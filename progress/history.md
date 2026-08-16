@@ -3181,3 +3181,243 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   cuenta por pagar); cubierta por 44 tests de componente, que el reviewer considera suficientes
   para el código y no para dar la pantalla por vista. Fichas 206 (anulación agrupada de un
   reparto, que `reparto_id` deja posible) y 207 (el censo de tablas cuenta prosa como JSX).
+
+## 2026-08-13 — 217: la factura del cierre gira con el tema
+
+- La hoja de la factura del cierre (`cierre-factura.tsx`, sus **dos** hojas: la factura y el
+  comprobante compacto) deja de estar fijada a tema claro con `tema-claro` y **gira con el tema**;
+  al **imprimir** sigue saliendo blanca, por una regla `@media print` acotada a las hojas.
+  Revierte una decisión deliberada de la 208 por pedido humano, no arregla un olvido.
+- **Requisitos cubiertos: R1–R26**, mapa `R → test` en `progress/impl_217.md`. Verificación:
+  `./init.sh` completo **1093/1093 archivos, 13.923/13.923 tests**, cero omitidos.
+- **Medir antes de especificar volvió a cambiar el encargo**, tercera vez esta jornada. Tres cosas
+  que la ficha no traía y que salieron de mirar el árbol: **no existía ninguna vía de impresión en
+  el repo** —ni `window.print()`, ni `@media print`, ni hoja— así que la regla del papel blanco
+  hubo que **crearla, no preservarla**; **ningún test congelaba el pin**, sólo el TÍTULO de un caso
+  lo afirmaba; y el medidor de contraste de la 210 **sí estaba commiteado**, dentro de la guardia,
+  sólo que sin exportar.
+- **La verificación cambió de raíz en la puerta humana.** Fuera el barrido de navegador —no es
+  reproducible, luego no puede ser criterio de aceptación—; dentro un **inventario CERRADO de
+  pares (tinta, fondo)** medido con la aritmética que ya estaba commiteada, sacada a
+  `tests/fixtures/contraste.ts` sin tocar los tres autocontroles de la 210. **Cero segundas copias
+  de la fórmula.**
+- **Cero pares indeterminados**, y por un motivo verificable: las cuatro capas de opacidad componen
+  sobre `card`, que es opaco. El único caso que lo habría sido lo eliminó el R8 aprobado en la
+  puerta — y ése era precisamente su segundo motivo.
+- **El reviewer rechazó la primera vuelta, y el bloqueante era el fallo de la 209 reaparecido en
+  código escrito el mismo día**: la guardia de R15 anclaba en `indexOf("@media print")`, que caía
+  en una **mención dentro de un comentario**, no en la regla. Lo demostró borrando el comentario
+  entero: el caso seguía verde, luego la mutación que la bitácora daba por roja **no pudo ocurrir**.
+  Arreglado con el quitador compartido; ahora muerde en las dos variantes.
+- **Decisión tomada, no limitación sufrida: el inventario NO se cierra por par.** Resolver el fondo
+  efectivo exige recorrer el árbol JSX, y eso produce respuestas plausibles y falsas; **un cierre
+  por par que se equivoque aprueba con un número**, que es peor que no cerrar. Se cierra por
+  **utilidad** y por **fondo** (siete), y la grieta —recombinar tinta y fondo ya declarados— queda
+  declarada en **tres sedes**: R7, `design.md §6.3` y la propia guardia. El reviewer la verificó
+  con una mutación de **control que sale verde a propósito**: ni mayor ni menor de lo que promete.
+- **El único número escrito de memoria fue el único que salió mal**: el hex de P26 oscuro. Volcados
+  de nuevo los 22 pares desde la aritmética, los otros 21 coincidían. El docstring dice ahora que
+  esos hexes **se vuelcan, no se escriben**.
+- **Deuda dejada, con nombre**: ficha **221** (el variant `dark:` también dispara al imprimir, en
+  toda la app), el **flujo de impresión** de la factura —hoy, desde el modal, la hoja saldría
+  recortada por el `overflow-y-auto`— y `Button` variant `destructive`, **bajo AA en los dos
+  temas** (3,29 / 4,43) y sin ficha que lo reclame: la 210 sólo arregló el `Badge` y la 216 trata
+  otro par.
+
+## 2026-08-14 — 223: la factura se imprime entera, y sólo la factura
+
+- La **217** garantizó que la hoja saliera **blanca** en papel; ésta añade el **flujo**: `@page`
+  (vertical, sin nombre de papel, 12 mm), se oculta lo que no es la hoja, y se pagina. Antes la
+  hoja se imprimía **recortada** por las capas de scroll del modal.
+- **Requisitos cubiertos: R1–R33**, mapa `R → test` en `progress/impl_223.md`. Verificación:
+  `./init.sh` completo, y **21 mutaciones con su variante inocua cada una**.
+- **El CSS del propio spec dejaba la página EN BLANCO**, y lo destapó medirlo en Chromium: PDF de
+  **652 bytes**, el tamaño exacto de una página que no imprime nada. `E:has(A B)` exige que `A` sea
+  descendiente de `E`, y el popup **es** el `[role="dialog"]`, no lo contiene, así que la rama A.1
+  ocultaba el diálogo entero. La versión del spec quedó viva como **mutación inocua** y muerde.
+- **Una decisión humana fue contra la recomendación, y eso obligó a resolver de verdad un problema
+  que el spec rodeaba**: la hoja compacta imprimible como documento propio. La objeción —que
+  imprimir el detalle emitiría además las N hojas de detrás— no desaparecía con la decisión.
+  Mecanismo: **candidata** es la hoja completa (la compacta sólo cuenta desplegada, porque su
+  desglose es `{open ? … : null}`), y la **elegida** la decide el contexto: una dentro de
+  `[role="dialog"]` gana y poda las demás por su ancestro; sin diálogo, se imprimen todas, cada una
+  a partir de la segunda en página nueva; cero candidatas, la página imprime como hoy. **Sin una
+  línea de JavaScript**, que era la condición de retorno escrita en el spec.
+- **`jsdom` sí resuelve `:has()`** (29.1.1), contra lo que el diseño daba por hecho. Eso convirtió
+  diez requisitos de censo de cadenas en **verificación por comportamiento**: los selectores se leen
+  del CSS con el parser compartido y se **evalúan contra el DOM montado**, lanzando si la regla no
+  aparece en vez de evaluar vacío.
+- **El riesgo de los anclajes posicionales era real, y está medido**: tres casos anclaban en «el
+  primer `@media print`». Con el ancla vieja, mover el bloque de tokens de la 217 habría salido
+  **VERDE** (`idx 4141 < 5775`); con la nueva, cuatro rojos. Se identifican por **contenido**.
+- **La guardia que prohibía `@page` se REEXPRESÓ, no se borró.** Decía «el formato de impresión es
+  otra ficha, no ésta» — y esa otra ficha era ésta.
+- **Nace `quitarComentariosCss`**, y cierra por la raíz lo que la 209 había dejado como excepción
+  declarada: el parser de CSS aplicaba el quitador de **TypeScript**, cuya pasada `//` se come una
+  `url(//cdn/x)` **y la declaración que le siga**. Hoy no había daño (0 ocurrencias, medido), era
+  latente. Migrados **los cinco** lectores de CSS del repo con salida **byte a byte idéntica**
+  (`11442 = 11442`), y con **contraprueba permanente**: un caso exige que el de TypeScript **sí** se
+  la lleve, para que la separación siga significando algo.
+- **`!important` son cinco, no uno**: Base UI escribe `position`, `height`, `width` y `overflow` en
+  línea sobre el `<body>`. Cada uno compite con un estilo en línea, que es el criterio del requisito.
+- **Dos mutaciones que salieron verdes y eran las mutaciones las que estaban mal**, cazadas y
+  rehechas: la del spec (A.1) y una del implementador que usaba `querySelector("main")` y devolvía
+  `null`, así que sus veinte verdes no significaban nada. **Una mutación inerte reportada en verde es
+  indistinguible de una guardia que no muerde.**
+- **Deuda dejada, con nombre**: el harness de impresión en Chromium se borró a propósito (queda a
+  ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
+  llevan su límite **declarado**, no omitido.
+
+## 2026-08-14 — 215 (el reintento se cuenta en el cierre) · **CIERRE: R19 ejecutado**
+- Se cierra la ficha corriendo lo único que le faltaba: la medición de **R19** contra la base
+  **real de producción** (`design.md §7.6`, escrita el 13-ago y **nunca ejecutada**). **Cero código
+  tocado**: el diff es spec + registro. Detalle completo en `progress/impl_215_r19.md`.
+- Requisitos cubiertos: **R19** (el último abierto). Con él caen **Q4** —la última de las 12
+  preguntas— y las tareas **T0b/T1/T1b/T18**. `spec_files` pasa de «1 bloqueado» a **0**.
+- **Resultado: 0 en las nueve columnas.** `empiezan_a_escalar = 0` ⇒ **nadie se rechazó ni se cobró
+  antes de tiempo** por el cambio de criterio.
+- **Y el cero es de UNIVERSO VACÍO, que es la mitad que importa.** Un 0 sobre un conjunto vacío es
+  indistinguible de una consulta rota, así que se comprobó por separado: la base tiene **141 órdenes
+  vivas**, el estado `devuelta` existe en el catálogo, no hay ninguna orden en él **ni contando las
+  borradas** (luego no es el filtro `deleted_at`), y el dominio **sí** tiene materia (**11** órdenes
+  pasaron por `devuelta`, **8** llegaron a `rechazada`, **32** gestiones contables en cierre
+  aprobado). Lo que está vacío es la foto de hoy, no la consulta.
+- **Y hay una razón por la que nadie pudo ser cobrado antes de tiempo, más fuerte que el cero**: las
+  8 rechazadas son **anteriores** al criterio nuevo — 7 por gestión manual (última el **12-ago**) y
+  **una sola** por `escalado_devuelta_sla` (**26-jul**), contra una release #381 del **14-ago**. El
+  cron ha escalado **una vez en toda la vida de la base**.
+- **De regalo, T1b:** el riesgo que D14 aceptó queda **dimensionado en 0 casos** — **12 cierres, los
+  12 `aprobado`**, ninguno con más de 7 ni de 30 días. El supuesto operativo del humano se sostiene
+  hoy, sobre 12 de 12.
+- **Deuda dejada, con nombre:** **el número caduca en cuanto una orden entre en `devuelta`**, igual
+  que caducó el 0 de `160/D7` —que el propio design ya declaraba no reutilizable—, y **nada lo
+  vigila**: la superficie que haría visible el efecto real es la ficha **219**, `pending`. Quien
+  vuelva a esto **vuelve a correr la consulta**; no cita esta tabla.
+- Y una que se destraba sola: la **218** condicionaba su arranque a «que la 215 esté mergeada». Lo
+  está, y en producción.
+
+## 2026-08-14 — 224 (al imprimir, los tokens también giran a claro)
+- Tercer `@media print` en `app/globals.css` con los **35** tokens claros para `.dark`,
+  `body:has(> .dark)`, `.tema-sistema` y su espejo, más la guardia espejo
+  (`impresion-tokens.guardia.test.ts`) y `tokenAlImprimir()` en `tests/fixtures/contraste.ts`.
+  Cierra la mitad que la 221 dejó abierta y **borra el precio que ella dejaba pagado**.
+- Requisitos: ficha `sdd: false`, sin `specs/`; el contrato es la ficha. **3 rondas de revisión**,
+  **33 mutaciones** (19 letales rojas, 14 inocuas verdes). Detalle en `progress/impl_224.md`.
+- **Lo compra, medido**: `--foreground` en papel **1,19 → 15,70**; Badge success 1,92 → 5,48; y con
+  «gráficos de fondo» marcado —el precio de la 221— success **1,70 → 4,84**, con warning, danger e
+  info también sobre AA.
+- **La ficha enunciaba la contradicción AL REVÉS, y sólo lo dijo medirlo.** Decía que un
+  `@media print` detrás de `.dark` «no hace nada»: detrás **también gana**; lo que lo prohíbe es el
+  **lector de tokens de los tests**, no la cascada. El problema real era la **especificidad**:
+  `.dark` a secas (0-1-0) empata y pierde por orden; `html .dark` (0-1-1) gana esté donde esté.
+  Medido en Chromium con `emulateMedia({media:"print"})` sobre **la hoja real compilada**, no sobre
+  el CSS fuente — y la descripción de la ficha se corrigió en vez de dejarla afirmando lo falso.
+- **La misma ceguera apareció por TERCERA vez, y la tercera estaba atornillada en verde.** Guardias
+  que afirman sobre el **papel** midiendo con `token()`, que lee el CSS con los `@media print` ya
+  borrados. La tercera —F4, el tercer puesto del ranking— sobrevivió al barrido por **dos defectos
+  encajados** (mal clasificada como «paleta fija» **y** medida con el lector ciego), y su frase falsa
+  estaba sostenida por un `toContain` que **exigía que siguiera escrita**. Hoy afirma lo contrario y
+  es cierto: con la 224 dentro, **la 221 BAJA esa fila** (15,70 → 11,39, las dos sobre AAA).
+- **Una mutación INOCUA salió roja, y ése fue el hallazgo de la primera ronda**: la guardia
+  identificaba el bloque por la cadena literal `"html .dark"` y rechazaba una implementación **igual
+  de correcta** escrita con `:root`. Sin la variante inocua, esa rigidez no se ve. En la tercera
+  ronda volvió a pasar y el implementador lo dijo: su primera «inocua» **no lo era**, y la rehízo.
+- **Un arreglo abrió un agujero y lo cazó el reviewer**: al pasar de lista escrita a mano a lista
+  **derivada**, el caso central —el que da nombre a la ficha— podía **pasar por vacuidad** con cero
+  selectores. Cerrado con anti-vacuidad **dentro** del propio caso: uno que necesita que otro se
+  ponga rojo para no mentir, sigue mintiendo si lo corren solo.
+- **Lo que NO compra, declarado y ejecutable**: `--destructive` 3,76 y `--primary` 3,18 siguen bajo
+  AA (deuda de paleta, 210/216), y **seis tokens empeoran** al imprimir desde oscuro (`P1`–`P6`; el
+  peor, `--primary-foreground` **18,33 → 1,00** en 15 usos, tinta blanca sobre un fondo que la
+  impresora no pone). **No se arregla aquí**: el papel **iguala al tema claro por construcción** —el
+  bloque espeja los 35 hex a hex—, y un valor propio rompería ese espejo. Ficha aparte.
+- **Deuda dejada, con nombre**: sólo **Chromium** (no hay Gecko ni WebKit en el entorno);
+  `.papel-al-imprimir` de la 217 queda redundante en la práctica pero **no se retira** —sigue siendo
+  la única defensa si un subárbol fija tokens oscuros por otra vía—; y el rebote de una mutación que
+  mata cuatro guardias en el `import` (122 tests que ni se cargan) se **acepta declarado**: cerrarlo
+  exigiría desacoplar un fixture que comparten seis guardias para ganar un mensaje mejor en un
+  escenario que ya falla a gritos.
+
+## 2026-08-15 — 227 (hilo de notas por orden entre tienda y mensajero)
+
+- Nace `orden_nota`: un hilo por orden entre `adminTienda` y `mensajero`, con autor, hora y borrado
+  lógico por el propio autor («nota eliminada» visible para la contraparte). Cuerpo máximo 200. Se
+  RETIRA a cambio la feature **116** entera —la nota privada del mensajero— incluida su columna
+  `orden_mensajero_meta.nota`. `orden.notas` (la nota de la TIENDA, que llega por carga masiva) y
+  `marcar_luego` (feature 115) quedan intactas.
+- Requisitos cubiertos: **R1–R36 + R38 = 37**, todos con test verificado uno a uno por el reviewer
+  (abrió cada test y comprobó que mide ESE requisito). `R37` se retiró a la ficha **228** y su número
+  **no se reutiliza**. Mapa en `progress/impl_227.md`; informe en `progress/review_227.md`.
+
+- **La decisión de diseño que sostiene la feature: la ventana de escritura es ASIMÉTRICA POR ROL.**
+  La tienda publica y borra mientras la orden está en `devuelta`; el mensajero mientras está en
+  `en_reparto` y asignada a él. La LECTURA es siempre, en cualquier estatus. No es una sutileza:
+  cada rol ve la orden en una pantalla distinta —`/novedades` lista `devuelta`,
+  `listarMisAsignaciones` lee `por_recoger`+`en_reparto` (corte de la 167/R34, que esta feature NO
+  toca)—, así que una ventana simétrica («solo en `devuelta`») deja al mensajero **sin ningún estado
+  alcanzable en el que publicar** y el hilo «bidireccional» sale unidireccional de hecho.
+
+- **La lección que costó encontrarla DOS veces en la misma feature, y que conviene no re-aprender:**
+  acotar una escritura por estatus **sin cruzarla con la pantalla donde cada rol ve la entidad**
+  concede permisos inejercitables. La primera vez apareció en la LECTURA y se cerró separando
+  lectura de escritura; se dio el problema por resuelto y **seguía vivo en la publicación**, donde el
+  «publicar» que un requisito le concedía al mensajero era letra muerta. Ahora hay una guardia
+  (`hilo-ventana-alcanzable`) que cruza la ventana con el corte de pantalla de cada rol y **falla si
+  alguna intersección queda vacía**.
+
+- **Rechazada en la primera revisión, y el hallazgo no era el rojo.** `./init.sh` terminaba en EXIT 1
+  por un deadlock `40P01` entre los tres archivos de DB nuevos: transacciones largas concurrentes
+  escribiendo en `public."usuario"`/`public."orden"` y tomando los locks de FK en ORDEN DISTINTO.
+  Lo grave es que, al reventar el `beforeAll`, vitest marcaba **13 tests como `skipped`** —justo la
+  evidencia de R26 (RLS/cero policies), R28 (índice) y R30 (CASCADE)—: la mitad de las corridas esa
+  prueba no se ejecutaba y el archivo lo reportaba como omitido, no como fallo. **El patrón «la suite
+  omite y parece casi verde», esta vez instalado dentro de la feature.** Cerrado con
+  `pg_advisory_xact_lock` como PRIMERA sentencia de cada transacción, y **se descartó el reintento a
+  propósito: reintentar un deadlock lo esconde, serializar la sección crítica lo elimina.**
+
+- **Decisión destructiva, tomada por el humano y registrada como tal:** dropear
+  `orden_mensajero_meta.nota` **borra** las notas privadas ya escritas por los mensajeros; no se
+  migran al hilo porque eso las haría visibles para su tienda, y se escribieron bajo una promesa
+  literal en pantalla («Solo tú puedes ver esta nota»). **DEUDA DE DESPLIEGUE:** el conteo de filas
+  afectadas **en producción** NO era alcanzable desde el entorno de desarrollo y **no se inventó
+  ninguna cifra** —la tabla local está vacía, así que su cero no informa—. Queda declarado como
+  PENDIENTE en la cabecera de M2: **no se aplica a producción sin ese `count` medido y pegado.**
+
+- Decisiones y deuda menores: la feature **no lleva notificación ni indicador** de «hay notas»
+  (decisión humana; hasta la 228 el mensajero solo ve el hilo si abre la orden, dicho en voz alta
+  para que no se lea como olvido). `borrarNotaSchema` lleva `{ordenId, notaId}` y no solo `{notaId}`
+  como pedía el design: sin la orden no se puede resolver la ventana y se podría borrar una nota de
+  la orden B desde la ventana abierta de la orden A. Las constantes de la ventana quedan cerradas
+  **por vigilancia** (guardia) y no por unificación, que era lo que el design pedía.
+
+## 2026-08-15 — 229 (rastreo público del envío, sin sesión)
+
+- El destinatario consulta su paquete **sin iniciar sesión**, desde un **modal en la landing
+  pública**: devuelve el hito vigente más la línea de tiempo con fecha y hora. Identifica con
+  **guía + los 4 últimos dígitos del teléfono del destinatario**. **Sin migración, sin ruta nueva y
+  sin tocar `middleware.ts`**: el botón «Rastrear envío» de `LandingNav.tsx` ya existía `disabled` —
+  la feature lo **activa**, no lo crea. La Server Action se postea a `/`, que es pública por
+  coincidencia exacta, así que pasa el guard sin sesión.
+- Requisitos cubiertos: **R1–R35**, los 35 mapeados a un test nombrado y ejecutado
+  (`progress/impl_229.md` §4). Reviewer **APROBADO, 0 bloqueantes** (`progress/review_229.md`),
+  6 menores documentados. Gate completo verde: **1107 archivos / 14220 tests**. PR **#386**.
+- **La no-enumeración es el diseño, no un extra**: los cuatro casos malos —guía inexistente, factor
+  errado, orden borrada, sin historial— recorren el mismo camino y hacen el mismo trabajo, así que
+  el tiempo de respuesta no delata qué guías existen. El DTO se enumera campo a campo (4 campos) en
+  vez de proyectar la fila, y una guardia lo comprueba: la fuga no puede colarse por herencia.
+- **Deuda saldada antes de desplegar (era el punto 3 de su propia ficha):** la comprobación de
+  órdenes sin segundo factor utilizable se había medido **contra la base local** (0 de 78). Se
+  repitió **contra producción** al preparar la release, y con el criterio que aplica el código —no
+  el de la bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+  **141 órdenes vivas, 0 con teléfono de menos de 4 dígitos, 0 sin historial → las 141 son
+  rastreables** (137 con 8 dígitos, 4 con 12). **No es un cero de universo vacío**: la mutación del
+  umbral lo mueve (con `< 12` el mismo conteo da **137**, no 0).
+- **Deuda viva, declarada y firmada, que NO se cierra aquí**: el limitador de intentos vive **en
+  memoria del proceso** (8 intentos / 10 min por IP). En serverless cada instancia tiene su contador
+  y cada despliegue los resetea: **acota al torpe, no al decidido**, y el segundo factor son 10.000
+  combinaciones por guía. Un límite **persistido** es ficha aparte. También aceptado: sin URL
+  compartible (es modal, no ruta), el QR impreso sigue apuntando a `/paquete` privada, y
+  `sin_gestionar` se publica como «En reparto» — ningún rastreo publica fallos operativos.
+- Los E2E (`e2e/rastreo-publico.spec.ts`) se ejecutaron **a mano** (2 passed) contra un `next dev`
+  propio, **no** por el `webServer` de `playwright.config.ts` (su `reuseExistingServer` engancha el
+  servidor de otro checkout). `init.sh` sigue sin correr E2E: deuda de arnés conocida.

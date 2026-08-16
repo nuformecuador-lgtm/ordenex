@@ -18,13 +18,18 @@ Todo anclaje de este documento se verificó abriendo el archivo en `C:/w213`
 > **Cuarta ronda (2026-08-13):** la deriva de `primer_intento_ok` **se DECLARA con
 > fecha de corte**, sin re-backfill y sin redefinir la métrica (**D15**, §8).
 >
-> **Queda ABIERTA una sola cosa, y no es una decisión:** **Q4**, la medición contra
-> la base real (§7.6, consulta lista para ejecutar).
+> **Q4 CERRADA el 2026-08-14: la medición se EJECUTÓ.** Se corrió contra la base
+> **real de producción** y su resultado, su control y su límite están pegados en
+> **§7.6**. Salió **0 en todas las direcciones**, y el cero **no significa que el
+> cambio sea inocuo**: significa que hoy no hay ninguna orden en `devuelta`. Léase
+> §7.6 antes de citarlo. **No queda ninguna pregunta abierta.**
 >
-> **Estado del código:** el commit **7d9471c3** implementa §2 y §3.1–§3.3
-> (`progress/impl_215.md`). **§3.4 —el discriminador de las gestiones sintéticas—
-> NO está implementado**: es el trabajo que abre la tercera ronda, y corrige además
-> un incumplimiento de R12 que la implementación dejó abierto.
+> **Estado del código (corregido el 2026-08-14, auditado contra el árbol):** el
+> commit **7d9471c3** implementó §2 y §3.1–§3.3, y el **Grupo 4** implementó después
+> **§3.4 —el discriminador de las gestiones sintéticas—**, cerrando R18, R34 y el
+> incumplimiento de R12 (`progress/impl_215.md §8`). Está **en `dev` y en
+> `origin/prod`**. Este encabezado decía «§3.4 NO está implementado»: registro
+> caducado.
 
 ---
 
@@ -456,19 +461,26 @@ tiempo es un cobro real a la tienda antes de tiempo.**
 
 Cinco verificaciones exigidas, en orden:
 
-1. **Medición previa contra producción (⛔ Q4), patrón `160/D7`.** Antes de tocar
-   código. La consulta está escrita y lista en **§7.6**; solo falta ejecutarla y
-   pegar el resultado con fecha. `160/D7` midió 0 órdenes en su día: **ese número
-   no es reutilizable**, hay que volver a medir.
+1. **Medición contra producción (⛔ Q4), patrón `160/D7`.** Se escribió como
+   medición **previa** («antes de tocar código»); **esa puerta ya pasó**: el
+   criterio nuevo, con sus seis condiciones, está desplegado en `prod`
+   (verificado el 2026-08-14 sobre `origin/prod`). Lo que queda es la misma
+   consulta como medición **POSTERIOR**, y **sigue sin ejecutarse**. Está escrita
+   y lista en **§7.6**; solo falta correrla y pegar el resultado con fecha.
+   `160/D7` midió 0 órdenes en su día: **ese número no es reutilizable**, hay que
+   volver a medir.
 2. **Dirección del error declarada, y con D8 va a favor.** La regla del repo
    (`OrdenHistorialRepository.ts:182-186`): contar de MENOS retrasa el escalado
    (inofensivo para la tienda); contar de MÁS cobra antes de tiempo. Con el ancla
    en `aprobado`, **el conteo de casi toda orden BAJA** ⇒ el escalado se RETRASA.
    El riesgo de esta feature **no es cobrar de más, es no cobrar nunca** (Q5,
    riesgo ACEPTADO por D14). Eso no relaja nada: se testea igual, pero el foco de
-   la vigilancia cambia. **Excepción a vigilar: el discriminador de §3.4.** Mientras
-   no esté, la reprogramación de la tienda SÍ suma de más (R12 incumplido) y eso sí
-   adelanta un `cobroRechazado`.
+   la vigilancia cambia. **Excepción a vigilar: el discriminador de §3.4.** Sin él
+   la reprogramación de la tienda suma de más (R12 incumplido) y eso sí adelanta un
+   `cobroRechazado`. **Ya está** (Grupo 4, en `dev` y en `origin/prod`,
+   verificado el 2026-08-14) — la vigilancia se traslada a la lista:
+   `ORIGEN_TIPOS_VISITA_REAL` es de INCLUSIÓN, y meterle una familia sintética
+   reabre exactamente este agujero.
 3. **Lista de INCLUSIÓN, no de exclusión** (§4). Un `resultado` futuro no puede
    empezar a contar solo. Test dedicado, heredado del propósito de #1 de §6.
 4. **No-doble-conteo (R4/R29)** con dos escenarios: (a) dos gestiones vigentes de
@@ -480,6 +492,18 @@ Cinco verificaciones exigidas, en orden:
 
 ### 7.6 La consulta de medición de ⛔ Q4 — lista para pegar (SOLO LECTURA)
 
+> **⚠️ LA PREMISA CADUCÓ (2026-08-14).** Esta consulta se escribió para medir
+> **ANTES** de activar el criterio nuevo. **El criterio nuevo ya corre en
+> producción**: `ORIGEN_TIPOS_VISITA_REAL` aparece 3 veces en
+> `origin/prod:lib/repositories/OrdenHistorialRepository.ts` (y la lista vive en
+> `origin/prod:lib/types/orden-historial.ts`), es decir, las **seis** condiciones
+> están desplegadas. Esa puerta pasó y no se puede volver a cruzar. Lo que la
+> consulta puede dar HOY —y sigue sin ejecutarse— es una medición **POSTERIOR**:
+> a cuántas órdenes movió el cambio de lado del umbral, fechada. Ya no es un
+> requisito de activación; es la cuenta de lo que el cambio hizo, y sirve para
+> saber si alguna orden se rechazó (y se cobró) antes de lo que se habría cobrado
+> con el criterio viejo. Ver R19 en `requirements.md`, reexpresado con esa fecha.
+
 Sin `INSERT`, sin `UPDATE`, sin `DELETE`, sin DDL: solo `WITH` + `SELECT`.
 Parametrizada por el umbral (`REINTENTOS_MIN_INTENTOS`, default 3). Responde: para
 las órdenes que HOY reposan en `devuelta`, conteo viejo vs. conteo nuevo, y cuántas
@@ -488,6 +512,9 @@ cruzan el umbral en cada dirección.
 ```sql
 -- Feature 215 / Q4 — efecto retroactivo del cambio de criterio de intentos.
 -- SOLO LECTURA. Ejecutar contra la base real y pegar el resultado con FECHA en este design.
+-- Corregida el 2026-08-14: al criterio NUEVO le faltaba la SEXTA condicion (visita real,
+-- §3.4/R34), que SI esta en el codigo vivo y en produccion. Tal como estaba, la consulta
+-- contaba las gestiones sinteticas y sobreestimaba `n_nuevo`.
 WITH parametros AS (
   SELECT 3::int AS umbral                       -- REINTENTOS_MIN_INTENTOS
 ),
@@ -522,7 +549,8 @@ conteo_viejo AS (
                              AND g."anulada_at" IS NULL ) )
   GROUP BY v.orden_id
 ),
--- Criterio NUEVO (215/D2+D6+D7+D8+D9+D10): cierres APROBADOS distintos con resultado contable.
+-- Criterio NUEVO (215/D2+D6+D7+D8+D9+D10+D13): cierres APROBADOS distintos con resultado
+-- contable Y nacidos de una VISITA REAL (§3.4 / R34). Son SEIS condiciones, no cinco.
 conteo_nuevo AS (
   SELECT v.orden_id, count(DISTINCT g."cierre_id") AS n_nuevo
   FROM en_vuelo v
@@ -534,6 +562,19 @@ conteo_nuevo AS (
         AND EXISTS ( SELECT 1 FROM "cierre_dia" c
                       WHERE c."id" = g."cierre_id"
                         AND c."estado"::text = 'aprobado' )
+        -- SEXTA condicion (§3.4, R34): la gestion nace de una VISITA REAL, no es sintetica.
+        -- Espejo SQL de `historialEstados: { some: { ordenId, origenTipo: { in: [...] } } }` de
+        -- `whereIntentosVigentes`. `IN (...)` y no `= 'gestion'` porque el original es una LISTA
+        -- de INCLUSION (`ORIGEN_TIPOS_VISITA_REAL`, hoy un solo valor): si esa lista crece, este
+        -- `IN` crece con ella. Sin esto la consulta cuenta el escalado SLA y la reprogramacion
+        -- de escritorio de la tienda como intentos y SOBREESTIMA `n_nuevo`.
+        -- El `orden_id` repetido NO es decorativo: `orden_historial_estado` no tiene indice por
+        -- `gestion_orden_id`, y repetirlo hace que el EXISTS entre por `@@index([orden_id,
+        -- created_at])` en vez de recorrer entera una tabla que crece con cada transicion.
+        AND EXISTS ( SELECT 1 FROM "orden_historial_estado" h2
+                      WHERE h2."gestion_orden_id" = g."id"
+                        AND h2."orden_id" = v.orden_id
+                        AND h2."origen_tipo"::text IN ('gestion') )
   GROUP BY v.orden_id
 )
 SELECT
@@ -574,6 +615,63 @@ LIMIT 100;
 que se cobrarían hoy: eso hay que enseñárselo al humano orden por orden con la
 segunda consulta antes de activar nada.
 
+### 7.6-bis RESULTADO EJECUTADO — 2026-08-14
+
+**Dónde se corrió:** base de **producción**, proyecto Supabase
+`scfnwxqbsgkzwsdntdvd`, por el MCP de Supabase (solo lectura: la consulta es `WITH` +
+`SELECT`, sin `INSERT`/`UPDATE`/`DELETE`/DDL). **Se corrió la consulta tal cual está
+escrita arriba**, con la sexta condición ya dentro.
+
+**Que la base es la que decimos, y no otra, está comprobado:** `_prisma_migrations`
+tiene **116 migraciones aplicadas** y la última es `20260812120000_gestion_orden_pago`
+— exactamente las 116 de `db/migrations` en `dev` y en `prod`. No se leyó ninguna
+credencial para saberlo.
+
+| columna | valor |
+| --- | --- |
+| `ordenes_en_devuelta` | **0** |
+| `empiezan_a_escalar` ⚠ cobra antes | **0** |
+| `dejan_de_escalar` | **0** |
+| `conteo_baja` / `conteo_sube` / `conteo_igual` | 0 / 0 / 0 |
+| `pierden_todo_el_conteo` | 0 |
+| `max_viejo` / `max_nuevo` | `null` / `null` |
+
+**La segunda consulta (los casos uno por uno) no se corrió, y no debía:** su
+disparador es `empiezan_a_escalar > 0`, y salió 0.
+
+#### El cero es de UNIVERSO VACÍO — el control que lo demuestra
+
+Un 0 sobre un conjunto vacío es indistinguible de una consulta mal escrita, así que
+se comprobó por separado, y este es el párrafo que hay que leer antes de citar el
+cero:
+
+- **El estado existe y el join es correcto:** `devuelta` está en el catálogo
+  `order_status` (`39095102-9ec0-427d-92ca-2c7e599110e3`).
+- **La base tiene datos:** **141 órdenes vivas**.
+- **Nadie está en `devuelta` ahora mismo:** 0 órdenes con ese `estatus_id`, **incluso
+  contando las borradas** — o sea, no es el filtro `deleted_at` el que vacía el
+  universo.
+- **El dominio SÍ tiene materia:** **11** órdenes pasaron alguna vez por `devuelta`,
+  **8** llegaron a `rechazada`, y hay **32** gestiones contables (`resultado` en
+  `rechazada`/`devuelta`/`reprogramada`, no anuladas) colgadas de un cierre
+  **aprobado**. El mecanismo se ha usado; lo que está vacío es la foto de hoy.
+- **Ninguna de esas 8 se rechazó bajo el criterio nuevo:** 7 llegaron a `rechazada`
+  por `origen_tipo = gestion` (manual, la última el **2026-08-12**) y **una sola** por
+  `escalado_devuelta_sla` (**2026-07-26**). Las dos fechas son **anteriores** a que el
+  criterio nuevo llegara a producción (release #381, 2026-08-14). El cron ha escalado
+  **una vez en toda la vida de la base**.
+
+**Qué se puede afirmar, entonces:** al corte del 2026-08-14 el cambio de criterio
+**no movió de lado del umbral a ninguna orden**, y **nadie ha sido cobrado antes de
+tiempo por él** — porque bajo el criterio nuevo todavía no ha escalado nadie.
+
+**Qué NO se puede afirmar, y por eso queda escrito aquí:** que el cambio sea inocuo.
+Este número **caduca en cuanto una orden entre en `devuelta`**. Es el mismo cero que
+midió `160/D7` en su día, y por el que este documento ya declaraba que **aquel número
+no era reutilizable**: este tampoco lo es. El efecto real se verá en la primera
+tanda de devoluciones que viva entera bajo el criterio nuevo, y la superficie que lo
+haría visible es la ficha **219**.
+
 ---
 
 ## 7bis. Q5 — La orden cuyo cierre nunca se aprueba. **CERRADA: riesgo ACEPTADO (D14)**
@@ -613,6 +711,18 @@ devolver, y se repite. **La orden gira indefinidamente y el rechazo nunca se
 cobra.** No es un bucle de cron (la orden sale de `devuelta` al liberarse), es un
 ciclo operativo de días o semanas.
 
+**El ciclo NO es inescapable: es MANUAL, y la salida ya existe.** Ninguno de los
+cuatro caminos es una trampa cerrada del sistema; los cuatro se destraban con una
+acción de persona, y para el peor de ellos —el `vencido` de un mensajero que ya no
+está— hay una **válvula de escape** dedicada: `forzarSolicitudVencido`
+(`CierresAdminRepository.ts:879`, feature 111/R16), que un admin usa para pasar el
+cierre a `solicitado` y poder aprobarlo. Que `ESTADOS_RESOLUBLES = ["solicitado"]`
+(`:39`) impida aprobar un `vencido` **directamente** no significa que no haya salida:
+significa que la salida pasa por una persona. Lo que el sistema NO tiene es un
+mecanismo que lo haga solo, ni una alerta que avise de que hace falta (M3, descartada
+por D14). Decirlo importa: pintar esto como un bucle sin salida lleva a implementar
+una mitigación que ya existe a mano.
+
 ### (c) Tres mitigaciones posibles, con su coste. **NINGUNA se implementa (D14)**
 
 | Opción | En qué consiste | Coste / contrapartida |
@@ -637,6 +747,21 @@ WHERE c."estado"::text <> 'aprobado'
 GROUP BY c."estado"
 ORDER BY cierres DESC;
 ```
+
+**RESULTADO (2026-08-14, misma base de producción, misma vía):** **cero filas.** No
+existe hoy ni un solo cierre que no esté aprobado.
+
+Con su control, porque un conjunto vacío tampoco se cita solo: la tabla `cierre_dia`
+tiene **12 cierres**, y los **12 están `aprobado`** (del 2026-07-22 al 2026-08-12).
+No hay ninguno en `solicitado`, `vencido` ni `rechazado`, así que **ninguno lleva más
+de 7 ni más de 30 días abierto**.
+
+**Qué dice esto del riesgo que D14 aceptó:** el supuesto operativo del humano —«el
+cierre se cerrará en algún momento por un usuario»— **se sostiene en producción a
+fecha de hoy**, sobre 12 de 12. Es la primera vez que se mide, y es una foto: el
+riesgo no desaparece, queda **dimensionado en 0 casos**. Si algún día esa consulta
+devuelve filas con antigüedad alta, esas órdenes son las que se quedan sin escalar
+—y sin cobrar— indefinidamente, que es exactamente lo que M1/M2/M3 mitigaban.
 
 ---
 
@@ -771,15 +896,22 @@ un cuarto estado ni un segundo camino de vinculación.
    ACEPTADO** (Q5/D14, §7bis): con el ancla en `aprobado`, un cierre nunca aprobado
    congela el conteo en 0, el cron libera indefinidamente y el rechazo **nunca se
    cobra**. Se agrava porque `vencido` y `rechazado` necesitan un paso humano antes
-   de poder aprobarse (`ESTADOS_RESOLUBLES = ["solicitado"]`). Riesgo asumido por
-   decisión, no mitigado: es un supuesto operativo, no una garantía del sistema.
+   de poder aprobarse (`ESTADOS_RESOLUBLES = ["solicitado"]`) — **pero ese paso
+   existe y está a mano**: la válvula `forzarSolicitudVencido`
+   (`CierresAdminRepository.ts:879`, feature 111/R16) destraba un `vencido`
+   /`rechazado` sin tocar código. El ciclo es MANUAL de salir, no inescapable.
+   Riesgo asumido por decisión, no mitigado: es un supuesto operativo, no una
+   garantía del sistema.
 6. **El discriminador de §3.4 toca el camino caliente del conteo** y
    `orden_historial_estado` no tiene índice por `gestion_orden_id`. Si el `EXPLAIN`
    pidiera uno, es migración y D7/R27 la prohíben ⇒ se para y se lleva al humano.
-7. **Mientras §3.4 no exista, R12 está incumplido en producción**: la
+7. ~~**Mientras §3.4 no exista, R12 está incumplido en producción**: la
    reprogramación de la tienda suma un intento que no debería, y eso adelanta el
    escalado y el cobro. Es el único vector de «cobrar de más» que esta feature
-   introduce.
+   introduce.~~ **CERRADO (2026-08-14):** §3.4 existe, está en `dev` y en
+   `origin/prod`, y la reprogramación de la tienda ya no suma. El riesgo se conserva
+   tachado, no borrado: **es el único vector de «cobrar de más» que esta feature
+   llegó a tener**, y quien toque `ORIGEN_TIPOS_VISITA_REAL` lo reabre.
 4. **El contador deja de bajar (D12/R32).** Es un cambio observable: hoy deshacer
    una gestión baja el número. Tras el cambio, una gestión solo cuenta cuando ya no
    es anulable. Declarado y con test; **si aparece un camino que lo haga bajar

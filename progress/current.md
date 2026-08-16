@@ -9,290 +9,214 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🟡 EN CURSO 2026-08-15 — feature **229**, fase 1 (spec): rastreo público del envío
+## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
 
-Pedido humano de hoy: **«agrega la funcionalidad a feature_list para consultar el estado del
-envío»**, y en la segunda vuelta **«que sea un modal, no hace falta una página dedicada»**. Ficha
-dada de alta (`id: 229`, `pending`, `fullstack`, `sdd: true`, `complexity: high`, sin `depends_on`);
-`spec_author` corriendo sobre `specs/229-rastreo-publico-envio/`. Zonas al arrancar: ninguna
-feature en `in_progress` → la regla de 2 por zona no bloqueaba.
-
-**Lo que se construye:** el **destinatario, sin sesión**, consulta en qué va su paquete y ve el
-estado vigente **más la línea de tiempo de hitos**. Entra por un **modal** (`components/ui/dialog.tsx`)
-disparado desde la landing pública `/` (feature 86). **Sin ruta nueva, sin migración, sin tocar
-`middleware.ts`.**
-
-**Las dos preguntas que hubo que hacer antes de escribir la ficha, y por qué no eran ceremonia:**
-«consultar el estado del envío» admitía tres consumidores incompatibles —cliente anónimo, tienda
-dentro de la app, tercero por API key— y la app **ya tiene** las dos últimas medio resueltas
-(la 169 busca por guía/remisión/teléfono dentro de la app; la 106 expone API por key). Sin fijar el
-consumidor, la ficha habría duplicado algo existente.
-
-**Lo que ya existía y NO sirve tal cual, medido leyendo el código:**
-- `app/paquete/[numGuia]/page.tsx` **exige sesión** y pinta la **etiqueta** (`obtenerEtiquetaPorGuia`),
-  no un seguimiento. Que sea privada es **decisión cerrada de la feature 79** (opción b), viva en
-  `middleware.ts:43` (`REDIRECT_TO_ROOT = ['/paquete']`) y testeada en
-  `tests/unit/auth/middleware.test.ts:116-127`. La 229 **no la toca**.
-- `OrdenHistorialService.obtenerHistorial(ordenId, actor)` **recibe un `Actor`**, corta con
-  `KNOWN_ROLES` (R27) y ramifica por rol → un anónimo no tiene por dónde entrar. Hace falta un
-  **borde propio de lectura pública**, no un parámetro más.
-- El dato ya está: `orden_historial_estado` (feature 49). Esta ficha **no crea trazabilidad, la
-  proyecta hacia afuera**.
-- `/` es pública por coincidencia **exacta** (`middleware.ts:60-64`), así que la Server Action del
-  modal se postea a `/` y pasa el guard sin sesión — cero cambios en middleware.
-
-**⚠️ El riesgo que manda en esta feature:** `num_guia` es **entero incremental y único** (feature 17)
-→ **adivinable**. Un borde público que acepte solo la guía es **enumeración de la base de clientes**.
-La alerta ya venía escrita en la ficha **79** y allí se esquivó cerrando la ruta; aquí hay que
-resolverla de frente: segundo factor + límite de intentos, y **respuesta idéntica ante guía
-inexistente y ante segundo factor errado**. Que sea un modal no relaja nada: el borde es igual de
-alcanzable por script que una ruta.
-
-**Consecuencias del modal, aceptadas por el humano y dichas en voz alta — no son descuidos:** sin
-ruta **no hay URL enlazable**, el resultado no sobrevive a un refresh y no se puede mandar el
-seguimiento por WhatsApp; y el **QR impreso** de la etiqueta (feature 32, `PAQUETE_BASE_PATH`) sigue
-apuntando a `/paquete/<numGuia>`, que es privada. Link compartible = ficha aparte, no ensanche.
-
-**Las tres preguntas que el spec deja al gate humano** (regla 6, no se inventan): (1) el segundo
-factor y el límite de intentos; (2) el **mapeo estatus interno → hito público** de los 19 valores de
-`ORDER_STATUS_SEED` (**20**, ver corrección abajo), con exhaustividad estática al estilo `lib/types/tablero-dia.ts` para que un
-estatus nuevo **rompa el build** en vez de aparecer crudo; (3) qué **PII** ve el anónimo —dirección,
-monto a cobrar, nombre del mensajero, intentos—, por defecto **NO**.
-
-### ✅ SPEC ESCRITO 2026-08-15 — `specs/229-rastreo-publico-envio/`, **35 requisitos EARS** (R1–R35)
-
-Los tres archivos están (`requirements.md`, `design.md`, `tasks.md`) y **los 35 `R<n>` están mapeados
-a un test concreto** en la tabla de trazabilidad. El **Bloque 0 de `tasks.md` es una puerta**: las 14
-preguntas abiertas lo bloquean, así que nadie puede empezar a implementar sin la firma humana.
-Ficha en `feature_list.json` → `spec_ready`.
-
-**Dos correcciones que el spec midió y el leader re-verificó — la ficha estaba mal, el spec no:**
-- `ORDER_STATUS_SEED` tiene **20 valores, no 19**. El 19 salió de creer un comentario del código
-  («el catálogo pasa de 20 a 19», feature 155) que es **anterior** al `recolectando` que añadió la
-  157. Contado sobre el array: 20 (`lib/types/order-status.ts:54-79`). **Lección barata: un
-  comentario que narra un cambio caduca con el cambio siguiente; el array no.**
-- El disparador **ya existe inerte**: el botón «Rastrear envío» de `app/_landing/LandingNav.tsx:44-51`
-  está `disabled`. La feature **lo activa, no lo crea** — alguien ya dejó el hueco preparado.
-
-### ✅ PUERTA HUMANA PASADA el 2026-08-15 — las 14 preguntas, firmadas de una vez
-
-Respuesta literal del humano: **«todo por defecto»**. Se aceptan las 14 propuestas del spec sin
-excepción. `spec_author` reanudado para convertir las preguntas en decisiones y desbloquear el
-Bloque 0 de `tasks.md`.
-
-| | Decisión |
-| --- | --- |
-| **D1** | segundo factor = **últimos 4 dígitos del teléfono**; teléfono de menos de 4 dígitos → **no consultable**, y responde **igual que «no existe»**; **8 intentos / 10 min** con `ResetRateLimiter`; clave **solo IP** |
-| **D2** | **9 hitos**; `recolectando` → `registrado`; `incidente` **colapsado** en `no_entregado`; `sin_gestionar` → `en_reparto`; **se colapsan** las rachas de hito repetido (R18); **sin** hitos futuros |
-| **D3** | lista blanca de **4 campos** (`numGuia`, `hitoVigente`, `actualizadoEn`, `linea[{hito,fecha}]`), fecha **con hora**, y **ninguno** de los excluidos entra |
-
-**🔴 DOS RIESGOS ACEPTADOS CON LOS OJOS ABIERTOS — el reviewer NO debe tratarlos como hallazgos:**
-1. **El limitador es en memoria POR PROCESO.** En serverless cada instancia tiene el suyo, así que
-   acota al enumerador torpe pero **no frena a un atacante distribuido**. Un límite persistido es
-   **ficha aparte**, no un ensanche de esta.
-2. **`sin_gestionar` → `en_reparto` oculta al cliente un fallo operativo interno.** Si la orden se
-   quedó sin gestionar, el cliente ve «en reparto» y no se entera. Es lo normal en un rastreo y es
-   **deliberado**.
-
-### 🔢 RENUMERADA 223 → 229 el 2026-08-15, antes de escribir una línea de código
-
-**La lista de este checkout (`ux`) está ATRASADA respecto a `dev` y por poco cuesta una colisión.**
-Se dio de alta como **223** leyendo `feature_list.json` desde `ux`, donde la cola era 222. En el
-linaje bueno (`origin/dev`) los ids **221–226 ya existen y son OTRAS features** (impresión / tema
-oscuro), y las dos fichas que esta sesión creó antes —hilo de notas y habilitar novedad— **ya viven
-como 227 y 228** en la rama de otra sesión (`C:/w227`). Se salta a **229** a propósito, para no
-chocar con ellas cuando aterricen.
-
-**Lo que se conserva es el SLUG** (`rastreo-publico-envio`): es lo único que sobrevive a una
-renumeración. Rama `feature/229-rastreo-publico-envio`, spec en `specs/229-rastreo-publico-envio/`.
-
-> **La lección, y esta vez que quede escrita:** el registro de features **no se lee del checkout
-> donde estás**, se lee de `dev`. Un `feature_list.json` local es una foto vieja en cuanto otra
-> sesión mergea; darle un id a una ficha desde esa foto es reservar un número que ya es de otro.
-
-### 🚧 FASE 2 EN CURSO — `implementer` sobre `C:/w229`
-
-Rama `feature/229-rastreo-publico-envio` nacida de `origin/dev` (`a145cab8`), con el spec y la ficha
-ya commiteados. **No se pudo trabajar desde este checkout:** `ux` tiene 154 archivos sucios y **6 en
-conflicto con `dev`**, entre ellos WIP ajeno de pagos (`GestionarOrdenPanel`, `desglose-captura`) que
-no es de esta sesión y no se toca. De ahí el worktree de ruta corta.
-
-**Al `implementer` se le dijo explícitamente que NO commitea** (el commit, el merge y el PR los hace
-el leader) y que **sin migración y sin tocar `middleware.ts`**: si cree necesitar cualquiera de las
-dos, para y avisa, porque significaría que el spec y la realidad divergen.
-
-### ✅ CERRADA 2026-08-15 — reviewer APROBADO, **PR #386** contra `dev`
-
-Gate `./init.sh` completo **verde, medido dos veces por separado** (implementer y reviewer, mismo
-resultado): **1107 archivos / 14220 tests** (+127), typecheck 0, lint 0 errores. **35 de 35
-requisitos** mapeados a un test nombrado y **ejecutado**. Tres commits en la rama (spec ·
-implementación · cierre). Sin migración, sin ruta nueva, sin tocar `middleware.ts`.
-
-**Lo que el reviewer verificó LEYENDO EL CÓDIGO, no fiándose del test —y por eso vale:**
-- **No-enumeración:** no hay retorno temprano. Las cuatro ramas de fallo hacen el **mismo trabajo**
-  (1 llamada a datos cada una, medido), así que no se filtra existencia por **tiempo de respuesta**
-  aunque el payload sea idéntico. Ese era el modo de fallo real, y el test solo no lo habría cazado.
-- **Exhaustividad:** reprodujo un `tsc` aislado con un value nuevo → `TS1360`. Rompe el build **de
-  verdad**, no de boquilla.
-
-**🔴 DEUDA DECLARADA — la que puede morder en producción va primero:**
-1. **La comprobación de teléfonos de menos de 4 dígitos (0 de 78) se midió contra la base LOCAL.**
-   Hay que **repetirla contra producción ANTES DE DESPLEGAR**: si allí existen órdenes con teléfono
-   corto, esas guías quedan **no consultables** por la decisión G2. No bloquea el merge; sí el deploy.
-2. **2 avisos de lint son NUEVOS**, no preexistentes como afirmaba la bitácora del implementer
-   (`rastreo-publico-service.test.ts:42-43`). Cosméticos, pero la bitácora decía otra cosa.
-3. Historial vacío responde tras **dos** lecturas en vez de una: misma forma, distinto trabajo; solo
-   alcanzable por quien ya acertó guía **y** teléfono.
-4. La guardia de `console.*`/`catch {}` cubre los 7 módulos de `lib/` pero **no el modal**.
-
-**Decisión humana del cierre:** el hito `en_bodega` **se conserva** con sus 4 entradas de allowlist
-en el censo de nomenclatura (se ofreció renombrarlo a `en_instalaciones` para retirarlas). Verificado
-que **no dejan pasar nomenclatura vieja real**: los únicos literales son el hito homónimo y el value
-retirado usado como dato de entrada del caso huérfano.
-
----
-
-## 🟡 EN CURSO 2026-08-14 — feature **221**, fase 1 (spec): hilo de notas por orden tienda↔mensajero
-
-Pedido humano de hoy: **«que el rol adminTienda también pueda escribir notas»**. Ficha dada de alta
-(`id: 221`, `pending`, `fullstack`, `sdd: true`, `complexity: high`), `spec_author` corriendo sobre
-`specs/221-hilo-notas-orden/`. Zonas ocupadas al arrancar: 213 (frontend) y 215 (backend) →
-`fullstack` estaba a 0, la regla de 2 por zona no bloqueaba.
-
-**Lo que se construye:** un hilo por orden (`orden_nota`: `orden_id`, `autor_id`, `rol_autor`,
-`cuerpo`, `created_at`), bidireccional, acotado a órdenes de la propia tienda **en estado de
-novedad**, donde **cada autor puede borrar sus propias notas** (decisión añadida el 14-ago, ya no
-es append-only). Se retira la columna `nota` de `orden_mensajero_meta` y con ella la feature
-116 entera. `marcar_luego` (115) no se toca.
-
-**La medición que cambió la decisión humana, y por qué conviene no re-descubrirla:** la primera
-respuesta fue *«reutilizar `orden_mensajero_meta`, solo abrir la validación por rol»*. No se puede:
-esa tabla tiene `@@unique([usuarioId, ordenId])` (`db/schema.prisma:634`) —**una fila por pareja**—
-y de esa unicidad depende la idempotencia del upsert de `marcar_luego` (115/R7). Un hilo necesita N
-filas por orden; quitar el UNIQUE rompe la 115. Se le enseñó la medición y cambió a tabla nueva.
-
-**🔴 DECISIÓN DESTRUCTIVA QUE EL GATE HUMANO DEBE FIRMAR, NO ASUMIR.** Se eligió tabla nueva **sin**
-migrar lo existente, así que dropear `orden_mensajero_meta.nota` **borra las notas privadas ya
-escritas por los mensajeros en producción**. El spec debe exigir un **conteo de filas afectadas
-contra la base real ANTES de escribir la migración**. La alternativa de migrarlas al hilo está
-descartada a propósito: las haría visibles para la tienda.
-
-**El problema de privacidad que originó todo esto:** esas notas se escribieron bajo una promesa
-literal en pantalla —*«Solo tú puedes ver esta nota; no la ven la tienda ni otros mensajeros»*
-(`NotaPrivadaMensajero.tsx:30`, R6/R8 de la 116)—. Abrir esas filas a la tienda no es un cambio de
-permisos: es una fuga retroactiva sobre datos de producción.
-
-**Trampa de alcance ya identificada:** «estado de novedad» **no está definido en ninguna parte del
-código**. Hoy `/novedades` lista devueltas (`findDevueltasByTienda`). La lista exacta de estatus se
-fija en el spec, no se hereda por costumbre.
-
-**No confundir con los otros cuatro textos libres de una orden**, todos fuera de alcance:
-`orden.notas` (de la tienda, solo se escribe en el alta), `GestionOrden.motivo` (`:737`),
-`OrdenHistorialEstado.motivo` (`:1557`), `OrdenIncidente.motivo` (`:880`) y el chat de WhatsApp con
-el **cliente** (`ChatConversacion`/`ChatMensaje`, features 109/120) — otra persona, otro canal.
-
-### ✅ PUERTA HUMANA PASADA el 2026-08-14 — las 9 preguntas del spec, resueltas
-
-| | Decisión |
-| --- | --- |
-| **P1** | **Eliminada.** No se migra nada: las notas privadas actuales se **borran** con la columna. Solo se muestran las de la tabla nueva. **Decisión, no descuido.** |
-| **P2** | novedad = **`ESTATUS_DEVUELTA`**, y solo ese |
-| **P3a/b/c/d** | borrado **lógico**; el otro lado ve **«mensaje eliminado»**; solo se borra **mientras esté `devuelta`**; **no se edita** |
-| **P4** | al escribir la tienda, se notifica al mensajero **«orden reactivada»** |
-| **P5** | máximo **200** caracteres; el mensajero no escribe en órdenes que no tiene asignadas |
-| **P7** | **(a)** «novedad» acota la **escritura**, no la lectura |
-| **P6** | resuelto por P7(a): sin pantalla nueva |
-| **P8 / P9** | sin vista admin/maestro por ahora · solo notas propias, sin moderación |
-
-**La regla completa, en una línea:** ventana de **escritura y borrado** = `devuelta`; **lectura** = siempre.
-
-**Por qué P7 era la pregunta cara y no un detalle:** P2 y P4 se anulaban entre sí. El mensajero **no
-ve órdenes devueltas** —`MisAsignacionesService.ts:152` lee solo `por_recoger` y `en_reparto`, y ese
-corte es deliberado (feature 167/R34)—, así que con el hilo confinado a la novedad **la tienda
-escribiría cuando el mensajero no puede leer, y el mensajero leería cuando el hilo ya no existe**:
-los dos participantes nunca coinciden. La opción (a) lo arregla sin tocar el corte de la 167.
-
-### 🔎 Hallazgo que cambia el planteamiento de P4: **el «Habilitar» ya existe, y ya pide nota**
-
-`app/(app)/novedades/_components/HabilitarNovedadModal.tsx` es un modal «Habilitar orden» con **nota
-obligatoria** y la firma **definitiva** `onConfirmar(nota: string)`. Es **maqueta declarada**: su
-cabecera (`:37`) dice «la transición todavía no existe en el backend» y su consumidor solo lanza un
-toast (`NovedadesModule.tsx:155-163`). Su propio comentario (`:31-35`) explica por qué esa nota es
-obligatoria: *«Habilitar una orden que la tienda ya dio por devuelta no deja más rastro que el que
-alguien escriba»*.
-
-Es decir: **la reactivación que P4 quiere notificar no existe todavía, y su nota ya tiene formulario
-esperando dónde ir.** El `spec_author` está evaluando en la segunda vuelta si esa nota es el primer
-mensaje del hilo y si la transición entra en la 221 o sale a ficha aparte de la que la 221 dependa.
-Coste asociado: notificar exige **migrar el enum cerrado** `NotificacionEvento` (`schema.prisma:1875`).
-
-### 🕳️ La contradicción que sobrevivió al arreglo de P7, y que casi se cuela al código
-
-P7(a) arregló la **lectura** y todos dimos el problema por cerrado. **Seguía vivo en la escritura y
-nadie lo vio:** `R14` confinaba la publicación a `devuelta`, y `R36` expone el hilo al mensajero
-desde `listarMisAsignaciones`, que lee solo `por_recoger` y `en_reparto`. El mensajero **nunca tiene
-delante una orden `devuelta`, luego nunca podía publicar** — el «publicar» que `R11` le concedía era
-**letra muerta**. El hilo pedido como *bidireccional* salía de una sola dirección.
-
-**Cerrado con ventana ASIMÉTRICA POR ROL** (decisión humana): la tienda escribe y borra mientras la
-orden está `devuelta`; el mensajero mientras está `en_reparto` **y asignada a él**. Cada uno escribe
-cuando ve la orden. La lectura no cambia y el corte de la 167/R34 no se toca. Ojo al efecto lateral:
-la ventana de **borrado** de cada rol es la misma que su ventana de escritura, así que «congelado»
-ya no es «salió de `devuelta`» sino **«salió de MI ventana»**.
-
-> **La lección, que ya está en memoria:** acotar una escritura por estatus **sin cruzarla con la
-> pantalla donde cada rol ve la entidad** concede permisos que nadie puede ejercer. No es un estatus
-> mal elegido: es razonar la regla sin mirar la superficie de cada participante.
-
-### ✂️ Partición aprobada: R37 sale, nace la **222**
-
-**La 221 no lleva notificación de ningún tipo.** El `spec_author` midió bien la incoherencia de P4:
-escribir solo es posible mientras la orden está `devuelta` —o sea, **cuando aún NO está
-reactivada**—, así que el disparador y el nombre del evento eran dos cosas distintas. El humano eligió
-**un solo aviso**, «orden reactivada», emitido por la ficha nueva **222** (transición habilitar).
-Se descarta el aviso de «la tienda te escribió».
-
-**Consecuencia aceptada y dicha en voz alta:** hasta que exista la 222, el mensajero **no recibe
-ninguna señal** de que la tienda le escribió — solo ve el hilo si abre la orden. Sin badge ni
-contador: es decisión, no olvido.
-
-**Y la dependencia va al revés de lo que parece:** la 221 no necesita el «habilitar» (entrega el hilo
-completo sin él); es el «habilitar» el que necesita el hilo donde sembrar su nota obligatoria.
-
-**Siguiente paso:** vuelta final del spec en curso — su objetivo principal es `tasks.md`, que se
-quedó con 34 de los 37 `R<n>` mapeados cuando el subagente murió por un error de API. Nadie toca
-código antes.
-
----
-
-## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
-
-### ✅ RESUELTO — este aviso caducó el 2026-08-13 (se conserva por lo que enseña)
-
-> **Ya no hace falta decidir nada: el rojo cayó en el PR #367** (`7205b2a1`, «cae el último rojo y
-> queda declarada la deriva del KPI, R24/R35»). Comprobado desde la rama de la 213 al remergear
-> `dev` para el PR #368: `analytics-daily-job.test.ts` pasa **29/29**.
+> Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
+> entero porque su razonamiento sigue valiendo. Lo que cambió:
 >
-> **Y se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue
-> esperando `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo, se implementó el R24
-> que estaba bloqueado. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
+> - **La release SALIÓ.** PR **#381** (`dev → prod`, 109 commits, cero migraciones), mergeado y
+>   **desplegado en producción** (`31c36d61`, deployment `READY`). **Cero errores de runtime en 24 h.**
+>   Ya no hay ninguna decisión humana esperando. `dev` va 4 commits por delante de `prod`: sólo el
+>   chore #382 de la deuda de la 215.
+> - **La 215 está `done`.** Se cerró corriendo **R19** contra la base real de producción — lo único
+>   que le faltaba. **R18 y R34 no eran deuda** (el código los cumple, verificado el 14-ago) y **R24
+>   se cerró** declarando la deriva con fecha de corte, así que el punto 6 de «Lo siguiente» estaba
+>   caducado en sus tres cargos. Detalle en `progress/impl_215_r19.md`.
+>   - Resultado: **0 en las nueve columnas**, y **el cero es de universo vacío** — 141 órdenes vivas
+>     en la base, pero ninguna en `devuelta` hoy. **Nadie fue cobrado antes de tiempo.** El número
+>     **caduca** en cuanto entre una orden, y **nada lo vigila**: eso es la ficha **219**.
+>   - **La 218 queda desbloqueada**: su condición era «no arranca hasta que la 215 esté mergeada».
+> - **La 224 también está `done` y mergeada** (PR **#384**). Tres rondas de revisión y **33
+>   mutaciones** (19 letales rojas, 14 inocuas verdes). **La ficha enunciaba la contradicción AL
+>   REVÉS y se corrigió**: detrás de `.dark` también gana; lo que lo prohíbe es el **lector de tokens
+>   de los tests**, no la cascada. El problema real era la **especificidad** (`.dark` 0-1-0 empata y
+>   pierde por orden; `html .dark` 0-1-1 gana esté donde esté), medido en Chromium sobre **la hoja
+>   real compilada**. Y eran **35** declaraciones, no 34.
+>   - Compra lo que prometía: `--foreground` en papel **1,19 → 15,70**, y con «gráficos de fondo»
+>     marcado las insignias **1,70 → 4,84**, que era el precio que la 221 dejaba pagado.
+>   - **Lo que NO compra está declarado y es ejecutable**: `--destructive` 3,76 y `--primary` 3,18
+>     siguen bajo AA (paleta, 210/216), y **seis tokens EMPEORAN** al imprimir desde oscuro
+>     (`P1`–`P6`; el peor `--primary-foreground` **18,33 → 1,00** en 15 usos). **Sin ficha todavía**
+>     — ver «Lo siguiente».
+> - **Gate completo verde tres veces** el 14-ago, con el baseline **remedido y no citado**: sobre
+>   `dev` limpio (1096/1096 archivos, 14044/14044 tests, 301 s), sobre la rama de la 215
+>   (1096/1096, 14044/14044, 349 s) y sobre el árbol de la 224 **ya mergeado con `dev`**
+>   (**1097/1097, 14093/14093**, 0 saltados, 283 s). Los tres exit 0.
+
+### 🧠 Lo que la tarde enseñó, y no estaba en el cierre de la mañana
+
+- **Un cero sobre un universo vacío no es un resultado: es una consulta sin sujeto.** R19 salió 0 en
+  las nueve columnas, y la mitad del trabajo fue **demostrar por qué**: 141 órdenes vivas, ninguna en
+  `devuelta` **ni contando las borradas**, y 11/8/32 de materia en el dominio. Sin esos cuatro
+  controles, ese 0 es indistinguible de un `JOIN` que no casa. Y el número **caduca**: se escribió
+  con su fecha de caducidad dentro, igual que había caducado el 0 de `160/D7`.
+- **Una afirmación falsa puede quedar ATORNILLADA por un test verde.** La guardia F4 exigía
+  `toContain("1.19 → 11.39")`: la frase del CSS no se podía corregir **sin poner el test rojo**. Un
+  pin de prosa protege de que alguien la borre, y a la vez la fosiliza cuando deja de ser cierta.
+  Al pinear una frase, pinear también **lo que la hace verdad**.
+- **Los defectos ENCAJADOS sobreviven a los barridos.** F4 escapó a un barrido que sí cazó a sus dos
+  hermanas porque tenía **dos**: estaba mal clasificada (como «paleta fija») **y** medida con el
+  lector ciego. Cada uno solo se ve; juntos se tapan.
+- **Un arreglo puede abrir el agujero que el arreglo anterior cerró.** Al cambiar una lista escrita a
+  mano por una **derivada**, el caso central pasó a poder cumplirse **por vacuidad**. La
+  anti-vacuidad va **dentro** del caso: uno que necesita que otro se ponga rojo para no mentir,
+  miente igual si lo corren solo.
+- **La mutación INOCUA volvió a ser la que encontró algo**, dos veces: destapó que la guardia
+  rechazaba una implementación igual de correcta, y que una «inocua» mal elegida no lo era.
+- **El gate de un worktree recién creado NO es el gate.** `./init.sh` salió rojo con 3 tests y **240
+  saltados** en `C:/w224`: faltaba el `.env`, y `prisma migrate diff` no podía derivar el DDL. Con
+  `.env`, ese archivo da **62/62**. Lo correcto lo hizo la guardia: **falló en vez de saltarse**.
+  Antes de leer un rojo de worktree como regresión, comprobar `.env` y el recuento de saltados.
+- **Medir en el CSS fuente no es medir.** La contradicción de la 224 sólo se resolvió mirando **la
+  hoja compilada** en el navegador: el fuente no dice quién gana la cascada.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-14
+
+### 🚦 ~~Lo único que espera decisión humana: **la release a `prod`**~~ — **HECHA, ver arriba**
+
+**95 commits, y CERO migraciones** — no es una estimación: el árbol `db/` de `dev` y el de `prod`
+son **idénticos byte a byte** (116 migraciones en ambos), así que mergear **no aplica nada** contra
+la base. La última que se desplegó fue la de la 212, en la release #359.
+
+Lleva **206** (anulación agrupada), **209** (un solo quitador de comentarios), **210** (contraste de
+insignias), **213** (pago múltiple en pantalla), **215** (el reintento se cuenta en el cierre),
+**217** (la factura gira con el tema), **221** (`dark:` no dispara al imprimir), **222** (el botón
+destructive cumple AA) y **223** (la factura se imprime entera).
+
+Lo que un usuario nota de inmediato: **puede cobrar una entrega con varios métodos**, y **la factura
+del cierre ya no sale recortada ni en blanco sobre negro al imprimirla**.
+
+### ✅ Lo que salió de esta jornada
+
+| | Qué |
+| --- | --- |
+| **El rojo de `dev`** | cerrado. Y la disyuntiva que la nota planteaba —«¿implementar R24 o cambiar el test?»— **era falsa: era la semilla** |
+| **209** | cerrada. 7 quitadores migrados **sin mover un veredicto**, 9 falsos positivos cerrados, y 2 semánticas que el censo no podía ver |
+| **217** | la factura gira con el tema, con inventario **cerrado** de 26 pares y la grieta declarada en tres sedes |
+| **221** | el variant `dark:` deja de disparar al imprimir; 4 pares de paleta fija mejoran de 1,87 a 3,18-11,39 |
+| **222** | el botón `destructive` cumple en los **cuatro** estados — el peor era el **hover**, y no estaba en la ficha |
+| **223** | la factura se imprime entera y sólo la factura, **sin una línea de JavaScript** |
+| **Bookkeeping** | la **213** llevaba `in_progress` con su PR mergeado: la única tarea sin marcar era **su propio bookkeeping**, y ocupaba un hueco de la regla de zona |
+| **Fichas nuevas** | **221**, **222**, **223** (las tres implementadas hoy) y **224**, **225**, **226** registradas con su medición dentro |
+
+### ⏭️ Lo siguiente, en este orden
+
+1. ~~**Decidir la release**~~ — **HECHA**: PR #381, en producción y sin errores de runtime.
+2. ~~**La 224**~~ — **CERRADA y mergeada el 14-ago** (PR #384). Ver arriba.
+2b. **SIN FICHA TODAVÍA, y es lo primero de la cola:** los **seis tokens que EMPEORAN al imprimir
+   desde oscuro** que destapó la 224 (`P1`–`P6`; el peor, `--primary-foreground` **18,33 → 1,00** en
+   15 usos: tinta blanca sobre un fondo que la impresora no pone). Está **medido y con guardia
+   ejecutable** en `impresion-tokens.guardia.test.ts`, y **declarado** en `app/globals.css`, pero
+   **nadie lo reclama**. No se arregla dentro de la 224 por una razón de fondo: el papel **iguala al
+   tema claro por construcción** —el bloque espeja los 35 tokens hex a hex—, así que darles un valor
+   propio rompería ese espejo y dejaría el papel de «oscuro» **mejor** que el de «claro». La
+   decisión de fondo es de **paleta**, y emparenta con la 216 y la 210.
+3. **La 225** — 19 avisos hechos a mano en 15 archivos repiten el par que la 222 arregló. Decidir al
+   empezar si van a un componente compartido o sólo se les cambia el par; lo segundo reabre la ficha.
+4. **La 226** — el anillo de foco mide 1,30 contra el **3:1** que pide 1.4.11. No es estética: es la
+   señal de dónde está el teclado.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+6. ~~**La 215** sigue `in_progress` con R18/R19/R24 abiertos~~ — **CERRADA el 14-ago**: R18/R34 no
+   eran deuda, R24 se cerró declarando la deriva, y **R19 se ejecutó** contra producción. Ver arriba.
+7. **La 218**, recién desbloqueada: el corte automático sigue sin sumar reintento en `sin_gestionar`.
+   Comparte predicado con la 215, que ya está en `prod`.
+
+### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
+
+- **La misma enfermedad apareció CINCO veces, y una en código escrito el mismo día que se erradicó.**
+  Un censo que lee **prosa como si fuera código**: los 9 quitadores de la 209, la guardia de R15 de
+  la 217, el docstring que prometía más que su mecanismo, y el parser de CSS que aplicaba el
+  quitador de TypeScript. La 209 la cerró por la mañana y por la tarde reapareció en la 217.
+- **Un censo mide la forma que sabe buscar, no el fenómeno.** El de la 209 buscaba regex, y las **dos
+  peores semánticas del árbol** estaban escritas con `split`/`filter`. El detector ancho dio 12
+  falsos positivos de 17 — y encontró las dos que importaban. **Ancho + triaje a mano** es lo único
+  que ha funcionado las dos veces que se ha intentado.
+- **«Un total que se mueve es un hallazgo» sólo vale si el total es el que la guardia AFIRMA.** Los
+  siete quitadores de la tanda B se apartaron por un derivado intermedio que se mueve **por diseño**.
+  No había ningún veredicto que dar.
+- **Tres mutaciones salieron VERDES y eran las mutaciones las que estaban mal**: la que la bitácora
+  de la 217 daba por roja no podía ocurrir, la del spec de la 223 dejaba la página en blanco, y una
+  con `querySelector("main")` devolvía `null` y sus veinte verdes no significaban nada. **Una
+  mutación inerte reportada en verde es indistinguible de una guardia que no muerde**, y la única
+  defensa que funcionó fue **plantarla uno mismo** y exigir su **variante inocua**.
+- **Medir antes de especificar volvió a cambiar el encargo, dos veces más.** En la 217 no existía
+  **ninguna** vía de impresión en el repo, así que la regla del papel blanco hubo que **crearla**;
+  y el medidor que el spec daba por inexistente **sí estaba commiteado**, dentro de una guardia y sin
+  exportar.
+- **El CSS de un spec aprobado puede estar roto, y sólo lo dice medirlo**: el de la 223 imprimía una
+  página **en blanco** —PDF de 652 bytes—. Leerlo no bastaba.
+- **Cuando una decisión humana va contra la recomendación, la objeción que la motivaba NO desaparece:
+  hay que resolverla.** La hoja compacta imprimible obligó a inventar el mecanismo de candidatura, y
+  salió **sin una línea de JavaScript**.
+- **Los backticks en un `-m` inline, y dentro de `node -e`, los ejecuta el shell antes de que nadie
+  los lea, y se comen el texto EN SILENCIO.** Pasó **dos veces hoy**, y la T18 de la 213 ya lo tenía
+  escrito. Usar `-F -` con heredoc citado, siempre.
+- **El registro se desincroniza en la dirección que nadie mira**: la 213 estaba mergeada, aprobada y
+  desplegada, y su ficha decía `in_progress` porque **su propia tarea de bookkeeping** era la única
+  sin marcar. Y con ella ocupaba un hueco de la regla de max-2-por-zona.
+
+### 🧾 Deuda declarada hoy, toda con ficha o con número
+
+- **224**, **225** y **226** (arriba), las tres con su medición dentro.
+- El **harness de impresión** de la 223 se borró a propósito → ficha aparte.
+- **Gecko y WebKit no están medidos** en la 223; sólo Chromium.
+- La **grieta del inventario** de la 217 —recombinar una tinta y un fondo ya declarados— no la caza
+  nada, **por decisión**: cerrar por par exige recorrer el JSX y eso aprueba con números falsos.
+  Verificada con una mutación de **control que sale verde a propósito**.
+- Las **pestañas no visitadas** y el **KPI animado** de la factura llevan su límite escrito.
+- La 215 deja **R19** (una consulta de medición a la que le falta una condición, y gobierna dinero),
+  **R28** en 3 sitios y **R24-b/c/d + R35** sin guardia que los sostenga.
+
+---
+
+## 🏁 CIERRE DE JORNADA 2026-08-13
+
+### ✅ EL ROJO DE `dev` ESTÁ CERRADO (2026-08-13, tarde) — **medido, no supuesto**
+
+> Este bloque abría diciendo «`dev` está ROJO» y que era la primera decisión humana pendiente.
+> **Ya no hace falta decidir nada: cayó en el PR #367** (`7205b2a1`). Dos sesiones lo comprobaron
+> por caminos distintos: desde la rama de la 213 al remergear `dev` para el PR #368
+> (`analytics-daily-job.test.ts` pasa **29/29**), y con el gate completo que se detalla abajo.
+>
+> **Se arregló por el lado correcto**, que era la mitad de la pregunta: el assert **sigue esperando
+> `[1, 0]`**. No se tapó cambiando la expectativa al criterio nuevo.
+>
+> ⚠️ **Matiz que conviene fijar, porque la primera redacción decía otra cosa: NO se implementó el
+> R24.** Lo que cayó fue **la semilla** (ver abajo). El R24 se cerró **declarando la deriva** con
+> fecha de corte (Q10, `e811e7bf`), que es una decisión documental, no el KPI persistido en
+> `analytics_daily` — la ficha 215 lo sigue listando entre lo NO implementado, y por eso sigue
+> `in_progress`. Que el aviso de la deriva no llegue a la pantalla es la ficha **219**.
 >
 > Lo que sí sigue en pie es el párrafo del peaje: el rojo vivió **seis merges** sin que nadie lo
 > parara, y eso no lo arregla ningún PR.
 
-### 🔴 EL AVISO ORIGINAL, YA RESUELTO: **`dev` estaba ROJO**
-
 `tests/integration/db/analytics-daily-job.test.ts > primer intento vs entrega tras una devolucion
-previa (R17)` falla **en `dev` limpio** — verificado sin ningún cambio local encima. Entró con el
-**PR #363** (feature 215) y ya lleva **seis merges por encima**.
+previa (R17)` llevaba seis merges rojo en `dev` limpio. Lo cierra el **PR #367** (feature 215),
+mergeado en `4f8e5362`.
 
-**No es un misterio: es el R24 que la propia ficha 215 declara BLOQUEADO y sin implementar** («el
-KPI `primer_intento_ok` persistido en `analytics_daily`»). Mover el conteo del reintento al cierre
-cambió ese KPI y el requisito que lo cubría se dejó fuera a propósito. Hay que decidir: **implementar
-R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
+**Y la disyuntiva que esta nota planteaba —«implementar R24 o actualizar el test»— era falsa: era la
+semilla.** El fixture describía el mundo viejo. Con el criterio nuevo una devolución solo cuenta
+como intento si su gestión pertenece a un **cierre aprobado**, y la semilla la creaba sin cierre. Se
+corrigió ahí (`crearCierreAprobado`, y un `cierreId` opcional con default `null` en `crearGestion`,
+que no toca los ~15 call-sites). **Las dos cifras que prueban que el KPI distingue un reintento de
+un primer intento siguen literalmente intactas** (`[1,0]` y `[1,1]`): no se relajó ninguna aserción.
 
-> Mientras siga rojo, cada PR paga el peaje de declarar «este rojo no es mío» — que es exactamente
-> cómo se cuela el siguiente que sí lo sea. Es la deuda más cara del tablero ahora mismo.
+**Verificado desde esta sesión, y conviene saber cómo:** el rojo se reprodujo primero sobre `dev`
+limpio (`expected [1,1] to deeply equal [1,0]`); luego se reconstruyó el merge real —la rama iba
+**11 commits por detrás**— y se corrió `./init.sh` completo sobre ese árbol: **1087/1087 archivos,
+13.776/13.776 tests**, cero omitidos, 275 s, exit 0. `dev` se movió mientras corría (la otra sesión
+mergeó el #367), así que **se comparó el árbol**: el medido y el de `dev` son el **mismo objeto**
+(`e5b8936c`). Por eso el verde certifica el `dev` publicado y no una aproximación suya.
+
+> ⚠️ **Lo que el #367 NO cierra, y estaba solo en el cuerpo del PR:** `R19` (la consulta de medición
+> de `design.md §7.6` contra la base real — el reviewer avisa de que **le falta la sexta condición,
+> la visita real**, así que hoy sobreestimaría, y gobierna dinero); `R28` incumplido en 3 sitios,
+> con el comentario de `GestionOrdenRepository.ts:505` afirmando algo **hoy falso**; y `R24-b/c/d` +
+> `R35` **sin dueño ejecutable** — la guardia de prosa que `tasks.md` les asigna no existe, así que
+> las tres declaraciones se pueden borrar sin que nada se ponga rojo. La ficha **215** sigue
+> `in_progress` justamente por esto; no darla por cerrada.
 
 ### ✅ Lo que salió de esta jornada
 
@@ -310,7 +234,7 @@ R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
 
 ### ⏭️ Lo siguiente, en este orden
 
-1. **Decidir el rojo de `dev`** (arriba). Bloquea la lectura de todo lo demás.
+1. ~~Decidir el rojo de `dev`~~ — **hecho** (arriba). Ya no bloquea la lectura de nada.
 2. **Los 7 quitadores** de la tanda B, uno a uno. Media faena hecha: el mecanismo está identificado
    y la lista está en la ficha 209. Cada uno es una pregunta contestable — ¿el conteo nuevo es el
    correcto, o el ancla era legítima? **Empezar en frío**: son siete veredictos de guardias de
@@ -319,8 +243,9 @@ R24 o actualizar el test al criterio nuevo**, y dejarlo escrito.
    **al imprimir, la hoja sigue blanca**.
 4. **La 216** espera una **decisión de marca** (un hex para el primario, o pasar el texto a un
    `-strong` propio). No es un arreglo técnico.
-5. **La 213** la implementa **otro programador** desde sus sesiones; su spec está completo y su
-   puerta humana **sin pasar**.
+5. **El PR #368 (la 213)** está abierto y sin revisar: 34 archivos, del otro programador, y va
+   **11 commits por detrás de `dev`**. La **214 sigue bloqueada** hasta que la 213 esté
+   **desplegada**, no mergeada.
 
 ### 🧠 Lo que esta jornada enseñó, y conviene no re-aprender
 

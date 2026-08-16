@@ -39,6 +39,18 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
   liberarGestion: vi.fn(),
 }));
 
+// Feature 227 (T3.4): el panel de gestión monta el HILO de notas y lo lee al abrir la orden.
+// Son Server Actions (`"use server"` con Prisma detrás) y se mockean por el mismo motivo que
+// las de arriba. Hilo vacío y de solo lectura = el mínimo DOM que no interfiere con lo que
+// este archivo mide.
+vi.mock("@/lib/actions/orden-notas", () => ({
+  listarNotasOrden: vi
+    .fn()
+    .mockResolvedValue({ status: "ok", notas: [], puedeEscribir: false }),
+  publicarNotaOrden: vi.fn(),
+  borrarNotaOrden: vi.fn(),
+}));
+
 // Feature 97: el mapa REAL usa Leaflet, que jsdom no puede pintar (canvas + `window`). Se
 // mockea `RutaMapa` por su testid para afirmar que está montado y con qué paradas, sin
 // depender del render de Leaflet. La Server Action de sincronización también se mockea (es
@@ -62,14 +74,6 @@ vi.mock("@/lib/actions/orden-mensajero-meta", () => ({
   marcarGestionarLuego: vi
     .fn()
     .mockResolvedValue({ status: "ok", ordenId: "g1", marcarLuego: true }),
-}));
-
-// Feature 116: el panel de detalle monta `NotaPrivadaMensajero`, que importa estas Server
-// Actions (`"use server"` con Prisma detrás). Se mockean para no cargar Prisma en jsdom; su
-// comportamiento propio se prueba en `NotaPrivadaMensajero.test.tsx`.
-vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
-  guardarNotaPrivada: vi.fn(),
-  limpiarNotaPrivada: vi.fn(),
 }));
 
 const { successMock, errorMock, refreshMock } = vi.hoisted(() => ({

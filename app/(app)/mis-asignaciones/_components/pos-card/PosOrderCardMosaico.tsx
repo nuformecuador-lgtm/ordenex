@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, MapPin, Navigation, Package, StickyNote } from "lucide-react";
+import { ChevronDown, MapPin, Navigation, Package } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -182,19 +182,6 @@ export function PosOrderCardMosaico({
               Gestionar más tarde
             </Badge>
           ) : null}
-        </div>
-      ) : null}
-
-      {/* Feature 116/R12: indicador de la NOTA PRIVADA del mensajero (badge + preview). */}
-      {orden.notaPrivada ? (
-        <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" className="shrink-0">
-            <StickyNote aria-hidden="true" />
-            Mi nota
-          </Badge>
-          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-            {orden.notaPrivada}
-          </span>
         </div>
       ) : null}
 

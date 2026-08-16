@@ -51,19 +51,11 @@ export interface MiAsignacionDTO {
    * consume para el badge y el reordenado de presentacion.
    */
   marcarLuego?: boolean;
-  /**
-   * Feature 116 (R6/R8): nota PRIVADA del mensajero actual sobre esta orden. `string` con el
-   * texto de su nota, o `null` si el propio actor no tiene nota para la orden. DISTINTA de
-   * `notas` (nota de la TIENDA, `orden.notas`): esta viaja SOLO por (usuario_id, orden_id) de
-   * `orden_mensajero_meta.nota`, se resuelve con `findNotasByMensajero(actor.usuarioId)` y NUNCA
-   * expone la nota de otro mensajero para la misma orden (R8).
-   *
-   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`: no rompe los fixtures que
-   * construyen `MiAsignacionDTO` sin el; `toDTO` SIEMPRE lo envia (`null` por defecto y el
-   * llamador lo sobreescribe con la nota real del actor). La UI del mensajero (feature 116/
-   * Bloque F) lo consume para el editor del detalle y el indicador de la card.
-   */
-  notaPrivada?: string | null;
+  // Feature 227 (R21): aqui vivia `notaPrivada?` (feature 116). El campo se RETIRO junto con la
+  // columna `orden_mensajero_meta.nota`: el DTO ya no emite ninguna nota privada del mensajero y
+  // ninguna card pinta indicador de ella. La conversacion sobre la orden vive ahora en
+  // `orden_nota` y NO viaja en este DTO: se carga bajo demanda con su propia accion, porque
+  // meterla en un listado paginado seria un N+1 (design §4/§5.2).
   /**
    * Feature 160 (R11/R14/R16/R24) + 215 (R6/R20): intentos de entrega de la orden, resueltos en
    * el MISMO lote de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215
@@ -71,7 +63,7 @@ export interface MiAsignacionDTO {
    * resultado de gestion vigente `rechazada`/`devuelta`/`reprogramada`; ya no se deriva de los
    * destinos de las transiciones del historial.
    *
-   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia, `0`
    * incluido (R14). La UI del mensajero lo pinta con `?? 0` como un dato mas de la orden (R19).
    */
@@ -82,7 +74,7 @@ export interface MiAsignacionDTO {
    * destinatario final). El modelo no tiene direccion de la tienda, asi que el contacto es lo
    * unico que se puede ofrecer para llegar a ella (pregunta abierta 2 de requirements.md).
    *
-   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`/`notaPrivada?`: no rompe los
+   * Opcional (`?`) por el mismo patron aditivo que `marcarLuego?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el repo SIEMPRE lo emite (`null` cuando
    * la tienda no tiene telefono registrado).
    *

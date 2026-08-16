@@ -24,10 +24,6 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
-vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
-  guardarNotaPrivada: vi.fn(),
-  limpiarNotaPrivada: vi.fn(),
-}));
 
 const { successMock, errorMock } = vi.hoisted(() => ({
   successMock: vi.fn(),

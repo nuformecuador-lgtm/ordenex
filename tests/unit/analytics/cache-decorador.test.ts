@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { CachedAnaliticaOperativaRollupRepository } from "@/lib/repositories/CachedAnaliticaOperativaRollupRepository";
 import { TAG_OPERATIVA } from "@/lib/analytics/cache-tags";
 import type { DimensionAnalitica } from "@/lib/analytics/types";
@@ -93,7 +94,7 @@ describe("R22 · el decorador no conoce Prisma", () => {
       path.join(REPO_ROOT, "lib", "repositories", "CachedAnaliticaOperativaRollupRepository.ts"),
       "utf8",
     );
-    const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+    const codigo = quitarComentarios(fuente);
     expect(codigo).not.toMatch(/@prisma\/client/);
     expect(codigo).not.toMatch(/analyticsDaily|analytics_daily/);
     expect(codigo).not.toMatch(/groupBy/);

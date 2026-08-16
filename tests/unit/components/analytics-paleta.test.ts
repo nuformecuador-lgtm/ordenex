@@ -13,6 +13,8 @@ import {
   varDeSerie,
 } from "@/components/private/analytics/paleta";
 import { MAX_SERIES } from "@/components/private/analytics/topes";
+// Feature 223 (R32): EL parser de reglas CSS del repo. Antes vivía copiado aquí abajo.
+import { reglasDeArchivo } from "../../fixtures/css-reglas";
 
 const RAIZ = process.cwd();
 const PAQUETE = path.join(RAIZ, "components", "private", "analytics");
@@ -25,28 +27,6 @@ function archivosDelPaquete(dir: string = PAQUETE): string[] {
 }
 
 /**
- * Corta por comas de PRIMER nivel: las de dentro de `:is(.a, .b)` o de un `[attr="x,y"]`
- * no separan selectores.
- */
-function selectoresDe(prelude: string): string[] {
-  const partes: string[] = [];
-  let actual = "";
-  let hondura = 0;
-  for (const c of prelude) {
-    if (c === "(" || c === "[") hondura += 1;
-    else if (c === ")" || c === "]") hondura -= 1;
-    if (c === "," && hondura === 0) {
-      partes.push(actual);
-      actual = "";
-      continue;
-    }
-    actual += c;
-  }
-  partes.push(actual);
-  return partes.map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
-}
-
-/**
  * Cuerpos de TODAS las reglas cuya lista de selectores incluya `selector` como elemento
  * propio, sin importar el orden, los vecinos ni el espaciado: `:root {`, `:root,\n
  * .tema-claro {` y `.x, :root {` valen igual.
@@ -56,30 +36,21 @@ function selectoresDe(prelude: string): string[] {
  * enganchaba al siguiente `:root {` del archivo (el de las variables de animación), donde
  * ningún `--chart-*` existe. Rojo por trocear mal, no por token ausente.
  *
- * Los comentarios se quitan ANTES de trocear: si no, una declaración borrada pero
- * mencionada en la prosa de al lado seguiría dando verde.
+ * ⚠️ Feature 223 (R32) — ESTE ARCHIVO TENÍA SU PROPIA COPIA del troceador (`selectoresDe` +
+ * un recorrido de llaves + un quitador de comentarios escrito a mano). Eran la segunda copia
+ * del parser de reglas del repo y el quitador propio que la feature 209 vino a cerrar. Hoy las
+ * dos piezas salen del fixture compartido `tests/fixtures/css-reglas.ts`, que lee con el
+ * quitador único. Lo que este archivo AFIRMA no cambia: sigue exigiendo que cada `--chart-N`
+ * esté declarado en `:root` y en `.dark`.
  */
-function cuerposDeRegla(css: string, selector: string): string[] {
-  const limpio = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const cuerpos: string[] = [];
-  const abiertas: { prelude: string; desde: number }[] = [];
-  let marca = 0;
-  for (let i = 0; i < limpio.length; i += 1) {
-    const c = limpio[i];
-    if (c === "{") {
-      abiertas.push({ prelude: limpio.slice(marca, i), desde: i + 1 });
-      marca = i + 1;
-    } else if (c === "}") {
-      const regla = abiertas.pop();
-      marca = i + 1;
-      if (regla && selectoresDe(regla.prelude).includes(selector)) {
-        cuerpos.push(limpio.slice(regla.desde, i));
-      }
-    } else if (c === ";") {
-      marca = i + 1;
-    }
-  }
-  return cuerpos;
+function cuerposDeRegla(selector: string): string[] {
+  return reglasDeArchivo(path.join("app", "globals.css"))
+    .filter((regla) => regla.selectores.includes(selector))
+    .map((regla) =>
+      Object.entries(regla.declaraciones)
+        .map(([nombre, valor]) => `${nombre}: ${valor};`)
+        .join("\n"),
+    );
 }
 
 describe("paleta de series (R16-R19, R30)", () => {
@@ -108,9 +79,8 @@ describe("paleta de series (R16-R19, R30)", () => {
   });
 
   it("los tokens declarados existen en app/globals.css, en :root y en .dark", () => {
-    const css = readFileSync(path.join(RAIZ, "app", "globals.css"), "utf8");
     const bloque = (selector: string): string => {
-      const cuerpos = cuerposDeRegla(css, selector);
+      const cuerpos = cuerposDeRegla(selector);
       expect(cuerpos.length, `no existe ninguna regla para ${selector} en globals.css`)
         .toBeGreaterThan(0);
       return cuerpos.join("\n");

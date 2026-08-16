@@ -26,13 +26,9 @@ vi.mock("@/lib/actions/mis-asignaciones", () => ({
   gestionar: vi.fn(),
 }));
 
-// El panel monta `NotaPrivadaMensajero` (router + Server Actions con Prisma detrás).
+// El panel y sus hijos usan `useRouter`; se mockea para montarlo en jsdom sin el router real.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
-}));
-vi.mock("@/lib/actions/notas-privadas-mensajero", () => ({
-  guardarNotaPrivada: vi.fn(),
-  limpiarNotaPrivada: vi.fn(),
 }));
 
 const { successMock, errorMock } = vi.hoisted(() => ({

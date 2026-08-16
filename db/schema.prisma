@@ -147,6 +147,7 @@ model Usuario {
   liquidacionRepartosComoMensajero    LiquidacionReparto[]      @relation("LiquidacionRepartoMensajero") // feature 205/R29: repartos (un importe troceado entre sus cierres) recibidos por ESTE mensajero
   liquidacionRepartosRegistrados      LiquidacionReparto[]      @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
+  ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -561,6 +562,9 @@ model Orden {
   mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
   incidentesAdmin       OrdenIncidente[] // feature 158/R38: incidentes reportados por un ADMIN sobre esta orden (a lo sumo UNO vivo, indice parcial R47)
+  // NO se llama `notas`: ese nombre ya lo ocupa la nota de la TIENDA (`orden.notas`, R14a),
+  // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
+  notasHilo             OrdenNota[]            @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -614,17 +618,22 @@ model Carga {
 }
 
 // Feature 115 — meta PRIVADA por (mensajero, orden). `marcar_luego` (115) = "gestionar
-// mas tarde", solo informativa (no cambia estatus ni ruta). `nota` (text NULL) NACE aqui
-// para la feature 116 (notas privadas), que NO crea migracion propia. UNIQUE(usuario_id,
-// orden_id): una fila por pareja -> idempotencia del toggle (upsert). Ambas FK ON DELETE
+// mas tarde", solo informativa (no cambia estatus ni ruta). UNIQUE(usuario_id, orden_id):
+// una fila por pareja -> idempotencia del toggle (upsert). Ambas FK ON DELETE
 // CASCADE: la meta es dato derivado, se va con el mensajero o la orden. RLS habilitada sin
 // policies (patron api_key/plantilla_mensaje); la autorizacion de negocio vive en el service.
+//
+// Feature 227 (R23): aqui vivia `nota text NULL`, la nota PRIVADA del mensajero (feature
+// 116). La columna se RETIRO con la migracion `*_orden_mensajero_meta_drop_nota` y su
+// contenido se perdio de forma DEFINITIVA y DELIBERADA (decision humana del 2026-08-14,
+// P1: se escribio bajo una promesa literal de privacidad, asi que copiarla al hilo
+// compartido habria sido una fuga retroactiva). La conversacion entre tienda y mensajero
+// vive ahora en `OrdenNota`. `marcar_luego`, el UNIQUE, las FK y la RLS NO se tocaron (R24).
 model OrdenMensajeroMeta {
   id          String   @id @default(uuid())
   usuarioId   String   @map("usuario_id")
   ordenId     String   @map("orden_id")
   marcarLuego Boolean  @default(false) @map("marcar_luego") // feature 115
-  nota        String? // feature 116: columna nace aqui (115), la USA la 116
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -635,6 +644,43 @@ model OrdenMensajeroMeta {
   @@index([usuarioId]) // R17: leer todas las metas del mensajero al listar
   @@index([ordenId])
   @@map("orden_mensajero_meta")
+}
+
+// Feature 227 (design §1.1) — HILO de notas por orden entre la tienda (adminTienda dueno)
+// y el mensajero ASIGNADO. Tabla NUEVA y no una reutilizacion de `orden_mensajero_meta`:
+// aquella declara UNIQUE(usuario_id, orden_id) —una fila por pareja, de la que depende la
+// idempotencia del toggle `marcar_luego` (feature 115/R7)— y un hilo necesita N filas por
+// orden.
+//
+// SIN `updated_at` a proposito (R2): el cuerpo de una nota publicada NO se edita. Lo unico
+// que muta en una fila es `deleted_at`, una vez y en un solo sentido (borrado LOGICO, R31:
+// la fila borrada sigue probando que ALGUIEN escribio algo y cuando, que es la mitad del
+// valor del hilo en una disputa tienda<->mensajero).
+//
+// `rol_autor` es COLUMNA y no un JOIN a `usuario.rol` (R4): el rol de un usuario puede
+// cambiar y el hilo debe decir con que sombrero se escribio cada nota, no reescribir la
+// historia.
+//
+// FK a `orden` ON DELETE CASCADE (R30: sin filas huerfanas); FK a `usuario` ON DELETE
+// RESTRICT: la autoria es evidencia y no se pierde al dar de baja un usuario. RLS
+// habilitada SIN policies (patron orden_mensajero_meta/plantilla_mensaje): toda la
+// autorizacion de negocio (rol, tienda, asignacion, ventana de escritura) vive en el
+// service (R26).
+model OrdenNota {
+  id        String    @id @default(uuid())
+  ordenId   String    @map("orden_id")
+  autorId   String    @map("autor_id")
+  rolAutor  RolValue  @map("rol_autor") // R4: congelado en el instante de publicar
+  cuerpo    String // NOT NULL; recorte y tope de 200 caracteres en el borde (R6/R7)
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at") // R31: borrado LOGICO; NULL = vigente
+
+  orden Orden   @relation("OrdenNotaOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+  autor Usuario @relation("OrdenNotaAutor", fields: [autorId], references: [id], onDelete: Restrict)
+
+  @@index([ordenId, createdAt]) // R3/R28: hilo ordenado en UNA sola consulta (forma del indice de ChatMensaje)
+  @@index([autorId]) // segunda FK indexada (patron orden_mensajero_meta)
+  @@map("orden_nota")
 }
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una

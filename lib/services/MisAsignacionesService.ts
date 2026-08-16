@@ -82,13 +82,10 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       "findByMensajero" | "upsertOrigen"
     >,
     // Feature 115 (R17/R20): meta privada del mensajero. Solo LECTURA aqui para reflejar en el
-    // listado, del PROPIO actor: la marca "gestionar mas tarde" (`findMarcarLuegoByMensajero`,
-    // 115) y la nota privada (`findNotasByMensajero`, feature 116/R6/R8). La ESCRITURA vive en
-    // OrdenMensajeroMetaService (marca) y NotaPrivadaMensajeroService (nota).
-    private readonly metaRepo: Pick<
-      IOrdenMensajeroMetaRepository,
-      "findMarcarLuegoByMensajero" | "findNotasByMensajero"
-    >,
+    // listado la marca "gestionar mas tarde" del PROPIO actor; la ESCRITURA vive en
+    // OrdenMensajeroMetaService. Feature 227 (R21): la lectura de la nota privada
+    // (`findNotasByMensajero`, feature 116) SALIO de aqui con la columna que la sostenia.
+    private readonly metaRepo: Pick<IOrdenMensajeroMetaRepository, "findMarcarLuegoByMensajero">,
     // Feature 160 (R11/R12/R24): derivador de intentos EN LOTE, dependencia REQUERIDA (una dep
     // opcional dejaria que el wiring se la olvidara y el dato desapareciera en silencio de las
     // superficies del mensajero). `import type` + `Pick`: sin ciclo de modulos y testeable con
@@ -141,7 +138,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const hoy = fechaCalendarioCR();
     const dia = { desde: inicioDelDiaCREnUtc(hoy), hasta: inicioDelDiaSiguienteCREnUtc(hoy) };
 
-    const [ordenEnGestionId, rows, entregadas, montoGestionadas, ruta, marcadasLuego, notasPrivadas] =
+    const [ordenEnGestionId, rows, entregadas, montoGestionadas, ruta, marcadasLuego] =
       await Promise.all([
         this.repo.getOrdenEnGestion(actor.usuarioId), // R20
         // Feature 167 (R34) — CORTE LIMPIO: Entregas lee EXACTAMENTE los dos estados de su
@@ -155,9 +152,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
         // Feature 115 (R17/R20): marcas "gestionar mas tarde" del PROPIO actor (Set<ordenId>).
         this.metaRepo.findMarcarLuegoByMensajero(actor.usuarioId),
-        // Feature 116 (R6/R8): notas privadas del PROPIO actor (Map<ordenId, nota>). Misma query
-        // acotada por `usuario_id = actor` que garantiza que nunca trae la nota de otro mensajero.
-        this.metaRepo.findNotasByMensajero(actor.usuarioId),
+        // Feature 227 (R21): aqui iba la lectura de las notas privadas de la 116. Se retiro con
+        // la columna. El hilo `orden_nota` NO se lee aqui a proposito: seria un N+1 sobre la
+        // pantalla mas caliente del portal; se carga bajo demanda al abrir la orden (design §5.2).
       ]);
 
     // Feature 92 (R28): posicion por orden. Vacio si nunca se optimizo -> todas las cards
@@ -174,13 +171,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
-      // Feature 116 (R6/R8): merge de la nota privada del propio actor (`null` si no hay nota).
       // Feature 160 (R14/R19): `?? 0` — las ordenes sin intentos no vienen en el Map y el `0`
       // es un valor CONOCIDO que SIEMPRE se expone, no un dato ausente.
       const dto = {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
-        notaPrivada: notasPrivadas.get(row.id) ?? null,
         intentosEntrega: intentos.get(row.id) ?? 0,
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
@@ -554,9 +549,8 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
-    // Feature 116 (R6/R8): default `null`; el llamador lo sobreescribe con la nota real del
-    // actor (`notasPrivadas.get(row.id)`). Aqui SIEMPRE nace un `string | null` concreto.
-    notaPrivada: null,
+    // Feature 227 (R21): aqui nacia `notaPrivada: null` (feature 116). El campo ya no existe en
+    // `MiAsignacionDTO` y el DTO no emite ninguna nota privada del mensajero.
   };
 }
 

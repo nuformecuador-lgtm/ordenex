@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import useSWR from "swr";
 import {
   Camera,
   ChevronUp,
@@ -20,6 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { HiloNotasOrden } from "@/components/shared/HiloNotasOrden";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +29,11 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
+import {
+  borrarNotaOrden,
+  listarNotasOrden,
+  publicarNotaOrden,
+} from "@/lib/actions/orden-notas";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import {
@@ -46,7 +53,6 @@ import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
-import { NotaPrivadaMensajero } from "./NotaPrivadaMensajero";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
@@ -97,6 +103,15 @@ const DESGLOSE_TEXTOS = {
    * el que se le paga (feature 44).
    */
   noCuadra: "El desglose debe sumar exactamente el monto a cobrar.",
+} as const;
+
+// Feature 227 (T3.4) — textos del bloque del hilo, en un solo sitio y fuera del JSX
+// (i18n-ready, mismo criterio que `DESGLOSE_TEXTOS`).
+const HILO_TEXTOS = {
+  titulo: "Notas con la tienda",
+  cargando: "Cargando las notas…",
+  sesion: "Tu sesión expiró. Iniciá sesión de nuevo para ver las notas.",
+  fallo: "No se pudieron cargar las notas de esta orden.",
 } as const;
 
 /**
@@ -308,6 +323,34 @@ export function GestionarOrdenPanel({
   // orden"; ahí aparece el escáner QR. Sin guía asignada arranca ABIERTA: el bloque no trae
   // escáner sino el aviso de que la orden no se puede gestionar, y eso hay que verlo.
   const gestion = useSeccionColapsable(orden.numGuia === null);
+
+  // Feature 227 (T3.4, design §5.2) — HILO de notas con la tienda, montado JUSTO donde
+  // estaba el editor de la nota privada de la 116 (retirada por esta misma feature).
+  //
+  // CARGA BAJO DEMANDA: el hilo NO viaja dentro de `listarMisAsignaciones` (alternativa A6
+  // descartada: sería N+1 sobre la pantalla más caliente del portal) y esta feature NO toca
+  // el conjunto de estatus que esa lectura hace —sigue siendo exactamente `por_recoger` y
+  // `en_reparto`, corte de la feature 167/R34 (R36)—. El panel se monta para UNA orden, la
+  // abierta, y con `key={orden.id}`: una lectura por orden abierta, ninguna por fila de la
+  // lista.
+  //
+  // `puedeEscribir` llega del servidor (R19): el mensajero escribe con la orden `en_reparto`
+  // y asignada a él, y solo lee en el resto. Aquí no se mira `orden.estatusValue` para
+  // decidirlo — la ventana es asimétrica por rol (D1) y el cliente no la re-deriva.
+  // Se lee con SWR y la Server Action como fetcher, igual que el hilo del chat
+  // (`ChatConversacion`): la clave lleva el `ordenId`, así que cambiar de orden cambia de
+  // clave y `mutate()` es el refresco DESDE EL SERVIDOR tras publicar o borrar (R17). Sin
+  // `refreshInterval`: esto no es el chat con el cliente, no hay nada que sondear.
+  const {
+    data: hilo,
+    isLoading: cargandoHilo,
+    mutate: refrescarHilo,
+  } = useSWR(["orden-notas", orden.id], () =>
+    listarNotasOrden({ ordenId: orden.id }),
+  );
+
+  const hiloOk = hilo?.status === "ok" ? hilo : null;
+
   // Contador de "llévame al bloque": sube en cada pulsación del CTA. El scroll y el foco se
   // hacen en un efecto, DESPUÉS del render que monta la sección (en el handler el nodo aún
   // no existe la primera vez).
@@ -726,16 +769,36 @@ export function GestionarOrdenPanel({
           </span>
         </div> */}
 
-        {/* Feature 116 (R7/R11/R14): editor de la NOTA PRIVADA del mensajero, HERMANO de
-            `AsignacionDetalle` (que sigue como presentación pura). Queda claramente separado
-            de la "Notas" de la tienda (dentro del detalle) y acompaña a la orden activa
-            también en modo foco. `notaPrivada` viaja en el DTO filtrada por el actor; el
-            panel se remonta con `key={orden.id}` al cambiar de orden, así que el editor
-            arranca con la nota correcta. */}
-        <NotaPrivadaMensajero
-          ordenId={orden.id}
-          notaInicial={orden.notaPrivada ?? null}
-        />
+        {/* Feature 227 (T3.4, design §5.2): el HILO con la tienda, hermano de
+            `AsignacionDetalle` y en el hueco que dejó el editor de la nota privada. Es
+            conversación de ESTA orden y no se confunde con la "Notas" de la tienda (dentro
+            del detalle, R25) ni con el chat de WhatsApp con el cliente (botón "Mensaje").
+            Sin pantalla nueva (P6). */}
+        {cargandoHilo ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            {HILO_TEXTOS.cargando}
+          </p>
+        ) : hiloOk ? (
+          <HiloNotasOrden
+            ordenId={orden.id}
+            notas={hiloOk.notas}
+            puedeEscribir={hiloOk.puedeEscribir}
+            onPublicar={publicarNotaOrden}
+            onBorrar={borrarNotaOrden}
+            onRefrescar={async () => {
+              await refrescarHilo();
+            }}
+            titulo={HILO_TEXTOS.titulo}
+          />
+        ) : (
+          /* Rechazo tipado (o fallo de transporte, que SWR ya capturó): se dice, y el resto
+             de la gestión sigue en pie — este panel se usa en la calle y con mala cobertura. */
+          <p role="alert" className="text-xs text-danger-strong">
+            {hilo?.status === "unauthenticated"
+              ? HILO_TEXTOS.sesion
+              : HILO_TEXTOS.fallo}
+          </p>
+        )}
 
         {/* Paso 1: verificar la guía antes de gestionar. La sección se revela al pulsar
             "Gestionar esta orden" (CTA fijo abajo); cerrada, el detalle se lee de un tirón. */}
@@ -749,7 +812,7 @@ export function GestionarOrdenPanel({
               <h3 className="flex-1 text-sm font-bold text-foreground">
                 Gestionar esta orden
               </h3>
-              {/* Se puede volver a ocultar (mismo gesto que "Mi nota"): abrirla no deja al
+              {/* Se puede volver a ocultar: abrirla no deja al
                   mensajero atrapado con el escáner ocupando la pantalla. Sin guía asignada no
                   hay nada que ocultar —el bloque es solo el aviso—, así que no se ofrece. */}
               {orden.numGuia !== null ? (

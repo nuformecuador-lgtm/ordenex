@@ -3,6 +3,12 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  componer,
+  contraste,
+  paleta,
+  token,
+} from "../../fixtures/contraste";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -30,7 +36,6 @@ import { quitarComentarios } from "../../fixtures/sin-comentarios";
  */
 
 const RAIZ = path.resolve(__dirname, "../../..");
-const CSS = path.join(RAIZ, "app", "globals.css");
 
 /** Umbral AA para texto normal (WCAG 2.1, criterio 1.4.3). */
 const AA_TEXTO = 4.5;
@@ -64,110 +69,6 @@ const SUELO: Record<string, number> = {
 
 /** Tolerancia del suelo: absorbe el redondeo a dos decimales, nada más. */
 const EPSILON = 0.01;
-
-// ─────────────────────────────────────────────────────────────────────────────────────────
-// Aritmética de color (sRGB → luminancia relativa → razón de contraste)
-// ─────────────────────────────────────────────────────────────────────────────────────────
-
-function aRgb(hex: string): [number, number, number] {
-  const s = hex.replace("#", "");
-  const n = s.length === 3
-    ? s.split("").map((c) => c + c).join("")
-    : s;
-  return [0, 2, 4].map((i) => parseInt(n.slice(i, i + 2), 16)) as [number, number, number];
-}
-
-function luminancia([r, g, b]: [number, number, number]): number {
-  const canal = (v: number) => {
-    const x = v / 255;
-    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
-}
-
-function contraste(a: string, b: string): number {
-  const la = luminancia(aRgb(a));
-  const lb = luminancia(aRgb(b));
-  const [alto, bajo] = la > lb ? [la, lb] : [lb, la];
-  return (alto + 0.05) / (bajo + 0.05);
-}
-
-/**
- * Compone `color` al `alpha` dado sobre un `fondo` OPACO. Es la técnica «soft-badge» que el
- * `Badge` usa en tema oscuro (`dark:bg-warning/15`): ahí no hay token `-soft`, el fondo se
- * compone en ejecución, y sin reproducir esa composición el número de oscuro no significa nada.
- */
-function componer(color: string, fondo: string, alpha: number): string {
-  const c = aRgb(color);
-  const f = aRgb(fondo);
-  return (
-    "#" +
-    c
-      .map((v, i) => Math.round(v * alpha + f[i] * (1 - alpha)).toString(16).padStart(2, "0"))
-      .join("")
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────────────────
-// Lectura de los tokens REALES del archivo
-// ─────────────────────────────────────────────────────────────────────────────────────────
-
-const cssSinComentarios = quitarComentarios(readFileSync(CSS, "utf8"));
-
-/**
- * Los `-strong` se declaran DOS veces: en `:root` (claro, :149) y en `.dark` + el bloque
- * `prefers-color-scheme` (oscuro, :210 y :269). Se parte por el selector `.dark` REAL a principio
- * de línea.
- *
- * ⚠️ No vale `indexOf(".dark")`: el archivo abre con `@custom-variant dark {` (:23), que menciona
- * `.dark` dentro. Cortar ahí dejaba el `:root` entero del lado «oscuro» y la primera versión de
- * esta guardia falló por eso — con un mensaje que culpaba al token, no al parser.
- */
-function partirPorTema(css: string): { claro: string; oscuro: string } {
-  const corte = css.match(/^\.dark[,\s{]/m);
-  if (!corte || corte.index === undefined) {
-    throw new Error(
-      "app/globals.css ya no declara un selector `.dark` a principio de línea: el parser de esta " +
-        "guardia caducó y hay que revisarlo a mano.",
-    );
-  }
-  return { claro: css.slice(0, corte.index), oscuro: css.slice(corte.index) };
-}
-
-const TEMAS = partirPorTema(cssSinComentarios);
-
-/** Un token con variante por tema (`--warning-strong`, `--card`): vive en `:root` y en `.dark`. */
-function token(tema: "claro" | "oscuro", nombre: string): string {
-  // La ÚLTIMA declaración gana, igual que en la cascada del navegador.
-  const encontrados = [
-    ...TEMAS[tema].matchAll(new RegExp(`--${nombre}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`, "g")),
-  ];
-  const ultimo = encontrados.at(-1);
-  if (!ultimo) {
-    throw new Error(
-      `--${nombre} no aparece como hex en el bloque ${tema} de app/globals.css. ` +
-        "Si el token cambió de nombre o pasó a otra notación de color, esta guardia hay que " +
-        "actualizarla A MANO: fallar es lo correcto, no adivinar.",
-    );
-  }
-  return ultimo[1];
-}
-
-/**
- * Un token de paleta SIN variante por tema: los `-soft` y los base viven una sola vez, en el
- * bloque `@theme inline` y con el prefijo `--color-` (`--color-warning-soft`, `--color-warning`).
- * Que no tengan variante oscura es justamente por lo que en oscuro el badge compone `base/15`.
- */
-function paleta(nombre: string): string {
-  const m = cssSinComentarios.match(new RegExp(`--color-${nombre}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`));
-  if (!m) {
-    throw new Error(
-      `--color-${nombre} no aparece como hex en app/globals.css. Esta guardia asume que los ` +
-        "tokens `-soft` y base viven en `@theme inline`; si eso cambió, revísala a mano.",
-    );
-  }
-  return m[1];
-}
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
@@ -258,5 +159,305 @@ describe("Feature 210 — contraste de los tokens semánticos (guardia)", () => 
     );
     expect(claro).toBeGreaterThanOrEqual(AA_TEXTO);
     expect(oscuro).toBeGreaterThanOrEqual(AA_TEXTO);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 222 — la variante `destructive` del BOTÓN
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * La 210 arregló el `Badge` y dejó el `Button` fuera de su alcance, con el defecto medido y
+ * escrito: `text-destructive` sobre `bg-destructive/10` — el mismo color como tinta y como fondo
+ * al 10 % — daba 3.29 en claro y 4.43 en oscuro, bajo el 4.5 de AA en los DOS temas. Y con el
+ * cursor encima bajaba a 2.90 y 3.68, porque el fondo se hunde hacia la propia tinta.
+ *
+ * Esta guardia ata el par nuevo. Tres cosas la separan de un test que sólo mira clases:
+ *
+ *  1. **Mide los CUATRO estados**: reposo y hover, en los dos temas. Un par que cumple quieto y
+ *     falla al pasar el ratón sigue siendo un fallo, y es exactamente cómo se le escapó a la 208.
+ *  2. **Mide sobre VARIAS superficies.** El `Button` es una primitiva: no sabe dónde lo montan. Un
+ *     fondo con alfa (`bg-danger/15`) vale lo que valga lo que tenga debajo — medido, el mismo
+ *     `danger/20` da 4.99 sobre la tarjeta y 4.44 sobre `secondary`. Medir sólo sobre `card` es
+ *     suponer el resto.
+ *  3. **Lee las clases REALES del componente** y resuelve cada utilidad contra los tokens de
+ *     `app/globals.css`. No hay una copia de las clases aquí: si alguien cambia el alfa o vuelve a
+ *     `--destructive`, esta guardia mide lo nuevo y se pone roja sola.
+ */
+
+const BOTON = path.join(RAIZ, "components", "ui", "button.tsx");
+/** El fuente TAL CUAL. Sólo para las autocomprobaciones del censo. */
+const botonCrudo = readFileSync(BOTON, "utf8");
+/**
+ * El CÓDIGO del botón, con la prosa fuera (quitador COMPARTIDO, feature 209). No es un adorno:
+ * el comentario de esa variante NOMBRA `text-destructive` y `bg-destructive/10` para explicar qué
+ * se arregló. Un censo sobre el texto crudo denunciaría la explicación y obligaría a borrarla.
+ */
+const boton = quitarComentarios(botonCrudo);
+
+/** Las clases de una variante de `cva`, tal como se escriben en el componente. */
+function clasesDeVariante(fuente: string, variante: string): string {
+  // El lookbehind evita enganchar un `…-destructive:` de otra utilidad; se exige el nombre suelto
+  // como clave del objeto de variantes.
+  const m = fuente.match(new RegExp(`(?<![\\w:-])${variante}:\\s*"([^"]*)"`));
+  if (!m) {
+    throw new Error(
+      `la variante \`${variante}\` desapareció del componente, o dejó de escribirse como una ` +
+        "cadena literal. Fallar es lo correcto: sin sus clases, esta guardia no mide nada y " +
+        "pasaría en verde sin haber mirado.",
+    );
+  }
+  return m[1];
+}
+
+const CLASES_DESTRUCTIVE = clasesDeVariante(boton, "destructive");
+
+/**
+ * Las superficies sobre las que el portal monta un botón. Se declaran con nombre porque son EL
+ * supuesto de toda medición con alfa: cambiar esta lista cambia los números.
+ */
+function superficiesDe(tema: "claro" | "oscuro"): { nombre: string; hex: string }[] {
+  return [
+    { nombre: "card", hex: token(tema, "card") },
+    { nombre: "popover (diálogos)", hex: token(tema, "popover") },
+    { nombre: "background (la página)", hex: token(tema, "background") },
+    { nombre: "muted (paneles apagados)", hex: token(tema, "muted") },
+    { nombre: "secondary", hex: token(tema, "secondary") },
+    {
+      nombre: "muted/50 sobre card (fila de tabla en hover)",
+      hex: componer(token(tema, "muted"), token(tema, "card"), 0.5),
+    },
+  ];
+}
+
+/**
+ * El hex de una utilidad (`bg-danger-soft`, `text-card`, `dark:bg-danger/15`) en un tema y sobre
+ * una superficie. `token()` primero y `paleta()` después, que es el orden real: los tokens con
+ * variante por tema viven en `:root`/`.dark` y los de paleta, una sola vez, en `@theme inline`.
+ */
+function hexDeUtilidad(utilidad: string, tema: "claro" | "oscuro", superficie: string): string {
+  const sinVariantes = utilidad.replace(/^(?:[a-z-]+:)*/, "");
+  const m = sinVariantes.match(/^(?:bg|text)-([a-z][a-z0-9-]*)(?:\/(\d+))?$/);
+  if (!m) {
+    throw new Error(
+      `\`${utilidad}\` no es una utilidad de color que esta guardia sepa resolver. Fallar es lo ` +
+        "correcto: adivinar el hex es cómo se producen tablas de números plausibles y falsos.",
+    );
+  }
+  const [, nombre, porcentaje] = m;
+  let base: string;
+  try {
+    base = token(tema, nombre);
+  } catch {
+    base = paleta(nombre); // lanza con su propio mensaje si tampoco existe
+  }
+  return porcentaje ? componer(base, superficie, Number(porcentaje) / 100) : base;
+}
+
+/**
+ * Qué clase gana en cada estado, por ESPECIFICIDAD, que es como lo resuelve el navegador:
+ * `dark:hover:` (tres clases) > `dark:` = `hover:` (dos) > la base (una).
+ *
+ * El empate NO se resuelve adivinando: si hay `hover:bg-*` y `dark:bg-*` pero no `dark:hover:bg-*`,
+ * en tema oscuro las dos reglas empatan y decide el orden del CSS compilado — que esta guardia no
+ * ve. Ahí lanza en vez de elegir una. Es un defecto real del componente, no de la medición.
+ */
+function utilidadQueGana(
+  clases: string[],
+  propiedad: "bg" | "text",
+  tema: "claro" | "oscuro",
+  estado: "reposo" | "hover",
+): string {
+  const con = (prefijo: string) =>
+    clases.find((c) => c.startsWith(prefijo) && c.slice(prefijo.length).startsWith(`${propiedad}-`));
+  const base = con("");
+  const hover = con("hover:");
+  const oscuroBase = con("dark:");
+  const oscuroHover = con("dark:hover:");
+
+  if (tema === "claro") {
+    const ganadora = estado === "hover" ? (hover ?? base) : base;
+    if (!ganadora) throw new Error(`la variante no declara ningún \`${propiedad}-\` en claro`);
+    return ganadora;
+  }
+  if (estado === "reposo") {
+    const ganadora = oscuroBase ?? base;
+    if (!ganadora) throw new Error(`la variante no declara ningún \`${propiedad}-\` en oscuro`);
+    return ganadora;
+  }
+  if (oscuroHover) return oscuroHover;
+  if (hover && oscuroBase) {
+    throw new Error(
+      `EMPATE DE ESPECIFICIDAD en tema oscuro: \`${hover}\` y \`${oscuroBase}\` valen lo mismo ` +
+        "(dos clases cada una) y el desempate sería el orden del CSS compilado. Escribí también " +
+        `la variante \`dark:hover:\` de \`${propiedad}-\` y el hover gana siempre.`,
+    );
+  }
+  return hover ?? oscuroBase ?? utilidadQueGana(clases, propiedad, "oscuro", "reposo");
+}
+
+/**
+ * SUELO por (tema, estado): el PEOR de los medidos sobre las superficies declaradas, el
+ * 2026-08-13, con la aritmética de `tests/fixtures/contraste.ts`.
+ *
+ *   claro  · reposo #b91c1c sobre #fee2e2 (opaco)                 5.30 en las seis superficies
+ *   claro  · hover  #ffffff sobre #b91c1c (opaco)                 6.47 en las seis
+ *   oscuro · reposo #f87171 sobre danger/15 compuesto             4.65 (muted/secondary) … 5.82
+ *   oscuro · hover  #10203a sobre #f87171 (opaco)                 5.89 en las seis
+ *
+ * Tres de los cuatro estados son OPACOS y por eso no dependen de la superficie. El único que sí
+ * es el reposo oscuro, que es el par que la 210 ya midió para el `Badge` (5.20 sobre la tarjeta).
+ */
+const SUELO_BOTON: Record<string, number> = {
+  "claro:reposo": 5.3,
+  "claro:hover": 6.47,
+  "oscuro:reposo": 4.65,
+  "oscuro:hover": 5.89,
+};
+
+describe("Feature 222 — el botón `destructive` cumple AA en reposo y en hover (guardia)", () => {
+  /**
+   * Autocomprobación del censo. Sin esto, una ruta mal resuelta o una variante renombrada dejaría
+   * a los casos de abajo midiendo una cadena vacía, en verde y sin haber mirado nada.
+   */
+  it("el censo lee el CÓDIGO del botón —no su prosa— y encuentra la variante", () => {
+    expect(boton.length).toBeGreaterThan(1000);
+    expect(boton).toContain("const buttonVariants = cva(");
+    expect(CLASES_DESTRUCTIVE.length).toBeGreaterThan(40);
+
+    // Que lo censado es CÓDIGO: el comentario de esa variante nombra a propósito las clases
+    // viejas para explicar qué se arregló. Si el quitador dejara de pasar, el caso de abajo se
+    // pondría rojo por la EXPLICACIÓN y habría que borrarla para pasar (feature 209).
+    expect(botonCrudo).toMatch(/Feature 222/);
+    expect(botonCrudo, "el comentario dejó de nombrar el defecto que arregla").toMatch(
+      /bg-destructive\/10/,
+    );
+    expect(boton, "el quitador de comentarios no está pasando: se está censando prosa").not.toMatch(
+      /Feature 222/,
+    );
+  });
+
+  /**
+   * El mismo caso que la 210 dejó para el `Badge`, ahora para el `Button`: lo que no puede volver
+   * es el par colgado de `--destructive`. Copiar la variante de shadcn al actualizar el componente
+   * —el gesto más natural del mundo— reintroduce exactamente el 3.29.
+   *
+   * ⚠️ Se prohíben `bg-` y `text-`, NO el nombre del token. El borde y el anillo de foco siguen
+   * en `--destructive` a propósito: son indicadores no textuales (WCAG 1.4.11), no caen bajo el
+   * 1.4.3 que esta ficha cumple, y son los mismos que la clase base usa para `aria-invalid`.
+   */
+  it("la variante `destructive` del Button NO usa el token sin par, sino el de `danger`", () => {
+    expect(CLASES_DESTRUCTIVE).toContain("bg-danger-soft");
+    expect(CLASES_DESTRUCTIVE).toContain("text-danger-strong");
+    expect(
+      CLASES_DESTRUCTIVE,
+      "el fondo o la tinta volvieron a `--destructive`, que no tiene `-strong`: es el mismo color " +
+        "como texto y como fondo, y mide 3.29 en claro y 4.43 en oscuro",
+    ).not.toMatch(/(?:^|\s)(?:[a-z-]+:)*(?:bg|text)-destructive\b/);
+  });
+
+  /** «No midas sólo el reposo»: si el hover desaparece, el estado deja de estar vigilado. */
+  it("la variante declara un hover propio: el fondo cambia con el cursor y hay que medirlo", () => {
+    const clases = CLASES_DESTRUCTIVE.split(/\s+/);
+    expect(
+      clases.filter((c) => /^hover:bg-/.test(c)),
+      "sin `hover:bg-*` no hay estado hover que medir. Si el hover se retira de verdad, este caso " +
+        "y los suelos de hover se actualizan A MANO; lo que no puede es desaparecer en silencio.",
+    ).not.toEqual([]);
+    expect(clases.filter((c) => /^dark:hover:bg-/.test(c))).not.toEqual([]);
+  });
+
+  const ESTADOS = [
+    ["claro", "reposo"],
+    ["claro", "hover"],
+    ["oscuro", "reposo"],
+    ["oscuro", "hover"],
+  ] as const;
+
+  /**
+   * QUÉ PAR SE ESTÁ MIDIENDO, escrito. Los números de abajo son correctos sólo si el resolutor
+   * eligió las clases que de verdad ganan en cada estado; un resolutor que se equivoque —que mida
+   * el reposo creyendo que mide el hover— devuelve un número plausible y falso, en verde. Aquí
+   * queda fijado y a la vista.
+   */
+  it("el resolutor elige, en cada estado, la clase que gana por especificidad", () => {
+    const clases = CLASES_DESTRUCTIVE.split(/\s+/);
+    expect(
+      ESTADOS.map(
+        ([tema, estado]) =>
+          `${tema}/${estado}: ${utilidadQueGana(clases, "text", tema, estado)} sobre ` +
+          `${utilidadQueGana(clases, "bg", tema, estado)}`,
+      ),
+    ).toEqual([
+      "claro/reposo: text-danger-strong sobre bg-danger-soft",
+      "claro/hover: hover:text-card sobre hover:bg-danger-strong",
+      "oscuro/reposo: text-danger-strong sobre dark:bg-danger/15",
+      "oscuro/hover: hover:text-card sobre dark:hover:bg-danger-strong",
+    ]);
+  });
+
+  it.each(ESTADOS)(
+    "tema %s, estado %s: cumple AA en TODAS las superficies declaradas, y no baja del suelo",
+    (tema, estado) => {
+      const clases = CLASES_DESTRUCTIVE.split(/\s+/);
+      const utilFondo = utilidadQueGana(clases, "bg", tema, estado);
+      const utilTinta = utilidadQueGana(clases, "text", tema, estado);
+
+      const medidos = superficiesDe(tema).map((superficie) => {
+        const fondo = hexDeUtilidad(utilFondo, tema, superficie.hex);
+        const tinta = hexDeUtilidad(utilTinta, tema, superficie.hex);
+        return { superficie, tinta, fondo, medido: contraste(tinta, fondo) };
+      });
+
+      for (const { superficie, tinta, fondo, medido } of medidos) {
+        expect(
+          medido,
+          `${tema}/${estado} sobre ${superficie.nombre}: \`${utilTinta}\` (${tinta}) sobre ` +
+            `\`${utilFondo}\` (${fondo}) mide ${medido.toFixed(2)}, y AA para texto normal pide ` +
+            `${AA_TEXTO}. Es el defecto que la feature 222 vino a cerrar.`,
+        ).toBeGreaterThanOrEqual(AA_TEXTO);
+      }
+
+      const peor = Math.min(...medidos.map((m) => m.medido));
+      expect(
+        peor,
+        `${tema}/${estado} EMPEORÓ: el peor de las seis superficies medía ` +
+          `${SUELO_BOTON[`${tema}:${estado}`]} al cerrar la 222. Aprobar por una centésima no es ` +
+          "aprobar (lección de la 210): si el cambio es a mejor, sube el suelo A MANO.",
+      ).toBeGreaterThanOrEqual(SUELO_BOTON[`${tema}:${estado}`] - EPSILON);
+    },
+  );
+
+  /**
+   * POR QUÉ EL HOVER ES OPACO, con el número de la alternativa descartada en vez de en prosa.
+   *
+   * Lo natural era hundir el tinte —`hover:bg-danger/20`, que es lo que hacía la variante vieja
+   * con `--destructive`—. Sobre la tarjeta mide 4.99 y habría pasado; sobre `secondary` mide 4.44
+   * y sobre el `muted` oscuro, 4.44. Un fondo con alfa vale lo que valga lo que tenga debajo, y
+   * una primitiva no sabe dónde la montan.
+   *
+   * Si algún día la paleta cambia y esa alternativa pasa a cumplir en todas partes, este caso se
+   * pone rojo: el motivo por el que el hover es opaco habría dejado de ser cierto y la decisión
+   * hay que releerla, no heredarla.
+   */
+  it("la alternativa descartada (hover con capa `danger/20`) sigue sin cumplir: por eso es opaco", () => {
+    const caidas = (["claro", "oscuro"] as const).flatMap((tema) =>
+      superficiesDe(tema)
+        .map((superficie) => ({
+          donde: `${tema}/${superficie.nombre}`,
+          medido: contraste(token(tema, "danger-strong"), componer(paleta("danger"), superficie.hex, 0.2)),
+        }))
+        .filter((m) => m.medido < AA_TEXTO),
+    );
+
+    expect(
+      caidas.map((c) => c.donde),
+      "ninguna superficie hace caer ya a `danger/20`: el argumento por el que el hover se pintó " +
+        "opaco caducó y hay que releer la decisión con los números nuevos.",
+    ).toEqual([
+      "claro/secondary",
+      "oscuro/muted (paneles apagados)",
+      "oscuro/secondary",
+    ]);
   });
 });

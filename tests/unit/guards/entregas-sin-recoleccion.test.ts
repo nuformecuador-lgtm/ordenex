@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 167 (R33/R34) — GUARD de NO-REINTRODUCCION. Molde de
 // `tests/unit/guards/recoleccion-no-contamina.test.ts` (incluida su `sinComentarios`).
@@ -59,11 +60,7 @@ function leer(rel: string): string {
  * esta aqui — y esa explicacion es justo lo que no debe borrarse para que el guard pase.
  */
 function sinComentarios(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((linea) => !linea.trimStart().startsWith("//"))
-    .join("\n");
+  return quitarComentarios(src);
 }
 
 describe("Feature 167 — Entregas no monta ninguna superficie de recoleccion (R33/R34)", () => {

@@ -276,8 +276,16 @@ export interface IGestionOrdenRepository {
    * (`actor = adminTienda`, `origen_tipo = reprogramacion_tienda`, enlazando la gestion, R11).
    * Sin logica de negocio (el service valida rol/tienda/estado y resuelve los estatus). Devuelve
    * `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron SLA de
-   * la 99 / doble submit -> no-op, sin efectos, R7). NO cuenta como intento (destino
-   * `reprogramada`, no `devuelta`, R8) ni genera movimiento de dinero (R10).
+   * la 99 / doble submit -> no-op, sin efectos, R7). No genera movimiento de dinero (R10).
+   *
+   * NO CUENTA COMO INTENTO por su ORIGEN, NO por su destino (feature 215/R12/R28/R34). Aqui se
+   * leia «destino `reprogramada`, no `devuelta`»: eso es FALSO desde la 215 —`reprogramada` SI
+   * esta en `RESULTADOS_QUE_CUENTAN_COMO_INTENTO`—. Lo que la excluye es que su fila de historial
+   * nace con `origen_tipo = reprogramacion_tienda`, fuera de `ORIGEN_TIPOS_VISITA_REAL` (la sexta
+   * condicion de `whereIntentosVigentes`). Meter esa familia en la lista de origenes creyendo que
+   * el destino protege hace que la orden sume de mas, escale antes de tiempo y cobre un
+   * `cobroRechazado` (56, dinero real) antes de lo debido; el porque completo esta en el docstring
+   * de `GestionOrdenRepository.reprogramarDesdeDevuelta`.
    */
   reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean>;
 }

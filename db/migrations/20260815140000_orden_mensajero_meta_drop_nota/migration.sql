@@ -1,0 +1,38 @@
+-- ============================================================================================
+-- MIGRACION DESTRUCTIVA — PERDIDA DE DATOS DEFINITIVA Y DELIBERADA
+-- ============================================================================================
+-- FEATURE 227 (design §1.3, M2 / R23). RETIRA LA COLUMNA `orden_mensajero_meta.nota`, QUE
+-- SOSTENIA LA NOTA PRIVADA DEL MENSAJERO (FEATURE 116).
+--
+-- EL CONTENIDO DE ESAS NOTAS SE PIERDE DE FORMA DEFINITIVA Y DELIBERADA. NO SE MIGRA, NO SE
+-- COPIA AL HILO `orden_nota`, NO SE LEE Y NO SE REGISTRA EN NINGUN LOG (R22). ES UNA DECISION
+-- HUMANA TOMADA EL 2026-08-14 (DECISION P1 DEL GATE DEL SPEC), NO UN EFECTO COLATERAL: LAS
+-- NOTAS SE ESCRIBIERON BAJO UNA PROMESA LITERAL EN PANTALLA —«SOLO TU PUEDES VER ESTA NOTA; NO
+-- LA VEN LA TIENDA NI OTROS MENSAJEROS»— Y VOLCARLAS AL HILO COMPARTIDO SERIA UNA FUGA
+-- RETROACTIVA. POR ESO SE BORRAN EN VEZ DE MIGRARSE.
+--
+-- CONTEO DE FILAS AFECTADAS (T0.1). MEDIDO EL 2026-08-15 CONTRA LA BASE **LOCAL**
+-- (`localhost:5432/ordenex`, schema `public`) CON:
+--   SELECT count(*), count(DISTINCT usuario_id), min(created_at), max(created_at)
+--     FROM orden_mensajero_meta WHERE nota IS NOT NULL;
+--   -> filas = 0, mensajeros = 0, primera = null, ultima = null
+--   (total de filas de la tabla: 0 — LA TABLA ESTA ENTERAMENTE VACIA EN LOCAL)
+--
+-- ESE CERO ES LOCAL Y NO INFORMA SOBRE PRODUCCION. EL CONTEO DE PRODUCCION NO ES ALCANZABLE
+-- DESDE EL ENTORNO EN EL QUE SE ESCRIBIO ESTA MIGRACION Y **NO SE MIDE AQUI**; NO SE INVENTA
+-- UNA CIFRA. QUEDA **PENDIENTE** DE MEDIRLO, CON LA MISMA CONSULTA, QUIEN TENGA LA CREDENCIAL,
+-- **ANTES DE APLICAR ESTA MIGRACION ALLI**, Y DE PEGARLO EN LA BITACORA DE LA FEATURE.
+--
+-- ESA MEDICION ES INFORMATIVA: LA DECISION DE PERDER EL CONTENIDO **NO DEPENDE DEL NUMERO** Y
+-- NO SE REABRE CON EL. SEA 0 O SEAN MILES, LA COLUMNA SE VA.
+--
+-- LO QUE ESTA MIGRACION **NO** TOCA (R24/R25):
+--   - `marcar_luego` (feature 115) y su default;
+--   - el indice UNICO `(usuario_id, orden_id)`, del que depende la idempotencia del toggle;
+--   - los indices `(usuario_id)` y `(orden_id)`;
+--   - las dos FK (a `usuario` y a `orden`, ambas ON DELETE CASCADE);
+--   - la RLS de la tabla;
+--   - `orden.notas`, que es la nota de la TIENDA y no tiene nada que ver con esta.
+-- ============================================================================================
+
+ALTER TABLE "orden_mensajero_meta" DROP COLUMN "nota";
