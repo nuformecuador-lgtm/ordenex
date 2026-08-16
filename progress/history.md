@@ -3267,3 +3267,105 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
 - **Deuda dejada, con nombre**: el harness de impresión en Chromium se borró a propósito (queda a
   ficha aparte); **Gecko y WebKit no están medidos**; y las pestañas no visitadas y el KPI animado
   llevan su límite **declarado**, no omitido.
+
+## 2026-08-14 — 215 (el reintento se cuenta en el cierre) · **CIERRE: R19 ejecutado**
+- Se cierra la ficha corriendo lo único que le faltaba: la medición de **R19** contra la base
+  **real de producción** (`design.md §7.6`, escrita el 13-ago y **nunca ejecutada**). **Cero código
+  tocado**: el diff es spec + registro. Detalle completo en `progress/impl_215_r19.md`.
+- Requisitos cubiertos: **R19** (el último abierto). Con él caen **Q4** —la última de las 12
+  preguntas— y las tareas **T0b/T1/T1b/T18**. `spec_files` pasa de «1 bloqueado» a **0**.
+- **Resultado: 0 en las nueve columnas.** `empiezan_a_escalar = 0` ⇒ **nadie se rechazó ni se cobró
+  antes de tiempo** por el cambio de criterio.
+- **Y el cero es de UNIVERSO VACÍO, que es la mitad que importa.** Un 0 sobre un conjunto vacío es
+  indistinguible de una consulta rota, así que se comprobó por separado: la base tiene **141 órdenes
+  vivas**, el estado `devuelta` existe en el catálogo, no hay ninguna orden en él **ni contando las
+  borradas** (luego no es el filtro `deleted_at`), y el dominio **sí** tiene materia (**11** órdenes
+  pasaron por `devuelta`, **8** llegaron a `rechazada`, **32** gestiones contables en cierre
+  aprobado). Lo que está vacío es la foto de hoy, no la consulta.
+- **Y hay una razón por la que nadie pudo ser cobrado antes de tiempo, más fuerte que el cero**: las
+  8 rechazadas son **anteriores** al criterio nuevo — 7 por gestión manual (última el **12-ago**) y
+  **una sola** por `escalado_devuelta_sla` (**26-jul**), contra una release #381 del **14-ago**. El
+  cron ha escalado **una vez en toda la vida de la base**.
+- **De regalo, T1b:** el riesgo que D14 aceptó queda **dimensionado en 0 casos** — **12 cierres, los
+  12 `aprobado`**, ninguno con más de 7 ni de 30 días. El supuesto operativo del humano se sostiene
+  hoy, sobre 12 de 12.
+- **Deuda dejada, con nombre:** **el número caduca en cuanto una orden entre en `devuelta`**, igual
+  que caducó el 0 de `160/D7` —que el propio design ya declaraba no reutilizable—, y **nada lo
+  vigila**: la superficie que haría visible el efecto real es la ficha **219**, `pending`. Quien
+  vuelva a esto **vuelve a correr la consulta**; no cita esta tabla.
+- Y una que se destraba sola: la **218** condicionaba su arranque a «que la 215 esté mergeada». Lo
+  está, y en producción.
+
+## 2026-08-14 — 224 (al imprimir, los tokens también giran a claro)
+- Tercer `@media print` en `app/globals.css` con los **35** tokens claros para `.dark`,
+  `body:has(> .dark)`, `.tema-sistema` y su espejo, más la guardia espejo
+  (`impresion-tokens.guardia.test.ts`) y `tokenAlImprimir()` en `tests/fixtures/contraste.ts`.
+  Cierra la mitad que la 221 dejó abierta y **borra el precio que ella dejaba pagado**.
+- Requisitos: ficha `sdd: false`, sin `specs/`; el contrato es la ficha. **3 rondas de revisión**,
+  **33 mutaciones** (19 letales rojas, 14 inocuas verdes). Detalle en `progress/impl_224.md`.
+- **Lo compra, medido**: `--foreground` en papel **1,19 → 15,70**; Badge success 1,92 → 5,48; y con
+  «gráficos de fondo» marcado —el precio de la 221— success **1,70 → 4,84**, con warning, danger e
+  info también sobre AA.
+- **La ficha enunciaba la contradicción AL REVÉS, y sólo lo dijo medirlo.** Decía que un
+  `@media print` detrás de `.dark` «no hace nada»: detrás **también gana**; lo que lo prohíbe es el
+  **lector de tokens de los tests**, no la cascada. El problema real era la **especificidad**:
+  `.dark` a secas (0-1-0) empata y pierde por orden; `html .dark` (0-1-1) gana esté donde esté.
+  Medido en Chromium con `emulateMedia({media:"print"})` sobre **la hoja real compilada**, no sobre
+  el CSS fuente — y la descripción de la ficha se corrigió en vez de dejarla afirmando lo falso.
+- **La misma ceguera apareció por TERCERA vez, y la tercera estaba atornillada en verde.** Guardias
+  que afirman sobre el **papel** midiendo con `token()`, que lee el CSS con los `@media print` ya
+  borrados. La tercera —F4, el tercer puesto del ranking— sobrevivió al barrido por **dos defectos
+  encajados** (mal clasificada como «paleta fija» **y** medida con el lector ciego), y su frase falsa
+  estaba sostenida por un `toContain` que **exigía que siguiera escrita**. Hoy afirma lo contrario y
+  es cierto: con la 224 dentro, **la 221 BAJA esa fila** (15,70 → 11,39, las dos sobre AAA).
+- **Una mutación INOCUA salió roja, y ése fue el hallazgo de la primera ronda**: la guardia
+  identificaba el bloque por la cadena literal `"html .dark"` y rechazaba una implementación **igual
+  de correcta** escrita con `:root`. Sin la variante inocua, esa rigidez no se ve. En la tercera
+  ronda volvió a pasar y el implementador lo dijo: su primera «inocua» **no lo era**, y la rehízo.
+- **Un arreglo abrió un agujero y lo cazó el reviewer**: al pasar de lista escrita a mano a lista
+  **derivada**, el caso central —el que da nombre a la ficha— podía **pasar por vacuidad** con cero
+  selectores. Cerrado con anti-vacuidad **dentro** del propio caso: uno que necesita que otro se
+  ponga rojo para no mentir, sigue mintiendo si lo corren solo.
+- **Lo que NO compra, declarado y ejecutable**: `--destructive` 3,76 y `--primary` 3,18 siguen bajo
+  AA (deuda de paleta, 210/216), y **seis tokens empeoran** al imprimir desde oscuro (`P1`–`P6`; el
+  peor, `--primary-foreground` **18,33 → 1,00** en 15 usos, tinta blanca sobre un fondo que la
+  impresora no pone). **No se arregla aquí**: el papel **iguala al tema claro por construcción** —el
+  bloque espeja los 35 hex a hex—, y un valor propio rompería ese espejo. Ficha aparte.
+- **Deuda dejada, con nombre**: sólo **Chromium** (no hay Gecko ni WebKit en el entorno);
+  `.papel-al-imprimir` de la 217 queda redundante en la práctica pero **no se retira** —sigue siendo
+  la única defensa si un subárbol fija tokens oscuros por otra vía—; y el rebote de una mutación que
+  mata cuatro guardias en el `import` (122 tests que ni se cargan) se **acepta declarado**: cerrarlo
+  exigiría desacoplar un fixture que comparten seis guardias para ganar un mensaje mejor en un
+  escenario que ya falla a gritos.
+
+## 2026-08-15 — 229 (rastreo público del envío, sin sesión)
+
+- El destinatario consulta su paquete **sin iniciar sesión**, desde un **modal en la landing
+  pública**: devuelve el hito vigente más la línea de tiempo con fecha y hora. Identifica con
+  **guía + los 4 últimos dígitos del teléfono del destinatario**. **Sin migración, sin ruta nueva y
+  sin tocar `middleware.ts`**: el botón «Rastrear envío» de `LandingNav.tsx` ya existía `disabled` —
+  la feature lo **activa**, no lo crea. La Server Action se postea a `/`, que es pública por
+  coincidencia exacta, así que pasa el guard sin sesión.
+- Requisitos cubiertos: **R1–R35**, los 35 mapeados a un test nombrado y ejecutado
+  (`progress/impl_229.md` §4). Reviewer **APROBADO, 0 bloqueantes** (`progress/review_229.md`),
+  6 menores documentados. Gate completo verde: **1107 archivos / 14220 tests**. PR **#386**.
+- **La no-enumeración es el diseño, no un extra**: los cuatro casos malos —guía inexistente, factor
+  errado, orden borrada, sin historial— recorren el mismo camino y hacen el mismo trabajo, así que
+  el tiempo de respuesta no delata qué guías existen. El DTO se enumera campo a campo (4 campos) en
+  vez de proyectar la fila, y una guardia lo comprueba: la fuga no puede colarse por herencia.
+- **Deuda saldada antes de desplegar (era el punto 3 de su propia ficha):** la comprobación de
+  órdenes sin segundo factor utilizable se había medido **contra la base local** (0 de 78). Se
+  repitió **contra producción** al preparar la release, y con el criterio que aplica el código —no
+  el de la bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+  **141 órdenes vivas, 0 con teléfono de menos de 4 dígitos, 0 sin historial → las 141 son
+  rastreables** (137 con 8 dígitos, 4 con 12). **No es un cero de universo vacío**: la mutación del
+  umbral lo mueve (con `< 12` el mismo conteo da **137**, no 0).
+- **Deuda viva, declarada y firmada, que NO se cierra aquí**: el limitador de intentos vive **en
+  memoria del proceso** (8 intentos / 10 min por IP). En serverless cada instancia tiene su contador
+  y cada despliegue los resetea: **acota al torpe, no al decidido**, y el segundo factor son 10.000
+  combinaciones por guía. Un límite **persistido** es ficha aparte. También aceptado: sin URL
+  compartible (es modal, no ruta), el QR impreso sigue apuntando a `/paquete` privada, y
+  `sin_gestionar` se publica como «En reparto» — ningún rastreo publica fallos operativos.
+- Los E2E (`e2e/rastreo-publico.spec.ts`) se ejecutaron **a mano** (2 passed) contra un `next dev`
+  propio, **no** por el `webServer` de `playwright.config.ts` (su `reuseExistingServer` engancha el
+  servidor de otro checkout). `init.sh` sigue sin correr E2E: deuda de arnés conocida.

@@ -14,7 +14,7 @@
 //  3. Si desaparece `body:has(...)`, vuelve la franja clara alrededor de la app oscura.
 //  4. Si el layout deja de montar el proveedor, el control sigue ahi y no enciende nada.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -106,6 +106,61 @@ describe("feature 211 — el CSS que enciende el tema", () => {
     const claro = reglaCon(".tema-claro");
     expect(claro.selectores).toContain(":root");
     expect(claro.declaraciones["--background"]).toBe("#f7f8fc");
+  });
+
+  /**
+   * Feature 224 — LAS CITAS DE LA PROSA APUNTAN A ARCHIVOS QUE EXISTEN.
+   *
+   * `globals.css` es el archivo mas comentado del repo y su prosa manda al lector a una guardia
+   * concreta varias veces («hay una guardia que falla si divergen…», «su guardia es…»). Esas rutas
+   * NADIE las comprobaba, y una habia caducado sin que nada lo notara: el comentario de
+   * `.tema-sistema` citaba `tema-sistema-espeja-dark.guardia.test.ts`, que **no existe** — la
+   * comprobacion vive en ESTE archivo, en el primer caso de este mismo `describe`. Quien fuera a
+   * buscarla no la habria encontrado, y habria concluido que no existe: peor que no citar nada.
+   *
+   * La autocomprobacion es la mitad importante: sin ella, una expresion regular que dejara de
+   * encontrar citas reportaria CERO rotas y pasaria en verde sin haber mirado nada.
+   *
+   * ── ALCANCE, y sus dos bordes, dichos porque el censo se leeria como mas amplio de lo que es
+   *
+   * 1. NO son solo las de `tests/`. La prosa manda tambien a componentes (`components/ui/badge.tsx`),
+   *    al proveedor del tema (`providers/TemaProvider.tsx`) y al layout: si una guardia caduca en
+   *    silencio, un componente renombrado tambien. Por eso el censo cubre las carpetas de codigo.
+   * 2. NO cubre las rutas escritas RELATIVAS a `app/(app)/` —«`cierres-admin/_components/…`»—,
+   *    que la prosa de la 223 usa. Verificarlas exige conocer esa base implicita; queda fuera a
+   *    proposito y dicho, en vez de dar a entender que estan cubiertas.
+   *
+   * El `(?<![\w./-])` NO es cosmetico: sin el, `_components/CierresAdminModule.tsx` casa por su
+   * mitad derecha como si fuera `components/CierresAdminModule.tsx`, y el censo denuncia TRES
+   * citas rotas que no existen. Medido antes de escribir el caso.
+   */
+  it("cada ruta del repo que cita la prosa de `globals.css` existe en el disco (224)", () => {
+    const crudo = readFileSync(path.join(__dirname, "../../..", GLOBALS), "utf8");
+    const RUTA =
+      /(?<![\w./-])(?:tests|app|components|lib|providers|hooks|db|scripts)\/[\w.()/-]*?\.(?:tsx?|css|sql)/g;
+    const citas = [...new Set([...crudo.matchAll(RUTA)].map((m) => m[0]!))];
+
+    expect(
+      citas.length,
+      "el censo no encontro citas a archivos del repo en la prosa de globals.css. O la prosa dejo " +
+        "de remitir a sus guardias y a sus componentes, o este censo dejo de saber que busca: en " +
+        "los dos casos estaba dando verde sin mirar.",
+    ).toBeGreaterThan(8);
+    // Y que mira MAS ALLA de `tests/`: si el patron volviera a estar anclado ahi, estas dos
+    // familias desaparecerian del censo sin que nada lo dijera.
+    expect(
+      citas.filter((r) => !r.startsWith("tests/")).length,
+      "el censo volvio a mirar solo `tests/`. La prosa cita ademas componentes y el proveedor del " +
+        "tema, y esos tambien se renombran.",
+    ).toBeGreaterThan(2);
+
+    const rotas = citas.filter((ruta) => !existsSync(path.join(__dirname, "../../..", ruta)));
+    expect(
+      rotas,
+      "la prosa de globals.css cita archivos que no existen. Quien lea la regla va a buscar ahi la " +
+        "comprobacion —o el componente— que la sostiene, no lo va a encontrar, y va a concluir que " +
+        "no existe. Si se movio, actualiza la cita; si desaparecio, di quien lo cubre.",
+    ).toEqual([]);
   });
 });
 

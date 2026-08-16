@@ -32,25 +32,43 @@ baselines caducan con cualquier PR ajeno).
   ronda, §Tercera ronda y §Preguntas cerradas, y como R29–R34.
   **Hecho:** R3, R18 y R27 desbloqueados con texto EARS definitivo.
 
-- [ ] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
+- [x] **T0b — Volver a la puerta con lo ÚNICO que falta: Q4.** No es una decisión;
   es la medición de T1 sin ejecutar. **Q10 quedó cerrada por D15** (deriva declarada
   con fecha de corte) y con ella R24 y R35.
-  **Hecho:** ni un `⛔` sin resolver en `requirements.md`; R19 con texto EARS
-  definitivo. **Depende de:** T1. **Bloquea:** T18.
+  ✅ **R19 ya tiene texto EARS definitivo** (reexpresado el 2026-08-14: la premisa
+  «ANTES de activar» caducó porque el criterio ya corre en `prod`; ahora pide una
+  medición POSTERIOR, fechada).
+  **Hecho (2026-08-14):** la medición se ejecutó (T1) y **no queda ni un `⛔` sin
+  resolver en `requirements.md`** — el último era el de Q4, ahora cerrado con su
+  resultado. **Depende de:** T1. **Bloquea:** T18.
 
-- [ ] **T1 — [P] Ejecutar la medición del efecto retroactivo (⛔ Q4).** La consulta
+- [x] **T1 — [P] Ejecutar la medición del efecto retroactivo (Q4).** La consulta
   ya está escrita en `design.md §7.6` (solo lectura, dos consultas: resumen y
   detalle con `LIMIT 100`). Solo hay que correrla contra la base real.
-  **Hecho:** resultado pegado en `design.md §7.6` **con fecha y base**; si
-  `empiezan_a_escalar > 0`, la lista de esas órdenes se le enseña al humano una por
-  una. **Depende de:** nada. **Informa:** T0b.
+  ⚠️ **Corregida el 2026-08-14:** al CTE `n_nuevo` le faltaba la **sexta** condición
+  (la visita real, §3.4/R34), que sí está en el código vivo; tal como estaba contaba
+  las gestiones sintéticas y **sobreestimaba** `n_nuevo`. Y su marco cambió: ya no es
+  medición **previa** (el criterio está desplegado en `prod`), es la cuenta
+  **posterior** de a cuántas órdenes movió el cambio.
+  **Hecho (2026-08-14):** resultado pegado en `design.md §7.6-bis` **con fecha y
+  base** (producción `scfnwxqbsgkzwsdntdvd`, vía MCP, solo lectura). Salió
+  `ordenes_en_devuelta = 0` ⇒ 0 en las nueve columnas, y **`empiezan_a_escalar = 0`,
+  así que la cláusula del «una por una» no se dispara**. Va con el control que
+  demuestra que el cero es de **universo vacío** y no de consulta rota (141 órdenes
+  vivas; 11 pasaron por `devuelta`; 8 llegaron a `rechazada`; 32 gestiones contables
+  en cierre aprobado) y con su fecha de caducidad escrita.
+  **Depende de:** nada. **Informa:** T0b.
 
-- [ ] **T1b — [P] Dimensionar el riesgo ACEPTADO de Q5.** Ejecutar la consulta de
+- [x] **T1b — [P] Dimensionar el riesgo ACEPTADO de Q5.** Ejecutar la consulta de
   cierres no aprobados por estado y antigüedad (`design.md §7bis`, final). **Ya no
   informa ninguna decisión** (D14 cerró Q5 aceptando el riesgo): sirve para saber si
   el supuesto operativo se sostiene en producción.
-  **Hecho:** resultado pegado en `design.md §7bis` con fecha; cuántos cierres
-  `vencido`/`rechazado`/`solicitado` llevan más de 7 y más de 30 días.
+  **Hecho (2026-08-14):** resultado pegado en `design.md §7bis` con fecha —**cero
+  filas**: no hay ni un cierre sin aprobar. Con su control, porque un vacío tampoco
+  se cita solo: **12 cierres en total y los 12 `aprobado`** (2026-07-22 → 2026-08-12),
+  ninguno en `solicitado`/`vencido`/`rechazado` y por tanto **ninguno con más de 7 ni
+  de 30 días**. El supuesto operativo de D14 se sostiene hoy, sobre 12 de 12; el
+  riesgo queda **dimensionado en 0 casos**, no eliminado.
   **Depende de:** nada. **No bloquea nada.**
 
 ---
@@ -239,6 +257,25 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   `requirements.md` §Tensión declarada); `metrics.test.ts` sigue verde.
   **R:** R24-a, R24-b, R24-c, R24-d, R35. **Depende de:** nada.
 
+- [x] **T25 — La guardia de la declaración. ESCRITA el 2026-08-14.** T23 dejó los
+  cuatro sitios escritos pero **sin dueño ejecutable**: se midió sobre `dev` que
+  borrar las **42 líneas** del bloque de `metrics.ts` dejaba `tests/unit/guards` +
+  `tests/unit/analytics` en **169 archivos / 1966 tests VERDES**, y que borrar los
+  **1458 caracteres** de la deriva dentro del `descripcion` —el dato exportado—
+  también. Prosa y dato podían evaporarse en silencio.
+  **Hecho:** `tests/unit/guards/deriva-primer-intento.guardia.test.ts` (22 casos)
+  vigila los **cuatro** puntos donde la deriva está declarada —el bloque de
+  `lib/analytics/metrics.ts`, el `descripcion` de `primer_intento_ok` **leído del
+  catálogo importado** (no del fuente), y los docblocks vecinos de
+  `AnaliticaRollupService.contarPrimerIntento` y
+  `AnaliticaOperativaService.completarPrimerIntentoEnCubos`— y exige en cada uno las
+  tres afirmaciones, por señales sinonímicas: **reformular es verde, quitar una
+  afirmación es rojo**. Anclaje por CONTENIDO (marcador `id: "primer_intento_ok"`,
+  docblock vecino inmediato de la función), nunca por línea ni por posición. Es la
+  excepción declarada a «ningún censo ancla en un comentario»: aquí el objeto
+  vigilado ES el comentario (R24-b), y así lo dice su propio docstring.
+  **R:** R24-b, R24-c, R24-d, R35. **Depende de:** T23.
+
 - [~] **T24 — ACCIÓN HUMANA EN EL DESPLIEGUE (documental).**
   ✅ **HUECO PREPARADO** (2026-08-13) en `progress/impl_215.md` §9.3, con la casilla
   vacía, el commit desplegado y la zona horaria. ⬜ **PENDIENTE la fecha real**: hoy
@@ -286,11 +323,16 @@ Desbloqueado por D15 («declara la deriva con fecha de corte»). Diseño complet
   **Hecho:** ningún `R<n>` sin al menos un test con ruta y nombre de caso reales.
   **Depende de:** T16.
 
-- [ ] **T18 — Gate completo antes del PR.** `./init.sh --rapido` para cerrar cada
+- [x] **T18 — Gate completo antes del PR.** `./init.sh --rapido` para cerrar cada
   tanda; **`./init.sh` completo antes del PR, sin excepción**.
-  **Hecho:** salida verde pegada en `progress/impl_215.md`, con el delta de rojos
-  medido contra el baseline REMEDIDO de `dev` (no contra el citado en la bitácora),
-  y el rojo declarado de Q10 (`analytics-daily-job.test.ts`) enumerado como tal.
+  **Hecho (2026-08-14, tanda de R19):** `./init.sh` **completo** dos veces, con el
+  baseline REMEDIDO en vez de citado: primero sobre `dev` limpio **antes** de tocar
+  nada (**1096/1096 archivos, 14044/14044 tests, 301 s, exit 0**) y luego sobre esta
+  rama (**1096/1096, 14044/14044, 349 s, exit 0**). **Delta de rojos: 0 → 0.** El
+  rojo declarado de Q10 (`analytics-daily-job.test.ts`) **ya no existe**: lo cerró el
+  PR #367 y las dos corridas lo confirman en verde. Se corrió entero aunque el diff
+  sea prosa, porque `init.sh` valida además el **registro** —max-2-por-zona y specs
+  de las features en vuelo—, que es justo lo que esta tanda mueve.
   **Depende de:** T17, T22, T0b.
 
 ---
@@ -377,31 +419,37 @@ es un fallo de la feature.
 | R16 | `devolucion-sla-service.test.ts`, bloques `:83-131`, `:234-268`, `:269-330` verdes SIN cambios de aserción (T12/T14) |
 | R17 | `devolucion-sla-dinero.test.ts` verde **sin tocarse** (T14) |
 | R18 | **T21** · (a) la gestión sintética del escalado SLA no cuenta aunque su cierre esté aprobado; (c) el cron sigue validando el umbral antes de escalar (`devolucion-sla-service.test.ts`, casos existentes de R15/R16); (d) `devolucion-sla-dinero.test.ts` verde sin tocarse = sigue cobrando como rechazo |
-| R19 | La medición fechada de **T1** en `design.md §7.6` (evidencia documental, no test) — ⛔ **pendiente de Q4** |
+| R19 | La medición fechada de **T1** en `design.md §7.6` (evidencia documental, no test) — ⛔ **SIGUE PENDIENTE**: no se ha ejecutado contra ninguna base. Reexpresado el 2026-08-14 como medición POSTERIOR (la premisa «antes de activar» caducó: el criterio ya corre en `prod`) y la consulta corregida con la sexta condición |
 | R20 | Las ~40 suites de consumidores y UI verdes sin tocarse (T14) |
 | R21 | Los casos de alcance por rol/zona/tienda ya existentes en los 6 servicios, verdes (T14) |
 | R22 | `intentos-no-alcance.test.ts` verde sin tocarse (T14) |
 | R23 | `metrics.test.ts` (`R11 · los intentos no se redefinen`, T6/T13) + CHECK de base |
-| R24 | **T13** · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** (R24-e) · **T23** · guardia de prosa en los cuatro sitios de `design.md §8.3` (R24-a/b/c/d) |
+| R24 | **T13** · «primer intento vs entrega tras una devolucion previa (R17)» verde **con las aserciones intactas** (R24-e) · **T23** (los cuatro sitios escritos) · **T25** · `tests/unit/guards/deriva-primer-intento.guardia.test.ts` — la guardia real de R24-b/c/d, 22 casos, con autocomprobación |
 | R25 | `criterio-intento-entrega.test.ts` (T9) + la derogación escrita en `requirements.md` |
 | R26 | `criterio-intento-entrega.test.ts` (T9) + prosa retirada (T6) |
 | R27 | `git diff --name-only -- db/` **vacío** (T15). Sin rama alternativa: D7 prohíbe materializar |
-| R28 | Revisión de prosa (T6) + `metrics.test.ts` (T6) |
+| R28 | Revisión de prosa (T6) + `metrics.test.ts` (T6). **2026-08-14:** se reescribieron los tres comentarios que aún afirmaban el criterio VIEJO — `GestionOrdenRepository.reprogramarDesdeDevuelta` (docstring), `IGestionOrdenRepository.reprogramarDesdeDevuelta` y la nota de la rama `incidente` en `GestionOrdenRepository` (citaba un derivador por `estatus_destino_id` que ya no existe) |
 | R29 | `orden-historial-repository.test.ts` (dos gestiones vigentes en el MISMO cierre aprobado → 1, T8); `devolucion-sla-service.test.ts` (T12) |
 | R30 | `orden-historial-repository.test.ts` (N cierres aprobados con resultado contable → N, T8) |
 | R31 | `orden-historial-repository.test.ts` (el resultado cuenta aunque la orden ya cambió de estado; el `where` no menciona `estatus_id`, T8) |
 | R32 | **T11b** (ningún test afirma que el conteo baje; caso explícito de monotonía) |
 | R33 | `criterio-intento-entrega.test.ts` (`sin_gestionar` no está y no puede estar en la lista, T9/T2) + `orden-historial-repository.test.ts` (una orden cortada sin gestión → 0, T8) |
 | R34 | **T19** (lista de INCLUSIÓN) + **T21** (a/b/c/d) + **T22** (conteo de gestiones legadas sin fila de historial) |
-| R35 | **T23** (la regla del corte escrita en los cuatro sitios, sin constante nueva) + **T24** (la anotación del despliegue) + guardia: `git diff -- db/` vacío |
+| R35 | **T23** (la regla del corte escrita en los cuatro sitios, sin constante nueva) + **T25** (`deriva-primer-intento.guardia.test.ts`, afirmación «R24-c/R35»: `updated_at` sí, `fecha` no) + **T24** (la anotación del despliegue) + guardia: `git diff -- db/` vacío |
 
 **Cobertura:** 35 requisitos, 35 con dueño.
 
 - **30 cerrados y verdes** en `7d9471c3` (mapa real con nombres de caso en
   `progress/impl_215.md §2`).
-- **R12, R18 y R34** → Grupo 4 (T19–T22). R12 figuraba como cubierto y **no lo
+- **R12, R18 y R34** → Grupo 4 (T19–T22), **cerrados** y desplegados en `dev` y en
+  `origin/prod` (verificado el 2026-08-14). R12 figuraba como cubierto y **no lo
   estaba**: su test medía el mapa, no el predicado.
 - **R24 y R35** → Grupo 5 (T13, T23, T24), desbloqueados por D15. Con T13 se cierra
-  **el último rojo declarado** de la feature.
+  **el último rojo declarado** de la feature. Su **dueño ejecutable** es **T25**
+  (2026-08-14): hasta entonces R24-b/c/d y R35 no tenían más respaldo que la prosa, y
+  se midió que la prosa podía borrarse entera —comentario y dato exportado— sin un
+  solo test rojo.
 - **R19** → lo único que sigue dependiendo de algo externo: ejecutar la medición de
-  T1 (Q4). No es una decisión, es una consulta sin correr.
+  T1 (Q4). No es una decisión, es una consulta sin correr. Su premisa se reexpresó el
+  2026-08-14 (de medición previa a posterior) y la consulta se corrigió con la sexta
+  condición que le faltaba.

@@ -8,16 +8,19 @@ Requisitos en notación EARS. Cada `R<n>` es verificable con un test. Feature
 > automático del cron SLA (99) y, por esa vía, el `cobroRechazado` de la 56
 > (dinero real). El mapa de estados NO cambia.
 >
-> **Estado de las 12 preguntas (2026-08-13, cuarta ronda):** **once CERRADAS**
-> (Q1, Q2, Q3, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12). **Queda UNA:** **Q4**, que no es
-> una decisión sino una **MEDICIÓN pendiente de ejecutar** (la consulta está lista
-> en `design.md §7.6`); bloquea R19 y nada más.
+> **Estado de las 12 preguntas: las DOCE cerradas (Q4 el 2026-08-14).** Q4 no era
+> una decisión sino una **medición**, y ya **se ejecutó** contra la base real de
+> producción: resultado, control y límite en `design.md §7.6`, y el veredicto en
+> R19. Tocaba R19 y nada más.
 >
-> **Estado de la implementación:** el commit **7d9471c3** ya implementa el criterio
-> nuevo (30 requisitos; bitácora en `progress/impl_215.md`). De aquí en adelante
-> este documento describe lo que **EXISTE**, no un plan. Lo que la tercera ronda
-> añade —el **discriminador de las gestiones SINTÉTICAS** (R18, R12, R34)— **NO
-> está implementado** y va marcado como tal en cada requisito.
+> **Estado de la implementación (corregido el 2026-08-14, auditado contra el
+> código):** el commit **7d9471c3** implementó el criterio nuevo (30 requisitos) y el
+> **Grupo 4** añadió después el **discriminador de las gestiones SINTÉTICAS** (R18,
+> R12, R34), que está **en `dev` y en `origin/prod`** (`progress/impl_215.md §8`).
+> Este documento describía ese discriminador como «NO implementado»: era registro
+> caducado, corregido en R12, R18 y R34. De aquí en adelante describe lo que
+> **EXISTE**, no un plan. **La medición de R19 ya se ejecutó (2026-08-14): no queda
+> nada debiéndose.**
 
 ## La decisión del humano, textual (2026-08-13)
 
@@ -84,6 +87,15 @@ indefinidamente; el cron SLA lee 0 < umbral y la **libera a bodega una y otra ve
 sin escalar jamás** a `rechazada`. Consecuencia de negocio: esa orden gira
 indefinidamente y **el rechazo nunca se cobra** (el `cobroRechazado` de la 56 no
 llega a emitirse por esa vía).
+
+**Y no es un ciclo inescapable: es MANUAL** *(precisión añadida el 2026-08-14; la
+nota anterior lo pintaba peor de lo que es)*. Existe **válvula de escape** y ya está
+en producción: `forzarSolicitudVencido` (`CierresAdminRepository.ts:879`, feature
+111/R16) deja a un admin pasar a `solicitado` un cierre `vencido`/`rechazado` que
+nadie re-solicita —el caso del mensajero desvinculado— y a partir de ahí aprobarlo. Lo
+que falta no es un camino de salida, es que el sistema avise de que hay que tomarlo
+(M3, descartada por D14). Sirve para no volver a proponer una mitigación de código
+para algo que hoy se destraba con dos clics.
 
 **Agravante ya medido:** un cierre `vencido` **no es aprobable directamente**
 (`ESTADOS_RESOLUBLES = ["solicitado"]`, `lib/repositories/CierresAdminRepository.ts:39`;
@@ -318,7 +330,14 @@ se reprograma desde la tienda (arista #22, `reprogramacion_tienda`), ENTONCES el
 sistema NO DEBE sumar un intento por esa reprogramación, **ni siquiera cuando la
 gestión sintética que crea quede vinculada a un cierre aprobado**.
 
-> ⚠️ **INCUMPLIDO en 7d9471c3.** `GestionOrdenRepository.reprogramarDesdeDevuelta`
+> ✅ **CUMPLIDO desde el Grupo 4** (corrección de registro del 2026-08-14): lo cerró el
+> discriminador de R34, en `dev` y en `origin/prod`. El párrafo de abajo se CONSERVA
+> porque describe el agujero real que hubo entre `7d9471c3` y el Grupo 4, y porque
+> explica por qué el destino `reprogramada` no protege de nada. La prosa del código que
+> afirmaba lo contrario se reescribió el 2026-08-14 (R28:
+> `GestionOrdenRepository.reprogramarDesdeDevuelta` y su interfaz).
+>
+> ⚠️ **Cómo estaba INCUMPLIDO en 7d9471c3.** `GestionOrdenRepository.reprogramarDesdeDevuelta`
 > (`:525-535`) crea una gestión sintética con `resultado: reprogramada`,
 > `cierre_id: null` y `mensajero_id` = el de la última `devuelta` vigente (`:509-513`).
 > `CierreDiaRepository.crearCierre` vincula por `{ mensajeroId, cierreId: null,
@@ -364,7 +383,26 @@ instante en que se snapshotea. Esta feature solo puede cambiar CUÁNDO una orden
 alcanza el umbral, nunca cuánto se cobra por alcanzarlo.
 
 **R18 — El escalado del cron NO incrementa el contador.** *(DESBLOQUEADO por D13.
-**NO implementado en 7d9471c3** — ver R34.)*
+**CUMPLIDO** — corrección de registro del 2026-08-14: figuraba como «NO
+implementado en 7d9471c3», y eso dejó de ser cierto cuando aterrizó R34.)*
+
+> **Evidencia, verificada en el código vivo (`dev`) y en `origin/prod`:** el cron
+> escribe la transición del escalado con `origenTipo: "escalado_devuelta_sla"`
+> (`lib/repositories/DevolucionSlaRepository.ts:163`, dentro de la misma tx que crea
+> la gestión sintética), y ese valor **no está** en `ORIGEN_TIPOS_VISITA_REAL`
+> (`lib/types/orden-historial.ts`, hoy `["gestion"]`). Como la sexta condición de
+> `whereIntentosVigentes` exige una fila de historial de familia de VISITA REAL, esa
+> gestión **no puede** contar como intento aunque su cierre se apruebe: R18-a y R18-b
+> se cumplen **estructuralmente**, no por una guarda ad-hoc. R18-c (el cron sigue
+> comparando el conteo contra el umbral antes de escalar) y R18-d (sigue cobrando como
+> rechazo: el ingreso de bodega se deriva del `resultado`, no del conteo) no se
+> tocaron. Desplegado: `ORIGEN_TIPOS_VISITA_REAL` aparece 3 veces en
+> `origin/prod:lib/repositories/OrdenHistorialRepository.ts`.
+> **Tests:** `tests/unit/types/criterio-intento-entrega.test.ts` (bloque
+> «`ORIGEN_TIPOS_VISITA_REAL` — el discriminador de las sinteticas (215/R34)») y
+> `tests/unit/repositories/orden-historial-repository.test.ts` (casos del
+> discriminador) + `devolucion-sla-service.test.ts` / `devolucion-sla-dinero.test.ts`
+> verdes sin tocar aserciones.
 
 - (a) CUANDO el cron SLA escala una orden a `rechazada`, el sistema DEBE cambiar el
   estado **sin** que el conteo de intentos de esa orden aumente por causa de ese
@@ -378,11 +416,44 @@ alcanza el umbral, nunca cuánto se cobra por alcanzarlo.
   gestión sintética genera (R17): **deja de contar como INTENTO, sigue cobrando como
   RECHAZO**. Son dos cosas distintas y solo cambia la primera.
 
-**R19 — Efecto retroactivo declarado y medido.** ⛔ **BLOQUEADO POR Q4.** ANTES
-de activar el criterio nuevo, el sistema DEBE poder informar cuántas órdenes en
-vuelo cambian de lado del umbral al cambiar el criterio, y esa medición DEBE
-quedar fechada en la especificación. No se activa un criterio de dinero sin saber
-a cuántas órdenes mueve.
+**R19 — Efecto retroactivo declarado y medido.** ✅ **CUMPLIDO el 2026-08-14: la
+consulta se ejecutó contra producción.** *(Reexpresado ese mismo día: la premisa
+«ANTES de activar» CADUCÓ.)*
+
+> **Por qué se reexpresa y no se borra ni se da por cumplido.** El texto original
+> decía *«ANTES de activar el criterio nuevo, el sistema DEBE poder informar…»*. **El
+> criterio nuevo ya corre en producción**: las seis condiciones están desplegadas
+> —`ORIGEN_TIPOS_VISITA_REAL` aparece 3 veces en
+> `origin/prod:lib/repositories/OrdenHistorialRepository.ts` y la lista vive en
+> `origin/prod:lib/types/orden-historial.ts`, verificado el 2026-08-14—. Esa puerta
+> pasó y no se puede volver a cruzar; exigir hoy una medición previa sería exigir algo
+> imposible. Lo que sí se podía hacer —y se hizo el 2026-08-14— es correrla como
+> medición **posterior y fechada**.
+
+El sistema DEBE informar, con fecha, **a cuántas órdenes movió el cambio de
+criterio**: cuántas de las que hoy reposan en `devuelta` cruzan el umbral en cada
+dirección con el criterio viejo frente al nuevo (`empiezan_a_escalar` /
+`dejan_de_escalar`), y esa medición DEBE quedar fechada en la especificación. La
+consulta está escrita y lista en `design.md §7.6` (SOLO LECTURA; corregida el
+2026-08-14 con la sexta condición, que le faltaba). SI `empiezan_a_escalar > 0`,
+ENTONCES esas órdenes se enseñan al humano una por una: son las que se rechazaron —y
+se cobraron— antes de lo que se habrían cobrado con el criterio viejo. **Lo que la
+medición ya no puede hacer es informar una decisión de activación; lo que sí hace es
+decir qué hizo el cambio.**
+
+**RESULTADO (2026-08-14, base de producción `scfnwxqbsgkzwsdntdvd`, vía MCP de
+Supabase, solo lectura):** `ordenes_en_devuelta = 0` y, por tanto, **0 en las nueve
+columnas**. `empiezan_a_escalar = 0` ⇒ **no hay ninguna orden que se haya rechazado
+—ni cobrado— antes de lo que se habría cobrado con el criterio viejo**, y la cláusula
+del «una por una» no se dispara.
+
+⚠️ **El cero es de universo vacío, y así hay que citarlo.** No dice que el cambio sea
+inocuo: dice que **en este corte no hay ninguna orden esperando al cron SLA**. El
+control que le da sentido, y los números que prueban que la base no está vacía, están
+en `design.md §7.6`. **Este número caduca en cuanto una orden entre en `devuelta`**,
+igual que caducó el de `160/D7` — que también midió 0 y por eso el propio §7.6 declara
+que no es reutilizable. La medición queda cumplida; la vigilancia del efecto real la
+recoge la ficha **219** (que el aviso de la deriva llegue a la pantalla).
 
 ---
 
@@ -491,7 +562,18 @@ BAJAR el número (`160/R5`): tras esta feature, una gestión solo puede contar
 cuando ya no es anulable.
 
 **R34 — Solo las gestiones de una VISITA REAL cuentan; las SINTÉTICAS no.**
-*(Generaliza R12 y R18-b. **NO implementado en 7d9471c3**.)*
+*(Generaliza R12 y R18-b. **CUMPLIDO** — corrección de registro del 2026-08-14: la
+marca «NO implementado en 7d9471c3» quedó obsoleta al aterrizar el Grupo 4, ver
+`progress/impl_215.md §8`.)*
+
+> **Evidencia:** `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`, lista de
+> INCLUSIÓN con `satisfies`) + la sexta condición de `whereIntentosVigentes`
+> (`lib/repositories/OrdenHistorialRepository.ts`, `historialEstados: { some: {
+> ordenId, origenTipo: { in: [...] } } }`). **En `dev` y en `origin/prod`** (3
+> apariciones en el repositorio, 1 en los tipos, verificado el 2026-08-14).
+> **Tests:** `tests/unit/types/criterio-intento-entrega.test.ts` («R34-a: la lista es
+> EXACTAMENTE `gestion`», «R34-c: es lista de INCLUSION», «R34-c: el predicado usa la
+> lista con `in` y NO contiene ningun `none` ni `notIn`»).
 
 - (a) El sistema DEBE contar como intento únicamente el resultado de una gestión
   originada por la **gestión de un mensajero sobre una orden en reparto**, y NO DEBE
@@ -545,18 +627,19 @@ Diez de las doce. Cada una con quién la cerró y dónde vive ahora la decisión
 
 ---
 
-## PREGUNTA ABIERTA (1)
+## PREGUNTAS ABIERTAS (0) — la última se cerró el 2026-08-14
 
-**No queda ninguna decisión pendiente.** Lo único que falta es una **medición sin
-ejecutar**: la consulta está escrita y lista en `design.md §7.6`.
+**No queda ninguna decisión pendiente ni ninguna medición sin ejecutar.**
 
-- **Q4 — Efecto retroactivo.** ⛔ bloquea **R19**. Al ser derivado, cambiar el
+- **Q4 — Efecto retroactivo. ✅ CERRADA (2026-08-14).** Al ser derivado, cambiar el
   criterio cambia el conteo de TODAS las órdenes históricas de golpe, incluidas las
   que hoy reposan en `devuelta` esperando el SLA. Con D8 el conteo de casi toda
   orden **BAJA** (solo cuentan cierres aprobados) ⇒ el escalado se RETRASA, no se
-  adelanta. ¿Se acepta? **La consulta de medición, lista para pegar en una consola
-  contra la base real, está escrita en `design.md §7.6`** (solo lectura); falta
-  EJECUTARLA y pegar el resultado con fecha.
+  adelanta. **Medido contra producción:** 0 órdenes en `devuelta` en el corte, luego
+  0 cruzan el umbral en cualquiera de las dos direcciones y **nadie fue cobrado antes
+  de tiempo**. El resultado, su control —la base **no** está vacía— y su límite —el
+  cero **caduca** en cuanto entre una orden— están en `design.md §7.6-bis`, y el
+  veredicto en **R19**.
 
 ---
 
