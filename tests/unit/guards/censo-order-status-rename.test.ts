@@ -115,6 +115,23 @@ const ALLOWLIST = new Set([
   // no nomenclatura viva. Si algun dia la fila desaparece del catalogo, el caso deja de tener
   // sentido y esta entrada se retira con el.
   "analytics-daily-job.test.ts",
+  // Feature 229 (T1.2) — HOMONIMIA, no reaparicion de nomenclatura. El vocabulario PUBLICO
+  // del rastreo (9 hitos firmados en el gate del 2026-08-15, `requirements.md` §D2) tiene un
+  // hito llamado `en_bodega` —«En nuestras instalaciones»— que se escribe igual que el value
+  // de `order_status` que la 135 renombro. No es el mismo dominio: el hito es lo que ve el
+  // destinatario anonimo y NUNCA sale de una fila de `order_status`; de hecho la razon de ser
+  // de esa tabla de hitos es que ningun value interno cruce al publico (R15). El id del hito
+  // viene de una tabla FIRMADA por el humano, asi que no se puede renombrar desde
+  // implementacion para esquivar este censo. Si algun dia se renombra el hito, estas cuatro
+  // entradas se retiran. Los dos archivos de test citan ademas el value RETIRADO por la 155
+  // como dato de entrada del caso de fila huerfana (R17), igual que `analytics-daily-job`.
+  // OJO: la allowlist es por BASENAME, asi que esta entrada cubre tambien
+  // `lib/config/rastreo-publico.ts` y `lib/actions/rastreo-publico.ts`, que hoy no contienen
+  // ningun literal antiguo. Es un efecto de la primitiva del guard, no una excepcion pedida.
+  "rastreo-publico.ts", // lib/types: la tabla de hitos publicos
+  "rastreo-hitos-exhaustivo.guardia.test.ts", // afirma la tabla firmada y el caso huerfano
+  "rastreo-publico-service.test.ts", // proyeccion esperada de la linea de tiempo
+  "rastreo-publico.int.test.ts", // idem, con datos
 ]);
 
 // Feature 153 (R17) — censo de la ETIQUETA antigua. Se busca el literal EXACTO entre
