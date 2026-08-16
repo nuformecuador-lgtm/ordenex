@@ -3337,3 +3337,35 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   mata cuatro guardias en el `import` (122 tests que ni se cargan) se **acepta declarado**: cerrarlo
   exigiría desacoplar un fixture que comparten seis guardias para ganar un mensaje mejor en un
   escenario que ya falla a gritos.
+
+## 2026-08-15 — 229 (rastreo público del envío, sin sesión)
+
+- El destinatario consulta su paquete **sin iniciar sesión**, desde un **modal en la landing
+  pública**: devuelve el hito vigente más la línea de tiempo con fecha y hora. Identifica con
+  **guía + los 4 últimos dígitos del teléfono del destinatario**. **Sin migración, sin ruta nueva y
+  sin tocar `middleware.ts`**: el botón «Rastrear envío» de `LandingNav.tsx` ya existía `disabled` —
+  la feature lo **activa**, no lo crea. La Server Action se postea a `/`, que es pública por
+  coincidencia exacta, así que pasa el guard sin sesión.
+- Requisitos cubiertos: **R1–R35**, los 35 mapeados a un test nombrado y ejecutado
+  (`progress/impl_229.md` §4). Reviewer **APROBADO, 0 bloqueantes** (`progress/review_229.md`),
+  6 menores documentados. Gate completo verde: **1107 archivos / 14220 tests**. PR **#386**.
+- **La no-enumeración es el diseño, no un extra**: los cuatro casos malos —guía inexistente, factor
+  errado, orden borrada, sin historial— recorren el mismo camino y hacen el mismo trabajo, así que
+  el tiempo de respuesta no delata qué guías existen. El DTO se enumera campo a campo (4 campos) en
+  vez de proyectar la fila, y una guardia lo comprueba: la fuga no puede colarse por herencia.
+- **Deuda saldada antes de desplegar (era el punto 3 de su propia ficha):** la comprobación de
+  órdenes sin segundo factor utilizable se había medido **contra la base local** (0 de 78). Se
+  repitió **contra producción** al preparar la release, y con el criterio que aplica el código —no
+  el de la bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+  **141 órdenes vivas, 0 con teléfono de menos de 4 dígitos, 0 sin historial → las 141 son
+  rastreables** (137 con 8 dígitos, 4 con 12). **No es un cero de universo vacío**: la mutación del
+  umbral lo mueve (con `< 12` el mismo conteo da **137**, no 0).
+- **Deuda viva, declarada y firmada, que NO se cierra aquí**: el limitador de intentos vive **en
+  memoria del proceso** (8 intentos / 10 min por IP). En serverless cada instancia tiene su contador
+  y cada despliegue los resetea: **acota al torpe, no al decidido**, y el segundo factor son 10.000
+  combinaciones por guía. Un límite **persistido** es ficha aparte. También aceptado: sin URL
+  compartible (es modal, no ruta), el QR impreso sigue apuntando a `/paquete` privada, y
+  `sin_gestionar` se publica como «En reparto» — ningún rastreo publica fallos operativos.
+- Los E2E (`e2e/rastreo-publico.spec.ts`) se ejecutaron **a mano** (2 passed) contra un `next dev`
+  propio, **no** por el `webServer` de `playwright.config.ts` (su `reuseExistingServer` engancha el
+  servidor de otro checkout). `init.sh` sigue sin correr E2E: deuda de arnés conocida.
