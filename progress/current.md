@@ -9,6 +9,262 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🟡 EN CURSO 2026-08-15 — feature **229**, fase 1 (spec): rastreo público del envío
+
+Pedido humano de hoy: **«agrega la funcionalidad a feature_list para consultar el estado del
+envío»**, y en la segunda vuelta **«que sea un modal, no hace falta una página dedicada»**. Ficha
+dada de alta (`id: 229`, `pending`, `fullstack`, `sdd: true`, `complexity: high`, sin `depends_on`);
+`spec_author` corriendo sobre `specs/229-rastreo-publico-envio/`. Zonas al arrancar: ninguna
+feature en `in_progress` → la regla de 2 por zona no bloqueaba.
+
+**Lo que se construye:** el **destinatario, sin sesión**, consulta en qué va su paquete y ve el
+estado vigente **más la línea de tiempo de hitos**. Entra por un **modal** (`components/ui/dialog.tsx`)
+disparado desde la landing pública `/` (feature 86). **Sin ruta nueva, sin migración, sin tocar
+`middleware.ts`.**
+
+**Las dos preguntas que hubo que hacer antes de escribir la ficha, y por qué no eran ceremonia:**
+«consultar el estado del envío» admitía tres consumidores incompatibles —cliente anónimo, tienda
+dentro de la app, tercero por API key— y la app **ya tiene** las dos últimas medio resueltas
+(la 169 busca por guía/remisión/teléfono dentro de la app; la 106 expone API por key). Sin fijar el
+consumidor, la ficha habría duplicado algo existente.
+
+**Lo que ya existía y NO sirve tal cual, medido leyendo el código:**
+- `app/paquete/[numGuia]/page.tsx` **exige sesión** y pinta la **etiqueta** (`obtenerEtiquetaPorGuia`),
+  no un seguimiento. Que sea privada es **decisión cerrada de la feature 79** (opción b), viva en
+  `middleware.ts:43` (`REDIRECT_TO_ROOT = ['/paquete']`) y testeada en
+  `tests/unit/auth/middleware.test.ts:116-127`. La 229 **no la toca**.
+- `OrdenHistorialService.obtenerHistorial(ordenId, actor)` **recibe un `Actor`**, corta con
+  `KNOWN_ROLES` (R27) y ramifica por rol → un anónimo no tiene por dónde entrar. Hace falta un
+  **borde propio de lectura pública**, no un parámetro más.
+- El dato ya está: `orden_historial_estado` (feature 49). Esta ficha **no crea trazabilidad, la
+  proyecta hacia afuera**.
+- `/` es pública por coincidencia **exacta** (`middleware.ts:60-64`), así que la Server Action del
+  modal se postea a `/` y pasa el guard sin sesión — cero cambios en middleware.
+
+**⚠️ El riesgo que manda en esta feature:** `num_guia` es **entero incremental y único** (feature 17)
+→ **adivinable**. Un borde público que acepte solo la guía es **enumeración de la base de clientes**.
+La alerta ya venía escrita en la ficha **79** y allí se esquivó cerrando la ruta; aquí hay que
+resolverla de frente: segundo factor + límite de intentos, y **respuesta idéntica ante guía
+inexistente y ante segundo factor errado**. Que sea un modal no relaja nada: el borde es igual de
+alcanzable por script que una ruta.
+
+**Consecuencias del modal, aceptadas por el humano y dichas en voz alta — no son descuidos:** sin
+ruta **no hay URL enlazable**, el resultado no sobrevive a un refresh y no se puede mandar el
+seguimiento por WhatsApp; y el **QR impreso** de la etiqueta (feature 32, `PAQUETE_BASE_PATH`) sigue
+apuntando a `/paquete/<numGuia>`, que es privada. Link compartible = ficha aparte, no ensanche.
+
+**Las tres preguntas que el spec deja al gate humano** (regla 6, no se inventan): (1) el segundo
+factor y el límite de intentos; (2) el **mapeo estatus interno → hito público** de los 19 valores de
+`ORDER_STATUS_SEED` (**20**, ver corrección abajo), con exhaustividad estática al estilo `lib/types/tablero-dia.ts` para que un
+estatus nuevo **rompa el build** en vez de aparecer crudo; (3) qué **PII** ve el anónimo —dirección,
+monto a cobrar, nombre del mensajero, intentos—, por defecto **NO**.
+
+### ✅ SPEC ESCRITO 2026-08-15 — `specs/229-rastreo-publico-envio/`, **35 requisitos EARS** (R1–R35)
+
+Los tres archivos están (`requirements.md`, `design.md`, `tasks.md`) y **los 35 `R<n>` están mapeados
+a un test concreto** en la tabla de trazabilidad. El **Bloque 0 de `tasks.md` es una puerta**: las 14
+preguntas abiertas lo bloquean, así que nadie puede empezar a implementar sin la firma humana.
+Ficha en `feature_list.json` → `spec_ready`.
+
+**Dos correcciones que el spec midió y el leader re-verificó — la ficha estaba mal, el spec no:**
+- `ORDER_STATUS_SEED` tiene **20 valores, no 19**. El 19 salió de creer un comentario del código
+  («el catálogo pasa de 20 a 19», feature 155) que es **anterior** al `recolectando` que añadió la
+  157. Contado sobre el array: 20 (`lib/types/order-status.ts:54-79`). **Lección barata: un
+  comentario que narra un cambio caduca con el cambio siguiente; el array no.**
+- El disparador **ya existe inerte**: el botón «Rastrear envío» de `app/_landing/LandingNav.tsx:44-51`
+  está `disabled`. La feature **lo activa, no lo crea** — alguien ya dejó el hueco preparado.
+
+### ✅ PUERTA HUMANA PASADA el 2026-08-15 — las 14 preguntas, firmadas de una vez
+
+Respuesta literal del humano: **«todo por defecto»**. Se aceptan las 14 propuestas del spec sin
+excepción. `spec_author` reanudado para convertir las preguntas en decisiones y desbloquear el
+Bloque 0 de `tasks.md`.
+
+| | Decisión |
+| --- | --- |
+| **D1** | segundo factor = **últimos 4 dígitos del teléfono**; teléfono de menos de 4 dígitos → **no consultable**, y responde **igual que «no existe»**; **8 intentos / 10 min** con `ResetRateLimiter`; clave **solo IP** |
+| **D2** | **9 hitos**; `recolectando` → `registrado`; `incidente` **colapsado** en `no_entregado`; `sin_gestionar` → `en_reparto`; **se colapsan** las rachas de hito repetido (R18); **sin** hitos futuros |
+| **D3** | lista blanca de **4 campos** (`numGuia`, `hitoVigente`, `actualizadoEn`, `linea[{hito,fecha}]`), fecha **con hora**, y **ninguno** de los excluidos entra |
+
+**🔴 DOS RIESGOS ACEPTADOS CON LOS OJOS ABIERTOS — el reviewer NO debe tratarlos como hallazgos:**
+1. **El limitador es en memoria POR PROCESO.** En serverless cada instancia tiene el suyo, así que
+   acota al enumerador torpe pero **no frena a un atacante distribuido**. Un límite persistido es
+   **ficha aparte**, no un ensanche de esta.
+2. **`sin_gestionar` → `en_reparto` oculta al cliente un fallo operativo interno.** Si la orden se
+   quedó sin gestionar, el cliente ve «en reparto» y no se entera. Es lo normal en un rastreo y es
+   **deliberado**.
+
+### 🔢 RENUMERADA 223 → 229 el 2026-08-15, antes de escribir una línea de código
+
+**La lista de este checkout (`ux`) está ATRASADA respecto a `dev` y por poco cuesta una colisión.**
+Se dio de alta como **223** leyendo `feature_list.json` desde `ux`, donde la cola era 222. En el
+linaje bueno (`origin/dev`) los ids **221–226 ya existen y son OTRAS features** (impresión / tema
+oscuro), y las dos fichas que esta sesión creó antes —hilo de notas y habilitar novedad— **ya viven
+como 227 y 228** en la rama de otra sesión (`C:/w227`). Se salta a **229** a propósito, para no
+chocar con ellas cuando aterricen.
+
+**Lo que se conserva es el SLUG** (`rastreo-publico-envio`): es lo único que sobrevive a una
+renumeración. Rama `feature/229-rastreo-publico-envio`, spec en `specs/229-rastreo-publico-envio/`.
+
+> **La lección, y esta vez que quede escrita:** el registro de features **no se lee del checkout
+> donde estás**, se lee de `dev`. Un `feature_list.json` local es una foto vieja en cuanto otra
+> sesión mergea; darle un id a una ficha desde esa foto es reservar un número que ya es de otro.
+
+### 🚧 FASE 2 EN CURSO — `implementer` sobre `C:/w229`
+
+Rama `feature/229-rastreo-publico-envio` nacida de `origin/dev` (`a145cab8`), con el spec y la ficha
+ya commiteados. **No se pudo trabajar desde este checkout:** `ux` tiene 154 archivos sucios y **6 en
+conflicto con `dev`**, entre ellos WIP ajeno de pagos (`GestionarOrdenPanel`, `desglose-captura`) que
+no es de esta sesión y no se toca. De ahí el worktree de ruta corta.
+
+**Al `implementer` se le dijo explícitamente que NO commitea** (el commit, el merge y el PR los hace
+el leader) y que **sin migración y sin tocar `middleware.ts`**: si cree necesitar cualquiera de las
+dos, para y avisa, porque significaría que el spec y la realidad divergen.
+
+### ✅ CERRADA 2026-08-15 — reviewer APROBADO, **PR #386** contra `dev`
+
+Gate `./init.sh` completo **verde, medido dos veces por separado** (implementer y reviewer, mismo
+resultado): **1107 archivos / 14220 tests** (+127), typecheck 0, lint 0 errores. **35 de 35
+requisitos** mapeados a un test nombrado y **ejecutado**. Tres commits en la rama (spec ·
+implementación · cierre). Sin migración, sin ruta nueva, sin tocar `middleware.ts`.
+
+**Lo que el reviewer verificó LEYENDO EL CÓDIGO, no fiándose del test —y por eso vale:**
+- **No-enumeración:** no hay retorno temprano. Las cuatro ramas de fallo hacen el **mismo trabajo**
+  (1 llamada a datos cada una, medido), así que no se filtra existencia por **tiempo de respuesta**
+  aunque el payload sea idéntico. Ese era el modo de fallo real, y el test solo no lo habría cazado.
+- **Exhaustividad:** reprodujo un `tsc` aislado con un value nuevo → `TS1360`. Rompe el build **de
+  verdad**, no de boquilla.
+
+**🔴 DEUDA DECLARADA — la que puede morder en producción va primero:**
+1. **La comprobación de teléfonos de menos de 4 dígitos (0 de 78) se midió contra la base LOCAL.**
+   Hay que **repetirla contra producción ANTES DE DESPLEGAR**: si allí existen órdenes con teléfono
+   corto, esas guías quedan **no consultables** por la decisión G2. No bloquea el merge; sí el deploy.
+2. **2 avisos de lint son NUEVOS**, no preexistentes como afirmaba la bitácora del implementer
+   (`rastreo-publico-service.test.ts:42-43`). Cosméticos, pero la bitácora decía otra cosa.
+3. Historial vacío responde tras **dos** lecturas en vez de una: misma forma, distinto trabajo; solo
+   alcanzable por quien ya acertó guía **y** teléfono.
+4. La guardia de `console.*`/`catch {}` cubre los 7 módulos de `lib/` pero **no el modal**.
+
+**Decisión humana del cierre:** el hito `en_bodega` **se conserva** con sus 4 entradas de allowlist
+en el censo de nomenclatura (se ofreció renombrarlo a `en_instalaciones` para retirarlas). Verificado
+que **no dejan pasar nomenclatura vieja real**: los únicos literales son el hito homónimo y el value
+retirado usado como dato de entrada del caso huérfano.
+
+---
+
+## 🟡 EN CURSO 2026-08-14 — feature **221**, fase 1 (spec): hilo de notas por orden tienda↔mensajero
+
+Pedido humano de hoy: **«que el rol adminTienda también pueda escribir notas»**. Ficha dada de alta
+(`id: 221`, `pending`, `fullstack`, `sdd: true`, `complexity: high`), `spec_author` corriendo sobre
+`specs/221-hilo-notas-orden/`. Zonas ocupadas al arrancar: 213 (frontend) y 215 (backend) →
+`fullstack` estaba a 0, la regla de 2 por zona no bloqueaba.
+
+**Lo que se construye:** un hilo por orden (`orden_nota`: `orden_id`, `autor_id`, `rol_autor`,
+`cuerpo`, `created_at`), bidireccional, acotado a órdenes de la propia tienda **en estado de
+novedad**, donde **cada autor puede borrar sus propias notas** (decisión añadida el 14-ago, ya no
+es append-only). Se retira la columna `nota` de `orden_mensajero_meta` y con ella la feature
+116 entera. `marcar_luego` (115) no se toca.
+
+**La medición que cambió la decisión humana, y por qué conviene no re-descubrirla:** la primera
+respuesta fue *«reutilizar `orden_mensajero_meta`, solo abrir la validación por rol»*. No se puede:
+esa tabla tiene `@@unique([usuarioId, ordenId])` (`db/schema.prisma:634`) —**una fila por pareja**—
+y de esa unicidad depende la idempotencia del upsert de `marcar_luego` (115/R7). Un hilo necesita N
+filas por orden; quitar el UNIQUE rompe la 115. Se le enseñó la medición y cambió a tabla nueva.
+
+**🔴 DECISIÓN DESTRUCTIVA QUE EL GATE HUMANO DEBE FIRMAR, NO ASUMIR.** Se eligió tabla nueva **sin**
+migrar lo existente, así que dropear `orden_mensajero_meta.nota` **borra las notas privadas ya
+escritas por los mensajeros en producción**. El spec debe exigir un **conteo de filas afectadas
+contra la base real ANTES de escribir la migración**. La alternativa de migrarlas al hilo está
+descartada a propósito: las haría visibles para la tienda.
+
+**El problema de privacidad que originó todo esto:** esas notas se escribieron bajo una promesa
+literal en pantalla —*«Solo tú puedes ver esta nota; no la ven la tienda ni otros mensajeros»*
+(`NotaPrivadaMensajero.tsx:30`, R6/R8 de la 116)—. Abrir esas filas a la tienda no es un cambio de
+permisos: es una fuga retroactiva sobre datos de producción.
+
+**Trampa de alcance ya identificada:** «estado de novedad» **no está definido en ninguna parte del
+código**. Hoy `/novedades` lista devueltas (`findDevueltasByTienda`). La lista exacta de estatus se
+fija en el spec, no se hereda por costumbre.
+
+**No confundir con los otros cuatro textos libres de una orden**, todos fuera de alcance:
+`orden.notas` (de la tienda, solo se escribe en el alta), `GestionOrden.motivo` (`:737`),
+`OrdenHistorialEstado.motivo` (`:1557`), `OrdenIncidente.motivo` (`:880`) y el chat de WhatsApp con
+el **cliente** (`ChatConversacion`/`ChatMensaje`, features 109/120) — otra persona, otro canal.
+
+### ✅ PUERTA HUMANA PASADA el 2026-08-14 — las 9 preguntas del spec, resueltas
+
+| | Decisión |
+| --- | --- |
+| **P1** | **Eliminada.** No se migra nada: las notas privadas actuales se **borran** con la columna. Solo se muestran las de la tabla nueva. **Decisión, no descuido.** |
+| **P2** | novedad = **`ESTATUS_DEVUELTA`**, y solo ese |
+| **P3a/b/c/d** | borrado **lógico**; el otro lado ve **«mensaje eliminado»**; solo se borra **mientras esté `devuelta`**; **no se edita** |
+| **P4** | al escribir la tienda, se notifica al mensajero **«orden reactivada»** |
+| **P5** | máximo **200** caracteres; el mensajero no escribe en órdenes que no tiene asignadas |
+| **P7** | **(a)** «novedad» acota la **escritura**, no la lectura |
+| **P6** | resuelto por P7(a): sin pantalla nueva |
+| **P8 / P9** | sin vista admin/maestro por ahora · solo notas propias, sin moderación |
+
+**La regla completa, en una línea:** ventana de **escritura y borrado** = `devuelta`; **lectura** = siempre.
+
+**Por qué P7 era la pregunta cara y no un detalle:** P2 y P4 se anulaban entre sí. El mensajero **no
+ve órdenes devueltas** —`MisAsignacionesService.ts:152` lee solo `por_recoger` y `en_reparto`, y ese
+corte es deliberado (feature 167/R34)—, así que con el hilo confinado a la novedad **la tienda
+escribiría cuando el mensajero no puede leer, y el mensajero leería cuando el hilo ya no existe**:
+los dos participantes nunca coinciden. La opción (a) lo arregla sin tocar el corte de la 167.
+
+### 🔎 Hallazgo que cambia el planteamiento de P4: **el «Habilitar» ya existe, y ya pide nota**
+
+`app/(app)/novedades/_components/HabilitarNovedadModal.tsx` es un modal «Habilitar orden» con **nota
+obligatoria** y la firma **definitiva** `onConfirmar(nota: string)`. Es **maqueta declarada**: su
+cabecera (`:37`) dice «la transición todavía no existe en el backend» y su consumidor solo lanza un
+toast (`NovedadesModule.tsx:155-163`). Su propio comentario (`:31-35`) explica por qué esa nota es
+obligatoria: *«Habilitar una orden que la tienda ya dio por devuelta no deja más rastro que el que
+alguien escriba»*.
+
+Es decir: **la reactivación que P4 quiere notificar no existe todavía, y su nota ya tiene formulario
+esperando dónde ir.** El `spec_author` está evaluando en la segunda vuelta si esa nota es el primer
+mensaje del hilo y si la transición entra en la 221 o sale a ficha aparte de la que la 221 dependa.
+Coste asociado: notificar exige **migrar el enum cerrado** `NotificacionEvento` (`schema.prisma:1875`).
+
+### 🕳️ La contradicción que sobrevivió al arreglo de P7, y que casi se cuela al código
+
+P7(a) arregló la **lectura** y todos dimos el problema por cerrado. **Seguía vivo en la escritura y
+nadie lo vio:** `R14` confinaba la publicación a `devuelta`, y `R36` expone el hilo al mensajero
+desde `listarMisAsignaciones`, que lee solo `por_recoger` y `en_reparto`. El mensajero **nunca tiene
+delante una orden `devuelta`, luego nunca podía publicar** — el «publicar» que `R11` le concedía era
+**letra muerta**. El hilo pedido como *bidireccional* salía de una sola dirección.
+
+**Cerrado con ventana ASIMÉTRICA POR ROL** (decisión humana): la tienda escribe y borra mientras la
+orden está `devuelta`; el mensajero mientras está `en_reparto` **y asignada a él**. Cada uno escribe
+cuando ve la orden. La lectura no cambia y el corte de la 167/R34 no se toca. Ojo al efecto lateral:
+la ventana de **borrado** de cada rol es la misma que su ventana de escritura, así que «congelado»
+ya no es «salió de `devuelta`» sino **«salió de MI ventana»**.
+
+> **La lección, que ya está en memoria:** acotar una escritura por estatus **sin cruzarla con la
+> pantalla donde cada rol ve la entidad** concede permisos que nadie puede ejercer. No es un estatus
+> mal elegido: es razonar la regla sin mirar la superficie de cada participante.
+
+### ✂️ Partición aprobada: R37 sale, nace la **222**
+
+**La 221 no lleva notificación de ningún tipo.** El `spec_author` midió bien la incoherencia de P4:
+escribir solo es posible mientras la orden está `devuelta` —o sea, **cuando aún NO está
+reactivada**—, así que el disparador y el nombre del evento eran dos cosas distintas. El humano eligió
+**un solo aviso**, «orden reactivada», emitido por la ficha nueva **222** (transición habilitar).
+Se descarta el aviso de «la tienda te escribió».
+
+**Consecuencia aceptada y dicha en voz alta:** hasta que exista la 222, el mensajero **no recibe
+ninguna señal** de que la tienda le escribió — solo ve el hilo si abre la orden. Sin badge ni
+contador: es decisión, no olvido.
+
+**Y la dependencia va al revés de lo que parece:** la 221 no necesita el «habilitar» (entrega el hilo
+completo sin él); es el «habilitar» el que necesita el hilo donde sembrar su nota obligatoria.
+
+**Siguiente paso:** vuelta final del spec en curso — su objetivo principal es `tasks.md`, que se
+quedó con 34 de los 37 `R<n>` mapeados cuando el subagente murió por un error de API. Nadie toca
+código antes.
+
+---
+
 ## 🏁 CIERRE DE JORNADA 2026-08-13 — **EMPIEZA A LEER POR AQUÍ**
 
 ### ✅ RESUELTO — este aviso caducó el 2026-08-13 (se conserva por lo que enseña)
