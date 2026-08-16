@@ -188,6 +188,18 @@ export interface DataTableProps<T> {
    * llama a ningún setter de la tabla.
    */
   descarga?: DataTableDescarga;
+  /**
+   * Barra de filtros del consumidor, colocada en la MISMA línea que el control de
+   * descarga, encima de la tabla. OPT-IN: sin la prop la tabla se comporta
+   * exactamente igual que antes.
+   *
+   * Es un `ReactNode` opaco a propósito (D4): la tabla NO conoce los filtros, no los
+   * lee y no los cablea — sigue recibiendo `data` ya filtrada. Lo único que aporta es
+   * el SITIO. Si algún día hiciera falta pasarle la selección o las claves para que
+   * hiciera algo con ellas, es señal de que el diseño falló, no permiso para meter
+   * dominio aquí.
+   */
+  filtros?: ReactNode;
 }
 
 /** Chevron del botón de expandir; rota al abrir. Decorativo (el botón ya tiene nombre). */
@@ -288,6 +300,7 @@ export function DataTable<T>({
   expandAriaLabel,
   rowClassName,
   descarga,
+  filtros,
 }: DataTableProps<T>) {
   // Filas desplegadas, por key de fila. Vive acá (y no en el consumidor) porque es estado
   // de PRESENTACIÓN de la tabla; el consumidor solo dice QUÉ se despliega.
@@ -478,17 +491,31 @@ export function DataTable<T>({
   return (
     // Wrapper relativo: ancla las flechas de scroll a los bordes de la tabla.
     <div className="relative w-full max-w-full">
-      {/* Control de descarga (R24): solo existe si el consumidor declaró `descarga`.
-          Va ENCIMA de la tabla para que cualquier tabla lo herede aunque no tenga
-          barra de filtros propia (gate P4). */}
-      {descarga ? (
-        <div className="mb-2 flex justify-end">
-          <DescargarDatasetButton
-            titulo={descarga.titulo}
-            columnas={descarga.columnas}
-            obtenerFilas={descarga.obtenerFilas}
-            formatos={descarga.formatos}
-          />
+      {/* Cabecera de la tabla: los filtros del consumidor a la izquierda y el control
+          de descarga (R24) al final de la MISMA línea. Ninguno de los dos existe si
+          el consumidor no los declaró; con `justify-end`, la descarga sola sigue
+          quedando a la derecha exactamente como antes.
+
+          Los `filtros` son un `ReactNode` OPACO: la tabla los coloca, no los mira. No
+          sabe qué filtros son, ni los lee, ni los cablea — sigue recibiendo `data` ya
+          filtrada (R1). Lo único que aporta es el sitio, que es justamente lo que el
+          consumidor no puede darse a sí mismo sin duplicar esta fila.
+
+          `items-start` y no `items-center`: una barra de filtros puede ser más ALTA
+          que el botón (reserva sitio para sus avisos bajo los controles). Centrada,
+          el botón de descarga se descolgaría hacia la mitad de esa altura en vez de
+          quedar a la altura de los controles, que es su fila. */}
+      {filtros || descarga ? (
+        <div className="mb-2 flex flex-wrap items-start justify-end gap-2">
+          {filtros ? <div className="min-w-0 flex-1">{filtros}</div> : null}
+          {descarga ? (
+            <DescargarDatasetButton
+              titulo={descarga.titulo}
+              columnas={descarga.columnas}
+              obtenerFilas={descarga.obtenerFilas}
+              formatos={descarga.formatos}
+            />
+          ) : null}
         </div>
       ) : null}
       {/* Contenedor con scroll horizontal: cuando la tabla excede el ancho

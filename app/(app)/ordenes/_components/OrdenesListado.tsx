@@ -8,6 +8,7 @@ import {
   type FilterDef,
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
+import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -19,7 +20,7 @@ import {
 } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
-import type { OrdenListItemDTO } from "@/lib/types/orden";
+import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
@@ -43,6 +44,7 @@ import {
   CATALOGO_FILTROS_VACIO,
   CLAVE_BUSQUEDA,
   CLAVE_ESTADO,
+  PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
 import { seleccionAFilter } from "./seleccion-a-filter";
 import type { OrdenesFilterUI } from "./serializar-filtro";
@@ -524,6 +526,32 @@ export function OrdenesListado({
   // emitido.
   const [seleccionFiltros, setSeleccionFiltros] = useState<FilterSelection>({});
 
+  // Término del BUSCADOR principal (`BuscadorFiltros`). Vive aparte de la selección
+  // agregada porque `FilterComponent` emite SU selección completa en cada cambio: si
+  // el término se guardara ahí dentro, marcar una zona lo borraría. Se funde con la
+  // selección justo antes de traducirla, más abajo.
+  const [terminoBuscador, setTerminoBuscador] = useState("");
+
+  // Claves de los filtros PUESTOS en la barra desde el selector. Arranca vacía: la
+  // barra nace con el buscador solo y el usuario pide los filtros que va a usar. Al
+  // retirar uno, `FilterComponent` descarta su selección —un filtro sin control en
+  // pantalla no puede seguir filtrando—, así que aquí no hay nada que limpiar.
+  const [filtrosActivos, setFiltrosActivos] = useState<string[]>([]);
+
+  // Contador de "Limpiar todo". `FilterComponent` es dueño de su selección y no expone
+  // forma de vaciarla desde fuera, así que se le cambia la `key` para remontarlo
+  // limpio; el estado de aquí se vacía en la misma acción.
+  const [resetFiltros, setResetFiltros] = useState(0);
+
+  /** Deja la barra como recién abierta: sin valores y sin filtros puestos. */
+  function limpiarFiltros() {
+    setSeleccionFiltros({});
+    // También se retiran los filtros PEDIDOS: "limpiar todo" es volver al punto de
+    // partida, y una barra que se queda con cuatro controles vacíos no lo es.
+    setFiltrosActivos([]);
+    setResetFiltros((n) => n + 1);
+  }
+
   // Ids marcados en el filtro de estado. Vacío = sin filtro (todas las órdenes). Ya no
   // es un estado aparte: el estado es UN filtro más de la barra (misma clave que el
   // `filter` del backend), así que sale de la selección agregada.
@@ -539,14 +567,6 @@ export function OrdenesListado({
   // estado, que sale del catálogo de estatus). Sin catálogo geográfico se declaran
   // igual, pero sin opciones y deshabilitadas (R64): la tabla sigue viva.
   const filtrosBarra = useMemo<FilterDef[]>(() => {
-    // Feature 169/R32: `construirFiltrosOrdenes` declara el BUSCADOR primero, y primero
-    // se queda: el filtro de estado —que se declara aquí, porque su catálogo viene de
-    // otra fuente— se inserta DETRÁS de él, no delante de todo.
-    //
-    // El buscador se separa POR SU CLAVE, no por su posición (M7 del review): con
-    // `const [busqueda, ...resto]`, reordenar `construirFiltrosOrdenes` dejaba al filtro
-    // que quedara primero fuera del apagado por catálogo —y al buscador dentro— sin que
-    // nada en este archivo lo delatara. Filtrando por `key` da igual el orden de origen.
     const declarados = construirFiltrosOrdenes(
       catalogoFiltros ?? CATALOGO_FILTROS_VACIO,
       {
@@ -554,13 +574,13 @@ export function OrdenesListado({
         incluirReasignables: incluirFiltroReasignables,
       },
     );
-    const busqueda = declarados.filter((f) => f.key === CLAVE_BUSQUEDA);
+    // El BUSCADOR ya no es un control más del panel: lo posee `BuscadorFiltros`, que
+    // es la barra permanente de arriba. Se descarta POR SU CLAVE, no por su posición
+    // (M7 del review): filtrando por `key` da igual cómo se reordene
+    // `construirFiltrosOrdenes`, mientras que quitar "el primero" dejaría fuera a
+    // otro filtro el día que cambie ese orden, sin que nada aquí lo delatara.
     const dependenDelCatalogo = declarados.filter((f) => f.key !== CLAVE_BUSQUEDA);
     return [
-      // El buscador NO depende del catálogo geográfico: que ese catálogo falle no puede
-      // apagar la búsqueda por guía (R64 apaga los filtros que se quedaron sin opciones,
-      // no los que nunca las tuvieron).
-      ...busqueda,
       // El estado va parametrizado como un filtro más, no por fuera: mismo control,
       // misma limpieza y misma salida agregada que zona, tienda o geografía.
       {
@@ -580,13 +600,33 @@ export function OrdenesListado({
     ];
   }, [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones]);
 
+  /** Lo que ofrece el selector: cada filtro declarado, por su clave y su etiqueta. */
+  const filtrosOfrecidos = useMemo(
+    () => filtrosBarra.map((f) => ({ key: f.key, label: f.label })),
+    [filtrosBarra],
+  );
+
+  // Solo se montan los filtros PEDIDOS, en el orden en que se declararon (no en el de
+  // los clics): así los controles no bailan de sitio según cómo se hayan ido pidiendo.
+  const filtrosMontados = useMemo(
+    () => filtrosBarra.filter((f) => filtrosActivos.includes(f.key)),
+    [filtrosBarra, filtrosActivos],
+  );
+
   // R46/R58/R59: `status_id` (feature 63) y los filtros nuevos se funden en UN solo
   // `filter`. Sin nada seleccionado, el objeto queda vacío y se envía `undefined`, de
   // modo que la entrada de `listarOrdenes` es IDÉNTICA a la previa a esta feature.
   const filter = useMemo<OrdenesFilterUI | undefined>(() => {
-    const compuesto: OrdenesFilterUI = seleccionAFilter(seleccionFiltros);
+    // El término del buscador entra como UN filtro más, bajo su misma clave: se funde
+    // aquí —y no en una traducción aparte— para que `seleccionAFilter` siga siendo el
+    // único punto que conoce la forma del `filter`.
+    const seleccion: FilterSelection =
+      terminoBuscador !== ""
+        ? { ...seleccionFiltros, [CLAVE_BUSQUEDA]: [terminoBuscador] }
+        : seleccionFiltros;
+    const compuesto: OrdenesFilterUI = seleccionAFilter(seleccion);
     return Object.keys(compuesto).length > 0 ? compuesto : undefined;
-  }, [seleccionFiltros]);
+  }, [seleccionFiltros, terminoBuscador]);
 
   // Si el filtro está acotado a EXACTAMENTE un estado, ese estado decide las columnas
   // ("Liberada el") y el resalte de prioridad. Con varios estados mezclados —o sin
@@ -731,13 +771,46 @@ export function OrdenesListado({
           estado incluido (ocho con el buscador de la 169; siete sin tienda). Toda la
           lógica de selección, búsqueda, acotamiento, agrupado, exclusión mutua y poda
           vive en el componente; aquí solo se declara y se traduce lo emitido. */}
-      <FilterComponent
-        filters={filtrosBarra}
-        onChange={setSeleccionFiltros}
-        showClearAll
-      />
-
       <OrdenesModule
+        // La zona de filtros vive DENTRO de la tabla, en la misma línea que el botón
+        // de descarga: el buscador manda la barra (guía, remisión, teléfono,
+        // destinatario o producto, con el mínimo de caracteres que valida el borde) y
+        // el botón "Filtros" ofrece el resto —estado, zona, tienda, geografía y
+        // fecha—. Los que el usuario pide se montan DELANTE del campo y siguen siendo
+        // la misma barra genérica de siempre: toda la lógica de selección,
+        // acotamiento, agrupado y poda vive en `FilterComponent`; aquí solo se declara
+        // y se traduce lo emitido.
+        filtros={
+          <BuscadorFiltros
+            // El mismo nombre accesible que tenía como control de la barra: el campo
+            // cambió de sitio, no de identidad.
+            label="Buscar"
+            placeholder={PLACEHOLDER_BUSQUEDA}
+            minChars={BUSQUEDA_MIN_CHARS}
+            onChange={setTerminoBuscador}
+            filtros={filtrosOfrecidos}
+            activos={filtrosActivos}
+            onActivosChange={setFiltrosActivos}
+            // "Limpiar todo" lo pone la barra al final de la fila, no `FilterComponent`
+            // en medio: así una sola acción se lleva por delante la búsqueda Y los
+            // filtros, que es lo que el usuario espera de ese botón.
+            onLimpiarTodo={limpiarFiltros}
+            // Basta con tener un filtro PUESTO —aunque esté vacío— para ofrecer la
+            // limpieza: retirarlo de la barra también es algo que limpiar.
+            hayFiltrosAplicados={
+              filtrosActivos.length > 0 ||
+              Object.keys(seleccionFiltros).length > 0
+            }
+          >
+            {filtrosMontados.length > 0 ? (
+              <FilterComponent
+                key={resetFiltros}
+                filters={filtrosMontados}
+                onChange={setSeleccionFiltros}
+              />
+            ) : null}
+          </BuscadorFiltros>
+        }
         filter={filter}
         columns={columns}
         mostrarHistorial={mostrarHistorial}

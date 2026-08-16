@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Inbox, SearchX } from "lucide-react";
 import useSWR from "swr";
 
@@ -125,6 +125,7 @@ export function OrdenesModule({
   resaltarPrioridad = false,
   permitirDescarga = false,
   puedeReportarIncidente = false,
+  filtros,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -200,6 +201,12 @@ export function OrdenesModule({
    * NO es una acción por LOTE a propósito: un incidente pide causa, motivo y fotos por orden.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Barra de filtros de la superficie, que la tabla coloca en la misma línea que el
+   * control de descarga. Solo se pasa a través: este módulo tampoco la mira. Quien
+   * arma los filtros y traduce lo seleccionado a `filter` es la superficie de arriba.
+   */
+  filtros?: ReactNode;
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -501,6 +508,7 @@ export function OrdenesModule({
         ariaLabel="Órdenes"
         rowClassName={resaltarPrioridad ? resaltarFilaPrioridad : undefined}
         descarga={descarga}
+        filtros={filtros}
         isLoading={isLoading}
         error={error ? "No se pudieron cargar las órdenes" : null}
         emptyState={
