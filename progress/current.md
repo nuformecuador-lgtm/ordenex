@@ -9,7 +9,77 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-15, noche. **EMPIEZA A LEER POR AQUÍ**
+
+> **La release SALIÓ y no hay nada a medias.** `prod` = `4b438f0c` (PR **#388**, deployment
+> **READY**, **cero errores de runtime**), y `dev` no tiene **ningún** commit que le falte a `prod`.
+> **0 features `in_progress`.** Sin PRs abiertos.
+
+**Lo que entró a producción hoy** — tres features, 22 commits, **cero migraciones** (verificado, no
+estimado: el árbol `db/` de `dev` y el de `prod` son idénticos, 116 en ambos):
+
+| # | Qué |
+| --- | --- |
+| **215** | el reintento se cuenta en el cierre, con R19 ya ejecutado contra la base real |
+| **224** | al imprimir, los tokens también son los claros (`--foreground` 1,19 → 15,70 en papel) |
+| **229** | **rastreo público del envío**: el destinatario consulta su paquete **sin sesión**, desde un modal en la landing |
+
+**La 229 llegó de otra sesión mientras se preparaba la release**, y su ficha quedó `in_progress` con
+el PR #386 ya mergeado — el mismo patrón de la 213. Cerrada en el PR **#387**, con su entrada de
+historia.
+
+### 🔎 La medición que la 229 exigía ANTES de desplegar, y que se hizo
+
+Su propia ficha llevaba escrita la deuda: la comprobación de órdenes **sin segundo factor
+utilizable** estaba medida contra la base **local** (0 de 78), y decía «hay que REPETIRLA ANTES DE
+DESPLEGAR». Se repitió contra **producción**, y con el criterio que aplica **el código** —no el de la
+bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+
+**141 órdenes vivas · 0 con teléfono de menos de 4 dígitos · 0 sin historial → las 141 son
+rastreables** (137 con 8 dígitos, 4 con 12).
+
+**No es un cero de universo vacío** —la lección de ayer, aplicada—: la mutación del umbral lo mueve,
+con `< 12` el mismo conteo da **137**. G2 no deja hoy ninguna orden real fuera del rastreo.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **La 218**, desbloqueada desde ayer y ahora con la 215 **en producción**: el corte automático
+   sigue sin sumar reintento en `sin_gestionar`. Comparte predicado con la 215.
+2. **La 219** — es la otra mitad del mismo agujero: el 0 de R19 **caduca** en cuanto entre una orden
+   en `devuelta`, y **nada lo vigila**. La 218 cierra el conteo; la 219 lo hace visible.
+3. **La 225** (19 avisos a mano que repiten el par que arregló la 222) y **la 226** (el anillo de foco
+   mide 1,30 contra el 3:1 de 1.4.11). Ambas frontend, ambas baratas.
+4. **SIN FICHA, y ahora con un hermano nuevo:**
+   - Los **seis tokens que EMPEORAN al imprimir desde oscuro** (`P1`–`P6`, el peor
+     `--primary-foreground` 18,33 → 1,00 en 15 usos). Medido, con guardia y declarado en
+     `app/globals.css:650`. Es decisión de **paleta**, emparenta con 216 y 210.
+   - **Límite de intentos PERSISTIDO para el rastreo público.** Hoy el limitador vive **en memoria
+     del proceso** (8 intentos / 10 min por IP): en serverless cada instancia tiene el suyo y cada
+     despliegue los resetea, así que **acota al torpe, no al decidido**, y el segundo factor son
+     10.000 combinaciones por guía. Es decisión firmada de la 229 (design §5.bis) y **ficha aparte
+     desde el principio** — pero ahora está **en producción y de cara a internet**, que es lo que
+     cambia su peso.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+
+### 🧠 Lo que este cierre enseñó
+
+- **El pre-vuelo de una release caduca en minutos, no en días.** El gate se corrió sobre `a145cab8`
+  y, al ir a abrir la release, `origin/dev` ya era `d1039d10`: **5.140 líneas de otra sesión** habían
+  entrado por PR #386 mientras corría. Un gate verde nombra **un SHA**, no «dev».
+- **Una ficha `in_progress` con su PR mergeado no es un descuido cosmético.** Ocupa cupo de zona y,
+  peor, **esconde deuda con fecha de vencimiento**: la medición contra producción de la 229 vivía
+  dentro de esa ficha sin cerrar. Si la release sale sin mirarla, sale sin hacerla.
+- **La deuda declarada por el implementer es una lista de tareas, no una nota al pie.** El punto (3)
+  de la ficha decía literalmente «repetir antes de desplegar»; ejecutarlo costó dos consultas.
+- **Al repetir una medición ajena, medir lo que hace el CÓDIGO, no lo que dice la bitácora.** La
+  consulta original omitía el caso «sin historial», que devuelve la misma respuesta al cliente.
+- **El gate completo se corre antes de cada PR aunque el diff sea prosa y JSON.** Los guards de este
+  repo recorren el árbol y leen ficheros de estado: un cambio en `feature_list.json` o en un `.md`
+  entra igual en su campo de visión que uno en `lib/`.
+
+---
+
+## ✅ AL DÍA — 2026-08-14, tarde
 
 > Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
 > entero porque su razonamiento sigue valiendo. Lo que cambió:
