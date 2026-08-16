@@ -6,6 +6,7 @@ import type {
   NovedadOrdenRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { descargaConfig } from "@/lib/config/descarga";
 import { fakeIntentosEnLote, llamadasIntentos } from "@/tests/fixtures/intentos-entrega";
 
 // Feature 89/99 (T14) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). INVIERTE al
@@ -496,5 +497,92 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
     // Ni un solo `Date` en el DTO: el borde RSC no lo transporta.
     for (const valor of Object.values(item)) expect(valor).not.toBeInstanceOf(Date);
     expect(JSON.parse(JSON.stringify(item))).toEqual(item);
+  });
+});
+
+// 2026-08-14 (pedido humano) — el MISMO listado sin recorte por pagina, que es de donde sale el
+// archivo de la descarga. Lo que estos casos fijan es lo que separa «el listado entero» de «una
+// pagina grande»: el tope se evalua en el SERVIDOR y con el CONTEO (superarlo no lee ni una fila
+// ni devuelve un dataset truncado), el alcance sigue saliendo del actor y la proyeccion es la
+// MISMA que la de la pagina —dos proyecciones distintas de la misma fila serian dos listados—.
+describe("NovedadesService.listarCompleto (descarga)", () => {
+  it("rol != adminTienda -> forbidden sin tocar el repo", async () => {
+    for (const actor of [MENSAJERO, MAESTRO]) {
+      const repo = fakeRepo();
+      const res = await new NovedadesService(repo, intentos).listarCompleto(actor);
+      expect(res).toEqual({ status: "forbidden" });
+      expect(repo.countDevueltasByTienda).not.toHaveBeenCalled();
+      expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+    }
+  });
+
+  it("devuelve el listado ENTERO de la tienda del actor, sin recorte por pagina", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 25),
+      findDevueltasByTienda: vi.fn(async () =>
+        Array.from({ length: 25 }, (_, i) => ordenRow({ id: `o${i}` })),
+      ),
+    });
+    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items).toHaveLength(25);
+    expect(res.total).toBe(25);
+    // El alcance sale del actor (R9) y la lectura pide las 25, no una pagina de 10.
+    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-1");
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", { skip: 0, take: 25 });
+  });
+
+  it("misma proyeccion que la pagina: causa vigente, intentos y ningun `Date`", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 1),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      findCausasDevueltaVigentes: vi.fn(
+        async () =>
+          new Map<string, CausaDevueltaVigente>([
+            ["o1", { causa: "not_found", fecha: new Date("2026-02-01T00:00:00Z") }],
+          ]),
+      ),
+    });
+    const service = new NovedadesService(repo, intentos);
+    const completo = await service.listarCompleto(ADMIN);
+    const pagina = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+
+    if (completo.status !== "ok" || pagina.status !== "ok") throw new Error("esperaba ok");
+    expect(completo.items).toEqual(pagina.items);
+    expect(completo.items[0].causa).toBe("not_found");
+    expect(completo.items[0]).not.toHaveProperty("createdAt");
+  });
+
+  it("el listado vacio no consulta causas ni intentos", async () => {
+    const repo = fakeRepo({ countDevueltasByTienda: vi.fn(async () => 0) });
+    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+
+    expect(res).toEqual({ status: "ok", items: [], total: 0 });
+    expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+    expect(repo.findCausasDevueltaVigentes).not.toHaveBeenCalled();
+  });
+
+  it("superado el tope: `limite_excedido` con conteos, sin leer una sola fila", async () => {
+    const limite = descargaConfig.MAX_FILAS;
+    const repo = fakeRepo({ countDevueltasByTienda: vi.fn(async () => limite + 1) });
+    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+
+    expect(res).toEqual({ status: "limite_excedido", total: limite + 1, limite });
+    // Ni filas truncadas ni PII en el resultado: el aviso lleva SOLO conteos.
+    expect(res).not.toHaveProperty("items");
+    expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+  });
+
+  it("justo EN el tope todavia hay archivo (el limite no se pasa por uno)", async () => {
+    const limite = descargaConfig.MAX_FILAS;
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => limite),
+      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+    });
+    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+
+    expect(res.status).toBe("ok");
+    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", { skip: 0, take: limite });
   });
 });

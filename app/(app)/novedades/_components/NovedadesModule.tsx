@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
+import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
-import { listarNovedadesAction } from "@/lib/actions/novedades";
+import {
+  listarNovedadesAction,
+  listarNovedadesCompletoAction,
+} from "@/lib/actions/novedades";
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
 import { PosOrderCardDetalle } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardMosaico";
@@ -21,6 +26,11 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
 import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
+import {
+  COLUMNAS_DESCARGA_NOVEDADES,
+  filaDescargaNovedad,
+  TITULO_DESCARGA_NOVEDADES,
+} from "./novedades-descarga-columnas";
 import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 
 // Feature 87 (T12, design §3.2) — modulo cliente de `/novedades`. Recibe TODO por props
@@ -228,6 +238,22 @@ export function NovedadesModule({
           aquí ese dato ya lo dice la `Pagination` del pie ("11-20 de 25"), y repetirlo
           serían dos cifras que pueden contradecirse (la página vs. el total). */}
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* 2026-08-14 (pedido humano) — LA DESCARGA, COMO EN LOS DEMÁS LISTADOS. Esta pantalla
+            no monta un `DataTable` (son cards), así que el control no llega heredado: se monta
+            aquí el MISMO `DescargarDatasetButton` que la tabla antepone, con el MISMO adaptador
+            (`filasDesdeResultado`) y el mismo contrato. Lo que descarga es el LISTADO ENTERO, no
+            la página visible: por eso llama a una lectura dedicada y no proyecta `items`, que
+            son las diez de la página. El tope de filas lo evalúa el SERVIDOR y el mensaje del
+            límite —con total y tope— lo redacta el adaptador común, no esta pantalla. */}
+        <DescargarDatasetButton
+          titulo={TITULO_DESCARGA_NOVEDADES}
+          columnas={COLUMNAS_DESCARGA_NOVEDADES}
+          obtenerFilas={() =>
+            filasDesdeResultado(listarNovedadesCompletoAction(), filaDescargaNovedad)
+          }
+          // Sin `formatos`: descarga DIRECTA en xlsx, como las ~27 tablas de la app. El menú de
+          // elección lo montan solo los dos exports de analítica, que sí declaran varios.
+        />
         <VistaCardsToggle vista={vistaCardsPedida} onVistaChange={cambiarVista} />
       </div>
 
