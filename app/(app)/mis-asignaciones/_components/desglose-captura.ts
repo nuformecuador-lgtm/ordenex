@@ -88,6 +88,53 @@ export function soloDigitos(texto: string): string {
   return digitos;
 }
 
+/**
+ * Pedido humano (2026-08-14): TOPE de lo que cabe en la linea `indice`, que es lo que falta para
+ * el total contando SOLO las OTRAS lineas. Con un total de 1.000 y una primera linea de 700, la
+ * segunda no admite mas de 300.
+ *
+ * Se excluye la propia linea a proposito —mismo criterio que `opcionesPara` (R5)— porque el tope
+ * es lo que esa linea PUEDE llegar a valer, no lo que ya vale: incluirse a si misma congelaria el
+ * campo en cuanto la suma cuadrase y no se podria ni corregir a la baja.
+ *
+ * Nunca negativo: si las otras lineas ya cubren el total, el tope es 0.
+ */
+export function topeDeLinea(
+  lineas: readonly LineaEnEdicion[],
+  indice: number,
+  totalACobrar: number,
+): number {
+  const otras = lineas.reduce(
+    (acc, l, i) => (i === indice ? acc : acc + centimosDeLinea(l)),
+    0,
+  );
+  const margen = aCentimos(totalACobrar) - otras;
+  return margen > 0 ? margen / 100 : 0;
+}
+
+/**
+ * Lo que QUEDA en el input tras teclear: digitos (`soloDigitos`) y, como mucho, `topeDeLinea`.
+ *
+ * Acota en vez de rechazar la tecla. Teclear 2.000 donde caben 300 deja 300, no deja el campo
+ * como estaba: el mensajero ve el numero que el sistema acepta en lugar de pelearse con un campo
+ * que no reacciona. El `""` sobrevive intacto —es un estado legitimo mientras se edita (R13)—.
+ *
+ * Consecuencia deliberada: por esta via la suma YA NO PUEDE pasarse del total, asi que el
+ * descuadre que queda alcanzable desde la UI es solo el de MENOS. La regla del exceso sigue viva
+ * en `capturaCuadra`/`pendiente`, que es donde protege lo que llega por otros caminos.
+ */
+export function acotarMonto(
+  texto: string,
+  lineas: readonly LineaEnEdicion[],
+  indice: number,
+  totalACobrar: number,
+): string {
+  const digitos = soloDigitos(texto);
+  if (digitos === "") return "";
+  const tope = topeDeLinea(lineas, indice, totalACobrar);
+  return aCentimos(montoDeTexto(digitos)) > aCentimos(tope) ? textoDeMonto(tope) : digitos;
+}
+
 /** `true` si la linea no tiene NI metodo NI monto: la unica que se descarta ([Q2] de la 212). */
 function estaVacia(linea: LineaEnEdicion): boolean {
   return linea.metodo === "" && linea.monto.trim() === "";

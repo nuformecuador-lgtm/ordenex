@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ERRORES_LINEA,
+  acotarMonto,
   capturaCuadra,
   erroresDeLinea,
   lineaNueva,
@@ -11,6 +12,7 @@ import {
   pendiente,
   puedeAnadirLinea,
   sinPendiente,
+  topeDeLinea,
   totalCapturado,
   type LineaEnEdicion,
 } from "@/app/(app)/mis-asignaciones/_components/desglose-captura";
@@ -92,6 +94,77 @@ describe("desglose-captura — sinPendiente (anadir con la suma ya cubierta)", (
     for (const [lineas, total] of casos) {
       expect(sinPendiente(lineas, total)).toBe(pendiente(lineas, total) === 0);
     }
+  });
+});
+
+// Pedido humano (2026-08-14): el monto de una linea no puede pasarse de lo que falta. El ejemplo
+// que lo origino —total 1.000, primera linea 700, se teclea 2.000 en la segunda y quedan 300— es
+// el primer caso, literal.
+describe("desglose-captura — topeDeLinea y acotarMonto (tope por linea)", () => {
+  it("el caso que lo origino: total 1.000, la primera lleva 700, la segunda admite 300", () => {
+    const lineas = [linea("efectivo", "700"), linea("SINPE", "")];
+
+    expect(topeDeLinea(lineas, 1, 1000)).toBe(300);
+    expect(acotarMonto("2000", lineas, 1, 1000)).toBe("300");
+  });
+
+  it("lo que CABE se respeta tal cual: acotar no es redondear", () => {
+    const lineas = [linea("efectivo", "700"), linea("SINPE", "")];
+
+    expect(acotarMonto("250", lineas, 1, 1000)).toBe("250");
+    expect(acotarMonto("300", lineas, 1, 1000)).toBe("300");
+  });
+
+  it("el tope EXCLUYE la propia linea: se puede corregir a la baja aunque la suma ya cuadre", () => {
+    const lineas = [linea("efectivo", "700"), linea("SINPE", "300")];
+
+    // La linea 1 no se cuenta a si misma, asi que su tope sigue siendo 1.000 - 300.
+    expect(topeDeLinea(lineas, 0, 1000)).toBe(700);
+    expect(acotarMonto("500", lineas, 0, 1000)).toBe("500");
+  });
+
+  it("la primera linea tambien se acota: sin otras lineas, su tope es el total", () => {
+    const lineas = [linea("", "")];
+
+    expect(topeDeLinea(lineas, 0, 1000)).toBe(1000);
+    expect(acotarMonto("2000", lineas, 0, 1000)).toBe("1000");
+  });
+
+  it("si las OTRAS ya cubren el total, el tope es 0 y no admite ni un colon", () => {
+    const lineas = [linea("efectivo", "1000"), linea("SINPE", "")];
+
+    expect(topeDeLinea(lineas, 1, 1000)).toBe(0);
+    expect(acotarMonto("500", lineas, 1, 1000)).toBe("0");
+  });
+
+  it("el campo vacio sobrevive: borrar es un estado legitimo mientras se edita (R13)", () => {
+    const lineas = [linea("efectivo", "700"), linea("SINPE", "300")];
+
+    expect(acotarMonto("", lineas, 1, 1000)).toBe("");
+  });
+
+  it("sigue filtrando a digitos antes de acotar, como hacia `soloDigitos`", () => {
+    const lineas = [linea("", "")];
+
+    expect(acotarMonto("2.5", lineas, 0, 1000)).toBe("25");
+    expect(acotarMonto("-1.5", lineas, 0, 1000)).toBe("15");
+    expect(acotarMonto("008", lineas, 0, 1000)).toBe("8");
+  });
+
+  it("acotado, el desglose NO puede pasarse del total por esta via", () => {
+    // Se teclea de mas en las tres lineas, UNA A UNA como hace el panel (cada cambio se acota
+    // contra el estado ya actualizado), y la suma no llega a superar el total ni una vez.
+    const total = 1000;
+    let lineas = [linea("efectivo", ""), linea("SINPE", ""), linea("transferencia", "")];
+
+    for (let i = 0; i < lineas.length; i += 1) {
+      const monto = acotarMonto("9999", lineas, i, total);
+      lineas = lineas.map((l, j) => (j === i ? { ...l, monto } : l));
+      expect(totalCapturado(lineas)).toBeLessThanOrEqual(total);
+    }
+
+    expect(totalCapturado(lineas)).toBe(total);
+    expect(capturaCuadra(lineas, total)).toBe(true);
   });
 });
 

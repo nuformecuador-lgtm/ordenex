@@ -268,8 +268,10 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     // Arranque: la línea 1 trae el total, así que la suma ya está cubierta.
     expect(anadir()).toBeDisabled();
 
-    // Pasarse tampoco lo habilita: de más no se arregla añadiendo, se arregla corrigiendo.
+    // Teclear de más tampoco lo habilita: el monto se acota al total (8.000), así que la suma
+    // sigue cubierta. Antes del tope por línea esto dejaba 9.000; ahora ni siquiera entra.
     escribirMonto(1, "9000");
+    expect(inputMonto(1).value).toBe("8000");
     expect(anadir()).toBeDisabled();
 
     // En cuanto queda pendiente, se puede partir el cobro.
@@ -304,10 +306,12 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     expect(resumen()).toEqual([conMoneda(8000), conMoneda(8000), conMoneda(0)]);
   });
 
-  it.each([
-    ["de menos", "5000"],
-    ["de más", "9000"],
-  ])(
+  // El caso «de más» se retiró de este `it.each` (2026-08-14): con el monto acotado al tope de la
+  // línea, pasarse ya NO se puede teclear —9.000 en un cobro de 8.000 aterriza en 8.000 y cuadra—,
+  // así que el único descuadre que la UI puede producir es el de MENOS. La regla del exceso sigue
+  // probada donde vive: `desglose-captura.test.ts` :: «pendiente es 0 —y nunca negativo— cuando la
+  // suma se pasa del total», que afirma `capturaCuadra(...) === false` con la suma pasada.
+  it.each([["de menos", "5000"]])(
     "R9: una suma que NO cuadra (%s) pinta el error, DESHABILITA «Guardar gestión» y no llama a la action",
     async (_caso, monto) => {
       const user = userEvent.setup();
@@ -330,13 +334,44 @@ describe("GestionarOrdenPanel · desglose del recaudo (feature 213)", () => {
     const user = userEvent.setup();
     await abrirEntrega(user);
 
-    // Punto, coma y signo caen; los dígitos sobreviven en su orden.
-    escribirMonto(1, "8000.01");
-    expect(inputMonto(1).value).toBe("800001");
+    // Punto, coma y signo caen; los dígitos sobreviven en su orden. Los valores se eligen POR
+    // DEBAJO del monto a cobrar (8.000) para que lo que se afirme aquí sea el filtro y no el tope
+    // de la línea, que tiene su propio caso más abajo.
+    escribirMonto(1, "50.01");
+    expect(inputMonto(1).value).toBe("5001");
     escribirMonto(1, "-1.5");
     expect(inputMonto(1).value).toBe("15");
     escribirMonto(1, "");
     expect(inputMonto(1).value).toBe("");
+  });
+
+  // Pedido humano (2026-08-14), con su ejemplo literal reescalado al monto de este fixture.
+  it("el monto de una línea se acota a lo que falta: no se puede teclear de más", async () => {
+    const user = userEvent.setup();
+    await abrirEntrega(user);
+
+    // Total 8.000. La línea 1 se queda en 6.000, así que en la 2 solo caben 2.000.
+    escribirMonto(1, "6000");
+    await user.click(screen.getByRole("button", { name: "Añadir método" }));
+    expect(inputMonto(2).value).toBe("2000");
+
+    // Se teclea muy de más y aterriza en el tope, no en lo tecleado ni en el valor anterior.
+    escribirMonto(2, "99999");
+    expect(inputMonto(2).value).toBe("2000");
+
+    // Lo que SÍ cabe entra tal cual: acotar no es forzar el tope.
+    escribirMonto(2, "500");
+    expect(inputMonto(2).value).toBe("500");
+
+    // El tope excluye la propia línea, así que la 1 se sigue pudiendo corregir a la baja.
+    escribirMonto(1, "1000");
+    expect(inputMonto(1).value).toBe("1000");
+
+    // Y la suma nunca llegó a pasarse: la diferencia jamás se pinta en negativo.
+    const diferencia = within(screen.getByLabelText("Resumen del cobro"))
+      .getAllByRole("definition")
+      .map((d) => d.textContent)[2];
+    expect(diferencia).toBe(conMoneda(6500));
   });
 
   // RETIRADO (2026-08-14): «añadir método con la suma ya cubierta pre-carga 0, nunca un negativo».

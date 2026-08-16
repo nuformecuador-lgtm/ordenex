@@ -52,6 +52,7 @@ import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import {
   ERRORES_LINEA,
+  acotarMonto,
   capturaCuadra,
   erroresDeLinea,
   lineaNueva,
@@ -61,7 +62,6 @@ import {
   pendiente,
   puedeAnadirLinea,
   sinPendiente,
-  soloDigitos,
   totalCapturado,
   type LineaEnEdicion,
 } from "./desglose-captura";
@@ -1093,13 +1093,18 @@ function DesglosePagoField({
               </div>
               {/* Sin decimales: `text` + `inputMode="numeric"` en vez de `type="number"`, porque
                   un input numerico devuelve "" ante un "." a medio teclear y se perderia lo ya
-                  escrito. El filtro real es `soloDigitos`; el `pattern` solo abre el teclado. */}
+                  escrito. El filtro real es `acotarMonto`; el `pattern` solo abre el teclado.
+
+                  `acotarMonto` filtra a digitos Y acota al TOPE de la linea (pedido 2026-08-14):
+                  con 1.000 a cobrar y 700 en la primera, teclear 2.000 en la segunda deja 300. */}
               <Input
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 value={linea.monto}
-                onChange={(e) => cambiar(i, { monto: soloDigitos(e.target.value) })}
+                onChange={(e) =>
+                  cambiar(i, { monto: acotarMonto(e.target.value, lineas, i, montoACobrar) })
+                }
                 aria-label={`${DESGLOSE_TEXTOS.montoLinea} ${i + 1}`}
                 aria-invalid={errorLinea ? true : undefined}
                 className="w-28"
