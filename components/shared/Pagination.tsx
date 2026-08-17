@@ -368,7 +368,7 @@ export function Pagination({
           queda pegada a la tabla (gap 0) sin tocar la separación del resto de bloques. */}
       <div
         className={cn(
-          "sticky bottom-0 z-10 -mt-4 bg-background/70 backdrop-blur-md",
+          "sticky bottom-0 z-10 bg-background/70 backdrop-blur-md",
           contenedorClassName,
         )}
       >
