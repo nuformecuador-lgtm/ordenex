@@ -22,6 +22,11 @@ import {
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
+import {
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 
 // Solo el estado que la 40 puede transicionar (R18): la guardia del updateMany.
 const ESTADO_SOLICITADO = "solicitado";
@@ -76,6 +81,42 @@ function toDetalleCierreRow(r: DetalleCierreRow): CierreBodegaDetalleCierreRow {
  * pantalla que lo diga. Una sola declaracion tampoco lo vuelve invisible: los casos de los
  * `*-where.test.ts` fijan el valor ABSOLUTO, asi que cambiar la constante los pone rojos.
  */
+/**
+ * Pedido humano del 2026-08-16 — el WHERE de los FILTROS de estos listados (fecha + zona),
+ * declarado UNA vez para los cuatro caminos: las dos paginas y los dos conjuntos del archivo.
+ *
+ * SIN MENSAJERO, y no es un recorte de alcance sino de datos: un cierre de bodega consolida los
+ * cierres del dia de VARIOS mensajeros, asi que «el mensajero de este cierre» no es una pregunta
+ * con respuesta. La columna no existe.
+ *
+ * Las fechas son de CALENDARIO DE COSTA RICA: `solicitadoAt` es un instante, y «del 1 al 3»
+ * significa desde el inicio del 1 en CR hasta el inicio del 4 en CR. Por eso el limite superior
+ * es `lt` del dia SIGUIENTE y no `lte` del mismo dia — con `lte` se perderian los cierres
+ * solicitados entre las 00:00 y las 23:59:59.999 del ultimo dia del rango, que es justo el dia
+ * que el usuario acaba de pedir. Es el MISMO criterio que `CierresAdminRepository.filtrosWhere`,
+ * escrito aparte porque la tabla y sus columnas son otras.
+ */
+function filtrosBodegaWhere(
+  filtros: FiltrosCierresBodega | undefined,
+): Prisma.CierreBodegaWhereInput[] {
+  if (!filtros) return [];
+  const condiciones: Prisma.CierreBodegaWhereInput[] = [];
+  if (filtros.desde !== undefined || filtros.hasta !== undefined) {
+    condiciones.push({
+      solicitadoAt: {
+        ...(filtros.desde !== undefined ? { gte: inicioDelDiaCREnUtc(filtros.desde) } : {}),
+        ...(filtros.hasta !== undefined
+          ? { lt: inicioDelDiaSiguienteCREnUtc(filtros.hasta) }
+          : {}),
+      },
+    });
+  }
+  if (filtros.destinoZonaIds !== undefined) {
+    condiciones.push({ zonaId: { in: [...filtros.destinoZonaIds] } });
+  }
+  return condiciones;
+}
+
 const ORDEN_CIERRES_BODEGA_ADMIN = {
   solicitadoAt: "desc",
 } as const satisfies Prisma.CierreBodegaOrderByWithRelationInput;
@@ -89,8 +130,16 @@ const ORDEN_CIERRES_BODEGA_ADMIN = {
  * cierre de bodega RECHAZADO —o cualquier estado nuevo del enum— desapareceria de las dos listas
  * en vez de caer en el historico.
  */
-function historicoBodegaWhere(): Prisma.CierreBodegaWhereInput {
-  return { estado: { notIn: [...ESTADOS_COLA_SOLICITADO] } };
+function historicoBodegaWhere(
+  filtros?: FiltrosCierresBodega,
+): Prisma.CierreBodegaWhereInput {
+  const recortes = filtrosBodegaWhere(filtros);
+  return {
+    estado: { notIn: [...ESTADOS_COLA_SOLICITADO] },
+    // Sin filtros no se escribe `AND`: el criterio queda IDENTICO al de antes del 2026-08-16,
+    // y los `*-where.test.ts` que fijan su valor absoluto siguen valiendo sin tocarlos.
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
+  };
 }
 
 /**
@@ -103,8 +152,12 @@ function historicoBodegaWhere(): Prisma.CierreBodegaWhereInput {
  * significa que un cierre de bodega deja de verse para aprobarlo, con el dinero agregado de una
  * zona entera parado hasta que alguien lo note.
  */
-function colaBodegaWhere(): Prisma.CierreBodegaWhereInput {
-  return { estado: { in: [...ESTADOS_COLA_SOLICITADO] } };
+function colaBodegaWhere(filtros?: FiltrosCierresBodega): Prisma.CierreBodegaWhereInput {
+  const recortes = filtrosBodegaWhere(filtros);
+  return {
+    estado: { in: [...ESTADOS_COLA_SOLICITADO] },
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
+  };
 }
 
 /**
@@ -145,9 +198,11 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
    * pagina N sea el segmento N de este conjunto (R5). UNA consulta y ninguna mas (R15): el
    * `count` de la pagina no viaja aqui, porque el total de un conjunto sin recorte es su longitud.
    */
-  async findHistoricoCompleto(): Promise<CierreBodegaResumenRow[]> {
+  async findHistoricoCompleto(
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreBodegaResumenRow[]> {
     const rows = await this.prisma.cierreBodega.findMany({
-      where: historicoBodegaWhere(),
+      where: historicoBodegaWhere(filtros),
       orderBy: ORDEN_CIERRES_BODEGA_ADMIN,
       select: BODEGA_RESUMEN_SELECT,
     });
@@ -167,9 +222,11 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
    * los dos conjuntos salen de esas dos funciones. Ninguna fila puede quedar en las dos listas ni
    * caerse de las dos.
    */
-  async findColaCompleta(): Promise<CierreBodegaResumenRow[]> {
+  async findColaCompleta(
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreBodegaResumenRow[]> {
     const rows = await this.prisma.cierreBodega.findMany({
-      where: colaBodegaWhere(),
+      where: colaBodegaWhere(filtros),
       orderBy: ORDEN_CIERRES_BODEGA_ADMIN,
       select: BODEGA_RESUMEN_SELECT,
     });
@@ -184,12 +241,13 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
    */
   async findHistoricoPaginado(
     rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
     // Feature 184/R16: el criterio sale de `historicoBodegaWhere`, la MISMA declaracion que usa
     // el conjunto completo del que sale el archivo. Estaba escrito aqui y habria que haberlo
     // escrito otra vez alli. R44 sigue siendo el motivo del `notIn`: con un
     // `in: ["aprobado","rechazado"]`, un estado nuevo del enum desapareceria de las dos listas.
-    const where = historicoBodegaWhere();
+    const where = historicoBodegaWhere(filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,
@@ -212,9 +270,12 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
    * `notIn` —el del `else`—. Leer las dos de la misma lista es lo que impide que un estado
    * nuevo del enum acabe en las dos colas o en ninguna.
    */
-  async findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
+  async findColaPaginada(
+    rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
     // Feature 184/R16: mismo criterio compartido que el conjunto completo de esta cola.
-    const where = colaBodegaWhere();
+    const where = colaBodegaWhere(filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,

@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 import type {
   CierreBodegaDetalleCierre,
   CierreBodegaResumen,
@@ -109,7 +110,7 @@ export interface ICierresBodegaAdminService {
    * alcance de nadie (R44). Rol distinto -> forbidden, sin filas y sin total.
    */
   listarHistoricoCierresBodegaPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarHistoricoCierresBodegaServiceResult>;
   /**
@@ -121,7 +122,7 @@ export interface ICierresBodegaAdminService {
    * el corte invertido. Rol distinto de acceso total -> forbidden, sin filas y sin total.
    */
   listarPendientesCierresBodegaPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarPendientesCierresBodegaServiceResult>;
   /**
@@ -134,6 +135,7 @@ export interface ICierresBodegaAdminService {
    */
   listarHistoricoCierresBodegaCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarHistoricoCierresBodegaCompletoServiceResult>;
   /**
    * Feature 184 — Tanda E (T E.2, R1/R4/R6): la COLA ENTERA de cierres de bodega pendientes, sin
@@ -141,6 +143,7 @@ export interface ICierresBodegaAdminService {
    */
   listarPendientesCierresBodegaCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarPendientesCierresBodegaCompletoServiceResult>;
   /**
    * R2/R11-R13/R19: detalle agregado de un cierre de bodega (cada cierre_dia con sus

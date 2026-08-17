@@ -60,6 +60,7 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     findGestionesIncidenteDelCierre: vi.fn(async () => []),
+    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
     ...overrides,
   };
 }

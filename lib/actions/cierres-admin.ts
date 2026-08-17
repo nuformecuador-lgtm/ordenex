@@ -37,7 +37,20 @@ import {
   type RechazarCierreResult,
   type ForzarSolicitudVencidoResult,
 } from "@/lib/types/cierres-admin";
+import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
+
+/**
+ * Resultado del catalogo de filtros: lo que decide el servicio (`ok`/`forbidden`) mas los dos
+ * que decide este borde. `validation_error` figura porque `toCierresAdminActionError` lo puede
+ * producir; con una lectura sin input no deberia ocurrir, y declararlo evita que la pantalla
+ * tenga que confiar en esa promesa.
+ */
+export type ObtenerCatalogoFiltrosCierresResult =
+  | { status: "ok"; catalogo: CatalogoFiltrosCierresDTO }
+  | { status: "forbidden" }
+  | { status: "unauthenticated" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 import type { AppErrorShape } from "@/lib/errors";
 
 // Feature 38 — Server Actions de "Cierres del dia" del admin (lecturas + mutaciones
@@ -187,9 +200,11 @@ export async function listarHistoricoCierresAdminCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarHistoricoCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // Pedido humano del 2026-08-16: la lista blanca ya no esta vacia — trae `filtros`, y lo que
+    // valida se USA. Antes se parseaba y se tiraba, porque no habia nada que transportar.
+    const data = listarHistoricoCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarHistoricoCierresAdminCompleto(actor);
+    return service.listarHistoricoCierresAdminCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }
@@ -205,9 +220,30 @@ export async function listarPendientesCierresAdminCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarPendientesCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarPendientesCierresAdminCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarPendientesCierresAdminCompleto(actor);
+    return service.listarPendientesCierresAdminCompleto(actor, data.filtros);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de la pantalla (bodegas destino y
+ * mensajeros), ya acotadas al alcance del actor.
+ *
+ * Lectura de SOLO CATALOGO: no lista cierres, no pagina y no depende del filtro aplicado, asi
+ * que se resuelve una vez al cargar la pantalla. No recibe input —no hay nada que el cliente
+ * pueda pedir aqui— y por eso tampoco hay schema: el alcance sale del ACTOR, como en los
+ * listados.
+ */
+export async function obtenerCatalogoFiltrosCierres(
+  deps: CierresAdminDeps = {},
+): Promise<ObtenerCatalogoFiltrosCierresResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const service = deps.service ?? buildService();
+    return service.obtenerCatalogoFiltros(actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

@@ -5,6 +5,7 @@ import { cierreConfig } from "@/lib/config/cierre";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { filtrosCierresSchema } from "@/lib/types/filtros-cierres";
 import type {
   ListarCierresAdminServiceResult,
   CierreAdminResumen,
@@ -101,6 +102,24 @@ export type CierreIdInput = z.infer<typeof cierreIdSchema>;
 export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
 
 /**
+ * Pedido humano del 2026-08-16 — anade el bloque de FILTROS a la entrada de un listado de
+ * cierres, sin tocar su paginacion ni su `.strict()`.
+ *
+ * `filtros` es UNA clave opcional y anidada, no cuatro claves sueltas al lado de `page`. Es
+ * deliberado y es lo que mantiene viva la barrera que ya existia: la lista blanca del bloque de
+ * filtros esta declarada en UN sitio (`filtrosCierresSchema`, con su propio `.strict()`), asi
+ * que una clave nueva —de filtro o, lo que importa, de ALCANCE— no puede entrar por el lado del
+ * listado sin pasar por alli. Anidar tambien deja legible en el codigo de pantalla la
+ * diferencia entre «que pagina pido» y «que recorto».
+ *
+ * `.strict()` se reescribe aunque el schema base ya lo traiga: la barrera es de ESTOS listados
+ * y no debe depender de que `paginaInputSchema` nunca se afloje.
+ */
+function conFiltrosDeCierres<T extends z.ZodRawShape>(base: z.ZodObject<T>) {
+  return base.extend({ filtros: filtrosCierresSchema.optional() }).strict();
+}
+
+/**
  * Feature 170 — FASE 2 (T I.1, R40) — entrada del HISTORICO paginado de cierres del dia.
  *
  * `.strict()`: este listado NO tiene filtros (design §11.3, riesgo BAJO) y su alcance sale
@@ -115,7 +134,9 @@ export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
  * `paginaInputSchema`, donde se declara UNA vez para los siete listados sin filtros de estos
  * tres modulos. El `.strict()` de arriba es exactamente lo que no puede olvidarse en una copia.
  */
-export const listarHistoricoCierresAdminSchema = paginaInputSchema(cierreConfig);
+export const listarHistoricoCierresAdminSchema = conFiltrosDeCierres(
+  paginaInputSchema(cierreConfig),
+);
 
 export type ListarHistoricoCierresAdminInput = z.infer<typeof listarHistoricoCierresAdminSchema>;
 
@@ -127,7 +148,9 @@ export type ListarHistoricoCierresAdminInput = z.infer<typeof listarHistoricoCie
  * a que compartieran tambien el nombre, y el nombre es lo unico que dice cual de las dos
  * mitades se esta pidiendo.
  */
-export const listarPendientesCierresAdminSchema = paginaInputSchema(cierreConfig);
+export const listarPendientesCierresAdminSchema = conFiltrosDeCierres(
+  paginaInputSchema(cierreConfig),
+);
 
 export type ListarPendientesCierresAdminInput = z.infer<typeof listarPendientesCierresAdminSchema>;
 
@@ -146,6 +169,15 @@ export type ListarPendientesCierresAdminInput = z.infer<typeof listarPendientesC
  *
  * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no
  * debe depender de que el schema base nunca se afloje.
+ *
+ * PEDIDO HUMANO DEL 2026-08-16 — la lista blanca deja de ser de CERO claves: `.omit()` quita
+ * `page`/`pageSize` y **conserva `filtros`**, a proposito. El archivo tiene que salir del MISMO
+ * conjunto que el listado ensena, filtros incluidos; si no, «descargar» dejaria de significar
+ * «esto que estoy viendo, entero» y pasaria a significar «todo lo del alcance», que es
+ * justamente lo que un usuario con un filtro puesto no espera. Lo que NO entra sigue sin
+ * entrar: `destinoZonaId` en singular —la clave de alcance que este comentario nombraba— no
+ * existe en `filtrosCierresSchema`, y el plural que si existe es un recorte que solo puede
+ * quitar filas dentro del alcance que el servicio ya resolvio.
  */
 export const listarHistoricoCierresAdminCompletoSchema = listarHistoricoCierresAdminSchema
   .omit({ page: true, pageSize: true })

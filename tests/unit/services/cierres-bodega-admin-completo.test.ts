@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 import { CierresBodegaAdminService } from "@/lib/services/CierresBodegaAdminService";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { ICierresBodegaAdminRepository } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
@@ -147,12 +148,32 @@ function repoEnMemoria(filas: CierreBodegaResumenRow[] = ALMACEN) {
     anotar("findCierresBodega", [...filas].sort(porSolicitadoDesc)),
   );
 
-  const findHistoricoCompleto = vi.fn(async () =>
-    anotar("findHistoricoCompleto", filas.filter((f) => !esCola(f)).sort(porSolicitadoDesc)),
+  /**
+   * Pedido humano del 2026-08-16 — el doble aplica el FILTRO como lo aplica el repositorio de
+   * verdad: en conjunción con el criterio, nunca en su lugar. Un doble que lo ignorara dejaría
+   * pasar verde un servicio que pasara el filtro EN VEZ del alcance. La composición en SQL la
+   * fija, aparte, `tests/unit/repositories/*-where.test.ts`.
+   */
+  function casaFiltro(f: CierreBodegaResumenRow, filtros?: FiltrosCierresBodega): boolean {
+    if (!filtros) return true;
+    if (filtros.destinoZonaIds && !filtros.destinoZonaIds.includes(f.zonaId)) return false;
+    if (filtros.desde && f.solicitadoAt.slice(0, 10) < filtros.desde) return false;
+    if (filtros.hasta && f.solicitadoAt.slice(0, 10) > filtros.hasta) return false;
+    return true;
+  }
+
+  const findHistoricoCompleto = vi.fn(async (filtros?: FiltrosCierresBodega) =>
+    anotar(
+      "findHistoricoCompleto",
+      filas.filter((f) => !esCola(f) && casaFiltro(f, filtros)).sort(porSolicitadoDesc),
+    ),
   );
 
-  const findColaCompleta = vi.fn(async () =>
-    anotar("findColaCompleta", filas.filter(esCola).sort(porSolicitadoDesc)),
+  const findColaCompleta = vi.fn(async (filtros?: FiltrosCierresBodega) =>
+    anotar(
+      "findColaCompleta",
+      filas.filter((f) => esCola(f) && casaFiltro(f, filtros)).sort(porSolicitadoDesc),
+    ),
   );
 
   const findHistoricoPaginado = vi.fn(async (rango: RangoPagina) => {
@@ -279,12 +300,20 @@ describe("los conjuntos de la descarga de «Cierres de bodega» del admin (featu
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect([...new Set(r.items.map((c) => c.zonaId))].sort()).toEqual(["z-1", "z-2"]);
 
-    // Y ninguno de los dos métodos admite un parámetro por el que pedir otro alcance: la aridad
-    // es 1, y ese 1 es el actor.
-    expect(CierresBodegaAdminService.prototype.listarHistoricoCierresBodegaCompleto).toHaveLength(1);
-    expect(CierresBodegaAdminService.prototype.listarPendientesCierresBodegaCompleto).toHaveLength(
-      1,
-    );
+    // AQUÍ ESTABA UNA AFIRMACIÓN DE ARIDAD, y se REEXPRESA en vez de relajarse. Decía: «ninguno
+    // de los dos métodos admite un parámetro por el que pedir otro alcance: la aridad es 1, y
+    // ese 1 es el actor». Era un buen proxy MIENTRAS el segundo parámetro no existía; el pedido
+    // humano del 2026-08-16 le añadió uno —los FILTROS— y subir el número a 2 no habría
+    // afirmado nada: la pregunta no es cuántos parámetros hay, es si alguno puede ensanchar lo
+    // que el actor ve. Aquí el alcance es el ROL —acceso total, TODAS las zonas—, así que lo que
+    // se comprueba es que el filtro solo RECORTA: pedir una zona devuelve esa zona y ninguna más.
+    const soloZona1 = await svc.listarHistoricoCierresBodegaCompleto(MAESTRO, {
+      destinoZonaIds: ["z-1"],
+    });
+    if (soloZona1.status !== "ok") throw new Error("esperaba ok");
+    expect([...new Set(soloZona1.items.map((c) => c.zonaId))]).toEqual(["z-1"]);
+    // Anti-vacuidad: sin filtro salían las DOS zonas, así que el recorte hizo algo de verdad.
+    expect(soloZona1.items.length).toBeLessThan(r.items.length);
   });
 
   it("el conjunto de la descarga NO relee el listado compuesto: pide su mitad y sólo su mitad (R1)", async () => {

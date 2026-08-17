@@ -39,6 +39,7 @@ function fakeRepo(): ICierresAdminRepository {
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
   // Feature 158/R19: sin incidentes -> cobertura vacia (camino de la 38 intacto).
   findGestionesIncidenteDelCierre: vi.fn(async () => []),
+  findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
   };
 }
 

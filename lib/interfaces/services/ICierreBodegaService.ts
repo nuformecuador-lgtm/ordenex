@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
@@ -162,7 +163,7 @@ export interface ICierreBodegaService {
    * que consultar), exactamente lo que ve hoy.
    */
   listarCierresBodegaSolicitadosPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarCierresBodegaSolicitadosServiceResult>;
   /**
@@ -177,7 +178,7 @@ export interface ICierreBodegaService {
    * tabla pinta, no lo que la bodega debe.
    */
   listarConsolidablesPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarConsolidablesServiceResult>;
   /**
@@ -192,6 +193,7 @@ export interface ICierreBodegaService {
    */
   listarCierresBodegaSolicitadosCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarCierresBodegaSolicitadosCompletoServiceResult>;
   /**
    * Feature 184 — Tanda B (R1/R4/R6/R10): el CONJUNTO de «Cierres del dia a consolidar» de la
@@ -201,7 +203,7 @@ export interface ICierreBodegaService {
    * **no calcula ninguno** (R10): el archivo lleva filas, no totales, y el reparto del efectivo
    * —que ordena todos los pagos individuales de la zona— no tiene por que pagarse al descargar.
    */
-  listarConsolidablesCompleto(actor: Actor): Promise<ListarConsolidablesCompletoServiceResult>;
+  listarConsolidablesCompleto(actor: Actor, filtros?: FiltrosCierresBodega): Promise<ListarConsolidablesCompletoServiceResult>;
   /**
    * R1/R4/R6-R10: crea la solicitud de cierre de bodega (`solicitado`) consolidando
    * TODOS los cierre_dia aprobados de la zona, con snapshot de totales agregados

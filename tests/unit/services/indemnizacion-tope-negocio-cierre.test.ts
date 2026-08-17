@@ -47,6 +47,7 @@ function fakeRepo(delCierre: GestionIncidenteDelCierre[]): ICierresAdminReposito
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     findGestionesIncidenteDelCierre: vi.fn(async () => delCierre),
+    findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
   };
 }
 

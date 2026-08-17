@@ -1,4 +1,5 @@
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 import { cierreConfig } from "@/lib/config/cierre";
 import { descargaConfig } from "@/lib/config/descarga";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -79,12 +80,17 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    * R41 exige viaja dentro de ella.
    */
   async listarHistoricoCierresBodegaPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarHistoricoCierresBodegaServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
-    const { items, total } = await this.repo.findHistoricoPaginado(rangoDePagina(input));
+    // Pedido humano del 2026-08-16: el filtro RECORTA dentro del alcance del rol, no lo
+    // sustituye — se compone con `AND` en el repositorio.
+    const { items, total } = await this.repo.findHistoricoPaginado(
+      rangoDePagina(input),
+      input.filtros,
+    );
 
     return {
       status: "ok",
@@ -108,12 +114,12 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    * viaja es el CONTADOR de cabecera (R42), un conteo de filas.
    */
   async listarPendientesCierresBodegaPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarPendientesCierresBodegaServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R2
 
-    const { items, total } = await this.repo.findColaPaginada(rangoDePagina(input));
+    const { items, total } = await this.repo.findColaPaginada(rangoDePagina(input), input.filtros);
 
     return {
       status: "ok",
@@ -165,10 +171,12 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    */
   async listarHistoricoCierresBodegaCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarHistoricoCierresBodegaCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repo
 
-    const conjunto = await this.repo.findHistoricoCompleto();
+    // Los MISMOS filtros que la pagina: el archivo es «esto que estoy viendo, entero».
+    const conjunto = await this.repo.findHistoricoCompleto(filtros);
 
     const limite = descargaConfig.MAX_FILAS;
     // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
@@ -200,10 +208,11 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
    */
   async listarPendientesCierresBodegaCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarPendientesCierresBodegaCompletoServiceResult> {
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R4: antes del repo
 
-    const conjunto = await this.repo.findColaCompleta();
+    const conjunto = await this.repo.findColaCompleta(filtros); // idem
 
     const limite = descargaConfig.MAX_FILAS;
     if (conjunto.length > limite) {

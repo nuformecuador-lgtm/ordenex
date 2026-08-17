@@ -257,9 +257,11 @@ export async function listarCierresBodegaSolicitadosCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // Pedido humano del 2026-08-16: la lista blanca ya no esta vacia — trae `filtros`, y lo
+    // que valida se USA. Antes se parseaba y se tiraba, porque no habia nada que transportar.
+    const data = listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
-    return service.listarCierresBodegaSolicitadosCompleto(actor);
+    return service.listarCierresBodegaSolicitadosCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -280,9 +282,9 @@ export async function listarConsolidablesCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
-    return service.listarConsolidablesCompleto(actor);
+    return service.listarConsolidablesCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -307,9 +309,9 @@ export async function listarPendientesCierresBodegaCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
-    return service.listarPendientesCierresBodegaCompleto(actor);
+    return service.listarPendientesCierresBodegaCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -329,9 +331,9 @@ export async function listarHistoricoCierresBodegaCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
-    return service.listarHistoricoCierresBodegaCompleto(actor);
+    return service.listarHistoricoCierresBodegaCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

@@ -23,6 +23,18 @@ import type {
   TarifaSnapshotDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+} from "@/lib/types/filtros-cierres";
+
+/** Valores de rol que este catálogo consulta. Salen del seed, no se inventan aquí. */
+const ROL_ADMIN_SATELITE = "adminSatelite";
+const ROL_MENSAJERO = "mensajero";
+import {
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
@@ -63,9 +75,13 @@ const CAJA_COD_FEED: ICajaCodFeedService = new CajaCodFeedService();
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
 // Feature 69/T18: el detalle del admin sale del SNAPSHOT -> necesita `cierreDetail`.
+// `zona` y `usuario` entran por el CATÁLOGO de los filtros (pedido humano del 2026-08-16), que
+// es una lectura de SOLO CATÁLOGO: proyecta `{id, nombre}` (y la zona del mensajero) y nada más.
+// Siguen siendo los únicos delegados que este repositorio puede tocar: el `Pick` es la lista, y
+// ampliarla es una decisión que se ve en el diff.
 type CierresAdminPrismaClient = Pick<
   PrismaClient,
-  "cierreDia" | "gestionOrden" | "cierreDetail" | "$transaction"
+  "cierreDia" | "gestionOrden" | "cierreDetail" | "zona" | "usuario" | "$transaction"
 >;
 
 // Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
@@ -342,6 +358,51 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
 }
 
 /**
+ * Pedido humano del 2026-08-16 — el WHERE de los FILTROS del listado (fecha, bodega destino,
+ * mensajero), declarado UNA vez para los cuatro caminos que leen estos listados: las dos
+ * paginas y los dos conjuntos de los que salen los archivos.
+ *
+ * TRES cosas que este bloque hace y que no son adorno:
+ *
+ *  1. **Recorta, no reabre.** Lo que devuelve se compone con `alcanceWhere` en el MISMO objeto,
+ *     y las claves no chocan: el alcance escribe `destinoTipo`/`destinoZonaId` (escalares) y el
+ *     filtro escribe `destinoZonaId: { in: [...] }`... que SI chocaria. Por eso el filtro de
+ *     zona NO se escribe como clave hermana: va dentro de un `AND`, que es la unica forma de
+ *     que las dos condiciones se exijan A LA VEZ. Un `adminSatelite` que pida la zona del
+ *     vecino obtiene la interseccion —vacio—, nunca la zona del vecino.
+ *  2. **Las fechas son de CALENDARIO DE COSTA RICA**, no instantes UTC. `solicitadoAt` es un
+ *     instante; «del 1 al 3» significa desde el inicio del 1 en CR hasta el inicio del 4 en CR,
+ *     y por eso el limite superior es `lt` del dia SIGUIENTE y no `lte` del mismo dia: con
+ *     `lte` se perderian los cierres solicitados entre las 00:00 y las 23:59:59.999 del ultimo
+ *     dia del rango, que es justo el dia que el usuario acaba de pedir.
+ *  3. **Se filtra por `solicitadoAt`**, la fecha por la que estos listados ya se ordenaban y la
+ *     unica que TODOS los cierres tienen: filtrar la cola por `resueltoAt` la dejaria siempre
+ *     vacia, porque un cierre sin resolver no tiene esa fecha.
+ */
+function filtrosWhere(filtros: FiltrosCierres | undefined): Prisma.CierreDiaWhereInput[] {
+  if (!filtros) return [];
+  const condiciones: Prisma.CierreDiaWhereInput[] = [];
+
+  if (filtros.desde !== undefined || filtros.hasta !== undefined) {
+    condiciones.push({
+      solicitadoAt: {
+        ...(filtros.desde !== undefined ? { gte: inicioDelDiaCREnUtc(filtros.desde) } : {}),
+        ...(filtros.hasta !== undefined
+          ? { lt: inicioDelDiaSiguienteCREnUtc(filtros.hasta) }
+          : {}),
+      },
+    });
+  }
+  if (filtros.destinoZonaIds !== undefined) {
+    condiciones.push({ destinoZonaId: { in: [...filtros.destinoZonaIds] } });
+  }
+  if (filtros.mensajeroIds !== undefined) {
+    condiciones.push({ mensajeroId: { in: [...filtros.mensajeroIds] } });
+  }
+  return condiciones;
+}
+
+/**
  * Feature 184 — Tanda D (R16) — el ORDEN de los cierres del dia del admin, declarado UNA vez.
  *
  * Lo comparten los CINCO caminos que leen este listado: el listado sin paginar, las dos
@@ -364,10 +425,17 @@ const ORDEN_CIERRES_ADMIN = { solicitadoAt: "desc" } as const satisfies Prisma.C
  * `in: ["aprobado","rechazado"]` un estado nuevo del enum desapareceria de las dos listas en
  * vez de caer en el historico.
  */
-function historicoWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+function historicoWhere(
+  alcance: Alcance,
+  filtros?: FiltrosCierres,
+): Prisma.CierreDiaWhereInput {
+  const recortes = filtrosWhere(filtros);
   return {
     ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
     estado: { notIn: [...ESTADOS_COLA_CIERRE_DIA] },
+    // Sin filtros, `AND: []` no se escribe: el criterio queda IDENTICO al de antes del
+    // 2026-08-16, byte a byte, y los `*-where.test.ts` que fijan su valor absoluto lo prueban.
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
   };
 }
 
@@ -381,10 +449,12 @@ function historicoWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
  * las dos — y en esta cola «caerse» significa que un cierre `vencido` deja de verse, con la
  * bodega de su mensajero bloqueada hasta que alguien lo note.
  */
-function colaWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+function colaWhere(alcance: Alcance, filtros?: FiltrosCierres): Prisma.CierreDiaWhereInput {
+  const recortes = filtrosWhere(filtros);
   return {
     ...alcanceWhere(alcance),
     estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
   };
 }
 
@@ -477,9 +547,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * sea el segmento N de este conjunto (R5). UNA consulta y ninguna mas (R15): el `count` de la
    * pagina no viaja aqui, porque el total de un conjunto sin recorte es su longitud.
    */
-  async findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+  async findHistoricoCompleto(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: historicoWhere(alcance),
+      where: historicoWhere(alcance, filtros),
       orderBy: ORDEN_CIERRES_ADMIN,
       select: CIERRE_RESUMEN_SELECT,
     });
@@ -499,9 +572,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * conjuntos salen de esas dos funciones. Ninguna fila puede quedar en las dos listas ni
    * caerse de las dos.
    */
-  async findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+  async findColaCompleta(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: colaWhere(alcance),
+      where: colaWhere(alcance, filtros),
       orderBy: ORDEN_CIERRES_ADMIN,
       select: CIERRE_RESUMEN_SELECT,
     });
@@ -519,11 +595,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async findHistoricoPaginado(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
     // Feature 184/R16: el criterio sale de `historicoWhere`, la MISMA declaracion que usa el
     // conjunto completo del que sale el archivo. Estaba escrito aqui y habria que haberlo
     // escrito otra vez alli.
-    const where = historicoWhere(alcance);
+    const where = historicoWhere(alcance, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
@@ -554,9 +631,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async findColaPaginada(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
     // Feature 184/R16: mismo criterio compartido que el conjunto completo de esta cola.
-    const where = colaWhere(alcance);
+    const where = colaWhere(alcance, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
@@ -568,6 +646,69 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO, no de la pagina
     ]);
     return { items: rows.map(toResumenRow), total };
+  }
+
+  /**
+   * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de esta pantalla, con las reglas
+   * que el humano fijó ese mismo día:
+   *
+   *   BODEGAS: es un filtro por ZONA, y solo se listan las zonas que pueden SER una bodega —las
+   *   que tienen un `adminSatelite` asignado— más la CENTRAL (la GAM). Una zona sin admin de
+   *   zona no es una bodega satélite operativa: ofrecerla sería un nombre que nunca devuelve
+   *   nada. La central entra siempre, porque es el destino de los cierres que no van a satélite.
+   *   (`esCentral` es la columna que la feature 54 renombró desde `es_gam`: misma zona, otro
+   *   nombre. Aquí importa porque «GAM» sigue siendo como el humano la llama.)
+   *
+   *   MENSAJEROS: TODOS los del rol, sin filtrar por estado. Un mensajero dado de baja sigue
+   *   siendo dueño de sus cierres pasados, y excluirlo haría esos cierres imposibles de filtrar
+   *   en el histórico —la misma trampa que la feature 144 declaró para las cuentas de tienda—.
+   *   Cada uno viaja con SU zona: es lo que permite que elegir una bodega recorte la lista de
+   *   mensajeros a los de esa zona (el `parentValue` del filtro dependiente).
+   *
+   * EL ALCANCE SE SIGUE APLICANDO, y aquí hay que ponerlo a mano porque este catálogo ya no se
+   * deriva de los cierres: un `adminSatelite` solo ve SU zona y los mensajeros de SU zona. Sin
+   * esa acotación, su selector le ofrecería el nombre de la bodega vecina y de su gente —que no
+   * devolvería ni una fila, porque el filtro se cruza con el alcance en el `WHERE`, pero le
+   * enseñaría una lista de nombres que no le corresponde ver—.
+   */
+  async findCatalogoFiltros(alcance: Alcance): Promise<CatalogoFiltrosCierresDTO> {
+    // El acceso total (`destinoZonaId === null`) ve el catálogo entero; el satélite, la suya.
+    const zonaDelActor = alcance.destinoZonaId;
+    const [zonas, mensajeros] = await Promise.all([
+      this.prisma.zona.findMany({
+        where:
+          zonaDelActor !== null
+            ? { id: zonaDelActor }
+            : {
+                OR: [
+                  { esCentral: true }, // la GAM
+                  { usuarios: { some: { rol: { value: ROL_ADMIN_SATELITE } } } },
+                ],
+              },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: "asc" }, // orden determinista
+      }),
+      this.prisma.usuario.findMany({
+        where: {
+          rol: { value: ROL_MENSAJERO },
+          ...(zonaDelActor !== null ? { zonaId: zonaDelActor } : {}),
+        },
+        // Proyección mínima: id, nombre y su zona. NUNCA email, teléfono, cédula ni hash.
+        select: { id: true, nombre: true, zonaId: true },
+        orderBy: { nombre: "asc" },
+      }),
+    ]);
+
+    return {
+      zonas,
+      mensajeros: mensajeros.map((m: { id: string; nombre: string; zonaId: string | null }) => ({
+        id: m.id,
+        nombre: m.nombre,
+        // `null` = mensajero sin zona asignada (la columna es nullable). Se ofrece igual: sus
+        // cierres existen. Lo que no puede es colgar de ninguna bodega en el encadenado.
+        zonaId: m.zonaId,
+      })),
+    };
   }
 
   /**
