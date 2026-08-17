@@ -33,7 +33,15 @@ import type { CierreDestinoTipo } from "@/lib/types/cierre";
 import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 // Pedido humano: el detalle de un cierre pasado se lee con el MISMO comprobante del admin
 // (feature 38/40), en su variante `mensajero`. Una sola hoja para las dos pantallas.
-import { CierreFacturaDetalle } from "@/app/(app)/cierres-admin/_components/cierre-factura";
+import {
+  CierreFacturaDetalle,
+  CierreFacturaResumenPropio,
+} from "@/app/(app)/cierres-admin/_components/cierre-factura";
+// Pedido humano del 2026-08-16: el histórico del mensajero deja de ser una tabla y pasa a ser
+// la tira de comprobantes que usan las demás pantallas de cierres. Mismo envoltorio, mismos
+// cuatro estados de listado.
+import { ListaComprobantes } from "@/app/(app)/cierres-admin/_components/ListaComprobantes";
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
 // Feature 170 (T E.4): las etiquetas compartidas salen del módulo PURO (sin React) para que
 // el archivo de la descarga y esta pantalla no puedan decir cosas distintas (R8).
 import {
@@ -146,7 +154,6 @@ const RECHAZADO_CONFIRM_DETALLE =
 const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
 
 // Pedido humano: "ver" el detalle de un cierre YA solicitado (textos separados, i18n-ready).
-const VER_DETALLE_COL = "Detalle";
 const VER_DETALLE_LABEL = "Ver";
 const DETALLE_TITULO = "Detalle del cierre";
 const DETALLE_CARGANDO = "Cargando el detalle…";
@@ -585,42 +592,55 @@ export function CierreDiaModule({
       {/* ---------- Cierres solicitados (histórico, solo lectura, R18) ---------- */}
       <section aria-label="Cierres solicitados" className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Cierres solicitados</h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasPasados(abrirDetalle)}
-            data={pasadosData?.items ?? []}
-            rowKey="cierreId"
-            ariaLabel={TITULO_DESCARGA_PASADOS}
-            emptyMessage="Aún no has solicitado ningún cierre."
-            isLoading={pasadosCargando}
-            error={pasadosError ? ERROR_PASADOS : null}
-            /**
-             * Feature 170 (T I.2, R52) — la tabla pinta UNA página; el archivo sigue siendo el
-             * CONJUNTO COMPLETO de ESTE mensajero, y ese acotamiento lo resuelve el servidor
-             * desde la sesión: descargar no puede traer los cierres de otro (R44).
-             *
-             * Feature 184 — Tanda C (T C.2, R1/R2/R6/R9): ese conjunto lo entrega ahora una
-             * lectura DEDICADA. Antes salía de releer `listarCierreDia()`, el listado COMPUESTO
-             * de esta pantalla, que además del histórico trae las gestiones del día, el conteo
-             * de órdenes pendientes, la tarifa por zona+vehículo y —lo caro— la FIRMA EN LOTE,
-             * contra Supabase Storage, de las evidencias fotográficas de todas esas gestiones.
-             * De todo eso el archivo usaba UN campo y NINGUNA URL: sus ocho columnas salen
-             * enteras del `CierrePasadoDTO`, que ni siquiera tiene campo de evidencia (R9).
-             *
-             * La lectura nueva cuesta una consulta, cero firmas, y el tope de filas lo evalúa
-             * el servidor (R6): por encima no viaja ni una fila.
-             */
-            descarga={{
-              titulo: TITULO_DESCARGA_PASADOS,
-              columnas: COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS,
-              obtenerFilas: () =>
-                filasDesdeResultado(
-                  listarCierresPasadosCompleto(),
-                  filaDescargaDiaCierrePasado,
-                ),
-            }}
+        {/* Pedido humano del 2026-08-16: la descarga dejó de vivir dentro de la lista y la
+            monta la pantalla. Aquí no hay pestañas con las que alinearla, así que se queda
+            donde estaba —encima del listado, a la derecha—, con el mismo nombre accesible.
+
+            Feature 170 (T I.2, R52) — el listado pinta UNA página; el archivo sigue siendo el
+            CONJUNTO COMPLETO de ESTE mensajero, y ese acotamiento lo resuelve el servidor desde
+            la sesión: descargar no puede traer los cierres de otro (R44). Feature 184 — Tanda C
+            (T C.2, R1/R2/R6/R9): ese conjunto lo entrega una lectura DEDICADA, que cuesta una
+            consulta, cero firmas de evidencia y con el tope de filas evaluado en el servidor. */}
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <DescargarDatasetButton
+            titulo={TITULO_DESCARGA_PASADOS}
+            columnas={COLUMNAS_DESCARGA_DIA_CIERRES_PASADOS}
+            obtenerFilas={() =>
+              filasDesdeResultado(
+                listarCierresPasadosCompleto(),
+                filaDescargaDiaCierrePasado,
+              )
+            }
           />
         </div>
+        {/* Cada cierre solicitado se lee como su COMPROBANTE, la misma hoja que el mensajero
+            ya veía al abrir el detalle —y la que el admin mira para decidirlo—. El botón
+            conserva el nombre accesible que tenía en la columna «Ver detalle»: es el mismo
+            gesto y lo localizan igual los tests y el E2E. */}
+        <ListaComprobantes
+          ariaLabel={TITULO_DESCARGA_PASADOS}
+          items={pasadosData?.items ?? []}
+          clave={(c) => c.cierreId}
+          isLoading={pasadosCargando}
+          error={pasadosError ? ERROR_PASADOS : null}
+          emptyMessage="Aún no has solicitado ningún cierre."
+          render={(c) => (
+            <CierreFacturaResumenPropio
+              cierre={c}
+              acciones={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={`${VER_DETALLE_LABEL} del cierre del ${c.solicitadoAt.slice(0, 10)}`}
+                  onClick={() => abrirDetalle(c)}
+                >
+                  {VER_DETALLE_LABEL}
+                </Button>
+              }
+            />
+          )}
+        />
 
         <Pagination
           page={pasadosPage}
@@ -970,72 +990,3 @@ function columnaEvidencia(
       ),
   };
 }
-
-// --- Columnas del histórico de cierres (R18) ---
-/**
- * Pedido humano: el histórico ya no es solo una fila de totales — cada cierre se puede ABRIR
- * y ver su detalle (las mismas gestiones agrupadas por resultado que se veían el día que se
- * solicitó, con los montos ya congelados). La columna se construye con el handler inyectado,
- * como las de evidencia/deshacer de las tablas del día.
- */
-function columnasPasados(
-  verDetalle: (cierre: CierrePasadoDTO) => void,
-): Column<CierrePasadoDTO>[] {
-  return [
-    ...COLUMNAS_PASADOS,
-    {
-      id: "detalle",
-      value: VER_DETALLE_COL,
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label={`${VER_DETALLE_LABEL} del cierre del ${c.solicitadoAt.slice(0, 10)}`}
-          onClick={() => verDetalle(c)}
-        >
-          {VER_DETALLE_LABEL}
-        </Button>
-      ),
-    },
-  ];
-}
-
-const COLUMNAS_PASADOS: Column<CierrePasadoDTO>[] = [
-  {
-    id: "estado",
-    value: "Estado",
-    render: (c) => ESTADO_LABEL[c.estado],
-  },
-  {
-    id: "destino",
-    value: "Destino",
-    render: (c) => DESTINO_LABEL[c.destinoTipo],
-  },
-  {
-    id: "efectivo",
-    value: "Efectivo",
-    render: (c) => money(c.totales.efectivo),
-  },
-  { id: "simpe", value: "SINPE", render: (c) => money(c.totales.simpe) },
-  {
-    id: "transferencia",
-    value: "Transferencia",
-    render: (c) => money(c.totales.transferencia),
-  },
-  {
-    id: "general",
-    value: "Total",
-    render: (c) => money(c.totales.general),
-  },
-  {
-    id: "pagoMensajero",
-    value: PAGO_MENSAJERO_COL,
-    render: (c) => money(c.totalPagoMensajero),
-  },
-  {
-    id: "solicitadoAt",
-    value: "Fecha",
-    render: (c) => c.solicitadoAt.slice(0, 10),
-  },
-];

@@ -240,7 +240,7 @@ async function aprobarDesdeLaCola(
   await waitFor(() => expect(aprobarMock).toHaveBeenCalledTimes(1));
 }
 
-/** Abre el detalle de un cierre del HISTÓRICO (botón «Ver» de la tabla). */
+/** Abre el detalle de un cierre del HISTÓRICO (botón «Ver» de su comprobante). */
 async function abrirDetalleDelHistorico(
   user: ReturnType<typeof userEvent.setup>,
   cierre: CierreAdminResumen,
@@ -248,12 +248,27 @@ async function abrirDetalleDelHistorico(
 ) {
   conDetalleDe(cierre);
   renderModule({ historico: [cierre], ...opciones });
+  // Pedido humano del 2026-08-16: el histórico es la pestaña «Resueltos», así que abrirla es
+  // parte del gesto. Es lo que hace el usuario, y por eso el helper lo hace en vez de buscar el
+  // panel escondido (que sigue montado, para no perder su paginación, pero fuera del árbol de
+  // accesibilidad mientras no es el visible).
+  await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
   await user.click(
     within(screen.getByRole("region", { name: "Histórico" })).getByRole("button", {
-      name: "Ver",
+      name: /^Ver el cierre resuelto de/,
     }),
   );
   return screen.findByRole("dialog", { name: "Detalle del cierre" });
+}
+
+/**
+ * Abre la pestaña «Resueltos» (donde vive el histórico desde el pedido humano del 2026-08-16) y
+ * devuelve su región. Los casos que solo MIRAN el listado también tienen que dar ese clic: es
+ * el gesto real del usuario.
+ */
+async function verHistorico(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
+  return screen.getByRole("region", { name: "Histórico" });
 }
 
 /** El aviso de que NADA se aprobó de más ni se deshizo: ninguna otra decisión se disparó. */
@@ -626,11 +641,20 @@ describe("T E.2/R28 — los CUATRO estados del cierre", () => {
     const enCola = estado === "solicitado" || estado === "vencido";
     renderModule(enCola ? { pendientes: [cierre] } : { historico: [cierre] });
 
+    if (!enCola) await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
     const region = screen.getByRole("region", {
       name: enCola ? "Pendientes de decisión" : "Histórico",
     });
+    // El nombre accesible del botón depende de dónde vive el comprobante: en la cola, «Ver /
+    // decidir» si es resoluble y «Ver el cierre de …» si es un `vencido`; en el histórico,
+    // «Ver el cierre resuelto de …». Los tres abren el mismo detalle.
     const abrir = within(region).getByRole("button", {
-      name: estado === "solicitado" ? "Ver / decidir" : "Ver",
+      name:
+        estado === "solicitado"
+          ? "Ver / decidir"
+          : enCola
+            ? /^Ver el cierre de/
+            : /^Ver el cierre resuelto de/,
     });
     await user.click(abrir);
     await screen.findByRole("dialog", { name: "Detalle del cierre" });
@@ -722,7 +746,11 @@ describe("T E.2/R49 — la lista de comprobantes del cierre", () => {
 // =========================================================================
 
 describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => {
-  it("un cierre aprobado CON deuda se distingue en la tabla, con el importe del servidor", () => {
+  it("un cierre aprobado CON deuda se distingue en el listado, con el importe del servidor", async () => {
+    const user = userEvent.setup();
+    // R26 no cambió con el pedido humano del 2026-08-16, y esta es la mitad que importa: LA
+    // DEUDA SE VE SIN ABRIR NADA. Antes era una columna del histórico; ahora es una insignia
+    // junto al estado, en la cabecera del comprobante — fuera del desplegable, a propósito.
     renderModule({
       historico: [
         makeResumen({
@@ -734,15 +762,13 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Histórico" });
-    expect(
-      within(region).getByRole("columnheader", { name: PAGO_MENSAJERO_TEXTO.pendiente }),
-    ).toBeInTheDocument();
+    const region = await verHistorico(user);
     // El importe se PINTA, no se calcula: es el STRING del servidor, carácter por carácter.
     expect(within(region).getByText("₡1.234,50")).toBeInTheDocument();
   });
 
   it("los TRES casos se distinguen entre sí (no es una etiqueta fija)", async () => {
+    const user = userEvent.setup();
     renderModule({
       historico: [
         makeResumen({
@@ -767,24 +793,27 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
       ],
     });
 
-    const filas = within(screen.getByRole("region", { name: "Histórico" })).getAllByRole("row");
-    // La columna se localiza por su rótulo, no por una posición escrita a mano: así el test
-    // sigue midiendo LA CELDA del pendiente aunque mañana se reordenen las columnas.
-    const cabeceras = within(filas[0])
-      .getAllByRole("columnheader")
-      .map((h) => h.textContent);
-    const col = cabeceras.indexOf(PAGO_MENSAJERO_TEXTO.pendiente);
-    expect(col).toBeGreaterThanOrEqual(0);
-    const celda = (fila: HTMLElement) => within(fila).getAllByRole("cell")[col].textContent;
+    // Un comprobante por cierre, en el orden que devolvió el servidor. Los tres se distinguen
+    // por lo que su cabecera dice del pago, sin abrir ninguno.
+    await verHistorico(user);
+    const filas = within(
+      screen.getByRole("list", { name: "Histórico" }),
+    ).getAllByRole("listitem");
+    expect(filas).toHaveLength(3);
 
-    // filas[0] es la cabecera; el orden de las demás es el que devolvió el servidor.
     // Con deuda: el importe, hasta el último céntimo.
-    expect(celda(filas[1])).toBe("₡0,10");
+    expect(filas[0].textContent).toContain("₡0,10");
     // Liquidado del todo (R27): deja de señalarse como pendiente, pero NO pasa por «no se
     // sabe» ni repite el importe: «no debe nada» y «todavía no aplica» son cosas distintas.
-    expect(celda(filas[2])).toBe(PAGO_MENSAJERO_TEXTO.sinPendiente);
-    // No aprobado (R28): no se muestra nada relativo al pago.
-    expect(celda(filas[3])).toBe("—");
+    expect(filas[1].textContent).toContain(PAGO_MENSAJERO_TEXTO.sinPendiente);
+    expect(filas[1].textContent).not.toContain("₡0,10");
+    // No aprobado (R28): no se muestra NADA relativo al pago. En la tabla ese «nada» era un
+    // guion —la celda existía y había que rellenarla—; en una tarjeta no hay celda que llenar,
+    // así que el marcador de ausencia es que la insignia no se pinta. Es la misma decisión de
+    // R28 dicha en el medio nuevo, y por eso se comprueba por las dos mitades: ni importe, ni
+    // la etiqueta de «al día».
+    expect(filas[2].textContent).not.toContain(PAGO_MENSAJERO_TEXTO.sinPendiente);
+    expect(filas[2].textContent).not.toContain("₡0,10");
   });
 
   it("R28 — la COLA no muestra pendiente: sus cierres no están aprobados", () => {
@@ -793,9 +822,9 @@ describe("T E.3/R26 — columna «pendiente de liquidar» en el listado", () => 
     });
 
     const region = screen.getByRole("region", { name: "Pendientes de decisión" });
-    expect(
-      within(region).queryByRole("columnheader", { name: PAGO_MENSAJERO_TEXTO.pendiente }),
-    ).toBeNull();
+    // Ni la insignia de «al día» ni ningún rótulo del pendiente: en la cola, `null` por
+    // definición (R28). Se pregunta por el TEXTO, que es lo que un comprobante puede tener.
+    expect(within(region).queryByText(PAGO_MENSAJERO_TEXTO.pendiente)).toBeNull();
     expect(within(region).queryByText(PAGO_MENSAJERO_TEXTO.sinPendiente)).toBeNull();
   });
 });
@@ -811,7 +840,7 @@ describe("R14 — ni un `Number(` ni un `parseFloat` sobre montos en esta tanda"
     "app/(app)/cierres-admin/_components/RegistrarPagoMensajeroDialog.tsx",
     "app/(app)/cierres-admin/_components/pago-mensajero-labels.ts",
     "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
-    "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+    "app/(app)/cierres-admin/_components/CierresAdminHistoricoLista.tsx",
   ])("%s no convierte dinero a número", (ruta) => {
     const codigo = codigoSinComentarios(ruta);
     for (const prohibida of LLAMADAS_PROHIBIDAS_EN_DINERO) {

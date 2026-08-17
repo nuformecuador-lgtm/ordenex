@@ -48,7 +48,7 @@ const RAIZ = path.resolve(__dirname, "../../..");
  * nombre, el primer test cae.
  */
 const ARCHIVOS_DE_LA_FEATURE: readonly string[] = [
-  "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+  "app/(app)/cierres-admin/_components/CierresAdminHistoricoLista.tsx",
   "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
   "app/(app)/cierres-admin/_components/PagoMensajeroSeccion.tsx",
   "app/(app)/cierres-admin/_components/PendienteLiquidarBadge.tsx",
