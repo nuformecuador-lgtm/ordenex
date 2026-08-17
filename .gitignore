@@ -10,8 +10,6 @@
 !.yarn/releases
 !.yarn/versions
 /harnessConfig
-/.claude/skills/impeccable
-/.impeccable
 
 # testing
 /coverage
