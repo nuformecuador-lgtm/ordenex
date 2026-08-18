@@ -167,7 +167,9 @@ describe("R74 — el diálogo dice QUÉ pago se está anulando", () => {
     montar();
     expect(screen.getByRole("dialog", { name: /Tienda Norte/ })).toBeInTheDocument();
     expect(
-      within(dialogo()).getByText("Pago de ₡4.000,10 del 2026-07-30, en SINPE."),
+      // El resumen se relee entero, no solo la cifra: el importe pierde su cola
+      // (feature 230) y el día y el método siguen exactamente donde estaban.
+      within(dialogo()).getByText("Pago de ₡4.000 del 2026-07-30, en SINPE."),
     ).toBeInTheDocument();
   });
 
@@ -257,11 +259,13 @@ describe("R14 — money-safe", () => {
     }
   });
 
-  it("el monto del pago se pinta TAL CUAL, hasta el tope de la columna", () => {
+  it("el monto del tope de la columna se redondea EXACTO, sin pasar por un número", () => {
+    // Feature 230: el `,99` ya no se pinta, decide el acarreo. Y ese acarreo cruza
+    // los diez dígitos —`9.999.999.999,99` sube a `10.000.000.000`—, que es
+    // justo lo que un `Number` intermedio no puede prometer. El caso sigue siendo
+    // el money-safe del tope de la columna, con otra afirmación.
     montar({ pago: { ...PAGO, monto: "9999999999.99" } });
-    expect(
-      within(dialogo()).getByText(/₡9\.999\.999\.999,99/),
-    ).toBeInTheDocument();
+    expect(within(dialogo()).getByText(/₡10\.000\.000\.000/)).toBeInTheDocument();
   });
 });
 

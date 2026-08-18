@@ -121,7 +121,7 @@ describe("R49/R50 — el comprobante trae sus siete datos", () => {
   it("pinta fecha real, monto, método, referencia, nota, quién e instante de registro", () => {
     montar([VIGENTE]);
     const fila = filaDe("2026-07-30");
-    expect(within(fila).getByText("₡4.000,10")).toBeInTheDocument();
+    expect(within(fila).getByText("₡4.000")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE")).toBeInTheDocument();
     expect(within(fila).getByText("SINPE-88112233")).toBeInTheDocument();
     expect(within(fila).getByText("Liquidación de julio")).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("R74 — un pago anulado se ve COMPLETO y marcado", () => {
     // Todo lo que tenía sigue ahí: anular no borra el pago.
     const celdas = within(fila).getAllByRole("cell");
     expect(celdas[0]).toHaveTextContent("2026-07-28"); // fecha real
-    expect(within(fila).getByText("₡1.250,00")).toBeInTheDocument();
+    expect(within(fila).getByText("₡1.250")).toBeInTheDocument();
     expect(within(fila).getByText("Efectivo")).toBeInTheDocument();
     expect(within(fila).getByText("Beto Admin")).toBeInTheDocument();
     expect(celdas[6]).toHaveTextContent("2026-07-31"); // instante de registro
@@ -279,10 +279,10 @@ describe("R4/R81 — el control de anular solo existe para quien puede anular", 
       onAnular: vi.fn(),
     });
     expect(
-      screen.getByRole("button", { name: "Anular el pago de ₡4.000,10 del 2026-07-30" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡4.000 del 2026-07-30" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Anular el pago de ₡10,00 del 2026-07-29" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡10 del 2026-07-29" }),
     ).toBeInTheDocument();
   });
 });
@@ -368,7 +368,7 @@ describe("T F.5 — el diálogo se abre sobre SU pago y avisa a quien montó la 
     });
 
     await user.click(
-      screen.getByRole("button", { name: "Anular el pago de ₡4.000,10 del 2026-07-30" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡4.000 del 2026-07-30" }),
     );
     const primero = await screen.findByRole("dialog");
     await user.type(
@@ -379,14 +379,16 @@ describe("T F.5 — el diálogo se abre sobre SU pago y avisa a quien montó la 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await user.click(
-      screen.getByRole("button", { name: "Anular el pago de ₡10,00 del 2026-07-29" }),
+      screen.getByRole("button", { name: "Anular el pago de ₡10 del 2026-07-29" }),
     );
     const segundo = await screen.findByRole("dialog");
     expect(
       (within(segundo).getByLabelText(/^Motivo de la anulación/) as HTMLTextAreaElement).value,
     ).toBe("");
     // Y habla del otro pago, no del primero.
-    expect(within(segundo).getByText(/₡10,00/)).toBeInTheDocument();
+    // Se ancla al texto entero del resumen: un `/₡10/` suelto casaría también con
+    // el `₡10.000` de cualquier otro importe y dejaría de identificar el pago.
+    expect(within(segundo).getByText(/Pago de ₡10 del 2026-07-29/)).toBeInTheDocument();
   });
 });
 
@@ -413,9 +415,13 @@ describe("R56 — ni un identificador interno en pantalla", () => {
 });
 
 describe("R14 — money-safe", () => {
-  it("el monto se pinta TAL CUAL, con sus dos decimales", () => {
+  it("el tope de la columna se redondea EXACTO: el acarreo cruza los diez dígitos", () => {
+    // Feature 230: el `,99` ya no se pinta y en su lugar arrastra un acarreo que
+    // añade un dígito (`9.999.999.999,99` -> `10.000.000.000`), reagrupando los
+    // miles. Que salga bien es lo que ningún `Number` intermedio garantiza; el
+    // caso de abajo lo remata mirando el fuente.
     montar([{ ...VIGENTE, monto: "9999999999.99" }]);
-    expect(within(tabla()).getByText("₡9.999.999.999,99")).toBeInTheDocument();
+    expect(within(tabla()).getByText("₡10.000.000.000")).toBeInTheDocument();
   });
 
   it("el archivo de la tabla no convierte ni redondea ningún monto", () => {

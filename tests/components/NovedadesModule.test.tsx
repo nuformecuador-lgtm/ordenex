@@ -103,8 +103,8 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
  */
 const PRODUCTO = "Zapatos deportivos";
 
-/** El monto de la novedad base, tal y como `formatMonto` lo pinta (₡ + miles + 2 decimales). */
-const MONTO_TEXTO = "₡24.500,00";
+/** El monto de la novedad base, tal y como `formatMonto` lo pinta (₡ + miles, sin decimales). */
+const MONTO_TEXTO = "₡24.500";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -863,7 +863,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
 
       const card = cardDe("Ana Cliente");
       // La sección de cobro SIGUE encendida (no se esconde por no tener importe) y su valor
-      // es la raya larga: sin monto no hay cifra, y un "₡0,00" sería una cifra inventada.
+      // es la raya larga: sin monto no hay cifra, y un "₡0" sería una cifra inventada.
       const filaCobro = within(card).getByText("Cobrar").parentElement as HTMLElement;
       expect(filaCobro).toHaveTextContent("—");
       expect(within(card).queryByText(/₡/)).toBeNull();

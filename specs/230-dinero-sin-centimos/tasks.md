@@ -18,17 +18,23 @@
 
 ## Bloque 0 — Puerta humana (BLOQUEA el resto)
 
-- [ ] **T0.1 — Respuesta a las preguntas abiertas Q1, Q2 y Q3** de `requirements.md` §4.
+- [x] **T0.1 — Respuesta a las preguntas abiertas Q1, Q2 y Q3** de `requirements.md` §4.
   **Hecho:** las tres respuestas quedan escritas en `requirements.md` §4 con fecha, y el
   `status_note` de la ficha 230 las resume. **Q1 bloquea T1.4 y T2.5.** Si no llega respuesta a Q1,
   se implementa la opción **(b)** —conservar el campo— por ser la reversible, y se deja escrito como
   deuda declarada. *(Lo hace el leader.)*
-- [ ] **T0.2 [P] — Registrar en `progress/impl_230.md` las consecuencias YA aceptadas**: A1 (una
+  > **SIN MARCAR a propósito (2026-08-18).** La puerta **sí** se pasó: el `status_note` de la ficha
+  > 230 recoge con fecha las tres respuestas (Q1 = conservar `separadorDecimal` con oficio nuevo;
+  > Q2 = el humano NO acepta seguir escribiendo céntimos, pero eso toca el DATO y sale en la ficha
+  > 232; Q3 = C1–C4 aceptadas como las resuelve el design), y **Q1(b) está implementada**. Lo que
+  > falta es la otra mitad del criterio de Hecho: **copiar esas tres respuestas a
+  > `requirements.md` §4 con su fecha**. Es del leader; `frontend_dev` no edita el spec.
+- [x] **T0.2 [P] — Registrar en `progress/impl_230.md` las consecuencias YA aceptadas**: A1 (una
   columna puede no cuadrar con su total por ±1/±2), A2, A3 de `requirements.md` §3, y las cuatro
   contradicciones C1–C4 de §5.
   **Hecho:** están escritas como **decisiones**, no como pendientes. El reviewer no debe tratarlas
   como hallazgos.
-- [ ] **T0.3 [P] — Ficha y rama.** `feature_list.json` id 230: `spec_path`, `status: spec_ready` →
+- [x] **T0.3 [P] — Ficha y rama.** `feature_list.json` id 230: `spec_path`, `status: spec_ready` →
   `in_progress`, `branch: feature/230-dinero-sin-centimos`.
   **Hecho:** `./init.sh` valida la ficha; no hay más de 2 features `in_progress` en la zona
   `fullstack`. *(Lo hace el leader.)*
@@ -39,21 +45,21 @@
 
 Depende de: T0.1.
 
-- [ ] **T1.1 — `sumarUno(enteros: string): string`**, privada del módulo: acarreo manual de derecha a
+- [x] **T1.1 — `sumarUno(enteros: string): string`**, privada del módulo: acarreo manual de derecha a
   izquierda, `'9' → '0'` arrastrando, y `'1'` antepuesto si el acarreo sobrevive (design §2.2).
   **Hecho:** typecheck verde; la función **no** contiene `Number(`, `parseFloat(`, `parseInt(` ni
   aritmética sobre números; cubierta por T2.4 (`"999" → "1000"`, `"9" → "10"`, `"0" → "1"`,
   `"999999" → "1000000"`).
-- [ ] **T1.2 — `redondearEnteros(enteros, decimales)`**: mira **solo** el primer dígito decimal
+- [x] **T1.2 — `redondearEnteros(enteros, decimales)`**: mira **solo** el primer dígito decimal
   (≥`'5'` llama a `sumarUno`, si no devuelve `enteros` tal cual); `decimales === null` o vacío →
   `enteros` (design §2.2). Depende de T1.1.
   **Hecho:** typecheck verde; sin conversiones; cubre **R2** y **R6**.
-- [ ] **T1.3 — Nuevo cuerpo de `formatMontoString`** (design §2.3): redondear **antes** de agrupar, y
+- [x] **T1.3 — Nuevo cuerpo de `formatMontoString`** (design §2.3): redondear **antes** de agrupar, y
   **caída del signo** cuando el resultado es cero. Depende de T1.2.
   **Hecho:** la tabla de contrato de `design.md` §2.4 pasa entera; `-0.49` da `₡0` y **nunca** `-₡0`;
   las ramas de ausencia (R9) y verbatim (R8) quedan **byte a byte** como estaban. Cubre **R1–R5,
   R7–R10**.
-- [ ] **T1.4 — Docstrings del módulo y decisión sobre `separadorDecimal`** (R18, C4). El docstring de
+- [x] **T1.4 — Docstrings del módulo y decisión sobre `separadorDecimal`** (R18, C4). El docstring de
   `formatMontoString` dice hoy «los decimales se copian VERBATIM» y el de `formatMonto` justifica su
   `toFixed(2)` con que «es lo que hace que un importe entero se pinte `₡320,00` y no `₡320`»: los dos
   dejan de ser ciertos. Aplicar la respuesta de **Q1** al campo `separadorDecimal` y a
@@ -61,7 +67,7 @@ Depende de: T0.1.
   **Hecho:** ningún docstring del módulo promete decimales; si Q1 = (a), el campo y su variable ya no
   existen en el código ni en los tests; si Q1 = (b), el docstring del campo dice explícitamente que
   **ya no gobierna la salida** y por qué se conserva.
-- [ ] **T1.5 — `pnpm exec vitest related --run lib/config/moneda.ts`** para medir el radio real del
+- [x] **T1.5 — `pnpm exec vitest related --run lib/config/moneda.ts`** para medir el radio real del
   cambio antes de tocar un solo test de pantalla.
   **Hecho:** la lista de archivos y el conteo quedan pegados en `progress/impl_230.md`. Es la entrada
   del bloque 5: si aparece un archivo que **no** está en el censo de 39, se añade allí.
@@ -75,7 +81,7 @@ Depende de: T0.1.
 Depende de: bloque 1. Es el archivo más pesado del censo (**27 líneas**) y el único donde el
 comportamiento se **define**, no se **observa**.
 
-- [ ] **T2.1 — Los dos tests que MUEREN, nombrados uno a uno.** No se editan: se **retiran** y su
+- [x] **T2.1 — Los dos tests que MUEREN, nombrados uno a uno.** No se editan: se **retiran** y su
   razón se escribe en el archivo, para que nadie los resucite por costumbre.
   1. `:71` — «copia los decimales VERBATIM: ni rellena ni recorta». Afirmaba el corazón de lo que
      esta feature cambia (`"1500.5" → ₡1.500,5`).
@@ -83,18 +89,18 @@ comportamiento se **define**, no se **observa**.
      Tras la 230 los dos caminos dan `₡320` y la asimetría que documentaba **deja de existir**.
   **Hecho:** los dos han desaparecido; en su lugar hay un comentario de una línea que dice qué
   afirmaban y qué feature los retiró.
-- [ ] **T2.2 — Reescribir las aserciones de aspecto** de los bloques `formatMontoString — el formato
+- [x] **T2.2 — Reescribir las aserciones de aspecto** de los bloques `formatMontoString — el formato
   objetivo` (`:42`, `:51`, `:83`, `:92`) y `formatMonto … MISMO aspecto` (`:141`, `:149`, `:177`)
   contra la tabla de `design.md` §2.4.
   **Hecho:** cada aserción reescrita **afirma un redondeo concreto**, no un formato genérico; las
   aserciones de bordes de agrupación (`"999"`, `"1000"`, `"1000000"`) y la de «ningún resultado
   empieza por el separador» **sobreviven intactas** — son de agrupación, no de decimales. Cubre
   **R2, R3, R5, R10**.
-- [ ] **T2.3 [P] — Los bloques de ausencia y verbatim NO se tocan** (`:106`, `:110`, `:121`, `:128`,
+- [x] **T2.3 [P] — Los bloques de ausencia y verbatim NO se tocan** (`:106`, `:110`, `:121`, `:128`,
   `:132`).
   **Hecho:** verificado que pasan **sin editar una línea**. Si alguno hubiera que tocar, es señal de
   que T1.3 cambió algo que no debía. Cubre **R8, R9**.
-- [ ] **T2.4 — El test más importante SE TRANSFORMA, no muere** (`:262`, «los decimales sobreviven a
+- [x] **T2.4 — El test más importante SE TRANSFORMA, no muere** (`:262`, «los decimales sobreviven a
   un importe que un `number` no puede representar»). Mismo propósito —el módulo trabaja dígito a
   dígito—, nueva afirmación: **el redondeo de un importe de once dígitos es exacto**
   (`"99999999999.51" → ₡100.000.000.000`; `"99999999999.49" → ₡99.999.999.999`;
@@ -102,14 +108,14 @@ comportamiento se **define**, no se **observa**.
   contraprueba incluida.
   **Hecho:** el archivo sigue afirmando que el módulo no llama a `Number(`/`parseFloat(`/`parseInt(`
   y que su único `toFixed` es de escala 2; los tres importes de once dígitos pasan. Cubre **R7**.
-- [ ] **T2.5 — Tests nuevos de los bordes que la feature crea**: acarreo que cambia dígitos
+- [x] **T2.5 — Tests nuevos de los bordes que la feature crea**: acarreo que cambia dígitos
   (`999.50 → ₡1.000`, `9.99 → ₡10`, `999999.99 → ₡1.000.000`), **cero con signo**
   (`-0.49 → ₡0`, `-0.00 → ₡0`), más de dos decimales (`10.4999 → ₡10`, `10.5001 → ₡11`), y el
   **doble redondeo declarado** de C3 (`formatMonto(1234.4951)`, con el comentario que explica por qué
   el resultado es el que es y que solo ocurre fuera del contrato de escala 2).
   **Hecho:** los cuatro grupos pasan; el de C3 **fija** el comportamiento elegido en `design.md`
   §7/A3 en vez de dejarlo implícito. Cubre **R3, R4, R6**.
-- [ ] **T2.6 — Bloque «el formato sale de configuración»** (`:183`, `:201`, `:216`, `:225`) según la
+- [x] **T2.6 — Bloque «el formato sale de configuración»** (`:183`, `:201`, `:216`, `:225`) según la
   respuesta a **Q1**. Hoy `:201` afirma que «cambian el símbolo y **LOS DOS** separadores». Depende
   de T1.4.
   **Hecho:** con otra configuración, `13331832.72` se pinta con el otro símbolo y el otro separador
@@ -126,32 +132,32 @@ comportamiento se **define**, no se **observa**.
 Depende de: bloque 1. Archivo: `tests/unit/guards/dinero-sin-centimos.guardia.test.ts`
 (el sufijo `guardia` la mete sola en `pnpm run test:guardias` y en `./init.sh --rapido`).
 
-- [ ] **T3.1 — Diente 1 (comportamiento).** Corpus determinista de importes **con forma decimal**
+- [x] **T3.1 — Diente 1 (comportamiento).** Corpus determinista de importes **con forma decimal**
   (los de `design.md` §2.4 + 0–3 decimales × negativos × 1–12 dígitos enteros × primer decimal 0–9)
   por los **cinco** caminos: `formatMontoString`, `money`, `formatMonto`, `PriceLabel` renderizado y
   `formatearValor(v, "moneda")`.
   **Hecho:** ninguna salida contiene el separador decimal seguido de un dígito; el sub-caso `,\d\d`
   se afirma aparte por ser el que pidió el humano; el corpus tiene **más de 100 casos** y el test lo
   afirma (para que no pase por no mirar nada). Cubre **R1, R12, R19(a)**.
-- [ ] **T3.2 — Diente 2 (estructura, anti-bypass).** Barrido de `app/**` y `components/**` con
+- [x] **T3.2 — Diente 2 (estructura, anti-bypass).** Barrido de `app/**` y `components/**` con
   `quitarComentarios` (`tests/fixtures/sin-comentarios.ts`) buscando `.toFixed(`, con **lista blanca
   censada** de usos no monetarios: hoy **uno**, `components/shared/BulkUpload.tsx` (tamaño en MB).
   **Hecho:** el barrido recorre **más de 100 archivos** y el test lo afirma; con el árbol actual (ya
   con T4.1 aplicada) sale verde; los dos `toFixed(2)` que viven en **comentarios** de
   `ordenes-columns.tsx` **no** lo ponen rojo. Cubre **R19(b)**.
-- [ ] **T3.3 [P] — Diente 3 (frontera de descargas).** `lib/utils/descarga-dataset.ts` y
+- [x] **T3.3 [P] — Diente 3 (frontera de descargas).** `lib/utils/descarga-dataset.ts` y
   `lib/utils/manifiesto-xlsx.ts` no importan `@/lib/config/moneda` ni nombran
   `money(`/`formatMonto(`/`formatMontoString(`; contraprueba con un fuente ficticio que sí lo
   importa.
   **Hecho:** verde hoy, rojo con la contraprueba. Cubre **R16**.
-- [ ] **T3.4 [P] — Diente 4 (el no-objetivo D2 y la excepción verbatim C2).**
+- [x] **T3.4 [P] — Diente 4 (el no-objetivo D2 y la excepción verbatim C2).**
   `formatearValor(0.842, "porcentaje")` y `formatearValor(5400, "segundos")` conservan su dígito
   decimal, comparados contra el mismo `Intl.NumberFormat` que los produce hoy (**no** contra un
   literal inventado); y un test propio deja escrito que la rama **verbatim** puede emitir `₡1,50` y
   está **fuera** del diente 1.
   **Hecho:** si alguien «sanea» también los porcentajes o las duraciones, este diente se pone rojo.
   Cubre **R15**.
-- [ ] **T3.5 — LAS DOS MUTACIONES, EJECUTADAS.** (a) revertir el paso 5 de `design.md` §2.3 (o
+- [x] **T3.5 — LAS DOS MUTACIONES, EJECUTADAS.** (a) revertir el paso 5 de `design.md` §2.3 (o
   inyectar un formateador que conserve céntimos) → **diente 1 rojo**; (b) devolver
   `row.montoCobrar.toFixed(2)` a la celda del resumen de carga → **diente 2 rojo**. Depende de T3.1,
   T3.2 y T4.1.
@@ -165,19 +171,19 @@ Depende de: bloque 1. Archivo: `tests/unit/guards/dinero-sin-centimos.guardia.te
 
 Depende de: bloque 1.
 
-- [ ] **T4.1 — `app/(app)/ordenes/_components/OrdenesCargaResumen.tsx:97` — LA ÚNICA FUGA.** Sustituir
+- [x] **T4.1 — `app/(app)/ordenes/_components/OrdenesCargaResumen.tsx:97` — LA ÚNICA FUGA.** Sustituir
   `row.montoCobrar.toFixed(2)` por el formateador compartido; `formatMonto` ya devuelve `"-"` cuando
   el monto es `null`, que es el marcador que la celda pinta hoy a mano.
   **Hecho:** con `montoCobrar = 1234.56` la celda muestra `₡1.235` (con símbolo y separador de
   miles, que hoy **no tiene**); con `null` sigue mostrando `-`; el archivo ya no contiene `.toFixed(`.
   Test: `tests/components/…` o `tests/unit/components/…` del resumen de carga. Cubre **R13**.
-- [ ] **T4.2 [P] — `components/shared/KpiValorAnimado.tsx:96`**: `decimals` pasa a **0** en modo
+- [x] **T4.2 [P] — `components/shared/KpiValorAnimado.tsx:96`**: `decimals` pasa a **0** en modo
   moneda. **No tocar** la memoización de `formatear` ni sus dependencias (el comentario del archivo
   explica que react-countup reinicia la animación si cambia la identidad de `formattingFn`).
   **Hecho:** `tests/components/KpiValorAnimado.test.tsx` afirma que en modo moneda el texto —inicial
   y final— no contiene el separador decimal seguido de un dígito, y que el modo **no** moneda no
   cambia. Cubre **R14**.
-- [ ] **T4.3 [P] — `components/shared/PriceLabel.tsx`: solo el docstring** (R18, C4). Hoy promete
+- [x] **T4.3 [P] — `components/shared/PriceLabel.tsx`: solo el docstring** (R18, C4). Hoy promete
   «SIEMPRE dos decimales (`₡1.234,50`, `₡0,00`)» y su punto 3 justifica los ceros finales por la
   alineación de la coma en una columna `tabular-nums` — justificación que desaparece cuando todas las
   filas son enteras. El contrato «sin valor → cero, no marcador de ausencia» **se conserva**
@@ -200,11 +206,11 @@ leader). **Se releen una a una.** Cada lote se cierra con `./init.sh --rapido`.
 4. Si al reescribirla el test deja de afirmar algo, **decirlo** en `progress/impl_230.md` en vez de
    dejar una aserción vacía.
 
-- [ ] **T5.0 — Lista de trabajo.** Regenerar el censo sobre el árbol actual y cruzarlo con la salida
+- [x] **T5.0 — Lista de trabajo.** Regenerar el censo sobre el árbol actual y cruzarlo con la salida
   de T1.5.
   **Hecho:** la lista definitiva (archivo → nº de líneas) está en `progress/impl_230.md`; cualquier
   archivo que aparezca y **no** esté en los 39 se añade al lote que le toque.
-- [ ] **T5.1 — Lote WALLET (8 archivos, 70 líneas)**: `tests/integration/wallet-tiendas-desglose`
+- [x] **T5.1 — Lote WALLET (8 archivos, 70 líneas)**: `tests/integration/wallet-tiendas-desglose`
   (22), `tests/integration/wallet-tiendas-pago` (13), `tests/integration/mi-wallet-page` (13),
   `tests/unit/components/wallet-desglose-egresos-card` (8), `tests/integration/wallet-mensajeros-page`
   (8), `tests/components/WalletMensajerosAvisoBrutos` (4),
@@ -212,37 +218,37 @@ leader). **Se releen una a una.** Cada lote se cierra con `./init.sh --rapido`.
   `tests/unit/components/wallet-gastos-fijos-panel` (1).
   **Hecho:** los 8 verdes; ninguna aserción de importe quedó como `expect(...).toBeTruthy()` ni
   equivalente. Aporta a **R12** y **R20**.
-- [ ] **T5.2 [P] — Lote CIERRES (6 archivos, 52 líneas)**: `CierresAdminModule` (20),
+- [x] **T5.2 [P] — Lote CIERRES (6 archivos, 52 líneas)**: `CierresAdminModule` (20),
   `CierreDiaModule` (15), `CierresAdminPagoMensajero` (7), `CierreDetallePagos` (7),
   `CierreDiaModuleIncidente` (2), `CierreDetalleIncidente` (1).
   **Hecho:** los 6 verdes; los desgloses que suman (efectivo/simpe/transferencia vs. general) se
   revisan contra A1/**R20**.
-- [ ] **T5.3 [P] — Lote PAGOS Y LIQUIDACIÓN (9 archivos, 47 líneas)**:
+- [x] **T5.3 [P] — Lote PAGOS Y LIQUIDACIÓN (9 archivos, 47 líneas)**:
   `tests/integration/mis-pagos-page` (10), `PagoMensajeroAcciones` (10),
   `paginacion/CuentasPorPagarPaginacion` (9), `PagosRegistradosTabla` (8), `CuentasPorPagarTable` (4),
   `tests/unit/components/desglose-tienda-labels` (2), `RegistrarPagoDialog` (2), `AnularPagoDialog`
   (1), `DesglosePagosMensajero` (1).
   **Hecho:** los 9 verdes. **Atención:** los mensajes de «excede lo disponible» de liquidación
   incrustan un importe formateado; se relee el texto completo, no solo el número.
-- [ ] **T5.4 [P] — Lote OPERACIÓN (8 archivos, 51 líneas)**: `CajaResumenCard` (16),
+- [x] **T5.4 [P] — Lote OPERACIÓN (8 archivos, 51 líneas)**: `CajaResumenCard` (16),
   `tests/unit/components/ordenes-columns` (9), `RepartoPrevisualizacion` (8), `PanelConciliacion` (6),
   `IncidentesAdminModule` (6), `RechazosSlaModule` (3), `NovedadesModule` (2), `RecogerModule` (1).
   **Hecho:** los 8 verdes. `ordenes-columns` es money-safe vigilado por la guardia de la 204: se
   revisa que **ninguna** edición introduzca una conversión.
-- [ ] **T5.5 [P] — Lote PRECIO, RANKING Y ANALÍTICA (5 archivos, 16 líneas)**: `PriceLabel` (11),
+- [x] **T5.5 [P] — Lote PRECIO, RANKING Y ANALÍTICA (5 archivos, 16 líneas)**: `PriceLabel` (11),
   `descarga/RankingHistoricoDescarga` (2), `RankingHistoricoModule` (1), `TableroFinanciero` (1),
   `AnalyticsKpiCard` (1).
   **Hecho:** los 5 verdes. **Dos cuidados:** (a) `RankingHistoricoDescarga` toca **descargas** — si
   alguna aserción afirma el contenido del archivo descargado, **conserva los céntimos** (R16), no se
   redondea; (b) `AnalyticsKpiCard` y `TableroFinanciero` mezclan moneda con porcentaje/duración: solo
   se toca la moneda (**R15**).
-- [ ] **T5.6 — Los 2 archivos de test de `lib/` del censo**: `tests/unit/services/`
+- [x] **T5.6 — Los 2 archivos de test de `lib/` del censo**: `tests/unit/services/`
   `indemnizacion-tope-negocio-incidente` (1) y `tests/unit/analytics/`
   `financiera-unidad-de-vistas.guardia` (1). *Es `backend_dev`, pero se cierra aquí para no partir el
   censo.*
   **Hecho:** los 2 verdes. **Ojo:** el segundo es una **guardia**; si su aserción de importe es sobre
   el **DTO** (frontera, escala 2) y no sobre lo pintado, **no se toca** — y se deja escrito por qué.
-- [ ] **T5.7 — Barrido de cierre del censo.** Volver a contar las apariciones de un importe con dos
+- [x] **T5.7 — Barrido de cierre del censo.** Volver a contar las apariciones de un importe con dos
   decimales en `tests/**`.
   **Hecho:** las que queden están **justificadas una a una** en `progress/impl_230.md` (frontera de
   escala 2, contenido de descarga, o afirmación sobre el DTO). Cero sin justificar.
@@ -253,20 +259,23 @@ leader). **Se releen una a una.** Cada lote se cierra con `./init.sh --rapido`.
 
 Depende de: todos los anteriores.
 
-- [ ] **T6.1 — `./init.sh` completo, verde.** Sin excepción, antes del PR
+- [ ] **T6.1 — `./init.sh` completo, verde.** *(pendiente: lo corre el leader antes del PR; los
+  implementadores cerraron con `./init.sh --rapido` + `test:guardias` aparte)* Sin excepción, antes del PR
   (`docs/verification.md`; la lección de los PR #209 y #237).
   **Hecho:** typecheck 0, lint 0 errores, suite entera verde; el conteo de archivos/tests queda
   pegado en `progress/impl_230.md`.
-- [ ] **T6.2 — Mapa `R<n> → test` en `progress/impl_230.md`**, con el **nombre del test ejecutado**,
+- [x] **T6.2 — Mapa `R<n> → test` en `progress/impl_230.md`**, con el **nombre del test ejecutado**,
   no con el archivo.
   **Hecho:** los **20** requisitos tienen su test nombrado y su salida real. El reviewer rechaza si
   falta uno (`docs/specs.md` §Trazabilidad).
-- [ ] **T6.3 — Verificación a ojo (una pantalla real).** Abrir wallet, un cierre y el listado de
+- [x] **T6.3 — Verificación a ojo (una pantalla real).** *(**HECHO**: ver `progress/impl_230_pantallas.md` (B2 cerrado por el reviewer en 2.a pasada) y lo
+  lleva el leader)* Abrir wallet, un cierre y el listado de
   órdenes con la app corriendo.
   **Hecho:** captura o descripción en `progress/impl_230.md` de al menos **tres** pantallas sin
   céntimos, incluida la del **resumen de carga** (T4.1). *(«Ver la app encuentra lo que la suite
   no».)*
-- [ ] **T6.4 — PR contra `dev`** con el resumen de la superficie: 4 archivos de producción, 1 guardia
+- [ ] **T6.4 — PR contra `dev`** *(pendiente: tras T6.1)* con el resumen de la superficie: **6**
+  archivos de producción —los 4 del design más los 2 que cierra B1 del review—, 1 guardia
   nueva, ~42 archivos de test tocados (los 39 del censo + la guardia + los de T4.1/T4.2),
   **0 migraciones**.
   **Hecho:** PR abierto tras T6.1, no antes.

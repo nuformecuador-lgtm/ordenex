@@ -31,7 +31,12 @@ import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { RECHAZADO_BLOQUEANTE_LABEL } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
+import { montoValido } from "@/components/shared/monto-cliente";
 import type { IncidenteAdminDTO } from "@/lib/interfaces/services/IIncidenteAdminService";
+import {
+  LLAMADAS_PROHIBIDAS_EN_DINERO,
+  codigoSinComentarios,
+} from "@/tests/fixtures/money-safe";
 
 // Feature 158 (T2.8 — R49/R50/R54/R55, camino del ADMIN) — la cola de aprobación de
 // incidentes de `/incidentes`, espejo de `CierresAdminModule` (38).
@@ -338,7 +343,39 @@ describe("Feature 158 (T2.8) — R50/R55: no se aprueba con un monto inválido",
       target: { value: "99999999999.99" }, // 11 dígitos enteros
     });
     expect(confirmar).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent(MONTO_EXCEDE);
+    // ⚠️ El esperado es un LITERAL, no `MONTO_EXCEDE`. Hasta la 230 esta línea comparaba la
+    // constante contra sí misma: afirmaba una tautología, y por eso ningún rojo delató que el
+    // mensaje hubiera pasado a anunciar `₡10.000.000.000` —un tope que la propia pantalla
+    // rechaza—. Escrito el texto entero, cualquier cambio del tope pintado cae aquí.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "El monto no puede superar ₡9.999.999.999 (10 dígitos y 2 decimales). Revisá si sobra un dígito.",
+    );
+  });
+
+  it("el tope que ANUNCIA el mensaje es un monto que el validador ACEPTA", async () => {
+    // La invariante detrás del literal de arriba, y la que de verdad importa: un máximo no
+    // puede redondearse AL ALZA, porque entonces el texto ofrece como válido algo que el
+    // borde rechaza. Se extrae la cifra del propio mensaje —sin escribirla otra vez— y se le
+    // pasa al MISMO validador que gobierna el botón.
+    const anunciado = /₡[\d.]+/.exec(MONTO_EXCEDE)?.[0] ?? "";
+    expect(anunciado).not.toBe("");
+    const digitos = anunciado.replace(/\D/g, "");
+
+    expect(montoValido(digitos, INDEMNIZACION_MONTO_MAX)).toBe(true);
+    // Y la contraprueba, con lo que el mensaje decía cuando estaba mal: el redondeo al alza
+    // añadía un dígito y ese monto NO pasa. Si alguien lo devuelve, la línea de arriba cae.
+    expect(montoValido("10000000000", INDEMNIZACION_MONTO_MAX)).toBe(false);
+    // El contrato de datos NO se toca en esta feature: sigue siendo el de la columna.
+    expect(INDEMNIZACION_MONTO_MAX).toBe("9999999999.99");
+  });
+
+  it("la ayuda del campo anuncia el MISMO tope que el error, y sin inflarlo", async () => {
+    const user = userEvent.setup();
+    await abrirAprobacion(user);
+    const ayuda = screen.getByText(/Mayor que 0 y hasta/);
+    expect(ayuda).toHaveTextContent(
+      "Mayor que 0 y hasta ₡9.999.999.999, con hasta 2 decimales (por ejemplo 12500.00).",
+    );
   });
 
   it("el máximo EXACTO se acepta (la frontera se caza por los DOS lados)", async () => {
@@ -447,8 +484,8 @@ describe("Feature 158 (T2.8) — R54: no se rechaza sin motivo", () => {
   });
 });
 
-describe("Feature 158 (T2.8) — R55: los montos se renderizan TAL CUAL", () => {
-  it("el histórico pinta el STRING del servidor sin re-formatear", () => {
+describe("Feature 158 (T2.8) — R55: los montos salen del STRING del servidor", () => {
+  it("el histórico pinta el importe del servidor, redondeado y agrupado", () => {
     montar({
       historico: [
         makeIncidente({
@@ -458,18 +495,22 @@ describe("Feature 158 (T2.8) — R55: los montos se renderizan TAL CUAL", () => 
         }),
       ],
     });
-    expect(screen.getByText("₡1.234.567,89")).toBeInTheDocument();
+    // Feature 230: el `,89` no se pinta, sube la unidad. Truncar daría `₡1.234.567`.
+    expect(screen.getByText("₡1.234.568")).toBeInTheDocument();
   });
 
-  // ⚠️ El caso de arriba NO basta y se midió: `parseFloat("1234567.89")` devuelve el MISMO
-  // texto, así que un render con `parseFloat` pasaría igual (mutación L, §mutaciones del
-  // impl). Un monto de dinero real llega SIEMPRE con escala 2, y ahí el `parseFloat` sí se
-  // nota: los ceros de la derecha desaparecen. Éste es el caso que mata la mutación.
+  // ⚠️ LO QUE ESTE BLOQUE PERDIÓ CON LA 230, dicho en voz alta. Estos tres casos existían
+  // para matar una mutación concreta: renderizar con `parseFloat`, que se come los ceros de
+  // la derecha de un importe de escala 2 (`"12500.00"` -> `12500`). Desde la 230 la pantalla
+  // YA NO pinta los decimales, así que esa diferencia dejó de ser observable desde el DOM y
+  // la mutación pasaría por aquí sin que nadie la viera. No se maquilla: los tres casos
+  // pasan a afirmar el REDONDEO —que sí se ve, y distingue redondear de truncar— y el
+  // barrido money-safe del final del bloque recupera lo que se perdió, mirando el fuente.
   it.each([
-    ["12500.00", "₡12.500,00"],
-    ["1200.50", "₡1.200,50"],
-    ["0.10", "₡0,10"],
-  ])("el monto «%s» conserva sus decimales (un `parseFloat` los comería)", (valor, pintado) => {
+    ["12500.00", "₡12.500"],
+    ["1200.50", "₡1.201"], // el medio se aleja del cero; truncar daría ₡1.200
+    ["0.10", "₡0"], // ⚠️ una indemnización real de diez céntimos se lee «₡0» (A2)
+  ])("el monto «%s» se pinta redondeado, sin cola decimal", (valor, pintado) => {
     montar({
       historico: [
         makeIncidente({ incidenteId: "i2", estado: "aprobado", indemnizacion: valor }),
@@ -478,7 +519,22 @@ describe("Feature 158 (T2.8) — R55: los montos se renderizan TAL CUAL", () => 
     expect(screen.getByText(pintado)).toBeInTheDocument();
   });
 
-  it("un rechazado no tiene monto y se pinta «—», no «₡0,00»", () => {
+  it("el módulo no convierte ningún monto a número (money-safe, R55)", () => {
+    // La red que reemplaza a la de arriba, en el único sitio donde ya se puede medir:
+    // el CÓDIGO. Sin esto, un `parseFloat` metido en la celda del histórico no rompería
+    // ni un solo caso de este archivo.
+    const codigo = codigoSinComentarios(
+      "app/(app)/incidentes/_components/IncidentesAdminModule.tsx",
+    );
+    for (const prohibida of LLAMADAS_PROHIBIDAS_EN_DINERO) {
+      expect(codigo, `el módulo llama a ${prohibida}`).not.toMatch(prohibida);
+    }
+    // Y la contraprueba, para que el barrido no pase por no mirar nada.
+    expect(codigo.length).toBeGreaterThan(1000);
+    expect("const x = parseFloat(monto);").toMatch(LLAMADAS_PROHIBIDAS_EN_DINERO[1]);
+  });
+
+  it("un rechazado no tiene monto y se pinta «—», no «₡0»", () => {
     montar({
       historico: [
         makeIncidente({
@@ -490,7 +546,7 @@ describe("Feature 158 (T2.8) — R55: los montos se renderizan TAL CUAL", () => 
       ],
     });
     const tabla = screen.getByRole("table", { name: TITULO_HISTORICO });
-    expect(within(tabla).queryByText("₡0,00")).toBeNull();
+    expect(within(tabla).queryByText("₡0")).toBeNull();
   });
 });
 

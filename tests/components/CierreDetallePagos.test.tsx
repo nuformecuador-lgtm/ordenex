@@ -174,7 +174,7 @@ describe("Feature 213 — desglose de pago en la tabla del detalle (cierre-detal
       }),
     );
 
-    expect(celdaMetodo(region)).toBe("Efectivo ₡5.000,00 + Transferencia ₡3.000,00");
+    expect(celdaMetodo(region)).toBe("Efectivo ₡5.000 + Transferencia ₡3.000");
   });
 
   it("R22/R23: sin líneas la celda sigue siendo «—», aunque la gestión traiga el escalar", () => {
@@ -200,7 +200,7 @@ describe("Feature 213 — desglose de pago en la tabla del detalle (cierre-detal
     );
 
     expect(celdaMetodo(region)).toBe(
-      "Transferencia ₡3.000,00 + SINPE ₡2.000,00 + Efectivo ₡3.000,00",
+      "Transferencia ₡3.000 + SINPE ₡2.000 + Efectivo ₡3.000",
     );
   });
 
@@ -224,7 +224,7 @@ describe("Feature 213 — desglose de pago en el comprobante (cierre-factura)", 
       gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
     );
 
-    expect(texto).toBe("₡8.000,00 · SINPE");
+    expect(texto).toBe("₡8.000 · SINPE");
   });
 
   it("R21: dos líneas ponen los DOS métodos con su monto junto a lo recibido", async () => {
@@ -237,7 +237,7 @@ describe("Feature 213 — desglose de pago en el comprobante (cierre-factura)", 
       }),
     );
 
-    expect(texto).toBe("₡8.000,00 · Efectivo ₡5.000,00 + Transferencia ₡3.000,00");
+    expect(texto).toBe("₡8.000 · Efectivo ₡5.000 + Transferencia ₡3.000");
   });
 
   it("R22/R23: sin líneas la fila muestra SOLO el monto —lo mismo que hoy—, aunque la gestión traiga el escalar", async () => {
@@ -248,7 +248,7 @@ describe("Feature 213 — desglose de pago en el comprobante (cierre-factura)", 
       gruposConEntrega({ metodoPago: "SINPE", pagos: [] }),
     );
 
-    expect(texto).toBe("₡8.000,00");
+    expect(texto).toBe("₡8.000");
   });
 
   it("R24: se pinta el ORDEN del DTO, no el alfabético", async () => {
@@ -263,7 +263,7 @@ describe("Feature 213 — desglose de pago en el comprobante (cierre-factura)", 
     );
 
     expect(texto).toBe(
-      "₡8.000,00 · Transferencia ₡3.000,00 + SINPE ₡2.000,00 + Efectivo ₡3.000,00",
+      "₡8.000 · Transferencia ₡3.000 + SINPE ₡2.000 + Efectivo ₡3.000",
     );
   });
 
@@ -274,7 +274,7 @@ describe("Feature 213 — desglose de pago en el comprobante (cierre-factura)", 
       const texto = await recibidoEnFactura(
         gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
       );
-      expect(texto).toBe("₡8.000,00 · SINPE-MUTADO");
+      expect(texto).toBe("₡8.000 · SINPE-MUTADO");
     } finally {
       METODO_LABEL.SINPE = original;
     }

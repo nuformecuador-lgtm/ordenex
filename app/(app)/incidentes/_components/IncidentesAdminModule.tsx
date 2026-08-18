@@ -34,7 +34,11 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 // `EstadoHistoricoRotulo`: su marcador «bloqueante hasta re-solicitud» es del cierre del
 // mensajero y sería FALSO aquí (un incidente rechazado devuelve la orden a su origen y se
 // puede volver a reportar; no bloquea a nadie).
-import { money, EstadoCierreBadge } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
+import {
+  money,
+  moneyTope,
+  EstadoCierreBadge,
+} from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import {
   IncidentesHistoricoTabla,
@@ -101,16 +105,21 @@ export const APROBAR_DETALLE =
   "Al aprobar, el monto sale de la caja principal como un egreso de indemnización. La orden se queda en incidente: esta decisión no se deshace.";
 export const APROBAR_CONFIRMAR = "Aprobar e indemnizar";
 export const MONTO_LABEL = "Monto de la indemnización";
-export const MONTO_AYUDA = `Mayor que 0 y hasta ${money(INDEMNIZACION_MONTO_MAX)}, con hasta 2 decimales (por ejemplo 12500.00).`;
+export const MONTO_AYUDA = `Mayor que 0 y hasta ${moneyTope(INDEMNIZACION_MONTO_MAX)}, con hasta 2 decimales (por ejemplo 12500.00).`;
 /**
  * Mensajes POR CAUSA del monto inválido: dicen QUÉ corregir. Es la misma lección de m5 del PR 1
  * —un «monto inválido» único deja al admin adivinando si sobra un dígito o si el problema es la
  * coma—, con el máximo interpolado del contrato y no tecleado.
  */
-// Feature 201: el tope se pinta con `money` por la misma razón que en `CierresAdminModule`
-// —«₡9.999.999.999,99» se lee y `₡9999999999.99` se cuenta con el dedo—, y el EJEMPLO de
-// entrada se queda crudo porque el campo no admite separador de miles.
-export const MONTO_EXCEDE = `El monto no puede superar ${money(INDEMNIZACION_MONTO_MAX)} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
+// Feature 201: el tope se pinta agrupado por la misma razón que en `CierresAdminModule`
+// —«₡9.999.999.999» se lee de un vistazo y `₡9999999999.99` hay que contarlo con el dedo—, y
+// el EJEMPLO de entrada se queda crudo porque el campo no admite separador de miles.
+//
+// Feature 230: se pinta con `moneyTope`, NO con `money`. Un máximo no se redondea al alza:
+// `money` lo subía a `₡10.000.000.000`, que es un dígito más de los que la propia frase
+// anuncia y justo lo que el validador rechaza. `moneyTope` corta la cola y deja el mensaje
+// del lado estricto.
+export const MONTO_EXCEDE = `El monto no puede superar ${moneyTope(INDEMNIZACION_MONTO_MAX)} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
 export const MONTO_FORMATO =
   "Escribí un monto mayor que 0, con punto decimal y sin separador de miles (por ejemplo 12500.00).";
 

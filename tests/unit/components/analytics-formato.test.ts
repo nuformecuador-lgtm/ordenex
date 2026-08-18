@@ -114,7 +114,10 @@ describe("la moneda y el idioma salen de configuracion, no del codigo (R13, R20)
     const { formatearValor: formatear } = await conMoneda("es-CR", "USD", "$");
 
     const salida = formatear(3500, "moneda");
-    expect(salida).toBe("$3.500,00");
+    // Feature 230: el importe se pinta sin parte decimal (antes `$3.500,00`). El
+    // simbolo y la agrupacion siguen saliendo de configuracion, que es lo que
+    // este caso mide; el redondeo se define en `moneda-formato`.
+    expect(salida).toBe("$3.500");
     // Lo que de verdad se afirma: el simbolo NO esta escrito en el paquete.
     expect(salida).not.toContain("₡");
   });

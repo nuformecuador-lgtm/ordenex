@@ -167,6 +167,23 @@ sistema DEBE mostrar como total el **redondeo del total real**, no la suma de lo
 
 ## §4 Preguntas abiertas — para la puerta humana
 
+> **PUERTA PASADA EL 2026-08-18.** Las tres se respondieron; las respuestas quedan escritas aqui,
+> que es donde T0.1 las pide, y no solo en la ficha. Los enunciados originales se conservan intactos
+> debajo: lo que se decidio solo se entiende junto a lo que se preguntaba.
+>
+> | | Respuesta del humano | Consecuencia aplicada |
+> | --- | --- | --- |
+> | **Q1** | **(b) Conservar `separadorDecimal`, con oficio nuevo.** | Deja de ser «el separador que se pinta» y pasa a ser «el caracter que la guardia vigila», documentado asi. Se descarto (a) porque retirarlo obligaba a la guardia a escribir la coma **a mano**, que es el hardcode de contexto que `docs/architecture.md` prohibe. |
+> | **Q2** | **NO se confirma la frontera: el humano quiere que los centimos tampoco se puedan escribir.** | **Pero no aqui.** Eso toca el DATO, no la presentacion, y sale en **ficha 232**. Esta feature sigue siendo solo presentacion, asi que §1 no cambia: los formularios siguen aceptando centimos **hasta que la 232 entre**. |
+> | **Q3** | **Aceptadas** las cuatro contradicciones (C1–C4) con la resolucion que propone el design. | Sin cambios en el alcance. |
+>
+> **Lo que la respuesta a Q2 hizo aparecer, y no estaba en este spec:** al medirlo contra produccion
+> antes de decidir, los centimos resultaron estar **en el dato**, no solo en la pantalla —
+> `orden.monto_cobrar` 34 de 139 (24 %), `wallet_movimiento.monto` 20 de 82,
+> `wallet_tienda_movimiento.monto` 17 de 70 — y **cero** en todo lo que se teclea a mano. Con eso
+> delante, el humano eligio cubrir **los tres grupos** (teclado, carga masiva y **aritmetica**) en la
+> 232. Esta feature no toca ninguno de los tres.
+
 > No se deciden aquí. Cada una lleva su medición y el coste de cada opción.
 
 ### Q1 — ¿Qué se hace con `separadorDecimal`, que se queda sin consumidores?

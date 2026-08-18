@@ -356,9 +356,10 @@ describe("DesglosePagosMensajero — desglose por cierre del maestro (R18)", () 
     expect(within(filas[1]).getByText("2026-07-12")).toBeInTheDocument();
     expect(within(filas[2]).getByText("2026-07-05")).toBeInTheDocument();
 
-    // Money-safe (R21/R27): los montos se renderizan TAL CUAL (STRING con simbolo).
-    expect(within(tabla).getByText("₡3.000,00")).toBeInTheDocument();
-    expect(within(tabla).getByText("₡5.000,00")).toBeInTheDocument();
+    // Money-safe (R21/R27): los montos salen del STRING del servidor, por el formateador
+    // compartido y sin recalcular nada (feature 230: sin la cola de centimos).
+    expect(within(tabla).getByText("₡3.000")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡5.000")).toBeInTheDocument();
   });
 });
 
@@ -403,8 +404,8 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
     // Espera a que la carga inicial (sin filtros) resuelva y renderice sus movimientos.
     await screen.findByText("2026-07-12");
     const saldo = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    // Carga inicial: el saldo muestra el agregado (cuentaPorPagar ₡2.000,00).
-    expect(within(saldo).getByText("₡2.000,00")).toBeInTheDocument();
+    // Carga inicial: el saldo muestra el agregado (cuentaPorPagar ₡2.000).
+    expect(within(saldo).getByText("₡2.000")).toBeInTheDocument();
 
     // La siguiente carga (al filtrar) devuelve el saldo del conjunto filtrado.
     desgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
@@ -416,11 +417,11 @@ describe("DesglosePagosMensajero — filtros server-side fecha/cierre (R22)", ()
       screen.getByRole("form", { name: "Filtros del desglose de Ana Mensajera" }),
     );
 
-    // R22: el saldo se recalcula desde result.data.cuenta (cuentaPorPagar ₡1.500,00), y ya no
-    // muestra el agregado (₡2.000,00).
+    // R22: el saldo se recalcula desde result.data.cuenta (cuentaPorPagar ₡1.500), y ya no
+    // muestra el agregado (₡2.000).
     await waitFor(() =>
-      expect(within(saldo).getByText("₡1.500,00")).toBeInTheDocument(),
+      expect(within(saldo).getByText("₡1.500")).toBeInTheDocument(),
     );
-    expect(within(saldo).queryByText("₡2.000,00")).not.toBeInTheDocument();
+    expect(within(saldo).queryByText("₡2.000")).not.toBeInTheDocument();
   });
 });

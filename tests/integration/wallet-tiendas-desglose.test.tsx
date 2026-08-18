@@ -63,6 +63,10 @@ vi.mock("next/navigation", () => ({
 import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable";
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import {
+  LLAMADAS_PROHIBIDAS_EN_DINERO,
+  codigoSinComentarios,
+} from "@/tests/fixtures/money-safe";
+import {
   DesgloseMovimientosTienda,
   claveDesgloseTienda,
 } from "@/app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda";
@@ -357,14 +361,14 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     // Nada se recalcula aquí: si el cliente hiciera la resta, un `Number()` intermedio ya
     // podría perder el céntimo. Y cuadran: 10000 − 1000 − 0 = 9000.
     expect(bloques.map(cifraDe)).toEqual([
-      "₡10.000,00",
-      "₡1.000,00",
-      "₡0,00",
-      "₡9.000,00",
+      "₡10.000",
+      "₡1.000",
+      "₡0",
+      "₡9.000",
     ]);
   });
 
-  it("R43: «Pagado a la tienda» se muestra en 0,00 — un cero verdadero, no un «no disponible»", async () => {
+  it("R43: «Pagado a la tienda» se muestra en ₡0 — un cero verdadero, no un «no disponible»", async () => {
     // Hoy ningún flujo emite un pago a tienda (lo cierra la 172), así que la cifra sale
     // siempre cero. Se enseña IGUAL: el servidor la lee de la categoría real del libro, y
     // ocultarla o pintarla como «sin datos» obligaría a rehacer la cabecera el día que
@@ -376,8 +380,8 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     const bloque = importesDeCabecera(region)[2];
     expect(rotuloDe(bloque)).toBe("Pagado a la tienda");
     // Y no es un texto de ausencia («—», que es lo que se ve mientras carga): la cifra está,
-    // con su símbolo y sus dos decimales.
-    await waitFor(() => expect(cifraDe(bloque)).toBe("₡0,00"));
+    // con su símbolo (feature 230: sin cola de céntimos, pero cifra al fin).
+    await waitFor(() => expect(cifraDe(bloque)).toBe("₡0"));
   });
 
   it("R43 (contraprueba): el día que haya un pago, la MISMA cabecera lo refleja sin tocar nada", async () => {
@@ -399,9 +403,9 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     const region = await desplegar("Tienda Norte");
 
     await waitFor(() =>
-      expect(within(region).getByText("₡4.000,00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡4.000")).toBeInTheDocument(),
     );
-    expect(within(region).getByText("₡5.000,00")).toBeInTheDocument();
+    expect(within(region).getByText("₡5.000")).toBeInTheDocument();
   });
 
   it("R11: sin filtros, el saldo del desglose es el MISMO de la fila de esa tienda", async () => {
@@ -409,9 +413,9 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     const region = await desplegar("Tienda Norte");
     await waitFor(() => expect(listarDesgloseMock).toHaveBeenCalledTimes(1));
 
-    // La fila decía ₡9.000,00; el desglose sin filtros dice lo mismo, cifra y signo.
+    // La fila decía ₡9.000; el desglose sin filtros dice lo mismo, cifra y signo.
     await waitFor(() =>
-      expect(within(region).getByText("₡9.000,00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡9.000")).toBeInTheDocument(),
     );
     expect(within(region).getByText("A favor")).toBeInTheDocument();
   });
@@ -423,7 +427,7 @@ describe("R7/R11/R14/R43 — la cabecera de cuatro importes", () => {
     // Saldo negativo: la tienda le debe a Ordenex. La tabla lo llama «En contra»; el
     // desglose, también — porque leen del mismo mapa.
     await waitFor(() => expect(within(region).getByText("En contra")).toBeInTheDocument());
-    expect(within(region).getByText("-₡452,00")).toBeInTheDocument();
+    expect(within(region).getByText("-₡452")).toBeInTheDocument();
   });
 });
 
@@ -465,7 +469,23 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
     expect(within(tabla).getByText("Cierre del día · Cierre del 5")).toBeInTheDocument();
   });
 
-  it("money-safe: los montos se pintan TAL CUAL, con sus dos decimales", async () => {
+  it("los montos del servidor se pintan redondeados y agrupados, sin recalcular", async () => {
+    // ⚠️ Feature 230 — ESTE CASO SE QUEDO SIN PRESA Y SE LE DEVUELVE UNA. Se titulaba
+    // «money-safe: los montos se pintan TAL CUAL, con sus dos decimales» y afirmaba
+    // `₡10.000,00` / `₡1.000,00`. Sin la cola decimal, dos importes redondos como esos salen
+    // identicos con o sin un `Number(` por el medio: el titulo prometia una medida que ya no
+    // existia. Ahora el desglose responde con importes que SI discriminan —un acarreo que
+    // cambia de digito y uno de once digitos que no cabe en un `double`— y el barrido del
+    // caso siguiente cubre, sobre el FUENTE, lo que el DOM ya no puede ver.
+    responderPorTienda({
+      t1: {
+        ...DESGLOSE_NORTE,
+        movimientos: [
+          mov({ id: "m2", monto: "999.99" }),
+          mov({ id: "m1", monto: "12345678901.99", fechaMovimiento: "2026-07-05T10:00:00.000Z" }),
+        ],
+      },
+    });
     renderTabla();
     await desplegar("Tienda Norte");
 
@@ -473,8 +493,26 @@ describe("R15/R16/R20/R21 — la lista de movimientos", () => {
       name: "Movimientos del desglose de Tienda Norte",
     });
     await within(tabla).findByText("2026-07-12");
-    expect(within(tabla).getByText("₡10.000,00")).toBeInTheDocument();
-    expect(within(tabla).getByText("₡1.000,00")).toBeInTheDocument();
+    // El acarreo añade un digito y REAGRUPA: truncar daria `₡999`.
+    expect(within(tabla).getByText("₡1.000")).toBeInTheDocument();
+    // Y el de once digitos redondea exacto: `₡12.345.678.901` seria el truncado.
+    expect(within(tabla).getByText("₡12.345.678.902")).toBeInTheDocument();
+  });
+
+  it("el panel del desglose no convierte ningun monto a numero (money-safe)", () => {
+    // La red que el caso de arriba perdio, en el unico sitio donde todavia se puede medir: el
+    // CODIGO. Este componente no lo cubre ningun barrido —el de la 172 censa
+    // `components/shared/liquidacion` y los `*Liquidacion*` de `lib/`—, asi que sin esto un
+    // `parseFloat` en la celda del monto no rompe ni un solo test del repo.
+    const fuente = codigoSinComentarios(
+      "app/(app)/wallet/tiendas/_components/DesgloseMovimientosTienda.tsx",
+    );
+    for (const prohibida of LLAMADAS_PROHIBIDAS_EN_DINERO) {
+      expect(fuente, `el panel llama a ${prohibida}`).not.toMatch(prohibida);
+    }
+    // Contraprueba, para que el barrido no pase por no mirar nada.
+    expect(fuente.length).toBeGreaterThan(1000);
+    expect("const x = Number(monto);").toMatch(LLAMADAS_PROHIBIDAS_EN_DINERO[0]);
   });
 
   it("R21: el conjunto filtrado sin movimientos lo DICE, no deja una tabla muda", async () => {
@@ -573,7 +611,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
     await waitFor(() =>
-      expect(within(region).getByText("₡9.000,00")).toBeInTheDocument(),
+      expect(within(region).getByText("₡9.000")).toBeInTheDocument(),
     );
 
     listarDesgloseMock.mockResolvedValueOnce({ status: "ok", data: DESGLOSE_FILTRADO });
@@ -585,10 +623,10 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     );
 
     await waitFor(() =>
-      expect(within(region).getByText("-₡1.000,00")).toBeInTheDocument(),
+      expect(within(region).getByText("-₡1.000")).toBeInTheDocument(),
     );
     // Y el agregado de antes ya no está: la cabecera habla del conjunto que se está viendo.
-    expect(within(region).queryByText("₡9.000,00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡9.000")).not.toBeInTheDocument();
   });
 
   it("R12: mientras vuela la recarga filtrada, el saldo NO enseña la cifra sin filtrar", async () => {
@@ -598,7 +636,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     // así que hasta que llegue la respuesta el saldo también es «—».
     renderTabla([NORTE]);
     const region = await desplegar("Tienda Norte");
-    await waitFor(() => expect(within(region).getByText("₡9.000,00")).toBeInTheDocument());
+    await waitFor(() => expect(within(region).getByText("₡9.000")).toBeInTheDocument());
 
     // La recarga filtrada se deja EN VUELO a propósito: es el instante del defecto.
     let resolver: (v: unknown) => void = () => {};
@@ -621,8 +659,8 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
     await act(async () => {
       resolver({ status: "ok", data: DESGLOSE_FILTRADO });
     });
-    await waitFor(() => expect(cifraDe(saldo())).toBe("-₡1.000,00"));
-    expect(within(region).queryByText("₡9.000,00")).not.toBeInTheDocument();
+    await waitFor(() => expect(cifraDe(saldo())).toBe("-₡1.000"));
+    expect(within(region).queryByText("₡9.000")).not.toBeInTheDocument();
   });
 
   it("R3/R36: filtrar en una fila abierta NO vuelve a consultar la otra", async () => {
@@ -653,7 +691,7 @@ describe("R17/R18/R19/R36 — paginación y filtros, resueltos en el servidor", 
       listarDesgloseMock.mock.calls.filter(([i]) => i.tiendaId === "t2").length,
     ).toBe(llamadasSurAntes);
     // Y su contenido sigue en pie, con SUS cifras.
-    expect(within(regionSur).getByText("-₡452,00")).toBeInTheDocument();
+    expect(within(regionSur).getByText("-₡452")).toBeInTheDocument();
   });
 
   it("R44: `pago_tienda` es una opción del filtro por concepto", async () => {
@@ -755,7 +793,7 @@ describe("R5 — un desglose que falla no se lleva por delante la pantalla", () 
     expect(within(saldos).getByText("Tienda Sur")).toBeInTheDocument();
     // …y el desglose de la otra tienda cargó igual.
     await waitFor(() =>
-      expect(within(regionSur).getByText("-₡452,00")).toBeInTheDocument(),
+      expect(within(regionSur).getByText("-₡452")).toBeInTheDocument(),
     );
     expect(within(regionSur).queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -877,8 +915,8 @@ describe("R6 — la tabla de saldos sigue siendo la de antes", () => {
     // propio nombre accesible; las tres de datos no cambian.
     expect(cabeceras).toEqual(["Desglose", "Tienda", "Saldo a favor", "Estado"]);
 
-    expect(within(tabla).getByText("₡9.000,00")).toBeInTheDocument();
-    expect(within(tabla).getByText("-₡452,00")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡9.000")).toBeInTheDocument();
+    expect(within(tabla).getByText("-₡452")).toBeInTheDocument();
     expect(within(tabla).getByText("A favor")).toBeInTheDocument();
     expect(within(tabla).getByText("En contra")).toBeInTheDocument();
 
