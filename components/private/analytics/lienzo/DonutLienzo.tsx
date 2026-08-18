@@ -15,7 +15,8 @@
 import { Cell, Label, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { varDeSerie } from "../paleta";
-import type { AnilloProps, LienzoProps } from "./tipos-lienzo";
+import { cifraConPeso } from "../porcentajes";
+import type { AnilloProps, DonutLienzoProps, LienzoProps } from "./tipos-lienzo";
 
 /** Los valores con los que el donut lleva dibujandose desde la 130. */
 const RADIO_INTERIOR_DEFAULT = "55%";
@@ -79,8 +80,10 @@ export function etiquetaDeLeyenda(
   nombre: string,
   valor: number | null,
   formatear: (valor: number | null) => string,
+  peso?: string,
 ): string {
-  return valor === null ? nombre : `${nombre}: ${formatear(valor)}`;
+  if (valor === null) return nombre;
+  return `${nombre}: ${cifraConPeso(formatear(valor), peso)}`;
 }
 
 /** Anchura de la columna de la leyenda lateral. */
@@ -94,7 +97,8 @@ export function DonutLienzo({
   centro,
   leyenda = "abajo",
   mostrarValores = false,
-}: LienzoProps & AnilloProps) {
+  pesos,
+}: LienzoProps & AnilloProps & DonutLienzoProps) {
   const segmentos = (series[0]?.puntos ?? []).map((punto) => ({
     name: punto.categoria,
     value: punto.valor,
@@ -123,8 +127,14 @@ export function DonutLienzo({
           // es como lleva dibujandose desde la 130.
           label={
             mostrarValores
-              ? ({ value }: { value?: number | null }) =>
-                  formatear(typeof value === "number" ? value : null)
+              ? ({ value, index }: { value?: number | null; index?: number }) =>
+                  cifraConPeso(
+                    formatear(typeof value === "number" ? value : null),
+                    // `index` es la POSICION del sector, la misma con la que se calcularon los
+                    // pesos y con la que se colorea. Recharts la pasa siempre; el `undefined`
+                    // solo deja la cifra sin peso, nunca el peso de otra porcion.
+                    typeof index === "number" ? pesos?.[index] : undefined,
+                  )
               : false
           }
           labelLine={mostrarValores}
@@ -164,7 +174,12 @@ export function DonutLienzo({
                 width: ANCHO_LEYENDA,
                 payload: segmentos.map((segmento, indice) => ({
                   id: segmento.name,
-                  value: etiquetaDeLeyenda(segmento.name, segmento.value, formatear),
+                  value: etiquetaDeLeyenda(
+                    segmento.name,
+                    segmento.value,
+                    formatear,
+                    pesos?.[indice],
+                  ),
                   type: "square" as const,
                   color: varDeSerie(indice),
                 })),

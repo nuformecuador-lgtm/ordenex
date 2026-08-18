@@ -17,6 +17,7 @@
 import { Suspense, lazy } from "react";
 
 import { formatearValor } from "./formato";
+import { porcentajesDeReparto } from "./porcentajes";
 import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
 import type { AnilloProps, GraficaProps, SerieDato } from "./tipos";
@@ -66,9 +67,25 @@ export function GraficaDonut({
   centro,
   leyenda,
   mostrarValores,
+  mostrarPorcentaje,
 }: GraficaDonutProps) {
   const hayDatos = series.some((serie) => serie.puntos.length > 0);
   const preparadas = hayDatos && !error && !cargando ? prepararSegmentos(series) : null;
+
+  // El PESO de cada porcion, calculado UNA vez y aqui —no en el lienzo— porque lo dicen DOS
+  // salidas: el dibujo (leyenda y texto sobre la porcion) y la alternativa textual, que no pasa
+  // por el lienzo. Con dos cuentas, el numero que se ve y el que lee un lector de pantalla
+  // podrian discrepar.
+  //
+  // `porcentajesDeReparto` reparte por resto mayor (suma 100 % exacto) y devuelve FRACCIONES,
+  // que es lo que `formatearValor(_, "porcentaje")` espera: el simbolo y el locale los pone el
+  // formateador de la casa, aqui no se escribe ni un `%`.
+  const pesos =
+    mostrarPorcentaje && preparadas
+      ? porcentajesDeReparto(preparadas.series[0]?.puntos.map((punto) => punto.valor) ?? []).map(
+          (fraccion) => formatearValor(fraccion, "porcentaje"),
+        )
+      : undefined;
 
   return (
     <GraficaMarco
@@ -92,6 +109,7 @@ export function GraficaDonut({
                 centro={centro}
                 leyenda={leyenda}
                 mostrarValores={mostrarValores}
+                pesos={pesos}
               />
             </Suspense>
           </div>
@@ -102,6 +120,7 @@ export function GraficaDonut({
             recorteSeries={preparadas.recorteSegmentos}
             recortePuntos={{ recortado: false, mostrados: 0, recibidos: 0 }}
             avisoRecorte={avisoRecorte}
+            pesos={pesos}
           />
         </>
       ) : null}

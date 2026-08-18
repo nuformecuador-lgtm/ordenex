@@ -1127,3 +1127,43 @@ body:has(> .dark) {
     animation: none;
   }
 }
+
+/*
+ * Feature del 2026-08-18 — LAS BARRAS DE LAS GRÁFICAS CRECEN AL APARECER.
+ *
+ * `GraficaReparto` y `GraficaRanking` no dibujan con recharts —son rectángulos de anchura
+ * porcentual— así que no heredan su animación de entrada. Ésta la repone, y en CSS a propósito:
+ * la de recharts es JavaScript y por eso NO la alcanza `prefers-reduced-motion` (lo documenta
+ * `lienzo/DonutLienzo.tsx`); una animación CSS sí, y el bloque de abajo la apaga sin que ningún
+ * componente tenga que detectar nada.
+ *
+ * Los 600 ms son los mismos de `ANIMACION_MS` en el lienzo del donut: las gráficas de la misma
+ * pantalla entran al mismo ritmo.
+ *
+ * `scaleX` y no `width`: la anchura la fija el dato en un `style` inline, y animarla obligaría a
+ * escribir dos valores del mismo número. Con la escala, el dato manda el ancho final y la
+ * animación solo la recorre.
+ */
+:root {
+  --grafica-barra-ms: 600ms;
+}
+
+@keyframes grafica-barra-crece {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.grafica-barra-crece {
+  animation: grafica-barra-crece var(--grafica-barra-ms) ease-out both;
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grafica-barra-crece {
+    animation: none;
+  }
+}

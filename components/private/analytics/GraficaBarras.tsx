@@ -15,7 +15,7 @@ import { Suspense, lazy } from "react";
 import { formatearValor } from "./formato";
 import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
-import type { GraficaProps } from "./tipos";
+import type { BarrasProps, GraficaProps } from "./tipos";
 import { prepararSeries } from "./topes";
 
 const BarrasLienzo = lazy(() => import("./lienzo/BarrasLienzo"));
@@ -30,8 +30,12 @@ export function GraficaBarras({
   error,
   className,
   proporcion,
-}: GraficaProps) {
+  apilado,
+  horizontal,
+  grosorBarra,
+}: GraficaProps & BarrasProps) {
   const hayDatos = series.some((serie) => serie.puntos.length > 0);
+
   // Los topes solo se aplican cuando hay algo que pintar: con error o cargando
   // no hay dato que recortar y lanzar ahi seria ruido sin informacion.
   const preparadas = hayDatos && !error && !cargando ? prepararSeries(series) : null;
@@ -53,6 +57,9 @@ export function GraficaBarras({
               <BarrasLienzo
                 series={preparadas.series}
                 formatear={(valor) => formatearValor(valor, unidad)}
+                apilado={apilado}
+                horizontal={horizontal}
+                grosorBarra={grosorBarra}
               />
             </Suspense>
           </div>

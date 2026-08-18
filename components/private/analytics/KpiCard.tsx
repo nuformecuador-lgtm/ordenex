@@ -39,7 +39,18 @@ export function KpiCard({
   className,
 }: KpiCardProps) {
   return (
-    <Card className={cn("w-full gap-1 p-4", className)}>
+    // `h-full`: la tarjeta ocupa TODO el alto de su celda, no el de su contenido.
+    //
+    // Sin esto, cada KPI mide lo que mide su texto y una fila de tarjetas queda con los bordes
+    // inferiores a distintas alturas —basta que un rotulo ocupe dos lineas y otro una—, que se
+    // lee como si estuvieran mal alineadas. NO es un alto FIJO: no hay `h-[120px]` ni `min-h`
+    // en pixeles; el alto lo decide la fila (la celda mas alta manda) y las demas la igualan,
+    // asi que la tarjeta sigue creciendo si su contenido crece.
+    //
+    // Funciona porque una celda de grid se estira por defecto (`align-items: stretch`): la
+    // celda ya tiene el alto de la fila y `h-full` hace que la tarjeta lo llene. Un
+    // `self-start` en la celda lo anula — por eso no debe haber ninguno alrededor de un KPI.
+    <Card className={cn("h-full w-full gap-1 p-4", className)}>
       <p className="text-sm text-muted-foreground">{etiqueta}</p>
       {error ? (
         <p role="alert" className="text-sm text-danger-strong">
