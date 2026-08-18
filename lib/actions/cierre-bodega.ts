@@ -353,8 +353,6 @@ export async function listarHistoricoCierresBodegaCompleto(
  * aqui, junto a las del lado adminSatelite, con su `buildCierresBodegaAdminService` ya cableado.
  * Se coloca donde estan sus hermanas —un modulo nuevo obligaria a duplicar el builder y el
  * traductor de errores— y se deja anotado para el reviewer.
- *
- * @sin-superficie TEMPORAL y con fecha de caducidad dentro de la MISMA feature 230: el borde de datos (T7.1-T7.3) aterriza antes que su montaje (T7.4), que es otra tanda y otro agente. Al montar el control en `CierresBodegaAdminModule`, esta anotacion se RETIRA en ese mismo commit — la segunda mitad de esta guardia la pone roja en cuanto la accion recupere superficie.
  */
 export async function listarGestionesCierresBodegaCompleto(
   input: unknown,

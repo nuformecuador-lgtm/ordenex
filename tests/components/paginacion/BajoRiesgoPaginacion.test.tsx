@@ -107,6 +107,9 @@ const { paginado, completo } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -125,6 +128,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
     paginado.cierresPendientes(...a),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   verCierreBodegaDetalle: vi.fn(),
   aprobarCierreBodega: vi.fn(),
   rechazarCierreBodega: vi.fn(),

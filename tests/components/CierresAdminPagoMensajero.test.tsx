@@ -44,6 +44,9 @@ import type { PagoRegistradoDTO, RegistrarPagoResult } from "@/lib/types/liquida
 // --- Dobles de las Server Actions ---------------------------------------
 
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),

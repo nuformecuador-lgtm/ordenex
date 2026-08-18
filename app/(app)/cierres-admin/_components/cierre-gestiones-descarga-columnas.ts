@@ -3,11 +3,20 @@
  * DETALLE de un cierre (`DetalleSecciones`): entregadas, reprogramadas, devueltas,
  * rechazadas e incidentes.
  *
- * **Una declaración POR SECCIÓN, y una descarga por sección** (decisión del humano, P2
- * ratificada). No hay un archivo único del cierre porque las cinco secciones no comparten
- * columnas: una entrega lleva método de pago y comisión; una reprogramación, la fecha nueva;
+ * **Una declaración POR SECCIÓN, y una descarga por sección** (decisión del humano, P2 de la
+ * feature 170). Cada sección declara sus columnas porque las cinco no comparten las
+ * específicas: una entrega lleva método de pago y comisión; una reprogramación, la fecha nueva;
  * un rechazo, el origen y el ingreso de bodega; un incidente, la causa y la indemnización.
- * Fundirlas daría una hoja llena de celdas vacías que nadie sabría leer.
+ * Fundirlas da una hoja con celdas vacías, y ése fue el motivo de no hacerlo aquí.
+ *
+ * **Feature 230 (2026-08-18): ese archivo único AHORA EXISTE**, en
+ * `cierres-gestiones-fundida-descarga-columnas.ts`, y su punto de entrada es otro: cruza los
+ * cierres de varios mensajeros desde los listados, no una sección de un cierre abierto. El
+ * humano vio el ejemplo con las celdas vacías y aceptó el coste para ESE caso de uso. **Las
+ * cinco descargas de este módulo NO se retiran** —siguen siendo la salida estrecha y legible de
+ * un cierre concreto—, así que lo de arriba sigue explicando por qué existen cinco y no una.
+ * La marca de evidencia (`TIENE_EVIDENCIA_*`, `tieneEvidencia`) es de ELLAS: la hoja fundida no
+ * lleva columna de evidencia en absoluto.
  *
  * **Lo que NO sale, y es el punto de esta tanda: la EVIDENCIA.** `evidenciaUrl` es una URL
  * FIRMADA: una hoja de cálculo que se reenvía por correo con esa URL dentro es un enlace a

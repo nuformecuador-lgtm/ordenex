@@ -57,14 +57,14 @@
 
 ## Tanda 3 — La declaración de columnas (26 columnas, decididas)
 
-- [ ] **T3.1 — Módulo `cierres-gestiones-fundida-descarga-columnas.ts`:**
+- [x] **T3.1 — Módulo `cierres-gestiones-fundida-descarga-columnas.ts`:**
       `COLUMNAS_DESCARGA_GESTIONES_FUNDIDA` (26 columnas, tabla de `design.md §6`) +
       `filaDescargaGestionFundida`. PURO. **Sin columna de evidencia.**
       **HECHO:** `columnas-sensibles.guardia.test.ts` lo descubre por convención y pasa; el
       módulo no importa React.
       *Depende de: T1.1, T1.3.*
 
-- [ ] **T3.2 — Test de orden y censo** en
+- [x] **T3.2 — Test de orden y censo** en
       `tests/unit/descarga/cierres-gestiones-fundida-descarga-columnas.test.ts`, con el esperado
       LITERAL de las 26 claves y los 26 encabezados (patrón de
       `cierre-gestiones-descarga-columnas.test.ts:38-72`).
@@ -72,12 +72,12 @@
       permuta de dos columnas pone rojo el caso.
       *Depende de: T3.1.*
 
-- [ ] **T3.3 — Tests de proyección por resultado** (cinco casos + invariantes de celda), con el
+- [x] **T3.3 — Tests de proyección por resultado** (cinco casos + invariantes de celda), con el
       vacío exacto de la tabla de `design.md §6`.
       **HECHO:** cubren R9, R10, R43, R44, R45, R46, R47.
       *Depende de: T3.1.*
 
-- [ ] **T3.4 — Test de ausencia de evidencia (R40/R41).** Un requisito que se cumple «porque la
+- [x] **T3.4 — Test de ausencia de evidencia (R40/R41).** Un requisito que se cumple «porque la
       columna no existe» necesita su test igual. Tres aserciones: (a) ninguna clave ni
       encabezado de `COLUMNAS_DESCARGA_GESTIONES_FUNDIDA` menciona evidencia; (b) la fila
       proyectada no tiene ninguna celda cuyo origen sea un campo de evidencia; (c) el DTO del
@@ -86,11 +86,11 @@
       (mutación comprobada).
       *Depende de: T3.1.*
 
-- [ ] **T3.5 [P] — Corregir la cabecera de `cierre-gestiones-descarga-columnas.ts`** con el
+- [x] **T3.5 [P] — Corregir la cabecera de `cierre-gestiones-descarga-columnas.ts`** con el
       texto de `design.md §8`. **Ni una línea de código de ese archivo.**
       **HECHO:** la guardia de T3.6 pasa y el `git diff` del archivo es solo comentario.
 
-- [ ] **T3.6 [P] — Guardia de la prosa (R52):** test que lee el archivo y falla si la cabecera
+- [x] **T3.6 [P] — Guardia de la prosa (R52):** test que lee el archivo y falla si la cabecera
       afirma que no existe un archivo único **y** falla si ha perdido la mención a la P2 de la
       170.
       **HECHO:** los dos canarios se comprueban con cadenas sintéticas (positivo y negativo),
@@ -100,7 +100,7 @@
 
 ## Tanda 4 — El diálogo
 
-- [ ] **T4.1 — `DescargarGestionesDialog.tsx`:** control + `Modal` con selección múltiple de
+- [x] **T4.1 — `DescargarGestionesDialog.tsx`:** control + `Modal` con selección múltiple de
       mensajeros (de `catalogoFiltros.mensajeros`) y rango de fechas propio (`desde`/`hasta`),
       cancelar y confirmar. Recibe la Server Action por prop: el mismo componente sirve a las
       dos pantallas.
@@ -108,7 +108,7 @@
       rango invertido no produce archivo.
       *Depende de: T2.3, T3.1.*
 
-- [ ] **T4.2 — Independencia de la barra de filtros (R34/R35).**
+- [x] **T4.2 — Independencia de la barra de filtros (R34/R35).**
       **HECHO:** test que afirma que el objeto enviado al borde contiene SOLO lo elegido en el
       diálogo, y que cambiar los filtros de pantalla no altera ese objeto.
       *Depende de: T4.1.*
@@ -117,7 +117,7 @@
 
 ## Tanda 5 — Montaje en `cierres-admin`
 
-- [ ] **T5.1 — Montaje en `CierresAdminModule.tsx`** junto al control general, en las dos
+- [x] **T5.1 — Montaje en `CierresAdminModule.tsx`** junto al control general, en las dos
       pestañas, con `titulo` propio.
       **HECHO:** la pantalla renderiza DOS controles de descarga con nombres accesibles
       distintos, y el general sigue siendo byte a byte el de antes.
@@ -127,20 +127,20 @@
 
 ## Tanda 6 — Verificación transversal del camino A
 
-- [ ] **T6.1 [P] — Guardia de frontera** (fuente única, patrón 134): el subárbol del control
+- [x] **T6.1 [P] — Guardia de frontera** (fuente única, patrón 134): el subárbol del control
       detallado no importa `lib/services`, `lib/repositories`, `getPrismaClient` ni construye un
       `where`; y no existe ninguna ruta `app/api/` que sirva esta descarga.
       **HECHO:** mutación comprobada — añadir el import del servicio pone la guardia roja.
       *Depende de: T5.1.*
 
-- [ ] **T6.2 [P] — No-regresión** (R2, R3): los tests existentes de `CierresDescarga.test.tsx`,
+- [x] **T6.2 [P] — No-regresión** (R2, R3): los tests existentes de `CierresDescarga.test.tsx`,
       `cierres-admin-descarga-columnas.test.ts`, `cierres-bodega-descarga-columnas.test.ts` y
       `cierre-gestiones-descarga-columnas.test.ts` pasan **sin modificarse**, y las constantes
       `TIENE_EVIDENCIA_*` y el helper `tieneEvidencia` siguen existiendo.
       **HECHO:** si alguno hubo que tocarlo, es un hallazgo, no un ajuste.
       *Depende de: T5.1.*
 
-- [ ] **T6.3 — Alcance por rol, listado por listado** (R14, R20, R37, R38): maestro,
+- [x] **T6.3 — Alcance por rol, listado por listado** (R14, R20, R37, R38): maestro,
       adminSatelite con zona, adminSatelite sin zona, y un `mensajeroIds` de otra zona.
       **HECHO:** el satélite no recibe ni una gestión fuera de su zona destino; pedir el
       mensajero ajeno devuelve cero filas (no error, no filas) y el MISMO desenlace que un
@@ -171,13 +171,13 @@
       **HECHO:** los cuatro desenlaces cubiertos.
       *Depende de: T7.2.*
 
-- [ ] **T7.4 — Montaje en `CierresBodegaAdminModule.tsx`,** reusando el diálogo de T4.1 con la
+- [x] **T7.4 — Montaje en `CierresBodegaAdminModule.tsx`,** reusando el diálogo de T4.1 con la
       acción de T7.3.
       **HECHO:** la pantalla renderiza el control nuevo sin tocar sus cuatro descargas
       existentes.
       *Depende de: T7.3, T4.1.*
 
-- [ ] **T7.5 — Paridad de los dos caminos (R26) y cobertura de la GAM (R27).**
+- [x] **T7.5 — Paridad de los dos caminos (R26) y cobertura de la GAM (R27).**
       **HECHO:** (a) test que ejecuta los dos servicios sobre gestiones equivalentes y compara la
       fila proyectada: idénticas, mismas 26 columnas desde la misma declaración; (b) test que
       afirma que una gestión de un cierre con destino `bodega_central` sale por el camino A sin
@@ -194,7 +194,7 @@
       **HECHO:** delta 0 de rojos respecto al baseline medido, typecheck 0, lint sin errores
       nuevos.
 
-- [ ] **T8.2 — Bitácora.** `progress/impl_230.md` con el mapa R1…R52 → test NOMBRADO Y
+- [x] **T8.2 — Bitácora.** `progress/impl_230.md` con el mapa R1…R52 → test NOMBRADO Y
       EJECUTADO.
       **HECHO:** 52 de 52; el reviewer rechaza si falta uno.
 

@@ -264,8 +264,6 @@ export async function obtenerCatalogoFiltrosCierres(
  *
  * `input` NO lleva default: el conjunto de esta descarga lo redacta el dialogo, y una llamada
  * sin `mensajeroIds` no es «todos», es una llamada que no debio ocurrir (R39).
- *
- * @sin-superficie TEMPORAL y con fecha de caducidad dentro de la MISMA feature 230: el borde de datos (tandas 1-2) aterriza antes que su UI (T4.1 el dialogo, T5.1 el montaje), que es otra tanda y otro agente. Al cablear el control, esta anotacion se RETIRA en ese mismo commit — la segunda mitad de esta guardia la pone roja en cuanto la accion recupere superficie, asi que no puede quedarse.
  */
 export async function listarGestionesCierresAdminCompleto(
   input: unknown,

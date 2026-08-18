@@ -21,6 +21,7 @@ import {
   rechazarCierre,
   forzarSolicitudVencido,
   listarHistoricoCierresAdminPaginado,
+  listarGestionesCierresAdminCompleto,
   listarPendientesCierresAdminCompleto,
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
@@ -53,6 +54,7 @@ import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
 } from "./cierre-factura";
+import { DescargarGestionesDialog } from "./DescargarGestionesDialog";
 import { ListaComprobantes } from "./ListaComprobantes";
 import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import { PanelConmutado } from "./PanelConmutado";
@@ -767,11 +769,28 @@ export function CierresAdminModule({
           onChange={setTab}
           ariaLabel={TABS_CIERRES_LABEL}
         />
-        <DescargarDatasetButton
-          {...(tab === TAB_PENDIENTES
-            ? descargaColaCierres(filtros)
-            : descargaHistoricoCierres(filtros))}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DescargarDatasetButton
+            {...(tab === TAB_PENDIENTES
+              ? descargaColaCierres(filtros)
+              : descargaHistoricoCierres(filtros))}
+          />
+          {/* Feature 230 (T5.1, R1/R23): la descarga DETALLADA, junto a la general y en las DOS
+              pestañas. Son dos controles distintos y no dos modos del mismo: la general es una
+              fila por CIERRE y sale de lo que la pestaña enseña, filtros incluidos; ésta es una
+              fila por GESTIÓN y su conjunto lo redacta su propio diálogo, sin heredar nada de la
+              barra (D11, R34/R35). Por eso NO se le pasa `filtros`.
+
+              Desde aquí se cubre la GAM: en esta pantalla el maestro solo ve los cierres con
+              destino `bodega_central`, y los de las bodegas satélite le llegan únicamente
+              consolidados, por el control gemelo de `CierresBodegaAdminModule`. Los dos
+              conjuntos son DISJUNTOS y su unión es el total (design §2.6). */}
+          <DescargarGestionesDialog
+            catalogo={catalogoFiltros}
+            accion={listarGestionesCierresAdminCompleto}
+            disabled={pendientesCargando || historicoCargando}
+          />
+        </div>
       </div>
 
       <PanelConmutado activo={tab === TAB_PENDIENTES} ariaLabel={TAB_PENDIENTES_LABEL}>

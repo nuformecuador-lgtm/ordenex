@@ -22,6 +22,7 @@ import {
   verCierreBodegaDetalle,
   aprobarCierreBodega,
   rechazarCierreBodega,
+  listarGestionesCierresBodegaCompleto,
   listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
@@ -47,6 +48,7 @@ import {
   VisorEvidencia,
 } from "./cierre-detalle-shared";
 import { CierreBodegaFacturaResumen } from "./cierre-factura";
+import { DescargarGestionesDialog } from "./DescargarGestionesDialog";
 import { ListaComprobantes } from "./ListaComprobantes";
 import { PanelConmutado } from "./PanelConmutado";
 import {
@@ -389,11 +391,26 @@ export function CierresBodegaAdminModule({
           onChange={setTab}
           ariaLabel={TABS_BODEGA_LABEL}
         />
-        <DescargarDatasetButton
-          {...(tab === TAB_PENDIENTES
-            ? descargaColaBodega(filtros)
-            : descargaBodegaResueltos(filtros))}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DescargarDatasetButton
+            {...(tab === TAB_PENDIENTES
+              ? descargaColaBodega(filtros)
+              : descargaBodegaResueltos(filtros))}
+          />
+          {/* Feature 230 (T7.4, R23/R24): la descarga DETALLADA de este listado. Es el MISMO
+              componente que monta `CierresAdminModule` y la MISMA declaración de columnas
+              (R26); lo único que cambia es la Server Action, porque el conjunto es otro: acá
+              salen las gestiones de los cierres del día ya CONSOLIDADOS en un cierre de bodega
+              —las bodegas satélite—, que en la otra pantalla el maestro no ve (design §2.6).
+
+              Los cuatro controles de descarga que esta pantalla ya tenía no se tocan: éste es
+              uno mas, con su propio nombre accesible y su propio nombre de archivo (R51). */}
+          <DescargarGestionesDialog
+            catalogo={catalogoFiltros}
+            accion={listarGestionesCierresBodegaCompleto}
+            disabled={pendientesCargando}
+          />
+        </div>
       </div>
 
       <PanelConmutado activo={tab === TAB_PENDIENTES} ariaLabel={TAB_PENDIENTES_LABEL}>
