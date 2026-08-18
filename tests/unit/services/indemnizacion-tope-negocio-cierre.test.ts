@@ -47,6 +47,9 @@ function fakeRepo(delCierre: GestionIncidenteDelCierre[]): ICierresAdminReposito
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     findGestionesIncidenteDelCierre: vi.fn(async () => delCierre),
+    // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
+    // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
+    findGestionesPorAlcanceCompleto: vi.fn(async () => []),
   };
 }
 

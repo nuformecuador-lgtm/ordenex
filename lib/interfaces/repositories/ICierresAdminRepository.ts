@@ -1,5 +1,7 @@
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 
 // Feature 38 — contrato del repositorio de "Cierres del dia" del admin. Solo queries
@@ -196,6 +198,25 @@ export interface ICierresAdminRepository {
     cierreId: string,
     alcance: Alcance,
   ): Promise<GestionIncidenteDelCierre[]>;
+  /**
+   * Feature 230 — Tanda 2 (T2.1, R11/R13/R14/R15/R22/R24/R41): TODAS las gestiones de los
+   * cierres del dia del alcance que casan los recortes del dialogo, a grano de GESTION.
+   *
+   * El ALCANCE va en el WHERE, dentro de la relacion `cierre` (nunca filtrado en memoria), y
+   * los recortes se componen con el por CONJUNCION: por construccion solo pueden QUITAR filas,
+   * jamas ensanchar lo que el actor ve (R37). Orden DETERMINISTA: los cierres por fecha de
+   * solicitud descendente y, dentro de cada uno, el mismo que el detalle presenta (R11).
+   *
+   * La proyeccion NO lee `evidencia_storage_path` (R22/R41): la hoja fundida no lleva columna
+   * de evidencia, y un campo que la consulta no trae no puede acabar emitido por descuido.
+   *
+   * Conjunto vacio si el alcance y los recortes no se cruzan — que es el MISMO desenlace que
+   * «ese mensajero no tiene cierres en el rango», y eso es deliberado (R38).
+   */
+  findGestionesPorAlcanceCompleto(
+    alcance: Alcance,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]>;
   /**
    * R10-R15: transicion atomica y guardada de `solicitado` -> nuevoEstado, SOLO si
    * el cierre sigue `solicitado` y casa el alcance (updateMany con guardia). NO toca

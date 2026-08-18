@@ -22,8 +22,11 @@ import type {
   IngresoOrdenexDTO,
   TarifaSnapshotDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
+import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
@@ -170,7 +173,10 @@ function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
  * resultado (una entrega no tiene flete de devolucion). Eso es distinto de "0.00", que es un
  * monto real. El `total` suma solo los presentes.
  */
-function toIngresoOrdenex(g: GestionAdminRow, d: DetalleAdminRow): IngresoOrdenexDTO {
+function toIngresoOrdenex(
+  g: Pick<GestionAdminRow, "resultado">,
+  d: DetalleAdminRow,
+): IngresoOrdenexDTO {
   const tarifa = tarifaDe(d);
   const montoCobrar = decimalToString(d.montoCobrar);
   const derivado = derivarIngresoOrden(
@@ -387,6 +393,198 @@ function colaWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
     estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
   };
 }
+
+/**
+ * Feature 230 (T2.1/T7.1, R22/R41) — proyeccion de una gestion para la HOJA FUNDIDA.
+ *
+ * Es `GESTION_ADMIN_SELECT` con dos diferencias, y las dos son requisitos:
+ *
+ *  1. **NO selecciona `evidenciaStoragePath`.** No basta con no emitirlo: no se lee. Un campo
+ *     que la consulta no trae no puede acabar en el DTO por descuido, ni ser firmado «de paso»
+ *     (R22/R41). Lo atornilla `cierres-admin-gestiones-where.test.ts`, que compara esta lista de
+ *     claves contra la del detalle y falla si la evidencia reaparece o si la del detalle crece
+ *     sin que nadie decida si esta tambien debe crecer.
+ *  2. **Sube al cierre** por `mensajeroNombre` y `solicitadoAt` (R8/R11). La descarga de hoy es
+ *     de UN cierre y el mensajero va en el nombre del archivo; al cruzar cierres, sin esas dos
+ *     celdas las filas no se distinguen.
+ *
+ * Se declara UNA vez y la usan los DOS repositorios (design §10, riesgo 4): dos proyecciones
+ * paralelas es exactamente como el mismo mensajero acaba saliendo con filas distintas segun
+ * desde que pantalla se descargue.
+ */
+export const GESTION_DESCARGA_SELECT = {
+  id: true,
+  ordenId: true,
+  // El grano de `cierre_detail` es (cierre_id, orden_id): una MISMA orden puede aparecer en
+  // varios cierres. Al cruzar cierres, emparejar solo por `orden_id` cogeria la fila congelada
+  // del cierre equivocado. NO se emite: es la clave del join, no una celda (R42).
+  cierreId: true,
+  resultado: true,
+  montoRecibido: true,
+  metodoPago: true,
+  motivo: true,
+  fechaReprogramacion: true,
+  pagoMensajero: true,
+  ingresoBodegaRechazo: true,
+  causaIncidente: true,
+  indemnizacion: true,
+  pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
+  historialEstados: {
+    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA },
+    take: 1,
+    select: { origenTipo: true },
+  },
+  // R8/R11: la identidad del CIERRE al que pertenece la gestion.
+  cierre: { select: { solicitadoAt: true, mensajero: { select: { nombre: true } } } },
+} as const;
+
+type GestionDescargaRow = Prisma.GestionOrdenGetPayload<{
+  select: typeof GESTION_DESCARGA_SELECT;
+}>;
+
+/**
+ * Feature 230 (T2.1/T7.1, R26/R42/R43) — gestion + snapshot congelado -> la fila del DTO de la
+ * hoja fundida.
+ *
+ * Gemelo de `toPendienteRowDesdeSnapshot` y con las MISMAS derivaciones (`decimalToString`,
+ * `toLineasPago`, `esRechazoSla`, `toIngresoOrdenex`), pero NO es aquel con campos de menos:
+ * es otro DTO. Lo que sale y lo que NO sale son requisitos verificables —sin uuid (R42), sin
+ * nada de evidencia (R41), con mensajero y fecha del cierre (R8/R11)—, y un DTO que los
+ * declarara opcionales no los sostendria.
+ *
+ * Exportado como su gemelo y por el mismo motivo: lo usan los DOS repositorios de admin, y
+ * compartir el mapper —no copiarlo— es lo que impide que las dos salidas divergan (R26).
+ */
+export function toGestionDescargaDTO(
+  g: GestionDescargaRow,
+  d: DetalleAdminRow,
+): CierreGestionDescargaDTO {
+  // `cierre` es nullable en el modelo (una gestion del dia aun sin cerrar tiene `cierre_id`
+  // NULL), pero los DOS caminos de esta feature exigen el cierre en su WHERE. Si llega null,
+  // el WHERE dejo de acotar y la fila no tiene ni mensajero ni fecha que emitir: se LANZA con
+  // contexto, no se rellena con un texto vacio que se leeria como «sin mensajero».
+  if (g.cierre === null) {
+    throw new Error(`gestion ${g.id} sin cierre: la proyeccion de descarga exige cierre_id`);
+  }
+  return {
+    mensajeroNombre: g.cierre.mensajero.nombre,
+    cierreSolicitadoAt: g.cierre.solicitadoAt.toISOString(),
+    numGuia: d.numGuia,
+    numRemision: d.numRemision,
+    destinatario: d.destinatario,
+    direccion: d.direccion,
+    zonaNombre: d.zonaNombre,
+    provinciaNombre: d.provinciaNombre,
+    cantonNombre: d.cantonNombre,
+    distritoNombre: d.distritoNombre,
+    producto: d.producto,
+    tiendaNombre: d.tiendaNombre,
+    resultado: g.resultado,
+    montoRecibido: decimalToString(g.montoRecibido),
+    pagos: toLineasPago(g.pagos),
+    motivo: g.motivo,
+    fechaReprogramacion: g.fechaReprogramacion
+      ? g.fechaReprogramacion.toISOString().slice(0, 10)
+      : null,
+    esRechazoSla: esRechazoSla(g.historialEstados),
+    causaIncidente: g.causaIncidente,
+    // R47: `null` = todavia sin capturar. NUNCA se sustituye por cero, que diria lo contrario.
+    indemnizacion: decimalToString(g.indemnizacion),
+    pagoMensajero: decimalToString(g.pagoMensajero),
+    ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+    ingresoOrdenex: toIngresoOrdenex(g, d),
+  };
+}
+
+/**
+ * Feature 230 (T2.1/T7.1) — el snapshot congelado con su clave de join COMPLETA.
+ *
+ * Es `DETALLE_ADMIN_SELECT` mas `cierreId`, y no es cosmetico: el grano de `cierre_detail` es
+ * `(cierre_id, orden_id)`, asi que en una lectura de UN cierre basta la orden —es lo que hacen
+ * los dos detalles de admin—, pero al CRUZAR cierres el `orden_id` deja de ser unico y el
+ * emparejamiento cogeria la fila congelada del cierre equivocado. Con montos dentro.
+ */
+export const DETALLE_DESCARGA_SELECT = {
+  ...DETALLE_ADMIN_SELECT,
+  cierreId: true,
+} as const;
+
+type DetalleDescargaRow = Prisma.CierreDetailGetPayload<{
+  select: typeof DETALLE_DESCARGA_SELECT;
+}>;
+
+/**
+ * Feature 230 (T2.1/T7.1, R26) — empareja cada gestion con su fila congelada y proyecta el DTO.
+ *
+ * Declarada UNA vez para los dos repositorios: el emparejamiento por `(cierreId, ordenId)` y el
+ * criterio de «falta la fila congelada» son lo que las dos salidas tienen que compartir para no
+ * divergir (R26).
+ *
+ * **`CierreDetalleFaltanteError` se conserva como error DURO**, igual que en los dos detalles de
+ * admin, y a proposito: un fallback que compusiera la fila con datos VIVOS mostraria valores de
+ * HOY disfrazados de congelados —justo el camino de lectura que la feature 69 vino a matar—.
+ * El riesgo asumido CRECE aqui y se documenta (design §10.2): antes tumbaba el detalle de un
+ * cierre abierto a mano; ahora, un solo cierre corrupto tumba la descarga de un rango de meses.
+ * Es riesgo aceptado y declarado, no un descuido.
+ */
+export function componerGestionesDescarga(
+  gestiones: GestionDescargaRow[],
+  detalle: DetalleDescargaRow[],
+): CierreGestionDescargaDTO[] {
+  const porCierreYOrden = new Map(detalle.map((d) => [`${d.cierreId}:${d.ordenId}`, d]));
+  return gestiones.map((g) => {
+    const d = porCierreYOrden.get(`${g.cierreId}:${g.ordenId}`);
+    if (d === undefined) throw new CierreDetalleFaltanteError(g.cierreId ?? "", g.ordenId);
+    return toGestionDescargaDTO(g, d);
+  });
+}
+
+/**
+ * Feature 230 (T2.1/T7.1, R31/R33/R37) — los RECORTES que el dialogo elige, traducidos al WHERE
+ * del CIERRE al que cuelga la gestion.
+ *
+ * Se declara UNA vez para los dos caminos (design §10, riesgo 4) y devuelve un fragmento que el
+ * llamador COMPONE con su propio criterio de seleccion —el alcance por rol en el camino de
+ * cierres del dia, `cierreBodegaId != null` en el de bodega—. La composicion es una CONJUNCION
+ * de claves del mismo objeto: por construccion, esto solo puede QUITAR filas del conjunto que
+ * aquel ya acoto, jamas anadirlas (R15/R37).
+ *
+ * Las fechas son dias CALENDARIO en horario de Costa Rica, resueltos a instantes UTC con
+ * `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` (convencion del repo): `hasta` es
+ * INCLUSIVO como dia, y por eso su borde es `lt` del dia SIGUIENTE y no `lte` del suyo — con
+ * `lte` se perderian los cierres solicitados despues de la medianoche del ultimo dia.
+ */
+export function recortesDescargaGestionesWhere(
+  filtros: FiltrosDescargaGestiones,
+): Prisma.CierreDiaWhereInput {
+  const { mensajeroIds, desde, hasta } = filtros;
+  return {
+    mensajeroId: { in: [...mensajeroIds] },
+    ...(desde !== undefined || hasta !== undefined
+      ? {
+          solicitadoAt: {
+            ...(desde !== undefined ? { gte: inicioDelDiaCREnUtc(desde) } : {}),
+            ...(hasta !== undefined ? { lt: inicioDelDiaSiguienteCREnUtc(hasta) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Feature 230 (T2.1/T7.1, R11) — el ORDEN de la hoja fundida, declarado UNA vez para los dos
+ * caminos.
+ *
+ * Primera clave: `ORDEN_CIERRES_ADMIN` ELEVADO a la relacion, para que los cierres salgan en el
+ * mismo orden en que el listado los enseña. Segunda: el `createdAt desc` con que el detalle de
+ * un cierre presenta sus gestiones, para que dentro de cada cierre el archivo diga lo mismo que
+ * la pantalla. Las dos juntas son R11: un orden DETERMINISTA y explicable, no el que la base
+ * quiera devolver.
+ */
+export const ORDEN_GESTIONES_DESCARGA = [
+  { cierre: ORDEN_CIERRES_ADMIN },
+  { createdAt: "desc" },
+] as const satisfies Prisma.GestionOrdenOrderByWithRelationInput[];
 
 /**
  * Feature 38 — repositorio de "Cierres del dia" del admin. SOLO queries Prisma. El
@@ -612,6 +810,49 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         return toPendienteRowDesdeSnapshot(g, d);
       }),
     };
+  }
+
+  /**
+   * Feature 230 — Tanda 2 (T2.1, R11/R13/R14/R15/R22/R24/R41) — TODAS las gestiones de los
+   * cierres del dia que caen dentro del alcance del actor y de los recortes del dialogo.
+   *
+   * Es la mecanica de `findCierreByIdEnAlcance` —dos consultas, `gestion_orden` +
+   * `cierre_detail`, emparejadas por su clave, con error DURO si falta la fila congelada—
+   * llevada de UN cierre a MUCHOS, con tres diferencias que son requisitos:
+   *
+   *  1. **El alcance va en el WHERE, dentro de la relacion `cierre`** (R14/R15), exactamente
+   *     como ya hace `findGestionesIncidenteDelCierre`. Los recortes del dialogo se componen
+   *     como claves hermanas del mismo objeto, es decir por CONJUNCION: solo pueden QUITAR
+   *     filas del alcance, nunca ensancharlo (R37).
+   *  2. **`ORDEN_GESTIONES_DESCARGA`** (R11), que eleva a la relacion la MISMA constante de
+   *     orden del listado.
+   *  3. **`GESTION_DESCARGA_SELECT`, que NO lee `evidencia_storage_path`** (R22/R41).
+   *
+   * DOS consultas y no N+1: reusar el metodo por id en bucle costaria una consulta por cierre
+   * —y, en este camino, un lote de firma de URL por cierre— para tirar las URL despues.
+   */
+  async findGestionesPorAlcanceCompleto(
+    alcance: Alcance,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]> {
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: {
+        cierre: { ...alcanceWhere(alcance), ...recortesDescargaGestionesWhere(filtros) },
+      },
+      orderBy: [...ORDEN_GESTIONES_DESCARGA],
+      select: GESTION_DESCARGA_SELECT,
+    });
+    // Sin gestiones no hay snapshot que pedir: la segunda consulta se ahorra entera. No es una
+    // optimizacion cosmetica — `cierreId: { in: [] }` es una consulta que se paga para nada, y
+    // el conjunto vacio es el desenlace NORMAL de R38 (mensajero sin cierres o fuera de alcance).
+    if (gestiones.length === 0) return [];
+
+    const cierreIds = [...new Set(gestiones.map((g) => g.cierreId).filter((id) => id !== null))];
+    const detalle = await this.prisma.cierreDetail.findMany({
+      where: { cierreId: { in: cierreIds } },
+      select: DETALLE_DESCARGA_SELECT,
+    });
+    return componerGestionesDescarga(gestiones, detalle);
   }
 
   /**

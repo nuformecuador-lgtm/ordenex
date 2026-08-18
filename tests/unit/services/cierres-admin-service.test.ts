@@ -107,6 +107,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // Feature 158/R19: por defecto el cierre NO tiene incidentes -> cobertura vacia, camino
     // de la 38 intacto (R36). Los casos de la 158 lo sobreescriben.
     findGestionesIncidenteDelCierre: vi.fn(async () => []),
+    // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
+    // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
+    findGestionesPorAlcanceCompleto: vi.fn(async () => []),
     ...overrides,
   };
 }
