@@ -188,7 +188,7 @@
 
 ## Tanda 8 — Cierre
 
-- [ ] **T8.1 — Gate.** `./init.sh --rapido` al cerrar cada tanda; `./init.sh` completo antes
+- [x] **T8.1 — Gate.** `./init.sh --rapido` al cerrar cada tanda; `./init.sh` completo antes
       del PR, con el baseline de rojos medido ANTES de empezar (ver memoria del repo: la rama
       base puede traer rojos ajenos).
       **HECHO:** delta 0 de rojos respecto al baseline medido, typecheck 0, lint sin errores
