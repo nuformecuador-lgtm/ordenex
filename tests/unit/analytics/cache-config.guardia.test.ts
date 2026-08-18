@@ -104,8 +104,47 @@ describe("R17 · ninguna entrada se escribe con `revalidate: false`", () => {
     "utf8",
   );
 
-  it("el adaptador pasa el TTL de la constante", () => {
-    expect(soloCodigo(adaptador)).toMatch(/revalidate:\s*ANALITICA_CACHE_TTL_SEGUNDOS/);
+  // ⚠ ESTE CASO SE REESCRIBIO EL 2026-08-17 y conviene decir por que, para que nadie lo lea
+  // como un aflojamiento. Antes exigia literalmente `revalidate: ANALITICA_CACHE_TTL_SEGUNDOS`
+  // en el adaptador. Al aparecer un SEGUNDO consumidor del mismo puerto con otro TTL —el
+  // conteo de entregas, 15 min, `lib/config/conteo-entregas-cache.ts`— el TTL paso a entrar
+  // por constructor, y esa forma literal dejo de existir.
+  //
+  // Lo que el guardia protege NO cambia, y se comprueba en tres piezas en vez de una:
+  //   (a) `revalidate` recibe el campo del constructor y NUNCA un numero escrito ahi mismo;
+  //   (b) el DEFAULT de ese campo sigue siendo la constante de la analitica, asi que una
+  //       construccion sin argumento escribe exactamente lo que escribia antes;
+  //   (c) todo argumento que se le pase es una CONSTANTE importada, no un literal — que es
+  //       justo lo que el censo por ambito de arriba ya persigue para el `3600`.
+  it("el adaptador pasa el TTL por constructor, con la constante como default", () => {
+    const codigo = soloCodigo(adaptador);
+
+    expect(codigo, "(a) `revalidate` sale del campo, no de un numero suelto").toMatch(
+      /revalidate:\s*this\.ttlSegundos/,
+    );
+    expect(codigo, "(b) sin argumento, el TTL es el de la analitica").toMatch(
+      /ttlSegundos:\s*number\s*=\s*ANALITICA_CACHE_TTL_SEGUNDOS/,
+    );
+    expect(codigo, "(c) nadie construye el adaptador con un numero literal").not.toMatch(
+      /new NextAnaliticaCache\(\s*\d/,
+    );
+  });
+
+  // El TTL del conteo de entregas hereda la MISMA regla: vive en una constante y solo en
+  // ella. Se anade aqui —y no en un guardia nuevo— porque la pregunta que protege es
+  // idéntica: que el adaptador escriba con un TTL y el operador crea que es otro.
+  it("el TTL de 15 min del conteo tambien vive en una sola constante", () => {
+    const CONSTANTE_CONTEO = "lib/config/conteo-entregas-cache.ts";
+    const literal900 = /\b9_?00\b/;
+
+    const infractores = AMBITO.flatMap((d) => archivos(d))
+      .filter((rel) => rel !== CONSTANTE_CONTEO)
+      .filter((rel) => literal900.test(soloCodigo(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"))));
+
+    expect(infractores, `el TTL del conteo vive SOLO en ${CONSTANTE_CONTEO}`).toEqual([]);
+
+    const fuente = fs.readFileSync(path.join(REPO_ROOT, CONSTANTE_CONTEO), "utf8");
+    expect(fuente).toMatch(/export const CONTEO_ENTREGAS_CACHE_TTL_SEGUNDOS = 900;/);
   });
 
   it("y no hay `revalidate: false` en ningun archivo del ambito", () => {
