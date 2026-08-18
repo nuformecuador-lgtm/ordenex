@@ -87,11 +87,10 @@ function fakeRutaRepo(): Pick<IRutaOptimizadaRepository, "findByMensajero" | "up
 
 function fakeMetaRepo(): Pick<
   IOrdenMensajeroMetaRepository,
-  "findMarcarLuegoByMensajero" | "findNotasByMensajero"
+  "findMarcarLuegoByMensajero"
 > {
   return {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()), // feature 116
   };
 }
 

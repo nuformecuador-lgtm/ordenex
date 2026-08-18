@@ -1,0 +1,15 @@
+-- DOWN — repone la ESTRUCTURA, NO EL CONTENIDO.
+--
+-- Esto es lo unico que un `down.sql` puede hacer aqui, y conviene decirlo sin eufemismos: vuelve
+-- a existir la columna `nota` (TEXT, NULLABLE, sin default, exactamente como la creo la feature
+-- 115), pero **vuelve VACIA**. El texto que tenian las notas privadas de los mensajeros NO se
+-- recupera con este archivo: se perdio de forma definitiva y deliberada al aplicar el `up`
+-- (decision humana del 2026-08-14, P1). Revertir esta migracion NO revierte esa perdida; solo
+-- deja el esquema en condiciones de volver a escribir notas nuevas.
+--
+-- NULLABLE a proposito: es como estaba (`nota text NULL`). Un `NOT NULL` con default aqui
+-- inventaria un dato para filas preexistentes y no seria la estructura de vuelta.
+--
+-- No toca `marcar_luego`, ni el UNIQUE `(usuario_id, orden_id)`, ni los indices, ni las FK, ni
+-- la RLS: el `up` tampoco los toco (R24).
+ALTER TABLE "orden_mensajero_meta" ADD COLUMN "nota" TEXT;

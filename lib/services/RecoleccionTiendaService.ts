@@ -239,8 +239,8 @@ export class RecoleccionTiendaService implements IRecoleccionTiendaService {
  *
  * Los tres campos que `toDTO` deja en su default son correctos aqui y no se re-derivan:
  *   - `secuenciaRuta: null` — una orden por recolectar no es parada de ninguna ruta;
- *   - `marcarLuego: false` / `notaPrivada: null` — la marca y la nota privadas se resuelven con
- *     repos que esta lectura no consume; son de la gestion en reparto, no de la recoleccion.
+ *   - `marcarLuego: false` — la marca privada se resuelve con un repo que esta lectura no
+ *     consume; es de la gestion en reparto, no de la recoleccion.
  * `intentosEntrega: 0` se fija explicito: una orden que todavia esta en la tienda no ha tenido
  * ningun intento de entrega, asi que el `0` es el dato REAL y no un relleno.
  *
