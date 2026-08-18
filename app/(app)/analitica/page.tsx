@@ -18,7 +18,13 @@ import { ConteoEntregasAnillo } from "./_components/entregas/ConteoEntregasAnill
 import { ConteoPorStatusDona } from "./_components/entregas/ConteoPorStatusDona";
 import { CargadasPorDiaBarras } from "./_components/entregas/CargadasPorDiaBarras";
 import { HoyGestionBarras } from "./_components/entregas/HoyGestionBarras";
+import { CicloVidaKpi } from "./_components/entregas/CicloVidaKpi";
+import { DevolucionesPorCausaAnillo } from "./_components/entregas/DevolucionesPorCausaAnillo";
+import { KpisEfectividad } from "./_components/entregas/KpisEfectividad";
 import { cargarTableroFinanciero } from "./_components/financiero/cargar";
+// import { cargarKpisFinancieros, kpisDenegados } from "./_components/finanzas/cargar-kpis"; // sección de finanzas comentada (2026-08-18)
+// import { KpisFinancieros } from "./_components/finanzas/KpisFinancieros"; // sección de finanzas comentada (2026-08-18)
+// import { FinanzasDiarioBarras } from "./_components/finanzas/FinanzasDiarioBarras"; // sección de finanzas comentada (2026-08-18)
 import { TableroFinanciero } from "./_components/financiero/TableroFinanciero";
 import { FiltrosOperativos } from "./_components/operativo/FiltrosOperativos";
 import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
@@ -95,6 +101,12 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
 // nada. `coincideSeccion` busca por subcadena, asi que «entregas» a secas sigue valiendo.
 const TITULO_ENTREGAS = "Detalle - Movimiento de las ordenes";
 const TITULO_OPERATIVO = "Indicadores operativos";
+// Los dos rótulos de la sección de finanzas, comentados con ella (2026-08-18). Se conservan
+// aquí —y no dentro del bloque comentado— para que reactivarla sea descomentar en un sitio y
+// no reescribir un texto que ya estaba decidido.
+// const TITULO_FINANCIERO_KPIS = "Finanzas";
+// const DESCRIPCION_FINANCIERO_KPIS =
+//   "Estado de las cuentas a día de hoy. Estas cifras NO responden a los filtros de arriba: son el saldo del libro entero, no el de un periodo.";
 const DESCRIPCION_OPERATIVO =
   "Los paneles se calculan sobre el rango y los filtros seleccionados arriba.";
 
@@ -149,9 +161,59 @@ export default async function AnaliticaPage() {
   // incumbe a nadie más de la página: el tablero operativo tiene el suyo.
   const bloqueEntregas = (
     <FiltroEntregasProvider>
-      <FiltrosEntregas />
+      {/* LA BARRA SE QUEDA PEGADA ARRIBA al bajar por la pantalla. Esta seccion tiene cuatro
+          graficas y crece: sin esto hay que volver arriba para cambiar un filtro y volver a
+          bajar para ver el efecto, que es justo lo que se hace todo el rato aqui.
+
+          ⚠ EL `sticky` VIVE EN ESTA PAGINA Y NO EN `FiltrosEntregas`, y es deliberado: esa
+          barra la monta TAMBIEN el panel maestro de `/dashboard`, donde no se ha pedido y
+          donde el alto de la pagina es otro. Pegarla dentro del componente la pegaria en las
+          dos pantallas de una vez.
+
+          `bg-background/70 backdrop-blur-md` es el MISMO tratamiento que ya usa la barra
+          pegajosa de `Pagination`, en vez de inventar otro: sin fondo, las graficas se verian
+          por debajo de los controles al hacer scroll.
+
+          `-mx-6 px-6` compensa el `p-6` de `Container`: sin eso el fondo difuminado acaba
+          antes que el borde y quedan dos franjas nitidas a los lados por las que se ve pasar
+          el contenido.
+
+          `z-20` basta: las graficas no declaran `z-index`, y el desplegable del selector de
+          filtros va en un portal con `z-50`, asi que sigue quedando por encima.
+
+          Funciona porque el layout eligio `overflow-x-clip` —y no `hidden`— en el `main`:
+          `clip` no lo convierte en contenedor de scroll vertical, que es lo que dejaria a un
+          `position: sticky` sin nada contra lo que pegarse. */}
+      <div className="sticky top-0 z-20 -mx-6 bg-background/70 px-6 py-3 backdrop-blur-md">
+        <FiltrosEntregas />
+      </div>
       <SeccionFiltrable titulo={TITULO_ENTREGAS}>
         <ContenedorSeccion titulo={TITULO_ENTREGAS}>
+          {/* LA FILA DE KPIs, encima de la rejilla: son el resumen de lo que las gráficas
+              desglosan, y tres de los cuatro salen de las MISMAS filas que «Detalle de las
+              órdenes» —comparten la clave de SWR, así que comparten petición y respuesta y no
+              pueden discrepar de los segmentos de abajo. Dentro de ESTE contenedor y no en uno
+              propio: es la misma pregunta a distinta resolución, y separarlos sugeriría dos
+              fuentes.
+
+              LA REJILLA LA PONE AQUÍ LA PÁGINA y no cada componente: `KpisEfectividad` devuelve
+              sus tres tarjetas sueltas y el ciclo de vida es un cuarto componente, así que sólo
+              este nivel sabe cuántas tarjetas hay en la fila. Con una rejilla dentro de cada
+              uno serían dos filas pegadas, con dos `gap` y dos anchos de columna distintos.
+
+              ⚠ SIN la caja de borde y sombra que llevan las celdas de las gráficas: `KpiCard`
+              YA es una `Card` con su propio `ring` y su fondo, y envolverla dejaría una tarjeta
+              dentro de otra. `items-start` para que una tarjeta de dos líneas no se estire al
+              alto de la de al lado —el ciclo de vida lleva su denominador debajo— y deje la
+              cifra flotando en medio del hueco. */}
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <KpisEfectividad />
+            {/* El ciclo de vida NO comparte petición con los otros tres: tiene su propia acción
+                y su propia clave. Comparte fila porque responde a la misma pregunta —cómo va la
+                operación— pero su cifra es un promedio de tiempo, no un reparto de órdenes, y
+                sólo cuenta las CERRADAS (ver `CicloVidaKpi`). */}
+            <CicloVidaKpi />
+          </div>
           {/* Los dos graficos, uno junto a otro y al 50 %.
 
               `sm` (640 px) y no `md` (768) porque el corte pedido es 600 y `sm` es el
@@ -179,32 +241,107 @@ export default async function AnaliticaPage() {
               (`components/ui/card.tsx`), asi que estas dos cajas se ven como el resto de
               tarjetas del producto en lugar de inventar un borde propio. `shadow-sm` es la
               sombra leve. `bg-card` para que la sombra tenga sobre que apoyarse. */}
-          {/* REJILLA DE 12 COLUMNAS: los dos donuts ocupan 6 cada uno (50 %) y la serie de
-              cargadas por dia las 12 (100 %), debajo. Doce y no dos columnas porque es lo que
-              permite mezclar anchos en la MISMA rejilla: con `grid-cols-2` la barra tendria
-              que salirse a un contenedor aparte y dejaria de compartir el `gap`. */}
+          {/* REJILLA DE 12 COLUMNAS, repartida por lo que cada gráfico necesita (opción A,
+              2026-08-18). Doce y no dos columnas porque es lo que permite mezclar anchos en la
+              MISMA rejilla: con `grid-cols-2` una fila entera tendría que salirse a otro
+              contenedor y dejaría de compartir el `gap`.
+
+              El orden es el de lectura: primero cómo acabó todo, luego el detalle y el ritmo
+              diario, y al final lo que queda pendiente hoy. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
-            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
+            {/* 12 de 12: es UNA barra al 100 % con seis franjas y su leyenda. A media fila las
+                franjas pequeñas —incidentes al 2 %— se vuelven astillas y la leyenda salta a
+                tres líneas; a ancho completo se lee entera de un vistazo. */}
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-12">
               <ConteoEntregasAnillo />
             </div>
+
+            {/* 6 + 6: el desglose por estado y el ritmo diario, uno al lado del otro. Son las
+                dos caras de la misma pregunta —qué pasó y cuándo— y comparar de un vistazo
+                «hubo más reprogramadas» con «entró más volumen» es justo lo que se viene a
+                hacer. Las filas del ranking crecen hacia abajo, así que a media anchura no
+                pierden ninguna categoría: solo recortan el nombre, que el tooltip devuelve. */}
             <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
               <ConteoPorStatusDona />
             </div>
-            {/* 9 de 12 para la serie temporal: es la que necesita el ancho, porque su eje
-                crece con el rango pedido y un mes apretado en media fila deja de leerse. */}
-            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-9">
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
               <CargadasPorDiaBarras />
             </div>
-            {/* 3 de 12 para el contador de hoy: son DOS barras y su ancho no depende del
-                filtro, asi que no gana nada con mas sitio. El `min-w-[300px]` sigue siendo el
-                suelo: por debajo de eso la rejilla ya ha apilado (breakpoint `sm`). */}
-            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-3">
+
+            {/* 6 + 6: las causas de devolución y el pendiente de hoy. Ojo al leer las causas
+                junto a la barra de arriba: aquí se cuentan GESTIONES y allí ÓRDENES, así que
+                sus totales no tienen por qué coincidir (ver `DevolucionesPorCausaAnillo`). */}
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
+              <DevolucionesPorCausaAnillo />
+            </div>
+            {/* El contador de hoy: una barra partida en dos y su leyenda. No depende del
+                filtro, así que no gana nada con más sitio. */}
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
               <HoyGestionBarras />
             </div>
           </div>
         </ContenedorSeccion>
       </SeccionFiltrable>
     </FiltroEntregasProvider>
+  );
+
+  // ─── LA SECCIÓN FINANCIERA, SEPARADA Y SIN FILTROS (2026-08-18) ───────────────────────
+  //
+  // Sección PROPIA y hermana de la de entregas, no un bloque dentro de ella: sus seis cifras no
+  // responden a la barra de filtros —son el estado de las cuentas HOY— y meterlas bajo el mismo
+  // título haría creer que sí. Por eso vive FUERA de `FiltroEntregasProvider`: lo que no se
+  // filtra no cuelga del proveedor que filtra.
+  //
+  // ⚠ QUIÉN LA VE Y QUÉ VE. La sección se monta para los MISMOS roles que la de entregas (así se
+  // pidió), pero las cifras siguen exigiendo acceso total: la caja central y los saldos de TODAS
+  // las tiendas son dinero de otros inquilinos. Un rol sin acceso total ve las seis tarjetas en
+  // estado «no tienes acceso», y `kpisDenegados()` produce ese estado SIN consultar la base — un
+  // rol denegado no debe llegar al dinero ni una sola vez (R9 de la 132), tampoco para que le
+  // digan que no.
+  // ⚠ SECCIÓN DE FINANZAS COMENTADA (2026-08-18, decisión humana). Se comenta ENTERA y no se
+  // borra: el trabajo está hecho y probado, y volver a encenderla es quitar estas marcas.
+  //
+  // Lo que hay que saber para reactivarla, porque no basta con descomentar este bloque:
+  //   - hay que devolver `{bloqueFinanciero}` a `bloquesDestacados`, justo debajo;
+  //   - hay que descomentar los tres imports de `./_components/finanzas/` arriba, que también
+  //     se comentaron — dejarlos vivos con el bloque muerto deja el módulo cargándose y el
+  //     linter en rojo por importaciones sin usar.
+  //
+  // Y lo que ESTO ahorra mientras esté apagada: `cargarKpisFinancieros()` corría en el render
+  // del servidor y consultaba la caja y los saldos de todas las tiendas. Con el bloque
+  // comentado ya no se llama — que es la diferencia con la sección financiera del shell, que
+  // sigue pidiendo sus diez métricas aunque su `<section>` esté comentada.
+  // const bloqueFinanciero = (
+  //   <SeccionFiltrable titulo={TITULO_FINANCIERO_KPIS}>
+  //     <ContenedorSeccion
+  //       titulo={TITULO_FINANCIERO_KPIS}
+  //       descripcion={DESCRIPCION_FINANCIERO_KPIS}
+  //     >
+  //       <KpisFinancieros
+  //         kpis={esAccesoTotal(actor.rol) ? await cargarKpisFinancieros() : kpisDenegados()}
+  //       />
+  //       {/* Debajo de las tarjetas: los KPIs dicen el ESTADO de las cuentas hoy y esta serie dice
+  //           cómo se llegó a él, día a día, en los últimos 30. Misma sección porque es la misma
+  //           pregunta a distinta resolución.
+  //
+  //           La caja de borde y sombra la pone esta celda, como en la rejilla de gráficas: las
+  //           tarjetas de KPI ya son `Card`, pero `GraficaMarco` es un `<section>` desnudo. */}
+  //       <div className="mt-4 min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10">
+  //         <FinanzasDiarioBarras />
+  //       </div>
+  //     </ContenedorSeccion>
+  //   </SeccionFiltrable>
+  // );
+
+  // La sección de entregas viaja en el slot `destacado` porque hoy es el ÚNICO que el shell
+  // pinta: sus otras tres regiones están comentadas en `AnaliticaShell`. La de finanzas iba
+  // aquí al lado y está comentada arriba; cuando vuelvan las regiones del shell, cualquiera de
+  // las dos puede pasar a su propio slot sin tocar nada de lo de arriba.
+  const bloquesDestacados = (
+    <>
+      {bloqueEntregas}
+      {/* {bloqueFinanciero} — comentado con su bloque, ver arriba. */}
+    </>
   );
 
   // El pre-fetch del dinero va DESPUÉS del gate a propósito: un rol denegado no
@@ -218,7 +355,7 @@ export default async function AnaliticaPage() {
     return (
       <FiltroSeccionesProvider>
         <AnaliticaShell
-          destacado={bloqueEntregas}
+          destacado={bloquesDestacados}
           filtros={<FiltrosOperativos facetas={recorte.facetas} />}
           operativo={bloqueOperativo}
         />
@@ -230,7 +367,7 @@ export default async function AnaliticaPage() {
   return (
     <FiltroSeccionesProvider>
       <AnaliticaShell
-        destacado={bloqueEntregas}
+        destacado={bloquesDestacados}
         filtros={<FiltrosOperativos facetas={recorte.facetas} />}
         operativo={bloqueOperativo}
         // La región financiera NO se declara filtrable, y no es un olvido: quién la ve lo
