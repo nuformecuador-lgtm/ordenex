@@ -493,3 +493,32 @@ export function claveDeConteoHoyGestion(
 
 /** Tag —y prefijo de clave— del contador de hoy. Ver `claveDeConteoHoyGestion`. */
 export const TAG_CONTEO_HOY_GESTION = "conteo-hoy-gestion";
+
+/**
+ * La clave del DESGLOSE DE DEVOLUCIONES POR CAUSA.
+ *
+ * Quinto prefijo, por el mismo motivo que los tres anteriores: las cinco lecturas comparten
+ * `ConsultaConteoEntregas` entera —el filtro es identico a proposito, para que la barra las
+ * mueva a todas a la vez— asi que sin prefijo producirian LA MISMA CLAVE con valores de forma
+ * distinta, y quien pidiera el desglose de causas recibiria el `porDesenlace` del anillo.
+ */
+export function claveDeConteoDevoluciones(consulta: ConsultaConteoEntregas): string {
+  return claveConPrefijo(TAG_CONTEO_DEVOLUCIONES, consulta);
+}
+
+/** Tag —y prefijo de clave— del desglose de devoluciones. Ver `claveDeConteoDevoluciones`. */
+export const TAG_CONTEO_DEVOLUCIONES = "conteo-devoluciones";
+
+/**
+ * La clave del CICLO DE VIDA (segundos entre creacion y cierre terminal).
+ *
+ * Sexto prefijo, por el mismo motivo que los anteriores: las seis lecturas comparten
+ * `ConsultaConteoEntregas` entera, asi que sin prefijo colisionarian en la MISMA clave con
+ * valores de forma distinta.
+ */
+export function claveDeCicloVida(consulta: ConsultaConteoEntregas): string {
+  return claveConPrefijo(TAG_CICLO_VIDA, consulta);
+}
+
+/** Tag —y prefijo de clave— del ciclo de vida. Ver `claveDeCicloVida`. */
+export const TAG_CICLO_VIDA = "ciclo-vida";
