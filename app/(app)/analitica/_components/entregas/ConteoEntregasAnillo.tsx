@@ -36,7 +36,7 @@ import useSWR from "swr";
 import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtro-analitica";
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
-import { GraficaDonut } from "@/components/private/analytics/GraficaDonut";
+import { GraficaReparto } from "@/components/private/analytics/GraficaReparto";
 import { consultarConteoEntregas } from "@/lib/actions/conteo-entregas";
 import {
   BUCKET_OTROS,
@@ -89,17 +89,7 @@ export function etiquetaDeDesenlace(valor: string): string {
 /** La unidad del formateador: son ordenes contadas, no dinero ni porcentaje. */
 const UNIDAD = "conteo";
 
-/**
- * Anillo fino: es un indicador con cifra al centro, no un reparto por categorias.
- *
- * ⚠ EL EXTERIOR NO LLEGA AL BORDE (era `"100%"` hasta el 2026-08-18) y el motivo es el valor
- * sobre cada porcion: recharts lo escribe FUERA del radio exterior, con su linea guia. Con el
- * anillo pegado al borde del contenedor no queda sitio donde ponerlo y el numero sale
- * recortado. Se recoge el radio lo justo para dejarle margen, conservando el grosor de banda
- * (20 puntos antes, 17 ahora): sigue siendo un anillo fino, no un donut.
- */
-const RADIO_INTERIOR = "68%";
-const RADIO_EXTERIOR = "85%";
+
 
 // ⚠ AQUI SE PINTABA EL SELLO DE FRESCURA («Actualizado 18:30»), y se RETIRO por decision
 // humana del 2026-08-18. Conviene saber que se pierde: la cifra se sirve de una cache de 15
@@ -173,27 +163,17 @@ export function ConteoEntregasAnillo() {
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <GraficaDonut
-        titulo={TITULO}
+      {/* ⚠ UNA BARRA AL 100 %, NO UN ANILLO (decisión del 2026-08-18, opción A). Los seis
+          desenlaces se comparan sobre la misma línea base y los pequeños —incidentes al 2 %—
+          conservan su franja, su nombre y su cifra; en el anillo eran astillas sin etiqueta.
+          El total, que antes iba al centro del anillo, pasa al título. */}
+      <GraficaReparto
+        titulo={hayDato ? `${TITULO} · ${formatearValor(datos.total, UNIDAD)}` : TITULO}
         series={series}
         unidad={UNIDAD}
         vacio={VACIO_PANEL}
         cargando={isLoading}
         error={mensaje}
-        innerRadius={RADIO_INTERIOR}
-        outerRadius={RADIO_EXTERIOR}
-        centro={hayDato ? formatearValor(datos.total, UNIDAD) : undefined}
-        // Las dos cifras se leen SIN tocar el gráfico: la leyenda va en columna al lado y
-        // lleva el conteo pegado al nombre («Entregadas: 20» / «No entregadas: 80»), y el
-        // valor se escribe además sobre su porción. Un tooltip es un dato escondido: obliga a
-        // apuntar con el ratón, y en una pantalla táctil directamente no existe.
-        //
-        // Las dos opciones son de ESTE anillo, no del donut: el resto de gráficas de
-        // analítica conservan su leyenda abajo. Encenderlas en el lienzo por defecto habría
-        // cambiado el tablero financiero y los paneles operativos sin haberlo decidido para
-        // ellos.
-        leyenda="lateral"
-        mostrarValores
       />
     </div>
   );

@@ -25,7 +25,7 @@ import useSWR from "swr";
 
 import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtro-analitica";
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
-import { GraficaBarras } from "@/components/private/analytics/GraficaBarras";
+import { GraficaReparto } from "@/components/private/analytics/GraficaReparto";
 import { consultarConteoHoyGestion } from "@/lib/actions/conteo-hoy-gestion";
 import type { ResultadoConteoHoyGestion } from "@/lib/types/conteo-hoy-gestion";
 
@@ -118,7 +118,10 @@ export function HoyGestionBarras() {
     : [];
 
   return (
-    <GraficaBarras
+    // ⚠ UNA BARRA DIVIDIDA, NO DOS BARRAS (decisión del 2026-08-18, opción A). La pregunta es
+    // qué PROPORCIÓN del día queda pendiente, y eso se lee en una barra partida en dos; dos
+    // barras sueltas obligan a compararlas de altura y a hacer la división mentalmente.
+    <GraficaReparto
       titulo={tituloConFecha(datos?.fecha ?? null)}
       series={series}
       unidad={UNIDAD}

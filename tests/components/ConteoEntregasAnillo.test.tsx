@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import { ConteoEntregasAnillo } from "@/app/(app)/analitica/_components/entregas/ConteoEntregasAnillo";
@@ -99,6 +99,54 @@ describe("Anillo de entregas — las dos cifras y su suma", () => {
     expect(screen.getByText(/Reprogramadas: 7/)).toBeInTheDocument();
     expect(screen.getByText(/Incidentes: 1/)).toBeInTheDocument();
     expect(screen.getByText(/Otros: 64/)).toBeInTheDocument();
+  });
+
+  // Pedido el 2026-08-18: cada desenlace lleva su PESO sobre el total pegado a la cifra. El
+  // ejemplo con el que se pidió, tal cual: 10 órdenes = 3 entregadas, 5 devueltas, 2 otros.
+  //
+  // El porcentaje ACOMPAÑA a la cantidad, no la sustituye: «50 %» a solas no dice de cuántas
+  // órdenes se habla. `\s` cubre el espacio duro que mete `Intl` antes del símbolo.
+  it("escribe el porcentaje de cada desenlace junto a su cifra", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos({ entregada: 3, devuelta: 5, otros: 2 }),
+    });
+    renderAnillo();
+
+    expect(await screen.findByText(/Entregadas: 3\s\(30\s?%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Devueltas: 5\s\(50\s?%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Otros: 2\s\(20\s?%\)/)).toBeInTheDocument();
+  });
+
+  // Un desenlace sin órdenes pesa 0 %, y se dice: es una respuesta, no una ausencia. El mismo
+  // criterio por el que los seis segmentos se pintan aunque valgan cero.
+  it("los desenlaces vacíos pesan 0 %", async () => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos({ entregada: 10 }) });
+    renderAnillo();
+
+    expect(await screen.findByText(/Entregadas: 10\s\(100\s?%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Incidentes: 0\s\(0\s?%\)/)).toBeInTheDocument();
+  });
+
+  // ⚠ LA INVARIANTE QUE JUSTIFICA EL RESTO MAYOR: los seis pesos SUMAN 100 %. Con tres tercios
+  // —el caso clásico— redondear cada porción por su cuenta daría 33 + 33 + 33 = 99 en un anillo
+  // que dibuja un todo.
+  it("los pesos suman 100 % aunque el reparto no sea exacto", async () => {
+    consultarMock.mockResolvedValue({
+      status: "ok",
+      datos: datos({ entregada: 1, devuelta: 1, rechazada: 1 }),
+    });
+    renderAnillo();
+
+    await screen.findAllByText(/Entregadas: 1\s\(/);
+    // Se cuenta sobre la lista ACCESIBLE y no sobre todo el documento: los mismos seis pesos
+    // salen dos veces —la leyenda visible y su gemela para lectores de pantalla— y sumar las
+    // doce entradas daría 200 %.
+    const puntos = within(screen.getByRole("list", { name: /Detalle gestión/ }))
+      .getAllByText(/\((\d+)\s?%\)/)
+      .map((nodo) => Number(/\((\d+)\s?%\)/.exec(nodo.textContent ?? "")?.[1] ?? 0));
+
+    expect(puntos.reduce((s, p) => s + p, 0)).toBe(100);
   });
 
   // «No entregadas» era el nombre del cubo viejo. Que no vuelva por descuido: ahora ese lado

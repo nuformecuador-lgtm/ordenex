@@ -25,7 +25,7 @@ import useSWR from "swr";
 
 import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtro-analitica";
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
-import { GraficaBarras } from "@/components/private/analytics/GraficaBarras";
+import { GraficaLineas } from "@/components/private/analytics/GraficaLineas";
 import { consultarConteoCargadasPorDia } from "@/lib/actions/conteo-cargadas-por-dia";
 import type { ResultadoConteoCargadasPorDia } from "@/lib/types/conteo-cargadas";
 
@@ -111,7 +111,12 @@ export function CargadasPorDiaBarras() {
     : [];
 
   return (
-    <GraficaBarras
+    // ⚠ LÍNEA Y NO BARRAS (decisión del 2026-08-18). En una serie diaria la pregunta es la
+    // TENDENCIA —si sube o baja—, no comparar el martes contra el jueves; y con treinta días
+    // las barras se vuelven un peine ilegible mientras la línea sigue leyéndose. Un hueco en
+    // la línea es un día sin cargas: `GraficaLineas` no une los ausentes con una recta, así
+    // que no inventa un dato que no existe.
+    <GraficaLineas
       titulo={TITULO}
       series={series}
       unidad={UNIDAD}

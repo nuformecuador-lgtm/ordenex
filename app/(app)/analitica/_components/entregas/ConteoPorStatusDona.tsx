@@ -26,7 +26,7 @@ import useSWR from "swr";
 import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtro-analitica";
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
-import { GraficaDonut } from "@/components/private/analytics/GraficaDonut";
+import { GraficaRanking } from "@/components/private/analytics/GraficaRanking";
 import { consultarConteoPorStatus } from "@/lib/actions/conteo-por-status";
 import type { ResultadoConteoPorStatus } from "@/lib/types/conteo-por-status";
 
@@ -44,9 +44,7 @@ const TITULO = "Detalle de las ordenes";
 /** La unidad del formateador: son ordenes contadas, no dinero ni porcentaje. */
 const UNIDAD = "conteo";
 
-/** Dona con hueco: el total va al centro, como en el anillo hermano. */
-const RADIO_INTERIOR = "55%";
-const RADIO_EXTERIOR = "78%";
+
 
 // El sello de frescura («Actualizado 18:30») se RETIRO el 2026-08-18, igual que en el anillo
 // hermano. `lastSync` sigue viajando en el DTO: lo que se quito es el rotulo, no el dato.
@@ -146,19 +144,16 @@ export function ConteoPorStatusDona() {
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <GraficaDonut
-        titulo={TITULO}
+      {/* ⚠ FILAS ORDENADAS, NO UNA DONA (decisión del 2026-08-18, opción A). Con hasta veinte
+          estados la dona vuelve astillas las porciones pequeñas y obliga a comparar ángulos
+          para saber cuál manda. El total pasa al título, donde estaba el centro de la dona. */}
+      <GraficaRanking
+        titulo={hayDato ? `${TITULO} · ${formatearValor(datos.total, UNIDAD)}` : TITULO}
         series={series}
         unidad={UNIDAD}
         vacio={VACIO_PANEL}
         cargando={isLoading}
         error={mensaje}
-        innerRadius={RADIO_INTERIOR}
-        outerRadius={RADIO_EXTERIOR}
-        centro={hayDato ? formatearValor(datos.total, UNIDAD) : undefined}
-        // Mismo trato que el anillo hermano: las cifras se leen sin tocar el grafico.
-        leyenda="lateral"
-        mostrarValores
       />
     </div>
   );
