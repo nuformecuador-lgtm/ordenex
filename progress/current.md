@@ -9,7 +9,73 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-15, noche. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-18. **EMPIEZA A LEER POR AQUÍ**
+
+> **Producción está sana y no se ha movido**: `prod` sigue en la release del 15-ago (PR #388),
+> **cero errores de runtime en 3 días**. Todo lo que cambió está en `dev`. **0 features
+> `in_progress`.**
+
+**Entró la 227 desde otra sesión** — PR **#390**, mergeado el 16-ago 23:07 UTC: *hilo de notas por
+orden entre tienda y mensajero*, 79 archivos, +8.242/−1.589. `dev` va **3 commits por delante de
+`prod`**. Su ficha quedó `in_progress` con el PR ya mergeado —**sexta** vez el mismo patrón— y se
+cierra aquí.
+
+### 🔎 La deuda que esa ficha escondía, y que ya está saldada
+
+La migración `20260815140000_orden_mensajero_meta_drop_nota` es **destructiva**, y su propia cabecera
+lo dejaba escrito: el conteo se hizo contra la base **local** (0 de 0, tabla vacía) y quedaba
+**PENDIENTE** de medirlo *«quien tenga la credencial, ANTES de aplicar esta migración allí»*. El
+reviewer lo aceptó abierto a propósito (m3). Medido contra **producción** el 18-ago:
+
+**4 filas en `orden_mensajero_meta` · 0 con `nota` · 0 mensajeros → el drop no pierde nada.**
+
+**No es un cero de universo vacío** —la lección de siempre, aplicada—: la tabla **tiene** 4 filas, y
+son de `marcar_luego` (feature 115), que la migración no toca. Nadie llegó a usar la nota privada de
+la 116, así que la pérdida deliberada que la P1 firmó no se lleva por delante ni un texto real.
+
+### ⚠️ La próxima release YA NO es «cero migraciones»
+
+La base de producción va por `20260812120000_gestion_orden_pago`. Le faltan **dos**:
+`20260815120000_orden_nota` y `20260815140000_orden_mensajero_meta_drop_nota` —**y la segunda dropea
+una columna**—. Entran solas con el deploy. Las tres últimas releases fueron de cero migraciones;
+ésta no, y hay que abrirla sabiéndolo.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **La 230**, registrada hoy a petición del humano: **el dinero se pinta sin céntimos**
+   (`₡1.234,56` → `₡1.235`, redondeando). El formato tiene **un solo punto de paso**
+   (`formatMontoString`, que consolidó la 201), así que el cambio de producción son 4 archivos; el
+   coste real son **276 aserciones en 39 archivos de test**. Decisiones ya firmadas: redondear y no
+   truncar, y **solo dinero** —los porcentajes y las duraciones de analítica son décimas, no
+   centésimas—. Va con guardia nueva, o la próxima feature reintroduce los céntimos.
+2. **Release `dev` → `prod`** cuando la 230 esté dentro, con **gate completo sobre el SHA real** y no
+   sobre «dev» (el pre-vuelo caduca en minutos), y consciente de las dos migraciones de arriba.
+3. **La 228, desbloqueada**: dependía de la 227, que ya está en `dev`. Es la transición «la tienda
+   habilita una novedad», con `HabilitarNovedadModal` esperando en maqueta declarada. Y hasta que
+   exista, **el mensajero no recibe ninguna señal** de que la tienda le escribió en el hilo nuevo.
+4. **La 218** (el corte automático sigue sin sumar reintento en `sin_gestionar`) y **la 219** (el 0 de
+   R19 caduca en cuanto entre una orden en `devuelta`, y nada lo vigila).
+5. **La 225** y **la 226**, frontend y baratas.
+6. **SIN FICHA:** los seis tokens que **empeoran al imprimir** desde oscuro (`P1`–`P6`), y el **límite
+   de intentos del rastreo público**, hoy en memoria del proceso y ya de cara a internet.
+7. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+
+### 🧠 Lo que este cierre enseñó
+
+- **Una medición pendiente dentro de una migración es una tarea con fecha de vencimiento**, no un
+  comentario. La de la 227 estaba escrita en la cabecera del `.sql`, el reviewer la dejó abierta con
+  nombre y número (m3), y aun así sólo se ejecuta si alguien **lee la ficha antes de la release**.
+  Costó una consulta.
+- **El conteo se hace sobre la tabla entera, no sobre la columna.** Preguntar sólo `WHERE nota IS NOT
+  NULL` habría dado 0 y no habría distinguido «nadie la usó» de «la tabla está vacía». Con las 4
+  filas de `marcar_luego` delante, el cero significa algo.
+- **`origin/dev` se mueve mientras se redacta el estado.** Este archivo describía «0 `in_progress`,
+  sin PRs abiertos» y llevaba dos días abierto en un PR sin mergear; la 227 lo desmintió el mismo
+  día. Un estado no mergeado envejece igual que un gate.
+
+---
+
+## ✅ AL DÍA — 2026-08-15, noche
 
 > **La release SALIÓ y no hay nada a medias.** `prod` = `4b438f0c` (PR **#388**, deployment
 > **READY**, **cero errores de runtime**), y `dev` no tiene **ningún** commit que le falte a `prod`.
