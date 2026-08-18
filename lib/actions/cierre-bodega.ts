@@ -28,6 +28,7 @@ import {
   type ListarConsolidablesCompletoResult,
   type ListarPendientesCierresBodegaCompletoResult,
   type ListarHistoricoCierresBodegaCompletoResult,
+  type ListarGestionesCierresBodegaCompletoResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
@@ -37,6 +38,7 @@ import {
   type AprobarCierreBodegaResult,
   type RechazarCierreBodegaResult,
 } from "@/lib/types/cierre-bodega";
+import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -332,6 +334,36 @@ export async function listarHistoricoCierresBodegaCompleto(
     listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
     return service.listarHistoricoCierresBodegaCompleto(actor);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 230 — Tanda 7 (T7.3, R13/R17/R19/R23/R32/R36) — el UNICO punto de entrada de servidor
+ * de la descarga DETALLADA del listado de cierres de BODEGA.
+ *
+ * Misma forma que su gemela de `cierres-admin` y con la MISMA lista blanca compartida
+ * (`filtrosDescargaGestionesSchema`): el actor ANTES de validar (R17), `.strict()` como unica
+ * defensa contra una clave ajena (R19) y el rango invertido muerto en el borde (R32).
+ *
+ * **`design.md §3.2` la situa en un `lib/actions/cierres-bodega-admin.ts`.** Ese archivo no
+ * existe en esta rama base: las Server Actions del lado maestro de los cierres de bodega viven
+ * aqui, junto a las del lado adminSatelite, con su `buildCierresBodegaAdminService` ya cableado.
+ * Se coloca donde estan sus hermanas —un modulo nuevo obligaria a duplicar el builder y el
+ * traductor de errores— y se deja anotado para el reviewer.
+ *
+ * @sin-superficie TEMPORAL y con fecha de caducidad dentro de la MISMA feature 230: el borde de datos (T7.1-T7.3) aterriza antes que su montaje (T7.4), que es otra tanda y otro agente. Al montar el control en `CierresBodegaAdminModule`, esta anotacion se RETIRA en ese mismo commit — la segunda mitad de esta guardia la pone roja en cuanto la accion recupere superficie.
+ */
+export async function listarGestionesCierresBodegaCompleto(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarGestionesCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R17: antes de parsear y antes del service
+    const data = filtrosDescargaGestionesSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarGestionesCierresBodegaCompleto(actor, data);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

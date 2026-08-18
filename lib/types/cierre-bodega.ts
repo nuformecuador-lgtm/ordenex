@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cierreConfig } from "@/lib/config/cierre";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
 import type {
@@ -190,6 +191,21 @@ export type ListarPendientesCierresBodegaCompletoResult =
   ListarCompletoResult<CierreBodegaResumen>;
 export type ListarHistoricoCierresBodegaCompletoResult =
   ListarCompletoResult<CierreBodegaResumen>;
+
+/**
+ * Feature 230 — Tanda 7 (T7.3, R13/R21/R26/R38) — el conjunto de la HOJA FUNDIDA de «cierres de
+ * bodega» tal como lo recibe el cliente.
+ *
+ * MISMO elemento (`CierreGestionDescargaDTO`) que su gemelo de `cierres-admin`, importado de
+ * aquel contrato y no redeclarado (R26): las dos pantallas alimentan la MISMA declaracion de
+ * columnas con la MISMA proyeccion, y un tipo paralelo es la primera grieta por la que se
+ * cuela una fila distinta segun desde donde se descargue.
+ *
+ * Union de error ANCHO por el motivo de siempre: lo consume `filasDesdeResultado`, que traduce
+ * `limite_excedido`, `forbidden` y `unauthenticated` a mensajes accionables en un solo sitio.
+ */
+export type ListarGestionesCierresBodegaCompletoResult =
+  ListarCompletoResult<CierreGestionDescargaDTO>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde). Para ver-detalle/aprobar se

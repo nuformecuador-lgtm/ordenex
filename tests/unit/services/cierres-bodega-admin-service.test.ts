@@ -113,6 +113,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     findHistoricoCompleto: vi.fn(async () => [] as CierreBodegaResumenRow[]),
     findColaCompleta: vi.fn(async () => [] as CierreBodegaResumenRow[]),
     findCierreBodegaConDetalle: vi.fn(async () => null),
+    // Feature 230 (T7.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
+    // descarga detallada; el conjunto vacio deja el camino de la 40 intacto.
+    findGestionesDeCierresBodegaCompleto: vi.fn(async () => []),
     resolverCierreBodega: vi.fn(async () => "updated" as const),
     ...overrides,
   };

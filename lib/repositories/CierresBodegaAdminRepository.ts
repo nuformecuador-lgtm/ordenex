@@ -14,11 +14,22 @@ import {
 // Feature 69/T23 (R15): se reusan las MISMAS piezas que compone T18 en `CierresAdminRepository`
 // (proyeccion + mapper), no una copia: las dos pantallas de admin muestran el detalle del mismo
 // cierre_dia ya creado y tienen que salir del mismo sitio o divergen.
+// Feature 230 (T7.1, R26): + las CUATRO piezas de la hoja fundida (proyeccion, snapshot con su
+// clave de join, orden y recortes) y su compositor. Mismo motivo llevado al extremo: los DOS
+// caminos de la descarga detallada tienen que emitir la MISMA fila desde la MISMA declaracion,
+// asi que ninguno de ellos declara nada propio.
 import {
+  componerGestionesDescarga,
   DETALLE_ADMIN_SELECT,
+  DETALLE_DESCARGA_SELECT,
   GESTION_ADMIN_SELECT,
+  GESTION_DESCARGA_SELECT,
+  ORDEN_GESTIONES_DESCARGA,
+  recortesDescargaGestionesWhere,
   toPendienteRowDesdeSnapshot,
 } from "@/lib/repositories/CierresAdminRepository";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import { ESTADOS_COLA_SOLICITADO } from "@/lib/utils/colas-cierre";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -284,6 +295,47 @@ export class CierresBodegaAdminRepository implements ICierresBodegaAdminReposito
     );
 
     return { cierre: toBodegaResumenRow(cierre), cierresDia };
+  }
+
+  /**
+   * Feature 230 — Tanda 7 (T7.1, R11/R24/R26/R41) — TODAS las gestiones de los cierres del dia
+   * YA CONSOLIDADOS en un cierre de bodega que casan los recortes del dialogo.
+   *
+   * `cierreBodegaId: { not: null }` es la traduccion EXACTA de R24 («las gestiones de los cierres
+   * del dia consolidados en un cierre de bodega, y ninguna otra»). No hay alcance por zona que
+   * componer: este listado es de ACCESO TOTAL, y el guard de rol lo aplica el servicio antes de
+   * llamar aqui (R25).
+   *
+   * **Esto y el camino de `cierres-admin` cubren conjuntos DISJUNTOS**, no dos vistas de lo mismo
+   * (design §2.6): un cierre del dia con destino `bodega_central` —la GAM— nunca se consolida en
+   * un cierre de bodega, porque `consolidablesWhere` exige destino satelite. Los dos botones
+   * juntos son el total; uno solo deja fuera media operacion.
+   *
+   * Reusa las cuatro piezas de la hoja fundida sin declarar nada propio (R26), y NO reusa
+   * `findCierreBodegaConDetalle` con su bucle por `cierre_dia`: aquel paga una consulta por
+   * cierre del dia, y aqui el conjunto es un rango de meses.
+   */
+  async findGestionesDeCierresBodegaCompleto(
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]> {
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: {
+        cierre: {
+          cierreBodegaId: { not: null }, // R24: solo lo ya consolidado en bodega
+          ...recortesDescargaGestionesWhere(filtros),
+        },
+      },
+      orderBy: [...ORDEN_GESTIONES_DESCARGA], // R11/R26: el MISMO orden que el camino A
+      select: GESTION_DESCARGA_SELECT, // R41: sin `evidencia_storage_path`
+    });
+    if (gestiones.length === 0) return [];
+
+    const cierreIds = [...new Set(gestiones.map((g) => g.cierreId).filter((id) => id !== null))];
+    const detalle = await this.prisma.cierreDetail.findMany({
+      where: { cierreId: { in: cierreIds } },
+      select: DETALLE_DESCARGA_SELECT,
+    });
+    return componerGestionesDescarga(gestiones, detalle);
   }
 
   /** R16-R22: transicion atomica guardada; un solo UPDATE, no toca otras tablas. */
