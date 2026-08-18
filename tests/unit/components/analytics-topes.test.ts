@@ -4,13 +4,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MAX_CATEGORIAS_LEGIBLES,
   MAX_PUNTOS_SERIE,
-  MAX_SERIES,
   PuntosExcedidosError,
-  SeriesExcedidasError,
   aplicarTopePuntos,
-  aplicarTopeSeries,
+  prepararSeries,
 } from "@/components/private/analytics/topes";
+import type { SerieDato } from "@/components/private/analytics/tipos";
 
 /** `NODE_ENV` es de solo lectura en los tipos de Node; se sustituye para el caso. */
 function conEntorno(valor: string, caso: () => void): void {
@@ -29,36 +29,59 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("techo de series (R30, R31)", () => {
-  it("con 5 series o menos no recorta ni lanza en ningun entorno", () => {
+// ⚠ AQUI VIVIA EL TECHO DE SERIES (`MAX_SERIES` = 5), y se RETIRO el 2026-08-18 por decision
+// humana. Existia por una sola razon: la paleta tenia cinco tokens y no ciclaba, asi que la
+// sexta categoria se habria pintado del color de otra. Ahora `paleta.ts` declara VEINTE y
+// cicla, y el precio del techo lo pagaba el dato — un desglose de ordenes por estado perdia
+// quince buckets de veinte.
+//
+// Estos casos son los que impiden que el recorte vuelva por la puerta de atras.
+describe("ya NO hay techo de categorias (2026-08-18)", () => {
+  const serieDe = (n: number): SerieDato => ({
+    id: "s",
+    etiqueta: "s",
+    puntos: Array.from({ length: n }, (_, i) => ({ categoria: `c${i}`, valor: i })),
+  });
+
+  it("con veinte categorias no recorta en NINGUN entorno", () => {
     for (const entorno of ["development", "test", "production"]) {
       conEntorno(entorno, () => {
-        const resultado = aplicarTopeSeries(serie(MAX_SERIES));
-        expect(resultado.recortado).toBe(false);
-        expect(resultado.items).toHaveLength(MAX_SERIES);
-        expect(resultado.mostrados).toBe(MAX_SERIES);
+        const preparadas = prepararSeries([serieDe(20)]);
+        expect(preparadas.series[0]?.puntos).toHaveLength(20);
+        expect(preparadas.recorteSeries.recortado).toBe(false);
       });
     }
   });
 
-  it("con 6 series lanza SeriesExcedidasError fuera de produccion", () => {
-    for (const entorno of ["development", "test"]) {
-      conEntorno(entorno, () => {
-        expect(() => aplicarTopeSeries(serie(6))).toThrow(SeriesExcedidasError);
-        expect(() => aplicarTopeSeries(serie(6))).toThrow(/6/);
-        expect(() => aplicarTopeSeries(serie(6))).toThrow(/5/);
-      });
-    }
-  });
-
-  it("en produccion conserva las 5 primeras en orden y no lanza", () => {
-    conEntorno("production", () => {
-      const resultado = aplicarTopeSeries(serie(8));
-      expect(resultado.items).toEqual(["serie-0", "serie-1", "serie-2", "serie-3", "serie-4"]);
-      expect(resultado.recortado).toBe(true);
-      expect(resultado.mostrados).toBe(5);
-      expect(resultado.recibidos).toBe(8);
+  // La mutacion que este caso mata: reintroducir un `slice` en `prepararSeries`. Con seis
+  // series pasaban cinco y la sexta desaparecia.
+  it("con seis series llegan las SEIS, y sin lanzar", () => {
+    conEntorno("development", () => {
+      const seis = Array.from({ length: 6 }, () => serieDe(1));
+      expect(() => prepararSeries(seis)).not.toThrow();
+      expect(prepararSeries(seis).series).toHaveLength(6);
     });
+  });
+
+  it("el aviso de recorte de series queda en falso, con los numeros reales", () => {
+    const preparadas = prepararSeries([serieDe(3), serieDe(3)]);
+    expect(preparadas.recorteSeries).toEqual({ recortado: false, mostrados: 2, recibidos: 2 });
+  });
+});
+
+// El techo de LEGIBILIDAD sobrevive, y es otra cosa: no lo aplica el paquete sino cada
+// tablero sobre sus propios datos, para no pintar un donut de quince porciones aunque ahora
+// todas tuvieran color propio.
+describe("techo de legibilidad de los tableros", () => {
+  it("MAX_CATEGORIAS_LEGIBLES vale 5 y el paquete NO lo aplica por su cuenta", () => {
+    expect(MAX_CATEGORIAS_LEGIBLES).toBe(5);
+    // Anti-vacio: si el paquete lo aplicara, esta serie de ocho saldria recortada.
+    const ocho: SerieDato = {
+      id: "s",
+      etiqueta: "s",
+      puntos: Array.from({ length: 8 }, (_, i) => ({ categoria: `c${i}`, valor: i })),
+    };
+    expect(prepararSeries([ocho]).series[0]?.puntos).toHaveLength(8);
   });
 });
 

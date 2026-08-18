@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   MAX_PUNTOS_SERIE,
-  MAX_SERIES,
-  SeriesExcedidasError,
-  aplicarTopeSeries,
+  MAX_CATEGORIAS_LEGIBLES,
   prepararSeries,
 } from "@/components/private/analytics/topes";
 import type { GranularidadVista, VistaFinanciera } from "@/lib/types/analitica-financiera";
@@ -319,7 +317,7 @@ describe("R9/186 · una granularidad desconocida no se rotula como si fuera un d
 
 describe("R10/186 · un punto por fila, en el orden del DTO, sin cola agrupada", () => {
   it("un punto por fila, en el orden del DTO, sin cola agrupada", () => {
-    // Doce cubos con `MAX_SERIES = 5`: si alguien aplicara `agruparCola` a la serie
+    // Doce cubos con `MAX_CATEGORIAS_LEGIBLES = 5`: si alguien aplicara `agruparCola` a la serie
     // temporal —«por si acaso», por simetria con el donut y las barras— quedarian CINCO
     // puntos y el ultimo se llamaria «Otros». Fundir fechas en «Otros» no significa nada en
     // un eje de tiempo y se comeria el final de la serie, que es lo que se mira.
@@ -327,7 +325,7 @@ describe("R10/186 · un punto por fila, en el orden del DTO, sin cola agrupada",
     const serie = serieTemporalDeVista(vista, "bruto", TEXTOS_CUBO);
 
     expect(serie.puntos).toHaveLength(12);
-    expect(serie.puntos.length).toBeGreaterThan(MAX_SERIES);
+    expect(serie.puntos.length).toBeGreaterThan(MAX_CATEGORIAS_LEGIBLES);
     serie.puntos.forEach((punto, indice) => {
       expect(punto.categoria).toContain(vista.filas[indice]!.cubo);
     });
@@ -745,21 +743,28 @@ describe("R20 · con la cola agrupada el paquete acepta la serie; sin agrupar, r
     const serie = serieDeVista(vistaConCubos(12), "bruto");
     const acotada = {
       ...serie,
-      puntos: agruparCola(serie.puntos, MAX_SERIES, ETIQUETA_COLA),
+      puntos: agruparCola(serie.puntos, MAX_CATEGORIAS_LEGIBLES, ETIQUETA_COLA),
     };
 
     const preparadas = prepararSeries([acotada]);
-    expect(preparadas.series[0]?.puntos).toHaveLength(MAX_SERIES);
+    expect(preparadas.series[0]?.puntos).toHaveLength(MAX_CATEGORIAS_LEGIBLES);
     expect(preparadas.recorteSeries.recortado).toBe(false);
     expect(preparadas.recortePuntos.recortado).toBe(false);
   });
 
-  it("los mismos doce cubos SIN agrupar desbordan el techo de segmentos del donut", () => {
-    // Contrapeso: `GraficaDonut` aplica `MAX_SERIES` a los SEGMENTOS de la unica
-    // serie que pinta (`GraficaDonut.tsx:25-37`), asi que doce cubos crudos
-    // lanzan. Sin esta asercion, el caso anterior podria estar pasando porque el
-    // tope no se aplica en ningun sitio.
+  // ⚠ ESTE CASO SE DIO LA VUELTA EL 2026-08-18. Era el contrapeso del anterior: doce cubos
+  // sin agrupar LANZABAN `SeriesExcedidasError`, y esa asercion probaba que el techo se
+  // aplicaba de verdad en algun sitio. Ya no hay techo de color —la paleta tiene veinte
+  // tokens y cicla— asi que doce cubos crudos pasan enteros.
+  //
+  // El contrapeso sigue haciendo falta, pero ahora prueba otra cosa: que `agruparCola` es lo
+  // UNICO que reduce las porciones. Sin agrupar hay doce, con agrupar cinco; si el caso
+  // anterior pasara sin que `agruparCola` hiciera nada, este lo delata.
+  it("los mismos doce cubos SIN agrupar llegan enteros: quien reduce es agruparCola", () => {
     const serie = serieDeVista(vistaConCubos(12), "bruto");
-    expect(() => aplicarTopeSeries(serie.puntos)).toThrow(SeriesExcedidasError);
+
+    expect(serie.puntos).toHaveLength(12);
+    expect(() => prepararSeries([serie])).not.toThrow();
+    expect(prepararSeries([serie]).series[0]?.puntos).toHaveLength(12);
   });
 });

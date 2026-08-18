@@ -13,7 +13,7 @@
 import { Suspense, lazy } from "react";
 
 import { formatearValor } from "./formato";
-import { CLASES_LIENZO, GraficaMarco } from "./GraficaMarco";
+import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
 import type { GraficaProps } from "./tipos";
 import { prepararSeries } from "./topes";
@@ -29,6 +29,7 @@ export function GraficaBarras({
   cargando,
   error,
   className,
+  proporcion,
 }: GraficaProps) {
   const hayDatos = series.some((serie) => serie.puntos.length > 0);
   // Los topes solo se aplican cuando hay algo que pintar: con error o cargando
@@ -43,10 +44,11 @@ export function GraficaBarras({
       cargando={cargando}
       error={error}
       className={className}
+      proporcion={proporcion}
     >
       {preparadas ? (
         <>
-          <div className={CLASES_LIENZO}>
+          <div className={clasesDeLienzo(proporcion)}>
             <Suspense fallback={null}>
               <BarrasLienzo
                 series={preparadas.series}

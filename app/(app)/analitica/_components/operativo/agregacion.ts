@@ -35,7 +35,7 @@
 //         numerador y el denominador solo se leen para distinguir «no hubo gestiones» de
 //         «no hay dato».
 
-import { MAX_PUNTOS_SERIE, MAX_SERIES } from "@/components/private/analytics/topes";
+import { MAX_PUNTOS_SERIE, MAX_CATEGORIAS_LEGIBLES } from "@/components/private/analytics/topes";
 import type { PuntoDato, SerieDato } from "@/components/private/analytics/tipos";
 import type { MetricaUnidad } from "@/lib/analytics/types";
 import type { CuboAgregado, PuntoSerie, SerieOperativa } from "@/lib/types/analitica-operativa";
@@ -248,20 +248,20 @@ export interface Agrupacion<T> {
 /**
  * R15 — ordena por magnitud descendente y funde la cola en «otros».
  *
- * El resultado NUNCA supera `MAX_SERIES`: si se conservasen 5 y ademas se anadiese
+ * El resultado NUNCA supera `MAX_CATEGORIAS_LEGIBLES`: si se conservasen 5 y ademas se anadiese
  * «otros» serian 6 y `aplicarTopeSeries` lanzaria `SeriesExcedidasError`, que es
- * exactamente lo que R15 existe para evitar. Se conservan por tanto las `MAX_SERIES - 1`
+ * exactamente lo que R15 existe para evitar. Se conservan por tanto las `MAX_CATEGORIAS_LEGIBLES - 1`
  * mayores y la cola va al cubo (declarado en `progress/impl_131.md`).
  *
  * Punto de mutacion de R15: devolver las series sin agrupar hace que el tope de la 130
  * lance.
  */
 export function agruparSeriesEnOtros(series: readonly SerieDato[]): Agrupacion<SerieDato> {
-  if (series.length <= MAX_SERIES) return { items: series, agrupadas: 0 };
+  if (series.length <= MAX_CATEGORIAS_LEGIBLES) return { items: series, agrupadas: 0 };
 
   const ordenadas = [...series].sort((a, b) => magnitud(b.puntos) - magnitud(a.puntos));
-  const conservadas = ordenadas.slice(0, MAX_SERIES - 1);
-  const cola = ordenadas.slice(MAX_SERIES - 1);
+  const conservadas = ordenadas.slice(0, MAX_CATEGORIAS_LEGIBLES - 1);
+  const cola = ordenadas.slice(MAX_CATEGORIAS_LEGIBLES - 1);
 
   // La cola se suma POR CATEGORIA: dos series temporales distintas comparten eje X.
   const porCategoria = new Map<string, number | null>();
@@ -288,11 +288,11 @@ export function agruparSeriesEnOtros(series: readonly SerieDato[]): Agrupacion<S
 
 /** R15 en un donut: alli las categorias son los PUNTOS de la unica serie, no las series. */
 export function agruparPuntosEnOtros(puntos: readonly PuntoDato[]): Agrupacion<PuntoDato> {
-  if (puntos.length <= MAX_SERIES) return { items: puntos, agrupadas: 0 };
+  if (puntos.length <= MAX_CATEGORIAS_LEGIBLES) return { items: puntos, agrupadas: 0 };
 
   const ordenados = [...puntos].sort((a, b) => Math.abs(b.valor ?? 0) - Math.abs(a.valor ?? 0));
-  const conservados = ordenados.slice(0, MAX_SERIES - 1);
-  const cola = ordenados.slice(MAX_SERIES - 1);
+  const conservados = ordenados.slice(0, MAX_CATEGORIAS_LEGIBLES - 1);
+  const cola = ordenados.slice(MAX_CATEGORIAS_LEGIBLES - 1);
 
   const presentes = cola.filter((p): p is PuntoDato & { valor: number } => p.valor !== null);
   const otros: PuntoDato = {

@@ -13,3 +13,9 @@ export interface LienzoProps {
    */
   readonly formatear: (valor: number | null) => string;
 }
+
+// `AnilloProps` vive en `../tipos` y no aqui: `GraficaDonut` tiene que declararla en SUS
+// props, y el guardia de confinamiento de recharts (R26/R27) prohibe que una grafica
+// importe nada de `./lienzo/` —aunque sea solo un tipo, que se borra en compilacion—,
+// porque un import estatico a esta carpeta mete el lienzo en el First Load.
+export type { AnilloProps } from "../tipos";

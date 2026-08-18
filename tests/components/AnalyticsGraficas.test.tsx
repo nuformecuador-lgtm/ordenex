@@ -19,7 +19,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { GraficaBarras } from "@/components/private/analytics/GraficaBarras";
 import { GraficaDonut } from "@/components/private/analytics/GraficaDonut";
 import { GraficaLineas } from "@/components/private/analytics/GraficaLineas";
-import { MAX_PUNTOS_SERIE, MAX_SERIES } from "@/components/private/analytics/topes";
+import { MAX_PUNTOS_SERIE } from "@/components/private/analytics/topes";
 import { SIN_MONTO } from "@/lib/config/moneda";
 
 vi.mock("@/components/private/analytics/lienzo/BarrasLienzo", () => ({
@@ -189,15 +189,19 @@ describe("topes de series y de puntos (R10 acotado, R31, R33)", () => {
         />,
       );
 
-      expect(screen.getByText("Se muestran 5 de 8")).toBeInTheDocument();
+      // Ya no se recorta por numero de series (2026-08-18): las OCHO llegan enteras y no hay
+      // aviso que anunciar. Antes eran cinco y un «Se muestran 5 de 8».
+      expect(screen.queryByText("Se muestran 5 de 8")).toBeNull();
       const lista = screen.getByRole("list", { name: "Entregas" });
-      expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES * 2);
+      expect(within(lista).getAllByRole("listitem")).toHaveLength(8 * 2);
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it("con 400 puntos, en produccion, nunca emite mas de MAX_SERIES x MAX_PUNTOS_SERIE entradas", () => {
+  // El techo de PUNTOS sobrevive y es el que acota la salida: es de legibilidad de un eje
+  // temporal, no de color, y ninguna paleta lo resuelve.
+  it("con 400 puntos, en produccion, cada serie se acota a MAX_PUNTOS_SERIE", () => {
     vi.stubEnv("NODE_ENV", "production");
     try {
       const largos = Array.from({ length: 8 }, (_, i) =>
@@ -214,21 +218,25 @@ describe("topes de series y de puntos (R10 acotado, R31, R33)", () => {
       );
 
       const lista = screen.getByRole("list", { name: "Entregas" });
-      expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES * MAX_PUNTOS_SERIE);
+      expect(within(lista).getAllByRole("listitem")).toHaveLength(8 * MAX_PUNTOS_SERIE);
       expect(screen.getByText("Se muestran 62 de 400")).toBeInTheDocument();
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  // El donut se prueba APARTE porque su techo es distinto y el motivo importa:
-  // ahi el color distingue SEGMENTOS, no series, y `paleta.ts` lanza
-  // `IndiceSerieFueraDeRangoError` para cualquier indice >= MAX_SERIES **en todo
-  // NODE_ENV, produccion incluida**. Si `GraficaDonut` dejara de recortar, un donut
-  // de 6+ categorias -- `ordenes_por_estado` tiene 19 -- REVENTARIA EN EL NAVEGADOR
-  // tambien en produccion. El recorte es codigo de seguridad, no cosmetica, y estos
-  // dos tests son su unica red.
-  describe("techo de SEGMENTOS del donut (R30, R31 aplicados a las porciones)", () => {
+  // ⚠ ESTE BLOQUE SE DIO LA VUELTA EL 2026-08-18, y el comentario que habia aqui explicaba
+  // muy bien POR QUE existia: el color del donut distingue SEGMENTOS, `paleta.ts` lanzaba
+  // `IndiceSerieFueraDeRangoError` para cualquier indice >= 5 **en todo NODE_ENV, produccion
+  // incluida**, y por tanto un donut de 6+ categorias —`ordenes_por_estado` tiene 19—
+  // REVENTARIA EN EL NAVEGADOR si la grafica no recortaba. El recorte era codigo de
+  // seguridad, no cosmetica.
+  //
+  // Lo que cambio no es la opinion sino el PELIGRO: la paleta ahora tiene veinte tokens y
+  // CICLA, asi que `varDeSerie` ya no lanza por muchas categorias que lleguen. Sin nada que
+  // reventar, el recorte solo costaba dato — quince buckets de veinte en el desglose por
+  // estado—. Estos casos vigilan la direccion nueva: que se pinten TODAS.
+  describe("el donut ya no recorta segmentos (2026-08-18)", () => {
     const donut = (categorias: number) => [
       {
         id: "estados",
@@ -240,15 +248,38 @@ describe("topes de series y de puntos (R10 acotado, R31, R33)", () => {
       },
     ];
 
-    it("con 6 categorias lanza SeriesExcedidasError fuera de produccion", () => {
+    it("con 6 categorias las pinta las seis, sin lanzar", () => {
       expect(() =>
         render(
           <GraficaDonut titulo="Estados" series={donut(6)} unidad="conteo" vacio={VACIO} />,
         ),
-      ).toThrow(/SeriesExcedidasError|6/);
+      ).not.toThrow();
+
+      const lista = screen.getByRole("list", { name: "Estados" });
+      expect(within(lista).getAllByRole("listitem")).toHaveLength(6);
     });
 
-    it("en produccion recorta a 5 segmentos, no revienta, y anuncia el recorte por texto", () => {
+    // El caso que motivo el cambio: los veinte estados del catalogo caben enteros.
+    it("con 20 categorias pinta las veinte y no anuncia ningun recorte", () => {
+      render(
+        <GraficaDonut
+          titulo="Estados"
+          series={donut(20)}
+          unidad="conteo"
+          vacio={VACIO}
+          avisoRecorte={aviso}
+        />,
+      );
+
+      const lista = screen.getByRole("list", { name: "Estados" });
+      expect(within(lista).getAllByRole("listitem")).toHaveLength(20);
+      expect(screen.queryByText(/Se muestran/)).toBeNull();
+      // La ultima NO se perdio por el camino: es la que el techo viejo se comia primero.
+      expect(within(lista).getByText("Estados, estado-19: 20")).toBeInTheDocument();
+    });
+
+    // Y en produccion tampoco: antes era el entorno donde SI recortaba en silencio.
+    it("en produccion tampoco recorta", () => {
       vi.stubEnv("NODE_ENV", "production");
       try {
         render(
@@ -262,37 +293,18 @@ describe("topes de series y de puntos (R10 acotado, R31, R33)", () => {
         );
 
         const lista = screen.getByRole("list", { name: "Estados" });
-        expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES);
-        expect(screen.getByText("Se muestran 5 de 19")).toBeInTheDocument();
-        // Conserva las PRIMERAS en el orden recibido.
-        expect(within(lista).getByText("Estados, estado-0: 1")).toBeInTheDocument();
-        expect(within(lista).queryByText(/estado-5/)).toBeNull();
+        expect(within(lista).getAllByRole("listitem")).toHaveLength(19);
+        expect(screen.queryByText("Se muestran 5 de 19")).toBeNull();
       } finally {
         vi.unstubAllEnvs();
       }
     });
-
-    it("con 5 categorias exactas pinta las cinco y no anuncia recorte", () => {
-      render(
-        <GraficaDonut
-          titulo="Estados"
-          series={donut(MAX_SERIES)}
-          unidad="conteo"
-          vacio={VACIO}
-          avisoRecorte={aviso}
-        />,
-      );
-
-      const lista = screen.getByRole("list", { name: "Estados" });
-      expect(within(lista).getAllByRole("listitem")).toHaveLength(MAX_SERIES);
-      expect(screen.queryByText(/Se muestran/)).toBeNull();
-    });
   });
 
-  it("fuera de produccion, pasarse del techo revienta en el test del llamador", () => {
+  it("una grafica de barras con 6 series las pinta las seis, sin lanzar", () => {
     const series = Array.from({ length: 6 }, (_, i) => serie(`s${i}`, [1]));
     expect(() =>
       render(<GraficaBarras titulo="Entregas" series={series} unidad="conteo" vacio={VACIO} />),
-    ).toThrow(/SeriesExcedidasError|6 series/);
+    ).not.toThrow();
   });
 });

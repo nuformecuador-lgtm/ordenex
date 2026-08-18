@@ -73,6 +73,62 @@ export interface GraficaProps extends EstadoVisual {
   readonly avisoRecorte?: (mostradas: number, recibidas: number) => string;
   /** R24: clase adicional opcional. El paquete no fija ancho ni alto en pixeles. */
   readonly className?: string;
+  /**
+   * Proporcion del lienzo. `normal` = 16:9 (lo de siempre); `bajo` = 32:9, la MITAD de alto.
+   *
+   * Alto por PROPORCION y no por pixeles, que es la regla del paquete (R24): el slot del
+   * shell es una columna flex y cualquier `h-[300px]` se rompe ahi. Por eso la prop es una
+   * union cerrada y no un numero: las clases de Tailwind se compilan estaticamente, asi que
+   * una interpolada no existiria en el CSS final.
+   *
+   * Opcional y con el default en lo de siempre, como `innerRadius` o `leyenda`: ninguna
+   * grafica ya montada cambia de forma porque exista una opcion nueva.
+   */
+  readonly proporcion?: "normal" | "bajo";
+}
+
+/**
+ * Lo que distingue un donut de un ANILLO: el grosor y lo que va en el hueco.
+ *
+ * Los dos radios se declaran como los declara recharts —pixeles o porcentaje del radio
+ * disponible— y viajan tal cual al lienzo. No se validan aqui: el paquete dibuja, y una
+ * combinacion absurda (interior mayor que exterior) se ve en el acto.
+ *
+ * Vive en el CONTRATO y no junto al lienzo porque `GraficaDonut` la necesita en sus props
+ * y no puede importar nada de `./lienzo/` sin romper el confinamiento de recharts
+ * (R26/R27): ahi el guardia mira el texto del import, no si el tipo se borra al compilar.
+ */
+export interface AnilloProps {
+  /** Radio interior. Default del donut: `"55%"`. Un `"80%"` deja un anillo fino. */
+  readonly innerRadius?: string | number;
+  /** Radio exterior. Default del donut: `"85%"`. */
+  readonly outerRadius?: string | number;
+  /**
+   * Texto al CENTRO del hueco. Cadena YA formateada por el llamador —no un `ReactNode`—
+   * porque estas graficas las monta tambien un Server Component, y un nodo con funciones
+   * dentro no cruza la frontera RSC. Ausente: el hueco queda vacio.
+   */
+  readonly centro?: string;
+  /**
+   * Donde va la leyenda. `"abajo"` (default) es como el donut lleva dibujandose desde la 130.
+   * `"lateral"` la pone en COLUMNA a la derecha del anillo, una entrada por linea.
+   *
+   * Opcional y con el default puesto en el comportamiento viejo, igual que `innerRadius` y
+   * `centro`: es la regla de esta familia de props —ninguna grafica ya montada cambia de
+   * forma porque exista una opcion nueva—. Hoy la piden las ENTREGAS; el donut financiero y
+   * los paneles operativos siguen con su leyenda abajo hasta que alguien lo decida para
+   * ellos, que es una decision de cada pantalla y no de este archivo.
+   */
+  readonly leyenda?: "abajo" | "lateral";
+  /**
+   * Escribir el VALOR de cada segmento sobre el propio anillo, para no tener que pasar el
+   * raton por encima para leerlo. Default `false` (el comportamiento de siempre).
+   *
+   * ⚠ No es gratis en un anillo FINO: con `innerRadius: "80%"` la banda es estrecha y el
+   * numero se apoya sobre ella. Con la leyenda lateral encendida la cifra ya se lee ahi, asi
+   * que esto es redundancia deliberada, no la unica via: se puede apagar sin perder el dato.
+   */
+  readonly mostrarValores?: boolean;
 }
 
 /** Variacion respecto al periodo anterior (R15). */

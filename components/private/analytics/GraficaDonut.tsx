@@ -1,37 +1,52 @@
 "use client";
 
-// Grafica de donut. Igual que las otras dos en estados, titulo y alternativa
-// textual, con UNA diferencia deliberada en el techo:
+// Grafica de donut. Igual que las otras dos en estados, titulo y alternativa textual, con UNA
+// diferencia deliberada: aqui el color distingue SEGMENTOS, no series.
 //
-// en un donut el color distingue SEGMENTOS, no series. Aplicarle `MAX_PUNTOS_SERIE`
-// (62) daria un donut de 62 porciones con cinco colores repetidos, que es
-// exactamente lo que Q3 descarto: dos porciones del mismo color se leen como la
-// misma categoria. Asi que aqui el techo de los segmentos es `MAX_SERIES` (5), y
-// agrupar la cola en "otros" sigue siendo del tablero (R34). Un donut con mas de
-// cinco categorias lanza `SeriesExcedidasError` fuera de produccion y en
-// produccion muestra cinco anunciandolo, igual que el resto del paquete.
+// ⚠ EL TECHO DE SEGMENTOS SE RETIRO (2026-08-18, decision humana). Aqui se aplicaba
+// `MAX_SERIES` (5): un donut con seis categorias lanzaba fuera de produccion y en produccion
+// pintaba cinco anunciandolo. El motivo era que la paleta tenia cinco tokens y no ciclaba.
+// Ahora `paleta.ts` declara VEINTE y cicla, asi que se pintan TODAS las porciones — que es lo
+// que un desglose por estado necesita, porque `ORDER_STATUS_SEED` tiene exactamente veinte
+// valores y con el techo perdia quince.
+//
+// Lo que NO se aplica aqui, y sigue siendo deliberado: `MAX_PUNTOS_SERIE` (62). Es un techo
+// de legibilidad de un eje TEMPORAL; en un donut daria 62 porciones, que no es un grafico.
+// Agrupar la cola en "otros" sigue siendo decision de cada tablero (R34), no de este archivo.
 
 import { Suspense, lazy } from "react";
 
 import { formatearValor } from "./formato";
-import { CLASES_LIENZO, GraficaMarco } from "./GraficaMarco";
+import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
-import type { GraficaProps, SerieDato } from "./tipos";
-import { aplicarTopeSeries } from "./topes";
+import type { AnilloProps, GraficaProps, SerieDato } from "./tipos";
+
+/**
+ * El donut, mas los tres ajustes del ANILLO (`innerRadius`, `outerRadius`, `centro`).
+ * Los tres son opcionales y sus defaults son los de siempre: una llamada existente
+ * dibuja exactamente lo que dibujaba.
+ */
+export type GraficaDonutProps = GraficaProps & AnilloProps;
 
 const DonutLienzo = lazy(() => import("./lienzo/DonutLienzo"));
 
-/** Un donut pinta UNA serie: si llegan varias, se pinta la primera. */
+/**
+ * Un donut pinta UNA serie: si llegan varias, se pinta la primera.
+ *
+ * Ya no recorta: todos los segmentos pasan. `recorteSegmentos` se conserva —siempre
+ * `recortado: false`— porque lo lee `SerieTextual` para decidir si anuncia un aviso, y
+ * quitarlo era tocar el contrato de la alternativa textual para no ganar nada.
+ */
 function prepararSegmentos(series: readonly SerieDato[]) {
   const serie = series[0];
   if (!serie) return null;
-  const recorte = aplicarTopeSeries(serie.puntos);
+  const puntos = serie.puntos;
   return {
-    series: [{ ...serie, puntos: recorte.items }] as readonly SerieDato[],
+    series: [serie] as readonly SerieDato[],
     recorteSegmentos: {
-      recortado: recorte.recortado,
-      mostrados: recorte.mostrados,
-      recibidos: recorte.recibidos,
+      recortado: false,
+      mostrados: puntos.length,
+      recibidos: puntos.length,
     },
   };
 }
@@ -45,7 +60,13 @@ export function GraficaDonut({
   cargando,
   error,
   className,
-}: GraficaProps) {
+  proporcion,
+  innerRadius,
+  outerRadius,
+  centro,
+  leyenda,
+  mostrarValores,
+}: GraficaDonutProps) {
   const hayDatos = series.some((serie) => serie.puntos.length > 0);
   const preparadas = hayDatos && !error && !cargando ? prepararSegmentos(series) : null;
 
@@ -57,14 +78,20 @@ export function GraficaDonut({
       cargando={cargando}
       error={error}
       className={className}
+      proporcion={proporcion}
     >
       {preparadas ? (
         <>
-          <div className={CLASES_LIENZO}>
+          <div className={clasesDeLienzo(proporcion)}>
             <Suspense fallback={null}>
               <DonutLienzo
                 series={preparadas.series}
                 formatear={(valor) => formatearValor(valor, unidad)}
+                innerRadius={innerRadius}
+                outerRadius={outerRadius}
+                centro={centro}
+                leyenda={leyenda}
+                mostrarValores={mostrarValores}
               />
             </Suspense>
           </div>

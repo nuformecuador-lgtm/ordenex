@@ -54,7 +54,7 @@ import { GraficaLineas } from "@/components/private/analytics/GraficaLineas";
 import { KpiCard } from "@/components/private/analytics/KpiCard";
 import { TablaResumen } from "@/components/private/analytics/TablaResumen";
 import { formatearValor } from "@/components/private/analytics/formato";
-import { MAX_SERIES } from "@/components/private/analytics/topes";
+import { MAX_CATEGORIAS_LEGIBLES } from "@/components/private/analytics/topes";
 import type { SerieDato } from "@/components/private/analytics/tipos";
 import type { MetricaUnidad } from "@/lib/analytics/types";
 import {
@@ -256,7 +256,7 @@ function PanelKpi({
 
 /** Una serie con la cola ya agrupada: el paquete nunca recibe de mas (R20, R21 de la 132). */
 function acotar(serie: SerieDato): SerieDato {
-  return { ...serie, puntos: agruparCola(serie.puntos, MAX_SERIES, TEXTOS.otros) };
+  return { ...serie, puntos: agruparCola(serie.puntos, MAX_CATEGORIAS_LEGIBLES, TEXTOS.otros) };
 }
 
 /**
@@ -264,7 +264,7 @@ function acotar(serie: SerieDato): SerieDato {
  * —la del bruto— donde no (R21 de la 183).
  *
  * Emitir dos series iguales donde el neto es `+bruto` por construccion consumiria el
- * techo `MAX_SERIES` al doble y pintaria dos veces la misma cifra con dos nombres.
+ * techo `MAX_CATEGORIAS_LEGIBLES` al doble y pintaria dos veces la misma cifra con dos nombres.
  */
 function seriesComparativas(vista: VistaFinanciera): readonly SerieDato[] {
   if (!esVistaConNeto(vista)) return [acotar(serieDeVista(vista, "bruto"))];
@@ -308,7 +308,7 @@ function seriesTemporales(vista: VistaTemporal): readonly SerieDato[] {
  * lector de pantalla, y esta cuelga dentro de la seccion de la vista.
  *
  * Una grafica POR VISTA, y no una combinada con las seis metricas de flujo: seis series
- * (mas, contando `bruto` y `neto`) superan `MAX_SERIES` y `aplicarTopeSeries` LANZA fuera
+ * (mas, contando `bruto` y `neto`) superan `MAX_CATEGORIAS_LEGIBLES` y `aplicarTopeSeries` LANZA fuera
  * de produccion; y el DTO no declara sumabilidad entre metricas, solo entre vistas.
  */
 function PanelLineas({
