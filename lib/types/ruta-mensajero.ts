@@ -1,4 +1,7 @@
 import { z } from "zod";
+import type { TrazadoRuta } from "@/lib/interfaces/services/IOptimizacionRutaService";
+
+export type { TrazadoRuta };
 
 // Feature 92 (R22/R32/R33) — validacion de borde de la ruta del mensajero. Vive en su
 // propio archivo (y no dentro de `gestion-orden.ts`) porque lo consumen DOS bordes
@@ -38,8 +41,53 @@ export type SincronizarRutaActionInput = z.infer<typeof sincronizarRutaSchema>;
  *  - `forbidden`: R33, el actor no es mensajero. Sin efectos ni llamada.
  */
 export type SincronizarRutaResult =
-  | { status: "ok"; omitida: boolean }
+  /**
+   * `trazado` viaja al cliente para que el mapa pinte la ruta REAL por calles en cuanto
+   * termina la sincronizacion, sin esperar a nada mas. Puede venir CON `omitida: true`: con
+   * una sola parada no hay orden que calcular (R35) pero si linea que dibujar. Ausente si no
+   * cambio nada desde la ultima vez, si no queda ninguna parada, o si el trazado no salio.
+   *
+   * ⚠️ ES EFIMERO: hoy no se persiste (no hay columna en `ruta_optimizada`), asi que
+   * sobrevive en el estado del cliente hasta que se recargue la pagina. Tras un F5 el mapa
+   * vuelve a la linea recta hasta la siguiente sincronizacion.
+   */
+  | { status: "ok"; omitida: boolean; trazado?: TrazadoRuta }
   | { status: "conflict"; motivo: string }
   | { status: "forbidden" }
   | { status: "unauthenticated" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
+/**
+ * Entrada del TRAYECTO EN VIVO. A diferencia de la sincronizacion, aqui la ubicacion es
+ * OBLIGATORIA: el trayecto es «desde donde estoy», y sin ese punto no hay nada que pedir.
+ * Eso NO contradice R25 —el permiso sigue sin forzarse—: sin ubicacion la UI simplemente no
+ * ofrece el boton, en vez de llamar y fallar.
+ */
+export const trazarTramoVivoSchema = z.object({
+  ubicacion: ubicacionSchema,
+  ordenId: z.string().min(1),
+});
+
+export type TrazarTramoVivoActionInput = z.infer<typeof trazarTramoVivoSchema>;
+
+/**
+ * Resultado de `trazarTramoVivo`.
+ *  - `ok`       : hay trayecto. `encodedPolyline` es SOLO ese tramo, no la ruta entera.
+ *  - `conflict` : intervalo minimo, o el proveedor no dio geometria. NO se distingue el uno
+ *                 del otro hacia el cliente: los dos se resuelven esperando y reintentando,
+ *                 y el motivo ya va en el texto.
+ *  - `forbidden`: no es mensajero (R33), o la orden no es una parada suya. El MISMO valor a
+ *                 proposito — separarlos convertiria la action en un oraculo para saber si
+ *                 una guia ajena esta en reparto.
+ */
+export type TrazarTramoVivoResultUI =
+  | {
+      status: "ok";
+      encodedPolyline: string;
+      distanciaM: number | null;
+      duracionS: number | null;
+    }
+  | { status: "conflict"; motivo: string }
+  | { status: "forbidden" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
+  | { status: "unauthenticated" };

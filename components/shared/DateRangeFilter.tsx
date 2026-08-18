@@ -207,7 +207,15 @@ export function DateRangeFilter({
       className={cn("flex flex-wrap items-end gap-2", className)}
     >
       <div className="relative flex flex-col gap-1.5">
-        <Label id={idEtiquetaRango}>{label}</Label>
+        {/* La etiqueta va SOLO para lectores de pantalla: en una barra de filtros el
+            resto de controles (multi, single) llevan su nombre DENTRO del disparador
+            ("Zona: Todas"), así que una etiqueta encima dejaba este control más alto
+            y desalineado con los demás. El nombre no se pierde: se pinta dentro del
+            disparador, como en los otros, y sigue siendo el nombre accesible vía
+            `aria-labelledby`. */}
+        <Label id={idEtiquetaRango} className="sr-only">
+          {label}
+        </Label>
         <Popover.Root>
           <Popover.Trigger
             aria-labelledby={idEtiquetaRango}
@@ -220,6 +228,7 @@ export function DateRangeFilter({
           >
             <CalendarDays className="size-4 opacity-60" aria-hidden="true" />
             <span className="flex-1 truncate text-left">
+              <span className="text-muted-foreground">{label}: </span>
               {resumen(atajo, desde, hasta, shortcuts, placeholder)}
             </span>
             {/* Con seleccion, el hueco de la derecha lo ocupa la X que limpia; sin

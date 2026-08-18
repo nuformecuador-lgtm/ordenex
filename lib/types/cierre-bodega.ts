@@ -5,6 +5,22 @@ import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { filtrosCierresBodegaSchema } from "@/lib/types/filtros-cierres";
+
+/**
+ * Pedido humano del 2026-08-16 — anade el bloque de FILTROS de bodega (fecha + zona, SIN
+ * mensajero) a la entrada de un listado, sin tocar su paginacion ni su `.strict()`.
+ *
+ * Gemelo de `conFiltrosDeCierres` (`lib/types/cierres-admin.ts`) y con el mismo motivo para
+ * anidar bajo UNA clave: la lista blanca del bloque esta declarada en UN sitio
+ * (`filtrosCierresBodegaSchema`, con su propio `.strict()`), asi que una clave nueva —de filtro
+ * o, lo que importa, de ALCANCE— no puede entrar por el lado del listado sin pasar por alli.
+ *
+ * `.strict()` se reescribe aunque el schema base ya lo traiga: la barrera es de ESTOS listados.
+ */
+function conFiltrosDeBodega<T extends z.ZodRawShape>(base: z.ZodObject<T>) {
+  return base.extend({ filtros: filtrosCierresBodegaSchema.optional() }).strict();
+}
 import type {
   CierreBodegaResumen,
   CierreBodegaResumenLite,
@@ -54,7 +70,9 @@ export type RechazarCierreBodegaInput = z.infer<typeof rechazarCierreBodegaSchem
  * bodega— muera en el BORDE con `validation_error` y no en un servicio que la ignoraria en
  * silencio. Tamano de pagina desde `cierreBodegaConfig` (T H.1), recortado a `MAX_PAGE_SIZE`.
  */
-export const listarCierresBodegaPaginadoSchema = paginaInputSchema(cierreBodegaConfig);
+export const listarCierresBodegaPaginadoSchema = conFiltrosDeBodega(
+  paginaInputSchema(cierreBodegaConfig),
+);
 
 export type ListarCierresBodegaPaginadoInput = z.infer<typeof listarCierresBodegaPaginadoSchema>;
 
@@ -66,7 +84,7 @@ export type ListarCierresBodegaPaginadoInput = z.infer<typeof listarCierresBodeg
  * `cierreBodegaConfig` haria que ajustar el tamano de pagina de los cierres de bodega moviera
  * tambien el de una tabla de cierres del dia.
  */
-export const listarConsolidablesSchema = paginaInputSchema(cierreConfig);
+export const listarConsolidablesSchema = conFiltrosDeBodega(paginaInputSchema(cierreConfig));
 
 export type ListarConsolidablesInput = z.infer<typeof listarConsolidablesSchema>;
 
@@ -86,7 +104,14 @@ export type ListarConsolidablesInput = z.infer<typeof listarConsolidablesSchema>
  * schema de pagina y lo hereda AQUI, sin arrastrar al otro.
  *
  * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no debe
- * depender de que el schema base nunca se afloje.
+ * depender de que el schema base nunca se afloje. *
+ * PEDIDO HUMANO DEL 2026-08-16 — la lista blanca deja de ser de CERO claves: `.omit()` quita
+ * `page`/`pageSize` y **conserva `filtros`**, a proposito. El archivo tiene que salir del MISMO
+ * conjunto que el listado ensena, filtros incluidos; si no, «descargar» dejaria de significar
+ * «esto que estoy viendo, entero». Lo que NO entra sigue sin entrar: `zonaId` en singular —la
+ * clave de alcance que estos comentarios nombran— no existe en `filtrosCierresBodegaSchema`, y
+ * el plural que si existe es un recorte que solo puede quitar filas dentro del alcance que el
+ * servicio ya resolvio.
  */
 export const listarCierresBodegaSolicitadosCompletoSchema = listarCierresBodegaPaginadoSchema
   .omit({ page: true, pageSize: true })
@@ -119,7 +144,14 @@ export type ListarConsolidablesCompletoInput = z.infer<typeof listarConsolidable
  * un filtro lo hereda AQUI sin arrastrar a la otra.
  *
  * `.strict()` se reescribe aunque `.omit()` lo herede: la barrera es de ESTOS listados y no debe
- * depender de que el schema base nunca se afloje.
+ * depender de que el schema base nunca se afloje. *
+ * PEDIDO HUMANO DEL 2026-08-16 — la lista blanca deja de ser de CERO claves: `.omit()` quita
+ * `page`/`pageSize` y **conserva `filtros`**, a proposito. El archivo tiene que salir del MISMO
+ * conjunto que el listado ensena, filtros incluidos; si no, «descargar» dejaria de significar
+ * «esto que estoy viendo, entero». Lo que NO entra sigue sin entrar: `zonaId` en singular —la
+ * clave de alcance que estos comentarios nombran— no existe en `filtrosCierresBodegaSchema`, y
+ * el plural que si existe es un recorte que solo puede quitar filas dentro del alcance que el
+ * servicio ya resolvio.
  */
 export const listarPendientesCierresBodegaCompletoSchema = listarCierresBodegaPaginadoSchema
   .omit({ page: true, pageSize: true })

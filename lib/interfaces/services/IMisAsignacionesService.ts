@@ -110,6 +110,35 @@ export interface RutaResumenDTO {
   origenFuente: "gps" | "ultima_conocida" | "centroide" | null;
   /** R28: cuantas ordenes en reparto NO tienen posicion todavia. */
   paradasSinOptimizar: number;
+  /**
+   * Trazado PERSISTIDO de la ruta vigente, para que el mapa pinte la geometria real ya en
+   * el primer render — sin esperar a que el mensajero pulse "Sincronizar". Antes de la
+   * migracion `20260814120000_ruta_optimizada_trazado` esto no existia y cada F5 devolvia
+   * el mapa a la linea recta.
+   *
+   * `null` si nunca se dibujo, si la secuencia se reemplazo despues (la DB lo limpia en la
+   * misma transaccion) o si el ultimo dibujo salio del fallback local, que no se cachea.
+   */
+  trazado: {
+    encodedPolyline: string;
+    distanciaM: number | null;
+    duracionS: number | null;
+    fuente: "routes" | "local";
+  } | null;
+  /**
+   * Tramo que lleva a la SIGUIENTE parada: la primera de `porGestionar`, que ya viene ordenado
+   * por secuencia. Es el trozo del recorrido que el mensajero tiene delante ahora mismo, y la
+   * UI lo resalta sobre el resto de la linea.
+   *
+   * NO CUESTA UNA LLAMADA APARTE: sale de los `legs` que Google devuelve en la misma respuesta
+   * del trazado. `null` mientras no se haya dibujado la ruta, si el dibujo salio del fallback
+   * local (que no produce tramos) o si no queda ninguna parada por gestionar.
+   */
+  tramoSiguiente: {
+    encodedPolyline: string;
+    distanciaM: number | null;
+    duracionS: number | null;
+  } | null;
 }
 
 // Feature 61: KPIs del portal del mensajero, calculados SERVER-SIDE (autoritativos).

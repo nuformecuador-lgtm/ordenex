@@ -195,7 +195,7 @@ type AdaptadorDescarga = "conjunto" | "completo";
 interface ListadoPaginado {
   /** Nombre del Anexo III. */
   listado: string;
-  /** Archivo que monta el `<Pagination>`, el `<DataTable>` y la descarga de ESE listado. */
+  /** Archivo que monta el `<Pagination>`, el listado (tabla o comprobantes) y su descarga. */
   ruta: string;
   /** Tanda de `tasks.md` que lo entregó. */
   tanda: "I" | "J" | "K" | "L";
@@ -234,7 +234,7 @@ const ANEXO_III: ListadoPaginado[] = [
     // Feature 184 — Tanda D (T D.3/T D.4): su relectura traía la cola Y el histórico juntos y
     // se quedaba con una mitad; la lectura dedicada corta por estado en la base.
     listado: "Cierres del día — histórico",
-    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
+    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoLista.tsx",
     tanda: "I",
     adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_HISTORICO_LABEL",
@@ -264,7 +264,7 @@ const ANEXO_III: ListadoPaginado[] = [
     // Feature 184 — Tanda E (T E.3/T E.4): el gemelo del anterior, y la otra mitad del mismo
     // listado compuesto. Aquí lo que se arrastraba era la cola; allí, el histórico.
     listado: "Cierres de bodega resueltos",
-    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosLista.tsx",
     tanda: "I",
     adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_RESUELTOS_LABEL",
@@ -273,7 +273,7 @@ const ANEXO_III: ListadoPaginado[] = [
     // Feature 184 — Tanda B (T B.2/T B.3): su relectura era la más cara del inventario —cuatro
     // consultas, cinco agregados de dinero y el reparto del efectivo— para quedarse con un campo.
     listado: "Cierres de bodega solicitados",
-    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosLista.tsx",
     tanda: "I",
     adaptador: "completo",
     etiquetaPaginacion: "PAGINACION_BODEGA_SOLICITADOS_LABEL",

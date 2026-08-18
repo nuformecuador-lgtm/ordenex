@@ -1,4 +1,10 @@
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+  FiltrosDescargaGestiones,
+} from "@/lib/types/filtros-cierres";
+import { CATALOGO_FILTROS_CIERRES_VACIO } from "@/lib/types/filtros-cierres";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -27,7 +33,6 @@ import type {
   ListarPendientesCierresAdminServiceResult,
   RechazarCierreServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
-import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import { descargaConfig } from "@/lib/config/descarga";
 import { esColaCierreDia } from "@/lib/utils/colas-cierre";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
@@ -174,7 +179,7 @@ export class CierresAdminService implements ICierresAdminService {
    * R41 exige viaja DENTRO de ella.
    */
   async listarHistoricoCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarHistoricoCierresAdminServiceResult> {
     const scope = await this.resolveAlcance(actor);
@@ -183,9 +188,14 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
     }
 
+    // Pedido humano del 2026-08-16: los filtros RECORTAN dentro del alcance que este servicio
+    // acaba de resolver — van al repositorio como tercer argumento y se componen con `AND`,
+    // nunca en lugar de `scope.alcance`. Un `adminSatelite` que pida la zona del vecino obtiene
+    // la interseccion (vacio), no la zona del vecino.
     const { items, total } = await this.repo.findHistoricoPaginado(
       scope.alcance,
       rangoDePagina(input),
+      input.filtros,
     );
 
     return {
@@ -217,7 +227,7 @@ export class CierresAdminService implements ICierresAdminService {
    * devuelve `pendientes: []` para ese mismo actor.
    */
   async listarPendientesCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarPendientesCierresAdminServiceResult> {
     const scope = await this.resolveAlcance(actor);
@@ -226,7 +236,11 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
     }
 
-    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+    const { items, total } = await this.repo.findColaPaginada(
+      scope.alcance,
+      rangoDePagina(input),
+      input.filtros, // recorte DENTRO del alcance (ver la nota del historico)
+    );
 
     return {
       status: "ok",
@@ -249,10 +263,14 @@ export class CierresAdminService implements ICierresAdminService {
    * quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la base por el
    * mismo criterio que su pagina (R16).
    *
-   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
-   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
-   * sigue aplicando entera —un `destinoZonaId` colado muere alli con `validation_error` (R17)—
-   * pero no hay nada que transportar hasta aqui. El alcance sale del ACTOR, como en la pagina.
+   * **Lleva `filtros` y NO lleva `input`, y las dos mitades son deliberadas.** Hasta el
+   * 2026-08-16 este listado no admitia filtros y la lista blanca de su conjunto era de CERO
+   * claves. El pedido humano de ese dia le dio cuatro (fecha, bodega destino, mensajero), y el
+   * archivo recibe LOS MISMOS que la pagina: si no, «descargar» dejaria de significar «esto que
+   * estoy viendo, entero». Lo que sigue sin viajar es la paginacion —un conjunto no tiene
+   * pagina— y, sobre todo, el ALCANCE: sale del ACTOR, como en la pagina, y un `destinoZonaId`
+   * en singular colado en el input muere en el borde con `validation_error` (R17). El plural
+   * que si existe es un recorte: solo puede quitar filas dentro del alcance ya resuelto.
    *
    * `sinZona` -> conjunto vacio sin consultar la base, no `forbidden`: el `adminSatelite` sin
    * zona tiene acceso al modulo, lo que no tiene es alcance. Es lo mismo que devuelven hoy
@@ -273,12 +291,15 @@ export class CierresAdminService implements ICierresAdminService {
    */
   async listarHistoricoCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarHistoricoCierresAdminCompletoServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
     if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
 
-    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+    // Los MISMOS filtros que la pagina: el archivo tiene que ser «esto que estoy viendo,
+    // entero», no «todo lo del alcance» (ver la nota del schema completo, `lib/types`).
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance, filtros);
 
     const limite = descargaConfig.MAX_FILAS;
     // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
@@ -302,8 +323,8 @@ export class CierresAdminService implements ICierresAdminService {
    * PEQUEÑA del conjunto (los cierres sin resolver), asi que producir su archivo arrastraba
    * todo el historico del alcance —que crece sin tope con los dias— para descartarlo.
    *
-   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
-   * blanca, alcance desde el actor.
+   * Los mismos `filtros` que su pagina, y por el mismo motivo que su hermano; el alcance sigue
+   * saliendo del actor y no de la peticion.
    *
    * **Excepcion declarada a R29 de la 170**, la misma de arriba con el signo cambiado: se cumple
    * el transporte —superado el tope no va ninguna fila— y no el materializar, porque
@@ -314,12 +335,13 @@ export class CierresAdminService implements ICierresAdminService {
    */
   async listarPendientesCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarPendientesCierresAdminCompletoServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
     if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
 
-    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+    const conjunto = await this.repo.findColaCompleta(scope.alcance, filtros); // idem
 
     const limite = descargaConfig.MAX_FILAS;
     if (conjunto.length > limite) {
@@ -373,6 +395,27 @@ export class CierresAdminService implements ICierresAdminService {
     }
 
     return { status: "ok", items: conjunto, total: conjunto.length };
+  }
+
+  /**
+   * Pedido humano del 2026-08-16 — las opciones de los filtros de la pantalla.
+   *
+   * Misma puerta que los listados y en el mismo orden: rol invalido -> `forbidden` ANTES de
+   * tocar el repositorio; `adminSatelite` sin zona -> catalogo VACIO sin consultar la base (no
+   * `forbidden`: tiene acceso al modulo, lo que no tiene es alcance — es la misma respuesta que
+   * dan sus listados, que devuelven cero filas).
+   */
+  async obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<
+    { status: "ok"; catalogo: CatalogoFiltrosCierresDTO } | { status: "forbidden" }
+  > {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" };
+    if (scope.status === "sinZona") {
+      return { status: "ok", catalogo: CATALOGO_FILTROS_CIERRES_VACIO };
+    }
+    return { status: "ok", catalogo: await this.repo.findCatalogoFiltros(scope.alcance) };
   }
 
   async verCierreDetalle(

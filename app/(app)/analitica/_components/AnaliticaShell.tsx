@@ -5,6 +5,13 @@ import { AppPage } from "@/components/shared/AppPage";
 import { EmptyState } from "@/components/shared/EmptyState";
 
 export interface AnaliticaShellProps {
+  /**
+   * Bloque que va PRIMERO, por encima de los filtros. Es un slot más: si no
+   * llega, no se renderiza nada — ni envoltorio, ni estado vacío. No emite
+   * `<section aria-label>` a propósito, para que las regiones de esta página
+   * sigan siendo exactamente las que R20 de la 129 y R6/R7 de la 132 congelaron.
+   */
+  destacado?: ReactNode;
   /** Barra de filtros (rango, zona, tienda, mensajero). La enchufa la 131. */
   filtros?: ReactNode;
   /** Paneles del tablero operativo. Los enchufa la 131. */
@@ -50,6 +57,7 @@ export interface AnaliticaShellProps {
  * dinero oculto.
  */
 export function AnaliticaShell({
+  destacado,
   filtros,
   operativo,
   financiero,
@@ -59,6 +67,7 @@ export function AnaliticaShell({
       title="Analítica"
       description="Panel de indicadores del negocio. Los paneles se irán activando por entregas."
     >
+      {destacado}
       <section aria-label="Filtros" className="flex flex-col gap-4">
         {filtros ?? (
           <EmptyState

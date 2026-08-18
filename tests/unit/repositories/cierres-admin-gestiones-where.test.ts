@@ -27,7 +27,12 @@ import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 const SATELITE: Alcance = { destinoTipo: "bodega_satelite", destinoZonaId: "z-a" };
 const MAESTRO: Alcance = { destinoTipo: "bodega_central", destinoZonaId: null };
 
-const FILTROS: FiltrosDescargaGestiones = { mensajeroIds: ["m-1", "m-2"] };
+// UUID porque la primitiva compartida del modulo de filtros los exige (feature del 2026-08-16).
+const M1 = "11111111-1111-4111-8111-111111111111";
+const M2 = "22222222-2222-4222-8222-222222222222";
+const AJENO = "99999999-9999-4999-8999-999999999999";
+
+const FILTROS: FiltrosDescargaGestiones = { mensajeroIds: [M1, M2] };
 
 interface Consulta {
   where?: Record<string, unknown>;
@@ -63,11 +68,15 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     const consulta = prisma.gestionOrden.findMany.mock.calls[0]![0]!;
     // El alcance y el recorte son claves HERMANAS del mismo objeto: eso es un AND. Un `OR`, o un
     // alcance en el nivel de la gestión, es justo lo que dejaría entrar la bodega vecina.
+    // El alcance va como clave DIRECTA y los recortes DENTRO de `AND`, que es la MISMA forma
+    // que usan `historicoWhere` y `colaWhere`. La distincion no es cosmetica: como claves
+    // hermanas, el `mensajeroId` del recorte podria SUSTITUIR al criterio del alcance en vez de
+    // sumarse a el — es exactamente lo que vigila `filtros-cierres-alcance.guardia.test.ts`.
     expect(consulta.where).toEqual({
       cierre: {
         destinoTipo: "bodega_satelite",
         destinoZonaId: "z-a",
-        mensajeroId: { in: ["m-1", "m-2"] },
+        AND: [{ mensajeroId: { in: [M1, M2] } }],
       },
     });
   });
@@ -81,7 +90,7 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     // Y `destinoTipo` SIEMPRE presente: es lo que hace que este listado y el de bodega sean
     // particiones disjuntas y no dos vistas de lo mismo.
     expect(prisma.gestionOrden.findMany.mock.calls[0]![0]!.where).toEqual({
-      cierre: { destinoTipo: "bodega_central", mensajeroId: { in: ["m-1", "m-2"] } },
+      cierre: { destinoTipo: "bodega_central", AND: [{ mensajeroId: { in: [M1, M2] } }] },
     });
   });
 
@@ -89,14 +98,16 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     const prisma = prismaFalso();
 
     await repositorio(prisma).findGestionesPorAlcanceCompleto(SATELITE, {
-      mensajeroIds: ["m-de-otra-zona"],
+      mensajeroIds: [AJENO],
     });
 
     const where = prisma.gestionOrden.findMany.mock.calls[0]![0]!.where as {
-      cierre: Record<string, unknown>;
+      cierre: { destinoZonaId: string; AND: unknown[] };
     };
+    // El alcance SIGUE ahi y el mensajero ajeno se le suma con AND: la interseccion es vacia,
+    // que es cero filas y no filas ajenas.
     expect(where.cierre.destinoZonaId).toBe("z-a");
-    expect(where.cierre.mensajeroId).toEqual({ in: ["m-de-otra-zona"] });
+    expect(where.cierre.AND).toEqual([{ mensajeroId: { in: [AJENO] } }]);
     expect(JSON.stringify(where)).not.toContain("OR");
   });
 
@@ -104,19 +115,20 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
     const prisma = prismaFalso();
 
     await repositorio(prisma).findGestionesPorAlcanceCompleto(MAESTRO, {
-      mensajeroIds: ["m-1"],
+      mensajeroIds: [M1],
       desde: "2026-02-01",
       hasta: "2026-02-28",
     });
 
     const where = prisma.gestionOrden.findMany.mock.calls[0]![0]!.where as {
-      cierre: { solicitadoAt: { gte: Date; lt: Date } };
+      cierre: { AND: { solicitadoAt: { gte: Date; lt: Date } }[] };
     };
+    const rango = where.cierre.AND[0]!;
     // Días CALENDARIO de Costa Rica (UTC-6) resueltos a instantes UTC. El borde superior es `lt`
     // del día SIGUIENTE y no `lte` del último: con `lte` se perderían los cierres solicitados
     // después de la medianoche del último día del rango.
-    expect(where.cierre.solicitadoAt.gte.toISOString()).toBe("2026-02-01T06:00:00.000Z");
-    expect(where.cierre.solicitadoAt.lt.toISOString()).toBe("2026-03-01T06:00:00.000Z");
+    expect(rango.solicitadoAt.gte.toISOString()).toBe("2026-02-01T06:00:00.000Z");
+    expect(rango.solicitadoAt.lt.toISOString()).toBe("2026-03-01T06:00:00.000Z");
   });
 
   it("sin fechas no aparece ningún predicado temporal (no se inventa un rango por defecto)", async () => {
@@ -124,10 +136,9 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres del día» (feat
 
     await repositorio(prisma).findGestionesPorAlcanceCompleto(MAESTRO, FILTROS);
 
-    const where = prisma.gestionOrden.findMany.mock.calls[0]![0]!.where as {
-      cierre: Record<string, unknown>;
-    };
-    expect(where.cierre).not.toHaveProperty("solicitadoAt");
+    expect(JSON.stringify(prisma.gestionOrden.findMany.mock.calls[0]![0]!.where)).not.toContain(
+      "solicitadoAt",
+    );
   });
 
   it("ordena por fecha de solicitud del cierre y luego por la gestión (R11)", async () => {

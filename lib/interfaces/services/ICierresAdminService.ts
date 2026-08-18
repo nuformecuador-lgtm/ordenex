@@ -1,8 +1,12 @@
 import type { MetodoPagoValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+  FiltrosDescargaGestiones,
+} from "@/lib/types/filtros-cierres";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
-import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
@@ -283,7 +287,7 @@ export interface ICierresAdminService {
    * vacia (no hay alcance que consultar), igual que hoy.
    */
   listarHistoricoCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarHistoricoCierresAdminServiceResult>;
   /**
@@ -296,7 +300,7 @@ export interface ICierresAdminService {
    * `adminSatelite` sin zona -> pagina vacia sin tocar la base.
    */
   listarPendientesCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarPendientesCierresAdminServiceResult>;
   /**
@@ -304,13 +308,15 @@ export interface ICierresAdminService {
    * ARCHIVO de ese listado.
    *
    * MISMO `resolveAlcance` que la pagina —el rol y la zona salen del actor, nunca de la
-   * entrada— y MISMO corte cola/historico. No recibe input: este listado no tiene filtros, asi
-   * que su lista blanca (derivada de la de la pagina) no deja ninguna clave que transportar.
+   * entrada— y MISMO corte cola/historico. Recibe los MISMOS `filtros` que su pagina (pedido
+   * humano del 2026-08-16): el archivo es «esto que estoy viendo, entero», no «todo lo del
+   * alcance». Lo que no recibe es paginacion ni alcance.
    * Rol invalido -> `forbidden` ANTES de tocar el repositorio; `adminSatelite` sin zona ->
    * conjunto vacio sin consultar. Supera el tope -> `limite_excedido` con conteos y sin filas.
    */
   listarHistoricoCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarHistoricoCierresAdminCompletoServiceResult>;
   /**
    * Feature 184 — Tanda D (T D.2, R1/R4/R6): la COLA ENTERA de pendientes de decision del
@@ -318,6 +324,7 @@ export interface ICierresAdminService {
    */
   listarPendientesCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarPendientesCierresAdminCompletoServiceResult>;
   /**
    * Feature 230 — Tanda 2 (T2.2, R13/R14/R15/R16/R18/R20/R21/R22) — las GESTIONES de los
@@ -345,6 +352,18 @@ export interface ICierresAdminService {
     actor: Actor,
     filtros: FiltrosDescargaGestiones,
   ): Promise<ListarGestionesDescargaServiceResult>;
+  /**
+   * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de la pantalla (bodegas destino
+   * y mensajeros), ya acotadas al alcance del actor.
+   *
+   * Misma puerta y mismo orden que los listados: rol invalido -> `forbidden` antes de tocar el
+   * repositorio; `adminSatelite` sin zona -> catalogo VACIO, no `forbidden`.
+   */
+  obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<
+    { status: "ok"; catalogo: CatalogoFiltrosCierresDTO } | { status: "forbidden" }
+  >;
   /**
    * R6-R9/R13/R16: detalle completo de un cierre del alcance (gestiones agrupadas
    * por resultado, evidencias firmadas). Solo lectura. Fuera de alcance ->

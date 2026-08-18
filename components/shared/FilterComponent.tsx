@@ -277,6 +277,11 @@ function TextFilter({
  * emite una combinacion incoherente. `dependsOn` a una clave no declarada (o un
  * ciclo) se trata como filtro independiente.
  *
+ * ## Filtros que dejan de declararse
+ * Si un filtro desaparece de `filters` (p. ej. porque el consumidor deja al usuario
+ * elegir QUE filtros monta), su seleccion se descarta y se emite la seleccion ya sin
+ * el. Un filtro sin control en pantalla no puede seguir filtrando.
+ *
  * ## `group` (R28)
  * Una opcion puede declarar `group`; las opciones se presentan bajo la cabecera
  * accesible de su grupo. Sin grupos, la lista es plana.
@@ -368,6 +373,29 @@ export function FilterComponent({
     setSeleccion(podada);
     emitir(podada);
   }
+
+  // Un filtro que deja de estar DECLARADO deja de filtrar. Sin esto su seleccion
+  // seguiria viva en el estado interno —y viajando en cada emision— con su control
+  // fuera de pantalla: un filtro invisible pero aplicado, que el usuario no puede ni
+  // ver ni quitar. Se compara por CLAVES (no por identidad del array) para no
+  // dispararse en cada render del consumidor.
+  const clavesMontadas = montados.map((f) => f.key).join(" ");
+  const seleccionRef = useRef(seleccion);
+  useEffect(() => {
+    seleccionRef.current = seleccion;
+  });
+  useEffect(() => {
+    const vivas = new Set(clavesMontadas.split(" "));
+    const actual = seleccionRef.current;
+    const sobran = Object.keys(actual).filter((clave) => !vivas.has(clave));
+    if (sobran.length === 0) return;
+    const siguiente = { ...actual };
+    for (const clave of sobran) delete siguiente[clave];
+    aplicar(siguiente);
+    // `aplicar` se recrea en cada render; depender de el volveria a correr el efecto
+    // sin que haya cambiado nada. Lo unico que debe dispararlo es el juego de claves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clavesMontadas]);
 
   function fijar(key: string, valores: string[]) {
     const siguiente: FilterSelection = { ...seleccion };

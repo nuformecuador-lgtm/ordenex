@@ -6,15 +6,26 @@ import {
   useContext,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
 import { cn } from "@/lib/utils";
 import { guardarPreferenciaTema } from "@/lib/tema/preferencia-tema";
-import { claseDeTema, TEMA_POR_DEFECTO, type Tema } from "@/lib/tema/tema";
+import {
+  claseDeTema,
+  resolverTemaDelSistema,
+  suscribirTemaDelSistema,
+  type Tema,
+  type TemaElegido,
+} from "@/lib/tema/tema";
+
+/** El servidor no puede conocer `prefers-color-scheme`: declara que no sabe. */
+const SIN_RESOLVER = () => null;
 
 interface TemaContexto {
-  tema: Tema;
+  /** `null` mientras no hay elección Y el cliente aún no ha resuelto qué pinta el CSS. */
+  tema: TemaElegido;
   establecer: (tema: Tema) => void;
 }
 
@@ -42,13 +53,34 @@ const Contexto = createContext<TemaContexto | null>(null);
 export function TemaProvider({
   temaInicial,
   children,
-}: Readonly<{ temaInicial: Tema; children: ReactNode }>) {
-  // `useState` inicializado con lo que resolvió el servidor: el primer render del cliente
-  // coincide con el HTML recibido, así que no hay discrepancia de hidratación.
-  const [tema, setTema] = useState<Tema>(temaInicial);
+}: Readonly<{ temaInicial: TemaElegido; children: ReactNode }>) {
+  // La ELECCIÓN. Inicializada con lo que resolvió el servidor desde la cookie: el primer
+  // render del cliente coincide con el HTML recibido, así que no hay discrepancia de
+  // hidratación. `null` = nadie ha elegido todavía.
+  const [elegido, setElegido] = useState<TemaElegido>(temaInicial);
+
+  // Lo que dice el SISTEMA OPERATIVO. `useSyncExternalStore` y no un efecto por dos
+  // motivos concretos:
+  //
+  //  1. HIDRATACIÓN. Su tercer argumento es la respuesta del servidor (`null`, porque
+  //     `prefers-color-scheme` no llega en ninguna cabecera que pidamos). React usa esa
+  //     durante la hidratación y pasa a la del cliente después, sin marcar discrepancia.
+  //     Resolverlo en el inicializador de `useState` sí la marcaría.
+  //  2. EL SO CAMBIA SOLO. macOS y Windows giran a oscuro al anochecer. Con una lectura
+  //     única, quien no ha elegido se quedaría con el tema que hubiera al abrir la
+  //     pestaña; suscritos, la app le sigue.
+  const delSistema = useSyncExternalStore(
+    suscribirTemaDelSistema,
+    resolverTemaDelSistema,
+    SIN_RESOLVER,
+  );
+
+  // La elección MANDA sobre el sistema. Y mientras no haya ninguna de las dos —el HTML del
+  // servidor— queda `null`, que es lo que estampa `tema-sistema` y deja decidir al CSS.
+  const tema: TemaElegido = elegido ?? delSistema;
 
   const establecer = useCallback((siguiente: Tema) => {
-    setTema(siguiente);
+    setElegido(siguiente);
     guardarPreferenciaTema(siguiente);
   }, []);
 
@@ -56,7 +88,7 @@ export function TemaProvider({
 
   return (
     <Contexto.Provider value={valor}>
-      <div className={cn("contents", claseDeTema(tema))} data-tema={tema}>
+      <div className={cn("contents", claseDeTema(tema))} data-tema={tema ?? "sistema"}>
         {children}
       </div>
     </Contexto.Provider>
@@ -72,7 +104,7 @@ export function TemaProvider({
  */
 export function useTema(): TemaContexto {
   const delProveedor = useContext(Contexto);
-  const [temaLocal, setTemaLocal] = useState<Tema>(TEMA_POR_DEFECTO);
+  const [temaLocal, setTemaLocal] = useState<TemaElegido>(null);
   const local = useMemo<TemaContexto>(
     () => ({
       tema: temaLocal,

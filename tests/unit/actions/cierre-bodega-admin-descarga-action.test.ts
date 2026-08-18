@@ -89,7 +89,15 @@ describe("borde de los conjuntos de «Cierres de bodega» del admin (feature 184
     }
   });
 
-  it("sin entrada, o con un objeto vacío, delega en el service con SOLO el actor", async () => {
+  it("sin entrada, o con un objeto vacío, delega en el service con el actor y SIN filtros", async () => {
+    // El título y la última afirmación cambiaron el 2026-08-16, y no por relajarse. Decían «con
+    // SOLO el actor» y fijaban la aridad en 1: era exacto MIENTRAS estos listados no tenían
+    // filtros. El pedido humano de ese día les dio dos (fecha y bodega; el de mensajero se omite
+    // aquí a propósito: un cierre de bodega consolida los de varios), así que el borde transporta
+    // un segundo argumento — y lo que hay que afirmar es que, sin entrada, ese argumento es
+    // `undefined`: quien no filtra sigue pidiendo el conjunto entero de su alcance. Lo que NO
+    // puede colarse sigue sin poder: `page` y `zonaId` mueren en la lista blanca.
+
     for (const { nombre, accion, metodo } of BORDES) {
       for (const input of [undefined, {}]) {
         const f = fakeService(metodo, { status: "ok", items: [CIERRE], total: 1 });
@@ -100,10 +108,7 @@ describe("borde de los conjuntos de «Cierres de bodega» del admin (feature 184
 
         const etiqueta = `${nombre} / ${String(input)}`;
         expect(r, etiqueta).toEqual({ status: "ok", items: [CIERRE], total: 1 });
-        // Un solo argumento —el actor— y nada de recorte: estos listados no tienen entrada que
-        // transportar, y el `page` de la página no puede colarse por aquí.
-        expect(f.espia, etiqueta).toHaveBeenCalledWith(MAESTRO);
-        expect(f.espia.mock.calls[0], etiqueta).toHaveLength(1);
+        expect(f.espia, etiqueta).toHaveBeenCalledWith(MAESTRO, undefined);
       }
     }
   });

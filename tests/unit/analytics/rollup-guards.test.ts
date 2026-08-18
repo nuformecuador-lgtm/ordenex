@@ -681,6 +681,9 @@ function formasLiterales(valor: number): RegExp {
 const AJENAS_A_R47: readonly { ruta: string; ocurrencias: number }[] = [
   { ruta: "lib/clients/google-route-optimization.ts", ocurrencias: 1 },
   { ruta: "lib/config/route-optimization.ts", ocurrencias: 1 },
+  // Mismo caso que los dos de arriba: el default de `timeoutMs` del cliente de trazado, en
+  // milisegundos. No es una cifra de VOLUMEN, que es lo unico que R47 centraliza.
+  { ruta: "lib/clients/google-routes.ts", ocurrencias: 1 },
 ];
 
 describe("R47 — el umbral de volumen vive en una sola constante, provisional y no medida", () => {

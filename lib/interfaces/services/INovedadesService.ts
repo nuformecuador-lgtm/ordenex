@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
 // Feature 87/89 (T3, design §2.2) — contrato del servicio de NOVEDADES: lista paginada de las
@@ -22,6 +23,13 @@ export type ListarNovedadesServiceResult =
   | { status: "ok"; items: NovedadDTO[]; total: number; page: number; pageSize: number }
   | { status: "forbidden" };
 
+/**
+ * Feature 170/184 (`ListarCompletoServiceResult`) — el MISMO listado sin recorte por pagina,
+ * para el archivo de la descarga. Tres formas excluyentes: `ok` con el conjunto entero,
+ * `limite_excedido` con SOLO conteos (jamas filas, jamas truncado) y `forbidden`.
+ */
+export type ListarNovedadesCompletoServiceResult = ListarCompletoServiceResult<NovedadDTO>;
+
 export interface INovedadesService {
   /**
    * R1-R13: lista la pagina de novedades (devoluciones vigentes y abiertas) de la tienda del
@@ -31,4 +39,12 @@ export interface INovedadesService {
    * -> forbidden (R11).
    */
   listar(input: ListarNovedadesInput, actor: Actor): Promise<ListarNovedadesServiceResult>;
+  /**
+   * El MISMO listado que `listar`, SIN recorte por pagina, para la descarga del archivo. Mismo
+   * predicado, mismo orden (R12) y la MISMA proyeccion a DTO que la pagina: dos proyecciones
+   * distintas de la misma fila serian dos listados distintos. El tope de filas se evalua AQUI
+   * (servidor), con el conteo del listado, antes de leer ninguna fila: superarlo devuelve
+   * `limite_excedido` con los conteos y ninguna orden. Rol != adminTienda -> forbidden (R11).
+   */
+  listarCompleto(actor: Actor): Promise<ListarNovedadesCompletoServiceResult>;
 }

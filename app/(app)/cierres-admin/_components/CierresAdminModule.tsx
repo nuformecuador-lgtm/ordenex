@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
+import type { DataTableDescarga } from "@/components/shared/DataTable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
@@ -23,6 +25,14 @@ import {
   listarPendientesCierresAdminPaginado,
 } from "@/lib/actions/cierres-admin";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+} from "@/lib/types/filtros-cierres";
+import {
+  CATALOGO_FILTROS_CIERRES_VACIO,
+  sinFiltros,
+} from "@/lib/types/filtros-cierres";
 import type {
   CierreDetalleGestion,
   CierreGrupos,
@@ -38,25 +48,24 @@ import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 // módulo que usa el panel del mensajero para capturarla). El admin decide el monto MIRANDO la
 // causa: no puede ser un slug crudo ni, peor, no estar.
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
-import {
-  money,
-  EstadoCierreBadge,
-  PAGO_MENSAJERO_COL,
-  INGRESO_BODEGA_RECHAZOS_COL,
-} from "./cierre-detalle-shared";
+import { money } from "./cierre-detalle-shared";
 import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
 } from "./cierre-factura";
+import { ListaComprobantes } from "./ListaComprobantes";
+import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
+import { PanelConmutado } from "./PanelConmutado";
 import { destinoCierre } from "./cierre-labels";
 // Feature 205 (T6.1): el nombre del parámetro que hace direccionable un cierre. Sale del
 // módulo compartido y no de un literal acá, porque quien construye el enlace vive en OTRA
 // pantalla (`/wallet/mensajeros`) y renombrarlo en un solo lado dejaría el enlace mudo.
 import { PARAM_CIERRE } from "./cierre-enlace";
 import {
-  CierresAdminHistoricoTabla,
+  CierresAdminHistoricoLista,
+  descargaHistoricoCierres,
   type CierresAdminHistoricoPagina,
-} from "./CierresAdminHistoricoTabla";
+} from "./CierresAdminHistoricoLista";
 import {
   COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
   filaDescargaCierrePendiente,
@@ -119,6 +128,15 @@ export interface CierresAdminModuleProps {
    * ofrece pagar a nadie, en vez de ofrecérselo a todos.
    */
   puedeRegistrarPago?: boolean;
+  /**
+   * Pedido humano del 2026-08-16 — opciones de los filtros (bodegas destino y mensajeros), ya
+   * acotadas al alcance del actor y resueltas por el Server Component: es una lectura de solo
+   * catalogo, no depende del filtro aplicado y no tiene por que costar un viaje del cliente.
+   *
+   * Opcional con default VACIO: un montaje que se olvide de pasarla ofrece cero opciones —la
+   * pantalla sigue funcionando sin filtrar— en vez de romperse.
+   */
+  catalogoFiltros?: CatalogoFiltrosCierresDTO;
 }
 
 /**
@@ -136,6 +154,15 @@ interface OfertaPago {
   pendiente: string;
 }
 
+// --- Pedido humano del 2026-08-16: las dos mitades, en pestañas ---
+const TAB_PENDIENTES = "pendientes";
+const TAB_RESUELTOS = "resueltos";
+type TabCierresAdmin = typeof TAB_PENDIENTES | typeof TAB_RESUELTOS;
+const TAB_PENDIENTES_LABEL = "Pendientes";
+const TAB_RESUELTOS_LABEL = "Resueltos";
+/** Nombre accesible del conmutador. Propio: la pantalla anida varios segmentados. */
+const TABS_CIERRES_LABEL = "Cierres del día por estado";
+
 /** Nombre visible de la cola: hoja, base del archivo y nombre del control (R12/R13). */
 const TITULO_DESCARGA_PENDIENTES = "Cierres pendientes de decisión";
 /** Nombre accesible del control de la COLA (R43). La pantalla monta varias tablas paginadas. */
@@ -148,15 +175,44 @@ const ERROR_CARGA_PENDIENTES = "No se pudieron cargar los cierres pendientes.";
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
 
 /**
+ * La configuración de descarga de la COLA, para que la monte la fila de las pestañas.
+ *
+ * Feature 170 (T J.2, R52) — el listado pinta UNA página; el archivo sigue siendo la COLA
+ * COMPLETA del alcance del actor, y ese acotamiento lo pone el SERVIDOR desde la sesión: un
+ * `adminSatelite` sigue descargando solo los cierres de su zona (R14/R44). Feature 184 — Tanda D
+ * (T D.3, R1): sale de la lectura DEDICADA, que corta por estado en la base con el mismo
+ * criterio y el mismo orden que la página, y cuyo tope de filas evalúa el servidor (R6).
+ *
+ * Pedido humano del 2026-08-16 — el archivo sale del MISMO conjunto que el listado enseña,
+ * filtros incluidos: «descargar» significa «esto que estoy viendo, entero».
+ *
+ * El título no repite el del otro listado: dos controles en la misma pantalla necesitan nombres
+ * accesibles distintos (R13).
+ */
+function descargaColaCierres(filtros: FiltrosCierres): DataTableDescarga {
+  return {
+    titulo: TITULO_DESCARGA_PENDIENTES,
+    columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
+    obtenerFilas: () =>
+      filasDesdeResultado(
+        listarPendientesCierresAdminCompleto({ filtros }),
+        filaDescargaCierrePendiente,
+      ),
+  };
+}
+
+/**
  * Feature 170 — FASE 2 (T I.2, R40/R41): una página del histórico. El alcance NO viaja en el
  * input —lo resuelve el servicio desde la sesión, igual que el listado sin paginar (R44)—;
- * aquí solo van el número de página y el tamaño.
+ * aquí solo van el número de página, el tamaño y —desde el pedido humano del 2026-08-16— los
+ * FILTROS, que recortan DENTRO de ese alcance y nunca lo ensanchan.
  */
 async function leerHistorico(
   page: number,
   pageSize: number,
+  filtros: FiltrosCierres,
 ): Promise<CierresAdminHistoricoPagina> {
-  const res = await listarHistoricoCierresAdminPaginado({ page, pageSize });
+  const res = await listarHistoricoCierresAdminPaginado({ page, pageSize, filtros });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -165,8 +221,9 @@ async function leerHistorico(
 async function leerPendientes(
   page: number,
   pageSize: number,
+  filtros: FiltrosCierres,
 ): Promise<CierresAdminColaPagina> {
-  const res = await listarPendientesCierresAdminPaginado({ page, pageSize });
+  const res = await listarPendientesCierresAdminPaginado({ page, pageSize, filtros });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -260,6 +317,7 @@ export function CierresAdminModule({
   historico,
   sinZona,
   puedeRegistrarPago = false,
+  catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
   const pathname = usePathname();
@@ -294,19 +352,54 @@ export function CierresAdminModule({
   // Feature 172/T E.1 (§8): oferta de pago tras aprobar; null = no se está ofreciendo nada.
   const [ofertaPago, setOfertaPago] = useState<OfertaPago | null>(null);
 
+  /**
+   * Pedido humano del 2026-08-16 — los filtros de la pantalla (fecha, bodega destino,
+   * mensajero). UNO para los DOS listados: ver la cabecera de `FiltrosCierresBarra`.
+   *
+   * Va en la CLAVE de los dos `useSWR`, no en un `useEffect` que revalide: así cada
+   * combinación (página, tamaño, filtros) es su propia entrada de caché y volver a un filtro ya
+   * visto no dispara una lectura. Y por eso mismo el `fallbackData` del Server Component sólo
+   * se usa SIN filtros: con un filtro puesto, la página 1 pre-cargada es la del conjunto SIN
+   * filtrar, y servirla sería enseñar cierres que el filtro excluye.
+   */
+  const [filtros, setFiltros] = useState<FiltrosCierres>({});
+
+  /**
+   * Pedido humano del 2026-08-16 — las dos mitades de esta pantalla (la cola de decisión y el
+   * histórico) pasan a ser PESTAÑAS en vez de dos secciones apiladas. Arranca en «Pendientes»:
+   * es la que tiene trabajo que hacer; el histórico se consulta, no se atiende.
+   */
+  const [tab, setTab] = useState<TabCierresAdmin>(TAB_PENDIENTES);
+
+  /**
+   * Cambiar un filtro devuelve LOS DOS listados a su página 1. Sin esto, quien estuviera en la
+   * página 7 pediría la página 7 de un conjunto recién recortado —que casi siempre no existe— y
+   * vería un listado vacío con el contador diciendo que hay filas.
+   */
+  function aplicarFiltros(next: FiltrosCierres) {
+    setFiltros(next);
+    setHistoricoPage(1);
+    setPendientesPage(1);
+  }
+
   // Feature 170 — FASE 2 (T I.2, R40/R43): página visible del histórico. Vive AQUÍ y no en
-  // `CierresAdminHistoricoTabla` porque dos lecturas pintan los mismos cierres —la tabla y la
-  // «Vista tipo factura»— y pedir la página dos veces las dejaría enseñando cosas distintas
-  // (Q-I3). `fallbackData` es la página que ya resolvió el Server Component: al entrar no hay
-  // segunda lectura, y las filas son EXACTAMENTE las de antes (R44).
+  // `CierresAdminHistoricoLista` por el motivo de Q-I3: la página se pide UNA vez y quien la
+  // pinta la recibe. Hasta el 2026-08-16 eran dos lecturas de los mismos cierres —la tabla y la
+  // «Vista tipo factura»— y pedirla dos veces las habría dejado enseñando cosas distintas; hoy
+  // la lectura es una sola, y el reparto se conserva porque es también el que mantiene el
+  // contador de la cola fuera del archivo que pagina (guardia de T H.3).
+  // `fallbackData` es la página que ya resolvió el Server Component: al entrar no hay
+  // segunda lectura, y los comprobantes son EXACTAMENTE los de antes (R44).
   const [historicoPage, setHistoricoPage] = useState(1);
   const [historicoPageSize, setHistoricoPageSize] = useState(historico.pageSize);
   const { data: historicoData, error: historicoError } = useSWR(
-    ["cierres-admin:historico", historicoPage, historicoPageSize],
-    () => leerHistorico(historicoPage, historicoPageSize),
+    ["cierres-admin:historico", historicoPage, historicoPageSize, filtros],
+    () => leerHistorico(historicoPage, historicoPageSize, filtros),
     {
       fallbackData:
-        historicoPage === 1 && historicoPageSize === historico.pageSize
+        historicoPage === 1 &&
+        historicoPageSize === historico.pageSize &&
+        sinFiltros(filtros)
           ? historico
           : undefined,
     },
@@ -331,11 +424,13 @@ export function CierresAdminModule({
   const [pendientesPage, setPendientesPage] = useState(1);
   const [pendientesPageSize, setPendientesPageSize] = useState(pendientes.pageSize);
   const { data: pendientesData, error: pendientesError } = useSWR(
-    ["cierres-admin:pendientes", pendientesPage, pendientesPageSize],
-    () => leerPendientes(pendientesPage, pendientesPageSize),
+    ["cierres-admin:pendientes", pendientesPage, pendientesPageSize, filtros],
+    () => leerPendientes(pendientesPage, pendientesPageSize, filtros),
     {
       fallbackData:
-        pendientesPage === 1 && pendientesPageSize === pendientes.pageSize
+        pendientesPage === 1 &&
+        pendientesPageSize === pendientes.pageSize &&
+        sinFiltros(filtros)
           ? pendientes
           : undefined,
     },
@@ -622,7 +717,10 @@ export function CierresAdminModule({
   const esResoluble = cierreAbierto?.estado === "solicitado";
 
   return (
-    <div className="flex flex-col gap-8">
+    // `gap-4` y no `gap-8` (pedido humano del 2026-08-16): entre la barra de filtros y las
+    // pestañas había el mismo hueco que entre dos secciones distintas, y no lo son —el filtro
+    // acota justo lo que las pestañas reparten—. Se separan como lo que son: una cabecera.
+    <div className="flex flex-col gap-4">
       {/* Feature 205 (T6.1, R39/R40): el cierre que nombra la URL se abre al llegar. No pinta
           nada; solo dispara la MISMA lectura por id que usa la tabla. */}
       <AbrirCierreDeLaUrl
@@ -630,59 +728,91 @@ export function CierresAdminModule({
         onAbrir={abrirDetalle}
       />
 
+      {/* ---------- Filtros (pedido humano del 2026-08-16) ----------
+          UNA barra para los dos listados de abajo. Deshabilitada mientras alguna de las dos
+          páginas está en vuelo: cambiar un filtro a mitad de una lectura dispararía una
+          segunda con la primera todavía viva. */}
+      <FiltrosCierresBarra
+        catalogo={catalogoFiltros}
+        onChange={aplicarFiltros}
+        disabled={pendientesCargando || historicoCargando}
+      />
+
+      {/* ---------- Pestañas: pendientes / resueltos (pedido humano del 2026-08-16) ----------
+          El conteo va DENTRO de cada pestaña, y no es adorno: al esconder la mitad que no se
+          mira, sin el número la pestaña apagada no diría si hay trabajo esperando. Los dos
+          salen del `total` del SERVIDOR (R42), nunca de `items.length`. */}
+      {/* Pedido humano del 2026-08-16: la descarga va ALINEADA con las pestañas, en su misma
+          fila y al otro extremo, en vez de en una fila propia encima de la lista. Se monta la
+          de la pestaña ACTIVA: solo hay un archivo que pedir en cada momento, y así el botón
+          no aparece dos veces (una por panel). */}
+      {/* `pb-1` (pedido humano del 2026-08-16): el grupo segmentado se estaba viendo cortado
+          por abajo. Su borde y su anillo de foco se salen del alto nominal del botón, y sin
+          este respiro el contenedor de la fila los recorta. */}
+<div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+        <SegmentedToggle
+          options={[
+            {
+              valor: TAB_PENDIENTES,
+              etiqueta: TAB_PENDIENTES_LABEL,
+              conteo: colaPendientes.total,
+            },
+            {
+              valor: TAB_RESUELTOS,
+              etiqueta: TAB_RESUELTOS_LABEL,
+              conteo: historicoPagina.total,
+            },
+          ]}
+          valor={tab}
+          onChange={setTab}
+          ariaLabel={TABS_CIERRES_LABEL}
+        />
+        <DescargarDatasetButton
+          {...(tab === TAB_PENDIENTES
+            ? descargaColaCierres(filtros)
+            : descargaHistoricoCierres(filtros))}
+        />
+      </div>
+
+      <PanelConmutado activo={tab === TAB_PENDIENTES} ariaLabel={TAB_PENDIENTES_LABEL}>
       {/* ---------- Pendientes de decisión (R4) ---------- */}
+      {/* SIN ENCABEZADO VISIBLE (pedido humano del 2026-08-16): la pestaña de arriba ya dice
+          «Pendientes», y repetirlo dos centímetros más abajo no añade nada. El `aria-label` SÍ
+          se queda: la sección sigue necesitando un nombre para quien no ve la pantalla, y es
+          por él por el que la localizan los tests y el E2E.
+
+          EL CONTADOR NO SE PIERDE, se mudó: vive en la pestaña (`conteo`), y sigue saliendo del
+          TOTAL del servidor. Con `items.length` diría «(25)» habiendo 300 cierres esperando
+          decisión, y no fallaría nada: compilaría, renderizaría y mentiría. Lo vigila
+          `tests/unit/descarga/contadores-cabecera.guardia.test.ts`. */}
       <section
         aria-label="Pendientes de decisión"
         className="flex flex-col gap-3"
       >
-        <h2 className="text-lg font-semibold">
-          Pendientes de decisión{" "}
-          <span className="text-sm font-normal text-muted-foreground">
-            {/* R42: el contador es el TOTAL del conjunto que devuelve el servidor. Con
-                `items.length` diría «(25)» habiendo 300 cierres esperando decisión, y no
-                fallaría nada: compilaría, renderizaría y mentiría. */}
-            ({colaPendientes.total})
-          </span>
-        </h2>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasPendientes(abrirDetalle, setDestrabar)}
-            data={colaPendientes.items}
-            rowKey="cierreId"
-            ariaLabel="Pendientes de decisión"
-            emptyMessage="No hay cierres pendientes de decisión."
-            isLoading={pendientesCargando}
-            error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
-            /**
-             * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
-             * la COLA COMPLETA del alcance del actor, y ese acotamiento lo pone el SERVIDOR
-             * desde la sesión: un `adminSatelite` sigue descargando solo los cierres de su
-             * zona (R14/R44). Proyectar `colaPendientes.items` habría convertido «descargar
-             * la cola» en «descargar lo que se ve» sin que nada fallara.
-             *
-             * Feature 184 — Tanda D (T D.3, R1): lo que cambia es DE DÓNDE sale esa cola.
-             * Hasta aquí se releía `listarCierresAdmin()`, que devuelve la cola Y el histórico
-             * juntos, y de ahí esta descarga se quedaba con UNA de las dos mitades. En
-             * producción esa relectura es la cara: la cola son los cierres sin resolver —una
-             * decena— y el histórico crece sin tope con los días, así que descargar la cola
-             * arrastraba todo el histórico del alcance. Ahora se pide la lectura DEDICADA, que
-             * corta por estado en la base (`estado in` la cola) con el mismo criterio y el
-             * mismo orden que la página, y cuyo tope de filas evalúa el servidor (R6).
-             *
-             * El título no repite el de la otra tabla: dos controles en la misma pantalla
-             * necesitan nombres accesibles distintos (R13).
-             */
-            descarga={{
-              titulo: TITULO_DESCARGA_PENDIENTES,
-              columnas: COLUMNAS_DESCARGA_CIERRES_PENDIENTES,
-              obtenerFilas: () =>
-                filasDesdeResultado(
-                  listarPendientesCierresAdminCompleto(),
-                  filaDescargaCierrePendiente,
-                ),
-            }}
-          />
-        </div>
+        {/* Pedido humano del 2026-08-16: la cola se lee como COMPROBANTES, no como tabla.
+            Cada cierre es la misma hoja compacta que ya usaba la previsualización, con su
+            botonera y su desglose desplegable; la tabla que estaba aquí desaparece, y con
+            ella la duplicidad de tener los mismos cierres dos veces en la pantalla. */}
+        <ListaComprobantes
+          ariaLabel="Pendientes de decisión"
+          items={colaPendientes.items}
+          clave={(c) => c.cierreId}
+          isLoading={pendientesCargando}
+          error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
+          emptyMessage="No hay cierres pendientes de decisión."
+          render={(c) => (
+            <CierreFacturaResumen
+              cierre={c}
+              acciones={
+                <AccionesCola
+                  cierre={c}
+                  abrir={abrirDetalle}
+                  pedirDestrabar={setDestrabar}
+                />
+              }
+            />
+          )}
+        />
 
         <Pagination
           page={pendientesPage}
@@ -701,10 +831,13 @@ export function CierresAdminModule({
         />
       </section>
 
+      </PanelConmutado>
+
+      <PanelConmutado activo={tab === TAB_RESUELTOS} ariaLabel={TAB_RESUELTOS_LABEL}>
       {/* ---------- Histórico (solo lectura, R5) ----------
-          Feature 170 — FASE 2 (T I.2): la tabla y su control viven en su propio componente;
+          Feature 170 — FASE 2 (T I.2): el listado y su control viven en su propio componente;
           la página la pide este módulo (ver el comentario del `useSWR`). */}
-      <CierresAdminHistoricoTabla
+      <CierresAdminHistoricoLista
         pagina={historicoPagina}
         page={historicoPage}
         isLoading={historicoCargando}
@@ -717,89 +850,10 @@ export function CierresAdminModule({
         onAbrir={abrirDetalle}
       />
 
-      {/* ---------- Vista tipo factura (previsualización de UX) ----------
-          Lectura alternativa de LOS MISMOS cierres que las dos tablas de arriba, como
-          comprobante. Va DEBAJO y a propósito no reemplaza nada: es para comparar las
-          dos lecturas antes de decidir cuál se queda.
+      </PanelConmutado>
 
-          Feature 170 — FASE 2 (T I.2, Q-I3): al paginar el histórico, esta vista SIGUE A LA
-          TABLA — muestra la cola completa más la PÁGINA visible de resueltos, no todo el
-          histórico. Cambia lo que el usuario ve: los cierres resueltos que caen fuera de la
-          página dejan de aparecer aquí como tarjeta (su comprobante sigue a un clic, en el
-          detalle, que es el MISMO componente). Se elige así porque la frase que define esta
-          sección es «los mismos cierres de arriba»: alimentarla del conjunto entero la
-          convertiría en la única razón por la que el histórico completo seguiría cruzando a
-          la pantalla, que es justo lo que esta fase viene a quitar.
-
-          T J.2 aplica la MISMA decisión a la cola, que ahora también es una página: las dos
-          tiras siguen siendo «los mismos cierres de arriba», cada una en su página. */}
-      <section
-        aria-label="Vista tipo factura"
-        className="flex flex-col gap-4 border-t pt-6"
-      >
-        <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold">Vista tipo factura</h2>
-          <p className="text-sm text-muted-foreground">
-            Previsualización: los mismos cierres de arriba leídos como comprobante.
-          </p>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          {[...colaPendientes.items, ...historicoPagina.items].map((c) => (
-            <CierreFacturaResumen
-              key={c.cierreId}
-              cierre={c}
-              acciones={
-                // Los nombres accesibles llevan el sufijo de la vista: los botones de
-                // la tabla ya se llaman "Ver / decidir" / "Destrabar cierre vencido",
-                // y duplicarlos haría ambigua la localización por nombre.
-                c.estado === "vencido" ? (
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label={`Ver el comprobante del cierre de ${c.mensajeroNombre}`}
-                      onClick={() => abrirDetalle(c.cierreId)}
-                    >
-                      Ver
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setDestrabar(c)}
-                      aria-label={`Destrabar desde el comprobante el cierre vencido abandonado de ${c.mensajeroNombre}`}
-                    >
-                      Destrabar cierre vencido
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={c.estado === "solicitado" ? "default" : "outline"}
-                    aria-label={
-                      c.estado === "solicitado"
-                        ? `Ver / decidir desde el comprobante el cierre de ${c.mensajeroNombre}`
-                        : `Ver el comprobante del cierre de ${c.mensajeroNombre}`
-                    }
-                    onClick={() => abrirDetalle(c.cierreId)}
-                  >
-                    {c.estado === "solicitado" ? "Ver / decidir" : "Ver"}
-                  </Button>
-                )
-              }
-            />
-          ))}
-          {colaPendientes.items.length === 0 && historicoPagina.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No hay cierres para previsualizar.
-            </p>
-          ) : null}
-        </div>
-      </section>
-
+      {/* Los modales viven FUERA de los dos paneles: el detalle se abre desde cualquiera de las
+          dos pestañas y no puede quedar escondido con la que no se está mirando. */}
       {/* ---------- Detalle del cierre (R6-R8) ---------- */}
       <Modal
         open={detalle !== null}
@@ -1093,73 +1147,52 @@ export function CierresAdminModule({
   );
 }
 
-// --- Columnas de la cola de pendientes (R4) ---
-function columnasPendientes(
-  abrir: (cierreId: string) => void,
-  pedirDestrabar: (c: CierreAdminResumen) => void,
-): Column<CierreAdminResumen>[] {
-  return [
-    // Feature 41 (R20): estado diferenciado (`solicitado` vs `vencido`) en la cola.
-    {
-      id: "estado",
-      value: "Estado",
-      render: (c) => <EstadoCierreBadge estado={c.estado} />,
-    },
-    { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
-    {
-      id: "fecha",
-      value: "Fecha",
-      render: (c) => c.solicitadoAt.slice(0, 10),
-    },
-    { id: "destino", value: "Destino", render: (c) => destinoCierre(c) },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      // Feature 111/R15/R16: un `solicitado` es resoluble por la vía normal ("Ver /
-      // decidir" abre el detalle con aprobar/rechazar). Un `vencido` NO es resoluble por
-      // esa vía; se ofrece SOLO en sus filas la acción DIFERENCIADA de excepción
-      // "Destrabar cierre vencido" (con confirmación), separada de aprobar/rechazar.
-      render: (c) =>
-        c.estado === "vencido" ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => abrir(c.cierreId)}
-            >
-              Ver
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              onClick={() => pedirDestrabar(c)}
-              aria-label={`Destrabar cierre vencido abandonado de ${c.mensajeroNombre}`}
-            >
-              Destrabar cierre vencido
-            </Button>
-          </div>
-        ) : (
-          <Button type="button" size="sm" onClick={() => abrir(c.cierreId)}>
-            Ver / decidir
-          </Button>
-        ),
-    },
-  ];
+/**
+ * Botonera de un cierre de la cola (R4). Es la que vivía en la columna «Acciones» de la
+ * tabla, TAL CUAL —mismos rótulos y mismos nombres accesibles—: ahora que la tabla no existe,
+ * estos botones ya no compiten con nadie por el nombre y recuperan el suyo, sin el sufijo
+ * «desde el comprobante» que la previsualización necesitaba para no duplicarlos.
+ *
+ * Feature 111/R15/R16: un `solicitado` es resoluble por la vía normal ("Ver / decidir" abre el
+ * detalle con aprobar/rechazar). Un `vencido` NO lo es; solo en él se ofrece la acción
+ * DIFERENCIADA de excepción "Destrabar cierre vencido" (con confirmación).
+ */
+function AccionesCola({
+  cierre,
+  abrir,
+  pedirDestrabar,
+}: Readonly<{
+  cierre: CierreAdminResumen;
+  abrir: (cierreId: string) => void;
+  pedirDestrabar: (c: CierreAdminResumen) => void;
+}>) {
+  if (cierre.estado !== "vencido") {
+    return (
+      <Button type="button" size="sm" onClick={() => abrir(cierre.cierreId)}>
+        Ver / decidir
+      </Button>
+    );
+  }
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={`Ver el cierre de ${cierre.mensajeroNombre}`}
+        onClick={() => abrir(cierre.cierreId)}
+      >
+        Ver
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        onClick={() => pedirDestrabar(cierre)}
+        aria-label={`Destrabar cierre vencido abandonado de ${cierre.mensajeroNombre}`}
+      >
+        Destrabar cierre vencido
+      </Button>
+    </div>
+  );
 }

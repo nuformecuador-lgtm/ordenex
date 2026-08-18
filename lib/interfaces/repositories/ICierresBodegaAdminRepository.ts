@@ -4,6 +4,7 @@ import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 
 // Feature 40 — contrato del repositorio de "Cierres de bodega" del maestro (aprobar /
 // rechazar). Solo queries Prisma; sin logica de negocio (esa vive en
@@ -53,7 +54,12 @@ export interface ICierresBodegaAdminRepository {
    * `orderBy` por construccion (R16), de modo que la pagina N es el segmento N de este conjunto
    * (R5). UNA sola consulta (R15).
    */
-  findHistoricoCompleto(): Promise<CierreBodegaResumenRow[]>;
+  /**
+   * Pedido humano del 2026-08-16 — `filtros` es OPCIONAL (fecha + zona, SIN mensajero: un cierre
+   * de bodega consolida los de varios) y RECORTA dentro del alcance, componiendose con `AND` y
+   * nunca en lugar de el. Omitirlo deja el criterio IDENTICO al de antes.
+   */
+  findHistoricoCompleto(filtros?: FiltrosCierresBodega): Promise<CierreBodegaResumenRow[]>;
   /**
    * Feature 184 — Tanda E (T E.1, R1/R14/R15/R16): la COLA ENTERA de cierres de bodega
    * PENDIENTES (`solicitado`), sin recorte. Es el conjunto del que sale el archivo del listado 4.
@@ -61,7 +67,7 @@ export interface ICierresBodegaAdminRepository {
    * COMPLEMENTO EXACTO del de arriba, con la MISMA constante de estados (`in` aqui, `notIn`
    * alli): los dos conjuntos particionan la tabla igual que las dos paginas.
    */
-  findColaCompleta(): Promise<CierreBodegaResumenRow[]>;
+  findColaCompleta(filtros?: FiltrosCierresBodega): Promise<CierreBodegaResumenRow[]>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA del historico (los cierres
    * de bodega ya RESUELTOS) + el TOTAL del conjunto.
@@ -71,7 +77,10 @@ export interface ICierresBodegaAdminRepository {
    * `orderBy solicitadoAt desc` (R51) y mismas proyecciones. Pagina y total en la MISMA
    * llamada: el `count` es la unica consulta que R54 permite anadir.
    */
-  findHistoricoPaginado(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
+  findHistoricoPaginado(
+    rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
   /**
    * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de cierres de
    * bodega PENDIENTES (`solicitado`) + el TOTAL del conjunto, que es el que la cabecera de la
@@ -80,7 +89,10 @@ export interface ICierresBodegaAdminRepository {
    * COMPLEMENTO EXACTO de `findHistoricoPaginado`: misma proyeccion, mismo orden y la MISMA
    * constante de estados, con `in` en vez de `notIn`.
    */
-  findColaPaginada(rango: RangoPagina): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
+  findColaPaginada(
+    rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
   /**
    * R11: el cierre de bodega (cabecera + totales snapshot) + por cada cierre_dia
    * incluido (WHERE cierre_bodega_id=id) su cabecera y sus gestiones (WITH_DETALLE,

@@ -1,7 +1,9 @@
 # Feature 230 — bitácora de implementación · BACKEND (tandas 1, 2 y 7 backend)
 
 > Agente: `backend_dev`. Worktree `C:/w230`, rama
-> `feature/230-descarga-cierres-general-y-detallada`, nacida de `origin/dev` en `9b627059`.
+> `feature/230-descarga-cierres-general-y-detallada`, nacida de `origin/dev` en `9b627059` y
+> **rebasada sobre `origin/ux` por decisión del humano del 2026-08-18** (merge, no rebase: una
+> sola pasada de conflictos). El motivo está en H1.
 >
 > **Alcance entregado:** tanda 1 completa (T1.1, T1.2, T1.3), tanda 2 completa (T2.1, T2.2,
 > T2.3) y la parte BACKEND de la tanda 7 (T7.1, T7.2, T7.3).
@@ -15,25 +17,71 @@
 Los tres primeros son de aterrizaje: `design.md` se escribió mirando el árbol de la rama `ux`,
 y esta feature nace de `dev`. Ninguno bloquea, pero el reviewer los tiene que ver.
 
-### H1 — `lib/types/filtros-cierres.ts` NO EXISTÍA en la rama base
+### H1 — RESUELTO: `lib/types/filtros-cierres.ts` no existía en `dev`, y la feature se rebasó sobre `ux`
 
-`design.md §3.1` sitúa el schema nuevo «en el mismo módulo y desde las mismas primitivas»
-(`listaDeIds` `:34-38`, `fechaCalendario` `:30-32`, `rangoCoherente`/`MENSAJE_RANGO` `:62-67`).
-En `origin/dev@9b627059` ese archivo **no existe**: los filtros de cierres (commit `4c9a888e`,
-«cuatro filtros por alcance en el backend de cierres») viven en `ux`, sin mergear. Tampoco
-existen `filtrosWhere`, `findCatalogoFiltros`, `rangoSolicitadoAt` ni
-`obtenerCatalogoFiltrosCierres`, que el design cita por `ruta:línea`.
+**El hallazgo original:** `design.md §3.1` situaba el schema nuevo «en el mismo módulo y desde
+las mismas primitivas», y en `origin/dev@9b627059` ese módulo **no existía**. Tampoco
+`filtrosWhere`, `findCatalogoFiltros` ni `obtenerCatalogoFiltrosCierres`. Todo eso es el commit
+`4c9a888e`, que vive solo en `origin/ux`. Para no bloquearme escribí un módulo propio con las
+primitivas copiadas por valor de `lib/types/orden.ts`.
 
-**Qué hice, y por qué no es inventar:** creé `lib/types/filtros-cierres.ts` con el schema y con
-las primitivas **copiadas por valor** de `lib/types/orden.ts:102-107` y `:152-156`, que es la
-declaración viva de esas mismas primitivas en esta rama (`idList`, `fechaCalendario` y el
-`refine` de rango no invertido). Está documentado en la cabecera del módulo. El día que `ux`
-mergee, es un conflicto de UN archivo y una decisión de dos líneas: fundirlos o dejarlos.
+**Decisión del humano (2026-08-18):** la 230 se rebasa sobre `ux`, no sobre `dev` — porque
+además `ux` trae `2fd98ea1`, que reescribe los listados de cierres donde va el botón nuevo.
+Montar sobre `dev` habría sido construir sobre pantallas que van a desaparecer. El leader hizo
+`git merge origin/ux` y yo resolví los nueve conflictos.
 
-**Consecuencia sobre R29 (catálogo de mensajeros del diálogo):** el design apoya la lista del
-diálogo en `obtenerCatalogoFiltrosCierres` → `findCatalogoFiltros`, que **no existen aquí**.
-R29 es de la tanda 4 (UI) y no de mi alcance, pero el agente que la haga se va a encontrar sin
-esa lectura. Es un bloqueo real de la tanda 4, no mío.
+**Cómo quedó `lib/types/filtros-cierres.ts`:** **gana el módulo de `ux`, entero.** Mi copia era
+un andamio y su motivo desapareció; la borré. Encima de ese módulo re-injerté lo único que era
+de la 230 —`filtrosDescargaGestionesSchema` y `FiltrosDescargaGestiones`— construido con SUS
+primitivas reales, no con las mías:
+
+| Lo que yo tenía | Lo que quedó |
+| --- | --- |
+| `z.array(z.string().min(1)).nonempty()` propio | `listaDeIdsRequerida`, extraída de `listaDeIds` de `ux` (uuid + `MAX_IDS_POR_FILTRO` + `nonempty`) |
+| `fechaCalendario` con regex propia | la de `ux`, que valida con `esFechaCalendarioValida` |
+| `MENSAJE_RANGO_DESCARGA_GESTIONES` propio | el `MENSAJE_RANGO` del módulo, uno solo para los cinco listados y esta descarga |
+| refine de rango propio | `rangoCoherente` del módulo |
+
+`listaDeIds` de `ux` traía `.optional()` incorporado, y esta descarga lo necesita OBLIGATORIO
+(R39). En vez de declarar una lista paralela, partí la suya en dos —`listaDeIdsRequerida` y
+`listaDeIds = listaDeIdsRequerida.optional()`—: sin duplicar el tope, el `uuid` ni el
+`nonempty`, y sin cambiar el comportamiento de ningún filtro existente. La guardia
+`filtros-cierres-alcance.guardia.test.ts` sigue verde.
+
+**Efecto colateral que hay que saber:** los ids de esta descarga ahora son **UUID**, porque es
+la regla del módulo. Mis tests usaban `"m-1"`; se adaptaron.
+
+**Un intento que reverti, y merece estar escrito:** primero exporté `MENSAJE_RANGO` para que el
+test comparase contra la constante. No funciona: **zod v4 MUTA el objeto de params que recibe
+`.refine`** y le renombra `message` a `error`, así que `MENSAJE_RANGO.message` es `undefined`
+después de importarlo. Deshice el export —una constante que zod reescribe no debe salir del
+módulo— y el test afirma ahora algo más fuerte y sin literales: que el mensaje del rango
+invertido de esta descarga es **el mismo** que el de `filtrosCierresSchema`.
+
+### H1.b — `filtrosWhere` ya existía: borré mi `recortesDescargaGestionesWhere`
+
+Con `ux` dentro, `CierresAdminRepository` tiene `filtrosWhere(filtros)`, que traduce fechas,
+zonas y mensajeros a condiciones y que `historicoWhere`/`colaWhere` componen con `AND`. Mi
+helper hacía la misma traducción de fechas y de `mensajeroId`. **Borrado.** Los dos caminos de
+la 230 usan ahora `filtrosWhere` (exportada para que el repositorio de bodega la lea), y el
+`where` pasa de claves hermanas a `{ ...alcanceWhere(alcance), AND: filtrosWhere(filtros) }`.
+
+No es sólo quitar una copia: es la forma **correcta**. Como claves hermanas, un `mensajeroId` de
+recorte podría SUSTITUIR al criterio del alcance en vez de sumarse; dentro de `AND` se exigen
+los dos. Es exactamente lo que la guardia `filtros-cierres-alcance` vigila para los listados, y
+ahora la descarga detallada compone igual. El `design.md §3.1` decía que
+`FiltrosDescargaGestiones` es un subconjunto estructural de `FiltrosCierres` y que `filtrosWhere`
+se reusa sin tocarlo: **con `ux` dentro, el design vuelve a ser cierto**.
+
+### H1.c — R29 queda DESBLOQUEADO
+
+`obtenerCatalogoFiltrosCierres` (`lib/actions/cierres-admin.ts`), `findCatalogoFiltros`
+(`CierresAdminRepository`), `CierresAdminService.obtenerCatalogoFiltros` y
+`CatalogoFiltrosCierresDTO` existen ya en esta rama, con el catálogo acotado al alcance del
+actor y con `CATALOGO_FILTROS_CIERRES_VACIO` para el `adminSatelite` sin zona. La tanda 4 tiene
+de dónde poblar el diálogo sin consulta nueva y sin caso especial para la GAM, tal como el
+`design.md §7` describía. **Mi borde no cambia por esto**: el catálogo es del diálogo, no de la
+lectura de gestiones.
 
 ### H2 — `lib/actions/cierres-bodega-admin.ts` no existe
 
@@ -42,11 +90,11 @@ cierres de bodega viven en **`lib/actions/cierre-bodega.ts`**, junto a las del `
 con su `buildCierresBodegaAdminService` y su `toCierreBodegaActionError` ya cableados. Puse la
 acción ahí: un módulo nuevo obligaba a duplicar el builder y el traductor de errores.
 
-### H3 — `listarPendientesCierresAdminCompleto` no recibe filtros en esta rama
+### H3 — RESUELTO por el merge: los listados sí reciben filtros
 
-El design lo cita como `listarPendientesCierresAdminCompleto({ filtros })`. Aquí la firma es
-`(actor)` a secas: los filtros por listado son de `ux`. No afecta a lo entregado (los métodos
-nuevos son suyos propios), pero invalida la lectura literal de esa cita.
+El design citaba `listarPendientesCierresAdminCompleto({ filtros })`; en `dev` la firma era
+`(actor)` a secas. Con `ux` dentro, la firma real es `(actor, filtros?: FiltrosCierres)` y la
+cita del design vuelve a ser exacta. Nada que hacer.
 
 ### H4 — el grano de `cierre_detail` obliga a una clave de join que el design no menciona
 
@@ -67,8 +115,10 @@ dedicado que lo mata (`empareja el snapshot por (cierre, orden) y no sólo por o
 `mensajeroIds: listaDeIds` **sin** `.optional()`. Las dos cosas no pueden ser ciertas: con
 `filtros` ausente no hay `mensajeroIds`, y «sin mensajeros» tendría que significar «todos», que
 es exactamente lo que R39 y D5 niegan. Implementé `filtros` **obligatorio** y su `mensajeroIds`
-no vacío, y el borde no lleva `input: unknown = {}` por el mismo motivo. Si el humano prefiere
-la otra lectura, es un cambio de una línea por capa.
+no vacío, y el borde no lleva `input: unknown = {}` por el mismo motivo.
+
+**RATIFICADO por el humano el 2026-08-18:** `mensajeroIds` queda obligatorio y no vacío. «Sin
+mensajeros» no es «todos», es error (R39). No se reabre.
 
 ### H6 — `toIngresoOrdenex` pedía la fila entera de la gestión y sólo usa `resultado`
 
@@ -101,7 +151,7 @@ manipulación de tests ajenos.
 
 | Archivo | Qué |
 | --- | --- |
-| `lib/types/filtros-cierres.ts` | `filtrosDescargaGestionesSchema` + `FiltrosDescargaGestiones` + `MENSAJE_RANGO_DESCARGA_GESTIONES` (T1.2, ver H1) |
+| ~~`lib/types/filtros-cierres.ts`~~ | Dejó de ser nuevo: gana el módulo de `ux` y sobre él se re-injertó `filtrosDescargaGestionesSchema` + `FiltrosDescargaGestiones` (T1.2, ver H1) |
 | `tests/unit/types/filtros-descarga-gestiones-schema.test.ts` | Lista blanca, rango, lista vacía (T1.2) |
 | `tests/unit/components/cierre-resultado-fila-label.test.ts` | Los cinco singulares y la no-derivación del plural (T1.3) |
 | `tests/unit/repositories/cierres-admin-gestiones-where.test.ts` | WHERE, orden y proyección del camino A (T2.1) |
@@ -119,10 +169,11 @@ manipulación de tests ajenos.
 | `lib/interfaces/services/ICierresBodegaAdminService.ts` | `listarGestionesCierresBodegaCompleto` (importa el DTO, no lo redeclara) |
 | `lib/interfaces/repositories/ICierresAdminRepository.ts` | `findGestionesPorAlcanceCompleto` |
 | `lib/interfaces/repositories/ICierresBodegaAdminRepository.ts` | `findGestionesDeCierresBodegaCompleto` |
-| `lib/repositories/CierresAdminRepository.ts` | `GESTION_DESCARGA_SELECT`, `DETALLE_DESCARGA_SELECT`, `toGestionDescargaDTO`, `componerGestionesDescarga`, `recortesDescargaGestionesWhere`, `ORDEN_GESTIONES_DESCARGA` y el método; `toIngresoOrdenex` estrecha su parámetro (H6) |
-| `lib/repositories/CierresBodegaAdminRepository.ts` | El método de bodega, reusando las SEIS piezas anteriores sin declarar nada propio (R26) |
+| `lib/repositories/CierresAdminRepository.ts` | `GESTION_DESCARGA_SELECT`, `DETALLE_DESCARGA_SELECT`, `toGestionDescargaDTO`, `componerGestionesDescarga`, `ORDEN_GESTIONES_DESCARGA` y el método; `filtrosWhere` pasa a exportarse (H1.b); `toIngresoOrdenex` estrecha su parámetro (H6) |
+| `lib/repositories/CierresBodegaAdminRepository.ts` | El método de bodega, reusando las piezas anteriores + `filtrosWhere` sin declarar nada propio (R26) |
 | `lib/services/CierresAdminService.ts` | `listarGestionesCierresAdminCompleto` |
 | `lib/services/CierresBodegaAdminService.ts` | `listarGestionesCierresBodegaCompleto` |
+| `lib/types/filtros-cierres.ts` | `listaDeIdsRequerida` extraída de `listaDeIds`, y el schema de la 230 sobre las primitivas de `ux` (H1) |
 | `lib/types/cierres-admin.ts` | `ListarGestionesCierresAdminCompletoResult` |
 | `lib/types/cierre-bodega.ts` | `ListarGestionesCierresBodegaCompletoResult` |
 | `lib/actions/cierres-admin.ts` | Server Action del camino A |
@@ -175,66 +226,72 @@ los cierran las tandas 3-7.4; abajo van los que este entregable hace verificable
 
 ## 4. Verificación ejecutada
 
-Sin `./init.sh` y sin la suite completa (los corre el leader). Todo desde `C:/w230`.
+Sin `./init.sh` y sin la suite completa (los corre el leader). Todo desde `C:/w230`, **después
+de resolver el merge con `origin/ux`** y de un `pnpm db:generate` (el cliente Prisma quedó
+obsoleto respecto del schema que trae `ux`: `RutaOptimizadaRepository` daba 11 errores de tipos
+fantasma que no eran de código).
 
 ```
 $ pnpm typecheck
-> ordenex@0.1.0 typecheck C:\w230
 > tsc --noEmit
 (sin salida → 0 errores)
 
 $ pnpm lint
-✖ 73 problems (0 errors, 73 warnings)
+✖ 75 problems (0 errors, 75 warnings)
 ```
 
-Los 73 son `@typescript-eslint/no-unused-vars` preexistentes en toda la suite (parámetros
-`_args`, `_actor`, …). Cuatro de ellos son míos, en los dos `*-gestiones-where.test.ts`, y son
-el MISMO patrón `_args?: Consulta` que ya usan `historicos-paginados-where.test.ts` y
-`colas-paginadas-where.test.ts`: el parámetro se declara explícitamente porque es justo lo que
-esos casos afirman. **0 errores nuevos.**
+Los 75 son `@typescript-eslint/no-unused-vars` preexistentes de toda la suite (parámetros
+`_args`, `_actor`, …). Cuatro son míos, en los dos `*-gestiones-where.test.ts`, y son el MISMO
+patrón `_args?: Consulta` que ya usan `historicos-paginados-where.test.ts` y
+`colas-paginadas-where.test.ts`. **0 errores nuevos.**
 
 ```
-$ pnpm exec vitest run <mis 8 archivos de test nuevos>
+$ pnpm exec vitest run <mis 8 archivos de test>
  Test Files  8 passed (8)
-      Tests  92 passed (92)
+      Tests  93 passed (93)
 
-$ pnpm exec vitest related --run lib/repositories/CierresAdminRepository.ts \
-    lib/repositories/CierresBodegaAdminRepository.ts lib/services/CierresAdminService.ts \
-    lib/services/CierresBodegaAdminService.ts lib/actions/cierres-admin.ts \
-    lib/actions/cierre-bodega.ts lib/types/filtros-cierres.ts lib/types/cierres-admin.ts \
-    lib/types/cierre-bodega.ts
- Test Files  94 passed (94)
-      Tests  1431 passed (1431)
+$ pnpm exec vitest run tests/unit/services tests/unit/repositories tests/unit/actions tests/unit/types
+ Test Files  355 passed (355)
+      Tests  5412 passed (5412)
 
-$ pnpm exec vitest related --run "app/(app)/cierres-admin/_components/cierre-labels.ts" \
-    lib/interfaces/services/ICierresAdminService.ts \
-    lib/interfaces/repositories/ICierresAdminRepository.ts \
-    lib/interfaces/services/ICierresBodegaAdminService.ts \
-    lib/interfaces/repositories/ICierresBodegaAdminRepository.ts
- Test Files  36 passed (36)
-      Tests  571 passed (571)
+$ pnpm exec vitest run tests/unit/guards tests/unit/descarga
+ Test Files  79 passed (79)
+      Tests  927 passed (927)
 
-$ pnpm exec vitest run tests/unit/descarga tests/unit/guards
- Test Files  77 passed (77)
-      Tests  913 passed (913)
+$ pnpm exec vitest run tests/components/descarga
+ Test Files  17 passed (17)
+      Tests  142 passed (142)
+
+$ pnpm exec vitest related --run <los 11 fuentes tocados>
+ Test Files  4 failed | 90 passed (94)
+      Tests  38 failed | ...
 ```
 
-La última corrida es la que destapó H7: en su primera pasada,
-`superficie-de-uso.guardia.test.ts` estaba rojo con las dos acciones nuevas. Con la anotación
-`@sin-superficie` documentada, verde.
+**Los 38 rojos NO son míos y no los diagnostiqué**, por instrucción expresa. Están todos en
+cuatro archivos de `ordenes`, ninguno de cierres:
 
-**Cero rojos ajenos observados** en lo que corrí.
+```
+tests/unit/components/ordenes-listado-buscador.test.tsx   (8 tests | 3 failed)
+tests/unit/components/ordenes-listado.test.tsx            (18 tests | 13 failed)
+tests/unit/components/ordenes-listado-filtros.test.tsx    (17 tests | 16 failed)
+tests/components/OrdenesPageFiltros.test.tsx              (8 tests | 6 failed)
+```
 
----
+Son los que la rama `ux` ya arrastraba (38 rojos en `ordenes-listado`, medidos el 2026-08-16);
+llegan con el merge, no con este trabajo. Los toco `vitest related` sólo porque comparten el
+grafo de `lib/types/*`, no porque este entregable los roce.
 
 ## 5. Lo que queda abierto para quien siga
 
-1. **R29 no tiene de dónde salir en esta rama** (H1): no existe `obtenerCatalogoFiltrosCierres`
-   ni `findCatalogoFiltros`. La tanda 4 la necesita para poblar el diálogo. Decisión del
-   humano/leader: portarla desde `ux`, escribirla nueva, o esperar al merge.
+1. ~~R29 no tiene de dónde salir~~ — **DESBLOQUEADO** por el merge con `ux` (H1.c). El catálogo
+   existe (`obtenerCatalogoFiltrosCierres` → `findCatalogoFiltros`), acotado al alcance y con su
+   caso vacío para el `adminSatelite` sin zona. La tanda 4 puede poblar el diálogo sin abrir una
+   consulta nueva.
 2. **Las dos anotaciones `@sin-superficie` se retiran al cablear la UI** (H7). No es opcional:
    la guardia se pone roja si sobreviven a su motivo.
-3. **T7.5(b)** («ningún `if` sobre `esCentral` en el código nuevo») es un grep del subárbol y
+3. **38 rojos ajenos heredados de `ux`** en `ordenes-listado`/`OrdenesPageFiltros`, anotados
+   arriba sin diagnosticar.
+4. **T7.5(b)** («ningún `if` sobre `esCentral` en el código nuevo») es un grep del subárbol y
    pertenece a la tanda 7 de UI. Por mi parte lo puedo afirmar de palabra —no hay ni una
    mención a `esCentral` en el código que escribí, salvo la lectura del snapshot que ya
    existía— pero el test que lo mide no es mío.

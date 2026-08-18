@@ -1870,6 +1870,16 @@ model RutaOptimizada {
   origenFuente String?    @map("origen_fuente")
   huellaSet    String?    @map("huella_set")
   ultimoError  String?    @map("ultimo_error")
+  // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
+  // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
+  // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
+  trazadoPolilinea  String? @map("trazado_polilinea")
+  trazadoDistanciaM Int?    @map("trazado_distancia_m")
+  trazadoDuracionS  Int?    @map("trazado_duracion_s")
+  trazadoFuente     String? @map("trazado_fuente")
+  // Guarda de coste del trayecto EN VIVO (20260814160000_ruta_tramo_vivo_at). Contador de
+  // gasto, no dato de negocio: solo lo lee la guarda del intervalo minimo.
+  tramoVivoAt       DateTime? @map("tramo_vivo_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
@@ -1890,6 +1900,12 @@ model RutaOptimizadaParada {
   rutaId    String @map("ruta_id")
   ordenId   String @map("orden_id")
   secuencia Int
+  // Tramo que LLEGA a esta parada (20260814140000_ruta_parada_tramo). La fila 1 guarda el
+  // origen -> primera parada. No necesita invalidacion propia: `reemplazarSecuencia` borra e
+  // reinserta estas filas enteras en cada recalculo.
+  tramoPolilinea  String? @map("tramo_polilinea")
+  tramoDistanciaM Int?    @map("tramo_distancia_m")
+  tramoDuracionS  Int?    @map("tramo_duracion_s")
 
   ruta  RutaOptimizada @relation(fields: [rutaId], references: [id], onDelete: Cascade)
   orden Orden          @relation(fields: [ordenId], references: [id], onDelete: Cascade)

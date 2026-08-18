@@ -31,13 +31,19 @@ import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
+import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
+import { TrayectoVivoButton } from "./TrayectoVivoButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
 import { useSeccionColapsable } from "./useSeccionColapsable";
-import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
+import type {
+  RutaMapaOrigen,
+  RutaMapaParada,
+  RutaMapaTrazado,
+} from "./ruta-mapa-tipos";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): pantalla de REPARTO del mensajero.
 // Recibe el grupo ya resuelto por el Server Component padre (datos sensibles por props,
@@ -113,6 +119,16 @@ export function RepartoModule({
   // se fuerza el permiso; solo se captura cuando el mensajero pulsa "Sincronizar ruta").
   const [ubicacionActual, setUbicacionActual] = useState<RutaMapaOrigen | null>(
     null,
+  );
+  // Feature 92 (seguimiento): geometría de la ruta. Arranca con la PERSISTIDA que trae el
+  // servidor (migración `20260814120000_ruta_optimizada_trazado`), así que el mapa pinta las
+  // calles reales ya en el primer render y sobrevive a un F5 — antes cada recarga lo devolvía
+  // a la línea recta. La sincronización la sustituye por la recién calculada; ese valor es
+  // estado de cliente y sobrevive a `router.refresh()`, que no remonta el componente.
+  const [trazadoRuta, setTrazadoRuta] = useState<RutaMapaTrazado | null>(
+    ruta.trazado !== null
+      ? { encodedPolyline: ruta.trazado.encodedPolyline, fuente: ruta.trazado.fuente }
+      : null,
   );
   // Mapa de ruta como ACORDEÓN: abierto de entrada, se pliega y despliega con animación
   // desde un control que no se mueve de su sitio (ver el bloque del mapa, más abajo).
@@ -220,6 +236,21 @@ export function RepartoModule({
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
   const origenAproximado =
     ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+
+  // Feature 92 (seguimiento): posición EN VIVO. No cuesta ninguna llamada facturada —la da el
+  // navegador— y solo arranca si el permiso ya consta concedido (R25: nunca se fuerza).
+  // `ubicacionActual !== null` es la prueba de que el botón ya lo obtuvo, para los navegadores
+  // sin Permissions API.
+  const ubicacionVivo = useSeguimientoUbicacion(ubicacionActual !== null);
+  // La del seguimiento MANDA sobre la del último botón: es más reciente por definición. Se
+  // cae a la del botón mientras el GPS no haya dado su primer fix bueno.
+  const origenMapa = ubicacionVivo ?? ubicacionActual;
+
+  // Trayecto en vivo pedido a mano. Cuando existe MANDA sobre el tramo persistido: el
+  // mensajero acaba de pedir explícitamente «desde donde estoy», y seguir resaltando el
+  // tramo que arranca en el origen de la optimización sería ignorar lo que pidió.
+  const [trayectoVivo, setTrayectoVivo] = useState<string | null>(null);
+  const tramoResaltado = trayectoVivo ?? ruta.tramoSiguiente?.encodedPolyline ?? null;
 
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
@@ -440,7 +471,21 @@ export function RepartoModule({
               </h2>
               {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
                   navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
-              <SincronizarRutaButton onUbicacion={setUbicacionActual} />
+              <div className="flex flex-wrap items-center gap-2">
+                <SincronizarRutaButton
+                  onUbicacion={setUbicacionActual}
+                  onTrazado={setTrazadoRuta}
+                />
+                {/* Trayecto EN VIVO: cada pulsación es una llamada facturada (no se puede
+                    cachear algo que arranca donde el mensajero está AHORA), por eso es un
+                    botón aparte y explícito. La siguiente parada es la primera de la lista,
+                    que ya viene ordenada por secuencia desde el servidor. */}
+                <TrayectoVivoButton
+                  ubicacion={origenMapa}
+                  ordenId={porGestionar[0]?.id ?? null}
+                  onTrayecto={setTrayectoVivo}
+                />
+              </div>
             </div>
 
             {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
@@ -489,7 +534,12 @@ export function RepartoModule({
                         GPS reciente).
                       </p>
                     ) : null}
-                    <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+                    <RutaMapa
+                      paradas={paradasMapa}
+                      origen={origenMapa}
+                      trazado={trazadoRuta}
+                      tramoSiguiente={tramoResaltado}
+                    />
                   </div>
                 ) : null}
               </div>

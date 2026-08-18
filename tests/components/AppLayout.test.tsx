@@ -131,7 +131,6 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     for (const [cookie, clase] of [
       ["oscuro", "dark"],
       ["claro", "tema-claro"],
-      ["sistema", "tema-sistema"],
     ] as const) {
       cookieTemaMock.mockReturnValue(cookie);
       const { unmount } = await renderLayout(<div>Contenido</div>);
@@ -146,20 +145,55 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     cookieTemaMock.mockReturnValue(undefined);
   });
 
-  it("sin cookie —y con una cookie manipulada— cae en «sistema», que respeta la preferencia del SO", async () => {
+  // «sistema» dejó de ser una opción ELEGIBLE (2026-08-14), pero sigue siendo lo que se
+  // sirve a quien nunca eligió: la clase `tema-sistema` deja que `prefers-color-scheme`
+  // decida en CSS. Es la única forma de acertar sin parpadeo, porque el servidor no puede
+  // conocer la preferencia del SO. La cookie `"sistema"` que escribían las versiones
+  // anteriores entra aquí también: ya no es válida y se lee como «sin elegir».
+  it("sin cookie —o con una manipulada, o con la «sistema» vieja— delega en la preferencia del SO", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
 
-    for (const cookie of [undefined, "azul", ""]) {
+    // El SO dice OSCURO. Ninguno de estos valores es una eleccion, asi que los cuatro
+    // tienen que acabar en oscuro — no en el «claro» que saldria de fijar un default.
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      // `addEventListener`/`removeEventListener` no son decoracion: el sidebar se suscribe
+      // a su propia media query y sin ellos React revienta al montar el efecto.
+      value: (query: string) => ({
+        matches: query.includes("dark"),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+
+    for (const cookie of [undefined, "azul", "", "sistema"]) {
       cookieTemaMock.mockReturnValue(cookie);
       const { unmount } = await renderLayout(<div>Contenido</div>);
 
       const envoltorio = document.querySelector("[data-tema]");
-      expect(envoltorio!.getAttribute("data-tema"), `cookie=${String(cookie)}`).toBe("sistema");
-      expect(envoltorio!.className.split(" ")).toContain("tema-sistema");
-      expect(envoltorio!.className.split(" ")).not.toContain("dark");
+      // El HTML del SERVIDOR sale con `tema-sistema` —no puede saber la preferencia del
+      // SO— y el CSS lo resuelve sin parpadeo. Ya hidratado, el cliente lo concreta para
+      // que el control sepa hacia donde ir. Lo que se mide aqui es el DESENLACE: oscuro.
+      expect(envoltorio!.getAttribute("data-tema"), `cookie=${String(cookie)}`).toBe("oscuro");
+      expect(envoltorio!.className.split(" ")).toContain("dark");
       unmount();
     }
     cookieTemaMock.mockReturnValue(undefined);
+  });
+
+  it("el HTML del SERVIDOR sale con `tema-sistema`: es lo que evita el parpadeo", async () => {
+    // Se comprueba sobre el arbol de React SIN montar en el DOM (`renderToStaticMarkup` no
+    // corre efectos), que es exactamente lo que el navegador recibe antes de hidratar.
+    resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "maestro" });
+    cookieTemaMock.mockReturnValue(undefined);
+
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const html = renderToStaticMarkup(await AppLayout({ children: <div>Contenido</div> }));
+
+    expect(html).toContain('data-tema="sistema"');
+    expect(html).toContain("tema-sistema");
   });
 
   it("/login no incluye el sidebar (R15)", () => {

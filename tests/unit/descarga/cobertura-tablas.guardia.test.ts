@@ -85,8 +85,14 @@ const ARBOLES_UI = ["app", "components"] as const;
 // Feature 196 (T5.2): 30 → 31 archivos y 31 → 32 instancias. La de más es el ranking
 // CONGELADO (`ranking/historico/_components/RankingHistoricoModule.tsx`), una pantalla nueva
 // que nace `con_descarga`. Censo total: 33 tablas = 32 `<DataTable>` + 1 `<table>` cruda.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 31;
-const TOTAL_INSTANCIAS_DATATABLE = 32;
+// Pedido humano del 2026-08-16: 31 → 25 archivos y 32 → 25 instancias. Las SIETE de menos son
+// los listados de CIERRES, que pasaron de tabla a tira de comprobantes; tres de sus archivos
+// desaparecieron con ellas y los otros cuatro siguen vivos (uno, `CierreDiaModule`, conserva su
+// otra tabla, la de gestiones del día — por eso caen siete instancias pero sólo seis archivos).
+// Ninguna descarga se pierde —se mudó al nuevo envoltorio— y por eso esto NO es una baja de
+// alcance: el detalle, con los siete nombres, está en `censo-tablas.ts`.
+const TOTAL_ARCHIVOS_CON_DATATABLE = 25;
+const TOTAL_INSTANCIAS_DATATABLE = 25;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -243,7 +249,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(33);
+    expect(totalCensado).toBe(26);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -290,7 +296,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     // Feature 196 (T5.2): 26 → 27 dentro de alcance y las 6 exclusiones NO se mueven. La de
     // más es el ranking congelado del histórico, que nace descargando: ninguna decisión de
     // alcance previa cambia.
-    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(27);
+    expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(20);
     expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
   });
 

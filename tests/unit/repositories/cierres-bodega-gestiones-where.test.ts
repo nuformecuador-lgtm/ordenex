@@ -17,7 +17,9 @@ import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 // dos constantes que casualmente hoy son la misma—, porque el modo de fallo es que UNO de los
 // dos derive y el mismo mensajero salga distinto según desde dónde se descargue.
 
-const FILTROS: FiltrosDescargaGestiones = { mensajeroIds: ["m-1"] };
+const M1 = "11111111-1111-4111-8111-111111111111";
+
+const FILTROS: FiltrosDescargaGestiones = { mensajeroIds: [M1] };
 
 interface Consulta {
   where?: Record<string, unknown>;
@@ -42,7 +44,7 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres de bodega» (fea
     await repositorio(prisma).findGestionesDeCierresBodegaCompleto(FILTROS);
 
     expect(prisma.gestionOrden.findMany.mock.calls[0]![0]!.where).toEqual({
-      cierre: { cierreBodegaId: { not: null }, mensajeroId: { in: ["m-1"] } },
+      cierre: { cierreBodegaId: { not: null }, AND: [{ mensajeroId: { in: [M1] } }] },
     });
   });
 
@@ -66,16 +68,18 @@ describe("WHERE/orden/proyección de las gestiones de «Cierres de bodega» (fea
     const prisma = prismaFalso();
 
     await repositorio(prisma).findGestionesDeCierresBodegaCompleto({
-      mensajeroIds: ["m-1"],
+      mensajeroIds: [M1],
       desde: "2026-02-01",
       hasta: "2026-02-28",
     });
 
+    // Mismos instantes UTC que el camino A porque los produce la MISMA `filtrosWhere`: es el
+    // criterio compartido, no dos traducciones que hoy coinciden.
     const where = prisma.gestionOrden.findMany.mock.calls[0]![0]!.where as {
-      cierre: { solicitadoAt: { gte: Date; lt: Date } };
+      cierre: { AND: { solicitadoAt: { gte: Date; lt: Date } }[] };
     };
-    expect(where.cierre.solicitadoAt.gte.toISOString()).toBe("2026-02-01T06:00:00.000Z");
-    expect(where.cierre.solicitadoAt.lt.toISOString()).toBe("2026-03-01T06:00:00.000Z");
+    expect(where.cierre.AND[0]!.solicitadoAt.gte.toISOString()).toBe("2026-02-01T06:00:00.000Z");
+    expect(where.cierre.AND[0]!.solicitadoAt.lt.toISOString()).toBe("2026-03-01T06:00:00.000Z");
   });
 
   it("usa el MISMO orden que el camino de cierres del día (R11/R26)", async () => {

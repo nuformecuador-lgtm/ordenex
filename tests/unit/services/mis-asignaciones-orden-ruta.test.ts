@@ -66,6 +66,9 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: "gps",
     huellaSet: "h",
     ultimoError: null,
+    trazado: null,
+    tramoVivoAt: null,
+    tramoPorOrden: new Map(),
     secuenciaPorOrden: new Map(),
     ...over,
   };
@@ -230,7 +233,42 @@ describe("bloque `ruta` del resultado y KPIs", () => {
       calculadaAt: calculada,
       origenFuente: "centroide",
       paradasSinOptimizar: 1,
+      trazado: null,
+      tramoSiguiente: null,
     });
+  });
+
+  it("`tramoSiguiente` es el de la PRIMERA parada de la ruta, no el de cualquiera", async () => {
+    // El listado ya viene ordenado por secuencia, asi que la primera es la que el mensajero
+    // tiene delante. Devolver el tramo de otra resaltaria un trozo de mapa que no le toca.
+    const tramoA = { encodedPolyline: "aaa", distanciaM: 1000, duracionS: 100 };
+    const tramoB = { encodedPolyline: "bbb", distanciaM: 2000, duracionS: 200 };
+    const r = await listar(
+      [row("B", "en_reparto"), row("A", "en_reparto")],
+      ruta({
+        // A es la parada 1 y B la 2, al reves del orden en que llegan de la consulta.
+        secuenciaPorOrden: new Map([
+          ["A", 1],
+          ["B", 2],
+        ]),
+        tramoPorOrden: new Map([
+          ["A", tramoA],
+          ["B", tramoB],
+        ]),
+      }),
+    );
+
+    expect(r.porGestionar[0].id).toBe("A");
+    expect(r.ruta.tramoSiguiente).toEqual(tramoA);
+  });
+
+  it("sin tramo para la primera parada -> null (ruta sin dibujar, o dibujada en local)", async () => {
+    const r = await listar(
+      [row("A", "en_reparto")],
+      ruta({ secuenciaPorOrden: new Map([["A", 1]]), tramoPorOrden: new Map() }),
+    );
+
+    expect(r.ruta.tramoSiguiente).toBeNull();
   });
 
   it("los KPIs de la feature 61 NO se alteran por el reordenado", async () => {

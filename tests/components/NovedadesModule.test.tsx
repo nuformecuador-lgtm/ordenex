@@ -19,8 +19,12 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // Feature 87 (T14) — modulo cliente de `/novedades`. Cubre R9 (fila con guia/destinatario/
 // causa/contacto + placeholder si numGuia null), R10 (estado vacio), R11 (label ES, no slug)
 // y R22 (Pagination con total/page). Se mockea la Server Action (re-fetch) y el toast.
+// 2026-08-14: el módulo importa TAMBIÉN la lectura del listado completo (la que alimenta la
+// descarga). Un mock de módulo que no la declare no es un mock incompleto: vitest lanza al
+// resolver el import, así que el archivo entero moriría antes del primer caso.
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: vi.fn(),
+  listarNovedadesCompletoAction: vi.fn(),
 }));
 
 // Feature 100 (T3.1/T3.2) — la acción "Reprogramar" ejecuta la reprogramación vía

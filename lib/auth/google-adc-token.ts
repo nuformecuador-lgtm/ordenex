@@ -23,6 +23,7 @@ import {
   SCOPE_CLOUD_PLATFORM,
   type TokenProvider,
 } from "@/lib/auth/google-token-shared";
+import { optlog, opterror, describirToken, cronometro } from "@/lib/logging/optimizer-log";
 
 /** Vida del token impersonado, en segundos (maximo que admite IAM Credentials). */
 const IMPERSONATION_LIFETIME_S = 3600;
@@ -73,24 +74,36 @@ class GoogleAdcToken implements TokenProvider {
   constructor(private readonly crearClient: () => Promise<AuthClientLike>) {}
 
   async obtener(): Promise<string> {
+    const medir = cronometro();
     if (this.client === null) {
+      optlog("auth/adc — resolviendo credencial local (application-default)");
       try {
         this.client = await this.crearClient();
-      } catch {
+      } catch (error) {
+        // Aqui es donde aparece el fallo tipico del local: `gcloud auth
+        // application-default login` sin hacer, o sin permiso para impersonar la SA.
+        opterror("auth/adc — no se pudo inicializar el cliente", error, { ms: medir() });
         // R14: el error de ADC puede citar rutas/cuentas locales; se colapsa.
         throw new RutaTokenError("no se pudo inicializar el cliente ADC");
       }
+      optlog("auth/adc — cliente listo", { ms: medir() });
     }
 
     let respuesta: { token?: string | null };
     try {
       respuesta = await this.client.getAccessToken();
-    } catch {
+    } catch (error) {
+      opterror("auth/adc — fallo al pedir el access_token", error, { ms: medir() });
       throw new RutaTokenError("fallo al obtener access_token via ADC");
     }
     if (respuesta.token === undefined || respuesta.token === null || respuesta.token === "") {
+      optlog("auth/adc — no devolvio token", { ms: medir() });
       throw new RutaTokenError("ADC no devolvio access_token");
     }
+    optlog("auth/adc — access_token obtenido", {
+      ...describirToken(respuesta.token),
+      ms: medir(),
+    });
     return respuesta.token;
   }
 }
@@ -123,6 +136,9 @@ export function construirTokenProviderAdc(
     const source = await crearAuth([scope]).getClient();
     // Con SA destino: se impersona (refleja produccion). Sin ella: client ADC directo.
     if (config.GOOGLE_ROUTE_OPT_SA_EMAIL !== null) {
+      optlog("auth/adc — impersonando la service account destino", {
+        sa: config.GOOGLE_ROUTE_OPT_SA_EMAIL,
+      });
       return crearImpersonated({
         sourceClient: source,
         targetPrincipal: config.GOOGLE_ROUTE_OPT_SA_EMAIL,
@@ -130,6 +146,7 @@ export function construirTokenProviderAdc(
         lifetime: IMPERSONATION_LIFETIME_S,
       });
     }
+    optlog("auth/adc — sin SA destino: se usa la credencial del desarrollador directamente");
     return source;
   };
 

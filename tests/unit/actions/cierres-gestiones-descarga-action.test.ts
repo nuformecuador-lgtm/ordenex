@@ -18,7 +18,9 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
-const ENTRADA_OK = { mensajeroIds: ["m-1"], desde: "2026-02-01", hasta: "2026-02-28" };
+const M1 = "11111111-1111-4111-8111-111111111111";
+
+const ENTRADA_OK = { mensajeroIds: [M1], desde: "2026-02-01", hasta: "2026-02-28" };
 
 const CONJUNTO = { status: "ok" as const, items: [], total: 0 };
 
@@ -92,7 +94,7 @@ describe.each(BORDES)("borde de la descarga detallada de $nombre (feature 230)",
     const { espia, deps } = armar();
 
     const r = await borde.accion(
-      { mensajeroIds: ["m-1"], desde: "2026-03-01", hasta: "2026-02-01" },
+      { mensajeroIds: [M1], desde: "2026-03-01", hasta: "2026-02-01" },
       deps,
     );
 

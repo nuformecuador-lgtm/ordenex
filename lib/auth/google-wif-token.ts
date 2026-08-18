@@ -24,6 +24,7 @@ import {
   SCOPE_CLOUD_PLATFORM,
   type TokenProvider,
 } from "@/lib/auth/google-token-shared";
+import { optlog, opterror, describirToken, cronometro } from "@/lib/logging/optimizer-log";
 
 /** `token_url` del Security Token Service de Google (canje OIDC -> token federado). */
 const STS_TOKEN_URL = "https://sts.googleapis.com/v1/token";
@@ -75,17 +76,28 @@ class GoogleWifToken implements TokenProvider {
   constructor(private readonly authClient: AuthClientLike) {}
 
   async obtener(): Promise<string> {
+    // El intercambio completo (OIDC de Vercel -> STS -> impersonacion) ocurre dentro de
+    // `getAccessToken`, asi que solo se puede cronometrar de fuera: si estos ms se disparan,
+    // el sospechoso es la latencia a STS/IAM, no el codigo de aqui.
+    optlog("auth/wif — pidiendo access_token (OIDC -> STS -> impersonacion)");
+    const medir = cronometro();
     let respuesta: { token?: string | null };
     try {
       respuesta = await this.authClient.getAccessToken();
-    } catch {
+    } catch (error) {
+      opterror("auth/wif — fallo el intercambio", error, { ms: medir() });
       // R14: el error de google-auth-library puede citar el endpoint/status; nunca el token
       // OIDC, el federado ni el email de la SA. Se colapsa a un mensaje generico.
       throw new RutaTokenError("fallo en el intercambio WIF (STS/impersonacion)");
     }
     if (respuesta.token === undefined || respuesta.token === null || respuesta.token === "") {
+      optlog("auth/wif — el intercambio termino SIN token", { ms: medir() });
       throw new RutaTokenError("el intercambio WIF no devolvio access_token");
     }
+    optlog("auth/wif — access_token obtenido", {
+      ...describirToken(respuesta.token),
+      ms: medir(),
+    });
     return respuesta.token;
   }
 }
@@ -101,6 +113,7 @@ export function construirTokenProviderWif(
 ): TokenProvider {
   for (const pieza of PIEZAS_WIF) {
     if (config[pieza] === null) {
+      optlog("auth/wif — pieza ausente; no se construye el cliente", { pieza });
       throw new RutaNoConfiguradoError(pieza);
     }
   }
@@ -130,10 +143,17 @@ export function construirTokenProviderWif(
   });
 
   if (authClient === null) {
+    optlog("auth/wif — fromJSON devolvio null; opciones no validas para external_account");
     // fromJSON devuelve null si las opciones no describen una external_account valida.
     // R14: no se cita ninguna opcion (una de ellas es el email de la SA).
     throw new RutaTokenError("no se pudo inicializar el cliente WIF");
   }
 
+  // La audience es publica (identifica el pool, no autentica). Verla en el log es lo que
+  // permite cotejarla contra la consola de GCP cuando STS responde 403.
+  optlog("auth/wif — cliente listo", {
+    audience,
+    saImpersonada: config.GOOGLE_ROUTE_OPT_SA_EMAIL,
+  });
   return new GoogleWifToken(authClient);
 }

@@ -5,6 +5,12 @@ import { recorteDePresentacion } from "@/lib/analytics/presentacion";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { ROLES_ACCESO_ANALITICA } from "@/lib/auth/menu-visibility";
+import {
+  FiltroSeccionesProvider,
+  SeccionFiltrable,
+} from "@/app/(app)/_components/filtro-secciones";
+import { FiltrosEntregas } from "@/app/(app)/_components/FiltrosEntregas";
+import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
 import { cargarTableroFinanciero } from "./_components/financiero/cargar";
@@ -69,6 +75,20 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  * La región operativa, en cambio, la ve todo el que supera el gate: sus dos
  * slots van SIEMPRE (D5 de la 131).
  */
+/**
+ * Textos del encabezado del bloque operativo. Fuera del JSX y en una sola
+ * constante, como el resto de la analítica, para que la región quede lista para
+ * i18n sin tocar el árbol.
+ *
+ * NO repiten el nombre accesible de la región del shell («Tablero operativo»):
+ * dos rótulos idénticos en el mismo subárbol se leen como una duplicación, no
+ * como una jerarquía.
+ */
+const TITULO_ENTREGAS = "Entregas";
+const TITULO_OPERATIVO = "Indicadores operativos";
+const DESCRIPCION_OPERATIVO =
+  "Los paneles se calculan sobre el rango y los filtros seleccionados arriba.";
+
 export default async function AnaliticaPage() {
   const actor = await resolveActorFromSession();
   // `ROLES_ACCESO_ANALITICA` es un array de literales de rol —los del dominio de
@@ -89,24 +109,73 @@ export default async function AnaliticaPage() {
   // nada que recortar.
   const recorte = recorteDePresentacion(actor);
 
+  // El contenedor es PRESENTACIÓN y nada más: un encabezado y los N componentes
+  // que se le pasen dentro. No cambia qué se carga ni quién lo ve — esas dos
+  // decisiones siguen viviendo enteras en el gate y en `esAccesoTotal` de abajo.
+  // Se declara una vez para que las dos ramas pinten exactamente el mismo bloque
+  // operativo y no puedan divergir.
+  const bloqueOperativo = (
+    <SeccionFiltrable titulo={TITULO_OPERATIVO}>
+      <ContenedorSeccion
+        titulo={TITULO_OPERATIVO}
+        descripcion={DESCRIPCION_OPERATIVO}
+      >
+        <PanelesOperativos alcance={recorte.alcance} />
+      </ContenedorSeccion>
+    </SeccionFiltrable>
+  );
+
+  // Va PRIMERO dentro de la página, por encima de la región de filtros del tablero: la
+  // barra de entregas y, debajo, su contenedor. Hoy el contenedor es sólo su encabezado
+  // —no pinta cuerpo mientras no reciba hijos, así que no hay ni una caja vacía ni una
+  // cifra de relleno; un cero de placeholder es indistinguible de un cero real (R22 de
+  // la 129)— y la barra todavía no consulta nada (ver `FiltrosEntregas`).
+  //
+  // La barra es la de ÓRDENES (fecha con sus atajos, zona, provincia, cantón, distrito y
+  // mensajero) y NO sustituye a `FiltrosOperativos`, que sigue siendo quien filtra el
+  // tablero: son dos barras con dos alcances distintos, y fundirlas es una decisión
+  // aparte. Pasa como elemento ya montado, sin props-función, porque cruza la frontera RSC.
+  const bloqueEntregas = (
+    <>
+      <FiltrosEntregas />
+      <SeccionFiltrable titulo={TITULO_ENTREGAS}>
+        <ContenedorSeccion titulo={TITULO_ENTREGAS} />
+      </SeccionFiltrable>
+    </>
+  );
+
   // El pre-fetch del dinero va DESPUÉS del gate a propósito: un rol denegado no
   // debe llegar a consultarlo ni una sola vez (R9). Y va dentro de la guarda de
   // `esAccesoTotal` por el mismo motivo: un rol sin acceso total tampoco lo pide.
+  // El proveedor envuelve el SHELL ENTERO, no solo la barra: quien teclea (la barra, en el
+  // slot `destacado`) y quien se oculta (las secciones, en los otros slots) cuelgan de
+  // ramas distintas, así que un proveedor pegado a la barra no sería ancestro de nadie a
+  // quien filtrar. No pinta nada: sin término escrito el árbol es idéntico al de antes.
   if (!esAccesoTotal(actor.rol)) {
     return (
-      <AnaliticaShell
-        filtros={<FiltrosOperativos facetas={recorte.facetas} />}
-        operativo={<PanelesOperativos alcance={recorte.alcance} />}
-      />
+      <FiltroSeccionesProvider>
+        <AnaliticaShell
+          destacado={bloqueEntregas}
+          filtros={<FiltrosOperativos facetas={recorte.facetas} />}
+          operativo={bloqueOperativo}
+        />
+      </FiltroSeccionesProvider>
     );
   }
 
   const paneles = await cargarTableroFinanciero();
   return (
-    <AnaliticaShell
-      filtros={<FiltrosOperativos facetas={recorte.facetas} />}
-      operativo={<PanelesOperativos alcance={recorte.alcance} />}
-      financiero={<TableroFinanciero paneles={paneles} />}
-    />
+    <FiltroSeccionesProvider>
+      <AnaliticaShell
+        destacado={bloqueEntregas}
+        filtros={<FiltrosOperativos facetas={recorte.facetas} />}
+        operativo={bloqueOperativo}
+        // La región financiera NO se declara filtrable, y no es un olvido: quién la ve lo
+        // decide `esAccesoTotal` server-side (R2/R7 de la 132), y meterla en un filtro de
+        // presentación mezclaría «no te toca» con «no la buscaste». Se deja para su
+        // propio PR, con sus guardias delante.
+        financiero={<TableroFinanciero paneles={paneles} />}
+      />
+    </FiltroSeccionesProvider>
   );
 }
