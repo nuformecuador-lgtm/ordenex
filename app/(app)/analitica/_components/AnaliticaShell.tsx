@@ -68,7 +68,7 @@ export function AnaliticaShell({
       description="Panel de indicadores del negocio. Los paneles se irán activando por entregas."
     >
       {destacado}
-      <section aria-label="Filtros" className="flex flex-col gap-4">
+      {/* <section aria-label="Filtros" className="flex flex-col gap-4">
         {filtros ?? (
           <EmptyState
             icon={ChartColumn}
@@ -93,7 +93,7 @@ export function AnaliticaShell({
         >
           {financiero}
         </section>
-      ) : null}
+      ) : null} */}
     </AppPage>
   );
 }

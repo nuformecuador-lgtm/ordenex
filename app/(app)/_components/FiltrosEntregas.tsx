@@ -14,7 +14,12 @@ import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
+import {
+  FILTRO_ENTREGAS_INICIAL,
+  seleccionAFiltroAnalitica,
+} from "./entregas-filtro-analitica";
 import { construirFiltrosEntregas } from "./entregas-filtros-def";
+import { useFiltroEntregas } from "./filtro-entregas";
 import { coincideSeccion, useFiltroSecciones } from "./filtro-secciones";
 
 /** Catalogo vacio: la barra se monta igual, sin opciones, si el catalogo no cargo. */
@@ -38,7 +43,7 @@ const PLACEHOLDER_BUSCADOR = "Nombre de la sección: Entregas, Indicadores…";
 const TEXTO_SIN_COINCIDENCIAS = "Ninguna sección coincide con";
 
 /**
- * El catalogo (zonas + geografia) que rellena cinco de los seis filtros.
+ * El catalogo (zonas + tiendas) que rellena dos de los cuatro filtros.
  *
  * Se pide desde el CLIENTE, como hace la barra de analitica
  * (`analitica/_components/operativo/FiltrosOperativos.tsx`), y no desde la ruta: el Server
@@ -65,20 +70,20 @@ async function catalogoFetcher(): Promise<CatalogoFiltrosOrdenesDTO | null> {
 async function mensajerosFetcher(): Promise<MensajeroLiteDTO[]> {
   const res = await listarMensajerosParaAsignacion();
   // Un fallo aqui NO rompe la barra: el filtro de mensajero se queda sin opciones y los
-  // otros cinco siguen operativos, que es el mismo trato que la barra de ordenes le da a
+  // otros tres siguen operativos, que es el mismo trato que la barra de ordenes le da a
   // un catalogo caido. Por eso se devuelve vacio en vez de lanzar.
   if (res.status !== "ok") return [];
   return res.mensajeros;
 }
 
 /**
- * La barra de filtros de ordenes, montada en el panel maestro sobre las ENTREGAS:
- * fecha (con los mismos atajos de rango que ordenes), zona, provincia, canton, distrito
- * y mensajero.
+ * La barra de filtros de ordenes, montada en el panel maestro sobre las ENTREGAS: fecha (con
+ * los mismos atajos de rango que ordenes), zona, provincia, canton, distrito, tienda y
+ * mensajero.
  *
  * Es la MISMA pareja de componentes que la barra de ordenes —`BuscadorFiltros` como
  * contenedor y `FilterComponent` para los controles pedidos—, no una copia: el campo
- * manda la barra, el boton «Filtros» ofrece los seis, y los que el usuario pide se montan
+ * manda la barra, el boton «Filtros» los ofrece todos, y los que el usuario pide se montan
  * delante del campo.
  *
  * EL CAMPO DE TEXTO FILTRA LAS SECCIONES de la pagina por su nombre («Entregas»,
@@ -86,11 +91,17 @@ async function mensajerosFetcher(): Promise<MensajeroLiteDTO[]> {
  * `SeccionFiltrable` decide si sigue en el arbol. No busca DENTRO de las secciones ni
  * consulta nada al servidor — es navegacion, no una consulta.
  *
- * ⚠️ LOS SEIS FILTROS, EN CAMBIO, TODAVIA NO CONSULTAN NADA. La barra es dueña de su
- * `seleccion` y la deja lista, pero no hay un listado de entregas contra el que aplicarla:
- * el contenedor «Entregas» esta vacio. Enchufarlo es traducir esa seleccion al `filter`
- * del listado que se monte ahi —como hace `seleccionAFilter` en ordenes— y no exige tocar
- * este archivo por dentro.
+ * LOS FILTROS YA CONSULTAN. La barra traduce su `seleccion` al filtro de la analitica
+ * (`seleccionAFiltroAnalitica`) y lo publica en `FiltroEntregasProvider`; quien pinta cifras
+ * dentro de la seccion —hoy el anillo de conteo— lo consume desde ahi. La traduccion vive
+ * fuera, en su modulo puro, porque es donde se decide QUE numero se pide.
+ *
+ * LOS SIETE recortan la cifra: fecha, zona, provincia, canton, distrito, tienda y mensajero.
+ * La cadena geografica estuvo RETIRADA mientras la cifra salia de `analytics_daily`, cuyo
+ * grano no tiene esas coordenadas —ofrecerla era prometer un recorte que la analitica
+ * ignoraba en silencio—. Volvio el 2026-08-17 con el cambio de fuente: el conteo se lee de la
+ * tabla `orden`, que si tiene `provincia_id`, `canton_id` y `distrito_id` como columnas
+ * propias. El motivo por el que no estaban desaparecio; el criterio es el mismo.
  */
 export function FiltrosEntregas() {
   // Las dos lecturas van en la MISMA oleada, sin encadenarse: el catalogo no depende de
@@ -111,8 +122,19 @@ export function FiltrosEntregas() {
   const catalogo = isLoading ? CATALOGO_VACIO : (catalogoCargado ?? null);
 
   // Seleccion agregada de los controles montados. `FilterComponent` es dueño de su
-  // estado interno y emite la seleccion COMPLETA en cada cambio; aqui solo se guarda.
+  // estado interno y emite la seleccion COMPLETA en cada cambio; aqui se guarda y se
+  // PUBLICA ya traducida.
   const [seleccion, setSeleccion] = useState<FilterSelection>({});
+
+  // El filtro que consumen las cifras de la seccion. Se publica en el mismo manejador que
+  // guarda la seleccion —y no en un `useEffect` que la observe— para que no exista un
+  // render intermedio en el que la barra dice una cosa y la cifra sigue mostrando otra.
+  const { setFiltro } = useFiltroEntregas();
+
+  function alCambiarSeleccion(nueva: FilterSelection) {
+    setSeleccion(nueva);
+    setFiltro(seleccionAFiltroAnalitica(nueva));
+  }
 
   // El termino del buscador NO vive aqui: vive en el proveedor, porque quien lo consume
   // son las secciones de la pagina, que cuelgan de otras ramas del arbol. Aparte de la
@@ -126,6 +148,38 @@ export function FiltrosEntregas() {
   // Claves de los filtros PUESTOS desde el selector. Arranca vacia: la barra nace con el
   // buscador solo y el usuario pide los que va a usar.
   const [activos, setActivos] = useState<string[]>([]);
+
+  /**
+   * Retirar un filtro del selector lo retira TAMBIEN de la cifra.
+   *
+   * ⚠ ESTO NO ES REDUNDANTE CON `FilterComponent`, aunque lo parezca. Aquel ya poda su
+   * seleccion cuando una clave deja de estar declarada («un filtro que deja de estar
+   * DECLARADO deja de filtrar»), pero esa poda vive en un `useEffect` SUYO — y aqui abajo
+   * `FilterComponent` solo se monta si queda algun filtro puesto. Al desmarcar el ULTIMO, el
+   * componente se DESMONTA: el efecto no llega a correr y su emision pendiente se cancela en
+   * la limpieza. Resultado antes de este cambio: la seleccion del filtro retirado seguia viva
+   * aqui, la cifra seguia recortada por un control que ya no estaba en pantalla, y «Limpiar
+   * todo» se quedaba visible sin nada visible que limpiar.
+   *
+   * Se poda aqui, en el manejador, y no en un `useEffect` que observe `activos`: asi no
+   * existe un render intermedio en el que la barra ya no muestra el filtro y la cifra todavia
+   * lo aplica. Y sin debounce — quitar un filtro es una intencion explicita, no una racha de
+   * tecleo.
+   */
+  function alCambiarActivos(nuevos: string[]) {
+    setActivos(nuevos);
+
+    const vivos = new Set(nuevos);
+    const podada = Object.fromEntries(
+      Object.entries(seleccion).filter(([clave]) => vivos.has(clave)),
+    );
+    // Solo se publica si algo se cayo: sin esta guarda, PONER un filtro nuevo (que no cambia
+    // ninguna seleccion) republicaria el mismo filtro y dispararia una consulta de mas.
+    if (Object.keys(podada).length === Object.keys(seleccion).length) return;
+
+    setSeleccion(podada);
+    setFiltro(seleccionAFiltroAnalitica(podada));
+  }
 
   // `FilterComponent` no expone forma de vaciar su seleccion desde fuera, asi que
   // «Limpiar todo» le cambia la `key` para remontarlo limpio.
@@ -159,6 +213,10 @@ export function FiltrosEntregas() {
   /** Deja la barra como recien abierta: sin valores y sin filtros puestos. */
   function limpiarTodo() {
     setSeleccion({});
+    // Y la cifra vuelve a la del arranque. Sin esta linea «Limpiar todo» vaciaria los
+    // controles dejando la cifra del ultimo filtro: la pantalla afirmaria estar sin filtrar
+    // mientras muestra un recorte.
+    setFiltro(FILTRO_ENTREGAS_INICIAL);
     setActivos([]);
     setReset((n) => n + 1);
   }
@@ -177,16 +235,19 @@ export function FiltrosEntregas() {
       onChange={setTermino}
       filtros={ofrecidos}
       activos={activos}
-      onActivosChange={setActivos}
+      onActivosChange={alCambiarActivos}
       onLimpiarTodo={limpiarTodo}
       // Basta con tener un filtro PUESTO —aunque este vacio— para ofrecer la limpieza:
-      // retirarlo de la barra tambien es algo que limpiar.
+      // retirarlo de la barra tambien es algo que limpiar. Lo que NO puede pasar es que el
+      // boton siga ahi sin nada que limpiar, y por eso `seleccion` se poda en
+      // `alCambiarActivos`: sin esa poda, esta condicion se quedaba en `true` para siempre
+      // por una seleccion huerfana de un control ya retirado.
       hayFiltrosAplicados={
         activos.length > 0 || Object.keys(seleccion).length > 0 || termino !== ""
       }
     >
       {montados.length > 0 ? (
-        <FilterComponent key={reset} filters={montados} onChange={setSeleccion} />
+        <FilterComponent key={reset} filters={montados} onChange={alCambiarSeleccion} />
       ) : null}
     </BuscadorFiltros>
     {/* El aviso va JUNTO AL CAMPO, que es donde mira quien acaba de teclear. Sin el, una

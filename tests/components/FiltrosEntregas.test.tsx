@@ -14,8 +14,13 @@ import {
   ATAJOS_CREACION,
   CLAVE_CREACION,
   CLAVE_MENSAJERO,
+  CLAVE_TIENDA,
 } from "@/app/(app)/_components/entregas-filtros-def";
 import { FiltrosEntregas } from "@/app/(app)/_components/FiltrosEntregas";
+import {
+  FiltroEntregasProvider,
+  useFiltroEntregas,
+} from "@/app/(app)/_components/filtro-entregas";
 import { construirFiltrosOrdenes } from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 
@@ -47,8 +52,8 @@ const AHORA = new Date("2026-08-17T12:00:00.000Z");
 
 afterEach(cleanup);
 
-describe("Barra de entregas — los SEIS filtros pedidos", () => {
-  it("declara fecha, zona, provincia, cantón, distrito y mensajero, y nada más", () => {
+describe("Barra de entregas — los SIETE filtros que la cifra sabe aplicar", () => {
+  it("declara fecha, zona, la cadena geográfica, tienda y mensajero, y nada más", () => {
     const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
 
     expect(defs.map((f) => f.key)).toEqual([
@@ -57,6 +62,7 @@ describe("Barra de entregas — los SEIS filtros pedidos", () => {
       "provincia_id",
       "canton_id",
       "distrito_id",
+      CLAVE_TIENDA,
       CLAVE_MENSAJERO,
     ]);
     expect(defs.map((f) => f.label)).toEqual([
@@ -65,23 +71,38 @@ describe("Barra de entregas — los SEIS filtros pedidos", () => {
       "Provincia",
       "Cantón",
       "Distrito",
+      "Tienda",
       "Mensajero",
     ]);
   });
 
-  // La cadena geográfica es lo que hace que cantón y distrito ofrezcan solo lo que cuelga
-  // de lo ya elegido. Sin `dependsOn` los tres filtros seguirían montándose, pero cada uno
-  // ofrecería el país entero: la barra parecería igual y filtraría distinto.
-  it("la geografía se declara en cadena: cantón depende de provincia y distrito de cantón", () => {
+  // ⚠ ESTE CASO CAMBIÓ DE SIGNO EL 2026-08-17, y merece decirse: antes afirmaba justo lo
+  // contrario —que provincia/cantón/distrito NO se ofrecían—, y estaba bien: la cifra salía
+  // de `analytics_daily`, cuyo grano no tiene esas coordenadas, así que ofrecerlas prometía
+  // un recorte que la cifra ignoraba en silencio. Lo que cambió no es la opinión sino la
+  // FUENTE: el conteo se lee de la tabla `orden`, que sí tiene esas tres columnas. El motivo
+  // por el que no estaban desapareció.
+  it("ofrece la cadena geográfica, ahora que la fuente sabe recortarla", () => {
     const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
-    const por = (k: string) => defs.find((f) => f.key === k);
+    const claves = defs.map((f) => f.key);
 
-    expect(por("provincia_id")?.dependsOn).toBeUndefined();
-    expect(por("canton_id")?.dependsOn).toBe("provincia_id");
-    expect(por("distrito_id")?.dependsOn).toBe("canton_id");
-    // Y el hijo declara de quién cuelga cada opción, que es lo que el acotamiento lee.
-    expect(por("canton_id")?.options?.[0]?.parentValue).toBe("p1");
-    expect(por("distrito_id")?.options?.[0]?.parentValue).toBe("c1");
+    expect(claves).toContain("provincia_id");
+    expect(claves).toContain("canton_id");
+    expect(claves).toContain("distrito_id");
+  });
+
+  // La cadena se DECLARA, no se programa: cantón cuelga de provincia y distrito de cantón,
+  // igual que en la barra de órdenes. Sin `dependsOn`, el selector de distrito ofrecería los
+  // de todo el país aunque el usuario ya hubiera elegido un cantón.
+  it("encadena provincia -> cantón -> distrito con `dependsOn` y `parentValue`", () => {
+    const defs = construirFiltrosEntregas(CATALOGO, MENSAJEROS, { ahora: AHORA });
+    const canton = defs.find((f) => f.key === "canton_id");
+    const distrito = defs.find((f) => f.key === "distrito_id");
+
+    expect(canton?.dependsOn).toBe("provincia_id");
+    expect(distrito?.dependsOn).toBe("canton_id");
+    expect(canton?.options).toEqual([{ value: "c1", label: "Escazú", parentValue: "p1" }]);
+    expect(distrito?.options).toEqual([{ value: "d1", label: "San Rafael", parentValue: "c1" }]);
   });
 
   it("el filtro de mensajero se llena con la lista servida, no con el catálogo", () => {
@@ -226,5 +247,149 @@ describe("Sin proveedor, una sección filtrable se pinta siempre", () => {
     );
 
     expect(screen.getByText("contenido suelto")).toBeInTheDocument();
+  });
+});
+
+/* ========================================================================== */
+/* Poner y QUITAR filtros desde el selector                                   */
+/* ========================================================================== */
+
+// Bug reportado el 2026-08-18: al desmarcar un filtro en el selector, su valor seguía
+// recortando la cifra y «Limpiar todo» se quedaba visible sin nada que limpiar.
+//
+// La causa está escrita entera en `alCambiarActivos` (`FiltrosEntregas.tsx`): `FilterComponent`
+// poda su propia selección cuando una clave deja de estar declarada, pero esa poda vive en un
+// efecto SUYO y la barra lo desmonta en cuanto no queda ningún filtro puesto. Al desmarcar el
+// último, el efecto no llega a correr. Estos casos son los que impiden que vuelva.
+
+/** La barra, el proveedor y un espía que enseña el filtro publicado. */
+function BarraConEspia() {
+  return (
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+      <FiltroEntregasProvider>
+        <FiltrosEntregas />
+        <EspiaDeFiltro />
+      </FiltroEntregasProvider>
+    </SWRConfig>
+  );
+}
+
+function EspiaDeFiltro() {
+  const { filtro } = useFiltroEntregas();
+  return <output data-testid="filtro-publicado">{JSON.stringify(filtro)}</output>;
+}
+
+function filtroPublicado(): Record<string, unknown> {
+  return JSON.parse(screen.getByTestId("filtro-publicado").textContent ?? "{}");
+}
+
+/**
+ * Marca o desmarca un filtro en el selector «Filtros» y CIERRA el desplegable.
+ *
+ * El cierre no es cosmético: el panel vive en un portal con guardas de foco, así que
+ * dejarlo abierto tapa los controles que este mismo test tiene que pulsar después.
+ */
+async function alternarEnSelector(nombre: string) {
+  fireEvent.click(screen.getByRole("button", { name: /filtros/i }));
+  const opcion = await screen.findByRole("option", { name: new RegExp(nombre, "i") });
+  fireEvent.click(opcion);
+  fireEvent.keyDown(opcion, { key: "Escape" });
+}
+
+describe("Quitar un filtro del selector lo quita también de la cifra", () => {
+  it("el filtro publicado arranca VACÍO: nada preestablecido", () => {
+    render(<BarraConEspia />);
+    expect(filtroPublicado()).toEqual({});
+  });
+
+  it("desmarcar el ÚNICO filtro puesto borra su valor del filtro publicado", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<BarraConEspia />);
+
+    await alternarEnSelector("Zona");
+    // Elegir una zona: sin valor elegido el bug no se ve, porque no hay nada que quedarse
+    // pegado.
+    fireEvent.click(await screen.findByRole("button", { name: /^Zona:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Central" }));
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+    expect(filtroPublicado()).toMatchObject({ zona_id: ["z1"] });
+
+    // Y ahora se retira del selector. Este es el momento en que `FilterComponent` se
+    // DESMONTA (era el único puesto) y su poda interna no llega a correr.
+    await alternarEnSelector("Zona");
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+
+    expect(filtroPublicado()).toEqual({});
+    vi.useRealTimers();
+  });
+
+  it("quitar uno de DOS deja el otro intacto", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<BarraConEspia />);
+
+    await alternarEnSelector("Zona");
+    fireEvent.click(await screen.findByRole("button", { name: /^Zona:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Central" }));
+    await alternarEnSelector("Provincia");
+    fireEvent.click(await screen.findByRole("button", { name: /^Provincia:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "San José" }));
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+    expect(filtroPublicado()).toMatchObject({ zona_id: ["z1"], provincia_id: ["p1"] });
+
+    await alternarEnSelector("Zona");
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+
+    // La mutación que este caso mata: podar de más (vaciar la selección entera al retirar
+    // uno). Quitar un filtro no puede llevarse por delante los demás.
+    expect(filtroPublicado()).toEqual({ provincia_id: ["p1"] });
+    vi.useRealTimers();
+  });
+});
+
+describe("«Limpiar todo» solo está cuando hay algo que limpiar", () => {
+  it("no aparece con la barra recién abierta", () => {
+    render(<BarraConEspia />);
+    expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
+  });
+
+  it("aparece al poner un filtro y DESAPARECE al quitarlo", async () => {
+    render(<BarraConEspia />);
+
+    await alternarEnSelector("Zona");
+    expect(screen.getByRole("button", { name: "Limpiar todo" })).toBeInTheDocument();
+
+    await alternarEnSelector("Zona");
+
+    // El síntoma reportado: el botón se quedaba porque `seleccion` conservaba la clave
+    // huérfana de un control ya retirado.
+    expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
+  });
+
+  it("sigue desapareciendo aunque el filtro llegara a tener un valor elegido", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(<BarraConEspia />);
+
+    await alternarEnSelector("Zona");
+    fireEvent.click(await screen.findByRole("button", { name: /^Zona:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Central" }));
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+
+    await alternarEnSelector("Zona");
+    await act(async () => {
+      vi.advanceTimersByTime(DEBOUNCE_MS_DEFAULT + 1);
+    });
+
+    expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
+    vi.useRealTimers();
   });
 });

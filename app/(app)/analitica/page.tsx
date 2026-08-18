@@ -9,10 +9,15 @@ import {
   FiltroSeccionesProvider,
   SeccionFiltrable,
 } from "@/app/(app)/_components/filtro-secciones";
+import { FiltroEntregasProvider } from "@/app/(app)/_components/filtro-entregas";
 import { FiltrosEntregas } from "@/app/(app)/_components/FiltrosEntregas";
 import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
+import { ConteoEntregasAnillo } from "./_components/entregas/ConteoEntregasAnillo";
+import { ConteoPorStatusDona } from "./_components/entregas/ConteoPorStatusDona";
+import { CargadasPorDiaBarras } from "./_components/entregas/CargadasPorDiaBarras";
+import { HoyGestionBarras } from "./_components/entregas/HoyGestionBarras";
 import { cargarTableroFinanciero } from "./_components/financiero/cargar";
 import { TableroFinanciero } from "./_components/financiero/TableroFinanciero";
 import { FiltrosOperativos } from "./_components/operativo/FiltrosOperativos";
@@ -84,7 +89,11 @@ import { PanelesOperativos } from "./_components/operativo/PanelesOperativos";
  * dos rótulos idénticos en el mismo subárbol se leen como una duplicación, no
  * como una jerarquía.
  */
-const TITULO_ENTREGAS = "Entregas";
+// El nombre del bloque, y con el la etiqueta que busca el campo de secciones. Los dos salen
+// de la MISMA constante: si el titulo visible dijera «Detalle entregas» y el registrado para
+// la busqueda siguiera siendo «Entregas», teclear lo que se ve en pantalla no encontraria
+// nada. `coincideSeccion` busca por subcadena, asi que «entregas» a secas sigue valiendo.
+const TITULO_ENTREGAS = "Detalle - Movimiento de las ordenes";
 const TITULO_OPERATIVO = "Indicadores operativos";
 const DESCRIPCION_OPERATIVO =
   "Los paneles se calculan sobre el rango y los filtros seleccionados arriba.";
@@ -126,22 +135,76 @@ export default async function AnaliticaPage() {
   );
 
   // Va PRIMERO dentro de la página, por encima de la región de filtros del tablero: la
-  // barra de entregas y, debajo, su contenedor. Hoy el contenedor es sólo su encabezado
-  // —no pinta cuerpo mientras no reciba hijos, así que no hay ni una caja vacía ni una
-  // cifra de relleno; un cero de placeholder es indistinguible de un cero real (R22 de
-  // la 129)— y la barra todavía no consulta nada (ver `FiltrosEntregas`).
+  // barra de entregas y, debajo, su contenedor con el anillo de conteo.
   //
-  // La barra es la de ÓRDENES (fecha con sus atajos, zona, provincia, cantón, distrito y
-  // mensajero) y NO sustituye a `FiltrosOperativos`, que sigue siendo quien filtra el
-  // tablero: son dos barras con dos alcances distintos, y fundirlas es una decisión
-  // aparte. Pasa como elemento ya montado, sin props-función, porque cruza la frontera RSC.
+  // La barra ofrece las CUATRO coordenadas por las que la analítica sabe recortar (fecha
+  // con sus atajos, zona, tienda y mensajero) y NO sustituye a `FiltrosOperativos`, que
+  // sigue siendo quien filtra el tablero: son dos barras con dos alcances distintos, y
+  // fundirlas es una decisión aparte. Por eso el filtro de entregas viaja por su propio
+  // proveedor y no por la URL, que es de la otra barra. Pasa como elemento ya montado, sin
+  // props-función, porque cruza la frontera RSC.
+  // El proveedor envuelve la barra Y la sección: quien filtra y quien consulta son
+  // hermanos, así que un proveedor pegado a la barra no sería ancestro de la cifra. Envuelve
+  // sólo este bloque —y no el shell entero, como el de secciones— porque este filtro no le
+  // incumbe a nadie más de la página: el tablero operativo tiene el suyo.
   const bloqueEntregas = (
-    <>
+    <FiltroEntregasProvider>
       <FiltrosEntregas />
       <SeccionFiltrable titulo={TITULO_ENTREGAS}>
-        <ContenedorSeccion titulo={TITULO_ENTREGAS} />
+        <ContenedorSeccion titulo={TITULO_ENTREGAS}>
+          {/* Los dos graficos, uno junto a otro y al 50 %.
+
+              `sm` (640 px) y no `md` (768) porque el corte pedido es 600 y `sm` es el
+              breakpoint mas cercano de la escala de Tailwind. Por debajo, una sola columna:
+              dos donuts a 300 px en un movil no se leen, se adivinan.
+
+              El grid va AQUI y no en `ContenedorSeccion columnas={2}`: aquel apila hasta
+              `md`, que son 168 px de mas de los pedidos, y cambiarle el breakpoint moveria
+              todos los contenedores del repo por una peticion de esta pantalla.
+
+              `min-w-[300px]` en cada celda es el suelo pedido. `minmax(0,1fr)` de `1fr`
+              a secas: el default de una celda de grid es `min-width:auto`, que impide
+              encogerse por debajo del contenido y desbordaria la fila con la leyenda lateral
+              dentro.
+
+              CADA GRAFICO VA ENCERRADO en su propia caja (borde + sombra leve). La caja vive
+              AQUI y no dentro de los componentes por dos razones: `GraficaMarco` es un
+              `<section>` desnudo que comparten todas las graficas de analitica —darle borde
+              alli encajaria tambien los paneles operativos y el tablero financiero, que nadie
+              ha pedido— y ademas el borde es una decision de ESTA composicion: son dos
+              tarjetas hermanas en una rejilla, y lo que las separa visualmente es el hueco
+              entre cajas.
+
+              `ring-1 ring-foreground/10` y no `border`: es exactamente lo que usa `Card`
+              (`components/ui/card.tsx`), asi que estas dos cajas se ven como el resto de
+              tarjetas del producto en lugar de inventar un borde propio. `shadow-sm` es la
+              sombra leve. `bg-card` para que la sombra tenga sobre que apoyarse. */}
+          {/* REJILLA DE 12 COLUMNAS: los dos donuts ocupan 6 cada uno (50 %) y la serie de
+              cargadas por dia las 12 (100 %), debajo. Doce y no dos columnas porque es lo que
+              permite mezclar anchos en la MISMA rejilla: con `grid-cols-2` la barra tendria
+              que salirse a un contenedor aparte y dejaria de compartir el `gap`. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-12">
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
+              <ConteoEntregasAnillo />
+            </div>
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-6">
+              <ConteoPorStatusDona />
+            </div>
+            {/* 9 de 12 para la serie temporal: es la que necesita el ancho, porque su eje
+                crece con el rango pedido y un mes apretado en media fila deja de leerse. */}
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-9">
+              <CargadasPorDiaBarras />
+            </div>
+            {/* 3 de 12 para el contador de hoy: son DOS barras y su ancho no depende del
+                filtro, asi que no gana nada con mas sitio. El `min-w-[300px]` sigue siendo el
+                suelo: por debajo de eso la rejilla ya ha apilado (breakpoint `sm`). */}
+            <div className="min-w-[300px] rounded-xl bg-card p-4 shadow-sm ring-1 ring-foreground/10 sm:col-span-3">
+              <HoyGestionBarras />
+            </div>
+          </div>
+        </ContenedorSeccion>
       </SeccionFiltrable>
-    </>
+    </FiltroEntregasProvider>
   );
 
   // El pre-fetch del dinero va DESPUÉS del gate a propósito: un rol denegado no
