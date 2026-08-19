@@ -9,6 +9,85 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 // Prisma mockeado: se afirma el `select`/`where`/`orderBy` emitido (que es donde vive el
 // contrato de "campos minimos" y "orden determinista") y la forma de la fila devuelta.
 
+describe("GeoRepository — la geografia de UNA zona", () => {
+  // Pedido humano (2026-08-19): el adminSatelite filtra por provincia/canton/distrito, pero
+  // solo por los de SU zona. La asociacion se lee de la N:M `zona_distrito` (feature 24),
+  // unica fuente de verdad desde que `distrito.zona_id` se elimino.
+  function prismaConDistritos(rows: unknown[]) {
+    return {
+      provincia: { findMany: vi.fn() },
+      canton: { findMany: vi.fn() },
+      distrito: { findMany: vi.fn().mockResolvedValue(rows) },
+    };
+  }
+
+  /** Una fila de distrito tal como la devuelve el `select` anidado. */
+  function fila(
+    id: string,
+    nombre: string,
+    canton: { id: string; nombre: string },
+    provincia: { id: string; nombre: string },
+  ) {
+    return {
+      id,
+      nombre,
+      cantonId: canton.id,
+      canton: { ...canton, provinciaId: provincia.id, provincia },
+    };
+  }
+
+  const LIMON = { id: "p9", nombre: "Limon" };
+  const POCOCI = { id: "c9", nombre: "Pococi" };
+  const GUACIMO = { id: "c8", nombre: "Guacimo" };
+
+  it("filtra por la N:M y DERIVA cantones y provincias de los distritos de la zona", async () => {
+    const prisma = prismaConDistritos([
+      fila("d2", "Guapiles", POCOCI, LIMON),
+      fila("d1", "Cariari", POCOCI, LIMON),
+      fila("d3", "Rio Jimenez", GUACIMO, LIMON),
+    ]);
+    const repo = new GeoRepository(prisma as unknown as PrismaClient);
+
+    const r = await repo.listGeografiaLitePorZona("z-1");
+
+    // La zona entra por la puente, no por una columna del distrito (que ya no existe).
+    const args = prisma.distrito.findMany.mock.calls[0]![0] as {
+      where: unknown;
+      orderBy: unknown;
+    };
+    expect(args.where).toEqual({ zonas: { some: { zonaId: "z-1" } } });
+    expect(args.orderBy).toEqual({ nombre: "asc" });
+
+    // Los otros dos niveles NO se consultan aparte: «los cantones de la zona» son
+    // exactamente los de sus distritos, y dos consultas mas podrian dar otro conjunto.
+    expect(prisma.canton.findMany).not.toHaveBeenCalled();
+    expect(prisma.provincia.findMany).not.toHaveBeenCalled();
+
+    expect(r.provincias).toEqual([{ id: "p9", nombre: "Limon" }]);
+    // Deduplicado (Pococi aparece en dos distritos) y en orden alfabetico.
+    expect(r.cantones).toEqual([
+      { id: "c8", nombre: "Guacimo", padreId: "p9" },
+      { id: "c9", nombre: "Pococi", padreId: "p9" },
+    ]);
+    expect(r.distritos).toEqual([
+      { id: "d1", nombre: "Cariari", padreId: "c9" },
+      { id: "d2", nombre: "Guapiles", padreId: "c9" },
+      { id: "d3", nombre: "Rio Jimenez", padreId: "c8" },
+    ]);
+  });
+
+  it("zona sin distritos asociados -> las tres listas vacias, no un error", async () => {
+    const prisma = prismaConDistritos([]);
+    const repo = new GeoRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.listGeografiaLitePorZona("z-vacia")).toEqual({
+      provincias: [],
+      cantones: [],
+      distritos: [],
+    });
+  });
+});
+
 describe("GeoRepository — catalogo plano (R48/R49)", () => {
   function buildPrisma() {
     return {
