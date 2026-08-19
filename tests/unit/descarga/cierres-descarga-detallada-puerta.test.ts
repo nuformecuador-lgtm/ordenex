@@ -62,7 +62,11 @@ describe("puerta única de la descarga detallada de cierres (R13/R36)", () => {
     // Lo que el usuario elige se convierte en el RECORTE de la MISMA llamada, no en una segunda
     // lectura que resuelva los mensajeros o el rango por su cuenta.
     expect(dialogo).toMatch(/accion\(recorteElegido\(\)\)/);
-    expect(dialogo).toMatch(/mensajeroIds:\s*seleccion/);
+    // `elegidos` y ya no `seleccion` (2026-08-19): el diálogo abre con TODOS marcados, así que
+    // el estado pasó a ser `string[] | null` —`null` = «no ha tocado nada»— y lo que viaja es
+    // `seleccion ?? idsCatalogo`. Lo que esta guardia vigila no cambia: lo elegido es el recorte
+    // de la MISMA llamada, y sigue sin haber una segunda lectura que resuelva los mensajeros.
+    expect(dialogo).toMatch(/mensajeroIds:\s*elegidos/);
 
     // Ni `fetch`, ni SWR, ni ninguna otra llamada de red: el catálogo del diálogo llega por
     // prop, ya acotado al alcance por el servidor (R29).
