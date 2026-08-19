@@ -23,6 +23,8 @@ const MAESTRO: Actor = { usuarioId: "adm", rol: "maestro" };
 
 function movimiento(over: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
   return {
+    // Feature 231 (R31): todas las categorias de este fixture son dinero de Ordenex.
+    dueno: "propio",
     id: "w1",
     tipo: "egreso",
     categoria: "egreso_indemnizacion",

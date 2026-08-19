@@ -2,19 +2,21 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowLeftRight,
-  Landmark,
-  TrendingUp,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { Landmark, TriangleAlert } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { CajaResumenDTO, WalletBalanceSigno } from "@/lib/types/wallet";
+import type {
+  CajaResumenDTO,
+  ModoComposicionCaja,
+  WalletBalanceSigno,
+} from "@/lib/types/wallet";
+import { cn } from "@/lib/utils";
 
+import { BarraComposicionCaja } from "./BarraComposicionCaja";
 import {
+  CAJA_COMPOSICION_LABEL,
+  CAJA_COMPOSICION_MENSAJE,
   CAJA_RESUMEN_AVISO_PERIODO,
   CAJA_RESUMEN_AVISO_TERCEROS,
   CAJA_RESUMEN_LABEL,
@@ -32,38 +34,38 @@ import {
 // y se ven A LA VEZ (R58). Nada de pestanas ni de desplegables — el punto entero de la feature es
 // que nadie confunda el dinero que pasa por la caja con lo que Ordenex gana.
 //
-//  - «Dinero en caja» (R4): todo lo que entro menos todo lo que salio, incluido el contra-entrega
-//    que se cobro a nombre de las tiendas.
-//  - «Ganancia de Ordenex» (R5): es, numero por numero, el que la 42 rotulaba de la otra manera.
-//    No cambia de valor: cambia de nombre.
-//  - Tercera linea `[P6]` (R34): la diferencia entre las dos, con su advertencia de que NO es la
-//    deuda con las tiendas y el enlace a la pantalla donde esa deuda si vive.
+// Money-safe (R64 de la 173 / R12 de la 231): los importes llegan ya derivados y serializados por
+// el SERVIDOR y se pintan TAL CUAL con `money`. Aqui no se suma, no se resta y no se convierte a
+// numero; los dos signos tambien los da el servidor. El rotulo condicional `[P7]` se decide con
+// la bandera `periodoFiltrado` del DTO, no deduciendo nada en el cliente.
 //
-// Money-safe (R64): los seis importes llegan ya derivados y serializados por el SERVIDOR y se
-// pintan TAL CUAL con `money`. Aqui no se suma, no se resta y no se convierte a numero; los dos
-// signos tambien los da el servidor. El rotulo condicional `[P7]` se decide con la bandera
-// `periodoFiltrado` del DTO, no deduciendo nada en el cliente.
+// ── Feature 231 (T4.3, design §4.1) — LA CAJA PARTIDA EN DOS BOLSILLOS ──
 //
-// ── Feature 200 (tanda 1) — REDISENO DE PRESENTACION, no de datos ──
+// La grilla de tiles hermanos de la 200 se refunde en UNA tarjeta con tres bloques seguidos,
+// porque lo que se venia a contar no era «tres numeros» sino UNA cifra y de quien es cada trozo:
 //
-// La misma informacion pasa de UNA tarjeta monolitica a una GRILLA DE TILES hermanos (DESIGN.md:
-// «Cards: hermanas, nunca anidadas»), con un tercer tile OPCIONAL de conteo. Lo que NO cambia,
-// porque es lo que la feature 173 vino a impedir:
+//   1. la cifra grande de la caja, con «Entro», «Salio» y el conteo como datos SECUNDARIOS
+//      debajo (R6: ninguno desaparece de la pantalla);
+//   2. la barra de composicion, inmediatamente debajo (R2);
+//   3. los DOS bolsillos, hermanos: el de las tiendas —que conserva entero el aviso y el enlace
+//      de la 173— y el de Ordenex (R3/R4).
 //
-//  - las dos cifras siguen viendose A LA VEZ, sin nada que abrir: esta tarjeta no tiene ni un
-//    solo `<button>`, y los iconos son decoracion (`aria-hidden`), no controles;
-//  - cada cifra sigue siendo HERMANA de su propio desglose dentro de su tile, para que ningun
-//    importe pueda leerse bajo el rotulo del de al lado;
-//  - la tercera linea sigue viviendo AQUI —ahora como banda destacada a lo ancho—, con su
-//    advertencia y su enlace: sacarla a otro componente la separaria de las cifras que explica.
+// Tres detalles del arbol que NO son esteticos y que sostienen las aserciones vivas de la 173:
 //
-// El tercer tile (`movimientos`) es un CONTEO, no dinero: color neutro, sin insignia de signo y
-// sin desglose. Llega como prop opcional; sin ella la grilla queda de dos columnas.
+//  - las dos regiones son DISJUNTAS: la de «Dinero en caja» no envuelve a la de «Ganancia de
+//    Ordenex», asi que ningun importe puede leerse bajo el rotulo del vecino;
+//  - cada region tiene un PADRE ACOTADO que contiene su propio desglose y no el del otro (el
+//    caso de la 173 busca por `parentElement` con `getByText`, que revienta con dos
+//    coincidencias — y en su conjunto de prueba «Salio» y «Gastos de Ordenex» valen lo mismo);
+//  - CERO elementos interactivos (R8): ni un `<button>`, ni `details/summary`, ni tooltip. La
+//    barra es `role="img"`, no un `Progress` de Radix.
 
-// Feature 200 (tanda 2) — las insignias de signo pasan a las variantes SEMANTICAS de la
-// primitiva. «Positivo» venia con `default`, que es el naranja de marca, y DESIGN.md lo
-// reserva para accion primaria y seleccion: un estado pintado con el color de la accion
-// compite con los botones de la pantalla y deja de leerse como estado. Los TEXTOS no cambian.
+/**
+ * Feature 200 (tanda 2) — las insignias de signo usan las variantes SEMANTICAS de la
+ * primitiva. «Positivo» venia con `default`, que es el naranja de marca, y DESIGN.md lo
+ * reserva para accion primaria y seleccion: un estado pintado con el color de la accion
+ * compite con los botones de la pantalla y deja de leerse como estado.
+ */
 const SIGNO_BADGE: Record<
   WalletBalanceSigno,
   { variant: "success" | "danger" | "secondary"; label: string }
@@ -73,138 +75,103 @@ const SIGNO_BADGE: Record<
   cero: { variant: "secondary", label: "En cero" },
 };
 
-/** Color de una cifra grande segun su signo (verde/rojo/neutro). */
+/** Color de una cifra segun su signo (verde/rojo/neutro), en el tono `-strong` de texto. */
 const SIGNO_COLOR: Record<WalletBalanceSigno, string> = {
   positivo: "text-success-strong",
   negativo: "text-danger-strong",
   cero: "text-muted-foreground",
 };
 
-/** Tipografia comun de las cifras grandes: mismo peso para las tres, ninguna manda. */
+/** Superficie de cada bolsillo. Base comun; el color lo decide el caso. */
+const BOLSILLO = "flex flex-col gap-2 rounded-xl border p-4";
+
+/**
+ * R5/R16 — de que color va el bloque de ORDENEX en cada modo. `Record` TOTAL sobre los cuatro:
+ * un modo nuevo rompe el build en vez de heredar en silencio el color de otro caso.
+ *
+ * Neutro salvo en el caso limite. `DESIGN.md` reserva el acento para accion y estado: una
+ * ganancia normal no es ninguna de las dos cosas, y pintarla de color la convertiria en una
+ * alarma permanente. Cuando el modo es `solo_tiendas` SI hay un estado que avisar —Ordenex esta
+ * en perdida y ese saldo lo cubre dinero ajeno—, y ahi entra `danger` con sus tres roles: la
+ * base en el borde, `-soft` de fondo y `dark:bg-danger/15` para que el token que gira (el texto)
+ * no se quede sobre una superficie fija.
+ */
+const SUPERFICIE_NEUTRA = "border-border bg-muted/40";
+
+/**
+ * El TONO del mensaje del modo. Va emparejado con la superficie por la misma razon:
+ * `solo_tiendas` es el unico de los tres modos con mensaje que describe un ESTADO —Ordenex en
+ * perdida, con dinero ajeno cubriendo el saldo—; los otros dos solo EXPLICAN por que la barra
+ * no se parte. Pintarlos tambien en rojo gasta la senal: un rojo que sale en un estado normal
+ * deja de leerse como alarma el dia que la alarma existe (`DESIGN.md`, «restrained»).
+ */
+const TONO_INFORMATIVO = "text-muted-foreground";
+const TONO_PELIGRO = "font-medium text-danger-strong";
+
+const BOLSILLO_ORDENEX: Record<
+  ModoComposicionCaja,
+  { superficie: "neutra" | "peligro"; clase: string; tonoMensaje: string }
+> = {
+  dos_bolsillos: {
+    superficie: "neutra",
+    clase: SUPERFICIE_NEUTRA,
+    // Sin mensaje que pintar; el tono va igualmente para que el `Record` sea TOTAL.
+    tonoMensaje: TONO_INFORMATIVO,
+  },
+  solo_ordenex: {
+    superficie: "neutra",
+    clase: SUPERFICIE_NEUTRA,
+    tonoMensaje: TONO_INFORMATIVO,
+  },
+  sin_reparto: {
+    superficie: "neutra",
+    clase: SUPERFICIE_NEUTRA,
+    tonoMensaje: TONO_INFORMATIVO,
+  },
+  solo_tiendas: {
+    superficie: "peligro",
+    clase: "border-danger/30 bg-danger-soft dark:bg-danger/15",
+    tonoMensaje: TONO_PELIGRO,
+  },
+};
+
+/** Tipografia de la cifra grande de la caja. */
 const CIFRA_GRANDE = "text-3xl font-semibold tracking-tight tabular-nums";
 
-/**
- * El icono de un tile. Es DECORACION: nombra lo que el rotulo ya dice, asi que se oculta al
- * lector de pantalla en vez de repetirselo.
- */
-function IconoTile({ icono: Icono }: { icono: LucideIcon }) {
-  // La caja va EXPLICITA (`inline-flex items-center justify-center`). Un `<span>` es inline por
-  // defecto y hoy solo se comporta como caja porque su padre resulta ser un contenedor flex que
-  // lo blockifica: funcionaba por accidente. Sin la caja propia, en cualquier otro contenedor el
-  // `p-2` no genera area, el `bg-muted` se pinta como una tira estirada a la altura de la linea
-  // y el icono se desborda. Con ella mide 32 x 32 alli donde se ponga.
-  return (
-    <span className="inline-flex items-center justify-center rounded-md bg-muted p-2 text-muted-foreground">
-      <Icono className="size-4" aria-hidden="true" />
-    </span>
-  );
-}
-
-/** Cabecera de un tile: rotulo (con su insignia, si la lleva) a la izquierda; icono a la derecha. */
-function CabeceraTile({
-  rotulo,
-  insignia,
-  icono,
-}: {
-  rotulo: string;
-  insignia?: ReactNode;
-  icono: LucideIcon;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">{rotulo}</span>
-        {insignia}
-      </div>
-      <IconoTile icono={icono} />
-    </div>
-  );
-}
+/** Tipografia de la cifra de cada bolsillo: mismo peso para las dos, ninguna manda. */
+const CIFRA_BOLSILLO = "text-2xl font-semibold tracking-tight tabular-nums";
 
 /**
- * Tile de una de las dos cifras de DINERO: rotulo, insignia de signo, importe grande, su
- * aclaracion y —hermano de la `<section>`, no dentro— su desglose.
+ * Un dato SECUNDARIO de la cifra grande (R6): rotulo pequeno, valor en rejilla y —si la tiene—
+ * su pista. Sirve para dinero y para el conteo, que no es dinero y por eso llega ya convertido
+ * en texto por quien lo pinta.
  */
-function TileCifra({
+function DatoSecundario({
   rotulo,
+  valor,
   pista,
-  valor,
-  signo,
-  icono,
-  desglose,
-}: {
-  rotulo: string;
-  pista: string;
-  /** STRING del servidor, pintado tal cual (puede venir "-123.45"). */
-  valor: string;
-  signo: WalletBalanceSigno;
-  icono: LucideIcon;
-  desglose: ReactNode;
-}) {
-  const badge = SIGNO_BADGE[signo];
-  return (
-    <Card>
-      <CardContent className="flex flex-1 flex-col gap-3">
-        <section aria-label={rotulo} className="flex flex-col gap-2">
-          <CabeceraTile
-            rotulo={rotulo}
-            insignia={<Badge variant={badge.variant}>{badge.label}</Badge>}
-            icono={icono}
-          />
-          <span className={`${CIFRA_GRANDE} ${SIGNO_COLOR[signo]}`}>{money(valor)}</span>
-          <span className="text-xs text-muted-foreground">{pista}</span>
-        </section>
-        <div className="mt-auto grid grid-cols-2 gap-4 border-t pt-3">{desglose}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Tile del CONTEO de movimientos. No es dinero: ni color semantico ni insignia de signo, para
- * que no compita con las dos cifras ni parezca una tercera. El entero se pinta tal cual.
- */
-function TileConteo({ cantidad }: { cantidad: number }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-1 flex-col gap-2">
-        <CabeceraTile rotulo={CAJA_RESUMEN_LABEL.movimientos} icono={ArrowLeftRight} />
-        <span className={`${CIFRA_GRANDE} text-foreground`}>{cantidad}</span>
-        <span className="text-xs text-muted-foreground">
-          {CAJA_RESUMEN_LABEL.movimientosPista}
-        </span>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Un importe del desglose de una cifra grande. */
-function Importe({
-  rotulo,
-  valor,
   className,
 }: {
   rotulo: string;
-  /** STRING del servidor, pintado tal cual. */
-  valor: string;
+  valor: ReactNode;
+  pista?: string;
   className?: string;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-xs text-muted-foreground">{rotulo}</span>
-      <span className={`text-lg font-medium tabular-nums ${className ?? ""}`}>
-        {money(valor)}
-      </span>
+      <span className={cn("text-lg font-medium tabular-nums", className)}>{valor}</span>
+      {pista ? <span className="text-xs text-muted-foreground">{pista}</span> : null}
     </div>
   );
 }
 
 export interface CajaResumenCardProps {
-  /** Las dos cifras (y la tercera linea) ya derivadas en el servidor, montos STRING. */
+  /** Las dos cifras (y el reparto) ya derivadas en el servidor, montos STRING. */
   resumen: CajaResumenDTO;
   /**
    * Feature 200: cuantos registros tiene el conjunto que se esta mirando. Es el `total` del
-   * servidor, no el largo de la pagina pintada. Opcional: sin el, la grilla queda de dos tiles.
+   * servidor, no el largo de la pagina pintada. Opcional: sin el, la fila queda de dos datos.
    */
   movimientos?: number;
 }
@@ -215,119 +182,158 @@ export function CajaResumenCard({ resumen, movimientos }: CajaResumenCardProps) 
     ? CAJA_RESUMEN_LABEL.enCajaPeriodo
     : CAJA_RESUMEN_LABEL.enCaja;
 
-  // Las clases van completas en cada rama: Tailwind lee el fuente, no evalua expresiones.
-  const grilla =
-    movimientos === undefined
-      ? "grid grid-cols-1 gap-4 md:grid-cols-2"
-      : "grid grid-cols-1 gap-4 md:grid-cols-3";
+  const badgeEnCaja = SIGNO_BADGE[resumen.signoEnCaja];
+  const badgeGanancia = SIGNO_BADGE[resumen.signoGanancia];
+  const ordenex = BOLSILLO_ORDENEX[resumen.modoComposicion];
+  // R16/R17/R18: lo que hay que decir cuando la barra no se puede partir. En el caso normal no
+  // hay nada que anadir y el bloque se explica con su importe y su pista.
+  const mensajeModo = CAJA_COMPOSICION_MENSAJE[resumen.modoComposicion];
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* R58: las dos, a la vez y con el mismo peso visual. */}
-      <div className={grilla}>
-        <TileCifra
-          rotulo={rotuloEnCaja}
-          pista={CAJA_RESUMEN_LABEL.enCajaPista}
-          valor={resumen.enCaja}
-          signo={resumen.signoEnCaja}
-          icono={Landmark}
-          desglose={
-            <>
-              <Importe
-                rotulo={CAJA_RESUMEN_LABEL.entradas}
-                valor={resumen.entradas}
-                className="text-success-strong"
+    <Card>
+      <CardContent className="flex flex-col gap-5">
+        {/* 1 — la cifra grande y, HERMANOS suyos, sus datos secundarios (R6). */}
+        <div className="flex flex-col gap-3">
+          <section aria-label={rotuloEnCaja} className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center justify-center rounded-md bg-muted p-2 text-muted-foreground">
+                <Landmark className="size-4" aria-hidden="true" />
+              </span>
+              <span className="text-sm font-medium text-muted-foreground">{rotuloEnCaja}</span>
+              <Badge variant={badgeEnCaja.variant}>{badgeEnCaja.label}</Badge>
+            </div>
+            <span className={cn(CIFRA_GRANDE, SIGNO_COLOR[resumen.signoEnCaja])}>
+              {money(resumen.enCaja)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {CAJA_RESUMEN_LABEL.enCajaPista}
+            </span>
+          </section>
+
+          <div className="grid grid-cols-2 gap-4 border-t pt-3 sm:grid-cols-3">
+            <DatoSecundario
+              rotulo={CAJA_RESUMEN_LABEL.entradas}
+              valor={money(resumen.entradas)}
+              className="text-success-strong"
+            />
+            <DatoSecundario
+              rotulo={CAJA_RESUMEN_LABEL.salidas}
+              valor={money(resumen.salidas)}
+              className="text-danger-strong"
+            />
+            {/* El conteo NO es dinero: color neutro, sin insignia de signo y sin desglose. */}
+            {movimientos === undefined ? null : (
+              <DatoSecundario
+                rotulo={CAJA_RESUMEN_LABEL.movimientos}
+                valor={movimientos}
+                pista={CAJA_RESUMEN_LABEL.movimientosPista}
+                className="text-foreground"
               />
-              <Importe
-                rotulo={CAJA_RESUMEN_LABEL.salidas}
-                valor={resumen.salidas}
-                className="text-danger-strong"
-              />
-            </>
-          }
-        />
-
-        <TileCifra
-          rotulo={CAJA_RESUMEN_LABEL.ganancia}
-          pista={CAJA_RESUMEN_LABEL.gananciaPista}
-          valor={resumen.ganancia}
-          signo={resumen.signoGanancia}
-          icono={TrendingUp}
-          desglose={
-            <>
-              <Importe
-                rotulo={CAJA_RESUMEN_LABEL.ingresosPropios}
-                valor={resumen.ingresosPropios}
-                className="text-success-strong"
-              />
-              <Importe
-                rotulo={CAJA_RESUMEN_LABEL.egresosPropios}
-                valor={resumen.egresosPropios}
-                className="text-danger-strong"
-              />
-            </>
-          }
-        />
-
-        {movimientos === undefined ? null : <TileConteo cantidad={movimientos} />}
-      </div>
-
-      {/* R60: en que se diferencian, junto a las dos cifras y no en otra pantalla. */}
-      <div className="flex flex-col gap-2">
-        <p role="note" className="text-xs text-muted-foreground">
-          {CAJA_RESUMEN_NOTA_DIFERENCIA}
-        </p>
-
-        {/* `[P7]`: solo cuando hay un periodo elegido, que es cuando el nombre de siempre
-            mentiria. */}
-        {resumen.periodoFiltrado ? (
-          <p role="note" className="text-xs text-muted-foreground">
-            {CAJA_RESUMEN_AVISO_PERIODO}
-          </p>
-        ) : null}
-      </div>
-
-      {/* Tercera linea `[P6]` — R34: la advertencia y el enlace no son decorado, son la unica
-          defensa contra leer esta cifra como la deuda con las tiendas. Va a lo ancho y con el
-          color de aviso porque es lo ultimo que se lee antes de sacar una conclusion. */}
-      <section
-        aria-label={CAJA_RESUMEN_LABEL.deTerceros}
-        className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 sm:flex-row sm:items-start sm:gap-4 dark:bg-warning/15"
-      >
-        <span className="w-fit rounded-md bg-warning/15 p-2 text-warning-strong">
-          <TriangleAlert className="size-4" aria-hidden="true" />
-        </span>
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-warning-strong">
-            {CAJA_RESUMEN_LABEL.deTerceros}
-          </span>
-          {/* Feature 208 — LA CIFRA va en `text-foreground`, no en el color de aviso.
-              El aviso lo siguen dando el icono, el rótulo, el borde y el fondo; el
-              número es dinero y necesita margen, no el aprobado justo:
-              `text-warning-strong` sobre `bg-warning-soft` medía 4.51:1 en tema claro
-              (el umbral AA es 4.50), y quedarse a una centésima de la línea en el
-              importe que se retiene de terceros no es aceptable. Medido después:
-              14.22:1 en claro y 15.1:1 en oscuro.
-
-              Feature 210 — ese 4.51 YA NO ES EL VIGENTE: `--warning-strong` pasó a
-              #92400e y el par mide 6.37:1. La decisión de arriba NO cambia —la cifra
-              sigue en `text-foreground`, que da 14.22— pero el motivo que la justificaba
-              está saldado, así que no vuelvas aquí buscando el 4.51. El contraste de
-              estos pares lo vigila ahora `contraste-tokens.guardia.test.ts`. */}
-          <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
-            {money(resumen.deTerceros)}
-          </span>
-          <p role="note" className="text-xs text-muted-foreground">
-            {CAJA_RESUMEN_AVISO_TERCEROS}
-          </p>
-          <Link
-            href={CAJA_TIENDAS_HREF}
-            className="w-fit rounded-sm text-xs font-medium text-warning-strong underline underline-offset-2 transition-colors duration-200 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-          >
-            {CAJA_RESUMEN_LABEL.deTercerosEnlace}
-          </Link>
+            )}
+          </div>
         </div>
-      </section>
-    </div>
+
+        {/* 2 — la barra (R2), inmediatamente debajo de la cifra que reparte. */}
+        <BarraComposicionCaja resumen={resumen} />
+
+        {/* 3 — los DOS bolsillos, hermanos y a la vez (R3). */}
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+          {/* R4: la advertencia y el enlace no son decorado, son la unica defensa contra leer
+              esta cifra como la deuda con las tiendas. */}
+          <section
+            aria-label={CAJA_RESUMEN_LABEL.deTerceros}
+            data-bolsillo="tiendas"
+            className={cn(BOLSILLO, "border-warning/30 bg-warning-soft dark:bg-warning/15")}
+          >
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center rounded-md bg-warning/15 p-2 text-warning-strong">
+                <TriangleAlert className="size-4" aria-hidden="true" />
+              </span>
+              <span className="text-sm font-medium text-warning-strong">
+                {CAJA_COMPOSICION_LABEL.tiendas}
+              </span>
+            </div>
+            {/* Feature 208/210 — LA CIFRA va en `text-foreground`, no en el color de aviso: el
+                aviso lo dan el icono, el rotulo, el borde y el fondo, y el numero es dinero,
+                que necesita margen de contraste y no el aprobado justo (14.22:1 en claro). */}
+            <span className={cn(CIFRA_BOLSILLO, "text-foreground")}>
+              {money(resumen.deTerceros)}
+            </span>
+            <span className="text-sm font-medium text-warning-strong">
+              {CAJA_RESUMEN_LABEL.deTerceros}
+            </span>
+            <p role="note" className="text-xs text-muted-foreground">
+              {CAJA_RESUMEN_AVISO_TERCEROS}
+            </p>
+            <Link
+              href={CAJA_TIENDAS_HREF}
+              className="w-fit rounded-sm text-xs font-medium text-warning-strong underline underline-offset-2 transition-colors duration-200 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              {CAJA_RESUMEN_LABEL.deTercerosEnlace}
+            </Link>
+          </section>
+
+          {/* El bolsillo de Ordenex: la region de la ganancia y su desglose, hermanos dentro de
+              un padre ACOTADO que no contiene ni un importe de la columna de al lado. */}
+          <div
+            data-bolsillo="ordenex"
+            data-superficie={ordenex.superficie}
+            className={cn(BOLSILLO, ordenex.clase)}
+          >
+            <section aria-label={CAJA_RESUMEN_LABEL.ganancia} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {CAJA_COMPOSICION_LABEL.ordenex}
+                </span>
+                <Badge variant={badgeGanancia.variant}>{badgeGanancia.label}</Badge>
+              </div>
+              <span className={cn(CIFRA_BOLSILLO, SIGNO_COLOR[resumen.signoGanancia])}>
+                {money(resumen.ganancia)}
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                {CAJA_RESUMEN_LABEL.ganancia}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {CAJA_RESUMEN_LABEL.gananciaPista}
+              </span>
+            </section>
+
+            <div className="grid grid-cols-2 gap-4 border-t pt-3">
+              <DatoSecundario
+                rotulo={CAJA_RESUMEN_LABEL.ingresosPropios}
+                valor={money(resumen.ingresosPropios)}
+                className="text-success-strong"
+              />
+              <DatoSecundario
+                rotulo={CAJA_RESUMEN_LABEL.egresosPropios}
+                valor={money(resumen.egresosPropios)}
+                className="text-danger-strong"
+              />
+            </div>
+
+            {mensajeModo === null ? null : (
+              <p role="note" className={cn("text-xs", ordenex.tonoMensaje)}>
+                {mensajeModo}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* R60: en que se diferencian, junto a las dos cifras y no en otra pantalla. */}
+        <div className="flex flex-col gap-2">
+          <p role="note" className="text-xs text-muted-foreground">
+            {CAJA_RESUMEN_NOTA_DIFERENCIA}
+          </p>
+
+          {/* `[P7]`: solo cuando hay un periodo elegido, que es cuando el nombre de siempre
+              mentiria. */}
+          {resumen.periodoFiltrado ? (
+            <p role="note" className="text-xs text-muted-foreground">
+              {CAJA_RESUMEN_AVISO_PERIODO}
+            </p>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

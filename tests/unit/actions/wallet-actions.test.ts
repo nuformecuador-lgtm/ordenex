@@ -6,7 +6,11 @@ import {
 } from "@/lib/actions/wallet";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IWalletService } from "@/lib/interfaces/services/IWalletService";
-import type { CajaResumenDTO, WalletMovimientoDTO } from "@/lib/types/wallet";
+import type {
+  CajaResumenDTO,
+  ComposicionGananciaDTO,
+  WalletMovimientoDTO,
+} from "@/lib/types/wallet";
 
 // Feature 42 (T10) — tests unit de las Server Actions de wallet (R19/R21/R25). Sin sesion
 // -> unauthenticated; rol no autorizado -> forbidden (el service lo decide); DTOs STRING.
@@ -33,6 +37,8 @@ function mov(): WalletMovimientoDTO {
     descripcion: null,
     registradoPor: null,
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
+    // Feature 231 (R31): el flete es dinero de Ordenex.
+    dueno: "propio",
   };
 }
 
@@ -52,6 +58,28 @@ const RESUMEN: CajaResumenDTO = {
   signoGanancia: "positivo",
   deTerceros: "5000.00",
   periodoFiltrado: false,
+  // Feature 231 (R9/R10): 5000 / 5700 x 100 = 87.719… -> "87.72", con las dos cifras > 0.
+  porcentajeTiendas: "87.72",
+  modoComposicion: "dos_bolsillos",
+};
+
+/**
+ * Feature 231 (design §2.2) — la composicion que viaja HERMANA del resumen. Cuadra con el:
+ * `totalIngresos` = `ingresosPropios` (1000) y `totalEgresos` = `egresosPropios` (300).
+ */
+const COMPOSICION: ComposicionGananciaDTO = {
+  ingresos: {
+    ingreso_flete: "1000.00",
+    ingreso_flete_devolucion: "0.00",
+    ingreso_comision_cod: "0.00",
+    ingreso_iva_flete: "0.00",
+    ingreso_iva_flete_devolucion: "0.00",
+    ingreso_iva_comision_cod: "0.00",
+    ingreso_ajuste: "0.00",
+  },
+  totalIngresos: "1000.00",
+  otrosEgresos: "300.00",
+  totalEgresos: "300.00",
 };
 
 function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
@@ -67,7 +95,11 @@ function fakeService(overrides: Partial<IWalletService> = {}): IWalletService {
       items: [mov()],
       total: 1,
     })),
-    verResumenCaja: vi.fn(async () => ({ status: "ok" as const, resumen: RESUMEN })),
+    verResumenCaja: vi.fn(async () => ({
+      status: "ok" as const,
+      resumen: RESUMEN,
+      composicion: COMPOSICION,
+    })),
     registrarMovimientoManual: vi.fn(async () => ({ status: "ok" as const, movimiento: mov() })),
     ...overrides,
   };
@@ -159,6 +191,7 @@ describe("verResumenCajaAction (R8/R64/R65)", () => {
       verResumenCaja: vi.fn(async () => ({
         status: "ok" as const,
         resumen: { ...RESUMEN, periodoFiltrado: true },
+        composicion: COMPOSICION,
       })),
     });
     const r = await verResumenCajaAction(

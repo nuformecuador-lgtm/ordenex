@@ -2799,15 +2799,15 @@
       "name": "wallet caja: separar el dinero de las tiendas del de ordenex",
       "spec_path": "specs/231-wallet-caja-dos-bolsillos/",
       "description": "Fullstack. Rediseño de la caja principal (/wallet) sobre lo entregado por la 42, la 173 y la 200: el «dinero en caja» se parte en la porcion de las TIENDAS (contra-entrega cobrado) y la de ORDENEX (ganancia) con una barra de composicion, una tarjeta nueva abre la ganancia concepto por concepto, y el libro gana la columna «Dueño». Exige ampliar `CajaResumenDTO` (proporcion + desglose de ingresos propios) y `WalletMovimientoDTO` (dueño), todo derivado server-side. Encargo completo, con lo verificado y los bloqueos: progress/design_231.md",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/231-wallet-caja-dos-bolsillos",
       "depends_on": null,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18. El humano aprobo la opcion B de un lienzo con 4 direcciones de diseño; el encargo, los 4 datos que faltan en el servidor y el caso limite estan en progress/design_231.md. || BLOQUEO YA LOCALIZADO: tests/components/descarga/WalletDescarga.test.tsx:590 fija con toEqual los seis encabezados visibles del libro; añadir «Dueño» lo pone rojo. Misma sobre-especificacion que bloqueo el reordenado de columnas en la 200: cambiarla necesita firma humana. || ID 231 y no 230: la 230 ya estaba tomada por «el dinero se pinta sin centimos» (spec escrito, sin commitear). || PARALELISMO: la 230 toca `lib/config/moneda.ts` y `money()`, que es lo que pinta esta pantalla. Si las dos pasan a in_progress a la vez, chocan en los componentes de wallet."
+      "spec_ready_at": "2026-08-18",
+      "spec_approved_at": "2026-08-18",
+      "status_note": "DADA DE ALTA el 2026-08-18. El humano aprobo la opcion B de un lienzo con 4 direcciones de diseño; el encargo, los 4 datos que faltan en el servidor y el caso limite estan en progress/design_231.md. || BLOQUEO YA LOCALIZADO: tests/components/descarga/WalletDescarga.test.tsx:590 fija con toEqual los seis encabezados visibles del libro; añadir «Dueño» lo pone rojo. Misma sobre-especificacion que bloqueo el reordenado de columnas en la 200: cambiarla necesita firma humana. || ID 231 y no 230: la 230 ya estaba tomada por «el dinero se pinta sin centimos» (spec escrito, sin commitear). || PARALELISMO: la 230 toca `lib/config/moneda.ts` y `money()`, que es lo que pinta esta pantalla. Si las dos pasan a in_progress a la vez, chocan en los componentes de wallet. || PUERTA HUMANA PASADA el 2026-08-18: el humano firmo las CINCO decisiones abiertas del spec tal como venian propuestas (respuesta literal 'Si dale'). Spec: specs/231-wallet-caja-dos-bolsillos/, 40 requisitos EARS (R1-R40), trazabilidad 40/40 comprobada por el leader de forma independiente. D1 se sustituye la asercion toEqual de los seis encabezados por lo que su caso dice afirmar, mas un caso propio para «Duenno»; D2 fila «Otros gastos de Ordenex» derivada en el servidor para que el total sea egresosPropios (DesgloseEgresosDTO de la 45/158 INTACTO, la tarjeta «Egresos» se absorbe con su lista extraida); D3 campos nuevos del resumen como STRING plano; D4 el caso espejo (deTerceros negativo) se resuelve con el modo solo_ordenex; D5 entra ingreso_iva_flete_devolucion como septimo concepto. El detalle vive en progress/design_231.md. || LA FICHA VIAJO POR LA RAMA DE OTRA SESION: se registro sin commitear y la 230 se la llevo dentro de d648bce9; llego a dev intacta y esa sesion renumero lo suyo a 232. La 230 YA ESTA MERGEADA (dev 37c3e469), asi que el choque de los cinco archivos de test de wallet quedo atras: de los cinco, solo wallet-desglose-egresos-card cae en esta superficie."
     },
     {
       "id": 232,

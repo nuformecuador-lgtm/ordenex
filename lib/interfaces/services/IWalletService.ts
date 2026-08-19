@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   CajaResumenDTO,
+  ComposicionGananciaDTO,
   WalletMovimientoDTO,
   ListarMovimientosCompletoInput,
   ListarMovimientosInput,
@@ -40,9 +41,15 @@ export type ListarMovimientosCompletoServiceResult =
  * SUSTITUYE a `VerBalanceServiceResult`, que llevaba una sola cifra (`WalletBalanceDTO`) y por
  * eso no podia distinguir el dinero de Ordenex del que solo pasa por la caja. `forbidden` no
  * viaja con cifra alguna (R65).
+ *
+ * Feature 231 (design §2.4, R24/R30): la rama `ok` gana `composicion` —la ganancia abierta
+ * concepto por concepto—, derivada del MISMO array de filas que `resumen` y en la MISMA
+ * llamada. No hay accion nueva ni segundo viaje al servidor (design §6.3): un segundo
+ * `groupBy` en otro instante podria enseñar unos ingresos que no suman la ganancia que la
+ * tarjeta de al lado esta mostrando. `forbidden` sigue viajando SIN datos (R30).
  */
 export type VerResumenCajaServiceResult =
-  | { status: "ok"; resumen: CajaResumenDTO }
+  | { status: "ok"; resumen: CajaResumenDTO; composicion: ComposicionGananciaDTO }
   | { status: "forbidden" };
 
 export type RegistrarMovimientoManualServiceResult =

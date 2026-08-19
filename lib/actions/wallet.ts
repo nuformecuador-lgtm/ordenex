@@ -115,6 +115,12 @@ export async function listarMovimientosCompletoAction(
  * quien autoriza (R65) y quien deriva; aqui no se toca ni un monto. Money-safe: el DTO cruza la
  * frontera con todos los importes como STRING (R64) — el navegador nunca ve un `Prisma.Decimal`
  * ni recalcula dinero.
+ *
+ * Feature 231 (T2.3): la rama `ok` pasa a llevar tambien `composicion`. El tipo de retorno de
+ * esta accion NO se toca porque ya se DERIVA del contrato del servicio
+ * (`VerResumenCajaActionResult = VerResumenCajaServiceResult | …`): ampliar el resultado del
+ * servicio lo amplia aqui solo. Sin schema nuevo, sin accion nueva (design §6.3) y sin una
+ * sola operacion aritmetica en el borde.
  */
 export async function verResumenCajaAction(
   input: unknown,

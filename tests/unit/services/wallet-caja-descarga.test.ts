@@ -9,6 +9,7 @@ import type {
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { listarMovimientosCompletoSchema, listarMovimientosSchema } from "@/lib/types/wallet";
+import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 import { descargaConfig } from "@/lib/config/descarga";
 
 // Feature 170 / T C.1 (R9/R11/R14/R15/R17/R27/R29) — LIBRO DE CAJA sin paginación.
@@ -32,17 +33,19 @@ const ROLES_SIN_ACCESO: Actor[] = [
 const LIMITE = descargaConfig.MAX_FILAS;
 
 function mov(over: Partial<WalletMovimientoDTO> & { id: string }): WalletMovimientoDTO {
-  return {
-    tipo: "ingreso",
-    categoria: "ingreso_flete",
+  const base = {
+    tipo: "ingreso" as const,
+    categoria: "ingreso_flete" as const,
     monto: "1000.00",
-    origenTipo: "cierre_dia",
+    origenTipo: "cierre_dia" as const,
     origenId: "c1",
     descripcion: null,
     registradoPor: null,
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     ...over,
   };
+  // Feature 231 (R31): `dueno` sale de la MISMA clasificacion que usa el repositorio.
+  return { ...base, dueno: over.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
 }
 
 /** Repositorio en memoria: aplica los filtros, ordena por fecha desc y recorta. */

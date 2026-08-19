@@ -20,6 +20,7 @@ import {
 import { verDesgloseEgresosAction } from "@/lib/actions/wallet-egresos";
 import type {
   CajaResumenDTO,
+  ComposicionGananciaDTO,
   DesgloseEgresosDTO,
   WalletMovimientoDTO,
 } from "@/lib/types/wallet";
@@ -30,7 +31,7 @@ import { filaDescargaMovimientoCaja } from "./wallet-ledger-descarga-columnas";
 import { WalletFiltros, FILTROS_VACIOS, type WalletFiltrosValue } from "./WalletFiltros";
 import { RegistrarMovimientoManualDialog } from "./RegistrarMovimientoManualDialog";
 import { RegistrarEgresoAdministrativoDialog } from "./RegistrarEgresoAdministrativoDialog";
-import { DesgloseEgresosCard } from "./DesgloseEgresosCard";
+import { ComposicionGananciaCard } from "./ComposicionGananciaCard";
 import {
   GastosFijosPlantillasPanel,
   type GastosFijosPlantillasPagina,
@@ -62,6 +63,12 @@ export interface WalletModuleProps {
   /** Feature 173 (R58): las DOS cifras de la caja para el conjunto filtrado, ya derivadas. */
   resumen: CajaResumenDTO;
   desglose: DesgloseEgresosDTO;
+  /**
+   * Feature 231 (T6.3, R22/R24): la ganancia abierta concepto por concepto. Viaja HERMANA del
+   * resumen y del MISMO agregado —una sola lectura de la base—, así que la tarjeta de la
+   * ganancia y las cifras de la caja no pueden estar hablando de dos instantes distintos.
+   */
+  composicion: ComposicionGananciaDTO;
   /**
    * Feature 170 — FASE 2 (T I.2, R40/R41): PÁGINA 1 de las plantillas de gasto fijo, ya
    * resuelta server-side, más el `total` del conjunto. El panel pide las siguientes.
@@ -101,6 +108,7 @@ export function WalletModule({
   pageSize,
   resumen: initialResumen,
   desglose: initialDesglose,
+  composicion: initialComposicion,
   plantillas,
 }: WalletModuleProps) {
   const toast = useToast();
@@ -110,6 +118,7 @@ export function WalletModule({
   const [page, setPage] = useState(initialPage);
   const [resumen, setResumen] = useState(initialResumen);
   const [desglose, setDesglose] = useState(initialDesglose);
+  const [composicion, setComposicion] = useState(initialComposicion);
   const [filtros, setFiltros] = useState<WalletFiltrosValue>(FILTROS_VACIOS);
   const [loading, setLoading] = useState(false);
 
@@ -124,7 +133,12 @@ export function WalletModule({
     }
   }
 
-  /** Recarga libro + las dos cifras + desglose para los filtros/página dados (R20/R11). */
+  /**
+   * Recarga libro + las dos cifras + desglose + composición para los filtros/página dados
+   * (R20/R11 de la 45/173; T6.3 de la 231). La composición NO viaja en una acción propia: llega
+   * en la MISMA respuesta que el resumen, así que un cambio de filtro refresca las dos a la vez
+   * y por construcción no pueden discrepar.
+   */
   async function recargar(next: WalletFiltrosValue, nextPage: number) {
     const input = buildInput(next, nextPage, pageSize);
     setLoading(true);
@@ -152,6 +166,7 @@ export function WalletModule({
       setTotal(movRes.data.total);
       setPage(movRes.data.page);
       setResumen(resRes.resumen);
+      setComposicion(resRes.composicion);
       setDesglose(desRes.desglose);
       setFiltros(next);
     } finally {
@@ -195,29 +210,29 @@ export function WalletModule({
         <CajaResumenCard resumen={resumen} movimientos={total} />
       </section>
 
-      {/* Feature 200 (tanda 2): el desglose sale de la sección de la caja —no es una de sus
-          cifras, es el detalle de lo que sale— y comparte fila con los gastos fijos, que hasta
-          ahora ocupaban un ancho entero para una tabla de cuatro columnas.
+      {/* Feature 231 (T6.3, D2) — la tarjeta de la ganancia entra BAJO la de la caja, que es
+          donde se hace la pregunta que responde («¿y de dónde sale ese número?»).
 
-          El reparto es 1/3 para el desglose y 2/3 para los gastos fijos, al revés que el
-          mockup: el desglose son cuatro filas cortas y un total, mientras que los gastos fijos
-          son una tabla PAGINADA con descarga, que a un tercio de ancho no cabe sin scroll
-          horizontal permanente.
+          Con ella, la tarjeta «Egresos» de la 45/158 SALE de la página: enseñaba los mismos
+          cuatro conceptos y su total, y verlos dos veces en la misma pantalla es lo que hace
+          dudar de cuál de los dos números es el bueno. No se borra su contenido: su lista es
+          ahora la columna derecha de ésta (`DesgloseEgresosLista`), con una fila más para que
+          el total cuadre con `egresosPropios`.
 
-          `items-start`: sin él las dos columnas se estirarían a la altura de la más alta y el
-          pie del desglose —que es una banda apoyada en el borde— quedaría flotando a media
-          tarjeta con el hueco debajo. */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <DesgloseEgresosCard desglose={desglose} />
-        </div>
+          Efecto colateral declarado en D2: al salir el desglose de la fila que compartía, el
+          panel de gastos fijos pasa a ancho completo — que es lo que su tabla paginada con
+          descarga necesitaba desde el principio. */}
+      <ComposicionGananciaCard
+        composicion={composicion}
+        desglose={desglose}
+        resumen={resumen}
+      />
 
-        <section aria-label="Gastos fijos" className="lg:col-span-2">
-          {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
-              tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
-          <GastosFijosPlantillasPanel initialData={plantillas} />
-        </section>
-      </div>
+      <section aria-label="Gastos fijos">
+        {/* Feature 170 — FASE 2 (T I.2): el panel pagina su propio listado y relee su página
+            tras cada cambio del CRUD (R23); la wallet ya no guarda la lista en su estado. */}
+        <GastosFijosPlantillasPanel initialData={plantillas} />
+      </section>
 
       {/* Feature 200 (tanda 3): el libro deja de ser TRES hermanos sueltos —filtros, tabla y
           paginación flotando uno debajo del otro— y pasa a UNA tarjeta que los contiene, como

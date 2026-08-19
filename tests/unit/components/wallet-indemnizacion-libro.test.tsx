@@ -35,6 +35,7 @@ const EGRESO_INDEMNIZACION: WalletMovimientoDTO = {
   descripcion: null,
   registradoPor: "maestro-1",
   fechaMovimiento: "2026-07-30T10:00:00.000Z",
+  dueno: "propio", // feature 231 (R31)
 };
 
 const EGRESO_GASTO: WalletMovimientoDTO = {
@@ -47,6 +48,7 @@ const EGRESO_GASTO: WalletMovimientoDTO = {
   descripcion: "Suministros",
   registradoPor: "maestro-1",
   fechaMovimiento: "2026-07-30T10:00:00.000Z",
+  dueno: "propio", // feature 231 (R31)
 };
 
 afterEach(() => {

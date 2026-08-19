@@ -36,6 +36,9 @@ const RESUMEN: CajaResumenDTO = {
   signoGanancia: "positivo",
   deTerceros: "10000.00",
   periodoFiltrado: false,
+  // Feature 231 (R9/R10): 10 000 / 12 000 x 100 = 83.333… -> "83.33".
+  porcentajeTiendas: "83.33",
+  modoComposicion: "dos_bolsillos",
 };
 
 /** Vocabulario que NO puede aparecer en esta pantalla: es de contador, no del maestro. */
@@ -123,6 +126,35 @@ describe("CajaResumenCard — las dos cifras (R1/R58)", () => {
     // caja y no en la ganancia. Si la tarjeta pintara el mismo par de importes en los dos
     // desgloses, esta línea lo caza.
     expect(within(columnaGanancia).queryByText("₡15.000")).toBeNull();
+  });
+
+  // ── Feature 231 (T4.3, R6) ──
+  it("Entró, Salió y el conteo siguen en la tarjeta", () => {
+    // El rediseño de la 231 refunde los tres tiles de la 200 en UNA tarjeta. Lo que no puede
+    // pasar por el camino es que un dato DESAPAREZCA de la pantalla: los tres siguen aquí,
+    // ahora como datos secundarios de la cifra grande y dentro de su misma columna.
+    render(<CajaResumenCard resumen={RESUMEN} movimientos={7} />);
+
+    const columnaCaja = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja })
+      .parentElement as HTMLElement;
+
+    expect(within(columnaCaja).getByText(CAJA_RESUMEN_LABEL.entradas)).toBeInTheDocument();
+    expect(within(columnaCaja).getByText("₡15.000")).toBeInTheDocument();
+    expect(within(columnaCaja).getByText(CAJA_RESUMEN_LABEL.salidas)).toBeInTheDocument();
+    expect(within(columnaCaja).getByText("₡3.000")).toBeInTheDocument();
+    // El conteo NO es dinero: entero pelado, sin símbolo de moneda.
+    expect(within(columnaCaja).getByText(CAJA_RESUMEN_LABEL.movimientos)).toBeInTheDocument();
+    expect(within(columnaCaja).getByText("7")).toBeInTheDocument();
+    expect(within(columnaCaja).queryByText("₡7")).toBeNull();
+
+    // Sin el conteo (la tarjeta lo recibe opcional) los otros dos siguen estando.
+    cleanup();
+    pintar();
+    const soloDos = screen.getByRole("region", { name: CAJA_RESUMEN_LABEL.enCaja })
+      .parentElement as HTMLElement;
+    expect(within(soloDos).getByText(CAJA_RESUMEN_LABEL.entradas)).toBeInTheDocument();
+    expect(within(soloDos).getByText(CAJA_RESUMEN_LABEL.salidas)).toBeInTheDocument();
+    expect(within(soloDos).queryByText(CAJA_RESUMEN_LABEL.movimientos)).toBeNull();
   });
 
   it("los signos los da el SERVIDOR: negativo y cero se pintan sin recalcular nada", () => {
