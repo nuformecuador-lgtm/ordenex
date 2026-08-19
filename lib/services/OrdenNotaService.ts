@@ -123,29 +123,55 @@ export class OrdenNotaService implements IOrdenNotaService {
   private async autorizar(
     ordenId: string,
     actor: Actor,
-  ): Promise<{ ok: true; rol: RolConHilo; orden: OrdenParaHilo } | { ok: false }> {
-    // 1. R12: solo `adminTienda` y `mensajero`. `maestro`, `admin`, `adminSatelite` y `apiKey`
-    //    caen aqui en las TRES operaciones: no hay vista de supervision (decision P8).
-    if (!esRolConHilo(actor.rol)) return { ok: false };
-
-    // 2. R10: la orden inexistente y la borrada logicamente producen el MISMO resultado que la
-    //    orden ajena. Comprobarlo antes de la pertenencia y devolver lo mismo es lo que impide
-    //    usar el borde para averiguar si una guia existe.
-    const orden = await this.repo.findOrdenParaHilo(ordenId);
-    if (!orden || orden.deletedAt !== null) return { ok: false };
-
-    // 3. Pertenencia, con el mecanismo que YA usa el modulo de novedades: `orden.tiendaId` es FK
-    //    a `usuario`, luego el `usuarioId` del adminTienda ES el identificador de su tienda
-    //    (R9). Para el mensajero, `orden.mensajeroAsignadoId` es la unica fuente de verdad desde
-    //    la feature 159 (R11). En ambos casos sale del ACTOR, nunca de un dato del input.
-    const propietario =
-      actor.rol === "adminTienda"
-        ? orden.tiendaId === actor.usuarioId
-        : orden.mensajeroAsignadoId === actor.usuarioId;
-    if (!propietario) return { ok: false };
-
-    return { ok: true, rol: actor.rol, orden };
+  ): Promise<AccesoAlHilo> {
+    return autorizarSobreHilo(this.repo, ordenId, actor);
   }
+}
+
+/** Resultado de la autorizacion: la orden ya cargada y el rol ESTRECHADO a los dos con hilo. */
+export type AccesoAlHilo =
+  | { ok: true; rol: RolConHilo; orden: OrdenParaHilo }
+  | { ok: false };
+
+/**
+ * Los pasos 1-3 del design §2.2 de la feature 227, como funcion de MODULO.
+ *
+ * Era un metodo privado y se extrajo (2026-08-18) porque la SOLICITUD DE AYUDA necesita
+ * exactamente esta misma puerta —rol con hilo, orden viva, pertenencia— para poder RETIRAR una
+ * solicitud, que es una operacion sobre la orden y no sobre el hilo, asi que no puede colarse por
+ * `publicar`. La alternativa era una segunda copia de la secuencia en `SolicitudAyudaService`, y
+ * el docstring de aqui abajo ya decia por que eso es justo lo que no se hace: «tres copias de la
+ * misma secuencia divergen, y la que diverge es la que abre el agujero».
+ *
+ * Sigue siendo la UNICA implementacion; `OrdenNotaService.autorizar` delega en ella y no cambio
+ * ni un paso.
+ */
+export async function autorizarSobreHilo(
+  repo: Pick<IOrdenNotaRepository, "findOrdenParaHilo">,
+  ordenId: string,
+  actor: Actor,
+): Promise<AccesoAlHilo> {
+  // 1. R12: solo `adminTienda` y `mensajero`. `maestro`, `admin`, `adminSatelite` y `apiKey`
+  //    caen aqui en las TRES operaciones: no hay vista de supervision (decision P8).
+  if (!esRolConHilo(actor.rol)) return { ok: false };
+
+  // 2. R10: la orden inexistente y la borrada logicamente producen el MISMO resultado que la
+  //    orden ajena. Comprobarlo antes de la pertenencia y devolver lo mismo es lo que impide
+  //    usar el borde para averiguar si una guia existe.
+  const orden = await repo.findOrdenParaHilo(ordenId);
+  if (!orden || orden.deletedAt !== null) return { ok: false };
+
+  // 3. Pertenencia, con el mecanismo que YA usa el modulo de novedades: `orden.tiendaId` es FK
+  //    a `usuario`, luego el `usuarioId` del adminTienda ES el identificador de su tienda
+  //    (R9). Para el mensajero, `orden.mensajeroAsignadoId` es la unica fuente de verdad desde
+  //    la feature 159 (R11). En ambos casos sale del ACTOR, nunca de un dato del input.
+  const propietario =
+    actor.rol === "adminTienda"
+      ? orden.tiendaId === actor.usuarioId
+      : orden.mensajeroAsignadoId === actor.usuarioId;
+  if (!propietario) return { ok: false };
+
+  return { ok: true, rol: actor.rol, orden };
 }
 
 /**
