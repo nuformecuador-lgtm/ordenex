@@ -1,0 +1,144 @@
+# Auditoría de «ayuda a la tienda» ya mergeado en `dev`
+
+> **2026-08-18/19.** El pedido humano del 2026-08-18 se planificó en
+> `progress/design_pila_ayuda_tienda.md` sin saber que **otra sesión ya había implementado y
+> mergeado parte de esa pila** en `dev` (merge #396 desde la rama `ux`), con un diseño distinto
+> y **sin ficha ni spec**. Esta auditoría compara lo mergeado contra el pedido original, punto
+> por punto, y mide dos riesgos de diseño.
+>
+> **Base auditada: `origin/dev` = 9095d4e5. NO está en producción** (`prod` = 448d5169).
+
+## Lo que se mergeó, y con qué diseño
+
+| Commit | Qué trae |
+|---|---|
+| `8df27285` | Tres columnas en `orden`: `ayuda`, `gestion_aprobada`, `intentos_contacto`, con 4 migraciones |
+| `8f4c82ab` | Solicitud de ayuda del mensajero: modal, action, `SolicitudAyudaService`, tipos y tests |
+| `55723c83` | «Habilitar» desde novedades + intentos de contacto; **retira el botón «Notas»** |
+| `114388cc` | Enciende `gestion_aprobada` al aprobar el cierre (23 líneas, **sin un solo test**) |
+| `c6fe6fc1` | La ventana de escritura del hilo se abre con una solicitud de ayuda viva |
+| `6a0e6d36` | Fuera de alcance — ver §5 |
+
+La diferencia de fondo con lo planificado: **`ayuda` es un BOOLEANO, no un estatus**, así que la
+orden nunca sale de `en_reparto`; y **`gestion_aprobada` es una columna persistida**, el enfoque
+que el diseño aprobado descartó explícitamente por sus sitios de limpieza.
+
+---
+
+## 1. EL FALLO QUE COBRA DINERO
+
+**Se implementó la mitad que quita la visibilidad, sin la mitad que mueve el reloj.**
+
+- `lib/repositories/OrdenRepository.ts:2942` — `novedadWhere` **exige** `gestionAprobada: true`
+  para que una devuelta se liste.
+- `lib/repositories/DevolucionSlaRepository.ts:38-55` — `findDevueltasSla` filtra **solo**
+  `deletedAt` + `estatus = devuelta`, y ancla el reloj en `gestion.createdAt` (`:67`).
+  `lib/services/DevolucionSlaService.ts` menciona `gestionAprobada` **cero veces** (verificado
+  por conteo, no por lectura).
+
+Con el retraso gestión→aprobación medido contra producción el 2026-08-18 (**mediana 8,2 h ·
+p90 22,1 h · máx 48,2 h**) y la ventana `not_found` de **24 h**:
+
+> El mensajero devuelve a las 10:00 → la tienda **no la ve** (cierre sin aprobar) → a las 24 h el
+> cron la escala a `rechazada`, crea la gestión sintética y **se cobra como ingreso de bodega por
+> rechazo**. La tienda nunca pudo reprogramarla.
+
+**Antes del cambio la veía.** El saldo neto de la mitad implementada es **peor que no haber hecho
+nada**. Era exactamente el punto 15 del pedido, y no se hizo.
+
+---
+
+## 2. Los otros dos fallos, del mismo origen
+
+**2.1 · Fuga permanente en `/novedades`.** La rama `{ ayuda: true }` de `novedadWhere`
+(`OrdenRepository.ts:2946`) **no acota estatus**. Una orden con el flag encendido se queda en
+`/novedades` para siempre —`sin_gestionar`, bodega, incluso entregada— hasta que alguien pulse
+«Habilitar» a mano. El corte nocturno (`CierreDiaRepository.ts:447-476`) la barre a
+`sin_gestionar` y **no apaga el flag**.
+
+**2.2 · «Habilitar» esconde la fila pero no detiene el reloj.** `habilitarNovedad` apaga el flag
+**sin tocar el estatus** (`lib/types/novedad-habilitar.ts:13-17`). La orden sigue `devuelta`,
+sigue siendo candidata del cron, y a los 5 días **se escala y se cobra**. Sin aviso.
+
+**2.3 · La raíz común.** `gestion_aprobada` hay que apagarla a mano, y de las **7 salidas de
+`devuelta`** (`lib/types/order-status-transiciones.ts:221-230`) **solo 2 la apagan**:
+
+| Salida | ¿Apaga? |
+|---|---|
+| `→ en_bodega_*` por SLA (#19/#20) | **Sí** (`DevolucionSlaRepository.ts:104`) |
+| `→ rechazada` por escalado (#21) | **No** |
+| `→ reprogramada` por la tienda (#22) | **No** |
+| `→ en_bodega_*` por recuperación manual (#23/#24) | **No** |
+| `→ en_reparto` por deshacer gestión (#36) | **No** |
+
+Y el **encendedor** (`CierresAdminRepository.ts:1017-1021`) **no acota el estatus actual**: puede
+encender el flag sobre una orden que ya está en bodega, y entonces una devolución futura aparece
+en `/novedades` sin que se haya aprobado su cierre nuevo.
+
+---
+
+## 3. Problema de proceso: aserciones enseñadas a no mirar
+
+Se añadió una escritura a la transacción del dinero y **las dos aserciones que la habrían visto se
+filtraron para ignorarla**:
+
+- `tests/unit/repositories/CierresAdminRepository.resolverCierre.devolucion.test.ts:115-120` —
+  `updateManyDeDevolucion()` con `.filter(c => c.where.id !== undefined)`, que excluye
+  precisamente el `updateMany` nuevo. Las aserciones de `:228` y `:239` cuentan sobre la lista ya
+  filtrada.
+- `tests/unit/repositories/cierres-admin-repository.test.ts:1143-1146` — lo mismo.
+
+Y un comentario (`cierres-admin-repository.test.ts:138-141`) afirma que la escritura «se mide en su
+propio archivo». **Ese archivo no existe**: ningún test cubre que `gestion_aprobada` se encienda.
+
+Además, la retirada del botón «Notas» **no dejó guardia**: se borraron dos tests de
+`NovedadesModuleHilo.test.tsx` y el mensaje de commit afirma que la cobertura se conservó. No se
+conservó. Nada falla si alguien repone el botón.
+
+---
+
+## 4. El pedido original, punto por punto
+
+**Cumplen (2):** el botón de pedir ayuda; el rescate del mensajero.
+
+**Parciales (5):** el apartado aparte existe pero el corte es **solo de cliente** y la orden sigue
+gestionable; la nota se escribe y **nadie la lee** (se retiró la lectura del hilo de la tienda); la
+card oculta «Reprogramar» y «Devolver» en órdenes con ayuda; «Notas» sí se retiró pero «Devolver»
+sigue siendo maqueta; el bloqueo del cierre funciona **por accidente** (la orden sigue
+`en_reparto`) y tiene dos rutas exentas (`vencido → solicitado` y `rechazado → solicitado`).
+
+**No están (9):** que la orden salga de la ruta (sigue siendo parada del optimizador y del mapa);
+la pestaña nueva; la gestión de la tienda que cuenta como del mensajero; «Habilitar» = rescate; el
+desenlace de las no gestionadas; el escaneo al aprobar; el re-anclaje del reloj; la evidencia y el
+motivo obligatorios.
+
+**Hace lo contrario (1):** el punto 12. `NovedadAcciones.tsx:116` —
+`puedeHabilitar = esDevuelta || novedad.ayuda === true` — así que «Habilitar» aparece justo en las
+cards que vienen de un cierre, que es donde el pedido decía que **no** debía estar.
+
+---
+
+## 5. Fuera de alcance detectado — `6a0e6d36`
+
+Va mucho más allá de su título. Además de subir el umbral de cierres abiertos tolerados:
+
+- **Retira la guarda de mensajero bloqueado en la asignación de guías**
+  (`lib/services/GuiaAsignacionService.ts:339-350`, antes un `conflict`).
+- **Retira una causa del bloqueo de bodega satélite** (`OrdenRepository.ts:2885-2905`).
+- El umbral viejo sigue aplicándose en otras superficies, así que **la lectura y la escritura ya no
+  coinciden**: un mensajero con un cierre abierto recibe asignaciones pero conserva o pierde otras
+  restricciones según por dónde se lo mire.
+
+Nadie pidió esto. Se investiga en ficha aparte antes de tocarlo: puede ser deliberado.
+
+---
+
+## 6. Lo que no se pudo determinar
+
+- Si existe **backfill** de `gestion_aprobada`. No hay migración de datos ni script. Hoy es
+  teórico —0 órdenes en `devuelta` en producción al 2026-08-18— pero el día que se despliegue con
+  volumen, **todas las devueltas históricas caen de `/novedades`** por el `DEFAULT false`.
+- El coste del `updateMany` con `some: { cierreId }` dentro de la transacción larga (no se
+  revisaron los índices de `gestion_orden`).
+- Si `deshacerGestion` alcanza en la práctica la gestión sintética de `reprogramarDesdeDevuelta`.
+- Los e2e no se inspeccionaron ni se ejecutaron.

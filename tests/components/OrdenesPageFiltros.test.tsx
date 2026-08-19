@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, configure } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  configure,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import { RolValue } from "@prisma/client";
@@ -82,19 +90,70 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+/**
+ * Pone en la barra los filtros que se piden, por su etiqueta.
+ *
+ * La barra de `/ordenes` ya NO nace con los controles montados: arranca con el buscador
+ * solo y cada filtro se PIDE en el selector "Filtros". Sin este paso no existe el
+ * disparador `"<Etiqueta>: …"`, así que esto es la precondición que antes daba el
+ * render de la page — no cambia lo que cada caso afirma sobre el catálogo.
+ */
+async function ponerFiltros(
+  user: ReturnType<typeof userEvent.setup>,
+  ...etiquetas: string[]
+) {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  for (const etiqueta of etiquetas) {
+    await user.click(within(selector).getByRole("option", { name: etiqueta }));
+  }
+  // Marcar NO cierra el selector (se piden varios del tirón); se cierra a mano para que
+  // su panel no tape los controles recién montados.
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+}
+
+/** Etiquetas que el selector "Filtros" OFRECE, en su orden. */
+async function filtrosOfrecidos(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<string[]> {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  const etiquetas = within(selector)
+    .getAllByRole("option")
+    .map((o) => o.textContent ?? "");
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+  return etiquetas;
+}
+
 describe("OrdenesPage — catálogo de filtros (R47)", () => {
   it("R47: el catálogo se resuelve EN EL SERVIDOR, en UNA sola llamada al cargar la página", async () => {
+    const user = userEvent.setup();
     await renderPage();
 
     expect(catalogoMock).toHaveBeenCalledTimes(1);
-    // Los filtros quedan operativos con las opciones ya presentes (sin petición extra).
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeEnabled();
+    // Los filtros quedan operativos con las opciones ya presentes: pedir uno NO dispara
+    // una segunda resolución del catálogo (esa es la mitad de R47 que este caso mide).
+    await ponerFiltros(user, "Zona");
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeEnabled();
+    expect(catalogoMock).toHaveBeenCalledTimes(1);
   });
 
   it("R47: el catálogo baja por props y alimenta los filtros de la barra", async () => {
+    const user = userEvent.setup();
     await renderPage();
 
-    for (const etiqueta of ["Zona", "Tienda", "Provincia", "Cantón", "Distrito"]) {
+    const MULTI = ["Zona", "Tienda", "Provincia", "Cantón", "Distrito"];
+    await ponerFiltros(user, ...MULTI, "Fecha de creación");
+
+    for (const etiqueta of MULTI) {
+      // Habilitado = el catálogo llegó con opciones: `FilterComponent` deshabilita
+      // cualquier `multi` sin opciones, así que esto distingue "alimentado" de "vacío".
       expect(
         await screen.findByRole("button", { name: new RegExp(`^${etiqueta}:`) }),
       ).toBeEnabled();
@@ -103,39 +162,53 @@ describe("OrdenesPage — catálogo de filtros (R47)", () => {
   });
 
   it("R62: el adminTienda NO recibe el filtro de tienda", async () => {
+    const user = userEvent.setup();
     resolveActorMock.mockResolvedValue({
       usuarioId: "t1",
       rol: RolValue.adminTienda,
     });
     await renderPage();
 
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeInTheDocument();
+    // Al adminTienda no se le OFRECE la tienda: no hay forma de ponerla en la barra.
+    const ofrecidos = await filtrosOfrecidos(user);
+    expect(ofrecidos).not.toContain("Tienda");
+    expect(ofrecidos).toContain("Zona");
+
+    // Y pidiendo TODO lo que se le ofrece, sigue sin aparecer.
+    await ponerFiltros(user, ...ofrecidos);
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Tienda:/ })).toBeNull();
   });
 });
 
 describe("OrdenesPage — catálogo no disponible (R64)", () => {
   it("R64: si el service responde `forbidden`, la barra va deshabilitada y la tabla sigue viva", async () => {
+    const user = userEvent.setup();
     catalogoMock.mockResolvedValue({ status: "forbidden" });
     await renderPage();
 
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeDisabled();
+    await ponerFiltros(user, "Zona");
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
   });
 
   it("R64: si el service responde `unauthenticated`, tampoco rompe la página", async () => {
+    const user = userEvent.setup();
     catalogoMock.mockResolvedValue({ status: "unauthenticated" });
     await renderPage();
 
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeDisabled();
+    await ponerFiltros(user, "Zona");
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
   });
 
   it("R64: si la lectura LANZA (error de DB propagado), la página renderiza igual", async () => {
+    const user = userEvent.setup();
     catalogoMock.mockRejectedValue(new Error("db caida"));
     await renderPage();
 
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeDisabled();
+    await ponerFiltros(user, "Zona");
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
     // Y el listado sigue pidiendo órdenes sin los filtros nuevos.
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
