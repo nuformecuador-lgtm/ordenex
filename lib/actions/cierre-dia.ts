@@ -75,9 +75,10 @@ export type EstadoBloqueoMensajeroResult =
 
 /**
  * Feature 41 (R21): deriva SERVER-SIDE si el mensajero (el actor) esta BLOQUEADO para
- * recibir nuevas asignaciones = tiene al menos un cierre en estado bloqueante
- * (`solicitado`/`vencido`), reutilizando `findMensajerosBloqueados` del backend (sin
- * flag persistido). El dato viaja por props a la vista del mensajero, que muestra el
+ * recibir nuevas asignaciones, reutilizando `findMensajerosBloqueados` del backend (sin flag
+ * persistido). Pedido humano 2026-08-18: el criterio ya no es "tiene algun cierre no aprobado"
+ * sino "tiene mas de los tolerados"; se consulta, no se re-deriva, para que el aviso de la
+ * pantalla del mensajero diga exactamente lo que el servidor va a rechazar. El dato viaja por props a la vista del mensajero, que muestra el
  * aviso accionable. No muta nada; solo lectura.
  */
 export async function estadoBloqueoMensajero(

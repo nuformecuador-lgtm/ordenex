@@ -890,9 +890,13 @@ const COLUMNA_INGRESO_TOTAL: Column<CierreDetalleGestion> = {
 // --- Columnas comunes a las 4 secciones del detalle (R11, reuso de la 37) ---
 export const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   {
+    // El número de guía es el dato con el que se busca la orden fuera de la app: se le
+    // da ancho propio (2.5× el que pedía su contenido) para que no quede espichado
+    // entre columnas más anchas ni se parta en dos líneas.
     id: "numGuia",
     value: "Nº Guía",
     render: (g) => <span className="font-semibold">{g.numGuia ?? "—"}</span>,
+    minWidth: "250px",
   },
   { id: "numRemision", value: "Nº Remisión", minWidth: "120px" },
   { id: "destinatario", value: "Destinatario" },

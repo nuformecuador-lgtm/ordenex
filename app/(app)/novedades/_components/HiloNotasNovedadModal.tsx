@@ -41,6 +41,16 @@ export interface HiloNotasNovedadModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * @sin-superficie el 2026-08-18, por pedido humano, se retiro el boton «Notas» de
+ * `NovedadAcciones`, que era el UNICO punto desde el que `/novedades` abria este modal. El
+ * componente se conserva intacto y sin montar en vez de borrarse por dos razones: la guardia
+ * `orden-nota-frontera` lo lleva en su lista FIRMADA de nucleo del hilo (borrarlo la pone roja y
+ * es una decision aparte, no la consecuencia de quitar un boton), y volver a darle superficie es
+ * reponer una linea en el modulo. CONSECUENCIA VIVA MIENTRAS ESTO SIGA ASI: la tienda no lee ni
+ * responde el hilo desde `/novedades`, y eso incluye el MOTIVO de una solicitud de ayuda, que el
+ * mensajero publica como nota de ese mismo hilo.
+ */
 export function HiloNotasNovedadModal({
   orden,
   onOpenChange,

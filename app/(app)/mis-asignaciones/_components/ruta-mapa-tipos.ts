@@ -18,3 +18,16 @@ export interface RutaMapaOrigen {
   lat: number;
   lng: number;
 }
+
+/**
+ * Trazado de la ruta devuelto por la sincronización (feature 92, seguimiento). Cuando llega,
+ * el mapa dibuja ESTA geometría en vez de unir las paradas en recto.
+ *
+ *   `routes` — sigue las calles. Línea CONTINUA.
+ *   `local`  — segmentos rectos entre paradas. Línea PUNTEADA: no es un recorrido navegable
+ *              y pintarla igual que la real le mentiría al mensajero.
+ */
+export interface RutaMapaTrazado {
+  encodedPolyline: string;
+  fuente: "routes" | "local";
+}

@@ -10,6 +10,7 @@
 // mientras el chunk diferido del lienzo viaja por la red.
 
 import { formatearValor } from "./formato";
+import { cifraConPeso } from "./porcentajes";
 import type { MetricaUnidad, SerieDato } from "./tipos";
 import type { SeriesPreparadas } from "./topes";
 
@@ -27,6 +28,18 @@ export interface SerieTextualProps {
    * que es peor que un texto pero mucho mejor que el silencio (design.md §9.16).
    */
   readonly avisoRecorte?: (mostradas: number, recibidas: number) => string;
+  /**
+   * Peso de cada punto sobre el total, YA formateado (`"50 %"`), uno por punto y en el mismo
+   * orden. Hoy lo pone el donut cuando el anillo pinta porcentajes.
+   *
+   * EXISTE PARA QUE LA LISTA DIGA LO MISMO QUE EL DIBUJO. Si el porcentaje solo viviera en la
+   * leyenda del SVG, quien usa un lector de pantalla oiria las cifras y no el reparto — que en
+   * un anillo es justamente lo que el grafico esta contando.
+   *
+   * Ausente => la lista escribe solo el valor, como siempre. Las barras y las lineas no lo
+   * pasan: el peso sobre un total no significa nada en un eje temporal.
+   */
+  readonly pesos?: readonly string[];
 }
 
 function redactar(
@@ -51,6 +64,7 @@ export function SerieTextual({
   recorteSeries,
   recortePuntos,
   avisoRecorte,
+  pesos,
 }: SerieTextualProps) {
   return (
     <div className="sr-only">
@@ -62,11 +76,16 @@ export function SerieTextual({
       ) : null}
       <ul aria-label={etiqueta}>
         {series.flatMap((serie) =>
-          serie.puntos.map((punto) => (
-            <li key={`${serie.id}-${punto.categoria}`}>
-              {`${serie.etiqueta}, ${punto.categoria}: ${formatearValor(punto.valor, unidad)}`}
-            </li>
-          )),
+          serie.puntos.map((punto, indice) => {
+            // El peso se indexa por POSICION del punto, la misma con la que se calculo y con
+            // la que se colorea la porcion. Sin peso, la entrada queda como siempre.
+            const texto = cifraConPeso(formatearValor(punto.valor, unidad), pesos?.[indice]);
+            return (
+              <li key={`${serie.id}-${punto.categoria}`}>
+                {`${serie.etiqueta}, ${punto.categoria}: ${texto}`}
+              </li>
+            );
+          }),
         )}
       </ul>
     </div>

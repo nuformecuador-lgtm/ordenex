@@ -433,14 +433,57 @@ describe("CierreDiaModule", () => {
     renderModule({ cierresPasados });
 
     const region = screen.getByRole("region", { name: "Cierres solicitados" });
+    // Pedido humano del 2026-08-16: el histórico es una tira de COMPROBANTES. Lo que la fila
+    // decía en ocho columnas lo dice ahora la cabecera de la hoja —estado, destino, fecha y el
+    // total— y su desglose, que llega detrás del desplegable.
     expect(within(region).getByText("Solicitado")).toBeInTheDocument();
     expect(within(region).getByText("Bodega central")).toBeInTheDocument();
-    // Efectivo y total general comparten valor: hay 2 celdas con ₡300.
-    expect(within(region).getAllByText("₡300")).toHaveLength(2);
-    // El histórico del mensajero nunca tuvo columna de ingreso de bodega (la tabla no
-    // renderiza `totalIngresoBodegaRechazos`); ese desglose vive en bodega/admin.
+    // Un solo ₡300 a la vista: el de la cabecera. El desglose por método está plegado.
+    // El importe va sin céntimos desde la feature 230 de `dev`.
+    expect(within(region).getAllByText("₡300")).toHaveLength(1);
+    // El histórico del mensajero nunca enseñó el ingreso de bodega por rechazos: es plata de
+    // la empresa (design §7.2), y no la ve NI plegada ni desplegada — lo comprueba el caso de
+    // abajo, que es la mitad que la tabla no podía tener.
     expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
     expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
+  });
+
+  it("R18 + design §7.2: al desplegar su comprobante, el mensajero ve SU ganancia y no el ingreso de la empresa", async () => {
+    // La tarjeta esconde el desglose tras un botón, así que un dato que no le toca no se vería
+    // al primer vistazo: se vería al segundo. Esto abre el desplegable y mira.
+    const user = userEvent.setup();
+    const cierresPasados: CierrePasadoDTO[] = [
+      {
+        cierreId: "c1",
+        estado: "aprobado",
+        destinoTipo: "bodega_central",
+        destinoZonaId: "z1",
+        totales: {
+          efectivo: "300.00",
+          simpe: "0.00",
+          transferencia: "0.00",
+          general: "300.00",
+        },
+        totalPagoMensajero: "45.00",
+        totalIngresoBodegaRechazos: "2100.00",
+        solicitadoAt: "2026-07-11T10:00:00.000Z",
+      },
+    ];
+    renderModule({ cierresPasados });
+
+    const region = screen.getByRole("region", { name: "Cierres solicitados" });
+    await user.click(
+      within(region).getByRole("button", { name: /^Ver detalles de tu cierre del/ }),
+    );
+
+    // Su pago está, y con SU rótulo: en su pantalla ese monto se llama «Ganancia».
+    expect(within(region).getByText("Ganancia")).toBeInTheDocument();
+    expect(within(region).getByText("₡45")).toBeInTheDocument();
+    // Y el ingreso de bodega por rechazos sigue sin aparecer, ni el rótulo ni el monto.
+    expect(
+      within(region).queryByText("Ingreso de bodega por rechazos"),
+    ).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
   });
 
   // Pedido humano: cada cierre del histórico se puede ABRIR y ver su detalle, con el MISMO

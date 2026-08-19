@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 import type { ICierreBodegaRepository } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -241,7 +242,7 @@ export class CierreBodegaService implements ICierreBodegaService {
    * segunda.
    */
   async listarCierresBodegaSolicitadosPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarCierresBodegaSolicitadosServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
@@ -251,9 +252,12 @@ export class CierreBodegaService implements ICierreBodegaService {
       return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 };
     }
 
+    // Pedido humano del 2026-08-16: el filtro RECORTA dentro de la zona del actor —se compone
+    // con `AND` en el repositorio—, nunca la sustituye. Pedir la zona vecina da vacio.
     const { items, total } = await this.repo.findCierresBodegaByZonaPaginado(
       zonaId,
       rangoDePagina(input),
+      input.filtros,
     );
 
     return {
@@ -289,7 +293,7 @@ export class CierreBodegaService implements ICierreBodegaService {
    * que se recorta es SOLO lo que la tabla pinta.
    */
   async listarConsolidablesPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierresBodega },
     actor: Actor,
   ): Promise<ListarConsolidablesServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
@@ -302,6 +306,7 @@ export class CierreBodegaService implements ICierreBodegaService {
     const { items, total } = await this.repo.findCierresDiaConsolidablesPaginado(
       zonaId,
       rangoDePagina(input),
+      input.filtros, // recorte DENTRO de la zona (ver la nota del listado de solicitados)
     );
 
     return {
@@ -347,6 +352,7 @@ export class CierreBodegaService implements ICierreBodegaService {
    */
   async listarCierresBodegaSolicitadosCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarCierresBodegaSolicitadosCompletoServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
 
@@ -355,7 +361,8 @@ export class CierreBodegaService implements ICierreBodegaService {
 
     // El MISMO metodo del que la pagina saca su recorte: mismo where, mismo orden y —lo que en
     // una pantalla de dinero no es estilo— el MISMO mapper de totales.
-    const conjunto = await this.repo.findCierresBodegaByZona(zonaId);
+    // Los MISMOS filtros que la pagina: el archivo es «esto que estoy viendo, entero».
+    const conjunto = await this.repo.findCierresBodegaByZona(zonaId, filtros);
 
     const limite = descargaConfig.MAX_FILAS;
     // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
@@ -377,8 +384,8 @@ export class CierreBodegaService implements ICierreBodegaService {
    * sigue recibiendo por `listarConsolidacion` (R49 de la 170), calculados sobre este mismo
    * conjunto. Aqui se leen las filas y se acaba.
    *
-   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
-   * blanca, alcance desde el actor.
+   * Los mismos `filtros` que su pagina (pedido humano del 2026-08-16); la ZONA sigue saliendo
+   * del actor y nunca de la peticion.
    *
    * **Excepcion declarada a R29 de la 170, y aqui es la de menor riesgo del par.**
    * `findCierresDiaConsolidables` tampoco lleva cota, asi que la materializacion entera vale
@@ -390,6 +397,7 @@ export class CierreBodegaService implements ICierreBodegaService {
    */
   async listarConsolidablesCompleto(
     actor: Actor,
+    filtros?: FiltrosCierresBodega,
   ): Promise<ListarConsolidablesCompletoServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R4: antes del repo
 
@@ -397,7 +405,7 @@ export class CierreBodegaService implements ICierreBodegaService {
     if (zonaId === null) return { status: "ok", items: [], total: 0 };
 
     // El MISMO metodo que alimenta la pagina y los agregados: un conjunto, no dos parecidos.
-    const conjunto = await this.repo.findCierresDiaConsolidables(zonaId);
+    const conjunto = await this.repo.findCierresDiaConsolidables(zonaId, filtros); // idem
 
     const limite = descargaConfig.MAX_FILAS;
     if (conjunto.length > limite) {

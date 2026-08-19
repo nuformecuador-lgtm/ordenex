@@ -92,11 +92,32 @@ function buildDevolucionPrisma(
     opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
   );
   prisma.orden.findMany.mockResolvedValue(rechazadas);
-  prisma.orden.updateMany.mockImplementation((args: { where: { id: { in: string[] } } }) =>
-    Promise.resolve({ count: opts.movidas ?? args.where.id.in.length }),
+  // `where.id.in` es el updateMany DE ESTA FEATURE (la devolucion de `rechazada`, que rutea por
+  // ids). Desde el pedido humano de 2026-08-18 la rama `aprobado` corre ademas OTRO updateMany
+  // sobre `orden` — el que enciende `gestion_aprobada` en las devoluciones del cierre— que filtra
+  // por la relacion `gestiones` y no lleva `id`. El fake tiene que sobrevivir a los dos, asi que
+  // el acceso es opcional: sin `id` no hay filas que contar para lo que este archivo mide.
+  prisma.orden.updateMany.mockImplementation((args: { where: { id?: { in: string[] } } }) =>
+    Promise.resolve({ count: opts.movidas ?? args.where.id?.in.length ?? 0 }),
   );
   prisma.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
   return prisma;
+}
+
+/**
+ * Los `updateMany` sobre `orden` de ESTA feature: los que rutean por ids. Desde el pedido humano
+ * de 2026-08-18 la rama `aprobado` corre ademas el que enciende `gestion_aprobada` (filtra por la
+ * relacion `gestiones`, sin `id`), asi que contar todas las llamadas ya no mide lo que este
+ * archivo quiere medir.
+ */
+type UpdateManyArgs = { where: { id?: { in: string[] } }; data: Record<string, unknown> };
+
+function updateManyDeDevolucion(prisma: {
+  orden: { updateMany: { mock: { calls: unknown[][] } } };
+}): UpdateManyArgs[] {
+  return prisma.orden.updateMany.mock.calls
+    .map((c) => c[0] as UpdateManyArgs)
+    .filter((c) => c.where.id !== undefined);
 }
 
 function makeRepo(prisma: Record<string, unknown>) {
@@ -153,11 +174,11 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=rechazada.
-    const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
+    const calls = updateManyDeDevolucion(prisma);
     const central = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_tienda"));
     const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver"));
-    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
-    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
   });
 
   it("R8: money-neutral — el updateMany SOLO cambia estatus_id (NO mensajero/asignado_at/prioridad)", async () => {
@@ -166,7 +187,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
 
     await aprobar(repo);
 
-    const data = prisma.orden.updateMany.mock.calls[0][0].data;
+    const data = updateManyDeDevolucion(prisma)[0].data;
     expect(data).toEqual({ estatusId: idEstado("por_devolver") });
     expect(data).not.toHaveProperty("mensajeroAsignadoId");
     expect(data).not.toHaveProperty("asignadoAt");
@@ -204,8 +225,8 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // El WHERE del findMany usa el mensajero del cierre; una rechazada suya (venga de rechazo directo
     // o de escalado SLA) entra igual (elegibilidad por estado, agnostica del camino).
     expect(prisma.orden.findMany.mock.calls[0][0].where.mensajeroAsignadoId).toBe("m-sla");
-    expect(prisma.orden.updateMany).toHaveBeenCalledTimes(1);
-    expect(prisma.orden.updateMany.mock.calls[0][0].data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(updateManyDeDevolucion(prisma)).toHaveLength(1);
+    expect(updateManyDeDevolucion(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver") });
   });
 
   it("R7/no-op: cierre sin rechazadas (0 filas) -> no updateMany de orden ni append", async () => {
@@ -215,7 +236,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     const r = await aprobar(repo);
 
     expect(r).toBe("updated"); // la aprobacion (wallets) no se ve afectada
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(updateManyDeDevolucion(prisma)).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 

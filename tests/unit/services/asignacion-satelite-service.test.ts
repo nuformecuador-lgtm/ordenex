@@ -344,20 +344,20 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     });
   });
 
-  it("R14: mensajero destino bloqueado por cierre pendiente -> validation_error, sin escribir", async () => {
+  // Pedido humano 2026-08-18 — R14 RETIRADA. Este test afirmaba que el mensajero con un cierre
+  // abierto se rechazaba con `mensajero_bloqueado_por_cierre`. Se invierte: la asignacion PASA.
+  it("mensajero con cierre pendiente -> se asigna igual (R14 retirada)", async () => {
     const repo = fakeRepo({
-      // bodega libre, pero el mensajero elegido esta bloqueado.
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
     });
     const res = await newService(repo).asignar(
       { ordenIds: ["o1"], mensajeroId: MENSAJERO },
       ADMIN,
     );
-    expect(res).toEqual({
-      status: "validation_error",
-      fieldErrors: { mensajeroId: ["mensajero_bloqueado_por_cierre"] },
-    });
-    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+    expect(res.status).toBe("ok");
+    expect(repo.asignarSateliteLote).toHaveBeenCalled();
+    // Y no se consulta siquiera: el servicio dejo de preguntar por los cierres del mensajero.
+    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
   });
 
   it("camino feliz sin bloqueo -> ok (los dobles por defecto no bloquean)", async () => {

@@ -18,8 +18,30 @@
 
 import type { SerieDato } from "./tipos";
 
-/** Numero maximo de series visibles. Igual al numero de tokens `--chart-N` (R30, I4). */
-export const MAX_SERIES = 5;
+// ⚠ AQUI VIVIA `MAX_SERIES = 5`, el techo de categorias del paquete, y se RETIRO el
+// 2026-08-18 por decision humana. Existia por una sola razon: la paleta tenia cinco tokens y
+// no ciclaba, asi que la sexta categoria se habria pintado del color de otra. Ahora
+// `paleta.ts` declara VEINTE y cicla, de modo que ya no hay nada que recortar — y recortar
+// costaba dato: un desglose de ordenes por estado perdia quince buckets de veinte.
+//
+// El techo de PUNTOS (`MAX_PUNTOS_SERIE`) NO se toca y sigue vivo: aquel no es de color, es
+// de legibilidad de un eje temporal, y ninguna paleta lo resuelve.
+
+/**
+ * Cuantas categorias sigue mostrando un tablero antes de fundir la cola en «otros».
+ *
+ * ⚠ NO ES EL VIEJO `MAX_SERIES`, aunque valga lo mismo. Aquel era un techo de COLOR —el
+ * paquete no sabia pintar mas de cinco— y el paquete lo aplicaba por su cuenta, recortando el
+ * dato. Este es de LEGIBILIDAD y lo aplica cada TABLERO sobre sus propios datos: nadie quiere
+ * un donut financiero de quince porciones aunque ahora todas tuvieran color propio.
+ *
+ * La diferencia que importa: el paquete ya no recorta nada. Un tablero que NO agrupe muestra
+ * todas sus categorias, y eso es una decision suya — es justo lo que hace el desglose de
+ * ordenes por estado, que quiere sus veinte buckets enteros.
+ *
+ * Lo consumen `_components/operativo/agregacion.ts` y `_components/financiero`.
+ */
+export const MAX_CATEGORIAS_LEGIBLES = 5;
 
 /**
  * Numero maximo de puntos por serie (R32).
@@ -30,19 +52,6 @@ export const MAX_SERIES = 5;
  * rango anual crudo falla siempre y de forma inequivoca.
  */
 export const MAX_PUNTOS_SERIE = 62;
-
-/** Se superaron las series que el paquete sabe colorear sin repetir color (R31). */
-export class SeriesExcedidasError extends Error {
-  readonly recibidas: number;
-  readonly tope: number;
-
-  constructor(recibidas: number, tope: number = MAX_SERIES) {
-    super(`Se recibieron ${recibidas} series y el tope del paquete es ${tope}`);
-    this.name = "SeriesExcedidasError";
-    this.recibidas = recibidas;
-    this.tope = tope;
-  }
-}
 
 /** Se superaron los puntos por serie que el paquete acepta pintar (R33). */
 export class PuntosExcedidosError extends Error {
@@ -74,21 +83,6 @@ function sinRecorte<T>(items: readonly T[]): Recorte<T> {
 }
 
 /**
- * Aplica `MAX_SERIES` (R31). Conserva las PRIMERAS en el orden recibido: el
- * llamador ya decidio ese orden y respetarlo hace el recorte predecible.
- */
-export function aplicarTopeSeries<T>(series: readonly T[]): Recorte<T> {
-  if (series.length <= MAX_SERIES) return sinRecorte(series);
-  if (!esProduccion()) throw new SeriesExcedidasError(series.length);
-  return {
-    items: series.slice(0, MAX_SERIES),
-    recortado: true,
-    mostrados: MAX_SERIES,
-    recibidos: series.length,
-  };
-}
-
-/**
  * Aplica `MAX_PUNTOS_SERIE` (R33). Conserva los ULTIMOS puntos, no los primeros:
  * en una serie temporal lo reciente es lo que se esta mirando, y quedarse con
  * enero cuando el usuario pidio el ano seria absurdo.
@@ -113,13 +107,22 @@ export interface SeriesPreparadas {
 }
 
 /**
- * Aplica los dos techos a un juego de series (R31, R33). Es la unica puerta por
- * la que pasan los datos antes de llegar al lienzo o a la alternativa textual,
- * de modo que ninguno de los dos puede emitir mas de
- * `MAX_SERIES x MAX_PUNTOS_SERIE` entradas (R10 acotado).
+ * Aplica el techo de PUNTOS a un juego de series (R33). Es la unica puerta por la que pasan
+ * los datos antes de llegar al lienzo o a la alternativa textual.
+ *
+ * ⚠ YA NO RECORTA SERIES (2026-08-18). Antes aplicaba tambien `MAX_SERIES`, el techo de
+ * categorias, porque la paleta solo sabia colorear cinco. Ahora `paleta.ts` tiene veinte
+ * tokens y cicla, asi que TODAS las categorias llegan al lienzo.
+ *
+ * `recorteSeries` se CONSERVA en la salida —siempre `recortado: false`— y no se borra: lo
+ * leen `SerieTextual` y las tres graficas para decidir si anuncian un aviso. Quitarlo era
+ * tocar cinco componentes para no ganar nada; dejarlo dice, con sus propios numeros, que no
+ * se recorto nada. Si algun dia no queda ningun consumidor, se retira entero.
  */
 export function prepararSeries(series: readonly SerieDato[]): SeriesPreparadas {
-  const recorteSeries = aplicarTopeSeries(series);
+  // Sin techo de categorias: entran todas. `sinRecorte` deja el aviso en `false` con los
+  // numeros reales, que es lo que los consumidores esperan leer.
+  const recorteSeries = sinRecorte(series);
   let puntosRecortados = false;
   let puntosMostrados = 0;
   let puntosRecibidos = 0;

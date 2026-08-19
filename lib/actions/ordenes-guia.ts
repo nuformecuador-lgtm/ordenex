@@ -10,7 +10,6 @@ import {
   type AsignarRecoleccionResult,
   type GenerarGuiaResult,
   type ListarMensajerosParaAsignacionResult,
-  type ListarZonasBloqueadasResult,
   type RutearSateliteResult,
 } from "@/lib/types/orden-guia";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -51,13 +50,6 @@ function buildZonaRepoParaMensajeros(): Pick<IZonaRepository, "findCentralZonaId
   return new ZonaRepository(getPrismaClient());
 }
 
-function buildOrdenRepoParaZonasBloqueadas(): Pick<
-  IOrdenRepository,
-  "findZonasConMensajeroBloqueado"
-> {
-  return new OrdenRepository(getPrismaClient());
-}
-
 export interface GuiaActionDeps {
   guiaService?: IGuiaAsignacionService;
   getActor?: () => Promise<Actor | null>;
@@ -74,10 +66,6 @@ export interface ListarMensajerosDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-export interface ListarZonasBloqueadasDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findZonasConMensajeroBloqueado">;
-  getActor?: () => Promise<Actor | null>;
-}
 
 // Traduce el AppErrorShape que puede producir este borde: solo ZodError
 // (VALIDATION_ERROR) o falta de sesion (UNAUTHORIZED, R14). `forbidden` y
@@ -244,29 +232,9 @@ export async function rutearABodegaSatelite(
 // autorizacion MAS AMPLIA (todos menos mensajero, frente a solo maestro/admin) y mejor probada.
 // `IOrdenRepository.listOrderStatus()` NO se toca: lo sigue usando esa sustituta.
 
-/**
- * Gate de seleccion del maestro — loader de solo lectura de las zonas BLOQUEADAS: las
- * que tienen AL MENOS 1 mensajero con un cierre abierto (`solicitado`/`vencido`). Cubre
- * TODAS las zonas (central GAM y satelites) con la misma regla, para que la UI
- * deshabilite la seleccion de esas ordenes con el mismo criterio que la guarda de
- * escritura del servidor (`existeBodegaSateliteBloqueada` / `zonasSateliteBloqueadas`).
- * Una zona sin mensajeros nunca sale bloqueada. `maestro` y `admin` pueden leer (mismo
- * criterio de solo-lectura que `listarMensajerosParaAsignacion`); el resto -> forbidden.
- */
-export async function listarZonasBloqueadasPorCierre(
-  deps: ListarZonasBloqueadasDeps = {},
-): Promise<ListarZonasBloqueadasResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    if (actor.rol !== "maestro" && actor.rol !== "admin") {
-      return { status: "forbidden" as const };
-    }
-    const repo = deps.ordenRepo ?? buildOrdenRepoParaZonasBloqueadas();
-    const zonas = await repo.findZonasConMensajeroBloqueado();
-    return { status: "ok" as const, zonasBloqueadasIds: [...zonas] };
-  });
-  // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el
-  // unico AppErrorShape posible es UNAUTHORIZED.
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
-}
+// Pedido humano 2026-08-18 — AQUI VIVIA `listarZonasBloqueadasPorCierre`, el loader del gate de
+// seleccion del maestro: devolvia las zonas con >=1 mensajero con cierre abierto para que el
+// checkbox de esas ordenes saliera deshabilitado. Se elimina con la regla que servia: los cierres
+// dejaron de bloquear la asignacion, asi que no queda nadie a quien informar. Se borra en vez de
+// anotarse `@sin-superficie` porque no hay un motivo real para conservarla — si algun dia vuelve
+// el aviso, vuelve con su consumidor.

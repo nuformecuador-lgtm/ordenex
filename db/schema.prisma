@@ -500,6 +500,9 @@ model Orden {
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
+  ayuda                  Boolean   @default(false) @map("ayuda") // flag opcional de solicitud de ayuda sobre la orden; default false = sin backfill
+  gestionAprobada        Boolean   @default(false) @map("gestion_aprobada") // la gestion de la devolucion fue APROBADA en el cierre; default false = sin backfill
+  intentosContacto       Int       @default(0) @map("intentos_contacto") // conteo de intentos de contacto que la TIENDA registra sobre la orden desde /novedades; default 0 = sin backfill. Es CUMULATIVO y sobrevive a que `ayuda` se apague: es historial de gestion, no estado de la solicitud
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
   // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
@@ -1870,6 +1873,16 @@ model RutaOptimizada {
   origenFuente String?    @map("origen_fuente")
   huellaSet    String?    @map("huella_set")
   ultimoError  String?    @map("ultimo_error")
+  // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
+  // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
+  // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
+  trazadoPolilinea  String? @map("trazado_polilinea")
+  trazadoDistanciaM Int?    @map("trazado_distancia_m")
+  trazadoDuracionS  Int?    @map("trazado_duracion_s")
+  trazadoFuente     String? @map("trazado_fuente")
+  // Guarda de coste del trayecto EN VIVO (20260814160000_ruta_tramo_vivo_at). Contador de
+  // gasto, no dato de negocio: solo lo lee la guarda del intervalo minimo.
+  tramoVivoAt       DateTime? @map("tramo_vivo_at")
   createdAt    DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
@@ -1890,6 +1903,12 @@ model RutaOptimizadaParada {
   rutaId    String @map("ruta_id")
   ordenId   String @map("orden_id")
   secuencia Int
+  // Tramo que LLEGA a esta parada (20260814140000_ruta_parada_tramo). La fila 1 guarda el
+  // origen -> primera parada. No necesita invalidacion propia: `reemplazarSecuencia` borra e
+  // reinserta estas filas enteras en cada recalculo.
+  tramoPolilinea  String? @map("tramo_polilinea")
+  tramoDistanciaM Int?    @map("tramo_distancia_m")
+  tramoDuracionS  Int?    @map("tramo_duracion_s")
 
   ruta  RutaOptimizada @relation(fields: [rutaId], references: [id], onDelete: Cascade)
   orden Orden          @relation(fields: [ordenId], references: [id], onDelete: Cascade)

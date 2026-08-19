@@ -7,9 +7,11 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
   INovedadesService,
+  ListarNovedadesCompletoServiceResult,
   ListarNovedadesInput,
   ListarNovedadesServiceResult,
 } from "@/lib/interfaces/services/INovedadesService";
+import { descargaConfig } from "@/lib/config/descarga";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
 // R11: unico rol autorizado (paridad con `RecepcionSateliteService.ROL_AUTORIZADO`).
@@ -59,6 +61,38 @@ export class NovedadesService implements INovedadesService {
       return { status: "ok", items: [], total, page, pageSize };
     }
 
+    return { status: "ok", items: await this.proyectar(rows), total, page, pageSize };
+  }
+
+  /**
+   * El listado ENTERO para el archivo de la descarga. Reusa el conteo, la lectura, el orden y la
+   * proyeccion de `listar`: lo unico que cambia es que no hay recorte por pagina.
+   *
+   * El tope se evalua con el CONTEO, antes de leer ninguna fila: asi superarlo cuesta una sola
+   * consulta y el aviso conserva el total EXACTO que publica (nunca un dataset truncado).
+   */
+  async listarCompleto(actor: Actor): Promise<ListarNovedadesCompletoServiceResult> {
+    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R11, antes del repo
+
+    const total = await this.repo.countDevueltasByTienda(actor.usuarioId); // mismo predicado (R8)
+
+    const limite = descargaConfig.MAX_FILAS;
+    if (total > limite) return { status: "limite_excedido", total, limite };
+    if (total === 0) return { status: "ok", items: [], total: 0 };
+
+    const rows = await this.repo.findDevueltasByTienda(actor.usuarioId, {
+      skip: 0,
+      take: total,
+    });
+
+    return { status: "ok", items: await this.proyectar(rows), total: rows.length };
+  }
+
+  /**
+   * Filas del repo -> `NovedadDTO[]`, ordenadas por recencia (R12). UNICA proyeccion del
+   * listado: la pagina y el archivo salen de aqui, para que no puedan divergir.
+   */
+  private async proyectar(rows: NovedadOrdenRow[]): Promise<NovedadDTO[]> {
     // R8: UNA sola consulta agregada para las causas de TODAS las ordenes de la pagina.
     const causas = await this.repo.findCausasDevueltaVigentes(rows.map((r) => r.id)); // R6/R7
     // Feature 160 (R12/R15): UNA sola consulta al historial para toda la pagina, sobre las
@@ -82,7 +116,7 @@ export class NovedadesService implements INovedadesService {
     //
     // Lo unico que NO se propaga es `row.createdAt`: es de la fila del repo, se usa arriba
     // para ordenar por recencia (R12) y muere aqui. Un `Date` no cruza el borde RSC.
-    const items: NovedadDTO[] = ordered.map((row) => ({
+    return ordered.map((row) => ({
       id: row.id,
       numGuia: row.numGuia,
       // El REAL de la orden. La etiqueta «Guia N» del identificador visible (R9) la pone el
@@ -105,12 +139,18 @@ export class NovedadesService implements INovedadesService {
       distritoNombre: row.distritoNombre,
       // SIEMPRE `null`: una novedad no es parada de ninguna ruta optimizada (feature 92/R28).
       secuenciaRuta: null,
+      // Solicitud de ayuda (2026-08-18): SIEMPRE se emite. Es la segunda razon por la que una
+      // fila puede estar en este listado, y la pantalla necesita distinguirla de una devolucion
+      // — no puede derivarla del estatus, porque una orden devuelta tambien puede tener ayuda
+      // pedida de antes.
+      ayuda: row.ayuda,
+      // Pedido humano 2026-08-18: SIEMPRE se emite, el `0` incluido. Es un valor CONOCIDO
+      // («nadie lo ha intentado todavia»), no un dato ausente.
+      intentosContacto: row.intentosContacto,
       causa: causas.get(row.id)?.causa ?? null,
       // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone.
       intentosEntrega: intentos.get(row.id) ?? 0,
     }));
-
-    return { status: "ok", items, total, page, pageSize };
   }
 }
 

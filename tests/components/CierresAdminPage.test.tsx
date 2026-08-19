@@ -34,6 +34,9 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   listarCierresAdmin: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
@@ -56,11 +59,20 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
     pageSize: 25,
     total: 0,
   })),
+  // Pedido humano del 2026-08-16: la página resuelve también el catálogo de los filtros
+  // (bodegas destino y mensajeros del alcance), en el mismo `Promise.all` que las dos páginas.
+  obtenerCatalogoFiltrosCierres: vi.fn(async () => ({
+    status: "ok" as const,
+    catalogo: { zonas: [], mensajeros: [] },
+  })),
 }));
 // Feature 40: la página, role-aware, pre-fetch los datos de cierre de bodega por rol
 // (adminSatelite → consolidación; maestro → cola/histórico). Se mockean para aislar
 // el control de acceso de la 38; por defecto `forbidden` → no se renderiza la sección.
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   listarConsolidacion: vi.fn(),
   listarCierresBodegaAdmin: vi.fn(),
   solicitarCierreBodega: vi.fn(),
@@ -192,7 +204,17 @@ describe("CierresAdminPage — control de acceso por rol (R1)", () => {
     expect(
       screen.getByRole("region", { name: "Pendientes de decisión" }),
     ).toBeInTheDocument();
+
+    // Pedido humano del 2026-08-16: la pantalla se divide en BODEGA / MENSAJERO, y dentro de
+    // cada una en PENDIENTES / RESUELTOS. Al entrar se ve «Mensajero → Pendientes», que es lo
+    // que esta pantalla dice ser; el histórico está a un clic, y este caso lo da para
+    // comprobar que sigue estando y que el conmutador es el que lo trae.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
     expect(screen.getByRole("region", { name: "Histórico" })).toBeInTheDocument();
+
+    // Y las dos mitades existen: el conmutador de arriba ofrece la de bodega.
+    expect(screen.getByRole("group", { name: "Tipo de cierre" })).toBeInTheDocument();
   });
 
   it("R1: el rol adminSatelite ve el módulo", async () => {

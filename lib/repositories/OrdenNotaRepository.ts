@@ -87,6 +87,8 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
         tiendaId: true,
         mensajeroAsignadoId: true,
         deletedAt: true,
+        // 2026-08-18: la ventana del adminTienda tambien se abre con una solicitud de ayuda viva.
+        ayuda: true,
         estatus: { select: { value: true } },
       },
     });
@@ -95,6 +97,7 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
       tiendaId: orden.tiendaId,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
       estatusValue: orden.estatus.value,
+      ayuda: orden.ayuda,
       deletedAt: orden.deletedAt,
     };
   }

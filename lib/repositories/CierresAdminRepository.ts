@@ -22,8 +22,19 @@ import type {
   IngresoOrdenexDTO,
   TarifaSnapshotDTO,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+  FiltrosDescargaGestiones,
+} from "@/lib/types/filtros-cierres";
+import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
+
+/** Valores de rol que este catálogo consulta. Salen del seed, no se inventan aquí. */
+const ROL_ADMIN_SATELITE = "adminSatelite";
+const ROL_MENSAJERO = "mensajero";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
@@ -63,9 +74,13 @@ const CAJA_COD_FEED: ICajaCodFeedService = new CajaCodFeedService();
 // Feature 42/T8: la resolucion del cierre ahora orquesta una transaccion (para alimentar
 // la wallet atomicamente al aprobar, R5/R7) -> el cliente necesita `$transaction`.
 // Feature 69/T18: el detalle del admin sale del SNAPSHOT -> necesita `cierreDetail`.
+// `zona` y `usuario` entran por el CATÁLOGO de los filtros (pedido humano del 2026-08-16), que
+// es una lectura de SOLO CATÁLOGO: proyecta `{id, nombre}` (y la zona del mensajero) y nada más.
+// Siguen siendo los únicos delegados que este repositorio puede tocar: el `Pick` es la lista, y
+// ampliarla es una decisión que se ve en el diff.
 type CierresAdminPrismaClient = Pick<
   PrismaClient,
-  "cierreDia" | "gestionOrden" | "cierreDetail" | "$transaction"
+  "cierreDia" | "gestionOrden" | "cierreDetail" | "zona" | "usuario" | "$transaction"
 >;
 
 // Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
@@ -170,7 +185,10 @@ function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
  * resultado (una entrega no tiene flete de devolucion). Eso es distinto de "0.00", que es un
  * monto real. El `total` suma solo los presentes.
  */
-function toIngresoOrdenex(g: GestionAdminRow, d: DetalleAdminRow): IngresoOrdenexDTO {
+function toIngresoOrdenex(
+  g: Pick<GestionAdminRow, "resultado">,
+  d: DetalleAdminRow,
+): IngresoOrdenexDTO {
   const tarifa = tarifaDe(d);
   const montoCobrar = decimalToString(d.montoCobrar);
   const derivado = derivarIngresoOrden(
@@ -342,6 +360,51 @@ function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; 
 }
 
 /**
+ * Pedido humano del 2026-08-16 — el WHERE de los FILTROS del listado (fecha, bodega destino,
+ * mensajero), declarado UNA vez para los cuatro caminos que leen estos listados: las dos
+ * paginas y los dos conjuntos de los que salen los archivos.
+ *
+ * TRES cosas que este bloque hace y que no son adorno:
+ *
+ *  1. **Recorta, no reabre.** Lo que devuelve se compone con `alcanceWhere` en el MISMO objeto,
+ *     y las claves no chocan: el alcance escribe `destinoTipo`/`destinoZonaId` (escalares) y el
+ *     filtro escribe `destinoZonaId: { in: [...] }`... que SI chocaria. Por eso el filtro de
+ *     zona NO se escribe como clave hermana: va dentro de un `AND`, que es la unica forma de
+ *     que las dos condiciones se exijan A LA VEZ. Un `adminSatelite` que pida la zona del
+ *     vecino obtiene la interseccion —vacio—, nunca la zona del vecino.
+ *  2. **Las fechas son de CALENDARIO DE COSTA RICA**, no instantes UTC. `solicitadoAt` es un
+ *     instante; «del 1 al 3» significa desde el inicio del 1 en CR hasta el inicio del 4 en CR,
+ *     y por eso el limite superior es `lt` del dia SIGUIENTE y no `lte` del mismo dia: con
+ *     `lte` se perderian los cierres solicitados entre las 00:00 y las 23:59:59.999 del ultimo
+ *     dia del rango, que es justo el dia que el usuario acaba de pedir.
+ *  3. **Se filtra por `solicitadoAt`**, la fecha por la que estos listados ya se ordenaban y la
+ *     unica que TODOS los cierres tienen: filtrar la cola por `resueltoAt` la dejaria siempre
+ *     vacia, porque un cierre sin resolver no tiene esa fecha.
+ */
+export function filtrosWhere(filtros: FiltrosCierres | undefined): Prisma.CierreDiaWhereInput[] {
+  if (!filtros) return [];
+  const condiciones: Prisma.CierreDiaWhereInput[] = [];
+
+  if (filtros.desde !== undefined || filtros.hasta !== undefined) {
+    condiciones.push({
+      solicitadoAt: {
+        ...(filtros.desde !== undefined ? { gte: inicioDelDiaCREnUtc(filtros.desde) } : {}),
+        ...(filtros.hasta !== undefined
+          ? { lt: inicioDelDiaSiguienteCREnUtc(filtros.hasta) }
+          : {}),
+      },
+    });
+  }
+  if (filtros.destinoZonaIds !== undefined) {
+    condiciones.push({ destinoZonaId: { in: [...filtros.destinoZonaIds] } });
+  }
+  if (filtros.mensajeroIds !== undefined) {
+    condiciones.push({ mensajeroId: { in: [...filtros.mensajeroIds] } });
+  }
+  return condiciones;
+}
+
+/**
  * Feature 184 — Tanda D (R16) — el ORDEN de los cierres del dia del admin, declarado UNA vez.
  *
  * Lo comparten los CINCO caminos que leen este listado: el listado sin paginar, las dos
@@ -364,10 +427,17 @@ const ORDEN_CIERRES_ADMIN = { solicitadoAt: "desc" } as const satisfies Prisma.C
  * `in: ["aprobado","rechazado"]` un estado nuevo del enum desapareceria de las dos listas en
  * vez de caer en el historico.
  */
-function historicoWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+function historicoWhere(
+  alcance: Alcance,
+  filtros?: FiltrosCierres,
+): Prisma.CierreDiaWhereInput {
+  const recortes = filtrosWhere(filtros);
   return {
     ...alcanceWhere(alcance), // R2/R13: el alcance, en el WHERE y nunca en memoria
     estado: { notIn: [...ESTADOS_COLA_CIERRE_DIA] },
+    // Sin filtros, `AND: []` no se escribe: el criterio queda IDENTICO al de antes del
+    // 2026-08-16, byte a byte, y los `*-where.test.ts` que fijan su valor absoluto lo prueban.
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
   };
 }
 
@@ -381,12 +451,174 @@ function historicoWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
  * las dos — y en esta cola «caerse» significa que un cierre `vencido` deja de verse, con la
  * bodega de su mensajero bloqueada hasta que alguien lo note.
  */
-function colaWhere(alcance: Alcance): Prisma.CierreDiaWhereInput {
+function colaWhere(alcance: Alcance, filtros?: FiltrosCierres): Prisma.CierreDiaWhereInput {
+  const recortes = filtrosWhere(filtros);
   return {
     ...alcanceWhere(alcance),
     estado: { in: [...ESTADOS_COLA_CIERRE_DIA] },
+    ...(recortes.length > 0 ? { AND: recortes } : {}),
   };
 }
+
+/**
+ * Feature 230 (T2.1/T7.1, R22/R41) — proyeccion de una gestion para la HOJA FUNDIDA.
+ *
+ * Es `GESTION_ADMIN_SELECT` con dos diferencias, y las dos son requisitos:
+ *
+ *  1. **NO selecciona `evidenciaStoragePath`.** No basta con no emitirlo: no se lee. Un campo
+ *     que la consulta no trae no puede acabar en el DTO por descuido, ni ser firmado «de paso»
+ *     (R22/R41). Lo atornilla `cierres-admin-gestiones-where.test.ts`, que compara esta lista de
+ *     claves contra la del detalle y falla si la evidencia reaparece o si la del detalle crece
+ *     sin que nadie decida si esta tambien debe crecer.
+ *  2. **Sube al cierre** por `mensajeroNombre` y `solicitadoAt` (R8/R11). La descarga de hoy es
+ *     de UN cierre y el mensajero va en el nombre del archivo; al cruzar cierres, sin esas dos
+ *     celdas las filas no se distinguen.
+ *
+ * Se declara UNA vez y la usan los DOS repositorios (design §10, riesgo 4): dos proyecciones
+ * paralelas es exactamente como el mismo mensajero acaba saliendo con filas distintas segun
+ * desde que pantalla se descargue.
+ */
+export const GESTION_DESCARGA_SELECT = {
+  id: true,
+  ordenId: true,
+  // El grano de `cierre_detail` es (cierre_id, orden_id): una MISMA orden puede aparecer en
+  // varios cierres. Al cruzar cierres, emparejar solo por `orden_id` cogeria la fila congelada
+  // del cierre equivocado. NO se emite: es la clave del join, no una celda (R42).
+  cierreId: true,
+  resultado: true,
+  montoRecibido: true,
+  metodoPago: true,
+  motivo: true,
+  fechaReprogramacion: true,
+  pagoMensajero: true,
+  ingresoBodegaRechazo: true,
+  causaIncidente: true,
+  indemnizacion: true,
+  pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
+  historialEstados: {
+    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA },
+    take: 1,
+    select: { origenTipo: true },
+  },
+  // R8/R11: la identidad del CIERRE al que pertenece la gestion.
+  cierre: { select: { solicitadoAt: true, mensajero: { select: { nombre: true } } } },
+} as const;
+
+type GestionDescargaRow = Prisma.GestionOrdenGetPayload<{
+  select: typeof GESTION_DESCARGA_SELECT;
+}>;
+
+/**
+ * Feature 230 (T2.1/T7.1, R26/R42/R43) — gestion + snapshot congelado -> la fila del DTO de la
+ * hoja fundida.
+ *
+ * Gemelo de `toPendienteRowDesdeSnapshot` y con las MISMAS derivaciones (`decimalToString`,
+ * `toLineasPago`, `esRechazoSla`, `toIngresoOrdenex`), pero NO es aquel con campos de menos:
+ * es otro DTO. Lo que sale y lo que NO sale son requisitos verificables —sin uuid (R42), sin
+ * nada de evidencia (R41), con mensajero y fecha del cierre (R8/R11)—, y un DTO que los
+ * declarara opcionales no los sostendria.
+ *
+ * Exportado como su gemelo y por el mismo motivo: lo usan los DOS repositorios de admin, y
+ * compartir el mapper —no copiarlo— es lo que impide que las dos salidas divergan (R26).
+ */
+export function toGestionDescargaDTO(
+  g: GestionDescargaRow,
+  d: DetalleAdminRow,
+): CierreGestionDescargaDTO {
+  // `cierre` es nullable en el modelo (una gestion del dia aun sin cerrar tiene `cierre_id`
+  // NULL), pero los DOS caminos de esta feature exigen el cierre en su WHERE. Si llega null,
+  // el WHERE dejo de acotar y la fila no tiene ni mensajero ni fecha que emitir: se LANZA con
+  // contexto, no se rellena con un texto vacio que se leeria como «sin mensajero».
+  if (g.cierre === null) {
+    throw new Error(`gestion ${g.id} sin cierre: la proyeccion de descarga exige cierre_id`);
+  }
+  return {
+    mensajeroNombre: g.cierre.mensajero.nombre,
+    cierreSolicitadoAt: g.cierre.solicitadoAt.toISOString(),
+    numGuia: d.numGuia,
+    numRemision: d.numRemision,
+    destinatario: d.destinatario,
+    direccion: d.direccion,
+    zonaNombre: d.zonaNombre,
+    provinciaNombre: d.provinciaNombre,
+    cantonNombre: d.cantonNombre,
+    distritoNombre: d.distritoNombre,
+    producto: d.producto,
+    tiendaNombre: d.tiendaNombre,
+    resultado: g.resultado,
+    montoRecibido: decimalToString(g.montoRecibido),
+    pagos: toLineasPago(g.pagos),
+    motivo: g.motivo,
+    fechaReprogramacion: g.fechaReprogramacion
+      ? g.fechaReprogramacion.toISOString().slice(0, 10)
+      : null,
+    esRechazoSla: esRechazoSla(g.historialEstados),
+    causaIncidente: g.causaIncidente,
+    // R47: `null` = todavia sin capturar. NUNCA se sustituye por cero, que diria lo contrario.
+    indemnizacion: decimalToString(g.indemnizacion),
+    pagoMensajero: decimalToString(g.pagoMensajero),
+    ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
+    ingresoOrdenex: toIngresoOrdenex(g, d),
+  };
+}
+
+/**
+ * Feature 230 (T2.1/T7.1) — el snapshot congelado con su clave de join COMPLETA.
+ *
+ * Es `DETALLE_ADMIN_SELECT` mas `cierreId`, y no es cosmetico: el grano de `cierre_detail` es
+ * `(cierre_id, orden_id)`, asi que en una lectura de UN cierre basta la orden —es lo que hacen
+ * los dos detalles de admin—, pero al CRUZAR cierres el `orden_id` deja de ser unico y el
+ * emparejamiento cogeria la fila congelada del cierre equivocado. Con montos dentro.
+ */
+export const DETALLE_DESCARGA_SELECT = {
+  ...DETALLE_ADMIN_SELECT,
+  cierreId: true,
+} as const;
+
+type DetalleDescargaRow = Prisma.CierreDetailGetPayload<{
+  select: typeof DETALLE_DESCARGA_SELECT;
+}>;
+
+/**
+ * Feature 230 (T2.1/T7.1, R26) — empareja cada gestion con su fila congelada y proyecta el DTO.
+ *
+ * Declarada UNA vez para los dos repositorios: el emparejamiento por `(cierreId, ordenId)` y el
+ * criterio de «falta la fila congelada» son lo que las dos salidas tienen que compartir para no
+ * divergir (R26).
+ *
+ * **`CierreDetalleFaltanteError` se conserva como error DURO**, igual que en los dos detalles de
+ * admin, y a proposito: un fallback que compusiera la fila con datos VIVOS mostraria valores de
+ * HOY disfrazados de congelados —justo el camino de lectura que la feature 69 vino a matar—.
+ * El riesgo asumido CRECE aqui y se documenta (design §10.2): antes tumbaba el detalle de un
+ * cierre abierto a mano; ahora, un solo cierre corrupto tumba la descarga de un rango de meses.
+ * Es riesgo aceptado y declarado, no un descuido.
+ */
+export function componerGestionesDescarga(
+  gestiones: GestionDescargaRow[],
+  detalle: DetalleDescargaRow[],
+): CierreGestionDescargaDTO[] {
+  const porCierreYOrden = new Map(detalle.map((d) => [`${d.cierreId}:${d.ordenId}`, d]));
+  return gestiones.map((g) => {
+    const d = porCierreYOrden.get(`${g.cierreId}:${g.ordenId}`);
+    if (d === undefined) throw new CierreDetalleFaltanteError(g.cierreId ?? "", g.ordenId);
+    return toGestionDescargaDTO(g, d);
+  });
+}
+
+/**
+ * Feature 230 (T2.1/T7.1, R11) — el ORDEN de la hoja fundida, declarado UNA vez para los dos
+ * caminos.
+ *
+ * Primera clave: `ORDEN_CIERRES_ADMIN` ELEVADO a la relacion, para que los cierres salgan en el
+ * mismo orden en que el listado los enseña. Segunda: el `createdAt desc` con que el detalle de
+ * un cierre presenta sus gestiones, para que dentro de cada cierre el archivo diga lo mismo que
+ * la pantalla. Las dos juntas son R11: un orden DETERMINISTA y explicable, no el que la base
+ * quiera devolver.
+ */
+export const ORDEN_GESTIONES_DESCARGA = [
+  { cierre: ORDEN_CIERRES_ADMIN },
+  { createdAt: "desc" },
+] as const satisfies Prisma.GestionOrdenOrderByWithRelationInput[];
 
 /**
  * Feature 38 — repositorio de "Cierres del dia" del admin. SOLO queries Prisma. El
@@ -477,9 +709,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * sea el segmento N de este conjunto (R5). UNA consulta y ninguna mas (R15): el `count` de la
    * pagina no viaja aqui, porque el total de un conjunto sin recorte es su longitud.
    */
-  async findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+  async findHistoricoCompleto(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: historicoWhere(alcance),
+      where: historicoWhere(alcance, filtros),
       orderBy: ORDEN_CIERRES_ADMIN,
       select: CIERRE_RESUMEN_SELECT,
     });
@@ -499,9 +734,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * conjuntos salen de esas dos funciones. Ninguna fila puede quedar en las dos listas ni
    * caerse de las dos.
    */
-  async findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
+  async findColaCompleta(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: colaWhere(alcance),
+      where: colaWhere(alcance, filtros),
       orderBy: ORDEN_CIERRES_ADMIN,
       select: CIERRE_RESUMEN_SELECT,
     });
@@ -519,11 +757,12 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async findHistoricoPaginado(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
     // Feature 184/R16: el criterio sale de `historicoWhere`, la MISMA declaracion que usa el
     // conjunto completo del que sale el archivo. Estaba escrito aqui y habria que haberlo
     // escrito otra vez alli.
-    const where = historicoWhere(alcance);
+    const where = historicoWhere(alcance, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
@@ -554,9 +793,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async findColaPaginada(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>> {
     // Feature 184/R16: mismo criterio compartido que el conjunto completo de esta cola.
-    const where = colaWhere(alcance);
+    const where = colaWhere(alcance, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
@@ -568,6 +808,69 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       this.prisma.cierreDia.count({ where }), // R41: el total del CONJUNTO, no de la pagina
     ]);
     return { items: rows.map(toResumenRow), total };
+  }
+
+  /**
+   * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de esta pantalla, con las reglas
+   * que el humano fijó ese mismo día:
+   *
+   *   BODEGAS: es un filtro por ZONA, y solo se listan las zonas que pueden SER una bodega —las
+   *   que tienen un `adminSatelite` asignado— más la CENTRAL (la GAM). Una zona sin admin de
+   *   zona no es una bodega satélite operativa: ofrecerla sería un nombre que nunca devuelve
+   *   nada. La central entra siempre, porque es el destino de los cierres que no van a satélite.
+   *   (`esCentral` es la columna que la feature 54 renombró desde `es_gam`: misma zona, otro
+   *   nombre. Aquí importa porque «GAM» sigue siendo como el humano la llama.)
+   *
+   *   MENSAJEROS: TODOS los del rol, sin filtrar por estado. Un mensajero dado de baja sigue
+   *   siendo dueño de sus cierres pasados, y excluirlo haría esos cierres imposibles de filtrar
+   *   en el histórico —la misma trampa que la feature 144 declaró para las cuentas de tienda—.
+   *   Cada uno viaja con SU zona: es lo que permite que elegir una bodega recorte la lista de
+   *   mensajeros a los de esa zona (el `parentValue` del filtro dependiente).
+   *
+   * EL ALCANCE SE SIGUE APLICANDO, y aquí hay que ponerlo a mano porque este catálogo ya no se
+   * deriva de los cierres: un `adminSatelite` solo ve SU zona y los mensajeros de SU zona. Sin
+   * esa acotación, su selector le ofrecería el nombre de la bodega vecina y de su gente —que no
+   * devolvería ni una fila, porque el filtro se cruza con el alcance en el `WHERE`, pero le
+   * enseñaría una lista de nombres que no le corresponde ver—.
+   */
+  async findCatalogoFiltros(alcance: Alcance): Promise<CatalogoFiltrosCierresDTO> {
+    // El acceso total (`destinoZonaId === null`) ve el catálogo entero; el satélite, la suya.
+    const zonaDelActor = alcance.destinoZonaId;
+    const [zonas, mensajeros] = await Promise.all([
+      this.prisma.zona.findMany({
+        where:
+          zonaDelActor !== null
+            ? { id: zonaDelActor }
+            : {
+                OR: [
+                  { esCentral: true }, // la GAM
+                  { usuarios: { some: { rol: { value: ROL_ADMIN_SATELITE } } } },
+                ],
+              },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: "asc" }, // orden determinista
+      }),
+      this.prisma.usuario.findMany({
+        where: {
+          rol: { value: ROL_MENSAJERO },
+          ...(zonaDelActor !== null ? { zonaId: zonaDelActor } : {}),
+        },
+        // Proyección mínima: id, nombre y su zona. NUNCA email, teléfono, cédula ni hash.
+        select: { id: true, nombre: true, zonaId: true },
+        orderBy: { nombre: "asc" },
+      }),
+    ]);
+
+    return {
+      zonas,
+      mensajeros: mensajeros.map((m: { id: string; nombre: string; zonaId: string | null }) => ({
+        id: m.id,
+        nombre: m.nombre,
+        // `null` = mensajero sin zona asignada (la columna es nullable). Se ofrece igual: sus
+        // cierres existen. Lo que no puede es colgar de ninguna bodega en el encadenado.
+        zonaId: m.zonaId,
+      })),
+    };
   }
 
   /**
@@ -615,6 +918,53 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   }
 
   /**
+   * Feature 230 — Tanda 2 (T2.1, R11/R13/R14/R15/R22/R24/R41) — TODAS las gestiones de los
+   * cierres del dia que caen dentro del alcance del actor y de los recortes del dialogo.
+   *
+   * Es la mecanica de `findCierreByIdEnAlcance` —dos consultas, `gestion_orden` +
+   * `cierre_detail`, emparejadas por su clave, con error DURO si falta la fila congelada—
+   * llevada de UN cierre a MUCHOS, con tres diferencias que son requisitos:
+   *
+   *  1. **El alcance va en el WHERE, dentro de la relacion `cierre`** (R14/R15), exactamente
+   *     como ya hace `findGestionesIncidenteDelCierre`. Los recortes del dialogo se componen
+   *     como claves hermanas del mismo objeto, es decir por CONJUNCION: solo pueden QUITAR
+   *     filas del alcance, nunca ensancharlo (R37).
+   *  2. **`ORDEN_GESTIONES_DESCARGA`** (R11), que eleva a la relacion la MISMA constante de
+   *     orden del listado.
+   *  3. **`GESTION_DESCARGA_SELECT`, que NO lee `evidencia_storage_path`** (R22/R41).
+   *
+   * DOS consultas y no N+1: reusar el metodo por id en bucle costaria una consulta por cierre
+   * —y, en este camino, un lote de firma de URL por cierre— para tirar las URL despues.
+   */
+  async findGestionesPorAlcanceCompleto(
+    alcance: Alcance,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]> {
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: {
+        // El alcance y los recortes se componen con `AND`, EXACTAMENTE como `historicoWhere` y
+        // `colaWhere`: es la unica forma de que las dos condiciones se exijan a la vez. Como
+        // claves hermanas, un `mensajeroId` de recorte podria SUSTITUIR al del alcance en vez
+        // de sumarse — que es lo que la guardia `filtros-cierres-alcance` vigila arriba.
+        cierre: { ...alcanceWhere(alcance), AND: filtrosWhere(filtros) },
+      },
+      orderBy: [...ORDEN_GESTIONES_DESCARGA],
+      select: GESTION_DESCARGA_SELECT,
+    });
+    // Sin gestiones no hay snapshot que pedir: la segunda consulta se ahorra entera. No es una
+    // optimizacion cosmetica — `cierreId: { in: [] }` es una consulta que se paga para nada, y
+    // el conjunto vacio es el desenlace NORMAL de R38 (mensajero sin cierres o fuera de alcance).
+    if (gestiones.length === 0) return [];
+
+    const cierreIds = [...new Set(gestiones.map((g) => g.cierreId).filter((id) => id !== null))];
+    const detalle = await this.prisma.cierreDetail.findMany({
+      where: { cierreId: { in: cierreIds } },
+      select: DETALLE_DESCARGA_SELECT,
+    });
+    return componerGestionesDescarga(gestiones, detalle);
+  }
+
+  /**
    * R10-R15 + feature 42/T8 (R5/R7): transicion atomica guardada. Envuelta en
    * `$transaction`: mantiene el `updateMany` guardado (estado resoluble + alcance) y, SOLO
    * si la aprobacion se aplico (count===1 Y nuevoEstado==='aprobado'), alimenta la wallet
@@ -653,6 +1003,23 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // R5/R7: solo al APROBAR y si se aplico, construir e insertar los movimientos de
       // ingreso EN LA MISMA TX (todo-o-nada). `rechazado` no toca la wallet.
       if (res.count === 1 && nuevoEstado === "aprobado") {
+        // Pedido humano 2026-08-18 — APROBAR EL CIERRE ES LO QUE ABRE LA NOVEDAD. Las ordenes
+        // cuya gestion de ESTE cierre fue `devuelta` quedan con `gestion_aprobada = true`, que
+        // es la condicion que `OrdenRepository.novedadWhere` exige para listarlas en
+        // `/novedades`: hasta que el admin aprueba, la devolucion existe pero la tienda no la
+        // ve. Un RECHAZO no la enciende (esta rama es exclusiva de `aprobado`), asi que una
+        // devolucion de un cierre rechazado no llega nunca a la pantalla de la tienda.
+        //
+        // Va DENTRO de la misma tx que la transicion del cierre: o se aprueba y se abren las
+        // novedades, o no pasa ninguna de las dos cosas. Es money-neutral (solo toca
+        // `orden.gestion_aprobada`) y idempotente: re-aprobar encuentra las filas ya en `true`
+        // y no cambia nada. `cierreId` va en el WHERE como GUARDIA, no como filtro: sin el, la
+        // aprobacion de un cierre abriria devoluciones de otro.
+        await tx.orden.updateMany({
+          where: { gestiones: { some: { cierreId, resultado: "devuelta" } } },
+          data: { gestionAprobada: true },
+        });
+
         // Feature 158 (T1.14, R19-R22/R26): PRIMERO se persiste cada monto capturado, con
         // `cierreId` y `resultado` como GUARDIA del WHERE (no como filtro cosmetico): una
         // gestion de OTRO cierre, o que no sea `incidente`, no se puede tarifar. Si algun

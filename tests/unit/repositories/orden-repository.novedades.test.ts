@@ -13,10 +13,21 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 // La causa (R9) la sigue resolviendo `findCausasDevueltaVigentes` (sin cambios).
 
 // El `where` que ambos metodos DEBEN construir con el predicado anclado al estado real (§3.5).
+// Pedido humano 2026-08-18: el predicado pasa a tener DOS ramas. Una orden esta en `/novedades`
+// por REPOSAR en `devuelta` (R7) o por tener una SOLICITUD DE AYUDA viva, que la deja ahi aunque
+// siga en reparto. El `OR` conserva lo que R8 exige: `count` y `find` comparten el mismo `where`,
+// asi que total y pagina cuentan el mismo universo, y una orden que case por las DOS ramas
+// aparece UNA sola vez.
 const NOVEDAD_WHERE = {
   tiendaId: "tienda-1",
   deletedAt: null, // R8: excluye borradas
-  estatus: { value: "devuelta" }, // R7: solo mientras REPOSE en `devuelta`
+  OR: [
+    // R7 + pedido humano 2026-08-18: reposar en `devuelta` ya NO basta — hace falta ademas que la
+    // gestion se haya APROBADO en su cierre. Hasta entonces la devolucion existe pero su tienda
+    // no la ve.
+    { estatus: { value: "devuelta" }, gestionAprobada: true },
+    { ayuda: true }, // solicitud de ayuda viva, en cualquier estatus y sin pasar por esa puerta
+  ],
 };
 
 // 2026-08-13 (pedido humano) — fila TAL COMO LA DEVUELVE PRISMA para el `select` de
@@ -38,6 +49,8 @@ function prismaRow(overrides: Record<string, unknown> = {}) {
     latitud: new Prisma.Decimal("9.9333296"),
     longitud: new Prisma.Decimal("-84.0833282"),
     notas: "Tocar el timbre",
+    ayuda: false,
+    intentosContacto: 0,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     estatus: { value: "devuelta" },
     tienda: { nombre: "Tienda Uno" },
@@ -72,8 +85,12 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     expect(prisma.orden.count).toHaveBeenCalledWith({ where: NOVEDAD_WHERE });
 
     const { where } = prisma.orden.count.mock.calls[0][0];
-    // R7: la novedad es la orden que REPOSA en `devuelta` (estado real, no la gestion).
-    expect(where.estatus).toEqual({ value: "devuelta" });
+    // R7: la novedad SIGUE anclandose al estado real (no a la gestion vigente); desde 2026-08-18
+    // esa condicion vive en la primera rama del `OR` — y lleva pegada la aprobacion del cierre.
+    expect(where.OR[0]).toEqual({ estatus: { value: "devuelta" }, gestionAprobada: true });
+    // La SEGUNDA rama, y la unica que no mira el estatus: la solicitud de ayuda.
+    expect(where.OR[1]).toEqual({ ayuda: true });
+    expect(where.OR).toHaveLength(2);
     // R8: nunca cuenta borradas.
     expect(where.deletedAt).toBeNull();
   });
@@ -88,9 +105,10 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     // Ya no se filtra por gestion vigente: el ancla es el estado real.
     expect(where).not.toHaveProperty("gestiones");
     // Y no hay lista `notIn`: solo `estatus.value = "devuelta"`. Una orden liberada a
-    // `en_bodega_central`/`en_bodega_satelite` o escalada a `rechazada` deja de casar (sale de novedades).
-    expect(where.estatus.value).toBe("devuelta");
-    expect(where.estatus).not.toHaveProperty("notIn");
+    // `en_bodega_central`/`en_bodega_satelite` o escalada a `rechazada` deja de casar por la rama
+    // del estatus — y si no tiene ayuda pedida, tampoco por la otra: sale de novedades.
+    expect(where.OR[0].estatus.value).toBe("devuelta");
+    expect(where.OR[0].estatus).not.toHaveProperty("notIn");
   });
 });
 
@@ -125,6 +143,8 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
       latitud: true,
       longitud: true,
       notas: true,
+      ayuda: true,
+      intentosContacto: true,
       createdAt: true,
       estatus: { select: { value: true } },
       tienda: { select: { nombre: true } },
@@ -151,6 +171,32 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     expect(rows[0].producto).toBe("Zapatos");
     expect(rows[0].peso).toBe(1.5);
     expect(typeof rows[0].peso).toBe("number");
+  });
+
+  // Pedido humano 2026-08-18 — la fila lleva `ayuda` porque es una de las DOS razones por las
+  // que puede estar aqui, y la pantalla tiene que poder decir cual. Una orden que sigue EN
+  // REPARTO entra por esa rama: es el caso que antes de este pedido no existia.
+  it("la orden con ayuda pedida llega aunque NO este devuelta, y su `ayuda` cruza como true", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ ayuda: true, estatus: { value: "en_reparto" } }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].ayuda).toBe(true);
+    expect(rows[0].estatusValue).toBe("en_reparto");
+  });
+
+  it("sin ayuda pedida, el flag cruza como false (nunca undefined: la columna es NOT NULL)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([prismaRow()]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].ayuda).toBe(false);
   });
 
   it("peso nulo (carga masiva sin peso, feature 15/R4) sigue nulo: no se rellena con 0", async () => {
@@ -279,7 +325,7 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).not.toHaveProperty("gestiones");
-    expect(arg.where.estatus).toEqual({ value: "devuelta" });
+    expect(arg.where.OR[0]).toEqual({ estatus: { value: "devuelta" }, gestionAprobada: true });
   });
 });
 

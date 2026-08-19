@@ -11,18 +11,20 @@ import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 // Un mensajero NO elegible se muestra deshabilitado y con el motivo entre paréntesis, en
 // vez de desaparecer: el maestro sabe que existe y por qué no puede elegirlo ahora.
 //
-// `bloqueadosIds` (pedido admin_satelite): cierre abierto.
-// `noElegibles` (feature 157, regla de dedicación): motivo por mensajero — repartir y
-// recolectar son viajes incompatibles, así que cada modal pasa el suyo. El cierre gana
-// sobre la dedicación: es la condición que hay que resolver primero.
+// Pedido humano 2026-08-18 — SE RETIRA el deshabilitado por CIERRE ABIERTO (antes el primer
+// parámetro era un `bloqueadosIds` que ganaba sobre todo lo demás). El servicio ya no rechaza
+// a un mensajero por arrastrar un cierre abierto o vencido, y un selector que lo siguiera
+// deshabilitando prohibiría en la UI algo que el servidor acepta — que es peor que no avisar:
+// no hay forma de descubrir que la regla ya no existe.
+//
+// `noElegibles` (feature 157, regla de dedicación) SIGUE: repartir y recolectar son viajes
+// incompatibles y el service SIGUE rechazándolo, así que cada modal pasa el suyo.
 export function toMensajeroOptions(
   mensajeros: MensajeroLiteDTO[],
-  bloqueadosIds?: Set<string>,
   noElegibles?: ReadonlyMap<string, string>,
 ): SelectOption[] {
   return mensajeros.map((m) => {
-    const porCierre = bloqueadosIds?.has(m.id) ?? false;
-    const motivo = porCierre ? "cierre abierto" : noElegibles?.get(m.id);
+    const motivo = noElegibles?.get(m.id);
     return {
       value: m.id,
       label: motivo ? `${m.nombre} (${motivo})` : m.nombre,

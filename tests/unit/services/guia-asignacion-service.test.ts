@@ -574,8 +574,10 @@ describe("GuiaAsignacionService.generarGuia — validation_error si falta el see
 // Cero cambios de codigo en este metodo. Estos tests son la prueba de que las guardas que
 // `generarGuia` dejo de aplicar SIGUEN vivas donde si se asigna un mensajero.
 
-describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", () => {
-  it("R13: asignarDesdeBodega hacia mensajero bloqueado -> conflict, sin persistir", async () => {
+// Pedido humano 2026-08-18 — R13 RETIRADA. Este bloque afirmaba que asignar desde bodega a un
+// mensajero con cierre abierto daba `conflict`. Se invierte: la asignacion pasa.
+describe("GuiaAsignacionService — el cierre abierto YA NO bloquea (R13 retirada)", () => {
+  it("asignarDesdeBodega hacia un mensajero con cierre abierto -> persiste", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
@@ -585,11 +587,10 @@ describe("GuiaAsignacionService — bloqueo de mensajero (feature 41/R13/R23)", 
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m-bloq" }, MAESTRO);
 
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([{ ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" }]);
-    }
-    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(repo.asignarBodegaLote).toHaveBeenCalled();
+    // Ni siquiera se pregunta: la guarda se fue entera, no solo su efecto.
+    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
   });
 });
 
@@ -1066,7 +1067,9 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
     expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
   });
 
-  it("R7: mensajero con cierre pendiente -> conflict con motivo por orden, sin escribir", async () => {
+  // Pedido humano 2026-08-18 — R7 RETIRADA (misma decision que R13): un cierre abierto o vencido
+  // no impide mandar a alguien a recolectar.
+  it("mensajero con cierre pendiente -> se le asigna la recoleccion igual", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
@@ -1077,11 +1080,9 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
       MAESTRO,
     );
 
-    expect(r).toMatchObject({
-      status: "conflict",
-      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/cierre pendiente/i) }],
-    });
-    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(repo.asignarRecoleccionLote).toHaveBeenCalled();
+    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
   });
 
   it("R9: una orden SIN coordenadas SI se asigna (el gate no corre: no entra a ninguna ruta)", async () => {

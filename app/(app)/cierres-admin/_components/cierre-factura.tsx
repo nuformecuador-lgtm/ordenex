@@ -17,8 +17,12 @@ import { Card } from "@/components/ui/card";
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
 import { cn } from "@/lib/utils";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
-import type { CierreBodegaResumen } from "@/lib/interfaces/services/ICierreBodegaService";
 import type {
+  CierreBodegaResumen,
+  CierreBodegaResumenLite,
+} from "@/lib/interfaces/services/ICierreBodegaService";
+import type {
+  CierrePasadoDTO,
   CierreDetalleGestion,
   CierreGrupos,
   CierreResultado,
@@ -484,18 +488,34 @@ interface HojaResumenProps {
   /** Cola del nombre accesible del toggle ("Ver detalles <sufijo>"). */
   toggleSufijo: string;
   folio: string;
-  estado: CierreAdminResumen["estado"];
+  /**
+   * Ausente en un comprobante que NO tiene estado propio que mostrar: el `cierre_dia`
+   * consolidable es `aprobado` por definición del listado (40/R5), y pintar ese badge en cada
+   * tarjeta sería repetir el criterio de la consulta como si fuera un dato del cierre.
+   */
+  estado?: CierreAdminResumen["estado"];
   rotulo?: ReactNode;
   acciones?: ReactNode;
   partes: ParteComprobante[];
   totales: CierreAdminResumen["totales"];
   totalPagoMensajero: string;
   totalIngresoBodegaRechazos: string;
-  solicitadoAt: string;
-  resueltoAt: string | null;
-  motivoRechazo: string | null;
+  /** Ausente cuando el DTO del listado no las trae (consolidables): la columna no se pinta. */
+  solicitadoAt?: string;
+  resueltoAt?: string | null;
+  motivoRechazo?: string | null;
   /** Datos propios del comprobante (p. ej. cuántos cierres del día consolida). */
   extra?: ReactNode;
+  /**
+   * Para quién se pinta la hoja compacta, con el MISMO criterio que el detalle (design §7.2):
+   * en la vista del `mensajero` se cae el ingreso de bodega por rechazos —plata de la empresa,
+   * no suya— y su pago se rotula «Ganancia», como el resto de su pantalla.
+   *
+   * Importa más aquí que en el detalle, y por eso está escrito: en una TARJETA el desglose
+   * llega detrás de un desplegable, así que un dato que no le toca no se ve al primer vistazo
+   * —se ve al segundo—, que es exactamente la forma en que estas fugas pasan desapercibidas.
+   */
+  audiencia?: CierreFacturaAudiencia;
 }
 
 /**
@@ -520,8 +540,11 @@ function HojaResumen({
   resueltoAt,
   motivoRechazo,
   extra,
+  audiencia = "admin",
 }: Readonly<HojaResumenProps>) {
   const [open, setOpen] = useState(false);
+  // Design §7.2: en la hoja del mensajero no entra la plata de la empresa.
+  const esMensajero = audiencia === "mensajero";
 
   return (
     // gap-0/py-0: el padding lo ponen la cabecera y el panel; la franja de marca es el
@@ -559,7 +582,7 @@ function HojaResumen({
             <span className="font-mono text-xs text-muted-foreground">
               #{numeroFolio}
             </span>
-            <EstadoCierreBadge estado={estado} />
+            {estado ? <EstadoCierreBadge estado={estado} /> : null}
             {rotulo}
           </div>
 
@@ -644,28 +667,38 @@ function HojaResumen({
             <section aria-label={RESUMEN_AJUSTES_TITULO}>
               <TituloColumna>{RESUMEN_AJUSTES_TITULO}</TituloColumna>
               <LineaMonto
-                label={PAGO_MENSAJERO_LABEL}
+                label={etiquetaPago(esMensajero)}
                 monto={totalPagoMensajero}
+                ultima={esMensajero}
               />
-              <LineaMonto
-                label={INGRESO_BODEGA_RECHAZOS_LABEL}
-                monto={totalIngresoBodegaRechazos}
-                ultima
-              />
+              {/* El ingreso de bodega por rechazos es de la EMPRESA: fuera de la hoja del
+                  mensajero, igual que en su detalle (design §7.2). */}
+              {esMensajero ? null : (
+                <LineaMonto
+                  label={INGRESO_BODEGA_RECHAZOS_LABEL}
+                  monto={totalIngresoBodegaRechazos}
+                  ultima
+                />
+              )}
             </section>
 
-            <section aria-label={RESUMEN_FECHAS_TITULO}>
-              <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
-              <LineaFecha
-                label={FACTURA_SOLICITADO_LABEL}
-                value={fecha(solicitadoAt)}
-              />
-              <LineaFecha
-                label={FACTURA_RESUELTO_LABEL}
-                value={fecha(resueltoAt)}
-                ultima
-              />
-            </section>
+            {/* Sin `solicitadoAt` no hay columna que pintar: el DTO de los consolidables no
+                lleva fechas, y rellenarla con guiones diría «no tiene fecha» cuando lo cierto
+                es que este listado no la trae. */}
+            {solicitadoAt === undefined ? null : (
+              <section aria-label={RESUMEN_FECHAS_TITULO}>
+                <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
+                <LineaFecha
+                  label={FACTURA_SOLICITADO_LABEL}
+                  value={fecha(solicitadoAt)}
+                />
+                <LineaFecha
+                  label={FACTURA_RESUELTO_LABEL}
+                  value={fecha(resueltoAt ?? null)}
+                  ultima
+                />
+              </section>
+            )}
           </div>
           {extra}
         </div>
@@ -719,6 +752,80 @@ export function CierreBodegaFacturaResumen({
           </b>
         </p>
       }
+    />
+  );
+}
+
+export interface CierreFacturaResumenPropioProps {
+  cierre: CierrePasadoDTO;
+  /** Botonera de la fila equivalente en la tabla que reemplazó ("Ver detalle"). */
+  acciones?: ReactNode;
+}
+
+/**
+ * El comprobante compacto de un cierre PROPIO del mensajero (su histórico). Es el mismo de
+ * `CierreFacturaResumen` con una parte menos: el mensajero NO se lista, porque el cierre es
+ * suyo y decir su nombre en cada tarjeta de su propia pantalla no informa de nada. Tampoco
+ * hay nombre de zona destino —el DTO trae el id, no el nombre—, así que la parte del destino
+ * es el TIPO, exactamente lo que ya decía la columna «Destino» de la tabla.
+ */
+export function CierreFacturaResumenPropio({
+  cierre,
+  acciones,
+}: Readonly<CierreFacturaResumenPropioProps>) {
+  const dia = fecha(cierre.solicitadoAt);
+  return (
+    <HojaResumen
+      titulo={FACTURA_TITULO}
+      ariaLabel={`Comprobante de tu cierre del ${dia}`}
+      toggleSufijo={`de tu cierre del ${dia}`}
+      folio={folio(cierre.cierreId)}
+      estado={cierre.estado}
+      acciones={acciones}
+      partes={[
+        {
+          icon: <Warehouse size={14} aria-hidden="true" />,
+          texto: destino({ destinoTipo: cierre.destinoTipo }),
+        },
+        { icon: <Calendar size={14} aria-hidden="true" />, texto: dia },
+      ]}
+      totales={cierre.totales}
+      totalPagoMensajero={cierre.totalPagoMensajero}
+      totalIngresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
+      solicitadoAt={cierre.solicitadoAt}
+      resueltoAt={cierre.resueltoAt ?? null}
+      motivoRechazo={cierre.motivoRechazo ?? null}
+      audiencia="mensajero"
+    />
+  );
+}
+
+export interface CierreConsolidableFacturaResumenProps {
+  cierre: CierreBodegaResumenLite;
+}
+
+/**
+ * Un `cierre_dia` CONSOLIDABLE leído como comprobante: lo que el adminSatelite repasa antes
+ * de solicitar el cierre de su bodega. El DTO es el más pobre de los cuatro —mensajero y
+ * totales, nada más (40/R5)—, así que la hoja va sin estado y sin fechas: los tres son
+ * `aprobado` por definición del listado, y las fechas no viajan. Se pintan los mismos montos
+ * que enseñaban las siete columnas de la tabla, STRING de punta a punta.
+ */
+export function CierreConsolidableFacturaResumen({
+  cierre,
+}: Readonly<CierreConsolidableFacturaResumenProps>) {
+  return (
+    <HojaResumen
+      titulo={FACTURA_TITULO}
+      ariaLabel={`Comprobante del cierre de ${cierre.mensajeroNombre}`}
+      toggleSufijo={`del cierre de ${cierre.mensajeroNombre}`}
+      folio={folio(cierre.cierreDiaId)}
+      partes={[
+        { icon: <User size={14} aria-hidden="true" />, texto: cierre.mensajeroNombre },
+      ]}
+      totales={cierre.totales}
+      totalPagoMensajero={cierre.totalPagoMensajero}
+      totalIngresoBodegaRechazos={cierre.totalIngresoBodegaRechazos}
     />
   );
 }

@@ -65,9 +65,74 @@ function centimosDeLinea(linea: LineaEnEdicion): number {
   return aCentimos(montoDeTexto(linea.monto));
 }
 
-/** Texto que se pre-carga en el input a partir de un monto ya calculado. */
+/**
+ * UX de calle: la captura NO maneja decimales. El mensajero teclea con una mano y de pie, y un
+ * punto de mas convierte 8.000 en 8. Por eso lo que se pre-carga se redondea a unidad entera y
+ * lo que se teclea se filtra a digitos (`soloDigitos`).
+ *
+ * La aritmetica interna sigue en centimos (R11): el redondeo es de ENTRADA, no de calculo, para
+ * que este modulo siga cuadrando igual que `sumaCuadra` del borde si algun dia entran decimales
+ * por otra via.
+ */
 function textoDeMonto(monto: number): string {
-  return String(monto);
+  return String(Math.round(monto));
+}
+
+/**
+ * Filtra a digitos lo que se teclea en el input de monto: sin punto, sin coma, sin signo. Devuelve
+ * `""` para el campo vacio (que es un estado legitimo mientras se edita) y come los ceros a la
+ * izquierda para que no quede «08000» en pantalla.
+ */
+export function soloDigitos(texto: string): string {
+  const digitos = texto.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  return digitos;
+}
+
+/**
+ * Pedido humano (2026-08-14): TOPE de lo que cabe en la linea `indice`, que es lo que falta para
+ * el total contando SOLO las OTRAS lineas. Con un total de 1.000 y una primera linea de 700, la
+ * segunda no admite mas de 300.
+ *
+ * Se excluye la propia linea a proposito —mismo criterio que `opcionesPara` (R5)— porque el tope
+ * es lo que esa linea PUEDE llegar a valer, no lo que ya vale: incluirse a si misma congelaria el
+ * campo en cuanto la suma cuadrase y no se podria ni corregir a la baja.
+ *
+ * Nunca negativo: si las otras lineas ya cubren el total, el tope es 0.
+ */
+export function topeDeLinea(
+  lineas: readonly LineaEnEdicion[],
+  indice: number,
+  totalACobrar: number,
+): number {
+  const otras = lineas.reduce(
+    (acc, l, i) => (i === indice ? acc : acc + centimosDeLinea(l)),
+    0,
+  );
+  const margen = aCentimos(totalACobrar) - otras;
+  return margen > 0 ? margen / 100 : 0;
+}
+
+/**
+ * Lo que QUEDA en el input tras teclear: digitos (`soloDigitos`) y, como mucho, `topeDeLinea`.
+ *
+ * Acota en vez de rechazar la tecla. Teclear 2.000 donde caben 300 deja 300, no deja el campo
+ * como estaba: el mensajero ve el numero que el sistema acepta en lugar de pelearse con un campo
+ * que no reacciona. El `""` sobrevive intacto —es un estado legitimo mientras se edita (R13)—.
+ *
+ * Consecuencia deliberada: por esta via la suma YA NO PUEDE pasarse del total, asi que el
+ * descuadre que queda alcanzable desde la UI es solo el de MENOS. La regla del exceso sigue viva
+ * en `capturaCuadra`/`pendiente`, que es donde protege lo que llega por otros caminos.
+ */
+export function acotarMonto(
+  texto: string,
+  lineas: readonly LineaEnEdicion[],
+  indice: number,
+  totalACobrar: number,
+): string {
+  const digitos = soloDigitos(texto);
+  if (digitos === "") return "";
+  const tope = topeDeLinea(lineas, indice, totalACobrar);
+  return aCentimos(montoDeTexto(digitos)) > aCentimos(tope) ? textoDeMonto(tope) : digitos;
 }
 
 /** `true` si la linea no tiene NI metodo NI monto: la unica que se descarta ([Q2] de la 212). */
@@ -105,6 +170,27 @@ export function opcionesPara(lineas: readonly LineaEnEdicion[], indice: number):
 /** R3: no puede haber mas lineas que metodos en el catalogo. */
 export function puedeAnadirLinea(lineas: readonly LineaEnEdicion[]): boolean {
   return lineas.length < METODO_PAGO_SEED.length;
+}
+
+/**
+ * Pedido humano (2026-08-14): no queda NADA que repartir, porque lo capturado ya iguala —o
+ * supera— el total. La linea nueva nace de `pendiente`, que se acota a 0 (R4), asi que aqui
+ * solo podria nacer una linea de monto 0: una que no cobra nada y que, al enviarse, se para
+ * sola en `erroresDeLinea` con «Monto requerido». Ofrecerla es ofrecer un callejon sin salida.
+ *
+ * Es un `>=` deliberado, no un `>`: con la captura PASADA de rosca el problema no se arregla
+ * anadiendo otra linea, se arregla corrigiendo las que ya hay. Se lee del mismo `pendiente`
+ * que pre-carga el monto, para que el boton y lo que el boton haria no puedan divergir.
+ *
+ * DESHABILITA, no oculta —a diferencia del tope de catalogo (R3), que si esconde el control—:
+ * el mensajero tiene que poder ver que partir el cobro sigue siendo posible en cuanto baje el
+ * monto de una linea, no que la opcion desaparecio sin explicacion.
+ */
+export function sinPendiente(
+  lineas: readonly LineaEnEdicion[],
+  totalACobrar: number,
+): boolean {
+  return pendiente(lineas, totalACobrar) === 0;
 }
 
 /**

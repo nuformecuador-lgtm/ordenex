@@ -1,0 +1,11 @@
+-- Nueva columna `orden.intentos_contacto`: conteo de intentos de contacto que la TIENDA registra
+-- sobre una orden desde /novedades (boton «+1 intento de contacto»).
+--
+-- NOT NULL con DEFAULT 0, mismo criterio que `orden.ayuda` y que `orden.prioridad` (feature
+-- 101/R11): "todavia no lo intento nadie" ES cero, no "desconocido". El DEFAULT rellena las filas
+-- existentes en el propio ALTER, asi que NO hace falta backfill.
+--
+-- El contador es CUMULATIVO y NO se reinicia cuando la solicitud de ayuda se retira: cuenta
+-- intentos que de verdad ocurrieron, y borrarlos al apagar el flag convertiria un historial en un
+-- estado. Por el mismo motivo tampoco se reinicia al pedir ayuda de nuevo.
+ALTER TABLE "orden" ADD COLUMN "intentos_contacto" INTEGER NOT NULL DEFAULT 0;

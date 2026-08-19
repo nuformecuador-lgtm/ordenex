@@ -56,4 +56,22 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // (`CAUSA_DEVOLUCION_LABEL`) ocurre en el cliente (R11), NO en el DTO.
 export interface NovedadDTO extends MiAsignacionDTO {
   causa: GestionCausaDevolucion | null;
+  /**
+   * Pedido humano 2026-08-18 — intentos de contacto que ESTA tienda lleva registrados sobre la
+   * orden (`orden.intentos_contacto`), para el boton «+1 intento de contacto» y su contador.
+   *
+   * Campo PROPIO de este DTO y no de `MiAsignacionDTO`, igual que `causa`: lo registra y lo mira
+   * la tienda desde `/novedades`, y el portal del mensajero no lo pinta en ningun sitio. Meterlo
+   * en el contrato compartido obligaria a emitirlo en las dos listas del mensajero para que nadie
+   * lo lea.
+   *
+   * NO confundir con `intentosEntrega` (feature 160/215), que cuenta CIERRES APROBADOS con un
+   * resultado de gestion del mensajero. Este cuenta gestos de la TIENDA, se registra a mano y no
+   * deriva de ninguna gestion.
+   *
+   * Es CUMULATIVO: sobrevive a que la solicitud de ayuda se retire y no se reinicia al pedirla de
+   * nuevo. Cuenta intentos que ocurrieron, y un historial que se borra al cambiar de estado es un
+   * estado, no un historial.
+   */
+  intentosContacto: number;
 }

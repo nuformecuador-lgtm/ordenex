@@ -11,11 +11,19 @@ const VARS = [
   "GOOGLE_ROUTE_OPT_PROJECT_ID",
   "GOOGLE_ROUTE_OPT_SA_EMAIL",
   "GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY",
+  "GOOGLE_WIF_PROJECT_NUMBER",
+  "GOOGLE_WIF_POOL_ID",
+  "GOOGLE_WIF_PROVIDER_ID",
+  "GOOGLE_CLOUD_PROJECT_NUMBER",
+  "GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_ID",
+  "GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_PROVIDER_ID",
+  "GOOGLE_ROUTE_OPT_USE_ADC",
   "ROUTE_OPT_TIMEOUT_MS",
   "RUTA_DEBOUNCE_S",
   "RUTA_ORIGEN_TTL_MIN",
   "RUTA_SYNC_MIN_INTERVALO_S",
   "RUTA_MAX_PARADAS",
+  "ROUTES_ROUTING_PREFERENCE",
 ] as const;
 
 const original = new Map(VARS.map((v) => [v, process.env[v]]));
@@ -64,6 +72,59 @@ describe("R10 — secretos ausentes o vacios se resuelven a null", () => {
   });
 });
 
+describe("R10 — piezas de WIF: nombre canonico y alias del entorno ya desplegado", () => {
+  it("sin variables, las tres piezas WIF son null y ADC queda desactivado", () => {
+    limpiar();
+    const config = loadRouteOptimizationConfig();
+    expect(config.GOOGLE_WIF_PROJECT_NUMBER).toBeNull();
+    expect(config.GOOGLE_WIF_POOL_ID).toBeNull();
+    expect(config.GOOGLE_WIF_PROVIDER_ID).toBeNull();
+    expect(config.GOOGLE_ROUTE_OPT_USE_ADC).toBe(false);
+  });
+
+  it("los nombres GOOGLE_CLOUD_* del entorno ya desplegado valen como alias", () => {
+    // El `.env` de produccion nombra estas piezas asi desde antes de la feature 92. Aceptar
+    // el alias evita un renombrado coordinado en Vercel para encender WIF.
+    limpiar();
+    process.env.GOOGLE_CLOUD_PROJECT_NUMBER = "123456789012";
+    process.env.GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_ID = "vercel";
+    process.env.GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_PROVIDER_ID = "vercel";
+    const config = loadRouteOptimizationConfig();
+    expect(config.GOOGLE_WIF_PROJECT_NUMBER).toBe("123456789012");
+    expect(config.GOOGLE_WIF_POOL_ID).toBe("vercel");
+    expect(config.GOOGLE_WIF_PROVIDER_ID).toBe("vercel");
+  });
+
+  it("el nombre canonico GANA cuando estan los dos", () => {
+    limpiar();
+    process.env.GOOGLE_WIF_POOL_ID = "canonico";
+    process.env.GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_ID = "alias";
+    expect(loadRouteOptimizationConfig().GOOGLE_WIF_POOL_ID).toBe("canonico");
+  });
+
+  it("un canonico VACIO cede al alias (vacio == ausente, R10)", () => {
+    limpiar();
+    process.env.GOOGLE_WIF_POOL_ID = "";
+    process.env.GOOGLE_CLOUD_WORKLOAD_IDENTITY_POOL_ID = "alias";
+    expect(loadRouteOptimizationConfig().GOOGLE_WIF_POOL_ID).toBe("alias");
+  });
+
+  it.each([
+    ["true", true],
+    ["TRUE", true],
+    ["1", false],
+    ["yes", false],
+    ["false", false],
+    ["", false],
+  ])("GOOGLE_ROUTE_OPT_USE_ADC=%j -> %s", (valor, esperado) => {
+    // Solo "true" activa: el flag conmuta a ADC, que en Vercel NO funciona. Un valor
+    // ambiguo debe caer del lado seguro (produccion sigue en WIF).
+    limpiar();
+    process.env.GOOGLE_ROUTE_OPT_USE_ADC = valor;
+    expect(loadRouteOptimizationConfig().GOOGLE_ROUTE_OPT_USE_ADC).toBe(esperado);
+  });
+});
+
 describe("R10 — enteros: default ante ausente, vacio o invalido", () => {
   it("sin variables, cada entero toma su default documentado", () => {
     limpiar();
@@ -99,6 +160,35 @@ describe("R10 — enteros: default ante ausente, vacio o invalido", () => {
     const config = loadRouteOptimizationConfig();
     expect(config.RUTA_MAX_PARADAS).toBe(40);
     expect(config.RUTA_DEBOUNCE_S).toBe(30);
+  });
+
+  describe("ROUTES_ROUTING_PREFERENCE — enum con lista blanca", () => {
+    it("ausente -> TRAFFIC_UNAWARE (el SKU barato es el default)", () => {
+      limpiar();
+      expect(loadRouteOptimizationConfig().ROUTES_ROUTING_PREFERENCE).toBe("TRAFFIC_UNAWARE");
+    });
+
+    it("acepta los tres valores validos, sin distinguir mayusculas", () => {
+      for (const [entrada, esperado] of [
+        ["TRAFFIC_AWARE", "TRAFFIC_AWARE"],
+        ["traffic_aware_optimal", "TRAFFIC_AWARE_OPTIMAL"],
+        ["TRAFFIC_UNAWARE", "TRAFFIC_UNAWARE"],
+      ] as const) {
+        limpiar();
+        process.env.ROUTES_ROUTING_PREFERENCE = entrada;
+        expect(loadRouteOptimizationConfig().ROUTES_ROUTING_PREFERENCE).toBe(esperado);
+      }
+    });
+
+    it("un valor invalido cae al lado BARATO, no al caro", () => {
+      // Lo que importa aqui no es que se sanee, sino HACIA DONDE: un typo jamas debe subir
+      // de SKU y ponerse a facturar tarifa Advanced sin que nadie lo haya pedido.
+      for (const basura of ["TRAFFIC_AWERE", "si", "1", "TRAFFIC"]) {
+        limpiar();
+        process.env.ROUTES_ROUTING_PREFERENCE = basura;
+        expect(loadRouteOptimizationConfig().ROUTES_ROUTING_PREFERENCE).toBe("TRAFFIC_UNAWARE");
+      }
+    });
   });
 
   it("NINGUNA combinacion de entorno hace lanzar a loadRouteOptimizationConfig", () => {

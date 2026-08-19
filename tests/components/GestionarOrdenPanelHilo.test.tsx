@@ -97,6 +97,12 @@ const RUTA: RutaResumenDTO = {
   calculadaAt: null,
   origenFuente: "gps",
   paradasSinOptimizar: 0,
+  // Los dos campos de la feature 92 (trazado persistido y tramo vivo) nacieron en `ux`
+  // mientras este archivo nacia en `dev`, asi que el merge lo dejo corto: textualmente no
+  // habia conflicto, pero el tipo se habia hecho mas estricto por el otro lado. En `null`,
+  // igual que su hermano `MarcarLuegoToggle.test.tsx`: este test no va del mapa.
+  trazado: null,
+  tramoSiguiente: null,
 };
 
 /**

@@ -19,11 +19,6 @@ export interface AsignarSateliteModalProps {
   ordenes: RecepcionSateliteDTO[];
   /** Mensajeros de la zona del adminSatelite (ya scoped server-side, R5). */
   mensajeros: { id: string; nombre: string }[];
-  /**
-   * Pedido admin_satelite: ids de mensajeros con un cierre abierto. Se muestran
-   * deshabilitados en el selector (no asignables) para poder seguir asignando al resto.
-   */
-  mensajerosBloqueadosIds?: string[];
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -40,7 +35,6 @@ export function AsignarSateliteModal({
   open,
   ordenes,
   mensajeros,
-  mensajerosBloqueadosIds = [],
   onOpenChange,
   onSuccess,
 }: AsignarSateliteModalProps) {
@@ -63,10 +57,10 @@ export function AsignarSateliteModal({
   }
 
   const sinMensajeros = mensajeros.length === 0; // R6
-  const mensajeroOptions = toMensajeroOptions(
-    mensajeros,
-    new Set(mensajerosBloqueadosIds),
-  );
+  // Pedido humano 2026-08-18: ya no se deshabilita a nadie por tener un cierre abierto — el
+  // service dejo de rechazarlo. Este selector no tiene ninguna otra regla de elegibilidad (la
+  // dedicacion reparto/recoleccion es de la central), asi que va sin motivos.
+  const mensajeroOptions = toMensajeroOptions(mensajeros);
 
   async function handleConfirm() {
     if (!mensajeroId) {

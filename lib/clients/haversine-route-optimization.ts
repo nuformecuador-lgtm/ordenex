@@ -20,30 +20,9 @@ import type {
   OptimizarInput,
   OptimizarOutcome,
 } from "@/lib/interfaces/external/IRouteOptimizationClient";
-
-/** Radio medio de la Tierra en km. Constante para la formula Haversine. */
-const RADIO_TIERRA_KM = 6371;
-
-const gradosARadianes = (grados: number): number => (grados * Math.PI) / 180;
-
-/**
- * Distancia de circulo maximo (Haversine) entre dos puntos, en km. Solo se usa para
- * COMPARAR distancias, asi que el radio es indiferente al resultado del orden; se conserva
- * para que la funcion sea correcta y legible por si mismo.
- */
-function distanciaHaversineKm(
-  a: { lat: number; lng: number },
-  b: { lat: number; lng: number },
-): number {
-  const dLat = gradosARadianes(b.lat - a.lat);
-  const dLng = gradosARadianes(b.lng - a.lng);
-  const lat1 = gradosARadianes(a.lat);
-  const lat2 = gradosARadianes(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * RADIO_TIERRA_KM * Math.asin(Math.sqrt(h));
-}
+// La formula vive en `lib/geo/polilinea.ts` desde que el trazado local la necesito tambien.
+// Solo se usa para COMPARAR distancias, asi que el radio es indiferente al orden resultante.
+import { distanciaHaversineKm } from "@/lib/geo/polilinea";
 
 export class HaversineRouteOptimizationClient implements IRouteOptimizationClient {
   // La interfaz es async (un proveedor real hace red); aqui el calculo es local y sincrono,

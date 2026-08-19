@@ -11,7 +11,7 @@ import { codigoCssSinComentarios } from "../../fixtures/sin-comentarios";
  * Feature 224 — GUARDIA del bloque que hace que AL IMPRIMIR los tokens sean los CLAROS.
  *
  * La 221 apagó el variant `dark:` en papel; su guardia vive en `impresion-sin-dark.guardia.test.ts`.
- * Ésta vigila la otra mitad: el `@media print` que redeclara los 35 tokens claros para `.dark`,
+ * Ésta vigila la otra mitad: el `@media print` que redeclara los 50 tokens claros para `.dark`,
  * `body:has(> .dark)`, `.tema-sistema` y `body:has(> .tema-sistema)`.
  *
  * ── QUÉ VIGILA, Y POR QUÉ CADA COSA SE ROMPE EN SILENCIO
@@ -552,7 +552,7 @@ describe("feature 224 — en papel sin fondos, la tinta pasa a ser la clara", ()
 });
 
 /**
- * EL ROL de cada uno de los 35 tokens, escrito a mano porque NO está en el CSS y no se puede
+ * EL ROL de cada uno de los 50 tokens, escrito a mano porque NO está en el CSS y no se puede
  * derivar de él: que `--card` sea una superficie y `--card-foreground` una tinta es un hecho de
  * diseño, no una propiedad del hex.
  *
@@ -586,6 +586,23 @@ const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
   "--chart-3": "grafico",
   "--chart-4": "grafico",
   "--chart-5": "grafico",
+  // Los quince que amplian la paleta a veinte (2026-08-18). Mismo rol que los cinco
+  // primeros: son color de GRAFICO, no tinta ni superficie.
+  "--chart-6": "grafico",
+  "--chart-7": "grafico",
+  "--chart-8": "grafico",
+  "--chart-9": "grafico",
+  "--chart-10": "grafico",
+  "--chart-11": "grafico",
+  "--chart-12": "grafico",
+  "--chart-13": "grafico",
+  "--chart-14": "grafico",
+  "--chart-15": "grafico",
+  "--chart-16": "grafico",
+  "--chart-17": "grafico",
+  "--chart-18": "grafico",
+  "--chart-19": "grafico",
+  "--chart-20": "grafico",
   "--sidebar": "superficie",
   "--sidebar-foreground": "tinta",
   "--sidebar-primary": "tinta",
@@ -612,7 +629,7 @@ const ROL: Record<string, "tinta" | "superficie" | "linea" | "grafico"> = {
  * ⚠️ ESTA LISTA SE DERIVA, NO SE ELIGE. La primera versión la escribí a mano con cuatro filas y
  * **le faltaban dos** (`--sidebar-foreground` y `--sidebar-border`): una lista escrita a mano que
  * dice ser «lo que empeora» es una afirmación de censo sin censo, que es el mismo defecto que esta
- * ficha ya pagó con F4. Ahora el caso barre los 35 tokens, descarta los roles que no son
+ * ficha ya pagó con F4. Ahora el caso barre los 50 tokens, descarta los roles que no son
  * legibilidad, y **exige que lo que baje sea exactamente esta lista**.
  *
  * ── POR QUÉ NO SE ARREGLA AQUÍ, y por qué el caso mide las DOS columnas
@@ -639,7 +656,7 @@ const SE_PIERDE_EN_PAPEL = [
 
 describe("feature 224 — LO QUE EMPEORA: la tinta que se apoyaba en un fondo que no se imprime", () => {
   /**
-   * Autocomprobación del ROL: tiene que cubrir los 35 tokens del bloque, ni uno más ni uno menos.
+   * Autocomprobación del ROL: tiene que cubrir los 50 tokens del bloque, ni uno más ni uno menos.
    * Sin esto, un token nuevo se quedaría sin rol, el barrido de abajo lo saltaría y la lista
    * volvería a estar incompleta EN VERDE — que es justo lo que pasó la primera vez.
    */

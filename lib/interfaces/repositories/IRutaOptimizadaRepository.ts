@@ -20,8 +20,49 @@ export interface RutaOptimizadaDTO {
   origenFuente: OrigenFuente | null;
   huellaSet: string | null;
   ultimoError: string | null;
+  /**
+   * Trazado persistido de ESTA `huellaSet`. `null` si nunca se dibujo, si la secuencia se
+   * reemplazo despues (se limpia en la misma transaccion) o si el ultimo dibujo salio del
+   * fallback local, que NO se cachea.
+   */
+  trazado: TrazadoPersistido | null;
+  /**
+   * Instante del ultimo trayecto EN VIVO servido. `null` = nunca. Es el unico estado que
+   * acota ese gasto: a diferencia del trazado de la ruta, un trayecto que arranca en la
+   * posicion actual no se puede cachear, asi que cada peticion es una llamada facturada.
+   */
+  tramoVivoAt: Date | null;
   /** Posicion por `ordenId`. Una orden en reparto AUSENTE de este mapa esta sin optimizar. */
   secuenciaPorOrden: Map<string, number>;
+  /**
+   * Tramo que LLEGA a cada parada, por `ordenId`. Vacio mientras no se haya dibujado la ruta.
+   * Una orden puede estar en `secuenciaPorOrden` y no aqui: tiene posicion, pero su tramo aun
+   * no se calculo (o el trazado salio del fallback local, que no los produce).
+   */
+  tramoPorOrden: Map<string, TramoPersistido>;
+}
+
+/**
+ * Trazado tal y como vive en la fila. Es un ESPEJO de `TrazadoRuta` (capa de servicio), no el
+ * mismo tipo: el repositorio no debe importar de `lib/interfaces/services/`, y que la DB y el
+ * dominio compartan forma hoy no obliga a que la compartan siempre.
+ */
+export interface TrazadoPersistido {
+  encodedPolyline: string;
+  distanciaM: number | null;
+  duracionS: number | null;
+  /**
+   * Solo `"routes"` llega a persistirse (ver la migracion), pero el tipo admite `"local"`
+   * porque la columna es TEXT y una fila escrita por otra version del codigo podria traerlo.
+   */
+  fuente: "routes" | "local";
+}
+
+/** Un tramo del recorrido, guardado en la fila de la parada A LA QUE LLEGA. */
+export interface TramoPersistido {
+  encodedPolyline: string;
+  distanciaM: number | null;
+  duracionS: number | null;
 }
 
 /** Metadatos que acompanan a una secuencia recien calculada. */
@@ -63,11 +104,34 @@ export interface IRutaOptimizadaRepository {
    * persistir posiciones repetidas o la misma orden dos veces.
    *
    * `secuencia` son los `ordenId` EN ORDEN DE VISITA; la posicion es su indice + 1.
+   *
+   * LIMPIA el trazado persistido, en la MISMA transaccion. La polilinea vieja describe el
+   * orden viejo: servirla junto a una secuencia nueva seria peor que no tener linea, porque
+   * parece correcta. Se vuelve a llenar con `guardarTrazado` cuando el dibujo salga.
    */
   reemplazarSecuencia(
     mensajeroId: string,
     secuencia: string[],
     meta: ReemplazarSecuenciaMeta,
+  ): Promise<void>;
+
+  /**
+   * Persiste el trazado recien obtenido. `huellaSet` NO es informativo: la escritura solo se
+   * aplica si la cabecera SIGUE teniendo esa huella. Entre `reemplazarSecuencia` y esta
+   * llamada hay una llamada de red a Routes, y en esa ventana otro disparo (el cron, otra
+   * pestana) puede haber recalculado la ruta; sin la condicion, este trazado tardio se
+   * pegaria encima de una secuencia que ya no es la suya.
+   *
+   * No lanza si no aplica: que la ruta haya cambiado no es un error, es una carrera perdida.
+   *
+   * `tramos` va EN ORDEN DE VISITA y con exactamente un elemento por parada: el `i` se guarda
+   * en la parada de secuencia `i + 1`. Vacio deja las columnas de tramo como esten.
+   */
+  guardarTrazado(
+    mensajeroId: string,
+    huellaSet: string,
+    trazado: TrazadoPersistido,
+    tramos?: TramoPersistido[],
   ): Promise<void>;
 
   /**
@@ -77,4 +141,11 @@ export interface IRutaOptimizadaRepository {
    * no existia (un fallo en la primera optimizacion tambien debe quedar registrado).
    */
   marcarDesactualizada(mensajeroId: string, ultimoError: string): Promise<void>;
+
+  /**
+   * Sella el instante del ultimo trayecto en vivo. Se llama DESPUES de que la llamada al
+   * proveedor haya salido bien: sellar antes cobraria el intervalo por un intento fallido y
+   * dejaria al mensajero esperando sin haber recibido nada.
+   */
+  marcarTramoVivo(mensajeroId: string, at: Date): Promise<void>;
 }

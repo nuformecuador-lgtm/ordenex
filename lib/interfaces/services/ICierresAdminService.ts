@@ -1,10 +1,19 @@
+import type { MetodoPagoValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+  FiltrosDescargaGestiones,
+} from "@/lib/types/filtros-cierres";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
   CierreGrupos,
+  CierreResultado,
   CierreTotales,
+  IngresoOrdenexDTO,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 
@@ -104,6 +113,82 @@ export type ListarHistoricoCierresAdminCompletoServiceResult =
 export type ListarPendientesCierresAdminCompletoServiceResult =
   ListarCompletoServiceResult<CierreAdminResumen>;
 
+/**
+ * Feature 230 (T1.1, design §2.4) — UNA GESTION de un cierre, lista para proyectar a una fila
+ * de la HOJA FUNDIDA (la descarga detallada que cruza los cierres de varios mensajeros).
+ *
+ * Es el DTO COMPARTIDO por los DOS bordes de lectura de la feature —el de «cierres del dia»
+ * (`ICierresAdminService`) y el de «cierres de bodega» (`ICierresBodegaAdminService`, que lo
+ * importa de aqui)— para que las dos salidas emitan las MISMAS columnas desde la MISMA
+ * proyeccion (R26). Los dos listados son particiones DISJUNTAS del negocio (design §2.6), no
+ * dos vistas del mismo conjunto: por eso hay dos bordes y un solo DTO.
+ *
+ * **NO es `CierreDetalleGestion`** (design §2.5), y las diferencias son requisitos, no estilo:
+ *
+ *  - **Sin `evidenciaUrl` y sin NINGUN campo derivado de la evidencia** (R22/R40/R41). Aquel
+ *    lleva la URL FIRMADA, y una hoja reenviada por correo con ella dentro es acceso a la foto
+ *    sin sesion. La forma mas fuerte de cumplirlo es que el servidor no emita NADA relativo a
+ *    la evidencia por este camino —ni siquiera un booleano `tieneEvidencia`—: asi no hay campo
+ *    que manana pueda convertirse en columna por descuido. Lo cubre su test (T3.4c).
+ *  - **Sin `gestionId` ni `ordenId`** (R42): identificadores internos con forma de uuid. El
+ *    identificador de negocio de la fila es `numRemision`.
+ *  - **CON `mensajeroNombre` y `cierreSolicitadoAt`** (R8/R11): la descarga de hoy es de UN
+ *    cierre y el mensajero va en el NOMBRE del archivo; al cruzar cierres, sin esas dos celdas
+ *    las filas no se distinguen entre si.
+ *
+ * Money-safe (R43/R44): todo monto viaja como el STRING del snapshot TAL CUAL. Ni conversion
+ * numerica, ni simbolo de moneda, ni separador de miles, ni aritmetica.
+ *
+ * OJO, R3: nada de esto toca `TIENE_EVIDENCIA_COL/_SI/_NO` ni el helper `tieneEvidencia` de
+ * `cierre-gestiones-descarga-columnas.ts`, que siguen sirviendo a las CINCO descargas por
+ * seccion del detalle de un cierre. Solo la hoja fundida no los usa.
+ */
+export interface CierreGestionDescargaDTO {
+  // --- identidad del cierre al que pertenece la gestion (R8/R11) ---
+  mensajeroNombre: string;
+  /** ISO del `solicitado_at` del cierre; la fila lo emite como dia calendario. */
+  cierreSolicitadoAt: string;
+  // --- identidad de negocio de la gestion (SIN uuid, R42) ---
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  direccion: string | null;
+  zonaNombre: string;
+  provinciaNombre: string;
+  cantonNombre: string;
+  distritoNombre: string | null;
+  producto: string;
+  tiendaNombre: string;
+  resultado: CierreResultado;
+  // --- datos POR RAMA; money-safe STRING del snapshot, tal cual (R43/R44) ---
+  montoRecibido: string | null;
+  /** Desglose del recaudo (feature 212). `[]` cuando la gestion no tiene lineas de pago. */
+  pagos: { metodo: MetodoPagoValue; monto: string }[];
+  motivo: string | null;
+  /** Dia calendario `YYYY-MM-DD`; `null` fuera de `reprogramada`. */
+  fechaReprogramacion: string | null;
+  esRechazoSla: boolean;
+  causaIncidente: CausaIncidente | null;
+  /** `null` = todavia NO capturada (R47). No es cero: cero diria «no se indemniza». */
+  indemnizacion: string | null;
+  pagoMensajero: string | null;
+  ingresoBodegaRechazo: string | null;
+  /** `null` = la orden no tenia tarifa vigente al solicitar (gap conocido de la feature 69). */
+  ingresoOrdenex: IngresoOrdenexDTO | null;
+}
+
+/**
+ * Feature 230 (T1.1) — el conjunto de gestiones del que sale la hoja fundida, tal como lo
+ * devuelve cualquiera de los DOS servicios.
+ *
+ * Reusa el union comun de la 170 (`lib/types/descarga-listado.ts`), con su garantia escrita: ni
+ * `limite_excedido` ni `forbidden` llevan nunca `items`. El tope lo evalua el SERVICIO —el
+ * mismo `descargaConfig.MAX_FILAS` que sus dos hermanos, sin constante nueva (D13/R21)— y
+ * superarlo es un ERROR ACCIONABLE con los conteos, jamas un archivo truncado en silencio.
+ */
+export type ListarGestionesDescargaServiceResult =
+  ListarCompletoServiceResult<CierreGestionDescargaDTO>;
+
 // R6-R9/R13: detalle completo de UN cierre. Reusa CierreGrupos (grupos por
 // resultado) de la 37. `no_encontrada` = id inexistente o fuera de alcance (R13, no
 // se distingue). `forbidden` = rol invalido (R1).
@@ -202,7 +287,7 @@ export interface ICierresAdminService {
    * vacia (no hay alcance que consultar), igual que hoy.
    */
   listarHistoricoCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarHistoricoCierresAdminServiceResult>;
   /**
@@ -215,7 +300,7 @@ export interface ICierresAdminService {
    * `adminSatelite` sin zona -> pagina vacia sin tocar la base.
    */
   listarPendientesCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarPendientesCierresAdminServiceResult>;
   /**
@@ -223,13 +308,15 @@ export interface ICierresAdminService {
    * ARCHIVO de ese listado.
    *
    * MISMO `resolveAlcance` que la pagina —el rol y la zona salen del actor, nunca de la
-   * entrada— y MISMO corte cola/historico. No recibe input: este listado no tiene filtros, asi
-   * que su lista blanca (derivada de la de la pagina) no deja ninguna clave que transportar.
+   * entrada— y MISMO corte cola/historico. Recibe los MISMOS `filtros` que su pagina (pedido
+   * humano del 2026-08-16): el archivo es «esto que estoy viendo, entero», no «todo lo del
+   * alcance». Lo que no recibe es paginacion ni alcance.
    * Rol invalido -> `forbidden` ANTES de tocar el repositorio; `adminSatelite` sin zona ->
    * conjunto vacio sin consultar. Supera el tope -> `limite_excedido` con conteos y sin filas.
    */
   listarHistoricoCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarHistoricoCierresAdminCompletoServiceResult>;
   /**
    * Feature 184 — Tanda D (T D.2, R1/R4/R6): la COLA ENTERA de pendientes de decision del
@@ -237,7 +324,46 @@ export interface ICierresAdminService {
    */
   listarPendientesCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarPendientesCierresAdminCompletoServiceResult>;
+  /**
+   * Feature 230 — Tanda 2 (T2.2, R13/R14/R15/R16/R18/R20/R21/R22) — las GESTIONES de los
+   * cierres del dia del alcance del actor, a grano de GESTION, de las que sale la HOJA FUNDIDA.
+   *
+   * MISMO `resolveAlcance` que los cuatro listados de esta pantalla: el rol y la zona salen del
+   * ACTOR y jamas de la entrada (R15), y se componen con los recortes por CONJUNCION, de modo
+   * que `filtros` solo puede QUITAR filas dentro del alcance ya resuelto y nunca ensancharlo
+   * (R37: un `mensajeroIds` de otra zona cruza con el alcance y da vacio, no error).
+   *
+   * Mismo orden de desenlaces que sus hermanos: rol invalido -> `forbidden` ANTES de tocar el
+   * repositorio (R18); `adminSatelite` sin zona -> conjunto VACIO sin consultar la base y NO
+   * `forbidden` (R20); superar `descargaConfig.MAX_FILAS` -> `limite_excedido` con conteos y
+   * sin filas (R21).
+   *
+   * **NO firma ninguna URL de evidencia** (R22): el bloque `signedUrls.createSignedUrls` de
+   * `verCierreDetalle` no se copia aqui. Seria trabajo pagado en red para tirarlo despues, y
+   * ademas un agujero: la hoja no lleva columna de evidencia en absoluto.
+   *
+   * `filtros` es OBLIGATORIO y su `mensajeroIds` no admite lista vacia: el conjunto de esta
+   * descarga lo redacta el usuario en el dialogo (D5/D11), y «sin mensajeros elegidos» no es
+   * «todos», es «no descargues nada» (R39).
+   */
+  listarGestionesCierresAdminCompleto(
+    actor: Actor,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<ListarGestionesDescargaServiceResult>;
+  /**
+   * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de la pantalla (bodegas destino
+   * y mensajeros), ya acotadas al alcance del actor.
+   *
+   * Misma puerta y mismo orden que los listados: rol invalido -> `forbidden` antes de tocar el
+   * repositorio; `adminSatelite` sin zona -> catalogo VACIO, no `forbidden`.
+   */
+  obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<
+    { status: "ok"; catalogo: CatalogoFiltrosCierresDTO } | { status: "forbidden" }
+  >;
   /**
    * R6-R9/R13/R16: detalle completo de un cierre del alcance (gestiones agrupadas
    * por resultado, evidencias firmadas). Solo lectura. Fuera de alcance ->

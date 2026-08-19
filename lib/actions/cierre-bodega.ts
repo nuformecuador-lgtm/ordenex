@@ -28,6 +28,7 @@ import {
   type ListarConsolidablesCompletoResult,
   type ListarPendientesCierresBodegaCompletoResult,
   type ListarHistoricoCierresBodegaCompletoResult,
+  type ListarGestionesCierresBodegaCompletoResult,
   type SolicitarCierreBodegaResult,
   type ListarCierresBodegaAdminResult,
   type ListarCierresBodegaSolicitadosResult,
@@ -37,6 +38,7 @@ import {
   type AprobarCierreBodegaResult,
   type RechazarCierreBodegaResult,
 } from "@/lib/types/cierre-bodega";
+import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -257,9 +259,11 @@ export async function listarCierresBodegaSolicitadosCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    // Pedido humano del 2026-08-16: la lista blanca ya no esta vacia — trae `filtros`, y lo
+    // que valida se USA. Antes se parseaba y se tiraba, porque no habia nada que transportar.
+    const data = listarCierresBodegaSolicitadosCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
-    return service.listarCierresBodegaSolicitadosCompleto(actor);
+    return service.listarCierresBodegaSolicitadosCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -280,9 +284,9 @@ export async function listarConsolidablesCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarConsolidablesCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierreBodegaService ?? buildCierreBodegaService();
-    return service.listarConsolidablesCompleto(actor);
+    return service.listarConsolidablesCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -307,9 +311,9 @@ export async function listarPendientesCierresBodegaCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarPendientesCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
-    return service.listarPendientesCierresBodegaCompleto(actor);
+    return service.listarPendientesCierresBodegaCompleto(actor, data.filtros);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }
@@ -329,9 +333,37 @@ export async function listarHistoricoCierresBodegaCompleto(
   const r = await withErrorHandler(async () => {
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R7: antes de tocar el service
-    listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const data = listarHistoricoCierresBodegaCompletoSchema.parse(input); // ZodError -> VALIDATION_ERROR
     const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
-    return service.listarHistoricoCierresBodegaCompleto(actor);
+    return service.listarHistoricoCierresBodegaCompleto(actor, data.filtros);
+  });
+  return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
+}
+
+/**
+ * Feature 230 — Tanda 7 (T7.3, R13/R17/R19/R23/R32/R36) — el UNICO punto de entrada de servidor
+ * de la descarga DETALLADA del listado de cierres de BODEGA.
+ *
+ * Misma forma que su gemela de `cierres-admin` y con la MISMA lista blanca compartida
+ * (`filtrosDescargaGestionesSchema`): el actor ANTES de validar (R17), `.strict()` como unica
+ * defensa contra una clave ajena (R19) y el rango invertido muerto en el borde (R32).
+ *
+ * **`design.md §3.2` la situa en un `lib/actions/cierres-bodega-admin.ts`.** Ese archivo no
+ * existe en esta rama base: las Server Actions del lado maestro de los cierres de bodega viven
+ * aqui, junto a las del lado adminSatelite, con su `buildCierresBodegaAdminService` ya cableado.
+ * Se coloca donde estan sus hermanas —un modulo nuevo obligaria a duplicar el builder y el
+ * traductor de errores— y se deja anotado para el reviewer.
+ */
+export async function listarGestionesCierresBodegaCompleto(
+  input: unknown,
+  deps: CierreBodegaDeps = {},
+): Promise<ListarGestionesCierresBodegaCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R17: antes de parsear y antes del service
+    const data = filtrosDescargaGestionesSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.cierresBodegaAdminService ?? buildCierresBodegaAdminService();
+    return service.listarGestionesCierresBodegaCompleto(actor, data);
   });
   return isAppErrorShape(r) ? toCierreBodegaActionError(r) : r;
 }

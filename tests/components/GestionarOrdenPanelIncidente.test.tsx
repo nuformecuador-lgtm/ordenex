@@ -323,10 +323,14 @@ describe("R10 (Q-B) — la foto se exige en las TRES causas, también sin paquet
     await abrirIncidente(user);
 
     const input = screen.getByLabelText(LABEL_FOTO_INCIDENTE);
-    const ayudaId = input.getAttribute("aria-describedby");
-    expect(ayudaId, "el input de fotos no describe su ayuda").toBeTruthy();
-    const ayuda = document.getElementById(ayudaId as string);
-    const texto = ayuda?.textContent ?? "";
+    // `aria-describedby` es una LISTA de ids (la ayuda + el límite de formatos/cantidad de la
+    // zona de carga): se lee entera, como haría un lector de pantalla.
+    const ayudaIds = input.getAttribute("aria-describedby");
+    expect(ayudaIds, "el input de fotos no describe su ayuda").toBeTruthy();
+    const texto = (ayudaIds as string)
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
 
     // No basta con "campo requerido": el mensajero está en la calle y necesita saber qué
     // se espera de él. Se exige que el copy nombre alternativas concretas.

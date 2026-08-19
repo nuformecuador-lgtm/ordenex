@@ -1,6 +1,12 @@
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+} from "@/lib/types/filtros-cierres";
 
 // Feature 38 — contrato del repositorio de "Cierres del dia" del admin. Solo queries
 // Prisma; sin logica de negocio (esa vive en CierresAdminService). El ALCANCE
@@ -134,11 +140,18 @@ export interface ICierresAdminRepository {
    *
    * Devuelve pagina Y total en la MISMA llamada. El `count` es la UNICA consulta que R54
    * permite anadir, y viaja aqui dentro para que no pueda resolverse contra un `where`
-   * distinto del de la pagina.
+   * distinto del de la pagina — con filtros eso importa mas, no menos: un total que ignorara
+   * el recorte diria «(300)» sobre una lista de 4.
+
+   * Pedido humano del 2026-08-16 — `filtros` es OPCIONAL y RECORTA dentro del alcance: se
+   * compone con el `AND` del criterio, nunca en lugar del `alcanceWhere`. Omitirlo deja el
+   * criterio IDENTICO al de antes, que es lo que permite que los `*-where.test.ts` sigan
+   * fijando su valor absoluto sin cambios.
    */
   findHistoricoPaginado(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
   /**
    * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R51/R54): UNA PAGINA de la COLA de pendientes de
@@ -151,6 +164,7 @@ export interface ICierresAdminRepository {
   findColaPaginada(
     alcance: Alcance,
     rango: RangoPagina,
+    filtros?: FiltrosCierres,
   ): Promise<PaginaRepositorio<CierreAdminResumenRow>>;
   /**
    * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): el HISTORICO ENTERO del alcance, sin recorte
@@ -163,7 +177,10 @@ export interface ICierresAdminRepository {
    * NO se puede sustituir por `findCierresByAlcance`: aquel devuelve la UNION de la cola y el
    * historico, que es justo la relectura compuesta que esta tanda retira (R1).
    */
-  findHistoricoCompleto(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  findHistoricoCompleto(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]>;
   /**
    * Feature 184 — Tanda D (T D.1, R1/R14/R15/R16): la COLA ENTERA de pendientes de decision del
    * alcance, sin recorte y sin conteo — el conjunto del que sale el ARCHIVO de ese listado.
@@ -171,7 +188,18 @@ export interface ICierresAdminRepository {
    * Complemento exacto de `findHistoricoCompleto` por la MISMA `ESTADOS_COLA_CIERRE_DIA` que
    * usan las dos paginas: los cuatro caminos particionan el mismo conjunto.
    */
-  findColaCompleta(alcance: Alcance): Promise<CierreAdminResumenRow[]>;
+  findColaCompleta(
+    alcance: Alcance,
+    filtros?: FiltrosCierres,
+  ): Promise<CierreAdminResumenRow[]>;
+  /**
+   * Pedido humano del 2026-08-16 — las OPCIONES de los filtros de la pantalla, DERIVADAS de los
+   * cierres del alcance (no de las tablas `zona`/`usuario`). Ver la implementacion para los tres
+   * motivos; el que mas pesa es que asi el selector no puede ofrecer la bodega del vecino, y el
+   * que mas se olvida es que incluye a los mensajeros ya desactivados, que siguen siendo duenos
+   * de sus cierres pasados.
+   */
+  findCatalogoFiltros(alcance: Alcance): Promise<CatalogoFiltrosCierresDTO>;
   /**
    * R6/R7/R9/R13: un cierre SOLO si su destino casa el alcance en el WHERE (guardia
    * R13) + sus gestiones (WITH_DETALLE, reuso 37, WHERE cierre_id = X). Fuera de
@@ -196,6 +224,25 @@ export interface ICierresAdminRepository {
     cierreId: string,
     alcance: Alcance,
   ): Promise<GestionIncidenteDelCierre[]>;
+  /**
+   * Feature 230 — Tanda 2 (T2.1, R11/R13/R14/R15/R22/R24/R41): TODAS las gestiones de los
+   * cierres del dia del alcance que casan los recortes del dialogo, a grano de GESTION.
+   *
+   * El ALCANCE va en el WHERE, dentro de la relacion `cierre` (nunca filtrado en memoria), y
+   * los recortes se componen con el por CONJUNCION: por construccion solo pueden QUITAR filas,
+   * jamas ensanchar lo que el actor ve (R37). Orden DETERMINISTA: los cierres por fecha de
+   * solicitud descendente y, dentro de cada uno, el mismo que el detalle presenta (R11).
+   *
+   * La proyeccion NO lee `evidencia_storage_path` (R22/R41): la hoja fundida no lleva columna
+   * de evidencia, y un campo que la consulta no trae no puede acabar emitido por descuido.
+   *
+   * Conjunto vacio si el alcance y los recortes no se cruzan — que es el MISMO desenlace que
+   * «ese mensajero no tiene cierres en el rango», y eso es deliberado (R38).
+   */
+  findGestionesPorAlcanceCompleto(
+    alcance: Alcance,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]>;
   /**
    * R10-R15: transicion atomica y guardada de `solicitado` -> nuevoEstado, SOLO si
    * el cierre sigue `solicitado` y casa el alcance (updateMany con guardia). NO toca

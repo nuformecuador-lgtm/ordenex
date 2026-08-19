@@ -119,6 +119,10 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
       mensajeroAsignadoId: null, // R15: handoff limpio a la bodega
       asignadoAt: null,
       prioridad: true, // feature 101/R2
+      // Pedido humano 2026-08-18: la orden SALE de la novedad, asi que la aprobacion del cierre
+      // anterior deja de valer. Si vuelve a devolverse, tendra que aprobarse el cierre NUEVO
+      // para que su tienda vuelva a verla en `/novedades`.
+      gestionAprobada: false,
     });
     // R18/R19: append por el choke point, actor NULL, origen_tipo liberacion_devuelta_sla.
     expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);

@@ -6,7 +6,7 @@
 import { Suspense, lazy } from "react";
 
 import { formatearValor } from "./formato";
-import { CLASES_LIENZO, GraficaMarco } from "./GraficaMarco";
+import { clasesDeLienzo, GraficaMarco } from "./GraficaMarco";
 import { SerieTextual } from "./SerieTextual";
 import type { GraficaProps } from "./tipos";
 import { prepararSeries } from "./topes";
@@ -22,6 +22,7 @@ export function GraficaLineas({
   cargando,
   error,
   className,
+  proporcion,
 }: GraficaProps) {
   const hayDatos = series.some((serie) => serie.puntos.length > 0);
   const preparadas = hayDatos && !error && !cargando ? prepararSeries(series) : null;
@@ -34,10 +35,11 @@ export function GraficaLineas({
       cargando={cargando}
       error={error}
       className={className}
+      proporcion={proporcion}
     >
       {preparadas ? (
         <>
-          <div className={CLASES_LIENZO}>
+          <div className={clasesDeLienzo(proporcion)}>
             <Suspense fallback={null}>
               <LineasLienzo
                 series={preparadas.series}

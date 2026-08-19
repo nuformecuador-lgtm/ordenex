@@ -580,7 +580,6 @@ export function RecepcionSateliteModule({
         open={modalOpen}
         ordenes={ordenesAAsignar}
         mensajeros={mensajeros}
-        mensajerosBloqueadosIds={bloqueoBodega.mensajerosConCierreIds ?? []}
         onOpenChange={setModalOpen}
         onSuccess={handleSuccess}
       />

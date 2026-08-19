@@ -26,6 +26,13 @@ export interface OrdenParaHilo {
   /** Feature 159: unica fuente de verdad del mensajero de la orden (R11). */
   mensajeroAsignadoId: string | null;
   estatusValue: string;
+  /**
+   * Pedido humano 2026-08-18: `orden.ayuda`. Entra en la lectura de AUTORIZACION porque desde ese
+   * pedido la ventana de escritura del `adminTienda` ya no depende solo del estatus — ver
+   * `lib/types/ventana-hilo-notas.ts`. Sin este campo, la unica forma de aplicar esa regla seria
+   * una segunda consulta desde el service.
+   */
+  ayuda: boolean;
   /** Borrado logico de la orden: el service lo trata como «no existe» (R10). */
   deletedAt: Date | null;
 }

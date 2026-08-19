@@ -10,7 +10,11 @@ import {
   type FuenteSerie,
 } from "@/app/(app)/analitica/_components/operativo/agregacion";
 import { categoriaDePunto } from "@/app/(app)/analitica/_components/operativo/textos";
-import { MAX_PUNTOS_SERIE, MAX_SERIES, prepararSeries } from "@/components/private/analytics/topes";
+import {
+  MAX_CATEGORIAS_LEGIBLES,
+  MAX_PUNTOS_SERIE,
+  prepararSeries,
+} from "@/components/private/analytics/topes";
 import type { SerieDato } from "@/components/private/analytics/tipos";
 import type { MetricaUnidad } from "@/lib/analytics/types";
 import {
@@ -151,9 +155,10 @@ describe("Feature 131 (R15) — la cola de categorias se agrupa en «otros»", (
   it("mas de 5 categorias se agrupan en otros conservando las 5 mayores", () => {
     const { items, agrupadas } = agruparSeriesEnOtros(muchas);
 
-    // El resultado cabe en el tope del paquete de la 130: si no, `prepararSeries` lanza
-    // `SeriesExcedidasError` y la pantalla se cae por haber crecido de 5 a 6 categorias.
-    expect(items).toHaveLength(MAX_SERIES);
+    // El resultado cabe en el techo de LEGIBILIDAD del tablero. Ya no es una cuestion de
+    // color —la paleta tiene veinte tokens y cicla desde el 2026-08-18, y `prepararSeries` ya
+    // no recorta ni lanza—: es que un donut de doce porciones no se lee.
+    expect(items).toHaveLength(MAX_CATEGORIAS_LEGIBLES);
     expect(() => prepararSeries(items)).not.toThrow();
 
     // Las mayores por magnitud sobreviven, y la cola queda declarada en un cubo que se
@@ -351,7 +356,7 @@ describe("Feature 131 — composicion de paneles", () => {
       categoriaDePunto,
     });
     expect(preparado.series).toHaveLength(1);
-    expect(preparado.series[0]?.puntos.length).toBeLessThanOrEqual(MAX_SERIES);
+    expect(preparado.series[0]?.puntos.length).toBeLessThanOrEqual(MAX_CATEGORIAS_LEGIBLES);
     expect(preparado.series[0]?.puntos.at(-1)?.categoria).toBe(CATEGORIA_OTROS);
     expect(preparado.categoriasAgrupadas).toBeGreaterThan(0);
   });

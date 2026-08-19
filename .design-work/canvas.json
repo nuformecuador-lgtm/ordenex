@@ -1,0 +1,61 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "A — Avance por mensajero",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 700
+    },
+    {
+      "file": "Tabla.dc.html",
+      "title": "B — Sala de control",
+      "x": 1320,
+      "y": 0,
+      "w": 1240,
+      "h": 600
+    },
+    {
+      "file": "Triage.dc.html",
+      "title": "C — Triage por excepción",
+      "x": 2640,
+      "y": 0,
+      "w": 1240,
+      "h": 800
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -250,
+      "w": 520,
+      "text": "Rediseño de /monitoreo — el tablero del día\n\nQué conserva cualquiera de las tres: la fecha CR, la antigüedad del dato («hace 12 s», que hoy se mide contra generadoAt y no contra el render), el drill-down al detalle del mensajero y los mismos nueve contadores del backend.\n\nQué ataca: hoy cada mensajero trae ocho números del mismo peso visual. Es exacto, pero no responde en tres segundos «¿dónde tengo un problema ahora?».\n\nLos nombres y las cifras son de ejemplo."
+    },
+    {
+      "id": "dir-a",
+      "x": 0,
+      "y": 740,
+      "w": 520,
+      "text": "A — AVANCE POR MENSAJERO\n\nEje: comparar. Cada mensajero es una fila con una barra apilada (entregadas / en reparto / reprogramadas / problemas) y su % de avance; los ocho contadores se resumen en una línea y el desglose completo vive en el detalle.\n\nA favor: de un vistazo ves quién va al 79% y quién al 27%, que es la pregunta real de quien abre esto a media tarde. Cabe más gente en pantalla que hoy.\n\nEn contra: pierde la lectura exacta por contador — para saber cuántas devueltas lleva alguien hay que abrir su detalle."
+    },
+    {
+      "id": "dir-b",
+      "x": 1320,
+      "y": 640,
+      "w": 520,
+      "text": "B — SALA DE CONTROL\n\nEje: verlo todo a la vez. Tabla real, una fila por mensajero y una columna por contador, con los totales fijos abajo y las celdas problemáticas teñidas. La línea vertical separa lo que ya tuvo resultado de lo que no.\n\nA favor: ninguna cifra se esconde, se puede ordenar por cualquier columna y un equipo de 15 cabe sin scroll. Es lo más cercano a lo que hay hoy.\n\nEn contra: es la más densa de las tres y la que peor cae en móvil; sin el teñido, sigue siendo una malla de números."
+    },
+    {
+      "id": "dir-c",
+      "x": 2640,
+      "y": 840,
+      "w": 520,
+      "text": "C — TRIAGE POR EXCEPCIÓN\n\nEje: atender. No lista a todos igual: arriba «Necesitan atención» con el motivo escrito («13 sin recoger a las 2 p. m.») y un botón directo; debajo «En curso» en una línea por persona; y «Al día» colapsado.\n\nA favor: la pantalla te dice qué hacer, no solo qué pasa. Quien monitorea deja de escanear y empieza a actuar.\n\nEn contra: es la que más criterio necesita — hay que DECIDIR qué cuenta como «necesita atención» (¿cuántas sin recoger?, ¿a qué hora?) y esa regla no existe hoy en el backend. Sin ella, la sección de arriba se llena o se vacía sola."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

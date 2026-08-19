@@ -7,7 +7,9 @@ import {
   listarCierresAdmin,
   listarHistoricoCierresAdminPaginado,
   listarPendientesCierresAdminPaginado,
+  obtenerCatalogoFiltrosCierres,
 } from "@/lib/actions/cierres-admin";
+import { CATALOGO_FILTROS_CIERRES_VACIO } from "@/lib/types/filtros-cierres";
 import {
   listarConsolidacion,
   listarCierresBodegaSolicitadosPaginado,
@@ -19,6 +21,7 @@ import {
 import { CierresAdminModule } from "./_components/CierresAdminModule";
 import { ConsolidacionBodegaModule } from "./_components/ConsolidacionBodegaModule";
 import { CierresBodegaAdminModule } from "./_components/CierresBodegaAdminModule";
+import { CierresTabs } from "./_components/CierresTabs";
 
 /**
  * Feature 38 (T12, R1/R3) + Feature 40 (T8, F1.4-l): módulo "Cierres" role-aware. El
@@ -48,12 +51,25 @@ export default async function CierresAdminPage() {
   // totales y `sinZona`; las DOS tablas —la COLA de pendientes y el HISTÓRICO— llegan como
   // PÁGINA 1 con su total, no como arrays enteros. El input va vacío: los defaults de
   // `page`/`pageSize` los pone el schema del dominio.
-  const [pendientesResult, historicoResult] = await Promise.all([
+  //
+  // Pedido humano del 2026-08-16 — se resuelve tambien el CATALOGO de los filtros (bodegas
+  // destino y mensajeros del alcance). Va en el MISMO `Promise.all` y no en una lectura aparte:
+  // es independiente de las otras dos, y secuenciarla sumaria su latencia al TTFB sin ganar
+  // nada. Las dos paginas se piden SIN filtros, que es el estado inicial de la pantalla.
+  const [pendientesResult, historicoResult, catalogoResult] = await Promise.all([
     listarPendientesCierresAdminPaginado({}),
     listarHistoricoCierresAdminPaginado({}),
+    obtenerCatalogoFiltrosCierres(),
   ]);
   if (pendientesResult.status !== "ok") notFound(); // defensa en profundidad
   if (historicoResult.status !== "ok") notFound(); // defensa en profundidad
+  // El catalogo NO tumba la pagina si falla: sin opciones la pantalla se queda sin filtrar,
+  // que es exactamente lo que era antes de esta feature. Un listado de cierres que no se
+  // puede abrir es peor que uno que no se puede filtrar.
+  const catalogoFiltros =
+    catalogoResult.status === "ok"
+      ? catalogoResult.catalogo
+      : CATALOGO_FILTROS_CIERRES_VACIO;
 
   // Feature 40 — pre-fetch por rol de los datos sensibles del cierre de bodega.
   // adminSatelite: consolidación de SU zona (R1/R3). maestro/admin (acceso total,
@@ -115,6 +131,15 @@ export default async function CierresAdminPage() {
       title="Cierres del día"
       description="Revisá el detalle de cada cierre solicitado por tus mensajeros y aprobalo o rechazalo"
     >
+      {/* Pedido humano del 2026-08-16 — la pantalla se divide en BODEGA y MENSAJERO, con el
+          conmutador segmentado del portal del mensajero (ver `CierresTabs`). Cuál es la mitad
+          de «bodega» depende del ROL, y esa decisión sigue donde estaba: el `adminSatelite`
+          consolida la suya, el maestro decide sobre las de todos, y quien no tenga ninguna de
+          las dos ve los cierres del día sin conmutador. */}
+      <CierresTabs
+        bodega={
+          consolidacion === null && bodega === null ? null : (
+          <>
       {/* Feature 40 (adminSatelite): consolidación + solicitud de cierre de bodega. */}
       {consolidacion ? (
         <ConsolidacionBodegaModule
@@ -138,6 +163,7 @@ export default async function CierresAdminPage() {
             pageSize: consolidacion.solicitados.pageSize,
           }}
           sinZona={consolidacion.sinZona}
+          catalogoFiltros={catalogoFiltros}
         />
       ) : null}
 
@@ -154,10 +180,14 @@ export default async function CierresAdminPage() {
             total: bodega.resueltos.total,
             pageSize: bodega.resueltos.pageSize,
           }}
+          catalogoFiltros={catalogoFiltros}
         />
       ) : null}
-
-      {/* Feature 38: cierres del día de los mensajeros del alcance. */}
+          </>
+          )
+        }
+        mensajero={
+      /* Feature 38: cierres del día de los mensajeros del alcance. */
       <CierresAdminModule
         pendientes={{
           items: pendientesResult.items,
@@ -170,6 +200,7 @@ export default async function CierresAdminPage() {
           pageSize: historicoResult.pageSize,
         }}
         sinZona={result.sinZona}
+        catalogoFiltros={catalogoFiltros}
         /**
          * Feature 172 (T E.1/T E.2, [P3]/R6) — el permiso de PAGAR se resuelve SOLO
          * server-side y con el MISMO predicado (`esAccesoTotal`) que `LiquidacionService` usa
@@ -182,6 +213,8 @@ export default async function CierresAdminPage() {
          * él, aprobar sigue funcionando exactamente como antes de esta feature.
          */
         puedeRegistrarPago={esAccesoTotal(actor.rol)}
+      />
+        }
       />
     </AppPage>
   );

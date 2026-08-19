@@ -19,6 +19,14 @@ if (typeof window !== "undefined") {
   await import("@testing-library/jest-dom/vitest");
 }
 
+// Feature 92 (seguimiento) — silencia la traza `optimizer***:` durante la suite. Va AQUI y
+// no dentro de `lib/logging/optimizer-log.ts` porque una guardia del repo
+// (`notificacion-notificadores-reales.test.ts`) prohibe que un modulo de `lib/` o `app/`
+// cambie de comportamiento al detectar el entorno de test. Este archivo SI es codigo de
+// test, asi que puede saberlo. Sin esto, la traza escupiria coordenadas y cuerpos HTTP en
+// cada corrida del gate.
+process.env.RUTA_DEBUG_LOG = "0";
+
 // `react-countup` anima el valor DESDE 0 (`start={0}` explícito en `KpiValorAnimado`), asi
 // que en el primer render un KPI vale "0" y solo llega a su valor real cuando la animacion
 // termina, ~1.2 s despues por requestAnimationFrame. Un test que lea el KPI justo tras

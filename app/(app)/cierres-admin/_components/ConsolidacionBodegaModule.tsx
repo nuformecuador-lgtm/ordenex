@@ -6,8 +6,15 @@ import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
+import type { DataTableDescarga } from "@/components/shared/DataTable";
+import {
+  CATALOGO_FILTROS_CIERRES_VACIO,
+  type CatalogoFiltrosCierresDTO,
+  type FiltrosCierresBodega,
+} from "@/lib/types/filtros-cierres";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreConfig } from "@/lib/config/cierre";
@@ -19,32 +26,55 @@ import {
 import type { CierreBodegaResumenLite } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import {
-  money,
-  PAGO_MENSAJERO_COL,
-  INGRESO_BODEGA_RECHAZOS_COL,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
   CentralDebeTotal,
   TotalesPanel,
 } from "./cierre-detalle-shared";
+import { CierreConsolidableFacturaResumen } from "./cierre-factura";
+import { ListaComprobantes } from "./ListaComprobantes";
+import { PanelConmutado } from "./PanelConmutado";
 import {
-  CierresBodegaSolicitadosTabla,
+  CierresBodegaSolicitadosLista,
+  descargaBodegaSolicitados,
   type CierresBodegaSolicitadosPagina,
-} from "./CierresBodegaSolicitadosTabla";
+} from "./CierresBodegaSolicitadosLista";
+import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import {
   COLUMNAS_DESCARGA_CONSOLIDABLES,
   filaDescargaConsolidable,
 } from "./cierres-bodega-descarga-columnas";
 
-/** Nombre visible de la tabla de consolidables: hoja, archivo y control (R12/R13). */
+/** Nombre visible del listado de consolidables: hoja, archivo y control (R12/R13). */
 const TITULO_DESCARGA_CONSOLIDABLES = "Cierres del día a consolidar";
-/** Nombre accesible del control (R43). Propio: la pantalla monta dos tablas paginadas. */
+/** Nombre accesible del control (R43). Propio: la pantalla monta dos listados paginados. */
 export const PAGINACION_CONSOLIDABLES_LABEL =
   "Paginación de los cierres del día a consolidar";
 const ERROR_CARGA_CONSOLIDABLES = "No se pudieron cargar los cierres a consolidar.";
 
+/** `true` si el objeto no recorta nada: entonces la página pre-cargada del servidor sirve. */
+function sinFiltrosBodega(filtros: FiltrosCierresBodega): boolean {
+  return Object.values(filtros).every((v) => v === undefined);
+}
+
+// --- Pedido humano del 2026-08-16: las dos mitades de esta sección, en pestañas ---
+//
+// LOS NOMBRES NO SON «Pendientes/Resueltos», y es una decisión, no un descuido. En las otras
+// dos secciones esa pareja es exacta —hay una cola de decisión y un histórico de resueltos—;
+// aquí las dos mitades son OTRA COSA: lo que todavía no se ha consolidado (cierres del día
+// `aprobado` de la zona) y los cierres de BODEGA que esta zona ya solicitó, que incluyen los
+// que siguen esperando decisión del maestro. Llamar «Resueltos» a un conjunto que contiene
+// solicitudes sin resolver sería una etiqueta falsa en una pantalla de dinero.
+const TAB_CONSOLIDAR = "consolidar";
+const TAB_SOLICITADOS = "solicitados";
+type TabConsolidacion = typeof TAB_CONSOLIDAR | typeof TAB_SOLICITADOS;
+const TAB_CONSOLIDAR_LABEL = "A consolidar";
+const TAB_SOLICITADOS_LABEL = "Solicitados";
+/** Nombre accesible del conmutador. Propio: la pantalla anida varios segmentados. */
+const TABS_CONSOLIDACION_LABEL = "Cierre de bodega por etapa";
+
 // R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
-// Es `cierreConfig` y no `cierreBodegaConfig` porque las filas de esta tabla son `cierre_dia`
+// Es `cierreConfig` y no `cierreBodegaConfig` porque los comprobantes de este listado son `cierre_dia`
 // (T J.1, decisión 9): con la config de bodega, ajustar el tamaño de página de los cierres de
 // bodega movería también el de una tabla de cierres del día.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter((s) => s <= cierreConfig.MAX_PAGE_SIZE);
@@ -66,8 +96,9 @@ export interface ConsolidablesPagina {
 async function leerConsolidables(
   page: number,
   pageSize: number,
+  filtros: FiltrosCierresBodega,
 ): Promise<ConsolidablesPagina> {
-  const res = await listarConsolidablesPaginado({ page, pageSize });
+  const res = await listarConsolidablesPaginado({ page, pageSize, filtros });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -124,6 +155,31 @@ export interface ConsolidacionBodegaModuleProps {
   cierresBodegaPasados: CierresBodegaSolicitadosPagina;
   /** `true` si el adminSatelite no tiene zona asignada (R4). */
   sinZona: boolean;
+  /** Opciones de los filtros (bodegas), resueltas por el Server Component. */
+  catalogoFiltros?: CatalogoFiltrosCierresDTO;
+}
+
+/**
+ * La configuración de descarga de «Cierres del día a consolidar», para la fila de las pestañas.
+ *
+ * Feature 170 (T J.2, R52) — el listado pinta UNA página; el archivo es el CONJUNTO COMPLETO de
+ * consolidables de SU zona, y esa zona la resuelve el servidor desde la sesión: descargar no
+ * amplía el alcance ni una fila (R14/R44). Feature 184 — Tanda B (T B.2, R1/R6/R10): lo entrega
+ * una lectura DEDICADA, que cuesta una consulta y cero aritmética de dinero. Los cinco agregados
+ * de la cabecera siguen llegando por props desde `listarConsolidacion` (R49/R50 de la 170).
+ *
+ * Pedido humano del 2026-08-16 — con los mismos filtros que la página.
+ */
+function descargaConsolidables(filtros: FiltrosCierresBodega): DataTableDescarga {
+  return {
+    titulo: TITULO_DESCARGA_CONSOLIDABLES,
+    columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
+    obtenerFilas: () =>
+      filasDesdeResultado(
+        listarConsolidablesCompleto({ filtros }),
+        filaDescargaConsolidable,
+      ),
+  };
 }
 
 export function ConsolidacionBodegaModule({
@@ -137,6 +193,7 @@ export function ConsolidacionBodegaModule({
   motivoBloqueo,
   cierresBodegaPasados,
   sinZona,
+  catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: ConsolidacionBodegaModuleProps) {
   const router = useRouter();
   const toast = useToast();
@@ -151,14 +208,38 @@ export function ConsolidacionBodegaModule({
   // R49/R50: los cinco agregados de dinero NO se tocan. Siguen siendo las props que calculó
   // `listarConsolidacion` sobre el conjunto completo; esta lectura solo recorta lo que la
   // tabla PINTA.
+  /**
+   * Pedido humano del 2026-08-16 — las dos mitades pasan a ser PESTAÑAS. Arranca en «A
+   * consolidar»: es la que tiene trabajo (y de la que salen los cinco agregados de dinero y el
+   * botón de solicitar).
+   */
+  const [tab, setTab] = useState<TabConsolidacion>(TAB_CONSOLIDAR);
+
+  /**
+   * Pedido humano del 2026-08-16 — la misma barra que la mitad del maestro, sin el filtro de
+   * mensajero. En esta pantalla el de bodega es casi siempre trivial (el actor tiene UNA zona),
+   * pero se ofrece igual: la barra es la misma y lo que ofrece hace lo que dice.
+   */
+  const [filtros, setFiltros] = useState<FiltrosCierresBodega>({});
+
+  /** Filtrar devuelve el listado a su página 1. */
+  function aplicarFiltros(next: FiltrosCierresBodega) {
+    setFiltros(next);
+    setPage(1);
+  }
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(consolidables.pageSize);
   const { data, error } = useSWR(
-    ["cierre-bodega:consolidables", page, pageSize],
-    () => leerConsolidables(page, pageSize),
+    ["cierre-bodega:consolidables", page, pageSize, filtros],
+    () => leerConsolidables(page, pageSize, filtros),
     {
+      // Con un filtro puesto la página 1 pre-cargada es la del conjunto SIN filtrar: servirla
+      // sería enseñar cierres que el filtro excluye.
       fallbackData:
-        page === 1 && pageSize === consolidables.pageSize ? consolidables : undefined,
+        page === 1 && pageSize === consolidables.pageSize && sinFiltrosBodega(filtros)
+          ? consolidables
+          : undefined,
     },
   );
   const pagina: ConsolidablesPagina = data ?? { items: [], total: 0, pageSize };
@@ -194,9 +275,8 @@ export function ConsolidacionBodegaModule({
   }
 
   return (
-    <section aria-label="Cierre de bodega" className="flex flex-col gap-8">
-      <h2 className="text-lg font-semibold">Cierre de bodega</h2>
-
+    // `gap-4`: la barra de filtros y las pestañas son una cabecera, no dos secciones.
+    <section aria-label="Cierre de bodega" className="flex flex-col gap-4">
       {/* R4: adminSatelite sin zona → aviso accionable, sin tablas de acción. */}
       {sinZona ? (
         <p
@@ -207,6 +287,46 @@ export function ConsolidacionBodegaModule({
         </p>
       ) : (
         <>
+          {/* ---------- Pestañas: a consolidar / solicitados (pedido humano del 2026-08-16) ----
+              El conteo solo va en «A consolidar»: su `total` lo tiene este módulo (del servidor,
+              R42), mientras que el de los solicitados vive dentro de
+              `CierresBodegaSolicitadosLista`, que pide su propia página. No se inventa. */}
+          <FiltrosCierresBarra
+            catalogo={catalogoFiltros}
+            onChange={aplicarFiltros}
+            disabled={cargando}
+            sinMensajero
+          />
+
+          {/* La descarga va ALINEADA con las pestañas, y es la de la pestaña ACTIVA. */}
+          {/* `pb-1`: sin él el grupo segmentado se ve cortado por abajo (su borde y su anillo
+              de foco se salen del alto nominal del botón). */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+            <SegmentedToggle
+              options={[
+                {
+                  valor: TAB_CONSOLIDAR,
+                  etiqueta: TAB_CONSOLIDAR_LABEL,
+                  conteo: pagina.total,
+                },
+                { valor: TAB_SOLICITADOS, etiqueta: TAB_SOLICITADOS_LABEL },
+              ]}
+              valor={tab}
+              onChange={setTab}
+              ariaLabel={TABS_CONSOLIDACION_LABEL}
+            />
+            <DescargarDatasetButton
+              {...(tab === TAB_CONSOLIDAR
+                ? descargaConsolidables(filtros)
+                : descargaBodegaSolicitados(filtros))}
+            />
+          </div>
+
+          {/* Los cinco agregados de dinero y el botón de solicitar viven DENTRO de «A
+              consolidar», y no encima de las pestañas: hablan exactamente de ese conjunto —son
+              su suma— y el botón actúa sobre él. Colgarlos fuera los dejaría a la vista
+              mientras se mira un listado del que no hablan. */}
+          <PanelConmutado activo={tab === TAB_CONSOLIDAR} ariaLabel={TAB_CONSOLIDAR_LABEL}>
           {/* ---------- Totales agregados a consolidar (R10/R13) ---------- */}
           <TotalesPanel
             totales={totalesAgregados}
@@ -242,52 +362,26 @@ export function ConsolidacionBodegaModule({
             aria-label="Cierres del día a consolidar"
             className="flex flex-col gap-3"
           >
-            <h3 className="text-base font-semibold">
-              Cierres del día a consolidar{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {/* R42: el TOTAL del conjunto que devuelve el servidor. Este contador va
-                    junto a los agregados de dinero de arriba: si contara la página, diría
-                    «(25)» al lado de un total calculado sobre 60 cierres. */}
-                ({pagina.total})
-              </span>
-            </h3>
-            <div className="overflow-x-auto">
-              <DataTable
-                columns={COLUMNAS_CONSOLIDABLES}
-                data={pagina.items}
-                rowKey="cierreDiaId"
-                ariaLabel="Cierres del día a consolidar"
-                emptyMessage="No hay cierres del día aprobados para consolidar."
-                isLoading={cargando}
-                error={error ? ERROR_CARGA_CONSOLIDABLES : null}
-                /**
-                 * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue
-                 * siendo el CONJUNTO COMPLETO de consolidables de SU zona, y esa zona la
-                 * resuelve el servidor desde la sesión: descargar no amplía el alcance ni una
-                 * fila (R14/R44).
-                 *
-                 * Feature 184 — Tanda B (T B.2, R1/R6/R10): ese conjunto lo entrega ahora una
-                 * lectura DEDICADA. Antes salía de releer `listarConsolidacion()`, que además
-                 * de estas filas produce los cinco agregados de dinero y —lo caro— el reparto
-                 * del efectivo entre los pagos INDIVIDUALES de la zona, ordenados de menor a
-                 * mayor. Descargar una tabla de siete columnas no tiene por qué costar eso.
-                 *
-                 * Y no se pierde nada de lo que el comentario anterior defendía: el archivo y
-                 * los totales de la cabecera siguen hablando del MISMO conjunto —los
-                 * consolidables de la zona—, solo que cada uno lo lee por su lado. Los cinco
-                 * agregados siguen llegando por props, sin cambios (R49/R50 de la 170).
-                 */
-                descarga={{
-                  titulo: TITULO_DESCARGA_CONSOLIDABLES,
-                  columnas: COLUMNAS_DESCARGA_CONSOLIDABLES,
-                  obtenerFilas: () =>
-                    filasDesdeResultado(
-                      listarConsolidablesCompleto(),
-                      filaDescargaConsolidable,
-                    ),
-                }}
-              />
-            </div>
+            {/* SIN ENCABEZADO VISIBLE (pedido humano del 2026-08-16): la pestaña de arriba ya lo
+                dice, y repetirlo dos centímetros más abajo no añade nada. El `aria-label` de la
+                sección SÍ se queda: sigue haciendo falta un nombre para quien no ve la pantalla, y
+                es por él por el que la localizan los tests y el E2E.
+
+                EL CONTADOR NO SE PIERDE, se mudó a la pestaña, y sigue saliendo del TOTAL del
+                servidor (R42) — lo vigila `contadores-cabecera.guardia.test.ts`. */}
+            {/* Pedido humano del 2026-08-16: cada cierre del día a consolidar se lee como
+                COMPROBANTE, la misma hoja que verá el maestro cuando decida el cierre de esta
+                bodega. Sin estado ni fechas: los tres son `aprobado` por definición de este
+                listado (R5) y el DTO no trae fechas. */}
+            <ListaComprobantes
+              ariaLabel="Cierres del día a consolidar"
+              items={pagina.items}
+              clave={(c) => c.cierreDiaId}
+              isLoading={cargando}
+              error={error ? ERROR_CARGA_CONSOLIDABLES : null}
+              emptyMessage="No hay cierres del día aprobados para consolidar."
+              render={(c) => <CierreConsolidableFacturaResumen cierre={c} />}
+            />
 
             <Pagination
               page={page}
@@ -336,13 +430,21 @@ export function ConsolidacionBodegaModule({
               </p>
             ) : null}
           </section>
+          </PanelConmutado>
+
+          <PanelConmutado activo={tab === TAB_SOLICITADOS} ariaLabel={TAB_SOLICITADOS_LABEL}>
+            {/* ---------- Histórico de cierres de bodega (solo lectura, F1.4-h) ----------
+                Feature 170 — FASE 2 (T I.2): el listado, su control de paginación y su descarga
+                viven en su propio componente (ver `CierresBodegaSolicitadosLista`). */}
+            <CierresBodegaSolicitadosLista initialData={cierresBodegaPasados} />
+          </PanelConmutado>
         </>
       )}
 
-      {/* ---------- Histórico de cierres de bodega (solo lectura, F1.4-h) ----------
-          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
-          en su propio componente (ver la cabecera de `CierresBodegaSolicitadosTabla`). */}
-      <CierresBodegaSolicitadosTabla initialData={cierresBodegaPasados} />
+      {/* SIN ZONA (R4) el histórico se sigue enseñando fuera de las pestañas: es lo único que
+          este actor puede mirar, y esconderlo tras un conmutador que no puede usar dejaría la
+          pantalla en blanco detrás de un aviso. */}
+      {sinZona ? <CierresBodegaSolicitadosLista initialData={cierresBodegaPasados} /> : null}
 
       {/* Confirmación de "Solicitar cierre de bodega". */}
       <Modal
@@ -357,30 +459,3 @@ export function ConsolidacionBodegaModule({
     </section>
   );
 }
-
-// --- Columnas de los cierre_dia consolidables (R5, money-safe R13) ---
-const COLUMNAS_CONSOLIDABLES: Column<CierreBodegaResumenLite>[] = [
-  { id: "mensajero", value: "Mensajero", render: (c) => c.mensajeroNombre },
-  { id: "efectivo", value: "Efectivo", render: (c) => money(c.totales.efectivo) },
-  { id: "simpe", value: "SINPE", render: (c) => money(c.totales.simpe) },
-  {
-    id: "transferencia",
-    value: "Transferencia",
-    render: (c) => money(c.totales.transferencia),
-  },
-  {
-    id: "general",
-    value: "Total general",
-    render: (c) => money(c.totales.general),
-  },
-  {
-    id: "pagoMensajero",
-    value: PAGO_MENSAJERO_COL,
-    render: (c) => money(c.totalPagoMensajero),
-  },
-  {
-    id: "ingresoBodegaRechazos",
-    value: INGRESO_BODEGA_RECHAZOS_COL,
-    render: (c) => money(c.totalIngresoBodegaRechazos),
-  },
-];
