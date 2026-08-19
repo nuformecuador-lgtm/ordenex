@@ -51,7 +51,7 @@ export class OrdenNotaService implements IOrdenNotaService {
       notas: filas.map((fila) => proyectarNota(fila, actor.usuarioId)),
       // R19/R14: «el actor esta dentro de SU ventana», no «la orden esta en devuelta». La UI no
       // re-deriva la regla: pinta compositor y controles de borrado segun este booleano.
-      puedeEscribir: estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue),
+      puedeEscribir: estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda),
     };
   }
 
@@ -63,7 +63,7 @@ export class OrdenNotaService implements IOrdenNotaService {
     // `en_reparto`. Fuera de SU ventana el actor no publica, aunque el otro rol si este dentro
     // de la suya. Fuera de ambas (`entregada`, `reprogramada`, `rechazada`, ...) no publica
     // nadie. Un `forbidden` opaco: el borde no dice por que (R10).
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda)) {
       return { status: "forbidden" };
     }
 
@@ -98,7 +98,7 @@ export class OrdenNotaService implements IOrdenNotaService {
     // notas quedan congeladas para ese actor, incluidas las SUYAS: con la orden en `en_reparto`
     // la tienda ya no puede borrar lo que escribio, y con la orden en `devuelta` el mensajero
     // tampoco. Es lo que convierte el hilo en evidencia y no en un relato editable.
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda)) {
       return { status: "forbidden" };
     }
 

@@ -105,7 +105,7 @@ export class SolicitudAyudaService implements ISolicitudAyudaService {
     // Y la misma VENTANA que para escribir en el hilo. Es lo coherente: quien no puede decir nada
     // sobre la orden tampoco puede declarar que la ayuda ya no hace falta. Para el mensajero eso
     // significa `en_reparto`, que es exactamente donde vive el boton «Recuperar».
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda)) {
       return { status: "forbidden" };
     }
 

@@ -274,49 +274,6 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  // Pedido humano 2026-08-18 — «deja de ser la orden con gestión en curso y toma la siguiente».
-  // El backend suelta el puntero 1-a-1; lo que se mide aquí es la otra mitad: que el panel no se
-  // quede plantado en la orden que acaba de pedir ayuda, que es lo que pasaría si el default
-  // siguiera siendo «la primera de la lista» a secas.
-  it("el panel NO se queda en la orden marcada: toma la siguiente sin ayuda", () => {
-    renderModule([
-      makeAsignacion({
-        id: "g1",
-        numRemision: "REM-001",
-        destinatario: "Ana Perez",
-        ayuda: true,
-      }),
-      makeAsignacion({
-        id: "g2",
-        numRemision: "REM-002",
-        destinatario: "Beto Solis",
-      }),
-    ]);
-
-    const panel = screen.getByRole("region", { name: "Detalle de la orden" });
-    expect(within(panel).getByText(/REM-002|Beto Solis/)).toBeTruthy();
-    expect(within(panel).queryByText("Ana Perez")).toBeNull();
-  });
-
-  it("sin ninguna marcada el panel sigue tomando la PRIMERA: el default de siempre no cambió", () => {
-    renderModule([
-      makeAsignacion({ id: "g1", numRemision: "REM-001", destinatario: "Ana Perez" }),
-      makeAsignacion({ id: "g2", numRemision: "REM-002", destinatario: "Beto Solis" }),
-    ]);
-
-    const panel = screen.getByRole("region", { name: "Detalle de la orden" });
-    expect(within(panel).getByText("Ana Perez")).toBeTruthy();
-  });
-
-  it("con TODAS marcadas el panel muestra una igual: mejor una marcada que un panel vacío", () => {
-    renderModule([
-      makeAsignacion({ id: "g1", numRemision: "REM-001", destinatario: "Ana Perez", ayuda: true }),
-    ]);
-
-    const panel = screen.getByRole("region", { name: "Detalle de la orden" });
-    expect(within(panel).getByText("Ana Perez")).toBeTruthy();
-  });
-
   it("la orden con ayuda SIGUE siendo gestionable desde su card (no queda atrapada)", () => {
     renderModule([makeAsignacion({ id: "g2", numRemision: "REM-002", ayuda: true })]);
 

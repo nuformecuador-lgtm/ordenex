@@ -307,13 +307,31 @@ describe("NovedadesModule", () => {
     // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
     // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
     expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Devolver la orden/ })).toBeNull();
+    // «Habilitar» SÍ: es el desenlace de la solicitud de ayuda del lado de la tienda (pedido
+    // humano 2026-08-18), y por eso es la única de las tres que no está atada a `devuelta`.
+    expect(
+      screen.getByRole("button", { name: /^Habilitar la orden/ }),
+    ).toBeInTheDocument();
     // Lo que SÍ sigue: el contacto y el registro de intentos. (El botón «Notas» se retiró de
     // esta pantalla el 2026-08-18 por pedido humano; ver la cabecera de `NovedadAcciones`.)
     expect(
       screen.getByRole("button", { name: /^Registrar un intento de contacto/ }),
     ).toBeInTheDocument();
+  });
+
+  it("sin ayuda pedida y sin estar devuelta, «Habilitar» tampoco se ofrece", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: false, causa: null, estatusValue: "en_reparto" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    // La excepción es la AYUDA, no el estatus: sin bandera viva no hay nada que habilitar.
+    expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
   });
 
   it("sobre una devuelta, las acciones de devolución siguen ofreciéndose", () => {

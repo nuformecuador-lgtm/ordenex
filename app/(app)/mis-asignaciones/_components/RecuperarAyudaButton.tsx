@@ -19,6 +19,9 @@ import { recuperarOrdenAyuda } from "@/lib/actions/orden-ayuda";
 // «Ayuda» en el panel) y no destruye nada — los motivos escritos siguen en el hilo de la orden.
 // Un diálogo aquí cobraría un gesto extra por algo que se deshace con otro.
 //
+// Se probó a colgarle un modal con nota (2026-08-18) y se REVIRTIÓ por decisión humana: ese paso
+// con nota vive en «Habilitar», del lado de la tienda, no aquí.
+//
 // `Undo2` es el MISMO icono que el repo ya usa para «Devolver» en `/novedades` y en el panel de
 // gestión: no se eligió por parecerse a la palabra, sino porque en este repo ese dibujo ya
 // significa «devolver esto a donde estaba».

@@ -22,8 +22,11 @@ const NOVEDAD_WHERE = {
   tiendaId: "tienda-1",
   deletedAt: null, // R8: excluye borradas
   OR: [
-    { estatus: { value: "devuelta" } }, // R7: solo mientras REPOSE en `devuelta`
-    { ayuda: true }, // solicitud de ayuda viva, en cualquier estatus
+    // R7 + pedido humano 2026-08-18: reposar en `devuelta` ya NO basta — hace falta ademas que la
+    // gestion se haya APROBADO en su cierre. Hasta entonces la devolucion existe pero su tienda
+    // no la ve.
+    { estatus: { value: "devuelta" }, gestionAprobada: true },
+    { ayuda: true }, // solicitud de ayuda viva, en cualquier estatus y sin pasar por esa puerta
   ],
 };
 
@@ -82,9 +85,9 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     expect(prisma.orden.count).toHaveBeenCalledWith({ where: NOVEDAD_WHERE });
 
     const { where } = prisma.orden.count.mock.calls[0][0];
-    // R7: la novedad SIGUE siendo la orden que REPOSA en `devuelta` (estado real, no la gestion);
-    // desde 2026-08-18 esa condicion vive en la primera rama del `OR` y no suelta en el `where`.
-    expect(where.OR[0]).toEqual({ estatus: { value: "devuelta" } });
+    // R7: la novedad SIGUE anclandose al estado real (no a la gestion vigente); desde 2026-08-18
+    // esa condicion vive en la primera rama del `OR` — y lleva pegada la aprobacion del cierre.
+    expect(where.OR[0]).toEqual({ estatus: { value: "devuelta" }, gestionAprobada: true });
     // La SEGUNDA rama, y la unica que no mira el estatus: la solicitud de ayuda.
     expect(where.OR[1]).toEqual({ ayuda: true });
     expect(where.OR).toHaveLength(2);
@@ -322,7 +325,7 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).not.toHaveProperty("gestiones");
-    expect(arg.where.OR[0]).toEqual({ estatus: { value: "devuelta" } });
+    expect(arg.where.OR[0]).toEqual({ estatus: { value: "devuelta" }, gestionAprobada: true });
   });
 });
 

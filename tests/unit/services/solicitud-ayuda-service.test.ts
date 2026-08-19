@@ -41,6 +41,7 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
     // La ventana del mensajero, leida de la MISMA tabla que usa el codigo: si alguien la mueve,
     // estos tests se mueven con ella en vez de quedarse afirmando un literal caducado.
     estatusValue: VENTANA_ESCRITURA.mensajero,
+    ayuda: false,
     deletedAt: null,
     ...over,
   };

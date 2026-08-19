@@ -96,10 +96,9 @@ export function NovedadAcciones({
   // `Power` es propio de "Habilitar" —no lo usa nadie más en el repo— porque esa acción no
   // tiene gemela en ninguna otra superficie.
   //
-  // ⚠️ Pedido humano 2026-08-18 — TRES DE LAS CINCO SON DE DEVOLUCIÓN, Y DESDE HOY ESTA PANTALLA
-  // LISTA TAMBIÉN ÓRDENES QUE NO ESTÁN DEVUELTAS: las que tienen una solicitud de ayuda viva
-  // (`OrdenRepository.novedadWhere`), que siguen en reparto. «Reprogramar», «Habilitar» y
-  // «Devolver» presuponen una orden devuelta, así que sobre una de ésas no se ofrecen.
+  // ⚠️ Pedido humano 2026-08-18 — ESTA PANTALLA LISTA TAMBIÉN ÓRDENES QUE NO ESTÁN DEVUELTAS: las
+  // que tienen una solicitud de ayuda viva (`OrdenRepository.novedadWhere`), que siguen en reparto.
+  // «Reprogramar» y «Devolver» presuponen una devolución, así que sobre una de ésas no se ofrecen.
   //
   // Y no es cosmética: `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden que no
   // esté en `devuelta` (comprobado, es la guarda real). Ofrecer el botón igual sólo consigue que
@@ -109,6 +108,12 @@ export function NovedadAcciones({
   // Lo que SÍ se conserva siempre: el contacto (llamar/WhatsApp) y, sobre una orden con ayuda
   // pedida, «+1 intento de contacto».
   const esDevuelta = novedad.estatusValue === "devuelta";
+  // «HABILITAR» ES LA EXCEPCIÓN (pedido humano 2026-08-18): también se ofrece cuando hay una
+  // SOLICITUD DE AYUDA viva, aunque la orden siga en reparto. Es el desenlace de esa solicitud del
+  // lado de la tienda — su modal exige una nota, y al confirmar apaga la bandera y la orden sale
+  // de esta pantalla. Las otras dos siguen atadas a `devuelta` porque presuponen una devolución
+  // que sobre una orden en reparto no existe.
+  const puedeHabilitar = esDevuelta || novedad.ayuda === true;
   const acciones: {
     etiqueta: string;
     Icono: typeof RotateCcw;
@@ -121,9 +126,13 @@ export function NovedadAcciones({
             Icono: RotateCcw,
             onClick: () => onReprogramar(novedad),
           },
-          { etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) },
-          { etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) },
         ]
+      : []),
+    ...(puedeHabilitar
+      ? [{ etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) }]
+      : []),
+    ...(esDevuelta
+      ? [{ etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) }]
       : []),
   ];
 

@@ -51,10 +51,32 @@ export function esRolConHilo(rol: RolValue): rol is RolConHilo {
 }
 
 /**
- * R14/R35 — `true` si `estatusValue` cae DENTRO de la ventana DEL ROL indicado. Es una
- * comparacion contra la tabla de arriba, no una re-derivacion de la regla: quien quiera saber
- * si un actor puede escribir pregunta aqui.
+ * R14/R35 — `true` si el actor cae DENTRO de la ventana DE SU ROL. Es una comparacion contra la
+ * tabla de arriba, no una re-derivacion de la regla: quien quiera saber si un actor puede
+ * escribir pregunta aqui.
+ *
+ * SEGUNDA PUERTA, SOLO PARA `adminTienda` (pedido humano 2026-08-18): una SOLICITUD DE AYUDA viva
+ * (`orden.ayuda`) abre su ventana en cualquier estatus.
+ *
+ * POR QUE HIZO FALTA, medido y no supuesto. La tabla de arriba dice que la tienda escribe en
+ * `devuelta` porque «es EXACTAMENTE lo que lista /novedades». Eso dejo de ser cierto ese mismo dia:
+ * `novedadWhere` gano una segunda rama y ahora esa pantalla lista tambien ordenes EN REPARTO con
+ * ayuda pedida. Sin esta puerta, la tienda ve en su pantalla una orden con una solicitud de ayuda,
+ * lee que el mensajero pide auxilio... y no puede contestarle ni pulsar «Habilitar», porque las dos
+ * cosas pasan por `publicar`. Es el permiso inejercitable de siempre, con la ventana quedandose
+ * quieta mientras la superficie visible crecia debajo.
+ *
+ * QUE NO CAMBIA. La ventana del `mensajero` sigue siendo `en_reparto` y nada mas: `ayuda` no se la
+ * ensancha, porque una orden con ayuda pedida ya esta en reparto por construccion. La LECTURA sigue
+ * sin pasar por aqui (R15). Y esto no concede acceso a ninguna orden nueva: la pertenencia se
+ * comprueba antes y por separado (`autorizarSobreHilo`), asi que lo unico que abre es la ventana
+ * TEMPORAL sobre una orden que ya era de esa tienda.
  */
-export function estaEnVentanaDeEscritura(rol: RolConHilo, estatusValue: string): boolean {
-  return estatusValue === VENTANA_ESCRITURA[rol];
+export function estaEnVentanaDeEscritura(
+  rol: RolConHilo,
+  estatusValue: string,
+  ayuda = false,
+): boolean {
+  if (estatusValue === VENTANA_ESCRITURA[rol]) return true;
+  return rol === "adminTienda" && ayuda;
 }
