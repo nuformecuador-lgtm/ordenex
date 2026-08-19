@@ -14,7 +14,7 @@
 
 ## T0 — Puerta humana: medir y firmar (sin código)
 
-- [ ] **T0.1 — Re-medir contra producción.** Vía MCP de Supabase, solo lectura:
+- [x] **T0.1 — Re-medir contra producción.** Vía MCP de Supabase, solo lectura:
       (a) órdenes hoy en `devuelta`; (b) cierres por estado y antigüedad (consulta de
       `specs/215/design.md` §7bis); (c) retraso gestión→aprobación (mediana / p90 / máx) sobre los
       últimos 30 días; (d) órdenes con `gestion_aprobada = false` y estatus `devuelta` (las que hoy
@@ -22,7 +22,7 @@
       **Hecho:** los cuatro números pegados en `progress/impl_239.md` con su fecha. La foto del
       2026-08-18 (0 en `devuelta`, 12/12 cierres aprobados, mediana 8,2 h · p90 22,1 h · máx 48,2 h)
       **caduca** y no se cita como vigente.
-- [ ] **T0.2 — Firmar las decisiones abiertas.** P1 (nombre y etiqueta), P2 (webhook), P3 (qué ve la
+- [x] **T0.2 — Firmar las decisiones abiertas.** P1 (nombre y etiqueta), P2 (webhook), P3 (qué ve la
       tienda en el limbo), P4 (recuperación del adminSatélite), P9 (orden de mergeo con la 240),
       P10 (orden de mergeo con 235/236).
       **Hecho:** cada una respondida en `progress/impl_239.md`; el spec se actualiza si alguna
@@ -35,12 +35,12 @@
 
 ## T1 — El estado, el mapa y las seis superficies  *(mismo PR que T2)*
 
-- [ ] **T1.1 — Alta del value en el catálogo.** `ORDER_STATUS_SEED` + migración
+- [x] **T1.1 — Alta del value en el catálogo.** `ORDER_STATUS_SEED` + migración
       `<ts>_order_status_devolucion_por_confirmar` con `INSERT … WHERE NOT EXISTS` y su `down.sql`
       que borra **solo si nadie lo referencia**.
       **Hecho:** `pnpm run db:migrate` aplica y `pnpm run db:rollback` revierte en local; el catálogo
       queda en 21 values sin duplicados. **Depende de:** T0.2.
-- [ ] **T1.2 — Alta del `origen_tipo` `anclaje_devolucion`.** Migración de enum + `down.sql` que
+- [x] **T1.2 — Alta del `origen_tipo` `anclaje_devolucion`.** Migración de enum + `down.sql` que
       **recrea el tipo con la lista vigente**; `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED` actualizado.
       **NO se tocan los `down.sql` de migraciones anteriores de este enum** (son fotos históricas):
       solo se comprueba si alguno recrea con lista cerrada y se anota la consecuencia del rollback
@@ -48,36 +48,36 @@
       **Hecho:** `tests/integration/db/anclaje-devolucion-migration.test.ts` verde: aplica dos veces
       sin duplicar, el down revierte, y el value NO está en `ORIGEN_TIPOS_VISITA_REAL` ni en
       `ORIGEN_TIPOS_CON_GESTION`. **Depende de:** T1.1.
-- [ ] **T1.3 — [P] El mapa `resultado → estatus`.** Nuevo módulo puro `lib/types/gestion-destino.ts`
+- [x] **T1.3 — [P] El mapa `resultado → estatus`.** Nuevo módulo puro `lib/types/gestion-destino.ts`
       con `ESTATUS_POR_RESULTADO` y sus dos `satisfies`. `MisAsignacionesService:388` deja de usar
       `findEstatusIdByValue(input.resultado)`.
       **Hecho:** `tests/unit/types/gestion-destino.test.ts` cubre los 5 resultados y afirma que
       `devuelta → ⟨PRE⟩` es el único que rompe la identidad; `mis-asignaciones-service.test.ts`
       afirma que gestionar `devuelta` deja la orden en `⟨PRE⟩`. **Depende de:** T1.1.
-- [ ] **T1.4 — Aristas de transición.** Altas `en_reparto → ⟨PRE⟩`, `⟨PRE⟩ → devuelta`,
+- [x] **T1.4 — Aristas de transición.** Altas `en_reparto → ⟨PRE⟩`, `⟨PRE⟩ → devuelta`,
       `⟨PRE⟩ → en_reparto` (+ las dos de recuperación **solo si P4 = sí**); **baja** de
       `en_reparto → devuelta` en el mismo commit que su último productor.
       **Hecho:** typecheck verde (la exhaustividad rompe el build hasta declararlas);
       `order-status-transiciones.guardia.test.ts`, `.connectividad.test.ts` y
       `tests/fixtures/inventario-transiciones-140.ts` actualizados con nota fechada; un caso afirma
       que `en_reparto → devuelta` **ya es ilegal**. **Depende de:** T1.3.
-- [ ] **T1.5 — `ESTADOS_ESPERADOS` (regresión, no aserción a actualizar).** `CierreDiaService.ts:86`,
+- [x] **T1.5 — `ESTADOS_ESPERADOS` (regresión, no aserción a actualizar).** `CierreDiaService.ts:86`,
       entrada `devuelta` gana `⟨PRE⟩` en primera posición.
       **Hecho:** `cierre-dia-service.test.ts` tiene un caso **nuevo** «el mensajero deshace su
       devolución del día mientras la orden está en el pre-estado», verde. **Depende de:** T1.1.
-- [ ] **T1.6 — [P] Superficies que rompen el build.** Etiqueta + variante en `EstatusBadge.tsx`; hito
+- [x] **T1.6 — [P] Superficies que rompen el build.** Etiqueta + variante en `EstatusBadge.tsx`; hito
       público en `rastreo-publico.ts` (mismo hito que `devuelta`, R28).
       **Hecho:** typecheck verde; `EstatusBadgeCatalogoV2.test.tsx`,
       `rastreo-hitos-exhaustivo.guardia.test.ts` y `rastreo-sin-estatus-crudo.guardia.test.ts`
       actualizados a 21 values con nota fechada. **Depende de:** T1.1.
-- [ ] **T1.7 — [P] Los cuatro mapas parciales que NO rompen el build.** Revisión **a mano** de
+- [x] **T1.7 — [P] Los cuatro mapas parciales que NO rompen el build.** Revisión **a mano** de
       `exclude-por-rol.ts` (excluir para `adminTienda`), `webhook-eventos.ts` (**no** añadir, P2),
       `estados-bodega-satelite.ts` (añadir en la posición previa a `devuelta` **si P4 = sí**),
       `tablero-dia.ts` (**no** añadir: default `otros` es correcto).
       **Hecho:** un test por archivo afirma la decisión **y su razón**, incluido el caso negativo
       («`⟨PRE⟩` NO es evento público», «`⟨PRE⟩` NO tiene bucket explícito»);
       `buckets-estatus.guardia.test.ts` actualizado a 21. **Depende de:** T1.1, T0.2.
-- [ ] **T1.8 — [P] Inventarios congelados restantes.** Barrido de las cuentas literales del catálogo
+- [x] **T1.8 — [P] Inventarios congelados restantes.** Barrido de las cuentas literales del catálogo
       (`toBe(20)`, «los 20 values», `CATALOGO_CONGELADO`).
       **Hecho:** `pnpm run typecheck && pnpm test` sin rojos de conteo; cada actualización lleva
       comentario con fecha y motivo. **Depende de:** T1.6, T1.7.
@@ -88,12 +88,12 @@
 
 ## T2 — El tercer bloque de `resolverCierre`  *(mismo PR que T1)*
 
-- [ ] **T2.1 — `ResolverCierreInput.anclajeDevolucion` OBLIGATORIO** + resolución de los dos ids en
+- [x] **T2.1 — `ResolverCierreInput.anclajeDevolucion` OBLIGATORIO** + resolución de los dos ids en
       `CierresAdminService`, con **fallo cerrado** si alguno es `null` (R9).
       **Hecho:** typecheck rompe en todo doble de test que no lo pase (esa es la señal buscada); un
       caso afirma que con catálogo incompleto la aprobación **no ocurre** y no hay efectos parciales.
       **Depende de:** T1.1.
-- [ ] **T2.2 — El bloque.** Al final de la rama `aprobado`, después del de `devolucionRechazadas`:
+- [x] **T2.2 — El bloque.** Al final de la rama `aprobado`, después del de `devolucionRechazadas`:
       lectura de las gestiones `devuelta` del cierre → lectura de las vigentes más recientes de esas
       órdenes (**una** consulta, no N) → `updateMany` guardado por `⟨PRE⟩` → `appendCambioEstado` solo
       si `count > 0`, con `origenTipo: 'anclaje_devolucion'`, `actorUsuarioId = resueltoPor` y
@@ -103,23 +103,23 @@
       prometía y que no existía»— con los casos: ancla, no ancla al rechazar, no ancla la gestión que
       no es la vigente más reciente, idempotencia en segunda pasada, cierre sin devoluciones =
       cero consultas extra. **Depende de:** T2.1.
-- [ ] **T2.3 — Retirar el encendedor viejo.** Se borra el `updateMany` de `gestionAprobada: true`
+- [x] **T2.3 — Retirar el encendedor viejo.** Se borra el `updateMany` de `gestionAprobada: true`
       (`CierresAdminRepository:1018-1021`).
       **Hecho:** `grep` sin resultados de `gestionAprobada` en `lib/repositories/CierresAdminRepository.ts`.
       **Depende de:** T2.2.
-- [ ] **T2.4 — Verificar que ningún feed de dinero lee `orden.estatus_id`.** Revisión de los cinco
+- [x] **T2.4 — Verificar que ningún feed de dinero lee `orden.estatus_id`.** Revisión de los cinco
       feeds + la caja COD.
       **Hecho:** anotado en `progress/impl_239.md` con los archivos revisados;
       `cierres-admin-caja-cod.test.ts` verde **sin tocar**, y sus suites de idempotencia también.
       **Depende de:** T2.2.
-- [ ] **T2.5 — Restaurar las dos aserciones que se enseñaron a ignorar.**
+- [x] **T2.5 — Restaurar las dos aserciones que se enseñaron a ignorar.**
       `CierresAdminRepository.resolverCierre.devolucion.test.ts:115-120` y
       `cierres-admin-repository.test.ts:1143-1146`: se retira el
       `.filter(c => c.where.id !== undefined)` que excluía precisamente la escritura nueva, y las
       aserciones que contaban sobre la lista filtrada pasan a contar sobre la lista completa.
       **Hecho:** las dos suites verdes **con el filtro retirado** y con un caso que nombra la
       escritura del anclaje. **Depende de:** T2.2.
-- [ ] **T2.6 — Guardia de cobertura de escrituras (R33).**
+- [x] **T2.6 — Guardia de cobertura de escrituras (R33).**
       `tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts`: censa la transacción de
       `resolverCierre` y falla si alguna escritura no está nombrada por al menos una aserción, o si
       un test filtra escrituras por la forma de su `where`.
@@ -132,34 +132,34 @@
 
 ## T3 — El reloj y la visibilidad
 
-- [ ] **T3.1 — Retirar la columna.** Migración `<ts>_orden_retiro_gestion_aprobada` (`DROP COLUMN` +
+- [x] **T3.1 — Retirar la columna.** Migración `<ts>_orden_retiro_gestion_aprobada` (`DROP COLUMN` +
       `down.sql` que la repone con `DEFAULT false`, **pérdida de valores declarada**), `schema.prisma`,
       `novedadWhere` vuelve a `{ estatus: { value: "devuelta" } }`, `liberarDevueltaSla` pierde la
       línea del apagado, `habilitarNovedad` pasa a `{ ayuda: false }`.
       **Hecho:** `orden-repository.novedades.test.ts` afirma que `count` y `find` comparten predicado
       (R21) y que una `devuelta` **anterior** a la columna se lista (R30);
       `devolucion-sla-repository.test.ts` verde. **Depende de:** T2.
-- [ ] **T3.2 — Guardia de retirada (R20).** `tests/unit/guards/gestion-aprobada-retirada.guardia.test.ts`:
+- [x] **T3.2 — Guardia de retirada (R20).** `tests/unit/guards/gestion-aprobada-retirada.guardia.test.ts`:
       censo del árbol; ninguna referencia a `gestion_aprobada` / `gestionAprobada` fuera de
       `db/migrations/` y de los documentos históricos.
       **Hecho:** verde, y **roja** al reintroducir la columna en `schema.prisma` (autocomprobación en
       el archivo). El censo se escribe **en un archivo**, nunca por `node -e`: ahí `\b` llega como
       backspace y el censo miente en verde. **Depende de:** T3.1.
-- [ ] **T3.3 — El ancla del cron.** `findDevueltasSla` proyecta también la última fila de historial
+- [x] **T3.3 — El ancla del cron.** `findDevueltasSla` proyecta también la última fila de historial
       con `origen_tipo = anclaje_devolucion`; `DevueltaSlaRow` gana `origenAncla`; rama legada
       nombrada para las filas viejas.
       **Hecho:** `devolucion-sla-repository.test.ts` cubre las dos ramas y afirma que una orden en
       `⟨PRE⟩` **no** es candidata (R13); `devolucion-sla-service.test.ts` afirma que la ventana se
       mide desde la aprobación y que el contador `legadas` sale en el resultado. **Depende de:** T3.1.
-- [ ] **T3.4 — [P] Re-anclaje en la vuelta completa (R15).**
+- [x] **T3.4 — [P] Re-anclaje en la vuelta completa (R15).**
       **Hecho:** un caso que recorre devolución → aprobación → liberación → reasignación → nueva
       devolución → nueva aprobación, y afirma que gana el anclaje **más reciente**. **Depende de:** T3.3.
-- [ ] **T3.5 — [P] Prosa caducada.** Reescribir el bloque de `DevolucionSlaService.ts:122` que aún
+- [x] **T3.5 — [P] Prosa caducada.** Reescribir el bloque de `DevolucionSlaService.ts:122` que aún
       dice «Q5, **ABIERTA**» (está **CERRADA con riesgo ACEPTADO** desde 2026-08-13, D14) y anotar el
       cambio de forma de Q5.
       **Hecho:** el texto nuevo cita la decisión con fecha y no afirma nada que el código no haga.
       **Depende de:** T3.3.
-- [ ] **T3.6 — La fuga de la bandera de ayuda (R22) y «Habilitar» (R23).** Alcance según la respuesta
+- [x] **T3.6 — La fuga de la bandera de ayuda (R22) y «Habilitar» (R23).** Alcance según la respuesta
       a P9/P10.
       **Hecho:** un test afirma que una orden que salió de reparto **no** sigue listada por una
       solicitud de ayuda anterior, y otro que ninguna orden puede quedar fuera del listado con una
@@ -172,21 +172,21 @@
 
 ## T4 — Los tests legítimamente invertidos  *(la tanda más cara y la más subestimada)*
 
-- [ ] **T4.1 — Los tres emuladores de integración.**
+- [x] **T4.1 — Los tres emuladores de integración.**
       `tests/integration/db/resolver-novedad-recupera-sla.test.ts`,
       `resolver-novedad-reprograma-sla.test.ts`, `resolver-novedad-reprograma-dinero.test.ts`:
       su semilla deja la orden en `devuelta` justo después de gestionar, que ya no ocurre.
       **Hecho:** las tres semillas pasan por la aprobación del cierre; cada archivo lleva una nota
       fechada de por qué se invirtió. **Ninguno queda verde por ausencia de datos** — se comprueba
       matando cada uno con una mutación antes de darlo por bueno. **Depende de:** T3.
-- [ ] **T4.2 — [P] E2E de escalado por SLA.**
+- [x] **T4.2 — [P] E2E de escalado por SLA.**
       **Hecho:** el flujo pasa por aprobar el cierre antes de que el reloj corra, y el test falla si
       se salta ese paso. **Depende de:** T3.
-- [ ] **T4.3 — [P] El test que vive dentro de lo que se borra.** Antes de retirar cualquier archivo o
+- [x] **T4.3 — [P] El test que vive dentro de lo que se borra.** Antes de retirar cualquier archivo o
       componente, comprobar qué tests mueren con él.
       **Hecho:** lista en `progress/impl_239.md` de tests retirados y de la guardia que los sustituye;
       cero cobertura perdida sin reemplazo nombrado. **Depende de:** T3.
-- [ ] **T4.4 — Guardia de no fusión de criterios (R16).**
+- [x] **T4.4 — Guardia de no fusión de criterios (R16).**
       `tests/unit/guards/anclaje-vs-intentos.guardia.test.ts`: falla si el anclaje y el conteo de
       intentos comparten punto de definición o si uno importa el predicado del otro.
       **Hecho:** verde; **roja** al hacer que el anclaje reutilice `whereIntentosVigentes`
@@ -199,21 +199,21 @@
 
 ## T5 — Mutación, medición y el resto de las guardias
 
-- [ ] **T5.1 — Mutación: el reloj arranca en la aprobación.** Revertir el ancla a
+- [x] **T5.1 — Mutación: el reloj arranca en la aprobación.** Revertir el ancla a
       `gestion.createdAt` y comprobar que la suite se pone **roja**.
       **Hecho:** salida real pegada en `progress/impl_239.md`, con el nombre del test que cae. Sin
       esa salida no cuenta: un arnés de mutaciones ya reportó 9/9 supervivientes dos veces **sin
       haber ejecutado un test**. **Depende de:** T3, T4.
-- [ ] **T5.2 — [P] Mutación: la carrera de los dos cierres.** Quitar la comprobación de «gestión
+- [x] **T5.2 — [P] Mutación: la carrera de los dos cierres.** Quitar la comprobación de «gestión
       vigente más reciente» del bloque y comprobar que cae el caso de T2.2.
       **Hecho:** ídem, con salida real. **Depende de:** T2, T4.
-- [ ] **T5.3 — [P] Mutación: el predicado de novedades.** Cambiar la igualdad de estado por `⟨PRE⟩` y
+- [x] **T5.3 — [P] Mutación: el predicado de novedades.** Cambiar la igualdad de estado por `⟨PRE⟩` y
       comprobar que caen los casos de T3.1.
       **Hecho:** ídem. **Depende de:** T3.
-- [ ] **T5.4 — [P] Consulta de población atascada (R34).** Dejar la consulta de `design.md` §12
+- [x] **T5.4 — [P] Consulta de población atascada (R34).** Dejar la consulta de `design.md` §12
       ejecutada contra producción y pegada con su resultado.
       **Hecho:** resultado con fecha en `progress/impl_239.md`. **Depende de:** T3.
-- [ ] **T5.5 — Guardias completas.** `pnpm run test:guardias` entero: transiciones exhaustivas,
+- [x] **T5.5 — Guardias completas.** `pnpm run test:guardias` entero: transiciones exhaustivas,
       `hilo-ventana-alcanzable`, frontera de `orden_nota`, money-safe, `dinero-sin-centimos`, los dos
       criterios de intento, y las tres guardias nuevas de esta feature.
       **Hecho:** todas verdes. Un rojo en los criterios de intento significa que alguien los unificó:
@@ -231,14 +231,14 @@
 
 ## T6 — Cierre documental
 
-- [ ] **T6.1 — [P] Marcar SUPERADAS con fecha** las decisiones §1.1 y §3.5 de
+- [x] **T6.1 — [P] Marcar SUPERADAS con fecha** las decisiones §1.1 y §3.5 de
       `specs/99-devolucion-diferida-sla/design.md`.
       **Hecho:** las dos secciones llevan la nota, sin borrar el texto original.
-- [ ] **T6.2 — [P] Actualizar §7bis de `specs/215-reintento-en-cierre/design.md`** con el cambio de
+- [x] **T6.2 — [P] Actualizar §7bis de `specs/215-reintento-en-cierre/design.md`** con el cambio de
       forma de Q5 (mejor: se acaba el bucle y la población es contable; peor: la mercadería se
       congela).
       **Hecho:** la sección lo dice y no contradice al código.
-- [ ] **T6.3 — [P] Anotar el cierre del fallo** en `progress/auditoria_ayuda_tienda.md` §1, con fecha
+- [x] **T6.3 — [P] Anotar el cierre del fallo** en `progress/auditoria_ayuda_tienda.md` §1, con fecha
       y con el PR.
       **Hecho:** el §1 deja de leerse como un fallo vivo.
 - [ ] **T6.4 — Cerrar la ficha.** `feature_list.json`: estado, `status_note` de 3-6 líneas técnicas

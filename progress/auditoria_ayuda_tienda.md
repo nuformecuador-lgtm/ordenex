@@ -142,3 +142,27 @@ Nadie pidió esto. Se investiga en ficha aparte antes de tocarlo: puede ser deli
   revisaron los índices de `gestion_orden`).
 - Si `deshacerGestion` alcanza en la práctica la gestión sintética de `reprogramarDesdeDevuelta`.
 - Los e2e no se inspeccionaron ni se ejecutaron.
+
+---
+
+## CERRADO EL FALLO DE §1 — 2026-08-19 (feature 239)
+
+El fallo que cobraba dinero **está arreglado en la rama `feature/239-devolucion-espera-cierre`**, y
+no por parche: la mitad que quitaba la visibilidad y la que mueve el reloj **quedan del mismo lado
+por construcción**. La orden entra en `devolucion_por_confirmar` y la aprobación del cierre es la
+transición a `devuelta`, así que ya no son dos condiciones que alguien deba mantener sincronizadas.
+
+También quedan cerrados los otros dos de §2:
+
+- **La fuga permanente** (§2.1): la rama `{ ayuda: true }` exige además `en_reparto`. Es un **tapón
+  con dueño** —la ficha 235 retira el booleano y la rama entera sobra— y está escrito así en el
+  código, con dos tests que lo matan.
+- **«Habilitar» que escondía sin detener el reloj** (§2.2): cerrado **por construcción**. Al volver
+  la visibilidad a una igualdad de estado, la palanca dejó de existir; no hizo falta comprobación
+  nueva.
+
+Y el problema de proceso de §3: la escritura que **nadie vigilaba** ahora tiene su aserción, con una
+orden testigo de otro cierre, matada por mutación.
+
+**Lo que NO cierra esta ficha** y sigue en pie: §4 (la mayoría de los 17 puntos del pedido, que son
+las fichas 235-238 y 240) y §5 (las guardas retiradas, ficha 241).
