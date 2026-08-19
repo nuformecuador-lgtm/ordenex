@@ -267,11 +267,28 @@ const ARBOLES_DE_PANTALLA: readonly string[] = ["app", "components"];
  * Usos de `.toFixed(` que NO son dinero, censados uno a uno. La lista es corta a
  * proposito: cualquier `.toFixed(` nuevo en estos dos arboles pone la guardia
  * roja hasta que alguien lo justifique aqui, y ese tramite ES el punto.
+ *
+ * LIMITE DEL MECANISMO — escrito aqui para que no se descubra dentro de seis
+ * meses: la exencion es POR ARCHIVO, no por linea. Cada ruta de esta lista queda
+ * ciega ENTERA, y lo seguira estando para los `.toFixed(` que le añadan mañana
+ * —y esos si podrian ser importes—. Es el precio de la forma que eligio la 230,
+ * y se paga a cambio de que ampliar la lista obligue a tocar este archivo y a
+ * escribir un motivo. Las dos mitigaciones son de disciplina, no de codigo:
+ * mantener la lista corta, y no meter en ella un fuente que ademas pinte dinero.
+ * Si algun dia deja de bastar, el sitio donde afinar es `usosDeToFixed`, que ya
+ * devuelve `ruta:linea` y por tanto podria exentar la linea y no el fuente.
  */
 const LISTA_BLANCA_TO_FIXED: readonly { ruta: string; porque: string }[] = [
   {
     ruta: "components/shared/BulkUpload.tsx",
     porque: "tamaño de archivo en MB, no un importe",
+  },
+  {
+    // No se reescribio el fuente para sacarlo de aqui: `Math.round(m / 100) / 10`
+    // se come el cero final y «1.0 km» pasaria a «1 km». Lo que ve el mensajero no
+    // se cambia para acomodar una guardia.
+    ruta: "app/(app)/mis-asignaciones/_components/TrayectoVivoButton.tsx",
+    porque: "distancia en km hasta la siguiente parada, no un importe",
   },
 ];
 
