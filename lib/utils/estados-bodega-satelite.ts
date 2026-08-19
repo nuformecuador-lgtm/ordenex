@@ -39,6 +39,11 @@
  * confirmacion fisica—. Si duele en operacion, la via es REABRIR P4, no anadir el value aqui ni
  * una puerta trasera en las transiciones. Esta lista es PARCIAL y no rompe el build: la ausencia
  * se afirma en `tests/unit/utils/estados-bodega-satelite.test.ts`.
+ *
+ * FEATURE 235 (T1.5, 2026-08-19) — `ayuda_tienda` TAMPOCO entra, por la razon mas simple de todas:
+ * el paquete esta EN LA MOTO, no en el estante del satelite. Una orden sobre la que el mensajero
+ * pidio ayuda sigue en la calle con el; listarla en la bodega diria que esta guardada ahi. Mismo
+ * criterio que la 239 aplico al pre-estado de la devolucion. Ausencia afirmada en el mismo test.
  */
 export const ESTADOS_BODEGA_SATELITE = [
   "en_bodega_satelite", // Recibidas

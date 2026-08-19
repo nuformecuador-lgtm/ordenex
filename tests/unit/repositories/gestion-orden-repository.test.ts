@@ -174,16 +174,37 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
   // siguen en reparto. Si la query no excluyera `en_reparto`, una orden gestionada hoy como
   // reprogramada y liberada de vuelta a reparto el mismo dia (feature 46) caeria en los DOS
   // conjuntos y su monto se sumaria dos veces.
-  it("EXCLUYE en_reparto para no solaparse con la otra mitad del total", async () => {
+  it("EXCLUYE lo que el mensajero LLEVA EN LA MANO, para no solaparse con la otra mitad", async () => {
     const { repo, aggregate } = repoConAggregate(null);
 
     const total = await repo.sumMontoCobrarGestionadas("m1", DIA);
 
     expect(total).toBe(0); // sin gestionadas / montos nulos -> 0, no null
     const arg = (aggregate.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
-    expect(arg.where.estatus).toEqual({ value: { not: "en_reparto" } });
+    // FEATURE 235 (R21, 2026-08-19): de UN value a DOS. El otro sumando (`porCobrar`) se calcula
+    // sobre `porGestionar UNION conAyuda`, asi que el conjunto «en la mano» crecio y esta red
+    // tenia que crecer con el. Censo CERRADO: uno de mas dejaria fuera dinero que si se gestiono.
+    expect(arg.where.estatus).toEqual({ value: { notIn: ["en_reparto", "ayuda_tienda"] } });
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
+  });
+
+  // Feature 235 (R21): el predicado, aplicado a filas, para que el caso de arriba no afirme solo
+  // una forma. Los dos estados «en la mano» quedan fuera; los desenlaces, dentro.
+  it("235/R21: el predicado deja fuera `en_reparto` Y `ayuda_tienda`, y deja dentro los desenlaces", async () => {
+    const { repo, aggregate } = repoConAggregate(null);
+
+    await repo.sumMontoCobrarGestionadas("m1", DIA);
+    const arg = (aggregate.mock.calls[0] as unknown[])[0] as {
+      where: { estatus: { value: { notIn: string[] } } };
+    };
+    const cuenta = (estatus: string) => !arg.where.estatus.value.notIn.includes(estatus);
+
+    expect(cuenta("en_reparto")).toBe(false);
+    expect(cuenta("ayuda_tienda")).toBe(false);
+    for (const dentro of ["entregada", "reprogramada", "rechazada", "devolucion_por_confirmar"]) {
+      expect(cuenta(dentro), `${dentro} SI cuenta como gestionada del dia`).toBe(true);
+    }
   });
 });
 

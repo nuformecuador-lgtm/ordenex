@@ -262,13 +262,18 @@ describe("NovedadesModule", () => {
 
   // --- Pedido humano 2026-08-18: la solicitud de AYUDA ---
   // Esta pantalla dejó de ser «las devueltas de mi tienda» para ser «lo que mi tienda tiene que
-  // mirar»: entran también órdenes que siguen EN REPARTO porque el mensajero pidió ayuda. El
-  // badge es lo único que distingue en la lista una cosa de la otra.
+  // mirar»: entran también órdenes sobre las que el mensajero pidió ayuda. El badge es lo único
+  // que distingue en la lista una cosa de la otra.
+  //
+  // FEATURE 235 (T5.4, 2026-08-19) — los fixtures pasan de `ayuda: true` a
+  // `estatusValue: "ayuda_tienda"`. NO es una reescritura de los casos: el comportamiento visible
+  // que afirman es EXACTAMENTE el mismo, lo que cambia es de dónde sale la verdad. La bandera se
+  // retiró con su columna y el estatus la sustituye.
 
-  it("ayuda sin causa (la orden sigue en reparto) -> badge «Ayuda solicitada», no «Sin causa registrada»", () => {
+  it("en `ayuda_tienda` sin causa -> badge «Ayuda solicitada», no «Sin causa registrada»", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -281,10 +286,10 @@ describe("NovedadesModule", () => {
     expect(screen.queryByText("Sin causa registrada")).toBeNull();
   });
 
-  it("devuelta Y con ayuda pedida: el badge dice las DOS cosas, sin tapar una con la otra", () => {
+  it("con ayuda pedida y una causa arrastrada: el badge dice las DOS cosas, sin tapar una con la otra", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: "not_found" })]}
+        items={[novedad({ causa: "not_found", estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -297,7 +302,7 @@ describe("NovedadesModule", () => {
   it("sobre una orden que NO está devuelta no se ofrecen las acciones de devolución", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -323,14 +328,15 @@ describe("NovedadesModule", () => {
   it("sin ayuda pedida y sin estar devuelta, «Habilitar» tampoco se ofrece", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: false, causa: null, estatusValue: "en_reparto" })]}
+        items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
       />,
     );
 
-    // La excepción es la AYUDA, no el estatus: sin bandera viva no hay nada que habilitar.
+    // La excepción es el estatus de AYUDA, no «cualquier orden en reparto»: sin solicitud viva no
+    // hay nada que habilitar. Es el CASO NEGATIVO de la traducción literal de la 235.
     expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
   });
 
@@ -360,7 +366,7 @@ describe("NovedadesModule", () => {
   it("con ayuda pedida aparece el botón y el contador, con el `0` incluido", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 0 })]}
+        items={[novedad({ intentosContacto: 0, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -379,7 +385,7 @@ describe("NovedadesModule", () => {
   it("el contador arranca en el valor del servidor, no en cero", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 4 })]}
+        items={[novedad({ intentosContacto: 4, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -396,7 +402,7 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "ok", intentosContacto: 9 });
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -420,7 +426,7 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "forbidden" });
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}

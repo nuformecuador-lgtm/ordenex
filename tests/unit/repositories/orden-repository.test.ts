@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import {
   assertTransicionValida,
   TRANSICIONES,
@@ -790,6 +791,111 @@ describe("239/R25 — el pre-estado no se ofrece para asignacion, ruteo, recolec
     expect([...salidas].sort()).toEqual(["devuelta", "en_reparto"]);
     for (const destino of ["por_recoger", "en_ruta_bodega_satelite", "recolectando"] as const) {
       expect(() => assertTransicionValida(PRE_ESTADO, destino)).toThrow(TransicionIlegalError);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// FEATURE 235 (T3.2/T3.4, R14/R17) — LA ORDEN EN AYUDA SALE DE LA RUTA, Y NO SE OFRECE PARA NADA.
+//
+// ESTE ES EL ARGUMENTO CENTRAL DE LA FICHA, medido. Con la BANDERA, `findParadasEnReparto` traia
+// la orden igual —su `where` es `estatus = en_reparto` y la orden seguia ahi—, asi que el
+// optimizador la seguia visitando y el mapa la seguia pintando aunque su card estuviera abajo en
+// otra seccion. NO HIZO FALTA ESCRIBIR NINGUN FILTRO NUEVO: al mover el estatus, la orden deja de
+// casar SOLA.
+//
+// Se demuestra por las MISMAS dos vias que la 239 (design §12 de aquella ficha):
+//   (a) por el WHERE: los listados que ofrecen trabajo acotan por IGUALDAD de estado;
+//   (b) por el GRAFO: aunque alguien la colara en un listado, `ayuda_tienda` no tiene arista legal
+//       hacia `por_recoger`, `en_ruta_bodega_satelite` ni `recolectando`, asi que la accion
+//       moriria en el choke point. La (b) es la que sobrevive a un refactor del WHERE.
+//
+// ⚠️ LA MUTACION QUE MATA EL PRIMER CASO: cambiar el `where` de `findParadasEnReparto` a
+// `estatus: { value: { in: ["en_reparto", "ayuda_tienda"] } }`.
+// ---------------------------------------------------------------------------------------------
+describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece para operar", () => {
+  const AYUDA = "ayuda_tienda";
+
+  it("R14(a): `findParadasEnReparto` acota por IGUALDAD a `en_reparto` — un `in` la colaria", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.findParadasEnReparto("m1");
+
+    const arg = prisma.orden.findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    // Igualdad, no `in` ni `notIn`. Es lo que hace que la orden en ayuda desaparezca de la ruta
+    // sin que nadie escriba un filtro para ella.
+    expect(arg.where.estatus).toEqual({ value: "en_reparto" });
+    expect(JSON.stringify(arg.where)).not.toContain(AYUDA);
+  });
+
+  it("R14(a): el predicado, aplicado a filas, DEJA FUERA la del mensajero que pidio ayuda", async () => {
+    // El `where` es lo unico que decide (este doble no ejecuta SQL), asi que se le da semantica:
+    // se simula la igualdad sobre tres filas del MISMO mensajero. Sin esto, el caso de arriba
+    // afirmaria una forma sin decir que efecto tiene.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.findParadasEnReparto("m1");
+    const { where } = prisma.orden.findMany.mock.calls[0][0] as {
+      where: { mensajeroAsignadoId: string; deletedAt: null; estatus: { value: string } };
+    };
+
+    const casa = (fila: { mensajero: string; estatus: string; borrada: boolean }) =>
+      fila.mensajero === where.mensajeroAsignadoId &&
+      fila.borrada === (where.deletedAt !== null) &&
+      fila.estatus === where.estatus.value;
+
+    expect(casa({ mensajero: "m1", estatus: "en_reparto", borrada: false })).toBe(true);
+    // ⭑ La que importa: misma moto, mismo dia, y NO es parada.
+    expect(casa({ mensajero: "m1", estatus: AYUDA, borrada: false })).toBe(false);
+    expect(casa({ mensajero: "m2", estatus: "en_reparto", borrada: false })).toBe(false);
+  });
+
+  it("R17(a): el filtro `reasignables` tampoco la ofrece (acota a `en_bodega_central`)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.list({
+      where: { reasignables: true },
+      sortBy: "num_guia",
+      sortDir: "asc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0] as {
+      where: { estatus?: { value?: unknown } };
+    };
+    // Asignar a mensajero y rutear a satelite parten del MISMO origen, asi que este unico caso
+    // cubre las dos superficies. Igualdad: ni por omision ni por lista negra se cuela.
+    expect(arg.where.estatus).toEqual({ value: "en_bodega_central" });
+    expect(JSON.stringify(arg.where)).not.toContain(AYUDA);
+  });
+
+  it("R17(a): el listado de la bodega satelite tampoco la admite", () => {
+    // Su lista blanca esta congelada en `estados-bodega-satelite.test.ts`; aqui se afirma la
+    // consecuencia para esta feature: el paquete esta en la moto, no en el estante.
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain(AYUDA);
+  });
+
+  it("R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion", () => {
+    // La via que sobrevive a un refactor del WHERE: aunque alguien la colara en un listado, la
+    // accion moriria en el choke point. Las DOS unicas salidas son el rescate y el corte.
+    const salidas = TRANSICIONES.ayuda_tienda.map((d) => d.to);
+    expect([...salidas].sort()).toEqual(["en_reparto", "sin_gestionar"]);
+    for (const destino of [
+      "por_recoger", // asignacion a mensajero
+      "en_ruta_bodega_satelite", // ruteo a satelite
+      "recolectando", // asignacion de recoleccion en tienda
+      "en_bodega_central", // recuperacion manual
+      "en_bodega_satelite",
+    ] as const) {
+      expect(() => assertTransicionValida(AYUDA, destino)).toThrow(TransicionIlegalError);
     }
   });
 });

@@ -90,7 +90,19 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
 // Asimetria deliberada en lo que cuenta como "ocupado": las otras RECOLECCIONES no
 // bloquean —un viaje a la tienda son N ordenes, y exigir cero pendientes impediria asignar
 // la segunda del mismo lote—, pero cualquier orden de REPARTO si.
-const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto"];
+//
+// FEATURE 235 (R1, 2026-08-19) — `ayuda_tienda` ENTRA, y no es un apendice: es el caso mas claro de
+// los tres. El estatus significa literalmente «el mensajero pidio ayuda sobre esta orden y EL
+// PAQUETE SIGUE CON EL, EN LA CALLE» (R1). Un mensajero con una orden ahi lleva carga encima, asi
+// que mandarlo a recolectar a una tienda es exactamente lo que la regla de dedicacion prohibe:
+// «quien va a una tienda a recoger un lote sale con el vehiculo vacio y vuelve a la central».
+//
+// Dejarla fuera no habria sido una decision, habria sido un olvido con dirección peligrosa: el
+// mensajero se leeria como «sin carga» JUSTO cuando esta atascado con un paquete que no puede
+// entregar. La 235 movio la orden de `en_reparto` a un estatus propio y esta lista no se entero —
+// la cazó la revision, no la suite—. La guardia `carga-del-mensajero.guardia.test.ts` existe para
+// que la proxima vez la cace un test.
+const ESTADOS_REPARTO_PENDIENTE = ["por_recoger", "en_reparto", "ayuda_tienda"];
 // Lo que ocupa a un mensajero es la recoleccion que TIENE ASIGNADA (`recolectando`); las que
 // esperan sin dueño no son de nadie y por tanto no bloquean a nadie.
 const ESTADOS_RECOLECCION_PENDIENTE = [ESTATUS_RECOLECTANDO];

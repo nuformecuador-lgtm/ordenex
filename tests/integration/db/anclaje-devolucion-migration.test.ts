@@ -94,9 +94,18 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(26);
     expect(valores).not.toContain(FAMILIA);
-    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade.
+    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade
+    // Y menos los que se anadieron DESPUES: el `down.sql` es una FOTO HISTORICA y no se toca, asi
+    // que lo que se ajusta al crecer el enum es el conjunto que se le descuenta al SEED vigente.
+    //
+    // Feature 235 (2026-08-19): entran `solicitud_ayuda_tienda` y `rescate_ayuda_tienda`.
+    const POSTERIORES = new Set<string>([
+      FAMILIA,
+      "solicitud_ayuda_tienda",
+      "rescate_ayuda_tienda",
+    ]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== FAMILIA)),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),
     );
   });
 
@@ -201,7 +210,13 @@ describe("Feature 239 · el codigo y la base dicen lo mismo (sin drift)", () => 
 
   it("`ORDER_STATUS_SEED` incluye el pre-estado, y como APENDICE (no reordena)", () => {
     expect(ORDER_STATUS_SEED as readonly string[]).toContain(PRE_ESTADO);
-    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe(PRE_ESTADO);
+    // 2026-08-19 (feature 235): el pre-estado deja de ser el ULTIMO porque `ayuda_tienda` se
+    // apendio DESPUES. Lo que este caso afirma sigue siendo lo mismo —que la 239 no reordeno a
+    // nadie— y se dice de la forma que sobrevive a la siguiente feature aditiva: su posicion es la
+    // penultima, e inmediatamente despues del value que ya estaba antes de ella.
+    const i = (ORDER_STATUS_SEED as readonly string[]).indexOf(PRE_ESTADO);
+    expect(i).toBe(ORDER_STATUS_SEED.length - 2);
+    expect(ORDER_STATUS_SEED[i - 1]).toBe("recolectando"); // el ultimo antes de la 239 (157)
   });
 
   // R16 — EL CASO QUE PROTEGE EL DINERO. Si la familia del anclaje entrara en la lista de visita

@@ -9,7 +9,52 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-18, noche. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-19. **EMPIEZA A LEER POR AQUÍ**
+
+**La 235 («ayuda a la tienda: estatus propio») está lista para PR.** La revisión la había
+**RECHAZADO** con 4 bloqueantes; los cuatro están cerrados:
+
+| | qué era | cómo quedó |
+| --- | --- | --- |
+| **B1** | el corte de la noche no barría al mensajero que acababa el día en ayuda | cerrado en `db23911b`, censando las **siete** listas de «qué ocupa a un mensajero» y con guardia que las cruza |
+| **B2** | la regla de dedicación de la 157 leía «sin carga» a quien lleva el paquete | ídem |
+| **B3** | R35 pedía superficie de lectura para los dos roles y la tienda no la tiene | **reconciliado en el spec**: el propio `requirements.md` se contradecía (su «fuera de alcance» ya difería la pantalla de la tienda a la 236) |
+| **B4** | `tasks.md` con 0/39 y trabajo abierto dentro | cerrado: **38/39**, con **T8.1 hecho de verdad** (ver abajo). La única sin marcar es T8.3 —gate completo y PR—, que no puede marcarse antes de correrse |
+
+Y el último menor, **m4**: el rescate estaba apagado en pantalla para el mensajero bloqueado, contra
+R25 — arreglado, con test que se sabe poner rojo.
+
+### 🔀 ORDEN DE MERGEO Y DE DESPLIEGUE (cierra **T0.3** de la 235)
+
+**235 → 236 → 237 → 240**, en ese orden. La **241** (investigación de las guardas de bloqueo
+retiradas) es independiente y puede ir cuando sea. La **238** no depende de ninguna y puede arrancar
+en paralelo, ya con spec completo y decisiones firmadas.
+
+⚠️ **La 235 y la 236 conviene que salgan juntas o seguidas.** Medido en pantalla el 2026-08-19: con
+la 235 sola, la tienda ve la orden en `/novedades` con el chip «Ayuda solicitada» **bajo la pestaña
+«En devolución»** y **sin ninguna forma de leer el motivo** que el mensajero escribió (su card no
+tiene botón de notas). No es peor que hoy —hoy tampoco lo lee—, pero es una solicitud de ayuda cuyo
+motivo la tienda no puede abrir. La 236 es la que le da pestaña, card y lectura del hilo.
+
+### ⚠️ Aviso para la 237: la guardia nueva **vigila, pero no descubre**
+
+La guardia de las siete listas de «qué ocupa a un mensajero» cruza los gemelos entre sí —que es donde
+vivieron B1 y B2— pero su censo está **cerrado a mano** (`toHaveLength(7)`) y **no recorre el árbol**
+buscando una octava. Sabe de las siete que alguien le declaró. Si la 237 abre una lista nueva de esa
+familia, **la guardia no la va a encontrar sola**: hay que declararla. La red contra un *estatus*
+nuevo sigue siendo el `satisfies Record<OrderStatusValue, …>` de los mapas exhaustivos.
+
+### 👀 T8.1 — la app, vista
+
+Se recorrió entero, con Playwright y los dos roles: el mensajero pide ayuda → la orden sale del
+listado y del mapa → baja a su sección con los KPI **quietos** → hilo → «Recuperar»; y la tienda la
+ve en `/novedades` y la rescata con «Habilitar». **Encontró dos defectos que la suite no veía** (el
+chip de la card decía «En reparto», y la card llevaba «Pendiente de optimizar» contra R15), los dos
+arreglados en esta misma tanda. Detalle completo, con el texto leído del navegador, en
+`progress/recorrido_235.md`.
+
+
+## AL DÍA — 2026-08-18, noche
 
 > **Producción sigue sana y sin tocar**: `prod` en la release del 15-ago (PR #388), **cero errores de
 > runtime en 3 días**. Todo lo de hoy está en esta rama, pendiente de PR.

@@ -265,6 +265,70 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     expect(findMensajerosBloqueados).toHaveBeenCalledWith(["m1", "m2"]);
   });
 
+  // ===============================================================================================
+  // FEATURE 235 (regla de dedicacion de la 157) — EL GEMELO DE INTERFAZ.
+  //
+  // Esta accion marca en el selector del maestro a quien NO se le puede mandar una recoleccion. Su
+  // lista de estados y la de `GuiaAsignacionService.ESTADOS_REPARTO_PENDIENTE` son LA MISMA VERDAD
+  // DICHA DOS VECES: si divergen, el selector deja elegir a un mensajero al que el servidor va a
+  // rechazar al confirmar, que es exactamente el «toparse con un rechazo del servidor» que este
+  // marcador existe para evitar.
+  //
+  // Al mover la ayuda a un estatus propio, esta lista se quedo con los dos estados viejos y el
+  // mensajero con el paquete encima aparecio SELECCIONABLE. Se repone aqui, y la guardia
+  // `carga-del-mensajero.guardia.test.ts` cruza las dos listas para que no vuelvan a separarse.
+  // ===============================================================================================
+  it("235: pregunta por los TRES estados que ocupan al mensajero, `ayuda_tienda` incluido", async () => {
+    const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findMensajerosByZona = vi
+      .fn()
+      .mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
+    const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
+    const findMensajerosConOrdenesEn = vi.fn(async () => new Set<string>());
+
+    await listarMensajerosParaAsignacion({
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        findMensajerosConOrdenesEn,
+      },
+      zonaRepo: { findCentralZonaId },
+      getActor: getActor(MAESTRO),
+    });
+
+    // Cara REPARTO: censo cerrado, con el estatus de la ayuda dentro.
+    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(
+      ["m1"],
+      ["por_recoger", "en_reparto", "ayuda_tienda"],
+    );
+    // Cara RECOLECCION: intacta. `ayuda_tienda` no es una recoleccion.
+    expect(findMensajerosConOrdenesEn).toHaveBeenCalledWith(["m1"], ["por_recolectar_en_tienda"]);
+  });
+
+  it("235: el mensajero con una orden en `ayuda_tienda` sale marcado en `conRepartoIds`", async () => {
+    const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findMensajerosByZona = vi
+      .fn()
+      .mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
+    const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
+    // El doble responde como la query real: ocupado si se le pregunta por el estatus de ayuda.
+    const findMensajerosConOrdenesEn = vi.fn(async (_ids: string[], estados: string[]) =>
+      estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+    );
+
+    const r = await listarMensajerosParaAsignacion({
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosBloqueados,
+        findMensajerosConOrdenesEn,
+      },
+      zonaRepo: { findCentralZonaId },
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r).toMatchObject({ status: "ok", conRepartoIds: ["m1"], conRecoleccionIds: [] });
+  });
+
   it("R5: sin zona GAM configurada -> lista vacia, sin consultar mensajeros", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue(null);
     const findMensajerosByZona = vi.fn();

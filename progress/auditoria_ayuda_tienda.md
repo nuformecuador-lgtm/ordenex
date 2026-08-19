@@ -166,3 +166,23 @@ orden testigo de otro cierre, matada por mutación.
 
 **Lo que NO cierra esta ficha** y sigue en pie: §4 (la mayoría de los 17 puntos del pedido, que son
 las fichas 235-238 y 240) y §5 (las guardas retiradas, ficha 241).
+
+
+---
+
+## CERRADO TAMBIÉN §2.1 Y §2.3 — 2026-08-19 (feature 235)
+
+La 235 migró la solicitud de ayuda de un **booleano** a un **estatus propio** y retiró la columna.
+Con eso:
+
+- **§2.1, la fuga permanente**: deja de existir su causa. Ya no hay una marca que sobreviva a que la
+  orden cambie de estado, así que no hay nada que se quede en `/novedades` para siempre. El tapón
+  que la 239 puso como parche se retiró en el mismo movimiento.
+- **§2.3, la raíz común** («una columna que hay que apagar a mano»): resuelta. Los dos apagadores
+  colapsaron en **un solo punto de escritura**, y el resto de las salidas ya no tienen nada que
+  apagar.
+- **§4**: la orden ahora **sí sale de la ruta**, del mapa y de la gestión del mensajero, y el
+  bloqueo del cierre pasó de accidental a **explícito**. El corte de «sección aparte», que era solo
+  de cliente, subió al servidor.
+
+Queda en pie de esta auditoría: el resto de §4 (fichas 236, 237, 238 y 240) y §5 (ficha 241).

@@ -51,7 +51,10 @@ export class OrdenNotaService implements IOrdenNotaService {
       notas: filas.map((fila) => proyectarNota(fila, actor.usuarioId)),
       // R19/R14: «el actor esta dentro de SU ventana», no «la orden esta en devuelta». La UI no
       // re-deriva la regla: pinta compositor y controles de borrado segun este booleano.
-      puedeEscribir: estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda),
+      // Feature 235: la ventana ya no acepta ninguna bandera. `puedeEscribir` depende SOLO del
+      // estado de la orden (R36) y por eso el mensajero lo recibe en `true` sobre una orden en
+      // `ayuda_tienda`, que es lo que habilita el compositor del hilo en su card (R35).
+      puedeEscribir: estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue),
     };
   }
 
@@ -59,11 +62,15 @@ export class OrdenNotaService implements IOrdenNotaService {
     const acceso = await this.autorizar(input.ordenId, actor);
     if (!acceso.ok) return { status: "forbidden" };
 
-    // R14/D1: ventana ASIMETRICA por rol. `adminTienda` solo en `devuelta`, `mensajero` solo en
-    // `en_reparto`. Fuera de SU ventana el actor no publica, aunque el otro rol si este dentro
-    // de la suya. Fuera de ambas (`entregada`, `reprogramada`, `rechazada`, ...) no publica
-    // nadie. Un `forbidden` opaco: el borde no dice por que (R10).
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda)) {
+    // R14/D1: ventana ASIMETRICA por rol. `adminTienda` en `devuelta` y `ayuda_tienda`;
+    // `mensajero` en `en_reparto` y `ayuda_tienda`. Fuera de SU ventana el actor no publica,
+    // aunque el otro rol si este dentro de la suya. Fuera de ambas (`entregada`, `reprogramada`,
+    // `rechazada`, ...) no publica nadie. Un `forbidden` opaco: el borde no dice por que (R10).
+    //
+    // Feature 235 (R34): `ayuda_tienda` esta en las DOS ventanas, y ese solape es el requisito -
+    // es el UNICO estado en el que los dos roles pueden hablarse sobre la misma orden a la vez. Si
+    // el mensajero no pudiera escribir ahi, la tienda le hablaria a un hilo mudo.
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
       return { status: "forbidden" };
     }
 
@@ -98,7 +105,7 @@ export class OrdenNotaService implements IOrdenNotaService {
     // notas quedan congeladas para ese actor, incluidas las SUYAS: con la orden en `en_reparto`
     // la tienda ya no puede borrar lo que escribio, y con la orden en `devuelta` el mensajero
     // tampoco. Es lo que convierte el hilo en evidencia y no en un relato editable.
-    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue, acceso.orden.ayuda)) {
+    if (!estaEnVentanaDeEscritura(acceso.rol, acceso.orden.estatusValue)) {
       return { status: "forbidden" };
     }
 

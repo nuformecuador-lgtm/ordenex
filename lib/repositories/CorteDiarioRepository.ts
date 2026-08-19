@@ -11,9 +11,21 @@ import type { CierreEstado } from "@/lib/types/cierre";
 // (109): ahora bloquea y es re-solicitable, igual que `vencido`.
 const ESTADOS_CIERRE_ABIERTOS: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
 
-// Feature 109 (R4): estado de una orden que el corte transiciona a `sin_gestionar` (mensajero que
-// no gestiono ni recogio de vuelta antes del corte del dia).
-const ESTADO_EN_REPARTO = "en_reparto";
+// Feature 109 (R4) + feature 235 (R26): estados de una orden que el corte transiciona a
+// `sin_gestionar` — el mensajero no la gestiono ni la recogio de vuelta antes del corte del dia.
+//
+// ⚠️ ESTA LISTA Y LA DEL SERVICE SON LA MISMA VERDAD VISTA DOS VECES, y esa es la trampa que costo
+// una regresion. `CorteDiarioService` resuelve los ids de estos mismos estados para pasarselos a
+// `crearCierre` (que es quien ESCRIBE), pero la lista de abajo decide QUIENES entran siquiera en el
+// bucle. Si las dos divergen, el barrido queda correcto «de crearCierre hacia dentro» y roto desde
+// la seleccion hacia fuera: exactamente lo que paso con `ayuda_tienda` entre el commit del estatus y
+// esta correccion — un mensajero que acababa el dia con TODO en ayuda y sin gestiones sin cerrar no
+// entraba en la lista, no recibia su cierre `vencido` y sus ordenes no se barrian NUNCA.
+//
+// Es UNION, no sustitucion: `en_reparto` sigue estando. La guardia
+// `tests/unit/guards/carga-del-mensajero.guardia.test.ts` censa las dos listas y exige que digan lo
+// mismo.
+const ESTADOS_A_BARRER = ["en_reparto", "ayuda_tienda"];
 
 type CortePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia">;
 
@@ -28,9 +40,9 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
   /**
    * R7/R10 + feature 109 (R4/R10/R29): mensajeros DISTINCT a evaluar en el corte = UNION de
    * (a) los que tienen `gestion_orden.cierre_id IS NULL AND anulada_at IS NULL` (actividad del dia
-   * sin cerrar, comportamiento 41/67) y (b) los que tienen >=1 `orden` en `en_reparto` no borrada
-   * (mensajero inactivo que dejo ordenes sin gestionar, nuevo en 109) — a estas ultimas el corte
-   * las llevara a `sin_gestionar`. Se RESTAN (R10/R29) los que ya tienen un cierre ABIERTO
+   * sin cerrar, comportamiento 41/67) y (b) los que tienen >=1 `orden` no borrada en alguno de los
+   * `ESTADOS_A_BARRER` — `en_reparto` (109) o `ayuda_tienda` (235) — a las que el corte llevara a
+   * `sin_gestionar`. Se RESTAN (R10/R29) los que ya tienen un cierre ABIERTO
    * (`estado IN ('solicitado','vencido','rechazado')`), para no crear un 2.º cierre bloqueante ni
    * violar el invariante generalizado (R30). Devuelve `zonaId` (usuario.zona_id) para derivar el
    * destino (R1). Solo queries (sin logica de negocio).
@@ -43,11 +55,15 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
       select: { mensajeroId: true, mensajero: { select: { zonaId: true } } },
     });
 
-    // (b) feature 109/R4: mensajeros con ordenes que siguen en `en_reparto` al pasar de dia.
+    // (b) feature 109/R4 + 235/R26: mensajeros con ordenes que el corte tiene que barrer al pasar
+    // de dia — las que siguen en `en_reparto` Y las que quedaron en `ayuda_tienda`. Las segundas
+    // son el caso que la 235 rompio y que aqui se repone: pedir ayuda NO crea `gestion_orden`, asi
+    // que un mensajero que recoge una guia, pide ayuda y se va a casa no aparece por la rama (a)
+    // tampoco. Sin este `in` no entra por ninguna de las dos.
     const enReparto = await this.prisma.orden.findMany({
       where: {
         deletedAt: null,
-        estatus: { value: ESTADO_EN_REPARTO },
+        estatus: { value: { in: ESTADOS_A_BARRER } },
         mensajeroAsignadoId: { not: null },
       },
       distinct: ["mensajeroAsignadoId"],

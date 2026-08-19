@@ -51,6 +51,31 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // NO entra en `ORIGEN_TIPOS_VISITA_REAL`: es una confirmacion administrativa en bodega, no una
   // visita de calle; contarla subiria los intentos y cobraria antes de tiempo (R16).
   "anclaje_devolucion",
+  // Feature 235 (P2, R10) — LA IDA del viaje de la ayuda: `en_reparto -> ayuda_tienda`, disparada
+  // por el MENSAJERO ASIGNADO (`SolicitudAyudaService.solicitar`). Familia propia, y no reuso de
+  // `ajuste_estado`, porque el historial es la unica evidencia de que hubo una solicitud: sin ella
+  // el sentido habria que deducirlo del par de estatus, que es la clase de derivacion que se
+  // vuelve falsa en cuanto el grafo gana una arista.
+  // NO entra en `ORIGEN_TIPOS_VISITA_REAL` (R11): pedir auxilio NO es una visita fallida — el
+  // mensajero sigue en la calle con el paquete y no ha intentado entregar nada. Contarla subiria
+  // los intentos, adelantaria el escalado del cron SLA (99) y cobraria el rechazo (56) antes de
+  // tiempo. Tampoco en `ORIGEN_TIPOS_CON_GESTION`: su fila nace con `gestion_orden_id` NULO.
+  "solicitud_ayuda_tienda",
+  // Feature 235 (P2, R10) — LA VUELTA: `ayuda_tienda -> en_reparto`, el RESCATE. Una sola familia
+  // aunque la disparen DOS actores (el mensajero con «Recuperar» y la tienda con «Habilitar»),
+  // porque el hecho es el mismo y el punto de escritura es UNO (R8); quien lo hizo lo dice
+  // `actor_usuario_id`, no la familia.
+  // ⚠️ ESTA FAMILIA ES LA CLAVE DE LA EXCEPCION DE WEBHOOK (P4, firmada EN CONTRA de la
+  // recomendacion del spec el 2026-08-19): el rescate NO emite evento publico, para que ningun
+  // integrador reciba `en_reparto` dos veces sobre la misma orden. La excepcion se aplica por
+  // FAMILIA y jamas por estado destino — si se hiciera por estado, se silenciarian los reingresos
+  // legitimos (una reprogramada liberada dejaria de avisar) y ESO SI seria una regresion. Ver
+  // `lib/types/webhook-eventos.ts`.
+  // Mismas dos ausencias que la ida: ni visita real (R11) ni con gestion.
+  "rescate_ayuda_tienda",
+  // ⚠️ `gestion_tienda_ayuda` NO se declara aqui (P2, firmada): su productor es la ficha 237 y la
+  // convencion del repo es que un valor de enum nace en el commit de su productor. Precedente
+  // literal: `incidente` (154), declarado sin productor, «costo el tren 154+155+156».
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

@@ -19,6 +19,10 @@ type OrdenRepo = Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusId
 // Feature 109 (R4): estados del catalogo que consume la transicion del corte diario.
 const ESTADO_EN_REPARTO = "en_reparto";
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+// Feature 235 (T4.4, R26): el corte barre TAMBIEN las ordenes con ayuda pedida. Sin esto, un
+// mensajero que dejara el dia con ordenes en `ayuda_tienda` se quedaria con ellas colgando y su
+// cierre bloqueado para siempre.
+const ESTADO_AYUDA = "ayuda_tienda";
 // Reusa la 37: gestiones pendientes del mensajero + creacion transaccional del cierre
 // (parametrizada con estado='vencido', feature 41/C1).
 type CierreRepo = Pick<ICierreDiaRepository, "findGestionesPendientes" | "crearCierre">;
@@ -54,13 +58,16 @@ export class CorteDiarioService implements ICorteDiarioService {
     // Feature 109 (T1.3, R4): resuelve UNA vez los estatus ids de la transicion del corte. Si el
     // catalogo aun no tiene `sin_gestionar` (seed pendiente), se omite la transicion y el corte se
     // comporta como la 41 (solo `vencido` por gestiones) — no bloquea el flujo money-critical.
-    const [enRepartoEstatusId, sinGestionarEstatusId] = await Promise.all([
+    const [enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_AYUDA),
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
     ]);
+    // Feature 235: los TRES o ninguno. `ayudaEstatusId` es obligatorio en `CorteSinGestionarInput`,
+    // asi que un olvido de cableado rompe el typecheck en vez de dejar ordenes sin barrer.
     const corteSinGestionar =
-      enRepartoEstatusId !== null && sinGestionarEstatusId !== null
-        ? { enRepartoEstatusId, sinGestionarEstatusId }
+      enRepartoEstatusId !== null && ayudaEstatusId !== null && sinGestionarEstatusId !== null
+        ? { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId }
         : undefined;
     // R4/R7/R10: mensajeros que "debian cerrar" (gestiones sin cerrar) O que dejaron ordenes en
     // `en_reparto` al pasar de dia; sin un cierre ABIERTO (R10/R29).
@@ -102,8 +109,10 @@ export class CorteDiarioService implements ICorteDiarioService {
         estado: "vencido",
         destinoTipo,
         destinoZonaId: m.zonaId,
-        // Feature 109 (T1.3, R4/R6): en la MISMA tx transiciona `en_reparto -> sin_gestionar` del
-        // mensajero (via choke point). undefined si el catalogo no lo soporta (seed pendiente).
+        // Feature 109 (T1.3, R4/R6) + feature 235 (T4.4, R26): en la MISMA tx transiciona a
+        // `sin_gestionar` las ordenes del mensajero que sigan en `en_reparto` Y las que esten en
+        // `ayuda_tienda`, cada una desde SU origen real (via choke point). undefined si el catalogo
+        // no lo soporta (seed pendiente).
         corteSinGestionar,
         totales,
         pagoByGestionId,

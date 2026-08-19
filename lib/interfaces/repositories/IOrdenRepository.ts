@@ -2,6 +2,7 @@ import type { GestionCausaDevolucion } from "@prisma/client";
 import type { OrdenDTO, OrdenListItemDTO, SortField, SortDir } from "@/lib/types/orden";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
+import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
@@ -276,6 +277,32 @@ export interface OrdenTransicionRow {
 }
 
 /**
+ * Feature 235 (T2.2, R8/R10) — los datos de UNA transicion del ciclo de ayuda, para el punto
+ * unico de escritura. Los dos sentidos comparten forma; lo que los distingue son los ids y la
+ * FAMILIA, que es lo que queda escrito en el historial.
+ *
+ * Todos los ids los resuelve el SERVICE (`findEstatusIdByValue`), no el repo: si el catalogo no
+ * resuelve, la operacion se rechaza entera antes de tocar nada (fallo cerrado, design §3.3).
+ */
+export interface TransicionAyudaInput {
+  ordenId: string;
+  /** LA GUARDA: la escritura solo ocurre si la orden sigue EXACTAMENTE en este estado (R9). */
+  estatusOrigenId: string;
+  estatusDestinoId: string;
+  /**
+   * El usuario que la provoco (R10): el mensajero que pide o recupera, o la tienda que habilita.
+   * NUNCA `null` en los dos sentidos de esta feature — el corte de la noche es otra transicion, en
+   * otro repo, y esa si es del sistema.
+   */
+  actorUsuarioId: string;
+  /** `solicitud_ayuda_tienda` (ida) o `rescate_ayuda_tienda` (vuelta). Ninguna es visita real (R11). */
+  origenTipo: Extract<
+    OrdenHistorialOrigenTipo,
+    "solicitud_ayuda_tienda" | "rescate_ayuda_tienda"
+  >;
+}
+
+/**
  * Feature 92 (design §5) — una orden en reparto del mensajero, candidata a ser parada de
  * la ruta. `latitud`/`longitud` nullable: la orden pudo asignarse antes de que existiera
  * el gate de coordenadas (R8) o perder la geocodificacion al corregirse la direccion.
@@ -545,14 +572,10 @@ export interface NovedadOrdenRow {
   cantonNombre: string;
   /** `distrito_id` es el UNICO FK geografico nullable -> `null` cuando la orden no lo tiene. */
   distritoNombre: string | null;
-  /**
-   * Solicitud de ayuda (pedido humano 2026-08-18): `orden.ayuda`. NOT NULL con default `false`,
-   * asi que aqui es un boolean y nunca `null`. Viaja porque desde este pedido es una de las DOS
-   * razones por las que una fila esta en esta lista (la otra es `estatus = devuelta`), y la
-   * pantalla tiene que poder decir cual: sin el, una orden en reparto marcada apareceria en
-   * `/novedades` sin ninguna explicacion visible.
-   */
-  ayuda: boolean;
+  // Feature 235 (T6.1, R40): aqui viajaba `ayuda: boolean`, la bandera. Se retira con la columna.
+  // La pantalla sigue pudiendo decir POR QUE esta la fila —hay dos razones y siguen siendo dos—
+  // pero ahora lo lee de `estatusValue`, que ya viajaba: `devuelta` = devolucion anclada,
+  // `ayuda_tienda` = solicitud de ayuda viva. Una verdad, no dos.
   /**
    * `orden.intentos_contacto`. NOT NULL con default 0, asi que aqui es un numero y nunca `null`.
    * Viaja porque la pantalla lo PINTA junto al boton que lo incrementa: un contador que no se ve
@@ -1302,36 +1325,25 @@ export interface IOrdenRepository {
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
 
   /**
-   * Solicitud de ayuda (pedido humano 2026-08-18): enciende `orden.ayuda`. Es un UPDATE ciego y
-   * DELIBERADAMENTE sin autorizacion propia: quien llama ya paso por la puerta del hilo de notas
-   * (`SolicitudAyudaService`), que es la unica que decide quien puede tocar esta orden. Un repo
-   * que revalidara aqui seria una segunda tabla de permisos.
+   * Feature 235 (T2.2, R8/R9/R10/R13) — EL PUNTO UNICO DE ESCRITURA DE LAS DOS TRANSICIONES DE LA
+   * AYUDA (`en_reparto -> ayuda_tienda` y `ayuda_tienda -> en_reparto`).
    *
-   * Idempotente: marcar dos veces deja la orden marcada una. No devuelve nada porque no hay nada
-   * util que devolver — el estado resultante es siempre `ayuda = true`.
-   */
-  marcarAyuda(ordenId: string): Promise<void>;
-
-  /**
-   * La inversa de `marcarAyuda`: apaga `orden.ayuda` («Recuperar»). Misma ausencia deliberada de
-   * autorizacion propia y misma idempotencia. NO toca el hilo de notas: los motivos ya escritos
-   * siguen ahi, porque retirar la solicitud es «ya no hace falta», no «no paso».
-   */
-  desmarcarAyuda(ordenId: string): Promise<void>;
-
-  /**
-   * «Habilitar» (pedido humano 2026-08-18): apaga la bandera `ayuda`.
+   * RETIRADOS en el mismo commit: `marcarAyuda`, `desmarcarAyuda` y `habilitarNovedad`, los tres
+   * `update` CIEGOS que escribian la bandera `orden.ayuda`. Los DOS apagadores («Recuperar» del
+   * mensajero y «Habilitar» de la tienda) colapsan aqui: R8 pide un solo punto de escritura para
+   * el rescate y pide que sea el que usen los dos lados.
    *
-   * FEATURE 239 (T3.1, R23): apagaba DOS banderas (`ayuda` y `gestion_aprobada`); la segunda ya
-   * no existe. Consecuencia buscada: «Habilitar» **ya no puede sacar de `/novedades` una
-   * devolucion cuyo reloj de SLA sigue corriendo**. La rama de la devolucion es ahora una
-   * igualdad de estado, asi que mientras la orden siga en `devuelta` sigue listada. Lo que este
-   * metodo retira es la solicitud de ayuda, y solo eso.
+   * Escritura GUARDADA POR EL ESTADO DE ORIGEN, con su append por el choke point en la MISMA
+   * transaccion. Devuelve `false` sin escribir nada si la orden no estaba en el origen esperado
+   * (R9), lo que hace la operacion idempotente POR CONSTRUCCION: no hay codigo de idempotencia.
    *
-   * Misma ausencia deliberada de autorizacion propia que sus hermanos: la puerta la pone
-   * `HabilitarNovedadService` reusando la del hilo de notas. Idempotente.
+   * SIN autorizacion propia, a proposito: la puerta la ponen los services reusando la del hilo de
+   * notas (feature 227). Un repo que revalidara aqui seria una segunda tabla de permisos.
+   *
+   * MONEY-SAFE (R13): el `data` toca UNICAMENTE `estatusId` — ni montos, ni prioridad, ni el
+   * mensajero asignado (R6).
    */
-  habilitarNovedad(ordenId: string): Promise<void>;
+  transicionarAyuda(input: TransicionAyudaInput): Promise<boolean>;
 
   /**
    * Suma UNO al contador de intentos de contacto de la orden y devuelve el valor RESULTANTE.

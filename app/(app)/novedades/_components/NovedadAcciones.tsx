@@ -109,11 +109,20 @@ export function NovedadAcciones({
   // pedida, «+1 intento de contacto».
   const esDevuelta = novedad.estatusValue === "devuelta";
   // «HABILITAR» ES LA EXCEPCIÓN (pedido humano 2026-08-18): también se ofrece cuando hay una
-  // SOLICITUD DE AYUDA viva, aunque la orden siga en reparto. Es el desenlace de esa solicitud del
-  // lado de la tienda — su modal exige una nota, y al confirmar apaga la bandera y la orden sale
-  // de esta pantalla. Las otras dos siguen atadas a `devuelta` porque presuponen una devolución
-  // que sobre una orden en reparto no existe.
-  const puedeHabilitar = esDevuelta || novedad.ayuda === true;
+  // SOLICITUD DE AYUDA viva. Es el desenlace de esa solicitud del lado de la tienda — su modal
+  // exige una nota, y al confirmar RESCATA la orden (`ayuda_tienda → en_reparto`, por el punto
+  // único de la 235) y con eso sale de esta pantalla. Las otras dos siguen atadas a `devuelta`
+  // porque presuponen una devolución que sobre una orden con ayuda no existe.
+  //
+  // FEATURE 235 (T5.4) — TRADUCCION LITERAL, NO ARREGLO. Era `novedad.ayuda === true` y pasa a ser
+  // la igualdad de estado equivalente. El comportamiento visible es EXACTAMENTE el mismo.
+  //
+  // ⚠️ Que «Habilitar» aparezca justo en las cards que vienen de un cierre -el punto 12 del pedido
+  // humano, AL REVES de lo que pedia- sigue aqui y se corrige en la FICHA 240. Adelantarlo en esta
+  // ficha seria tocar la card que la 236 esta reescribiendo, y la puerta humana del 2026-08-19
+  // asigno cada cosa a su ficha.
+  const esAyuda = novedad.estatusValue === "ayuda_tienda";
+  const puedeHabilitar = esDevuelta || esAyuda;
   const acciones: {
     etiqueta: string;
     Icono: typeof RotateCcw;
@@ -173,7 +182,7 @@ export function NovedadAcciones({
           No entra en el arreglo `acciones` de arriba porque no comparte su forma: lleva estado
           propio, llama a su Server Action y arrastra un contador al lado. Meterla ahí habría
           obligado a que aquella lista supiera de todo eso para una sola de sus entradas. */}
-      {novedad.ayuda ? <IntentoContactoAccion novedad={novedad} /> : null}
+      {esAyuda ? <IntentoContactoAccion novedad={novedad} /> : null}
     </div>
   );
 }

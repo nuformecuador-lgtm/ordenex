@@ -41,6 +41,10 @@ const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set<string>([
       // Feature 239 (2026-08-19): el `down.sql` de ESTA migracion NO se toca (es una foto
       // historica); lo que se ajusta es el conjunto que se le descuenta al SEED vigente.
       "anclaje_devolucion",
+      // Feature 235 (2026-08-19): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE. Las dos
+      // familias de la ayuda se descuentan del SEED vigente, no se anaden a la foto historica.
+      "solicitud_ayuda_tienda",
+      "rescate_ayuda_tienda",
 ]);
 const schemaPrisma = fs.readFileSync(
   path.join(__dirname, "..", "..", "..", "db", "schema.prisma"),

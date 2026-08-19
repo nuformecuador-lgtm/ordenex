@@ -89,6 +89,23 @@ export const ORDER_STATUS_SEED = [
   // El nombre dice QUIEN FALTA (la bodega confirma), no que paso. No colisiona con
   // `por_devolver` / `por_devolver_a_tienda`, que son el otro flujo (el de las rechazadas).
   "devolucion_por_confirmar",
+  // Feature 235/R1 (P1 FIRMADA por el humano el 2026-08-19): APENDICE, indice 21 -> el catalogo
+  // pasa de 21 a 22. Ni renombra, ni reordena, ni retira ninguno de los 21 vigentes.
+  //
+  // Es la SOLICITUD DE AYUDA del mensajero a la tienda, viva: «el mensajero pidio ayuda sobre esta
+  // orden y el paquete sigue con el, en la calle». Hasta hoy esto era un BOOLEANO (`orden.ayuda`,
+  // merge #396) y la orden nunca salia de `en_reparto`, asi que CADA superficie que debia
+  // excluirla tenia que acordarse de leer esa columna — y no la leia ninguna: ni el optimizador de
+  // ruta, ni el mapa, ni la guardia de gestionabilidad, ni el listado del portal. Con un estatus,
+  // `satisfies Record<OrderStatusValue, ...>` de `TRANSICIONES` ROMPE EL BUILD hasta que alguien
+  // decide el caso nuevo, y esas superficies filtran por construccion
+  // (`progress/auditoria_ayuda_tienda.md` §2/§4).
+  //
+  // NO es un desenlace ni un pozo: tiene entrada (#62, la solicitud) y DOS salidas (#63 el rescate
+  // por cualquiera de los dos lados, #64 el corte de la noche). Las aristas de GESTION desde aqui
+  // —entregada/reprogramada/devolucion_por_confirmar/rechazada/incidente— NO se declaran en esta
+  // ficha: llegan con su productor en la 237.
+  "ayuda_tienda",
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

@@ -178,9 +178,11 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     const { service, repo } = newService();
     await service.listarCierreDia(MENSAJERO);
     expect(repo.findGestionesPendientes).toHaveBeenCalledWith("m1");
+    // Feature 235 (T4.1, R23): la lista gana `ayuda_tienda` POR SU NOMBRE.
     expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith("m1", [
       "por_recoger",
       "en_reparto",
+      "ayuda_tienda",
     ]);
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
   });
@@ -1891,5 +1893,114 @@ describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.grupos.reprogramada[0].pagos).toEqual([]);
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T4.1/T4.2/T4.3, R22/R23/R24/R25) — EL BLOQUEO DEL CIERRE, EXPLICITO Y NO ACCIDENTAL.
+//
+// QUE HABIA. Una orden con ayuda pedida bloqueaba el cierre POR ACCIDENTE: la solicitud era una
+// BANDERA y la orden seguia en `en_reparto`, que si estaba en `ESTADOS_PENDIENTES`. NADIE habia
+// escrito nunca «una orden en ayuda bloquea el cierre», asi que el dia que la orden dejara de estar
+// en `en_reparto` —exactamente lo que hace esta ficha— el bloqueo habria desaparecido EN SILENCIO,
+// y un mensajero habria podido cerrar el dia con un paquete todavia en la mano.
+//
+// R23 pide que el bloqueo se derive de una LISTA EXPLICITA en la que el estatus figure POR SU
+// NOMBRE. Eso es todo el cambio funcional, y estos casos son lo que lo vuelve auditable.
+// =================================================================================================
+describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
+  it("R23: la lista de estados pendientes NOMBRA `ayuda_tienda`", async () => {
+    // Se lee de la llamada real al repo, no de una constante importada: `ESTADOS_PENDIENTES` es
+    // privado del modulo y afirmar una copia seria un espejo de si mismo.
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO);
+
+    const estados = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as string[];
+    expect(estados).toContain("ayuda_tienda");
+    // Censo CERRADO: uno de mas bloquearia a mensajeros que no tienen nada en la mano.
+    expect(estados).toEqual(["por_recoger", "en_reparto", "ayuda_tienda"]);
+  });
+
+  it("R22: con una orden en `ayuda_tienda`, `solicitarCierre` devuelve conflict con motivo accionable", async () => {
+    // El repo cuenta 1 porque el estatus esta en la lista; si saliera de ella, contaria 0 y el
+    // cierre se crearia con el paquete todavia en la moto.
+    const repo = fakeRepo({ contarOrdenesPendientesGestion: vi.fn(async () => 1) });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") return;
+    expect(r.motivo).toContain("gestionalas antes de cerrar");
+    // Sin PII (R46): el motivo no nombra la orden, ni al mensajero, ni al cierre.
+    expect(r.motivo).not.toMatch(/m1|o1|c1/);
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R22: el gate de la pantalla dice lo mismo — `puedesSolicitar` en false", async () => {
+    const repo = fakeRepo({
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+      findGestionesPendientes: vi.fn(async () => [pendiente()]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.puedesSolicitar).toBe(false);
+    // Los dos consumidores de la lista dicen lo mismo: el gate y la precondicion. Si divergieran,
+    // el boton estaria activo y la accion fallaria al pulsarlo.
+    expect(r.motivoBloqueo).toContain("gestionalas antes de cerrar");
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T4.2, R24) — LAS DOS RUTAS EXENTAS SIGUEN EXENTAS. Aqui NO se cambia codigo: se
+// AFIRMA la exencion para que nadie la «arregle» por simetria.
+//
+// ⚠️ QUITARLES LA EXENCION REABRE EL DEADLOCK QUE LA 111/R9 CERRO: el mensajero con un cierre
+// `vencido` esta BLOQUEADO para gestionar, asi que si ademas no pudiera enviar su vencido a
+// aprobacion por tener pendientes, quedaria atrapado sin ninguna salida. Con `ayuda_tienda` en la
+// lista, estas dos rutas se comportan EXACTAMENTE igual que con `en_reparto`: una orden en ayuda no
+// las bloquea, igual que hoy no las bloquea una orden en reparto.
+//
+// CONSECUENCIA DECLARADA PARA LA FICHA 237 (design §8): su invariante —«una orden en ayuda BLOQUEA
+// la solicitud de cierre, asi que la gestion de la tienda cae antes del snapshot»— es cierta para
+// la CREACION de un cierre y FALSA para estas dos rutas de re-solicitud. En ellas el cierre ya
+// existe con sus gestiones vinculadas, asi que una gestion posterior nace con `cierre_id = NULL` y
+// cae en el cierre SIGUIENTE. No rompe dinero, pero la 237 tiene que probarlo.
+// =================================================================================================
+describe("235 · las dos rutas exentas de la precondicion (T4.2, R24)", () => {
+  it("R24: con un cierre `vencido` y una orden en `ayuda_tienda`, transiciona a `solicitado`", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => true),
+      // Hay una orden en ayuda: el conteo la incluye porque el estatus esta en la lista.
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
+    // Y la exencion, dicha como lo que es: esta rama ni siquiera CONSULTA los pendientes.
+    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
+  });
+
+  it("R24: el gemelo para `rechazado` — misma exencion, mismo motivo", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => true),
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
+    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
   });
 });

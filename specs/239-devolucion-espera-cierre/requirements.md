@@ -357,3 +357,19 @@ bandera sobre una orden que ya cayó del listado.
 **Dueño y fecha de muerte:** la ficha **235** retira el booleano `ayuda` y con él esta puerta. R19
 se lee, hasta entonces, como «la ventana de escritura no depende del pre-estado **salvo por la
 bandera legada de ayuda**, que la 235 elimina».
+
+
+---
+
+## LAS DOS DEUDAS DE ESTA FICHA, SALDADAS POR LA 235 — 2026-08-19
+
+Esta ficha dejó dos cosas escritas «con dueño», diciendo que morían con la 235. **Murieron.**
+
+1. **El tapón de la rama de `ayuda`** en `novedadWhere` —que exigía además `en_reparto`— ya no
+   existe: la 235 retiró la columna booleana y la rama pasó a ser una **igualdad de estado**, como
+   la de la devolución.
+2. **La reconciliación de R19**: `estaEnVentanaDeEscritura` **perdió su tercer parámetro**. Ya no
+   hay una bandera legada que abra la ventana de escritura del hilo sobre el pre-estado; la ventana
+   se decide solo por rol y estatus, que es lo que R19 prometía desde el principio.
+
+Ninguna de las dos necesitó código de esta ficha: se cerraron al desaparecer su causa.

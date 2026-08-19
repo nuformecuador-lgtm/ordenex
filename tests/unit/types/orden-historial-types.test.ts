@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { OrdenHistorialOrigenTipo as PrismaOrdenHistorialOrigenTipo } from "@prisma/client";
-import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
+import {
+  ORDEN_HISTORIAL_ORIGEN_TIPO_SEED,
+  ORIGEN_TIPOS_CON_GESTION,
+  ORIGEN_TIPOS_VISITA_REAL,
+} from "@/lib/types/orden-historial";
 
 // Feature 49/R23 — el tipo de origen es un CONJUNTO CERRADO de los call-sites de escritura
 // de `orden.estatus_id` (design §1.2/§2). La exhaustividad frente al enum Prisma es de
@@ -63,10 +67,12 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida); la 157 le suma la reversion de una recoleccion
     "asignacion_recoleccion", // feature 157 (ampliacion): GuiaAsignacionService.asignarRecoleccion (por_recolectar_en_tienda -> recolectando)
     "anclaje_devolucion", // feature 239 (2026-08-19): CierresAdminRepository.resolverCierre (aprobar, devolucion_por_confirmar -> devuelta). El cron del SLA la busca POR ESTA FAMILIA para anclar el reloj
+    "solicitud_ayuda_tienda", // feature 235 (2026-08-19): SolicitudAyudaService.solicitar (en_reparto -> ayuda_tienda, actor = el mensajero asignado)
+    "rescate_ayuda_tienda", // feature 235 (2026-08-19): rescatarOrdenAyuda (ayuda_tienda -> en_reparto). UN productor, DOS puertas: «Recuperar» del mensajero y «Habilitar» de la tienda
   ];
 
-  it("contiene exactamente los 27 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(27); // 2026-08-19 (239): +anclaje_devolucion
+  it("contiene exactamente los 29 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(29); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 
@@ -92,5 +98,43 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     expect(new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).size).toBe(
       ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.length,
     );
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // FEATURE 235 (T1.2, R10/R11) — las DOS familias de la ayuda a la tienda.
+  //
+  // El caso que protege DINERO es el segundo. Si alguna de las dos entrara en
+  // `ORIGEN_TIPOS_VISITA_REAL`, cada solicitud de ayuda sumaria un intento de entrega de mas: el
+  // cron del SLA (99) alcanzaria antes el umbral, escalaria antes a `rechazada` y dispararia el
+  // `cobroRechazado` (56) — dinero real cobrado a la tienda antes de tiempo, en silencio y
+  // castigando justamente a la orden sobre la que se pidio auxilio.
+  // -------------------------------------------------------------------------------------------
+  it("235/R10: las DOS familias estan en el SEED, una por cada SENTIDO del viaje", () => {
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("solicitud_ayuda_tienda");
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("rescate_ayuda_tienda");
+    // Y el enum de la DB (via Prisma) tambien: sin drift en ninguna direccion (R9 de la 154).
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("solicitud_ayuda_tienda");
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("rescate_ayuda_tienda");
+  });
+
+  it("235/R11: NINGUNA de las dos es VISITA REAL — pedir ayuda no es un intento de entrega", () => {
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("solicitud_ayuda_tienda");
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("rescate_ayuda_tienda");
+    // Y la lista sigue teniendo UN solo miembro: el censo cerrado es lo que impide que una
+    // familia futura entre de rebote.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+  });
+
+  it("235: ninguna de las dos entra en `ORIGEN_TIPOS_CON_GESTION` (sus filas nacen sin gestion)", () => {
+    expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain("solicitud_ayuda_tienda");
+    expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain("rescate_ayuda_tienda");
+    expect([...ORIGEN_TIPOS_CON_GESTION]).toEqual(["gestion", "deshacer_gestion"]);
+  });
+
+  it("235/P2: `gestion_tienda_ayuda` NO se declara aqui — nace con su productor (ficha 237)", () => {
+    // La convencion del repo, con precedente costoso: `incidente` (154) se declaro sin productor
+    // y «costo el tren 154+155+156». Este caso se pone rojo el dia que alguien lo adelante, y esa
+    // es su unica funcion.
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).not.toContain("gestion_tienda_ayuda");
   });
 });

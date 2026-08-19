@@ -395,13 +395,19 @@ export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---
 
-// Feature 167 (R34): DOS grupos. Lo que espera al mensajero EN LA TIENDA salio a su apartado
-// propio (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
+// Feature 167 (R34): lo que espera al mensajero EN LA TIENDA salio a su apartado propio
+// (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
+//
+// Feature 235 (T3.1, R18): TRES grupos. El tercero son las ordenes en `ayuda_tienda`, separadas EN
+// EL SERVIDOR — antes el portal recibia dos listas y partia la de reparto en el cliente, con lo que
+// la orden con ayuda seguia siendo parada del mapa y gestionable. Esta forma espeja a
+// `ListarMisAsignacionesServiceResult`; si divergen, el typecheck lo dice en el borde.
 export type ListarMisAsignacionesResult =
   | {
       status: "ok";
       porRecoger: MiAsignacionDTO[];
       porGestionar: MiAsignacionDTO[];
+      conAyuda: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis; // Feature 61
       ruta: RutaResumenDTO; // Feature 92/R27/R28/R30

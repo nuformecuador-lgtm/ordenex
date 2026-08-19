@@ -87,8 +87,8 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
         tiendaId: true,
         mensajeroAsignadoId: true,
         deletedAt: true,
-        // 2026-08-18: la ventana del adminTienda tambien se abre con una solicitud de ayuda viva.
-        ayuda: true,
+        // Feature 235: la ventana depende SOLO de esto. Aqui se leia ademas `ayuda`, la bandera
+        // que abria una segunda puerta al adminTienda; se retiro con la columna.
         estatus: { select: { value: true } },
       },
     });
@@ -97,7 +97,6 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
       tiendaId: orden.tiendaId,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
       estatusValue: orden.estatus.value,
-      ayuda: orden.ayuda,
       deletedAt: orden.deletedAt,
     };
   }

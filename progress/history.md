@@ -3498,3 +3498,46 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   esta ficha puede salir a producción antes que la 235, que la retirará entera. Y **antes de
   desplegar** faltan dos cosas que no son código: re-medir producción y **avisar a los integradores**
   de que `devuelta` les llegará al aprobar bodega y no al gestionar el mensajero.
+
+## 2026-08-19 — 235 (la ayuda a la tienda deja de ser una bandera y pasa a ser un estatus)
+
+**PR [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402)** · 46 requisitos EARS, 39
+tareas, 3 migraciones con su `down.sql` · gate completo **1192 archivos / 15453 tests / 347 s**.
+
+- **El fallo que cierra, en una línea:** una bandera al lado del estado obliga a que **cada**
+  consulta se acuerde de filtrarla, y basta con que una no lo haga para que la orden siga
+  apareciendo donde ya no debería. `orden.ayuda` se **retira**; nace `ayuda_tienda`.
+- **La revisión RECHAZÓ la primera pasada, con razón**, y los dos bloqueantes de código eran
+  **regresión de esta misma ficha y del mismo patrón**: al pasar de bandera a estatus, las listas
+  que responden *«¿qué ocupa a este mensajero?»* no se ampliaron. El **corte de la noche** dejaba
+  fuera al mensajero que acababa el día con todo en ayuda —ni cierre `vencido` ni barrido— y la
+  **regla de dedicación de la 157** lo leía como «sin carga», así que se le podía mandar a
+  recolectar con el paquete encima.
+- **En vez de arreglar los dos sueltos se censó la familia entera**: siete listas, con las tres
+  rotas más **una cuarta latente** que nadie había pedido buscar. Y una guardia que **lee las siete
+  del fuente** y cruza los gemelos entre sí (servicio↔selector, selección↔ids del corte,
+  portal↔bloqueo). ⚠️ Vigila, pero **no descubre** una octava: el censo está cerrado a mano.
+- **El test que parecía cubrir el primer caso llamaba a `crearCierre` a mano**, un nivel por debajo
+  de donde el sistema falla. El nuevo entra por `ejecutarCorte` con el repositorio real.
+- **Un requisito que se contradecía consigo mismo.** R35 prometía la lectura del hilo para los dos
+  roles mientras la sección de alcance del **mismo documento** difería la pantalla de la tienda a la
+  236. Se enmendó con fecha, dueño y condición de reapertura: un requisito que miente es peor que
+  uno ausente.
+- **Ver la app encontró lo que 15.000 tests daban por bueno.** El recorrido con los dos roles
+  (`progress/recorrido_235.md`) confirmó en pantalla lo que más se jugaba —al pedir ayuda **los
+  cuatro KPI no bajan**, P7/R20— y sacó **dos defectos**: el chip de la card decía «En reparto»,
+  que es justo lo que la ficha volvió falso, y la card llevaba «Pendiente de optimizar», que **R15
+  prohíbe por su nombre**. El servicio ya la dejaba fuera del número; la superficie se había
+  quedado atrás. Tercera vez el mismo patrón en una sola ficha.
+- **Un permiso que vivía en el servidor y moría en la pantalla** (R25): con el mensajero bloqueado
+  por un cierre sin resolver, la UI le apagaba el rescate que el servicio le concede **a propósito**
+  —comprobarlo allí crearía un deadlock con R22: ni rescatar ni cerrar—. Se quitó, y con él **la
+  prop `disabled` del botón**, cuyo JSDoc documentaba exactamente la conducta prohibida.
+- **Un color que viajaba de polizón.** El chip nuevo heredaba su color del *fallback* de «texto
+  libre», que significa «no sé qué es este rótulo»: apoyar ahí una decisión la vuelve
+  indistinguible de un accidente. Ahora tiene entrada propia y un test — y la mutación que prueba
+  algo **no** es borrar la entrada (eso cae al fallback y da el mismo color, verde), sino la que
+  cambia el color.
+- **Deuda declarada y con dueño:** la tienda **ve** la solicitud de ayuda y **no puede leer el
+  motivo**; su card cae bajo la pestaña «En devolución». Lo arregla la **236**, y por eso ⚠️ **la
+  235 y la 236 salen juntas o seguidas**. Orden acordado: **235 → 236 → 237 → 240**.

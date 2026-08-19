@@ -34,6 +34,8 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   // Feature 239 (2026-08-19): gestionar `devuelta` ya NO resuelve el estatus `devuelta`, sino el
   // PRE-ESTADO. El fake tiene que conocerlo o la rama cae en "catalogo incompleto".
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
+  // Feature 235 (2026-08-19): el estatus de la solicitud de ayuda viva.
+  ayuda_tienda: "os-ayuda-tienda",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -223,8 +225,12 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     expect(r.status).toBe("ok");
     expect(llamadasIntentos(intentos)).toEqual([[]]);
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
-    // Feature 167 (R34): y a EXACTAMENTE los dos estados del flujo de Entregas.
-    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+    // Feature 167 (R34) + 235 (R18): y a EXACTAMENTE los TRES estados del flujo de Entregas.
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recoger",
+      "en_reparto",
+      "ayuda_tienda",
+    ]);
   });
 
   it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
@@ -261,7 +267,12 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.porGestionar.map((o) => o.id)).toEqual(["b"]);
     expect(r.ordenEnGestionId).toBe("b");
     // R13: la consulta se hizo con el mensajero del actor.
-    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+    // Feature 235 (T3.1, R18): el corte pasa a TRES estados. `recolectando` SIGUE fuera (167/R34).
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recoger",
+      "en_reparto",
+      "ayuda_tienda",
+    ]);
   });
 
   it("Feature 61: KPIs = pendientes (en_reparto), entregadas (conteo) y porCobrar (suma COD de en_reparto; null=0)", async () => {
@@ -372,6 +383,142 @@ describe("listarMisAsignaciones (R9-R13)", () => {
 });
 
 // --- recogerAsignaciones (R14-R17) ---
+
+// =================================================================================================
+// FEATURE 235 (T3.1/T3.6) — EL TERCER GRUPO, Y LOS KPI QUE NO BAJAN.
+//
+// Las dos mitades de la ficha que NO se caen solas al mover el estatus:
+//   - R18/R19: la separacion SUBE AL SERVIDOR. Antes el portal recibia dos listas y partia la de
+//     reparto en el cliente con un `useMemo` sobre `orden.ayuda`; la orden marcada seguia dentro de
+//     `porGestionar` y por tanto seguia siendo parada del mapa, contacto del chat y GESTIONABLE.
+//   - R20/R21 (P7, firmada): los KPI del dia SIGUEN CONTANDO las ordenes en ayuda. Es una decision
+//     explicita porque el comportamiento POR DEFECTO al sacarlas del grupo seria el CONTRARIO: los
+//     tres bajarian al pedir ayuda, el numero dejaria de describir la jornada del mensajero y
+//     ademas PREMIARIA pedir ayuda.
+// =================================================================================================
+describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R21)", () => {
+  it("R18: las de ayuda salen en `conAyuda` y NO en `porGestionar`", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecoger.map((o) => o.id)).toEqual(["a"]);
+    expect(r.porGestionar.map((o) => o.id)).toEqual(["b"]);
+    expect(r.conAyuda.map((o) => o.id)).toEqual(["c"]);
+    // Cada orden en UNA sola lista: si el corte se hiciera mal, la de ayuda saldria dos veces.
+    expect([...r.porRecoger, ...r.porGestionar, ...r.conAyuda].map((o) => o.id).sort()).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("R15: las de ayuda NO llevan `secuenciaRuta` ni cuentan en `paradasSinOptimizar`", async () => {
+    // Una orden detenida esperando a la tienda no es parada de ninguna ruta optimizada. Si
+    // contara como «parada sin optimizar», la pantalla avisaria de que la ruta esta
+    // desactualizada por una orden que no puede entrar en ninguna ruta.
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.conAyuda[0]!.secuenciaRuta).toBeNull();
+    // Sin ruta persistida, la unica sin posicion que se cuenta es la de `porGestionar`.
+    expect(r.ruta.paradasSinOptimizar).toBe(1);
+  });
+
+  it("R20 (P7): una orden que pasa a `ayuda_tienda` NO cambia ninguno de los tres KPI", async () => {
+    // ⭑ LA MUTACION QUE MATA ESTE CASO: derivar los KPI solo de `porGestionar`. El paquete sigue
+    // en la moto y su COD sigue por cobrar; si el «Total a cobrar» bajara al pedir ayuda, el
+    // numero dejaria de describir la jornada y premiaria pedir ayuda.
+    const antes = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
+        asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
+      ]),
+      contarEntregadas: vi.fn(async () => 7),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+    const despues = fakeRepo({
+      // La MISMA orden `c`, ahora en ayuda. Es lo unico que cambia entre los dos escenarios.
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+      ]),
+      contarEntregadas: vi.fn(async () => 7),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+
+    const rAntes = await newService(antes).listarMisAsignaciones(MENSAJERO);
+    const rDespues = await newService(despues).listarMisAsignaciones(MENSAJERO);
+
+    if (rAntes.status !== "ok" || rDespues.status !== "ok") throw new Error("esperaba ok");
+    expect(rDespues.kpis).toEqual(rAntes.kpis);
+    // Y el valor concreto, para que el caso no pase por comparar dos ceros:
+    expect(rDespues.kpis).toEqual({
+      pendientes: 2,
+      entregadas: 7,
+      porCobrar: 350,
+      totalACobrar: 750,
+    });
+  });
+
+  it("R21: el COD de una gestionada hoy y el de una en ayuda NO se suman dos veces", async () => {
+    // Los dos sumandos de `totalACobrar` siguen siendo DISJUNTOS, y ahora hay que decir por que:
+    // `sumMontoCobrarGestionadas` exige `gestiones: { some: ... }`, y una orden en `ayuda_tienda`
+    // NO tiene gestion del dia —no se puede gestionar desde ahi (R16), esas aristas son de la
+    // 237—. El doble devuelve 400 por la gestionada; los 250 de la de ayuda entran UNA vez, por
+    // el otro sumando.
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+      ]),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.kpis.porCobrar).toBe(250);
+    expect(r.kpis.totalACobrar).toBe(650); // 250 + 400, no 900
+  });
+
+  it("R16: `escogerParaGestion` sobre una orden en `ayuda_tienda` devuelve `conflict`", async () => {
+    // No hay guarda nueva: `cargarOrdenGestionable` exige `en_reparto` y la orden ya no lo esta.
+    // Con la bandera esto PASABA —la orden seguia en reparto— y el apartado aparte no impedia
+    // nada: era maquetacion.
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
+    });
+    const r = await newService(repo).escogerParaGestion("o1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") return;
+    expect(r.motivo).toContain("en_reparto");
+    // Y NO fija el puntero: sin efectos parciales.
+    expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
+  });
+
+  it("R16: `gestionar` sobre una orden en `ayuda_tienda` devuelve `conflict` y no crea gestion", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
+    });
+    const input = { ordenId: "o1", resultado: "entregada", pagos: [] } as unknown as GestionarInput;
+    const r = await newService(repo).gestionar(input, MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+});
 
 describe("recogerAsignaciones (R14-R17)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
@@ -1056,7 +1203,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167)", () => {
   const RECOLECTANDO = "recolectando";
 
-  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\"]`, ni un estado mas", async () => {
+  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\", \"ayuda_tienda\"]`, ni un estado mas", async () => {
     const repo = fakeRepo();
 
     await newService(repo).listarMisAsignaciones(MENSAJERO);
@@ -1064,10 +1211,19 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
     // Lista EXACTA (no `arrayContaining`): la forma fuerte de R34. Si alguien reintrodujera
     // `recolectando` "porque estaba antes", este caso lo caza antes que la pantalla.
+    //
+    // 2026-08-19 (feature 235/T3.1, R18/R19) — EL CENSO PASA DE 2 A 3, con nota fechada y por la
+    // puerta: `ayuda_tienda` se lee porque el portal tiene que ENTREGAR esas ordenes YA SEPARADAS
+    // desde el servidor. Lo que la 167 aislo se conserva intacto y se dice abajo como negativo:
+    // `recolectando` SIGUE FUERA.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
       "por_recoger",
       "en_reparto",
+      "ayuda_tienda",
     ]);
+    const estados = (repo.findMisAsignaciones as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as string[];
+    expect(estados).not.toContain(RECOLECTANDO);
   });
 
   it("R34: el resultado NO declara ningun grupo de recoleccion", async () => {
@@ -1075,7 +1231,11 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r).not.toHaveProperty("porRecolectar");
+    // 2026-08-19 (feature 235/R18): el contrato gana `conAyuda`, el tercer grupo. La lista sigue
+    // siendo CERRADA, que es lo que impide que reaparezca un grupo de recoleccion por la puerta
+    // de atras.
     expect(Object.keys(r).sort()).toEqual([
+      "conAyuda",
       "kpis",
       "ordenEnGestionId",
       "porGestionar",

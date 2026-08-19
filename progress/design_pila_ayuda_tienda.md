@@ -239,3 +239,24 @@ por construcción**.
 - **Ver la app**, no solo la suite: pedir ayuda → verla en el tab → rescatarla → volver a pedirla →
   gestionarla desde la tienda → verla en el cierre → aprobar con escaneo → verla llegar a novedades.
 - **La migración de enums** contra `tests/integration/db`, con su `down.sql` probado.
+
+
+---
+
+## ADVERTENCIA HEREDADA PARA LA FICHA 237 — 2026-08-19
+
+Medido al implementar la 235, y hay que **probarlo, no asumirlo**:
+
+La invariante que sostiene la F3 —«una orden en ayuda **bloquea** la solicitud de cierre, así que la
+gestión de la tienda siempre cae antes del snapshot de totales»— es **cierta al CREAR un cierre** y
+**FALSA en las dos rutas de re-solicitud** (`vencido → solicitado` y `rechazado → solicitado`), que
+siguen exentas de esa precondición **por diseño anti-deadlock** (feature 111/R9).
+
+En esas dos rutas, una gestión hecha por la tienda nace con `cierre_id = NULL` y **cae en el cierre
+siguiente**. No rompe el dinero —el snapshot ya se congeló sin ella y la gestión se vincula al
+próximo—, pero **cambia en qué cierre aparece**, y eso es exactamente lo que la 237 promete al decir
+«entra en el cierre del mensajero».
+
+**La 237 tiene que escribir un requisito para ese caso y un test que lo ejerza.** Si se da por
+sentado el caso feliz, el defecto aparece en producción como una gestión que sale en el cierre de
+otro día.

@@ -1168,10 +1168,73 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
 
     // Si preguntara por `por_recolectar_en_tienda`, el segundo lote de un mismo viaje a la
     // tienda seria inasignable: el mensajero ya tendria la primera orden encima.
+    //
+    // FEATURE 235 (2026-08-19): la lista pasa a TRES. `ayuda_tienda` significa literalmente que el
+    // paquete SIGUE CON EL, en la calle (R1), asi que ocupa igual que `en_reparto`. Censo CERRADO:
+    // uno de mas bloquearia a quien no lleva nada; uno de menos —el que se cayo al mover el
+    // estatus— manda a recolectar a quien va cargado.
     expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
       ["m1"],
-      ["por_recoger", "en_reparto"],
+      ["por_recoger", "en_reparto", "ayuda_tienda"],
     );
+  });
+
+  // ===============================================================================================
+  // FEATURE 235 (R1 + regla de dedicacion de la 157) — LA ORDEN EN AYUDA OCUPA AL MENSAJERO.
+  //
+  // ⚠️ ESTO SE ROMPIO Y NADIE LO VIO. Mientras la ayuda fue un BOOLEANO, la orden seguia en
+  // `en_reparto` y esta lista la contaba sola. Al moverla a un estatus propio, un mensajero con el
+  // paquete encima paso a leerse como SIN CARGA y el maestro podia mandarlo a recolectar a una
+  // tienda — contra la regla que el humano firmo el 2026-07-31 y que el propio archivo explica:
+  // «quien va a una tienda a recoger un lote sale con el vehiculo vacio y vuelve a la central».
+  //
+  // El barrido de la 235 (T3.4/R17) miro los listados que OFRECEN ORDENES; esta es otra familia:
+  // las listas que describen la OCUPACION DEL MENSAJERO. La guardia
+  // `carga-del-mensajero.guardia.test.ts` censa la familia entera para que no vuelva a pasar.
+  // ===============================================================================================
+  it("235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      // El doble responde como responderia la query real: pregunta por los tres estados y este
+      // mensajero tiene una orden en uno de ellos.
+      findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
+        estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+      ),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/sin carga/i) }],
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("235 (CASO NEGATIVO): si `ayuda_tienda` saliera de la lista, este mensajero pasaria", async () => {
+    // La contraprueba que da sentido al caso de arriba: el MISMO doble, y lo unico que decide es si
+    // el service pregunta o no por el estatus de ayuda. Sin este par, el caso anterior pasaria
+    // igual con un doble que dijera «ocupado» siempre.
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
+        estados.includes("por_devolver") ? new Set(["m1"]) : new Set<string>(),
+      ),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
   });
 
   it("un mensajero con OTRAS recolecciones SÍ recibe más del mismo viaje", async () => {

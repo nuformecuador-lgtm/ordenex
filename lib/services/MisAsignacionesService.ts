@@ -44,7 +44,17 @@ const MSG_BLOQUEADO =
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
 const ESTADO_EN_REPARTO = "en_reparto";
+/**
+ * Feature 235 (R18/R19): el estatus de la SOLICITUD DE AYUDA viva. El panel lo LEE -esas ordenes
+ * siguen siendo del mensajero y las tiene que ver- pero en un grupo APARTE, cortado aqui y no en
+ * el cliente.
+ */
+const ESTADO_AYUDA = "ayuda_tienda";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
+//
+// Feature 235 (R16): que siga siendo `en_reparto` -y no una lista- es lo que hace que una orden en
+// `ayuda_tienda` deje de ser gestionable SIN escribir ninguna guarda nueva: `cargarOrdenGestionable`
+// la rechaza con `conflict` sola. Antes pasaba, porque con la bandera la orden seguia en reparto.
 const ORIGEN_GESTION = "en_reparto";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
@@ -147,7 +157,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // (`/recoleccion`, `RecoleccionTiendaService.listarRecoleccion`). Que el estado
         // `recolectando` NO se lea es la forma FUERTE del aislamiento: lo que no se lee no
         // puede contaminar los KPIs, el mapa, la ruta ni el corte del dia (R36).
-        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        // Feature 235 (R18/R19): + `ESTADO_AYUDA`. El corte de la 167/R34 se ensancha a TRES
+        // estatus, por la puerta y con su requisito delante; `recolectando` SIGUE FUERA, que es lo
+        // que aquella feature aislo.
+        this.repo.findMisAsignaciones(actor.usuarioId, [
+          ORIGEN_RECOGER,
+          ESTADO_EN_REPARTO,
+          ESTADO_AYUDA,
+        ]), // R9/R13
         this.repo.contarEntregadas(actor.usuarioId, dia), // Feature 61: KPI entregadas (HOY)
         this.repo.sumMontoCobrarGestionadas(actor.usuarioId, dia), // "Total a cobrar" (parte gestionada HOY)
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
@@ -169,6 +186,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
+    // Feature 235 (R18): TERCER acumulador. El corte lo hace el SERVIDOR, por `estatusValue`, y no
+    // un `useMemo` del cliente sobre una bandera.
+    const conAyuda: MiAsignacionDTO[] = [];
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
@@ -184,6 +204,10 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         porRecoger.push(dto);
       } else if (row.estatusValue === ESTADO_EN_REPARTO) {
         porGestionar.push({ ...dto, secuenciaRuta: secuencias.get(row.id) ?? null });
+      } else if (row.estatusValue === ESTADO_AYUDA) {
+        // R15: SIN `secuenciaRuta`. Una orden detenida esperando a la tienda no es parada de
+        // ninguna ruta optimizada, asi que no lleva posicion ni entra en `paradasSinOptimizar`.
+        conAyuda.push(dto);
       }
     }
 
@@ -216,21 +240,37 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // las ordenes en reparto del mensajero, asi que la base ya respondio esa pregunta.
     // Preguntarsela de nuevo seria una segunda fuente de verdad para el mismo numero, libre
     // de discrepar de la lista que lo acompaña.
-    const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
+    //
+    // FEATURE 235 (P7/R20, FIRMADA el 2026-08-19) - LOS TRES KPI SE DERIVAN DE
+    // `porGestionar` UNION `conAyuda`, Y ESO HAY QUE DECIDIRLO A MANO. Al sacar las ordenes en
+    // ayuda del grupo «por gestionar», el comportamiento POR DEFECTO seria el contrario: los tres
+    // BAJARIAN al pedir ayuda. Se firmo que no: el paquete sigue en la moto y su COD sigue por
+    // cobrar, asi que si el «Total a cobrar» bajara, el numero dejaria de describir la jornada del
+    // mensajero y ademas PREMIARIA pedir ayuda.
+    const enManoDelMensajero = [...porGestionar, ...conAyuda];
+    const codEnReparto = enManoDelMensajero.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
-      pendientes: porGestionar.length,
+      pendientes: enManoDelMensajero.length,
       entregadas,
       porCobrar: codEnReparto,
       // Total a cobrar DEL DIA = lo que el mensajero YA gestiono hoy (cualquier resultado)
-      // + lo que todavia lleva en reparto. Los dos sumandos son DISJUNTOS: la query excluye
-      // `en_reparto`, que es justo lo que aporta `codEnReparto`. No se mueve al gestionar
-      // —la orden solo cambia de sumando— y se reinicia al cruzar la medianoche CR.
+      // + lo que todavia lleva en la mano (en reparto o con ayuda pedida).
+      //
+      // R21 - LOS DOS SUMANDOS SIGUEN SIENDO DISJUNTOS, y hay que comprobarlo ahora que el
+      // segundo creció. `sumMontoCobrarGestionadas` exige `gestiones: { some: ... }` Y
+      // `estatus.value != en_reparto`. Una orden en `ayuda_tienda` NO TIENE GESTION del dia -no se
+      // puede gestionar desde ahi (R16), esas aristas son de la ficha 237- asi que no entra en el
+      // primer sumando por la condicion de gestion, no por la de estatus. Ninguna orden se cuenta
+      // dos veces. No se mueve al gestionar -la orden solo cambia de sumando- y se reinicia al
+      // cruzar la medianoche CR.
       totalACobrar: codEnReparto + montoGestionadas,
     };
     return {
       status: "ok",
       porRecoger,
       porGestionar,
+      // R18: el cliente recibe las tres listas ya separadas y NO vuelve a decidir el corte.
+      conAyuda,
       ordenEnGestionId,
       kpis,
       // Feature 92 (R27/R30): sin ruta persistida el estado es `vigente` con
@@ -559,10 +599,8 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
-    // Solicitud de ayuda (2026-08-18): flag de la ORDEN, no del actor, asi que sale de la fila y
-    // no hay nada que mezclarle despues. `?? false` porque la fila lo declara opcional (patron
-    // aditivo): un doble de test que no lo ponga produce `false`, no `undefined`.
-    ayuda: row.ayuda ?? false,
+    // Feature 235 (T6.1, R40): aqui se emitia `ayuda: row.ayuda ?? false`. Se retira con la
+    // columna: `estatusValue` -que ya viaja arriba- dice si hay una solicitud de ayuda viva.
     // Feature 227 (R21): aqui nacia `notaPrivada: null` (feature 116). El campo ya no existe en
     // `MiAsignacionDTO` y el DTO no emite ninguna nota privada del mensajero.
   };

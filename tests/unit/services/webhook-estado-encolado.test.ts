@@ -46,13 +46,19 @@ function buildRepo() {
   return { repo, enqueue };
 }
 
-function entrada(ordenId: string, estatusDestinoId: string): CambioEstadoEntrada {
+function entrada(
+  ordenId: string,
+  estatusDestinoId: string,
+  // Feature 235 (P4): la FAMILIA entra en la decision de emitir, asi que el helper la admite. El
+  // default es el de siempre, para que ningun caso previo cambie de significado.
+  origenTipo: CambioEstadoEntrada["origenTipo"] = "gestion",
+): CambioEstadoEntrada {
   return {
     ordenId,
     estatusOrigenId: "s-previo",
     estatusDestinoId,
     actorUsuarioId: "u1",
-    origenTipo: "gestion",
+    origenTipo,
   };
 }
 
@@ -126,5 +132,69 @@ describe("R12 — solo ordenes elegibles (owner suscrito activo y rol apiKey)", 
     const tx = buildTx(new Set()); // sin suscripciones -> §5 vacio
     await emitirWebhooksEstado(tx, [entrada("o1", "s-entregada")], repo);
     expect(enqueue).not.toHaveBeenCalled();
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T1.5, P4 FIRMADA EN CONTRA DE LA RECOMENDACION, 2026-08-19) — el ciclo de AYUDA no
+// se emite, y la excepcion es POR FAMILIA DE ORIGEN.
+//
+// El humano no acepta que un integrador reciba `en_reparto` dos veces sobre la misma orden. La IDA
+// (`-> ayuda_tienda`) no se emite porque ese value no es publico; la VUELTA si lo seria, porque
+// `en_reparto` esta en la politica — de ahi la excepcion.
+//
+// ⚠️ EL SEGUNDO CASO ES EL QUE HAY QUE MIRAR. Si alguien implementara la excepcion POR ESTADO en
+// vez de por familia, el primero seguiria verde y el segundo caeria: una `reprogramada` liberada
+// por el cron dejaria de avisar al integrador, y eso SI es una regresion. El requisito 2 de la
+// firma pide exactamente esto: «un test que falle si alguien amplia la excepcion a otra familia».
+// =================================================================================================
+describe("235/P4 — el RESCATE de la ayuda no emite evento, pero los reingresos legitimos SI", () => {
+  it("`ayuda_tienda -> en_reparto` via `rescate_ayuda_tienda`: NO encola nada", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"])); // la orden SI tiene integrador suscrito
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-en-reparto", "rescate_ayuda_tienda")],
+      repo,
+      () => new Date("2026-08-19T10:00:00.000Z"),
+    );
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("MISMA orden, MISMO estado destino, OTRA familia: `liberacion_reprogramada` SI encola", async () => {
+    // El control que impide que la excepcion se implemente por estado. Es literalmente el mismo
+    // `enqueue`, el mismo `tx` y el mismo `s-en-reparto` del caso de arriba: lo unico que cambia es
+    // la familia.
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-en-reparto", "liberacion_reprogramada")],
+      repo,
+      () => new Date("2026-08-19T10:00:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(tipo).toBe("webhook_estado");
+    expect(payload.estatusDestinoId).toBe("s-en-reparto");
+  });
+
+  it("en un LOTE mixto, solo cae la del rescate: la excepcion no contamina a sus vecinas", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1", "o2", "o3"]));
+    await emitirWebhooksEstado(
+      tx,
+      [
+        entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // exceptuada
+        entrada("o2", "s-en-reparto", "recoleccion"), // la entrada NORMAL a reparto
+        entrada("o3", "s-entregada", "gestion"), // otro estado publico
+      ],
+      repo,
+      () => new Date("2026-08-19T10:00:00.000Z"),
+    );
+    const ordenesEncoladas = (
+      enqueue.mock.calls as unknown as [string, Record<string, unknown>][]
+    ).map((c) => c[1].ordenId);
+    expect(ordenesEncoladas.sort()).toEqual(["o2", "o3"]);
   });
 });
