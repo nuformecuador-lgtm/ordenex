@@ -566,11 +566,14 @@ en un cierre, solo que en otro— pero **la 237 tiene que probarlo, no suponerlo
 
 ## 8 · Decisiones abiertas / lo que NO hice
 
-1. **T0.3 — el orden de mergeo 235 → 236 → 240 sigue sin anotar** en `progress/current.md` (censado:
-   ninguna línea lo fija). Es decisión del leader; P10 la dejó «pendiente de confirmar». No bloquea
-   código, sí la nota de cierre.
-2. **T8.1 — «ver la app» NO se hizo.** Es la parte que la suite no cubre y esta ficha reescribió 8
-   archivos de `app/` más un componente nuevo. La asume el leader.
+1. ~~**T0.3 — el orden de mergeo sigue sin anotar**~~ → **CERRADO el 2026-08-19 por el leader.**
+   El orden queda **235 → 236 → 237 → 240**, escrito en `progress/current.md` §«ORDEN DE MERGEO Y DE
+   DESPLIEGUE», con el aviso medido de que la 235 y la 236 salen juntas o seguidas.
+2. ~~**T8.1 — «ver la app» NO se hizo.**~~ → **HECHO el 2026-08-19 por el leader**, con Playwright
+   y los dos roles. El recorrido, anotado con el texto leído del navegador, está en
+   `progress/recorrido_235.md`. **Encontró dos defectos que la suite no veía** —el chip de la card
+   decía «En reparto» y la card llevaba «Pendiente de optimizar» contra R15—, arreglados con su test
+   y su mutación (`progress/impl_235_t81.md`).
 3. **T8.3 — el gate completo y el PR** los corre el leader con el árbol quieto. Yo corrí `tsc`,
    `eslint` y la suite entera (§5) y **no** ejecuté `./init.sh`.
 4. **UI: hice más de lo que me toca, y hay que revisarlo.** Retirar la columna rompe el typecheck en
@@ -581,12 +584,12 @@ en un cierre, solo que en otro— pero **la 237 tiene que probarlo, no suponerlo
      chat con la unión, card sin «Gestionar», mensaje de «todas con ayuda»);
    - **nuevo**: `HiloNotasAyudaModal.tsx`, porque **R35** lo exige del lado mensajero.
 
-   👉 **Un `frontend_dev` debería revisar el acabado.** La revisión anotó además dos menores que NO
-   arreglé porque son decisiones de producto, no defectos de implementación: **m2** — la sección de
-   ayuda quedó fuera del buscador y del filtro cantón/distrito (antes se derivaba de la lista ya
-   filtrada); y **m4** — `RecuperarAyudaButton` sigue `disabled={bloqueado}`, así que la UI le niega
-   al mensajero bloqueado el rescate que R25 le concede en el servicio. Las dos son visibles y
-   baratas; ninguna es mía de decidir.
+   👉 **Un `frontend_dev` debería revisar el acabado.** → **HECHO el 2026-08-19.** De los dos
+   menores que dejé abiertos: **m4** está **arreglado** (`RecuperarAyudaButton` pierde su prop
+   `disabled` y la card ya no se la pasa, con test `235/R25` que se sabe poner rojo —
+   `progress/impl_235_m4.md`); y **m2** —la sección de ayuda fuera del buscador y del filtro— se
+   **decidió a mano y quedó escrita** en `design.md` §6.3, que era lo que faltaba: aceptada, con su
+   razón y con la línea que la revierte si molesta.
 5. **B3 (R35 del lado tienda) no es mío.** El leader reconcilia el requisito en el spec: el propio
    `requirements.md` se contradecía —«fuera de alcance» difiere la lectura del hilo de la tienda a la
    236 mientras R35 la exige aquí—.

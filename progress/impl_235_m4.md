@@ -15,10 +15,20 @@ pantalla lo negaba**. Permiso inejercitable, la misma clase que R35 prohíbe.
 
 ### `app/(app)/mis-asignaciones/_components/RepartoModule.tsx`
 - Fuera `disabled={bloqueado}` del `RecuperarAyudaButton` de `renderCardConAyuda`.
-- En su lugar, un comentario que deja la **excepción escrita como decisión**: el resto de la card
+- En su lugar, un comentario que deja la **excepción escrita como decisión**: ~~el resto de la card
   sigue bloqueada (el `bloqueado` que recibe `PosOrderCardDetalle` apaga su gate de selección,
-  feature 111/R14), y este botón no, porque es la salida del deadlock. Se cita R22, R25, R35 y el
-  archivo del servicio, para que quien lo lea no lo tome por un olvido y lo "arregle".
+  feature 111/R14), y~~ este botón no se apaga, porque es la salida del deadlock. Se cita R22, R25,
+  R35 y el archivo del servicio, para que quien lo lea no lo tome por un olvido y lo "arregle".
+
+  > **Corregido el 2026-08-19 (N1 de `progress/review_235_r2.md`), aquí y en el código.** Lo tachado
+  > era **falso**: en ESTA card `bloqueado` no apaga nada. `posSeleccionHandlers` calcula
+  > `Boolean(onGestionar) && !bloqueado`, y `renderCardConAyuda` **no pasa `onGestionar`** (la card
+  > perdió «Gestionar» a propósito), así que el gate de selección ya estaba apagado venga lo que
+  > venga en `bloqueado` — la prop es **inerte**. Lo comprobado en el párrafo de abajo
+  > («`PosOrderCardDetalle` usa `bloqueado` solo para el gate de selección») sigue siendo cierto; lo
+  > que no se vio es que aquí ese gate ya estaba apagado por otra vía. **La excepción no cambia**:
+  > se sostiene sola por R25 y por el deadlock de `rescate-ayuda.ts`, que es el argumento bueno y
+  > también estaba escrito. Detalle y decisión en la sección final de `progress/impl_235_t81.md`.
 - Una línea más en el JSDoc de `renderCardConAyuda`, en la viñeta que ya hablaba de «Recuperar».
 
 Comprobado antes de tocar: `PosOrderCardDetalle` usa su prop `bloqueado` **solo** para

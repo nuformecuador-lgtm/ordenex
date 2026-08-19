@@ -379,6 +379,22 @@ de atrás»: es el estado nuevo entrando por la puerta, con su requisito (R19) d
 - **La card de ayuda pierde «Gestionar»** (`RepartoModule.renderCardConAyuda:480-488`): llamaría a
   `escogerParaGestion`, que ahora devuelve `conflict`. Se sustituye por «Conversación»; «Recuperar»
   se queda donde está.
+- **La sección de ayuda queda FUERA del buscador y del filtro cantón/distrito**, y se decide así
+  **a mano el 2026-08-19**, a petición de la revisión (menor m2 de `progress/review_235.md`). Antes
+  de esta ficha, `visualConAyuda` se derivaba de `porGestionarVisual`, es decir **después** del
+  buscador (114), del filtro (117) y del reordenado (115); ahora `conAyuda` llega por props y se
+  pinta crudo. Consecuencia visible: al buscar una guía que está en ayuda, arriba se lee «Ninguna
+  guía en reparto coincide con la búsqueda» y **abajo siguen todas** las cards de ayuda, sin
+  filtrar.
+  **Se acepta, y por qué:** la sección de ayuda es ahora una **lista aparte y corta** —lo que el
+  mensajero espera de la tienda, no lo que sale a repartir—, y los dos controles rotulan «en
+  reparto». El modo de fallo es **mostrar de más, nunca esconder**: ninguna orden desaparece por
+  filtrar. Reaplicar los tres pasos a la segunda lista es trabajo de la pantalla que la 236
+  rediseña, no de esta ficha.
+  **Lo que NO se acepta es que quede sin decidir**: es un cambio de conducta de dos features ya
+  entregadas (114 y 117) que nadie pidió, y este repo acaba de pagar dos bloqueantes (B1, B2) por no
+  distinguir «decidido» de «olvidado». Si al usarlo molesta, el arreglo es una línea: derivar
+  `conAyuda` de la lista ya filtrada, igual que antes.
 
 ### 6.4 `/novedades`, lo mínimo para no romperla (la pestaña es de la 236)
 

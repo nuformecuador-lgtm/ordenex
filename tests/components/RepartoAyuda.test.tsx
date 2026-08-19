@@ -335,7 +335,9 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     // `vencido` y una orden en ayuda no podría ni rescatarla (bloqueado) ni cerrar (esa misma orden
     // le bloquea el cierre). Hasta hoy la card le pasaba `disabled={bloqueado}` al botón: el
     // permiso vivía en el servidor y moría en la pantalla, que es el permiso inejercitable que R35
-    // prohíbe. El resto de la card SÍ sigue bloqueada; esta acción es la salida.
+    // prohíbe. No se apoya en que el resto de la card siga bloqueada: no lo está —sin `onGestionar`
+    // el gate de selección ya está apagado, ver el comentario de la prop `bloqueado` en
+    // `RepartoModule`—. El `alert` de abajo es lo que prueba que el bloqueo llegó al módulo.
     const user = userEvent.setup();
     recuperarMock.mockResolvedValue({ status: "ok" });
     renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })], true);
@@ -366,6 +368,24 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     const seccion = seccionAyuda() as HTMLElement;
     expect(within(seccion).queryByText("En reparto")).toBeNull();
     expect(within(seccion).getByText("En ayuda")).toBeInTheDocument();
+  });
+
+  it("235/R37: y el COLOR de ese chip es el de `warning` sólido, fijado y no heredado", () => {
+    // N1/N2 de la re-revisión. «En ayuda» es texto libre para `estadoBadgeClass`, así que hasta
+    // ahora su color llegaba por el FALLBACK — la rama que existe para no romper con un rótulo
+    // desconocido, no para expresar una decisión — y coincidía con el de «En reparto». Nadie lo
+    // fijaba: retocar esa otra entrada movía este chip en silencio. Ahora `ESTADO_CLASSNAME` tiene
+    // su entrada propia y este caso la clava en la SUPERFICIE, que es donde se ve: `warning` es la
+    // familia de los estados de espera con acción pendiente (la de `EstatusBadge.ayuda_tienda` y la
+    // del encabezado de la sección) y `bg-warning`/`text-navy` son tokens fijos, o sea el par
+    // fijo-sobre-fijo que DESIGN.md exige para un chip sólido.
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
+
+    const seccion = seccionAyuda() as HTMLElement;
+    expect(within(seccion).getByText("En ayuda")).toHaveClass(
+      "bg-warning",
+      "text-navy",
+    );
   });
 
   it("235/R35: desde la card se abre el HILO, que es donde el mensajero ejerce su ventana", async () => {

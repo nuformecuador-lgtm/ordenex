@@ -487,8 +487,7 @@ export function RepartoModule({
    *    órdenes. Es el permiso inejercitable de siempre, y R35 lo prohíbe.
    *
    *  - CONSERVA «Recuperar», que es el rescate: devuelve la orden a `en_reparto` y con ella arriba.
-   *    Y lo conserva TAMBIÉN con el mensajero bloqueado (R25) — es la única excepción de esta card,
-   *    ver el comentario del botón.
+   *    Y lo conserva TAMBIÉN con el mensajero bloqueado (R25), ver el comentario del botón.
    */
   function renderCardConAyuda(orden: MiAsignacionDTO) {
     return (
@@ -497,18 +496,22 @@ export function RepartoModule({
         total={porGestionar.length + conAyuda.length}
         esActiva={false}
         esDetalle={false}
+        /* Feature 235 (N1 de la re-revisión) — HOY ESTA PROP NO APAGA NADA, y se conserva a
+           propósito. `PosOrderCardDetalle` la usa en un solo sitio: el gate de selección de
+           `posSeleccionHandlers`, que calcula `Boolean(onGestionar) && !bloqueado`. Esta card NO
+           pasa `onGestionar` (perdió «Gestionar», ver arriba), así que el gate ya está apagado
+           venga lo que venga aquí. Queda porque es inerte por COINCIDENCIA —que esta card no monte
+           acción de selección—, no por diseño: cuando la 237 le devuelva las gestiones desde ayuda,
+           el bloqueo del mensajero (111/R14) tiene que valer sin que nadie lo redescubra. */
         bloqueado={bloqueado}
         /* Feature 235 (T8.1) — SIN esta prop el chip decía «En reparto», que es exactamente lo que
            esta ficha convirtió en falso: `estadoPorDefecto(false, false)` devuelve ese literal. Para
            los otros tres valores el chip describe la situación de la orden; aquí afirmaba la
-           contraria. El COLOR se hereda del fallback de `estadoBadgeClass` (texto libre -> las
-           clases de «En reparto», `bg-warning text-navy`) y eso es CORRECTO, no un accidente:
-           `warning` es la familia que este repo da a los estados de espera con acción pendiente y
-           es la que `EstatusBadge` ya asignó a `ayuda_tienda` (R37), la misma del
-           `text-warning-strong` del encabezado de esta sección. Es además fijo-sobre-fijo (`warning`
-           y `navy` son tokens del bloque `@theme`, DESIGN.md), medido 8.1:1 en los dos temas. Por
-           eso NO se le añade entrada propia a `ESTADO_CLASSNAME`: sería un duplicado literal del
-           fallback al que ya llega. */
+           contraria. El COLOR lo DECLARA `ESTADO_CLASSNAME` con entrada propia (`bg-warning
+           text-navy`, con el porqué de `warning` escrito allí). Coincide con lo que daba el fallback
+           de texto libre, y aun así se declara: el fallback significa «no sé qué es este rótulo», así
+           que heredar de él una decisión de color la vuelve indistinguible de un accidente y la
+           movería en silencio si alguien retoca «En reparto». Lo fija `RepartoAyuda.test.tsx`. */
         estado={AYUDA_CARD_ESTADO}
         /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
            como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
@@ -523,8 +526,9 @@ export function RepartoModule({
         acciones={
           <div className="flex items-center justify-between gap-2">
             {/* Feature 235 (R25) — LA EXCEPCIÓN AL BLOQUEO, y es deliberada: este botón NO recibe
-                `disabled={bloqueado}`. El resto de la card SÍ está bloqueada (el `bloqueado` de
-                arriba apaga su gate de selección, feature 111/R14), pero el rescate es justamente
+                `disabled={bloqueado}`. No hace falta apoyarla en que «el resto de la card sí está
+                bloqueada», que además hoy es falso —el `bloqueado` de arriba no apaga nada en esta
+                card, ver su comentario—: se sostiene sola, porque el rescate es justamente
                 la SALIDA del deadlock que documenta `lib/services/rescate-ayuda.ts`: un mensajero
                 con un cierre `vencido` y una orden en ayuda no podría ni rescatarla —bloqueado— ni
                 cerrar —la orden en ayuda le bloquea el cierre, R22—. El servicio se lo permite a

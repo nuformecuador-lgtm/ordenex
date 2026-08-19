@@ -179,6 +179,9 @@ hilo de notas **tanto al mensajero asignado como a la tienda dueña**.
 
 **R35.** El sistema DEBE ofrecer a cada uno de esos dos roles al menos una superficie alcanzable,
 desde su propia pantalla, para leer y escribir en el hilo de una orden en el estatus de ayuda.
+> ⚠️ **ENMENDADO el 2026-08-19 — este texto ya NO se lee tal cual.** Ver
+> **«RECONCILIACIÓN DE R35 TRAS LA REVISIÓN»** al final de este archivo: el original queda intacto
+> a propósito (no se reescribe un documento firmado), pero lo que rige es la enmienda.
 
 **R36.** El sistema NO DEBE hacer depender la ventana de escritura del hilo de ninguna marca
 persistida distinta del estado de la orden.
