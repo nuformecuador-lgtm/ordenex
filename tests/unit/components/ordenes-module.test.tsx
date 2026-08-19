@@ -102,14 +102,16 @@ describe("OrdenesModule — prop `filter` opcional (R19, sin regresión R10)", (
   });
 });
 
-// `bloqueoSeleccion`: deshabilita el checkbox de las filas que la acción del estado
-// no puede procesar (tab `rechazada`: solo la bodega central devuelve a la tienda),
-// en vez de dejar seleccionarlas y que el modal quede vacío/"bloqueado".
+// `bloqueoSeleccion`: las filas que la acción del estado no puede procesar (tab
+// `rechazada`: solo la bodega central devuelve a la tienda) no ofrecen casilla, en vez de
+// dejar seleccionarlas y que el modal quede vacío/"bloqueado".
+const MOTIVO_SATELITE = "Orden de zona satélite: la devuelve el admin satélite.";
+
 describe("OrdenesModule — bloqueoSeleccion por fila", () => {
   const acciones = [{ key: "devolver", label: "Devolver a la tienda", onRun: vi.fn() }];
   // Solo las NO centrales (zonaEsGam !== true) se bloquean, con su motivo.
   const bloqueoSeleccion = (o: OrdenListItemDTO) =>
-    o.zonaEsGam === true ? null : "Orden de zona satélite: la devuelve el admin satélite.";
+    o.zonaEsGam === true ? null : MOTIVO_SATELITE;
 
   beforeEach(() => {
     listarOrdenesMock.mockResolvedValue({
@@ -124,7 +126,7 @@ describe("OrdenesModule — bloqueoSeleccion por fila", () => {
     });
   });
 
-  it("deshabilita el checkbox de la fila bloqueada y habilita el de la seleccionable", async () => {
+  it("la fila bloqueada NO pinta checkbox, sino el aviso con su motivo (pedido 2026-08-19)", async () => {
     renderModule(
       <OrdenesModule
         filter={{ status_id: "est-rechazada" }}
@@ -135,15 +137,45 @@ describe("OrdenesModule — bloqueoSeleccion por fila", () => {
     );
 
     await screen.findByText("5001");
-    // La GAM se puede seleccionar; la satélite no.
+    // La GAM se puede seleccionar: conserva su casilla.
     expect(
       screen.getByRole("checkbox", { name: "Seleccionar orden REM-gam" }),
-    ).not.toHaveAttribute("aria-disabled", "true");
+    ).toBeInTheDocument();
+    // La satélite no: donde estaba la casilla hay un aviso que dice POR QUÉ. Se afirma la
+    // AUSENCIA del checkbox, no que esté deshabilitado: una casilla gris se lee como «esto
+    // no funciona», y ese fue el reporte que originó el cambio.
     expect(
-      screen.getByRole("checkbox", {
+      screen.queryByRole("checkbox", { name: /orden REM-sat/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("img", {
         name: /No se puede seleccionar la orden REM-sat/,
       }),
-    ).toHaveAttribute("aria-disabled", "true");
+    ).toBeInTheDocument();
+  });
+
+  it("el aviso de la fila bloqueada es alcanzable con el teclado y muestra el motivo", async () => {
+    const user = userEvent.setup();
+    renderModule(
+      <OrdenesModule
+        filter={{ status_id: "est-rechazada" }}
+        selectable
+        acciones={acciones}
+        bloqueoSeleccion={bloqueoSeleccion}
+      />,
+    );
+
+    await screen.findByText("5001");
+    const aviso = screen.getByRole("img", {
+      name: /No se puede seleccionar la orden REM-sat/,
+    });
+
+    // Enfocable: un tooltip que solo responde al raton deja el motivo fuera del alcance de
+    // quien navega con teclado, y el motivo ES la informacion.
+    aviso.focus();
+    expect(aviso).toHaveFocus();
+    await user.hover(aviso);
+    expect(await screen.findByText(MOTIVO_SATELITE)).toBeInTheDocument();
   });
 
   it("marcar la fila seleccionable abre la barra de acciones; la bloqueada no se puede marcar", async () => {
@@ -159,9 +191,9 @@ describe("OrdenesModule — bloqueoSeleccion por fila", () => {
 
     await screen.findByText("5001");
 
-    // Marcar la satélite (deshabilitada) no hace nada: no aparece la barra.
+    // La satélite ya no tiene casilla que pulsar: pulsar su aviso no marca nada.
     await user.click(
-      screen.getByRole("checkbox", {
+      screen.getByRole("img", {
         name: /No se puede seleccionar la orden REM-sat/,
       }),
     );

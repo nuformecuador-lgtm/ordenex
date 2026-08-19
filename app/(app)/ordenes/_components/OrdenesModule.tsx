@@ -13,7 +13,7 @@ import {
 import { Pagination } from "@/components/shared/Pagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { CeldaSeleccion } from "@/components/shared/CeldaSeleccion";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
@@ -319,23 +319,22 @@ export function OrdenesModule({
               );
             },
             render: (row) => {
-              // Motivo de bloqueo (o null): deshabilita el checkbox y lo explica en
-              // el tooltip, en vez de dejar seleccionar una orden que la acción del
-              // estado va a descartar (lo que dejaba el modal vacío/"bloqueado").
+              // Motivo de bloqueo (o null): con motivo NO se pinta checkbox, sino el aviso
+              // «!» que lo explica (pedido humano 2026-08-19). Antes era una casilla gris
+              // con el motivo en el `title` nativo: dejaba de parecer «esto no aplica» y
+              // pasaba a parecer «los checkbox no funcionan», que es el reporte que llegó.
               const motivo = bloqueoSeleccion?.(row) ?? null;
               return (
-                <Checkbox
+                <CeldaSeleccion
                   checked={seleccionIds.has(row.id)}
-                  disabled={motivo !== null}
-                  onCheckedChange={(checked) =>
-                    toggleSeleccion(row, checked === true)
-                  }
-                  aria-label={
+                  onCheckedChange={(checked) => toggleSeleccion(row, checked)}
+                  bloqueo={motivo}
+                  ariaLabel={`Seleccionar orden ${row.numRemision}`}
+                  bloqueoAriaLabel={
                     motivo
                       ? `No se puede seleccionar la orden ${row.numRemision}: ${motivo}`
-                      : `Seleccionar orden ${row.numRemision}`
+                      : undefined
                   }
-                  title={motivo ?? undefined}
                 />
               );
             },
