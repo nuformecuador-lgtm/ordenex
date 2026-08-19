@@ -46,7 +46,8 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       deletedAt: null,
-      estatus: { value: "en_reparto" },
+      // Feature 235 (R26): la rama (b) barre los DOS estados. UNION, no sustitucion.
+      estatus: { value: { in: ["en_reparto", "ayuda_tienda"] } },
       mensajeroAsignadoId: { not: null },
     });
     expect(arg.distinct).toEqual(["mensajeroAsignadoId"]);
@@ -141,5 +142,76 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const rows = await repo.findMensajerosConActividadSinCierre();
 
     expect(rows).toEqual([{ mensajeroId: "m1", zonaId: null }]);
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (R26) — LA SELECCION DEL CORTE TIENE QUE VER LA ORDEN EN AYUDA.
+//
+// ⚠️ ESTO ES UNA REGRESION QUE LA 235 INTRODUJO Y QUE LA SUITE NO VIO. Mientras la solicitud de
+// ayuda fue un BOOLEANO, la orden seguia en `en_reparto` y esta rama la pescaba sola. Al moverla a
+// un estatus propio, la rama se quedo mirando el estado viejo: un mensajero que recoge una guia,
+// pide ayuda y se va a casa **no entraba en la lista que itera `ejecutarCorte`** —pedir ayuda NO
+// crea `gestion_orden`, asi que la rama (a) tampoco lo pesca— y por tanto no se le creaba el cierre
+// `vencido` ni se barria su orden NUNCA.
+//
+// El test que sonaba a que cubria esto (`235/R26: un mensajero cuyo dia entero acabo EN AYUDA...`,
+// en `cierre-dia-repository.test.ts`) llama a `crearCierre` A MANO: afirma la propiedad un nivel por
+// debajo de donde fallaba. Se conserva —mide la ESCRITURA, que tambien hay que medir— y aqui se
+// añade la mitad que faltaba: la SELECCION.
+// =================================================================================================
+describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
+  it("incluye al mensajero cuyo dia entero acabo en `ayuda_tienda`, SIN gestiones pendientes", async () => {
+    const prisma = buildPrisma();
+    // Rama (a) vacia a proposito: pedir ayuda no crea `gestion_orden`, asi que este mensajero solo
+    // puede entrar por la rama (b). Es EL caso de la regresion.
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    prisma.orden.findMany.mockResolvedValue([
+      { mensajeroAsignadoId: "m-ayuda", mensajeroAsignado: { zonaId: "z9" } },
+    ]);
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findMensajerosConActividadSinCierre();
+
+    expect(rows).toEqual([{ mensajeroId: "m-ayuda", zonaId: "z9" }]);
+  });
+
+  it("el predicado, aplicado a filas, pesca `en_reparto` Y `ayuda_tienda` y deja fuera el resto", async () => {
+    // El `where` es lo unico que decide (este doble no ejecuta SQL), asi que se le da semantica.
+    // Sin esto, el caso de arriba pasaria igual con un `where` que trajera CUALQUIER orden.
+    const prisma = buildPrisma();
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+
+    await repo.findMensajerosConActividadSinCierre();
+    const { where } = prisma.orden.findMany.mock.calls[0][0] as {
+      where: { deletedAt: null; estatus: { value: { in: string[] } }; mensajeroAsignadoId: unknown };
+    };
+    const casa = (estatus: string) => where.estatus.value.in.includes(estatus);
+
+    // Los DOS que el corte barre.
+    expect(casa("en_reparto")).toBe(true);
+    expect(casa("ayuda_tienda")).toBe(true);
+    // Y los que NO: `por_recoger` es la guarda de la 109/R5 (el mensajero ni siquiera la recogio),
+    // y los desenlaces ya estan cerrados.
+    for (const fuera of ["por_recoger", "entregada", "sin_gestionar", "recolectando", "devuelta"]) {
+      expect(casa(fuera), `${fuera} NO debe barrerse`).toBe(false);
+    }
+    // Censo CERRADO: ni uno mas. Un tercer estado aqui barreria trabajo que no toca.
+    expect([...where.estatus.value.in].sort()).toEqual(["ayuda_tienda", "en_reparto"]);
+  });
+
+  it("UNION sin duplicar: el mensajero con gestiones Y una orden en ayuda aparece UNA vez", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([
+      { mensajeroId: "m1", mensajero: { zonaId: "z1" } },
+    ]);
+    prisma.orden.findMany.mockResolvedValue([
+      { mensajeroAsignadoId: "m1", mensajeroAsignado: { zonaId: "z1" } },
+    ]);
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findMensajerosConActividadSinCierre();
+
+    expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
   });
 });

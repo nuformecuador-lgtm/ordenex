@@ -188,8 +188,14 @@ export async function listarMensajerosParaAsignacion(
     // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
     // Se marcan las DOS caras para que cada modal deshabilite la suya y el maestro vea el
     // motivo en vez de toparse con un rechazo del servidor al confirmar.
+    //
+    // ⚠️ Feature 235: la primera lista es el GEMELO DE INTERFAZ de `ESTADOS_REPARTO_PENDIENTE`
+    // (`GuiaAsignacionService`). Las dos tienen que decir lo mismo o el selector deja elegir a un
+    // mensajero al que el servidor va a rechazar — que es el «rechazo al confirmar» que este
+    // marcador existe para evitar. `ayuda_tienda` entra en las dos: el paquete sigue con él (R1).
+    // La guardia `carga-del-mensajero.guardia.test.ts` cruza las dos y falla si divergen.
     const [conReparto, conRecoleccion] = await Promise.all([
-      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
+      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto", "ayuda_tienda"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
     ]);
     return {

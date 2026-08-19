@@ -55,23 +55,92 @@ Las tres condiciones de la firma, una a una:
 
 ---
 
-## 1 · T0.1 — la medición de datos en vuelo: **PENDIENTE, y bloquea el despliegue**
+## 1 · T0.1 — la medición de datos en vuelo: **CERRADA**
 
-⚠️ **No pude re-medir.** El MCP de Supabase **no está expuesto a este subagente** (`.mcp.json` lo
-declara, pero la herramienta no llega hasta aquí). La base contra la que corre `prisma migrate
-status` es `localhost:5432` (`ordenex`), no producción.
+✅ **Re-medida por el leader el 2026-08-19 contra producción (MCP, solo lectura): 0 órdenes con
+`orden.ayuda = true`.** Confirma la medición de la puerta humana y cierra **P6 como *grandfather***:
+se retira la columna y **no hace falta script de datos**. Por eso `scripts/migrar-ayuda-a-estatus.ts`
+no existe: escribirlo para un conjunto medido como vacío sería código sin caso.
 
-- Lo que hay: la medición de la **puerta humana del 2026-08-19** — columna `ayuda` existente en
-  `prod`, **0 órdenes con la bandera encendida**, autocomprobado sobre 141 órdenes vivas → *grandfather*.
-- Lo que falta: **re-medirlo antes de desplegar**, porque la foto caduca (design §14.4). La consulta
-  es `SELECT count(*) FROM orden o JOIN order_status os ON os.id = o.estatus_id WHERE o.ayuda = true
-  GROUP BY os.value`.
-- Si el conjunto **no** fuera vacío, hace falta `scripts/migrar-ayuda-a-estatus.ts` **antes** de la
-  migración del retiro (design §9). **No lo escribí**, porque escribir un script para un conjunto
-  medido como vacío es código sin caso.
+Por qué no la hice yo, dicho para que quede el precedente: **el MCP de Supabase no está expuesto a un
+subagente** (`.mcp.json` lo declara, pero la herramienta no llega), y `prisma migrate status` apunta
+a `localhost:5432`. Un implementer no puede cerrar T0.1 por sí solo en este arnés.
 
-R43 sí quedó cubierto por su **propiedad estructural**, que no caduca: una orden en `ayuda_tienda`
-la ve su tienda y tiene dos salidas (test nombrado abajo).
+⚠️ **La foto sigue caducando.** Si el despliegue se retrasa, se vuelve a medir. La consulta es
+`SELECT count(*) FROM orden o JOIN order_status os ON os.id = o.estatus_id WHERE o.ayuda = true
+GROUP BY os.value`. Si algún día no diera vacío, hace falta ese script **antes** de la migración del
+retiro (design §9).
+
+R43 queda cubierto además por su **propiedad estructural**, que no caduca: una orden en
+`ayuda_tienda` la ve su tienda y tiene dos salidas (test nombrado en §3).
+
+---
+
+## 1.bis · La revisión rechazó la ficha: el barrido incompleto (B1/B2) y cómo se cerró
+
+`progress/review_235.md` (commit **29310f74**) confirmó que el núcleo estaba bien —P4, las dos rutas
+exentas y las dos deudas de la 239, con seis mutaciones propias del reviewer— y encontró que **lo que
+falló fue el barrido**: dos consultas de una familia entera que esta ficha no miró.
+
+### El censo de la familia — **7 listas**
+
+La familia son las listas que responden **«¿qué ocupa a este mensajero?»** o **«¿a quién hay que
+barrer?»**. No es la familia que T3.4 barrió (esa es «¿qué órdenes se ofrecen?»), y esa distinción es
+justo lo que se coló.
+
+| # | Lista | Archivo | Pregunta | Estado antes de la revisión |
+| --- | --- | --- | --- | --- |
+| 1 | `ESTADOS_PENDIENTES` | `lib/services/CierreDiaService.ts` | qué ocupa | ✅ migrada (R22/R23) |
+| 2 | corte del portal (`findMisAsignaciones`) | `lib/services/MisAsignacionesService.ts` | qué ocupa | ✅ migrada (R18) |
+| 3 | ids que resuelve el corte | `lib/services/CorteDiarioService.ts` | a quién barrer | ✅ migrada (R26) |
+| 4 | **`ESTADOS_A_BARRER`** (era `ESTADO_EN_REPARTO`) | `lib/repositories/CorteDiarioRepository.ts` | a quién barrer | ❌ **B1 — sin migrar** |
+| 5 | **`ESTADOS_REPARTO_PENDIENTE`** | `lib/services/GuiaAsignacionService.ts` | qué ocupa | ❌ **B2 — sin migrar** |
+| 6 | **`conRepartoIds`** (gemelo de interfaz de la 5) | `lib/actions/ordenes-guia.ts` | qué ocupa | ❌ **B2 — sin migrar** |
+| 7 | **`ESTADOS_EN_MANO_DEL_MENSAJERO`** (era `!= en_reparto`) | `lib/repositories/GestionOrdenRepository.ts` | qué ocupa | ⚠️ **red latente** (ver abajo) |
+
+**Descartadas del censo, con su razón** (para que no parezcan olvidos):
+
+- `RankingRepository.contarAsignadasPorMensajero` — cuenta por `asignadoAt`, es **agnóstica al
+  estatus**: no puede quedarse atrás.
+- `findMensajerosBloqueados`, `findZonasConMensajeroBloqueado`, `existeBodegaSateliteBloqueada` —
+  derivan de **cierres**, no de estados de orden.
+- `findRecepcionSateliteByZona` / `…GeoByZona` — listan **órdenes por zona**: son la otra familia, la
+  que T3.4 sí barrió (y su lista blanca ya decidió que `ayuda_tienda` no entra).
+- `ESTADOS_RECOLECCION_PENDIENTE` (`GuiaAsignacionService`) — **sí es de la familia**, pero su
+  contenido (`recolectando`) no cambia: `ayuda_tienda` no es una recolección. Queda vigilada por la
+  guardia igualmente, por el cruce de gemelos.
+- Los crons `liberar-reprogramadas`, `procesar-devueltas-sla`, `snapshot-ranking` y
+  `RechazosSlaTiendaService` — ninguno enumera ocupación de mensajero (`grep` sobre los cuatro: cero
+  coincidencias de `en_reparto` / `mensajero`).
+
+### El hallazgo nº 7, que la revisión no pidió y salió del censo
+
+`gestionadasDelDiaWhere` excluía **solo** `en_reparto` para mantener disjuntos los dos sumandos de
+`totalACobrar` (R21). Desde esta ficha el otro sumando se calcula sobre `porGestionar ∪ conAyuda`, así
+que la **red** se quedó cubriendo la mitad del conjunto que debía.
+
+**¿Había doble conteo vivo? No** — y conviene dejarlo escrito para que nadie deshaga el cambio: para
+tener una gestión VIGENTE de hoy y estar además en `ayuda_tienda` habría que volver a `en_reparto`
+después de gestionar, y el único camino que hace eso es `deshacerGestion`, que **anula** la gestión;
+`gestionDelDia` exige `anuladaAt: null`. El conjunto era vacío **por alcanzabilidad**.
+
+Se amplió igualmente a `notIn: ["en_reparto", "ayuda_tienda"]` porque «vacío hoy» es justo el
+argumento que ese `where` dice no querer usar: su propio comentario explica que la exclusión vive en
+la query «para que ningún llamador futuro pueda combinarlos mal» — y **la ficha 237 abre aristas
+desde `ayuda_tienda`**.
+
+### La guardia que impide la tercera vez
+
+`tests/unit/guards/carga-del-mensajero.guardia.test.ts` (**16 casos**). Censa las **siete** listas
+leyéndolas **del texto fuente** (tres son `const` privadas de módulo y tres son literales en el sitio
+de la llamada; importarlas la volvería un espejo de sí misma), y exige:
+
+1. que cada una **declare su decisión** sobre `ayuda_tienda`, con la razón en el mensaje del fallo;
+2. que los **gemelos** no puedan separarse — servicio ↔ selector, selección del corte ↔ ids que el
+   service resuelve, portal ↔ bloqueo del cierre;
+3. los **casos negativos**: `por_recoger` no se barre (109/R5) y ningún desenlace ocupa a nadie;
+4. **autocomprobación**: cada extractor revienta con nombre si su patrón deja de casar, y devuelve lo
+   mutado sobre un fuente sintético.
 
 ---
 
@@ -145,6 +214,21 @@ la foto histórica se queda quieta.
 - `lib/services/OrdenNotaService.ts`, `NovedadesService.ts` — sin el tercer argumento / sin el campo.
 - `lib/services/jobs/webhook-estado-encolado.ts` — pregunta a la política; **firma intacta**.
 
+### El arreglo de la revisión (B1/B2, 2026-08-19)
+
+| Archivo | Qué cambia |
+| --- | --- |
+| `lib/repositories/CorteDiarioRepository.ts` | `ESTADO_EN_REPARTO` → **`ESTADOS_A_BARRER`** (`in`, unión) en la rama (b) de `findMensajerosConActividadSinCierre` |
+| `lib/services/GuiaAsignacionService.ts` | `ESTADOS_REPARTO_PENDIENTE` gana `ayuda_tienda` |
+| `lib/actions/ordenes-guia.ts` | el gemelo del selector (`conRepartoIds`) gana `ayuda_tienda` |
+| `lib/repositories/GestionOrdenRepository.ts` | `!= en_reparto` → **`notIn ESTADOS_EN_MANO_DEL_MENSAJERO`** (red de R21) |
+| `tests/unit/services/corte-diario-seleccion.test.ts` | **nuevo**: el corte medido **desde `ejecutarCorte`**, con el repositorio REAL sobre un doble de Prisma con semántica |
+| `tests/unit/guards/carga-del-mensajero.guardia.test.ts` | **nuevo**: censo de las 7 listas de la familia + cruce de gemelos + autocomprobación |
+| `tests/unit/repositories/corte-diario-repository.test.ts` | el `where` con los dos estados, aplicado a filas, con su caso negativo |
+| `tests/unit/services/guia-asignacion-service.test.ts` | la orden en ayuda ocupa, con su caso negativo |
+| `tests/integration/actions/ordenes-guia-action.test.ts` | el selector pregunta por los tres estados y marca al mensajero |
+| `tests/unit/repositories/gestion-orden-repository.test.ts` | la red de R21 con los dos values, aplicada a filas |
+
 ### Interfaces
 
 `IOrdenRepository` (+`TransicionAyudaInput`, −3 métodos, −`NovedadOrdenRow.ayuda`),
@@ -188,19 +272,19 @@ Nombres **tal cual los imprime el runner**. Ruta abreviada: `u/` = `tests/unit/`
 | R14 | `u/repositories/orden-repository.test.ts` | `R14(a): `findParadasEnReparto` acota por IGUALDAD a `en_reparto` — un `in` la colaria` |
 | R15 | `c/RepartoAyuda.test.tsx` | `235/R15: NO llega al mapa de ruta — la parada desaparece, no solo su card` |
 | R16 | `u/services/mis-asignaciones-service.test.ts` | `R16: `escogerParaGestion` sobre una orden en `ayuda_tienda` devuelve `conflict`` |
-| R17 | `u/repositories/orden-repository.test.ts` | `R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion` |
+| R17 | `u/repositories/orden-repository.test.ts` | `R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion` · **+ (B2)** `u/services/guia-asignacion-service.test.ts::235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`` |
 | R18 | `u/services/mis-asignaciones-service.test.ts` | `R18: las de ayuda salen en `conAyuda` y NO en `porGestionar`` |
 | R19 | `c/RepartoAyuda.test.tsx` | `235/R19: la card conserva «Recuperar», que es la salida de vuelta` |
 | R20 | `u/services/mis-asignaciones-service.test.ts` | `R20 (P7): una orden que pasa a `ayuda_tienda` NO cambia ninguno de los tres KPI` |
-| R21 | `u/services/mis-asignaciones-service.test.ts` | `R21: el COD de una gestionada hoy y el de una en ayuda NO se suman dos veces` |
+| R21 | `u/services/mis-asignaciones-service.test.ts` | `R21: el COD de una gestionada hoy y el de una en ayuda NO se suman dos veces` · **+ (red)** `u/repositories/gestion-orden-repository.test.ts::235/R21: el predicado deja fuera `en_reparto` Y `ayuda_tienda`, y deja dentro los desenlaces` |
 | R22 | `u/services/cierre-dia-service.test.ts` | `R22: con una orden en `ayuda_tienda`, `solicitarCierre` devuelve conflict con motivo accionable` |
 | R23 | `u/services/cierre-dia-service.test.ts` | `R23: la lista de estados pendientes NOMBRA `ayuda_tienda`` |
 | R24 | `u/services/cierre-dia-service.test.ts` | `R24: con un cierre `vencido` y una orden en `ayuda_tienda`, transiciona a `solicitado`` (+ gemelo `rechazado`) |
 | R25 | `u/services/solicitud-ayuda-service.test.ts` | `235/R25: un mensajero BLOQUEADO por un cierre sin resolver PUEDE pedir ayuda` (+ `R25` en `rescate-ayuda-service`) |
-| R26 | `u/repositories/cierre-dia-repository.test.ts` | `235/R26: barre las de `en_reparto` Y las de `ayuda_tienda` en la MISMA transaccion` |
+| R26 | `u/services/corte-diario-seleccion.test.ts` | `le CREA su cierre `vencido` y le pasa los ids del barrido (EL CASO DE LA REGRESION)` — **desde `ejecutarCorte`**, que es donde fallaba · (escritura) `u/repositories/cierre-dia-repository.test.ts::235/R26: barre las de `en_reparto` Y las de `ayuda_tienda` en la MISMA transaccion` |
 | R27 | `u/repositories/cierre-dia-repository.test.ts` | `235/R27: cada append lleva el `estatusOrigenId` de SU bloque, no uno supuesto` |
 | R28 | `u/repositories/cierre-dia-repository.test.ts` | `235/R28 (MONEY-NEUTRAL): el `data` del bloque de ayuda toca SOLO `estatusId`` |
-| R29 | `u/guards/ayuda-columna-retirada.guardia.test.ts` | `ningun modulo de codigo la usa (censo sobre fuente sin comentarios)` — tras el corte no queda señal que apagar porque no queda marca |
+| R29 | `u/guards/ayuda-columna-retirada.guardia.test.ts` | `ningun modulo de codigo la usa (censo sobre fuente sin comentarios)` — tras el corte no queda señal que apagar porque no queda marca. **El menor m8 queda cerrado con B1**: ahora el corte SÍ alcanza a esas órdenes |
 | R30 | `u/repositories/orden-repository.novedades.test.ts` | `235/R30: la orden con ayuda pedida llega con `estatusValue = ayuda_tienda`` |
 | R31 | `u/repositories/orden-repository.novedades.test.ts` | `R21: `count` y `find` comparten EXACTAMENTE el mismo where` |
 | R32 | `u/repositories/orden-repository.novedades.test.ts` | `235/R32: ninguna rama lista una orden que SALIO del estatus de ayuda` |
@@ -251,31 +335,36 @@ aristas la sostiene el test `235/R12: las salidas de `ayuda_tienda` son EXACTAME
 
 `./init.sh` **no** se corrió: lo corre el leader con el árbol quieto.
 
+**Medición final (2026-08-19, tras cerrar B1/B2/B4):**
+
 ```
 $ npx tsc --noEmit
 typecheck exit=0        (sin salida)
 
 $ npx eslint
 lint exit=0
-✖ 92 problems (0 errors, 92 warnings)
+✖ 93 problems (0 errors, 93 warnings)
   0 errors and 1 warning potentially fixable with the `--fix` option.
 ```
 
-Las 92 son **warnings preexistentes** de `@typescript-eslint/no-unused-vars` sobre parámetros con
-prefijo `_` en dobles de test; las 3 nuevas (`_input` en los dobles de `transicionarAyuda`) siguen
-esa misma convención del repo.
+Las 93 son **warnings preexistentes** de `@typescript-eslint/no-unused-vars` sobre parámetros con
+prefijo `_` en dobles de test; las 4 nuevas (`_input` en los dobles de `transicionarAyuda` y de
+`crearCierre`) siguen esa misma convención del repo. **Cero errores.**
 
 ```
 $ npx vitest run
- Test Files  1190 passed (1190)
-      Tests  15420 passed | 26 skipped (15446)
-   Duration  308.85s
+ Test Files  1192 passed (1192)
+      Tests  15449 passed | 26 skipped (15475)
+   Duration  309.56s
 exit=0
 ```
 
+(Antes del arreglo de la revisión: 1190 archivos / 15.420 tests. **+2 archivos, +29 casos**, todos
+del cierre de B1/B2 y de la guardia de la familia.)
+
 ```
 $ npx vitest run tests/unit/guards/
-      Tests  818 passed (818)
+      Tests  834 passed (834)      # 818 + los 16 de `carga-del-mensajero`
 ```
 
 ```
@@ -285,7 +374,7 @@ $ npx vitest run tests/integration/db
 
 ---
 
-## 6 · Las mutaciones — cinco, con hash antes y después
+## 6 · Las mutaciones — ocho, con hash antes y después
 
 Cada una: hash del archivo → mutación → tests que **mueren, nombrados** → revert → hash idéntico.
 
@@ -397,8 +486,66 @@ Mutación: `enManoDelMensajero = porGestionar` → **murieron 2**:
 `235/R20 (P7): una orden que pasa a `ayuda_tienda` NO cambia ninguno de los tres KPI` y
 `235/R21: el COD de una gestionada hoy y el de una en ayuda NO se suman dos veces`.
 
-**Autocomprobación:** las cinco mutaciones se aplicaron **una a una**, con `vitest` ejecutado en cada
-una y su salida real leída; ninguna reportó «superviviente» sin haber corrido tests. Los seis hashes
+### (f) B1 — la SELECCIÓN del corte, medida **desde `ejecutarCorte`**
+
+`lib/repositories/CorteDiarioRepository.ts`
+
+| | sha256 |
+| --- | --- |
+| antes | `72003baab2d69c4637570528d5baf47b7c20a5358b4a3b65e4c06386b9db7d6b` |
+| mutado | `980aacaf4b6be96eafc290895b6f473c0b83ebe721aa73aa541bb7e5f0b199d6` |
+| después | `72003baab2d69c4637570528d5baf47b7c20a5358b4a3b65e4c06386b9db7d6b` ✅ |
+
+Mutación: `estatus: { value: { in: ESTADOS_A_BARRER } }` → `{ value: ESTADOS_A_BARRER[0] }`, es decir,
+**el estado exacto en el que estaba el bug**.
+
+**Murieron 2 al nivel que la revisión exigía** (`corte-diario-seleccion.test.ts`, que entra por
+`ejecutarCorte` con el repositorio REAL):
+
+- `le CREA su cierre `vencido` y le pasa los ids del barrido (EL CASO DE LA REGRESION)` —
+  `expected { mensajerosEvaluados: 0, … } to deeply equal { mensajerosEvaluados: 1, … }`. **Cero
+  mensajeros evaluados: exactamente el fallo, visto desde donde se veía.**
+- `los dos a la vez: dos mensajeros, dos cierres` — `expected 1 to be 2`.
+
+Y **2 más** en los otros dos niveles, que es lo que hace que el arreglo no se pueda deshacer por
+ningún lado: `R4: incluye mensajeros con >=1 orden en `en_reparto` no borrada` y
+`235/R26: el predicado, aplicado a filas, pesca `en_reparto` Y `ayuda_tienda` y deja fuera el resto`.
+
+### (g) B2 — la regla de dedicación
+
+`lib/services/GuiaAsignacionService.ts`
+
+| | sha256 |
+| --- | --- |
+| antes | `4e9c0f7d62c8ef4c37d5b1d45db703c6802cf65b476a7ab88ffbe039d1f965a8` |
+| mutado | `704cf1e5932b92be1e12c022df9c7dd0cc1e1c299bc274d40f6f90f97f4749fb` |
+| después | `4e9c0f7d62c8ef4c37d5b1d45db703c6802cf65b476a7ab88ffbe039d1f965a8` ✅ |
+
+Mutación: `ESTADOS_REPARTO_PENDIENTE` pierde `"ayuda_tienda"`. **Murieron 4**:
+
+- `235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`` (el de negocio)
+- `pregunta EXACTAMENTE por los estados de reparto, no por otras recolecciones`
+- `la regla de dedicación de la 157 (`ESTADOS_REPARTO_PENDIENTE`) incluye `ayuda_tienda`` (guardia)
+- `regla de dedicación: el SERVICIO y el MARCADOR del selector piden los mismos estatus` (gemelos)
+
+### (h) B2' — solo el GEMELO del selector, para probar que el cruce vigila
+
+`lib/actions/ordenes-guia.ts`
+
+| | sha256 |
+| --- | --- |
+| antes | `67d80e3f6c423bdb5d17310442d1fef21d58b488698ddf34622c8d6fd50a7064` |
+| mutado | `9d680d9308b31acb0521cb513a7fb44a8b67722d42ca9c8f17bb1c5d4df0efb0` |
+| después | `67d80e3f6c423bdb5d17310442d1fef21d58b488698ddf34622c8d6fd50a7064` ✅ |
+
+Mutación: solo la lista del selector pierde `"ayuda_tienda"`, dejando el servicio correcto — la
+divergencia de gemelos que produce «el selector deja elegir a quien el servidor rechaza».
+**Murieron 4**, incluidos los dos de la guardia:
+`el marcador del selector del maestro (`conRepartoIds`) incluye `ayuda_tienda`` y
+`regla de dedicación: el SERVICIO y el MARCADOR del selector piden los mismos estatus`.
+
+**Autocomprobación:** las ocho mutaciones se aplicaron **una a una**, con `vitest` ejecutado en cada
+una y su salida real leída; ninguna reportó «superviviente» sin haber corrido tests. Los nueve hashes
 posteriores coinciden con los previos, byte a byte.
 
 ---
@@ -419,39 +566,41 @@ en un cierre, solo que en otro— pero **la 237 tiene que probarlo, no suponerlo
 
 ## 8 · Decisiones abiertas / lo que NO hice
 
-1. **T0.1 — la medición contra producción está PENDIENTE** y **bloquea el despliegue**, no el código.
-   El MCP de Supabase no está expuesto a este subagente. Ver §1.
-2. **UI: hice más de lo que me toca, y hay que revisarlo.** Mi encargo era backend, pero retirar la
-   columna **rompe el typecheck** en cinco componentes y dejarlos rotos habría hecho imposible
-   entregar un árbol verde. Toqué:
+1. **T0.3 — el orden de mergeo 235 → 236 → 240 sigue sin anotar** en `progress/current.md` (censado:
+   ninguna línea lo fija). Es decisión del leader; P10 la dejó «pendiente de confirmar». No bloquea
+   código, sí la nota de cierre.
+2. **T8.1 — «ver la app» NO se hizo.** Es la parte que la suite no cubre y esta ficha reescribió 8
+   archivos de `app/` más un componente nuevo. La asume el leader.
+3. **T8.3 — el gate completo y el PR** los corre el leader con el árbol quieto. Yo corrí `tsc`,
+   `eslint` y la suite entera (§5) y **no** ejecuté `./init.sh`.
+4. **UI: hice más de lo que me toca, y hay que revisarlo.** Retirar la columna rompe el typecheck en
+   cinco componentes. Toqué:
    - **forzado por el tipo** (traducción literal, sin rediseño): `GestionarOrdenPanel`,
      `NovedadAcciones`, `NovedadesModule`, `reparto/page.tsx`;
    - **forzado + con decisión**: `RepartoModule` (borrado del corte de cliente, `conAyuda` por props,
      chat con la unión, card sin «Gestionar», mensaje de «todas con ayuda»);
-   - **nuevo**: `HiloNotasAyudaModal.tsx` — lo escribí porque **R35** lo exige y sin él el mensajero
-     tendría la ventana abierta y ningún sitio donde ejercerla. Es un calco del modal de la tienda
-     sobre el mismo componente compartido, **sin estilos propios**.
+   - **nuevo**: `HiloNotasAyudaModal.tsx`, porque **R35** lo exige del lado mensajero.
 
-   👉 **Un `frontend_dev` debería revisar el acabado visual** de la sección de ayuda y del modal
-   (espaciados, variante del botón «Conversación», copy). La funcionalidad y sus tests están.
-3. **`scripts/migrar-ayuda-a-estatus.ts` no existe**, a propósito: P6 midió el conjunto como vacío.
-   Si la re-medición de T0.1 da distinto, **hay que escribirlo y correrlo antes** de la migración del
-   retiro (design §9).
-4. **T8.1 («ver la app») no se hizo.** No levanté el servidor ni recorrí las pantallas. Es la parte
-   que la suite no cubre y que este repo ya midió como valiosa.
-5. **T8.2 (documentación al día)**: no marqué como CERRADAS la «RECONCILIACIÓN DE R19» ni el «tapón
-   con dueño» en `specs/239-devolucion-espera-cierre/`, ni anoté la auditoría. Las dos deudas **están
-   cerradas en el código** (y así lo dicen los comentarios de `novedadWhere` y `ventana-hilo-notas`),
-   pero los tres documentos siguen sin la nota fechada con el número de PR.
-6. **Migraciones sin aplicar en local.** `prisma migrate status` dice que las tres están pendientes
-   contra `localhost:5432`. No las apliqué para no mover la base bajo los pies de otra sesión; su
-   reversibilidad está cubierta por lectura de fichero (`i/ayuda-tienda-migration.test.ts`), no por
-   `db:migrate` + `db:rollback` reales — **eso queda por hacer** (T6.3).
+   👉 **Un `frontend_dev` debería revisar el acabado.** La revisión anotó además dos menores que NO
+   arreglé porque son decisiones de producto, no defectos de implementación: **m2** — la sección de
+   ayuda quedó fuera del buscador y del filtro cantón/distrito (antes se derivaba de la lista ya
+   filtrada); y **m4** — `RecuperarAyudaButton` sigue `disabled={bloqueado}`, así que la UI le niega
+   al mensajero bloqueado el rescate que R25 le concede en el servicio. Las dos son visibles y
+   baratas; ninguna es mía de decidir.
+5. **B3 (R35 del lado tienda) no es mío.** El leader reconcilia el requisito en el spec: el propio
+   `requirements.md` se contradecía —«fuera de alcance» difiere la lectura del hilo de la tienda a la
+   236 mientras R35 la exige aquí—.
+6. **Migraciones aplicadas y revertidas contra el motor por el leader** (T6.3). Yo no las apliqué en
+   local para no mover la base bajo otra sesión; su reversibilidad está además cubierta por lectura
+   de fichero (`tests/integration/db/ayuda-tienda-migration.test.ts`).
+7. **T8.2 está hecha** (los tres documentos llevan su nota fechada); falta solo el número de PR, que
+   no existe hasta que el leader lo abra.
 
 ---
 
 ## Veredicto
 
-El estatus está entero y medido: 46/46 con test nombrado, typecheck y lint en 0 errores, 15.420 tests
-verdes y cinco mutaciones que mueren donde deben — pero **no se despliega sin re-medir P6** y sin que
-un frontend_dev pase por la UI que tuve que tocar.
+El estatus está entero y medido, y las dos listas que el barrido se dejó —el corte de la noche y la
+regla de dedicación— están cerradas con su mutación y con una guardia que censa la familia completa
+para que no haya una tercera. Queda fuera de mi alcance ver la app (T8.1), el gate y el PR (T8.3), y
+el acabado de la UI que tuve que tocar.

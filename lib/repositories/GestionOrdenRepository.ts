@@ -21,6 +21,11 @@ const ESTATUS_ENTREGADA = "entregada";
 // Estado de las ordenes que el mensajero lleva encima. El KPI "Total a cobrar" lo EXCLUYE de
 // su parte gestionada porque esa mitad ya la aporta `porCobrar` (ver `gestionadasDelDiaWhere`).
 const ESTADO_EN_REPARTO = "en_reparto";
+// Feature 235 (R21): los estatus en los que el paquete SIGUE EN LA MANO del mensajero, y que por
+// tanto aporta el OTRO sumando de `totalACobrar` (`porCobrar`, calculado sobre
+// `porGestionar ∪ conAyuda` en `MisAsignacionesService`). Los dos sumandos se mantienen disjuntos
+// excluyendo AQUI exactamente ese conjunto.
+const ESTADOS_EN_MANO_DEL_MENSAJERO = [ESTADO_EN_REPARTO, "ayuda_tienda"];
 
 // Feature 100 — `resultado` de la gestion que ancla la ventana en `devuelta` (R5: de ahi se deriva
 // el mensajero de la gestion sintetica) y `resultado` de la gestion sintetica de reprogramacion
@@ -71,17 +76,30 @@ function entregadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
  * hoy siguen siendo parte de su jornada; si se filtraran, el total bajaria cada vez que una
  * orden NO se entrega, que es justo cuando el mensajero necesita que el numero no se mueva.
  *
- * `estatus.value != en_reparto` es lo que hace DISJUNTOS los dos sumandos de `totalACobrar`.
- * Sin el habria doble conteo real: una orden gestionada hoy como `reprogramada` y liberada de
- * vuelta a reparto el mismo dia (feature 46) cae en los DOS conjuntos y su COD se sumaria dos
- * veces. La exclusion vive AQUI, en la query, y no en el service, para que ningun llamador
- * futuro pueda combinarlos mal.
+ * La exclusion por estatus es lo que hace DISJUNTOS los dos sumandos de `totalACobrar`. Sin ella
+ * habria doble conteo real: una orden gestionada hoy como `reprogramada` y liberada de vuelta a
+ * reparto el mismo dia (feature 46) cae en los DOS conjuntos y su COD se sumaria dos veces. La
+ * exclusion vive AQUI, en la query, y no en el service, para que ningun llamador futuro pueda
+ * combinarlos mal.
+ *
+ * FEATURE 235 (R21, 2026-08-19) — la lista pasa de UN value a DOS, y es la RED, no el arreglo de un
+ * fallo vivo. El otro sumando (`porCobrar`) se calcula sobre `porGestionar ∪ conAyuda`, asi que
+ * desde la 235 el conjunto «lo que el mensajero lleva en la mano» incluye `ayuda_tienda` — y esta
+ * red solo cubria `en_reparto`.
+ *
+ * ¿Habia doble conteo de verdad? NO, y conviene decir por que para que nadie la quite: para tener
+ * una gestion VIGENTE de hoy y estar ademas en `ayuda_tienda` haria falta volver a `en_reparto`
+ * despues de gestionar, y el unico camino que hace eso es `deshacerGestion`, que ANULA la gestion
+ * (`anuladaAt`) — y `gestionDelDia` exige `anuladaAt: null`. O sea que el conjunto era vacio por
+ * alcanzabilidad. Se amplia igualmente porque «vacio hoy» es justo el argumento que este `where`
+ * dice no querer usar: la exclusion esta aqui para que la disjuncion sea CIERTA POR CONSTRUCCION y
+ * no dependa de que nadie abra un camino nuevo (la 237 abre aristas desde `ayuda_tienda`).
  */
 function gestionadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
   return {
     mensajeroAsignadoId: mensajeroId,
     deletedAt: null,
-    estatus: { value: { not: ESTADO_EN_REPARTO } },
+    estatus: { value: { notIn: ESTADOS_EN_MANO_DEL_MENSAJERO } },
     gestiones: { some: gestionDelDia(mensajeroId, dia) },
   } satisfies Prisma.OrdenWhereInput;
 }

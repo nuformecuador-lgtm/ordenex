@@ -392,3 +392,31 @@ el emisor y una regla nueva en un sitio delicado. Requisitos que hay que escribi
 
 **Si esta excepción resulta más frágil de lo previsto al implementarla, se vuelve a P4** — no se
 inventa una tercera vía.
+
+
+---
+
+## RECONCILIACIÓN DE R35 TRAS LA REVISIÓN — 2026-08-19
+
+La revisión encontró que **R35 solo está cumplido para un rol**, y tiene razón: el mensajero tiene
+su superficie de lectura del hilo (`HiloNotasAyudaModal`), pero el `adminTienda` **no tiene ninguna**
+desde que el trabajo del 2026-08-18 retiró el botón «Notas» de `/novedades`.
+
+**La contradicción era del propio spec**, no de la implementación: R35 se redactó como si cubriera
+los dos roles, mientras su sección de alcance difiere la pantalla de la tienda a la ficha **236**.
+Se reconcilia el texto en vez de dejarlo prometiendo algo que esta ficha no entrega — un requisito
+que miente es peor que uno ausente.
+
+**R35 se lee, desde hoy, como:** «el rol que tiene ventana de escritura sobre el estatus de ayuda
+debe tener **dónde ejercerla**; para el **mensajero** eso se entrega en esta ficha, y para el
+**`adminTienda`** es la pestaña de la ficha 236, que monta la card y su hilo».
+
+### Lo que esto significa mientras la 236 no entre
+
+**La tienda ve que hay una solicitud de ayuda y no puede leer el motivo.** Es exactamente el defecto
+que la auditoría dejó anotado en su §4 («la nota se escribe y NADIE la lee»), y **esta ficha no lo
+empeora**: hoy, antes de ella, tampoco se leía. Pero tampoco lo arregla, y conviene no dar por
+cerrado lo que sigue abierto.
+
+**Dueño y fecha de muerte: ficha 236**, que es la inmediatamente siguiente de la pila. Si la 236 se
+retrasara, esto pasa a ser deuda visible en producción y hay que reabrir la decisión.
