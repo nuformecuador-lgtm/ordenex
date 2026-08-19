@@ -2864,17 +2864,86 @@ export class OrdenRepository implements IOrdenRepository {
    * Feature 99/R7-R9 (Q7): predicado CENTRAL de una NOVEDAD, ANCLADO AL ESTADO REAL. Extraido
    * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8: total y pagina cuentan el
    * mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta borrada
-   * (R5) y su estatus ACTUAL ES `devuelta` (R7). Bajo la feature 99 la orden REPOSA en `devuelta`
-   * hasta que el cron SLA la libere/escale o la feature 100 la resuelva; al salir de `devuelta`
-   * cae del predicado sin doble conteo (R8). Reemplaza el predicado anterior por gestion vigente
+   * (R5) y su estatus ACTUAL ES `devuelta` (R7) CON `gestion_aprobada = true`. Bajo la feature 99
+   * la orden REPOSA en `devuelta` hasta que el cron SLA la libere/escale o la feature 100 la
+   * resuelva; al salir de `devuelta` cae del predicado sin doble conteo (R8). Reemplaza el predicado anterior por gestion vigente
    * + estatus abierto (feature 89): ya no hace falta, el estado real es la fuente unica.
    */
   private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
     return {
       tiendaId,
       deletedAt: null, // R5: excluye borradas
-      estatus: { value: ESTATUS_DEVUELTA }, // R7: solo mientras REPOSE en `devuelta`
+      // Pedido humano 2026-08-18 — DOS razones, no una. Hasta hoy `/novedades` era exactamente
+      // "las devueltas de mi tienda". Ahora es "lo que mi tienda tiene que mirar": la devolucion
+      // que reposa en `devuelta` (R7) Y tiene la GESTION APROBADA, O la orden sobre la que el mensajero
+      // PIDIO AYUDA, que sigue viva en reparto y por definicion NO esta devuelta. Sin esta segunda
+      // rama la solicitud de ayuda no tendria donde aparecer, porque la unica pantalla de la
+      // tienda es esta.
+      //
+      // El `OR` mantiene lo esencial del predicado central: `count` y `find` lo siguen compartiendo
+      // (R8), asi que total y pagina cuentan el mismo universo y una orden que este en las DOS
+      // ramas a la vez (devuelta Y con ayuda pedida antes) aparece UNA sola vez, no dos.
+      OR: [
+        // La devolucion NO entra sola: entra si ADEMAS tiene la GESTION APROBADA en el cierre (pedido humano
+        // 2026-08-18). `gestionAprobada` es NOT NULL con default `false`, asi que toda orden
+        // anterior a la columna vale `false` y CAE del listado — el recorte es real y
+        // retroactivo, no solo para las nuevas.
+        { estatus: { value: ESTATUS_DEVUELTA }, gestionAprobada: true },
+        // La solicitud de ayuda no pasa por esa puerta: se lista con `gestionAprobada` en
+        // cualquier valor y en cualquier estatus. Son dos motivos independientes de mirar la
+        // orden, y la aprobacion de la gestion solo gobierna el primero.
+        { ayuda: true },
+      ],
     };
+  }
+
+  /**
+   * Solicitud de ayuda (pedido humano 2026-08-18): enciende `orden.ayuda`. Sin autorizacion
+   * propia a proposito — la puerta la pone `SolicitudAyudaService` reusando la del hilo de notas
+   * (feature 227). Idempotente: `update` a `true` sobre una fila ya marcada no cambia nada.
+   */
+  async marcarAyuda(ordenId: string): Promise<void> {
+    await this.prisma.orden.update({
+      where: { id: ordenId },
+      data: { ayuda: true },
+    });
+  }
+
+  /** La inversa: retira la solicitud de ayuda. Ver `marcarAyuda` para el porque de todo lo demas. */
+  async desmarcarAyuda(ordenId: string): Promise<void> {
+    await this.prisma.orden.update({
+      where: { id: ordenId },
+      data: { ayuda: false },
+    });
+  }
+
+  /**
+   * «Habilitar» (pedido humano 2026-08-18): apaga las DOS banderas de novedad en UN update.
+   * Ver `IOrdenRepository.habilitarNovedad` para por que van juntas. Sin guarda de estatus a
+   * proposito: la ventana la comprueba el service, y una orden que ya salio de `devuelta` se
+   * queda igual de bien con las banderas apagadas.
+   */
+  async habilitarNovedad(ordenId: string): Promise<void> {
+    await this.prisma.orden.update({
+      where: { id: ordenId },
+      data: { ayuda: false, gestionAprobada: false },
+    });
+  }
+
+  /**
+   * Suma UNO al contador de intentos de contacto y devuelve el valor RESULTANTE.
+   *
+   * `{ increment: 1 }` y no un valor calculado en memoria: el incremento ocurre en la base, asi
+   * que dos pulsaciones simultaneas dan dos y no una. `select` acotado a la columna para no
+   * arrastrar la fila entera de vuelta por un numero.
+   */
+  async incrementarIntentoContacto(ordenId: string): Promise<number> {
+    const fila = await this.prisma.orden.update({
+      where: { id: ordenId },
+      data: { intentosContacto: { increment: 1 } },
+      select: { intentosContacto: true },
+    });
+    return fila.intentosContacto;
   }
 
   /** Feature 99/R7/R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
@@ -2920,6 +2989,10 @@ export class OrdenRepository implements IOrdenRepository {
         latitud: true,
         longitud: true,
         notas: true,
+        // Solicitud de ayuda (2026-08-18): es una de las dos razones por las que la fila esta
+        // aqui, asi que la pantalla necesita el dato, no solo el efecto.
+        ayuda: true,
+        intentosContacto: true,
         createdAt: true,
         // Catalogos: se traen los NOMBRES, no los IDs (mismo molde que `WITH_ASIGNACION` en
         // `GestionOrdenRepository`). `distrito` es el unico opcional -> `?.nombre ?? null`.
@@ -2952,6 +3025,8 @@ export class OrdenRepository implements IOrdenRepository {
       provinciaNombre: row.provincia.nombre,
       cantonNombre: row.canton.nombre,
       distritoNombre: row.distrito?.nombre ?? null,
+      ayuda: row.ayuda,
+      intentosContacto: row.intentosContacto,
       createdAt: row.createdAt,
     }));
   }

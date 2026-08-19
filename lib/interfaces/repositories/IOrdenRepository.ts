@@ -545,6 +545,20 @@ export interface NovedadOrdenRow {
   cantonNombre: string;
   /** `distrito_id` es el UNICO FK geografico nullable -> `null` cuando la orden no lo tiene. */
   distritoNombre: string | null;
+  /**
+   * Solicitud de ayuda (pedido humano 2026-08-18): `orden.ayuda`. NOT NULL con default `false`,
+   * asi que aqui es un boolean y nunca `null`. Viaja porque desde este pedido es una de las DOS
+   * razones por las que una fila esta en esta lista (la otra es `estatus = devuelta`), y la
+   * pantalla tiene que poder decir cual: sin el, una orden en reparto marcada apareceria en
+   * `/novedades` sin ninguna explicacion visible.
+   */
+  ayuda: boolean;
+  /**
+   * `orden.intentos_contacto`. NOT NULL con default 0, asi que aqui es un numero y nunca `null`.
+   * Viaja porque la pantalla lo PINTA junto al boton que lo incrementa: un contador que no se ve
+   * no le sirve a nadie para decidir si vale la pena volver a intentarlo.
+   */
+  intentosContacto: number;
   createdAt: Date;
 }
 
@@ -1286,6 +1300,47 @@ export interface IOrdenRepository {
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 
   // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
+
+  /**
+   * Solicitud de ayuda (pedido humano 2026-08-18): enciende `orden.ayuda`. Es un UPDATE ciego y
+   * DELIBERADAMENTE sin autorizacion propia: quien llama ya paso por la puerta del hilo de notas
+   * (`SolicitudAyudaService`), que es la unica que decide quien puede tocar esta orden. Un repo
+   * que revalidara aqui seria una segunda tabla de permisos.
+   *
+   * Idempotente: marcar dos veces deja la orden marcada una. No devuelve nada porque no hay nada
+   * util que devolver — el estado resultante es siempre `ayuda = true`.
+   */
+  marcarAyuda(ordenId: string): Promise<void>;
+
+  /**
+   * La inversa de `marcarAyuda`: apaga `orden.ayuda` («Recuperar»). Misma ausencia deliberada de
+   * autorizacion propia y misma idempotencia. NO toca el hilo de notas: los motivos ya escritos
+   * siguen ahi, porque retirar la solicitud es «ya no hace falta», no «no paso».
+   */
+  desmarcarAyuda(ordenId: string): Promise<void>;
+
+  /**
+   * «Habilitar» (pedido humano 2026-08-18): apaga LAS DOS banderas de novedad a la vez
+   * —`ayuda` y `gestion_aprobada`— en un solo UPDATE. Las dos juntas y no una llamada por
+   * bandera: son exactamente las dos ramas del `OR` de `novedadWhere`, asi que apagarlas en
+   * dos escrituras dejaria una ventana en la que la orden sigue listada por la otra.
+   *
+   * Misma ausencia deliberada de autorizacion propia que sus hermanos: la puerta la pone
+   * `HabilitarNovedadService` reusando la del hilo de notas. Idempotente.
+   */
+  habilitarNovedad(ordenId: string): Promise<void>;
+
+  /**
+   * Suma UNO al contador de intentos de contacto de la orden y devuelve el valor RESULTANTE.
+   *
+   * El incremento se hace en la base (`{ increment: 1 }`), NO leyendo-sumando-escribiendo: dos
+   * pestañas de la misma tienda pulsando a la vez tienen que dar dos, y un `update` con el valor
+   * calculado en memoria daria uno. Devolver el valor ya escrito evita ademas una segunda lectura
+   * para poder pintarlo.
+   *
+   * Sin autorizacion propia, como sus hermanos: la puerta la pone el service.
+   */
+  incrementarIntentoContacto(ordenId: string): Promise<number>;
 
   /**
    * Feature 99/R7/R8 (Q7): cuenta las NOVEDADES de `tiendaId`. El predicado se ANCLA AL ESTADO

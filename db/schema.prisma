@@ -500,6 +500,9 @@ model Orden {
   asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
+  ayuda                  Boolean   @default(false) @map("ayuda") // flag opcional de solicitud de ayuda sobre la orden; default false = sin backfill
+  gestionAprobada        Boolean   @default(false) @map("gestion_aprobada") // la gestion de la devolucion fue APROBADA en el cierre; default false = sin backfill
+  intentosContacto       Int       @default(0) @map("intentos_contacto") // conteo de intentos de contacto que la TIENDA registra sobre la orden desde /novedades; default 0 = sin backfill. Es CUMULATIVO y sobrevive a que `ayuda` se apague: es historial de gestion, no estado de la solicitud
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
   // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
