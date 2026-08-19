@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; background: #f7f8fc; }
+    a { color: #1d4ed8; text-decoration: none; }
+    a:hover { color: #0b3880; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; background: #f7f8fc; color: #12233f; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;">
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Monitoreo</h1>
+      <p style="margin: 0; font-size: 14px; color: #4a5368;">martes, 18 de agosto de 2026</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="display: inline-block; width: 7px; height: 7px; border-radius: 999px; background: #10b981;"></span>
+      <span style="font-size: 13px; color: #4a5368;">Actualizado hace 12 s</span>
+    </div>
+  </div>
+
+  <div style="border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10); overflow: hidden;">
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; background: #f1f4fb; border-bottom: 1px solid #e3e8f2;">
+      <div style="display: flex; align-items: center; gap: 6px; padding: 11px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">
+        Mensajero
+      </div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #12233f;">
+        Asig.
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f26419" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"></path></svg>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Entr.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Repr.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Dev.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Rech.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Inc.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368; border-left: 1px solid #e3e8f2;">S/rec.</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Reparto</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 11px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Otros</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; border-bottom: 1px solid #f1f4fb;">
+      <div style="display: flex; align-items: center; padding: 12px 14px; font-size: 14px; font-weight: 500;">Kevin Solano</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;">31</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #047857;">23</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums;">3</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; border-left: 1px solid #e3e8f2;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums;">5</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; border-bottom: 1px solid #f1f4fb;">
+      <div style="display: flex; align-items: center; padding: 12px 14px; font-size: 14px; font-weight: 500;">Marisol Vargas</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;">28</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #047857;">18</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; background: #fee2e2; color: #b91c1c; font-weight: 600;">3</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; border-left: 1px solid #e3e8f2;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums;">7</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; border-bottom: 1px solid #f1f4fb; background: #fff5f5;">
+      <div style="display: flex; align-items: center; padding: 12px 14px; font-size: 14px; font-weight: 500;">Diego Ramírez</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;">26</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #047857;">7</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; background: #fee2e2; color: #b91c1c; font-weight: 600;">2</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; background: #fee2e2; color: #b91c1c; font-weight: 600; border-left: 1px solid #e3e8f2;">13</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums;">6</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; border-bottom: 1px solid #f1f4fb;">
+      <div style="display: flex; align-items: center; padding: 12px 14px; font-size: 14px; font-weight: 500;">Andrea Jiménez</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;">24</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #047857;">19</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; border-left: 1px solid #e3e8f2;">0</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums;">5</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 12px 10px; font-size: 14px; font-variant-numeric: tabular-nums; color: #8a94ad;">0</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 216px repeat(9, minmax(0, 1fr)); gap: 0; padding: 0 4px; background: #f1f4fb; border-top: 1px solid #e3e8f2;">
+      <div style="display: flex; align-items: center; padding: 13px 14px; font-size: 13px; font-weight: 600;">Totales del día</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">184</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: #047857;">107</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">20</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">8</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">3</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">2</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; border-left: 1px solid #e3e8f2;">13</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">31</div>
+      <div style="display: flex; align-items: center; justify-content: flex-end; padding: 13px 10px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">0</div>
+    </div>
+
+  </div>
+
+  <p style="margin: 0; font-size: 12px; color: #4a5368;">Las columnas a la derecha de la línea son las que aún no tienen resultado. Clic en una fila abre el detalle del mensajero.</p>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
