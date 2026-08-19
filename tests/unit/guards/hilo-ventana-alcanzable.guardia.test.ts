@@ -134,8 +134,23 @@ function valorDe(fuenteModulo: string, ruta: string, expresion: string): string 
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Lo que `/novedades` lista: el `estatus: { value: … }` del predicado central
- * `OrdenRepository.novedadWhere`. Es UN estatus, y que sea uno solo es parte de la afirmación.
+ * Lo que `/novedades` lista POR ESTATUS: TODOS los `estatus: { value: … }` del predicado central
+ * `OrdenRepository.novedadWhere`. Hoy es uno solo, y que sea uno solo es parte de la afirmación
+ * (la comprobación vive abajo, en el bloque 0).
+ *
+ * ⚠️ 2026-08-18 — `novedadWhere` DEJÓ DE SER UN SOLO PREDICADO DE ESTATUS. Con la solicitud de
+ * ayuda pasó a un `OR` de dos ramas: la de siempre (`estatus = devuelta`) y una que NO mira el
+ * estatus (`ayuda: true`), por la que entran órdenes que siguen en reparto.
+ *
+ * Esa segunda rama no puede participar de la intersección que hace esta guardia —no aporta ningún
+ * estatus con el que cruzar la ventana—, así que se deja fuera A PROPÓSITO y no por descuido: R38
+ * sigue sosteniéndose sobre `devuelta`, que es donde el adminTienda escribe.
+ *
+ * Lo que SÍ cambió es la extracción: antes tomaba la PRIMERA coincidencia y se quedaba tan
+ * tranquila. Con un `OR` de por medio, eso significa que añadir una segunda rama con OTRO estatus
+ * habría pasado inadvertido —la guardia habría seguido verde afirmando un universo incompleto—.
+ * Ahora se recogen TODAS y el bloque 0 exige que siga habiendo exactamente una: el día que alguien
+ * añada otra, esto se pone rojo y hay que venir a decidir qué significa para la ventana.
  */
 export function estatusDeNovedades(fuente: string, ruta = RUTA_ORDEN_REPO): string[] {
   const cuerpo = cuerpoDeMiembro(
@@ -144,9 +159,13 @@ export function estatusDeNovedades(fuente: string, ruta = RUTA_ORDEN_REPO): stri
     /private\s+novedadWhere\s*\(/,
     "la declaración de `novedadWhere`",
   );
-  const m = /estatus\s*:\s*\{\s*value\s*:\s*([^,}]+?)\s*\}/.exec(cuerpo);
-  if (!m) reventar(`${ruta}: \`novedadWhere\` ya no acota \`estatus: { value: … }\``);
-  return [valorDe(fuente, ruta, m[1])];
+  const encontrados = [
+    ...cuerpo.matchAll(/estatus\s*:\s*\{\s*value\s*:\s*([^,}]+?)\s*\}/g),
+  ];
+  if (encontrados.length === 0) {
+    reventar(`${ruta}: \`novedadWhere\` ya no acota \`estatus: { value: … }\``);
+  }
+  return encontrados.map((m) => valorDe(fuente, ruta, m[1]));
 }
 
 /**
@@ -217,6 +236,19 @@ describe("0 — el detector de esta guardia no está roto", () => {
     }
     expect(ESTATUS_DE_NOVEDADES.length).toBe(1);
     expect(ESTATUS_DEL_PANEL_MENSAJERO.length).toBeGreaterThan(0);
+  });
+
+  // 2026-08-18 — la rama SIN estatus de `novedadWhere`, vigilada explícitamente para que el
+  // comentario de `estatusDeNovedades` no se vuelva folclore. Si la solicitud de ayuda se
+  // retirara algún día, esto se pone rojo y obliga a releer aquel razonamiento en vez de dejarlo
+  // describiendo un código que ya no existe.
+  it("la rama de AYUDA de `novedadWhere` existe y NO aporta estatus a la intersección", () => {
+    const cuerpo = FUENTE_ORDEN_REPO.slice(
+      FUENTE_ORDEN_REPO.indexOf("novedadWhere"),
+    ).slice(0, 600);
+    expect(cuerpo).toMatch(/ayuda\s*:\s*true/);
+    // Y sigue habiendo UNA sola rama por estatus: la de ayuda no trae ninguno.
+    expect(ESTATUS_DE_NOVEDADES).toEqual(["devuelta"]);
   });
 
   it("la extracción REVIENTA si el patrón deja de encontrarse (nunca «nada → verde»)", () => {

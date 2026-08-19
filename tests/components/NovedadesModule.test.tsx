@@ -12,6 +12,8 @@ import userEvent from "@testing-library/user-event";
 
 import { NovedadesModule } from "@/app/(app)/novedades/_components/NovedadesModule";
 import { listarNovedadesAction } from "@/lib/actions/novedades";
+import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
+import { registrarIntentoContactoOrden } from "@/lib/actions/orden-ayuda";
 import { reprogramarNovedad } from "@/lib/actions/resolver-novedad";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
@@ -33,7 +35,24 @@ vi.mock("@/lib/actions/resolver-novedad", () => ({
   reprogramarNovedad: vi.fn(),
 }));
 
+// Pedido humano 2026-08-18 — sobre una orden con ayuda pedida el módulo monta también
+// «+1 intento de contacto», que llama a su propia Server Action. Se mockea el MÓDULO ENTERO
+// (las tres): un mock parcial no existe, y sin las otras dos el import moriría al resolverse.
+// Pedido humano 2026-08-18 — «Habilitar» dejó de ser maqueta: publica la nota y apaga las dos
+// banderas de novedad de la orden. Se mockea su Server Action para afirmar la invocación.
+vi.mock("@/lib/actions/habilitar-novedad", () => ({
+  habilitarNovedad: vi.fn(),
+}));
+
+vi.mock("@/lib/actions/orden-ayuda", () => ({
+  solicitarAyudaOrden: vi.fn(),
+  recuperarOrdenAyuda: vi.fn(),
+  registrarIntentoContactoOrden: vi.fn(),
+}));
+
 const reprogramarMock = vi.mocked(reprogramarNovedad);
+const habilitarMock = vi.mocked(habilitarNovedad);
+const intentoContactoMock = vi.mocked(registrarIntentoContactoOrden);
 /** El re-fetch de página (R22). Sirve de anti-vacío: conmutar de vista NO debe invocarlo. */
 const listarNovedadesMock = vi.mocked(listarNovedadesAction);
 
@@ -73,6 +92,8 @@ const novedad = (over: Partial<NovedadDTO> = {}): NovedadDTO => ({
   numGuia: 12345,
   numRemision: "REM-90210",
   estatusValue: "devuelta",
+  // Pedido humano 2026-08-18: requerido en `NovedadDTO`. El default es "nadie lo ha intentado".
+  intentosContacto: 0,
   destinatario: "Ana Cliente",
   telefonoDest: "88887777",
   causa: "not_found",
@@ -237,6 +258,166 @@ describe("NovedadesModule", () => {
     );
 
     expect(screen.getByText("Sin causa registrada")).toBeInTheDocument();
+  });
+
+  // --- Pedido humano 2026-08-18: la solicitud de AYUDA ---
+  // Esta pantalla dejó de ser «las devueltas de mi tienda» para ser «lo que mi tienda tiene que
+  // mirar»: entran también órdenes que siguen EN REPARTO porque el mensajero pidió ayuda. El
+  // badge es lo único que distingue en la lista una cosa de la otra.
+
+  it("ayuda sin causa (la orden sigue en reparto) -> badge «Ayuda solicitada», no «Sin causa registrada»", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    expect(screen.getByText("Ayuda solicitada")).toBeInTheDocument();
+    // No hay devolución de la que registrar causa: anunciar su ausencia señalaría un hueco
+    // que no existe.
+    expect(screen.queryByText("Sin causa registrada")).toBeNull();
+  });
+
+  it("devuelta Y con ayuda pedida: el badge dice las DOS cosas, sin tapar una con la otra", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, causa: "not_found" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    expect(screen.getByText("Ayuda · Cliente no localizado")).toBeInTheDocument();
+  });
+
+  it("sobre una orden que NO está devuelta no se ofrecen las acciones de devolución", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
+    // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
+    expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Devolver la orden/ })).toBeNull();
+    // Lo que SÍ sigue: el contacto y el registro de intentos. (El botón «Notas» se retiró de
+    // esta pantalla el 2026-08-18 por pedido humano; ver la cabecera de `NovedadAcciones`.)
+    expect(
+      screen.getByRole("button", { name: /^Registrar un intento de contacto/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("sobre una devuelta, las acciones de devolución siguen ofreciéndose", () => {
+    render(
+      <NovedadesModule
+        items={[novedad()]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^Reprogramar la orden/ })).toBeInTheDocument();
+  });
+
+  // --- Pedido humano 2026-08-18: «+1 intento de contacto» y su contador ---
+
+  it("sobre una devolución corriente NO aparece: el contador es para las órdenes atascadas", () => {
+    render(<NovedadesModule items={[novedad()]} total={1} page={1} pageSize={10} />);
+
+    expect(
+      screen.queryByRole("button", { name: /^Registrar un intento de contacto/ }),
+    ).toBeNull();
+  });
+
+  it("con ayuda pedida aparece el botón y el contador, con el `0` incluido", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, intentosContacto: 0 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Registrar un intento de contacto con la orden de Ana Cliente",
+      }),
+    ).toBeInTheDocument();
+    // «Todavía no lo intentó nadie» es el dato que hace falta para decidir si intentarlo ahora.
+    expect(screen.getByText("Intentos de contacto:").parentElement?.textContent).toContain("0");
+  });
+
+  it("el contador arranca en el valor del servidor, no en cero", () => {
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, intentosContacto: 4 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    expect(screen.getByText("Intentos de contacto:").parentElement?.textContent).toContain("4");
+  });
+
+  it("al pulsar registra el intento y pinta EL VALOR DEL SERVIDOR, no el suyo", async () => {
+    const user = userEvent.setup();
+    // El servidor devuelve 9 y no 3: si la UI pintara su propia suma (2+1), esto lo caza. Con dos
+    // personas de la misma tienda pulsando, el número bueno es siempre el de la base.
+    intentoContactoMock.mockResolvedValue({ status: "ok", intentosContacto: 9 });
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Registrar un intento de contacto con la orden de Ana Cliente",
+      }),
+    );
+
+    expect(intentoContactoMock).toHaveBeenCalledWith({ ordenId: "o1" });
+    await waitFor(() =>
+      expect(screen.getByText("Intentos de contacto:").parentElement?.textContent).toContain("9"),
+    );
+  });
+
+  it("si el servidor rechaza, el número VUELVE ATRÁS y se avisa", async () => {
+    const user = userEvent.setup();
+    intentoContactoMock.mockResolvedValue({ status: "forbidden" });
+    render(
+      <NovedadesModule
+        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Registrar un intento de contacto con la orden de Ana Cliente",
+      }),
+    );
+
+    // El optimismo no puede dejar el contador afirmando algo que no se guardó.
+    await waitFor(() => expect(errorMock).toHaveBeenCalled());
+    expect(screen.getByText("Intentos de contacto:").parentElement?.textContent).toContain("2");
   });
 
   it("R22: renderiza la Pagination con el total y la pagina recibidos", () => {
@@ -1132,7 +1313,14 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
     expect(within(dialog).queryByRole("alert")).toBeNull();
   });
 
-  it("MAQUETA: confirmar con nota todavía no ejecuta ninguna transición (sólo avisa)", async () => {
+  // Pedido humano 2026-08-18 — los dos desenlaces de «Habilitar», que desde hoy SÍ ejecuta
+  // una transición. La nota viaja con la orden; el estatus NO se toca (eso es del servidor y
+  // se afirma en su propio test) — aquí se afirma lo que la PANTALLA hace con la respuesta.
+  it("confirmar con nota llama a la acción y saca la orden de la lista", async () => {
+    habilitarMock.mockResolvedValue({
+      status: "ok",
+      nota: { id: "n1" },
+    } as unknown as Awaited<ReturnType<typeof habilitarNovedad>>);
     const user = userEvent.setup();
     const dialog = await abrirHabilitar(user);
 
@@ -1143,17 +1331,32 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
     await user.click(within(dialog).getByRole("button", { name: "Habilitar" }));
 
     await waitFor(() =>
-      expect(infoMock).toHaveBeenCalledWith(
-        "Esta acción todavía no está disponible.",
-      ),
+      expect(habilitarMock).toHaveBeenCalledWith({
+        ordenId: "o1",
+        nota: "El cliente pidió reintentar",
+      }),
     );
-    // La orden NO sale de la lista y no se llamó a la mutación de la pantalla hermana.
+    await waitFor(() => expect(successMock).toHaveBeenCalledWith("Orden habilitada."));
+    // La fila desaparece: sus dos banderas de novedad quedaron apagadas.
+    await waitFor(() => expect(screen.queryByText("Ana Cliente")).toBeNull());
+    // No se tocó la mutación de la pantalla hermana.
+    expect(reprogramarMock).not.toHaveBeenCalled();
+  });
+
+  it("si la acción rechaza, avisa y la orden SIGUE en la lista", async () => {
+    habilitarMock.mockResolvedValue({ status: "forbidden" });
+    const user = userEvent.setup();
+    const dialog = await abrirHabilitar(user);
+
+    await user.type(within(dialog).getByLabelText(/^Nota/), "Nota cualquiera");
+    await user.click(within(dialog).getByRole("button", { name: "Habilitar" }));
+
+    await waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("No se pudo habilitar la orden."),
+    );
     // La fila sigue en pantalla. Se cuenta en vez de usar `getByText`: desde que el
     // desplegable está encendido, el destinatario aparece dos veces en la card mosaico.
-    // (Y no se usa `cardDe`: con un diálogo abierto el resto del árbol queda `aria-hidden`,
-    // así que la consulta por ROL no encontraría el `<article>` aunque siga ahí.)
     expect(screen.getAllByText("Ana Cliente").length).toBeGreaterThan(0);
-    expect(reprogramarMock).not.toHaveBeenCalled();
     expect(successMock).not.toHaveBeenCalled();
   });
 });

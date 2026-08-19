@@ -50,6 +50,10 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     latitud: 9.9333296,
     longitud: -84.0833282,
     notas: "Tocar el timbre",
+    // Solicitud de ayuda (2026-08-18): el default es la fila que llega por ESTAR devuelta, no por
+    // tener ayuda pedida. Los casos de ayuda lo sobreescriben.
+    ayuda: false,
+    intentosContacto: 0,
     tiendaNombre: "Tienda Uno",
     zonaNombre: "GAM",
     provinciaNombre: "San Jose",
@@ -552,6 +556,33 @@ describe("NovedadesService.listarCompleto (descarga)", () => {
     expect(completo.items).toEqual(pagina.items);
     expect(completo.items[0].causa).toBe("not_found");
     expect(completo.items[0]).not.toHaveProperty("createdAt");
+  });
+
+  // Pedido humano 2026-08-18 — `ayuda` viaja al DTO. La pantalla NO puede derivarlo del estatus:
+  // una orden devuelta tambien puede tener ayuda pedida de antes, y una en reparto solo esta en
+  // este listado por la ayuda. Sin el campo, el badge no podria distinguirlas.
+  it("`ayuda` se proyecta al DTO tal cual llega de la fila, en la pagina y en el archivo", async () => {
+    const repo = fakeRepo({
+      countDevueltasByTienda: vi.fn(async () => 2),
+      findDevueltasByTienda: vi.fn(async () => [
+        ordenRow({ id: "o1", ayuda: true, estatusValue: "en_reparto" }),
+        ordenRow({ id: "o2", ayuda: false }),
+      ]),
+      findCausasDevueltaVigentes: vi.fn(async () => new Map<string, CausaDevueltaVigente>()),
+    });
+    const service = new NovedadesService(repo, intentos);
+    const pagina = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const completo = await service.listarCompleto(ADMIN);
+
+    if (pagina.status !== "ok" || completo.status !== "ok") throw new Error("esperaba ok");
+    expect(pagina.items.map((i) => [i.id, i.ayuda])).toEqual([
+      ["o1", true],
+      ["o2", false],
+    ]);
+    // El `false` SIEMPRE se emite: es un valor conocido, no un dato ausente.
+    expect(pagina.items[1]).toHaveProperty("ayuda", false);
+    // Una sola proyeccion: el archivo no puede decir otra cosa que la pagina.
+    expect(completo.items).toEqual(pagina.items);
   });
 
   it("el listado vacio no consulta causas ni intentos", async () => {

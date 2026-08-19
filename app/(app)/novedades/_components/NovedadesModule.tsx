@@ -23,8 +23,9 @@ import {
 } from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
+import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
+
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
-import { HiloNotasNovedadModal } from "./HiloNotasNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
 import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
 import {
@@ -120,6 +121,28 @@ function causaLabel(causa: NovedadDTO["causa"]): string {
   return causa ? CAUSA_DEVOLUCION_LABEL[causa] : "Sin causa registrada";
 }
 
+/**
+ * Pedido humano 2026-08-18 — el badge de la card, ahora que esta pantalla tiene DOS clases de
+ * fila. Hasta hoy todas las órdenes estaban devueltas y el badge sólo tenía que decir la causa;
+ * desde la solicitud de ayuda una fila puede estar aquí por estar devuelta, por tener ayuda
+ * pedida, o por las dos cosas.
+ *
+ * La ayuda va PRIMERO cuando existe porque es lo accionable: alguien está esperando respuesta
+ * ahora. Y cuando además hay causa, se dicen las dos —«Ayuda · Cliente ausente»— en vez de tapar
+ * una con la otra: una devuelta con ayuda pedida no es lo mismo que una devuelta a secas ni que
+ * una orden en reparto atascada, y el badge es lo único que las distingue en la lista.
+ *
+ * Sin causa el texto es «Ayuda solicitada» y no «Ayuda · Sin causa registrada»: en una orden que
+ * sigue en reparto no HAY devolución de la que registrar causa, así que anunciar su ausencia
+ * sería señalar un hueco que no existe.
+ */
+function badgeNovedad(novedad: NovedadDTO): string {
+  if (!novedad.ayuda) return causaLabel(novedad.causa);
+  return novedad.causa
+    ? `Ayuda · ${CAUSA_DEVOLUCION_LABEL[novedad.causa]}`
+    : "Ayuda solicitada";
+}
+
 export function NovedadesModule({
   items: initialItems,
   total: initialTotal,
@@ -143,7 +166,6 @@ export function NovedadesModule({
   // Feature 227 (T3.3): orden con el HILO de notas abierto (null = cerrado). Mismo patrón
   // que los dos modales de arriba, por el mismo motivo: el hilo se pide al abrir UNA orden y
   // nunca para la lista (design §4/A6, N+1).
-  const [ordenConNotas, setOrdenConNotas] = useState<NovedadDTO | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -168,18 +190,31 @@ export function NovedadesModule({
   }
 
   /**
-   * MAQUETA (2026-08-12): "Habilitar" SÍ abre su modal y SÍ exige la nota —esa parte es
-   * real y está probada—, pero al confirmar no hay transición que ejecutar todavía. La nota
-   * ya validada llega hasta aquí y muere en el toast.
+   * Pedido humano 2026-08-18 — "Habilitar" DEJA DE SER MAQUETA. La nota que el modal exige
+   * se publica en el hilo de la orden y la orden pierde sus dos banderas de novedad
+   * (`ayuda` y `gestion_aprobada`), con lo que cae del listado.
    *
-   * Se deja el parámetro `nota` a la vista, y no una firma sin argumentos, porque es el
-   * dato que la Server Action va a necesitar: cuando exista, el cuerpo de esta función es
-   * lo único que cambia.
+   * NO cambia el estatus: la orden sigue `devuelta`. Lo que se decidió aquí es qué deja de
+   * ver la tienda, no adónde va la orden —esa parte sigue abierta (ver la cabecera de
+   * `NovedadAcciones`)—, así que la fila se quita de la lista igual que tras reprogramar.
+   *
+   * El modal se cierra al confirmar y no al resolver: la acción ya validó la nota, y dejarlo
+   * abierto invitaría a un segundo clic que publicaría una segunda nota.
    */
-  function habilitarPendiente(nota: string) {
-    void nota;
+  async function habilitar(nota: string) {
+    const orden = ordenAHabilitar;
+    if (!orden) return;
     setOrdenAHabilitar(null);
-    toast.info("Esta acción todavía no está disponible.");
+    const res = await habilitarNovedad({ ordenId: orden.id, nota });
+    if (res.status === "ok") {
+      setItems((prev) => prev.filter((n) => n.id !== orden.id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      toast.success("Orden habilitada.");
+      return;
+    }
+    // `forbidden` es opaco a propósito (hereda el del hilo): no se traduce a un motivo
+    // concreto porque el servidor no dice cuál es, y adivinarlo aquí sería inventarlo.
+    toast.error("No se pudo habilitar la orden.");
   }
 
   /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
@@ -289,7 +324,7 @@ export function NovedadesModule({
               // El badge de la card lleva la CAUSA de devolución, que es la señal de esta
               // pantalla (R7/R11). No hay estado de reparto que anunciar: todas las órdenes
               // de la lista están devueltas, así que repetirlo por fila no diría nada.
-              estado={causaLabel(novedad.causa)}
+              estado={badgeNovedad(novedad)}
               // Sin `onGestionar`: de aquí no se gestiona nada, así que la card es de
               // solo-visualización — no clickeable ni enfocable (ver `pos-seleccion`).
               mostrarRuta={false}
@@ -304,7 +339,6 @@ export function NovedadesModule({
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
                   onDevolver={avisarNoDisponible}
-                  onNotas={setOrdenConNotas}
                 />
               }
             />
@@ -344,22 +378,10 @@ export function NovedadesModule({
           onOpenChange={(open) => {
             if (!open) setOrdenAHabilitar(null);
           }}
-          onConfirmar={habilitarPendiente}
+          onConfirmar={(nota) => void habilitar(nota)}
         />
       ) : null}
 
-      {/* Feature 227 (T3.3, design §5.1): el HILO de la orden abierta. Montaje condicional y
-          `key` como los dos de arriba — con eso la lectura del hilo ocurre una vez por
-          apertura y jamás por fila del listado paginado. */}
-      {ordenConNotas ? (
-        <HiloNotasNovedadModal
-          key={ordenConNotas.id}
-          orden={ordenConNotas}
-          onOpenChange={(open) => {
-            if (!open) setOrdenConNotas(null);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

@@ -16,6 +16,7 @@ const NOVEDAD: NovedadDTO = {
   numGuia: 12345,
   numRemision: "REM-90210",
   estatusValue: "devuelta",
+  intentosContacto: 0,
   destinatario: "Ana Cliente",
   telefonoDest: "88887777",
   direccion: "Av. Central 120, portón verde",

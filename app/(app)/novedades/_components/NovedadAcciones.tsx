@@ -1,11 +1,13 @@
 "use client";
 
-import { MessageSquareText, Power, RotateCcw, Undo2 } from "lucide-react";
+import { Power, RotateCcw, Undo2 } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NovedadDTO } from "@/lib/types/novedad";
+
+import { IntentoContactoAccion } from "./IntentoContactoAccion";
 
 // 2026-08-12 (pedido humano) — LAS ACCIONES de una novedad, extraídas para viajar como un
 // solo nodo en la prop `acciones` de la card POS: `acciones={<NovedadAcciones … />}`.
@@ -41,6 +43,20 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // nacen en un control (`pos-seleccion`), así que ninguno de estos botones puede seleccionar
 // la orden de rebote — hoy da igual, porque la card de novedades no es seleccionable, y
 // mañana no habrá que acordarse.
+//
+// ⚠️ RETIRADO 2026-08-18 (pedido humano): el botón «Notas», que era la puerta —y la ÚNICA— por la
+// que esta pantalla abría el HILO de la orden (feature 227/T3.3). Con él se fue el montaje de
+// `HiloNotasNovedadModal` en `NovedadesModule`.
+//
+// CONSECUENCIA, escrita aquí para que nadie la redescubra depurando: desde `/novedades` la tienda
+// YA NO LEE NI RESPONDE el hilo. Eso incluye el MOTIVO de una solicitud de ayuda, que el mensajero
+// publica precisamente como una nota de ese hilo — la tienda ve que la orden pidió ayuda (el badge)
+// y puede registrar intentos de contacto, pero no lee lo que el mensajero escribió.
+//
+// Lo que NO se tocó: el hilo sigue vivo entero (tabla, service, Server Actions) y el mensajero lo
+// sigue leyendo y escribiendo desde su panel. `HiloNotasNovedadModal.tsx` se conserva en disco sin
+// montar: está en la lista firmada de la guardia `orden-nota-frontera`, así que borrarlo es una
+// decisión aparte y no la consecuencia de quitar un botón.
 
 export interface NovedadAccionesProps {
   novedad: NovedadDTO;
@@ -50,11 +66,6 @@ export interface NovedadAccionesProps {
   onHabilitar: (novedad: NovedadDTO) => void;
   /** MAQUETA: sin comportamiento decidido (ver la cabecera de este archivo). */
   onDevolver: (novedad: NovedadDTO) => void;
-  /**
-   * Feature 227 (T3.3): abre el HILO de notas de esta orden. Es la puerta —y la única— por
-   * la que se pide el hilo: la card no lo trae, la lista no lo pide (design §4/A6).
-   */
-  onNotas: (novedad: NovedadDTO) => void;
 }
 
 export function NovedadAcciones({
@@ -62,7 +73,6 @@ export function NovedadAcciones({
   onReprogramar,
   onHabilitar,
   onDevolver,
-  onNotas,
 }: NovedadAccionesProps) {
   // Los tres botones de acción comparten forma (outline · icono) y patrón de `aria-label`
   // («<Verbo> la orden de <destinatario>»), que es lo que los distingue entre sí cuando la
@@ -85,29 +95,36 @@ export function NovedadAcciones({
   // (`GestionarOrdenPanel`), así que las dos pantallas dicen lo mismo con el mismo dibujo.
   // `Power` es propio de "Habilitar" —no lo usa nadie más en el repo— porque esa acción no
   // tiene gemela en ninguna otra superficie.
+  //
+  // ⚠️ Pedido humano 2026-08-18 — TRES DE LAS CINCO SON DE DEVOLUCIÓN, Y DESDE HOY ESTA PANTALLA
+  // LISTA TAMBIÉN ÓRDENES QUE NO ESTÁN DEVUELTAS: las que tienen una solicitud de ayuda viva
+  // (`OrdenRepository.novedadWhere`), que siguen en reparto. «Reprogramar», «Habilitar» y
+  // «Devolver» presuponen una orden devuelta, así que sobre una de ésas no se ofrecen.
+  //
+  // Y no es cosmética: `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden que no
+  // esté en `devuelta` (comprobado, es la guarda real). Ofrecer el botón igual sólo consigue que
+  // la tienda descubra el límite pulsándolo. Los otros dos son maqueta, así que ahí lo único que
+  // se evita es un aviso sobre una acción que además no aplicaba.
+  //
+  // Lo que SÍ se conserva siempre: el contacto (llamar/WhatsApp) y, sobre una orden con ayuda
+  // pedida, «+1 intento de contacto».
+  const esDevuelta = novedad.estatusValue === "devuelta";
   const acciones: {
     etiqueta: string;
     Icono: typeof RotateCcw;
     onClick: () => void;
   }[] = [
-    {
-      etiqueta: "Reprogramar",
-      Icono: RotateCcw,
-      onClick: () => onReprogramar(novedad),
-    },
-    { etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) },
-    { etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) },
-    // Feature 227 (T3.3): "Notas" NO es maqueta —abre el hilo real y lo carga en ese
-    // momento—. Va con los demás y con el mismo patrón de `aria-label` porque es una acción
-    // más de la fila; el icono es propio (`MessageSquareText`) para no chocar con el
-    // `MessageCircle` que el panel del mensajero usa para el CHAT con el cliente, que es
-    // otra conversación y otro canal.
-    //
-    // ⚠️ D3: esto es lo ÚNICO que se añade a la pantalla. NO hay badge, punto ni contador de
-    // "hay notas" en ninguna card: esta feature acaba de RETIRAR los de la nota privada de
-    // esas mismas cards (R21) y no se retiran unos para poner otros. La señal llega con la
-    // ficha 228; hasta entonces, el hilo se descubre abriéndolo.
-    { etiqueta: "Notas", Icono: MessageSquareText, onClick: () => onNotas(novedad) },
+    ...(esDevuelta
+      ? [
+          {
+            etiqueta: "Reprogramar",
+            Icono: RotateCcw,
+            onClick: () => onReprogramar(novedad),
+          },
+          { etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) },
+          { etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) },
+        ]
+      : []),
   ];
 
   return (
@@ -139,6 +156,15 @@ export function NovedadAcciones({
           <TooltipContent>{etiqueta}</TooltipContent>
         </Tooltip>
       ))}
+      {/* Pedido humano 2026-08-18 — «+1 intento de contacto» y su contador, SOLO sobre una orden
+          con ayuda pedida. Va al final de la fila y no entre las otras: las de arriba resuelven
+          la orden (la reprograman, la habilitan, la devuelven) y ésta no resuelve nada — deja
+          constancia de que se intentó. Mezclarla con ellas sugeriría que también cambia algo.
+
+          No entra en el arreglo `acciones` de arriba porque no comparte su forma: lleva estado
+          propio, llama a su Server Action y arrastra un contador al lado. Meterla ahí habría
+          obligado a que aquella lista supiera de todo eso para una sola de sus entradas. */}
+      {novedad.ayuda ? <IntentoContactoAccion novedad={novedad} /> : null}
     </div>
   );
 }
