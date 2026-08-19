@@ -9,9 +9,13 @@ import {
 } from "@/app/(app)/_components/PorAceptarSection";
 
 // Feature 63 — sección REUTILIZABLE "por aceptar" (extraída de "Por recoger" del
-// mensajero): banner con contador de nuevas + acción en lote + acción por-orden +
-// render de detalle opcional. Componente puro; se afirma la composición y los
-// callbacks sin Server Actions ni router.
+// mensajero): banner con contador de nuevas + acción por-orden + render de detalle
+// opcional. Componente puro; se afirma la composición y los callbacks sin Server
+// Actions ni router.
+//
+// Pedido humano del 2026-08-19: la sección YA NO ofrece acción en lote. Se afirma la
+// AUSENCIA del botón, no sólo la presencia del de cada fila: sin esa afirmación,
+// devolverlo no pondría nada rojo.
 
 interface Orden extends PorAceptarOrdenBase {
   extra?: string;
@@ -22,23 +26,20 @@ function make(id: string, numRemision = `REM-${id}`): Orden {
 }
 
 function renderSection(props?: Partial<Parameters<typeof PorAceptarSection<Orden>>[0]>) {
-  const onAceptarTodas = props?.onAceptarTodas ?? vi.fn();
   const onAceptarUna = props?.onAceptarUna ?? vi.fn();
   render(
     <PorAceptarSection<Orden>
       titulo={props?.titulo ?? "Por recibir"}
       nuevasLabel={props?.nuevasLabel ?? ((n) => `${n} nuevas`)}
       ordenes={props?.ordenes ?? []}
-      onAceptarTodas={onAceptarTodas}
       onAceptarUna={onAceptarUna}
-      textoBotonTodas={props?.textoBotonTodas ?? "Aceptar todas"}
       textoBotonUna={props?.textoBotonUna ?? "Aceptar"}
       vacio={props?.vacio ?? "No hay órdenes."}
       renderDetalle={props?.renderDetalle}
       mostrarAcciones={props?.mostrarAcciones}
     />,
   );
-  return { onAceptarTodas, onAceptarUna };
+  return { onAceptarUna };
 }
 
 afterEach(() => cleanup());
@@ -50,10 +51,10 @@ describe("PorAceptarSection", () => {
     expect(screen.getByRole("heading", { name: "Por recoger" })).toBeInTheDocument();
   });
 
-  it("muestra el vacío y deshabilita 'aceptar todas' cuando no hay órdenes", () => {
+  it("muestra el vacío y ningún botón cuando no hay órdenes", () => {
     renderSection({ ordenes: [], vacio: "Nada por recibir." });
     expect(screen.getByText("Nada por recibir.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aceptar todas" })).toBeDisabled();
+    expect(screen.queryByRole("button")).toBeNull();
     // Sin órdenes no hay banner.
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -68,13 +69,11 @@ describe("PorAceptarSection", () => {
     );
   });
 
-  it("'aceptar todas' invoca onAceptarTodas con TODOS los ids", async () => {
-    const user = userEvent.setup();
-    const { onAceptarTodas } = renderSection({
-      ordenes: [make("a"), make("b")],
-    });
-    await user.click(screen.getByRole("button", { name: "Aceptar todas" }));
-    expect(onAceptarTodas).toHaveBeenCalledWith(["a", "b"]);
+  it("NO ofrece acción en lote: los únicos botones son los de cada orden", () => {
+    renderSection({ ordenes: [make("a"), make("b")] });
+    const region = screen.getByRole("region", { name: "Por recibir" });
+    expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
+    expect(within(region).getAllByRole("button", { name: "Aceptar" })).toHaveLength(2);
   });
 
   it("'aceptar' por-orden invoca onAceptarUna con ese id", async () => {
