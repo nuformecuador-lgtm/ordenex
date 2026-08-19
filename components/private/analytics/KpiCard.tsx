@@ -1,10 +1,20 @@
 // Cifra unica con su etiqueta y su variacion (R12-R15).
 //
-// Sin recharts y SIN ANIMAR. Q5 decidio *arreglar* `components/shared/KpiValorAnimado`
-// (que hoy hardcodeaba el simbolo del colon), no *montarlo* aqui: animar exigiria
-// ademas ensenarle a respetar `prefers-reduced-motion` (R28), y eso ampliaria el
-// radio de un cambio compartido sin que nadie lo haya pedido. Si el tablero 131
-// quiere el numero animado, monta el compartido —ya arreglado— en su sitio.
+// Sin recharts y con la CIFRA ANIMADA desde el 2026-08-19 (pedido humano). Es exactamente el
+// camino que este comentario dejaba abierto: Q5 arreglo `components/shared/KpiValorAnimado`
+// —que hardcodeaba el simbolo del colon— y dejo dicho que quien quisiera el numero animado
+// montara el compartido en su sitio, con la condicion de ensenarle antes a respetar
+// `prefers-reduced-motion` (R28). Eso es lo que se hizo: la preferencia se atiende DENTRO del
+// componente compartido, porque esta cuenta la lleva `requestAnimationFrame` y ninguna regla
+// CSS puede detener JavaScript.
+//
+// El montaje va a traves de `KpiValor` y no directo: `KpiValorAnimado` recibe el formateador
+// como FUNCION, y una funcion no cruza la frontera RSC. Esta tarjeta sigue siendo
+// server-compatible y solo pasa props serializables (el numero y su unidad).
+//
+// Lo que NO cambio: el texto lo sigue escribiendo `formatearValor`, asi que el fotograma final
+// es identico al que se pintaba antes. Y la VARIACION no se anima —es la linea secundaria, y
+// dos cifras contando a la vez en una tarjeta de cuatro centimetros compiten entre si—.
 //
 // El signo de la variacion se dice con TEXTO ademas de con color (R15): un
 // daltonico no ve la diferencia entre verde y rojo, y "-3" a secas tampoco
@@ -15,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { formatearValor } from "./formato";
+import { KpiValor } from "./KpiValor";
 import type { KpiCardProps, VariacionKpi } from "./tipos";
 
 function textoDelSigno(variacion: VariacionKpi): string {
@@ -66,7 +77,7 @@ export function KpiCard({
       ) : (
         <>
           <p className="text-2xl font-semibold tabular-nums text-foreground">
-            {formatearValor(valor, unidad)}
+            <KpiValor valor={valor} unidad={unidad} />
           </p>
           {variacion ? (
             <p className={cn("text-sm", claseDelSigno(variacion.delta))}>
