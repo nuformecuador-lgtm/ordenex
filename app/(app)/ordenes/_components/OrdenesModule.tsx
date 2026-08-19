@@ -126,6 +126,7 @@ export function OrdenesModule({
   permitirDescarga = false,
   puedeReportarIncidente = false,
   filtros,
+  resetSeleccion = 0,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -207,6 +208,15 @@ export function OrdenesModule({
    * arma los filtros y traduce lo seleccionado a `filter` es la superficie de arriba.
    */
   filtros?: ReactNode;
+  /**
+   * Señal de "la selección ya se consumió": cada vez que este número cambia, se
+   * desmarcan TODAS las filas. Quien ejecuta las acciones por lote vive arriba (es
+   * quien sabe cuándo una terminó bien), pero la selección vive aquí; en vez de
+   * exponer un handle imperativo, la superficie incrementa un contador y este módulo
+   * la limpia. Tras una acción por lote las filas marcadas ya cambiaron de estado:
+   * dejarlas marcadas invita a repetir la acción sobre órdenes que ya no la admiten.
+   */
+  resetSeleccion?: number;
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -267,6 +277,15 @@ export function OrdenesModule({
   if (filterKey !== filterKeyPrevio) {
     setFilterKeyPrevio(filterKey);
     setPage(1);
+    setSeleccion(new Map());
+  }
+
+  // Ejecutada una acción por lote, la superficie incrementa `resetSeleccion` y aquí se
+  // desmarca todo. Mismo patrón de "ajustar estado durante el render" que el reset por
+  // cambio de filtro, y por el mismo motivo: sin efecto ni parpadeo intermedio.
+  const [resetSeleccionPrevio, setResetSeleccionPrevio] = useState(resetSeleccion);
+  if (resetSeleccion !== resetSeleccionPrevio) {
+    setResetSeleccionPrevio(resetSeleccion);
     setSeleccion(new Map());
   }
 

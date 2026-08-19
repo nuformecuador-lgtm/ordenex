@@ -303,6 +303,45 @@ describe("OrdenesModule — bloqueoSeleccion por fila", () => {
     ).toHaveAttribute("aria-checked", "false");
   });
 
+  // Pedido humano (2026-08-19): ejecutada una acción por lote, las casillas quedan
+  // vacías. La superficie avisa incrementando `resetSeleccion` (lo hace al revalidar,
+  // que es cuando la acción ya terminó); aquí se comprueba el efecto sobre la selección.
+  it("al cambiar `resetSeleccion` se desmarcan TODAS las filas y desaparece la barra", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderModule(
+      <OrdenesModule
+        filter={{ status_id: "est-rechazada" }}
+        selectable
+        acciones={acciones}
+        resetSeleccion={0}
+      />,
+    );
+
+    await screen.findByText("5001");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-gam" }),
+    );
+    expect(await screen.findByText(/1 seleccionada/)).toBeInTheDocument();
+
+    rerender(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ToastProvider>
+          <OrdenesModule
+            filter={{ status_id: "est-rechazada" }}
+            selectable
+            acciones={acciones}
+            resetSeleccion={1}
+          />
+        </ToastProvider>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.queryByText(/seleccionada/)).toBeNull());
+    expect(
+      screen.getByRole("checkbox", { name: "Seleccionar orden REM-gam" }),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
   it("sin `bloqueoSeleccion` todas las filas son seleccionables (sin regresión)", async () => {
     renderModule(
       <OrdenesModule

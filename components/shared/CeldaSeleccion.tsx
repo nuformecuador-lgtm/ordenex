@@ -5,6 +5,16 @@ import { CircleAlert } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+/**
+ * Motivo especial: la fila NO se puede marcar y ADEMÁS no hay nada que explicar, así que
+ * la celda queda vacía (sin checkbox y sin aviso «!»).
+ *
+ * Existe porque un aviso solo vale la pena cuando el bloqueo sorprende. Si la fila
+ * simplemente no participa de ninguna acción por lote, el «!» repetido en media tabla es
+ * ruido: no informa de un impedimento, describe una ausencia que ya se ve.
+ */
+export const BLOQUEO_SIN_AVISO = "__bloqueo_sin_aviso__";
+
 export interface CeldaSeleccionProps {
   /** `true` si la fila está marcada. La selección la posee el listado, no esta celda. */
   checked: boolean;
@@ -55,6 +65,12 @@ export function CeldaSeleccion({
   ariaLabel,
   bloqueoAriaLabel,
 }: Readonly<CeldaSeleccionProps>) {
+  if (bloqueo === BLOQUEO_SIN_AVISO) {
+    // Celda vacía, pero del mismo tamaño que el checkbox al que sustituye: la columna no
+    // cambia de ancho ni las filas de alto según la fila participe o no.
+    return <span className="inline-block size-4" aria-hidden="true" />;
+  }
+
   if (bloqueo !== null && bloqueo !== "") {
     return (
       <Tooltip>
