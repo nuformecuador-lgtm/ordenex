@@ -22,6 +22,9 @@ import type {
   ListarPendientesCierresBodegaServiceResult,
   RechazarCierreBodegaServiceResult,
 } from "@/lib/interfaces/services/ICierresBodegaAdminService";
+// Feature 230 (T7.2, R26): el union de la hoja fundida es UNO para los dos bordes.
+import type { ListarGestionesDescargaServiceResult } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import { esColaSolicitado } from "@/lib/utils/colas-cierre";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { toDetalleDTO } from "@/lib/services/CierreDiaService";
@@ -220,6 +223,40 @@ export class CierresBodegaAdminService implements ICierresBodegaAdminService {
     }
 
     return { status: "ok", items: conjunto.map(toResumen), total: conjunto.length };
+  }
+
+  /**
+   * Feature 230 — Tanda 7 (T7.2, R13/R21/R22/R24/R25/R26) — las GESTIONES de los cierres del dia
+   * ya consolidados en un cierre de bodega, de las que sale la HOJA FUNDIDA de esta pantalla.
+   *
+   * Espejo exacto de `listarGestionesCierresAdminCompleto` con el acotamiento que corresponde a
+   * ESTE listado: aqui no hay zona que resolver —es de acceso total—, asi que todo el
+   * acotamiento por rol es `esAccesoTotal`, evaluado ANTES de tocar el repositorio (R25). No se
+   * reimplementa ningun criterio: se reusa el guard que ya gobierna los cuatro listados de esta
+   * pantalla (R16).
+   *
+   * `filtros` son RECORTES, nunca alcance (R15). Y **ni una llamada a `this.signedUrls`** (R22):
+   * la hoja fundida no lleva columna de evidencia en absoluto.
+   *
+   * Los cierres que este camino devuelve son, por construccion, los de las bodegas SATELITE: un
+   * cierre con destino `bodega_central` nunca se consolida en un cierre de bodega. La GAM sale
+   * por el OTRO boton, sin un solo `if` que la nombre (R27).
+   */
+  async listarGestionesCierresBodegaCompleto(
+    actor: Actor,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<ListarGestionesDescargaServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // R25: antes del repo
+
+    const conjunto = await this.repo.findGestionesDeCierresBodegaCompleto(filtros);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R21: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
   async verCierreBodegaDetalle(

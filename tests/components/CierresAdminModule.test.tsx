@@ -27,6 +27,9 @@ import type {
 // Server Actions (ver detalle / aprobar / rechazar), el toast y el router (refresh)
 // para afirmar la composición (cola, histórico, detalle, decisiones) sin DB ni sesión.
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),

@@ -24,6 +24,26 @@ export const RESULTADO_LABEL: Record<CierreResultado, string> = {
   incidente: "Incidentes", // feature 158/R18
 };
 
+/**
+ * Feature 230 (T1.3, design §6.1) — el resultado de UNA gestion, en SINGULAR.
+ *
+ * `RESULTADO_LABEL` esta en plural porque nombra la SECCION de la pantalla («Entregadas»). La
+ * hoja fundida emite una celda POR FILA, y una fila es una gestion: «Entregada».
+ *
+ * Es un segundo mapa y NO una derivacion del primero (nada de quitarle la «s»): las dos formas
+ * son textos de interfaz, i18n-ready, y una regla morfologica del castellano incrustada en el
+ * codigo se rompe en el primer idioma —o en el primer resultado— que no la cumpla.
+ *
+ * R45 exige que la celda sea SIEMPRE esta etiqueta y jamas el value del enum.
+ */
+export const RESULTADO_FILA_LABEL: Record<CierreResultado, string> = {
+  entregada: "Entregada",
+  reprogramada: "Reprogramada",
+  devuelta: "Devuelta",
+  rechazada: "Rechazada",
+  incidente: "Incidente",
+};
+
 export const METODO_LABEL: Record<MetodoPagoValue, string> = {
   efectivo: "Efectivo",
   SINPE: "SINPE",

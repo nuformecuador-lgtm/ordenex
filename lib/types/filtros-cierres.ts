@@ -31,11 +31,14 @@ const fechaCalendario = z
   .string()
   .refine(esFechaCalendarioValida, { message: "La fecha debe tener el formato AAAA-MM-DD" });
 
-const listaDeIds = z
-  .array(z.string().uuid())
-  .max(MAX_IDS_POR_FILTRO)
-  .nonempty()
-  .optional();
+/**
+ * Una lista de ids OBLIGATORIA. Se declara aparte de `listaDeIds` para que la descarga detallada
+ * de gestiones (feature 230) pueda exigirla sin volver a escribir el tope, el `nonempty` ni el
+ * `uuid`: alli «ningun mensajero elegido» no es «todos», es un error (R39).
+ */
+const listaDeIdsRequerida = z.array(z.string().uuid()).max(MAX_IDS_POR_FILTRO).nonempty();
+
+const listaDeIds = listaDeIdsRequerida.optional();
 
 /**
  * Lo que TODO listado de cierres puede recortar: un rango de fechas y una o varias bodegas.
@@ -111,6 +114,48 @@ export function sinFiltros(filtros: FiltrosCierres | undefined): boolean {
     filtros.mensajeroIds === undefined
   );
 }
+
+/**
+ * Feature 230 (T1.2, design §3.1, R19/R31/R32/R33/R36/R39) — la lista blanca de la descarga
+ * DETALLADA de cierres (la «hoja fundida», una fila por GESTION).
+ *
+ * **No es `filtrosCierresSchema`, y esa es la decision.** D11 hizo esta descarga INDEPENDIENTE
+ * de la barra de filtros: su conjunto lo redacta integramente el dialogo, no el estado de la
+ * pantalla. `destinoZonaIds` no tiene ningun papel aqui —el eje de zona ya lo fija el alcance en
+ * cada pantalla— y `.strict()` debe RECHAZARLA, no aceptarla y no usarla.
+ *
+ * Se declara en ESTE modulo y desde SUS primitivas —`listaDeIdsRequerida`, `fechaCalendario`,
+ * `rangoCoherente`, `MENSAJE_RANGO`— por el mismo motivo escrito arriba para el schema de
+ * bodega: el dia que las fechas cambien de criterio, cambian para todos los listados de cierres
+ * a la vez, este incluido.
+ *
+ * Dos diferencias con sus hermanos, y las dos son requisitos:
+ *
+ *  - **`mensajeroIds` es OBLIGATORIO y no vacio** (R39, ratificado por el humano el 2026-08-18).
+ *    En los listados el mensajero es un recorte opcional; aqui es el conjunto mismo. Confirmar
+ *    el dialogo sin nadie elegido no debe llamar al servidor, y si algun cliente lo intenta
+ *    muere en el borde y no en una consulta que habria devuelto el alcance entero.
+ *  - **`desde`/`hasta` no son un adorno** (R31): sin ellos el conjunto por defecto es TODO el
+ *    historico del mensajero, que a grano de gestion choca contra el tope de 5000 casi de
+ *    inmediato. Son la mitigacion de producto de ese riesgo, no una comodidad.
+ *
+ * El ALCANCE, como en todo este modulo, NO viaja aqui: lo resuelve el servicio desde la sesion y
+ * lo compone con esto por conjuncion. Un `mensajeroIds` de otra zona no ensancha nada — da CERO
+ * filas (R37), indistinguible de «ese mensajero no tiene cierres en el rango» (R38, deliberado).
+ *
+ * `FiltrosDescargaGestiones` es un SUBCONJUNTO ESTRUCTURAL de `FiltrosCierres`, asi que
+ * `filtrosWhere` del repositorio se reusa sin tocarlo.
+ */
+export const filtrosDescargaGestionesSchema = z
+  .object({
+    mensajeroIds: listaDeIdsRequerida,
+    desde: fechaCalendario.optional(),
+    hasta: fechaCalendario.optional(),
+  })
+  .strict()
+  .refine(rangoCoherente, MENSAJE_RANGO);
+
+export type FiltrosDescargaGestiones = z.infer<typeof filtrosDescargaGestionesSchema>;
 
 /** Una opción de los selectores: lo mínimo para pintarla y emitirla. Nunca PII. */
 export interface OpcionFiltroCierres {

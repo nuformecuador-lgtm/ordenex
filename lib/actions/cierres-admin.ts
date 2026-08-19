@@ -32,11 +32,13 @@ import {
   type ListarHistoricoCierresAdminCompletoResult,
   type ListarPendientesCierresAdminResult,
   type ListarPendientesCierresAdminCompletoResult,
+  type ListarGestionesCierresAdminCompletoResult,
   type VerCierreDetalleResult,
   type AprobarCierreResult,
   type RechazarCierreResult,
   type ForzarSolicitudVencidoResult,
 } from "@/lib/types/cierres-admin";
+import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 
@@ -244,6 +246,35 @@ export async function obtenerCatalogoFiltrosCierres(
     if (!actor) throw new UnauthenticatedError();
     const service = deps.service ?? buildService();
     return service.obtenerCatalogoFiltros(actor);
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Feature 230 — Tanda 2 (T2.3, R13/R17/R19/R32/R36) — el UNICO punto de entrada de servidor de
+ * la descarga DETALLADA de esta pantalla: las gestiones de los cierres del dia del alcance.
+ *
+ * Server Action y no `app/api/`: la lectura es interna del mismo proyecto y el archivo se arma
+ * en el navegador, que es la doctrina de la 134 y lo que hace el resto de este modulo.
+ *
+ * **El actor se resuelve ANTES de validar** (R17), como sus hermanas: quien no tiene sesion no
+ * debe poder deducir que claves acepta esta superficie probando entradas. Y la lista blanca es
+ * `.strict()`, asi que una clave ajena —`destinoZonaIds`, `page`— muere aqui con
+ * `validation_error` y sin tocar la base (R19), igual que un rango de fechas invertido (R32).
+ *
+ * `input` NO lleva default: el conjunto de esta descarga lo redacta el dialogo, y una llamada
+ * sin `mensajeroIds` no es «todos», es una llamada que no debio ocurrir (R39).
+ */
+export async function listarGestionesCierresAdminCompleto(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ListarGestionesCierresAdminCompletoResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R17: antes de parsear y antes del service
+    const data = filtrosDescargaGestionesSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarGestionesCierresAdminCompleto(actor, data);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }
