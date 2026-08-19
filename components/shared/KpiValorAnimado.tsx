@@ -18,8 +18,9 @@ import { toValidNumber } from "@/lib/utils/number";
 // `const SIMBOLO = "₡"` y un `"es-CR"` incrustados, así que cambiar de país
 // obligaba a editar un componente compartido. El formato resultante es el de
 // `formatMonto`, el mismo que ya usan los otros cinco consumidores cliente. Fue
-// el de `Intl` con `style: "currency"` («₡3 500,00», con espacio duro) hasta que
-// la feature 201 unifico la agrupacion en `lib/config/moneda.ts` («₡3.500,00»).
+// el de `Intl` con `style: "currency"` —que agrupa los miles con espacio duro—
+// hasta que la feature 201 unifico la agrupacion en `lib/config/moneda.ts`, y
+// desde la feature 230 ese formato ya no lleva parte decimal: «₡3.500».
 //
 // Lo que este arreglo NO resuelve, y es PREEXISTENTE (no lo introduce la 130):
 // `loadMonedaConfig` lee `process.env[name]` con clave dinámica, y Next solo
@@ -93,7 +94,12 @@ export function KpiValorAnimado({
   className,
 }: Readonly<KpiValorAnimadoProps>) {
   const amount = toValidNumber(value);
-  const decimals = moneda ? 2 : 0;
+  // Feature 230 (R14): CERO decimales tambien en modo moneda. El texto lo pinta
+  // `formatear` —que en moneda es `formatMonto`— y desde la 230 no emite parte
+  // decimal; pero `decimals` gobierna el valor de CADA FOTOGRAMA, asi que dejarlo
+  // en 2 haria que el contador recalculara centimos durante toda la animacion para
+  // un texto que ya no los muestra. El modo no moneda ya era 0 y no cambia.
+  const decimals = 0;
 
   // `false` en el servidor y durante la hidratacion, `true` en cuanto corre en el navegador.
   // Va con `useSyncExternalStore` y no con un `useState` + `useEffect`: React usa el snapshot

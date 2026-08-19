@@ -123,22 +123,26 @@ describe("CuentasPorPagarTable — columnas y datos (R18/R21)", () => {
     }
   });
 
-  it("money-safe: pinta los montos TAL CUAL (STRING con símbolo) y el badge por signo", () => {
+  // Feature 230: los importes se pintan sin la cola de céntimos. Lo que este caso
+  // vigila no cambia —que la tabla no recalcule nada y que el badge salga del
+  // signo que manda el servidor—; el `0.00` de Beto sigue siendo un cero pintado
+  // (`₡0`), no una ausencia.
+  it("money-safe: pinta los montos del SERVIDOR, sin recalcular, y el badge por signo", () => {
     renderTabla(MENSAJEROS);
 
     const filaAna = within(tabla())
       .getByText("Ana Mensajera")
       .closest("tr") as HTMLElement;
-    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡3.000,00")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡2.000,00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡5.000")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡3.000")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡2.000")).toBeInTheDocument();
     // Positivo (Ordenex debe) → badge "Pendiente".
     expect(within(filaAna).getByText("Pendiente")).toBeInTheDocument();
 
     const filaBeto = within(tabla())
       .getByText("Beto Repartidor")
       .closest("tr") as HTMLElement;
-    expect(within(filaBeto).getByText("₡0,00")).toBeInTheDocument();
+    expect(within(filaBeto).getByText("₡0")).toBeInTheDocument();
     // Cero (al día) → badge "Al día".
     expect(within(filaBeto).getByText("Al día")).toBeInTheDocument();
   });

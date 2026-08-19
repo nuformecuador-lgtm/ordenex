@@ -6,6 +6,7 @@ import type {
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
+import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Feature 42 — tests unit del WalletService (R1/R3/R15/R16/R19/R20/R25). Guardia de rol
 // maestro; manual inmutable (no update/delete); DTOs con montos STRING.
@@ -20,18 +21,22 @@ const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: pari
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
-  return {
+  const base = {
     id: "w1",
-    tipo: "ingreso",
-    categoria: "ingreso_flete",
+    tipo: "ingreso" as const,
+    categoria: "ingreso_flete" as const,
     monto: "1000.00",
-    origenTipo: "cierre_dia",
+    origenTipo: "cierre_dia" as const,
     origenId: "c1",
     descripcion: null,
     registradoPor: null,
     fechaMovimiento: "2026-07-12T10:00:00.000Z",
     ...overrides,
   };
+  // Feature 231 (R31): el `dueno` del fixture sale de la MISMA clasificacion que el del
+  // repositorio, no de un literal a mano — si no, cambiar la categoria de un caso dejaria el
+  // doble diciendo una cosa y el codigo real otra.
+  return { ...base, dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
 }
 
 /**
@@ -152,6 +157,9 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
       signoGanancia: "positivo",
       deTerceros: "5000.00",
       periodoFiltrado: false,
+      // Feature 231 (R9/R10/R14): 5 000 / 5 700 x 100 = 87.719… -> "87.72".
+      porcentajeTiendas: "87.72",
+      modoComposicion: "dos_bolsillos",
     });
     // Lo que la feature existe para conseguir: los ₡5000 de contra-entrega estan en la caja y
     // NO estan en la ganancia. Si `verResumenCaja` ignorara la naturaleza, serian iguales.
@@ -259,6 +267,14 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
         expect(["positivo", "negativo", "cero"]).toContain(valor);
         continue;
       }
+      // Feature 231: `modoComposicion` es el TERCER enum del DTO y se mide igual que los dos
+      // signos — un valor de una lista cerrada, no una frase. La afirmacion de este caso («el
+      // servidor no redacta») se conserva entera: sigue sin haber ni un texto que la pantalla
+      // deba limitarse a repetir.
+      if (clave === "modoComposicion") {
+        expect(["dos_bolsillos", "solo_tiendas", "solo_ordenex", "sin_reparto"]).toContain(valor);
+        continue;
+      }
       expect(valor).toMatch(/^-?\d+\.\d{2}$/);
     }
   });
@@ -276,6 +292,73 @@ describe("WalletService.verResumenCaja (R8/R64/R65)", () => {
     expect(r.resumen.signoEnCaja).toBe("cero");
     expect(r.resumen.signoGanancia).toBe("cero");
     expect(r.resumen.deTerceros).toBe("0.00");
+  });
+
+  // ── Feature 231 (T2.4, design §3.2) — la composicion viaja con el resumen ──
+
+  it("R24: una sola lectura: las dos derivaciones salen del mismo array", async () => {
+    // La contraprueba tiene que distinguir «una lectura» de «dos lecturas que dieron lo mismo».
+    // Por eso el doble devuelve un agregado DISTINTO a partir de la segunda llamada: si el
+    // servicio consultara la base dos veces —una por derivacion—, la composicion hablaria del
+    // segundo instante y las aserciones de abajo caerian con el importe a la vista.
+    const repo = buildRepo();
+    (repo.agregarPorCategoriaYTipo as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(AGREGADO)
+      .mockResolvedValue([
+        { categoria: "ingreso_flete", tipo: "ingreso", total: "9999.00" },
+        { categoria: "egreso_sueldo", tipo: "egreso", total: "4444.00" },
+      ] satisfies AgregadoCajaRow[]);
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    // (a) UNA sola lectura de la base por consulta de pantalla.
+    expect(repo.agregarPorCategoriaYTipo).toHaveBeenCalledTimes(1);
+    // (b) la composicion habla del PRIMER agregado, no del segundo.
+    expect(r.composicion.ingresos.ingreso_flete).toBe("1000.00");
+    expect(r.composicion.ingresos.ingreso_flete).not.toBe("9999.00");
+    expect(r.composicion.totalEgresos).toBe("300.00");
+    // (c) y las dos derivaciones cuadran entre si, que es lo que R24 existe para garantizar:
+    //     la tarjeta de la ganancia y la cifra de la caja no pueden discrepar.
+    expect(r.composicion.totalIngresos).toBe(r.resumen.ingresosPropios);
+    expect(r.composicion.totalEgresos).toBe(r.resumen.egresosPropios);
+    // (d) el dinero de las tiendas (5 000) no se coló en la ganancia por ningún lado.
+    expect(r.composicion.totalIngresos).not.toBe(r.resumen.entradas);
+  });
+
+  it("R30: `forbidden` no viaja con composición", async () => {
+    const repo = buildRepo();
+    const svc = new WalletService(repo, writeClient);
+
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, OTRO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect("composicion" in r).toBe(false);
+    expect("resumen" in r).toBe(false);
+    expect(Object.keys(r)).toEqual(["status"]);
+    // Control de no-vacuidad del `not`: con un rol autorizado, el MISMO camino SI trae las dos.
+    const permitido = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    expect("composicion" in permitido).toBe(true);
+    expect("resumen" in permitido).toBe(true);
+  });
+
+  it("R23/R26: la composición cruza la frontera con TODOS sus importes como STRING", async () => {
+    const svc = new WalletService(buildRepo(), writeClient);
+    const r = await svc.verResumenCaja({ page: 1, pageSize: 20 }, MAESTRO);
+    if (r.status !== "ok") throw new Error("esperado ok");
+
+    const importes = [
+      ...Object.values(r.composicion.ingresos),
+      r.composicion.totalIngresos,
+      r.composicion.otrosEgresos,
+      r.composicion.totalEgresos,
+    ];
+    expect(importes.length).toBe(10); // 7 conceptos + 3 totales: ninguno se pierde
+    for (const v of importes) {
+      expect(typeof v).toBe("string");
+      expect(v).toMatch(/^-?\d+\.\d{2}$/); // escala 2 SIEMPRE, tambien en el cero
+    }
   });
 });
 

@@ -81,8 +81,9 @@ describe("RechazosSlaModule", () => {
     expect(within(lista).getByText(/12345/)).toBeInTheDocument();
     expect(within(lista).getByText(/REM-777/)).toBeInTheDocument();
     expect(within(lista).getByText("Ana Cliente")).toBeInTheDocument();
-    // El monto se renderiza tal cual (STRING), con el simbolo de colon prefijado.
-    expect(within(lista).getByText("₡3.500,00")).toBeInTheDocument();
+    // El monto entra por el formateador compartido: simbolo delante, miles
+    // agrupados y sin cola decimal (feature 230). No se reparsea en el camino.
+    expect(within(lista).getByText("₡3.500")).toBeInTheDocument();
   });
 
   it("R14: numGuia null -> placeholder legible, no rompe la fila", () => {
@@ -109,7 +110,7 @@ describe("RechazosSlaModule", () => {
     );
 
     expect(screen.getByText("Pendiente de cierre")).toBeInTheDocument();
-    // No inventa un ₡0,00 cuando el monto aun no existe.
+    // No inventa un ₡0 cuando el monto aun no existe.
     expect(screen.queryByText(/₡/)).toBeNull();
   });
 
@@ -232,7 +233,7 @@ describe("RechazosSlaModule — intentos de entrega (feature 160)", () => {
     );
     const items = screen.getAllByRole("listitem");
     expect(within(items[0]).getByText("Intentos: 2")).toBeInTheDocument();
-    expect(within(items[0]).getByText("₡3.500,00")).toBeInTheDocument();
+    expect(within(items[0]).getByText("₡3.500")).toBeInTheDocument();
     expect(within(items[1]).getByText("Intentos: 0")).toBeInTheDocument();
     expect(within(items[1]).getByText("Pendiente de cierre")).toBeInTheDocument();
   });

@@ -1,3 +1,27 @@
+> # ⚠ FUNCIONALIDAD RETIRADA por la feature 227 (2026-08-14)
+>
+> **Esta ficha ya no describe el sistema. Se conserva como REGISTRO HISTORICO, no como spec
+> vigente.** La feature 227 («hilo de notas por orden entre tienda y mensajero») retiro la nota
+> privada del mensajero por completo: su service, sus Server Actions, sus tipos, su interfaz, su
+> componente, el campo `notaPrivada` del DTO, los metodos `upsertNota`/`limpiarNota`/
+> `findNotasByMensajero` del meta-repo y los badges de las tres pos-card.
+>
+> La columna `orden_mensajero_meta.nota` se elimino con la migracion
+> `20260815140000_orden_mensajero_meta_drop_nota`. **El contenido de las notas se perdio de forma
+> definitiva y deliberada** (decision humana del 2026-08-14, P1 del gate de la 227): se habian
+> escrito bajo una promesa literal de privacidad —«Solo tu puedes ver esta nota; no la ven la
+> tienda ni otros mensajeros»— y copiarlas al hilo COMPARTIDO habria sido una fuga retroactiva.
+> Por eso no se migraron.
+>
+> Lo que hoy existe en su lugar es la tabla `orden_nota`: un hilo bidireccional entre el
+> adminTienda dueno de la orden y el mensajero asignado. Ver `specs/227-hilo-notas-orden/`.
+>
+> Una guardia (`tests/unit/guards/nota-privada-retirada.guardia.test.ts`) impide que los archivos
+> y simbolos descritos aqui vuelvan al arbol.
+>
+> Lo que de esta ficha SIGUE VIVO: nada de la nota. `marcar_luego` es de la feature **115** y no
+> se toco (R24 de la 227).
+
 # Feature 116 — Mensajero: notas privadas por orden · tasks.md
 
 > Checklist verificable, orquestable como **backend_dev → frontend_dev**. `[B]` backend / `[F]`

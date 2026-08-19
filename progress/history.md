@@ -3338,6 +3338,58 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   exigiría desacoplar un fixture que comparten seis guardias para ganar un mensaje mejor en un
   escenario que ya falla a gritos.
 
+## 2026-08-15 — 227 (hilo de notas por orden entre tienda y mensajero)
+
+- Nace `orden_nota`: un hilo por orden entre `adminTienda` y `mensajero`, con autor, hora y borrado
+  lógico por el propio autor («nota eliminada» visible para la contraparte). Cuerpo máximo 200. Se
+  RETIRA a cambio la feature **116** entera —la nota privada del mensajero— incluida su columna
+  `orden_mensajero_meta.nota`. `orden.notas` (la nota de la TIENDA, que llega por carga masiva) y
+  `marcar_luego` (feature 115) quedan intactas.
+- Requisitos cubiertos: **R1–R36 + R38 = 37**, todos con test verificado uno a uno por el reviewer
+  (abrió cada test y comprobó que mide ESE requisito). `R37` se retiró a la ficha **228** y su número
+  **no se reutiliza**. Mapa en `progress/impl_227.md`; informe en `progress/review_227.md`.
+
+- **La decisión de diseño que sostiene la feature: la ventana de escritura es ASIMÉTRICA POR ROL.**
+  La tienda publica y borra mientras la orden está en `devuelta`; el mensajero mientras está en
+  `en_reparto` y asignada a él. La LECTURA es siempre, en cualquier estatus. No es una sutileza:
+  cada rol ve la orden en una pantalla distinta —`/novedades` lista `devuelta`,
+  `listarMisAsignaciones` lee `por_recoger`+`en_reparto` (corte de la 167/R34, que esta feature NO
+  toca)—, así que una ventana simétrica («solo en `devuelta`») deja al mensajero **sin ningún estado
+  alcanzable en el que publicar** y el hilo «bidireccional» sale unidireccional de hecho.
+
+- **La lección que costó encontrarla DOS veces en la misma feature, y que conviene no re-aprender:**
+  acotar una escritura por estatus **sin cruzarla con la pantalla donde cada rol ve la entidad**
+  concede permisos inejercitables. La primera vez apareció en la LECTURA y se cerró separando
+  lectura de escritura; se dio el problema por resuelto y **seguía vivo en la publicación**, donde el
+  «publicar» que un requisito le concedía al mensajero era letra muerta. Ahora hay una guardia
+  (`hilo-ventana-alcanzable`) que cruza la ventana con el corte de pantalla de cada rol y **falla si
+  alguna intersección queda vacía**.
+
+- **Rechazada en la primera revisión, y el hallazgo no era el rojo.** `./init.sh` terminaba en EXIT 1
+  por un deadlock `40P01` entre los tres archivos de DB nuevos: transacciones largas concurrentes
+  escribiendo en `public."usuario"`/`public."orden"` y tomando los locks de FK en ORDEN DISTINTO.
+  Lo grave es que, al reventar el `beforeAll`, vitest marcaba **13 tests como `skipped`** —justo la
+  evidencia de R26 (RLS/cero policies), R28 (índice) y R30 (CASCADE)—: la mitad de las corridas esa
+  prueba no se ejecutaba y el archivo lo reportaba como omitido, no como fallo. **El patrón «la suite
+  omite y parece casi verde», esta vez instalado dentro de la feature.** Cerrado con
+  `pg_advisory_xact_lock` como PRIMERA sentencia de cada transacción, y **se descartó el reintento a
+  propósito: reintentar un deadlock lo esconde, serializar la sección crítica lo elimina.**
+
+- **Decisión destructiva, tomada por el humano y registrada como tal:** dropear
+  `orden_mensajero_meta.nota` **borra** las notas privadas ya escritas por los mensajeros; no se
+  migran al hilo porque eso las haría visibles para su tienda, y se escribieron bajo una promesa
+  literal en pantalla («Solo tú puedes ver esta nota»). **DEUDA DE DESPLIEGUE:** el conteo de filas
+  afectadas **en producción** NO era alcanzable desde el entorno de desarrollo y **no se inventó
+  ninguna cifra** —la tabla local está vacía, así que su cero no informa—. Queda declarado como
+  PENDIENTE en la cabecera de M2: **no se aplica a producción sin ese `count` medido y pegado.**
+
+- Decisiones y deuda menores: la feature **no lleva notificación ni indicador** de «hay notas»
+  (decisión humana; hasta la 228 el mensajero solo ve el hilo si abre la orden, dicho en voz alta
+  para que no se lea como olvido). `borrarNotaSchema` lleva `{ordenId, notaId}` y no solo `{notaId}`
+  como pedía el design: sin la orden no se puede resolver la ventana y se podría borrar una nota de
+  la orden B desde la ventana abierta de la orden A. Las constantes de la ventana quedan cerradas
+  **por vigilancia** (guardia) y no por unificación, que era lo que el design pedía.
+
 ## 2026-08-15 — 229 (rastreo público del envío, sin sesión)
 
 - El destinatario consulta su paquete **sin iniciar sesión**, desde un **modal en la landing
@@ -3369,3 +3421,43 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
 - Los E2E (`e2e/rastreo-publico.spec.ts`) se ejecutaron **a mano** (2 passed) contra un `next dev`
   propio, **no** por el `webServer` de `playwright.config.ts` (su `reuseExistingServer` engancha el
   servidor de otro checkout). `init.sh` sigue sin correr E2E: deuda de arnés conocida.
+
+## 2026-08-18 — 231 (la caja de la wallet, partida en dos bolsillos)
+
+- `/wallet` deja de enseñar «dinero en caja» como una cifra sola: una **barra de composición** la
+  parte en lo que es de las TIENDAS (contra-entrega cobrado, aún sin entregar) y lo que es de
+  ORDENEX (ganancia), con un bolsillo por cada lado. Una tarjeta nueva abre la ganancia **concepto
+  por concepto** —siete de ingreso frente a cinco de egreso— y el libro gana la columna «Dueño».
+  Nace de un lienzo de cuatro direcciones de diseño; el humano eligió la opción B
+  (`progress/design_231.md`).
+- Requisitos cubiertos: **R1–R40**, los 40 mapeados a un test nombrado, existente y ejecutado
+  (`progress/impl_231.md` §2 y §10; el reviewer los recontó: 0 huérfanos, 0 fantasmas).
+- **El servidor tuvo que crecer, y no por gusto**: la pantalla tiene PROHIBIDO convertir un monto a
+  número (tres guardias vivas), así que la proporción de la barra, el desglose de ingresos por
+  concepto y el dueño de cada movimiento **se derivan en el servidor** y cruzan como STRING. Nada
+  de esto se podía calcular arriba.
+- **El caso límite es el que decidía si el diseño era viable**: si Ordenex gasta más de lo que gana,
+  la porción de las tiendas es MAYOR que el total de la caja y la barra no admite dos segmentos. Se
+  resolvió con una tabla de **cuatro modos** evaluada sobre los nueve pares de signos, sin división
+  por cero. Medido: las cuatro ramas son mutuamente excluyentes, así que su orden es documental.
+- **`DesgloseEgresosCard` se absorbió en la tarjeta nueva**, y con ella se borró su archivo de test.
+  Las **18 aserciones de las features 45 y 158 se re-hospedaron una a una** —verificado por nombre
+  y por intención, no por conteo— y se probó que fue mudanza: con la lista ya extraída, el test
+  viejo pasó **sin una sola modificación** antes de borrarlo.
+- **Tres listas literales de columnas gobernaban esta pantalla desde fuera.** La de
+  `WalletDescarga.test.tsx:590` (D1, firmada) se cambió por lo que su caso decía afirmar: que las
+  categorías de la 173 no añaden ni quitan columnas, medido ahora sobre cuatro conjuntos incluido
+  el catálogo entero en runtime. Ya había bloqueado el reordenado de columnas de la 200; habría
+  bloqueado «Dueño».
+- **Dos tests estaban en verde sin comprobar nada, y se cazaron por mutación, no por lectura**:
+  (1) el orden de las filas —el conjunto de prueba estaba escrito ya ordenado y `Array#sort` es
+  estable, así que ordenar por magnitud pintaba lo mismo—; (2) **la columna de ingresos no afirmaba
+  ni un importe**: los siete conceptos podían pintar el mismo número, la resta con el total seguía
+  cuadrando en pantalla y la suite pasaba. Este segundo lo encontró el reviewer y fue **bloqueante**.
+  Ahora el caso empareja rótulo↔importe fila a fila y hay un control de que los siete importes son
+  distintos **después** de formatear.
+- **Deuda declarada, no escondida**: `lib/utils/monto-escala-2.ts` existe para no relajar una
+  aserción de dinero de la 173 que prohíbe `.toFixed(` en `caja-tesoreria.ts`. Tiene guardia propia
+  desde este mismo commit, con un criterio distinto al del padre —`.toFixed(` se le permite, que es
+  su oficio— y persiguiendo además `.toNumber(`, que la lista genérica del repo no perseguía. Y `wallet-caja-descarga-columnas.test.ts` sigue fijando su lista contra un literal:
+  gobernará a la próxima feature igual que D1 gobernó a ésta.

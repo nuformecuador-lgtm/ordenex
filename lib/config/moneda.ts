@@ -10,6 +10,17 @@
 // pintaban sin separador de miles (`₡13331832.72`) y nadie podia cambiarlo en un
 // solo lugar. El simbolo tambien sale de configuracion: estaba hardcodeado en
 // las siete copias pese a que este archivo existe justamente para eso.
+//
+// Feature 230 — el dinero se pinta SIN CENTIMOS. La parte decimal ya no se
+// copia: se usa para REDONDEAR la parte entera (half away from zero) y se
+// descarta. `₡13.331.833`, no `₡13.331.832` con su cola. Es un cambio de
+// PRESENTACION y solo de presentacion: la columna sigue siendo `DECIMAL(12,2)`,
+// el importe sigue cruzando la frontera con escala 2 y las descargas XLSX/CSV
+// conservan la cola que la contabilidad necesita. Ver `specs/230-*`.
+//
+// El redondeo opera sobre el STRING, digito a digito, y no es purismo: hay tres
+// guardias vivas que prohiben convertir un monto a numero en este camino y este
+// repo ya perdio un centimo por una conversion (feature 204).
 
 function readNonEmpty(name: string, fallback: string): string {
   const raw = process.env[name];
@@ -26,7 +37,18 @@ export interface MonedaConfig {
   simbolo: string;
   /** Separador de los grupos de tres de la parte entera (p. ej. "."). */
   separadorMiles: string;
-  /** Separador entre la parte entera y la decimal (p. ej. ","). */
+  /**
+   * El caracter que separaria la parte entera de la decimal (p. ej. ",").
+   *
+   * ⚠️ Desde la feature 230 NO GOBIERNA LA SALIDA: no hay parte decimal que
+   * separar, asi que este campo no se emite nunca y cambiarlo no altera ni un
+   * byte de lo que se pinta. Se conserva —decision Q1(b), firmada— porque le
+   * queda un oficio distinto y vivo: es EL CARACTER QUE LA GUARDIA VIGILA.
+   * `tests/unit/guards/dinero-sin-centimos.guardia.test.ts` lo lee de aqui en
+   * vez de escribir la coma a mano, que seria el hardcode de contexto que
+   * `docs/architecture.md` prohibe. Retirarlo dejaria a la guardia sin punto
+   * unico de configuracion para lo que persigue.
+   */
   separadorDecimal: string;
 }
 
@@ -65,6 +87,73 @@ export const SIN_MONTO_RAYA = "—";
 const FORMA_DECIMAL = /^-?\d+(\.\d+)?$/;
 
 /**
+ * El sucesor de cada digito que NO es `'9'`. Una tabla y no una suma: sumar
+ * obligaria a convertir el digito a numero, que es exactamente lo que este
+ * modulo tiene prohibido.
+ */
+const DIGITO_SIGUIENTE: Readonly<Record<string, string>> = {
+  "0": "1",
+  "1": "2",
+  "2": "3",
+  "3": "4",
+  "4": "5",
+  "5": "6",
+  "6": "7",
+  "7": "8",
+  "8": "9",
+};
+
+/**
+ * Suma 1 a una parte entera representada como STRING, con acarreo manual
+ * (feature 230). `"999" -> "1000"`, `"9" -> "10"`, `"0" -> "1"`,
+ * `"999999" -> "1000000"`.
+ *
+ * Es el acarreo de derecha a izquierda de toda la vida —la cola de nueves se
+ * vuelve ceros y el primer digito distinto de `'9'` sube—, escrito con una
+ * expresion regular en vez de con un bucle A PROPOSITO: asi no hay ni una sola
+ * operacion aritmetica, ni siquiera sobre el indice del recorrido. `(\d*)` es
+ * codicioso, asi que `([0-8])` cae sobre el ULTIMO digito que no es `'9'` y
+ * `(9*)` se queda con la cola que hay que poner a cero.
+ *
+ * Si no hay ningun `[0-8]` es que el numero era todo nueves: la cola entera se
+ * pone a cero y el acarreo sobrevive, asi que se antepone `'1'`. Ese es el caso
+ * que CAMBIA EL NUMERO DE DIGITOS y por el que el redondeo tiene que ir ANTES
+ * de agrupar los miles y nunca despues (`999.50` se pinta `₡1.000`).
+ *
+ * Los ceros a la izquierda se conservan (`"000123" -> "000124"`): es lo que ya
+ * hacia el modulo con una entrada asi y esta feature no normaliza la rama de
+ * entradas fuera de contrato.
+ */
+function sumarUno(enteros: string): string {
+  const casa = /^(\d*)([0-8])(9*)$/.exec(enteros);
+  if (casa === null) return `1${enteros.replace(/9/g, "0")}`;
+  const [, cabeza, ultimoNoNueve, nueves] = casa;
+  return `${cabeza}${DIGITO_SIGUIENTE[ultimoNoNueve]}${"0".repeat(nueves.length)}`;
+}
+
+/**
+ * Devuelve la parte entera YA redondeada (feature 230, D1: half away from zero,
+ * el medio se ALEJA del cero).
+ *
+ * Mira SOLO el primer digito decimal: `>= '5'` sube, si no baja, y el resto se
+ * ignora (`"10.4999" -> "10"`, `"10.5001" -> "11"`). La comparacion es entre
+ * CARACTERES, que para un digito suelto ordena igual que entre numeros y no
+ * obliga a convertir nada.
+ *
+ * El signo no llega hasta aqui: quien llama ya lo separo, asi que "alejarse del
+ * cero" es siempre "subir" y el negativo hereda el mismo redondeo.
+ */
+function redondearEnteros(enteros: string, decimales: string | null): string {
+  if (decimales === null || decimales === "") return enteros;
+  return decimales.charAt(0) >= "5" ? sumarUno(enteros) : enteros;
+}
+
+/** Una parte entera que vale cero, con los ceros a la izquierda que traiga. */
+function esCero(enteros: string): boolean {
+  return /^0+$/.test(enteros);
+}
+
+/**
  * Agrupa de tres en tres DESDE LA DERECHA. El borde que importa es el del
  * principio: con 3 digitos exactos ("999") o con un multiplo de 3 ("1000" ->
  * "1.000") una agrupacion mal escrita cuela un separador delante del primer
@@ -83,11 +172,24 @@ function agruparMiles(enteros: string): string {
  * Formatea un importe que llega como STRING, sin convertirlo NUNCA a numero.
  *
  * `Number(`, `parseFloat(` y `parseInt(` estan prohibidos sobre el monto y no es
- * una precaucion teorica: `Number("1500.50")` ya no vuelve a ser `"1500.50"`,
- * `"0.10"` se convierte en `0.1` —y se pintaria "₡0,1"— y un `DECIMAL(12,2)` de
- * once digitos no cabe exacto en un `number`. Aqui se parte por el punto, se
- * agrupa la parte ENTERA y los decimales se copian VERBATIM: si el servidor
- * manda dos, se pintan dos; si no manda ninguno, no se inventa ningun ",00".
+ * una precaucion teorica: un `DECIMAL(12,2)` de once digitos no cabe exacto en
+ * un `number`, y el redondeo de esta feature tiene que ser exacto justo ahi
+ * (`"99999999999.51"` se pinta `₡100.000.000.000`). Aqui se parte por el punto y
+ * se trabaja digito a digito.
+ *
+ * QUE SE PINTA (feature 230): la parte entera agrupada por miles, sin cola
+ * decimal. La parte decimal que mande el servidor no se copia: decide el
+ * redondeo de la entera y se descarta. El orden importa —primero se redondea y
+ * despues se agrupa—, porque el acarreo puede añadir un digito y cambiar la
+ * agrupacion entera.
+ *
+ * Si el redondeo da cero, el signo SE CAE: un `"-0.49"` se pinta `₡0`, nunca con
+ * el menos delante de un cero pelado.
+ *
+ * Lo que NO tiene forma de importe decimal se pinta VERBATIM detras del simbolo,
+ * como siempre. Esa rama no redondea nada, asi que es la unica por la que puede
+ * salir un caracter separador seguido de digitos; esta escrita como excepcion en
+ * la guardia de la feature 230 para que no se descubra como un rojo inexplicable.
  *
  * @param value    importe serializado (`"13331832.72"`), o `null` si no lo hay.
  * @param sinMonto que pintar cuando no hay importe. Por defecto `SIN_MONTO`; las
@@ -111,12 +213,13 @@ export function formatMontoString(value: string | null, sinMonto: string = SIN_M
   const enteros = punto === -1 ? sinSigno : sinSigno.slice(0, punto);
   const decimales = punto === -1 ? null : sinSigno.slice(punto + 1);
 
-  const agrupado = agruparMiles(enteros);
-  const cuerpo =
-    decimales === null ? agrupado : `${agrupado}${monedaConfig.separadorDecimal}${decimales}`;
+  const redondeado = redondearEnteros(enteros, decimales);
+  const agrupado = agruparMiles(redondeado);
 
-  // El signo va DELANTE del simbolo: "-₡4.500,00".
-  return `${negativo ? "-" : ""}${monedaConfig.simbolo}${cuerpo}`;
+  // El signo va DELANTE del simbolo ("-₡4.501"), y desaparece si lo que queda
+  // es un cero: "menos cero" no es una cantidad que nadie quiera leer.
+  const signo = negativo && !esCero(redondeado) ? "-" : "";
+  return `${signo}${monedaConfig.simbolo}${agrupado}`;
 }
 
 /**
@@ -148,16 +251,23 @@ export function money(value: string | null): string {
  * simbolo ni moneda en el codigo). Sin importe -> `sinMonto` (por defecto
  * `SIN_MONTO`).
  *
- * Pasa por la MISMA agrupacion que `formatMontoString` para que los dos caminos
- * produzcan el mismo aspecto; `Intl` con locale "es-CR" da espacio fino como
- * separador de miles y aqui se quiere el punto (feature 201).
+ * Pasa por el MISMO camino que `formatMontoString` para que los dos produzcan el
+ * mismo aspecto; `Intl` con locale "es-CR" da espacio fino como separador de
+ * miles y aqui se quiere el punto (feature 201).
  *
  * Este es el unico sitio del formato donde un monto llega como `number`, y llega
  * asi POR CONTRATO (feature 32/R5). Convertirlo a STRING con `toFixed(2)` —la
  * serializacion de escala 2, la misma que emite el servidor— es entrar al camino
- * money-safe, no salirse de el. `toFixed(2)` es ademas lo que hace que un importe
- * entero se pinte "₡320,00" y no "₡320": aqui la escala 2 SI esta en el contrato,
- * al reves que en `formatMontoString`, donde los decimales se copian verbatim.
+ * money-safe, no salirse de el.
+ *
+ * ⚠️ El `toFixed(2)` se conserva DESPUES de la feature 230, y con los ojos
+ * abiertos (`design.md` §7/A3): la escala 2 es la del CONTRATO de la frontera, y
+ * bajarla aqui delegaria el redondeo en el motor de JS —binario— justo en la
+ * operacion que esta feature quiere determinista. La consecuencia declarada es
+ * un doble redondeo para entradas que YA estan fuera de ese contrato: un
+ * `1234.4951` serializa a `"1234.50"` y sube, cuando el redondeo directo habria
+ * bajado. Solo pasa con mas de dos decimales por el camino numerico y esta
+ * fijado con un test para que sea una decision y no una sorpresa.
  *
  * @param monto    importe, o `null` si no lo hay.
  * @param sinMonto que pintar cuando no hay importe. Por defecto `SIN_MONTO` (el

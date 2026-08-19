@@ -80,10 +80,8 @@ function newService(repo: IGestionOrdenRepository) {
     upsertOrigen: vi.fn(async () => {}),
   };
   // Feature 115 (R17): sin marcas -> `marcarLuego` false en todas las cards.
-  // Feature 116: sin notas -> `notaPrivada` null en todas las cards.
   const metaRepo = {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
   };
   return new MisAsignacionesService(
     repo,

@@ -9,6 +9,7 @@ import type {
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { AgregadoCajaRow, WalletMovimientoDTO } from "@/lib/types/wallet";
+import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Cliente Prisma acotado a lo que este repo necesita (patron CierresAdminRepository).
 type WalletPrismaClient = Pick<PrismaClient, "walletMovimiento">;
@@ -16,6 +17,20 @@ type WalletPrismaClient = Pick<PrismaClient, "walletMovimiento">;
 // Money-safe: Decimal -> STRING escala 2 (nunca number/parseFloat).
 type MovimientoRow = Prisma.WalletMovimientoGetPayload<Record<string, never>>;
 
+/**
+ * Feature 231 (R31/R32, design §3.3) — `dueno` se asigna AQUI, en el unico punto de proyeccion
+ * a DTO por el que pasan `listar`, `listarCompleto` y `obtenerPorId`.
+ *
+ * Desviacion consciente de `docs/architecture.md` («el repositorio no lleva logica de
+ * negocio»), declarada en design §3.3 y §6.2: lo que se anade no es una regla, es una BUSQUEDA
+ * TOTAL en un `Record` ya existente durante la proyeccion, que es justo lo que esta funcion
+ * hace con los demas campos. Mapear en el servicio obligaria a repetir el `map` en los cuatro
+ * caminos que consumen este DTO y abriria la puerta a que la tabla y la descarga dijeran cosas
+ * distintas — que es exactamente lo que la columna «Dueño» existe para impedir.
+ *
+ * `NATURALEZA_POR_CATEGORIA` es un `Record` TOTAL sobre el union de categorias: el dia que el
+ * enum gane un valor, esto deja de compilar hasta que alguien decida de quien es ese dinero.
+ */
 function toDTO(r: MovimientoRow): WalletMovimientoDTO {
   return {
     id: r.id,
@@ -27,6 +42,7 @@ function toDTO(r: MovimientoRow): WalletMovimientoDTO {
     descripcion: r.descripcion,
     registradoPor: r.registradoPor,
     fechaMovimiento: r.fechaMovimiento.toISOString(),
+    dueno: NATURALEZA_POR_CATEGORIA[r.categoria],
   };
 }
 

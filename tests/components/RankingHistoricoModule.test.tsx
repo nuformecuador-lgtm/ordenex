@@ -134,7 +134,9 @@ describe("RankingHistoricoModule — presentación money-safe (R31)", () => {
 
     // `"100.0"` con el decimal intacto: un `Number` intermedio lo habría dejado en "100".
     expect(within(filaAna).getByText("100.0%")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
+    // El premio `"5000.00"` se pinta sin la cola (feature 230). El porcentaje de
+    // arriba NO: no es dinero y conserva su decimal (D2/R15).
+    expect(within(filaAna).getByText("₡5.000")).toBeInTheDocument();
     expect(within(filaAna).getByText("Bono oro")).toBeInTheDocument();
 
     // Sin asignadas el porcentaje es INDEFINIDO, que no es cero: la celda dice «—».

@@ -86,7 +86,6 @@ function newService(
   };
   const metaRepo = {
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
   };
   const service = new MisAsignacionesService(
     repo,
@@ -165,7 +164,6 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
       { findByMensajero: vi.fn(async () => null), upsertOrigen: vi.fn(async () => {}) },
       {
         findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-        findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
       },
       fakeIntentosEnLote(),
     );

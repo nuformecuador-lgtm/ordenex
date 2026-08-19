@@ -19,6 +19,7 @@ import {
 import type { NovedadDTO } from "@/lib/types/novedad";
 
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
+import { HiloNotasNovedadModal } from "./HiloNotasNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
 import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
 import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
@@ -129,6 +130,10 @@ export function NovedadesModule({
   // estados y no uno con discriminante: son dos modales distintos, y fundirlos obligaría a
   // preguntar cuál está abierto en cada render para nada.
   const [ordenAHabilitar, setOrdenAHabilitar] = useState<NovedadDTO | null>(null);
+  // Feature 227 (T3.3): orden con el HILO de notas abierto (null = cerrado). Mismo patrón
+  // que los dos modales de arriba, por el mismo motivo: el hilo se pide al abrir UNA orden y
+  // nunca para la lista (design §4/A6, N+1).
+  const [ordenConNotas, setOrdenConNotas] = useState<NovedadDTO | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -273,6 +278,7 @@ export function NovedadesModule({
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
                   onDevolver={avisarNoDisponible}
+                  onNotas={setOrdenConNotas}
                 />
               }
             />
@@ -313,6 +319,19 @@ export function NovedadesModule({
             if (!open) setOrdenAHabilitar(null);
           }}
           onConfirmar={habilitarPendiente}
+        />
+      ) : null}
+
+      {/* Feature 227 (T3.3, design §5.1): el HILO de la orden abierta. Montaje condicional y
+          `key` como los dos de arriba — con eso la lectura del hilo ocurre una vez por
+          apertura y jamás por fila del listado paginado. */}
+      {ordenConNotas ? (
+        <HiloNotasNovedadModal
+          key={ordenConNotas.id}
+          orden={ordenConNotas}
+          onOpenChange={(open) => {
+            if (!open) setOrdenConNotas(null);
+          }}
         />
       ) : null}
     </div>

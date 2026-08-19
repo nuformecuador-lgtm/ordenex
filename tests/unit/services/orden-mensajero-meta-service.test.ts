@@ -43,10 +43,6 @@ function fakeMetaRepo(
   return {
     upsertMarcarLuego: vi.fn(async () => {}),
     findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()),
-    // Feature 116: metodos `nota` de la misma interfaz; este service (marca) no los usa.
-    upsertNota: vi.fn(async () => {}),
-    limpiarNota: vi.fn(async () => {}),
-    findNotasByMensajero: vi.fn(async () => new Map<string, string>()),
     ...over,
   };
 }

@@ -342,7 +342,7 @@ async function verMiWallet() {
 }
 
 // El `-?` de las dos expresiones es de la feature 201 (tanda B): el signo de un importe
-// negativo va DELANTE del símbolo (`-₡450,00`), así que un `/^₡/` a secas dejaría de
+// negativo va DELANTE del símbolo (`-₡450`), así que un `/^₡/` a secas dejaría de
 // encontrar el importe justo en el caso en que la tienda debe dinero. Aquí todos los casos
 // son positivos y por eso el cambio no altera qué elemento se elige; se escribe así para que
 // el buscador siga significando «el elemento que es un importe» y no «el que empieza por ₡».
@@ -367,16 +367,16 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     await verMiWallet();
 
     // Lo que le recaudaron, lo que le cobraron y lo que ya le entregaron: TRES cifras.
-    expect(importeDe("A tu favor")).toBe("₡50.000,00");
-    expect(importeDe("Ya pagado")).toBe("₡20.000,00");
+    expect(importeDe("A tu favor")).toBe("₡50.000");
+    expect(importeDe("Ya pagado")).toBe("₡20.000");
 
     // EL PUNTO DE LA TASK: el pago no engorda los cargos. 1 200 son los fletes, y solo eso.
-    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200,00");
+    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200");
     // Contraprueba de la cabecera vieja: si el pago cayera en «cargos», la cifra sería 21 200.
-    expect(importeDe("Cargos de Ordenex")).not.toBe("₡21.200,00");
+    expect(importeDe("Cargos de Ordenex")).not.toBe("₡21.200");
 
     // Y el saldo sigue siendo la resta de los tres: 50 000 − 1 200 − 20 000.
-    expect(saldoEnPantalla()).toBe("₡28.800,00");
+    expect(saldoEnPantalla()).toBe("₡28.800");
   });
 
   it("la cabecera vieja ya NO existe: «Débitos» no es un rótulo de esta pantalla", async () => {
@@ -392,9 +392,9 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     sembrarTienda([COD, FLETE], "1200.00");
     await verMiWallet();
 
-    expect(importeDe("Ya pagado")).toBe("₡0,00");
-    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200,00");
-    expect(saldoEnPantalla()).toBe("₡48.800,00");
+    expect(importeDe("Ya pagado")).toBe("₡0");
+    expect(importeDe("Cargos de Ordenex")).toBe("₡1.200");
+    expect(saldoEnPantalla()).toBe("₡48.800");
   });
 
   it("los tres importes salen de la clasificación del servidor, no de una cuenta del cliente", async () => {
@@ -433,7 +433,7 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
     expect(saldoEnPantalla()).toBe(money(esperado.saldo));
 
     // El pago anulado y su devolución: el saldo vuelve al valor de antes del pago (R71).
-    expect(saldoEnPantalla()).toBe("₡48.800,00");
+    expect(saldoEnPantalla()).toBe("₡48.800");
   });
 
   it("declara que los importes brutos incluyen lo anulado, y cuál es el número correcto", async () => {
@@ -458,9 +458,9 @@ describe("MiWalletPage — la tienda distingue el pago del cargo (R55) [P5]", ()
 
     // Los dos importes quedan altos: 70 000 «a tu favor» y 20 000 «ya pagado» cuando de verdad
     // se recaudaron 50 000 y no se le entregó nada. El saldo, en cambio, sale exacto.
-    expect(importeDe("A tu favor")).toBe("₡70.000,00");
-    expect(importeDe("Ya pagado")).toBe("₡20.000,00");
-    expect(saldoEnPantalla()).toBe("₡48.800,00");
+    expect(importeDe("A tu favor")).toBe("₡70.000");
+    expect(importeDe("Ya pagado")).toBe("₡20.000");
+    expect(saldoEnPantalla()).toBe("₡48.800");
 
     // Por eso el aviso: nombra las dos cifras infladas y la que hay que mirar.
     const aviso = screen.getByRole("note");

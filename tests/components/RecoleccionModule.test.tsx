@@ -95,7 +95,6 @@ function makeOrden(over: Partial<RecoleccionOrdenDTO> = {}): RecoleccionOrdenDTO
     distritoNombre: "San Rafael",
     secuenciaRuta: null,
     marcarLuego: false,
-    notaPrivada: null,
     intentosEntrega: 0,
     ...over,
   };

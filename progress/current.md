@@ -9,7 +9,171 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-18, noche. **EMPIEZA A LEER POR AQUÍ**
+
+> **Producción sigue sana y sin tocar**: `prod` en la release del 15-ago (PR #388), **cero errores de
+> runtime en 3 días**. Todo lo de hoy está en esta rama, pendiente de PR.
+
+**Lo que entró hoy**, en un solo PR (`feature/230-dinero-sin-centimos`):
+
+| # | Qué |
+| --- | --- |
+| **227** | queda `done`, con el conteo del drop **medido contra producción** |
+| **230** | **el dinero se pinta sin céntimos** — implementada, revisada y vista en pantalla |
+| **232** | registrada: los céntimos dejan de EXISTIR (toca el dato) |
+| **233** | registrada: el gate rápido no corre las guardias si los relacionados fallan |
+
+**Gate completo `./init.sh` EXIT 0** sobre el árbol final: **1116 archivos, 14313 tests, 0 saltados,
+282 s** (baseline de `dev`: 1115 / 14276 → +1 archivo, la guardia nueva, y +37 tests).
+
+### 🔎 La 227 y su deuda con fecha de vencimiento
+
+Entró por PR #390 desde otra sesión y su ficha quedó `in_progress` con el PR ya mergeado —**sexta**
+vez—. Dentro vivía lo de siempre: la migración del drop de `orden_mensajero_meta.nota` es
+**destructiva** y su cabecera dejaba el conteo de producción **PENDIENTE**. Medido: **4 filas en la
+tabla, 0 con nota, 0 mensajeros**. El drop no pierde nada, y **no es un cero de universo vacío** — las
+4 filas son de `marcar_luego` (feature 115), que la migración no toca.
+
+### ⚠️ La próxima release NO es de cero migraciones
+
+La base de producción va por `20260812120000_gestion_orden_pago` y le faltan **dos**:
+`20260815120000_orden_nota` y el drop, **que borra una columna**. Entran solas con el deploy.
+
+### 💰 La 230, y lo que costó de verdad
+
+`₡1.234,56` → `₡1.235`, **redondeando** (no truncando) y **solo el dinero**. El formateador tiene un
+**único punto de paso**, así que sus 128 consumidores no cambian: la superficie son **6 archivos de
+producción**. El precio estuvo en otro sitio — **234 líneas de aserción reescritas en 36 archivos de
+test**, releídas una a una.
+
+**El redondeo va sobre el STRING, con acarreo manual.** No es preciosismo: `Number(`, `parseFloat(` y
+`parseInt(` están prohibidos en el camino del dinero por tres guardias vivas, y este repo ya perdió un
+céntimo por una conversión. Y va **antes** de agrupar los miles, que es lo que hace que `999,50` dé
+`₡1.000` y no `₡1000`.
+
+**Visto en pantalla, no solo en tests** (T6.3): Chromium real, **488 importes en 11 rutas, cero con
+decimal**, con el cero **autocomprobado** — el mismo texto en formato viejo da 32 hallazgos. Los cinco
+huecos de esa medición están declarados en `progress/impl_230_pantallas.md`, incluido el que importa:
+el mensaje del tope **no llegó a renderizarse** porque no hay incidentes pendientes en local.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **Release `dev` → `prod`**, con gate completo sobre el SHA real y **consciente de las dos
+   migraciones**, una destructiva.
+2. **La 232** — la otra mitad de la 230, y la que tiene dientes: los céntimos dejan de existir en el
+   **dato**. Medido contra producción: `orden.monto_cobrar` **34 de 139** (24 %),
+   `wallet_movimiento.monto` 20 de 82, `wallet_tienda_movimiento.monto` 17 de 70, y **cero** en todo
+   lo que se teclea a mano. Sus cuatro preguntas abiertas están en la ficha; la primera —qué se hace
+   con los datos que ya tienen céntimos— son **saldos que ya se le deben a alguien**.
+3. **La 233**, barata y del arnés: `test:rapido` es `test:cambiados && test:guardias` y el `&&`
+   cortocircuita. Un gate rápido en rojo **no dice nada** sobre si las guardias pasan. Ojo al
+   arreglarlo: cambiar `&&` por `;` taparía el exit code y volvería verde un gate rojo.
+4. **La 228, desbloqueada** (dependía de la 227). Hasta que exista, el mensajero **no recibe ninguna
+   señal** de que la tienda le escribió en el hilo nuevo.
+5. **La 218** y **la 219**; luego **225** y **226**, frontend y baratas.
+6. **La 216** sigue esperando una **decisión de marca**. No es técnico.
+
+### ⚡ Dos sesiones en el mismo árbol: lo que costó
+
+Otra sesión trabajó hoy en este mismo directorio (ficha **231**, caja de wallet). De ahí salieron
+tres cosas que conviene no repetir:
+
+- **Tomó el id 231 antes que yo**, así que lo que iba a ser la 231 es la **232**. Sexta colisión.
+- **Un `reset` de su rama movió la mía por debajo.** Un commit mío quedó apuntando a `dev` sin las
+  ediciones que yo daba por commiteadas: `feature_list.json` volvió a la versión de `dev`, con la 227
+  otra vez `in_progress`. **Lo detectó comparar el BLOB commiteado, no el árbol** — `git show
+  HEAD:fichero`. Verificar contra el árbol de trabajo no distingue «lo commiteé» de «alguien lo
+  revirtió».
+- **La 230 y la 231 chocan** en cinco archivos de test de wallet. Está escrito en las dos fichas.
+
+### 🧠 Lo que este día enseñó
+
+- **Una aserción que compara un texto contra la función que lo genera no comprueba nada.** Siempre
+  está verde. Había **cuatro** así, y son las que dejaron pasar el defecto real de esta feature: un
+  tope que anunciaba `₡10.000.000.000` mientras el validador rechazaba esa cifra. **Un máximo nunca
+  se redondea al alza**: al alza deja de ser un límite.
+- **La pareja invariante + literal es más fuerte que cualquiera de las dos.** El reviewer mutó el tope
+  a uno *demasiado bajo* y la invariante **sobrevivió**; los literales cayeron. Cada red tapa el
+  agujero de la otra.
+- **Un cero hay que autocomprobarlo o no vale.** El detector de céntimos de la primera medición era
+  **más estrecho que el requisito** —exigía dos dígitos, y R1 prohíbe cualquiera—, así que `₡1.234,5`
+  se le habría escapado. Lo destapó el reviewer, no yo.
+- **Ver la app encuentra lo que la suite no**, otra vez: el defecto del tope es un texto de pantalla
+  que 14.000 tests dieron por bueno.
+
+---
+
+## ✅ AL DÍA — 2026-08-15, noche
+
+> **La release SALIÓ y no hay nada a medias.** `prod` = `4b438f0c` (PR **#388**, deployment
+> **READY**, **cero errores de runtime**), y `dev` no tiene **ningún** commit que le falte a `prod`.
+> **0 features `in_progress`.** Sin PRs abiertos.
+
+**Lo que entró a producción hoy** — tres features, 22 commits, **cero migraciones** (verificado, no
+estimado: el árbol `db/` de `dev` y el de `prod` son idénticos, 116 en ambos):
+
+| # | Qué |
+| --- | --- |
+| **215** | el reintento se cuenta en el cierre, con R19 ya ejecutado contra la base real |
+| **224** | al imprimir, los tokens también son los claros (`--foreground` 1,19 → 15,70 en papel) |
+| **229** | **rastreo público del envío**: el destinatario consulta su paquete **sin sesión**, desde un modal en la landing |
+
+**La 229 llegó de otra sesión mientras se preparaba la release**, y su ficha quedó `in_progress` con
+el PR #386 ya mergeado — el mismo patrón de la 213. Cerrada en el PR **#387**, con su entrada de
+historia.
+
+### 🔎 La medición que la 229 exigía ANTES de desplegar, y que se hizo
+
+Su propia ficha llevaba escrita la deuda: la comprobación de órdenes **sin segundo factor
+utilizable** estaba medida contra la base **local** (0 de 78), y decía «hay que REPETIRLA ANTES DE
+DESPLEGAR». Se repitió contra **producción**, y con el criterio que aplica **el código** —no el de la
+bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+
+**141 órdenes vivas · 0 con teléfono de menos de 4 dígitos · 0 sin historial → las 141 son
+rastreables** (137 con 8 dígitos, 4 con 12).
+
+**No es un cero de universo vacío** —la lección de ayer, aplicada—: la mutación del umbral lo mueve,
+con `< 12` el mismo conteo da **137**. G2 no deja hoy ninguna orden real fuera del rastreo.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **La 218**, desbloqueada desde ayer y ahora con la 215 **en producción**: el corte automático
+   sigue sin sumar reintento en `sin_gestionar`. Comparte predicado con la 215.
+2. **La 219** — es la otra mitad del mismo agujero: el 0 de R19 **caduca** en cuanto entre una orden
+   en `devuelta`, y **nada lo vigila**. La 218 cierra el conteo; la 219 lo hace visible.
+3. **La 225** (19 avisos a mano que repiten el par que arregló la 222) y **la 226** (el anillo de foco
+   mide 1,30 contra el 3:1 de 1.4.11). Ambas frontend, ambas baratas.
+4. **SIN FICHA, y ahora con un hermano nuevo:**
+   - Los **seis tokens que EMPEORAN al imprimir desde oscuro** (`P1`–`P6`, el peor
+     `--primary-foreground` 18,33 → 1,00 en 15 usos). Medido, con guardia y declarado en
+     `app/globals.css:650`. Es decisión de **paleta**, emparenta con 216 y 210.
+   - **Límite de intentos PERSISTIDO para el rastreo público.** Hoy el limitador vive **en memoria
+     del proceso** (8 intentos / 10 min por IP): en serverless cada instancia tiene el suyo y cada
+     despliegue los resetea, así que **acota al torpe, no al decidido**, y el segundo factor son
+     10.000 combinaciones por guía. Es decisión firmada de la 229 (design §5.bis) y **ficha aparte
+     desde el principio** — pero ahora está **en producción y de cara a internet**, que es lo que
+     cambia su peso.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+
+### 🧠 Lo que este cierre enseñó
+
+- **El pre-vuelo de una release caduca en minutos, no en días.** El gate se corrió sobre `a145cab8`
+  y, al ir a abrir la release, `origin/dev` ya era `d1039d10`: **5.140 líneas de otra sesión** habían
+  entrado por PR #386 mientras corría. Un gate verde nombra **un SHA**, no «dev».
+- **Una ficha `in_progress` con su PR mergeado no es un descuido cosmético.** Ocupa cupo de zona y,
+  peor, **esconde deuda con fecha de vencimiento**: la medición contra producción de la 229 vivía
+  dentro de esa ficha sin cerrar. Si la release sale sin mirarla, sale sin hacerla.
+- **La deuda declarada por el implementer es una lista de tareas, no una nota al pie.** El punto (3)
+  de la ficha decía literalmente «repetir antes de desplegar»; ejecutarlo costó dos consultas.
+- **Al repetir una medición ajena, medir lo que hace el CÓDIGO, no lo que dice la bitácora.** La
+  consulta original omitía el caso «sin historial», que devuelve la misma respuesta al cliente.
+- **El gate completo se corre antes de cada PR aunque el diff sea prosa y JSON.** Los guards de este
+  repo recorren el árbol y leen ficheros de estado: un cambio en `feature_list.json` o en un `.md`
+  entra igual en su campo de visión que uno en `lib/`.
+
+---
+
+## ✅ AL DÍA — 2026-08-14, tarde
 
 > Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
 > entero porque su razonamiento sigue valiendo. Lo que cambió:

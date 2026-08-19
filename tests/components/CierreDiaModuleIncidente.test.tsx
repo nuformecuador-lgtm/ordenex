@@ -197,7 +197,7 @@ describe("R18 — el incidente es un grupo PROPIO del detalle del mensajero", ()
 describe("R17 — el incidente no muestra dinero en la vista del mensajero", () => {
   it("la tabla de incidentes NO tiene columna de ganancia ni de ningún monto", () => {
     // El snapshot de dinero de un incidente es 0.00 (backend). Aun así NO se pinta: un
-    // "₡0,00" en la fila se lee como "me pagaron cero por esto", que no es lo que pasó.
+    // "₡0" en la fila se lee como "me pagaron cero por esto", que no es lo que pasó.
     renderModule({
       ...emptyGrupos(),
       incidente: [incidente({ pagoMensajero: "0.00", montoRecibido: "0.00" })],
@@ -249,7 +249,7 @@ describe("R17 — el incidente no muestra dinero en la vista del mensajero", () 
       .map((th) => th.textContent);
     expect(cabeceras).toContain("Ganancia");
     expect(cabeceras).toContain("Monto");
-    expect(within(tabla).getByText("₡150,00")).toBeInTheDocument();
+    expect(within(tabla).getByText("₡150")).toBeInTheDocument();
   });
 });
 

@@ -68,6 +68,7 @@ export default async function WalletPage() {
         pageSize={movimientosResult.data.pageSize}
         resumen={resumenResult.resumen}
         desglose={desgloseResult.desglose}
+        composicion={resumenResult.composicion}
         plantillas={{
           items: plantillasResult.items,
           total: plantillasResult.total,

@@ -337,7 +337,7 @@ describe("R34/R9 — la CAUSA se pinta traducida, nunca el slug del enum", () =>
 });
 
 describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero", () => {
-  it("un incidente ya indemnizado muestra su monto TAL CUAL (STRING, sin parseFloat)", () => {
+  it("un incidente indemnizado con once dígitos se redondea EXACTO (sin parseFloat)", () => {
     renderConToast(
       <DetalleSecciones
         grupos={{
@@ -349,7 +349,10 @@ describe("R19/R22 — el MONTO de la indemnización, y el '—' que NO es cero",
     );
 
     const tabla = screen.getByRole("table", { name: "Incidentes" });
-    expect(within(tabla).getByText("₡12.345.678.901,99")).toBeInTheDocument();
+    // Feature 230: sin céntimos, pero el caso sigue midiendo lo mismo. El monto
+    // no cabe exacto en un `double`; que el `,99` suba a `…902` solo pasa si el
+    // camino es dígito a dígito, y un `parseFloat` intermedio lo rompería.
+    expect(within(tabla).getByText("₡12.345.678.902")).toBeInTheDocument();
   });
 
   it("sin monto todavía muestra '—' CON la nota de que se captura al aprobar", () => {

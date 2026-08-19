@@ -165,7 +165,7 @@ describe("/wallet/mensajeros — el aviso de los importes brutos (N1)", () => {
     // La fila sigue abierta cuando se cuenta: sin esto, la relectura de SWR podría haber
     // desmontado el desglose y el conteo diría «1» por no haber nada que contar.
     const seccion = screen.getByRole("region", { name: "Desglose de Ana Mensajera" });
-    expect(within(seccion).getByText("₡50.000,00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡50.000")).toBeInTheDocument();
 
     const avisos = screen.getAllByRole("note");
     expect(avisos).toHaveLength(1);
@@ -185,9 +185,9 @@ describe("/wallet/mensajeros — el aviso de los importes brutos (N1)", () => {
     expect(salvedad.closest("table")).toBeNull();
 
     // Y está en la misma sección que los tres importes, no colgando en otro sitio.
-    expect(within(seccion).getByText("₡70.000,00")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡20.000,00")).toBeInTheDocument();
-    expect(within(seccion).getByText("₡50.000,00")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡70.000")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡20.000")).toBeInTheDocument();
+    expect(within(seccion).getByText("₡50.000")).toBeInTheDocument();
   });
 
   it("los dos textos hablan en lenguaje claro: ni jerga contable ni siglas", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Navigation, StickyNote } from "lucide-react";
+import { MapPin, Navigation } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
@@ -107,18 +107,12 @@ export function PosOrderCardDetalle({
           >
             {estado}
           </span>
-          {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18 / 116/R12), solo si aplican. */}
+          {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18), solo si aplican. */}
           {mostrarRuta && orden.secuenciaRuta === null ? (
             <Badge variant="outline">Pendiente de optimizar</Badge>
           ) : null}
           {orden.marcarLuego ? (
             <Badge variant="warning">Gestionar más tarde</Badge>
-          ) : null}
-          {orden.notaPrivada ? (
-            <Badge variant="secondary">
-              <StickyNote aria-hidden="true" />
-              Mi nota
-            </Badge>
           ) : null}
         </div>
         <p className="truncate text-sm font-bold text-foreground">
@@ -137,12 +131,6 @@ export function PosOrderCardDetalle({
         {verIntentos ? (
           <p className="text-[11px] font-semibold text-muted-foreground">
             <IntentosDato intentos={valorIntentos(orden)} />
-          </p>
-        ) : null}
-        {/* Feature 116/R12: preview de la nota privada (el badge de arriba es el indicador). */}
-        {orden.notaPrivada ? (
-          <p className="truncate text-[11px] text-muted-foreground">
-            {orden.notaPrivada}
           </p>
         ) : null}
       </div>
