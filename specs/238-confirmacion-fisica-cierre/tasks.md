@@ -18,18 +18,35 @@
 
 ## T0 — Puerta humana: medir y firmar (sin código)
 
-- [ ] **T0.1 — Medir contra producción**, vía MCP de Supabase, solo lectura, con la consulta de
+- [x] **T0.1 — Medir contra producción**, vía MCP de Supabase, solo lectura, con la consulta de
       `design.md` §9: (a) cierres `solicitado` y cuántas gestiones tendría que escanear cada uno;
       (b) **cuántas gestiones que vuelven tienen `orden.num_guia IS NULL`** — el número que decide D3;
       (c) incidentes por cierre, para dimensionar la línea de exclusión.
       **Hecho:** los tres números pegados en `progress/impl_238.md` con su fecha. **Bloquea T0.2.**
-- [ ] **T0.2 — Firmar las decisiones abiertas.** **D1** (qué se persiste), **D2** (¿faltantes
+      > ✅ **MEDIDA el 2026-08-19** (MCP, solo lectura). Los tres números en `progress/impl_238.md`
+      > §T0.1, **con autocomprobación**: (a) **0 cierres `solicitado`**, pero hay **12 cierres** y
+      > **32 gestiones que vuelven** — el cero es «no hay cola», no «no hay datos»; (b) **0**
+      > gestiones que vuelven sin `num_guia`, sobre 32 vivas y 141 órdenes → **la población de D3 no
+      > existe**; (c) **2 incidentes**, en 2 cierres distintos.
+      > **Tres cosas que la medición le dijo al diseño:** el caso «sin retornables» es **3 de 12**
+      > (no es un `else`, es 1 de cada 4), el **techo de la ventana es 14 guías** (no 2 ni 3), y la
+      > línea de exclusión de incidentes **se va a ver de verdad**.
+      > ⏳ **Caduca**: un cierre solicitado aparece en cuanto un mensajero cierre su día. **Re-medir
+      > justo antes de desplegar**, no antes de mergear.
+- [x] **T0.2 — Firmar las decisiones abiertas.** **D1** (qué se persiste), **D2** (¿faltantes
       declarados?), **D3** (gestiones sin número de guía, con el número de T0.1 delante).
       **Hecho:** cada una respondida en `progress/impl_238.md`; si alguna se aparta de la
       recomendación, el spec se corrige **antes** de escribir código. **Bloquea T1.**
+      > ✅ **FIRMADAS el 2026-08-19**, en `requirements.md` §«PUERTA HUMANA PASADA» y transcritas en
+      > `progress/impl_238.md` §T0.2. **Ninguna se apartó de la recomendación**, así que el spec no
+      > se corrige. D1 marca por gestión; **D2 sin escapatoria** —un solo paquete perdido devuelve el
+      > cierre entero, y es deliberado—; D3 y D8 resueltas por medición.
 - [ ] **T0.3 — [P] Avisar a bodega del cambio de gesto** (D8): a partir del despliegue, aprobar exige
       tener los paquetes delante, y los cierres ya en cola lo exigirán desde el primer minuto.
       **Hecho:** aviso enviado y anotado con fecha. **Bloquea el despliegue, no T1.**
+      > ⏳ **ABIERTA, y ya NO bloquea el despliegue** (2026-08-19): la medición de T0.1 encontró
+      > **0 cierres en cola**, así que nadie se encuentra el gesto cambiado de un día para otro.
+      > Queda como acción **del humano** antes de desplegar, no de código.
 
 ---
 

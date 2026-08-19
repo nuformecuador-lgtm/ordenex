@@ -2900,15 +2900,15 @@
       "name": "confirmacion fisica de los paquetes al aprobar el cierre",
       "spec_path": "specs/238-confirmacion-fisica-cierre/",
       "description": "Fullstack. Aprobar un cierre deja de ser un click: pide escanear o teclear las guias de lo que vuelve fisicamente a bodega (devoluciones, rechazos y reprogramadas) y BLOQUEA hasta completarlas. Los INCIDENTES no cuentan para ese bloqueo. Reusa el escaner de guias que ya existe. Diseno: progress/design_pila_ayuda_tienda.md (F4).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/238-confirmacion-fisica-cierre",
       "depends_on": null,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 como NO implementada (`aprobarCierreSchema` sigue siendo {cierreId, indemnizaciones} y no se monta ningun escaner). INDEPENDIENTE de las de ayuda: puede ir en paralelo. || Engancha en la tercera rama de `pedirAprobacion()`, junto a la de indemnizaciones, y el parametro sigue el patron de `indemnizaciones` en el contrato de `aprobarCierre`. || La confirmacion se persiste DENTRO de la transaccion de `resolverCierre`. || Reusa QrScanner, EscanerGuiaCard, EscanerModal y extractNumGuiaFromScan: seis pantallas ya lo hacen."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "IN_PROGRESS el 2026-08-19. Puerta humana PASADA y escrita en specs/238-confirmacion-fisica-cierre/requirements.md: D1 (marca por gestion, gestion_orden.confirmada_fisica_at) y D2 (NO se aprueba con faltantes, sin escapatoria) FIRMADAS; D3 y D8 resueltas POR MEDICION contra produccion (0 ordenes vivas sin num_guia, 0 cierres en solicitado). || Consecuencia aceptada de D2: un solo paquete perdido devuelve el cierre entero, y es deliberado -es la friccion que hace que los paquetes aparezcan-. La salida ya existe: rechazar con motivo. || CONFLICTO DE ARCHIVOS: toca resolverCierre, CierresAdminService, lib/types/cierres-admin.ts y CierresAdminModule.tsx. NO trabajar en paralelo con nada que vuelva sobre la transaccion de aprobacion. || Backend (T1-T3) antes que frontend (T4): T4 lee contratos que T2/T3 mueven."
     },
     {
       "id": 239,
