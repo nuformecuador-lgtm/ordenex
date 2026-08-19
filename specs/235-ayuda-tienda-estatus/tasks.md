@@ -375,17 +375,18 @@
       aquí) y marcar como **CERRADAS** la «RECONCILIACIÓN DE R19» y el «tapón con dueño» de
       `specs/239-devolucion-espera-cierre/`.
       **Hecho:** los tres documentos editados con fecha y con el número de PR.
-- [ ] **T8.3 — Gate completo y PR.** `./init.sh` entero, con el árbol quieto, **antes** de abrir el
+- [x] **T8.3 — Gate completo y PR.** `./init.sh` entero, con el árbol quieto, **antes** de abrir el
       PR. Comparar el SHA medido contra `origin/dev` justo antes (el pre-vuelo caduca).
       **Hecho:** cifras del gate (typecheck, lint, archivos/tests, guardias) pegadas en
       `progress/impl_235.md`; PR abierto contra `dev` desde `feature/235-ayuda-tienda-estatus`.
       **Depende de:** T7.5, T8.1.
-      > ⏳ **ÚLTIMA ABIERTA (2026-08-19).** El gate completo y el PR los corre **el leader, con el
-      > árbol quieto**: un gate lanzado en paralelo con un subagente que muta el árbol no vale su
-      > veredicto. El implementer corrió `tsc`, `eslint` y la suite entera por su cuenta (cifras en
-      > `progress/impl_235.md` §5) y **no** ejecutó `./init.sh`. **T8.1 ya está cerrada**
-      > (`progress/recorrido_235.md`), así que esta tarea es lo único que separa a la ficha de estar
-      > hecha. La re-revisión (`progress/review_235_r2.md`) levantó el rechazo: **OK, 0 bloqueantes**.
+      > ✅ **CERRADA (2026-08-19).** `./init.sh` completo, **EXIT 0**, con el árbol quieto:
+      > typecheck sin errores · lint sin errores (92 warnings preexistentes, ninguno de esta rama) ·
+      > **1192 archivos, 15453 tests, 26 saltados, 347 s** · las guardias dentro. Baseline de `dev`
+      > antes de la ficha: 1115 archivos / 14276 tests.
+      > **Pre-vuelo:** `origin/dev` = `5f35963f`, medido **dos veces** —antes del gate y justo antes
+      > de empujar— porque caduca.
+      > **PR abierto: [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402)** contra `dev`.
 
 ---
 
