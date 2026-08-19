@@ -2960,7 +2960,7 @@
       "name": "dev esta rojo: la guardia del dinero marca una distancia en km",
       "spec_path": null,
       "description": "Backend/tooling. La guardia `dinero-sin-centimos.guardia` (feature 230) barre `.toFixed(` en `app/**` y `components/**` y marca `TrayectoVivoButton.tsx:39`, que formatea KILOMETROS, no dinero. Es un falso positivo y deja `dev` en ROJO desde el merge #396, asi que ninguna rama basada en dev puede pasar el gate. La guardia ya trae el mecanismo: `LISTA_BLANCA_TO_FIXED` con su `porque`.",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "backend",
@@ -2968,14 +2968,14 @@
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE: mientras siga rojo, ninguna feature puede cerrar su gate. || Comprobado sobre un checkout LIMPIO de origin/dev (sin cambios locales): 1 failed | 18 passed. No lo rompio esta sesion. || Es el tercer problema que llega del mismo merge #396, junto con el cobro prematuro (239) y las guardas retiradas (241). Un PR verde no dice nada de los tests: el check de Vercel es un build. || La lista blanca es POR ARCHIVO, asi que anadirlo ciega ese fuente entero para futuros `.toFixed(` sobre dinero. Queda dicho; cambiar el codigo no es equivalente (`Math.round` pierde el cero final: «1 km» en vez de «1.0 km»)."
+      "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE: mientras siga rojo, ninguna feature puede cerrar su gate. || Comprobado sobre un checkout LIMPIO de origin/dev (sin cambios locales): 1 failed | 18 passed. No lo rompio esta sesion. || Es el tercer problema que llega del mismo merge #396, junto con el cobro prematuro (239) y las guardas retiradas (241). Un PR verde no dice nada de los tests: el check de Vercel es un build. || La lista blanca es POR ARCHIVO, asi que anadirlo ciega ese fuente entero para futuros `.toFixed(` sobre dinero. Queda dicho; cambiar el codigo no es equivalente (`Math.round` pierde el cero final: «1 km» en vez de «1.0 km»). || IMPLEMENTADA Y MERGEADA el 2026-08-19 en el PR #397. La entrada de lista blanca lleva su motivo y el LIMITE del mecanismo escrito al lado: es POR ARCHIVO, no por linea, asi que ciega ese fuente entero. Censo previo: 443 fuentes barridos, 4 apariciones, CERO fugas de dinero — no se tapo nada. Comprobado tres veces que la lista blanca NO apaga la guardia: con un `.toFixed(2)` de mentira sobre un importe en un archivo no exento, se pone roja y lo senala por ruta y linea."
     },
     {
       "id": 243,
       "name": "dev esta rojo: 73 tests que el merge #396 dejo atras",
       "spec_path": null,
       "description": "Fullstack/tooling. `dev` (9095d4e5) tiene 73 tests rojos en 10 archivos, todos anteriores a esta sesion y verificados sobre un checkout limpio. 33 son de la barra de filtros de /ordenes, que la rama `ux` rehizo sin acompanar sus tests (buscan botones `Estado:`, `Zona:`, `Tienda:` que ya no se renderizan). El resto son de integracion, entre ellos `wallet-idempotencia`, que revienta con `Cannot read properties of undefined (reading 'updateMany')` sobre el updateMany nuevo de `gestion_aprobada`. Mientras siga rojo, NINGUN PR puede cumplir la regla del gate verde.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "medium",
       "zone": "fullstack",
@@ -2983,7 +2983,7 @@
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE de toda la pila: el arnes exige gate verde antes de cada PR y con dev asi nadie puede cumplirlo. || 191 rojos iniciales; 118 eran mi base local sin migrar (el merge trajo 4 migraciones) y se fueron con `prisma migrate deploy` contra localhost:5432, verificado antes de migrar. Quedan 73 REALES. || DECISION HUMANA 2026-08-19: la barra de filtros cambio A PROPOSITO, asi que sus 33 aserciones se actualizan contra la interfaz nueva SIN perder lo que cada caso comprobaba. || El rojo de `wallet-idempotencia` NO se actualiza a ciegas: hay que determinar si es un hueco del emulador o un fallo real del codigo, porque cae justo en la transaccion del dinero."
+      "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE de toda la pila: el arnes exige gate verde antes de cada PR y con dev asi nadie puede cumplirlo. || 191 rojos iniciales; 118 eran mi base local sin migrar (el merge trajo 4 migraciones) y se fueron con `prisma migrate deploy` contra localhost:5432, verificado antes de migrar. Quedan 73 REALES. || DECISION HUMANA 2026-08-19: la barra de filtros cambio A PROPOSITO, asi que sus 33 aserciones se actualizan contra la interfaz nueva SIN perder lo que cada caso comprobaba. || El rojo de `wallet-idempotencia` NO se actualiza a ciegas: hay que determinar si es un hueco del emulador o un fallo real del codigo, porque cae justo en la transaccion del dinero. || CERRADA el 2026-08-19 en el PR #397. De 191 rojos a CERO, sin tocar una linea de produccion y sin borrar un solo caso. 118 eran la base local sin migrar; 73 eran reales. || El rojo del dinero era hueco del EMULADOR, determinado ejecutando el WHERE real de `resolverCierre` en una transaccion revertida, no leyendo — y destapo que NADIE vigilaba esa escritura en la transaccion del dinero, asi que se escribio la asercion que faltaba, con orden testigo de otro cierre. || La barra de filtros cambio a proposito: 30 de 32 casos conservan sus `expect` intactos. || 26 casos de analitica quedan INERTES con motivo y ruta de reactivacion, mas un tripwire que se pone rojo si alguien descomenta. || `db:rollback` estaba roto: 4 down.sql escritos y verificados contra el motor. || Salen de aqui las fichas 244 y 245."
     },
     {
       "id": 244,
