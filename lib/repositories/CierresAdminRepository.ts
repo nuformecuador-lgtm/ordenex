@@ -794,6 +794,23 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // R5/R7: solo al APROBAR y si se aplico, construir e insertar los movimientos de
       // ingreso EN LA MISMA TX (todo-o-nada). `rechazado` no toca la wallet.
       if (res.count === 1 && nuevoEstado === "aprobado") {
+        // Pedido humano 2026-08-18 — APROBAR EL CIERRE ES LO QUE ABRE LA NOVEDAD. Las ordenes
+        // cuya gestion de ESTE cierre fue `devuelta` quedan con `gestion_aprobada = true`, que
+        // es la condicion que `OrdenRepository.novedadWhere` exige para listarlas en
+        // `/novedades`: hasta que el admin aprueba, la devolucion existe pero la tienda no la
+        // ve. Un RECHAZO no la enciende (esta rama es exclusiva de `aprobado`), asi que una
+        // devolucion de un cierre rechazado no llega nunca a la pantalla de la tienda.
+        //
+        // Va DENTRO de la misma tx que la transicion del cierre: o se aprueba y se abren las
+        // novedades, o no pasa ninguna de las dos cosas. Es money-neutral (solo toca
+        // `orden.gestion_aprobada`) y idempotente: re-aprobar encuentra las filas ya en `true`
+        // y no cambia nada. `cierreId` va en el WHERE como GUARDIA, no como filtro: sin el, la
+        // aprobacion de un cierre abriria devoluciones de otro.
+        await tx.orden.updateMany({
+          where: { gestiones: { some: { cierreId, resultado: "devuelta" } } },
+          data: { gestionAprobada: true },
+        });
+
         // Feature 158 (T1.14, R19-R22/R26): PRIMERO se persiste cada monto capturado, con
         // `cierreId` y `resultado` como GUARDIA del WHERE (no como filtro cosmetico): una
         // gestion de OTRO cierre, o que no sea `incidente`, no se puede tarifar. Si algun

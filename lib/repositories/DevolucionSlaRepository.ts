@@ -96,6 +96,12 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           mensajeroAsignadoId: null, // R15: handoff limpio a la bodega (nuevo intento)
           asignadoAt: null, // limpia el timestamp de asignacion (defensivo, patron 46)
           prioridad: true, // feature 101/R2: liberada por SLA -> reasignacion prioritaria
+          // Pedido humano 2026-08-18: la orden vuelve a bodega, o sea SALE de la novedad. Se
+          // apaga `gestion_aprobada` para que la aprobacion del cierre ANTERIOR no siga valiendo:
+          // si esta orden se devuelve otra vez, tendra que aprobarse el cierre NUEVO para volver
+          // a aparecer en `/novedades`. Va en el MISMO `data` del updateMany GUARDADO por
+          // `estatus_id = devuelta`, asi que hereda su idempotencia: una 2.a corrida no toca nada.
+          gestionAprobada: false,
         },
       });
       // R24/R25: SOLO si transiciono (count 1); una re-corrida/carrera (count 0) no duplica.
