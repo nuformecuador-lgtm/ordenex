@@ -193,6 +193,7 @@ function aprobar(repo: CierresAdminRepository, cierreId = "c1") {
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
     anclajeDevolucion: ANCLAJE_DEVOLUCION,
+    confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
   });
 }
 

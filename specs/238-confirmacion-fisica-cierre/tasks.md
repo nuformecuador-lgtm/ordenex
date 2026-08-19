@@ -52,21 +52,21 @@
 
 ## T1 — El punto único y la lectura *(inerte: se puede desplegar suelto)*
 
-- [ ] **T1.1 — El módulo puro `lib/types/gestion-retorno.ts`** con `RETORNA_A_BODEGA`
+- [x] **T1.1 — El módulo puro `lib/types/gestion-retorno.ts`** con `RETORNA_A_BODEGA`
       (`satisfies Record<GestionResultado, boolean>`), `RESULTADOS_QUE_VUELVEN` derivado y
       `vuelveABodega()`. El `false` de `incidente` va **con su comentario y su razón**, no como
       omisión.
       **Hecho:** `tests/unit/types/gestion-retorno.test.ts` cubre los cinco resultados, afirma que
       `incidente` está declarado como no-retornable y que la lista se **deriva** del `Record` (no es
       un segundo literal). **Depende de:** T0.2.
-- [ ] **T1.2 — [P] Guardia de copia única (R3/R5).**
+- [x] **T1.2 — [P] Guardia de copia única (R3/R5).**
       `tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts`: censo del árbol; ningún
       archivo fuera de `gestion-retorno.ts` declara su propia lista de resultados que vuelven a
       bodega (un `["devuelta","rechazada","reprogramada"]` suelto la pone roja).
       **Hecho:** verde, y **roja** al plantar esa lista en otro archivo (autocomprobación **dentro
       del propio archivo**). El censo se escribe **en un archivo de test**, nunca por `node -e`: ahí
       `\b` llega como backspace y el censo miente en verde. **Depende de:** T1.1.
-- [ ] **T1.3 — `findGestionesRetornablesDelCierre`** en `ICierresAdminRepository` +
+- [x] **T1.3 — `findGestionesRetornablesDelCierre`** en `ICierresAdminRepository` +
       `CierresAdminRepository`, molde literal de `findGestionesIncidenteDelCierre`: alcance en el
       WHERE, `resultado IN RESULTADOS_QUE_VUELVEN`, `anuladaAt: null`, proyección
       `{ gestionId, numGuia, resultado }`.
@@ -82,13 +82,13 @@
 
 ## T2 — El borde y la cobertura en el servicio  *(mismo PR que T3 y T4)*
 
-- [ ] **T2.1 — Borde zod.** `confirmacionFisicaSchema` + `aprobarCierreSchema` gana
+- [x] **T2.1 — Borde zod.** `confirmacionFisicaSchema` + `aprobarCierreSchema` gana
       `confirmacionFisica: z.array(...).default([])`; la Server Action la pasa **tal cual** al
       servicio (sin coerción).
       **Hecho:** `tests/unit/types/cierres-admin-confirmacion-schema.test.ts` cubre id no-uuid, guía
       no entera, guía ≤ 0 y ausencia del campo (`[]`); `tests/integration/actions/cierres-admin-action.test.ts`
       afirma que la lista llega al servicio sin transformar. **Depende de:** T1.3.
-- [ ] **T2.2 — `validarConfirmacionFisica` en `CierresAdminService`**, espejo de
+- [x] **T2.2 — `validarConfirmacionFisica` en `CierresAdminService`**, espejo de
       `validarCoberturaIndemnizaciones`, **antes** de ella y **antes** de tocar el repo. Sus seis
       mensajes con nombre (`design.md` §3.2).
       **Hecho:** `tests/unit/services/cierres-admin-confirmacion-fisica.test.ts` con un caso por
@@ -96,14 +96,14 @@
       de ajena), guía que no casa, gestión sin guía, y el camino feliz. En **todos** los rojos se
       afirma que `repo.resolverCierre` **no se llamó** (R14) y que el cierre sigue `solicitado`.
       **Depende de:** T2.1.
-- [ ] **T2.3 — [P] Los dos caminos que no cambian.** Cierre sin retornables → se aprueba con el
+- [x] **T2.3 — [P] Los dos caminos que no cambian.** Cierre sin retornables → se aprueba con el
       payload de siempre (R16); petición sin el campo → tratada como lista vacía (R15).
       **Hecho:** dos casos en el mismo archivo, uno de ellos afirmando que el servicio **no** pide
       confirmación cuando no hay nada que devolver. **Depende de:** T2.2.
-- [ ] **T2.4 — [P] Claves de error disjuntas.** Un cierre con incidentes **y** retornables produce
+- [x] **T2.4 — [P] Claves de error disjuntas.** Un cierre con incidentes **y** retornables produce
       `fieldErrors` cuyas claves no se pisan.
       **Hecho:** un caso que lo afirma con los dos conjuntos poblados. **Depende de:** T2.2.
-- [ ] **T2.5 — [P] Alcance (R38).** Un `adminSatelite` recibe la misma exigencia; un cierre fuera de
+- [x] **T2.5 — [P] Alcance (R38).** Un `adminSatelite` recibe la misma exigencia; un cierre fuera de
       su alcance produce conjunto vacío y `no_encontrada`, sin revelar nada.
       **Hecho:** dos casos en `tests/unit/services/cierres-admin-service.test.ts`. **Depende de:** T2.2.
 
@@ -113,7 +113,7 @@
 
 ## T3 — La migración y la escritura dentro de la transacción  *(mismo PR que T2 y T4)*
 
-- [ ] **T3.1 — Migración `<ts>_gestion_orden_confirmacion_fisica`** (`<ts>` posterior a
+- [x] **T3.1 — Migración `<ts>_gestion_orden_confirmacion_fisica`** (`<ts>` posterior a
       `20260819160000`): `ADD COLUMN "confirmada_fisica_at" TIMESTAMP(3);` + `down.sql` con su
       `DROP COLUMN IF EXISTS`, **pérdida de valores declarada**. `schema.prisma` actualizado. Sin
       índice, sin CHECK, sin tocar RLS.
@@ -121,11 +121,11 @@
       `tests/integration/db/confirmacion-fisica-migration.test.ts` afirma que la columna es
       **nullable, sin default**, que las filas previas quedan en `NULL` (R20) y que aplicar dos veces
       no rompe. **Depende de:** T0.2.
-- [ ] **T3.2 — `ResolverCierreInput.confirmacionFisica`**: obligatorio en la rama `aprobado`,
+- [x] **T3.2 — `ResolverCierreInput.confirmacionFisica`**: obligatorio en la rama `aprobado`,
       `never` en la rama `rechazado`.
       **Hecho:** el typecheck **rompe** en todo doble de `resolverCierre` que no lo pase — esa es la
       señal buscada— y **rompe** si alguien lo pasa al rechazar. **Depende de:** T3.1.
-- [ ] **T3.3 — El bloque**, entre `devolucionRechazadas` (139) y el anclaje (239): un solo
+- [x] **T3.3 — El bloque**, entre `devolucionRechazadas` (139) y el anclaje (239): un solo
       `updateMany` guardado por `{ id: { in: ids }, cierreId, resultado: { in: RESULTADOS_QUE_VUELVEN } }`,
       `data` con **exactamente** `confirmadaFisicaAt`, y `throw ConfirmacionFisicaNoAplicableError`
       si `count !== ids.length`. La clase de error vive junto a `IndemnizacionNoAplicableError` y su
@@ -137,39 +137,39 @@
       `cierreId`); **un incidente del mismo cierre no se marca** (testigo del `resultado`); `count`
       insuficiente lanza y revierte **todo**; rechazar no escribe nada; `data` con una sola clave.
       **Depende de:** T3.2.
-- [ ] **T3.4 — La invariante 238↔239 (R23).** Un caso que aprueba un cierre con devoluciones y afirma
+- [x] **T3.4 — La invariante 238↔239 (R23).** Un caso que aprueba un cierre con devoluciones y afirma
       que **toda gestión anclada quedó confirmada** en la misma transacción, sin que el bloque de
       anclaje se toque.
       **Hecho:** el caso está en el archivo de T3.3 y
       `tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts` sigue **verde sin
       modificarse**. **Depende de:** T3.3.
-- [ ] **T3.5 — Idempotencia donde de verdad se ve (R22).** El caso vive en
+- [x] **T3.5 — Idempotencia donde de verdad se ve (R22).** El caso vive en
       `tests/integration/db/wallet-idempotencia.test.ts`, no en `cierres-admin-caja-cod.test.ts`:
       **ese doble devuelve vacío para el bloque de órdenes y pasa de largo**; el store de
       `wallet-idempotencia` honra el `where` como lo haría Postgres.
       **Hecho:** una segunda aprobación del mismo cierre da `conflict`, no ejecuta el bloque y deja
       **una sola** marca por gestión. **Depende de:** T3.3.
-- [ ] **T3.6 — [P] Guardia «nace sin lectores» (R21).**
+- [x] **T3.6 — [P] Guardia «nace sin lectores» (R21).**
       `tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts`: censo del árbol; nadie proyecta
       ni lee `confirmadaFisicaAt` fuera del schema, del bloque de escritura y de sus tests, y en
       particular **nadie hace aritmética de fechas con ella**. Mismo patrón que la guardia de
       `ubicacion_lat/lng` (193).
       **Hecho:** verde, y **roja** al añadir una lectura de prueba (autocomprobación en el archivo).
       **Depende de:** T3.3.
-- [ ] **T3.7 — Actualizar el inventario de escrituras (R40/R42).** En
+- [x] **T3.7 — Actualizar el inventario de escrituras (R40/R42).** En
       `tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts`, la entrada de
       `tx.gestionOrden.updateMany` pasa a describir **dos** bloques (indemnización 158 + confirmación
       física 238) con las **dos** suites que los nombran.
       **Hecho:** la guardia verde, y el frente 2 (ninguna aserción filtra por la forma del `where`)
       **también** verde tras T3.8. **Depende de:** T3.3.
-- [ ] **T3.8 — Los rojos por diseño de la indemnización.**
+- [x] **T3.8 — Los rojos por diseño de la indemnización.**
       `tests/unit/repositories/cierres-admin-indemnizacion.test.ts` deja de poder identificar su
       llamada por índice (ahora hay dos `tx.gestionOrden.updateMany`). Se re-apunta identificándola
       **por su significado** (`where.resultado === "incidente"`), jamás por presencia o ausencia de
       una clave.
       **Hecho:** la suite verde con la nueva identificación y la guardia de T3.7 **sin ladrar**.
       **Depende de:** T3.3.
-- [ ] **T3.9 — [P] Verificar que ningún feed lee la columna nueva ni `orden.estatus_id`.** Revisión
+- [x] **T3.9 — [P] Verificar que ningún feed lee la columna nueva ni `orden.estatus_id`.** Revisión
       de los cinco feeds + la caja COD.
       **Hecho:** anotado en `progress/impl_238.md` con los archivos revisados;
       `cierres-admin-caja-cod.test.ts` y las suites de idempotencia **verdes sin tocar** (R41).
@@ -181,34 +181,34 @@
 
 ## T4 — La pantalla  *(mismo PR que T2 y T3; subagente de frontend)*
 
-- [ ] **T4.1 — La tercera rama de `pedirAprobacion()`** (`CierresAdminModule.tsx`): retornables →
+- [x] **T4.1 — La tercera rama de `pedirAprobacion()`** (`CierresAdminModule.tsx`): retornables →
       ventana de confirmación; sin retornables y con incidentes → el sub-modal de hoy; sin ninguno →
       aprobar directo, byte a byte como hoy.
       **Hecho:** `tests/components/CierresAdminConfirmacionFisica.test.tsx` **nuevo** afirma los tres
       caminos, y que el cierre sin nada que devolver manda `{ cierreId }` sin campos nuevos (R16).
       **Depende de:** T2, T3.
-- [ ] **T4.2 — La ventana**: lista agrupada por resultado con guía, remisión, destinatario y estado;
+- [x] **T4.2 — La ventana**: lista agrupada por resultado con guía, remisión, destinatario y estado;
       `EscanerGuiaCard` con `manual`, montado **condicionalmente** dentro del `Modal` (no
       `EscanerModal`, que trae su propio disparador); `closeOnConfirm={false}`.
       **Hecho:** el test afirma R33 (lo que muestra cada fila) y **R36** (con la ventana cerrada, la
       tarjeta de escaneo **no está en el árbol**). **Depende de:** T4.1.
-- [ ] **T4.3 — Los cuatro desenlaces de una guía leída** (R29-R32), cada uno con su mensaje propio:
+- [x] **T4.3 — Los cuatro desenlaces de una guía leída** (R29-R32), cada uno con su mensaje propio:
       inválida · ajena al cierre · del cierre pero no vuelve · ya confirmada.
       **Hecho:** cuatro casos, uno por mensaje, y ninguno marca fila ni llama a la Server Action.
       **Depende de:** T4.2.
-- [ ] **T4.4 — [P] Los dos caminos de captura (R28).** Cámara (`extractNumGuiaFromScan`) y número
+- [x] **T4.4 — [P] Los dos caminos de captura (R28).** Cámara (`extractNumGuiaFromScan`) y número
       tecleado (`/^\d+$/`), reusando el patrón de `RecogerPaqueteCard` sin bifurcar el componente.
       **Hecho:** un caso por camino confirma la misma gestión. **Depende de:** T4.2.
-- [ ] **T4.5 — [P] El bloqueo con palabras (R27) y la exclusión nombrada (R34).** Botón deshabilitado
+- [x] **T4.5 — [P] El bloqueo con palabras (R27) y la exclusión nombrada (R34).** Botón deshabilitado
       **más** texto con cuántas faltan y qué hacer si un paquete no llegó (rechazar el cierre); línea
       visible de incidentes excluidos cuando los haya.
       **Hecho:** dos casos que leen el **texto**, no el `disabled`. Sin siglas ni jerga en el copy.
       **Depende de:** T4.2.
-- [ ] **T4.6 — [P] Cerrar sin completar (R35)** y **el orden de los dos pasos (R37)**.
+- [x] **T4.6 — [P] Cerrar sin completar (R35)** y **el orden de los dos pasos (R37)**.
       **Hecho:** un caso afirma que cerrar la ventana no llama a `aprobarCierre`; otro, que con
       incidentes **y** retornables la confirmación va primero y el sub-modal de montos después.
       **Depende de:** T4.2.
-- [ ] **T4.7 — Errores del servidor por fila.** Un `validation_error` con clave de gestión se pinta
+- [x] **T4.7 — Errores del servidor por fila.** Un `validation_error` con clave de gestión se pinta
       en su fila y la ventana **sigue abierta**.
       **Hecho:** un caso, espejo del que la 158 tiene para los montos. **Depende de:** T4.2.
 
@@ -218,23 +218,39 @@
 
 ## T5 — Lo que queda fuera, mutación y verificación
 
-- [ ] **T5.1 — El cierre de bodega no hereda nada (R39).** Sin código: un test que lo afirma para que
+- [x] **T5.1 — El cierre de bodega no hereda nada (R39).** Sin código: un test que lo afirma para que
       la ausencia sea decisión y no olvido.
       **Hecho:** un caso en `tests/unit/services/cierre-bodega-service.test.ts` afirma que resolver un
       cierre de bodega no pide confirmación física ni la exige, con la razón en el comentario
       (`CierreBodegaRepository` no toca `orden` ni el choke point). **Depende de:** T3.
-- [ ] **T5.2 — Mutación: el bloqueo bloquea de verdad.** Quitar la guardia de cobertura del servicio
+      > ✅ **HECHA, en OTRO archivo del que el spec decía, y con razón (2026-08-19).** El spec lo
+      > situaba en `tests/unit/services/cierre-bodega-service.test.ts`, pero `aprobarCierreBodega`
+      > vive en `CierresBodegaAdminService` y sus tres hermanos («la 42/43/44 no llega al nivel 2»)
+      > están en `cierres-bodega-admin-service.test.ts`. Va **junto a sus hermanos**. Se afirma por
+      > tres frentes y **se sabe poner rojo**: hacer que el nivel 2 «herede» la 238 mata dos casos.
+
+- [x] **T5.2 — Mutación: el bloqueo bloquea de verdad.** Quitar la guardia de cobertura del servicio
       y comprobar que la suite se pone **roja**.
       **Hecho:** salida real pegada en `progress/impl_238.md`, con el nombre del test que cae. Sin esa
       salida no cuenta: este repo ya tuvo un arnés de mutaciones que reportó 9/9 supervivientes dos
       veces **sin haber ejecutado un test**. **Depende de:** T2, T3, T4.
-- [ ] **T5.3 — [P] Mutación: la guarda del `cierreId` en la escritura.** Quitarla y comprobar que cae
+- [x] **T5.3 — [P] Mutación: la guarda del `cierreId` en la escritura.** Quitarla y comprobar que cae
       el caso testigo de T3.3 (la gestión de otro cierre).
       **Hecho:** ídem, con salida real. **Depende de:** T3.
-- [ ] **T5.4 — [P] Mutación: los incidentes.** Poner `incidente: true` en `RETORNA_A_BODEGA` y
-      comprobar que caen los casos de T1.1 y T2.2. **Es la mutación que protege la decisión firmada.**
+- [x] **T5.4 — [P] Mutación: los incidentes.** Poner `incidente: true` en `RETORNA_A_BODEGA` y
+      comprobar que caen los casos de T1.1 y ~~T2.2~~ **del REPOSITORIO**. **Es la mutación que
+      protege la decisión firmada.**
       **Hecho:** ídem, con salida real. **Depende de:** T1, T2.
-- [ ] **T5.5 — Guardias completas.** `pnpm run test:guardias` entero: money-safe,
+      > ✅ **CORRIDA — y el spec se equivocaba, se corrige aquí (2026-08-19).** La mutación mató **8
+      > casos en 3 archivos**, incluido el que corre contra Postgres real
+      > (`expected [ …(5) ] to deeply equal [ …(4) ]`). Pero **NO tocó T2.2**, y no puede: la suite
+      > del servicio usa **dobles del repositorio**, así que el conjunto esperado se lo da el test y
+      > `RETORNA_A_BODEGA` no interviene — es **estructuralmente incapaz** de ver esta mutación.
+      > Quien la mata es el módulo puro y **el repositorio**, que es donde la regla se aplica.
+      > La decisión firmada **sí** queda protegida; lo que era falso es que la protegiera la suite
+      > que este spec nombraba. Es el mismo error que el repo ya pagó: un test de servicio no ve el
+      > `WHERE`.
+- [x] **T5.5 — Guardias completas.** `pnpm run test:guardias` entero: money-safe,
       `dinero-sin-centimos`, `aprobacion-escrituras-cubiertas`, los dos criterios de intento, las
       transiciones exhaustivas, y las dos guardias nuevas de esta feature.
       **Hecho:** todas verdes. Un rojo en los criterios de intento o en las transiciones significa que

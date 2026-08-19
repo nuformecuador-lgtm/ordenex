@@ -107,6 +107,9 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
     // Feature 158/R19: por defecto el cierre NO tiene incidentes -> cobertura vacia, camino
     // de la 38 intacto (R36). Los casos de la 158 lo sobreescriben.
     findGestionesIncidenteDelCierre: vi.fn(async () => []),
+    // Feature 238 (T1.3): el conjunto esperado de la confirmacion fisica. Doble VACIO por
+    // defecto: sin nada que devolver, la guardia de la 238 deja el camino de esta suite intacto.
+    findGestionesRetornablesDelCierre: vi.fn(async () => []),
     // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
     // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
@@ -802,6 +805,13 @@ describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (
     const r = await service.aprobarCierre("c1", MAESTRO);
 
     expect(r.status).toBe("validation_error");
+    // El TEXTO, no solo el estado: este mensaje lo lee el admin y hasta hoy no lo miraba nadie,
+    // asi que se podia escribir mal (o borrar) sin que la suite se enterara. Tildes incluidas
+    // (2026-08-19, decision del leader sobre los once mensajes de este modulo).
+    if (r.status !== "validation_error") throw new Error("esperaba validation_error");
+    expect(r.fieldErrors.estatus).toEqual([
+      "No se puede aprobar: el catálogo de estados está incompleto (seed pendiente).",
+    ]);
     // SIN EFECTOS PARCIALES: ni transicion del cierre, ni movimientos de dinero, ni anclaje. El
     // repo ni se llama, asi que la transaccion no llega a abrirse.
     expect(repo.resolverCierre).not.toHaveBeenCalled();
@@ -826,6 +836,64 @@ describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.nuevoEstado).toBe("rechazado");
     expect(arg.anclajeDevolucion).toBeUndefined();
+  });
+});
+
+// Feature 238 (T2.5, R38/R6) — EL ALCANCE de la confirmacion fisica. La exigencia es la MISMA
+// para cualquier actor que pueda aprobar, incluido el adminSatelite: el satelite confirma los
+// paquetes que llegan a SU bodega, que es exactamente donde llegan.
+describe("Feature 238 · aprobarCierre — alcance de la confirmacion fisica (R38/R6)", () => {
+  it("R38: el adminSatelite recibe la MISMA exigencia, con SU alcance en la lectura", async () => {
+    const repo = fakeRepo({
+      findGestionesRetornablesDelCierre: vi.fn(async () => [
+        { gestionId: "g-dev", numGuia: 9001, resultado: "devuelta" as const },
+      ]),
+    });
+    const { service } = newService({ repo });
+
+    // Mismo envio incompleto que bloquearia al maestro: al satelite le bloquea igual.
+    const r = await service.aprobarCierre("c1", ADMIN_SATELITE, [], []);
+
+    expect(r.status).toBe("validation_error");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+    // Y la lectura del conjunto va acotada a SU zona, en el WHERE del repositorio.
+    expect(repo.findGestionesRetornablesDelCierre).toHaveBeenCalledWith("c1", {
+      destinoTipo: "bodega_satelite",
+      destinoZonaId: ZONA_SAT,
+    });
+  });
+
+  it("R6/R13: un adminSatelite SIN zona -> no_encontrada, sin leer el conjunto del cierre", async () => {
+    const repo = fakeRepo({
+      findGestionesRetornablesDelCierre: vi.fn(async () => [
+        { gestionId: "g-dev", numGuia: 9001, resultado: "devuelta" as const },
+      ]),
+    });
+    const { service } = newService({ repo, zonaSatelite: null });
+
+    const r = await service.aprobarCierre("c1", ADMIN_SATELITE, [], []);
+
+    // No se distingue de «el cierre no existe»: no se revela NADA del cierre, ni siquiera cuantos
+    // paquetes tendria que confirmar.
+    expect(r).toEqual({ status: "no_encontrada" });
+    expect(repo.findGestionesRetornablesDelCierre).not.toHaveBeenCalled();
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+
+  it("R6: un cierre FUERA del alcance da conjunto vacio -> se aprueba y decide el repo", async () => {
+    // El repositorio devuelve `[]` para un cierre fuera de alcance (no lo distingue de uno
+    // inexistente), asi que la guardia no tiene nada que exigir y quien resuelve el desenlace es
+    // la guarda de alcance del propio `resolverCierre`: `no_encontrada`. Es DELIBERADO — si la
+    // guardia contestara «te faltan 3 paquetes» estaria revelando el contenido de un cierre ajeno.
+    const repo = fakeRepo({
+      findGestionesRetornablesDelCierre: vi.fn(async () => []),
+      resolverCierre: vi.fn(async () => "fuera_de_alcance" as const),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierre("c-ajeno", ADMIN_SATELITE, [], []);
+
+    expect(r).toEqual({ status: "no_encontrada" });
   });
 });
 

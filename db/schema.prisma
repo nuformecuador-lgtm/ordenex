@@ -830,6 +830,17 @@ model GestionOrden {
   // R6: las tres columnas admiten DOS formas validas, (lat,lng,NULL) o (NULL,NULL,motivo).
   // Media coordenada no es una ubicacion.
   ubicacionAusencia    GestionUbicacionAusencia? @map("ubicacion_ausencia")
+  // Feature 238 (R17/R20/R21): instante en que BODEGA confirmo tener el PAQUETE delante, escrito
+  // DENTRO de la transaccion de aprobacion del cierre y solo sobre las gestiones cuyo paquete
+  // vuelve (`devuelta`/`rechazada`/`reprogramada`). NULL = gestion que no vuelve a bodega, o
+  // gestion de un cierre aprobado ANTES de esta feature (el historico NO se backfillea, R20).
+  // Mismo patron snapshot-escrito-despues que `indemnizacion` (158), `pago_mensajero` (39) e
+  // `ingreso_bodega_rechazo` (56).
+  //
+  // NO ES UN RELOJ (R21): coincide con `cierre_dia.resuelto_at` de la misma transaccion y NADA
+  // deriva de aqui plazos, vencimientos ni importes. Nace SIN LECTORES a proposito y hay una
+  // guardia que lo mantiene asi (`confirmacion-sin-lectores.guardia.test.ts`).
+  confirmadaFisicaAt   DateTime?                 @map("confirmada_fisica_at")
   anuladaAt            DateTime?                 @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
   anuladaPor           String?                   @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
   createdAt            DateTime                  @default(now()) @map("created_at")

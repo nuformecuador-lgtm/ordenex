@@ -75,6 +75,26 @@ export const indemnizacionSchema = z.object({
   }, `El monto no puede superar ${INDEMNIZACION_MONTO_MAX}.`),
 });
 
+/**
+ * Feature 238 (T2.1, design §3.1, R7/R12) — UNA gestion confirmada FISICAMENTE por bodega.
+ *
+ * `numGuia` es lo que bodega LEYO (camara o teclado); el servicio comprueba que casa con la guia
+ * de la orden de esa gestion (R12), de modo que un fallo de mapeo del cliente sea un
+ * `validation_error` por entrada y NO una confirmacion falsa de un paquete que nadie tuvo
+ * delante.
+ *
+ * Es un OBJETO y no un `string[]` de ids por dos motivos: lleva el dato que R12 verifica, y puede
+ * crecer sin romper el contrato si algun dia se decide registrar el medio (D7, hoy descartado).
+ *
+ * Lo que vive en el borde es la FORMA (uuid, entero positivo). La COBERTURA —que lo confirmado
+ * sea exactamente el conjunto que vuelve— la valida el SERVICE contra las gestiones reales del
+ * cierre: el borde no sabe que gestiones tiene ese cierre (design §10-F, misma razon que la 158).
+ */
+export const confirmacionFisicaSchema = z.object({
+  gestionId: z.string().uuid(),
+  numGuia: z.number().int().positive(),
+});
+
 // Feature 158 (R19/R36): `aprobarCierre` gana la lista de indemnizaciones. `.default([])` la
 // hace RETROCOMPATIBLE con el contrato de la 38: un cierre sin incidentes se aprueba
 // exactamente como hoy, sin campos nuevos obligatorios. La cobertura EXACTA (que no falte ni
@@ -83,9 +103,16 @@ export const indemnizacionSchema = z.object({
 export const aprobarCierreSchema = z.object({
   cierreId: z.string().uuid(),
   indemnizaciones: z.array(indemnizacionSchema).default([]),
+  // Feature 238 (T2.1, R15/R16): el `.default([])` NO abre ningun agujero. Un cierre CON
+  // retornables y lista vacia cae en la guardia de cobertura del servicio (R15: «sin campo» se
+  // trata como confirmacion vacia y se le aplica R8 sin excepcion). Lo que el default preserva es
+  // R16: un cierre sin nada que devolver —3 de cada 12 medidos en produccion, no un caso raro— se
+  // aprueba con el MISMO payload de siempre.
+  confirmacionFisica: z.array(confirmacionFisicaSchema).default([]),
 });
 
 export type IndemnizacionInput = z.infer<typeof indemnizacionSchema>;
+export type ConfirmacionFisicaBordeInput = z.infer<typeof confirmacionFisicaSchema>;
 export type AprobarCierreInput = z.infer<typeof aprobarCierreSchema>;
 
 // Feature 111/R16: la valvula de escape identifica el cierre `vencido` a destrabar por su id

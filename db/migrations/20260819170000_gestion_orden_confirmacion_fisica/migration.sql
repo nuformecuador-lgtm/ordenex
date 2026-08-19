@@ -1,0 +1,41 @@
+-- Feature 238 (T3.1, design §1.2, R17/R20/R21/R43) — la MARCA de confirmacion fisica del paquete.
+--
+-- QUE ES. El instante en que BODEGA declaro tener el paquete DELANTE al aprobar el cierre del dia.
+-- Se escribe UNICAMENTE dentro de la transaccion de aprobacion (`CierresAdminRepository
+-- .resolverCierre`), sobre las gestiones del cierre cuyo paquete vuelve (`devuelta`, `rechazada`,
+-- `reprogramada`). Los `incidente` NO se marcan: su paquete no vuelve, se indemniza (decision
+-- humana firmada el 2026-08-19).
+--
+-- POR QUE UNA COLUMNA EN `gestion_orden` Y NO UNA TABLA NUEVA (D1, FIRMADA el 2026-08-19):
+-- (a) la granularidad coincide con el acto —bodega confirma paquete a paquete—; (b) reutiliza una
+-- tabla que YA tiene RLS habilitada sin policies (solo service role, desde `20260711150000`), asi
+-- que no hay superficie nueva que aislar ni policy nueva que vigilar; (c) cae exactamente donde ya
+-- escribe la indemnizacion de la 158, asi que hereda su molde y su guardia.
+--
+-- NO SE ANADE `confirmada_fisica_por`, y no es un olvido: quien confirmo es
+-- `cierre_dia.resuelto_por` del mismo cierre aprobado en esa misma transaccion. Una segunda copia
+-- es una segunda verdad que puede divergir.
+--
+-- NULLABLE Y SIN DEFAULT, como el resto de campos por rama de esta tabla (`causa_devolucion` 73,
+-- `causa_incidente` e `indemnizacion` 158, `monto_recibido` 36). `NULL` significa DOS cosas y las
+-- dos son correctas: «esta gestion no vuelve a bodega» y «esta gestion es de un cierre aprobado
+-- ANTES de esta feature». El historico NO se backfillea (R20): no hay confirmacion cierta que
+-- inventar, y poder distinguir los dos casos del confirmado es justo lo que R20 pide.
+--
+-- SIN CHECK: la obligatoriedad vive en el SERVICIO (cobertura exacta antes de abrir la
+-- transaccion), mismo criterio declarado para `causa_devolucion` (73/F1.4-b) y `monto_recibido`
+-- (36). Una restriccion en la base no podria expresar «el conjunto confirmado es igual al conjunto
+-- que vuelve», que es la regla de verdad.
+--
+-- SIN INDICE: no hay ninguna consulta declarada que filtre por esta columna. Se lee siempre por la
+-- gestion o por el cierre, que ya tienen los suyos (`@@index([cierreId])`). Un indice que nadie usa
+-- se paga en cada escritura de la tabla mas caliente del sistema.
+--
+-- R21 — NO ES UN RELOJ. El instante coincide con `cierre_dia.resuelto_at` de la misma transaccion;
+-- su valor informativo es el HECHO, no la hora. NADA deriva plazos, vencimientos, importes ni orden
+-- de prelacion de esta columna, y hay una guardia (`confirmacion-sin-lectores.guardia.test.ts`) que
+-- lo atornilla.
+--
+-- ADITIVA: no renombra, no reordena, no borra, no toca filas, no toca indices y no toca RLS. Patron
+-- exacto de `20260730120000_incidente_indemnizacion`.
+ALTER TABLE "gestion_orden" ADD COLUMN "confirmada_fisica_at" TIMESTAMP(3);

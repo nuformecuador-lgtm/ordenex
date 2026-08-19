@@ -306,7 +306,16 @@ export async function aprobarCierre(
     const service = deps.service ?? buildService();
     // Feature 158/R19: la lista viaja TAL CUAL (montos STRING, sin coercion a number). Ausente
     // en el request -> `[]` por el `.default([])` del schema -> camino de la 38 intacto (R36).
-    return service.aprobarCierre(data.cierreId, actor, data.indemnizaciones);
+    // Feature 238/R14/R15: la confirmacion fisica viaja IGUAL de tal cual — el borde valida la
+    // FORMA (uuid, entero positivo) y nada mas. Quien decide si cubre el conjunto esperado es el
+    // servicio, contra las gestiones reales del cierre y dentro del alcance del actor; una
+    // coercion aqui seria una segunda regla que puede divergir de aquella.
+    return service.aprobarCierre(
+      data.cierreId,
+      actor,
+      data.indemnizaciones,
+      data.confirmacionFisica,
+    );
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

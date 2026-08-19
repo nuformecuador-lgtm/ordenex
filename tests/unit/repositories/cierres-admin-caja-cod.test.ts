@@ -217,6 +217,7 @@ function aprobar(repo: CierresAdminRepository, cierreId = CIERRE) {
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm",
     motivoRechazo: null,
   });
