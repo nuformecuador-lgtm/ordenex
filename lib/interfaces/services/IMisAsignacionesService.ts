@@ -87,6 +87,18 @@ export interface MiAsignacionDTO {
    * sigue siendo necesario — de ahi lo lee `listarRecoleccion` para construir su DTO.
    */
   tiendaTelefono?: string | null;
+  /**
+   * Solicitud de ayuda (pedido humano 2026-08-18): `true` si sobre esta orden hay una solicitud de
+   * ayuda viva (`orden.ayuda`). A diferencia de `marcarLuego`, NO es una marca privada de un
+   * mensajero: es un flag de la ORDEN, y por eso lo leen tanto el panel del mensajero —que pinta
+   * su boton «Solicitar ayuda» ya encendido— como `/novedades`, donde es lo que hace que la orden
+   * aparezca en la lista de la tienda.
+   *
+   * Opcional (`?`) por el patron aditivo de `marcarLuego?`/`intentosEntrega?`: no rompe los
+   * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo emite (boolean,
+   * `false` por defecto).
+   */
+  ayuda?: boolean;
 }
 
 /**

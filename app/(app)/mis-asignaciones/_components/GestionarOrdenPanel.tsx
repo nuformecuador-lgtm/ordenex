@@ -6,6 +6,7 @@ import {
   Camera,
   ChevronUp,
   ImagePlus,
+  LifeBuoy,
   MessageCircle,
   Navigation,
   PackageCheck,
@@ -29,6 +30,7 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
+import { solicitarAyudaOrden } from "@/lib/actions/orden-ayuda";
 import {
   borrarNotaOrden,
   listarNotasOrden,
@@ -53,6 +55,7 @@ import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { SolicitarAyudaModal } from "./SolicitarAyudaModal";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
@@ -113,6 +116,14 @@ const HILO_TEXTOS = {
   sesion: "Tu sesión expiró. Iniciá sesión de nuevo para ver las notas.",
   fallo: "No se pudieron cargar las notas de esta orden.",
 } as const;
+
+// Pedido humano 2026-08-18 — los tres desenlaces de «Solicitar ayuda», dichos en el idioma del
+// mensajero. El de `forbidden` NO enumera las causas (rol, orden ajena, orden fuera de reparto):
+// el borde es opaco a propósito y repetir aquí la lista sería adivinar cuál de ellas fue.
+const MSG_AYUDA_OK = "Se solicitó ayuda. Tu tienda lo verá en Novedades.";
+const MSG_AYUDA_MOTIVO = "Escribí un motivo para poder solicitar ayuda.";
+const MSG_AYUDA_FORBIDDEN =
+  "No se pudo solicitar ayuda con esta orden. Revisá que siga en reparto y asignada a vos.";
 
 /**
  * R2/R16: con qué líneas arranca —y a qué vuelve— el editor. Una entrega SIN cobro son CERO
@@ -606,6 +617,41 @@ export function GestionarOrdenPanel({
     return true;
   }
 
+  // Pedido humano 2026-08-18 — SOLICITAR AYUDA. El motivo se publica como una nota MÁS del hilo
+  // de esta orden (el mismo que se lee unos bloques más abajo) y la orden queda marcada, que es
+  // lo que la hace aparecer en `/novedades` para la tienda. Por eso al terminar se refresca el
+  // hilo: el motivo recién escrito tiene que aparecer ahí, o parecería que se perdió.
+  const [ayudaAbierta, setAyudaAbierta] = useState(false);
+  const [pidiendoAyuda, setPidiendoAyuda] = useState(false);
+
+  async function handleSolicitarAyuda(motivo: string) {
+    if (pidiendoAyuda) return;
+    setPidiendoAyuda(true);
+    try {
+      const result = await solicitarAyudaOrden({ ordenId: orden.id, motivo });
+      if (result.status === "ok") {
+        setAyudaAbierta(false);
+        toast.success(MSG_AYUDA_OK);
+        await refrescarHilo();
+        // El listado de arriba reparte las órdenes con ayuda a su propia sección, así que
+        // tiene que volver a leerse: si no, ésta se quedaría donde ya no va.
+        onSuccess();
+        return;
+      }
+      if (result.status === "validation_error") {
+        toast.error(MSG_AYUDA_MOTIVO);
+        return;
+      }
+      toast.error(
+        result.status === "unauthenticated"
+          ? HILO_TEXTOS.sesion
+          : MSG_AYUDA_FORBIDDEN,
+      );
+    } finally {
+      setPidiendoAyuda(false);
+    }
+  }
+
   async function handleConfirm() {
     if (enviando || comprimiendo || ubicando) return; // feature 193/R21
 
@@ -758,7 +804,41 @@ export function GestionarOrdenPanel({
             <Navigation className="size-5" aria-hidden="true" />
             Navegar
           </UbicacionTrigger>
+          {/* Pedido humano 2026-08-18 — CUARTO gesto de la puerta: pedir ayuda sobre ESTA orden.
+              Va con los otros tres y no en el bloque de gestión porque no es un desenlace: no
+              cierra la orden ni cambia su estatus, es una llamada de auxilio mientras se está
+              delante del cliente, igual que llamar o navegar.
+
+              Ya marcada, el botón NO desaparece ni se deshabilita: se rotula «Ayuda pedida» y
+              sigue abriendo el modal, porque lo que el mensajero suele necesitar la segunda vez
+              es AÑADIR contexto, no enterarse de que ya no puede decir nada. Cada envío suma un
+              motivo al hilo y la marca sigue encendida (el efecto es idempotente). */}
+          <button
+            type="button"
+            onClick={() => setAyudaAbierta(true)}
+            aria-label={`Solicitar ayuda con la orden de ${orden.destinatario}`}
+            className={`flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 text-xs font-bold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+              orden.ayuda
+                ? "bg-warning text-navy hover:opacity-90"
+                : "bg-destructive text-white hover:opacity-90"
+            }`}
+          >
+            <LifeBuoy className="size-5" aria-hidden="true" />
+            {orden.ayuda ? "Ayuda pedida" : "Ayuda"}
+          </button>
         </div>
+
+        {/* Montado sólo al abrir y con `key` de la orden: el motivo arranca fresco en cada
+            apertura, sin efecto de reinicio. */}
+        {ayudaAbierta ? (
+          <SolicitarAyudaModal
+            key={orden.id}
+            orden={orden}
+            onOpenChange={setAyudaAbierta}
+            onConfirmar={handleSolicitarAyuda}
+            enviando={pidiendoAyuda}
+          />
+        ) : null}
 
         {/* Feature 87 (R17): plantilla -> wa.me. Sigue disponible como salida a WhatsApp
             del propio mensajero (sirve con plantillas `pending`, que el chat no admite). */}

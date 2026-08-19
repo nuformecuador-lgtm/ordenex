@@ -549,6 +549,10 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
+    // Solicitud de ayuda (2026-08-18): flag de la ORDEN, no del actor, asi que sale de la fila y
+    // no hay nada que mezclarle despues. `?? false` porque la fila lo declara opcional (patron
+    // aditivo): un doble de test que no lo ponga produce `false`, no `undefined`.
+    ayuda: row.ayuda ?? false,
     // Feature 227 (R21): aqui nacia `notaPrivada: null` (feature 116). El campo ya no existe en
     // `MiAsignacionDTO` y el DTO no emite ninguna nota privada del mensajero.
   };

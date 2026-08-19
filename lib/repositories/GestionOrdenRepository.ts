@@ -111,6 +111,9 @@ const WITH_ASIGNACION = {
     longitud: true,
     notas: true,
     mensajeroAsignadoId: true,
+    // Solicitud de ayuda (2026-08-18): el panel del mensajero pinta el boton ya encendido si esta
+    // orden tiene una solicitud viva, en vez de ofrecer pedir ayuda como si no la hubiera pedido.
+    ayuda: true,
     estatus: { select: { value: true } },
     // Feature 157 (R15): el telefono de la TIENDA acompaña a su nombre — el mensajero que va
     // a recolectar necesita poder contactarla, y el modelo no tiene direccion de tienda.
@@ -148,6 +151,7 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
+    ayuda: row.ayuda,
   };
 }
 
