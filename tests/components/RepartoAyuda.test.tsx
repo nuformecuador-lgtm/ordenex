@@ -356,6 +356,18 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     expect(refreshMock).toHaveBeenCalled();
   });
 
+  it("235/R37: el chip de la card NO dice «En reparto», que es lo que la orden dejó de ser", () => {
+    // Medido en el navegador (T8.1), no en la suite: la card montaba `esActiva`/`esDetalle` en
+    // `false` y sin `estado`, así que `estadoPorDefecto` devolvía el literal «En reparto». Para los
+    // otros tres valores el chip DESCRIBE la situación de la orden; aquí afirmaba justo la que esta
+    // ficha volvió falsa, y a un palmo del encabezado que dice lo contrario.
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
+
+    const seccion = seccionAyuda() as HTMLElement;
+    expect(within(seccion).queryByText("En reparto")).toBeNull();
+    expect(within(seccion).getByText("En ayuda")).toBeInTheDocument();
+  });
+
   it("235/R35: desde la card se abre el HILO, que es donde el mensajero ejerce su ventana", async () => {
     // Sin esta acción el mensajero tendría la ventana de escritura abierta sobre esta orden
     // (`ayuda_tienda` está en `VENTANA_ESCRITURA.mensajero`) y NINGÚN sitio donde ejercerla: su
@@ -400,6 +412,25 @@ describe("Reparto · la orden en ayuda sale de la ruta, pero no del chat", () =>
     // Y en NINGÚN otro sitio: si el módulo volviera a partir en cliente una lista que ya viene
     // partida, la orden saldría dos veces.
     expect(screen.getAllByRole("article", { name: /REM-002/ })).toHaveLength(1);
+  });
+
+  it("235/R15: su card NO lleva la marca «Pendiente de optimizar», que sí sigue en el listado de arriba", () => {
+    // La otra mitad de R15, la que el número ya cumplía y la superficie no: el servicio deja estas
+    // órdenes fuera de `paradasSinOptimizar`, pero la card seguía luciendo la marca. El contraste
+    // con la orden de arriba es lo que hace al caso decir algo: si se apagara la marca en TODAS
+    // partes (o si nunca se pintara) este test seguiría verde con solo la primera aserción.
+    renderModule(
+      [makeAsignacion({ id: "g1", numRemision: "REM-001", secuenciaRuta: null })],
+      [enAyuda({ id: "g2", numRemision: "REM-002", secuenciaRuta: null })],
+    );
+
+    const seccion = seccionAyuda() as HTMLElement;
+    expect(within(seccion).queryByText("Pendiente de optimizar")).toBeNull();
+    // Y la posición en la ruta tampoco se anuncia: sin ruta no hay «sin posición» que declarar.
+    expect(within(seccion).queryByText("Sin posición en la ruta")).toBeNull();
+
+    const listado = screen.getByRole("region", { name: "En reparto / por gestionar" });
+    expect(within(listado).getByText("Pendiente de optimizar")).toBeInTheDocument();
   });
 
   it("235/P8: SÍ sigue entre los contactos del chat — el paquete sigue en su moto", () => {

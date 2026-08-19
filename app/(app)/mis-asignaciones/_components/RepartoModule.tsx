@@ -112,6 +112,14 @@ const AYUDA_SECCION_AYUDA =
 // Feature 235 (R35): rótulo de la acción que abre el hilo desde la card de ayuda. Dice de qué es
 // la pantalla que abre, no qué componente monta.
 const AYUDA_ACCION_HILO = "Conversación";
+// Feature 235 (T8.1) — CHIP DE ESTADO de la card de ayuda. Sigue la gramática de los otros cuatro
+// («En gestión», «En detalle», «En reparto», «Por recoger»: preposición + sustantivo) y comparte la
+// palabra «ayuda» con el encabezado de la sección y con el `EstatusBadge` de la tienda, así que no
+// es un tercer sinónimo. La forma CORTA se descartó en `/ordenes` por ambigua —allí maestro/admin
+// la ven suelta entre veintiún estados y no sabrían a quién se le pidió (R37)—, pero aquí la
+// desambiguación está pegada: el chip vive DENTRO de la sección «Con ayuda solicitada», cuyo texto
+// de ayuda ya dice que la tienda las está viendo en Novedades.
+const AYUDA_CARD_ESTADO = "En ayuda";
 const SIN_PENDIENTES_TODAS_CON_AYUDA =
   "Todas tus órdenes en reparto tienen ayuda solicitada; están abajo.";
 
@@ -490,6 +498,28 @@ export function RepartoModule({
         esActiva={false}
         esDetalle={false}
         bloqueado={bloqueado}
+        /* Feature 235 (T8.1) — SIN esta prop el chip decía «En reparto», que es exactamente lo que
+           esta ficha convirtió en falso: `estadoPorDefecto(false, false)` devuelve ese literal. Para
+           los otros tres valores el chip describe la situación de la orden; aquí afirmaba la
+           contraria. El COLOR se hereda del fallback de `estadoBadgeClass` (texto libre -> las
+           clases de «En reparto», `bg-warning text-navy`) y eso es CORRECTO, no un accidente:
+           `warning` es la familia que este repo da a los estados de espera con acción pendiente y
+           es la que `EstatusBadge` ya asignó a `ayuda_tienda` (R37), la misma del
+           `text-warning-strong` del encabezado de esta sección. Es además fijo-sobre-fijo (`warning`
+           y `navy` son tokens del bloque `@theme`, DESIGN.md), medido 8.1:1 en los dos temas. Por
+           eso NO se le añade entrada propia a `ESTADO_CLASSNAME`: sería un duplicado literal del
+           fallback al que ya llega. */
+        estado={AYUDA_CARD_ESTADO}
+        /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
+           como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
+           de `paradasSinOptimizar` y del mapa, pero la card seguía luciendo el nº de parada («·»,
+           con su «Sin posición en la ruta» accesible) y el badge «Pendiente de optimizar» — o sea,
+           la lógica migró y la superficie no. Esta sección es una superficie SIN ruta, como «Por
+           recoger»: estas órdenes llegan sin `secuenciaRuta` a propósito. `mostrarRuta={false}`
+           apaga EXACTAMENTE esas dos marcas (comprobado en `PosOrderCardDetalle`) y nada más: la
+           navegación, el nº de remisión, el destinatario, los intentos, el monto y «Gestionar más
+           tarde» siguen intactos. */
+        mostrarRuta={false}
         acciones={
           <div className="flex items-center justify-between gap-2">
             {/* Feature 235 (R25) — LA EXCEPCIÓN AL BLOQUEO, y es deliberada: este botón NO recibe

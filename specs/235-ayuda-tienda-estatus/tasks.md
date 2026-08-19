@@ -39,12 +39,12 @@
       («Habilitar» como rescate).
       **Hecho:** cada una respondida en `progress/impl_235.md`; el spec se actualiza si alguna
       respuesta se aparta de la recomendación. **Bloquea T1.**
-- [ ] **T0.3 — [P] Confirmar el orden de mergeo 235 → 236 → 240** con el leader.
+- [x] **T0.3 — [P] Confirmar el orden de mergeo 235 → 236 → 240** con el leader.
       **Hecho:** anotado en `progress/current.md`. No bloquea código; bloquea la nota de cierre.
-      > ⏳ **ABIERTA a propósito (2026-08-19).** Es una decisión **del leader**, no del implementer:
-      > `progress/current.md` no tiene todavía la nota del orden de mergeo (censado: ninguna línea
-      > lo fija). No bloquea nada de esta ficha —el código no depende del orden— pero sí la nota de
-      > cierre, y P10 la dejó explícitamente «pendiente de confirmar».
+      > ✅ **CERRADA (2026-08-19).** El orden queda **235 → 236 → 237 → 240**, con la 241
+      > independiente y la 238 sin dependencias. Escrito en `progress/current.md` §«ORDEN DE MERGEO
+      > Y DE DESPLIEGUE». Con el aviso medido: **la 235 y la 236 salen juntas o seguidas**, porque
+      > con la 235 sola la tienda ve la solicitud de ayuda y no puede abrir su motivo.
 
 ---
 
@@ -354,18 +354,22 @@
 
 ## T8 — Ver la app, y el cierre
 
-- [ ] **T8.1 — Ver la app, no solo la suite.** Recorrido completo: mensajero pide ayuda desde el panel
+- [x] **T8.1 — Ver la app, no solo la suite.** Recorrido completo: mensajero pide ayuda desde el panel
       → la orden **sale** del listado principal, del mapa y de la ruta → aparece abajo en su sección
       → la tienda la ve en `/novedades` → los dos escriben en el hilo → «Recuperar» la devuelve
       arriba → volver a pedirla → dejarla sin gestionar y comprobar que el corte la barre → intentar
       solicitar cierre y ver el motivo del bloqueo.
       **Hecho:** el recorrido anotado con lo que se vio, no con lo que se esperaba. Ojo: la mitad de
       `/novedades` exige OTP de `adminTienda`.
-      > ⏳ **ABIERTA — NO HECHA (2026-08-19).** Es la parte que la suite no cubre, y esta ficha
-      > reescribió 8 archivos de `app/` más un componente nuevo. El implementer no levantó el
-      > servidor: declaró la UI fuera de su lane y solo tocó lo que el typecheck le forzó más el
-      > modal que R35 exigía. **La asume el leader** y sigue pendiente. Este repo ya midió que ver
-      > la app encuentra lo que la suite no.
+      > ✅ **HECHA (2026-08-19) por el leader**, con Playwright y los DOS roles. Recorrido
+      > completo, anotado con el texto leído del navegador en `progress/recorrido_235.md`: pedir
+      > ayuda → la orden sale del listado y del mapa → baja a su sección con **los KPI quietos**
+      > (P7/R20, visto y no solo afirmado) → hilo con el motivo dentro → «Recuperar»; y del lado
+      > tienda, `/novedades` con el chip «Ayuda solicitada» y el rescate por «Habilitar».
+      > **Encontró dos defectos que la suite no veía** —el chip de la card decía «En reparto» y la
+      > card llevaba «Pendiente de optimizar» contra R15—, arreglados en la misma tanda
+      > (`progress/impl_235_t81.md`). Confirmado también, en pantalla, que la tienda **no puede
+      > leer el motivo**: es lo diferido a la 236.
 - [x] **T8.2 — [P] Documentación al día (design §15).** Anotar con fecha en
       `progress/auditoria_ayuda_tienda.md` (§2.1 cerrada por construcción; qué puntos de §4 caen
       aquí) y marcar como **CERRADAS** la «RECONCILIACIÓN DE R19» y el «tapón con dueño» de
