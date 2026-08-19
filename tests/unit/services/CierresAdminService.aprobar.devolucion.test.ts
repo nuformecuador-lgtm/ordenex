@@ -23,6 +23,10 @@ const ESTATUS_IDS: Record<string, string | null> = {
   rechazada: "s-rechazada",
   por_devolver: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
+  // Feature 239 (T2.1): los dos del ANCLAJE. Sin ellos la aprobacion NO ocurre (R9, fallo
+  // cerrado), asi que esta suite —que aprueba— tiene que resolverlos.
+  devolucion_por_confirmar: "s-devolucion-por-confirmar",
+  devuelta: "s-devuelta",
 };
 
 function fakeRepo(): ICierresAdminRepository {

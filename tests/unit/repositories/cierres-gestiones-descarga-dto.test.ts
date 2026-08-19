@@ -80,6 +80,9 @@ function detalle(over: Record<string, unknown> = {}) {
     tarifaComisionCod: dec("3.00"),
     tarifaIvaFlete: dec("13.00"),
     tarifaIvaComisionCod: dec("13.00"),
+    // 2026-08-19: la NOVENA columna de tarifa. Se congela con las otras ocho («todas o
+    // ninguna», gap R9) aunque no entre en la formula, y la hoja la lleva como columna propia.
+    tarifaFulfillment: dec("500.00"),
     ...over,
   };
 }

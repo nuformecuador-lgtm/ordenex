@@ -268,6 +268,11 @@ export function MultiSelectFilter({
                 <button
                   type="button"
                   role="option"
+                  // `role="option"` porque lo ES: se marca y se desmarca dentro del mismo
+                  // `listbox`, y esconderlo del rol lo dejaría fuera del lector de pantalla.
+                  // El `data-` es el gancho con el que un test cuenta las opciones DEL
+                  // CATÁLOGO sin contar ésta, que no viene del catálogo.
+                  data-todos="true"
                   aria-selected={estadoTodos === "todas"}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",

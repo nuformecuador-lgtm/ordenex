@@ -37,7 +37,9 @@ function createFakeOrderStatus() {
 // por_devolver_a_tienda). Feature 154 -> 20 (por_recolectar_en_tienda, incidente).
 // Feature 155/R27 -> 19: PRIMERA BAJA del catalogo (el estado de fulfillment). El sembrado
 // idempotente deja de incluirlo; las ordenes que estuvieran ahi las reasigna la migracion.
-describe("seedOrderStatus siembra los 19 estatus por value (R2/R5/R9 · 30 · 33 · PR #75 · 109 · 139 · 154 · 155)", () => {
+// Feature 157 -> 20 (recolectando). Feature 239 (2026-08-19) -> 21 (devolucion_por_confirmar,
+// el pre-estado de la devolucion).
+describe("seedOrderStatus siembra los 21 estatus por value (R2/R5/R9 · 30 · 33 · PR #75 · 109 · 139 · 154 · 155 · 157 · 239)", () => {
   it("crea una fila por cada valor de ORDER_STATUS_SEED", async () => {
     const fake = createFakeOrderStatus();
     await seedOrderStatus({ orderStatus: { upsert: fake.upsert } } as unknown as Pick<
@@ -45,7 +47,7 @@ describe("seedOrderStatus siembra los 19 estatus por value (R2/R5/R9 · 30 · 33
       "orderStatus"
     >);
 
-    expect(fake.upsert).toHaveBeenCalledTimes(20);
+    expect(fake.upsert).toHaveBeenCalledTimes(21); // 2026-08-19 (239)
     const valores = [...fake.rows.values()].map((r) => r.value).sort();
     expect(valores).toEqual([...ORDER_STATUS_SEED].sort());
   });
@@ -89,7 +91,7 @@ describe("seedOrderStatus siembra los 19 estatus por value (R2/R5/R9 · 30 · 33
 });
 
 describe("seedOrderStatus es idempotente (R3)", () => {
-  it("dos ejecuciones dejan 19 filas, sin duplicar y con id estable", async () => {
+  it("dos ejecuciones dejan 21 filas, sin duplicar y con id estable", async () => {
     const fake = createFakeOrderStatus();
     const client = { orderStatus: { upsert: fake.upsert } } as unknown as Pick<
       PrismaClient,
@@ -97,11 +99,11 @@ describe("seedOrderStatus es idempotente (R3)", () => {
     >;
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(20);
+    expect(fake.rows.size).toBe(21); // 2026-08-19 (239)
     const idsPrimera = new Map([...fake.rows.entries()].map(([k, v]) => [k, v.id]));
 
     await seedOrderStatus(client);
-    expect(fake.rows.size).toBe(20); // no crece
+    expect(fake.rows.size).toBe(21); // no crece
 
     for (const [k, v] of fake.rows.entries()) {
       expect(v.id).toBe(idsPrimera.get(k)); // id conservado (R3)

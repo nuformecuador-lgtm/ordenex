@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import type { ReactElement } from "react";
@@ -88,6 +88,44 @@ function buscador(): HTMLElement {
   return screen.getByRole("searchbox", { name: "Buscar" });
 }
 
+/**
+ * Los OCHO controles que la barra ofrece ademas del buscador, en el orden en que se
+ * declaran. El buscador NO esta en la lista a proposito: es la barra misma, no uno de
+ * los filtros que se piden.
+ */
+const FILTROS_OFRECIDOS = [
+  "Estado",
+  "Zona",
+  "Tienda",
+  "Provincia",
+  "Cantón",
+  "Distrito",
+  "Fecha de creación",
+  "Reasignables",
+];
+
+/**
+ * Pone en la barra los filtros que se piden, por su etiqueta. Los controles ya NO nacen
+ * montados: la barra arranca con el buscador solo y cada filtro se PIDE en el selector
+ * "Filtros", asi que esto es la precondicion que antes daba el render.
+ */
+async function ponerFiltros(
+  user: ReturnType<typeof userEvent.setup>,
+  ...etiquetas: string[]
+) {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  for (const etiqueta of etiquetas) {
+    await user.click(within(selector).getByRole("option", { name: etiqueta }));
+  }
+  // Marcar NO cierra el selector (se piden varios del tiron); se cierra a mano para que
+  // su panel no tape los controles recien montados.
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+}
+
 // La barra emite con el debounce por defecto (500 ms): las esperas de este archivo
 // tienen que sobrevivirlo con holgura.
 const ESPERA = { timeout: 3000 };
@@ -118,36 +156,59 @@ describe("OrdenesListado — el buscador es el PRIMER control (R32)", () => {
     expect(screen.getAllByRole("searchbox", { name: "Buscar" })).toHaveLength(1);
   });
 
-  it("R32: precede a TODOS los demas controles de la barra, el de estado incluido", async () => {
+  // ATENCION al traducir este caso: lo que afirmaba —el campo DELANTE de los ocho
+  // controles en el DOM— dejo de ser cierto A PROPOSITO. En la barra nueva los filtros
+  // PEDIDOS se pintan a la izquierda del campo (`BuscadorFiltros` pinta sus `children`
+  // antes del `Input`), asi que la comparacion de posiciones ya no tiene sujeto.
+  //
+  // Lo que SI sobrevive de R32, y es lo que se vigila aqui, es la primacia del
+  // buscador: es el UNICO control permanente de la barra. Nace solo —ninguno de los
+  // ocho, el de estado incluido, compite con el de entrada—, los ocho se siguen
+  // ofreciendo, y pedir uno lo suma a la barra sin desplazar ni sustituir al campo.
+  it("R32: es el UNICO control permanente; los ocho restantes se piden, el de estado incluido", async () => {
+    const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Estado:/ });
+    await screen.findByRole("searchbox", { name: "Buscar" });
 
-    const campo = buscador();
-    const otros = [
-      screen.getByRole("button", { name: /^Estado:/ }),
-      screen.getByRole("button", { name: /^Zona:/ }),
-      screen.getByRole("button", { name: /^Tienda:/ }),
-      screen.getByRole("button", { name: /^Provincia:/ }),
-      screen.getByRole("button", { name: /^Cantón:/ }),
-      screen.getByRole("button", { name: /^Distrito:/ }),
-      screen.getByRole("button", { name: "Fecha de creación" }),
-      screen.getByRole("checkbox", { name: "Reasignables" }),
-    ];
-
-    for (const control of otros) {
+    // Barra recien abierta: ni un disparador de filtro, ni el calendario, ni el
+    // interruptor.
+    for (const etiqueta of FILTROS_OFRECIDOS) {
       expect(
-        campo.compareDocumentPosition(control) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
+        screen.queryByRole("button", { name: new RegExp(`^${etiqueta}:`) }),
+      ).toBeNull();
     }
+    expect(screen.queryByRole("group", { name: "Fecha de creación" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Reasignables" })).toBeNull();
+
+    // ...y ninguno se perdio por el camino: los ocho se OFRECEN, en su orden.
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+    const selector = await screen.findByRole("listbox", { name: "Filtros" });
+    expect(
+      within(selector)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(FILTROS_OFRECIDOS);
+
+    // Pedir uno lo MONTA, y el campo sigue ahi: el filtro se suma a la barra, no la
+    // sustituye ni la desaloja.
+    await user.click(within(selector).getByRole("option", { name: "Estado" }));
+    await user.keyboard("{Escape}");
+    expect(
+      await screen.findByRole("button", { name: /^Estado:/ }),
+    ).toBeInTheDocument();
+    expect(buscador()).toBeEnabled();
   });
 
   it("R64: si el catalogo geografico no cargo, el buscador sigue OPERATIVO", async () => {
+    const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={null} />);
 
     expect(await screen.findByRole("searchbox", { name: "Buscar" })).toBeEnabled();
-    // Y los que si dependen del catalogo siguen deshabilitados (sin regresion).
+    // Y los que si dependen del catalogo, una vez puestos, siguen deshabilitados (sin
+    // regresion): el fallo del catalogo no se lleva por delante la busqueda.
+    await ponerFiltros(user, "Zona");
     expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
+    expect(buscador()).toBeEnabled();
   });
 });
 
@@ -198,7 +259,7 @@ describe("OrdenesListado — el termino llega a `listarOrdenes` (R34, R36)", () 
   it("R14: el termino se COMBINA con el resto de filtros, sin anularlos", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Zona");
 
     await user.click(screen.getByRole("button", { name: /^Zona:/ }));
     await user.click(screen.getByRole("option", { name: "GAM" }));

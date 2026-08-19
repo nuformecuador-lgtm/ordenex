@@ -102,8 +102,38 @@ const REMISION = "REM-SEED-REINTENTOS";
 // Retry threshold under test (default por ley). The 3rd return escalates (R9).
 const UMBRAL = 3;
 
+// ---------------------------------------------------------------------------------------------
+// 2026-08-19 — FEATURE 239 (T4.2). La gestión del mensajero YA NO deja la orden en `devuelta`:
+// la deja en `devolucion_por_confirmar` («Devolución por confirmar»), y a `devuelta` se llega
+// SOLO cuando un admin APRUEBA el cierre del día. Esa aprobación es a la vez lo que hace visible
+// la devolución para la tienda y lo que arranca su ventana de SLA.
+//
+// PARA ESTE FLUJO SIGNIFICA UN PASO MÁS entre cada devolución y su seguimiento: gestionar →
+// APROBAR EL CIERRE → (recién entonces) el cron evalúa la ventana y libera o escala. El escalado
+// del umbral ya lo movía la feature 99 del momento de la gestión al cron; la 239 le añade la
+// aprobación como precondición.
+//
+// ESTADO DE EJECUCIÓN, sin adornos: esta spec —como el resto de `e2e/`— está ESCRITA y NO
+// EJECUTADA (ver EXECUTION NOTE arriba): no hay harness ni base sembrada, y `pnpm test` no la
+// incluye. Así que NO se puede afirmar que «falla si se salta la aprobación»: no corre. Lo que sí
+// se hace es dejarla de acuerdo con el comportamiento real, para que no describa un flujo que ya
+// no existe — una spec que miente es peor que una que no corre.
+//
+// LA COBERTURA EJECUTABLE de esta propiedad vive en tests que SÍ corren, y son estos:
+//   · `tests/unit/services/mis-asignaciones-service.test.ts` — gestionar `devuelta` deja la orden
+//     en el PRE-ESTADO, no en `devuelta`.
+//   · `tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts` — aprobar el cierre es lo
+//     que la lleva a `devuelta`, en la misma transacción.
+//   · `tests/unit/repositories/devolucion-sla-repository.test.ts` — una orden en el pre-estado NO
+//     es candidata del cron (R13), y el reloj se ancla en la aprobación (R12).
+// ---------------------------------------------------------------------------------------------
+
 // Readable state labels (via estatus-label) shown in the timeline (R16).
-const LABEL_DEVUELTA = "Devuelta"; // cada intento fallido (transición a `devuelta`)
+// 2026-08-19 (feature 239): la transición que produce la GESTIÓN del mensajero ya no es
+// `devuelta` sino el pre-estado; `devuelta` la produce la APROBACIÓN del cierre. Son dos filas
+// distintas de la línea de tiempo, con dos etiquetas distintas.
+const LABEL_PRE_CONFIRMACION = "Devolución por confirmar"; // lo que deja la gestión del mensajero
+const LABEL_DEVUELTA = "Devuelta"; // lo que deja la APROBACIÓN del cierre (el anclaje)
 const LABEL_BODEGA = "En bodega"; // seguimiento de reintento (1ª y 2ª devolución)
 const LABEL_RECHAZADA = "Rechazada"; // escalado final (3ª devolución)
 
@@ -268,6 +298,12 @@ test.describe.serial("Reintentos y escalado — 3 devoluciones → rechazada (R8
     await expect(dialog.getByText(UUID_RE)).toHaveCount(0);
 
     // R9 — las TRES devoluciones (una por intento) aparecen en la línea de tiempo.
+    //
+    // 2026-08-19 (feature 239): cada intento deja AHORA DOS filas, no una — la gestión del
+    // mensajero («Devolución por confirmar») y la aprobación del cierre («Devuelta»)—. Si esta
+    // spec llegara a ejecutarse alguna vez y la segunda no apareciera, sería la señal de que la
+    // devolución se quedó sin anclar: invisible para la tienda y con el reloj parado.
+    await expect(dialog.getByText(LABEL_PRE_CONFIRMACION)).toHaveCount(UMBRAL);
     await expect(dialog.getByText(LABEL_DEVUELTA)).toHaveCount(UMBRAL);
     // R9 — los reintentos 1º y 2º dejaron la orden en bodega (seguimiento a
     // `en_bodega_central`): dos filas "En bodega".

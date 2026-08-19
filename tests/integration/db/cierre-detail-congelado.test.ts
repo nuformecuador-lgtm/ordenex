@@ -10,6 +10,7 @@ import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWallet
 import type { CrearMovimientoTiendaInput } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
+import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 69/R17/R18 — EL CORAZON DE LA FEATURE. Los dos casos son money-critical.
 //
@@ -166,14 +167,61 @@ function makeDb() {
         }
         return { count };
       }),
-      findMany: vi.fn(async ({ where }: { where: { cierreId?: string } }) =>
-        gestiones
-          .filter((g) => g.cierreId === where.cierreId)
-          .map((g) => ({
-            ...g,
-            // JOIN contra la fila VIVA de `orden` (lo que el bug leia).
-            orden: joinOrden(ordenes.find((o) => o.id === g.ordenId)!),
-          })),
+      // Feature 239 (T2.2): esta consulta la usan DOS lectores con `where` distinto — el feed de
+      // dinero (`{ cierreId }`) y el bloque de anclaje (`{ cierreId, resultado, anuladaAt }` y
+      // luego `{ ordenId: { in }, resultado, anuladaAt }`). El doble honra las CUATRO claves; si
+      // solo mirara `cierreId`, le devolveria al anclaje gestiones que no pidio y este archivo
+      // estaria midiendo un camino que no existe.
+      findMany: vi.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            cierreId?: string;
+            resultado?: string;
+            anuladaAt?: Date | null;
+            ordenId?: { in?: string[] };
+          };
+        }) =>
+          gestiones
+            .filter(
+              (g) =>
+                (where.cierreId === undefined || g.cierreId === where.cierreId) &&
+                (where.resultado === undefined || g.resultado === where.resultado) &&
+                (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
+                (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+            )
+            .map((g) => ({
+              ...g,
+              // JOIN contra la fila VIVA de `orden` (lo que el bug leia).
+              orden: joinOrden(ordenes.find((o) => o.id === g.ordenId)!),
+            })),
+      ),
+    },
+    // INVERTIDO el 2026-08-19 (feature 239/T2.3): la escritura de `gestion_aprobada` se retiro y
+    // la sustituye el ANCLAJE, que acota por ids y va GUARDADO por `estatus_id = <pre-estado>`.
+    // El doble honra esa guarda, que es la que da la idempotencia: un doble mudo que devolviera
+    // `{count: 0}` dejaria pasar un WHERE sin guarda. En ESTE archivo el escenario no tiene
+    // devoluciones (la unica gestion es `entregada`), asi que el anclaje es no-op — y eso se ve,
+    // en vez de esconderse detras de un `vi.fn()` sin cuerpo.
+    orden: {
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id?: { in?: string[] }; estatusId?: string; deletedAt?: Date | null };
+          data: Record<string, unknown>;
+        }) => {
+          let count = 0;
+          for (const o of ordenes) {
+            if (where.id?.in !== undefined && !where.id.in.includes(o.id)) continue;
+            if (where.estatusId !== undefined) continue; // ninguna orden de este escenario esta en el pre-estado
+            Object.assign(o, data);
+            count += 1;
+          }
+          return { count };
+        },
       ),
     },
     cierreDetail: {
@@ -298,6 +346,7 @@ function aprobar(db: Db, cierreId: string) {
     cierreId,
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
     resueltoPor: "adm",
     motivoRechazo: null,
   });

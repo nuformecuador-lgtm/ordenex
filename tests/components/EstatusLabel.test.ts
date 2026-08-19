@@ -30,6 +30,9 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29 (Q5 confirmada)
   recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino
   incidente: "Incidente", // feature 154/R30 (Q5 confirmada)
+  // Feature 239/R26 (2026-08-19): el catalogo pasa de 20 a 21 values. La etiqueta nombra a quien
+  // le toca actuar (la bodega confirma al aprobar el cierre), no el desenlace.
+  devolucion_por_confirmar: "Devolución por confirmar",
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

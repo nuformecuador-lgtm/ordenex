@@ -49,6 +49,7 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
+import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -76,6 +77,11 @@ const MSG_INDEMNIZACION_AJENA =
   "Este monto no corresponde a un incidente de este cierre.";
 const MSG_INDEMNIZACION_DUPLICADA = "Hay dos montos para el mismo incidente.";
 
+// Feature 239 (T2.1, R9): catalogo incompleto -> la aprobacion NO ocurre. Texto SIN PII y con el
+// mismo tono accionable que el resto (patron `MSG_CATALOGO` de la 36/67).
+const MSG_CATALOGO_ANCLAJE =
+  "No se puede aprobar: el catalogo de estados esta incompleto (seed pendiente).";
+
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
@@ -88,6 +94,11 @@ const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
 const ESTADO_RECHAZADA = "rechazada";
 const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
+
+// Feature 239 (T2.1, R4/R9): los DOS estados del ANCLAJE de la devolucion. Origen = el
+// pre-estado en el que el mensajero deja la orden al gestionar (`ESTATUS_POR_RESULTADO` de
+// `lib/types/gestion-destino.ts`, punto unico de esa regla); destino = `devuelta`.
+const ESTADO_DEVUELTA = "devuelta";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -566,6 +577,8 @@ export class CierresAdminService implements ICierresAdminService {
       porDevolverId,
       porDevolverATiendaId,
       centralZonaId,
+      preEstadoId,
+      devueltaId,
     ] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
@@ -574,6 +587,9 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER),
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER_A_TIENDA),
       this.zonaRepo.findCentralZonaId(),
+      // Feature 239 (T2.1, R4/R9): los dos ids del ANCLAJE.
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
     ]);
     const liberacionSinGestionar =
       sinGestionarEstatusId !== null &&
@@ -586,6 +602,21 @@ export class CierresAdminService implements ICierresAdminService {
         ? { rechazadaId, porDevolverId, porDevolverATiendaId, centralZonaId }
         : undefined;
 
+    // Feature 239 (T2.1, design §3.3, R9) — FALLO CERRADO, y aqui la diferencia con las dos
+    // configs de arriba es deliberada: aquellas caen a `undefined` y la aprobacion sigue
+    // adelante sin esa rama (degradacion silenciosa aceptada). Si NO se puede resolver el
+    // pre-estado o `devuelta`, la aprobacion NO OCURRE — ni transicion del cierre, ni
+    // movimientos de dinero, ni anclaje—, porque aprobar sin poder anclar deja la devolucion
+    // congelada para siempre: invisible para la tienda, sin reloj y sin que nadie se entere.
+    // Es exactamente el estado del que esta feature viene a sacarnos, asi que no se acepta ni
+    // una vez. Sin efectos parciales: se devuelve ANTES de tocar el repo.
+    if (preEstadoId === null || devueltaId === null) {
+      return {
+        status: "validation_error",
+        fieldErrors: { estatus: [MSG_CATALOGO_ANCLAJE] },
+      };
+    }
+
     // R10/R12-R15: transicion guardada. Aprobar limpia motivoRechazo (null).
     const res = await this.repo.resolverCierre({
       cierreId,
@@ -595,6 +626,10 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
       devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
+      // Feature 239/R4: ANCLA las devoluciones de este cierre en la MISMA tx. OBLIGATORIO (no
+      // opcional como las dos de arriba): sin el, la orden se queda en el pre-estado para
+      // siempre. Ver `AnclajeDevolucionConfig`.
+      anclajeDevolucion: { preEstadoId, devueltaId },
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,

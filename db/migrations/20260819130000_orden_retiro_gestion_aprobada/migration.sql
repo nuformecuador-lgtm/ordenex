@@ -1,0 +1,30 @@
+-- Feature 239 (T3.1, R20/R30) — RETIRA `orden.gestion_aprobada`.
+--
+-- QUE ERA. Una bandera persistida, anadida el 2026-08-18, que `OrdenRepository.novedadWhere`
+-- exigia en `true` para listar una devolucion en `/novedades`. Era la MITAD IMPLEMENTADA del
+-- fallo: quitaba la VISIBILIDAD sin mover el RELOJ. El cron de SLA nunca la miro (ni una vez), asi
+-- que la orden se escalaba a `rechazada` y se COBRABA a las 24 h sin que la tienda hubiera podido
+-- verla. Antes del cambio la veia: el saldo neto era peor que no haber hecho nada
+-- (`progress/auditoria_ayuda_tienda.md` §1).
+--
+-- QUE LA SUSTITUYE. El ESTADO de la orden. Desde la 239 una devolucion gestionada entra en
+-- `devolucion_por_confirmar` y la APROBACION DEL CIERRE es la transicion a `devuelta`. Las dos
+-- mitades —lo que la tienda ve y cuando arranca el reloj— pasan a mirar el mismo hecho, que es el
+-- unico dato que las dos ya consultaban por construccion.
+--
+-- POR QUE SE RETIRA EN VEZ DE DEJARLA MUERTA. Una columna mutable hay que APAGARLA A MANO en cada
+-- salida del estado, y de las SIETE salidas de `devuelta` solo DOS la apagaban (auditoria §2.3).
+-- Cuando una de esas limpiezas se olvida, el fallo es un ancla VIEJA sobre una devolucion NUEVA:
+-- el reloj arranca antes, el escalado ocurre antes y se cobra antes de tiempo. El estado, en
+-- cambio, no se puede olvidar: cambiarlo ES la operacion.
+--
+-- ⭑ ESTA MIGRACION **ES** EL ARREGLO DEL RECORTE RETROACTIVO (R30/P6). La columna es
+-- `NOT NULL DEFAULT false`, asi que TODA orden anterior a ella vale `false` y HOY CAE de
+-- `/novedades`. Al desaparecer la columna, el predicado vuelve a ser una igualdad de estado y esas
+-- devoluciones historicas se ven SOLAS. No hace falta backfill, y por eso no lo hay.
+--
+-- R31: NO mueve ninguna orden entre estados. No hay un solo `UPDATE "orden" SET estatus_id`, ni
+-- aqui ni en el down: toda transicion pasa por el punto unico de escritura (`appendCambioEstado`).
+--
+-- Sin RLS nueva: `orden` conserva la suya. No crea tablas ni indices.
+ALTER TABLE "orden" DROP COLUMN "gestion_aprobada";

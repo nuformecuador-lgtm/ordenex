@@ -1121,6 +1121,10 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       devolucionRechazadas,
       indemnizaciones,
     } = input;
+    // Feature 239 (T2.1/T2.2): presente SOLO en la rama `aprobado` de la union discriminada.
+    // Se lee aqui, fuera de la tx, para que el bloque de abajo no vuelva a estrechar el tipo.
+    const anclajeDevolucion =
+      input.nuevoEstado === "aprobado" ? input.anclajeDevolucion : undefined;
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -1139,23 +1143,14 @@ export class CierresAdminRepository implements ICierresAdminRepository {
       // R5/R7: solo al APROBAR y si se aplico, construir e insertar los movimientos de
       // ingreso EN LA MISMA TX (todo-o-nada). `rechazado` no toca la wallet.
       if (res.count === 1 && nuevoEstado === "aprobado") {
-        // Pedido humano 2026-08-18 — APROBAR EL CIERRE ES LO QUE ABRE LA NOVEDAD. Las ordenes
-        // cuya gestion de ESTE cierre fue `devuelta` quedan con `gestion_aprobada = true`, que
-        // es la condicion que `OrdenRepository.novedadWhere` exige para listarlas en
-        // `/novedades`: hasta que el admin aprueba, la devolucion existe pero la tienda no la
-        // ve. Un RECHAZO no la enciende (esta rama es exclusiva de `aprobado`), asi que una
-        // devolucion de un cierre rechazado no llega nunca a la pantalla de la tienda.
+        // Feature 239 (T2.3) — RETIRADO el `updateMany` que encendia `orden.gestion_aprobada`
+        // sobre las devoluciones de este cierre (pedido humano del 2026-08-18). Era la mitad
+        // implementada del fallo: quitaba la visibilidad sin mover el reloj, y ademas NO acotaba
+        // el estatus actual, asi que podia encender la marca sobre una orden que ya estaba en
+        // bodega. Lo SUSTITUYE el bloque de ANCLAJE del final de esta rama, que es una
+        // transicion de estado de verdad —guardada por el pre-estado y registrada en el
+        // historial—, no una bandera que alguien tiene que acordarse de apagar en siete sitios.
         //
-        // Va DENTRO de la misma tx que la transicion del cierre: o se aprueba y se abren las
-        // novedades, o no pasa ninguna de las dos cosas. Es money-neutral (solo toca
-        // `orden.gestion_aprobada`) y idempotente: re-aprobar encuentra las filas ya en `true`
-        // y no cambia nada. `cierreId` va en el WHERE como GUARDIA, no como filtro: sin el, la
-        // aprobacion de un cierre abriria devoluciones de otro.
-        await tx.orden.updateMany({
-          where: { gestiones: { some: { cierreId, resultado: "devuelta" } } },
-          data: { gestionAprobada: true },
-        });
-
         // Feature 158 (T1.14, R19-R22/R26): PRIMERO se persiste cada monto capturado, con
         // `cierreId` y `resultado` como GUARDIA del WHERE (no como filtro cosmetico): una
         // gestion de OTRO cierre, o que no sea `incidente`, no se puede tarifar. Si algun
@@ -1366,6 +1361,110 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     })),
                   );
                 }
+              }
+            }
+          }
+        }
+
+        // ------------------------------------------------------------------------------------
+        // Feature 239 (T2.2, design §3, R4-R10) — EL ANCLAJE DE LA DEVOLUCION.
+        //
+        // LA APROBACION DEL CIERRE **ES** LA TRANSICION `devolucion_por_confirmar -> devuelta`.
+        // No enciende una marca ni deja una fecha: mueve el estado. Con ese movimiento la
+        // devolucion (a) se vuelve visible para la tienda en `/novedades` y (b) arranca su
+        // ventana de SLA. Las dos mitades pasan a mirar el MISMO hecho, que es lo que el fallo
+        // de `progress/auditoria_ayuda_tienda.md` §1 no tenia: alli la visibilidad dependia de
+        // una columna y el reloj de la fecha de la gestion, y por eso se cobraban rechazos de
+        // ordenes que la tienda no habia podido ver nunca.
+        //
+        // VA AL FINAL de la rama `aprobado`, DESPUES de `devolucionRechazadas`, y eso no es
+        // estetico: `cierres-admin-caja-cod.test.ts` MIDE EL ORDEN de las llamadas dentro de la
+        // transaccion, porque los feeds de dinero se leen unos a otros (la caja lee lo que el
+        // ledger acaba de escribir). Este bloque es money-neutral —su `data` lleva SOLO
+        // `estatusId`— y ningun feed lee `orden.estatus_id`, asi que colocarlo aqui no mueve
+        // ninguna asercion de orden. Insertarlo entre medias tampoco romperia el dinero, pero
+        // moveria esas aserciones sin ninguna ganancia.
+        //
+        // `cierre_dia.resuelto_at` NO se usa, NUNCA: se escribe IGUAL al rechazar (unas lineas
+        // mas arriba, fuera de esta rama) y `forzarSolicitudVencido` reabre un cierre sin
+        // limpiarla. Cualquier derivacion que la use lleva `estado = 'aprobado'` pegado o
+        // miente. El anclaje no lee fechas del cierre: ES una transicion con su propia fila de
+        // historial, y esa fila es la que el cron lee.
+        if (anclajeDevolucion) {
+          const { preEstadoId, devueltaId } = anclajeDevolucion;
+
+          // (1) Las gestiones `devuelta` VIGENTES de ESTE cierre. `cierreId` es la GUARDIA (sin
+          // el, aprobar un cierre anclaria devoluciones de otro) y `anuladaAt: null` descarta
+          // las deshechas. Sin ninguna, el bloque es un no-op y no cuesta ni una consulta mas.
+          const gestionesDelCierre = await tx.gestionOrden.findMany({
+            where: { cierreId, resultado: "devuelta", anuladaAt: null },
+            select: { id: true, ordenId: true },
+          });
+
+          if (gestionesDelCierre.length > 0) {
+            const ordenIds = [...new Set(gestionesDelCierre.map((g) => g.ordenId))];
+
+            // (2) LA CARRERA QUE CUESTA DINERO (design §4, carrera 1). Secuencia real: el
+            // mensajero devuelve (gestion g1, cierre C1 sin aprobar) -> un admin recupera la
+            // orden a bodega -> se reasigna -> otro mensajero la vuelve a devolver (gestion g2,
+            // cierre C2) -> la orden esta en el pre-estado POR g2. Si ahora se aprueba C1 y se
+            // anclara sin mirar, la devolucion NUEVA quedaria anclada con una aprobacion
+            // ANTERIOR al hecho: el reloj arrancaria antes, el escalado ocurriria antes y se
+            // cobraria el rechazo ANTES DE TIEMPO.
+            //
+            // Por eso se comprueba, DENTRO de la transaccion, que la gestion de este cierre sea
+            // la gestion `devuelta` vigente MAS RECIENTE de su orden (R4c/R5). Una sola
+            // consulta ordenada y el recorte en memoria: un `findFirst` por orden seria un N+1
+            // dentro de la transaccion mas caliente y mas cara del sistema.
+            const vigentes = await tx.gestionOrden.findMany({
+              where: { ordenId: { in: ordenIds }, resultado: "devuelta", anuladaAt: null },
+              orderBy: [{ ordenId: "asc" }, { createdAt: "desc" }],
+              select: { id: true, ordenId: true },
+            });
+            const masRecientePorOrden = new Map<string, string>();
+            for (const g of vigentes) {
+              // La primera fila de cada `ordenId` es la mas reciente (orden del `orderBy`).
+              if (!masRecientePorOrden.has(g.ordenId)) masRecientePorOrden.set(g.ordenId, g.id);
+            }
+
+            // (3) Solo las ordenes cuya gestion vigente MAS RECIENTE es la de ESTE cierre. El
+            // resto no se ancla y no deja rastro de anclaje (R5).
+            const anclables = gestionesDelCierre.filter(
+              (g) => masRecientePorOrden.get(g.ordenId) === g.id,
+            );
+
+            if (anclables.length > 0) {
+              const idsAnclables = anclables.map((g) => g.ordenId);
+              // (4) UPDATE GUARDADO por el pre-estado (R4a) — y esa guarda ES la idempotencia
+              // (R8): una segunda aprobacion encuentra las ordenes ya en `devuelta`, devuelve
+              // `count = 0` y no appendea nada. No hay codigo de idempotencia porque no hace
+              // falta; la hay por construccion, igual que en los otros dos bloques.
+              //
+              // MONEY-NEUTRAL (R10): el `data` lleva EXACTAMENTE `estatusId` y nada mas. No
+              // toca montos, ni mensajero, ni `prioridad` — a diferencia de la liberacion 109,
+              // que si limpia mensajero porque su orden va a re-reparto. Aqui la devolucion se
+              // queda donde esta; lo unico que cambia es que ya esta confirmada.
+              const movidas = await tx.orden.updateMany({
+                where: { id: { in: idsAnclables }, estatusId: preEstadoId, deletedAt: null },
+                data: { estatusId: devueltaId },
+              });
+
+              // (5) Historial por el MISMO punto unico de escritura que el resto de
+              // transiciones (R7), y SOLO si algo se movio. `gestionOrdenId` enlaza la gestion
+              // que ancla: no es decorativo, es lo que permite auditar QUE devolucion se
+              // confirmo con QUE aprobacion sin volver a derivarlo.
+              if (movidas.count > 0) {
+                await appendCambioEstado(
+                  tx,
+                  anclables.map((g) => ({
+                    ordenId: g.ordenId,
+                    estatusOrigenId: preEstadoId,
+                    estatusDestinoId: devueltaId,
+                    actorUsuarioId: resueltoPor, // R7: el admin que aprobo
+                    origenTipo: "anclaje_devolucion", // R7: familia propia (P8)
+                    gestionOrdenId: g.id, // la gestion ancla
+                  })),
+                );
               }
             }
           }

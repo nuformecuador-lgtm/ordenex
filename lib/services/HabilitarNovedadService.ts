@@ -11,10 +11,14 @@ import type {
  * «HABILITAR» una novedad desde `/novedades` (pedido humano 2026-08-18).
  *
  * DOS EFECTOS, UNA SOLA PUERTA — el molde exacto de `SolicitudAyudaService.solicitar`, en el otro
- * sentido. La nota obligatoria se publica en el hilo de la feature 227 y la orden pierde las dos
- * banderas que la mantenian en `/novedades`. Si `publicar` no acepta —rol sin hilo, orden de otra
- * tienda, orden fuera de `devuelta`, nota vacia tras recortar— aqui no se apaga nada y se devuelve
- * su mismo resultado, sin traducirlo ni enriquecerlo.
+ * sentido. La nota obligatoria se publica en el hilo de la feature 227 y la orden pierde la
+ * bandera de ayuda que la mantenia en `/novedades`. Si `publicar` no acepta —rol sin hilo, orden
+ * de otra tienda, orden fuera de `devuelta`, nota vacia tras recortar— aqui no se apaga nada y se
+ * devuelve su mismo resultado, sin traducirlo ni enriquecerlo.
+ *
+ * FEATURE 239 (T3.1, R23): eran DOS banderas. `gestion_aprobada` se retiro, y con ella la unica
+ * via por la que «habilitar» podia sacar una devolucion de la pantalla **sin detener su reloj de
+ * SLA** — a los 5 dias el cron la escalaba a `rechazada` y la cobraba, sin aviso.
  *
  * POR QUE NO SE COMPRUEBA EL ROL NI EL ESTATUS AQUI. Los comprueba ya `OrdenNotaService.publicar`:
  * limita el hilo a `{ adminTienda, mensajero }` y la ventana del `adminTienda` a `devuelta`

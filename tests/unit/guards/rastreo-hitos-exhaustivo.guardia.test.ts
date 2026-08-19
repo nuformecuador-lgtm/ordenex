@@ -44,10 +44,15 @@ const TABLA_FIRMADA: Record<OrderStatusValue, HitoPublico> = {
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
   devuelta_a_tienda: "devuelto",
+  // Feature 239/R28 (2026-08-19): el pre-estado comparte hito con `devuelta`. Para el
+  // destinatario no cambia nada —el paquete no se le entrego—; lo que falta (la confirmacion en
+  // bodega) es un tramite interno que el rastreo publico no cuenta.
+  devolucion_por_confirmar: "no_entregado",
 };
 
 describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {
-  it("los 20 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
+  // 2026-08-19 (feature 239): 20 -> 21 values. El añadido es `devolucion_por_confirmar`.
+  it("los 21 values del catalogo tienen hito publico asignado y coinciden con la tabla firmada (incluidos recolectando→registrado, incidente→no_entregado y sin_gestionar→en_reparto)", () => {
     const sinHito = ORDER_STATUS_SEED.filter((value) => !(value in HITO_POR_ESTATUS));
     expect(sinHito).toEqual([]);
 

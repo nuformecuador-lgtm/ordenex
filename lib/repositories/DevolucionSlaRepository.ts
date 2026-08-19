@@ -13,6 +13,12 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 const ESTATUS_DEVUELTA = "devuelta";
 const RESULTADO_DEVUELTA = "devuelta";
 
+// Feature 239 (T3.3, R12) — la familia de historial que MARCA el instante en que la orden entro
+// en `devuelta`: la transicion `devolucion_por_confirmar -> devuelta` que escribe la APROBACION
+// del cierre. Es el ancla de la ventana de SLA. Se nombra aqui, una vez, en vez de repetir el
+// literal en el `where` y en el comentario.
+const ORIGEN_ANCLAJE = "anclaje_devolucion";
+
 // Feature 49/#10: `$transaction` para que el UPDATE guardado, el INSERT de la gestion sintetica
 // y el append del historial compartan tx (R18/R20). El `tx` del callback expone
 // `ordenHistorialEstado` (choke point) y `gestionOrden`.
@@ -30,10 +36,28 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
 
   /**
    * R5: ordenes en `devuelta` + no borradas, con su gestion `devuelta` VIGENTE mas reciente
-   * (`orderBy createdAt desc`, `take 1`, `anulada_at IS NULL`). Deriva el anclaje de la ventana
-   * (causa + `created_at`) y el mensajero de esa gestion. Filtra en memoria las ordenes SIN
-   * gestion vigente (patron `findOrdenesLiberables`); las que la tienen con `causa` null SI
-   * salen (el service las omite, R28).
+   * (`orderBy createdAt desc`, `take 1`, `anulada_at IS NULL`), de la que salen la `causa` y el
+   * mensajero. Filtra en memoria las ordenes SIN gestion vigente (patron `findOrdenesLiberables`);
+   * las que la tienen con `causa` null SI salen (el service las omite, R28).
+   *
+   * FEATURE 239 (T3.3, R12/R14/R15) — EL RELOJ. El ancla deja de ser el `created_at` de la
+   * gestion y pasa a ser el instante de la TRANSICION a `devuelta`, que es lo mismo que decir el
+   * instante en que un admin APROBO el cierre. Los dos hechos que antes se derivaban por caminos
+   * distintos —lo que la tienda ve y cuando empieza a correr el plazo— pasan a salir del mismo.
+   *
+   * DOS proyecciones anidadas, ninguna consulta extra por orden:
+   *   - `gestiones`   : causa + mensajero (igual que antes).
+   *   - `historialEstados`: la ULTIMA fila de familia `anclaje_devolucion`. `take 1` con
+   *     `createdAt desc` implementa R15 — si la orden dio la vuelta entera y volvio a `devuelta`,
+   *     gana el anclaje MAS RECIENTE, no el de la vuelta anterior.
+   *
+   * INDICE: se apoya en `@@index([ordenId, createdAt])` de `orden_historial_estado`; el filtro
+   * por familia queda como residual sobre el punado de filas de esa orden. Es deliberado — no hay
+   * indice por `origen_tipo` solo, y el mismo truco lo documenta `whereIntentosVigentes`.
+   *
+   * R13 por construccion: el `where` es `estatus = devuelta`. Una orden en
+   * `devolucion_por_confirmar` NO entra en esta lista, asi que el cron no la puede liberar, ni
+   * escalar, ni cobrar mientras su cierre siga sin aprobarse.
    */
   async findDevueltasSla(): Promise<DevueltaSlaRow[]> {
     const rows = await this.prisma.orden.findMany({
@@ -51,20 +75,36 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           take: 1,
           select: { mensajeroId: true, causaDevolucion: true, createdAt: true },
         },
+        // Feature 239 (R12/R15): EL ANCLA. La ultima transicion a `devuelta` de esta orden.
+        historialEstados: {
+          where: { origenTipo: ORIGEN_ANCLAJE },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { createdAt: true },
+        },
       },
     });
 
     const candidatas: DevueltaSlaRow[] = [];
     for (const r of rows) {
       const g = r.gestiones[0];
-      // Sin gestion `devuelta` vigente -> anomalia sin anclaje: se ignora (no se cuenta).
+      // Sin gestion `devuelta` vigente -> anomalia sin mensajero al que atribuir: se ignora.
       if (!g) continue;
+      // Feature 239 (R12/R14) — LAS DOS RAMAS DEL ANCLA, cada una con su NOMBRE. No es un `??`
+      // mudo: `origenAncla` viaja en el DTO y el servicio lo cuenta, para que la poblacion legada
+      // sea observable y se la pueda ver extinguirse.
+      const anclaje = r.historialEstados[0];
       candidatas.push({
         ordenId: r.id,
         zonaId: r.zonaId,
         mensajeroId: g.mensajeroId,
         causa: g.causaDevolucion, // puede ser null (R28: el service la omite)
-        ancladaAt: g.createdAt,
+        // R12: el instante de la transicion a `devuelta` = el instante de la aprobacion.
+        // R14 (rama LEGADA): una orden que llego a `devuelta` ANTES de esta feature no tiene esa
+        // fila. Su ventana se ancla donde ya estaba anclada —la fecha de su gestion `devuelta`
+        // vigente— para no moverle el plazo por debajo a una orden en vuelo (grandfather, P6).
+        ancladaAt: anclaje ? anclaje.createdAt : g.createdAt,
+        origenAncla: anclaje ? "aprobacion" : "legado",
       });
     }
     return candidatas;
@@ -96,12 +136,14 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           mensajeroAsignadoId: null, // R15: handoff limpio a la bodega (nuevo intento)
           asignadoAt: null, // limpia el timestamp de asignacion (defensivo, patron 46)
           prioridad: true, // feature 101/R2: liberada por SLA -> reasignacion prioritaria
-          // Pedido humano 2026-08-18: la orden vuelve a bodega, o sea SALE de la novedad. Se
-          // apaga `gestion_aprobada` para que la aprobacion del cierre ANTERIOR no siga valiendo:
-          // si esta orden se devuelve otra vez, tendra que aprobarse el cierre NUEVO para volver
-          // a aparecer en `/novedades`. Va en el MISMO `data` del updateMany GUARDADO por
-          // `estatus_id = devuelta`, asi que hereda su idempotencia: una 2.a corrida no toca nada.
-          gestionAprobada: false,
+          // Feature 239 (T3.1): aqui se apagaba `gestion_aprobada` para que la aprobacion del
+          // cierre ANTERIOR no siguiera valiendo. Ya no hace falta: la columna se retira y quien
+          // decide si una devolucion esta confirmada es el ESTADO. Esta orden SALE de `devuelta`
+          // en este mismo `data`, asi que deja de ser novedad y deja de correr su reloj por
+          // construccion; si se devuelve otra vez, volvera a entrar en `devolucion_por_confirmar`
+          // y hara falta aprobar el cierre NUEVO para que llegue a `devuelta`. Era una de las dos
+          // unicas salidas de `devuelta` (de siete) que se acordaba de apagar la marca: ese
+          // "acordarse" es justo lo que el estado no puede olvidar.
         },
       });
       // R24/R25: SOLO si transiciono (count 1); una re-corrida/carrera (count 0) no duplica.

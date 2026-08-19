@@ -25,6 +25,12 @@ export const EXCLUDE_POR_ROL: Record<string, string[]> = {
     "en_bodega_central",
     "en_bodega_satelite",
     "en_ruta_bodega_satelite",
+    // Feature 239/R26 (T1.7): el PRE-ESTADO de la devolución se excluye para el adminTienda,
+    // junto a `devuelta`. Este mapa es PARCIAL y NO rompe el build: un estado que no se liste
+    // aquí AUTO-APARECE como opción del desplegable de ese rol, así que olvidarlo pondría en la
+    // pantalla de la tienda justo el estado que la 239 decide que no debe ver todavía (P3: en el
+    // limbo la tienda no ve nada). Maestro/admin SÍ lo ven: solo excluyen "pendiente".
+    "devolucion_por_confirmar",
   ],
 };
 

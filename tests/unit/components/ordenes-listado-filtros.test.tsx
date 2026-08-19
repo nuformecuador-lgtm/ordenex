@@ -101,6 +101,61 @@ function ultimoFilter(): Record<string, unknown> | undefined {
   return ultima?.filter;
 }
 
+/**
+ * Pone en la barra los filtros que se piden, por su etiqueta.
+ *
+ * La barra ya NO nace con los controles montados: arranca con el buscador solo y cada
+ * filtro se PIDE en el selector "Filtros". Un filtro que no se ha pedido no tiene
+ * control en pantalla y —por contrato de `FilterComponent`— tampoco filtra, así que
+ * esto es la precondición que antes daba el render, no un adorno.
+ *
+ * OJO con la cadena geográfica: `dependsOn` se resuelve SOLO entre los filtros
+ * declarados, de modo que para comprobar el acotamiento provincia → cantón → distrito
+ * hay que pedir los TRES. Con el eslabón de en medio sin pedir, el hijo pasa a ser un
+ * filtro independiente y el acotamiento que el test dice vigilar deja de existir.
+ */
+async function ponerFiltros(
+  user: ReturnType<typeof userEvent.setup>,
+  ...etiquetas: string[]
+) {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  for (const etiqueta of etiquetas) {
+    await user.click(within(selector).getByRole("option", { name: etiqueta }));
+  }
+  // Marcar NO cierra el selector (se piden varios del tirón); se cierra a mano para
+  // que su panel no tape los controles recién montados.
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+}
+
+/**
+ * Las opciones DEL CATÁLOGO de un panel abierto. La opción «Todos» (2026-08-19) es
+ * `role="option"` porque se marca como una más, pero no viene del catálogo: incluirla haría
+ * que estos casos midieran la barra en vez de la geografía que acota la cadena.
+ */
+function opciones(panel: HTMLElement): HTMLElement[] {
+  return within(panel)
+    .getAllByRole("option")
+    .filter((o) => o.dataset.todos !== "true");
+}
+
+/** Etiquetas que el selector "Filtros" OFRECE, en su orden. */
+async function filtrosOfrecidos(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<string[]> {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  const etiquetas = opciones(selector).map((o) => o.textContent ?? "");
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+  return etiquetas;
+}
+
 /** Abre (si hace falta) el panel de un filtro de la barra genérica. */
 async function abrir(user: ReturnType<typeof userEvent.setup>, label: string) {
   const abierto = screen.queryByRole("listbox", { name: label });
@@ -137,9 +192,24 @@ afterEach(() => cleanup());
 
 describe("OrdenesListado — barra de filtros (R55, R63)", () => {
   it("R55: monta los SEIS filtros sobre el componente genérico", async () => {
+    const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
 
-    for (const etiqueta of ["Zona", "Tienda", "Provincia", "Cantón", "Distrito"]) {
+    const MULTI = ["Zona", "Tienda", "Provincia", "Cantón", "Distrito"];
+    // Los filtros se siguen DECLARANDO todos; lo que cambió es que hoy se piden en el
+    // selector en vez de nacer montados. Se afirma la lista EXACTA y en su orden: así
+    // el caso sigue delatando tanto un filtro que desaparezca como uno que se cuele.
+    expect(await filtrosOfrecidos(user)).toEqual([
+      "Estado",
+      ...MULTI,
+      "Fecha de creación",
+      "Reasignables",
+    ]);
+
+    // Y pedirlos los monta de verdad: cada uno con su control del componente genérico.
+    await ponerFiltros(user, ...MULTI, "Fecha de creación");
+
+    for (const etiqueta of MULTI) {
       expect(
         await screen.findByRole("button", { name: new RegExp(`^${etiqueta}:`) }),
       ).toBeInTheDocument();
@@ -152,29 +222,42 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
   it("R63: la barra ofrece 'Limpiar todo' además de la limpieza individual", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await screen.findByRole("searchbox", { name: "Buscar" });
 
-    // Sin ningún filtro activo no hay nada que limpiar: el botón no se ofrece.
+    // Barra recién abierta: nada escrito y ningún filtro puesto ⇒ no hay nada que
+    // limpiar y el botón no se ofrece.
     expect(screen.queryByRole("button", { name: "Limpiar todo" })).toBeNull();
 
+    await ponerFiltros(user, "Zona");
     await marcar(user, "Zona", "GAM");
     await waitFor(() => expect(ultimoFilter()).toEqual({ zona_id: ["z1"] }));
 
     await user.click(screen.getByRole("button", { name: "Limpiar todo" }));
     await waitFor(() => expect(ultimoFilter()).toBeUndefined());
+    // Y se lleva por delante el control, no solo su valor: la barra vuelve al punto de
+    // partida, que es lo que promete ese botón.
+    expect(screen.queryByRole("button", { name: /^Zona:/ })).toBeNull();
   });
 
   it("R62: sin el filtro de tienda, la barra monta cinco filtros", async () => {
+    const user = userEvent.setup();
     renderListado(
       <OrdenesListado catalogoFiltros={CATALOGO} incluirFiltroTienda={false} />,
     );
-    await screen.findByRole("button", { name: /^Zona:/ });
 
+    // El filtro de tienda ni siquiera se OFRECE: no hay forma de ponerlo en la barra.
+    const ofrecidos = await filtrosOfrecidos(user);
+    expect(ofrecidos).not.toContain("Tienda");
+    expect(ofrecidos).toContain("Provincia");
+
+    // Pidiendo TODO lo que se ofrece, la barra sigue sin control de tienda.
+    await ponerFiltros(user, ...ofrecidos);
     expect(screen.queryByRole("button", { name: /^Tienda:/ })).toBeNull();
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeInTheDocument();
   });
 
   it("sin `incluirFiltroReasignables` (adminTienda) el interruptor no se monta", async () => {
+    const user = userEvent.setup();
     renderListado(
       <OrdenesListado
         catalogoFiltros={CATALOGO}
@@ -182,8 +265,12 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
         incluirFiltroReasignables={false}
       />,
     );
-    await screen.findByRole("button", { name: /^Zona:/ });
 
+    const ofrecidos = await filtrosOfrecidos(user);
+    expect(ofrecidos).not.toContain("Reasignables");
+
+    // Pidiendo TODO lo que se ofrece, el interruptor no aparece por ningún lado.
+    await ponerFiltros(user, ...ofrecidos);
     expect(screen.queryByRole("checkbox", { name: "Reasignables" })).toBeNull();
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeInTheDocument();
   });
@@ -191,7 +278,7 @@ describe("OrdenesListado — barra de filtros (R55, R63)", () => {
   it("R51: las cuentas por API key se ofrecen en un grupo aparte", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Tienda:/ });
+    await ponerFiltros(user, "Tienda");
 
     const lista = await abrir(user, "Tienda");
     expect(
@@ -214,7 +301,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R58: con una zona marcada, el `filter` lleva su clave y su lista de ids", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Zona");
 
     await marcar(user, "Zona", "GAM");
 
@@ -224,7 +311,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R58: el filtro de tiempo se traduce a `created_desde`/`created_hasta`", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Fecha de creación");
 
     // El rango se elige en el calendario, que abre en el mes actual; el primer clic
     // deja un rango de un dia (`desde === hasta`).
@@ -245,7 +332,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R58: 'Reasignables' marcado viaja al `filter` como bandera booleana", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Reasignables");
 
     await user.click(screen.getByRole("checkbox", { name: "Reasignables" }));
 
@@ -255,7 +342,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R58: al desmarcar 'Reasignables' el filtro DESAPARECE de la consulta", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Reasignables");
 
     const casilla = screen.getByRole("checkbox", { name: "Reasignables" });
     await user.click(casilla);
@@ -268,7 +355,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R58: el atajo de antigüedad se traduce al RANGO que representa", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Zona:/ });
+    await ponerFiltros(user, "Fecha de creación");
 
     // Los atajos son botones dentro del propio calendario, no un control aparte, y no
     // emiten un valor propio: fijan el rango (30 días calendario CR incluido hoy).
@@ -292,7 +379,7 @@ describe("OrdenesListado — inyección en el `filter` (R46, R58, R59)", () => {
   it("R46: los filtros nuevos se COMBINAN con el de estado, sin anularse", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Estado:/ });
+    await ponerFiltros(user, "Estado", "Zona");
 
     await marcar(user, "Estado", "Entregada");
     await marcar(user, "Zona", "GAM");
@@ -310,11 +397,12 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
   it("R57: marcar una provincia acota los cantones SIN consultar al servidor", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Provincia:/ });
+    // Los DOS eslabones puestos: `dependsOn` solo acota entre filtros declarados.
+    await ponerFiltros(user, "Provincia", "Cantón");
 
     // Sin provincia marcada, el cantón ofrece los dos.
     let cantones = await abrir(user, "Cantón");
-    expect(within(cantones).getAllByRole("option")).toHaveLength(2);
+    expect(opciones(cantones)).toHaveLength(2);
     await user.keyboard("{Escape}");
 
     const llamadasCatalogo = listarOrderStatusMock.mock.calls.length;
@@ -322,7 +410,7 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
 
     cantones = await abrir(user, "Cantón");
     expect(
-      within(cantones).getAllByRole("option").map((o) => o.textContent),
+      opciones(cantones).map((o) => o.textContent),
     ).toEqual(["Escazú"]);
     // Ninguna consulta de catálogo extra: el acotamiento es puro cliente.
     expect(listarOrderStatusMock.mock.calls.length).toBe(llamadasCatalogo);
@@ -331,20 +419,22 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
   it("R57: la cadena acota de punta a punta (provincia -> cantón -> distrito)", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Provincia:/ });
+    // La cadena es TRANSITIVA y se resuelve entre los filtros declarados: sin el cantón
+    // puesto, el distrito quedaría suelto y no habría cadena que comprobar.
+    await ponerFiltros(user, "Provincia", "Cantón", "Distrito");
 
     await marcar(user, "Provincia", "Alajuela");
 
     const distritos = await abrir(user, "Distrito");
     expect(
-      within(distritos).getAllByRole("option").map((o) => o.textContent),
+      opciones(distritos).map((o) => o.textContent),
     ).toEqual(["Puente Piedra"]);
   });
 
   it("R57/R26: al cambiar la provincia, el cantón huérfano desaparece del `filter`", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
-    await screen.findByRole("button", { name: /^Provincia:/ });
+    await ponerFiltros(user, "Provincia", "Cantón");
 
     await marcar(user, "Provincia", "San José");
     await marcar(user, "Cantón", "Escazú");
@@ -364,9 +454,13 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
 
 describe("OrdenesListado — catálogo no disponible (R64)", () => {
   it("R64: con `catalogoFiltros` null la barra va deshabilitada y la tabla sigue viva", async () => {
+    const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={null} />);
+    // Se siguen OFRECIENDO (el selector no sabe si el catálogo cargó): lo que se
+    // comprueba es que, puestos, nacen inertes en vez de ofrecer una lista vacía.
+    await ponerFiltros(user, "Zona", "Provincia");
 
-    expect(await screen.findByRole("button", { name: /^Zona:/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Zona:/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Provincia:/ })).toBeDisabled();
     expect(screen.getByRole("table", { name: "Órdenes" })).toBeInTheDocument();
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
@@ -375,7 +469,7 @@ describe("OrdenesListado — catálogo no disponible (R64)", () => {
   it("R64: el filtro de ESTADO sigue operativo aunque falte el catálogo nuevo", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={null} />);
-    await screen.findByRole("button", { name: /^Estado:/ });
+    await ponerFiltros(user, "Estado");
 
     await marcar(user, "Estado", "Entregada");
 

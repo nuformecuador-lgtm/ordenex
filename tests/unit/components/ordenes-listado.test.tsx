@@ -78,8 +78,32 @@ function renderListado(ui: ReactElement) {
   );
 }
 
+/**
+ * Pone en la barra el filtro que se pide, por su etiqueta.
+ *
+ * La barra ya NO nace con los controles montados: arranca con el buscador solo y cada
+ * filtro se PIDE en el selector "Filtros". Sin este paso no existe el disparador
+ * `"<Etiqueta>: …"` que abren los tests, así que el paso no es decoración: es la
+ * precondición que antes daba el render.
+ */
+async function ponerFiltro(
+  user: ReturnType<typeof userEvent.setup>,
+  etiqueta: string,
+) {
+  await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
+  const selector = await screen.findByRole("listbox", { name: "Filtros" });
+  await user.click(within(selector).getByRole("option", { name: etiqueta }));
+  // Marcar NO cierra el selector (se pueden pedir varios del tirón); se cierra a mano
+  // para que su panel no tape el control recién montado.
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
+  );
+}
+
 /** Abre el desplegable del filtro de estados y devuelve su botón disparador. */
 async function abrirFiltro(user: ReturnType<typeof userEvent.setup>) {
+  await ponerFiltro(user, "Estado");
   const boton = await screen.findByRole("button", { name: /^Estado:/ });
   await user.click(boton);
   await screen.findByRole("listbox", { name: "Estado" });
@@ -89,6 +113,17 @@ async function abrirFiltro(user: ReturnType<typeof userEvent.setup>) {
 /** Panel desplegado del filtro de estados (ya abierto). */
 function listbox(): HTMLElement {
   return screen.getByRole("listbox", { name: "Estado" });
+}
+
+/**
+ * Las opciones DEL CATÁLOGO del panel abierto. Excluye la opción «Todos» (2026-08-19), que
+ * es `role="option"` porque se marca como una más, pero no sale del catálogo: contarla aquí
+ * haría que estos casos midieran la barra en vez de los estados que ofrece.
+ */
+function opcionesDeCatalogo(): HTMLElement[] {
+  return within(listbox())
+    .getAllByRole("option")
+    .filter((o) => o.dataset.todos !== "true");
 }
 
 /** `status_id` de la ÚLTIMA llamada a `listarOrdenes` (undefined si no hay filtro). */
@@ -146,7 +181,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     // 4 en catálogo − 1 excluido (pendiente) = 3 opciones. Se cuenta DENTRO del
     // listbox: el selector de tamaño de página de la paginación también usa
     // `<option>` y contaminaría un conteo global.
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+    expect(opcionesDeCatalogo()).toHaveLength(3);
   });
 
   it("R13: el estado por default `pendiente` NO genera opción", async () => {
@@ -177,7 +212,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     await abrirFiltro(user);
 
     // Las 3 de siempre (4 del catalogo − `pendiente`): el retirado no suma una cuarta.
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+    expect(opcionesDeCatalogo()).toHaveLength(3);
     expect(screen.queryByRole("option", { name: /fulfillment/i })).toBeNull();
   });
 
@@ -186,7 +221,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     renderListado(<OrdenesListado exclude={["pendiente", "devuelta"]} />);
     await abrirFiltro(user);
 
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(2);
+    expect(opcionesDeCatalogo()).toHaveLength(2);
     expect(screen.queryByRole("option", { name: OPT_DEVUELTA })).toBeNull();
   });
 
@@ -296,11 +331,16 @@ describe("OrdenesListado — carga masiva a nivel contenedor (adminTienda)", () 
 // documenta el contrato: el mensajero nunca instancia este componente.
 describe("OrdenesListado — catálogo no autorizado (R20)", () => {
   it("sin catálogo el filtro queda deshabilitado, pero el listado sigue funcionando", async () => {
+    const user = userEvent.setup();
     // Simula el forbidden del backend (rol no autorizado): sin opciones, sin crash.
     listarOrderStatusMock.mockResolvedValue({ status: "forbidden" });
     renderListado(<OrdenesListado />);
 
     expect(await screen.findByRole("table")).toBeInTheDocument();
+    // El filtro se sigue OFRECIENDO (el selector no sabe si su catálogo cargó): lo que
+    // se comprueba es que, una vez puesto, su control nace inerte en vez de ofrecer una
+    // lista vacía.
+    await ponerFiltro(user, "Estado");
     expect(screen.getByRole("button", { name: /^Estado:/ })).toBeDisabled();
     // El listado sin filtro sigue consultando (ya no hay tabs que montar).
     expect(listarOrdenesMock).toHaveBeenCalledWith({ page: 1, pageSize: 25 });

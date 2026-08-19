@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+// Feature 239 (2026-08-19): el destino de una gestion sale del MAPA, no del nombre del
+// resultado. Estas suites pasan `nuevoEstatusId` a mano, asi que lo derivan de la misma fuente
+// que el servicio real: si el mapa cambia, cambian con el en vez de fijar un destino caducado.
+import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 
 // Feature 36 — repositorio con Prisma mockeado (sin DB). Cubre el filtrado por
 // mensajero (R9/R13), la guardia origen+propiedad de recogerLote (R15) y la
@@ -508,13 +512,15 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", motivo: "cliente ausente" },
-      nuevoEstatusId: idEstado("devuelta"),
+      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
     });
 
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
       data: Record<string, unknown>[];
     };
-    expect(arg.data[0].estatusDestinoId).toBe(idEstado("devuelta"));
+    expect(arg.data[0].estatusDestinoId).toBe(
+      idEstado(estatusDestinoDeResultado("devuelta")),
+    );
     expect(arg.data[0].motivo).toBe("cliente ausente");
     expect(arg.data[0].origenTipo).toBe("gestion");
     expect(arg.data[0].gestionOrdenId).toBe("g1");
@@ -587,7 +593,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: { resultado, motivo: "x", fechaReprogramacion: "2099-01-01" },
-        nuevoEstatusId: idEstado(resultado),
+        nuevoEstatusId: idEstado(estatusDestinoDeResultado(resultado)),
       });
       const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as {
         data: Record<string, unknown>[];
@@ -605,7 +611,10 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
   // (`DevolucionSlaRepository`, verificado en devolucion-sla-repository.test.ts). Aqui se afirma
   // que la devolucion produce UNA sola transicion (a `devuelta`) y UN solo append.
 
-  it("R1/R29: devuelta -> UN solo orden.update (a `devuelta`) y UN solo append, sin re-ruteo", async () => {
+  // 2026-08-19 (feature 239): el destino de la rama `devuelta` deja de ser `devuelta` y pasa a
+  // ser el PRE-ESTADO. Lo que este caso mide NO cambia —UNA transicion y UN append, sin
+  // seguimiento— y por eso el destino se lee del mapa en vez de escribirse a mano.
+  it("R1/R29: devuelta -> UN solo orden.update (al destino del mapa) y UN solo append, sin re-ruteo", async () => {
     const historialCreateMany = vi.fn();
     const { repo, ordenUpdate } = buildTxRepo(idEstado("en_reparto"), historialCreateMany);
 
@@ -613,14 +622,14 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", motivo: "ausente" },
-      nuevoEstatusId: idEstado("devuelta"),
+      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
     });
 
     // La orden REPOSA en `devuelta`: un unico update, sin 2.ª transicion a bodega/rechazada.
     expect(ordenUpdate).toHaveBeenCalledTimes(1);
     expect((ordenUpdate.mock.calls[0] as unknown[])[0]).toMatchObject({
       where: { id: "o1" },
-      data: { estatusId: idEstado("devuelta") },
+      data: { estatusId: idEstado(estatusDestinoDeResultado("devuelta")) },
     });
     // El mensajero NO se limpia aqui (era parte del reintento de la 47, ahora en el cron).
     const updData = (ordenUpdate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -631,7 +640,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
     const arg = (historialCreateMany.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown>[] };
     expect(arg.data[0]).toMatchObject({
       estatusOrigenId: idEstado("en_reparto"),
-      estatusDestinoId: idEstado("devuelta"),
+      estatusDestinoId: idEstado(estatusDestinoDeResultado("devuelta")),
       actorUsuarioId: "m1",
       origenTipo: "gestion",
       motivo: "ausente",
@@ -664,7 +673,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "wrong_number", motivo: "telefono errado" },
-      nuevoEstatusId: idEstado("devuelta"),
+      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
     });
 
     const gArg = (gestionCreate.mock.calls[0] as unknown[])[0] as { data: Record<string, unknown> };
@@ -680,7 +689,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
       ordenId: "o1",
       mensajeroId: "m1",
       gestion: { resultado: "devuelta", causaDevolucion: "not_found", motivo: "ausente" },
-      nuevoEstatusId: idEstado("devuelta"),
+      nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
     });
 
     // Un unico INSERT de gestion (con la causa dentro) + el UPDATE del estado: si la tx aborta,
@@ -701,7 +710,7 @@ describe("GestionOrdenRepository.crearGestionYTransicionar (R23/R26/R28/R30 · f
         ordenId: "o1",
         mensajeroId: "m1",
         gestion: { resultado: "devuelta", causaDevolucion: "wrong_address", motivo: "x" },
-        nuevoEstatusId: idEstado("devuelta"),
+        nuevoEstatusId: idEstado(estatusDestinoDeResultado("devuelta")),
       }),
     ).rejects.toThrow("append falla");
   });

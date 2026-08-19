@@ -94,7 +94,13 @@ function newService(repo: ICierresAdminRepository, liquidacion = fakeLiquidacion
   } as unknown as IZonaRepository;
   const ordenRepo = {
     findUsuarioZonaId: vi.fn(async () => "z-sat"),
-    findEstatusIdByValue: vi.fn(async () => null),
+    // Feature 239 (T2.1, R9): los DOS ids del ANCLAJE son obligatorios al aprobar — sin ellos la
+    // aprobacion no ocurre. Los demas estados (la config OPCIONAL de la 109/139) siguen
+    // resolviendo a `null`, que es lo que esta suite necesita: mide el PENDIENTE, no la
+    // liberacion.
+    findEstatusIdByValue: vi.fn(async (v: string) =>
+      v === "devolucion_por_confirmar" || v === "devuelta" ? `s-${v}` : null,
+    ),
   } as unknown as IOrdenRepository;
   const signedUrls = {
     createSignedUrls: vi.fn(async () => ({})),

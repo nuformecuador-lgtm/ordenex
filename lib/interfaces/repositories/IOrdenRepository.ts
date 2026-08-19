@@ -1333,10 +1333,13 @@ export interface IOrdenRepository {
   desmarcarAyuda(ordenId: string): Promise<void>;
 
   /**
-   * «Habilitar» (pedido humano 2026-08-18): apaga LAS DOS banderas de novedad a la vez
-   * —`ayuda` y `gestion_aprobada`— en un solo UPDATE. Las dos juntas y no una llamada por
-   * bandera: son exactamente las dos ramas del `OR` de `novedadWhere`, asi que apagarlas en
-   * dos escrituras dejaria una ventana en la que la orden sigue listada por la otra.
+   * «Habilitar» (pedido humano 2026-08-18): apaga la bandera `ayuda`.
+   *
+   * FEATURE 239 (T3.1, R23): apagaba DOS banderas (`ayuda` y `gestion_aprobada`); la segunda ya
+   * no existe. Consecuencia buscada: «Habilitar» **ya no puede sacar de `/novedades` una
+   * devolucion cuyo reloj de SLA sigue corriendo**. La rama de la devolucion es ahora una
+   * igualdad de estado, asi que mientras la orden siga en `devuelta` sigue listada. Lo que este
+   * metodo retira es la solicitud de ayuda, y solo eso.
    *
    * Misma ausencia deliberada de autorizacion propia que sus hermanos: la puerta la pone
    * `HabilitarNovedadService` reusando la del hilo de notas. Idempotente.

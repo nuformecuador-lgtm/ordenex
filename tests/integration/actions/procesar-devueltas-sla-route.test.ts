@@ -20,6 +20,7 @@ function fakeService(
     liberadas: 2,
     escaladas: 1,
     omitidas: 3,
+    legadas: 0, // feature 239 (T3.3): quinto conteo, aditivo al contrato HTTP
   })),
 ): { service: IDevolucionSlaService; spy: typeof spy } {
   return { service: { ejecutar: spy }, spy };
@@ -57,7 +58,7 @@ describe("handleProcesarDevueltasSla — autorizacion (R10)", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("R12/R11: token correcto -> 200 con conteos SIN PII (evaluadas/liberadas/escaladas/omitidas)", async () => {
+  it("R12/R11: token correcto -> 200 con conteos SIN PII (evaluadas/liberadas/escaladas/omitidas/legadas)", async () => {
     const { service, spy } = fakeService();
     const res = await handleProcesarDevueltasSla(req({ authorization: `Bearer ${SECRET}` }), {
       getSecret: () => SECRET,
@@ -66,7 +67,17 @@ describe("handleProcesarDevueltasSla — autorizacion (R10)", () => {
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledTimes(1);
     const body = await res.json();
-    expect(body).toEqual({ evaluadas: 4, liberadas: 2, escaladas: 1, omitidas: 3 });
+    // 2026-08-19 (feature 239/T3.3): el cuerpo gana `legadas`, el UNICO cambio del contrato HTTP
+    // de este endpoint, y es aditivo. Cuenta las devoluciones ancladas por la rama LEGADA (sin
+    // fila de `anclaje_devolucion`): sirve para ver extinguirse la poblacion que quedo en vuelo
+    // el dia del despliegue. Sigue siendo un conteo agregado, sin PII (R11).
+    expect(body).toEqual({
+      evaluadas: 4,
+      liberadas: 2,
+      escaladas: 1,
+      omitidas: 3,
+      legadas: 0,
+    });
     // R11: el cuerpo NO filtra el secreto.
     expect(JSON.stringify(body)).not.toContain(SECRET);
   });

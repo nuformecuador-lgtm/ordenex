@@ -24,6 +24,8 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_reparto: "os-reparto",
   entregada: "os-entregada",
   devuelta: "os-devuelta",
+  // Feature 239 (2026-08-19): gestionar `devuelta` resuelve el PRE-ESTADO, no `devuelta`.
+  devolucion_por_confirmar: "os-devolucion-por-confirmar",
   rechazada: "os-rechazada",
   en_bodega_central: "os-en-bodega",
   en_bodega_satelite: "os-en-bodega-satelite",
@@ -128,10 +130,12 @@ describe("Feature 73 · el service persiste la causa en su campo propio (R11)", 
     const repo = fakeRepo();
     await newService(repo).gestionar(devolucion(), MENSAJERO);
     const call = (repo.crearGestionYTransicionar as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // Un solo argumento con la gestion (con su causa) + el estado destino `devuelta`. Feature 99:
-    // ya NO hay transicion de seguimiento inmediata (se relocalizo al cron SLA).
+    // Un solo argumento con la gestion (con su causa) + el estado destino. Feature 99: ya NO hay
+    // transicion de seguimiento inmediata (se relocalizo al cron SLA). Feature 239 (2026-08-19):
+    // ese destino es el PRE-ESTADO; la causa viaja igual y en la misma tx, que es lo que mide
+    // este caso.
     expect(call.gestion.causaDevolucion).toBe("wrong_address");
-    expect(call.nuevoEstatusId).toBe("os-devuelta");
+    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
     expect(call).not.toHaveProperty("seguimiento");
     expect(repo.crearGestionYTransicionar).toHaveBeenCalledTimes(1);
   });

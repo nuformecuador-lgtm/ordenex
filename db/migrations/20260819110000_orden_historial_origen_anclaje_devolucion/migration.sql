@@ -1,0 +1,31 @@
+-- Feature 239 (T1.2, R7/P8) — anade el valor `anclaje_devolucion` al enum
+-- `orden_historial_origen_tipo`. Es la familia PROPIA de la transicion
+--   devolucion_por_confirmar -> devuelta   (actor = el admin que APRUEBA el cierre)
+--
+-- Esa transicion es el ANCLAJE: el instante en que la devolucion se vuelve visible para la
+-- tienda y en que arranca su ventana de SLA. Necesita familia propia y no puede reusar
+-- ninguna de las 26 vigentes por dos motivos independientes:
+--   (a) el cron de SLA lee EXACTAMENTE esta familia para saber cuando anclar el reloj
+--       (`DevolucionSlaRepository`, tanda T3); reusar `gestion` o `devolucion_rechazada`
+--       haria que otras filas del historial se confundieran con el ancla;
+--   (b) `liberacion_sin_gestionar` / `devolucion_rechazada` son las otras dos escrituras de la
+--       misma transaccion de aprobacion y significan otra cosa.
+--
+-- NO ENTRA en `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`): esto es una
+-- CONFIRMACION ADMINISTRATIVA en bodega, no la visita de un mensajero. Meterla ahi subiria el
+-- conteo de intentos de entrega, adelantaria el escalado del cron SLA (99) y cobraria el
+-- `cobroRechazado` (56) antes de tiempo — la direccion del error que cuesta DINERO REAL.
+-- Tampoco entra en `ORIGEN_TIPOS_CON_GESTION`: esa lista solo desambigua la NULIDAD del enlace
+-- `gestion_orden_id`, y esta familia SI enlaza la gestion ancla (mismo caso que
+-- `escalado_devuelta_sla`, que tampoco esta).
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR
+-- un valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma Migrate
+-- corre cada migration.sql en una transaccion. Aqui SOLO se anade el valor; su primer uso ocurre
+-- en runtime (`CierresAdminRepository.resolverCierre`), en transacciones posteriores. Mismo
+-- precedente que `asignacion_recoleccion` (157), `deshacer_asignacion` (149) y
+-- `devolucion_rechazada` (139).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva
+-- su RLS de la feature 49). No crea tablas ni columnas. No mueve ninguna orden de estado (R31).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'anclaje_devolucion';
