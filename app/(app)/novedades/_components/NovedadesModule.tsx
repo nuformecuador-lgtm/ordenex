@@ -46,7 +46,7 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 //
 // 2026-08-12 (pedido humano) — LA FILA YA NO SE PINTA AQUÍ. Cada novedad se muestra con las
 // MISMAS cards que las órdenes del mensajero, y las acciones de esta pantalla —WhatsApp,
-// Llamar, Reprogramar, y las dos de MAQUETA "Habilitar" y "Devolver"— bajan como un solo
+// Llamar, Reprogramar, y las dos de MAQUETA "Habilitar" y "Rechazar"— bajan como un solo
 // nodo por su prop `acciones` (`NovedadAcciones`). Lo que eso cambia y lo que no:
 //
 //  - NO cambia lo que se ve: guía (o su placeholder, R9), destinatario, causa en etiqueta ES
@@ -179,8 +179,8 @@ export function NovedadesModule({
   } = useTransicionVista<VistaCards>("mosaico");
 
   /**
-   * MAQUETA (2026-08-12): "Devolver" está en la fila pero todavía no hace nada — su
-   * comportamiento no está decidido y no existe en el backend (ver la cabecera de
+   * MAQUETA (2026-08-12): "Rechazar" (rotulado "Devolver" hasta 2026-08-19) está en la fila
+   * pero todavía no hace nada — su comportamiento no está decidido y no existe en el backend (ver la cabecera de
    * `NovedadAcciones`). Avisa por toast en vez de callar: un botón que no responde se lee
    * como una app rota, y el usuario de esta pantalla es una tienda, no quien pidió la
    * maqueta. El día que se cablee, este handler desaparece.

@@ -60,7 +60,7 @@ const { successMock, errorMock, infoMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
   // 2026-08-12: el canal `info` deja de ser un `vi.fn()` anónimo porque los dos botones de
-  // MAQUETA ("Habilitar", "Devolver") avisan por él y hay que poder afirmarlo.
+  // MAQUETA ("Habilitar", "Rechazar") avisan por él y hay que poder afirmarlo.
   infoMock: vi.fn(),
 }));
 
@@ -307,7 +307,7 @@ describe("NovedadesModule", () => {
     // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
     // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
     expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Devolver la orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Rechazar la orden/ })).toBeNull();
     // «Habilitar» SÍ: es el desenlace de la solicitud de ayuda del lado de la tienda (pedido
     // humano 2026-08-18), y por eso es la única de las tres que no está atada a `devuelta`.
     expect(
@@ -765,14 +765,14 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
         "WhatsApp a Ana Cliente",
         "Reprogramar la orden de Ana Cliente",
         "Habilitar la orden de Ana Cliente",
-        "Devolver la orden de Ana Cliente",
+        "Rechazar la orden de Ana Cliente",
       ]) {
         expect(within(card).getByRole("button", { name: nombre })).toBeInTheDocument();
       }
     },
   );
 
-  // MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Devolver" existen en la fila pero su
+  // MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Rechazar" (antes "Devolver") existen en la fila pero su
   // comportamiento NO está decidido y no hay backend detrás. Estos dos casos son lo que
   // impide que la maqueta se confunda con una función terminada: afirman que los botones
   // están (para que el layout no se rompa sin avisar) y que NO mutan nada.
@@ -797,7 +797,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       />,
     );
 
-    for (const verbo of ["Reprogramar", "Habilitar", "Devolver"]) {
+    for (const verbo of ["Reprogramar", "Habilitar", "Rechazar"]) {
       const boton = screen.getByRole("button", {
         name: `${verbo} la orden de Ana Cliente`,
       });
@@ -869,7 +869,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     },
   );
 
-  it("MAQUETA: 'Devolver' avisa que no está disponible y no toca la lista", async () => {
+  it("MAQUETA: 'Rechazar' avisa que no está disponible y no toca la lista", async () => {
     const user = userEvent.setup();
     render(
       <NovedadesModule
@@ -881,7 +881,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Devolver la orden de Ana Cliente" }),
+      screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
     );
 
     expect(infoMock).toHaveBeenCalledWith("Esta acción todavía no está disponible.");
