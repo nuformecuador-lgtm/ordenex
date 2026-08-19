@@ -88,6 +88,7 @@ const MOVIMIENTOS_OK = {
         descripcion: null,
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        dueno: "propio" as const, // feature 231 (R31): el flete es dinero de Ordenex
       },
       // Feature 173 (R62): un movimiento de una de las categorías NUEVAS viaja por el mismo
       // camino, con la misma forma y sin ningún campo de más.
@@ -101,6 +102,7 @@ const MOVIMIENTOS_OK = {
         descripcion: null,
         registradoPor: null,
         fechaMovimiento: "2026-07-12T10:00:00.000Z",
+        dueno: "terceros" as const, // feature 231 (R31): el contra-entrega es de las tiendas
       },
     ],
     total: 2,
@@ -127,6 +129,25 @@ const RESUMEN_OK = {
     signoGanancia: "positivo" as const,
     deTerceros: "10000.00",
     periodoFiltrado: false,
+    // Feature 231 (R9/R10): 10 000 / 11 500 x 100 = 86.9565… -> "86.96".
+    porcentajeTiendas: "86.96",
+    modoComposicion: "dos_bolsillos" as const,
+  },
+  // Feature 231 (design §2.4): la composición viaja HERMANA del resumen, no anidada dentro —
+  // por eso el barrido de STRING sobre `props.resumen` sigue afirmando lo mismo que hoy.
+  composicion: {
+    ingresos: {
+      ingreso_flete: "1500.00",
+      ingreso_flete_devolucion: "0.00",
+      ingreso_comision_cod: "0.00",
+      ingreso_iva_flete: "0.00",
+      ingreso_iva_flete_devolucion: "0.00",
+      ingreso_iva_comision_cod: "0.00",
+      ingreso_ajuste: "0.00",
+    },
+    totalIngresos: "1500.00",
+    otrosEgresos: "0.00",
+    totalEgresos: "0.00",
   },
 };
 
@@ -283,6 +304,45 @@ describe("WalletPage — pre-fetch del maestro (R18/R21)", () => {
     expect(props.plantillas.total).toBe(1);
     expect(props.plantillas.items[0].concepto).toBe("Alquiler");
     expect(typeof props.plantillas.items[0].monto).toBe("string");
+  });
+
+  // ── Feature 231 (T4.5, R9/R12) ──
+  it("R9: `composicion` y el resumen cruzan como STRING", async () => {
+    resolveActorMock.mockResolvedValue({ usuarioId: "m", rol: "maestro" });
+    const { default: WalletPage } = await import("@/app/(app)/wallet/page");
+
+    render(await WalletPage());
+
+    const props = moduleCalls[0];
+
+    // La composición viaja HERMANA del resumen, no anidada dentro: por eso el barrido de
+    // STRING sobre `props.resumen` de aquí arriba sigue afirmando exactamente lo que afirmaba
+    // antes de esta feature, sin ampliar ni una excepción.
+    expect(props.composicion, "la composición no cruzó por props").toBeDefined();
+    expect(props.resumen).not.toHaveProperty("composicion");
+    expect(props.resumen).not.toHaveProperty("ingresos");
+
+    // TODOS sus importes son STRING. Se barre el objeto entero, no tres campos elegidos a
+    // mano: cualquier importe que alguien añada mañana como `number` cae aquí.
+    const { ingresos, ...totales } = props.composicion;
+    // Control de no-vacuidad: el desglose trae las siete categorías, no un objeto vacío.
+    expect(Object.keys(ingresos)).toHaveLength(7);
+    for (const [categoria, valor] of Object.entries(ingresos)) {
+      expect(typeof valor, `composicion.ingresos.${categoria}`).toBe("string");
+    }
+    for (const [clave, valor] of Object.entries(totales)) {
+      expect(typeof valor, `composicion.${clave}`).toBe("string");
+    }
+
+    // Y los dos campos nuevos del resumen también son STRING planos (D3).
+    expect(typeof props.resumen.porcentajeTiendas).toBe("string");
+    expect(props.resumen.porcentajeTiendas).toBe("86.96");
+    expect(typeof props.resumen.modoComposicion).toBe("string");
+    expect(props.resumen.modoComposicion).toBe("dos_bolsillos");
+
+    // El desglose de ingresos cuadra con la cifra agregada del resumen: es la misma lectura.
+    expect(props.composicion.totalIngresos).toBe(props.resumen.ingresosPropios);
+    expect(props.composicion.totalEgresos).toBe(props.resumen.egresosPropios);
   });
 
   it("R62: los movimientos de las categorías NUEVAS llegan al listado como los demás", async () => {

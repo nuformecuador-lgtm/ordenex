@@ -1,4 +1,8 @@
+import { money } from "@/lib/config/moneda";
 import type {
+  CajaResumenDTO,
+  ModoComposicionCaja,
+  NaturalezaMovimiento,
   TipoEgresoManual,
   WalletMovimientoCategoria,
   WalletMovimientoDTO,
@@ -24,8 +28,13 @@ import {
  * aquí para que sus consumidores sigan importándola del mismo sitio: es una mudanza —el
  * mismo precedente que `montoValido` al final de este archivo—, y lo único que cambia es el
  * ASPECTO del importe, que es justamente el objetivo de la feature.
+ *
+ * Feature 231: pasa de `export { money } from …` a importar + re-exportar, porque este
+ * módulo la NECESITA para componer el nombre accesible de la barra (R13). La forma
+ * `export … from` no crea enlace local; el import sí, y los ~37 consumidores siguen
+ * importándola de aquí sin cambiar una línea.
  */
-export { money } from "@/lib/config/moneda";
+export { money };
 
 /** Etiqueta legible del tipo de movimiento (ingreso/egreso). */
 export const TIPO_LABEL: Record<WalletMovimientoTipo, string> = {
@@ -117,6 +126,73 @@ export const CAJA_RESUMEN_AVISO_TERCEROS =
 export const CAJA_RESUMEN_AVISO_PERIODO =
   `Con filtros puestos esta cifra no es el dinero que hay hoy en la caja: es lo que entró ` +
   `menos lo que salió en el periodo que elegiste.`;
+
+// ── Feature 231 (T4.1, design §4.2) — la caja partida en DOS BOLSILLOS ──
+
+/**
+ * Rotulos de la barra de composicion y de sus dos bloques (R2/R3). Van aqui, y no dentro del
+ * componente, por la misma regla que el resto del archivo (docs/conventions: textos de UI
+ * fuera del componente) y porque el nombre accesible de la barra se COMPONE con ellos: el dia
+ * que alguien renombre un bolsillo, lo que oye un lector de pantalla lo sigue.
+ *
+ * Vocabulario de maestro, no de contador (R59 de la 173): «de las tiendas» y «de Ordenex»,
+ * nunca «terceros», «propio» ni el nombre de ningun enum.
+ */
+export const CAJA_COMPOSICION_LABEL = {
+  barra: "Reparto del dinero en caja",
+  tiendas: "De las tiendas",
+  ordenex: "De Ordenex",
+} as const;
+
+/**
+ * Lo que hay que DECIR en cada modo, cuando la barra no se puede partir en dos (R16/R17/R18).
+ *
+ * `Record` TOTAL sobre los cuatro modos: un modo nuevo en el servidor rompe el build de la
+ * pantalla en vez de caer en un `default` mudo. `null` en `dos_bolsillos` NO es un hueco: es
+ * el caso normal, donde los dos bloques se explican solos con su importe y su pista.
+ */
+export const CAJA_COMPOSICION_MENSAJE: Record<ModoComposicionCaja, string | null> = {
+  dos_bolsillos: null,
+  // R16: con todas sus letras. Es el aviso mas importante de la pantalla.
+  solo_tiendas:
+    "Ordenex gastó más de lo que ganó, así que hay dinero de las tiendas cubriendo ese " +
+    "saldo. Lo que se ve en la caja no alcanza para entregarles todo lo suyo.",
+  // R17 (D4): el espejo — se entrego a las tiendas mas contra-entrega del que se cobro.
+  solo_ordenex:
+    "Se entregó a las tiendas más contra-entrega del que se cobró en este periodo, así que " +
+    "todo lo que queda en la caja es de Ordenex.",
+  // R18: nada que repartir. Ni se enuncia porcentaje ni se pinta segmento alguno.
+  sin_reparto: "No hay nada que repartir: no queda dinero de las tiendas ni ganancia de Ordenex.",
+};
+
+/**
+ * R13 — el nombre accesible de la barra: las DOS porciones, cada una con su rotulo y su
+ * importe. Se compone a partir de las etiquetas de arriba y de los STRING del servidor;
+ * money-safe, porque `money` solo da formato y nunca convierte el monto a numero.
+ *
+ * NO enuncia el porcentaje a proposito (R20): fuera de `dos_bolsillos` no existe reparto que
+ * enunciar, y un nombre accesible que dependiera del modo diria cosas distintas segun el dia.
+ */
+export function composicionCajaNombreAccesible(resumen: CajaResumenDTO): string {
+  return (
+    `${CAJA_COMPOSICION_LABEL.barra}. ` +
+    `${CAJA_COMPOSICION_LABEL.tiendas}: ${money(resumen.deTerceros)}. ` +
+    `${CAJA_COMPOSICION_LABEL.ordenex}: ${money(resumen.ganancia)}.`
+  );
+}
+
+/**
+ * R33/R34 — de quien es el dinero de un movimiento, en palabras. El servidor manda el campo
+ * `dueno` ya derivado (R31/R36): esto solo lo bautiza.
+ *
+ * `Record` TOTAL sobre `NaturalezaMovimiento`: una naturaleza nueva rompe el build hasta que
+ * alguien decida como se llama en pantalla. SINGULAR («Tienda», no «Tiendas») porque rotula
+ * UNA fila del libro, no un conjunto.
+ */
+export const DUENO_LABEL: Record<NaturalezaMovimiento, string> = {
+  propio: "Ordenex",
+  terceros: "Tienda",
+};
 
 /** Etiqueta legible del origen de un movimiento. */
 export const ORIGEN_LABEL: Record<WalletOrigenTipo, string> = {

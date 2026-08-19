@@ -3421,3 +3421,42 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
 - Los E2E (`e2e/rastreo-publico.spec.ts`) se ejecutaron **a mano** (2 passed) contra un `next dev`
   propio, **no** por el `webServer` de `playwright.config.ts` (su `reuseExistingServer` engancha el
   servidor de otro checkout). `init.sh` sigue sin correr E2E: deuda de arnés conocida.
+
+## 2026-08-18 — 231 (la caja de la wallet, partida en dos bolsillos)
+
+- `/wallet` deja de enseñar «dinero en caja» como una cifra sola: una **barra de composición** la
+  parte en lo que es de las TIENDAS (contra-entrega cobrado, aún sin entregar) y lo que es de
+  ORDENEX (ganancia), con un bolsillo por cada lado. Una tarjeta nueva abre la ganancia **concepto
+  por concepto** —siete de ingreso frente a cinco de egreso— y el libro gana la columna «Dueño».
+  Nace de un lienzo de cuatro direcciones de diseño; el humano eligió la opción B
+  (`progress/design_231.md`).
+- Requisitos cubiertos: **R1–R40**, los 40 mapeados a un test nombrado, existente y ejecutado
+  (`progress/impl_231.md` §2 y §10; el reviewer los recontó: 0 huérfanos, 0 fantasmas).
+- **El servidor tuvo que crecer, y no por gusto**: la pantalla tiene PROHIBIDO convertir un monto a
+  número (tres guardias vivas), así que la proporción de la barra, el desglose de ingresos por
+  concepto y el dueño de cada movimiento **se derivan en el servidor** y cruzan como STRING. Nada
+  de esto se podía calcular arriba.
+- **El caso límite es el que decidía si el diseño era viable**: si Ordenex gasta más de lo que gana,
+  la porción de las tiendas es MAYOR que el total de la caja y la barra no admite dos segmentos. Se
+  resolvió con una tabla de **cuatro modos** evaluada sobre los nueve pares de signos, sin división
+  por cero. Medido: las cuatro ramas son mutuamente excluyentes, así que su orden es documental.
+- **`DesgloseEgresosCard` se absorbió en la tarjeta nueva**, y con ella se borró su archivo de test.
+  Las **18 aserciones de las features 45 y 158 se re-hospedaron una a una** —verificado por nombre
+  y por intención, no por conteo— y se probó que fue mudanza: con la lista ya extraída, el test
+  viejo pasó **sin una sola modificación** antes de borrarlo.
+- **Tres listas literales de columnas gobernaban esta pantalla desde fuera.** La de
+  `WalletDescarga.test.tsx:590` (D1, firmada) se cambió por lo que su caso decía afirmar: que las
+  categorías de la 173 no añaden ni quitan columnas, medido ahora sobre cuatro conjuntos incluido
+  el catálogo entero en runtime. Ya había bloqueado el reordenado de columnas de la 200; habría
+  bloqueado «Dueño».
+- **Dos tests estaban en verde sin comprobar nada, y se cazaron por mutación, no por lectura**:
+  (1) el orden de las filas —el conjunto de prueba estaba escrito ya ordenado y `Array#sort` es
+  estable, así que ordenar por magnitud pintaba lo mismo—; (2) **la columna de ingresos no afirmaba
+  ni un importe**: los siete conceptos podían pintar el mismo número, la resta con el total seguía
+  cuadrando en pantalla y la suite pasaba. Este segundo lo encontró el reviewer y fue **bloqueante**.
+  Ahora el caso empareja rótulo↔importe fila a fila y hay un control de que los siete importes son
+  distintos **después** de formatear.
+- **Deuda declarada, no escondida**: `lib/utils/monto-escala-2.ts` existe para no relajar una
+  aserción de dinero de la 173 que prohíbe `.toFixed(` en `caja-tesoreria.ts`; ninguna guardia lo
+  barre todavía. Y `wallet-caja-descarga-columnas.test.ts` sigue fijando su lista contra un literal:
+  gobernará a la próxima feature igual que D1 gobernó a ésta.

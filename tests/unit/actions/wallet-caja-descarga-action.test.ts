@@ -18,6 +18,7 @@ const ITEM: WalletMovimientoDTO = {
   descripcion: null,
   registradoPor: null,
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
+  dueno: "propio", // feature 231 (R31): el flete es dinero de Ordenex
 };
 
 function fakeService(resultado: unknown) {

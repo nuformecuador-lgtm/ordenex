@@ -13,12 +13,13 @@ import {
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { reversarEgresoAdministrativoAction } from "@/lib/actions/wallet-egresos";
-import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import type { NaturalezaMovimiento, WalletMovimientoDTO } from "@/lib/types/wallet";
 import { cn } from "@/lib/utils";
 
 import { COLUMNAS_DESCARGA_WALLET_CAJA } from "./wallet-ledger-descarga-columnas";
 import {
   CATEGORIA_LABEL,
+  DUENO_LABEL,
   ORIGEN_LABEL,
   TIPO_LABEL,
   esEgresoAdministrativo,
@@ -75,6 +76,34 @@ function MontoCelda({ movimiento }: { movimiento: WalletMovimientoDTO }) {
       )}
     >
       {money(movimiento.monto)}
+    </span>
+  );
+}
+
+/**
+ * Feature 231 (T5.2, R33) — DE QUIEN es el dinero de esta fila: punto de color + texto, NO una
+ * insignia. La tabla ya lleva una pastilla por fila (la del tipo) y una segunda al lado
+ * convertiria cada renglon en un semaforo doble donde ninguna de las dos se lee.
+ *
+ * El dato llega YA DERIVADO del servidor (`dueno`, R31/R36): aqui no se mira la categoria ni se
+ * consulta ninguna clasificacion, para que la tabla y la descarga no puedan decir cosas
+ * distintas. El punto es DECORACION (`aria-hidden`): quien no ve color lee la palabra.
+ */
+const DUENO_PUNTO: Record<NaturalezaMovimiento, string> = {
+  // Ordenex en neutro y las tiendas en `warning`, los MISMOS dos colores con los que la barra
+  // de composicion de la tarjeta reparte la caja: es el mismo reparto, fila a fila.
+  propio: "bg-muted-foreground",
+  terceros: "bg-warning",
+};
+
+function DuenoCelda({ dueno }: { dueno: NaturalezaMovimiento }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={cn("size-2 shrink-0 rounded-full", DUENO_PUNTO[dueno])}
+        aria-hidden="true"
+      />
+      {DUENO_LABEL[dueno]}
     </span>
   );
 }
@@ -158,14 +187,22 @@ export function WalletLedger({
   // como se lee cualquier extracto. Está BLOQUEADO por una aserción que fija la secuencia
   // exacta de los encabezados visibles:
   //
-  //     tests/components/descarga/WalletDescarga.test.tsx:566
+  //     tests/components/descarga/WalletDescarga.test.tsx:590
   //     («R62: el listado los pinta como a los demás, sin cambiar las columnas»)
+  //
+  // (La referencia decía «:566» y estaba desactualizada; la aserción vive en la 590. Corregido
+  // por la feature 231/T5.2, que es la que volvió a tropezar con ella.)
   //
   // Esa aserción es de la feature 173 y lo que quiere afirmar es otra cosa —que las dos
   // categorías nuevas no AÑADEN ni QUITAN columnas—; el orden se le coló dentro por usar
-  // `toEqual` sobre el array. Permutar aquí la pone roja, y esta tanda tiene prohibido tocar
-  // tests. Queda como la única decisión abierta de la feature: mover esas seis líneas del
-  // test es un cambio de aserción DELIBERADO y necesita aprobación, no un arreglo de paso.
+  // `toEqual` sobre el array.
+  //
+  // ── Feature 231 (D1, firmada por el humano el 2026-08-18) ──
+  // La aserción pasó a afirmar lo que su propio caso dice —que las categorías de la 173 no
+  // añaden ni quitan columnas, comparado contra la lista que declara ESTE componente— y la 231
+  // añadió su caso propio para «Dueño». La 173 queda igual de protegida y deja de gobernar el
+  // número de columnas del libro. El REORDENADO que la 200 quería sigue sin hacerse: es otra
+  // decisión y no entra por la puerta de atrás de esta.
   //
   // Lo que sí llega sin tocar el orden: el dinero alineado a la DERECHA, en `tabular-nums` y
   // con su color semántico, que es de donde venía la mayor parte de la ganancia de lectura.
@@ -203,6 +240,14 @@ export function WalletLedger({
         // La más ancha: lleva el origen Y la descripción libre del movimiento.
         minWidth: "18rem",
         render: (m) => origenTexto(m),
+      },
+      {
+        // Feature 231 (T5.2, R35): la ULTIMA de las columnas de datos, justo antes de
+        // «Acciones». Se anade; ninguna de las anteriores se mueve ni se quita.
+        id: "dueno",
+        value: "Dueño",
+        minWidth: "8rem",
+        render: (m) => <DuenoCelda dueno={m.dueno} />,
       },
       {
         id: "acciones",

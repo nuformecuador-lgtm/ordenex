@@ -96,6 +96,47 @@ export const WALLET_INGRESO_CONCEPTO_SEED = [
 
 export type WalletIngresoConcepto = (typeof WALLET_INGRESO_CONCEPTO_SEED)[number];
 
+// Feature 231 (design §2.2, D5 firmada el 2026-08-18) — las SIETE categorias de ingreso de
+// naturaleza `propio` del catalogo: las seis del feed MAS el ajuste manual. Se escribe como
+// EXTENSION del seed del feed, no como una segunda lista a mano, para que el dia que el feed
+// gane un concepto entre solo en el desglose de la ganancia (R23).
+//
+// La totalidad —que estas siete son EXACTAMENTE las categorias que `NATURALEZA_POR_CATEGORIA`
+// declara `propio` con tipo ingreso— la comprueba en RUNTIME
+// `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts` (R23/R32): un `satisfies`
+// no puede afirmarlo, porque la naturaleza es un VALOR y no un tipo.
+export const WALLET_INGRESO_PROPIO_SEED = [
+  ...WALLET_INGRESO_CONCEPTO_SEED,
+  "ingreso_ajuste",
+] as const satisfies readonly WalletMovimientoCategoria[];
+
+export type WalletIngresoPropio = (typeof WALLET_INGRESO_PROPIO_SEED)[number];
+
+// Feature 231 (design §2.2) — las CUATRO categorias de egreso propio que `DesgloseEgresosDTO`
+// (features 45/158) ya abre concepto por concepto. Existe para poder derivar su COMPLEMENTO
+// (`ComposicionGananciaDTO.otrosEgresos`, R26) sin copiar a mano la lista de las que faltan:
+// lo que no esta aqui y es un egreso propio, cae en «otros gastos» por construccion.
+export const WALLET_EGRESO_DESGLOSADO_SEED = [
+  "egreso_gasto_fijo",
+  "egreso_gasto_variable",
+  "egreso_sueldo",
+  "egreso_indemnizacion",
+] as const satisfies readonly WalletMovimientoCategoria[];
+
+export type WalletEgresoDesglosado = (typeof WALLET_EGRESO_DESGLOSADO_SEED)[number];
+
+/**
+ * Feature 231 — de quien es el dinero de una categoria: de Ordenex, o de un tercero que lo
+ * tiene aparcado en la caja.
+ *
+ * Lo DECLARO la 173 dentro de `lib/utils/caja-tesoreria.ts`, junto a la tabla que lo usa. Se
+ * muda aqui —y aquel modulo lo re-exporta, asi que ningun importador cambia— porque desde
+ * esta feature es tambien el tipo de un campo de `WalletMovimientoDTO` (R31): dejarlo alli
+ * obligaria a `lib/types/` a importar de `lib/utils/`, invirtiendo la direccion de la
+ * dependencia. La clasificacion en si (`NATURALEZA_POR_CATEGORIA`) NO se mueve.
+ */
+export type NaturalezaMovimiento = "propio" | "terceros";
+
 // ── Contratos I/O (frontera Server Action -> cliente). Montos SIEMPRE STRING (R4/R25) ──
 
 export type WalletMovimientoDTO = {
@@ -108,6 +149,12 @@ export type WalletMovimientoDTO = {
   descripcion: string | null;
   registradoPor: string | null;
   fechaMovimiento: string; // ISO
+  /**
+   * Feature 231 (R31/R32) — de quien es este dinero, derivado EN EL SERVIDOR a partir de la
+   * categoria y del unico `Record` que la clasifica. El cliente no lo deduce (R36): asi la
+   * tabla y la descarga no pueden decir cosas distintas.
+   */
+  dueno: NaturalezaMovimiento;
 };
 
 export type WalletBalanceSigno = "positivo" | "negativo" | "cero";
@@ -159,6 +206,54 @@ export type CajaResumenDTO = {
   // periodo. El numero NO cambia; lo que cambia es el rotulo, y esta bandera es lo unico que
   // la pantalla necesita para no mentir.
   periodoFiltrado: boolean;
+  /**
+   * Feature 231 (R9/R10) — porcion de las TIENDAS sobre el total de la caja, "0.00"–"100.00".
+   *
+   * STRING plano y no un numero (D3, firmada): `tests/integration/wallet-page.test.tsx` barre
+   * `Object.entries(props.resumen)` exigiendo STRING en todo salvo `periodoFiltrado`, y sobre
+   * todo el navegador tiene PROHIBIDO convertir un importe a numero (R12). Solo es una
+   * proporcion de reparto cuando `modoComposicion` vale `dos_bolsillos`.
+   */
+  porcentajeTiendas: string;
+  /**
+   * Feature 231 (R14/R21) — que forma admite la barra de composicion. Lo decide el SERVIDOR
+   * comparando los DOS importes derivados; la pantalla no compara nada.
+   */
+  modoComposicion: ModoComposicionCaja;
+};
+
+// Feature 231 (design §3.1) — los CUATRO estados posibles del reparto de la caja. Seed
+// primero para que la pantalla pueda montar un `Record` TOTAL sobre ellos (design §4.2): un
+// modo nuevo rompe el build en vez de caer en un `default` silencioso.
+export const MODO_COMPOSICION_CAJA_SEED = [
+  "dos_bolsillos", // R19: hay algo de los dos lados y la barra se parte
+  "solo_tiendas", // R15: Ordenex esta en perdida y el dinero de las tiendas cubre el saldo
+  "solo_ordenex", // R17: el espejo — `deTerceros` negativo (D4, firmada)
+  "sin_reparto", // R18: no hay nada que repartir
+] as const;
+
+export type ModoComposicionCaja = (typeof MODO_COMPOSICION_CAJA_SEED)[number];
+
+/**
+ * Feature 231 (design §2.2, R22-R28) — la ganancia de Ordenex abierta concepto por concepto.
+ *
+ * Viaja HERMANO de `CajaResumenDTO` y no anidado dentro (D3): el barrido de STRING de la 173
+ * sobre el resumen sigue afirmando exactamente lo que afirma hoy, sin ampliar excepciones.
+ * Money-safe: todos los importes son STRING escala 2.
+ */
+export type ComposicionGananciaDTO = {
+  /** Un importe por categoria de ingreso propio. `Record` TOTAL: no admite huecos (R23). */
+  ingresos: Record<WalletIngresoPropio, string>;
+  /** Σ de `ingresos`. Identico, importe a importe, a `CajaResumenDTO.ingresosPropios` (R23). */
+  totalIngresos: string;
+  /**
+   * Egresos propios que `DesgloseEgresosDTO` NO cubre (D2, firmada): hoy el pago al mensajero,
+   * el gasto y el ajuste. Se deriva por COMPLEMENTO, no por lista, para que la columna de la
+   * tarjeta sume `egresosPropios` aunque el catalogo gane un egreso propio (R26).
+   */
+  otrosEgresos: string;
+  /** Σ de egresos propios. Identico a `CajaResumenDTO.egresosPropios` (R26). */
+  totalEgresos: string;
 };
 
 // Feature 45 (R11) — desglose de egresos administrativos por tipo para el conjunto

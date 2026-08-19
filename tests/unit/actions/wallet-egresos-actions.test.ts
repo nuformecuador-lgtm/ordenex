@@ -27,6 +27,7 @@ function mov(): WalletMovimientoDTO {
     descripcion: "Papeleria",
     registradoPor: "u-maestro",
     fechaMovimiento: "2026-07-13T10:00:00.000Z",
+    dueno: "propio", // feature 231 (R31): un gasto variable es dinero de Ordenex
   };
 }
 

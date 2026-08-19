@@ -6,6 +6,7 @@ import type {
   WalletTxClient,
 } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
+import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Feature 45 (R1/R2/R3/R7/R11/R13/R15/R16/R17/R32) — tests unit del WalletEgresoService.
 // Guardia de rol maestro; egreso manual inmutable (origen_tipo=gasto, origen_id=null,
@@ -17,18 +18,20 @@ const ADMIN: Actor = { usuarioId: "u-admin", rol: "admin" }; // feature 94: pari
 const OTRO: Actor = { usuarioId: "u-otro", rol: "adminSatelite" };
 
 function mov(overrides: Partial<WalletMovimientoDTO> = {}): WalletMovimientoDTO {
-  return {
+  const base = {
     id: "eg-1",
-    tipo: "egreso",
-    categoria: "egreso_gasto_variable",
+    tipo: "egreso" as const,
+    categoria: "egreso_gasto_variable" as const,
     monto: "1500.00",
-    origenTipo: "gasto",
+    origenTipo: "gasto" as const,
     origenId: null,
     descripcion: "Papeleria",
     registradoPor: "u-maestro",
     fechaMovimiento: "2026-07-13T10:00:00.000Z",
     ...overrides,
   };
+  // Feature 231 (R31): `dueno` sale de la MISMA clasificacion que usa el repositorio.
+  return { ...base, dueno: overrides.dueno ?? NATURALEZA_POR_CATEGORIA[base.categoria] };
 }
 
 function buildRepo(overrides: Partial<IWalletMovimientoRepository> = {}): IWalletMovimientoRepository {

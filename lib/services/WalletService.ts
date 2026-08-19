@@ -19,7 +19,7 @@ import type {
   WalletMovimientoTipo,
 } from "@/lib/types/wallet";
 import { descargaConfig } from "@/lib/config/descarga";
-import { derivarCaja } from "@/lib/utils/caja-tesoreria";
+import { derivarCaja, derivarComposicionGanancia } from "@/lib/utils/caja-tesoreria";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 
 // Roles autorizados (R19/R65): acceso total (maestro/admin, dueños de la caja central).
@@ -150,6 +150,12 @@ export class WalletService implements IWalletService {
    *
    * El servicio no resta nada: agrega con el repositorio y deriva con `derivarCaja`, que es
    * pura y ya esta probada. Money-safe: STRING de punta a punta (R64).
+   *
+   * Feature 231 (design §3.2 — R24): **UNA lectura, DOS derivaciones.** El MISMO array `filas`
+   * alimenta `derivarCaja` y `derivarComposicionGanancia`. Eso es lo que garantiza que la
+   * tarjeta de la ganancia y la cifra de la caja hablen del mismo instante y del mismo
+   * conjunto: con dos consultas podrian discrepar si alguien registra un movimiento entre
+   * ellas, y la resta de la pantalla dejaria de cuadrar sin que nada fallara.
    */
   async verResumenCaja(
     input: ListarMovimientosInput,
@@ -162,6 +168,7 @@ export class WalletService implements IWalletService {
     return {
       status: "ok",
       resumen: derivarCaja(filas, { periodoFiltrado: hayFiltros(filtros) }),
+      composicion: derivarComposicionGanancia(filas),
     };
   }
 

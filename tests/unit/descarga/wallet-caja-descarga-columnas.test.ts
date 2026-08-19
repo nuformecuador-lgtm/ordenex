@@ -17,16 +17,47 @@ const MOV: WalletMovimientoDTO = {
   descripcion: "Alquiler de bodega",
   registradoPor: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
   fechaMovimiento: "2026-07-12T10:00:00.000Z",
+  dueno: "propio", // feature 231 (R31): un gasto fijo es dinero de Ordenex
 };
 
 describe("columnas de descarga del libro de caja", () => {
   it("declara sus columnas ENUMERADAS, en el orden de la pantalla (R5)", () => {
+    // ── POR QUÉ ESTE LITERAL SE QUEDA, si el de la 173 hubo que quitarlo ──
+    //
+    // A simple vista son el mismo patrón —una lista de columnas fijada con `toEqual`— y la
+    // feature 231 tuvo que desmontar el otro (D1, firmada). No son lo mismo, y la diferencia
+    // está en QUÉ fija cada uno:
+    //
+    //  · El de D1 (`tests/components/descarga/WalletDescarga.test.tsx`) fijaba CUÁNTAS
+    //    columnas puede tener la PANTALLA. Su caso decía afirmar otra cosa —que las categorías
+    //    nuevas de la 173 no añaden ni quitan columnas—, así que el orden y el número se le
+    //    colaron de polizón por usar `toEqual` sobre el array. Y un polizón sobre el diseño del
+    //    libro acaba gobernando a features ajenas: bloqueó el reordenado de columnas de la 200
+    //    y habría bloqueado la columna «Dueño» de la 231. Por eso se sustituyó por lo que su
+    //    propio caso dice afirmar.
+    //
+    //  · ÉSTE fija el CONTRATO DEL ARCHIVO que se descarga, que es un artefacto que alguien
+    //    abre FUERA de la app —una hoja de cálculo de caja que se archiva, se compara con la
+    //    del mes pasado y se pega en un correo—. Que sus columnas cambien en silencio es
+    //    exactamente lo que no debe pasar. Aquí el literal ES lo que el caso quiere afirmar, no
+    //    un polizón: quien añada, quite o mueva una columna del archivo tiene que venir a esta
+    //    línea y decirlo, y ese trámite es el punto.
+    //
+    //  · Y no se sustituye por una comparación contra `COLUMNAS_DESCARGA_WALLET_CAJA` porque
+    //    eso sería comparar la lista CONSIGO MISMA: una aserción contra su propia fuente, que
+    //    no puede ponerse roja nunca. Sería más débil, no más fuerte.
+    //
+    // Feature 231 (T5.3, R34/R35): «dueno» se AÑADE al final, que es donde la tabla la pinta
+    // —la última de los datos, antes de «Acciones»—. Ninguna de las cinco anteriores se mueve
+    // ni se quita, que es exactamente lo que este caso viene afirmando desde la 170: las
+    // columnas están ENUMERADAS y en el ORDEN de la pantalla.
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toEqual([
       "fecha",
       "tipo",
       "categoria",
       "monto",
       "origen",
+      "dueno",
     ]);
     expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.encabezado)).toEqual([
       "Fecha",
@@ -34,6 +65,7 @@ describe("columnas de descarga del libro de caja", () => {
       "Categoría",
       "Monto",
       "Origen",
+      "Dueño",
     ]);
   });
 

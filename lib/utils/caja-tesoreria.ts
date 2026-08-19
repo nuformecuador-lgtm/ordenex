@@ -1,9 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { derivarBalance } from "@/lib/utils/wallet-balance";
-import type {
-  AgregadoCajaRow,
-  CajaResumenDTO,
-  WalletMovimientoCategoria,
+import { montoEscala2 } from "@/lib/utils/monto-escala-2";
+import {
+  WALLET_EGRESO_DESGLOSADO_SEED,
+  WALLET_INGRESO_PROPIO_SEED,
+  type AgregadoCajaRow,
+  type CajaResumenDTO,
+  type ComposicionGananciaDTO,
+  type ModoComposicionCaja,
+  type NaturalezaMovimiento,
+  type WalletIngresoPropio,
+  type WalletMovimientoCategoria,
 } from "@/lib/types/wallet";
 
 /**
@@ -22,8 +29,15 @@ import type {
  * con `derivarDesgloseTienda` al lado de `derivarSaldoTienda`.
  */
 
-/** De quien es el dinero: de Ordenex, o de un tercero que lo tiene aparcado en la caja. */
-export type NaturalezaMovimiento = "propio" | "terceros";
+/**
+ * De quien es el dinero: de Ordenex, o de un tercero que lo tiene aparcado en la caja.
+ *
+ * Feature 231: la DECLARACION se muda a `lib/types/wallet.ts` —desde esta feature es tambien
+ * el tipo de un campo de `WalletMovimientoDTO` (R31), y `lib/types/` no puede depender de
+ * `lib/utils/`—. Se re-exporta aqui para que ningun importador de la 173 cambie: la mudanza es
+ * una mudanza, no un cambio de significado. La CLASIFICACION sigue viviendo abajo.
+ */
+export type { NaturalezaMovimiento };
 
 /**
  * R2/R3 — clasificacion EXHAUSTIVA de las categorias de la caja en las dos naturalezas.
@@ -104,6 +118,59 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
   return acc;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════════════════
+// Feature 231 (design §3.1) — la caja partida en DOS BOLSILLOS.
+//
+// Todo lo que sigue son SUMAS POR CUBETA y UNA DIVISION sobre importes que `derivarBalance`
+// ya derivo. Ninguna resta con signo nueva: la guardia `caja-derivaciones.guardia.test.ts`
+// exige que este modulo siga llamando a `derivarBalance` exactamente tres veces y que no
+// declare por su cuenta ni el signo ni la resta.
+// ═════════════════════════════════════════════════════════════════════════════════════════
+
+/** Las dos porciones extremas de la barra, como STRING con la misma escala que el resto. */
+const TODO_DE_LAS_TIENDAS = "100.00";
+const NADA_DE_LAS_TIENDAS = "0.00";
+
+/**
+ * R10/R14-R19 — que forma admite la barra y, si admite dos segmentos, con que proporcion.
+ *
+ * La tabla se evalua EN ESTE ORDEN y es TOTAL: los nueve pares de signos posibles de (G, T)
+ * caen en exactamente una rama.
+ *
+ *  1. `G < 0` y `T > 0`  -> `solo_tiendas`   (100.00): Ordenex pierde y el dinero de las
+ *                                            tiendas esta cubriendo ese saldo.
+ *  2. `T < 0` y `G > 0`  -> `solo_ordenex`   (  0.00): el espejo (D4).
+ *  3. `T <= 0` y `G <= 0`-> `sin_reparto`    (  0.00): no hay nada que repartir.
+ *  4. resto              -> `dos_bolsillos`  (T / enCaja x 100).
+ *
+ * La division ocurre SOLO en la rama 4, donde `enCaja = G + T` es estrictamente positivo
+ * (llegar ahi exige `T >= 0`, `G >= 0` y que al menos uno sea > 0): no hay division por cero
+ * que atrapar. El signo se compara sobre `Prisma.Decimal` (`.lt(0)` / `.gt(0)`) y NUNCA
+ * leyendo el campo `signo` del balance — que es la otra forma de acabar con dos definiciones
+ * de «cuando una cifra es negativa».
+ */
+function derivarReparto(
+  enCaja: Prisma.Decimal,
+  ganancia: Prisma.Decimal,
+  deTerceros: Prisma.Decimal,
+): { porcentajeTiendas: string; modoComposicion: ModoComposicionCaja } {
+  if (ganancia.lt(0) && deTerceros.gt(0)) {
+    return { porcentajeTiendas: TODO_DE_LAS_TIENDAS, modoComposicion: "solo_tiendas" };
+  }
+  if (deTerceros.lt(0) && ganancia.gt(0)) {
+    return { porcentajeTiendas: NADA_DE_LAS_TIENDAS, modoComposicion: "solo_ordenex" };
+  }
+  if (!deTerceros.gt(0) && !ganancia.gt(0)) {
+    return { porcentajeTiendas: NADA_DE_LAS_TIENDAS, modoComposicion: "sin_reparto" };
+  }
+  return {
+    porcentajeTiendas: montoEscala2(
+      deTerceros.div(enCaja).mul(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+    ),
+    modoComposicion: "dos_bolsillos",
+  };
+}
+
 /**
  * R1/R4/R5/R6/R7 — deriva las DOS cifras del libro de la caja a partir de los totales ya
  * agregados por (categoria, tipo).
@@ -122,6 +189,10 @@ function acumular(filas: readonly AgregadoCajaRow[]): Acumulado {
  * `periodoFiltrado` [P7] no se deriva de las filas —no es una propiedad del dinero sino de la
  * CONSULTA—, asi que entra como opcion explicita y vale `false` por defecto. La pantalla la
  * usa para cambiar el ROTULO cuando hay filtros puestos; el numero no cambia nunca.
+ *
+ * Feature 231 (R9/R10/R14): la salida gana `porcentajeTiendas` y `modoComposicion`. Ni la
+ * firma ni el valor de los diez campos anteriores cambian (R38): lo nuevo se DERIVA de los
+ * tres balances que esta funcion ya calculaba.
  */
 export function derivarCaja(
   filas: readonly AgregadoCajaRow[],
@@ -132,6 +203,12 @@ export function derivarCaja(
   const caja = derivarBalance(acc.entradas, acc.salidas);
   const propio = derivarBalance(acc.ingresosPropios, acc.egresosPropios);
   const terceros = derivarBalance(acc.ingresosTerceros, acc.egresosTerceros);
+
+  const reparto = derivarReparto(
+    new Prisma.Decimal(caja.balance),
+    new Prisma.Decimal(propio.balance),
+    new Prisma.Decimal(terceros.balance),
+  );
 
   return {
     entradas: caja.ingresos,
@@ -144,5 +221,84 @@ export function derivarCaja(
     signoGanancia: propio.signo,
     deTerceros: terceros.balance,
     periodoFiltrado: opciones.periodoFiltrado ?? false,
+    porcentajeTiendas: reparto.porcentajeTiendas,
+    modoComposicion: reparto.modoComposicion,
+  };
+}
+
+/** Las siete cubetas del desglose de ingresos, todas a cero: un `Record` sin huecos (R23). */
+function cubetasDeIngreso(): Record<WalletIngresoPropio, Prisma.Decimal> {
+  // El `Object.fromEntries` pierde el tipo de las claves (devuelve `Record<string, …>`), asi
+  // que la afirmacion va aqui, en UNA linea y sobre el seed que la produce. No es un `any`:
+  // el union de claves sale del propio seed, y una categoria de mas o de menos la caza la
+  // guardia de exhaustividad en runtime.
+  return Object.fromEntries(
+    WALLET_INGRESO_PROPIO_SEED.map((categoria) => [categoria, new Prisma.Decimal(0)]),
+  ) as Record<WalletIngresoPropio, Prisma.Decimal>;
+}
+
+const CATEGORIAS_DE_INGRESO_PROPIO: ReadonlySet<string> = new Set(WALLET_INGRESO_PROPIO_SEED);
+const CATEGORIAS_DE_EGRESO_DESGLOSADO: ReadonlySet<string> = new Set(WALLET_EGRESO_DESGLOSADO_SEED);
+
+function esIngresoPropio(categoria: WalletMovimientoCategoria): categoria is WalletIngresoPropio {
+  return CATEGORIAS_DE_INGRESO_PROPIO.has(categoria);
+}
+
+/**
+ * Feature 231 (R23/R26, design §2.2) — la ganancia de Ordenex, concepto por concepto.
+ *
+ * Funcion PURA y con la MISMA entrada que `derivarCaja`: el servicio la llama sobre el MISMO
+ * array de filas (design §3.2), y eso es lo que garantiza R24 —la tarjeta de la ganancia y la
+ * cifra de la caja hablan del mismo instante y del mismo conjunto, y no pueden discrepar
+ * aunque alguien registre un movimiento entre dos peticiones—.
+ *
+ * Dos invariantes, y las dos son ESTRUCTURALES, no aspiracionales:
+ *
+ *  - `totalIngresos` es la Σ de las siete cubetas, asi que la columna de ingresos de la
+ *    tarjeta SIEMPRE suma su propio total. Que ademas coincida con `ingresosPropios` depende
+ *    de que el seed cubra todas las categorias propias de ingreso, y eso lo mide en runtime
+ *    `tests/unit/guards/caja-composicion-exhaustiva.guardia.test.ts`.
+ *  - `otrosEgresos` es el COMPLEMENTO: todo egreso propio que no sea uno de los cuatro
+ *    conceptos que `DesgloseEgresosDTO` ya abre. Por eso «los cuatro conceptos + otros» suman
+ *    `totalEgresos` = `egresosPropios` aunque el catalogo gane manana un egreso propio (R26).
+ *    Escribir aqui la lista de las tres categorias que hoy faltan dejaria esa suma a merced
+ *    de que alguien se acordara de ampliarla.
+ *
+ * El desglose se teclea POR CATEGORIA (`ingreso_comision_cod`), nunca con las claves camelCase
+ * de las formulas de ingreso: `caja-173-alcance.guardia.test.ts` prohibe que este modulo
+ * nombre un insumo de formula, y con razon — no es quien las calcula.
+ */
+export function derivarComposicionGanancia(
+  filas: readonly AgregadoCajaRow[],
+): ComposicionGananciaDTO {
+  const ingresos = cubetasDeIngreso();
+  let totalIngresos = new Prisma.Decimal(0);
+  let totalEgresos = new Prisma.Decimal(0);
+  let otrosEgresos = new Prisma.Decimal(0);
+
+  for (const fila of filas) {
+    if (NATURALEZA_POR_CATEGORIA[fila.categoria] !== "propio") continue;
+    const monto = new Prisma.Decimal(fila.total);
+
+    if (fila.tipo === "ingreso") {
+      if (!esIngresoPropio(fila.categoria)) continue;
+      ingresos[fila.categoria] = ingresos[fila.categoria].add(monto);
+      totalIngresos = totalIngresos.add(monto);
+      continue;
+    }
+
+    totalEgresos = totalEgresos.add(monto);
+    if (!CATEGORIAS_DE_EGRESO_DESGLOSADO.has(fila.categoria)) {
+      otrosEgresos = otrosEgresos.add(monto);
+    }
+  }
+
+  return {
+    ingresos: Object.fromEntries(
+      WALLET_INGRESO_PROPIO_SEED.map((categoria) => [categoria, montoEscala2(ingresos[categoria])]),
+    ) as Record<WalletIngresoPropio, string>,
+    totalIngresos: montoEscala2(totalIngresos),
+    otrosEgresos: montoEscala2(otrosEgresos),
+    totalEgresos: montoEscala2(totalEgresos),
   };
 }
