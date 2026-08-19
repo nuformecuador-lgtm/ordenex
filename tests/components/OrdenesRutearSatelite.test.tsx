@@ -13,7 +13,6 @@ import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
   asignarDesdeBodega,
   listarMensajerosParaAsignacion,
-  listarZonasBloqueadasPorCierre,
   rutearABodegaSatelite,
 } from "@/lib/actions/ordenes-guia";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -54,7 +53,6 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
   desasignarRecoleccion: vi.fn(),
   listarMensajerosParaAsignacion: vi.fn(),
   rutearABodegaSatelite: vi.fn(),
-  listarZonasBloqueadasPorCierre: vi.fn(),
 }));
 
 // El rol sale SOLO del servidor; aquí se varía por test (es la entrada del eslabón).
@@ -83,7 +81,6 @@ vi.mock("@/app/_components/LogoutButton", () => ({
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 const listarOrderStatusMock = vi.mocked(listarOrderStatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
-const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 const rutearMock = vi.mocked(rutearABodegaSatelite);
 const asignarMock = vi.mocked(asignarDesdeBodega);
 const resolveActorMock = vi.mocked(resolveActorFromSession);
@@ -166,10 +163,6 @@ beforeEach(() => {
     status: "ok",
     mensajeros: [{ id: "m1", nombre: "Juan" }],
     bloqueadosIds: [],
-  });
-  listarZonasBloqueadasMock.mockResolvedValue({
-    status: "ok",
-    zonasBloqueadasIds: [],
   });
 });
 
@@ -268,10 +261,6 @@ describe("/ordenes — 'Rutear a bodega satélite' vuelve a tener superficie (ho
         status: "ok",
         mensajeros: [{ id: "m1", nombre: "Juan" }],
         bloqueadosIds: [],
-      });
-      listarZonasBloqueadasMock.mockResolvedValue({
-        status: "ok",
-        zonasBloqueadasIds: [],
       });
     }
   });

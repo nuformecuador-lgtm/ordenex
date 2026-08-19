@@ -10,7 +10,6 @@ import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
   listarMensajerosParaAsignacion,
-  listarZonasBloqueadasPorCierre,
   generarGuia,
   asignarDesdeBodega,
 } from "@/lib/actions/ordenes-guia";
@@ -27,7 +26,6 @@ vi.mock("@/lib/actions/ordenes", () => ({ listarOrdenes: vi.fn() }));
 vi.mock("@/lib/actions/order-status", () => ({ listarOrderStatus: vi.fn() }));
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   listarMensajerosParaAsignacion: vi.fn(),
-  listarZonasBloqueadasPorCierre: vi.fn(),
   generarGuia: vi.fn(),
   asignarDesdeBodega: vi.fn(),
 }));
@@ -55,7 +53,6 @@ vi.mock("react-barcode", () => ({
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 const listarOrderStatusMock = vi.mocked(listarOrderStatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
-const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 const generarGuiaMock = vi.mocked(generarGuia);
 const asignarDesdeBodegaMock = vi.mocked(asignarDesdeBodega);
 const generarEtiquetasMock = vi.mocked(generarEtiquetas);
@@ -131,10 +128,6 @@ beforeEach(() => {
     bloqueadosIds: [],
   });
   // Sin zonas bloqueadas: los checkbox de las órdenes de asignación quedan habilitados.
-  listarZonasBloqueadasMock.mockResolvedValue({
-    status: "ok",
-    zonasBloqueadasIds: [],
-  });
 });
 
 afterEach(() => {

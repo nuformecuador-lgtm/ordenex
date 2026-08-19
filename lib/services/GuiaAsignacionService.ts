@@ -75,9 +75,11 @@ const GAM_NO_CONFIGURADA: Record<string, string[]> = {
   zona: ["zona GAM no configurada"],
 };
 
-// Feature 41/R13: motivo accionable cuando un mensajero destino esta bloqueado por un
-// cierre pendiente (solicitado/vencido). No se le asignan nuevas ordenes hasta resolverlo.
-const MSG_MENSAJERO_BLOQUEADO = "mensajero bloqueado por cierre pendiente";
+// Feature 41/R13 RETIRADA (pedido humano 2026-08-18): aqui vivia el motivo accionable de
+// "mensajero bloqueado por cierre pendiente". Ninguna de las dos asignaciones de este service
+// lo emite ya — un cierre abierto o vencido no impide asignar. Se retira la constante con la
+// guarda: un mensaje que nadie puede recibir es peor que ninguno, porque invita a volver a
+// cablearlo sin releer por que se quito.
 
 // Feature 157 (regla de DEDICACION, decision del humano 2026-07-31) — recolectar en tienda
 // y repartir son viajes incompatibles: quien va a una tienda a recoger un lote sale con el
@@ -98,7 +100,7 @@ const MSG_MENSAJERO_CON_RECOLECCION =
   "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
 
 // Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite que tiene al
-// menos un mensajero con un cierre abierto. Con un cierre pendiente la bodega esta
+// menos un mensajero BLOQUEADO (mas cierres abiertos de los tolerados). Asi la bodega esta
 // cuadrando caja: no recibe ordenes nuevas hasta resolverlo.
 const MSG_BODEGA_SATELITE_BLOQUEADA =
   "bodega satelite bloqueada: tiene un mensajero con un cierre abierto";
@@ -334,14 +336,15 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R29/R17: aborta sin efectos
 
-    // --- Feature 41/R13/R23: guarda de mensajero bloqueado, ANTES de persistir ---
-    const bloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
-    if (bloqueados.has(input.mensajeroId)) {
-      return {
-        status: "conflict",
-        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
-      };
-    }
+    // --- Feature 41/R13/R23 RETIRADA (pedido humano 2026-08-18) ---
+    // Aqui vivia la guarda de "mensajero bloqueado por cierre abierto/vencido", que impedia
+    // asignarle guias a quien arrastrara un cierre sin resolver. SE RETIRA: asignar a un
+    // mensajero debe poder hacerse tenga o no cierres pendientes.
+    //
+    // El predicado NO desaparece del repo (`findMensajerosBloqueados`) porque otras superficies
+    // lo siguen usando —`deshacerGestion`, la recoleccion en tienda y el aviso del panel del
+    // mensajero—, y esas NO estaban en el alcance de este cambio. Lo que se retira es su efecto
+    // sobre ESTA accion.
 
     // --- Feature 157: simetrica de la anterior. Un mensajero con una recoleccion sin
     //     confirmar tiene un viaje a la tienda comprometido; darle reparto ahora lo obliga
@@ -446,14 +449,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- 5. R7: mensajero bloqueado por cierre pendiente, ANTES de persistir ---
-    const bloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
-    if (bloqueados.has(input.mensajeroId)) {
-      return {
-        status: "conflict",
-        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_MENSAJERO_BLOQUEADO })),
-      };
-    }
+    // --- 5. R7 RETIRADA (pedido humano 2026-08-18): ver `asignarDesdeBodega`. Un cierre abierto
+    //     o vencido ya no impide mandar a un mensajero a recolectar. ---
 
     // --- 5b. Regla de dedicacion: quien recolecta va sin carga de reparto ---
     const conReparto = await this.repo.findMensajerosConOrdenesEn(

@@ -135,6 +135,11 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // vacio es lo coherente con el resto del doble, no un atajo: sin creditos no hay
     // contra-entrega que meter en la caja (R13).
     walletTiendaMovimiento: { findMany: vi.fn().mockResolvedValue([]) },
+    // Pedido humano 2026-08-18: aprobar enciende `gestion_aprobada` en las ordenes cuya gestion
+    // de ESTE cierre fue `devuelta` (un `updateMany` mas dentro de la misma tx). Ningun test de
+    // este archivo mide esa escritura — se mide en su propio archivo—, pero TODOS pasan por
+    // ella al aprobar, asi que el doble tiene que existir o la tx muere con un TypeError.
+    orden: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     ...overrides,
   };
 }
@@ -1098,8 +1103,11 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
     );
     prisma.orden.findMany.mockResolvedValue(ordenes);
-    prisma.orden.updateMany.mockImplementation((args: { where: { id: { in: string[] } } }) =>
-      Promise.resolve({ count: opts.movidas ?? args.where.id.in.length }),
+    // `where.id.in` es el updateMany de la LIBERACION (rutea por ids). Desde el pedido humano de
+    // 2026-08-18 la rama `aprobado` corre ademas el de `gestion_aprobada`, que filtra por la
+    // relacion `gestiones` y no lleva `id`: el acceso es opcional para sobrevivir a los dos.
+    prisma.orden.updateMany.mockImplementation((args: { where: { id?: { in: string[] } } }) =>
+      Promise.resolve({ count: opts.movidas ?? args.where.id?.in.length ?? 0 }),
     );
     prisma.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
     return prisma;
@@ -1133,7 +1141,10 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=sin_gestionar.
-    const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
+    // Solo los de la LIBERACION: el de `gestion_aprobada` (sin `id`) no es lo que mide este test.
+    const calls = prisma.orden.updateMany.mock.calls
+      .map((c) => c[0])
+      .filter((c: { where: { id?: unknown } }) => c.where.id !== undefined);
     const central = calls.find((c) => c.data.estatusId === idEstado("en_bodega_central"));
     const sat = calls.find((c) => c.data.estatusId === idEstado("en_bodega_satelite"));
     expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
@@ -1175,7 +1186,11 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     const r = await aprobar(repo);
 
     expect(r).toBe("updated"); // el flujo de aprobacion (wallets) NO se ve afectado
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(
+      prisma.orden.updateMany.mock.calls
+        .map((c) => c[0])
+        .filter((c: { where: { id?: unknown } }) => c.where.id !== undefined),
+    ).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 
@@ -1195,7 +1210,11 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     });
 
     expect(prisma.orden.findMany).not.toHaveBeenCalled();
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(
+      prisma.orden.updateMany.mock.calls
+        .map((c) => c[0])
+        .filter((c: { where: { id?: unknown } }) => c.where.id !== undefined),
+    ).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 

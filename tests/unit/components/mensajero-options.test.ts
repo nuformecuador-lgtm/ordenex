@@ -22,24 +22,25 @@ describe("toMensajeroOptions", () => {
     ]);
   });
 
-  it("un cierre abierto lo deshabilita y lo dice", () => {
-    const opciones = toMensajeroOptions(MENSAJEROS, new Set(["m2"]));
-
-    expect(opciones[1]).toEqual({
-      value: "m2",
-      label: "Beto (cierre abierto)",
-      disabled: true,
-    });
-    expect(opciones[0].disabled).toBe(false);
+  // Pedido humano 2026-08-18 — EL CIERRE ABIERTO YA NO DESHABILITA. Antes habia aqui dos tests
+  // (uno que lo deshabilitaba y otro que le daba prioridad sobre la dedicacion) y se van con la
+  // regla: el service dejo de rechazar por cierre, asi que el selector que lo prohibiera
+  // mentiria. Queda este, que fija lo contrario — que tener un cierre no cambia nada.
+  it("tener un cierre abierto ya no deshabilita a nadie", () => {
+    // El id del mensajero con cierre no viaja siquiera: la funcion ya no acepta ese parametro.
+    expect(toMensajeroOptions(MENSAJEROS)).toEqual([
+      { value: "m1", label: "Ana", disabled: false },
+      { value: "m2", label: "Beto", disabled: false },
+      { value: "m3", label: "Carla", disabled: false },
+    ]);
   });
 
   // Feature 157: el motivo lo pone CADA modal, porque no es el mismo en los dos sentidos
-  // — al asignar una recolección estorba el reparto, y al asignar reparto estorba una
-  // recolección sin confirmar—.
-  it("un motivo de dedicación lo deshabilita con SU texto", () => {
+  // — al asignar una recoleccion estorba el reparto, y al asignar reparto estorba una
+  // recoleccion sin confirmar—. Esta regla SIGUE viva: el service la revalida.
+  it("un motivo de dedicacion lo deshabilita con SU texto", () => {
     const opciones = toMensajeroOptions(
       MENSAJEROS,
-      new Set(),
       new Map([["m3", "tiene reparto pendiente"]]),
     );
 
@@ -48,15 +49,6 @@ describe("toMensajeroOptions", () => {
       label: "Carla (tiene reparto pendiente)",
       disabled: true,
     });
-  });
-
-  it("el cierre GANA sobre la dedicación: es lo que hay que resolver primero", () => {
-    const opciones = toMensajeroOptions(
-      MENSAJEROS,
-      new Set(["m1"]),
-      new Map([["m1", "tiene reparto pendiente"]]),
-    );
-
-    expect(opciones[0].label).toBe("Ana (cierre abierto)");
+    expect(opciones[0].disabled).toBe(false);
   });
 });

@@ -10,14 +10,19 @@ import type {
 } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
-// Feature 149 — T4.9 (R19): ASIMETRIA DELIBERADA entre ASIGNAR y DESHACER cuando el mensajero
-// tiene un cierre de dia pendiente (Q1 CERRADA, design §8-Q1).
+// Feature 149 — T4.9 (R19): aqui vivia una ASIMETRIA DELIBERADA entre ASIGNAR y DESHACER cuando
+// el mensajero tiene un cierre de dia pendiente (Q1 CERRADA, design §8-Q1):
 //
 //   deshacer  -> el cierre NO bloquea: `ok`, y el service NI SIQUIERA consulta el gate.
-//   asignar   -> el cierre SIGUE bloqueando: `conflict` (gate vigente, no se toca).
+//   asignar   -> el cierre SI bloqueaba: `conflict`.
 //
-// Los dos asertos son sobre EL MISMO mensajero (`m-cierre`) con un cierre `solicitado`. Si
-// alguien "armonizara" ambos caminos, uno de los dos casos rompe.
+// PEDIDO HUMANO 2026-08-18 — LA ASIMETRIA DESAPARECIO, y por el lado que faltaba: ahora asignar
+// tampoco consulta el gate. Los dos caminos coinciden, asi que este archivo deja de custodiar una
+// diferencia y pasa a custodiar la COINCIDENCIA — que sigue mereciendo un testigo, porque el
+// bloqueo por cierre existio en uno de los dos durante meses y su retirada fue una decision, no un
+// descuido.
+//
+// Los dos asertos siguen siendo sobre EL MISMO mensajero (`m-cierre`) con un cierre `solicitado`.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 const MENSAJERO_CON_CIERRE = "m-cierre";
@@ -72,9 +77,12 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
   });
 });
 
-describe("T4.9(b)/R19 — ASIGNAR a ese MISMO mensajero sigue bloqueado: `conflict`", () => {
-  it("GuiaAsignacionService.asignarDesdeBodega -> conflict por cierre pendiente (no-regresion)", async () => {
+describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18)", () => {
+  it("GuiaAsignacionService.asignarDesdeBodega -> ok, sin consultar el gate de cierres", async () => {
     const asignarBodegaLote = vi.fn(async (ids: string[]) => ids.length);
+    const findMensajerosBloqueados = vi.fn(
+      async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
+    );
     const repo = {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID[v] ?? null),
       findByIdsForTransicion: vi.fn(async () => [
@@ -93,10 +101,10 @@ describe("T4.9(b)/R19 — ASIGNAR a ese MISMO mensajero sigue bloqueado: `confli
           geocodeStatus: "OK",
         })),
       ),
-      // El MISMO mensajero, con su cierre `solicitado` -> bloqueado para ASIGNAR.
-      findMensajerosBloqueados: vi.fn(
-        async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
-      ),
+      // El doble sigue diciendo que este mensajero esta bloqueado: el punto es que ya nadie
+      // pregunta.
+      findMensajerosBloqueados,
+      findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
       asignarBodegaLote,
     } as unknown as IOrdenRepository;
     const zonaRepo = {
@@ -113,12 +121,9 @@ describe("T4.9(b)/R19 — ASIGNAR a ese MISMO mensajero sigue bloqueado: `confli
       MAESTRO,
     );
 
-    expect(r.status).toBe("conflict");
-    if (r.status === "conflict") {
-      expect(r.detalle).toEqual([
-        { ordenId: "o1", motivo: "mensajero bloqueado por cierre pendiente" },
-      ]);
-    }
-    expect(asignarBodegaLote).not.toHaveBeenCalled(); // el gate de asignacion sigue VIGENTE
+    expect(r.status).toBe("ok");
+    expect(asignarBodegaLote).toHaveBeenCalledTimes(1);
+    // La simetria con `deshacer`: ninguno de los dos consulta ya el gate de cierres.
+    expect(findMensajerosBloqueados).not.toHaveBeenCalled();
   });
 });

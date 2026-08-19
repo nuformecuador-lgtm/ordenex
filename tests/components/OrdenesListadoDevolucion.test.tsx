@@ -10,7 +10,6 @@ import { listarOrdenes } from "@/lib/actions/ordenes";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import {
   listarMensajerosParaAsignacion,
-  listarZonasBloqueadasPorCierre,
 } from "@/lib/actions/ordenes-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
@@ -24,7 +23,6 @@ vi.mock("@/lib/actions/ordenes", () => ({ listarOrdenes: vi.fn() }));
 vi.mock("@/lib/actions/order-status", () => ({ listarOrderStatus: vi.fn() }));
 vi.mock("@/lib/actions/ordenes-guia", () => ({
   listarMensajerosParaAsignacion: vi.fn(),
-  listarZonasBloqueadasPorCierre: vi.fn(),
 }));
 vi.mock("@/app/(app)/ordenes/_components/GenerarGuiaModal", () => ({
   GenerarGuiaModal: () => null,
@@ -45,7 +43,6 @@ vi.mock("@/app/(app)/ordenes/_components/DevolverATiendaModal", () => ({
 const listarOrdenesMock = vi.mocked(listarOrdenes);
 const listarOrderStatusMock = vi.mocked(listarOrderStatus);
 const listarMensajerosMock = vi.mocked(listarMensajerosParaAsignacion);
-const listarZonasBloqueadasMock = vi.mocked(listarZonasBloqueadasPorCierre);
 
 function makeOrden(ref: string, estatusValue: string): OrdenListItemDTO {
   return {
@@ -97,10 +94,6 @@ beforeEach(() => {
     status: "ok",
     mensajeros: [{ id: "m1", nombre: "Juan" }],
     bloqueadosIds: [],
-  });
-  listarZonasBloqueadasMock.mockResolvedValue({
-    status: "ok",
-    zonasBloqueadasIds: [],
   });
 });
 

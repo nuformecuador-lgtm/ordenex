@@ -14,10 +14,7 @@ import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { listarOrderStatus } from "@/lib/actions/order-status";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
-import {
-  listarMensajerosParaAsignacion,
-  listarZonasBloqueadasPorCierre,
-} from "@/lib/actions/ordenes-guia";
+import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
@@ -64,10 +61,10 @@ type ModalAbierto =
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  // `bloqueadosIds` = mensajeros con cierre abierto. El bloqueo del CHECKBOX se sigue
-  // derivando por ZONA de la orden (`zonasBloqueadasFetcher`); estos ids alimentan el
-  // SELECTOR de los modales de asignación, para no ofrecer a alguien a quien el service
-  // va a rechazar.
+  // Pedido humano 2026-08-18: los cierres abiertos DEJARON DE BLOQUEAR la asignación — ni el
+  // checkbox por zona ni el selector de mensajero. `bloqueadosIds` sigue viniendo en la
+  // respuesta de la action y se ignora aquí a propósito: el dato es cierto, pero ya no manda
+  // sobre nada de esta pantalla.
   //
   // La key SWR "ordenes:mensajeros" la compartía con la vista legacy
   // `OrdenesRevisionMaestro`, borrada el 2026-07-31: hoy este es el ÚNICO fetcher de esa
@@ -82,18 +79,6 @@ async function mensajerosFetcher() {
     conRepartoIds: res.conRepartoIds ?? [],
     conRecoleccionIds: res.conRecoleccionIds ?? [],
   };
-}
-
-/**
- * Zonas (central GAM y satélites, misma regla) con AL MENOS 1 mensajero con un cierre
- * abierto (`solicitado`/`vencido`). Alimenta el bloqueo POR ORDEN del checkbox en las
- * órdenes cuya acción por lote asigna/rutea: mientras la zona de la orden esté
- * bloqueada no se le puede asignar mensajero, así que no se deja seleccionar.
- */
-async function zonasBloqueadasFetcher(): Promise<Set<string>> {
-  const res = await listarZonasBloqueadasPorCierre();
-  if (res.status !== "ok") throw new Error(res.status);
-  return new Set(res.zonasBloqueadasIds);
 }
 
 // Feature 63/C3 (F1.4-c): `exclude` es por `value` del estado; default
@@ -136,20 +121,6 @@ const MOTIVO_DEVUELTA_NO_CENTRAL =
 // se activa solo cuando el filtro está acotado EXACTAMENTE a este estado, de modo que
 // el resto de vistas (otros estados, listado sin filtro) no resalta por prioridad (R10).
 const ESTADO_EN_BODEGA = "en_bodega_central";
-
-// Estados cuya acción por lote ASIGNA mensajero: ahí el checkbox se bloquea POR
-// ORDEN si la zona de esa orden tiene ≥1 mensajero con cierre abierto.
-// Feature 156/R28: el único apartado que asigna por lote es la BODEGA CENTRAL
-// ("Asignar mensajero"). `en_preparacion` salió del conjunto porque su acción
-// ("Generar guía") ya no decide mensajero: solo numera y mueve a la bodega central,
-// así que un cierre abierto en la zona no impide numerar.
-// Los estados que solo imprimen etiquetas (`por_recoger`,
-// `en_ruta_bodega_satelite`) NO se bloquean: no asignan nada.
-// Nota: en `en_bodega_central` el bloqueo también alcanza a "Imprimir etiquetas"
-// (comparte el checkbox); es el precio de una única columna de selección.
-const ESTADOS_ASIGNACION = new Set(["en_bodega_central"]);
-const MOTIVO_ZONA_CIERRE_ABIERTO =
-  "La bodega de esta zona tiene al menos un cierre de mensajero abierto: resuélvelo para poder asignar la orden.";
 
 // Motivo del bloqueo del checkbox en órdenes cuyo estado no tiene ninguna acción por
 // lote (p. ej. `rechazada`, `entregada`): con una sola tabla para todos los estados,
@@ -269,20 +240,10 @@ export function OrdenesListado({
     mensajerosFetcher,
   );
   const mensajeros = mensajerosData?.mensajeros;
-  // Feature 157: los bloqueados por cierre SÍ se usan aquí — el selector de la recolección
-  // los deshabilita para no ofrecer a alguien a quien el service va a rechazar.
-  const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
   // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
   // mezclan". Cada modal deshabilita la suya, con el motivo a la vista.
   const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
   const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
-
-  // Zonas bloqueadas por cierre (≥1 mensajero con cierre abierto), central y satélites
-  // por igual. Solo se pide si hay acciones por lote (sin checkbox no hay qué bloquear).
-  const { data: zonasBloqueadas } = useSWR(
-    accionesLote ? "ordenes:zonas-bloqueadas" : null,
-    zonasBloqueadasFetcher,
-  );
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -657,24 +618,15 @@ export function OrdenesListado({
    * - estado sin acciones por lote: no hay a dónde llevar la selección (la columna
    *   existe porque otras filas de la página sí la tienen).
    * - `devuelta`: solo las de la bodega central (las satélite las recupera el adminSatelite).
-   * - estados de asignación: si la ZONA de esa orden tiene ≥1 mensajero con cierre abierto.
-   * Nota (139/R15): `por_devolver_a_tienda` NO se bloquea por zona: su acción "Enviar a la
-   * tienda" es maestro/admin central directa y estas órdenes están siempre físicamente en
-   * la central (incluidas las de origen satélite ya recibidas).
+   * Pedido humano 2026-08-18: SE RETIRÓ la tercera regla, que bloqueaba los estados de
+   * asignación cuando la ZONA de la orden tenía ≥1 mensajero con cierre abierto. El servidor
+   * ya no rechaza esa asignación, así que el checkbox tampoco la impide.
    */
   function bloqueoSeleccion(row: OrdenListItemDTO): string | null {
     const value = row.estatusValue;
     if (accionesDe(value).length === 0) return MOTIVO_SIN_ACCIONES;
     if (value === ESTADO_DEVUELTA) {
       return row.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
-    }
-    if (value && ESTADOS_ASIGNACION.has(value)) {
-      // Sin datos aún (SWR en vuelo) o sin `zonaId` utilizable: NO se bloquea. No se
-      // puede AFIRMAR que la zona esté bloqueada, y el backend revalida la regla al
-      // ejecutar la acción (defensa en profundidad); bloquear "por si acaso"
-      // castigaría órdenes válidas.
-      if (!zonasBloqueadas || !row.zonaId) return null;
-      return zonasBloqueadas.has(row.zonaId) ? MOTIVO_ZONA_CIERRE_ABIERTO : null;
     }
     return null;
   }
@@ -845,7 +797,6 @@ export function OrdenesListado({
             open={modalAbierto === "asignar-recoleccion"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
-            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             mensajerosConRepartoIds={mensajerosConRepartoIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
