@@ -92,7 +92,10 @@ describe("Feature 100 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
       "recoleccion_tienda", // feature 154
       "incidente", // feature 154
       "deshacer_asignacion", // feature 149
-    ]);
+          // Feature 239 (2026-08-19): el `down.sql` de ESTA migracion NO se toca (es una foto
+      // historica); lo que se ajusta es el conjunto que se le descuenta al SEED vigente.
+      "anclaje_devolucion",
+]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_100.has(v))),
     );

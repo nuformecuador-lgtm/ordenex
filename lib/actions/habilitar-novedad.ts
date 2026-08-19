@@ -58,8 +58,12 @@ export interface HabilitarNovedadDeps {
 }
 
 /**
- * Publica la nota en el hilo de la orden y apaga sus dos banderas de novedad (`ayuda` y
- * `gestion_aprobada`), con lo que la orden deja de aparecer en `/novedades`. NO cambia el estatus.
+ * Publica la nota en el hilo de la orden y apaga su bandera de AYUDA. NO cambia el estatus.
+ *
+ * FEATURE 239 (T3.1, R23): antes apagaba DOS banderas y con eso la orden desaparecia de
+ * `/novedades` aunque siguiera en `devuelta` — con el reloj del SLA corriendo, hasta escalar y
+ * cobrarse sola. `gestion_aprobada` ya no existe: la devolucion se lista por igualdad de estado,
+ * asi que habilitar retira la solicitud de ayuda y nada mas.
  */
 export async function habilitarNovedad(
   input: unknown,

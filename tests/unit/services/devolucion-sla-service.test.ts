@@ -44,6 +44,9 @@ function row(overrides: Partial<DevueltaSlaRow> = {}): DevueltaSlaRow {
     mensajeroId: "m1",
     causa: "not_found",
     ancladaAt: new Date(NOW.getTime() - 25 * HORA), // por defecto: not_found vencida
+    // Feature 239 (T3.3): por defecto el caso NORMAL — la ventana se ancla en la aprobacion del
+    // cierre. La rama LEGADA se pide explicitamente en los casos que la miden.
+    origenAncla: "aprobacion",
     ...overrides,
   };
 }
@@ -96,7 +99,7 @@ describe("ejecutar — not_found: ventana de 24h (R14/R15/R16)", () => {
       ]),
     });
     const res = await newService(repo).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
@@ -108,7 +111,7 @@ describe("ejecutar — not_found: ventana de 24h (R14/R15/R16)", () => {
       ]),
     });
     const res = await newService(repo, fakeHistorial(2)).ejecutar(NOW); // 2 < 3
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
     const arg = (repo.liberarDevueltaSla as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as LiberarDevueltaSlaInput;
@@ -129,7 +132,7 @@ describe("ejecutar — not_found: ventana de 24h (R14/R15/R16)", () => {
   it("R16: not_found vencida + intentos >= umbral (3) -> escala a rechazada", async () => {
     const repo = fakeRepo({ findDevueltasSla: vi.fn(async () => [row()]) });
     const res = await newService(repo, fakeHistorial(3)).ejecutar(NOW); // 3 >= 3
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
     const arg = (repo.escalarDevueltaSla as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as EscalarDevueltaSlaInput;
@@ -145,7 +148,7 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
       ]),
     });
     const res = await newService(repo).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -159,7 +162,7 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
         ]),
       });
       const res = await newService(repo, historial).ejecutar(NOW);
-      expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+      expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
       expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
       // R17: no consulta el conteo de intentos para las causas de rechazo directo.
       expect(historial.contarIntentos).not.toHaveBeenCalled();
@@ -230,7 +233,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     ]);
     const res = await svc.ejecutar(NOW);
 
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
     const arg = (repo.escalarDevueltaSla as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as EscalarDevueltaSlaInput;
@@ -252,7 +255,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
       expect(await service.contarIntentos(ORDEN)).toBe(0);
 
       const res = await svc.ejecutar(NOW);
-      expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+      expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
       expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
     },
   );
@@ -263,7 +266,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     const { svc, service, repo } = correr([gestion("devuelta", "c1", "solicitado")]);
     expect(await service.contarIntentos(ORDEN)).toBe(0);
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -287,7 +290,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(segunda).toBe(primera); // R4: re-aprobar el mismo cierre no suma otra vez
 
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -303,7 +306,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(await service.contarIntentos(ORDEN)).toBe(1); // solo `c1`
 
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -323,7 +326,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
 
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -339,7 +342,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(await service.contarIntentos(ORDEN)).toBe(2); // no 3
 
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -354,7 +357,7 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     });
     const res = await newService(repo, historial).ejecutar(NOW);
 
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
     expect(historial.contarIntentos).not.toHaveBeenCalled();
   });
 
@@ -399,13 +402,13 @@ describe("ejecutar — reloj inyectable (R13)", () => {
     const rViva = await newService(viva, fakeHistorial(0)).ejecutar(
       new Date(ancladaAt.getTime() + 23 * HORA),
     );
-    expect(rViva).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0 });
+    expect(rViva).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
 
     const vencida = build();
     const rVencida = await newService(vencida, fakeHistorial(0)).ejecutar(
       new Date(ancladaAt.getTime() + 25 * HORA),
     );
-    expect(rVencida).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(rVencida).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
   });
 });
 
@@ -415,7 +418,7 @@ describe("ejecutar — resiliencia, idempotencia y datos incompletos (R24/R25/R2
       findDevueltasSla: vi.fn(async () => [row({ causa: null })]),
     });
     const res = await newService(repo).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1, legadas: 0 });
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
@@ -431,7 +434,7 @@ describe("ejecutar — resiliencia, idempotencia y datos incompletos (R24/R25/R2
       { warn },
     );
     const res = await service.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.findDevueltasSla).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledTimes(1);
   });
@@ -448,13 +451,13 @@ describe("ejecutar — resiliencia, idempotencia y datos incompletos (R24/R25/R2
       }),
     });
     const res = await newService(repo, fakeHistorial(0)).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 1, legadas: 0 });
   });
 
   it("R24/R25: liberar guardado por estado devuelve false -> omitida (no re-actua)", async () => {
     const repo = fakeRepo({ liberarDevueltaSla: vi.fn(async () => false) });
     const res = await newService(repo, fakeHistorial(0)).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1, legadas: 0 });
   });
 
   it("R24/R25: escalar guardado por estado devuelve false -> omitida (no doble efecto)", async () => {
@@ -463,12 +466,135 @@ describe("ejecutar — resiliencia, idempotencia y datos incompletos (R24/R25/R2
       escalarDevueltaSla: vi.fn(async () => false),
     });
     const res = await newService(repo).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 1, legadas: 0 });
   });
 
   it("nada que procesar -> conteos en cero", async () => {
     const repo = fakeRepo({ findDevueltasSla: vi.fn(async () => []) });
     const res = await newService(repo).ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 239 (T3.3/T3.4, R12/R14/R15/R35) — EL RELOJ ARRANCA EN LA APROBACION.
+//
+// Estos casos son el corazon de la feature vistos desde el servicio: el mismo instante que hace
+// visible la devolucion para la tienda es el que empieza a contar su plazo. Mientras eran dos
+// instantes distintos habia una ventana (mediana medida 8,2 h, p90 22,1 h) en la que la orden ya
+// corria plazo y todavia no se veia — y con la ventana `not_found` de 24 h, eso son rechazos
+// cobrados a ciegas.
+//
+// LA MUTACION QUE LOS MATA (T5.1): devolver el ancla al `createdAt` de la gestion.
+// ---------------------------------------------------------------------------------------------
+describe("239 — la ventana se mide desde la APROBACION (R12/R14/R15/R35)", () => {
+  // Mismo hecho contado dos veces: el mensajero devolvio hace 30 h, pero la bodega solo confirmo
+  // hace 10 h. Con la ventana `not_found` de 24 h, la respuesta correcta y la incorrecta se
+  // separan: anclando en la aprobacion la orden AUN NO VENCE; anclando en la gestion, ya habria
+  // escalado a `rechazada` y cobrado.
+  const APROBADA_HACE_10H = new Date(NOW.getTime() - 10 * HORA);
+  const GESTIONADA_HACE_30H = new Date(NOW.getTime() - 30 * HORA);
+
+  it("R12: con el ancla en la aprobacion (10 h) la ventana de 24 h AUN vive: no escala ni cobra", async () => {
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "not_found", ancladaAt: APROBADA_HACE_10H, origenAncla: "aprobacion" }),
+      ]),
+    });
+
+    const res = await newService(repo).ejecutar(NOW);
+
+    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+    expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
+  });
+
+  it("R12: con el MISMO caso anclado en la gestion (30 h) la ventana habria vencido — es la diferencia", async () => {
+    // Este caso es el CONTRAFACTUAL, y esta aqui a proposito: fija que los dos instantes dan
+    // respuestas OPUESTAS sobre la misma orden, de modo que anclar en el sitio equivocado no
+    // pueda pasar por un matiz. Con 30 h la orden vence y actua; con 10 h no.
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "not_found", ancladaAt: GESTIONADA_HACE_30H, origenAncla: "aprobacion" }),
+      ]),
+    });
+
+    const res = await newService(repo).ejecutar(NOW);
+
+    expect(res.evaluadas).toBe(0);
+    expect(res.liberadas + res.escaladas).toBe(1);
+  });
+
+  // R14/R35 — la rama LEGADA se CUENTA. Es lo que convierte «hay ordenes viejas sin ancla» en un
+  // numero que se puede ver bajar a cero, en vez de un `??` mudo dentro de una consulta.
+  it("R14/R35: una candidata legada sale contada en `legadas`, sin PII", async () => {
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "not_found", ancladaAt: GESTIONADA_HACE_30H, origenAncla: "legado" }),
+      ]),
+    });
+
+    const res = await newService(repo).ejecutar(NOW);
+
+    expect(res.legadas).toBe(1);
+    // Corte TRANSVERSAL: la misma orden se cuenta ademas en el cubo que le toque.
+    expect(res.liberadas + res.escaladas + res.evaluadas + res.omitidas).toBe(1);
+  });
+
+  it("R14: una candidata anclada por aprobacion NO cuenta como legada", async () => {
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "not_found", ancladaAt: GESTIONADA_HACE_30H, origenAncla: "aprobacion" }),
+      ]),
+    });
+
+    const res = await newService(repo).ejecutar(NOW);
+
+    expect(res.legadas).toBe(0);
+  });
+
+  it("R35: el aviso de la rama legada es un CONTEO agregado, sin ids ni guias ni tiendas", async () => {
+    const logger = { warn: vi.fn() };
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ ordenId: "o-secreta", causa: "not_found", origenAncla: "legado" }),
+      ]),
+    });
+    const service = new DevolucionSlaService(
+      repo,
+      fakeZonaRepo() as unknown as IZonaRepository,
+      fakeOrdenRepo() as unknown as IOrdenRepository,
+      fakeHistorial() as unknown as IOrdenHistorialService,
+      logger,
+    );
+
+    await service.ejecutar(NOW);
+
+    const mensajes = logger.warn.mock.calls.map((c) => String(c[0])).join(" | ");
+    expect(mensajes).toContain("rama legada");
+    expect(mensajes).not.toContain("o-secreta");
+  });
+
+  // R15 — LA VUELTA COMPLETA vista desde el servicio. La orden ya dio una vuelta entera
+  // (devolucion -> aprobacion -> liberacion a bodega -> reasignacion -> nueva devolucion -> nueva
+  // aprobacion). El repositorio entrega el anclaje MAS RECIENTE; el servicio mide desde ahi. Si
+  // se colara el anclaje viejo, la orden venceria de inmediato: escalaria a `rechazada` y
+  // dispararia el cobro por una devolucion que acaba de confirmarse.
+  it("R15: tras la vuelta completa se mide desde el anclaje NUEVO, no desde el de la vuelta anterior", async () => {
+    const anclajeViejo = new Date(NOW.getTime() - 20 * DIA);
+    const anclajeNuevo = new Date(NOW.getTime() - 2 * HORA);
+    const repo = fakeRepo({
+      findDevueltasSla: vi.fn(async () => [
+        row({ causa: "not_found", ancladaAt: anclajeNuevo, origenAncla: "aprobacion" }),
+      ]),
+    });
+
+    const res = await newService(repo).ejecutar(NOW);
+
+    // Con el anclaje nuevo (2 h) la ventana de 24 h vive: la orden reposa y no se toca.
+    expect(res).toEqual({ evaluadas: 1, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 });
+    expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
+    // Con el viejo (20 dias) habria vencido hace mucho: es justo lo que no puede pasar.
+    expect(anclajeViejo.getTime()).toBeLessThan(anclajeNuevo.getTime());
   });
 });

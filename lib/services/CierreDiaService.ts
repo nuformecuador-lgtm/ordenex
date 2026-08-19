@@ -24,6 +24,7 @@ import type {
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { GestionResultado } from "@prisma/client";
 import { descargaConfig } from "@/lib/config/descarga";
+import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import {
@@ -87,7 +88,21 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
   entregada: ["entregada"],
   reprogramada: ["reprogramada"],
   rechazada: ["rechazada"],
-  devuelta: ["en_bodega_central", "en_bodega_satelite", "rechazada", "devuelta"],
+  // Feature 239 (T1.5, R24) — `devolucion_por_confirmar` va PRIMERO y es una CORRECCION DE
+  // REGRESION, no una asercion que se actualiza: desde la 239 una gestion `devuelta` deja la
+  // orden en el PRE-ESTADO (`ESTATUS_POR_RESULTADO`, `lib/types/gestion-destino.ts`), asi que
+  // sin este value la guarda de "la orden sigue exactamente donde la dejo esa gestion" no casa
+  // NUNCA y el mensajero deja de poder deshacer su propia devolucion del dia. Los cuatro de
+  // detras se conservan intactos: siguen siendo los sitios donde una devolucion YA ANCLADA
+  // puede estar cuando alguien intenta deshacerla (reintento a bodega o escalado del cron, mas
+  // `devuelta` por defensa ante filas anteriores a la 47/239).
+  devuelta: [
+    ESTATUS_DEVOLUCION_POR_CONFIRMAR,
+    "en_bodega_central",
+    "en_bodega_satelite",
+    "rechazada",
+    "devuelta",
+  ],
   incidente: ["incidente"], // feature 158 (Q-D): el incidente SI se puede deshacer
 };
 

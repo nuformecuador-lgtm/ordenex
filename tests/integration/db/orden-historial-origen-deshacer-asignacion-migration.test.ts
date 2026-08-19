@@ -38,6 +38,9 @@ const downSql = fs.readFileSync(path.join(migrationDir, "down.sql"), "utf8");
 const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set<string>([
   "deshacer_asignacion", // feature 149
   "asignacion_recoleccion", // feature 157 (ampliacion)
+      // Feature 239 (2026-08-19): el `down.sql` de ESTA migracion NO se toca (es una foto
+      // historica); lo que se ajusta es el conjunto que se le descuenta al SEED vigente.
+      "anclaje_devolucion",
 ]);
 const schemaPrisma = fs.readFileSync(
   path.join(__dirname, "..", "..", "..", "db", "schema.prisma"),

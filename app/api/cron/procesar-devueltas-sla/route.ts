@@ -70,6 +70,11 @@ export async function handleProcesarDevueltasSla(
       liberadas: resumen.liberadas,
       escaladas: resumen.escaladas,
       omitidas: resumen.omitidas,
+      // Feature 239 (T3.3, R14/R35): cuantas se anclaron por la rama LEGADA (sin fila de
+      // `anclaje_devolucion`). Es el UNICO cambio del contrato HTTP de este endpoint, y es
+      // aditivo. Sirve para ver extinguirse la poblacion que quedo en vuelo el dia del
+      // despliegue: deberia bajar a cero y quedarse ahi.
+      legadas: resumen.legadas,
     };
   });
 

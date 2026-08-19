@@ -1,0 +1,18 @@
+-- DOWN (feature 239, retiro de `orden.gestion_aprobada`): repone la COLUMNA, con el mismo tipo,
+-- la misma nulabilidad y el mismo default que tenia.
+--
+-- ⚠️ PERDIDA DE DATO DECLARADA: repone la columna, NO sus valores. Todas las filas quedan en
+-- `false`.
+--
+-- POR QUE ES ACEPTABLE, y no un atajo: despues de la 239 ningun valor de esa columna significa
+-- nada — quien decide si una devolucion esta confirmada es el ESTADO de la orden, y el codigo que
+-- la escribia (el `updateMany` de `resolverCierre`) ya no existe. Ademas, el codigo ANTERIOR la
+-- leia con `DEFAULT false`, que es exactamente lo que este down deja: una base que ese codigo
+-- puede leer sin romperse (R32). Lo que ese codigo veria es `/novedades` vacia hasta que se
+-- aprueben cierres nuevos — que es el estado en el que ese codigo dejaba a las ordenes historicas
+-- de todos modos.
+--
+-- `IF NOT EXISTS` para que el rollback sea idempotente (se puede correr dos veces sin fallar).
+--
+-- R31: tampoco aqui se mueve ninguna orden de estado.
+ALTER TABLE "orden" ADD COLUMN IF NOT EXISTS "gestion_aprobada" boolean NOT NULL DEFAULT false;

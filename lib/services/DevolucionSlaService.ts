@@ -77,7 +77,7 @@ export class DevolucionSlaService implements IDevolucionSlaService {
       this.logger.warn(
         "[procesar-devueltas-sla] catalogo de estados incompleto (seed pendiente); no se procesa",
       );
-      return { evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0 };
+      return { evaluadas: 0, liberadas: 0, escaladas: 0, omitidas: 0, legadas: 0 };
     }
 
     // R12: la clasificacion a central usa la zona central (o null: todo cae a satelite, fallback
@@ -91,9 +91,15 @@ export class DevolucionSlaService implements IDevolucionSlaService {
     let liberadas = 0;
     let escaladas = 0;
     let omitidas = 0;
+    // Feature 239 (R14): corte TRANSVERSAL, no un quinto cubo. Cuenta las candidatas cuya ventana
+    // se ancla por la rama LEGADA (sin fila de `anclaje_devolucion`), se acabe omitiendo,
+    // evaluando, liberando o escalando. Es lo que hace observable la poblacion que quedo en vuelo
+    // el dia del despliegue, para poder verla llegar a cero y quedarse ahi.
+    let legadas = 0;
 
     for (const orden of candidatas) {
       try {
+        if (orden.origenAncla === "legado") legadas += 1;
         // R28: sin causa en la ultima gestion vigente -> se omite (no se adivina ventana).
         if (orden.causa === null) {
           omitidas += 1;
@@ -119,9 +125,19 @@ export class DevolucionSlaService implements IDevolucionSlaService {
           // queda en 0 indefinidamente, y este cron la libera a bodega una y otra vez sin
           // escalar jamas -> el `cobroRechazado` (56) nunca se emite.
           //
-          // Eso es la pregunta **Q5, ABIERTA**: no hay mitigacion implementada aqui ni en
-          // ninguna otra parte (las tres candidatas estan medidas en `design.md §7bis` y
-          // ninguna esta elegida). El servicio NO cambia de logica por ello; se declara.
+          // Eso era la pregunta Q5. **CERRADA CON RIESGO ACEPTADO el 2026-08-13** (decision D14
+          // del humano, medida el 2026-08-14 sobre 12 cierres: 12 aprobados, cero abiertos). El
+          // supuesto operativo es explicito: «el cierre se cerrara en algun momento por un
+          // usuario». Este comentario decia «ABIERTA» hasta el 2026-08-19 y citarlo ya llevo una
+          // vez a conclusiones falsas; el servicio nunca cambio de logica por ello.
+          //
+          // FEATURE 239 — Q5 CAMBIA DE FORMA, y conviene leer en que direccion. Antes: un cierre
+          // sin aprobar dejaba la orden girando en `devuelta` y NUNCA se cobraba. Con la mitad
+          // que se mergeo el 2026-08-18: la dejaba invisible Y SE COBRABA IGUAL a las 24 h — ese
+          // era el fallo. Desde la 239: la orden se queda CONGELADA en `devolucion_por_confirmar`
+          // —no se ve, no corre reloj, no se cobra— y esa poblacion es CONTABLE, que antes no lo
+          // era. El dano pasa de dinero mal cobrado a mercaderia parada. La alerta operativa que
+          // vigila esa poblacion (M3 del §7bis de la 215) sigue siendo ficha aparte.
           const intentos = await this.historial.contarIntentos(orden.ordenId); // R15
           if (intentos >= umbral) {
             // R16: alcanzo el umbral -> escala a `rechazada`.
@@ -157,7 +173,13 @@ export class DevolucionSlaService implements IDevolucionSlaService {
         `[procesar-devueltas-sla] ${omitidas} orden(es) omitida(s) en esta corrida`,
       );
     }
-    return { evaluadas, liberadas, escaladas, omitidas };
+    if (legadas > 0) {
+      // R35: SOLO un conteo agregado. Ni ids, ni guias, ni tiendas, ni mensajeros.
+      this.logger.warn(
+        `[procesar-devueltas-sla] ${legadas} devolucion(es) sin fila de anclaje (rama legada)`,
+      );
+    }
+    return { evaluadas, liberadas, escaladas, omitidas, legadas };
   }
 
   /** R15: reintento -> bodega responsable derivada de la zona (reusa el ruteo 41/46). */

@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 54 aristas y 52 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b)", () => {
+  it("el inventario de flujo tiene las 56 aristas y 54 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b + 239 #59/#60/#61 - #14)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -370,8 +370,11 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // 158/PR2 (#48-#52 entradas, #54-#58 inversas) = 52.
     // El invariante que protege este caso son las BAJAS (los pares retirados siguen siendo
     // ilegales, ver los casos de arriba); el recuento absoluto se mueve con cada feature aditiva.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(54); // +2: feature 157 (ampliacion)
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(52); // +2: feature 157 (ampliacion)
+    // Feature 239 (2026-08-19): 54 -> 56 y 52 -> 54. Suma #59/#60/#61 (tres pares NUEVOS) y
+    // RETIRA #14 (`en_reparto -> devuelta`, par unico). Es la primera feature de esta lista que
+    // da de BAJA una arista de `gestion`.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(56); // +2: feature 157; +3 -1: feature 239
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(54); // +2: feature 157; +3 -1: feature 239
   });
 });
 
@@ -565,12 +568,92 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 149: 38/36/2 -> 41/39/2 con sus tres aristas (#45/#46/#47), que son pares NUEVOS.
   // Feature 158/PR1: 41/39/2 -> 42/40/2 con #53 (`incidente -> en_reparto`), par NUEVO.
   // Feature 158/PR2: 42/40/2 -> 52/50/2 con las diez del ADMIN, las diez pares NUEVOS.
-  it("los recuentos del inventario son 54 flujo / 52 pares / 2 creacion", () => {
+  // Feature 239 (2026-08-19): 54/52/2 -> 56/54/2 con #59/#60/#61 (pares nuevos) menos #14.
+  it("los recuentos del inventario son 56 flujo / 54 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 54, // feature 157 (ampliacion)
-      paresUnicos: 52, // feature 157 (ampliacion)
+      aristasFlujo: 56, // feature 239
+      paresUnicos: 54, // feature 239
       aristasCreacion: 2,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 239 (T1.4, R29) — la devolucion espera al cierre. ALTAS #59/#60/#61 y BAJA de #14.
+//
+// La BAJA es la que importa: mientras `en_reparto -> devuelta` siga siendo legal, cualquier
+// camino que la reintroduzca vuelve a dejar la orden en `devuelta` al gestionar, y con ella
+// vuelve el cobro prematuro que esta feature cierra (la ventana de SLA arranca sin que la tienda
+// haya podido ver la novedad). Por eso se afirma que LANZA, no que "no se usa".
+// ---------------------------------------------------------------------------------------------
+describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto -> devuelta`", () => {
+  it("R2/R29: `en_reparto -> devuelta` ya es ILEGAL (arista #14 retirada)", () => {
+    expect(() => assertTransicionValida("en_reparto", "devuelta")).toThrow(TransicionIlegalError);
+    // Y no queda declarada por ninguna otra familia: el par entero desaparecio del mapa.
+    expect(
+      INVENTARIO_FLUJO.filter((a) => a.origen === "en_reparto" && a.destino === "devuelta"),
+    ).toHaveLength(0);
+  });
+
+  it("R2/#59: gestionar una devolucion lleva la orden al PRE-ESTADO, y eso es legal", () => {
+    expect(() =>
+      assertTransicionValida("en_reparto", "devolucion_por_confirmar"),
+    ).not.toThrow();
+    const arista = INVENTARIO_FLUJO.find(
+      (a) => a.origen === "en_reparto" && a.destino === "devolucion_por_confirmar",
+    );
+    expect(arista?.via).toBe("gestion"); // misma familia que el resto de resultados de gestion
+  });
+
+  it("R4/#60: el ANCLAJE `devolucion_por_confirmar -> devuelta` es legal y tiene familia PROPIA", () => {
+    expect(() =>
+      assertTransicionValida("devolucion_por_confirmar", "devuelta"),
+    ).not.toThrow();
+    const anclaje = TRANSICIONES.devolucion_por_confirmar.find((d) => d.to === "devuelta");
+    // Familia propia y no `gestion` ni `devolucion_rechazada`: el cron del SLA busca EXACTAMENTE
+    // esta familia para saber en que instante arranco el reloj (R12).
+    expect(anclaje?.via).toBe("anclaje_devolucion");
+    expect(anclaje?.rol).toContain("admin");
+  });
+
+  it("R24/#61: el mensajero puede deshacer su devolucion del dia desde el pre-estado", () => {
+    expect(() =>
+      assertTransicionValida("devolucion_por_confirmar", "en_reparto"),
+    ).not.toThrow();
+    const deshacer = TRANSICIONES.devolucion_por_confirmar.find((d) => d.to === "en_reparto");
+    expect(deshacer?.via).toBe("deshacer_gestion");
+  });
+
+  it("P4 FIRMADA EN CONTRA: el pre-estado NO tiene arista de `recuperacion_manual`", () => {
+    // Decision humana del 2026-08-19 (`requirements.md`, PUERTA HUMANA). El adminSatelite NO
+    // puede recuperar a bodega una devolucion no anclada, aunque tenga el paquete delante. Si
+    // esto se pone rojo es porque alguien anadio la puerta trasera "por comodidad": la via
+    // correcta es reabrir P4, no declarar la arista.
+    const familias = TRANSICIONES.devolucion_por_confirmar.map((d) => d.via);
+    expect(familias).not.toContain("recuperacion_manual");
+    expect(() =>
+      assertTransicionValida("devolucion_por_confirmar", "en_bodega_central"),
+    ).toThrow(TransicionIlegalError);
+    expect(() =>
+      assertTransicionValida("devolucion_por_confirmar", "en_bodega_satelite"),
+    ).toThrow(TransicionIlegalError);
+  });
+
+  it("las SIETE salidas de `devuelta` se conservan intactas (siguen teniendo productor)", () => {
+    // `devuelta` pasa a significar "devolucion ANCLADA"; sus salidas son el camino de esas
+    // ordenes y no cambian. Si alguna cayera, una devolucion confirmada se quedaria sin salida.
+    expect(TRANSICIONES.devuelta).toHaveLength(7);
+    expect(TRANSICIONES.devuelta.map((d) => `${d.to}:${d.via}`).sort()).toEqual(
+      [
+        "en_bodega_central:liberacion_devuelta_sla",
+        "en_bodega_central:recuperacion_manual",
+        "en_bodega_satelite:liberacion_devuelta_sla",
+        "en_bodega_satelite:recuperacion_manual",
+        "en_reparto:deshacer_gestion",
+        "rechazada:escalado_devuelta_sla",
+        "reprogramada:reprogramacion_tienda",
+      ].sort(),
+    );
   });
 });
 

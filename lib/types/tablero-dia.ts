@@ -43,6 +43,13 @@ export type BucketSinResultado = "sinRecoger" | "enReparto" | "otros";
  * que verla en `sinRecoger` seria contar como "trabajo parado de este mensajero" algo que
  * no es de nadie. Cae en `otros` por defecto.
  *
+ * FEATURE 239 (T1.7, 2026-08-19) — `devolucion_por_confirmar` NO esta aqui, y tampoco es un
+ * olvido. Este mapa es PARCIAL con default `otros`, asi que ABSORBE un value nuevo sin quejarse:
+ * por eso la decision se afirma en `buckets-estatus.test.ts`. Los tres buckets solo particionan
+ * ordenes SIN gestion vigente en el dia; una orden en el pre-estado tiene gestion del dia —la
+ * devolucion que el mensajero acaba de registrar—, asi que cuenta en `devueltas` del primer eje
+ * y no puede aparecer como "trabajo parado" en `sinRecoger` ni en `enReparto`.
+ *
  * El `satisfies` sobre `OrderStatusValue` es lo que hace que un RENAME del catalogo no
  * compile (R46); que no falte ni sobre ningun value lo comprueba el guardia.
  */
