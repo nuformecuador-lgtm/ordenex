@@ -44,7 +44,9 @@ describe("MultiSelectFilter — agrupado de opciones (R28)", () => {
     const lista = await abrir(user);
 
     expect(within(lista).queryAllByRole("group")).toHaveLength(0);
+    // "Todos" encabeza la lista (pedido humano 2026-08-19) y no pertenece a ningun grupo.
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
       "Rojo",
       "Azul",
     ]);
@@ -114,6 +116,7 @@ describe("MultiSelectFilter — agrupado de opciones (R28)", () => {
     ).toEqual(["Frios", "Calidos"]);
     // Todas las opciones siguen presentes y en el orden declarado dentro de su grupo.
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
       "Azul",
       "Celeste",
       "Rojo",
@@ -176,7 +179,10 @@ describe("MultiSelectFilter — agrupado de opciones (R28)", () => {
         .getAllByRole("group")
         .map((g) => g.getAttribute("aria-label")),
     ).toEqual(["Frios"]);
-    expect(within(lista).getAllByRole("option")).toHaveLength(1);
+    expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
+      "Azul",
+    ]);
   });
 
   it("R28: las opciones SIN grupo conviven con las agrupadas, sin cabecera propia", async () => {
@@ -196,8 +202,125 @@ describe("MultiSelectFilter — agrupado de opciones (R28)", () => {
 
     expect(within(lista).getAllByRole("group")).toHaveLength(1);
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
       "Suelto",
       "Rojo",
+    ]);
+  });
+});
+
+// Pedido humano del 2026-08-19 — la opcion "Todos" que marca y desmarca de una vez.
+// Lo que se afirma no es el boton, es la REGLA: actua sobre lo que se esta viendo y
+// no toca lo marcado que el buscador dejo fuera.
+describe("MultiSelectFilter — opcion 'Todos' (pedido humano 2026-08-19)", () => {
+  it("sin nada marcado, 'Todos' emite TODOS los valores", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={AGRUPADAS}
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+    const lista = await abrir(user);
+
+    await user.click(within(lista).getByRole("option", { name: "Todos" }));
+    expect(onChange).toHaveBeenCalledWith(["rojo", "naranja", "azul"]);
+  });
+
+  it("con TODAS marcadas, 'Todos' aparece seleccionado y el clic las desmarca", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={AGRUPADAS}
+        value={["rojo", "naranja", "azul"]}
+        onChange={onChange}
+      />,
+    );
+    const lista = await abrir(user);
+
+    const todos = within(lista).getByRole("option", { name: "Todos" });
+    expect(todos).toHaveAttribute("aria-selected", "true");
+    await user.click(todos);
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("con ALGUNAS marcadas NO figura como seleccionado, y el clic completa la seleccion", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={AGRUPADAS}
+        value={["azul"]}
+        onChange={onChange}
+      />,
+    );
+    const lista = await abrir(user);
+
+    const todos = within(lista).getByRole("option", { name: "Todos" });
+    // Parcial NO es "todas": anunciarlo como marcado haria que el clic siguiente
+    // desmarcara cuando el usuario espera lo contrario.
+    expect(todos).toHaveAttribute("aria-selected", "false");
+    await user.click(todos);
+    expect(onChange).toHaveBeenCalledWith(["azul", "rojo", "naranja"]);
+  });
+
+  it("con el buscador puesto, 'Todos' solo alcanza lo VISIBLE y respeta el resto", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={AGRUPADAS}
+        value={["rojo"]}
+        onChange={onChange}
+      />,
+    );
+    const lista = await abrir(user);
+
+    await user.type(screen.getByLabelText("Buscar en Color"), "azul");
+    await user.click(within(lista).getByRole("option", { name: "Todos" }));
+    // "rojo" no estaba en pantalla: se conserva. Solo se suma lo que el buscador dejo ver.
+    expect(onChange).toHaveBeenCalledWith(["rojo", "azul"]);
+  });
+
+  it("sin coincidencias en la busqueda no se ofrece 'Todos' (no habria que marcar)", async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={AGRUPADAS}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+    const lista = await abrir(user);
+
+    await user.type(screen.getByLabelText("Buscar en Color"), "verde");
+    expect(within(lista).queryAllByRole("option")).toHaveLength(0);
+  });
+
+  it("con `todosLabel={null}` el atajo no se ofrece", async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelectFilter
+        label="Color"
+        options={PLANAS}
+        value={[]}
+        onChange={vi.fn()}
+        todosLabel={null}
+      />,
+    );
+    const lista = await abrir(user);
+
+    expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Rojo",
+      "Azul",
     ]);
   });
 });
