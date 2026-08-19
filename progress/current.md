@@ -9,69 +9,97 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-18. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-18, noche. **EMPIEZA A LEER POR AQUÍ**
 
-> **Producción está sana y no se ha movido**: `prod` sigue en la release del 15-ago (PR #388),
-> **cero errores de runtime en 3 días**. Todo lo que cambió está en `dev`. **0 features
-> `in_progress`.**
+> **Producción sigue sana y sin tocar**: `prod` en la release del 15-ago (PR #388), **cero errores de
+> runtime en 3 días**. Todo lo de hoy está en esta rama, pendiente de PR.
 
-**Entró la 227 desde otra sesión** — PR **#390**, mergeado el 16-ago 23:07 UTC: *hilo de notas por
-orden entre tienda y mensajero*, 79 archivos, +8.242/−1.589. `dev` va **3 commits por delante de
-`prod`**. Su ficha quedó `in_progress` con el PR ya mergeado —**sexta** vez el mismo patrón— y se
-cierra aquí.
+**Lo que entró hoy**, en un solo PR (`feature/230-dinero-sin-centimos`):
 
-### 🔎 La deuda que esa ficha escondía, y que ya está saldada
+| # | Qué |
+| --- | --- |
+| **227** | queda `done`, con el conteo del drop **medido contra producción** |
+| **230** | **el dinero se pinta sin céntimos** — implementada, revisada y vista en pantalla |
+| **232** | registrada: los céntimos dejan de EXISTIR (toca el dato) |
+| **233** | registrada: el gate rápido no corre las guardias si los relacionados fallan |
 
-La migración `20260815140000_orden_mensajero_meta_drop_nota` es **destructiva**, y su propia cabecera
-lo dejaba escrito: el conteo se hizo contra la base **local** (0 de 0, tabla vacía) y quedaba
-**PENDIENTE** de medirlo *«quien tenga la credencial, ANTES de aplicar esta migración allí»*. El
-reviewer lo aceptó abierto a propósito (m3). Medido contra **producción** el 18-ago:
+**Gate completo `./init.sh` EXIT 0** sobre el árbol final: **1116 archivos, 14313 tests, 0 saltados,
+282 s** (baseline de `dev`: 1115 / 14276 → +1 archivo, la guardia nueva, y +37 tests).
 
-**4 filas en `orden_mensajero_meta` · 0 con `nota` · 0 mensajeros → el drop no pierde nada.**
+### 🔎 La 227 y su deuda con fecha de vencimiento
 
-**No es un cero de universo vacío** —la lección de siempre, aplicada—: la tabla **tiene** 4 filas, y
-son de `marcar_luego` (feature 115), que la migración no toca. Nadie llegó a usar la nota privada de
-la 116, así que la pérdida deliberada que la P1 firmó no se lleva por delante ni un texto real.
+Entró por PR #390 desde otra sesión y su ficha quedó `in_progress` con el PR ya mergeado —**sexta**
+vez—. Dentro vivía lo de siempre: la migración del drop de `orden_mensajero_meta.nota` es
+**destructiva** y su cabecera dejaba el conteo de producción **PENDIENTE**. Medido: **4 filas en la
+tabla, 0 con nota, 0 mensajeros**. El drop no pierde nada, y **no es un cero de universo vacío** — las
+4 filas son de `marcar_luego` (feature 115), que la migración no toca.
 
-### ⚠️ La próxima release YA NO es «cero migraciones»
+### ⚠️ La próxima release NO es de cero migraciones
 
-La base de producción va por `20260812120000_gestion_orden_pago`. Le faltan **dos**:
-`20260815120000_orden_nota` y `20260815140000_orden_mensajero_meta_drop_nota` —**y la segunda dropea
-una columna**—. Entran solas con el deploy. Las tres últimas releases fueron de cero migraciones;
-ésta no, y hay que abrirla sabiéndolo.
+La base de producción va por `20260812120000_gestion_orden_pago` y le faltan **dos**:
+`20260815120000_orden_nota` y el drop, **que borra una columna**. Entran solas con el deploy.
+
+### 💰 La 230, y lo que costó de verdad
+
+`₡1.234,56` → `₡1.235`, **redondeando** (no truncando) y **solo el dinero**. El formateador tiene un
+**único punto de paso**, así que sus 128 consumidores no cambian: la superficie son **6 archivos de
+producción**. El precio estuvo en otro sitio — **234 líneas de aserción reescritas en 36 archivos de
+test**, releídas una a una.
+
+**El redondeo va sobre el STRING, con acarreo manual.** No es preciosismo: `Number(`, `parseFloat(` y
+`parseInt(` están prohibidos en el camino del dinero por tres guardias vivas, y este repo ya perdió un
+céntimo por una conversión. Y va **antes** de agrupar los miles, que es lo que hace que `999,50` dé
+`₡1.000` y no `₡1000`.
+
+**Visto en pantalla, no solo en tests** (T6.3): Chromium real, **488 importes en 11 rutas, cero con
+decimal**, con el cero **autocomprobado** — el mismo texto en formato viejo da 32 hallazgos. Los cinco
+huecos de esa medición están declarados en `progress/impl_230_pantallas.md`, incluido el que importa:
+el mensaje del tope **no llegó a renderizarse** porque no hay incidentes pendientes en local.
 
 ### ⏭️ Lo siguiente, en este orden
 
-1. **La 230**, registrada hoy a petición del humano: **el dinero se pinta sin céntimos**
-   (`₡1.234,56` → `₡1.235`, redondeando). El formato tiene **un solo punto de paso**
-   (`formatMontoString`, que consolidó la 201), así que el cambio de producción son 4 archivos; el
-   coste real son **276 aserciones en 39 archivos de test**. Decisiones ya firmadas: redondear y no
-   truncar, y **solo dinero** —los porcentajes y las duraciones de analítica son décimas, no
-   centésimas—. Va con guardia nueva, o la próxima feature reintroduce los céntimos.
-2. **Release `dev` → `prod`** cuando la 230 esté dentro, con **gate completo sobre el SHA real** y no
-   sobre «dev» (el pre-vuelo caduca en minutos), y consciente de las dos migraciones de arriba.
-3. **La 228, desbloqueada**: dependía de la 227, que ya está en `dev`. Es la transición «la tienda
-   habilita una novedad», con `HabilitarNovedadModal` esperando en maqueta declarada. Y hasta que
-   exista, **el mensajero no recibe ninguna señal** de que la tienda le escribió en el hilo nuevo.
-4. **La 218** (el corte automático sigue sin sumar reintento en `sin_gestionar`) y **la 219** (el 0 de
-   R19 caduca en cuanto entre una orden en `devuelta`, y nada lo vigila).
-5. **La 225** y **la 226**, frontend y baratas.
-6. **SIN FICHA:** los seis tokens que **empeoran al imprimir** desde oscuro (`P1`–`P6`), y el **límite
-   de intentos del rastreo público**, hoy en memoria del proceso y ya de cara a internet.
-7. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+1. **Release `dev` → `prod`**, con gate completo sobre el SHA real y **consciente de las dos
+   migraciones**, una destructiva.
+2. **La 232** — la otra mitad de la 230, y la que tiene dientes: los céntimos dejan de existir en el
+   **dato**. Medido contra producción: `orden.monto_cobrar` **34 de 139** (24 %),
+   `wallet_movimiento.monto` 20 de 82, `wallet_tienda_movimiento.monto` 17 de 70, y **cero** en todo
+   lo que se teclea a mano. Sus cuatro preguntas abiertas están en la ficha; la primera —qué se hace
+   con los datos que ya tienen céntimos— son **saldos que ya se le deben a alguien**.
+3. **La 233**, barata y del arnés: `test:rapido` es `test:cambiados && test:guardias` y el `&&`
+   cortocircuita. Un gate rápido en rojo **no dice nada** sobre si las guardias pasan. Ojo al
+   arreglarlo: cambiar `&&` por `;` taparía el exit code y volvería verde un gate rojo.
+4. **La 228, desbloqueada** (dependía de la 227). Hasta que exista, el mensajero **no recibe ninguna
+   señal** de que la tienda le escribió en el hilo nuevo.
+5. **La 218** y **la 219**; luego **225** y **226**, frontend y baratas.
+6. **La 216** sigue esperando una **decisión de marca**. No es técnico.
 
-### 🧠 Lo que este cierre enseñó
+### ⚡ Dos sesiones en el mismo árbol: lo que costó
 
-- **Una medición pendiente dentro de una migración es una tarea con fecha de vencimiento**, no un
-  comentario. La de la 227 estaba escrita en la cabecera del `.sql`, el reviewer la dejó abierta con
-  nombre y número (m3), y aun así sólo se ejecuta si alguien **lee la ficha antes de la release**.
-  Costó una consulta.
-- **El conteo se hace sobre la tabla entera, no sobre la columna.** Preguntar sólo `WHERE nota IS NOT
-  NULL` habría dado 0 y no habría distinguido «nadie la usó» de «la tabla está vacía». Con las 4
-  filas de `marcar_luego` delante, el cero significa algo.
-- **`origin/dev` se mueve mientras se redacta el estado.** Este archivo describía «0 `in_progress`,
-  sin PRs abiertos» y llevaba dos días abierto en un PR sin mergear; la 227 lo desmintió el mismo
-  día. Un estado no mergeado envejece igual que un gate.
+Otra sesión trabajó hoy en este mismo directorio (ficha **231**, caja de wallet). De ahí salieron
+tres cosas que conviene no repetir:
+
+- **Tomó el id 231 antes que yo**, así que lo que iba a ser la 231 es la **232**. Sexta colisión.
+- **Un `reset` de su rama movió la mía por debajo.** Un commit mío quedó apuntando a `dev` sin las
+  ediciones que yo daba por commiteadas: `feature_list.json` volvió a la versión de `dev`, con la 227
+  otra vez `in_progress`. **Lo detectó comparar el BLOB commiteado, no el árbol** — `git show
+  HEAD:fichero`. Verificar contra el árbol de trabajo no distingue «lo commiteé» de «alguien lo
+  revirtió».
+- **La 230 y la 231 chocan** en cinco archivos de test de wallet. Está escrito en las dos fichas.
+
+### 🧠 Lo que este día enseñó
+
+- **Una aserción que compara un texto contra la función que lo genera no comprueba nada.** Siempre
+  está verde. Había **cuatro** así, y son las que dejaron pasar el defecto real de esta feature: un
+  tope que anunciaba `₡10.000.000.000` mientras el validador rechazaba esa cifra. **Un máximo nunca
+  se redondea al alza**: al alza deja de ser un límite.
+- **La pareja invariante + literal es más fuerte que cualquiera de las dos.** El reviewer mutó el tope
+  a uno *demasiado bajo* y la invariante **sobrevivió**; los literales cayeron. Cada red tapa el
+  agujero de la otra.
+- **Un cero hay que autocomprobarlo o no vale.** El detector de céntimos de la primera medición era
+  **más estrecho que el requisito** —exigía dos dígitos, y R1 prohíbe cualquiera—, así que `₡1.234,5`
+  se le habría escapado. Lo destapó el reviewer, no yo.
+- **Ver la app encuentra lo que la suite no**, otra vez: el defecto del tope es un texto de pantalla
+  que 14.000 tests dieron por bueno.
 
 ---
 

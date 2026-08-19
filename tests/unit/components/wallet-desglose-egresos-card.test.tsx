@@ -32,13 +32,13 @@ describe("DesgloseEgresosCard — render (R11/R12)", () => {
 
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
     expect(within(lista).getByText("Gastos fijos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡300,00")).toBeInTheDocument();
+    expect(within(lista).getByText("₡300")).toBeInTheDocument();
     expect(within(lista).getByText("Gastos variables")).toBeInTheDocument();
-    expect(within(lista).getByText("₡125,50")).toBeInTheDocument();
+    expect(within(lista).getByText("₡126")).toBeInTheDocument();
     expect(within(lista).getByText("Sueldos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡800,00")).toBeInTheDocument();
+    expect(within(lista).getByText("₡800")).toBeInTheDocument();
     expect(within(lista).getByText("Total de egresos")).toBeInTheDocument();
-    expect(within(lista).getByText("₡1.250,75")).toBeInTheDocument();
+    expect(within(lista).getByText("₡1.251")).toBeInTheDocument();
   });
 });
 
@@ -48,29 +48,36 @@ describe("Feature 158/R32 — la indemnización es una fila propia y suma al tot
 
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
     expect(within(lista).getByText("Indemnizaciones")).toBeInTheDocument();
-    expect(within(lista).getByText("₡25,25")).toBeInTheDocument();
+    expect(within(lista).getByText("₡25")).toBeInTheDocument();
   });
 
   it("el total mostrado es el que llega del servidor (la tarjeta NO suma dinero)", () => {
     // 300.00 + 125.50 + 800.00 + 25.25 = 1250.75. El componente no hace la cuenta: si el
     // servidor mandara otro total, la tarjeta mostraría ESE (money-safe, un solo origen).
+    //
+    // Feature 230/R20: el total que se pinta es el REDONDEO DEL TOTAL (1250.75 -> ₡1.251),
+    // nunca la suma de los redondeos. Aquí las dos cuentas coinciden por casualidad
+    // (300+126+800+25 = 1251); el caso de abajo, con `999.99 -> ₡1.000`, demuestra que la
+    // tarjeta pinta lo que le mandan aunque no cuadre con las filas de arriba.
     render(
       <DesgloseEgresosCard desglose={{ ...DESGLOSE, total: "999.99" }} />,
     );
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
-    expect(within(lista).getByText("₡999,99")).toBeInTheDocument();
+    expect(within(lista).getByText("₡1.000")).toBeInTheDocument();
   });
 
-  it("un monto con muchos decimales o muy grande se muestra sin reformatear (sin parseFloat)", () => {
+  it("un monto que no cabe en un `number` se redondea EXACTO (sin parseFloat)", () => {
     render(
       <DesgloseEgresosCard
         desglose={{ ...DESGLOSE, indemnizacion: "12345678901.99", total: "12345679127.49" }}
       />,
     );
     const lista = screen.getByRole("group", { name: "Desglose de egresos" });
-    // Un `parseFloat`/`Number` intermedio perdería precisión o cambiaría el texto.
-    expect(within(lista).getByText("₡12.345.678.901,99")).toBeInTheDocument();
-    expect(within(lista).getByText("₡12.345.679.127,49")).toBeInTheDocument();
+    // Feature 230: los dos redondean en sentidos opuestos (`,99` sube, `,49` baja) sobre
+    // once dígitos, y eso solo sale bien trabajando dígito a dígito. Un `parseFloat`/`Number`
+    // intermedio pondría en juego la precisión justo aquí.
+    expect(within(lista).getByText("₡12.345.678.902")).toBeInTheDocument();
+    expect(within(lista).getByText("₡12.345.679.127")).toBeInTheDocument();
   });
 });
 

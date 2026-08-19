@@ -94,7 +94,9 @@ describe("GastosFijosPlantillasPanel — listado (R26)", () => {
     montarPanel([ACTIVA, INACTIVA]);
 
     expect(screen.getByText("Alquiler de bodega")).toBeInTheDocument();
-    expect(screen.getByText("₡300,00")).toBeInTheDocument();
+    // El `"300.00"` del servidor se pinta sin la cola de céntimos (feature 230).
+    // El formulario de edición sigue viéndola: es dato, no presentación (§1/Q2).
+    expect(screen.getByText("₡300")).toBeInTheDocument();
     expect(screen.getByText("Activa")).toBeInTheDocument();
     expect(screen.getByText("Internet")).toBeInTheDocument();
     expect(screen.getByText("Inactiva")).toBeInTheDocument();

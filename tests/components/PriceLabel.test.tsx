@@ -9,6 +9,13 @@
 // Se escribe con la migracion de la feature 201 (tanda D) porque migrarlo cambia
 // TRES cosas visibles a la vez —separador de miles, espacio tras el simbolo y
 // ceros finales— y ninguna de las tres estaba medida.
+//
+// Feature 230: la tercera de esas tres cosas —los ceros finales— DEJA DE EXISTIR.
+// El componente hereda el formato sin centimos de `lib/config/moneda.ts` y ya no
+// pinta parte decimal. Los casos que afirmaban los ceros finales no se borran:
+// pasan a afirmar el REDONDEO (half away from zero), que es lo que ahora decide
+// lo que se ve. La agrupacion de miles, el simbolo pegado y el contrato de
+// «sin valor -> cero» siguen exactamente igual.
 
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -28,28 +35,32 @@ function etiqueta(): HTMLElement {
 }
 
 describe("PriceLabel — el formato de la app (feature 201)", () => {
-  it("un entero se pinta con dos decimales, no pelado", () => {
-    // Antes `minimumFractionDigits: 0` se comia los ceros y la columna quedaba
-    // con la coma a distinta altura en cada fila.
+  it("un entero se pinta PELADO, sin cola decimal (feature 230)", () => {
+    // Hasta la 230 este caso afirmaba lo contrario (`₡1.234,00`) y lo justificaba
+    // con la alineacion de la coma en la columna. Ya no hay coma que alinear.
     render(<PriceLabel value={1234} />);
-    expect(screen.getByText("₡1.234,00")).toBeInTheDocument();
+    expect(screen.getByText("₡1.234")).toBeInTheDocument();
   });
 
-  it("los decimales se pintan completos, incluido el cero final", () => {
+  it("el medio se aleja del cero: 1.234,5 sube a 1.235", () => {
+    // Afirmaba «los decimales se pintan completos, incluido el cero final». Los
+    // decimales ya no se pintan: DECIDEN el redondeo y se descartan (230/R2, D1).
     render(<PriceLabel value={1234.5} />);
-    expect(screen.getByText("₡1.234,50")).toBeInTheDocument();
+    expect(screen.getByText("₡1.235")).toBeInTheDocument();
   });
 
-  it("no recorta el segundo decimal", () => {
+  it("la cola decimal REDONDEA la parte entera, no se recorta", () => {
+    // Truncar daria `₡13.331.832`; el `,72` sube a `₡13.331.833`. La diferencia
+    // entre redondear y truncar es justo lo que este caso mide (230/R2).
     render(<PriceLabel value={13331832.72} />);
-    expect(screen.getByText("₡13.331.832,72")).toBeInTheDocument();
+    expect(screen.getByText("₡13.331.833")).toBeInTheDocument();
   });
 
   it("agrupa los miles de tres en tres, con PUNTO", () => {
-    // La mutacion que este caso caza: quitar la agrupacion (`₡13331832,72`).
+    // La mutacion que este caso caza: quitar la agrupacion (`₡13331833`).
     render(<PriceLabel value={13331832.72} />);
     const texto = etiqueta().textContent ?? "";
-    expect(texto).toBe("₡13.331.832,72");
+    expect(texto).toBe("₡13.331.833");
     expect(texto.split(".")).toHaveLength(3);
     // Y el separador no se cuela delante del primer grupo (".999").
     expect(texto).not.toMatch(/^₡\./);
@@ -57,22 +68,23 @@ describe("PriceLabel — el formato de la app (feature 201)", () => {
 
   it("con miles justos tampoco cuela un separador de mas", () => {
     render(<PriceLabel value={1000} />);
-    expect(screen.getByText("₡1.000,00")).toBeInTheDocument();
+    expect(screen.getByText("₡1.000")).toBeInTheDocument();
   });
 
   it("acepta el valor como STRING", () => {
     render(<PriceLabel value="4500.5" />);
-    expect(screen.getByText("₡4.500,50")).toBeInTheDocument();
+    expect(screen.getByText("₡4.501")).toBeInTheDocument();
   });
 
   it("acepta el valor como NUMBER", () => {
     render(<PriceLabel value={4500.5} />);
-    expect(screen.getByText("₡4.500,50")).toBeInTheDocument();
+    expect(screen.getByText("₡4.501")).toBeInTheDocument();
   });
 
   it("un negativo lleva el signo DELANTE del simbolo", () => {
+    // Y se aleja del cero tambien hacia abajo: -1.234,5 da -₡1.235, no -₡1.234.
     render(<PriceLabel value={-1234.5} />);
-    expect(screen.getByText("-₡1.234,50")).toBeInTheDocument();
+    expect(screen.getByText("-₡1.235")).toBeInTheDocument();
     expect(etiqueta().textContent).not.toContain("₡-");
   });
 
@@ -100,7 +112,7 @@ describe("PriceLabel — sin valor pinta CERO, no el marcador de ausencia", () =
 
   it.each(AUSENTES)("%s se pinta como cero", (_caso, valor) => {
     render(<PriceLabel value={valor} />);
-    expect(screen.getByText("₡0,00")).toBeInTheDocument();
+    expect(screen.getByText("₡0")).toBeInTheDocument();
   });
 
   it("no pinta NINGUNO de los dos marcadores de «sin importe»", () => {
@@ -119,7 +131,7 @@ describe("PriceLabel — sin valor pinta CERO, no el marcador de ausencia", () =
     unmount();
     render(<PriceLabel value={null} />);
     expect(etiqueta().textContent).toBe(conCero);
-    expect(conCero).toBe("₡0,00");
+    expect(conCero).toBe("₡0");
   });
 });
 

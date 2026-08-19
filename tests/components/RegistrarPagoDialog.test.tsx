@@ -129,8 +129,10 @@ describe("R30/R23 — el monto se propone y se puede bajar", () => {
   it("prefija el monto con el disponible que devolvió el servidor, TAL CUAL", () => {
     render(<Arnes disponible="9000.00" />);
     expect(montoInput().value).toBe("9000.00");
-    // Y el disponible se enseña con su símbolo, sin recalcularlo.
-    expect(screen.getByText("₡9.000,00")).toBeInTheDocument();
+    // Y el disponible se enseña con su símbolo, sin recalcularlo. El CAMPO sigue
+    // llevando la escala 2 del servidor (`9000.00`): la feature 230 cambia lo que
+    // se PINTA, no lo que se escribe ni lo que viaja (§1/Q2).
+    expect(screen.getByText("₡9.000")).toBeInTheDocument();
   });
 
   it("un monto MENOR se acepta y viaja tal cual: es el pago parcial (R23/R30)", async () => {
@@ -155,7 +157,9 @@ describe("R30/R23 — el monto se propone y se puede bajar", () => {
     fireEvent.click(confirmar());
     await waitFor(() => expect(registrarMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "El monto supera lo que se puede pagar. Disponible: ₡9.000,00.",
+      // El texto se relee ENTERO, no solo la cifra: el mensaje del servidor sigue
+      // igual y lo único que cambia es cómo se pinta el importe que incrusta.
+      "El monto supera lo que se puede pagar. Disponible: ₡9.000.",
     );
   });
 });

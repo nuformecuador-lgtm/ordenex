@@ -257,6 +257,30 @@ export const ORDEN_RESULTADOS: CierreResultado[] = [
 export { money };
 
 /**
+ * El TOPE de una columna de dinero, pintado para un texto de formulario.
+ *
+ * Existe por la feature 230 y por un defecto que la 230 destapó: `money` redondea, y un
+ * maximo NUNCA se redondea AL ALZA. `INDEMNIZACION_MONTO_MAX` es `"9999999999.99"`, que
+ * `money` pinta `₡10.000.000.000` — once digitos—, asi que el mensaje pasaba a anunciar como
+ * valido justo lo que el validador (`montoValido(monto, MAX)`, y el borde del servidor con
+ * `Prisma.Decimal.lte`) RECHAZA, y ademas se contradecia con el «(10 digitos)» de su propia
+ * frase. Al alza un limite deja de ser un limite.
+ *
+ * Aqui la cola decimal se DESCARTA en vez de decidir el redondeo: el tope se pinta hacia
+ * ABAJO (`₡9.999.999.999`). El mensaje queda mas estricto que la realidad —por 99 centimos—,
+ * que es el lado seguro: lo que anuncia como maximo el validador lo acepta.
+ *
+ * Money-safe: corta el STRING por el punto, sin `Number(`/`parseFloat(`/`.toFixed(`.
+ *
+ * ⚠️ Es para una cota POSITIVA, que es lo que son los topes de columna de este repo. Con un
+ * tope negativo truncar acercaria al cero, o sea AL ALZA, y seria el lado inseguro.
+ */
+export function moneyTope(max: string): string {
+  const punto = max.indexOf(".");
+  return money(punto === -1 ? max : max.slice(0, punto));
+}
+
+/**
  * ¿El monto (STRING money-safe, escala 2 con signo, p. ej. "-12.50") es negativo?
  * Se lee el signo del texto: NO se parsea a número (money-safe, R13).
  */

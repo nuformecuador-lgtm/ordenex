@@ -4,6 +4,7 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { OrdenesCargaResumen } from "@/app/(app)/ordenes/_components/OrdenesCargaResumen";
+import { monedaConfig, SIN_MONTO } from "@/lib/config/moneda";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
 // Feature 16 / 159 R12, R13, R14, R22(d) — el resumen del lote recien cargado, en
@@ -116,7 +117,9 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
 
     expect(screen.getByText("0999999999")).toBeInTheDocument();
     expect(screen.getByText("Camiseta")).toBeInTheDocument();
-    expect(screen.getByText("25.90")).toBeInTheDocument();
+    // Feature 230/R13: el monto pasa por el formateador compartido. Antes esta
+    // celda pintaba `25.90` crudo —sin simbolo y sin agrupar—; ahora `₡26`.
+    expect(screen.getByText("₡26")).toBeInTheDocument();
     expect(screen.getByText("Av. Amazonas")).toBeInTheDocument();
     // Sin monto ni dirección se muestra el marcador de dato ausente, no vacío.
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
@@ -150,6 +153,51 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
       .queryAllByRole("button")
       .filter((b) => /error/i.test(b.textContent ?? ""));
     expect(descargasDeErrores).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 230 / R13 — la celda del monto pasa por el formateador compartido
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaResumen — el monto lo formatea el módulo de moneda (230/R13)", () => {
+  /** Una sola fila, con el monto que pide el criterio de Hecho de T4.1. */
+  function unaOrdenCon(montoCobrar: number | null): ResumenCargaOrdenDTO[] {
+    return [{ ...ORDENES[0], montoCobrar }];
+  }
+
+  it("con 1234.56 la celda muestra ₡1.235: símbolo, miles y SIN céntimos", async () => {
+    // Era la única fuga del árbol: `row.montoCobrar.toFixed(2)` pintaba `1234.56`
+    // pelado. Este caso mide las tres cosas que gana a la vez —el símbolo, el
+    // separador de miles y el redondeo— y no solo la desaparición de la cola.
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(1234.56) });
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.getByText("₡1.235")).toBeInTheDocument();
+    expect(screen.queryByText("1234.56")).not.toBeInTheDocument();
+  });
+
+  it("el medio se aleja del cero, y no queda ni un dígito tras la coma", async () => {
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(1234.5) });
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+
+    expect(screen.getByText("₡1.235")).toBeInTheDocument();
+    const celdas = screen.getAllByRole("cell").map((td) => td.textContent ?? "");
+    expect(celdas.some((texto) => new RegExp(`${monedaConfig.separadorDecimal}\\d`).test(texto))).toBe(
+      false,
+    );
+  });
+
+  it("sin monto sigue mostrando el mismo marcador que pintaba a mano", async () => {
+    // El `-` no es una elección nueva del formateador: es `SIN_MONTO`, el mismo
+    // carácter que esta celda ponía a mano cuando `montoCobrar` era `null`.
+    resumenCargaMasivaMock.mockResolvedValue({ status: "ok", ordenes: unaOrdenCon(null) });
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+
+    const celdas = screen.getAllByRole("cell").map((td) => td.textContent ?? "");
+    expect(celdas).toContain(SIN_MONTO);
   });
 });
 

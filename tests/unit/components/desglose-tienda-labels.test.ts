@@ -38,10 +38,16 @@ describe("etiquetas del desglose por tienda — R20: las MISMAS de /mi-wallet", 
 
   it("el helper de moneda es el MISMO, así que ninguno de los dos puede parsear un monto", () => {
     expect(money).toBe(miWalletLabels.money);
-    // Money-safe: antepone el símbolo al STRING y no lo toca. Un `Number()` intermedio
-    // habría perdido el céntimo.
-    expect(money("1000.10")).toBe("₡1.000,10");
-    expect(money("-452.00")).toBe("-₡452,00");
+    // Feature 230: la cola decide el redondeo y NO se pinta. Estas dos líneas
+    // afirmaban «el céntimo sobrevive a la pantalla» (`₡1.000,10`), y eso ya no
+    // es cierto por diseño: el céntimo sigue en el dato y en las descargas, pero
+    // no se ve. Que el camino no convierta a número se afirma ahora donde se
+    // puede afirmar de verdad —el barrido de `Number(`/`parseFloat(` sobre el
+    // fuente del módulo, en `moneda-formato` y en la guardia de la 230—.
+    // Lo que estas dos siguen midiendo es el formato compartido: el `,10` baja y
+    // el signo del negativo va DELANTE del símbolo.
+    expect(money("1000.10")).toBe("₡1.000");
+    expect(money("-452.00")).toBe("-₡452");
     // `null` = aún no cargado. NO es un cero: un cero falso en una pantalla de dinero miente.
     expect(money(null)).toBe("—");
   });

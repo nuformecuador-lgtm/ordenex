@@ -5,6 +5,7 @@ import { render, screen, cleanup, within } from "@testing-library/react";
 import { PanelConciliacion } from "@/app/(app)/analitica/_components/financiero/PanelConciliacion";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { getMetrica } from "@/lib/analytics/metrics";
+import { monedaConfig } from "@/lib/config/moneda";
 import type { ResultadoFinancieroConciliacion } from "@/lib/types/analitica-financiera";
 
 // Feature 132 (T4.3) — R19.
@@ -217,9 +218,9 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
    * unica afirmacion del archivo sobre el texto exacto que ve un humano.
    */
   const MONEDA = {
-    snapshot: "₡1.560,50",
-    ledger: "₡1.500,00",
-    diferencia: "₡60,50",
+    snapshot: "₡1.561",
+    ledger: "₡1.500",
+    diferencia: "₡61",
   } as const;
 
   it("la cabecera del DTO real declara `conteo`: la unidad de la métrica NO sirve para el cuadre", () => {
@@ -231,15 +232,21 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
     expect(datosDe(true, []).unidad).toBe(UNIDAD_DEL_DTO);
   });
 
-  it("pinta el descuadre con sus decimales y su símbolo (₡60,50), NO redondeado a «61»", () => {
+  it("pinta el cuadre como DINERO (₡61), no con la unidad `conteo` de la cabecera («61»)", () => {
     // El defecto que llego a produccion: `formatearValor(importe, datos.unidad)` con
     // `unidad = "conteo"` redondea a entero y quita la moneda. Un descuadre de ₡60,50
     // se anunciaba como «61» en la pantalla de conciliar dinero, y ₡1 560,50 como
     // «1 561».
     //
-    // Se afirma el TEXTO que se lee en pantalla —importe con decimales y simbolo— y,
-    // ademas, que la forma redondeada NO esta: sin la segunda mitad, un panel que
-    // pintara las dos cosas seguiria en verde.
+    // ⚠️ FEATURE 230 — LA MITAD DE ESTE CASO CAMBIO DE SENTIDO, y se deja escrito.
+    // El titulo decia «con sus decimales, NO redondeado a 61». Desde la 230 el dinero
+    // TAMBIEN se redondea: el descuadre de `60.50` se lee `₡61`. O sea que el decimal
+    // ya no distingue el camino bueno del malo; lo que los distingue es lo que queda:
+    // el SIMBOLO de moneda y el separador de miles con PUNTO, frente al `Intl` de
+    // `conteo`, que no pone simbolo y agrupa con espacio duro. La regresion que este
+    // caso vigila sigue cazada —usar `datos.unidad` para el cuadre da «1 561», sin
+    // colon—, pero con un margen mas estrecho que antes. Queda anotado en
+    // `progress/impl_230_frontend.md`.
     render(<PanelConciliacion datos={datosDe(false, ["cierre-a"])} />);
 
     const seccion = screen.getByRole("region", { name: ETIQUETA });
@@ -251,11 +258,20 @@ describe("Regresión: las tres cifras del cuadre no se formatean con la unidad d
     expect(within(seccion).getByText(MONEDA.snapshot)).toBeInTheDocument();
     expect(within(seccion).getByText(MONEDA.ledger)).toBeInTheDocument();
     expect(within(seccion).getByText(MONEDA.diferencia)).toBeInTheDocument();
+    // Y las tres llevan el simbolo, que es lo que la unidad `conteo` se comeria.
+    for (const importe of Object.values(MONEDA)) {
+      expect(importe).toContain(monedaConfig.simbolo);
+    }
 
-    // Ausentes: las mismas cifras redondeadas y sin moneda. Ninguna de las tres es un
-    // valor de la tabla, asi que si aparecen es porque salieron del cuadre.
+    // Ausentes: las mismas cifras con la unidad de la cabecera —sin moneda y agrupadas
+    // por `Intl`—. Ninguna de las tres es un valor de la tabla, asi que si aparecen es
+    // porque salieron del cuadre formateado con `datos.unidad`.
     expect(within(seccion).queryAllByText(cifra(1560.5, "conteo"))).toHaveLength(0);
     expect(within(seccion).queryAllByText(cifra(1500, "conteo"))).toHaveLength(0);
     expect(within(seccion).queryAllByText(cifra(60.5, "conteo"))).toHaveLength(0);
+    // La contraprueba de que las tres de arriba miran algo: las formas `conteo` y
+    // `moneda` del MISMO importe siguen siendo distintas despues de la 230.
+    expect(cifra(1560.5, "conteo")).not.toBe(cifra(1560.5, "moneda"));
+    expect(cifra(60.5, "conteo")).not.toBe(cifra(60.5, "moneda"));
   });
 });
