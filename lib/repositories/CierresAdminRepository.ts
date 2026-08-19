@@ -127,6 +127,7 @@ export const DETALLE_ADMIN_SELECT = {
   tarifaValorFleteGam: true,
   tarifaValorFleteDevuelto: true,
   tarifaValorFleteDevueltoGam: true,
+  tarifaFulfillment: true, // 2026-08-19: monto congelado que el detalle y las descargas muestran
   tarifaComisionCod: true,
   tarifaIvaFlete: true,
   tarifaIvaComisionCod: true,
@@ -188,6 +189,9 @@ function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
     comisionCod: t.comisionCod,
     ivaFlete: t.ivaFlete,
     ivaComisionCod: t.ivaComisionCod,
+    // Se lee de la COLUMNA, no de `tarifaDe`: esa reconstruye la `TarifaVigente` que consume la
+    // formula, y el fulfillment no es una entrada de la formula.
+    fulfillment: d.tarifaFulfillment === null ? null : d.tarifaFulfillment.toFixed(2),
   };
 }
 

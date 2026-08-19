@@ -33,6 +33,11 @@ export interface TarifaVigente {
 // esto la EXTIENDE solo en el camino del snapshot.
 export interface TarifaVigenteResuelta extends TarifaVigente {
   tarifaId: string;
+  // Monto FIJO de fulfillment (2026-08-19). Viaja por el MISMO camino que `tarifaId` y por el
+  // mismo motivo: `cierre_detail` lo congela para mostrarlo, pero NO es una entrada de la
+  // formula, asi que NO entra en `TarifaVigente`. Meterlo alli lo pondria al alcance de
+  // `derivarIngresoOrden`, y esa funcion decide dinero que se liquida.
+  fulfillment: string; // MONTO -> STRING 2 dec
 }
 
 export interface ITarifaVigentePorTiendaRepository {

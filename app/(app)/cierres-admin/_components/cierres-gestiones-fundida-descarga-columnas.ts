@@ -4,12 +4,13 @@
  *
  * **Una sola declaración para las DOS pantallas** (R26). Los dos puntos de entrada —los cierres
  * del día de `cierres-admin` y los cierres de bodega del maestro— cubren conjuntos DISJUNTOS
- * (design §2.6) y cada uno llama a su propia Server Action, pero las 26 columnas y la función
+ * (design §2.6) y cada uno llama a su propia Server Action, pero las 27 columnas y la función
  * que las puebla son estas, y solo estas: dos declaraciones «iguales» son dos declaraciones que
  * divergen a la primera columna nueva.
  *
- * **26 columnas, decididas por el humano** (D6/D7/D8/D9, `design.md §6`). Las diez primeras se
- * pueblan SIEMPRE; las dieciséis restantes son específicas del resultado de la fila y, cuando no
+ * **27 columnas** (D6/D8/D9, `design.md §6`, más las tres de medios de pago que sustituyeron a la
+ * celda única «Método», el fulfillment congelado, y menos el par partido del flete de devolución). Las diez primeras se
+ * pueblan SIEMPRE; las diecisiete restantes son específicas del resultado de la fila y, cuando no
  * aplican, la celda queda VACÍA —`null`, nunca el «—» de pantalla ni un relleno— y la columna NO
  * se omite (R9/R10/R46). Que la hoja tenga celdas vacías es el coste que el humano vio y aceptó
  * al pedir UN archivo en vez de cinco (D3); ver la cabecera de
@@ -44,6 +45,7 @@ import {
   COMISION_CON_IVA_LABEL,
   FLETE_CON_IVA_LABEL,
   FLETE_DEV_CON_IVA_LABEL,
+  FULFILLMENT_COL,
   INDEMNIZACION_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
   INGRESO_TOTAL_COL,
@@ -54,7 +56,8 @@ import {
   RECHAZO_SLA_BADGE_LABEL,
   RESULTADO_FILA_LABEL,
 } from "./cierre-labels";
-import { desgloseDescarga } from "./desglose-pago";
+import { CLAVE_MEDIO_PAGO, montoPorMetodo } from "./desglose-pago";
+import { COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
 // --- Encabezados propios de la fundida (texto separado de la lógica, i18n-ready) ---
 //
@@ -70,7 +73,8 @@ export const FECHA_CIERRE_COL = "Fecha del cierre";
 export const RESULTADO_COL = "Resultado";
 
 /**
- * Las 26 columnas de la hoja fundida, en el orden decidido (`design.md §6`).
+ * Las 27 columnas de la hoja fundida, en el orden decidido (`design.md §6`), con las tres de
+ * MEDIOS DE PAGO donde antes iba la celda única «Método».
  *
  * Los encabezados que ya existían se LEEN de `cierre-labels` y no se teclean: es lo que hace
  * cierto que la pantalla y el archivo digan lo mismo, en vez de que hoy coincidan dos literales
@@ -88,18 +92,17 @@ export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
   { clave: "producto", encabezado: "Producto" },
   { clave: "tienda", encabezado: "Tienda" },
   { clave: "resultado", encabezado: RESULTADO_COL },
-  // --- 11-26: específicas del resultado; vacías donde no aplican (R10) ---
+  // --- 11-27: específicas del resultado; vacías donde no aplican (R10) ---
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "recibido", encabezado: "Recibido" },
-  { clave: "metodo", encabezado: "Método" },
+  ...COLUMNAS_MEDIOS_PAGO,
   { clave: "nuevaFecha", encabezado: "Nueva fecha" },
   { clave: "origenRechazo", encabezado: RECHAZO_ORIGEN_COL },
   { clave: "causa", encabezado: CAUSA_INCIDENTE_COL },
   { clave: "motivo", encabezado: "Motivo" },
   { clave: "fleteConIva", encabezado: FLETE_CON_IVA_LABEL },
   { clave: "comisionConIva", encabezado: COMISION_CON_IVA_LABEL },
-  { clave: "fleteDevolucion", encabezado: "Flete devolución" },
-  { clave: "ivaFleteDevolucion", encabezado: "IVA flete dev." },
   { clave: "fleteDevolucionConIva", encabezado: FLETE_DEV_CON_IVA_LABEL },
   { clave: "ingresoTotal", encabezado: INGRESO_TOTAL_COL },
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
@@ -108,22 +111,23 @@ export const COLUMNAS_DESCARGA_GESTIONES_FUNDIDA: DescargaColumna[] = [
 ];
 
 /**
- * Las dieciséis claves ESPECÍFICAS, en el orden en que se declaran arriba. Es la lista de la que
+ * Las diecisiete claves ESPECÍFICAS, en el orden en que se declaran arriba. Es la lista de la que
  * sale el «todas vacías» de partida: cada resultado enciende las suyas y las demás quedan
- * vacías, en vez de que cada rama tenga que acordarse de apagar quince.
+ * vacías, en vez de que cada rama tenga que acordarse de apagar dieciséis.
  */
 const CLAVES_ESPECIFICAS = [
   "montoCobrar",
+  "fulfillment",
   "recibido",
-  "metodo",
+  CLAVE_MEDIO_PAGO.efectivo,
+  CLAVE_MEDIO_PAGO.SINPE,
+  CLAVE_MEDIO_PAGO.transferencia,
   "nuevaFecha",
   "origenRechazo",
   "causa",
   "motivo",
   "fleteConIva",
   "comisionConIva",
-  "fleteDevolucion",
-  "ivaFleteDevolucion",
   "fleteDevolucionConIva",
   "ingresoTotal",
   "pagoMensajero",
@@ -140,32 +144,37 @@ type ClaveEspecifica = (typeof CLAVES_ESPECIFICAS)[number];
  * MENOS la evidencia (D8): la hoja fundida no enseña nada que su sección no enseñe, que es la
  * lectura fiel de R24 de la feature 170.
  *
- * **El flete de devolución NO se agrupa** (D7): una DEVUELTA puebla el par partido
- * (`fleteDevolucion` + `ivaFleteDevolucion`), que es lo que su tabla muestra, y una RECHAZADA el
- * agrupado (`fleteDevolucionConIva`), que es lo que muestra la suya. Las tres columnas existen
- * en la hoja; cada resultado llena las que le corresponden.
+ * **El flete de devolución SE AGRUPA, y ahora también en la devuelta** (2026-08-19, revierte
+ * D7): las dos —DEVUELTA y RECHAZADA— pueblan `fleteDevolucionConIva`, que es lo que las dos
+ * tablas muestran desde este mismo cambio. El par partido (`fleteDevolucion` +
+ * `ivaFleteDevolucion`) se retiró de la hoja: eran dos columnas para un importe que siempre se
+ * lee sumado. El DTO los sigue trayendo por separado para el desglose de la fila desplegable.
  */
 const ESPECIFICAS_POR_RESULTADO: Record<CierreResultado, readonly ClaveEspecifica[]> = {
   entregada: [
     "montoCobrar",
+    "fulfillment",
     "recibido",
-    "metodo",
+    CLAVE_MEDIO_PAGO.efectivo,
+    CLAVE_MEDIO_PAGO.SINPE,
+    CLAVE_MEDIO_PAGO.transferencia,
     "fleteConIva",
     "comisionConIva",
     "ingresoTotal",
     "pagoMensajero",
   ],
-  reprogramada: ["montoCobrar", "nuevaFecha", "motivo", "pagoMensajero"],
+  reprogramada: ["montoCobrar", "fulfillment", "nuevaFecha", "motivo", "pagoMensajero"],
   devuelta: [
     "montoCobrar",
+    "fulfillment",
     "motivo",
-    "fleteDevolucion",
-    "ivaFleteDevolucion",
+    "fleteDevolucionConIva",
     "ingresoTotal",
     "pagoMensajero",
   ],
   rechazada: [
     "montoCobrar",
+    "fulfillment",
     "origenRechazo",
     "motivo",
     "fleteDevolucionConIva",
@@ -174,7 +183,7 @@ const ESPECIFICAS_POR_RESULTADO: Record<CierreResultado, readonly ClaveEspecific
     "ingresoBodega",
   ],
   // Un incidente no paga al mensajero y no genera ingreso de bodega: esas dos quedan vacías.
-  incidente: ["montoCobrar", "causa", "motivo", "indemnizacion"],
+  incidente: ["montoCobrar", "fulfillment", "causa", "motivo", "indemnizacion"],
 };
 
 /**
@@ -211,7 +220,7 @@ function celdasComunes(gestion: CierreGestionDescargaDTO): DescargaFila {
 }
 
 /**
- * Las dieciséis celdas específicas, TODAS derivadas, con independencia del resultado. Quién se
+ * Las diecisiete celdas específicas, TODAS derivadas, con independencia del resultado. Quién se
  * queda con cuáles lo decide `ESPECIFICAS_POR_RESULTADO`; aquí solo se calculan.
  *
  * Se calculan todas —y no solo las de la rama— por dos motivos. Uno: la derivación de cada celda
@@ -224,13 +233,20 @@ function celdasEspecificas(
   gestion: CierreGestionDescargaDTO,
 ): Record<ClaveEspecifica, DescargaCelda> {
   const ingreso = gestion.ingresoOrdenex;
+  const mediosPago = montoPorMetodo(gestion.pagos);
   return {
     // `null` cuando la orden no tenía tarifa vigente al solicitar (gap conocido de la feature
     // 69): celda VACÍA, que es lo que la pantalla enseña (R46).
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
+    // Monto FIJO de la tarifa CONGELADA (2026-08-19). No es un concepto derivado: no lo calcula
+    // `derivarIngresoOrden` y no entra en `ingresoTotal`. Vacío si el cierre no lo congeló.
+    fulfillment: ingreso?.tarifa?.fulfillment ?? null,
     recibido: gestion.montoRecibido,
-    // El desglose completo del recaudo en UNA celda, money-safe (feature 213).
-    metodo: desgloseDescarga(gestion.pagos),
+    // Una columna POR MEDIO DE PAGO, money-safe: el STRING del snapshot tal cual. El medio sin
+    // linea queda en `null` —celda VACIA (R10)—, que no es un cero.
+    [CLAVE_MEDIO_PAGO.efectivo]: mediosPago.efectivo,
+    [CLAVE_MEDIO_PAGO.SINPE]: mediosPago.SINPE,
+    [CLAVE_MEDIO_PAGO.transferencia]: mediosPago.transferencia,
     nuevaFecha: gestion.fechaReprogramacion,
     // R45: la etiqueta del badge —«Automático» si lo escaló el cron de plazo vencido, «Manual»
     // si lo registró el mensajero—, nunca el booleano crudo.
@@ -243,8 +259,6 @@ function celdasEspecificas(
     motivo: gestion.motivo,
     fleteConIva: ingreso ? ingreso.fleteConIva : null,
     comisionConIva: ingreso ? ingreso.comisionConIva : null,
-    fleteDevolucion: ingreso ? ingreso.fleteDevolucion : null,
-    ivaFleteDevolucion: ingreso ? ingreso.ivaFleteDevolucion : null,
     fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,
     pagoMensajero: gestion.pagoMensajero,
@@ -256,13 +270,13 @@ function celdasEspecificas(
 }
 
 /**
- * Proyecta UNA gestión a UNA fila de la hoja fundida: las 26 claves declaradas, siempre las
+ * Proyecta UNA gestión a UNA fila de la hoja fundida: las 27 claves declaradas, siempre las
  * mismas y siempre todas (R9), con las que no aplican a su resultado en VACÍO (R10).
  *
  * El `??` sobre `ESPECIFICAS_POR_RESULTADO` no es un caso de negocio: el mapa es exhaustivo
  * sobre `CierreResultado` y en producción siempre acierta. Está para que la guardia de datos
  * sensibles, que invoca esta función con una sonda —cuyo `resultado` no es ninguno de los
- * cinco—, siga viendo las dieciséis celdas específicas en vez de dieciséis nulos.
+ * cinco—, siga viendo las diecisiete celdas específicas en vez de diecisiete nulos.
  */
 export function filaDescargaGestionFundida(gestion: CierreGestionDescargaDTO): DescargaFila {
   const especificas = celdasEspecificas(gestion);

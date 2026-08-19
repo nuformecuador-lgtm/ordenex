@@ -1692,6 +1692,11 @@ model CierreDetail {
   tarifaComisionCod           Decimal? @map("tarifa_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
   tarifaIvaFlete              Decimal? @map("tarifa_iva_flete") @db.Decimal(5, 2) // porcentaje 0..100
   tarifaIvaComisionCod        Decimal? @map("tarifa_iva_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
+  // Monto FIJO de fulfillment de la tarifa (2026-08-19). NO entra en `derivarIngresoOrden` ni
+  // en las wallets: se congela para poder MOSTRARLO en el detalle y en las descargas del cierre
+  // con el mismo valor que tenia al solicitar. Es NULL en las filas anteriores a esta columna
+  // (no hay backfill posible: la tarifa de entonces pudo cambiar), y eso se ve como celda vacia.
+  tarifaFulfillment           Decimal? @map("tarifa_fulfillment") @db.Decimal(12, 2) // monto
 
   // --- descriptivos (R7): lo que el admin ve del cierre (38), congelado ---
   numGuia         Int?    @map("num_guia") // SIN @unique: es copia, no identidad
@@ -1876,29 +1881,29 @@ enum RutaEstado {
 // coordenadas (R14). RLS habilitada sin policies (solo service role, va en la migracion):
 // guarda geolocalizacion de una persona y no es accesible desde el cliente.
 model RutaOptimizada {
-  id           String     @id @default(uuid())
-  mensajeroId  String     @unique @map("mensajero_id")
-  estado       RutaEstado @default(vigente)
-  calculadaAt  DateTime?  @map("calculada_at") // NULL = nunca se calculo
-  origenLat    Decimal?   @map("origen_lat") @db.Decimal(10, 7)
-  origenLng    Decimal?   @map("origen_lng") @db.Decimal(10, 7)
-  origenAt     DateTime?  @map("origen_at")
-  origenFuente String?    @map("origen_fuente")
-  huellaSet    String?    @map("huella_set")
-  ultimoError  String?    @map("ultimo_error")
+  id                String     @id @default(uuid())
+  mensajeroId       String     @unique @map("mensajero_id")
+  estado            RutaEstado @default(vigente)
+  calculadaAt       DateTime?  @map("calculada_at") // NULL = nunca se calculo
+  origenLat         Decimal?   @map("origen_lat") @db.Decimal(10, 7)
+  origenLng         Decimal?   @map("origen_lng") @db.Decimal(10, 7)
+  origenAt          DateTime?  @map("origen_at")
+  origenFuente      String?    @map("origen_fuente")
+  huellaSet         String?    @map("huella_set")
+  ultimoError       String?    @map("ultimo_error")
   // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
   // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
   // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
-  trazadoPolilinea  String? @map("trazado_polilinea")
-  trazadoDistanciaM Int?    @map("trazado_distancia_m")
-  trazadoDuracionS  Int?    @map("trazado_duracion_s")
-  trazadoFuente     String? @map("trazado_fuente")
+  trazadoPolilinea  String?    @map("trazado_polilinea")
+  trazadoDistanciaM Int?       @map("trazado_distancia_m")
+  trazadoDuracionS  Int?       @map("trazado_duracion_s")
+  trazadoFuente     String?    @map("trazado_fuente")
   // Guarda de coste del trayecto EN VIVO (20260814160000_ruta_tramo_vivo_at). Contador de
   // gasto, no dato de negocio: solo lo lee la guarda del intervalo minimo.
-  tramoVivoAt       DateTime? @map("tramo_vivo_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  tramoVivoAt       DateTime?  @map("tramo_vivo_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
-  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at")
 
   mensajero Usuario                @relation("RutaOptimizadaMensajero", fields: [mensajeroId], references: [id], onDelete: Cascade)
   paradas   RutaOptimizadaParada[]
@@ -1912,10 +1917,10 @@ model RutaOptimizada {
 // garantiza la DB, no solo el codigo. Una orden en reparto SIN fila aqui es una parada
 // "sin optimizar" (R28), que la lectura muestra al final.
 model RutaOptimizadaParada {
-  id        String @id @default(uuid())
-  rutaId    String @map("ruta_id")
-  ordenId   String @map("orden_id")
-  secuencia Int
+  id              String  @id @default(uuid())
+  rutaId          String  @map("ruta_id")
+  ordenId         String  @map("orden_id")
+  secuencia       Int
   // Tramo que LLEGA a esta parada (20260814140000_ruta_parada_tramo). La fila 1 guarda el
   // origen -> primera parada. No necesita invalidacion propia: `reemplazarSecuencia` borra e
   // reinserta estas filas enteras en cada recalculo.

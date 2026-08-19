@@ -1081,6 +1081,7 @@ describe("CierreDiaRepository.findCierresByMensajero (R18)", () => {
 
 const TARIFA_T1: TarifaVigenteResuelta = {
   tarifaId: "ta1",
+  fulfillment: "300.00",
   valorFlete: "1000.00",
   valorFleteGam: "800.00",
   valorFleteDevuelto: "500.00",

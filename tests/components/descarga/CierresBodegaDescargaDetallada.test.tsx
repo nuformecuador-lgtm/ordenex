@@ -203,7 +203,13 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
-    await user.click(await screen.findByRole("checkbox", { name: "Ana Mensajera" }));
+    // Desde el 2026-08-19 el diálogo abre con TODOS marcados y con el rango en el día de hoy
+    // (ver `DescargarGestionesDialog`). Para afirmar el borde con un conjunto EXACTO hay que
+    // apagar la lista desde «Todos», encender a Ana y vaciar las dos fechas.
+    await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
+    await user.click(screen.getByRole("checkbox", { name: "Ana Mensajera" }));
+    await user.clear(screen.getByLabelText("Desde"));
+    await user.clear(screen.getByLabelText("Hasta"));
     await user.click(screen.getByRole("button", { name: "Descargar Gestiones de cierres" }));
 
     await waitFor(() => expect(listarGestionesCierresBodegaCompleto).toHaveBeenCalledTimes(1));

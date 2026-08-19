@@ -46,8 +46,11 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "producto",
       "tienda",
       "montoCobrar",
+      "fulfillment",
       "recibido",
-      "metodo",
+      "pago_efectivo",
+      "pago_SINPE",
+      "pago_transferencia",
       "fleteConIva",
       "comisionConIva",
       "ingresoTotal",
@@ -62,8 +65,11 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Producto",
       "Tienda",
       "A cobrar",
+      "Fulfillment",
       "Recibido",
-      "Método",
+      "Efectivo",
+      "SINPE",
+      "Transferencia",
       "Flete + IVA",
       "Comisión + IVA",
       "Total Ordenex",
@@ -83,6 +89,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "producto",
       "tienda",
       "montoCobrar",
+      "fulfillment",
       "nuevaFecha",
       "motivo",
       "pagoMensajero",
@@ -96,6 +103,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Producto",
       "Tienda",
       "A cobrar",
+      "Fulfillment",
       "Nueva fecha",
       "Motivo",
       "Pago mensajero",
@@ -103,9 +111,9 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
   });
 
   it("la sección DEVUELTAS declara sus columnas en el orden de la pantalla (R5)", () => {
-    // El flete de devolución va PARTIDO en dos columnas (base e IVA), al revés que en
-    // RECHAZADAS, que lo lleva agrupado. No es un descuido de este test: es lo que pinta
-    // `cierre-detalle-shared.tsx:911-912`, y el archivo usa la palabra de la pantalla (R8).
+    // El flete de devolución va AGRUPADO con su IVA (2026-08-19), igual que en RECHAZADAS:
+    // el par partido (base e IVA en dos columnas) se retiró de las dos pantallas y de sus
+    // archivos. El split sigue existiendo en el DTO, para la fila desplegable del desglose.
     expect(COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS.map((c) => c.clave)).toEqual([
       "numGuia",
       "numRemision",
@@ -115,9 +123,9 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "producto",
       "tienda",
       "montoCobrar",
+      "fulfillment",
       "motivo",
-      "fleteDevolucion",
-      "ivaFleteDevolucion",
+      "fleteDevolucionConIva",
       "ingresoTotal",
       "pagoMensajero",
     ]);
@@ -130,16 +138,16 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Producto",
       "Tienda",
       "A cobrar",
+      "Fulfillment",
       "Motivo",
-      "Flete devolución",
-      "IVA flete dev.",
+      "Flete devolución + IVA",
       "Total Ordenex",
       "Pago mensajero",
     ]);
   });
 
   it("la sección RECHAZADAS declara sus columnas en el orden de la pantalla (R5)", () => {
-    // La más larga de las cinco (15 columnas) y la única con «Origen» delante de «A cobrar» y
+    // La más larga de las cinco (16 columnas) y la única con «Origen» delante de «A cobrar» y
     // con «Ingreso bodega» cerrando: dos columnas que ninguna de sus hermanas lleva.
     expect(COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS.map((c) => c.clave)).toEqual([
       "numGuia",
@@ -151,6 +159,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "tienda",
       "origenRechazo",
       "montoCobrar",
+      "fulfillment",
       "motivo",
       "tieneEvidencia",
       "fleteDevolucionConIva",
@@ -168,6 +177,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Tienda",
       "Origen",
       "A cobrar",
+      "Fulfillment",
       "Motivo",
       "Tiene evidencia",
       "Flete devolución + IVA",
@@ -189,6 +199,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "producto",
       "tienda",
       "montoCobrar",
+      "fulfillment",
       "causa",
       "motivo",
       "tieneEvidencia",
@@ -203,6 +214,7 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
       "Producto",
       "Tienda",
       "A cobrar",
+      "Fulfillment",
       "Causa",
       "Motivo",
       "Tiene evidencia",
@@ -212,14 +224,18 @@ describe("orden de las columnas de descarga del detalle de un cierre (admin)", (
 });
 
 // ---------------------------------------------------------------------------
-// Feature 213 [D4] — el DESGLOSE del recaudo en la celda escalar «Método»
+// El recaudo, con UNA COLUMNA POR MEDIO DE PAGO (2026-08-19)
 // ---------------------------------------------------------------------------
 //
-// Los cinco casos de arriba (censo y ORDEN) NO se tocan: son los que hacen cumplir R26 —el
-// desglose va en la celda que ya existía, sin columna nueva— y siguen verdes tal cual. Este
-// bloque amplía la PROYECCIÓN de la sección entregadas del archivo del ADMIN, que es OTRA
+// Sustituye al bloque de la celda escalar «Método» de la feature 213, que probaba la
+// CONCATENACIÓN («Efectivo 5000.00 + Transferencia 3000.00») en una sola celda. R26 —«sin
+// columna nueva»— se revierte a propósito: una hoja de cálculo no puede sumar un texto, y
+// sumar por medio de pago es justo lo que se hace con este archivo.
+//
+// Esto prueba la PROYECCIÓN de la sección entregadas del archivo del ADMIN, que es OTRA
 // declaración que la del mensajero aunque el DTO sea el mismo: aquí la columna vecina se
-// llama «Recibido» y hay siete columnas más de dinero que allí no existen.
+// llama «Recibido» y hay siete columnas más de dinero que allí no existen. El cierre del día
+// del mensajero SIGUE con la celda concatenada, y su test sigue probándola.
 
 /**
  * Gestión `entregada` mínima. `ingresoOrdenex: null` a propósito: las columnas de ingreso
@@ -259,7 +275,7 @@ function gestionEntregada(
   };
 }
 
-describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (admin)", () => {
+describe("columnas por MEDIO DE PAGO de la sección ENTREGADAS del detalle (admin)", () => {
   it("una gestión con pago MIXTO produce UNA sola fila, no un array (R27)", () => {
     const fila = filaDescargaGestionEntregada(
       gestionEntregada([
@@ -278,7 +294,7 @@ describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (
     expect(fila.pagoMensajero).toBe("1500.00");
   });
 
-  it("dos líneas se concatenan en la celda `metodo` con un ÚNICO separador (R28)", () => {
+  it("un pago MIXTO reparte cada monto en SU columna, sin concatenar nada", () => {
     const fila = filaDescargaGestionEntregada(
       gestionEntregada([
         { metodo: "efectivo", monto: "5000.00" },
@@ -286,11 +302,36 @@ describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (
       ]),
     );
 
-    expect(fila.metodo).toBe("Efectivo 5000.00 + Transferencia 3000.00");
-    expect(String(fila.metodo).split(" + ")).toHaveLength(2);
+    expect(fila.pago_efectivo).toBe("5000.00");
+    expect(fila.pago_transferencia).toBe("3000.00");
+    // El medio por el que no entró dinero queda VACÍO, que NO es un cero: un 0.00 diría que
+    // se cobró cero por SINPE, y lo que pasó es que no se cobró por SINPE.
+    expect(fila.pago_SINPE).toBeNull();
+    // Ninguna celda lleva ya la etiqueta del medio: el medio es el ENCABEZADO de la columna.
+    expect(String(fila.pago_efectivo)).not.toMatch(/Efectivo|\+/);
   });
 
-  it("respeta el ORDEN del DTO aunque difiera del alfabético (R28)", () => {
+  it("las tres columnas salen SIEMPRE y en el orden del enum, sea cual sea el pago", () => {
+    // Es lo que permite pegar dos hojas o sumar una columna entera: la posición no depende
+    // de por dónde cobró esta gestión.
+    const claves = COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS.map((c) => c.clave);
+    expect(claves.filter((c) => c.startsWith("pago_"))).toEqual([
+      "pago_efectivo",
+      "pago_SINPE",
+      "pago_transferencia",
+    ]);
+
+    const soloSinpe = filaDescargaGestionEntregada(
+      gestionEntregada([{ metodo: "SINPE", monto: "8000.00" }]),
+    );
+    expect(soloSinpe.pago_efectivo).toBeNull();
+    expect(soloSinpe.pago_SINPE).toBe("8000.00");
+    expect(soloSinpe.pago_transferencia).toBeNull();
+  });
+
+  it("el ORDEN del DTO no altera en qué columna cae cada monto", () => {
+    // La celda concatenada respetaba el orden recibido porque era una lista; una columna por
+    // medio no tiene ese problema: la clave manda, venga el DTO como venga.
     const fila = filaDescargaGestionEntregada(
       gestionEntregada([
         { metodo: "SINPE", monto: "2000.00" },
@@ -298,23 +339,17 @@ describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (
       ]),
     );
 
-    expect(fila.metodo).toBe("SINPE 2000.00 + Efectivo 6000.00");
+    expect(fila.pago_SINPE).toBe("2000.00");
+    expect(fila.pago_efectivo).toBe("6000.00");
   });
 
-  it("una sola línea da SOLO la etiqueta, exactamente igual que hoy (R29)", () => {
-    // El importe ya viaja en la columna contigua «Recibido» ([Q2]).
-    const fila = filaDescargaGestionEntregada(
-      gestionEntregada([{ metodo: "SINPE", monto: "8000.00" }]),
-    );
-
-    expect(fila.metodo).toBe("SINPE");
-  });
-
-  it("sin líneas de pago la celda `metodo` queda VACÍA: `null`, ni «—» ni «» (R30)", () => {
-    // Con `metodoPago` escalar puesto: la celda ya no lo lee, así que sigue vacía.
+  it("sin líneas de pago las TRES columnas quedan VACÍAS: `null`, ni «—» ni «» (R30)", () => {
+    // Con `metodoPago` escalar puesto: las celdas no lo leen, así que siguen vacías.
     const fila = filaDescargaGestionEntregada(gestionEntregada([], "efectivo"));
 
-    expect(fila.metodo).toBeNull();
+    expect(fila.pago_efectivo).toBeNull();
+    expect(fila.pago_SINPE).toBeNull();
+    expect(fila.pago_transferencia).toBeNull();
   });
 
   it("los montos son el STRING money-safe del snapshot TAL CUAL (R31)", () => {
@@ -325,8 +360,9 @@ describe("celda «Método» de la sección ENTREGADAS del detalle de un cierre (
       ]),
     );
 
-    expect(fila.metodo).toBe("Efectivo 1234567.89 + SINPE 0.10");
-    expect(fila.metodo).not.toMatch(/[₡$]/);
-    expect(fila.metodo).not.toMatch(/1[.,]234[.,]567/);
+    expect(fila.pago_efectivo).toBe("1234567.89");
+    expect(fila.pago_SINPE).toBe("0.10");
+    expect(String(fila.pago_efectivo)).not.toMatch(/[₡$]/);
+    expect(String(fila.pago_efectivo)).not.toMatch(/1[.,]234[.,]567/);
   });
 });
