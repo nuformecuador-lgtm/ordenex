@@ -3457,6 +3457,7 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   Ahora el caso empareja rótulo↔importe fila a fila y hay un control de que los siete importes son
   distintos **después** de formatear.
 - **Deuda declarada, no escondida**: `lib/utils/monto-escala-2.ts` existe para no relajar una
-  aserción de dinero de la 173 que prohíbe `.toFixed(` en `caja-tesoreria.ts`; ninguna guardia lo
-  barre todavía. Y `wallet-caja-descarga-columnas.test.ts` sigue fijando su lista contra un literal:
+  aserción de dinero de la 173 que prohíbe `.toFixed(` en `caja-tesoreria.ts`. Tiene guardia propia
+  desde este mismo commit, con un criterio distinto al del padre —`.toFixed(` se le permite, que es
+  su oficio— y persiguiendo además `.toNumber(`, que la lista genérica del repo no perseguía. Y `wallet-caja-descarga-columnas.test.ts` sigue fijando su lista contra un literal:
   gobernará a la próxima feature igual que D1 gobernó a ésta.

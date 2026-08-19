@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 
 import { ComposicionGananciaCard } from "@/app/(app)/wallet/_components/ComposicionGananciaCard";
-import { CATEGORIA_LABEL } from "@/app/(app)/wallet/_components/wallet-labels";
+import { CATEGORIA_LABEL, money } from "@/app/(app)/wallet/_components/wallet-labels";
 import type {
   CajaResumenDTO,
   ComposicionGananciaDTO,
@@ -301,15 +301,41 @@ describe("ComposicionGananciaCard — las dos columnas y el pie (R22/R23)", () =
     // Sin esto, el caso de arriba podría estar pasando con dos filas intercambiadas: si dos
     // conceptos valieran lo mismo, ponerle a uno el importe del otro no cambiaría ni un píxel.
     // Es la misma clase de agujero que dejó sobrevivir la mutación del ORDEN (M9).
-    const importesIngresos = ["₡150", "₡4.000", "₡900", "₡20", "₡520", "₡30", "₡90"];
+    //
+    // Y el peligro no es teórico desde la feature 230, que pinta el dinero SIN CÉNTIMOS: dos
+    // importes distintos en el DTO pueden colapsar en el mismo texto («19.50» y «20.49» se
+    // pintan los dos «₡20»). Por eso la colisión se mide DESPUÉS de formatear, no antes.
+    //
+    // ── POR QUÉ AQUÍ SÍ SE USA `money()`, Y EN EL CASO DE ARRIBA NO ──
+    // Arriba los importes van escritos a mano porque el sujeto de la prueba es LA PANTALLA, y
+    // comprobarla contra la misma función que la pinta sería una aserción contra su propia
+    // fuente. Aquí el sujeto es EL CONJUNTO DE PRUEBA, y lo que se quiere saber es si colisiona
+    // *bajo el formateador real*: el formateador es parte del sujeto, no el oráculo.
+    //
+    // Se DERIVA del fixture y no se escribe a mano a propósito: una lista literal se queda atrás
+    // en cuanto alguien toca un importe de `COMPOSICION` —el caso de emparejado se pondría rojo
+    // y se actualizaría, y éste seguiría verde afirmando sobre un conjunto que ya no existe—,
+    // que es justo cuando el control tiene que hablar.
+    const importesIngresos = WALLET_INGRESO_PROPIO_SEED.map((c) =>
+      money(COMPOSICION.ingresos[c]),
+    );
+    expect(importesIngresos).toHaveLength(WALLET_INGRESO_PROPIO_SEED.length);
     expect(new Set(importesIngresos).size).toBe(WALLET_INGRESO_PROPIO_SEED.length);
 
-    const importesEgresos = ["₡300", "₡126", "₡800", "₡25", "₡940"];
+    // Las cinco filas de la columna de egresos, en el orden que declara el componente.
+    const importesEgresos = [
+      DESGLOSE.gastoFijo,
+      DESGLOSE.gastoVariable,
+      DESGLOSE.sueldo,
+      DESGLOSE.indemnizacion,
+      COMPOSICION.otrosEgresos,
+    ].map(money);
+    expect(importesEgresos).toHaveLength(5);
     expect(new Set(importesEgresos).size).toBe(importesEgresos.length);
 
     // Y ninguno coincide con un total, que es el otro modo de que una fila mal cableada pase.
-    expect(importesIngresos).not.toContain("₡5.710");
-    expect(importesEgresos).not.toContain("₡2.191");
+    expect(importesIngresos).not.toContain(money(COMPOSICION.totalIngresos));
+    expect(importesEgresos).not.toContain(money(COMPOSICION.totalEgresos));
   });
 
   it("R25: cada concepto con su etiqueta legible, nunca el enum", () => {

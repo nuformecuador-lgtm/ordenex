@@ -784,3 +784,98 @@ Desglose de los archivos con casos nuevos en esta vuelta:
   §4.1 «CERRADO» y §6 «La guardia del menor 4, vista fallar».
 - **La lista literal de columnas de la descarga (menor 5 del reviewer)**: el reviewer está de
   acuerdo con lo hecho y recomienda dejarla. Se deja.
+
+---
+
+## 11. Último cierre — el CONTROL de colisiones, derivado del fixture
+
+El reviewer levantó el rechazo, pero quedaba una variante del mismo defecto que esta feature se
+pasó el día cazando, esta vez **dentro de un control**.
+
+**El agujero.** El caso «CONTROL: los importes del conjunto son distintos entre sí, ya
+formateados» (`tests/components/ComposicionGananciaCard.test.tsx`) comprobaba una **lista literal
+escrita a mano**. Hoy coincidía con `COMPOSICION`, así que protegía — pero estaba desacoplada del
+fixture: el día que alguien tocara un importe, el caso de emparejado se pondría rojo y se
+actualizaría, y **este control seguiría verde afirmando sobre un conjunto que ya no existe**. Y si
+en ese cambio dos conceptos colapsaran al mismo texto —fácil desde la 230, que pinta sin céntimos:
+`19.50` y `20.49` se pintan los dos `₡20`—, el intercambio entre esas dos filas volvería a
+sobrevivir. El control dejaría de controlar justo cuando hace falta.
+
+**El arreglo.** Se DERIVA del fixture:
+
+```ts
+const importesIngresos = WALLET_INGRESO_PROPIO_SEED.map((c) => money(COMPOSICION.ingresos[c]));
+expect(new Set(importesIngresos).size).toBe(WALLET_INGRESO_PROPIO_SEED.length);
+```
+
+y lo mismo para las cinco filas de egresos (los cuatro conceptos de `DESGLOSE` más
+`COMPOSICION.otrosEgresos`) y para los dos totales.
+
+**La distinción que queda escrita dentro del caso**, porque es sutil y alguien la querría
+«arreglar» en la dirección contraria: en el caso de emparejado los importes van a mano porque el
+sujeto de la prueba es **la pantalla**, y comprobarla contra la misma función que la pinta sería
+una aserción contra su propia fuente. Aquí el sujeto es **el conjunto de prueba**, y lo que se
+quiere saber es si colisiona *bajo el formateador real*: `money()` es parte del sujeto, no el
+oráculo.
+
+### Las dos medidas
+
+```
+$ sha256sum tests/components/ComposicionGananciaCard.test.tsx
+5c295a78e73dc2ce74304e91cc0992487478ada0a17a5c01a3418394f78ca153   ← ANTES
+
+# mutación del FIXTURE (ancla comprobada única):
+#   ingreso_iva_comision_cod: "30.25" -> "20.49"
+#   (colisiona con ingreso_iva_flete "19.50": los dos se pintan ₡20)
+$ sha256sum tests/components/ComposicionGananciaCard.test.tsx
+0e2ed2ed5775b0151714dc4aa155deaa651a883953c83c84858cd18b667a2052   ← MUTADO
+
+$ pnpm exec vitest run …/ComposicionGananciaCard.test.tsx -t "CONTROL: los importes del conjunto"
+ FAIL  … > CONTROL: los importes del conjunto son distintos entre sí, ya formateados
+ AssertionError: expected 6 to be 7   ← seis textos distintos para siete conceptos
+ Test Files  1 failed (1)
+      Tests  1 failed | 17 skipped (18)          ← ROJO, y el rojo es SUYO (los otros 17, saltados)
+
+$ pnpm exec vitest run …/ComposicionGananciaCard.test.tsx      (archivo entero)
+     × R22/R23: cada concepto lleva SU importe, no el del vecino
+     × CONTROL: los importes del conjunto son distintos entre sí, ya formateados
+      Tests  2 failed | 16 passed (18)
+
+# restaurado desde la copia previa
+$ sha256sum tests/components/ComposicionGananciaCard.test.tsx
+5c295a78e73dc2ce74304e91cc0992487478ada0a17a5c01a3418394f78ca153   ← IDÉNTICO BYTE A BYTE
+
+$ pnpm exec vitest run tests/components/ComposicionGananciaCard.test.tsx
+ Test Files  1 passed (1)
+      Tests  18 passed (18)                       ← VERDE
+```
+
+Con la lista literal anterior esa misma mutación habría dejado el control **en verde**: es la
+prueba de que el arreglo no es cosmético.
+
+### Y el otro encargo de comentario (sin tocar aserciones)
+
+`tests/unit/descarga/wallet-caja-descarga-columnas.test.ts` — queda escrito dentro del caso por
+qué su literal de columnas **se queda** aunque el de D1 hubo que quitarlo: aquél fijaba cuántas
+columnas puede tener la PANTALLA y era un polizón que acabó gobernando features ajenas; éste fija
+el CONTRATO DEL ARCHIVO que se descarga —un artefacto que alguien abre fuera de la app—, así que el
+literal ES lo que el caso quiere afirmar. Y no se sustituye por una comparación contra
+`COLUMNAS_DESCARGA_WALLET_CAJA` porque sería comparar la lista consigo misma: una aserción contra
+su propia fuente, que no puede ponerse roja nunca.
+
+### Salida real del cierre
+
+```
+$ pnpm run typecheck            → 0 errores
+$ pnpm run lint                 → 0 errors, 69 warnings (los preexistentes)
+$ pnpm exec vitest run <los 9 de la feature>
+ Test Files  9 passed (9)       Tests  93 passed (93)
+$ pnpm exec vitest run tests/unit/descarga/wallet-caja-descarga-columnas.test.ts
+ Test Files  1 passed (1)       Tests  7 passed (7)
+$ pnpm run test:guardias
+ Test Files  111 passed (111)   Tests  1654 passed (1654)
+```
+
+*(El conteo de guardias sube de 1648 a 1654 respecto de §7 porque el leader marcó las tasks de
+`specs/231-…/tasks.md` mientras tanto y `test-citado-desaparecido.guardia` genera sus casos a
+partir de esos documentos. No es de esta tanda.)*

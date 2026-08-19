@@ -304,3 +304,84 @@ Los 7 menores no son condición para el OK. Los que yo movería igualmente por b
 Al cerrar, el leader tiene pendiente la entrada en `progress/history.md` (menor 1) y pasar la ficha
 a `done` en `feature_list.json` (hoy `in_progress`; con la 230 son 2 en la zona `fullstack`, justo
 en el tope que `./init.sh` valida).
+
+---
+
+## 6. Re-revisión de cierre (commit `e9c4e100`, árbol limpio)
+
+Acotada a los dos bloqueantes y a los cuatro menores que el leader dio por cerrados. El resto de
+la revisión no se repite: sigue valiendo lo dicho arriba.
+
+### BLOQUEANTE 1 — CERRADO
+
+El caso nuevo «R22/R23: cada concepto lleva SU importe, no el del vecino» mide lo que dice. El
+helper `pares()` lee el `dt` y el `dd` **de dentro del mismo renglón** (`lista.children`, y dentro
+de cada hijo su propio `dt`/`dd`), no dos listas paralelas: por eso un intercambio entre filas no
+se le escapa. Los importes esperados están escritos a mano, no recalculados con `money()`.
+
+Re-medido por mí sobre `e9c4e100`, con restauración verificada por hash en cada paso
+(sha original `b884209c…`, idéntico al final; `git status` limpio):
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| M0 | control sin mutar | **VERDE — 18 passed** |
+| MA | **intercambio entre dos filas**: «Flete» toma el importe de «Comisión COD» y viceversa (rótulos y orden intactos) | **ROJO — 1 fallo**, exactamente el caso nuevo |
+| MB | **una fila toma el TOTAL** de su columna (`ingreso_iva_flete` = `totalIngresos`) | **ROJO — 3 fallos** |
+| MC | las siete filas, el mismo importe (la mutación original del bloqueante) | **ROJO — 1 fallo** |
+| MD | intercambio en la **columna de EGRESOS**: `gastoFijo` por `sueldo` (sha `c821264d…`, restaurado) | **ROJO — 1 fallo** |
+
+MD es la debilidad heredada de la 45 que señalé como nota de alcance: ya no sobrevive.
+
+**Variante que todavía podría pasar con el código roto** (menor, no bloqueante). El caso
+«CONTROL: los importes del conjunto son distintos entre sí, ya formateados» comprueba una lista
+**literal** escrita a mano —`["₡150", "₡4.000", …]`— y **no la deriva de `COMPOSICION`**. Hoy las
+dos listas coinciden, así que protege. Pero si mañana alguien cambia un importe del fixture, el
+caso de emparejado se pone rojo, se actualizan sus expectativas… y este control sigue verde
+afirmando sobre una lista que ya no existe. Si en ese cambio dos conceptos colapsaran al mismo
+texto (fácil desde la 230: `19.50` y `20.49` se pintan los dos `₡20`), un intercambio entre esas
+dos filas volvería a sobrevivir. Se cierra en una línea derivándolo:
+`new Set(WALLET_INGRESO_PROPIO_SEED.map((c) => money(COMPOSICION.ingresos[c]))).size` — aquí usar
+`money()` es correcto, porque lo que se quiere saber es si el conjunto colisiona **bajo el
+formateador real**.
+
+### BLOQUEANTE 2 — CERRADO
+
+`tasks.md`: 32 de 33 marcadas. La única sin marcar es **T7.4**, cuya segunda mitad («y PR contra
+`dev`») todavía no ha ocurrido: dejarla abierta es lo correcto, no un olvido. La entrada de
+`progress/history.md` existe (2026-08-18).
+
+### Menores 1-4 — CERRADOS (5 se queda como estaba, por acuerdo)
+
+1. **Copy**: la descripción dice ahora «…indemnizaciones **y pagos a mensajeros**».
+2. **Color**: `BOLSILLO_ORDENEX` gana `tonoMensaje`; `solo_ordenex` y `sin_reparto` usan
+   `text-muted-foreground` y sólo `solo_tiendas` conserva `text-danger-strong`. Y ahora **está
+   medido**: tres aserciones sobre el tono por modo en `CajaComposicionBarra.test.tsx`.
+3. **D1**: el caso mide sobre **cuatro** conjuntos —vacío, sin las 173, con las 173 y el catálogo
+   ENTERO en runtime— con control de no-vacuidad en los cuatro. Deja de hablar sólo de dos
+   categorías y afirma lo general, que es lo que su título dice. Y el comentario apunta a R35 como
+   la red que fija cuáles son las columnas.
+4. **Money-safe**: el barrido pasa de 4 a **7** fuentes (entran `WalletLedger`, `WalletModule` y
+   `wallet-ledger-descarga-columnas`), y `lib/utils/monto-escala-2.ts` tiene guardia propia dentro
+   de `caja-composicion-exhaustiva.guardia.test.ts`, con auto-comprobación y persiguiendo además
+   `.toNumber(`, que la lista genérica no miraba. Es más de lo que yo pedí.
+5. **La lista literal de la descarga se queda**, con el comentario que explica en qué se diferencia
+   del literal de D1 (contrato de un archivo que se abre fuera de la app, frente a un polizón sobre
+   el diseño de la pantalla). Ninguna aserción cambió. De acuerdo.
+
+*Corrección de papeleo (menor, sin efecto sobre el veredicto):* el último punto de la entrada de
+`progress/history.md` dice que `monto-escala-2.ts` «ninguna guardia lo barre todavía». Eso quedó
+obsoleto en este mismo commit — ahora sí la tiene.
+
+### Medición de cierre (mía, sobre `e9c4e100`)
+
+```
+pnpm run typecheck                      -> 0 errores
+9 archivos de test de la feature        -> 9 passed / 114 tests
+pnpm run test:guardias                  -> 111 passed / 1654 tests
+git status                              -> limpio
+```
+
+## VEREDICTO ACTUALIZADO: **OK** — se levanta el rechazo. **Cero bloqueantes en pie.**
+
+Queda pendiente de trámite lo que no es del implementer: `./init.sh` completo antes del PR
+(T7.4), el PR contra `dev` y pasar la ficha a `done`.
