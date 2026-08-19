@@ -48,7 +48,6 @@ import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigente
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
-import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { ParadaRutaRow } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -665,30 +664,89 @@ function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
     Prisma.sql`o."deleted_at" IS NULL`,
     Prisma.sql`os."value" IN (${Prisma.join([...filtro.estatusValues])})`,
   ];
-  const cantonNombres = [...(filtro.cantonNombres ?? [])];
-  if (cantonNombres.length > 0) {
-    condiciones.push(Prisma.sql`c."nombre" IN (${Prisma.join(cantonNombres)})`);
+  // Pedido humano (2026-08-19): la geografia se compara por ID —las columnas de `orden`, sin
+  // pasar por los JOIN de nombre— porque las opciones ya vienen de la geografia de la ZONA del
+  // actor, que es lo que ofrece el catalogo de `/ordenes`. Antes eran nombres derivados de las
+  // ordenes cargadas, y «Central» existe en cuatro provincias.
+  const provinciaIds = [...(filtro.provinciaIds ?? [])];
+  if (provinciaIds.length > 0) {
+    condiciones.push(Prisma.sql`o."provincia_id" IN (${Prisma.join(provinciaIds)})`);
   }
-  const distritoNombres = [...(filtro.distritoNombres ?? [])];
-  if (distritoNombres.length > 0) {
-    // El JOIN de distrito es LEFT y `NULL IN (...)` no es cierto: una orden SIN distrito
-    // queda fuera bajo un filtro de distrito, que es exactamente lo que hace hoy el cliente.
-    condiciones.push(Prisma.sql`d."nombre" IN (${Prisma.join(distritoNombres)})`);
+  const cantonIds = [...(filtro.cantonIds ?? [])];
+  if (cantonIds.length > 0) {
+    condiciones.push(Prisma.sql`o."canton_id" IN (${Prisma.join(cantonIds)})`);
+  }
+  const distritoIds = [...(filtro.distritoIds ?? [])];
+  if (distritoIds.length > 0) {
+    // `distrito_id` es NULLABLE y `NULL IN (...)` no es cierto: una orden SIN distrito queda
+    // fuera bajo un filtro de distrito. Mismo trato que en `/ordenes`.
+    condiciones.push(Prisma.sql`o."distrito_id" IN (${Prisma.join(distritoIds)})`);
+  }
+  // Pedido humano (2026-08-19) — rango de creacion: bordes ya resueltos a instantes UTC por el
+  // servicio. `>= desde` y `< hasta` (superior ABIERTO), la misma semantica que el `gte`/`lt`
+  // del listado de `/ordenes`.
+  if (filtro.creadaDesde) {
+    condiciones.push(Prisma.sql`o."created_at" >= ${filtro.creadaDesde}`);
+  }
+  if (filtro.creadaHasta) {
+    condiciones.push(Prisma.sql`o."created_at" < ${filtro.creadaHasta}`);
+  }
+  // BUSCADOR: `LIKE` parcial sobre la columna GENERADA (guia, remision, telefono en sus dos
+  // formas, destinatario y producto), acelerada por el indice GIN de trigramas. El termino
+  // llega YA normalizado por el servicio; aqui solo se escapan los comodines de `LIKE`.
+  //
+  // Sin `ILIKE` a proposito, igual que en `/ordenes`: la columna ya esta en minusculas y sin
+  // acentos, y el termino tambien. El `OR` de las dos formas del telefono compara LA MISMA
+  // columna y va entre parentesis, asi que sigue siendo una condicion hermana de la zona: el
+  // acotamiento por zona queda FUERA del `OR` y sigue mandando.
+  if (filtro.busqueda) {
+    condiciones.push(condicionBusquedaSatelite(filtro.busqueda, filtro.busquedaDigitos));
   }
   return condiciones;
+}
+
+/**
+ * Feature 169 (design §4.3, R7) — escapa lo que `LIKE` interpreta como comodin.
+ *
+ * Sin esto, buscar `"100%"` devolveria todo lo que empieza por `100` y `"_"` casaria con
+ * cualquier caracter. No es solo precision: `"%"` devolveria el listado entero. Se escapa con
+ * `\` porque es el caracter de escape POR DEFECTO de `LIKE` en Postgres; el `\` va primero en
+ * la clase para que el propio backslash se duplique en la misma pasada.
+ *
+ * Vive en el MODULO —y no dentro de la clase— porque lo necesitan las dos vias: el `contains`
+ * de Prisma (`/ordenes`) y el SQL crudo de la bodega satelite. Una declaracion, no dos.
+ */
+function escaparComodinesLike(valor: string): string {
+  return valor.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+}
+
+/**
+ * El termino sobre la columna generada, en UNA o en DOS formas. Espejo exacto de
+ * `OrdenRepository.criterioBusqueda`, que hace lo mismo en el dialecto de Prisma: el patron
+ * `%termino%` se construye aqui porque el SQL crudo no lo pone por su cuenta.
+ */
+function condicionBusquedaSatelite(termino: string, digitos?: string): Prisma.Sql {
+  const casa = (t: string): Prisma.Sql =>
+    Prisma.sql`o."busqueda_texto" LIKE ${`%${escaparComodinesLike(t)}%`}`;
+  if (!digitos || digitos === termino) return casa(termino);
+  return Prisma.sql`(${casa(termino)} OR ${casa(digitos)})`;
 }
 
 /**
  * Feature 184 (T A.1) — el `FROM ... WHERE` del listado, con los JOINs que las condiciones
  * necesitan. UN solo fragmento: la pagina, su conteo, el conjunto de la descarga y la vigencia
  * no tienen forma de mirar conjuntos distintos.
+ *
+ * Pedido humano (2026-08-19): aqui habia ademas tres JOIN de geografia (`provincia`, `canton`,
+ * `distrito`), que existian SOLO para comparar nombres. Con la geografia por ID el criterio se
+ * resuelve contra las columnas de `orden` y los tres JOIN se retiran: quedarse con ellos seria
+ * pagar tres uniones por consulta para no leer ni una columna suya. `order_status` se queda:
+ * lo necesitan el filtro de estado y el rango de grupo del `ORDER BY`.
  */
 function desdeSatelite(condiciones: Prisma.Sql[]): Prisma.Sql {
   return Prisma.sql`
       FROM "orden" o
       JOIN "order_status" os ON os."id" = o."estatus_id"
-      JOIN "canton" c ON c."id" = o."canton_id"
-      LEFT JOIN "distrito" d ON d."id" = o."distrito_id"
       WHERE ${Prisma.join(condiciones, " AND ")}
     `;
 }
@@ -785,7 +843,7 @@ export class OrdenRepository implements IOrdenRepository {
    * backslash se duplique en la misma pasada.
    */
   private static escaparLike(valor: string): string {
-    return valor.replace(/[\\%_]/g, (caracter) => `\\${caracter}`);
+    return escaparComodinesLike(valor);
   }
 
   /**
@@ -2301,51 +2359,6 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  /**
-   * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
-   * del actor. Alimenta las opciones de los dos desplegables, que hasta ahora se derivaban
-   * del array entero que viajaba al navegador.
-   *
-   * `distinct` sobre las tres FKs y `select` de los tres nombres: es la lectura mas estrecha
-   * que puede producir las mismas opciones que `derivarCantones`/`derivarDistritos` producian
-   * sobre el dataset completo. El `orderBy` empieza por las mismas columnas del `distinct`
-   * para que el resultado sea estable entre llamadas.
-   */
-  async findRecepcionSateliteGeoByZona(
-    zonaId: string,
-    estatusValues: string[],
-  ): Promise<ZonaDeOrden[]> {
-    if (estatusValues.length === 0) return [];
-    const filas = await this.prisma.orden.findMany({
-      where: {
-        zonaId,
-        deletedAt: null,
-        estatus: { value: { in: estatusValues } },
-      },
-      select: {
-        provinciaId: true,
-        cantonId: true,
-        distritoId: true,
-        provincia: { select: { nombre: true } },
-        canton: { select: { nombre: true } },
-        distrito: { select: { nombre: true } },
-      },
-      distinct: ["provinciaId", "cantonId", "distritoId"],
-      orderBy: [{ provinciaId: "asc" }, { cantonId: "asc" }, { distritoId: "asc" }],
-    });
-    return filas.map((fila) => ({
-      provinciaNombre: fila.provincia.nombre,
-      cantonNombre: fila.canton.nombre,
-      distritoNombre: fila.distrito?.nombre ?? null,
-    }));
-  }
-
-  /**
-   * Feature 33/R11/R18: transiciona UNA orden a `en_bodega_satelite` SOLO si sigue
-   * en `en_ruta_bodega_satelite`, es de `zonaId` y no esta borrada (guardia por
-   * estado de origen + zona en el propio UPDATE; concurrencia-segura). Devuelve
-   * `true` si afecto 1 fila. NO toca `mensajeroAsignadoId` ni `numGuia`.
-   */
   async recibirEnSatelite(
     ordenId: string,
     zonaId: string,

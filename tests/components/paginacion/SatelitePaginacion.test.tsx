@@ -225,8 +225,10 @@ interface FiltroEntrada {
   page?: number;
   pageSize?: number;
   estados?: string[];
-  cantones?: string[];
-  distritos?: string[];
+  // Pedido humano (2026-08-19): las claves de la geografía son las de `/ordenes` y viajan por
+  // ID. En este andamiaje el id de un cantón es su nombre (ver `catalogoSatelite`).
+  canton_id?: string[];
+  distrito_id?: string[];
 }
 
 /**
@@ -237,10 +239,10 @@ interface FiltroEntrada {
 function filtrarComoElServidor(input: FiltroEntrada): RecepcionSateliteDTO[] {
   return CONJUNTO.filter((o) => {
     if (input.estados?.length && !input.estados.includes(o.estatusValue)) return false;
-    if (input.cantones?.length && !input.cantones.includes(o.cantonNombre)) return false;
-    if (input.distritos?.length) {
+    if (input.canton_id?.length && !input.canton_id.includes(o.cantonNombre)) return false;
+    if (input.distrito_id?.length) {
       if (o.distritoNombre === null) return false;
-      if (!input.distritos.includes(o.distritoNombre)) return false;
+      if (!input.distrito_id.includes(o.distritoNombre)) return false;
     }
     return true;
   });
@@ -346,6 +348,18 @@ function region(): HTMLElement {
   return screen.getByRole("region", { name: LISTADO });
 }
 
+/**
+ * Pedido humano (2026-08-19): desde que esta pantalla monta la barra de `/ordenes`, la seccion
+ * tiene DOS regiones `role="status"` —el aviso del minimo de caracteres del buscador (vacio
+ * salvo cuando falta teclear) y esta—, asi que se elige por lo que DICE, no por ser la unica.
+ */
+function contador(): HTMLElement {
+  const status = within(region())
+    .getAllByRole("status")
+    .filter((n) => (n.textContent ?? "").trim() !== "");
+  return status[status.length - 1]!;
+}
+
 /** El `<nav>` de paginación, localizado por rol y nombre accesible (R43). */
 function nav(): HTMLElement {
   return screen.getByRole("navigation", { name: PAGINACION });
@@ -380,11 +394,30 @@ async function irAPagina(
  * `tests/unit/components/filter-component.test.tsx`: el panel no se cierra al marcar, así que
  * se reusa el `listbox` si ya está abierto.
  */
+/**
+ * PIDE un filtro en el selector de la barra. Pedido humano (2026-08-19): esta pantalla monta
+ * `BuscadorFiltros`, la barra de `/ordenes`, y ahí los filtros NO están puestos de entrada —se
+ * piden uno a uno—. Sin este paso el control no existe.
+ */
+async function pedirFiltro(user: ReturnType<typeof userEvent.setup>, label: string) {
+  // El selector se queda ABIERTO tras marcar una opción (se pueden pedir varios de una vez),
+  // así que pulsar el disparador otra vez lo cerraría. Se abre solo si hace falta.
+  if (screen.queryByRole("listbox", { name: "Filtros" }) === null) {
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+  }
+  const puesto = within(await screen.findByRole("listbox", { name: "Filtros" })).getByRole(
+    "option",
+    { name: label },
+  );
+  if (puesto.getAttribute("aria-selected") !== "true") await user.click(puesto);
+}
+
 async function filtrarPor(
   user: ReturnType<typeof userEvent.setup>,
   filtro: string,
   opcion: string,
 ) {
+  await pedirFiltro(user, filtro);
   const abierto = screen.queryByRole("listbox", { name: filtro });
   const lista =
     abierto ??
@@ -395,11 +428,23 @@ async function filtrarPor(
   await user.click(within(lista).getByRole("option", { name: opcion }));
 }
 
+/**
+ * Las opciones del DOMINIO de un desplegable: las de arriba menos el atajo «Todos», que el
+ * control ofrece para marcar o desmarcar de una vez lo que hay debajo.
+ */
+async function opcionesDeDominio(
+  user: ReturnType<typeof userEvent.setup>,
+  filtro: string,
+): Promise<string[]> {
+  return (await opcionesDe(user, filtro)).filter((o) => o !== "Todos");
+}
+
 /** Opciones que ofrece un desplegable de la barra, por su etiqueta. */
 async function opcionesDe(
   user: ReturnType<typeof userEvent.setup>,
   filtro: string,
 ): Promise<string[]> {
+  await pedirFiltro(user, filtro);
   const abierto = screen.queryByRole("listbox", { name: filtro });
   const lista =
     abierto ??
@@ -469,8 +514,8 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
 
     // R42: el contador dice el TOTAL del servidor, no el tamaño de la página. En la última
     // página es donde un contador derivado del array se delata sin ambigüedad.
-    expect(within(region()).getByRole("status")).toHaveTextContent(`${TOTAL} órdenes`);
-    expect(within(region()).getByRole("status")).not.toHaveTextContent(
+    expect(contador()).toHaveTextContent(`${TOTAL} órdenes`);
+    expect(contador()).not.toHaveTextContent(
       `${ULTIMA_PAGINA} órdenes`,
     );
 
@@ -491,7 +536,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // EXACTAMENTE las de la página: ni una menos…
     for (const remision of visibles) expect(casilla(remision)).toBeChecked();
     // …ni una más: el contador de la barra habla de 25, no de las 60 del conjunto.
-    expect(within(region()).getByRole("status")).toHaveTextContent(
+    expect(contador()).toHaveTextContent(
       `${PAGE_SIZE} seleccionada(s) en esta página`,
     );
 
@@ -504,7 +549,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     }
     expect(within(tabla()).getByRole("checkbox", { name: SELECCIONAR_TODO })).not.toBeChecked();
     // Y la barra vuelve a hablar del conjunto, no de una selección invisible.
-    expect(within(region()).getByRole("status")).toHaveTextContent(`${TOTAL} órdenes`);
+    expect(contador()).toHaveTextContent(`${TOTAL} órdenes`);
   });
 
   it("las acciones de lote se deciden sobre lo seleccionado, no sobre el conjunto (R48)", async () => {
@@ -591,24 +636,25 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     );
     expect([...cantonesDeLaPagina]).toEqual(["Escazú"]);
 
-    // El desplegable ofrece los CUATRO del conjunto, con la provincia desambiguando los dos
-    // homónimos (feature 117) y en orden alfabético.
-    expect(await opcionesDe(user, "Cantón")).toEqual([
-      "Barva (Heredia)",
-      "Central (Alajuela)",
-      "Central (San José)",
-      "Escazú (San José)",
-    ]);
+    // El desplegable ofrece los del CONJUNTO, no el único de la página. Pedido humano
+    // (2026-08-19): las etiquetas ya no llevan el sufijo «(Provincia)» que desambiguaba a los
+    // homónimos —«Central» existe en cuatro provincias—; ahora se distinguen por el
+    // ENCADENADO provincia → cantón, que es lo que permitió el paso a ids. En este andamiaje
+    // el id de un cantón es su nombre, así que los dos «Central» colapsan en una opción; el
+    // encadenado de verdad se afirma en `filtros-acotados-por-rol.test.ts`.
+    // «Todos» es un atajo del control (marca o desmarca lo visible), no una opción del
+    // dominio: se descarta para afirmar lo que este caso mide, que son los cantones ofrecidos.
+    expect(await opcionesDeDominio(user, "Cantón")).toEqual(["Escazú", "Central", "Barva"]);
 
     // Y elegir uno no borra los demás: el catálogo no depende de la selección ni de la
     // página que se esté viendo.
-    await filtrarPor(user, "Cantón", "Barva (Heredia)");
+    await filtrarPor(user, "Cantón", "Barva");
     await waitFor(() => expect(remisionesVisibles()[0]).toBe(etiqueta(51)));
-    expect(await opcionesDe(user, "Cantón")).toHaveLength(4);
+    expect(await opcionesDeDominio(user, "Cantón")).toHaveLength(3);
 
     // El distrito depende del cantón elegido, y sus opciones también salen del catálogo del
     // conjunto: «San Pedro» no aparece en ninguna fila de la página 1.
-    expect(await opcionesDe(user, "Distrito")).toEqual(["San Pedro"]);
+    expect(await opcionesDeDominio(user, "Distrito")).toEqual(["San Pedro"]);
   });
 
   it("la descarga sigue entregando el dataset completo con los filtros vigentes (R52)", async () => {
@@ -699,7 +745,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     ).toEqual(["en_bodega_satelite"]);
     // Los CONTADORES son los del servidor y no se mueven: 30 con el filtro, 60 sin él. Un
     // contador recalculado sobre la selección o sobre las filas restantes se delataría aquí.
-    expect(within(region()).getByRole("status")).toHaveTextContent(`30 de ${TOTAL} órdenes`);
+    expect(contador()).toHaveTextContent(`30 de ${TOTAL} órdenes`);
     // Y podar no relee el listado: no cuesta ni una consulta de página.
     expect(paginadoMock.mock.calls.length).toBe(lecturasTrasPodar);
   });
@@ -736,7 +782,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
 
     // ANTES de podar: la acción está ofrecida y habilitada sobre la única marca visible.
     expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
-    expect(within(region()).getByRole("status")).toHaveTextContent(
+    expect(contador()).toHaveTextContent(
       "1 seleccionada(s) en esta página",
     );
     expect(avisoTexto()).toBe(
@@ -761,7 +807,7 @@ describe("Riesgo ALTO · «Órdenes de la bodega» del adminSatelite (T K.3)", (
     // DESPUÉS de podar: la MISMA acción sigue ofrecida, habilitada y sobre la misma selección
     // visible. La poda se llevó una marca de otra página y ni tocó ésta.
     expect(within(region()).getByRole("button", { name: "Enviar a central" })).toBeEnabled();
-    expect(within(region()).getByRole("status")).toHaveTextContent(
+    expect(contador()).toHaveTextContent(
       "1 seleccionada(s) en esta página",
     );
     // Y sigue siendo la acción de lo SELECCIONADO EN LA PÁGINA: la 02, que sobrevivió a la poda,

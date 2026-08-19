@@ -10,8 +10,8 @@ import {
   listarMensajerosSatelite,
   estadoBloqueoBodegaSatelite,
   listarOrdenesBodegaPaginado,
-  obtenerCatalogoFiltrosSatelite,
 } from "@/lib/actions/recepcion-satelite";
+import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { PAGE_SIZE_SATELITE } from "@/tests/fixtures/satelite-bodega";
 
 // Feature 33 (T11) — la página resuelve el rol SOLO server-side; rol ≠
@@ -29,7 +29,11 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   // Feature 170 — FASE 2 (T K.3): la página pre-carga la PÁGINA 1 del listado y el catálogo
   // de cantón/distrito, y los baja por props al módulo.
   listarOrdenesBodegaPaginado: vi.fn(),
-  obtenerCatalogoFiltrosSatelite: vi.fn(),
+}));
+// Pedido humano (2026-08-19): el catálogo de los filtros es el de `/ordenes` — la misma
+// acción, acotada por el servicio a la zona del actor.
+vi.mock("@/lib/actions/filtros-ordenes", () => ({
+  obtenerCatalogoFiltrosOrdenes: vi.fn(),
 }));
 vi.mock("html5-qrcode", () => ({ Html5Qrcode: vi.fn() }));
 
@@ -62,7 +66,7 @@ const listarMock = vi.mocked(listarRecepcionSatelite);
 const listarMensajerosMock = vi.mocked(listarMensajerosSatelite);
 const bloqueoMock = vi.mocked(estadoBloqueoBodegaSatelite);
 const paginaMock = vi.mocked(listarOrdenesBodegaPaginado);
-const catalogoMock = vi.mocked(obtenerCatalogoFiltrosSatelite);
+const catalogoMock = vi.mocked(obtenerCatalogoFiltrosOrdenes);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -94,7 +98,8 @@ beforeEach(() => {
   });
   catalogoMock.mockResolvedValue({
     status: "ok",
-    catalogo: { cantones: [], distritos: [] },
+    // Lo que este rol recibe: geografía de SU zona, ni zonas ni cuentas tienda.
+    catalogo: { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
   });
 });
 

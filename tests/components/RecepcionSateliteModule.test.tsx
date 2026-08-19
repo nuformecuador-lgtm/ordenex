@@ -18,8 +18,9 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
-// Feature 63: se mockea también `recibirLote` (recepción en lote "Aceptar todas"/
-// "Aceptar") que consume la sección compartida "Por recibir".
+// Feature 63: se mockea también `recibirLote` (la recepción "Aceptar" por-orden, que
+// viaja por el mismo camino en lote con UN id) que consume la sección compartida
+// "Por recibir". Pedido humano del 2026-08-19: ya no hay "Aceptar todas".
 // Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
 // devuelve las órdenes que el caso monta, sin recortar: aquí no se pagina nada (eso lo mide
 // `tests/components/paginacion/SatelitePaginacion.test.tsx`).
@@ -213,7 +214,7 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.getByRole("region", { name: LISTADO })).toBeInTheDocument();
   });
 
-  it("Feature 63: la sección 'Por recibir' expone 'Aceptar todas' + 'Aceptar' por-orden, pero NO asignar/gestionar", () => {
+  it("Feature 63: la sección 'Por recibir' expone 'Aceptar' por-orden (sin lote) y NO asignar/gestionar", () => {
     renderModule({
       porRecibir: [
         makeOrden({ id: "r1", numRemision: "REM-R1" }),
@@ -222,11 +223,9 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recibir" });
-    // La recepción en lote reutiliza la sección del mensajero: acción en lote…
-    expect(
-      within(region).getByRole("button", { name: "Aceptar todas" }),
-    ).toBeInTheDocument();
-    // …y una acción por-orden por cada tarjeta.
+    // Pedido humano del 2026-08-19: NO hay acción en lote…
+    expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
+    // …sólo una acción por-orden por cada tarjeta.
     expect(
       within(region).getAllByRole("button", { name: "Aceptar" }),
     ).toHaveLength(2);
@@ -906,9 +905,7 @@ describe("RecepcionSateliteModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("Feature 63: 'Aceptar todas' llama recibirLote con TODOS los ids y en éxito refresca", async () => {
-    const user = userEvent.setup();
-    recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 2 });
+  it("Pedido humano 2026-08-19: NO hay 'Aceptar todas' ni forma de recibir varias de golpe", () => {
     renderModule({
       porRecibir: [
         makeOrden({ id: "r1", numRemision: "REM-R1" }),
@@ -917,11 +914,9 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recibir" });
-    await user.click(within(region).getByRole("button", { name: "Aceptar todas" }));
-
-    await vi.waitFor(() => expect(recibirLoteMock).toHaveBeenCalledTimes(1));
-    expect(recibirLoteMock).toHaveBeenCalledWith({ ordenIds: ["r1", "r2"] });
-    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
+    // Aceptar sigue existiendo, pero SOLO dentro de cada tarjeta: una por orden.
+    expect(within(region).getAllByRole("button", { name: "Aceptar" })).toHaveLength(2);
   });
 
   it("Feature 63: 'Aceptar' de una fila envía solo ese ordenId", async () => {

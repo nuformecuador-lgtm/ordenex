@@ -4,7 +4,6 @@ import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
-import type { ZonaDeOrden } from "@/lib/utils/filtro-canton-distrito";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -467,13 +466,40 @@ export interface RecepcionSateliteFiltro {
   zonaId: string;
   /** Lista blanca de estados ya intersecada por el servicio; vacia -> pagina vacia. */
   estatusValues: readonly string[];
-  /** Nombres de canton elegidos; vacio/ausente = todos los cantones. */
-  cantonNombres?: readonly string[];
   /**
-   * Nombres de distrito elegidos; vacio/ausente = todos. Con distritos elegidos, una orden
-   * SIN distrito queda fuera — igual que hoy en el cliente (`distritoNombre === null`).
+   * Pedido humano (2026-08-19): geografia por ID, igual que el listado de `/ordenes`. Antes
+   * eran NOMBRES —los `value` que ofrecia el catalogo derivado de las ordenes cargadas—; las
+   * opciones salen ahora de la geografia de la ZONA del actor, que son ids. Vacio/ausente =
+   * todas; se cruzan en AND entre si y con el resto.
    */
-  distritoNombres?: readonly string[];
+  provinciaIds?: readonly string[];
+  cantonIds?: readonly string[];
+  /**
+   * Distritos elegidos; vacio/ausente = todos. Con distritos elegidos, una orden SIN distrito
+   * queda fuera (`distrito_id` es NULLABLE y `NULL IN (...)` no es cierto) — el mismo trato
+   * que le da el listado de `/ordenes`.
+   */
+  distritoIds?: readonly string[];
+  /**
+   * Pedido humano (2026-08-19) — rango de creacion ya resuelto a instantes UTC por el
+   * servicio (el atajo `7d`/`30d`… y las fechas calendario se traducen ALLI, con el huso de
+   * Costa Rica). El repositorio no sabe de husos ni de atajos: recibe dos bordes.
+   */
+  creadaDesde?: Date;
+  creadaHasta?: Date;
+  /**
+   * Pedido humano (2026-08-19) — termino del BUSCADOR, ya normalizado por el servicio con
+   * `normalizarTerminoBusqueda` (el espejo TypeScript de la columna generada
+   * `orden.busqueda_texto`). Se compara con `LIKE` contra esa columna, acelerada por su
+   * indice GIN de trigramas, igual que en `/ordenes`.
+   */
+  busqueda?: string;
+  /**
+   * La forma SOLO-DIGITOS del termino, cuando el termino trae separadores («8888-0000»).
+   * Es un AÑADIDO al termino, no un sustituto: las dos formas se comparan contra la MISMA
+   * columna dentro de un `OR`, que a su vez va en AND con la zona y el resto del criterio.
+   */
+  busquedaDigitos?: string;
 }
 
 // Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
@@ -1076,19 +1102,6 @@ export interface IOrdenRepository {
     filtro: RecepcionSateliteFiltro,
     ids: readonly string[],
   ): Promise<string[]>;
-  /**
-   * Feature 170 — FASE 2 (T K.2, R44/R46): los pares canton/distrito DISTINTOS del conjunto
-   * del actor (su zona + los estados del listado), para las OPCIONES de los desplegables.
-   *
-   * Se lee el conjunto COMPLETO a proposito: R46 exige que las opciones sigan siendo las de
-   * todas las filas del actor y no las de la pagina visible. Se piden solo los tres nombres
-   * de geografia —lo unico que el desplegable necesita— y filas repetidas se descartan en la
-   * base. Solo query.
-   */
-  findRecepcionSateliteGeoByZona(
-    zonaId: string,
-    estatusValues: string[],
-  ): Promise<ZonaDeOrden[]>;
   /**
    * Feature 33/R11/R18: transicion atomica y concurrencia-segura de UNA orden a
    * `en_bodega_satelite`. UPDATE guardado por estado de ORIGEN (solo si sigue en
