@@ -2984,6 +2984,36 @@
       "spec_ready_at": null,
       "spec_approved_at": null,
       "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE de toda la pila: el arnes exige gate verde antes de cada PR y con dev asi nadie puede cumplirlo. || 191 rojos iniciales; 118 eran mi base local sin migrar (el merge trajo 4 migraciones) y se fueron con `prisma migrate deploy` contra localhost:5432, verificado antes de migrar. Quedan 73 REALES. || DECISION HUMANA 2026-08-19: la barra de filtros cambio A PROPOSITO, asi que sus 33 aserciones se actualizan contra la interfaz nueva SIN perder lo que cada caso comprobaba. || El rojo de `wallet-idempotencia` NO se actualiza a ciegas: hay que determinar si es un hueco del emulador o un fallo real del codigo, porque cae justo en la transaccion del dinero."
+    },
+    {
+      "id": 244,
+      "name": "analitica: el recorte por rol ya no llega a la barra que se pinta",
+      "spec_path": null,
+      "description": "Fullstack. `/analitica` calcula `recorteDePresentacion(actor)` y se lo pasa a `FiltrosOperativos` en el slot `filtros`, que el shell reducido DESCARTA. La barra que si se pinta es otra (`FiltrosEntregas`, dentro de `destacado`), que no recibe facetas ni conoce el rol. Medido con sonda sobre la pantalla renderizada: los tres roles reciben las MISMAS siete facetas y, con el filtro de tienda abierto, un adminTienda ve en el DOM el nombre de una tienda ajena.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": null,
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-19 al poner dev en verde (243). || NO AFIRMA QUE HAYA FUGA EN PRODUCCION: el catalogo real lo sirve `obtenerCatalogoFiltrosOrdenes()`, que acota server-side; en el test esta mockeado a proposito para servir entidades ajenas. Lo que se perdio es la GARANTIA DE PRESENTACION que la R23 de la feature 133 congelaba, o sea la segunda linea de defensa. || Sus dos casos y su control positivo quedaron INERTES en tests/components/AnaliticaPage.test.tsx con la medicion escrita dentro: re-anclarlos manteniendo la asercion los dejaba rojos, y aflojarla los dejaba verdes mintiendo. || Verificar primero si la barra que se pinta DEBE recortar por rol, o si el recorte sobra porque el catalogo ya acota."
+    },
+    {
+      "id": 245,
+      "name": "analitica lee la base en cada carga para tirar el resultado",
+      "spec_path": null,
+      "description": "Backend. `app/(app)/analitica/page.tsx:366` hace `const paneles = await cargarTableroFinanciero()` y se lo pasa a `financiero={<TableroFinanciero paneles={paneles} />}`, que el shell reducido descarta. Corre en cada carga de /analitica para maestro y admin. Ademas `AnaliticaShell.tsx` acepta y tira tres props, con 5 avisos de eslint vivos.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-19 al poner dev en verde (243). || CONTRASTE UTIL: la seccion de finanzas comentada en la propia `page.tsx` SI evito su lectura (`cargarKpisFinancieros()` ya no se llama, y su comentario lo dice). La del shell no: sigue pidiendo sus paneles con la <section> comentada. || Cuidado al limpiarlo: si las secciones vuelven, la lectura hace falta. El tripwire «Contrato del shell reducido» de AnaliticaShell.test.tsx avisa cuando alguien descomente."
     }
   ]
 }
