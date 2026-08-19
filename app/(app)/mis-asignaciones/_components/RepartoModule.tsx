@@ -479,6 +479,8 @@ export function RepartoModule({
    *    órdenes. Es el permiso inejercitable de siempre, y R35 lo prohíbe.
    *
    *  - CONSERVA «Recuperar», que es el rescate: devuelve la orden a `en_reparto` y con ella arriba.
+   *    Y lo conserva TAMBIÉN con el mensajero bloqueado (R25) — es la única excepción de esta card,
+   *    ver el comentario del botón.
    */
   function renderCardConAyuda(orden: MiAsignacionDTO) {
     return (
@@ -490,11 +492,18 @@ export function RepartoModule({
         bloqueado={bloqueado}
         acciones={
           <div className="flex items-center justify-between gap-2">
+            {/* Feature 235 (R25) — LA EXCEPCIÓN AL BLOQUEO, y es deliberada: este botón NO recibe
+                `disabled={bloqueado}`. El resto de la card SÍ está bloqueada (el `bloqueado` de
+                arriba apaga su gate de selección, feature 111/R14), pero el rescate es justamente
+                la SALIDA del deadlock que documenta `lib/services/rescate-ayuda.ts`: un mensajero
+                con un cierre `vencido` y una orden en ayuda no podría ni rescatarla —bloqueado— ni
+                cerrar —la orden en ayuda le bloquea el cierre, R22—. El servicio se lo permite a
+                propósito; apagarlo aquí dejaba el permiso vivo en el servidor y muerto en la
+                pantalla, que es el permiso inejercitable que R35 prohíbe. */}
             <RecuperarAyudaButton
               ordenId={orden.id}
               numRemision={orden.numRemision}
               onRecuperada={() => router.refresh()}
-              disabled={bloqueado}
             />
             <Button
               type="button"

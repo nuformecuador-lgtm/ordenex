@@ -133,6 +133,9 @@ function renderModule(
   // Feature 235 (R18): la SEGUNDA lista, ya separada por el servidor. Que sea un parámetro y no
   // una derivación es el cambio: el módulo no vuelve a decidir el corte.
   conAyuda: MiAsignacionDTO[] = [],
+  // Feature 235 (R25): el bloqueo por cierre sin resolver. Parametrizado porque el rescate es la
+  // ÚNICA acción de esta pantalla que debe sobrevivirle, y sin poder encenderlo no se puede afirmar.
+  bloqueado = false,
 ) {
   return render(
     <RepartoModule
@@ -140,7 +143,7 @@ function renderModule(
       conAyuda={conAyuda}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
-      bloqueado={false}
+      bloqueado={bloqueado}
     />,
   );
 }
@@ -324,6 +327,33 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
         name: "Retirar la solicitud de ayuda de la orden REM-002",
       }),
     ).toBeTruthy();
+  });
+
+  it("235/R25: bloqueado por cierre, «Recuperar» sigue pulsable y llega hasta la Server Action", async () => {
+    // POR QUÉ ES LA EXCEPCIÓN Y NO UN DESCUIDO: `rescate-ayuda.ts` NO comprueba el bloqueo total, a
+    // propósito, porque comprobarlo crearía un DEADLOCK con R22 — un mensajero con un cierre
+    // `vencido` y una orden en ayuda no podría ni rescatarla (bloqueado) ni cerrar (esa misma orden
+    // le bloquea el cierre). Hasta hoy la card le pasaba `disabled={bloqueado}` al botón: el
+    // permiso vivía en el servidor y moría en la pantalla, que es el permiso inejercitable que R35
+    // prohíbe. El resto de la card SÍ sigue bloqueada; esta acción es la salida.
+    const user = userEvent.setup();
+    recuperarMock.mockResolvedValue({ status: "ok" });
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })], true);
+
+    // Antes de nada: que el bloqueo REALMENTE llegó al módulo. Sin esto el caso quedaría verde
+    // aunque la prop se ignorara, y no probaría nada del bloqueo.
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    const recuperar = screen.getByRole("button", {
+      name: "Retirar la solicitud de ayuda de la orden REM-002",
+    });
+    expect(recuperar).not.toBeDisabled();
+
+    // Y que el permiso es EJERCITABLE de verdad, no solo un atributo ausente: el click tiene que
+    // llegar al borde y devolver la orden a la calle.
+    await user.click(recuperar);
+    expect(recuperarMock).toHaveBeenCalledWith({ ordenId: "g2" });
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   it("235/R35: desde la card se abre el HILO, que es donde el mensajero ejerce su ventana", async () => {
