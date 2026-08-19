@@ -1,7 +1,10 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  ActualizarPagosGestionInput,
+  ActualizarPagosGestionResult,
   Alcance,
   CierreAdminResumenRow,
+  GestionEditableDelCierre,
   GestionIncidenteDelCierre,
   ICierresAdminRepository,
   ResolverCierreInput,
@@ -41,6 +44,7 @@ import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-f
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
+import { computeTotales } from "@/lib/utils/cierre-totales";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -54,6 +58,18 @@ const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
 // ABIERTO ABANDONADO (`vencido` o —modelo GLOBAL 109— `rechazado`) a `solicitado`, en nombre del
 // mensajero ausente que dejaria su bodega bloqueada; guardada por estado. Solo cambia `estado`.
 const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
+
+// Pedido humano (2026-08-19): cierre ABIERTO = la plata todavia no esta aprobada. Es el unico
+// momento en el que un admin/maestro puede CORREGIR el reparto por metodo que declaro el
+// mensajero. `aprobado` y `rechazado` quedan congelados: el primero porque ya se liquido, el
+// segundo porque su correccion es re-solicitarlo y volver a declararlo.
+//
+// NO es `ESTADOS_RESOLUBLES` (solo `solicitado`): un `vencido` es un cierre abierto que el
+// mensajero nunca llego a solicitar, y su desglose es tan corregible como el de un `solicitado`.
+const ESTADOS_ABIERTOS: CierreEstado[] = ["solicitado", "vencido"];
+
+// El unico resultado con desglose que corregir: los otros cuatro no cobran nada (R8/R25).
+const RESULTADO_ENTREGADA = "entregada" as const;
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 /**
@@ -974,6 +990,122 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * `rechazado` NO alimenta. La distincion count===0 (conflict vs fuera_de_alcance) queda
    * igual.
    */
+  /**
+   * Pedido humano (2026-08-19) — la gestion a corregir, con el alcance en el WHERE.
+   *
+   * `cierre: { is: {...} }` y no `cierreId` a secas: la guardia tiene que ser sobre el CIERRE
+   * (su destino), que es donde vive el alcance. Una gestion sin cierre no casa el `is` y sale
+   * `null`, que es justo lo que se quiere: esta correccion es la de un cierre.
+   */
+  async findGestionEditableEnCierre(
+    gestionId: string,
+    alcance: Alcance,
+  ): Promise<GestionEditableDelCierre | null> {
+    const fila = await this.prisma.gestionOrden.findFirst({
+      where: {
+        id: gestionId,
+        anuladaAt: null,
+        cierre: { is: alcanceWhere(alcance) },
+      },
+      select: {
+        id: true,
+        cierreId: true,
+        resultado: true,
+        montoRecibido: true,
+        cierre: { select: { estado: true } },
+        pagos: { select: { metodo: true, monto: true } },
+      },
+    });
+    if (!fila || fila.cierreId === null || fila.cierre === null) return null;
+    return {
+      gestionId: fila.id,
+      cierreId: fila.cierreId,
+      cierreEstado: fila.cierre.estado,
+      resultado: fila.resultado,
+      // Money-safe: STRING escala 2, nunca `Number`.
+      montoRecibido: fila.montoRecibido === null ? null : fila.montoRecibido.toFixed(2),
+      pagos: toLineasPago(fila.pagos),
+    };
+  }
+
+  async actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+  ): Promise<ActualizarPagosGestionResult> {
+    const { gestionId, alcance, editadoPor, lineas } = input;
+    const alcanceGuard = alcanceWhere(alcance);
+
+    return this.prisma.$transaction(async (tx) => {
+      // (1) Anti-TOCTOU: la MISMA condicion que dejo pasar la lectura, reevaluada al escribir.
+      // El sello del rastro ES la guardia — si no se sella, no se toca ni una linea.
+      const sello = await tx.gestionOrden.updateMany({
+        where: {
+          id: gestionId,
+          anuladaAt: null,
+          resultado: RESULTADO_ENTREGADA,
+          cierre: { is: { estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard } },
+        },
+        data: { pagosEditadosAt: new Date(), pagosEditadosPor: editadoPor },
+      });
+      if (sello.count !== 1) {
+        // No se distingue «se cerro entre medias» de «no es tuyo»: la lectura previa ya
+        // decidio eso con informacion fresca, y aqui cualquiera de los dos es lo mismo.
+        const existe = await tx.gestionOrden.count({ where: { id: gestionId } });
+        return { status: existe > 0 ? ("conflict" as const) : ("fuera_de_alcance" as const) };
+      }
+
+      // (2) El desglose es un CONJUNTO: se sustituye entero. Un `upsert` por metodo dejaria
+      // viva la linea del metodo que la correccion quita.
+      await tx.gestionOrdenPago.deleteMany({ where: { gestionId } });
+      if (lineas.length > 0) {
+        await tx.gestionOrdenPago.createMany({
+          data: lineas.map((l: ActualizarPagosGestionInput["lineas"][number]) => ({
+            gestionId,
+            metodo: l.metodo,
+            monto: new Prisma.Decimal(l.monto),
+          })),
+        });
+      }
+
+      // (3) Los totales del cierre, recalculados con la MISMA funcion que los congelo al
+      // solicitarlo, sobre las gestiones de ESE cierre. Recalcular (y no sumar un delta) es lo
+      // que garantiza que snapshot y lineas no puedan divergir.
+      //
+      // El conjunto es el mismo que vio `computeTotales` al crear el cierre: las gestiones
+      // vinculadas y no anuladas. (Anular exige `cierre_id IS NULL`, feature 67, asi que dentro
+      // de un cierre no hay anuladas; el filtro se escribe igual, por si esa regla cambia.)
+      const deLaGestion = await tx.gestionOrden.findUnique({
+        where: { id: gestionId },
+        select: { cierreId: true },
+      });
+      const cierreId = deLaGestion?.cierreId ?? null;
+      if (cierreId === null) throw new Error("gestion sin cierre tras el sello");
+
+      const gestiones = await tx.gestionOrden.findMany({
+        where: { cierreId, anuladaAt: null },
+        select: { resultado: true, pagos: { select: { metodo: true, monto: true } } },
+      });
+      const totales = computeTotales(
+        gestiones.map((g) => ({ resultado: g.resultado, pagos: toLineasPago(g.pagos) })),
+      );
+
+      // (4) El snapshot, con la MISMA guardia de estado y alcance. `total_general` va tambien:
+      // no puede cambiar —solo cambia de balde—, y escribirlo es lo que hace que un descuadre
+      // se vea como un fallo aqui en vez de como un numero raro tres pantallas mas alla.
+      const actualizados = await tx.cierreDia.updateMany({
+        where: { id: cierreId, estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard },
+        data: {
+          totalEfectivo: new Prisma.Decimal(totales.efectivo),
+          totalSimpe: new Prisma.Decimal(totales.simpe),
+          totalTransferencia: new Prisma.Decimal(totales.transferencia),
+          totalGeneral: new Prisma.Decimal(totales.general),
+        },
+      });
+      if (actualizados.count !== 1) throw new Error("cierre no actualizado");
+
+      return { status: "updated" as const, totales };
+    });
+  }
+
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
     const {
       cierreId,
