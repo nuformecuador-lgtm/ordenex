@@ -11,11 +11,9 @@ import {
   Navigation,
   PackageCheck,
   Phone,
-  Plus,
   QrCode,
   RotateCcw,
   ShieldAlert,
-  Trash2,
   Truck,
   Undo2,
   X,
@@ -27,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
-import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { solicitarAyudaOrden } from "@/lib/actions/orden-ayuda";
@@ -38,11 +35,6 @@ import {
 } from "@/lib/actions/orden-notas";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
-import {
-  formatMonto as formatMontoConfigurado,
-  SIN_MONTO_RAYA,
-} from "@/lib/config/moneda";
-import { aCentimos } from "@/lib/utils/pagos-recaudo";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import {
   capturarUbicacion,
@@ -61,22 +53,21 @@ import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import {
   ERRORES_LINEA,
-  acotarMonto,
   capturaCuadra,
   erroresDeLinea,
-  lineaNueva,
   lineasIniciales,
   lineasParaEnviar,
-  opcionesPara,
-  pendiente,
-  puedeAnadirLinea,
-  sinPendiente,
-  totalCapturado,
   type LineaEnEdicion,
 } from "./desglose-captura";
+// El EDITOR de líneas vive en `components/shared` desde que lo comparte la corrección del
+// desglose que hace el admin en un cierre abierto (pedido humano 2026-08-19).
+import {
+  DESGLOSE_TEXTOS,
+  DesglosePagoField,
+} from "@/components/shared/DesglosePagoField";
 import { VerificarGuiaGate } from "./VerificarGuiaGate";
 import { UbicacionTrigger } from "./UbicacionTrigger";
-import { useSeccionColapsable } from "./useSeccionColapsable";
+import { useSeccionColapsable } from "@/hooks/useSeccionColapsable";
 
 // Feature 193 (R19) — el permiso de ubicación está DENEGADO y por eso la gestión no sale.
 //
@@ -86,27 +77,6 @@ import { useSeccionColapsable } from "./useSeccionColapsable";
 const MSG_UBICACION_DENEGADA =
   "Para registrar la gestión hace falta tu ubicación. Activá el permiso desde el candado " +
   "de la barra de direcciones (Permisos del sitio → Ubicación) y volvé a intentarlo.";
-
-// Feature 213 (R8/R9) — textos del editor de líneas de pago, en un solo sitio (i18n-ready) y
-// FUERA del JSX, igual que los avisos de la 158/193.
-const DESGLOSE_TEXTOS = {
-  titulo: "Método de pago",
-  linea: "Línea de pago",
-  metodoLinea: "Método de pago línea",
-  montoLinea: "Monto línea",
-  quitarLinea: "Quitar línea",
-  resumen: "Resumen del cobro",
-  aCobrar: "A cobrar",
-  capturado: "Capturado",
-  diferencia: "Diferencia",
-  anadir: "Añadir método",
-  /**
-   * R9: el descuadre se dice ANTES de pulsar. No es un "revisa los datos": el mensajero
-   * necesita saber QUÉ no cuadra, porque este número acaba siendo la `E` del `min(P, E)` con
-   * el que se le paga (feature 44).
-   */
-  noCuadra: "El desglose debe sumar exactamente el monto a cobrar.",
-} as const;
 
 // Feature 227 (T3.4) — textos del bloque del hilo, en un solo sitio y fuera del JSX
 // (i18n-ready, mismo criterio que `DESGLOSE_TEXTOS`).
@@ -132,14 +102,6 @@ const MSG_AYUDA_FORBIDDEN =
  */
 function lineasDeArranque(montoCobrar: number | null): LineaEnEdicion[] {
   return montoCobrar ? lineasIniciales(montoCobrar) : [];
-}
-
-/**
- * R8: los tres importes del resumen, con la moneda de CONFIGURACIÓN. Mismo formateador que ya
- * usa `AsignacionDetalle` en esta carpeta; aquí no se escribe ningún símbolo de moneda.
- */
-function money(monto: number): string {
-  return formatMontoConfigurado(monto, SIN_MONTO_RAYA);
 }
 
 /**
@@ -200,6 +162,11 @@ const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
 // mismo `gestionConfig.MAX_EVIDENCIAS_POR_GESTION`; en el navegador la env no es visible
 // (no lleva `NEXT_PUBLIC_`), asi que cae al default 3, igual que el schema en cliente.
 const MAX_EVIDENCIAS = gestionConfig.MAX_EVIDENCIAS_POR_GESTION;
+
+// Pedido humano (2026-08-19): una entrega cuyo `montoCobrar` es 0/null no monta el editor de
+// desglose. Ese hueco silencioso se lee como "falta algo", así que se dice en voz alta que no
+// hay cobro que capturar. Fuera del JSX, mismo criterio que el resto de los avisos.
+const SIN_COBRO_NOTA = "Esta orden no tiene cobro asociado: no hay nada que recaudar.";
 
 // Feature 158 (R33/Q-B): textos del reporte de incidente (separados de la lógica, i18n-ready).
 const INCIDENTE_APARTE_NOTA =
@@ -869,6 +836,10 @@ export function GestionarOrdenPanel({
               await refrescarHilo();
             }}
             titulo={HILO_TEXTOS.titulo}
+            // Pedido humano del 2026-08-19: acá el hilo se LEE. Escribir es la excepción, y
+            // un área de texto siempre desplegada empujaba las notas —y el resto de la
+            // gestión— fuera de la pantalla del teléfono.
+            compositorColapsado
           />
         ) : (
           /* Rechazo tipado (o fallo de transporte, que SWR ya capturó): se dice, y el resto
@@ -995,8 +966,13 @@ export function GestionarOrdenPanel({
           {resultado === "entregada" ? (
             <>
               {/* Sin cobro (montoCobrar 0/null): no hay nada que repartir, así que no se monta
-                  el editor y la entrega se registra con recaudo 0 y CERO líneas (213/R16). */}
-              {sinCobro ? null : (
+                  el editor y la entrega se registra con recaudo 0 y CERO líneas (213/R16). En su
+                  sitio va la nota: el hueco vacío se lee como un campo que falta. */}
+              {sinCobro ? (
+                <p role="note" className="text-sm text-muted-foreground">
+                  {SIN_COBRO_NOTA}
+                </p>
+              ) : (
                 <DesglosePagoField
                   lineas={lineas}
                   montoACobrar={montoACobrar}
@@ -1163,176 +1139,6 @@ export function GestionarOrdenPanel({
         </div>
       ) : null}
     </section>
-  );
-}
-
-/**
- * Feature 213 (R1-R9) — EDITOR DE LÍNEAS del recaudo, en el hueco que ocupaba el selector único
- * de método. Hermano de `CausaField` / `EvidenciasField`: vive en este archivo porque tiene UN
- * solo consumidor (`docs/architecture.md`, «sin sobre-ingeniería»).
- *
- * Cada línea es un grupo con nombre accesible propio («Línea de pago N») y DOS controles y nada
- * más [D3/R7]: el método y el monto. Sin referencia y sin nota — un campo más en la calle, con
- * una mano, es un campo que se rellena mal.
- *
- * La lógica (opciones deshabilitadas, pendiente, cuadre, errores por línea) NO está aquí: está
- * en `desglose-captura.ts`, que se testea sin montar React. Aquí solo se pinta.
- */
-function DesglosePagoField({
-  lineas,
-  montoACobrar,
-  errores,
-  errorCuadre,
-  errorMetodo,
-  errorServidor,
-  onChange,
-}: {
-  lineas: LineaEnEdicion[];
-  montoACobrar: number;
-  /** R13: error por línea, en la MISMA posición que la línea que lo provoca. */
-  errores: (string | undefined)[];
-  /** R9: la suma no iguala exactamente el monto a cobrar. */
-  errorCuadre: string | undefined;
-  /** R14: «método de pago requerido» (regla 3 del borde, campo `metodoPago`). */
-  errorMetodo: string | undefined;
-  /** R18: error del servidor en el campo `pagos`. */
-  errorServidor: string | undefined;
-  onChange: (lineas: LineaEnEdicion[]) => void;
-}) {
-  const capturado = totalCapturado(lineas);
-  // R11: la diferencia se saca en CÉNTIMOS ENTEROS. `pendiente` no sirve aquí porque se acota a
-  // 0: en el resumen hay que poder ver que se capturó de MÁS, y eso es una diferencia negativa.
-  const diferencia = (aCentimos(montoACobrar) - aCentimos(capturado)) / 100;
-
-  function cambiar(indice: number, cambio: Partial<LineaEnEdicion>) {
-    onChange(lineas.map((l, i) => (i === indice ? { ...l, ...cambio } : l)));
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <Label>{DESGLOSE_TEXTOS.titulo}</Label>
-
-      {lineas.map((linea, i) => {
-        const errorLinea = errores[i];
-        return (
-          <div
-            key={linea.id}
-            role="group"
-            aria-label={`${DESGLOSE_TEXTOS.linea} ${i + 1}`}
-            className="flex flex-col gap-1.5"
-          >
-            <div className="flex items-end gap-2">
-              <div className="min-w-0 flex-1">
-                <Select
-                  value={linea.metodo}
-                  onValueChange={(next) =>
-                    cambiar(i, { metodo: next as LineaEnEdicion["metodo"] })
-                  }
-                  options={opcionesPara(lineas, i)}
-                  placeholder="Selecciona un método"
-                  aria-label={`${DESGLOSE_TEXTOS.metodoLinea} ${i + 1}`}
-                  aria-invalid={errorLinea ? true : undefined}
-                />
-              </div>
-              {/* Sin decimales: `text` + `inputMode="numeric"` en vez de `type="number"`, porque
-                  un input numerico devuelve "" ante un "." a medio teclear y se perderia lo ya
-                  escrito. El filtro real es `acotarMonto`; el `pattern` solo abre el teclado.
-
-                  `acotarMonto` filtra a digitos Y acota al TOPE de la linea (pedido 2026-08-14):
-                  con 1.000 a cobrar y 700 en la primera, teclear 2.000 en la segunda deja 300. */}
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={linea.monto}
-                onChange={(e) =>
-                  cambiar(i, { monto: acotarMonto(e.target.value, lineas, i, montoACobrar) })
-                }
-                aria-label={`${DESGLOSE_TEXTOS.montoLinea} ${i + 1}`}
-                aria-invalid={errorLinea ? true : undefined}
-                className="w-28"
-              />
-              {/* R6: quitar se ofrece mientras quede más de una línea. Con una sola no hay nada
-                  que quitar: el recaudo de un método es la línea, no un extra. */}
-              {lineas.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => onChange(lineas.filter((_, j) => j !== i))}
-                  aria-label={`${DESGLOSE_TEXTOS.quitarLinea} ${i + 1}`}
-                  className="rounded-md p-2 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                </button>
-              ) : null}
-            </div>
-            {errorLinea ? (
-              <p role="alert" className="text-sm text-destructive">
-                {errorLinea}
-              </p>
-            ) : null}
-          </div>
-        );
-      })}
-
-      {/* R3: no se ofrecen más líneas que métodos hay en el catálogo. */}
-      {puedeAnadirLinea(lineas) ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="self-start gap-1.5"
-          // Pedido humano (2026-08-14): sin nada pendiente, la línea que nacería sería de monto 0
-          // —`pendiente` se acota a 0— y solo serviría para descuadrar. Se DESHABILITA (no se
-          // esconde, a diferencia del tope de catálogo): baja el monto de una línea y vuelve.
-          disabled={sinPendiente(lineas, montoACobrar)}
-          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco. `pendiente` ya acota a 0
-          // cuando lo capturado iguala o supera el total: nunca se pre-carga un negativo.
-          onClick={() => onChange([...lineas, lineaNueva(pendiente(lineas, montoACobrar))])}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {DESGLOSE_TEXTOS.anadir}
-        </Button>
-      ) : null}
-
-      {/* R8: los tres importes, siempre visibles y recalculados en cada tecla. */}
-      <dl
-        aria-label={DESGLOSE_TEXTOS.resumen}
-        className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground"
-      >
-        <div className="flex gap-1.5">
-          <dt>{DESGLOSE_TEXTOS.aCobrar}</dt>
-          <dd className="font-semibold text-foreground">{money(montoACobrar)}</dd>
-        </div>
-        <div className="flex gap-1.5">
-          <dt>{DESGLOSE_TEXTOS.capturado}</dt>
-          <dd className="font-semibold text-foreground">{money(capturado)}</dd>
-        </div>
-        <div className="flex gap-1.5">
-          <dt>{DESGLOSE_TEXTOS.diferencia}</dt>
-          <dd
-            className={`font-semibold ${diferencia === 0 ? "text-foreground" : "text-destructive"}`}
-          >
-            {money(diferencia)}
-          </dd>
-        </div>
-      </dl>
-
-      {errorCuadre ? (
-        <p role="alert" className="text-sm text-destructive">
-          {errorCuadre}
-        </p>
-      ) : null}
-      {errorMetodo ? (
-        <p role="alert" className="text-sm text-destructive">
-          {errorMetodo}
-        </p>
-      ) : null}
-      {errorServidor ? (
-        <p role="alert" className="text-sm text-destructive">
-          {errorServidor}
-        </p>
-      ) : null}
-    </div>
   );
 }
 
