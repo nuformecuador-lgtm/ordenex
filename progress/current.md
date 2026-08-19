@@ -9,7 +9,143 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-18. **EMPIEZA A LEER POR AQUÍ**
+
+> **Producción está sana y no se ha movido**: `prod` sigue en la release del 15-ago (PR #388),
+> **cero errores de runtime en 3 días**. Todo lo que cambió está en `dev`. **0 features
+> `in_progress`.**
+
+**Entró la 227 desde otra sesión** — PR **#390**, mergeado el 16-ago 23:07 UTC: *hilo de notas por
+orden entre tienda y mensajero*, 79 archivos, +8.242/−1.589. `dev` va **3 commits por delante de
+`prod`**. Su ficha quedó `in_progress` con el PR ya mergeado —**sexta** vez el mismo patrón— y se
+cierra aquí.
+
+### 🔎 La deuda que esa ficha escondía, y que ya está saldada
+
+La migración `20260815140000_orden_mensajero_meta_drop_nota` es **destructiva**, y su propia cabecera
+lo dejaba escrito: el conteo se hizo contra la base **local** (0 de 0, tabla vacía) y quedaba
+**PENDIENTE** de medirlo *«quien tenga la credencial, ANTES de aplicar esta migración allí»*. El
+reviewer lo aceptó abierto a propósito (m3). Medido contra **producción** el 18-ago:
+
+**4 filas en `orden_mensajero_meta` · 0 con `nota` · 0 mensajeros → el drop no pierde nada.**
+
+**No es un cero de universo vacío** —la lección de siempre, aplicada—: la tabla **tiene** 4 filas, y
+son de `marcar_luego` (feature 115), que la migración no toca. Nadie llegó a usar la nota privada de
+la 116, así que la pérdida deliberada que la P1 firmó no se lleva por delante ni un texto real.
+
+### ⚠️ La próxima release YA NO es «cero migraciones»
+
+La base de producción va por `20260812120000_gestion_orden_pago`. Le faltan **dos**:
+`20260815120000_orden_nota` y `20260815140000_orden_mensajero_meta_drop_nota` —**y la segunda dropea
+una columna**—. Entran solas con el deploy. Las tres últimas releases fueron de cero migraciones;
+ésta no, y hay que abrirla sabiéndolo.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **La 230**, registrada hoy a petición del humano: **el dinero se pinta sin céntimos**
+   (`₡1.234,56` → `₡1.235`, redondeando). El formato tiene **un solo punto de paso**
+   (`formatMontoString`, que consolidó la 201), así que el cambio de producción son 4 archivos; el
+   coste real son **276 aserciones en 39 archivos de test**. Decisiones ya firmadas: redondear y no
+   truncar, y **solo dinero** —los porcentajes y las duraciones de analítica son décimas, no
+   centésimas—. Va con guardia nueva, o la próxima feature reintroduce los céntimos.
+2. **Release `dev` → `prod`** cuando la 230 esté dentro, con **gate completo sobre el SHA real** y no
+   sobre «dev» (el pre-vuelo caduca en minutos), y consciente de las dos migraciones de arriba.
+3. **La 228, desbloqueada**: dependía de la 227, que ya está en `dev`. Es la transición «la tienda
+   habilita una novedad», con `HabilitarNovedadModal` esperando en maqueta declarada. Y hasta que
+   exista, **el mensajero no recibe ninguna señal** de que la tienda le escribió en el hilo nuevo.
+4. **La 218** (el corte automático sigue sin sumar reintento en `sin_gestionar`) y **la 219** (el 0 de
+   R19 caduca en cuanto entre una orden en `devuelta`, y nada lo vigila).
+5. **La 225** y **la 226**, frontend y baratas.
+6. **SIN FICHA:** los seis tokens que **empeoran al imprimir** desde oscuro (`P1`–`P6`), y el **límite
+   de intentos del rastreo público**, hoy en memoria del proceso y ya de cara a internet.
+7. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+
+### 🧠 Lo que este cierre enseñó
+
+- **Una medición pendiente dentro de una migración es una tarea con fecha de vencimiento**, no un
+  comentario. La de la 227 estaba escrita en la cabecera del `.sql`, el reviewer la dejó abierta con
+  nombre y número (m3), y aun así sólo se ejecuta si alguien **lee la ficha antes de la release**.
+  Costó una consulta.
+- **El conteo se hace sobre la tabla entera, no sobre la columna.** Preguntar sólo `WHERE nota IS NOT
+  NULL` habría dado 0 y no habría distinguido «nadie la usó» de «la tabla está vacía». Con las 4
+  filas de `marcar_luego` delante, el cero significa algo.
+- **`origin/dev` se mueve mientras se redacta el estado.** Este archivo describía «0 `in_progress`,
+  sin PRs abiertos» y llevaba dos días abierto en un PR sin mergear; la 227 lo desmintió el mismo
+  día. Un estado no mergeado envejece igual que un gate.
+
+---
+
+## ✅ AL DÍA — 2026-08-15, noche
+
+> **La release SALIÓ y no hay nada a medias.** `prod` = `4b438f0c` (PR **#388**, deployment
+> **READY**, **cero errores de runtime**), y `dev` no tiene **ningún** commit que le falte a `prod`.
+> **0 features `in_progress`.** Sin PRs abiertos.
+
+**Lo que entró a producción hoy** — tres features, 22 commits, **cero migraciones** (verificado, no
+estimado: el árbol `db/` de `dev` y el de `prod` son idénticos, 116 en ambos):
+
+| # | Qué |
+| --- | --- |
+| **215** | el reintento se cuenta en el cierre, con R19 ya ejecutado contra la base real |
+| **224** | al imprimir, los tokens también son los claros (`--foreground` 1,19 → 15,70 en papel) |
+| **229** | **rastreo público del envío**: el destinatario consulta su paquete **sin sesión**, desde un modal en la landing |
+
+**La 229 llegó de otra sesión mientras se preparaba la release**, y su ficha quedó `in_progress` con
+el PR #386 ya mergeado — el mismo patrón de la 213. Cerrada en el PR **#387**, con su entrada de
+historia.
+
+### 🔎 La medición que la 229 exigía ANTES de desplegar, y que se hizo
+
+Su propia ficha llevaba escrita la deuda: la comprobación de órdenes **sin segundo factor
+utilizable** estaba medida contra la base **local** (0 de 78), y decía «hay que REPETIRLA ANTES DE
+DESPLEGAR». Se repitió contra **producción**, y con el criterio que aplica **el código** —no el de la
+bitácora, que **omitía el caso «sin historial»**, que también responde `no_encontrado`—:
+
+**141 órdenes vivas · 0 con teléfono de menos de 4 dígitos · 0 sin historial → las 141 son
+rastreables** (137 con 8 dígitos, 4 con 12).
+
+**No es un cero de universo vacío** —la lección de ayer, aplicada—: la mutación del umbral lo mueve,
+con `< 12` el mismo conteo da **137**. G2 no deja hoy ninguna orden real fuera del rastreo.
+
+### ⏭️ Lo siguiente, en este orden
+
+1. **La 218**, desbloqueada desde ayer y ahora con la 215 **en producción**: el corte automático
+   sigue sin sumar reintento en `sin_gestionar`. Comparte predicado con la 215.
+2. **La 219** — es la otra mitad del mismo agujero: el 0 de R19 **caduca** en cuanto entre una orden
+   en `devuelta`, y **nada lo vigila**. La 218 cierra el conteo; la 219 lo hace visible.
+3. **La 225** (19 avisos a mano que repiten el par que arregló la 222) y **la 226** (el anillo de foco
+   mide 1,30 contra el 3:1 de 1.4.11). Ambas frontend, ambas baratas.
+4. **SIN FICHA, y ahora con un hermano nuevo:**
+   - Los **seis tokens que EMPEORAN al imprimir desde oscuro** (`P1`–`P6`, el peor
+     `--primary-foreground` 18,33 → 1,00 en 15 usos). Medido, con guardia y declarado en
+     `app/globals.css:650`. Es decisión de **paleta**, emparenta con 216 y 210.
+   - **Límite de intentos PERSISTIDO para el rastreo público.** Hoy el limitador vive **en memoria
+     del proceso** (8 intentos / 10 min por IP): en serverless cada instancia tiene el suyo y cada
+     despliegue los resetea, así que **acota al torpe, no al decidido**, y el segundo factor son
+     10.000 combinaciones por guía. Es decisión firmada de la 229 (design §5.bis) y **ficha aparte
+     desde el principio** — pero ahora está **en producción y de cara a internet**, que es lo que
+     cambia su peso.
+5. **La 216** sigue esperando una **decisión de marca** (un hex para el primario). No es técnico.
+
+### 🧠 Lo que este cierre enseñó
+
+- **El pre-vuelo de una release caduca en minutos, no en días.** El gate se corrió sobre `a145cab8`
+  y, al ir a abrir la release, `origin/dev` ya era `d1039d10`: **5.140 líneas de otra sesión** habían
+  entrado por PR #386 mientras corría. Un gate verde nombra **un SHA**, no «dev».
+- **Una ficha `in_progress` con su PR mergeado no es un descuido cosmético.** Ocupa cupo de zona y,
+  peor, **esconde deuda con fecha de vencimiento**: la medición contra producción de la 229 vivía
+  dentro de esa ficha sin cerrar. Si la release sale sin mirarla, sale sin hacerla.
+- **La deuda declarada por el implementer es una lista de tareas, no una nota al pie.** El punto (3)
+  de la ficha decía literalmente «repetir antes de desplegar»; ejecutarlo costó dos consultas.
+- **Al repetir una medición ajena, medir lo que hace el CÓDIGO, no lo que dice la bitácora.** La
+  consulta original omitía el caso «sin historial», que devuelve la misma respuesta al cliente.
+- **El gate completo se corre antes de cada PR aunque el diff sea prosa y JSON.** Los guards de este
+  repo recorren el árbol y leen ficheros de estado: un cambio en `feature_list.json` o en un `.md`
+  entra igual en su campo de visión que uno en `lib/`.
+
+---
+
+## ✅ AL DÍA — 2026-08-14, tarde
 
 > Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
 > entero porque su razonamiento sigue valiendo. Lo que cambió:
