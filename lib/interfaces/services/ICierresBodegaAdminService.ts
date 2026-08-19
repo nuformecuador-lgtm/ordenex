@@ -5,6 +5,10 @@ import type {
   CierreBodegaResumen,
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
+// Feature 230 (T7.2, R26): el DTO y el union de la hoja fundida se IMPORTAN del contrato de
+// `cierres-admin`, no se redeclaran. Los dos bordes de la feature emiten la misma fila.
+import type { ListarGestionesDescargaServiceResult } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 
@@ -145,6 +149,28 @@ export interface ICierresBodegaAdminService {
     actor: Actor,
     filtros?: FiltrosCierresBodega,
   ): Promise<ListarPendientesCierresBodegaCompletoServiceResult>;
+  /**
+   * Feature 230 — Tanda 7 (T7.2, R13/R21/R22/R24/R25/R26) — las GESTIONES de los cierres del dia
+   * YA CONSOLIDADOS en un cierre de bodega, a grano de GESTION, de las que sale la HOJA FUNDIDA
+   * de esta pantalla.
+   *
+   * Segundo de los DOS bordes de la feature, y son dos por una razon medida: este listado y el
+   * de «cierres del dia» cubren conjuntos DISJUNTOS (design §2.6). El maestro solo ve en
+   * `cierres-admin` los cierres con destino bodega central —la GAM—, y los de las zonas satelite
+   * le llegan UNICAMENTE consolidados aqui. Unificar los dos caminos exigiria un parametro que
+   * dijera «dame el otro conjunto», es decir alcance viajando en la entrada, que es lo que R15
+   * prohibe.
+   *
+   * MISMA guardia de rol que sus hermanos (`esAccesoTotal`, R25) evaluada ANTES de tocar el
+   * repositorio, y MISMO bloque del tope (R21). **Sin firmador** (R22).
+   *
+   * Devuelve el MISMO DTO que el camino de cierres del dia, producido por la MISMA proyeccion
+   * (R26): las dos salidas emiten exactamente las mismas columnas.
+   */
+  listarGestionesCierresBodegaCompleto(
+    actor: Actor,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<ListarGestionesDescargaServiceResult>;
   /**
    * R2/R11-R13/R19: detalle agregado de un cierre de bodega (cada cierre_dia con sus
    * gestiones por resultado, evidencias firmadas). Solo lectura. Inexistente ->

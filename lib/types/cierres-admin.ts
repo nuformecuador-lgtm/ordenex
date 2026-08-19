@@ -9,6 +9,7 @@ import { filtrosCierresSchema } from "@/lib/types/filtros-cierres";
 import type {
   ListarCierresAdminServiceResult,
   CierreAdminResumen,
+  CierreGestionDescargaDTO,
   CierreDetalleAdminServiceResult,
   AprobarCierreServiceResult,
   RechazarCierreServiceResult,
@@ -229,6 +230,23 @@ export type ListarPendientesCierresAdminResult = ListarPaginadoResult<
  */
 export type ListarHistoricoCierresAdminCompletoResult = ListarCompletoResult<CierreAdminResumen>;
 export type ListarPendientesCierresAdminCompletoResult = ListarCompletoResult<CierreAdminResumen>;
+
+/**
+ * Feature 230 — Tanda 2 (T2.3, R13/R21/R38) — el conjunto de la HOJA FUNDIDA de «cierres del
+ * dia» tal como lo recibe el cliente.
+ *
+ * Mismo union ANCHO que sus hermanos, y por el mismo motivo: quien lo consume es
+ * `filasDesdeResultado`, el adaptador comun de la descarga, que redacta el mensaje de CUALQUIER
+ * error de borde en un solo sitio. De ahi sale D12 gratis: «el mensajero no tiene cierres» y «el
+ * mensajero esta fuera de tu alcance» llegan los DOS como `{ ok, items: [] }` y el boton muestra
+ * el mismo mensaje de «sin datos». No hay rama que los distinga, que es justo lo que R38 pide.
+ *
+ * El schema de su ENTRADA no vive aqui sino en `lib/types/filtros-cierres.ts`
+ * (`filtrosDescargaGestionesSchema`): lo comparten los DOS bordes de la feature, y una lista
+ * blanca duplicada es una lista blanca que se afloja por un lado sin que el otro se entere.
+ */
+export type ListarGestionesCierresAdminCompletoResult =
+  ListarCompletoResult<CierreGestionDescargaDTO>;
 
 // Resultados de las Server Actions: resultado de dominio del service +
 // `unauthenticated` (sin sesion, lo resuelve el borde).

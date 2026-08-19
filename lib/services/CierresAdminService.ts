@@ -2,6 +2,7 @@ import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import type {
   CatalogoFiltrosCierresDTO,
   FiltrosCierres,
+  FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
 import { CATALOGO_FILTROS_CIERRES_VACIO } from "@/lib/types/filtros-cierres";
 import { cierreConfig } from "@/lib/config/cierre";
@@ -25,6 +26,7 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarGestionesDescargaServiceResult,
   ListarHistoricoCierresAdminCompletoServiceResult,
   ListarHistoricoCierresAdminServiceResult,
   ListarPendientesCierresAdminCompletoServiceResult,
@@ -347,6 +349,52 @@ export class CierresAdminService implements ICierresAdminService {
     }
 
     return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
+  }
+
+  /**
+   * Feature 230 — Tanda 2 (T2.2, R13-R16/R18/R20-R22) — las GESTIONES de los cierres del dia del
+   * alcance, a grano de GESTION, de las que sale la HOJA FUNDIDA.
+   *
+   * Calcado de sus dos hermanos de arriba, y el calco es el requisito (R16): el criterio de
+   * alcance no se reimplementa, se DELEGA en el mismo `resolveAlcance` que resuelve los cuatro
+   * listados de esta pantalla. Por eso el orden de desenlaces tambien es el mismo —`forbidden`
+   * antes del repositorio (R18), `sinZona` como conjunto vacio sin consultar la base y no como
+   * `forbidden` (R20), y el tope evaluado aqui con `descargaConfig.MAX_FILAS` (R21)—.
+   *
+   * `filtros` son RECORTES y nunca alcance (R15): viajan al repositorio para componerse por
+   * CONJUNCION con el alcance ya resuelto, de modo que un `mensajeroIds` de otra zona da CERO
+   * filas (R37) y no un error — que es exactamente el mismo desenlace que un mensajero sin
+   * cierres en el rango (R38), y eso es deliberado: distinguirlos filtraria informacion sobre
+   * el alcance ajeno.
+   *
+   * **Ni una llamada a `this.signedUrls`** (R22). No es un olvido: el bloque de firma en lote de
+   * `verCierreDetalle` seria trabajo pagado en red para tirarlo despues —la hoja no tiene
+   * columna de evidencia— y, sobre todo, una URL firmada dentro de un archivo que se reenvia
+   * por correo es acceso a la foto sin sesion.
+   *
+   * **Misma excepcion declarada a R29 de la 170** que sus dos hermanos: el tope se cumple en el
+   * TRANSPORTE (por encima de el no sale ni una fila) y no en el MATERIALIZAR, porque la lectura
+   * del repositorio es un `findMany` sin `take`. Aqui pesa mas que alli —el grano es la gestion,
+   * no el cierre—, y por eso el rango de fechas del dialogo (R31) es la mitigacion de producto,
+   * no un adorno: sin el, el conjunto por defecto es todo el historico del mensajero.
+   */
+  async listarGestionesCierresAdminCompleto(
+    actor: Actor,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<ListarGestionesDescargaServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R18: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 }; // R20
+
+    const conjunto = await this.repo.findGestionesPorAlcanceCompleto(scope.alcance, filtros);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R21: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
   /**

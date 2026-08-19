@@ -1,4 +1,6 @@
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
+import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
+import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -104,6 +106,20 @@ export interface ICierresBodegaAdminRepository {
       gestiones: CierreGestionPendienteRow[];
     }[];
   } | null>;
+  /**
+   * Feature 230 — Tanda 7 (T7.1, R11/R24/R26/R41): TODAS las gestiones de los cierres del dia YA
+   * CONSOLIDADOS en un cierre de bodega que casan los recortes del dialogo, a grano de GESTION.
+   *
+   * `cierre_bodega_id IS NOT NULL` en el WHERE es la traduccion exacta de R24. Sin alcance por
+   * zona: este listado es de acceso total y el guard de rol vive en el servicio (R25).
+   *
+   * MISMA proyeccion, MISMO orden y MISMO compositor que el camino de «cierres del dia» (R26):
+   * las dos salidas tienen que producir la misma fila o el mismo mensajero saldria distinto
+   * segun desde donde se descargue.
+   */
+  findGestionesDeCierresBodegaCompleto(
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<CierreGestionDescargaDTO[]>;
   /**
    * R16-R22: transicion atomica y guardada de `solicitado` -> nuevoEstado, SOLO si el
    * cierre de bodega sigue `solicitado` (updateMany con guardia de estado). Un solo

@@ -34,6 +34,9 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
   resolveActorFromSession: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   listarCierresAdmin: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
@@ -67,6 +70,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
 // (adminSatelite → consolidación; maestro → cola/histórico). Se mockean para aislar
 // el control de acceso de la 38; por defecto `forbidden` → no se renderiza la sección.
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   listarConsolidacion: vi.fn(),
   listarCierresBodegaAdmin: vi.fn(),
   solicitarCierreBodega: vi.fn(),

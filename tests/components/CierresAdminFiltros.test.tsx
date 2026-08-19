@@ -35,6 +35,9 @@ import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
 //      compartir una barra entre los dos listados, y callarlo deja trabajo sin hacer.
 
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -289,7 +292,15 @@ describe("Filtros del listado de cierres del día", () => {
     // El control de descarga vive en la FILA DE LAS PESTAÑAS desde el 2026-08-16 (pedido
     // humano: alineado con «Pendientes/Resueltos»), así que ya no está dentro de la sección del
     // listado. Es el de la pestaña ACTIVA, y al entrar la activa es «Pendientes».
-    await user.click(screen.getByRole("button", { name: /Descargar/ }));
+    //
+    // Feature 230 (T5.1): el nombre pasa de la regex `/Descargar/` al nombre accesible EXACTO
+    // del control general. Desde esta feature la fila tiene DOS controles —el general y el
+    // detallado (R1)—, así que la regex encontraba dos y el caso ya no podía decir cuál pulsaba.
+    // Lo que este caso afirma no cambia: es el GENERAL el que se lleva el filtro de la pantalla;
+    // el detallado, por decisión del humano (D11), no lo hereda.
+    await user.click(
+      screen.getByRole("button", { name: "Descargar Cierres pendientes de decisión" }),
+    );
 
     await waitFor(() =>
       expect(pendientesCompletoMock).toHaveBeenCalledWith({
