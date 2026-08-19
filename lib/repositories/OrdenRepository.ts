@@ -459,6 +459,9 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     direccion: row.direccion,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toNumber() : null,
     cobraComision: row.cobraComision,
+    // Pedido humano del 2026-08-19: la marca de «gestion aprobada» en la columna Estado. Es
+    // un escalar de `orden` que el `include` del listado ya trae; aqui solo se expone.
+    gestionAprobada: row.gestionAprobada,
     // Feature 204: los dos importes DERIVADOS, ya calculados arriba en Decimal. El cliente
     // los pinta; no vuelve a operar con ellos.
     fleteConIva: costos.fleteConIva,

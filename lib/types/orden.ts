@@ -341,6 +341,19 @@ export type OrdenListItemDTO = OrdenDTO & {
    * (R29): es derivado en tiempo de lectura, no una columna de `orden`.
    */
   intentosEntrega?: number;
+  /**
+   * Pedido humano del 2026-08-19 — la columna «Estado» marca con un punto las ordenes cuya
+   * GESTION DE DEVOLUCION ya fue aprobada en el cierre (`orden.gestion_aprobada`). Hasta hoy
+   * esa columna solo vivia en la base y en el `where` de `/novedades`: la tabla no tenia forma
+   * de distinguir una `devuelta` recien cerrada de una ya aprobada, que es justo lo que decide
+   * si la tienda puede escribir en su hilo.
+   *
+   * Opcional (`?`) por el patron aditivo del repo (`zonaEsGam?`/`prioridad?`/`intentosEntrega?`):
+   * no rompe los fixtures ni los mocks que construyen el DTO sin el. El repositorio SIEMPRE lo
+   * envia; la columna es NOT NULL con default `false`, asi que ausente = fixture viejo, nunca
+   * "no se sabe".
+   */
+  gestionAprobada?: boolean;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
   // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`

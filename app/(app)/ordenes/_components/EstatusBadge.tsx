@@ -97,6 +97,12 @@ const ORDER_STATUS_CLASS: Partial<Record<OrderStatusValue, string>> = {
   reprogramada: "border-hivis/60 dark:border-hivis/40",
 };
 
+/**
+ * Nombre de la marca para lector de pantalla. Fuera del JSX, como el resto de textos del
+ * repo, y en un solo sitio: es lo que un test afirma sin reescribir la cadena a mano.
+ */
+export const TEXTO_GESTION_APROBADA = "Gestión aprobada";
+
 function isKnownStatus(value: string): value is OrderStatusValue {
   return value in ORDER_STATUS_LABELS;
 }
@@ -114,9 +120,20 @@ function isKnownStatus(value: string): value is OrderStatusValue {
 export function EstatusBadge({
   value,
   zonaNombre,
+  gestionAprobada = false,
 }: {
   value: string;
   zonaNombre?: string;
+  /**
+   * Pedido humano del 2026-08-19 — `orden.gestion_aprobada`: la gestión de devolución de esta
+   * orden ya fue APROBADA en el cierre. Con `true` el chip antepone un punto de alta
+   * visibilidad al nombre del estado.
+   *
+   * El punto NO reemplaza al estado ni cambia su color: es una marca ENCIMA de él, porque el
+   * mismo estatus (`devuelta`, típicamente) existe con la gestión aprobada y sin aprobar, y
+   * teñir el chip entero haría creer que son dos estados distintos.
+   */
+  gestionAprobada?: boolean;
 }) {
   const known = isKnownStatus(value);
   const label =
@@ -129,5 +146,27 @@ export function EstatusBadge({
   const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
-  return <Badge variant={variant} className={cn(extra)}>{label}</Badge>;
+  return (
+    <Badge variant={variant} className={cn(extra)}>
+      {/* Punto de alta visibilidad, con halo y latido. `hivis` es el token neón de la casa
+          (el mismo del borde de `reprogramada` y de la corona del ranking) y el halo usa el
+          idioma que ya emplea la línea del escáner QR: color por token + `shadow-[…]` solo
+          para la geometría. Sin hex.
+
+          `aria-hidden` + texto para lector de pantalla: un círculo no se lee, y la marca
+          tiene que llegar también a quien no ve el color (no puede ser SOLO color, WCAG
+          1.4.1). El texto va antes del estado, igual que el punto. */}
+      {gestionAprobada ? (
+        <>
+          <span className="sr-only">{TEXTO_GESTION_APROBADA}. </span>
+          <span
+            aria-hidden="true"
+            data-gestion-aprobada="true"
+            className="mr-0.5 inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-hivis shadow-hivis/70 shadow-[0_0_6px_1px]"
+          />
+        </>
+      ) : null}
+      {label}
+    </Badge>
+  );
 }

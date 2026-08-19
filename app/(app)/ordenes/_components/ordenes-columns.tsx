@@ -104,6 +104,10 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
       <EstatusBadge
         value={row.relaciones?.estatus?.value ?? row.estatusValue ?? SIN_DATO}
         zonaNombre={row.relaciones?.zona?.nombre ?? row.zonaNombre}
+        // Pedido humano del 2026-08-19: punto de alta visibilidad cuando la gestión de la
+        // orden ya fue aprobada en el cierre. `?? false` porque el campo es aditivo en el
+        // DTO: un fixture viejo sin él es "no aprobada", no "se desconoce".
+        gestionAprobada={row.gestionAprobada ?? false}
       />
     ),
   },
