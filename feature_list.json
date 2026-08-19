@@ -2852,24 +2852,24 @@
     },
     {
       "id": 235,
-      "name": "ayuda a la tienda: el estado y el viaje de ida y vuelta",
-      "spec_path": "specs/235-ayuda-tienda-estado/",
-      "description": "Fullstack. El mensajero puede pedir AYUDA A LA TIENDA para una orden de su ruta, con una nota obligatoria de por que. La orden sale de la ruta a un estatus nuevo `ayuda_tienda` sin perder su mensajero asignado, aparece en un apartado propio del mensajero, y puede volver a la ruta por RESCATE. Incluye el bloqueo del cierre mientras haya ordenes en ayuda y el barrido del corte nocturno. Encargo completo: progress/design_pila_ayuda_tienda.md (F1).",
-      "status": "in_progress",
+      "name": "ayuda a la tienda: estatus propio y el viaje completo de ida y vuelta",
+      "spec_path": "specs/235-ayuda-tienda-estatus/",
+      "description": "Fullstack. La solicitud de ayuda YA EXISTE en dev como un BOOLEANO `orden.ayuda` (merge #396, sin ficha ni spec). Esta ficha la migra a un ESTATUS propio y completa el viaje: hoy la orden nunca sale de `en_reparto`, asi que sigue siendo parada del optimizador y del mapa, sigue gestionable desde su card, y el corte nocturno la barre dejando el flag encendido. Auditoria: progress/auditoria_ayuda_tienda.md (§2, §4). Diseno aprobado: progress/design_pila_ayuda_tienda.md (F1).",
+      "status": "pending",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
-      "branch": "feature/235-ayuda-tienda-estado",
+      "branch": "feature/235-ayuda-tienda-estatus",
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con el plan de la pila aprobado por el humano (progress/design_pila_ayuda_tienda.md). Es la base estructural: estatus nuevo, tres origen_tipo nuevos y migracion de dos enums con down.sql que RECREA el tipo. || LA NOTA VA ANTES DEL CAMBIO DE ESTATUS, en la misma transaccion: publicada despues, la ventana de escritura del hilo (227) ya no la admitiria. || La ventana del hilo suma `ayuda_tienda` para LOS DOS roles; si el mensajero no puede escribir, la tienda le habla a un hilo mudo (riesgo que la 227 dejo anotado). || `rescatarOrdenAyuda` se escribe UNA vez: la llaman el rescate del mensajero y el boton «Habilitar» de la tienda (236)."
+      "status_note": "REESCRITA el 2026-08-19 tras auditar lo mergeado: lo que existe es un flag, y el humano firmo migrar al estatus. || POR QUE IMPORTA: con un booleano, cada superficie que deberia excluir la orden tiene que filtrarlo A MANO. Hoy no lo filtran el optimizador de ruta (findParadasEnReparto), el mapa, el chat, `TrayectoVivoButton` ni el listado del servidor: el corte a la seccion aparte es SOLO de cliente (RepartoModule). Con un estatus, la guardia de transiciones rompe el build si falta un caso. || El bloqueo del cierre hoy funciona POR ACCIDENTE (la orden sigue `en_reparto`) y tiene dos rutas exentas: `vencido -> solicitado` y `rechazado -> solicitado`. Debe pasar a ser explicito. || El corte nocturno tiene que barrer el estatus nuevo, que es el desenlace «no gestionada» que el humano pidio."
     },
     {
       "id": 236,
-      "name": "ayuda a la tienda: la pestana en novedades",
+      "name": "ayuda a la tienda: la pestana propia en novedades y su card",
       "spec_path": "specs/236-ayuda-tienda-novedades/",
-      "description": "Fullstack. Tercera pestana en /novedades con las ordenes que pidieron ayuda, con su card y sus acciones. El hilo de notas de la 227 pasa a vivir DENTRO de esa card (la nota del mensajero es su primer mensaje) y el boton suelto «Notas» desaparece. «Habilitar» devuelve la orden a la ruta llamando al rescate de la 235. Encargo: progress/design_pila_ayuda_tienda.md (F2).",
+      "description": "Fullstack. Hoy las ordenes con ayuda entran MEZCLADAS en la pestana de siempre, distinguidas solo por un badge de texto. Esta ficha les da su pestana propia, con la card y las acciones que el pedido describe, y REPONE la lectura del hilo del lado de la tienda: la nota con la que el mensajero pide ayuda hoy se escribe y NADIE la lee. Auditoria: progress/auditoria_ayuda_tienda.md (§4). Diseno: progress/design_pila_ayuda_tienda.md (F2).",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
@@ -2878,13 +2878,13 @@
       "depends_on": 235,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con la pila. || El juego de botones de la card pasa a depender de DE DONDE VIENE la orden (ayuda vs. cierre) y esa decision debe vivir en UN solo sitio, no repartida por el JSX. || Absorbe la ficha 228 («transicion habilitar novedad»), que queda superada: «Habilitar» ya no es una transicion propia, es el rescate de la 235."
+      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || EL DEFECTO MAS VISIBLE QUE ARREGLA: la nota de la solicitud de ayuda es obligatoria, se publica en el hilo... y la tienda no puede leerla, porque el commit 55723c83 retiro el boton «Notas» y el montaje del modal. El propio codigo lo dice en NovedadAcciones. La nota sin lector es la mitad del pedido tirada. || Hoy la card OCULTA «Reprogramar» y «Devolver» en las ordenes con ayuda, que es lo contrario de «aparece con la card que tiene todas las acciones». || Absorbe la ficha 228, que queda superada."
     },
     {
       "id": 237,
       "name": "la gestion que hace la tienda cuenta como del mensajero",
       "spec_path": "specs/237-gestion-tienda-ayuda/",
-      "description": "Fullstack. Desde la pestana de ayuda la tienda puede REPROGRAMAR o RECHAZAR, y esa gestion cuenta como si la hubiera hecho el mensajero: entra a su cierre, cuenta como intento y mueve el dinero igual. Exige los MISMOS requisitos que la del mensajero (evidencia en imagen y motivo en texto). Encargo: progress/design_pila_ayuda_tienda.md (F3).",
+      "description": "Fullstack. Desde la pestana de ayuda la tienda puede REPROGRAMAR o RECHAZAR, y esa gestion cuenta como si la hubiera hecho el mensajero: entra a su cierre, cuenta como intento y mueve el dinero igual. Exige los MISMOS requisitos que la del mensajero (evidencia en imagen y motivo en texto). Nada de esto existe hoy. Diseno: progress/design_pila_ayuda_tienda.md (F3).",
       "status": "pending",
       "sdd": true,
       "complexity": "high",
@@ -2893,13 +2893,13 @@
       "depends_on": 236,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con la pila. Es la mas delicada en DINERO. || La fila de gestion_orden lleva mensajero_id = el mensajero (para caer en su cierre) y el historial actor_usuario_id = la tienda (para saber quien la ejecuto), con origen_tipo `gestion_tienda_ayuda`, que entra en ORIGEN_TIPOS_VISITA_REAL para que cuente como intento. || INVARIANTE QUE LA SOSTIENE: una orden en ayuda BLOQUEA la solicitud de cierre, asi que la gestion siempre cae antes del snapshot de totales y `deshacerGestion` sigue funcionando sin tocarlo. Hay que probarla explicitamente: si algun dia deja de bloquear, el dinero se rompe en silencio. || Reutiliza la subida compensada de evidencias de MisAsignacionesService.gestionar; no se escribe una segunda."
+      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 por la auditoria como NO implementada. Es la mas delicada en DINERO. || La fila de gestion_orden lleva mensajero_id = el mensajero (para caer en su cierre) y el historial actor_usuario_id = la tienda; su origen_tipo entra en ORIGEN_TIPOS_VISITA_REAL para que cuente como intento. || INVARIANTE QUE LA SOSTIENE: una orden en ayuda BLOQUEA la solicitud de cierre, asi que la gestion cae antes del snapshot de totales y `deshacerGestion` sigue funcionando. Hay que probarla: si deja de bloquear, el dinero se rompe en silencio. Ojo que hoy ese bloqueo es accidental (ver la 235). || Reutiliza la subida compensada de evidencias de MisAsignacionesService.gestionar; no se escribe una segunda."
     },
     {
       "id": 238,
       "name": "confirmacion fisica de los paquetes al aprobar el cierre",
       "spec_path": "specs/238-confirmacion-fisica-cierre/",
-      "description": "Fullstack. Aprobar un cierre deja de ser un click: pide escanear o teclear las guias de lo que vuelve fisicamente a bodega (devoluciones, rechazos y reprogramadas) y BLOQUEA hasta completarlas. Los INCIDENTES no cuentan para ese bloqueo. Reusa el escaner de guias que ya existe. Encargo: progress/design_pila_ayuda_tienda.md (F4).",
+      "description": "Fullstack. Aprobar un cierre deja de ser un click: pide escanear o teclear las guias de lo que vuelve fisicamente a bodega (devoluciones, rechazos y reprogramadas) y BLOQUEA hasta completarlas. Los INCIDENTES no cuentan para ese bloqueo. Reusa el escaner de guias que ya existe. Diseno: progress/design_pila_ayuda_tienda.md (F4).",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
@@ -2908,13 +2908,13 @@
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con la pila. INDEPENDIENTE de las tres de ayuda: puede ir en paralelo. || Engancha en la tercera rama de `pedirAprobacion()` (CierresAdminModule), junto a la de indemnizaciones, y el parametro sigue el patron de `indemnizaciones` en el contrato de `aprobarCierre` (cobertura exacta validada en el servicio antes de tocar el repo). || La confirmacion se persiste DENTRO de la transaccion de `resolverCierre`. || Reusa QrScanner, EscanerGuiaCard, EscanerModal y extractNumGuiaFromScan: seis pantallas ya lo hacen."
+      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 como NO implementada (`aprobarCierreSchema` sigue siendo {cierreId, indemnizaciones} y no se monta ningun escaner). INDEPENDIENTE de las de ayuda: puede ir en paralelo. || Engancha en la tercera rama de `pedirAprobacion()`, junto a la de indemnizaciones, y el parametro sigue el patron de `indemnizaciones` en el contrato de `aprobarCierre`. || La confirmacion se persiste DENTRO de la transaccion de `resolverCierre`. || Reusa QrScanner, EscanerGuiaCard, EscanerModal y extractNumGuiaFromScan: seis pantallas ya lo hacen."
     },
     {
       "id": 239,
-      "name": "la devolucion espera al cierre aprobado para ser novedad",
+      "name": "la devolucion espera al cierre: arreglar el cobro prematuro y anclar el reloj",
       "spec_path": "specs/239-devolucion-espera-cierre/",
-      "description": "Fullstack. Una orden devuelta deja de entrar a /novedades al gestionarla el mensajero: entra a un PRE-ESTADO, y la APROBACION DEL CIERRE es la transicion a `devuelta`. Con eso el reloj de 24h/5d del SLA arranca en la aprobacion y no en la gestion. La mas grande de la pila; va en siete tandas. Encargo: progress/design_pila_ayuda_tienda.md (F5).",
+      "description": "Fullstack. URGENTE. En dev ya se recorto la VISIBILIDAD de las devueltas por `gestion_aprobada`, pero NO se movio el reloj del SLA: el cron sigue anclando en la gestion y no mira esa columna. Con el retraso medido (p90 22.1h) y la ventana de 24h, hay casos reales en que la orden se escala a rechazada Y SE COBRA sin que la tienda haya podido verla nunca. Esta ficha reemplaza la columna por partir el estado, ancla el reloj en la aprobacion y restaura las aserciones que se filtraron. Auditoria: progress/auditoria_ayuda_tienda.md (§1, §2, §3). Diseno: progress/design_pila_ayuda_tienda.md (F5).",
       "status": "pending",
       "sdd": true,
       "complexity": "high",
@@ -2923,13 +2923,13 @@
       "depends_on": 238,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con la pila. || T0 YA MEDIDO contra produccion (2026-08-18, MCP solo lectura): 0 ordenes en `devuelta`, 0 gestiones devueltas sin cierre, 12 cierres y los 12 aprobados, y el retraso gestion->aprobacion con mediana 8.2h / p90 22.1h / max 48.2h sobre 12 gestiones. El cero de `devuelta` se autocomprobo con el conteo por estatus (141 ordenes vivas, 11 categorias). HAY QUE RE-MEDIRLO antes de desplegar: es una foto. || Con la base asi, NO hay ordenes en vuelo que migrar. || SE ELIGIO partir el estado y no derivar el ancla en la consulta ni persistir una columna: asi `novedadWhere` no cambia y tres guardas quedan correctas solas. Una columna mutable tendria cinco sitios de limpieza y su direccion de fallo es COBRAR ANTES DE TIEMPO. || CARRERA QUE CUESTA DINERO: dos cierres de la misma orden; el bloque debe verificar DENTRO de la tx que la gestion sea la `devuelta` vigente mas reciente. || `cierre_dia.resuelto_at` NO significa aprobado: se escribe igual al rechazar. || Cambia el contrato de webhooks con integradores externos."
+      "status_note": "REESCRITA el 2026-08-19: deja de ser una feature nueva y pasa a ser TAMBIEN el arreglo de un fallo que cobra dinero, ya mergeado en dev. || NO SE PUEDE SACAR `dev` A PRODUCCION hasta que esto entre: hoy `prod` (448d5169) no lo lleva. La mitad mergeada -quitar visibilidad sin mover el reloj- es PEOR que no haber hecho nada, porque antes la tienda al menos veia la orden y podia reprogramarla. || Arregla ademas la fuga permanente (la rama `{ayuda:true}` de novedadWhere no acota estatus) y que «Habilitar» esconda la fila sin detener el reloj. || RESTAURA las dos aserciones que se enseriaron a ignorar el `updateMany` nuevo en la transaccion del dinero, y crea el test que un comentario promete en un archivo que no existe. || T0 medido el 2026-08-18: 0 ordenes en `devuelta` en produccion, 12 cierres y los 12 aprobados, retraso mediana 8.2h / p90 22.1h / max 48.2h. RE-MEDIR antes de desplegar. || Cambia el contrato de webhooks con integradores externos."
     },
     {
       "id": 240,
       "name": "rechazo manual de la tienda y limpieza de la card de novedades",
       "spec_path": "specs/240-rechazo-manual-tienda/",
-      "description": "Fullstack. Hoy `devuelta -> rechazada` solo la dispara el cron. Se abre la arista para adminTienda: el boton que decia «Devolver» pasa a llamarse «Rechazar» y a hacer algo. Ademas se retiran «Habilitar» y «Notas» de la card de las novedades que vienen de un cierre. Encargo: progress/design_pila_ayuda_tienda.md (F6).",
+      "description": "Fullstack. `devuelta -> rechazada` hoy solo la dispara el cron: se abre la arista para adminTienda y el boton que dice «Devolver» pasa a llamarse «Rechazar» y a hacer algo. Se retira «Habilitar» de las cards que vienen de un cierre, donde hoy SI aparece. Y se pone la guardia que falta para que el boton «Notas» no vuelva. Auditoria: progress/auditoria_ayuda_tienda.md (§3, §4). Diseno: progress/design_pila_ayuda_tienda.md (F6).",
       "status": "pending",
       "sdd": true,
       "complexity": "medium",
@@ -2938,7 +2938,37 @@
       "depends_on": 239,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18 con la pila, como la ultima. || «Devolver» era MAQUETA declarada desde el 2026-08-12 (sin action, sin service, sin transicion) y su nombre era ademas equivocado: lo que el humano queria ahi era RECHAZAR. || Cierra formalmente la ficha 228 como superada por la 236."
+      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || El punto 12 del pedido esta hoy AL REVES: `puedeHabilitar = esDevuelta || novedad.ayuda === true`, asi que «Habilitar» aparece justo en las cards que vienen de un cierre, que es donde no debia estar. || «Devolver» sigue siendo MAQUETA desde el 2026-08-12 y ademas su nombre era equivocado: lo pedido es RECHAZAR. || La retirada del boton «Notas» se hizo SIN GUARDIA: se borraron dos tests y el mensaje de commit afirma que la cobertura se conservo. No se conservo. Nada falla si alguien lo repone."
+    },
+    {
+      "id": 241,
+      "name": "investigar las guardas de bloqueo que se retiraron sin pedirlo",
+      "spec_path": null,
+      "description": "Backend. El commit 6a0e6d36 («el bloqueo por cierres pasa de alguno a mas de los tolerados») ademas RETIRO la guarda de mensajero bloqueado en la asignacion de guias (GuiaAsignacionService, antes un conflict) y una causa del bloqueo de bodega satelite (OrdenRepository). El umbral viejo sigue aplicandose en otras superficies, asi que la lectura y la escritura ya no coinciden. Nadie lo pidio. Investigar si fue deliberado antes de tocarlo. Auditoria: progress/auditoria_ayuda_tienda.md (§5).",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-19 por decision del humano: se saca de la pila de ayuda y se mira aparte. || Cambia QUIEN PUEDE RECIBIR ASIGNACIONES, que no estaba en ningun pedido. || Primero averiguar si hubo motivo (puede haber un deadlock real detras); solo despues decidir si se repone."
+    },
+    {
+      "id": 242,
+      "name": "dev esta rojo: la guardia del dinero marca una distancia en km",
+      "spec_path": null,
+      "description": "Backend/tooling. La guardia `dinero-sin-centimos.guardia` (feature 230) barre `.toFixed(` en `app/**` y `components/**` y marca `TrayectoVivoButton.tsx:39`, que formatea KILOMETROS, no dinero. Es un falso positivo y deja `dev` en ROJO desde el merge #396, asi que ninguna rama basada en dev puede pasar el gate. La guardia ya trae el mecanismo: `LISTA_BLANCA_TO_FIXED` con su `porque`.",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "low",
+      "zone": "backend",
+      "branch": null,
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-19. BLOQUEANTE: mientras siga rojo, ninguna feature puede cerrar su gate. || Comprobado sobre un checkout LIMPIO de origin/dev (sin cambios locales): 1 failed | 18 passed. No lo rompio esta sesion. || Es el tercer problema que llega del mismo merge #396, junto con el cobro prematuro (239) y las guardas retiradas (241). Un PR verde no dice nada de los tests: el check de Vercel es un build. || La lista blanca es POR ARCHIVO, asi que anadirlo ciega ese fuente entero para futuros `.toFixed(` sobre dinero. Queda dicho; cambiar el codigo no es equivalente (`Math.round` pierde el cero final: «1 km» en vez de «1.0 km»)."
     }
   ]
 }
