@@ -331,3 +331,29 @@ RECOMENDACIÓN DEL SPEC, y por eso el precio se escribe aquí en vez de descubri
 pila**, porque es la que detiene un cobro prematuro que hoy está en `dev`. Las fichas 235, 236 y
 240 se especifican **asumiendo la 239 ya dentro**; en particular, la fuga de la bandera `ayuda` y
 el comportamiento de «Habilitar» se resuelven en ellas, no aquí.
+
+---
+
+## RECONCILIACIÓN DE R19 TRAS LA REVISIÓN — 2026-08-19
+
+La revisión midió que **R19 no se cumple del todo**, y el texto del requisito se corrige aquí en vez
+de dejarlo prometiendo algo que el código no hace — una afirmación que miente es peor que una
+ausente.
+
+**Lo medido:** `estaEnVentanaDeEscritura("adminTienda", "devolucion_por_confirmar", true)` devuelve
+`true`. Una bandera `ayuda` encendida de antes **abre la ventana de escritura del hilo** sobre una
+orden que está en el pre-estado.
+
+**Por qué no es bloqueante, con las tres propiedades comprobadas:**
+
+- **Visibilidad-neutral**: la orden no se lista en `/novedades` — la rama de ayuda exige además
+  `en_reparto`, y el pre-estado no es `devuelta`.
+- **Reloj-neutral**: el cron no ve el pre-estado, así que el plazo sigue parado.
+- **Money-neutral**: reprogramar y rechazar siguen guardados por `= devuelta`.
+
+Escribir en el hilo **no hace visible nada** y es, de hecho, el camino por el que se apaga la
+bandera sobre una orden que ya cayó del listado.
+
+**Dueño y fecha de muerte:** la ficha **235** retira el booleano `ayuda` y con él esta puerta. R19
+se lee, hasta entonces, como «la ventana de escritura no depende del pre-estado **salvo por la
+bandera legada de ayuda**, que la 235 elimina».
