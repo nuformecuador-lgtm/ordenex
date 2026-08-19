@@ -42,6 +42,50 @@ function makeWalletStore() {
   return { rows, walletMovimiento };
 }
 
+// Store en memoria de `orden` para el updateMany POR RELACION que la rama `aprobado` corre
+// desde el pedido humano del 2026-08-18: enciende `gestion_aprobada` en las ordenes cuya
+// gestion de ESTE cierre fue `devuelta` (es la puerta que `OrdenRepository.novedadWhere` exige
+// para listarlas en /novedades).
+//
+// POR QUE NO ES UN `vi.fn()` QUE DEVUELVE `{count: 0}`. Un doble mudo tapa el TypeError y deja
+// la escritura sin nadie que la mire — que es exactamente el agujero que hay hoy: las dos
+// suites que si tenian delegado (`cierres-admin-repository`, `…resolverCierre.devolucion`)
+// FILTRAN esta llamada fuera (`.filter(c => c.where.id !== undefined)`) porque miden otra cosa.
+// Este store honra el `where` como lo haria Postgres, asi que el `cierreId` del WHERE se
+// comporta como la GUARDIA que dice ser: una gestion `devuelta` de OTRO cierre queda fuera.
+function makeOrdenStore() {
+  const ordenes = [
+    { id: "o1", gestionAprobada: false, gestiones: [{ cierreId: "c1", resultado: "entregada" }] },
+    { id: "o2", gestionAprobada: false, gestiones: [{ cierreId: "c1", resultado: "devuelta" }] },
+    // La testigo: MISMO resultado `devuelta`, OTRO cierre. Solo el `cierreId` la separa, asi
+    // que si la guardia desapareciera del WHERE, esta fila se encenderia sola.
+    { id: "o3", gestionAprobada: false, gestiones: [{ cierreId: "c2", resultado: "devuelta" }] },
+  ];
+  type WhereRelacion = {
+    gestiones?: { some?: { cierreId?: string; resultado?: string } };
+  };
+  const orden = {
+    updateMany: vi.fn(
+      async ({ where, data }: { where: WhereRelacion; data: Record<string, unknown> }) => {
+        const some = where.gestiones?.some ?? {};
+        let count = 0;
+        for (const o of ordenes) {
+          const casa = o.gestiones.some(
+            (g) =>
+              (some.cierreId === undefined || g.cierreId === some.cierreId) &&
+              (some.resultado === undefined || g.resultado === some.resultado),
+          );
+          if (!casa) continue;
+          Object.assign(o, data);
+          count += 1;
+        }
+        return { count };
+      },
+    ),
+  };
+  return { ordenes, orden };
+}
+
 const TARIFA = {
   valorFlete: "1000.00",
   valorFleteGam: "1500.00",
@@ -67,7 +111,10 @@ const TARIFA_CONGELADA = {
 // Prisma doble: gestiones del cierre + su detalle CONGELADO + la tienda de wallet +
 // $transaction (tx === prisma). Feature 69: el feed deriva del snapshot, asi que el doble
 // aporta `cierreDetail`; los importes (y por tanto los 6 conceptos) no cambian.
-function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
+function buildPrisma(
+  store: ReturnType<typeof makeWalletStore>,
+  ordenStore: ReturnType<typeof makeOrdenStore> = makeOrdenStore(),
+) {
   const gestiones = [
     { ordenId: "o1", resultado: "entregada" },
     { ordenId: "o2", resultado: "devuelta" },
@@ -81,6 +128,7 @@ function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
     gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
     cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
+    orden: ordenStore.orden,
   };
   return {
     ...prisma,
@@ -90,11 +138,14 @@ function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
 
 const ALCANCE: Alcance = { destinoTipo: "bodega_central", destinoZonaId: null };
 
-describe("wallet idempotencia (R6/R13)", () => {
-  it("R6: doble aprobacion del mismo cierre -> UN SOLO set de movimientos (skipDuplicates)", async () => {
-    const store = makeWalletStore();
-    const prisma = buildPrisma(store);
-    const repo = new CierresAdminRepository(
+/**
+ * El repositorio bajo prueba con los dobles de las features vecinas. Extraido (era el cuerpo del
+ * caso R6) para que el caso de `gestion_aprobada` de mas abajo monte EXACTAMENTE la misma
+ * transaccion: si cada uno armara la suya, podrian dejar de medir el mismo camino sin que nada
+ * lo delate.
+ */
+function makeRepo(prisma: ReturnType<typeof buildPrisma>) {
+  return new CierresAdminRepository(
       prisma as unknown as PrismaClient,
       new WalletMovimientoRepository(prisma as unknown as PrismaClient),
       new WalletFeedService(),
@@ -110,7 +161,14 @@ describe("wallet idempotencia (R6/R13)", () => {
       // idempotencia de los conceptos de INGRESO; la del egreso de indemnizacion tiene su
       // propio caso mas abajo, con el feed REAL.
       { construirEgresoIndemnizacion: vi.fn(async () => []) },
-    );
+  );
+}
+
+describe("wallet idempotencia (R6/R13)", () => {
+  it("R6: doble aprobacion del mismo cierre -> UN SOLO set de movimientos (skipDuplicates)", async () => {
+    const store = makeWalletStore();
+    const prisma = buildPrisma(store);
+    const repo = makeRepo(prisma);
 
     const aprobar = () =>
       repo.resolverCierre({
@@ -133,6 +191,53 @@ describe("wallet idempotencia (R6/R13)", () => {
     // El cierre solo-entregada+devuelta produce: flete, iva_flete, comision, iva_comision,
     // flete_devolucion, iva_flete_devolucion (6 conceptos, ninguno duplicado).
     expect(store.rows.length).toBe(6);
+  });
+
+  // Pedido humano 2026-08-18 — LA ESCRITURA QUE NADIE MIRABA. Aprobar el cierre enciende
+  // `orden.gestion_aprobada` en las devoluciones de ESE cierre, y lo hace DENTRO de la misma
+  // transaccion que mueve los cinco feeds de dinero. Es money-neutral, pero gobierna lo que la
+  // tienda ve en /novedades, y hasta aqui no tenia ni una asercion: las dos suites que la
+  // ejecutaban la filtran fuera a proposito (`.filter(c => c.where.id !== undefined)`) porque
+  // miden los updateMany por ids de la liberacion y de la devolucion, no este.
+  //
+  // Va en ESTE archivo, y no en uno nuevo, por lo que mide: que la SEGUNDA aprobacion no
+  // estropea lo que dejo la primera. Es el mismo enunciado que R6 —doble aprobacion, un solo
+  // efecto— aplicado a la unica escritura de la tx que no pasa por el indice unico de la
+  // wallet y que, por tanto, no queda protegida por `skipDuplicates` sino por ser idempotente.
+  it("R6: aprobar enciende `gestion_aprobada` SOLO en las devoluciones de ESTE cierre, y re-aprobar no cambia nada", async () => {
+    const store = makeWalletStore();
+    const ordenStore = makeOrdenStore();
+    const prisma = buildPrisma(store, ordenStore);
+    const repo = makeRepo(prisma);
+
+    const aprobar = () =>
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE,
+        nuevoEstado: "aprobado",
+        resueltoPor: "adm",
+        motivoRechazo: null,
+      });
+
+    await aprobar();
+
+    const estado = () =>
+      Object.fromEntries(ordenStore.ordenes.map((o) => [o.id, o.gestionAprobada]));
+    // o2 es la unica `devuelta` de c1. o1 entrego (no es novedad) y o3 se devolvio en OTRO
+    // cierre: mientras ese cierre no se apruebe, su tienda no la ve.
+    expect(estado()).toEqual({ o1: false, o2: true, o3: false });
+
+    // El WHERE tal cual sale del repositorio: `cierreId` es GUARDIA, no filtro cosmetico, y
+    // `resultado` acota a las devoluciones. Se mira el argumento porque es lo que separa
+    // "escribio en las filas correctas por casualidad" de "pidio exactamente esas filas".
+    expect(prisma.orden.updateMany).toHaveBeenCalledWith({
+      where: { gestiones: { some: { cierreId: "c1", resultado: "devuelta" } } },
+      data: { gestionAprobada: true },
+    });
+
+    await aprobar(); // segunda aprobacion del MISMO cierre
+    // Idempotente: encuentra las filas ya en `true` y no mueve ninguna otra.
+    expect(estado()).toEqual({ o1: false, o2: true, o3: false });
   });
 
   it("R13: reintento por par existente = no-op (sin error propagado, sin segundo movimiento)", async () => {

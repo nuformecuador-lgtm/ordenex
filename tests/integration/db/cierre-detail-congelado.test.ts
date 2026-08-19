@@ -40,6 +40,10 @@ interface OrdenRow {
   destinatario: string;
   direccion: string | null;
   producto: string;
+  // Pedido humano 2026-08-18: la rama `aprobado` de `resolverCierre` la enciende para las
+  // devoluciones del cierre. Money-neutral (no entra en ninguna formula), pero la escritura
+  // ocurre DENTRO de esta misma tx, asi que la "base" tiene que tener donde escribirla.
+  gestionAprobada: boolean;
 }
 interface TarifaRow {
   id: string;
@@ -89,6 +93,7 @@ function makeDb() {
       destinatario: "Ana",
       direccion: "Av 1",
       producto: "Caja",
+      gestionAprobada: false,
     },
   ];
   const tarifas: TarifaRow[] = [
@@ -174,6 +179,37 @@ function makeDb() {
             // JOIN contra la fila VIVA de `orden` (lo que el bug leia).
             orden: joinOrden(ordenes.find((o) => o.id === g.ordenId)!),
           })),
+      ),
+    },
+    // Pedido humano 2026-08-18: al APROBAR, la misma tx enciende `gestion_aprobada` en las
+    // ordenes cuya gestion de ESTE cierre fue `devuelta`. El doble resuelve la relacion
+    // `gestiones.some` contra las filas VIVAS igual que el resto de esta "base": un doble mudo
+    // que devolviera `{count: 0}` dejaria pasar un WHERE que no filtrara nada, que es
+    // justamente lo que la GUARDIA `cierreId` existe para impedir.
+    orden: {
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { gestiones?: { some?: { cierreId?: string; resultado?: string } } };
+          data: Record<string, unknown>;
+        }) => {
+          const some = where.gestiones?.some ?? {};
+          let count = 0;
+          for (const o of ordenes) {
+            const casa = gestiones.some(
+              (g) =>
+                g.ordenId === o.id &&
+                (some.cierreId === undefined || g.cierreId === some.cierreId) &&
+                (some.resultado === undefined || g.resultado === some.resultado),
+            );
+            if (!casa) continue;
+            Object.assign(o, data);
+            count += 1;
+          }
+          return { count };
+        },
       ),
     },
     cierreDetail: {
