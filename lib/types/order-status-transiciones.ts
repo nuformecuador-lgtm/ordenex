@@ -62,6 +62,14 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // baja era un par unico). Las dos aristas de `recuperacion_manual` desde el pre-estado que el
 // spec dejaba condicionadas NO se declaran: P4 se firmo EN CONTRA de la recomendacion.
 //
+// FEATURE 235 (2026-08-19) — SOLO ADITIVA: suma TRES aristas (#62 `en_reparto -> ayuda_tienda`
+// con familia propia `solicitud_ayuda_tienda`; #63 `ayuda_tienda -> en_reparto` con
+// `rescate_ayuda_tienda`, el punto UNICO de rescate; #64 `ayuda_tienda -> sin_gestionar` por el
+// corte de la noche) y NO da de baja ninguna: pedir ayuda no sustituye a ningun desenlace de
+// `en_reparto`, lo anade. Las tres son pares NUEVOS, asi que 56 -> 59 aristas de flujo y 54 -> 57
+// pares unicos. Las cifras se RE-DERIVAN en `tests/fixtures/inventario-transiciones-140.ts`, no se
+// copian de aqui.
+//
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
 // `ANY -> ANY` para maestro/admin (Q3): el ajuste administrativo generico
@@ -221,6 +229,15 @@ export const TRANSICIONES = {
     // legalidad (:26-35), asi que el cambio es cosmetico — pero un metadato que miente sobre
     // lo que se persiste es peor que no tenerlo.
     { to: "incidente", via: "incidente", rol: "mensajero" }, // #44 (154 / via 158)
+    // FEATURE 235 — ALTA de #62. Pedir ayuda a la tienda NO sustituye a ningun desenlace: se
+    // AÑADE. `en_reparto` conserva sus seis salidas intactas (contraste con la 239, que si dio de
+    // baja #14 porque su productor cambio de destino).
+    //
+    // El `rol` es `mensajero` y ademas el ASIGNADO, y eso NO se expresa aqui (los metadatos no
+    // participan de la legalidad): se expresa ESTRECHANDO LA VENTANA del hilo
+    // (`lib/types/ventana-hilo-notas.ts` + `autorizarSobreHilo`), que es la puerta unica de la
+    // solicitud. P9, firmada el 2026-08-19: «no una segunda tabla de permisos».
+    { to: "ayuda_tienda", via: "solicitud_ayuda_tienda", rol: "mensajero (asignado)" }, // #62 (235)
   ],
 
   // --- Resultados de gestion -----------------------------------------------------------
@@ -250,6 +267,31 @@ export const TRANSICIONES = {
   devolucion_por_confirmar: [
     { to: "devuelta", via: "anclaje_devolucion", rol: "admin (aprobar cierre)" }, // #60 (239)
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #61 (239)
+  ],
+  // FEATURE 235 — el estatus de la SOLICITUD DE AYUDA viva. Tiene ENTRADA (#62) y SALIDAS
+  // (#63/#64), asi que no es terminal ni vestigial (invariante 140/R14).
+  //
+  // Las DOS salidas declaradas son EXACTAMENTE las que tienen productor en el codigo (R12):
+  //   #63 el RESCATE — el punto UNICO de escritura (`OrdenRepository.transicionarAyuda`), al que
+  //       delegan los DOS llamadores: `SolicitudAyudaService.recuperar` («Recuperar», el
+  //       mensajero) y `HabilitarNovedadService.habilitar` («Habilitar», la tienda). Un solo par,
+  //       una sola familia, dos puertas.
+  //   #64 el CORTE DE LA NOCHE — `CierreDiaRepository.crearCierre`, en su propio bloque guardado
+  //       por este estatus de origen, para que el historial registre el origen REAL (R27) y no uno
+  //       supuesto.
+  //
+  // LO QUE **NO** SE DECLARA, y por que importa decirlo:
+  //   - `ayuda_tienda -> entregada / reprogramada / devolucion_por_confirmar / rechazada /
+  //     incidente`: son LAS GESTIONES. Las trae la ficha 237 JUNTO A SU PRODUCTOR
+  //     (`gestionarDesdeAyuda`). Declararlas aqui repetiria el error que la 154 cometio con
+  //     #43/#44 y que «costo el tren 154+155+156». Consecuencia VIVA mientras la 237 no entre:
+  //     desde aqui solo se sale rescatando o por el corte de la noche. Es un estado con salida, no
+  //     un pozo.
+  //   - `ayuda_tienda -> en_bodega_*`: no hay recuperacion manual desde aqui. El paquete esta en
+  //     la moto, no en un estante.
+  ayuda_tienda: [
+    { to: "en_reparto", via: "rescate_ayuda_tienda", rol: "mensajero / adminTienda" }, // #63 (235)
+    { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #64 (235)
   ],
   devuelta: [
     { to: "en_bodega_central", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #19

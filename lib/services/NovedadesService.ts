@@ -139,11 +139,10 @@ export class NovedadesService implements INovedadesService {
       distritoNombre: row.distritoNombre,
       // SIEMPRE `null`: una novedad no es parada de ninguna ruta optimizada (feature 92/R28).
       secuenciaRuta: null,
-      // Solicitud de ayuda (2026-08-18): SIEMPRE se emite. Es la segunda razon por la que una
-      // fila puede estar en este listado, y la pantalla necesita distinguirla de una devolucion
-      // — no puede derivarla del estatus, porque una orden devuelta tambien puede tener ayuda
-      // pedida de antes.
-      ayuda: row.ayuda,
+      // Feature 235 (T6.1, R40): aqui se emitia `ayuda: row.ayuda`. Se retira con la columna, y el
+      // motivo por el que existia deja de valer: la pantalla SI puede derivar del estatus por que
+      // esta la fila, porque una orden ya no puede estar `devuelta` Y con ayuda pedida a la vez —
+      // son dos estados y son excluyentes. `estatusValue` ya viaja unas lineas mas arriba.
       // Pedido humano 2026-08-18: SIEMPRE se emite, el `0` incluido. Es un valor CONOCIDO
       // («nadie lo ha intentado todavia»), no un dato ausente.
       intentosContacto: row.intentosContacto,

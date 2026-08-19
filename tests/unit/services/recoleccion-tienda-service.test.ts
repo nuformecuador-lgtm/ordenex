@@ -484,24 +484,33 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         secuenciaRuta: null,
         marcarLuego: false,
         intentosEntrega: 0,
-        // Solicitud de ayuda (2026-08-18): entro en `toDTO`, la proyeccion COMPARTIDA con «Por
-        // recoger», asi que viaja tambien aqui. Que este en la lista es justo lo que este caso
-        // afirma: las dos pantallas hermanas transportan los MISMOS campos. La fila del fixture
-        // no la declara (es opcional, patron aditivo) -> `false`.
-        ayuda: false,
+        // Feature 235 (T6.1, 2026-08-19): aqui viajaba `ayuda: false`, heredado de `toDTO`. La
+        // columna se retiro y con ella el campo. Lo que aquel caso afirmaba -que las dos pantallas
+        // hermanas transportan los MISMOS campos- lo sigue afirmando esta igualdad literal entera:
+        // si `toDTO` gana o pierde un campo, este `toEqual` cae.
       },
     ]);
   });
 
-  it("`ayuda` es el flag REAL de la orden, no un `false` de relleno", async () => {
-    // Sin este caso, el `ayuda: false` de arriba pasaria igual si alguien clavara la constante
-    // en la proyeccion: el fixture tampoco lo trae. Aqui la fila SI lo trae encendido.
-    const { service } = makeLectura({ pendientes: [asignacionRow({ ayuda: true })] });
+  // ⚰️ Feature 235 (T6.1, 2026-08-19) — AQUI VIVIA «`ayuda` es el flag REAL de la orden, no un
+  // `false` de relleno». Se RETIRA con la columna que medía, y se deja dicho por que en vez de
+  // borrarlo en silencio: aquel caso existia para que el `ayuda: false` del `toEqual` de arriba no
+  // pudiera pasar con una constante clavada en la proyeccion. Sin columna no hay flag que clavar,
+  // y el sustituto -`estatusValue`- YA esta cubierto por el `toEqual` literal de arriba, que lo
+  // compara contra el valor de la fila.
+  //
+  // Lo que este archivo NO pierde: una orden de recoleccion nunca esta en `ayuda_tienda` (ese
+  // estatus solo se alcanza desde `en_reparto`), asi que no hay caso nuevo que escribir aqui.
+  it("el `estatusValue` que viaja al DTO es el REAL de la fila, no una constante", async () => {
+    // El relevo del caso retirado, sobre el campo que HOY decide lo que aquel flag decidia.
+    const { service } = makeLectura({
+      pendientes: [asignacionRow({ estatusValue: "recolectando" })],
+    });
 
     const r = await service.listarRecoleccion(MENSAJERO);
 
     if (r.status !== "ok") throw new Error("esperaba ok");
-    expect(r.porRecolectar[0]!.ayuda).toBe(true);
+    expect(r.porRecolectar[0]!.estatusValue).toBe("recolectando");
   });
 
   it("los campos que la card lee llegan CON la clave, no recortados", async () => {

@@ -139,18 +139,20 @@ function valorDe(fuenteModulo: string, ruta: string, expresion: string): string 
  * (la comprobación vive abajo, en el bloque 0).
  *
  * ⚠️ 2026-08-18 — `novedadWhere` DEJÓ DE SER UN SOLO PREDICADO DE ESTATUS. Con la solicitud de
- * ayuda pasó a un `OR` de dos ramas: la de siempre (`estatus = devuelta`) y una que NO mira el
- * estatus (`ayuda: true`), por la que entran órdenes que siguen en reparto.
+ * ayuda pasó a un `OR` de dos ramas: la de siempre (`estatus = devuelta`) y una que NO miraba el
+ * estatus (`ayuda: true`), por la que entraban órdenes que seguían en reparto. Aquella segunda
+ * rama no podía participar de la intersección de esta guardia, porque no aportaba ningún estatus
+ * con el que cruzar la ventana.
  *
- * Esa segunda rama no puede participar de la intersección que hace esta guardia —no aporta ningún
- * estatus con el que cruzar la ventana—, así que se deja fuera A PROPÓSITO y no por descuido: R38
- * sigue sosteniéndose sobre `devuelta`, que es donde el adminTienda escribe.
+ * ✅ 2026-08-19 (feature 235/R30/R33) — YA SÍ LO APORTA, y esa es la mejora de fondo de la ficha.
+ * La rama de ayuda es hoy una IGUALDAD DE ESTADO (`estatus = ayuda_tienda`), igual que su hermana,
+ * porque la solicitud dejó de existir como dato separado del estado. El resultado es que las DOS
+ * ramas de la pantalla de la tienda cruzan con una ventana real, y el cruce que hace esta guardia
+ * vuelve a ver el universo entero en vez de la mitad.
  *
- * Lo que SÍ cambió es la extracción: antes tomaba la PRIMERA coincidencia y se quedaba tan
- * tranquila. Con un `OR` de por medio, eso significa que añadir una segunda rama con OTRO estatus
- * habría pasado inadvertido —la guardia habría seguido verde afirmando un universo incompleto—.
- * Ahora se recogen TODAS y el bloque 0 exige que siga habiendo exactamente una: el día que alguien
- * añada otra, esto se pone rojo y hay que venir a decidir qué significa para la ventana.
+ * La extracción no cambia: recoge TODAS las coincidencias y el bloque 0 fija cuántas debe haber.
+ * El día que alguien añada otra rama, esto se pone rojo y hay que venir a decidir qué significa
+ * para la ventana — que es exactamente lo que pasó con esta.
  */
 export function estatusDeNovedades(fuente: string, ruta = RUTA_ORDEN_REPO): string[] {
   const cuerpo = cuerpoDeMiembro(
@@ -241,33 +243,24 @@ describe("0 — el detector de esta guardia no está roto", () => {
     expect(ESTATUS_DEL_PANEL_MENSAJERO.length).toBeGreaterThan(0);
   });
 
-  // 2026-08-18 — la rama de AYUDA de `novedadWhere`, vigilada explícitamente para que el
-  // comentario de `estatusDeNovedades` no se vuelva folclore. Si la solicitud de ayuda se
-  // retirara algún día, esto se pone rojo y obliga a releer aquel razonamiento en vez de dejarlo
-  // describiendo un código que ya no existe.
+  // 2026-08-18 → 2026-08-19: la rama de AYUDA de `novedadWhere`, vigilada explícitamente en cada
+  // una de sus TRES formas, para que el comentario de `estatusDeNovedades` no se vuelva folclore.
   //
-  // INVERTIDO el 2026-08-19 (feature 239/R22), y la inversión es una MEJORA del cruce, no un
-  // apaño. Esta guardia estaba escrita para ponerse roja «el día que alguien añada otra rama con
-  // estatus», y eso es exactamente lo que pasó: la rama de ayuda dejó de ser la que no mira el
-  // estatus. Lo que significa para la ventana:
+  //   (1) `{ ayuda: true }`                                → la fuga permanente (auditoría §2.1)
+  //   (2) `{ ayuda: true, estatus: { value: en_reparto } }` → el tapón CON DUEÑO de la 239
+  //   (3) `{ estatus: { value: ayuda_tienda } }`            → hoy, feature 235/R30
   //
-  //   - la tienda ya no ve una orden por una solicitud de ayuda ANTIGUA sobre algo que salió de
-  //     reparto (era la fuga permanente: el corte nocturno la barría a `sin_gestionar` sin apagar
-  //     el flag, y ahí se quedaba para siempre);
-  //   - y el estatus que aporta esa rama, `en_reparto`, es JUSTO la ventana del mensajero. Así
-  //     que ahora las dos ramas de la pantalla de la tienda cruzan con una ventana real: la suya
-  //     por `devuelta` y la del mensajero por `en_reparto`. R38 se sostiene por dos sitios en vez
-  //     de por uno.
-  it("la rama de AYUDA de `novedadWhere` existe y está ACOTADA a reparto (R22)", () => {
-    const cuerpo = FUENTE_ORDEN_REPO.slice(
-      FUENTE_ORDEN_REPO.indexOf("novedadWhere"),
-    );
+  // Esta guardia estaba escrita para ponerse roja «el día que alguien añada otra rama con
+  // estatus», y se puso roja las dos veces. La forma (3) es la que cierra el círculo: sin marca
+  // persistida, R32/R33 se cumplen por construcción y no por una clave que alguien deba recordar.
+  it("235/R33: la rama de AYUDA es una IGUALDAD DE ESTADO, sin ninguna marca persistida", () => {
+    const cuerpo = FUENTE_ORDEN_REPO.slice(FUENTE_ORDEN_REPO.indexOf("novedadWhere"));
     const cierre = cuerpo.indexOf("],\n    };");
     const predicado = cuerpo.slice(0, cierre);
-    expect(predicado).toMatch(/ayuda\s*:\s*true/);
-    // Y la rama de ayuda YA NO viaja sola: lleva su estatus pegado en la misma clave hermana.
-    expect(predicado).toMatch(/ayuda\s*:\s*true,\s*estatus\s*:\s*\{\s*value\s*:/);
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta", "en_reparto"]);
+    // La bandera desapareció del predicado. Este `not` es el que se pondría rojo si alguien
+    // repusiera «un booleano pequeño» al lado del estado.
+    expect(predicado).not.toMatch(/ayuda\s*:\s*true/);
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["ayuda_tienda", "devuelta"]);
   });
 
   it("la extracción REVIENTA si el patrón deja de encontrarse (nunca «nada → verde»)", () => {
@@ -339,15 +332,18 @@ describe("227 / R38 — el hilo es bidireccional de hecho", () => {
   });
 
   it("cada rol tiene al menos un estatus alcanzable en su pantalla donde puede publicar", () => {
+    // 2026-08-19 (feature 235/T5.2): la ventana pasó de UN valor por rol a una LISTA por rol, así
+    // que el cruce pasa de una comparación a una INTERSECCIÓN de conjuntos. La propiedad que
+    // protege es la misma, palabra por palabra: intersección no vacía para los DOS roles.
     const sinDondeEscribir: string[] = [];
 
     for (const rol of ROLES_CON_HILO) {
-      const ventana = VENTANA_ESCRITURA[rol];
+      const ventana = VENTANA_ESCRITURA[rol] as readonly string[];
       const pantalla = PANTALLA_POR_ROL[rol];
-      const interseccion = pantalla.estatus.filter((estatus) => estatus === ventana);
+      const interseccion = pantalla.estatus.filter((estatus) => ventana.includes(estatus));
       if (interseccion.length === 0) {
         sinDondeEscribir.push(
-          `${rol}: su ventana de escritura es \`${ventana}\`, pero su pantalla ` +
+          `${rol}: su ventana de escritura es [${ventana.join(", ")}], pero su pantalla ` +
             `(${pantalla.donde}) solo lista [${pantalla.estatus.join(", ")}] — el permiso existe ` +
             `y es INEJERCITABLE`,
         );
@@ -369,24 +365,51 @@ describe("227 / R38 — el hilo es bidireccional de hecho", () => {
 // =============================================================================================
 
 describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () => {
-  it("listarMisAsignaciones sigue leyendo exactamente por_recoger y en_reparto", () => {
+  it("listarMisAsignaciones lee exactamente por_recoger, en_reparto y ayuda_tienda", () => {
     // Censo CERRADO, y a propósito: ni uno más ni uno menos. Uno menos rompería R38 (el
-    // mensajero se quedaría sin la orden en la que publica); uno más sería la feature 227
-    // ensanchando el corte de la 167 por la puerta de atrás — lo que la 167 aisló fue
-    // precisamente que `recolectando` NO se lea desde aquí.
-    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual(["en_reparto", "por_recoger"]);
-    expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(2);
+    // mensajero se quedaría sin la orden en la que publica); uno de más sería una feature
+    // ensanchando el corte de la 167 por la puerta de atrás.
+    //
+    // 2026-08-19 (feature 235/T3.1, R18/R19) — EL CENSO PASA DE 2 A 3, y entra por la puerta:
+    // `ayuda_tienda` se lee porque el portal tiene que ENTREGAR esas órdenes YA SEPARADAS desde el
+    // servidor (R18); antes la separación era un `useMemo` de cliente sobre una bandera y la orden
+    // seguía siendo parada del mapa y gestionable. La propiedad que este censo protege se
+    // conserva: sigue siendo CERRADO y `recolectando` SIGUE FUERA, que es exactamente lo que la
+    // 167 aisló.
+    expect([...ESTATUS_DEL_PANEL_MENSAJERO].sort()).toEqual([
+      "ayuda_tienda",
+      "en_reparto",
+      "por_recoger",
+    ]);
+    expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(3);
+    // Lo que la 167 aisló, dicho como negativo para que no se pierda al crecer el censo.
+    expect(ESTATUS_DEL_PANEL_MENSAJERO).not.toContain("recolectando");
   });
 
-  it("y `/novedades` lista exactamente `devuelta` (devolución) y `en_reparto` (ayuda)", () => {
+  it("y `/novedades` lista exactamente `devuelta` (devolución) y `ayuda_tienda` (ayuda)", () => {
     // La otra mitad del cruce, dicha también como valor: si el predicado central de novedades
     // cambiara de estatus, la ventana del adminTienda tendría que moverse con él.
     //
-    // 2026-08-19 (feature 239/R22): son DOS. `devuelta` es la devolución anclada —donde la tienda
-    // escribe— y `en_reparto` es la orden con solicitud de ayuda viva, que además coincide con la
-    // ventana del mensajero: por esa rama los dos roles miran la MISMA orden a la vez, que es
-    // literalmente lo que el hilo bidireccional necesita para servir de algo.
-    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta", "en_reparto"]);
+    // 2026-08-19 (feature 235/R30): siguen siendo DOS y las dos son igualdades de estado.
+    // `devuelta` es la devolución anclada; `ayuda_tienda` es la solicitud de ayuda viva, y ese
+    // segundo value está TAMBIÉN en la ventana del mensajero: por esa rama los dos roles miran la
+    // MISMA orden a la vez, que es literalmente lo que el hilo bidireccional necesita para servir
+    // de algo (R34).
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["ayuda_tienda", "devuelta"]);
     expect(ESTATUS_DE_NOVEDADES).toHaveLength(2);
+  });
+
+  // 2026-08-19 (feature 235/R34/R35) — EL SOLAPE, afirmado por sí mismo. Es lo que convierte el
+  // hilo en una conversación y no en dos monólogos: hay UN estado en el que los dos roles pueden
+  // escribir sobre la misma orden, y los dos lo tienen en su pantalla.
+  it("235/R34: `ayuda_tienda` es el ÚNICO estado en el que los dos roles pueden escribir", () => {
+    const tienda = VENTANA_ESCRITURA.adminTienda as readonly string[];
+    const mensajero = VENTANA_ESCRITURA.mensajero as readonly string[];
+    const solape = tienda.filter((e) => mensajero.includes(e));
+    expect(solape).toEqual(["ayuda_tienda"]);
+    // Y ese estado está en las DOS pantallas: sin eso, el permiso sería inejercitable para uno de
+    // los dos (R35) y el hilo volvería a ser unidireccional de hecho.
+    expect(PANTALLA_POR_ROL.adminTienda.estatus).toContain("ayuda_tienda");
+    expect(PANTALLA_POR_ROL.mensajero.estatus).toContain("ayuda_tienda");
   });
 });

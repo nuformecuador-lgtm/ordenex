@@ -78,13 +78,45 @@ describe("154/R31 — un estatus fuera del catalogo del build no rompe la vista"
   });
 });
 
+// Feature 235 (T1.4, R37) — la etiqueta y la variante del estatus de la AYUDA, EXACTAS y escritas
+// a mano. No se derivan del mapa: si se derivaran, este bloque diria que el mapa coincide consigo
+// mismo (el fallo «aserción contra su propia fuente» que ya costo un tope mal validado en el repo).
+describe("235/R37 — `ayuda_tienda`: etiqueta y variante firmadas (P1, 2026-08-19)", () => {
+  it("la etiqueta dice A QUIEN se le pidio la ayuda, no solo que se pidio", () => {
+    expect(ORDER_STATUS_LABELS.ayuda_tienda).toBe("Ayuda solicitada a la tienda");
+    render(<EstatusBadge value="ayuda_tienda" />);
+    expect(screen.getByText("Ayuda solicitada a la tienda")).toBeInTheDocument();
+  });
+
+  it("usa la variante de ESPERA (`warning`): mismo chip que `sin_gestionar`, sin acento de marca", () => {
+    // `ORDER_STATUS_VARIANT` es privado del modulo, asi que la variante se verifica sobre el DOM
+    // y POR COMPARACION con su gemelo semantico — el mismo metodo que usa el resto del archivo.
+    // Que comparta chip con `sin_gestionar` es la afirmacion: `danger` diria que algo se rompio y
+    // `info` que la orden avanza, y lo que hay es una parada esperando a alguien.
+    const ayuda = classesDe("ayuda_tienda");
+    cleanup();
+    const espera = classesDe("sin_gestionar");
+    expect(ayuda).toEqual(espera);
+    expect(ayuda).not.toContain("bg-brand-soft");
+  });
+
+  it("NO comparte chip con un estado de error: `rechazada` se ve distinto", () => {
+    // El caso negativo. Sin el, la igualdad de arriba pasaria igual si TODOS los chips fueran
+    // iguales.
+    const ayuda = classesDe("ayuda_tienda");
+    cleanup();
+    const error = classesDe("rechazada");
+    expect(ayuda).not.toEqual(error);
+  });
+});
+
 describe("154 — el mapa de presentacion sigue cubriendo el catalogo EXACTO", () => {
   // Feature 155/R28: el catalogo baja de 20 a 19 values (primera BAJA de su historia:
   // se retira el estado interno de fulfillment en bodega). El conteo se mantiene escrito
   // a mano a proposito: es la red que caza un sobrante en el mapa de presentacion, que el
   // `Record<OrderStatusValue, ...>` solo caza si FALTA una clave, no si sobra en runtime.
-  it("tiene una etiqueta por cada uno de los 19 values, sin sobrantes", () => {
+  it("tiene una etiqueta por cada uno de los 22 values, sin sobrantes", () => {
     expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual([...ORDER_STATUS_SEED].sort());
-    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(21); // +1: feature 157 (recolectando); +1: feature 239 (devolucion_por_confirmar, 2026-08-19)
+    expect(Object.keys(ORDER_STATUS_LABELS)).toHaveLength(22); // +1: 157 (recolectando); +1: 239 (devolucion_por_confirmar); +1: 235 (ayuda_tienda, 2026-08-19)
   });
 });

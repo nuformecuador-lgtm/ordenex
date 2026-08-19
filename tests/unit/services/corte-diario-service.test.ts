@@ -63,6 +63,10 @@ function gestion(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGest
 // transicion `en_reparto -> sin_gestionar`. Por defecto ambos presentes; `null` simula seed pendiente.
 const ESTATUS_IDS: Record<string, string | null> = {
   en_reparto: "s-reparto",
+  // Feature 235 (T4.4, R26): el corte barre TAMBIEN el estatus de la ayuda. Es OBLIGATORIO en
+  // `CorteSinGestionarInput`, asi que sin este id el input no se arma y el barrido se omitiria
+  // entero — de ahi que el fake lo conozca.
+  ayuda_tienda: "s-ayuda",
   sin_gestionar: "s-sin-gestionar",
 };
 
@@ -188,9 +192,12 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     expect(crearCierre).toHaveBeenCalledTimes(1);
     const arg = crearCierre.mock.calls[0][0];
     expect(arg.estado).toBe("vencido"); // R7
-    // R4/R6: la transicion en_reparto -> sin_gestionar viaja en el input del corte.
+    // R4/R6 (+ 235/R26): las transiciones a `sin_gestionar` viajan en el input del corte, con los
+    // DOS estados de origen. Igualdad EXACTA: si `ayudaEstatusId` se cayera del cableado, las
+    // ordenes en ayuda se quedarian sin barrer cada noche y su mensajero, bloqueado para siempre.
     expect(arg.corteSinGestionar).toEqual({
       enRepartoEstatusId: "s-reparto",
+      ayudaEstatusId: "s-ayuda",
       sinGestionarEstatusId: "s-sin-gestionar",
     });
     // El doble por defecto devuelve "cv" -> cuenta 1 (el repo decidiria null si nada paso).
@@ -210,8 +217,27 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     const pedidos = findEstatusIdByValue.mock.calls.map((c) => c[0]);
     expect(pedidos).toContain("en_reparto");
     expect(pedidos).toContain("sin_gestionar");
+    // Feature 235 (R26): tambien resuelve el estatus de la ayuda, porque tambien lo barre.
+    expect(pedidos).toContain("ayuda_tienda");
+    // Y lo que R5 protege sigue igual: `por_recoger` NUNCA se resuelve, asi que una orden que el
+    // mensajero ni siquiera recogio no puede transicionar.
     expect(pedidos).not.toContain("por_recoger");
     expect(crearCierre.mock.calls[0][0].corteSinGestionar.enRepartoEstatusId).toBe("s-reparto");
+    expect(crearCierre.mock.calls[0][0].corteSinGestionar.ayudaEstatusId).toBe("s-ayuda");
+  });
+
+  // Feature 235 (T4.4, R26): el fallback defensivo se extiende al tercer id. Los TRES o ninguno —
+  // barrer `en_reparto` sin barrer `ayuda_tienda` dejaria al mensajero con ordenes colgando y su
+  // cierre bloqueado, que es peor que no barrer nada y repetir el corte al dia siguiente.
+  it("235: catalogo sin `ayuda_tienda` -> crearCierre SIN corteSinGestionar (mismo fallback)", async () => {
+    const { service, crearCierre } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
+      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: null, sin_gestionar: "s-sin-gestionar" },
+    });
+
+    await service.ejecutarCorte();
+
+    expect(crearCierre.mock.calls[0][0].corteSinGestionar).toBeUndefined();
   });
 
   // Feature 109 (defensivo): catalogo sin `sin_gestionar` (seed pendiente) -> no se pasa
@@ -219,7 +245,7 @@ describe("CorteDiarioService.ejecutarCorte", () => {
   it("catalogo sin `sin_gestionar` -> crearCierre SIN corteSinGestionar (fallback 41)", async () => {
     const { service, crearCierre } = build({
       mensajeros: [{ mensajeroId: "m1", zonaId: "z-cartago" }],
-      estatusIds: { en_reparto: "s-reparto", sin_gestionar: null },
+      estatusIds: { en_reparto: "s-reparto", ayuda_tienda: "s-ayuda", sin_gestionar: null },
     });
 
     await service.ejecutarCorte();

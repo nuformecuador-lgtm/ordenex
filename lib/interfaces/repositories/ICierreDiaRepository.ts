@@ -89,6 +89,16 @@ export interface CierreGestionPendienteRow {
 // resuelve el service (`findEstatusIdByValue`), no el repo.
 export interface CorteSinGestionarInput {
   enRepartoEstatusId: string;
+  /**
+   * Feature 235 (T4.4, R26) - OBLIGATORIO, no opcional, y la diferencia importa: un olvido de
+   * cableado tiene que romper el TYPECHECK, no dejar ordenes en ayuda sin barrer para siempre.
+   * Mismo criterio y mismo precedente que `anclajeDevolucion` en la 239.
+   *
+   * El corte recorre DOS BLOQUES GUARDADOS -uno por estado de origen- y no un solo `updateMany`
+   * con un `in`: con dos origenes posibles en una sola escritura, el append tendria que INVENTARSE
+   * de cual salia cada fila y escribiria un historial falso (R27).
+   */
+  ayudaEstatusId: string;
   sinGestionarEstatusId: string;
 }
 

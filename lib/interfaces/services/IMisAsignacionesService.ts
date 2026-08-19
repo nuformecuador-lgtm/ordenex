@@ -87,18 +87,9 @@ export interface MiAsignacionDTO {
    * sigue siendo necesario — de ahi lo lee `listarRecoleccion` para construir su DTO.
    */
   tiendaTelefono?: string | null;
-  /**
-   * Solicitud de ayuda (pedido humano 2026-08-18): `true` si sobre esta orden hay una solicitud de
-   * ayuda viva (`orden.ayuda`). A diferencia de `marcarLuego`, NO es una marca privada de un
-   * mensajero: es un flag de la ORDEN, y por eso lo leen tanto el panel del mensajero —que pinta
-   * su boton «Solicitar ayuda» ya encendido— como `/novedades`, donde es lo que hace que la orden
-   * aparezca en la lista de la tienda.
-   *
-   * Opcional (`?`) por el patron aditivo de `marcarLuego?`/`intentosEntrega?`: no rompe los
-   * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo emite (boolean,
-   * `false` por defecto).
-   */
-  ayuda?: boolean;
+  // Feature 235 (T6.1, R40): aqui vivia `ayuda?: boolean`, la bandera de la ORDEN. Se retira con
+  // la columna. Quien quiera saber si hay una solicitud de ayuda viva mira `estatusValue`, que ya
+  // viaja mas arriba en este mismo DTO: es `ayuda_tienda` o no lo es. Una verdad, no dos.
 }
 
 /**
@@ -173,10 +164,21 @@ export interface MisAsignacionesKpis {
 // bloqueo del actor (para que la UI marque la orden activa y bloquee las demas).
 // Feature 61: + `kpis` para la fila de indicadores del portal.
 //
-// Feature 167 (R34): DOS grupos, no tres. La recoleccion en tienda tiene contrato propio
-// (`ListarRecoleccionResult`) y service propio; este contrato NO transporta ordenes en estado
-// de recoleccion. La ausencia es el requisito: lo que no viaja por aqui no puede reaparecer en
-// los KPIs, en el mapa ni en el corte del dia.
+// Feature 167 (R34): la recoleccion en tienda tiene contrato propio (`ListarRecoleccionResult`) y
+// service propio; este contrato NO transporta ordenes en estado de recoleccion. La ausencia es el
+// requisito: lo que no viaja por aqui no puede reaparecer en los KPIs, en el mapa ni en el corte
+// del dia.
+//
+// FEATURE 235 (T3.1, R18) - PASA DE DOS GRUPOS A TRES, y el corte SUBE AL SERVIDOR. Hasta el
+// 2026-08-19 el portal recibia DOS listas y partia la de reparto EN EL CLIENTE, con un `useMemo`
+// de `RepartoModule` sobre `orden.ayuda`: la orden con ayuda pedida seguia en `porGestionar`, o
+// sea seguia siendo parada del mapa, contacto del chat, candidata de `TrayectoVivoButton` y
+// gestionable. La separacion era MAQUETACION. R18 exige que llegue ya partida desde el servidor,
+// y `conAyuda` es esa tercera lista.
+//
+// El ensanche del corte de la 167/R34 (de dos estatus leidos a tres) es DELIBERADO y entra por la
+// puerta: `recolectando` SIGUE FUERA, que es lo que aquella feature aislo. Lo congela la guardia
+// `hilo-ventana-alcanzable.guardia.test.ts` con un censo cerrado, actualizado con nota fechada.
 export type ListarMisAsignacionesServiceResult =
   | {
       status: "ok";
@@ -190,6 +192,16 @@ export type ListarMisAsignacionesServiceResult =
        * `secuencia` asc; despues las que no la tienen, conservando su `createdAt desc`.
        */
       porGestionar: MiAsignacionDTO[];
+      /**
+       * Feature 235 (R18/R19): las ordenes en `ayuda_tienda` del actor, YA SEPARADAS AQUI. No son
+       * paradas de la ruta (R14/R15) ni gestionables (R16), pero SIGUEN VIENDOSE en su apartado
+       * propio con su accion de rescate (R19) y SIGUEN CONTANDO en los KPIs del dia (R20): el
+       * paquete sigue en la moto del mensajero y su COD sigue por cobrar.
+       *
+       * NO viene ordenada por secuencia de ruta ni la lleva: una orden detenida esperando a la
+       * tienda no tiene posicion en ninguna ruta optimizada.
+       */
+      conAyuda: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis;
       /** Feature 92 (R27/R28/R30): estado de la ruta que produjo ese orden. */

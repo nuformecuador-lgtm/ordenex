@@ -437,36 +437,59 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         });
 
         // Feature 109 (T1.2, R4/R6/R22): CORTE DIARIO — transiciona en la MISMA tx las ordenes que
-        // siguen en `en_reparto` del mensajero a `sin_gestionar`, CONSERVANDO
-        // `mensajero_asignado_id` (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al
-        // liberar al aprobar, R16) y registrando el cambio por el CHOKE POINT (49) con actor null y
-        // `origen_tipo = corte_sin_gestionar`. Pre-SELECT de ids + updateMany GUARDADO por
-        // `estatus_id = en_reparto` (money-safe: NO toca prioridad ni totales) -> el append es SOLO
-        // de las que efectivamente transicionaron (R6/R8). Ausente el input = flujo 37 sin cambios.
+        // el mensajero dejo sin desenlace a `sin_gestionar`, CONSERVANDO `mensajero_asignado_id`
+        // (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al liberar al aprobar, R16)
+        // y registrando el cambio por el CHOKE POINT (49) con actor null y
+        // `origen_tipo = corte_sin_gestionar`. Ausente el input = flujo 37 sin cambios.
+        //
+        // FEATURE 235 (T4.4, R26/R27/R28) — DOS BLOQUES GUARDADOS, NO UNO CON DOS ORIGENES.
+        //
+        // Antes habia un solo bloque: pre-SELECT por `estatusId = enReparto`, `updateMany` guardado
+        // por ese mismo id, y un `appendCambioEstado` con `estatusOrigenId: enRepartoEstatusId` y el
+        // comentario «la guarda garantiza este origen». ESE COMENTARIO ES LA RAZON POR LA QUE NO SE
+        // PUEDE METER `ayuda_tienda` EN UN `in`: con dos origenes posibles en un solo `updateMany`,
+        // el append tendria que INVENTARSE de cual salia cada fila, y escribiria un historial falso
+        // — justo lo que R27 prohibe («el estado de origen REAL, y NO uno supuesto»).
+        //
+        // Asi que el bloque se recorre UNA VEZ POR ORIGEN. Cada vuelta lleva su propia guarda en el
+        // WHERE y su propio append, y `sinGestionarTransicionadas` ACUMULA las dos: un mensajero
+        // cuyo dia entero acabo en ayuda SI genera su cierre `vencido` (guarda «algo paso», R26).
+        //
+        // R29 se cumple POR CONSTRUCCION: despues del barrido la orden esta en `sin_gestionar` y no
+        // queda ninguna señal de ayuda viva, porque no existe ninguna marca que apagar. Ese era
+        // EXACTAMENTE el agujero de la auditoria §2.1 (el corte barria la orden sin apagar la
+        // bandera y la fila se quedaba en `/novedades` para siempre), cerrado por el mismo
+        // mecanismo que lo creo.
+        //
+        // MONEY-NEUTRAL (R28): el `data` de las dos vueltas toca UNICAMENTE `estatusId`. Ni
+        // `prioridad`, ni `mensajeroAsignadoId`, ni un solo total del cierre. Igual que antes.
         let sinGestionarTransicionadas = 0;
         if (corteSinGestionar) {
-          const { enRepartoEstatusId, sinGestionarEstatusId } = corteSinGestionar;
-          const enReparto = await tx.orden.findMany({
-            where: {
-              mensajeroAsignadoId: mensajeroId,
-              estatusId: enRepartoEstatusId,
-              deletedAt: null,
-            },
-            select: { id: true },
-          });
-          if (enReparto.length > 0) {
-            const ids = enReparto.map((o) => o.id);
+          const { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId } = corteSinGestionar;
+          for (const origenEstatusId of [enRepartoEstatusId, ayudaEstatusId]) {
+            const pendientes = await tx.orden.findMany({
+              where: {
+                mensajeroAsignadoId: mensajeroId,
+                estatusId: origenEstatusId,
+                deletedAt: null,
+              },
+              select: { id: true },
+            });
+            if (pendientes.length === 0) continue; // no-op: ni update, ni append, ni ruido
+            const ids = pendientes.map((o) => o.id);
             const movidas = await tx.orden.updateMany({
-              where: { id: { in: ids }, estatusId: enRepartoEstatusId, deletedAt: null },
+              // LA GUARDA: `estatusId: origenEstatusId`. Es lo que garantiza que el origen que se
+              // registra abajo es el REAL de esta vuelta y no el de la otra.
+              where: { id: { in: ids }, estatusId: origenEstatusId, deletedAt: null },
               data: { estatusId: sinGestionarEstatusId },
             });
-            sinGestionarTransicionadas = movidas.count;
+            sinGestionarTransicionadas += movidas.count;
             if (movidas.count > 0) {
               await appendCambioEstado(
                 tx,
                 ids.map((ordenId) => ({
                   ordenId,
-                  estatusOrigenId: enRepartoEstatusId, // la guarda garantiza este origen
+                  estatusOrigenId: origenEstatusId, // R27: el origen de SU bloque, no uno supuesto
                   estatusDestinoId: sinGestionarEstatusId,
                   actorUsuarioId: null, // R6: sistema/cron
                   origenTipo: "corte_sin_gestionar", // R6

@@ -60,14 +60,8 @@ export interface MiAsignacionRow {
   cantonNombre: string;
   distritoNombre: string | null;
   mensajeroAsignadoId: string | null;
-  /**
-   * Solicitud de ayuda (pedido humano 2026-08-18): `orden.ayuda`. NOT NULL con default `false` en
-   * la base, asi que el repo real SIEMPRE emite un boolean.
-   *
-   * Opcional (`?`) por el mismo patron aditivo que `tiendaTelefono?`: no rompe los fixtures que
-   * construyen `MiAsignacionRow` sin el.
-   */
-  ayuda?: boolean;
+  // Feature 235 (T6.1, R40): aqui vivia `ayuda?: boolean`. Se retira con la columna; `estatusValue`
+  // es la unica fuente de verdad sobre si hay una solicitud de ayuda viva.
 }
 
 // Fila proyectada por id para validar recoger/gestionar (R17/R18/R31). INCLUYE

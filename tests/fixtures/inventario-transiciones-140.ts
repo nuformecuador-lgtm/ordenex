@@ -169,6 +169,21 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "56", origen: "incidente", destino: "en_ruta_bodega_central", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "57", origen: "incidente", destino: "en_ruta_bodega_satelite", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
   { n: "58", origen: "incidente", destino: "por_recoger", via: "incidente", callSite: "IncidenteAdminRepository.resolver (158)" },
+  // Feature 235 (2026-08-19) — el viaje de ida y vuelta de la AYUDA A LA TIENDA, mas su salida por
+  // el corte de la noche. Las TRES son pares NUEVOS y NO se retira ninguna: pedir ayuda no
+  // sustituye a ningun desenlace de `en_reparto`, lo anade (contraste con la 239, que si dio de
+  // baja #14 porque su productor cambio de destino).
+  //
+  // #63 tiene UN solo call-site aunque lo disparen DOS botones desde dos servicios: R8 exige un
+  // punto unico de escritura para el rescate y que sea el que usen tanto el mensajero como la
+  // tienda. `SolicitudAyudaService.recuperar` y `HabilitarNovedadService.habilitar` DELEGAN.
+  //
+  // NO hay aristas de GESTION desde `ayuda_tienda` (`-> entregada`, `-> reprogramada`,
+  // `-> devolucion_por_confirmar`, `-> rechazada`, `-> incidente`): son de la ficha 237 y llegan
+  // CON su productor. Declararlas aqui repetiria el error que la 154 cometio con #43/#44.
+  { n: "62", origen: "en_reparto", destino: "ayuda_tienda", via: "solicitud_ayuda_tienda", callSite: "SolicitudAyudaService.solicitar -> OrdenRepository.transicionarAyuda (235)" },
+  { n: "63", origen: "ayuda_tienda", destino: "en_reparto", via: "rescate_ayuda_tienda", callSite: "rescatarOrdenAyuda -> OrdenRepository.transicionarAyuda (235; lo llaman SolicitudAyudaService.recuperar y HabilitarNovedadService.habilitar)" },
+  { n: "64", origen: "ayuda_tienda", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService.ejecutarCorte -> CierreDiaRepository.crearCierre, bloque guardado por ayuda_tienda (235)" },
 ];
 
 /**
@@ -210,9 +225,12 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  */
 export const RECUENTO_INVENTARIO = {
   // 2026-08-19 (feature 239): 54 -> 56. Suma TRES (#59/#60/#61) y RETIRA UNA (#14).
-  aristasFlujo: 56, // +2 (157: asignacion de recoleccion y su reversion); +3 -1 (239)
-  // 52 -> 54: las tres altas son pares NUEVOS y el par retirado (`en_reparto -> devuelta`)
-  // estaba declarado UNA sola vez, asi que la aritmetica de pares sigue a la de aristas.
-  paresUnicos: 54,
+  // 2026-08-19 (feature 235): 56 -> 59. Suma TRES (#62/#63/#64) y NO retira NINGUNA.
+  aristasFlujo: 59, // +2 (157); +3 -1 (239); +3 (235)
+  // 52 -> 54 (239) -> 57 (235): las tres altas de la 235 son pares NUEVOS (`en_reparto ->
+  // ayuda_tienda`, `ayuda_tienda -> en_reparto`, `ayuda_tienda -> sin_gestionar`; ninguno estaba
+  // declarado), asi que la aritmetica de pares sigue a la de aristas y la diferencia
+  // aristas - pares se queda en 2 (los duplicados historicos #19/#23 y #20/#24).
+  paresUnicos: 57,
   aristasCreacion: 2,
 } as const;

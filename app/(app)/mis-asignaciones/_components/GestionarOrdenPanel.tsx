@@ -817,14 +817,15 @@ export function GestionarOrdenPanel({
             type="button"
             onClick={() => setAyudaAbierta(true)}
             aria-label={`Solicitar ayuda con la orden de ${orden.destinatario}`}
-            className={`flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 text-xs font-bold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-              orden.ayuda
-                ? "bg-warning text-navy hover:opacity-90"
-                : "bg-destructive text-white hover:opacity-90"
-            }`}
+            className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl bg-destructive py-3.5 text-xs font-bold uppercase tracking-wide text-white transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             <LifeBuoy className="size-5" aria-hidden="true" />
-            {orden.ayuda ? "Ayuda pedida" : "Ayuda"}
+            {/* Feature 235 (T3.3): el rotulo pasa a ser FIJO. Antes alternaba «Ayuda» / «Ayuda
+                pedida» segun la bandera `orden.ayuda`, y podia hacerlo porque la orden marcada
+                seguia en el panel. Ya no: este panel solo se abre sobre ordenes `en_reparto`
+                (`cargarOrdenGestionable`), asi que una orden con ayuda pedida NUNCA llega aqui —
+                esta abajo, en su seccion propia, que es donde el mensajero mira ese estado. */}
+            Ayuda
           </button>
         </div>
 

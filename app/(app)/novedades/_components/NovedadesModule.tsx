@@ -137,7 +137,14 @@ function causaLabel(causa: NovedadDTO["causa"]): string {
  * sería señalar un hueco que no existe.
  */
 function badgeNovedad(novedad: NovedadDTO): string {
-  if (!novedad.ayuda) return causaLabel(novedad.causa);
+  // Feature 235 (T5.4): traducción LITERAL de `novedad.ayuda` a la igualdad de estado. Mismo texto
+  // en pantalla; lo que cambia es de dónde sale la verdad.
+  //
+  // Nota de exactitud, ahora que son ESTADOS y no una bandera: una orden ya no puede estar
+  // `devuelta` Y con ayuda pedida a la vez, así que la rama «Ayuda · <causa>» solo se alcanza si la
+  // orden en ayuda arrastra una causa de una devolución ANTERIOR ya deshecha. Se conserva tal cual
+  // porque no es de esta ficha decidir ese texto: la card la reescribe la 236.
+  if (novedad.estatusValue !== "ayuda_tienda") return causaLabel(novedad.causa);
   return novedad.causa
     ? `Ayuda · ${CAUSA_DEVOLUCION_LABEL[novedad.causa]}`
     : "Ayuda solicitada";

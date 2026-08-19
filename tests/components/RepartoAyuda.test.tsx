@@ -15,7 +15,15 @@ import type {
 
 // Pedido humano 2026-08-18 — SOLICITUD DE AYUDA en la pantalla de reparto del mensajero, en sus
 // dos mitades: el cuarto botón del panel («Ayuda») y la SECCIÓN de abajo, que es donde van a
-// parar las órdenes marcadas.
+// parar las órdenes con ayuda pedida.
+//
+// FEATURE 235 (T3.3/T3.5/T5.2, 2026-08-19) — EL CORTE DEJA DE SER DE CLIENTE. Hasta hoy este
+// módulo recibía UNA lista y la partía con un `useMemo` sobre `orden.ayuda`: la orden marcada
+// seguía dentro de `porGestionar`, o sea seguía siendo parada del mapa, candidata del panel y
+// GESTIONABLE. Ahora llega ya partida en dos props (`porGestionar` y `conAyuda`, R18) y el módulo
+// pinta lo que le dan. Los casos de abajo no se reescribieron: se les cambió el fixture (de la
+// bandera a la segunda lista) y se les sumó lo que la separación real hace posible — que la orden
+// salga del mapa y del contador de paradas (R15) y que su card tenga dónde abrir el hilo (R35).
 //
 // Archivo aparte de `RepartoModule.test.tsx` a propósito: aquel mide la composición de la
 // pantalla y ya es largo; esto mide una regla de reparto entre dos listas. El andamiaje de mocks
@@ -42,8 +50,15 @@ vi.mock("@/lib/actions/orden-notas", () => ({
   borrarNotaOrden: vi.fn(),
 }));
 
+// Feature 235 (R15): el mock CAPTURA las paradas, como hace `RepartoModule.test.tsx`. Sin eso no
+// se puede afirmar que la orden en ayuda sale del mapa — solo que no se ve su card, que es otra
+// cosa y era justamente lo que la separación de cliente conseguía sin sacarla de la ruta.
+const { rutaMapaMock } = vi.hoisted(() => ({ rutaMapaMock: vi.fn() }));
 vi.mock("@/app/(app)/mis-asignaciones/_components/RutaMapa", () => ({
-  RutaMapa: () => <div data-testid="ruta-mapa" />,
+  RutaMapa: (props: { paradas: unknown[] }) => {
+    rutaMapaMock(props);
+    return <div data-testid="ruta-mapa" />;
+  },
 }));
 
 vi.mock("@/lib/actions/ruta-mensajero", () => ({
@@ -113,15 +128,26 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   tramoSiguiente: null,
 };
 
-function renderModule(porGestionar: MiAsignacionDTO[]) {
+function renderModule(
+  porGestionar: MiAsignacionDTO[],
+  // Feature 235 (R18): la SEGUNDA lista, ya separada por el servidor. Que sea un parámetro y no
+  // una derivación es el cambio: el módulo no vuelve a decidir el corte.
+  conAyuda: MiAsignacionDTO[] = [],
+) {
   return render(
     <RepartoModule
       porGestionar={porGestionar}
+      conAyuda={conAyuda}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
       bloqueado={false}
     />,
   );
+}
+
+/** Una orden en el estatus de ayuda, tal como llega hoy: en la SEGUNDA lista y con su estado. */
+function enAyuda(over: Partial<MiAsignacionDTO> & { id: string }): MiAsignacionDTO {
+  return makeAsignacion({ estatusValue: "ayuda_tienda", ...over });
 }
 
 /** La sección de abajo, por su nombre accesible. `query` para poder afirmar que NO está. */
@@ -149,15 +175,16 @@ describe("Reparto · el cuarto botón «Ayuda» del panel", () => {
     expect(ayuda.textContent).not.toContain("Ayuda pedida");
   });
 
-  it("con la solicitud ya viva se rotula «Ayuda pedida» y SIGUE pulsable (se puede añadir contexto)", () => {
-    renderModule([makeAsignacion({ id: "g1", ayuda: true })]);
+  it("235/R16: el panel NO se abre sobre una orden en ayuda, así que su rótulo es FIJO", () => {
+    // El rótulo alternaba «Ayuda» / «Ayuda pedida» según la bandera, y podía hacerlo porque la
+    // orden marcada seguía en `porGestionar` y por tanto en el panel. Desde la 235 esas órdenes
+    // llegan en `conAyuda` y el panel no las alcanza —`cargarOrdenGestionable` exige
+    // `en_reparto`—, así que el estado «pedida» lo cuenta la sección de abajo, que es donde el
+    // mensajero lo mira.
+    renderModule([], [enAyuda({ id: "g1" })]);
 
-    const panel = screen.getByRole("region", { name: "Detalle de la orden" });
-    const ayuda = within(panel).getByRole("button", {
-      name: "Solicitar ayuda con la orden de Ana Perez",
-    });
-    expect(ayuda.textContent).toContain("Ayuda pedida");
-    expect((ayuda as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole("region", { name: "Detalle de la orden" })).toBeNull();
+    expect(seccionAyuda()).not.toBeNull();
   });
 
   it("no se puede confirmar sin motivo, y con motivo envía la orden y el texto recortado", async () => {
@@ -205,10 +232,10 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
   });
 
   it("la marcada sale del listado principal y aparece abajo, una sola vez", () => {
-    renderModule([
-      makeAsignacion({ id: "g1", numRemision: "REM-001" }),
-      makeAsignacion({ id: "g2", numRemision: "REM-002", ayuda: true }),
-    ]);
+    renderModule(
+      [makeAsignacion({ id: "g1", numRemision: "REM-001" })],
+      [enAyuda({ id: "g2", numRemision: "REM-002" })],
+    );
 
     const principal = screen.getByRole("region", {
       name: "En reparto / por gestionar",
@@ -231,7 +258,7 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
   });
 
   it("con TODAS marcadas el listado principal lo dice, en vez de quedarse en blanco", () => {
-    renderModule([makeAsignacion({ id: "g1", ayuda: true })]);
+    renderModule([], [enAyuda({ id: "g1" })]);
 
     expect(
       screen.getByText(
@@ -244,10 +271,10 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
   it("«Recuperar» retira la solicitud y hace releer el listado", async () => {
     const user = userEvent.setup();
     recuperarMock.mockResolvedValue({ status: "ok" });
-    renderModule([
-      makeAsignacion({ id: "g1", numRemision: "REM-001" }),
-      makeAsignacion({ id: "g2", numRemision: "REM-002", ayuda: true }),
-    ]);
+    renderModule(
+      [makeAsignacion({ id: "g1", numRemision: "REM-001" })],
+      [enAyuda({ id: "g2", numRemision: "REM-002" })],
+    );
 
     await user.click(
       screen.getByRole("button", {
@@ -262,7 +289,7 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
   it("un rechazo del borde NO se traga: se avisa y no se refresca por las dudas", async () => {
     const user = userEvent.setup();
     recuperarMock.mockResolvedValue({ status: "forbidden" });
-    renderModule([makeAsignacion({ id: "g2", numRemision: "REM-002", ayuda: true })]);
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
 
     await user.click(
       screen.getByRole("button", {
@@ -274,14 +301,83 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it("la orden con ayuda SIGUE siendo gestionable desde su card (no queda atrapada)", () => {
-    renderModule([makeAsignacion({ id: "g2", numRemision: "REM-002", ayuda: true })]);
+  // ⚰️ FEATURE 235 (T3.5, R16/R19) — AQUI VIVIA «la orden con ayuda SIGUE siendo gestionable desde
+  // su card». Aquel botón llamaba a `escogerParaGestion`, que desde la 235 devuelve `conflict`
+  // sobre una orden en `ayuda_tienda` (`cargarOrdenGestionable` exige `en_reparto`): dejarlo sería
+  // un botón que siempre falla. Las gestiones DESDE ayuda son la ficha 237, con su productor.
+  //
+  // Lo que aquel caso protegía —que la orden no quede ATRAPADA— lo protegen los dos de abajo:
+  // «Recuperar» la devuelve arriba y «Conversación» le da al mensajero dónde ejercer su ventana.
+  it("235/R16: la card de ayuda YA NO ofrece «Gestionar» (llamaría a una acción que rechaza)", () => {
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
 
     const seccion = seccionAyuda() as HTMLElement;
-    // Sin este botón, pedir ayuda dejaría la orden imposible de llevar al panel: desde el
-    // rediseño la card ya no selecciona al tocarla.
+    expect(within(seccion).queryByRole("button", { name: /Gestionar/ })).toBeNull();
+  });
+
+  it("235/R19: la card conserva «Recuperar», que es la salida de vuelta", () => {
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
+
+    const seccion = seccionAyuda() as HTMLElement;
     expect(
-      within(seccion).getByRole("button", { name: /Gestionar/ }),
+      within(seccion).getByRole("button", {
+        name: "Retirar la solicitud de ayuda de la orden REM-002",
+      }),
     ).toBeTruthy();
+  });
+
+  it("235/R35: desde la card se abre el HILO, que es donde el mensajero ejerce su ventana", async () => {
+    // Sin esta acción el mensajero tendría la ventana de escritura abierta sobre esta orden
+    // (`ayuda_tienda` está en `VENTANA_ESCRITURA.mensajero`) y NINGÚN sitio donde ejercerla: su
+    // hilo vivía dentro de `GestionarOrdenPanel`, que ya no alcanza a estas órdenes. Es el permiso
+    // inejercitable que R35 prohíbe — y en la práctica, la tienda hablándole a un hilo mudo.
+    const user = userEvent.setup();
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })]);
+
+    const seccion = seccionAyuda() as HTMLElement;
+    await user.click(within(seccion).getByRole("button", { name: "Conversación" }));
+
+    expect(await screen.findByRole("region", { name: "Notas con la tienda" })).toBeTruthy();
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T3.3, R15/P8) — LO QUE LA SEPARACIÓN REAL HACE POSIBLE, y que con la bandera era
+// imposible de afirmar: la orden en ayuda SALE de la ruta y del mapa, pero SIGUE en el chat.
+// =================================================================================================
+describe("Reparto · la orden en ayuda sale de la ruta, pero no del chat", () => {
+  it("235/R15: NO llega al mapa de ruta — la parada desaparece, no solo su card", () => {
+    renderModule(
+      [makeAsignacion({ id: "g1", numRemision: "REM-001", secuenciaRuta: 1 })],
+      [enAyuda({ id: "g2", numRemision: "REM-002" })],
+    );
+
+    // ⭑ LA AFIRMACIÓN QUE LA SEPARACIÓN DE CLIENTE NO PODÍA HACER. Antes la orden con la bandera
+    // seguía dentro de `porGestionar`, así que llegaba al mapa igual: se le ocultaba la card y se
+    // le dejaba la chincheta. Hoy ni siquiera está en la lista de la que salen las paradas.
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as { paradas: { id: string }[] };
+    expect(props.paradas.map((p) => p.id)).toEqual(["g1"]);
+  });
+
+  it("235/R15: y su card aparece UNA sola vez, en la sección de abajo", () => {
+    renderModule(
+      [makeAsignacion({ id: "g1", numRemision: "REM-001" })],
+      [enAyuda({ id: "g2", numRemision: "REM-002" })],
+    );
+
+    const seccion = seccionAyuda() as HTMLElement;
+    expect(within(seccion).getAllByRole("article", { name: /REM-002/ })).toHaveLength(1);
+    // Y en NINGÚN otro sitio: si el módulo volviera a partir en cliente una lista que ya viene
+    // partida, la orden saldría dos veces.
+    expect(screen.getAllByRole("article", { name: /REM-002/ })).toHaveLength(1);
+  });
+
+  it("235/P8: SÍ sigue entre los contactos del chat — el paquete sigue en su moto", () => {
+    // Es una línea del módulo y sin ella el mensajero pierde EN SILENCIO la única entrada al chat
+    // que le queda sobre un paquete que sigue llevando encima. Nadie pidió quitarlo.
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002", destinatario: "Beto Ruiz" })]);
+
+    // El botón flotante del chat solo se pinta si hay contactos; su nombre accesible los cuenta.
+    expect(screen.getByRole("button", { name: /chat/i })).toBeTruthy();
   });
 });

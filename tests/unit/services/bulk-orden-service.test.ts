@@ -90,9 +90,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
-    marcarAyuda: vi.fn().mockResolvedValue(undefined),
-    desmarcarAyuda: vi.fn().mockResolvedValue(undefined),
-    habilitarNovedad: vi.fn().mockResolvedValue(undefined),
+    // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
+    // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
+    transicionarAyuda: vi.fn().mockResolvedValue(true),
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     countDevueltasByTienda: vi.fn().mockResolvedValue(0),
     findDevueltasByTienda: vi.fn().mockResolvedValue([]),

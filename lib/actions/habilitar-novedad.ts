@@ -46,9 +46,13 @@ function toHabilitarNovedadActionError(
 
 function buildService(): IHabilitarNovedadService {
   const prisma = getPrismaClient();
+  const notaRepo = new OrdenNotaRepository(prisma);
   return new HabilitarNovedadService(
-    new OrdenNotaService(new OrdenNotaRepository(prisma)),
+    new OrdenNotaService(notaRepo),
     new OrdenRepository(prisma),
+    // Feature 235: «Habilitar» delega en el punto unico de rescate, que autoriza por su cuenta con
+    // el MISMO repositorio del hilo (no publica nada, asi que no puede colarse por `publicar`).
+    notaRepo,
   );
 }
 

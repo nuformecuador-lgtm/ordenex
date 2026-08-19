@@ -8,7 +8,10 @@ import type {
   OrdenParaHilo,
 } from "@/lib/interfaces/repositories/IOrdenNotaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
-import { VENTANA_ESCRITURA } from "@/lib/types/ventana-hilo-notas";
+import {
+  estaEnVentanaDeEscritura,
+  VENTANA_ESCRITURA,
+} from "@/lib/types/ventana-hilo-notas";
 
 // Feature 227 (T2.7) — el SERVICE del hilo, con dobles. Sin DB, sin HTTP, sin Next.
 //
@@ -102,9 +105,9 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
       tiendaId: TIENDA,
       mensajeroAsignadoId: MENSAJERO,
       estatusValue: "devuelta",
-      // 2026-08-18: default `false` para que los casos existentes sigan midiendo la ventana por
-      // ESTATUS y nada mas. Los que ejercitan la segunda puerta lo sobreescriben.
-      ayuda: false,
+      // Feature 235 (T5.1, R36): aqui vivia `ayuda: false`, la bandera de la SEGUNDA PUERTA. Se
+      // retiro con la columna y la ventana vuelve a depender SOLO del estatus, que es lo que todos
+      // los casos de este archivo ya median.
       deletedAt: null,
       notas: "nota de la tienda, escrita en la carga masiva",
       ...over,
@@ -148,7 +151,6 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
             tiendaId: o.tiendaId,
             mensajeroAsignadoId: o.mensajeroAsignadoId,
             estatusValue: o.estatusValue,
-            ayuda: o.ayuda,
             deletedAt: o.deletedAt,
           }
         : null;
@@ -371,43 +373,77 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     }
 
     // Y la asimetria, dicha en una sola linea: la ventana de cada rol es la de SU pantalla.
-    expect(VENTANA_ESCRITURA).toEqual({ adminTienda: "devuelta", mensajero: "en_reparto" });
+    //
+    // Feature 235 (T5.1): pasa de UN valor por rol a una LISTA por rol. La asimetria se conserva
+    // —cada uno tiene el estado de SU pantalla— y aparece el UNICO solape: `ayuda_tienda`, que es
+    // el estado en el que los dos miran la misma orden a la vez (R34).
+    expect(VENTANA_ESCRITURA).toEqual({
+      adminTienda: ["devuelta", "ayuda_tienda"],
+      mensajero: ["en_reparto", "ayuda_tienda"],
+    });
   });
 
-  // Pedido humano 2026-08-18 — SEGUNDA PUERTA, y solo para la tienda: una solicitud de ayuda viva
-  // le abre la ventana en cualquier estatus. Sin esto, la tienda ve en `/novedades` una orden EN
-  // REPARTO con ayuda pedida —la lista desde que `novedadWhere` gano su segunda rama—, lee que el
-  // mensajero pide auxilio y no puede ni contestarle ni pulsar «Habilitar», porque las dos cosas
-  // pasan por `publicar`. Permiso inejercitable, con la ventana quieta y la superficie creciendo.
-  it("con `ayuda` viva la TIENDA publica fuera de `devuelta`; el mensajero NO gana nada", async () => {
-    const conAyuda = { estatusValue: "en_reparto", ayuda: true };
-
-    const tienda = escenario({ ordenes: { [ORDEN]: conAyuda } });
+  // ===============================================================================================
+  // FEATURE 235 (T5.1, R34/R36) — ⚰️ AQUI VIVIA LA «SEGUNDA PUERTA, Y SOLO PARA LA TIENDA».
+  //
+  // QUE HUBO. El 2026-08-18 `novedadWhere` gano una rama que listaba ordenes EN REPARTO con la
+  // bandera `orden.ayuda` encendida. La tienda veia en su pantalla una orden con un auxilio pedido,
+  // lo leia... y no podia ni contestar ni pulsar «Habilitar», porque las dos cosas pasan por
+  // `publicar`. Se parcheo con un TERCER PARAMETRO booleano que abria su ventana EN CUALQUIER
+  // ESTATUS — y la 239 midio el precio: `estaEnVentanaDeEscritura("adminTienda",
+  // "devolucion_por_confirmar", true)` devolvia `true`, una bandera vieja abriendo la ventana sobre
+  // el pre-estado de una devolucion.
+  //
+  // QUE HAY AHORA. El estatus sustituye a la bandera y `ayuda_tienda` entra en la ventana de LOS
+  // DOS ROLES. Que sean los dos es el REQUISITO (R34), no una cortesia: si el mensajero no pudiera
+  // escribir, la tienda le hablaria a un hilo mudo —le pregunta «¿el cliente esta?» y no hay quien
+  // conteste— que es literalmente el fallo que la guardia `hilo-ventana-alcanzable` existe para
+  // impedir.
+  // ===============================================================================================
+  it("235/R34: en `ayuda_tienda` publican LOS DOS — la tienda y el mensajero asignado", async () => {
+    const tienda = escenario({ ordenes: { [ORDEN]: { estatusValue: "ayuda_tienda" } } });
     expect(
       await tienda.service.publicar({ ordenId: ORDEN, cuerpo: "te llamo ya" }, actorTienda),
     ).toMatchObject({ status: "ok" });
     expect(tienda.filas).toHaveLength(1);
 
-    // El mensajero ya podia publicar ahi por SU ventana (`en_reparto`): `ayuda` no le anade nada
-    // y no se le ensancha a ningun otro estatus.
-    const mensajeroFuera = escenario({
-      ordenes: { [ORDEN]: { estatusValue: "entregada", ayuda: true } },
-    });
+    const mensajero = escenario({ ordenes: { [ORDEN]: { estatusValue: "ayuda_tienda" } } });
     expect(
-      await mensajeroFuera.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero),
-    ).toEqual({ status: "forbidden" });
-    expect(mensajeroFuera.filas).toHaveLength(0);
+      await mensajero.service.publicar(
+        { ordenId: ORDEN, cuerpo: "el porton esta cerrado" },
+        actorMensajero,
+      ),
+    ).toMatchObject({ status: "ok" });
+    expect(mensajero.filas).toHaveLength(1);
   });
 
-  it("sin `ayuda`, la ventana de la tienda sigue siendo EXACTAMENTE `devuelta`", async () => {
-    // La contraprueba del caso de arriba: lo que abre la puerta es la bandera, no el estatus.
-    const { service, filas } = escenario({
-      ordenes: { [ORDEN]: { estatusValue: "en_reparto", ayuda: false } },
-    });
-    expect(await service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorTienda)).toEqual({
+  it("235/R36: la ventana depende SOLO del estado — en `en_reparto` la tienda NO publica", async () => {
+    // La contraprueba de la puerta muerta. Con la bandera, esta misma orden dejaba publicar a la
+    // tienda; hoy no, porque `en_reparto` no esta en SU lista. Y con la orden `entregada` tampoco
+    // publica nadie, venga de donde venga.
+    const enReparto = escenario({ ordenes: { [ORDEN]: { estatusValue: "en_reparto" } } });
+    expect(await enReparto.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorTienda)).toEqual({
       status: "forbidden",
     });
-    expect(filas).toHaveLength(0);
+    expect(enReparto.filas).toHaveLength(0);
+
+    const entregada = escenario({ ordenes: { [ORDEN]: { estatusValue: "entregada" } } });
+    expect(await entregada.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero)).toEqual(
+      { status: "forbidden" },
+    );
+    expect(await entregada.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorTienda)).toEqual({
+      status: "forbidden",
+    });
+    expect(entregada.filas).toHaveLength(0);
+  });
+
+  it("235/R36: la firma de la ventana YA NO ADMITE ninguna bandera", () => {
+    // La afirmacion estructural, no de comportamiento: mientras el tercer parametro exista, alguien
+    // puede reabrir la puerta pasando `true`. `length` de la funcion cuenta los parametros sin
+    // default, que son exactamente los dos que quedan.
+    expect(estaEnVentanaDeEscritura).toHaveLength(2);
+    // Y el resultado depende solo de (rol, estatus): dos llamadas identicas no pueden diferir.
+    expect(estaEnVentanaDeEscritura("adminTienda", "devolucion_por_confirmar")).toBe(false);
   });
 
   it("`por_recoger` NO abre ventana para nadie (decision deliberada del design §2.2)", async () => {
@@ -486,10 +522,11 @@ describe("R25 — la nota de la TIENDA no se toca", () => {
     // proyeccion minima de autorizacion, que no incluye `notas`.
     for (const proyeccion of repo.findOrdenParaHilo.mock.results) {
       expect(Object.keys(await proyeccion.value).sort()).toEqual([
-        // 2026-08-18: `ayuda` entra en la proyeccion de AUTORIZACION porque la ventana del
-        // adminTienda pasa a depender tambien de ella. La lista sigue siendo cerrada a proposito:
-        // es lo que impide que `notas` —la nota de la TIENDA, otra cosa— se cuele aqui algun dia.
-        "ayuda",
+        // Feature 235 (T5.1/T6.1): `ayuda` SALE de la proyeccion de AUTORIZACION. Entro el
+        // 2026-08-18 porque la ventana del adminTienda paso a depender de esa bandera, y se va con
+        // ella: la ventana vuelve a depender solo de `estatusValue` (R36). La lista sigue siendo
+        // cerrada a proposito — es lo que impide que `notas` (la nota de la TIENDA, otra cosa) se
+        // cuele aqui algun dia.
         "deletedAt",
         "estatusValue",
         "mensajeroAsignadoId",

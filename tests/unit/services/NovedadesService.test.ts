@@ -50,9 +50,8 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     latitud: 9.9333296,
     longitud: -84.0833282,
     notas: "Tocar el timbre",
-    // Solicitud de ayuda (2026-08-18): el default es la fila que llega por ESTAR devuelta, no por
-    // tener ayuda pedida. Los casos de ayuda lo sobreescriben.
-    ayuda: false,
+    // Feature 235 (T6.1, R40): aqui vivia `ayuda: false`. Se retiro con la columna; la razon por
+    // la que la fila esta en el listado la dice `estatusValue`, que ya viaja en esta misma fila.
     intentosContacto: 0,
     tiendaNombre: "Tienda Uno",
     zonaNombre: "GAM",
@@ -558,15 +557,19 @@ describe("NovedadesService.listarCompleto (descarga)", () => {
     expect(completo.items[0]).not.toHaveProperty("createdAt");
   });
 
-  // Pedido humano 2026-08-18 — `ayuda` viaja al DTO. La pantalla NO puede derivarlo del estatus:
-  // una orden devuelta tambien puede tener ayuda pedida de antes, y una en reparto solo esta en
-  // este listado por la ayuda. Sin el campo, el badge no podria distinguirlas.
-  it("`ayuda` se proyecta al DTO tal cual llega de la fila, en la pagina y en el archivo", async () => {
+  // Pedido humano 2026-08-18 → FEATURE 235 (T6.1, R40). Este caso afirmaba que `ayuda` viajaba al
+  // DTO, con el argumento de que la pantalla NO podia derivarlo del estatus: con una BANDERA, una
+  // orden devuelta podia ademas tener ayuda pedida de antes.
+  //
+  // Ese argumento MURIO con la columna: hoy son dos ESTADOS y son excluyentes, asi que
+  // `estatusValue` lo dice todo. El caso no se borra, se REAPUNTA al campo que hoy decide — y se
+  // le añade el caso NEGATIVO, que es lo que impide que alguien reponga un campo paralelo.
+  it("235/R40: el DTO transporta `estatusValue` y NINGUNA marca de ayuda, en la pagina y en el archivo", async () => {
     const repo = fakeRepo({
       countDevueltasByTienda: vi.fn(async () => 2),
       findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "o1", ayuda: true, estatusValue: "en_reparto" }),
-        ordenRow({ id: "o2", ayuda: false }),
+        ordenRow({ id: "o1", estatusValue: "ayuda_tienda" }),
+        ordenRow({ id: "o2", estatusValue: "devuelta" }),
       ]),
       findCausasDevueltaVigentes: vi.fn(async () => new Map<string, CausaDevueltaVigente>()),
     });
@@ -575,12 +578,13 @@ describe("NovedadesService.listarCompleto (descarga)", () => {
     const completo = await service.listarCompleto(ADMIN);
 
     if (pagina.status !== "ok" || completo.status !== "ok") throw new Error("esperaba ok");
-    expect(pagina.items.map((i) => [i.id, i.ayuda])).toEqual([
-      ["o1", true],
-      ["o2", false],
+    // Las DOS razones por las que una fila esta en este listado, distinguibles por el estado.
+    expect(pagina.items.map((i) => [i.id, i.estatusValue])).toEqual([
+      ["o1", "ayuda_tienda"],
+      ["o2", "devuelta"],
     ]);
-    // El `false` SIEMPRE se emite: es un valor conocido, no un dato ausente.
-    expect(pagina.items[1]).toHaveProperty("ayuda", false);
+    // Y ninguna marca paralela: una sola verdad sobre el mismo hecho.
+    expect(pagina.items[0]).not.toHaveProperty("ayuda");
     // Una sola proyeccion: el archivo no puede decir otra cosa que la pagina.
     expect(completo.items).toEqual(pagina.items);
   });

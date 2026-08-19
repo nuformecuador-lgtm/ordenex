@@ -272,6 +272,32 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "resolverCierre",
     origenTipo: "anclaje_devolucion",
   },
+  // #29/#30: feature 235 (2026-08-19). El viaje de ida y vuelta de la AYUDA A LA TIENDA. Las DOS
+  // familias comparten simbolo (`OrdenRepository.transicionarAyuda`, el PUNTO UNICO de escritura
+  // que R8 exige) y eso es correcto: el mapa es de FAMILIAS, no de simbolos, y ya hay precedente
+  // (#20/#22 y #24/#25/#26). Lo que las distingue es el SENTIDO del viaje, que es lo que el
+  // historial tiene que poder decir.
+  //
+  // NINGUNA enlaza gestion: sus filas nacen con `gestion_orden_id` nulo porque no vienen de
+  // ninguna. Y NINGUNA es VISITA REAL (235/R11): pedir auxilio no es un intento de entrega
+  // fallido, asi que no sube el conteo, no adelanta el escalado del cron SLA (99) y no cobra el
+  // rechazo (56) antes de tiempo.
+  //
+  // ⚠️ La VUELTA (`rescate_ayuda_tienda`) es ademas la clave de la excepcion de webhook firmada en
+  // P4: es la unica familia que NO emite evento publico pese a que su estado destino (`en_reparto`)
+  // si lo es. Ver `lib/types/webhook-eventos.ts`.
+  {
+    n: 29,
+    repo: "OrdenRepository",
+    simbolo: "transicionarAyuda",
+    origenTipo: "solicitud_ayuda_tienda",
+  },
+  {
+    n: 30,
+    repo: "OrdenRepository",
+    simbolo: "transicionarAyuda",
+    origenTipo: "rescate_ayuda_tienda",
+  },
 ] as const;
 
 // Feature 158/PR2 — familias con MAS DE UN punto de escritura, declaradas UNA A UNA con su
@@ -348,14 +374,16 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 27 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(27); // 28 - 1: el #2 se retiro el 2026-08-07
+  it("son EXACTAMENTE 29 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    // 30 - 1: el #2 se retiro el 2026-08-07. Feature 235 (2026-08-19): +2 (#29/#30, las dos
+    // familias del viaje de la ayuda, con UN solo simbolo — el punto unico que R8 exige).
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(29);
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26, 27, 28,
+      26, 27, 28, 29, 30,
     ]);
   });
 

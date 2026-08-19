@@ -44,7 +44,18 @@ const ROL_AUTORIZADO = "mensajero";
 
 // R10: estados de una orden asignada que aun cuenta como "pendiente de gestion".
 // Mientras el mensajero tenga alguna en estos estados, no puede cerrar.
-const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto"];
+//
+// FEATURE 235 (T4.1, R22/R23) - `ayuda_tienda` ENTRA AQUI POR SU NOMBRE, y este es todo el cambio
+// funcional del bloqueo. Hasta el 2026-08-19 una orden con ayuda pedida bloqueaba el cierre POR
+// ACCIDENTE: la solicitud era una bandera y la orden seguia en `en_reparto`, que si estaba en esta
+// lista. Nadie habia escrito nunca «una orden en ayuda bloquea el cierre», asi que el dia que la
+// orden dejara de estar en `en_reparto` -exactamente lo que hace esta feature- el bloqueo habria
+// desaparecido en silencio. R23 pide que se derive de una LISTA EXPLICITA en la que el estatus
+// figure por su nombre: aqui esta.
+//
+// Por que debe bloquear: el paquete sigue EN LA MANO del mensajero. Cerrar el dia con una orden
+// suya sin desenlace dejaria el paquete fuera de todo cuadre.
+const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto", "ayuda_tienda"];
 
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
@@ -413,6 +424,11 @@ export class CierreDiaService implements ICierreDiaService {
     // si además no pudiera enviar su vencido a aprobación). NO recalcula ni re-snapshotea (R8:
     // el repo solo cambia `estado`). Invariante R10: el corte no crea `vencido` con `solicitado`
     // presente (41 R10) y aquí se transiciona en vez de crear una segunda fila.
+    //
+    // FEATURE 235 (R24): con `ayuda_tienda` en `ESTADOS_PENDIENTES`, esta ruta se comporta
+    // EXACTAMENTE igual que con `en_reparto` - es decir, una orden en ayuda NO la bloquea, porque
+    // esta rama no consulta pendientes. Es deliberado y se afirma en test para que nadie lo
+    // «arregle»: quitarle la exencion reabre el deadlock que la 111/R9 cerro.
     if (await this.repo.existeCierreVencido(actor.usuarioId)) {
       const ok = await this.repo.transicionarVencidoASolicitado(actor.usuarioId);
       // R7: 0 filas = el vencido ya fue resuelto/transicionado entre la lectura y la escritura.
@@ -426,6 +442,8 @@ export class CierreDiaService implements ICierreDiaService {
     // (EXENTO de la precondicion de "sin pendientes", anti-deadlock: el mensajero esta bloqueado y
     // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`). El desbloqueo definitivo y
     // la liberacion de `sin_gestionar` ocurren SOLO al APROBAR (R16).
+    // FEATURE 235 (R24): mismo caso que el `vencido` de arriba, y misma razon. Ninguna de las dos
+    // rutas de RE-solicitud comprueba pendientes.
     if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
       const ok = await this.repo.transicionarRechazadoASolicitado(actor.usuarioId);
       if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };

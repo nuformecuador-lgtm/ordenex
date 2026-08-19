@@ -194,6 +194,9 @@ function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {
   return render(
     <RepartoModule
       porGestionar={props?.porGestionar ?? []}
+      // Feature 235 (R18): el tercer grupo llega ya separado del servidor. Los escenarios de este
+      // archivo no tienen ordenes en ayuda; los que si, viven en `RepartoAyuda.test.tsx`.
+      conAyuda={props?.conAyuda ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
       bloqueado={props?.bloqueado ?? false}
@@ -1386,6 +1389,7 @@ describe("RepartoModule", () => {
     const { rerender } = render(
       <RepartoModule
         porGestionar={porGestionar}
+        conAyuda={[]}
         ordenEnGestionId="g2"
         ruta={RUTA_VIGENTE}
         bloqueado={false}
@@ -1402,6 +1406,7 @@ describe("RepartoModule", () => {
     rerender(
       <RepartoModule
         porGestionar={porGestionar}
+        conAyuda={[]}
         ordenEnGestionId={null}
         ruta={RUTA_VIGENTE}
         bloqueado={false}
