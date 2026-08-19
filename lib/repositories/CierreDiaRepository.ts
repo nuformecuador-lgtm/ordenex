@@ -561,7 +561,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
 
         if (filas.length > 0) {
           // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 8 columnas quedan
+          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
           // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
           const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
             tx,

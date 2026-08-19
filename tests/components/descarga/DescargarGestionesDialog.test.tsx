@@ -288,7 +288,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(descargarBlobMock).not.toHaveBeenCalled();
   });
 
-  it("confirmar con selección produce el archivo detallado con sus 26 columnas", async () => {
+  it("confirmar con selección produce el archivo detallado con sus 27 columnas", async () => {
     const accion = accionOk();
     montar(accion);
     await userEvent.click(disparador());
@@ -305,7 +305,7 @@ describe("diálogo de descarga detallada de gestiones (T4.1)", () => {
     expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1);
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     const encabezados = columnas.map((c) => c.header);
-    expect(encabezados).toHaveLength(26);
+    expect(encabezados).toHaveLength(27);
     expect(encabezados[0]).toBe("Mensajero");
     expect(encabezados).toContain("Resultado");
     // D8/R40: la columna de evidencia no existe en la fundida, en ningun resultado.

@@ -196,6 +196,7 @@ function detalleRow(overrides: Record<string, unknown> = {}) {
     tarifaComisionCod: null,
     tarifaIvaFlete: null,
     tarifaIvaComisionCod: null,
+    tarifaFulfillment: null,
     ...overrides,
   };
 }
@@ -350,6 +351,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
         tarifaComisionCod: new Prisma.Decimal("3.00"),
         tarifaIvaFlete: new Prisma.Decimal("13.00"),
         tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+        tarifaFulfillment: new Prisma.Decimal("500.00"),
       }),
     ]);
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
@@ -399,6 +401,7 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
         tarifaComisionCod: new Prisma.Decimal("3.00"),
         tarifaIvaFlete: new Prisma.Decimal("13.00"),
         tarifaIvaComisionCod: new Prisma.Decimal("13.00"),
+        tarifaFulfillment: new Prisma.Decimal("500.00"),
       }),
     ]);
     const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);

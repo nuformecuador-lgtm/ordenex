@@ -1,7 +1,11 @@
 /**
- * Feature 213 (T6) — el ÚNICO formateador del desglose de pago de una entrega, para los
- * cinco consumidores que lo pintan: las dos tablas del detalle, el comprobante de factura y
- * los dos módulos de descarga.
+ * Feature 213 (T6) — el ÚNICO formateador del desglose de pago de una entrega.
+ *
+ * Desde 2026-08-19 tiene DOS clientelas. Las dos funciones de FORMATO de aquí abajo
+ * (`desglosePantalla` / `desgloseDescarga`) concatenan el desglose en UNA celda, y las siguen
+ * usando el cierre del día del mensajero (tabla y descarga) y el comprobante de factura. El
+ * detalle de cierres del admin y sus dos descargas pasaron a UNA COLUMNA POR MEDIO, que se
+ * arma con `montoPorMetodo` (ver el bloque del final del archivo).
  *
  * Módulo PURO: sin React y sin runtime de `@prisma/client` (solo `import type`), igual que
  * su vecino `cierre-labels.ts`, porque lo importan módulos de descarga que se declaran puros.

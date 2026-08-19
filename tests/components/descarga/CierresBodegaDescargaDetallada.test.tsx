@@ -8,7 +8,7 @@
 // las bodegas satélite le llegan ÚNICAMENTE consolidados, y por aquí. Un solo botón no cubriría
 // las dos mitades, y por eso cada uno llama a SU borde.
 //
-// Lo que sí es común, y también se afirma: el componente del diálogo, las 26 columnas y la
+// Lo que sí es común, y también se afirma: el componente del diálogo, las 27 columnas y la
 // proyección son los MISMOS que en la otra pantalla (R26).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
@@ -217,11 +217,11 @@ describe("descarga detallada en cierres de bodega (T7.4)", () => {
     // El listado general de esta pantalla NO se toca: son dos bordes distintos y dos granos.
     expect(listarPendientesCierresBodegaCompleto).not.toHaveBeenCalled();
 
-    // R26: mismas 26 columnas, mismo orden y misma proyección que en la otra pantalla, porque
+    // R26: mismas 27 columnas, mismo orden y misma proyección que en la otra pantalla, porque
     // salen de la MISMA declaración.
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
-    expect(columnas.map((c) => c.header)).toHaveLength(26);
+    expect(columnas.map((c) => c.header)).toHaveLength(27);
     expect(columnas[0].header).toBe("Mensajero");
     expect(columnas.map((c) => c.header)).not.toContain("Tiene evidencia");
     expect(hoja).toBe("Gestiones de cierres");
