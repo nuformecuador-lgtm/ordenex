@@ -11,8 +11,9 @@
 
 ## ✅ AL DÍA — 2026-08-19. **EMPIEZA A LEER POR AQUÍ**
 
-**La 235 («ayuda a la tienda: estatus propio») está lista para PR.** La revisión la había
-**RECHAZADO** con 4 bloqueantes; los cuatro están cerrados:
+**La 235 («ayuda a la tienda: estatus propio») está MERGEADA en `dev`** — PR
+[#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402), commit `32b4064f`, ficha en `done`,
+39/39 tareas. La revisión la había **RECHAZADO** con 4 bloqueantes; los cuatro se cerraron:
 
 | | qué era | cómo quedó |
 | --- | --- | --- |
@@ -24,13 +25,26 @@
 Y el último menor, **m4**: el rescate estaba apagado en pantalla para el mensajero bloqueado, contra
 R25 — arreglado, con test que se sabe poner rojo.
 
+### ▶️ Qué sigue, en orden
+
+1. **236** — la pestaña propia de ayuda en `/novedades` y su card. **Es la siguiente y corre prisa**:
+   hasta que entre, la tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede
+   leer el motivo**. Ver el aviso de despliegue de abajo.
+2. **238** — confirmación física de los paquetes al aprobar el cierre. **No depende de ninguna** y ya
+   tiene spec completo y decisiones firmadas: puede arrancar sin esperar a nadie, incluso en paralelo
+   con la 236 (zona `fullstack`, y ahora mismo no hay ninguna `in_progress`).
+3. **237** → **240**, en ese orden. La **237** hereda dos avisos escritos: la invariante «una orden en
+   ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia nueva de las
+   siete listas **vigila pero no descubre** una octava.
+4. **241** — investigación de las guardas de bloqueo retiradas. Independiente, cuando toque.
+
 ### 🔀 ORDEN DE MERGEO Y DE DESPLIEGUE (cierra **T0.3** de la 235)
 
 **235 → 236 → 237 → 240**, en ese orden. La **241** (investigación de las guardas de bloqueo
 retiradas) es independiente y puede ir cuando sea. La **238** no depende de ninguna y puede arrancar
 en paralelo, ya con spec completo y decisiones firmadas.
 
-⚠️ **La 235 y la 236 conviene que salgan juntas o seguidas.** Medido en pantalla el 2026-08-19: con
+⚠️ **La 235 YA ESTÁ EN `dev`, así que la 236 marca el reloj.** Medido en pantalla el 2026-08-19: con
 la 235 sola, la tienda ve la orden en `/novedades` con el chip «Ayuda solicitada» **bajo la pestaña
 «En devolución»** y **sin ninguna forma de leer el motivo** que el mensajero escribió (su card no
 tiene botón de notas). No es peor que hoy —hoy tampoco lo lee—, pero es una solicitud de ayuda cuyo
