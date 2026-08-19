@@ -169,7 +169,7 @@ describe("R3 — se paga desde acá, sin ir a otra pantalla", () => {
     });
     // Lo que un pago puede saldar AHORA (₡12.400), no el imputable total (₡18.850) ni la
     // cuenta por pagar (₡21.150): las otras dos no se pueden cobrar en este registro.
-    expect(within(bloque).getByText("₡12.400,00")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡12.400")).toBeInTheDocument();
     await waitFor(() =>
       expect(within(bloque).getByRole("button", { name: "Registrar pago" })).toBeEnabled(),
     );

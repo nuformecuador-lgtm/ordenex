@@ -2,9 +2,14 @@
 // Feature 196 (T5.3) — descarga del RANKING CONGELADO. Cubre R32, R33 y R35.
 //
 // Patrón de `RankingDescarga.test.tsx`, y el riesgo es el mismo de toda Familia B: que el
-// archivo ADORNE lo que la tabla pinta. Aquí hay tres celdas formateadas —`100.0%`, `₡5.000,00`
+// archivo ADORNE lo que la tabla pinta. Aquí hay tres celdas formateadas —`100.0%`, `₡5.000`
 // y el `—` de las filas sin podio— y ninguna de las tres puede viajar así a una hoja: el `%`
 // y el `₡` convierten una celda numérica en texto, y un guion se lee como un valor.
+//
+// Feature 230 (R16): la pantalla dejó de pintar los céntimos, la DESCARGA no. El premio sale
+// del archivo como `"5000.00"`, con su escala 2 intacta, porque la contabilidad los necesita.
+// La distancia entre lo que se ve y lo que se descarga se ensanchó, y este archivo es donde
+// esa distancia se afirma.
 //
 // El riesgo PROPIO de esta pantalla es el orden: el archivo tiene que salir en el orden
 // CONGELADO (`puesto`), no en uno recalculado. Por eso el caso compara contra lo que la
@@ -164,13 +169,16 @@ describe("Ranking histórico · descarga", () => {
     const tabla = screen.getByRole("table", { name: "Ranking congelado del día" });
     const filaAna = within(tabla).getByText("Ana Mensajera").closest("tr") as HTMLElement;
     expect(within(filaAna).getByText("100.0%")).toBeInTheDocument();
-    expect(within(filaAna).getByText("₡5.000,00")).toBeInTheDocument();
+    expect(within(filaAna).getByText("₡5.000")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: `Descargar ${TITULO}` }));
     await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
 
     const [, filas] = buildXlsxRowsMock.mock.calls[0];
     expect(filas[0].porcentaje).toBe("100.0"); // un Number lo dejaría en "100"
+    // R16: la descarga CONSERVA los céntimos. La pantalla, dos líneas más arriba,
+    // ya no los pinta (`₡5.000`); esta celda sigue siendo `"5000.00"` a propósito
+    // y NO se enruta por el formateador de presentación.
     expect(filas[0].premio).toBe("5000.00");
     expect(filas[1].porcentaje).toBe("80.0");
     for (const celda of Object.values(filas[0])) {

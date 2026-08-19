@@ -202,6 +202,10 @@ describe("derivarCaja — las dos cifras (R1/R4/R5)", () => {
       signoGanancia: "cero",
       deTerceros: "0.00",
       periodoFiltrado: false,
+      // Feature 231 (R18): sin nada que repartir la barra no admite dos segmentos y no se
+      // enuncia porcentaje alguno. El caso vacio cae en la tercera fila de la tabla.
+      porcentajeTiendas: "0.00",
+      modoComposicion: "sin_reparto",
     });
   });
 

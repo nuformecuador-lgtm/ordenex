@@ -6,6 +6,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { Button } from "@/components/ui/button";
 import { resumenCargaMasiva } from "@/lib/actions/carga-masiva-resumen";
+import { formatMonto } from "@/lib/config/moneda";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
@@ -94,7 +95,12 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
     {
       id: "montoCobrar",
       value: "Monto",
-      render: (row) => (row.montoCobrar != null ? row.montoCobrar.toFixed(2) : "-"),
+      // Feature 230 (R13): el monto pasa por el formateador compartido en vez de
+      // serializarse a mano. Era la unica celda del arbol que pintaba el numero
+      // crudo, asi que gana el simbolo y el separador de miles que el resto de la
+      // app ya tenia. `formatMonto` devuelve el mismo `-` que esta celda ponia a
+      // mano cuando no hay monto (`SIN_MONTO`), asi que la ausencia no cambia.
+      render: (row) => formatMonto(row.montoCobrar),
     },
     {
       id: "direccion",

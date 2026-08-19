@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import { WALLET_MOVIMIENTO_CATEGORIA_SEED } from "@/lib/types/wallet";
+import { NATURALEZA_POR_CATEGORIA } from "@/lib/utils/caja-tesoreria";
 
 // Feature 42 — tests unit del WalletMovimientoRepository (mockea Prisma, sin DB real).
 // Cubre R2 (persiste tipo/categoria/monto/origen/fecha), R6/R13 (idempotencia por
@@ -192,6 +194,8 @@ describe("listar (R20/R24)", () => {
       descripcion: null,
       registradoPor: null,
       fechaMovimiento: "2026-07-12T10:00:00.000Z",
+      // Feature 231 (R31): el dueño lo pone el SERVIDOR, en el unico punto de proyeccion.
+      dueno: "propio",
     });
     expect(typeof r.movimientos[0].monto).toBe("string");
   });
@@ -294,5 +298,105 @@ describe("agregarPorCategoriaYTipo (R8/R47)", () => {
       "obtenerPorId",
     ]);
     expect(metodos.some((m) => /update|delete|actualizar|eliminar|borrar/i.test(m))).toBe(false);
+  });
+});
+
+
+// ── Feature 231 (T2.1/T2.4, design §3.3) — la columna «Dueño» nace en `toDTO` ──
+//
+// `dueno` no es una regla de negocio nueva: es una busqueda TOTAL en `NATURALEZA_POR_CATEGORIA`
+// durante la proyeccion a DTO. Vive en `toDTO` —y no en el servicio— porque por ahi pasan los
+// CUATRO consumidores del DTO (listado paginado, descarga completa, `obtenerPorId` y el egreso
+// recien creado): mapear en el servicio significaria repetir el `map` en cada uno y abrir la
+// puerta a que la tabla y el archivo digan cosas distintas.
+
+describe("dueno en el DTO (R31/R32)", () => {
+  /** Un `walletMovimiento` de la base con la categoria que se pida. */
+  function filaDeLaBase(categoria: string) {
+    return {
+      id: `w-${categoria}`,
+      tipo: categoria.startsWith("ingreso_") ? "ingreso" : "egreso",
+      categoria,
+      monto: new Prisma.Decimal("10.00"),
+      origenTipo: "manual",
+      origenId: null,
+      descripcion: null,
+      registradoPor: null,
+      fechaMovimiento: new Date("2026-07-12T10:00:00.000Z"),
+      createdAt: new Date("2026-07-12T10:00:00.000Z"),
+    };
+  }
+
+  it("R31/R32: cada categoria del SEED produce su `dueno`", async () => {
+    // Se recorre el catalogo ENTERO en runtime, no tres categorias elegidas a mano: el dia que
+    // el enum gane un valor, este caso lo mide sin que nadie lo amplie. Y la respuesta esperada
+    // sale de `NATURALEZA_POR_CATEGORIA`, que es la unica clasificacion del arbol (R32) — si el
+    // repositorio se inventara la suya, los dos dejarian de coincidir aqui.
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.findMany.mockResolvedValue(
+      WALLET_MOVIMIENTO_CATEGORIA_SEED.map(filaDeLaBase),
+    );
+    prisma.walletMovimiento.count.mockResolvedValue(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const { movimientos } = await repo.listar({ page: 1, pageSize: 100 });
+
+    // CONTROL DE NO-VACUIDAD: se han proyectado TODAS las filas, y el catalogo no esta vacio.
+    expect(movimientos).toHaveLength(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
+    expect(movimientos.length).toBeGreaterThan(10);
+
+    for (const m of movimientos) {
+      expect(m.dueno, m.categoria).toBe(NATURALEZA_POR_CATEGORIA[m.categoria]);
+    }
+    // Y las DOS naturalezas aparecen de verdad: un `dueno` fijado a "propio" pasaria el bucle
+    // de arriba en casi todo el catalogo, pero no esta afirmacion.
+    expect(new Set(movimientos.map((m) => m.dueno))).toEqual(new Set(["propio", "terceros"]));
+    // Nombradas, para que el fallo diga cual: el contra-entrega y el pago a tienda son de las
+    // tiendas; el flete y el sueldo, de Ordenex.
+    const duenoDe = (categoria: string) =>
+      movimientos.find((m) => m.categoria === categoria)?.dueno;
+    expect(duenoDe("ingreso_cod_recaudado")).toBe("terceros");
+    expect(duenoDe("egreso_pago_tienda")).toBe("terceros");
+    expect(duenoDe("ingreso_reverso_pago_tienda")).toBe("terceros");
+    expect(duenoDe("ingreso_flete")).toBe("propio");
+    expect(duenoDe("egreso_sueldo")).toBe("propio");
+    expect(duenoDe("egreso_pago_mensajero")).toBe("propio"); // devengo, no tesoreria
+  });
+
+  it("R31: `obtenerPorId` dice EXACTAMENTE lo mismo que el listado (un solo punto de proyeccion)", async () => {
+    // Es la razon de que `dueno` se asigne en `toDTO` y no en el servicio: la tabla, la descarga
+    // y la lectura por id no pueden divergir porque salen de la misma funcion.
+    const fila = filaDeLaBase("ingreso_cod_recaudado");
+    const prisma = {
+      walletMovimiento: {
+        findUnique: vi.fn().mockResolvedValue(fila),
+        findMany: vi.fn().mockResolvedValue([fila]),
+        count: vi.fn().mockResolvedValue(1),
+      },
+    };
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const porId = await repo.obtenerPorId("w-ingreso_cod_recaudado");
+    const { movimientos } = await repo.listar({ page: 1, pageSize: 20 });
+
+    expect(porId?.dueno).toBe("terceros");
+    expect(porId).toEqual(movimientos[0]);
+  });
+
+  it("R31: el agregado por (categoria, tipo) NO gana el dueño — la particion la hace la derivacion", async () => {
+    // `agregarPorCategoriaYTipo` se queda como estaba: el repositorio agrega y devuelve filas;
+    // quien parte por naturaleza es `derivarCaja`, que es pura. Si el dueño se colara tambien
+    // aqui habria DOS sitios diciendo de quien es el dinero.
+    const prisma = buildPrisma();
+    prisma.walletMovimiento.groupBy.mockResolvedValue([
+      { categoria: "ingreso_cod_recaudado", tipo: "ingreso", _sum: { monto: new Prisma.Decimal("5.00") } },
+    ]);
+    const repo = new WalletMovimientoRepository(prisma as unknown as PrismaClient);
+
+    const filas = await repo.agregarPorCategoriaYTipo({});
+    expect(filas).toEqual([
+      { categoria: "ingreso_cod_recaudado", tipo: "ingreso", total: "5.00" },
+    ]);
+    expect(Object.keys(filas[0])).toEqual(["categoria", "tipo", "total"]);
   });
 });

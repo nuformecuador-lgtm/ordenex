@@ -250,7 +250,7 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1.250,50")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.251")).toBeInTheDocument();
     expect(within(region).getByText("SINPE")).toBeInTheDocument();
   });
 
@@ -292,11 +292,15 @@ describe("CierreDiaModule", () => {
       },
     });
 
+    // Feature 230/R20: el general es el REDONDEO DEL TOTAL del servidor (`160.35`
+    // -> `₡160`), no la suma de los tres redondeados de arriba. Aquí las dos cuentas
+    // coinciden; cuando no coincidan, manda el del servidor (consecuencia A1, ya
+    // aceptada: una columna puede no cuadrar a ojo con su total por ±1/±2).
     const region = screen.getByRole("region", { name: "Totales del día" });
-    expect(within(region).getByText("₡100,00")).toBeInTheDocument();
-    expect(within(region).getByText("₡50,25")).toBeInTheDocument();
-    expect(within(region).getByText("₡10,10")).toBeInTheDocument();
-    expect(within(region).getByText("₡160,35")).toBeInTheDocument();
+    expect(within(region).getByText("₡100")).toBeInTheDocument();
+    expect(within(region).getByText("₡50")).toBeInTheDocument();
+    expect(within(region).getByText("₡10")).toBeInTheDocument();
+    expect(within(region).getByText("₡160")).toBeInTheDocument();
   });
 
   it("R10: expone el pago al mensajero por orden (string, money-safe) en la sección de entregadas", () => {
@@ -315,14 +319,14 @@ describe("CierreDiaModule", () => {
     renderModule({ grupos });
 
     const region = screen.getByRole("region", { name: "Entregadas" });
-    expect(within(region).getByText("₡1.500,00")).toBeInTheDocument();
+    expect(within(region).getByText("₡1.500")).toBeInTheDocument();
   });
 
   it("R11: el total a pagar al mensajero se muestra separado de los totales de dinero recibido", () => {
     renderModule({ totalPagoMensajero: "4200.00" });
 
     const region = screen.getByRole("region", { name: "Ganancia" });
-    expect(within(region).getByText("₡4.200,00")).toBeInTheDocument();
+    expect(within(region).getByText("₡4.200")).toBeInTheDocument();
   });
 
   it("feature 56/R12: el ingreso de bodega por rechazos NO se muestra por orden en la tabla de rechazadas (solo el total; el desglose vive en las vistas de bodega/admin)", () => {
@@ -340,7 +344,7 @@ describe("CierreDiaModule", () => {
 
     const region = screen.getByRole("region", { name: "Rechazadas" });
     expect(within(region).queryByText("Ingreso bodega")).not.toBeInTheDocument();
-    expect(within(region).queryByText("₡3.500,00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡3.500")).not.toBeInTheDocument();
   });
 
   it("feature 56/R10: el ingreso de bodega por rechazos NO se le muestra al mensajero (el total vive en las vistas de bodega/admin)", () => {
@@ -434,12 +438,13 @@ describe("CierreDiaModule", () => {
     // total— y su desglose, que llega detrás del desplegable.
     expect(within(region).getByText("Solicitado")).toBeInTheDocument();
     expect(within(region).getByText("Bodega central")).toBeInTheDocument();
-    // Un solo ₡300,00 a la vista: el de la cabecera. El desglose por método está plegado.
-    expect(within(region).getAllByText("₡300,00")).toHaveLength(1);
+    // Un solo ₡300 a la vista: el de la cabecera. El desglose por método está plegado.
+    // El importe va sin céntimos desde la feature 230 de `dev`.
+    expect(within(region).getAllByText("₡300")).toHaveLength(1);
     // El histórico del mensajero nunca enseñó el ingreso de bodega por rechazos: es plata de
     // la empresa (design §7.2), y no la ve NI plegada ni desplegada — lo comprueba el caso de
     // abajo, que es la mitad que la tabla no podía tener.
-    expect(within(region).queryByText("₡2.100,00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
     expect(within(region).getByText("2026-07-11")).toBeInTheDocument();
   });
 
@@ -473,12 +478,12 @@ describe("CierreDiaModule", () => {
 
     // Su pago está, y con SU rótulo: en su pantalla ese monto se llama «Ganancia».
     expect(within(region).getByText("Ganancia")).toBeInTheDocument();
-    expect(within(region).getByText("₡45,00")).toBeInTheDocument();
+    expect(within(region).getByText("₡45")).toBeInTheDocument();
     // Y el ingreso de bodega por rechazos sigue sin aparecer, ni el rótulo ni el monto.
     expect(
       within(region).queryByText("Ingreso de bodega por rechazos"),
     ).not.toBeInTheDocument();
-    expect(within(region).queryByText("₡2.100,00")).not.toBeInTheDocument();
+    expect(within(region).queryByText("₡2.100")).not.toBeInTheDocument();
   });
 
   // Pedido humano: cada cierre del histórico se puede ABRIR y ver su detalle, con el MISMO
@@ -880,9 +885,9 @@ describe("CierreDiaModule — feature 67: devolver a gestión", () => {
       within(region).getByRole("button", { name: "Devolver a gestión la orden REM-A · Ana Pérez" }),
     ).toBeEnabled();
     const panel = screen.getByRole("region", { name: "Totales del día" });
-    expect(within(panel).getAllByText("₡150,00")).toHaveLength(2);
+    expect(within(panel).getAllByText("₡150")).toHaveLength(2);
     expect(
-      within(screen.getByRole("region", { name: "Ganancia" })).getByText("₡1.500,00"),
+      within(screen.getByRole("region", { name: "Ganancia" })).getByText("₡1.500"),
     ).toBeInTheDocument();
   });
 
@@ -1043,7 +1048,7 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
       ],
     });
 
-    expect(celdaMetodo()).toBe("Efectivo ₡5.000,00 + Transferencia ₡3.000,00");
+    expect(celdaMetodo()).toBe("Efectivo ₡5.000 + Transferencia ₡3.000");
   });
 
   it("R22/R23: sin líneas la celda sigue siendo «—», aunque la gestión traiga el escalar", () => {
@@ -1064,7 +1069,7 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
     });
 
     expect(celdaMetodo()).toBe(
-      "Transferencia ₡3.000,00 + SINPE ₡2.000,00 + Efectivo ₡3.000,00",
+      "Transferencia ₡3.000 + SINPE ₡2.000 + Efectivo ₡3.000",
     );
   });
 

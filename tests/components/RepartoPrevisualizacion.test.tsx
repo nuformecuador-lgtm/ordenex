@@ -122,8 +122,8 @@ describe("R32/R34 — se pinta lo que dice el servidor, y no se calcula nada", (
   it("enseña a qué cierres se aplicaría y cuánto a cada uno, TAL CUAL", async () => {
     montar();
 
-    expect(await screen.findByText("Se aplica ₡4.000,00")).toBeInTheDocument();
-    expect(screen.getByText("Se aplica ₡3.000,00")).toBeInTheDocument();
+    expect(await screen.findByText("Se aplica ₡4.000")).toBeInTheDocument();
+    expect(screen.getByText("Se aplica ₡3.000")).toBeInTheDocument();
     // Y el cierre se nombra por el día trabajado, que es la antigüedad que ordena el reparto.
     expect(screen.getByText("Cierre del 2026-07-28")).toBeInTheDocument();
     expect(screen.getByText("Cierre del 2026-07-30")).toBeInTheDocument();
@@ -150,10 +150,13 @@ describe("R32/R34 — se pinta lo que dice el servidor, y no se calcula nada", (
     });
     montar();
 
-    expect(await screen.findByText("Se aplica ₡1.234,56")).toBeInTheDocument();
-    expect(screen.getByText(/Queda pendiente: ₡2\.765,44/)).toBeInTheDocument();
+    // Feature 230: `1234.56` se aplica y se lee `₡1.235`; el pendiente que queda,
+    // `2765.44`, se lee `₡2.765`. Los dos importes siguen siendo los del SERVIDOR:
+    // la pantalla no resta nada, solo pinta lo que le mandan.
+    expect(await screen.findByText("Se aplica ₡1.235")).toBeInTheDocument();
+    expect(screen.getByText(/Queda pendiente: ₡2\.765/)).toBeInTheDocument();
     // Y no aparece por ningún lado el total tecleado: acá nadie suma.
-    expect(screen.queryByText(/₡9\.000,00/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/₡9\.000/)).not.toBeInTheDocument();
   });
 
   it("no manda al servidor un monto que no tiene forma de monto: pide la lectura sin él", async () => {
@@ -167,7 +170,7 @@ describe("R32/R34 — se pinta lo que dice el servidor, y no se calcula nada", (
 
   it("con monto legible, la petición lleva el monto y NUNCA un cierre (R9)", async () => {
     montar("9000.00");
-    await screen.findByText("Se aplica ₡4.000,00");
+    await screen.findByText("Se aplica ₡4.000");
 
     expect(previsualizarMock).toHaveBeenCalledWith({
       mensajeroId: MENSAJERO,
@@ -183,8 +186,8 @@ describe("R33 — la imputación parcial va marcada, con lo que le queda a ese c
     const marcas = await screen.findAllByText("Pago parcial");
     expect(marcas).toHaveLength(1);
     // El cierre parcial es el segundo y su resto lo dijo el servidor.
-    expect(screen.getByText(/Pendiente hoy: ₡5\.000,00/)).toBeInTheDocument();
-    expect(screen.getByText(/Queda pendiente: ₡2\.000,00/)).toBeInTheDocument();
+    expect(screen.getByText(/Pendiente hoy: ₡5\.000/)).toBeInTheDocument();
+    expect(screen.getByText(/Queda pendiente: ₡2\.000/)).toBeInTheDocument();
   });
 });
 
@@ -202,14 +205,14 @@ describe("R38 — el importe que no cabe se avisa ANTES de confirmar", () => {
     // este aviso existe para evitar.
     expect(
       await screen.findByText(
-        /supera lo que se puede pagar ahora: sobran ₡2\.000,00\. Como máximo se pueden aplicar ₡12\.400,00/,
+        /supera lo que se puede pagar ahora: sobran ₡2\.000\. Como máximo se pueden aplicar ₡12\.400/,
       ),
     ).toBeInTheDocument();
   });
 
   it("sin exceso, no hay aviso de exceso", async () => {
     montar();
-    await screen.findByText("Se aplica ₡4.000,00");
+    await screen.findByText("Se aplica ₡4.000");
     expect(screen.queryByText(/supera lo que se puede pagar/)).not.toBeInTheDocument();
   });
 });
@@ -234,7 +237,7 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
 
     expect(
       await screen.findByText(
-        /alcanza a los 50 cierres más antiguos\. Quedan 3 cierres por ₡18\.500,00/,
+        /alcanza a los 50 cierres más antiguos\. Quedan 3 cierres por ₡18\.500/,
       ),
     ).toBeInTheDocument();
     // Y NO aparece el otro aviso: hablan de cosas distintas.
@@ -258,7 +261,7 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
     const SENTINELA = 7;
     const ESPERADO =
       "Este pago alcanza a los 3 cierres más antiguos. " +
-      "Quedan 2 cierres por ₡6.450,00, que se pagan en el siguiente registro.";
+      "Quedan 2 cierres por ₡6.450, que se pagan en el siguiente registro.";
     // Autocomprobación: si el centinela apareciera dentro de la frase correcta, el caso pasaría
     // sin comprobar nada. Vale para el número y para cualquier dígito de los importes.
     expect(ESPERADO).not.toContain(String(SENTINELA));
@@ -297,7 +300,7 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
 
     expect(
       await screen.findByText(
-        /₡2\.500,00 de la cuenta por pagar no corresponde a ningún cierre/,
+        /₡2\.500 de la cuenta por pagar no corresponde a ningún cierre/,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/cierres más antiguos/)).not.toBeInTheDocument();
@@ -315,7 +318,7 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
       }),
     });
     montar();
-    await screen.findByText("Se aplica ₡4.000,00");
+    await screen.findByText("Se aplica ₡4.000");
     expect(screen.queryByText(/no corresponde a ningún cierre/)).not.toBeInTheDocument();
     expect(screen.getByText(/cierres más antiguos/)).toBeInTheDocument();
   });
@@ -335,8 +338,8 @@ describe("R56/R37 — los DOS avisos de deuda son dos, y se distinguen", () => {
     });
     montar();
 
-    const recorte = await screen.findByText(/Quedan 2 cierres por ₡4\.000,00/);
-    const noImputable = screen.getByText(/₡1\.500,00 de la cuenta por pagar/);
+    const recorte = await screen.findByText(/Quedan 2 cierres por ₡4\.000/);
+    const noImputable = screen.getByText(/₡1\.500 de la cuenta por pagar/);
     expect(recorte).toBeInTheDocument();
     expect(noImputable).toBeInTheDocument();
     // Dos párrafos distintos: nadie los fundió en un mensaje.
@@ -368,7 +371,7 @@ describe("R36 — los excluidos son un CONTEO por estado, no un listado", () => 
 
   it("sin excluidos, el aviso NO aparece", async () => {
     montar();
-    await screen.findByText("Se aplica ₡4.000,00");
+    await screen.findByText("Se aplica ₡4.000");
     expect(screen.queryByText(/no pueden recibir pago/)).not.toBeInTheDocument();
   });
 

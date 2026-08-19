@@ -49,7 +49,9 @@ import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 // módulo que usa el panel del mensajero para capturarla). El admin decide el monto MIRANDO la
 // causa: no puede ser un slug crudo ni, peor, no estar.
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
-import { money } from "./cierre-detalle-shared";
+// `moneyTope` lo usan los mensajes de la indemnizacion (feature 230 de `dev`); los tres
+// simbolos de tabla que `dev` importaba aqui se fueron con la tira de comprobantes.
+import { money, moneyTope } from "./cierre-detalle-shared";
 import {
   CierreFacturaResumen,
   CierreFacturaDetalle,
@@ -242,18 +244,24 @@ const INDEMNIZACION_MONTO_LABEL = "Monto de la indemnización";
  * sólo que está mal: un «monto inválido» deja al admin adivinando si sobra un dígito, si el
  * problema es la coma o si el tope es otro. El máximo se interpola del contrato, no se teclea.
  */
-// El tope se pinta con `money` (feature 201) porque es justo lo que el mensaje intenta
-// explicar: «no puede superar ₡9.999.999.999,99» se lee de un vistazo y `₡9999999999.99` hay
+// El tope se pinta agrupado (feature 201) porque es justo lo que el mensaje intenta
+// explicar: «no puede superar ₡9.999.999.999» se lee de un vistazo y `₡9999999999.99` hay
 // que contarlo con el dedo. El EJEMPLO de entrada (`12500.00`) se queda crudo a propósito:
 // eso es lo que hay que teclear en el campo, que no admite separador de miles.
-const INDEMNIZACION_MONTO_EXCEDE = `El monto no puede superar ${money(INDEMNIZACION_MONTO_MAX)} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
+//
+// Feature 230: el tope va por `moneyTope` y NO por `money`. Redondear un importe está bien;
+// redondear un LÍMITE al alza lo invalida: `money("9999999999.99")` da `₡10.000.000.000`, que
+// es lo que el validador de esta misma pantalla rechaza y un dígito más de los «10 dígitos»
+// que la frase promete. `moneyTope` descarta la cola y el mensaje queda más estricto que la
+// realidad, que es el lado seguro.
+const INDEMNIZACION_MONTO_EXCEDE = `El monto no puede superar ${moneyTope(INDEMNIZACION_MONTO_MAX)} (10 dígitos y 2 decimales). Revisá si sobra un dígito.`;
 const INDEMNIZACION_MONTO_FORMATO =
   "Escribí un monto mayor que 0, con punto decimal y sin separador de miles (por ejemplo 12500.00).";
 /** R34: rótulo de la causa en la fila del incidente (el dato que justifica el monto). */
 const INDEMNIZACION_CAUSA_LABEL = "Causa";
 /** Causa ausente: no debería pasar (el borde la exige, R9), pero no se inventa un valor. */
 const INDEMNIZACION_CAUSA_DESCONOCIDA = "Sin causa registrada";
-const INDEMNIZACION_MONTO_AYUDA = `Mayor que 0 y hasta ${money(INDEMNIZACION_MONTO_MAX)}, con hasta 2 decimales (por ejemplo 12500.00).`;
+const INDEMNIZACION_MONTO_AYUDA = `Mayor que 0 y hasta ${moneyTope(INDEMNIZACION_MONTO_MAX)}, con hasta 2 decimales (por ejemplo 12500.00).`;
 const INDEMNIZACION_FALTAN =
   "Falta el monto de al menos un incidente, o alguno no es válido. No se puede aprobar así.";
 

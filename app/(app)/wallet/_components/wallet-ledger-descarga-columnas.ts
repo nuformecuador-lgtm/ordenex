@@ -19,11 +19,16 @@ import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { WalletMovimientoDTO } from "@/lib/types/wallet";
 import { fechaDiaISO } from "@/lib/utils/fecha-dia-iso";
 
-import { CATEGORIA_LABEL, ORIGEN_LABEL, TIPO_LABEL } from "./wallet-labels";
+import { CATEGORIA_LABEL, DUENO_LABEL, ORIGEN_LABEL, TIPO_LABEL } from "./wallet-labels";
 
 /**
  * Columnas emitidas por la descarga del libro de caja, en su orden de pantalla. Son las
- * cinco columnas de datos de la tabla; la sexta ("Acciones") es un botón, no un dato.
+ * columnas de DATOS de la tabla; la última de la pantalla ("Acciones") es un botón, no un dato.
+ *
+ * Feature 231 (T5.3, R34): entra "Dueño", en el mismo sitio que en la tabla —la última de los
+ * datos— y con el MISMO texto, porque sale de `DUENO_LABEL`, que es de donde lo saca la celda.
+ * Se añade aquí y en `filaDescargaMovimientoCaja` en el mismo commit: los dos casos que comparan
+ * `Object.keys(fila)` contra esta lista siguen verdes solos.
  */
 export const COLUMNAS_DESCARGA_WALLET_CAJA: DescargaColumna[] = [
   { clave: "fecha", encabezado: "Fecha" },
@@ -31,6 +36,7 @@ export const COLUMNAS_DESCARGA_WALLET_CAJA: DescargaColumna[] = [
   { clave: "categoria", encabezado: "Categoría" },
   { clave: "monto", encabezado: "Monto" },
   { clave: "origen", encabezado: "Origen" },
+  { clave: "dueno", encabezado: "Dueño" },
 ];
 
 /**
@@ -54,5 +60,8 @@ export function filaDescargaMovimientoCaja(movimiento: WalletMovimientoDTO): Des
     categoria: CATEGORIA_LABEL[movimiento.categoria] ?? movimiento.categoria,
     monto: movimiento.monto, // STRING tal cual (money-safe): sin parseo, sin símbolo
     origen: origen(movimiento),
+    // Feature 231 (R34): el MISMO texto que muestra la tabla. El dueño lo derivó el servidor;
+    // aquí solo se traduce a la palabra que se lee en pantalla.
+    dueno: DUENO_LABEL[movimiento.dueno] ?? movimiento.dueno,
   };
 }

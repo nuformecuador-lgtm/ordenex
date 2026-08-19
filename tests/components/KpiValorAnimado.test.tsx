@@ -9,18 +9,39 @@
 //
 // `react-countup` esta mockeado globalmente (`tests/setup/jest-dom.ts`) y renderiza
 // `formattingFn(end)`: lo que se verifica aqui es la CIFRA que el KPI muestra, no
-// que la anime.
+// que la anime. Desde la feature 230 este archivo instala su PROPIO doble, que
+// hace lo mismo y ademas guarda las props (ver abajo): `decimals` es lo que R14
+// afirma y el doble del setup no lo deja ver.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { quitarComentarios } from "../fixtures/sin-comentarios";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { KpiValorAnimado } from "@/components/shared/KpiValorAnimado";
 import { formatMonto, monedaConfig } from "@/lib/config/moneda";
+
+/**
+ * El doble de `react-countup` de `tests/setup/jest-dom.ts` se sustituye por otro
+ * que hace LO MISMO —renderizar `formattingFn(end)`— y ademas GUARDA las props.
+ *
+ * Hace falta para la feature 230 (R14): lo que hay que afirmar es el `decimals`
+ * que recibe el contador, y el doble del setup lo ignora. Sin esto, el unico modo
+ * de medirlo seria mirar el fuente, que no es medir lo que llega al componente.
+ */
+const { propsDeCountUp } = vi.hoisted(() => ({
+  propsDeCountUp: [] as { end: number; decimals?: number; formattingFn?: (n: number) => string }[],
+}));
+
+vi.mock("react-countup", () => ({
+  default: (props: { end: number; decimals?: number; formattingFn?: (n: number) => string }) => {
+    propsDeCountUp.push(props);
+    return props.formattingFn ? props.formattingFn(props.end) : String(props.end);
+  },
+}));
 
 /** `Intl` usa espacio duro (U+00A0); testing-library normaliza el DOM, no el esperado. */
 const norm = (texto: string) => texto.replace(/\s/g, " ");
@@ -28,6 +49,10 @@ const norm = (texto: string) => texto.replace(/\s/g, " ");
 /** El mismo formato de enteros que usa el componente, derivado de la configuracion. */
 const miles = (n: number) =>
   new Intl.NumberFormat(monedaConfig.locale, { maximumFractionDigits: 0 }).format(n);
+
+beforeEach(() => {
+  propsDeCountUp.length = 0;
+});
 
 afterEach(() => {
   cleanup();
@@ -156,5 +181,60 @@ describe("KpiValorAnimado — prefijo y puerta de visibilidad (feature 198)", ()
     } finally {
       Object.assign(globalThis, { IntersectionObserver: previo });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 230 (R14) — en modo moneda el contador anima con CERO decimales.
+// ---------------------------------------------------------------------------
+describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => {
+  /**
+   * El separador decimal CONFIGURADO seguido de un digito: lo que ningun
+   * fotograma puede emitir. Va dentro de una clase de caracteres para no tener
+   * que escaparlo, y se lee de `monedaConfig` en vez de escribir la coma a mano.
+   */
+  const CON_DECIMAL = new RegExp(`[${monedaConfig.separadorDecimal}]\\d`);
+
+  /** Las props con las que se monto el contador en el ultimo render. */
+  function ultimasProps() {
+    const props = propsDeCountUp.at(-1);
+    if (props === undefined) throw new Error("el contador no llego a montarse");
+    return props;
+  }
+
+  it("en modo moneda el contador recibe 0 decimales, no 2", () => {
+    // `decimals` no gobierna el texto —de eso se ocupa `formattingFn`— sino el
+    // VALOR de cada fotograma. Con 2 el contador seguiria recalculando centimos
+    // durante toda la animacion para una cifra que ya no los muestra.
+    render(<KpiValorAnimado value={3500.75} moneda />);
+
+    expect(ultimasProps().decimals).toBe(0);
+  });
+
+  it("el modo NO moneda sigue en 0, como siempre", () => {
+    render(<KpiValorAnimado value={3500.75} />);
+
+    expect(ultimasProps().decimals).toBe(0);
+  });
+
+  it("ningun fotograma —inicial, intermedio o final— lleva parte decimal", () => {
+    // Se recorre el formateador REAL que el componente le pasa al contador, con
+    // el 0 del arranque, un valor intermedio y el final: es lo que el usuario ve
+    // pasar por pantalla, no solo la cifra en la que se detiene.
+    render(<KpiValorAnimado value={13331832.72} moneda />);
+    const { formattingFn, end } = ultimasProps();
+    if (formattingFn === undefined) throw new Error("el contador se monto sin formattingFn");
+
+    for (const fotograma of [0, end / 3, end / 2, end * 0.99, end]) {
+      expect(formattingFn(fotograma), `fotograma ${fotograma}`).not.toMatch(CON_DECIMAL);
+    }
+    expect(formattingFn(end)).toBe(formatMonto(13331832.72));
+  });
+
+  it("el texto final en moneda es el del formateador compartido, sin cola", () => {
+    render(<KpiValorAnimado value={3500.75} moneda />);
+
+    expect(screen.getByText(norm(formatMonto(3500.75)))).toBeInTheDocument();
+    expect(screen.getByText(norm("₡3.501"))).toBeInTheDocument();
   });
 });

@@ -181,7 +181,7 @@ async function abrirFormulario() {
   await waitFor(() => expect(abrir()).toBeEnabled());
   fireEvent.click(abrir());
   await screen.findByRole("dialog");
-  await within(dialogo()).findByText("Se aplica ₡4.000,00");
+  await within(dialogo()).findByText("Se aplica ₡4.000");
 }
 
 /** Las claves de idempotencia enviadas, en orden. */
@@ -208,7 +208,7 @@ describe("R3/R15 — el control vive en el desglose y dice cuándo no hay nada q
     // El importe es el STRING del servidor, con formato y nada más: no se deriva del resumen.
     // Y es el de la VENTANA (₡12.400), no el imputable total (₡18.850) ni la cuenta por pagar
     // (₡21.150): las otras dos cifras son deuda que este pago NO puede saldar.
-    expect(await screen.findByText("₡12.400,00")).toBeInTheDocument();
+    expect(await screen.findByText("₡12.400")).toBeInTheDocument();
     await waitFor(() => expect(abrir()).toBeEnabled());
   });
 
@@ -304,7 +304,7 @@ describe("R27/R31 — la clave de idempotencia", () => {
     await waitFor(() => expect(registrarMock).toHaveBeenCalledTimes(1));
     // El aviso lo da el propio formulario, con el disponible que mandó el servidor.
     expect(
-      await within(dialogo()).findByText(/Disponible: ₡6\.500,00/),
+      await within(dialogo()).findByText(/Disponible: ₡6\.500/),
     ).toBeInTheDocument();
 
     fireEvent.click(confirmar());
@@ -338,17 +338,17 @@ describe("R25 — al terminar se enseña lo APLICADO, no lo previsualizado", () 
     await waitFor(() => expect(registrarMock).toHaveBeenCalledTimes(1));
 
     // Todo acotado al bloque de lo aplicado: la cabecera pinta el imputable (₡12.400) y el
-    // total repartido vale lo mismo, así que sin acotar «₡12.400,00» sale dos veces.
+    // total repartido vale lo mismo, así que sin acotar «₡12.400» sale dos veces.
     const bloque = await screen.findByRole("region", { name: "Último pago registrado" });
     // El total APLICADO, y el reparto por cierre que devolvió la ESCRITURA (₡7.400), no el
     // que se previsualizó.
-    expect(within(bloque).getByText("₡12.400,00")).toBeInTheDocument();
-    expect(within(bloque).getByText("₡7.400,00")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡12.400")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡7.400")).toBeInTheDocument();
     // Y lo que SIGUE debiéndose por cierres tras el pago, que es lo que dice que hace falta
     // otro registro. Es el imputable TOTAL restante, no el de la ventana.
-    expect(within(bloque).getByText("₡9.850,00")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡9.850")).toBeInTheDocument();
     // La cifra que la previsualización daba a ese cierre NO se repite: se aplicó otra.
-    expect(within(bloque).queryByText("₡4.000,00")).not.toBeInTheDocument();
+    expect(within(bloque).queryByText("₡4.000")).not.toBeInTheDocument();
   });
 
   it("cada cierre del resultado lleva su enlace al detalle (R44)", async () => {
@@ -374,7 +374,7 @@ describe("R25 — al terminar se enseña lo APLICADO, no lo previsualizado", () 
     fireEvent.click(confirmar());
 
     await waitFor(() =>
-      expect(successMock).toHaveBeenCalledWith("Pago de ₡12.400,00 registrado."),
+      expect(successMock).toHaveBeenCalledWith("Pago de ₡12.400 registrado."),
     );
     // El padre es quien refresca el desglose: acá se le avisa.
     await waitFor(() => expect(refrescado).toHaveBeenCalledTimes(1));
@@ -399,8 +399,8 @@ describe("R25 — al terminar se enseña lo APLICADO, no lo previsualizado", () 
     // El reparto ORIGINAL, el mismo que devolvió la primera escritura: ₡7.400 al cierre más
     // antiguo, que no es lo que la previsualización enseñaba.
     const bloque = await screen.findByRole("region", { name: "Último pago registrado" });
-    expect(within(bloque).getByText("₡7.400,00")).toBeInTheDocument();
-    expect(within(bloque).getByText("₡12.400,00")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡7.400")).toBeInTheDocument();
+    expect(within(bloque).getByText("₡12.400")).toBeInTheDocument();
     expect(successMock).not.toHaveBeenCalled();
   });
 });

@@ -117,6 +117,7 @@ import { DesglosePagosMensajero } from "@/app/(app)/wallet/mensajeros/_component
 import {
   CATEGORIA_LABEL,
   CATEGORIA_OPTIONS,
+  DUENO_LABEL,
 } from "@/app/(app)/wallet/_components/wallet-labels";
 import {
   COLUMNAS_DESCARGA_WALLET_CAJA,
@@ -137,6 +138,7 @@ function movimientoCaja(i: number): WalletMovimientoDTO {
     descripcion: `Movimiento ${i}`,
     registradoPor: null,
     fechaMovimiento: `2026-07-${String(10 + i).padStart(2, "0")}T14:00:00.000Z`,
+    dueno: "propio", // feature 231 (R31): el flete es dinero de Ordenex
   };
 }
 
@@ -189,6 +191,26 @@ const RESUMEN = {
   signoGanancia: "positivo" as const,
   deTerceros: "0.00",
   periodoFiltrado: false,
+  // Feature 231 (R9/R10): sin dinero de terceros la porcion de las tiendas es 0.
+  porcentajeTiendas: "0.00",
+  modoComposicion: "dos_bolsillos" as const,
+};
+// Feature 231 (T6.3): el módulo monta ahora la tarjeta de la ganancia, que recibe la
+// composición hermana del resumen. Este archivo mide la DESCARGA y el FILTRO, no esa tarjeta;
+// el dato se adapta para que el módulo monte, igual que `RESUMEN` aquí arriba.
+const COMPOSICION = {
+  ingresos: {
+    ingreso_flete: "1.00",
+    ingreso_flete_devolucion: "0.00",
+    ingreso_comision_cod: "0.00",
+    ingreso_iva_flete: "0.00",
+    ingreso_iva_flete_devolucion: "0.00",
+    ingreso_iva_comision_cod: "0.00",
+    ingreso_ajuste: "0.00",
+  },
+  totalIngresos: "1.00",
+  otrosEgresos: "0.00",
+  totalEgresos: "0.00",
 };
 // Feature 201 (tanda B): era `{} as never`, y ese `as never` tapaba que el objeto NO tenía
 // ninguno de los cinco montos que `DesgloseEgresosDTO` declara obligatorios. Con el `money`
@@ -250,6 +272,7 @@ function renderCaja(movimientos: WalletMovimientoDTO[] = CAJA_PAGINA) {
       pageSize={20}
       resumen={RESUMEN}
       desglose={DESGLOSE_EGRESOS}
+      composicion={COMPOSICION}
       plantillas={{ items: [], total: 0, pageSize: 25 }}
     />,
   );
@@ -328,7 +351,12 @@ function cebarDobles() {
     status: "ok",
     data: { movimientos: CAJA_PAGINA, total: 80, page: 1 },
   });
-  verResumenCajaMock.mockResolvedValue({ status: "ok", resumen: RESUMEN });
+  // Feature 231: el borde de la caja devuelve resumen Y composición en la misma respuesta.
+  verResumenCajaMock.mockResolvedValue({
+    status: "ok",
+    resumen: RESUMEN,
+    composicion: COMPOSICION,
+  });
   listarMisMovimientosMock.mockResolvedValue({
     status: "ok",
     data: { movimientos: TIENDA_PAGINA, total: 60, page: 1, saldo: SALDO_TIENDA },
@@ -524,6 +552,7 @@ function movimientoNuevo(
     descripcion: null,
     registradoPor: null,
     fechaMovimiento: `2026-08-0${i}T14:00:00.000Z`,
+    dueno: "terceros", // feature 231 (R31): los dos conceptos de la 173 son de las tiendas
   };
 }
 
@@ -578,6 +607,75 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
   });
 
   it("R62: el listado los pinta como a los demás, sin cambiar las columnas", async () => {
+    // ── D1, firmada por el humano el 2026-08-18 (feature 231, T5.1) ──
+    //
+    // Este caso fijaba con `toEqual` la secuencia EXACTA de los seis encabezados. Ese literal
+    // NO es lo que el caso dice afirmar —se le coló por usar `toEqual` sobre el array—, y por
+    // el camino acabó gobernando cuántas columnas puede tener el libro: bloqueó el reordenado
+    // de la 200 y habría bloqueado la columna «Dueño» de la 231.
+    //
+    // Lo que el caso afirma, y lo que sigue afirmando ahora, es que las categorías NUEVAS de
+    // la 173 no AÑADEN ni QUITAN columnas. Se mide comparando el juego de encabezados que
+    // declara el componente CON y SIN esas categorías dentro: es más fuerte que el literal
+    // —caza también la columna que apareciera solo para ellas— y deja de opinar sobre el
+    // número total de columnas, que es asunto de quien diseña el libro.
+
+    // ── Lo que mide, y hasta dónde llega (menor 6 de `progress/review_231.md`) ──
+    //
+    // Las columnas de `WalletLedger` se declaran en un `useMemo` que NO depende de los datos,
+    // así que comparar dos renders con distintas filas sólo cae si alguien hace las columnas
+    // dependientes del contenido. Es exactamente la regresión que este caso quiere impedir
+    // —«esta categoría necesita una columna suya»—, pero es un blanco estrecho.
+    //
+    // Por eso se mide sobre CUATRO conjuntos y no dos, incluido el catálogo ENTERO en runtime:
+    // así el caso deja de hablar sólo de las dos categorías de la 173 y afirma lo general —que
+    // ninguna categoría del catálogo añade ni quita columnas—, que es lo que el título dice.
+    //
+    // La red de que las columnas son LAS QUE SON (las seis anteriores, en su orden, más
+    // «Dueño» en su sitio) la aporta el caso «R35: los encabezados anteriores conservan su
+    // orden y «Dueño» se añade», al final de este archivo. Si alguien borra aquél creyendo que
+    // la protección vive aquí, el libro se queda sin ella.
+    const unaPorCategoria: WalletMovimientoDTO[] = WALLET_MOVIMIENTO_CATEGORIA_SEED.map(
+      (categoria, i) => ({
+        ...movimientoCaja(i + 1),
+        id: `cat-${i}`,
+        categoria,
+        tipo: categoria.startsWith("ingreso") ? ("ingreso" as const) : ("egreso" as const),
+      }),
+    );
+
+    async function encabezados(filas: WalletMovimientoDTO[]): Promise<(string | null)[]> {
+      renderCaja(filas);
+      const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
+      const leidos = within(tabla)
+        .getAllByRole("columnheader")
+        .map((c) => c.textContent);
+      cleanup();
+      return leidos;
+    }
+
+    const conjuntos = {
+      vacio: await encabezados([]),
+      sinLas173: await encabezados([movimientoCaja(1)]),
+      conLas173: await encabezados(CAJA_CON_NUEVOS),
+      catalogoEntero: await encabezados(unaPorCategoria),
+    };
+
+    // Control de no-vacuidad: cuatro listas vacías también serían «iguales».
+    for (const [nombre, lista] of Object.entries(conjuntos)) {
+      expect(lista.length, `el conjunto ${nombre} no pintó encabezados`).toBeGreaterThan(4);
+    }
+    // Y el barrido del catálogo mira TODAS las categorías, no dos.
+    expect(unaPorCategoria.length).toBe(WALLET_MOVIMIENTO_CATEGORIA_SEED.length);
+    expect(unaPorCategoria.length).toBeGreaterThan(15);
+
+    // El juego de encabezados es el MISMO en los cuatro: ni las categorías de la 173 ni
+    // ninguna otra del catálogo añaden o quitan columna, y tampoco lo hace la tabla vacía.
+    expect(conjuntos.sinLas173).toEqual(conjuntos.vacio);
+    expect(conjuntos.conLas173).toEqual(conjuntos.sinLas173);
+    expect(conjuntos.catalogoEntero).toEqual(conjuntos.conLas173);
+
+    // Y las categorías de la 173, con su nombre legible (R61), no con el valor del enum.
     renderCaja(CAJA_CON_NUEVOS);
 
     const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
@@ -586,22 +684,11 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
       expect(within(tabla).queryByRole("status")).not.toBeInTheDocument();
     });
 
-    // Las mismas seis columnas de siempre: las categorías nuevas no añaden ni quitan ninguna.
-    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
-      "Fecha",
-      "Tipo",
-      "Categoría",
-      "Monto",
-      "Origen",
-      "Acciones",
-    ]);
-
-    // Y cada una con su nombre legible (R61), no con el valor del enum.
     for (const categoria of CATEGORIAS_173) {
       expect(within(tabla).getByText(CATEGORIA_LABEL[categoria])).toBeInTheDocument();
       expect(within(tabla).queryByText(categoria)).toBeNull();
     }
-  });
+  }, 20000);
 
   it("R62: y el archivo también los trae, por el mismo camino que el resto", async () => {
     const user = userEvent.setup();
@@ -627,5 +714,79 @@ describe("Feature 173 · el libro de caja con las categorías nuevas", () => {
       CATEGORIA_LABEL.ingreso_cod_recaudado,
       CATEGORIA_LABEL.ingreso_reverso_pago_tienda,
     ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 231 (T5.1/T5.3) — la columna «Dueño», en la tabla y en el archivo.
+//
+// Los dos casos de aquí abajo son los que D1 pedía AÑADIR al cambiar la aserción de la 173:
+// el caso de arriba sigue protegiendo lo suyo —que las categorías de la 173 no tocan las
+// columnas— y estos fijan lo de ESTA feature: que «Dueño» está, dónde está, y que el archivo
+// dice exactamente la misma palabra que la pantalla.
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Los seis encabezados que el libro tenía ANTES de esta feature, en su orden. */
+const ENCABEZADOS_ANTERIORES = [
+  "Fecha",
+  "Tipo",
+  "Categoría",
+  "Monto",
+  "Origen",
+  "Acciones",
+] as const;
+
+describe("Feature 231 · el libro dice de quién es cada movimiento", () => {
+  it("R35: los encabezados anteriores conservan su orden y «Dueño» se añade", async () => {
+    // Un movimiento de cada naturaleza, para que la tabla tenga las dos palabras dentro.
+    renderCaja([movimientoCaja(1), movimientoNuevo("ingreso_cod_recaudado", 1)]);
+
+    const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
+    const encabezados = within(tabla)
+      .getAllByRole("columnheader")
+      .map((c) => c.textContent);
+
+    // Ninguna de las seis se movió ni se fue: filtradas del juego actual, salen en su orden.
+    expect(
+      encabezados.filter((h) => ENCABEZADOS_ANTERIORES.includes(h as never)),
+    ).toEqual([...ENCABEZADOS_ANTERIORES]);
+
+    // Y «Dueño» entra: una sola columna más, la ÚLTIMA de los datos —justo antes del botón—.
+    expect(encabezados).toHaveLength(ENCABEZADOS_ANTERIORES.length + 1);
+    expect(encabezados).toContain("Dueño");
+    expect(encabezados.indexOf("Dueño")).toBe(encabezados.indexOf("Acciones") - 1);
+  });
+
+  it("R34: la descarga trae «Dueño» con el mismo texto que muestra la tabla", async () => {
+    const propio = movimientoCaja(1); // flete → dinero de Ordenex
+    const terceros = movimientoNuevo("ingreso_cod_recaudado", 1); // contra-entrega → tienda
+    renderCaja([propio, terceros]);
+
+    const tabla = await screen.findByRole("table", { name: "Libro de movimientos" });
+    const encabezados = within(tabla)
+      .getAllByRole("columnheader")
+      .map((c) => c.textContent);
+    const columna = encabezados.indexOf("Dueño");
+    expect(columna).toBeGreaterThan(-1);
+
+    // Lo que se LEE en la celda de cada fila, en el orden en que llegaron.
+    const filasTabla = within(tabla).getAllByRole("row").slice(1);
+    const enPantalla = filasTabla.map(
+      (fila) => within(fila).getAllByRole("cell")[columna].textContent,
+    );
+    expect(enPantalla).toEqual([DUENO_LABEL.propio, DUENO_LABEL.terceros]);
+    // Las dos palabras son DISTINTAS: si «Ordenex» y «Tienda» fueran la misma, la columna
+    // entera no diría nada y este caso pasaría igual.
+    expect(DUENO_LABEL.propio).not.toBe(DUENO_LABEL.terceros);
+
+    // Y el archivo dice exactamente eso, celda a celda.
+    expect([propio, terceros].map((m) => filaDescargaMovimientoCaja(m).dueno)).toEqual(
+      enPantalla,
+    );
+    // La columna está declarada en la hoja, con su encabezado.
+    expect(COLUMNAS_DESCARGA_WALLET_CAJA.map((c) => c.clave)).toContain("dueno");
+    expect(
+      COLUMNAS_DESCARGA_WALLET_CAJA.find((c) => c.clave === "dueno")?.encabezado,
+    ).toBe("Dueño");
   });
 });

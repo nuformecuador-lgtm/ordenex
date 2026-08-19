@@ -13,7 +13,7 @@ import {
 import { paginaInicial } from "@/tests/fixtures/pagina-inicial";
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
 import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
-import { money } from "@/lib/config/moneda";
+import { montoValido } from "@/components/shared/monto-cliente";
 import type { CierreAdminResumen } from "@/lib/interfaces/services/ICierresAdminService";
 import type {
   CierreDetalleGestion,
@@ -384,12 +384,19 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
     const error = document.getElementById("indemnizacion-gi1-error");
     expect(error).toHaveAttribute("role", "alert");
     const texto = error?.textContent ?? "";
-    // No basta con «monto inválido»: nombra el tope real y qué revisar. El esperado sigue
-    // saliendo del CONTRATO (`INDEMNIZACION_MONTO_MAX`) y no de un número tecleado; lo único
-    // que cambia (feature 201) es que el mensaje lo pinta legible, así que el esperado pasa
-    // por el mismo formateador que la pantalla.
-    expect(texto).toContain(money(INDEMNIZACION_MONTO_MAX));
+    // No basta con «monto inválido»: nombra el tope real y qué revisar.
+    //
+    // ⚠️ Feature 230: el esperado es un LITERAL. Pasaba por `money(INDEMNIZACION_MONTO_MAX)`,
+    // o sea por la MISMA función que genera el texto, así que la aserción era una tautología:
+    // el día que `money` empezó a redondear, el mensaje pasó a anunciar `₡10.000.000.000`
+    // —un tope que esta misma pantalla rechaza— y esta línea siguió verde. Escrito a mano, un
+    // máximo redondeado al alza cae aquí.
+    expect(texto).toContain("₡9.999.999.999");
+    expect(texto).not.toContain("₡10.000.000.000");
     expect(texto).toMatch(/sobra un d[íi]gito/i);
+    // Y la invariante: lo que el mensaje anuncia como máximo, el validador lo ACEPTA.
+    const anunciado = /₡[\d.]+/.exec(texto)?.[0] ?? "";
+    expect(montoValido(anunciado.replace(/\D/g, ""), INDEMNIZACION_MONTO_MAX)).toBe(true);
   });
 
   it("m5: un monto mal FORMADO recibe otro mensaje (son dos correcciones distintas)", async () => {
@@ -402,10 +409,11 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
 
     const texto = document.getElementById("indemnizacion-gi1-error")?.textContent ?? "";
     expect(texto).toMatch(/punto decimal|separador de miles/i);
-    // Ojo: este esperado TAMBIÉN pasa por `money`. Con el tope crudo la aserción seguiría en
-    // verde sin comprobar nada —ese texto ya no aparece en ninguna pantalla— y el día que el
-    // mensaje de formato empezara a nombrar el tope, nadie se enteraría.
-    expect(texto).not.toContain(money(INDEMNIZACION_MONTO_MAX));
+    // Ojo: el esperado es el tope tal y como se PINTA (literal, feature 230). Con el tope
+    // crudo la aserción seguiría en verde sin comprobar nada —ese texto no aparece en ninguna
+    // pantalla— y el día que el mensaje de formato empezara a nombrar el tope, nadie se
+    // enteraría.
+    expect(texto).not.toContain("₡9.999.999.999");
   });
 
   it("m5: el campo vacío NO pinta error de formato (todavía no se tecleó nada)", async () => {
@@ -427,7 +435,9 @@ describe("R34 — con incidentes, aprobar pasa SIEMPRE por la captura del monto"
     await screen.findByRole("dialog", { name: SUB_MODAL });
 
     const ayuda = document.getElementById("indemnizacion-gi1-ayuda");
-    expect(ayuda?.textContent ?? "").toContain(money(INDEMNIZACION_MONTO_MAX));
+    // Literal por la misma razón que el error de arriba: comparar contra `money(MAX)` era
+    // comparar el texto con la función que lo escribe (feature 230).
+    expect(ayuda?.textContent ?? "").toContain("₡9.999.999.999");
   });
 
   it("no deja confirmar mientras falte algún monto, y lo dice con TEXTO", async () => {

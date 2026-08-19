@@ -344,7 +344,7 @@ describe("MisPagosPage — el mensajero ve su liquidación (R54)", () => {
       signo: "positivo",
     });
     await verMisPagos();
-    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000,00");
+    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000");
     cleanup();
     moduleCalls.length = 0;
 
@@ -359,7 +359,7 @@ describe("MisPagosPage — el mensajero ve su liquidación (R54)", () => {
 
     // R54, primera mitad: el pago se VE, con la etiqueta que ya existía para su concepto.
     const fila = filaDeConcepto("Liquidación");
-    expect(within(fila).getByText("₡20.000,00")).toBeInTheDocument();
+    expect(within(fila).getByText("₡20.000")).toBeInTheDocument();
     expect(within(fila).getByText("Pago")).toBeInTheDocument();
     // El origen lo identifica como una liquidación y arrastra la descripción del comprobante.
     expect(
@@ -367,8 +367,8 @@ describe("MisPagosPage — el mensajero ve su liquidación (R54)", () => {
     ).toBeInTheDocument();
 
     // R54, segunda mitad: su cuenta por pagar BAJA exactamente lo que se le pagó.
-    expect(cuentaPorPagarEnPantalla()).toBe("₡30.000,00");
-    expect(screen.getByText("₡20.000,00", { selector: "span" })).toBeInTheDocument();
+    expect(cuentaPorPagarEnPantalla()).toBe("₡30.000");
+    expect(screen.getByText("₡20.000", { selector: "span" })).toBeInTheDocument();
   });
 
   it("con el CONTRAASIENTO sembrado, la cuenta por pagar vuelve a SUBIR y el reverso también se ve", async () => {
@@ -380,7 +380,7 @@ describe("MisPagosPage — el mensajero ve su liquidación (R54)", () => {
       signo: "positivo",
     });
     await verMisPagos();
-    expect(cuentaPorPagarEnPantalla()).toBe("₡30.000,00");
+    expect(cuentaPorPagarEnPantalla()).toBe("₡30.000");
     cleanup();
     moduleCalls.length = 0;
 
@@ -394,12 +394,12 @@ describe("MisPagosPage — el mensajero ve su liquidación (R54)", () => {
     await verMisPagos();
 
     // Vuelve EXACTAMENTE al valor previo al pago: no se recorta ni se redondea nada.
-    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000,00");
+    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000");
 
     // El pago sigue a la vista —anular no borra— y el reverso aparece a su lado.
     expect(filaDeConcepto("Liquidación")).toBeInTheDocument();
     const reverso = filaDeConcepto("Ajuste (devengo)");
-    expect(within(reverso).getByText("₡20.000,00")).toBeInTheDocument();
+    expect(within(reverso).getByText("₡20.000")).toBeInTheDocument();
     expect(within(reverso).getByText("Devengo")).toBeInTheDocument();
   });
 
@@ -447,10 +447,10 @@ describe("MisPagosPage — los importes brutos incluyen lo anulado, y se declara
     await verMisPagos();
 
     // Las dos cifras están, efectivamente, altas: se devengaron 50 000 y no se cobró nada.
-    expect(importeDeLaTarjeta("Devengado")).toBe("₡70.000,00");
-    expect(importeDeLaTarjeta("Pagado")).toBe("₡20.000,00");
+    expect(importeDeLaTarjeta("Devengado")).toBe("₡70.000");
+    expect(importeDeLaTarjeta("Pagado")).toBe("₡20.000");
     // La resta, en cambio, sale exacta.
-    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000,00");
+    expect(cuentaPorPagarEnPantalla()).toBe("₡50.000");
 
     const aviso = screen.getByRole("note");
     expect(aviso).toHaveTextContent("«Pagado» sigue contando los pagos que se anularon");
