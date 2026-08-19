@@ -42,6 +42,15 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   "incidente", // feature 154: familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158 (la arista #44 viaja via `gestion`, decision Q4). NO enlaza gestion (ver la nota de ORIGEN_TIPOS_CON_GESTION)
   "asignacion_recoleccion", // feature 157 (ampliacion): el maestro decide quien va a la tienda, por_recolectar_en_tienda -> recolectando (#45). NO enlaza gestion (ver la nota de ORIGEN_TIPOS_CON_GESTION)
   "deshacer_asignacion", // feature 149: reversion de la asignacion/ruteo ANTES de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central; actor maestro/admin/adminSatelite). NO enlaza gestion (ver la nota de ORIGEN_TIPOS_CON_GESTION)
+  // Feature 239 (P8, R7): el ANCLAJE de la devolucion. Al APROBAR el cierre,
+  // `devolucion_por_confirmar -> devuelta` (actor = el admin que aprueba). Es la transicion que
+  // hace visible la devolucion para la tienda Y la que arranca su ventana de SLA: el cron la
+  // busca POR ESTA FAMILIA (`DevolucionSlaRepository`), asi que no puede reusar ninguna otra.
+  // SI enlaza la gestion ancla (`gestion_orden_id` poblado), y aun asi NO entra en
+  // `ORIGEN_TIPOS_CON_GESTION` — mismo caso que `escalado_devuelta_sla`, ver la nota de esa lista.
+  // NO entra en `ORIGEN_TIPOS_VISITA_REAL`: es una confirmacion administrativa en bodega, no una
+  // visita de calle; contarla subiria los intentos y cobraria antes de tiempo (R16).
+  "anclaje_devolucion",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

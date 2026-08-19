@@ -218,7 +218,7 @@ describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
     );
     expect(faltantes, `value del catalogo sin clasificar: ${faltantes.join(", ")}`).toEqual([]);
     expect(sobrantes, `value fuera del catalogo: ${sobrantes.join(", ")}`).toEqual([]);
-    expect(ORDER_STATUS_SEED.length).toBe(20); // 154: 18 -> 20; 155: 20 -> 19; 157: 19 -> 20
+    expect(ORDER_STATUS_SEED.length).toBe(21); // 154: 18 -> 20; 155: 20 -> 19; 157: 19 -> 20; 239: 20 -> 21 (2026-08-19)
   });
 
   // Feature 154/R25: los DOS values nuevos quedan clasificados en el mapa. Es la contraparte

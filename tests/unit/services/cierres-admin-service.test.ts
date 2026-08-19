@@ -130,6 +130,10 @@ const ESTATUS_IDS: Record<string, string | null> = {
   sin_gestionar: "s-sin-gestionar",
   en_bodega_central: "s-en-bodega",
   en_bodega_satelite: "s-en-bodega-sat",
+  // Feature 239 (T2.1): los DOS del ANCLAJE. A diferencia de los de arriba NO son opcionales: si
+  // el catalogo no los tiene, la aprobacion NO ocurre (R9, fallo cerrado).
+  devolucion_por_confirmar: "s-devolucion-por-confirmar",
+  devuelta: "s-devuelta",
 };
 
 function newService(
@@ -749,13 +753,79 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
     const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
     const { service } = newService({
       repo,
-      estatusIds: { sin_gestionar: null, en_bodega_central: "s-b", en_bodega_satelite: "s-bs" },
+      estatusIds: {
+        sin_gestionar: null,
+        en_bodega_central: "s-b",
+        en_bodega_satelite: "s-bs",
+        // Feature 239: los del anclaje SI estan; lo que este caso mide es el defensivo de la 109.
+        devolucion_por_confirmar: "s-devolucion-por-confirmar",
+        devuelta: "s-devuelta",
+      },
     });
 
     await service.aprobarCierre("c1", MAESTRO);
 
     const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.liberacionSinGestionar).toBeUndefined();
+  });
+});
+
+// Feature 239 (T2.1, R4/R9) — la APROBACION resuelve los dos ids del ANCLAJE y los pasa
+// OBLIGATORIAMENTE. Aqui esta la diferencia deliberada con la config de la 109 de arriba: aquella
+// cae a `undefined` y la aprobacion sigue (degradacion silenciosa aceptada); esta, si no se puede
+// resolver, ABORTA la aprobacion entera. Aprobar sin poder anclar dejaria la devolucion congelada
+// para siempre —invisible, sin reloj y sin que nadie se entere—, que es el estado del que esta
+// feature viene a sacarnos.
+describe("Feature 239 · aprobarCierre — config del ANCLAJE de la devolucion (R4/R9)", () => {
+  it("R4: resuelve el pre-estado y `devuelta` y los pasa al repo", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service, ordenRepo } = newService({ repo });
+
+    await service.aprobarCierre("c1", MAESTRO);
+
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.anclajeDevolucion).toEqual({
+      preEstadoId: "s-devolucion-por-confirmar",
+      devueltaId: "s-devuelta",
+    });
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devolucion_por_confirmar");
+    expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("devuelta");
+  });
+
+  it("R9: catalogo SIN el pre-estado -> la aprobacion NO ocurre y no hay efectos parciales", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({
+      repo,
+      estatusIds: { ...ESTATUS_IDS, devolucion_por_confirmar: null },
+    });
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    // SIN EFECTOS PARCIALES: ni transicion del cierre, ni movimientos de dinero, ni anclaje. El
+    // repo ni se llama, asi que la transaccion no llega a abrirse.
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+
+  it("R9: catalogo SIN `devuelta` -> mismo fallo cerrado (no se aprueba a medias)", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo, estatusIds: { ...ESTATUS_IDS, devuelta: null } });
+
+    const r = await service.aprobarCierre("c1", MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    expect(repo.resolverCierre).not.toHaveBeenCalled();
+  });
+
+  it("R6: el RECHAZO no pasa config de anclaje (un rechazo no mueve ninguna orden)", async () => {
+    const repo = fakeRepo({ resolverCierre: vi.fn(async () => "updated" as const) });
+    const { service } = newService({ repo });
+
+    await service.rechazarCierre("c1", "cuadre", MAESTRO);
+
+    const arg = (repo.resolverCierre as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.nuevoEstado).toBe("rechazado");
+    expect(arg.anclajeDevolucion).toBeUndefined();
   });
 });
 

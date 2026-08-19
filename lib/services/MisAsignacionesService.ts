@@ -26,6 +26,7 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import {
@@ -385,7 +386,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       }
     }
 
-    const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(input.resultado);
+    // Feature 239 (T1.3, R2/R3): el destino de la gestion sale de un MAPA EXPLICITO, no de la
+    // coincidencia de nombre entre el vocabulario de `resultado` y el de `order_status`. Hasta
+    // aqui se pasaba `input.resultado` directamente, y funcionaba solo porque los cinco
+    // resultados se llamaban igual que su estado. La 239 rompe esa identidad para `devuelta`:
+    // gestionar una devolucion deja la orden en `devolucion_por_confirmar`, y es la APROBACION
+    // DEL CIERRE la que la lleva a `devuelta` (R4). Volver a `findEstatusIdByValue(input.
+    // resultado)` reabre el cobro prematuro que esta feature cierra.
+    const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(
+      estatusDestinoDeResultado(input.resultado),
+    );
     if (nuevoEstatusId === null) {
       return {
         status: "validation_error",

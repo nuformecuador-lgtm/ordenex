@@ -29,6 +29,16 @@
  *
  * `en_ruta_bodega_satelite` NO esta aqui a proposito: esas son las «Por recibir», que viven en
  * su propia seccion (se aceptan por escaner/lote) y nunca han entrado en este listado.
+ *
+ * FEATURE 239 (P4, FIRMADA EN CONTRA de la recomendacion del spec el 2026-08-19):
+ * `devolucion_por_confirmar` TAMPOCO entra, y el precio esta escrito en `requirements.md`. El
+ * pre-estado no tiene arista de `recuperacion_manual`, asi que el adminSatelite NO puede
+ * recuperar a bodega una devolucion todavia no anclada: un paquete que esta fisicamente en su
+ * estante no se puede registrar hasta que el cierre del mensajero se apruebe (retraso medido:
+ * p90 22,1 h, max 48,2 h). Se firmo a sabiendas — se prefiere que nada se mueva antes de la
+ * confirmacion fisica—. Si duele en operacion, la via es REABRIR P4, no anadir el value aqui ni
+ * una puerta trasera en las transiciones. Esta lista es PARCIAL y no rompe el build: la ausencia
+ * se afirma en `tests/unit/utils/estados-bodega-satelite.test.ts`.
  */
 export const ESTADOS_BODEGA_SATELITE = [
   "en_bodega_satelite", // Recibidas

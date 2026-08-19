@@ -84,6 +84,25 @@ export interface DevolucionRechazadasConfig {
   centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
 }
 
+// Feature 239 (T2.1, design §3.3, R4/R9) — config del ANCLAJE de la devolucion al APROBAR el
+// cierre: la transicion `devolucion_por_confirmar -> devuelta` que hace visible la devolucion
+// para la tienda y arranca su ventana de SLA.
+//
+// A DIFERENCIA de las dos de arriba, esta NO es opcional, y la diferencia es deliberada. Si
+// `liberacionSinGestionar` o `devolucionRechazadas` se olvidan en el composition root, la
+// aprobacion funciona y esa rama simplemente no ocurre: se degrada en silencio, pero nada queda
+// roto para siempre. Aqui un olvido dejaria la orden en el pre-estado PARA SIEMPRE —invisible
+// para la tienda, sin reloj y sin que nadie se entere—, que es exactamente el estado del que
+// esta feature viene a sacarnos. Por eso es obligatoria en la rama `aprobado`: el olvido de
+// cableado rompe el TYPECHECK, que es donde tiene que romper.
+//
+// El service resuelve los dos ids ANTES de llamar al repo y, si alguno es `null` (catalogo
+// incompleto), RECHAZA la aprobacion entera sin efectos parciales (R9, fallo cerrado).
+export interface AnclajeDevolucionConfig {
+  preEstadoId: string; // `devolucion_por_confirmar` — estado de ORIGEN (guarda del updateMany, R4a/R8)
+  devueltaId: string; // `devuelta` — destino del anclaje
+}
+
 // Feature 158 (T1.14, R19/R22): UN monto de indemnizacion, ya validado en el borde. El monto
 // viaja como STRING (money-safe, R24) y solo se convierte a `Prisma.Decimal` al ESCRIBIR.
 export interface IndemnizacionCapturada {
@@ -93,10 +112,17 @@ export interface IndemnizacionCapturada {
 
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
-export interface ResolverCierreInput {
+//
+// Feature 239 (T2.1): el input es una UNION DISCRIMINADA por `nuevoEstado`, y no un objeto
+// plano con un campo opcional mas. La razon es R9: `anclajeDevolucion` tiene que ser
+// OBLIGATORIO al aprobar (un olvido de cableado dejaria devoluciones congeladas para siempre) y
+// tiene que estar AUSENTE al rechazar (un rechazo no mueve ninguna orden del pre-estado, R6, y
+// exigirle al camino de rechazo que resuelva un catalogo que no usa lo haria fallar por algo
+// que no le incumbe). Un campo opcional no expresa ninguna de las dos cosas; la union expresa
+// las dos y las hace fallar en el typecheck.
+interface ResolverCierreBase {
   cierreId: string;
   alcance: Alcance;
-  nuevoEstado: "aprobado" | "rechazado";
   resueltoPor: string;
   motivoRechazo: string | null;
   // Feature 158 (T1.14, R19-R23/R28): presente SOLO al aprobar -> DENTRO de la MISMA tx
@@ -117,6 +143,19 @@ export interface ResolverCierreInput {
   // Ausente = no dispara (rechazo R10, o cierres sin la config).
   devolucionRechazadas?: DevolucionRechazadasConfig;
 }
+
+export type ResolverCierreInput =
+  | (ResolverCierreBase & {
+      nuevoEstado: "aprobado";
+      // Feature 239 (T2.1, design §3.3): OBLIGATORIO. Ver `AnclajeDevolucionConfig`.
+      anclajeDevolucion: AnclajeDevolucionConfig;
+    })
+  | (ResolverCierreBase & {
+      nuevoEstado: "rechazado";
+      // R6: un rechazo no ancla nada. `never` (no `undefined`) para que pasarlo no compile: si
+      // alguien lo cablea aqui, es que espera que un rechazo mueva ordenes, y no las mueve.
+      anclajeDevolucion?: never;
+    });
 
 // Resultado de la transicion guardada: `updated` (aplicada), `conflict` (existe en
 // alcance pero ya no esta `solicitado`, R12), `fuera_de_alcance` (no existe o de otra

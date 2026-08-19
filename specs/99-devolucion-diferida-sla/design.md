@@ -289,3 +289,22 @@ recencia, R9). Efecto: al liberar/escalar (cron) o resolver (feature 100), la or
 | R28 | `devolucion-sla-service`: causa null → omitida, sin ventana |
 | R30 | suite 47 invertida (no aflojada) + aserciones de reintento/escalado en el cron |
 | migración | `tests/integration/db`: enum tiene los 2 valores nuevos; `down.sql` reversible |
+
+---
+
+## SUPERADO POR LA FEATURE 239 — 2026-08-19
+
+Dos decisiones de este documento quedan **superadas**. No se borran (este repo conserva las
+decisiones revertidas con su fecha y su razón); se marcan.
+
+**§1.1 «Sin columna nueva de anclaje (Q2 → derivar)»** y **§3.5**: el ancla dejó de derivarse del
+`created_at` de la gestión. Desde la 239, una orden devuelta **no entra en `devuelta` al gestionar**
+—entra en `devolucion_por_confirmar`— y **la aprobación del cierre es la transición**. El ancla es
+esa transición, leída del historial (`origen_tipo = anclaje_devolucion`).
+
+**El motivo no fue estético.** Anclar en la gestión mientras la visibilidad dependía de la
+aprobación abría una ventana en la que el cron escalaba a `rechazada` **y cobraba** una orden que la
+tienda nunca había podido ver. Medido en producción: el retraso gestión→aprobación tiene p90 de
+22,1 h y máximo de 48,2 h, contra una ventana `not_found` de 24 h.
+
+Spec: `specs/239-devolucion-espera-cierre/`.

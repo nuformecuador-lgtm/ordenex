@@ -12,8 +12,13 @@ import type {
 // resuelve `IOrdenNotaService.publicar`, y aqui NO se vuelve a derivar.
 export interface IHabilitarNovedadService {
   /**
-   * Publica la nota en el hilo de la orden y, SOLO si esa publicacion fue aceptada, apaga las dos
-   * banderas de novedad (`ayuda` y `gestion_aprobada`) en un unico UPDATE.
+   * Publica la nota en el hilo de la orden y, SOLO si esa publicacion fue aceptada, apaga la
+   * bandera `ayuda`.
+   *
+   * FEATURE 239 (T3.1, R23): antes apagaba DOS banderas; `gestion_aprobada` ya no existe, y con
+   * ella desaparece la unica via por la que «Habilitar» podia esconder una devolucion **sin
+   * detener su reloj** (a los 5 dias el cron la escalaba y la cobraba, auditoria §2.2). Ahora la
+   * devolucion se lista por IGUALDAD DE ESTADO: mientras siga en `devuelta`, sigue visible.
    *
    * El orden importa y es el unico punto delicado: la nota es la que lleva la autorizacion, asi que
    * va PRIMERO; apagar las banderas es consecuencia de que la nota se haya aceptado. El fallo

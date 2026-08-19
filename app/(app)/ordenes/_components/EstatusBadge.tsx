@@ -35,6 +35,10 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   por_recolectar_en_tienda: "Por recolectar en tienda", // feature 154/R29: espera en la tienda a que el mensajero la recolecte
   recolectando: "Recolectando", // feature 157 (ampliacion): ya tiene mensajero y va en camino a la tienda
   incidente: "Incidente", // feature 154/R30: resultado terminal de la gestión
+  // Feature 239/R26 (P1 firmada 2026-08-19): la devolución la gestionó el mensajero y la bodega
+  // todavía no la confirmó al aprobar el cierre. La etiqueta nombra QUIÉN FALTA, no promete un
+  // desenlace: «por confirmar», no «pendiente» (que se leería como lo contrario).
+  devolucion_por_confirmar: "Devolución por confirmar",
 };
 
 /**
@@ -77,6 +81,10 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // es trabajo en curso, la misma familia visual que el resto de tramos en movimiento.
   recolectando: "info",
   incidente: "danger",
+  // Feature 239/R26: MISMA variante que `devuelta` (`warning`). Es la misma cosa vista antes de
+  // la confirmación: un estado de alerta con acción pendiente, no un error ni un tránsito. Sin
+  // refuerzo de acento en `ORDER_STATUS_CLASS`, igual que `devuelta`.
+  devolucion_por_confirmar: "warning",
 };
 
 /**

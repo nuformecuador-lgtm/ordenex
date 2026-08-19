@@ -2913,37 +2913,72 @@ export class OrdenRepository implements IOrdenRepository {
 
   /**
    * Feature 99/R7-R9 (Q7): predicado CENTRAL de una NOVEDAD, ANCLADO AL ESTADO REAL. Extraido
-   * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8: total y pagina cuentan el
-   * mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta borrada
-   * (R5) y su estatus ACTUAL ES `devuelta` (R7) CON `gestion_aprobada = true`. Bajo la feature 99
-   * la orden REPOSA en `devuelta` hasta que el cron SLA la libere/escale o la feature 100 la
-   * resuelva; al salir de `devuelta` cae del predicado sin doble conteo (R8). Reemplaza el predicado anterior por gestion vigente
-   * + estatus abierto (feature 89): ya no hace falta, el estado real es la fuente unica.
+   * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8/239-R21: total y pagina
+   * cuentan el mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta
+   * borrada (R5) y su estatus ACTUAL ES `devuelta` (R7). Bajo la feature 99 la orden REPOSA en
+   * `devuelta` hasta que el cron SLA la libere/escale o la feature 100 la resuelva; al salir de
+   * `devuelta` cae del predicado sin doble conteo (R8).
+   *
+   * FEATURE 239 (T3.1, R18/R20/R30) - la rama de la devolucion vuelve a ser una IGUALDAD DE
+   * ESTADO, sin ninguna marca persistida al lado. Entre el 2026-08-18 y hoy exigia ademas
+   * `gestion_aprobada = true`, y esa columna es la mitad implementada del fallo: recortaba lo que
+   * la tienda VE sin mover el RELOJ del SLA, asi que habia devoluciones que se escalaban a
+   * `rechazada` y se COBRABAN sin haber sido visibles nunca.
+   *
+   * Ahora el recorte lo hace el ESTADO: una devolucion sin confirmar esta en
+   * `devolucion_por_confirmar`, no en `devuelta`, asi que no casa este predicado - y tampoco corre
+   * su ventana de SLA, porque el cron tambien filtra por `devuelta`. Las dos mitades miran EL
+   * MISMO HECHO (R20: la visibilidad no depende de ninguna marca distinta del estado).
+   *
+   * Y el retiro de la columna ES el arreglo del recorte retroactivo (R30): `gestion_aprobada` era
+   * `NOT NULL DEFAULT false`, asi que TODA devolucion anterior a ella caia del listado. Al
+   * desaparecer, esas devoluciones vuelven a verse solas, sin backfill.
    */
   private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
     return {
       tiendaId,
       deletedAt: null, // R5: excluye borradas
-      // Pedido humano 2026-08-18 — DOS razones, no una. Hasta hoy `/novedades` era exactamente
-      // "las devueltas de mi tienda". Ahora es "lo que mi tienda tiene que mirar": la devolucion
-      // que reposa en `devuelta` (R7) Y tiene la GESTION APROBADA, O la orden sobre la que el mensajero
-      // PIDIO AYUDA, que sigue viva en reparto y por definicion NO esta devuelta. Sin esta segunda
-      // rama la solicitud de ayuda no tendria donde aparecer, porque la unica pantalla de la
-      // tienda es esta.
+      // DOS razones de mirar la orden, no una: la devolucion que REPOSA en `devuelta` (R7/R18),
+      // o la orden sobre la que el mensajero PIDIO AYUDA, que sigue viva en reparto y por
+      // definicion NO esta devuelta. Sin esta segunda rama la solicitud de ayuda no tendria donde
+      // aparecer, porque la unica pantalla de la tienda es esta.
       //
-      // El `OR` mantiene lo esencial del predicado central: `count` y `find` lo siguen compartiendo
-      // (R8), asi que total y pagina cuentan el mismo universo y una orden que este en las DOS
-      // ramas a la vez (devuelta Y con ayuda pedida antes) aparece UNA sola vez, no dos.
+      // El `OR` mantiene lo esencial del predicado central: `count` y `find` lo siguen
+      // compartiendo (R8/239-R21), asi que total y pagina cuentan el mismo universo y una orden
+      // que este en las DOS ramas a la vez (devuelta Y con ayuda pedida antes) aparece UNA sola
+      // vez, no dos.
       OR: [
-        // La devolucion NO entra sola: entra si ADEMAS tiene la GESTION APROBADA en el cierre (pedido humano
-        // 2026-08-18). `gestionAprobada` es NOT NULL con default `false`, asi que toda orden
-        // anterior a la columna vale `false` y CAE del listado — el recorte es real y
-        // retroactivo, no solo para las nuevas.
-        { estatus: { value: ESTATUS_DEVUELTA }, gestionAprobada: true },
-        // La solicitud de ayuda no pasa por esa puerta: se lista con `gestionAprobada` en
-        // cualquier valor y en cualquier estatus. Son dos motivos independientes de mirar la
-        // orden, y la aprobacion de la gestion solo gobierna el primero.
-        { ayuda: true },
+        // Feature 239/R18/R20: IGUALDAD DE ESTADO, y nada mas. `devuelta` significa desde la 239
+        // «devolucion ANCLADA»: confirmada en el cierre, visible para la tienda y con el reloj
+        // corriendo. Las tres cosas a la vez, o ninguna. Ninguna marca persistida al lado: esa era
+        // `gestion_aprobada`, la mitad implementada del fallo, y la retira esta misma tanda.
+        { estatus: { value: ESTATUS_DEVUELTA } },
+        // Feature 239/R22 — TAPON DE LA FUGA PERMANENTE, con dueño y con fecha de caducidad.
+        //
+        // EL AGUJERO QUE CIERRA (auditoria §2.1): esta rama NO acotaba estatus. Una orden con el
+        // flag encendido se quedaba en `/novedades` PARA SIEMPRE —`sin_gestionar`, en bodega,
+        // incluso entregada— hasta que alguien pulsara «Habilitar» a mano, porque el corte
+        // nocturno la barre a `sin_gestionar` sin apagar el flag y nadie mas lo apaga.
+        //
+        // El tapon es la clave de estatus: la solicitud de ayuda solo sostiene la fila MIENTRAS
+        // la orden sigue en reparto, que es el unico estado en el que esa solicitud significa
+        // algo (el mensajero esta en la calle con el paquete y pide auxilio). En cuanto la orden
+        // sale de reparto, la ayuda deja de listarla — R22 literal: «mientras una orden no este
+        // en un estado sobre el que la tienda pueda actuar, NO DEBE listarla como novedad por
+        // efecto de una solicitud de ayuda anterior».
+        //
+        // ⏳ ES UN TAPON, NO EL DISEÑO FINAL. La ficha 235 RETIRA el booleano `ayuda` y lo
+        // sustituye por un estatus propio; cuando entre, esta rama entera sobra —el estatus sera
+        // el que liste la orden, como ya pasa con la devolucion— y esta clave con ella. Se pone
+        // aqui, y no se espera a la 235, por una razon de DESPLIEGUE decidida por el humano el
+        // 2026-08-19: si la 239 sale a produccion antes que la 235, la fuga sale con ella y hay
+        // que limpiar filas a mano.
+        //
+        // Nota de coherencia: la ventana de ESCRITURA del hilo (`estaEnVentanaDeEscritura`) sigue
+        // abriendose para el `adminTienda` con `ayuda` en cualquier estatus, y eso es deliberado
+        // — deja cerrar la conversacion y pulsar «Habilitar» sobre una orden que ya cayo del
+        // listado, que es justo como se apaga el flag. Escribir no hace visible nada.
+        { ayuda: true, estatus: { value: ESTATUS_EN_REPARTO } },
       ],
     };
   }
@@ -2969,15 +3004,22 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * «Habilitar» (pedido humano 2026-08-18): apaga las DOS banderas de novedad en UN update.
-   * Ver `IOrdenRepository.habilitarNovedad` para por que van juntas. Sin guarda de estatus a
-   * proposito: la ventana la comprueba el service, y una orden que ya salio de `devuelta` se
-   * queda igual de bien con las banderas apagadas.
+   * «Habilitar» (pedido humano 2026-08-18): apaga la bandera de AYUDA.
+   *
+   * FEATURE 239 (T3.1, R23) - deja de apagar `gestion_aprobada`, porque esa columna ya no existe.
+   * La consecuencia es la que R23 exige y conviene leer despacio: **«Habilitar» ya NO puede
+   * esconder una devolucion cuyo reloj sigue corriendo**. Antes apagaba la marca, la orden caia de
+   * `/novedades` y seguia en `devuelta`, asi que a los 5 dias el cron la escalaba y la COBRABA sin
+   * aviso (auditoria §2.2). Ahora la rama de la devolucion es una IGUALDAD DE ESTADO: mientras la
+   * orden siga en `devuelta` sigue listada, se pulse lo que se pulse. Lo unico que este metodo
+   * retira es la solicitud de ayuda.
+   *
+   * Sin guarda de estatus a proposito: la ventana la comprueba el service.
    */
   async habilitarNovedad(ordenId: string): Promise<void> {
     await this.prisma.orden.update({
       where: { id: ordenId },
-      data: { ayuda: false, gestionAprobada: false },
+      data: { ayuda: false },
     });
   }
 

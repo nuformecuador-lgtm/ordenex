@@ -6,15 +6,20 @@ import { CUERPO_MAX, type NotaValidationError, type OrdenNotaDTO } from "@/lib/t
 // discriminado, con el patron de `lib/types/orden-ayuda.ts`.
 //
 // QUE ES. La tienda cierra la novedad desde `/novedades`: la nota obligatoria del modal se publica
-// en el hilo de la feature 227 y la orden pierde LAS DOS banderas que la ponian en esa pantalla
-// (`orden.ayuda` y `orden.gestion_aprobada`). Con las dos apagadas la orden cae del `OR` de
-// `OrdenRepository.novedadWhere` y desaparece del listado.
+// en el hilo de la feature 227 y la orden pierde la bandera `orden.ayuda`.
 //
-// QUE **NO** HACE, Y ESO ES LO IMPORTANTE DE ESTE MODULO: no toca el ESTATUS de la orden. La orden
-// sigue `devuelta` despues de habilitarla; lo unico que cambia es que su tienda deja de verla como
-// pendiente. Que «habilitar» deba ademas moverla —y adonde, y que pasa con el plazo de la feature
-// 102, que corre desde la devolucion— es la pregunta que la cabecera de `NovedadAcciones.tsx`
-// declara ABIERTA desde 2026-08-12, y sigue abierta: no se decide aqui.
+// FEATURE 239 (T3.1, R23) — CAMBIO DE ALCANCE, y es el punto importante de este modulo. Hasta el
+// 2026-08-19 apagaba DOS banderas (`ayuda` y `gestion_aprobada`) y con eso la orden caia del `OR`
+// de `OrdenRepository.novedadWhere` **sin dejar de estar en `devuelta`**: seguia siendo candidata
+// del cron de SLA y a los 5 dias se escalaba a `rechazada` y se COBRABA, sin aviso y sin que
+// nadie la viera (auditoria §2.2). `gestion_aprobada` ya no existe y la rama de la devolucion es
+// una IGUALDAD DE ESTADO, asi que **«Habilitar» ya no puede esconder una devolucion con el reloj
+// corriendo**: mientras la orden siga en `devuelta`, sigue listada. Es exactamente lo que R23
+// exige, y se cumple por construccion, no por una comprobacion que alguien tenga que recordar.
+//
+// QUE **NO** HACE: no toca el ESTATUS de la orden. Que «habilitar» deba ademas moverla —y adonde—
+// es la pregunta que la cabecera de `NovedadAcciones.tsx` declara ABIERTA desde 2026-08-12; la
+// puerta humana del 2026-08-19 se la asigno a la ficha 240, no a esta.
 //
 // POR QUE LA NOTA REUSA `CUERPO_MAX`. La nota ES una nota: acaba literalmente en
 // `orden_nota.cuerpo`, que la 227 acota a 200 caracteres. Un tope propio seria una segunda fuente

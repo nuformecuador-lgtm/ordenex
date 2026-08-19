@@ -191,8 +191,14 @@ export function NovedadesModule({
 
   /**
    * Pedido humano 2026-08-18 — "Habilitar" DEJA DE SER MAQUETA. La nota que el modal exige
-   * se publica en el hilo de la orden y la orden pierde sus dos banderas de novedad
-   * (`ayuda` y `gestion_aprobada`), con lo que cae del listado.
+   * se publica en el hilo de la orden y la orden pierde su bandera `ayuda`.
+   *
+   * ⚠️ CORREGIDO el 2026-08-19 (feature 239/T3.1): esto decía «sus dos banderas de novedad
+   * (`ayuda` y `gestion_aprobada`)». `gestion_aprobada` YA NO EXISTE — se retiró porque
+   * recortaba lo que la tienda ve sin mover el reloj del SLA, y por esa vía se cobraban
+   * rechazos de órdenes que nunca habían sido visibles. La devolución se lista ahora por
+   * IGUALDAD DE ESTADO, así que «Habilitar» ya no puede sacarla de la pantalla mientras su
+   * plazo corra: sobre una orden `devuelta` esta acción solo retira la solicitud de ayuda.
    *
    * NO cambia el estatus: la orden sigue `devuelta`. Lo que se decidió aquí es qué deja de
    * ver la tienda, no adónde va la orden —esa parte sigue abierta (ver la cabecera de

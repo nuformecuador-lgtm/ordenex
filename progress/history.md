@@ -3461,3 +3461,40 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   desde este mismo commit, con un criterio distinto al del padre —`.toFixed(` se le permite, que es
   su oficio— y persiguiendo además `.toNumber(`, que la lista genérica del repo no perseguía. Y `wallet-caja-descarga-columnas.test.ts` sigue fijando su lista contra un literal:
   gobernará a la próxima feature igual que D1 gobernó a ésta.
+
+## 2026-08-19 — 239 (la devolución espera al cierre, y el reloj espera con ella)
+
+- Una orden devuelta **ya no entra en `devuelta` cuando el mensajero la gestiona**: entra en
+  `devolucion_por_confirmar`, y **la aprobación del cierre ES la transición**. Con eso el plazo de
+  24 h / 5 días arranca cuando bodega confirma que tiene el paquete, no cuando el mensajero
+  reporta que no pudo entregar.
+- Requisitos cubiertos: **R1–R35**, los 35 mapeados a un test nombrado y ejecutado.
+- **NACIÓ COMO ARREGLO DE UN FALLO QUE COBRABA DINERO, no como feature.** En `dev` estaba la mitad
+  que quita la visibilidad de las devueltas (`gestion_aprobada`) **sin** la que mueve el reloj: el
+  cron no miraba esa columna ni una vez. Con el retraso medido en producción —mediana 8,2 h, p90
+  22,1 h, máximo 48,2 h— contra una ventana de 24 h, la orden se escalaba a `rechazada` **y se
+  cobraba** sin que la tienda hubiera podido verla nunca. **Antes del cambio la veía**: el saldo de
+  esa mitad era peor que no haber hecho nada.
+- **La lección de diseño**: dos condiciones que deben moverse juntas no se dejan en dos sitios
+  distintos. Se eligió partir el estado —y no derivar el ancla en la consulta ni persistir una
+  columna— precisamente para que la visibilidad y el reloj **no puedan** desincronizarse. Una
+  columna habría tenido cinco sitios de limpieza y su dirección de fallo era **cobrar antes de
+  tiempo**, que es lo que `specs/215` declara prohibido.
+- **La carrera que costaba dinero, resuelta dentro de la transacción**: dos cierres de la misma
+  orden. Si se aprueba el viejo mientras la orden espera por el nuevo, anclarla con esa aprobación
+  arranca el reloj antes de tiempo. El bloque verifica que la gestión sea la `devuelta` vigente más
+  reciente. Mutado: sin ese filtro, dos tests caen.
+- **El reloj se probó donde vive.** Devolver el ancla al `created_at` de la gestión pone cinco
+  tests en rojo — y el test de *servicio* del cron **sobrevive a esa mutación, y está bien**: su
+  repositorio es un doble, así que mide la aritmética de la ventana, no de dónde sale el instante.
+- **La guardia que más va a durar**: el ancla y el conteo de intentos miran los dos «cierre
+  aprobado», y unirlos es la simplificación que cualquiera haría de pasada — rompiendo el conteo en
+  silencio. `anclaje-vs-intentos.guardia` lo impide en cuatro frentes; verificada con una fusión de
+  mentira que la pone roja.
+- **E2E declarado INAPLICABLE con razón y reemplazo**: las specs de `e2e/` están escritas y **no se
+  ejecutan**. Se dejó la spec de acuerdo con el comportamiento real —una spec que miente es peor que
+  una que no corre— y se nombraron dentro los tests que sí cubren la propiedad.
+- **Deuda declarada**: la rama de `ayuda` lleva un **tapón con dueño** (exige `en_reparto`) porque
+  esta ficha puede salir a producción antes que la 235, que la retirará entera. Y **antes de
+  desplegar** faltan dos cosas que no son código: re-medir producción y **avisar a los integradores**
+  de que `devuelta` les llegará al aprobar bodega y no al gestionar el mensajero.

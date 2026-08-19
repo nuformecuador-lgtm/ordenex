@@ -82,7 +82,11 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "11", origen: "por_recoger", destino: "en_reparto", via: "recoleccion", callSite: "MisAsignacionesService.recogerAsignaciones" },
   { n: "12", origen: "en_reparto", destino: "entregada", via: "gestion", callSite: "MisAsignacionesService.gestionar" },
   { n: "13", origen: "en_reparto", destino: "reprogramada", via: "gestion", callSite: "gestionar" },
-  { n: "14", origen: "en_reparto", destino: "devuelta", via: "gestion", callSite: "gestionar" },
+  // Feature 239 (2026-08-19): #14 (`en_reparto -> devuelta`) queda RETIRADA y la sustituye #59
+  // (`en_reparto -> devolucion_por_confirmar`). Es la MISMA accion del mensajero con otro
+  // destino: gestionar una devolucion ya no deja la orden en `devuelta`, y por eso la baja va en
+  // el mismo commit que su ultimo productor (el mapa `ESTATUS_POR_RESULTADO`).
+  { n: "59", origen: "en_reparto", destino: "devolucion_por_confirmar", via: "gestion", callSite: "MisAsignacionesService.gestionar -> GestionOrdenRepository.crearGestionYTransicionar (239)" },
   { n: "15", origen: "en_reparto", destino: "rechazada", via: "gestion", callSite: "gestionar" },
   { n: "16", origen: "en_reparto", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService -> CierreDiaRepository.crearCierre" },
   { n: "17", origen: "sin_gestionar", destino: "en_bodega_central", via: "liberacion_sin_gestionar", callSite: "CierresAdminService.aprobarCierre -> resolverCierre" },
@@ -138,6 +142,16 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // NUMERACION: el PR 1 salto del #47 al #53 A PROPOSITO, reservando #48-#52 y #54-#58 para el
   // camino del ADMIN, que no tenia productor todavia (design §15.2). El PR 2 los ocupa, abajo.
   { n: "53", origen: "incidente", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (158)" },
+  // Feature 239 (2026-08-19) — las DOS salidas del pre-estado, las dos con productor real. #60
+  // es el ANCLAJE: la aprobacion del cierre ES la transicion a `devuelta`, con familia propia
+  // (`anclaje_devolucion`) porque el cron del SLA la busca por ella para saber cuando arranco el
+  // reloj. #61 es el deshacer del mensajero dentro de su ventana de siempre; sin ella el
+  // mensajero no podria deshacer su propia devolucion del dia (R24), que seria una REGRESION.
+  //
+  // NO hay aristas de `recuperacion_manual` desde el pre-estado: P4 se firmo EN CONTRA de la
+  // recomendacion del spec, y el precio esta escrito en `requirements.md`.
+  { n: "60", origen: "devolucion_por_confirmar", destino: "devuelta", via: "anclaje_devolucion", callSite: "CierresAdminService.aprobarCierre -> CierresAdminRepository.resolverCierre (239)" },
+  { n: "61", origen: "devolucion_por_confirmar", destino: "en_reparto", via: "deshacer_gestion", callSite: "CierreDiaService.deshacerGestion -> CierreDiaRepository.anularGestionYDevolverAGestion (239)" },
   // Feature 158, PR 2 — camino del ADMIN. CINCO entradas desde el conjunto CERRADO de origenes
   // que el humano fijo (Q-A) y sus CINCO inversas de reversion. Las diez son pares NUEVOS, asi
   // que suben por igual los dos recuentos (42 -> 52 y 40 -> 50). El `rol` de cada una esta
@@ -195,7 +209,10 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  * aristas del camino del admin repite un par ya declarado, por eso la diferencia no se mueve.
  */
 export const RECUENTO_INVENTARIO = {
-  aristasFlujo: 54, // +2 (157: asignacion de recoleccion y su reversion)
-  paresUnicos: 52,
+  // 2026-08-19 (feature 239): 54 -> 56. Suma TRES (#59/#60/#61) y RETIRA UNA (#14).
+  aristasFlujo: 56, // +2 (157: asignacion de recoleccion y su reversion); +3 -1 (239)
+  // 52 -> 54: las tres altas son pares NUEVOS y el par retirado (`en_reparto -> devuelta`)
+  // estaba declarado UNA sola vez, asi que la aritmetica de pares sigue a la de aristas.
+  paresUnicos: 54,
   aristasCreacion: 2,
 } as const;

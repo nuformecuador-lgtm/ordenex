@@ -54,6 +54,14 @@ import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 // desde bodega y transito interno (#48-#52) y sus CINCO inversas de reversion (#54-#58), todas
 // con la familia `incidente` que la 154 dio de alta para esto. No retira ninguna arista.
 //
+// FEATURE 239 (2026-08-19) — la unica de esta lista que RETIRA una arista de gestion. Suma TRES
+// (#59 `en_reparto -> devolucion_por_confirmar`, #60 `devolucion_por_confirmar -> devuelta` con
+// familia propia `anclaje_devolucion`, #61 `devolucion_por_confirmar -> en_reparto` por deshacer)
+// y da de BAJA #14 (`en_reparto -> devuelta`), que pierde su unico productor en el mismo commit.
+// Neto: 54 -> 56 aristas de flujo y 52 -> 54 pares unicos (las tres altas son pares NUEVOS y la
+// baja era un par unico). Las dos aristas de `recuperacion_manual` desde el pre-estado que el
+// spec dejaba condicionadas NO se declaran: P4 se firmo EN CONTRA de la recomendacion.
+//
 // ACTIVACION ESTRICTA (Q7, decision del gate): no hay modo shadow, ni modo solo-log, ni
 // feature flag, ni variable de entorno que desactive la guardia. Tampoco existe override
 // `ANY -> ANY` para maestro/admin (Q3): el ajuste administrativo generico
@@ -194,7 +202,14 @@ export const TRANSICIONES = {
   en_reparto: [
     { to: "entregada", via: "gestion", rol: "mensajero" }, // #12
     { to: "reprogramada", via: "gestion", rol: "mensajero" }, // #13
-    { to: "devuelta", via: "gestion", rol: "mensajero" }, // #14
+    // FEATURE 239 — BAJA de #14 (`en_reparto -> devuelta`) y ALTA de #59
+    // (`en_reparto -> devolucion_por_confirmar`). Es la MISMA accion del mensajero con otro
+    // destino: gestionar una devolucion ya no deja la orden en `devuelta`, la deja en el
+    // pre-estado, y la aprobacion del cierre es la que la ancla (#60). La baja va en el MISMO
+    // commit que su ultimo productor —el mapa `ESTATUS_POR_RESULTADO` de
+    // `lib/types/gestion-destino.ts`, que ya apunta al pre-estado—, que es la convencion del
+    // repo. Reintroducir #14 reabre el cobro prematuro que la 239 cierra.
+    { to: "devolucion_por_confirmar", via: "gestion", rol: "mensajero" }, // #59 (239)
     { to: "rechazada", via: "gestion", rol: "mensajero" }, // #15
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #16
     // #44 (154, con el `via` REALINEADO por la 158/Q-G el 2026-07-30): resultado `incidente`
@@ -218,6 +233,24 @@ export const TRANSICIONES = {
     { to: "en_bodega_satelite", via: "liberacion_reprogramada", rol: "sistema/cron" }, // #26
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #32
   ],
+  // FEATURE 239 — el PRE-ESTADO de la devolucion. Tiene ENTRADA (#59, la gestion del mensajero)
+  // y SALIDAS (#60/#61), asi que no es terminal ni vestigial (invariante 140/R14).
+  //
+  // Las DOS salidas declaradas son EXACTAMENTE las que tienen productor en el codigo (R29):
+  //   #60 el anclaje al aprobar el cierre — el bloque de `CierresAdminRepository.resolverCierre`;
+  //   #61 el deshacer del mensajero — `CierreDiaRepository.anularGestionYDevolverAGestion`, con
+  //       su ventana de siempre (`cierre_id IS NULL`). Sin ella el mensajero no podria deshacer
+  //       su propia devolucion del dia (R24): eso seria una REGRESION, no una arista opcional.
+  //
+  // NO tiene arista de `recuperacion_manual` (P4, FIRMADA EN CONTRA de la recomendacion del spec
+  // el 2026-08-19, con el precio escrito en `requirements.md`): un satelite que tenga el paquete
+  // fisicamente en su estante NO puede registrarlo hasta que el cierre del mensajero se apruebe.
+  // Se prefiere que nada se mueva antes de la confirmacion fisica. Si duele en operacion, la via
+  // es REABRIR P4, no anadir aqui una puerta trasera «por comodidad».
+  devolucion_por_confirmar: [
+    { to: "devuelta", via: "anclaje_devolucion", rol: "admin (aprobar cierre)" }, // #60 (239)
+    { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #61 (239)
+  ],
   devuelta: [
     { to: "en_bodega_central", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #19
     { to: "en_bodega_satelite", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #20
@@ -227,6 +260,11 @@ export const TRANSICIONES = {
     { to: "en_bodega_central", via: "recuperacion_manual", rol: "maestro/admin/adminSatelite" }, // #23
     { to: "en_bodega_satelite", via: "recuperacion_manual", rol: "adminSatelite" }, // #24
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #36 (defensa filas legadas)
+    // FEATURE 239: las SIETE salidas de `devuelta` se conservan INTACTAS. `devuelta` pasa a
+    // significar «devolucion ANCLADA» —confirmada en bodega, visible para la tienda y con el
+    // reloj corriendo—, y esas siete siguen siendo el camino de las ordenes ya ancladas. Lo que
+    // cambia es la ENTRADA: ya no se llega aqui gestionando (#14, retirada), se llega aprobando
+    // el cierre (#60).
   ],
   rechazada: [
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #33

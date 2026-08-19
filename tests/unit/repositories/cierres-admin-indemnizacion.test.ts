@@ -8,6 +8,7 @@ import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoR
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
+import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 158 (T1.14, R22/R23/R26/R28) — la escritura de los montos y la emision del egreso,
 // DENTRO de la transaccion de aprobacion. Doble de Prisma con la semantica del indice unico
@@ -158,6 +159,7 @@ function aprobar(
     cierreId: "c1",
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
     resueltoPor: "adm",
     motivoRechazo: null,
     indemnizaciones,

@@ -45,11 +45,30 @@ const TABLA_APROBADA: Record<OrderStatusValue, BucketSinResultado> = {
   por_devolver_a_tienda: "otros",
   por_recolectar_en_tienda: "otros", // R44: nadie va todavia
   incidente: "otros",
+  // Feature 239/R26 (2026-08-19, T1.7): `otros` POR DEFECTO, y es la clasificacion correcta, no
+  // un olvido. Estos buckets solo particionan ordenes SIN gestion vigente hoy; una orden en el
+  // pre-estado tiene gestion del dia (la devolucion que el mensajero acaba de registrar), asi
+  // que cuenta en `devueltas` y no puede caer en `sinRecoger` ni en `enReparto`.
+  devolucion_por_confirmar: "otros",
 };
 
 describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () => {
   it.each(ORDER_STATUS_SEED)("`%s` cae en el bucket aprobado por el humano", (value) => {
     expect(bucketDeEstatus(value)).toBe(TABLA_APROBADA[value]);
+  });
+
+  // Feature 239 (T1.7, R26) — CASO NEGATIVO con su razon. El mapa es parcial con default
+  // `otros`, asi que absorbe un value nuevo sin quejarse: si el pre-estado tuviera que estar y
+  // no estuviera, nada se pondria rojo. Aqui se afirma que NO tiene bucket explicito y POR QUE.
+  it("239/R26: `devolucion_por_confirmar` NO tiene bucket explicito — cae en `otros`", () => {
+    expect(BUCKET_POR_ESTATUS).not.toHaveProperty("devolucion_por_confirmar");
+    expect(bucketDeEstatus("devolucion_por_confirmar")).toBe("otros");
+    // La razon: estos tres buckets solo particionan ordenes SIN gestion vigente hoy. Una orden
+    // en el pre-estado tiene gestion del dia (la devolucion que el mensajero acaba de registrar)
+    // y cuenta en `devueltas` del primer eje; verla como "trabajo parado" seria contarla dos
+    // veces y culpar al mensajero de una orden que ya gestiono.
+    expect(estatusDelBucket("sinRecoger")).not.toContain("devolucion_por_confirmar");
+    expect(estatusDelBucket("enReparto")).not.toContain("devolucion_por_confirmar");
   });
 
   it("los tres casos nombrados en R43 son los unicos con bucket EXPLICITO", () => {

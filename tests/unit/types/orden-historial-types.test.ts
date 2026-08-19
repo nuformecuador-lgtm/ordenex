@@ -62,10 +62,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "incidente", // feature 154 (R8): familia propia del resultado `incidente`. SIN PRODUCTOR hasta la 158
     "deshacer_asignacion", // feature 149: OrdenRepository.deshacerAsignacionLote (reversion antes de la recogida); la 157 le suma la reversion de una recoleccion
     "asignacion_recoleccion", // feature 157 (ampliacion): GuiaAsignacionService.asignarRecoleccion (por_recolectar_en_tienda -> recolectando)
+    "anclaje_devolucion", // feature 239 (2026-08-19): CierresAdminRepository.resolverCierre (aprobar, devolucion_por_confirmar -> devuelta). El cron del SLA la busca POR ESTA FAMILIA para anclar el reloj
   ];
 
-  it("contiene exactamente los 26 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(26);
+  it("contiene exactamente los 27 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(27); // 2026-08-19 (239): +anclaje_devolucion
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

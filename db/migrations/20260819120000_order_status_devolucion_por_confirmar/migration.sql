@@ -1,0 +1,34 @@
+-- Feature 239 (T1.1, R1) — alta del PRE-ESTADO `devolucion_por_confirmar` en el catalogo
+-- `order_status`. P1 firmada por el humano el 2026-08-19.
+--
+-- QUE ARREGLA. Hoy el mensajero gestiona una devolucion y la orden entra directamente en
+-- `devuelta`: desde ese instante corre su ventana de SLA (feature 99) y a las 24 h el cron la
+-- escala a `rechazada` y la COBRA como ingreso de bodega por rechazo. Pero `/novedades` exige
+-- ademas `orden.gestion_aprobada = true` para mostrarsela a la tienda, y esa columna solo se
+-- enciende al APROBAR el cierre (retraso medido contra produccion el 2026-08-18: mediana 8,2 h,
+-- p90 22,1 h, max 48,2 h). Resultado: ordenes cobradas sin que la tienda pudiera verlas nunca
+-- (`progress/auditoria_ayuda_tienda.md` §1).
+--
+-- Con este value la orden gestionada entra AQUI, no en `devuelta`. La APROBACION DEL CIERRE es
+-- la transicion `devolucion_por_confirmar -> devuelta` (R4), y esa transicion es a la vez el
+-- inicio del reloj y el momento en que la tienda la ve. Las dos mitades pasan a mirar EL MISMO
+-- HECHO: el estado de la orden.
+--
+-- `order_status` es TABLA de valores, no enum
+-- (`20260714123909_reconcile_fks_drop_order_status_value` hizo el camino enum -> tabla para
+-- poder referenciarlo por FK), asi que el alta es un INSERT.
+--
+-- IDEMPOTENTE: `INSERT ... SELECT ... WHERE NOT EXISTS` por `value` (indice unico
+-- `order_status_value_key`). Mismo patron exacto que la 139, la 154 y la 157.
+--
+-- SIN BACKFILL, y es una decision (P6, R30/R31): NINGUNA orden se mueve de estado desde SQL de
+-- migracion. Las `devuelta` que ya existan se quedan donde estan; su reloj sigue anclado en la
+-- fecha de su gestion por la rama LEGADA del cron (R14), que es exactamente el comportamiento
+-- que ya tenian. Moverlas hacia atras exigiria escribir `estatus_id` desde SQL, que R31 prohibe
+-- (toda transicion pasa por el punto unico de escritura, `appendCambioEstado`).
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`order_status` es catalogo
+-- publico de solo lectura y conserva la suya).
+INSERT INTO "order_status" ("id", "value")
+SELECT gen_random_uuid()::text, 'devolucion_por_confirmar'
+WHERE NOT EXISTS (SELECT 1 FROM "order_status" WHERE "value" = 'devolucion_por_confirmar');
