@@ -9,6 +9,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { FiltrosCierres } from "@/lib/types/filtros-cierres";
 import type { RangoPagina } from "@/lib/utils/rango-pagina";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
 import { descargaConfig } from "@/lib/config/descarga";
@@ -162,17 +163,37 @@ function repoEnMemoria(filas: CierreAdminResumenRow[] = ALMACEN) {
     ),
   );
 
-  const findHistoricoCompleto = vi.fn(async (alcance: Alcance) =>
+  /**
+   * Pedido humano del 2026-08-16 — el doble aplica el FILTRO como lo aplica el repositorio de
+   * verdad: en conjunción con el alcance, nunca en su lugar. Un doble que lo ignorara dejaría
+   * pasar verde un servicio que pasara el filtro EN VEZ del alcance, que es exactamente el
+   * error que abriría el dinero de la bodega vecina. La composición en SQL la fija, aparte,
+   * `tests/unit/repositories/cierres-filtros-where.test.ts`.
+   */
+  function casaFiltro(f: CierreAdminResumenRow, filtros?: FiltrosCierres): boolean {
+    if (!filtros) return true;
+    if (filtros.destinoZonaIds && !filtros.destinoZonaIds.includes(f.destinoZonaId)) return false;
+    if (filtros.mensajeroIds && !filtros.mensajeroIds.includes(f.mensajeroId)) return false;
+    if (filtros.desde && f.solicitadoAt.slice(0, 10) < filtros.desde) return false;
+    if (filtros.hasta && f.solicitadoAt.slice(0, 10) > filtros.hasta) return false;
+    return true;
+  }
+
+  const findHistoricoCompleto = vi.fn(async (alcance: Alcance, filtros?: FiltrosCierres) =>
     anotar(
       "findHistoricoCompleto",
-      filas.filter((f) => casaAlcance(f, alcance) && !esCola(f)).sort(porSolicitadoDesc),
+      filas
+        .filter((f) => casaAlcance(f, alcance) && casaFiltro(f, filtros) && !esCola(f))
+        .sort(porSolicitadoDesc),
     ),
   );
 
-  const findColaCompleta = vi.fn(async (alcance: Alcance) =>
+  const findColaCompleta = vi.fn(async (alcance: Alcance, filtros?: FiltrosCierres) =>
     anotar(
       "findColaCompleta",
-      filas.filter((f) => casaAlcance(f, alcance) && esCola(f)).sort(porSolicitadoDesc),
+      filas
+        .filter((f) => casaAlcance(f, alcance) && casaFiltro(f, filtros) && esCola(f))
+        .sort(porSolicitadoDesc),
     ),
   );
 
@@ -303,10 +324,29 @@ describe("los conjuntos de la descarga de «Cierres del día» del admin (featur
     expect(historicoMaestro.filter((id) => historicoA.includes(id) || historicoB.includes(id))).toEqual([]);
     expect(historicoA.filter((id) => historicoB.includes(id))).toEqual([]);
 
-    // Y ninguno de los dos métodos admite un parámetro por el que pedir el alcance de otro: la
-    // aridad es 1, y ese 1 es el actor.
-    expect(CierresAdminService.prototype.listarHistoricoCierresAdminCompleto).toHaveLength(1);
-    expect(CierresAdminService.prototype.listarPendientesCierresAdminCompleto).toHaveLength(1);
+    // AQUÍ ESTABA UNA AFIRMACIÓN DE ARIDAD, y se REEXPRESA en vez de relajarse. Decía: «ninguno
+    // de los dos métodos admite un parámetro por el que pedir el alcance de otro: la aridad es 1,
+    // y ese 1 es el actor». Era un buen proxy MIENTRAS el segundo parámetro no existía; el pedido
+    // humano del 2026-08-16 le añadió uno —los FILTROS— y subir el número a 2 no habría afirmado
+    // nada: la pregunta no es cuántos parámetros hay, es si alguno de ellos puede ensanchar lo
+    // que el actor ve. Así que se comprueba ESO, con el peor caso: el `adminSatelite` de la zona
+    // A pidiendo, por filtro, la zona B.
+    const { svc: svcA } = servicio(repoEnMemoria().repo);
+    const zonaAjena = { destinoZonaIds: ["z-b"] as [string, ...string[]] };
+    const historicoConZonaAjena = await svcA.listarHistoricoCierresAdminCompleto(
+      SATELITE_A,
+      zonaAjena,
+    );
+    const colaConZonaAjena = await svcA.listarPendientesCierresAdminCompleto(
+      SATELITE_A,
+      zonaAjena,
+    );
+    // La intersección de «mi zona» con «la zona B» es vacía: se ve NADA, no se ve la zona B.
+    expect(historicoConZonaAjena.status === "ok" && ids(historicoConZonaAjena.items)).toEqual([]);
+    expect(colaConZonaAjena.status === "ok" && ids(colaConZonaAjena.items)).toEqual([]);
+    // Y ninguna de las dos trajo una sola fila de la zona ajena, ni siquiera para descartarla.
+    expect(historicoB.length, "el almacén no tiene filas de la zona B: el caso sería vacuo")
+      .toBeGreaterThan(0);
   });
 
   it("el adminSatelite SIN zona recibe un conjunto vacío y no consulta la base (R4)", async () => {

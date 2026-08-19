@@ -26,6 +26,7 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import {
@@ -240,6 +241,17 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         calculadaAt: ruta?.calculadaAt ?? null,
         origenFuente: ruta?.origenFuente ?? null,
         paradasSinOptimizar,
+        // El trazado se sirve TAL CUAL lo tenga la fila. No se recalcula ni se pide nada
+        // aqui: esta es una lectura de listado y no puede quedar colgada de una llamada
+        // facturada a Routes. Si la fila no lo tiene, el mapa dibuja rectas como siempre.
+        trazado: ruta?.trazado ?? null,
+        // La siguiente parada es la PRIMERA de `porGestionar`, que se acaba de ordenar por
+        // secuencia justo arriba. Si esa orden no tiene tramo —ruta sin dibujar, o dibujada
+        // en local— no hay nada que resaltar y va `null`.
+        tramoSiguiente:
+          porGestionar.length > 0
+            ? (ruta?.tramoPorOrden.get(porGestionar[0].id) ?? null)
+            : null,
       },
     }; // R10
   }
@@ -374,7 +386,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       }
     }
 
-    const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(input.resultado);
+    // Feature 239 (T1.3, R2/R3): el destino de la gestion sale de un MAPA EXPLICITO, no de la
+    // coincidencia de nombre entre el vocabulario de `resultado` y el de `order_status`. Hasta
+    // aqui se pasaba `input.resultado` directamente, y funcionaba solo porque los cinco
+    // resultados se llamaban igual que su estado. La 239 rompe esa identidad para `devuelta`:
+    // gestionar una devolucion deja la orden en `devolucion_por_confirmar`, y es la APROBACION
+    // DEL CIERRE la que la lleva a `devuelta` (R4). Volver a `findEstatusIdByValue(input.
+    // resultado)` reabre el cobro prematuro que esta feature cierra.
+    const nuevoEstatusId = await this.ordenRepo.findEstatusIdByValue(
+      estatusDestinoDeResultado(input.resultado),
+    );
     if (nuevoEstatusId === null) {
       return {
         status: "validation_error",
@@ -538,6 +559,10 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
+    // Solicitud de ayuda (2026-08-18): flag de la ORDEN, no del actor, asi que sale de la fila y
+    // no hay nada que mezclarle despues. `?? false` porque la fila lo declara opcional (patron
+    // aditivo): un doble de test que no lo ponga produce `false`, no `undefined`.
+    ayuda: row.ayuda ?? false,
     // Feature 227 (R21): aqui nacia `notaPrivada: null` (feature 116). El campo ya no existe en
     // `MiAsignacionDTO` y el DTO no emite ninguna nota privada del mensajero.
   };

@@ -107,6 +107,9 @@ const { paginado, completo } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -125,6 +128,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
     paginado.cierresPendientes(...a),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   verCierreBodegaDetalle: vi.fn(),
   aprobarCierreBodega: vi.fn(),
   rechazarCierreBodega: vi.fn(),
@@ -404,12 +410,27 @@ interface Listado {
   nombre: string;
   /** Nombre accesible del `<nav>` de paginación (R43). */
   paginacion: string;
-  /** Nombre accesible de la tabla. */
+  /** Nombre accesible del listado (de su `<table>` o, desde el 2026-08-16, de su `<ul>`). */
   tabla: string;
+  /**
+   * Rol ARIA con el que se localiza el listado. Los CUATRO listados de cierres dejaron de ser
+   * tablas el 2026-08-16 (pedido humano: comprobantes para todos los roles) y ahora son listas.
+   * El recorrido no cambia: mismo nombre accesible, mismas filas, misma descarga — sólo cambia
+   * por qué rol se pregunta. Se declara por entrada y no se deduce, para que convertir otro
+   * listado obligue a tocar esta línea.
+   */
+  rol?: "table" | "list";
   /** Nombre del control de descarga («Descargar …», R13). */
   descarga: string;
   /** Monta la pantalla con sus 60 filas repartidas en 3 páginas. */
   montar: () => void;
+  /**
+   * Pedido humano del 2026-08-16 — pestaña que hay que abrir para que este listado sea
+   * visible. Los listados de cierres pasaron a vivir en pestañas (bodega/mensajero y, dentro,
+   * pendientes/resueltos) y los paneles no visibles quedan fuera del árbol de accesibilidad,
+   * así que hay que dar el mismo clic que da el usuario. Los listados sin pestaña lo omiten.
+   */
+  abrir?: RegExp[];
   /** Texto visible y único de la fila `i` del conjunto (1-based). */
   textoFila: (i: number) => string;
 }
@@ -419,6 +440,8 @@ const LISTADOS: Listado[] = [
     nombre: "Cierres del día — histórico",
     paginacion: "Paginación del histórico de cierres del día",
     tabla: "Histórico",
+    abrir: [/^Resueltos/],
+    rol: "list",
     descarga: "Cierres del día resueltos",
     textoFila: (i) => `Mensajero ${etiqueta(i)}`,
     montar: () => {
@@ -450,6 +473,8 @@ const LISTADOS: Listado[] = [
     nombre: "Cierres de bodega resueltos",
     paginacion: "Paginación de los cierres de bodega resueltos",
     tabla: "Cierres de bodega resueltos",
+    abrir: [/^Resueltos/],
+    rol: "list",
     descarga: "Cierres de bodega resueltos",
     textoFila: (i) => `Satélite ${etiqueta(i)}`,
     montar: () => {
@@ -479,6 +504,8 @@ const LISTADOS: Listado[] = [
     nombre: "Cierres de bodega solicitados",
     paginacion: "Paginación de los cierres de bodega solicitados",
     tabla: "Cierres de bodega solicitados",
+    abrir: [/^Solicitados/],
+    rol: "list",
     descarga: "Cierres de bodega solicitados",
     textoFila: (i) => `Motivo ${etiqueta(i)}`,
     montar: () => {
@@ -527,6 +554,7 @@ const LISTADOS: Listado[] = [
     nombre: "Cierres solicitados del mensajero",
     paginacion: "Paginación de los cierres solicitados",
     tabla: "Cierres solicitados",
+    rol: "list",
     descarga: "Cierres solicitados",
     textoFila: (i) => money(`${1000 + i}.00`),
     montar: () => {
@@ -650,6 +678,20 @@ afterEach(() => {
   cleanup();
 });
 
+/**
+ * Monta el listado y abre las pestañas que hagan falta para verlo. Se hace con clics reales y
+ * no buscando el panel escondido: es el gesto del usuario, y además los paneles inactivos
+ * llevan `hidden`, que los saca del árbol de accesibilidad a propósito.
+ */
+async function montarYAbrir(listado: Listado): Promise<ReturnType<typeof userEvent.setup>> {
+  const user = userEvent.setup();
+  listado.montar();
+  for (const pestana of listado.abrir ?? []) {
+    await user.click(await screen.findByRole("button", { name: pestana }));
+  }
+  return user;
+}
+
 describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () => {
   it("los siete están cubiertos: ni uno se queda fuera del recorrido", () => {
     // Anti-vacuidad: los tres tests de abajo recorren `LISTADOS`. Si alguien borrara una
@@ -671,8 +713,7 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
 
   it("cada listado navega entre páginas y el control tiene nombre accesible (R43)", async () => {
     for (const listado of LISTADOS) {
-      const user = userEvent.setup();
-      listado.montar();
+      const user = await montarYAbrir(listado);
 
       // El control se localiza por ROL y NOMBRE, nunca por clase: si no tiene nombre
       // accesible, un lector de pantalla anuncia siete «navegación» idénticas.
@@ -682,7 +723,7 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
         listado.nombre,
       ).toBeInTheDocument();
 
-      const tabla = screen.getByRole("table", { name: listado.tabla });
+      const tabla = screen.getByRole(listado.rol ?? "table", { name: listado.tabla });
       expect(within(tabla).getByText(listado.textoFila(1)), listado.nombre).toBeInTheDocument();
       expect(
         within(tabla).queryByText(listado.textoFila(26)),
@@ -694,14 +735,14 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
       // La página 2 trae SUS filas y ninguna de la 1.
       await waitFor(() =>
         expect(
-          within(screen.getByRole("table", { name: listado.tabla })).getByText(
+          within(screen.getByRole(listado.rol ?? "table", { name: listado.tabla })).getByText(
             listado.textoFila(26),
           ),
           listado.nombre,
         ).toBeInTheDocument(),
       );
       expect(
-        within(screen.getByRole("table", { name: listado.tabla })).queryByText(
+        within(screen.getByRole(listado.rol ?? "table", { name: listado.tabla })).queryByText(
           listado.textoFila(1),
         ),
         `${listado.nombre}: la página 2 sigue mostrando filas de la 1`,
@@ -715,7 +756,7 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
       await user.click(within(nav).getByRole("button", { name: "Página anterior" }));
       await waitFor(() =>
         expect(
-          within(screen.getByRole("table", { name: listado.tabla })).getByText(
+          within(screen.getByRole(listado.rol ?? "table", { name: listado.tabla })).getByText(
             listado.textoFila(1),
           ),
           listado.nombre,
@@ -734,14 +775,13 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
     // simple vista. Se exigen las 60, empezando por la fila 1 —que en ese momento NO está en
     // pantalla— y terminando en la 60.
     for (const listado of LISTADOS) {
-      const user = userEvent.setup();
-      listado.montar();
+      const user = await montarYAbrir(listado);
 
       const nav = await screen.findByRole("navigation", { name: listado.paginacion });
       await user.click(within(nav).getByRole("button", { name: "Página siguiente" }));
       await waitFor(() =>
         expect(
-          within(screen.getByRole("table", { name: listado.tabla })).getByText(
+          within(screen.getByRole(listado.rol ?? "table", { name: listado.tabla })).getByText(
             listado.textoFila(26),
           ),
           listado.nombre,
@@ -787,9 +827,26 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
     for (const listado of LISTADOS) {
       listado.montar();
 
-      const tabla = screen.getByRole("table", { name: listado.tabla });
+      // `hidden: true` para los que viven tras una pestaña (pedido humano del 2026-08-16), y
+      // aquí ESO ES EL CASO, no un rodeo: lo que se afirma es que la página pre-cargada está en
+      // el DOM desde el PRIMER pintado. Abrir la pestaña con un clic exigiría un `await` y
+      // convertiría este caso en «acaba estando», que es justo lo que no distingue una página
+      // pre-cargada de una que se fue a buscar al servidor. El panel está montado desde el
+      // principio —`PanelConmutado` no desmonta— y solo lleva `hidden`.
+      const tabla = screen.getByRole(listado.rol ?? "table", {
+        name: listado.tabla,
+        hidden: listado.abrir !== undefined,
+      });
       // Una fila de encabezado + las 25 de la página.
-      expect(within(tabla).getAllByRole("row"), listado.nombre).toHaveLength(1 + PAGE_SIZE);
+      // La tabla trae cabecera + `PAGE_SIZE` filas; el listado de comprobantes, `PAGE_SIZE`
+      // elementos y ninguna cabecera. Es la misma afirmación: se ve una página, no el conjunto.
+      const oculto = { hidden: listado.abrir !== undefined };
+      expect(
+        listado.rol === "list"
+          ? within(tabla).getAllByRole("listitem", oculto)
+          : within(tabla).getAllByRole("row", oculto),
+        listado.nombre,
+      ).toHaveLength(listado.rol === "list" ? PAGE_SIZE : 1 + PAGE_SIZE);
 
       for (const i of [1, 2, PAGE_SIZE]) {
         expect(
@@ -802,8 +859,14 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
         `${listado.nombre}: la página 1 trae una fila que no le toca`,
       ).not.toBeInTheDocument();
 
-      // El orden es el del servidor, no uno reconstruido en la pantalla.
-      const filas = within(tabla).getAllByRole("row").slice(1);
+      // El orden es el del servidor, no uno reconstruido en la pantalla. En una tabla las
+      // filas son `row` (y la primera es la cabecera); en un listado de comprobantes son
+      // `listitem`, sin cabecera que descartar. Lo que se afirma es lo mismo: la primera y la
+      // última de la página son las que el servidor mandó, en ese orden.
+      const filas =
+        listado.rol === "list"
+          ? within(tabla).getAllByRole("listitem", oculto)
+          : within(tabla).getAllByRole("row", oculto).slice(1);
       expect(filas[0].textContent, listado.nombre).toContain(listado.textoFila(1));
       expect(filas[PAGE_SIZE - 1].textContent, listado.nombre).toContain(
         listado.textoFila(PAGE_SIZE),
@@ -821,13 +884,17 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
   // tamaño de página (R42)`, que además lo comprueba en la ÚLTIMA página —donde un contador
   // derivado del array se delataría—. No se pierde cobertura: la sustituta es más estricta.
 
-  it("Q-I3: la vista tipo factura sigue a la tabla del histórico, no al conjunto entero", async () => {
-    // Decisión de T I.2 sobre la previsualización de comprobantes de `CierresAdminModule`,
-    // que concatenaba `[...pendientes, ...historico]`. Al paginar, muestra la cola completa
-    // más la PÁGINA visible: la frase que define la sección es «los mismos cierres de
-    // arriba», y alimentarla del conjunto entero sería la única razón por la que el histórico
-    // completo seguiría cruzando a la pantalla. CAMBIA lo que el usuario ve, y por eso está
-    // escrito aquí y en la bitácora.
+  it("Q-I3: los comprobantes del histórico son los de la PÁGINA, no los del conjunto", async () => {
+    // Decisión de T I.2, REEXPRESADA el 2026-08-16 y no relajada. Nació mirando la sección
+    // «Vista tipo factura», una previsualización que concatenaba `[...pendientes, ...historico]`
+    // DEBAJO de las dos tablas: al paginar, debía enseñar la página y no el conjunto entero,
+    // porque alimentarla del conjunto habría sido la única razón por la que el histórico
+    // completo seguiría cruzando a la pantalla.
+    //
+    // Esa sección ya no existe: el pedido humano del 2026-08-16 convirtió el histórico MISMO en
+    // la tira de comprobantes, así que la previsualización y la tabla se fundieron en una sola
+    // lectura. La propiedad que este caso defiende sobrevive intacta —un comprobante por cierre
+    // de la página, y la tira sigue a la paginación—; lo que cambia es dónde vive.
     const user = userEvent.setup();
     const todos = conjunto(cierreAdmin);
     servirPaginas(paginado.cierresHistorico, todos);
@@ -840,15 +907,19 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
       />,
     );
 
-    const factura = await screen.findByRole("region", { name: "Vista tipo factura" });
-    // Hay una tarjeta por cierre de la página, no por cierre del conjunto.
+    // El histórico es la pestaña «Resueltos» desde el 2026-08-16: se abre como lo haría el
+    // usuario antes de mirarlo.
+    await user.click(await screen.findByRole("button", { name: /^Resueltos/ }));
+    const historico = await screen.findByRole("list", { name: "Histórico" });
+    // Hay un comprobante por cierre de la página, no por cierre del conjunto.
+    expect(within(historico).getAllByRole("listitem")).toHaveLength(PAGE_SIZE);
     expect(
-      within(factura).getAllByRole("button", { name: /Ver el comprobante del cierre/ }),
+      within(historico).getAllByRole("button", { name: /Ver el cierre resuelto de/ }),
     ).toHaveLength(PAGE_SIZE);
-    expect(within(factura).getByText(/Mensajero 01/)).toBeInTheDocument();
-    expect(within(factura).queryByText(/Mensajero 26/)).not.toBeInTheDocument();
+    expect(within(historico).getByText(/Mensajero 01/)).toBeInTheDocument();
+    expect(within(historico).queryByText(/Mensajero 26/)).not.toBeInTheDocument();
 
-    // Y al cambiar de página, la previsualización cambia con ella.
+    // Y al cambiar de página, la tira cambia con ella.
     const nav = screen.getByRole("navigation", {
       name: "Paginación del histórico de cierres del día",
     });
@@ -856,15 +927,11 @@ describe("Riesgo BAJO · paginación server-side de los 7 listados (T I.2)", () 
 
     await waitFor(() =>
       expect(
-        within(screen.getByRole("region", { name: "Vista tipo factura" })).getByText(
-          /Mensajero 26/,
-        ),
+        within(screen.getByRole("list", { name: "Histórico" })).getByText(/Mensajero 26/),
       ).toBeInTheDocument(),
     );
     expect(
-      within(screen.getByRole("region", { name: "Vista tipo factura" })).queryByText(
-        /Mensajero 01/,
-      ),
+      within(screen.getByRole("list", { name: "Histórico" })).queryByText(/Mensajero 01/),
     ).not.toBeInTheDocument();
   });
 });

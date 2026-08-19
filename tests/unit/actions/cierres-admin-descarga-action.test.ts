@@ -92,7 +92,14 @@ describe("borde de los conjuntos de «Cierres del día» del admin (feature 184,
     }
   });
 
-  it("sin entrada, o con un objeto vacío, delega en el service con SOLO el actor", async () => {
+  it("sin entrada, o con un objeto vacío, delega en el service con el actor y SIN filtros", async () => {
+    // El título y la última afirmación cambiaron el 2026-08-16, y no por relajarse. Decían «con
+    // SOLO el actor» y fijaban la aridad en 1: era exacto MIENTRAS estos listados no tenían
+    // filtros. El pedido humano de ese día les dio cuatro, así que ahora el borde transporta un
+    // segundo argumento — y lo que hay que afirmar es que, sin entrada, ese argumento es
+    // `undefined`: quien no filtra sigue pidiendo el conjunto entero de su alcance, igual que
+    // antes. Lo que NO puede colarse por aquí sigue sin poder: `page` y las claves de alcance
+    // mueren en la lista blanca (ver los casos de abajo y la guardia de `filtros-cierres`).
     for (const { nombre, accion, metodo } of BORDES) {
       for (const input of [undefined, {}]) {
         const f = fakeService(metodo, { status: "ok", items: [CIERRE], total: 1 });
@@ -100,11 +107,19 @@ describe("borde de los conjuntos de «Cierres del día» del admin (feature 184,
 
         const etiqueta = `${nombre} / ${String(input)}`;
         expect(r, etiqueta).toEqual({ status: "ok", items: [CIERRE], total: 1 });
-        // Un solo argumento —el actor— y nada de recorte: estos listados no tienen entrada que
-        // transportar, y el `page` de la página no puede colarse por aquí.
-        expect(f.espia, etiqueta).toHaveBeenCalledWith(MAESTRO);
-        expect(f.espia.mock.calls[0], etiqueta).toHaveLength(1);
+        expect(f.espia, etiqueta).toHaveBeenCalledWith(MAESTRO, undefined);
       }
+    }
+  });
+
+  it("los filtros de la entrada llegan al service, y el alcance sigue sin viajar", async () => {
+    // La otra mitad del caso de arriba: lo que el usuario SÍ pidió tiene que llegar, porque de
+    // eso depende que el archivo sea «esto que estoy viendo, entero» y no «todo lo del alcance».
+    const filtros = { desde: "2026-08-01", mensajeroIds: ["11111111-1111-4111-8111-111111111111"] };
+    for (const { nombre, accion, metodo } of BORDES) {
+      const f = fakeService(metodo, { status: "ok", items: [CIERRE], total: 1 });
+      await accion({ filtros }, { service: f.service, getActor: async () => MAESTRO });
+      expect(f.espia, nombre).toHaveBeenCalledWith(MAESTRO, filtros);
     }
   });
 

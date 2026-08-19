@@ -93,6 +93,11 @@ export const HITO_POR_ESTATUS = {
   por_devolver_a_tienda: "devolucion_en_curso",
   devolviendo_a_tienda: "devolucion_en_curso",
   devuelta_a_tienda: "devuelto",
+  // Feature 239/R28: el destinatario ve EXACTAMENTE el mismo hito que ve hoy una `devuelta`.
+  // Para el cliente final no ha cambiado nada —el paquete no se le entregó— y quien falta por
+  // confirmar es la bodega, que es asunto interno. Un hito propio le contaría un trámite
+  // nuestro; retrasar el hito hasta la aprobación le escondería un hecho que ya ocurrió.
+  devolucion_por_confirmar: "no_entregado",
 } as const satisfies Record<OrderStatusValue, HitoPublico>;
 
 /**

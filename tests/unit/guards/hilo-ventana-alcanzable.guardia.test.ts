@@ -134,8 +134,23 @@ function valorDe(fuenteModulo: string, ruta: string, expresion: string): string 
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Lo que `/novedades` lista: el `estatus: { value: … }` del predicado central
- * `OrdenRepository.novedadWhere`. Es UN estatus, y que sea uno solo es parte de la afirmación.
+ * Lo que `/novedades` lista POR ESTATUS: TODOS los `estatus: { value: … }` del predicado central
+ * `OrdenRepository.novedadWhere`. Hoy es uno solo, y que sea uno solo es parte de la afirmación
+ * (la comprobación vive abajo, en el bloque 0).
+ *
+ * ⚠️ 2026-08-18 — `novedadWhere` DEJÓ DE SER UN SOLO PREDICADO DE ESTATUS. Con la solicitud de
+ * ayuda pasó a un `OR` de dos ramas: la de siempre (`estatus = devuelta`) y una que NO mira el
+ * estatus (`ayuda: true`), por la que entran órdenes que siguen en reparto.
+ *
+ * Esa segunda rama no puede participar de la intersección que hace esta guardia —no aporta ningún
+ * estatus con el que cruzar la ventana—, así que se deja fuera A PROPÓSITO y no por descuido: R38
+ * sigue sosteniéndose sobre `devuelta`, que es donde el adminTienda escribe.
+ *
+ * Lo que SÍ cambió es la extracción: antes tomaba la PRIMERA coincidencia y se quedaba tan
+ * tranquila. Con un `OR` de por medio, eso significa que añadir una segunda rama con OTRO estatus
+ * habría pasado inadvertido —la guardia habría seguido verde afirmando un universo incompleto—.
+ * Ahora se recogen TODAS y el bloque 0 exige que siga habiendo exactamente una: el día que alguien
+ * añada otra, esto se pone rojo y hay que venir a decidir qué significa para la ventana.
  */
 export function estatusDeNovedades(fuente: string, ruta = RUTA_ORDEN_REPO): string[] {
   const cuerpo = cuerpoDeMiembro(
@@ -144,9 +159,13 @@ export function estatusDeNovedades(fuente: string, ruta = RUTA_ORDEN_REPO): stri
     /private\s+novedadWhere\s*\(/,
     "la declaración de `novedadWhere`",
   );
-  const m = /estatus\s*:\s*\{\s*value\s*:\s*([^,}]+?)\s*\}/.exec(cuerpo);
-  if (!m) reventar(`${ruta}: \`novedadWhere\` ya no acota \`estatus: { value: … }\``);
-  return [valorDe(fuente, ruta, m[1])];
+  const encontrados = [
+    ...cuerpo.matchAll(/estatus\s*:\s*\{\s*value\s*:\s*([^,}]+?)\s*\}/g),
+  ];
+  if (encontrados.length === 0) {
+    reventar(`${ruta}: \`novedadWhere\` ya no acota \`estatus: { value: … }\``);
+  }
+  return encontrados.map((m) => valorDe(fuente, ruta, m[1]));
 }
 
 /**
@@ -215,8 +234,40 @@ describe("0 — el detector de esta guardia no está roto", () => {
     for (const valor of [...ESTATUS_DE_NOVEDADES, ...ESTATUS_DEL_PANEL_MENSAJERO]) {
       expect(catalogo, `\`${valor}\` no es un estatus del catálogo`).toContain(valor);
     }
-    expect(ESTATUS_DE_NOVEDADES.length).toBe(1);
+    // 2026-08-19 (feature 239/R22): pasan de UNO a DOS. La rama de ayuda dejo de ser «la que no
+    // mira el estatus» — ahora exige `en_reparto`, para que una solicitud vieja no sostenga la
+    // fila despues de que la orden salga de reparto (la fuga permanente de la auditoria §2.1).
+    expect(ESTATUS_DE_NOVEDADES.length).toBe(2);
     expect(ESTATUS_DEL_PANEL_MENSAJERO.length).toBeGreaterThan(0);
+  });
+
+  // 2026-08-18 — la rama de AYUDA de `novedadWhere`, vigilada explícitamente para que el
+  // comentario de `estatusDeNovedades` no se vuelva folclore. Si la solicitud de ayuda se
+  // retirara algún día, esto se pone rojo y obliga a releer aquel razonamiento en vez de dejarlo
+  // describiendo un código que ya no existe.
+  //
+  // INVERTIDO el 2026-08-19 (feature 239/R22), y la inversión es una MEJORA del cruce, no un
+  // apaño. Esta guardia estaba escrita para ponerse roja «el día que alguien añada otra rama con
+  // estatus», y eso es exactamente lo que pasó: la rama de ayuda dejó de ser la que no mira el
+  // estatus. Lo que significa para la ventana:
+  //
+  //   - la tienda ya no ve una orden por una solicitud de ayuda ANTIGUA sobre algo que salió de
+  //     reparto (era la fuga permanente: el corte nocturno la barría a `sin_gestionar` sin apagar
+  //     el flag, y ahí se quedaba para siempre);
+  //   - y el estatus que aporta esa rama, `en_reparto`, es JUSTO la ventana del mensajero. Así
+  //     que ahora las dos ramas de la pantalla de la tienda cruzan con una ventana real: la suya
+  //     por `devuelta` y la del mensajero por `en_reparto`. R38 se sostiene por dos sitios en vez
+  //     de por uno.
+  it("la rama de AYUDA de `novedadWhere` existe y está ACOTADA a reparto (R22)", () => {
+    const cuerpo = FUENTE_ORDEN_REPO.slice(
+      FUENTE_ORDEN_REPO.indexOf("novedadWhere"),
+    );
+    const cierre = cuerpo.indexOf("],\n    };");
+    const predicado = cuerpo.slice(0, cierre);
+    expect(predicado).toMatch(/ayuda\s*:\s*true/);
+    // Y la rama de ayuda YA NO viaja sola: lleva su estatus pegado en la misma clave hermana.
+    expect(predicado).toMatch(/ayuda\s*:\s*true,\s*estatus\s*:\s*\{\s*value\s*:/);
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta", "en_reparto"]);
   });
 
   it("la extracción REVIENTA si el patrón deja de encontrarse (nunca «nada → verde»)", () => {
@@ -327,9 +378,15 @@ describe("227 / R36 — el panel del mensajero sigue leyendo lo que leía", () =
     expect(ESTATUS_DEL_PANEL_MENSAJERO).toHaveLength(2);
   });
 
-  it("y `/novedades` sigue listando exactamente `devuelta`", () => {
+  it("y `/novedades` lista exactamente `devuelta` (devolución) y `en_reparto` (ayuda)", () => {
     // La otra mitad del cruce, dicha también como valor: si el predicado central de novedades
     // cambiara de estatus, la ventana del adminTienda tendría que moverse con él.
-    expect(ESTATUS_DE_NOVEDADES).toEqual(["devuelta"]);
+    //
+    // 2026-08-19 (feature 239/R22): son DOS. `devuelta` es la devolución anclada —donde la tienda
+    // escribe— y `en_reparto` es la orden con solicitud de ayuda viva, que además coincide con la
+    // ventana del mensajero: por esa rama los dos roles miran la MISMA orden a la vez, que es
+    // literalmente lo que el hilo bidireccional necesita para servir de algo.
+    expect([...ESTATUS_DE_NOVEDADES].sort()).toEqual(["devuelta", "en_reparto"]);
+    expect(ESTATUS_DE_NOVEDADES).toHaveLength(2);
   });
 });

@@ -198,10 +198,29 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
     }
   });
 
-  it("R14: `devuelta` sigue teniendo al menos una arista y la del mensajero es de familia `gestion`", () => {
+  // INVERTIDO el 2026-08-19 por la feature 239, y hay que leer POR QUE antes de tocarlo: NO es
+  // una fusion de criterios (eso seria regresion, R16), es que la arista del mensajero cambio de
+  // DESTINO. Desde la 239 gestionar una devolucion deja la orden en `devolucion_por_confirmar`,
+  // no en `devuelta`; a `devuelta` se llega al APROBAR el cierre (familia `anclaje_devolucion`).
+  //
+  // EL CONTEO DE INTENTOS NO CAMBIA (R17), y este caso lo afirma: `whereIntentosVigentes` no
+  // mira NINGUN destino de transicion — mira `resultado` (`devuelta` sigue en la lista) y la
+  // familia de la fila de historial (`gestion` sigue siendo la que escribe la gestion del
+  // mensajero, solo que ahora hacia el pre-estado). Las dos condiciones siguen intactas.
+  it("R14/239: la arista del mensajero conserva la familia `gestion` (cambia su DESTINO, no el conteo)", () => {
+    const delMensajero = aristas.filter(
+      (a) => a.origen === "en_reparto" && a.destino === "devolucion_por_confirmar",
+    );
+    expect(delMensajero).toHaveLength(1);
+    expect(delMensajero[0].via).toBe("gestion"); // R17: la sexta condicion del predicado sigue casando
+
+    // `devuelta` conserva entrada: la del ANCLAJE, con familia PROPIA. Y esa familia NO esta en
+    // `ORIGEN_TIPOS_VISITA_REAL`, que es lo que impide que la confirmacion administrativa sume
+    // un intento de mas (y con el, un `cobroRechazado` antes de tiempo).
     const aDevuelta = aristas.filter((a) => a.destino === "devuelta");
     expect(aDevuelta.length).toBeGreaterThanOrEqual(1);
-    expect(aDevuelta.map((a) => a.via)).toContain("gestion");
+    expect(aDevuelta.map((a) => a.via)).toContain("anclaje_devolucion");
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("anclaje_devolucion");
   });
 
   // R14: `incidente` sigue siendo terminal en el sentido del negocio — todas sus salidas son

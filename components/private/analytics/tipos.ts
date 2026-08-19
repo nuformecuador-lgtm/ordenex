@@ -73,6 +73,111 @@ export interface GraficaProps extends EstadoVisual {
   readonly avisoRecorte?: (mostradas: number, recibidas: number) => string;
   /** R24: clase adicional opcional. El paquete no fija ancho ni alto en pixeles. */
   readonly className?: string;
+  /**
+   * Proporcion del lienzo. `normal` = 16:9 (lo de siempre); `bajo` = 32:9, la MITAD de alto.
+   *
+   * Alto por PROPORCION y no por pixeles, que es la regla del paquete (R24): el slot del
+   * shell es una columna flex y cualquier `h-[300px]` se rompe ahi. Por eso la prop es una
+   * union cerrada y no un numero: las clases de Tailwind se compilan estaticamente, asi que
+   * una interpolada no existiria en el CSS final.
+   *
+   * Opcional y con el default en lo de siempre, como `innerRadius` o `leyenda`: ninguna
+   * grafica ya montada cambia de forma porque exista una opcion nueva.
+   */
+  readonly proporcion?: "normal" | "bajo";
+}
+
+/**
+ * Lo que distingue un donut de un ANILLO: el grosor y lo que va en el hueco.
+ *
+ * Los dos radios se declaran como los declara recharts —pixeles o porcentaje del radio
+ * disponible— y viajan tal cual al lienzo. No se validan aqui: el paquete dibuja, y una
+ * combinacion absurda (interior mayor que exterior) se ve en el acto.
+ *
+ * Vive en el CONTRATO y no junto al lienzo porque `GraficaDonut` la necesita en sus props
+ * y no puede importar nada de `./lienzo/` sin romper el confinamiento de recharts
+ * (R26/R27): ahi el guardia mira el texto del import, no si el tipo se borra al compilar.
+ */
+/** Ajuste propio de las BARRAS. Opcional y con el default en el comportamiento de siempre,
+ *  igual que la familia de `AnilloProps`: ninguna grafica ya montada cambia de forma. */
+export interface BarrasProps {
+  /**
+   * Apilar las series en UNA barra por categoria, cada una de su color, en vez de ponerlas
+   * lado a lado. Default `false` (como se dibujan desde la 130).
+   *
+   * ⚠ APILAR AFIRMA QUE LAS SERIES SON PARTES DE UN TODO: la altura de la barra es su suma. Con
+   * series que se solapan —una que ya esta contenida en otra— esa altura no significa nada, y
+   * el grafico lo dice igual de convincente. Quien enciende esto se hace responsable de que
+   * sumar sus series tenga sentido.
+   */
+  readonly apilado?: boolean;
+  /**
+   * Dibujar las barras TUMBADAS: la categoria baja por el eje vertical y el valor crece hacia
+   * la derecha. Default `false` (barras de pie, como se dibujan desde la 130).
+   *
+   * ⚠ EL ALTO DEJA DE SER LIBRE. De pie, el numero de categorias reparte el ANCHO —que es
+   * elastico— y el alto lo fija el contenedor. Tumbadas, cada categoria necesita su franja de
+   * ALTO: con muchas categorias en una caja baja las barras se aplastan hasta no distinguirse.
+   * Quien la enciende tiene que mirar cuantas categorias hay y darle alto en consecuencia.
+   */
+  readonly horizontal?: boolean;
+  /**
+   * GROSOR de cada barra, en px. Ausente: recharts lo reparte solo con el espacio disponible,
+   * que es como se dibujan las barras desde la 130.
+   *
+   * Es un tope, no una medida rigida: recharts nunca dibuja mas grueso que esto, pero SI mas
+   * fino si no cabe. Por eso fijarlo no puede desbordar la caja con muchas categorias — lo que
+   * pasa es que las barras se separan menos entre si.
+   *
+   * Se llama GROSOR y no «ancho» a proposito: con `horizontal` la barra esta tumbada y lo que
+   * este numero mide es su ALTO. Una prop llamada `ancho` mentiria en la mitad de los casos.
+   */
+  readonly grosorBarra?: number;
+}
+
+export interface AnilloProps {
+  /** Radio interior. Default del donut: `"55%"`. Un `"80%"` deja un anillo fino. */
+  readonly innerRadius?: string | number;
+  /** Radio exterior. Default del donut: `"85%"`. */
+  readonly outerRadius?: string | number;
+  /**
+   * Texto al CENTRO del hueco. Cadena YA formateada por el llamador —no un `ReactNode`—
+   * porque estas graficas las monta tambien un Server Component, y un nodo con funciones
+   * dentro no cruza la frontera RSC. Ausente: el hueco queda vacio.
+   */
+  readonly centro?: string;
+  /**
+   * Donde va la leyenda. `"abajo"` (default) es como el donut lleva dibujandose desde la 130.
+   * `"lateral"` la pone en COLUMNA a la derecha del anillo, una entrada por linea.
+   *
+   * Opcional y con el default puesto en el comportamiento viejo, igual que `innerRadius` y
+   * `centro`: es la regla de esta familia de props —ninguna grafica ya montada cambia de
+   * forma porque exista una opcion nueva—. Hoy la piden las ENTREGAS; el donut financiero y
+   * los paneles operativos siguen con su leyenda abajo hasta que alguien lo decida para
+   * ellos, que es una decision de cada pantalla y no de este archivo.
+   */
+  readonly leyenda?: "abajo" | "lateral";
+  /**
+   * Escribir el VALOR de cada segmento sobre el propio anillo, para no tener que pasar el
+   * raton por encima para leerlo. Default `false` (el comportamiento de siempre).
+   *
+   * ⚠ No es gratis en un anillo FINO: con `innerRadius: "80%"` la banda es estrecha y el
+   * numero se apoya sobre ella. Con la leyenda lateral encendida la cifra ya se lee ahi, asi
+   * que esto es redundancia deliberada, no la unica via: se puede apagar sin perder el dato.
+   */
+  readonly mostrarValores?: boolean;
+  /**
+   * Escribir tambien el PESO de cada porcion sobre el total del anillo, pegado a su cifra:
+   * `«20 (50 %)»`. Default `false` (el comportamiento de siempre).
+   *
+   * Acompana a la cifra, no la sustituye: «50 %» a solas no dice de cuantas ordenes se habla,
+   * y en un anillo de operacion la cantidad es tan dato como la proporcion.
+   *
+   * Los porcentajes se calculan con `porcentajesDeReparto`, que reparte por RESTO MAYOR para
+   * que la columna sume exactamente 100 %. Redondear cada porcion por su cuenta daria 99 o
+   * 101, y unos porcentajes que no suman contradicen el propio dibujo.
+   */
+  readonly mostrarPorcentaje?: boolean;
 }
 
 /** Variacion respecto al periodo anterior (R15). */

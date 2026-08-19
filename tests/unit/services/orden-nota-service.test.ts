@@ -102,6 +102,9 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
       tiendaId: TIENDA,
       mensajeroAsignadoId: MENSAJERO,
       estatusValue: "devuelta",
+      // 2026-08-18: default `false` para que los casos existentes sigan midiendo la ventana por
+      // ESTATUS y nada mas. Los que ejercitan la segunda puerta lo sobreescriben.
+      ayuda: false,
       deletedAt: null,
       notas: "nota de la tienda, escrita en la carga masiva",
       ...over,
@@ -145,6 +148,7 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
             tiendaId: o.tiendaId,
             mensajeroAsignadoId: o.mensajeroAsignadoId,
             estatusValue: o.estatusValue,
+            ayuda: o.ayuda,
             deletedAt: o.deletedAt,
           }
         : null;
@@ -370,6 +374,42 @@ describe("R14 — ventana de escritura ASIMETRICA por rol", () => {
     expect(VENTANA_ESCRITURA).toEqual({ adminTienda: "devuelta", mensajero: "en_reparto" });
   });
 
+  // Pedido humano 2026-08-18 — SEGUNDA PUERTA, y solo para la tienda: una solicitud de ayuda viva
+  // le abre la ventana en cualquier estatus. Sin esto, la tienda ve en `/novedades` una orden EN
+  // REPARTO con ayuda pedida —la lista desde que `novedadWhere` gano su segunda rama—, lee que el
+  // mensajero pide auxilio y no puede ni contestarle ni pulsar «Habilitar», porque las dos cosas
+  // pasan por `publicar`. Permiso inejercitable, con la ventana quieta y la superficie creciendo.
+  it("con `ayuda` viva la TIENDA publica fuera de `devuelta`; el mensajero NO gana nada", async () => {
+    const conAyuda = { estatusValue: "en_reparto", ayuda: true };
+
+    const tienda = escenario({ ordenes: { [ORDEN]: conAyuda } });
+    expect(
+      await tienda.service.publicar({ ordenId: ORDEN, cuerpo: "te llamo ya" }, actorTienda),
+    ).toMatchObject({ status: "ok" });
+    expect(tienda.filas).toHaveLength(1);
+
+    // El mensajero ya podia publicar ahi por SU ventana (`en_reparto`): `ayuda` no le anade nada
+    // y no se le ensancha a ningun otro estatus.
+    const mensajeroFuera = escenario({
+      ordenes: { [ORDEN]: { estatusValue: "entregada", ayuda: true } },
+    });
+    expect(
+      await mensajeroFuera.service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero),
+    ).toEqual({ status: "forbidden" });
+    expect(mensajeroFuera.filas).toHaveLength(0);
+  });
+
+  it("sin `ayuda`, la ventana de la tienda sigue siendo EXACTAMENTE `devuelta`", async () => {
+    // La contraprueba del caso de arriba: lo que abre la puerta es la bandera, no el estatus.
+    const { service, filas } = escenario({
+      ordenes: { [ORDEN]: { estatusValue: "en_reparto", ayuda: false } },
+    });
+    expect(await service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorTienda)).toEqual({
+      status: "forbidden",
+    });
+    expect(filas).toHaveLength(0);
+  });
+
   it("`por_recoger` NO abre ventana para nadie (decision deliberada del design §2.2)", async () => {
     const { service, filas } = escenario({ ordenes: { [ORDEN]: { estatusValue: "por_recoger" } } });
     expect(await service.publicar({ ordenId: ORDEN, cuerpo: "x" }, actorMensajero)).toEqual({
@@ -446,6 +486,10 @@ describe("R25 — la nota de la TIENDA no se toca", () => {
     // proyeccion minima de autorizacion, que no incluye `notas`.
     for (const proyeccion of repo.findOrdenParaHilo.mock.results) {
       expect(Object.keys(await proyeccion.value).sort()).toEqual([
+        // 2026-08-18: `ayuda` entra en la proyeccion de AUTORIZACION porque la ventana del
+        // adminTienda pasa a depender tambien de ella. La lista sigue siendo cerrada a proposito:
+        // es lo que impide que `notas` —la nota de la TIENDA, otra cosa— se cuele aqui algun dia.
+        "ayuda",
         "deletedAt",
         "estatusValue",
         "mensajeroAsignadoId",

@@ -76,6 +76,19 @@ export const ORDER_STATUS_SEED = [
   // el mensajero escrito, seguia saliendo como asignable y se podia reasignar indefinidamente.
   // `por_recolectar_en_tienda` = nadie va todavia; `recolectando` = alguien va en camino.
   "recolectando",
+  // Feature 239/R1 (P1 FIRMADA por el humano el 2026-08-19): APENDICE, indice 20 -> el catalogo
+  // pasa de 20 a 21. Ni renombra, ni reordena, ni retira ninguno de los 20 vigentes.
+  //
+  // Es el PRE-ESTADO de la devolucion: el mensajero YA gestiono la orden como `devuelta`, pero la
+  // bodega todavia no lo ha confirmado al aprobar el cierre. La orden NO entra en `devuelta` al
+  // gestionar (esa arista, la #14, muere en este mismo commit): entra aqui, y la APROBACION DEL
+  // CIERRE **es** la transicion a `devuelta` (R4). Mientras este aqui: no la ve la tienda (R19),
+  // no corre su ventana de SLA (R13) y por tanto NO se puede cobrar el rechazo antes de tiempo,
+  // que es el fallo que esta feature arregla (`progress/auditoria_ayuda_tienda.md` §1).
+  //
+  // El nombre dice QUIEN FALTA (la bodega confirma), no que paso. No colisiona con
+  // `por_devolver` / `por_devolver_a_tienda`, que son el otro flujo (el de las rechazadas).
+  "devolucion_por_confirmar",
 ] as const;
 
 export type OrderStatusValue = (typeof ORDER_STATUS_SEED)[number];

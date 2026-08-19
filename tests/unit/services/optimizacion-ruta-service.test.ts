@@ -26,11 +26,18 @@ const CONFIG: RouteOptimizationConfig = {
   GOOGLE_ROUTE_OPT_PROJECT_ID: "p",
   GOOGLE_ROUTE_OPT_SA_EMAIL: "sa@x",
   GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY: "pem",
+  // El service NO elige modo de autenticacion (eso es del selector); estas piezas estan
+  // aqui solo para satisfacer el tipo.
+  GOOGLE_WIF_PROJECT_NUMBER: null,
+  GOOGLE_WIF_POOL_ID: null,
+  GOOGLE_WIF_PROVIDER_ID: null,
+  GOOGLE_ROUTE_OPT_USE_ADC: false,
   ROUTE_OPT_TIMEOUT_MS: 20_000,
   RUTA_DEBOUNCE_S: 60,
   RUTA_ORIGEN_TTL_MIN: 120,
   RUTA_SYNC_MIN_INTERVALO_S: 10,
   RUTA_MAX_PARADAS: 100,
+  ROUTES_ROUTING_PREFERENCE: "TRAFFIC_UNAWARE",
 };
 
 function parada(id: string, over: Partial<ParadaRutaRow> = {}): ParadaRutaRow {
@@ -49,6 +56,9 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: null,
     huellaSet: null,
     ultimoError: null,
+    trazado: null,
+    tramoVivoAt: null,
+    tramoPorOrden: new Map(),
     secuenciaPorOrden: new Map(),
     ...over,
   };
@@ -65,6 +75,8 @@ function build(opts: {
     findByMensajero: vi.fn(async () => opts.ruta ?? null),
     upsertOrigen: vi.fn<(m: string, u: unknown) => Promise<void>>(async () => {}),
     reemplazarSecuencia: vi.fn<(m: string, s: string[], meta: unknown) => Promise<void>>(async () => {}),
+    guardarTrazado: vi.fn<(m: string, h: string, t: unknown) => Promise<void>>(async () => {}),
+    marcarTramoVivo: vi.fn<(m: string, a: Date) => Promise<void>>(async () => {}),
     marcarDesactualizada: vi.fn<(m: string, e: string) => Promise<void>>(async () => {}),
   };
 
@@ -180,10 +192,39 @@ describe("R35 — 0 o 1 parada con coordenadas", () => {
 
     const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
 
-    expect(r).toEqual({ status: "omitida", razon: "sin_paradas" });
+    expect(r.status).toBe("omitida");
+    expect(r).toMatchObject({ razon: "sin_paradas" });
     expect(client.optimizar).not.toHaveBeenCalled();
     expect(rutas.reemplazarSecuencia).toHaveBeenCalledTimes(1);
     expect(rutas.reemplazarSecuencia.mock.calls[0][1]).toEqual(["o1"]);
+  });
+
+  it("UNA parada -> aun sin ordenar, SI devuelve trazado para dibujar la linea", async () => {
+    // El mapa con una sola parada mostraba dos puntos sueltos. `omitida` describe que no
+    // hubo ORDENACION; el dibujo va aparte y debe salir igual.
+    const { service } = build({ paradas: [parada("o1")] });
+
+    const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
+
+    expect(r.trazado).toBeDefined();
+    expect(r.trazado?.encodedPolyline).not.toBe("");
+    // Sin cliente de Routes en este doble, el trazado cae al local (lineas rectas).
+    expect(r.trazado?.fuente).toBe("local");
+  });
+
+  it("UNA parada sin cambios desde la ultima vez -> NO se vuelve a pagar el trazado", async () => {
+    // El trazado es su propio SKU: se le aplica el mismo criterio que a R36.
+    const primera = build({ paradas: [parada("o1")], ruta: null });
+    await primera.service.ejecutar(MENSAJERO, { motivo: "manual" });
+    const huella = metaDe(primera.rutas).huellaSet as string;
+
+    const segunda = build({
+      paradas: [parada("o1")],
+      ruta: ruta({ huellaSet: huella, estado: "vigente" }),
+    });
+    const r = await segunda.service.ejecutar(MENSAJERO, { motivo: "inmediato" });
+
+    expect(r).toEqual({ status: "omitida", razon: "sin_paradas" });
   });
 
   it("CERO paradas -> limpia la secuencia vieja, sin llamar y sin reventar por el centroide", async () => {
@@ -222,6 +263,51 @@ describe("R36 — huella del conjunto de paradas + origen", () => {
 
     expect(r).toEqual({ status: "omitida", razon: "sin_cambios" });
     expect(segunda.client.optimizar).not.toHaveBeenCalled();
+  });
+
+  it("con trazado persistido, la guarda lo DEVUELVE en vez de dejar el mapa sin linea", async () => {
+    // El agujero que cerro la migracion: cortar por huella dejaba al mapa sin polilinea.
+    // La guardada corresponde a esta misma huella (la DB la limpia si la secuencia cambia),
+    // asi que se puede servir tal cual, sin llamar ni pagar.
+    const cacheado = {
+      encodedPolyline: "gfo}EtohhUxD@bAxJmGF",
+      distanciaM: 5400,
+      duracionS: 930,
+      fuente: "routes" as const,
+    };
+    const paradas = [parada("o1"), parada("o2")];
+    const primera = build({ paradas, ruta: null });
+    await primera.service.ejecutar(MENSAJERO, { motivo: "manual" });
+    const huella = metaDe(primera.rutas).huellaSet as string;
+
+    const segunda = build({
+      paradas,
+      ruta: ruta({ huellaSet: huella, estado: "vigente", trazado: cacheado }),
+    });
+    const r = await segunda.service.ejecutar(MENSAJERO, { motivo: "manual" });
+
+    // `tramos` vacio: la ruta cacheada de este doble no trae tramos por parada.
+    expect(r).toEqual({
+      status: "omitida",
+      razon: "sin_cambios",
+      trazado: { ...cacheado, tramos: [] },
+    });
+    expect(segunda.client.optimizar).not.toHaveBeenCalled();
+  });
+
+  it("sin trazado persistido, la guarda corta igual (el mapa conserva el suyo)", async () => {
+    const paradas = [parada("o1"), parada("o2")];
+    const primera = build({ paradas, ruta: null });
+    await primera.service.ejecutar(MENSAJERO, { motivo: "manual" });
+    const huella = metaDe(primera.rutas).huellaSet as string;
+
+    const segunda = build({
+      paradas,
+      ruta: ruta({ huellaSet: huella, estado: "vigente", trazado: null }),
+    });
+    const r = await segunda.service.ejecutar(MENSAJERO, { motivo: "manual" });
+
+    expect(r).toEqual({ status: "omitida", razon: "sin_cambios" });
   });
 
   it("una parada NUEVA cambia la huella -> si se optimiza", async () => {
@@ -300,7 +386,10 @@ describe("R38 — tope de paradas", () => {
 
     const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
 
-    expect(r).toEqual({ status: "ok", paradas: 3 });
+    // `toMatchObject` y no `toEqual`: desde el seguimiento de la 92 el resultado tambien
+    // trae `trazado` (la polilinea), que estos tests no ejercitan —tiene los suyos en
+    // `optimizacion-ruta-trazado.test.ts`—.
+    expect(r).toMatchObject({ status: "ok", paradas: 3 });
     const enviadas = client.optimizar.mock.calls[0][0].paradas.map(
       (p: { ordenId: string }) => p.ordenId,
     );
@@ -390,6 +479,8 @@ describe("R12 — credencial ausente corta ANTES de cualquier red", () => {
       findByMensajero: vi.fn(async () => null),
       upsertOrigen: vi.fn(async () => {}),
       reemplazarSecuencia: vi.fn(async () => {}),
+      guardarTrazado: vi.fn(async () => {}),
+      marcarTramoVivo: vi.fn(async () => {}),
       marcarDesactualizada: vi.fn(async () => {}),
     };
     const client: IRouteOptimizationClient = {
@@ -421,7 +512,10 @@ describe("resultado exitoso", () => {
 
     const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
 
-    expect(r).toEqual({ status: "ok", paradas: 3 });
+    // `toMatchObject` y no `toEqual`: desde el seguimiento de la 92 el resultado tambien
+    // trae `trazado` (la polilinea), que estos tests no ejercitan —tiene los suyos en
+    // `optimizacion-ruta-trazado.test.ts`—.
+    expect(r).toMatchObject({ status: "ok", paradas: 3 });
     // El doble del cliente invierte el orden: se comprueba que se persiste LO QUE EL
     // PROVEEDOR DIJO, no el orden de entrada.
     expect(rutas.reemplazarSecuencia.mock.calls[0][1]).toEqual(["o3", "o2", "o1"]);

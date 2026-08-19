@@ -126,6 +126,27 @@ const COLAS_TANDA_J: { ruta: string; listado: string }[] = [
 const CONTADOR_POR_TOTAL = /\(\{\s*[^{}]*?\.total\s*\}\)/;
 
 /**
+ * Pedido humano del 2026-08-16 — LA SEGUNDA FORMA del mismo contador: `conteo: X.total`, dentro
+ * de la pestaña de un `SegmentedToggle`.
+ *
+ * POR QUÉ SE AÑADE, y por qué esto NO es aflojar la guardia. Ese día la pantalla de cierres se
+ * dividió en pestañas y el encabezado visible («Pendientes de decisión (12)») se retiró por
+ * redundante: la pestaña ya lo dice. El número no desapareció —se mudó al `conteo` de la
+ * pestaña— y sigue saliendo del `total` del SERVIDOR, que es lo ÚNICO que R42 exige. Lo que
+ * quedó obsoleto es la FORMA `({X.total})`, no la regla.
+ *
+ * Y el contador importa más que antes, no menos: al esconder la mitad que no se está mirando,
+ * la pestaña apagada es el único sitio donde se puede ver si hay trabajo esperando. Un
+ * `items.length` ahí diría «(25)» habiendo 300 cierres sin decidir, y ahora ni siquiera se
+ * vería la lista para sospecharlo.
+ *
+ * Lo PROHIBIDO no se toca: el primer caso de este archivo sigue vetando `({X.length})` en todo
+ * el árbol, y esta forma nueva no abre ninguna puerta a un `.length` —exige `.total` igual que
+ * la vieja—.
+ */
+const CONTADOR_EN_PESTANA = /conteo:[ ]*[A-Za-z0-9_.]*[.]total[ ]*[,}]/;
+
+/**
  * Feature 170 — FASE 2 (T K.3): la bodega satelite, la pantalla de riesgo ALTO del Anexo III.
  *
  * Entra en esta guardia por el traspaso de T K.1/T K.2 (§9, punto 8): su contador NO tiene la
@@ -347,8 +368,11 @@ describe("guardia de contadores de cabecera (T H.3, R42)", () => {
         `${cola.listado}: su modulo no monta el control, la guardia deja de mirarlo (Q-I6)`,
       ).toBe(true);
       const fuente = readFileSync(path.join(RAIZ, cola.ruta), "utf8");
+      // Vale CUALQUIERA de las dos formas —el contador junto al encabezado o dentro de su
+      // pestaña—, y las dos exigen `.total`. Es la misma afirmación de siempre: el número lo
+      // pone el SERVIDOR. Ver la nota de `CONTADOR_EN_PESTANA` para por qué hay dos.
       expect(
-        CONTADOR_POR_TOTAL.test(fuente),
+        CONTADOR_POR_TOTAL.test(fuente) || CONTADOR_EN_PESTANA.test(fuente),
         `${cola.listado}: su contador no sale del total del servidor (R42)`,
       ).toBe(true);
     }

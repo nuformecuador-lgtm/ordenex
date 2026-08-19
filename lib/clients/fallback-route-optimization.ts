@@ -20,6 +20,7 @@ import type {
   OptimizarOutcome,
 } from "@/lib/interfaces/external/IRouteOptimizationClient";
 import { RutaNoConfiguradoError } from "@/lib/auth/google-token-shared";
+import { optlog, opterror } from "@/lib/logging/optimizer-log";
 
 /** Logger inyectable, mismo contrato que `RutaLogger`. NUNCA recibe PII ni secretos. */
 export interface FallbackLogger {
@@ -39,6 +40,11 @@ export class FallbackRouteOptimizationClient implements IRouteOptimizationClient
       return await this.primary.optimizar(input);
     } catch (error) {
       if (error instanceof RutaNoConfiguradoError) {
+        // ESTA linea es la que explica el sintoma mas confuso de la feature: "la ruta se
+        // ordena pero Google nunca se llama". Sin ella, el fallback es invisible.
+        optlog("fallback — SIN credencial: se ordena en local con Haversine", {
+          motivo: error.message,
+        });
         // Aviso agregado, sin PII: util para que un operador note que se esta ordenando en
         // local por falta de credencial, en vez de creer que Google esta activo.
         this.logger.warn(
@@ -47,6 +53,7 @@ export class FallbackRouteOptimizationClient implements IRouteOptimizationClient
         return this.fallback.optimizar(input);
       }
       // Fallo REAL del proveedor configurado: se propaga para que la cola/UI lo traten.
+      opterror("fallback — fallo REAL del proveedor; NO se cae a Haversine", error);
       throw error;
     }
   }

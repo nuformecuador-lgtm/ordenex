@@ -89,6 +89,8 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   calculadaAt: null,
   origenFuente: "gps",
   paradasSinOptimizar: 0,
+  trazado: null,
+  tramoSiguiente: null,
 };
 
 function renderModule(porGestionar: MiAsignacionDTO[]) {

@@ -23,6 +23,10 @@ const ESTATUS_IDS: Record<string, string | null> = {
   rechazada: "s-rechazada",
   por_devolver: "s-por-devolver",
   por_devolver_a_tienda: "s-por-devolver-a-tienda",
+  // Feature 239 (T2.1): los dos del ANCLAJE. Sin ellos la aprobacion NO ocurre (R9, fallo
+  // cerrado), asi que esta suite —que aprueba— tiene que resolverlos.
+  devolucion_por_confirmar: "s-devolucion-por-confirmar",
+  devuelta: "s-devuelta",
 };
 
 function fakeRepo(): ICierresAdminRepository {
@@ -39,6 +43,10 @@ function fakeRepo(): ICierresAdminRepository {
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
   // Feature 158/R19: sin incidentes -> cobertura vacia (camino de la 38 intacto).
   findGestionesIncidenteDelCierre: vi.fn(async () => []),
+  // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
+  // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
+  findGestionesPorAlcanceCompleto: vi.fn(async () => []),
+  findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
   };
 }
 

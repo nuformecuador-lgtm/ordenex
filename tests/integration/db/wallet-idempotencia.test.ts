@@ -1,10 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import type { CrearMovimientoInput } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { Alcance } from "@/lib/interfaces/repositories/ICierresAdminRepository";
+import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
+import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // Feature 42/T9 — idempotencia + no-doble-conteo (R6/R13). Simula el constraint unico
 // parcial (origen_tipo, origen_id, categoria) WHERE origen_id IS NOT NULL con una tienda
@@ -42,6 +44,84 @@ function makeWalletStore() {
   return { rows, walletMovimiento };
 }
 
+// INVERTIDO el 2026-08-19 por la feature 239 (T2.3/T2.5). Hasta aqui este store emulaba el
+// `updateMany` POR RELACION que encendia `orden.gestion_aprobada`. Esa escritura SE RETIRO: era
+// la mitad implementada del fallo (quitaba la visibilidad sin mover el reloj). La sustituye el
+// bloque de ANCLAJE, que es una TRANSICION DE ESTADO de verdad, guardada por el pre-estado.
+//
+// POR QUE NO ES UN `vi.fn()` QUE DEVUELVE `{count: 0}`, y esto no cambia con la 239: un doble
+// mudo tapa el TypeError y deja la escritura sin nadie que la mire — que era exactamente el
+// agujero que la escritura vieja tuvo durante toda su vida. Este store honra el `where` como lo
+// haria Postgres, asi que la GUARDA por `estatus_id` se comporta como la guarda que dice ser: la
+// idempotencia se ve de verdad, no se afirma de palabra.
+function makeOrdenStore() {
+  const ordenes = [
+    // o1 entrego: nunca entra en el pre-estado.
+    { id: "o1", estatusId: idEstado("entregada"), deletedAt: null as Date | null },
+    // o2 es la devolucion de ESTE cierre (gestion g2): la que tiene que quedar anclada.
+    { id: "o2", estatusId: ANCLAJE_DEVOLUCION.preEstadoId, deletedAt: null as Date | null },
+    // La testigo: MISMO resultado `devuelta` y MISMO pre-estado, pero su gestion (g3) es de OTRO
+    // cierre. Solo el `cierreId` la separa, asi que si la guardia desapareciera del WHERE, esta
+    // orden se anclaria sola — con la aprobacion de un cierre que no es el suyo.
+    { id: "o3", estatusId: ANCLAJE_DEVOLUCION.preEstadoId, deletedAt: null as Date | null },
+  ];
+  type WhereOrden = {
+    id?: { in?: string[] };
+    estatusId?: string;
+    deletedAt?: Date | null;
+  };
+  const orden = {
+    updateMany: vi.fn(
+      async ({ where, data }: { where: WhereOrden; data: Record<string, unknown> }) => {
+        let count = 0;
+        for (const o of ordenes) {
+          if (where.id?.in !== undefined && !where.id.in.includes(o.id)) continue;
+          // LA GUARDA: `estatus_id = <pre-estado>`. Es lo que hace idempotente al bloque sin una
+          // sola linea de codigo de idempotencia — una segunda aprobacion no encuentra nada.
+          if (where.estatusId !== undefined && o.estatusId !== where.estatusId) continue;
+          if (where.deletedAt !== undefined && o.deletedAt !== where.deletedAt) continue;
+          Object.assign(o, data);
+          count += 1;
+        }
+        return { count };
+      },
+    ),
+  };
+  return { ordenes, orden };
+}
+
+// Las gestiones que ve la transaccion, con la forma REAL de las dos consultas que las leen: el
+// feed de dinero (`{ cierreId }`) y el bloque de anclaje (`{ cierreId, resultado, anuladaAt }` y
+// despues `{ ordenId: { in }, resultado, anuladaAt }`). El doble honra el `where` en vez de
+// devolver siempre la misma lista: si no lo hiciera, la GUARDIA de `cierreId` del anclaje no se
+// estaria probando (devolveria las de todos los cierres y el test pasaria igual).
+const GESTIONES_EN_BASE = [
+  { id: "g1", ordenId: "o1", cierreId: "c1", resultado: "entregada", anuladaAt: null as Date | null },
+  { id: "g2", ordenId: "o2", cierreId: "c1", resultado: "devuelta", anuladaAt: null as Date | null },
+  { id: "g3", ordenId: "o3", cierreId: "c2", resultado: "devuelta", anuladaAt: null as Date | null },
+];
+
+type WhereGestion = {
+  cierreId?: string;
+  resultado?: string;
+  anuladaAt?: Date | null;
+  ordenId?: { in?: string[] };
+};
+
+function gestionOrdenFake() {
+  return {
+    findMany: vi.fn(async ({ where }: { where: WhereGestion }) =>
+      GESTIONES_EN_BASE.filter(
+        (g) =>
+          (where.cierreId === undefined || g.cierreId === where.cierreId) &&
+          (where.resultado === undefined || g.resultado === where.resultado) &&
+          (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
+          (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+      ).map((g) => ({ ...g })),
+    ),
+  };
+}
+
 const TARIFA = {
   valorFlete: "1000.00",
   valorFleteGam: "1500.00",
@@ -67,20 +147,23 @@ const TARIFA_CONGELADA = {
 // Prisma doble: gestiones del cierre + su detalle CONGELADO + la tienda de wallet +
 // $transaction (tx === prisma). Feature 69: el feed deriva del snapshot, asi que el doble
 // aporta `cierreDetail`; los importes (y por tanto los 6 conceptos) no cambian.
-function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
-  const gestiones = [
-    { ordenId: "o1", resultado: "entregada" },
-    { ordenId: "o2", resultado: "devuelta" },
-  ];
+function buildPrisma(
+  store: ReturnType<typeof makeWalletStore>,
+  ordenStore: ReturnType<typeof makeOrdenStore> = makeOrdenStore(),
+) {
   const detalle = [
     { ordenId: "o1", tiendaId: "t1", montoCobrar: new Prisma.Decimal("10000.00"), cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
     { ordenId: "o2", tiendaId: "t1", montoCobrar: null, cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
   ];
   const prisma = {
     cierreDia: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
-    gestionOrden: { findMany: vi.fn().mockResolvedValue(gestiones) },
+    gestionOrden: gestionOrdenFake(),
     cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
+    orden: ordenStore.orden,
+    // Feature 239 (T2.2): el anclaje registra la transicion por el choke point. El doble tiene
+    // que existir o la tx muere; lo que escribe se afirma en el caso de abajo.
+    ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
   };
   return {
     ...prisma,
@@ -90,11 +173,14 @@ function buildPrisma(store: ReturnType<typeof makeWalletStore>) {
 
 const ALCANCE: Alcance = { destinoTipo: "bodega_central", destinoZonaId: null };
 
-describe("wallet idempotencia (R6/R13)", () => {
-  it("R6: doble aprobacion del mismo cierre -> UN SOLO set de movimientos (skipDuplicates)", async () => {
-    const store = makeWalletStore();
-    const prisma = buildPrisma(store);
-    const repo = new CierresAdminRepository(
+/**
+ * El repositorio bajo prueba con los dobles de las features vecinas. Extraido (era el cuerpo del
+ * caso R6) para que el caso del ANCLAJE de mas abajo monte EXACTAMENTE la misma
+ * transaccion: si cada uno armara la suya, podrian dejar de medir el mismo camino sin que nada
+ * lo delate.
+ */
+function makeRepo(prisma: ReturnType<typeof buildPrisma>) {
+  return new CierresAdminRepository(
       prisma as unknown as PrismaClient,
       new WalletMovimientoRepository(prisma as unknown as PrismaClient),
       new WalletFeedService(),
@@ -110,13 +196,29 @@ describe("wallet idempotencia (R6/R13)", () => {
       // idempotencia de los conceptos de INGRESO; la del egreso de indemnizacion tiene su
       // propio caso mas abajo, con el feed REAL.
       { construirEgresoIndemnizacion: vi.fn(async () => []) },
-    );
+  );
+}
+
+// Feature 140/239: la guardia del choke point es de FALLO CERRADO. El anclaje registra el par
+// `devolucion_por_confirmar -> devuelta`, asi que la tx necesita un catalogo REAL con esos dos
+// values o la aprobacion entera revierte (que es el comportamiento correcto, pero no lo que este
+// archivo mide).
+beforeEach(async () => {
+  await sembrarCatalogoEstados();
+});
+
+describe("wallet idempotencia (R6/R13)", () => {
+  it("R6: doble aprobacion del mismo cierre -> UN SOLO set de movimientos (skipDuplicates)", async () => {
+    const store = makeWalletStore();
+    const prisma = buildPrisma(store);
+    const repo = makeRepo(prisma);
 
     const aprobar = () =>
       repo.resolverCierre({
         cierreId: "c1",
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
         resueltoPor: "adm",
         motivoRechazo: null,
       });
@@ -133,6 +235,74 @@ describe("wallet idempotencia (R6/R13)", () => {
     // El cierre solo-entregada+devuelta produce: flete, iva_flete, comision, iva_comision,
     // flete_devolucion, iva_flete_devolucion (6 conceptos, ninguno duplicado).
     expect(store.rows.length).toBe(6);
+  });
+
+  // INVERTIDO el 2026-08-19 (feature 239, T2.3/T2.5). Este caso nacio el 2026-08-18 para mirar
+  // «la escritura que nadie miraba»: el `updateMany` que encendia `orden.gestion_aprobada`. Esa
+  // escritura ya no existe — era la mitad implementada del fallo—; la sustituye el ANCLAJE, que
+  // mueve la orden del pre-estado a `devuelta` dentro de la MISMA transaccion que los cinco
+  // feeds de dinero.
+  //
+  // El caso se conserva EN ESTE ARCHIVO y con el mismo enunciado (R6: doble aprobacion, un solo
+  // efecto) porque mide lo mismo que medía: la unica escritura de la tx que NO esta protegida
+  // por el indice unico de la wallet ni por `skipDuplicates`, sino por ser idempotente por
+  // construccion. Lo que cambia es de que escritura hablamos.
+  it("R6/239-R4/R8: aprobar ANCLA solo la devolucion de ESTE cierre, y re-aprobar no cambia nada", async () => {
+    const store = makeWalletStore();
+    const ordenStore = makeOrdenStore();
+    const prisma = buildPrisma(store, ordenStore);
+    const repo = makeRepo(prisma);
+
+    const aprobar = () =>
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE,
+        nuevoEstado: "aprobado",
+        anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+        resueltoPor: "adm",
+        motivoRechazo: null,
+      });
+
+    await aprobar();
+
+    const estado = () => Object.fromEntries(ordenStore.ordenes.map((o) => [o.id, o.estatusId]));
+    // o2 es la unica `devuelta` de c1: pasa del pre-estado a `devuelta` (queda ANCLADA: visible
+    // para la tienda y con el reloj corriendo). o1 entrego. o3 se devolvio en OTRO cierre y se
+    // queda en el pre-estado: mientras ese cierre no se apruebe, ni se ve ni corre su reloj —y
+    // por tanto NO se le puede cobrar el rechazo.
+    expect(estado()).toEqual({
+      o1: idEstado("entregada"),
+      o2: ANCLAJE_DEVOLUCION.devueltaId,
+      o3: ANCLAJE_DEVOLUCION.preEstadoId,
+    });
+
+    // El WHERE tal cual sale del repositorio: acota a los ids derivados de ESTE cierre y va
+    // GUARDADO por el pre-estado. Se mira el argumento porque es lo que separa "escribio en las
+    // filas correctas por casualidad" de "pidio exactamente esas filas". Y el `data` lleva SOLO
+    // `estatusId`: money-neutral (R10).
+    expect(prisma.orden.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["o2"] },
+        estatusId: ANCLAJE_DEVOLUCION.preEstadoId,
+        deletedAt: null,
+      },
+      data: { estatusId: ANCLAJE_DEVOLUCION.devueltaId },
+    });
+
+    const llamadasTrasLaPrimera = prisma.orden.updateMany.mock.calls.length;
+    const historialTrasLaPrimera = prisma.ordenHistorialEstado.createMany.mock.calls.length;
+    expect(historialTrasLaPrimera).toBe(1); // R7: la transicion deja su fila
+
+    await aprobar(); // segunda aprobacion del MISMO cierre
+    // R8: la guarda por el pre-estado no encuentra nada -> `count = 0` -> ni cambio de estado ni
+    // segunda fila de historial. La idempotencia no la da un `if`, la da el WHERE.
+    expect(estado()).toEqual({
+      o1: idEstado("entregada"),
+      o2: ANCLAJE_DEVOLUCION.devueltaId,
+      o3: ANCLAJE_DEVOLUCION.preEstadoId,
+    });
+    expect(prisma.orden.updateMany.mock.calls.length).toBe(llamadasTrasLaPrimera + 1); // se INTENTA
+    expect(prisma.ordenHistorialEstado.createMany.mock.calls.length).toBe(historialTrasLaPrimera); // y no escribe
   });
 
   it("R13: reintento por par existente = no-op (sin error propagado, sin segundo movimiento)", async () => {

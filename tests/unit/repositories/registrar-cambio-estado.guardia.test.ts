@@ -233,7 +233,14 @@ describe("R13 — validacion O(1) sin round-trips de DB adicionales", () => {
   it("la cache se comparte entre llamadas con distintos tx (el catalogo es inmutable)", async () => {
     const emitir = vi.fn(async () => {});
     const primero = buildTx();
-    await appendCambioEstado(primero.tx as never, [entrada("en_reparto", "devuelta")], emitir);
+    // 2026-08-19 (feature 239): el par era `en_reparto -> devuelta`, que dejo de ser legal (la
+    // arista #14 se retiro). Se usa su SUSTITUTA, `en_reparto -> devolucion_por_confirmar`: lo
+    // que este caso mide es la cache del catalogo, no el par concreto.
+    await appendCambioEstado(
+      primero.tx as never,
+      [entrada("en_reparto", "devolucion_por_confirmar")],
+      emitir,
+    );
     const segundo = buildTx();
     await appendCambioEstado(segundo.tx as never, [entrada("en_reparto", "rechazada")], emitir);
     expect(consultasDeCatalogo(primero.$queryRaw)).toBe(1);
@@ -410,7 +417,8 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
       (fila) =>
         fila.value !== "por_recolectar_en_tienda" &&
         fila.value !== "incidente" &&
-        fila.value !== "recolectando", // feature 157 (ampliacion): otro value posterior
+        fila.value !== "recolectando" && // feature 157 (ampliacion): otro value posterior
+        fila.value !== "devolucion_por_confirmar", // feature 239 (2026-08-19): idem
     );
     // 17 y no 18: la foto de la DB pre-154 tenia 18 values, pero la feature 155 retiro uno de
     // ellos del catalogo TS (y de la DB, con su migracion), asi que este fixture ya no lo
@@ -431,7 +439,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "incidente" &&
         a.destino !== "incidente" &&
         a.origen !== "recolectando" && // feature 157 (ampliacion)
-        a.destino !== "recolectando",
+        a.destino !== "recolectando" &&
+        a.origen !== "devolucion_por_confirmar" && // feature 239 (2026-08-19)
+        a.destino !== "devolucion_por_confirmar",
     );
     // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 13. El PR 1 anadio
     // #53 (`incidente -> en_reparto`, el deshacer del mensajero) y el PR 2 las DIEZ del camino
@@ -439,7 +449,10 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     // Feature 157 (ampliacion): el filtro de arriba tambien excluye las que tocan
     // `recolectando` (la #43 movida, la asignacion #45b y su reversion #46b), asi que el
     // descuento sube de 13 a 15: la #43 ya se contaba, y se suman las dos nuevas.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 15; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157)
+    // Feature 239 (2026-08-19): el filtro excluye ademas las TRES que tocan
+    // `devolucion_por_confirmar` (#59 la gestion, #60 el anclaje, #61 el deshacer), asi que el
+    // descuento sube de 15 a 18.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 18; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );

@@ -6,6 +6,11 @@ import type {
   ICierreBodegaRepository,
 } from "@/lib/interfaces/repositories/ICierreBodegaRepository";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
+import {
+  inicioDelDiaCREnUtc,
+  inicioDelDiaSiguienteCREnUtc,
+} from "@/lib/utils/fecha-cr";
 
 // Estados/destino relevantes (fuente de verdad en lib/types/cierre.ts). El cierre de
 // bodega se crea SIEMPRE en `solicitado`; consolida SOLO cierre_dia `aprobado`.
@@ -99,12 +104,59 @@ export function toBodegaResumenRow(r: BodegaResumenRow): CierreBodegaResumenRow 
  * que el total no cuenta y el adminSatelite veria dos numeros de dinero que no cuadran entre
  * si, sin nada que se lo diga.
  */
-function consolidablesWhere(zonaId: string): Prisma.CierreDiaWhereInput {
+/**
+ * Pedido humano del 2026-08-16 — el recorte por FECHA de un listado de esta pantalla, en la
+ * forma que Prisma entiende para las DOS tablas que aqui se leen.
+ *
+ * Las fechas son de CALENDARIO DE COSTA RICA: `solicitadoAt` es un instante, y el limite
+ * superior es `lt` del dia SIGUIENTE —no `lte` del mismo dia— porque con `lte` se caerian los
+ * cierres solicitados entre las 00:00 y las 23:59:59.999 del ultimo dia del rango, que es justo
+ * el dia que el usuario acaba de pedir. Mismo criterio que en los otros dos repositorios de
+ * cierres, escrito aqui porque las tablas son otras.
+ */
+function rangoSolicitadoAt(
+  filtros: FiltrosCierresBodega | undefined,
+): { gte?: Date; lt?: Date } | undefined {
+  if (!filtros || (filtros.desde === undefined && filtros.hasta === undefined)) return undefined;
+  return {
+    ...(filtros.desde !== undefined ? { gte: inicioDelDiaCREnUtc(filtros.desde) } : {}),
+    ...(filtros.hasta !== undefined ? { lt: inicioDelDiaSiguienteCREnUtc(filtros.hasta) } : {}),
+  };
+}
+
+/**
+ * Pedido humano del 2026-08-16 — el recorte por ZONA, que aqui NO puede escribirse como clave
+ * hermana: el alcance ya fija `zonaId`/`destinoZonaId` a la del actor, y una segunda clave con
+ * el mismo nombre lo PISARIA. Va dentro de un `AND`, que es la unica forma de que las dos
+ * condiciones se exijan a la vez: un adminSatelite que filtre por la zona vecina obtiene la
+ * interseccion —vacio—, nunca la zona vecina.
+ *
+ * En esta pantalla el filtro de zona es casi siempre trivial (el actor tiene UNA), pero se
+ * aplica igual: la barra es la misma que la del maestro y lo que ofrece tiene que hacer lo que
+ * dice. Ofrecer un control que no filtra es peor que no ofrecerlo.
+ */
+function recorteZona<T extends { destinoZonaId?: unknown; zonaId?: unknown }>(
+  filtros: FiltrosCierresBodega | undefined,
+  clave: "destinoZonaId" | "zonaId",
+): T[] {
+  if (!filtros || filtros.destinoZonaIds === undefined) return [];
+  return [{ [clave]: { in: [...filtros.destinoZonaIds] } } as T];
+}
+
+function consolidablesWhere(
+  zonaId: string,
+  filtros?: FiltrosCierresBodega,
+): Prisma.CierreDiaWhereInput {
+  const rango = rangoSolicitadoAt(filtros);
+  const zonas = recorteZona<Prisma.CierreDiaWhereInput>(filtros, "destinoZonaId");
   return {
     estado: ESTADO_APROBADO, // R5: solo aprobados aportan dinero cuadrado
     destinoTipo: DESTINO_SATELITE, // R5: destino bodega satelite
     destinoZonaId: zonaId, // R3/R5: acotado a SU zona (en el WHERE)
     cierreBodegaId: null, // R5: aun no consolidados
+    ...(rango ? { solicitadoAt: rango } : {}),
+    // Sin filtros no se escribe `AND`: el criterio queda IDENTICO al de antes del 2026-08-16.
+    ...(zonas.length > 0 ? { AND: zonas } : {}),
   };
 }
 
@@ -127,8 +179,17 @@ const ORDEN_CONSOLIDABLES: Prisma.CierreDiaOrderByWithRelationInput = { solicita
  * pagina—; que las dos digan `{ zonaId }` por separado es justo lo que permite que una se quede
  * atras el dia que este listado gane un predicado.
  */
-function cierresBodegaDeZonaWhere(zonaId: string): Prisma.CierreBodegaWhereInput {
-  return { zonaId }; // R3: el alcance por zona, en el WHERE y nunca en memoria
+function cierresBodegaDeZonaWhere(
+  zonaId: string,
+  filtros?: FiltrosCierresBodega,
+): Prisma.CierreBodegaWhereInput {
+  const rango = rangoSolicitadoAt(filtros);
+  const zonas = recorteZona<Prisma.CierreBodegaWhereInput>(filtros, "zonaId");
+  return {
+    zonaId, // R3: el alcance por zona, en el WHERE y nunca en memoria
+    ...(rango ? { solicitadoAt: rango } : {}),
+    ...(zonas.length > 0 ? { AND: zonas } : {}),
+  };
 }
 
 /** El orden de «Cierres de bodega solicitados», compartido por el conjunto y la pagina (R16). */
@@ -168,9 +229,12 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
    * ya devolvia el conjunto entero, con el mismo criterio, el mismo orden y el mismo mapper que
    * la pagina, y anadir un gemelo habria sido la tercera declaracion del mismo `where`.
    */
-  async findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]> {
+  async findCierresDiaConsolidables(
+    zonaId: string,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreDiaConsolidableRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
-      where: consolidablesWhere(zonaId),
+      where: consolidablesWhere(zonaId, filtros),
       orderBy: ORDEN_CONSOLIDABLES,
       select: CONSOLIDABLE_SELECT,
     });
@@ -195,8 +259,9 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
   async findCierresDiaConsolidablesPaginado(
     zonaId: string,
     rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>> {
-    const where = consolidablesWhere(zonaId);
+    const where = consolidablesWhere(zonaId, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreDia.findMany({
         where,
@@ -273,9 +338,12 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
    * consolidables, no se anadio un metodo nuevo: este devuelve ya el conjunto entero de la zona
    * con el mismo orden y el mismo mapper que la pagina.
    */
-  async findCierresBodegaByZona(zonaId: string): Promise<CierreBodegaResumenRow[]> {
+  async findCierresBodegaByZona(
+    zonaId: string,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreBodegaResumenRow[]> {
     const rows = await this.prisma.cierreBodega.findMany({
-      where: cierresBodegaDeZonaWhere(zonaId),
+      where: cierresBodegaDeZonaWhere(zonaId, filtros),
       orderBy: ORDEN_CIERRES_BODEGA,
       select: BODEGA_RESUMEN_SELECT,
     });
@@ -294,8 +362,10 @@ export class CierreBodegaRepository implements ICierreBodegaRepository {
   async findCierresBodegaByZonaPaginado(
     zonaId: string,
     rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreBodegaResumenRow>> {
-    const where = cierresBodegaDeZonaWhere(zonaId); // R3/R16: el MISMO alcance del conjunto
+    // R3/R16: el MISMO alcance —y el mismo recorte— que el conjunto del archivo.
+    const where = cierresBodegaDeZonaWhere(zonaId, filtros);
     const [rows, total] = await Promise.all([
       this.prisma.cierreBodega.findMany({
         where,

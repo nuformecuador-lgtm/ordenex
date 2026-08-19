@@ -92,48 +92,44 @@ export interface ArchivoCensado {
   tablas: TablaCensada[];
 }
 
+// PEDIDO HUMANO DEL 2026-08-16 — SIETE BAJAS, y ninguna es una capacidad perdida. «Todas las
+// cards de los cierres al componente de vista factura, para todos los roles»: los SEIS listados
+// de cierres dejaron de ser `<DataTable>` y pasaron a ser tiras de comprobantes
+// (`ListaComprobantes` + las hojas de `cierre-factura`). Los seis son:
+//
+//     Cierres solicitados (mensajero) ....... CierreDiaModule.tsx
+//     Cierres del día — histórico ........... CierresAdminHistoricoTabla.tsx  (archivo borrado)
+//     Cierres del día pendientes ............ CierresAdminModule.tsx
+//     Cierres de bodega pendientes .......... CierresBodegaAdminModule.tsx
+//     Cierres de bodega resueltos ........... CierresBodegaResueltosTabla.tsx (archivo borrado)
+//     Cierres de bodega solicitados ......... CierresBodegaSolicitadosTabla.tsx (archivo borrado)
+//     Cierres del día a consolidar .......... ConsolidacionBodegaModule.tsx
+//
+// Siete instancias, seis archivos: `CierreDiaModule` sigue en el censo porque conserva su OTRA
+// tabla, la de gestiones del día por resultado, que no es un listado de cierres.
+//
+// LO QUE NO CAMBIA, y es la razón de que esto sea una baja del CENSO y no de la capacidad: los
+// siete listados **siguen descargando**. La configuración `descarga` no se borró: se movió del
+// `<DataTable>` a `<ListaComprobantes>`, que monta el MISMO `DescargarDatasetButton` con el
+// mismo `obtenerFilas` contra el mismo conjunto del servidor. Este censo cuenta instancias de
+// `<DataTable>`, así que la baja es real aquí y en ningún otro sitio. Quien vigila que esas
+// descargas sigan entregando el CONJUNTO es `paginacion-transversal.test.tsx` (R52), que las
+// tiene registradas por ruta y no por tipo de listado.
+//
+// Totales: 33 → 26 tablas = 25 `<DataTable>` en 25 archivos + 1 `<table>` cruda.
+
 /**
- * Las 30 instancias de `<DataTable>` del árbol (25 archivos), en el orden en que aparecen
+ * Las 25 instancias de `<DataTable>` del árbol (25 archivos), en el orden en que aparecen
  * en cada archivo. Verificado contra el código, no de memoria.
  */
 export const CENSO_DATATABLE: ArchivoCensado[] = [
   {
+    // Pedido humano del 2026-08-16: «Cierres solicitados (mensajero)» DEJÓ DE SER UNA TABLA.
+    // Ver la nota de SEIS BAJAS en la cabecera de este archivo. La que queda es la del día.
     ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx",
     tablas: [
       { nombre: "Gestiones del cierre del día por resultado", estado: "con_descarga" },
-      { nombre: "Cierres solicitados (mensajero)", estado: "con_descarga" },
     ],
-  },
-  {
-    // Feature 170 — FASE 2 (T I.2): el HISTÓRICO salió de `CierresAdminModule` a su propio
-    // archivo al pasar a paginado; el módulo conserva la cola. Ni una tabla nace ni muere:
-    // cambian de sitio, y por eso los TOTALES de instancias no se mueven.
-    ruta: "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
-    tablas: [{ nombre: "Cierres del día — histórico", estado: "con_descarga" }],
-  },
-  {
-    ruta: "app/(app)/cierres-admin/_components/CierresAdminModule.tsx",
-    tablas: [
-      { nombre: "Cierres del día pendientes de decisión", estado: "con_descarga" },
-    ],
-  },
-  {
-    ruta: "app/(app)/cierres-admin/_components/CierresBodegaAdminModule.tsx",
-    tablas: [{ nombre: "Cierres de bodega pendientes", estado: "con_descarga" }],
-  },
-  {
-    // Feature 170 — FASE 2 (T I.2): salió de `CierresBodegaAdminModule` (mismo motivo).
-    ruta: "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
-    tablas: [{ nombre: "Cierres de bodega resueltos", estado: "con_descarga" }],
-  },
-  {
-    // Feature 170 — FASE 2 (T I.2): salió de `ConsolidacionBodegaModule` (mismo motivo).
-    ruta: "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
-    tablas: [{ nombre: "Cierres de bodega solicitados", estado: "con_descarga" }],
-  },
-  {
-    ruta: "app/(app)/cierres-admin/_components/ConsolidacionBodegaModule.tsx",
-    tablas: [{ nombre: "Cierres del día a consolidar", estado: "con_descarga" }],
   },
   {
     ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx",

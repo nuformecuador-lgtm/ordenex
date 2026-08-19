@@ -31,6 +31,9 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   reprogramada: "os-reprogramada",
   devuelta: "os-devuelta",
   rechazada: "os-rechazada",
+  // Feature 239 (2026-08-19): gestionar `devuelta` ya NO resuelve el estatus `devuelta`, sino el
+  // PRE-ESTADO. El fake tiene que conocerlo o la rama cae en "catalogo incompleto".
+  devolucion_por_confirmar: "os-devolucion-por-confirmar",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -653,7 +656,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(gArg.nuevoEstatusId).toBe("os-reprogramada");
   });
 
-  it("R28 + pedido: devolucion valida -> sube foto, gestion(devuelta) con evidencia + estado devuelta", async () => {
+  it("R28 + 239/R2: devolucion valida -> sube foto, gestion(devuelta) con evidencia + estado PRE-CONFIRMACION", async () => {
     const repo = fakeRepo();
     const storage = fakeStorage();
     const r = await newService(repo, storage).gestionar(
@@ -667,7 +670,10 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
     expect(gArg.gestion.resultado).toBe("devuelta");
     expect(gArg.gestion.evidencias[0].storagePath).toContain("o1/devuelta-");
     expect(gArg.gestion.evidencias[0].contentType).toBe("image/jpeg");
-    expect(gArg.nuevoEstatusId).toBe("os-devuelta");
+    // 2026-08-19 (feature 239/R2): el destino ya NO es `devuelta`. La aprobacion del cierre es
+    // la que lleva la orden ahi; hasta entonces la tienda no la ve y su reloj no corre.
+    expect(gArg.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
+    expect(gArg.nuevoEstatusId).not.toBe("os-devuelta");
   });
 
   it("feature 75: devolucion con transaccion fallida -> limpia storage y propaga", async () => {
@@ -728,7 +734,7 @@ describe("gestionar — REPROGRAMAR / DEVOLUCION / RECHAZO (R26/R28/R30/R32)", (
 // escalado (>=3 rechaza) / wrong_* directo MIGRARON a `tests/unit/services/devolucion-sla-service.test.ts`
 // (no se aflojaron: se movieron al lugar donde ahora vive la capacidad, R30).
 
-describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99, R1/R29)", () => {
+describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (feature 99 R1/R29 · 239 R2)", () => {
   const devolucion: GestionarInput = {
     ordenId: "o1",
     resultado: "devuelta",
@@ -744,15 +750,21 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
     };
   }
 
-  it("R1: devolver transiciona la orden a `devuelta` y NO pasa transicion de seguimiento", async () => {
+  // 2026-08-19 (feature 239/R2) — EL CASO DE LA FEATURE. Antes afirmaba `os-devuelta`; ahora
+  // afirma el pre-estado Y que NO es `devuelta`. Si esto volviera a `os-devuelta`, la ventana de
+  // SLA arrancaria al gestionar y el cron cobraria el rechazo sin que la tienda viera la novedad.
+  it("R1/239-R2: devolver deja la orden en el PRE-ESTADO (no en `devuelta`) y sin seguimiento", async () => {
     const repo = fakeRepo({
       findByIdsParaGestion: vi.fn(async () => [gestionRow({ zonaId: "z-satelite" })]),
     });
     const r = await newService(repo).gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("ok");
     const call = repoCall(repo);
-    // R1/R2: la orden REPOSA en `devuelta` (el append a `devuelta` la contabiliza como intento).
-    expect(call.nuevoEstatusId).toBe("os-devuelta");
+    // 239/R2: la orden REPOSA en el pre-estado. El intento SIGUE contandose igual (R17): el
+    // criterio mira `gestion_orden.resultado` + cierre aprobado + familia `gestion`, nunca el
+    // destino de la transicion.
+    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar");
+    expect(call.nuevoEstatusId).not.toBe("os-devuelta");
     // R29: ni reintento a bodega ni escalado inmediato -> el input ya no lleva `seguimiento`.
     expect(call).not.toHaveProperty("seguimiento");
   });
@@ -785,14 +797,14 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
     }
   });
 
-  it("R1: sin importar cuantas devoluciones previas hubo, la orden queda en `devuelta` (no escala aqui)", async () => {
+  it("R1: sin importar cuantas devoluciones previas hubo, la orden queda en el pre-estado (no escala aqui)", async () => {
     // Antes, la N-esima devolucion (N=umbral) escalaba a `rechazada` en esta misma tx. Ese
     // escalado ahora lo decide el cron: `gestionar` SIEMPRE deja `devuelta`, sin excepcion.
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(devolucion, MENSAJERO);
     expect(r.status).toBe("ok");
     const call = repoCall(repo);
-    expect(call.nuevoEstatusId).toBe("os-devuelta");
+    expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar"); // 2026-08-19 (239)
     expect(call).not.toHaveProperty("seguimiento");
   });
 
@@ -815,13 +827,13 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
     expect(ordenRepo.findEstatusIdByValue).not.toHaveBeenCalledWith("devolviendo_a_tienda");
   });
 
-  it("catalogo incompleto (sin el estado `devuelta`) -> validation_error, sin persistir", async () => {
+  it("catalogo incompleto (sin el PRE-ESTADO) -> validation_error, sin persistir", async () => {
     const repo = fakeRepo();
-    // ordenRepo que NO resuelve `devuelta` (seed pendiente): la unica resolucion que `gestionar`
-    // hace en la rama devuelta es la del propio resultado.
+    // ordenRepo que NO resuelve el destino de la rama `devuelta` (seed pendiente). 2026-08-19
+    // (feature 239): ese destino es el PRE-ESTADO, no `devuelta`.
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) =>
-        v === "devuelta" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
+        v === "devolucion_por_confirmar" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
       ),
       findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
@@ -918,7 +930,7 @@ describe("gestionar — DEVUELTA queda en devuelta, sin seguimiento (feature 99,
       );
       expect(r.status).toBe("ok");
       const call = repoCall(repo);
-      expect(call.nuevoEstatusId).toBe("os-devuelta");
+      expect(call.nuevoEstatusId).toBe("os-devolucion-por-confirmar"); // 2026-08-19 (239)
       expect(call).not.toHaveProperty("seguimiento");
     },
   );

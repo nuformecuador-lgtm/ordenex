@@ -6,8 +6,15 @@ import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
-import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Pagination } from "@/components/shared/Pagination";
+import { SegmentedToggle } from "@/components/shared/SegmentedToggle";
+import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
+import type { DataTableDescarga } from "@/components/shared/DataTable";
+import {
+  CATALOGO_FILTROS_CIERRES_VACIO,
+  type CatalogoFiltrosCierresDTO,
+  type FiltrosCierresBodega,
+} from "@/lib/types/filtros-cierres";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { useToast } from "@/hooks/useToast";
 import { cierreBodegaConfig } from "@/lib/config/cierre-bodega";
@@ -15,6 +22,7 @@ import {
   verCierreBodegaDetalle,
   aprobarCierreBodega,
   rechazarCierreBodega,
+  listarGestionesCierresBodegaCompleto,
   listarPendientesCierresBodegaCompleto,
   listarPendientesCierresBodegaPaginado,
 } from "@/lib/actions/cierre-bodega";
@@ -24,9 +32,6 @@ import type {
 } from "@/lib/interfaces/services/ICierreBodegaService";
 import type { TotalesIngresoOrdenex } from "@/lib/interfaces/services/ICierreDiaService";
 import {
-  money,
-  PAGO_MENSAJERO_COL,
-  INGRESO_BODEGA_RECHAZOS_COL,
   DetalleSecciones,
   PagoMensajeroTotal,
   IngresoBodegaRechazosTotal,
@@ -42,10 +47,16 @@ import {
   TotalesPanel,
   VisorEvidencia,
 } from "./cierre-detalle-shared";
+import { CierreBodegaFacturaResumen } from "./cierre-factura";
+import { DescargarGestionesDialog } from "./DescargarGestionesDialog";
+import { ListaComprobantes } from "./ListaComprobantes";
+import { PanelConmutado } from "./PanelConmutado";
 import {
-  CierresBodegaResueltosTabla,
+  CierresBodegaResueltosLista,
+  descargaBodegaResueltos,
   type CierresBodegaResueltosPagina,
-} from "./CierresBodegaResueltosTabla";
+} from "./CierresBodegaResueltosLista";
+import { FiltrosCierresBarra } from "./FiltrosCierresBarra";
 import {
   COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
   filaDescargaBodegaPendiente,
@@ -57,6 +68,20 @@ const TITULO_DESCARGA_PENDIENTES = "Cierres de bodega pendientes";
 export const PAGINACION_BODEGA_PENDIENTES_LABEL =
   "Paginación de los cierres de bodega pendientes";
 const ERROR_CARGA_PENDIENTES = "No se pudieron cargar los cierres de bodega pendientes.";
+
+/** `true` si el objeto no recorta nada: entonces la página pre-cargada del servidor sirve. */
+function sinFiltrosBodega(filtros: FiltrosCierresBodega): boolean {
+  return Object.values(filtros).every((v) => v === undefined);
+}
+
+// --- Pedido humano del 2026-08-16: las dos mitades de esta sección, en pestañas ---
+const TAB_PENDIENTES = "pendientes";
+const TAB_RESUELTOS = "resueltos";
+type TabBodega = typeof TAB_PENDIENTES | typeof TAB_RESUELTOS;
+const TAB_PENDIENTES_LABEL = "Pendientes";
+const TAB_RESUELTOS_LABEL = "Resueltos";
+/** Nombre accesible del conmutador. Propio: la pantalla anida varios segmentados. */
+const TABS_BODEGA_LABEL = "Cierres de bodega por estado";
 
 // R40: el tamaño sale de la config del dominio (T H.1), nunca de un literal de pantalla.
 const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
@@ -71,8 +96,9 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50].filter(
 async function leerPendientes(
   page: number,
   pageSize: number,
+  filtros: FiltrosCierresBodega,
 ): Promise<CierresBodegaColaPagina> {
-  const res = await listarPendientesCierresBodegaPaginado({ page, pageSize });
+  const res = await listarPendientesCierresBodegaPaginado({ page, pageSize, filtros });
   if (res.status !== "ok") throw new Error(res.status);
   return { items: res.items, total: res.total, pageSize: res.pageSize };
 }
@@ -108,6 +134,12 @@ export interface CierresBodegaAdminModuleProps {
    * server-side, más el `total` del conjunto. Deja de ser el array entero.
    */
   historico: CierresBodegaResueltosPagina;
+  /**
+   * Opciones de los filtros (bodegas), resueltas por el Server Component. Opcional con default
+   * VACIO: un montaje que se olvide de pasarla ofrece cero opciones —la pantalla sigue
+   * funcionando sin filtrar— en vez de romperse.
+   */
+  catalogoFiltros?: CatalogoFiltrosCierresDTO;
 }
 
 /** Detalle abierto: la cabecera del cierre de bodega + sus cierre_dia incluidos. */
@@ -122,9 +154,34 @@ interface DetalleAbierto {
   pagoTienda: string;
 }
 
+/**
+ * La configuración de descarga de la COLA de bodega, para la fila de las pestañas.
+ *
+ * Feature 170 (T J.2, R52) — el listado pinta UNA página; el archivo es la COLA COMPLETA.
+ * Feature 184 — Tanda E (T E.3, R1/R2/R6): sale de la lectura DEDICADA, que corta por estado en
+ * la base. El alcance no viaja en la llamada y no puede: es acceso total y lo decide el servicio
+ * desde la sesión, así que descargar no amplía lo que el actor podía ver (R14/R44), y el tope de
+ * filas se evalúa en el SERVIDOR (R6).
+ *
+ * Pedido humano del 2026-08-16 — con los mismos filtros que la página: el archivo es «esto que
+ * estoy viendo, entero».
+ */
+function descargaColaBodega(filtros: FiltrosCierresBodega): DataTableDescarga {
+  return {
+    titulo: TITULO_DESCARGA_PENDIENTES,
+    columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
+    obtenerFilas: () =>
+      filasDesdeResultado(
+        listarPendientesCierresBodegaCompleto({ filtros }),
+        filaDescargaBodegaPendiente,
+      ),
+  };
+}
+
 export function CierresBodegaAdminModule({
   pendientes,
   historico,
+  catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: Readonly<CierresBodegaAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
@@ -145,14 +202,39 @@ export function CierresBodegaAdminModule({
   //
   // R50: el estado de esta pantalla —el detalle abierto, el motivo tecleado— vive en los
   // `useState` de arriba, que la página no toca. Cambiar de página no los reinicia.
+  /**
+   * Pedido humano del 2026-08-16 — cola e histórico pasan a ser PESTAÑAS. Arranca en
+   * «Pendientes», que es la que tiene decisiones esperando.
+   */
+  const [tab, setTab] = useState<TabBodega>(TAB_PENDIENTES);
+
+  /**
+   * Pedido humano del 2026-08-16 — «en la parte de bodega deja el mismo filtro solo omitiendo el
+   * de mensajero». Misma barra, mismo catálogo de bodegas (GAM + las que tienen admin de zona) y
+   * los mismos atajos de fecha que `/ordenes`; lo que no se ofrece es el mensajero, porque un
+   * cierre de bodega consolida los de varios y el dato no existe.
+   */
+  const [filtros, setFiltros] = useState<FiltrosCierresBodega>({});
+
+  /** Filtrar devuelve la cola a su página 1: pedir la 7 de un conjunto recién recortado da vacío. */
+  function aplicarFiltros(next: FiltrosCierresBodega) {
+    setFiltros(next);
+    setPendientesPage(1);
+  }
+
   const [pendientesPage, setPendientesPage] = useState(1);
   const [pendientesPageSize, setPendientesPageSize] = useState(pendientes.pageSize);
   const { data: pendientesData, error: pendientesError } = useSWR(
-    ["cierres-bodega:pendientes", pendientesPage, pendientesPageSize],
-    () => leerPendientes(pendientesPage, pendientesPageSize),
+    ["cierres-bodega:pendientes", pendientesPage, pendientesPageSize, filtros],
+    () => leerPendientes(pendientesPage, pendientesPageSize, filtros),
     {
+      // El `fallbackData` del Server Component solo vale SIN filtros: con un filtro puesto, la
+      // página 1 pre-cargada es la del conjunto sin filtrar, y servirla sería enseñar cierres
+      // que el filtro excluye.
       fallbackData:
-        pendientesPage === 1 && pendientesPageSize === pendientes.pageSize
+        pendientesPage === 1 &&
+        pendientesPageSize === pendientes.pageSize &&
+        sinFiltrosBodega(filtros)
           ? pendientes
           : undefined,
     },
@@ -273,62 +355,104 @@ export function CierresBodegaAdminModule({
   const esPendiente = cierreAbierto?.estado === "solicitado";
 
   return (
+    // `gap-4`: la barra de filtros y las pestañas son una cabecera, no dos secciones.
     <section
       aria-label="Cierres de bodega satélite"
-      className="flex flex-col gap-8"
+      className="flex flex-col gap-4"
     >
-      <h2 className="text-lg font-semibold">Cierres de bodega satélite</h2>
+      {/* ---------- Pestañas: pendientes / resueltos (pedido humano del 2026-08-16) ----------
+          Solo «Pendientes» lleva conteo, y la asimetría es deliberada: su `total` lo tiene ESTE
+          módulo (viene del servidor, R42), mientras que el de los resueltos vive dentro de
+          `CierresBodegaResueltosLista`, que pide su propia página. Antes que inventar aquí un
+          número —o subir el estado de aquel listado solo para pintarlo— la pestaña se queda sin
+          él: un conteo equivocado en una cola de dinero es peor que ninguno. */}
+      <FiltrosCierresBarra
+        catalogo={catalogoFiltros}
+        onChange={aplicarFiltros}
+        disabled={pendientesCargando}
+        sinMensajero
+      />
 
+      {/* La descarga va ALINEADA con las pestañas, y es la de la pestaña ACTIVA. */}
+      {/* `pb-1` (pedido humano del 2026-08-16): el grupo segmentado se estaba viendo cortado
+          por abajo. Su borde y su anillo de foco se salen del alto nominal del botón, y sin
+          este respiro el contenedor de la fila los recorta. */}
+<div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+        <SegmentedToggle
+          options={[
+            {
+              valor: TAB_PENDIENTES,
+              etiqueta: TAB_PENDIENTES_LABEL,
+              conteo: colaPendientes.total,
+            },
+            { valor: TAB_RESUELTOS, etiqueta: TAB_RESUELTOS_LABEL },
+          ]}
+          valor={tab}
+          onChange={setTab}
+          ariaLabel={TABS_BODEGA_LABEL}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DescargarDatasetButton
+            {...(tab === TAB_PENDIENTES
+              ? descargaColaBodega(filtros)
+              : descargaBodegaResueltos(filtros))}
+          />
+          {/* Feature 230 (T7.4, R23/R24): la descarga DETALLADA de este listado. Es el MISMO
+              componente que monta `CierresAdminModule` y la MISMA declaración de columnas
+              (R26); lo único que cambia es la Server Action, porque el conjunto es otro: acá
+              salen las gestiones de los cierres del día ya CONSOLIDADOS en un cierre de bodega
+              —las bodegas satélite—, que en la otra pantalla el maestro no ve (design §2.6).
+
+              Los cuatro controles de descarga que esta pantalla ya tenía no se tocan: éste es
+              uno mas, con su propio nombre accesible y su propio nombre de archivo (R51). */}
+          <DescargarGestionesDialog
+            catalogo={catalogoFiltros}
+            accion={listarGestionesCierresBodegaCompleto}
+            disabled={pendientesCargando}
+          />
+        </div>
+      </div>
+
+      <PanelConmutado activo={tab === TAB_PENDIENTES} ariaLabel={TAB_PENDIENTES_LABEL}>
       {/* ---------- Cola de pendientes (R15) ---------- */}
       <section
         aria-label="Cierres de bodega pendientes"
         className="flex flex-col gap-3"
       >
-        <h3 className="text-base font-semibold">
-          Cierres de bodega pendientes{" "}
-          <span className="text-sm font-normal text-muted-foreground">
-            {/* R42: el TOTAL del conjunto que devuelve el servidor, no el tamaño de la
-                página. Cada fila de esta cola ES el dinero agregado de una zona entera:
-                un contador que mienta aquí esconde bodegas esperando decisión. */}
-            ({colaPendientes.total})
-          </span>
-        </h3>
-        <div className="overflow-x-auto">
-          <DataTable
-            columns={columnasPendientes(abrirDetalle)}
-            data={colaPendientes.items}
-            rowKey="cierreBodegaId"
-            ariaLabel="Cierres de bodega pendientes"
-            emptyMessage="No hay cierres de bodega pendientes de decisión."
-            isLoading={pendientesCargando}
-            error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
-            /**
-             * Feature 170 (T J.2, R52) — la tabla pinta UNA página; el archivo sigue siendo
-             * la COLA COMPLETA.
-             *
-             * Feature 184 — Tanda E (T E.3, R1/R2/R6): ese conjunto ya NO sale de
-             * `listarCierresBodegaAdmin()`. Aquel listado devuelve las dos mitades de esta
-             * pantalla —la cola Y el histórico entero de la operación—, y descargar la cola
-             * pagaba las dos para quedarse con una: el histórico crece sin tope con los días
-             * mientras la cola son los cierres sin resolver, una decena. Ahora el corte por
-             * estado lo hace la base (`listarPendientesCierresBodegaCompleto`).
-             *
-             * Lo que NO cambia: el alcance no viaja en la llamada y no puede: es acceso total
-             * y lo decide el servicio desde la sesión, igual que la página, así que descargar
-             * no amplía lo que el actor podía ver (R14/R44). Y el tope de filas pasa a
-             * evaluarse en el SERVIDOR: por encima no viaja ni una fila (R6).
-             */
-            descarga={{
-              titulo: TITULO_DESCARGA_PENDIENTES,
-              columnas: COLUMNAS_DESCARGA_BODEGA_PENDIENTES,
-              obtenerFilas: () =>
-                filasDesdeResultado(
-                  listarPendientesCierresBodegaCompleto(),
-                  filaDescargaBodegaPendiente,
-                ),
-            }}
-          />
-        </div>
+        {/* SIN ENCABEZADO VISIBLE (pedido humano del 2026-08-16): la pestaña de arriba ya lo
+            dice, y repetirlo dos centímetros más abajo no añade nada. El `aria-label` de la
+            sección SÍ se queda: sigue haciendo falta un nombre para quien no ve la pantalla, y
+            es por él por el que la localizan los tests y el E2E.
+
+            EL CONTADOR NO SE PIERDE, se mudó a la pestaña, y sigue saliendo del TOTAL del
+            servidor (R42) — lo vigila `contadores-cabecera.guardia.test.ts`. */}
+        {/* Pedido humano del 2026-08-16: la cola se lee como COMPROBANTES. Cada cierre de
+            bodega es la misma hoja compacta que el maestro ya usaba para los cierres del día,
+            con las partes propias de una bodega (zona y quién solicitó) y, en su desglose,
+            cuántos cierres del día consolida. */}
+        <ListaComprobantes
+          ariaLabel="Cierres de bodega pendientes"
+          items={colaPendientes.items}
+          clave={(c) => c.cierreBodegaId}
+          isLoading={pendientesCargando}
+          error={pendientesError ? ERROR_CARGA_PENDIENTES : null}
+          emptyMessage="No hay cierres de bodega pendientes de decisión."
+          render={(c) => (
+            <CierreBodegaFacturaResumen
+              cierre={c}
+              acciones={
+                <Button
+                  type="button"
+                  size="sm"
+                  aria-label={`Ver / decidir el cierre de bodega de ${c.zonaNombre}`}
+                  onClick={() => abrirDetalle(c.cierreBodegaId)}
+                >
+                  Ver / decidir
+                </Button>
+              }
+            />
+          )}
+        />
 
         <Pagination
           page={pendientesPage}
@@ -347,10 +471,14 @@ export function CierresBodegaAdminModule({
         />
       </section>
 
-      {/* ---------- Histórico (solo lectura, R15) ----------
-          Feature 170 — FASE 2 (T I.2): la tabla, su control de paginación y su descarga viven
-          en su propio componente (ver la cabecera de `CierresBodegaResueltosTabla`). */}
-      <CierresBodegaResueltosTabla initialData={historico} onAbrir={abrirDetalle} />
+      </PanelConmutado>
+
+      <PanelConmutado activo={tab === TAB_RESUELTOS} ariaLabel={TAB_RESUELTOS_LABEL}>
+        {/* ---------- Histórico (solo lectura, R15) ----------
+            Feature 170 — FASE 2 (T I.2): el listado, su control de paginación y su descarga
+            viven en su propio componente (ver la cabecera de `CierresBodegaResueltosLista`). */}
+        <CierresBodegaResueltosLista initialData={historico} onAbrir={abrirDetalle} />
+      </PanelConmutado>
 
       {/* ---------- Detalle agregado del cierre de bodega (R11-R13) ---------- */}
       <Modal
@@ -569,56 +697,4 @@ export function CierresBodegaAdminModule({
       <VisorEvidencia url={evidencia} onClose={() => setEvidencia(null)} />
     </section>
   );
-}
-
-// --- Columnas de la cola de pendientes (R15) ---
-function columnasPendientes(
-  abrir: (cierreBodegaId: string) => void,
-): Column<CierreBodegaResumen>[] {
-  return [
-    { id: "zona", value: "Zona", render: (c) => c.zonaNombre },
-    {
-      id: "solicitadoPor",
-      value: "Solicitó",
-      render: (c) => c.solicitadoPorNombre,
-    },
-    {
-      id: "solicitadoAt",
-      value: "Fecha",
-      render: (c) => c.solicitadoAt.slice(0, 10),
-    },
-    {
-      id: "cantidadCierres",
-      value: "Cierres del día",
-      render: (c) => String(c.cantidadCierres),
-    },
-    {
-      id: "general",
-      value: "Total general",
-      render: (c) => money(c.totales.general),
-    },
-    {
-      id: "pagoMensajero",
-      value: PAGO_MENSAJERO_COL,
-      render: (c) => money(c.totalPagoMensajero),
-    },
-    {
-      id: "ingresoBodegaRechazos",
-      value: INGRESO_BODEGA_RECHAZOS_COL,
-      render: (c) => money(c.totalIngresoBodegaRechazos),
-    },
-    {
-      id: "acciones",
-      value: "Acciones",
-      render: (c) => (
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => abrir(c.cierreBodegaId)}
-        >
-          Ver / decidir
-        </Button>
-      ),
-    },
-  ];
 }

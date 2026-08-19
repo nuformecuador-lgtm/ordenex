@@ -175,6 +175,106 @@ con `< 12` el mismo conteo da **137**. G2 no deja hoy ninguna orden real fuera d
 
 ## ✅ AL DÍA — 2026-08-14, tarde
 
+## 🟡 EN CURSO 2026-08-18 — feature **230**: la descarga de cierres, en general y en detalle
+
+**Fase 1 (spec) lanzada.** `spec_author` escribiendo `specs/230-descarga-cierres-general-y-detallada/`.
+No se creó rama: la fase de spec solo escribe en `specs/`, y el árbol está en `ux` con WIP ajeno
+sin commitear por todas partes. La rama nace en F2.0, desde `dev`.
+
+**Qué pidió el humano (2026-08-18):** «la descarga de datos de los cierres debe poder hacerse de
+2 formas: general (como está) y detallada (por mensajero)».
+
+**Punto de partida medido, no supuesto.** Hoy hay dos descargas de granos distintos y **ninguna
+cruza cierres**:
+
+- **General** — `cierres-admin-descarga-columnas.ts`: una fila POR CIERRE, dos declaraciones
+  (cola de pendientes / histórico), cableada en `CierresAdminModule.tsx:195`. **Se conserva tal cual.**
+- **Detalle** — `cierre-gestiones-descarga-columnas.ts`: una fila POR GESTIÓN, pero **cinco**
+  archivos separados y solo alcanzables **abriendo un cierre concreto** (mapa
+  `DESCARGA_POR_RESULTADO`, `cierre-detalle-shared.tsx:1018`). Ese es el hueco.
+
+**Decisiones del humano en la gate F1.4 (cerradas, no se re-abren):** (a) grano = una fila por
+gestión, no un agregado por mensajero; (b) **un solo archivo** con columna «Resultado»;
+(c) el mensajero se elige con **diálogo propio**, no heredando el filtro de pantalla.
+
+**⚠️ La (b) revierte la decisión P2 de la feature 170**, escrita en la cabecera de
+`cierre-gestiones-descarga-columnas.ts` («no hay archivo único porque las cinco secciones no
+comparten columnas... daría una hoja llena de celdas vacías»). El humano vio el ejemplo con los
+huecos y aceptó el coste. La 170 **no se reescribe** y sus cinco descargas **no se retiran**: la
+fundida es una salida adicional en otro punto de entrada. Sí hay que corregir esa prosa, que a
+partir de ahora sería falsa.
+
+**Lo que hace que esto NO sea pegar columnas — el riesgo real:** no existe camino de lectura que
+cruce cierres. `CierreDetalleGestion` (`ICierreDiaService.ts:20`) y `CierreGrupos` (`:192`) son
+**por cierre**. Falta ese borde entero, y de ahí sale la complejidad `medium`.
+
+**Tensión que el spec debe resolver explícitamente:** el diálogo propio choca con la «puerta
+única» de las features 134/184 (el dataset se construye por el mismo punto de entrada que pinta
+la pantalla, nunca reconstruyendo el filtro). Lectura compatible propuesta: el selector recorta
+DENTRO del alcance que el servicio resuelve desde la sesión (R44 de la 170, «el alcance NO viaja
+en el input»), nunca lo ensancha. Si no se puede sin duplicar filtrado, el spec_author para y
+marca sub-decisión.
+
+**Preguntas que quedan ABIERTAS para la gate humana:** (1) la unión exacta de columnas de la hoja
+fundida — 7 comunes + Mensajero + Resultado + las específicas de las cinco secciones sale muy
+ancha; (2) desde dónde se lanza: ¿segundo botón en cierres-admin? ¿también en cierres de bodega,
+que tiene su propio archivo de columnas y monta `DetalleSecciones` una vez POR mensajero?
+
+**Nota de zona:** queda `fullstack` sin partir en backend+frontend. AGENTS.md > F1.0 dice que una
+fullstack se parte en dos; la práctica reciente del repo no lo hace (227 y 229 fueron fullstack
+enteras). Si se quiere partir, es antes de F2.0. Cupo verificado: `fullstack` tenía **1**
+`in_progress` (la 227), y el máximo es 2.
+
+
+### F2.0 — APROBADO por el humano (2026-08-18) y en implementación
+
+**Worktree aislado `C:/w230`**, rama `feature/230-descarga-cierres-general-y-detallada` desde
+`origin/dev` `9b627059`. Ruta corta a propósito (el límite de 260 chars de Windows revienta el
+cliente de Prisma en rutas largas). El checkout principal sigue en `ux` con sus 47 archivos de WIP
+ajeno **intactos**: no se hizo checkout ahí. `pnpm install` + `db:generate` hechos, y
+**`pnpm typecheck` medido en VERDE sobre el worktree limpio** — baseline real, no supuesto.
+
+`complexity` subida de `medium` a **`high`** por el leader: dos bordes, dos servicios, dos repos,
+schema nuevo y diálogo con controles propios. Las 25 tasks van en 8 tandas, cortadas para poder
+partir en dos PR (tandas 1-6, luego 7).
+
+**Spec v2 aprobado:** R1–R52, 25 tasks, hoja fundida de **26 columnas**.
+
+**El hallazgo del v2 que cambió el alcance —** los dos listados son **particiones DISJUNTAS**, no
+dos vistas de lo mismo. `CierresAdminService.resolveAlcance:117-119` da al maestro
+`{destinoTipo:"bodega_central"}` y `alcanceWhere` (`CierresAdminRepository.ts:353-358`) filtra
+SIEMPRE por `destinoTipo`; enfrente `consolidablesWhere` (`CierreBodegaRepository.ts:150`) exige
+`DESTINO_SATELITE`. **Verificado por el leader contra el código**, no aceptado de palabra. Un cierre
+con destino central NUNCA entra en un cierre de bodega, y el maestro en `cierres-admin` **solo ve la
+GAM**. De ahí los DOS bordes de lectura (design §2.6; el borde único quedó descartado en §9.9), y de
+ahí que el «incluida GAM» del pedido fuera literalmente exacto: ningún botón solo cubre todo.
+GAM no es un eje aparte: es la zona `esCentral` (renombrada desde `es_gam` por la 54) y entra sola
+por el `destinoTipo`, sin ningún `if` (R27, verificado por grep en T7.5b).
+
+**Cesión declarada, no disimulada:** con Q3 = independiente, **R2 de la feature 134** («el archivo es
+lo que la pantalla enseña») **NO se cumple**, por decisión del humano. Siguen sin excepción: fuente
+única, alcance desde sesión con `AND`, lista blanca `.strict()`.
+
+**Consecuencia forzada de Q3+Q5:** sin heredar fechas, el conjunto por defecto sería todo el
+histórico y el tope de 5000 reventaría casi siempre → el diálogo lleva controles PROPIOS de fecha
+(R31/R32). Sin ellos la feature sería un botón que solo sabe fallar.
+
+**Orquestación:** directa del leader (`backend_dev` -> `frontend_dev` -> `reviewer`), no el
+`implementer` monolítico, que muere por el bug de modelo. Backend lanzado con tandas 1, 2 y 7.1-7.3;
+la UI (tandas 3, 4, 5, 7.4) va después, en otro agente.
+
+**Follow-up abierto, no bloqueante:** el diálogo ofrece TODOS los mensajeros en las dos pantallas,
+así que elegir uno de la partición equivocada devuelve «no hay datos» sin decir por qué. Acotar cada
+diálogo a su partición obliga a ampliar el catálogo, que hoy no distingue `destinoTipo`.
+
+**⚠️ Deriva de bookkeeping detectada (no es de esta feature):** la **227** figura `in_progress` en
+`feature_list.json` pero su PR **#390 ya está mergeado en `dev`** (`git branch -r --merged origin/dev`
+lo confirma). Debería ser `done`. No lo cambio yo por no pisar el bookkeeping de otra sesión, pero
+mientras siga así, `fullstack` aparenta tener 2 `in_progress` cuando de verdad tiene 1.
+
+
+## ✅ AL DÍA — 2026-08-14, tarde. **EMPIEZA A LEER POR AQUÍ**
+
 > Lo de abajo (el cierre de jornada) **ya no describe el presente en dos puntos**, y se conserva
 > entero porque su razonamiento sigue valiendo. Lo que cambió:
 >

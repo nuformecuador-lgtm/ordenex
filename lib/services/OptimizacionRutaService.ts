@@ -13,6 +13,7 @@
 //   R20  job obsoleto (una optimizacion posterior ya cubrio este evento) -> 0 llamadas
 //   R34  dos pulsaciones del boton dentro del intervalo minimo           -> 0 llamadas
 //   R35  0 o 1 parada con coordenadas                                    -> 0 llamadas
+//        (con 1 parada SI se pide el trazado, que es otro SKU; ver la rama)
 //   R38  mas de RUTA_MAX_PARADAS -> se recorta, no se paga por el exceso
 //   R36  mismo conjunto de paradas y mismo origen que la ultima vez      -> 0 llamadas
 //
@@ -33,7 +34,13 @@ import type {
   EjecutarOptimizacionOpts,
   EjecutarOptimizacionResult,
   IOptimizacionRutaService,
+  TrazadoRuta,
+  TrazadoTramo,
+  TrazarTramoVivoResult,
 } from "@/lib/interfaces/services/IOptimizacionRutaService";
+import { codificarPolilinea, distanciaTotalM } from "@/lib/geo/polilinea";
+import { optlog, opterror } from "@/lib/logging/optimizer-log";
+import type { IRoutesClient } from "@/lib/interfaces/external/IRoutesClient";
 
 /** Fuente de las paradas. `Pick` para que los dobles de test no implementen 40 metodos. */
 export interface ParadasRepo {
@@ -69,6 +76,12 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
     private readonly config: RouteOptimizationConfig,
     private readonly now: () => Date = () => new Date(),
     private readonly logger: RutaLogger = defaultLogger,
+    /**
+     * Trazado de la ruta (Google Routes). OPCIONAL a proposito: `null` = no se dibuja, y
+     * todo lo demas sigue igual. Es una llamada FACTURADA aparte, y su fallo NUNCA debe
+     * tumbar una optimizacion que ya salio bien (ver `trazar`).
+     */
+    private readonly routes: IRoutesClient | null = null,
   ) {}
 
   async ejecutar(
@@ -76,6 +89,12 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
     opts: EjecutarOptimizacionOpts,
   ): Promise<EjecutarOptimizacionResult> {
     const ahora = this.now();
+    optlog("service — ENTRADA", {
+      mensajeroId,
+      motivo: opts.motivo,
+      jobCreatedAt: opts.jobCreatedAt?.toISOString(),
+      ubicacionRecibida: opts.ubicacion !== undefined,
+    });
 
     // R23: la ubicacion del navegador se persiste ANTES de cualquier guarda. Aunque la
     // optimizacion se omita, la posicion capturada sigue siendo util para la siguiente.
@@ -100,6 +119,10 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       ruta?.calculadaAt != null &&
       opts.jobCreatedAt < ruta.calculadaAt
     ) {
+      optlog("service — guarda R20: job obsoleto, 0 llamadas facturadas", {
+        jobCreatedAt: opts.jobCreatedAt.toISOString(),
+        rutaCalculadaAt: ruta.calculadaAt.toISOString(),
+      });
       return { status: "omitida", razon: "obsoleta" };
     }
 
@@ -110,6 +133,10 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
     if (opts.motivo === "manual" && ruta?.calculadaAt != null) {
       const transcurridoS = (ahora.getTime() - ruta.calculadaAt.getTime()) / 1000;
       if (transcurridoS < this.config.RUTA_SYNC_MIN_INTERVALO_S) {
+        optlog("service — guarda R34: intervalo minimo, 0 llamadas facturadas", {
+          transcurridoS,
+          minimoS: this.config.RUTA_SYNC_MIN_INTERVALO_S,
+        });
         return { status: "omitida", razon: "intervalo_minimo" };
       }
     }
@@ -121,30 +148,70 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       (p): p is ParadaRutaRow & { latitud: number; longitud: number } =>
         p.latitud !== null && p.longitud !== null,
     );
+    optlog("service — paradas en reparto", {
+      total: todas.length,
+      conCoordenadas: conCoordenadas.length,
+      sinCoordenadas: todas.length - conCoordenadas.length,
+    });
 
     // ── R35: 0 o 1 parada ─────────────────────────────────────────────────────────
     // Optimizar un punto no significa nada: no hay orden que calcular. Se persiste la
     // secuencia trivial (o se limpia la vieja, si el mensajero ya entrego todo) SIN
-    // llamar al proveedor.
+    // llamar al proveedor de OPTIMIZACION.
+    //
+    // Pero con UNA parada si hay recorrido que enseñar —del origen a esa parada—, y no
+    // dibujarlo dejaba al mensajero con un mapa de dos puntos sueltos justo en el caso mas
+    // comun del final del dia. El TRAZADO si se pide (decision del humano, 2026-08-14).
+    // Sigue siendo `omitida`: describe que no hubo ORDENACION, no que no pasara nada.
     if (conCoordenadas.length <= 1) {
+      optlog("service — guarda R35: 0 o 1 parada, 0 llamadas de OPTIMIZACION", {
+        conCoordenadas: conCoordenadas.length,
+      });
       const unica = conCoordenadas[0];
       const origen =
         unica !== undefined
           ? this.resolverOrigen(ruta, conCoordenadas, ahora)
           : this.origenSoloDeUltimaConocida(ruta);
-      await this.rutas.reemplazarSecuencia(
-        mensajeroId,
-        unica !== undefined ? [unica.ordenId] : [],
-        {
-          calculadaAt: ahora,
-          origen,
-          huellaSet: this.huella(
-            unica !== undefined ? [unica.ordenId] : [],
-            origen,
-          ),
-        },
-      );
-      return { status: "omitida", razon: "sin_paradas" };
+      const secuencia = unica !== undefined ? [unica.ordenId] : [];
+      const huellaSet = this.huella(secuencia, origen);
+      await this.rutas.reemplazarSecuencia(mensajeroId, secuencia, {
+        calculadaAt: ahora,
+        origen,
+        huellaSet,
+      });
+
+      // El trazado SI se factura (Routes es su propio SKU). Se reusa el criterio de R36
+      // para no pagarlo en cada disparo: si la parada y el origen son los mismos que la
+      // ultima vez y la ruta sigue vigente, se devuelve el trazado ya persistido.
+      //
+      // OJO al orden: `cacheado` se lee de `ruta`, la cabecera de ANTES de la escritura de
+      // arriba. Releer despues no serviria — `reemplazarSecuencia` acaba de limpiar las
+      // columnas del trazado.
+      const sinCambios = ruta?.huellaSet === huellaSet && ruta.estado === "vigente";
+      if (unica === undefined || origen === null || sinCambios) {
+        const cacheado = sinCambios && ruta !== null ? this.trazadoDesdeCache(ruta) : null;
+        optlog("service — R35: no se redibuja", {
+          conCoordenadas: conCoordenadas.length,
+          sinOrigen: origen === null,
+          sinCambios,
+          trazadoEnCache: cacheado !== null,
+        });
+        // Se repone lo que la escritura de arriba borro: la secuencia es la MISMA (una sola
+        // parada, la misma huella), asi que el dibujo guardado sigue siendo el suyo.
+        if (cacheado !== null) await this.persistirTrazado(mensajeroId, huellaSet, cacheado);
+        return {
+          status: "omitida",
+          razon: "sin_paradas",
+          ...(cacheado !== null ? { trazado: cacheado } : {}),
+        };
+      }
+      const trazado = await this.trazar([unica.ordenId], [unica], origen);
+      await this.persistirTrazado(mensajeroId, huellaSet, trazado);
+      return {
+        status: "omitida",
+        razon: "sin_paradas",
+        ...(trazado !== null ? { trazado } : {}),
+      };
     }
 
     // ── R38: tope de paradas ──────────────────────────────────────────────────────
@@ -168,11 +235,33 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       paradas.map((p) => p.ordenId),
       origen,
     );
+    optlog("service — origen resuelto y huella calculada", {
+      origen,
+      huellaSet,
+      huellaPrevia: ruta?.huellaSet ?? null,
+      estadoRuta: ruta?.estado ?? null,
+    });
+
     if (ruta?.huellaSet === huellaSet && ruta.estado === "vigente") {
-      return { status: "omitida", razon: "sin_cambios" };
+      // Nada que RECALCULAR, pero el mapa sigue necesitando su linea. El trazado persistido
+      // corresponde a esta misma huella —la DB solo lo conserva mientras la secuencia no
+      // cambie— asi que se devuelve tal cual, sin llamar ni pagar nada.
+      const cacheado = this.trazadoDesdeCache(ruta);
+      optlog("service — guarda R36: mismo conjunto y origen, 0 llamadas facturadas", {
+        trazadoEnCache: cacheado !== null,
+        tramosEnCache: cacheado?.tramos.length ?? 0,
+      });
+      return {
+        status: "omitida",
+        razon: "sin_cambios",
+        ...(cacheado !== null ? { trazado: cacheado } : {}),
+      };
     }
 
     // ── Llamada FACTURADA al proveedor ────────────────────────────────────────────
+    optlog("service — ninguna guarda corto: se LLAMA al proveedor (esto se factura)", {
+      paradas: paradas.length,
+    });
     const outcome = await this.client.optimizar({
       origen: { lat: origen.lat, lng: origen.lng },
       paradas: paradas.map((p) => ({ ordenId: p.ordenId, lat: p.latitud, lng: p.longitud })),
@@ -184,7 +273,17 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
         origen,
         huellaSet,
       });
-      return { status: "ok", paradas: outcome.secuencia.length };
+      optlog("service — SALIDA: ok, secuencia persistida", {
+        secuencia: outcome.secuencia,
+        paradas: outcome.secuencia.length,
+      });
+      const trazado = await this.trazar(outcome.secuencia, paradas, origen);
+      await this.persistirTrazado(mensajeroId, huellaSet, trazado);
+      return {
+        status: "ok",
+        paradas: outcome.secuencia.length,
+        ...(trazado !== null ? { trazado } : {}),
+      };
     }
 
     // R27: fallo del proveedor. NO se tocan las paradas — el ultimo orden valido queda
@@ -196,8 +295,236 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       // a rutas que dejan de actualizarse en silencio.
       this.logger.warn("[optimizacion_ruta] el proveedor rechazo la credencial");
     }
+    optlog("service — SALIDA: fallo del proveedor; se CONSERVA el orden previo (R27)", {
+      status: outcome.status,
+      detalle: outcome.detalle,
+    });
     await this.rutas.marcarDesactualizada(mensajeroId, outcome.detalle);
     throw new RutaIntentoFallidoError(outcome.detalle);
+  }
+
+  /**
+   * Guarda el trazado para que la proxima lectura —y la proxima guarda R36— tengan linea que
+   * pintar sin volver a llamar a Routes.
+   *
+   * ═══ SOLO SE CACHEA `routes`. EL FALLBACK LOCAL NO ═══
+   * Un trazado `local` no es un resultado: es la marca de que Google no contesto. Cachearlo
+   * congelaria lineas RECTAS hasta que cambie el conjunto de paradas, porque la guarda R36
+   * cortaria antes de reintentar. Dejando la columna vacia, el proximo disparo vuelve a
+   * pedirle el dibujo a Routes y el mapa se cura solo en cuanto el proveedor vuelva.
+   * El precio es alguna llamada de mas mientras Routes este caido; es el lado barato del error.
+   *
+   * NUNCA LANZA: se llega aqui con la secuencia YA persistida. Fallar por no haber podido
+   * guardar el DIBUJO provocaria un reintento que volveria a pagar la OPTIMIZACION —la cara—
+   * para arreglar lo accesorio. Mismo criterio que `trazar`.
+   */
+  /**
+   * Trayecto EN VIVO desde la posicion actual hasta UNA parada. Ver el contrato para el
+   * porque de que esto no se pueda cachear.
+   *
+   * ═══ EL ORDEN DE LAS GUARDAS ES EL DE SIEMPRE: LO BARATO PRIMERO ═══
+   *   1. intervalo minimo  -> 0 llamadas, 0 lecturas de paradas
+   *   2. sin cliente Routes-> 0 llamadas
+   *   3. la parada es suya -> 0 llamadas si no lo es
+   * Solo despues se llama al proveedor.
+   *
+   * LA COMPROBACION DE PERTENENCIA ES LA AUTORIZACION, no una validacion de forma.
+   * `findParadasEnReparto` devuelve EXACTAMENTE las paradas en reparto de ESTE mensajero, asi
+   * que buscar el `ordenId` ahi dentro responde de una vez «¿existe?» y «¿es suya?». Sin esto,
+   * cualquier mensajero con sesion podria pedir el trayecto a la guia de otro y, de paso,
+   * averiguar sus coordenadas de entrega (R14).
+   */
+  async trazarTramoVivo(
+    mensajeroId: string,
+    input: { ubicacion: { lat: number; lng: number }; ordenId: string },
+  ): Promise<TrazarTramoVivoResult> {
+    const ahora = this.now();
+    const ruta = await this.rutas.findByMensajero(mensajeroId);
+
+    if (ruta?.tramoVivoAt != null) {
+      const transcurridoS = (ahora.getTime() - ruta.tramoVivoAt.getTime()) / 1000;
+      if (transcurridoS < this.config.RUTA_SYNC_MIN_INTERVALO_S) {
+        optlog("service — tramo vivo: intervalo minimo, 0 llamadas facturadas", {
+          transcurridoS,
+          minimoS: this.config.RUTA_SYNC_MIN_INTERVALO_S,
+        });
+        return { status: "intervalo_minimo" };
+      }
+    }
+
+    if (this.routes === null) {
+      optlog("service — tramo vivo: sin cliente de Routes");
+      return { status: "no_disponible" };
+    }
+
+    const paradas = await this.paradasRepo.findParadasEnReparto(mensajeroId);
+    const destino = paradas.find((p) => p.ordenId === input.ordenId);
+    if (destino === undefined || destino.latitud === null || destino.longitud === null) {
+      // Una parada suya pero SIN geocodificar cae aqui tambien. Es correcto: no hay punto al
+      // que trazar, y el mensajero no puede distinguir ese caso del de una guia ajena — ni
+      // falta que le hace.
+      optlog("service — tramo vivo: la parada no es suya o no tiene coordenadas");
+      return { status: "no_autorizada" };
+    }
+
+    optlog("service — tramo vivo: ninguna guarda corto, se LLAMA a Routes (esto se factura)");
+    let outcome;
+    try {
+      outcome = await this.routes.trazar({
+        origen: input.ubicacion,
+        paradasEnOrden: [
+          { ordenId: destino.ordenId, lat: destino.latitud, lng: destino.longitud },
+        ],
+      });
+    } catch (error) {
+      // Se traga la excepcion como en `trazar`: esto es apoyo visual, no una operacion.
+      opterror("service — tramo vivo: el proveedor lanzo", error);
+      return { status: "no_disponible" };
+    }
+
+    if (outcome.status !== "ok") {
+      optlog("service — tramo vivo: el proveedor no dio geometria", { status: outcome.status });
+      return { status: "no_disponible" };
+    }
+
+    // Se sella DESPUES del exito: cobrarle el intervalo por un intento que no le devolvio nada
+    // dejaria al mensajero esperando sin haber recibido su trayecto.
+    await this.rutas.marcarTramoVivo(mensajeroId, ahora);
+    return {
+      status: "ok",
+      encodedPolyline: outcome.encodedPolyline,
+      distanciaM: outcome.distanciaM,
+      duracionS: outcome.duracionS,
+    };
+  }
+
+  /**
+   * Rearma el trazado del dominio a partir de lo persistido. La cabecera guarda la polilinea
+   * entera; los tramos viven repartidos por las filas de las paradas, asi que hay que volver a
+   * ordenarlos POR SECUENCIA — el `Map` no tiene orden util.
+   *
+   * TODO O NADA con los tramos, igual que en el cliente: se consumen por indice, asi que si a
+   * alguna parada le falta el suyo se devuelven vacios. La polilinea entera sigue sirviendo.
+   */
+  private trazadoDesdeCache(ruta: RutaOptimizadaDTO): TrazadoRuta | null {
+    if (ruta.trazado === null) return null;
+    const enOrden = [...ruta.secuenciaPorOrden.entries()].sort((a, b) => a[1] - b[1]);
+    const tramos = enOrden.map(([ordenId]) => ruta.tramoPorOrden.get(ordenId));
+    const completos = tramos.every((t) => t !== undefined);
+    return {
+      ...ruta.trazado,
+      tramos: completos && tramos.length > 0 ? (tramos as TrazadoTramo[]) : [],
+    };
+  }
+
+  private async persistirTrazado(
+    mensajeroId: string,
+    huellaSet: string,
+    trazado: TrazadoRuta | null,
+  ): Promise<void> {
+    if (trazado === null || trazado.fuente !== "routes") {
+      optlog("service — trazado NO cacheado", { fuente: trazado?.fuente ?? "ninguno" });
+      return;
+    }
+    try {
+      await this.rutas.guardarTrazado(mensajeroId, huellaSet, trazado, trazado.tramos);
+      optlog("service — trazado persistido", {
+        fuente: trazado.fuente,
+        tramos: trazado.tramos.length,
+      });
+    } catch (error) {
+      opterror("service — no se pudo persistir el trazado; se sigue igual", error);
+    }
+  }
+
+  /**
+   * Pide a Google Routes la POLILINEA de la secuencia recien calculada. Devuelve `null` si
+   * no hay cliente de trazado o si el trazado no salio: nunca lanza.
+   *
+   * POR QUE NO PROPAGA NINGUN FALLO: el trazado es accesorio. La ruta ya esta optimizada y
+   * PERSISTIDA cuando se llega aqui; hacer fallar el job por no haber podido dibujarla
+   * provocaria un reintento que volveria a pagar la optimizacion —la cara— para arreglar el
+   * dibujo —lo barato—. Si Routes falla, el mensajero se queda sin linea en el mapa y con
+   * su lista de paradas intacta.
+   *
+   * ⚠️ ESTO NO SE PERSISTE TODAVIA. `ruta_optimizada` no tiene columna para la polilinea, y
+   * anadirla es una migracion. Por ahora el trazado viaja en el resultado (util para el
+   * disparo manual) y queda en la traza. Ver el seguimiento anotado en el spec.
+   */
+  private async trazar(
+    secuencia: string[],
+    paradas: { ordenId: string; latitud: number; longitud: number }[],
+    origen: { lat: number; lng: number },
+  ): Promise<TrazadoRuta | null> {
+    // La secuencia son `ordenId`; dibujar necesita COORDENADAS. Este mapa es el puente, y
+    // reordena `paradas` al orden que decidio la optimizacion.
+    const porOrdenId = new Map(paradas.map((p) => [p.ordenId, p]));
+    const paradasEnOrden = secuencia
+      .map((ordenId) => porOrdenId.get(ordenId))
+      .filter((p): p is { ordenId: string; latitud: number; longitud: number } => p !== undefined)
+      .map((p) => ({ ordenId: p.ordenId, lat: p.latitud, lng: p.longitud }));
+
+    if (paradasEnOrden.length !== secuencia.length) {
+      // No deberia pasar: el cliente ya valida que la secuencia cubra todas las paradas.
+      // Sin correspondencia completa no se dibuja NADA: una linea a la que le falta una
+      // parada es peor que ninguna linea, porque parece correcta.
+      optlog("service — trazado omitido: la secuencia no cuadra con las paradas", {
+        secuencia: secuencia.length,
+        resueltas: paradasEnOrden.length,
+      });
+      return null;
+    }
+
+    // ── Trazado REAL, por calles ──────────────────────────────────────────────────
+    if (this.routes !== null) {
+      let outcome;
+      try {
+        outcome = await this.routes.trazar({ origen, paradasEnOrden });
+      } catch (error) {
+        // Ni siquiera una excepcion cancela el dibujo: se cae al trazado local.
+        opterror("service — el trazado por calles lanzo; se usa el local", error);
+        outcome = null;
+      }
+      if (outcome !== null && outcome.status === "ok") {
+        optlog("service — trazado obtenido de Routes (por calles)", {
+          distanciaM: outcome.distanciaM,
+          duracionS: outcome.duracionS,
+          polilineaChars: outcome.encodedPolyline.length,
+          tramos: outcome.tramos.length,
+        });
+        return {
+          encodedPolyline: outcome.encodedPolyline,
+          distanciaM: outcome.distanciaM,
+          duracionS: outcome.duracionS,
+          fuente: "routes",
+          tramos: outcome.tramos,
+        };
+      }
+      optlog("service — Routes no dio polilinea; se cae al trazado local", {
+        status: outcome?.status ?? "excepcion",
+      });
+    } else {
+      optlog("service — sin cliente de Routes; trazado local directo");
+    }
+
+    // ── Trazado LOCAL, en linea recta ─────────────────────────────────────────────
+    // Gratis, sin red y siempre disponible: se aplica IGUAL venga la secuencia de Google o
+    // del fallback Haversine. Une origen + paradas en el orden calculado.
+    const puntos = [origen, ...paradasEnOrden.map((p) => ({ lat: p.lat, lng: p.lng }))];
+    const encodedPolyline = codificarPolilinea(puntos);
+    const distanciaM = distanciaTotalM(puntos);
+    // Se loguea el TAMANO, nunca la polilinea: decodificarla devuelve las coordenadas de los
+    // domicilios de entrega una por una (R14, cabecera de este archivo).
+    optlog("service — trazado LOCAL (lineas rectas entre paradas)", {
+      puntos: puntos.length,
+      distanciaM,
+      polilineaChars: encodedPolyline.length,
+    });
+    // `duracionS` va a null a proposito: sin calles no hay tiempo de viaje que estimar, y
+    // una cifra inventada acabaria mostrandose al mensajero como si fuera real.
+    // `tramos` vacio: el trazado local es UNA recta continua por todos los puntos. Partirla
+    // daria segmentos que no describen ningun recorrido, solo la cuerda entre dos domicilios.
+    return { encodedPolyline, distanciaM, duracionS: null, fuente: "local", tramos: [] };
   }
 
   /**

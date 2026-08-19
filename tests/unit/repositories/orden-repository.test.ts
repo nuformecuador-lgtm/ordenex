@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import {
+  assertTransicionValida,
+  TRANSICIONES,
+  TransicionIlegalError,
+} from "@/lib/types/order-status-transiciones";
 
 function ordenRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -726,5 +731,65 @@ describe("OrdenRepository.findUsuarioFulfillment (feature 27/R15/R16/R17)", () =
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.findUsuarioFulfillment("desconocido")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 239 (T1.4/T1.7, R25) — el PRE-ESTADO no se ofrece para nada operativo.
+//
+// «No aparece» se demuestra de dos maneras, y las dos hacen falta:
+//   (a) por el WHERE: los tres listados que ofrecen trabajo acotan por IGUALDAD de estado, asi
+//       que una orden en el pre-estado no puede entrar por ninguno;
+//   (b) por el GRAFO: aunque alguien la colara en un listado, el pre-estado no tiene arista
+//       legal hacia `por_recoger`, `en_ruta_bodega_satelite` ni `recolectando`, asi que la
+//       accion fallaria en el choke point. La (b) es la que sobrevive a un refactor del WHERE.
+// ---------------------------------------------------------------------------------------------
+describe("239/R25 — el pre-estado no se ofrece para asignacion, ruteo, recoleccion ni ruta", () => {
+  const PRE_ESTADO = "devolucion_por_confirmar";
+
+  it("R25(a): el filtro `reasignables` acota por IGUALDAD a `en_bodega_central`", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.list({
+      where: { reasignables: true },
+      sortBy: "num_guia",
+      sortDir: "asc",
+      skip: 0,
+      take: 20,
+    });
+
+    const arg = prisma.orden.findMany.mock.calls[0][0] as {
+      where: { estatus?: { value?: unknown }; mensajeroAsignadoId?: unknown };
+    };
+    // Igualdad, no `in` ni `notIn`: el pre-estado no puede colarse ni por omision ni por
+    // lista negra. Asignar y rutear a satelite parten del MISMO origen.
+    expect(arg.where.estatus).toEqual({ value: "en_bodega_central" });
+    expect(arg.where.mensajeroAsignadoId).toBeNull();
+    expect(JSON.stringify(arg.where)).not.toContain(PRE_ESTADO);
+  });
+
+  it("R25(a): las PARADAS de ruta salen SOLO de `en_reparto`", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.findParadasEnReparto("m1");
+
+    const arg = prisma.orden.findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(arg.where.estatus).toEqual({ value: "en_reparto" });
+    expect(JSON.stringify(arg.where)).not.toContain(PRE_ESTADO);
+  });
+
+  it("R25(b): el grafo no ofrece salida del pre-estado hacia asignacion/ruteo/recoleccion", () => {
+    // Las DOS unicas salidas son el anclaje (al aprobar el cierre) y el deshacer del mensajero.
+    // Cualquier intento de asignar, rutear o recolectar desde aqui muere en el choke point.
+    const salidas = TRANSICIONES.devolucion_por_confirmar.map((d) => d.to);
+    expect([...salidas].sort()).toEqual(["devuelta", "en_reparto"]);
+    for (const destino of ["por_recoger", "en_ruta_bodega_satelite", "recolectando"] as const) {
+      expect(() => assertTransicionValida(PRE_ESTADO, destino)).toThrow(TransicionIlegalError);
+    }
   });
 });

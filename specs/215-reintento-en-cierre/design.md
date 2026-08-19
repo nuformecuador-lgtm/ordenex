@@ -920,3 +920,25 @@ un cuarto estado ni un segundo camino de vinculación.
    test.
 5. **Deriva del KPI persistido** (⛔ Q10, §8): el mismo día puede dar dos valores
    distintos según cuándo se recalcule el rollup.
+
+---
+
+## §7bis ACTUALIZADO POR LA FEATURE 239 — 2026-08-19
+
+**Q5 no se cierra: cambia de forma**, y conviene decir en qué dirección.
+
+Antes: una orden cuyo cierre nunca se aprueba tenía 0 intentos, así que el cron la liberaba a
+bodega una y otra vez **sin escalar jamás** — un bucle invisible, con la mercadería circulando.
+
+Desde la 239, esa orden se queda en `devolucion_por_confirmar` y el cron **no la ve**. El bucle se
+acaba, y con él la `prioridad` falsa y el ruido en el ranking. **Pero la mercadería se congela**: el
+paquete del cliente final queda detenido esperando una aprobación administrativa, y la tienda no se
+entera porque no lo ve.
+
+**Lo que sí gana: la población atascada pasa a ser CONTABLE.** Antes una orden en el bucle se veía
+igual que una sana. La consulta está en `specs/239-devolucion-espera-cierre/design.md` y su
+resultado contra producción el 2026-08-19 fue **0** en las tres columnas.
+
+**La decisión D14 sigue en pie** —el riesgo se acepta porque «el cierre se cerrará en algún momento
+por un usuario»— pero ahora tiene termómetro. **M3 deja de ser opcional**: sin la alerta, el
+congelamiento es más silencioso que el bucle que reemplaza.

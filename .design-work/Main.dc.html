@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; background: #f7f8fc; }
+    a { color: #1d4ed8; text-decoration: none; }
+    a:hover { color: #0b3880; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; background: #f7f8fc; color: #12233f; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em;">Monitoreo</h1>
+    <p style="margin: 0; font-size: 14px; color: #4a5368;">El pulso del día en curso: cuántas órdenes lleva hoy cada mensajero y en qué terminó cada una</p>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10);">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>
+      <span style="font-size: 14px; font-weight: 500;">martes, 18 de agosto de 2026</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="display: inline-block; width: 7px; height: 7px; border-radius: 999px; background: #10b981;"></span>
+      <span style="font-size: 13px; color: #4a5368;">Actualizado hace 12 s</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px;">
+
+    <div style="grid-column: span 12; display: flex; align-items: center; gap: 28px; padding: 16px 20px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10);">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 108px;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Asignadas hoy</span>
+        <span style="font-size: 34px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums;">184</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1;">
+        <div style="display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: #f1f4fb;">
+          <div style="width: 58%; background: #10b981;"></div>
+          <div style="width: 24%; background: #1a56db;"></div>
+          <div style="width: 11%; background: #f59e0b;"></div>
+          <div style="width: 7%; background: #ef4444;"></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #4a5368;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #10b981;"></span>Entregadas <strong style="color: #12233f; font-variant-numeric: tabular-nums;">107</strong></span>
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #4a5368;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #1a56db;"></span>En reparto <strong style="color: #12233f; font-variant-numeric: tabular-nums;">44</strong></span>
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #4a5368;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #f59e0b;"></span>Reprogramadas <strong style="color: #12233f; font-variant-numeric: tabular-nums;">20</strong></span>
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #4a5368;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #ef4444;"></span>Problemas <strong style="color: #12233f; font-variant-numeric: tabular-nums;">13</strong></span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding-left: 24px; border-left: 1px solid #e3e8f2;">
+        <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5368;">Avance</span>
+        <span style="font-size: 34px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; color: #047857;">58%</span>
+      </div>
+    </div>
+
+    <div style="grid-column: span 12; display: flex; flex-direction: column; gap: 10px;">
+
+      <div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10);">
+        <div style="display: flex; flex-direction: column; gap: 2px; width: 190px;">
+          <span style="font-size: 15px; font-weight: 600;">Kevin Solano</span>
+          <span style="font-size: 12px; color: #4a5368;"><span style="font-variant-numeric: tabular-nums;">31</span> asignadas</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+          <div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #f1f4fb;">
+            <div style="width: 74%; background: #10b981;"></div>
+            <div style="width: 16%; background: #1a56db;"></div>
+            <div style="width: 10%; background: #f59e0b;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 12px; color: #4a5368;">23 entregadas · 5 en reparto · 3 reprogramadas</span>
+          </div>
+        </div>
+        <span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: #047857; width: 58px; text-align: right;">74%</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10);">
+        <div style="display: flex; flex-direction: column; gap: 2px; width: 190px;">
+          <span style="font-size: 15px; font-weight: 600;">Marisol Vargas</span>
+          <span style="font-size: 12px; color: #4a5368;"><span style="font-variant-numeric: tabular-nums;">28</span> asignadas</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+          <div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #f1f4fb;">
+            <div style="width: 64%; background: #10b981;"></div>
+            <div style="width: 25%; background: #1a56db;"></div>
+            <div style="width: 11%; background: #ef4444;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 12px; color: #4a5368;">18 entregadas · 7 en reparto · 3 devueltas</span>
+          </div>
+        </div>
+        <span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: #047857; width: 58px; text-align: right;">64%</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px #b91c1c;">
+        <div style="display: flex; flex-direction: column; gap: 2px; width: 190px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 4.3 2.6 18a1.9 1.9 0 0 0 1.7 2.9h15.4a1.9 1.9 0 0 0 1.7-2.9L13.7 4.3a1.9 1.9 0 0 0-3.4 0z"></path></svg>
+            <span style="font-size: 15px; font-weight: 600;">Diego Ramírez</span>
+          </div>
+          <span style="font-size: 12px; color: #4a5368;"><span style="font-variant-numeric: tabular-nums;">26</span> asignadas</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+          <div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #f1f4fb;">
+            <div style="width: 27%; background: #10b981;"></div>
+            <div style="width: 23%; background: #1a56db;"></div>
+            <div style="width: 50%; background: #ef4444;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 12px; color: #b91c1c; font-weight: 500;">13 sin recoger · 2 incidentes</span>
+            <span style="font-size: 12px; color: #4a5368;">7 entregadas · 6 en reparto</span>
+          </div>
+        </div>
+        <span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: #b91c1c; width: 58px; text-align: right;">27%</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px rgba(18,35,63,0.10);">
+        <div style="display: flex; flex-direction: column; gap: 2px; width: 190px;">
+          <span style="font-size: 15px; font-weight: 600;">Andrea Jiménez</span>
+          <span style="font-size: 12px; color: #4a5368;"><span style="font-variant-numeric: tabular-nums;">24</span> asignadas</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; flex-grow: 1;">
+          <div style="display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #f1f4fb;">
+            <div style="width: 79%; background: #10b981;"></div>
+            <div style="width: 21%; background: #1a56db;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 12px; color: #4a5368;">19 entregadas · 5 en reparto</span>
+          </div>
+        </div>
+        <span style="font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: #047857; width: 58px; text-align: right;">79%</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a5368" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

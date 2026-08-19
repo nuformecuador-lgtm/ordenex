@@ -260,6 +260,18 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "asignarRecoleccionLote",
     origenTipo: "asignacion_recoleccion",
   },
+  // #28: feature 239 (2026-08-19). El ANCLAJE de la devolucion. Al APROBAR el cierre, la orden
+  // pasa del pre-estado a `devuelta` DENTRO de la misma transaccion, y esa transicion es la que
+  // arranca la ventana de SLA y hace visible la novedad para la tienda. Familia PROPIA porque el
+  // cron la busca por ella. Es el TERCER punto del mismo simbolo (`resolverCierre` ya emitia
+  // `liberacion_sin_gestionar` y `devolucion_rechazada`): mismo precedente que #20/#22. ENLAZA la
+  // gestion ancla (`gestion_orden_id` poblado), a diferencia de las otras dos.
+  {
+    n: 28,
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
+    origenTipo: "anclaje_devolucion",
+  },
 ] as const;
 
 // Feature 158/PR2 — familias con MAS DE UN punto de escritura, declaradas UNA A UNA con su
@@ -336,14 +348,14 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 26 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(26); // 27 - 1: el #2 se retiro el 2026-08-07
+  it("son EXACTAMENTE 27 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(27); // 28 - 1: el #2 se retiro el 2026-08-07
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26, 27,
+      26, 27, 28,
     ]);
   });
 

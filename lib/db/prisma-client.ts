@@ -44,6 +44,68 @@ function resolvePoolMax(): number {
  */
 export const PRISMA_OMIT = { orden: { busquedaTexto: true } } as const;
 
+/* -------------------------------------------------------------------------- */
+/* Log de consultas SQL                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cuánto se imprime de cada consulta.
+ *
+ * - `off`    — nada (por defecto).
+ * - `sql`    — la sentencia y su duración.
+ * - `params` — además, los PARÁMETROS con los que se ejecutó.
+ */
+export type ModoLogQueries = "off" | "sql" | "params";
+
+/** Variable de entorno que lo enciende. */
+export const ENV_LOG_QUERIES = "PRISMA_LOG_QUERIES";
+
+/**
+ * Decide el modo a partir del entorno. Función PURA (recibe el entorno) para poder
+ * comprobarla sin abrir una conexión.
+ *
+ * DOS candados, y ninguno es paranoia de más:
+ *
+ * 1. **En producción SIEMPRE `off`**, aunque la variable esté puesta. Un log por consulta
+ *    en Vercel es una factura de ingesta de logs y un ruido que entierra los errores de
+ *    verdad; encenderlo ahí tiene que costar un despliegue, no una variable de entorno
+ *    cambiada a las tres de la mañana.
+ * 2. **Los parámetros son un nivel APARTE**, no un extra del interruptor general. La
+ *    sentencia es una plantilla y no dice nada de nadie; los parámetros llevan datos
+ *    reales —un `where` del buscador arrastra teléfono y nombre del destinatario, que es
+ *    justo el PII que `PRISMA_OMIT` se cuida de no traer en las filas—. Quien los quiera
+ *    tiene que pedirlos por su nombre.
+ */
+export function modoLogQueries(env: NodeJS.ProcessEnv = process.env): ModoLogQueries {
+  if (env.NODE_ENV === "production") return "off";
+  const raw = env[ENV_LOG_QUERIES]?.trim().toLowerCase();
+  if (!raw || raw === "0" || raw === "false" || raw === "off") return "off";
+  return raw === "params" ? "params" : "sql";
+}
+
+/** Cliente con el log de consultas ya enchufado, si el entorno lo pide. */
+function construirCliente(adapter: PrismaPg): PrismaClient {
+  const modo = modoLogQueries();
+  if (modo === "off") {
+    return new PrismaClient({ adapter, omit: PRISMA_OMIT }) as unknown as PrismaClient;
+  }
+
+  const cliente = new PrismaClient({
+    adapter,
+    omit: PRISMA_OMIT,
+    // `emit: "event"` y no `"stdout"`: así el formato lo decide esta función —incluido
+    // el recorte de los parámetros— en vez de imprimirlo Prisma por su cuenta.
+    log: [{ emit: "event", level: "query" }],
+  });
+
+  cliente.$on("query", (evento) => {
+    const linea = `[prisma] ${evento.duration}ms  ${evento.query}`;
+    console.debug(modo === "params" ? `${linea}\n  params: ${evento.params}` : linea);
+  });
+
+  return cliente as unknown as PrismaClient;
+}
+
 export function getPrismaClient(): PrismaClient {
   if (!globalThis.__prisma__) {
     const adapter = new PrismaPg({
@@ -62,10 +124,7 @@ export function getPrismaClient(): PrismaClient {
     // parametro generico por toda la capa de datos para expresar la ausencia de un campo
     // que nadie lee. La garantia que importa (R28) es de EJECUCION —la columna no viaja en
     // ninguna fila— y la demuestra un test contra Postgres real, no el compilador.
-    globalThis.__prisma__ = new PrismaClient({
-      adapter,
-      omit: PRISMA_OMIT,
-    }) as unknown as PrismaClient;
+    globalThis.__prisma__ = construirCliente(adapter);
   }
   return globalThis.__prisma__;
 }

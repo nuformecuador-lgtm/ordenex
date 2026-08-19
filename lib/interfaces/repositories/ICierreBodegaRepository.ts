@@ -1,6 +1,7 @@
 import type { CierreEstado } from "@/lib/types/cierre";
 import type { CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+import type { FiltrosCierresBodega } from "@/lib/types/filtros-cierres";
 
 // Feature 40 — contrato del repositorio del "Cierre de bodega" (lado adminSatelite:
 // consolidar + solicitar). Solo queries Prisma; sin logica de negocio (esa vive en
@@ -55,7 +56,15 @@ export interface ICierreBodegaRepository {
    * `destino_zona_id=zonaId` y `cierre_bodega_id IS NULL` (aun no consolidados) +
    * mensajero + totales snapshot. Filtro por zona/estado en el WHERE.
    */
-  findCierresDiaConsolidables(zonaId: string): Promise<CierreDiaConsolidableRow[]>;
+  /**
+   * Pedido humano del 2026-08-16 — `filtros` es OPCIONAL (fecha + zona, SIN mensajero: un cierre
+   * de bodega consolida los de varios) y RECORTA dentro del alcance, componiendose con `AND` y
+   * nunca en lugar de el. Omitirlo deja el criterio IDENTICO al de antes.
+   */
+  findCierresDiaConsolidables(
+    zonaId: string,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreDiaConsolidableRow[]>;
   /**
    * Feature 170 — FASE 2 (T J.1, R40/R41/R44/R49/R51/R54): UNA PAGINA de los cierre_dia
    * consolidables de la zona + el TOTAL del conjunto (el que la cabecera mostrara, R42).
@@ -68,6 +77,7 @@ export interface ICierreBodegaRepository {
   findCierresDiaConsolidablesPaginado(
     zonaId: string,
     rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreDiaConsolidableRow>>;
   /**
    * R6: cuenta los cierre_dia de la zona (`destino_tipo='bodega_satelite'`,
@@ -91,7 +101,10 @@ export interface ICierreBodegaRepository {
    * F1.4-h: historico propio de la zona (todos los cierres de bodega de la zona), mas
    * reciente primero, totales snapshot -> STRING, `cantidadCierres` = _count.
    */
-  findCierresBodegaByZona(zonaId: string): Promise<CierreBodegaResumenRow[]>;
+  findCierresBodegaByZona(
+    zonaId: string,
+    filtros?: FiltrosCierresBodega,
+  ): Promise<CierreBodegaResumenRow[]>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres de bodega
    * SOLICITADOS por la zona + el TOTAL del conjunto.
@@ -107,5 +120,6 @@ export interface ICierreBodegaRepository {
   findCierresBodegaByZonaPaginado(
     zonaId: string,
     rango: RangoPagina,
+    filtros?: FiltrosCierresBodega,
   ): Promise<PaginaRepositorio<CierreBodegaResumenRow>>;
 }

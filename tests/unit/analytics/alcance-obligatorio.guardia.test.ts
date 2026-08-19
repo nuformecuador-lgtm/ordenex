@@ -102,13 +102,33 @@ function consultaTablaDeAnalitica(codigo: string): string | null {
  * `unknown` intermedio. Lo que NO cuenta es RECIBIRLO en una firma o importarlo como tipo,
  * que es el uso legitimo y el unico que deja el recorte intacto.
  */
-const FORJA_LA_CONSULTA = /\bas\s+(?:unknown\s+as\s+)?ConsultaAnalitica\b/;
+/**
+ * Los tipos OPACOS que valen como "consulta ya preparada". Son dos desde el 2026-08-17:
+ *
+ *  - `ConsultaAnalitica` (`lib/analytics/consulta.ts`) — las 25 metricas del catalogo.
+ *  - `ConsultaConteoEntregas` (`lib/analytics/entregas-conteo.ts`) — el conteo de entregas,
+ *    que NO sale de `analytics_daily` sino de la tabla `orden` viva, y por eso tiene su
+ *    propio preparador. Se admite aqui porque cumple lo MISMO que se le exige al primero:
+ *    marca `unique symbol`, de modo que la unica forma de tener uno es haber pasado por su
+ *    resolutor de alcance.
+ *
+ * ⚠ ESTA LISTA NO ES UN CAJON. Un tipo nuevo entra si —y solo si— esta marcado con un
+ * `unique symbol` que impida construirlo a mano. Meter aqui un tipo llano (un `interface`
+ * normal con `filtro` y `alcance`) desarmaria el guardia entero sin que nada se pusiera rojo:
+ * cualquier repositorio podria fabricarse el alcance que quisiera y seguir pasando el censo.
+ */
+const TIPOS_OPACOS = ["ConsultaAnalitica", "ConsultaConteoEntregas"] as const;
+
+/** `as [unknown as] <Tipo>` para cualquiera de los opacos. */
+const FORJA_LA_CONSULTA = new RegExp(
+  `\\bas\\s+(?:unknown\\s+as\\s+)?(?:${TIPOS_OPACOS.join("|")})\\b`,
+);
 
 function recibeConsultaPreparada(codigo: string): boolean {
   // Forjarla NO es recibirla: si el archivo la fabrica con un cast, el censo no lo perdona
   // aunque la palabra aparezca por todas partes.
   if (FORJA_LA_CONSULTA.test(codigo)) return false;
-  return /\bConsultaAnalitica\b/.test(codigo);
+  return new RegExp(`\\b(?:${TIPOS_OPACOS.join("|")})\\b`).test(codigo);
 }
 
 /**
@@ -289,5 +309,84 @@ describe("R18 · autocomprobacion con fixtures sinteticos (126/127 aun no existe
       "// TODO: migrar a ConsultaAnalitica\nexport class",
     );
     expect(violacionDeAlcanceObligatorio("disfrazado.ts", disfrazado)).not.toBeNull();
+  });
+});
+
+// El segundo tipo opaco entro en `TIPOS_OPACOS` el 2026-08-17. Este bloque es lo que impide
+// que esa lista se convierta en un cajon: cada nombre que este dentro tiene que ganarse el
+// sitio con una marca `unique symbol`, y tiene que caer si lo forjan igual que el primero.
+describe("R18 · el segundo tipo opaco cumple lo mismo que el primero", () => {
+  const FUENTES_OPACAS: Record<string, string> = {
+    ConsultaAnalitica: "lib/analytics/consulta.ts",
+    ConsultaConteoEntregas: "lib/analytics/entregas-conteo.ts",
+  };
+
+  // LA ASERCION QUE SOSTIENE TODO EL GUARDIA. Un tipo llano en `TIPOS_OPACOS` —una interfaz
+  // normal con `filtro` y `alcance`— desarmaria el censo entero sin ponerse rojo: cualquier
+  // repositorio podria construirse el alcance que quisiera y seguir pasando. La marca es lo
+  // unico que convierte "menciona el tipo" en "paso por el resolutor".
+  it.each(TIPOS_OPACOS)("«%s» esta marcado con un `unique symbol`", (tipo) => {
+    const fuente = fs.readFileSync(path.join(REPO_ROOT, FUENTES_OPACAS[tipo]), "utf8");
+
+    const marca = /declare const (\w+): unique symbol;/.exec(fuente);
+    expect(marca, `${tipo} no declara marca: no puede estar en TIPOS_OPACOS`).not.toBeNull();
+
+    // Y la marca esta DENTRO del tipo, no declarada al lado y olvidada: se toma el cuerpo de
+    // la interfaz y se exige que el simbolo sea una de sus primeras propiedades.
+    const cuerpo = fuente.slice(fuente.indexOf(`interface ${tipo}`), fuente.length);
+    expect(cuerpo.slice(0, 200), `${tipo} declara la marca pero no la lleva dentro`).toContain(
+      `[${marca?.[1]}]: true;`,
+    );
+  });
+
+  it("cada nombre de la lista tiene un archivo fuente declarado y existente", () => {
+    for (const tipo of TIPOS_OPACOS) {
+      expect(FUENTES_OPACAS[tipo], `${tipo} sin fuente declarada en este test`).toBeDefined();
+      expect(fs.existsSync(path.join(REPO_ROOT, FUENTES_OPACAS[tipo]))).toBe(true);
+    }
+  });
+
+  it("forjar el tipo del conteo tampoco cuenta como recibirlo", () => {
+    const forjador = `
+import type { ConsultaConteoEntregas } from "@/lib/analytics/entregas-conteo";
+export class ConteoRepository {
+  async contar(filtro: unknown, alcance: unknown) {
+    const c = { filtro, alcance } as unknown as ConsultaConteoEntregas;
+    return this.prisma.orden.count({ where: { zonaId: (c as never)["x"] } });
+  }
+}
+`;
+    const v = violacionDeAlcanceObligatorio("forjador-conteo.ts", forjador);
+    expect(v, "un cast a ConsultaConteoEntregas paso el censo").not.toBeNull();
+    expect(v).toContain("orden");
+  });
+
+  it("y el repositorio real del conteo pasa porque lo RECIBE, no porque lo nombre", () => {
+    // Se mira `ConteoPorStatusRepository` y no `ConteoEntregasRepository`: desde el 2026-08-18
+    // aquel es el UNICO de los dos que toca la base —el otro delega en el y pliega—. Un
+    // anti-vacio apuntando a un archivo que ya no consulta nada estaria verde POR VACIO, que
+    // es justo el fallo que este bloque existe para evitar.
+    const rel = "lib/repositories/ConteoPorStatusRepository.ts";
+    const fuente = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+
+    expect(violacionDeAlcanceObligatorio(rel, fuente)).toBeNull();
+    // Anti-vacio en las dos direcciones: el archivo SI consulta `orden` y SI esta en contexto
+    // de analitica, asi que su ausencia del censo es una decision y no un descuido del detector.
+    expect(fuente).toMatch(/queryRaw/);
+    expect(fuente).toMatch(/"orden"/);
+    expect(fuente).toContain("@/lib/analytics/");
+    expect(FORJA_LA_CONSULTA.test(fuente), "forja el tipo opaco").toBe(false);
+  });
+
+  // Y el que PLIEGA no se escapa del censo por la puerta de atras. Hoy no consulta ninguna
+  // tabla, asi que el detector no tiene nada que reprocharle — pero eso se comprueba, no se
+  // supone: si volviera a consultar por su cuenta tendria que seguir recibiendo el tipo opaco
+  // en vez de forjarlo, y esta asercion lo obliga.
+  it("el repositorio que pliega tampoco forja el tipo opaco", () => {
+    const rel = "lib/repositories/ConteoEntregasRepository.ts";
+    const fuente = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+
+    expect(violacionDeAlcanceObligatorio(rel, fuente)).toBeNull();
+    expect(FORJA_LA_CONSULTA.test(fuente), "forja el tipo opaco").toBe(false);
   });
 });

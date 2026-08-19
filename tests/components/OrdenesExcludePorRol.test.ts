@@ -38,3 +38,25 @@ describe("EXCLUDE_POR_ROL — visibilidad de los estados del flujo de devolució
     expect(excluidos).toContain("en_bodega_central");
   });
 });
+
+// Feature 239 (T1.7, R26/R19) — este mapa es PARCIAL y NO rompe el build: un estado que no se
+// liste AUTO-APARECE como opcion del desplegable de ese rol. La decision de la 239 (P3: durante
+// el limbo la tienda no ve nada) solo queda protegida si se afirma aqui.
+describe("EXCLUDE_POR_ROL — el pre-estado de la devolucion (239/R26)", () => {
+  const PRE_ESTADO = "devolucion_por_confirmar";
+
+  it("R19/R26: el adminTienda NO puede filtrar por el pre-estado (esta excluido, junto a `devuelta`)", () => {
+    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
+    expect(excluidos).toContain(PRE_ESTADO);
+    // Va con `devuelta` porque son la misma cosa antes y despues de la confirmacion: si el
+    // pre-estado se colara en el desplegable, la tienda veria en su filtro justo el estado que
+    // la 239 decide que todavia no le corresponde ver.
+    expect(excluidos).toContain("devuelta");
+  });
+
+  it("R26: maestro y admin SI lo ven (solo excluyen `pendiente`)", () => {
+    // Son los que tienen que poder contar la poblacion atascada en el pre-estado (R34).
+    expect(EXCLUDE_POR_ROL[RolValue.maestro]).not.toContain(PRE_ESTADO);
+    expect(EXCLUDE_POR_ROL[RolValue.admin]).not.toContain(PRE_ESTADO);
+  });
+});

@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import useSWR from "swr";
 import {
+  Camera,
   ChevronUp,
+  ImagePlus,
+  LifeBuoy,
   MessageCircle,
   Navigation,
   PackageCheck,
@@ -27,6 +30,7 @@ import { RadioGroup } from "@/components/ui/radio-group";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
+import { solicitarAyudaOrden } from "@/lib/actions/orden-ayuda";
 import {
   borrarNotaOrden,
   listarNotasOrden,
@@ -51,11 +55,13 @@ import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "./AsignacionDetalle";
+import { SolicitarAyudaModal } from "./SolicitarAyudaModal";
 import { EnviarPlantillaWhatsappButton } from "./EnviarPlantillaWhatsappButton";
 import { CAUSA_DEVOLUCION_OPTIONS } from "./causa-devolucion-options";
 import { CAUSA_INCIDENTE_OPTIONS } from "./causa-incidente-options";
 import {
   ERRORES_LINEA,
+  acotarMonto,
   capturaCuadra,
   erroresDeLinea,
   lineaNueva,
@@ -64,6 +70,7 @@ import {
   opcionesPara,
   pendiente,
   puedeAnadirLinea,
+  sinPendiente,
   totalCapturado,
   type LineaEnEdicion,
 } from "./desglose-captura";
@@ -109,6 +116,14 @@ const HILO_TEXTOS = {
   sesion: "Tu sesión expiró. Iniciá sesión de nuevo para ver las notas.",
   fallo: "No se pudieron cargar las notas de esta orden.",
 } as const;
+
+// Pedido humano 2026-08-18 — los tres desenlaces de «Solicitar ayuda», dichos en el idioma del
+// mensajero. El de `forbidden` NO enumera las causas (rol, orden ajena, orden fuera de reparto):
+// el borde es opaco a propósito y repetir aquí la lista sería adivinar cuál de ellas fue.
+const MSG_AYUDA_OK = "Se solicitó ayuda. Tu tienda lo verá en Novedades.";
+const MSG_AYUDA_MOTIVO = "Escribí un motivo para poder solicitar ayuda.";
+const MSG_AYUDA_FORBIDDEN =
+  "No se pudo solicitar ayuda con esta orden. Revisá que siga en reparto y asignada a vos.";
 
 /**
  * R2/R16: con qué líneas arranca —y a qué vuelve— el editor. Una entrega SIN cobro son CERO
@@ -171,6 +186,15 @@ type Resultado =
 type Paso = "detalle" | "resultados" | "formulario";
 
 const ACCEPT_MIME = GESTION_ALLOWED_MIME.join(",");
+
+/**
+ * Formatos admitidos, en la letra del usuario y DERIVADOS del mismo catálogo que valida el borde
+ * (`GESTION_ALLOWED_MIME`). Escritos a mano se desincronizarían el día que entre —o salga— un
+ * formato, y la zona de carga prometería algo que el servidor rechaza.
+ */
+const FORMATOS_EVIDENCIA = GESTION_ALLOWED_MIME.map((mime) =>
+  mime.replace("image/", "").toUpperCase(),
+).join(" · ");
 
 // Feature 119 (R16): tope de fotos por gestion. El schema (cliente y servidor) usa el
 // mismo `gestionConfig.MAX_EVIDENCIAS_POR_GESTION`; en el navegador la env no es visible
@@ -593,6 +617,41 @@ export function GestionarOrdenPanel({
     return true;
   }
 
+  // Pedido humano 2026-08-18 — SOLICITAR AYUDA. El motivo se publica como una nota MÁS del hilo
+  // de esta orden (el mismo que se lee unos bloques más abajo) y la orden queda marcada, que es
+  // lo que la hace aparecer en `/novedades` para la tienda. Por eso al terminar se refresca el
+  // hilo: el motivo recién escrito tiene que aparecer ahí, o parecería que se perdió.
+  const [ayudaAbierta, setAyudaAbierta] = useState(false);
+  const [pidiendoAyuda, setPidiendoAyuda] = useState(false);
+
+  async function handleSolicitarAyuda(motivo: string) {
+    if (pidiendoAyuda) return;
+    setPidiendoAyuda(true);
+    try {
+      const result = await solicitarAyudaOrden({ ordenId: orden.id, motivo });
+      if (result.status === "ok") {
+        setAyudaAbierta(false);
+        toast.success(MSG_AYUDA_OK);
+        await refrescarHilo();
+        // El listado de arriba reparte las órdenes con ayuda a su propia sección, así que
+        // tiene que volver a leerse: si no, ésta se quedaría donde ya no va.
+        onSuccess();
+        return;
+      }
+      if (result.status === "validation_error") {
+        toast.error(MSG_AYUDA_MOTIVO);
+        return;
+      }
+      toast.error(
+        result.status === "unauthenticated"
+          ? HILO_TEXTOS.sesion
+          : MSG_AYUDA_FORBIDDEN,
+      );
+    } finally {
+      setPidiendoAyuda(false);
+    }
+  }
+
   async function handleConfirm() {
     if (enviando || comprimiendo || ubicando) return; // feature 193/R21
 
@@ -671,6 +730,10 @@ export function GestionarOrdenPanel({
     sinCobro || capturaCuadra(lineas, montoACobrar)
       ? undefined
       : DESGLOSE_TEXTOS.noCuadra;
+  // El desglose que no cuadra no llega ni a intentarlo: «Guardar gestión» se deshabilita mientras
+  // la suma no iguale el monto a cobrar. `revisarDesglose` (:538) sigue siendo la barrera de
+  // verdad —el botón puede habilitarse con las líneas a medias—; esto solo evita el pulso inútil.
+  const desgloseBloquea = resultado === "entregada" && cuadreError !== undefined;
   // Feature 119: la evidencia es una LISTA -> tanto el cliente (`safeParse`) como el servidor
   // cuelgan sus errores del campo `evidencias`.
   const evidenciaError = firstError(fieldErrors, "evidencias");
@@ -741,7 +804,41 @@ export function GestionarOrdenPanel({
             <Navigation className="size-5" aria-hidden="true" />
             Navegar
           </UbicacionTrigger>
+          {/* Pedido humano 2026-08-18 — CUARTO gesto de la puerta: pedir ayuda sobre ESTA orden.
+              Va con los otros tres y no en el bloque de gestión porque no es un desenlace: no
+              cierra la orden ni cambia su estatus, es una llamada de auxilio mientras se está
+              delante del cliente, igual que llamar o navegar.
+
+              Ya marcada, el botón NO desaparece ni se deshabilita: se rotula «Ayuda pedida» y
+              sigue abriendo el modal, porque lo que el mensajero suele necesitar la segunda vez
+              es AÑADIR contexto, no enterarse de que ya no puede decir nada. Cada envío suma un
+              motivo al hilo y la marca sigue encendida (el efecto es idempotente). */}
+          <button
+            type="button"
+            onClick={() => setAyudaAbierta(true)}
+            aria-label={`Solicitar ayuda con la orden de ${orden.destinatario}`}
+            className={`flex flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 text-xs font-bold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+              orden.ayuda
+                ? "bg-warning text-navy hover:opacity-90"
+                : "bg-destructive text-white hover:opacity-90"
+            }`}
+          >
+            <LifeBuoy className="size-5" aria-hidden="true" />
+            {orden.ayuda ? "Ayuda pedida" : "Ayuda"}
+          </button>
         </div>
+
+        {/* Montado sólo al abrir y con `key` de la orden: el motivo arranca fresco en cada
+            apertura, sin efecto de reinicio. */}
+        {ayudaAbierta ? (
+          <SolicitarAyudaModal
+            key={orden.id}
+            orden={orden}
+            onOpenChange={setAyudaAbierta}
+            onConfirmar={handleSolicitarAyuda}
+            enviando={pidiendoAyuda}
+          />
+        ) : null}
 
         {/* Feature 87 (R17): plantilla -> wa.me. Sigue disponible como salida a WhatsApp
             del propio mensajero (sirve con plantillas `pending`, que el chat no admite). */}
@@ -1027,7 +1124,7 @@ export function GestionarOrdenPanel({
               type="button"
               onClick={handleConfirm}
               loading={enviando || ubicando}
-              disabled={comprimiendo}
+              disabled={comprimiendo || desgloseBloquea}
             >
               {comprimiendo
                 ? "Procesando foto…"
@@ -1137,13 +1234,20 @@ function DesglosePagoField({
                   aria-invalid={errorLinea ? true : undefined}
                 />
               </div>
+              {/* Sin decimales: `text` + `inputMode="numeric"` en vez de `type="number"`, porque
+                  un input numerico devuelve "" ante un "." a medio teclear y se perderia lo ya
+                  escrito. El filtro real es `acotarMonto`; el `pattern` solo abre el teclado.
+
+                  `acotarMonto` filtra a digitos Y acota al TOPE de la linea (pedido 2026-08-14):
+                  con 1.000 a cobrar y 700 en la primera, teclear 2.000 en la segunda deja 300. */}
               <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={linea.monto}
-                onChange={(e) => cambiar(i, { monto: e.target.value })}
+                onChange={(e) =>
+                  cambiar(i, { monto: acotarMonto(e.target.value, lineas, i, montoACobrar) })
+                }
                 aria-label={`${DESGLOSE_TEXTOS.montoLinea} ${i + 1}`}
                 aria-invalid={errorLinea ? true : undefined}
                 className="w-28"
@@ -1177,7 +1281,12 @@ function DesglosePagoField({
           variant="outline"
           size="sm"
           className="self-start gap-1.5"
-          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco.
+          // Pedido humano (2026-08-14): sin nada pendiente, la línea que nacería sería de monto 0
+          // —`pendiente` se acota a 0— y solo serviría para descuadrar. Se DESHABILITA (no se
+          // esconde, a diferencia del tope de catálogo): baja el monto de una línea y vuelve.
+          disabled={sinPendiente(lineas, montoACobrar)}
+          // R4 [Q4]: la línea nueva nace con lo que FALTA, no en blanco. `pendiente` ya acota a 0
+          // cuando lo capturado iguala o supera el total: nunca se pre-carga un negativo.
           onClick={() => onChange([...lineas, lineaNueva(pendiente(lineas, montoACobrar))])}
         >
           <Plus className="size-4" aria-hidden="true" />
@@ -1374,6 +1483,14 @@ function EvidenciasField({
           ))}
         </ul>
       ) : null}
+      {/* Zona de carga: el `input[type=file]` crudo pintaba un botón gris de sistema que en el
+          móvil no se lee como «aquí van las fotos». El input sigue existiendo y sigue siendo el
+          control (mismo id, mismo `aria-label`, misma validez): sólo se oculta VISUALMENTE con
+          `sr-only` —nunca con `hidden`/`display:none`, que lo sacaría del foco y del teclado— y
+          la superficie visible es su `<label>`, que le traslada el clic y el tap.
+
+          El foco vive en el input, así que el anillo se pinta con `has-[:focus-visible]` sobre
+          la zona: quien navega con teclado ve resaltado el área, no un input invisible. */}
       <input
         id={inputId}
         type="file"
@@ -1382,12 +1499,34 @@ function EvidenciasField({
         onChange={onSelect}
         aria-invalid={error ? true : undefined}
         aria-label={ariaLabel}
-        aria-describedby={ayuda ? `${inputId}-ayuda` : undefined}
-        className="text-sm"
+        aria-describedby={`${inputId}-limite${ayuda ? ` ${inputId}-ayuda` : ""}`}
+        className="sr-only"
       />
-      <p className="text-xs text-muted-foreground">
-        {`Puedes adjuntar hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS}).`}
-      </p>
+      <label
+        htmlFor={inputId}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 ${
+          error
+            ? "border-destructive/60 bg-destructive/5"
+            : "border-input bg-muted/30 hover:border-ring hover:bg-muted/60"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-10 items-center justify-center rounded-full bg-background text-muted-foreground shadow-xs"
+        >
+          {files.length > 0 ? (
+            <ImagePlus className="size-5" />
+          ) : (
+            <Camera className="size-5" />
+          )}
+        </span>
+        <span className="text-sm font-medium text-foreground">
+          {files.length > 0 ? "Añadir otra foto" : "Toca para tomar o subir fotos"}
+        </span>
+        <span id={`${inputId}-limite`} className="text-xs text-muted-foreground">
+          {`${FORMATOS_EVIDENCIA} · hasta ${MAX_EVIDENCIAS} fotos (${files.length}/${MAX_EVIDENCIAS})`}
+        </span>
+      </label>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

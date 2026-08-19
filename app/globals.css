@@ -109,6 +109,21 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-20: var(--chart-20);
+  --color-chart-19: var(--chart-19);
+  --color-chart-18: var(--chart-18);
+  --color-chart-17: var(--chart-17);
+  --color-chart-16: var(--chart-16);
+  --color-chart-15: var(--chart-15);
+  --color-chart-14: var(--chart-14);
+  --color-chart-13: var(--chart-13);
+  --color-chart-12: var(--chart-12);
+  --color-chart-11: var(--chart-11);
+  --color-chart-10: var(--chart-10);
+  --color-chart-9: var(--chart-9);
+  --color-chart-8: var(--chart-8);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -239,6 +254,21 @@
   --chart-3: #1a56db;
   --chart-4: #10b981;
   --chart-5: #f59e0b;
+  --chart-6: #8b5cf6;
+  --chart-7: #ec4899;
+  --chart-8: #06b6d4;
+  --chart-9: #84cc16;
+  --chart-10: #ef4444;
+  --chart-11: #9a3412;
+  --chart-12: #64748b;
+  --chart-13: #1e3a8a;
+  --chart-14: #047857;
+  --chart-15: #b45309;
+  --chart-16: #6d28d9;
+  --chart-17: #9d174d;
+  --chart-18: #0e7490;
+  --chart-19: #4d7c0f;
+  --chart-20: #991b1b;
   --sidebar: #0d2444;
   --sidebar-foreground: #aab6d2;
   --sidebar-primary: #f26419;
@@ -360,6 +390,21 @@
     --chart-3: #1a56db;
     --chart-4: #10b981;
     --chart-5: #f59e0b;
+    --chart-6: #8b5cf6;
+    --chart-7: #ec4899;
+    --chart-8: #06b6d4;
+    --chart-9: #84cc16;
+    --chart-10: #ef4444;
+    --chart-11: #9a3412;
+    --chart-12: #64748b;
+    --chart-13: #1e3a8a;
+    --chart-14: #047857;
+    --chart-15: #b45309;
+    --chart-16: #6d28d9;
+    --chart-17: #9d174d;
+    --chart-18: #0e7490;
+    --chart-19: #4d7c0f;
+    --chart-20: #991b1b;
     --sidebar: #0d2444;
     --sidebar-foreground: #aab6d2;
     --sidebar-primary: #f26419;
@@ -721,6 +766,21 @@
     --chart-3: #1a56db;
     --chart-4: #10b981;
     --chart-5: #f59e0b;
+    --chart-6: #8b5cf6;
+    --chart-7: #ec4899;
+    --chart-8: #06b6d4;
+    --chart-9: #84cc16;
+    --chart-10: #ef4444;
+    --chart-11: #9a3412;
+    --chart-12: #64748b;
+    --chart-13: #1e3a8a;
+    --chart-14: #047857;
+    --chart-15: #b45309;
+    --chart-16: #6d28d9;
+    --chart-17: #9d174d;
+    --chart-18: #0e7490;
+    --chart-19: #4d7c0f;
+    --chart-20: #991b1b;
     --sidebar: #0d2444;
     --sidebar-foreground: #aab6d2;
     --sidebar-primary: #f26419;
@@ -777,6 +837,21 @@ body:has(> .dark) {
   --chart-3: #1a56db;
   --chart-4: #10b981;
   --chart-5: #f59e0b;
+  --chart-6: #a78bfa;
+  --chart-7: #f472b6;
+  --chart-8: #22d3ee;
+  --chart-9: #a3e635;
+  --chart-10: #f87171;
+  --chart-11: #fdba74;
+  --chart-12: #94a3b8;
+  --chart-13: #93c5fd;
+  --chart-14: #6ee7b7;
+  --chart-15: #fcd34d;
+  --chart-16: #c4b5fd;
+  --chart-17: #f9a8d4;
+  --chart-18: #67e8f9;
+  --chart-19: #bef264;
+  --chart-20: #fca5a5;
   --sidebar: #071627;
   --sidebar-foreground: #9fadc9;
   --sidebar-primary: #ff7a33;
@@ -838,6 +913,21 @@ body:has(> .dark) {
     --chart-3: #1a56db;
     --chart-4: #10b981;
     --chart-5: #f59e0b;
+    --chart-6: #a78bfa;
+    --chart-7: #f472b6;
+    --chart-8: #22d3ee;
+    --chart-9: #a3e635;
+    --chart-10: #f87171;
+    --chart-11: #fdba74;
+    --chart-12: #94a3b8;
+    --chart-13: #93c5fd;
+    --chart-14: #6ee7b7;
+    --chart-15: #fcd34d;
+    --chart-16: #c4b5fd;
+    --chart-17: #f9a8d4;
+    --chart-18: #67e8f9;
+    --chart-19: #bef264;
+    --chart-20: #fca5a5;
     --sidebar: #071627;
     --sidebar-foreground: #9fadc9;
     --sidebar-primary: #ff7a33;
@@ -1034,6 +1124,46 @@ body:has(> .dark) {
 @media (prefers-reduced-motion: reduce) {
   .vista-cards-saliendo,
   .vista-cards-entrando {
+    animation: none;
+  }
+}
+
+/*
+ * Feature del 2026-08-18 — LAS BARRAS DE LAS GRÁFICAS CRECEN AL APARECER.
+ *
+ * `GraficaReparto` y `GraficaRanking` no dibujan con recharts —son rectángulos de anchura
+ * porcentual— así que no heredan su animación de entrada. Ésta la repone, y en CSS a propósito:
+ * la de recharts es JavaScript y por eso NO la alcanza `prefers-reduced-motion` (lo documenta
+ * `lienzo/DonutLienzo.tsx`); una animación CSS sí, y el bloque de abajo la apaga sin que ningún
+ * componente tenga que detectar nada.
+ *
+ * Los 600 ms son los mismos de `ANIMACION_MS` en el lienzo del donut: las gráficas de la misma
+ * pantalla entran al mismo ritmo.
+ *
+ * `scaleX` y no `width`: la anchura la fija el dato en un `style` inline, y animarla obligaría a
+ * escribir dos valores del mismo número. Con la escala, el dato manda el ancho final y la
+ * animación solo la recorre.
+ */
+:root {
+  --grafica-barra-ms: 600ms;
+}
+
+@keyframes grafica-barra-crece {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.grafica-barra-crece {
+  animation: grafica-barra-crece var(--grafica-barra-ms) ease-out both;
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grafica-barra-crece {
     animation: none;
   }
 }

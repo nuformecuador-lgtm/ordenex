@@ -19,8 +19,6 @@ export interface AsignarRecoleccionModalProps {
   ordenes: OrdenListItemDTO[];
   /** Mensajeros elegibles: CUALQUIERA activo (decisión del humano 2026-07-30, R6). */
   mensajeros: MensajeroLiteDTO[];
-  /** Ids de mensajeros con cierre abierto; se deshabilitan en el selector (R7). */
-  mensajerosBloqueadosIds?: string[];
   /**
    * Ids con órdenes de REPARTO pendientes (regla de dedicación, 2026-07-31): quien va a
    * una tienda a recoger un lote sale sin carga, así que no se les puede asignar. Se
@@ -49,7 +47,6 @@ export function AsignarRecoleccionModal({
   open,
   ordenes,
   mensajeros,
-  mensajerosBloqueadosIds = [],
   mensajerosConRepartoIds = [],
   onOpenChange,
   onSuccess,
@@ -66,7 +63,6 @@ export function AsignarRecoleccionModal({
 
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
-    new Set(mensajerosBloqueadosIds),
     new Map(mensajerosConRepartoIds.map((id) => [id, "tiene reparto pendiente"])),
   );
 

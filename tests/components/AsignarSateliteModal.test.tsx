@@ -267,14 +267,16 @@ describe("AsignarSateliteModal", () => {
     );
   });
 
-  it("admin_satelite: un mensajero con cierre abierto aparece deshabilitado; los demás siguen asignables", async () => {
+  // Pedido humano 2026-08-18 — el test que habia aqui afirmaba que un mensajero con cierre
+  // abierto salia DESHABILITADO en el selector. La regla se retiro (el service ya no lo rechaza),
+  // asi que el test se invierte: se comprueba que TODOS siguen elegibles.
+  it("un mensajero con cierre abierto ya NO aparece deshabilitado", async () => {
     const user = userEvent.setup();
     render(
       <AsignarSateliteModal
         open
         ordenes={[makeOrden({ id: "o1", numRemision: "REM-001" })]}
         mensajeros={MENSAJEROS}
-        mensajerosBloqueadosIds={["m2"]}
         onOpenChange={vi.fn()}
         onSuccess={vi.fn()}
       />,
@@ -286,13 +288,13 @@ describe("AsignarSateliteModal", () => {
     await user.click(select);
     const listbox = await screen.findByRole("listbox");
 
-    const bloqueado = within(listbox).getByRole("option", {
-      name: /Beto Mensajero \(cierre abierto\)/i,
-    });
-    expect(bloqueado).toHaveAttribute("aria-disabled", "true");
-
-    const libre = within(listbox).getByRole("option", { name: "Ana Mensajera" });
-    expect(libre).not.toHaveAttribute("aria-disabled", "true");
+    // Ni el sufijo "(cierre abierto)" ni el deshabilitado: el nombre sale limpio.
+    expect(within(listbox).queryByText(/cierre abierto/i)).toBeNull();
+    for (const nombre of ["Ana Mensajera", "Beto Mensajero"]) {
+      expect(
+        within(listbox).getByRole("option", { name: nombre }),
+      ).not.toHaveAttribute("aria-disabled", "true");
+    }
   });
 
   it("R6: zona sin mensajeros → estado vacío accionable y 'Asignar' deshabilitado", async () => {

@@ -19,6 +19,23 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 const noopJobRepo = {} as unknown as ConstructorParameters<typeof GestionOrdenRepository>[1];
 
 // --- Catalogo de estados (value <-> id), como el seed de order_status ---
+// ---------------------------------------------------------------------------------------------
+// INVERTIDO el 2026-08-19 por la feature 239 (T3.3/T4.1). Este emulador sembraba la orden EN
+// `devuelta` sin mas, porque hasta hoy eso era lo que dejaba una gestion del mensajero. Ya no: la
+// gestion deja la orden en `devolucion_por_confirmar`, y a `devuelta` se llega SOLO por el
+// ANCLAJE, la transicion que escribe la aprobacion del cierre con `origen_tipo =
+// anclaje_devolucion`.
+//
+// La semilla lo refleja: la orden esta en `devuelta` Y tiene su fila de anclaje en el historial,
+// que es el unico estado de la base que hoy puede producir ese `devuelta`. Sin esa fila, el cron
+// la leeria por la RAMA LEGADA (R14) y este archivo estaria midiendo un camino que la feature
+// declara en extincion, no el vigente.
+//
+// El cron ademas PROYECTA esa fila (`select.historialEstados`), asi que el emulador tiene que
+// resolverla: un doble que devolviera `undefined` reventaria, y uno que devolviera `[]` en
+// silencio dejaria pasar una version del repositorio que no la pide.
+// ---------------------------------------------------------------------------------------------
+
 const ESTATUS: Record<string, string> = {
   devuelta: idEstado("devuelta"),
   reprogramada: idEstado("reprogramada"),
@@ -85,11 +102,47 @@ function makeDb() {
       cierreId: null,
     },
   ];
-  const historial: Array<Record<string, unknown>> = [];
+  // Feature 239 (T4.1): el historial arranca CON la fila del ANCLAJE. Es lo que hace que la
+  // orden este legitimamente en `devuelta`: la aprobacion del cierre la puso ahi, y ese instante
+  // es el ancla de su ventana de SLA (R12).
+  const historial: Array<Record<string, unknown>> = [
+    {
+      id: "h-anclaje",
+      ordenId: "o1",
+      origenTipo: "anclaje_devolucion",
+      createdAt: new Date("2026-07-21T02:00:00.000Z"), // el cierre se aprobo 8 h despues
+    },
+  ];
   let seq = 0;
 
   // Resuelve la sub-relacion `gestiones` de una orden segun el `select.gestiones`
   // (where resultado+anuladaAt, orderBy createdAt desc, take N, select scalar).
+  /**
+   * Feature 239 (T3.3): resuelve `select.historialEstados` con la semantica REAL de la consulta
+   * del cron — filtro por `origenTipo`, `orderBy createdAt desc` y `take`. Honrar el `where` y el
+   * orden no es celo: si devolviera siempre la misma fila, una version del repositorio que NO
+   * filtrara por familia (o que no ordenara) pasaria en verde, y esa version ancla el reloj en la
+   * transicion equivocada.
+   */
+  function resolveHistorial(ordenId: string, sub: Record<string, unknown>) {
+    const where = (sub.where ?? {}) as { origenTipo?: string };
+    let cands = historial.filter(
+      (h) =>
+        h.ordenId === ordenId &&
+        (where.origenTipo === undefined || h.origenTipo === where.origenTipo),
+    );
+    const orderBy = sub.orderBy as { createdAt?: "asc" | "desc" } | undefined;
+    if (orderBy?.createdAt === "desc") {
+      cands = [...cands].sort(
+        (a, b) => (b.createdAt as Date).getTime() - (a.createdAt as Date).getTime(),
+      );
+    }
+    const take = sub.take as number | undefined;
+    if (take !== undefined) cands = cands.slice(0, take);
+    const sel = sub.select as Record<string, unknown> | undefined;
+    return cands.map((h) => (sel ? pick(h, sel) : h));
+  }
+
   function resolveGestiones(ordenId: string, sub: Record<string, unknown>) {
     const where = (sub.where ?? {}) as { resultado?: string; anuladaAt?: null };
     let cands = gestiones.filter(
@@ -130,6 +183,12 @@ function makeDb() {
             for (const k of Object.keys(select)) {
               if (k === "gestiones") {
                 out.gestiones = resolveGestiones(o.id, select.gestiones as Record<string, unknown>);
+              } else if (k === "historialEstados") {
+                // Feature 239 (T3.3): la proyeccion del ANCLA.
+                out.historialEstados = resolveHistorial(
+                  o.id,
+                  select.historialEstados as Record<string, unknown>,
+                );
               } else if (select[k] === true) {
                 out[k] = (o as unknown as Record<string, unknown>)[k];
               }
@@ -241,6 +300,17 @@ describe("Feature 100 T5.1 — reprogramar saca la orden de `devuelta`: el cron 
     const db = makeDb();
     const devueltas = await slaRepo(db).findDevueltasSla();
     expect(devueltas.map((d) => d.ordenId)).toEqual(["o1"]);
+  });
+
+  // Feature 239 (T3.3/T4.1) — LA SEMILLA ES LOAD-BEARING, no decorado. Ver el gemelo de
+  // `resolver-novedad-recupera-sla.test.ts`: sin esta asercion, la fila de anclaje que la semilla
+  // anade podria dejar de leerse y nadie se enteraria.
+  it("239/R12: el cron ancla en la APROBACION del cierre, no en la gestion del mensajero", async () => {
+    const db = makeDb();
+    const [devuelta] = await slaRepo(db).findDevueltasSla();
+    expect(devuelta.origenAncla).toBe("aprobacion");
+    expect(devuelta.ancladaAt).toEqual(new Date("2026-07-21T02:00:00.000Z")); // aprobacion
+    expect(devuelta.ancladaAt).not.toEqual(db.gestiones[0].createdAt); // NO la gestion
   });
 
   it("DESPUES de reprogramar, la orden esta en `reprogramada` y el cron SLA 99 ya NO la ve (la salta)", async () => {

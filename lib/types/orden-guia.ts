@@ -141,15 +141,9 @@ export type ListarMensajerosParaAsignacionResult =
   | { status: "unauthenticated" }
   | { status: "forbidden" };
 
-// Gate de seleccion del maestro — loader de solo lectura de las zonas BLOQUEADAS:
-// las que tienen AL MENOS 1 mensajero con un cierre abierto (`solicitado`/`vencido`).
-// Cubre TODAS las zonas (central GAM y satelites) con la misma regla, para que la UI
-// deshabilite la seleccion de esas ordenes y no diverja de la guarda del servidor.
-export type ListarZonasBloqueadasResult =
-  | { status: "ok"; zonasBloqueadasIds: string[] }
-  | { status: "unauthenticated" }
-  | { status: "forbidden" };
-
+// BORRADO 2026-08-18 (pedido humano): aqui vivia `ListarZonasBloqueadasResult`, el resultado del
+// gate de seleccion por zona con cierre abierto. Se fue con su action y con la regla: un cierre
+// abierto ya no impide asignar, asi que la UI no tiene nada que deshabilitar.
 // BORRADO 2026-08-07 (tanda 2): aqui vivian `EstatusLiteDTO` y `ListarCatalogoEstatusResult`,
 // el soporte R15/R16 de `listarCatalogoEstatus` — borrada en la tanda 1 por ser la segunda
 // victima de `54757be4`. La lectura viva del catalogo `order_status` es `listarOrderStatus`

@@ -42,6 +42,9 @@ import type {
 // PÁGINA del servidor y su descarga RELEE el conjunto completo (R52). Por eso aquí hay dos
 // dobles por listado: el paginado (lo que se ve) y el compuesto (lo que se descarga).
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -58,6 +61,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
   forzarSolicitudVencido: vi.fn(),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   verCierreBodegaDetalle: vi.fn(),
   aprobarCierreBodega: vi.fn(),
   rechazarCierreBodega: vi.fn(),
@@ -546,13 +552,31 @@ function renderDetalle() {
 }
 
 /** Las NUEVE tablas de cierres, con el nombre de su control y cuántas filas debe traer. */
+// `pestana`: pedido humano del 2026-08-16 — cuál hay que abrir para que el listado sea el
+// visible. Las cuatro «segundas mitades» de cada pantalla nacen escondidas tras su pestaña;
+// las primeras son las que se ven al entrar y no llevan nada.
 const TABLAS = [
   { control: "Cierres pendientes de decisión", montar: renderCierresAdmin, filas: 2 },
-  { control: "Cierres del día resueltos", montar: renderCierresAdmin, filas: 1 },
+  {
+    control: "Cierres del día resueltos",
+    montar: renderCierresAdmin,
+    filas: 1,
+    pestana: /^Resueltos/,
+  },
   { control: "Cierres de bodega pendientes", montar: renderCierresBodega, filas: 1 },
-  { control: "Cierres de bodega resueltos", montar: renderCierresBodega, filas: 1 },
+  {
+    control: "Cierres de bodega resueltos",
+    montar: renderCierresBodega,
+    filas: 1,
+    pestana: /^Resueltos/,
+  },
   { control: "Cierres del día a consolidar", montar: renderConsolidacion, filas: 2 },
-  { control: "Cierres de bodega solicitados", montar: renderConsolidacion, filas: 1 },
+  {
+    control: "Cierres de bodega solicitados",
+    montar: renderConsolidacion,
+    filas: 1,
+    pestana: /^Solicitados/,
+  },
   { control: "Cierres solicitados", montar: renderCierreDia, filas: 2 },
   // El detalle compartido: UNA descarga por sección (P2 ratificada), no un archivo único.
   { control: "Entregadas", montar: renderDetalle, filas: 1 },
@@ -568,12 +592,30 @@ afterEach(() => {
   cleanup();
 });
 
+/**
+ * Pedido humano del 2026-08-16 — los listados de cierres viven en pestañas, así que su control
+ * de descarga solo existe (a efectos de accesibilidad) cuando su panel es el visible. Este
+ * helper da el mismo clic que daría el usuario antes de pulsar «Descargar».
+ *
+ * Lo que NO cambia, y es lo que estos casos vigilan: qué lectura alimenta cada archivo. Abrir
+ * una pestaña no dispara ninguna, y los `expect(...).not.toHaveBeenCalled()` de cada caso lo
+ * siguen comprobando después del clic.
+ */
+async function abrirPestana(
+  user: ReturnType<typeof userEvent.setup>,
+  pestana: RegExp,
+): Promise<void> {
+  await user.click(await screen.findByRole("button", { name: pestana }));
+}
+
 describe("Cierres · descarga", () => {
   it("cada tabla de cierres ofrece su control, con nombre accesible propio", async () => {
     // R1/R13. Los nombres son DISTINTOS entre sí a propósito: varias de estas pantallas
     // montan dos tablas a la vez, y dos controles llamados igual no dicen cuál es cuál.
+    const user = userEvent.setup();
     for (const tabla of TABLAS) {
       tabla.montar();
+      if ("pestana" in tabla) await abrirPestana(user, tabla.pestana);
       expect(
         screen.getByRole("button", { name: `Descargar ${tabla.control}` }),
         `${tabla.control} sin control`,
@@ -588,6 +630,7 @@ describe("Cierres · descarga", () => {
     for (const tabla of TABLAS) {
       const user = userEvent.setup();
       tabla.montar();
+      if ("pestana" in tabla) await abrirPestana(user, tabla.pestana);
 
       await user.click(screen.getByRole("button", { name: `Descargar ${tabla.control}` }));
       await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
@@ -646,6 +689,7 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderCierresAdmin();
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres del día resueltos" }),
     );
@@ -714,13 +758,18 @@ describe("Cierres · descarga", () => {
     expect(listarCierresBodegaSolicitadosCompleto).not.toHaveBeenCalled();
     expect(listarConsolidacion).not.toHaveBeenCalled();
 
+    await abrirPestana(user, /^Solicitados/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
     );
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarCierresBodegaSolicitadosCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarCierresBodegaSolicitadosCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni `pageSize`, ni `zonaId`
+    // —la clave que abriría el dinero de la bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarCierresBodegaSolicitadosCompleto).mock.calls[0]).toEqual([{ filtros: {} }]);
     expect(listarConsolidacion).not.toHaveBeenCalled();
     // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
     // de degradar el archivo.
@@ -737,6 +786,8 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderConsolidacion();
 
+    // Los cinco agregados viven DENTRO de «A consolidar» (son la suma de ese conjunto), que es
+    // la pestaña que se ve al entrar: se leen antes de irse a la otra.
     const numero = (etiqueta: string) =>
       screen.getByRole("region", { name: etiqueta }).textContent;
     const antes = [
@@ -745,12 +796,17 @@ describe("Cierres · descarga", () => {
       numero("Ingreso de bodega por rechazos a consolidar"),
     ];
 
+    await abrirPestana(user, /^Solicitados/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
     );
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarConsolidacion).not.toHaveBeenCalled();
+    // Se vuelve a «A consolidar» para leerlos, en vez de mirarlos escondidos: así el caso dice
+    // además que alternar de pestaña no se lleva por delante los agregados —siguen siendo las
+    // props del servidor, no algo que la pantalla recalcule al volver—.
+    await abrirPestana(user, /^A consolidar/);
     expect([
       numero("Totales a consolidar"),
       numero("Pago a mensajeros a consolidar"),
@@ -773,6 +829,7 @@ describe("Cierres · descarga", () => {
       total: 2,
     });
 
+    await abrirPestana(user, /^Solicitados/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
     );
@@ -789,6 +846,7 @@ describe("Cierres · descarga", () => {
       status: "forbidden",
     });
 
+    await abrirPestana(user, /^Solicitados/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega solicitados" }),
     );
@@ -830,7 +888,11 @@ describe("Cierres · descarga", () => {
     expect(listarConsolidablesCompleto).toHaveBeenCalledTimes(1);
     // Sin un solo argumento: este listado tampoco tiene filtros, así que ni `page`, ni
     // `pageSize`, ni `zonaId` pueden viajar (R4/R17).
-    expect(vi.mocked(listarConsolidablesCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni `pageSize`, ni `zonaId`
+    // —la clave que abriría el dinero de la bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarConsolidablesCompleto).mock.calls[0]).toEqual([{ filtros: {} }]);
     expect(listarConsolidacion).not.toHaveBeenCalled();
     expect(listarConsolidablesPaginado).toHaveBeenCalledTimes(1);
   });
@@ -1043,13 +1105,21 @@ describe("Cierres · descarga", () => {
     expect(listarHistoricoCierresAdminCompleto).not.toHaveBeenCalled();
     expect(listarCierresAdmin).not.toHaveBeenCalled();
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres del día resueltos" }),
     );
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarHistoricoCierresAdminCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarHistoricoCierresAdminCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera y se hace explícita: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni
+    // `pageSize`, ni `destinoZonaId`/`destinoTipo` —las claves que abrirían el dinero de la
+    // bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarHistoricoCierresAdminCompleto).mock.calls[0]).toEqual([
+      { filtros: {} },
+    ]);
     expect(listarCierresAdmin).not.toHaveBeenCalled();
     // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
     // de degradar el archivo.
@@ -1069,6 +1139,7 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderCierresAdmin();
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres del día resueltos" }),
     );
@@ -1113,6 +1184,7 @@ describe("Cierres · descarga", () => {
       total: 30,
     });
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres del día resueltos" }),
     );
@@ -1134,6 +1206,7 @@ describe("Cierres · descarga", () => {
       status: "forbidden",
     });
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres del día resueltos" }),
     );
@@ -1171,9 +1244,14 @@ describe("Cierres · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarPendientesCierresAdminCompleto).toHaveBeenCalledTimes(1);
-    // Sin un solo argumento: ni `page`, ni `pageSize`, ni `destinoZonaId`/`destinoTipo`, que
-    // son las claves que abrirían el dinero de la bodega vecina (R4/R17).
-    expect(vi.mocked(listarPendientesCierresAdminCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera y se hace explícita: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni
+    // `pageSize`, ni `destinoZonaId`/`destinoTipo` —las claves que abrirían el dinero de la
+    // bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarPendientesCierresAdminCompleto).mock.calls[0]).toEqual([
+      { filtros: {} },
+    ]);
     expect(listarCierresAdmin).not.toHaveBeenCalled();
     expect(listarPendientesCierresAdminPaginado).toHaveBeenCalledTimes(1);
   });
@@ -1283,7 +1361,11 @@ describe("Cierres · descarga", () => {
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarPendientesCierresBodegaCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarPendientesCierresBodegaCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni `pageSize`, ni `zonaId`
+    // —la clave que abriría el dinero de la bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarPendientesCierresBodegaCompleto).mock.calls[0]).toEqual([{ filtros: {} }]);
     expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
     // Y sigue sin pedir páginas: descargar por partes lo que se entrega entero es la otra forma
     // de degradar el archivo.
@@ -1410,13 +1492,18 @@ describe("Cierres · descarga", () => {
     expect(listarHistoricoCierresBodegaCompleto).not.toHaveBeenCalled();
     expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega resueltos" }),
     );
     await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
 
     expect(listarHistoricoCierresBodegaCompleto).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(listarHistoricoCierresBodegaCompleto).mock.calls[0]).toEqual([]);
+    // Pedido humano del 2026-08-16: la llamada ya NO va sin argumentos — lleva el bloque de
+    // filtros de la pantalla, que sin filtrar es `{}`. La afirmación que importaba se conserva
+    // entera: lo que viaja es EXACTAMENTE ese bloque, y ni `page`, ni `pageSize`, ni `zonaId`
+    // —la clave que abriría el dinero de la bodega vecina (R4/R17)— aparecen por ningún lado.
+    expect(vi.mocked(listarHistoricoCierresBodegaCompleto).mock.calls[0]).toEqual([{ filtros: {} }]);
     expect(listarCierresBodegaAdmin).not.toHaveBeenCalled();
     expect(listarHistoricoCierresBodegaPaginado).toHaveBeenCalledTimes(1);
   });
@@ -1428,6 +1515,7 @@ describe("Cierres · descarga", () => {
     const user = userEvent.setup();
     renderCierresBodega();
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega resueltos" }),
     );
@@ -1469,6 +1557,7 @@ describe("Cierres · descarga", () => {
       total: 30,
     });
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega resueltos" }),
     );
@@ -1490,6 +1579,7 @@ describe("Cierres · descarga", () => {
       status: "forbidden",
     });
 
+    await abrirPestana(user, /^Resueltos/);
     await user.click(
       screen.getByRole("button", { name: "Descargar Cierres de bodega resueltos" }),
     );

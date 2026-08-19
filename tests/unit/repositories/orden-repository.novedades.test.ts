@@ -13,10 +13,30 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 // La causa (R9) la sigue resolviendo `findCausasDevueltaVigentes` (sin cambios).
 
 // El `where` que ambos metodos DEBEN construir con el predicado anclado al estado real (§3.5).
+// Pedido humano 2026-08-18: el predicado pasa a tener DOS ramas. Una orden esta en `/novedades`
+// por REPOSAR en `devuelta` (R7) o por tener una SOLICITUD DE AYUDA viva, que la deja ahi aunque
+// siga en reparto. El `OR` conserva lo que R8 exige: `count` y `find` comparten el mismo `where`,
+// asi que total y pagina cuentan el mismo universo, y una orden que case por las DOS ramas
+// aparece UNA sola vez.
 const NOVEDAD_WHERE = {
   tiendaId: "tienda-1",
   deletedAt: null, // R8: excluye borradas
-  estatus: { value: "devuelta" }, // R7: solo mientras REPOSE en `devuelta`
+  OR: [
+    // 2026-08-19 (feature 239/T3.1, R18/R20/R30) — VUELVE A SER UNA IGUALDAD DE ESTADO. Entre el
+    // 2026-08-18 y hoy esta rama exigia ademas `gestionAprobada: true`, y esa columna era la
+    // mitad implementada del fallo: recortaba lo que la tienda VE sin mover el RELOJ del SLA, asi
+    // que habia devoluciones que se escalaban a `rechazada` y se COBRABAN sin haber sido visibles
+    // nunca. Ahora el recorte lo hace el ESTADO — una devolucion sin confirmar esta en
+    // `devolucion_por_confirmar`, y ese estado no casa ni aqui ni en el cron.
+    { estatus: { value: "devuelta" } },
+    // 2026-08-19 (feature 239/R22) — TAPON DE LA FUGA PERMANENTE. Esta rama no acotaba estatus,
+    // asi que una orden con el flag encendido se quedaba listada PARA SIEMPRE: el corte nocturno
+    // la barre a `sin_gestionar` sin apagarlo y nadie mas lo apaga. La solicitud de ayuda solo
+    // sostiene la fila mientras la orden sigue EN REPARTO, que es el unico estado en el que esa
+    // solicitud significa algo. Es un tapon con dueño: la ficha 235 retira el booleano y esta
+    // rama entera sobra.
+    { ayuda: true, estatus: { value: "en_reparto" } },
+  ],
 };
 
 // 2026-08-13 (pedido humano) — fila TAL COMO LA DEVUELVE PRISMA para el `select` de
@@ -38,6 +58,8 @@ function prismaRow(overrides: Record<string, unknown> = {}) {
     latitud: new Prisma.Decimal("9.9333296"),
     longitud: new Prisma.Decimal("-84.0833282"),
     notas: "Tocar el timbre",
+    ayuda: false,
+    intentosContacto: 0,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     estatus: { value: "devuelta" },
     tienda: { nombre: "Tienda Uno" },
@@ -72,8 +94,12 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     expect(prisma.orden.count).toHaveBeenCalledWith({ where: NOVEDAD_WHERE });
 
     const { where } = prisma.orden.count.mock.calls[0][0];
-    // R7: la novedad es la orden que REPOSA en `devuelta` (estado real, no la gestion).
-    expect(where.estatus).toEqual({ value: "devuelta" });
+    // R7/239-R18: la novedad se ancla al ESTADO REAL, y a nada mas. La primera rama del `OR` es
+    // una igualdad limpia: ni marcas persistidas, ni relaciones, ni listas.
+    expect(where.OR[0]).toEqual({ estatus: { value: "devuelta" } });
+    // La SEGUNDA rama: la solicitud de ayuda, acotada a reparto desde el 2026-08-19 (R22).
+    expect(where.OR[1]).toEqual({ ayuda: true, estatus: { value: "en_reparto" } });
+    expect(where.OR).toHaveLength(2);
     // R8: nunca cuenta borradas.
     expect(where.deletedAt).toBeNull();
   });
@@ -88,9 +114,10 @@ describe("OrdenRepository.countDevueltasByTienda (R7/R8)", () => {
     // Ya no se filtra por gestion vigente: el ancla es el estado real.
     expect(where).not.toHaveProperty("gestiones");
     // Y no hay lista `notIn`: solo `estatus.value = "devuelta"`. Una orden liberada a
-    // `en_bodega_central`/`en_bodega_satelite` o escalada a `rechazada` deja de casar (sale de novedades).
-    expect(where.estatus.value).toBe("devuelta");
-    expect(where.estatus).not.toHaveProperty("notIn");
+    // `en_bodega_central`/`en_bodega_satelite` o escalada a `rechazada` deja de casar por la rama
+    // del estatus — y si no tiene ayuda pedida, tampoco por la otra: sale de novedades.
+    expect(where.OR[0].estatus.value).toBe("devuelta");
+    expect(where.OR[0].estatus).not.toHaveProperty("notIn");
   });
 });
 
@@ -125,6 +152,8 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
       latitud: true,
       longitud: true,
       notas: true,
+      ayuda: true,
+      intentosContacto: true,
       createdAt: true,
       estatus: { select: { value: true } },
       tienda: { select: { nombre: true } },
@@ -151,6 +180,32 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     expect(rows[0].producto).toBe("Zapatos");
     expect(rows[0].peso).toBe(1.5);
     expect(typeof rows[0].peso).toBe("number");
+  });
+
+  // Pedido humano 2026-08-18 — la fila lleva `ayuda` porque es una de las DOS razones por las
+  // que puede estar aqui, y la pantalla tiene que poder decir cual. Una orden que sigue EN
+  // REPARTO entra por esa rama: es el caso que antes de este pedido no existia.
+  it("la orden con ayuda pedida llega aunque NO este devuelta, y su `ayuda` cruza como true", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      prismaRow({ ayuda: true, estatus: { value: "en_reparto" } }),
+    ]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].ayuda).toBe(true);
+    expect(rows[0].estatusValue).toBe("en_reparto");
+  });
+
+  it("sin ayuda pedida, el flag cruza como false (nunca undefined: la columna es NOT NULL)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([prismaRow()]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const rows = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(rows[0].ayuda).toBe(false);
   });
 
   it("peso nulo (carga masiva sin peso, feature 15/R4) sigue nulo: no se rellena con 0", async () => {
@@ -279,7 +334,7 @@ describe("OrdenRepository.findDevueltasByTienda (R7/R8/R9)", () => {
     await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).not.toHaveProperty("gestiones");
-    expect(arg.where.estatus).toEqual({ value: "devuelta" });
+    expect(arg.where.OR[0]).toEqual({ estatus: { value: "devuelta" } });
   });
 });
 
@@ -346,5 +401,188 @@ describe("OrdenRepository.findCausasDevueltaVigentes (R6/R7/R10)", () => {
 
     expect(map.size).toBe(0);
     expect(prisma.gestionOrden.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 239 (T3.1) — LA MITAD QUE FALTABA. El fallo que esta ficha cierra no era el predicado
+// ni el cron por separado: era que MIRABAN HECHOS DISTINTOS. La visibilidad dependia de una
+// columna (`gestion_aprobada`) que solo se encendia al aprobar el cierre, y el reloj del SLA se
+// anclaba en la fecha de la gestion sin mirar esa columna ni una vez. Entre los dos habia una
+// ventana —mediana medida de 8,2 h, p90 22,1 h— en la que la orden ya corria plazo y todavia no
+// se veia; con la ventana `not_found` de 24 h, eso son rechazados cobrados a ciegas.
+//
+// Desde aqui los dos miran el ESTADO, y es el mismo estado.
+// ---------------------------------------------------------------------------------------------
+describe("239 — la visibilidad y el reloj miran el MISMO hecho (R18/R19/R20/R21/R23/R30)", () => {
+  const PRE_ESTADO = "devolucion_por_confirmar";
+
+  it("R18: una orden en `devuelta` se lista, sin ninguna condicion adicional", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(1);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+
+    const { where } = prisma.orden.count.mock.calls[0][0];
+    expect(where.OR[0]).toEqual({ estatus: { value: "devuelta" } });
+  });
+
+  it("R19: una orden en el PRE-ESTADO no casa el predicado (no hay rama que la admita)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+
+    const { where } = prisma.orden.count.mock.calls[0][0];
+    // La rama del estatus es una IGUALDAD con `devuelta`: el pre-estado no entra ni por omision
+    // ni por lista negra. Y la otra rama es la de ayuda, que no habla de devoluciones.
+    expect(where.OR[0].estatus).toEqual({ value: "devuelta" });
+    expect(JSON.stringify(where)).not.toContain(PRE_ESTADO);
+  });
+
+  // R20 — LA REGLA, no un detalle de implementacion: la visibilidad NO puede depender de ninguna
+  // marca persistida distinta del estado. Una marca hay que apagarla a mano en cada salida, y de
+  // las SIETE salidas de `devuelta` solo DOS lo hacian. El estado no se puede olvidar.
+  it("R20: el predicado no menciona ninguna marca persistida de aprobacion", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+
+    const serializado = JSON.stringify(prisma.orden.count.mock.calls[0][0].where);
+    // Los dos nombres de la columna retirada se construyen por CONCATENACION, no como literal:
+    // el censo de `gestion-aprobada-retirada.guardia.test.ts` barre el arbol buscandolos, y un
+    // literal aqui lo pondria rojo por una asercion que precisamente comprueba su ausencia. Es
+    // la misma convencion que uso la 155 con el value que retiro.
+    expect(serializado).not.toContain(["gestion", "Aprobada"].join(""));
+    expect(serializado).not.toContain(["gestion", "aprobada"].join("_"));
+    // La rama del estatus tiene UNA sola clave: el estatus. Ni una condicion hermana.
+    expect(Object.keys(prisma.orden.count.mock.calls[0][0].where.OR[0])).toEqual(["estatus"]);
+  });
+
+  // R30 — EL ARREGLO DEL RECORTE RETROACTIVO. `gestion_aprobada` era `NOT NULL DEFAULT false`, asi
+  // que TODA devolucion anterior a la columna valia `false` y CAIA de `/novedades`: el recorte no
+  // afectaba solo a las nuevas, borraba de la pantalla las que ya estaban. Al retirar la columna
+  // el predicado vuelve a ser una igualdad de estado y esas devoluciones se ven SOLAS, sin
+  // backfill — la migracion ES el arreglo.
+  it("R30: una `devuelta` ANTERIOR al despliegue casa el predicado (nada que backfillear)", async () => {
+    const prisma = buildPrisma();
+    // Fila historica: no tiene, ni puede tener, ninguna marca de aprobacion.
+    const historica = prismaRow({ id: "o-vieja", estatus: { value: "devuelta" } });
+    prisma.orden.findMany.mockResolvedValue([historica]);
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(res.map((r) => r.id)).toEqual(["o-vieja"]);
+    // Y el predicado con el que se pidio no exige nada mas que el estado.
+    expect(prisma.orden.findMany.mock.calls[0][0].where.OR[0]).toEqual({
+      estatus: { value: "devuelta" },
+    });
+  });
+
+  // R21 — el total y la pagina describen el mismo universo. El caso vive arriba, entero; aqui se
+  // vuelve a nombrar con su requisito porque es la asercion que la mutacion T5.3 tiene que matar.
+  it("R21: `count` y `find` comparten EXACTAMENTE el mismo where", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(3);
+    prisma.orden.findMany.mockResolvedValue([]);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+    await repo.findDevueltasByTienda("tienda-1", { skip: 0, take: 10 });
+
+    expect(prisma.orden.count.mock.calls[0][0].where).toEqual(
+      prisma.orden.findMany.mock.calls[0][0].where,
+    );
+  });
+
+  // R22 — LA FUGA PERMANENTE, TAPADA. Es el segundo de los tres fallos de la misma raiz
+  // (auditoria §2.1): la rama de ayuda no acotaba estatus, asi que una orden con el flag
+  // encendido se quedaba en `/novedades` PARA SIEMPRE. El corte nocturno la barre a
+  // `sin_gestionar` y NO apaga el flag; ninguna otra via lo apaga tampoco. La tienda acababa con
+  // una pantalla llena de ordenes que ya no le tocaban, y la unica salida era pulsar «Habilitar»
+  // en cada una a mano.
+  //
+  // El tapon es UNA CLAVE, y por eso hace falta este caso: una linea que nadie vigila es una
+  // linea que el proximo refactor se lleva por delante sin que nada se ponga rojo.
+  //
+  // LA MUTACION QUE LO MATA: quitarle el `estatus` a la rama de ayuda —volver a `{ ayuda: true }`
+  // a secas—, que es exactamente como estaba antes del 2026-08-19.
+  it("R22: la rama de ayuda EXIGE `en_reparto` — una solicitud vieja no sostiene la fila", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+
+    const { where } = prisma.orden.count.mock.calls[0][0];
+    const ramaAyuda = where.OR.find((r: Record<string, unknown>) => r.ayuda === true);
+    expect(ramaAyuda, "la rama de ayuda desaparecio del predicado").toBeDefined();
+    // La clave hermana es lo que cierra la fuga: `ayuda` y `estatus` van en el MISMO objeto, asi
+    // que se exigen a la vez (AND). Si `estatus` se fuera a otra rama del `OR`, volveria a ser un
+    // «o esto o lo otro» y la fuga estaria abierta otra vez.
+    expect(ramaAyuda).toEqual({ ayuda: true, estatus: { value: "en_reparto" } });
+    expect(Object.keys(ramaAyuda).sort()).toEqual(["ayuda", "estatus"]);
+  });
+
+  // El caso de negocio, enunciado como lo que la tienda ve. Se prueba sobre el PREDICADO porque
+  // es lo unico que decide: Prisma resuelve el `AND` de claves hermanas, y este doble no ejecuta
+  // SQL. Lo que se afirma es que ninguna de las dos ramas admite una orden fuera de reparto por
+  // efecto del flag.
+  it("R22: ninguna rama lista una orden con ayuda si NO esta en reparto (ni `sin_gestionar`, ni bodega, ni entregada)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.countDevueltasByTienda("tienda-1");
+    const { where } = prisma.orden.count.mock.calls[0][0];
+
+    // Simula el predicado sobre una orden con la bandera encendida en cada estado por el que el
+    // corte nocturno y la bodega la pasan. `casa` reproduce la semantica de Prisma para las dos
+    // formas que este predicado usa: claves hermanas = AND, `OR` = disyuncion.
+    const casa = (orden: { estatus: string; ayuda: boolean }) =>
+      (where.OR as Array<{ ayuda?: boolean; estatus?: { value: string } }>).some(
+        (rama) =>
+          (rama.ayuda === undefined || rama.ayuda === orden.ayuda) &&
+          (rama.estatus === undefined || rama.estatus.value === orden.estatus),
+      );
+
+    // EN reparto con ayuda: SI se lista. Es el caso para el que la rama existe.
+    expect(casa({ estatus: "en_reparto", ayuda: true })).toBe(true);
+    // Fuera de reparto con la ayuda ENCENDIDA: no se lista por ninguna rama. Estos cuatro son la
+    // fuga literal que describe la auditoria §2.1.
+    for (const estatus of [
+      "sin_gestionar", // el corte nocturno la barre aqui y NO apaga el flag
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "entregada",
+    ]) {
+      expect(casa({ estatus, ayuda: true }), `${estatus} con ayuda NO debe listarse`).toBe(false);
+    }
+    // Y la devolucion sigue entrando por SU rama, con la bandera apagada: el tapon no la toca.
+    expect(casa({ estatus: "devuelta", ayuda: false })).toBe(true);
+  });
+
+  // R23 — «HABILITAR» YA NO PUEDE ESCONDER UNA DEVOLUCION CON EL RELOJ CORRIENDO. Antes apagaba
+  // `gestion_aprobada`, la fila caia del listado y la orden seguia en `devuelta`: a los 5 dias el
+  // cron la escalaba a `rechazada` y la cobraba, sin aviso (auditoria §2.2). Ahora apaga solo
+  // `ayuda`, y la rama de la devolucion no depende de esa bandera.
+  it("R23: `habilitarNovedad` apaga SOLO `ayuda` — la devolucion sigue listada mientras corra su reloj", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const prisma = buildPrisma({ orden: { findMany: vi.fn(), count: vi.fn(), update } });
+    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
+
+    await repo.habilitarNovedad("o1");
+
+    // Igualdad EXACTA: si volviera a apagar una marca que la rama del estatus mirase, la orden
+    // desapareceria de la pantalla con la ventana de SLA todavia viva.
+    expect(update).toHaveBeenCalledWith({ where: { id: "o1" }, data: { ayuda: false } });
+    // Y el predicado de la devolucion no mira `ayuda`, asi que la fila no se mueve de sitio.
+    expect(NOVEDAD_WHERE.OR[0]).toEqual({ estatus: { value: "devuelta" } });
   });
 });

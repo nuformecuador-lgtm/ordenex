@@ -1,4 +1,10 @@
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import type {
+  CatalogoFiltrosCierresDTO,
+  FiltrosCierres,
+  FiltrosDescargaGestiones,
+} from "@/lib/types/filtros-cierres";
+import { CATALOGO_FILTROS_CIERRES_VACIO } from "@/lib/types/filtros-cierres";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -20,6 +26,7 @@ import type {
   ICierresAdminService,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
+  ListarGestionesDescargaServiceResult,
   ListarHistoricoCierresAdminCompletoServiceResult,
   ListarHistoricoCierresAdminServiceResult,
   ListarPendientesCierresAdminCompletoServiceResult,
@@ -38,6 +45,7 @@ import {
   totalesIngresoOrdenex,
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
+import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -54,6 +62,11 @@ const MSG_INDEMNIZACION_AJENA =
   "Este monto no corresponde a un incidente de este cierre.";
 const MSG_INDEMNIZACION_DUPLICADA = "Hay dos montos para el mismo incidente.";
 
+// Feature 239 (T2.1, R9): catalogo incompleto -> la aprobacion NO ocurre. Texto SIN PII y con el
+// mismo tono accionable que el resto (patron `MSG_CATALOGO` de la 36/67).
+const MSG_CATALOGO_ANCLAJE =
+  "No se puede aprobar: el catalogo de estados esta incompleto (seed pendiente).";
+
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
@@ -66,6 +79,11 @@ const ESTADO_EN_BODEGA_SATELITE = "en_bodega_satelite";
 const ESTADO_RECHAZADA = "rechazada";
 const ESTADO_POR_DEVOLVER = "por_devolver";
 const ESTADO_POR_DEVOLVER_A_TIENDA = "por_devolver_a_tienda";
+
+// Feature 239 (T2.1, R4/R9): los DOS estados del ANCLAJE de la devolucion. Origen = el
+// pre-estado en el que el mensajero deja la orden al gestionar (`ESTATUS_POR_RESULTADO` de
+// `lib/types/gestion-destino.ts`, punto unico de esa regla); destino = `devuelta`.
+const ESTADO_DEVUELTA = "devuelta";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -172,7 +190,7 @@ export class CierresAdminService implements ICierresAdminService {
    * R41 exige viaja DENTRO de ella.
    */
   async listarHistoricoCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarHistoricoCierresAdminServiceResult> {
     const scope = await this.resolveAlcance(actor);
@@ -181,9 +199,14 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
     }
 
+    // Pedido humano del 2026-08-16: los filtros RECORTAN dentro del alcance que este servicio
+    // acaba de resolver — van al repositorio como tercer argumento y se componen con `AND`,
+    // nunca en lugar de `scope.alcance`. Un `adminSatelite` que pida la zona del vecino obtiene
+    // la interseccion (vacio), no la zona del vecino.
     const { items, total } = await this.repo.findHistoricoPaginado(
       scope.alcance,
       rangoDePagina(input),
+      input.filtros,
     );
 
     return {
@@ -215,7 +238,7 @@ export class CierresAdminService implements ICierresAdminService {
    * devuelve `pendientes: []` para ese mismo actor.
    */
   async listarPendientesCierresAdminPaginado(
-    input: { page: number; pageSize: number },
+    input: { page: number; pageSize: number; filtros?: FiltrosCierres },
     actor: Actor,
   ): Promise<ListarPendientesCierresAdminServiceResult> {
     const scope = await this.resolveAlcance(actor);
@@ -224,7 +247,11 @@ export class CierresAdminService implements ICierresAdminService {
       return { status: "ok", items: [], page: input.page, pageSize: input.pageSize, total: 0 }; // R3
     }
 
-    const { items, total } = await this.repo.findColaPaginada(scope.alcance, rangoDePagina(input));
+    const { items, total } = await this.repo.findColaPaginada(
+      scope.alcance,
+      rangoDePagina(input),
+      input.filtros, // recorte DENTRO del alcance (ver la nota del historico)
+    );
 
     return {
       status: "ok",
@@ -247,10 +274,14 @@ export class CierresAdminService implements ICierresAdminService {
    * quede con una de las dos mitades. Aqui se lee SOLO el historico, cortado en la base por el
    * mismo criterio que su pagina (R16).
    *
-   * **No lleva `input`, y es deliberado.** Este listado no admite filtros: su schema de pagina
-   * solo tenia `page`/`pageSize`, y quitarlos deja una lista blanca de CERO claves. El borde la
-   * sigue aplicando entera —un `destinoZonaId` colado muere alli con `validation_error` (R17)—
-   * pero no hay nada que transportar hasta aqui. El alcance sale del ACTOR, como en la pagina.
+   * **Lleva `filtros` y NO lleva `input`, y las dos mitades son deliberadas.** Hasta el
+   * 2026-08-16 este listado no admitia filtros y la lista blanca de su conjunto era de CERO
+   * claves. El pedido humano de ese dia le dio cuatro (fecha, bodega destino, mensajero), y el
+   * archivo recibe LOS MISMOS que la pagina: si no, «descargar» dejaria de significar «esto que
+   * estoy viendo, entero». Lo que sigue sin viajar es la paginacion —un conjunto no tiene
+   * pagina— y, sobre todo, el ALCANCE: sale del ACTOR, como en la pagina, y un `destinoZonaId`
+   * en singular colado en el input muere en el borde con `validation_error` (R17). El plural
+   * que si existe es un recorte: solo puede quitar filas dentro del alcance ya resuelto.
    *
    * `sinZona` -> conjunto vacio sin consultar la base, no `forbidden`: el `adminSatelite` sin
    * zona tiene acceso al modulo, lo que no tiene es alcance. Es lo mismo que devuelven hoy
@@ -271,12 +302,15 @@ export class CierresAdminService implements ICierresAdminService {
    */
   async listarHistoricoCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarHistoricoCierresAdminCompletoServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
     if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
 
-    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance);
+    // Los MISMOS filtros que la pagina: el archivo tiene que ser «esto que estoy viendo,
+    // entero», no «todo lo del alcance» (ver la nota del schema completo, `lib/types`).
+    const conjunto = await this.repo.findHistoricoCompleto(scope.alcance, filtros);
 
     const limite = descargaConfig.MAX_FILAS;
     // R6: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
@@ -300,8 +334,8 @@ export class CierresAdminService implements ICierresAdminService {
    * PEQUEÑA del conjunto (los cierres sin resolver), asi que producir su archivo arrastraba
    * todo el historico del alcance —que crece sin tope con los dias— para descartarlo.
    *
-   * Sin `input` por el mismo motivo que su hermano: cero filtros, cero claves en la lista
-   * blanca, alcance desde el actor.
+   * Los mismos `filtros` que su pagina, y por el mismo motivo que su hermano; el alcance sigue
+   * saliendo del actor y no de la peticion.
    *
    * **Excepcion declarada a R29 de la 170**, la misma de arriba con el signo cambiado: se cumple
    * el transporte —superado el tope no va ninguna fila— y no el materializar, porque
@@ -312,12 +346,13 @@ export class CierresAdminService implements ICierresAdminService {
    */
   async listarPendientesCierresAdminCompleto(
     actor: Actor,
+    filtros?: FiltrosCierres,
   ): Promise<ListarPendientesCierresAdminCompletoServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R4: antes del repo
     if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 };
 
-    const conjunto = await this.repo.findColaCompleta(scope.alcance);
+    const conjunto = await this.repo.findColaCompleta(scope.alcance, filtros); // idem
 
     const limite = descargaConfig.MAX_FILAS;
     if (conjunto.length > limite) {
@@ -325,6 +360,73 @@ export class CierresAdminService implements ICierresAdminService {
     }
 
     return { status: "ok", items: await this.conPendiente(conjunto), total: conjunto.length };
+  }
+
+  /**
+   * Feature 230 — Tanda 2 (T2.2, R13-R16/R18/R20-R22) — las GESTIONES de los cierres del dia del
+   * alcance, a grano de GESTION, de las que sale la HOJA FUNDIDA.
+   *
+   * Calcado de sus dos hermanos de arriba, y el calco es el requisito (R16): el criterio de
+   * alcance no se reimplementa, se DELEGA en el mismo `resolveAlcance` que resuelve los cuatro
+   * listados de esta pantalla. Por eso el orden de desenlaces tambien es el mismo —`forbidden`
+   * antes del repositorio (R18), `sinZona` como conjunto vacio sin consultar la base y no como
+   * `forbidden` (R20), y el tope evaluado aqui con `descargaConfig.MAX_FILAS` (R21)—.
+   *
+   * `filtros` son RECORTES y nunca alcance (R15): viajan al repositorio para componerse por
+   * CONJUNCION con el alcance ya resuelto, de modo que un `mensajeroIds` de otra zona da CERO
+   * filas (R37) y no un error — que es exactamente el mismo desenlace que un mensajero sin
+   * cierres en el rango (R38), y eso es deliberado: distinguirlos filtraria informacion sobre
+   * el alcance ajeno.
+   *
+   * **Ni una llamada a `this.signedUrls`** (R22). No es un olvido: el bloque de firma en lote de
+   * `verCierreDetalle` seria trabajo pagado en red para tirarlo despues —la hoja no tiene
+   * columna de evidencia— y, sobre todo, una URL firmada dentro de un archivo que se reenvia
+   * por correo es acceso a la foto sin sesion.
+   *
+   * **Misma excepcion declarada a R29 de la 170** que sus dos hermanos: el tope se cumple en el
+   * TRANSPORTE (por encima de el no sale ni una fila) y no en el MATERIALIZAR, porque la lectura
+   * del repositorio es un `findMany` sin `take`. Aqui pesa mas que alli —el grano es la gestion,
+   * no el cierre—, y por eso el rango de fechas del dialogo (R31) es la mitigacion de producto,
+   * no un adorno: sin el, el conjunto por defecto es todo el historico del mensajero.
+   */
+  async listarGestionesCierresAdminCompleto(
+    actor: Actor,
+    filtros: FiltrosDescargaGestiones,
+  ): Promise<ListarGestionesDescargaServiceResult> {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" }; // R18: antes del repo
+    if (scope.status === "sinZona") return { status: "ok", items: [], total: 0 }; // R20
+
+    const conjunto = await this.repo.findGestionesPorAlcanceCompleto(scope.alcance, filtros);
+
+    const limite = descargaConfig.MAX_FILAS;
+    // R21: o van TODAS las filas del conjunto, o van solo los conteos. Nunca un archivo truncado.
+    if (conjunto.length > limite) {
+      return { status: "limite_excedido", total: conjunto.length, limite };
+    }
+
+    return { status: "ok", items: conjunto, total: conjunto.length };
+  }
+
+  /**
+   * Pedido humano del 2026-08-16 — las opciones de los filtros de la pantalla.
+   *
+   * Misma puerta que los listados y en el mismo orden: rol invalido -> `forbidden` ANTES de
+   * tocar el repositorio; `adminSatelite` sin zona -> catalogo VACIO sin consultar la base (no
+   * `forbidden`: tiene acceso al modulo, lo que no tiene es alcance — es la misma respuesta que
+   * dan sus listados, que devuelven cero filas).
+   */
+  async obtenerCatalogoFiltros(
+    actor: Actor,
+  ): Promise<
+    { status: "ok"; catalogo: CatalogoFiltrosCierresDTO } | { status: "forbidden" }
+  > {
+    const scope = await this.resolveAlcance(actor);
+    if (scope.status === "forbidden") return { status: "forbidden" };
+    if (scope.status === "sinZona") {
+      return { status: "ok", catalogo: CATALOGO_FILTROS_CIERRES_VACIO };
+    }
+    return { status: "ok", catalogo: await this.repo.findCatalogoFiltros(scope.alcance) };
   }
 
   async verCierreDetalle(
@@ -460,6 +562,8 @@ export class CierresAdminService implements ICierresAdminService {
       porDevolverId,
       porDevolverATiendaId,
       centralZonaId,
+      preEstadoId,
+      devueltaId,
     ] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_BODEGA),
@@ -468,6 +572,9 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER),
       this.ordenRepo.findEstatusIdByValue(ESTADO_POR_DEVOLVER_A_TIENDA),
       this.zonaRepo.findCentralZonaId(),
+      // Feature 239 (T2.1, R4/R9): los dos ids del ANCLAJE.
+      this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
     ]);
     const liberacionSinGestionar =
       sinGestionarEstatusId !== null &&
@@ -480,6 +587,21 @@ export class CierresAdminService implements ICierresAdminService {
         ? { rechazadaId, porDevolverId, porDevolverATiendaId, centralZonaId }
         : undefined;
 
+    // Feature 239 (T2.1, design §3.3, R9) — FALLO CERRADO, y aqui la diferencia con las dos
+    // configs de arriba es deliberada: aquellas caen a `undefined` y la aprobacion sigue
+    // adelante sin esa rama (degradacion silenciosa aceptada). Si NO se puede resolver el
+    // pre-estado o `devuelta`, la aprobacion NO OCURRE — ni transicion del cierre, ni
+    // movimientos de dinero, ni anclaje—, porque aprobar sin poder anclar deja la devolucion
+    // congelada para siempre: invisible para la tienda, sin reloj y sin que nadie se entere.
+    // Es exactamente el estado del que esta feature viene a sacarnos, asi que no se acepta ni
+    // una vez. Sin efectos parciales: se devuelve ANTES de tocar el repo.
+    if (preEstadoId === null || devueltaId === null) {
+      return {
+        status: "validation_error",
+        fieldErrors: { estatus: [MSG_CATALOGO_ANCLAJE] },
+      };
+    }
+
     // R10/R12-R15: transicion guardada. Aprobar limpia motivoRechazo (null).
     const res = await this.repo.resolverCierre({
       cierreId,
@@ -489,6 +611,10 @@ export class CierresAdminService implements ICierresAdminService {
       motivoRechazo: null,
       liberacionSinGestionar, // feature 109/R16: libera `sin_gestionar` en la misma tx
       devolucionRechazadas, // feature 139/R5: dispara la devolucion de `rechazada` en la misma tx
+      // Feature 239/R4: ANCLA las devoluciones de este cierre en la MISMA tx. OBLIGATORIO (no
+      // opcional como las dos de arriba): sin el, la orden se queda en el pre-estado para
+      // siempre. Ver `AnclajeDevolucionConfig`.
+      anclajeDevolucion: { preEstadoId, devueltaId },
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,

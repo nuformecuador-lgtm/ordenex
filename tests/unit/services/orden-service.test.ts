@@ -117,6 +117,11 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
+    // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
+    marcarAyuda: vi.fn().mockResolvedValue(undefined),
+    desmarcarAyuda: vi.fn().mockResolvedValue(undefined),
+    habilitarNovedad: vi.fn().mockResolvedValue(undefined),
+    incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     countDevueltasByTienda: vi.fn().mockResolvedValue(0),
     findDevueltasByTienda: vi.fn().mockResolvedValue([]),
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos

@@ -14,6 +14,23 @@ export interface DevolucionSlaResult {
   liberadas: number;
   escaladas: number;
   omitidas: number;
+  /**
+   * Feature 239 (T3.3, R14/R35) — cuantas de las candidatas de esta corrida venian por la RAMA
+   * LEGADA: en `devuelta` pero SIN fila de historial `anclaje_devolucion`, asi que su ventana se
+   * ancla en la fecha de su gestion (el comportamiento anterior a la 239).
+   *
+   * NO es un contador decorativo. Es el unico sitio desde el que se ve extinguirse la poblacion
+   * que quedo en vuelo el dia del despliegue (grandfather, P6/R30): deberia bajar a cero y
+   * quedarse ahi. Si NO baja, o si sube, hay ordenes entrando en `devuelta` por fuera del
+   * anclaje — y eso es exactamente lo que no puede volver a pasar en silencio.
+   *
+   * NO es disjunto con los otros cuatro (que si lo son entre si): una misma orden legada puede
+   * contarse ademas como `evaluada`, `liberada` o `escalada`. Es un corte transversal, no un
+   * quinto cubo.
+   *
+   * Sin PII (R35): un numero y nada mas. Ni ids, ni guias, ni tiendas.
+   */
+  legadas: number;
 }
 
 export interface IDevolucionSlaService {

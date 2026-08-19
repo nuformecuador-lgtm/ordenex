@@ -484,8 +484,24 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         secuenciaRuta: null,
         marcarLuego: false,
         intentosEntrega: 0,
+        // Solicitud de ayuda (2026-08-18): entro en `toDTO`, la proyeccion COMPARTIDA con «Por
+        // recoger», asi que viaja tambien aqui. Que este en la lista es justo lo que este caso
+        // afirma: las dos pantallas hermanas transportan los MISMOS campos. La fila del fixture
+        // no la declara (es opcional, patron aditivo) -> `false`.
+        ayuda: false,
       },
     ]);
+  });
+
+  it("`ayuda` es el flag REAL de la orden, no un `false` de relleno", async () => {
+    // Sin este caso, el `ayuda: false` de arriba pasaria igual si alguien clavara la constante
+    // en la proyeccion: el fixture tampoco lo trae. Aqui la fila SI lo trae encendido.
+    const { service } = makeLectura({ pendientes: [asignacionRow({ ayuda: true })] });
+
+    const r = await service.listarRecoleccion(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecolectar[0]!.ayuda).toBe(true);
   });
 
   it("los campos que la card lee llegan CON la clave, no recortados", async () => {

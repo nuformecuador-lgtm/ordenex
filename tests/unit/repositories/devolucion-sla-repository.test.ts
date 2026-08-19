@@ -36,22 +36,24 @@ beforeEach(async () => {
   await sembrarCatalogoEstados();
 });
 
-describe("findDevueltasSla (R5)", () => {
-  it("R5: filtra por estatus devuelta + no borrada; deriva causa, ancladaAt y mensajero de la gestion vigente", async () => {
+const ANCLA = new Date("2026-07-16T14:00:00.000Z"); // instante de la aprobacion del cierre
+const GESTION = new Date("2026-07-15T06:00:00.000Z"); // el mensajero devolvio (32 h antes)
+
+/** Fila cruda tal y como la devuelve la consulta, con sus DOS proyecciones anidadas. */
+function filaCruda(over: Record<string, unknown> = {}) {
+  return {
+    id: "o1",
+    zonaId: "z1",
+    gestiones: [{ mensajeroId: "m1", causaDevolucion: "not_found", createdAt: GESTION }],
+    historialEstados: [{ createdAt: ANCLA }],
+    ...over,
+  };
+}
+
+describe("findDevueltasSla (R5 - 239 R12/R13/R14/R15)", () => {
+  it("R5: filtra por estatus devuelta + no borrada; deriva causa y mensajero de la gestion vigente", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findMany.mockResolvedValue([
-      {
-        id: "o1",
-        zonaId: "z1",
-        gestiones: [
-          {
-            mensajeroId: "m1",
-            causaDevolucion: "not_found",
-            createdAt: new Date("2026-07-15T06:00:00.000Z"),
-          },
-        ],
-      },
-    ]);
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
     const rows = await repoWith(prisma).findDevueltasSla();
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
@@ -68,30 +70,126 @@ describe("findDevueltasSla (R5)", () => {
         zonaId: "z1",
         mensajeroId: "m1",
         causa: "not_found",
-        ancladaAt: new Date("2026-07-15T06:00:00.000Z"),
+        ancladaAt: ANCLA,
+        origenAncla: "aprobacion",
       },
     ]);
+  });
+
+  // EL CASO DE LA FEATURE (239/R12). El reloj arranca cuando la BODEGA CONFIRMA, no cuando el
+  // mensajero devuelve. Con el retraso medido contra produccion (mediana 8,2 h, p90 22,1 h) y la
+  // ventana `not_found` de 24 h, anclar en la gestion escalaba y COBRABA ordenes que la tienda no
+  // habia podido ver nunca. La mutacion que mata este caso es exactamente esa: devolver el ancla
+  // al `createdAt` de la gestion.
+  it("239/R12: el ancla es el instante del ANCLAJE, no el `created_at` de la gestion", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
+
+    const rows = await repoWith(prisma).findDevueltasSla();
+
+    expect(rows[0].ancladaAt).toEqual(ANCLA);
+    expect(rows[0].ancladaAt).not.toEqual(GESTION); // la fecha de la gestion NO manda
+    expect(rows[0].origenAncla).toBe("aprobacion");
+  });
+
+  it("239/R12: la proyeccion del ancla pide la ULTIMA fila de familia `anclaje_devolucion`", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda()]);
+
+    await repoWith(prisma).findDevueltasSla();
+
+    // Se mira el ARGUMENTO porque es lo que separa "salio el numero correcto por casualidad" de
+    // "pidio exactamente esa fila". `desc` + `take 1` es lo que implementa R15.
+    expect(prisma.orden.findMany.mock.calls[0][0].select.historialEstados).toEqual({
+      where: { origenTipo: "anclaje_devolucion" },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+      select: { createdAt: true },
+    });
+  });
+
+  // R14 - LA RAMA LEGADA, con nombre. Son las ordenes que ya estaban en `devuelta` el dia del
+  // despliegue: no tienen fila de anclaje y su ventana se queda donde ya estaba, sin moverles el
+  // plazo por debajo (grandfather, P6/R30).
+  it("239/R14: sin fila de anclaje, ancla en la gestion Y sale MARCADA como legada", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([filaCruda({ historialEstados: [] })]);
+
+    const rows = await repoWith(prisma).findDevueltasSla();
+
+    expect(rows[0].ancladaAt).toEqual(GESTION);
+    // Lo que hace que esto NO sea un fallback silencioso: viaja en el DTO y el servicio lo cuenta.
+    expect(rows[0].origenAncla).toBe("legado");
+  });
+
+  // R15 - LA VUELTA COMPLETA: devolucion -> aprobacion -> liberacion a bodega -> reasignacion ->
+  // nueva devolucion -> nueva aprobacion. El historial es append-only, asi que la orden acumula
+  // DOS filas de anclaje. Tiene que ganar la MAS RECIENTE; si ganara la primera, el plazo de la
+  // devolucion nueva se contaria desde la vuelta anterior y la orden se escalaria -y se
+  // cobraria- de inmediato.
+  it("239/R15: tras la vuelta completa gana el anclaje MAS RECIENTE", async () => {
+    const prisma = buildPrisma();
+    const anclaVieja = new Date("2026-07-01T08:00:00.000Z");
+    const anclaNueva = new Date("2026-07-20T09:00:00.000Z");
+    // El doble honra el contrato del `take 1` + `orderBy desc`: la base devuelve UNA fila, la mas
+    // reciente. Lo que este caso fija es que la consulta PIDE ese orden, no que el doble acierte.
+    prisma.orden.findMany.mockResolvedValue([
+      filaCruda({ historialEstados: [{ createdAt: anclaNueva }] }),
+    ]);
+
+    const rows = await repoWith(prisma).findDevueltasSla();
+
+    expect(rows[0].ancladaAt).toEqual(anclaNueva);
+    expect(rows[0].ancladaAt).not.toEqual(anclaVieja);
+    expect(prisma.orden.findMany.mock.calls[0][0].select.historialEstados.orderBy).toEqual({
+      createdAt: "desc",
+    });
+    expect(prisma.orden.findMany.mock.calls[0][0].select.historialEstados.take).toBe(1);
+  });
+
+  // R13 - la mitad que faltaba del fallo. Una orden en el pre-estado NO entra en esta lista, asi
+  // que el cron no la puede liberar, ni escalar, ni cobrar mientras su cierre siga sin aprobar.
+  it("239/R13: una orden en `devolucion_por_confirmar` NO es candidata del cron", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+
+    await repoWith(prisma).findDevueltasSla();
+
+    const where = prisma.orden.findMany.mock.calls[0][0].where;
+    // IGUALDAD, no `in` ni `notIn`: el pre-estado no puede colarse ni por omision ni por lista
+    // negra. Es la MISMA igualdad que usa `novedadWhere`, y esa coincidencia es el punto de toda
+    // la feature: lo que la tienda ve y lo que el reloj mira son el mismo hecho.
+    expect(where.estatus).toEqual({ value: "devuelta" });
+    expect(JSON.stringify(where)).not.toContain("devolucion_por_confirmar");
   });
 
   it("R28: una orden con gestion vigente pero SIN causa (pre-73) SI sale (el service la omite)", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      {
-        id: "o1",
-        zonaId: "z1",
+      filaCruda({
         gestiones: [{ mensajeroId: "m1", causaDevolucion: null, createdAt: new Date() }],
-      },
+      }),
     ]);
     const rows = await repoWith(prisma).findDevueltasSla();
     expect(rows).toHaveLength(1);
     expect(rows[0].causa).toBeNull();
   });
 
-  it("ignora ordenes en devuelta SIN gestion `devuelta` vigente (anomalia sin anclaje)", async () => {
+  it("ignora ordenes en devuelta SIN gestion `devuelta` vigente (anomalia sin mensajero)", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      { id: "o1", zonaId: "z1", gestiones: [] },
-      { id: "o2", zonaId: "z2", gestiones: [{ mensajeroId: "m2", causaDevolucion: "wrong_number", createdAt: new Date("2026-07-10T00:00:00Z") }] },
+      filaCruda({ id: "o1", gestiones: [] }),
+      filaCruda({
+        id: "o2",
+        zonaId: "z2",
+        gestiones: [
+          {
+            mensajeroId: "m2",
+            causaDevolucion: "wrong_number",
+            createdAt: new Date("2026-07-10T00:00:00Z"),
+          },
+        ],
+      }),
     ]);
     const rows = await repoWith(prisma).findDevueltasSla();
     expect(rows.map((r) => r.ordenId)).toEqual(["o2"]);
@@ -114,6 +212,11 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
     // Feature 101/R2 (gate F1.4-Q5): la liberacion por SLA enciende `prioridad: true` en el
     // MISMO `data` guardado (junto al destino y el handoff limpio del mensajero).
+    // 2026-08-19 (feature 239/T3.1): el `data` ya NO apaga `gestion_aprobada`. Esa columna se
+    // retiro: la orden SALE de `devuelta` en este mismo `data`, asi que deja de ser novedad y
+    // deja de correr su reloj por construccion, sin ninguna bandera que alguien tenga que
+    // acordarse de apagar. Igualdad EXACTA a proposito: lo que se afirma es que no queda ni un
+    // resto de la columna en la escritura.
     expect(upd.data).toEqual({
       estatusId: idEstado("en_bodega_satelite"),
       mensajeroAsignadoId: null, // R15: handoff limpio a la bodega

@@ -9,6 +9,7 @@ import type { JobHandler } from "@/lib/interfaces/services/IJobQueueService";
 import type { IRouteOptimizationClient } from "@/lib/interfaces/external/IRouteOptimizationClient";
 import { OptimizacionRutaService } from "@/lib/services/OptimizacionRutaService";
 import { GoogleRouteOptimizationClient } from "@/lib/clients/google-route-optimization";
+import { GoogleRoutesClient } from "@/lib/clients/google-routes";
 import { HaversineRouteOptimizationClient } from "@/lib/clients/haversine-route-optimization";
 import { FallbackRouteOptimizationClient } from "@/lib/clients/fallback-route-optimization";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
@@ -16,6 +17,8 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
 import { construirTokenProvider } from "@/lib/auth/google-sa-token";
+import type { TokenProvider } from "@/lib/auth/google-token-shared";
+import { optlog, opterror } from "@/lib/logging/optimizer-log";
 
 /** R21/PII: el payload lleva SOLO el id del mensajero. Cualquier otra forma es un error. */
 const payloadSchema = z.object({ mensajeroId: z.string().min(1) });
@@ -29,14 +32,23 @@ const payloadSchema = z.object({ mensajeroId: z.string().min(1) });
  */
 export function crearOptimizacionRutaHandler(service: OptimizacionRutaService): JobHandler {
   return async (job: JobDTO) => {
+    optlog("job — recibido", { jobId: job.id, createdAt: job.createdAt.toISOString() });
     const parsed = payloadSchema.safeParse(job.payload);
     if (!parsed.success) {
+      optlog("job — payload invalido", { jobId: job.id });
       throw new Error("optimizacion_ruta: payload invalido (se esperaba { mensajeroId })");
     }
-    await service.ejecutar(parsed.data.mensajeroId, {
-      motivo: "debounce",
-      jobCreatedAt: job.createdAt,
-    });
+    try {
+      await service.ejecutar(parsed.data.mensajeroId, {
+        motivo: "debounce",
+        jobCreatedAt: job.createdAt,
+      });
+      optlog("job — completado", { jobId: job.id });
+    } catch (error) {
+      // Se traza y se RE-LANZA: la cola necesita el fallo para su backoff y su dead-letter.
+      opterror("job — fallo; la cola aplicara backoff", error, { jobId: job.id });
+      throw error;
+    }
   };
 }
 
@@ -44,7 +56,8 @@ export function crearOptimizacionRutaHandler(service: OptimizacionRutaService): 
  * Construye el service real con sus repos y el cliente HTTP.
  *
  * OJO: la config se carga aqui y NUNCA lanza si falta la credencial (design §2). La
- * validacion de las tres piezas ocurre en `construirTokenProvider`, que lanza
+ * ELECCION del modo de autenticacion (ADC / WIF keyless / JWT-bearer) y la validacion de
+ * las piezas del modo elegido ocurren en `construirTokenProvider`, que lanza
  * `RutaNoConfiguradoError` — pero SOLO cuando se pide el token, es decir DESPUES de todas
  * las guardas de coste y dentro del `try` por job de `JobQueueService.drenar`. Esto es lo
  * que garantiza que un despliegue sin credencial de Route Optimization NO tumbe el drenado
@@ -55,16 +68,36 @@ export function crearOptimizacionRutaHandler(service: OptimizacionRutaService): 
 export function buildOptimizacionRutaService(now: () => Date = () => new Date()) {
   const prisma = getPrismaClient();
   const config = loadRouteOptimizationConfig();
+  optlog("build — config cargada", {
+    projectId: config.GOOGLE_ROUTE_OPT_PROJECT_ID ?? "AUSENTE",
+    useAdc: config.GOOGLE_ROUTE_OPT_USE_ADC,
+    timeoutMs: config.ROUTE_OPT_TIMEOUT_MS,
+    maxParadas: config.RUTA_MAX_PARADAS,
+    debounceS: config.RUTA_DEBOUNCE_S,
+    origenTtlMin: config.RUTA_ORIGEN_TTL_MIN,
+    syncMinIntervaloS: config.RUTA_SYNC_MIN_INTERVALO_S,
+    routingPreference: config.ROUTES_ROUTING_PREFERENCE,
+  });
 
-  let tokenProvider: ReturnType<typeof construirTokenProvider> | null = null;
+  let tokenProvider: TokenProvider | null = null;
+  // UN solo proveedor de token para las DOS APIs (optimizacion y trazado): el selector
+  // ADC/WIF/JWT se resuelve una vez y ambos clientes heredan el modo que salga.
+  const getToken = async () => {
+    // R12: lanza `RutaNoConfiguradoError` ANTES de firmar nada y ANTES de la red.
+    tokenProvider ??= construirTokenProvider(config);
+    return tokenProvider.obtener();
+  };
+
   const google = new GoogleRouteOptimizationClient({
     projectId: config.GOOGLE_ROUTE_OPT_PROJECT_ID ?? "",
     timeoutMs: config.ROUTE_OPT_TIMEOUT_MS,
-    getToken: async () => {
-      // R12: lanza `RutaNoConfiguradoError` ANTES de firmar nada y ANTES de la red.
-      tokenProvider ??= construirTokenProvider(config);
-      return tokenProvider.obtener();
-    },
+    getToken,
+  });
+
+  const routes = new GoogleRoutesClient({
+    getToken,
+    timeoutMs: config.ROUTE_OPT_TIMEOUT_MS,
+    routingPreference: config.ROUTES_ROUTING_PREFERENCE,
   });
 
   // Fallback (design §9.A): si falta la credencial, `google.optimizar` propaga
@@ -82,5 +115,7 @@ export function buildOptimizacionRutaService(now: () => Date = () => new Date())
     client,
     config,
     now,
+    undefined,
+    routes,
   );
 }

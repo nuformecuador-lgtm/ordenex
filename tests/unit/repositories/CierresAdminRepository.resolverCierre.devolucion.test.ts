@@ -9,6 +9,10 @@ import type { IWalletTiendaFeedService } from "@/lib/interfaces/services/IWallet
 import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/repositories/IPagoMensajeroMovimientoRepository";
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import {
+  ANCLAJE_DEVOLUCION,
+  gestionOrdenSinDevoluciones,
+} from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 139 (T1.4) — DISPARO de la devolucion de RECHAZADAS al APROBAR el cierre, dentro de
 // `CierresAdminRepository.resolverCierre` (mockea Prisma, sin DB real; molde del bloque de
@@ -86,17 +90,47 @@ function buildDevolucionPrisma(
       findUnique: vi.fn(),
     },
     orden: { findMany: vi.fn(), updateMany: vi.fn() },
+    // Feature 239 (T2.2): la rama `aprobado` corre ademas el bloque de ANCLAJE, que lee las
+    // gestiones `devuelta` de ESTE cierre. Vacio -> no-op: esta suite mide la devolucion de
+    // `rechazada`, no el anclaje (que tiene su propio archivo).
+    gestionOrden: gestionOrdenSinDevoluciones(),
     ordenHistorialEstado: { createMany: vi.fn() },
   };
   prisma.cierreDia.findUnique.mockResolvedValue(
     opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
   );
   prisma.orden.findMany.mockResolvedValue(rechazadas);
+  // 2026-08-19 (feature 239/T2.5): la escritura de `gestion_aprobada` —la unica sin `id` en el
+  // WHERE— SE RETIRO. Todo `updateMany` sobre `orden` de esta transaccion rutea ahora por ids,
+  // asi que el acceso vuelve a ser directo y no opcional: si apareciera una escritura sin `id`,
+  // este fake reventaria en vez de tragarsela.
   prisma.orden.updateMany.mockImplementation((args: { where: { id: { in: string[] } } }) =>
     Promise.resolve({ count: opts.movidas ?? args.where.id.in.length }),
   );
   prisma.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
   return prisma;
+}
+
+/**
+ * TODAS las escrituras sobre `orden` de la transaccion, SIN FILTRAR.
+ *
+ * 2026-08-19 (feature 239/T2.5) — SE RETIRA el `.filter(c => c.where.id !== undefined)` que
+ * vivia aqui. Ese filtro excluia por la FORMA DEL WHERE, y lo que excluia era precisamente la
+ * unica escritura de la transaccion que no tenia ninguna asercion: la de `gestion_aprobada`. Una
+ * asercion que se ensena a no mirar una escritura no protege esa escritura — deja un hueco con
+ * aspecto de cobertura, que es como el fallo de la 239 llego a `dev` con el arbol verde
+ * (`progress/auditoria_ayuda_tienda.md` §3).
+ *
+ * Ahora se cuentan TODAS. Los casos de este archivo montan un cierre sin devoluciones, asi que
+ * el bloque de anclaje no escribe y el recuento sigue siendo el de la devolucion de `rechazada`
+ * — pero si el anclaje empezara a escribir aqui, se veria, que es justo lo que se quiere.
+ */
+type UpdateManyArgs = { where: { id: { in: string[] } }; data: Record<string, unknown> };
+
+function updateManyDeOrden(prisma: {
+  orden: { updateMany: { mock: { calls: unknown[][] } } };
+}): UpdateManyArgs[] {
+  return prisma.orden.updateMany.mock.calls.map((c) => c[0] as UpdateManyArgs);
 }
 
 function makeRepo(prisma: Record<string, unknown>) {
@@ -125,6 +159,7 @@ function aprobar(repo: CierresAdminRepository) {
     cierreId: "c1",
     alcance: ALCANCE_MAESTRO,
     nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
     devolucionRechazadas: DEVOLUCION,
@@ -153,11 +188,11 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=rechazada.
-    const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
+    const calls = updateManyDeOrden(prisma);
     const central = calls.find((c) => c.data.estatusId === idEstado("por_devolver_a_tienda"));
     const sat = calls.find((c) => c.data.estatusId === idEstado("por_devolver"));
-    expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
-    expect(sat.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    expect(central?.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("rechazada"), deletedAt: null });
+    expect(sat?.where).toEqual({ id: { in: ["o2"] }, estatusId: idEstado("rechazada"), deletedAt: null });
   });
 
   it("R8: money-neutral — el updateMany SOLO cambia estatus_id (NO mensajero/asignado_at/prioridad)", async () => {
@@ -166,7 +201,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
 
     await aprobar(repo);
 
-    const data = prisma.orden.updateMany.mock.calls[0][0].data;
+    const data = updateManyDeOrden(prisma)[0].data;
     expect(data).toEqual({ estatusId: idEstado("por_devolver") });
     expect(data).not.toHaveProperty("mensajeroAsignadoId");
     expect(data).not.toHaveProperty("asignadoAt");
@@ -204,8 +239,8 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     // El WHERE del findMany usa el mensajero del cierre; una rechazada suya (venga de rechazo directo
     // o de escalado SLA) entra igual (elegibilidad por estado, agnostica del camino).
     expect(prisma.orden.findMany.mock.calls[0][0].where.mensajeroAsignadoId).toBe("m-sla");
-    expect(prisma.orden.updateMany).toHaveBeenCalledTimes(1);
-    expect(prisma.orden.updateMany.mock.calls[0][0].data).toEqual({ estatusId: idEstado("por_devolver") });
+    expect(updateManyDeOrden(prisma)).toHaveLength(1);
+    expect(updateManyDeOrden(prisma)[0].data).toEqual({ estatusId: idEstado("por_devolver") });
   });
 
   it("R7/no-op: cierre sin rechazadas (0 filas) -> no updateMany de orden ni append", async () => {
@@ -215,7 +250,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
     const r = await aprobar(repo);
 
     expect(r).toBe("updated"); // la aprobacion (wallets) no se ve afectada
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    expect(updateManyDeOrden(prisma)).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 
@@ -246,6 +281,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });

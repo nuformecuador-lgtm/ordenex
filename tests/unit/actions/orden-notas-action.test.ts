@@ -63,7 +63,15 @@ function servicioReal(estatusValue = "devuelta") {
     marcarBorrada: vi.fn(async () => 0),
     findOrdenParaHilo: vi.fn(async (ordenId: string): Promise<OrdenParaHilo | null> =>
       ordenId === ORDEN
-        ? { tiendaId: TIENDA, mensajeroAsignadoId: null, estatusValue, deletedAt: null }
+        ? {
+            tiendaId: TIENDA,
+            mensajeroAsignadoId: null,
+            estatusValue,
+            // 2026-08-18: la ventana del adminTienda tambien se abre con ayuda viva. Aqui `false`
+            // para que estos casos sigan midiendo la ventana por ESTATUS y nada mas.
+            ayuda: false,
+            deletedAt: null,
+          }
         : null,
     ),
   };

@@ -106,7 +106,7 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
     const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
     expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
     // 20: la 157 apendio `recolectando` DESPUES de los dos de la 154.
-    expect(ORDER_STATUS_SEED).toHaveLength(20);
+    expect(ORDER_STATUS_SEED).toHaveLength(21); // 2026-08-19 (239): +devolucion_por_confirmar
     expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });
@@ -137,6 +137,8 @@ describe("Feature 154 · UP — alta aditiva e idempotente en la tabla catalogo 
   it("R4: aplicarla dos veces seguidas deja 20 values y ningun duplicado", () => {
     const unaVez = aplicarUp(PREVIOS_18);
     const dosVeces = aplicarUp(unaVez);
+    // 18 previos + los DOS de la 154 = 20. Este numero NO se mueve con las features posteriores:
+    // es lo que ESTA migracion deja, no el catalogo vigente (que hoy tiene 21).
     expect(unaVez).toHaveLength(20);
     expect(dosVeces).toHaveLength(20);
     expect(dosVeces).toEqual(unaVez);
@@ -145,7 +147,10 @@ describe("Feature 154 · UP — alta aditiva e idempotente en la tabla catalogo 
     // (con su propia migracion y su backfill) MAS los que apendieron features posteriores. Se
     // ajusta aqui explicitamente para que el invariante de la 154 —"el UP deja exactamente
     // estos values"— siga probandose sin congelar el catalogo entero.
-    const APENDIDOS_DESPUES = ["recolectando"]; // feature 157 (ampliacion)
+    const APENDIDOS_DESPUES = [
+      "recolectando", // feature 157 (ampliacion)
+      "devolucion_por_confirmar", // feature 239 (2026-08-19): el pre-estado de la devolucion
+    ];
     expect([...dosVeces].filter((v) => v !== RETIRADO_155).sort()).toEqual(
       [...ORDER_STATUS_SEED]
         .filter((v) => !APENDIDOS_DESPUES.includes(v))

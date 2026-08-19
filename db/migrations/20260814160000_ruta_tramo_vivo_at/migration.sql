@@ -1,0 +1,29 @@
+-- Feature 92 (seguimiento) — guarda de coste del TRAYECTO EN VIVO.
+--
+-- Que hace: anade UNA columna NULLABLE a `ruta_optimizada`. Nada mas.
+--
+-- POR QUE EXISTE ESTA COLUMNA. El trayecto en vivo (ubicacion actual -> siguiente parada) es
+-- lo unico de esta feature que NO se puede cachear: en cuanto el mensajero se mueve, el tramo
+-- guardado deja de empezar donde el esta. Cada pulsacion es, por fuerza, una llamada
+-- FACTURADA nueva a `computeRoutes`.
+--
+-- El cerrojo del cliente (`enVueloRef`) no basta: una Server Action es un ENDPOINT y se puede
+-- invocar directamente con su id, en bucle, sin pasar por el boton. Sin una marca PERSISTIDA
+-- no hay forma de acotar eso — una variable en memoria del proceso no sirve, porque en
+-- serverless cada invocacion puede caer en una instancia distinta y el contador nace a cero.
+--
+-- Se reutiliza el intervalo `RUTA_SYNC_MIN_INTERVALO_S` que ya acota el boton de sincronizar:
+-- es la misma clase de proteccion sobre la misma persona, y dos numeros distintos para lo
+-- mismo solo servirian para que uno de los dos se quedara viejo.
+--
+-- ADITIVA Y NO BLOQUEANTE: `ADD COLUMN` nullable y sin DEFAULT no reescribe la tabla.
+--
+-- ⛔ SIN BACKFILL. NULL significa «nunca se pidio un trayecto en vivo», que es exactamente lo
+-- que pasa con todas las rutas existentes. La guarda lo trata como «adelante».
+--
+-- RLS: NO hay tabla nueva -> NO hay superficie RLS nueva. `ruta_optimizada` sigue con RLS
+-- habilitada sin policies (solo service role).
+
+-- Instante del ultimo trayecto en vivo servido a este mensajero. Es un CONTADOR DE GASTO, no
+-- un dato de negocio: no se muestra en ninguna pantalla y nada lo lee salvo la guarda.
+ALTER TABLE "ruta_optimizada" ADD COLUMN "tramo_vivo_at" TIMESTAMP(3);

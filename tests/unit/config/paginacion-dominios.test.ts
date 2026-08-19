@@ -196,9 +196,9 @@ const PANTALLAS_ANEXO_III = [
   // Feature 170 — FASE 2 (T I.2): cuatro de esos listados se llevaron su tabla y su control
   // de paginación a un componente propio. La guardia los sigue: si no, dejaría de vigilar
   // exactamente los archivos donde se escribe hoy el `pageSize`.
-  "app/(app)/cierres-admin/_components/CierresAdminHistoricoTabla.tsx",
-  "app/(app)/cierres-admin/_components/CierresBodegaResueltosTabla.tsx",
-  "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosTabla.tsx",
+  "app/(app)/cierres-admin/_components/CierresAdminHistoricoLista.tsx",
+  "app/(app)/cierres-admin/_components/CierresBodegaResueltosLista.tsx",
+  "app/(app)/cierres-admin/_components/CierresBodegaSolicitadosLista.tsx",
   "app/(app)/incidentes/_components/IncidentesHistoricoTabla.tsx",
   // Feature 170 — FASE 2 (T K.3): el control y el tamaño de página de la bodega satélite
   // viven en el MÓDULO (el listado se quedó con la tabla y la selección), así que el literal

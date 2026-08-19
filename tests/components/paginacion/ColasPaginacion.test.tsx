@@ -100,6 +100,9 @@ const { paginado, completo, verIncidenteMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -115,6 +118,9 @@ vi.mock("@/lib/actions/cierres-admin", () => ({
     paginado.cierresHistorico(...a),
 }));
 vi.mock("@/lib/actions/cierre-bodega", () => ({
+  // Feature 230 (T7.3): el borde de la descarga DETALLADA del listado de cierres de bodega. Se
+  // añade al doble porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresBodegaCompleto: vi.fn(),
   verCierreBodegaDetalle: vi.fn(),
   aprobarCierreBodega: vi.fn(),
   rechazarCierreBodega: vi.fn(),
@@ -379,8 +385,23 @@ interface Cola {
   nombre: string;
   /** Nombre accesible del `<nav>` de paginación de ESTA cola (R43). */
   paginacion: string;
-  /** Nombre accesible de la tabla y de la sección que lleva el contador. */
+  /** Nombre accesible del listado y de la sección que lleva el contador. */
   seccion: string;
+  /**
+   * Rol ARIA con el que se localiza el listado. Las TRES colas de cierres dejaron de ser tablas
+   * el 2026-08-16 (pedido humano: comprobantes para todos los roles) y ahora son listas; la de
+   * incidentes sigue siendo una tabla. Mismo nombre accesible, mismas filas, misma descarga:
+   * sólo cambia por qué rol se pregunta. Se declara por entrada y no se deduce, para que
+   * convertir otra cola obligue a tocar esta línea.
+   */
+  rol?: "table" | "list";
+  /**
+   * Nombre accesible del conmutador donde vive el CONTADOR, cuando no está junto al encabezado
+   * de la sección. Pedido humano del 2026-08-16: en «Cierres del día» el encabezado visible se
+   * retiró por redundante —la pestaña ya lo dice— y el número se mudó a la pestaña. Sigue
+   * saliendo del `total` del servidor, que es lo que R42 exige; lo que cambió es dónde mirarlo.
+   */
+  contadorEn?: string;
   /** Nombre del control de descarga («Descargar …», R13). */
   descarga: string;
   /** Monta la pantalla con sus 60 filas repartidas en 3 páginas. */
@@ -395,6 +416,8 @@ const COLAS: Cola[] = [
     paginacion: "Paginación de los cierres del día pendientes",
     seccion: "Pendientes de decisión",
     descarga: "Cierres pendientes de decisión",
+    rol: "list",
+    contadorEn: "Cierres del día por estado",
     textoFila: (i) => `Mensajero ${etiqueta(i)}`,
     montar: () => {
       const todos = conjunto(cierreAdmin);
@@ -425,6 +448,8 @@ const COLAS: Cola[] = [
     nombre: "Cierres de bodega pendientes",
     paginacion: "Paginación de los cierres de bodega pendientes",
     seccion: "Cierres de bodega pendientes",
+    rol: "list",
+    contadorEn: "Cierres de bodega por estado",
     descarga: "Cierres de bodega pendientes",
     textoFila: (i) => `Satélite ${etiqueta(i)}`,
     montar: () => {
@@ -455,6 +480,8 @@ const COLAS: Cola[] = [
     paginacion: "Paginación de los cierres del día a consolidar",
     seccion: "Cierres del día a consolidar",
     descarga: "Cierres del día a consolidar",
+    rol: "list",
+    contadorEn: "Cierre de bodega por etapa",
     textoFila: (i) => `Mensajero ${etiqueta(i)}`,
     montar: () => montarConsolidacion(),
   },
@@ -555,9 +582,31 @@ function navDe(cola: Cola, trasModal = false): HTMLElement {
   return screen.getByRole("navigation", { name: cola.paginacion, hidden: trasModal });
 }
 
-/** La tabla de la cola. */
+/** El listado de la cola: una `<table>` o, en las tres de cierres, la `<ul>` de comprobantes. */
 function tablaDe(cola: Cola, trasModal = false): HTMLElement {
-  return screen.getByRole("table", { name: cola.seccion, hidden: trasModal });
+  return screen.getByRole(cola.rol ?? "table", { name: cola.seccion, hidden: trasModal });
+}
+
+/**
+ * Dónde vive el contador de esta cola: junto al encabezado de su sección o, si el encabezado se
+ * retiró por redundante, dentro de su conmutador de pestañas. Lo que se afirma sobre él no
+ * cambia en un caso ni en el otro.
+ */
+function contadorDe(cola: Cola): HTMLElement {
+  return cola.contadorEn === undefined
+    ? screen.getByRole("region", { name: cola.seccion })
+    : screen.getByRole("group", { name: cola.contadorEn });
+}
+
+/**
+ * Las filas VISIBLES del listado. En una tabla son los `row` menos la cabecera; en un listado
+ * de comprobantes, los `listitem`, que no tienen cabecera que descontar. Los dos casos
+ * comparten la propiedad que los tests afirman: cuántas hay y en qué orden llegaron.
+ */
+function filasDe(cola: Cola, listado: HTMLElement): HTMLElement[] {
+  return cola.rol === "list"
+    ? within(listado).getAllByRole("listitem")
+    : within(listado).getAllByRole("row").slice(1);
 }
 
 beforeEach(() => {
@@ -593,33 +642,32 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
       const user = userEvent.setup();
       cola.montar();
 
-      const seccion = screen.getByRole("region", { name: cola.seccion });
+      const seccion = contadorDe(cola);
       expect(within(seccion).getByText(`(${TOTAL})`), cola.nombre).toBeInTheDocument();
       expect(
         within(seccion).queryByText(`(${PAGE_SIZE})`),
         `${cola.nombre}: el contador muestra el tamaño de la página`,
       ).not.toBeInTheDocument();
-      // Y la tabla sí pinta una página: el contador no es el número de filas visibles.
-      expect(within(tablaDe(cola)).getAllByRole("row"), cola.nombre).toHaveLength(
-        1 + PAGE_SIZE,
-      );
+      // Y el listado sí pinta una página: el contador no es el número de filas visibles.
+      expect(filasDe(cola, tablaDe(cola)), cola.nombre).toHaveLength(PAGE_SIZE);
 
       await user.click(within(navDe(cola)).getByRole("button", { name: "Última página" }));
       await waitFor(() => {
         expect(
-          within(tablaDe(cola)).getAllByRole("row"),
+          filasDe(cola, tablaDe(cola)),
           `${cola.nombre}: la última página`,
-        ).toHaveLength(1 + ULTIMA_PAGINA);
+        ).toHaveLength(ULTIMA_PAGINA);
         // Y que la página haya LLEGADO, no que esté llegando: en carga el `DataTable` deja un
-        // `<tr>` con `role="status"` y filas skeleton que no cuentan como `row`, así que un
-        // conteo solo puede cumplirse a mitad de camino.
+        // `<tr>` con `role="status"` y filas skeleton que no cuentan como `row` —y
+        // `ListaComprobantes` hace lo propio con su `role="status"` y sus esqueletos—, así que
+        // un conteo solo puede cumplirse a mitad de camino.
         expect(
           within(tablaDe(cola)).queryByRole("status"),
           `${cola.nombre}: se midió con la página en carga`,
         ).not.toBeInTheDocument();
       });
 
-      const ultima = screen.getByRole("region", { name: cola.seccion });
+      const ultima = contadorDe(cola);
       expect(
         within(ultima).getByText(`(${TOTAL})`),
         `${cola.nombre}: el contador cambió al pasar de página`,
@@ -693,7 +741,7 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
       cola.montar();
 
       const tabla = tablaDe(cola);
-      expect(within(tabla).getAllByRole("row"), cola.nombre).toHaveLength(1 + PAGE_SIZE);
+      expect(filasDe(cola, tabla), cola.nombre).toHaveLength(PAGE_SIZE);
       for (const i of [1, 2, PAGE_SIZE]) {
         expect(
           within(tabla).getByText(cola.textoFila(i)),
@@ -706,7 +754,7 @@ describe("Riesgo MEDIO · paginación de las 4 colas con contador de cabecera (T
       ).not.toBeInTheDocument();
 
       // El orden es el del servidor, no uno reconstruido en la pantalla.
-      const filas = within(tabla).getAllByRole("row").slice(1);
+      const filas = filasDe(cola, tabla);
       expect(filas[0].textContent, cola.nombre).toContain(cola.textoFila(1));
       expect(filas[PAGE_SIZE - 1].textContent, cola.nombre).toContain(
         cola.textoFila(PAGE_SIZE),

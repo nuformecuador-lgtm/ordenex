@@ -957,6 +957,16 @@ describe("Feature 67 · deshacerGestion — guardia de estado de la orden (R5, F
     { resultado: "devuelta" as const, estatusValue: "en_bodega_central", nota: "47: reintento a central" },
     { resultado: "devuelta" as const, estatusValue: "en_bodega_satelite", nota: "47: reintento a satelite" },
     { resultado: "devuelta" as const, estatusValue: "rechazada", nota: "47: escalado al umbral" },
+    // Feature 239 (T1.5, R24) — EL CASO DE LA FEATURE, y es una REGRESION EVITADA, no una
+    // asercion nueva de adorno: desde la 239 la gestion `devuelta` deja la orden en el
+    // PRE-ESTADO, asi que ese es el sitio donde el mensajero la encuentra el mismo dia. Sin
+    // `devolucion_por_confirmar` en `ESTADOS_ESPERADOS.devuelta`, esta guardia no casaria NUNCA
+    // y el mensajero perderia la capacidad de deshacer su propia devolucion del dia.
+    {
+      resultado: "devuelta" as const,
+      estatusValue: "devolucion_por_confirmar",
+      nota: "239: el mensajero deshace su devolucion del dia desde el pre-estado",
+    },
   ];
 
   for (const c of CASOS_OK) {

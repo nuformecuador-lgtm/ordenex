@@ -29,15 +29,22 @@ import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
 import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
+import { RecuperarAyudaButton } from "./RecuperarAyudaButton";
 import { PosOrderCardMosaico } from "./pos-card/PosOrderCardMosaico";
 import { RutaMapa } from "./RutaMapa";
+import { useSeguimientoUbicacion } from "./useSeguimientoUbicacion";
 import { SincronizarRutaButton } from "./SincronizarRutaButton";
+import { TrayectoVivoButton } from "./TrayectoVivoButton";
 import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
 import { useSeccionColapsable } from "./useSeccionColapsable";
-import type { RutaMapaOrigen, RutaMapaParada } from "./ruta-mapa-tipos";
+import type {
+  RutaMapaOrigen,
+  RutaMapaParada,
+  RutaMapaTrazado,
+} from "./ruta-mapa-tipos";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano): pantalla de REPARTO del mensajero.
 // Recibe el grupo ya resuelto por el Server Component padre (datos sensibles por props,
@@ -87,6 +94,15 @@ const BUSCADOR_PLACEHOLDER =
 // frase «coincide con la búsqueda» para ser reconocible.
 const SIN_RESULTADOS_REPARTO = "Ninguna guía en reparto coincide con la búsqueda.";
 
+// Pedido humano 2026-08-18 — textos de la sección de órdenes con ayuda solicitada. El de la
+// ayuda dice DÓNDE llegó la solicitud y CÓMO se deshace, que es lo que no se puede deducir
+// mirando la sección.
+const AYUDA_SECCION_TITULO = "Con ayuda solicitada";
+const AYUDA_SECCION_AYUDA =
+  "Tu tienda las está viendo en Novedades. Con «Recuperar» retirás la solicitud y la orden vuelve arriba.";
+const SIN_PENDIENTES_TODAS_CON_AYUDA =
+  "Todas tus órdenes en reparto tienen ayuda solicitada; están abajo.";
+
 // 2026-07-31 — RETIRADO: el mensaje de feature 117/R11 ("Ninguna guía en reparto coincide
 // con el filtro."). R11 nació cuando las OPCIONES de cantón/distrito se derivaban de la
 // UNIÓN de los dos grupos del portal: elegir un cantón que solo existía en "Por recoger"
@@ -113,6 +129,16 @@ export function RepartoModule({
   // se fuerza el permiso; solo se captura cuando el mensajero pulsa "Sincronizar ruta").
   const [ubicacionActual, setUbicacionActual] = useState<RutaMapaOrigen | null>(
     null,
+  );
+  // Feature 92 (seguimiento): geometría de la ruta. Arranca con la PERSISTIDA que trae el
+  // servidor (migración `20260814120000_ruta_optimizada_trazado`), así que el mapa pinta las
+  // calles reales ya en el primer render y sobrevive a un F5 — antes cada recarga lo devolvía
+  // a la línea recta. La sincronización la sustituye por la recién calculada; ese valor es
+  // estado de cliente y sobrevive a `router.refresh()`, que no remonta el componente.
+  const [trazadoRuta, setTrazadoRuta] = useState<RutaMapaTrazado | null>(
+    ruta.trazado !== null
+      ? { encodedPolyline: ruta.trazado.encodedPolyline, fuente: ruta.trazado.fuente }
+      : null,
   );
   // Mapa de ruta como ACORDEÓN: abierto de entrada, se pliega y despliega con animación
   // desde un control que no se mueve de su sitio (ver el bloque del mapa, más abajo).
@@ -213,6 +239,28 @@ export function RepartoModule({
     [porGestionarFiltrado],
   );
 
+  // Pedido humano 2026-08-18 — LAS ÓRDENES CON AYUDA SOLICITADA SALEN DEL LISTADO PRINCIPAL y
+  // se agrupan abajo, en su propia sección.
+  //
+  // POR QUÉ SE PARTEN AQUÍ Y NO EN EL SERVIDOR: `porGestionar` es el mismo dato para las dos
+  // secciones —las órdenes en reparto de este mensajero— y sigue siendo UNA sola lectura. Partirlo
+  // en el service habría convertido un corte de PRESENTACIÓN en dos listados con dos contratos,
+  // y el mapa de ruta, el buscador, el filtro de cantón/distrito y el chat seguirían necesitando
+  // el conjunto entero de todas formas.
+  //
+  // El corte se aplica DESPUÉS del filtrado y del reordenado, sobre `porGestionarVisual`, para
+  // que las dos secciones respeten el buscador, el filtro y el orden de ruta que ya llegaba.
+  const [visualSinAyuda, visualConAyuda] = useMemo<
+    [MiAsignacionDTO[], MiAsignacionDTO[]]
+  >(() => {
+    const sin: MiAsignacionDTO[] = [];
+    const con: MiAsignacionDTO[] = [];
+    for (const orden of porGestionarVisual) {
+      (orden.ayuda ? con : sin).push(orden);
+    }
+    return [sin, con];
+  }, [porGestionarVisual]);
+
   // R30: la ruta no refleja el estado real si la última optimización falló
   // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
   const rutaDesactualizada =
@@ -220,6 +268,21 @@ export function RepartoModule({
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
   const origenAproximado =
     ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+
+  // Feature 92 (seguimiento): posición EN VIVO. No cuesta ninguna llamada facturada —la da el
+  // navegador— y solo arranca si el permiso ya consta concedido (R25: nunca se fuerza).
+  // `ubicacionActual !== null` es la prueba de que el botón ya lo obtuvo, para los navegadores
+  // sin Permissions API.
+  const ubicacionVivo = useSeguimientoUbicacion(ubicacionActual !== null);
+  // La del seguimiento MANDA sobre la del último botón: es más reciente por definición. Se
+  // cae a la del botón mientras el GPS no haya dado su primer fix bueno.
+  const origenMapa = ubicacionVivo ?? ubicacionActual;
+
+  // Trayecto en vivo pedido a mano. Cuando existe MANDA sobre el tramo persistido: el
+  // mensajero acaba de pedir explícitamente «desde donde estoy», y seguir resaltando el
+  // tramo que arranca en el origen de la optimización sería ignorar lo que pidió.
+  const [trayectoVivo, setTrayectoVivo] = useState<string | null>(null);
+  const tramoResaltado = trayectoVivo ?? ruta.tramoSiguiente?.encodedPolyline ?? null;
 
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
   // solo una PREFERENCIA: la orden mostrada se DERIVA (ver `detalleOrden`) para
@@ -234,11 +297,28 @@ export function RepartoModule({
   // gestión siempre está en `porGestionarFiltrado` (salvaguarda R9), así que el puntero
   // sigue mandando en el panel. Si el filtro deja "En reparto" sin coincidencias, no hay
   // orden en el panel (la grilla muestra el estado "sin resultados", R6).
+  //
+  // Pedido humano 2026-08-18 — al pedir ayuda, el panel TOMA LA SIGUIENTE. El backend suelta el
+  // puntero 1-a-1 y el módulo limpia su preferencia, así que la orden mostrada vuelve a decidirse
+  // por el caso (3), «la primera de la lista» — y si esa primera fuera justo la que acaba de pedir
+  // ayuda, el panel se quedaría exactamente donde estaba y el gesto no habría servido de nada.
+  //
+  // De ahí esta lista: los CANDIDATOS a ocupar el panel por defecto son las que NO tienen ayuda
+  // pedida. Sólo afecta al caso (3): una orden con ayuda elegida a mano —desde el botón
+  // «Gestionar» de su card, abajo— sigue mandando, porque eso es una decisión explícita y no un
+  // default. Y si TODAS tienen ayuda pedida, el panel vuelve a la primera de la lista entera: es
+  // preferible mostrar una orden marcada que dejar el panel vacío teniendo órdenes en reparto.
+  const candidatasPanel = useMemo<MiAsignacionDTO[]>(
+    () => porGestionarFiltrado.filter((o) => !o.ayuda),
+    [porGestionarFiltrado],
+  );
+
   const detalleOrden = useMemo<MiAsignacionDTO | null>(() => {
     if (porGestionarFiltrado.length === 0) return null;
     if (ordenEnGestionId !== null) {
       return (
         porGestionarFiltrado.find((o) => o.id === ordenEnGestionId) ??
+        candidatasPanel[0] ??
         porGestionarFiltrado[0]
       );
     }
@@ -246,8 +326,8 @@ export function RepartoModule({
       const elegida = porGestionarFiltrado.find((o) => o.id === seleccionId);
       if (elegida) return elegida;
     }
-    return porGestionarFiltrado[0];
-  }, [porGestionarFiltrado, ordenEnGestionId, seleccionId]);
+    return candidatasPanel[0] ?? porGestionarFiltrado[0];
+  }, [porGestionarFiltrado, candidatasPanel, ordenEnGestionId, seleccionId]);
 
   // Feature 113/R5 — MODO FOCO: flag DERIVADO de una sola fuente de verdad
   // (`ordenEnGestionId`, backend, robusto a recarga). Con una gestión activa y sin
@@ -371,6 +451,47 @@ export function RepartoModule({
     );
   }
 
+  /**
+   * Una card de la seccion «Con ayuda solicitada». SIEMPRE en vista de DETALLE (pedido humano):
+   * son las órdenes atascadas, la fila ancha deja leer de un vistazo cuál es cuál, y esta sección
+   * no participa del conmutador mosaico/detalle de arriba.
+   *
+   * Sus acciones son «Recuperar» —retira la solicitud y la devuelve al listado principal— y el
+   * MISMO `GestionarOrdenCardButton` de las demás. Lo segundo no es un extra: sin él, pedir ayuda
+   * dejaría la orden imposible de gestionar hasta recuperarla, porque desde el rediseño la card
+   * ya no selecciona al tocarla y ese botón es la única puerta al panel.
+   */
+  function renderCardConAyuda(orden: MiAsignacionDTO) {
+    return (
+      <PosOrderCardDetalle
+        orden={orden}
+        total={porGestionar.length}
+        esActiva={ordenEnGestionId === orden.id}
+        esDetalle={detalleOrden?.id === orden.id}
+        bloqueado={bloqueado}
+        acciones={
+          <div className="flex items-center justify-between gap-2">
+            <RecuperarAyudaButton
+              ordenId={orden.id}
+              numRemision={orden.numRemision}
+              onRecuperada={() => router.refresh()}
+              disabled={bloqueado}
+            />
+            <GestionarOrdenCardButton
+              numRemision={orden.numRemision}
+              disabled={
+                bloqueado ||
+                ordenEnGestionId !== null ||
+                detalleOrden?.id === orden.id
+              }
+              onConfirmar={() => seleccionar(orden)}
+            />
+          </div>
+        }
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       {/* ---------- Aviso de BLOQUEO TOTAL del mensajero (feature 111/R12) ---------- */}
@@ -440,7 +561,21 @@ export function RepartoModule({
               </h2>
               {/* R31/R32: sincronización manual de la ruta. El botón captura el GPS del
                   navegador (best-effort) y lo eleva aquí para dibujar el origen en el mapa. */}
-              <SincronizarRutaButton onUbicacion={setUbicacionActual} />
+              <div className="flex flex-wrap items-center gap-2">
+                <SincronizarRutaButton
+                  onUbicacion={setUbicacionActual}
+                  onTrazado={setTrazadoRuta}
+                />
+                {/* Trayecto EN VIVO: cada pulsación es una llamada facturada (no se puede
+                    cachear algo que arranca donde el mensajero está AHORA), por eso es un
+                    botón aparte y explícito. La siguiente parada es la primera de la lista,
+                    que ya viene ordenada por secuencia desde el servidor. */}
+                <TrayectoVivoButton
+                  ubicacion={origenMapa}
+                  ordenId={porGestionar[0]?.id ?? null}
+                  onTrayecto={setTrayectoVivo}
+                />
+              </div>
             </div>
 
             {/* R30: aviso VISIBLE de que el orden mostrado no está actualizado. */}
@@ -489,7 +624,12 @@ export function RepartoModule({
                         GPS reciente).
                       </p>
                     ) : null}
-                    <RutaMapa paradas={paradasMapa} origen={ubicacionActual} />
+                    <RutaMapa
+                      paradas={paradasMapa}
+                      origen={origenMapa}
+                      trazado={trazadoRuta}
+                      tramoSiguiente={tramoResaltado}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -551,6 +691,13 @@ export function RepartoModule({
               <p className="text-sm text-muted-foreground">
                 {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
               </p>
+            ) : visualSinAyuda.length === 0 ? (
+              /* Hay órdenes, pero TODAS están abajo con ayuda solicitada. Sin este caso el
+                 listado principal quedaría en blanco, sin decir por qué, justo debajo de un
+                 encabezado que anuncia órdenes en reparto. */
+              <p className="text-sm text-muted-foreground">
+                {SIN_PENDIENTES_TODAS_CON_AYUDA}
+              </p>
             ) : vistaCards === "mosaico" ? (
               /* Pedido humano: en MOSAICO las cards van en carrusel (`CarruselCards`,
                  componente shared sobre la primitiva shadcn), no en grilla. Se ven de 3 en 3
@@ -559,7 +706,7 @@ export function RepartoModule({
                  La vista "detalle" NO se toca: sigue siendo la lista de una fila por orden. */
               <div className={CLASE_FASE[faseVista]}>
                 <CarruselCards
-                  items={porGestionarVisual}
+                  items={visualSinAyuda}
                   getKey={(orden) => orden.id}
                   ariaLabel="Órdenes en reparto"
                   singular="Orden"
@@ -572,13 +719,38 @@ export function RepartoModule({
                  subir+aparecer). Sin transición (`estable`) no añade nada, así que la
                  lista no queda con estilos de animación colgando. */
               <ul className={`flex flex-col gap-3 ${CLASE_FASE[faseVista]}`}>
-                {porGestionarVisual.map((orden) => (
+                {visualSinAyuda.map((orden) => (
                   <li key={orden.id}>
                     {renderCardEnReparto(orden, "detalle")}
                   </li>
                 ))}
               </ul>
             )}
+
+            {/* Pedido humano 2026-08-18 — las órdenes con AYUDA SOLICITADA, DEBAJO y aparte.
+                No están escondidas ni deshabilitadas: siguen siendo órdenes en reparto de este
+                mensajero y se pueden gestionar desde aquí. Lo que cambia es que dejan de
+                mezclarse con las que avanzan solas, que es lo que se pidió. */}
+            {visualConAyuda.length > 0 ? (
+              <section
+                aria-label={AYUDA_SECCION_TITULO}
+                className="mt-6 flex flex-col gap-3 border-t border-border pt-4"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-warning-strong">
+                    {AYUDA_SECCION_TITULO}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {AYUDA_SECCION_AYUDA}
+                  </p>
+                </div>
+                <ul className="flex flex-col gap-3">
+                  {visualConAyuda.map((orden) => (
+                    <li key={orden.id}>{renderCardConAyuda(orden)}</li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
           </section>
         </>

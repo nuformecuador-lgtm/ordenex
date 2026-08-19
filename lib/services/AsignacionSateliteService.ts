@@ -22,9 +22,9 @@ const ESTATUS_REPROGRAMADA = "reprogramada";
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
 const ROL_AUTORIZADO = "adminSatelite";
 
-// Feature 41/R14: motivo accionable cuando el mensajero destino esta bloqueado por un
-// cierre pendiente (solicitado/vencido).
-const MSG_MENSAJERO_BLOQUEADO = "mensajero_bloqueado_por_cierre";
+// Feature 41/R14 RETIRADA (pedido humano 2026-08-18): aqui vivia `mensajero_bloqueado_por_cierre`,
+// el motivo con que se rechazaba al mensajero con un cierre abierto o vencido. La guarda se fue y
+// el motivo con ella: ya no hay camino por el que este servicio pueda emitirlo.
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declara
 // como Pick para dobles de test sin DB/HTTP (patron RecepcionSateliteService).
@@ -94,15 +94,10 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       };
     }
 
-    // 3b. Feature 41/R14: mensajero bloqueado por un cierre pendiente (solicitado/vencido)
-    // -> sin efectos. Antes de cualquier escritura del lote.
-    const mensajerosBloqueados = await this.repo.findMensajerosBloqueados([input.mensajeroId]);
-    if (mensajerosBloqueados.has(input.mensajeroId)) {
-      return {
-        status: "validation_error",
-        fieldErrors: { mensajeroId: [MSG_MENSAJERO_BLOQUEADO] },
-      };
-    }
+    // 3b. Feature 41/R14 RETIRADA (pedido humano 2026-08-18): aqui se rechazaba al mensajero que
+    //     arrastrara un cierre abierto o vencido. Asignar debe poder hacerse igual, asi que la
+    //     guarda se va. El predicado sigue vivo en el repo para las superficies que no son
+    //     asignacion (gestion, recoleccion en tienda, aviso del panel del mensajero).
 
     const ordenIds = input.ordenIds;
 

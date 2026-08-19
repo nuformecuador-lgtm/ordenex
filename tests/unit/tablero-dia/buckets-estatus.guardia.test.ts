@@ -55,6 +55,11 @@ const CATALOGO_CONGELADO = [
   "por_recolectar_en_tienda",
   "incidente",
   "recolectando",
+  // 2026-08-19 (feature 239/T1.8): 20 -> 21 values. El pre-estado de la devolucion entra como
+  // APENDICE y NO gana bucket explicito (cae en `otros`, ver `buckets-estatus.test.ts`). Esta
+  // foto se actualiza a mano A PROPOSITO: es lo unico que delata un value nuevo, porque el mapa
+  // tiene default y lo absorberia en silencio.
+  "devolucion_por_confirmar",
 ] as const;
 
 // Archivos que legitimamente nombran a la vez un bucket y un estatus de la clasificacion.
@@ -113,9 +118,9 @@ describe("R46 — el catalogo esta congelado: ganar, perder o renombrar un value
   // `order-status.ts`, escrito cuando la 155 dejo el catalogo en 19). El catalogo REAL
   // tiene 20: la 157 sumo `recolectando` despues de aquel retiro. Se congela el numero
   // REAL, medido contra el seed, no el del texto.
-  it("el catalogo tiene 20 values (los 19 tras el retiro de la 155 + `recolectando` de la 157)", () => {
-    expect(ORDER_STATUS_SEED).toHaveLength(20);
-    expect(CATALOGO_CONGELADO).toHaveLength(20);
+  it("el catalogo tiene 21 values (los 19 tras el retiro de la 155 + `recolectando` de la 157 + `devolucion_por_confirmar` de la 239)", () => {
+    expect(ORDER_STATUS_SEED).toHaveLength(21); // 2026-08-19 (239)
+    expect(CATALOGO_CONGELADO).toHaveLength(21); // 2026-08-19 (239): +devolucion_por_confirmar
   });
 
   it("las claves del mapa siguen existiendo en el catalogo (un rename las dejaria huerfanas)", () => {

@@ -11,6 +11,7 @@ import type { IPagoMensajeroMovimientoRepository } from "@/lib/interfaces/reposi
 import type { IWalletMensajeroFeedService } from "@/lib/interfaces/services/IWalletMensajeroFeedService";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 import type { IWalletIndemnizacionFeedService } from "@/lib/interfaces/services/IWalletIndemnizacionFeedService";
+import { ANCLAJE_DEVOLUCION } from "@/tests/fixtures/anclaje-devolucion";
 
 // Feature 38 — tests unit del CierresAdminRepository (mockea Prisma, sin DB real,
 // patron cierre-dia-repository.test.ts). Cubre R2/R4/R5 (findCierresByAlcance con
@@ -126,7 +127,11 @@ function cierreResumenRow(overrides: Record<string, unknown> = {}) {
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
     cierreDia: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
-    gestionOrden: { findMany: vi.fn() },
+    // Feature 239 (T2.2): al APROBAR, la misma tx corre ademas el bloque de ANCLAJE, que empieza
+    // leyendo las gestiones `devuelta` de ESTE cierre. Sin devoluciones el bloque es no-op —que
+    // es lo que estas suites quieren— pero el doble tiene que RESPONDER, o la tx muere con un
+    // TypeError. Vacio por defecto; la suite que MIDE el anclaje lo monta con datos.
+    gestionOrden: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
     cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 173/T B.2: al aprobar, el feed del contra-entrega LEE el ledger por tienda para
@@ -135,6 +140,11 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // vacio es lo coherente con el resto del doble, no un atajo: sin creditos no hay
     // contra-entrega que meter en la caja (R13).
     walletTiendaMovimiento: { findMany: vi.fn().mockResolvedValue([]) },
+    // Pedido humano 2026-08-18: aprobar enciende `gestion_aprobada` en las ordenes cuya gestion
+    // de ESTE cierre fue `devuelta` (un `updateMany` mas dentro de la misma tx). Ningun test de
+    // este archivo mide esa escritura — se mide en su propio archivo—, pero TODOS pasan por
+    // ella al aprobar, asi que el doble tiene que existir o la tx muere con un TypeError.
+    orden: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     ...overrides,
   };
 }
@@ -536,6 +546,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -560,6 +571,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -585,6 +597,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -605,6 +618,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       cierreId: "c-ajeno",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -733,6 +747,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -774,6 +789,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -793,6 +809,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -822,6 +839,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -846,6 +864,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -888,6 +907,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -907,6 +927,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -932,6 +953,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -960,6 +982,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -1007,6 +1030,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c1",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -1026,6 +1050,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       cierreId: "c-vencido",
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -1052,6 +1077,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
         cierreId: "c1",
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -1089,7 +1115,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
         count: vi.fn(),
         findUnique: vi.fn(),
       },
-      gestionOrden: { findMany: vi.fn() },
+      gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // feature 239: sin devoluciones -> anclaje no-op
       cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
       orden: { findMany: vi.fn(), updateMany: vi.fn() },
       ordenHistorialEstado: { createMany: vi.fn() },
@@ -1098,8 +1124,11 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       opts.mensajeroId === null ? null : { mensajeroId: opts.mensajeroId ?? "m1" },
     );
     prisma.orden.findMany.mockResolvedValue(ordenes);
-    prisma.orden.updateMany.mockImplementation((args: { where: { id: { in: string[] } } }) =>
-      Promise.resolve({ count: opts.movidas ?? args.where.id.in.length }),
+    // `where.id.in` es el updateMany de la LIBERACION (rutea por ids). Desde el pedido humano de
+    // 2026-08-18 la rama `aprobado` corre ademas el de `gestion_aprobada`, que filtra por la
+    // relacion `gestiones` y no lleva `id`: el acceso es opcional para sobrevivir a los dos.
+    prisma.orden.updateMany.mockImplementation((args: { where: { id?: { in: string[] } } }) =>
+      Promise.resolve({ count: opts.movidas ?? args.where.id?.in.length ?? 0 }),
     );
     prisma.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
     return prisma;
@@ -1110,6 +1139,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
       liberacionSinGestionar: LIBERACION,
@@ -1133,7 +1163,13 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       deletedAt: null,
     });
     // dos updateMany (uno por destino), cada uno GUARDADO por estatus_id=sin_gestionar.
+    //
+    // 2026-08-19 (feature 239/T2.5): SE RETIRA el `.filter(c => c.where.id !== undefined)` que
+    // habia aqui. Excluia por la FORMA DEL WHERE, y lo que excluia era la unica escritura de la
+    // transaccion que no tenia ninguna asercion (la de `gestion_aprobada`). Esa escritura ya no
+    // existe; el hueco de cobertura tampoco tiene por que seguir existiendo. Se cuentan TODAS.
     const calls = prisma.orden.updateMany.mock.calls.map((c) => c[0]);
+    expect(calls).toHaveLength(2); // exactamente las dos de la liberacion: ni una escritura mas
     const central = calls.find((c) => c.data.estatusId === idEstado("en_bodega_central"));
     const sat = calls.find((c) => c.data.estatusId === idEstado("en_bodega_satelite"));
     expect(central.where).toEqual({ id: { in: ["o1"] }, estatusId: idEstado("sin_gestionar"), deletedAt: null });
@@ -1175,7 +1211,9 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     const r = await aprobar(repo);
 
     expect(r).toBe("updated"); // el flujo de aprobacion (wallets) NO se ve afectado
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    // 2026-08-19 (feature 239/T2.5): sin `.filter(... where.id !== undefined)`. Se cuentan TODAS
+    // las escrituras sobre `orden` de la transaccion: cero es cero, sin excepciones por forma.
+    expect(prisma.orden.updateMany.mock.calls).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 
@@ -1195,7 +1233,9 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     });
 
     expect(prisma.orden.findMany).not.toHaveBeenCalled();
-    expect(prisma.orden.updateMany).not.toHaveBeenCalled();
+    // 2026-08-19 (feature 239/T2.5): sin `.filter(... where.id !== undefined)`. Se cuentan TODAS
+    // las escrituras sobre `orden` de la transaccion: cero es cero, sin excepciones por forma.
+    expect(prisma.orden.updateMany.mock.calls).toHaveLength(0);
     expect(prisma.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 
@@ -1207,6 +1247,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       cierreId: "c1",
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });

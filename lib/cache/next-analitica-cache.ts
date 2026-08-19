@@ -21,6 +21,7 @@
 
 import { revalidateTag, unstable_cache } from "next/cache";
 import { ANALITICA_CACHE_TTL_SEGUNDOS, analiticaCacheHabilitada } from "@/lib/config/analitica-cache";
+import { CONTEO_ENTREGAS_CACHE_TTL_SEGUNDOS } from "@/lib/config/conteo-entregas-cache";
 import { cacheNula } from "@/lib/cache/cache-nula";
 import { conRegistroDeInvalidacion } from "@/lib/cache/registro-invalidacion";
 import type { IAnaliticaCache, OrigenInvalidacion } from "@/lib/interfaces/external/IAnaliticaCache";
@@ -43,8 +44,20 @@ const PERFIL_INVALIDACION = "max";
 
 export class NextAnaliticaCache implements IAnaliticaCache {
   /**
-   * `revalidate` va SIEMPRE con el TTL de `lib/config/analitica-cache.ts` y NUNCA `false`
-   * (R17): sin TTL, un invalidador que no llegue congela la cifra para siempre.
+   * El TTL entra por CONSTRUCTOR, con el de la analitica por defecto.
+   *
+   * Se parametrizo (2026-08-17) al aparecer un segundo consumidor del MISMO puerto con otro
+   * TTL: el conteo de entregas, que pide 15 min porque lee tablas VIVAS y no tiene
+   * invalidador por evento (`lib/config/conteo-entregas-cache.ts`). La alternativa era un
+   * segundo archivo adaptador, y eso obliga a tocar la allowlist de
+   * `cache-aislamiento.guardia.test.ts` (R21) para meter un tercer import de `next/cache` en
+   * el arbol — un parametro es mas barato y deja intacta la garantia que ese guardia compra.
+   */
+  constructor(private readonly ttlSegundos: number = ANALITICA_CACHE_TTL_SEGUNDOS) {}
+
+  /**
+   * `revalidate` va SIEMPRE con un TTL y NUNCA `false` (R17): sin TTL, un invalidador que no
+   * llegue congela la cifra para siempre.
    */
   async envolver<T>(
     clave: string,
@@ -53,7 +66,7 @@ export class NextAnaliticaCache implements IAnaliticaCache {
   ): Promise<T> {
     return unstable_cache(producir, [clave], {
       tags: [...tags],
-      revalidate: ANALITICA_CACHE_TTL_SEGUNDOS,
+      revalidate: this.ttlSegundos,
     })();
   }
 
@@ -72,4 +85,23 @@ export function crearAnaliticaCacheDeNext(
 ): IAnaliticaCache {
   if (!analiticaCacheHabilitada(env)) return cacheNula();
   return conRegistroDeInvalidacion(new NextAnaliticaCache());
+}
+
+/**
+ * El puerto que consume el CONTEO DE ENTREGAS (2026-08-17). Mismo adaptador, mismo
+ * kill-switch y TTL propio de 15 min.
+ *
+ * El kill-switch se comparte a proposito (`ANALITICA_CACHE_DISABLED`): una segunda variable
+ * de entorno para lo mismo obligaria a acordarse de las dos el dia que haya que apagar la
+ * analitica en produccion, y ese dia nadie lee comentarios.
+ *
+ * SIN `conRegistroDeInvalidacion`: ese decorador registra INVALIDACIONES, y esta vertical no
+ * tiene ninguna —su unico mecanismo de caducidad es el TTL, porque lee tablas vivas sin job
+ * que avise—. Envolverla dejaria un registro que no puede emitir nunca una linea.
+ */
+export function crearConteoEntregasCacheDeNext(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): IAnaliticaCache {
+  if (!analiticaCacheHabilitada(env)) return cacheNula();
+  return new NextAnaliticaCache(CONTEO_ENTREGAS_CACHE_TTL_SEGUNDOS);
 }

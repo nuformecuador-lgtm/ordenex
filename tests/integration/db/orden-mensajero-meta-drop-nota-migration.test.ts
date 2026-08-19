@@ -98,12 +98,23 @@ describe("227 / M2 — la migracion destructiva existe, va DESPUES de M1 y decla
     expect(dirs.indexOf(path.basename(migrationDir))).toBeGreaterThan(
       dirs.indexOf("20260815120000_orden_nota"),
     );
-    // Ultima de la lista ordenada: `scripts/db-rollback.ts` revierte SIEMPRE la ultima por
-    // orden alfabetico. Si esta migracion no fuera la ultima, `pnpm run db:rollback` habria
-    // revertido otra cosa.
-    expect(dirs[dirs.length - 1]).toBe(path.basename(migrationDir));
     expect(fs.existsSync(path.join(migrationDir, "migration.sql"))).toBe(true);
     expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
+    // Aqui vivia `expect(dirs[dirs.length - 1]).toBe(...)`: «esta es la ultima de la lista
+    // ordenada, asi que `pnpm run db:rollback` la revierte a ella». Era CIERTO al escribirla y
+    // no puede volver a serlo: la asercion caduca sola en cuanto entra cualquier migracion
+    // posterior (entraron cuatro), y lo que medía no era un hecho de ESTA migracion sino de la
+    // posicion del HEAD. Retirarla no pierde cobertura de la 227.
+    //
+    // Lo que SI hay que conservar es la preocupacion de fondo, que no caduca: `db-rollback.ts`
+    // revierte SIEMPRE la ultima y ABORTA (exit 1) si a esa carpeta le falta `down.sql`. Para
+    // poder llegar bajando hasta esta migracion, TODA carpeta posterior tiene que traer el
+    // suyo. Eso si es comprobable para siempre, y es lo que se afirma aqui.
+    const posteriores = dirs.slice(dirs.indexOf(path.basename(migrationDir)) + 1);
+    const sinDown = posteriores.filter(
+      (d) => !fs.existsSync(path.join(MIGRATIONS_DIR, d, "down.sql")),
+    );
+    expect(sinDown, `migraciones posteriores sin down.sql: ${sinDown.join(", ")}`).toEqual([]);
   });
 
   it("R23: la cabecera declara la perdida DEFINITIVA Y DELIBERADA, su fecha y el conteo medido", () => {

@@ -27,6 +27,9 @@ import type {
 // Server Actions (ver detalle / aprobar / rechazar), el toast y el router (refresh)
 // para afirmar la composición (cola, histórico, detalle, decisiones) sin DB ni sesión.
 vi.mock("@/lib/actions/cierres-admin", () => ({
+  // Feature 230 (T2.3): el borde de la descarga DETALLADA de esta pantalla. Se añade al doble
+  // porque el módulo la importa; ninguna aserción de este archivo cambia.
+  listarGestionesCierresAdminCompleto: vi.fn(),
   verCierreDetalle: vi.fn(),
   aprobarCierre: vi.fn(),
   rechazarCierre: vi.fn(),
@@ -216,6 +219,18 @@ function renderModule(props?: {
   );
 }
 
+/**
+ * Pedido humano del 2026-08-16 — el histórico dejó de estar debajo de la cola y pasó a ser la
+ * pestaña «Resueltos», así que hay que ABRIRLA antes de mirarlo. No es un rodeo del test: es
+ * exactamente el gesto que hace ahora el usuario, y por eso se escribe en vez de esquivarse
+ * apuntando al DOM escondido —que existe (los paneles no se desmontan, para no perder su
+ * paginación) pero está fuera del árbol de accesibilidad—.
+ */
+async function irAResueltos(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /^Resueltos/ }));
+  return screen.getByRole("region", { name: "Histórico" });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -260,7 +275,11 @@ describe("CierresAdminModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", () => {
+  it("R5: el histórico lista cierres resueltos con estado, fecha resuelta y motivo (solo lectura)", async () => {
+    // Pedido humano del 2026-08-16: el histórico es una tira de COMPROBANTES. Estado, mensajero
+    // y motivo siguen a la vista sin abrir nada —el motivo explica el estado, y por eso queda
+    // fuera del desplegable—; la fecha resuelta vive en el desglose, que se despliega.
+    const user = userEvent.setup();
     renderModule({
       historico: [
         makeResumen({
@@ -273,13 +292,20 @@ describe("CierresAdminModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Histórico" });
+    const region = await irAResueltos(user);
     expect(within(region).getByText("Rechazado")).toBeInTheDocument();
     expect(within(region).getByText("Diana Mora")).toBeInTheDocument();
-    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
     expect(within(region).getByText("Faltan evidencias")).toBeInTheDocument();
-    // Solo lectura: el botón del histórico es "Ver", sin acciones de decisión.
-    expect(within(region).getByRole("button", { name: "Ver" })).toBeInTheDocument();
+    // Solo lectura: la única acción del histórico es «Ver», sin decisión. Su nombre accesible
+    // nombra al mensajero porque la pantalla monta una tarjeta por cierre.
+    expect(
+      within(region).getByRole("button", { name: "Ver el cierre resuelto de Diana Mora" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(region).getByRole("button", { name: /^Ver detalles del cierre de Diana Mora/ }),
+    );
+    expect(within(region).getByText("2026-07-12")).toBeInTheDocument();
   });
 
   it("R8/R9: al abrir el detalle muestra los totales snapshot como string (sin reparsear)", async () => {
@@ -973,7 +999,10 @@ describe("CierresAdminModule", () => {
       ],
     });
 
-    await user.click(screen.getByRole("button", { name: "Ver" }));
+    const historico = await irAResueltos(user);
+    await user.click(
+      within(historico).getByRole("button", { name: /^Ver el cierre resuelto de/ }),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
@@ -1091,8 +1120,8 @@ describe("CierresAdminModule", () => {
     });
     renderModule({ pendientes: [makeResumen({ cierreId: "cv", estado: "vencido" })] });
 
-    // La fila `vencido` se ve con "Ver" (solo lectura del detalle).
-    await user.click(screen.getByRole("button", { name: "Ver" }));
+    // El comprobante del `vencido` ofrece «Ver» (solo lectura del detalle) junto al destrabar.
+    await user.click(screen.getByRole("button", { name: /^Ver el cierre de/ }));
     const dialog = await screen.findByRole("dialog", {
       name: "Detalle del cierre",
     });
@@ -1193,7 +1222,8 @@ describe("CierresAdminModule", () => {
 
   // ---------- Feature 109 (R31): `rechazado` del histórico rotulado como bloqueante ----------
 
-  it("R31: un 'rechazado' del histórico se rotula 'Bloqueante hasta re-solicitud' (no resuelto/cerrado)", () => {
+  it("R31: un 'rechazado' del histórico se rotula 'Bloqueante hasta re-solicitud' (no resuelto/cerrado)", async () => {
+    const user = userEvent.setup();
     renderModule({
       historico: [
         makeResumen({
@@ -1206,7 +1236,7 @@ describe("CierresAdminModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Histórico" });
+    const region = await irAResueltos(user);
     // Conserva su etiqueta "Rechazado"…
     expect(within(region).getByText("Rechazado")).toBeInTheDocument();
     // …pero se rotula BLOQUEANTE hasta que el mensajero lo re-solicite (no "resuelto").
@@ -1215,7 +1245,8 @@ describe("CierresAdminModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("R31: un 'aprobado' del histórico NO lleva el rótulo de bloqueante (es terminal)", () => {
+  it("R31: un 'aprobado' del histórico NO lleva el rótulo de bloqueante (es terminal)", async () => {
+    const user = userEvent.setup();
     renderModule({
       historico: [
         makeResumen({
@@ -1227,7 +1258,7 @@ describe("CierresAdminModule", () => {
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Histórico" });
+    const region = await irAResueltos(user);
     expect(within(region).getByText("Aprobado")).toBeInTheDocument();
     expect(
       within(region).queryByText("Bloqueante hasta re-solicitud"),

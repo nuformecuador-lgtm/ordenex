@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
 
-import type { RutaMapaOrigen } from "./ruta-mapa-tipos";
+import type { RutaMapaOrigen, RutaMapaTrazado } from "./ruta-mapa-tipos";
 
 export interface SincronizarRutaButtonProps {
   /**
@@ -21,6 +21,13 @@ export interface SincronizarRutaButtonProps {
    * negó o el navegador no expone geolocalización (R25).
    */
   onUbicacion?: (ubicacion: RutaMapaOrigen) => void;
+  /**
+   * Se invoca con la geometría de la ruta recién calculada, para que el padre la pase al
+   * mapa. Se llama siempre que la action traiga trazado — incluso con `omitida: true`, que
+   * es el caso de una sola parada (R35): no se reordena nada, pero sí se dibuja la línea.
+   * Una ruta que ya estaba al día no produce trazado nuevo, y ahí el mapa conserva el suyo.
+   */
+  onTrazado?: (trazado: RutaMapaTrazado) => void;
 }
 
 /**
@@ -42,7 +49,10 @@ function capturarUbicacion(): Promise<RutaMapaOrigen | undefined> {
   });
 }
 
-export function SincronizarRutaButton({ onUbicacion }: SincronizarRutaButtonProps) {
+export function SincronizarRutaButton({
+  onUbicacion,
+  onTrazado,
+}: SincronizarRutaButtonProps) {
   const router = useRouter();
   const toast = useToast();
   const [procesando, setProcesando] = useState(false);
@@ -61,6 +71,14 @@ export function SincronizarRutaButton({ onUbicacion }: SincronizarRutaButtonProp
       const result = await sincronizarRuta(ubicacion ? { ubicacion } : {});
       switch (result.status) {
         case "ok":
+          // El trazado se eleva ANTES del refresh: `router.refresh()` no toca el estado de
+          // cliente, así que la línea nueva sobrevive al re-render del módulo.
+          if (result.trazado) {
+            onTrazado?.({
+              encodedPolyline: result.trazado.encodedPolyline,
+              fuente: result.trazado.fuente,
+            });
+          }
           toast.success(
             result.omitida ? "La ruta ya estaba al día." : "Ruta sincronizada.",
           );

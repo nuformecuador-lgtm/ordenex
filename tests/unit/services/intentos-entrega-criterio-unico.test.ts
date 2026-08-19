@@ -120,6 +120,10 @@ function devueltaSlaRow(): DevueltaSlaRow {
     mensajeroId: "m1",
     causa: "not_found",
     ancladaAt: new Date(NOW.getTime() - 25 * HORA), // ventana de 24h vencida
+    // 2026-08-19 (feature 239/T3.3): el DTO gana `origenAncla`, obligatorio a proposito para que
+    // ningun productor pueda dejar la rama del ancla sin decir cual es. Es un campo mas del
+    // objeto, NO un cambio del criterio de intento — este archivo sigue midiendo lo mismo.
+    origenAncla: "aprobacion",
   };
 }
 
@@ -211,7 +215,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     const { repo, svc } = cron(service, ordenRepo);
     const res = await svc.ejecutar(NOW);
 
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -240,7 +244,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     const { repo, svc } = cron(service, ordenRepo);
     const res = await svc.ejecutar(NOW);
 
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -260,7 +264,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
 
     const { repo, svc } = cron(service, ordenRepo);
     const res = await svc.ejecutar(NOW);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 1, escaladas: 0, omitidas: 0, legadas: 0 });
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
@@ -297,6 +301,7 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
       liberadas: 0,
       escaladas: 1,
       omitidas: 0,
+      legadas: 0, // feature 239 (T3.3): quinto conteo del resumen, no cambia el criterio
     });
     expect(repo.escalarDevueltaSla).toHaveBeenCalledTimes(1);
 
