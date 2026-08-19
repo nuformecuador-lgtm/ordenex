@@ -72,10 +72,22 @@ export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono, destinatario o
  *
  * Feature 169/R32: el BUSCADOR va PRIMERO y no cae por rol — el acotamiento por rol lo
  * impone el servicio, no la barra.
+ *
+ * Pedido humano (2026-08-19): esta misma barra la monta ahora el listado de la bodega
+ * satelite, y de ahi sale `incluirZona`. Es la MISMA razon que `incluirTienda`: al rol
+ * acotado a UNA zona no se le ofrece elegirla —un selector con un unico valor legal no
+ * informa— y su geografia ya llega recortada a esa zona por el catalogo. Que las tres claves
+ * caigan por parametro, y no por una copia de esta funcion, es lo que impide que las barras
+ * de dos superficies se separen sin que nadie lo note.
  */
 export function construirFiltrosOrdenes(
   cat: CatalogoFiltrosOrdenesDTO,
-  opts: { incluirTienda: boolean; incluirReasignables?: boolean; ahora?: Date },
+  opts: {
+    incluirTienda: boolean;
+    incluirReasignables?: boolean;
+    incluirZona?: boolean;
+    ahora?: Date;
+  },
 ): FilterDef[] {
   // `ahora` inyectable para poder fijar los rangos de los atajos en los tests.
   const ahora = opts.ahora ?? new Date();
@@ -111,6 +123,19 @@ export function construirFiltrosOrdenes(
         ]
       : [];
 
+  const zona: FilterDef[] =
+    opts.incluirZona ?? true
+      ? [
+          {
+            key: "zona_id",
+            label: "Zona",
+            kind: "multi",
+            searchPlaceholder: "Buscar zona…",
+            options: cat.zonas.map((z) => ({ value: z.id, label: z.nombre })),
+          },
+        ]
+      : [];
+
   return [
     {
       // R32: PRIMER control de la barra. `minChars` sale de la MISMA constante que valida
@@ -122,13 +147,7 @@ export function construirFiltrosOrdenes(
       minChars: BUSQUEDA_MIN_CHARS,
       placeholder: PLACEHOLDER_BUSQUEDA,
     },
-    {
-      key: "zona_id",
-      label: "Zona",
-      kind: "multi",
-      searchPlaceholder: "Buscar zona…",
-      options: cat.zonas.map((z) => ({ value: z.id, label: z.nombre })),
-    },
+    ...zona,
     ...tienda,
     {
       key: "provincia_id",

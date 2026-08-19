@@ -140,8 +140,13 @@ export function NovedadAcciones({
     ...(puedeHabilitar
       ? [{ etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) }]
       : []),
+    // Pedido humano 2026-08-19 — el botón se LLAMA «Rechazar» (etiqueta visible, tooltip y
+    // `aria-label`); antes decía «Devolver». Sólo cambia el nombre: sigue siendo la misma maqueta
+    // con el mismo handler `onDevolver` y el mismo icono, que es el que el panel del mensajero usa
+    // para su desenlace. El prop conserva su nombre porque nombra la transición que falta decidir,
+    // no el rótulo del control.
     ...(esDevuelta
-      ? [{ etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) }]
+      ? [{ etiqueta: "Rechazar", Icono: Undo2, onClick: () => onDevolver(novedad) }]
       : []),
   ];
 

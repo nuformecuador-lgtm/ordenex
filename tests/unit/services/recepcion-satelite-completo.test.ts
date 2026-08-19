@@ -83,9 +83,9 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
       {},
       { estados: ["devuelta"] },
       { estados: ["en_bodega_satelite", "por_recoger"] },
-      { cantones: ["Escazú"] },
-      { cantones: ["Escazú", "Barva"], distritos: ["San Rafael"] },
-      { estados: ["devuelta"], cantones: ["Barva"] },
+      { canton_id: ["Escazú"] },
+      { canton_id: ["Escazú", "Barva"], distrito_id: ["San Rafael"] },
+      { estados: ["devuelta"], canton_id: ["Barva"] },
     ];
 
     let conFilas = 0;
@@ -123,12 +123,12 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
   it("el alcance sale del ACTOR, no de la entrada (R4)", async () => {
     const a = repoSateliteEnMemoria();
     const conjuntoDeA = await servicio(a.repo).listarOrdenesBodegaCompleto(
-      { cantones: ["Escazú"] },
+      { canton_id: ["Escazú"] },
       SAT_A,
     );
     const b = repoSateliteEnMemoria();
     const conjuntoDeB = await servicio(b.repo).listarOrdenesBodegaCompleto(
-      { cantones: ["Escazú"] },
+      { canton_id: ["Escazú"] },
       SAT_B,
     );
     if (conjuntoDeA.status !== "ok" || conjuntoDeB.status !== "ok") throw new Error("no ok");
@@ -148,15 +148,15 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
   it("con un filtro de cantón el conjunto excluye las demás filas EN LA BASE (R11)", async () => {
     const { repo, filtros, findRecepcionSateliteCompleta } = repoSateliteEnMemoria();
     const r = await servicio(repo).listarOrdenesBodegaCompleto(
-      { cantones: ["Barva"], distritos: ["San Pedro"] },
+      { canton_id: ["Barva"], distrito_id: ["San Pedro"] },
       SAT_A,
     );
     if (r.status !== "ok") throw new Error("no ok");
 
     // El filtro VIAJA al repositorio: no se aplica despues, en memoria, sobre un conjunto que
     // ya cruzo entero. Eso es lo que R11 exige y lo que la pantalla hacia hasta hoy.
-    expect(filtros[0]!.filtro.cantonNombres).toEqual(["Barva"]);
-    expect(filtros[0]!.filtro.distritoNombres).toEqual(["San Pedro"]);
+    expect(filtros[0]!.filtro.cantonIds).toEqual(["Barva"]);
+    expect(filtros[0]!.filtro.distritoIds).toEqual(["San Pedro"]);
     // Y el servicio devuelve EXACTAMENTE lo que el repositorio le dio, sin volver a filtrar.
     const delRepo = await findRecepcionSateliteCompleta.mock.results[0]!.value;
     expect(ids(r.items)).toEqual(ids(delRepo));
@@ -260,13 +260,13 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
   it("al repositorio le llega el filtro y NADA de recorte, ni la página lo contamina", async () => {
     const { repo, filtros, findRecepcionSateliteCompleta } =
       repoSateliteEnMemoria(ALMACEN_SATELITE);
-    await servicio(repo).listarOrdenesBodegaCompleto({ cantones: ["Escazú"] }, SAT_A);
+    await servicio(repo).listarOrdenesBodegaCompleto({ canton_id: ["Escazú"] }, SAT_A);
 
-    // Lo que viaja al repositorio son las cuatro claves del filtro y nada mas: ni `skip`, ni
-    // `take`, ni un `page` heredado del schema de la pagina.
+    // Lo que viaja al repositorio son las claves del filtro elegido y nada mas: ni `skip`, ni
+    // `take`, ni un `page` heredado del schema de la pagina. Las claves NO elegidas tampoco
+    // aparecen: el filtro que se pide es el que se aplica.
     expect(Object.keys(filtros[0]!.filtro).sort()).toEqual([
-      "cantonNombres",
-      "distritoNombres",
+      "cantonIds",
       "estatusValues",
       "zonaId",
     ]);

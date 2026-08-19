@@ -192,10 +192,27 @@ function montar() {
   );
 }
 
-/** Abre el diálogo y elige a Ana. Es lo mínimo para que el control produzca archivo. */
+/**
+ * Abre el diálogo y deja elegida SOLO a Ana.
+ *
+ * Desde el 2026-08-19 el diálogo abre con TODOS marcados, así que «elegir a Ana» ya no es un
+ * clic sobre Ana —eso la desmarcaría—: es apagar la lista desde «Todos» y encenderla a ella.
+ */
 async function abrirYElegirAAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
-  await user.click(await screen.findByRole("checkbox", { name: "Ana Mensajera" }));
+  await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
+  await user.click(screen.getByRole("checkbox", { name: "Ana Mensajera" }));
+}
+
+/** Escribe una fecha en un control que YA trae la de hoy: sin vaciarlo primero se concatenaría. */
+async function ponerFecha(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  valor: string,
+) {
+  const control = screen.getByLabelText(label);
+  await user.clear(control);
+  await user.type(control, valor);
 }
 
 beforeEach(() => {
@@ -266,7 +283,7 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
     expect(descargarBlobMock).toHaveBeenCalledTimes(1);
     const [columnas, filas, hoja] = buildXlsxRowsMock.mock.calls[0];
     expect(hoja).toBe("Gestiones de cierres");
-    expect(columnas).toHaveLength(26);
+    expect(columnas).toHaveLength(27);
     // Cinco resultados distintos, CINCO filas, en la misma hoja y con la columna que los nombra.
     expect(filas).toHaveLength(5);
     expect(filas.map((f) => f.resultado)).toEqual([
@@ -288,9 +305,10 @@ describe("descarga detallada en cierres del día (T5.1)", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Descargar detallada por mensajero" }));
-    await user.click(await screen.findByRole("checkbox", { name: "Beto Mensajero" }));
-    await user.type(screen.getByLabelText("Desde"), "2026-07-01");
-    await user.type(screen.getByLabelText("Hasta"), "2026-07-31");
+    await user.click(await screen.findByRole("checkbox", { name: "Todos" }));
+    await user.click(screen.getByRole("checkbox", { name: "Beto Mensajero" }));
+    await ponerFecha(user, "Desde", "2026-07-01");
+    await ponerFecha(user, "Hasta", "2026-07-31");
     await user.click(screen.getByRole("button", { name: "Descargar Gestiones de cierres" }));
 
     await waitFor(() => expect(listarGestionesCierresAdminCompleto).toHaveBeenCalledTimes(1));

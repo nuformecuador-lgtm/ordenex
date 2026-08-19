@@ -150,14 +150,16 @@ const ORDENES: RecepcionSateliteDTO[] = [
  */
 function filtrarComoElServidor(
   ordenes: RecepcionSateliteDTO[],
-  input: { estados?: string[]; cantones?: string[]; distritos?: string[] } = {},
+  input: { estados?: string[]; canton_id?: string[]; distrito_id?: string[] } = {},
 ): RecepcionSateliteDTO[] {
   return ordenes.filter((orden) => {
     if (input.estados?.length && !input.estados.includes(orden.estatusValue)) return false;
-    if (input.cantones?.length && !input.cantones.includes(orden.cantonNombre)) return false;
-    if (input.distritos?.length) {
+    // Pedido humano (2026-08-19): la geografia viaja por ID; en este andamiaje el id de un
+    // canton es su nombre (ver `catalogoSatelite`).
+    if (input.canton_id?.length && !input.canton_id.includes(orden.cantonNombre)) return false;
+    if (input.distrito_id?.length) {
       if (orden.distritoNombre === null) return false;
-      if (!input.distritos.includes(orden.distritoNombre)) return false;
+      if (!input.distrito_id.includes(orden.distritoNombre)) return false;
     }
     return true;
   });
@@ -223,11 +225,27 @@ function botonDescarga() {
  * recorrido que `tests/unit/components/filter-component.test.tsx`: el panel no se cierra
  * al marcar, así que se reusa el `listbox` si ya está abierto.
  */
+/**
+ * PIDE un filtro en el selector de la barra. Pedido humano (2026-08-19): esta pantalla monta
+ * `BuscadorFiltros`, la barra de `/ordenes`, y ahi los filtros NO estan puestos de entrada.
+ */
+async function pedirFiltro(user: ReturnType<typeof userEvent.setup>, label: string) {
+  if (screen.queryByRole("listbox", { name: "Filtros" }) === null) {
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+  }
+  const puesto = within(await screen.findByRole("listbox", { name: "Filtros" })).getByRole(
+    "option",
+    { name: label },
+  );
+  if (puesto.getAttribute("aria-selected") !== "true") await user.click(puesto);
+}
+
 async function filtrarPor(
   user: ReturnType<typeof userEvent.setup>,
   filtro: string,
   opcion: string,
 ) {
+  await pedirFiltro(user, filtro);
   const abierto = screen.queryByRole("listbox", { name: filtro });
   const lista =
     abierto ??
@@ -280,7 +298,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
 
     // Se filtra por cantón: la tabla se queda con dos filas…
     // La etiqueta del cantón desambigua con la provincia (feature 117).
-    await filtrarPor(user, "Cantón", "Pococí (Limón)");
+    await filtrarPor(user, "Cantón", "Pococí");
     const tabla = screen.getByRole("table", { name: "Órdenes de la bodega" });
     // El conteo NO basta como ancla: durante la carga el `DataTable` pinta un `<tr>` con
     // `role="status"` («Cargando») y filas skeleton `aria-hidden` que no cuentan como `row`,
@@ -349,7 +367,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     const user = userEvent.setup();
     renderModulo();
 
-    await filtrarPor(user, "Cantón", "Pococí (Limón)");
+    await filtrarPor(user, "Cantón", "Pococí");
     const tabla = screen.getByRole("table", { name: "Órdenes de la bodega" });
     await waitFor(() => {
       expect(within(tabla).getAllByRole("row")).toHaveLength(2 + 1);
@@ -367,7 +385,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     const [entrada] = completoMock.mock.calls[0] as [Record<string, unknown>];
     expect(entrada).toEqual({
       estados: ["en_bodega_satelite"],
-      cantones: ["Pococí"],
+      canton_id: ["Pococí"],
     });
     // Y el recorte de página NO contamina la lectura del conjunto: pedir `page`/`pageSize`
     // aquí sería descargar una página con otro nombre (y el borde lo rechazaría, R17).
@@ -384,7 +402,7 @@ describe("Órdenes de la bodega satélite · descarga", () => {
     const user = userEvent.setup();
     renderModulo();
 
-    await filtrarPor(user, "Cantón", "Pococí (Limón)");
+    await filtrarPor(user, "Cantón", "Pococí");
     const tabla = screen.getByRole("table", { name: "Órdenes de la bodega" });
     await waitFor(() => {
       expect(within(tabla).getAllByRole("row")).toHaveLength(2 + 1);

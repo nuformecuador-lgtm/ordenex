@@ -90,12 +90,19 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
     const filas = await tx.tarifa.findMany({
       where: { tiendaId: { in: unicas }, deletedAt: null },
       orderBy: { createdAt: "desc" },
-      select: { id: true, tiendaId: true, ...TARIFA_SELECT },
+        // `fulfillment` va SOLO en el camino del snapshot (2026-08-19): `cierre_detail` lo
+      // congela para mostrarlo, pero no es una entrada de la formula y por eso no esta en
+      // `TARIFA_SELECT` ni en `toTarifaVigente`.
+      select: { id: true, tiendaId: true, fulfillment: true, ...TARIFA_SELECT },
     });
     // `orderBy createdAt desc` + primera aparicion por tienda = la mas reciente (R22).
     for (const f of filas) {
       if (out.get(f.tiendaId) !== null) continue;
-      out.set(f.tiendaId, { tarifaId: f.id, ...toTarifaVigente(f) });
+      out.set(f.tiendaId, {
+        tarifaId: f.id,
+        fulfillment: f.fulfillment.toFixed(2),
+        ...toTarifaVigente(f),
+      });
     }
     return out;
   }

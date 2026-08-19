@@ -6,6 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 // "Gestionar esta orden") se muestran y se ocultan como un acordeón, CON animación en los
 // dos sentidos.
 //
+// Vive en `hooks/` desde el pedido humano del 2026-08-19, que sumó un tercer consumidor
+// fuera de `/mis-asignaciones`: el compositor del hilo de notas (`components/shared/
+// HiloNotasOrden`). Un componente compartido no puede importar de la carpeta privada de una
+// ruta, y duplicar el hook habría dejado dos acordeones que se desincronizan al primer ajuste.
+//
 // El contenido se DESMONTA al cerrar (no basta con `hidden`): dentro vive el escáner QR, y
 // un escáner montado a escondidas es justo el bug que ya se arregló una vez (la cámara
 // encendida detrás de la pantalla). Por eso el cierre tiene dos tramos: primero corre la

@@ -275,7 +275,10 @@ describe("R19 — el bundle del panel no arrastra runtime de servidor", () => {
  */
 const SITIOS_DE_PRESENTACION: { ruta: string; ancla: string }[] = [
   { ruta: "app/(app)/cierre-dia/_components/CierreDiaModule.tsx", ancla: "desglosePantalla" },
-  { ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx", ancla: "desglosePantalla" },
+  // 2026-08-19: las dos tablas del detalle ya no pintan la celda concatenada, sino una columna
+  // por medio de pago. El ancla cambia con ella: lo que R23 vigila es que el dato salga del
+  // DESGLOSE y no del campo escalar, y `montoPorMetodo` es la puerta por la que sale ahora.
+  { ruta: "app/(app)/cierres-admin/_components/cierre-detalle-shared.tsx", ancla: "montoPorMetodo" },
   { ruta: "app/(app)/cierres-admin/_components/cierre-factura.tsx", ancla: "desglosePantalla" },
 ];
 
@@ -314,9 +317,28 @@ describe("R23 — la presentación no lee `metodoPago` de la gestión", () => {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
 const MODULO_DE_CAPTURA = "app/(app)/mis-asignaciones/_components/desglose-captura.ts";
-const MODULOS_DE_DESCARGA = [
-  "app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas.ts",
-  "app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas.ts",
+// El ancla es POR MÓDULO desde 2026-08-19: el cierre del día del mensajero sigue con la celda
+// concatenada (`desgloseDescarga`), y las descargas del admin pasaron a una columna por medio
+// de pago (`celdasMediosPago`, que declara y puebla `medios-pago-descarga-columnas.ts`). Un
+// ancla única obligaría a que los dos caminos formatearan igual, que es justo lo que dejó de
+// ser cierto.
+const MODULOS_DE_DESCARGA: { ruta: string; ancla: string }[] = [
+  {
+    ruta: "app/(app)/cierre-dia/_components/cierre-dia-descarga-columnas.ts",
+    ancla: "desgloseDescarga(",
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/cierre-gestiones-descarga-columnas.ts",
+    ancla: "celdasMediosPago(",
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/cierres-gestiones-fundida-descarga-columnas.ts",
+    ancla: "montoPorMetodo(",
+  },
+  {
+    ruta: "app/(app)/cierres-admin/_components/medios-pago-descarga-columnas.ts",
+    ancla: "montoPorMetodo(",
+  },
 ];
 
 /**
@@ -415,16 +437,14 @@ describe("R11 — el módulo de captura no hace aritmética de coma flotante con
   });
 });
 
-describe("R31 — los dos módulos de descarga siguen siendo MONEY-SAFE", () => {
-  for (const ruta of MODULOS_DE_DESCARGA) {
+describe("R31 — los módulos de descarga siguen siendo MONEY-SAFE", () => {
+  for (const { ruta, ancla } of MODULOS_DE_DESCARGA) {
     describe(ruta, () => {
       const codigo = quitarComentarios(fuente(ruta));
 
       it("CONTROL DE NO-VACUIDAD: existe, tiene cuerpo y proyecta el desglose", () => {
-        expect(codigo.length).toBeGreaterThan(1000);
-        expect(codigo, "ya no concatena el desglose en la celda escalar").toContain(
-          "desgloseDescarga(",
-        );
+        expect(codigo.length).toBeGreaterThan(400);
+        expect(codigo, `ya no proyecta el desglose vía \`${ancla}\``).toContain(ancla);
       });
 
       it("ni una conversión de dinero, ni un símbolo de moneda: AQUÍ no hay excepción", () => {

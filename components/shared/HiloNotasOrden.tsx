@@ -1,11 +1,12 @@
 "use client";
 
-import { useId, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useSeccionColapsable } from "@/hooks/useSeccionColapsable";
 import {
   CUERPO_MAX,
   type BorrarNotaResult,
@@ -54,6 +55,9 @@ const TEXTOS = {
   placeholder: "Contá qué pasa con esta orden…",
   publicar: "Publicar nota",
   publicando: "Publicando…",
+  /** Pedido humano del 2026-08-19: el compositor se pide, no ocupa sitio por defecto. */
+  agregar: "Agregar nota",
+  cancelar: "Cancelar",
   eliminar: "Eliminar",
   eliminada: "Nota eliminada",
   propia: "Vos",
@@ -126,6 +130,17 @@ export interface HiloNotasOrdenProps {
   onRefrescar: () => void | Promise<void>;
   /** Encabezado del bloque; cada pantalla nombra a su contraparte (i18n-ready). */
   titulo?: string;
+  /**
+   * Pedido humano del 2026-08-19 — con `true`, el bloque enseña LAS NOTAS y un boton
+   * «Agregar nota»; el compositor no se pinta hasta pedirlo, y entonces se despliega con
+   * animacion. Es lo que quiere el panel de gestion del mensajero, donde el hilo es una
+   * seccion mas de una pantalla larga que se usa en la calle y el area de texto siempre
+   * abierta empuja el resto fuera de vista.
+   *
+   * Default `false`: en una pantalla DEDICADA a las notas (el modal de `/novedades`) el
+   * compositor abierto es justo lo que se fue a buscar, y esconderlo seria un clic de mas.
+   */
+  compositorColapsado?: boolean;
 }
 
 export function HiloNotasOrden({
@@ -136,14 +151,32 @@ export function HiloNotasOrden({
   onBorrar,
   onRefrescar,
   titulo = TEXTOS.tituloPorDefecto,
+  compositorColapsado = false,
 }: Readonly<HiloNotasOrdenProps>) {
   const compositorId = useId();
   const contadorId = `${compositorId}-contador`;
+  const formId = `${compositorId}-form`;
   const [borrador, setBorrador] = useState("");
   const [enviando, setEnviando] = useState(false);
   /** Id de la nota que se está borrando (null = ninguna): deshabilita SU botón, no todos. */
   const [borrandoId, setBorrandoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Pedido humano del 2026-08-19 — el compositor como acordeón. Sin `compositorColapsado`
+   * arranca ABIERTO y no se pinta ningún disparador: el bloque es el mismo de siempre, y el
+   * hook se limita a devolver `abierta`/`montada` en `true`.
+   */
+  const compositor = useSeccionColapsable(!compositorColapsado);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Abrir el compositor deja el cursor dentro: quien pulsó «Agregar nota» ya dijo que va a
+  // escribir, y un área de texto que aparece sin foco pide un segundo clic. Solo cuando el
+  // acordeón está en juego — con el compositor siempre abierto, tomar el foco al montar la
+  // pantalla movería el scroll sin que nadie lo pidiera.
+  useEffect(() => {
+    if (!compositorColapsado || !compositor.abierta) return;
+    textareaRef.current?.focus();
+  }, [compositorColapsado, compositor.abierta]);
 
   const cuerpoLimpio = borrador.trim();
   // El vacío tras recortar lo rechaza el service (R6); aquí solo se evita el viaje inútil.
@@ -164,6 +197,9 @@ export function HiloNotasOrden({
         return;
       }
       setBorrador("");
+      // Publicada, la nota ya está en la lista: el compositor vuelve a plegarse y la
+      // pantalla queda enseñando el hilo, que es lo que se vino a mirar.
+      if (compositorColapsado) compositor.cerrar();
       await onRefrescar(); // R17
     } catch {
       // No vacío (R29): un fallo de transporte se dice, y el borrador se conserva.
@@ -268,31 +304,77 @@ export function HiloNotasOrden({
       ) : null}
 
       {puedeEscribir ? (
-        <form onSubmit={handlePublicar} className="flex flex-col gap-1.5">
-          <Label htmlFor={compositorId}>{TEXTOS.etiquetaCompositor}</Label>
-          <Textarea
-            id={compositorId}
-            value={borrador}
-            onChange={(e) => setBorrador(e.target.value)}
-            rows={3}
-            maxLength={CUERPO_MAX}
-            placeholder={TEXTOS.placeholder}
-            aria-describedby={contadorId}
-            className="resize-none"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <span
-              id={contadorId}
-              aria-live="polite"
-              className="text-xs text-muted-foreground"
+        <div className="flex flex-col gap-2">
+          {/* Pedido humano del 2026-08-19: con el compositor plegado, lo que se ofrece es el
+              botón. Reaparece en cuanto empieza el cierre (`abierta` ya es `false` mientras
+              corre la animación de salida), así que no queda un hueco sin acción. */}
+          {compositorColapsado && !compositor.abierta ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              aria-expanded={false}
+              onClick={compositor.abrir}
             >
-              {borrador.length}/{CUERPO_MAX}
-            </span>
-            <Button type="submit" size="sm" disabled={publicarBloqueado}>
-              {enviando ? TEXTOS.publicando : TEXTOS.publicar}
+              <Plus aria-hidden="true" />
+              {TEXTOS.agregar}
             </Button>
-          </div>
-        </form>
+          ) : null}
+
+          {/* `montada` y no `abierta`: el formulario sigue en el árbol mientras corre la
+              animación de salida; con `prefers-reduced-motion` no hay tramo que sostener y
+              desaparece en el acto. */}
+          {compositor.montada ? (
+            <form
+              id={formId}
+              onSubmit={handlePublicar}
+              className={`flex flex-col gap-1.5 ${
+                compositorColapsado ? compositor.clase : ""
+              }`}
+            >
+              <Label htmlFor={compositorId}>{TEXTOS.etiquetaCompositor}</Label>
+              <Textarea
+                id={compositorId}
+                ref={textareaRef}
+                value={borrador}
+                onChange={(e) => setBorrador(e.target.value)}
+                rows={3}
+                maxLength={CUERPO_MAX}
+                placeholder={TEXTOS.placeholder}
+                aria-describedby={contadorId}
+                className="resize-none"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  id={contadorId}
+                  aria-live="polite"
+                  className="text-xs text-muted-foreground"
+                >
+                  {borrador.length}/{CUERPO_MAX}
+                </span>
+                <div className="flex items-center gap-2">
+                  {/* Cerrar NO descarta lo tecleado: el borrador se conserva, igual que
+                      cuando el servidor rechaza la publicación (R18). */}
+                  {compositorColapsado ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={enviando}
+                      onClick={compositor.cerrar}
+                    >
+                      {TEXTOS.cancelar}
+                    </Button>
+                  ) : null}
+                  <Button type="submit" size="sm" disabled={publicarBloqueado}>
+                    {enviando ? TEXTOS.publicando : TEXTOS.publicar}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          ) : null}
+        </div>
       ) : (
         /* R19: modo solo lectura. No es un compositor deshabilitado —eso prometería que en
            algún momento de esta pantalla se puede escribir—, es la ausencia del compositor

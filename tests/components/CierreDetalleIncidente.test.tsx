@@ -250,6 +250,9 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       "producto",
       "tiendaNombre",
       "montoCobrar",
+      // 2026-08-19: el monto FIJO de fulfillment de la tarifa congelada. Va en las cinco
+      // secciones, junto a «A cobrar», porque es de la ORDEN y no del resultado.
+      "fulfillment",
       "causaIncidente", // feature 158/R34 (T2.3, 2026-07-30)
       "motivo",
       "evidencia",

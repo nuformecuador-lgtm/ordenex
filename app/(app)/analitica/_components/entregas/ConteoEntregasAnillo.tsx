@@ -37,7 +37,6 @@ import { serializarFiltroEntregas } from "@/app/(app)/_components/entregas-filtr
 import { useFiltroEntregas } from "@/app/(app)/_components/filtro-entregas";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { GraficaReparto } from "@/components/private/analytics/GraficaReparto";
-import { consultarConteoEntregas } from "@/lib/actions/conteo-entregas";
 import {
   BUCKET_OTROS,
   DESENLACES,
@@ -51,7 +50,8 @@ import {
   TITULO_FILTRO_INVALIDO,
   VACIO_PANEL,
 } from "../operativo/textos";
-import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
+
+import { claveConteoEntregas, consultarConteoEntregasSwr } from "./conteo-entregas-swr";
 
 const TITULO = "Detalle gestión";
 
@@ -100,10 +100,6 @@ const UNIDAD = "conteo";
 // sellandolo dentro del productor de la cache. Volver a pintarlo es anadir una linea, no
 // rehacer la vertical.
 
-async function consultar(filtroSerializado: string): Promise<ResultadoConteoEntregas> {
-  return consultarConteoEntregas(JSON.parse(filtroSerializado) as unknown);
-}
-
 /** El mensaje de error que corresponde a cada estado que no es `ok`. `null` = no hay error. */
 function mensajeDe(resultado: ResultadoConteoEntregas | undefined, fallo: boolean): string | null {
   if (fallo) return TEXTO_ERROR_PANEL;
@@ -129,9 +125,12 @@ export function ConteoEntregasAnillo() {
   const { filtro } = useFiltroEntregas();
   const filtroSerializado = serializarFiltroEntregas(filtro);
 
+  // La clave y el fetcher salen de `conteo-entregas-swr` y NO se escriben aquí: el botón
+  // «Actualizar» lee esta MISMA entrada para pintar su sello de frescura, y dos copias de la
+  // clave se separan en silencio (ver la cabecera de aquel módulo).
   const { data, error, isLoading } = useSWR(
-    [CLAVE_TABLERO, "conteo-entregas", filtroSerializado],
-    () => consultar(filtroSerializado),
+    claveConteoEntregas(filtroSerializado),
+    () => consultarConteoEntregasSwr(filtroSerializado),
     { keepPreviousData: false, revalidateOnFocus: false },
   );
 

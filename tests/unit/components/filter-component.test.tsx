@@ -228,7 +228,9 @@ describe("FilterComponent — tipos de control (R6, R7, R13, R14)", () => {
 
     await user.type(screen.getByLabelText("Buscar en Color"), "azu");
 
+    // "Todos" —el atajo del pedido humano 2026-08-19— encabeza la lista acotada.
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
       "Azul",
     ]);
   });
@@ -500,6 +502,7 @@ describe("FilterComponent — limpieza y poda (R21, R22, R26)", () => {
     const lista = await abrirMulti(user, "Talla");
 
     expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos",
       "Roja S",
     ]);
   });

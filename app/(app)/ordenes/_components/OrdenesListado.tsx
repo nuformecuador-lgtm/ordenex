@@ -9,6 +9,7 @@ import {
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
+import { BLOQUEO_SIN_AVISO } from "@/components/shared/CeldaSeleccion";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -125,8 +126,12 @@ const ESTADO_EN_BODEGA = "en_bodega_central";
 // Motivo del bloqueo del checkbox en órdenes cuyo estado no tiene ninguna acción por
 // lote (p. ej. `rechazada`, `entregada`): con una sola tabla para todos los estados,
 // marcarlas no llevaría a ninguna acción, así que se bloquean y se explica por qué.
-const MOTIVO_SIN_ACCIONES =
-  "Este estado no tiene acciones por lote disponibles.";
+/**
+ * Estado sin acciones por lote: la fila se bloquea pero SIN aviso visible (pedido humano
+ * 2026-08-19). El «!» se reservaba para explicar un impedimento; aquí no hay impedimento
+ * que explicar, solo un estado que no participa, y repetirlo en media tabla era ruido.
+ */
+const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -308,9 +313,18 @@ export function OrdenesListado({
     setModalAbierto("deshacer-asignacion");
   }
 
+  // Señal de "desmarca todo" para la tabla: la selección vive en `OrdenesModule`, pero
+  // quien sabe que una acción por lote se llevó a cabo es esta superficie. Se incrementa
+  // junto con la revalidación —el mismo momento— y la tabla limpia sus casillas.
+  const [resetSeleccion, setResetSeleccion] = useState(0);
+
   // Revalida el listado (todas sus combinaciones de estado/página comparten el
-  // prefijo de key SWR).
+  // prefijo de key SWR) y desmarca las filas: las órdenes recién actuadas ya cambiaron
+  // de estado, así que dejarlas marcadas solo invita a repetir la acción sobre algo que
+  // ya no la admite. El lote en curso viaja en `ordenesSeleccionadas` (snapshot propio),
+  // de modo que esto NO rompe el encadenado guía → etiquetas.
   function revalidarTablas() {
+    setResetSeleccion((n) => n + 1);
     void mutate(
       (key) => Array.isArray(key) && key[0] === "ordenes:list",
       undefined,
@@ -766,6 +780,7 @@ export function OrdenesListado({
         filter={filter}
         columns={columns}
         mostrarHistorial={mostrarHistorial}
+        resetSeleccion={resetSeleccion}
         selectable={accionesLote ? haySeleccionables : false}
         bloqueoSeleccion={accionesLote ? bloqueoSeleccion : undefined}
         acciones={accionesLote ? accionesPara : undefined}

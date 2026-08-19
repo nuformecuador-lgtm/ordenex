@@ -115,7 +115,18 @@ export type CreatedPreset = (typeof CREATED_PRESETS)[number];
 // (filtro multi-estado del listado unico de `/ordenes`, que sustituyo a las tabs
 // por estado). La lista se traduce a `IN (...)` en el repositorio; una lista VACIA
 // no es valida (equivaldria a "ningun estado": el front omite el filtro en su lugar).
-export const ordenFilterSchema = z
+/**
+ * Pedido humano (2026-08-19) — el bloque de filtros SIN los dos `refine`, para poder
+ * REUSARLO por partes. La barra de `/ordenes` se aplica tambien a la bodega satelite, que
+ * toma de aqui geografia, tiempo y buscador (y NO zona ni tienda) en vez de declarar unas
+ * claves paralelas que dirian lo mismo con otro nombre. `.strict()` vive aqui: lo hereda
+ * todo lo que se derive.
+ *
+ * Un `refine` convierte el `ZodObject` en otro tipo y con el se pierden `.pick()`/`.omit()`;
+ * por eso los dos de abajo se aplican al FINAL, y quien derive de esta base los aplica a su
+ * vez con `conRefinesDeCreacion`.
+ */
+export const ordenFilterBase = z
   .object({
     status_id: z
       .union([z.string().min(1), z.array(z.string().min(1)).nonempty()])
@@ -147,20 +158,41 @@ export const ordenFilterSchema = z
     // maximo el borde responde `validation_error` SIN ejecutar ninguna consulta.
     q: z.string().trim().min(BUSQUEDA_MIN_CHARS).max(BUSQUEDA_MAX_CHARS).optional(),
   })
-  .strict()
-  // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es
-  // equivalente a la cronologica (formato de ancho fijo, mayor a menor).
-  .refine(
-    (f) => !(f.created_desde && f.created_hasta) || f.created_desde <= f.created_hasta,
-    { path: ["created_hasta"], message: "El rango de fechas esta invertido" },
-  )
-  // R40: atajo y rango son EXCLUYENTES. La UI ya lo hace inalcanzable (el control
-  // vacia uno al elegir el otro); el borde falla CERRADO en vez de inventar una
-  // precedencia silenciosa para un cliente que construya el filter a mano.
-  .refine((f) => !(f.created_preset && (f.created_desde || f.created_hasta)), {
-    path: ["created_preset"],
-    message: "Usa el atajo o el rango, no ambos",
-  });
+  .strict();
+
+/** Las tres claves temporales, tal como las validan los dos `refine` de abajo. */
+type FiltroCreacion = {
+  created_preset?: string;
+  created_desde?: string;
+  created_hasta?: string;
+};
+
+/**
+ * Las DOS reglas del filtro de tiempo (R39/R40), aplicables a cualquier schema que declare
+ * las tres claves. Se extraen para que la barra de la bodega satelite las herede en vez de
+ * volver a escribirlas: dos copias de un `refine` es la forma silenciosa de que una superficie
+ * acepte lo que la otra rechaza.
+ */
+export function conRefinesDeCreacion<T extends z.ZodType<FiltroCreacion>>(schema: T) {
+  return (
+    schema
+      // R39: rango no invertido. La comparacion lexicografica de `YYYY-MM-DD` es
+      // equivalente a la cronologica (formato de ancho fijo, mayor a menor).
+      .refine(
+        (f) => !(f.created_desde && f.created_hasta) || f.created_desde <= f.created_hasta,
+        { path: ["created_hasta"], message: "El rango de fechas esta invertido" },
+      )
+      // R40: atajo y rango son EXCLUYENTES. La UI ya lo hace inalcanzable (el control
+      // vacia uno al elegir el otro); el borde falla CERRADO en vez de inventar una
+      // precedencia silenciosa para un cliente que construya el filter a mano.
+      .refine((f) => !(f.created_preset && (f.created_desde || f.created_hasta)), {
+        path: ["created_preset"],
+        message: "Usa el atajo o el rango, no ambos",
+      })
+  );
+}
+
+export const ordenFilterSchema = conRefinesDeCreacion(ordenFilterBase);
 export type OrdenFilterInput = z.infer<typeof ordenFilterSchema>;
 
 // R30/R31/R32/R33: parametros del listado. page/pageSize enteros positivos (R32);
@@ -179,11 +211,11 @@ export const listarOrdenesSchema = z.object({
   estatusId: z.string().min(1).optional(),
   filter: ordenFilterSchema.optional(),
   sortBy: z.enum(SORT_FIELDS).default("created_at"),
-  // Pedido humano: el listado va de la orden MÁS ANTIGUA a la más nueva (`created_at asc`).
-  // Lo que primero entró es lo primero que hay que trabajar; con `desc` las órdenes viejas
-  // se hundían al final de la paginación. Es el DEFAULT: quien pase `sortDir` explícito
-  // (la API de lectura tiene el suyo) no cambia.
-  sortDir: z.enum(SORT_DIRS).default("asc"),
+  // Pedido humano (2026-08-19): el listado va de la orden MÁS NUEVA a la más antigua
+  // (`created_at desc`). Deroga el pedido anterior (`asc`, "lo que primero entró se trabaja
+  // primero"): lo que se mira a diario es lo que acaba de entrar. Es el DEFAULT: quien pase
+  // `sortDir` explícito (la API de lectura tiene el suyo) no cambia.
+  sortDir: z.enum(SORT_DIRS).default("desc"),
 });
 export type ListarOrdenesInput = z.infer<typeof listarOrdenesSchema>;
 

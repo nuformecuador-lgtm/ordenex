@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -295,6 +295,7 @@ export function CierreDiaModule({
 }: CierreDiaModuleProps) {
   const router = useRouter();
   const toast = useToast();
+  const { mutate } = useSWRConfig();
 
   // Confirmación de "Solicitar cierre"; true = modal abierto.
   const [confirmar, setConfirmar] = useState(false);
@@ -317,6 +318,18 @@ export function CierreDiaModule({
   const [detalleGrupos, setDetalleGrupos] = useState<CierreGrupos | null>(null);
   const [detalleError, setDetalleError] = useState<string | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  /**
+   * Pedido humano del 2026-08-19 — solicitar el cierre tiene que verse en «Cierres
+   * solicitados» sin recargar. `router.refresh()` a secas no alcanzaba: re-resuelve el Server
+   * Component, pero su página entra en el `useSWR` de abajo como `fallbackData`, que SWR usa
+   * una vez y no vuelve a consultar; con datos ya en caché, el cierre recién solicitado no
+   * aparecía. Se revalidan todas las páginas de la lista, no sólo la visible.
+   */
+  function refrescarListas() {
+    void mutate((clave) => Array.isArray(clave) && clave[0] === "cierre-dia:pasados");
+    router.refresh();
+  }
 
   /** Abre el visor de un cierre pasado y carga su detalle (solo lectura). */
   async function abrirDetalle(cierre: CierrePasadoDTO) {
@@ -382,7 +395,7 @@ export function CierreDiaModule({
       setConfirmar(false);
       setConfirmarVencido(false);
       setConfirmarRechazado(false);
-      router.refresh();
+      refrescarListas();
       return;
     }
     const mensaje =
@@ -414,7 +427,7 @@ export function CierreDiaModule({
       // `deshaciendo` NO se limpia: la fila se va con el refresh y su botón se
       // desmonta; re-habilitarlo solo abriría la ventana a un segundo envío que el
       // server rechazaría con "esta gestión ya fue deshecha" (R3).
-      router.refresh();
+      refrescarListas();
       return;
     }
     const mensaje =

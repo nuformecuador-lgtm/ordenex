@@ -217,6 +217,24 @@ describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => 
     expect(ultimasProps().decimals).toBe(0);
   });
 
+  // 2026-08-19 — la resolucion de la cuenta (`decimales`). countup.js redondea el valor de
+  // CADA FOTOGRAMA a `decimals` antes de formatearlo, asi que una cifra que vive entre 0 y 1
+  // —un porcentaje que llega como fraccion— no cuenta con los 0 de siempre: todos sus
+  // fotogramas valen 0 y la cifra salta de golpe. Estos dos casos fijan la puerta y su tope.
+  it("la resolucion pedida llega al contador tal cual", () => {
+    render(<KpiValorAnimado value={0.842} decimales={3} />);
+
+    expect(ultimasProps().decimals).toBe(3);
+  });
+
+  it("el dinero IGNORA la resolucion pedida y se queda en 0 (R14)", () => {
+    // La puerta no puede servir de rendija para devolver los centimos al contador de dinero:
+    // el texto ya no los muestra y recalcularlos en cada fotograma es trabajo invisible.
+    render(<KpiValorAnimado value={3500.75} moneda decimales={2} />);
+
+    expect(ultimasProps().decimals).toBe(0);
+  });
+
   it("ningun fotograma —inicial, intermedio o final— lleva parte decimal", () => {
     // Se recorre el formateador REAL que el componente le pasa al contador, con
     // el 0 del arranque, un valor intermedio y el final: es lo que el usuario ve
@@ -236,5 +254,62 @@ describe("KpiValorAnimado — el dinero se anima sin centimos (230/R14)", () => 
 
     expect(screen.getByText(norm(formatMonto(3500.75)))).toBeInTheDocument();
     expect(screen.getByText(norm("₡3.501"))).toBeInTheDocument();
+  });
+});
+
+/* ========================================================================== */
+/* Formateador propio y `prefers-reduced-motion` (2026-08-19)                  */
+/* ========================================================================== */
+
+describe("KpiValorAnimado — formateo propio y movimiento reducido", () => {
+  // El formateador propio es lo que permite montar este contador en los KPI de analítica, cuyo
+  // texto no es ni un monto ni un entero pelado: lo decide la UNIDAD de la métrica.
+  it("el formateador propio gobierna TODOS los fotogramas, no solo el último", () => {
+    const formatear = (n: number) => `${Math.round(n)} %`;
+    render(<KpiValorAnimado value={45} formatear={formatear} />);
+
+    const props = propsDeCountUp.at(-1);
+    if (props === undefined) throw new Error("el contador no llego a montarse");
+    const { formattingFn, end } = props;
+    if (formattingFn === undefined) throw new Error("el contador se monto sin formattingFn");
+    expect(formattingFn(0)).toBe("0 %");
+    expect(formattingFn(end)).toBe("45 %");
+    expect(screen.getByText("45 %")).toBeInTheDocument();
+  });
+
+  // Gana sobre `moneda`: quien pasa su formateador lo pasa entero, y media mezcla de los dos
+  // produciría un texto que no es ninguno de los dos.
+  it("el formateador propio gana sobre el modo moneda", () => {
+    render(<KpiValorAnimado value={3500} moneda formatear={(n) => `${n} ordenes`} />);
+
+    expect(screen.getByText("3500 ordenes")).toBeInTheDocument();
+  });
+
+  // R28 de la 130. Y lo que se ve NO es un cero congelado: es la cifra final puesta de una vez.
+  // Perder la animación es lo pedido; perder el dato sería un fallo.
+  it("con `prefers-reduced-motion` no monta el contador y pinta la cifra final", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((consulta: string) =>
+      ({
+        matches: consulta.includes("prefers-reduced-motion"),
+        media: consulta,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        onchange: null,
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+
+    try {
+      render(<KpiValorAnimado value={3500} formatear={(n) => `${n} ordenes`} />);
+
+      // Ni un solo montaje del contador: la cuenta la lleva `requestAnimationFrame` y ninguna
+      // regla CSS podría detenerla, así que el corte tiene que ser este.
+      expect(propsDeCountUp).toHaveLength(0);
+      expect(screen.getByText("3500 ordenes")).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });

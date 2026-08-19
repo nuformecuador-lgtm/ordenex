@@ -158,8 +158,10 @@ function repoEnMemoria(filas: FilaAlmacen[] = ALMACEN) {
       llamadas.push("findRecepcionSatelitePaginada");
       const estados = [...filtro.estatusValues];
       if (estados.length === 0) return { items: [], total: 0 };
-      const cantones = [...(filtro.cantonNombres ?? [])];
-      const distritos = [...(filtro.distritoNombres ?? [])];
+      // Pedido humano (2026-08-19): la geografía viaja por ID. Este doble describe sus filas
+      // por nombre y usa el nombre como id, igual que `catalogoSatelite`.
+      const cantones = [...(filtro.cantonIds ?? [])];
+      const distritos = [...(filtro.distritoIds ?? [])];
       const conjunto = filas
         .filter((f) => f.zonaId === filtro.zonaId)
         .filter((f) => estados.includes(f.row.estatusValue))
@@ -184,30 +186,10 @@ function repoEnMemoria(filas: FilaAlmacen[] = ALMACEN) {
     },
   );
 
-  const findRecepcionSateliteGeoByZona = vi.fn(async (zonaId: string, estatusValues: string[]) => {
-    llamadas.push("findRecepcionSateliteGeoByZona");
-    const vistos = new Set<string>();
-    const geo: { provinciaNombre: string; cantonNombre: string; distritoNombre: string | null }[] = [];
-    for (const f of filas) {
-      if (f.zonaId !== zonaId) continue;
-      if (!estatusValues.includes(f.row.estatusValue)) continue;
-      const clave = `${f.row.provinciaNombre}|${f.row.cantonNombre}|${f.row.distritoNombre}`;
-      if (vistos.has(clave)) continue;
-      vistos.add(clave);
-      geo.push({
-        provinciaNombre: f.row.provinciaNombre,
-        cantonNombre: f.row.cantonNombre,
-        distritoNombre: f.row.distritoNombre,
-      });
-    }
-    return geo;
-  });
-
   const repo = {
     findUsuarioZonaId,
     findRecepcionSateliteByZona,
     findRecepcionSatelitePaginada,
-    findRecepcionSateliteGeoByZona,
   } as unknown as IOrdenRepository;
 
   return { repo, llamadas, findRecepcionSatelitePaginada };
@@ -219,7 +201,7 @@ function repoEnMemoria(filas: FilaAlmacen[] = ALMACEN) {
  * podria comparar el DTO paginado con el del listado sin paginar. Las de sufijo IMPAR se
  * omiten del mapa a proposito: ese es el caso de `?? 0` (feature 160/R14).
  */
-function servicio(repo: IOrdenRepository, lotes?: string[][]) {
+function servicio(repo: IOrdenRepository, lotes?: string[][], ahora?: Date) {
   const historial = {
     contarIntentosEnLote: vi.fn(async (ids: string[]) => {
       lotes?.push([...ids]);
@@ -229,7 +211,11 @@ function servicio(repo: IOrdenRepository, lotes?: string[][]) {
       return new Map(pares);
     }),
   } as unknown as Pick<IOrdenHistorialService, "contarIntentosEnLote">;
-  return new RecepcionSateliteService(repo, historial);
+  // El reloj se inyecta para poder fijar el rango del atajo de antiguedad («ultimos 7 dias»
+  // se mide desde AHORA); sin `ahora` el servicio usa el del sistema, como en produccion.
+  return ahora
+    ? new RecepcionSateliteService(repo, historial, () => ahora)
+    : new RecepcionSateliteService(repo, historial);
 }
 
 function input(extra: Record<string, unknown> = {}) {
@@ -335,10 +321,13 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
             canton,
             distrito,
           });
+          // Una lista VACIA se OMITE, no viaja como `[]`: desde que la barra es la de
+          // `/ordenes`, su borde comparte la regla R32 —lista vacia = `validation_error`—
+          // porque «sin filtro» se expresa quitando la clave. Es lo que hace la barra.
           const { recorrido, total } = await recorrerPaginas(svc, SAT_A, {
-            estados: estado,
-            cantones: canton,
-            distritos: distrito,
+            ...(estado.length > 0 ? { estados: estado } : {}),
+            ...(canton.length > 0 ? { canton_id: canton } : {}),
+            ...(distrito.length > 0 ? { distrito_id: distrito } : {}),
           });
 
           // El MISMO conjunto y en el MISMO orden, no solo los mismos elementos.
@@ -362,8 +351,8 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     const svc = servicio(repoEnMemoria().repo);
 
     // «Escazú» existe en las dos zonas. Cada actor ve LO SUYO bajo el mismo valor de filtro.
-    const escazuDeA = await recorrerPaginas(svc, SAT_A, { cantones: ["Escazú"] }, 50);
-    const escazuDeB = await recorrerPaginas(svc, SAT_B, { cantones: ["Escazú"] }, 50);
+    const escazuDeA = await recorrerPaginas(svc, SAT_A, { canton_id: ["Escazú"] }, 50);
+    const escazuDeB = await recorrerPaginas(svc, SAT_B, { canton_id: ["Escazú"] }, 50);
 
     expect(escazuDeA.recorrido).toEqual(["a-02", "a-01", "a-04", "a-07", "a-09"]);
     expect(escazuDeA.recorrido.some((id) => id.startsWith("b-"))).toBe(false);
@@ -373,10 +362,10 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     expect(escazuDeB.recorrido.some((id) => id.startsWith("a-"))).toBe(false);
 
     // Un canton que solo existe en la zona del vecino no abre ninguna puerta.
-    const cartagoDeA = await recorrerPaginas(svc, SAT_A, { cantones: ["Cartago"] }, 50);
+    const cartagoDeA = await recorrerPaginas(svc, SAT_A, { canton_id: ["Cartago"] }, 50);
     expect(cartagoDeA.recorrido).toEqual([]);
     expect(cartagoDeA.total).toBe(0);
-    const cartagoDeB = await recorrerPaginas(svc, SAT_B, { cantones: ["Cartago"] }, 50);
+    const cartagoDeB = await recorrerPaginas(svc, SAT_B, { canton_id: ["Cartago"] }, 50);
     expect(cartagoDeB.recorrido).toEqual(["b-03", "b-02"]);
   });
 
@@ -566,5 +555,75 @@ describe("RecepcionSateliteService.listarOrdenesBodegaPaginado", () => {
     // Y el resto del DTO es el mismo que entrega el listado sin paginar.
     const enPantalla = await conjuntoDeLaPantalla(svc, SAT_A);
     expect(r.items[0]).toEqual(enPantalla.find((o) => o.id === "a-02"));
+  });
+});
+
+// --- Pedido humano (2026-08-19): los filtros que esta barra heredo de `/ordenes` ---------
+
+describe("RecepcionSateliteService.listarOrdenesBodegaPaginado — buscador y fecha (barra de /ordenes)", () => {
+  /** El filtro que le llego al repositorio en la primera llamada. */
+  async function filtroDe(
+    entrada: Record<string, unknown>,
+    ahora?: Date,
+  ): Promise<RecepcionSateliteFiltro> {
+    const { repo, findRecepcionSatelitePaginada } = repoEnMemoria();
+    await servicio(repo, undefined, ahora).listarOrdenesBodegaPaginado(
+      input(entrada),
+      SAT_A,
+    );
+    return findRecepcionSatelitePaginada.mock.calls[0]![0] as RecepcionSateliteFiltro;
+  }
+
+  it("el termino viaja NORMALIZADO, no como se tecleo", () => {
+    // La columna generada esta en minusculas y sin acentos; el termino tiene que llegar igual
+    // o la busqueda «no encuentra» sin que nada falle. La normalizacion es la MISMA funcion
+    // que usa `/ordenes` (`lib/utils/filtros-listado-ordenes`).
+    return expect(filtroDe({ q: "  Guápiles  " })).resolves.toMatchObject({
+      busqueda: "guapiles",
+    });
+  });
+
+  it("un termino con separadores viaja TAMBIEN en su forma solo-digitos", async () => {
+    // «8888-0000» tiene que encontrar el telefono guardado sin guiones Y la remision escrita
+    // con ellos: son dos formas de la MISMA columna, no dos filtros.
+    const filtro = await filtroDe({ q: "8888-0000" });
+    expect(filtro.busqueda).toBe("8888-0000");
+    expect(filtro.busquedaDigitos).toBe("88880000");
+  });
+
+  it("un termino ya limpio NO duplica la forma de digitos", async () => {
+    const filtro = await filtroDe({ q: "88880000" });
+    expect(filtro.busqueda).toBe("88880000");
+    expect(filtro.busquedaDigitos).toBeUndefined();
+  });
+
+  it("el atajo de antiguedad se resuelve a un rango con el huso de Costa Rica", async () => {
+    // «Ultimos 7 dias» son 7 dias CALENDARIO incluido hoy, contados desde las 00:00 de Costa
+    // Rica (UTC-6), no desde hace 168 horas ni desde medianoche UTC. El 19 de agosto a las
+    // 03:00 UTC son todavia las 21:00 del 18 en CR, asi que el septimo dia hacia atras
+    // empieza el 12 a las 06:00 UTC.
+    const filtro = await filtroDe(
+      { created_preset: "7d" },
+      new Date("2026-08-19T03:00:00.000Z"),
+    );
+    expect(filtro.creadaDesde).toEqual(new Date("2026-08-12T06:00:00.000Z"));
+    expect(filtro.creadaHasta).toBeUndefined();
+  });
+
+  it("el rango de fechas incluye el dia «hasta» entero", async () => {
+    const filtro = await filtroDe({
+      created_desde: "2026-08-01",
+      created_hasta: "2026-08-10",
+    });
+    expect(filtro.creadaDesde).toEqual(new Date("2026-08-01T06:00:00.000Z"));
+    // El borde superior es el inicio del dia SIGUIENTE y la consulta lo compara con `<`: el
+    // dia 10 entra entero, incluida una orden creada a las 23:59 de Costa Rica.
+    expect(filtro.creadaHasta).toEqual(new Date("2026-08-11T06:00:00.000Z"));
+  });
+
+  it("el alcance por zona no depende de ninguno de los dos: siguen siendo filtros", async () => {
+    const filtro = await filtroDe({ q: "guapiles", created_preset: "30d" });
+    expect(filtro.zonaId).toBe("z-a");
+    expect(filtro.estatusValues).toEqual([...ESTADOS_BODEGA_SATELITE]);
   });
 });

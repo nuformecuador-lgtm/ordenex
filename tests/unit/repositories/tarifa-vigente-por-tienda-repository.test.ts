@@ -28,6 +28,8 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
     comisionCod: new Prisma.Decimal("5"),
     ivaFlete: new Prisma.Decimal("13"),
     ivaComisionCod: new Prisma.Decimal("13"),
+    // Solo lo pide el batch (camino del snapshot): el singular no lo selecciona.
+    fulfillment: new Prisma.Decimal("300"),
     ...overrides,
   };
 }
@@ -177,7 +179,7 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifasPorTiendas (R20/R22/R23
     expect(out.get("sin-tarifa")).toBeNull();
   });
 
-  it("R8: el batch congela tambien `tarifaId` (auditoria: QUE fila se uso) + los 7 STRING", async () => {
+  it("R8: el batch congela `tarifaId` y `fulfillment` (auditoria) + los 7 STRING", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.findMany.mockResolvedValue([tarifaRow({ id: "tar1", tiendaId: "t1" })]);
 
@@ -188,6 +190,9 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifasPorTiendas (R20/R22/R23
 
     expect(out.get("t1")).toEqual({
       tarifaId: "tar1",
+      // 2026-08-19: viaja SOLO por el camino del snapshot, como `tarifaId`. No es una entrada
+      // de la formula y por eso no esta en `TarifaVigente` (lo que consume `derivarIngresoOrden`).
+      fulfillment: "300.00",
       valorFlete: "1000.00",
       valorFleteGam: "1500.00",
       valorFleteDevuelto: "400.00",

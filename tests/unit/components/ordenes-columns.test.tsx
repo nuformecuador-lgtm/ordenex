@@ -684,3 +684,4 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
     expect(fila[IDX_FULFILLMENT]).toHaveTextContent(/^₡251$/);
   });
 });
+

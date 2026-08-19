@@ -6,6 +6,7 @@ import type {
   FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
@@ -268,6 +269,27 @@ export type ForzarSolicitudVencidoServiceResult =
   | { status: "no_encontrada" }
   | { status: "conflict" };
 
+/**
+ * Pedido humano (2026-08-19) — desenlaces de la CORRECCIÓN del desglose de pago de una gestión
+ * desde el detalle de un cierre abierto.
+ *
+ *  - `forbidden`: el rol no corrige desgloses. Son maestro y admin, y NADIE más — ni siquiera
+ *    el `adminSatelite`, que sí tiene alcance para VER los cierres de su bodega: reescribir lo
+ *    que un mensajero declaró haber cobrado no es lectura de su bodega, es tocar la caja.
+ *  - `no_encontrada`: la gestión no existe, no está en un cierre, o su cierre no es del alcance.
+ *    Los tres van juntos a propósito: distinguirlos revelaría cierres ajenos.
+ *  - `conflict`: el cierre dejó de estar ABIERTO (lo aprobaron o rechazaron mientras el diálogo
+ *    estaba abierto). La corrección NO se aplica; la pantalla recarga y enseña el estado nuevo.
+ *  - `validation_error`: la suma no cuadra con lo que el mensajero declaró, o la gestión no es
+ *    una entrega con cobro. Por campo, como el resto de este borde.
+ */
+export type ActualizarPagosGestionServiceResult =
+  | { status: "ok"; gestionId: string; totales: CierreTotales }
+  | { status: "forbidden" }
+  | { status: "no_encontrada" }
+  | { status: "conflict" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
+
 export interface ICierresAdminService {
   /**
    * R2-R5/R8/R9: lista los cierres del alcance del actor (rol+zona), partidos en
@@ -380,6 +402,19 @@ export interface ICierresAdminService {
    * egreso ocurren en la MISMA transaccion que la aprobacion. Por defecto `[]`, que es el
    * camino RETROCOMPATIBLE de un cierre sin incidentes (R36).
    */
+  /**
+   * Pedido humano (2026-08-19) — corrige el reparto por método de UNA gestión de un cierre
+   * ABIERTO. Solo maestro/admin.
+   *
+   * Lo que NO puede hacer, y es la mitad del contrato: mover el total. La suma de las líneas
+   * tiene que ser EXACTAMENTE `gestion_orden.monto_recibido`, comparada en `Prisma.Decimal`
+   * contra el valor de la base —nunca contra un total que venga del cliente—. El dinero que el
+   * mensajero declaró sigue siendo el suyo; lo que cambia es en qué balde cae.
+   */
+  actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+    actor: Actor,
+  ): Promise<ActualizarPagosGestionServiceResult>;
   aprobarCierre(
     cierreId: string,
     actor: Actor,

@@ -27,7 +27,6 @@ import {
   type ListarOrdenesBodegaPaginadoResult,
   type ListarOrdenesBodegaCompletoResult,
   type ListarIdsVigentesBodegaResult,
-  type ObtenerCatalogoFiltrosSateliteResult,
   type RecibirResult,
   type RecibirLoteResult,
   type AsignarSateliteResult,
@@ -217,27 +216,6 @@ export async function listarIdsVigentesBodega(
     return service.listarIdsVigentesBodega(data, actor);
   });
   return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
-}
-
-/**
- * Feature 170 — FASE 2 (T K.2, R44/R46) — catálogo de opciones de cantón y distrito del
- * conjunto del actor, INDEPENDIENTE del recorte de página.
- *
- * Molde: `obtenerCatalogoFiltrosOrdenes` (feature 144). Lo invoca el Server Component al
- * cargar la pantalla y el resultado baja por props: no hay endpoint nuevo ni una consulta por
- * cada selección del usuario. Sin zod porque no recibe entrada — el único AppErrorShape
- * posible es UNAUTHORIZED.
- */
-export async function obtenerCatalogoFiltrosSatelite(
-  deps: RecepcionSateliteDeps = {},
-): Promise<ObtenerCatalogoFiltrosSateliteResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const service = deps.service ?? buildService();
-    return service.obtenerCatalogoFiltros(actor);
-  });
-  return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
 
 /** R3/R10/R16/R17: recibe una orden por el `num_guia` escaneado (el QR codifica /paquete/<numGuia>). */

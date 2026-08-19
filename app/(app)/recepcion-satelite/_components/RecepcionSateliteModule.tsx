@@ -12,10 +12,8 @@ import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
 import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
-import type {
-  CatalogoFiltrosSateliteDTO,
-  RecepcionSateliteDTO,
-} from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
@@ -113,10 +111,13 @@ export interface RecepcionSateliteModuleProps {
    */
   ordenesBodega: OrdenesBodegaPagina;
   /**
-   * Feature 170 — FASE 2 (T K.2, R46): opciones de cantón y distrito del CONJUNTO del
-   * actor, resueltas por su propia acción. No dependen de la página visible.
+   * Feature 170 — FASE 2 (T K.2, R46): opciones de la geografía, resueltas server-side y
+   * ajenas a la página visible.
+   *
+   * Pedido humano (2026-08-19): es el catálogo de `/ordenes`, que a este rol le llega acotado
+   * a SU zona. `null` si no cargó — la barra se monta igual y la tabla sigue viva (R64).
    */
-  catalogoFiltros: CatalogoFiltrosSateliteDTO;
+  catalogoFiltros: CatalogoFiltrosOrdenesDTO | null;
   /** Nombre de la zona del adminSatelite (para el display, R9); `null` si no tiene. */
   zonaNombre: string | null;
   /** `true` si el adminSatelite no tiene zona asignada (R5). */
@@ -405,16 +406,15 @@ export function RecepcionSateliteModule({
               (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado. */}
           <EscanerRecepcion onRecibida={() => void releerBodega()} />
           {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
-              banner con contador de nuevas + "Aceptar todas" (lote -> recibirLote con
-              todos los ids) + "Aceptar" por-orden (recibirLote con uno). Sin zona no se
-              muestran los botones (solo se listan). */}
+              banner con contador de nuevas + "Aceptar" por-orden (recibirLote con uno).
+              Sin zona no se muestran los botones (solo se listan).
+              Pedido humano del 2026-08-19: ya NO hay "Aceptar todas" — la recepción es
+              orden por orden o por guía con el escáner. */}
           <PorAceptarSection
             titulo="Por recibir"
             nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
             ordenes={porRecibir}
-            onAceptarTodas={(ids) => void aceptarRecepcion(ids)}
             onAceptarUna={(id) => void aceptarRecepcion([id])}
-            textoBotonTodas="Aceptar todas"
             textoBotonUna="Aceptar"
             vacio="No hay órdenes por recibir."
             mostrarAcciones={!sinZona}

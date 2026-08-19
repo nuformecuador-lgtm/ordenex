@@ -889,7 +889,20 @@ export interface CierreFacturaDetalleProps {
   audiencia?: CierreFacturaAudiencia;
   /** Abre el visor con la URL FIRMADA de la evidencia (nunca el storage_path). */
   onVerEvidencia?: (url: string) => void;
+  /**
+   * Pedido humano (2026-08-19): abre la corrección del desglose de pago de una gestión.
+   * Ausente = la hoja es de solo lectura, que es lo que sigue siendo en un cierre resuelto,
+   * para el rol que no corrige y en la vista del mensajero.
+   */
+  onCorregirPagos?: (g: CierreDetalleGestion) => void;
 }
+
+/**
+ * Pedido humano (2026-08-19): rótulo del acceso a la CORRECCIÓN del desglose de pago. Dice
+ * «corregir» y no «editar» a propósito — lo que se arregla es un dato mal registrado en la
+ * calle, no una preferencia—, y nombra los MÉTODOS porque el total no se toca.
+ */
+const FILA_CORREGIR_METODOS = "Corregir métodos de pago";
 
 // --- Rótulos de la tabla compacta del detalle (texto separado, i18n-ready) ---
 const FILA_GUIA_COL = "Guía";
@@ -1054,11 +1067,18 @@ function FilaGestion({
   g,
   esMensajero = false,
   onVerEvidencia,
+  onCorregirPagos,
 }: Readonly<{
   g: CierreDetalleGestion;
   /** Vista del mensajero: las dos cifras de la fila son lo RECIBIDO y SU pago. */
   esMensajero?: boolean;
   onVerEvidencia?: (url: string) => void;
+  /**
+   * Pedido humano (2026-08-19): abre la corrección del desglose de ESTA gestión. Ausente = no
+   * se ofrece, que es lo que pasa en un cierre ya resuelto, para el rol que no corrige y en la
+   * vista del mensajero. Igual que `onVerEvidencia`: el permiso no se decide aquí, se recibe.
+   */
+  onCorregirPagos?: (g: CierreDetalleGestion) => void;
 }>) {
   const [open, setOpen] = useState(false);
   const ing = g.ingresoOrdenex ?? null;
@@ -1202,6 +1222,21 @@ function FilaGestion({
                 {FILA_VER_EVIDENCIA}
               </Button>
             ) : null}
+            {/* Solo donde hay algo que repartir: una ENTREGA que cobró. Los otros resultados no
+                tienen desglose, y una entrega sin cobro no reparte cero colones entre métodos
+                (misma regla que el servidor, que rechaza las dos cosas). */}
+            {onCorregirPagos && g.resultado === "entregada" && g.pagos.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-fit"
+                aria-label={`${FILA_CORREGIR_METODOS} de la orden ${g.numRemision} · ${g.destinatario}`}
+                onClick={() => onCorregirPagos(g)}
+              >
+                {FILA_CORREGIR_METODOS}
+              </Button>
+            ) : null}
           </div>
 
           {/* Desglose auditable de la orden: de qué tarifa CONGELADA salió cada monto y
@@ -1232,6 +1267,7 @@ export function CierreFacturaDetalle({
   pagoTienda,
   audiencia = "admin",
   onVerEvidencia,
+  onCorregirPagos,
 }: Readonly<CierreFacturaDetalleProps>) {
   // Vista del MENSAJERO: la misma hoja, sin la plata de la empresa (design §7.2).
   const esMensajero = audiencia === "mensajero";
@@ -1473,6 +1509,7 @@ export function CierreFacturaDetalle({
                 g={g}
                 esMensajero={esMensajero}
                 onVerEvidencia={onVerEvidencia}
+                onCorregirPagos={onCorregirPagos}
               />
             ))
           )}

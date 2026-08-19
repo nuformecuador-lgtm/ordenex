@@ -144,14 +144,23 @@ describe("nadie escribe `busquedaTexto` (R27)", () => {
     expect(sospechosas).toEqual([]);
   });
 
-  it("en el repositorio solo aparece como criterio de LECTURA (`contains`)", () => {
+  it("en el repositorio solo aparece como criterio de LECTURA (`contains` o `LIKE`)", () => {
     // El filtro `!texto.startsWith("//")` que habia aqui se retira: era la mitigacion local de
     // que el censo leyera prosa, y ademas solo cubria el comentario de linea COMPLETA. Ahora
     // MENCIONES ya viene sin comentarios de ningun tipo (feature 209).
+    //
+    // Pedido humano (2026-08-19): la columna se lee AHORA por dos vias —el `contains` de
+    // Prisma en `/ordenes` y un `LIKE` en el SQL crudo de la bodega satelite, que va en
+    // `Prisma.sql` parametrizado—. Las dos son LECTURA, que es lo unico que esta guardia
+    // vigila: escribirla la rechazaria Postgres entera. Se admiten las dos formas y nada mas;
+    // cualquier tercera aparicion sigue poniendo esto rojo.
     const enRepo = MENCIONES.filter((m) => m.archivo === "lib/repositories/OrdenRepository.ts");
     expect(enRepo.length).toBeGreaterThan(0);
     for (const mencion of enRepo) {
-      expect(mencion.texto).toContain("contains");
+      expect(
+        mencion.texto.includes("contains") || / LIKE /.test(mencion.texto),
+        mencion.texto,
+      ).toBe(true);
     }
   });
 });

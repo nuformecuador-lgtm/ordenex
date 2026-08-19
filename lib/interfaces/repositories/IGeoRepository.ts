@@ -1,4 +1,8 @@
-import type { OpcionCatalogo, OpcionConPadre } from "@/lib/types/filtros-ordenes";
+import type {
+  GeografiaFiltrosDTO,
+  OpcionCatalogo,
+  OpcionConPadre,
+} from "@/lib/types/filtros-ordenes";
 
 // Lectura del catalogo geografico global.
 //
@@ -20,4 +24,17 @@ export interface IGeoRepository {
   listCantonesLite(): Promise<OpcionConPadre[]>;
   /** Todos los distritos `{id, nombre, padreId=cantonId}`, por nombre (R48/R49). */
   listDistritosLite(): Promise<OpcionConPadre[]>;
+
+  /**
+   * La cadena geografica ACOTADA a una zona: los distritos que la tabla puente
+   * `zona_distrito` asocia a `zonaId`, mas sus cantones y provincias ascendientes.
+   *
+   * No es una optimizacion del catalogo completo: es OTRO catalogo. El adminSatelite solo
+   * opera su zona, y ofrecerle las 491 filas del pais le deja elegir un canton que su
+   * bodega no puede tener — un filtro que siempre devuelve cero y no dice por que.
+   *
+   * La zona sale del ACTOR, nunca de la peticion. La asociacion se lee de la N:M (feature
+   * 24), que es la unica fuente de verdad desde que `distrito.zona_id` se elimino.
+   */
+  listGeografiaLitePorZona(zonaId: string): Promise<GeografiaFiltrosDTO>;
 }

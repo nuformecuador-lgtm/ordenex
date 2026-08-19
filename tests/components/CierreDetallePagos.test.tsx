@@ -117,21 +117,34 @@ const CABECERA: CierreFacturaCabecera = {
   motivoRechazo: null,
 };
 
+/** Encabezados de la tabla de una región, en el orden en que se pintan. */
+function encabezados(region: HTMLElement): string[] {
+  return within(within(region).getByRole("table"))
+    .getAllByRole("columnheader")
+    .map((th) => th.textContent?.trim() ?? "");
+}
+
 /**
- * Texto de la celda «Método» de la primera fila de una tabla, localizada por el ÍNDICE de su
+ * Texto de la celda de UN MEDIO DE PAGO en la primera fila, localizada por el ÍNDICE de su
  * cabecera y no por posición fija: así el caso sigue diciendo la verdad si mañana se añade
  * una columna antes, y un `getByText("—")` no puede confundirse con el "—" de otra celda.
  */
-function celdaMetodo(region: HTMLElement): string {
+function celdaMedio(region: HTMLElement, encabezado: string): string {
   const tabla = within(region).getByRole("table");
-  const encabezados = within(tabla)
-    .getAllByRole("columnheader")
-    .map((th) => th.textContent?.trim() ?? "");
-  const indice = encabezados.indexOf("Método");
-  expect(indice).toBeGreaterThanOrEqual(0);
+  const indice = encabezados(region).indexOf(encabezado);
+  expect(indice, `no existe la columna «${encabezado}»`).toBeGreaterThanOrEqual(0);
   const filas = within(tabla).getAllByRole("row");
   const celdas = within(filas[1]).getAllByRole("cell");
   return celdas[indice].textContent?.trim() ?? "";
+}
+
+/** Las tres celdas de medios de pago de la primera fila, en el orden de las columnas. */
+function celdasDeMedios(region: HTMLElement): [string, string, string] {
+  return [
+    celdaMedio(region, "Efectivo"),
+    celdaMedio(region, "SINPE"),
+    celdaMedio(region, "Transferencia"),
+  ];
 }
 
 function renderTabla(grupos: CierreGrupos) {
@@ -155,16 +168,40 @@ afterEach(() => {
   cleanup();
 });
 
-describe("Feature 213 — desglose de pago en la tabla del detalle (cierre-detalle-shared)", () => {
-  it("R20: una sola línea se ve EXACTAMENTE igual que antes: la etiqueta a secas, sin monto", () => {
+describe("Detalle del cierre — UNA COLUMNA POR MEDIO DE PAGO (cierre-detalle-shared)", () => {
+  // Sustituye a los casos de la feature 213 que probaban la celda única «Método» con el
+  // desglose concatenado. Lo que se afirma sigue siendo lo mismo (R23/R25): lo pintado sale
+  // del DESGLOSE y no del campo escalar, y los nombres salen de `METODO_LABEL`. Lo que cambia
+  // es dónde: el medio es ahora el ENCABEZADO de la columna y la celda lleva solo su monto.
+  //
+  // El comprobante de factura NO cambió: sigue con la celda concatenada y sus casos, abajo.
+
+  it("ya no existe la columna «Método»: los medios son tres columnas", () => {
+    const region = renderTabla(
+      gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
+    );
+    const cabeceras = encabezados(region);
+
+    expect(cabeceras).not.toContain("Método");
+    // En el orden de declaración del enum, que es el del DTO (R24). Es lo que permite leer la
+    // tabla en columna: la posición no depende de por dónde cobró cada gestión.
+    expect(cabeceras.filter((c) => ["Efectivo", "SINPE", "Transferencia"].includes(c))).toEqual([
+      "Efectivo",
+      "SINPE",
+      "Transferencia",
+    ]);
+  });
+
+  it("una sola línea pone su monto en SU columna y deja las otras dos en «—»", () => {
     const region = renderTabla(
       gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
     );
 
-    expect(celdaMetodo(region)).toBe("SINPE");
+    // El monto va en la moneda de configuración, como el resto del dinero de la tabla.
+    expect(celdasDeMedios(region)).toEqual(["—", "₡8.000", "—"]);
   });
 
-  it("R21: dos líneas se ven las DOS, cada una con su monto en la moneda de configuración", () => {
+  it("dos líneas se ven las DOS, cada una en su columna", () => {
     const region = renderTabla(
       gruposConEntrega({
         pagos: [
@@ -174,21 +211,22 @@ describe("Feature 213 — desglose de pago en la tabla del detalle (cierre-detal
       }),
     );
 
-    expect(celdaMetodo(region)).toBe("Efectivo ₡5.000 + Transferencia ₡3.000");
+    expect(celdasDeMedios(region)).toEqual(["₡5.000", "—", "₡3.000"]);
   });
 
-  it("R22/R23: sin líneas la celda sigue siendo «—», aunque la gestión traiga el escalar", () => {
-    // El escalar SIGUE VIVO en el DTO (R32) y aquí vale `SINPE`: si la celda lo leyera,
-    // este caso pintaría «SINPE». Es la contraprueba de que la presentación deriva del
-    // DESGLOSE (R23).
+  it("R22/R23: sin líneas las tres celdas son «—», aunque la gestión traiga el escalar", () => {
+    // El escalar SIGUE VIVO en el DTO (R32) y aquí vale `SINPE`: si alguna celda lo leyera,
+    // este caso pintaría un monto bajo SINPE. Es la contraprueba de que la presentación
+    // deriva del DESGLOSE (R23).
     const region = renderTabla(gruposConEntrega({ metodoPago: "SINPE", pagos: [] }));
 
-    expect(celdaMetodo(region)).toBe("—");
+    expect(celdasDeMedios(region)).toEqual(["—", "—", "—"]);
   });
 
-  it("R24: se pinta el ORDEN del DTO, no el alfabético", () => {
-    // Orden alfabético de las etiquetas: Efectivo, SINPE, Transferencia. El DTO las manda
-    // al revés, así que si alguien ordenara la lista el texto saldría distinto.
+  it("R24: el orden del DTO no altera en qué columna cae cada monto", () => {
+    // Con la celda concatenada el orden del DTO ERA el orden pintado. Con una columna por
+    // medio ya no puede serlo: aquí el DTO llega al revés del enum y cada monto sigue cayendo
+    // donde le toca. Eso es lo que hace sumable la columna.
     const region = renderTabla(
       gruposConEntrega({
         pagos: [
@@ -199,21 +237,21 @@ describe("Feature 213 — desglose de pago en la tabla del detalle (cierre-detal
       }),
     );
 
-    expect(celdaMetodo(region)).toBe(
-      "Transferencia ₡3.000 + SINPE ₡2.000 + Efectivo ₡3.000",
-    );
+    expect(celdasDeMedios(region)).toEqual(["₡3.000", "₡2.000", "₡3.000"]);
   });
 
-  it("R25: la etiqueta sale de METODO_LABEL (mutarla cambia lo pintado)", () => {
-    const original = METODO_LABEL.SINPE;
-    try {
-      METODO_LABEL.SINPE = "SINPE-MUTADO";
-      const region = renderTabla(
-        gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
-      );
-      expect(celdaMetodo(region)).toBe("SINPE-MUTADO");
-    } finally {
-      METODO_LABEL.SINPE = original;
+  it("R25: los encabezados SON las etiquetas de METODO_LABEL, no un literal tecleado", () => {
+    // Antes esto se probaba MUTANDO el mapa en caliente, porque la etiqueta se leía en cada
+    // render. Ahora las columnas se declaran una vez al cargar el módulo, así que mutar el
+    // mapa no cambiaría lo pintado: lo que se afirma es la igualdad con el mapa, que es la
+    // propiedad que R25 protege (una sola fuente para pantalla y archivo).
+    const region = renderTabla(
+      gruposConEntrega({ pagos: [{ metodo: "SINPE", monto: "8000.00" }] }),
+    );
+    const cabeceras = encabezados(region);
+
+    for (const etiqueta of Object.values(METODO_LABEL)) {
+      expect(cabeceras).toContain(etiqueta);
     }
   });
 });

@@ -1,4 +1,6 @@
+import type { MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { CierreResultado, CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
@@ -109,6 +111,46 @@ export interface IndemnizacionCapturada {
   gestionId: string;
   monto: string; // STRING 2 dec -> Prisma.Decimal en la impl
 }
+
+/**
+ * Pedido humano (2026-08-19) — la gestión de un cierre ABIERTO tal como la necesita la
+ * corrección del desglose de pago: lo justo para decidir, y nada más.
+ *
+ * `montoRecibido` es el TOTAL que el mensajero declaró y que la corrección NO puede mover
+ * (money-safe STRING, como el resto de montos de este contrato): el admin re-reparte ese mismo
+ * dinero entre métodos, no decide cuánto se recaudó.
+ */
+export interface GestionEditableDelCierre {
+  gestionId: string;
+  cierreId: string;
+  cierreEstado: CierreEstado;
+  resultado: CierreResultado;
+  /** `null` cuando la gestión no cobró nada (entrega sin cobro) o no es `entregada`. */
+  montoRecibido: string | null;
+  /** Las líneas VIGENTES, para que la pantalla abra el editor con lo que hay hoy. */
+  pagos: { metodo: MetodoPagoValue; monto: string }[];
+}
+
+/** Entrada de la corrección: las líneas NUEVAS, que sustituyen ENTERAS a las anteriores. */
+export interface ActualizarPagosGestionInput {
+  gestionId: string;
+  alcance: Alcance;
+  /** Actor de la corrección: queda en `gestion_orden.pagos_editados_por` (rastro). */
+  editadoPor: string;
+  /** Money-safe STRING escala 2. Un método, una línea (espejo del `@@unique`). */
+  lineas: ReadonlyArray<{ metodo: MetodoPagoValue; monto: string }>;
+}
+
+/**
+ * `updated` con los totales del cierre YA recalculados; `conflict` si el cierre dejó de estar
+ * abierto (o la gestión dejó de ser corregible) entre la lectura y la escritura;
+ * `fuera_de_alcance` si el cierre no es del alcance del actor —indistinguible de «no existe»,
+ * como en `resolverCierre`—.
+ */
+export type ActualizarPagosGestionResult =
+  | { status: "updated"; totales: CierreTotales }
+  | { status: "conflict" }
+  | { status: "fuera_de_alcance" };
 
 // Datos de la transicion guardada (aprobar/rechazar). `motivoRechazo` = null al
 // aprobar; el motivo (ya validado) al rechazar.
@@ -287,6 +329,37 @@ export interface ICierresAdminRepository {
    * el cierre sigue `solicitado` y casa el alcance (updateMany con guardia). NO toca
    * gestion_orden ni otra tabla (R15). Distingue updated/conflict/fuera_de_alcance.
    */
+  /**
+   * Pedido humano (2026-08-19) — la gestión que el admin quiere corregir, SOLO si su cierre casa
+   * el alcance (guardia en el WHERE, nunca en memoria). Fuera de alcance o inexistente -> `null`,
+   * sin distinguir: los dos casos son «aquí no hay nada tuyo». Sin cierre (`cierre_id IS NULL`)
+   * también es `null` — esta corrección es la de un cierre, no la del día en curso.
+   */
+  findGestionEditableEnCierre(
+    gestionId: string,
+    alcance: Alcance,
+  ): Promise<GestionEditableDelCierre | null>;
+  /**
+   * Pedido humano (2026-08-19) — sustituye ENTERO el desglose de pago de una gestión de un cierre
+   * ABIERTO y RECALCULA los totales del cierre, todo en UNA transacción.
+   *
+   * Las tres cosas que hace y por qué van juntas:
+   *  1. **Sella el rastro** (`pagos_editados_at`/`_por`) con un `updateMany` GUARDADO por estado
+   *     del cierre + alcance + gestión no anulada + `resultado = 'entregada'`: es el anti-TOCTOU
+   *     (mismo patrón que `resolverCierre`). `count === 0` -> nada de lo de abajo ocurre.
+   *  2. **Reemplaza las líneas** (borrar + insertar). No es un `upsert` por método: el desglose
+   *     es un CONJUNTO, y una corrección que quita un método tiene que quitar su fila.
+   *  3. **Recalcula `total_efectivo`/`_simpe`/`_transferencia`** del cierre con la MISMA función
+   *     que los congeló al solicitarlo (`computeTotales`), sobre las gestiones de ESE cierre.
+   *     Sin este paso el snapshot y las líneas dirían cosas distintas, y `total_efectivo` es la
+   *     `E` del `min(P, E)` con el que se le paga al mensajero (feature 44).
+   *
+   * `total_general` NO puede cambiar —la suma es la misma, solo cambia de balde— y eso se
+   * COMPRUEBA en la transacción: si cambiara, algo está mal y se aborta sin escribir.
+   */
+  actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+  ): Promise<ActualizarPagosGestionResult>;
   resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult>;
   /**
    * Feature 111/R16 — VALVULA DE ESCAPE: destraba un `vencido` ABANDONADO transicionandolo

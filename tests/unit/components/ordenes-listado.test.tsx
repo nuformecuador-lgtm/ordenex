@@ -115,6 +115,17 @@ function listbox(): HTMLElement {
   return screen.getByRole("listbox", { name: "Estado" });
 }
 
+/**
+ * Las opciones DEL CATÁLOGO del panel abierto. Excluye la opción «Todos» (2026-08-19), que
+ * es `role="option"` porque se marca como una más, pero no sale del catálogo: contarla aquí
+ * haría que estos casos midieran la barra en vez de los estados que ofrece.
+ */
+function opcionesDeCatalogo(): HTMLElement[] {
+  return within(listbox())
+    .getAllByRole("option")
+    .filter((o) => o.dataset.todos !== "true");
+}
+
 /** `status_id` de la ÚLTIMA llamada a `listarOrdenes` (undefined si no hay filtro). */
 function ultimoStatusId(): string | string[] | undefined {
   const calls = listarOrdenesMock.mock.calls;
@@ -170,7 +181,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     // 4 en catálogo − 1 excluido (pendiente) = 3 opciones. Se cuenta DENTRO del
     // listbox: el selector de tamaño de página de la paginación también usa
     // `<option>` y contaminaría un conteo global.
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+    expect(opcionesDeCatalogo()).toHaveLength(3);
   });
 
   it("R13: el estado por default `pendiente` NO genera opción", async () => {
@@ -201,7 +212,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     await abrirFiltro(user);
 
     // Las 3 de siempre (4 del catalogo − `pendiente`): el retirado no suma una cuarta.
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+    expect(opcionesDeCatalogo()).toHaveLength(3);
     expect(screen.queryByRole("option", { name: /fulfillment/i })).toBeNull();
   });
 
@@ -210,7 +221,7 @@ describe("OrdenesListado — opciones del filtro (R13/R14)", () => {
     renderListado(<OrdenesListado exclude={["pendiente", "devuelta"]} />);
     await abrirFiltro(user);
 
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(2);
+    expect(opcionesDeCatalogo()).toHaveLength(2);
     expect(screen.queryByRole("option", { name: OPT_DEVUELTA })).toBeNull();
   });
 

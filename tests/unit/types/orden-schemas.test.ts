@@ -112,8 +112,8 @@ describe("listarOrdenesSchema — paginacion/orden (R30/R31/R32/R33)", () => {
     if (r.success) {
       expect(r.data.page).toBe(1);
       expect(r.data.sortBy).toBe("created_at");
-      // Pedido humano: el listado va de la más ANTIGUA a la más nueva.
-      expect(r.data.sortDir).toBe("asc");
+      // Pedido humano (2026-08-19): el listado va de la más NUEVA a la más antigua.
+      expect(r.data.sortDir).toBe("desc");
     }
   });
 

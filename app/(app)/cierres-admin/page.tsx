@@ -213,6 +213,14 @@ export default async function CierresAdminPage() {
          * él, aprobar sigue funcionando exactamente como antes de esta feature.
          */
         puedeRegistrarPago={esAccesoTotal(actor.rol)}
+        /**
+         * Pedido humano (2026-08-19) — el permiso de CORREGIR el desglose de pago, resuelto
+         * server-side con el MISMO predicado que exige `CierresAdminService`. Al
+         * `adminSatelite` le da `false` A PROPÓSITO aunque vea (y apruebe) los cierres de su
+         * zona: reescribir lo que un mensajero declaró haber cobrado no es aprobar, es tocar
+         * la caja. El servicio le responde `forbidden` aunque alguien invoque la acción a mano.
+         */
+        puedeCorregirPagos={esAccesoTotal(actor.rol)}
       />
         }
       />

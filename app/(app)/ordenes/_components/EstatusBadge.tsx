@@ -148,5 +148,9 @@ export function EstatusBadge({
   const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
-  return <Badge variant={variant} className={cn(extra)}>{label}</Badge>;
+  return (
+    <Badge variant={variant} className={cn(extra)}>
+      {label}
+    </Badge>
+  );
 }
