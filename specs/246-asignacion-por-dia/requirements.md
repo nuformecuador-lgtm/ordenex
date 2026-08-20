@@ -17,6 +17,15 @@
 > diseño recomienda que lo **almacenado** sea una fecha absoluta y no una marca de «para mañana»,
 > por una razón que se explica allí.
 >
+> ⚠️ **AMPLIACIÓN DE ALCANCE — 2026-08-20.** En la puerta humana, **D7 se firmó EN CONTRA de la
+> recomendación de este spec**: el **denominador del ranking diario se corrige aquí**, no en una
+> ficha aparte. El ranking deja de contar «asignadas hoy» por `asignado_at` y pasa a contarlas por
+> **día de reparto**. Eso mete dentro de esta ficha una segunda superficie —`RankingRepository`,
+> `RankingService`, `RankingSnapshotService`— y, con ella, **el podio y `premio_ranking`**. La
+> sección **H** son los requisitos de esa parte; el registro de la decisión y su coste están en
+> **D7** y en «PUERTA HUMANA PASADA». **Con esto la ficha deja de ser `medium`** (ver el veredicto
+> al final).
+>
 > Fuentes leídas para escribir esto: `lib/services/CorteDiarioService.ts`,
 > `lib/repositories/CorteDiarioRepository.ts`, `lib/repositories/CierreDiaRepository.ts`
 > (`crearCierre`), `lib/services/GuiaAsignacionService.ts`, `lib/services/AsignacionSateliteService.ts`,
@@ -171,9 +180,8 @@ asignación transiciona (`por_recoger`), ni abrir aristas nuevas en el flujo de 
 
 **R32.** El día de reparto NO DEBE emitir webhooks nuevos ni cambiar la carga de los existentes.
 
-**R33.** El sistema DEBE seguir contando el denominador del ranking y del tablero del día por
-`asignado_at`, sin cambio alguno en esta ficha (ver **D7**: la distorsión que eso implica queda
-**nombrada**, no arreglada aquí).
+**R33.** El sistema NO DEBE escribir en `asignado_at` nada que no escriba hoy: esta ficha **lee** esa
+columna y la **acompaña**, pero no cambia quién la estampa ni cuándo.
 
 **R34.** La asignación de **recolección en tienda** queda fuera: no ofrece la elección y no se ve
 afectada. Su aislamiento respecto del corte (167/R34) DEBE seguir intacto.
@@ -184,6 +192,50 @@ afectada. Su aislamiento respecto del corte (167/R34) DEBE seguir intacto.
 
 **R35.** El sistema DEBE poder responder, para una orden con mensajero asignado, para qué día quedó
 su asignación vigente.
+
+---
+
+## H · El denominador del ranking *(D7, firmada el 2026-08-20 EN CONTRA de la recomendación)*
+
+> El ranking diario mide `entregadas / asignadas` por mensajero, y las tres primeras posiciones
+> cobran el importe de `premio_ranking`. Hoy el denominador son las órdenes cuyo `asignado_at` cae en
+> la ventana del día de Costa Rica. Esta sección lo cambia por el **día de reparto**.
+
+**R36.** El sistema DEBE contar, en el denominador del ranking de un día, las órdenes cuyo **día de
+reparto** sea ese día.
+
+**R37.** SI una orden **no tiene** día de reparto, ENTONCES el sistema DEBE contarla en el
+denominador del día de Costa Rica al que pertenece su `asignado_at`.
+
+**R38.** CUANDO una orden se asigna un día para el reparto del día siguiente, el sistema DEBE
+contarla en el denominador **del día siguiente** y NO en el del día en que se asignó.
+
+**R39.** El sistema NO DEBE cambiar el numerador: sigue siendo el número de **entregas vigentes
+registradas ese día**.
+
+**R40.** SI una orden reservada para mañana se entrega hoy, ENTONCES el sistema DEBE contar la
+entrega en el numerador de **hoy** y la orden en el denominador de **mañana**.
+
+**R41.** El sistema DEBE aplicar **el mismo criterio de denominador** en el ranking en vivo y en el
+snapshot diario congelado. Los dos DEBEN poder diferir sólo en **qué día** miran, nunca en **cómo**
+lo cuentan.
+
+**R42.** El sistema NO DEBE modificar ninguna fila de ranking ya congelada. El criterio nuevo DEBE
+aplicarse **sólo de su entrada en vigor hacia adelante**.
+
+**R43.** CUANDO el criterio nuevo entre en vigor, el denominador del día del despliegue NO DEBE
+sufrir un salto artificial por las órdenes asignadas antes de que la columna existiera.
+
+**R44.** El sistema DEBE resolver el denominador con una consulta que se apoye en un índice, sin
+recorrer la tabla de órdenes completa.
+
+**R45.** El sistema NO DEBE cambiar cómo se ordena el ranking, cómo se asigna el podio, cómo se
+redondea el porcentaje ni cómo se congela el premio: el único cambio es **qué órdenes entran en el
+denominador**.
+
+**R46.** El sistema DEBE dejar el denominador de un día **estable** antes de que la corrida que lo
+congela se ejecute: ninguna escritura posterior DEBE poder cambiar el denominador de un día ya
+congelado.
 
 ---
 
@@ -198,6 +250,12 @@ su asignación vigente.
 3. **La reserva no impide entregar hoy.** Por **D5**, un mensajero puede recoger y entregar hoy una
    orden reservada para mañana. Si algún día se quiere impedirlo, hace falta un requisito nuevo y
    una decisión nueva; no es un olvido de esta ficha.
+4. **R40 es una asimetría consciente, no un cabo suelto.** Entregar hoy algo reservado para mañana
+   **sube** el porcentaje de hoy y **baja** el de mañana, porque el numerador y el denominador de esa
+   orden caen en días distintos. El sistema **ya convive con esa asimetría** en el otro sentido —una
+   orden asignada ayer y entregada hoy—, hasta el punto de que `ranking_snapshot_fila` renuncia a
+   propósito a un `CHECK entregadas <= asignadas` y lo deja escrito en el esquema. Alinear los dos
+   lados está **descartado con motivo** en `design.md` §10-F.
 
 ---
 
@@ -206,7 +264,10 @@ su asignación vigente.
 - Una **fecha futura arbitraria** (planificación de ruta a varios días).
 - **Cambiar el día** de una orden ya asignada sin deshacer la asignación (ver **D8**).
 - Mostrar el día de reparto en el **listado general de órdenes** o exportarlo a Excel (ver **D9**).
-- Cambiar el **denominador del ranking** (ver **D7**).
+- **Recalcular los rankings ya congelados** (ver **D11**): `ranking_snapshot_dia` y
+  `ranking_snapshot_fila` son **inmutables por diseño** y esta ficha no las reescribe (R42).
+- Pagar el premio: `premio_ranking` **no emite ningún movimiento de wallet** —no existe categoría
+  para ello— así que el sistema decide **a quién se le paga**, no mueve el dinero (ver **D7**).
 - Cualquier cambio en el cierre de bodega (nivel 2), en la wallet o en las tarifas.
 
 ---
@@ -222,8 +283,18 @@ qué decide cada número.
 | **M2** | Órdenes barridas por el corte (`orden_historial_estado`, `origen_tipo='corte_sin_gestionar'`) cuyo `asignado_at` cae en las **6 h anteriores** a esa corrida. | La **población real del defecto**: cuántas asignaciones se deshizo el cron la misma noche. |
 | **M3** | Distribución horaria de las transiciones `por_recoger → en_reparto` (`origen_tipo='recoleccion'`). | Si de verdad se **carga la furgoneta de noche**. Es el número que sostiene o tumba **D5**. |
 | **M4** | Cierres `vencido` creados por noche, y cuántos de esos mensajeros tenían ≥1 orden barrida asignada esa misma tarde/noche. | Cuántos **bloqueos de la 241** son atribuibles a este defecto. Es el número que dice cuánto vale la ficha. |
+| **M5** | **Cuánto se movería el denominador**: por día, qué fracción de las asignadas tendría un día de reparto distinto del día de su `asignado_at`. Es un **PROXY** —la columna no existe todavía, así que se aproxima con «asignadas a partir de las 18:00 CR que no se desenlazaron ese mismo día»—, y va etiquetado como tal. | Si D7 mueve céntimos o mueve el podio. **Es el número que el humano pidió.** |
+| **M6** | **Cuánto dinero mueve `premio_ranking` hoy**: los tres montos vigentes × cuántos días de los últimos 30 tuvieron podio congelado. | El **importe mensual** que esta decisión pone en juego. |
+| **M7** | **¿Cambia el podio?** Recalcular el top-3 de los últimos 30 días con el denominador actual y con el proxy de M5, y contar en cuántos días el top-3 **difiere**. | Si el cambio es cosmético o si **reasigna premios**. Con M6 al lado, da el importe exacto que cambia de manos. |
+| **M8** | **`EXPLAIN`** (solo lectura, sin `ANALYZE` que escriba nada) del `groupBy` del denominador actual y del propuesto. | Si el índice nuevo de `design.md` §2.1 hace falta de verdad, o si la consulta ya era un recorrido completo antes (R44). |
 
 ⏳ **Caducan.** Son fotos. Se re-miden **justo antes de desplegar**, no antes de mergear.
+
+⚠️ **M5 y M7 son PROXIES, y hay que decirlo al pegarlos.** Miden qué habría pasado *si* bodega
+hubiera marcado «mañana» todo lo asignado a partir de las 18:00. Eso es una **hipótesis sobre una
+conducta humana que todavía no existe**, no una medición de la conducta real. Sirven para acotar el
+orden de magnitud —¿céntimos o premios?—, no para prometer un número. Presentarlos como si fueran el
+efecto real sería inventar.
 
 ---
 
@@ -287,15 +358,59 @@ de una — nunca se pierde una orden, sólo se retrasa un barrido. **Escape ya d
 §4.4): que el cliente mande también la fecha base que estaba mostrando y el servidor rechace si
 cambió. **Se implementa sólo si M1 muestra masa entre las 23:00 y la 01:00 CR.**
 
-**D7 · El denominador del ranking sigue siendo `asignado_at`. [FIRMA — toca premios]**
-**Recomendación: no tocarlo en esta ficha, pero dejarlo escrito.** El ranking diario y el tablero del
-día cuentan «asignadas hoy» por `orden.asignado_at` dentro de la ventana del día de Costa Rica
-(`RankingService`, `TableroDiaRepository`). Una orden asignada esta noche **para mañana** cuenta en
-el denominador de **hoy** y se entrega **mañana**: baja el porcentaje del mensajero sin poder
-subirlo. **Esto ya pasa hoy** cada vez que se asigna de noche; lo que hace esta ficha es volverlo
-**deliberado y frecuente**. **Qué se rompe si se arregla aquí:** se cambia quién gana
-`premio_ranking` dentro de una ficha que nadie leyó como si fuera de premios, y sin la medición que
-esa decisión merece. Va como ficha aparte, con su propio número.
+**D7 · El denominador del ranking. [FIRMA — toca premios] → FIRMADA EL 2026-08-20 *EN CONTRA* DE LA
+RECOMENDACIÓN DE ESTE SPEC.**
+
+**Lo que se firmó:** el denominador del ranking **se corrige aquí**. El ranking pasa a contar las
+asignadas de un día por **día de reparto** en vez de por `asignado_at` (sección **H**, R36-R46).
+
+**Cuál era la recomendación de este spec, y por qué** *(se deja escrita a propósito: dentro de seis
+meses alguien se preguntará por qué esta ficha arrastró el ranking, y la respuesta tiene que estar
+aquí — no como disculpa, sino como el registro de una decisión tomada con su coste delante)*:
+
+> **No tocarlo en esta ficha; nombrar la distorsión y llevarla a una ficha propia.** Tres razones:
+> (1) el ranking decide **quién ocupa el podio**, y el podio lleva el importe de `premio_ranking`:
+> es dinero real a una persona, aunque el sistema no lo mueva; (2) arrastra tres módulos
+> (`RankingRepository`, `RankingService`, `RankingSnapshotService`) y una tabla **congelada e
+> inmutable** dentro de una ficha que se leía como «un selector y un cron»; (3) la distorsión que
+> corrige **ya existe hoy** —asignar de noche ya infla el denominador del día que acaba— así que no
+> es un defecto que esta ficha **cause**, sino uno que **vuelve frecuente**: se podía arreglar
+> después sin deuda nueva.
+
+**Qué asumió el humano al firmar en contra:** que un mensajero al que le asignan a las 22:00 aparezca
+castigado en el ranking del día que acaba es un defecto **visible para él**, y dejar el selector sin
+el arreglo del denominador entrega media feature. Se acepta el coste: **ficha más cara, `high` en vez
+de `medium`, y una medición (M5/M6/M7) que hay que hacer antes de escribir la consulta.**
+
+**Consecuencias que la firma trae, y que este spec ahora recoge:**
+- **Un índice nuevo** en `orden`, la tabla más caliente (R44, `design.md` §2.1). El §2.1 original
+  decía «sin índice»; con D7 firmada, **eso deja de ser cierto** y el coste se paga en cada escritura
+  de `orden`. **M8** confirma si hace falta.
+- **Un peligro el día del despliegue** (R43): si el denominador contase sólo `fecha_reparto = X`, las
+  órdenes asignadas antes de que la columna existiera saldrían del denominador, **todos los
+  porcentajes subirían de golpe** y el podio de ese día sería falso. Lo cierra R37 y su cláusula de
+  respaldo; sin ella, el despliegue es un incidente de dinero.
+- **Una asimetría nueva** (R40), acotada en el límite declarado 4.
+
+**D10 · ¿El tablero del día sigue al ranking? [FIRMA]**
+`TableroDiaRepository` cuenta «asignadas hoy» con el **mismo** `asignado_at` y lo dice en su
+cabecera: *«es el denominador del ranking diario del mensajero y moverla mueve su pago y su premio»*.
+Si el ranking cambia de criterio y el tablero no, **dos pantallas del mismo maestro muestran dos
+cifras distintas de "asignadas hoy" el mismo día**, y ninguna de las dos está mal.
+**Recomendación: sí, que lo siga**, y en esta misma ficha: el coste es la misma cláusula en una
+consulta que ya existe, y el tablero es sólo lectura. **Qué se rompe si no:** el maestro pierde la
+capacidad de cuadrar una pantalla contra la otra, que es justo para lo que abre las dos.
+
+**D11 · ¿Se recalcula el ranking ya congelado? [FIRMA — es historia que ya se pagó]**
+**Recomendación: NO, y no se da por hecho en ninguna parte del diseño.** `ranking_snapshot_dia` y
+`ranking_snapshot_fila` son **inmutables por diseño**: la tabla no tiene `updated_at` —y el esquema
+explica que «una columna que nunca se actualiza es una invitación a actualizarla»—, la unicidad de
+`fecha` **es** la idempotencia del cron, y cada fila congela el nombre, el puesto, el umbral aplicado
+y **el importe del premio**. Recalcular hacia atrás significa **reescribir filas que ya se leyeron
+para pagar a alguien**. **Qué se rompe si se elige recalcular:** hay que decidir qué se hace con un
+premio ya entregado a quien el recálculo saca del podio —el sistema no lo puede deshacer porque nunca
+lo movió—, y hay que romper la inmutabilidad que sostiene la idempotencia del cron. Si aun así se
+quiere, **es una ficha aparte con su propia puerta humana**, no una tarea de ésta.
 
 **D8 · Cambiar el día de una orden ya asignada.**
 **Recomendación: fuera de alcance.** Hoy, para cambiar el día habría que **deshacer la asignación**
@@ -319,3 +434,68 @@ seguimiento**.
    central, satélite, o las dos?— cambia D4 de «recomendación» a «evidencia».
 2. **¿Se carga la furgoneta la noche anterior?** Es el escenario que hace que el defecto sea
    frecuente, y el que decide D5. M3 lo aproxima; una respuesta humana lo cierra.
+3. **¿El premio se paga de verdad, y cómo?** El sistema **no mueve ese dinero** (no hay categoría de
+   wallet para premios: sólo un monto y un rótulo por posición). Saber si alguien lo paga fuera del
+   sistema, y con qué frecuencia, es lo que convierte M6 en un importe real.
+
+---
+
+## PUERTA HUMANA PASADA — 2026-08-20
+
+Tres decisiones firmadas. **Dos con la recomendación de este spec, una en contra.**
+
+### Firmadas CON la recomendación
+
+- **D1 + D2 — columna nueva `orden.fecha_reparto` con fecha ABSOLUTA**, no tabla lateral y no marca
+  de «para mañana». El argumento aceptado es el del spec: **una fecha vence sola; una marca necesita
+  quien la apague**, y el día que ese apagado falle la orden **no se barre nunca** — el defecto exacto
+  que ya pagó la 235 con una fuga permanente en `/novedades`.
+- **D4 — el selector va en las DOS superficies** (bodega central y bodega satélite). Dejar el
+  satélite fuera haría que la regla dependiera de **desde qué bodega te asignaron**, y eso no se le
+  puede explicar a quien opera.
+
+### Firmada EN CONTRA de la recomendación
+
+- **D7 — el denominador del ranking SE CORRIGE EN ESTA FICHA.** La recomendación del spec era **no
+  tocarlo aquí** y llevarlo a una ficha propia, porque mueve `premio_ranking` —dinero real a una
+  persona— y arrastra tres módulos y una tabla inmutable dentro de una ficha que se leía como «un
+  selector y un cron». El texto íntegro de esa recomendación, con sus tres razones, está en **D7**:
+  se conserva a propósito para que dentro de seis meses se pueda reconstruir **por qué** esta ficha
+  arrastró el ranking.
+  **Lo que la firma cambia en el spec:** sección **H** nueva (R36-R46), R33 reescrito, el índice de
+  `design.md` §2.1 (donde antes decía «sin índice»), tres mediciones nuevas (**M5**, **M6**, **M7**)
+  más un `EXPLAIN` (**M8**), una tanda nueva en `tasks.md`, y **dos decisiones que la firma abre y que
+  siguen ABIERTAS**: **D10** (¿el tablero del día sigue al ranking?) y **D11** (¿se recalcula la
+  historia congelada? — **recomendación: no**, y en ningún sitio del diseño se da por hecho).
+
+### Veredicto de complejidad
+
+**`medium` → `high`.** El juicio, con sus razones, para que el leader lo estampe:
+
+1. **Dos subsistemas cercanos al dinero en vez de uno.** Antes: el corte. Ahora: el corte **y** el
+   ranking/podio/premio.
+2. **Un índice en la tabla más caliente**, que hay que justificar con un `EXPLAIN` (M8) en vez de con
+   una intuición.
+3. **Un peligro de dinero concentrado en el día del despliegue** (R43): sin la cláusula de respaldo
+   de R37, el podio de ese día es falso para todos a la vez.
+4. **La superficie de archivos casi se duplica** y entra una tabla **inmutable** en la conversación.
+5. **Tres mediciones nuevas, y dos son PROXIES** de una conducta humana que aún no existe: hay que
+   presentarlas con esa etiqueta y decidir con ellas igualmente.
+
+Sigue **sin** llegar a lo que este repo llama una ficha de dinero de primer orden —no emite ni un
+movimiento de wallet, no toca totales de cierre ni tarifas—, pero `medium` ya no la describe.
+
+### D11 — FIRMADA el 2026-08-20: **solo hacia adelante, no se recalcula nada**
+
+Con la recomendación del spec. El cambio del denominador del ranking **rige desde el despliegue** y
+**la historia no se toca**.
+
+Y no es sólo preferencia: es lo que el código ya impone. `ranking_snapshot_dia` / `_fila` son
+**inmutables por diseño** —sin `updated_at`, y la unicidad de `fecha` **es** la idempotencia del
+cron—, así que recalcular sería **reescribir filas que ya se leyeron para decidir a quién se le
+paga**. El cambio es prospectivo **por construcción**, no por decisión.
+
+**Consecuencia aceptada:** habrá un antes y un después en la serie del ranking. Quien compare dos
+periodos a caballo del despliegue está comparando dos criterios distintos. **Que quede escrito donde
+se vea**, no en una nota al pie.
+

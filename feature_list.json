@@ -2930,15 +2930,15 @@
       "name": "rechazo manual de la tienda y limpieza de la card de novedades",
       "spec_path": "specs/240-rechazo-manual-tienda/",
       "description": "Fullstack. `devuelta -> rechazada` hoy solo la dispara el cron: se abre la arista para adminTienda y el boton que dice «Devolver» pasa a llamarse «Rechazar» y a hacer algo. Se retira «Habilitar» de las cards que vienen de un cierre, donde hoy SI aparece. Y se pone la guardia que falta para que el boton «Notas» no vuelva. Auditoria: progress/auditoria_ayuda_tienda.md (§3, §4). Diseno: progress/design_pila_ayuda_tienda.md (F6).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/240-rechazo-manual-tienda",
       "depends_on": 239,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || El punto 12 del pedido esta hoy AL REVES: `puedeHabilitar = esDevuelta || novedad.ayuda === true`, asi que «Habilitar» aparece justo en las cards que vienen de un cierre, que es donde no debia estar. || «Devolver» sigue siendo MAQUETA desde el 2026-08-12 y ademas su nombre era equivocado: lo pedido es RECHAZAR. || La retirada del boton «Notas» se hizo SIN GUARDIA: se borraron dos tests y el mensaje de commit afirma que la cobertura se conservo. No se conservo. Nada falla si alguien lo repone."
+      "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "IN_PROGRESS el 2026-08-20, desbloqueada por la 237. Puerta humana PASADA: 47 requisitos EARS y 10 decisiones. || FIRMADO POR EL HUMANO: paridad con el cron -- sin gestion sintetica, rechazar a mano saldria GRATIS y esperar al plazo costaria, sobre el mismo paquete-- y el doble cobro del flete sale a la ficha 247. || MEDIDO: el flete de devolucion YA se cobra dos veces (orden 63050 de NUFORM, 22 y 28 de julio, los dos cierres aprobados). No lo introduce esta ficha -viene de la 99- pero le abre una segunda puerta. || Firmadas por el leader: guardia anti-maqueta con PRODUCTOR_POR_ACCION (medido: superficie-de-uso por si sola NO ve una maqueta, sus tres capas estuvieron verdes las dos semanas); motivo obligatorio y foto NO; no se puede deshacer; familia de historial propia fuera de ORIGEN_TIPOS_VISITA_REAL; y el rechazo manual NO espera al vencimiento. || EL RELOJ DE LA 239 se detiene POR CONSTRUCCION y no hay que escribir nada: findDevueltasSla filtra por estatus = devuelta, asi que al pasar a rechazada la orden sale del conjunto. La carrera con el cron la cierra la misma guarda. || HALLAZGOS PARA OTRAS FICHAS: la reprogramacion de escritorio de la 100 SI se puede deshacer hoy (D6); y la ventana fisica de la 238 pedira escanear un paquete que ya esta en bodega, cosa que ya pasa con las sinteticas de la 99 y la 100 (D7)."
     },
     {
       "id": 241,
@@ -3020,15 +3020,30 @@
       "name": "elegir para que dia es la asignacion, y que el corte lo respete",
       "spec_path": "specs/246-asignacion-por-dia/",
       "description": "Fullstack. Al asignar ordenes a un mensajero, elegir si son para el reparto de hoy o el del dia siguiente, y que el corte nocturno no barra ni genere cierre vencido por las de manana. Hoy no existe el concepto de fecha de reparto: asignar de noche hace que el cron deshaga la asignacion y cree un vencido injusto.",
-      "status": "spec_ready",
+      "status": "in_progress",
       "sdd": true,
-      "complexity": "medium",
+      "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/246-asignacion-por-dia",
       "depends_on": null,
       "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "IN_PROGRESS el 2026-08-20. Puerta humana PASADA: 46 requisitos EARS. Complejidad medium -> HIGH al entrar el ranking. || FIRMADO CON LA RECOMENDACION: columna orden.fecha_reparto con FECHA ABSOLUTA (una fecha vence sola; una marca necesita quien la apague, y ese es el defecto que pago la 235); y el selector va en LAS DOS superficies (si no, la regla depende de desde que bodega te asignaron). || FIRMADO EN CONTRA DE LA RECOMENDACION -- D7: el denominador del ranking SE CORRIGE AQUI. El spec recomendaba no tocarlo por ser dinero; queda registrado con su recomendacion original y sus razones. || D11 FIRMADA: solo hacia adelante, NO se recalcula nada. Y es lo que el codigo impone: los snapshots del ranking son inmutables por diseno -- sin updated_at, y la unicidad de la fecha ES la idempotencia del cron. || TRES CORRECCIONES QUE TRAJO LEER EL CODIGO: premio_ranking NO mueve dinero por el sistema (no hay categoria de premio en la wallet: decide a quien se paga, no paga); no hace falta corte de fecha porque el cambio es prospectivo por construccion; y aparecio un peligro que nadie vio -- si el denominador contase solo por fecha_reparto, las ordenes previas al despliegue saldrian y TODOS los porcentajes subirian a la vez, con el podio de ese dia falso. || OJO: dos de las cuatro mediciones de T0 son PROXY -- simulan una conducta humana que aun no existe. Sirven para el orden de magnitud, no para prometer un numero."
+    },
+    {
+      "id": 247,
+      "name": "el flete de devolucion se cobra dos veces cuando una devuelta acaba rechazada",
+      "spec_path": "specs/247-doble-flete-devolucion/",
+      "description": "Backend. `derivarIngresoOrden` factura `ingreso_flete_devolucion` para `devuelta` Y para `rechazada`, asi que una orden que pasa por los dos estados se lo cobra dos veces a la tienda. Existe desde la feature 99 y lo dispara el cron; la 240 le abre una segunda puerta manual.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/247-doble-flete-devolucion",
+      "depends_on": null,
+      "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-20 por pedido humano, durante la 241. || EL DEFECTO: el corte nocturno se lleva a sin_gestionar todo lo que siga en en_reparto y crea un cierre vencido. Si bodega asigna a las 10 pm, el cron deshace esa asignacion esa misma noche y el mensajero se come un vencido que no merecia. || ENGANCHA CON LA 241: alli se firmo que un vencido bloquea al mensajero para gestionar. Un vencido nacido de este defecto seria un bloqueo INJUSTO, asi que esto no es comodidad: evita que la regla castigue a quien no debe. || ALCANCE TOMADO POR EL LEADER, revisable en el spec: HOY / MANANA, que es lo minimo que resuelve el caso. Una fecha futura cualquiera es planificacion de ruta y es otra feature. || DECISIONES ABIERTAS para el spec: donde vive la fecha (columna nueva en la tabla orden, que es la mas caliente, o derivada), y que se lee para lo ya asignado (por defecto «de hoy», que no exige migracion de datos). || SPEC LISTO el 2026-08-20: 35 requisitos EARS y 9 decisiones. HALLAZGO QUE CAMBIA EL ENCUADRE: asignar deja la orden en por_recoger y el corte NO barre por_recoger, asi que el defecto solo muerde si el mensajero YA RECOGIO. || MEDIDO: el corte ha barrido 2 ordenes en toda la vida de la base (sobre 612 filas de historial) y NINGUNA se habia asignado esa tarde-noche; nadie carga la furgoneta despues de las 18:00. LECTURA ELEGIDA POR EL HUMANO: bodega ya evita asignar de noche porque sabe que el cron se lo come, asi que el cero es el sintoma del apano y no prueba de que no haga falta. La ficha no arregla un fallo: QUITA UNA RESTRICCION OPERATIVA AUTOIMPUESTA. || OJO al evaluarla: no se puede medir con el numero que la justifico. Si tras desplegarla suben las asignaciones nocturnas, eso CONFIRMA la lectura. || PENDIENTE DE FIRMA: D1 (columna orden.fecha_reparto DATE), D2 (fecha absoluta, no marca «para manana»), D4 (las dos superficies) y D7 (el ranking no se toca)."
+      "status_note": "DADA DE ALTA el 2026-08-20 durante el spec de la 240, que se comprometio a abrirla si la medicion no era cero. NO ES CERO. || MEDIDO EN PRODUCCION, con nombre: la orden 63050 de la tienda NUFORM pago el flete de devolucion DOS VECES -- 2.200 + 13 % el 2026-07-22 como `devuelta`, y otra vez el 2026-07-28 como `rechazada`, los dos cierres APROBADOS. Sobrecoste 2.486. Denominador: 1 de 16 ordenes con gestion devuelta/rechazada en cierre aprobado. || NO LO INTRODUCE LA 240 ni la 239: viene de la 99 y lo dispara el cron. Lo que hace la 240 es abrirle una segunda puerta (el rechazo manual), asi que puede volverlo frecuente. || SIN DEVOLUCION DE DINERO: el humano confirmo el 2026-08-20 que produccion se usa hoy como entorno de pruebas, asi que los importes cobrados no corresponden a operacion real. Si eso cambia, hay que re-medir ANTES de arreglar y decidir que se hace con lo ya cobrado. || Detalle y consultas en progress/medicion_240.md."
     }
   ]
 }
