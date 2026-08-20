@@ -35,9 +35,12 @@ import {
   inicioDelDiaSiguienteCREnUtc,
 } from "@/lib/utils/fecha-cr";
 
-// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
-// i18n-ready, SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre
-// `solicitado`/`vencido` sin resolver no puede gestionar NI recoger/escoger.
+// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo sobre las guías (texto fijo i18n-ready,
+// SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre `vencido` o `rechazado` sin
+// resolver no puede gestionar NI recoger/escoger.
+//
+// Feature 241 (2026-08-20): `solicitado` SALIO de esa lista. Quien ya pidio su cierre no tiene
+// nada que resolver —espera al admin— y sigue trabajando con normalidad.
 const MSG_BLOQUEADO =
   "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
 
@@ -72,12 +75,13 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    // Feature 111/R1-R4: + `findMensajerosBloqueados` — MISMO predicado derivado de la
-    // asignación (`solicitado`/`vencido`), sin duplicar la derivación ni flag persistido. La
-    // guarda de bloqueo total lo consume en gestionar/recoger/escoger.
+    // Feature 111/R1-R4 -> 241: + `findMensajerosBloqueadosParaGestion`. Lo consume la guarda de
+    // gestionar/recoger/escoger, que es EXACTAMENTE lo que ese predicado bloquea: este service ES
+    // «gestionar y cobrar». Ya no es «el mismo predicado que la asignación» — la asignación no
+    // consulta ninguno.
     private readonly ordenRepo: Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueados"
+      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
     >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
@@ -129,12 +133,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 
   /**
-   * Feature 111/R1-R4/R2 — predicado de bloqueo total: `true` si el mensajero tiene un cierre
-   * en estado bloqueante (`solicitado`/`vencido`). REUSA `findMensajerosBloqueados` (mismo
-   * helper derivado de la asignación); NO duplica la derivación ni introduce un flag persistido.
+   * Feature 111/R1-R4/R2 — predicado de bloqueo: `true` si el mensajero tiene un cierre `vencido`
+   * o `rechazado`. NO duplica la derivación ni introduce un flag persistido: la lista de estados
+   * vive entera en `OrdenRepository`, con el porqué de la asimetría escrito al lado.
+   *
+   * Feature 241: lo que este `true` impide es GESTIONAR Y COBRAR. Ese mismo mensajero sigue
+   * recibiendo asignaciones nuevas —esa puerta no la cierra nadie— y sigue pudiendo solicitar su
+   * cierre, que es la salida (111/R9, 109/R28).
    */
   private async estaBloqueado(usuarioId: string): Promise<boolean> {
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([usuarioId]);
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([usuarioId]);
     return bloqueados.has(usuarioId);
   }
 
@@ -375,10 +383,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    // Feature 111/R1/R2/R3 (obligatorio): bloqueo total — un mensajero con un cierre pendiente
-    // (`solicitado`/`vencido`) NO puede GESTIONAR. Guarda al INICIO, ANTES de cargar la orden y
-    // de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni transición, ni
-    // fila `gestion_orden`). MISMO predicado derivado de la asignación (R2). Sin PII (R20).
+    // Feature 111/R1/R2/R3 (obligatorio) -> 241: un mensajero con un cierre `vencido` o
+    // `rechazado` NO puede GESTIONAR; con `solicitado` SÍ. Guarda al INICIO, ANTES de cargar la
+    // orden y de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni
+    // transición, ni fila `gestion_orden`). Sin PII (R20).
+    //
+    // ESTA ES LA GUARDA QUE SOSTIENE LA CAJA, y por eso sobrevivió a la regla 2: si el mensajero
+    // pudiera seguir cobrando con un cierre sin resolver, el dinero del día nuevo se acumularía
+    // sin cierre al que ir y el admin estaría cuadrando una caja que ya no es todo lo que él
+    // tiene en la mano. Que ASIGNARLE órdenes no se bloquee es otra cosa: recibirlas no cobra.
     if (await this.estaBloqueado(actor.usuarioId)) {
       return { status: "conflict", motivo: MSG_BLOQUEADO };
     }

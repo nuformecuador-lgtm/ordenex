@@ -531,20 +531,19 @@ export interface RecepcionSateliteFiltro {
   busquedaDigitos?: string;
 }
 
-// Feature 41 (R17/R18) — resultado del bloqueo derivado de una bodega satelite.
-// `bloqueada = porMensajeros || porCierreBodega`. `porCierreBodega` = existe su propio
+// Feature 41 (R17/R18) -> 241 — resultado del bloqueo derivado de una bodega satelite.
+// `bloqueada = porCierreBodega`, y NADA MAS. `porCierreBodega` = existe su propio
 // CierreBodega hacia la central en `solicitado` (causa ii, bloqueo duro).
 //
-// Causa (i), mensajeros: `porMensajeros` es `true` (bloqueo duro) si AL MENOS 1 mensajero
-// de la zona tiene un cierre abierto (`solicitado`/`vencido`). Con un cierre pendiente la
-// bodega esta cuadrando caja, asi que no recibe ordenes nuevas hasta resolverlo. Una zona
-// SIN mensajeros no bloquea por (i) (no hay cierre que resolver). Es la misma regla que
-// aplica el gate de seleccion del maestro, para que lectura y escritura no diverjan.
-// Los campos informativos alimentan el detalle del aviso y el deshabilitado
-// por-mensajero en el selector:
+// Causa (i), mensajeros: `porMensajeros` es `true` si AL MENOS 1 mensajero de la zona tiene
+// un cierre ABIERTO (los tres estados que no son `aprobado`). Desde la feature 241 NO ES UN
+// BLOQUEO SINO UN AVISO: la bodega puede seguir recibiendo ordenes y asignandolas: al que
+// arrastra el cierre y a sus companeros. Bloquear por aqui congelaba la bodega entera por
+// una sola persona, que es el dolor que originó todo esto.
+// Los campos informativos alimentan el detalle del aviso:
 //   - `cierresAbiertos`         = mensajeros de la zona con un cierre abierto.
 //   - `totalMensajeros`         = mensajeros de la zona.
-//   - `mensajerosConCierreIds`  = ids de esos mensajeros (para deshabilitarlos al asignar).
+//   - `mensajerosConCierreIds`  = ids de esos mensajeros.
 // Son opcionales (aditivos): los consumidores que solo deciden el bloqueo usan los tres
 // primeros campos.
 export interface BodegaBloqueoResult {
@@ -1310,30 +1309,39 @@ export interface IOrdenRepository {
     zonaId: string | null,
   ): Promise<number>;
 
-  // --- Feature 41: bloqueo derivado en asignacion (R12/R16/R17/R23) ---
+  // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17/R23) ---
 
   /**
-   * R12/R16: de `ids`, subconjunto de mensajeros BLOQUEADOS = tienen al menos un
-   * `cierre_dia` en estado bloqueante (`solicitado` o `vencido`). `rechazado`/`aprobado`
-   * NO bloquean (R16). Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
+   * R12/R16 + feature 241 (regla firmada 2026-08-20): de `ids`, los mensajeros BLOQUEADOS
+   * PARA GESTIONAR Y COBRAR = tienen al menos un `cierre_dia` en `vencido` o `rechazado`.
+   *
+   * `solicitado` NO bloquea (es espera del admin, no del mensajero) y `aprobado` tampoco
+   * (es terminal). Y el bloqueo es SOLO de gestion: RECIBIR ASIGNACIONES no se bloquea
+   * nunca, por lo que ninguna superficie de asignacion debe pedir este metodo en su
+   * `Pick<IOrdenRepository, ...>`. El porque completo, en `OrdenRepository`.
+   *
+   * Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
    */
-  findMensajerosBloqueados(ids: string[]): Promise<Set<string>>;
+  findMensajerosBloqueadosParaGestion(ids: string[]): Promise<Set<string>>;
   /**
-   * Zonas (central y satelite) con AL MENOS 1 mensajero con un cierre abierto
-   * (`solicitado`/`vencido`): misma regla y mismos estados que la causa (i) de
-   * `existeBodegaSateliteBloqueada`, para que el gate de lectura de la UI y la guarda de
-   * escritura del servidor no diverjan. Una zona sin mensajeros nunca aparece. La
-   * pertenencia se lee de `usuario.zonaId`, no del snapshot `cierre_dia.destino_zona_id`.
+   * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado para gestionar: mismo
+   * criterio que `findMensajerosBloqueadosParaGestion`, agregado por zona. Una zona sin
+   * mensajeros nunca aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot
+   * `cierre_dia.destino_zona_id`.
+   *
+   * ⚠️ Sin consumidor de produccion desde el 2026-08-18 (feature 241 §2.6).
    */
   findZonasConMensajeroBloqueado(): Promise<Set<string>>;
   /**
-   * R17 (regla estricta F1.4-Q4): la bodega satelite de `zonaId` esta BLOQUEADA para
-   * asignar a sus mensajeros si existe CUALQUIERA de: (i) un `cierre_dia`
-   * `destino_tipo='bodega_satelite'`, `destino_zona_id=zonaId`, `estado IN
-   * ('solicitado','vencido')`; O (ii) un `cierre_bodega` `zona_id=zonaId`,
-   * `estado='solicitado'` (su propio cierre hacia la central pendiente; mismo criterio
-   * que la guardia de unicidad de la feature 40, respaldado por su indice unico parcial).
-   * Devuelve los dos flags + `bloqueada = i || ii` para que el borde distinga el motivo.
+   * R17 (regla estricta F1.4-Q4) + feature 241: la bodega satelite de `zonaId` esta
+   * BLOQUEADA si tiene un `cierre_bodega` propio `zona_id=zonaId`, `estado='solicitado'`
+   * —su cierre hacia la central, causa (ii), mismo criterio que la guardia de unicidad de
+   * la feature 40—. La causa (i) («algun mensajero suyo tiene un cierre abierto») NO
+   * bloquea: congelaba la bodega entera por una persona y recibir ordenes no se bloquea.
+   *
+   * Los flags viajan igual para que el borde distinga el motivo: `porCierreBodega` es el
+   * veto y `porMensajeros` (+ `cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`,
+   * los TRES estados abiertos) es un AVISO informativo.
    */
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 

@@ -1129,16 +1129,25 @@ describe("RepartoModule", () => {
     expect(props.paradas.map((p) => p.id)).toEqual(["g1"]);
   });
 
-  // ---------------- Feature 111 (R12/R14): bloqueo total del mensajero ----------------
+  // ---------------- Feature 111 (R12/R14): bloqueo del mensajero ----------------
+  //
+  // ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO DEL AVISO CAMBIO Y LOS LITERALES DE ESTE ARCHIVO CON EL.
+  // Decia «No puedes gestionar NI RECIBIR NUEVAS ASIGNACIONES…», y eso dejo de ser cierto: recibir
+  // asignaciones no se bloquea (regla 2, firmada). Un aviso que prohibe mas de lo que el servidor
+  // rechaza hace que el mensajero deje de intentar cosas que si puede hacer.
+  //
+  // Los literales se conservan como LITERALES —no se sustituyen por `BLOQUEO_AVISO` importado—
+  // a proposito: comparar el texto contra la constante que lo genera esta siempre verde y no
+  // afirmaria nada. La fuente unica es `lib/constants/bloqueo-mensajero.ts`.
 
-  it("R12: bloqueado muestra el aviso accionable de BLOQUEO TOTAL", () => {
+  it("R12: bloqueado muestra el aviso accionable de BLOQUEO", () => {
     renderModule({
       bloqueado: true,
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+      /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
     );
   });
 
@@ -1148,7 +1157,7 @@ describe("RepartoModule", () => {
     });
 
     expect(
-      screen.queryByText(/no puedes gestionar ni recibir nuevas asignaciones/i),
+      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
     ).not.toBeInTheDocument();
   });
 
@@ -1449,7 +1458,7 @@ describe("RepartoModule", () => {
 
     // El aviso de bloqueo total tiene precedencia.
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar ni recibir nuevas asignaciones/i,
+      /no puedes gestionar entregas ni cobrar/i,
     );
     // NO hay foco: las cards siguen en la grilla (deshabilitadas) y NO se monta el panel.
     expect(
@@ -2325,7 +2334,7 @@ describe("RepartoModule — Entregas no monta ninguna superficie de recolección
     // El aviso de bloqueo de Entregas sí está…
     expect(
       screen.getByText(
-        /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+        /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
       ),
     ).toBeInTheDocument();
     // …y no arrastra ninguna mención de la recolección con él.

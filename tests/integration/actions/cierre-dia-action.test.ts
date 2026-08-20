@@ -106,7 +106,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
     findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 67/R18
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {

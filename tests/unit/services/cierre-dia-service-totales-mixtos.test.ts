@@ -105,7 +105,7 @@ function newService(repo: ICierreDiaRepository) {
     findUsuarioZonaId: vi.fn(async () => "z-cartago"),
     findUsuarioVehiculoId: vi.fn(async () => null),
     findEstatusIdByValue: vi.fn(async () => "s-reparto"),
-    findMensajerosBloqueados: vi.fn(async () => new Set<string>()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
   } as unknown as IOrdenRepository;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
     resolvePagoTarifa: vi.fn(async () => TARIFA),

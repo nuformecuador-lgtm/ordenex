@@ -125,7 +125,7 @@ function newService(opts: {
   signedUrls?: ISignedUrlProvider;
   // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
-  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueados`.
+  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueadosParaGestion`.
   bloqueados?: string[];
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
@@ -141,13 +141,13 @@ function newService(opts: {
     ),
     // Feature 111/R5: predicado de bloqueo (default = NO bloqueado). Los tests de bloqueo lo
     // sobreescriben (Set con el mensajero) via `bloqueados`.
-    findMensajerosBloqueados: vi.fn(
+    findMensajerosBloqueadosParaGestion: vi.fn(
       async (): Promise<Set<string>> =>
         opts.bloqueados ? new Set(opts.bloqueados) : new Set<string>(),
     ),
   } as unknown as Pick<
     IOrdenRepository,
-    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueados"
+    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
   >;
   const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
@@ -1451,7 +1451,7 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
 
     expect(r.status).toBe("conflict");
     // R5 (Q2, belt-and-suspenders): usa el MISMO predicado derivado, ANTES de cualquier lectura.
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
     expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_reparto
   });

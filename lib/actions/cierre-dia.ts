@@ -64,7 +64,7 @@ export interface CierreDiaDeps {
 // Feature 41 (R21): deps del flag de bloqueo derivado del mensajero. Inyecta el repo
 // (solo el metodo de bloqueo) y el actor en tests, sin tocar el service backend.
 export interface EstadoBloqueoMensajeroDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findMensajerosBloqueados">;
+  ordenRepo?: Pick<IOrdenRepository, "findMensajerosBloqueadosParaGestion">;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -74,12 +74,21 @@ export type EstadoBloqueoMensajeroResult =
   | { status: "unauthenticated" };
 
 /**
- * Feature 41 (R21): deriva SERVER-SIDE si el mensajero (el actor) esta BLOQUEADO para
- * recibir nuevas asignaciones, reutilizando `findMensajerosBloqueados` del backend (sin flag
- * persistido). Pedido humano 2026-08-18: el criterio ya no es "tiene algun cierre no aprobado"
- * sino "tiene mas de los tolerados"; se consulta, no se re-deriva, para que el aviso de la
- * pantalla del mensajero diga exactamente lo que el servidor va a rechazar. El dato viaja por props a la vista del mensajero, que muestra el
- * aviso accionable. No muta nada; solo lectura.
+ * Feature 41 (R21) — deriva SERVER-SIDE si el mensajero (el actor) esta BLOQUEADO, reutilizando
+ * `findMensajerosBloqueadosParaGestion` del backend (sin flag persistido).
+ *
+ * FEATURE 241 (2026-08-20) — QUE DICE ESTE AVISO AHORA. Se enciende exactamente cuando el
+ * mensajero NO PUEDE GESTIONAR NI COBRAR, que desde la regla firmada es tener un cierre `vencido`
+ * o `rechazado`. Y NO se enciende con `solicitado`: ese mensajero ya hizo lo suyo y esta esperando
+ * al admin (mediana 8,2 h, p90 22,1 h), asi que sigue trabajando con normalidad.
+ *
+ * El aviso NO habla de asignaciones, y ese cambio es el punto: recibir ordenes nuevas no se
+ * bloquea nunca. El texto vive en `lib/constants/bloqueo-mensajero.ts`, compartido por los dos
+ * portales.
+ *
+ * Se CONSULTA el mismo predicado que aplica el servidor, no se re-deriva, para que el aviso diga
+ * exactamente lo que el servidor va a rechazar — que es la propiedad que la incoherencia del
+ * 2026-08-18 rompio en la bodega satelite. No muta nada; solo lectura.
  */
 export async function estadoBloqueoMensajero(
   deps: EstadoBloqueoMensajeroDeps = {},
@@ -88,7 +97,7 @@ export async function estadoBloqueoMensajero(
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el repo
     const repo = deps.ordenRepo ?? new OrdenRepository(getPrismaClient());
-    const bloqueados = await repo.findMensajerosBloqueados([actor.usuarioId]);
+    const bloqueados = await repo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
     return { status: "ok" as const, bloqueado: bloqueados.has(actor.usuarioId) };
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;

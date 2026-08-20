@@ -261,11 +261,23 @@ describe("R41 (T4.14b) — ancla TODO(146) para la campana de notificaciones", (
     "utf8",
   );
 
+  /**
+   * Valla de FIN del metodo: el comentario de seccion que va justo despues de
+   * `deshacerAsignacionLote`. No es un contrato de redaccion, es un delimitador — pero si deja de
+   * encontrarse, `indexOf` devuelve -1 y el `slice` se tragaria medio archivo en silencio. De ahi
+   * el `expect(hasta).toBeGreaterThan(desde)` de cada caso, que es lo que hace ruidoso el fallo.
+   *
+   * Feature 241 (2026-08-20): la valla cambio de texto. Decia «Feature 41: bloqueo derivado en
+   * asignacion» y ese «en asignacion» era justo lo que dejo de ser cierto — el predicado bloquea
+   * la GESTION, no la asignacion. Se actualiza aqui y la guardia sigue midiendo lo mismo.
+   */
+  const FIN_DEL_METODO = "// --- Feature 41 -> 241: bloqueo derivado para GESTIONAR";
+
   it("el ancla literal `TODO(146)` vive dentro de deshacerAsignacionLote", () => {
     const desde = fuente.indexOf("async deshacerAsignacionLote(");
     expect(desde).toBeGreaterThan(-1);
     // Fin del metodo: el comentario de seccion de la feature 41, que va justo despues.
-    const hasta = fuente.indexOf("// --- Feature 41: bloqueo derivado en asignacion", desde);
+    const hasta = fuente.indexOf(FIN_DEL_METODO, desde);
     expect(hasta).toBeGreaterThan(desde);
     const cuerpo = fuente.slice(desde, hasta);
     expect(cuerpo).toContain("TODO(146)");
@@ -276,7 +288,7 @@ describe("R41 (T4.14b) — ancla TODO(146) para la campana de notificaciones", (
 
   it("el pre-read captura el mensajero previo, insumo del aviso de la 146", () => {
     const desde = fuente.indexOf("async deshacerAsignacionLote(");
-    const hasta = fuente.indexOf("// --- Feature 41: bloqueo derivado en asignacion", desde);
+    const hasta = fuente.indexOf(FIN_DEL_METODO, desde);
     expect(fuente.slice(desde, hasta)).toContain("mensajero_asignado_id");
   });
 });

@@ -36,7 +36,11 @@ type RepoMethods = Pick<
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
   | "existeBodegaSateliteBloqueada" // feature 41/R18
-  | "findMensajerosBloqueados" // feature 41/R14
+  // ⚠️ FEATURE 241: el doble SIGUE OFRECIENDO el predicado, pero el service YA NO lo pide en su
+  // `AsignacionSateliteRepo`. Esa diferencia es deliberada y es lo que hace que el
+  // `not.toHaveBeenCalled()` de mas abajo afirme una decision de diseño y no solo la
+  // implementacion de hoy: el espia esta ahi, disponible, y aun asi no se toca.
+  | "findMensajerosBloqueadosParaGestion"
   | "findParaAsignabilidad" // feature 92/R8
 >;
 
@@ -67,7 +71,7 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
       porMensajeros: false,
       porCierreBodega: false,
     })),
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 92 (R8): filas que consume el gate de coordenadas.
     findParaAsignabilidad: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, direccion: "x", latitud: 9.9, longitud: -84.1, geocodeStatus: "OK" })),
@@ -344,11 +348,18 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     });
   });
 
-  // Pedido humano 2026-08-18 — R14 RETIRADA. Este test afirmaba que el mensajero con un cierre
-  // abierto se rechazaba con `mensajero_bloqueado_por_cierre`. Se invierte: la asignacion PASA.
+  // Pedido humano 2026-08-18 — R14 RETIRADA, RATIFICADA POR LA FEATURE 241 (regla 2, 2026-08-20).
+  // Este test afirmaba que el mensajero con un cierre abierto se rechazaba con
+  // `mensajero_bloqueado_por_cierre`; se invirtio entonces y SE QUEDA invertido.
+  //
+  // ⚠️ CUIDADO CON LO QUE ESTE TEST NO VE, y es la lección del §4.2. Aqui `asignarSateliteLote` es
+  // un doble que devuelve 1 SIEMPRE, asi que este `ok` no prueba que la escritura real pase: el SQL
+  // llevaba dentro su propio `NOT EXISTS` sobre `cierre_dia` y devolvia 0 filas, y este mismo test
+  // estaba verde mientras la accion fallaba en produccion. Quien mide el WHERE es
+  // `orden-repository.asignacion-satelite.test.ts`, y ahi esta la otra mitad de la propiedad.
   it("mensajero con cierre pendiente -> se asigna igual (R14 retirada)", async () => {
     const repo = fakeRepo({
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
     });
     const res = await newService(repo).asignar(
       { ordenIds: ["o1"], mensajeroId: MENSAJERO },
@@ -356,8 +367,9 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     );
     expect(res.status).toBe("ok");
     expect(repo.asignarSateliteLote).toHaveBeenCalled();
-    // Y no se consulta siquiera: el servicio dejo de preguntar por los cierres del mensajero.
-    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
+    // Y no se consulta siquiera: el doble lo ofrece y declara BLOQUEADO a este mensajero, pero el
+    // service no puede llamarlo — el metodo no esta en su `Pick`. Recibir no se bloquea nunca.
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 
   it("camino feliz sin bloqueo -> ok (los dobles por defecto no bloquean)", async () => {

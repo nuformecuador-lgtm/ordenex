@@ -811,13 +811,13 @@
       "id": 74,
       "name": "explotar la causa de devolucion (mostrarla y agruparla)",
       "description": "SALIDA de la decision (c) de la gate F1.4 de la feature 73 (humano, 2026-07-15: 'solo capturar por ahora'). Se registra como feature y no como comentario suelto por el precedente EXPLICITO de este repo: un pendiente fuera del backlog no lo prioriza nadie -- es exactamente lo que le paso a la 68 ('aun no llegamos a esa parte del flujo') y termino bloqueando el despliegue; la 70 nacio por la misma razon. QUE PASA: la 73 anade `gestion_orden.causa_devolucion` (enum `not_found`/`wrong_number`/`wrong_address`, nullable) y la CAPTURA con radios en el panel del mensajero, pero por decision consciente del humano NADIE LA LEE: la columna nace de SOLO ESCRITURA. La MOTIVACION DECLARADA del humano al elegir 'campo propio + enum' sobre 'concatenar en motivo' (decision (a) de la misma gate) fue justamente que la causa sea CONSULTABLE/AGRUPABLE -- metricas de 'cuantas devoluciones por direccion errada', deteccion de tiendas que cargan datos malos. Esta feature es la que entrega ESE valor; sin ella la 73 paga el coste de una migracion sin cobrar el beneficio que la justifico. ALCANCE SUGERIDO (lo formaliza el spec_author, NO esta aprobado): (1) exponer la causa en la linea de tiempo / `HistorialOrdenSheet` de la feature 49 -- `design.md §8.6` de la 73 dejo el camino documentado: el DTO del historial YA resuelve `motivo` desde la gestion, asi que es cambio minimo y SIN migracion; (2) reporte agregado 'devoluciones por causa' y/o deteccion de tiendas con datos malos (celular/direccion errados son un problema de la TIENDA, no del mensajero: ahi esta el valor de negocio). OJO AL PRIVILEGIO DE VISIBILIDAD: reusar las MISMAS reglas ya existentes (49/R27, ratificadas por 47/R17) -- maestro/admin todas; adminTienda solo su tienda; mensajero solo las asignadas/actuadas; adminSatelite solo su zona. NO inventar permiso nuevo. NOTA SOBRE EL DATO: la columna es NULLABLE por decision (a) de la 73 -- las gestiones `devuelta` ANTERIORES a la 73 NO tienen causa y no se puede derivar del texto libre. Cualquier agregado DEBE tratar el NULL como 'sin causa registrada' y NO como una cuarta causa ni repartirlo entre las 3; un grafico que ignore ese hueco mentira sobre el periodo previo a la 73. LA 73 NO SE TOCA al cerrar esta: su alcance (captura) esta cerrado y su spec deja anotado en 3 sitios que el 'solo escritura' es deliberado. ESTADO VERIFICADO CONTRA dev (2026-07-28): la parte (1) 'mostrarla' YA ESTA ENTREGADA por el modulo de novedades -- app/(app)/novedades/_components/NovedadesModule.tsx pinta la causa de la ultima gestion devuelta vigente con CAUSA_DEVOLUCION_LABEL y trata el NULL como 'Sin causa registrada'. LO QUE QUEDA: la causa en la linea de tiempo de HistorialOrdenSheet.tsx (hoy no la menciona en ninguna linea) y el agregado 'devoluciones por causa' / deteccion de tiendas con datos malos.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "fullstack",
       "branch": null,
       "depends_on": 73,
-      "status_note": "AUDITORIA 2026-07-26: la CAPTURA de la causa ya existe (app/(app)/mis-asignaciones/_components/causa-devolucion-options.ts + GestionarOrdenPanel.tsx, con migracion gestion_orden_causa_devolucion y lib/types/causa-devolucion.ts). LO QUE FALTA ES EXPLOTARLA: la causa NO se muestra ni se agrupa en los listados (cero referencias a causaDevolucion en app/(app)/ordenes ni app/(app)/cierre-dia). Alcance real = mostrar la causa en el listado y agrupar/contar por causa."
+      "status_note": "DONE por AUDITORIA el 2026-08-20, no por una tanda propia: se implemento de refilon y la ficha se quedo abierta. || VERIFICADO EN EL CODIGO, no deducido: la causa de devolucion se MUESTRA y se AGRUPA en el anillo de analitica DevolucionesPorCausaAnillo.tsx, servido por ConteoDevolucionesService.porCausa, sobre el mismo enum de la 73 (not_found / wrong_number / wrong_address). Eso es exactamente lo que pedia la decision (c) de la gate F1.4 de la 73: salir de «solo capturar por ahora». || OJO al leer sus cifras: el anillo cuenta GESTIONES, no ordenes, y esta declarado asi en su cabecera. Una orden devuelta dos veces aporta dos."
     },
     {
       "id": 75,
@@ -2650,7 +2650,7 @@
       "zone": "frontend",
       "branch": null,
       "depends_on": null,
-      "status_note": "RENUMERADA DE 218 A 220 el 2026-08-13 al remergear dev para el PR #368: otra sesion tomo 218 y 219 mientras este PR estaba abierto, y manda quien ya esta en dev. Conserva contenido y motivo intactos. Es la CUARTA colision de ids de esta familia; la leccion ya esta escrita en la 212 y se confirma otra vez: el id se comprueba contra dev justo antes de publicar, y OTRA VEZ al remergear. || DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos."
+      "status_note": "RENUMERADA DE 218 A 220 el 2026-08-13 al remergear dev para el PR #368: otra sesion tomo 218 y 219 mientras este PR estaba abierto, y manda quien ya esta en dev. Conserva contenido y motivo intactos. Es la CUARTA colision de ids de esta familia; la leccion ya esta escrita en la 212 y se confirma otra vez: el id se comprueba contra dev justo antes de publicar, y OTRA VEZ al remergear. || DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos. || AUDITADA el 2026-08-20: SIGUE ABIERTA, pero su premisa hay que revisarla antes de trabajarla. El archivo e2e/mis-asignaciones.spec.ts existe, y 13 de los 20 specs de e2e/ estan marcados NOT EXECUTED: este repo NO tiene arnes de Playwright vivo. Actualizar un spec que nadie corre no arregla nada. Antes de tomarla hay que decidir si se levanta el arnes o si la ficha se cierra como inaplicable; el sustituto que este repo si usa es «ver la app», que en la pila de ayuda encontro tres defectos que la suite no veia."
     },
     {
       "id": 221,
@@ -2945,15 +2945,15 @@
       "name": "investigar las guardas de bloqueo que se retiraron sin pedirlo",
       "spec_path": null,
       "description": "Backend. El commit 6a0e6d36 («el bloqueo por cierres pasa de alguno a mas de los tolerados») ademas RETIRO la guarda de mensajero bloqueado en la asignacion de guias (GuiaAsignacionService, antes un conflict) y una causa del bloqueo de bodega satelite (OrdenRepository). El umbral viejo sigue aplicandose en otras superficies, asi que la lectura y la escritura ya no coinciden. Nadie lo pidio. Investigar si fue deliberado antes de tocarlo. Auditoria: progress/auditoria_ayuda_tienda.md (§5).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "low",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/241-guardas-bloqueo",
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-19 por decision del humano: se saca de la pila de ayuda y se mira aparte. || Cambia QUIEN PUEDE RECIBIR ASIGNACIONES, que no estaba en ningun pedido. || Primero averiguar si hubo motivo (puede haber un deadlock real detras); solo despues decidir si se repone."
+      "status_note": "IN_PROGRESS el 2026-08-20. Investigacion cerrada en progress/investigacion_241.md; el commit 6a0e6d36 ESTA EN PRODUCCION. || HUBO MOTIVO REAL (un cierre sin aprobar congelaba una bodega satelite entera) pero NO hay deadlock: los cinco caminos tienen salida. || EL HALLAZGO: el tope quedo en «mas de 1» y el invariante 109/R30 impide tener 2, asi que no subio un umbral -- APAGO EL PREDICADO ENTERO, incluidas tres superficies que el commit dice no haber tocado. Y son TRES guardas retiradas, no dos: la de AsignacionSateliteService no estaba ni en la ficha ni en la auditoria. || FIRMADO POR EL HUMANO el 2026-08-20: se bloquea SOLO con vencido o rechazado --la pelota en el tejado del mensajero-- y NUNCA con solicitado, que es espera del admin (mediana 8,2 h, p90 22,1 h). Recibir asignaciones no se bloquea nunca, que es lo que se pidio el 2026-08-18. || Y se quita el NOT EXISTS del SQL crudo del satelite, que conserva el criterio viejo y bloquea justo lo que la regla permite: hoy deja elegir al mensajero y luego falla con un conflict vacio y el mensaje «Actualiza la lista y vuelve a intentarlo», que es falso. || MEDIDO en produccion: 0 mensajeros con cierre abierto (sobre 4), 12 cierres todos aprobados, 0 asignaciones historicas a mensajero con cierre abierto sobre 26 ordenes asignadas. Nada paso por el hueco todavia; el cero es suerte de calendario y caduca en cuanto alguien cierre su dia."
     },
     {
       "id": 242,
@@ -3014,6 +3014,21 @@
       "spec_ready_at": null,
       "spec_approved_at": null,
       "status_note": "DADA DE ALTA el 2026-08-19 al poner dev en verde (243). || CONTRASTE UTIL: la seccion de finanzas comentada en la propia `page.tsx` SI evito su lectura (`cargarKpisFinancieros()` ya no se llama, y su comentario lo dice). La del shell no: sigue pidiendo sus paneles con la <section> comentada. || Cuidado al limpiarlo: si las secciones vuelven, la lectura hace falta. El tripwire «Contrato del shell reducido» de AnaliticaShell.test.tsx avisa cuando alguien descomente."
+    },
+    {
+      "id": 246,
+      "name": "elegir para que dia es la asignacion, y que el corte lo respete",
+      "spec_path": "specs/246-asignacion-por-dia/",
+      "description": "Fullstack. Al asignar ordenes a un mensajero, elegir si son para el reparto de hoy o el del dia siguiente, y que el corte nocturno no barra ni genere cierre vencido por las de manana. Hoy no existe el concepto de fecha de reparto: asignar de noche hace que el cron deshaga la asignacion y cree un vencido injusto.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/246-asignacion-por-dia",
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-20 por pedido humano, durante la 241. || EL DEFECTO: el corte nocturno se lleva a sin_gestionar todo lo que siga en en_reparto y crea un cierre vencido. Si bodega asigna a las 10 pm, el cron deshace esa asignacion esa misma noche y el mensajero se come un vencido que no merecia. || ENGANCHA CON LA 241: alli se firmo que un vencido bloquea al mensajero para gestionar. Un vencido nacido de este defecto seria un bloqueo INJUSTO, asi que esto no es comodidad: evita que la regla castigue a quien no debe. || ALCANCE TOMADO POR EL LEADER, revisable en el spec: HOY / MANANA, que es lo minimo que resuelve el caso. Una fecha futura cualquiera es planificacion de ruta y es otra feature. || DECISIONES ABIERTAS para el spec: donde vive la fecha (columna nueva en la tabla orden, que es la mas caliente, o derivada), y que se lee para lo ya asignado (por defecto «de hoy», que no exige migracion de datos)."
     }
   ]
 }

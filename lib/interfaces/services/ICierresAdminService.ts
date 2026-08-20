@@ -456,9 +456,13 @@ export interface ICierresAdminService {
    * Feature 111/R16/R17/R18 — VALVULA DE ESCAPE (emergencia): destraba un `vencido`
    * ABANDONADO de su alcance transicionandolo `vencido -> solicitado` en nombre del mensajero.
    * Acotada por rol+zona destino (mismo `resolveAlcance` que aprobar/rechazar) y guardada por
-   * estado en el repo (0 filas -> conflict). NO recalcula el snapshot (R21) y NO desbloquea
-   * (R18: el desbloqueo ocurre al aprobar el `solicitado` resultante, que registra
-   * `resuelto_por`/`resuelto_at`, R17). Fuera de alcance -> no_encontrada.
+   * estado en el repo (0 filas -> conflict). NO recalcula el snapshot (R21).
+   * Fuera de alcance -> no_encontrada.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20): decia «y NO desbloquea (R18: el desbloqueo ocurre al aprobar el
+   * `solicitado` resultante…)». SI DESBLOQUEA, en el acto, porque `solicitado` dejo de bloquear la
+   * gestion. Lo que el `aprobar` posterior sigue haciendo —y que esta valvula no hace— es RESOLVER:
+   * registrar `resuelto_por`/`resuelto_at` (R17) y mover el dinero.
    */
   forzarSolicitudVencido(
     cierreId: string,

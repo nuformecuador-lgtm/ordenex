@@ -95,11 +95,11 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 
 function fakeOrdenRepo(
   bloqueados: string[] = [],
-): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> {
+): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
     // Feature 111/R1-R4: predicado de bloqueo total (default = NO bloqueado).
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
   };
 }
 
@@ -924,7 +924,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       });
       const ordenRepo = {
         findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-        findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+        findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
       };
       const service = new MisAsignacionesService(
         repo,
@@ -959,7 +959,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     const repo = fakeRepo();
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -982,7 +982,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       findEstatusIdByValue: vi.fn(async (v: string) =>
         v === "devolucion_por_confirmar" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
       ),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -1108,9 +1108,14 @@ describe("liberarGestion (R35)", () => {
 });
 
 // ============================================================================
-// Feature 111 — bloqueo total del mensajero (R1/R2/R3/R4/R20). Un mensajero con un cierre
-// `solicitado`/`vencido` no puede gestionar NI recoger/escoger. MISMO predicado derivado
-// (`findMensajerosBloqueados`), guarda ANTES de cualquier efecto (sin efectos parciales).
+// Feature 111 — bloqueo del mensajero (R1/R2/R3/R4/R20) -> FEATURE 241. Un mensajero con un
+// cierre `vencido` o `rechazado` no puede gestionar NI recoger/escoger; con `solicitado` SÍ puede.
+// Guarda ANTES de cualquier efecto (sin efectos parciales).
+//
+// ⚠️ QUÉ MIDE ESTE BLOQUE Y QUÉ NO. Aquí `findMensajerosBloqueadosParaGestion` es un DOBLE que
+// devuelve el Set que se le pide, así que estos casos prueban la GUARDA (que corta antes de
+// cualquier efecto), no la LISTA DE ESTADOS — el doble no sabe qué estado tiene el cierre. Los tres
+// casos por estado, con el repositorio real detrás, están en `cierre-bloqueo-asimetria.test.ts`.
 // ============================================================================
 
 describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
@@ -1146,14 +1151,18 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
     // R2: reusa el MISMO predicado derivado (doble espía).
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     // R3: sin efectos parciales (la guarda está ANTES de la subida y de la tx).
     expect(storage.upload).not.toHaveBeenCalled();
     expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
   });
 
-  it("R2: rechazado/aprobado NO bloquean (Set vacío) -> gestionar procede normal", async () => {
-    // `fakeOrdenRepo([])` = ningún estado bloqueante presente (rechazado/aprobado no cuentan).
+  it("R2: mensajero NO bloqueado (Set vacío) -> gestionar procede normal", async () => {
+    // ⚠️ TÍTULO CORREGIDO POR LA FEATURE 241. Decía «rechazado/aprobado NO bloquean», y desde la
+    // feature 109 eso ya era falso de `rechazado` — el doble devuelve un Set vacío y nunca supo de
+    // qué estado hablaba, así que el título afirmaba algo que el caso no podía comprobar. Lo que
+    // mide, y es útil, es el CONTROL del bloque: con el predicado en vacío la gestión pasa entera,
+    // de modo que los `conflict` de los casos de arriba vienen de la guarda y no de otra cosa.
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(entrega(), MENSAJERO);
     expect(r.status).toBe("ok");
@@ -1167,7 +1176,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.detalle[0].motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
 
@@ -1178,7 +1187,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
   });
 

@@ -622,7 +622,7 @@ describe("RecoleccionModule — bloqueado por cierre pendiente (R9/R23)", () => 
     // el aviso lo ponía el módulo de al lado y aquí no quedaría ninguno.
     const aviso = screen.getByRole("alert");
     expect(aviso).toHaveTextContent(
-      /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+      /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
     );
     // Accionable: dice adónde ir a resolverlo.
     expect(aviso).toHaveTextContent(/cierre del día/i);

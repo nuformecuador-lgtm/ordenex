@@ -181,7 +181,7 @@ function cierreService(repo: ReturnType<typeof cierreRepo>, notificar: CierreNot
       findUsuarioZonaId: vi.fn().mockResolvedValue("zona-1"),
       findUsuarioVehiculoId: vi.fn().mockResolvedValue("veh-1"),
       findEstatusIdByValue: vi.fn(),
-      findMensajerosBloqueados: vi.fn().mockResolvedValue([]),
+      findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue([]),
     } as never,
     { createSignedUrls: vi.fn().mockResolvedValue({}) } as never,
     { resolvePagoTarifa: vi.fn().mockResolvedValue(null) } as never,

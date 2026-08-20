@@ -373,7 +373,7 @@ describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
 
     expect(
       screen.getByText(
-        /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
+        /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
       ),
     ).toBeInTheDocument();
   });
@@ -397,7 +397,7 @@ describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1" })] });
 
     expect(
-      screen.queryByText(/no puedes gestionar ni recibir nuevas asignaciones/i),
+      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
     ).not.toBeInTheDocument();
   });
 });

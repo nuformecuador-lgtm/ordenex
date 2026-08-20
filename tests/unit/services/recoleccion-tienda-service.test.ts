@@ -35,7 +35,7 @@ type RepoMethods = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recolectarEnTienda"
-  | "findMensajerosBloqueados"
+  | "findMensajerosBloqueadosParaGestion"
 >;
 
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
@@ -58,7 +58,7 @@ function makeRepo(overrides: Partial<RepoMethods> = {}) {
     findByNumGuiaForTransicion: vi.fn().mockResolvedValue(transicionRow()),
     findEstatusIdByValue: vi.fn().mockResolvedValue(DESTINO_ID),
     recolectarEnTienda: vi.fn().mockResolvedValue(true),
-    findMensajerosBloqueados: vi.fn().mockResolvedValue(new Set<string>()),
+    findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue(new Set<string>()),
     ...overrides,
   };
   // Feature 167: los dos repos de LECTURA son dependencias REQUERIDAS del constructor (una
@@ -91,7 +91,7 @@ describe("RecoleccionTiendaService — autorizacion y bloqueo (R29/R31)", () => 
 
   it("R31: con un cierre pendiente NO recolecta, y ni siquiera llega a leer la orden", async () => {
     const { repo, service } = makeRepo({
-      findMensajerosBloqueados: vi.fn().mockResolvedValue(new Set([MENSAJERO.usuarioId])),
+      findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue(new Set([MENSAJERO.usuarioId])),
     });
 
     const res = await service.recolectarEnTienda(NUM_GUIA, MENSAJERO);
@@ -368,7 +368,7 @@ function makeLectura(opts: LecturaOpts = {}) {
     findByNumGuiaForTransicion: vi.fn(),
     findEstatusIdByValue: vi.fn(),
     recolectarEnTienda: vi.fn(),
-    findMensajerosBloqueados: vi.fn(),
+    findMensajerosBloqueadosParaGestion: vi.fn(),
   };
   const repoGestion = {
     findMisAsignaciones: vi.fn().mockResolvedValue(opts.pendientes ?? []),
@@ -433,7 +433,7 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         findByNumGuiaForTransicion: vi.fn(),
         findEstatusIdByValue: vi.fn(),
         recolectarEnTienda: vi.fn(),
-        findMensajerosBloqueados: vi.fn(),
+        findMensajerosBloqueadosParaGestion: vi.fn(),
       },
       repoGestion,
       historialFijo(),
@@ -741,7 +741,7 @@ describe("listarRecoleccion — la ventana de HOY es el dia natural de Costa Ric
         findByNumGuiaForTransicion: vi.fn(),
         findEstatusIdByValue: vi.fn(),
         recolectarEnTienda: vi.fn(),
-        findMensajerosBloqueados: vi.fn(),
+        findMensajerosBloqueadosParaGestion: vi.fn(),
       },
       {
         findMisAsignaciones: vi.fn().mockResolvedValue([]),

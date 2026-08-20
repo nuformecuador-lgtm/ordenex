@@ -64,9 +64,9 @@ function newService(
   repo: IGestionOrdenRepository,
   opts: { bloqueados?: string[]; storage?: IFileStorage } = {},
 ) {
-  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> = {
+  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueados: vi.fn(
+    findMensajerosBloqueadosParaGestion: vi.fn(
       async (): Promise<Set<string>> => new Set(opts.bloqueados ?? []),
     ),
   };
@@ -148,9 +148,9 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
 
   it("R6: el catalogo sin el value `incidente` (seed pendiente) -> validation_error sin escribir", async () => {
     const repo = fakeRepo();
-    const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> = {
+    const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
       findEstatusIdByValue: vi.fn(async (v: string) => (v === "incidente" ? null : "os-x")),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     };
     const storage: IFileStorage = { upload: vi.fn(), remove: vi.fn(async () => {}) };
     const service = new MisAsignacionesService(

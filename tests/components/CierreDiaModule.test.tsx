@@ -551,21 +551,46 @@ describe("CierreDiaModule", () => {
     ).toBeInTheDocument();
   });
 
-  // ---------- Feature 41 (F2, R21) + Feature 111 (R12) ----------
+  // ---------- Feature 41 (F2, R21) + Feature 111 (R12) → Feature 241 ----------
+  //
+  // ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO DEL AVISO CAMBIÓ Y ESTOS ASERTOS CON ÉL. Decía «No
+  // puedes gestionar NI RECIBIR NUEVAS ASIGNACIONES hasta resolver tu cierre pendiente», y las dos
+  // afirmaciones eran falsas: recibir asignaciones no se bloquea nunca, y `solicitado` ya no
+  // bloquea gestionar. Un aviso que prohíbe más de lo que el servidor rechaza hace que el mensajero
+  // deje de intentar cosas que sí puede hacer.
+  //
+  // EL LITERAL VA ESCRITO A MANO, COMPLETO, y NO importado de `BLOQUEO_AVISO` — la constante ni
+  // siquiera se exporta, y aunque se exportara compararla contra sí misma estaría siempre verde:
+  // cambiar el copy cambiaría el aserto con él y esto no vigilaría nada. Aquí el texto es el
+  // CONTRATO con el mensajero, así que se fija entero: si alguien lo edita, este archivo se pone
+  // rojo y obliga a decidir a conciencia, que es justo lo que faltó cuando el backend corrigió su
+  // copia y ésta se quedó mintiendo sin que nada avisara.
 
-  it("R12: bloqueado muestra el aviso accionable de BLOQUEO TOTAL (no gestionar NI recibir)", () => {
+  const AVISO_BLOQUEO_ESPERADO =
+    "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones: te esperan en «Entregas». Resuélvelo con el botón de abajo.";
+
+  it("R12/241: bloqueado muestra el aviso con el alcance real (no gestionar ni cobrar; recibir SÍ)", () => {
     renderModule({ bloqueado: true });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent(AVISO_BLOQUEO_ESPERADO);
   });
 
-  it("R12: sin bloqueo NO muestra el aviso de bloqueo total", () => {
+  it("R12/241: el aviso NO afirma que se dejen de recibir asignaciones", () => {
+    renderModule({ bloqueado: true });
+
+    // Guardia de la regresión concreta: la frase vieja prohibía recibir, que es lo único que el
+    // servidor NO bloquea en ningún estado. Que el aviso diga la verdad no basta si mañana vuelve
+    // a colarse la negación; se afirma también su ausencia.
+    const aviso = screen.getByRole("alert");
+    expect(aviso).not.toHaveTextContent(/ni recibir/i);
+    expect(aviso).not.toHaveTextContent(/nuevas asignaciones/i);
+  });
+
+  it("R12/241: sin bloqueo NO muestra el aviso", () => {
     renderModule({ bloqueado: false });
 
     expect(
-      screen.queryByText(/no puedes gestionar ni recibir nuevas asignaciones/i),
+      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
     ).not.toBeInTheDocument();
   });
 
@@ -640,14 +665,46 @@ describe("CierreDiaModule", () => {
     ).toBeDisabled();
   });
 
-  it("R31: el aviso comunica que un cierre rechazado NO es terminal (bloquea hasta re-solicitar + aprobar)", () => {
+  // ⚠️ FEATURE 241 (2026-08-20) — ESTE CASO AFIRMABA LA MENTIRA. Pedía `/sigue bloqueando/i` y
+  // `/apruebe/i` juntos, que es literalmente la promesa falsa: que el bloqueo dura hasta que la
+  // bodega apruebe. Lo hace `transicionarRechazadoASolicitado` escribiendo `estado='solicitado'`,
+  // y `solicitado` no está en `ESTADOS_CIERRE_BLOQUEAN_GESTION` — el bloqueo se levanta al
+  // REENVIAR. El error iba en la dirección cara: le decía al mensajero que estaba MÁS bloqueado de
+  // lo que estaba, y esperar de brazos cruzados no da ningún síntoma.
+  //
+  // Literales A MANO, como el aviso de bloqueo de más arriba y por lo mismo: la constante no se
+  // exporta, y compararla contra sí misma estaría siempre verde.
+
+  const AVISO_RECHAZADO_ESPERADO =
+    "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación: con eso se levanta el bloqueo y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe.";
+
+  it("R31/241: el aviso del rechazado dice cuándo se levanta el bloqueo (al reenviar, no al aprobar)", () => {
     renderModule({ tieneRechazado: true });
 
     const region = screen.getByRole("region", { name: "Cierre rechazado" });
-    // No se lee como "resuelto/cerrado": sigue bloqueando hasta re-enviarlo y que lo aprueben.
+    expect(region).toHaveTextContent(AVISO_RECHAZADO_ESPERADO);
+    // Lo que el aviso SIGUE aportando y no se perdió al corregirlo: un rechazado no es terminal.
     expect(region).toHaveTextContent(/no queda cerrado/i);
-    expect(region).toHaveTextContent(/sigue bloqueando/i);
-    expect(region).toHaveTextContent(/apruebe/i);
+  });
+
+  it("R31/241: el aviso NO promete que el bloqueo dure hasta que la bodega apruebe", () => {
+    renderModule({ tieneRechazado: true });
+
+    // Guardia de la regresión concreta, en su forma NEGATIVA: que hoy diga la verdad no impide que
+    // mañana vuelva a colarse la espera inventada, así que se afirma su ausencia.
+    const region = screen.getByRole("region", { name: "Cierre rechazado" });
+    expect(region).not.toHaveTextContent(/sigue bloqueando/i);
+    expect(region).not.toHaveTextContent(/y tu bodega lo apruebe/i);
+  });
+
+  it("R13/241: el aviso del vencido sigue diciendo que se destraba AL ENVIARLO", () => {
+    renderModule({ tieneVencido: true });
+
+    // Este no se cambió: se revisó con la regla nueva y ya era cierto (envíalo -> destraba). Se
+    // fija a mano para que deje de depender de que alguien vuelva a comprobarlo.
+    expect(screen.getByRole("region", { name: "Cierre vencido" })).toHaveTextContent(
+      "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.",
+    );
   });
 
   it("R31: sin cierre rechazado NO aparece el CTA del rechazado", () => {

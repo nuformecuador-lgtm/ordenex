@@ -122,11 +122,13 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
 // para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
-// Feature 111/R5: + `findMensajerosBloqueados` (guarda de bloqueo EXPLICITA de `deshacerGestion`,
-// mismo predicado derivado que la asignacion; sin duplicar la derivacion ni flag persistido).
+// Feature 111/R5 -> 241: + `findMensajerosBloqueadosParaGestion` (guarda EXPLICITA de
+// `deshacerGestion`; sin duplicar la derivacion ni flag persistido). Deshacer una gestion ES
+// gestionar —mueve la guia y descuadra el cobro—, asi que le toca la politica de gestion:
+// `vencido`/`rechazado` bloquean, `solicitado` no.
 type OrdenRepo = Pick<
   IOrdenRepository,
-  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueados"
+  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
 >;
 
 /**
@@ -440,8 +442,24 @@ export class CierreDiaService implements ICierreDiaService {
     // Feature 109/R28 (modelo GLOBAL): un cierre `rechazado` ya NO es terminal — BLOQUEA (R29) y es
     // RE-SOLICITABLE (`rechazado -> solicitado`, espejo EXACTO del `vencido`). Misma rama, mismo gate
     // (EXENTO de la precondicion de "sin pendientes", anti-deadlock: el mensajero esta bloqueado y
-    // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`). El desbloqueo definitivo y
-    // la liberacion de `sin_gestionar` ocurren SOLO al APROBAR (R16).
+    // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`).
+    //
+    // ⚠️ FEATURE 241 (2026-08-20) — AQUI DECIA «el desbloqueo definitivo y la liberacion de
+    // `sin_gestionar` ocurren SOLO al APROBAR (R16)», Y LA PRIMERA MITAD YA NO ES CIERTA. Son DOS
+    // cosas distintas y confundirlas fue justo lo que se propago a la pantalla:
+    //
+    //   - EL BLOQUEO DEL MENSAJERO SE LEVANTA AQUI, AL RE-SOLICITAR. `solicitado` NO esta en
+    //     `ESTADOS_CIERRE_BLOQUEAN_GESTION` (`OrdenRepository`), asi que en cuanto esta rama
+    //     escribe `rechazado -> solicitado` el mensajero vuelve a gestionar y cobrar. No espera a
+    //     nadie: la pelota pasa al admin y el ya hizo lo suyo.
+    //   - LA LIBERACION DE `sin_gestionar` SI OCURRE SOLO AL APROBAR (109/R16). La emite el admin,
+    //     en otro camino y otra transaccion (`CierresAdminRepository`, origen
+    //     `liberacion_sin_gestionar`). Esa mitad no la toco la 241.
+    //
+    // Prometerle al mensajero un bloqueo mas largo del real lo deja esperando de brazos cruzados
+    // una aprobacion que ya no necesita. El aviso de la pantalla decia eso y se corrigio; esta
+    // frase era su fuente, asi que se corrige tambien o el proximo que lea el servicio la copia.
+    //
     // FEATURE 235 (R24): mismo caso que el `vencido` de arriba, y misma razon. Ninguna de las dos
     // rutas de RE-solicitud comprueba pendientes.
     if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
@@ -534,11 +552,15 @@ export class CierreDiaService implements ICierreDiaService {
     // para deshacer (la ventana muere al solicitar el cierre, que es cuando el admin lo ve).
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
 
-    // Feature 111/R5 (Q2, guarda EXPLICITA belt-and-suspenders): un mensajero BLOQUEADO
-    // (cierre `solicitado`/`vencido`) no puede hacer NADA con las guías, incluido DESHACER.
-    // MISMO predicado derivado que la asignación/gestionar (`findMensajerosBloqueados`), ANTES
-    // de cualquier lectura/escritura de la gestión. No se apoya en el no-op natural.
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([actor.usuarioId]);
+    // Feature 111/R5 (Q2, guarda EXPLICITA belt-and-suspenders) + 241: un mensajero con un cierre
+    // `vencido` o `rechazado` no puede tocar sus guías, y DESHACER es tocarlas. MISMO predicado
+    // que `gestionar` (`findMensajerosBloqueadosParaGestion`), ANTES de cualquier lectura o
+    // escritura de la gestión. No se apoya en el no-op natural.
+    //
+    // Con `solicitado` NO bloquea (regla firmada 2026-08-20): ese mensajero está esperando al
+    // admin, y su ventana de deshacer muere igual sola en cuanto la gestión quede atada al cierre
+    // (guarda 4, `gestion.cierreId !== null`), que es la protección de verdad del dinero.
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
     if (bloqueados.has(actor.usuarioId)) return { status: "conflict", motivo: MSG_BLOQUEADO };
 
     // 2) R9: inexistente -> forbidden (NO se distingue de ajena, patron 36/R31: no revela que

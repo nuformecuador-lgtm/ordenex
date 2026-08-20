@@ -103,10 +103,18 @@ export interface CierreDiaModuleProps {
    */
   cierresPasados: CierresPasadosPagina;
   /**
-   * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
-   * `solicitado`/`vencido` pendiente). Derivado server-side y pasado por props; el
-   * módulo solo muestra el aviso accionable. Feature 111/R12: el bloqueo es TOTAL
-   * (no puede gestionar NI recibir); el aviso lo comunica.
+   * Feature 41/R21: `true` si el mensajero está BLOQUEADO para GESTIONAR Y COBRAR.
+   * Derivado server-side (`estadoBloqueoMensajero` → `findMensajerosBloqueadosParaGestion`)
+   * y pasado por props; el módulo solo muestra el aviso, nunca re-deriva el estado del
+   * cierre en el cliente.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20) — QUÉ LO ENCIENDE HOY, porque cambió: `vencido` o
+   * `rechazado`, y NADA MÁS. Este doc decía «tiene un cierre `solicitado`/`vencido`
+   * pendiente» y «el bloqueo es TOTAL (no puede gestionar NI recibir)»; las dos cosas son
+   * falsas con la regla firmada. Con `solicitado` la pelota está en el tejado del admin
+   * (mediana 8,2 h, p90 22,1 h) y el mensajero trabaja con normalidad, así que el flag
+   * llega en `false` y el aviso NO se pinta: el filtro vive en el predicado del servidor,
+   * no aquí. Y recibir asignaciones no se bloquea nunca, en ningún estado.
    */
   bloqueado: boolean;
   /**
@@ -126,13 +134,42 @@ export interface CierreDiaModuleProps {
   tieneRechazado: boolean;
 }
 
-// Feature 41/R21 + 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado,
-// i18n-ready). El bloqueo abarca gestionar Y recibir: el mensajero debe resolver su
-// cierre pendiente antes de operar con las guías.
+// Feature 41/R21 + 111/R12 → 241: aviso accionable del bloqueo (texto separado, i18n-ready).
+//
+// ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO CAMBIÓ PORQUE DECÍA DOS COSAS FALSAS. Decía «No puedes
+// gestionar NI RECIBIR NUEVAS ASIGNACIONES hasta resolver tu cierre pendiente», y este comentario
+// remataba con «el bloqueo abarca gestionar Y recibir»:
+//   · «ni recibir nuevas asignaciones» es falso SIEMPRE — recibir no se bloquea en ningún estado
+//     (pedido humano del 2026-08-18, ratificado por la regla firmada). Ninguna superficie de
+//     asignación consulta el predicado de bloqueo.
+//   · «No puedes gestionar» es falso con `solicitado` — pero eso ya no llega hasta aquí: el flag
+//     `bloqueado` sólo se enciende con `vencido`/`rechazado` (ver su doc en las props).
+// Un aviso que prohíbe MÁS de lo que el servidor rechaza es peor que no avisar: el mensajero deja
+// de intentar cosas que sí puede hacer, y el trabajo que le siguen asignando se le queda parado.
+//
+// Es la SEGUNDA copia del texto; la primera vive en `lib/constants/bloqueo-mensajero.ts` para los
+// dos portales ("Entregas" y "Recolección"). NO se importa de allí a propósito: esa variante
+// remata con «Ve a «Cierre del día» para resolverlo» y aquí el mensajero YA está en esa pantalla,
+// con el CTA del vencido/rechazado a la vista. Lo único que se comparte es el criterio: decir qué
+// NO puede, qué SÍ puede, y cómo salir.
+//
+// Qué NO repite: el «envíalo a aprobación» y el porqué del estado los dicen `VENCIDO_AVISO` /
+// `RECHAZADO_AVISO` justo debajo, cada uno con su CTA. Lo que ninguno de los dos dice —y es lo que
+// aporta éste— es el ALCANCE: qué significa exactamente «tu operación» bloqueada.
 const BLOQUEO_AVISO =
-  "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente.";
+  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones: te esperan en «Entregas». Resuélvelo con el botón de abajo.";
 
 // Feature 111/R13: CTA + aviso del cierre `vencido` (texto separado, i18n-ready).
+//
+// FEATURE 241 (2026-08-20) — REVISADO CON LA REGLA NUEVA DELANTE, Y SOBREVIVE TAL CUAL. Se miro
+// por lo mismo que hundio a `RECHAZADO_AVISO` de aqui abajo, y sale limpio en los dos frentes:
+//   · CUANDO SE LEVANTA EL BLOQUEO: dice «envialo a aprobacion PARA DESTRABAR tu operacion», o sea
+//     que destraba AL ENVIAR. Es exactamente lo que hace el codigo — `transicionarVencidoASolicitado`
+//     escribe `estado = 'solicitado'` y `solicitado` NO esta en `ESTADOS_CIERRE_BLOQUEAN_GESTION`,
+//     asi que el mensajero sale del conjunto bloqueado en esa misma escritura.
+//   · ASIGNACIONES: no las menciona, que es lo correcto — recibir no se bloquea nunca.
+// Queda anotado para que la proxima revision no tenga que re-litigarlo: NO es un olvido, esta
+// comprobado contra el predicado.
 const VENCIDO_AVISO =
   "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.";
 const VENCIDO_CTA_LABEL = "Solicitar aprobación del cierre vencido";
@@ -142,11 +179,26 @@ const VENCIDO_CONFIRM_DETALLE =
 const VENCIDO_OK = "Cierre vencido enviado a aprobación.";
 
 // Feature 109/R31: CTA + aviso del cierre `rechazado` (texto separado, i18n-ready).
-// En el modelo GLOBAL un cierre `rechazado` NO es terminal: sigue bloqueando la operación
-// hasta que el mensajero lo VUELVA A SOLICITAR y su bodega lo APRUEBE (espejo del `vencido`).
-// El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+// En el modelo GLOBAL un cierre `rechazado` NO es terminal: bloquea, y es RE-SOLICITABLE (espejo
+// del `vencido`). El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+//
+// ⚠️ FEATURE 241 (2026-08-20) — DECÍA QUE EL BLOQUEO DURABA MÁS DE LO QUE DURA, Y ESA DIRECCIÓN DEL
+// ERROR ES LA CARA. Remataba con «sigue bloqueando tu operación hasta que lo vuelvas a enviar a
+// aprobación Y TU BODEGA LO APRUEBE». Falso: `transicionarRechazadoASolicitado` escribe
+// `estado = 'solicitado'`, y `solicitado` NO está en `ESTADOS_CIERRE_BLOQUEAN_GESTION`
+// (`["vencido","rechazado"]`) — el único predicado que gatea gestionar y cobrar, y el que consultan
+// `MisAsignacionesService`, `CierreDiaService.deshacerGestion` y `RecoleccionTiendaService`. O sea:
+// el bloqueo se levanta EN ESA MISMA ESCRITURA, sin que la bodega toque nada.
+//
+// Prometer una espera que no existe no es un matiz de redacción: manda al mensajero a esperar de
+// brazos cruzados una aprobación que no necesita para volver a trabajar —mediana 8,2 h, p90 22,1 h—
+// y es una pérdida de jornada silenciosa, sin ningún síntoma que la delate.
+//
+// Lo que NO se prometió a cambio: que reenviar le devuelva las órdenes congeladas. La liberación de
+// `sin_gestionar` sí ocurre solo al APROBAR (109/R16, `CierresAdminService`), así que el texto habla
+// de lo que recupera —gestionar y cobrar— y no de recuperar las órdenes.
 const RECHAZADO_AVISO =
-  "Tu cierre fue rechazado, pero no queda cerrado: sigue bloqueando tu operación hasta que lo vuelvas a enviar a aprobación y tu bodega lo apruebe.";
+  "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación: con eso se levanta el bloqueo y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe.";
 const RECHAZADO_CTA_LABEL = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_DETALLE =
@@ -444,7 +496,11 @@ export function CierreDiaModule({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* ---------- Aviso de bloqueo TOTAL del mensajero (feature 41/R21 + 111/R12) ---------- */}
+      {/* ---------- Aviso de bloqueo para gestionar y cobrar (feature 41/R21 + 111/R12 → 241) ----
+          Se pinta con el booleano tal cual llega del servidor: `bloqueado` YA significa
+          «vencido o rechazado» (241), así que un cierre `solicitado` no entra por aquí y no hay
+          nada que filtrar en el cliente. Va antes que los CTA del vencido/rechazado porque enuncia
+          el ALCANCE del bloqueo; el «qué hacer» y su botón vienen justo debajo. */}
       {bloqueado ? (
         <p
           role="alert"
