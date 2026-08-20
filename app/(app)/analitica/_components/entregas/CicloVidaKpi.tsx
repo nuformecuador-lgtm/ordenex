@@ -12,9 +12,15 @@
 //   - la ventana del filtro cae sobre el CIERRE, no sobre la creacion: una orden creada en
 //     enero y cerrada en agosto cuenta en agosto.
 //
-// Por eso la etiqueta dice «cerradas» y no «ordenes» a secas, y por eso el denominador va
-// debajo: un promedio de 4 h sobre 3 ordenes y sobre 3.000 no son la misma afirmacion, y sin
-// el `n` no hay forma de distinguirlas.
+// Por eso la etiqueta dice «cerradas» y no «ordenes» a secas, y por eso el DENOMINADOR va
+// dentro de esa misma etiqueta: un promedio de 4 h sobre 3 ordenes y sobre 3.000 no son la
+// misma afirmacion, y sin el `n` no hay forma de distinguirlas.
+//
+// El `n` vivia en una linea aparte DEBAJO de la tarjeta (pedido humano 2026-08-19: se retira).
+// Iba fuera de la tarjeta —no cabe dentro de `KpiCard`— y eso lo dejaba flotando entre dos
+// KPIs, sin decir de cual de los dos hablaba; ademas descuadraba el alto de la fila. Metido en
+// el rotulo, el denominador viaja PEGADO a la cifra que califica y la tarjeta vuelve a ser una
+// sola pieza.
 //
 // Reglas de la casa que se conservan, y por reuso y no por copia:
 //
@@ -40,13 +46,19 @@ import {
 } from "../operativo/textos";
 import { CLAVE_TABLERO } from "../operativo/PanelOperativo";
 
+/** Rotulo sin denominador: mientras carga o cuando hay error, el `n` no se conoce. */
 const ETIQUETA = "Ciclo de vida promedio (órdenes cerradas)";
+
+/**
+ * El mismo rotulo CON el denominador dentro. Concuerda en singular («1 orden cerrada»):
+ * el KPI de una tarjeta se lee entero como una frase, y «1 órdenes» delata que nadie la leyo.
+ */
+function etiquetaCon(n: number): string {
+  return `Ciclo de vida promedio (${n} ${n === 1 ? "orden cerrada" : "órdenes cerradas"})`;
+}
 
 /** La unidad del formateador: el valor son SEGUNDOS y `formato.ts` los pone legibles. */
 const UNIDAD = "segundos";
-
-/** Lo que se escribe debajo de la cifra. `%s` lo rellena el denominador. */
-const SUFIJO_DENOMINADOR = "órdenes cerradas en el periodo";
 
 async function consultar(filtroSerializado: string): Promise<ResultadoCicloVida> {
   return consultarCicloVida(JSON.parse(filtroSerializado) as unknown);
@@ -85,27 +97,21 @@ export function CicloVidaKpi() {
   const datos = data?.status === "ok" ? data.datos : null;
 
   return (
-    // `h-full` tambien AQUI: `KpiCard` se estira al alto de su padre, y su padre es este
-    // envoltorio —que existe para colgarle debajo el denominador—. Sin el, el envoltorio mide
-    // lo que su contenido y la tarjeta no tendria contra que estirarse.
-    <div className="flex h-full w-full flex-col gap-1">
-      <KpiCard
-        etiqueta={ETIQUETA}
-        // `promedioSegundos` es `null` cuando no cerro ninguna orden, y `KpiCard` lo pinta como
-        // guion: cero segundos de ciclo seria una afirmacion —«se cerraron al instante»— y lo
-        // que paso es que no hubo ninguna que cerrar.
-        valor={datos?.promedioSegundos ?? null}
-        unidad={UNIDAD}
-        cargando={isLoading}
-        error={mensaje}
-      />
-      {/* EL DENOMINADOR, debajo y siempre que haya respuesta. No es un detalle: un promedio de
-          cuatro horas sobre 3 ordenes y sobre 3.000 no son la misma afirmacion, y la cifra sola
-          no las distingue. Con `n = 0` tambien se escribe —«0 ordenes cerradas»— porque es lo
-          que explica el guion de arriba. */}
-      {datos !== null && mensaje === null ? (
-        <p className="text-xs text-muted-foreground">{`${datos.n} ${SUFIJO_DENOMINADOR}`}</p>
-      ) : null}
-    </div>
+    <KpiCard
+      // El denominador va DENTRO del rotulo, y solo cuando se conoce: con la consulta en
+      // vuelo o en error no hay `n` que escribir, y un «(0 órdenes cerradas)» mientras carga
+      // seria una afirmacion de negocio que nadie ha hecho todavia.
+      //
+      // Con `n = 0` SI se escribe —«(0 órdenes cerradas)»— porque es lo que explica el guion
+      // de la cifra: no es que falte el dato, es que no hubo ninguna que cerrar.
+      etiqueta={datos !== null && mensaje === null ? etiquetaCon(datos.n) : ETIQUETA}
+      // `promedioSegundos` es `null` cuando no cerro ninguna orden, y `KpiCard` lo pinta como
+      // guion: cero segundos de ciclo seria una afirmacion —«se cerraron al instante»— y lo
+      // que paso es que no hubo ninguna que cerrar.
+      valor={datos?.promedioSegundos ?? null}
+      unidad={UNIDAD}
+      cargando={isLoading}
+      error={mensaje}
+    />
   );
 }

@@ -102,7 +102,7 @@ const LOS_CINCO: CierreResultado[] = [
 // --- T3.2: orden y censo --------------------------------------------------
 
 describe("orden de las columnas de la hoja fundida (T3.2)", () => {
-  it("declara las 26 columnas en el orden decidido (design §6)", () => {
+  it("declara las 27 columnas en el orden decidido (design §6)", () => {
     expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.clave)).toEqual([
       "mensajero",
       "fechaCierre",
@@ -115,16 +115,17 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "tienda",
       "resultado",
       "montoCobrar",
+      "fulfillment",
       "recibido",
-      "metodo",
+      "pago_efectivo",
+      "pago_SINPE",
+      "pago_transferencia",
       "nuevaFecha",
       "origenRechazo",
       "causa",
       "motivo",
       "fleteConIva",
       "comisionConIva",
-      "fleteDevolucion",
-      "ivaFleteDevolucion",
       "fleteDevolucionConIva",
       "ingresoTotal",
       "pagoMensajero",
@@ -143,16 +144,17 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Tienda",
       "Resultado",
       "A cobrar",
+      "Fulfillment",
       "Recibido",
-      "Método",
+      "Efectivo",
+      "SINPE",
+      "Transferencia",
       "Nueva fecha",
       "Origen",
       "Causa",
       "Motivo",
       "Flete + IVA",
       "Comisión + IVA",
-      "Flete devolución",
-      "IVA flete dev.",
       "Flete devolución + IVA",
       "Total Ordenex",
       "Pago mensajero",
@@ -160,16 +162,17 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
       "Indemnización",
     ]);
     // El número es parte de la decisión (D6), no una consecuencia: si alguien añade una
-    // columna 27 sin reabrirla, esto lo dice con el número en la mano.
-    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(26);
+    // columna 28 sin reabrirla, esto lo dice con el número en la mano.
+    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA).toHaveLength(27);
   });
 
-  it("las tres columnas de flete de devolución existen a la vez y no se agrupan (D7)", () => {
-    // D7 descartó la columna agrupada ÚNICA: se conservan las TRES de hoy, y cada resultado
-    // puebla la suya (la devuelta el par partido, la rechazada la agrupada).
-    expect(CLAVES_DECLARADAS).toContain("fleteDevolucion");
-    expect(CLAVES_DECLARADAS).toContain("ivaFleteDevolucion");
+  it("del flete de devolución queda UNA columna, la agrupada (2026-08-19, revierte D7)", () => {
+    // D7 había conservado las TRES (par partido para la devuelta, agrupada para la rechazada).
+    // Ahora las dos pueblan la agrupada y el par partido se retiró de la hoja: eran dos
+    // columnas para un importe que siempre se lee sumado.
     expect(CLAVES_DECLARADAS).toContain("fleteDevolucionConIva");
+    expect(CLAVES_DECLARADAS).not.toContain("fleteDevolucion");
+    expect(CLAVES_DECLARADAS).not.toContain("ivaFleteDevolucion");
   });
 
   it("la fundida no declara ni estado del cierre ni destino (R12)", () => {
@@ -184,7 +187,7 @@ describe("orden de las columnas de la hoja fundida (T3.2)", () => {
 // --- T3.3: proyección por resultado --------------------------------------
 
 describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () => {
-  it("las 26 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
+  it("las 27 columnas salen en el orden declarado sea cual sea el resultado (R9)", () => {
     for (const resultado of LOS_CINCO) {
       const fila = filaDescargaGestionFundida(gestion({ resultado }));
       // Mismas claves, mismo orden de inserción y NINGUNA de más: la hoja es rectangular.
@@ -232,7 +235,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(filas.map((f) => f.resultado)).toEqual(["Entregada", "Reprogramada", "Incidente"]);
   });
 
-  it("la fila de una ENTREGADA puebla sus siete específicas y deja vacías las otras nueve", () => {
+  it("la fila de una ENTREGADA puebla sus diez específicas y deja vacías las otras siete", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
         resultado: "entregada",
@@ -252,16 +255,19 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       tienda: "Tienda X",
       resultado: "Entregada",
       montoCobrar: "1000.10",
+      // El fixture de `ingreso()` trae `tarifa: null` (gap R9): sin tarifa congelada no hay
+      // fulfillment que mostrar, y la celda queda vacía como el resto de lo que no se congeló.
+      fulfillment: null,
       recibido: "1000.10",
-      metodo: "SINPE",
+      pago_efectivo: null,
+      pago_SINPE: "1000.10",
+      pago_transferencia: null,
       nuevaFecha: null,
       origenRechazo: null,
       causa: null,
       motivo: null,
       fleteConIva: "113.00",
       comisionConIva: "56.50",
-      fleteDevolucion: null,
-      ivaFleteDevolucion: null,
       fleteDevolucionConIva: null,
       ingresoTotal: "169.50",
       pagoMensajero: "100.10",
@@ -288,22 +294,24 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila.comisionConIva).toBeNull();
     expect(fila.ingresoTotal).toBeNull();
     expect(fila.recibido).toBeNull();
-    expect(fila.metodo).toBeNull();
+    // Y tampoco lleva medios de pago: no hubo recaudo que repartir.
+    expect(fila.pago_efectivo).toBeNull();
+    expect(fila.pago_SINPE).toBeNull();
+    expect(fila.pago_transferencia).toBeNull();
   });
 
-  it("la fila de una DEVUELTA puebla el flete de devolución PARTIDO y no el agrupado (D7)", () => {
+  it("la fila de una DEVUELTA puebla el flete de devolución AGRUPADO (2026-08-19)", () => {
     const fila = filaDescargaGestionFundida(
       gestion({ resultado: "devuelta", motivo: "Rechazó el paquete" }),
     );
-    expect(fila.fleteDevolucion).toBe("40.00");
-    expect(fila.ivaFleteDevolucion).toBe("5.20");
-    // El agrupado es de la RECHAZADA, que es la que lo enseña en su tabla.
-    expect(fila.fleteDevolucionConIva).toBeNull();
+    // Antes poblaba el par partido y dejaba vacío el agrupado (D7). Ahora lee lo mismo que la
+    // rechazada, que es lo que las dos tablas muestran.
+    expect(fila.fleteDevolucionConIva).toBe("45.20");
     expect(fila.ingresoTotal).toBe("169.50");
     expect(fila.origenRechazo).toBeNull();
   });
 
-  it("la fila de una RECHAZADA puebla el flete de devolución AGRUPADO y no el partido (D7)", () => {
+  it("la fila de una RECHAZADA puebla el flete de devolución AGRUPADO", () => {
     const fila = filaDescargaGestionFundida(
       gestion({
         resultado: "rechazada",
@@ -313,8 +321,6 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
       }),
     );
     expect(fila.fleteDevolucionConIva).toBe("45.20");
-    expect(fila.fleteDevolucion).toBeNull();
-    expect(fila.ivaFleteDevolucion).toBeNull();
     expect(fila.ingresoBodega).toBe("12.00");
     expect(fila.origenRechazo).toBe("Automático");
   });
@@ -348,7 +354,7 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila.nuevaFecha).not.toBeUndefined();
   });
 
-  it("resultado, método, causa y origen salen como etiqueta legible (R45)", () => {
+  it("resultado, causa y origen salen como etiqueta legible (R45)", () => {
     const entregada = filaDescargaGestionFundida(
       gestion({
         resultado: "entregada",
@@ -363,17 +369,15 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     );
 
     expect(entregada.resultado).toBe("Entregada");
-    expect(entregada.metodo).toBe("Efectivo");
     expect(incidente.causa).toBe("Paquete perdido");
     expect(rechazada.origenRechazo).toBe("Manual");
+    // El medio de pago ya no es una CELDA sino un ENCABEZADO, y ahí la etiqueta legible sigue
+    // siendo obligatoria: la celda lleva el monto pelado.
+    expect(COLUMNAS_DESCARGA_GESTIONES_FUNDIDA.map((c) => c.encabezado)).toContain("Efectivo");
+    expect(entregada.pago_efectivo).toBe("500.00");
 
-    // Y NINGUNA de las cuatro celdas es el value del enum.
-    for (const valor of [
-      entregada.resultado,
-      entregada.metodo,
-      incidente.causa,
-      rechazada.origenRechazo,
-    ]) {
+    // Y NINGUNA de las tres celdas es el value del enum.
+    for (const valor of [entregada.resultado, incidente.causa, rechazada.origenRechazo]) {
       expect(["entregada", "incidente", "rechazada", "efectivo", "perdido"]).not.toContain(valor);
     }
   });
@@ -395,12 +399,20 @@ describe("proyección de una gestión a una fila de la hoja fundida (T3.3)", () 
     expect(fila.montoCobrar).toBe("1234567.89");
     expect(fila.ingresoTotal).toBe("1000.00");
     expect(typeof fila.recibido).toBe("string");
-    for (const clave of ["recibido", "montoCobrar", "ingresoTotal", "metodo"] as const) {
+    for (const clave of [
+      "recibido",
+      "montoCobrar",
+      "ingresoTotal",
+      "pago_efectivo",
+      "pago_SINPE",
+    ] as const) {
       expect(String(fila[clave]), clave).not.toMatch(/[₡$]/);
       expect(String(fila[clave]), clave).not.toMatch(/\d,\d/);
     }
-    // El desglose de varias líneas también es money-safe: etiqueta + STRING, sin `money()`.
-    expect(fila.metodo).toBe("Efectivo 1000000.00 + SINPE 234567.89");
+    // Cada medio en SU columna, también money-safe: el STRING del snapshot, sin `money()`.
+    expect(fila.pago_efectivo).toBe("1000000.00");
+    expect(fila.pago_SINPE).toBe("234567.89");
+    expect(fila.pago_transferencia).toBeNull();
   });
 
   it("un dato nulo deja la celda vacía y nunca el guion de pantalla (R46)", () => {

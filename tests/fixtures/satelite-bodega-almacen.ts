@@ -123,8 +123,12 @@ export const ALMACEN_SATELITE: FilaAlmacen[] = [
 function conjuntoDe(filas: FilaAlmacen[], filtro: RecepcionSateliteFiltro): FilaAlmacen[] {
   const estados = [...filtro.estatusValues];
   if (estados.length === 0) return [];
-  const cantones = [...(filtro.cantonNombres ?? [])];
-  const distritos = [...(filtro.distritoNombres ?? [])];
+  // Pedido humano (2026-08-19): la geografía se filtra por ID. Este almacén no tiene ids de
+  // catálogo —sus filas se describen por nombre—, así que el doble usa el NOMBRE como id, que
+  // es lo mismo que hace `catalogoSatelite`: los asserts siguen legibles y el criterio (AND,
+  // y una orden sin distrito fuera bajo un filtro de distrito) es el mismo.
+  const cantones = [...(filtro.cantonIds ?? [])];
+  const distritos = [...(filtro.distritoIds ?? [])];
   return filas
     .filter((f) => f.zonaId === filtro.zonaId)
     .filter((f) => estados.includes(f.row.estatusValue))

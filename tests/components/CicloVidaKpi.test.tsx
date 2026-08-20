@@ -74,20 +74,37 @@ describe("KPI de ciclo de vida — la cifra y su denominador", () => {
   });
 
   // ⚠ NO ES UN DETALLE. Un promedio de cuatro horas sobre 3 órdenes y sobre 3.000 no son la
-  // misma afirmación, y la cifra sola no las distingue.
-  it("escribe el denominador debajo", async () => {
+  // misma afirmación, y la cifra sola no las distingue. Pedido humano (2026-08-19): el
+  // denominador se retiró de la línea suelta de debajo y vive DENTRO del rótulo.
+  it("escribe el denominador DENTRO del rótulo, no en una línea aparte", async () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(86400, 2) });
     renderKpi();
 
-    expect(await screen.findByText(/^2 órdenes cerradas/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Ciclo de vida promedio (2 órdenes cerradas)"),
+    ).toBeInTheDocument();
+    // La línea de antes («2 órdenes cerradas en el periodo») ya no existe.
+    expect(screen.queryByText(/en el periodo/)).toBeNull();
   });
 
-  // El denominador se escribe TAMBIÉN con cero: es lo que explica el guion de arriba.
-  it("con ninguna orden cerrada dice «0», y no oculta la línea", async () => {
+  // El denominador se escribe TAMBIÉN con cero: es lo que explica el guion de la cifra.
+  it("con ninguna orden cerrada dice «0», y no lo oculta", async () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(0, 0) });
     renderKpi();
 
-    expect(await screen.findByText(/^0 órdenes cerradas/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Ciclo de vida promedio (0 órdenes cerradas)"),
+    ).toBeInTheDocument();
+  });
+
+  // Se lee como una frase, y «1 órdenes» delata que nadie la leyó.
+  it("concuerda en singular con una sola orden cerrada", async () => {
+    consultarMock.mockResolvedValue({ status: "ok", datos: datos(3600, 1) });
+    renderKpi();
+
+    expect(
+      await screen.findByText("Ciclo de vida promedio (1 orden cerrada)"),
+    ).toBeInTheDocument();
   });
 
   // `promedioSegundos` es `null` sin órdenes cerradas: cero segundos de ciclo sería una
@@ -96,7 +113,7 @@ describe("KPI de ciclo de vida — la cifra y su denominador", () => {
     consultarMock.mockResolvedValue({ status: "ok", datos: datos(0, 0) });
     renderKpi();
 
-    await screen.findByText(/^0 órdenes cerradas/);
+    await screen.findByText(/\(0 órdenes cerradas\)/);
     // El «0» del denominador sí está; lo que no puede estar es un «0 s» como valor medido.
     expect(screen.queryByText(/^0 s$/)).toBeNull();
   });
@@ -122,7 +139,9 @@ describe("KPI de ciclo de vida — los estados que NO son «sin datos»", () => 
 
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent ?? "").toContain(texto);
-    expect(screen.queryByText(/órdenes cerradas en el periodo/)).toBeNull();
+    // Sin dato no hay denominador que escribir: el rótulo se queda sin el `n` (un
+    // «(0 órdenes cerradas)» aquí sería una afirmación de negocio que nadie ha hecho).
+    expect(screen.queryByText(/\(\d+ (órdenes cerradas|orden cerrada)\)/)).toBeNull();
   });
 
   it("un fallo de red se presenta como aviso, no como vacío", async () => {

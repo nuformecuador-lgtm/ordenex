@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/shared/Modal";
+import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { DescargarDatasetButton } from "@/components/shared/DescargarDatasetButton";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { DescargaFilasResult } from "@/components/shared/DataTable";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
@@ -32,7 +34,7 @@ import {
  * cierres de bodega del maestro es la Server Action, que llega por prop (`accion`). No es un
  * lujo: los dos listados cubren conjuntos DISJUNTOS (design §2.6 — el maestro solo ve la GAM en
  * cierres del día, y lo satélite solo consolidado en cierres de bodega), así que hacen falta dos
- * bordes; pero las 26 columnas, la proyección y esta interacción son las mismas, y duplicarlas
+ * bordes; pero las 27 columnas, la proyección y esta interacción son las mismas, y duplicarlas
  * sería garantizar que divergen (R26).
  *
  * **El conjunto lo redacta ESTE diálogo, no la pantalla** (D11, R34/R35). El componente no
@@ -45,6 +47,17 @@ import {
  * **Los controles de fecha no son una comodidad** (R31): sin ellos el conjunto por defecto sería
  * todo el histórico del mensajero, que a grano de gestión choca contra el tope de 5000 filas casi
  * siempre y convierte el botón en uno que solo sabe fallar.
+ *
+ * **LOS VALORES POR DEFECTO (pedido humano 2026-08-19)**: se abre con TODOS los mensajeros del
+ * alcance marcados y con el rango puesto en el DÍA DE HOY (calendario de Costa Rica) en sus dos
+ * extremos. Es la descarga que se pide a diario —el cierre del día de toda la flota— y antes
+ * costaba dos clics de fecha más uno por cada mensajero.
+ *
+ * Lo que ese defecto NO cambia: siguen siendo controles, no una decisión tomada por el diálogo.
+ * Se pueden desmarcar todos (y entonces R39 corta, como siempre) y se puede vaciar cualquiera de
+ * las dos fechas para ensanchar la ventana; una fecha vacía sigue significando «sin ese extremo»
+ * y no viaja al borde. Y el defecto de fechas hace MÁS cierto el párrafo de arriba: el conjunto
+ * inicial ya no es todo el histórico de nadie.
  *
  * **Sin mensajeros elegidos no se llama al servidor** (R39): «ninguno» no es «todos», es una
  * llamada que no debió ocurrir. Se corta aquí, y el borde lo corta otra vez con su lista blanca.
@@ -74,10 +87,12 @@ const MODAL_TITULO = "Descargar gestiones por mensajero";
 const MODAL_DESCRIPCION =
   "Una fila por gestión, cruzando los cierres de los mensajeros que elijas. Esta descarga es independiente de los filtros de la pantalla: lo que se lleva es lo que elijas acá.";
 const MENSAJEROS_LEGEND = "Mensajeros";
+const TODOS_LABEL = "Todos";
 const SIN_MENSAJEROS_EN_ALCANCE = "No hay mensajeros en tu alcance.";
 const DESDE_LABEL = "Desde";
 const HASTA_LABEL = "Hasta";
-const RANGO_AYUDA = "Opcional. Recorta por la fecha de solicitud del cierre.";
+const RANGO_AYUDA =
+  "Recorta por la fecha de solicitud del cierre. Arranca en el día de hoy; vaciá una fecha para quitar ese extremo.";
 const CERRAR_LABEL = "Cerrar";
 
 /** R39: el aviso accionable de confirmar sin nadie elegido. No se llama al servidor. */
@@ -111,19 +126,48 @@ export function DescargarGestionesDialog({
   disabled = false,
 }: Readonly<DescargarGestionesDialogProps>) {
   const [abierto, setAbierto] = useState(false);
-  /** Ids de los mensajeros elegidos. El conjunto del archivo, y nada más (R30/R33). */
-  const [seleccion, setSeleccion] = useState<string[]>([]);
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+
+  /** Los ids del catálogo, en su orden: el universo de lo elegible y el defecto de la selección. */
+  const idsCatalogo = useMemo(
+    () => catalogo.mensajeros.map((mensajero) => mensajero.id),
+    [catalogo.mensajeros],
+  );
+
+  /**
+   * Ids de los mensajeros elegidos. El conjunto del archivo, y nada más (R30/R33).
+   *
+   * `null` significa **«el usuario no ha tocado nada», que es TODOS** (pedido humano
+   * 2026-08-19), y no se guarda como una copia de los ids por un motivo concreto: el catálogo lo
+   * resuelve el servidor y su prop tiene por defecto el catálogo VACÍO. Con
+   * `useState(idsCatalogo)` esa lista quedaría congelada en lo que hubiera en el primer render y
+   * el diálogo abriría sin nada marcado —lo contrario de lo que se pidió— sin que nada se ponga
+   * rojo. Cualquier interacción escribe una lista explícita, incluida la vacía.
+   */
+  const [seleccion, setSeleccion] = useState<string[] | null>(null);
+  const elegidos = seleccion ?? idsCatalogo;
+
+  // El rango arranca en HOY, los dos extremos. Calendario de Costa Rica y no `toISOString()`:
+  // aquél emite la fecha en UTC, así que a partir de las 18:00 CR ya devuelve el día siguiente y
+  // el diálogo abriría con un rango de mañana a mañana, vacío de cierres.
+  const [desde, setDesde] = useState(() => fechaCalendarioCR());
+  const [hasta, setHasta] = useState(() => fechaCalendarioCR());
 
   const rangoInvertido = desde !== "" && hasta !== "" && desde > hasta;
 
   function alternar(mensajeroId: string, marcado: boolean) {
-    setSeleccion((previos) =>
-      marcado
-        ? [...previos, mensajeroId]
-        : previos.filter((id) => id !== mensajeroId),
+    setSeleccion(
+      marcado ? [...elegidos, mensajeroId] : elegidos.filter((id) => id !== mensajeroId),
     );
+  }
+
+  /**
+   * «Todos» marca o desmarca la lista ENTERA de una vez. Desmarcar deja el conjunto VACÍO a
+   * propósito y no vuelve al defecto: es la forma corta de decir «ninguno de éstos, sólo el que
+   * marque ahora», y sin ella quedarse con un solo mensajero de una flota de veinte son
+   * diecinueve clics. Confirmar así lo sigue cortando R39.
+   */
+  function alternarTodos(marcado: boolean) {
+    setSeleccion(marcado ? [...idsCatalogo] : []);
   }
 
   /**
@@ -133,7 +177,7 @@ export function DescargarGestionesDialog({
    */
   function recorteElegido(): FiltrosDescargaGestiones {
     return {
-      mensajeroIds: seleccion as FiltrosDescargaGestiones["mensajeroIds"],
+      mensajeroIds: elegidos as FiltrosDescargaGestiones["mensajeroIds"],
       ...(desde === "" ? {} : { desde }),
       ...(hasta === "" ? {} : { hasta }),
     };
@@ -145,7 +189,7 @@ export function DescargarGestionesDialog({
    * toast y no genera nada.
    */
   async function obtenerFilas(): Promise<DescargaFilasResult> {
-    if (seleccion.length === 0) {
+    if (elegidos.length === 0) {
       return { status: "error", mensaje: MENSAJE_SIN_MENSAJERO };
     }
     if (rangoInvertido) {
@@ -186,23 +230,46 @@ export function DescargarGestionesDialog({
             {catalogo.mensajeros.length === 0 ? (
               <p className="text-sm text-muted-foreground">{SIN_MENSAJEROS_EN_ALCANCE}</p>
             ) : (
-              <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-                {catalogo.mensajeros.map((mensajero) => {
-                  const id = `descarga-gestiones-mensajero-${mensajero.id}`;
-                  return (
-                    <div key={mensajero.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={id}
-                        checked={seleccion.includes(mensajero.id)}
-                        onCheckedChange={(marcado) => alternar(mensajero.id, marcado === true)}
-                      />
-                      <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
-                        {mensajero.nombre}
-                      </Label>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                {/* «Todos» va FUERA de la lista con scroll y separado por una línea: es un
+                    control SOBRE los de abajo, no uno más de ellos. Dentro del `overflow-y-auto`
+                    se perdería de vista al desplazarse por una flota larga, que es justo cuando
+                    hace falta. Reusa `SelectAllCheckbox` —el mismo tri-estado de la cabecera del
+                    `DataTable`, con su indeterminado cuando hay algunos— en vez de una cuarta
+                    copia de la misma cuenta. */}
+                <div className="flex items-center gap-2 border-b pb-2">
+                  <SelectAllCheckbox
+                    id="descarga-gestiones-todos"
+                    selectableIds={idsCatalogo}
+                    selectedIds={new Set(elegidos)}
+                    onToggleAll={alternarTodos}
+                    ariaLabel={TODOS_LABEL}
+                  />
+                  <Label
+                    htmlFor="descarga-gestiones-todos"
+                    className="cursor-pointer text-sm font-normal"
+                  >
+                    {TODOS_LABEL}
+                  </Label>
+                </div>
+                <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+                  {catalogo.mensajeros.map((mensajero) => {
+                    const id = `descarga-gestiones-mensajero-${mensajero.id}`;
+                    return (
+                      <div key={mensajero.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={id}
+                          checked={elegidos.includes(mensajero.id)}
+                          onCheckedChange={(marcado) => alternar(mensajero.id, marcado === true)}
+                        />
+                        <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
+                          {mensajero.nombre}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </fieldset>
 

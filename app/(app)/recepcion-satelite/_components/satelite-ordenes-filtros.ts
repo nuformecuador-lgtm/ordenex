@@ -3,7 +3,12 @@ import {
   ESTADOS_BODEGA_SATELITE,
   type EstadoBodegaSatelite,
 } from "@/lib/utils/estados-bodega-satelite";
-import type { CatalogoFiltrosSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import {
+  CLAVE_BUSQUEDA,
+  construirFiltrosOrdenes,
+} from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
+import { seleccionAFilter } from "@/app/(app)/ordenes/_components/seleccion-a-filter";
 
 // Barra de filtros del listado de la bodega satélite (pedido humano: "el mismo diseño
 // que en el admin"). Declaración PURA de los filtros que ofrece `FilterComponent`,
@@ -15,21 +20,26 @@ import type { CatalogoFiltrosSateliteDTO } from "@/lib/interfaces/services/IRece
 // restricción es de coherencia, no una defensa: el scope real lo impone el servicio,
 // acotado a la zona del actor.
 //
-// Feature 170 — FASE 2 (T K.3): los tres filtros los resuelve AHORA EL SERVIDOR (T K.1) y
-// las opciones de cantón y distrito vienen del catálogo del conjunto (T K.2, R46), no de
-// las órdenes cargadas.
+// Feature 170 — FASE 2 (T K.3): los filtros los resuelve EL SERVIDOR (T K.1) y las opciones
+// de la geografía vienen de un catálogo, no de las órdenes cargadas (T K.2, R46).
+//
+// Pedido humano (2026-08-19): la barra deja de ser «como la del admin» y pasa a ser LA del
+// admin — los controles salen de `construirFiltrosOrdenes`, el módulo de `/ordenes`—, sin
+// zona ni tienda y con la geografía de la zona del actor. Ver `construirFiltrosSatelite`.
 //
 // Feature 184 — Tanda A (T A.4): la descarga también los resuelve en el servidor, así que
 // este módulo se queda SOLO con lo que es de presentación: declarar los filtros a partir del
 // catálogo, traducir la selección de la barra al input de la Server Action y serializarla
 // para la caché. Ya no filtra nada (ver el bloque del final).
 
-/** Clave del filtro de estado dentro de la selección de `FilterComponent`. */
+/**
+ * Clave del filtro de estado dentro de la selección de `FilterComponent`.
+ *
+ * Es la ÚNICA clave propia que le queda a esta barra: los cinco estados de la bodega no son
+ * los del catálogo `order_status` que ofrece `/ordenes`, así que este filtro no puede salir
+ * de allí. Geografía, tiempo y buscador sí (ver `construirFiltrosSatelite`).
+ */
 export const CLAVE_ESTADO = "estado";
-/** Clave del filtro de cantón. */
-export const CLAVE_CANTON = "canton";
-/** Clave del filtro de distrito (depende del cantón elegido). */
-export const CLAVE_DISTRITO = "distrito";
 
 /**
  * Etiqueta visible de cada uno de los cinco estados del listado.
@@ -72,21 +82,45 @@ export function etiquetaEstado(value: string): string {
 }
 
 /**
- * Filtros de la barra: estado (los cinco de arriba) + cantón y distrito del CATÁLOGO del
- * conjunto del actor (T K.2, R46). El distrito declara `dependsOn` para que
- * `FilterComponent` solo ofrezca los del cantón elegido y pode la selección al cambiarlo;
- * el encadenamiento (`parentValue`) viaja en el propio catálogo.
+ * Pedido humano (2026-08-19) — la barra de la bodega satélite ES la barra de `/ordenes`.
  *
- * Feature 170 — FASE 2 (T K.3): antes recibía las ÓRDENES y derivaba las opciones de ellas.
- * Con la tabla paginada ese array es la PÁGINA visible, así que derivar de él reduciría el
- * desplegable a los cantones de la página — justo lo que R46 prohíbe. Cambia el ORIGEN, no
- * el contrato: el catálogo trae la misma forma (`{ value, label }` y
- * `{ value, label, parentValue }`) porque el servidor la produce con las mismas funciones
- * (`derivarCantones` / `derivarDistritos`).
+ * No se parece: es la misma. Los controles salen de `construirFiltrosOrdenes` (el mismo
+ * módulo que monta la barra del maestro), así que buscador, geografía encadenada y filtro de
+ * creación —con sus mismos atajos, sus mismos límites y sus mismas etiquetas— llegan aquí sin
+ * una segunda declaración que pueda quedarse atrás.
+ *
+ * Lo que CAE, y por qué:
+ *   - **Zona** (`incluirZona: false`): el adminSatelite opera UNA zona y el servidor la toma
+ *     siempre del actor. Ofrecer el control sería ofrecer el alcance como entrada.
+ *   - **Tienda** (`incluirTienda: false`): no ve el directorio de cuentas tienda; el servicio
+ *     del catálogo tampoco se lo entrega, así que el control se quedaría sin opciones.
+ *   - **Reasignables**: es un filtro de despacho de la bodega CENTRAL (allí sin mensajero),
+ *     un estado que este listado no contiene.
+ *
+ * Lo que SE AÑADE: el filtro de ESTADO con los cinco estados de esta pantalla, delante del
+ * resto — la misma posición que ocupa en `/ordenes`.
+ *
+ * La GEOGRAFÍA llega ya acotada a la zona del actor: el catálogo se pide con
+ * `obtenerCatalogoFiltrosOrdenes`, que para este rol devuelve la geografía de SU zona (y ni
+ * zonas ni tiendas). Antes las opciones se derivaban de las órdenes cargadas y se comparaban
+ * por NOMBRE, con lo que «Central» —que existe en cuatro provincias— no podía encadenarse a su
+ * provincia; ahora son ids, y la cadena provincia → cantón → distrito funciona como en
+ * `/ordenes`.
+ *
+ * El BUSCADOR se declara pero se descarta aquí por su CLAVE: lo pinta `BuscadorFiltros`, la
+ * barra permanente de arriba, igual que en `/ordenes`.
  */
 export function construirFiltrosSatelite(
-  catalogo: CatalogoFiltrosSateliteDTO,
+  catalogo: CatalogoFiltrosOrdenesDTO,
+  opts?: { ahora?: Date },
 ): FilterDef[] {
+  const declarados = construirFiltrosOrdenes(catalogo, {
+    incluirZona: false,
+    incluirTienda: false,
+    incluirReasignables: false,
+    ahora: opts?.ahora,
+  }).filter((f) => f.key !== CLAVE_BUSQUEDA);
+
   return [
     {
       key: CLAVE_ESTADO,
@@ -96,25 +130,7 @@ export function construirFiltrosSatelite(
       placeholder: "Todos los estados",
       emptyMessage: "Sin estados",
     },
-    {
-      key: CLAVE_CANTON,
-      label: "Cantón",
-      kind: "multi",
-      options: catalogo.cantones,
-      placeholder: "Todos los cantones",
-      searchPlaceholder: "Buscar cantón",
-      emptyMessage: "Sin cantones",
-    },
-    {
-      key: CLAVE_DISTRITO,
-      label: "Distrito",
-      kind: "multi",
-      dependsOn: CLAVE_CANTON,
-      options: catalogo.distritos,
-      placeholder: "Todos los distritos",
-      searchPlaceholder: "Buscar distrito",
-      emptyMessage: "Elige un cantón primero",
-    },
+    ...declarados,
   ];
 }
 
@@ -124,8 +140,14 @@ export function construirFiltrosSatelite(
  */
 export interface FiltroBodegaSatelite {
   estados?: EstadoBodegaSatelite[];
-  cantones?: string[];
-  distritos?: string[];
+  /** Geografía por ID, tiempo y término: las MISMAS claves que el `filter` de `/ordenes`. */
+  provincia_id?: string[];
+  canton_id?: string[];
+  distrito_id?: string[];
+  created_preset?: string;
+  created_desde?: string;
+  created_hasta?: string;
+  q?: string;
 }
 
 /** `true` si el valor es uno de los cinco estados del listado. */
@@ -136,24 +158,24 @@ function esEstadoDelListado(value: string): value is EstadoBodegaSatelite {
 /**
  * Traduce la selección de la barra al input de la Server Action.
  *
- * Cantón y distrito viajan como NOMBRES —son exactamente los `value` que el catálogo
- * ofrece, que es lo que el filtro de cliente comparaba (traspaso §9.3)—, así que no hay
- * nada que traducir. Los estados SÍ se acotan a los cinco: el schema del borde los valida
- * con `z.enum` y un valor ajeno tumbaría la consulta entera en vez de ignorarse.
+ * Pedido humano (2026-08-19): todo lo que esta barra comparte con `/ordenes` lo traduce
+ * `seleccionAFilter`, la MISMA función que usa allí — incluido lo que no es una identidad: la
+ * clave posicional del calendario (`[atajo, desde, hasta]`) que se abre en `created_preset` o
+ * en `created_desde`/`created_hasta`, y el término, que baja de lista a escalar. Aquí sólo
+ * queda lo propio: los ESTADOS, que se acotan a los cinco de esta pantalla porque el borde los
+ * valida con `z.enum` y un valor ajeno tumbaría la consulta entera en vez de ignorarse.
  *
- * Una lista vacía se OMITE en vez de viajar como `[]`, para que «sin filtros» tenga una
- * sola clave de caché y siga aprovechando la página que pre-cargó el servidor.
+ * Una lista vacía se OMITE en vez de viajar como `[]`, para que «sin filtros» tenga una sola
+ * clave de caché y siga aprovechando la página que pre-cargó el servidor.
  */
 export function seleccionAFiltroSatelite(
   seleccion: FilterSelection,
 ): FiltroBodegaSatelite {
-  const filtro: FiltroBodegaSatelite = {};
+  const compartidos: FilterSelection = { ...seleccion };
+  delete compartidos[CLAVE_ESTADO]; // la unica clave que `seleccionAFilter` no conoce
+  const filtro = seleccionAFilter(compartidos) as FiltroBodegaSatelite;
   const estados = (seleccion[CLAVE_ESTADO] ?? []).filter(esEstadoDelListado);
-  const cantones = seleccion[CLAVE_CANTON] ?? [];
-  const distritos = seleccion[CLAVE_DISTRITO] ?? [];
   if (estados.length > 0) filtro.estados = estados;
-  if (cantones.length > 0) filtro.cantones = [...cantones];
-  if (distritos.length > 0) filtro.distritos = [...distritos];
   return filtro;
 }
 
@@ -167,7 +189,12 @@ export function serializarFiltroSatelite(filtro: FiltroBodegaSatelite): string {
     .sort()
     .map((clave) => {
       const valor = filtro[clave];
-      return valor === undefined ? null : `${clave}=${[...valor].sort().join(",")}`;
+      if (valor === undefined) return null;
+      // Desde que la barra es la de `/ordenes` no todas las claves son listas: el término y
+      // las tres del calendario son ESCALARES. Ordenar sólo lo que es lista mantiene la
+      // propiedad que da sentido a esta función —dos selecciones equivalentes, una sola
+      // clave— sin inventarle un `sort` a un string (que lo partiría en caracteres).
+      return `${clave}=${Array.isArray(valor) ? [...valor].sort().join(",") : valor}`;
     })
     .filter((parte): parte is string => parte !== null)
     .join("&");

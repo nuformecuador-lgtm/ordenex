@@ -123,6 +123,10 @@ export interface TarifaSnapshotDTO {
   comisionCod: string; // % 0..100 sobre montoCobrar
   ivaFlete: string; // % 0..100 sobre el flete
   ivaComisionCod: string; // % 0..100 sobre la comision
+  // Monto FIJO de fulfillment congelado (2026-08-19). `null` en los cierres anteriores a la
+  // columna: no hay valor correcto que inventar hacia atras, y un "0.00" diria "no se cobro",
+  // que es otra cosa. NO participa del `total` del ingreso: no es un concepto de la formula.
+  fulfillment: string | null;
 }
 
 /**

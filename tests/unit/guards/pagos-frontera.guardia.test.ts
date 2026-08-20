@@ -153,10 +153,20 @@ describe("R33 — los módulos inmunes no nombran la tabla del desglose", () => 
       return NOMBRES_DEL_DESGLOSE.some((n) => codigo.includes(n));
     });
 
-    // El repositorio que INSERTA las líneas dentro de la transacción de la gestión, y nadie más.
-    // Los tres caminos de LECTURA no nombran la tabla: llegan a ella por la relación `pagos` de
-    // `gestion_orden`, que es una proyección y no un acceso directo.
-    expect(conDesglose.sort()).toEqual(["lib/repositories/GestionOrdenRepository.ts"]);
+    // Los DOS repositorios que ESCRIBEN las líneas, y nadie más. Los caminos de LECTURA no
+    // nombran la tabla: llegan a ella por la relación `pagos` de `gestion_orden`, que es una
+    // proyección y no un acceso directo.
+    //
+    //  · `GestionOrdenRepository` las INSERTA dentro de la transacción de la gestión (212).
+    //  · `CierresAdminRepository` las SUSTITUYE cuando un admin/maestro corrige el reparto por
+    //    método de un cierre abierto (pedido humano 2026-08-19). Entra en esta lista con la
+    //    misma condición que el primero: escribe el desglose Y recalcula, en la MISMA
+    //    transacción, los totales del cierre que dependen de él. Un tercer módulo que solo
+    //    quiera LEER sigue sin tener por qué nombrar la tabla, y esta guardia lo delata.
+    expect(conDesglose.sort()).toEqual([
+      "lib/repositories/CierresAdminRepository.ts",
+      "lib/repositories/GestionOrdenRepository.ts",
+    ]);
   });
 
   it("CONTRAPRUEBA: el barrido caza una lectura del desglose inyectada en un inmune", () => {

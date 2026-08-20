@@ -14,6 +14,7 @@ import { FiltrosEntregas } from "@/app/(app)/_components/FiltrosEntregas";
 import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { AnaliticaShell } from "./_components/AnaliticaShell";
+import { ActualizarAnalitica } from "./_components/entregas/ActualizarAnalitica";
 import { ConteoEntregasAnillo } from "./_components/entregas/ConteoEntregasAnillo";
 import { ConteoPorStatusDona } from "./_components/entregas/ConteoPorStatusDona";
 import { CargadasPorDiaBarras } from "./_components/entregas/CargadasPorDiaBarras";
@@ -184,8 +185,26 @@ export default async function AnaliticaPage() {
           Funciona porque el layout eligio `overflow-x-clip` —y no `hidden`— en el `main`:
           `clip` no lo convierte en contenedor de scroll vertical, que es lo que dejaria a un
           `position: sticky` sin nada contra lo que pegarse. */}
-      <div className="sticky top-0 z-20 -mx-6 bg-background/70 px-6 py-3 backdrop-blur-md">
-        <FiltrosEntregas />
+      <div className="sticky top-0 z-20 -mx-6 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 bg-background/70 px-6 py-3 backdrop-blur-md">
+        {/* La barra crece y el control de actualización se queda a la derecha. Van en la MISMA
+            fila pegajosa —y no en el encabezado de la sección— porque los dos hablan de la
+            consulta que hay en pantalla: uno decide QUÉ se pide y el otro CUÁNDO se leyó. Al
+            hacer scroll por las cuatro gráficas, el sello de frescura sigue a la vista con el
+            filtro que lo produjo.
+
+            `min-w-0` en la celda del filtro: sin él, una celda de flex no encoge por debajo de
+            su contenido y el botón se saldría de la fila en una pantalla estrecha.
+
+            `items-start` y no `items-center` (2026-08-19): la barra de filtros CRECE hacia
+            abajo —al poner filtros la fila envuelve, y debajo puede aparecer el aviso de «no
+            hay secciones»—, y centrar sobre el bloque entero iría bajando el botón hasta
+            dejarlo enfrente de la segunda fila. Anclado arriba queda a la altura del campo y
+            del selector, que es la fila con la que tiene que alinearse. El centrado real lo
+            hace el `h-8` del propio grupo. */}
+        <div className="min-w-0 flex-1">
+          <FiltrosEntregas facetas={recorte.facetas} />
+        </div>
+        <ActualizarAnalitica />
       </div>
       <SeccionFiltrable titulo={TITULO_ENTREGAS}>
         <ContenedorSeccion titulo={TITULO_ENTREGAS}>

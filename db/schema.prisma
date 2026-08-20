@@ -113,6 +113,7 @@ model Usuario {
   ordenesAsignadas                    Orden[]                   @relation("OrdenMensajeroAsignado") // feature 17: mensajero ASIGNADO (decision del maestro)
   gestionesRealizadas                 GestionOrden[]            @relation("GestionMensajero") // feature 36: gestiones que este mensajero registro
   gestionesAnuladas                   GestionOrden[]            @relation("GestionAnuladaPor") // feature 67/R11: gestiones que este usuario DESHIZO (rastro de la anulacion)
+  gestionesPagosEditados              GestionOrden[]            @relation("GestionPagosEditadosPor") // gestiones cuyo desglose de pago CORRIGIO este usuario
   tarifasTienda                       Tarifa[]                  @relation("TarifaTienda") // tarifas cuya tienda es este usuario (adminTienda)
   cierresRealizados                   CierreDia[]               @relation("CierreMensajero") // feature 37: cierres del dia solicitados por este mensajero
   cierresResueltos                    CierreDia[]               @relation("CierreResueltoPor") // feature 38: cierres que este admin aprobo/rechazo
@@ -843,26 +844,38 @@ model GestionOrden {
   confirmadaFisicaAt   DateTime?                 @map("confirmada_fisica_at")
   anuladaAt            DateTime?                 @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
   anuladaPor           String?                   @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
+  // Pedido humano (2026-08-19): rastro de la CORRECCION del desglose de pago por un
+  // admin/maestro desde el detalle de un cierre ABIERTO. NULL = el reparto sigue siendo el que
+  // registro el mensajero (el estado de todas las filas anteriores). Mismo patron que el par
+  // `anulada_at`/`anulada_por` de arriba: quien declaro el reparto fue el mensajero y ese
+  // reparto es la `E` del `min(P, E)` con el que se le paga (44), asi que reescribirlo sin
+  // decir quien ni cuando convierte una correccion en una discrepancia sin autor.
+  pagosEditadosAt      DateTime?                 @map("pagos_editados_at")
+  pagosEditadosPor     String?                   @map("pagos_editados_por")
   createdAt            DateTime                  @default(now()) @map("created_at")
 
-  orden             Orden                   @relation(fields: [ordenId], references: [id])
-  mensajero         Usuario                 @relation("GestionMensajero", fields: [mensajeroId], references: [id])
-  cierre            CierreDia?              @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
+  orden                   Orden                   @relation(fields: [ordenId], references: [id])
+  mensajero               Usuario                 @relation("GestionMensajero", fields: [mensajeroId], references: [id])
+  cierre                  CierreDia?              @relation(fields: [cierreId], references: [id]) // feature 37/R13: cierre que agrupa esta gestion
   // Feature 67/R11: quien deshizo la gestion. ON DELETE SET NULL como el actor del historial
   // (49/R21): borrar al usuario no borra el rastro de la anulacion.
-  anuladaPorUsuario Usuario?                @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
-  historialEstados  OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
+  anuladaPorUsuario       Usuario?                @relation("GestionAnuladaPor", fields: [anuladaPor], references: [id], onDelete: SetNull)
+  // SetNull como el actor de la anulacion (67) y el del historial (49): borrar al usuario no
+  // borra el rastro de que la correccion ocurrio.
+  pagosEditadosPorUsuario Usuario?                @relation("GestionPagosEditadosPor", fields: [pagosEditadosPor], references: [id], onDelete: SetNull)
+  historialEstados        OrdenHistorialEstado[] // feature 49: transiciones de estado causadas por esta gestion (familia gestion)
   // Feature 119 (R1): evidencias 1..N de esta gestion (la portada = indice 0 se conserva
   // ademas denormalizada en evidencia_storage_path/_content_type por retro-compat, R12).
-  evidencias        GestionOrdenEvidencia[]
+  evidencias              GestionOrdenEvidencia[]
   // Feature 212 (R1): desglose del recaudo al cliente, 0..N lineas (metodo, monto).
   // `monto_recibido` se conserva como TOTAL snapshot (R5).
-  pagos             GestionOrdenPago[]
+  pagos                   GestionOrdenPago[]
 
   @@index([ordenId]) // R7
   @@index([mensajeroId]) // R7
   @@index([cierreId]) // feature 37/R3: listar gestiones sin cierre (cierre_id IS NULL)
   @@index([anuladaPor]) // feature 67: FK del actor de la anulacion
+  @@index([pagosEditadosPor]) // FK del actor de la correccion del desglose
   // Feature 126/R25 (T0-Q1 = B): la ruta caliente INTRADIA (cubos del dia en curso, D6/D13)
   // filtra por `created_at` SIN `orden_id` ni `mensajero_id` por delante, y ninguno de los
   // cuatro indices de arriba la cubre. Se DECLARA aqui, y no solo en el `.sql`: si el
@@ -1696,6 +1709,11 @@ model CierreDetail {
   tarifaComisionCod           Decimal? @map("tarifa_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
   tarifaIvaFlete              Decimal? @map("tarifa_iva_flete") @db.Decimal(5, 2) // porcentaje 0..100
   tarifaIvaComisionCod        Decimal? @map("tarifa_iva_comision_cod") @db.Decimal(5, 2) // porcentaje 0..100
+  // Monto FIJO de fulfillment de la tarifa (2026-08-19). NO entra en `derivarIngresoOrden` ni
+  // en las wallets: se congela para poder MOSTRARLO en el detalle y en las descargas del cierre
+  // con el mismo valor que tenia al solicitar. Es NULL en las filas anteriores a esta columna
+  // (no hay backfill posible: la tarifa de entonces pudo cambiar), y eso se ve como celda vacia.
+  tarifaFulfillment           Decimal? @map("tarifa_fulfillment") @db.Decimal(12, 2) // monto
 
   // --- descriptivos (R7): lo que el admin ve del cierre (38), congelado ---
   numGuia         Int?    @map("num_guia") // SIN @unique: es copia, no identidad
@@ -1880,29 +1898,29 @@ enum RutaEstado {
 // coordenadas (R14). RLS habilitada sin policies (solo service role, va en la migracion):
 // guarda geolocalizacion de una persona y no es accesible desde el cliente.
 model RutaOptimizada {
-  id           String     @id @default(uuid())
-  mensajeroId  String     @unique @map("mensajero_id")
-  estado       RutaEstado @default(vigente)
-  calculadaAt  DateTime?  @map("calculada_at") // NULL = nunca se calculo
-  origenLat    Decimal?   @map("origen_lat") @db.Decimal(10, 7)
-  origenLng    Decimal?   @map("origen_lng") @db.Decimal(10, 7)
-  origenAt     DateTime?  @map("origen_at")
-  origenFuente String?    @map("origen_fuente")
-  huellaSet    String?    @map("huella_set")
-  ultimoError  String?    @map("ultimo_error")
+  id                String     @id @default(uuid())
+  mensajeroId       String     @unique @map("mensajero_id")
+  estado            RutaEstado @default(vigente)
+  calculadaAt       DateTime?  @map("calculada_at") // NULL = nunca se calculo
+  origenLat         Decimal?   @map("origen_lat") @db.Decimal(10, 7)
+  origenLng         Decimal?   @map("origen_lng") @db.Decimal(10, 7)
+  origenAt          DateTime?  @map("origen_at")
+  origenFuente      String?    @map("origen_fuente")
+  huellaSet         String?    @map("huella_set")
+  ultimoError       String?    @map("ultimo_error")
   // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
   // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
   // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
-  trazadoPolilinea  String? @map("trazado_polilinea")
-  trazadoDistanciaM Int?    @map("trazado_distancia_m")
-  trazadoDuracionS  Int?    @map("trazado_duracion_s")
-  trazadoFuente     String? @map("trazado_fuente")
+  trazadoPolilinea  String?    @map("trazado_polilinea")
+  trazadoDistanciaM Int?       @map("trazado_distancia_m")
+  trazadoDuracionS  Int?       @map("trazado_duracion_s")
+  trazadoFuente     String?    @map("trazado_fuente")
   // Guarda de coste del trayecto EN VIVO (20260814160000_ruta_tramo_vivo_at). Contador de
   // gasto, no dato de negocio: solo lo lee la guarda del intervalo minimo.
-  tramoVivoAt       DateTime? @map("tramo_vivo_at")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  tramoVivoAt       DateTime?  @map("tramo_vivo_at")
+  createdAt         DateTime   @default(now()) @map("created_at")
   // Default declarado para que coincida con `20260720130000_ruta_optimizada`.
-  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
+  updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at")
 
   mensajero Usuario                @relation("RutaOptimizadaMensajero", fields: [mensajeroId], references: [id], onDelete: Cascade)
   paradas   RutaOptimizadaParada[]
@@ -1916,10 +1934,10 @@ model RutaOptimizada {
 // garantiza la DB, no solo el codigo. Una orden en reparto SIN fila aqui es una parada
 // "sin optimizar" (R28), que la lectura muestra al final.
 model RutaOptimizadaParada {
-  id        String @id @default(uuid())
-  rutaId    String @map("ruta_id")
-  ordenId   String @map("orden_id")
-  secuencia Int
+  id              String  @id @default(uuid())
+  rutaId          String  @map("ruta_id")
+  ordenId         String  @map("orden_id")
+  secuencia       Int
   // Tramo que LLEGA a esta parada (20260814140000_ruta_parada_tramo). La fila 1 guarda el
   // origen -> primera parada. No necesita invalidacion propia: `reemplazarSecuencia` borra e
   // reinserta estas filas enteras en cada recalculo.

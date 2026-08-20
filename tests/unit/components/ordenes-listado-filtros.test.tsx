@@ -131,15 +131,24 @@ async function ponerFiltros(
   );
 }
 
+/**
+ * Las opciones DEL CATÁLOGO de un panel abierto. La opción «Todos» (2026-08-19) es
+ * `role="option"` porque se marca como una más, pero no viene del catálogo: incluirla haría
+ * que estos casos midieran la barra en vez de la geografía que acota la cadena.
+ */
+function opciones(panel: HTMLElement): HTMLElement[] {
+  return within(panel)
+    .getAllByRole("option")
+    .filter((o) => o.dataset.todos !== "true");
+}
+
 /** Etiquetas que el selector "Filtros" OFRECE, en su orden. */
 async function filtrosOfrecidos(
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<string[]> {
   await user.click(await screen.findByRole("button", { name: /^Filtros/ }));
   const selector = await screen.findByRole("listbox", { name: "Filtros" });
-  const etiquetas = within(selector)
-    .getAllByRole("option")
-    .map((o) => o.textContent ?? "");
+  const etiquetas = opciones(selector).map((o) => o.textContent ?? "");
   await user.keyboard("{Escape}");
   await waitFor(() =>
     expect(screen.queryByRole("listbox", { name: "Filtros" })).toBeNull(),
@@ -393,7 +402,7 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
 
     // Sin provincia marcada, el cantón ofrece los dos.
     let cantones = await abrir(user, "Cantón");
-    expect(within(cantones).getAllByRole("option")).toHaveLength(2);
+    expect(opciones(cantones)).toHaveLength(2);
     await user.keyboard("{Escape}");
 
     const llamadasCatalogo = listarOrderStatusMock.mock.calls.length;
@@ -401,7 +410,7 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
 
     cantones = await abrir(user, "Cantón");
     expect(
-      within(cantones).getAllByRole("option").map((o) => o.textContent),
+      opciones(cantones).map((o) => o.textContent),
     ).toEqual(["Escazú"]);
     // Ninguna consulta de catálogo extra: el acotamiento es puro cliente.
     expect(listarOrderStatusMock.mock.calls.length).toBe(llamadasCatalogo);
@@ -418,7 +427,7 @@ describe("OrdenesListado — cadena geográfica en el cliente (R57)", () => {
 
     const distritos = await abrir(user, "Distrito");
     expect(
-      within(distritos).getAllByRole("option").map((o) => o.textContent),
+      opciones(distritos).map((o) => o.textContent),
     ).toEqual(["Puente Piedra"]);
   });
 

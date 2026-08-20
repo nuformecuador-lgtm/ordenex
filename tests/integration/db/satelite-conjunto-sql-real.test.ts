@@ -55,13 +55,45 @@ describeSiHayBase("SQL real de la bodega satélite (feature 184, T A.1/T A.2)", 
       }),
     ).resolves.toEqual([]);
 
-    // Con los dos filtros: se añaden `c."nombre"` y `d."nombre"`, que dependen de los JOINs.
+    // Con los dos filtros: se añaden `o."canton_id"` y `o."distrito_id"`.
     await expect(
       repo.findRecepcionSateliteCompleta({
         zonaId: ZONA_INEXISTENTE,
         estatusValues: ["devuelta"],
-        cantonNombres: ["Escazú"],
-        distritoNombres: ["San Rafael"],
+        cantonIds: ["c-escazu"],
+        distritoIds: ["d-san-rafael"],
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("los filtros heredados de `/ordenes` también son SQL válido contra el esquema real", async () => {
+    // Pedido humano (2026-08-19): la barra ganó buscador y filtro de creación, y los dos
+    // añaden condiciones al MISMO SQL crudo. `o."busqueda_texto"` es una columna GENERADA
+    // —existe solo desde su migración— y el `LIKE` va con su patrón ya construido: si el
+    // nombre o el tipo no casaran, ningún test con dobles lo vería y reventaría en la primera
+    // búsqueda de la bodega.
+    await expect(
+      repo.findRecepcionSatelitePaginada(
+        {
+          zonaId: ZONA_INEXISTENTE,
+          estatusValues: [...ESTADOS_BODEGA_SATELITE],
+          provinciaIds: ["p-sj"],
+          creadaDesde: new Date("2026-08-01T06:00:00.000Z"),
+          creadaHasta: new Date("2026-08-11T06:00:00.000Z"),
+          busqueda: "8888-0000",
+          busquedaDigitos: "88880000",
+        },
+        { skip: 0, take: 5 },
+      ),
+    ).resolves.toEqual({ items: [], total: 0 });
+
+    // Y el conjunto de la descarga, que comparte el fragmento: una forma sola del término
+    // (sin el `OR`) tiene que ser igual de válida.
+    await expect(
+      repo.findRecepcionSateliteCompleta({
+        zonaId: ZONA_INEXISTENTE,
+        estatusValues: ["devuelta"],
+        busqueda: "guapiles",
       }),
     ).resolves.toEqual([]);
   });

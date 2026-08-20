@@ -97,6 +97,7 @@ import {
   clavePagosDeCierre,
 } from "./PagoMensajeroSeccion";
 import { RegistrarPagoMensajeroDialog } from "./RegistrarPagoMensajeroDialog";
+import { CorregirPagosDialog } from "./CorregirPagosDialog";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -147,6 +148,17 @@ export interface CierresAdminModuleProps {
    * ofrece pagar a nadie, en vez de ofrecérselo a todos.
    */
   puedeRegistrarPago?: boolean;
+  /**
+   * Pedido humano (2026-08-19) — permiso de CORREGIR el desglose de pago de una gestión de un
+   * cierre abierto. Se resuelve server-side con el MISMO predicado que el servicio
+   * (`esAccesoTotal`): maestro y admin, y nadie más.
+   *
+   * Es otra prop y no `puedeRegistrarPago` aunque hoy coincida el predicado: pagar un cierre
+   * aprobado y corregir lo que un mensajero declaró son dos permisos distintos, y fundirlos
+   * aquí haría que separarlos mañana exigiera desenredar la pantalla. Opcional y con default
+   * `false` — FALLA CERRADO, igual que su vecina.
+   */
+  puedeCorregirPagos?: boolean;
   /**
    * Pedido humano del 2026-08-16 — opciones de los filtros (bodegas destino y mensajeros), ya
    * acotadas al alcance del actor y resueltas por el Server Component: es una lectura de solo
@@ -342,6 +354,7 @@ export function CierresAdminModule({
   historico,
   sinZona,
   puedeRegistrarPago = false,
+  puedeCorregirPagos = false,
   catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
@@ -356,6 +369,10 @@ export function CierresAdminModule({
   const [detalle, setDetalle] = useState<DetalleAbierto | null>(null);
   // Evidencia (URL firmada, R7) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
+  // Pedido humano (2026-08-19): la gestión cuyo desglose se está corrigiendo; `null` = diálogo
+  // cerrado. Va aquí, con el resto de los hooks, y no junto al bloque que lo usa: los hooks se
+  // llaman todos, siempre y en el mismo orden.
+  const [corrigiendo, setCorrigiendo] = useState<CierreDetalleGestion | null>(null);
   // Sub-modal de rechazo (R11): true = abierto.
   const [rechazando, setRechazando] = useState(false);
   // Motivo del rechazo (obligatorio, R11) + su error de validación.
@@ -565,7 +582,7 @@ export function CierresAdminModule({
     }
     if (result.status === "no_encontrada") {
       toast.error("El cierre ya no está disponible. Actualizando la lista.");
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "unauthenticated") {
@@ -614,6 +631,28 @@ export function CierresAdminModule({
     setUltimaGuiaConfirmada(null);
   }
 
+  /**
+   * Pedido humano del 2026-08-19 — tras aceptar / rechazar / destrabar, LA LISTA tiene que
+   * enterarse. `router.refresh()` a secas no bastaba: sólo vuelve a resolver el Server
+   * Component, y sus páginas entran acá como `fallbackData`, que SWR usa una vez y nunca
+   * vuelve a mirar. Con datos ya en caché, el cierre resuelto seguía sentado en la cola hasta
+   * recargar a mano.
+   *
+   * Se revalidan TODAS las claves de los dos listados —cualquier página, cualquier
+   * combinación de filtros—, no sólo la visible: una decisión mueve la fila de la cola al
+   * histórico y recorre la paginación de ambos, así que dejar el resto de páginas en caché
+   * sería volver a la misma mentira una página más allá.
+   */
+  function refrescarListas() {
+    void mutate(
+      (clave) =>
+        Array.isArray(clave) &&
+        (clave[0] === "cierres-admin:pendientes" ||
+          clave[0] === "cierres-admin:historico"),
+    );
+    router.refresh();
+  }
+
   /** Traduce un resultado de dominio de error a feedback accionable + refresco. */
   function manejarErrorDecision(
     status:
@@ -635,7 +674,7 @@ export function CierresAdminModule({
       toast.error("No se pudo resolver el cierre. Intentá de nuevo.");
     }
     cerrarDetalle();
-    router.refresh();
+    refrescarListas();
   }
 
   /**
@@ -668,7 +707,7 @@ export function CierresAdminModule({
 
       toast.success("Cierre aprobado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
 
       // R16 — se OFRECE registrar el pago si queda algo pendiente y el actor puede pagar.
       // [P3]/R6: un `adminSatelite` aprueba y aquí no ve nada; el flujo termina como hoy y la
@@ -829,7 +868,7 @@ export function CierresAdminModule({
     if (result.status === "ok") {
       toast.success("Cierre rechazado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "validation_error") {
@@ -856,7 +895,7 @@ export function CierresAdminModule({
         "Cierre vencido destrabado; quedó como solicitado para aprobación.",
       );
       setDestrabar(null);
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "conflict") {
@@ -871,7 +910,7 @@ export function CierresAdminModule({
       toast.error("No se pudo destrabar el cierre. Intentá de nuevo.");
     }
     setDestrabar(null);
-    router.refresh();
+    refrescarListas();
   }
 
   const cierreAbierto = detalle?.cierre ?? null;
@@ -885,6 +924,15 @@ export function CierresAdminModule({
   // camino normal es que el mensajero lo solicite (→ `solicitado`); la excepción es la
   // válvula de escape del admin (R16). El histórico sigue siendo solo lectura.
   const esResoluble = cierreAbierto?.estado === "solicitado";
+  /**
+   * Pedido humano (2026-08-19): el desglose se corrige mientras el cierre está ABIERTO — la
+   * plata todavía no está aprobada—. NO es `esResoluble`: un `vencido` es un cierre abierto que
+   * el mensajero nunca solicitó, y su desglose es tan corregible como el de un `solicitado`.
+   * El servidor exige lo mismo; esto solo decide si se ofrece.
+   */
+  const ofrecerCorreccionPagos =
+    puedeCorregirPagos &&
+    (cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido");
 
   return (
     // `gap-4` y no `gap-8` (pedido humano del 2026-08-16): entre la barra de filtros y las
@@ -1075,6 +1123,24 @@ export function CierresAdminModule({
               ganancia={detalle.ganancia}
               pagoTienda={detalle.pagoTienda}
               onVerEvidencia={setEvidencia}
+              // Ausente cuando no se puede corregir: la hoja vuelve a ser de solo lectura sin
+              // que la fila tenga que saber nada de roles ni de estados.
+              onCorregirPagos={ofrecerCorreccionPagos ? setCorrigiendo : undefined}
+            />
+
+            {/* Pedido humano (2026-08-19): el editor del desglose, el MISMO que usa el
+                mensajero. Tras corregir se RELEE el detalle del servidor —los totales del
+                cierre los recalculó él en la misma transacción— y se refrescan las listas,
+                porque el total del cierre también cambia de balde en la tabla. */}
+            <CorregirPagosDialog
+              gestion={corrigiendo}
+              onOpenChange={(open) => {
+                if (!open) setCorrigiendo(null);
+              }}
+              onCorregido={async () => {
+                if (cierreAbierto) await abrirDetalle(cierreAbierto.cierreId);
+                refrescarListas();
+              }}
             />
 
             {/* ---------- Feature 172 (T E.2, R19/R27/R28/R49): pago al mensajero ----------
@@ -1090,7 +1156,7 @@ export function CierresAdminModule({
                 puedeAnular={puedeRegistrarPago}
                 onRegistrado={async () => {
                   await abrirDetalle(cierreAbierto.cierreId);
-                  router.refresh();
+                  refrescarListas();
                 }}
               />
             ) : null}
@@ -1350,7 +1416,7 @@ export function CierresAdminModule({
             // Refresco DIRIGIDO de los comprobantes de ESE cierre (R33) + la ruta, para que
             // el listado vuelva a traer el pendiente derivado por el servidor (R26).
             await mutate(clavePagosDeCierre(ofertaPago.cierreId));
-            router.refresh();
+            refrescarListas();
           }}
         />
       ) : null}

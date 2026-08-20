@@ -7,8 +7,8 @@ import {
   listarMensajerosSatelite,
   estadoBloqueoBodegaSatelite,
   listarOrdenesBodegaPaginado,
-  obtenerCatalogoFiltrosSatelite,
 } from "@/lib/actions/recepcion-satelite";
+import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 
@@ -81,15 +81,17 @@ export default async function RecepcionSatelitePage() {
           pageSize: recepcionSateliteConfig.DEFAULT_PAGE_SIZE,
         };
 
-  // Feature 170 — FASE 2 (T K.2, R46): opciones de cantón y distrito del CONJUNTO del
-  // actor. Van por props (molde `obtenerCatalogoFiltrosOrdenes`, feature 144): no hay una
-  // consulta por cada selección del usuario, y los desplegables no se reducen a lo que
-  // trae la página visible.
-  const catalogoResult = await obtenerCatalogoFiltrosSatelite();
+  // Pedido humano (2026-08-19): el catálogo de los filtros es el de `/ordenes` — la misma
+  // acción, el mismo servicio—, que para el `adminSatelite` responde ACOTADO: la geografía de
+  // SU zona (leída de la N:M de la zona, no derivada de las órdenes cargadas) y ni zonas ni
+  // cuentas tienda. Va por props, resuelto tras la guardia de rol: los filtros están
+  // operativos en el primer paint, sin una consulta por cada selección del usuario.
+  //
+  // La página NO falla si el catálogo falla: cualquier resultado que no sea `ok` deja `null`
+  // y la barra se monta deshabilitada con la tabla viva (R64 de la 144).
+  const catalogoResult = await obtenerCatalogoFiltrosOrdenes();
   const catalogoFiltros =
-    catalogoResult.status === "ok"
-      ? catalogoResult.catalogo
-      : { cantones: [], distritos: [] };
+    catalogoResult.status === "ok" ? catalogoResult.catalogo : null;
 
   return (
     <AppPage

@@ -495,6 +495,7 @@ describe("CierresAdminModule", () => {
             comisionCod: "3.00",
             ivaFlete: "13.00",
             ivaComisionCod: "13.00",
+            fulfillment: "500.00",
           },
         },
       }),

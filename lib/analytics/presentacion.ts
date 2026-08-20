@@ -87,6 +87,14 @@ function metricaOperativaDeReferencia(): string {
  *     mensajero se quedan sin facetas hasta que backend amplie esos servicios; el dia
  *     que lo haga, se vuelven a ofrecer cambiando SOLO este modulo.
  *
+ *     ACTUALIZACION (2026-08-19): `FiltrosOrdenesService` ya NO le responde `forbidden` al
+ *     adminSatelite — le entrega la geografia de SU zona, sin zonas ni cuentas tienda. Eso
+ *     no cambia lo de arriba, y por eso el alcance `zona` sigue fuera de
+ *     `ALCANCES_CON_CATALOGO`: las dos facetas que ese catalogo alimentaria le llegan
+ *     VACIAS a proposito (su zona esta fijada; las cuentas tienda no son suyas), asi que
+ *     ofrecer el control seguiria dejandolo muerto. Lo que su catalogo alimenta es la
+ *     CADENA GEOGRAFICA, que no es una faceta de este recorte y se ofrece siempre.
+ *
  * (b) La faceta «Mensajero» exige ademas alcance global. Motivo (R15, D4): su catalogo
  *     sirve nombre real + uuid de cada mensajero, que es exactamente lo que R38/R39 de
  *     la 122 (identidad seudonima) existen para impedir a quien ve el grano mensajero

@@ -32,19 +32,14 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       estado: "en_bodega_satelite" as const,
     })),
     recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 0 })),
-    // Feature 170 (T K.1/T K.2): la pagina del listado de la bodega y el catalogo de sus
-    // filtros. Este archivo no los ejercita (viven en `satelite-catalogos.test.ts` y en el
-    // test de servicio); se declaran porque la interfaz los exige.
+    // Feature 170 (T K.1): la pagina del listado de la bodega. Este archivo no la ejercita
+    // (vive en el test de servicio); se declara porque la interfaz la exige.
     listarOrdenesBodegaPaginado: vi.fn(async () => ({
       status: "ok" as const,
       items: [],
       page: 1,
       pageSize: 25,
       total: 0,
-    })),
-    obtenerCatalogoFiltros: vi.fn(async () => ({
-      status: "ok" as const,
-      catalogo: { cantones: [], distritos: [] },
     })),
     // Feature 184 (T A.3): el conjunto de la descarga y la vigencia de la seleccion.
     listarOrdenesBodegaCompleto: vi.fn(async () => ({
@@ -246,8 +241,8 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
         page: 2,
         pageSize: 10,
         estados: ["devuelta", "por_recoger"],
-        cantones: ["Escazú"],
-        distritos: ["San Rafael", "San Antonio"],
+        canton_id: ["Escazú"],
+        distrito_id: ["San Rafael", "San Antonio"],
       },
       { service, getActor: actorAdmin },
     );
@@ -256,8 +251,8 @@ describe("listarOrdenesBodegaPaginado — el borde (feature 170, T K.1)", () => 
         page: 2,
         pageSize: 10,
         estados: ["devuelta", "por_recoger"],
-        cantones: ["Escazú"],
-        distritos: ["San Rafael", "San Antonio"],
+        canton_id: ["Escazú"],
+        distrito_id: ["San Rafael", "San Antonio"],
       },
       ADMIN,
     );
@@ -339,16 +334,16 @@ describe("listarOrdenesBodegaCompleto — el borde del conjunto (feature 184, T 
     await listarOrdenesBodegaCompleto(
       {
         estados: ["devuelta", "por_recoger"],
-        cantones: ["Escazú"],
-        distritos: ["San Rafael", "San Antonio"],
+        canton_id: ["Escazú"],
+        distrito_id: ["San Rafael", "San Antonio"],
       },
       { service, getActor: actorAdmin },
     );
     expect(service.listarOrdenesBodegaCompleto).toHaveBeenCalledWith(
       {
         estados: ["devuelta", "por_recoger"],
-        cantones: ["Escazú"],
-        distritos: ["San Rafael", "San Antonio"],
+        canton_id: ["Escazú"],
+        distrito_id: ["San Rafael", "San Antonio"],
       },
       ADMIN,
     );
@@ -395,12 +390,12 @@ describe("listarIdsVigentesBodega — el borde de la vigencia (feature 184, T A.
       })),
     });
     const r = await listarIdsVigentesBodega(
-      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], cantones: ["Escazú"] },
+      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], canton_id: ["Escazú"] },
       { service, getActor: actorAdmin },
     );
     expect(r).toEqual({ status: "ok", ids: [uuid(1)] });
     expect(service.listarIdsVigentesBodega).toHaveBeenCalledWith(
-      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], cantones: ["Escazú"] },
+      { ids: [uuid(1), uuid(2)], estados: ["devuelta"], canton_id: ["Escazú"] },
       ADMIN,
     );
   });

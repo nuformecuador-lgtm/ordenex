@@ -40,7 +40,7 @@ import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { VistaCardsToggle, type VistaCards } from "./VistaCardsToggle";
 import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
-import { useSeccionColapsable } from "./useSeccionColapsable";
+import { useSeccionColapsable } from "@/hooks/useSeccionColapsable";
 import type {
   RutaMapaOrigen,
   RutaMapaParada,

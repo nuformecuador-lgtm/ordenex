@@ -1,5 +1,8 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { RecepcionSateliteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type {
+  RecepcionSateliteFiltro,
+  RecepcionSateliteRow,
+} from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
@@ -11,22 +14,22 @@ import type {
   ListarOrdenesBodegaPaginadoInput,
   ListarOrdenesBodegaPaginadoServiceResult,
   ListarRecepcionSateliteServiceResult,
-  ObtenerCatalogoFiltrosSateliteServiceResult,
   RecepcionSateliteDTO,
   RecibirLoteInput,
   RecibirLoteServiceResult,
   RecibirServiceResult,
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import { descargaConfig } from "@/lib/config/descarga";
-import {
-  ESTADOS_BODEGA_SATELITE,
-  estadosDelListado,
-} from "@/lib/utils/estados-bodega-satelite";
-import {
-  derivarCantones,
-  derivarDistritos,
-} from "@/lib/utils/filtro-canton-distrito";
+import { estadosDelListado } from "@/lib/utils/estados-bodega-satelite";
 import { rangoDePagina } from "@/lib/utils/rango-pagina";
+// Pedido humano (2026-08-19): la barra de este listado es la de `/ordenes`, asi que sus dos
+// traducciones no triviales —el atajo de antiguedad a instantes de Costa Rica y el termino
+// tecleado a las formas que casan con la columna generada— salen del MISMO util que usa
+// `OrdenService`. Escritas dos veces divergirian sin que nada fallara.
+import {
+  rangoCreacion,
+  terminoDeBusqueda,
+} from "@/lib/utils/filtros-listado-ordenes";
 
 // Estado de ORIGEN de la recepcion (feature 30) y destino tras recibir (esta
 // feature). Un solo estado de destino; el nombre de zona se deriva de orden.zonaId
@@ -67,7 +70,6 @@ type RecepcionSateliteRepo = Pick<
   | "findRecepcionSateliteByZona"
   // Feature 170 — FASE 2 (T K.1/T K.2): la pagina del listado y el catalogo de sus filtros.
   | "findRecepcionSatelitePaginada"
-  | "findRecepcionSateliteGeoByZona"
   // Feature 184 — Tanda A (T A.1/T A.2): el conjunto entero para el archivo y la vigencia de
   // los identificadores marcados, los dos con el MISMO criterio que la pagina.
   | "findRecepcionSateliteCompleta"
@@ -95,7 +97,44 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     // Feature 160 (R11/R12/R25): derivador de intentos EN LOTE, dependencia REQUERIDA.
     // `import type` + `Pick`: sin ciclo de modulos y testeable con dobles.
     private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+    /**
+     * Pedido humano (2026-08-19): reloj inyectable, como en `OrdenService`. Lo necesita el
+     * atajo de antiguedad del filtro de creacion («ultimos 7 dias» se mide desde AHORA), y
+     * inyectarlo es lo que permite fijar ese rango en los tests sin congelar el reloj global.
+     */
+    private readonly ahora: () => Date = () => new Date(),
   ) {}
+
+  /**
+   * Pedido humano (2026-08-19) — la entrada publica del listado traducida al criterio del
+   * repositorio, en UN solo sitio.
+   *
+   * Lo comparten los TRES caminos del listado (la pagina, el conjunto de la descarga y la
+   * comprobacion de vigencia) porque los tres tienen que mirar el MISMO conjunto: escrita tres
+   * veces, la descarga acabaria filtrando distinto que la pantalla sin que nada lo delatara
+   * (R16). La zona NO es un parametro publico: llega aparte, siempre desde el actor.
+   */
+  private filtroDeRepo(
+    input: ListarOrdenesBodegaCompletoInput,
+    zonaId: string,
+  ): RecepcionSateliteFiltro {
+    const creacion = rangoCreacion(input, this.ahora());
+    const termino = input.q ? terminoDeBusqueda(input.q) : undefined;
+    // Las claves ausentes se OMITEN en vez de viajar como `undefined`: lo que el repositorio
+    // recibe es exactamente lo que se filtra, y un doble de test puede afirmarlo mirando las
+    // claves. `zonaId` y `estatusValues` van siempre — son el alcance, no un filtro.
+    return {
+      zonaId,
+      estatusValues: estadosDelListado(input.estados), // la lista blanca de los cinco (R44)
+      ...(input.provincia_id ? { provinciaIds: input.provincia_id } : {}),
+      ...(input.canton_id ? { cantonIds: input.canton_id } : {}),
+      ...(input.distrito_id ? { distritoIds: input.distrito_id } : {}),
+      ...(creacion?.gte ? { creadaDesde: creacion.gte } : {}),
+      ...(creacion?.lt ? { creadaHasta: creacion.lt } : {}),
+      ...(termino ? { busqueda: termino.busqueda } : {}),
+      ...(termino?.busquedaDigitos ? { busquedaDigitos: termino.busquedaDigitos } : {}),
+    };
+  }
 
   async listar(actor: Actor): Promise<ListarRecepcionSateliteServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R3/R17
@@ -195,12 +234,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     }
 
     const { items: rows, total } = await this.repo.findRecepcionSatelitePaginada(
-      {
-        zonaId,
-        estatusValues: estadosDelListado(input.estados),
-        cantonNombres: input.cantones,
-        distritoNombres: input.distritos,
-      },
+      this.filtroDeRepo(input, zonaId),
       rangoDePagina(input),
     );
 
@@ -264,12 +298,11 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
     if (zonaId === null) return { status: "ok", items: [], total: 0 };
 
-    const conjunto = await this.repo.findRecepcionSateliteCompleta({
-      zonaId,
-      estatusValues: estadosDelListado(input.estados), // la lista blanca, igual que la pagina
-      cantonNombres: input.cantones,
-      distritoNombres: input.distritos,
-    });
+    // El MISMO criterio que la pagina, del mismo traductor: el archivo no puede filtrar
+    // distinto que la pantalla (R16).
+    const conjunto = await this.repo.findRecepcionSateliteCompleta(
+      this.filtroDeRepo(input, zonaId),
+    );
 
     const limite = descargaConfig.MAX_FILAS;
     if (conjunto.length > limite) {
@@ -319,57 +352,10 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     if (zonaId === null) return { status: "ok", ids: [] };
 
     const ids = await this.repo.findIdsVigentesEnBodega(
-      {
-        zonaId,
-        estatusValues: estadosDelListado(input.estados),
-        cantonNombres: input.cantones,
-        distritoNombres: input.distritos,
-      },
+      this.filtroDeRepo(input, zonaId),
       input.ids,
     );
     return { status: "ok", ids };
-  }
-
-  /**
-   * Feature 170 — FASE 2 (T K.2, R44/R46) — las opciones de canton y distrito del CONJUNTO
-   * del actor, independientes del recorte de pagina.
-   *
-   * Hoy esas opciones se derivan del array que la pantalla ya tiene cargado
-   * (`construirFiltrosSatelite(ordenes)`). Con una pagina, derivarlas de `items` reduciria el
-   * desplegable a los cantones de las 25 filas visibles: el usuario perderia opciones sin
-   * enterarse y, peor, creeria que su bodega no tiene ordenes en el canton que busca.
-   *
-   * Se reusan `derivarCantones`/`derivarDistritos` —las MISMAS funciones que la pantalla usa—
-   * sobre los pares distintos del conjunto: mismas etiquetas, mismo desempate de homonimos,
-   * mismo orden alfabetico. Acotado por rol y zona igual que el listado (R44).
-   */
-  async obtenerCatalogoFiltros(
-    actor: Actor,
-  ): Promise<ObtenerCatalogoFiltrosSateliteServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R3/R17
-
-    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
-    if (zonaId === null) return { status: "ok", catalogo: { cantones: [], distritos: [] } };
-
-    // El catalogo se deriva SIEMPRE de los cinco estados del listado: si se derivara de la
-    // seleccion vigente, elegir un estado borraria cantones del desplegable.
-    const geo = await this.repo.findRecepcionSateliteGeoByZona(zonaId, [
-      ...ESTADOS_BODEGA_SATELITE,
-    ]);
-
-    const cantones = derivarCantones(geo);
-    return {
-      status: "ok",
-      catalogo: {
-        cantones,
-        distritos: cantones.flatMap((canton) =>
-          derivarDistritos(geo, canton.value).map((distrito) => ({
-            ...distrito,
-            parentValue: canton.value,
-          })),
-        ),
-      },
-    };
   }
 
   async recibir(numGuia: number, actor: Actor): Promise<RecibirServiceResult> {

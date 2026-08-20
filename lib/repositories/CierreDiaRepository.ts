@@ -78,7 +78,9 @@ const SNAPSHOT_SELECT = {
 type SnapshotRow = Prisma.GestionOrdenGetPayload<{ select: typeof SNAPSHOT_SELECT }>;
 
 // Money-safe: STRING escala 2 -> Decimal (nunca number/parseFloat), R11. `null` = la tienda
-// no tenia tarifa vigente al solicitar (gap R9): las 8 columnas quedan NULL, todas o ninguna.
+// no tenia tarifa vigente al solicitar (gap R9): las 9 columnas quedan NULL, todas o ninguna.
+// `tarifaFulfillment` (2026-08-19) entra por la MISMA puerta aunque no alimente la formula:
+// congelarlo aparte seria abrir una segunda regla de "todas o ninguna".
 function tarifaColumnas(t: TarifaVigenteResuelta | null) {
   if (t === null) {
     return {
@@ -90,6 +92,7 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
       tarifaComisionCod: null,
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
+      tarifaFulfillment: null,
     };
   }
   return {
@@ -101,6 +104,7 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
     tarifaComisionCod: new Prisma.Decimal(t.comisionCod),
     tarifaIvaFlete: new Prisma.Decimal(t.ivaFlete),
     tarifaIvaComisionCod: new Prisma.Decimal(t.ivaComisionCod),
+    tarifaFulfillment: new Prisma.Decimal(t.fulfillment),
   };
 }
 
@@ -580,7 +584,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
 
         if (filas.length > 0) {
           // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 8 columnas quedan
+          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
           // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
           const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
             tx,

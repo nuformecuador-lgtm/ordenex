@@ -61,6 +61,12 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     findGestionesRetornablesDelCierre: vi.fn(async () => []),
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
     findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
+    // Merge 238 <- dev (2026-08-19): la correccion del desglose de pago amplio el contrato del
+    // repositorio. Esta suite no toca esa ruta; los stubs estan por completitud del doble y
+    // devuelven lo NEUTRO (nada que editar, nada de alcance) para que un uso accidental no pase
+    // por verde.
+    findGestionEditableEnCierre: vi.fn(async () => null),
+    actualizarPagosGestion: vi.fn(async () => ({ status: "fuera_de_alcance" as const })),
     ...overrides,
   };
 }

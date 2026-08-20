@@ -93,6 +93,10 @@ export const RECHAZO_SLA_BADGE_LABEL = "Automático";
 export const RECHAZO_MANUAL_BADGE_LABEL = "Manual";
 // --- Desglose del ingreso de Ordenex por orden (texto separado, i18n-ready) ---
 export const MONTO_COBRAR_COL = "A cobrar";
+// Monto FIJO de fulfillment de la tarifa CONGELADA del cierre (2026-08-19). No es un concepto
+// derivado: no se suma al «Total Ordenex» ni a las wallets. Vacío en los cierres anteriores a
+// la columna `cierre_detail.tarifa_fulfillment`.
+export const FULFILLMENT_COL = "Fulfillment";
 // Conceptos AGRUPADOS (cada uno con su IVA incluido): así se leen en tablas y paneles.
 export const FLETE_CON_IVA_LABEL = "Flete + IVA";
 export const COMISION_CON_IVA_LABEL = "Comisión + IVA";

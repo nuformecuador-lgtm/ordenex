@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
@@ -185,6 +185,7 @@ export function CierresBodegaAdminModule({
 }: Readonly<CierresBodegaAdminModuleProps>) {
   const router = useRouter();
   const toast = useToast();
+  const { mutate } = useSWRConfig();
 
   // Detalle del cierre de bodega abierto (null = modal cerrado).
   const [detalle, setDetalle] = useState<DetalleAbierto | null>(null);
@@ -264,7 +265,7 @@ export function CierresBodegaAdminModule({
     }
     if (result.status === "no_encontrada") {
       toast.error("El cierre de bodega ya no está disponible. Actualizando la lista.");
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "forbidden") {
@@ -284,6 +285,20 @@ export function CierresBodegaAdminModule({
     setRechazando(false);
     setMotivo("");
     setMotivoError(null);
+  }
+
+  /**
+   * Pedido humano del 2026-08-19 — aprobar o rechazar tiene que dejarse ver en la cola.
+   * `router.refresh()` sólo re-resuelve el Server Component, y su página llega acá como
+   * `fallbackData`: SWR ya tiene datos y no la vuelve a mirar, así que el cierre resuelto
+   * seguía en la lista. Se revalidan todas las páginas/filtros de la cola, no sólo la
+   * visible: la fila resuelta puede estar en cualquiera de ellas.
+   */
+  function refrescarListas() {
+    void mutate(
+      (clave) => Array.isArray(clave) && clave[0] === "cierres-bodega:pendientes",
+    );
+    router.refresh();
   }
 
   /** Traduce un resultado de dominio de error a feedback accionable + refresco. */
@@ -307,7 +322,7 @@ export function CierresBodegaAdminModule({
       toast.error("No se pudo resolver el cierre de bodega. Intentá de nuevo.");
     }
     cerrarDetalle();
-    router.refresh();
+    refrescarListas();
   }
 
   /** R16: aprueba el cierre de bodega abierto. */
@@ -319,7 +334,7 @@ export function CierresBodegaAdminModule({
     if (result.status === "ok") {
       toast.success("Cierre de bodega aprobado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
       return;
     }
     manejarErrorDecision(result.status);
@@ -340,7 +355,7 @@ export function CierresBodegaAdminModule({
     if (result.status === "ok") {
       toast.success("Cierre de bodega rechazado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "validation_error") {

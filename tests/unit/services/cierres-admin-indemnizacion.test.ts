@@ -54,6 +54,10 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
     findCatalogoFiltros: vi.fn(async () => ({ zonas: [], mensajeros: [] })),
+    // Pedido humano (2026-08-19): la correccion del desglose. Dobles no-op: esta suite no la
+    // ejercita (vive en `cierres-admin-corregir-pagos.test.ts`).
+    findGestionEditableEnCierre: vi.fn(async () => null),
+    actualizarPagosGestion: vi.fn(async () => ({ status: "conflict" as const })),
     ...overrides,
   };
 }

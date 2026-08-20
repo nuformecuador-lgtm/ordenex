@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import type {
   CatalogoFiltrosCierresDTO,
@@ -19,7 +20,10 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
+import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
+import type { CierreEstado } from "@/lib/types/cierre";
 import type {
+  ActualizarPagosGestionServiceResult,
   AprobarCierreServiceResult,
   CierreAdminResumen,
   CierreDetalleAdminServiceResult,
@@ -55,6 +59,17 @@ const ROL_ADMIN_SATELITE = "adminSatelite";
 
 // Mensaje accionable cuando falta el motivo de rechazo (R11).
 const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
+
+// Pedido humano (2026-08-19) — estados del cierre en los que su desglose todavia se corrige.
+// Misma lista que la guardia del repositorio; aqui sirve para dar un `conflict` legible ANTES
+// de abrir la transaccion, no para sustituirla (la de verdad es la del WHERE).
+const ESTADOS_CIERRE_ABIERTO: CierreEstado[] = ["solicitado", "vencido"];
+
+// Mensajes de la correccion del desglose. Sin PII y sin nombrar al mensajero: dicen QUE esta
+// mal, que es lo unico que el admin necesita para arreglarlo.
+const MSG_PAGOS_SOLO_ENTREGA = "Solo una entrega tiene desglose de pago que corregir.";
+const MSG_PAGOS_SIN_COBRO = "Esta orden no tiene cobro asociado: no hay nada que repartir.";
+const msgDescuadre = (total: string) => `El desglose debe sumar exactamente ${total}.`;
 
 // Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto
 // fijo i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla),
@@ -894,6 +909,94 @@ export class CierresAdminService implements ICierresAdminService {
 
     if (Object.keys(fieldErrors).length === 0) return null;
     return { status: "validation_error", fieldErrors };
+  }
+
+  /**
+   * Pedido humano (2026-08-19) — CORRECCIÓN del desglose de pago de una gestión de un cierre
+   * ABIERTO, desde el detalle del cierre. Solo maestro/admin.
+   *
+   * Las cuatro guardias, en este orden y todas ANTES de escribir:
+   *
+   *  1. **Rol.** `esAccesoTotal` y nada más. El `adminSatelite` tiene alcance para VER los
+   *     cierres de su bodega (`resolveAlcance` se lo da), y aquí se le niega A PROPÓSITO:
+   *     reescribir lo que un mensajero declaró haber cobrado no es leer su bodega. Por eso el
+   *     guard va antes de resolver el alcance y no se apoya en él.
+   *  2. **Alcance.** La gestión tiene que estar en un cierre del alcance del actor; el
+   *     repositorio lo impone en el WHERE. Fuera de alcance e inexistente son el mismo
+   *     desenlace: distinguirlos revelaría cierres ajenos.
+   *  3. **Estado.** El cierre tiene que estar ABIERTO. Aprobado ya se liquidó; rechazado se
+   *     corrige re-solicitándolo. Se comprueba aquí para dar un `conflict` legible, y OTRA VEZ
+   *     dentro de la transacción (anti-TOCTOU): entre este `if` y la escritura cabe una
+   *     aprobación de otro admin.
+   *  4. **La suma.** En `Prisma.Decimal`, contra el `monto_recibido` que está EN LA BASE. El
+   *     total no viaja en la petición justamente para que esta comparación no pueda hacerse
+   *     contra un número que eligió la pantalla.
+   */
+  async actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+    actor: Actor,
+  ): Promise<ActualizarPagosGestionServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // guardia 1
+
+    const scope = await this.resolveAlcance(actor);
+    // Acceso total siempre resuelve alcance; las otras dos ramas son inalcanzables tras el
+    // guard de rol y se tratan como «aquí no hay nada tuyo» en vez de asumirlo.
+    if (scope.status !== "ok") return { status: "forbidden" };
+
+    const gestion = await this.repo.findGestionEditableEnCierre(
+      input.gestionId,
+      scope.alcance,
+    );
+    if (gestion === null) return { status: "no_encontrada" }; // guardia 2
+
+    if (!ESTADOS_CIERRE_ABIERTO.includes(gestion.cierreEstado)) {
+      return { status: "conflict" }; // guardia 3
+    }
+
+    // Solo una ENTREGA reparte dinero; los otros cuatro resultados no cobran nada (R8/R25), así
+    // que no hay desglose que corregir y aceptar uno inventaría un cobro.
+    if (gestion.resultado !== "entregada") {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [MSG_PAGOS_SOLO_ENTREGA] },
+      };
+    }
+
+    // Una entrega SIN cobro (`monto_recibido` 0 o NULL) no tiene nada que repartir: cero
+    // colones no se dividen entre métodos, son CERO líneas (misma regla 4 del borde del
+    // mensajero, feature 212/R14).
+    const montoRecibido = new Prisma.Decimal(gestion.montoRecibido ?? 0);
+    if (montoRecibido.lte(0)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [MSG_PAGOS_SIN_COBRO] },
+      };
+    }
+
+    // Guardia 4: la suma, exacta. `Prisma.Decimal` y no `number`: 0.1 + 0.2 en coma flotante no
+    // es 0.3, y este número decide cuánto se le paga a una persona.
+    const suma = input.lineas.reduce(
+      (acc, l) => acc.plus(new Prisma.Decimal(l.monto)),
+      new Prisma.Decimal(0),
+    );
+    if (!suma.equals(montoRecibido)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [msgDescuadre(montoRecibido.toFixed(2))] },
+      };
+    }
+
+    const res = await this.repo.actualizarPagosGestion({
+      gestionId: input.gestionId,
+      alcance: scope.alcance,
+      editadoPor: actor.usuarioId, // el rastro: quién reescribió lo que declaró el mensajero
+      lineas: input.lineas,
+    });
+    if (res.status === "updated") {
+      return { status: "ok", gestionId: input.gestionId, totales: res.totales };
+    }
+    if (res.status === "conflict") return { status: "conflict" };
+    return { status: "no_encontrada" };
   }
 
   async rechazarCierre(

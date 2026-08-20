@@ -13,7 +13,7 @@ import {
 import { Pagination } from "@/components/shared/Pagination";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { CeldaSeleccion } from "@/components/shared/CeldaSeleccion";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { ordenesConfig } from "@/lib/config/ordenes";
@@ -126,6 +126,7 @@ export function OrdenesModule({
   permitirDescarga = false,
   puedeReportarIncidente = false,
   filtros,
+  resetSeleccion = 0,
 }: {
   columns?: Column<OrdenListItemDTO>[];
   puedeCargarMasiva?: boolean;
@@ -207,6 +208,15 @@ export function OrdenesModule({
    * arma los filtros y traduce lo seleccionado a `filter` es la superficie de arriba.
    */
   filtros?: ReactNode;
+  /**
+   * Señal de "la selección ya se consumió": cada vez que este número cambia, se
+   * desmarcan TODAS las filas. Quien ejecuta las acciones por lote vive arriba (es
+   * quien sabe cuándo una terminó bien), pero la selección vive aquí; en vez de
+   * exponer un handle imperativo, la superficie incrementa un contador y este módulo
+   * la limpia. Tras una acción por lote las filas marcadas ya cambiaron de estado:
+   * dejarlas marcadas invita a repetir la acción sobre órdenes que ya no la admiten.
+   */
+  resetSeleccion?: number;
 }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ordenesConfig.DEFAULT_PAGE_SIZE);
@@ -270,6 +280,15 @@ export function OrdenesModule({
     setSeleccion(new Map());
   }
 
+  // Ejecutada una acción por lote, la superficie incrementa `resetSeleccion` y aquí se
+  // desmarca todo. Mismo patrón de "ajustar estado durante el render" que el reset por
+  // cambio de filtro, y por el mismo motivo: sin efecto ni parpadeo intermedio.
+  const [resetSeleccionPrevio, setResetSeleccionPrevio] = useState(resetSeleccion);
+  if (resetSeleccion !== resetSeleccionPrevio) {
+    setResetSeleccionPrevio(resetSeleccion);
+    setSeleccion(new Map());
+  }
+
   // Identidad estable de la página: `data?.items ?? []` fabrica un array NUEVO en cada
   // render mientras SWR no tiene datos, y esa identidad inestable se propaga a los
   // `useMemo` que dependen de ella (columnas, motivos de bloqueo), que se recalculaban
@@ -319,23 +338,22 @@ export function OrdenesModule({
               );
             },
             render: (row) => {
-              // Motivo de bloqueo (o null): deshabilita el checkbox y lo explica en
-              // el tooltip, en vez de dejar seleccionar una orden que la acción del
-              // estado va a descartar (lo que dejaba el modal vacío/"bloqueado").
+              // Motivo de bloqueo (o null): con motivo NO se pinta checkbox, sino el aviso
+              // «!» que lo explica (pedido humano 2026-08-19). Antes era una casilla gris
+              // con el motivo en el `title` nativo: dejaba de parecer «esto no aplica» y
+              // pasaba a parecer «los checkbox no funcionan», que es el reporte que llegó.
               const motivo = bloqueoSeleccion?.(row) ?? null;
               return (
-                <Checkbox
+                <CeldaSeleccion
                   checked={seleccionIds.has(row.id)}
-                  disabled={motivo !== null}
-                  onCheckedChange={(checked) =>
-                    toggleSeleccion(row, checked === true)
-                  }
-                  aria-label={
+                  onCheckedChange={(checked) => toggleSeleccion(row, checked)}
+                  bloqueo={motivo}
+                  ariaLabel={`Seleccionar orden ${row.numRemision}`}
+                  bloqueoAriaLabel={
                     motivo
                       ? `No se puede seleccionar la orden ${row.numRemision}: ${motivo}`
-                      : `Seleccionar orden ${row.numRemision}`
+                      : undefined
                   }
-                  title={motivo ?? undefined}
                 />
               );
             },

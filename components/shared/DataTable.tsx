@@ -588,7 +588,7 @@ export function DataTable<T>({
               onClick={() => desplazar(-1)}
               disabled={!scrollNav.canLeft}
               aria-label="Desplazar la tabla a la izquierda"
-              className="pointer-events-auto sticky top-1/2 ml-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-md backdrop-blur-sm transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+              className="pointer-events-auto sticky top-1/2 ml-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronLeft className="size-5" aria-hidden="true" />
             </button>
@@ -602,7 +602,7 @@ export function DataTable<T>({
               onClick={() => desplazar(1)}
               disabled={!scrollNav.canRight}
               aria-label="Desplazar la tabla a la derecha"
-              className="pointer-events-auto sticky top-1/2 mr-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-md backdrop-blur-sm transition hover:bg-muted disabled:pointer-events-none disabled:opacity-30"
+              className="pointer-events-auto sticky top-1/2 mr-2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-900 bg-neutral-900 text-white shadow-md backdrop-blur-sm transition hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-black dark:hover:bg-white/85 disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronRight className="size-5" aria-hidden="true" />
             </button>

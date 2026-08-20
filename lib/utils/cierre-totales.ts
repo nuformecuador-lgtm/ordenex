@@ -65,7 +65,16 @@ export function derivarIngresoBodega(
 // exacto del `default: break` defensivo que tenia el switch escalar para una entrega sin
 // metodo. Y no hay fallback al par escalar (design §3.1): si una proyeccion se olvidara del
 // desglose, el total sale CERO —ruidoso— en vez de plausible.
-export function computeTotales(gestiones: CierreGestionPendienteRow[]): CierreTotales {
+/**
+ * Lo UNICO que el reparto por metodo lee de una gestion. Pedido humano (2026-08-19): el
+ * parametro se acota a esto —en vez de exigir la fila entera— porque la correccion del desglose
+ * desde el detalle de un cierre abierto recalcula los totales con ESTA MISMA funcion, y lo hace
+ * sobre una proyeccion minima (`resultado` + `pagos`). Ensanchar el parametro obligaria a leer
+ * quince columnas que el reparto no mira, o —peor— a escribir un segundo reparto.
+ */
+export type GestionConPagos = Pick<CierreGestionPendienteRow, "resultado" | "pagos">;
+
+export function computeTotales(gestiones: readonly GestionConPagos[]): CierreTotales {
   let efectivo = new Prisma.Decimal(0);
   let simpe = new Prisma.Decimal(0);
   let transferencia = new Prisma.Decimal(0);

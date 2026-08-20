@@ -99,6 +99,33 @@ const ESCRITURAS_DE_LA_APROBACION = [
   },
 ] as const;
 
+/**
+ * Escrituras del MISMO ARCHIVO que NO son de la transaccion de aprobacion, cada una con la suite
+ * que la nombra. El censo del frente 1 es por archivo —no sabe distinguir una transaccion de
+ * otra—, asi que sin esta lista una escritura ajena a la aprobacion solo tendria dos salidas:
+ * declararse como «de la aprobacion», que seria falso, o quedarse el arbol rojo.
+ *
+ * La EXIGENCIA es la misma y por eso van declaradas y no exentas: cada entrada nombra la suite
+ * que asierta sobre su `where` o su `data`. Lo que esta lista concede es el rotulo, no la
+ * cobertura; el fallo de agosto de 2026 fue una escritura que NADIE miraba, y eso lo sigue
+ * cerrando este archivo para todo lo que se escriba aqui dentro.
+ */
+const ESCRITURAS_FUERA_DE_LA_APROBACION = [
+  {
+    escritura: "tx.gestionOrdenPago.deleteMany",
+    que:
+      "correccion del desglose de pago (2026-08-19): borra las lineas VIGENTES de la gestion " +
+      "antes de reinsertarlas. Transaccion propia (`actualizarPagosGestion`), disparada desde " +
+      "el detalle de un cierre ABIERTO, no desde la resolucion.",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-corregir-pagos-where.test.ts"],
+  },
+  {
+    escritura: "tx.gestionOrdenPago.createMany",
+    que: "correccion del desglose de pago: las lineas NUEVAS, que sustituyen enteras a las anteriores",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-corregir-pagos-where.test.ts"],
+  },
+] as const;
+
 /** Escrituras de la transaccion que salen por un REPOSITORIO inyectado, no por `tx.` directo. */
 const ESCRITURAS_POR_REPO_INYECTADO = [
   {
@@ -128,17 +155,31 @@ describe("239/R33 — el inventario de escrituras de la aprobacion esta CERRADO"
     // verde sin haber mirado el codigo. Se exige que encuentre las que sabemos que hay.
     expect(censadas.length).toBeGreaterThanOrEqual(3);
 
-    const declaradas = new Set<string>(ESCRITURAS_DE_LA_APROBACION.map((e) => e.escritura));
+    const declaradas = new Set<string>(
+      [...ESCRITURAS_DE_LA_APROBACION, ...ESCRITURAS_FUERA_DE_LA_APROBACION].map(
+        (e) => e.escritura,
+      ),
+    );
     const noDeclaradas = censadas.filter((e) => !declaradas.has(e));
     expect(
       noDeclaradas,
-      "escritura sobre `tx` sin entrada en ESCRITURAS_DE_LA_APROBACION: declarala con la suite " +
-        "que la nombra, o el fallo de agosto de 2026 se repite",
+      "escritura sobre `tx` sin entrada en ESCRITURAS_DE_LA_APROBACION ni en " +
+        "ESCRITURAS_FUERA_DE_LA_APROBACION: declarala con la suite que la nombra, o el fallo " +
+        "de agosto de 2026 se repite",
     ).toEqual([]);
   });
 
   it("cada escritura declarada apunta a archivos de test que EXISTEN", () => {
-    for (const e of [...ESCRITURAS_DE_LA_APROBACION, ...ESCRITURAS_POR_REPO_INYECTADO]) {
+    // Merge 238 <- dev (2026-08-19): se conserva lo mas fuerte de cada lado. La forma de LISTA
+    // viene de la 238 (una escritura puede estar nombrada por varias suites, y la lista vacia se
+    // detecta); las TRES listas vienen de `dev`, porque ESCRITURAS_FUERA_DE_LA_APROBACION es una
+    // lista declarada mas y sus suites citadas tienen que existir igual que las demas — dejarla
+    // fuera de este recorrido la convertiria en la unica declaracion que nadie comprueba.
+    for (const e of [
+      ...ESCRITURAS_DE_LA_APROBACION,
+      ...ESCRITURAS_FUERA_DE_LA_APROBACION,
+      ...ESCRITURAS_POR_REPO_INYECTADO,
+    ]) {
       // Cada entrada cita AL MENOS una suite: una lista vacia seria una escritura declarada sin
       // nadie que la mire, que es lo que esta guardia existe para impedir.
       expect(e.cubiertaPor.length, `${e.escritura} no cita ninguna suite`).toBeGreaterThan(0);

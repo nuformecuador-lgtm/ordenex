@@ -15,6 +15,12 @@ export interface SelectAllCheckboxProps {
   onToggleAll: (checked: boolean) => void;
   /** Nombre accesible; el `<th>` no aporta texto visible al ser un checkbox. */
   ariaLabel?: string;
+  /**
+   * `id` del control, para poder asociarle un `<Label htmlFor>` cuando SÍ hay texto visible
+   * al lado (2026-08-19: el «Todos» del diálogo de descarga detallada de cierres). En la
+   * cabecera del `DataTable` no hace falta y se omite.
+   */
+  id?: string;
 }
 
 /**
@@ -28,6 +34,7 @@ export function SelectAllCheckbox({
   selectedIds,
   onToggleAll,
   ariaLabel = "Seleccionar todo",
+  id,
 }: Readonly<SelectAllCheckboxProps>) {
   const total = selectableIds.length;
   const marcados = selectableIds.reduce(
@@ -39,6 +46,7 @@ export function SelectAllCheckbox({
 
   return (
     <Checkbox
+      id={id}
       checked={todosMarcados}
       indeterminate={indeterminado}
       disabled={total === 0}

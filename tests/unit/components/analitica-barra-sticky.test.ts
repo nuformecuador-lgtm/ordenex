@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
+
 // La barra de filtros de /analítica se queda pegada arriba al hacer scroll (pedido humano del
 // 2026-08-18). La sección tiene cuatro gráficas y crece: sin esto hay que volver arriba para
 // cambiar un filtro y volver a bajar para ver el efecto.
@@ -21,8 +23,51 @@ const pagina = fs.readFileSync(PAGINA, "utf8");
 describe("La barra de filtros de analítica es pegajosa", () => {
   it("la página envuelve la barra en un contenedor `sticky top-0`", () => {
     expect(pagina).toMatch(/sticky top-0/);
-    // Y envuelve A LA BARRA, no a otra cosa: el `<FiltrosEntregas />` va dentro del div.
-    expect(pagina).toMatch(/sticky top-0[^"]*"[^]{0,80}?<FiltrosEntregas \/>/);
+
+    // Y envuelve A LA BARRA, no a otra cosa. Se comprueba que entre la clase y la barra NO se
+    // cierre ningún `<div>`, que es lo que significa «va dentro».
+    //
+    // ⚠ ANTES esto era una ventana de 80 caracteres entre la clase y `<FiltrosEntregas />`, y
+    // se cambió el 2026-08-19 porque medía la cosa equivocada: al entrar en esa misma fila el
+    // botón «Actualizar» —con su comentario y su celda—, la distancia creció y el guardia se
+    // puso rojo sin que la barra hubiera salido del contenedor pegajoso. La proximidad no era
+    // el requisito; la contención sí, y ahora es lo que se afirma.
+    const fuente = quitarComentarios(pagina);
+    const desdeSticky = fuente.slice(fuente.indexOf("sticky top-0"));
+    // Se busca la ETIQUETA DE APERTURA y no `<FiltrosEntregas />` literal: la barra ya recibe
+    // props (`facetas`) y atarse a la forma sin atributos volvería a poner rojo el guardia el
+    // día que reciba la segunda, sin que nada del `sticky` haya cambiado.
+    const cierre = desdeSticky.indexOf("<FiltrosEntregas");
+    expect(cierre, "`<FiltrosEntregas />` ya no aparece después del contenedor pegajoso").toBeGreaterThan(0);
+    expect(desdeSticky.slice(0, cierre)).not.toMatch(/<\/div>/);
+  });
+
+  // El botón de colapsar el menú SOBRESALE del sidebar por su borde derecho, justo sobre la
+  // columna donde vive esta barra pegajosa. Los dos estaban en `z-20` y la barra —posterior en
+  // el DOM— lo tapaba (pedido humano 2026-08-19).
+  //
+  // ⚠ LO QUE ESTE CASO COMPARA NO ES EL Z DEL BOTÓN, y es lo que hay que entender antes de
+  // tocarlo: el botón vive DENTRO del contenedor `fixed` del sidebar, que al llevar z-index
+  // crea un contexto de apilamiento propio. Su `z-20` sólo lo ordena frente a sus hermanos;
+  // contra esta barra quien compite es el CONTENEDOR. Por eso se miden esas dos capas y no la
+  // del botón, que puede subir todo lo que quiera sin que se vea nada.
+  it("el sidebar apila por encima de la barra de filtros", () => {
+    const sidebar = fs.readFileSync(
+      path.join(REPO_ROOT, "app", "(app)", "_components", "Sidebar.tsx"),
+      "utf8",
+    );
+
+    const zDeLaBarra = /sticky top-0 z-(\d+)/.exec(pagina);
+    const zDelSidebar = /<SidebarRoot[^>]*className="[^"]*\bz-(\d+)\b/.exec(
+      quitarComentarios(sidebar),
+    );
+    expect(zDeLaBarra, "la barra pegajosa ya no declara su z-index ahí").not.toBeNull();
+    expect(zDelSidebar, "`SidebarRoot` ya no sube su contexto de apilamiento").not.toBeNull();
+
+    expect(Number(zDelSidebar![1])).toBeGreaterThan(Number(zDeLaBarra![1]));
+    // Y por debajo de los portales (modales, tooltips, el desplegable de los filtros), que
+    // tienen que seguir quedando encima de todo.
+    expect(Number(zDelSidebar![1])).toBeLessThan(50);
   });
 
   // ⚠ EL PECADO QUE ESTE CASO PERSIGUE. `FiltrosEntregas` la monta TAMBIÉN el panel maestro de
