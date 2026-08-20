@@ -29,12 +29,27 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
  *     recupero, o es un segundo envio). Idempotente, sin efectos (R3/R5).
  *   - `config_error`: el catalogo no tiene `devuelta` o `rechazada`. Fallo CERRADO: sin los dos
  *     ids no hay guarda que poner en el `where`, y escribir sin guarda es justo lo que R4 prohibe.
+ *   - `sin_gestion_origen`: la orden esta en la devolucion anclada pero NO tiene ninguna gestion
+ *     `devuelta` vigente de la que derivar el mensajero (R10). SIN EFECTOS: la transaccion aborto.
+ *
+ * ⚠️ POR QUE `sin_gestion_origen` ES UN ESTADO PROPIO Y NO UN `conflict`, que es lo que parecia a
+ * primera vista y seria mas corto. La pantalla NO PINTA el `motivo` de un `conflict` — lo dice su
+ * propio codigo, y con razon: ese motivo es una cadena tecnica («la orden ya no esta en devuelta»),
+ * pensada para un registro—. Asi que un `conflict` aqui le ensenaria a la tienda el texto fijo de la
+ * carrera perdida, «esta orden ya no estaba en devolucion», que es FALSO: la orden SI sigue en
+ * devolucion; lo que falta es su gestion. Un dato que miente con formato de dato, que es
+ * exactamente lo que este repo lleva media sesion cazando.
+ *
+ * Y con estado propio el `Record<Exclude<status, "ok" | "conflict">, string>` de la pantalla DEJA DE
+ * COMPILAR hasta que alguien le escriba su mensaje: la omision se vuelve imposible en vez de
+ * silenciosa, que es el mecanismo que esa pantalla ya tenia montado para justo esto.
  */
 export type RechazarNovedadResult =
   | { status: "ok" }
   | { status: "forbidden" }
   | { status: "not_found" }
   | { status: "conflict"; motivo: string }
+  | { status: "sin_gestion_origen" }
   | { status: "config_error" };
 
 export interface IRechazoTiendaService {

@@ -192,6 +192,38 @@ export interface ReprogramarDesdeDevueltaInput {
  * bodega y YA se escaneo al aprobar el cierre (238), asi que pedirle a la tienda una foto seria
  * pedirle la foto de algo que no tiene delante.
  */
+/**
+ * Feature 240 (T10, R10) — LA ORDEN ESTA EN LA DEVOLUCION ANCLADA PERO NO TIENE NINGUNA GESTION
+ * `devuelta` VIGENTE de la que derivar el mensajero.
+ *
+ * Es un estado que NO DEBERIA EXISTIR: a `devuelta` solo se llega aprobando el cierre que contiene
+ * la gestion `devuelta` (feature 239), asi que la gestion siempre esta. Medido en produccion el
+ * 2026-08-20: **11 ordenes han pasado por `devuelta` y las 11 tienen su gestion** — cero sin ella,
+ * ni siquiera anulada. Se llega aqui solo si alguien mueve el `estatus_id` a mano.
+ *
+ * POR QUE ES UN `throw` Y NO UN VALOR DE RETORNO, que es la pregunta obvia: este metodo ya escribio
+ * el `updateMany` cuando lo descubre. Un `return` dejaria la orden en `rechazada` SIN gestion y SIN
+ * historial — peor que el estado del que venimos. Lanzar **aborta la transaccion** y lo revierte
+ * todo. Es fallo CERRADO y se queda asi.
+ *
+ * ⚠️ POR QUE TIENE CLASE PROPIA Y NO ES UN `Error` PELADO, que es lo que era hasta el 2026-08-20:
+ * un `Error` generico sube hasta `withErrorHandler`, sale como `INTERNAL`, y
+ * `toResolverNovedadActionError` **lanza** al no reconocer ese codigo. Resultado medido en el
+ * recorrido: la tienda pulsa «Rechazar» con su motivo escrito y **no pasa absolutamente nada** —ni
+ * la orden cambia, ni sale un aviso—. Un boton mudo, que es EL DEFECTO QUE ESTA FICHA VINO A
+ * CERRAR, una capa mas abajo. Con la clase, el service lo distingue de una caida de base y lo
+ * convierte en un desenlace que la pantalla sabe pintar.
+ *
+ * El mensaje es para el REGISTRO, no para nadie: sin datos personales, sin el motivo escrito por la
+ * tienda y sin el id de la orden (R46). Lo que ve la persona lo decide la pantalla.
+ */
+export class SinGestionDevueltaError extends Error {
+  constructor(llamador: string) {
+    super(`${llamador}: sin gestion \`devuelta\` vigente para derivar el mensajero`);
+    this.name = "SinGestionDevueltaError";
+  }
+}
+
 export interface RechazarDesdeDevueltaInput {
   ordenId: string;
   /** GUARDA del `updateMany` (R3/R4): la orden tiene que seguir en la devolucion anclada. */

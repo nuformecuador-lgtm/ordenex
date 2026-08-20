@@ -9,6 +9,7 @@ import type {
   ReprogramarDesdeDevueltaInput,
   VentanaDia,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import { SinGestionDevueltaError } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
@@ -352,9 +353,11 @@ async function transicionarDesdeDevuelta(
       // Anomalia: una orden en `devuelta` SIN gestion `devuelta` vigente no tiene a quien
       // atribuir la gestion sintetica (`mensajero_id` NOT NULL). Abortar la tx (revierte el
       // UPDATE) es preferible a inventar un actor.
-      throw new Error(
-        `${input.llamador}: sin gestion \`devuelta\` vigente para derivar el mensajero`,
-      );
+      // 2026-08-20: era un `Error` pelado y salia como `INTERNAL`, que la pantalla no sabe pintar
+      // — la tienda pulsaba y no pasaba NADA. Clase propia para que el service lo distinga de una
+      // caida de base y lo convierta en un desenlace con texto. El `throw` se queda: es lo que
+      // ABORTA la transaccion y revierte el `updateMany` de arriba.
+      throw new SinGestionDevueltaError(input.llamador);
     }
 
     // 3) la gestion sintetica, que es lo unico que difiere entre las dos vias.

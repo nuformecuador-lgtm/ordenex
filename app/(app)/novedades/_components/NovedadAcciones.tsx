@@ -74,8 +74,10 @@ import {
 // Hasta el 2026-08-20 la tienda podía leer el problema, responder en el hilo y devolverle la orden
 // al mensajero, pero no RESOLVERLA. Esta ficha añade sus dos desenlaces —«Reprogramar» y
 // «Rechazar»— y hay que decir aquí lo que un clic dispara: la gestión que crean se atribuye al
-// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (un
-// rechazo cobra a la tienda hasta ₡1.000, medido). El precio se dice con palabras en la ventana
+// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (los
+// hasta ₡1.000 de un rechazo —`cobroRechazado`— NO se le cobran a la tienda: son **ingreso de
+// bodega** y caen en el cierre DEL MENSAJERO, medido. A la tienda un rechazo **sí** le cuesta, pero
+// por otra vía: el **flete de devolución** más IVA). El precio se dice con palabras en la ventana
 // (`GestionarDesdeAyudaModal`, aviso fijo de D7), no en este panel: aquí sólo se abre la puerta.
 //
 // Las dos acciones cuelgan de `ACCIONES_POR_GRUPO` como CELDAS, no de una condición suelta. Es la

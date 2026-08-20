@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { SinGestionDevueltaError } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
 
 // 💰 Feature 240 (T2.2, D1/D8) — EL RECHAZO MANUAL DE LA TIENDA en el repositorio:
@@ -23,10 +24,26 @@ const noopJobRepo = {} as unknown as ConstructorParameters<typeof GestionOrdenRe
 const ORDEN_ID = "o1";
 const MENSAJERO_DE_LA_DEVUELTA = "m-ultima-devuelta";
 
+/** La fila de anclaje de la devolucion (239) que YA existe cuando la tienda rechaza. */
+interface FilaHistorial {
+  ordenId: string;
+  origenTipo: string;
+  gestionOrdenId: string | null;
+}
+
 /**
  * Doble de Prisma con UNA fila de `orden` de verdad: `{ id, estatusId, deletedAt }`. El
  * `updateMany` evalua el `where` contra ella (id + estatusId + deletedAt) y solo entonces muta y
  * devuelve `count: 1`. Es lo que convierte la guarda en algo observable.
+ *
+ * ⚠️ Y con una TABLA `orden_historial_estado` de verdad, sembrada con EL ANCLA de la devolucion
+ * (`anclaje_devolucion`, feature 239). Hasta 2026-08-20 este doble exponia SOLO `createMany`, y eso
+ * tenia una consecuencia que no se veia: una mutacion que borrase el ancla moria con un
+ * `TypeError` —«prisma.ordenHistorialEstado.deleteMany is not a function»— y no por ninguna
+ * asercion. Un requisito que se sostiene sobre una excepcion accidental NO esta cubierto: el dia
+ * que el doble crezca, el rojo desaparece y nadie se entera. Por eso ahora estan los CINCO metodos
+ * de escritura de esa tabla, los cuatro que el repo NO debe usar espiados, y el ancla se comprueba
+ * fila a fila (R24).
  */
 function buildPrisma(
   fila: { id?: string; estatusId?: string; deletedAt?: Date | null } = {},
@@ -36,6 +53,15 @@ function buildPrisma(
     estatusId: fila.estatusId ?? idEstado("devuelta"),
     deletedAt: fila.deletedAt ?? null,
   };
+
+  // R24: el ancla de la 239 ya esta escrita cuando la tienda decide rechazar. Es historia
+  // INMUTABLE y es lo que R24 protege: ni se re-ancla, ni se borra, ni se modifica.
+  const ancla: FilaHistorial = {
+    ordenId: ORDEN_ID,
+    origenTipo: "anclaje_devolucion",
+    gestionOrdenId: "g-ancla",
+  };
+  const historial: FilaHistorial[] = [ancla];
 
   const prisma = {
     orden: {
@@ -60,25 +86,72 @@ function buildPrisma(
       ),
     },
     gestionOrden: { findFirst: vi.fn(), create: vi.fn() },
-    ordenHistorialEstado: { createMany: vi.fn() },
+    // Los CINCO metodos de escritura de `orden_historial_estado`. `createMany` es el UNICO que el
+    // choke point (`appendCambioEstado`) usa; los otros cuatro estan aqui para que su uso sea
+    // OBSERVABLE en vez de reventar con un `TypeError`. Todos mutan la tabla de verdad, asi que el
+    // efecto sobre el ancla se puede comprobar sobre los datos y no solo sobre el espia.
+    ordenHistorialEstado: {
+      createMany: vi.fn(async ({ data }: { data: FilaHistorial[] }) => {
+        historial.push(...data);
+        return { count: data.length };
+      }),
+      create: vi.fn(async ({ data }: { data: FilaHistorial }) => {
+        historial.push(data);
+        return data;
+      }),
+      update: vi.fn(async ({ data }: { data: Partial<FilaHistorial> }) => {
+        Object.assign(historial[0], data);
+        return historial[0];
+      }),
+      updateMany: vi.fn(async ({ data }: { data: Partial<FilaHistorial> }) => {
+        for (const f of historial) Object.assign(f, data);
+        return { count: historial.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: { where?: { origenTipo?: string } } = {}) => {
+        const antes = historial.length;
+        const quedan = historial.filter(
+          (f) => where?.origenTipo !== undefined && f.origenTipo !== where.origenTipo,
+        );
+        historial.length = 0;
+        historial.push(...quedan);
+        return { count: antes - historial.length };
+      }),
+    },
     $transaction: vi.fn(),
     /** Para poder afirmar que el estado NO se movio cuando la transaccion aborta (R10). */
     _orden: orden,
+    /** La tabla de historial, para comprobar el ancla fila a fila (R24). */
+    _historial: historial,
+    /** La fila de anclaje tal cual se sembro, para compararla contra si misma despues (R24). */
+    _anclaEsperada: { ...ancla },
   };
 
   prisma.gestionOrden.findFirst.mockResolvedValue({ mensajeroId: MENSAJERO_DE_LA_DEVUELTA });
   prisma.gestionOrden.create.mockResolvedValue({ id: "g-rechazada" });
   // La transaccion es todo-o-nada: si el cuerpo lanza, se revierte lo escrito hasta ahi. El doble
-  // lo emula deshaciendo la mutacion de la fila, que es lo unico que este metodo muta.
+  // lo emula deshaciendo lo que este metodo puede mutar: el estatus de la orden Y las filas de
+  // historial. Lo segundo se anadio con la tabla de historial de verdad (2026-08-20): si el doble
+  // revirtiera solo la orden, una escritura de historial dentro de una tx abortada quedaria visible
+  // y el caso R10 pasaria a mentir sobre lo que la base tiene.
   prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
     const estadoPrevio = orden.estatusId;
+    const historialPrevio = historial.map((f) => ({ ...f }));
     try {
       return await fn(prisma);
     } catch (e) {
       orden.estatusId = estadoPrevio; // ROLLBACK
+      historial.length = 0;
+      historial.push(...historialPrevio);
       throw e;
     }
   });
+  return prisma;
+}
+
+/** Un doble nuevo sin gestion `devuelta` vigente: cada `expect(...).rejects` consume el suyo. */
+function buildPrismaSinAncla() {
+  const prisma = buildPrisma();
+  prisma.gestionOrden.findFirst.mockResolvedValue(null);
   return prisma;
 }
 
@@ -280,7 +353,13 @@ describe("rechazarDesdeDevuelta — cuando NO se aplica, no deja NI UN efecto (R
     const prisma = buildPrisma();
     prisma.gestionOrden.findFirst.mockResolvedValue(null);
 
+    // 2026-08-20: se afirma la CLASE, no solo el texto. El service la distingue con `instanceof`
+    // para convertirla en un desenlace con mensaje; si aqui volviera a lanzarse un `Error` pelado,
+    // ese `instanceof` fallaria en silencio y la tienda volveria a pulsar un boton mudo.
     await expect(repoWith(prisma).rechazarDesdeDevuelta(INPUT)).rejects.toThrow(
+      SinGestionDevueltaError,
+    );
+    await expect(repoWith(buildPrismaSinAncla()).rechazarDesdeDevuelta(INPUT)).rejects.toThrow(
       /rechazarDesdeDevuelta/,
     );
     expect(prisma.gestionOrden.create).not.toHaveBeenCalled();
@@ -302,6 +381,90 @@ describe("rechazarDesdeDevuelta — cuando NO se aplica, no deja NI UN efecto (R
     expect(mensaje).not.toContain(INPUT.motivo); // el motivo es texto libre de la tienda
     expect(mensaje).not.toContain(INPUT.actorUsuarioId);
     expect(mensaje).not.toContain(ORDEN_ID);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2-bis. El ancla de la 239 no se toca (R24)                                    */
+/* -------------------------------------------------------------------------- */
+
+// FEATURE 240 (R24, D9) — EL ANCLA DE LA DEVOLUCION SOBREVIVE AL RECHAZO, INTACTA.
+//
+// Que dice R24: «El sistema NO DEBE re-anclar, borrar ni modificar el registro de anclaje de la
+// devolucion de esa orden». Son TRES prohibiciones distintas y aqui se afirman las tres por
+// separado, porque cada una se rompe de una forma distinta.
+//
+// POR QUE IMPORTA, y no es simetria burocratica: el ancla (`orden_historial_estado` con familia
+// `anclaje_devolucion`, feature 239) es de donde el cron del plazo saca CUANDO empezo a correr el
+// reloj — `orderBy createdAt desc` + `take 1`—. Es historia inmutable y es la unica prueba de
+// cuando la bodega confirmo esa devolucion. Si el rechazo manual la borrase, una orden que algun
+// dia volviera a `devuelta` arrancaria su reloj desde el ancla EQUIVOCADA (la vieja, o ninguna), y
+// el escalado —con su `cobroRechazado`— caeria en la fecha que no es.
+//
+// ⏳ 2026-08-20 — ESTE BLOQUE NACE DE UN RECHAZO DE REVISION, y conviene que quede escrito por que.
+// R24 estaba declarado como «no cubierto aqui, es del recorrido T8.3», y T8.3 nunca se corrio. La
+// revision midio que la mutacion «el rechazo borra el ancla» SI moria... pero con un `TypeError`,
+// porque el doble solo exponia `createMany`. Morir por una excepcion accidental no es estar
+// cubierto: el dia que alguien anada `deleteMany` al doble por otro motivo, el rojo se apaga solo y
+// nadie se entera. Ahora el doble expone los cinco metodos y el rojo viene de la ASERCION.
+describe("rechazarDesdeDevuelta — el ancla de la devolucion queda INTACTA (R24)", () => {
+  it("R24: la fila de anclaje sigue ahi, sin un solo campo cambiado", () => {
+    const prisma = buildPrisma();
+    return repoWith(prisma)
+      .rechazarDesdeDevuelta(INPUT)
+      .then((ok) => {
+        expect(ok).toBe(true);
+        // Se compara contra la FOTO tomada al sembrar, no contra la fila viva: comparar una fila
+        // consigo misma estaria verde aunque alguien la hubiera reescrito entera.
+        const anclas = prisma._historial.filter((f) => f.origenTipo === "anclaje_devolucion");
+        expect(anclas).toHaveLength(1);
+        expect(anclas[0]).toEqual(prisma._anclaEsperada);
+      });
+  });
+
+  it("💰 R24: NO se borra — ninguno de los cuatro metodos que podrian tocarla se usa", () => {
+    // El choke point appendea con `createMany` y NADA MAS. Cualquier otro metodo de escritura sobre
+    // esta tabla, en este camino, solo puede servir para tocar filas que ya existen: es decir, el
+    // ancla. Por eso los cuatro se espian y se afirma que nadie los llamo.
+    const prisma = buildPrisma();
+    return repoWith(prisma)
+      .rechazarDesdeDevuelta(INPUT)
+      .then(() => {
+        expect(prisma.ordenHistorialEstado.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.ordenHistorialEstado.update).not.toHaveBeenCalled();
+        expect(prisma.ordenHistorialEstado.updateMany).not.toHaveBeenCalled();
+        expect(prisma.ordenHistorialEstado.create).not.toHaveBeenCalled();
+        // Y el unico que SI se usa, exactamente una vez: el append del choke point.
+        expect(prisma.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
+      });
+  });
+
+  it("R24: NO se RE-ANCLA — la unica fila nueva es la del rechazo, no otro anclaje", () => {
+    // La tercera prohibicion, y la mas facil de romper sin querer: bastaria con que alguien
+    // «refrescara» el anclaje al rechazar, creyendo que asi la fecha queda al dia. El resultado
+    // seria que el `take 1` descendente devolviera un ancla nacida DESPUES del rechazo.
+    const prisma = buildPrisma();
+    return repoWith(prisma)
+      .rechazarDesdeDevuelta(INPUT)
+      .then(() => {
+        expect(prisma._historial).toHaveLength(2); // el ancla que ya estaba + la del rechazo
+        const nuevas = prisma._historial.filter((f) => f.origenTipo !== "anclaje_devolucion");
+        expect(nuevas.map((f) => f.origenTipo)).toEqual(["rechazo_tienda"]);
+      });
+  });
+
+  it("R24: tampoco se toca cuando la orden YA SALIO de `devuelta` (carrera perdida)", () => {
+    // La rama sin efectos tiene que serlo tambien para el ancla: si el borrado viviera ANTES de la
+    // guarda del `updateMany`, esta orden perderia su anclaje sin que nada mas ocurriera — el peor
+    // de los casos, porque no dejaria ni rastro de que paso.
+    const prisma = buildPrisma({ estatusId: idEstado("rechazada") });
+    return repoWith(prisma)
+      .rechazarDesdeDevuelta(INPUT)
+      .then((ok) => {
+        expect(ok).toBe(false);
+        expect(prisma._historial).toEqual([prisma._anclaEsperada]);
+        expect(prisma.ordenHistorialEstado.deleteMany).not.toHaveBeenCalled();
+      });
   });
 });
 

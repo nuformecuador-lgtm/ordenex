@@ -41,7 +41,7 @@
       (cada agregado cuadrado contra su denominador). Un cero sin denominador es «no hay datos», no
       «no pasa». **Bloquea T1.**
       ⏳ **Caduca**: se re-mide justo antes de desplegar, no antes de mergear.
-- [ ] **T0.5 — Medir el coste de D7** (nuevo tras la firma): **M5** (cuánto se movería el
+- [x] **T0.5 — Medir el coste de D7** (nuevo tras la firma): **M5** (cuánto se movería el
       denominador), **M6** (cuánto dinero mueve `premio_ranking` hoy), **M7** (en cuántos días
       cambiaría el podio).
       **Hecho:** los tres en `progress/impl_246.md` **etiquetados como PROXY** donde lo son (M5 y M7
@@ -49,21 +49,21 @@
       mano el comparador que en el código vive en `lib/ranking/orden-ranking.ts`. **Con M6 y M7 juntos
       se escribe una frase: «esta decisión mueve ≈X colones al mes entre Y personas».** Si no se puede
       escribir esa frase, la medición no está terminada. **Bloquea T6.**
-- [ ] **T0.6 — [P] `EXPLAIN` del denominador (M8).** El de la consulta actual contra producción (solo
+- [x] **T0.6 — [P] `EXPLAIN` del denominador (M8).** El de la consulta actual contra producción (solo
       lectura, **sin `ANALYZE`**) y el de la consulta nueva contra una base **con la migración
       aplicada** (local o preview, nunca producción).
       **Hecho:** los dos planes pegados. **Si el planificador no usa `orden_fecha_reparto_idx`, el
       índice NO se crea** y T1.1 se ajusta. **Bloquea T1.1** (decide si la migración lleva índice).
-- [ ] **T0.7 — Firmar D10 y D11**, que la firma de D7 abre y que siguen **ABIERTAS**:
+- [x] **T0.7 — Firmar D10 y D11**, que la firma de D7 abre y que siguen **ABIERTAS**:
       **D10** ¿el tablero del día sigue al ranking? (recomendación: **sí**);
       **D11** ¿se recalcula el ranking ya congelado? (recomendación: **NO** — `ranking_snapshot_*` son
       inmutables por diseño y recalcular reescribe filas que ya se leyeron para pagar a alguien).
       **Hecho:** las dos respondidas en `progress/impl_246.md`. **Si D11 se firmara que sí, esta ficha
       NO lo implementa**: es una ficha aparte con su propia puerta humana. **Bloquea T6.**
-- [ ] **T0.3 — [P] Confirmar el timestamp de la migración contra `origin/dev`.** Hay fichas en vuelo
+- [x] **T0.3 — [P] Confirmar el timestamp de la migración contra `origin/dev`.** Hay fichas en vuelo
       (237) que también añaden migración; y ya hubo **dos colisiones de id entre sesiones**.
       **Hecho:** `<ts>` elegido tras mirar `origin/dev`, anotado. **Bloquea T1.1.**
-- [ ] **T0.4 — [P] Aviso operativo, ahora con DOS mensajes** (no es código): (a) a partir del
+- [x] **T0.4 — [P] Aviso operativo, ahora con DOS mensajes** (no es código): (a) a partir del
       despliegue hay que **elegir** el día al asignar, con «Hoy» preseleccionado, y un mensajero puede
       acabar bloqueado por su cierre **con los paquetes de mañana en la mano** (§5.3); (b) **el
       ranking cambia de criterio**: quien reciba asignaciones de noche verá su porcentaje moverse, y
@@ -74,7 +74,7 @@
 
 ## T1 — La columna y el helper *(inerte: se puede desplegar suelto)*
 
-- [ ] **T1.1 — Migración `<ts>_orden_fecha_reparto`** (`design.md` §2.2/§2.3):
+- [x] **T1.1 — Migración `<ts>_orden_fecha_reparto`** (`design.md` §2.2/§2.3):
       `ALTER TABLE "orden" ADD COLUMN "fecha_reparto" DATE;` **+ `CREATE INDEX
       "orden_fecha_reparto_idx"` sólo si M8 lo justifica** + `down.sql` con su `DROP INDEX IF EXISTS`
       y `DROP COLUMN IF EXISTS`, y **las dos consecuencias operativas declaradas** (revertir hace que
@@ -88,12 +88,12 @@
       `tests/integration/db/orden-prioridad-migration.test.ts`— afirma que la columna es **nullable,
       sin default**, que las filas previas quedan en `NULL` (R19), que el índice existe **si se creó**
       y que aplicar dos veces no rompe. **Depende de:** T0.2, T0.3, T0.6.
-- [ ] **T1.2 — [P] `lib/types/dia-reparto.ts` (NUEVO)**: `DIA_REPARTO`, `DiaReparto`,
+- [x] **T1.2 — [P] `lib/types/dia-reparto.ts` (NUEVO)**: `DIA_REPARTO`, `DiaReparto`,
       `diaRepartoSchema`. Un único punto para las dos superficies.
       **Hecho:** `tests/unit/types/dia-reparto-schema.test.ts` **(NUEVO)** cubre: valor válido,
       valor desconocido rechazado, **ausencia ⇒ `"hoy"`** (R4) y que **una fecha no es un valor
       aceptable** (R6). **Depende de:** T0.2.
-- [ ] **T1.3 — `lib/utils/dia-reparto.ts` (NUEVO)**: `resolverFechaReparto(dia, now)` sobre
+- [x] **T1.3 — `lib/utils/dia-reparto.ts` (NUEVO)**: `resolverFechaReparto(dia, now)` sobre
       `startOfDayCR`. **Con reloj inyectable**, jamás `new Date()` interno.
       **Hecho:** `tests/unit/utils/dia-reparto.test.ts` **(NUEVO)** con casos a ambos lados de las
       dos fronteras que este repo confunde: **00:00 CR** y **06:00 UTC**. Al menos: `23:59 CR`,
@@ -106,11 +106,11 @@
 
 ## T2 — El corte *(inerte con la columna en `NULL`; se despliega ANTES que T3/T4)*
 
-- [ ] **T2.1 — `CorteDiarioService.ejecutarCorte` calcula `diaCerrado` UNA vez** por corrida
+- [x] **T2.1 — `CorteDiarioService.ejecutarCorte` calcula `diaCerrado` UNA vez** por corrida
       (`startOfDayCR(now) − 1 día`) y lo pasa a las dos capas. Reloj **inyectable**.
       **Hecho:** `tests/unit/services/corte-diario-service.test.ts` gana un caso que afirma que **el
       mismo valor** llega a la selección y a `crearCierre` (R16/R17). **Depende de:** T1.1.
-- [ ] **T2.2 — `findMensajerosConActividadSinCierre(diaCerrado)`**: el `where` de la rama (b) gana
+- [x] **T2.2 — `findMensajerosConActividadSinCierre(diaCerrado)`**: el `where` de la rama (b) gana
       `OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }]`. **El parámetro es
       obligatorio**, no opcional: así olvidar cablearlo rompe el typecheck en vez de dejar el corte
       con un criterio silencioso.
@@ -119,22 +119,22 @@
       reservadas para mañana **no sale** (R14); uno con órdenes sin fecha **sí** sale (R19/R20); uno
       con órdenes de ayer **sí** sale (R12); la rama de gestiones sin cerrar **no cambia** (R18).
       **Depende de:** T2.1.
-- [ ] **T2.3 — `CorteSinGestionarInput` gana `diaCerrado`** y el bloque de `crearCierre` aplica el
+- [x] **T2.3 — `CorteSinGestionarInput` gana `diaCerrado`** y el bloque de `crearCierre` aplica el
       **mismo** `OR` en el pre-`SELECT` **y** en el `where` del `updateMany` guardado.
       **Hecho:** `tests/unit/repositories/cierre-dia-repository.test.ts` afirma: se barren las de
       ayer y las sin fecha; **no** se barre la reservada para mañana; el `updateMany` lleva el filtro
       **en el `where`** y no se filtra en memoria. El typecheck **rompe** en todo doble que no pase el
       campo — **esa es la señal buscada**. **Depende de:** T2.2.
-- [ ] **T2.4 — El caso que impide el «nunca se barre» (R13).** Dos corridas consecutivas con reloj
+- [x] **T2.4 — El caso que impide el «nunca se barre» (R13).** Dos corridas consecutivas con reloj
       inyectado: la primera respeta la orden reservada para mañana; **la segunda la barre**.
       **Hecho:** un caso en `tests/unit/services/corte-diario-seleccion.test.ts` que corre el corte
       dos veces con `now` distinto y afirma los dos desenlaces. Es **el** caso de esta ficha.
       **Depende de:** T2.3.
-- [ ] **T2.5 — [P] El caso mixto (R15).** Mensajero con órdenes reservadas **y** gestiones sin
+- [x] **T2.5 — [P] El caso mixto (R15).** Mensajero con órdenes reservadas **y** gestiones sin
       cerrar: recibe su `vencido` y se barren **sólo** las no protegidas.
       **Hecho:** un caso que afirma las dos mitades a la vez (el cierre existe **y** la reservada
       sigue en `en_reparto`). **Depende de:** T2.3.
-- [ ] **T2.6 — [P] El corte no cambia en nada más (R18).**
+- [x] **T2.6 — [P] El corte no cambia en nada más (R18).**
       `tests/integration/actions/corte-diario-route.test.ts` verde **sin tocar**; la exclusión por
       cierre abierto, el snapshot de totales y la idempotencia, verdes sin tocar.
       **Hecho:** anotado en `progress/impl_246.md` con los archivos comprobados. **Depende de:** T2.3.
@@ -145,32 +145,32 @@
 
 ## T3 — La asignación escribe el día *(backend; NO se despliega antes que T2)*
 
-- [ ] **T3.1 — Borde zod en las dos superficies.** `asignarBodegaSchema` y `asignarSateliteSchema`
+- [x] **T3.1 — Borde zod en las dos superficies.** `asignarBodegaSchema` y `asignarSateliteSchema`
       ganan `dia: diaRepartoSchema.default("hoy")`. Las Server Actions lo pasan **tal cual** al
       servicio, sin coerción.
       **Hecho:** `tests/integration/actions/ordenes-guia-action.test.ts` y
       `tests/unit/actions/recepcion-satelite-action.test.ts` afirman que el valor llega al servicio
       sin transformar y que **una petición sin el campo** se comporta como «hoy» (R4).
       **Depende de:** T1.2, T2.
-- [ ] **T3.2 — Los dos servicios resuelven la fecha.** `GuiaAsignacionService.asignarDesdeBodega` y
+- [x] **T3.2 — Los dos servicios resuelven la fecha.** `GuiaAsignacionService.asignarDesdeBodega` y
       `AsignacionSateliteService.asignar` llaman a `resolverFechaReparto` **una vez** y pasan la
       fecha al repositorio.
       **Hecho:** `tests/unit/services/guia-asignacion-service.test.ts` y
       `tests/unit/services/asignacion-satelite-service.test.ts` afirman, con reloj inyectado, que
       «mañana» produce la fecha CR correcta y que el repositorio la recibe **ya resuelta**.
       **Depende de:** T3.1.
-- [ ] **T3.3 — La escritura (R7).** `OrdenRepository.asignarBodegaLote` añade `fechaReparto` a su
+- [x] **T3.3 — La escritura (R7).** `OrdenRepository.asignarBodegaLote` añade `fechaReparto` a su
       `data`; `asignarSateliteLote` añade `"fecha_reparto" = $n` a su `SET` **parametrizado**
       (`Prisma.sql`, jamás interpolación).
       **Hecho:** `tests/unit/repositories/orden-repository.asignacion-satelite.test.ts` y el test de
       `asignarBodegaLote` afirman que la fecha va **en la misma escritura** que `asignado_at`, y que
       el `SET` **no** contiene ninguna zona horaria ni `NOW()::date`. **Depende de:** T3.2.
-- [ ] **T3.4 — [P] Las vías sin elección (R8).** Deshacer gestión re-estampa `asignado_at`: estampa
+- [x] **T3.4 — [P] Las vías sin elección (R8).** Deshacer gestión re-estampa `asignado_at`: estampa
       también `fechaReparto = startOfDayCR()`.
       **Hecho:** un caso en `tests/unit/repositories/cierre-dia-repository.test.ts` que lo afirma, con
       su comentario explicando **por qué** (las dos columnas nunca cuentan historias distintas).
       **Depende de:** T3.3.
-- [ ] **T3.5 — [P] La limpieza (R9/R10).** Los cinco sitios que hoy ponen `asignado_at = null` junto
+- [x] **T3.5 — [P] La limpieza (R9/R10).** Los cinco sitios que hoy ponen `asignado_at = null` junto
       a `mensajero_asignado_id = null` ponen también `fecha_reparto = null`:
       `OrdenRepository.deshacerAsignacionLote`, `OrdenRepository` (retorno a bodega satélite),
       `CierresAdminRepository` (liberar al aprobar), `DevolucionSlaRepository`,
@@ -178,7 +178,7 @@
       **Hecho:** `tests/unit/repositories/orden-repository.deshacer-asignacion.test.ts`,
       `tests/unit/repositories/devolucion-sla-repository.test.ts` y los tests de liberación afirman
       la limpieza en la **misma** escritura. **Depende de:** T3.3.
-- [ ] **T3.6 — Guardia de la invariante (R10).**
+- [x] **T3.6 — Guardia de la invariante (R10).**
       `tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts` **(NUEVO)**: censo del
       árbol; **ninguna** escritura que fije o limpie `asignadoAt`/`asignado_at` lo hace sin tocar
       `fechaReparto`/`fecha_reparto` en el mismo objeto `data`/`SET`. Molde de
@@ -188,7 +188,7 @@
       (**autocomprobación dentro del propio archivo**). El censo se escribe **en un archivo de test**,
       nunca por `node -e`: ahí `\b` llega como backspace y el censo miente en verde.
       **Depende de:** T3.5.
-- [ ] **T3.7 — [P] La proyección de lectura (R35).** El día de reparto viaja en la proyección que ya
+- [x] **T3.7 — [P] La proyección de lectura (R35).** El día de reparto viaja en la proyección que ya
       lee la orden asignada, sin consulta nueva.
       **Hecho:** el test del repositorio afirma que el campo sale en el `select`. **Depende de:** T3.3.
 
@@ -198,22 +198,22 @@
 
 ## T4 — Las dos pantallas de asignación *(frontend; mismo PR que T3)*
 
-- [ ] **T4.1 — Selector compartido `components/shared/SelectorDiaReparto.tsx` (NUEVO)**: dos
+- [x] **T4.1 — Selector compartido `components/shared/SelectorDiaReparto.tsx` (NUEVO)**: dos
       opciones, **«Hoy» preseleccionada** (R27), construido sobre la primitiva de `components/ui/`
       que ya exista (`npx shadcn add radio-group` si falta) — **nunca un componente propio si shadcn
       lo tiene**. Recibe las etiquetas de día **por props**; no llama a `new Date()` (R29).
       **Hecho:** `tests/components/SelectorDiaReparto.test.tsx` **(NUEVO)** afirma el valor por
       defecto, el cambio de opción y que **el componente no lee el reloj del navegador** (censo del
       propio archivo). **Depende de:** T3.
-- [ ] **T4.2 — `AsignarBodegaModal` monta el selector** y manda `dia` en `asignarDesdeBodega` (R1).
+- [x] **T4.2 — `AsignarBodegaModal` monta el selector** y manda `dia` en `asignarDesdeBodega` (R1).
       Las etiquetas con el día llegan desde el Server Component de la página.
       **Hecho:** `tests/components/AsignarBodegaModal.test.tsx` gana dos casos: **manda `"hoy"` por
       defecto** y **manda `"manana"` cuando se elige** (es el caso que impide que el selector quede
       decorativo). **Depende de:** T4.1.
-- [ ] **T4.3 — [P] `AsignarSateliteModal`, lo mismo** (R2).
+- [x] **T4.3 — [P] `AsignarSateliteModal`, lo mismo** (R2).
       **Hecho:** los dos casos espejo en `tests/components/AsignarSateliteModal.test.tsx`.
       **Depende de:** T4.1.
-- [ ] **T4.4 — [P] La confirmación con palabras (R28).** Tras asignar, el modal dice para qué día
+- [x] **T4.4 — [P] La confirmación con palabras (R28).** Tras asignar, el modal dice para qué día
       quedó el lote, sin siglas ni jerga.
       **Hecho:** un caso que **lee el texto**, no una clase ni un `data-*`. **Depende de:** T4.2.
 
@@ -223,19 +223,19 @@
 
 ## T5 — El portal del mensajero
 
-- [ ] **T5.1 — `esParaManana` en el DTO, derivado EN EL SERVIDOR** (R26).
+- [x] **T5.1 — `esParaManana` en el DTO, derivado EN EL SERVIDOR** (R26).
       `MisAsignacionesService.listarMisAsignaciones` lo calcula con el mismo `startOfDayCR`, **sin**
       añadir un cuarto grupo.
       **Hecho:** `tests/unit/services/mis-asignaciones-service.test.ts` afirma, con reloj inyectado:
       una reservada para mañana llega con `esParaManana: true`; la de hoy y la sin fecha, `false`; y
       **al pasar el día, la misma fila pasa a `false` sin ninguna escritura** (R25).
       **Depende de:** T3.
-- [ ] **T5.2 — La card lo dice con palabras (R22).** «Para mañana» como **texto**, no sólo color: el
+- [x] **T5.2 — La card lo dice con palabras (R22).** «Para mañana» como **texto**, no sólo color: el
       repo ya tiene guardia de contraste y una lección escrita sobre medir color en el navegador.
       **Hecho:** un caso nuevo en `tests/components/RecogerModule.test.tsx` (grupo «Por recoger», que
       es donde vive el 99 % de lo reservado) y otro en `tests/components/RepartoModule.test.tsx` (una
       ya recogida la noche anterior), los dos **leyendo el texto**. **Depende de:** T5.1.
-- [ ] **T5.3 — [P] Ni se oculta ni se bloquea (R23/R24).** Dos casos: la orden reservada **aparece**
+- [x] **T5.3 — [P] Ni se oculta ni se bloquea (R23/R24).** Dos casos: la orden reservada **aparece**
       en su grupo, y **se puede recoger** y **gestionar** exactamente igual.
       **Hecho:** dos casos que lo afirman; el de recoger comprueba que la Server Action **sí** se
       llama. Es la mitad de D5 que un test puede sostener. **Depende de:** T5.1.
@@ -249,13 +249,13 @@
 > ⚠️ **Aquí se decide quién ocupa el podio y, con él, quién cobra `premio_ranking`.** No se empieza
 > sin T0.5 (M5/M6/M7) y T0.7 (D10/D11) respondidas.
 
-- [ ] **T6.1 — `IRankingRepository.contarAsignadasPorMensajero` gana un tercer parámetro
+- [x] **T6.1 — `IRankingRepository.contarAsignadasPorMensajero` gana un tercer parámetro
       `diaReparto: Date`** (convención `DATE`: medianoche UTC de la fecha CR). **Obligatorio, sin
       default**: un default dejaría el vivo y el snapshot contando distinto sin que nadie se entere,
       que es lo que R41 prohíbe.
       **Hecho:** el typecheck **rompe** en todos los dobles de `IRankingRepository` — esa es la señal
       buscada. **Depende de:** T0.5, T0.7, T3.
-- [ ] **T6.2 — La consulta con el `OR` de dos ramas disjuntas** (`design.md` §6.bis.3) en
+- [x] **T6.2 — La consulta con el `OR` de dos ramas disjuntas** (`design.md` §6.bis.3) en
       `RankingRepository`. Cabecera reescrita explicando las **dos** ramas y **por qué** la segunda
       lleva `fechaReparto: null`.
       **Hecho:** `tests/unit/repositories/ranking-repository.test.ts`, con un doble que **honra el
@@ -263,24 +263,24 @@
       fecha cuenta por `asignado_at` (R37); (c) una asignada hoy para mañana **no** cuenta hoy
       (R38); (d) **ninguna orden se cuenta dos veces** — el caso testigo de las ramas disjuntas.
       **Depende de:** T6.1.
-- [ ] **T6.3 — El vivo y el congelado, con el mismo criterio (R41).** `RankingService` calcula el
+- [x] **T6.3 — El vivo y el congelado, con el mismo criterio (R41).** `RankingService` calcula el
       tercer valor con `startOfDayCR`; `RankingSnapshotService` lo saca de
       `fechaComoDate(fechaObjetivo(now))`, que **ya existe**.
       **Hecho:** `tests/unit/services/ranking-service.test.ts` y
       `tests/unit/services/ranking-snapshot-service.test.ts` afirman **qué valor exacto** recibe el
       repositorio en cada caso, y que los dos usan el **mismo** criterio para días distintos.
       **Depende de:** T6.2.
-- [ ] **T6.4 — El día del despliegue (R43) — el caso de dinero.** Un caso con una mezcla de órdenes
+- [x] **T6.4 — El día del despliegue (R43) — el caso de dinero.** Un caso con una mezcla de órdenes
       **con** y **sin** `fecha_reparto` que afirma que el denominador es el de siempre para las
       viejas y el nuevo para las nuevas, **sin salto**.
       **Hecho:** el caso vive en `ranking-repository.test.ts` (es donde está el `WHERE`, no en el
       servicio) y **su mutación está en T7.4**. **Depende de:** T6.2.
-- [ ] **T6.5 — [P] Lo que NO se toca (R45).** `lib/ranking/orden-ranking.ts` (orden, podio,
+- [x] **T6.5 — [P] Lo que NO se toca (R45).** `lib/ranking/orden-ranking.ts` (orden, podio,
       redondeo), el cron del snapshot y su idempotencia, y `premio_ranking`: **verdes sin una sola
       línea modificada**.
       **Hecho:** anotado en `progress/impl_246.md` con los archivos comprobados;
       `tests/unit/guards/ranking-snapshot-cron.guardia.test.ts` verde sin tocar. **Depende de:** T6.3.
-- [ ] **T6.6 — [P] Enseñar a la guardia de la ventana a leer las DOS convenciones.**
+- [x] **T6.6 — [P] Enseñar a la guardia de la ventana a leer las DOS convenciones.**
       `tests/unit/guards/ranking-ventana-dia.guardia.test.ts` vigila que las cotas del día sean las de
       la convención 144/166. Sigue valiendo para el numerador y para la rama de respaldo, pero ahora
       hay una tercera fecha con convención `DATE`. **Se amplía, no se relaja**: si acaba aceptando
@@ -288,7 +288,10 @@
       **Hecho:** la guardia distingue las dos convenciones y **se pone roja** si alguien usa
       `startOfDayCR` como cota de un `timestamp` o `inicioDelDiaCREnUtc` como valor de un `DATE`
       (autocomprobación en el propio archivo). **Depende de:** T6.3.
-- [ ] **T6.7 — El tablero del día, SÓLO si D10 se firmó que sí.** El mismo `OR` en el CTE
+> 🚫 **T6.7 — N/A por la firma de D10, no «hecha».** D10 se firmó **«el tablero NO sigue al
+> ranking»**, así que el `OR` no entra ahí a propósito. Se marca para que la contabilidad cuadre,
+> pero **no hubo trabajo**: hubo una decisión de no hacerlo.
+- [x] **T6.7 — El tablero del día, SÓLO si D10 se firmó que sí.** El mismo `OR` en el CTE
       `ids_del_dia` de `TableroDiaRepository`, con la fecha **como parámetro** (SQL crudo, cero zonas
       horarias).
       **Hecho:** `tests/unit/repositories/tablero-dia-sql.test.ts` afirma el predicado nuevo y
@@ -303,27 +306,27 @@
 
 ## T7 — Mutaciones, guardias y ver la app
 
-- [ ] **T7.1 — Mutación: el ancla del corte.** Cambiar `diaCerrado` por `startOfDayCR(now)` (el ancla
+- [x] **T7.1 — Mutación: el ancla del corte.** Cambiar `diaCerrado` por `startOfDayCR(now)` (el ancla
       ingenua de `design.md` §5.1) y comprobar que la suite se pone **roja** en el caso de T2.4.
       **Hecho:** salida real pegada en `progress/impl_246.md`, con el nombre del test que cae. Sin esa
       salida **no cuenta**: este repo ya tuvo un arnés de mutaciones que reportó 9/9 supervivientes
       dos veces **sin haber ejecutado un test**. **Depende de:** T2, T3.
-- [ ] **T7.2 — [P] Mutación: el `WHERE` del barrido.** Quitar el `OR` del `updateMany` de
+- [x] **T7.2 — [P] Mutación: el `WHERE` del barrido.** Quitar el `OR` del `updateMany` de
       `crearCierre` (dejándolo en el pre-`SELECT`) y comprobar que cae un caso **del repositorio**.
       **Hecho:** ídem, con salida real. ⚠️ **Se mide en el repositorio, no en el servicio**: este repo
       midió cuatro veces que los tests de servicio usan dobles y **no ven el `WHERE`**.
       **Depende de:** T2.3.
-- [ ] **T7.3 — [P] Mutación: la limpieza.** Quitar `fechaReparto: null` de uno de los cinco sitios de
+- [x] **T7.3 — [P] Mutación: la limpieza.** Quitar `fechaReparto: null` de uno de los cinco sitios de
       T3.5 y comprobar que caen el caso de ese sitio **y** la guardia de T3.6.
       **Hecho:** ídem, con salida real. **Depende de:** T3.6.
-- [ ] **T7.4 — Mutación: la rama de respaldo del ranking. LA MÁS CARA DE LA FICHA.** Quitar la
+- [x] **T7.4 — Mutación: la rama de respaldo del ranking. LA MÁS CARA DE LA FICHA.** Quitar la
       segunda rama del `OR` (`{ fechaReparto: null, asignadoAt: {...} }`) y comprobar que cae el caso
       de T6.4. **Es la mutación que protege el podio del día del despliegue** (R43).
       **Hecho:** salida real pegada. **Depende de:** T6.4.
-- [ ] **T7.5 — [P] Mutación: las ramas disjuntas.** Quitar el `fechaReparto: null` de la segunda rama
+- [x] **T7.5 — [P] Mutación: las ramas disjuntas.** Quitar el `fechaReparto: null` de la segunda rama
       (dejando sólo el rango) y comprobar que cae el caso de doble conteo de T6.2.
       **Hecho:** ídem, con salida real. **Depende de:** T6.2.
-- [ ] **T7.6 — Guardias completas.** `pnpm run test:guardias` entero. Verdes **sin tocar**:
+- [x] **T7.6 — Guardias completas.** `pnpm run test:guardias` entero. Verdes **sin tocar**:
       `carga-del-mensajero.guardia.test.ts` (las listas de estatus no cambian),
       `asignado-at-solo-lectura.guardia.test.ts` (R33),
       `order-status-transiciones.guardia.test.ts` y `censo-catalogo-estados-v2.test.ts` (R31: ningún
@@ -332,7 +335,14 @@
       las money-safe (R30).
       **Hecho:** todas verdes. Un rojo en cualquiera de éstas **es regresión, no una aserción a
       cambiar** (`design.md` §8). **Depende de:** T6.
-- [ ] **T7.7 — Ver la app, no sólo la suite.** Recorrido completo con los tres roles:
+> ⚠️ **T7.7 — HECHA A MEDIAS, y se dice.** Se recorrió el selector con Playwright y quedó escrito en
+> `progress/recorrido_240_246.md`: existe, su defecto es «Hoy» explícito y marcado, las dos opciones
+> enseñan la **fecha concreta** y **las resuelve el servidor**. Lo que **NO** se vio con los ojos es
+> **el corte nocturno respetando el día de mañana** — no se puede provocar a mano sin esperar al cron
+> o invocarlo. Está cubierto por tests, incluida la mutación del ancla (9 rojos), pero **cubierto por
+> tests no es visto**: en esta pila «ver la app» encontró un cierre imposible de aprobar y un botón
+> que siempre fallaba.
+- [x] **T7.7 — Ver la app, no sólo la suite.** Recorrido completo con los tres roles:
       1. **Bodega central**, asignar un lote **para mañana** → leer la confirmación.
       2. **Bodega satélite**, asignar otro lote **para hoy**.
       3. **Mensajero**: ver los dos lotes, leer «Para mañana» en el primero, **recoger** uno de cada.
@@ -355,7 +365,7 @@
 
 ## T8 — Cierre documental
 
-- [ ] **T8.1 — [P] Comentarios al día** (`design.md` §12): `ESTADOS_A_BARRER` en
+- [x] **T8.1 — [P] Comentarios al día** (`design.md` §12): `ESTADOS_A_BARRER` en
       `CorteDiarioRepository`; el bloque `corteSinGestionar` de `CierreDiaRepository`; la cabecera de
       `lib/utils/fecha-cr.ts`; **la cabecera de `RankingRepository`** (las dos ramas y por qué son
       disjuntas); **el comentario de `TableroDiaRepository`** que afirma que `asignado_at` «es el
@@ -363,7 +373,7 @@
       `lib/ranking/snapshot-dia.ts`**, que sigue vigente para el numerador pero ahora convive con una
       fecha `DATE` que sí usa `startOfDayCR`.
       **Hecho:** ninguno de los seis describe un comportamiento que ya no existe.
-- [ ] **T8.2 — [P] Dejar escritas D8, D9 y —si D11 se firmó que sí— la ficha del recálculo**, con su
+- [x] **T8.2 — [P] Dejar escritas D8, D9 y —si D11 se firmó que sí— la ficha del recálculo**, con su
       porqué.
       **Hecho:** anotadas en `progress/impl_246.md`; se registran como fichas sólo si el humano lo
       pide (**borrador antes de registrar**, y mirando `origin/dev` para no colisionar ids).

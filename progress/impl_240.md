@@ -26,8 +26,16 @@ Cómo se eligió, porque hubo que rehacerlo una vez:
    (`20260820120000`, la 237) **y también al que registre la 246**. Con la 246 en `…180000`, la 240
    se renumeró a **`20260820190000`**. No hay colisión y el orden es el que el spec pide.
 
-**⚠️ LA MIGRACIÓN NO SE HA APLICADO A NINGUNA BASE**, por instrucción del coordinador. Queda
-pendiente el round-trip real (`db:migrate` → `db:rollback` → `db:migrate`) contra la base local.
+~~**⚠️ LA MIGRACIÓN NO SE HA APLICADO A NINGUNA BASE**, por instrucción del coordinador. Queda
+pendiente el round-trip real (`db:migrate` → `db:rollback` → `db:migrate`) contra la base local.~~
+
+> ⏳ **CORREGIDO el 2026-08-20 (§8.3).** La frase tachada **ya era falsa cuando se escribió**, y
+> ahora se sabe la hora: la migración **se aplicó a las 11:12**, todavía con el nombre
+> `…160000`, **antes** de que la renumerara. Se deja tachada y no borrada porque el error es del
+> tipo que esta sesión lleva persiguiendo —una bitácora que afirma un estado que no es— y taparlo
+> sería repetirlo. **El round-trip real está hecho y pegado en §8.3**, junto con la fila fantasma que
+> esa renumeración dejó atrás y las dos lecciones que salieron de ella.
+
 El test de integración de T1.2 es **estático** (lee `migration.sql` / `down.sql`), así que está verde
 sin base — como el de la 237, que declara lo mismo en su cabecera. **Producción no se tocó.**
 
@@ -383,3 +391,557 @@ Todos entraron en las corridas de arriba y **ninguno falló**.
 3 mutaciones de dinero muertas con salida citada); **T5, T6 y T8 pendientes del turno de frontend**,
 y la única roja mía —`superficie-de-uso` sobre `rechazarNovedad`— **es exactamente la señal de que
 falta cablear el botón**: no se apaga con una anotación.
+
+---
+
+# 8. Segunda vuelta — los dos bloqueantes de la revisión (2026-08-20)
+
+> Nada de lo anterior se reescribe. Lo único que se tocó de arriba es la frase de §0 que **afirmaba
+> un estado falso de la base**: queda **tachada, con su nota**, porque borrarla sería repetir el
+> error en vez de arreglarlo.
+>
+> **Rama:** la que había. **Ni un comando de git que mueva árbol o índice. Sin commit.**
+
+## 8.1 · BLOQUEANTE 1 — R24 tenía un rojo accidental, no una aserción
+
+**El diagnóstico de la revisión era exacto.** R24 estaba declarado «no cubierto aquí, es T8.3», y
+T8.3 nunca se corrió. La mutación «el rechazo borra el ancla» **sí** moría, pero con un
+`TypeError: prisma.ordenHistorialEstado.deleteMany is not a function`, porque el doble solo exponía
+`createMany`. **Un requisito que se sostiene sobre una excepción accidental no está cubierto:** el
+día que alguien añada `deleteMany` al doble por cualquier otro motivo, el rojo se apaga solo.
+
+**Qué se hizo** (`tests/unit/repositories/gestion-orden-rechazar.test.ts`):
+
+- El doble de `ordenHistorialEstado` pasa de **1 a 5 métodos** —`createMany`, `create`, `update`,
+  `updateMany`, `deleteMany`—, y **los cuatro que el repo no debe usar quedan espiados**.
+- El doble deja de ser mudo: mantiene una **tabla de historial de verdad**, sembrada con la fila de
+  anclaje de la 239 (`origen_tipo = anclaje_devolucion`). Los cinco métodos **mutan esa tabla**, así
+  que el efecto sobre el ancla se comprueba **sobre los datos**, no solo sobre el espía.
+- La transacción falsa ahora **también revierte el historial** al abortar. Sin eso, el caso R10
+  pasaría a mentir sobre lo que la base tiene.
+- **Cuatro casos nuevos**, uno por cada cosa que R24 prohíbe, más la rama sin efectos:
+  «la fila de anclaje sigue ahí, sin un solo campo cambiado» (contra la **foto** tomada al sembrar,
+  no contra la fila viva) · «NO se borra — ninguno de los cuatro métodos se usa» · «NO se RE-ANCLA —
+  la única fila nueva es la del rechazo» · «tampoco se toca cuando la orden ya salió de `devuelta`».
+
+`Tests  17 passed (17)` (eran 13).
+
+### Las dos mutaciones, con salida real
+
+**M-R24-a — el rechazo BORRA el ancla** (`deleteMany` sobre `anclaje_devolucion` dentro de la tx):
+
+```
+SHA ANTES:   a7d0bf4e484c98244cbe30ce4c704a877cf96cee0f7aee5d479f39df6a466733
+SHA MUTADO:  3a2d28fda4a3be1aea728b080c57f90255524362d21d80ee65ae2f28d5c05646
+SHA DESPUES: a7d0bf4e484c98244cbe30ce4c704a877cf96cee0f7aee5d479f39df6a466733
+```
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  … (R24) > R24: la fila de anclaje sigue ahi, sin un solo campo cambiado
+AssertionError: expected [] to have a length of 1 but got +0
+ FAIL  … (R24) > 💰 R24: NO se borra — ninguno de los cuatro metodos que podrian tocarla se usa
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+ FAIL  … (R24) > R24: NO se RE-ANCLA — la unica fila nueva es la del rechazo, no otro anclaje
+AssertionError: expected [ { ordenId: 'o1', …(6) } ] to have a length of 2 but got 1
+      Tests  3 failed | 14 passed (17)
+```
+
+**Tres `AssertionError`. Cero `TypeError`.** Es exactamente lo que la revisión pedía ver.
+
+**M-R24-b — el rechazo MODIFICA el ancla** (la «refresca» con `updateMany` en vez de borrarla). Es
+la tercera prohibición de R24, la que un `deleteMany` no ejerce:
+
+```
+SHA ANTES:   a7d0bf4e484c98244cbe30ce4c704a877cf96cee0f7aee5d479f39df6a466733
+SHA MUTADO:  55fe3a90aca43e060fa49b3670fac8b2d5c60fbfa8e3f753f5d2f7e58f5022b3
+SHA DESPUES: a7d0bf4e484c98244cbe30ce4c704a877cf96cee0f7aee5d479f39df6a466733
+```
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  … (R24) > R24: la fila de anclaje sigue ahi, sin un solo campo cambiado
+AssertionError: expected { ordenId: 'o1', …(2) } to deeply equal { ordenId: 'o1', …(2) }
+ FAIL  … (R24) > 💰 R24: NO se borra — ninguno de los cuatro metodos que podrian tocarla se usa
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+      Tests  2 failed | 15 passed (17)
+```
+
+Tras cada restauración: `Tests  17 passed (17)`.
+
+**Fila del mapa que cambia:** R24 pasa de «— · **NO CUBIERTO AQUÍ**» a
+`tests/unit/repositories/gestion-orden-rechazar.test.ts` **(NUEVO)** — el bloque
+«el ancla de la devolución queda INTACTA (R24)», 4 casos, **mutaciones M-R24-a y M-R24-b**.
+
+---
+
+## 8.2 · BLOQUEANTE 2 — el frente 2 medía el `import`, no la llamada
+
+**La quinta forma de replantar la maqueta existía y sobrevivía:** dejar el `import` en pie y borrar
+la invocación. Las dos guardias, verdes. Y la variante ingenua —el import huérfano— también, porque
+`"lint": "eslint"` **no lleva `--max-warnings=0`** y `no-unused-vars` sale como *warning*. Quien
+mataba esa maqueta era un **test de componente**: justo la red que D3 declaró insuficiente, porque un
+test de componente afirma que el botón llama a **lo que el test le pasa como doble**.
+
+### La forma elegida, y por qué ésa
+
+Se añade `invocaElSimbolo(codigo, simbolo)` y el frente 2 pasa a exigir **las dos cosas**: que la
+pantalla la **importe** y que la **invoque**. Tres decisiones dentro, cada una por un falso positivo
+concreto:
+
+1. **se quitan los comentarios** — la prosa del catálogo nombra las seis acciones, varias con
+   paréntesis detrás; sin esto, cualquier módulo pasaría por invocarlas solo con mencionarlas;
+2. **se quitan los `import` enteros** antes de buscar — si no, esto volvería a ser un detector de
+   importación con otro nombre;
+3. se busca el símbolo seguido de un paréntesis de apertura.
+
+**El mensaje del frente cambia con él**, y distingue los dos fallos porque se arreglan distinto:
+«nadie la importa» es una celda que sobra o un modal que falta; «la importan … pero **NINGUNA la
+llama**» es la maqueta exacta.
+
+### Por qué exigir la invocación NO es frágil aquí — medido, no supuesto
+
+La objeción legítima es el símbolo que viaja **por referencia** (`onConfirm={rechazarNovedad}`) o el
+**re-export**: esta forma no los vería. Se censaron **las seis acciones de la tabla** en el árbol:
+
+```
+rechazarNovedad               → RechazarNovedadModal.tsx:187    await rechazarNovedad({ ordenId, motivo })
+reprogramarNovedad            → ReprogramarNovedadModal.tsx:52  await reprogramarNovedad({ … })
+habilitarNovedad              → NovedadesModule.tsx:373         await habilitarNovedad({ ordenId, nota })
+listarNotasOrden              → HiloNotasNovedadModal.tsx:86    listarNotasOrden({ ordenId })
+registrarIntentoContactoOrden → IntentoContactoAccion.tsx:51    await registrarIntentoContactoOrden({ … })
+gestionarDesdeAyuda           → GestionarDesdeAyudaModal.tsx:278 await gestionarDesdeAyuda(buildFormData())
+```
+
+**Las seis se invocan directamente. Ninguna viaja como referencia y ninguna se re-exporta.** Si
+algún día una lo hiciera, este frente se pondría rojo y el arreglo sería **enseñarle esa forma**, no
+relajarlo a «la importa» — eso es el agujero que esto cierra. Queda escrito junto a la función.
+
+### Autocomprobación nueva (R40), en las dos direcciones
+
+Fixture `IMPORT_SIN_LLAMADA` —la quinta maqueta, tal cual— y cuatro casos: ve la llamada real ·
+**el `import` en pie sin la llamada NO cuenta** (y se afirma que el import **sí** está, que es lo que
+hacía pasar al frente viejo) · nombrarla en un **comentario** no es llamarla · mencionarla **sin
+paréntesis** tampoco (es literalmente `accionServidor: "rechazarNovedad"` en la tabla).
+
+`Tests  19 passed (19)` (eran 15).
+
+> ⚠️ **Dos veces mordió el escapado**, y se deja escrito porque es la lección de siempre: al escribir
+> la expresión regular desde un script, la cadena perdió una capa y quedó un **backspace** en vez del
+> `\b`; y un salto de línea escapado se convirtió en un salto real y rompió el fuente. Se arregló
+> escribiendo la línea **por índice** y usando un template literal con el salto **literal**, sin
+> ninguna secuencia de escape que pueda perder una capa por el camino.
+
+### Las CINCO formas de replantar la maqueta — las cinco mueren
+
+Catálogo: sha `53a98dd271a643f79f3c22a32f87b993ba98ebe2e5b43c408a361a237c6d968b` (antes y después).
+Modal: sha `520cd779c8428827125034675a1c9425d8fbb523d6022aa834124d4e7b03716f` (antes y después).
+
+| # | Forma | sha mutado | Quién la mata |
+| --- | --- | --- | --- |
+| M1 | `sinOperacion` con motivo de relleno (`TODO`) | `eaed04ca…` | **Frente 3** («es de relleno») + frente 4 + anti-vacuidad. **3 rojos** |
+| M2 | productor **inventado** (`rechazarQueNadieEscribio`) | `d99d379c…` | **Frente 1** («cita un productor que no está donde dice») + frente 2 + anti-vacuidad. **4 rojos** |
+| M3 | productor **real pero no cableado** (`recuperarABodega`) | `68607dbe…` | **Frente 2** («nadie la importa») + frente 4 + anti-vacuidad. **3 rojos** |
+| M4 | `sinOperacion` con **motivo largo y creíble** | `acad38e6…` | **Frente 4, el censo inverso** («la pantalla dispara una operación que la tabla no declara») + anti-vacuidad. **2 rojos** |
+| **M5** | **el `import` EN PIE y la invocación borrada** ← *la que sobrevivía* | `089019da…` | **Frente 2, ahora** («la importan … pero NINGUNA la llama») + anti-vacuidad. **2 rojos** |
+
+Salida de M5, con el `import` todavía presente en el archivo (`RechazarNovedadModal.tsx:7`), que es
+lo que prueba que es **esta** maqueta y no otra:
+
+```
+ FAIL  …sin-maqueta.guardia.test.ts > 240/R38 — y algún archivo de la pantalla la LLAMA
+                                    > cada productor se importa Y se invoca dentro de `app/(app)/novedades/`
+AssertionError: un botón de `/novedades` declara una operación que NINGÚN archivo de la pantalla
+llama: … Ojo con el sabor sutil: dejar el `import` y borrar la invocación deja el botón igual de
+muerto, y el linter no lo caza porque `no-unused-vars` es un *warning*. …
+      Tests  2 failed | 25 passed (27)
+```
+
+Tras restaurar los dos archivos: **sha idénticos, `git status` de `app/(app)/novedades/` vacío**, y
+`Tests  27 passed (27)`.
+
+> **Lo que NO se tocó, y por qué se dice:** `"lint": "eslint"` sigue **sin** `--max-warnings=0`. Es
+> un cambio de configuración global que afecta a **todo** el repo y a todas las features en vuelo, no
+> a esta ficha. Se **nombra** aquí porque explica por qué el linter no era red para M5, y se propone
+> como cambio aparte. La guardia ya no depende de él.
+
+---
+
+## 8.3 · La base: el round-trip que faltaba, y la fila fantasma que SÍ existía
+
+### La fila fantasma — SÍ existía, y mi primera versión de este apartado era falsa
+
+> ⏳ **CORREGIDO el 2026-08-20, con la evidencia del leader.** Aquí decía **«No hay ninguna fila
+> fantasma… el `20260820160000` que renumeré nunca llegó a aplicarse»**. **Es falso**, y se deja
+> escrito el error entero en vez de sustituirlo en silencio, porque el modo de fallo es justo el que
+> esta bitácora ya tuvo una vez (§0).
+
+**Lo que pasó de verdad, en orden:**
+
+1. La migración se creó como `20260820160000_orden_historial_origen_rechazo_tienda` y **SÍ se
+   aplicó** a la base local, a las **11:12**.
+2. **Después** se renumeró a `…190000`, al descubrir que la 246 ya había tomado `…180000` y que el
+   spec exigía ir detrás de ella (§0).
+3. Eso dejó en `_prisma_migrations` **una fila sin carpeta en disco**: el nombre viejo seguía
+   registrado como aplicado, pero su directorio ya no existía.
+4. **El leader la borró** mientras esta segunda vuelta estaba en marcha.
+
+**La evidencia, tomada por el leader ANTES de limpiar nada:**
+
+```
+20260820120000_orden_historial_origen_gestion_tienda_ayuda   2026-08-20 02:24
+20260820160000_orden_historial_origen_rechazo_tienda         2026-08-20 11:12   ← SIN CARPETA
+20260820180000_orden_fecha_reparto                           2026-08-20 12:20
+20260820190000_orden_historial_origen_rechazo_tienda         2026-08-20 12:20
+```
+
+**Dos filas con el mismo nombre de migración y distinto timestamp**, y sólo `…190000` con carpeta.
+
+### Las dos lecciones, que es lo que de verdad vale de esto
+
+**1. Renumerar una migración YA APLICADA deja una fila fantasma que `prisma migrate status` NO
+detecta.** No es un descuido de la herramienta: `migrate status` compara **lo que falta por
+aplicar** —carpetas sin fila—, no **lo huérfano** —filas sin carpeta—. Por eso decía «Database
+schema is up to date!» con la fila fantasma dentro, y por eso yo, que me apoyé en ese verde, no vi
+nada. Quien renumere una migración tiene que comprobar el sentido contrario **a mano**: filas de
+`_prisma_migrations` que ya no tengan directorio.
+
+**2. 💰 Lo único que lo hizo INOCUO fue la guarda idempotente de mi propio SQL.** El `migration.sql`
+lleva `ALTER TYPE … ADD VALUE **IF NOT EXISTS** 'rechazo_tienda'`, así que la segunda aplicación
+—la de `…190000` sobre una base que ya tenía el valor— fue un **no-op**. El leader lo verificó antes
+de borrar la fila: `rechazo_tienda` estaba en el enum **una sola vez**. **Con un `ALTER TABLE ADD
+COLUMN` sin guarda, o con cualquier DDL no idempotente, esto habría petado** — y habría petado en la
+re-aplicación, no en la renumeración, que es donde nadie estaría mirando. La convención de escribir
+migraciones idempotentes dejó de ser una formalidad y pagó una factura concreta el mismo día.
+
+### Y una lección de método, sobre cómo medí
+
+**Medí un estado que otro había cambiado entre medias, y no lo dije.** El censo de abajo se tomó en
+esta segunda vuelta —minutos antes del round-trip cuya re-aplicación queda sellada a las
+`2026-08-20T14:16:42.117Z`—, es decir **DESPUÉS de la limpieza del leader**. Los números son
+correctos **para ese instante**; la conclusión que saqué de ellos —«nunca hubo fila que dejar
+atrás»— **no lo era**, porque una foto no puede decir nada sobre lo que había antes de tomarla.
+
+**La regla que queda:** una medición se escribe con **cuándo** se tomó, no sólo con qué dio. «137 y
+137» sin hora es un dato que parece más fuerte de lo que es. Aquí ya costó una afirmación falsa en
+una bitácora que existe, precisamente, para que nadie tenga que fiarse de la memoria de nadie.
+
+### El censo, con su hora
+
+**Medido en la segunda vuelta, el 2026-08-20 hacia las 14:1x UTC — DESPUÉS de que el leader borrara
+la fila fantasma.** Consulta de solo lectura sobre `_prisma_migrations`:
+
+```
+filas con '160000' en el nombre: 9
+  20260710160000_vehiculos · 20260711160000_order_status_en_bodega_satelite
+  20260712160000_wallet_movimiento · 20260714160000_gestion_orden_anulacion
+  20260715160000_gestion_orden_causa_devolucion · 20260720160000_num_guia_no_secuencial
+  20260731160000_orden_busqueda_trgm · 20260814160000_ruta_tramo_vivo_at
+  20260819160000_orden_retiro_ayuda
+filas con 'rechazo_tienda' en el nombre:
+  [{"migration_name":"20260820190000_orden_historial_origen_rechazo_tienda"}]
+filas SIN finished_at o con rolled_back_at: []
+carpetas en disco: 137 | filas en tabla: 137
+EN TABLA SIN CARPETA (fantasmas): []
+EN CARPETA SIN TABLA (pendientes): []
+```
+
+Las nueve filas con `160000` son migraciones **legítimas de otras fechas** (julio y agosto): ninguna
+es la del 20 de agosto, porque **esa ya la había borrado el leader**. La correspondencia
+carpeta ↔ fila es 1:1 exacta **a esa hora**, que es exactamente lo que se espera **después** de una
+limpieza — no la prueba de que nunca hiciera falta.
+
+> ⭑ **La consulta que sí lo habría cazado**, y que es la que hay que correr al renumerar: la de
+> `EN TABLA SIN CARPETA`. Estaba escrita en mi script de inspección y devolvió `[]` **porque llegué
+> tarde**. Corrida a las 11:12, habría devuelto la fila.
+
+### El round-trip completo, contra la base local
+
+```
+########## PASO 1 — ESTADO INICIAL ##########
+Datasource "db": PostgreSQL database "ordenex", schema "public" at "localhost:5432"
+137 migrations found · Database schema is up to date!
+{"migration_name":"20260820190000_orden_historial_origen_rechazo_tienda",
+ "finished_at":"2026-08-20T12:20:28.727Z","rolled_back_at":null,"applied_steps_count":1}
+--- enum orden_historial_origen_tipo: 31 valores ---  (… gestion_tienda_ayuda, rechazo_tienda)
+filas con origen_tipo = 'rechazo_tienda': 0
+
+########## PASO 2 — ROLLBACK (pnpm run db:rollback) ##########
+Aplicando rollback: 20260820190000_orden_historial_origen_rechazo_tienda
+Script executed successfully.   (down.sql)
+Script executed successfully.   (DELETE de _prisma_migrations)
+Rollback completado: 20260820190000_orden_historial_origen_rechazo_tienda
+
+########## PASO 3 — TRAS EL DOWN ##########
+Following migration have not yet been applied:
+20260820190000_orden_historial_origen_rechazo_tienda
+--- enum orden_historial_origen_tipo: 30 valores ---
+Raw query failed. Code: `22P02`. Message: `la sintaxis de entrada no es válida para el enum
+orden_historial_origen_tipo: «rechazo_tienda»`
+
+########## PASO 4 — RE-APLICAR (prisma migrate deploy) ##########
+Applying migration `20260820190000_orden_historial_origen_rechazo_tienda`
+All migrations have been successfully applied.
+
+########## PASO 5 — ESTADO FINAL ##########
+137 migrations found · Database schema is up to date!
+{"migration_name":"20260820190000_orden_historial_origen_rechazo_tienda",
+ "finished_at":"2026-08-20T14:16:42.117Z","rolled_back_at":null,"applied_steps_count":1}
+--- enum orden_historial_origen_tipo: 31 valores ---
+total filas en _prisma_migrations: 137
+filas con origen_tipo = 'rechazo_tienda': 0
+```
+
+**Las tres cosas que el round-trip demuestra y que un test estático no puede:**
+1. el `down.sql` **corre de verdad** contra Postgres y deja el enum en **30** valores;
+2. el `22P02` del paso 3 es la **prueba positiva** de que el valor desapareció del tipo — la consulta
+   ya no puede ni nombrarlo;
+3. `migrate status` vuelve a verla como **pendiente** y `deploy` la **re-aplica** sin drift.
+
+⚠️ **El `down.sql` no llegó a ejercer su precondición ruidosa**, y hay que decirlo: había **0 filas**
+con la familia, así que el `USING` no tuvo nada que rechazar. Que aborte con filas vivas está
+afirmado **estáticamente** en `rechazo-tienda-migration.test.ts` y sigue **sin comprobación contra
+Postgres**. Comprobarlo exigiría insertar una fila a mano y volver a bajar; **no se hizo** para no
+dejar basura en la base local sin pedirlo.
+
+⚠️ **`rechazo_tienda` sigue con 0 filas**: el rechazo manual **nunca se ha ejecutado contra
+Postgres**. Sigue pendiente el recorrido T8 (§4, punto 5), que es donde R24 se vería *en vivo* — pero
+R24 **ya no depende de eso**: ahora tiene sus cuatro casos y sus dos mutaciones (§8.1).
+
+**Los dos scripts de inspección eran de un solo uso y se borraron** (`scripts/_tmp_*`), como manda la
+convención de este repo.
+
+---
+
+## 8.4 · Verificación de la segunda vuelta
+
+```
+$ pnpm exec tsc --noEmit -p tsconfig.json
+(sin salida — 0 errores)
+
+$ pnpm exec eslint tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts \
+                   tests/unit/repositories/gestion-orden-rechazar.test.ts
+(sin salida — 0 errores, 0 warnings)
+
+$ pnpm run test:guardias
+ Test Files  125 passed (125)
+      Tests  1854 passed (1854)
+
+$ pnpm exec vitest run tests/unit tests/integration
+ Test Files  1027 passed (1027)
+      Tests  13526 passed (13526)
+
+$ pnpm exec vitest run tests/components
+ Test Files  214 passed (214)
+      Tests  2814 passed | 26 skipped (2840)
+```
+
+**Cero rojos, en todo el árbol.** Los tres que quedaban al cerrar la primera vuelta ya no están: el
+de `superficie-de-uso` sobre `rechazarNovedad` lo apagó **el frontend cableando el botón** —que era
+justo lo que ese rojo pedía—, y los dos de la 246 los cerró su propio agente.
+
+## Veredicto de la segunda vuelta
+
+Los dos bloqueantes, cerrados con evidencia: **R24 pasa de un rojo accidental por `TypeError` a
+cuatro casos y dos mutaciones que mueren por aserción**, y **el frente 2 pasa de medir el `import` a
+exigir la invocación, con las cinco formas de la maqueta muertas** —incluida la que sobrevivía—.
+La base tiene su **round-trip real** y la frase falsa de §0 está corregida en su sitio.
+
+⚠️ **Y una tercera corrección, que no es de código sino de rigor:** este apartado llegó a afirmar que
+**no había fila fantasma**. **La había** — renumerar una migración ya aplicada la dejó, y
+`prisma migrate status` no la ve. Lo único que la hizo inocua fue el `ADD VALUE IF NOT EXISTS` del
+propio SQL. Medí **después** de que el leader la limpiara y no dije a qué hora medía: la foto era
+correcta, la conclusión no. Está corregido con su evidencia en §8.3.
+
+---
+
+# 9. Tercera vuelta — el botón mudo que el recorrido destapó (2026-08-20)
+
+> El leader cerró T8.1 y T8.3 ejecutando el rechazo **de verdad** contra Postgres, y funciona: 1 fila
+> de historial con `rechazo_tienda`, orden a `rechazada`, **actor = la tienda**, y la gestión
+> sintética con `mensajero_id` puesto y `cierre_id` NULL. **La paridad con el cron, verificada en
+> datos y no en dobles.** Por el camino apareció esto.
+
+## 9.1 · El fallo, tal como salió
+
+Sobre una orden puesta en `devuelta` **a mano, sin gestión**, el servidor devolvió:
+
+```
+[AppError:INTERNAL] Error: rechazarDesdeDevuelta: sin gestion `devuelta` vigente
+                    para derivar el mensajero
+⨯ Error: resolver-novedad: AppErrorCode inesperado INTERNAL
+```
+
+**Y la tienda no vio absolutamente nada.** Botón habilitado, motivo escrito, pulsó, y no pasó nada:
+ni la orden cambió, ni salió un aviso. **Un botón mudo — el defecto que esta ficha vino a cerrar,
+una capa más abajo.**
+
+La cadena, entera: el repo lanza un `Error` pelado → `withErrorHandler` lo normaliza a `INTERNAL` →
+`toResolverNovedadActionError` **no reconoce ese código y lanza** (`default: throw`) →
+`RechazarNovedadModal` llama a la acción **sin `try/catch`**, así que `onResuelto` nunca se ejecuta y
+no hay nada que pintar.
+
+## 9.2 · Lo que NO se hizo, y por qué
+
+**No se inventó ningún camino de recuperación**, ni se derivó el mensajero de otra parte. El estado
+**no es alcanzable hoy** y está medido antes de tocar nada: en producción, **11 órdenes han pasado
+por `devuelta` y las 11 tienen su gestión** — 0 sin ella, ni siquiera anulada. A `devuelta` sólo se
+llega aprobando el cierre que **contiene** esa gestión (239).
+
+**El `throw` del repositorio se queda**, y es lo correcto: cuando se descubre, el `updateMany` ya
+está escrito. Un `return` dejaría la orden en `rechazada` **sin gestión y sin historial**, peor que
+el estado del que venimos. Lanzar **aborta la transacción** y lo revierte todo. Fallo cerrado.
+
+**Lo que estaba mal era cómo salía**, y eso es lo único que se tocó.
+
+## 9.3 · La forma elegida — y por qué NO es un `conflict`
+
+El encargo decía «conviértelo en un `conflict` con motivo accionable, para que la pantalla lo
+pinte». **Al mirarlo, esa forma habría mentido, y se cambió a propósito:**
+
+**La pantalla NO pinta el `motivo` de un `conflict`.** Lo dice su propio código, con su razón
+escrita desde que se montó (`RechazarNovedadModal.tsx`, sobre `RECHAZO_CONFLICTO`): ese `motivo` es
+una cadena técnica —«la orden ya no esta en devuelta», sin tildes y con el nombre interno del estado
+dentro— pensada para un registro. Así que `conflict` se pinta con un **texto fijo**:
+
+> «Esta orden ya no estaba en devolución, así que no se rechazó. Actualizá la pantalla.»
+
+Sobre este caso eso es **FALSO**: la orden **sí sigue en devolución**; lo que falta es su gestión.
+Habría cambiado un botón mudo por **un mensaje que miente**, que es la misma familia de defecto.
+
+**La forma que sí sirve:** un estado propio en la máquina de resultados,
+`{ status: "sin_gestion_origen" }`. Y no es sólo corrección semántica — es que **la pantalla no
+puede olvidarlo**: su mapa de mensajes es
+`Record<Exclude<DesenlaceRechazo["status"], "ok" | "conflict">, string>`, así que añadir el estado
+**rompe el typecheck** hasta que alguien le escriba su texto. Ese mecanismo ya estaba montado ahí
+para exactamente esto, con su comentario puesto. **El rojo salió, como debía:**
+
+```
+app/(app)/novedades/_components/NovedadesModule.tsx(203,7): error TS2741:
+Property 'sin_gestion_origen' is missing in type
+'{ forbidden: string; not_found: string; config_error: string; unauthenticated: string; }'
+but required in type 'Record<"not_found" | "forbidden" | "sin_gestion_origen" | …, string>'
+```
+
+## 9.4 · Qué se escribió
+
+| Archivo | Qué |
+| --- | --- |
+| `lib/interfaces/repositories/IGestionOrdenRepository.ts` | **`SinGestionDevueltaError`**, clase propia. Precedente exacto en este repo: `DeshacerAsignacionConflictoError` en `IOrdenRepository.ts`. Su mensaje es **para el registro**: sin datos personales, sin el motivo escrito por la tienda y sin el id de la orden (R46) |
+| `lib/repositories/GestionOrdenRepository.ts` | El helper lanza la clase en vez de un `Error` pelado. **El `throw` no se mueve de sitio**: sigue abortando la transacción |
+| `lib/interfaces/services/IRechazoTiendaService.ts` | La unión gana `{ status: "sin_gestion_origen" }`, con el porqué de no ser `conflict` escrito al lado |
+| `lib/services/RechazoTiendaService.ts` | `try/catch` que captura **sólo esa clase** y devuelve el estado. **Todo lo demás se re-lanza**: una caída de base tiene que seguir siendo `INTERNAL`, porque no es un desenlace de negocio. Mismo patrón que `DeshacerAsignacionService` |
+| `app/(app)/novedades/_components/RechazarNovedadModal.tsx` | El texto `RECHAZO_SIN_GESTION_ORIGEN` |
+| `app/(app)/novedades/_components/NovedadesModule.tsx` | Una entrada en el `Record` — la que el typecheck exigía |
+
+**El texto, y las tres cosas que dice a propósito:**
+
+> «No se pudo rechazar: a esta orden le falta el registro de su devolución. No es algo que hayas
+> hecho mal —avisá a un administrador con el número de guía para que la revisen.»
+
+**qué pasa** (le falta un registro, no «error interno») · **que no es culpa suya** —el botón estaba
+habilitado y ella hizo todo bien— · **qué hacer**, con el dato que le van a pedir. **Ningún nombre de
+función:** el `SinGestionDevueltaError` va al registro, no a la pantalla.
+
+> ⚠️ **Se tocaron dos archivos de pantalla**, y se dice porque está fuera de mi superficie habitual:
+> una constante de texto y una entrada del `Record`. Sin la segunda **el árbol no compila** —es el
+> rojo que este cambio provoca a propósito—, así que dejarla para otro turno habría sido dejar el
+> árbol roto.
+
+## 9.5 · Los casos, y la mutación
+
+**Servicio** (`tests/unit/services/rechazo-tienda-service.test.ts`, 18 → **21**):
+«sin gestión `devuelta` vigente → `sin_gestion_origen`, **no una excepción**» · «y **NO se disfraza
+de `conflict`** — el texto de la carrera perdida sería FALSO» · **el contraste obligatorio**: «una
+caída de base NO se captura: sigue subiendo como excepción». Sin ese tercero, un `catch` a ciegas
+haría que la tienda leyera «le falta el registro de su devolución» sobre una base caída — un
+diagnóstico inventado.
+
+**Repositorio** (`gestion-orden-rechazar.test.ts`): el caso R10 pasa a afirmar **la clase**
+(`rejects.toThrow(SinGestionDevueltaError)`), no sólo el texto. Es lo que hace que el `instanceof`
+del servicio signifique algo: si alguien volviera a lanzar un `Error` pelado, aquel `instanceof`
+fallaría **en silencio** y la tienda volvería a pulsar un botón mudo.
+
+**Borde** (`resolver-novedad.test.ts`, 29 → **30**): `sin_gestion_origen` cruza la Server Action
+**tal cual**, junto a `forbidden` / `not_found` / `config_error`.
+
+### La mutación pedida — devolver el `throw` a la superficie
+
+```
+SHA ANTES:   780e3d8625d07bd28d1fbd811c8693f16e413d98fd398999b7086cae4b900458
+SHA MUTADO:  87ad8035d4792fd416db2a4d134c99123b2070cd9f9c221d24fed0180447f6a0
+SHA DESPUES: 780e3d8625d07bd28d1fbd811c8693f16e413d98fd398999b7086cae4b900458
+```
+
+```
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  … > R10: sin gestion `devuelta` vigente -> `sin_gestion_origen`, no una excepcion
+AssertionError: promise rejected "SinGestionDevueltaError: rechazarDesdeDev…" instead of resolving
+ FAIL  … > R10: y NO se disfraza de `conflict` — el texto de la carrera perdida seria FALSO
+      Tests  2 failed | 19 passed (21)
+```
+
+Tras restaurar: `Tests  21 passed (21)`.
+
+## 9.6 · El censo que pediste: qué más puede salir mudo
+
+**El agujero de fondo no es de esta ficha y sigue abierto.** `toResolverNovedadActionError`
+(`lib/actions/resolver-novedad.ts:126`) sólo traduce `VALIDATION_ERROR` y `UNAUTHORIZED`; **cualquier
+otro código cae en un `default: throw`**. Y `RechazarNovedadModal` / `ReprogramarNovedadModal` llaman
+a su acción **sin `try/catch`** (verificado: 0 en los dos). Así que **todo lo que llegue como
+`INTERNAL` deja la ventana muda**, no sólo lo de R10.
+
+**Lo que puede llegar por ahí en el camino del rechazo, censado en el árbol:**
+
+| Origen | Qué lo lanza | ¿Arreglado? |
+| --- | --- | --- |
+| `SinGestionDevueltaError` | el helper, cuando falta la gestión de origen | **SÍ, en §9.4** |
+| `TransicionNoValidableError` (**4** sitios en `registrar-cambio-estado.ts`) | catálogo no disponible / estatus desconocido — el fallo cerrado de la 140 | **No.** Sube como `INTERNAL` → ventana muda |
+| `TransicionIlegalError` | si el par `devuelta → rechazada` dejara de ser legal | **No.** Ídem |
+| Errores de Prisma (base caída, timeout, constraint) | la transacción | **No**, y aquí es discutible que deba serlo: no es un desenlace de negocio. Pero la persona **sigue sin ver nada** |
+
+**Y no es sólo del rechazo:** las otras **dos** acciones del mismo archivo —`reprogramarNovedad` y
+`recuperarABodega`, feature **100**— comparten ese `toResolverNovedadActionError` y tienen **el mismo
+agujero, idéntico**. `NovedadesModule` y `GestionarDesdeAyudaModal` sí tienen `try/catch` (1 cada
+uno), así que «Habilitar» y la gestión desde ayuda están mejor cubiertos que estas dos ventanas.
+
+**No se tocó, y es deliberado:** arreglarlo bien es o un `default` que devuelva un desenlace genérico
+en vez de lanzar, o un `try/catch` en cada ventana. Las dos cosas **cambian la conducta de la feature
+100**, que es dinero vivo y ficha ajena. **Se propone como ficha aparte**, con este censo delante.
+
+## 9.7 · La lección, y dónde quedó escrita
+
+**Un estado inalcanzable no exime de tener salida.** La invariante se cumple hoy —11 de 11, medido—
+pero el día que un dato se tuerza, quien está delante de la pantalla **merece un mensaje, no un botón
+mudo**. Y la forma de que eso no dependa de que alguien se acuerde es que **el typecheck lo exija**:
+por eso el desenlace es un estado propio y no un `conflict` reutilizado.
+
+Queda **junto al código**, no sólo aquí: en el JSDoc de `SinGestionDevueltaError` (por qué es un
+`throw` y por qué tiene clase), en el de `RechazarNovedadResult` (por qué no es un `conflict`), y
+sobre todo en el del texto `RECHAZO_SIN_GESTION_ORIGEN`, que es donde lo va a leer quien se pregunte
+por qué existe un mensaje para algo que «no puede pasar».
+
+## 9.8 · Verificación
+
+```
+$ pnpm exec tsc --noEmit -p tsconfig.json
+(sin salida — 0 errores)
+
+$ pnpm exec eslint <los 9 archivos tocados>
+(sin salida — 0 errores, 0 warnings)
+
+$ pnpm exec vitest run tests/unit/services/rechazo-tienda-service.test.ts
+      Tests  21 passed (21)
+
+$ pnpm exec vitest run tests/unit/repositories/gestion-orden-rechazar.test.ts
+      Tests  17 passed (17)
+
+$ pnpm exec vitest run tests/unit/actions/resolver-novedad.test.ts
+      Tests  30 passed (30)
+
+$ pnpm exec vitest run tests/unit tests/integration tests/components
+ Test Files  1241 passed (1241)
+      Tests  16344 passed | 26 skipped (16370)
+```
+
+**Cero rojos en todo el árbol**, con el estado nuevo dentro y la pantalla ya cableada.

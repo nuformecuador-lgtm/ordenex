@@ -1,5 +1,8 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IGestionOrdenRepository } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import {
+  SinGestionDevueltaError,
+  type IGestionOrdenRepository,
+} from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IRechazoTiendaService,
@@ -93,13 +96,36 @@ export class RechazoTiendaService implements IRechazoTiendaService {
     //    por `estatus_id = devuelta` del repo hace la accion idempotente frente al doble envio y a
     //    la carrera con el cron: si perdio la carrera (`count = 0`), el repo devuelve `false` sin
     //    dejar ni un efecto, y el `cobroRechazado` no se cobra dos veces (R21).
-    const ok = await this.gestionRepo.rechazarDesdeDevuelta({
-      ordenId,
-      estatusDevueltaId,
-      estatusRechazadaId,
-      motivo, // R12: obligatorio, ya validado en el borde
-      actorUsuarioId: actor.usuarioId, // R11: quien decidio. NO es el mensajero de la gestion.
-    });
+    //
+    //    ⚠️ R10 — Y SI LA ORDEN NO TIENE GESTION `devuelta` VIGENTE, EL REPO LANZA. Ese `throw` es
+    //    correcto y se queda: es lo que ABORTA la transaccion y revierte el `updateMany`, en vez de
+    //    dejar la orden en `rechazada` sin gestion y sin historial. Lo que NO era correcto es como
+    //    salia de aqui. Hasta el 2026-08-20 subia como un `Error` pelado, se normalizaba a
+    //    `INTERNAL` y `toResolverNovedadActionError` LANZABA al no reconocer ese codigo: la tienda
+    //    pulsaba «Rechazar» con su motivo escrito y NO PASABA NADA — ni cambio, ni aviso—. Un boton
+    //    mudo, que es el defecto que esta ficha vino a cerrar, una capa mas abajo.
+    //
+    //    Se captura SOLO esa clase y se re-lanza todo lo demas: una caida de base tiene que seguir
+    //    siendo `INTERNAL`, porque no es un desenlace de negocio y nadie puede hacer nada con ella
+    //    desde la pantalla. Mismo patron, linea por linea, que
+    //    `DeshacerAsignacionService` con `DeshacerAsignacionConflictoError`.
+    let ok: boolean;
+    try {
+      ok = await this.gestionRepo.rechazarDesdeDevuelta({
+        ordenId,
+        estatusDevueltaId,
+        estatusRechazadaId,
+        motivo, // R12: obligatorio, ya validado en el borde
+        actorUsuarioId: actor.usuarioId, // R11: quien decidio. NO es el mensajero de la gestion.
+      });
+    } catch (error) {
+      if (error instanceof SinGestionDevueltaError) {
+        // Sin efectos: la transaccion ya revirtio el cambio de estado. La orden sigue en la
+        // devolucion anclada y la tienda la sigue viendo en su lista.
+        return { status: "sin_gestion_origen" };
+      }
+      throw error;
+    }
     // R3/R31: carrera perdida (o doble submit) -> la orden ya no estaba en la devolucion anclada.
     // La pantalla NO debe afirmar que la rechazo: devuelve `conflict` con su motivo.
     if (!ok) {

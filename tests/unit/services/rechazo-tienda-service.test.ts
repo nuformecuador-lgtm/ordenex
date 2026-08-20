@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { RechazoTiendaService } from "@/lib/services/RechazoTiendaService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { IGestionOrdenRepository } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import {
+  SinGestionDevueltaError,
+  type IGestionOrdenRepository,
+} from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
 
@@ -218,6 +221,72 @@ describe("RechazoTiendaService — las ramas que NO escriben (R3)", () => {
     const r = await service.rechazar("o1", MOTIVO, TIENDA);
     expect(r.status).toBe("conflict");
     expect(r).not.toEqual({ status: "ok" });
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // R10 (2026-08-20) — LA ORDEN SIN GESTION `devuelta` VIGENTE **SALE CON TEXTO**, NO EN SILENCIO.
+  //
+  // Nace de un recorrido real: el leader puso una orden en `devuelta` a mano, sin gestion, pulso
+  // «Rechazar» con el motivo escrito y **no paso absolutamente nada**. El servidor lanzaba
+  // `[AppError:INTERNAL]` y el borde remataba con «AppErrorCode inesperado INTERNAL»; la pantalla
+  // no sabia pintar ninguno de los dos. Un boton mudo — el defecto que esta ficha vino a cerrar,
+  // una capa mas abajo.
+  //
+  // ⚠️ El estado NO es alcanzable hoy y se midio antes de tocar nada: en produccion, 11 ordenes han
+  // pasado por `devuelta` y **las 11 tienen su gestion**, ni una anulada. Por eso NO se inventa un
+  // camino de recuperacion ni se deriva el mensajero de otra parte: el `throw` del repo se queda
+  // como fallo CERRADO. Lo unico que cambia es COMO SALE.
+  // -------------------------------------------------------------------------------------------
+  it("R10: sin gestion `devuelta` vigente -> `sin_gestion_origen`, no una excepcion", async () => {
+    const { service } = build(
+      {},
+      {
+        rechazarDesdeDevuelta: vi.fn(async () => {
+          throw new SinGestionDevueltaError("rechazarDesdeDevuelta");
+        }),
+      },
+    );
+
+    // ⭑ LA MUTACION QUE ESTE CASO MATA: devolver el `throw` a la superficie. Si alguien quita el
+    // `catch` del service, esta promesa REJECTA en vez de resolver y el caso cae aqui.
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).resolves.toEqual({
+      status: "sin_gestion_origen",
+    });
+  });
+
+  it("R10: y NO se disfraza de `conflict` — el texto de la carrera perdida seria FALSO", async () => {
+    // La pantalla pinta un texto FIJO para `conflict` («esta orden ya no estaba en devolucion») y
+    // descarta el `motivo`. Aqui la orden SI sigue en devolucion: lo que falta es su gestion. Un
+    // `conflict` le ensenaria a la tienda algo que no es cierto, que es la clase de dato que este
+    // repo persigue. Por eso es un estado propio, y este caso lo fija.
+    const { service } = build(
+      {},
+      {
+        rechazarDesdeDevuelta: vi.fn(async () => {
+          throw new SinGestionDevueltaError("rechazarDesdeDevuelta");
+        }),
+      },
+    );
+
+    const r = await service.rechazar("o1", MOTIVO, TIENDA);
+    expect(r.status).not.toBe("conflict");
+    expect(r.status).not.toBe("ok");
+  });
+
+  it("una caida de base NO se captura: sigue subiendo como excepcion", async () => {
+    // El contraste obligatorio. Si el `catch` fuera a ciegas, un fallo de infraestructura pasaria
+    // por desenlace de negocio y la tienda leeria «le falta el registro de su devolucion» sobre una
+    // base caida: un diagnostico inventado. Solo se captura la clase, y todo lo demas sube.
+    const { service } = build(
+      {},
+      {
+        rechazarDesdeDevuelta: vi.fn(async () => {
+          throw new Error("db down");
+        }),
+      },
+    );
+
+    await expect(service.rechazar("o1", MOTIVO, TIENDA)).rejects.toThrow("db down");
   });
 
   it.each(["devuelta", "rechazada"])(

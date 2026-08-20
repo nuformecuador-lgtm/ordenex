@@ -3690,3 +3690,62 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - **Deuda con dueño:** `IncidenteAdminService` sigue con su copia de la subida compensada (D5-a) y
   `motivoSchema` sigue sin tope (D8). Y **T0.1 queda abierta a propósito**: re-medir antes de
   desplegar.
+
+---
+
+## 2026-08-20 · Feature 240 — el rechazo manual de la tienda deja de ser una maqueta
+
+**PR #411** (junto con la 246) · zona `fullstack` · complejidad alta · `done`
+
+- 🔴 **Tres defectos que llevaban semanas en pantalla, y ninguno lo veía la suite.** «Devolver a
+  gestión» era una **maqueta desde el 2026-08-12** —el botón existía, el modal se abría, y no pasaba
+  nada—; su nombre además era el equivocado. «Habilitar» aparecía justo en las cards que vienen de un
+  cierre, que es **donde el pedido decía que no debía estar**. Está medido y es el hallazgo que más
+  vale de esta ficha: **las tres capas de tests de esa superficie estuvieron verdes esas dos
+  semanas**. Una maqueta no rompe nada — por eso una suite verde no la encuentra.
+- **La paridad con el cron es la ficha entera, y se verificó contra Postgres**, no contra la
+  pantalla: el rechazo manual escribe la **gestión sintética** con `mensajero_id` **puesto** y
+  `cierre_id` **NULL**, igual que la del corte automático. Sin ella, rechazar a mano saldría **gratis**
+  y esperar al plazo **costaría** — dos precios para el mismo hecho, decididos por quién pulsa antes.
+- **La guardia anti-maqueta tiene cuatro frentes**, y hubo que arreglarla **durante la revisión**:
+  sobrevivía una quinta forma de replantar el botón —dejar el import y quitar la invocación— porque
+  su frente 2 medía **el import** aunque su mensaje dijera «llama». Ahora comprueba la invocación.
+  Detalle que lo hacía invisible: `"lint": "eslint"` **sin `--max-warnings=0`**, así que un import
+  muerto no ponía nada en rojo.
+- **Un agente se apartó de mi instrucción, y tenía razón.** Le dije que el fallo silencioso al
+  rechazar saliera como `conflict`; midió que **la pantalla descarta el motivo de un `conflict` y
+  pinta un texto fijo** que sería falso. Usó un estado propio que **rompe el typecheck** hasta que
+  alguien le escriba su texto: el fallo se hace notar en la compilación, no en la cara del usuario.
+- **Dos hallazgos salen a ficha aparte, no se cuelan aquí:** el **doble cobro del flete** (247 — está
+  medido, `1 de 16`, ₡2.486 a NUFORM, y **no lo introduce esta ficha**: le abre una segunda puerta) y
+  los **errores mudos de `/novedades`** (248), que la **feature 100 comparte idénticos**.
+- **Abierto y dicho:** T8.2 —la mitad del recorrido que **no** se hizo: ver la orden rechazada desde
+  el mensajero y desde bodega— y T4.3, que es una **cita equivocada en el spec** (nombra un archivo
+  del portal del mensajero), comprobada dos veces.
+
+## 2026-08-20 · Feature 246 — al asignar se elige para qué día
+
+**PR #411** (junto con la 240) · zona `fullstack` · complejidad alta · `done`
+
+- **Una fecha, no una marca.** El selector guarda `fecha_reparto` **absoluta**, y la razón está
+  firmada: **una fecha vence sola; una marca necesita a alguien que la apague** — que es exactamente
+  el defecto que pagó la 235. Las dos opciones enseñan la **fecha concreta** («20 de agosto», «21 de
+  agosto»), y **las resuelve el servidor**: el corte es a medianoche de Costa Rica y un reloj de
+  navegador en otro huso habría dado otro día sin avisar.
+- 🔴 **El ancla del corte no es «hoy»**, es **el día que la corrida cierra**. Era el punto donde la
+  ficha se rompía sola —el cron que corre a las 23:59 y termina pasada la medianoche se llevaría por
+  delante las asignaciones de mañana— y hoy tiene mutación propia: **9 rojos**.
+- **El `EXPLAIN` cambió la pregunta.** Contra producción, la consulta de hoy se sirve con un **`Index
+  Only Scan` sobre un compuesto que YA EXISTÍA**. Así que lo que había que preguntar no era «¿falta
+  un índice?» sino **«¿el `OR` nuevo rompe el índice que ya cubría?»**. Medidos cuatro escenarios
+  **por forma del plan**: el índice nuevo era **el peor de los tres**. Se **retiró** y se **amplió el
+  compuesto** a tres columnas — el número de índices no sube.
+- **D7 se firmó EN CONTRA de la recomendación** (corregir el denominador del ranking aquí en vez de
+  en ficha aparte), y por eso la ficha subió a complejidad alta. Con el importe delante: **₡10.000
+  reparte el premio en toda la historia**, y **las posiciones 2 y 3 están sin configurar** — si algún
+  día se configuran, lo que está en juego se multiplica.
+- **D11: solo hacia adelante**, que además es lo que el código ya impone — los snapshots de ranking
+  son **inmutables por diseño**.
+- **Abierto y dicho:** T0.1, re-medir antes de desplegar. R44 está medido **por forma** con
+  `enable_seqscan=off` sobre **141/67 filas**: **ninguna de las dos bases tiene volumen** para que el
+  plan de hoy prediga el de mañana.

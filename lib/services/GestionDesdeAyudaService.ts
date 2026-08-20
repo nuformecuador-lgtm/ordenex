@@ -21,9 +21,15 @@ import { estaEnVentanaDeEscritura } from "@/lib/types/ventana-hilo-notas";
  * gestion cuenta como si la hubiera hecho el mensajero: entra en su cierre, suma un intento de
  * entrega y mueve el mismo dinero.
  *
- * ⚠️ ES LA OPERACION MAS DELICADA EN DINERO DE LA PILA DE LA AYUDA. Un `rechazada` dispara el
- * `cobroRechazado` de la 56 —dinero real debitado a la tienda, hasta ₡1.000 segun lo medido en
- * produccion el 2026-08-20— y suma un intento que adelanta el escalado del cron de SLA (99).
+ * ⚠️ ES LA OPERACION MAS DELICADA EN DINERO DE LA PILA DE LA AYUDA, y lo es por DOS IMPORTES
+ * DISTINTOS CON DUEÑOS DISTINTOS. Un `rechazada`:
+ *
+ * 1. dispara el `cobroRechazado` de la 56 —hasta ₡1.000 segun lo medido en produccion el
+ *    2026-08-20—, que es INGRESO DE BODEGA y cae en el CIERRE DEL MENSAJERO al que se atribuye
+ *    la gestion: NO es un cargo a la tienda, en su billetera no hay apunte por ese concepto;
+ * 2. SI le cuesta dinero a la tienda, pero POR OTRA VIA Y DESDE OTRA TARIFA: el flete de
+ *    devolucion (`ingreso_flete_devolucion`, hasta ₡2.600 —₡2.200 en GAM— mas IVA 13 %, medido);
+ * 3. y suma un intento que adelanta el escalado del cron de SLA (99).
  *
  * ## Por que este servicio existe y no se llama a `MisAsignacionesService.gestionar`
  *

@@ -61,6 +61,7 @@ import {
   RECHAZO_ERROR_FORBIDDEN,
   RECHAZO_ERROR_NOT_FOUND,
   RECHAZO_ERROR_SESION,
+  RECHAZO_SIN_GESTION_ORIGEN,
   RECHAZO_EXITO,
   type DesenlaceRechazo,
 } from "./RechazarNovedadModal";
@@ -208,6 +209,10 @@ const MENSAJE_POR_FALLO_DEL_RECHAZO: Record<
   not_found: RECHAZO_ERROR_NOT_FOUND,
   config_error: RECHAZO_ERROR_CONFIG,
   unauthenticated: RECHAZO_ERROR_SESION,
+  // 2026-08-20: esta entrada NO se anadio por gusto — sin ella este `Record` NO COMPILA, que es
+  // justo lo que el comentario de arriba promete. El estado nacio de un recorrido en el que la
+  // tienda pulso «Rechazar» y no vio nada: la accion salia por `INTERNAL` y el borde lanzaba.
+  sin_gestion_origen: RECHAZO_SIN_GESTION_ORIGEN,
 };
 
 export interface NovedadesModuleProps {

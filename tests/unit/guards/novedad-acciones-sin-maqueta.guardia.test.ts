@@ -206,6 +206,39 @@ export function importaElSimbolo(
   );
 }
 
+/**
+ * ¿`codigo` LLAMA a `simbolo`? No «lo nombra»: lo INVOCA.
+ *
+ * ⏳ 2026-08-20 — ESTA FUNCIÓN NACE DE UN AGUJERO MEDIDO, y conviene que quede escrito cuál.
+ * El frente 2 preguntaba sólo `importaElSimbolo`, aunque su mensaje dijera «llama». Con eso, la
+ * QUINTA forma de replantar la maqueta —**dejar el `import` en pie y borrar la invocación**—
+ * pasaba las dos guardias en verde. Y la variante ingenua (el import huérfano) también, porque
+ * `"lint": "eslint"` no lleva `--max-warnings=0` y `no-unused-vars` sale como *warning*. Quien
+ * mataba esa maqueta era un test de componente: exactamente la red que D3 declaró insuficiente,
+ * porque un test de componente afirma que el botón llama a lo que el test le pasa como doble.
+ *
+ * QUÉ MIDE, en orden, y por qué cada paso:
+ *   1. se quitan los COMENTARIOS: la prosa del catálogo nombra las seis acciones, y sin esto
+ *      cualquier módulo pasaría por llamarlas sólo con mencionarlas;
+ *   2. se quitan los `import` ENTEROS: si no, `import { rechazarNovedad }` contaría como llamada
+ *      en cuanto el símbolo fuera seguido de un paréntesis en otra parte de la línea. Es la
+ *      precaución que convierte esto en un detector de invocación y no en otro de importación;
+ *   3. se busca `simbolo` seguido de `(`. Una Server Action se dispara llamándola.
+ *
+ * ⚠️ POR QUÉ EXIGIR LA INVOCACIÓN NO ES FRÁGIL AQUÍ, medido y no supuesto. La objeción legítima es
+ * el símbolo que se pasa por referencia (`onConfirm={rechazarNovedad}`) o el re-export, que esta
+ * forma no vería. Se censaron las SEIS acciones de la tabla en el árbol el 2026-08-20 y las seis se
+ * invocan directamente —`await rechazarNovedad({…})`, `await gestionarDesdeAyuda(…)`,
+ * `listarNotasOrden({…})`…—: ninguna viaja como referencia y ninguna se re-exporta. Si algún día
+ * una lo hiciera, este frente se pondría rojo y el arreglo sería enseñarle esa forma, NO relajarlo
+ * a «la importa»: eso es precisamente el agujero que esta función cierra.
+ */
+export function invocaElSimbolo(codigo: string, simbolo: string): boolean {
+  const sinComentarios = quitarComentarios(codigo);
+  const sinImports = sinComentarios.replace(IMPORT_NOMBRADO, " ");
+  return new RegExp(`\\b${simbolo}\\s*\\(`).test(sinImports);
+}
+
 /** El fuente de un módulo de `lib/actions/**`, o `null` si no existe ningún archivo con ese nombre. */
 export function fuenteDelModulo(modulo: string): string | null {
   for (const ext of EXTENSIONES) {
@@ -309,6 +342,24 @@ const LA_MAQUETA = `
     return avisarNoDisponible;
   }`;
 
+/**
+ * 💀 LA QUINTA MAQUETA — la que sobrevivió a las dos guardias hasta el 2026-08-20.
+ *
+ * El `import` sigue en pie y la invocación no está: el botón avisa por toast, como el original.
+ * Pasaba el frente 2 porque aquel frente medía el `import`, y pasaba el linter porque
+ * `"lint": "eslint"` no lleva `--max-warnings=0`, así que `no-unused-vars` es un *warning* y no
+ * rompe nada. La única red que la cazaba era un test de componente, que es justo la que D3 declaró
+ * insuficiente: un test de componente afirma que el botón llama a lo que el test le pasa.
+ */
+const IMPORT_SIN_LLAMADA = `
+  import { useToast } from "@/hooks/useToast";
+  import { rechazarNovedad } from "@/lib/actions/resolver-novedad";
+  export function RechazarNovedadModal() {
+    const toast = useToast();
+    // Aqui llamaba a rechazarNovedad(...) y ahora solo avisa.
+    return () => toast.info("Esta accion todavia no esta disponible.");
+  }`;
+
 const IMPORT_MULTILINEA = `
   import {
     borrarNotaOrden,
@@ -381,6 +432,44 @@ describe("0 — los detectores de esta guardia no están rotos (R40)", () => {
     expect(
       importaElSimbolo(IMPORT_MULTILINEA, "lib/actions/orden-notas", "listarNotasOrden"),
     ).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // El detector de INVOCACIÓN (2026-08-20). Se prueba en las dos direcciones y contra los tres
+  // falsos positivos que lo dejarían sin sujeto: el import, el comentario y la mera mención.
+  // ---------------------------------------------------------------------------------------------
+  it("ve la LLAMADA cuando el archivo la invoca de verdad", () => {
+    expect(invocaElSimbolo(CABLEADO, "rechazarNovedad")).toBe(true);
+  });
+
+  it("💀 AUTOCOMPROBACIÓN: el `import` en pie SIN la llamada NO cuenta como cableado", () => {
+    // ⭑ EL CASO QUE CIERRA EL AGUJERO. Es la quinta forma de replantar la maqueta, la que
+    // sobrevivía: importar y no llamar. El import SÍ está —y por eso el frente viejo pasaba—, la
+    // invocación NO.
+    expect(
+      importaElSimbolo(IMPORT_SIN_LLAMADA, "lib/actions/resolver-novedad", "rechazarNovedad"),
+    ).toBe(true);
+    expect(invocaElSimbolo(IMPORT_SIN_LLAMADA, "rechazarNovedad")).toBe(false);
+  });
+
+  it("AUTOCOMPROBACIÓN: nombrarla en un COMENTARIO no es llamarla", () => {
+    // Sin quitar comentarios, el catálogo pasaría por invocar las seis acciones: su prosa las
+    // nombra todas, y varias con paréntesis detrás.
+    expect(
+      invocaElSimbolo(
+        `// llama a rechazarNovedad({ ordenId }) cuando toque
+export const x = 1;`,
+        "rechazarNovedad",
+      ),
+    ).toBe(false);
+  });
+
+  it("AUTOCOMPROBACIÓN: mencionar el símbolo sin paréntesis tampoco es llamarlo", () => {
+    // `accionServidor: "rechazarNovedad"` es exactamente esto: la tabla NOMBRA la acción. Si eso
+    // contara, el catálogo se cablearía a sí mismo y el frente 2 no mediría nada.
+    expect(
+      invocaElSimbolo('export const T = { accionServidor: "rechazarNovedad" };', "rechazarNovedad"),
+    ).toBe(false);
   });
 
   it("AUTOCOMPROBACIÓN: un productor INVENTADO no existe en el árbol", () => {
@@ -465,8 +554,18 @@ describe("240/R38 — toda acción cita una Server Action que EXISTE", () => {
 // FRENTE 2 — EL PRODUCTOR ESTÁ CABLEADO (R38). ÉSTE ES EL QUE LA MAQUETA NO HABRÍA PASADO.
 // =================================================================================================
 
-describe("240/R38 — y algún archivo de la pantalla la IMPORTA", () => {
-  it("cada productor tiene al menos un importador dentro de `app/(app)/novedades/`", () => {
+describe("240/R38 — y algún archivo de la pantalla la LLAMA", () => {
+  // ⏳ 2026-08-20 — ESTE FRENTE MEDÍA EL `import`, AUNQUE SU MENSAJE DIJERA «llama». La revisión
+  // buscó una quinta forma de replantar la maqueta y la encontró: **dejar el `import` en pie y
+  // borrar la invocación**. Las dos guardias, verdes. Y el import huérfano tampoco rompía nada,
+  // porque `"lint": "eslint"` no lleva `--max-warnings=0` y `no-unused-vars` sale como *warning*.
+  // Quien mataba esa maqueta era un test de componente — justo la red que D3 declaró insuficiente.
+  //
+  // Ahora se exigen LAS DOS COSAS, y el orden de la comprobación es el que hace legible el fallo:
+  // primero que la importe (si no, no puede llamarla y compilar), después que la INVOQUE. El
+  // mensaje distingue los dos casos porque se arreglan distinto: «nadie la importa» es una celda
+  // que sobra o un modal que falta; «la importa pero no la llama» es la maqueta exacta.
+  it("cada productor se importa Y se invoca dentro de `app/(app)/novedades/`", () => {
     const sinCable: string[] = [];
     for (const { accion, accionServidor, modulo } of entradasConProductor()) {
       const importadores = FUENTES.filter((m) =>
@@ -474,23 +573,39 @@ describe("240/R38 — y algún archivo de la pantalla la IMPORTA", () => {
       );
       if (importadores.length === 0) {
         sinCable.push(`${accion} → \`${accionServidor}\` (${modulo}): nadie la importa`);
+        continue;
+      }
+      // ⭑ EL ESLABÓN QUE FALTABA: importar no es disparar. Un `import` sin llamada es un botón que
+      // no hace nada con el cable puesto encima, y en verde.
+      const invocadores = importadores.filter((m) => invocaElSimbolo(m.codigo, accionServidor));
+      if (invocadores.length === 0) {
+        sinCable.push(
+          `${accion} → \`${accionServidor}\` (${modulo}): la importan ` +
+            `${importadores.map((m) => m.ruta).join(", ")} pero NINGUNA la llama`,
+        );
       }
     }
     expect(
       sinCable,
       "un botón de `/novedades` declara una operación que NINGÚN archivo de la pantalla llama: es " +
         "el cable cortado, y es exactamente el estado en el que «Rechazar» vivió del 2026-08-12 al " +
-        "2026-08-20 avisando por toast. Se arregla CABLEANDO el botón. Anotarlo para callar la " +
-        "guardia sería volver a declarar la maqueta.",
+        "2026-08-20 avisando por toast. Ojo con el sabor sutil: dejar el `import` y borrar la " +
+        "invocación deja el botón igual de muerto, y el linter no lo caza porque `no-unused-vars` " +
+        "es un *warning*. Se arregla CABLEANDO el botón. Anotarlo para callar la guardia sería " +
+        "volver a declarar la maqueta.",
     ).toEqual([]);
   });
 
-  it("y el importador es un archivo REAL, con la arista nombrada (anti-vacuidad)", () => {
-    // Si `importaElSimbolo` estuviera roto y devolviera `true` a ciegas, el caso de arriba pasaría
-    // sin medir nada. Esto fija el mapa concreto: qué archivo cablea cada operación, hoy.
+  it("y el que la llama es un archivo REAL, con la arista nombrada (anti-vacuidad)", () => {
+    // Si `importaElSimbolo` o `invocaElSimbolo` estuvieran rotos y devolvieran `true` a ciegas, el
+    // caso de arriba pasaría sin medir nada. Esto fija el mapa concreto: qué archivo DISPARA cada
+    // operación, hoy. El mapa se construye con el detector de INVOCACIÓN, no con el de import: si
+    // alguien relajase el frente, esta lista cambiaría y habría que reescribirla a mano.
     const mapa = entradasConProductor().map(({ accionServidor, modulo }) => {
-      const importadores = FUENTES.filter((m) =>
-        importaElSimbolo(m.codigo, modulo, accionServidor),
+      const importadores = FUENTES.filter(
+        (m) =>
+          importaElSimbolo(m.codigo, modulo, accionServidor) &&
+          invocaElSimbolo(m.codigo, accionServidor),
       ).map((m) => m.ruta.replace(`${PANTALLA}/_components/`, ""));
       return `${accionServidor} ← ${importadores.sort().join(", ")}`;
     });

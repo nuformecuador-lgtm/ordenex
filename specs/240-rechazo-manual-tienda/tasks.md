@@ -21,7 +21,7 @@
 
 ## T0 — Puerta humana: medir y firmar *(sin código)*
 
-- [ ] **T0.1 — Medir contra producción**, vía MCP de Supabase, **solo lectura**, con las seis
+- [x] **T0.1 — Medir contra producción**, vía MCP de Supabase, **solo lectura**, con las seis
       consultas de `design.md` §18:
       **M1** población viva por estatus (¿cuántas órdenes hay hoy en `devuelta`?) ·
       **M2** cuántas rechaza el cron por plazo vencido, por mes ·
@@ -33,13 +33,13 @@
       denominador** — un cero sin denominador no dice nada. **Bloquea T0.2.**
       > ⏳ **La foto caduca**: M1 y M2 se mueven en cuanto la 239 lleve unos días con volumen.
       > **Re-medir justo antes de desplegar**, no antes de mergear.
-- [ ] **T0.2 — Firmar las decisiones.** **D1** (qué escribe el rechazo), **D2** (el flete que se
+- [x] **T0.2 — Firmar las decisiones.** **D1** (qué escribe el rechazo), **D2** (el flete que se
       cobra dos veces, **con M3 delante**), **D5** (motivo sí, evidencia no), **D6** (no se puede
       deshacer), **D7** (el escaneo del 238), **D9** (no hace falta que el plazo venza) y **D10**
       (los textos). D3, D4 y D8 las firma el leader con la recomendación del spec salvo objeción.
       **Hecho:** cada una respondida en `progress/impl_240.md`; si alguna se aparta de la
       recomendación, **el spec se corrige antes de escribir código**. **Bloquea T1.**
-- [ ] **T0.3 — [P] Decidir si se abren las dos fichas propuestas** (`design.md` §19): el cobro
+- [x] **T0.3 — [P] Decidir si se abren las dos fichas propuestas** (`design.md` §19): el cobro
       repetido del flete (D2/M3) y el deshacer de la reprogramación de escritorio (D6/M5).
       **Hecho:** decisión anotada; si es que sí, **el leader** las estampa en `feature_list.json`
       **mirando antes `origin/dev`** (ya hubo dos colisiones de id entre sesiones). **No bloquea T1.**
@@ -48,7 +48,7 @@
 
 ## T1 — La familia y la arista *(inerte: se puede desplegar suelta)*
 
-- [ ] **T1.1 — La migración del valor de enum, SOLA.**
+- [x] **T1.1 — La migración del valor de enum, SOLA.**
       `db/migrations/<ts>_orden_historial_origen_rechazo_tienda/` con `<ts>` posterior a
       `20260820120000` **y al de la 246 si ésta entra antes** (§Paralelismo):
       `ALTER TYPE … ADD VALUE IF NOT EXISTS 'rechazo_tienda';` + `down.sql` que **recrea el tipo con
@@ -57,23 +57,23 @@
       **Hecho:** `pnpm run db:migrate` aplica y `pnpm run db:rollback` revierte en local; el test
       de integración de T1.2 verde. ⚠️ **Los `down.sql` anteriores de este enum NO se tocan.**
       **Depende de:** T0.2.
-- [ ] **T1.2 — [P] Test de integración de la migración (NUEVO).**
+- [x] **T1.2 — [P] Test de integración de la migración (NUEVO).**
       `tests/integration/db/rechazo-tienda-migration.test.ts`, molde literal de
       `tests/integration/db/gestion-tienda-ayuda-migration.test.ts`: el valor existe en el enum,
       aplicar dos veces no rompe, y **el down falla ruidosamente si queda una fila usándolo** (R47).
       **Hecho:** verde contra Postgres real. **Depende de:** T1.1.
-- [ ] **T1.3 — El valor en `lib/types/orden-historial.ts`**, con su comentario y —lo importante—
+- [x] **T1.3 — El valor en `lib/types/orden-historial.ts`**, con su comentario y —lo importante—
       **su razón de NO entrar en `ORIGEN_TIPOS_VISITA_REAL`** (`design.md` §7.3: la orden ya tiene
       contada su `devuelta` real; es el caso de `reprogramacion_tienda`, no el de
       `gestion_tienda_ayuda`). `ORIGEN_TIPOS_CON_GESTION` **no cambia**.
       **Hecho:** `tests/unit/types/orden-historial-types.test.ts` verde con el SEED ampliado **y su
       literal de `ORIGEN_TIPOS_VISITA_REAL` INTACTO**; `tests/unit/types/criterio-intento-entrega.test.ts`
       verde **sin tocarse**. **Depende de:** T1.1.
-- [ ] **T1.4 — La arista #67** en `lib/types/order-status-transiciones.ts`, dentro de `devuelta`, y
+- [x] **T1.4 — La arista #67** en `lib/types/order-status-transiciones.ts`, dentro de `devuelta`, y
       **reescritura** del comentario «las SIETE salidas… se conservan INTACTAS» (`:321-325`).
       **Hecho:** `tests/unit/domain/order-status-transiciones.guardia.test.ts` y
       `.connectividad.test.ts` verdes. **Depende de:** T1.3.
-- [ ] **T1.5 — El inventario de transiciones.** `tests/fixtures/inventario-transiciones-140.ts`:
+- [x] **T1.5 — El inventario de transiciones.** `tests/fixtures/inventario-transiciones-140.ts`:
       `aristasFlujo` **61 → 62**, `paresUnicos` **se queda en 59**, y el comentario del recuento gana
       el **tercer duplicado** (#21/#67, hermano de #19/#23 y #20/#24). Fila `#67` con su `callSite`.
       **Hecho:** las cifras **re-derivadas**, no copiadas; el archivo explica por qué los pares no
@@ -85,7 +85,7 @@
 
 ## T2 — La escritura: helper compartido y `rechazarDesdeDevuelta` *(mismo PR que T3-T6)*
 
-- [ ] **T2.1 — Extraer el helper privado `transicionarDesdeDevuelta`** en
+- [x] **T2.1 — Extraer el helper privado `transicionarDesdeDevuelta`** en
       `lib/repositories/GestionOrdenRepository.ts`, con los pasos 1, 2 y 4 de
       `reprogramarDesdeDevuelta` (`:580-639`), y hacer que **aquel método lo use sin cambiar su firma
       ni su conducta**.
@@ -93,7 +93,7 @@
       `tests/integration/db/resolver-novedad-reprograma-dinero.test.ts` **verdes sin cambiar una
       aserción**. Si alguna mira la *estructura* de las llamadas y no la conducta, se re-apunta y se
       dice en el commit. **Depende de:** T0.2.
-- [ ] **T2.2 — `rechazarDesdeDevuelta`** + `RechazarDesdeDevueltaInput` en la interfaz. `data` del
+- [x] **T2.2 — `rechazarDesdeDevuelta`** + `RechazarDesdeDevueltaInput` en la interfaz. `data` del
       `updateMany` con **exactamente** `estatusId`; gestión con `resultado: "rechazada"`,
       `cierreId: null`, `motivo`, mensajero **derivado**; append con actor = la tienda y familia
       `rechazo_tienda`.
@@ -104,12 +104,12 @@
       `false` sin duplicar (R5); sin gestión `devuelta` vigente → **aborta la tx** (R10); el `data`
       lleva una sola clave (R14/R20); **no** se tocan `mensajeroAsignadoId`, `prioridad`,
       `causaDevolucion` ni ubicación (R14/R16). **Depende de:** T2.1.
-- [ ] **T2.3 — [P] El testigo del choke point.** El inventario de escrituras de estado:
+- [x] **T2.3 — [P] El testigo del choke point.** El inventario de escrituras de estado:
       `tests/unit/repositories/orden-historial-cobertura.test.ts` pasa de **30 a 31** puntos, con la
       entrada `GestionOrdenRepository.rechazarDesdeDevuelta / rechazo_tienda`, y la **igualdad exacta
       contra el SEED** sigue cumpliéndose.
       **Hecho:** verde, sin debilitar la igualdad. **Depende de:** T2.2.
-- [ ] **T2.4 — [P] El aviso interno que NO se emite (R45).** Un caso que afirma que una transición a
+- [x] **T2.4 — [P] El aviso interno que NO se emite (R45).** Un caso que afirma que una transición a
       `rechazada` con la familia nueva **no** produce el aviso «rechazada por el destinatario», y el
       **control positivo** de que con familia `gestion` sí. Se añade el párrafo de esta ficha en
       `lib/notificaciones/emitir.ts:134-150`, junto al de la 237.
@@ -122,7 +122,7 @@
 
 ## T3 — El servicio y el borde *(mismo PR)*
 
-- [ ] **T3.1 — `RechazoTiendaService`** (`lib/services/`, + su interfaz), espejo de
+- [x] **T3.1 — `RechazoTiendaService`** (`lib/services/`, + su interfaz), espejo de
       `ReprogramacionTiendaService`: las cinco puertas de `design.md` §5, en ese orden.
       **Hecho:** `tests/unit/services/rechazo-tienda-service.test.ts` **(NUEVO)**, molde de
       `tests/unit/services/reprogramacion-tienda-service.test.ts`. Casos: `not_found`; **otro rol** y
@@ -130,7 +130,7 @@
       `conflict` **sin llamar al repo** (R3); catálogo incompleto → `config_error` sin efectos; el
       repo devuelve `false` → `conflict`; camino feliz. **Y dos ausencias afirmadas:** no se consulta
       el bloqueo del mensajero, y **no se exige que el plazo haya vencido** (R25). **Depende de:** T2.2.
-- [ ] **T3.2 — La Server Action `rechazarNovedad`** en `lib/actions/resolver-novedad.ts`, junto a sus
+- [x] **T3.2 — La Server Action `rechazarNovedad`** en `lib/actions/resolver-novedad.ts`, junto a sus
       dos hermanas, con `rechazarSchema` (**`motivo` obligatorio**, tope reutilizado de
       `gestion-orden.ts`) y el mismo `withErrorHandler`/`toResolverNovedadActionError`.
       **Hecho:** casos añadidos a `tests/unit/actions/resolver-novedad.test.ts`: `ordenId` no-uuid y
@@ -143,7 +143,7 @@
 
 ## T4 — La guarda del deshacer, y el rótulo que dejó de ser cierto *(mismo PR)*
 
-- [ ] **T4.1 — Generalizar el predicado de «lo registró la tienda».**
+- [x] **T4.1 — Generalizar el predicado de «lo registró la tienda».**
       `lib/utils/gestion-tienda-ayuda-flag.ts` → `gestion-de-la-tienda-flag.ts`:
       `ORIGENES_GESTION_DE_LA_TIENDA` (lista) y `esGestionDeLaTienda`. Los dos consumidores
       (`CierreDiaRepository.ts:342-349`, `CierresAdminRepository.ts:155-158`) pasan de un igual a un
@@ -152,12 +152,17 @@
       **Hecho:** el rename completo, con `tests/unit/repositories/cierres-admin-repository.test.ts`,
       `tests/unit/repositories/cierre-dia-repository.test.ts` y
       `tests/unit/services/gestion-desde-ayuda-rotulo-cierre.test.ts` verdes. **Depende de:** T1.3.
-- [ ] **T4.2 — El deshacer bloqueado para la familia nueva (R43).** `CierreDiaService` **no cambia
+- [x] **T4.2 — El deshacer bloqueado para la familia nueva (R43).** `CierreDiaService` **no cambia
       una línea** de su guarda 3-bis; lo que cambia es de dónde sale el booleano. El mensaje deja de
       nombrar «su pantalla de ayuda» (D10).
       **Hecho:** en `tests/unit/services/cierre-dia-service.test.ts`, junto a los casos de la 237
       (`:1083-1111`): un caso con la **familia nueva** → `conflict` con el mensaje nuevo, y el
       **control positivo** de que una gestión del mensajero se sigue deshaciendo. **Depende de:** T4.1.
+> ⚠️ **T4.3 — EL SPEC CITA UN ARCHIVO EQUIVOCADO, comprobado (2026-08-20).**
+> Nombra `RepartoAyudaResueltaPorLaTienda.test.tsx`, que es sobre el **portal del mensajero**
+> (237/R40), no sobre el badge del cierre — ése vive en `CierreDiaModule.tsx` y está en la
+> superficie de la **246**. Lo verificaron el frontend y la revisión por separado. **Queda abierta
+> a propósito**: no es trabajo pendiente, es una cita que corregir en el spec.
 - [ ] **T4.3 — [P] El badge del cierre.** La fila de la gestión en el cierre del mensajero y en el
       detalle de admin sigue diciendo **«La tienda»** para el rechazo manual, por el mismo predicado.
       **Hecho:** un caso en `tests/components/RepartoAyudaResueltaPorLaTienda.test.tsx` —el archivo
@@ -170,19 +175,19 @@
 
 ## T5 — La pantalla *(mismo PR; subagente de FRONTEND, después de T2-T4)*
 
-- [ ] **T5.1 — La celda que se borra (R33/R34).** `ACCIONES_POR_GRUPO.devolucion` pierde
+- [x] **T5.1 — La celda que se borra (R33/R34).** `ACCIONES_POR_GRUPO.devolucion` pierde
       `"habilitar"`; el comentario `:63-68` que declaraba la deuda **con dueño** se sustituye por lo
       que pasó; el JSDoc de `rechazar` deja de decir «MAQUETA hasta la ficha 240».
       **Hecho:** `tests/unit/types/novedad-acciones-catalogo.test.ts` con `JUEGO_ESPERADO.devolucion`
       **actualizado a mano** (⚠️ **ese literal ES el contrato**: jamás se sustituye por una
       derivación de su propia fuente) + dos casos nuevos: «la devolución no ofrece habilitar» y su
       **control positivo** «la ayuda sí». **Depende de:** T0.2.
-- [ ] **T5.2 — [P] El botón «Notas» que no vuelve (R36).** Caso explícito: el grupo de devolución
+- [x] **T5.2 — [P] El botón «Notas» que no vuelve (R36).** Caso explícito: el grupo de devolución
       **no** ofrece `conversacion`, con su control positivo en ayuda. Es lo que la auditoría §3
       echaba en falta —«nada falla si alguien repone el botón»— y hoy sólo está como una línea suelta
       del test del catálogo (`:117-118`).
       **Hecho:** el caso nombra la auditoría y el motivo. **Depende de:** T5.1.
-- [ ] **T5.3 — Cablear «Rechazar» (R27/R28/R29/R30/R31/R32).** `onDevolver` → **`onRechazar`** en
+- [x] **T5.3 — Cablear «Rechazar» (R27/R28/R29/R30/R31/R32).** `onDevolver` → **`onRechazar`** en
       `NovedadAcciones`; `avisarNoDisponible` **desaparece** de `NovedadesModule`; entra
       `ordenARechazar` con montaje condicional y `key={orden.id}`; `RechazarNovedadModal.tsx`
       **(NUEVO)**, molde de `ReprogramarNovedadModal`, con el aviso fijo de D10 arriba y siempre
@@ -193,13 +198,13 @@
       y **no** afirma que rechazó (R31); cerrar sin confirmar **no** llama a la acción; y **el aviso
       del precio y del «no se puede deshacer» está en el árbol antes de confirmar** (R28).
       **Depende de:** T3.2, T5.1.
-- [ ] **T5.4 — [P] Los comentarios que dejaron de ser ciertos.** El fixture del canal `info` de
+- [x] **T5.4 — [P] Los comentarios que dejaron de ser ciertos.** El fixture del canal `info` de
       `tests/components/NovedadesModule.test.tsx:79-81` («los dos botones de MAQUETA avisan por él»),
       el JSDoc de `onDevolver` (`NovedadAcciones.tsx:87-88`) y la nota de `:141-143` («el prop
       conserva su nombre porque nombra la transición que falta decidir»).
       **Hecho:** reescritos contando **qué decían y qué cambió**; ninguno borrado en silencio.
       **Depende de:** T5.3.
-- [ ] **T5.5 — [P] El censo de la card, en sus dos sitios.**
+- [x] **T5.5 — [P] El censo de la card, en sus dos sitios.**
       `tests/components/NovedadAcciones.test.tsx:125-131` (la fila de devolución pasa de cinco
       controles a cuatro) y `tests/components/NovedadesModule.test.tsx:877-882`.
       **Hecho:** los dos censos actualizados a mano, con nota fechada. **Depende de:** T5.3.
@@ -210,11 +215,11 @@
 
 ## T6 — La guardia contra la maqueta *(mismo PR; frontend)*
 
-- [ ] **T6.1 — `PRODUCTOR_POR_ACCION`** en el catálogo, con `satisfies Record<AccionNovedad, …>`
+- [x] **T6.1 — `PRODUCTOR_POR_ACCION`** en el catálogo, con `satisfies Record<AccionNovedad, …>`
       (R37) y las ocho entradas de `design.md` §11.1.
       **Hecho:** el typecheck **rompe** al añadir una acción a la unión sin su productor — esa es la
       señal buscada, y se comprueba a mano una vez. **Depende de:** T3.2, T5.1.
-- [ ] **T6.2 — La guardia (NUEVO).** `tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts`,
+- [x] **T6.2 — La guardia (NUEVO).** `tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts`,
       hermana de `novedad-acciones-una-tabla.guardia.test.ts` y con su misma forma: los tres frentes
       de §11.2 (el productor **existe**, el productor **está importado por algún archivo de la
       pantalla**, la excusa **es legible y caduca**), leyendo el fuente **sin comentarios** con
@@ -225,7 +230,7 @@
       con «TODO» → roja; tabla real → limpia.
       ⚠️ **El censo se escribe en un archivo de test, nunca por `node -e`**: ahí `\b` llega como
       backspace y el censo miente en verde. **Depende de:** T6.1.
-- [ ] **T6.3 — La prueba de fuego de la guardia: replantar la maqueta.** Volver a poner
+- [x] **T6.3 — La prueba de fuego de la guardia: replantar la maqueta.** Volver a poner
       `rechazar: { sinOperacion: "…" }` con un motivo cualquiera **y** el handler de toast, y
       comprobar que la guardia **se pone roja** y por qué.
       **Hecho:** salida real pegada en `progress/impl_240.md`. Sin esa salida no cuenta: este repo ya
@@ -238,28 +243,28 @@
 
 ## T7 — Mutaciones, dinero y guardias completas
 
-- [ ] **T7.1 — 💰 Mutación: la guarda del `updateMany`.** Quitar `estatusId: estatusDevueltaId` del
+- [x] **T7.1 — 💰 Mutación: la guarda del `updateMany`.** Quitar `estatusId: estatusDevueltaId` del
       `where` y comprobar que **cae** el caso testigo de T2.2 («una orden que ya salió de `devuelta`
       no deja ni un efecto»).
       **Hecho:** salida real con el nombre del test que cae. **Depende de:** T2.2.
       > ⚠️ Un test de servicio **no ve el `WHERE`**: esta mutación la mata el test del **repositorio**
       > y sólo él. Está medido cuatro veces en este repo; no se cita otro archivo.
-- [ ] **T7.2 — [P] 💰 Mutación: el mensajero atribuido.** Sustituir el mensajero derivado por
+- [x] **T7.2 — [P] 💰 Mutación: el mensajero atribuido.** Sustituir el mensajero derivado por
       `input.actorUsuarioId` (la tienda) y comprobar que cae el caso que afirma a quién se atribuye
       la gestión. Es la mutación que protege R9: con la tienda ahí, `crearCierre` **no vincularía la
       fila a ningún cierre nunca** y el rechazo sería invisible y gratis.
       **Hecho:** salida real. **Depende de:** T2.2.
-- [ ] **T7.3 — [P] 💰 Mutación: la familia y el intento.** Meter `rechazo_tienda` en
+- [x] **T7.3 — [P] 💰 Mutación: la familia y el intento.** Meter `rechazo_tienda` en
       `ORIGEN_TIPOS_VISITA_REAL` y comprobar que **cae** el literal de
       `tests/unit/types/orden-historial-types.test.ts` y el de
       `tests/unit/types/criterio-intento-entrega.test.ts`. Es la mutación que protege R19: contar de
       más adelanta el escalado de otras órdenes y cobra antes de tiempo.
       **Hecho:** salida real con los dos archivos. **Depende de:** T1.3.
-- [ ] **T7.4 — [P] Mutación: la celda borrada.** Reponer `"habilitar"` en
+- [x] **T7.4 — [P] Mutación: la celda borrada.** Reponer `"habilitar"` en
       `ACCIONES_POR_GRUPO.devolucion` y comprobar que caen los casos de T5.1 y T5.5. **Es la mutación
       que protege el punto 12** — el defecto que esta ficha viene a cerrar.
       **Hecho:** salida real. **Depende de:** T5.5.
-- [ ] **T7.5 — Guardias completas.** `pnpm run test:guardias` entero. Verdes obligatorias:
+- [x] **T7.5 — Guardias completas.** `pnpm run test:guardias` entero. Verdes obligatorias:
       `superficie-de-uso`, `novedad-acciones-una-tabla`, `novedad-acciones-sin-maqueta` (la nueva),
       `hilo-ventana-alcanzable`, `orden-nota-frontera`, `ordenes-columnas-money-safe`,
       `dinero-sin-centimos`, `anclaje-vs-intentos`, `deriva-primer-intento`,
@@ -267,7 +272,7 @@
       **Hecho:** todas verdes. Un rojo en los criterios de intento o en el anclaje significa que
       alguien fusionó dos derivaciones que la pila mantiene separadas a propósito: **es regresión, no
       una aserción a cambiar.** **Depende de:** T6, T7.1-T7.4.
-- [ ] **T7.6 — [P] Los rojos que serían regresión, comprobados uno a uno.** La lista de
+- [x] **T7.6 — [P] Los rojos que serían regresión, comprobados uno a uno.** La lista de
       `design.md` §15, en particular `cierres-admin-caja-cod`, los cuatro de idempotencia de wallet,
       `devolucion-sla-*` y `webhook-eventos`.
       **Hecho:** anotado en `progress/impl_240.md` **qué suites se corrieron y con qué resultado**,
@@ -282,7 +287,7 @@
 > En esta pila un recorrido de minutos encontró **un cierre imposible de aprobar**, **dos defectos de
 > card** y **un botón que siempre fallaba** que doce mil tests daban por buenos. No es opcional.
 
-- [ ] **T8.1 — El recorrido, como `adminTienda`.** Entrar a `/novedades` → pestaña «En devolución» →
+- [x] **T8.1 — El recorrido, como `adminTienda`.** Entrar a `/novedades` → pestaña «En devolución» →
       comprobar que la card **ya no tiene «Habilitar»** ni «Conversación» → pulsar **«Rechazar»** →
       **leer el aviso del precio y del “no se puede deshacer”** → intentar confirmar sin motivo y
       **leer el texto del bloqueo** → escribir el motivo → confirmar → ver la fila salir y **el total
@@ -294,6 +299,11 @@
       hay que lanzarlo con la salida redirigida a un **archivo** (`... > dev.log 2>&1 &`) y leer el
       archivo. **Canalizar por `tail` un proceso en segundo plano trunca el fichero en origen** y el
       código se pierde. **Depende de:** T7.5.
+> ⏳ **T8.2 — NO HECHA, y se dice.** La mitad del mensajero y de la bodega no se recorrió. **T8.1 y
+> T8.3 SÍ**: el rechazo se ejecutó de verdad contra Postgres —1 fila de historial con
+> `rechazo_tienda`, actor = la tienda, y la **gestión sintética con `mensajero_id` puesto y
+> `cierre_id` NULL**, que es la paridad firmada—. Lo que falta es ver esa orden **desde el
+> mensajero y desde bodega**. En esta pila, lo que no se mira no está verificado.
 - [ ] **T8.2 — La mitad del mensajero y de la bodega (D6/D7).** Con la orden ya rechazada: entrar
       como **mensajero** y comprobar que la gestión aparece en su cierre con el badge **«La tienda»**
       y que **«Deshacer» está bloqueado con el mensaje nuevo** (sin nombrar la pantalla de ayuda).
@@ -302,7 +312,7 @@
       diferencia entre fricción y bloqueo.
       **Hecho:** anotado en `progress/recorrido_240.md`, con lo que la ventana pidió **y si se pudo
       aprobar**. **Depende de:** T8.1.
-- [ ] **T8.3 — [P] Contra Postgres, no contra la pantalla.** Comprobar por MCP (solo lectura) que
+- [x] **T8.3 — [P] Contra Postgres, no contra la pantalla.** Comprobar por MCP (solo lectura) que
       quedó **una** fila de `gestion_orden` (`rechazada`, `cierre_id NULL`, mensajero derivado) y
       **una** de `orden_historial_estado` (familia nueva, `actor_usuario_id` = la tienda,
       `gestion_orden_id` poblado); y que **el ancla de la devolución sigue ahí, intacta** (R24).
@@ -315,11 +325,11 @@
 
 ## T9 — Cierre documental
 
-- [ ] **T9.1 — [P] Anotar la auditoría.** `progress/auditoria_ayuda_tienda.md`: **cae «Hace lo
+- [x] **T9.1 — [P] Anotar la auditoría.** `progress/auditoria_ayuda_tienda.md`: **cae «Hace lo
       contrario (1): el punto 12»** —la última línea de §4 con dueño— y §3 gana la nota de que la
       guardia que faltaba ya existe, con su nombre. De §4 queda **sólo el desenlace de las no
       gestionadas**. **Depende de:** T8.
-- [ ] **T9.2 — [P] Anotar el diseño de la pila.** `progress/design_pila_ayuda_tienda.md` §F6: fecha,
+- [x] **T9.2 — [P] Anotar el diseño de la pila.** `progress/design_pila_ayuda_tienda.md` §F6: fecha,
       PR y respuestas a D1-D10. ⚠️ **Corregir su tercera viñeta**: la 228 ya la declaró superada la
       **236**; aquí no queda nada que cerrar. **Depende de:** T8.
 - [ ] **T9.3 — Cerrar la ficha.** `feature_list.json` (lo estampa **el leader**): estado,

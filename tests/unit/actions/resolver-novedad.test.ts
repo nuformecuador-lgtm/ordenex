@@ -285,6 +285,10 @@ describe("rechazarNovedad (Server Action)", () => {
     ["forbidden", { status: "forbidden" as const }],
     ["not_found", { status: "not_found" as const }],
     ["config_error", { status: "config_error" as const }],
+    // R10 (2026-08-20): el desenlace que antes NO existia y salia como `INTERNAL`, haciendo que
+    // este mismo borde LANZARA («AppErrorCode inesperado INTERNAL») y la pantalla no viera nada.
+    // Ahora es un estado de dominio y cruza el borde como cualquier otro.
+    ["sin_gestion_origen", { status: "sin_gestion_origen" as const }],
   ])("R2: `%s` del service pasa TAL CUAL, sin traducirse", async (esperado, resultado) => {
     const service = rechazarService({ rechazar: vi.fn(async () => resultado) });
     const r = await rechazarNovedad(

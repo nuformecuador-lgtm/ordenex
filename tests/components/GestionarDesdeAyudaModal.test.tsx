@@ -6,9 +6,16 @@
 // **Qué protege este archivo y ningún test de backend puede proteger.** El servicio ya sabe
 // rechazar un envío sin foto, sin motivo o con una fecha de hoy; lo que no puede saber es si la
 // tienda LLEGÓ A ENTERARSE de lo que estaba firmando. Esta ventana dispara una gestión atribuida al
-// mensajero: entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero — un
-// rechazo cobra a la tienda hasta ₡1.000 (media 400), medido contra producción el 2026-08-20. Por
-// eso el aviso del precio (D7) tiene su propio caso: es el que evita que se cobre sin saberlo.
+// mensajero: entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero — y ese
+// dinero son DOS IMPORTES CON DUEÑOS DISTINTOS. Los hasta ₡1.000 de un rechazo (`cobroRechazado`;
+// media ₡400 sobre las 5 tarifas, `progress/impl_237.md` §M3, 2026-08-20) NO se le cobran a la
+// tienda: son **ingreso de bodega** y caen en el **cierre del mensajero**, y en la billetera de la
+// tienda no hay apunte por ese concepto (`progress/recorrido_237.md` paso 8). A la tienda un rechazo
+// **sí** le cuesta, pero por OTRA VÍA Y OTRA TARIFA: el **flete de devolución** (hasta ₡2.600
+// —₡2.200 en GAM— más IVA 13 %, `progress/medicion_240.md` §M4). Por eso el aviso del precio (D7)
+// tiene su propio caso: es el que evita que la tienda firme sin saberlo un movimiento de dinero que
+// no es suyo del todo — dispara ingreso de bodega en el cierre de otra persona y un cargo a su
+// propia tienda por otra vía.
 //
 // ⚠️ **LOS TEXTOS SE ESCRIBEN AQUÍ A MANO, NUNCA CONTRA LA CONSTANTE IMPORTADA.** Comparar el
 // aviso contra `GESTION_AYUDA_AVISO_PRECIO` estaría verde con cualquier contenido, incluido el día

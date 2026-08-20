@@ -124,6 +124,27 @@ export const RECHAZO_ERROR_CONFIG =
 export const RECHAZO_ERROR_SESION = "Tu sesión expiró. Iniciá sesión de nuevo.";
 
 /**
+ * R10 — la orden está en devolución pero le falta la gestión de la que sale el mensajero.
+ *
+ * ⚠️ **UN ESTADO INALCANZABLE NO EXIME DE TENER SALIDA**, y ésta es la lección que este texto deja
+ * escrita junto al código. La invariante se cumple: a `devuelta` sólo se llega aprobando el cierre
+ * que contiene la gestión (239), y está **medido en producción el 2026-08-20 — 11 órdenes han
+ * pasado por `devuelta` y las 11 tienen la suya**, ni una anulada. Pero el día que un dato se
+ * tuerza —alguien mueve un `estatus_id` a mano, una migración a medias—, quien está delante de la
+ * pantalla merece **un mensaje, no un botón mudo**. Y eso es exactamente lo que pasó en el
+ * recorrido: sin este desenlace, la acción salía por `INTERNAL`, el borde lanzaba y la tienda
+ * pulsaba «Rechazar» con su motivo escrito **sin ver absolutamente nada**.
+ *
+ * Tres cosas dice el texto, y las tres a propósito: **qué pasa** (le falta un registro, no «error
+ * interno»), **que no es culpa suya** —porque el botón estaba habilitado y ella hizo todo bien— y
+ * **qué hacer**, con el dato que el administrador va a pedirle. Ningún nombre de función: el
+ * `SinGestionDevueltaError` del servidor va al registro, no a la pantalla.
+ */
+export const RECHAZO_SIN_GESTION_ORIGEN =
+  "No se pudo rechazar: a esta orden le falta el registro de su devolución. No es algo que hayas " +
+  "hecho mal —avisá a un administrador con el número de guía para que la revisen.";
+
+/**
  * Los desenlaces que SALEN de esta ventana. `validation_error` no está: lo consume el propio modal
  * pintándolo junto al campo, con lo escrito intacto. Se excluye del tipo en vez de dejarlo pasar
  * para que el padre no tenga que escribir una rama que nunca se alcanza.
