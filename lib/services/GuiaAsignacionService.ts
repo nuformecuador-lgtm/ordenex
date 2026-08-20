@@ -42,6 +42,7 @@ import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloque
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
 
 // Feature 156/R4 + 155/R29: UNICO estado de origen valido para "Generar guia". El estado
 // de fulfillment que la 156 ya habia sacado de esta constante quedo RETIRADO del catalogo
@@ -257,9 +258,16 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     return { status: "ok", resultados };
   }
 
+  /**
+   * Feature 246 (T3.2, R1/R3/R5/R7): `now` es el reloj INYECTABLE desde el que se resuelve el dia
+   * de reparto. Con default para que el borde (la Server Action) siga llamando con dos
+   * argumentos; los tests lo pasan siempre, porque «hoy» y «mañana» solo se pueden probar
+   * moviendo el reloj.
+   */
   async asignarDesdeBodega(
     input: AsignarBodegaInput,
     actor: Actor,
+    now: Date = new Date(),
   ): Promise<AsignarBodegaServiceResult> {
     // --- Autorizacion (R11-R13/R16) ---
     if (!esAccesoTotal(actor.rol)) return { status: "forbidden" };
@@ -369,12 +377,22 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // Feature 246 (T3.2, R3/R5/R7) — LA ELECCION SE RESUELVE AQUI, UNA SOLA VEZ, Y PARA EL LOTE
+    // ENTERO. `input.dia` es un TOKEN («hoy»/«manana»), no una fecha: el cliente no puede decidir
+    // el dia (R6). `?? "hoy"` cubre la llamada directa al servicio sin el campo, que significa
+    // exactamente lo mismo que el default del schema (R4). Una asignacion, un dia de reparto (R3):
+    // la fecha se calcula una vez y viaja al repositorio como parametro, sin recalcularse abajo.
+    const fechaReparto = resolverFechaReparto(input.dia ?? "hoy", now);
+
     // R26/R5: NO reasigna num_guia, ya lo tienen de "Generar guia".
     // Feature 49/#4 (R12): actor = el maestro; destino por_recoger.
-    await this.repo.asignarBodegaLote(ordenIds, input.mensajeroId, estatusEsperaId, {
-      actorUsuarioId: actor.usuarioId,
-      origenTipo: "asignacion_bodega",
-    });
+    await this.repo.asignarBodegaLote(
+      ordenIds,
+      input.mensajeroId,
+      estatusEsperaId,
+      { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_bodega" },
+      fechaReparto, // R7: en la MISMA escritura que `asignado_at`
+    );
 
     const resultados: AsignarBodegaResultadoItem[] = ordenIds.map((ordenId) => ({
       ordenId,

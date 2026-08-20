@@ -15,6 +15,7 @@ import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { LiberadaHoyRow } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
+import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
 
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
 import {
@@ -147,7 +148,19 @@ export interface RecepcionSateliteModuleProps {
    * derivado "Liberadas hoy (reprogramación)". Vacío = sin aviso.
    */
   liberadasHoy?: LiberadaHoyRow[];
+  /**
+   * Feature 246 (T4.3, R29): fechas calendario de «hoy» y «mañana» resueltas por la PÁGINA con
+   * el día de Costa Rica. Sólo se transportan hasta `AsignarSateliteModal`.
+   *
+   * El defecto son dos cadenas vacías por el mismo motivo que en `/ordenes`: éste es código de
+   * cliente y cualquier fecha que se inventara aquí saldría del reloj del navegador. Sin fechas
+   * el selector se lee igual y sólo pierde precisión; con una fecha inventada, mentiría.
+   */
+  fechasDiaReparto?: FechasDiaReparto;
 }
+
+/** Feature 246: «no bajaron fechas de la página». Constante de módulo, no un literal por render. */
+const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
 
 /**
  * Estado legible "en bodega satélite de <zona>" (R9): deriva del `estatusValue`
@@ -168,6 +181,7 @@ export function RecepcionSateliteModule({
   mensajeros,
   bloqueoBodega,
   liberadasHoy = [],
+  fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: RecepcionSateliteModuleProps) {
   const router = useRouter();
   const toast = useToast();
@@ -580,6 +594,9 @@ export function RecepcionSateliteModule({
         open={modalOpen}
         ordenes={ordenesAAsignar}
         mensajeros={mensajeros}
+        // Feature 246 (T4.3, R29): resueltas por la página, en el servidor. Este módulo sólo
+        // las transporta.
+        fechasDiaReparto={fechasDiaReparto}
         onOpenChange={setModalOpen}
         onSuccess={handleSuccess}
       />

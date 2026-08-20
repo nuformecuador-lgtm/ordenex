@@ -40,8 +40,13 @@ import {
 //
 // Ahora el juego sale de `ACCIONES_POR_GRUPO`, indexada por el MISMO `GrupoNovedad` que el servidor
 // usa para decidir qué lista. Lo que queda aquí es cómo se PINTA cada acción, no cuál se ofrece.
-// (El defecto del punto 12 se conserva **tal cual**, ahora como una celda de esa tabla: su dueño es
-// la ficha 240. Ver el comentario de la tabla.)
+//
+// ⚠️ **FEATURE 240 (T5.1, R33 — 2026-08-20): el punto 12 ya no está aquí.** Hasta hoy esta nota
+// terminaba diciendo «el defecto del punto 12 se conserva **tal cual**, ahora como una celda de esa
+// tabla: su dueño es la ficha 240». La 240 borró esa celda: «Habilitar» sale del grupo de devolución
+// y queda sólo en el de ayuda. Que corregirlo haya sido borrar UNA PALABRA de una tabla —y no
+// desenredar cinco condiciones sueltas repartidas por este archivo— es exactamente lo que la 236
+// compró al centralizarlo.
 //
 // =================================================================================================
 // ⚠️ FEATURE 236 (T6.1/T6.7, R27) — LA TIENDA VUELVE A LEER EL HILO, Y AQUÍ ESTÁ LA PUERTA.
@@ -69,8 +74,10 @@ import {
 // Hasta el 2026-08-20 la tienda podía leer el problema, responder en el hilo y devolverle la orden
 // al mensajero, pero no RESOLVERLA. Esta ficha añade sus dos desenlaces —«Reprogramar» y
 // «Rechazar»— y hay que decir aquí lo que un clic dispara: la gestión que crean se atribuye al
-// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (un
-// rechazo cobra a la tienda hasta ₡1.000, medido). El precio se dice con palabras en la ventana
+// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (los
+// hasta ₡1.000 de un rechazo —`cobroRechazado`— NO se le cobran a la tienda: son **ingreso de
+// bodega** y caen en el cierre DEL MENSAJERO, medido. A la tienda un rechazo **sí** le cuesta, pero
+// por otra vía: el **flete de devolución** más IVA). El precio se dice con palabras en la ventana
 // (`GestionarDesdeAyudaModal`, aviso fijo de D7), no en este panel: aquí sólo se abre la puerta.
 //
 // Las dos acciones cuelgan de `ACCIONES_POR_GRUPO` como CELDAS, no de una condición suelta. Es la
@@ -84,8 +91,17 @@ export interface NovedadAccionesProps {
   onReprogramar: (novedad: NovedadDTO) => void;
   /** Abre el modal de «Habilitar» (nota obligatoria) que dispara el rescate de la 235. */
   onHabilitar: (novedad: NovedadDTO) => void;
-  /** MAQUETA: «Rechazar» todavía no tiene transición detrás; avisa por toast (ficha 240). */
-  onDevolver: (novedad: NovedadDTO) => void;
+  /**
+   * 💰 Feature 240 (T5.3/R27): abre la ventana con la que la tienda RECHAZA una orden de la
+   * devolución anclada (`RechazarNovedadModal`).
+   *
+   * ⚠️ **Hasta el 2026-08-20 esta prop se llamaba `onDevolver` y su JSDoc decía «MAQUETA:
+   * «Rechazar» todavía no tiene transición detrás; avisa por toast (ficha 240)».** Las dos cosas
+   * dejaron de ser ciertas a la vez: la transición existe (`devuelta → rechazada` decidida por la
+   * tienda) y el nombre viejo nombraba la transición que faltaba decidir. Ya está decidida, así que
+   * el nombre pasa a decir la verdad.
+   */
+  onRechazar: (novedad: NovedadDTO) => void;
   /** Feature 236 (R27): abre el HILO de notas de esta orden. */
   onConversacion: (novedad: NovedadDTO) => void;
   /**
@@ -139,13 +155,18 @@ const ICONO_POR_ACCION: Record<
     onClick: (novedad, props) => props.onHabilitar(novedad),
   },
   // Pedido humano 2026-08-19 — el botón se LLAMA «Rechazar» (etiqueta visible, tooltip y nombre
-  // accesible); antes decía «Devolver». El prop conserva su nombre porque nombra la transición que
-  // falta decidir, no el rótulo del control.
+  // accesible); antes decía «Devolver».
+  //
+  // ⚠️ **FEATURE 240 (T5.3/T5.4, 2026-08-20).** Aquí decía: «El prop conserva su nombre porque
+  // nombra la transición que falta decidir, no el rótulo del control». Esa transición ya está
+  // decidida y declarada (`devuelta → rechazada`, familia propia, decidida por la tienda dueña), así
+  // que el prop pasa a llamarse `onRechazar` y el rótulo y el nombre coinciden. El RÓTULO, el
+  // tooltip, el icono y el nombre accesible no cambian: lo que cambia es que ahora hay algo detrás.
   rechazar: {
     etiqueta: "Rechazar",
     Icono: Undo2,
     nombreAccesible: (destinatario) => `Rechazar la orden de ${destinatario}`,
-    onClick: (novedad, props) => props.onDevolver(novedad),
+    onClick: (novedad, props) => props.onRechazar(novedad),
   },
   // Feature 236 (R27). El rótulo es «Conversación», el MISMO que el lado mensajero (`RepartoModule`
   // › `AYUDA_ACCION_HILO`): las dos pantallas nombran igual el mismo hilo. El nombre accesible se

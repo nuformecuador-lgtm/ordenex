@@ -99,6 +99,34 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
   // mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (ver la nota de esa lista).
   "gestion_tienda_ayuda",
+  // Feature 240 (T1.3, D8/R6) — EL RECHAZO MANUAL DE LA TIENDA: `devuelta -> rechazada`, decidido
+  // por el ADMINTIENDA DUEÑO de la orden desde la card de devolucion de `/novedades`
+  // (`RechazoTiendaService.rechazar` -> `GestionOrdenRepository.rechazarDesdeDevuelta`).
+  //
+  // FAMILIA PROPIA, y las dos alternativas eran mas baratas — por eso se dice que rompen:
+  //   - `escalado_devuelta_sla` (99) es el MISMO par origen->destino, asi que la tentacion es
+  //     obvia. Pero ese valor ES el predicado de la pestaña «Rechazadas por plazo vencido» (102,
+  //     `OrdenRepository`) y de `esRechazoSla`: reusarlo listaria ahi rechazos que no vencieron
+  //     ningun plazo y etiquetaria la decision de una persona como un vencimiento del reloj.
+  //   - `gestion` atribuiria AL MENSAJERO la decision de la tienda —y esta fila es la unica
+  //     evidencia de quien decidio un cobro— ademas de sumar un intento de mas (ver abajo).
+  //
+  // ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (R19), al reves que `gestion_tienda_ayuda` que tiene
+  // justo encima. No es un olvido: el argumento es LITERALMENTE el que ya esta escrito para
+  // `reprogramacion_tienda` unas lineas mas arriba — esta transicion se hace sobre una orden que
+  // YA TIENE una gestion `devuelta` real contada, asi que sumarla da el DOBLE CONTEO que 160/R2
+  // evitaba. Y no contradice a la 237: aquella se hace sobre una orden en la que el mensajero NO
+  // registro ningun desenlace, asi que sin ella esa visita no la cuenta nadie; aqui ya esta
+  // contada. Quien meta esta familia en esa lista hace que el rechazo manual sume +1 de mas,
+  // adelante el escalado del cron (99) sobre OTRAS ordenes y cobre el `cobroRechazado` (56) antes
+  // de tiempo, en silencio.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  // mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (ver la nota de esa lista).
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R44): el integrador recibe `rechazada` igual que
+  // hoy. La unica excepcion por familia sigue siendo el rescate de la 235.
+  "rechazo_tienda",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

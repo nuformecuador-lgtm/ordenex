@@ -70,10 +70,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "solicitud_ayuda_tienda", // feature 235 (2026-08-19): SolicitudAyudaService.solicitar (en_reparto -> ayuda_tienda, actor = el mensajero asignado)
     "rescate_ayuda_tienda", // feature 235 (2026-08-19): rescatarOrdenAyuda (ayuda_tienda -> en_reparto). UN productor, DOS puertas: «Recuperar» del mensajero y «Habilitar» de la tienda
     "gestion_tienda_ayuda", // feature 237 (2026-08-20): GestionOrdenRepository.crearGestionDesdeAyuda (ayuda_tienda -> reprogramada|rechazada, actor = el adminTienda dueño). La UNICA de las tres de la ayuda que SI es visita real
+    "rechazo_tienda", // feature 240 (2026-08-20): GestionOrdenRepository.rechazarDesdeDevuelta (devuelta -> rechazada, actor = el adminTienda dueño). NO es visita real: la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
   ];
 
-  it("contiene exactamente los 30 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(30); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda
+  it("contiene exactamente los 31 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(31); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 
@@ -162,5 +163,41 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     // que tampoco estan. El literal de arriba (`["gestion","deshacer_gestion"]`) sigue verde SIN
     // tocarse, y esa inmovilidad es el punto.
     expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain("gestion_tienda_ayuda");
+  });
+
+  // -------------------------------------------------------------------------------------------
+  // FEATURE 240 (T1.3, D8/R6/R19/R44) — el RECHAZO MANUAL DE LA TIENDA, `devuelta -> rechazada`.
+  //
+  // La familia existe para poder responder «¿quien decidio esto?» sin adivinarlo por el par de
+  // estatus: ese par YA lo produce el cron de plazo vencido (99, `escalado_devuelta_sla`) y las dos
+  // vias cobran lo mismo. Sin familia propia, la pestaña «Rechazadas por plazo vencido» (102)
+  // listaria rechazos que no vencieron ningun plazo.
+  // -------------------------------------------------------------------------------------------
+  it("240/R6: la familia esta en el SEED y en el enum de la DB, sin drift en ninguna direccion", () => {
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("rechazo_tienda");
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("rechazo_tienda");
+  });
+
+  it("240/R19: NO es visita real — la orden ya tiene contada su `devuelta`", () => {
+    // 💰 EL CASO QUE PROTEGE EL DINERO DE ESTA FICHA, y la mutacion que hay que matar (T7.3).
+    // Meter `rechazo_tienda` en esa lista haria que el rechazo manual sumase +1 sobre una orden que
+    // YA cuenta su gestion `devuelta` real: el DOBLE CONTEO que 160/R2 evitaba. Ese +1 adelanta el
+    // umbral del cron del SLA (99) sobre OTRAS ordenes de la misma tienda y con el el
+    // `cobroRechazado` (56) — dinero real cobrado antes de tiempo, en silencio.
+    //
+    // La asimetria con `gestion_tienda_ayuda`, que SI esta, es deliberada y se afirma aqui junto a
+    // esta para que se lean a la vez: aquella se hace sobre una orden en la que el mensajero NO
+    // registro ningun desenlace (sin ella nadie cuenta esa visita); esta, sobre una que ya lo tiene.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("rechazo_tienda");
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toContain("gestion_tienda_ayuda");
+    // Y el mismo trato que su hermana de forma, `reprogramacion_tienda` (100): las dos son
+    // transiciones de escritorio sobre una orden ya contada.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("reprogramacion_tienda");
+  });
+
+  it("240/R6: NO entra en `ORIGEN_TIPOS_CON_GESTION`, aunque su fila SI enlace gestion", () => {
+    // Igual que `escalado_devuelta_sla`, `anclaje_devolucion` y `gestion_tienda_ayuda`: esa lista
+    // solo desambigua la NULIDAD del enlace (67/R25-R26), y estas filas nacen con el poblado.
+    expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain("rechazo_tienda");
   });
 });

@@ -190,6 +190,11 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
       VUELTA,
       // Feature 237 (2026-08-20): la TERCERA familia del viaje de la ayuda, posterior a esta foto.
       "gestion_tienda_ayuda",
+      // Feature 240 (2026-08-20): el rechazo manual de la tienda desde la devolucion anclada.
+      // Tambien posterior a esta foto, asi que se descuenta igual. El `down.sql` de la 235 NO se
+      // toca: aplicarlo despues de la 240 deja el enum sin este valor, y ese es el comportamiento
+      // ESPERADO de una cadena de rollbacks — cada down devuelve la base al estado de SU momento.
+      "rechazo_tienda",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(

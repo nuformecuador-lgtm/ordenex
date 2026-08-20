@@ -498,7 +498,16 @@ model Orden {
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro); feature 159: unica fuente de verdad del mensajero de una orden
-  asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
+  asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas). OJO: desde la 246/D7 ya NO es la fuente unica del denominador del ranking — solo la RAMA DE RESPALDO, para las ordenes sin `fecha_reparto`
+  // Feature 246 (D1+D2, firmadas el 2026-08-20) — DIA DE REPARTO: la fecha calendario de Costa Rica
+  // PARA LA QUE se hizo la asignacion. `@db.Date` (no `timestamp`): es una fecha, no un instante, y
+  // se compara contra la medianoche UTC de la fecha CR (`startOfDayCR`, convencion 46). Una FECHA
+  // ABSOLUTA y no una marca «para mañana» porque una fecha VENCE SOLA —el corte la deja de proteger
+  // por el mero paso del tiempo— mientras que una marca necesita quien la apague, y el dia que ese
+  // apagado falle la orden no se barre NUNCA: el defecto exacto que pago la 235 tres lineas mas
+  // abajo. NULL significa UNA sola cosa: «no esta reservada para un dia que aun no ha llegado»
+  // (R20) — orden anterior a esta feature, o sin mensajero. Sin default y sin backfill (R19).
+  fechaReparto           DateTime? @map("fecha_reparto") @db.Date
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
   // Feature 235 (T6.1, R40, 2026-08-19): aqui vivia la columna booleana de la SOLICITUD DE AYUDA.
@@ -577,7 +586,21 @@ model Orden {
   @@index([estatusId])
   @@index([createdAt])
   @@index([mensajeroAsignadoId]) // feature 17/R7
-  @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
+  // Feature 76/R1 + FEATURE 246 (D7) — EL INDICE DEL DENOMINADOR DEL RANKING, AMPLIADO A TRES.
+  //
+  // Era `(mensajeroAsignadoId, asignadoAt)`. El `EXPLAIN` de produccion (M8) mostro que la consulta
+  // de HOY se sirve con un `Index Only Scan` sobre el —el mejor plan posible, sin tocar el heap— y
+  // que el `OR` del denominador nuevo lo ROMPIA, porque `fechaReparto` no estaba dentro. Un indice
+  // suelto por `fechaReparto` NO lo arregla: lo empeora (hace atractivo un `BitmapOr` que degrada a
+  // `Bitmap Heap Scan`). Con la fecha como TERCERA COLUMNA CLAVE, el plan vuelve a ser `Index Only
+  // Scan` y el PREFIJO de dos columnas sigue sirviendo a quien lo usaba (`TableroDiaRepository`,
+  // la 76) — medido, no supuesto. El numero de indices de `orden` NO sube: se sustituye uno.
+  //
+  // Lo que ningun indice arregla y se declara como coste de D7: con el `OR`, el `Index Cond` se
+  // reduce a `mensajeroAsignadoId IS NOT NULL` y se pierde el acotado por rango de `asignadoAt`
+  // (un btree no expresa una disyuncion entre dos columnas como un rango). Sigue sin tocar el heap,
+  // pero recorre el indice entero. Ver `design.md` §2.1.
+  @@index([mensajeroAsignadoId, asignadoAt, fechaReparto], map: "orden_mensajero_asignado_at_fecha_reparto_idx")
   // Feature 144/B5: filtros de zona y geografia del listado (`IN (...)` en ruta caliente:
   // findMany + count por cada cambio de filtro). `createdAt` ya esta indexado arriba.
   @@index([zonaId])
@@ -1616,6 +1639,7 @@ enum OrdenHistorialOrigenTipo {
   solicitud_ayuda_tienda // feature 235 (P2): LA IDA de la ayuda — en_reparto -> ayuda_tienda (actor = el mensajero asignado). NO es visita real (no cuenta intentos). No enlaza gestion
   rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
   gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
+  rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
 
   @@map("orden_historial_origen_tipo")
 }

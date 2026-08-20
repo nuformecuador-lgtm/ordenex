@@ -57,22 +57,56 @@ function makeOrden(
   };
 }
 
+// Feature 246 (T4.3): las fechas bajan de la pagina, resueltas en el servidor con el dia de
+// Costa Rica (R29). Literales fijos, para que las etiquetas afirmadas no dependan del dia en que
+// corra la suite. Son LAS MISMAS que en bodega central: D4 exige que la eleccion signifique lo
+// mismo desde las dos bodegas.
+const FECHAS_DIA_REPARTO = { hoy: "2026-08-20", manana: "2026-08-21" };
+
 function renderModal(
   ordenes: RecepcionSateliteDTO[],
   mensajeros = MENSAJEROS,
   onSuccess = vi.fn(),
   onOpenChange = vi.fn(),
 ) {
-  render(
+  const { rerender } = render(
     <AsignarSateliteModal
       open
       ordenes={ordenes}
       mensajeros={mensajeros}
+      fechasDiaReparto={FECHAS_DIA_REPARTO}
       onOpenChange={onOpenChange}
       onSuccess={onSuccess}
     />,
   );
-  return { onSuccess, onOpenChange };
+  /** Reabre sin desmontar, que es como lo monta `RecepcionSateliteModule` (una sola vez). */
+  function reabrir() {
+    for (const abierto of [false, true]) {
+      rerender(
+        <AsignarSateliteModal
+          open={abierto}
+          ordenes={ordenes}
+          mensajeros={mensajeros}
+          fechasDiaReparto={FECHAS_DIA_REPARTO}
+          onOpenChange={onOpenChange}
+          onSuccess={onSuccess}
+        />,
+      );
+    }
+  }
+  return { onSuccess, onOpenChange, reabrir };
+}
+
+/** Elige un mensajero en el `Select` del lote (paso previo obligatorio de todo asignar). */
+async function elegirMensajero(
+  user: ReturnType<typeof userEvent.setup>,
+  nombre = "Ana Mensajera",
+) {
+  await user.click(
+    screen.getByRole("combobox", { name: "Mensajero para el lote" }),
+  );
+  const listbox = await screen.findByRole("listbox");
+  await user.click(within(listbox).getByRole("option", { name: nombre }));
 }
 
 beforeEach(() => {
@@ -115,6 +149,10 @@ describe("AsignarSateliteModal", () => {
     expect(asignarDesdeSateliteMock).toHaveBeenCalledWith({
       ordenIds: ["o1", "o2"],
       mensajeroId: "m1",
+      // Feature 246 (R2/R27): sin tocar el selector, el lote va al reparto de HOY. El literal
+      // se afirma porque el borde tiene `.default("hoy")`: si el modal dejara de mandar el
+      // campo, produccion seguiria funcionando y nadie se enteraria.
+      dia: "hoy",
     });
 
     // Feature 148 (§9.7): tras el éxito el modal pasa a la fase "resultado" (con el
@@ -277,6 +315,7 @@ describe("AsignarSateliteModal", () => {
         open
         ordenes={[makeOrden({ id: "o1", numRemision: "REM-001" })]}
         mensajeros={MENSAJEROS}
+        fechasDiaReparto={FECHAS_DIA_REPARTO}
         onOpenChange={vi.fn()}
         onSuccess={vi.fn()}
       />,
@@ -313,5 +352,120 @@ describe("AsignarSateliteModal", () => {
 
     await user.click(asignar);
     expect(asignarDesdeSateliteMock).not.toHaveBeenCalled();
+  });
+});
+
+// Feature 246 (T4.3/T4.4) — ELEGIR PARA QUÉ DÍA ES EL LOTE, desde bodega SATÉLITE (R2/R27-R29).
+//
+// Espejo del de bodega central. La decisión D4 se firmó precisamente para que estas dos suites
+// puedan ser espejo: si el satélite quedara fuera, la regla del sistema dependería de desde qué
+// bodega te asignaron. Los literales visibles van escritos A MANO, nunca importados.
+describe("AsignarSateliteModal — día de reparto (feature 246)", () => {
+  it("R27: el modal abre con «Hoy» marcada y «Mañana» sin marcar", () => {
+    renderModal([makeOrden({ id: "o1" })]);
+
+    expect(
+      screen.getByRole("radiogroup", { name: "Día de reparto" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "Hoy · 20 de agosto" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: "Mañana · 21 de agosto" }),
+    ).not.toBeChecked();
+  });
+
+  it("R2: elegir «Mañana» hace que la acción reciba `dia: manana` — el selector NO es decorativo", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+    });
+    renderModal([makeOrden({ id: "o1" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("radio", { name: "Mañana · 21 de agosto" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(asignarDesdeSateliteMock).toHaveBeenCalledWith({
+        ordenIds: ["o1"],
+        mensajeroId: "m1",
+        dia: "manana",
+      }),
+    );
+  });
+
+  it("R3/R6: el día viaja UNA vez para TODO el lote, y como token — nunca una fecha", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [
+        { ordenId: "o1", estado: "por_recoger" },
+        { ordenId: "o2", estado: "por_recoger" },
+      ],
+    });
+    renderModal([makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("radio", { name: "Mañana · 21 de agosto" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    await vi.waitFor(() =>
+      expect(asignarDesdeSateliteMock).toHaveBeenCalledTimes(1),
+    );
+    const enviado = asignarDesdeSateliteMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(enviado.ordenIds).toEqual(["o1", "o2"]);
+    expect(enviado.dia).toBe("manana");
+    expect(Object.keys(enviado).sort()).toEqual(["dia", "mensajeroId", "ordenIds"]);
+    expect(JSON.stringify(enviado)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("R28: tras asignar, el modal dice CON PALABRAS para qué día quedó el lote", async () => {
+    const user = userEvent.setup();
+    asignarDesdeSateliteMock.mockResolvedValue({
+      status: "ok",
+      resultados: [{ ordenId: "o1", estado: "por_recoger" }],
+    });
+    renderModal([makeOrden({ id: "o1" })]);
+
+    await elegirMensajero(user);
+    await user.click(screen.getByRole("radio", { name: "Mañana · 21 de agosto" }));
+    await user.click(screen.getByRole("button", { name: "Asignar" }));
+
+    expect(
+      await screen.findByText("El lote quedó para el reparto de mañana, 21 de agosto."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("El lote quedó para el reparto de hoy, 20 de agosto."),
+    ).toBeNull();
+  });
+
+  it("R27: reabrir el modal vuelve a «Hoy» — un «Mañana» no se queda pegado al lote siguiente", async () => {
+    const user = userEvent.setup();
+    const { reabrir } = renderModal([makeOrden({ id: "o1" })]);
+
+    await user.click(screen.getByRole("radio", { name: "Mañana · 21 de agosto" }));
+    expect(
+      screen.getByRole("radio", { name: "Mañana · 21 de agosto" }),
+    ).toBeChecked();
+
+    reabrir();
+
+    expect(
+      screen.getByRole("radio", { name: "Hoy · 20 de agosto" }),
+    ).toBeChecked();
+  });
+
+  it("sin mensajeros en la zona no se ofrece elegir día: no hay acción a la que llevaría", () => {
+    // La ausencia, EMPAREJADA con su presencia: el mismo lote CON mensajeros sí monta el
+    // selector (caso de arriba), así que este `toBeNull` no puede pasar por «no se renderizó
+    // nada».
+    renderModal([makeOrden({ id: "o1" })], []);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /no hay mensajeros en tu zona/i,
+    );
+    expect(screen.queryByRole("radiogroup", { name: "Día de reparto" })).toBeNull();
   });
 });

@@ -4,9 +4,15 @@ import { useState } from "react";
 
 import { Modal } from "@/components/shared/Modal";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
+import { SelectorDiaReparto } from "@/components/shared/SelectorDiaReparto";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { asignarDesdeSatelite } from "@/lib/actions/recepcion-satelite";
+import type { DiaReparto } from "@/lib/types/dia-reparto";
+import {
+  confirmacionDiaReparto,
+  type FechasDiaReparto,
+} from "@/lib/utils/dia-reparto-textos";
 import type { AsignarSateliteResult } from "@/lib/types/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
@@ -19,6 +25,12 @@ export interface AsignarSateliteModalProps {
   ordenes: RecepcionSateliteDTO[];
   /** Mensajeros de la zona del adminSatelite (ya scoped server-side, R5). */
   mensajeros: { id: string; nombre: string }[];
+  /**
+   * Feature 246 (T4.3, R29): las MISMAS fechas y el MISMO contrato que la bodega central. La
+   * simetría no es estética: D4 se firmó para que la elección del día signifique exactamente lo
+   * mismo desde las dos bodegas.
+   */
+  fechasDiaReparto: FechasDiaReparto;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -35,15 +47,21 @@ export function AsignarSateliteModal({
   open,
   ordenes,
   mensajeros,
+  fechasDiaReparto,
   onOpenChange,
   onSuccess,
 }: AsignarSateliteModalProps) {
   const toast = useToast();
   const [mensajeroId, setMensajeroId] = useState("");
+  // Feature 246 (T4.3, R27): «Hoy» PRESELECCIONADO, igual que en bodega central. Ninguna orden
+  // acaba reservada para mañana sin que alguien lo elija.
+  const [dia, setDia] = useState<DiaReparto>("hoy");
   // Feature 148 (T12, §9.7): fase "resultado" con el lote ya asignado.
   const [resultado, setResultado] = useState<{
     ordenIds: string[];
     mensaje: string;
+    /** R28: para qué día quedó el lote, en palabras. Se congela con el lote cometido. */
+    confirmacionDia: string;
   } | null>(null);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado durante
   // el render, no en un `useEffect`, para evitar el render en cascada).
@@ -52,6 +70,9 @@ export function AsignarSateliteModal({
     setPrevOpen(open);
     if (open) {
       setMensajeroId("");
+      // El día vuelve a «hoy» en CADA apertura: el modal no se desmonta al cerrarse, así que
+      // sin esto un «mañana» elegido para un lote se quedaría pegado al siguiente.
+      setDia("hoy");
       setResultado(null);
     }
   }
@@ -76,6 +97,9 @@ export function AsignarSateliteModal({
     const result = await asignarDesdeSatelite({
       ordenIds: ordenes.map((orden) => orden.id),
       mensajeroId,
+      // Feature 246 (R2/R3): el MISMO token, para TODO el lote. Va siempre, aunque el borde
+      // tenga `.default("hoy")`: sin este campo el olvido sería silencioso.
+      dia,
     });
     if (result.status !== "ok") {
       throw result;
@@ -88,6 +112,8 @@ export function AsignarSateliteModal({
     setResultado({
       ordenIds: result.resultados.map((r) => r.ordenId),
       mensaje,
+      // R28: se congela con el lote cometido, no se deriva del estado vivo del selector.
+      confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
     });
   }
 
@@ -125,11 +151,21 @@ export function AsignarSateliteModal({
       onError={handleError}
     >
       {resultado ? (
-        <ManifiestoResultado
-          mensaje={resultado.mensaje}
-          flujo="asignacion_satelite"
-          seleccion={{ ordenIds: resultado.ordenIds }}
-        />
+        <div className="flex flex-col gap-3">
+          {/* Feature 246 (T4.4, R28): para qué día quedó el lote, con palabras. Espejo exacto
+              del de bodega central. */}
+          <p
+            role="status"
+            className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+          >
+            {resultado.confirmacionDia}
+          </p>
+          <ManifiestoResultado
+            mensaje={resultado.mensaje}
+            flujo="asignacion_satelite"
+            seleccion={{ ordenIds: resultado.ordenIds }}
+          />
+        </div>
       ) : (
       <div className="flex flex-col gap-2">
         <ul className="max-h-40 list-disc overflow-auto pl-5 text-sm text-muted-foreground">
@@ -146,13 +182,23 @@ export function AsignarSateliteModal({
             mensajeros a tu zona para poder asignar órdenes.
           </p>
         ) : (
-          <Select
-            value={mensajeroId}
-            onValueChange={setMensajeroId}
-            options={mensajeroOptions}
-            placeholder="Selecciona un mensajero"
-            aria-label="Mensajero para el lote"
-          />
+          <>
+            <Select
+              value={mensajeroId}
+              onValueChange={setMensajeroId}
+              options={mensajeroOptions}
+              placeholder="Selecciona un mensajero"
+              aria-label="Mensajero para el lote"
+            />
+            {/* Feature 246 (T4.3, R2/R27): la MISMA elección que en bodega central. Va dentro
+                de la rama con mensajeros: sin nadie a quien asignar, elegir el día no lleva a
+                ninguna acción. */}
+            <SelectorDiaReparto
+              valor={dia}
+              onValorChange={setDia}
+              fechas={fechasDiaReparto}
+            />
+          </>
         )}
       </div>
       )}

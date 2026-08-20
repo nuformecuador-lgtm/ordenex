@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { DiaReparto } from "@/lib/types/dia-reparto";
 
 // Feature 17 — contrato del servicio de "Generar guia" / asignacion de
 // mensajero. Logica de negocio pura (sin HTTP, sin Prisma); el borde (Server
@@ -17,6 +18,18 @@ export interface GenerarGuiaInput {
 export interface AsignarBodegaInput {
   ordenIds: string[];
   mensajeroId: string;
+  /**
+   * Feature 246 (T3.1/T3.2, R3/R4/R6) — para que dia es el lote: `"hoy"` o `"manana"`. UN token
+   * para TODO el lote (R3). Llega del borde YA validado por zod (`asignarBodegaSchema`, que le
+   * pone `.default("hoy")`), y el SERVICIO lo traduce a una fecha con `resolverFechaReparto`.
+   *
+   * Es un TOKEN, no una fecha (R6): el cliente no puede decidir el dia de reparto de una orden.
+   *
+   * Opcional en el TIPO (`?`) por el patron aditivo del repo: no rompe a quien llame al servicio
+   * directamente sin el campo, y su ausencia significa exactamente lo mismo que el default del
+   * schema — «hoy», el comportamiento anterior a esta feature (R4).
+   */
+  dia?: DiaReparto;
 }
 
 export interface GenerarGuiaResultadoItem {
@@ -108,6 +121,8 @@ export interface IGuiaAsignacionService {
   asignarDesdeBodega(
     input: AsignarBodegaInput,
     actor: Actor,
+    /** Feature 246 (T3.2, R5): reloj inyectable del que sale el dia de reparto. Server-side. */
+    now?: Date,
   ): Promise<AsignarBodegaServiceResult>;
   /**
    * Feature 30/R13/R16/R17 + feature 156/R15/R16: rutea una o varias ordenes no-GAM a

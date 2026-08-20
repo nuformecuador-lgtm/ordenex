@@ -87,6 +87,27 @@ export interface MiAsignacionDTO {
    * sigue siendo necesario — de ahi lo lee `listarRecoleccion` para construir su DTO.
    */
   tiendaTelefono?: string | null;
+  /**
+   * Feature 246 (T5.1, R22/R25/R26) — `true` si esta orden esta RESERVADA para un dia POSTERIOR
+   * al dia de Costa Rica en curso. Es lo que la card pinta con palabras («Para mañana»).
+   *
+   * BOOLEAN DERIVADO EN EL SERVIDOR, NO LA FECHA CRUDA (R26). El cliente no vuelve a decidir que
+   * dia es hoy: es el mismo criterio con el que este DTO saca `estatusValue` resuelto en vez de
+   * dejar que el navegador interprete un id de catalogo. Un portatil con la hora corrida no puede
+   * etiquetar mal una orden.
+   *
+   * R25 — CADUCA SOLA: al llegar el dia reservado, la MISMA fila pasa a `false` sin que nadie
+   * ejecute ninguna accion y sin que se escriba nada en la base. No hay marca que apagar, que es
+   * la misma propiedad que hace segura a la columna (D2).
+   *
+   * R23/R24 — NO oculta ni bloquea nada. La orden aparece en su grupo de siempre y se puede
+   * recoger y gestionar igual: la reserva protege del CRON, no del mensajero (decision D5, que la
+   * medicion M3 cerro — nadie carga la furgoneta despues de las 18:00).
+   *
+   * Opcional (`?`) por el patron aditivo de `marcarLuego?`/`intentosEntrega?`: no rompe los
+   * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia.
+   */
+  esParaManana?: boolean;
   // Feature 235 (T6.1, R40): aqui vivia `ayuda?: boolean`, la bandera de la ORDEN. Se retira con
   // la columna. Quien quiera saber si hay una solicitud de ayuda viva mira `estatusValue`, que ya
   // viaja mas arriba en este mismo DTO: es `ayuda_tienda` o no lo es. Una verdad, no dos.
@@ -317,8 +338,11 @@ export type GestionarServiceResult =
 export type LiberarServiceResult = { status: "ok" } | { status: "forbidden" };
 
 export interface IMisAsignacionesService {
-  /** R9-R13: dos grupos + puntero de bloqueo; solo `mensajero` (sobre sus ordenes). */
-  listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult>;
+  /**
+   * R9-R13: dos grupos + puntero de bloqueo; solo `mensajero` (sobre sus ordenes).
+   * Feature 246 (T5.1, R25/R26): `now` es el reloj inyectable del que sale `esParaManana`.
+   */
+  listarMisAsignaciones(actor: Actor, now?: Date): Promise<ListarMisAsignacionesServiceResult>;
   /** R14-R17: transiciona por_recoger -> en_reparto (lote o de a una). */
   recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult>;
   /** R19-R21: fija la orden activa 1-a-1; conflict si ya hay otra activa. */

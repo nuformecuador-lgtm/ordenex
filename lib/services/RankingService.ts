@@ -21,6 +21,10 @@ import {
   ordenarAgregados,
   type AgregadoOrdenable,
 } from "@/lib/ranking/orden-ranking";
+// Feature 246 (T6.3, R41): el MISMO helper que usa el snapshot para su columna `@db.Date`. Se
+// importa desde `lib/ranking/snapshot-dia.ts` a proposito —es un modulo PURO, sin Prisma y sin
+// reloj— para que el vivo y el congelado no puedan divergir en la convencion de esta fecha.
+import { fechaComoDate } from "@/lib/ranking/snapshot-dia";
 
 // Rol lector adicional (solo-lectura) ademas del acceso total: el mensajero. El acceso total
 // (maestro/admin) VE (editable) y EDITA los premios (R16/R17/R19).
@@ -70,10 +74,26 @@ export class RankingService implements IRankingService {
     const desde = inicioDelDiaCREnUtc(hoyCR);
     const hasta = inicioDelDiaSiguienteCREnUtc(hoyCR);
 
+    // Feature 246 (T6.3, D7) — LA TERCERA FECHA, CON SU PROPIA CONVENCION, Y AQUI CONVIVEN LAS DOS.
+    //
+    // `desde`/`hasta` (arriba) son cotas contra columnas `timestamp` y valen `...T06:00:00.000Z`:
+    // ese ⛔ de mas arriba SIGUE VIGENTE para ellas. `diaReparto`, en cambio, se compara contra
+    // `orden.fecha_reparto`, que es `@db.Date`, y su convencion es la MEDIANOCHE UTC de la fecha
+    // calendario CR. Son dos cosas distintas y tienen que calcularse por separado: derivar una de
+    // la otra sumando o restando seis horas es exactamente el off-by-one de la ficha 166.
+    //
+    // Se usa `fechaComoDate` —el helper del snapshot— y NO `startOfDayCR`, por dos razones que van
+    // en la misma direccion: (1) es LITERALMENTE la misma funcion que usa el congelado
+    // (`RankingSnapshotService`), asi que R41 («los dos cuentan igual, solo miran dias distintos»)
+    // se cumple por construccion y no por disciplina; (2) mantiene `startOfDayCR` fuera de este
+    // archivo, donde la guardia `ranking-ventana-dia.guardia.test.ts` la prohibe desde la 166 — y
+    // esa prohibicion se conserva ENTERA en vez de relajarse para hacer sitio a esta ficha.
+    const diaReparto = fechaComoDate(hoyCR);
+
     const [mensajeros, entregadas, asignadas, premios] = await Promise.all([
       this.userRepo.listMensajeros(),
       this.rankingRepo.contarEntregadasPorMensajero(desde, hasta),
-      this.rankingRepo.contarAsignadasPorMensajero(desde, hasta),
+      this.rankingRepo.contarAsignadasPorMensajero(desde, hasta, diaReparto),
       this.premioRepo.listar(),
     ]);
 

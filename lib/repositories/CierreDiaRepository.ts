@@ -14,8 +14,13 @@ import type {
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
-import { ORIGEN_TIPO_GESTION_TIENDA_AYUDA } from "@/lib/utils/gestion-tienda-ayuda-flag";
+import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
+// Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
+// Costa Rica EN CURSO. `startOfDayCR` es el helper de la convencion `@db.Date`, la misma que usa
+// `fecha_reparto`; `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui
+// desplazaria el dia seis horas — la trampa que cerro la ficha 166.
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -343,7 +348,9 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       where: {
         ordenId: { in: [...new Set(rows.map((r) => r.ordenId))] }, // la columna GUIA del indice
         gestionOrdenId: { in: rows.map((r) => r.id) },
-        origenTipo: ORIGEN_TIPO_GESTION_TIENDA_AYUDA,
+        // Feature 237/R41 + 240/R43: de UNA igualdad a un `in` de la lista. Ninguna consulta
+        // nueva y el mismo indice: lo unico que cambia es cuantas familias acepta el filtro.
+        origenTipo: { in: [...ORIGENES_GESTION_DE_LA_TIENDA] },
       },
       select: { gestionOrdenId: true },
     });
@@ -522,15 +529,39 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         //
         // MONEY-NEUTRAL (R28): el `data` de las dos vueltas toca UNICAMENTE `estatusId`. Ni
         // `prioridad`, ni `mensajeroAsignadoId`, ni un solo total del cierre. Igual que antes.
+        //
+        // FEATURE 246 (T2.3, R11/R12/R15/R16) — EL DIA ENTRA EN EL `WHERE`, NO EN MEMORIA.
+        //
+        // El corte deja de barrer las ordenes RESERVADAS para un dia que aun no ha llegado. La
+        // condicion es `fecha_reparto IS NULL OR fecha_reparto <= diaCerrado`, y va en el `where`
+        // del pre-`SELECT` Y en el del `updateMany` guardado — no en un `filter` posterior. Filtrar
+        // en memoria dejaria el `updateMany` escribiendo sobre filas que la lista ya descarto en
+        // cuanto alguien tocara una de las dos, y el `updateMany` es quien de verdad escribe.
+        //
+        // Es EL MISMO predicado que aplica `CorteDiarioRepository` al SELECCIONAR (R16), con el
+        // MISMO valor: `diaCerrado` viaja dentro de `corteSinGestionar` desde el service, que lo
+        // calcula una vez por corrida.
+        //
+        // R15 se cumple por construccion: si el mensajero ademas tiene gestiones sin cerrar, su
+        // `vencido` se crea igual (lo decide `vinculadas.count` mas abajo) y aqui solo se barren
+        // las NO protegidas. Las reservadas se quedan donde estan, en la mano del mensajero.
         let sinGestionarTransicionadas = 0;
         if (corteSinGestionar) {
-          const { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId } = corteSinGestionar;
+          const { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId, diaCerrado } =
+            corteSinGestionar;
+          // R20: se pregunta «¿esta reservada para un dia que AUN NO ha llegado?», no «¿es de
+          // hoy?». A eso `NULL` responde una sola cosa —no— y por eso se barre igual que siempre.
+          const noReservadaParaDespues = [
+            { fechaReparto: null },
+            { fechaReparto: { lte: diaCerrado } },
+          ];
           for (const origenEstatusId of [enRepartoEstatusId, ayudaEstatusId]) {
             const pendientes = await tx.orden.findMany({
               where: {
                 mensajeroAsignadoId: mensajeroId,
                 estatusId: origenEstatusId,
                 deletedAt: null,
+                OR: noReservadaParaDespues, // feature 246/R11
               },
               select: { id: true },
             });
@@ -539,7 +570,14 @@ export class CierreDiaRepository implements ICierreDiaRepository {
             const movidas = await tx.orden.updateMany({
               // LA GUARDA: `estatusId: origenEstatusId`. Es lo que garantiza que el origen que se
               // registra abajo es el REAL de esta vuelta y no el de la otra.
-              where: { id: { in: ids }, estatusId: origenEstatusId, deletedAt: null },
+              // Feature 246 (R11/R16): el filtro de dia se REPITE aqui a proposito. Es la escritura
+              // real; el pre-SELECT solo sirve para el historial.
+              where: {
+                id: { in: ids },
+                estatusId: origenEstatusId,
+                deletedAt: null,
+                OR: noReservadaParaDespues,
+              },
               data: { estatusId: sinGestionarEstatusId },
             });
             sinGestionarTransicionadas += movidas.count;
@@ -860,10 +898,18 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
           // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero
           // autor (reasignacion efectiva) -> estampa `asignado_at = now`.
+          //
+          // FEATURE 246 (T3.4, R8/R10): esta via NO ofrece la eleccion de dia —nadie esta
+          // asignando un lote, se esta deshaciendo una gestion—, asi que el dia de reparto es el
+          // DIA DE COSTA RICA EN CURSO. La razon de estamparlo aqui y no dejarlo como estaba: las
+          // dos columnas no pueden contar historias distintas. Si `asignado_at` dijera «te la
+          // acabo de reasignar» y `fecha_reparto` conservara la reserva de ayer, el corte de esta
+          // misma noche la protegeria o la barreria segun un dato que ya no describe nada.
           data: {
             estatusId: estatusEnRepartoId,
             mensajeroAsignadoId: mensajeroId,
             asignadoAt: new Date(),
+            fechaReparto: startOfDayCR(),
           },
         });
         if (movida.count === 0) throw new NoAnulable();

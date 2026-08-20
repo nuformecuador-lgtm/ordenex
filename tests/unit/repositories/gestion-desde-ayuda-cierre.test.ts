@@ -463,10 +463,11 @@ describe("💰 R31/R32 (D1) — la gestion posterior cae en el SIGUIENTE cierre,
 
 describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensajero o de la tienda", () => {
   // Las tres funciones que deciden el dinero del cierre son PURAS y reciben la fila de dominio:
-  // `derivarPagos` (lo que se le paga al mensajero), `derivarIngresoBodega` (el `cobroRechazado`
-  // que se le debita a la tienda) y `computeTotales` (la caja del dia). NINGUNA recibe el origen ni
-  // el actor — no tienen por donde enterarse—, y eso es exactamente lo que R30 afirma. Se prueba
-  // comparando salidas, no leyendo el codigo.
+  // `derivarPagos` (lo que se le paga al mensajero), `derivarIngresoBodega` (el `cobroRechazado`,
+  // que es ingreso de BODEGA en el cierre del mensajero, y NO un debito a la tienda) y
+  // `computeTotales` (la caja del dia). NINGUNA recibe el origen ni el actor — no tienen por donde
+  // enterarse—, y eso es exactamente lo que R30 afirma. Se prueba comparando salidas, no leyendo el
+  // codigo.
   //
   // Los importes se comparan como STRING: nunca `number` ni `parseFloat` sobre un monto.
   const TARIFA = { cobroEntregado: "1500.00", cobroRechazado: "1000.00" };
@@ -523,9 +524,13 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
   );
 
   it("💰 `rechazada` de la tienda dispara el `cobroRechazado` DE LA TARIFA, exactamente igual", () => {
-    // El importe es DINERO REAL debitado a la tienda (hasta ₡1.000, medido en produccion el
-    // 2026-08-20). La tarifa se resuelve por zona + vehiculo DEL MENSAJERO, coherente con «cuenta
-    // como del mensajero», y el resultado es el mismo string.
+    // El importe es DINERO REAL, pero NO es un debito a la tienda: los hasta ₡1.000 del
+    // `cobroRechazado` (medido en produccion el 2026-08-20) son INGRESO DE BODEGA y caen en el
+    // cierre DEL MENSAJERO —por eso la funcion que este caso ejerce se llama `derivarIngresoBodega`
+    // y por eso en la billetera de la tienda no hay apunte por ese concepto—. A la tienda un rechazo
+    // SI le cuesta, pero por otra via y otra tarifa: el flete de devolucion mas IVA 13 %. La tarifa
+    // se resuelve por zona + vehiculo DEL MENSAJERO, coherente con «cuenta como del mensajero», y
+    // el resultado es el mismo string.
     const deLaTienda = [fila("g-tienda", "rechazada")];
     const { ingresoByGestionId, total } = derivarIngresoBodega(deLaTienda, TARIFA);
     expect(ingresoByGestionId["g-tienda"]).toBe("1000.00");

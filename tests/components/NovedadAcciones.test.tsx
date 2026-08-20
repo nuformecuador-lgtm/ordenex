@@ -6,7 +6,9 @@
 // decisión. La diferencia importa: hasta el 2026-08-19 esa decisión eran condiciones sueltas
 // (`esDevuelta`, `esAyuda`, `puedeHabilitar = esDevuelta || esAyuda`) y bastaba con añadir una
 // acción sin acordarse del otro grupo para que apareciera donde no debía — que es exactamente el
-// defecto del punto 12, todavía vivo y con dueño (ficha 240).
+// defecto del punto 12. ⚠️ 2026-08-20: hasta hoy esa frase terminaba en «todavía vivo y con dueño
+// (ficha 240)». La 240 lo cerró borrando la celda, así que el defecto ya no está vivo; lo que sigue
+// vivo es la razón de medir el censo, que es lo que impide que vuelva.
 //
 // **Lo que se mide es un CENSO CERRADO de nombres accesibles**, ni uno más ni uno menos. Un censo
 // abierto («están estos tres») pasaría igual con un cuarto botón de más, que es la forma que tiene
@@ -68,7 +70,9 @@ function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
 const handlers = {
   onReprogramar: vi.fn(),
   onHabilitar: vi.fn(),
-  onDevolver: vi.fn(),
+  // 240 (T5.3): hasta el 2026-08-20 se llamaba `onDevolver` y su handler real era la MAQUETA (un
+  // `toast.info`). Ahora abre la ventana del rechazo, que crea una gestión y cobra.
+  onRechazar: vi.fn(),
   onConversacion: vi.fn(),
   // Feature 237 (T7.1): UN handler para los dos desenlaces, con el modo como segundo argumento.
   onGestionarDesdeAyuda: vi.fn(),
@@ -113,22 +117,52 @@ describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
     ]);
   });
 
-  it("la fila de DEVOLUCIÓN ofrece exactamente cinco controles, y NO son los de la ayuda", () => {
+  // ⚠️ FEATURE 240 (T5.5, 2026-08-20) — EL CENSO PASA DE CINCO CONTROLES A CUATRO, y es el
+  // PRODUCTO de la ficha, no una aserción que se afloja para que pase.
+  //
+  // **Lo que decía este caso hasta hoy:** «la fila de DEVOLUCIÓN ofrece exactamente cinco
+  // controles», con «Habilitar la orden de Ana Cliente» dentro y esta nota al lado: «⚠️ «Habilitar»
+  // aparece aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido humano, al revés
+  // de lo que pedía). Su dueño es la ficha 240; esta ficha lo trasladó a una celda de
+  // `ACCIONES_POR_GRUPO` sin arreglarlo, y este literal es donde esa deuda se ve».
+  //
+  // **Qué cambió:** la 240 borró esa celda (R33). El literal se actualiza A MANO, una entrada
+  // menos; jamás se deriva de `ACCIONES_POR_GRUPO`, que es su propia fuente y lo dejaría verde para
+  // siempre.
+  it("240/R33: la fila de DEVOLUCIÓN ofrece exactamente cuatro controles, sin «Habilitar»", () => {
     renderAcciones({ estatusValue: "devuelta" });
 
     // El espejo del caso de arriba. Es lo que convierte las ausencias de cada uno en afirmaciones:
     // «no hay Reprogramar en ayuda» sólo dice algo si hay un sitio donde SÍ lo hay.
-    //
-    // ⚠️ «Habilitar» aparece aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido
-    // humano, al revés de lo que pedía). Su dueño es la ficha 240; esta ficha lo trasladó a una
-    // celda de `ACCIONES_POR_GRUPO` sin arreglarlo, y este literal es donde esa deuda se ve.
     expect(censoDeBotones()).toEqual([
       "Llamar a Ana Cliente",
       "WhatsApp a Ana Cliente",
       "Reprogramar la orden de Ana Cliente",
-      "Habilitar la orden de Ana Cliente",
       "Rechazar la orden de Ana Cliente",
     ]);
+  });
+
+  it("240/R33+R34: «Habilitar» NO está en la devolución, y SÍ en la ayuda", () => {
+    // La ausencia, emparejada con su presencia EN EL MISMO CASO. Dicha sola, «no hay Habilitar en
+    // la devolución» pasaría igual si el panel no renderizara nada — que es cómo se colaron casos
+    // en la 235, la 236 y la 238.
+    renderAcciones({ estatusValue: "devuelta" });
+    expect(
+      screen.queryByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      "el paquete de una orden en la devolución anclada YA volvió a la bodega y YA se escaneó al " +
+        "aprobar el cierre (238): «Habilitar» ahí ofrecía deshacer algo que físicamente no se " +
+        "puede deshacer. Es el punto 12, y la 240 lo cerró borrando la celda.",
+    ).toBeNull();
+    // CONTROL POSITIVO de que la card SÍ se renderizó: los otros cuatro controles están.
+    expect(censoDeBotones()).toHaveLength(4);
+
+    cleanup();
+    renderAcciones({ estatusValue: "ayuda_tienda" });
+    expect(
+      screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      "R34: sobre una orden en ayuda el paquete SIGUE EN LA MOTO, así que devolverla a la ruta es " +
+        "exactamente lo que «Habilitar» significa. Si esto cae, la ficha borró la celda equivocada.",
+    ).toBeInTheDocument();
   });
 
   it("R21: un estatus que no es de ningún grupo se queda SÓLO con el contacto", () => {
@@ -173,7 +207,7 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
     expect(handlers.onConversacion.mock.calls[0][0]).toMatchObject({ id: "o-ayuda" });
     expect(handlers.onHabilitar).not.toHaveBeenCalled();
     expect(handlers.onReprogramar).not.toHaveBeenCalled();
-    expect(handlers.onDevolver).not.toHaveBeenCalled();
+    expect(handlers.onRechazar).not.toHaveBeenCalled();
   });
 
   it("«Habilitar» desde la fila de ayuda llama a su handler con la orden", async () => {
@@ -247,9 +281,12 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
 
     expect(handlers.onGestionarDesdeAyuda).toHaveBeenCalledTimes(1);
     expect(handlers.onGestionarDesdeAyuda.mock.calls[0][1]).toBe("rechazar");
-    // `onDevolver` es la MAQUETA de la 240 (avisa por toast y no muta nada). Que no se llame es
-    // justo lo que distingue el rechazo con dinero detrás del botón que todavía no hace nada.
-    expect(handlers.onDevolver).not.toHaveBeenCalled();
+    // ⚠️ 2026-08-20: hasta la 240, esta línea decía «`onDevolver` es la MAQUETA de la 240 (avisa
+    // por toast y no muta nada)». Ya no: las DOS acciones mueven dinero, y lo que este caso
+    // protege es que van por PUERTAS DISTINTAS —el rechazo desde la ayuda crea una gestión que
+    // cuenta como del mensajero; el de la devolución cierra una devolución ya anclada—. Cruzarlas
+    // cobraría el importe equivocado sobre el cierre equivocado.
+    expect(handlers.onRechazar).not.toHaveBeenCalled();
   });
 
   it("y los dos modos son DISTINTOS entre sí (anti-vacuidad del literal)", async () => {
@@ -284,7 +321,11 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
     expect(handlers.onGestionarDesdeAyuda).not.toHaveBeenCalled();
   });
 
-  it("y «Rechazar» de la fila de DEVOLUCIÓN sigue siendo la maqueta de la 240", async () => {
+  // ⚠️ FEATURE 240 (T5.3, 2026-08-20) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO, y es el producto
+  // de la ficha. Hasta hoy se llamaba «y «Rechazar» de la fila de DEVOLUCIÓN sigue siendo la maqueta
+  // de la 240» y lo único que afirmaba era que se llamaba a `onDevolver`, cuyo handler real era un
+  // `toast.info`. Se reescribe contra `onRechazar`, que abre la ventana que dispara la operación.
+  it("240/R27: «Rechazar» de la fila de DEVOLUCIÓN abre SU ventana, con la orden", async () => {
     const user = userEvent.setup();
     renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
 
@@ -292,7 +333,9 @@ describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () =
       screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
     );
 
-    expect(handlers.onDevolver).toHaveBeenCalledTimes(1);
+    expect(handlers.onRechazar).toHaveBeenCalledTimes(1);
+    expect(handlers.onRechazar.mock.calls[0][0]).toMatchObject({ id: "o-devuelta" });
+    // Y NO por la puerta de la ayuda, que cobra en el cierre del mensajero y suma un intento.
     expect(handlers.onGestionarDesdeAyuda).not.toHaveBeenCalled();
   });
 });

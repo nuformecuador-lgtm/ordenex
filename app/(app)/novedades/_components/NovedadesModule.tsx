@@ -54,6 +54,17 @@ import {
   filaDescargaNovedad,
   TITULO_DESCARGA_NOVEDADES,
 } from "./novedades-descarga-columnas";
+import {
+  RechazarNovedadModal,
+  RECHAZO_CONFLICTO,
+  RECHAZO_ERROR_CONFIG,
+  RECHAZO_ERROR_FORBIDDEN,
+  RECHAZO_ERROR_NOT_FOUND,
+  RECHAZO_ERROR_SESION,
+  RECHAZO_SIN_GESTION_ORIGEN,
+  RECHAZO_EXITO,
+  type DesenlaceRechazo,
+} from "./RechazarNovedadModal";
 import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 
 // Feature 87 (T12, design §3.2) — modulo cliente de `/novedades`. Recibe TODO por props
@@ -180,6 +191,30 @@ const RECURSOS_POR_GRUPO = {
   },
 } as const satisfies Record<GrupoNovedad, RecursosGrupoNovedad>;
 
+/**
+ * 💰 Feature 240 (T5.3, R31) — QUÉ SE LE DICE A LA TIENDA CUANDO EL RECHAZO NO SE APLICA, por
+ * estado. `ok` y `conflict` NO están aquí: los dos tienen su propio camino en `resolverRechazo`
+ * —uno quita la fila, el otro relee la página— y meterlos en una tabla de errores los haría
+ * parecer lo que no son.
+ *
+ * Es una tabla y no un `switch` por la misma razón que `ACCIONES_POR_GRUPO`: el día que el
+ * resultado del servicio gane un estado, el typecheck reclama su mensaje en vez de dejarlo caer en
+ * el `default` en silencio.
+ */
+const MENSAJE_POR_FALLO_DEL_RECHAZO: Record<
+  Exclude<DesenlaceRechazo["status"], "ok" | "conflict">,
+  string
+> = {
+  forbidden: RECHAZO_ERROR_FORBIDDEN,
+  not_found: RECHAZO_ERROR_NOT_FOUND,
+  config_error: RECHAZO_ERROR_CONFIG,
+  unauthenticated: RECHAZO_ERROR_SESION,
+  // 2026-08-20: esta entrada NO se anadio por gusto — sin ella este `Record` NO COMPILA, que es
+  // justo lo que el comentario de arriba promete. El estado nacio de un recorrido en el que la
+  // tienda pulso «Rechazar» y no vio nada: la accion salia por `INTERNAL` y el borde lanzaba.
+  sin_gestion_origen: RECHAZO_SIN_GESTION_ORIGEN,
+};
+
 export interface NovedadesModuleProps {
   /**
    * Por que esta orden esta en la pantalla. **Obligatorio y sin default**: un olvido de cableado
@@ -256,6 +291,11 @@ export function NovedadesModule({
     orden: NovedadDTO;
     modo: ModoGestionDesdeAyuda;
   } | null>(null);
+  // 💰 Feature 240 (T5.3): la orden que la tienda está a punto de RECHAZAR (null = ventana cerrada).
+  // Mismo patrón que sus tres hermanos de arriba y por el mismo motivo: son ventanas distintas y no
+  // pueden estar abiertas a la vez, así que un estado con discriminante sólo añadiría una pregunta
+  // en cada render.
+  const [ordenARechazar, setOrdenARechazar] = useState<NovedadDTO | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -269,14 +309,42 @@ export function NovedadesModule({
   } = useTransicionVista<VistaCards>("mosaico");
 
   /**
-   * MAQUETA (2026-08-12): "Rechazar" (rotulado "Devolver" hasta 2026-08-19) está en la fila
-   * pero todavía no hace nada — su comportamiento no está decidido y no existe en el backend;
-   * lo cablea la ficha 240. Avisa por toast en vez de callar: un botón que no responde se lee
-   * como una app rota, y el usuario de esta pantalla es una tienda, no quien pidió la
-   * maqueta. El día que se cablee, este handler desaparece.
+   * 💰 FEATURE 240 (T5.3, design §10.2 — R30/R31/R32) — LO QUE LA PANTALLA HACE CON EL RECHAZO.
+   *
+   * **Lo que había aquí hasta el 2026-08-20, y por qué se cuenta en vez de borrarlo:** un handler
+   * llamado `avisarNoDisponible` que hacía `toast.info("Esta acción todavía no está disponible.")`
+   * y se pasaba como `onDevolver`. Su propio JSDoc lo declaraba MAQUETA desde el 2026-08-12 y
+   * terminaba diciendo «el día que se cablee, este handler desaparece». Este es ese día: desapareció.
+   *
+   * **`ok` y `conflict` se dicen DISTINTO** (R31). Un `conflict` significa que la orden dejó de
+   * estar en la devolución anclada entre que la tienda abrió la ventana y pulsó —el cron de plazo
+   * vencido la escaló, o la bodega la recuperó—, así que **no se escribió nada** y la pantalla no
+   * puede afirmar que rechazó.
+   *
+   * **`ok` quita la fila y baja el total** (R30) por el MISMO camino que su hermana «Reprogramar»
+   * (`sacarDeLaLista`): el servidor ya confirmó que la orden salió de la devolución, así que no
+   * hay optimismo que corregir. **`conflict` RELEE la página** en vez de quitar nada: ahí la fila
+   * desaparece —o se queda— por el dato, que es literalmente la lección de 236/D8 sobre esta misma
+   * card.
+   *
+   * `forbidden` no se traduce a un motivo concreto: el borde no dice si la orden existe, en qué
+   * estado está ni de quién es, así que adivinarlo aquí sería inventarlo.
    */
-  function avisarNoDisponible() {
-    toast.info("Esta acción todavía no está disponible.");
+  async function resolverRechazo(res: DesenlaceRechazo) {
+    const orden = ordenARechazar;
+    if (!orden) return;
+    setOrdenARechazar(null);
+    if (res.status === "ok") {
+      sacarDeLaLista(orden.id);
+      toast.success(RECHAZO_EXITO);
+      return;
+    }
+    if (res.status === "conflict") {
+      toast.warning(RECHAZO_CONFLICTO);
+      await cambiarPagina(page);
+      return;
+    }
+    toast.error(MENSAJE_POR_FALLO_DEL_RECHAZO[res.status]);
   }
 
   /**
@@ -365,8 +433,19 @@ export function NovedadesModule({
     );
   }
 
-  /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
-  function handleReprogramada(ordenId: string) {
+  /**
+   * La orden salió de la devolución anclada: se quita de la lista y el total baja.
+   *
+   * Lo usan LAS DOS salidas que el servidor confirma sobre esta card —«Reprogramar» (feature 100) y
+   * «Rechazar» (feature 240/R30)—, y por eso el nombre dice lo que hace y no cuál de las dos lo
+   * pidió: hasta el 2026-08-20 se llamaba `handleReprogramada`, que dejó de ser cierto en cuanto
+   * tuvo un segundo llamador.
+   *
+   * ⚠️ Sólo se usa cuando el servidor devolvió `ok`. Ahí no hay optimismo que corregir: la
+   * transición ya ocurrió. La carrera perdida tiene otro camino (relee la página), porque quitar una
+   * fila que sigue estando es la mentira que 236/D8 midió sobre esta misma card.
+   */
+  function sacarDeLaLista(ordenId: string) {
     setItems((prev) => prev.filter((n) => n.id !== ordenId));
     setTotal((prev) => Math.max(0, prev - 1));
   }
@@ -487,7 +566,7 @@ export function NovedadesModule({
                   novedad={novedad}
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
-                  onDevolver={avisarNoDisponible}
+                  onRechazar={setOrdenARechazar}
                   onConversacion={setOrdenConHilo}
                   onGestionarDesdeAyuda={(orden, modo) =>
                     setOrdenAGestionarDesdeAyuda({ orden, modo })
@@ -517,7 +596,7 @@ export function NovedadesModule({
           onOpenChange={(open) => {
             if (!open) setOrdenAReprogramar(null);
           }}
-          onReprogramada={handleReprogramada}
+          onReprogramada={sacarDeLaLista}
         />
       ) : null}
 
@@ -563,6 +642,21 @@ export function NovedadesModule({
 
           `modo` NO va en la `key`: cambiar de desenlace sobre la MISMA orden (abrir «Rechazar»
           tras cerrar «Reprogramar») remonta igual porque el estado pasa por `null` al cerrarse. */}
+      {/* 💰 Feature 240 (T5.3) — LA VENTANA DEL RECHAZO. Mismo montaje condicional y misma `key`
+          que los cuatro de arriba, y aquí el motivo es de dinero: con la ventana cerrada NO ESTÁ EN
+          EL ÁRBOL, y `key={orden.id}` hace que el motivo arranque vacío en cada apertura — un motivo
+          heredado de la orden anterior acabaría explicando un cobro que no le corresponde. */}
+      {ordenARechazar ? (
+        <RechazarNovedadModal
+          key={ordenARechazar.id}
+          orden={ordenARechazar}
+          onOpenChange={(open) => {
+            if (!open) setOrdenARechazar(null);
+          }}
+          onResuelto={(res) => void resolverRechazo(res)}
+        />
+      ) : null}
+
       {ordenAGestionarDesdeAyuda ? (
         <GestionarDesdeAyudaModal
           key={ordenAGestionarDesdeAyuda.orden.id}

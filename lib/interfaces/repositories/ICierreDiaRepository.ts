@@ -76,12 +76,21 @@ export interface CierreGestionPendienteRow {
    * intento de entrega. La orden desaparece de su portal en cuanto sale de `ayuda_tienda`, asi que
    * la fila de su cierre del dia es el UNICO sitio donde las dos poblaciones aparecen juntas.
    *
-   * DERIVADO del historial (`origen_tipo = gestion_tienda_ayuda`), nunca de una columna nueva en
-   * `gestion_orden`: la fuente de verdad de quien actuo es el historial, y duplicarla crearia una
-   * segunda verdad que puede divergir. Mismo patron que `esRechazoSla` (102).
+   * DERIVADO del historial (`origen_tipo` ∈ `ORIGENES_GESTION_DE_LA_TIENDA`), nunca de una columna
+   * nueva en `gestion_orden`: la fuente de verdad de quien actuo es el historial, y duplicarla
+   * crearia una segunda verdad que puede divergir. Mismo patron que `esRechazoSla` (102).
    *
    * `false` significa «no la registro la tienda», NO «no lo se» — el porque estructural esta en
-   * `lib/utils/gestion-tienda-ayuda-flag.ts`, que es donde se decide.
+   * `lib/utils/gestion-de-la-tienda-flag.ts`, que es donde se decide.
+   *
+   * ⏳ 2026-08-20 (feature 240, T4.1) — EL NOMBRE SE QUEDA CORTO Y SE SABE. Desde esta ficha el
+   * campo vale `true` tambien para el RECHAZO MANUAL de una devolucion anclada, que NO viene de la
+   * pantalla de ayuda: lo que el campo significa hoy es «la registro LA TIENDA», y su nombre honesto
+   * seria `registradaPorLaTienda`. El rename NO se hace en este cambio, y la razon se escribe aqui
+   * para que sea una deuda con dueño y no un descuido: toca ~40 archivos, casi todos fixtures de
+   * test de suites ajenas a esta ficha, y varias de ellas estan siendo modificadas en paralelo por
+   * otra feature en vuelo. Es un rename de LECTURA —sin cambio de forma, de dato ni de conducta—,
+   * asi que se puede hacer solo, guiado por el typecheck, el dia que el arbol este quieto.
    */
   desdeAyudaTienda: boolean;
   // Feature 158/R9: causa TIPIFICADA del incidente, leida de `gestion_orden.causa_incidente`.
@@ -118,6 +127,21 @@ export interface CorteSinGestionarInput {
    */
   ayudaEstatusId: string;
   sinGestionarEstatusId: string;
+  /**
+   * Feature 246 (T2.3, R11/R12/R16) — fecha CR de la JORNADA QUE LA CORRIDA CIERRA (convencion
+   * `@db.Date`: medianoche UTC), calculada UNA vez en `CorteDiarioService.ejecutarCorte`
+   * (`diaQueElCorteCierra`). El barrido solo alcanza a las ordenes cuya `fecha_reparto` sea
+   * `<= diaCerrado` o NULL; las reservadas para un dia posterior quedan intactas (R11/R15).
+   *
+   * OBLIGATORIO, no opcional, y la diferencia importa: un olvido de cableado tiene que romper el
+   * TYPECHECK, no dejar el barrido con un criterio silencioso que se lleve por delante lo que la
+   * ficha protege. Mismo criterio y mismo precedente que `ayudaEstatusId` aqui arriba.
+   *
+   * Viaja DENTRO de este input y no como argumento suelto de `crearCierre` para que sea
+   * literalmente el mismo valor que filtro la seleccion (R16): las dos consultas son la misma
+   * verdad vista dos veces, y la 235 ya costo una regresion por dejarlas divergir.
+   */
+  diaCerrado: Date;
 }
 
 // Datos para crear la solicitud de cierre (R13/R14). Totales snapshot como STRING.

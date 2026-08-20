@@ -2341,3 +2341,89 @@ describe("RepartoModule — Entregas no monta ninguna superficie de recolección
     expect(screen.queryByText(/recolect/i)).toBeNull();
   });
 });
+
+// Feature 246 (T5.2/T5.3) — UNA ORDEN RESERVADA PARA MAÑANA QUE EL MENSAJERO YA RECOGIÓ.
+//
+// Es el escenario que motiva la ficha: bodega carga la furgoneta de noche para el reparto del día
+// siguiente, así que la orden está en `en_reparto` con su día de reparto todavía por llegar. La
+// marca tiene que seguir a la orden hasta aquí, o el mensajero la entregará hoy y el selector no
+// habrá servido de nada.
+//
+// `esParaManana` llega YA RESUELTO desde el servidor (R26): aquí sólo se fija el booleano, igual
+// que haría el DTO real. Los textos van con su literal escrito A MANO, nunca contra la constante.
+describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
+  it("R22: la orden ya recogida anoche sigue diciendo «Para mañana», y la de hoy no", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          esParaManana: true,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-HOY",
+          estatusValue: "en_reparto",
+          esParaManana: false,
+        }),
+      ],
+    });
+
+    // Presencia y ausencia EMPAREJADAS, en la misma pantalla: sin la card de al lado, el
+    // `toBeNull` estaría verde también si no se hubiera renderizado nada.
+    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+    expect(within(cardDe("REM-HOY")).queryByText("Para mañana")).toBeNull();
+  });
+
+  it("R23: la reservada NO se esconde ni sale de la ruta: es una parada más", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          secuenciaRuta: 1,
+          esParaManana: true,
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
+    // Conserva su posición en la ruta: reservar para mañana no la degrada a «sin posición».
+    expect(diceParada(cardDe("REM-MAN"), 1, 1)).toBe(true);
+  });
+
+  it("R24: la reservada SE PUEDE GESTIONAR — `escogerParaGestion` sí se llama", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          numGuia: 1001,
+          estatusValue: "en_reparto",
+          esParaManana: true,
+        }),
+      ],
+    });
+
+    const panel = await abrirGestion(user);
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    // La otra mitad de D5: la reserva protege del corte de la noche, NO es un candado contra el
+    // mensajero. Se afirma que la acción SE LLAMA; «no aparece un error» no lo probaría, porque
+    // también estaría en verde si no pasara nada.
+    await vi.waitFor(() =>
+      expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }),
+    );
+    // Y llega a los cuatro resultados: puede entregarla hoy si quiere.
+    expect(
+      await screen.findByRole("button", { name: "Entregar" }),
+    ).toBeInTheDocument();
+  });
+});

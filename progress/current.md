@@ -9,6 +9,74 @@
 > `git show <rev>:progress/current.md`.
 
 
+## ✅ AL DÍA — 2026-08-20, cierre. **EMPIEZA A LEER POR AQUÍ**
+
+**Cinco fichas mergeadas en dos días, las cinco con revisión OK. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+| **241** | investigación de las guardas de bloqueo retiradas | [#408](https://github.com/nuformecuador-lgtm/ordenex/pull/408) |
+| **237** | la gestión que hace la tienda cuenta como del mensajero | [#410](https://github.com/nuformecuador-lgtm/ordenex/pull/410) |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | **#411** |
+
+La **228** queda **superada** por la 236. La **74** se cerró **por auditoría**: ya estaba
+implementada y la ficha llevaba semanas mintiendo.
+
+### ▶️ Qué queda por implementar
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **239** | el alta de tienda por OTP | `spec_ready` — **le falta «ver la app»**, y necesita el servidor levantado por el OTP |
+| **247** | **el doble cobro del flete de devolución** | `pending` — **medido**: `1 de 16`, ₡2.486 a NUFORM. Dos cierres aprobados, seis días de diferencia, el mismo paquete |
+| **248** | los errores de `/novedades` salen **mudos** | `pending` — la **feature 100 comparte el hueco idéntico** |
+| **220** | e2e | `pending`, pero **su premisa está podrida**: 13 de 20 specs son `NOT EXECUTED` |
+| **249** | la regla del `down.sql` obligatorio **no la vigila nadie** | `pending` — **tres migraciones llevan seis días sin `down.sql` con el gate en verde**, y van cinco en dos semanas |
+
+### ⚠️ Antes de desplegar — acciones HUMANAS que se arrastran
+
+- **238 / T0.3:** avisar a bodega de que **el gesto cambia**: aprobar exige tener los paquetes
+  delante y escanear su guía.
+- **Re-medir producción** antes de desplegar la **236**, la **237**, la **238** y la **246**. Las
+  cuatro mediciones se tomaron con fichas todavía sin desplegar y **caducan al salir**.
+
+### ⚠️ PRODUCCIÓN SE ESTÁ USANDO COMO ENTORNO DE PRUEBAS
+
+Confirmado por el humano el **2026-08-20**, y hay que saberlo para leer cualquier medición de
+`progress/medicion_*.md`. Los números **describen fielmente lo que el código hace** —un doble cobro
+medido es un doble cobro real del código—, pero **no dicen frecuencia operativa**: un número bajo
+puede ser «no pasa» o «nadie lo ha probado aún», y la base no distingue. Los importes cobrados de
+más **no son dinero real de una tienda real**, por eso el defecto de la 247 se arregla **hacia
+adelante** y no hay devolución que hacer. **El día que producción sea producción de verdad, todo
+esto hay que re-medirlo.**
+
+### 🧾 Los dos patrones que se repitieron en las cinco fichas
+
+**Una suite verde no encuentra una maqueta.** La 240 destapó un botón que llevaba **desde el
+2026-08-12** sin hacer nada, con **las tres capas de tests de esa superficie en verde** todo ese
+tiempo. Una maqueta no rompe nada — por eso «ver la app» ha encontrado, en esta pila, un cierre
+imposible de aprobar (238), dos defectos de card (235), un botón que siempre fallaba (237) y siete
+textos rotos. Lo que no se mira, no está verificado.
+
+### 📌 Una excepción a la regla 1, escrita para que no se convierta en costumbre
+
+La 240 y la 246 corrieron **las dos `in_progress` en la zona `fullstack` a la vez y compartiendo
+cinco archivos**. `CLAUDE.md` admite dos por zona **«siempre sin conflicto de archivos entre
+ellas»**, así que esto fue una excepción. Salió limpio —cada edición lleva su ficha citada, ninguna
+reescribió un archivo entero, y el gate completo lo confirma— pero **salió limpio porque se vigiló,
+no porque la regla lo permitiera**. Si vuelve a hacer falta, que se decida a propósito y con la
+misma vigilancia; y **el gate nunca en paralelo con un subagente que muta el árbol**, porque
+entonces su veredicto no vale.
+
+**Y marcar tareas por lotes miente.** Pasó en la 236 (T8), volvió a pasar en la 237 (recorrido
+marcado hecho **parado en el paso 6 de 9**, y los tres que faltaban eran los de dinero) y la
+revisión lo rechazó **con razón** las dos veces. En la 240 y la 246 las tareas quedan marcadas una a
+una, con **cinco abiertas a propósito** y el motivo escrito al lado.
+
+---
+
 ## ✅ AL DÍA — 2026-08-19, cierre. **EMPIEZA A LEER POR AQUÍ**
 
 **Tres fichas mergeadas hoy, las tres con revisión OK y gate completo verde. Ninguna `in_progress`.**

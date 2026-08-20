@@ -5,9 +5,12 @@ import type {
   IGestionOrdenRepository,
   MiAsignacionRow,
   OrdenGestionRow,
+  RechazarDesdeDevueltaInput,
   ReprogramarDesdeDevueltaInput,
   VentanaDia,
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import { SinGestionDevueltaError } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
+import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
@@ -33,6 +36,16 @@ const ESTADOS_EN_MANO_DEL_MENSAJERO = [ESTADO_EN_REPARTO, "ayuda_tienda"];
 // (R3). Valores del catalogo `gestion_resultado` ya sembrados; esta feature NO agrega estados.
 const RESULTADO_DEVUELTA = "devuelta";
 const RESULTADO_REPROGRAMADA = "reprogramada";
+
+// 💰 Feature 240 (D1/D8) — el `resultado` y la FAMILIA de la gestion sintetica del RECHAZO MANUAL
+// de la tienda. El `resultado` es EL MISMO que escribe el cron de plazo vencido (99), y esa
+// igualdad es el requisito (R17/R22): de el cuelgan `ingresoBodegaPorResultado` (56) y
+// `derivarIngresoOrden` (42/43), asi que las dos vias facturan lo mismo sin aritmetica nueva.
+// La FAMILIA, en cambio, es propia y NO `escalado_devuelta_sla`: es lo unico que distingue «lo
+// decidio la tienda» de «se vencio el plazo», y de ella cuelgan la pestaña «Rechazadas por plazo
+// vencido» (102) y `esRechazoSla`.
+const RESULTADO_RECHAZADA = "rechazada";
+const ORIGEN_TIPO_RECHAZO_TIENDA = "rechazo_tienda" satisfies OrdenHistorialOrigenTipo;
 
 // `resultado` de la gestion que ancla los KPIs de entregadas a SU DIA. Homonimo de
 // `ESTATUS_ENTREGADA` pero de otro vocabulario (enum `gestion_resultado`, no el catalogo
@@ -221,6 +234,10 @@ const WITH_ASIGNACION = {
     longitud: true,
     notas: true,
     mensajeroAsignadoId: true,
+    // Feature 246 (T3.7/T5.1, R26/R35): el dia de reparto viaja en la proyeccion QUE YA EXISTE,
+    // sin una consulta nueva. De aqui sale `esParaManana` del DTO, que lo deriva el SERVIDOR: el
+    // navegador no vuelve a decidir que dia es hoy.
+    fechaReparto: true,
     estatus: { select: { value: true } },
     // Feature 157 (R15): el telefono de la TIENDA acompaña a su nombre — el mensajero que va
     // a recolectar necesita poder contactarla, y el modelo no tiene direccion de tienda.
@@ -258,7 +275,109 @@ function toMiAsignacionRow(row: AsignacionRow): MiAsignacionRow {
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
     mensajeroAsignadoId: row.mensajeroAsignadoId,
+    // Feature 246 (R35): la fecha CRUDA llega hasta el service, que es quien la compara con el dia
+    // de Costa Rica en curso. El repositorio no interpreta el dia: no tiene reloj.
+    fechaReparto: row.fechaReparto,
   };
+}
+
+/**
+ * Feature 240 (design §4.2, T2.1) — LOS TRES PASOS QUE COMPARTEN LAS DOS SALIDAS DE ESCRITORIO DE
+ * `devuelta`: la reprogramacion de la tienda (100) y el rechazo manual de la tienda (240). Extraido
+ * de `reprogramarDesdeDevuelta`, sin cambiar su conducta ni su firma publica.
+ *
+ * POR QUE UN HELPER Y NO UNA TERCERA COPIA (alternativa A del design §14): serian TRES
+ * transacciones con la misma guarda de estado, la misma derivacion del mensajero (con su `throw` si
+ * falta) y el mismo append por el choke point. El dia que alguien arregle una —un `deletedAt` que
+ * falta, un `orderBy` mal— las otras dos se enteran EN PRODUCCION. Y no se renombra el metodo
+ * publico (alternativa B) porque eso movería los call-sites y los dobles de test de una feature de
+ * dinero que ya esta viva, a cambio de nada que este helper no de.
+ *
+ * La 237 escribio que NO generalizaba `reprogramarDesdeDevuelta` «porque su semantica —derivar el
+ * mensajero de la ultima `devuelta` vigente— es otra». Aqui ES LA MISMA, asi que el mismo argumento
+ * apunta en la direccion contraria.
+ *
+ * Lo unico que cada llamador aporta: el destino, la familia del historial, el motivo y COMO se crea
+ * su gestion (paso 3, que es lo unico que difiere de verdad).
+ *
+ * ⚠️ El `data` del UPDATE toca EXCLUSIVAMENTE `estatusId`. Ni `mensajero_asignado_id`, ni
+ * `prioridad`, ni ningun monto (240/R14/R20): el paquete ya no esta en ruta y el bloque 139 de la
+ * aprobacion busca las `rechazada` POR `mensajeroAsignadoId`, asi que limpiarlo dejaria al paquete
+ * sin ruta de vuelta a la tienda.
+ */
+async function transicionarDesdeDevuelta(
+  prisma: GestionPrismaClient,
+  input: {
+    ordenId: string;
+    /** GUARDA del UPDATE: la orden tiene que seguir en `devuelta` (R3/R4). */
+    estatusDevueltaId: string;
+    estatusDestinoId: string;
+    /** Familia propia de cada via: es lo unico que distingue quien decidio. */
+    origenTipo: OrdenHistorialOrigenTipo;
+    /** Quien lo decidio: el adminTienda. Va al historial, NUNCA a la gestion (R9/R11). */
+    actorUsuarioId: string;
+    motivo: string | null;
+    /** Nombre del metodo publico, para que el `throw` del paso 2 diga de donde viene. */
+    llamador: string;
+    /** Paso 3: crea la gestion sintetica con el mensajero YA derivado. Devuelve su id. */
+    crearGestion: (
+      tx: Prisma.TransactionClient,
+      mensajeroId: string,
+    ) => Promise<{ id: string }>;
+  },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    // 1) UPDATE guardado por estatus=devuelta + no borrada -> destino. La comprobacion del estado
+    //    de origen va EN LA MISMA SENTENCIA que lo muta: entre comprobar y escribir no queda
+    //    ninguna ventana, y sobre esta fila hay VARIOS actores (el cron de la 99, la bodega, la
+    //    tienda). Una guarda en el service seria una lectura optimista, no una barrera.
+    const result = await tx.orden.updateMany({
+      where: {
+        id: input.ordenId,
+        estatusId: input.estatusDevueltaId, // guarda de idempotencia/carrera con el cron 99
+        deletedAt: null,
+      },
+      data: { estatusId: input.estatusDestinoId },
+    });
+    // La orden ya salio de `devuelta` -> no crea gestion ni append (no-op, sin efectos).
+    if (result.count === 0) return false;
+
+    // 2) mensajero de la ULTIMA gestion `devuelta` VIGENTE, leido dentro de la tx (mismo criterio
+    //    de vigencia que `findDevueltasSla` de la 99: no anulada, mas reciente).
+    const ancla = await tx.gestionOrden.findFirst({
+      where: { ordenId: input.ordenId, resultado: RESULTADO_DEVUELTA, anuladaAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { mensajeroId: true },
+    });
+    if (!ancla) {
+      // Anomalia: una orden en `devuelta` SIN gestion `devuelta` vigente no tiene a quien
+      // atribuir la gestion sintetica (`mensajero_id` NOT NULL). Abortar la tx (revierte el
+      // UPDATE) es preferible a inventar un actor.
+      // 2026-08-20: era un `Error` pelado y salia como `INTERNAL`, que la pantalla no sabe pintar
+      // — la tienda pulsaba y no pasaba NADA. Clase propia para que el service lo distinga de una
+      // caida de base y lo convierta en un desenlace con texto. El `throw` se queda: es lo que
+      // ABORTA la transaccion y revierte el `updateMany` de arriba.
+      throw new SinGestionDevueltaError(input.llamador);
+    }
+
+    // 3) la gestion sintetica, que es lo unico que difiere entre las dos vias.
+    const gestion = await input.crearGestion(tx, ancla.mensajeroId);
+
+    // 4) append por el choke point (49), actor = adminTienda, familia propia, enlazando la gestion;
+    //    origen `devuelta` (fijado por la guarda del UPDATE).
+    await appendCambioEstado(tx, [
+      {
+        ordenId: input.ordenId,
+        estatusOrigenId: input.estatusDevueltaId,
+        estatusDestinoId: input.estatusDestinoId,
+        actorUsuarioId: input.actorUsuarioId,
+        origenTipo: input.origenTipo,
+        motivo: input.motivo,
+        gestionOrdenId: gestion.id,
+      },
+    ]);
+    return true;
+  });
 }
 
 export class GestionOrdenRepository implements IGestionOrdenRepository {
@@ -578,63 +697,86 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
    * conclusion sobrevive, el razonamiento se reescribe.)
    */
   async reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
-      // R21: UPDATE guardado por estatus=devuelta + no borrada -> reprogramada.
-      const result = await tx.orden.updateMany({
-        where: {
-          id: input.ordenId,
-          estatusId: input.estatusDevueltaId, // guarda de idempotencia/carrera con el cron 99
-          deletedAt: null,
-        },
-        data: { estatusId: input.estatusReprogramadaId },
-      });
-      // R7/R21: la orden ya salio de `devuelta` -> no crea gestion ni append (no-op).
-      if (result.count === 0) return false;
-
-      // R5: mensajero de la ULTIMA gestion `devuelta` vigente, leido dentro de la tx (mismo
-      // criterio de vigencia que `findDevueltasSla` de la 99: no anulada, mas reciente).
-      const ancla = await tx.gestionOrden.findFirst({
-        where: { ordenId: input.ordenId, resultado: RESULTADO_DEVUELTA, anuladaAt: null },
-        orderBy: { createdAt: "desc" },
-        select: { mensajeroId: true },
-      });
-      if (!ancla) {
-        // Anomalia: una orden en `devuelta` SIN gestion `devuelta` vigente no tiene a quien
-        // atribuir la gestion sintetica (`mensajero_id` NOT NULL). Abortar la tx (revierte el
-        // UPDATE, R20) es preferible a inventar un actor.
-        throw new Error(
-          "reprogramarDesdeDevuelta: sin gestion `devuelta` vigente para derivar el mensajero (R5)",
-        );
-      }
-
+    // Feature 240 (T2.1): los pasos 1, 2 y 4 —el UPDATE guardado (R21), la derivacion del
+    // mensajero (R5) y el append por el choke point (R11)— viven ahora en
+    // `transicionarDesdeDevuelta`, compartidos con el rechazo manual. La FIRMA y la CONDUCTA de
+    // este metodo NO cambian: lo que era el cuerpo de la transaccion es ahora el argumento.
+    return transicionarDesdeDevuelta(this.prisma, {
+      ordenId: input.ordenId,
+      estatusDevueltaId: input.estatusDevueltaId,
+      estatusDestinoId: input.estatusReprogramadaId,
+      origenTipo: "reprogramacion_tienda", // R11
+      actorUsuarioId: input.actorUsuarioId, // R11: el adminTienda
+      motivo: input.motivo, // consistente con la gestion (puede ser null)
+      llamador: "reprogramarDesdeDevuelta",
       // R3: gestion sintetica `reprogramada` en la MISMA tx. `fecha_reprogramacion` -> DATE
       // (patron `crearGestionYTransicionar`). `cierre_id NULL` -> money-neutral (R10).
-      const gestion = await tx.gestionOrden.create({
-        data: {
-          ordenId: input.ordenId,
-          mensajeroId: ancla.mensajeroId, // R5
-          resultado: RESULTADO_REPROGRAMADA, // R3
-          fechaReprogramacion: new Date(`${input.fechaReprogramacion}T00:00:00.000Z`), // R3
-          motivo: input.motivo, // Q1: opcional (puede ser null)
-          cierreId: null, // R10: entra al proximo cierre pero aporta $0.00 (no es entregada/rechazada)
-        },
-        select: { id: true },
-      });
+      crearGestion: (tx, mensajeroId) =>
+        tx.gestionOrden.create({
+          data: {
+            ordenId: input.ordenId,
+            mensajeroId, // R5
+            resultado: RESULTADO_REPROGRAMADA, // R3
+            fechaReprogramacion: new Date(`${input.fechaReprogramacion}T00:00:00.000Z`), // R3
+            motivo: input.motivo, // Q1: opcional (puede ser null)
+            cierreId: null, // R10: entra al proximo cierre pero aporta $0.00 (no es entregada/rechazada)
+          },
+          select: { id: true },
+        }),
+    });
+  }
 
-      // R11/R20: append por el choke point, actor = adminTienda, origen_tipo reprogramacion_tienda,
-      // enlaza la gestion sintetica; origen `devuelta` (fijado por la guarda del UPDATE).
-      await appendCambioEstado(tx, [
-        {
-          ordenId: input.ordenId,
-          estatusOrigenId: input.estatusDevueltaId,
-          estatusDestinoId: input.estatusReprogramadaId,
-          actorUsuarioId: input.actorUsuarioId, // R11: el adminTienda
-          origenTipo: "reprogramacion_tienda", // R11
-          motivo: input.motivo, // consistente con la gestion (puede ser null)
-          gestionOrdenId: gestion.id,
-        },
-      ]);
-      return true;
+  /**
+   * 💰 Feature 240 (design §4.2, D1/D8, T2.2) — EL RECHAZO MANUAL DE LA TIENDA sobre una devolucion
+   * anclada. Contrato completo en `IGestionOrdenRepository.rechazarDesdeDevuelta`; aqui van las
+   * razones que solo se ven desde el codigo.
+   *
+   * PARIDAD LITERAL CON EL CRON (D1, firmada): escribe LO MISMO que
+   * `DevolucionSlaRepository.escalarDevueltaSla` —transicion guardada + gestion `rechazada` con
+   * `cierre_id NULL` y el mensajero de la ultima `devuelta` vigente—. Solo cambia la familia del
+   * historial y que aqui SI hay un actor humano. Sin esa paridad, rechazar a mano saldria GRATIS y
+   * esperar al plazo costaria, sobre el mismo paquete: una asimetria que invita a usar el camino
+   * equivocado.
+   *
+   * ⚠️ NO SE ESCRIBE NI UNA LINEA DE ARITMETICA. El importe lo derivan `ingresoBodegaPorResultado`
+   * (56) y `derivarIngresoOrden` (42/43) a partir del `resultado` de la gestion, al aprobarse el
+   * cierre que la recoja. Esta ficha no toca ninguna de las dos: el rechazo manual y el rechazo por
+   * plazo vencido facturan lo mismo porque comparten el `resultado`, no porque nadie lo copie.
+   *
+   * LO QUE NO HACE, y cada ausencia es una decision (R14/R16):
+   *   - NO toca `mensajero_asignado_id`: paridad con el escalado del cron, y ademas es CARGA — el
+   *     bloque 139 de la aprobacion busca las `rechazada` POR `mensajeroAsignadoId`, asi que
+   *     limpiarlo dejaria el paquete sin ruta de vuelta a la tienda.
+   *   - NO enciende `prioridad`: la orden no vuelve a reasignarse.
+   *   - NO toca `usuario.ordenEnGestionId` ni encola reoptimizacion: la orden salio de la ruta hace
+   *     tiempo (por eso este metodo no usa `this.jobRepo`).
+   *   - NO escribe `causa_devolucion` ni ubicacion: la causa describe una devolucion y la tienda
+   *     decide desde un escritorio, sin coordenadas que aportar.
+   *   - NO escribe ningun importe: el `data` del UPDATE toca exclusivamente `estatusId`.
+   */
+  async rechazarDesdeDevuelta(input: RechazarDesdeDevueltaInput): Promise<boolean> {
+    return transicionarDesdeDevuelta(this.prisma, {
+      ordenId: input.ordenId,
+      estatusDevueltaId: input.estatusDevueltaId,
+      estatusDestinoId: input.estatusRechazadaId,
+      origenTipo: ORIGEN_TIPO_RECHAZO_TIENDA, // R11/D8: familia propia, NO la del cron
+      actorUsuarioId: input.actorUsuarioId, // R11: la persona de la tienda que decidio
+      motivo: input.motivo, // R12: el mismo texto en la gestion y en el historial
+      llamador: "rechazarDesdeDevuelta",
+      // R8/R18: gestion sintetica `rechazada` con `cierre_id NULL`. Ese NULL es lo que deja que la
+      // recoja el SIGUIENTE cierre del mensajero por el mismo mecanismo que vincula las suyas
+      // (`crearCierre`), sin camino propio y sin mover dinero en este instante.
+      crearGestion: (tx, mensajeroId) =>
+        tx.gestionOrden.create({
+          data: {
+            ordenId: input.ordenId,
+            mensajeroId, // R9: el MENSAJERO, no la tienda. Es lo que la mete en un cierre.
+            resultado: RESULTADO_RECHAZADA, // D1: el mismo que escribe el cron
+            motivo: input.motivo, // R12: obligatorio en esta via
+            cierreId: null, // R18: ningun movimiento de dinero hasta que se apruebe el cierre
+          },
+          select: { id: true },
+        }),
     });
   }
 

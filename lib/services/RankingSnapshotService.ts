@@ -91,11 +91,23 @@ export class RankingSnapshotService implements IRankingSnapshotService {
     const fecha = fechaObjetivo(now);
     const { desde, hasta } = ventanaDelDia(fecha);
 
+    // Feature 246 (T6.3, R41/R46) — el dia congelado, en la convencion `@db.Date`. Es EXACTAMENTE
+    // el valor que ya se le pasa a `crearSnapshot` como `fecha` (mas abajo): no hay helper nuevo
+    // que escribir, y que sea el mismo valor deja dicho que el denominador congelado y la fila
+    // congelada hablan del mismo dia.
+    //
+    // R46 se cumple por el ALCANCE de la ficha, no por suerte: `fecha_reparto = X` solo puede
+    // escribirse eligiendo «hoy» el dia `X` o «mañana» el dia `X-1`, y las dos cosas ocurren ANTES
+    // de las 02:00 CR del dia `X+1`, que es cuando este cron congela `X`. Ninguna escritura
+    // posterior puede mover el denominador de un dia ya congelado. Con una fecha futura arbitraria
+    // esto dejaria de ser cierto — es un argumento mas a favor del alcance estrecho hoy/mañana.
+    const diaReparto = fechaComoDate(fecha);
+
     // Las mismas cuatro lecturas del vivo, sobre la ventana del dia YA CERRADO.
     const [mensajeros, entregadas, asignadas, premios] = await Promise.all([
       this.userRepo.listMensajeros(),
       this.rankingRepo.contarEntregadasPorMensajero(desde, hasta),
-      this.rankingRepo.contarAsignadasPorMensajero(desde, hasta),
+      this.rankingRepo.contarAsignadasPorMensajero(desde, hasta, diaReparto),
       this.premioRepo.listar(),
     ]);
 
@@ -133,7 +145,7 @@ export class RankingSnapshotService implements IRankingSnapshotService {
     // R11: aunque `filas` este vacio se escribe la cabecera. «Ese dia no hubo actividad» es
     // un hecho que hay que poder distinguir de «el cron no corrio esa fecha» (R26).
     const resultado = await this.snapshotRepo.crearSnapshot({
-      fecha: fechaComoDate(fecha),
+      fecha: diaReparto, // = `fechaComoDate(fecha)`: el mismo dia que filtro el denominador
       minAsignadasPodio: this.config.MIN_ASIGNADAS_PODIO, // R1: el umbral APLICADO
       filas,
     });

@@ -318,11 +318,22 @@ export const TRANSICIONES = {
     { to: "en_bodega_central", via: "recuperacion_manual", rol: "maestro/admin/adminSatelite" }, // #23
     { to: "en_bodega_satelite", via: "recuperacion_manual", rol: "adminSatelite" }, // #24
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #36 (defensa filas legadas)
-    // FEATURE 239: las SIETE salidas de `devuelta` se conservan INTACTAS. `devuelta` pasa a
-    // significar «devolucion ANCLADA» —confirmada en bodega, visible para la tienda y con el
-    // reloj corriendo—, y esas siete siguen siendo el camino de las ordenes ya ancladas. Lo que
-    // cambia es la ENTRADA: ya no se llega aqui gestionando (#14, retirada), se llega aprobando
-    // el cierre (#60).
+    // FEATURE 240 (D8/R6): LA OCTAVA SALIDA — el RECHAZO MANUAL de la tienda dueña. Mismo par
+    // origen->destino que #21, y por eso comparten par y no `via`: lo que las separa es QUIEN
+    // decide. #21 es el reloj (el cron de plazo vencido); esta es una persona de la tienda que
+    // sabe que ese paquete no se va a entregar y no quiere esperar al vencimiento (R25).
+    { to: "rechazada", via: "rechazo_tienda", rol: "adminTienda (dueña)" }, // #67 (240)
+    // ⏳ 2026-08-20 (feature 240): aqui decia «FEATURE 239: las SIETE salidas de `devuelta` se
+    // conservan INTACTAS». DEJA DE SER CIERTO y por eso se reescribe en vez de dejarlo: un
+    // comentario que describe un mundo que ya no existe es peor que ninguno. Lo que la 239 dijo y
+    // SIGUE valiendo: `devuelta` significa «devolucion ANCLADA» —confirmada en bodega, visible
+    // para la tienda y con el reloj corriendo—, y la ENTRADA es la aprobacion del cierre (#60), no
+    // una gestion (#14, retirada). Lo que cambia hoy es la SALIDA: son OCHO, y la nueva (#67) es
+    // la primera que lleva a `rechazada` sin que la decida el sistema.
+    //
+    // R7: NO se declara ninguna otra salida nueva de `devuelta`. En particular la tienda NO puede
+    // entregar, ni devolver otra vez, ni mandar a bodega: el paquete esta fisicamente en la bodega
+    // desde que se aprobo el cierre, y esos caminos tienen sus propios dueños (#19/#20/#23/#24).
   ],
   rechazada: [
     { to: "en_reparto", via: "deshacer_gestion", rol: "mensajero" }, // #33

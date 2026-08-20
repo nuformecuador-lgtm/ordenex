@@ -106,6 +106,10 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
       // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
       // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
       "gestion_tienda_ayuda",
+      // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda desde
+      // la devolucion anclada. Cuarta ficha seguida que pasa por aqui sin tocar este `down.sql`, y
+      // eso es exactamente lo que el patron busca: la foto historica no se retoca nunca.
+      "rechazo_tienda",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),

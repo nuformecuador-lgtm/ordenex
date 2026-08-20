@@ -966,7 +966,7 @@ function TotalItem({
 //
 // **Que significa que NO este el badge:** que la gestion la registro el mensajero. NO es «no lo
 // se»: `desdeAyudaTienda` es obligatorio en el DTO y se deriva del historial, que nace en la MISMA
-// transaccion que la gestion (ver `lib/utils/gestion-tienda-ayuda-flag.ts`). La ausencia es una
+// transaccion que la gestion (ver `lib/utils/gestion-de-la-tienda-flag.ts`). La ausencia es una
 // afirmacion, y por eso su test va emparejado con el de la presencia.
 
 /** Rotulo de la marca. Dice QUIEN, no solo que la fila es distinta, y cabe en una celda apretada. */

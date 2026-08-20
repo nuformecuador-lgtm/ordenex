@@ -46,6 +46,10 @@ const HIST_ASIGNACION = {
   origenTipo: "asignacion_satelite",
 } as const;
 
+// Feature 246 (T3.3, R7): el dia de reparto YA RESUELTO por el servicio (convencion `@db.Date`:
+// medianoche UTC de la fecha calendario CR). El repositorio no calcula fechas ni conoce el reloj.
+const FECHA_REPARTO = new Date("2026-08-21T00:00:00.000Z");
+
 beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
 });
@@ -64,6 +68,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       idEstado("por_recoger"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
+      FECHA_REPARTO,
     );
 
     // R14/R23: count refleja solo lo transicionado (rows.length del RETURNING).
@@ -102,6 +107,22 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
     expect(strings).toMatch(/RETURNING "id"/);
     // Feature 76/R23 (W3): el SET estampa asignado_at = NOW() junto a la asignacion.
     expect(strings).toMatch(/"asignado_at" = NOW\(\)/);
+    // ── FEATURE 246 (T3.3, R7/R17) ────────────────────────────────────────────────────────────
+    // El dia de reparto va en el MISMO `SET` que `asignado_at` (nunca en una segunda pasada) y
+    // entra PARAMETRIZADO, como TEXTO `YYYY-MM-DD` con `::date` explicito.
+    expect(strings).toMatch(/"fecha_reparto" = /);
+    expect(strings).toMatch(/::date/);
+    expect(values).toContain("2026-08-21");
+    // R6/R17: el dia lo decide el SERVIDOR, no la base. Nada de `NOW()::date` (que seria «hoy»
+    // segun el reloj de Postgres) y nada de aritmetica de zona horaria dentro del SQL — es la
+    // segunda definicion del dia que design §3 prohibe.
+    expect(strings).not.toMatch(/NOW\(\)::date/);
+    expect(strings).not.toMatch(/CURRENT_DATE/);
+    expect(strings).not.toMatch(/AT TIME ZONE/);
+    expect(strings).not.toMatch(/America\/Costa_Rica/);
+    expect(strings).not.toMatch(/interval/i);
+    // Y el valor NO viaja interpolado en el texto del SQL: viaja como parametro.
+    expect(strings).not.toMatch(/2026-08-21/);
     // Feature 101/R5 (gate F1.4-Q1): el SET apaga prioridad al reasignar desde bodega satelite.
     expect(strings).toMatch(/"prioridad" = false/);
   });
@@ -121,6 +142,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       idEstado("por_recoger"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
+      FECHA_REPARTO,
     );
 
     expect(count).toBe(1);
@@ -152,6 +174,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
       idEstado("por_recoger"),
       idEstado("en_bodega_satelite"),
       HIST_ASIGNACION,
+      FECHA_REPARTO,
     );
 
     expect(count).toBe(0);
@@ -170,6 +193,7 @@ describe("OrdenRepository.asignarSateliteLote (feature 34/R7/R14 + feature 49/#7
         idEstado("por_recoger"),
         idEstado("en_bodega_satelite"),
         HIST_ASIGNACION,
+        FECHA_REPARTO,
       ),
     ).toBe(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();
