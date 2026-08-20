@@ -46,11 +46,43 @@ export type HabilitarNovedadInput = z.infer<typeof habilitarNovedadSchema>;
  * una segunda lectura (mismo contrato que la solicitud de ayuda).
  *
  * `forbidden` es OPACO y hereda el de la 227 tal cual: rol no autorizado, orden inexistente, orden
- * de otra tienda o fuera de la ventana de escritura del `adminTienda` (`devuelta`) devuelven todos
- * lo mismo. Habilitar no abre ni un resquicio de informacion que el hilo no abriera ya.
+ * de otra tienda o fuera de la ventana de escritura del `adminTienda` devuelven todos lo mismo.
+ * Habilitar no abre ni un resquicio de informacion que el hilo no abriera ya.
+ *
+ * ⚠️ FEATURE 236 (T5.5 — D8, FIRMADA POR EL HUMANO EL 2026-08-19, R25) — `rescatada` DICE SI LA
+ * ORDEN SE MOVIO DE VERDAD.
+ *
+ * **Que pasaba.** Este resultado era el de la NOTA y nada mas: el del rescate se descartaba. Si el
+ * mensajero recuperaba la orden un segundo antes, la tienda publicaba su nota, la fila desaparecia
+ * de `/novedades` y el aviso decia «Orden habilitada» — sobre una orden que NADIE movio. Al
+ * recargar, volvia, y nada lo explicaba. Es una carrera poco frecuente, pero la pantalla afirmaba
+ * algo falso, que es exactamente lo que la 236 vino a corregir en los otros dos sitios de esa misma
+ * pantalla (el subtitulo y la pestaña mezclada).
+ *
+ * **Que NO cambia, y es lo importante:** la NOTA sigue siendo la puerta. `ok` sigue significando
+ * «la nota se publico», y publicarla sigue siendo la unica autorizacion (D2). `rescatada: false` es
+ * un `ok` de pleno derecho: la nota quedo en el hilo, no se perdio. Lo unico que se añade es la
+ * capacidad de DECIR que el rescate no se aplico, en vez de callarlo y afirmar lo contrario.
+ *
+ * ⚠️ PUNTO DE COORDINACION CON LA FICHA 240: este tipo lo va a volver a tocar («que debe ademas
+ * mover Habilitar»). Por eso D8 se firmo ANTES — si las dos fichas escriben sin acordarlo, una
+ * sobrescribe a la otra en silencio.
  */
 export type HabilitarNovedadServiceResult =
-  | { status: "ok"; nota: OrdenNotaDTO }
+  | {
+      status: "ok";
+      nota: OrdenNotaDTO;
+      /**
+       * `true` = la orden volvio a la ruta (`ayuda_tienda -> en_reparto`, por el punto unico de
+       * rescate de la 235). `false` = la nota se publico y la orden NO se movio, porque cuando se
+       * pidio ya no estaba en el estatus de ayuda (la carrera con «Recuperar» del mensajero, o una
+       * devolucion anclada, sobre la que el rescate es un no-op deliberado).
+       *
+       * OBLIGATORIO y sin default: un olvido de propagacion tiene que romper el typecheck, no
+       * dejar a la pantalla afirmando el caso feliz por omision — que es justamente el defecto.
+       */
+      rescatada: boolean;
+    }
   | NotaValidationError
   | { status: "forbidden" };
 

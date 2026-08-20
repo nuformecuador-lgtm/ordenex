@@ -77,7 +77,11 @@ describe("HabilitarNovedadService.habilitar", () => {
       actorTienda,
     );
 
-    expect(r).toEqual({ status: "ok", nota: NOTA });
+    // FEATURE 236 (T5.5 — D8, firmada el 2026-08-19, R25): el `ok` gana `rescatada`. El literal se
+    // actualiza en vez de relajarse porque ES EL CONTRATO: es lo que la pantalla lee para decidir
+    // si puede decir «la orden volvio a la ruta». Aqui el rescate SI se aplico (la orden estaba en
+    // `ayuda_tienda`), asi que `true`; su caso espejo esta al final del archivo.
+    expect(r).toEqual({ status: "ok", nota: NOTA, rescatada: true });
     // La nota viaja como CUERPO, con el actor de la sesion. El autor no viaja en el input.
     expect(publicar).toHaveBeenCalledWith(
       { ordenId: ORDEN, cuerpo: "El cliente pidio reintentar" },
@@ -184,9 +188,32 @@ describe("239/R23 + 235 — habilitar retira la AYUDA, y NUNCA una devolucion", 
     );
 
     // El resultado sigue siendo el de la NOTA: la puerta es la nota, no el rescate.
-    expect(r).toEqual({ status: "ok", nota: NOTA });
+    //
+    // FEATURE 236 (T5.5 — D8, firmada el 2026-08-19, R25) — Y AHORA EL NO-OP SE DICE. Hasta hoy el
+    // resultado del rescate se descartaba entero, asi que la pantalla no tenia forma de saber si
+    // habia pasado algo: publicaba la nota, quitaba la fila por optimismo y avisaba «Orden
+    // habilitada» sobre una orden que nadie movio. `rescatada: false` es un `ok` de pleno derecho
+    // —la nota se publico y quedo en el hilo— que ademas DICE que el estatus no cambio.
+    expect(r).toEqual({ status: "ok", nota: NOTA, rescatada: false });
     expect(publicar).toHaveBeenCalledTimes(1);
     expect(repo.transicionarAyuda).not.toHaveBeenCalled();
+  });
+
+  it("236/D8: `rescatada` distingue los dos desenlaces, y no es una constante", () => {
+    // El anti-vacuidad del par de arriba: los dos casos viven en describes distintos, asi que si
+    // alguien fijara `rescatada` a un literal los dos seguirian pasando por separado... salvo por
+    // este, que los pone uno al lado del otro sobre el MISMO servicio.
+    const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
+    const enAyuda = build(publicar, ordenParaHilo({ estatusValue: "ayuda_tienda" }));
+    const devuelta = build(publicar, ordenParaHilo({ estatusValue: "devuelta" }));
+
+    return Promise.all([
+      enAyuda.service.habilitar({ ordenId: ORDEN, nota: "una" }, actorTienda),
+      devuelta.service.habilitar({ ordenId: ORDEN, nota: "otra" }, actorTienda),
+    ]).then(([a, b]) => {
+      expect(a).toMatchObject({ status: "ok", rescatada: true });
+      expect(b).toMatchObject({ status: "ok", rescatada: false });
+    });
   });
 
   it("235: este servicio NO tiene ninguna via para apagar una marca persistida", async () => {

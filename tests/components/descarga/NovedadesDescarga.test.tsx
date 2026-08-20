@@ -42,17 +42,34 @@ vi.mock("@/hooks/useToast", () => ({
   }),
 }));
 
-// Las DOS lecturas del listado, cada una con su doble, porque lo que se mide es CUÁL alimenta el
+// Las CUATRO lecturas del listado, cada una con su doble, porque lo que se mide es CUÁL alimenta el
 // archivo: `paginado` es la que repagina la lista, `completo` la dedicada a la descarga.
-const { paginadoMock, completoMock } = vi.hoisted(() => ({
-  paginadoMock: vi.fn(),
-  completoMock: vi.fn(),
-}));
+//
+// Feature 236 (T4.2, D3/R37): son cuatro y no dos porque hay UNA DESCARGA POR PESTAÑA. Que cada
+// pareja tenga su doble es lo que permite afirmar la propiedad que D3 pide —«el archivo publica lo
+// que la pantalla enseña»— en vez de suponerla: si el módulo de la pestaña de ayuda llamara a la
+// lectura de devoluciones, el archivo traería las órdenes de la otra y este archivo lo vería.
+const { paginadoMock, completoMock, paginadoAyudaMock, completoAyudaMock } = vi.hoisted(
+  () => ({
+    paginadoMock: vi.fn(),
+    completoMock: vi.fn(),
+    paginadoAyudaMock: vi.fn(),
+    completoAyudaMock: vi.fn(),
+  }),
+);
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: (...a: unknown[]) => paginadoMock(...a),
   listarNovedadesCompletoAction: (...a: unknown[]) => completoMock(...a),
+  listarAyudaTiendaAction: (...a: unknown[]) => paginadoAyudaMock(...a),
+  listarAyudaTiendaCompletoAction: (...a: unknown[]) => completoAyudaMock(...a),
 }));
 vi.mock("@/lib/actions/resolver-novedad", () => ({ reprogramarNovedad: vi.fn() }));
+vi.mock("@/lib/actions/habilitar-novedad", () => ({ habilitarNovedad: vi.fn() }));
+vi.mock("@/lib/actions/orden-ayuda", () => ({
+  solicitarAyudaOrden: vi.fn(),
+  recuperarOrdenAyuda: vi.fn(),
+  registrarIntentoContactoOrden: vi.fn(),
+}));
 
 import { NovedadesModule } from "@/app/(app)/novedades/_components/NovedadesModule";
 
@@ -95,18 +112,64 @@ const CONJUNTO: NovedadDTO[] = [
   novedad({ id: "o3", numRemision: "REM-003", causa: "wrong_address", intentosEntrega: 0 }),
 ];
 
+/** El LISTADO ENTERO de la pestaña de AYUDA: órdenes en `ayuda_tienda`, que nunca se devolvieron. */
+const CONJUNTO_AYUDA: NovedadDTO[] = [
+  novedad({
+    id: "a1",
+    numRemision: "REM-A01",
+    estatusValue: "ayuda_tienda",
+    // El ARRASTRE: una causa de una devolución ANTERIOR ya deshecha. No describe por qué la orden
+    // está en la pantalla, y por eso ni la columna ni el valor pueden salir en el archivo (R26/R39).
+    causa: "not_found",
+    intentosContacto: 3,
+  }),
+  novedad({
+    id: "a2",
+    numRemision: "REM-A02",
+    estatusValue: "ayuda_tienda",
+    causa: null,
+    intentosContacto: 0,
+    numGuia: null,
+  }),
+];
+
 function renderModulo() {
   return render(
-    <NovedadesModule items={PAGINA} total={CONJUNTO.length} page={1} pageSize={PAGE_SIZE} />,
+    <NovedadesModule
+      grupo="devolucion"
+      items={PAGINA}
+      total={CONJUNTO.length}
+      page={1}
+      pageSize={PAGE_SIZE}
+    />,
+  );
+}
+
+function renderModuloAyuda() {
+  return render(
+    <NovedadesModule
+      grupo="ayuda"
+      items={[CONJUNTO_AYUDA[0]]}
+      total={CONJUNTO_AYUDA.length}
+      page={1}
+      pageSize={PAGE_SIZE}
+    />,
   );
 }
 
 const botonDescarga = () => screen.getByRole("button", { name: "Descargar Novedades" });
+const botonDescargaAyuda = () =>
+  screen.getByRole("button", { name: "Descargar Ayuda solicitada" });
 
 beforeEach(() => {
   vi.clearAllMocks();
   buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
   completoMock.mockResolvedValue({ status: "ok", items: CONJUNTO, total: CONJUNTO.length });
+  completoAyudaMock.mockResolvedValue({
+    status: "ok",
+    items: CONJUNTO_AYUDA,
+    total: CONJUNTO_AYUDA.length,
+  });
 });
 
 afterEach(() => {
@@ -200,5 +263,97 @@ describe("Novedades · descarga", () => {
     expect(descargarBlobMock).not.toHaveBeenCalled();
     // El mensaje dice qué hacer, no solo que no hubo archivo.
     expect(errorToastMock.mock.calls[0][0]).toContain("Vuelve a intentarlo");
+  });
+});
+
+// =================================================================================================
+// FEATURE 236 (T4.2 — D3/R37/R38/R39) — UNA DESCARGA POR PESTAÑA, Y CADA UNA SALE DE SU GRUPO.
+//
+// D3, firmada por el humano el 2026-08-19: «el archivo publica lo que la pantalla enseña». Si la
+// pantalla separa las dos poblaciones en dos pestañas, el archivo también. Hasta hoy las órdenes en
+// ayuda salían MEZCLADAS en el archivo de devoluciones, con la columna «Causa de devolución»
+// diciendo «Sin causa registrada» sobre una orden que NUNCA se devolvió: eso no es un hueco, es una
+// afirmación falsa con formato de dato.
+//
+// Coste de migración: CERO, y está medido — `devuelta` = 0 en producción el 2026-08-19, así que
+// nadie tiene un archivo viejo que cambie de forma bajo los pies (`progress/medicion_236.md`).
+//
+// Lo que estos casos vigilan y los de arriba no podrían: que el módulo de CADA pestaña llama a la
+// lectura de SU grupo. El corte lo hace el servidor, pero si la pantalla llamara a la lectura de la
+// otra, el archivo traería la población equivocada con el servidor impecable.
+// =================================================================================================
+describe("Novedades · descarga de la pestaña «Ayuda solicitada» (236/D3)", () => {
+  it("R39/R26: el archivo se llama como su pestaña y NO tiene columna de causa", async () => {
+    const user = userEvent.setup();
+    renderModuloAyuda();
+
+    await user.click(botonDescargaAyuda());
+    await waitFor(() => expect(descargarBlobMock).toHaveBeenCalledTimes(1));
+
+    const [, , nombreArchivo] = descargarBlobMock.mock.calls[0];
+    expect(nombreArchivo).toMatch(/^ayuda-solicitada-\d{4}-\d{2}-\d{2}\.xlsx$/);
+
+    const [columnas, filas, titulo] = buildXlsxRowsMock.mock.calls[0];
+    expect(titulo).toBe("Ayuda solicitada");
+    expect(columnas.map((c) => c.header)).toEqual([
+      "Nº Guía",
+      "Nº Remisión",
+      "Destinatario",
+      "Teléfono",
+      "Dirección",
+      "Ubicación",
+      "Producto",
+      "Monto a cobrar",
+      "Intentos de contacto",
+      "Intentos de entrega",
+    ]);
+    // R39: ni la columna, ni su valor, ni el texto que anuncia su ausencia.
+    expect(columnas.map((c) => c.header)).not.toContain("Causa de devolución");
+    expect(filas[0]).not.toHaveProperty("causa");
+    expect(JSON.stringify(filas)).not.toContain("Sin causa registrada");
+    // La columna PROPIA de esta pestaña sí viaja, con su `0` incluido (es un dato, no un hueco).
+    expect(filas[0].intentosContacto).toBe(3);
+    expect(filas[1].intentosContacto).toBe(0);
+  });
+
+  it("R37/R38: cada pestaña llama a la lectura de SU grupo, y a la del otro ni una vez", async () => {
+    const user = userEvent.setup();
+    renderModuloAyuda();
+
+    await user.click(botonDescargaAyuda());
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+
+    expect(completoAyudaMock).toHaveBeenCalledTimes(1);
+    expect(completoMock).not.toHaveBeenCalled();
+    // Y el archivo trae el LISTADO ENTERO del grupo, no la fila visible.
+    const [, filas] = buildXlsxRowsMock.mock.calls[0];
+    expect(filas.map((f) => f.numRemision)).toEqual(["REM-A01", "REM-A02"]);
+
+    // CONTROL POSITIVO en el sentido contrario: la pestaña de devoluciones sigue llamando a la
+    // suya, y NO a la de ayuda. Sin este par, «no se llamó» pasaría igual si nadie llamara a nada.
+    cleanup();
+    vi.clearAllMocks();
+    buildXlsxRowsMock.mockResolvedValue(new ArrayBuffer(8));
+    completoMock.mockResolvedValue({ status: "ok", items: CONJUNTO, total: CONJUNTO.length });
+    renderModulo();
+    await user.click(botonDescarga());
+    await waitFor(() => expect(buildXlsxRowsMock).toHaveBeenCalledTimes(1));
+    expect(completoMock).toHaveBeenCalledTimes(1);
+    expect(completoAyudaMock).not.toHaveBeenCalled();
+  });
+
+  it("el tope de filas de esta pestaña también lo evalúa el servidor: aviso y NINGÚN archivo", async () => {
+    const user = userEvent.setup();
+    completoAyudaMock.mockResolvedValue({ status: "limite_excedido", total: 7200, limite: 5000 });
+    renderModuloAyuda();
+
+    await user.click(botonDescargaAyuda());
+
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledTimes(1));
+    expect(buildXlsxRowsMock).not.toHaveBeenCalled();
+    expect(descargarBlobMock).not.toHaveBeenCalled();
+    const mensaje = errorToastMock.mock.calls[0][0] as string;
+    expect(mensaje).toContain("5000");
+    expect(mensaje).toContain("7200");
   });
 });

@@ -13,6 +13,7 @@ import type {
   ListarNovedadesServiceResult,
 } from "@/lib/interfaces/services/INovedadesService";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
+import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 import type { NovedadDTO } from "@/lib/types/novedad";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
@@ -100,7 +101,7 @@ export async function listarNovedadesAction(
     if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
     const { page } = listarNovedadesSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listar({ page, pageSize: PAGE_SIZE }, actor);
+    return service.listar({ page, pageSize: PAGE_SIZE, grupo: GRUPO_DEVOLUCION }, actor);
   });
   return isAppErrorShape(r) ? toNovedadesActionError(r) : r;
 }
@@ -109,6 +110,10 @@ export async function listarNovedadesAction(
  * El MISMO listado SIN recorte por pagina, para la DESCARGA del archivo de novedades. Espejo
  * exacto de la de arriba: mismo actor de sesion, mismo service, mismo `withErrorHandler`. El
  * tope de filas lo evalua y lo aplica el SERVICIO; aqui solo se transporta lo que decidio.
+ *
+ * Feature 236 (T3.1, R38): al fijar el grupo, este archivo DEJA DE TRAER las ordenes en ayuda —
+ * sin tocar su archivo de columnas—. Hasta hoy salian aqui con la columna «Causa de devolucion»
+ * diciendo «Sin causa registrada» sobre una orden que nunca se devolvio.
  */
 export async function listarNovedadesCompletoAction(
   input: unknown = {},
@@ -119,7 +124,78 @@ export async function listarNovedadesCompletoAction(
     if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
     listarNovedadesCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
-    return service.listarCompleto(actor);
+    return service.listarCompleto({ grupo: GRUPO_DEVOLUCION }, actor);
+  });
+  return isAppErrorShape(r) ? toNovedadesActionError(r) : r;
+}
+
+// =============================================================================================
+// Feature 236 (T2.6, design §4) — LA SUPERFICIE DE AYUDA: dos acciones propias, no una con bandera
+// =============================================================================================
+//
+// POR QUE EL GRUPO **NO** VIAJA EN EL INPUT. Si el cliente eligiera el grupo, estaria eligiendo QUE
+// ESTATUS SE CONSULTA, y este borde pasaria a tener un parametro de filtrado controlado desde fuera
+// sobre la pantalla que ya sufrio una fuga de visibilidad. Aunque zod acotara el enum, la forma del
+// riesgo es la misma. Con cuatro acciones, el grupo es una CONSTANTE DEL MODULO SERVIDOR: el cliente
+// elige a que funcion llama, no que filtra.
+//
+// Es el mismo criterio con el que `listarNovedadesCompletoSchema` es `z.object({}).strict()` —lista
+// blanca de CERO claves— para que un `tiendaId` inventado sea un error y no un parametro ignorado.
+//
+// Todo lo demas es copia literal de las dos de arriba: mismo `PAGE_SIZE`, mismos schemas, mismo
+// `withErrorHandler`, `unauthenticated` ANTES de tocar el service y `forbidden` desde el service.
+
+/** Constantes de MODULO SERVIDOR: el cliente no las puede elegir ni sobrescribir. */
+const GRUPO_DEVOLUCION: GrupoNovedad = "devolucion";
+const GRUPO_AYUDA: GrupoNovedad = "ayuda";
+
+/**
+ * R1/R12: la pagina (10/pagina) de las ordenes sobre las que los mensajeros de esta tienda PIDIERON
+ * AYUDA (`ayuda_tienda`). Ordenadas por la fecha de la solicitud, la que lleva mas esperando primero
+ * (D7/R17); el orden lo decide el servicio, no el cliente.
+ *
+ * SU SUPERFICIE (T4.1, cableada el 2026-08-19): la pestaña «Ayuda solicitada» de `/novedades` — el
+ * pre-fetch de la pagina 1 en `app/(app)/novedades/page.tsx` y el re-fetch de pagina en
+ * `NovedadesModule` via `RECURSOS_POR_GRUPO.ayuda`. Aqui vivio una anotacion `@sin-superficie`
+ * TRANSITORIA mientras la pantalla era otra tanda del mismo PR; se retiro al cablearla, que es lo
+ * que la guardia `superficie-de-uso` exige de toda anotacion en cuanto su motivo caduca.
+ */
+export async function listarAyudaTiendaAction(
+  input?: { page?: number },
+  deps: NovedadesDeps = {},
+): Promise<ListarNovedadesActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    const { page } = listarNovedadesSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listar({ page, pageSize: PAGE_SIZE, grupo: GRUPO_AYUDA }, actor);
+  });
+  return isAppErrorShape(r) ? toNovedadesActionError(r) : r;
+}
+
+/**
+ * R37: el MISMO listado de ayuda SIN recorte por pagina, para su DESCARGA propia (D3). Mismo
+ * alcance y mismo predicado que su pestaña — el archivo publica lo que la pantalla enseña.
+ *
+ * SU SUPERFICIE (T4.2, cableada el 2026-08-19): el `DescargarDatasetButton` de la pestaña «Ayuda
+ * solicitada», que la llama a traves de `RECURSOS_POR_GRUPO.ayuda.listarCompleto` con las columnas
+ * de `_components/ayuda-descarga-columnas.ts` —sin causa de devolucion (R39)—. Aqui vivio una
+ * anotacion `@sin-superficie` TRANSITORIA mientras la pantalla era otra tanda del mismo PR; se
+ * retiro al cablearla. Si hubiera sobrevivido, la pestaña habria salido SIN descarga y la tienda
+ * habria PERDIDO una capacidad que ya tenia (esas filas hoy se descargan, mezcladas): la regresion
+ * silenciosa que D3-(c) descartaba.
+ */
+export async function listarAyudaTiendaCompletoAction(
+  input: unknown = {},
+  deps: NovedadesDeps = {},
+): Promise<ListarNovedadesCompletoActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    listarNovedadesCompletoSchema.parse(input ?? {}); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.listarCompleto({ grupo: GRUPO_AYUDA }, actor);
   });
   return isAppErrorShape(r) ? toNovedadesActionError(r) : r;
 }

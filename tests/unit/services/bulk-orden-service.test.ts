@@ -93,8 +93,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
     transicionarAyuda: vi.fn().mockResolvedValue(true),
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
-    countDevueltasByTienda: vi.fn().mockResolvedValue(0),
-    findDevueltasByTienda: vi.fn().mockResolvedValue([]),
+    // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
+    countNovedadesByTienda: vi.fn().mockResolvedValue(0),
+    findNovedadesByTienda: vi.fn().mockResolvedValue([]),
+    findFechaSolicitudAyuda: vi.fn().mockResolvedValue(new Map()),
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),
