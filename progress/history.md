@@ -3618,3 +3618,40 @@ que queda **superada**.
   las descargas que la propia página inicia) y D8, que necesita **ganar la carrera** al mensajero.
 - ⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
   No en paralelo.**
+
+## 2026-08-20 — 241 (el bloqueo por cierre distingue a quién le toca mover ficha)
+
+**PR [#408](https://github.com/nuformecuador-lgtm/ordenex/pull/408)** · `sdd: false`: **la
+investigación fue la especificación**. Gate completo **1219 archivos / 15822 tests / 345 s**.
+
+- **El encargo fue «entender antes de arreglar», y era el correcto.** Un `git revert` habría
+  reintroducido íntegra la queja humana que originó el commit: **un cierre sin aprobar congelaba una
+  bodega satélite entera**, compañeros limpios incluidos.
+- **No subió un umbral: apagó el predicado.** Quedó en `> 1` y el invariante 109/R30 impide tener
+  dos, así que **ningún valor ≥ 1 significa nada** — incluidas **tres superficies que el propio
+  commit afirma no haber tocado**. Y eran **tres** guardas retiradas, no dos.
+- **La regla firmada distingue de quién es la pelota:** `solicitado` es espera del **admin**
+  —mediana 8,2 h, p90 22,1 h— y no bloquea nada; `vencido` y `rechazado` sí. **Recibir asignaciones
+  no se bloquea nunca.**
+- **La decisión de fondo:** «recibir» **no es un predicado que devuelva vacío, es un sitio donde no
+  hay predicado**. Por eso no se metió un parámetro: se **renombró** a
+  `findMensajerosBloqueadosParaGestion` y se **sacó de las interfaces** de asignación, donde ahora
+  **no se puede llamar**. La ficha nació de un nombre que no decía su política.
+- **Una guarda que se habría resucitado sola.** La versión **por zona** de `rutearABodegaSatelite`
+  no disparaba por el tope apagado; al reparar el predicado habría vuelto **sin que nadie lo
+  decidiera**. Se borró con firma.
+- 🔴 **Una frase que mentía, y en la dirección cara.** El aviso decía «no puedes gestionar **ni
+  recibir** nuevas asignaciones»: falso en las dos mitades, y le dice al mensajero que está **más
+  bloqueado de lo que está**, así que **espera de brazos cruzados una aprobación que ya no
+  necesita**. Su test la comparaba contra su propia constante — siempre verde. Al tirar del hilo, la
+  misma afirmación vivía en **cinco sitios de `lib/`**, **dos en `lib/interfaces/`**, que es el
+  contrato y lo que más se lee.
+- **Un tripwire que hizo su trabajo y nadie escuchó:** el de la 172 se puso rojo **en el commit que
+  cambió la lista**. Y de los «seis tests invertidos» que la investigación listó, **uno no lo era**
+  —se contó por su forma sintáctica— mientras **cuatro asertos que sí eran contrato** no estaban en
+  la lista.
+- **Deuda declarada:** re-medir producción antes de desplegar. Cuando se midió: **0 mensajeros con
+  cierre abierto** sobre 4 y **0 asignaciones históricas** a mensajero bloqueado sobre 26. Nada pasó
+  por el hueco — **el cero es suerte de calendario**.
+- **Nació una ficha de aquí:** la **246**, cuando el humano señaló que asignar de noche hace que el
+  cron deshaga la asignación. Su spec está escrito y su medición hecha.
