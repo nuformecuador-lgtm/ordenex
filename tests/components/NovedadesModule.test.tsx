@@ -11,9 +11,10 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { NovedadesModule } from "@/app/(app)/novedades/_components/NovedadesModule";
-import { listarNovedadesAction } from "@/lib/actions/novedades";
+import { listarAyudaTiendaAction, listarNovedadesAction } from "@/lib/actions/novedades";
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 import { registrarIntentoContactoOrden } from "@/lib/actions/orden-ayuda";
+import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
 import { reprogramarNovedad } from "@/lib/actions/resolver-novedad";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
@@ -56,9 +57,19 @@ vi.mock("@/lib/actions/orden-ayuda", () => ({
   registrarIntentoContactoOrden: vi.fn(),
 }));
 
+// Feature 237 (T7.3) — la Server Action que dispara la ventana «Resolver la orden por tu cuenta».
+// Se mockea por el mismo motivo que las otras: importarla de verdad arrastraria Prisma y Supabase
+// Storage a jsdom, y el archivo entero moriria al resolver el import, no en un caso rojo.
+vi.mock("@/lib/actions/gestion-desde-ayuda", () => ({
+  gestionarDesdeAyuda: vi.fn(),
+}));
+
 const reprogramarMock = vi.mocked(reprogramarNovedad);
 const habilitarMock = vi.mocked(habilitarNovedad);
 const intentoContactoMock = vi.mocked(registrarIntentoContactoOrden);
+const gestionarDesdeAyudaMock = vi.mocked(gestionarDesdeAyuda);
+/** La relectura de la PESTAÑA DE AYUDA: es la que la 237 dispara tras resolver (R27). */
+const listarAyudaMock = vi.mocked(listarAyudaTiendaAction);
 /** El re-fetch de página (R22). Sirve de anti-vacío: conmutar de vista NO debe invocarlo. */
 const listarNovedadesMock = vi.mocked(listarNovedadesAction);
 
@@ -348,7 +359,15 @@ describe("NovedadesModule", () => {
     expect(screen.getByText("Cliente no localizado")).toBeInTheDocument();
   });
 
-  it("sobre una orden que NO está devuelta no se ofrecen las acciones de devolución", () => {
+  // ⚠️ FEATURE 237 (T7.1, 2026-08-20) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO. Hasta hoy decía
+  // «sobre una orden que NO está devuelta no se ofrecen las acciones de devolución» y afirmaba que
+  // en la ayuda NO había «Reprogramar» ni «Rechazar», porque las dos de entonces presuponían una
+  // devolución que sobre una orden en la moto no existe. Lo que cambió es que la 237 declaró las
+  // dos aristas que faltaban desde `ayuda_tienda` y su productor: ahora los dos botones existen,
+  // pero son OTROS —claves propias, otro servicio, otra ventana— y por eso el caso se reescribe en
+  // vez de borrarse. La razón vieja sigue siendo cierta de las acciones de la DEVOLUCIÓN.
+  it("237: la orden en ayuda ofrece SUS dos desenlaces, que no son los de la devolución", async () => {
+    const user = userEvent.setup();
     render(
       <NovedadesModule
         grupo="ayuda"
@@ -359,12 +378,13 @@ describe("NovedadesModule", () => {
       />,
     );
 
-    // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
-    // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo (R23).
-    expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Rechazar la orden/ })).toBeNull();
-    // «Habilitar» SÍ: es el desenlace de la solicitud de ayuda del lado de la tienda (pedido
-    // humano 2026-08-18), y por eso es la única de las tres que no está atada a `devuelta`.
+    // Existen los dos, con los rótulos de D7.
+    expect(
+      screen.getByRole("button", { name: /^Reprogramar la orden/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Rechazar la orden/ })).toBeInTheDocument();
+    // «Habilitar» SÍ seguía: es el desenlace de la solicitud de ayuda del lado de la tienda
+    // (pedido humano 2026-08-18), y por eso es la única que nunca estuvo atada a `devuelta`.
     expect(
       screen.getByRole("button", { name: /^Habilitar la orden/ }),
     ).toBeInTheDocument();
@@ -372,11 +392,20 @@ describe("NovedadesModule", () => {
     expect(
       screen.getByRole("button", { name: /^Registrar un intento de contacto/ }),
     ).toBeInTheDocument();
-    // Feature 236 (R27/R22): y lo NUEVO — la conversación, que es por donde la tienda lee el
-    // motivo con el que el mensajero pidió la ayuda. Estuvo retirada desde el 2026-08-18.
+    // Feature 236 (R27/R22): la conversación, que es por donde la tienda lee el motivo con el que
+    // el mensajero pidió la ayuda. Estuvo retirada desde el 2026-08-18.
     expect(
       screen.getByRole("button", { name: /^Abrir la conversación de la orden/ }),
     ).toBeInTheDocument();
+
+    // Y «Reprogramar» lleva a la ventana de la 237, NO al modal de reprogramación de la feature
+    // 100: se distingue por el aviso del precio, que aquél no tiene y no puede tener. Se abre AL
+    // FINAL porque el diálogo es modal y esconde del árbol de accesibilidad todo lo de detrás.
+    await user.click(screen.getByRole("button", { name: /^Reprogramar la orden/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Resolver la orden por tu cuenta");
+    expect(dialog).toHaveTextContent("mueve el dinero igual");
+    expect(reprogramarMock).not.toHaveBeenCalled();
   });
 
   it("R21: sobre un estatus que no es de ningún grupo sólo quedan los de contacto", () => {
@@ -1605,5 +1634,234 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
 
     render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
     expect(screen.queryByText(/Intentos/)).toBeNull();
+  });
+});
+
+// =================================================================================================
+// FEATURE 237 (T7.3/T7.4 — R25/R27) — LA VENTANA CON LA QUE LA TIENDA RESUELVE, CABLEADA.
+// =================================================================================================
+//
+// Lo que estos casos protegen es el TRAMO entre el botón y la lista, que es donde 236/D8 encontró
+// el defecto sobre esta misma card: «Habilitar» quitaba la fila por optimismo y afirmaba haber
+// habilitado aunque la carrera dejara la orden quieta. Aquí hay más en juego: un `ok` significa que
+// se creó una gestión en el cierre de OTRA persona, con un intento y con dinero detrás.
+describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
+  function montarAyuda(over: Partial<NovedadDTO> = {}) {
+    render(
+      <NovedadesModule
+        grupo="ayuda"
+        items={[
+          novedad({
+            id: "o1",
+            destinatario: "Ana Cliente",
+            estatusValue: "ayuda_tienda",
+            ...over,
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+  }
+
+  /** Abre la ventana por el botón de la card y devuelve el diálogo. */
+  async function abrir(
+    user: ReturnType<typeof userEvent.setup>,
+    boton: "Reprogramar" | "Rechazar",
+  ) {
+    await user.click(
+      screen.getByRole("button", { name: boton + " la orden de Ana Cliente" }),
+    );
+    return screen.findByRole("dialog");
+  }
+
+  /** Rellena motivo y una foto (D2: obligatoria en los dos desenlaces) y confirma. */
+  async function completarYEnviar(
+    user: ReturnType<typeof userEvent.setup>,
+    dialog: HTMLElement,
+    confirmar: "Reprogramar" | "Rechazar",
+  ) {
+    await user.upload(
+      within(dialog).getByLabelText("Fotos de evidencia"),
+      new File(["x"], "f0.jpg", { type: "image/jpeg" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("list", { name: "Fotos de evidencia seleccionadas" }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Motivo"), {
+      target: { value: "El cliente ya no quiere el pedido" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: confirmar }));
+  }
+
+  it("T7.3: con la ventana cerrada NO está en el árbol", () => {
+    montarAyuda();
+    // La ausencia. Su par es el caso siguiente, que la abre: sin él, esto pasaría igual con la
+    // pantalla entera rota. Importa porque, montada siempre, la ventana traería un selector de
+    // fotos y una fecha por cada orden de la página.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Esto cuenta como una gestión del mensajero/)).toBeNull();
+  });
+
+  it("T7.3: «Rechazar» de la card abre la ventana, con su aviso del precio", async () => {
+    const user = userEvent.setup();
+    montarAyuda();
+
+    const dialog = await abrir(user, "Rechazar");
+
+    expect(dialog).toHaveTextContent("Resolver la orden por tu cuenta");
+    // El literal, a mano: es el que le dice a la tienda que está a punto de cobrarse a sí misma.
+    expect(
+      within(dialog).getByText(
+        "Esto cuenta como una gestión del mensajero: entra en su cierre del día, suma un intento de entrega y mueve el dinero igual. Por eso pide foto y motivo.",
+      ),
+    ).toBeInTheDocument();
+    // Y la orden que nombra es la de la fila, no otra de la página.
+    expect(dialog).toHaveTextContent("Ana Cliente");
+  });
+
+  it("T7.3: «Reprogramar» de la card abre la MISMA ventana, con el campo de fecha", async () => {
+    const user = userEvent.setup();
+    montarAyuda();
+
+    const dialog = await abrir(user, "Reprogramar");
+
+    expect(within(dialog).getByLabelText("Nueva fecha")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Reprogramar" })).toBeInTheDocument();
+  });
+
+  it("R27: tras el éxito lo dice, RELEE la pestaña y la fila sale de la lista", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "o1",
+      resultado: "rechazada",
+    });
+    // La relectura es la que quita la fila: el servidor ya no la lista y el total baja a 0. No se
+    // filtra en el cliente — es la lección de 236/D8 sobre esta misma card.
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden quedó rechazada."),
+    );
+    await waitFor(() => expect(listarAyudaMock).toHaveBeenCalledWith({ page: 1 }));
+    // La fila desaparece POR EL DATO: la lista de la pestaña ya no está y en su sitio queda el
+    // estado vacío. Con un `filter` de cliente esto pasaría igual, y por eso se afirma además la
+    // llamada de arriba: lo que se mide es que se releyó.
+    await waitFor(() =>
+      expect(screen.queryByRole("list", { name: "Órdenes con ayuda solicitada" })).toBeNull(),
+    );
+  });
+
+  it("R27: y al reprogramar el aviso nombra ESE desenlace, no el otro", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "o1",
+      resultado: "reprogramada",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Reprogramar");
+
+    await completarYEnviar(user, dialog, "Reprogramar");
+
+    // El par del caso anterior: si el aviso fuera uno solo («Listo»), los dos pasarían y la tienda
+    // no sabría cuál de las dos cosas acaba de hacer.
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden quedó reprogramada."),
+    );
+    expect(successMock).not.toHaveBeenCalledWith("La orden quedó rechazada.");
+  });
+
+  it("R25: con `conflict` NO afirma que resolvió, dice el texto del servidor y RECARGA", async () => {
+    // La carrera: el mensajero recuperó la orden —o la cortó la noche— entre que la tienda abrió la
+    // ventana y pulsó. NO se creó ninguna gestión, así que no hay intento ni cobro, y la pantalla
+    // no puede decir «La orden quedó rechazada». Es literalmente el defecto que 236/D8 arregló
+    // sobre esta misma card, con dinero detrás esta vez.
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "Esta orden ya no está esperando tu respuesta.",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(warningMock).toHaveBeenCalledWith(
+        "Esta orden ya no está esperando tu respuesta.",
+      ),
+    );
+    // Ni éxito ni error: el desenlace es otro, y se dice por su propio canal.
+    expect(successMock).not.toHaveBeenCalled();
+    // Y se RECARGA igual: la fila que ya no corresponde desaparece POR EL DATO, no por optimismo.
+    await waitFor(() => expect(listarAyudaMock).toHaveBeenCalledWith({ page: 1 }));
+  });
+
+  it("R22: un `forbidden` avisa con un texto opaco y NO recarga (no se movió nada)", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({ status: "forbidden" });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("No tenés permiso para resolver esta orden."),
+    );
+    // El borde no dice si la orden existe, en qué estado está ni de quién es; adivinar un motivo
+    // concreto aquí sería inventarlo. Y como no cambió nada, releer la página sería ruido.
+    expect(listarAyudaMock).not.toHaveBeenCalled();
+    expect(successMock).not.toHaveBeenCalled();
+  });
+
+  it("la ventana se cierra tras el desenlace, sea cual sea", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "Esta orden ya no está esperando tu respuesta.",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    // Dejarla abierta invitaría a un segundo envío sobre una orden que ya no está en ayuda.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

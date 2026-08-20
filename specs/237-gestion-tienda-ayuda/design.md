@@ -376,7 +376,16 @@ dinero de esta ficha.** Se prueba con mutación (T8.1).
   (`computeTotales` sólo suma `entregada`), y el ledger de la tienda recibe los débitos que
   `derivarIngresoOrden` decida para ese resultado. **Money-neutral en los conceptos propios del cierre.**
 - `rechazada` → **`cobroRechazado` de la tarifa** (`lib/utils/ingreso-bodega.ts:23`), que es **dinero
-  real** atribuido a la bodega y debitado a la tienda. La tarifa se resuelve por **zona + vehículo del
+  real** atribuido a la bodega.
+  > ⚠️ **CORREGIDO el 2026-08-20 tras la revisión: aquí decía «y debitado a la tienda», y es FALSO.**
+  > `cobroRechazado` **no** está en los seis conceptos del ledger de la tienda
+  > (`WALLET_INGRESO_CONCEPTO_SEED`) y sus únicos consumidores son `CierreBodegaRepository` y
+  > `CierreBodegaService`: es **ingreso de bodega**, no un cargo a la tienda.
+  > **Y ojo con la conclusión contraria, que también sería falsa:** un `rechazada` **sí** debita a la
+  > tienda —`ingreso_flete_devolucion` + IVA, vía `derivarIngresoOrden` → `WalletTiendaFeedService`—,
+  > sólo que por **otra** vía y desde **otra** tarifa (la vigente por tienda, congelada en
+  > `cierre_detail`). Son dos importes distintos con dos dueños distintos; confundirlos es lo que
+  > hacía esta frase. La tarifa se resuelve por **zona + vehículo del
   MENSAJERO** (`CierreDiaService.resolveTarifaMensajero`), no de la tienda: coherente con «cuenta como
   del mensajero». **Cuánto es, se mide en T0.3.**
 

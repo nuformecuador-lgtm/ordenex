@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { GESTION_MIME_EXTENSION, gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
+import { gestionConfig } from "@/lib/config/gestion";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -26,6 +26,11 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import {
+  compensarEvidencias,
+  subirEvidenciasCompensadas,
+  type EvidenciaSubida,
+} from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
@@ -457,12 +462,19 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }
 
     // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
-    // transaccion, acumulando en `uploaded` los paths ya subidos para poder COMPENSAR
-    // (storage.remove) ante cualquier fallo. El bucle secuencial hace la compensacion trivial:
-    // `uploaded` contiene EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un
-    // Promise.all que rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
-    const uploaded: string[] = [];
-    const evidencias: { storagePath: string; contentType: string; indice: number }[] = [];
+    // transaccion, acumulando los paths ya subidos para poder COMPENSAR (storage.remove) ante
+    // cualquier fallo. El bucle secuencial hace la compensacion trivial: lo acumulado contiene
+    // EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un `Promise.all` que
+    // rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
+    //
+    // FEATURE 237 (T4.2, D5) — 2026-08-20: el bucle y su compensacion VIVIAN AQUI y se extrajeron
+    // a `lib/services/evidencias-compensadas.ts`. La conducta observable no cambia (mismos paths,
+    // misma secuencia, misma compensacion en los dos fallos): lo que cambia es que ahora hay UN
+    // solo sitio donde arreglarla. El motivo: la 237 necesitaba exactamente esta maquinaria y ya
+    // habia DOS copias (esta y la de `IncidenteAdminService`); escribir la suya habrian sido tres.
+    // `IncidenteAdminService` queda como deuda declarada con dueño, no se arrastro aqui.
+    let uploaded: string[] = [];
+    let evidencias: EvidenciaSubida[] = [];
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
@@ -472,26 +484,17 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       // `min(1)`, asi que aqui nunca llega una lista vacia.
       input.resultado === "incidente"
     ) {
-      try {
-        for (let i = 0; i < input.evidencias.length; i++) {
-          const ev = input.evidencias[i];
-          const ext = GESTION_MIME_EXTENSION[ev.contentType as GestionMimeType] ?? "bin";
-          // `-i` garantiza unicidad del path entre las fotos de la MISMA gestion (mismo `Date.now()`).
-          const path = `${input.ordenId}/${input.resultado}-${Date.now()}-${i}.${ext}`;
-          const stored = await this.storage.upload({
-            path,
-            bytes: ev.bytes,
-            contentType: ev.contentType,
-          });
-          uploaded.push(stored);
-          evidencias.push({ storagePath: stored, contentType: ev.contentType, indice: i });
-        }
-      } catch (error) {
-        // R10: falla la subida #k -> borrar las k-1 ya subidas y NO persistir NADA (el repo ni
-        // se invoca). El fallo se propaga como error, no como resultado de dominio.
-        if (uploaded.length > 0) await this.storage.remove(uploaded);
-        throw error;
-      }
+      // R10: si falla la subida #k, el modulo borra las k-1 ya subidas y PROPAGA el error, asi que
+      // el repo ni se invoca y no persiste NADA. El fallo sigue siendo un error, no un resultado
+      // de dominio.
+      const subida = await subirEvidenciasCompensadas(this.storage, {
+        ordenId: input.ordenId,
+        // El prefijo es el `resultado`: distingue las fotos de dos gestiones sobre la MISMA orden.
+        prefijo: `${input.resultado}-`,
+        evidencias: input.evidencias,
+      });
+      uploaded = subida.paths;
+      evidencias = subida.evidencias;
     }
 
     const gestion = buildGestionData(input, evidencias);
@@ -512,7 +515,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     } catch (error) {
       // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
       // (best-effort) y propagar; no queda ninguna fila persistida.
-      if (uploaded.length > 0) await this.storage.remove(uploaded);
+      await compensarEvidencias(this.storage, uploaded);
       throw error;
     }
 

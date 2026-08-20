@@ -138,8 +138,34 @@ Lo que este cambio hace con Q5 es **cambiarle la forma**, con saldo mixto:
 - **Reutiliza la maquinaria de evidencias** de `MisAsignacionesService.gestionar` (subida
   compensada 1..N), no una segunda.
 - El dinero sale solo: los feeds leen `gestion_orden` y esta fila es una más.
-- `deshacerGestion` sigue funcionando sin tocarlo, **porque una orden en ayuda bloquea el cierre**.
-  Es la invariante que sostiene F3 y hay que probarla explícitamente.
+- ~~`deshacerGestion` sigue funcionando sin tocarlo, **porque una orden en ayuda bloquea el
+  cierre**.~~ ⏳ **CORREGIDO el 2026-08-20 al implementar la 237.** Esta frase juntaba **dos hechos
+  distintos**, y **los dos eran medio falsos**:
+
+  1. **«Una orden en ayuda bloquea el cierre»** es cierto al **crear** un cierre y **falso en las dos
+     rutas de re-solicitud** (`vencido → solicitado` y `rechazado → solicitado`), exentas de la
+     precondición de pendientes por anti-deadlock (111/R9, 109/R28). En esas dos rutas la gestión de
+     la tienda nace con `cierre_id = NULL` y **cae en el cierre siguiente**. El dinero no se rompe
+     —el snapshot viejo ya se congeló sin ella y acaba en **un** cierre, sólo que en otro— pero
+     cambia **en cuál** aparece. **Decisión D1, firmada el 2026-08-20: se acepta y se PRUEBA**
+     (237/R32, `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts` ejerce las dos
+     rutas exentas; `tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts` ejerce que cae en
+     el siguiente y en **uno solo**).
+     **Medido en producción el 2026-08-20:** 0 cierres en `vencido` y 0 en `rechazado` sobre 12 — la
+     ruta exenta es un **caso de borde**, no la normalidad. Pero es **alcanzable** (235/R25 deja
+     pedir ayuda estando bloqueado), y por eso el test no era opcional.
+  2. **«`deshacerGestion` sigue funcionando sin tocarlo»** era cierto… **y ése era el problema**. La
+     gestión de la tienda nace con `mensajero_id` = el mensajero (para caer en su cierre) y con
+     `cierre_id = NULL`, así que **pasa las ocho guardias**: el mensajero podía **revertir la
+     decisión de la tienda**, la orden volvía a `en_reparto` reasignada a él, y con ella
+     desaparecían el intento contado y el `cobroRechazado` — **sin que la tienda se enterara**,
+     porque la fila ya no está en ninguna de sus pestañas. **Decisión D3, firmada por el humano el
+     2026-08-20: NO se puede deshacer**, con mensaje accionable (237/R38). Los números lo
+     convirtieron de precaución en necesidad: **deshacer se usa (7 de 57 gestiones, 12 %)** y un
+     rechazo mueve **hasta ₡1.000**.
+
+  La propiedad `mensajero_id` está ahí para que la gestión **caiga en su cierre**, no para declarar
+  autoría. Nadie había decidido que un actor pudiera revertir al otro.
 
 ### F4 · Confirmación física al aprobar el cierre
 
@@ -279,7 +305,7 @@ por construcción**.
 
 ---
 
-## ADVERTENCIA HEREDADA PARA LA FICHA 237 — 2026-08-19
+## ADVERTENCIA HEREDADA PARA LA FICHA 237 — 2026-08-19 · ✅ RESUELTA el 2026-08-20
 
 Medido al implementar la 235, y hay que **probarlo, no asumirlo**:
 
@@ -296,3 +322,19 @@ próximo—, pero **cambia en qué cierre aparece**, y eso es exactamente lo que
 **La 237 tiene que escribir un requisito para ese caso y un test que lo ejerza.** Si se da por
 sentado el caso feliz, el defecto aparece en producción como una gestión que sale en el cierre de
 otro día.
+
+> ✅ **RESUELTA — 2026-08-20, ficha 237.** La advertencia se cumplió tal cual: el requisito es
+> **R32** («si el mensajero tiene un cierre sin resolver, la gestión queda vinculada al SIGUIENTE
+> cierre, y a uno solo: nunca a ninguno, nunca a dos») y la decisión que lo respalda es **D1**,
+> firmada como «se acepta y se prueba». No se da por sentado nada:
+>
+> - `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts` **ejerce las dos rutas
+>   exentas** (`vencido → solicitado` y `rechazado → solicitado`) y afirma que **ni consultan
+>   pendientes ni re-vinculan gestiones ni re-snapshotean totales**.
+> - `tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts` afirma las tres cosas sobre el
+>   almacén real: el cierre en curso **no** la contiene, sus totales **no** cambian (R31), y el
+>   **siguiente** sí la contiene — y sólo el siguiente.
+>
+> **Medición que acompaña la firma** (producción, 2026-08-20): 0 cierres en `vencido` y 0 en
+> `rechazado` sobre 12. Es un **borde**, no la normalidad, así que no hizo falta mitigación; pero es
+> alcanzable, y por eso el test existe.

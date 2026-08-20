@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
@@ -227,6 +228,43 @@ const DESHACER_DETALLE =
 const DESHACER_OK = "Gestión deshecha; la orden volvió a tu lista para gestionar.";
 const DESHACER_FORBIDDEN = "No podés deshacer esta gestión.";
 const DESHACER_ERROR = "No se pudo deshacer la gestión. Intentá de nuevo.";
+
+// =================================================================================================
+// FEATURE 237 (D3 firmada por el humano, R38) — «DEVOLVER A GESTION» NO SE OFRECE SOBRE LO QUE
+// REGISTRO LA TIENDA.
+// =================================================================================================
+//
+// **El defecto que cierra, encontrado VIENDO LA APP y no por la suite** (2026-08-20, recorrido T9.1):
+// el boton salia HABILITADO en la fila de una gestion de la tienda, abria su modal —que promete «la
+// orden volvera a tu lista para gestionar»— y el servidor lo rechazaba, correctamente, por la
+// guardia 3-bis de `CierreDiaService.deshacerGestion`. O sea: un boton que SIEMPRE falla, detras de
+// un modal que afirma lo que no va a pasar. Es la misma clase de defecto que la 235 quito de esta
+// pila («dejarlo seria un boton que siempre falla»), aqui del reves: no es un permiso sin
+// superficie, es una superficie sin permiso.
+//
+// **Por que DESHABILITADO CON SU MOTIVO y no oculto.** Ocultarlo deja la fila mas limpia, pero un
+// control que desaparece sin explicacion hace que el mensajero se pregunte por que en unas filas si
+// y en otras no — y esa pregunta es exactamente la que la marca «La tienda» de la fila acaba de
+// empezar a responder: la fila ya dice QUIEN la registro; decir aqui POR QUE no puede tocarla cierra
+// el razonamiento en el mismo sitio. Ademas es el tratamiento que ESTA MISMA PANTALLA ya usa para
+// «no podes, y este es el motivo»: el boton «Solicitar cierre» va `disabled` con `motivoBloqueo` en
+// su `title`. Y mantiene la columna «Acciones» alineada: todas las filas tienen su control en el
+// mismo sitio, una de ellas apagada — un «—» suelto entre botones se lee peor.
+//
+// **El motivo viaja tambien en el NOMBRE ACCESIBLE, no solo en `title`.** Un boton `disabled` sale
+// del orden de tabulacion, asi que su tooltip es inalcanzable con el teclado; poniendolo tambien en
+// el nombre, quien navega con lector de pantalla lo lee al recorrer la tabla. Misma tecnica que la
+// marca de la fila (`GESTION_TIENDA_BADGE_NOTA`).
+//
+// ⚠️ EL TEXTO ES EL MISMO que devuelve el servidor si alguien llega a la accion por otra via
+// (`MSG_GESTION_DE_LA_TIENDA`, `lib/services/CierreDiaService.ts`). Esta duplicado a proposito y hay
+// que decirlo: esa constante NO se exporta y traerla aqui arrastraria Prisma al navegador. Con el
+// boton apagado el mensaje del servidor es practicamente inalcanzable desde esta pantalla, asi que
+// el riesgo de que divergan es bajo — pero si alguien cambia uno, tiene que cambiar el otro: son
+// las dos mitades de la MISMA regla, dicha antes y despues.
+const DESHACER_BLOQUEO_TIENDA =
+  "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.";
+
 /** Nombre accesible del botón de la fila (R35): identifica SU orden, no el botón genérico. */
 function deshacerAriaLabel(g: CierreDetalleGestion): string {
   return `${DESHACER_LABEL} la orden ${g.numRemision} · ${g.destinatario}`;
@@ -906,12 +944,61 @@ function TotalItem({
   );
 }
 
+// =================================================================================================
+// FEATURE 237 (T7.5 — R41, D6 firmada por el humano) — LA FILA DICE QUIEN LA REGISTRO.
+// =================================================================================================
+//
+// **El problema, dicho con lo que le pasa a una persona.** Desde la 237 la TIENDA puede resolver
+// una orden que sigue en la moto del mensajero, y esa gestion se atribuye a el: entra en ESTE
+// cierre, suma un intento y mueve el mismo dinero. Sin la marca, el mensajero firma su cierre del
+// dia con una gestion que no hizo y una evidencia que no subio, y no puede explicarla si le
+// preguntan. La orden, ademas, ya desaparecio de su portal (R40), asi que esta pantalla es el UNICO
+// sitio donde la vuelve a ver.
+//
+// **Por que un `Badge` inline y no una columna propia.** Es el tratamiento que esta MISMA fila
+// (`CierreDetalleGestion`) ya usa para marcar la excepcion sin pagar una columna en cada registro:
+// `renderPagoMensajero` (56/R23) cuelga un badge del monto solo cuando falta la tarifa, con su nota
+// en `title`/`aria-label`. No se inventa nada. La alternativa —una columna al estilo de
+// `renderRechazoOrigen` (102/R9), que pinta badge en TODAS las filas— cuesta ancho en una tabla que
+// ya tiene diez columnas y `overflow-x-auto`, y obligaria a rotular «Vos» veinte veces para marcar
+// una. Aqui la marca viaja pegada al numero de guia, que es la celda mas corta y la primera que se
+// lee.
+//
+// **Que significa que NO este el badge:** que la gestion la registro el mensajero. NO es «no lo
+// se»: `desdeAyudaTienda` es obligatorio en el DTO y se deriva del historial, que nace en la MISMA
+// transaccion que la gestion (ver `lib/utils/gestion-tienda-ayuda-flag.ts`). La ausencia es una
+// afirmacion, y por eso su test va emparejado con el de la presencia.
+
+/** Rotulo de la marca. Dice QUIEN, no solo que la fila es distinta, y cabe en una celda apretada. */
+export const GESTION_TIENDA_BADGE_LABEL = "La tienda";
+
+/**
+ * La nota accesible del badge (`title` + `aria-label`). El rotulo dice quien; la nota dice lo que el
+ * mensajero necesita para explicarla si le preguntan: desde donde se hizo, que el motivo y la foto
+ * no son suyos, y que aun asi cuenta en este cierre.
+ */
+export const GESTION_TIENDA_BADGE_NOTA =
+  "Esta gestión la registró la tienda desde «Ayuda solicitada», no vos: el motivo y la foto son suyos. Cuenta en tu cierre igual.";
+
 // --- Columnas comunes a TODAS las secciones (R4; feature 158: tambien al grupo `incidente`) ---
 const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   {
     id: "numGuia",
     value: "Nº Guía",
-    render: (g) => <span className="font-semibold">{g.numGuia ?? "—"}</span>,
+    render: (g) => (
+      <span className="inline-flex items-center gap-2">
+        <span className="font-semibold">{g.numGuia ?? "—"}</span>
+        {g.desdeAyudaTienda ? (
+          <Badge
+            variant="secondary"
+            title={GESTION_TIENDA_BADGE_NOTA}
+            aria-label={GESTION_TIENDA_BADGE_NOTA}
+          >
+            {GESTION_TIENDA_BADGE_LABEL}
+          </Badge>
+        ) : null}
+      </span>
+    ),
   },
   { id: "numRemision", value: "Nº Remisión", minWidth: "120px" },
   { id: "destinatario", value: "Destinatario" },
@@ -955,18 +1042,29 @@ function columnasPara(
   const columnaAcciones: Column<CierreDetalleGestion> = {
     id: "acciones",
     value: DESHACER_COL,
-    render: (g) => (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-label={deshacerAriaLabel(g)}
-        disabled={deshaciendo === g.gestionId}
-        onClick={() => pedirDeshacer(g)}
-      >
-        {DESHACER_LABEL}
-      </Button>
-    ),
+    render: (g) => {
+      // Feature 237 (D3/R38): la gestion que registro LA TIENDA no la puede deshacer el mensajero.
+      // El servidor lo rechaza igual (guardia 3-bis) — esto no es la defensa, es no ofrecer una
+      // accion que solo puede acabar en error, y decir por que.
+      const bloqueadaPorTienda = g.desdeAyudaTienda;
+      return (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={
+            bloqueadaPorTienda
+              ? `${deshacerAriaLabel(g)} — no disponible: ${DESHACER_BLOQUEO_TIENDA}`
+              : deshacerAriaLabel(g)
+          }
+          title={bloqueadaPorTienda ? DESHACER_BLOQUEO_TIENDA : undefined}
+          disabled={bloqueadaPorTienda || deshaciendo === g.gestionId}
+          onClick={() => pedirDeshacer(g)}
+        >
+          {DESHACER_LABEL}
+        </Button>
+      );
+    },
   };
   if (resultado === "entregada") {
     return [

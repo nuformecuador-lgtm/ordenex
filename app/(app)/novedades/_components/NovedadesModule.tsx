@@ -36,6 +36,14 @@ import {
   filaDescargaAyuda,
   TITULO_DESCARGA_AYUDA,
 } from "./ayuda-descarga-columnas";
+import {
+  GestionarDesdeAyudaModal,
+  GESTION_AYUDA_ERROR_FORBIDDEN,
+  GESTION_AYUDA_ERROR_SESION,
+  GESTION_AYUDA_EXITO,
+  type DesenlaceGestionDesdeAyuda,
+  type ModoGestionDesdeAyuda,
+} from "./GestionarDesdeAyudaModal";
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
 import { HiloNotasNovedadModal } from "./HiloNotasNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
@@ -240,6 +248,14 @@ export function NovedadesModule({
   // pide al abrir UNA orden y NUNCA para la lista — seria una consulta por orden de la pagina
   // (N+1), y el contrato de `lib/types/novedad.ts` lo prohibe con esas palabras.
   const [ordenConHilo, setOrdenConHilo] = useState<NovedadDTO | null>(null);
+  // Feature 237 (T7.3): la orden que la tienda está a punto de RESOLVER, con el desenlace elegido
+  // (null = ventana cerrada). Va como UN estado con el modo dentro y no como dos estados: las dos
+  // acciones abren la MISMA ventana y no pueden estar abiertas a la vez, así que dos estados
+  // obligarían a preguntar cuál manda en cada render y admitirían el estado imposible «las dos».
+  const [ordenAGestionarDesdeAyuda, setOrdenAGestionarDesdeAyuda] = useState<{
+    orden: NovedadDTO;
+    modo: ModoGestionDesdeAyuda;
+  } | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -307,6 +323,46 @@ export function NovedadesModule({
     // `forbidden` es opaco a propósito (hereda el del hilo): no se traduce a un motivo
     // concreto porque el servidor no dice cuál es, y adivinarlo aquí sería inventarlo.
     toast.error("No se pudo habilitar la orden.");
+  }
+
+  /**
+   * ⚠️ FEATURE 237 (T7.3/T7.4, design §12.3 — R25/R27) — LO QUE LA PANTALLA HACE CON EL DESENLACE.
+   *
+   * **Los dos caminos RECARGAN, y ésa es la decisión.** Ni el éxito ni la carrera perdida quitan la
+   * fila con un `filter` de cliente: se relee la página de la pestaña por Server Action y la fila
+   * desaparece —o se queda— **por el dato**. Es literalmente la lección de 236/D8 sobre esta misma
+   * card: «Habilitar» quitaba la fila por optimismo y al recargar volvía, sin que nada lo
+   * explicara. Y con la relectura el TOTAL baja de verdad (R27), en vez de un contador que se
+   * decrementa a mano y puede desviarse del servidor.
+   *
+   * **`ok` y `conflict` se dicen DISTINTO** (R25): un `conflict` significa que la orden dejó de
+   * estar en ayuda entre que la tienda abrió la ventana y pulsó —el mensajero la recuperó, o la
+   * cortó la noche—, así que **no se creó ninguna gestión** y la pantalla no puede afirmar que
+   * resolvió. El texto lo redacta el SERVIDOR (`MENSAJES_GESTION_DESDE_AYUDA`) y se muestra tal
+   * cual: reescribirlo aquí serían dos verdades sobre la misma carrera.
+   *
+   * `forbidden` es OPACO a propósito (hereda el del hilo): el borde no dice si la orden existe, en
+   * qué estado está ni de quién es, así que adivinar un motivo concreto aquí sería inventarlo.
+   */
+  async function resolverDesdeAyuda(res: DesenlaceGestionDesdeAyuda) {
+    const pendiente = ordenAGestionarDesdeAyuda;
+    if (!pendiente) return;
+    setOrdenAGestionarDesdeAyuda(null);
+    if (res.status === "ok") {
+      toast.success(GESTION_AYUDA_EXITO[pendiente.modo]);
+      await cambiarPagina(page);
+      return;
+    }
+    if (res.status === "conflict") {
+      toast.warning(res.motivo);
+      await cambiarPagina(page);
+      return;
+    }
+    toast.error(
+      res.status === "forbidden"
+        ? GESTION_AYUDA_ERROR_FORBIDDEN
+        : GESTION_AYUDA_ERROR_SESION,
+    );
   }
 
   /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
@@ -433,6 +489,9 @@ export function NovedadesModule({
                   onHabilitar={setOrdenAHabilitar}
                   onDevolver={avisarNoDisponible}
                   onConversacion={setOrdenConHilo}
+                  onGestionarDesdeAyuda={(orden, modo) =>
+                    setOrdenAGestionarDesdeAyuda({ orden, modo })
+                  }
                 />
               }
             />
@@ -492,6 +551,27 @@ export function NovedadesModule({
           onOpenChange={(open) => {
             if (!open) setOrdenConHilo(null);
           }}
+        />
+      ) : null}
+
+      {/* Feature 237 (T7.3) — LA VENTANA CON LA QUE LA TIENDA RESUELVE. Mismo montaje condicional
+          y misma `key` que los tres de arriba, y aquí el motivo pesa más que en ellos: con la
+          ventana cerrada NO ESTÁ EN EL ÁRBOL, así que ni el selector de fotos ni la fecha de
+          mañana existen mientras se navega la lista, y `key={orden.id}` hace que el formulario
+          arranque vacío en cada apertura — una foto o un motivo heredados de la orden anterior
+          acabarían en la evidencia de un cobro que no les corresponde.
+
+          `modo` NO va en la `key`: cambiar de desenlace sobre la MISMA orden (abrir «Rechazar»
+          tras cerrar «Reprogramar») remonta igual porque el estado pasa por `null` al cerrarse. */}
+      {ordenAGestionarDesdeAyuda ? (
+        <GestionarDesdeAyudaModal
+          key={ordenAGestionarDesdeAyuda.orden.id}
+          orden={ordenAGestionarDesdeAyuda.orden}
+          modo={ordenAGestionarDesdeAyuda.modo}
+          onOpenChange={(open) => {
+            if (!open) setOrdenAGestionarDesdeAyuda(null);
+          }}
+          onResuelto={(res) => void resolverDesdeAyuda(res)}
         />
       ) : null}
     </div>

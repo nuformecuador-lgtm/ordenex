@@ -30,23 +30,23 @@
 > En esta pila **medir ya mató una decisión entera antes de llegar a firma** (la 236: los dos ceros
 > borraron la pregunta del backfill). Aquí puede pasar lo mismo con D1 y D3.
 
-- [ ] **T0.1 — Re-medir la población en ayuda** (consulta M1). La foto del 2026-08-19 (`ayuda_tienda`
+- [ ] **T0.1 — [DELIBERADAMENTE ABIERTA hasta el despliegue] Re-medir la población en ayuda** (consulta M1). La foto del 2026-08-19 (`ayuda_tienda`
       = 0 sobre 141 vivas) **caduca** en cuanto la 235 lleve días en producción.
       **Hecho:** los números en `progress/impl_237.md`. **Bloquea el despliegue, no T1.**
-- [ ] **T0.2 — ⚠️ LA MEDICIÓN QUE DECIDE D1** (consulta M2): cuántos cierres viven en `vencido` y
+- [x] **T0.2 — ⚠️ LA MEDICIÓN QUE DECIDE D1** (consulta M2): cuántos cierres viven en `vencido` y
       `rechazado`, y cuántos pasaron por `rechazado → solicitado`.
       **Hecho:** los dos números pegados, **y una frase que diga si la ruta exenta es un caso de borde
       o la normalidad.** Si es la normalidad, D1 deja de poder firmarse «se acepta y se prueba» sin
       hablar de mitigación. **Bloquea D1, y D1 bloquea T3.**
-- [ ] **T0.3 — Cuánto dinero mueve un rechazo** (consulta M3): rango de
+- [x] **T0.3 — Cuánto dinero mueve un rechazo** (consulta M3): rango de
       `tarifa_zona_mensajero.cobro_rechazado`.
       **Hecho:** min/max/media pegados. Es el importe que la tienda se cobra a sí misma con un click;
       va literalmente en la conversación de D3 y de D7. **Bloquea D3 y D7.**
-- [ ] **T0.4 — Cuánto se deshace hoy** (consulta M4): gestiones anuladas sobre el total, y gestiones
+- [x] **T0.4 — Cuánto se deshace hoy** (consulta M4): gestiones anuladas sobre el total, y gestiones
       sin cierre de más de 24 h.
       **Hecho:** los cuatro números. Dimensiona D3 (¿el deshacer se usa?) y da una cota real de cuánto
       tarda una gestión en caer en un cierre. **Bloquea D3.**
-- [ ] **T0.5 — Firmar las decisiones.** **D1** (la invariante), **D2** (evidencia al reprogramar),
+- [x] **T0.5 — Firmar las decisiones.** **D1** (la invariante), **D2** (evidencia al reprogramar),
       **D3** (¿puede el mensajero deshacer?), **D4** (el aviso de rechazo), **D5** (hasta dónde se
       extrae la subida), **D6** (qué ve el mensajero), **D7** (los textos), **D8** (el tope del motivo).
       **Hecho:** cada una respondida en `requirements.md` bajo «PUERTA HUMANA PASADA» y transcrita en
@@ -60,7 +60,7 @@
 
 ## T1 — El valor de enum *(inerte: puede salir suelta, y va sola por obligación técnica)*
 
-- [ ] **T1.1 — La migración.** `db/migrations/<ts>_orden_historial_origen_gestion_tienda_ayuda/`
+- [x] **T1.1 — La migración.** `db/migrations/<ts>_orden_historial_origen_gestion_tienda_ayuda/`
       con `migration.sql` (`ADD VALUE IF NOT EXISTS 'gestion_tienda_ayuda'`) y `down.sql` que
       **recrea el tipo con los 29 valores previos** — copia literal del molde de
       `db/migrations/20260819150000_orden_historial_origen_ayuda_tienda/down.sql`, incluida su
@@ -72,7 +72,7 @@
       **Hecho:** `pnpm run db:migrate` aplica y `pnpm run db:rollback` revierte limpio; test de
       integración propio con el molde de `tests/integration/db/ayuda-tienda-migration.test.ts`.
       **Depende de:** T0.5. **Cubre:** R47.
-- [ ] **T1.2 — El SEED del tipo.** `gestion_tienda_ayuda` entra en
+- [x] **T1.2 — El SEED del tipo.** `gestion_tienda_ayuda` entra en
       `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED` (`lib/types/orden-historial.ts`) con su comentario: qué
       transición produce, quién la dispara y **por qué sí entra en `ORIGEN_TIPOS_VISITA_REAL` cuando
       `reprogramacion_tienda` no** (el argumento de `design.md` §7.3, escrito ahí y en ningún otro
@@ -92,7 +92,7 @@
 > adelanta el escalado del cron de SLA (99) y dispara el `cobroRechazado` (56) antes de tiempo. Aquí
 > lo que se busca es exactamente eso **para esta familia y sólo para esta familia**.
 
-- [ ] **T2.1 — `ORIGEN_TIPOS_VISITA_REAL` gana `gestion_tienda_ayuda`.**
+- [x] **T2.1 — `ORIGEN_TIPOS_VISITA_REAL` gana `gestion_tienda_ayuda`.**
       **Hecho:** los **dos** tests que la fijan por igualdad se actualizan **a mano y con nota
       fechada**: `tests/unit/types/orden-historial-types.test.ts:125` y
       `tests/unit/types/criterio-intento-entrega.test.ts:90`.
@@ -103,12 +103,12 @@
       **Hecho también:** el caso R34-c de `criterio-intento-entrega.test.ts:98-107` **sigue verde sin
       tocarse** (deriva `fuera` de la lista) y sigue afirmando que `escalado_devuelta_sla` y
       `reprogramacion_tienda` quedan **fuera**. **Depende de:** T1.2. **Cubre:** R6.
-- [ ] **T2.2 — El intento se cuenta UNA vez.** Caso nuevo: una orden que pasó por ayuda y fue resuelta
+- [x] **T2.2 — El intento se cuenta UNA vez.** Caso nuevo: una orden que pasó por ayuda y fue resuelta
       por la tienda, con su cierre aprobado, cuenta **1** intento; con dos gestiones vigentes en el
       **mismo** cierre aprobado sigue contando **1** (el grano es el cierre, `groupBy(["cierreId"])`).
       **Hecho:** el caso vive junto a los del criterio único y nombra la familia nueva.
       **Depende de:** T2.1. **Cubre:** R7.
-- [ ] **T2.3 — [P] Lo que NO entra, afirmado.** `ORIGEN_TIPOS_CON_GESTION` **no cambia** (nuestras
+- [x] **T2.3 — [P] Lo que NO entra, afirmado.** `ORIGEN_TIPOS_CON_GESTION` **no cambia** (nuestras
       filas nacen con `gestion_orden_id` poblado, mismo caso que `escalado_devuelta_sla` y
       `anclaje_devolucion`) y `ORIGENES_SIN_EVENTO_PUBLICO` **no cambia** (la familia nueva **sí**
       emite evento público).
@@ -123,13 +123,13 @@
 
 ## T3 — Las dos aristas y su inventario *(mismo PR; backend)*
 
-- [ ] **T3.1 — Las aristas `#65` y `#66`** en `lib/types/order-status-transiciones.ts`, dentro de
+- [x] **T3.1 — Las aristas `#65` y `#66`** en `lib/types/order-status-transiciones.ts`, dentro de
       `ayuda_tienda`, con `via: "gestion_tienda_ayuda"`. **Y ninguna más** (R1): `entregada`,
       `devolucion_por_confirmar` e `incidente` **no se declaran**.
       **Hecho:** el bloque «LO QUE **NO** SE DECLARA» (`:283-291`) se **reescribe**, no se borra:
       deja de ser cierto para dos de las cinco, y hay que dejar dicho por qué las otras tres siguen
       fuera. **Depende de:** T1.2, T0.5 (D1). **Cubre:** R1, R45 (mitad).
-- [ ] **T3.2 — El inventario.** `tests/fixtures/inventario-transiciones-140.ts`: dos filas nuevas con
+- [x] **T3.2 — El inventario.** `tests/fixtures/inventario-transiciones-140.ts`: dos filas nuevas con
       su `callSite` real (`GestionDesdeAyudaService.gestionar → GestionOrdenRepository.crearGestionDesdeAyuda`),
       y `aristasFlujo: 59 → 61`, `paresUnicos: 57 → 59` (las dos altas son pares nuevos).
       **Hecho:** `tests/unit/domain/order-status-transiciones.guardia.test.ts` y
@@ -142,14 +142,14 @@
 
 ## T4 — La maquinaria de evidencias, extraída *(mismo PR; backend)*
 
-- [ ] **T4.1 — `lib/services/evidencias-compensadas.ts`** (módulo nuevo, sin Prisma y sin `next/*`):
+- [x] **T4.1 — `lib/services/evidencias-compensadas.ts`** (módulo nuevo, sin Prisma y sin `next/*`):
       `subirEvidenciasCompensadas(storage, { ordenId, prefijo, evidencias })` y
       `compensarEvidencias(storage, paths)`. Bucle **secuencial** y acumulación en `subidos`, tal cual
       está hoy: `Promise.all` haría imposible saber qué se subió antes del fallo.
       **Hecho:** tests propios: falla la subida #k → se retiran las k-1 y **no se devuelve nada**;
       subida completa → N paths e índices 0..N-1 **en orden**. **Depende de:** T0.5 (D5).
       **Cubre:** R17.
-- [ ] **T4.2 — Cablear `MisAsignacionesService.gestionar`** al módulo, **sin cambiar su conducta
+- [x] **T4.2 — Cablear `MisAsignacionesService.gestionar`** al módulo, **sin cambiar su conducta
       observable**: sigue subiendo antes de la transacción, sigue compensando en los dos fallos
       (subida y transacción) y sigue firmando las URLs igual.
       **Hecho:** `tests/unit/services/mis-asignaciones-evidencias.test.ts` **verde**; si algún caso
@@ -165,7 +165,7 @@
 
 ## T5 — El servicio, el repositorio y el borde *(mismo PR; backend)*
 
-- [ ] **T5.1 — `GestionOrdenRepository.crearGestionDesdeAyuda`** (`design.md` §4.4): `updateMany`
+- [x] **T5.1 — `GestionOrdenRepository.crearGestionDesdeAyuda`** (`design.md` §4.4): `updateMany`
       **guardado por `estatusId = ayuda_tienda`** → `count === 0` ⇒ `null` sin efectos; gestión con
       `mensajeroId` = el mensajero y `cierreId: null`; N filas de evidencia en la **misma**
       transacción; append por el choke point con `actorUsuarioId` = **la tienda** y
@@ -180,7 +180,7 @@
       (c) la fila nace con `cierre_id NULL` y el `mensajero_id` del **mensajero**; (d) el append lleva
       actor = **tienda** y la familia nueva; (e) un caso testigo afirma que **`usuario.update` no se
       llama**. **Depende de:** T3.1. **Cubre:** R2, R3, R4, R5, R9, R10, R24, R25, R28.
-- [ ] **T5.2 — `lib/types/gestion-desde-ayuda.ts`** (borde zod, `design.md` §11).
+- [x] **T5.2 — `lib/types/gestion-desde-ayuda.ts`** (borde zod, `design.md` §11).
       `RESULTADOS_DESDE_AYUDA` con **dos** literales; unión discriminada; `evidenciasSchema`,
       `motivoSchema` y `fechaFuturaSchema` **reutilizados** — los dos últimos hay que **exportarlos**
       desde `lib/types/gestion-orden.ts`, **no copiarlos**: una segunda copia de «mañana o posterior en
@@ -190,7 +190,7 @@
       o con foto de MIME/ tamaño inválido **no parsea**; fecha de hoy o pasada **no parsea**; y un caso
       afirma que **`entregada`, `devuelta` e `incidente` no son valores posibles** (R1).
       **Depende de:** T0.5 (D2, D8). **Cubre:** R1, R12, R13, R14.
-- [ ] **T5.3 — `GestionDesdeAyudaService`** con las ocho comprobaciones de `design.md` §6, en ese
+- [x] **T5.3 — `GestionDesdeAyudaService`** con las ocho comprobaciones de `design.md` §6, en ese
       orden. La autorización sale de `autorizarSobreHilo` + `estaEnVentanaDeEscritura` —**la misma
       puerta del hilo, estrechada a `adminTienda`**, no una segunda tabla de permisos—.
       **Hecho:** tests de servicio con un caso por puerta: rol ajeno ⇒ `forbidden`; **mensajero
@@ -199,12 +199,12 @@
       `conflict`; orden sin mensajero asignado ⇒ `conflict` **sin crear gestión**; catálogo incompleto
       ⇒ fallo cerrado; y el repo devolviendo `null` ⇒ `conflict` **y las evidencias compensadas**.
       **Depende de:** T5.1, T5.2, T4.1. **Cubre:** R8, R15, R16, R18, R19, R20, R21, R22, R23, R26.
-- [ ] **T5.4 — [P] La Server Action** `lib/actions/gestion-desde-ayuda.ts`: `FormData` con
+- [x] **T5.4 — [P] La Server Action** `lib/actions/gestion-desde-ayuda.ts`: `FormData` con
       `getAll("evidencia")`, `withErrorHandler`, `unauthenticated` **antes** de tocar el servicio.
       **Hecho:** `sin sesión ⇒ unauthenticated` sin ni una llamada al servicio; `resultado` inválido ⇒
       `validation_error`; N archivos ⇒ N evidencias con índices 0..N-1 en orden.
       **Depende de:** T5.3. **Cubre:** R13.
-- [ ] **T5.5 — El deshacer (D3).** **Sólo si D3 se firma como (b):** `deshacerGestion` rechaza con
+- [x] **T5.5 — El deshacer (D3).** **Sólo si D3 se firma como (b):** `deshacerGestion` rechaza con
       `conflict` y mensaje accionable las gestiones cuya transición lleva la familia nueva. La lectura
       usa **el mismo patrón** que `whereIntentosVigentes` (repetir `ordenId` dentro del `some` para
       entrar por `@@index([ordenId, createdAt])`), no un índice nuevo.
@@ -224,18 +224,18 @@ R23, R24, R25, R26, R28, R38, R39.
 > Sin código de producción nuevo: esta tanda **demuestra** lo que §7 y §8 del diseño afirman. Es la
 > tanda que la revisión va a leer primero.
 
-- [ ] **T6.1 — La gestión cae en el cierre del mensajero.** Un caso end-to-end de repositorio: la
+- [x] **T6.1 — La gestión cae en el cierre del mensajero.** Un caso end-to-end de repositorio: la
       tienda gestiona → `crearCierre` del mensajero la **vincula** (`{ mensajeroId, cierreId: null,
       anuladaAt: null }`) → aparece en `findGestionesPendientes` y en el snapshot con su fila de
       `cierre_detail`.
       **Hecho:** verde, **y con la mutación de T8.1 detrás**. **Depende de:** T5.1. **Cubre:** R29.
-- [ ] **T6.2 — El dinero es el mismo.** Comparación explícita: para el mismo resultado sobre la misma
+- [x] **T6.2 — El dinero es el mismo.** Comparación explícita: para el mismo resultado sobre la misma
       orden, los movimientos que producen los cinco feeds al aprobar el cierre son **iguales** venga
       la gestión del mensajero o de la tienda. En particular `rechazada` ⇒ `cobroRechazado` de la
       tarifa **del mensajero**, y `reprogramada` ⇒ `0.00` en pago e ingreso.
       **Hecho:** un caso por resultado, con los importes como **string** (nunca `number`).
       **Depende de:** T6.1. **Cubre:** R30.
-- [ ] **T6.3 — ⚠️ LA INVARIANTE (R32, D1).** El caso que la ficha daba por sentado y que hay que
+- [x] **T6.3 — ⚠️ LA INVARIANTE (R32, D1).** El caso que la ficha daba por sentado y que hay que
       **ejercer**: mensajero con cierre `rechazado` → pide ayuda → re-solicita por la ruta exenta
       (`CierreDiaService.ts:447`, que **no** consulta pendientes) → la tienda gestiona → la gestión
       nace con `cierre_id NULL`, **NO** está en el cierre en curso, y el **siguiente** `crearCierre` la
@@ -243,20 +243,20 @@ R23, R24, R25, R26, R28, R38, R39.
       **Hecho:** dos casos, uno por ruta, que afirman las tres cosas: (a) el cierre en curso **no** la
       contiene; (b) sus totales **no cambian** (R31); (c) el siguiente cierre **sí** la contiene, y
       **sólo** el siguiente. **Depende de:** T6.1, T0.5 (D1). **Cubre:** R31, R32.
-- [ ] **T6.4 — [P] El bloqueo y sus dos exenciones siguen como estaban.**
+- [x] **T6.4 — [P] El bloqueo y sus dos exenciones siguen como estaban.**
       **Hecho:** `ayuda_tienda` sigue en `ESTADOS_PENDIENTES` y bloquea la **creación**; las dos rutas
       de re-solicitud **siguen exentas**. Los casos de la 235 que lo afirman quedan **verdes sin
       tocarse** y se deja constancia. **Depende de:** T5.1. **Cubre:** R33, R34.
-- [ ] **T6.5 — [P] El paquete entra en la confirmación física.** Una gestión de la tienda
+- [x] **T6.5 — [P] El paquete entra en la confirmación física.** Una gestión de la tienda
       (`reprogramada` o `rechazada`) vinculada a un cierre aparece en
       `findGestionesRetornablesDelCierre` y **bloquea la aprobación** hasta que se confirme.
       **Hecho:** un caso por resultado. **Depende de:** T6.1. **Cubre:** R35.
-- [ ] **T6.6 — [P] Los KPI del mensajero no se mueven.** Antes y después de la gestión de la tienda, el
+- [x] **T6.6 — [P] Los KPI del mensajero no se mueven.** Antes y después de la gestión de la tienda, el
       «Total a cobrar del día» es **el mismo**: la orden sale de `conAyuda` y entra en
       `sumMontoCobrarGestionadas`. Y los dos sumandos siguen **disjuntos**.
       **Hecho:** un caso que compara el total antes/después y otro que afirma la disjunción.
       **Depende de:** T5.1. **Cubre:** R36.
-- [ ] **T6.7 — [P] Nada nuevo en la transacción de aprobación.**
+- [x] **T6.7 — [P] Nada nuevo en la transacción de aprobación.**
       **Hecho:** `tests/unit/repositories/cierres-admin-caja-cod.test.ts`,
       `cierres-admin-confirmacion-fisica.test.ts`, `cierres-admin-anclaje-devolucion.test.ts` e
       `cierres-admin-indemnizacion.test.ts` **verdes sin modificarse**, con su resultado pegado. Un
@@ -264,7 +264,7 @@ R23, R24, R25, R26, R28, R38, R39.
       Y un caso afirma que el bloque de **anclaje (239) nunca alcanza** una gestión de esta familia
       (sólo mira `resultado: "devuelta"`, y desde ayuda no se puede devolver).
       **Depende de:** T6.1. **Cubre:** R37.
-- [ ] **T6.8 — [P] El aviso de rechazo (D4).** Según la firma: con (a), un caso afirma que el rechazo
+- [x] **T6.8 — [P] El aviso de rechazo (D4).** Según la firma: con (a), un caso afirma que el rechazo
       de la tienda **no** emite «orden rechazada por el destinatario» —y el comentario de
       `lib/notificaciones/emitir.ts:130-137` deja escrito que la ausencia es **decisión**—; con (c), el
       aviso se emite con **texto propio** y su caso.
@@ -276,30 +276,30 @@ R23, R24, R25, R26, R28, R38, R39.
 
 ## T7 — La pantalla *(mismo PR; subagente de FRONTEND)*
 
-- [ ] **T7.1 — Dos celdas en `ACCIONES_POR_GRUPO`**: `reprogramarDesdeAyuda` y `rechazarDesdeAyuda` en
+- [x] **T7.1 — Dos celdas en `ACCIONES_POR_GRUPO`**: `reprogramarDesdeAyuda` y `rechazarDesdeAyuda` en
       el grupo `ayuda`, con **claves propias** (no las de `devolucion`: `design.md` §12.1). El
       comentario que dice «`reprogramar` y `rechazar` NO están en `ayuda`… es la ficha 237»
       (`novedad-acciones-catalogo.ts:58-61`) se **reescribe**, no se borra.
       **Hecho:** `tests/unit/types/novedad-acciones-catalogo.test.ts` fija el juego exacto del grupo
       `ayuda` (seis acciones) y sigue afirmando que ninguna acción declarada queda sin grupo.
       **Depende de:** T5.4, T0.5 (D7). **Cubre:** R1 (mitad).
-- [ ] **T7.2 — La ventana `GestionarDesdeAyudaModal`**, molde de `ReportarIncidenteModal`: un
+- [x] **T7.2 — La ventana `GestionarDesdeAyudaModal`**, molde de `ReportarIncidenteModal`: un
       componente con `modo`, motivo + 1..N fotos (con compresión y tope), fecha sólo en reprogramar, y
       **el aviso fijo de D7 arriba y siempre visible**.
       **Hecho:** tests de componente: el envío está **bloqueado** sin motivo, sin foto o sin fecha **y
       el motivo del bloqueo se lee con palabras**; el aviso del precio se lee tal cual; N fotos viajan
       como N valores de la clave `evidencia`; un `validation_error` del servidor se pinta **sin perder
       lo capturado**. **Depende de:** T7.1. **Cubre:** R12 (superficie), R13 (superficie).
-- [ ] **T7.3 — [P] Cablear en `NovedadesModule`**: estado `ordenAGestionarDesdeAyuda` con montaje
+- [x] **T7.3 — [P] Cablear en `NovedadesModule`**: estado `ordenAGestionarDesdeAyuda` con montaje
       condicional y `key={orden.id}`, mismo patrón que los tres modales que ya viven ahí.
       **Hecho:** con el modal cerrado, la ventana **no está en el árbol**; tras el éxito la fila sale de
       la pestaña y **el total baja**. **Depende de:** T7.2. **Cubre:** R27.
-- [ ] **T7.4 — [P] La carrera, dicha en pantalla (R25).** Si el servicio responde `conflict`, la
+- [x] **T7.4 — [P] La carrera, dicha en pantalla (R25).** Si el servicio responde `conflict`, la
       pantalla **no afirma** que gestionó: usa el texto de D7 y **recarga la página** para que la fila
       desaparezca por el dato y no por optimismo.
       **Hecho:** un caso para el camino feliz y otro para el `conflict`. Es literalmente la lección de
       236/D8 sobre esta misma card. **Depende de:** T7.3. **Cubre:** R25 (superficie).
-- [ ] **T7.5 — [P] El portal del mensajero (R40/R41, D6).** La orden desaparece de su apartado de
+- [x] **T7.5 — [P] El portal del mensajero (R40/R41, D6).** La orden desaparece de su apartado de
       ayuda (sale gratis: el portal lee tres estatus) **y** la fila del detalle de su cierre del día
       dice que la gestionó **la tienda**.
       **Hecho:** un caso lee el rótulo en la fila del cierre; y un caso afirma que el apartado de ayuda
@@ -315,24 +315,24 @@ R23, R24, R25, R26, R28, R38, R39.
 > ejecutado un test**. **Sin salida real pegada, la task no cuenta.** Y el log largo **no se canaliza
 > por `tail`**: se escribe a archivo y se lee después.
 
-- [ ] **T8.1 — 💰 El `mensajero_id` de la fila.** Cambiar `mensajeroId` por el de la tienda en
+- [x] **T8.1 — 💰 El `mensajero_id` de la fila.** Cambiar `mensajeroId` por el de la tienda en
       `crearGestionDesdeAyuda` y comprobar que **T6.1 y T6.2 caen**. Es la mutación que protege el
       dinero: con la tienda ahí, la gestión no se vincula a ningún cierre **nunca** y desaparece de los
       cinco feeds sin que nada falle.
       **Hecho:** salida real pegada en `progress/impl_237.md`, con los nombres de los tests que caen.
       **Depende de:** T6.
-- [ ] **T8.2 — 💰 La visita real.** Quitar `gestion_tienda_ayuda` de `ORIGEN_TIPOS_VISITA_REAL` y
+- [x] **T8.2 — 💰 La visita real.** Quitar `gestion_tienda_ayuda` de `ORIGEN_TIPOS_VISITA_REAL` y
       comprobar que **T2.1 y T2.2 caen**. Sin esto, la gestión de la tienda **no contaría como
       intento** y la ficha incumpliría su promesa central en silencio.
       **Hecho:** ídem, con salida real. **Depende de:** T2.
-- [ ] **T8.3 — La guarda de la carrera.** Quitar `estatusId` del `where` del `updateMany` y comprobar
+- [x] **T8.3 — La guarda de la carrera.** Quitar `estatusId` del `where` del `updateMany` y comprobar
       que caen los casos de T5.1(a)/(b) y T7.4. Es la mutación que protege contra que la tienda
       gestione una orden que el mensajero ya recuperó.
       **Hecho:** ídem. **Depende de:** T5, T7.
-- [ ] **T8.4 — [P] La compensación.** Hacer que `compensarEvidencias` no borre nada y comprobar que
+- [x] **T8.4 — [P] La compensación.** Hacer que `compensarEvidencias` no borre nada y comprobar que
       caen los casos de T4.1 y el de T5.3 («el repo devuelve `null` ⇒ evidencias compensadas»).
       **Hecho:** ídem. **Depende de:** T4, T5.
-- [ ] **T8.5 — Guardias completas.** `pnpm run test:guardias` entero, con **atención especial** a
+- [x] **T8.5 — Guardias completas.** `pnpm run test:guardias` entero, con **atención especial** a
       `anclaje-vs-intentos`, `deriva-primer-intento`, `novedad-acciones-una-tabla`,
       `gestion-ubicacion-solo-escritura`, `hilo-ventana-alcanzable`, `orden-nota-frontera`,
       `ordenes-columnas-money-safe`, `dinero-sin-centimos` y `aprobacion-escrituras-cubiertas`.
@@ -344,7 +344,7 @@ R23, R24, R25, R26, R28, R38, R39.
 
 ## T9 — VER LA APP, no sólo la suite
 
-- [ ] **T9.1 — El recorrido.** En esta pila un recorrido de minutos encontró **un cierre que no se
+- [x] **T9.1 — El recorrido.** En esta pila un recorrido de minutos encontró **un cierre que no se
       podía aprobar nunca** (238/T5.6) y **dos defectos de card** (235). Recorrido completo:
       1. como **mensajero**: pedir ayuda sobre una orden con monto a cobrar → anotar su «Total a
          cobrar del día»;
@@ -358,7 +358,11 @@ R23, R24, R25, R26, R28, R38, R39.
       6. intentar **deshacerla** y comprobar lo que D3 diga, **leyendo el mensaje**;
       7. solicitar cierre → como **admin**: aprobarlo, y comprobar que la ventana de confirmación
          física **pide ese paquete**;
-      8. aprobar → comprobar el `cobroRechazado` en la billetera de la tienda y el intento sumado;
+      8. aprobar → comprobar el `cobroRechazado` **en el ingreso de bodega del cierre** y el intento
+         sumado. ⚠️ **Corregido el 2026-08-20:** este paso decía «en la billetera de la tienda» y
+         **ahí no aparece** — `cobroRechazado` es ingreso de **bodega**. Lo que sí debita a la tienda
+         por un rechazo es `ingreso_flete_devolucion` + IVA, que es **otro** importe y sale de **otra**
+         tarifa;
       9. repetir el paso 3 con **reprogramar** y una fecha, y comprobar que la fecha de hoy se rechaza.
       **Hecho:** recorrido anotado paso a paso en `progress/recorrido_237.md` (archivo propio, no
       mezclado con la bitácora), **con los textos leídos tal cual del navegador**.
@@ -372,11 +376,11 @@ R23, R24, R25, R26, R28, R38, R39.
       >    basta: hay que **reiniciar** el servidor. Mirar el log antes que el código.
       > 3. **La base local necesita la migración de T1** (`prisma migrate deploy`) o el valor de enum
       >    no existe y el append falla en runtime, no en compilación.
-- [ ] **T9.2 — [P] Nada de PII en registros (R50).** Censo: ningún `console.*` ni registro de
+- [x] **T9.2 — [P] Nada de PII en registros (R50).** Censo: ningún `console.*` ni registro de
       diagnóstico de los archivos tocados emite el cuerpo del motivo, teléfono, dirección, nombre ni
       número de guía.
       **Hecho:** verde, con la lista de archivos barridos. **Depende de:** T8. **Cubre:** R50.
-- [ ] **T9.3 — [P] Lo que esta ficha NO toca (R48/R49).** Se corren y se deja constancia de que siguen
+- [x] **T9.3 — [P] Lo que esta ficha NO toca (R48/R49).** Se corren y se deja constancia de que siguen
       verdes **sin modificarse**: `tests/unit/services/habilitar-novedad-service.test.ts`,
       `tests/components/RepartoAyuda.test.tsx`, `tests/unit/repositories/orden-repository.novedades.test.ts`,
       `tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts` y las suites del corte diario y del
@@ -388,21 +392,21 @@ R23, R24, R25, R26, R28, R38, R39.
 
 ## T10 — Cierre documental
 
-- [ ] **T10.1 — [P] Corregir la invariante en el diseño de la pila.**
+- [x] **T10.1 — [P] Corregir la invariante en el diseño de la pila.**
       `progress/design_pila_ayuda_tienda.md` §F3: la frase «`deshacerGestion` sigue funcionando sin
       tocarlo, porque una orden en ayuda bloquea el cierre» **son dos hechos distintos y uno tiene dos
       excepciones**. Se anota con fecha, con lo medido en T0.2 y con la respuesta a D1/D3. La
       «ADVERTENCIA HEREDADA PARA LA FICHA 237» pasa a **resuelta**, citando R32 y su test.
       **Hecho:** ninguna de las dos secciones contradice al código.
-- [ ] **T10.2 — [P] Anotar el aterrizaje** en `progress/auditoria_ayuda_tienda.md` §4: cae «la gestión
+- [x] **T10.2 — [P] Anotar el aterrizaje** en `progress/auditoria_ayuda_tienda.md` §4: cae «la gestión
       de la tienda que cuenta como del mensajero».
       **Hecho:** la lista de ausencias queda con una menos, con fecha.
-- [ ] **T10.3 — [P] Los comentarios que dejan de ser ciertos**, reescritos y no borrados (con qué
+- [x] **T10.3 — [P] Los comentarios que dejan de ser ciertos**, reescritos y no borrados (con qué
       decían y por qué cambió): `lib/types/order-status-transiciones.ts:283-291`,
       `lib/types/orden-historial.ts:76-78` y
       `app/(app)/novedades/_components/novedad-acciones-catalogo.ts:58-61`.
       **Hecho:** ninguno describe un mundo que ya no existe. **Depende de:** T3, T7.
-- [ ] **T10.4 — Cerrar la ficha.** `feature_list.json` **lo estampa el leader**: estado y `status_note`
+- [x] **T10.4 — Cerrar la ficha.** `feature_list.json` **lo estampa el leader**: estado y `status_note`
       de 3-6 líneas técnicas (el detalle vive en `progress/`, no duplicado en el JSON).
       **Hecho:** `./init.sh` completo verde **con el árbol quieto**, el mapa `R<n> → test` en
       `progress/impl_237.md`, y el SHA medido comparado contra `origin/dev` **justo antes** de abrir el

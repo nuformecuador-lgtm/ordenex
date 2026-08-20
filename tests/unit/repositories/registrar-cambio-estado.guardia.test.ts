@@ -457,7 +457,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     // descuento sube de 15 a 18.
     // Feature 235 (2026-08-19): y las TRES que tocan `ayuda_tienda` (#62 la solicitud, #63 el
     // rescate, #64 el corte de la noche), asi que sube de 18 a 21.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 21; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239) + #62/#63/#64 (235)
+    // Feature 237 (2026-08-20): y las DOS que SALEN de `ayuda_tienda` hacia los desenlaces de la
+    // tienda (#65 `-> reprogramada`, #66 `-> rechazada`), asi que sube de 21 a 23.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 23; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239) + #62/#63/#64 (235) + #65/#66 (237)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );

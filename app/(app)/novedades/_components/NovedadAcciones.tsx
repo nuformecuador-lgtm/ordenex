@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { grupoDeEstatus } from "@/lib/types/novedad-grupo";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
+import type { ModoGestionDesdeAyuda } from "./GestionarDesdeAyudaModal";
 import { IntentoContactoAccion } from "./IntentoContactoAccion";
 import {
   ACCIONES_POR_GRUPO,
@@ -60,6 +61,22 @@ import {
 //
 // **No es un botón «Notas» de vuelta en las cards de devolución**: la conversación sale de la tabla
 // y hoy la tabla sólo se la da al grupo de ayuda.
+//
+// =================================================================================================
+// ⚠️ FEATURE 237 (T7.1, R1) — LA FILA DE AYUDA PASA DE «AVISAR» A «RESOLVER», Y ESO CUESTA DINERO.
+// =================================================================================================
+//
+// Hasta el 2026-08-20 la tienda podía leer el problema, responder en el hilo y devolverle la orden
+// al mensajero, pero no RESOLVERLA. Esta ficha añade sus dos desenlaces —«Reprogramar» y
+// «Rechazar»— y hay que decir aquí lo que un clic dispara: la gestión que crean se atribuye al
+// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (un
+// rechazo cobra a la tienda hasta ₡1.000, medido). El precio se dice con palabras en la ventana
+// (`GestionarDesdeAyudaModal`, aviso fijo de D7), no en este panel: aquí sólo se abre la puerta.
+//
+// Las dos acciones cuelgan de `ACCIONES_POR_GRUPO` como CELDAS, no de una condición suelta. Es la
+// misma regla de arriba y no una repetición ociosa: `reprogramar`/`rechazar` (del grupo de
+// devolución) llaman a OTRO servicio, así que reutilizar sus claves obligaría a ramificar por grupo
+// dentro de este componente — la decisión fuera de la tabla que la guardia de la 236 caza.
 
 export interface NovedadAccionesProps {
   novedad: NovedadDTO;
@@ -71,6 +88,14 @@ export interface NovedadAccionesProps {
   onDevolver: (novedad: NovedadDTO) => void;
   /** Feature 236 (R27): abre el HILO de notas de esta orden. */
   onConversacion: (novedad: NovedadDTO) => void;
+  /**
+   * Feature 237 (T7.1/T7.3): abre `GestionarDesdeAyudaModal` sobre esta orden en el modo pedido.
+   *
+   * **UN solo handler para las dos acciones, con el modo como parámetro**, y no dos props: las dos
+   * abren la MISMA ventana y sólo cambian el rótulo y el campo de fecha. Dos props obligarían al
+   * padre a mantener dos estados que nunca pueden estar abiertos a la vez.
+   */
+  onGestionarDesdeAyuda: (novedad: NovedadDTO, modo: ModoGestionDesdeAyuda) => void;
 }
 
 /** Cómo se pinta una acción de icono: su etiqueta visible, su icono y cómo se nombra a sí misma. */
@@ -132,6 +157,31 @@ const ICONO_POR_ACCION: Record<
     nombreAccesible: (destinatario) =>
       `Abrir la conversación de la orden de ${destinatario}`,
     onClick: (novedad, props) => props.onConversacion(novedad),
+  },
+  // ===============================================================================================
+  // FEATURE 237 (T7.1, D7 firmada) — LOS DOS DESENLACES QUE LA TIENDA PUEDE REGISTRAR DESDE AYUDA.
+  // ===============================================================================================
+  //
+  // Los RÓTULOS son «Reprogramar» y «Rechazar», sin la palabra «entrega» detrás y sin el verbo
+  // «gestionar»: 236/D6 firmó «gestionar» como VERBO DEL MENSAJERO, y aquí ese verbo describe el
+  // efecto —que se dice en el aviso de la ventana—, no la acción del botón.
+  //
+  // Los ICONOS son los MISMOS que las acciones homónimas del grupo de devolución, y eso es
+  // deliberado: `RotateCcw` y `Undo2` son los que el panel de gestión del mensajero usa para
+  // «Reprogramar» y «Devolver», así que las tres pantallas dicen lo mismo con el mismo dibujo. Las
+  // dos parejas NUNCA coinciden en una fila —cada una vive en un grupo— así que no hay ambigüedad
+  // que resolver con un icono distinto sólo por distinguir.
+  reprogramarDesdeAyuda: {
+    etiqueta: "Reprogramar",
+    Icono: RotateCcw,
+    nombreAccesible: (destinatario) => `Reprogramar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onGestionarDesdeAyuda(novedad, "reprogramar"),
+  },
+  rechazarDesdeAyuda: {
+    etiqueta: "Rechazar",
+    Icono: Undo2,
+    nombreAccesible: (destinatario) => `Rechazar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onGestionarDesdeAyuda(novedad, "rechazar"),
   },
 };
 

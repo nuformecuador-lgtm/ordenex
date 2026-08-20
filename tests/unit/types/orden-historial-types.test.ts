@@ -69,10 +69,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "anclaje_devolucion", // feature 239 (2026-08-19): CierresAdminRepository.resolverCierre (aprobar, devolucion_por_confirmar -> devuelta). El cron del SLA la busca POR ESTA FAMILIA para anclar el reloj
     "solicitud_ayuda_tienda", // feature 235 (2026-08-19): SolicitudAyudaService.solicitar (en_reparto -> ayuda_tienda, actor = el mensajero asignado)
     "rescate_ayuda_tienda", // feature 235 (2026-08-19): rescatarOrdenAyuda (ayuda_tienda -> en_reparto). UN productor, DOS puertas: «Recuperar» del mensajero y «Habilitar» de la tienda
+    "gestion_tienda_ayuda", // feature 237 (2026-08-20): GestionOrdenRepository.crearGestionDesdeAyuda (ayuda_tienda -> reprogramada|rechazada, actor = el adminTienda dueño). La UNICA de las tres de la ayuda que SI es visita real
   ];
 
-  it("contiene exactamente los 29 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(29); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda
+  it("contiene exactamente los 30 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(30); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 
@@ -120,9 +121,17 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
   it("235/R11: NINGUNA de las dos es VISITA REAL — pedir ayuda no es un intento de entrega", () => {
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("solicitud_ayuda_tienda");
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("rescate_ayuda_tienda");
-    // Y la lista sigue teniendo UN solo miembro: el censo cerrado es lo que impide que una
-    // familia futura entre de rebote.
-    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6) — EL CENSO PASA DE UNO A DOS MIEMBROS, a mano.
+    // Antes: `toEqual(["gestion"])`. Ahora `gestion_tienda_ayuda` entra, porque es EL DESENLACE de
+    // la visita que el mensajero si hizo (design 237 §7.3); las DOS familias de la 235 siguen
+    // fuera, que es lo que este caso vigila.
+    //
+    // ESTE LITERAL ES EL CONTRATO, no un polizon: es el censo CERRADO que impide que una familia
+    // futura entre de rebote y empiece a sumar intentos —y a cobrar `cobroRechazado` (56)— sin que
+    // nadie lo decida. Se ACTUALIZA A MANO cuando alguien decide una alta, y JAMAS se sustituye por
+    // una derivacion de su propia fuente: eso quedaria verde para siempre y el candado
+    // desapareceria sin que se notara.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   it("235: ninguna de las dos entra en `ORIGEN_TIPOS_CON_GESTION` (sus filas nacen sin gestion)", () => {
@@ -131,10 +140,27 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     expect([...ORIGEN_TIPOS_CON_GESTION]).toEqual(["gestion", "deshacer_gestion"]);
   });
 
-  it("235/P2: `gestion_tienda_ayuda` NO se declara aqui — nace con su productor (ficha 237)", () => {
-    // La convencion del repo, con precedente costoso: `incidente` (154) se declaro sin productor
-    // y «costo el tren 154+155+156». Este caso se pone rojo el dia que alguien lo adelante, y esa
-    // es su unica funcion.
-    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).not.toContain("gestion_tienda_ayuda");
+  // -------------------------------------------------------------------------------------------
+  // FEATURE 237 (T1.2/T2.1/T2.3, R5/R6/R43) — la TERCERA familia del viaje de la ayuda, la que
+  // resuelve la orden.
+  //
+  // ⏳ 2026-08-20: aqui vivia el caso «235/P2: `gestion_tienda_ayuda` NO se declara — nace con su
+  // productor (ficha 237)», que afirmaba `not.toContain`. Su unica funcion era ponerse rojo si
+  // alguien adelantaba el valor sin productor (precedente `incidente`, 154, que costo el tren
+  // 154+155+156). El productor ya existe —`GestionOrdenRepository.crearGestionDesdeAyuda`—, asi que
+  // el caso CUMPLIO y se invierte: ahora vigila lo contrario, que la familia este declarada en los
+  // DOS lados sin drift. No se borra, se le da la vuelta y queda escrito por que.
+  // -------------------------------------------------------------------------------------------
+  it("237/R5: la familia esta en el SEED y en el enum de la DB, sin drift en ninguna direccion", () => {
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("gestion_tienda_ayuda");
+    expect(Object.values(PrismaOrdenHistorialOrigenTipo)).toContain("gestion_tienda_ayuda");
+  });
+
+  it("237/R43: NO entra en `ORIGEN_TIPOS_CON_GESTION`, aunque su fila SI enlace gestion", () => {
+    // Esa lista solo desambigua la NULIDAD del enlace `gestion_orden_id` (67/R25-R26): sus filas
+    // nacen CON el enlace poblado, exactamente como `escalado_devuelta_sla` y `anclaje_devolucion`,
+    // que tampoco estan. El literal de arriba (`["gestion","deshacer_gestion"]`) sigue verde SIN
+    // tocarse, y esa inmovilidad es el punto.
+    expect([...ORIGEN_TIPOS_CON_GESTION]).not.toContain("gestion_tienda_ayuda");
   });
 });

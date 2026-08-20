@@ -14,6 +14,7 @@ import type {
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { ORIGEN_TIPO_GESTION_TIENDA_AYUDA } from "@/lib/utils/gestion-tienda-ayuda-flag";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
@@ -43,7 +44,16 @@ class NoAnulable extends Error {}
 // `tarifa` (el resolver batch corre DENTRO de esa misma tx, design §3.1).
 type CierrePrismaClient = Pick<
   PrismaClient,
-  "gestionOrden" | "orden" | "cierreDia" | "cierreDetail" | "tarifa" | "$transaction"
+  | "gestionOrden"
+  | "orden"
+  | "cierreDia"
+  | "cierreDetail"
+  | "tarifa"
+  // Feature 237 (T5.5, D3): + `ordenHistorialEstado` para LEER —solo leer— de que familia nacio
+  // una gestion candidata a deshacerse. Este repositorio no escribe historial: eso pasa siempre
+  // por el choke point (`appendCambioEstado`).
+  | "ordenHistorialEstado"
+  | "$transaction"
 >;
 
 // Feature 69 (design §3, paso 5) — proyeccion del snapshot: TODO lo que `cierre_detail`
@@ -161,7 +171,10 @@ function decimalToString(d: Prisma.Decimal | null): string | null {
 
 // Mapper de la proyeccion WITH_DETALLE a la fila de dominio. Exportado para reuso
 // por CierresAdminRepository (feature 38).
-export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
+export function toPendienteRow(
+  row: DetalleRow,
+  desdeAyudaTienda: boolean,
+): CierreGestionPendienteRow {
   return {
     gestionId: row.id,
     ordenId: row.ordenId,
@@ -196,6 +209,11 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 102/R11: la vista EN VIVO del mensajero (37) NO expone el desglose SLA -> `false`.
     // La clasificacion SLA solo la deriva el detalle del admin (38/40) desde el historial.
     esRechazoSla: false,
+    // 💰 Feature 237 (D6/R41): lo contrario que el de arriba — este SI se deriva para la vista del
+    // mensajero, porque es SU cierre el que tiene que decir que la gestion la hizo la tienda. Llega
+    // ya resuelto por `marcarDesdeAyudaTienda`, que lo lee EN LOTE (una consulta para las N filas,
+    // no una por fila).
+    desdeAyudaTienda,
     // Feature 158/R9: la causa SI viaja a la vista del mensajero — es el hecho que el mismo
     // reporto, no un dato de dinero ni de otro actor.
     causaIncidente: row.causaIncidente,
@@ -298,6 +316,42 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
   ) {}
 
+  /**
+   * 💰 Feature 237 (D6/R41) — ¿cuales de estas gestiones las registro LA TIENDA?
+   *
+   * UNA sola consulta para las N filas (nunca una por fila), y con `orden_id` DELANTE. Ese orden
+   * no es cosmetico y esta MEDIDO, no supuesto (2026-08-20, `EXPLAIN` sobre la base local con
+   * `enable_seqscan = off`):
+   *
+   *   - con `origen_tipo + gestion_orden_id` (lo que produce un `select` anidado de Prisma):
+   *     **Seq Scan**. `orden_historial_estado` NO tiene indice por `gestion_orden_id` —la FK no
+   *     crea indice en Postgres— y su unica alternativa es recorrer entero
+   *     `orden_historial_actor_origen_created_idx`, cuya columna guia es `actor_usuario_id`.
+   *   - añadiendo `orden_id`: **Bitmap Heap Scan** por
+   *     `orden_historial_estado_orden_id_created_at_idx`, tocando solo las filas de esas ordenes.
+   *
+   * Es el MISMO truco que documenta `whereIntentosVigentes` (`OrdenHistorialRepository`) y que usa
+   * `findGestionParaDeshacer` unas lineas mas abajo. **No se crea ningun indice nuevo**: se entra
+   * por el que ya existe. Sin esto, la pantalla mas caliente del cierre recorreria una tabla
+   * append-only que crece con CADA transicion del sistema.
+   *
+   * Lista vacia -> ni una consulta.
+   */
+  private async marcarDesdeAyudaTienda(rows: DetalleRow[]): Promise<Set<string>> {
+    if (rows.length === 0) return new Set();
+    const filas = await this.prisma.ordenHistorialEstado.findMany({
+      where: {
+        ordenId: { in: [...new Set(rows.map((r) => r.ordenId))] }, // la columna GUIA del indice
+        gestionOrdenId: { in: rows.map((r) => r.id) },
+        origenTipo: ORIGEN_TIPO_GESTION_TIENDA_AYUDA,
+      },
+      select: { gestionOrdenId: true },
+    });
+    return new Set(
+      filas.map((f) => f.gestionOrdenId).filter((id): id is string => id !== null),
+    );
+  }
+
   /** R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle. */
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
     const rows = await this.prisma.gestionOrden.findMany({
@@ -311,7 +365,8 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
-    return rows.map(toPendienteRow);
+    const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
+    return rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id)));
   }
 
   /** R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes. */
@@ -671,7 +726,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
-    return { cierre: toCierrePasadoDTO(cierre), gestiones: rows.map(toPendienteRow) };
+    const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
+    return {
+      cierre: toCierrePasadoDTO(cierre),
+      gestiones: rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id))),
+    };
   }
 
   /**
@@ -723,6 +782,27 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       },
     });
     if (row === null) return null;
+    // 💰 Feature 237 (T5.5, D3/R38) — ¿la registro LA TIENDA desde la pestaña de ayuda? Se deriva
+    // del historial, que es donde ya esta escrito quien la registro (`actor_usuario_id` +
+    // `origen_tipo`), en vez de una columna nueva que habria que mantener.
+    //
+    // ⚠️ EL `ordenId` REPETIDO NO ES DECORATIVO — es rendimiento, y es el mismo truco que usa
+    // `whereIntentosVigentes` (`OrdenHistorialRepository`). `orden_historial_estado` NO tiene
+    // indice por `gestion_orden_id`: los tres que existen son `[ordenId, createdAt]`,
+    // `[ordenId, estatusDestinoId]` y `[actorUsuarioId, origenTipo, createdAt]`, y la FK no crea
+    // indice en Postgres. Filtrando tambien por `orden_id` el planner entra por
+    // `@@index([ordenId, createdAt])` y `gestion_orden_id` queda como filtro residual sobre el
+    // puñado de filas de esa orden. Sin el, esta consulta recorreria entera una tabla append-only
+    // que crece con CADA transicion del sistema — en el camino de un boton. No se crea un indice
+    // nuevo: se copia el acceso que ya estaba medido.
+    const deLaTienda = await this.prisma.ordenHistorialEstado.findFirst({
+      where: {
+        ordenId: row.ordenId,
+        gestionOrdenId: row.id,
+        origenTipo: "gestion_tienda_ayuda",
+      },
+      select: { id: true },
+    });
     return {
       gestionId: row.id,
       ordenId: row.ordenId,
@@ -735,6 +815,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         estatusId: row.orden.estatusId, // R5: id REAL (guardia del UPDATE, sin re-resolver catalogo)
         estatusValue: row.orden.estatus.value,
       },
+      desdeAyudaTienda: deLaTienda !== null,
     };
   }
 

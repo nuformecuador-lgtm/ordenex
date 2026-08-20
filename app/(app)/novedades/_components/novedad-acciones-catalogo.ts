@@ -34,7 +34,19 @@ export type AccionNovedad =
   /** «+1 intento de contacto» y su contador (`IntentoContactoAccion`). */
   | "intentoContacto"
   /** «Conversación»: abre el hilo de notas de la orden. Lo NUEVO de esta ficha (R27). */
-  | "conversacion";
+  | "conversacion"
+  /**
+   * Feature 237 (R1, mitad de pantalla) — «Reprogramar» DESDE LA AYUDA. Abre
+   * `GestionarDesdeAyudaModal` en su modo de reprogramar y registra una gestion que cuenta como
+   * del mensajero.
+   *
+   * ⚠️ CLAVE PROPIA, NO `reprogramar`. Ver la nota de la tabla: reutilizar aquella obligaria a
+   * `NovedadAcciones` a ramificar POR GRUPO para elegir a que servicio llama, y esa es justo la
+   * decision fuera de la tabla que R18/R19 de la 236 prohiben.
+   */
+  | "reprogramarDesdeAyuda"
+  /** Feature 237 (R1, mitad de pantalla) — «Rechazar» DESDE LA AYUDA. Clave propia, idem. */
+  | "rechazarDesdeAyuda";
 
 /**
  * **LA TABLA.** Que ofrece cada grupo, en el orden en que se pinta.
@@ -55,13 +67,40 @@ export type AccionNovedad =
  * mitad visible. Lo que esta ficha SI hace es mover el defecto a UNA CELDA DE ESTA TABLA: para la
  * 240, corregirlo pasa a ser borrar una palabra de esta linea.
  *
- * `reprogramar` y `rechazar` NO estan en `ayuda` (R23): las dos presuponen una devolucion que sobre
- * una orden en ayuda no existe —el paquete sigue en la moto—, y `ReprogramacionTiendaService` ya
- * rechaza con `conflict` toda orden fuera de `devuelta`, asi que ofrecer el boton solo conseguiria
- * que la tienda descubriera el limite pulsandolo. Gestionar DESDE ayuda es la ficha 237.
+ * ⚠️ FEATURE 237 (T7.1, design §12.1 — R1) — LA AYUDA GANA SUS DOS DESENLACES, CON CLAVES PROPIAS.
+ *
+ * **Lo que esta linea decia hasta el 2026-08-20, y ya no es cierto:** «`reprogramar` y `rechazar`
+ * NO estan en `ayuda` (R23): las dos presuponen una devolucion que sobre una orden en ayuda no
+ * existe —el paquete sigue en la moto—, y `ReprogramacionTiendaService` ya rechaza con `conflict`
+ * toda orden fuera de `devuelta`, asi que ofrecer el boton solo conseguiria que la tienda
+ * descubriera el limite pulsandolo. Gestionar DESDE ayuda es la ficha 237».
+ *
+ * **Que cambio.** La 237 declaro las dos aristas que faltaban desde `ayuda_tienda` (#65 y #66) y su
+ * productor, asi que la tienda ya puede resolver: reprogramar y rechazar, y nada mas (R1). Lo que
+ * sigue siendo cierto de la frase de arriba es su MOTIVO, y por eso las claves son OTRAS:
+ * `reprogramar` sigue significando «reprogramar una DEVOLUCION» (`ReprogramacionTiendaService`,
+ * feature 100) y `rechazar` sigue siendo la maqueta de la 240. Las dos nuevas van a otro servicio,
+ * otro modal y otro estado de origen.
+ *
+ * **Por que claves propias y no las de `devolucion`** (design §12.1, alternativa E descartada): si
+ * se reutilizaran, `NovedadAcciones` tendria que RAMIFICAR POR GRUPO para elegir a que servicio
+ * llama —uno en la devolucion, otro en la ayuda— y eso es exactamente la decision fuera de la tabla
+ * que R18/R19 de la 236 prohiben, con su guardia vigilandolo. Con claves propias cada accion tiene
+ * UN handler y la tabla sigue siendo el censo completo.
+ *
+ * **Y ninguna mas.** `entregada`, `devolucion_por_confirmar` e `incidente` no tienen arista
+ * declarada desde la ayuda ni productor, asi que tampoco tienen boton: la tienda no puede declarar
+ * entregado un paquete que no vio.
  */
 export const ACCIONES_POR_GRUPO = {
-  ayuda: ["contacto", "habilitar", "conversacion", "intentoContacto"],
+  ayuda: [
+    "contacto",
+    "reprogramarDesdeAyuda",
+    "rechazarDesdeAyuda",
+    "habilitar",
+    "conversacion",
+    "intentoContacto",
+  ],
   devolucion: ["contacto", "reprogramar", "habilitar", "rechazar"],
 } as const satisfies Record<GrupoNovedad, readonly AccionNovedad[]>;
 
@@ -71,7 +110,8 @@ export const ACCIONES_POR_GRUPO = {
  *
  * Queda `contacto` porque llamar o escribirle al destinatario no resuelve la orden ni presupone
  * nada de su estado — es informacion de contacto que la fila ya trae. Todo lo demas (reprogramar,
- * habilitar, rechazar, la conversacion y el contador) se retira.
+ * habilitar, rechazar, los dos desenlaces desde la ayuda de la 237, la conversacion y el contador)
+ * se retira.
  *
  * No puede ocurrir con los predicados del servidor —solo lista esos dos estados— y precisamente por
  * eso esta escrito: el dia que un tercer camino traiga una fila por otra via, la pantalla no se

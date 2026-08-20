@@ -51,7 +51,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
 // productor»— y el precedente de lo contrario esta escrito en el repo: la 154 declaro #43/#44 sin
 // productor y «costo el tren 154+155+156».
 // ---------------------------------------------------------------------------------------------
-describe("235 — el estatus de ayuda: sus tres aristas, y ni una mas (R12)", () => {
+describe("235+237 — el estatus de ayuda: sus CUATRO salidas, y ni una mas (235/R12, 237/R1)", () => {
   it("235/R2: `en_reparto -> ayuda_tienda` es legal (#62, la solicitud del mensajero)", () => {
     expect(() => assertTransicionValida("en_reparto", "ayuda_tienda")).not.toThrow();
   });
@@ -64,29 +64,44 @@ describe("235 — el estatus de ayuda: sus tres aristas, y ni una mas (R12)", ()
     expect(() => assertTransicionValida("ayuda_tienda", "sin_gestionar")).not.toThrow();
   });
 
-  it("235/R12: las salidas de `ayuda_tienda` son EXACTAMENTE esas dos, enumeradas enteras", () => {
+  it("237/R1: `ayuda_tienda -> reprogramada` es legal (#65, la tienda reprograma desde ayuda)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "reprogramada")).not.toThrow();
+  });
+
+  it("237/R1: `ayuda_tienda -> rechazada` es legal (#66, la tienda rechaza desde ayuda)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "rechazada")).not.toThrow();
+  });
+
+  it("235/R12 + 237/R1: las salidas de `ayuda_tienda` son EXACTAMENTE esas cuatro, enumeradas enteras", () => {
     // Censo CERRADO sobre el mapa real. Una salida de mas aqui es una arista sin productor (el
     // fallo de la 154); una de menos deja el estatus convertido en un POZO del que no se sale.
+    //
+    // ⏳ 2026-08-20 (feature 237): pasa de DOS a CUATRO. Las dos altas llegan CON su productor
+    // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`), y
+    // comparten `via` porque son el mismo acto con dos resultados.
     const salidas = TRANSICIONES.ayuda_tienda.map((d) => `${d.to} (${d.via})`).sort();
     expect(salidas).toEqual([
       "en_reparto (rescate_ayuda_tienda)",
+      "rechazada (gestion_tienda_ayuda)",
+      "reprogramada (gestion_tienda_ayuda)",
       "sin_gestionar (corte_sin_gestionar)",
     ]);
   });
 
   it.each([
-    // Las CINCO gestiones. Son de la ficha 237 y llegan CON su productor (`gestionarDesdeAyuda`).
-    // Si alguna de estas se vuelve legal antes que la 237, este caso lo dice.
+    // ⏳ 2026-08-20 (feature 237): `reprogramada` y `rechazada` SALEN de esta lista — ya son
+    // legales, con productor, dos casos mas arriba. Las TRES que quedan siguen ilegales A
+    // PROPOSITO (237/R1): la tienda no puede declarar entregado un paquete que no vio, ni devolver
+    // por su cuenta lo que sigue en la moto, ni reportar un incidente que no presencio. Si alguna
+    // se vuelve legal sin traer su productor, este caso lo dice.
     ["entregada"],
-    ["reprogramada"],
     ["devolucion_por_confirmar"],
-    ["rechazada"],
     ["incidente"],
     // Y las dos bodegas: no hay recuperacion manual desde aqui, el paquete esta en la moto.
     ["en_bodega_central"],
     ["en_bodega_satelite"],
   ] as const)(
-    "235/R12: `ayuda_tienda -> %s` sigue siendo ILEGAL (su productor no existe todavia)",
+    "235/R12 + 237/R1: `ayuda_tienda -> %s` sigue siendo ILEGAL (no tiene productor)",
     (destino) => {
       expect(() => assertTransicionValida("ayuda_tienda", destino)).toThrow(TransicionIlegalError);
     },
@@ -443,8 +458,11 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // da de BAJA una arista de `gestion`.
     // Feature 235 (2026-08-19): 56 -> 59 y 54 -> 57. Suma #62/#63/#64 (tres pares NUEVOS) y NO
     // retira ninguna: pedir ayuda no sustituye a ningun desenlace de `en_reparto`, lo anade.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(59); // +2: 157; +3 -1: 239; +3: 235
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(57); // +2: 157; +3 -1: 239; +3: 235
+    // Feature 237 (2026-08-20): 59 -> 61 y 57 -> 59. Suma #65/#66 (`ayuda_tienda -> reprogramada`
+    // y `-> rechazada`, dos pares NUEVOS) y NO retira ninguna. Comparten `via` entre si, pero un
+    // par lo define origen -> destino, asi que cuentan como dos en las dos columnas.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(61); // +2: 157; +3 -1: 239; +3: 235; +2: 237
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(59); // +2: 157; +3 -1: 239; +3: 235; +2: 237
   });
 });
 
@@ -639,10 +657,11 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 158/PR1: 41/39/2 -> 42/40/2 con #53 (`incidente -> en_reparto`), par NUEVO.
   // Feature 158/PR2: 42/40/2 -> 52/50/2 con las diez del ADMIN, las diez pares NUEVOS.
   // Feature 239 (2026-08-19): 54/52/2 -> 56/54/2 con #59/#60/#61 (pares nuevos) menos #14.
-  it("los recuentos del inventario son 59 flujo / 57 pares / 2 creacion", () => {
+  // Feature 237 (2026-08-20): 59/57/2 -> 61/59/2 con #65/#66 (pares nuevos), sin bajas.
+  it("los recuentos del inventario son 61 flujo / 59 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 59, // feature 235 (2026-08-19): 56 -> 59, tres altas y ninguna baja
-      paresUnicos: 57, // feature 235: las tres altas son pares NUEVOS
+      aristasFlujo: 61, // feature 237 (2026-08-20): 59 -> 61, dos altas y ninguna baja
+      paresUnicos: 59, // feature 237: las dos altas son pares NUEVOS
       aristasCreacion: 2,
     });
   });

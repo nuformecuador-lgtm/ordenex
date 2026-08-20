@@ -134,11 +134,19 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
     }
   });
 
-  it("P2 — `gestion_tienda_ayuda` NO se declara: nace con su productor (ficha 237)", () => {
+  it("P2 — ESTA migracion no declara `gestion_tienda_ayuda`: nacio con su productor (ficha 237)", () => {
     // La convencion del repo, con precedente costoso: `incidente` (154) se declaro sin productor y
     // «costo el tren 154+155+156».
+    //
+    // ⏳ 2026-08-20: la segunda mitad de este caso afirmaba que el valor tampoco estaba en el SEED
+    // de TS. La ficha 237 trajo su productor
+    // (`GestionOrdenRepository.crearGestionDesdeAyuda`) y su propia migracion
+    // (`20260820120000_orden_historial_origen_gestion_tienda_ayuda`), asi que esa mitad cumplio su
+    // funcion y se INVIERTE: lo que sigue siendo cierto —y es lo que este archivo vigila— es que
+    // el `migration.sql` DE LA 235 no lo menciona. Que el valor exista hoy es asunto del test de
+    // la migracion de la 237, no de esta.
     expect(quitarComentariosSql(enumUp)).not.toContain("gestion_tienda_ayuda");
-    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).not.toContain("gestion_tienda_ayuda");
+    expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain("gestion_tienda_ayuda");
   });
 
   it("el UP es ADITIVO: ni tablas, ni columnas, ni RLS, ni movimientos de orden (R41)", () => {
@@ -172,10 +180,21 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
     expect(valores).toHaveLength(27);
     expect(valores).not.toContain(IDA);
     expect(valores).not.toContain(VUELTA);
-    // La lista del down es EXACTAMENTE el SEED de hoy menos los dos valores que esta migracion
-    // anade: si el SEED gana uno mas sin tocar este down, el rollback dejaria el enum incompleto.
+
+    // Los 27 previos = el SEED actual menos los valores AÑADIDOS EN O DESPUES de la 235. Este
+    // `down.sql` recrea el enum a su estado PRE-235 (fijo, historico) y NO SE TOCA nunca; lo que
+    // se ajusta cuando el enum crece es el conjunto que se le descuenta al SEED vigente. Mismo
+    // patron que los downs del 67, 99, 100, 106, 138, 149, 154 y 239.
+    const AÑADIDOS_EN_O_DESPUES_DEL_235 = new Set<string>([
+      IDA,
+      VUELTA,
+      // Feature 237 (2026-08-20): la TERCERA familia del viaje de la ayuda, posterior a esta foto.
+      "gestion_tienda_ayuda",
+    ]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== IDA && v !== VUELTA)),
+      new Set(
+        ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_235.has(v)),
+      ),
     );
   });
 
@@ -325,7 +344,11 @@ describe("Feature 235 · el codigo y la base dicen lo mismo (sin drift)", () => 
   it("R11: NINGUNA de las dos esta en `ORIGEN_TIPOS_VISITA_REAL`", () => {
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain(IDA);
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain(VUELTA);
-    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6): el censo pasa de UNO a DOS miembros, a mano. La
+    // TERCERA familia del viaje (`gestion_tienda_ayuda`, la gestion que registra la tienda) SI es
+    // visita real —es el desenlace de la visita que el mensajero si hizo—, y esa asimetria con
+    // las dos de esta migracion es deliberada: pedir auxilio y retirarlo no son intentos.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   // R43 — NADIE SE QUEDA ATRAPADO AL DESPLEGAR. La medicion de P6 (0 ordenes con la bandera
@@ -337,9 +360,13 @@ describe("Feature 235 · el codigo y la base dicen lo mismo (sin drift)", () => 
     // (i) visible: es una de las dos ramas del predicado de `/novedades` (se fija por texto en
     // `orden-repository.novedades.test.ts`; aqui se afirma que el value existe para poder serlo).
     expect(ORDER_STATUS_SEED as readonly string[]).toContain(ESTATUS);
-    // (ii) con salida: DOS, y las dos con productor. Sin ellas seria un pozo y R43 caeria.
+    // (ii) con salida, y todas con productor. Sin ninguna seria un pozo y R43 caeria.
+    // ⏳ 2026-08-20 (feature 237): eran DOS (`en_reparto`, `sin_gestionar`) y ahora son CUATRO. Las
+    // dos altas son los desenlaces que la tienda puede registrar desde la pestaña de ayuda, y
+    // llegan con su productor (`crearGestionDesdeAyuda`). Lo que R43 exige —que la orden no quede
+    // atrapada— se cumple con mas holgura, no con menos.
     const salidas = TRANSICIONES.ayuda_tienda.map((d) => d.to).sort();
-    expect(salidas).toEqual(["en_reparto", "sin_gestionar"]);
+    expect(salidas).toEqual(["en_reparto", "rechazada", "reprogramada", "sin_gestionar"]);
   });
 
   it("ninguna de las dos esta en `ORIGEN_TIPOS_CON_GESTION`", () => {

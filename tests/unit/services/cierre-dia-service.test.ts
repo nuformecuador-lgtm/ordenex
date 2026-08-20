@@ -51,6 +51,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
     esRechazoSla: false, // feature 102/R11: la vista en vivo del mensajero no expone el desglose
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
@@ -102,6 +103,9 @@ function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDe
     cierreId: null, // R1: dentro de la ventana
     anuladaAt: null, // R1: vigente
     orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+    // Feature 237 (T5.5, D3): el default es «la registro el mensajero», que es el caso feliz del
+    // deshacer. Los casos de la 237 lo ponen en `true`.
+    desdeAyudaTienda: false,
     ...overrides,
   };
 }
@@ -1050,6 +1054,110 @@ describe("Feature 67 · deshacerGestion — autorizacion (R8/R9)", () => {
     const r = await service.deshacerGestion("no-existe", MENSAJERO);
 
     expect(r).toEqual({ status: "forbidden" }); // mismo resultado que la ajena (patron 36/R31)
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// 💰 FEATURE 237 (T5.5, D3 firmada por el HUMANO el 2026-08-20, R38/R39) — LA GESTION QUE
+// REGISTRO LA TIENDA NO SE DESHACE.
+//
+// El hallazgo que obligo a escribir esto: la gestion de la tienda nace con `mensajero_id` = el
+// mensajero (237/R3, lo que la mete en su cierre) y con `cierre_id = NULL` (R9). Con eso PASA LAS
+// OCHO GUARDIAS: es «suya», la ventana esta abierta, es la ultima y el estado esperado casa. Sin la
+// guardia nueva, el mensajero revierte la decision de la tienda —la orden vuelve a `en_reparto`
+// reasignada a el, desaparecen el intento y el `cobroRechazado`— y LA TIENDA NO SE ENTERA, porque
+// la fila ya no esta en ninguna de sus pestañas.
+//
+// Y los numeros lo convierten de precaucion en necesidad (medido en produccion el 2026-08-20):
+// deshacer se usa en 7 de 57 gestiones (12 %) y un rechazo mueve hasta ₡1.000.
+//
+// El precio de D3-b esta DECLARADO: un rechazo equivocado de la tienda no tiene deshacer. Se acepta
+// porque su peor caso es recuperable (el paquete vuelve por el flujo de devolucion) y el contrario
+// borra dinero sin consentimiento de quien lo decidio.
+// ---------------------------------------------------------------------------------------------
+describe("Feature 237 · deshacerGestion — la gestion de LA TIENDA (D3/R38)", () => {
+  it.each(["reprogramada", "rechazada"] as const)(
+    "R38: una gestion `%s` registrada por la tienda -> `conflict`, SIN escribir nada",
+    async (resultado) => {
+      const repo = fakeRepo({
+        findGestionParaDeshacer: vi.fn(async () =>
+          gestionDeshacer({
+            resultado,
+            desdeAyudaTienda: true,
+            orden: { deletedAt: null, estatusId: `s-${resultado}`, estatusValue: resultado },
+          }),
+        ),
+      });
+      const { service } = newService({ repo });
+
+      const r = await service.deshacerGestion("g1", MENSAJERO);
+
+      expect(r.status).toBe("conflict");
+      // 💰 Lo que de verdad protege: NI UNA escritura. Si esta llamada ocurriera, el intento y el
+      // `cobroRechazado` desaparecerian con ella.
+      expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R38: el mensaje es ACCIONABLE — dice quien lo hizo, que solo ella puede corregirlo y por donde", async () => {
+    // No es un «no se puede» a secas: el mensajero tiene el paquete en la moto y necesita saber a
+    // quien acudir. Se lee el texto tal cual, que es lo que vera en pantalla.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: true,
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({
+      status: "conflict",
+      motivo:
+        "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.",
+    });
+  });
+
+  it("R38: la guardia va DESPUES de la de propiedad — una gestion AJENA sigue dando `forbidden` pelado", async () => {
+    // Si estuviera antes, el mensaje «la resolvio la tienda» se emitiria sobre una gestion que no
+    // es suya y filtraria informacion de una orden ajena. El orden de las guardias es la
+    // proteccion, no un detalle de estilo.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({ mensajeroId: "m2", desdeAyudaTienda: true }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R38: NO se rompe el deshacer de nadie — la gestion PROPIA del mensajero se sigue deshaciendo", async () => {
+    // El contraste obligatorio: la guardia nueva discrimina por la FAMILIA de origen, no por el
+    // estado ni por el resultado. Una `rechazada` del propio mensajero sobre una orden en el mismo
+    // estado se deshace exactamente como antes.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: false,
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
   });
 });
 

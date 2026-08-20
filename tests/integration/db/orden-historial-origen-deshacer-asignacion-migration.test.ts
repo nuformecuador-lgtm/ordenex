@@ -45,6 +45,9 @@ const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set<string>([
       // familias de la ayuda se descuentan del SEED vigente, no se anaden a la foto historica.
       "solicitud_ayuda_tienda",
       "rescate_ayuda_tienda",
+      // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
+      // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
+      "gestion_tienda_ayuda",
 ]);
 const schemaPrisma = fs.readFileSync(
   path.join(__dirname, "..", "..", "..", "db", "schema.prisma"),

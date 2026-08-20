@@ -66,6 +66,24 @@ export interface CierreGestionPendienteRow {
   // columna nueva. La pueblan los repos de ADMIN (38/40); en la vista EN VIVO del mensajero (37)
   // es `false` por defecto (no expone el desglose, R11).
   esRechazoSla: boolean;
+  /**
+   * 💰 Feature 237 (D6 firmada por el HUMANO el 2026-08-20, R41) — `true` si esta gestion la
+   * registro LA TIENDA desde su pestaña de ayuda, no el mensajero.
+   *
+   * POR QUE VIAJA HASTA AQUI, que es lo que no hay que perder de vista: sin este dato, el
+   * mensajero **firma un cierre con una gestion que no hizo y una evidencia que no subio**, y no
+   * puede explicarla si le preguntan. Es su dinero (el `cobroRechazado` sale de SU tarifa) y su
+   * intento de entrega. La orden desaparece de su portal en cuanto sale de `ayuda_tienda`, asi que
+   * la fila de su cierre del dia es el UNICO sitio donde las dos poblaciones aparecen juntas.
+   *
+   * DERIVADO del historial (`origen_tipo = gestion_tienda_ayuda`), nunca de una columna nueva en
+   * `gestion_orden`: la fuente de verdad de quien actuo es el historial, y duplicarla crearia una
+   * segunda verdad que puede divergir. Mismo patron que `esRechazoSla` (102).
+   *
+   * `false` significa «no la registro la tienda», NO «no lo se» — el porque estructural esta en
+   * `lib/utils/gestion-tienda-ayuda-flag.ts`, que es donde se decide.
+   */
+  desdeAyudaTienda: boolean;
   // Feature 158/R9: causa TIPIFICADA del incidente, leida de `gestion_orden.causa_incidente`.
   // `null` en cualquier otro resultado (campo POR RAMA). La pueblan LOS DOS caminos: la vista
   // en vivo del mensajero (37) y los detalles de admin (38/40).
@@ -146,6 +164,27 @@ export interface GestionDeshacerRow {
     estatusId: string; // R5: id real del estado actual (guardia del UPDATE)
     estatusValue: string; // R5: `value` legible para contrastar con ESTADOS_ESPERADOS
   };
+  /**
+   * 💰 Feature 237 (T5.5, D3 firmada por el humano el 2026-08-20, R38) — `true` si esta gestion la
+   * registro LA TIENDA desde la pestaña de ayuda.
+   *
+   * POR QUE HACE FALTA EL DATO, contado entero porque no se ve a simple vista: la gestion de la
+   * tienda nace con `mensajero_id` = el mensajero (R3, que es lo que la mete en su cierre) y con
+   * `cierre_id = NULL` (R9). Con eso PASA LAS OCHO GUARDIAS del deshacer —es «suya», la ventana
+   * esta abierta, es la ultima, y el estado esperado casa— asi que, sin este campo, el mensajero
+   * puede revertir la decision de la tienda: la orden vuelve a `en_reparto` reasignada a el, con
+   * ella se van el intento contado y el `cobroRechazado`, y LA TIENDA NO SE ENTERA porque la fila
+   * ya no esta en ninguna de sus pestañas.
+   *
+   * No es teorico: medido en produccion el 2026-08-20, deshacer se usa en 7 de 57 gestiones (12 %)
+   * y un rechazo mueve hasta ₡1.000. Pasaria de verdad, y cada vez borraria en silencio dinero que
+   * decidio otra persona.
+   *
+   * Se DERIVA del historial (`origen_tipo = gestion_tienda_ayuda` en la fila que enlaza esta
+   * gestion), no de una columna nueva: quien la registro ya esta escrito ahi y una segunda verdad
+   * habria que mantenerla.
+   */
+  desdeAyudaTienda: boolean;
 }
 
 // Feature 67/R11/R18/R19/R20/R22 — input de la UNICA escritura del deshacer. `estatusEsperadoId`

@@ -114,8 +114,13 @@ const mapAdmin = (g = filaAdmin(), d = filaSnapshot()): CierreGestionPendienteRo
     d as unknown as Parameters<typeof toPendienteRowDesdeSnapshot>[1],
   );
 
-const mapEnVivo = (row = filaEnVivo()): CierreGestionPendienteRow =>
-  toPendienteRow(row as unknown as Parameters<typeof toPendienteRow>[0]);
+const mapEnVivo = (
+  row = filaEnVivo(),
+  // Feature 237 (D6/R41): el flag lo resuelve el repositorio EN LOTE y se lo pasa al mapper. Por
+  // defecto `false` (la registro el mensajero), que es lo que estos casos de causa/monto ejercen.
+  desdeAyudaTienda = false,
+): CierreGestionPendienteRow =>
+  toPendienteRow(row as unknown as Parameters<typeof toPendienteRow>[0], desdeAyudaTienda);
 
 // --- Proyecciones ------------------------------------------------------------------------
 
@@ -254,6 +259,7 @@ describe("R35 — los CUATRO resultados previos no cambian: causa y monto en `nu
       pagoMensajero: "5.00",
       ingresoBodegaRechazo: "0.00",
       esRechazoSla: false,
+      desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
       causaIncidente: null,
       indemnizacion: null,
     });

@@ -132,6 +132,9 @@ describe("Feature 67 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)"
       // familias de la ayuda se descuentan del SEED vigente, no se anaden a la foto historica.
       "solicitud_ayuda_tienda",
       "rescate_ayuda_tienda",
+      // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
+      // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
+      "gestion_tienda_ayuda",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_67.has(v))),

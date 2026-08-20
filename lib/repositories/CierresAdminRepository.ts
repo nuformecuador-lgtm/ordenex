@@ -46,6 +46,11 @@ const ROL_MENSAJERO = "mensajero";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
+import {
+  esGestionDesdeAyudaTienda,
+  ORIGEN_TIPO_GESTION_TIENDA_AYUDA,
+} from "@/lib/utils/gestion-tienda-ayuda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
@@ -142,6 +147,16 @@ export const DETALLE_ADMIN_SELECT = {
 // Feature 102/T2 (R1/R3): + la relacion `historialEstados` ACOTADA al origen SLA (feature 99),
 // para DERIVAR `esRechazoSla` por gestion sin columna/migracion nueva. `where` + `take: 1` la
 // dejan barata (a lo sumo una fila por gestion); el util `esRechazoSla` es el predicado.
+/**
+ * Las familias de historial que ESTA proyeccion necesita leer, y las UNICAS. Fuera del `as const`
+ * del select a proposito: `as const` congelaria el array como `readonly`, y el filtro de Prisma
+ * pide uno mutable. Cada miembro alimenta una derivacion pura distinta sobre el MISMO array.
+ */
+const FAMILIAS_DERIVADAS_DEL_HISTORIAL: OrdenHistorialOrigenTipo[] = [
+  ORIGEN_TIPO_RECHAZO_SLA, // feature 102/R1: `esRechazoSla`
+  ORIGEN_TIPO_GESTION_TIENDA_AYUDA, // feature 237/R41: `desdeAyudaTienda`
+];
+
 export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
@@ -161,9 +176,18 @@ export const GESTION_ADMIN_SELECT = {
   // fallback al par escalar: una proyeccion que lo olvide da CERO, no un total plausible.
   // `orderBy` sobre el enum nativo = orden de declaracion (efectivo, SINPE, transferencia).
   pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
+  // Feature 237 (D6/R41) — el `where` pasa de UNA igualdad a un `in` de DOS familias, y con eso
+  // esta MISMA lectura alimenta AHORA DOS derivaciones (`esRechazoSla` y `desdeAyudaTienda`).
+  // ⭑ COSTE: **CERO consultas nuevas** en los dos detalles de admin — la relacion ya se pedia; lo
+  // unico que cambia es cuantas familias acepta su filtro. Se hizo asi, y no con una segunda
+  // lectura, precisamente porque esta es la pagina que mas filas trae.
+  //
+  // `take: 2` y no `take: 1`: son dos familias distintas y una gestion podria, en teoria, tener
+  // fila de las dos. Con `take: 1` una taparia a la otra segun el orden de lectura, que es la
+  // clase de fallo que se ve en produccion y nunca en un test.
   historialEstados: {
-    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
-    take: 1,
+    where: { origenTipo: { in: FAMILIAS_DERIVADAS_DEL_HISTORIAL } },
+    take: 2,
     select: { origenTipo: true },
   },
 } as const;
@@ -298,8 +322,13 @@ export function toPendienteRowDesdeSnapshot(
     pagoMensajero: decimalToString(g.pagoMensajero),
     ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
     // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
-    // (`historialEstados` ya viene acotado a ese origen por `GESTION_ADMIN_SELECT`).
+    // (`historialEstados` ya viene acotado a esas familias por `GESTION_ADMIN_SELECT`).
     esRechazoSla: esRechazoSla(g.historialEstados),
+    // Feature 237 (D6/R41): y `true` si la registro la TIENDA desde su pestaña de ayuda. Sale de
+    // LA MISMA lectura de historial que la linea de arriba: dos predicados PUROS sobre un solo
+    // array, ninguna consulta de mas. El detalle de admin lo lleva por la misma razon que el del
+    // mensajero: quien audita un cobro tiene que poder ver QUIEN lo decidio.
+    desdeAyudaTienda: esGestionDesdeAyudaTienda(g.historialEstados),
     // Feature 158/R9/R34: la causa del incidente, para que el admin sepa QUE paso antes de
     // decidir el monto de la indemnizacion. `null` en cualquier otro resultado.
     causaIncidente: g.causaIncidente,

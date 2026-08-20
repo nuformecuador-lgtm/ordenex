@@ -39,6 +39,12 @@ vi.mock("@/lib/actions/orden-ayuda", () => ({
 vi.mock("@/lib/actions/rechazos-sla-tienda", () => ({
   listarRechazosSlaTiendaAction: vi.fn(),
 }));
+// Feature 237 (T7.3): la card de ayuda monta la ventana «Resolver la orden por tu cuenta», que
+// llama a esta Server Action. Se mockea como las otras: importarla de verdad arrastraria Prisma y
+// Supabase Storage a jsdom.
+vi.mock("@/lib/actions/gestion-desde-ayuda", () => ({
+  gestionarDesdeAyuda: vi.fn(),
+}));
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
@@ -300,8 +306,17 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
 
     const lista = screen.getByRole("list", { name: "Órdenes con ayuda solicitada" });
     expect(within(lista).getAllByRole("listitem")).toHaveLength(2);
-    // Y cada fila lleva SU juego de botones, decidido por el estado de LA FILA y no por la pestaña:
-    // la de ayuda tiene la conversación, la intrusa tiene «Reprogramar».
+    // Y cada fila lleva SU juego de botones, decidido por el estado de LA FILA y no por la pestaña.
+    //
+    // ⚠️ FEATURE 237 (T7.1, 2026-08-20) — EL CONTROL NEGATIVO CAMBIA DE PAREJA, y hay que decir por
+    // qué. Hasta hoy era «la de ayuda NO gana Reprogramar por estar al lado de una devolución», y
+    // servía porque en la ayuda no había ningún botón con ese rótulo. Ahora sí lo hay: la 237 le dio
+    // a la ayuda sus dos desenlaces, con claves propias y otro servicio detrás, pero con el MISMO
+    // nombre accesible («Reprogramar la orden de X») porque para quien mira es la misma palabra
+    // sobre otra orden. El nombre accesible no se retorció para que el test siguiera valiendo: se
+    // cambió el discriminador por los dos que siguen siendo exclusivos de la ayuda —la conversación
+    // y el contador de intentos de contacto—, y el caso de abajo afirma, ya sin ambigüedad posible,
+    // que cada «Reprogramar» abre una VENTANA distinta.
     expect(
       within(lista).getByRole("button", {
         name: "Abrir la conversación de la orden de Ana Cliente",
@@ -310,15 +325,59 @@ describe("NovedadesTabs — R2/R8: la partición es del SERVIDOR, no de la panta
     expect(
       within(lista).getByRole("button", { name: "Reprogramar la orden de Beto Cliente" }),
     ).toBeInTheDocument();
-    // El control negativo del par: la de ayuda NO gana «Reprogramar» por estar al lado de una
-    // devolución, ni la devolución gana la conversación por estar en la pestaña de ayuda.
-    expect(
-      within(lista).queryByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
-    ).toBeNull();
+    // La intrusa NO gana la conversación ni el contador por estar en la pestaña de ayuda.
     expect(
       within(lista).queryByRole("button", {
         name: "Abrir la conversación de la orden de Beto Cliente",
       }),
     ).toBeNull();
+    expect(
+      within(lista).queryByRole("button", {
+        name: /^Registrar un intento de contacto con la orden de Beto Cliente/,
+      }),
+    ).toBeNull();
+    // Y la de ayuda SÍ los tiene: el par positivo de las dos ausencias de arriba.
+    expect(
+      within(lista).getByRole("button", {
+        name: /^Registrar un intento de contacto con la orden de Ana Cliente/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("237: el «Reprogramar» de cada fila abre la ventana de SU grupo, no la del vecino", async () => {
+    // Éste es el heredero del control negativo que la 237 dejó sin discriminador. Los dos botones
+    // se llaman igual y hacen cosas distintas: el de la fila en ayuda crea una gestión atribuida al
+    // mensajero —con intento y con dinero— y el de la devuelta llama al servicio de la feature 100.
+    // Confundirlos no daría un error visible: daría un `conflict` en un caso y un cobro en el otro.
+    const user = userEvent.setup();
+    renderTabs({
+      ayuda: {
+        items: [
+          novedad({ id: "a1", estatusValue: "ayuda_tienda", destinatario: "Ana Cliente" }),
+          novedad({ id: "o9", estatusValue: "devuelta", destinatario: "Beto Cliente" }),
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 10,
+      },
+    });
+
+    // La fila en AYUDA -> la ventana de la 237, que se reconoce por el aviso del precio.
+    await user.click(
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
+    );
+    const ventana237 = await screen.findByRole("dialog");
+    expect(ventana237).toHaveTextContent("Resolver la orden por tu cuenta");
+    expect(ventana237).toHaveTextContent("mueve el dinero igual");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // La fila DEVUELTA -> el modal de la feature 100, que no dice nada de cierres ni de dinero.
+    await user.click(
+      screen.getByRole("button", { name: "Reprogramar la orden de Beto Cliente" }),
+    );
+    const modal100 = await screen.findByRole("dialog");
+    expect(modal100).not.toHaveTextContent("Resolver la orden por tu cuenta");
+    expect(modal100).not.toHaveTextContent("mueve el dinero igual");
   });
 });

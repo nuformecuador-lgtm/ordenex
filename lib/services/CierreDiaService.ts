@@ -75,6 +75,10 @@ const MSG_YA_DESHECHA = "Esta gestion ya fue deshecha."; // R3
 const MSG_NO_ES_LA_ULTIMA = "Esta orden tiene una gestion mas reciente; hay que deshacer esa primero."; // R4
 const MSG_ORDEN_MOVIDA = "Esta orden ya fue procesada por la bodega; ya no se puede deshacer."; // R5
 const MSG_ORDEN_BORRADA = "Esta orden fue eliminada; ya no se puede deshacer su gestion."; // R6
+// 💰 Feature 237 (T5.5, D3 firmada por el humano el 2026-08-20, R38). ACCIONABLE: le dice al
+// mensajero QUE paso, POR QUE no puede tocarlo y A QUIEN acudir — no es un «no se puede» a secas.
+const MSG_GESTION_DE_LA_TIENDA =
+  "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.";
 const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patron `gestionar` (36)
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
@@ -571,6 +575,33 @@ export class CierreDiaService implements ICierreDiaService {
     // 3) R9: gestion de OTRO mensajero -> forbidden, sin exponer ningun dato suyo.
     if (gestion.mensajeroId !== actor.usuarioId) return { status: "forbidden" };
 
+    // 💰 3-bis) FEATURE 237 (T5.5, D3, R38) — LA GESTION QUE REGISTRO LA TIENDA NO SE DESHACE.
+    //
+    // Va JUSTO DESPUES de la guardia de propiedad y no antes: hasta aqui no se sabe que la gestion
+    // sea de este mensajero, y decirle «la resolvio la tienda» sobre una gestion ajena filtraria
+    // informacion de una orden que no es suya. Despues de la 3, ya es suya y el mensaje es seguro.
+    //
+    // Y va ANTES de las guardias 4-8 a proposito, aunque esas sean mas baratas: las cinco
+    // devolverian un motivo que en este caso MIENTE («ya esta en un cierre», «la movio la
+    // bodega»…), y este repo tiene escrito lo que cuesta un dato falso con formato de dato. El
+    // dato ya viene con la fila (`findGestionParaDeshacer` lo trae), asi que esta guardia no
+    // cuesta ni una consulta mas.
+    //
+    // POR QUE EXISTE, con los numeros delante. La gestion de la tienda nace con `mensajero_id` =
+    // este mensajero —lo que la mete en su cierre (237/R3)— y con `cierre_id = NULL` (R9), asi que
+    // PASA LAS OCHO GUARDIAS. Sin esta linea, el mensajero revierte la decision de la tienda: la
+    // orden vuelve a `en_reparto` reasignada a el, desaparecen el intento contado y el
+    // `cobroRechazado`, y LA TIENDA NO SE ENTERA (la fila ya no esta en ninguna de sus pestañas).
+    // Medido en produccion el 2026-08-20: deshacer se usa en 7 de 57 gestiones (12 %) y un rechazo
+    // mueve hasta ₡1.000. No es una precaucion, es un agujero con caudal.
+    //
+    // El desenlace elegido (D3-b) tiene su precio DECLARADO: un rechazo equivocado de la tienda no
+    // tiene deshacer. Se acepta porque el peor caso es recuperable —el paquete vuelve a la tienda
+    // por el flujo de devolucion— mientras que el contrario borra dinero sin consentimiento.
+    if (gestion.desdeAyudaTienda) {
+      return { status: "conflict", motivo: MSG_GESTION_DE_LA_TIENDA };
+    }
+
     // 4) R2 (decision 1 del humano): la VENTANA es `cierre_id IS NULL`. Ya vinculada a un
     // cierre = sus totales estan snapshoteados y la wallet la cobrara al aprobar -> conflict.
     if (gestion.cierreId !== null) return { status: "conflict", motivo: MSG_YA_EN_CIERRE };
@@ -666,6 +697,12 @@ export function toDetalleDTO(
     // Feature 102/R9/R11: passthrough del flag ya derivado en el repo (admin: del historial;
     // vista en vivo del mensajero: `false`). El service no re-deriva la clasificacion.
     esRechazoSla: g.esRechazoSla,
+    // 💰 Feature 237 (D6/R41): passthrough del OTRO flag derivado del historial. Este SI lo lleva
+    // la vista en vivo del mensajero, y es su razon de ser: sin el, firma un cierre con una
+    // gestion que no hizo y una evidencia que no subio, y no puede explicarla si le preguntan.
+    // El service no re-deriva nada — el predicado vive en `lib/utils/gestion-tienda-ayuda-flag.ts`
+    // y los tres repositorios que producen la fila lo aplican sobre el historial.
+    desdeAyudaTienda: g.desdeAyudaTienda,
     // Feature 158/R9/R34: passthrough de la causa tipificada del incidente. La pueblan los DOS
     // repos (vista en vivo y detalles de admin); `null` en cualquier otro resultado.
     causaIncidente: g.causaIncidente,
