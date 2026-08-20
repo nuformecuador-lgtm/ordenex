@@ -9,6 +9,28 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🚧 EN CURSO — 248, cotizador por distrito (rama `feature/248-cotizador-distrito`, worktree `C:/w248`)
+
+**Fase 1 (SDD): `spec_author` corriendo.** Ficha dada de alta desde `origin/dev` (5deaa9a4).
+
+Cuatro decisiones humanas **ya firmadas** el 2026-08-20, ninguna abierta:
+
+1. Dos superficies: página **pública sin login** y **canal por API key**.
+2. La pública da **sólo cobertura** (sí/no + zona), **ni un importe**. Los costos viven únicamente
+   en el canal por API key. Razón: **no existe tarifa sin tienda** (`tarifas.tienda_id`), y un
+   anónimo no tiene tienda. Descartadas: crear una tarifa de referencia (cambia el esquema) y
+   pedir un identificador de tienda en la pública (expondría tarifas ajenas).
+3. El desglose trae **dos escenarios**: entregada y devuelta.
+4. Cierra con el **total por N órdenes** (unitario ya redondeado × N, como acumula el cierre).
+
+⚠️ **Dos cosas que se pondrán rojas y hay que resolver en el mismo PR:** la guardia de la 229
+congela `PUBLIC_ROUTES` posicionalmente (la ruta pública la rompe), y se toca contrato publicado
+(`openapi-spec.ts` + el `.yaml` espejo) ⇒ gate `./init.sh` **completo**, no `--rapido`.
+
+ℹ️ Deuda **heredada, no introducida**: `TarifaVigentePorTiendaRepository` no filtra `tarifas.status`,
+así que una tarifa `inactivo` puede llegar a cotizarse. Documentada desde la feature 69.
+
+
 ## ✅ AL DÍA — 2026-08-19, cierre. **EMPIEZA A LEER POR AQUÍ**
 
 **Tres fichas mergeadas hoy, las tres con revisión OK y gate completo verde. Ninguna `in_progress`.**
