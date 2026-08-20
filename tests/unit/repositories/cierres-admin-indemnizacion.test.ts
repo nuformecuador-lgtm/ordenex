@@ -80,21 +80,38 @@ function buildPrisma(
       findUnique: vi.fn(async () => ({ mensajeroId: "m1" })),
     },
     gestionOrden: {
+      // Feature 238 (T3.8): el mismo delegado lo usan DOS bloques con formas de `where`
+      // distintas —la 158 apunta a UNA gestion (`id` escalar, `resultado` escalar) y la 238 a un
+      // conjunto (`id: { in }`, `resultado: { in }`)—. El doble entiende las dos y las aplica
+      // igual que Postgres: si entendiera solo una, el bloque nuevo devolveria `count = 0` y
+      // pareceria roto cuando el roto seria el doble.
       updateMany: vi.fn(
         async ({
           where,
           data,
         }: {
-          where: { id: string; cierreId: string; resultado: string };
-          data: { indemnizacion: Prisma.Decimal };
+          where: {
+            id: string | { in?: string[] };
+            cierreId: string;
+            resultado: string | { in?: string[] };
+          };
+          data: Record<string, unknown>;
         }) => {
-          const g = gestiones.find(
-            (x) =>
-              x.id === where.id && x.cierreId === where.cierreId && x.resultado === where.resultado,
-          );
-          if (!g) return { count: 0 };
-          g.indemnizacion = data.indemnizacion;
-          return { count: 1 };
+          const casaId = (id: string) =>
+            typeof where.id === "string" ? id === where.id : (where.id.in ?? []).includes(id);
+          const casaResultado = (r: string) =>
+            typeof where.resultado === "string"
+              ? r === where.resultado
+              : (where.resultado.in ?? []).includes(r);
+          let count = 0;
+          for (const g of gestiones) {
+            if (!casaId(g.id) || g.cierreId !== where.cierreId || !casaResultado(g.resultado)) {
+              continue;
+            }
+            Object.assign(g, data);
+            count += 1;
+          }
+          return { count };
         },
       ),
       findMany: vi.fn(async (args?: { where?: { cierreId?: string; resultado?: string } }) =>
@@ -129,6 +146,20 @@ function buildRepo(prisma: ReturnType<typeof buildPrisma>) {
   );
 }
 
+/**
+ * Feature 238 (T3.8) — las escrituras de `tx.gestionOrden.updateMany` que son DE ESTA FEATURE.
+ *
+ * La transaccion de aprobacion ejecuta ese delegado desde DOS bloques (el monto de indemnizacion
+ * de la 158 y la marca de confirmacion fisica de la 238). Se eligen por lo que ESCRIBEN —un monto
+ * sobre una gestion `incidente`—, que es la unica forma de identificacion que sobrevive a que
+ * alguien reordene los bloques. Nunca por la forma del `where`: eso es lo que R42 prohibe.
+ */
+function escriturasDeIndemnizacion(prisma: ReturnType<typeof buildPrisma>) {
+  return (prisma.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls
+    .map((c) => c[0] as { where: Record<string, unknown>; data: Record<string, unknown> })
+    .filter((c) => c.where.resultado === "incidente");
+}
+
 function gestionesIncidente() {
   // `orden.montoCobrar`: fix «tope de negocio» (2026-08-04). Esta suite mide la ESCRITURA del
   // monto y la emision del egreso, no el tope; el valor solo tiene que estar para que la
@@ -160,6 +191,7 @@ function aprobar(
     alcance: ALCANCE,
     nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm",
     motivoRechazo: null,
     indemnizaciones,
@@ -202,9 +234,56 @@ describe("R22 — persistir los montos y emitir el egreso, en la MISMA transacci
 
     await aprobar(buildRepo(prisma), [{ gestionId: G1, monto: "1.00" }, { gestionId: G2, monto: "1.00" }]);
 
-    const calls = (prisma.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
-    expect(calls[0][0].where).toEqual({ id: G1, cierreId: "c1", resultado: "incidente" });
-    expect(calls[1][0].where).toEqual({ id: G2, cierreId: "c1", resultado: "incidente" });
+    // Feature 238 (T3.8, 2026-08-19) — RE-APUNTADO. Desde que la 238 escribe la marca de
+    // confirmacion fisica, `tx.gestionOrden.updateMany` la ejecutan DOS bloques en la misma
+    // transaccion, asi que identificar el de la indemnizacion POR INDICE (`calls[0]`, `calls[1]`)
+    // dejo de ser fiable: bastaria reordenar los bloques para que estas aserciones midieran otra
+    // escritura sin ponerse rojas.
+    //
+    // Se identifica POR SU SIGNIFICADO —lo que escribe: un monto sobre un `incidente`— y JAMAS
+    // por la presencia o la ausencia de una clave del `where`. Esa segunda forma es la que dejo
+    // la escritura de `gestion_aprobada` sin asercion durante toda su vida, y es lo que R42
+    // prohibe y la guardia `aprobacion-escrituras-cubiertas` detecta.
+    const deIndemnizacion = escriturasDeIndemnizacion(prisma);
+    expect(deIndemnizacion).toHaveLength(2);
+    expect(deIndemnizacion[0].where).toEqual({ id: G1, cierreId: "c1", resultado: "incidente" });
+    expect(deIndemnizacion[1].where).toEqual({ id: G2, cierreId: "c1", resultado: "incidente" });
+  });
+
+  it("238/T3.8: con la marca de confirmacion en la MISMA tx, la identificacion sigue siendo exacta", async () => {
+    // El caso que hace falta desde la 238: los DOS bloques escriben por `tx.gestionOrden
+    // .updateMany` en la misma transaccion. Si la identificacion volviera a hacerse por indice,
+    // este caso la pillaria; con la identificacion por significado, el conjunto no cambia.
+    const gestiones = gestionesIncidente();
+    gestiones.push({
+      id: "g-devuelta",
+      cierreId: "c1",
+      resultado: "devuelta",
+      indemnizacion: null,
+      orden: { montoCobrar: null },
+    });
+    const store = walletStore();
+    const prisma = buildPrisma(gestiones, store);
+
+    await buildRepo(prisma).resolverCierre({
+      cierreId: "c1",
+      alcance: ALCANCE,
+      nuevoEstado: "aprobado",
+      anclajeDevolucion: ANCLAJE_DEVOLUCION,
+      confirmacionFisica: [{ gestionId: "g-devuelta" }],
+      resueltoPor: "adm",
+      motivoRechazo: null,
+      indemnizaciones: [{ gestionId: G1, monto: "1.00" }],
+    });
+
+    const todas = (prisma.gestionOrden.updateMany as ReturnType<typeof vi.fn>).mock.calls;
+    // TRES llamadas al mismo delegado (dos de esta feature no: una de indemnizacion y una de
+    // confirmacion). Lo que importa es que el filtro por significado se quede SOLO con la suya.
+    expect(todas.length).toBeGreaterThan(1);
+    const deIndemnizacion = escriturasDeIndemnizacion(prisma);
+    expect(deIndemnizacion).toHaveLength(1);
+    expect(deIndemnizacion[0].where).toEqual({ id: G1, cierreId: "c1", resultado: "incidente" });
+    expect(Object.keys(deIndemnizacion[0].data)).toEqual(["indemnizacion"]);
   });
 
   it("R21/R22: un monto que NO aplica lanza y NADA queda aplicado (rollback)", async () => {

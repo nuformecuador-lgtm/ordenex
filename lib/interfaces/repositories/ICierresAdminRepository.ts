@@ -1,4 +1,4 @@
-import type { MetodoPagoValue } from "@prisma/client";
+import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CierreResultado, CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
@@ -62,6 +62,25 @@ export interface GestionIncidenteDelCierre {
   ordenMontoCobrar: string | null;
 }
 
+/**
+ * Feature 238 (T1.3, design §3.3, R2/R13) — UNA gestion del cierre cuyo PAQUETE vuelve a bodega:
+ * lo que bodega tiene que tener delante para poder aprobar.
+ *
+ * `numGuia` es NULLABLE porque `orden.num_guia` lo es (`db/schema.prisma:777`): se asigna en
+ * «Generar guia» y no hay constraint que impida que una orden llegue a reparto sin ella. Medido
+ * contra produccion el 2026-08-19 (T0.1): esa poblacion HOY es cero. R13 se mantiene igual —el
+ * servicio bloquea y lo dice, nunca omite la gestion en silencio—, porque el coste de tener la
+ * rama es una linea y el de no tenerla es un paquete aprobado sin escanear.
+ *
+ * `resultado` viaja para el AGRUPADO de la pantalla (Devoluciones / Rechazos / Reprogramadas) y
+ * para poder nombrar en el mensaje que clase de paquete falta.
+ */
+export interface GestionRetornableDelCierre {
+  gestionId: string;
+  numGuia: number | null;
+  resultado: GestionResultado;
+}
+
 // Feature 109 (T3.1, R16-R19): config OPCIONAL de la LIBERACION de ordenes `sin_gestionar` a
 // bodega. Presente SOLO al APROBAR (la resuelve el service via `findEstatusIdByValue`/
 // `findCentralZonaId`); ausente al rechazar (R27: un rechazo NO libera). Los estatus ids del
@@ -110,6 +129,18 @@ export interface AnclajeDevolucionConfig {
 export interface IndemnizacionCapturada {
   gestionId: string;
   monto: string; // STRING 2 dec -> Prisma.Decimal en la impl
+}
+
+/**
+ * Feature 238 (T3.2, design §3.4, R17) — UNA gestion a marcar como confirmada fisicamente, ya con
+ * la COBERTURA EXACTA verificada por el servicio.
+ *
+ * `numGuia` NO viaja: ya se comprobo contra la guia real de la orden en el servicio (R12) y el
+ * repositorio no la persiste. Lo que la escritura necesita es el conjunto de ids; llevar mas seria
+ * arrastrar un dato que nadie usa hasta dentro de la transaccion mas cara del sistema.
+ */
+export interface ConfirmacionFisicaGestion {
+  gestionId: string;
 }
 
 /**
@@ -191,12 +222,28 @@ export type ResolverCierreInput =
       nuevoEstado: "aprobado";
       // Feature 239 (T2.1, design §3.3): OBLIGATORIO. Ver `AnclajeDevolucionConfig`.
       anclajeDevolucion: AnclajeDevolucionConfig;
+      /**
+       * Feature 238 (T3.2, design §3.4, R17): OBLIGATORIO. Puede ser `[]` —un cierre sin nada
+       * que devolver, que es 3 de cada 12 medidos—, pero tiene que ESTAR.
+       *
+       * Obligatorio y no opcional por el precedente que la 239 acaba de establecer y por el
+       * mismo motivo: si el composition root lo olvida, la aprobacion OCURRE y la marca no se
+       * escribe. Eso es la degradacion silenciosa de un registro de auditoria que nadie va a
+       * echar de menos hasta que haga falta en una disputa con una tienda. Un olvido de cableado
+       * tiene que romper el TYPECHECK, que es donde tiene que romper. Coste conocido y aceptado:
+       * todos los dobles de `resolverCierre` tienen que pasarlo.
+       */
+      confirmacionFisica: ReadonlyArray<ConfirmacionFisicaGestion>;
     })
   | (ResolverCierreBase & {
       nuevoEstado: "rechazado";
       // R6: un rechazo no ancla nada. `never` (no `undefined`) para que pasarlo no compile: si
       // alguien lo cablea aqui, es que espera que un rechazo mueva ordenes, y no las mueve.
       anclajeDevolucion?: never;
+      // Feature 238/R24: un rechazo NO confirma ningun paquete. `never` (no `undefined`) para que
+      // pasarlo NO COMPILE: si alguien lo cablea aqui es que espera que rechazar deje marca, y no
+      // la deja. La ausencia de codigo para R24 es una DECISION, y el tipo es quien la sostiene.
+      confirmacionFisica?: never;
     });
 
 // Resultado de la transicion guardada: `updated` (aplicada), `conflict` (existe en
@@ -305,6 +352,30 @@ export interface ICierresAdminRepository {
     cierreId: string,
     alcance: Alcance,
   ): Promise<GestionIncidenteDelCierre[]>;
+  /**
+   * Feature 238 (T1.3, design §3.3, R2/R4/R6) — el CONJUNTO ESPERADO: las gestiones VIGENTES de
+   * ESE cierre cuyo paquete vuelve a bodega (`devuelta`, `rechazada`, `reprogramada`), acotadas
+   * por el alcance en el WHERE. Es lo que el servicio exige que bodega confirme para aprobar.
+   *
+   * Hermana literal de `findGestionesIncidenteDelCierre`, y los dos conjuntos son DISJUNTOS por
+   * construccion: `incidente` no vuelve (R3, decision firmada), asi que una gestion no puede
+   * estar en los dos y las claves de error de las dos coberturas no se pisan.
+   *
+   * R4: el conjunto sale de las GESTIONES del cierre, NO del estado actual de la orden. Una orden
+   * que ya se movio despues de la gestion (recuperada a bodega, reasignada, re-devuelta) sigue
+   * siendo confirmable — si dependiera del estatus vivo, el cierre se volveria inaprobable por
+   * algo que paso DESPUES.
+   *
+   * R6: fuera de alcance / cierre inexistente -> lista vacia, sin distinguir (no se revela nada
+   * del cierre; misma propiedad que R25 de la 158).
+   *
+   * UNA consulta, con la proyeccion completa que la pantalla necesita: el techo medido de un
+   * cierre real son 14 gestiones a escanear (T0.1), y pintarlas no puede costar 14 consultas.
+   */
+  findGestionesRetornablesDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionRetornableDelCierre[]>;
   /**
    * Feature 230 — Tanda 2 (T2.1, R11/R13/R14/R15/R22/R24/R41): TODAS las gestiones de los
    * cierres del dia del alcance que casan los recortes del dialogo, a grano de GESTION.

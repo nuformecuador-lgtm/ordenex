@@ -3541,3 +3541,43 @@ tareas, 3 migraciones con su `down.sql` · gate completo **1192 archivos / 15453
 - **Deuda declarada y con dueño:** la tienda **ve** la solicitud de ayuda y **no puede leer el
   motivo**; su card cae bajo la pestaña «En devolución». Lo arregla la **236**, y por eso ⚠️ **la
   235 y la 236 salen juntas o seguidas**. Orden acordado: **235 → 236 → 237 → 240**.
+
+## 2026-08-19 — 238 (aprobar el cierre exige tener los paquetes delante)
+
+**44 requisitos EARS, 39 tareas, 1 migración aditiva con su `down.sql`.** Bodega ya no aprueba un
+cierre a ciegas: los paquetes que **vuelven** —`devuelta`, `rechazada`, `reprogramada`— hay que
+confirmarlos escaneando su guía, y sin cobertura completa no se aprueba. Los incidentes **no** se
+confirman: su paquete no vuelve, se indemniza.
+
+- **D2 sin escapatoria, y es deliberado:** un solo paquete perdido devuelve el cierre entero. La
+  salida ya existía y es la correcta —rechazar con motivo, que se lo devuelve al mensajero— y la
+  fricción es justo lo que hace que los paquetes aparezcan. Por eso el bloqueo **habla**: dice
+  cuántas faltan y qué hacer si una no llegó. Un bloqueo mudo se lee como una app rota.
+- **La medición contra producción le cambió el diseño a la ficha**, y nada de esto estaba en el
+  spec: «sin retornables» es **3 de cada 12** cierres —un camino de igual rango, no un `else`— y el
+  techo de un cierre son **14 paquetes**, no dos ni tres. Por eso el contador y el motivo del bloqueo
+  van fijos arriba con la lista desplazándose debajo: al final de catorce filas no existirían.
+- 🔴 **Ver la app encontró un cierre que NO SE PODÍA APROBAR NUNCA.** Una orden puede tener **dos
+  gestiones vivas en el mismo cierre** —medido en producción: **1 par de 48**, y justo del tipo cuyo
+  paquete vuelve— y resolver `guía → gestión` con un `find` dejaba la segunda fila inalcanzable: el
+  contador clavado en 11 de 12, el botón muerto y **ningún mensaje** que lo explicara. El servidor no
+  tenía ese candado (su duplicado es por `gestionId`), así que era puramente de pantalla. Ahora una
+  lectura confirma **todas** las filas de esa guía —hay un solo paquete físico— y el contador cuenta
+  paquetes, no filas.
+- 🔴 **Y un test que estaba verde por el estado ambiental**: afirmaba «gestión creada antes de la
+  feature ⇒ nunca marcada», que es **falso por diseño** (un cierre viejo aprobado hoy marca gestiones
+  viejas). Pasaba sólo porque nadie había ejercido la feature y **se habría puesto rojo en producción
+  con la primera aprobación**. Sustituido por dos invariantes que siguen siendo ciertas con la
+  feature en uso, y ninguna basta sola.
+- **El `WHERE` se probó donde vive.** Además del doble que *aplica* el predicado, hay un archivo que
+  ejecuta el método real contra Postgres sembrando en una transacción que siempre revierte. Quitarle
+  `resultado` al `where` mata los dos lados; los tests de servicio, que usan dobles, **no lo ven**.
+- **Tres sitios donde el spec estaba equivocado, y se corrigió el SPEC, no el código:** T5.4 nombraba
+  una suite estructuralmente incapaz de ver su mutación, T5.1 situaba su test en un archivo donde la
+  función no vive, y design §5.3 decía «casa UNA gestión».
+- **Una premisa invisible, ahora escrita y atornillada:** el arreglo es correcto **porque
+  `orden.numGuia` es `@unique`». Quitar ese `@unique` deja 32 casos verdes y sólo uno rojo — el que
+  se añadió para eso.
+- **Deuda del despliegue (T0.3):** avisar a bodega de que el gesto cambia. La medición dice que **no
+  bloquea** —0 cierres en cola—, pero **esa foto caduca**: re-medir justo antes de desplegar, no
+  antes de mergear.

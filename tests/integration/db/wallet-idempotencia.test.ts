@@ -102,23 +102,96 @@ const GESTIONES_EN_BASE = [
 ];
 
 type WhereGestion = {
+  id?: { in?: string[] };
   cierreId?: string;
-  resultado?: string;
+  resultado?: string | { in?: string[] };
   anuladaAt?: Date | null;
   ordenId?: { in?: string[] };
 };
 
+/** `resultado` llega escalar desde el anclaje (239) y como `{ in }` desde la confirmacion (238). */
+function casaResultado(resultado: string, filtro: WhereGestion["resultado"]): boolean {
+  if (filtro === undefined) return true;
+  if (typeof filtro === "string") return resultado === filtro;
+  return filtro.in === undefined || filtro.in.includes(resultado);
+}
+
+/**
+ * Store de `gestion_orden` con las filas PROPIAS de cada caso (copia de `GESTIONES_EN_BASE`, no
+ * la constante compartida: la 238 ESCRIBE sobre ellas y un caso no puede heredar la marca del
+ * anterior).
+ *
+ * Feature 238 (T3.5): `updateMany` honra el `where` COMPLETO —`id IN`, `cierreId` y el
+ * `resultado IN` de los retornables— igual que lo haria Postgres. Un `vi.fn()` mudo devolviendo
+ * `{count: n}` dejaria la guarda sin nadie que la mire, que es como el fallo de agosto llego a
+ * `dev`.
+ */
 function gestionOrdenFake() {
-  return {
+  const filas = GESTIONES_EN_BASE.map((g) => ({
+    ...g,
+    confirmadaFisicaAt: null as Date | null,
+  }));
+  const delegate = {
     findMany: vi.fn(async ({ where }: { where: WhereGestion }) =>
-      GESTIONES_EN_BASE.filter(
-        (g) =>
-          (where.cierreId === undefined || g.cierreId === where.cierreId) &&
-          (where.resultado === undefined || g.resultado === where.resultado) &&
-          (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
-          (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
-      ).map((g) => ({ ...g })),
+      filas
+        .filter(
+          (g) =>
+            (where.cierreId === undefined || g.cierreId === where.cierreId) &&
+            casaResultado(g.resultado, where.resultado) &&
+            (where.anuladaAt === undefined || g.anuladaAt === where.anuladaAt) &&
+            (where.ordenId?.in === undefined || where.ordenId.in.includes(g.ordenId)),
+        )
+        .map((g) => ({ ...g })),
     ),
+    updateMany: vi.fn(
+      async ({ where, data }: { where: WhereGestion; data: Record<string, unknown> }) => {
+        let count = 0;
+        for (const g of filas) {
+          if (where.id?.in !== undefined && !where.id.in.includes(g.id)) continue;
+          if (where.cierreId !== undefined && g.cierreId !== where.cierreId) continue;
+          if (!casaResultado(g.resultado, where.resultado)) continue;
+          Object.assign(g, data);
+          count += 1;
+        }
+        return { count };
+      },
+    ),
+  };
+  return { delegate, filas };
+}
+
+/**
+ * Store de `cierre_dia` que HONRA la guarda `estado IN ESTADOS_RESOLUBLES`.
+ *
+ * Feature 238 (T3.5, R22): es lo que hace visible la idempotencia REAL de la marca. El bloque de
+ * confirmacion no tiene —ni necesita— codigo de idempotencia: vive dentro del
+ * `res.count === 1 && aprobado`, y ese `res` sale de este `updateMany`. Con un doble que devuelva
+ * siempre `{count: 1}` la segunda aprobacion volveria a entrar y la propiedad no se estaria
+ * midiendo.
+ */
+function cierreDiaFake(estadoInicial = "solicitado") {
+  const cierre = { estado: estadoInicial };
+  return {
+    cierre,
+    delegate: {
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { estado?: { in?: string[] } };
+          data: { estado?: string };
+        }) => {
+          if (where.estado?.in !== undefined && !where.estado.in.includes(cierre.estado)) {
+            return { count: 0 };
+          }
+          if (data.estado !== undefined) cierre.estado = data.estado;
+          return { count: 1 };
+        },
+      ),
+      count: vi.fn().mockResolvedValue(1), // existe en alcance -> `conflict`, no `fuera_de_alcance`
+      findUnique: vi.fn().mockResolvedValue({ mensajeroId: "m1" }),
+    },
   };
 }
 
@@ -150,14 +223,19 @@ const TARIFA_CONGELADA = {
 function buildPrisma(
   store: ReturnType<typeof makeWalletStore>,
   ordenStore: ReturnType<typeof makeOrdenStore> = makeOrdenStore(),
+  // Feature 238 (T3.5): los dos stores que la idempotencia de la marca necesita ver de verdad.
+  gestionStore: ReturnType<typeof gestionOrdenFake> = gestionOrdenFake(),
+  cierreStore: ReturnType<typeof cierreDiaFake> | null = null,
 ) {
   const detalle = [
     { ordenId: "o1", tiendaId: "t1", montoCobrar: new Prisma.Decimal("10000.00"), cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
     { ordenId: "o2", tiendaId: "t1", montoCobrar: null, cobraComision: true, esCentral: false, ...TARIFA_CONGELADA },
   ];
   const prisma = {
-    cierreDia: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
-    gestionOrden: gestionOrdenFake(),
+    cierreDia: cierreStore
+      ? cierreStore.delegate
+      : { updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
+    gestionOrden: gestionStore.delegate,
     cierreDetail: { findMany: vi.fn().mockResolvedValue(detalle) },
     walletMovimiento: store.walletMovimiento,
     orden: ordenStore.orden,
@@ -219,6 +297,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm",
         motivoRechazo: null,
       });
@@ -259,6 +338,7 @@ describe("wallet idempotencia (R6/R13)", () => {
         alcance: ALCANCE,
         nuevoEstado: "aprobado",
         anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+        confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm",
         motivoRechazo: null,
       });
@@ -303,6 +383,57 @@ describe("wallet idempotencia (R6/R13)", () => {
     });
     expect(prisma.orden.updateMany.mock.calls.length).toBe(llamadasTrasLaPrimera + 1); // se INTENTA
     expect(prisma.ordenHistorialEstado.createMany.mock.calls.length).toBe(historialTrasLaPrimera); // y no escribe
+  });
+
+  // ------------------------------------------------------------------------------------------
+  // Feature 238 (T3.5, R22) — LA IDEMPOTENCIA DE LA MARCA, DONDE DE VERDAD SE VE.
+  //
+  // Este caso vive AQUI y no en `cierres-admin-caja-cod.test.ts`, y no es una preferencia: aquel
+  // doble devuelve vacio para el bloque de ordenes y PASA DE LARGO por esta zona. El store de
+  // este archivo honra el `where` como lo haria Postgres, asi que la guarda se comporta como la
+  // guarda que dice ser. No re-descubrir esto: ya costo una escritura sin asercion durante toda
+  // su vida.
+  it("238/R22: re-aprobar da `conflict`, no ejecuta el bloque y deja UNA sola marca", async () => {
+    const store = makeWalletStore();
+    const gestionStore = gestionOrdenFake();
+    const cierreStore = cierreDiaFake(); // arranca `solicitado`
+    const prisma = buildPrisma(store, makeOrdenStore(), gestionStore, cierreStore);
+    const repo = makeRepo(prisma);
+
+    const aprobar = () =>
+      repo.resolverCierre({
+        cierreId: "c1",
+        alcance: ALCANCE,
+        nuevoEstado: "aprobado",
+        anclajeDevolucion: ANCLAJE_DEVOLUCION,
+        resueltoPor: "adm",
+        motivoRechazo: null,
+        // `g2` es la unica gestion de `c1` cuyo paquete vuelve: es lo que bodega escaneo.
+        confirmacionFisica: [{ gestionId: "g2" }],
+      });
+
+    const primera = await aprobar();
+    expect(primera).toBe("updated");
+
+    const marca = gestionStore.filas.find((g) => g.id === "g2")?.confirmadaFisicaAt;
+    expect(marca).toBeInstanceOf(Date);
+    // Y SOLO `g2`: `g1` entrego (no vuelve) y `g3` es de OTRO cierre.
+    expect(gestionStore.filas.filter((g) => g.confirmadaFisicaAt !== null).map((g) => g.id)).toEqual(
+      ["g2"],
+    );
+    const escriturasTrasLaPrimera = gestionStore.delegate.updateMany.mock.calls.length;
+    expect(escriturasTrasLaPrimera).toBe(1);
+
+    // SEGUNDA aprobacion del MISMO cierre. El cierre ya esta `aprobado`, asi que la guarda
+    // `estado IN ["solicitado"]` no casa, `res.count = 0` y la rama entera —marca incluida— no
+    // se ejecuta. La idempotencia no la da un `if`: la da esa guarda.
+    const segunda = await aprobar();
+
+    expect(segunda).toBe("conflict");
+    expect(gestionStore.delegate.updateMany.mock.calls.length).toBe(escriturasTrasLaPrimera);
+    // UNA sola marca, y con el instante de la PRIMERA: el reintento no la reescribe.
+    expect(gestionStore.filas.find((g) => g.id === "g2")?.confirmadaFisicaAt).toBe(marca);
+    expect(gestionStore.filas.filter((g) => g.confirmadaFisicaAt !== null)).toHaveLength(1);
   });
 
   it("R13: reintento por par existente = no-op (sin error propagado, sin segundo movimiento)", async () => {

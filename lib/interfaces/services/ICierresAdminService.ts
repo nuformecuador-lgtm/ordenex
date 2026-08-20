@@ -223,6 +223,19 @@ export interface IndemnizacionCapturadaInput {
   monto: string;
 }
 
+/**
+ * Feature 238 (T2.2, R7/R12) — UNA gestion que bodega declara tener DELANTE, ya validada en el
+ * borde (uuid + entero positivo).
+ *
+ * `numGuia` es lo que se LEYO —camara o teclado, el medio no se registra (D7)— y el servicio lo
+ * contrasta con la guia REAL de la orden de esa gestion. Sin ese contraste, un fallo de mapeo del
+ * cliente confirmaria el paquete equivocado y nadie se enteraria: el conteo cuadraria igual.
+ */
+export interface ConfirmacionFisicaInput {
+  gestionId: string;
+  numGuia: number;
+}
+
 // R10/R12-R14: aprobar un cierre `solicitado` del alcance.
 // Feature 158 (R19/R20/R21): + `validation_error` cuando los montos de indemnizacion no cubren
 // EXACTAMENTE las gestiones `incidente` del cierre (falta alguna, sobra alguna, o alguna no es
@@ -401,6 +414,14 @@ export interface ICierresAdminService {
    * tocar el repo; con la cobertura correcta, la escritura de los montos y la emision del
    * egreso ocurren en la MISMA transaccion que la aprobacion. Por defecto `[]`, que es el
    * camino RETROCOMPATIBLE de un cierre sin incidentes (R36).
+   *
+   * Feature 238 (R7-R16): `confirmacionFisica` trae UNA entrada por gestion del cierre cuyo
+   * PAQUETE vuelve a bodega (`devuelta`, `rechazada`, `reprogramada`). El service exige
+   * COBERTURA EXACTA contra las gestiones reales —ni falta ni sobra— ANTES de las
+   * indemnizaciones y ANTES de tocar el repo (R14): si falta un paquete no tiene sentido validar
+   * montos que se van a descartar. Con la cobertura correcta, la marca por gestion se escribe
+   * DENTRO de la misma transaccion que aprueba (R17). Por defecto `[]`, que es el camino
+   * INTACTO de un cierre sin nada que devolver (R16) — 3 de cada 12 cierres medidos.
    */
   /**
    * Pedido humano (2026-08-19) — corrige el reparto por método de UNA gestión de un cierre
@@ -419,6 +440,7 @@ export interface ICierresAdminService {
     cierreId: string,
     actor: Actor,
     indemnizaciones?: ReadonlyArray<IndemnizacionCapturadaInput>,
+    confirmacionFisica?: ReadonlyArray<ConfirmacionFisicaInput>,
   ): Promise<AprobarCierreServiceResult>;
   /**
    * R11-R15: rechaza un cierre `solicitado` del alcance con motivo obligatorio

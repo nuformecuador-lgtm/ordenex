@@ -146,8 +146,14 @@ avisarlo, NO DEBE marcar ninguna gestión y NO DEBE enviar nada al servidor.
 **R30.** SI la guía leída no pertenece a ninguna gestión del cierre abierto, ENTONCES el sistema DEBE
 avisarlo diciendo eso mismo y NO DEBE marcar ninguna gestión.
 
-**R31.** SI la guía leída pertenece al cierre pero a una gestión que **no vuelve a bodega**, ENTONCES
-el sistema DEBE avisarlo con un mensaje propio, distinto del de R30.
+**R31.** SI la guía leída pertenece al cierre pero **ninguna** de sus gestiones **vuelve a bodega**,
+ENTONCES el sistema DEBE avisarlo con un mensaje propio, distinto del de R30.
+> **PRECISADO el 2026-08-19** (m3 de la revisión), tras el bloqueo que apareció al ver la app: el
+> texto original decía «a una gestión que no vuelve», y una guía puede casar **varias** gestiones —una
+> orden puede tener dos vivas en el mismo cierre—. Leído al pie de la letra, el original pedía avisar
+> también cuando la guía casa una fila que **no** vuelve **y otra que sí**, y eso dejaría la segunda
+> sin poder confirmarse: el cierre no se podría aprobar nunca. Rige el **plural**: se avisa sólo si
+> **ninguna** vuelve. Ver `design.md` §5.3.
 
 **R32.** SI la guía leída ya estaba confirmada en esta sesión, ENTONCES el sistema DEBE decirlo y NO
 DEBE contarla dos veces.

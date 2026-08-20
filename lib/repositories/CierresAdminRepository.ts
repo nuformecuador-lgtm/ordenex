@@ -6,6 +6,7 @@ import type {
   CierreAdminResumenRow,
   GestionEditableDelCierre,
   GestionIncidenteDelCierre,
+  GestionRetornableDelCierre,
   ICierresAdminRepository,
   ResolverCierreInput,
   ResolverCierreResult,
@@ -34,6 +35,10 @@ import type {
 } from "@/lib/types/filtros-cierres";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
+// Feature 238 (T1.3/T3.3): el PUNTO UNICO de «que paquete vuelve a bodega». Lo leen las DOS
+// consultas de esta feature —la del conjunto esperado y la de la marca— para que no puedan
+// divergir entre si ni de lo que la pantalla pinta.
+import { RESULTADOS_QUE_VUELVEN } from "@/lib/types/gestion-retorno";
 
 /** Valores de rol que este catálogo consulta. Salen del seed, no se inventan aquí. */
 const ROL_ADMIN_SATELITE = "adminSatelite";
@@ -370,6 +375,30 @@ export class IndemnizacionNoAplicableError extends Error {
   }
 }
 
+/**
+ * Feature 238 (T3.3, design §4.2, R18/R44) — la marca de confirmacion fisica apunta a una gestion
+ * que NO cumple la guardia `(id IN ids, cierreId, resultado IN RESULTADOS_QUE_VUELVEN)`: no
+ * existe, es de otro cierre, o su paquete no vuelve a bodega.
+ *
+ * Se LANZA para que la `$transaction` revierta TODO (R18): la aprobacion del cierre, los cinco
+ * feeds de dinero, la liberacion de `sin_gestionar`, la devolucion de las `rechazada` y el anclaje
+ * de la 239. Sin efectos parciales, y en particular sin un cierre aprobado cuyos paquetes nadie
+ * confirmo.
+ *
+ * Es un error de PROGRAMACION o de CARRERA, no un resultado de dominio: el servicio ya valido la
+ * cobertura EXACTA antes de llamar, asi que llegar aqui significa que el cierre cambio entre la
+ * lectura y la escritura.
+ *
+ * Mensaje SIN PII (R44, patron `IndemnizacionNoAplicableError`): solo el id del cierre — ni
+ * gestiones, ni guias, ni destinatarios, ni actores.
+ */
+export class ConfirmacionFisicaNoAplicableError extends Error {
+  constructor(readonly cierreId: string) {
+    super(`confirmacion fisica no aplicable a una gestion del cierre ${cierreId}`);
+    this.name = "ConfirmacionFisicaNoAplicableError";
+  }
+}
+
 // WHERE del alcance: siempre por destino_tipo; por destino_zona_id SOLO si el alcance
 // lo acota (adminSatelite). El maestro (destinoZonaId null) ve todos los central.
 function alcanceWhere(alcance: Alcance): { destinoTipo: Alcance["destinoTipo"]; destinoZonaId?: string } {
@@ -700,6 +729,44 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     return rows.map((r) => ({
       gestionId: r.id,
       ordenMontoCobrar: decimalToString(r.orden.montoCobrar),
+    }));
+  }
+
+  /**
+   * Feature 238 (T1.3, design §3.3, R2/R4/R6) — el CONJUNTO ESPERADO de la confirmacion fisica.
+   * Molde literal de `findGestionesIncidenteDelCierre`, con tres diferencias que importan:
+   *
+   *  - `resultado IN RESULTADOS_QUE_VUELVEN` en vez de `= 'incidente'`, y la lista sale del PUNTO
+   *    UNICO (`lib/types/gestion-retorno.ts`), no de un literal aqui. Que este WHERE, el de la
+   *    escritura de la marca y el de la pantalla lean la MISMA declaracion es lo que impide
+   *    exigir la confirmacion de una gestion que la escritura despues no encontraria.
+   *  - `anuladaAt: null` como DEFENSA EXPLICITA, no como filtro necesario: una gestion con
+   *    `cierre_id` poblado no puede anularse (el vinculo solo lo reciben gestiones vigentes,
+   *    `CierreDiaRepository` «PUNTO MONEY-CRITICAL» de la 67, y `deshacerGestion` exige
+   *    `cierre_id IS NULL`). Se escribe igual, por simetria con el bloque de anclaje de la 239.
+   *  - La proyeccion trae `orden.numGuia` para que R12 se pueda verificar en el servicio contra
+   *    la guia REAL del paquete, en la misma consulta y sin un N+1 por fila.
+   *
+   * El ALCANCE va en el WHERE, por la relacion al cierre (R6): nunca se filtra en memoria, y un
+   * cierre fuera de alcance devuelve `[]` sin distinguirse de uno inexistente.
+   */
+  async findGestionesRetornablesDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionRetornableDelCierre[]> {
+    const rows = await this.prisma.gestionOrden.findMany({
+      where: {
+        cierreId,
+        resultado: { in: [...RESULTADOS_QUE_VUELVEN] },
+        anuladaAt: null,
+        cierre: alcanceWhere(alcance),
+      },
+      select: { id: true, resultado: true, orden: { select: { numGuia: true } } },
+    });
+    return rows.map((r) => ({
+      gestionId: r.id,
+      numGuia: r.orden.numGuia,
+      resultado: r.resultado,
     }));
   }
 
@@ -1125,6 +1192,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // Se lee aqui, fuera de la tx, para que el bloque de abajo no vuelva a estrechar el tipo.
     const anclajeDevolucion =
       input.nuevoEstado === "aprobado" ? input.anclajeDevolucion : undefined;
+    // Feature 238 (T3.2/T3.3): igual que el anclaje, solo existe en la rama `aprobado`. Al
+    // rechazar queda `[]` y el bloque de abajo no corre — que es R24 sostenido por el tipo, no
+    // por un `if` que alguien pueda mover.
+    const confirmacionFisica =
+      input.nuevoEstado === "aprobado" ? input.confirmacionFisica : [];
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -1365,6 +1437,57 @@ export class CierresAdminRepository implements ICierresAdminRepository {
             }
           }
         }
+
+        // ------------------------------------------------------------------------------------
+        // Feature 238 (T3.3, design §4, R17-R23) — LA MARCA DE CONFIRMACION FISICA.
+        //
+        // BODEGA DECLARO TENER ESTOS PAQUETES DELANTE. La cobertura EXACTA —que lo confirmado sea
+        // igual al conjunto que vuelve, ni falta ni sobra— ya la verifico el SERVICIO antes de
+        // abrir esta transaccion (R14); aqui solo se persiste el hecho, en la MISMA tx que aprueba
+        // (R17), de modo que no pueda existir un cierre aprobado sin sus marcas ni marcas de un
+        // cierre que no se aprobo.
+        //
+        // VA AQUI, entre la devolucion de las `rechazada` (139) y el ANCLAJE (239), y no es
+        // estetico: se lee en el orden operativo —se confirma que el paquete esta, y a
+        // continuacion la devolucion se ancla y se vuelve visible para la tienda—. Ademas es
+        // MONEY-NEUTRAL (`data` con una sola clave) y los cinco feeds de dinero estan TODOS por
+        // delante, asi que no mueve ninguna asercion de orden de
+        // `cierres-admin-caja-cod.test.ts`. Un rojo alli significa que este bloque aterrizo mal:
+        // es regresion, no asercion a actualizar.
+        //
+        // UNA consulta, no N. A diferencia del bucle de indemnizaciones —que escribe un valor
+        // distinto por fila— aqui el valor es el MISMO para todas, asi que un solo `updateMany`
+        // hace el trabajo. El techo real medido es de 14 gestiones por cierre.
+        if (confirmacionFisica.length > 0) {
+          const ids = confirmacionFisica.map((c) => c.gestionId);
+          const aplicado = await tx.gestionOrden.updateMany({
+            where: {
+              id: { in: ids },
+              // `cierreId` y `resultado` son GUARDIA del WHERE, no filtro cosmetico: sin el
+              // primero, aprobar un cierre podria marcar gestiones de OTRO; sin el segundo,
+              // podria marcar un `incidente` —cuyo paquete no vuelve y por tanto nadie tuvo
+              // delante—. Las dos tienen su caso testigo.
+              cierreId,
+              resultado: { in: [...RESULTADOS_QUE_VUELVEN] },
+            },
+            // R19 — MONEY-NEUTRAL: el `data` lleva EXACTAMENTE esta clave y ninguna mas. Ningun
+            // feed lee esta columna (nace sin lectores) y ninguno lee `orden.estatus_id`, asi que
+            // no hay ruta por la que esto toque un importe.
+            data: { confirmadaFisicaAt: new Date() },
+          });
+          // R18 — FALLO CERRADO. Si alguna no caso la guardia, se lanza y la `$transaction`
+          // revierte TODO. Es el equivalente del `count !== 1` del bucle de indemnizaciones.
+          if (aplicado.count !== ids.length) {
+            throw new ConfirmacionFisicaNoAplicableError(cierreId);
+          }
+        }
+        // R22 — IDEMPOTENCIA POR CONSTRUCCION, sin una linea de codigo de idempotencia: este
+        // bloque vive dentro del `res.count === 1 && aprobado`, y el `updateMany` del cierre esta
+        // guardado por `estado IN ESTADOS_RESOLUBLES = ["solicitado"]`. Un cierre ya aprobado
+        // devuelve `count = 0` y la rama entera no se ejecuta. NO se anade `confirmadaFisicaAt:
+        // null` al WHERE: haria que un reintento legitimo tras un rollback lanzara por
+        // `count !== ids.length`.
+        // ------------------------------------------------------------------------------------
 
         // ------------------------------------------------------------------------------------
         // Feature 239 (T2.2, design §3, R4-R10) — EL ANCLAJE DE LA DEVOLUCION.
