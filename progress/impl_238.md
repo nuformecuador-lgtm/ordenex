@@ -575,3 +575,169 @@ $ pnpm run test:guardias
 **Veredicto de la addenda:** los once mensajes tildados con las siete correcciones que hacian falta
 y **dos textos que nadie miraba ahora tienen su literal**; R39 cerrado donde vive, con dos
 mutaciones que lo matan. Sigue faltando **solo T4**.
+
+---
+
+# Fix backend — el caso de R20 era verde por el estado ambiental (2026-08-19)
+
+Rojo del gate en `tests/integration/db/confirmacion-fisica-migration.test.ts`. **El defecto estaba
+en el test, no en el codigo**, y el codigo NO se toco. **Sin commitear.**
+
+## Que estaba mal
+
+El caso afirmaba, sobre la base real:
+
+```sql
+SELECT count(*) FILTER (WHERE "confirmada_fisica_at" IS NOT NULL) ...
+  FROM "gestion_orden" WHERE "created_at" < TIMESTAMP '2026-08-19 00:00:00'
+```
+```ts
+expect(Number(filas[0].con_marca)).toBe(0);
+```
+
+Eso codifica «gestion **creada** antes de la feature ⇒ **nunca** marcada», y es **falso por
+diseno**: un cierre solicitado la semana pasada se aprueba hoy y sus gestiones —creadas antes— se
+marcan hoy. **Ese es el camino feliz de la feature.**
+
+Pasaba solo porque nadie la habia ejercido. En cuanto el leader aprobo un cierre real en la base
+local (recorrido de T5.6) quedaron **12 gestiones marcadas**, todas creadas en julio/agosto, y el
+caso cayo. En produccion habria caido con la **primera aprobacion de bodega**.
+
+Es la cara opuesta del test que pasa sin datos: **un test verde por el estado ambiental**. Lo
+escribi yo y no lo vi porque lo corri contra una base donde la feature aun no se habia usado.
+
+## Que dice R20 de verdad, y que se afirma ahora
+
+R20 es una propiedad de **la migracion** —no inventa confirmaciones, no hay backfill—, no una
+propiedad de todo lo que pase despues. Se traduce en **dos invariantes** que siguen siendo ciertas
+**con la feature en uso**:
+
+1. **Ninguna marca es anterior a la migracion.** Distingue «lo escribio la app» de «lo invento un
+   backfill»: un `UPDATE` masivo que copiara, por ejemplo, `cierre_dia.resuelto_at` de los cierres
+   ya aprobados dejaria marcas con fecha **anterior a que la columna existiera**. El instante de
+   referencia sale de `_prisma_migrations.finished_at`.
+2. **Ninguna marca vive fuera de un cierre aprobado.** Es la invariante de la **escritura** (R17):
+   la marca solo nace dentro de la transaccion de aprobacion, guardada por `estado = 'solicitado'`
+   y que lo deja en `aprobado`.
+
+### Por que LAS DOS, y no una — que era la pregunta
+
+- **(1) sola no basta:** no ve un backfill ejecutado **despues** de la migracion; sus marcas
+  llevarian `now()` y pasarian el filtro.
+- **(2) sola no basta, y esto NO es hipotetico:** la medicion de T0.1 encontro en produccion **12
+  cierres, los 12 `aprobado`, y 0 `solicitado`**. Un `UPDATE` a ciegas sobre esa base marcaria
+  gestiones de cierres aprobados y seria **invisible** para (2).
+
+Juntas cubren las dos formas que tiene el fallo de aparecer. Ninguna de las dos se relajo a
+`toBeGreaterThanOrEqual(0)` ni se acoto a un corpus sembrado que esquivara el problema.
+
+### Estabilidad de (2), verificada y no supuesta
+
+(2) solo seria fragil si un cierre pudiera **salir** de `aprobado` dejando marcas detras.
+Comprobado en `CierresAdminRepository`: `resolverCierre` esta guardado por
+`ESTADOS_RESOLUBLES = ["solicitado"]` y la valvula de escape por
+`ESTADOS_REABRIBLES = ["vencido", "rechazado"]` (`:61`). **Un cierre aprobado no vuelve a moverse**,
+asi que la invariante no puede volverse falsa por uso normal.
+
+### La anti-vacuidad, conservada y reforzada
+
+Era la parte buena del caso viejo y se mantiene, en **tres** niveles:
+
+1. **Hay gestiones que mirar** (`total > 0`), como antes.
+2. **La migracion figura aplicada con su `finished_at`.** Sin esa fila, el `JOIN` de (1) no casaria
+   y el contador daria cero **sin comparar nada** — un modo de vacuidad nuevo que el caso viejo no
+   tenia. Se afirma explicitamente.
+3. **Una AUTOCOMPROBACION que planta los dos backfills de mentira** dentro de una transaccion que
+   **siempre se revierte**, y comprueba que los dos contadores los cazan. Las dos auditorias —la
+   real y la plantada— llaman a **la misma funcion**: si cada una escribiera su SQL, podrian dejar
+   de medir lo mismo sin que nada lo delatara.
+
+### Un detalle de tipos que no es cosmetico
+
+`confirmada_fisica_at` es `timestamp without time zone` (Prisma escribe UTC) y
+`_prisma_migrations.finished_at` es `timestamptz`. Compararlos a pelo los convierte con el
+**TimeZone de la sesion** —medido en esta base: **`America/Bogota`**—, y la comparacion se desviaria
+cinco horas. El `AT TIME ZONE 'UTC'` los pone en el mismo marco. Queda escrito junto a la consulta.
+
+## Mutaciones — las dos, con salida real
+
+### M-DB · un backfill REAL en la base local (lo que pidio el leader)
+
+`UPDATE` sobre **una** gestion sin marca, poniendole `2026-01-01` (fecha anterior a la migracion);
+vitest corrido; deshecho y verificado. El **archivo de test no cambio** entre las tres corridas, y
+su `sha256` lo demuestra: es la prueba de que el verde final no se consiguio tocando el test.
+
+| | Estado de la base | `sha256` del test |
+| --- | --- | --- |
+| antes | `total 15, marcadas 12, primera 2026-08-20T00:02:14.828Z` | `f781118b` |
+| con el backfill | `total 15, marcadas 13, primera 2026-01-01T00:00:00.000Z` | `f781118b` (sin tocar) |
+| despues | `total 15, marcadas 12, primera 2026-08-20T00:02:14.828Z` | `f781118b` |
+
+Rojo citado tal cual:
+
+```
+FAIL tests/integration/db/confirmacion-fisica-migration.test.ts >
+     R20/R17: ninguna marca es anterior a la migracion ni vive fuera de un cierre aprobado
+AssertionError: hay marcas con fecha ANTERIOR a que la columna existiera:
+                eso solo lo produce un backfill: expected 1 to be +0 // Object.is equality
+- Expected
++ Received
+- 0
++ 1
+```
+
+Cayeron **dos** casos: el real y la autocomprobacion. Tras deshacer el `UPDATE`: **19 passed**.
+
+### M16 · el modo de vacuidad, cazado por la autocomprobacion
+
+Se rompe el `JOIN` de referencia (`migration_name = $1 || '_inexistente'`) para que el contador de
+(1) de **siempre cero**.
+
+| sha256 antes / mutado / despues | Resultado |
+| --- | --- |
+| `f781118b` / `418930f4` / `f781118b` | El caso REAL queda **verde** (vacuamente) y la **AUTOCOMPROBACION lo caza**: `AssertionError: expected 0 to be greater than 0` |
+
+Eso es exactamente para lo que esta la autocomprobacion: sin ella, una auditoria mal escrita
+—o una base sin la fila de la migracion— habrian dado verde para siempre.
+
+## Revision del resto del archivo (y de los demas)
+
+Preguntado a cada caso: **¿depende de que nadie haya usado la feature?**
+
+| Caso | Depende del uso | Por que |
+| --- | --- | --- |
+| `R17/R20: existe, es NULLABLE y no tiene DEFAULT` | **No** | lee `information_schema`: forma del esquema, no datos |
+| `no se creo ningun indice sobre la columna` | **No** | lee `pg_indexes` |
+| los 15 casos estaticos (`migration.sql` / `down.sql` / `schema.prisma`) | **No** | regex sobre archivos |
+| `R20/R17` (el reescrito) | **No** | las dos invariantes son ciertas con la feature en uso, y la anti-vacuidad no exige ni prohibe que haya marcas |
+| `cierres-admin-retornables-sql-real.test.ts` (los 5) | **No** | siembra su propio corpus y afirma **solo sobre los ids que creo**, dentro de un cierre que acaba de crear; los datos ambientales no pueden colarse |
+
+Lo que **si** sigue siendo ambiental —y es deliberado— es la exigencia de que la base tenga
+catalogo y gestiones: sin eso, esos archivos **fallan con un mensaje que lo dice**, nunca pasan en
+verde sin comprobar nada.
+
+## Verificacion
+
+```
+$ pnpm exec tsc --noEmit
+(sin salida; TSC OK)
+
+$ pnpm exec eslint tests/integration/db/confirmacion-fisica-migration.test.ts
+(sin salida; ESLINT_EXIT=0)
+
+$ pnpm exec vitest run tests/integration/db/confirmacion-fisica-migration.test.ts
+ Test Files  1 passed (1)
+      Tests  19 passed (19)          # con las 12 marcas REALES en la base, no a pesar de ellas
+
+$ pnpm exec vitest run tests/integration/db/
+ Test Files  107 passed (107)
+      Tests  1401 passed (1401)
+```
+
+**Mapa `R<n>` → test, corregido:** **R20** → `tests/integration/db/confirmacion-fisica-migration.test.ts`
+— «existe, es NULLABLE y no tiene DEFAULT» + «ninguna marca es anterior a la migracion ni vive
+fuera de un cierre aprobado» (mutaciones **M-DB** y **M16**). La redaccion anterior del mapa —«las
+gestiones previas quedan en NULL»— describia el caso viejo y **ya no es lo que se afirma**.
+
+**Veredicto:** el caso pasa **con** la base en su estado realista (un cierre aprobado, 12 marcas) y
+se rompe ante un backfill plantado. La base local quedo como estaba.

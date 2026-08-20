@@ -442,17 +442,36 @@ Reuso literal del patrón de `RecogerPaqueteCard`, que es el que ya resuelve est
   corregir (devolver `false` desde `onSubmit`).
 
 La resolución `numGuia → gestión` se hace **en el cliente contra el detalle ya cargado**, y produce
-uno de cuatro desenlaces, cada uno con su mensaje:
+uno de cuatro desenlaces, cada uno con su mensaje.
+
+> ⚠️ **CORREGIDO el 2026-08-19, tras verlo bloquear un cierre en pantalla (T5.6).** Esta tabla decía
+> «casa **una** gestión», y una guía puede casar **varias**: una orden puede tener **dos gestiones
+> vivas en el mismo cierre**. Medido en producción por MCP: **1 par (cierre, orden) sobre 48**, y
+> justo del tipo cuyo paquete vuelve.
+>
+> Con la resolución a **una** —un `find`, que devuelve siempre la primera— la segunda fila quedaba
+> **inalcanzable**: la primera lectura la confirmaba, la segunda respondía «ya está confirmada», el
+> contador se clavaba en `11 de 12` y **el cierre no se podía aprobar por ninguna vía**, sin ningún
+> mensaje que lo explicara. El servidor **no** tenía ese candado (su regla de duplicado es por
+> `gestionId`, no por guía), así que era un bloqueo puramente de pantalla.
+>
+> **Se lee ahora en plural**, y los cuatro desenlaces se evalúan sobre **todas** las filas de esa
+> guía. Hay **un solo paquete físico**: pedir dos lecturas de la misma caja es pedir que se
+> atestigüe dos veces un único acto.
 
 | Desenlace | Mensaje | Req |
 | --- | --- | --- |
-| Casa una gestión que vuelve y estaba pendiente | se marca confirmada (+ confirmación persistente bajo el formulario, como la última recogida) | R28 |
-| Casa una gestión que vuelve y **ya** estaba confirmada | «Esa guía ya está confirmada.» | R32 |
-| Casa una gestión del cierre que **no** vuelve (`entregada` / `incidente`) | «Esa guía es de este cierre, pero ese paquete no vuelve a bodega.» | R31 |
+| Casan **una o más** gestiones que vuelven y **alguna** estaba pendiente | se marcan confirmadas **todas** las pendientes de esa guía (+ confirmación persistente bajo el formulario, como la última recogida) | R28 |
+| Casan gestiones que vuelven y **todas** estaban ya confirmadas | «Esa guía ya está confirmada.» | R32 |
+| Casan gestiones del cierre y **ninguna** vuelve (`entregada` / `incidente`) | «Esa guía es de este cierre, pero ese paquete no vuelve a bodega.» | R31 |
 | No casa ninguna gestión del cierre | «Esa guía no pertenece a este cierre.» | R30 |
 
 Los cuatro mensajes son distintos **a propósito**: son cuatro correcciones distintas para quien está
 en el mostrador con el paquete en la mano.
+
+**Consecuencia en el contador:** cuenta **paquetes** (guías distintas), no filas — 12 filas pueden ser
+11 paquetes—, y cada fila sin número de guía cuenta aparte para no rebajar el bloqueo. El rótulo ya
+decía «paquetes»; lo que mentía era el número.
 
 ### 5.4 Estado de la ventana
 

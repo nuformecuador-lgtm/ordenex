@@ -65,6 +65,19 @@ const FILA_CONFIRMADA = "Confirmada";
 const FILA_SIN_GUIA =
   "Sin número de guía: no se puede confirmar. Avisá a un administrador.";
 
+/**
+ * Dos filas, UN solo bulto. Se dice en la fila porque es lo que hace legible lo que si no parece
+ * un error: al leer esa guía, dos filas cambian a «Confirmada» de golpe y el contador —que va en
+ * paquetes— avanza sólo uno. Sin esta línea, quien escanea ve la misma guía repetida y busca el
+ * segundo paquete que no existe, o cree que la app marcó de más.
+ *
+ * Siempre en plural («N filas»): `cuantasFilas` es 2 o más por construcción, así que no hay
+ * concordancia que resolver.
+ */
+export function filaMismoPaquete(cuantasFilas: number): string {
+  return `Este paquete aparece en ${cuantasFilas} filas de esta lista: una sola lectura las confirma todas.`;
+}
+
 // --- Los cuatro desenlaces de una guía leída (R29-R32) ---
 // Son cuatro mensajes DISTINTOS a propósito: son cuatro correcciones distintas para quien está
 // en el mostrador con el paquete en la mano. «No es de este cierre» manda a buscar en otra pila;
@@ -153,9 +166,17 @@ export function gestionesDelCierre(grupos: CierreGrupos): CierreDetalleGestion[]
   return Object.values(grupos).flat();
 }
 
-/** Lo que produce interpretar una lectura: o marca una fila, o dice qué pasó. Nunca las dos. */
+/**
+ * Lo que produce interpretar una lectura: o marca filas, o dice qué pasó. Nunca las dos.
+ *
+ * `gestionIds` es una LISTA y no una gestión suelta a propósito: una guía puede tener **más de
+ * una fila pendiente** en el mismo cierre (dos gestiones vivas de la misma orden), y hay UN solo
+ * paquete físico detrás. Una lectura = «tengo este paquete delante» = todas sus filas cubiertas.
+ * Con una sola gestión por lectura, la segunda fila no se podía confirmar nunca (ver
+ * `interpretarLectura`).
+ */
 export type LecturaInterpretada =
-  | { tipo: "confirma"; gestionId: string; numGuia: number }
+  | { tipo: "confirma"; gestionIds: readonly string[]; numGuia: number }
   | { tipo: "aviso"; mensaje: string };
 
 /**
@@ -167,6 +188,16 @@ export type LecturaInterpretada =
  * Se buscan TODAS las gestiones del cierre y no sólo las que vuelven, porque distinguir «no es
  * de este cierre» de «es de este cierre y no vuelve» son dos correcciones distintas (R30 vs R31)
  * y sólo se pueden distinguir mirando las cinco secciones.
+ *
+ * **Se buscan TODAS las filas de esa guía, no la primera.** Un cierre puede traer dos gestiones
+ * vivas de la MISMA orden y, por tanto, con la misma guía: medido contra producción el
+ * 2026-08-19, 1 de 48 pares (cierre, orden) vivos está en ese caso, y es justo del tipo que
+ * bloquea. Con `find` pasaba esto: la primera lectura confirmaba la primera fila, la segunda
+ * lectura volvía a caer en esa misma fila y respondía «ya está confirmada», y la segunda fila se
+ * quedaba `Pendiente` PARA SIEMPRE — el contador clavado en `N-1 de N`, el botón apagado y el
+ * cierre imposible de aprobar por ninguna vía. El servidor no tiene ese candado: dedupe por
+ * `gestionId` (no por guía) y compara la guía contra la de CADA gestión, así que dos entradas
+ * con la misma `numGuia` y distinto `gestionId` le valen.
  */
 export function interpretarLectura(
   texto: string,
@@ -187,18 +218,83 @@ export function interpretarLectura(
     return { tipo: "aviso", mensaje: LECTURA_ILEGIBLE }; // R29
   }
 
-  const gestion = gestionesDelCierre.find((g) => g.numGuia === numGuia);
-  if (gestion === undefined) return { tipo: "aviso", mensaje: LECTURA_AJENA }; // R30
-  if (!vuelveABodega(gestion.resultado)) {
-    // R31: `vuelveABodega` es el PUNTO ÚNICO. La pantalla no decide por su cuenta qué vuelve;
-    // si lo decidiera, podría pedir confirmar un conjunto distinto del que el servidor exige y
-    // el botón se quedaría bloqueado sin explicación posible.
-    return { tipo: "aviso", mensaje: lecturaNoVuelve(gestion.resultado) };
+  // Las gestiones sin guía (`numGuia === null`) no casan nunca: `numGuia` ya es un número acá.
+  const conEsaGuia = gestionesDelCierre.filter((g) => g.numGuia === numGuia);
+  if (conEsaGuia.length === 0) return { tipo: "aviso", mensaje: LECTURA_AJENA }; // R30
+
+  // R31: `vuelveABodega` es el PUNTO ÚNICO. La pantalla no decide por su cuenta qué vuelve; si
+  // lo decidiera, podría pedir confirmar un conjunto distinto del que el servidor exige y el
+  // botón se quedaría bloqueado sin explicación posible.
+  //
+  // El aviso sale sólo si NINGUNA de las filas de esa guía vuelve. Basta con que una vuelva para
+  // que el paquete esté delante y haya algo que confirmar: mirar sólo la primera convertía una
+  // `entregada` que comparte guía con una `devuelta` en el mismo bloqueo mudo de antes.
+  const queVuelven = conEsaGuia.filter((g) => vuelveABodega(g.resultado));
+  if (queVuelven.length === 0) {
+    // Se nombra el resultado de la primera: son todas del mismo paquete, y lo que corrige a
+    // quien está en el mostrador es SABER que ese bulto no se escanea, no cuál de las filas.
+    return { tipo: "aviso", mensaje: lecturaNoVuelve(conEsaGuia[0].resultado) };
   }
-  if (yaConfirmadas[gestion.gestionId] !== undefined) {
-    return { tipo: "aviso", mensaje: LECTURA_YA_CONFIRMADA }; // R32
+
+  const pendientes = queVuelven.filter(
+    (g) => yaConfirmadas[g.gestionId] === undefined,
+  );
+  // R32, intacto y con su motivo: avisa cuando YA NO QUEDA NADA que cubrir con esa guía, que es
+  // el caso en que la segunda lectura del mismo bulto no cuenta. Mientras quede una fila
+  // pendiente sí hay algo que confirmar, y avisar ahí era el defecto.
+  if (pendientes.length === 0) {
+    return { tipo: "aviso", mensaje: LECTURA_YA_CONFIRMADA };
   }
-  return { tipo: "confirma", gestionId: gestion.gestionId, numGuia };
+  return { tipo: "confirma", gestionIds: pendientes.map((g) => g.gestionId), numGuia };
+}
+
+/**
+ * La CLAVE del paquete FÍSICO de una fila. Dos gestiones vivas de la misma orden llegan con la
+ * misma guía y son **un solo bulto** en el estante: cuentan una vez.
+ *
+ * Sin guía no hay forma de saber si dos filas son el mismo bulto, así que cada una cuenta por su
+ * cuenta. No es un detalle: colapsarlas rebajaría el total y, con él, el número de paquetes que
+ * bodega tiene que poner delante — y esas filas además no se pueden confirmar nunca (R13), así
+ * que el bloqueo tiene que seguir contándolas.
+ */
+function clavePaquete(g: CierreDetalleGestion): string {
+  return g.numGuia === null ? `sin-guia:${g.gestionId}` : `guia:${g.numGuia}`;
+}
+
+/** Las filas del conjunto esperado, agrupadas por paquete físico (una guía, un bulto). */
+export function agruparPorPaquete(
+  retornables: readonly CierreDetalleGestion[],
+): CierreDetalleGestion[][] {
+  const porClave = new Map<string, CierreDetalleGestion[]>();
+  for (const g of retornables) {
+    const grupo = porClave.get(clavePaquete(g));
+    if (grupo === undefined) porClave.set(clavePaquete(g), [g]);
+    else grupo.push(g);
+  }
+  return [...porClave.values()];
+}
+
+/**
+ * R27 — el progreso EN PAQUETES, que es lo que el rótulo dice y lo que bodega cuenta en el
+ * estante. **No en filas**: en el cierre medido el 2026-08-19 eran doce filas para once bultos,
+ * así que «Paquetes confirmados: X de 12» ya mentía antes de este arreglo; y desde el arreglo,
+ * contar filas haría además que una sola lectura moviera el contador de dos en dos, que a los
+ * ojos de quien escanea es un error de la app.
+ *
+ * `faltan` es el MISMO candado de antes: un paquete cuenta como hecho sólo si TODAS sus filas
+ * están confirmadas, y una lectura confirma todas las pendientes de esa guía a la vez, así que
+ * «faltan 0 paquetes» y «no queda ninguna fila pendiente» son la misma condición. Contarlo en
+ * paquetes cambia el número que se DICE, no el que bloquea.
+ */
+export function progresoDePaquetes(
+  retornables: readonly CierreDetalleGestion[],
+  confirmadas: Readonly<Record<string, number>>,
+): { total: number; hechas: number; faltan: number } {
+  const paquetes = agruparPorPaquete(retornables);
+  const hechas = paquetes.filter((filas) =>
+    filas.every((g) => confirmadas[g.gestionId] !== undefined),
+  ).length;
+  return { total: paquetes.length, hechas, faltan: paquetes.length - hechas };
 }
 
 /**
@@ -241,11 +337,16 @@ export function ConfirmacionFisicaCuerpo({
   ultimaGuiaConfirmada,
   onLectura,
 }: Readonly<ConfirmacionFisicaCuerpoProps>) {
-  const total = retornables.length;
-  const hechas = retornables.filter(
-    (g) => confirmadas[g.gestionId] !== undefined,
-  ).length;
-  const faltan = total - hechas;
+  // El rótulo dice «paquetes», así que se cuentan PAQUETES: una guía repetida en dos filas es un
+  // solo bulto en el estante (ver `progresoDePaquetes`).
+  const { total, hechas, faltan } = progresoDePaquetes(retornables, confirmadas);
+  // Cuántas filas comparten bulto con otra, para poder decirlo en la fila.
+  const filasPorPaquete = new Map<string, number>(
+    agruparPorPaquete(retornables).map((filas) => [
+      clavePaquete(filas[0]),
+      filas.length,
+    ]),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -349,6 +450,7 @@ export function ConfirmacionFisicaCuerpo({
                   {gestiones.map((g) => {
                     const confirmada = confirmadas[g.gestionId] !== undefined;
                     const error = errores[g.gestionId];
+                    const filasDelPaquete = filasPorPaquete.get(clavePaquete(g)) ?? 1;
                     return (
                       <li
                         key={g.gestionId}
@@ -374,6 +476,16 @@ export function ConfirmacionFisicaCuerpo({
                         {g.numGuia === null ? (
                           <p role="alert" className="text-sm text-destructive">
                             {FILA_SIN_GUIA}
+                          </p>
+                        ) : null}
+                        {/* Dos gestiones vivas de la misma orden = una guía, un bulto. Se nombra
+                            para que ver la misma guía dos veces no se lea como un error. Sin
+                            `role`: es contenido de la fila, no un aviso aparte — el `role="note"`
+                            de la barra de estado es el del BLOQUEO (R27) y tiene que seguir
+                            siendo el único, o dejaría de poder señalarse. */}
+                        {filasDelPaquete > 1 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {filaMismoPaquete(filasDelPaquete)}
                           </p>
                         ) : null}
                         {/* T4.7: el error del servidor de ESA gestión, en SU fila. Espejo de lo

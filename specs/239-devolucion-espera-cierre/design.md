@@ -493,6 +493,14 @@ necesita una persona.
    cumple solo si esa ficha entra antes o a la vez (P9).
 5. **El pre-vuelo caduca**: `dev` se mueve. Comparar el SHA medido contra `origin/dev` antes de abrir
    el PR.
+6. **La ficha 238 añade una escritura más a esta misma transacción** (anotado el 2026-08-19). Al
+   aprobar, `resolverCierre` marca `gestion_orden.confirmada_fisica_at` en las gestiones cuyo paquete
+   vuelve, y lo hace **ANTES** del anclaje de esta ficha —hay un test que fija ese orden y muere si
+   alguien lo invierte (`la marca se escribe ANTES del anclaje`)—. No cambia el anclaje ni su reloj:
+   la marca es un hecho, no un instante del que se derive nada, y una guardia lo mantiene sin
+   lectores. Lo que sí cambia es que **la aprobación puede ahora fallar antes de llegar aquí**, si
+   bodega no tiene los paquetes delante: sigue siendo el mismo fallo cerrado y sin efectos parciales
+   que esta ficha ya exigía.
 
 ---
 

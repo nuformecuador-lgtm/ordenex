@@ -256,7 +256,7 @@
       **Hecho:** todas verdes. Un rojo en los criterios de intento o en las transiciones significa que
       alguien tocó algo que esta feature no toca: **es regresión, no aserción a cambiar.**
       **Depende de:** T4.
-- [ ] **T5.6 — Ver la app, no sólo la suite.** Cierre con devoluciones + rechazos + reprogramadas +
+- [x] **T5.6 — Ver la app, no sólo la suite.** Cierre con devoluciones + rechazos + reprogramadas +
       un incidente: abrir el detalle → pulsar Aprobar → ver la ventana → escanear una guía → teclear
       otra → intentar una ajena → intentar la del incidente → dejar una sin confirmar y comprobar que
       **no** se puede aprobar → completarla → pasar a los montos → aprobar → ver la devolución llegar
@@ -264,6 +264,15 @@
       **Hecho:** recorrido anotado paso a paso en `progress/impl_238.md`, con lo que se vio y con los
       textos leídos tal cual. Doce mil tests dan por buenos textos rotos que un recorrido de minutos
       encuentra. **Depende de:** T5.5.
+      > ✅ **HECHO el 2026-08-19** por el leader, con Playwright y los dos roles. Anotado en
+      > `progress/recorrido_238.md` (archivo propio, para no mezclarlo con la bitácora del
+      > implementer). Los cuatro desenlaces ejercidos uno a uno, el cierre aprobado, la marca
+      > comprobada contra Postgres (12 de 12, ninguna que no vuelva, misma transacción) y las dos
+      > devoluciones llegando a `/novedades`.
+      > 🔴 **Y encontró un BLOQUEO DURO que la suite no veía**: con dos gestiones vivas de la misma
+      > orden en un cierre —**existe en producción, 1 de 48**— el cierre **no se podía aprobar
+      > nunca**. Arreglado, con su caso y su mutación; el design §5.3 se corrigió, que decía «casa
+      > UNA gestión».
 
 **R cubiertos por T5:** R39 (+ verificación cruzada de todos los anteriores).
 
@@ -271,10 +280,10 @@
 
 ## T6 — Cierre documental
 
-- [ ] **T6.1 — [P] Anotar en `progress/design_pila_ayuda_tienda.md` §F4** que la ficha aterrizó, con
+- [x] **T6.1 — [P] Anotar en `progress/design_pila_ayuda_tienda.md` §F4** que la ficha aterrizó, con
       fecha, PR y las respuestas a D1-D3.
       **Hecho:** el §F4 deja de leerse como pendiente.
-- [ ] **T6.2 — [P] Anotar en `specs/239-devolucion-espera-cierre/design.md` §13** que la 238 añade una
+- [x] **T6.2 — [P] Anotar en `specs/239-devolucion-espera-cierre/design.md` §13** que la 238 añade una
       condición más a la aprobación y refuerza su riesgo 1 (población congelada).
       **Hecho:** la sección lo dice y no contradice al código.
 - [ ] **T6.3 — Cerrar la ficha.** `feature_list.json` (lo estampa el leader): estado, `status_note` de

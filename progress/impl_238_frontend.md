@@ -339,3 +339,259 @@ humano).
    No es un rol de región viva; si algún día se quiere que un lector de pantalla anuncie el
    bloqueo al cambiar, hay que moverlo a `status` — y entonces hay que decidir lo mismo para la
    158, no sólo para esta.
+
+---
+
+# Addenda (2026-08-19) — la GUÍA REPETIDA: cierres que no se podían aprobar nunca
+
+Encontrado **conduciendo la app** (T5.6), no por la suite. Sólo frontend: `lib/` sigue sin tocarse.
+
+## El defecto
+
+`interpretarLectura` resolvía la guía leída con `find`, que devuelve **siempre la primera** fila que
+casa:
+
+```ts
+const gestion = gestionesDelCierre.find((g) => g.numGuia === numGuia);
+```
+
+Si el cierre trae **dos gestiones vivas de la misma orden** —y por tanto con la misma guía—, pasaba
+esto:
+
+1. Se escanea la guía → confirma la **primera** fila. Contador 1.
+2. Se vuelve a escanear la misma guía → `find` devuelve **otra vez la primera**, que ya está
+   confirmada → «Esa guía ya está confirmada. No se cuenta dos veces.»
+3. La **segunda** fila se queda `Pendiente` **para siempre**: el contador clavado en `N-1 de N`, el
+   botón apagado y **el cierre imposible de aprobar por ninguna vía**, sin un solo mensaje que lo
+   explicara. Visto en pantalla: «Paquetes confirmados: **11 de 12**» con «Continuar» deshabilitado.
+
+El mismo `find` mirado desde el otro lado tenía una segunda cara: si la primera fila que casa **no**
+vuelve a bodega (una `entregada` que comparte guía con una `devuelta`), la lectura contestaba «ese
+paquete no vuelve a bodega» y la `devuelta` quedaba igual de imposible.
+
+**El servidor NO tiene este candado**, así que el arreglo es sólo del cliente:
+`CierresAdminService.validarConfirmacionFisica` deduplica por `vistos.has(gestionId)` —**por
+gestión, no por guía**— y R12 compara `esperada.numGuia !== numGuia` **contra la guía de CADA
+gestión**, que se cumple para las dos. Dos entradas con la misma `numGuia` y distinto `gestionId`
+son perfectamente válidas para el servicio.
+
+## La medición de producción (2026-08-19, MCP, sólo lectura)
+
+| medida | valor |
+| --- | --- |
+| pares (cierre, orden) con **más de una** gestión viva | **1** |
+| de esos, con la gestión **que vuelve** repetida | **1** |
+| universo de pares (cierre, orden) vivos | 48 |
+
+**1 de 48**, y justo del tipo que dispara el bloqueo. Hoy no hace daño porque ese cierre ya está
+aprobado; el siguiente que ocurra deja a bodega con un cierre que no puede cerrar.
+
+## La decisión: una lectura confirma TODAS las filas pendientes de esa guía
+
+Hay **un solo paquete físico**. Pedirle a bodega que escanee la misma caja dos veces es pedirle que
+atestigüe dos veces un único acto, y encima sin decirle por qué la primera no bastó. Una lectura =
+«tengo este paquete delante» = todas las filas de ese bulto quedan cubiertas.
+
+**R32 sigue vivo y corregido, no ablandado:** el aviso «ya está confirmada» salta cuando esa guía
+**ya no cubre nada** (todas sus filas confirmadas). Antes saltaba con una fila todavía pendiente, y
+ahí era donde mentía.
+
+**R31 se decide sobre el conjunto:** el aviso «ese paquete no vuelve a bodega» sale sólo si
+**ninguna** de las filas de esa guía vuelve. Basta con que una vuelva para que haya un bulto delante
+que confirmar.
+
+El contrato `LecturaInterpretada` pasa de `{ gestionId }` a `{ gestionIds: readonly string[] }`, y
+`CierresAdminModule.leerGuia` —su único consumidor— marca todas. `listaConfirmacionFisica()` no
+cambia: sigue mandando **una entrada por gestión**, con la guía repetida, que es exactamente lo que
+el servicio exige.
+
+## El copy: qué se decidió y por qué
+
+El contador decía **«Paquetes confirmados: X de N»** con `N` = **filas** (gestiones). En el cierre
+medido eran **12 filas para 11 bultos**: **el rótulo ya mentía antes de este arreglo**. Y con el
+arreglo, contar filas haría además que una sola lectura moviera el contador **de dos en dos**, que a
+los ojos de quien está escaneando es un error de la app.
+
+Se barajaron tres salidas: (a) que el rótulo deje de decir «paquetes»; (b) que la lista agrupe por
+paquete; (c) dejarlo con una razón escrita.
+
+**Se eligió que el contador cuente PAQUETES de verdad**, dejando el rótulo como está —porque el
+rótulo no era el que estaba mal, era el número—:
+
+- **`progresoDePaquetes`** agrupa las filas del conjunto esperado por bulto (`clavePaquete`) y cuenta
+  bultos. Una guía repetida en dos filas cuenta **uno**. Así `textoProgreso` y `textoFaltan` dicen
+  «paquetes» y son ciertos, y una lectura mueve el contador **exactamente uno**.
+- **Sin guía, cada fila cuenta por su cuenta**: no hay forma de saber si dos filas sin guía son el
+  mismo bulto, y colapsarlas rebajaría el número de paquetes que bodega tiene que poner delante —
+  además esas filas no se pueden confirmar nunca (R13), así que el bloqueo tiene que seguir
+  contándolas.
+- **La lista NO cambia de forma** (R33 intacto: una fila por gestión, con sus cinco datos). Lo que
+  gana es **una línea dentro de la fila** cuando ese bulto aparece más de una vez: «Este paquete
+  aparece en N filas de esta lista: una sola lectura las confirma todas.» Sin ella, ver la misma
+  guía dos veces y que las dos cambien de golpe se lee como un error de la app, o manda a bodega a
+  buscar un segundo paquete que no existe. Va **sin `role`**: es contenido de la fila, y el
+  `role="note"` de la barra de estado tiene que seguir siendo el del **bloqueo** (R27) o dejaría de
+  poder señalarse.
+
+**El candado no se ablanda.** Un paquete cuenta como hecho sólo si **todas** sus filas están
+confirmadas, y una lectura confirma todas las pendientes de esa guía a la vez; por eso «faltan 0
+paquetes» y «no queda ninguna fila pendiente» son la misma condición. `faltanPorConfirmar` (el que
+apaga el botón) sale ahora del **mismo** cálculo que pinta la ventana, para que no haya dos cuentas
+que puedan divergir.
+
+## Los casos nuevos (`tests/components/CierresAdminConfirmacionFisica.test.tsx`, 26 → 31)
+
+| Caso | Qué afirma |
+| --- | --- |
+| «las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba» | **Reproduce el bloqueo**: dos `devuelta` con la misma guía + un rechazo; una lectura confirma las dos filas, el contador va `0→1→2 de 2`, el botón se habilita y el payload lleva **una entrada por gestión** con la guía repetida. |
+| «R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más» | El aviso literal, el contador que no avanza y el botón que sigue apagado. |
+| «una `entregada` que comparte guía con una `devuelta` no roba la lectura» | La otra cara del `find`: la `devuelta` se confirma y NO sale el mensaje de R31. |
+| «dos filas de la misma guía son UN bulto, y la fila lo explica» | El contador en paquetes (`0 de 2` con 3 filas), «Faltan 2 paquetes…», las tres filas presentes y la línea de bulto compartido en las dos filas y **no** en la tercera. |
+| «dos filas SIN guía no se funden en un bulto» | `0 de 3` con una guía + dos filas sin guía; tras confirmar la única guía, `1 de 3` y el botón apagado. |
+
+Los textos esperados siguen escritos **a mano**, no importados de quien los produce.
+
+Ningún test existente se tocó: los 26 anteriores no tienen guías repetidas, así que sus números no
+cambian. El literal del payload de T4.4/T4.6 **es** el contrato con el servidor y se dejó intacto.
+
+## Mutaciones — una a una, `vitest` corrido, salida real
+
+Base: `cierre-confirmacion-fisica.tsx` `sha256 f03e14a4c210e63a…`, `CierresAdminModule.tsx`
+`sha256 8e1f0e7815d4d305…`. Tras **cada** mutación el archivo se restauró de una copia pristina y se
+volvió a medir el sha (columna «después»).
+
+| # | Mutación | sha mutado | Resultado |
+| --- | --- | --- | --- |
+| M1 | **el `find` de hoy restaurado** (una gestión por lectura) | `1bc32f86d06c06c0…` | **3 rojos** |
+| M2 | el aviso de R32 desactivado (`pendientes.length === 0 && false`) | `886e3bbb033a1625…` | **2 rojos** |
+| M3 | `clavePaquete` sin guía colapsa (`guia:null` para todas) | `caf0f0c1d17a5f4c…` | **1 rojo** |
+| M4 | el progreso cuenta **filas** en vez de bultos | `48bcd8399abfb8e1…` | **3 rojos** |
+| M5 | la línea de bulto compartido nunca se pinta (`{false ? (`) | `45fb0ea5cf673d59…` | **1 rojo** |
+| M6 | R31 decidido sólo por la **primera** fila (`conEsaGuia.slice(0, 1)`) | `8b2fa52a5268dc78…` | **3 rojos** |
+| M7 | el **módulo** marca sólo el primer id (`lectura.gestionIds.slice(0, 1)`) | `e5f176085e041741…` | **2 rojos** |
+| M8 | `filas.every(...)` → `filas.some(...)` en «bulto hecho» | `dc7f1a268373cd83…` | **SUPERVIVIENTE** (equivalente, ver abajo) |
+
+Sha «después» de las ocho: `f03e14a4c210e63a…` / `8e1f0e7815d4d305…` (los de base).
+
+Después de la tanda de mutaciones, `cierre-confirmacion-fisica.tsx` recibió **una edición de sólo
+comentario** (dos bloques `{/* … */}` de la fila fundidos en uno), y por eso el sha final es
+`3e7cc03697deea77…` y no el de base. Ni una línea de código cambió; `tsc --noEmit` y los 31 casos
+se volvieron a correr después, en verde.
+
+**M1 — el `find` de hoy** (`Tests 3 failed | 28 passed (31)`):
+
+```
+× las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba
+× R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más
+× una `entregada` que comparte guía con una `devuelta` no roba la lectura (R31 sigue siendo suyo)
+AssertionError: expected 'Nº Guía 7010 · REM-DUPDevueltaPendien…' to contain 'Confirmada'
+AssertionError: expected 'Paquetes confirmados: 0 de 2.' to be 'Paquetes confirmados: 1 de 2.'
+AssertionError: expected 'Nº Guía 7020 · REM-MIXDevueltaPendien…' to contain 'Confirmada'
+```
+
+**M2 — R32 desactivado** (`Tests 2 failed | 29 passed (31)`). Cae también el caso T4.3/R32 que ya
+existía, así que el aviso viejo sigue protegido:
+
+```
+× lo dice y NO la cuenta dos veces
+× R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más
+TestingLibraryElementError: Unable to find an accessible element with the role "alert"
+```
+
+**M3 — las filas sin guía colapsadas** (`Tests 1 failed | 30 passed (31)`):
+
+```
+× dos filas SIN guía no se funden en un bulto: cada una cuenta, y siguen bloqueando
+AssertionError: expected 'Paquetes confirmados: 0 de 2.' to be 'Paquetes confirmados: 0 de 3.'
+```
+
+**M4 — contar filas en vez de bultos** (`Tests 3 failed | 28 passed (31)`). El segundo rojo es
+literalmente el síntoma que se quería evitar, el contador moviéndose de dos en dos:
+
+```
+× las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba
+× R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más
+× dos filas de la misma guía son UN bulto, y la fila lo explica
+AssertionError: expected 'Paquetes confirmados: 0 de 3.' to be 'Paquetes confirmados: 0 de 2.'
+AssertionError: expected 'Paquetes confirmados: 2 de 3.' to be 'Paquetes confirmados: 1 de 2.'
+```
+
+**M5 — la línea de bulto compartido callada** (`Tests 1 failed | 30 passed (31)`):
+
+```
+× dos filas de la misma guía son UN bulto, y la fila lo explica
+AssertionError: expected 'Nº Guía 7010 · REM-DUPDevueltaPendien…' to contain 'Este paquete aparece en 2 filas de es…'
+Received: "Nº Guía 7010 · REM-DUPDevueltaPendienteDora Quesada · Tienda X"
+```
+
+**M6 — R31 por la primera fila** (`Tests 3 failed | 28 passed (31)`):
+
+```
+× las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba
+× R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más
+× una `entregada` que comparte guía con una `devuelta` no roba la lectura (R31 sigue siendo suyo)
+AssertionError: expected 'Nº Guía 7020 · REM-MIXDevueltaPendien…' to contain 'Confirmada'
+```
+
+**M7 — el módulo marca sólo el primer id** (`Tests 2 failed | 29 passed (31)`). Es el que prueba que
+la cobertura no se queda en la función pura, sino que llega al estado de la pantalla:
+
+```
+× las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba
+× R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más
+AssertionError: expected 'Paquetes confirmados: 0 de 2.' to be 'Paquetes confirmados: 1 de 2.'
+```
+
+**M8 — `every` → `some`: SUPERVIVIENTE, y se declara.** `Tests 31 passed (31)`, corrido y leído. Es
+un **mutante equivalente** hoy: una lectura confirma **todas** las filas pendientes de ese bulto a
+la vez, así que un paquete nunca está a medias y «alguna fila confirmada» y «todas confirmadas»
+valen lo mismo. Se deja `every` porque es el que sigue siendo correcto si mañana aparece una vía de
+confirmar fila a fila (un botón por fila, una confirmación parcial persistida); con `some`, esa vía
+daría un paquete por hecho con una fila pendiente y **desbloquearía el botón**. No hay test que lo
+distinga porque hoy no hay forma de llegar a ese estado desde la UI.
+
+## Verificación — salida real
+
+```
+$ pnpm exec tsc --noEmit
+(sin salida; TSC_EXIT=0)
+
+$ pnpm exec eslint app/(app)/cierres-admin/_components/CierresAdminModule.tsx \
+    app/(app)/cierres-admin/_components/cierre-confirmacion-fisica.tsx \
+    tests/components/CierresAdminConfirmacionFisica.test.tsx
+  69:10  warning  'money' is defined but never used  @typescript-eslint/no-unused-vars
+✖ 1 problem (0 errors, 1 warning)
+ESLINT_EXIT=0
+
+$ pnpm exec vitest run tests/components/CierresAdminConfirmacionFisica.test.tsx
+ Test Files  1 passed (1)
+      Tests  31 passed (31)
+
+$ pnpm exec vitest related --run \
+    app/(app)/cierres-admin/_components/CierresAdminModule.tsx \
+    app/(app)/cierres-admin/_components/cierre-confirmacion-fisica.tsx
+ Test Files  12 passed (12)
+      Tests  215 passed (215)
+
+$ pnpm exec vitest run tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts \
+    tests/unit/guards/confirmacion-sin-lectores.guardia.test.ts tests/unit/types/gestion-retorno.test.ts
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+```
+
+El aviso de `eslint` es el **preexistente** (`money`, sin consumidores desde la 230); antes estaba en
+la línea 68 y ahora en la 69 porque el `import` de `progresoDePaquetes` lo desplaza una línea.
+
+**Sin commit.** El gate (`./init.sh`) no se corrió desde aquí: lo corre el leader con el árbol
+quieto. **El servidor de dev de `localhost:3000` no se tocó**: el recorrido lo repite el humano.
+
+## Lo que esta addenda deja abierto
+
+1. **`design.md` §5.3 sigue describiendo la resolución como «casa UNA gestión»** (la tabla de los
+   cuatro desenlaces). El comportamiento ya no es ése: una lectura puede casar varias filas del
+   mismo bulto. No se editó el spec desde aquí —es de otro rol—, pero la tabla está desalineada con
+   el código y conviene arreglarla antes de cerrar la ficha.
+2. **Que dos gestiones vivas de la misma orden convivan en un cierre es un dato del backend**, no de
+   esta pantalla. El cliente lo trata bien; queda sin responder si esa duplicidad *debería* existir
+   (1 de 48 pares medidos). Si algún día se elimina en origen, este arreglo pasa a ser una red que
+   no se dispara — que es como debe quedar.

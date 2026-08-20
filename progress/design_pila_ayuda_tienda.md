@@ -130,6 +130,23 @@ Lo que este cambio hace con Q5 es **cambiarle la forma**, con saldo mixto:
 - `aprobarCierre` gana un parámetro con el patrón de `indemnizaciones` (cobertura exacta validada
   en el servicio antes de tocar el repo); se persiste **dentro de la transacción** de `resolverCierre`.
 
+> ✅ **ATERRIZÓ el 2026-08-19** — ficha **238**, rama `feature/238-confirmacion-fisica-cierre`.
+> Se implementó como estaba diseñado: tercera rama, modal con las guías esperadas, incidentes fuera,
+> bloqueo hasta completar, y la marca (`gestion_orden.confirmada_fisica_at`) escrita **dentro de la
+> transacción**, entre el disparo de devoluciones de la 139 y el anclaje de la 239.
+>
+> **Cuatro cosas que el diseño de esta pila no había previsto**, todas medidas:
+> 1. **«Sin retornables» es 3 de cada 12 cierres.** No es un caso raro: en uno de cada cuatro la
+>    ventana no debe aparecer y aprobar sigue siendo el gesto de hoy.
+> 2. **El techo de un cierre son 14 paquetes** (media 2,7). La ventana se diseñó para eso: contador y
+>    motivo del bloqueo fijos arriba, la lista desplazándose debajo.
+> 3. 🔴 **Una orden puede tener DOS gestiones vivas en el MISMO cierre** —existe en producción, 1 par
+>    de 48— y resolver `guía → gestión` con un `find` dejaba la segunda fila inalcanzable: **el
+>    cierre no se podía aprobar nunca**. Una lectura confirma ahora **todas** las filas de esa guía.
+>    Quien vuelva sobre esta pantalla, que no lo deshaga.
+> 4. **D2 no tiene escapatoria**, por decisión humana: un solo paquete perdido devuelve el cierre
+>    entero. La salida es rechazar con motivo.
+
 ### F5 · El limbo: la devolución espera al cierre  ⚠️ la más grande
 
 **Enfoque elegido: partir el estado.** La orden **no entra en `devuelta` al gestionar**: entra en

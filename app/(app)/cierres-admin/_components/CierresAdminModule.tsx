@@ -55,6 +55,7 @@ import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/
 import {
   ConfirmacionFisicaCuerpo,
   interpretarLectura,
+  progresoDePaquetes,
   retornablesDelCierre,
   gestionesDelCierre,
   CONFIRMACION_TITULO,
@@ -511,10 +512,12 @@ export function CierresAdminModule({
   const gestionesDelCierreAbierto: CierreDetalleGestion[] = detalle
     ? gestionesDelCierre(detalle.grupos)
     : [];
-  // R27: cuántos paquetes faltan por tener delante. Es el número que bloquea y el que se dice.
-  const faltanPorConfirmar = retornables.filter(
-    (g) => confirmadas[g.gestionId] === undefined,
-  ).length;
+  // R27: cuántos paquetes faltan por tener delante. Es el número que bloquea y el que se dice, y
+  // por eso sale del MISMO cálculo que pinta la ventana (`progresoDePaquetes`): son PAQUETES,
+  // no filas — dos gestiones vivas de la misma orden comparten guía y son un solo bulto. El
+  // candado no se ablanda: un paquete cuenta como hecho sólo si todas sus filas están
+  // confirmadas, así que «faltan 0» sigue queriendo decir «no queda ninguna fila pendiente».
+  const faltanPorConfirmar = progresoDePaquetes(retornables, confirmadas).faltan;
   // R34: no se puede confirmar mientras falte o sea inválido algún monto. Mismo criterio
   // que el servidor (`montoValido` de la wallet: > 0, hasta 2 decimales, sin `parseFloat`) —
   // incluido el TOPE (m5): sin él la UI habilitaba «Confirmar» con un monto de 11 dígitos que
@@ -756,15 +759,23 @@ export function CierresAdminModule({
       setAvisoLectura(lectura.mensaje);
       return false;
     }
-    setConfirmadas((prev) => ({ ...prev, [lectura.gestionId]: lectura.numGuia }));
+    // Una lectura puede cubrir MÁS DE UNA fila: hay un solo paquete físico, y si dos gestiones
+    // vivas de la misma orden comparten guía, las dos quedan cubiertas por ese único gesto.
+    // Pedir dos escaneos de la misma caja sería pedir que se atestigüe dos veces un solo acto —
+    // y con `find` la segunda fila no había forma de confirmarla nunca.
+    setConfirmadas((prev) => {
+      const siguiente = { ...prev };
+      for (const gestionId of lectura.gestionIds) siguiente[gestionId] = lectura.numGuia;
+      return siguiente;
+    });
     setUltimaGuiaConfirmada(lectura.numGuia);
     setAvisoLectura(null);
-    // Confirmar una fila limpia el error del servidor de ESA fila (no el de las otras), igual
-    // que teclear limpia el del monto en el sub-modal de la 158.
+    // Confirmar limpia el error del servidor de LAS FILAS CONFIRMADAS (no el de las otras),
+    // igual que teclear limpia el del monto en el sub-modal de la 158.
     setConfirmacionErrores((prev) => {
-      if (!prev[lectura.gestionId]) return prev;
+      if (!lectura.gestionIds.some((gestionId) => prev[gestionId])) return prev;
       const resto = { ...prev };
-      delete resto[lectura.gestionId];
+      for (const gestionId of lectura.gestionIds) delete resto[gestionId];
       return resto;
     });
     return true;

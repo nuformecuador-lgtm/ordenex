@@ -895,3 +895,217 @@ describe("T4.7 — un `validation_error` con clave de gestión se pinta en SU fi
     expect(successMock).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// La GUÍA REPETIDA — el bloqueo duro encontrado conduciendo la app (T5.6, 2026-08-19)
+// ---------------------------------------------------------------------------------------------
+//
+// Un cierre puede traer DOS gestiones vivas de la MISMA orden y, por tanto, con la MISMA guía.
+// Medido contra producción ese mismo día (sólo lectura): 1 de 48 pares (cierre, orden) vivos está
+// así, y es justo del tipo que dispara el bloqueo (la gestión que vuelve, repetida).
+//
+// Con la resolución por `find` —la primera fila que case— pasaba esto: la primera lectura
+// confirmaba la primera fila; la segunda lectura de la MISMA guía volvía a caer en esa fila y
+// respondía «ya está confirmada»; y la segunda fila se quedaba `Pendiente` para siempre, con el
+// contador clavado en `N-1 de N` y el botón apagado. El cierre no se podía aprobar por ninguna vía
+// y nada en la pantalla decía por qué. Visto en pantalla: «Paquetes confirmados: 11 de 12».
+//
+// La decisión: **una lectura confirma TODAS las filas pendientes de esa guía**, porque hay UN solo
+// paquete físico. Pedir dos escaneos de la misma caja es pedir que se atestigüe dos veces un único
+// acto. El servidor lo admite sin cambios: dedupe por `gestionId` (no por guía) y compara la guía
+// contra la de CADA gestión.
+
+/** Dos gestiones vivas de la misma orden: una guía, un bulto, dos filas. */
+const DUP_A = makeGestion({
+  gestionId: "g-dup-a",
+  ordenId: "o-dup",
+  resultado: "devuelta",
+  numGuia: 7010,
+  numRemision: "REM-DUP",
+  destinatario: "Dora Quesada",
+});
+const DUP_B = makeGestion({
+  gestionId: "g-dup-b",
+  ordenId: "o-dup",
+  resultado: "devuelta",
+  numGuia: 7010,
+  numRemision: "REM-DUP",
+  destinatario: "Dora Quesada",
+});
+
+describe("guía repetida — una lectura confirma TODAS las filas de ese paquete", () => {
+  it("las dos filas quedan confirmadas, el botón se habilita y el cierre se aprueba", async () => {
+    const user = userEvent.setup();
+    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    const dialog = await abrirVentana(user);
+
+    // Dos bultos: el repetido (dos filas) y el rechazo. Las TRES filas están en la lista.
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 2.");
+    expect(fila(dialog, "g-dup-a")).toContain("Pendiente");
+    expect(fila(dialog, "g-dup-b")).toContain("Pendiente");
+
+    await teclear(user, dialog, "7010");
+
+    // El corazón del arreglo: UNA lectura, las DOS filas de esa guía confirmadas.
+    expect(fila(dialog, "g-dup-a")).toContain("Confirmada");
+    expect(fila(dialog, "g-dup-b")).toContain("Confirmada");
+    expect(fila(dialog, "g-rec-1")).toContain("Pendiente");
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 1 de 2.");
+    expect(
+      within(dialog).getByRole("button", { name: "Confirmar y aprobar" }),
+    ).toBeDisabled();
+
+    await teclear(user, dialog, "7002");
+
+    // Antes del arreglo esto se quedaba en «1 de 3» para siempre: la segunda fila del bulto
+    // repetido no había forma de confirmarla, y el botón nunca se habilitaba.
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 2 de 2.");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "Están todos. Ya se puede aprobar el cierre.",
+    );
+    const boton = within(dialog).getByRole("button", { name: "Confirmar y aprobar" });
+    expect(boton).toBeEnabled();
+
+    await user.click(boton);
+
+    // Y el payload lleva UNA ENTRADA POR GESTIÓN con la misma guía repetida: es lo que el
+    // servicio exige (cobertura exacta del conjunto esperado, dedupe por `gestionId`).
+    await vi.waitFor(() =>
+      expect(aprobarMock).toHaveBeenCalledWith({
+        cierreId: "c1",
+        confirmacionFisica: [
+          { gestionId: "g-dup-a", numGuia: 7010 },
+          { gestionId: "g-dup-b", numGuia: 7010 },
+          { gestionId: "g-rec-1", numGuia: 7002 },
+        ],
+      }),
+    );
+  });
+
+  it("R32 SIGUE VIVO: con las dos filas ya confirmadas, otra lectura avisa y no cuenta de más", async () => {
+    // R32 no se ablanda, se corrige: el aviso es para cuando esa guía YA NO CUBRE NADA. Antes
+    // saltaba con una fila todavía pendiente, y ahí era donde mentía.
+    const user = userEvent.setup();
+    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    const dialog = await abrirVentana(user);
+
+    await teclear(user, dialog, "7010");
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 1 de 2.");
+
+    await teclear(user, dialog, "7010");
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Esa guía ya está confirmada. No se cuenta dos veces.",
+    );
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 1 de 2.");
+    expect(fila(dialog, "g-rec-1")).toContain("Pendiente");
+    expect(
+      within(dialog).getByRole("button", { name: "Confirmar y aprobar" }),
+    ).toBeDisabled();
+    expect(aprobarMock).not.toHaveBeenCalled();
+  });
+
+  it("una `entregada` que comparte guía con una `devuelta` no roba la lectura (R31 sigue siendo suyo)", async () => {
+    // El mismo `find` mirado desde el otro lado: si la primera fila que casa no vuelve a bodega,
+    // la lectura contestaba «ese paquete no vuelve» y la `devuelta` quedaba imposible. Basta con
+    // que UNA de las filas de esa guía vuelva para que haya un bulto delante que confirmar.
+    const user = userEvent.setup();
+    const ENT_DUP = makeGestion({
+      gestionId: "g-ent-dup",
+      ordenId: "o-mix",
+      resultado: "entregada",
+      numGuia: 7020,
+      numRemision: "REM-MIX",
+      destinatario: "Eva Mixta",
+    });
+    const DEV_DUP = makeGestion({
+      gestionId: "g-dev-dup",
+      ordenId: "o-mix",
+      resultado: "devuelta",
+      numGuia: 7020,
+      numRemision: "REM-MIX",
+      destinatario: "Eva Mixta",
+    });
+    conGrupos({ entregada: [ENT_DUP], devuelta: [DEV_DUP] });
+    const dialog = await abrirVentana(user);
+
+    await teclear(user, dialog, "7020");
+
+    expect(fila(dialog, "g-dev-dup")).toContain("Confirmada");
+    expect(dialog.textContent).not.toContain("ese paquete no vuelve a bodega");
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 1 de 1.");
+    await user.click(within(dialog).getByRole("button", { name: "Confirmar y aprobar" }));
+    await vi.waitFor(() =>
+      expect(aprobarMock).toHaveBeenCalledWith({
+        cierreId: "c1",
+        confirmacionFisica: [{ gestionId: "g-dev-dup", numGuia: 7020 }],
+      }),
+    );
+  });
+});
+
+describe("el contador dice PAQUETES y cuenta paquetes, no filas", () => {
+  it("dos filas de la misma guía son UN bulto, y la fila lo explica", async () => {
+    // El rótulo decía «Paquetes confirmados: X de N» con N = filas. En el cierre medido eran
+    // doce filas para once bultos: el rótulo ya mentía antes del arreglo. Y contando filas, una
+    // sola lectura movería el contador de dos en dos, que a quien escanea se le lee como un
+    // error de la app.
+    const user = userEvent.setup();
+    conGrupos({ devuelta: [DUP_A, DUP_B], rechazada: [REC_1] });
+    const dialog = await abrirVentana(user);
+
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 2.");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "Faltan 2 paquetes por confirmar. Si alguno no llegó, rechazá el cierre indicando cuáles faltan.",
+    );
+    // Pero las TRES filas siguen ahí: R33 pide una fila por gestión, y agrupar el conteo no es
+    // esconder ninguna.
+    expect(fila(dialog, "g-dup-a")).toContain("Nº Guía 7010");
+    expect(fila(dialog, "g-dup-b")).toContain("Nº Guía 7010");
+    expect(fila(dialog, "g-rec-1")).toContain("Nº Guía 7002");
+
+    // Y la guía repetida se NOMBRA en sus dos filas: sin esto, ver la misma guía dos veces y que
+    // las dos cambien de golpe se lee como un error.
+    const explicacion =
+      "Este paquete aparece en 2 filas de esta lista: una sola lectura las confirma todas.";
+    expect(fila(dialog, "g-dup-a")).toContain(explicacion);
+    expect(fila(dialog, "g-dup-b")).toContain(explicacion);
+    // La fila que no comparte bulto NO lleva la línea.
+    expect(fila(dialog, "g-rec-1")).not.toContain("Este paquete aparece en");
+  });
+
+  it("dos filas SIN guía no se funden en un bulto: cada una cuenta, y siguen bloqueando", async () => {
+    // Sin guía no hay forma de saber si dos filas son el mismo bulto. Colapsarlas rebajaría el
+    // total —el número de paquetes que bodega tiene que poner delante— y esas filas además no se
+    // pueden confirmar nunca (R13), así que el bloqueo tiene que seguir contándolas.
+    const user = userEvent.setup();
+    const SIN_GUIA_1 = makeGestion({
+      gestionId: "g-sin-1",
+      resultado: "devuelta",
+      numGuia: null,
+      numRemision: "REM-SIN-1",
+      destinatario: "Sara Vega",
+    });
+    const SIN_GUIA_2 = makeGestion({
+      gestionId: "g-sin-2",
+      resultado: "devuelta",
+      numGuia: null,
+      numRemision: "REM-SIN-2",
+      destinatario: "Saúl Ruiz",
+    });
+    conGrupos({ devuelta: [DEV_1, SIN_GUIA_1, SIN_GUIA_2] });
+    const dialog = await abrirVentana(user);
+
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 0 de 3.");
+
+    await teclear(user, dialog, "7001");
+
+    expect(progreso(dialog)).toBe("Paquetes confirmados: 1 de 3.");
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "Faltan 2 paquetes por confirmar.",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Confirmar y aprobar" }),
+    ).toBeDisabled();
+  });
+});
