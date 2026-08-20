@@ -7,9 +7,11 @@ import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
 import { ReprogramacionTiendaService } from "@/lib/services/ReprogramacionTiendaService";
+import { RechazoTiendaService } from "@/lib/services/RechazoTiendaService";
 import { RecuperacionBodegaService } from "@/lib/services/RecuperacionBodegaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esFechaFutura } from "@/lib/types/gestion-orden";
+import { rechazarNovedadSchema } from "@/lib/types/rechazo-tienda";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IReprogramacionTiendaService,
@@ -19,6 +21,10 @@ import type {
   IRecuperacionBodegaService,
   RecuperarABodegaResult,
 } from "@/lib/interfaces/services/IRecuperacionBodegaService";
+import type {
+  IRechazoTiendaService,
+  RechazarNovedadResult,
+} from "@/lib/interfaces/services/IRechazoTiendaService";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -47,6 +53,16 @@ const recuperarSchema = z.object({
   ordenId: z.string().uuid(), // R23
 });
 
+// 💰 Feature 240 (T3.2, D5/R12/R13) — el borde del RECHAZO MANUAL. El schema vive en
+// `lib/types/rechazo-tienda.ts` y NO aqui: la ventana lo reutiliza para validar en cliente antes de
+// habilitar el boton, y este modulo es `"use server"`. Dos schemas para el mismo campo serian dos
+// verdades que divergen sin que nada falle.
+//
+// ⚠️ `motivo` es OBLIGATORIO en el BORDE, no solo en la ventana (a diferencia del de
+// `reprogramarSchema`, que es opcional por el gate F1.4-Q1). La ventana es UI: un cliente que no sea
+// la ventana llegaria igual aqui. Rechazar sin motivo dejaria un cobro sin una linea que lo
+// explique — el dato que alguien pedira el dia de la primera disputa.
+
 // Resultado expuesto por cada Server Action: el resultado de dominio del service + los dos estados
 // del borde (validation_error de zod, unauthenticated sin sesion).
 type BorderError =
@@ -55,9 +71,15 @@ type BorderError =
 
 export type ReprogramarNovedadActionResult = ReprogramarNovedadResult | BorderError;
 export type RecuperarABodegaActionResult = RecuperarABodegaResult | BorderError;
+export type RechazarNovedadActionResult = RechazarNovedadResult | BorderError;
 
 export interface ReprogramarNovedadDeps {
   service?: IReprogramacionTiendaService;
+  getActor?: () => Promise<Actor | null>;
+}
+
+export interface RechazarNovedadDeps {
+  service?: IRechazoTiendaService;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -72,6 +94,11 @@ function buildReprogramacionService(): IReprogramacionTiendaService {
     new OrdenRepository(prisma),
     new GestionOrdenRepository(prisma),
   );
+}
+
+function buildRechazoService(): IRechazoTiendaService {
+  const prisma = getPrismaClient();
+  return new RechazoTiendaService(new OrdenRepository(prisma), new GestionOrdenRepository(prisma));
 }
 
 function buildRecuperacionService(): IRecuperacionBodegaService {
@@ -118,6 +145,31 @@ export async function reprogramarNovedad(
     // motivo OPCIONAL (Q1): vacio tras el trim -> null (no forzar texto).
     const motivo = data.motivo && data.motivo.length > 0 ? data.motivo : null;
     return service.reprogramar(data.ordenId, data.fechaReprogramacion, motivo, actor);
+  });
+  return isAppErrorShape(r) ? toResolverNovedadActionError(r) : r;
+}
+
+/**
+ * 💰 Feature 240 (R1/R2/R12/R31): el adminTienda dueño RECHAZA a mano una orden en la devolucion
+ * anclada (transicion `devuelta -> rechazada` + gestion sintetica que la cobra en el siguiente
+ * cierre, D1). `unauthenticated` (sin sesion) y `validation_error` (`ordenId` no-uuid o motivo
+ * vacio) se resuelven en el borde; forbidden/not_found/conflict/config_error los devuelve el
+ * service. Espejo exacto de `reprogramarNovedad`, su hermana de esta misma card.
+ *
+ * ⚠️ EL ACTOR NO VIAJA EN EL INPUT: lo fija la sesion. Si viajara, cualquiera podria rechazar
+ * ordenes ajenas diciendo ser su tienda — y aqui eso cuesta dinero y no se puede deshacer (D6).
+ */
+export async function rechazarNovedad(
+  input: unknown,
+  deps: RechazarNovedadDeps = {},
+): Promise<RechazarNovedadActionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // antes de tocar el service
+    // R12: motivo vacio o solo espacios -> ZodError -> VALIDATION_ERROR, SIN llegar al service.
+    const data = rechazarNovedadSchema.parse(input);
+    const service = deps.service ?? buildRechazoService();
+    return service.rechazar(data.ordenId, data.motivo, actor);
   });
   return isAppErrorShape(r) ? toResolverNovedadActionError(r) : r;
 }

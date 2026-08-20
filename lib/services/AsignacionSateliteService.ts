@@ -8,6 +8,7 @@ import type {
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
+import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
 
 // Estado de ORIGEN de la asignacion satelite (feature 33) y destino tras asignar
 // (feature 17). Esta feature NO agrega estados ni `num_guia` (R8): usa exclusivamente
@@ -58,9 +59,14 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     private readonly asignabilidad: IAsignabilidadCoordenadasService,
   ) {}
 
+  /**
+   * Feature 246 (T3.2, R2/R3/R5/R7): `now` es el reloj INYECTABLE desde el que se resuelve el dia
+   * de reparto, espejo exacto de `GuiaAsignacionService.asignarDesdeBodega` (D4).
+   */
   async asignar(
     input: AsignarSateliteInput,
     actor: Actor,
+    now: Date = new Date(),
   ): Promise<AsignarSateliteServiceResult> {
     // 1. R13: revalida el rol antes de tocar datos (defensa en profundidad sobre R1).
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
@@ -173,6 +179,11 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     // 6. R7/R14: escritura guardada por estado de origen + zona. NO toca num_guia (R8).
     // Feature 49/#7 (R15): actor = el adminSatelite; el append cubre solo las ordenes que
     // ganaron la guarda anti-TOCTOU (RETURNING id en la misma tx).
+    // Feature 246 (T3.2, R2/R3/R5/R7): la eleccion se resuelve AQUI, una vez, para el lote entero
+    // —y con el MISMO helper que la bodega central, que es lo que hace que la regla no dependa de
+    // desde que bodega te asignaron (D4)—. `?? "hoy"` = el comportamiento anterior (R4).
+    const fechaReparto = resolverFechaReparto(input.dia ?? "hoy", now);
+
     const count = await this.repo.asignarSateliteLote(
       ordenIds,
       input.mensajeroId,
@@ -180,6 +191,7 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       destinoId,
       origenId,
       { actorUsuarioId: actor.usuarioId, origenTipo: "asignacion_satelite" },
+      fechaReparto, // R7: en el MISMO `SET` que `asignado_at`
     );
 
     // R14: si alguna orden cambio de estado/zona entre la lectura y la escritura, el

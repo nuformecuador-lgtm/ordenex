@@ -41,11 +41,19 @@ const JUEGO_ESPERADO: Record<GrupoNovedad, AccionNovedad[]> = {
     "conversacion",
     "intentoContacto",
   ],
-  // `habilitar` está aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido humano,
+  // ⚠️ FEATURE 240 (T5.1 — R33, 2026-08-20). **Lo que decía este comentario hasta hoy:**
+  // «`habilitar` está aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido humano,
   // al revés de lo que pedía). No es un descuido de esta ficha: su dueño es la 240, y este test es
   // el sitio donde esa deuda queda escrita y medida. Cuando la 240 la corrija, este literal cambia
-  // con ella — y ese es el punto de tenerlo aquí.
-  devolucion: ["contacto", "reprogramar", "habilitar", "rechazar"],
+  // con ella — y ese es el punto de tenerlo aquí».
+  //
+  // **Qué cambió:** la 240 la corrigió y el literal cambió con ella. `habilitar` sale, y el juego
+  // de la devolución pasa de CUATRO acciones a TRES.
+  //
+  // ⚠️ ESTE LITERAL **ES** EL CONTRATO. Se actualiza A MANO, entrada por entrada. Sustituirlo por
+  // una derivación de `ACCIONES_POR_GRUPO` —su propia fuente— lo dejaría verde para siempre, con
+  // «Habilitar» repuesto incluido, que es justo la mutación que este caso tiene que matar (T7.4).
+  devolucion: ["contacto", "reprogramar", "rechazar"],
 };
 
 /** Toda acción que la unión declara. Escrita a mano por el mismo motivo que el juego de arriba. */
@@ -116,6 +124,41 @@ describe("236/R18 — la tabla es el censo EXACTO de lo que ofrece cada grupo", 
     expect(ACCIONES_POR_GRUPO.ayuda).toContain("conversacion");
     // No es un botón «Notas» de vuelta en las cards de devolución (eso lo vigila además la 240).
     expect(ACCIONES_POR_GRUPO.devolucion).not.toContain("conversacion");
+  });
+
+  // ===============================================================================================
+  // FEATURE 240 (T5.1/T5.2 — R33/R34/R36, 2026-08-20)
+  // ===============================================================================================
+
+  it("240/R33+R34: «Habilitar» sale de la devolución y se queda SÓLO en la ayuda", () => {
+    // **El punto 12 del pedido humano, cerrado.** «Habilitar» devuelve la orden a la ruta, y eso
+    // sólo tiene sentido mientras el paquete SIGA EN LA MOTO. Sobre una orden en la devolución
+    // anclada el paquete ya volvió a la bodega y ya se escaneó físicamente al aprobar el cierre
+    // (238): ofrecer ahí «Habilitar» era ofrecer deshacer algo que físicamente no se puede deshacer.
+    expect(
+      ACCIONES_POR_GRUPO.devolucion,
+      "si esto cae, alguien repuso la celda que la 240 vino a borrar (el punto 12: «Habilitar» " +
+        "justo en las cards que vienen de un cierre, al revés de lo que el pedido decía).",
+    ).not.toContain("habilitar");
+    // CONTROL POSITIVO de la ausencia, y NO es ceremonia: sin él, la negativa de arriba pasaría
+    // igual el día que alguien borrara la acción entera de las dos listas — y con ella el único
+    // desenlace que la tienda tiene sobre una solicitud de ayuda (R34).
+    expect(
+      ACCIONES_POR_GRUPO.ayuda,
+      "R34: la ayuda SIGUE ofreciéndola. Si esto cae, la ficha borró la celda equivocada.",
+    ).toContain("habilitar");
+  });
+
+  it("240/R36: el botón «Notas» NO vuelve a las cards de devolución", () => {
+    // `progress/auditoria_ayuda_tienda.md` §3 lo dejó escrito como el hueco de la 236: la lectura
+    // del hilo se le dio SÓLO al grupo de ayuda, pero «nada falla si alguien repone el botón» en el
+    // otro. Esto es ese algo que falla. El motivo de la separación no es de superficie: sobre una
+    // devolución anclada la ventana de escritura del hilo está cerrada, así que la tienda abriría
+    // una conversación en la que no puede responder.
+    expect(ACCIONES_POR_GRUPO.devolucion).not.toContain("conversacion");
+    // Y su control positivo, en el mismo caso: la ayuda SÍ la tiene. Sin esta línea, la ausencia de
+    // arriba también estaría verde con la acción borrada del árbol entero.
+    expect(ACCIONES_POR_GRUPO.ayuda).toContain("conversacion");
   });
 
   it("`contacto` está en la tabla de los DOS grupos, y no fuera de ella", () => {

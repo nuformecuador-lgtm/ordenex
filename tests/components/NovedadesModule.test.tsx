@@ -15,7 +15,7 @@ import { listarAyudaTiendaAction, listarNovedadesAction } from "@/lib/actions/no
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 import { registrarIntentoContactoOrden } from "@/lib/actions/orden-ayuda";
 import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
-import { reprogramarNovedad } from "@/lib/actions/resolver-novedad";
+import { rechazarNovedad, reprogramarNovedad } from "@/lib/actions/resolver-novedad";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
@@ -38,8 +38,12 @@ vi.mock("@/lib/actions/novedades", () => ({
 
 // Feature 100 (T3.1/T3.2) — la acción "Reprogramar" ejecuta la reprogramación vía
 // esta Server Action; se mockea para verificar la invocación con la fecha elegida.
+// Feature 240 (T5.3): `rechazarNovedad` entra en ESTE mismo mock y no en otro. No es cosmetica:
+// `RechazarNovedadModal` la importa de este modulo, y un mock que no la declare no deja un caso
+// rojo — vitest lanza al resolver el import y el archivo entero muere antes del primer caso.
 vi.mock("@/lib/actions/resolver-novedad", () => ({
   reprogramarNovedad: vi.fn(),
+  rechazarNovedad: vi.fn(),
 }));
 
 // Pedido humano 2026-08-18 — sobre una orden con ayuda pedida el módulo monta también
@@ -65,6 +69,7 @@ vi.mock("@/lib/actions/gestion-desde-ayuda", () => ({
 }));
 
 const reprogramarMock = vi.mocked(reprogramarNovedad);
+const rechazarMock = vi.mocked(rechazarNovedad);
 const habilitarMock = vi.mocked(habilitarNovedad);
 const intentoContactoMock = vi.mocked(registrarIntentoContactoOrden);
 const gestionarDesdeAyudaMock = vi.mocked(gestionarDesdeAyuda);
@@ -76,8 +81,16 @@ const listarNovedadesMock = vi.mocked(listarNovedadesAction);
 const { successMock, errorMock, infoMock, warningMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
-  // 2026-08-12: el canal `info` deja de ser un `vi.fn()` anónimo porque los dos botones de
-  // MAQUETA ("Habilitar", "Rechazar") avisan por él y hay que poder afirmarlo.
+  // ⚠️ FEATURE 240 (T5.4, 2026-08-20) — EL CANAL `info` SE QUEDÓ SIN USUARIOS EN ESTE MÓDULO.
+  //
+  // **Lo que decía este comentario hasta hoy:** «2026-08-12: el canal `info` deja de ser un
+  // `vi.fn()` anónimo porque los dos botones de MAQUETA ("Habilitar", "Rechazar") avisan por él y
+  // hay que poder afirmarlo». «Habilitar» dejó de ser maqueta el 2026-08-18 y «Rechazar» hoy, así
+  // que ya no queda ni un `toast.info` en `NovedadesModule`.
+  //
+  // **Y por eso sigue con nombre, en vez de volver a ser anónimo:** ahora sirve para lo contrario
+  // —afirmar que NADIE avisa por él—, que es la aserción que se pondría roja si alguien repusiera
+  // un aviso de «esto todavía no está disponible» en lugar de cablear la operación.
   infoMock: vi.fn(),
   // Feature 236 (D8): tampoco `warning`. Es el canal por el que la pantalla dice que la nota se
   // publicó pero la orden NO volvió a la ruta, y un `vi.fn()` anónimo no deja leer ese texto.
@@ -871,27 +884,38 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       // Y por eso se ejerce en las DOS vistas: el panel viaja a la card elegida, y las dos
       // aceptan `acciones` por su cuenta (no hay herencia entre ellas). Si una dejara de
       // renderizar la prop, la otra seguiría verde.
+      // ⚠️ FEATURE 240 (T5.5, 2026-08-20): este censo tenía «Habilitar la orden de Ana Cliente»
+      // dentro y pasa a CUATRO nombres. Es el punto 12, cerrado (R33). Actualizado a mano.
       const card = cardDe("Ana Cliente");
       for (const nombre of [
         "Llamar a Ana Cliente",
         "WhatsApp a Ana Cliente",
         "Reprogramar la orden de Ana Cliente",
-        "Habilitar la orden de Ana Cliente",
         "Rechazar la orden de Ana Cliente",
       ]) {
         expect(within(card).getByRole("button", { name: nombre })).toBeInTheDocument();
       }
+      // La AUSENCIA, emparejada con las cuatro presencias de arriba y DENTRO de la misma card: sin
+      // ellas, «no está Habilitar» pasaría igual si la card no hubiera renderizado el panel.
+      expect(
+        within(card).queryByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      ).toBeNull();
     },
   );
 
-  // MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Rechazar" (antes "Devolver") existen en la fila pero su
-  // comportamiento NO está decidido y no hay backend detrás. Estos dos casos son lo que
-  // impide que la maqueta se confunda con una función terminada: afirman que los botones
-  // están (para que el layout no se rompa sin avisar) y que NO mutan nada.
+  // ⚠️ 2026-08-20 (FEATURE 240) — LA MAQUETA SE ACABÓ, Y ESTE BLOQUE SE PUSO ROJO COMO SE PREVIÓ.
   //
-  // El día que se cableen, este bloque se pone rojo — y eso es exactamente lo que tiene que
-  // pasar: obligará a escribir el test de la transición real en vez de heredar el silencio.
-  // 2026-08-12 (pedido humano): las tres acciones son ICONO + TOOLTIP, ya no texto.
+  // **Lo que decía esta nota hasta hoy:** «MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Rechazar"
+  // (antes "Devolver") existen en la fila pero su comportamiento NO está decidido y no hay backend
+  // detrás… El día que se cableen, este bloque se pone rojo — y eso es exactamente lo que tiene que
+  // pasar: obligará a escribir el test de la transición real en vez de heredar el silencio».
+  //
+  // Eso es lo que pasó: «Habilitar» se cableó el 2026-08-18 y «Rechazar» hoy. El test de la
+  // transición real vive en `tests/components/RechazarNovedad.test.tsx`; aquí queda lo que sigue
+  // siendo de este archivo —que los controles son icono + nombre accesible— y el caso que afirma
+  // que el aviso de «todavía no está disponible» YA NO EXISTE.
+  //
+  // 2026-08-12 (pedido humano): las acciones son ICONO + TOOLTIP, ya no texto.
   //
   // Lo que estos dos casos protegen es la parte que se rompe callando: al quitar el texto
   // visible, el ÚNICO nombre que le queda al botón es su `aria-label`. Si alguien lo borra
@@ -899,7 +923,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   // y sin nombre para una pantalla táctil (donde no hay hover que revele nada) — y ningún
   // test de los de arriba se daría cuenta, porque todos buscan por ese mismo `aria-label`
   // y fallarían por "no encuentro el botón", no por "el botón no se puede nombrar".
-  it("las tres acciones son botones de ICONO: sin texto visible, con su nombre accesible intacto", () => {
+  it("las acciones son botones de ICONO: sin texto visible, con su nombre accesible intacto", () => {
     render(
       <NovedadesModule
         grupo="devolucion"
@@ -910,7 +934,8 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       />,
     );
 
-    for (const verbo of ["Reprogramar", "Habilitar", "Rechazar"]) {
+    // 2026-08-20 (240/R33): eran tres verbos; «Habilitar» salió del grupo de devolución.
+    for (const verbo of ["Reprogramar", "Rechazar"]) {
       const boton = screen.getByRole("button", {
         name: `${verbo} la orden de Ana Cliente`,
       });
@@ -938,13 +963,16 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     // `userEvent.hover` (se comprobó: el popup no llega a montarse ni esperando 3 s). El
     // foco ejerce el MISMO camino de apertura del componente, y de paso cubre al usuario de
     // teclado, que es quien más lo necesita: con el ratón siempre queda el hover real.
+    // 2026-08-20 (240/R33): este caso enfocaba «Habilitar», que ya no está en la devolución. Se
+    // mueve a «Reprogramar», que sigue en la misma fila y ejerce EL MISMO camino de apertura del
+    // tooltip; lo que se mide es el patrón `TooltipTrigger render={<Button …/>}`, no ese botón.
     fireEvent.focus(
-      screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
     );
 
     // El tooltip trae la palabra que antes estaba impresa en el botón. Que sea la MISMA no
     // es casual: es lo que hace que quitar el texto no pierda información.
-    expect(await screen.findByText("Habilitar")).toBeInTheDocument();
+    expect(await screen.findByText("Reprogramar")).toBeInTheDocument();
   });
 
   // 2026-08-12 (pedido humano) — "Llamar" y "WhatsApp" eran los DOS únicos botones de la
@@ -984,7 +1012,14 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     },
   );
 
-  it("MAQUETA: 'Rechazar' avisa que no está disponible y no toca la lista", async () => {
+  // ⚠️ FEATURE 240 (T5.3/T5.4) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO.
+  //
+  // **Lo que afirmaba hasta el 2026-08-20:** «MAQUETA: 'Rechazar' avisa que no está disponible y no
+  // toca la lista», con `expect(infoMock).toHaveBeenCalledWith("Esta acción todavía no está
+  // disponible.")` dentro. Ése era el aviso de la maqueta, y estuvo verde las dos semanas en que el
+  // botón no hizo nada. Ahora afirma **lo contrario**: pulsar abre la ventana y **nadie avisa por
+  // el canal `info`**.
+  it("240/R27: 'Rechazar' abre la ventana en vez de avisar que no está disponible", async () => {
     const user = userEvent.setup();
     render(
       <NovedadesModule
@@ -1000,14 +1035,21 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
     );
 
-    expect(infoMock).toHaveBeenCalledWith("Esta acción todavía no está disponible.");
-    // No resuelve la novedad: la fila sigue ahí y no se llamó a la única mutación que esta
-    // pantalla tiene cableada.
+    // La ventana está: es la presencia que empareja con la ausencia de abajo. Sin ella, «no se
+    // avisó por `info`» pasaría igual si el botón se hubiera quedado sin handler.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Rechazar la orden");
+    // Y el aviso de la maqueta NO vuelve por ningún canal.
+    expect(infoMock).not.toHaveBeenCalled();
+
+    // Abrir no muta: la operación se dispara al confirmar, y eso se mide en
+    // `tests/components/RechazarNovedad.test.tsx`.
     // La fila sigue en pantalla. Se cuenta en vez de usar `getByText`: desde que el
     // desplegable está encendido, el destinatario aparece dos veces en la card mosaico.
     // (Y no se usa `cardDe`: con un diálogo abierto el resto del árbol queda `aria-hidden`,
     // así que la consulta por ROL no encontraría el `<article>` aunque siga ahí.)
     expect(screen.getAllByText("Ana Cliente").length).toBeGreaterThan(0);
+    expect(rechazarMock).not.toHaveBeenCalled();
     expect(reprogramarMock).not.toHaveBeenCalled();
     expect(errorMock).not.toHaveBeenCalled();
     expect(successMock).not.toHaveBeenCalled();

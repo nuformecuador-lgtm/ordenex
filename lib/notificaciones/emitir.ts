@@ -148,6 +148,21 @@ const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
 // LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de que viene un rechazo de
 // esta clase. Si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision — no ensanchar
 // esta igualdad. Afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`.
+//
+// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` QUEDA FUERA POR LA MISMA RAZON, y se escribe aparte
+// porque es un caso distinto que llega al mismo sitio.
+//
+// Desde la 240 la tienda puede rechazar a mano una devolucion ya anclada (`devuelta -> rechazada`,
+// familia `rechazo_tienda`). Tambien aterriza en `rechazada` y tampoco la alcanza la igualdad de
+// arriba, asi que el aviso NO se emite. Y aqui el texto seria todavia mas falso que en el caso de
+// la 237: el paquete ni siquiera esta en la calle — volvio a la bodega, se escaneo al aprobar el
+// cierre (238) y lleva dias esperando. Decir «rechazada por el destinatario» sobre eso es contar un
+// hecho que no ocurrio.
+//
+// Y como en la 237, el aviso no es el mecanismo de nada: la orden llega igual a
+// `por_devolver`/`por_devolver_a_tienda` al aprobarse el cierre que recoja la gestion sintetica
+// (139). Afirmado con su CONTROL POSITIVO en
+// `tests/unit/repositories/notificacion-orden-rechazada.test.ts`.
 
 /**
  * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por

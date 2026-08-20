@@ -98,6 +98,10 @@ describe("OrdenRepository.deshacerAsignacionLote — escritura guardada (R8/R9/R
     expect(sql).toMatch(/"estatus_id" = /);
     expect(sql).toMatch(/"mensajero_asignado_id" = NULL/); // R8
     expect(sql).toMatch(/"asignado_at" = NULL/); // R9
+    // Feature 246 (T3.5, R9/R10): el dia de reparto se limpia en el MISMO `SET`. Deshacer la
+    // asignacion deshace tambien la reserva: una reserva sin mensajero es un dato que el corte
+    // tendria que interpretar, y esa es la clase de dato que la 235 pago.
+    expect(sql).toMatch(/"fecha_reparto" = NULL/);
     expect(sql).toMatch(/AND "estatus_id" = /); // guarda anti-TOCTOU por origen (R21)
     expect(sql).toMatch(/AND "deleted_at" IS NULL/);
     expect(sql).toMatch(/RETURNING "id"/);

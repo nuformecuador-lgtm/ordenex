@@ -99,10 +99,15 @@ describe("liberarOrden (R13/R17 · feature 49/#10)", () => {
     const arg = prisma.orden.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("reprogramada"), deletedAt: null });
     // Feature 110/R1/R6: prioridad=true va DENTRO del mismo data (resto de campos intactos).
+    // Feature 246 (T3.5, R9/R10): `fechaReparto: null` entra en la MISMA igualdad EXACTA, y por
+    // el mismo motivo que el resto: la invariante es que el dia de reparto solo tiene valor
+    // mientras la orden tenga mensajero. Una reserva sin duenno seria un dato que el corte
+    // tendria que interpretar — la clase de dato que la 235 pago con una fuga permanente.
     expect(arg.data).toEqual({
       estatusId: idEstado("en_bodega_central"),
       mensajeroAsignadoId: null,
       asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion
+      fechaReparto: null, // feature 246/R9/R10
       liberadaReprogramadaAt: corridaAt,
       prioridad: true,
     });

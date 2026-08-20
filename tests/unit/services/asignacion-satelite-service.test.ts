@@ -6,6 +6,9 @@ import type {
   OrdenTransicionRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+// Feature 246 (T3.2, D4): el UNICO traductor «hoy/mañana» -> fecha del repo. Se importa para
+// afirmar que las dos superficies de asignacion producen el MISMO dia para la misma entrada.
+import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
 import type {
   EstadoAsignabilidad,
   IAsignabilidadCoordenadasService,
@@ -161,6 +164,8 @@ describe("AsignacionSateliteService.asignar", () => {
     });
     // R8: escribe con estatus origen/destino resueltos, sin num_guia.
     // Feature 49/#7: pasa ademas el contexto de historial (actor = adminSatelite).
+    // Feature 246 (T3.2, R4/R7): el dia de reparto YA RESUELTO viaja en la MISMA llamada. Sin
+    // `dia` en la peticion se comporta como «hoy», igual que la bodega central (D4).
     expect(repo.asignarSateliteLote).toHaveBeenCalledWith(
       ["o1", "o2"],
       MENSAJERO,
@@ -168,6 +173,7 @@ describe("AsignacionSateliteService.asignar", () => {
       "os-espera",
       "os-bodega-satelite",
       { actorUsuarioId: "as1", origenTipo: "asignacion_satelite" },
+      expect.any(Date),
     );
   });
 
@@ -380,5 +386,81 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     );
     expect(res.status).toBe("ok");
     expect(repo.existeBodegaSateliteBloqueada).toHaveBeenCalledWith(ZONA);
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T3.2, D4 firmada el 2026-08-20) — LA BODEGA SATELITE RESUELVE EL DIA IGUAL.
+//
+// D4 se firmo asi por una razon operativa, no por simetria estetica: dejar el satelite fuera haria
+// que la regla del sistema dependiera de DESDE QUE BODEGA te asignaron, y eso no se le puede
+// explicar a quien opera. Estos casos son el espejo EXACTO de los de `guia-asignacion-service`.
+// =================================================================================================
+describe("246/R2-R7 — asignarDesdeSatelite resuelve el dia de reparto", () => {
+  const TARDE_DEL_20 = new Date("2026-08-20T20:00:00.000Z"); // 14:00 CR del 20
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+  const DIA_21 = new Date("2026-08-21T00:00:00.000Z");
+
+  /** La fecha que el servicio le pasa al repositorio (7.º argumento). */
+  function fechaEscrita(repo: RepoMethods): Date {
+    const call = (repo.asignarSateliteLote as ReturnType<typeof vi.fn>).mock
+      .calls[0] as unknown[];
+    return call[6] as Date;
+  }
+
+  it("R4: sin `dia` -> «hoy», igual que la bodega central", async () => {
+    const repo = fakeRepo();
+    await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it('R2/R5: `dia: "manana"` -> la fecha CR del dia siguiente', async () => {
+    const repo = fakeRepo();
+    await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO, dia: "manana" },
+      ADMIN,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("R3: el lote entero recibe LA MISMA fecha, en una sola llamada", async () => {
+    const repo = fakeRepo();
+    await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO, dia: "manana" },
+      ADMIN,
+      TARDE_DEL_20,
+    );
+    const calls = (repo.asignarSateliteLote as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as unknown[])[0]).toEqual(["o1"]);
+  });
+
+  it("R5/R17: a las 23:59 CR «mañana» es el dia siguiente en hora de Costa Rica, no en UTC", async () => {
+    const repo = fakeRepo();
+    await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO, dia: "manana" },
+      ADMIN,
+      new Date("2026-08-21T05:59:00.000Z"), // 23:59 CR del 20
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("D4: la MISMA entrada produce el MISMO dia que la bodega central", async () => {
+    // La comprobacion literal de D4: si un dia las dos superficies divergieran, esto se rompe.
+    const repo = fakeRepo();
+    await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO, dia: "manana" },
+      ADMIN,
+      TARDE_DEL_20,
+    );
+    // `resolverFechaReparto` es el unico traductor del repo, y las dos superficies lo llaman.
+    expect(fechaEscrita(repo).toISOString()).toBe(
+      resolverFechaReparto("manana", TARDE_DEL_20).toISOString(),
+    );
   });
 });

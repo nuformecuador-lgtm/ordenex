@@ -135,6 +135,7 @@ export class DevolucionSlaRepository implements IDevolucionSlaRepository {
           estatusId: input.destinoEstatusId, // R15 (destino ya resuelto por el service)
           mensajeroAsignadoId: null, // R15: handoff limpio a la bodega (nuevo intento)
           asignadoAt: null, // limpia el timestamp de asignacion (defensivo, patron 46)
+          fechaReparto: null, // feature 246/R9/R10: el dia de reparto SIEMPRE acompana a `asignado_at`
           prioridad: true, // feature 101/R2: liberada por SLA -> reasignacion prioritaria
           // Feature 239 (T3.1): aqui se apagaba `gestion_aprobada` para que la aprobacion del
           // cierre ANTERIOR no siguiera valiendo. Ya no hace falta: la columna se retira y quien

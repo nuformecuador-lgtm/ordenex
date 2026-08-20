@@ -48,9 +48,9 @@ import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import {
-  esGestionDesdeAyudaTienda,
-  ORIGEN_TIPO_GESTION_TIENDA_AYUDA,
-} from "@/lib/utils/gestion-tienda-ayuda-flag";
+  esGestionDeLaTienda,
+  ORIGENES_GESTION_DE_LA_TIENDA,
+} from "@/lib/utils/gestion-de-la-tienda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
@@ -154,7 +154,11 @@ export const DETALLE_ADMIN_SELECT = {
  */
 const FAMILIAS_DERIVADAS_DEL_HISTORIAL: OrdenHistorialOrigenTipo[] = [
   ORIGEN_TIPO_RECHAZO_SLA, // feature 102/R1: `esRechazoSla`
-  ORIGEN_TIPO_GESTION_TIENDA_AYUDA, // feature 237/R41: `desdeAyudaTienda`
+  // Feature 237/R41 + 240/R43: `desdeAyudaTienda`. Paso de UN valor a la LISTA, porque la tienda
+  // registra gestiones por dos caminos (la pestaña de ayuda y el rechazo manual de una devolucion
+  // anclada). Se expande aqui y no se cita el valor suelto: el dia que la lista crezca, esta
+  // proyeccion se entera sola.
+  ...ORIGENES_GESTION_DE_LA_TIENDA,
 ];
 
 export const GESTION_ADMIN_SELECT = {
@@ -182,12 +186,18 @@ export const GESTION_ADMIN_SELECT = {
   // unico que cambia es cuantas familias acepta su filtro. Se hizo asi, y no con una segunda
   // lectura, precisamente porque esta es la pagina que mas filas trae.
   //
-  // `take: 2` y no `take: 1`: son dos familias distintas y una gestion podria, en teoria, tener
-  // fila de las dos. Con `take: 1` una taparia a la otra segun el orden de lectura, que es la
-  // clase de fallo que se ve en produccion y nunca en un test.
+  // `take` = TANTAS COMO FAMILIAS FILTRADAS, y no `take: 1`: son familias distintas y una gestion
+  // podria, en teoria, tener fila de varias. Con un `take` corto una taparia a la otra segun el
+  // orden de lectura, que es la clase de fallo que se ve en produccion y nunca en un test.
+  //
+  // ⏳ 2026-08-20 (feature 240): aqui habia un `2` LITERAL, correcto mientras las familias fueran
+  // dos. Al entrar `rechazo_tienda` serian tres y el `2` habria empezado a truncar EN SILENCIO —el
+  // fallo exacto contra el que ese comentario avisaba—. Se ata al tamaño de la lista para que no
+  // vuelva a poder desincronizarse: quien añada una familia ya no tiene que acordarse de este
+  // numero.
   historialEstados: {
     where: { origenTipo: { in: FAMILIAS_DERIVADAS_DEL_HISTORIAL } },
-    take: 2,
+    take: FAMILIAS_DERIVADAS_DEL_HISTORIAL.length,
     select: { origenTipo: true },
   },
 } as const;
@@ -324,11 +334,12 @@ export function toPendienteRowDesdeSnapshot(
     // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
     // (`historialEstados` ya viene acotado a esas familias por `GESTION_ADMIN_SELECT`).
     esRechazoSla: esRechazoSla(g.historialEstados),
-    // Feature 237 (D6/R41): y `true` si la registro la TIENDA desde su pestaña de ayuda. Sale de
+    // Feature 237 (D6/R41) + 240 (R43): y `true` si la registro LA TIENDA — por la pestaña de
+    // ayuda o rechazando a mano una devolucion anclada. Sale de
     // LA MISMA lectura de historial que la linea de arriba: dos predicados PUROS sobre un solo
     // array, ninguna consulta de mas. El detalle de admin lo lleva por la misma razon que el del
     // mensajero: quien audita un cobro tiene que poder ver QUIEN lo decidio.
-    desdeAyudaTienda: esGestionDesdeAyudaTienda(g.historialEstados),
+    desdeAyudaTienda: esGestionDeLaTienda(g.historialEstados),
     // Feature 158/R9/R34: la causa del incidente, para que el admin sepa QUE paso antes de
     // decidir el monto de la indemnizacion. `null` en cualquier otro resultado.
     causaIncidente: g.causaIncidente,
@@ -1381,6 +1392,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     estatusId: destinoEstatusId,
                     mensajeroAsignadoId: null, // R16: handoff limpio a la bodega
                     asignadoAt: null, // R16
+                    fechaReparto: null, // feature 246/R9/R10: acompana SIEMPRE a `asignado_at`
                     prioridad: true, // R17: reasignacion prioritaria (101/110)
                   },
                 });

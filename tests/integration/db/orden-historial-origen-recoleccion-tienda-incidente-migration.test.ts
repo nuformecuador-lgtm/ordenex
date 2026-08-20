@@ -73,7 +73,7 @@ describe("Feature 154 · SEED del enum — las dos familias del flujo v2 (R7/R8/
     );
   // 27: la 149 apendio `deshacer_asignacion`, la 157 `asignacion_recoleccion` y la 239
     // `anclaje_devolucion` (2026-08-19), las tres DESPUES de estos dos valores.
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(30); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(31); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda
   });
 
   it("R12: NINGUNA de las dos entra en ORIGEN_TIPOS_CON_GESTION (no alteran los intentos)", () => {
@@ -138,6 +138,9 @@ describe("Feature 154 · DOWN — recrea el tipo con las 22 familias previas (R1
       // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
       // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
       "gestion_tienda_ayuda",
+      // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
+      // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
+      "rechazo_tienda",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_154.has(v))),

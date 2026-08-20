@@ -11,6 +11,7 @@ import {
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarLiberadasHoy } from "@/lib/actions/liberacion-reprogramada";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
+import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import { RecepcionSateliteModule } from "./_components/RecepcionSateliteModule";
 
@@ -93,6 +94,15 @@ export default async function RecepcionSatelitePage() {
   const catalogoFiltros =
     catalogoResult.status === "ok" ? catalogoResult.catalogo : null;
 
+  // Feature 246 (T4.3, R5/R29): las MISMAS dos fechas calendario que en `/ordenes`, resueltas
+  // aquí, en el servidor, con el día de Costa Rica. La decisión D4 exige que la elección del día
+  // signifique lo mismo desde las dos bodegas, y eso empieza por que la etiqueta salga del mismo
+  // sitio. El caso de la medianoche (D6) está nombrado en `SelectorDiaReparto`.
+  const fechasDiaReparto = {
+    hoy: fechaCalendarioCR(),
+    manana: mananaCalendarioCR(),
+  };
+
   return (
     <AppPage
       title="Mis asignaciones"
@@ -112,6 +122,7 @@ export default async function RecepcionSatelitePage() {
         mensajeros={mensajeros}
         bloqueoBodega={bloqueoBodega}
         liberadasHoy={liberadasHoy}
+        fechasDiaReparto={fechasDiaReparto}
       />
     </AppPage>
   );

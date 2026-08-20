@@ -188,7 +188,9 @@ describe("CorteDiarioService.ejecutarCorte", () => {
       gestionesByMensajero: { m1: [] },
     });
 
-    const res = await service.ejecutarCorte();
+    // Feature 246 (T2.1): reloj FIJO, porque `diaCerrado` entra en la igualdad exacta de abajo y
+    // un reloj real la haria depender del dia en que se corra la suite.
+    const res = await service.ejecutarCorte(new Date("2026-08-21T06:00:00.000Z"));
 
     expect(crearCierre).toHaveBeenCalledTimes(1);
     const arg = crearCierre.mock.calls[0][0];
@@ -196,10 +198,13 @@ describe("CorteDiarioService.ejecutarCorte", () => {
     // R4/R6 (+ 235/R26): las transiciones a `sin_gestionar` viajan en el input del corte, con los
     // DOS estados de origen. Igualdad EXACTA: si `ayudaEstatusId` se cayera del cableado, las
     // ordenes en ayuda se quedarian sin barrer cada noche y su mensajero, bloqueado para siempre.
+    // Feature 246 (R11/R16): `diaCerrado` entra en la MISMA igualdad exacta y por el MISMO motivo
+    // — si se cayera del cableado, el barrido perderia su criterio de dia en silencio.
     expect(arg.corteSinGestionar).toEqual({
       enRepartoEstatusId: "s-reparto",
       ayudaEstatusId: "s-ayuda",
       sinGestionarEstatusId: "s-sin-gestionar",
+      diaCerrado: new Date("2026-08-20T00:00:00.000Z"),
     });
     // El doble por defecto devuelve "cv" -> cuenta 1 (el repo decidiria null si nada paso).
     expect(res.vencidosCreados).toBe(1);
@@ -304,5 +309,87 @@ describe("Feature 69/(f) — el corte diario congela cierre_detail por el mismo 
     // asunto del repo, dentro de su tx (design §3.2, `CrearCierreInput` NO se extiende).
     expect(Object.keys(crearCierre.mock.calls[0][0])).not.toContain("cierreDetail");
     expect(cierreRepo).not.toHaveProperty("crearCierreDetail");
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T2.1, R16/R17) — EL ANCLA SE CALCULA UNA VEZ Y LLEGA IGUAL A LAS DOS CAPAS.
+//
+// Lo que este bloque mide NO es el `where` (eso vive en los tests de repositorio, que es donde
+// vive el SQL): mide el CABLEADO. Que la seleccion y la escritura reciban el MISMO valor es la
+// mitad de R16 que se puede afirmar desde aqui, y es la que la 235 dejo divergir.
+// =================================================================================================
+describe("246/R16/R17 — el dia que la corrida CIERRA, calculado una vez", () => {
+  // 00:00 hora de pared de Costa Rica del 21 de agosto = 06:00Z. Es la hora a la que el cron
+  // arranca de verdad (`0 6 * * *` UTC en `vercel.json`).
+  const CORRIDA_21 = new Date("2026-08-21T06:00:00.000Z");
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+
+  it("el MISMO `diaCerrado` llega a la seleccion y a `crearCierre`", async () => {
+    const { service, corteRepo, crearCierre } = build({
+      mensajeros: [{ mensajeroId: "m1", zonaId: "z1" }],
+    });
+
+    await service.ejecutarCorte(CORRIDA_21);
+
+    const seleccion = (
+      corteRepo.findMensajerosConActividadSinCierre as ReturnType<typeof vi.fn>
+    ).mock.calls[0]![0] as Date;
+    const escritura = crearCierre.mock.calls[0]![0].corteSinGestionar!.diaCerrado as Date;
+    expect(seleccion.toISOString()).toBe(escritura.toISOString());
+  });
+
+  it("EL ANCLA: corriendo a las 00:00 CR del 21, el dia que se cierra es el 20 — no el 21", async () => {
+    // Es el punto donde esta ficha se rompe sola si nadie lo lee. Con el ancla ingenua
+    // (`startOfDayCR(now)` = el 21), una orden reservada anoche «para mañana» tiene
+    // `fecha_reparto = 21`, `21 > 21` es falso y SE BARRE: justo lo que la ficha impide.
+    const { service, corteRepo } = build({ mensajeros: [] });
+
+    await service.ejecutarCorte(CORRIDA_21);
+
+    const diaCerrado = (
+      corteRepo.findMensajerosConActividadSinCierre as ReturnType<typeof vi.fn>
+    ).mock.calls[0]![0] as Date;
+    expect(diaCerrado.toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it("R17: el ancla es la convencion `@db.Date` (medianoche UTC), no las 06:00Z", async () => {
+    // Si alguien usara `inicioDelDiaCREnUtc` el valor llevaria las 06:00 dentro y la comparacion
+    // contra la columna `DATE` se iria un dia — la trampa que cerro la ficha 166.
+    const { service, corteRepo } = build({ mensajeros: [] });
+
+    await service.ejecutarCorte(CORRIDA_21);
+
+    const diaCerrado = (
+      corteRepo.findMensajerosConActividadSinCierre as ReturnType<typeof vi.fn>
+    ).mock.calls[0]![0] as Date;
+    expect(diaCerrado.getUTCHours()).toBe(0);
+    expect(diaCerrado.getUTCMinutes()).toBe(0);
+  });
+
+  it("si el cron se ADELANTA a las 23:5x CR del 20, cierra el 19: retrasa un barrido, no lo pierde", async () => {
+    // `2026-08-21T05:50:00Z` = 23:50 CR del 20. `startOfDayCR` da el 20 y el ancla el 19. Lo del
+    // 20 sobrevive una corrida mas y la siguiente lo alcanza. Anclar en `now` sin restar el dia
+    // tendria el defecto INVERSO, que si pierde la proteccion.
+    const { service, corteRepo } = build({ mensajeros: [] });
+
+    await service.ejecutarCorte(new Date("2026-08-21T05:50:00.000Z"));
+
+    const diaCerrado = (
+      corteRepo.findMensajerosConActividadSinCierre as ReturnType<typeof vi.fn>
+    ).mock.calls[0]![0] as Date;
+    expect(diaCerrado.toISOString()).toBe("2026-08-19T00:00:00.000Z");
+  });
+
+  it("cada corrida avanza su ancla un dia: la proteccion caduca sola (R13)", async () => {
+    const { service, corteRepo } = build({ mensajeros: [] });
+
+    await service.ejecutarCorte(CORRIDA_21);
+    await service.ejecutarCorte(new Date("2026-08-22T06:00:00.000Z"));
+
+    const calls = (corteRepo.findMensajerosConActividadSinCierre as ReturnType<typeof vi.fn>).mock
+      .calls;
+    expect((calls[0]![0] as Date).toISOString()).toBe("2026-08-20T00:00:00.000Z");
+    expect((calls[1]![0] as Date).toISOString()).toBe("2026-08-21T00:00:00.000Z");
   });
 });

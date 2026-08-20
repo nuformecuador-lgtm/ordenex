@@ -56,32 +56,134 @@ fechaReparto DateTime? @map("fecha_reparto") @db.Date
   contra `now()` y a reintroducir el desfase de seis horas del que avisa `lib/analytics/ranges.ts`.
 - **Nullable y sin default** (R19): las filas anteriores quedan en `NULL` y el corte las barre igual
   que hoy. **Cero backfill.**
-- **CON índice `@@index([fechaReparto])` — y esto cambió con la firma de D7.**
-  ⚠️ **Este punto decía «sin índice» antes de la puerta humana del 2026-08-20, y con D7 firmada eso
-  dejó de ser cierto.** Se deja escrito el porqué de las dos versiones:
-  - **Para el corte, el índice sobra.** El barrido filtra por `mensajero_asignado_id` (que ya tiene
-    `@@index`) y la fecha es un filtro **residual** sobre las órdenes de **un** mensajero. La
-    selección filtra por `estatus_id` (indexado) sobre la población en `en_reparto`, que a medianoche
-    es pequeña — **cuantificada en M2**.
-  - **Para el ranking, hace falta.** `contarAsignadasPorMensajero` es un `groupBy` sobre `orden`
-    **sin igualdad por mensajero** (`mensajeroAsignadoId: { not: null }` + rango de fecha), y lo
-    ejecuta cada carga de `/ranking` —que abre el maestro **y cada mensajero**— más el cron del
-    snapshot. Con el denominador movido a `fecha_reparto` (§6.bis), la consulta pasa a filtrar por
-    esta columna: sin índice es un recorrido completo de una tabla que sólo crece, y
-    `docs/architecture.md` lista «queries sin índice en rutas calientes o crons frecuentes» entre los
-    anti-patrones que el reviewer rechaza.
-  - **El coste es real y se declara:** un índice más que mantener en **cada escritura** de la tabla
-    más caliente del sistema. Ese razonamiento —«un índice que nadie usa se paga en cada escritura»—
-    es literal de `20260819170000_gestion_orden_confirmacion_fisica/migration.sql`, y aquí se paga a
-    conciencia porque **sí** hay quien lo usa.
-  - **Se confirma midiendo, no suponiendo (M8).** El `EXPLAIN` de T0 tiene que decir dos cosas: qué
-    plan usa **hoy** el denominador (puede que ya sea un recorrido completo, en cuyo caso el índice
-    **mejora** el estado actual en vez de empeorarlo) y qué plan usaría con la columna nueva. **Si el
-    `EXPLAIN` dice que el índice no se usa, el índice no se crea** y R44 se replantea.
-  - **Una sola columna, no `(mensajero_asignado_id, fecha_reparto)`:** la consulta del ranking agrupa
-    por mensajero pero **no filtra** por él, así que un compuesto con el mensajero delante no la
-    serviría — es exactamente el motivo por el que el índice `(mensajero_asignado_id, asignado_at)`
-    que existe hoy tampoco la sirve del todo.
+- **EL ÍNDICE — la decisión cambió DOS veces, y las tres versiones se dejan escritas.**
+
+  Se conserva la evolución entera, no sólo la conclusión, porque el error intermedio es
+  instructivo: **v2 no fue «una decisión distinta», fue una respuesta correcta a una pregunta
+  mal formulada**, y eso es más fácil de repetir que de detectar.
+
+  ---
+
+  **v1 — «SIN ÍNDICE».** *(antes de la puerta humana del 2026-08-20)*
+
+  Al **corte** el índice le sobra: el barrido filtra por `mensajero_asignado_id` (que ya tiene
+  `@@index`) y la fecha es un filtro **residual** sobre las órdenes de **un** mensajero; la
+  selección filtra por `estatus_id` (indexado) sobre la población en `en_reparto`, que a medianoche
+  es pequeña. Y un índice que nadie usa **se paga en cada escritura de la tabla más caliente** —
+  razonamiento literal de `20260819170000_gestion_orden_confirmacion_fisica`.
+
+  Con D7 sin firmar, esto era **correcto**.
+
+  ---
+
+  **v2 — «CON ÍNDICE `orden_fecha_reparto_idx`, de UNA columna».** *(tras firmar D7)*
+
+  D7 mete el denominador del ranking dentro de la ficha, y ése **sí** filtra por `fecha_reparto`:
+  `contarAsignadasPorMensajero` es un `groupBy` **sin igualdad por mensajero**, y lo ejecuta cada
+  carga de `/ranking` —que abre el maestro **y cada mensajero**— más el cron del snapshot. Sin
+  índice: recorrido completo de una tabla que sólo crece, que es lo que R44 prohíbe.
+
+  De **una sola** columna y no `(mensajero_asignado_id, fecha_reparto)`, porque la consulta **agrupa
+  por** mensajero pero **no filtra** por él, así que un compuesto con el mensajero delante no la
+  serviría.
+
+  **Ese razonamiento era correcto en todo menos en su premisa**, y la premisa no se había medido.
+
+  ---
+
+  **v3 — «AMPLIAR EL COMPUESTO QUE YA EXISTE A TRES COLUMNAS».** *(medido, 2026-08-20, y es la que
+  se aplica)*
+
+  **La premisa que faltaba.** El `EXPLAIN` de producción (**M8**) mostró que la consulta del
+  denominador **hoy no hace ningún recorrido completo**: se sirve con un **`Index Only Scan`** sobre
+  `(mensajero_asignado_id, asignado_at)`, un índice **que ya existe** desde la 76.
+
+  ```
+  GroupAggregate
+    ->  Index Only Scan using orden_mensajero_asignado_id_asignado_at_idx on orden o
+          Index Cond: (mensajero_asignado_id IS NOT NULL
+                       AND asignado_at >= … AND asignado_at < …)
+  ```
+
+  Es el mejor plan posible: **no toca el heap**.
+
+  **Con eso delante, la pregunta de v2 estaba mal formulada.** No era «¿hace falta un índice
+  nuevo?». Era:
+
+  > **¿El `OR` sobre `fecha_reparto` rompe el `Index Only Scan` que hoy sirve esta consulta?**
+
+  El riesgo no era quedarse sin índice: era que **el índice que ya funcionaba dejara de cubrir la
+  consulta**, porque `fecha_reparto` no está dentro de él. Y un plan óptimo puede degradarse a uno
+  peor sin que falte nada.
+
+  **Los cuatro planes, medidos** (base local, `enable_seqscan = off` para forzar la **forma** del
+  plan; ver «por qué no por coste» abajo):
+
+  | Índices presentes | Plan de la consulta con el `OR` | ¿Toca el heap? |
+  | --- | --- | --- |
+  | compuesto `(msj, asignado_at)` **+ `orden_fecha_reparto_idx`** *(v2)* | `BitmapOr` → **`Bitmap Heap Scan`** | **SÍ** |
+  | sólo el compuesto `(msj, asignado_at)` | **`Index Scan`** por `msj IS NOT NULL` + Filter | **SÍ** |
+  | compuesto **ampliado** `(msj, asignado_at, fecha_reparto)` *(v3)* | **`Index Only Scan`** + Filter | **NO** |
+  | ampliado + `(fecha_reparto, msj)` | idéntico al anterior — el segundo índice **no se usa** | **NO** |
+
+  **La conclusión que invierte v2:** `orden_fecha_reparto_idx` **no arregla el problema, lo
+  empeora**. Es lo bastante atractivo para que el planificador elija un `BitmapOr` de dos escaneos
+  de índice, y **un `BitmapOr` no es un `Index Only Scan`**: el `Bitmap Heap Scan` que lo remata
+  vuelve al heap. Sin ese índice, el plan al menos se queda en un `Index Scan`.
+
+  **Lo que sí lo arregla:** que `fecha_reparto` sea la **tercera columna clave** del compuesto que
+  ya existe. Entonces todas las columnas de la consulta viven en el índice y el plan vuelve a ser
+  `Index Only Scan`.
+
+  **Por qué se AMPLÍA en vez de añadir:**
+  - **el número de índices de `orden` no sube.** Se sustituye uno por su versión de tres columnas,
+    así que el coste de escritura sube por **4 bytes de ancho de entrada**, no por un índice más.
+    Es estrictamente más barato que v2, que sumaba uno entero;
+  - **el prefijo se conserva.** `(a, b, c)` sirve a quien consultaba `(a, b)`:
+    `TableroDiaRepository.cteIdsDelDia` y el denominador de la 76 siguen con **el mismo `Index
+    Cond`**, verificado con `EXPLAIN`, no supuesto. *(El orden de las columnas es el requisito:
+    `(fecha_reparto, msj, asignado_at)` **no** serviría ese prefijo.)*
+
+  **LO QUE NINGÚN ÍNDICE ARREGLA, Y SE DECLARA COMO COSTE DE D7.** Con el `OR`, el `Index Cond` se
+  reduce a `mensajero_asignado_id IS NOT NULL` y **se pierde el acotado por rango de
+  `asignado_at`**: un btree **no puede** expresar una disyunción entre **dos** columnas como un
+  rango. El plan sigue sin tocar el heap, pero pasa de leer **la porción de un día** a leer **el
+  índice entero** (toda la población de órdenes asignadas, que sólo crece).
+
+  ```
+  ->  Index Only Scan using orden_mensajero_asignado_at_fecha_reparto_idx on orden o
+        Index Cond: (mensajero_asignado_id IS NOT NULL)          ← se perdió el rango
+        Filter: ((fecha_reparto = …) OR ((fecha_reparto IS NULL) AND (asignado_at >= …) AND …))
+  ```
+
+  **Esto es un coste de D7, no un defecto de la implementación**, y no se esconde: es el precio de
+  contar el denominador por dos criterios a la vez.
+
+  **La forma que lo recuperaría, medida y nombrada como seguimiento:** partir el `OR` en **dos
+  consultas** y sumar los dos mapas en el repositorio. Con el mismo índice ampliado, **las dos
+  ramas recuperan su `Index Cond` estrecho**:
+
+  ```
+  rama (a)  Index Cond: (mensajero_asignado_id IS NOT NULL AND fecha_reparto = D)
+  rama (b)  Index Cond: (mensajero_asignado_id IS NOT NULL
+                         AND asignado_at >= … AND asignado_at < … AND fecha_reparto IS NULL)
+  ```
+
+  La (b) es **exactamente la forma de hoy** con la comprobación del `NULL` empujada **dentro** del
+  `Index Cond`. Y la disyunción disjunta se vuelve **más** fácil de probar, no menos: dos consultas
+  disjuntas cuyos conteos se suman.
+
+  **No se hace en esta ficha**, y el motivo es de proceso, no técnico: reestructuraría la consulta
+  que decide el podio **justo después de firmarla**, y con ella los casos y las mutaciones (T7.4,
+  T7.5) que la protegen. Se registra aquí para que sea **decisión y no descubrimiento**.
+
+  **⏳ POR QUÉ ESTO ESTÁ MEDIDO POR FORMA Y NO POR COSTE, Y HAY QUE RE-MEDIRLO.** **Ninguna de las
+  dos bases tiene volumen para decidir por el plan**: producción tiene **141 órdenes vivas** y la
+  local **67**. A esa escala el planificador hace `Seq Scan` **con índice y sin él**, y hace bien.
+  Todo lo de arriba se midió con `enable_seqscan = off`, que fuerza al planificador a enseñar **qué
+  plan indexado es capaz de construir** — que es exactamente la pregunta de esta sección— pero **no
+  dice nada de qué elegirá cuando la tabla crezca**. **Re-medir con volumen antes de confiar en
+  cualquiera de estos planes.**
 - **Sin `CHECK`.** «Sólo hoy o mañana» es una regla del **borde** (zod) y del servicio; expresarla en
   la base exigiría comparar contra `now()` dentro de una restricción, que es una segunda definición
   del día — prohibido por §3.
@@ -96,12 +198,20 @@ vuelo que también añaden migraciones).
 
 ```sql
 ALTER TABLE "orden" ADD COLUMN "fecha_reparto" DATE;
-CREATE INDEX "orden_fecha_reparto_idx" ON "orden" ("fecha_reparto");
+
+-- El indice NO se añade: se AMPLIA el que ya existe (§2.1 v3). Se crea primero y se borra
+-- despues, para que nunca haya una ventana en la que el prefijo se quede sin indice que lo sirva.
+CREATE INDEX "orden_mensajero_asignado_at_fecha_reparto_idx"
+  ON "orden" ("mensajero_asignado_id", "asignado_at", "fecha_reparto");
+
+DROP INDEX IF EXISTS "orden_mensajero_asignado_id_asignado_at_idx";
 ```
 
-⚠️ **El `CREATE INDEX` es condicional a M8**: si el `EXPLAIN` de T0 dice que el planificador no lo
-usa para el denominador, **no se escribe**, y el `migration.sql` lo dice en vez de crearlo «por si
-acaso». Un índice de más en `orden` no es gratis.
+⚠️ **Esto NO es lo que esta sección decía antes de M8.** Decía
+`CREATE INDEX "orden_fecha_reparto_idx" ON "orden" ("fecha_reparto")`, condicionado a que el
+`EXPLAIN` lo justificara. El `EXPLAIN` **lo desmintió**: ese índice suelto no preserva el `Index
+Only Scan` que la consulta ya tenía —lo degrada a `Bitmap Heap Scan`—. El razonamiento entero, con
+sus tres versiones y los cuatro planes medidos, está en **§2.1**.
 
 El `migration.sql` lleva su razonamiento **entero** arriba, al nivel de la 238: qué es, por qué una
 columna y no una tabla lateral (D1), por qué una fecha y no una marca (D2), qué significa `NULL` (una
@@ -111,7 +221,15 @@ reordena, no borra, no toca filas, no toca índices, no toca RLS).
 ### 2.3 El `down.sql`, pensado
 
 ```sql
-DROP INDEX IF EXISTS "orden_fecha_reparto_idx";
+-- Se REPONE el indice de dos columnas ANTES de soltar nada: el `up` lo SUSTITUYO, no lo sumo, asi
+-- que un `down` que solo soltara la columna dejaria la base SIN el, y con el se iria el
+-- `Index Only Scan` del que dependen el denominador del ranking y `TableroDiaRepository`. Eso no
+-- seria «devolver la base al estado anterior»: seria dejarla PEOR.
+CREATE INDEX IF NOT EXISTS "orden_mensajero_asignado_id_asignado_at_idx"
+  ON "orden" ("mensajero_asignado_id", "asignado_at");
+
+DROP INDEX IF EXISTS "orden_mensajero_asignado_at_fecha_reparto_idx";
+
 ALTER TABLE "orden" DROP COLUMN IF EXISTS "fecha_reparto";
 ```
 
@@ -426,9 +544,22 @@ const rows = await this.prisma.orden.groupBy({
 **Por qué un `OR` de dos predicados y no `COALESCE(fecha_reparto, dia(asignado_at)) = X`:** el
 `COALESCE` mezcla las dos convenciones dentro de una expresión, **no es indexable** por ningún índice
 existente ni por el nuevo, y obligaría a meter `- interval '6 hours'` en el SQL — la segunda
-definición del día que §3 prohíbe. El `OR`, en cambio, tiene **las dos ramas indexables por separado**
-(la primera por `orden_fecha_reparto_idx`, la segunda por el índice que ya existe) y Postgres las
-combina con un `BitmapOr`. **M8 lo confirma; si el `EXPLAIN` dice otra cosa, manda el `EXPLAIN`.**
+definición del día que §3 prohíbe.
+
+⚠️ **Aquí esta sección decía algo que M8 desmintió, y se corrige en vez de dejarlo envejecer.**
+Decía que el `OR` tiene «las dos ramas indexables por separado (la primera por
+`orden_fecha_reparto_idx`, la segunda por el índice que ya existe) y Postgres las combina con un
+`BitmapOr`». **Eso es literalmente cierto y operativamente peor de lo que suena:** un `BitmapOr`
+**no es un `Index Only Scan`** —lo remata un `Bitmap Heap Scan`, que vuelve al heap— y la consulta
+ya tenía un `Index Only Scan` que perder. **El plan bueno no sale de indexar cada rama por su lado,
+sale de que las tres columnas vivan en el MISMO índice** (§2.1 v3): entonces el `OR` se evalúa como
+`Filter` sobre la tupla del índice y no se toca el heap.
+
+**Lo que el `OR` sí cuesta, y ningún índice quita:** el `Index Cond` se reduce a
+`mensajero_asignado_id IS NOT NULL` — un btree no expresa una disyunción entre dos columnas como un
+rango—, así que se recorre el índice entero en vez de la porción de un día. **Está declarado como
+coste de D7 en §2.1**, junto con la forma que lo recuperaría (partir el `OR` en dos consultas), su
+`EXPLAIN` y el motivo por el que no se hace en esta ficha.
 
 **Por qué la segunda rama lleva `fechaReparto: null` y no sólo el rango:** sin ese `null`, una orden
 asignada hoy para mañana entraría **por las dos ramas** —en el denominador de hoy por `asignado_at` y
@@ -857,7 +988,7 @@ para mañana.
 | 7 | **El podio del día del despliegue sale falso** si el denominador contase sólo `fecha_reparto = X`: las órdenes anteriores desaparecen, todos los porcentajes suben y el premio se lo lleva quien no debe. **Es el peligro de dinero de esta ficha.** | La segunda rama del `OR` (§6.bis.3, R37/R43) y un test que la ejercita con una mezcla de órdenes con y sin fecha. **Mutación obligatoria**: quitar esa rama tiene que poner rojo un caso, con salida real. |
 | 8 | **Doble conteo entre las dos ramas del `OR`**: sin la cláusula `fechaReparto: null`, una orden asignada hoy para mañana entra en los denominadores de **los dos** días. | Las ramas son disjuntas por construcción; hay un caso testigo dedicado y su mutación. |
 | 9 | **Mezclar las dos convenciones de fecha** en la misma consulta del ranking (`DATE` a medianoche UTC vs `timestamp` a las 06:00Z): desplaza el día seis horas — el defecto que cerró la 166. | §6.bis.2 lo nombra; los tres valores los calcula el **llamador** y ninguno se deriva del otro; `ranking-ventana-dia.guardia.test.ts` se **amplía**, no se relaja. |
-| 10 | **Un índice de más en la tabla más caliente**, pagado en cada escritura de `orden`, por una consulta que quizá ya estaba haciendo un recorrido completo. | **M8 decide**: si el `EXPLAIN` no lo usa, no se crea. La decisión se toma con el plan delante, no con una intuición. |
+| 10 | **El riesgo era el contrario del que esta tabla decía.** Decía «un índice de más… por una consulta que quizá ya estaba haciendo un recorrido completo». **M8 lo desmintió**: la consulta **no** hacía un recorrido completo —tenía un `Index Only Scan`— y el riesgo real era **perderlo** al añadir el `OR`. | Medido (§2.1 v3): se **amplía** el compuesto que ya existe en vez de crear uno suelto (el suelto degradaba a `Bitmap Heap Scan`). El número de índices no sube. Lo que no se puede recuperar —el acotado por rango— **se declara como coste de D7**, no se esconde. ⏳ **Re-medir con volumen**: ni producción (141 órdenes) ni local (67) deciden por coste. |
 | 11 | **La ficha se lleva por delante el ranking sin que nadie lo espere.** D7 se firmó en contra de la recomendación; quien lea el título de la ficha dentro de seis meses no adivinará que aquí se movió el podio. | El registro está en `requirements.md` §D7 y §«PUERTA HUMANA PASADA», con la recomendación original íntegra, y en la `status_note` de la ficha. |
 | 12 | **M5 y M7 son PROXIES** y es fácil pegarlos como si fueran el efecto real. | Van etiquetados en los dos archivos y con autocomprobación; M7 además **reimplementa a mano** el comparador que en el código vive en un módulo puro, y eso se dice al pegar el resultado. |
 

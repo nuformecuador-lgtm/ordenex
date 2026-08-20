@@ -1,0 +1,50 @@
+-- Feature 240 (T1.1, D8, R6/R47) — anade la familia del RECHAZO MANUAL DE LA TIENDA al enum
+-- `orden_historial_origen_tipo`:
+--
+--   `rechazo_tienda`   devuelta -> rechazada   (actor = el adminTienda dueño de la orden)
+--
+-- QUE ES. Hasta hoy la arista `devuelta -> rechazada` la producia UN SOLO sitio, el cron de plazo
+-- vencido (`DevolucionSlaRepository.escalarDevueltaSla`, familia `escalado_devuelta_sla`, feature
+-- 99). Esta ficha abre la MISMA llegada a `rechazada` para la administracion de la tienda dueña:
+-- el paquete ya volvio fisicamente a la bodega y se escaneo al aprobar el cierre (238), la
+-- devolucion quedo anclada (239) y la tienda decide no reintentar. La familia es lo unico que
+-- distingue «lo decidio alguien» de «se vencio el plazo».
+--
+-- POR QUE UNA FAMILIA PROPIA Y NO REUSAR UNA EXISTENTE (D8, y las dos alternativas eran mas
+-- baratas — por eso hay que decir por que se descartaron):
+--   - con `escalado_devuelta_sla` la pestaña «Rechazadas por plazo vencido» (feature 102) listaria
+--     rechazos que NO vencieron ningun plazo: su predicado es EXACTAMENTE esa familia
+--     (`OrdenRepository`, `esRechazoSla`), asi que el detalle del cierre y la descarga pasarian a
+--     mentir sobre por que se cobro.
+--   - con `gestion` el historial ATRIBUIRIA AL MENSAJERO la decision de la tienda —y ese historial
+--     es la unica evidencia de quien decidio un rechazo que se cobra— y ademas `gestion` SI esta en
+--     `ORIGEN_TIPOS_VISITA_REAL`, asi que el rechazo sumaria UN INTENTO DE MAS sobre una orden que
+--     ya tiene contada su `devuelta` real: el doble conteo que 160/R2 evitaba, que adelanta el
+--     escalado de otras ordenes y cobra antes de tiempo.
+--
+-- ⚠️ ESTA FAMILIA **NO** ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`,
+-- R19), al reves que `gestion_tienda_ayuda` (237) que tiene justo encima en el SEED. La asimetria
+-- no es un descuido y el argumento es LITERALMENTE el que ya esta escrito para
+-- `reprogramacion_tienda`: esta transicion se hace sobre una orden que YA TIENE una gestion
+-- `devuelta` real contada, asi que sumarla produce el DOBLE CONTEO. `gestion_tienda_ayuda` es el
+-- caso contrario —el mensajero no registro NINGUN desenlace, y sin ella esa visita no la cuenta
+-- nadie—.
+--
+-- SI enlaza gestion (`gestion_orden_id` poblado) y aun asi NO entra en `ORIGEN_TIPOS_CON_GESTION`:
+-- mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (esa lista solo desambigua la
+-- NULIDAD del enlace, 67/R25-R26). Ver la nota de esa lista.
+--
+-- Y NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: el integrador recibe `rechazada` igual que hoy
+-- (R44). La unica excepcion de webhook por familia sigue siendo el rescate de la 235.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR un
+-- valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma Migrate corre
+-- cada `migration.sql` en una. Aqui SOLO se anade el valor; su primer uso ocurre en runtime
+-- (`GestionOrdenRepository.rechazarDesdeDevuelta`), en transacciones posteriores. Mismo precedente
+-- que `gestion_tienda_ayuda` (237), `solicitud_ayuda_tienda`/`rescate_ayuda_tienda` (235),
+-- `anclaje_devolucion` (239) y `asignacion_recoleccion` (157).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva su
+-- RLS de la feature 49). No crea tablas ni columnas. No hay BACKFILL: esta ficha no reinterpreta
+-- ninguna fila existente, y ninguna orden cambia de estado aqui (R47).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'rechazo_tienda';

@@ -1,4 +1,5 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { DiaReparto } from "@/lib/types/dia-reparto";
 
 // Feature 34 — contrato del servicio de asignacion de la bodega satelite: el
 // adminSatelite asigna un lote de ordenes `en_bodega_satelite` de SU zona a un
@@ -14,6 +15,13 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 export interface AsignarSateliteInput {
   ordenIds: string[];
   mensajeroId: string;
+  /**
+   * Feature 246 (T3.1/T3.2, R2/R3/R4/R6, decision D4) — espejo EXACTO de `AsignarBodegaInput.dia`.
+   * Mismo token, mismo default, mismo significado: la regla no puede depender de desde que bodega
+   * te asignaron. El servicio lo traduce a fecha con `resolverFechaReparto`; el cliente nunca
+   * manda una fecha (R6).
+   */
+  dia?: DiaReparto;
 }
 
 // R7/R3/R9/R10/R13: maquina de resultados de la asignacion. Todos los rechazos son
@@ -47,5 +55,10 @@ export interface IAsignacionSateliteService {
    * del actor (R3) → mensajero de la zona (R9) → precarga y valida cada orden
    * (R10-R12) → escritura guardada por estado+zona con deteccion de carrera (R14).
    */
-  asignar(input: AsignarSateliteInput, actor: Actor): Promise<AsignarSateliteServiceResult>;
+  asignar(
+    input: AsignarSateliteInput,
+    actor: Actor,
+    /** Feature 246 (T3.2, R5): reloj inyectable del que sale el dia de reparto. Server-side. */
+    now?: Date,
+  ): Promise<AsignarSateliteServiceResult>;
 }

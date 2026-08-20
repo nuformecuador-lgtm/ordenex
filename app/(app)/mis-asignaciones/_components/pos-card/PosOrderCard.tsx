@@ -15,6 +15,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
+import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
@@ -182,13 +183,24 @@ export function PosOrderCard({
           </div>
         </div>
 
-        {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde):
-            marcas informativas de la card, en una fila que envuelve. */}
-        {(mostrarRuta && orden.secuenciaRuta === null) || orden.marcarLuego ? (
+        {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde) + feature
+            246/R22 (para mañana): marcas informativas de la card, en una fila que envuelve. */}
+        {(mostrarRuta && orden.secuenciaRuta === null) ||
+        orden.marcarLuego ||
+        orden.esParaManana ? (
           <div className="flex flex-wrap gap-1.5">
             {mostrarRuta && orden.secuenciaRuta === null ? (
               <Badge variant="outline" className="w-fit">
                 Pendiente de optimizar
+              </Badge>
+            ) : null}
+            {/* Feature 246 (T5.2, R22). La marca va TAMBIÉN aquí, y no sólo en las dos cards que
+                el portal monta hoy: las tres son PARALELAS, no variantes, y una card que no
+                dijera «Para mañana» dejaría de distinguir la orden reservada en cuanto alguien
+                la montara. Que hoy no esté montada no la hace correcta. */}
+            {orden.esParaManana ? (
+              <Badge variant="info" className="w-fit">
+                {ETIQUETA_PARA_MANANA}
               </Badge>
             ) : null}
             {orden.marcarLuego ? (

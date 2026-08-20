@@ -977,6 +977,15 @@ export interface IOrdenRepository {
     mensajeroId: string,
     estatusId: string,
     historial: HistorialContexto,
+    /**
+     * Feature 246 (T3.3, R7/R10) — el DIA DE REPARTO del lote, ya resuelto a fecha por el
+     * servicio (`resolverFechaReparto`). Se escribe en la MISMA `data` que `asignadoAt`, nunca
+     * en una segunda pasada: las dos columnas se estampan juntas o no se estampa ninguna.
+     *
+     * OBLIGATORIO, sin default: si fuera opcional, olvidar cablearlo compilaria y dejaria el
+     * lote sin dia de reparto — indistinguible de una orden anterior a la feature.
+     */
+    fechaReparto: Date,
   ): Promise<number>;
 
   // --- Feature 30: ruteo a bodega satelite (R10/R13) ---
@@ -1277,6 +1286,10 @@ export interface IOrdenRepository {
     destinoEstatusId: string,
     origenEstatusId: string,
     historial: HistorialContexto,
+    /** Feature 246 (T3.3, R7/R10): espejo de `asignarBodegaLote`. Entra PARAMETRIZADO en el mismo
+     * `SET` que `asignado_at`, jamas interpolado y jamas como `NOW()::date` — el dia lo decide el
+     * servidor en TypeScript, no la base (R17). Obligatorio, sin default. */
+    fechaReparto: Date,
   ): Promise<number>;
 
   // --- Feature 149: deshacer asignacion / ruteo antes de la recogida (R8-R10/R20/R21) ---

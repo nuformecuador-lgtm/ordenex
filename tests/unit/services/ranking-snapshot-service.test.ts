@@ -132,7 +132,15 @@ describe("congelar — fecha objetivo y ventana (R2)", () => {
     expect(res.fecha).toBe(FECHA_OBJETIVO);
     const { desde, hasta } = ventanaDelDia(FECHA_OBJETIVO);
     expect(contarEntregadasPorMensajero).toHaveBeenCalledWith(desde, hasta);
-    expect(contarAsignadasPorMensajero).toHaveBeenCalledWith(desde, hasta);
+    // Feature 246 (T6.3, D7): el denominador recibe un TERCER valor —el dia como `@db.Date`— y es
+    // EXACTAMENTE el mismo que se congela en la cabecera. Las DOS convenciones conviven en la
+    // misma llamada: `desde`/`hasta` llevan las 06:00 (cotas `timestamp`) y `diaReparto` no
+    // (medianoche UTC). Confundirlas desplaza el dia seis horas — la trampa de la ficha 166.
+    expect(contarAsignadasPorMensajero).toHaveBeenCalledWith(
+      desde,
+      hasta,
+      new Date("2026-08-10T00:00:00.000Z"),
+    );
     // La cabecera guarda la MEDIANOCHE UTC de la fecha, no el `desde` de la ventana.
     expect(escrituras[0].fecha.toISOString()).toBe("2026-08-10T00:00:00.000Z");
   });
@@ -496,5 +504,106 @@ describe("obtenerPorFecha — contenido y serializacion (R16/R25/R26/R31)", () =
     expect(res.data.generadoAt).toBe("2026-08-11T08:00:00.000Z");
     expect(res.data.minAsignadasPodio).toBe(3);
     expect(res.data.fecha).toBe(FECHA_OBJETIVO);
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T6.3, D7 firmada el 2026-08-20) — EL CONGELADO Y EL VIVO CUENTAN IGUAL.
+//
+// R41: los dos DEBEN poder diferir solo en QUE DIA miran, nunca en COMO lo cuentan. Aqui se afirma
+// exactamente eso: misma forma de llamada, mismo tipo de valor, dias distintos.
+// =================================================================================================
+describe("246/R41/R42/R46 — el denominador congelado usa el MISMO criterio que el vivo", () => {
+  /** Los tres argumentos que cada uno pasa al denominador. */
+  async function argsDeLosDos() {
+    const datos = escenario();
+    const congelado = buildService(datos);
+    await congelado.service.congelar(CORRIDA);
+
+    const repos = reposDelRanking(datos);
+    const vivo = new RankingService(repos.rankingRepo, repos.userRepo, repos.premioRepo, {
+      MIN_ASIGNADAS_PODIO: datos.minPodio ?? 1,
+    });
+    await vivo.obtenerRanking(MAESTRO, DENTRO_DEL_DIA);
+
+    return {
+      delCongelado: congelado.contarAsignadasPorMensajero.mock.calls[0] as unknown as [
+        Date,
+        Date,
+        Date,
+      ],
+      delVivo: repos.contarAsignadasPorMensajero.mock.calls[0] as unknown as [Date, Date, Date],
+    };
+  }
+
+  it("R41: los dos pasan TRES argumentos, y el tercero tiene la MISMA convencion", async () => {
+    const { delCongelado, delVivo } = await argsDeLosDos();
+
+    expect(delCongelado).toHaveLength(3);
+    expect(delVivo).toHaveLength(3);
+    // Misma convencion `@db.Date`: medianoche UTC, sin las 06:00 dentro. Si uno de los dos usara
+    // la convencion `timestamp`, contarian dias distintos sin que nadie se enterara — que es
+    // exactamente lo que R41 prohibe.
+    for (const dia of [delCongelado[2], delVivo[2]]) {
+      expect(dia.getUTCHours()).toBe(0);
+      expect(dia.getUTCMinutes()).toBe(0);
+      expect(dia.getUTCSeconds()).toBe(0);
+      expect(dia.getUTCMilliseconds()).toBe(0);
+    }
+  });
+
+  it("R41: en este caso miran EL MISMO dia — el congelado de D−1 y el vivo dentro de D−1", async () => {
+    // `CORRIDA` son las 02:00 CR del 11 (congela el 10) y `DENTRO_DEL_DIA` son las 12:00 CR del
+    // 10. Los dos tienen que apuntar al 10: es la comprobacion de que «solo difieren en QUE dia».
+    const { delCongelado, delVivo } = await argsDeLosDos();
+    expect(delCongelado[2].toISOString()).toBe("2026-08-10T00:00:00.000Z");
+    expect(delVivo[2].toISOString()).toBe(delCongelado[2].toISOString());
+  });
+
+  it("R46: el dia congelado es el MISMO que filtro el denominador — no dos fechas distintas", async () => {
+    // Si la cabecera guardara un dia y el denominador filtrara por otro, la fila congelada
+    // describiria un dia que nadie conto. Aqui son literalmente el mismo valor.
+    const { service, contarAsignadasPorMensajero, escrituras } = buildService(escenario());
+
+    await service.congelar(CORRIDA);
+
+    const diaFiltrado = (contarAsignadasPorMensajero.mock.calls[0] as unknown as [
+      Date,
+      Date,
+      Date,
+    ])[2];
+    expect(escrituras[0].fecha.toISOString()).toBe(diaFiltrado.toISOString());
+  });
+
+  it("R46: no hay escritura posible que mueva el denominador de un dia ya congelado", async () => {
+    // No es una promesa: es el ALCANCE de la ficha. `fecha_reparto = X` solo puede escribirse
+    // eligiendo «hoy» el dia X o «mañana» el dia X−1, y este cron congela X a las 02:00 CR del
+    // X+1. La forma de afirmarlo desde aqui es que `congelar` no admite otra fecha que la que
+    // deriva de `now` (R15, ya cubierto) y que el dia que filtra es siempre D−1.
+    const { service, contarAsignadasPorMensajero } = buildService(escenario());
+
+    await service.congelar(CORRIDA);
+
+    const diaFiltrado = (contarAsignadasPorMensajero.mock.calls[0] as unknown as [
+      Date,
+      Date,
+      Date,
+    ])[2];
+    // D−1 respecto de la corrida, nunca el dia en curso ni uno futuro.
+    expect(diaFiltrado.getTime()).toBeLessThan(CORRIDA.getTime());
+    expect(CORRIDA.getTime() - diaFiltrado.getTime()).toBeLessThan(2 * 24 * 60 * 60 * 1000);
+  });
+
+  it("R42: una re-corrida sobre una fecha ya congelada NO reescribe nada", async () => {
+    // El criterio nuevo rige solo hacia adelante (D11, firmada). La idempotencia del cron es la
+    // unicidad de `fecha`, y esta ficha no la toca: si el snapshot ya existe, se omite.
+    const { service, escrituras } = buildService(escenario(), { creado: false });
+
+    const res = await service.congelar(CORRIDA);
+
+    expect(res.status).toBe("omitido");
+    // Se intento escribir una vez (el repo es quien decide por unicidad), y NO hay ninguna
+    // actualizacion de filas previas: este service no tiene ningun camino que las modifique.
+    expect(escrituras).toHaveLength(1);
   });
 });

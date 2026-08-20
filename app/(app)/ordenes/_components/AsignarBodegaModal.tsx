@@ -5,9 +5,15 @@ import { useState } from "react";
 import { Modal } from "@/components/shared/Modal";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
 import { ManifiestoResultado } from "@/components/shared/ManifiestoResultado";
+import { SelectorDiaReparto } from "@/components/shared/SelectorDiaReparto";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/hooks/useToast";
 import { asignarDesdeBodega } from "@/lib/actions/ordenes-guia";
+import type { DiaReparto } from "@/lib/types/dia-reparto";
+import {
+  confirmacionDiaReparto,
+  type FechasDiaReparto,
+} from "@/lib/utils/dia-reparto-textos";
 import type { AsignarBodegaResult } from "@/lib/types/orden-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
@@ -32,6 +38,13 @@ export interface AsignarBodegaModalProps {
    * Tienen un viaje comprometido, así que no reciben reparto hasta cerrarlo.
    */
   mensajerosConRecoleccionIds?: string[];
+  /**
+   * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» resueltas EN EL SERVIDOR y
+   * bajadas por props desde la página. Obligatorias: montar el modal sin decidir de dónde salen
+   * las etiquetas del día tiene que ser imposible, porque la alternativa fácil —calcularlas con
+   * `new Date()` aquí— es justo lo que R29 prohíbe.
+   */
+  fechasDiaReparto: FechasDiaReparto;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -47,15 +60,24 @@ export function AsignarBodegaModal({
   ordenes,
   mensajeros,
   mensajerosConRecoleccionIds = [],
+  fechasDiaReparto,
   onOpenChange,
   onSuccess,
 }: AsignarBodegaModalProps) {
   const toast = useToast();
   const [mensajeroId, setMensajeroId] = useState("");
+  // Feature 246 (T4.2, R27): «Hoy» PRESELECCIONADO. El estado arranca en `"hoy"` y el envío
+  // manda siempre un valor explícito, así que no hay ningún camino por el que un lote acabe
+  // «para mañana» sin que alguien lo eligiera — que sería peor que el defecto que esta ficha
+  // arregla. El borde también tiene `.default("hoy")` (R4), pero eso es la red de abajo: aquí
+  // la elección es explícita para que el servidor no tenga que adivinar nada.
+  const [dia, setDia] = useState<DiaReparto>("hoy");
   // Feature 148 (T11, §9.7): fase "resultado" con el lote ya cometido.
   const [resultado, setResultado] = useState<{
     ordenIds: string[];
     mensaje: string;
+    /** R28: para qué día quedó el lote, en palabras. Se congela con el lote cometido. */
+    confirmacionDia: string;
   } | null>(null);
   // Reinicia la selección solo al transicionar a `open` (ajuste de estado
   // durante el render, no en un `useEffect`, para evitar el render en cascada).
@@ -64,6 +86,10 @@ export function AsignarBodegaModal({
     setPrevOpen(open);
     if (open) {
       setMensajeroId("");
+      // El día vuelve a «hoy» en CADA apertura, no sólo en la primera: el modal no se
+      // desmonta al cerrarse, así que sin esto un «mañana» elegido para un lote se quedaría
+      // pegado y el siguiente lote saldría reservado sin que nadie lo pidiera.
+      setDia("hoy");
       setResultado(null);
     }
   }
@@ -95,6 +121,14 @@ export function AsignarBodegaModal({
     const result = await asignarDesdeBodega({
       ordenIds: ordenes.map((orden) => orden.id),
       mensajeroId,
+      // Feature 246 (R1/R3): UN token para TODO el lote — una asignación, un día de reparto.
+      // Se manda SIEMPRE, elija lo que elija el usuario: el borde tiene `.default("hoy")`, así
+      // que un modal que se olvidara de este campo no rompería nada y nadie se enteraría. Por eso
+      // hay un caso de componente que afirma que el valor elegido VIAJA.
+      //
+      // Va el TOKEN, nunca una fecha (R6): la fecha la resuelve el servidor con el día de Costa
+      // Rica, y el reloj del navegador no puede decidir el día de reparto de ninguna orden.
+      dia,
     });
     if (result.status !== "ok") {
       throw result;
@@ -107,6 +141,10 @@ export function AsignarBodegaModal({
     setResultado({
       ordenIds: result.resultados.map((r) => r.ordenId),
       mensaje,
+      // R28: la frase se calcula con el día que se ACABA de cometer y se guarda con el
+      // resultado. Derivarla del estado vivo dejaría que un cambio posterior del selector
+      // reescribiera la confirmación de un lote que ya está asignado.
+      confirmacionDia: confirmacionDiaReparto(dia, fechasDiaReparto),
     });
   }
 
@@ -144,11 +182,23 @@ export function AsignarBodegaModal({
       onError={handleError}
     >
       {resultado ? (
-        <ManifiestoResultado
-          mensaje={resultado.mensaje}
-          flujo="generacion_guia"
-          seleccion={{ ordenIds: resultado.ordenIds }}
-        />
+        <div className="flex flex-col gap-3">
+          {/* Feature 246 (T4.4, R28): la confirmación de PARA QUÉ DÍA quedó el lote, con
+              palabras y sin siglas. Va como `role="status"` para que un lector de pantalla la
+              anuncie al entrar la fase de resultado, igual que el resto de avisos derivados de
+              la app. */}
+          <p
+            role="status"
+            className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+          >
+            {resultado.confirmacionDia}
+          </p>
+          <ManifiestoResultado
+            mensaje={resultado.mensaje}
+            flujo="generacion_guia"
+            seleccion={{ ordenIds: resultado.ordenIds }}
+          />
+        </div>
       ) : sinOrdenes ? (
         <p
           role="alert"
@@ -174,6 +224,13 @@ export function AsignarBodegaModal({
           options={mensajeroOptions}
           placeholder="Selecciona un mensajero"
           aria-label="Mensajero para el lote"
+        />
+        {/* Feature 246 (T4.2, R1/R27): la elección del día del lote, con «Hoy» preseleccionado.
+            Debajo del mensajero porque el orden de lectura es «a quién» y luego «para cuándo». */}
+        <SelectorDiaReparto
+          valor={dia}
+          onValorChange={setDia}
+          fechas={fechasDiaReparto}
         />
       </div>
       )}

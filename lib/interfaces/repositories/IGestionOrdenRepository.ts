@@ -60,6 +60,18 @@ export interface MiAsignacionRow {
   cantonNombre: string;
   distritoNombre: string | null;
   mensajeroAsignadoId: string | null;
+  /**
+   * Feature 246 (T3.7, R35) — dia de reparto CRUDO de la orden (`@db.Date`: medianoche UTC de la
+   * fecha calendario CR). `null` = orden anterior a la feature, o sin reserva.
+   *
+   * Viaja crudo a proposito: quien decide si es «para mañana» es el SERVICIO, que tiene reloj
+   * (R26). Un repositorio que devolviera ya el booleano tendria que leer la hora, y entonces dos
+   * filas del mismo listado podrian caer a distinto lado de la medianoche.
+   *
+   * Opcional (`?`) por el patron aditivo del repo (igual que `tiendaTelefono?`): no rompe los
+   * fixtures que construyen `MiAsignacionRow` sin el; el repo SIEMPRE lo emite.
+   */
+  fechaReparto?: Date | null;
   // Feature 235 (T6.1, R40): aqui vivia `ayuda?: boolean`. Se retira con la columna; `estatusValue`
   // es la unica fuente de verdad sobre si hay una solicitud de ayuda viva.
 }
@@ -163,6 +175,33 @@ export interface ReprogramarDesdeDevueltaInput {
   fechaReprogramacion: string; // YYYY-MM-DD; se persiste como columna DATE en la gestion
   motivo: string | null; // OPCIONAL (Q1)
   actorUsuarioId: string; // R11: el adminTienda que reprograma
+}
+
+/**
+ * Feature 240 (design §4.2, D1/D5, R3/R4/R8/R9/R11/R12) — entrada del RECHAZO MANUAL de la tienda
+ * sobre una devolucion anclada. Hermana exacta de `ReprogramarDesdeDevueltaInput`: mismo estado de
+ * ORIGEN, misma derivacion del mensajero, misma forma de escritura. Cambian tres cosas —el destino,
+ * el `resultado` de la gestion y la familia del historial— y una cuarta que si es una decision:
+ *
+ * ⚠️ `motivo` es OBLIGATORIO aqui (`string`, no `string | null`), al reves que en la reprogramacion
+ * (D5, firmada). No es simetria: es la UNICA linea que explica por que se decidio un rechazo que se
+ * cobra, y el dato que alguien pedira el dia de la primera disputa. La reprogramacion puede
+ * permitirselo opcional porque su dato critico es la fecha y no mueve dinero; esta si.
+ *
+ * NO lleva evidencia en imagen, y tambien es una decision (D5/R13): el paquete YA volvio a la
+ * bodega y YA se escaneo al aprobar el cierre (238), asi que pedirle a la tienda una foto seria
+ * pedirle la foto de algo que no tiene delante.
+ */
+export interface RechazarDesdeDevueltaInput {
+  ordenId: string;
+  /** GUARDA del `updateMany` (R3/R4): la orden tiene que seguir en la devolucion anclada. */
+  estatusDevueltaId: string;
+  /** Destino, resuelto por el service desde el catalogo (`findEstatusIdByValue`), no por nombre. */
+  estatusRechazadaId: string;
+  /** R12/D5: OBLIGATORIO. Se conserva en la gestion Y en la fila de historial. */
+  motivo: string;
+  /** R11: la persona de la TIENDA que decidio. Solo va al historial, nunca a la gestion. */
+  actorUsuarioId: string;
 }
 
 /**
@@ -321,6 +360,47 @@ export interface IGestionOrdenRepository {
    * de `GestionOrdenRepository.reprogramarDesdeDevuelta`.
    */
   reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean>;
+
+  /**
+   * 💰 Feature 240 (design §4.2, D1/D8, R3/R4/R5/R8/R9/R10/R11/R12/R14/R15/R16/R18/R21) — RECHAZA
+   * a mano UNA orden en la devolucion anclada. La MISMA transaccion, con los mismos cuatro pasos,
+   * que `reprogramarDesdeDevuelta` (comparten el helper privado `transicionarDesdeDevuelta`):
+   *   (a) UPDATE guardado por `{ id, estatus_id = devuelta, deleted_at IS NULL }` -> `rechazada`.
+   *       La comprobacion del estado de origen va EN LA MISMA SENTENCIA que lo muta (R4), asi que
+   *       no queda ventana entre comprobar y escribir. `count === 0` ⇒ `false` SIN NINGUN EFECTO
+   *       (R3), y con eso la idempotencia sale gratis (R5): el segundo envio encuentra la orden ya
+   *       fuera de `devuelta`. No hay codigo de idempotencia porque un segundo mecanismo puede
+   *       divergir del primero.
+   *   (b) gestion sintetica `resultado = rechazada` con `cierre_id NULL` (R8/R18) y `motivo`
+   *       (R12), atribuida al `mensajero_id` de la ULTIMA gestion `devuelta` VIGENTE (R9). Sin esa
+   *       gestion ⇒ ABORTA la transaccion (R10): no se inventa un actor.
+   *   (c) append por el choke point de la 49: actor = LA TIENDA, `origen_tipo = rechazo_tienda`,
+   *       enlazando la gestion (R11/R15).
+   *
+   * 💰 POR QUE CREA GESTION Y NO SOLO CAMBIA EL ESTADO (D1, firmada): el paquete no se entrega y
+   * vuelve por el flujo de devolucion exactamente igual que si el plazo lo hubiera escalado dos
+   * horas despues, asi que la bodega gana el mismo `cobroRechazado` (56). Sin la gestion, rechazar
+   * a mano saldria GRATIS y esperar al plazo costaria —sobre el mismo paquete—, y ademas la fila no
+   * entraria en ningun cierre: nadie podria auditar quien decidio el retorno.
+   *
+   * ⚠️ EL `mensajero_id` ES EL DEL MENSAJERO, NUNCA EL DE LA TIENDA (R9), y no es cosmetico: es lo
+   * que mete la fila en un cierre (`crearCierre` vincula por `{ mensajeroId, cierreId: null }`).
+   * Con el id de la tienda ahi, la gestion NO se vincularia a ningun cierre nunca y el rechazo
+   * seria invisible y gratis. Quien decidio va al historial, en `actor_usuario_id`.
+   *
+   * NO CUENTA COMO INTENTO por su ORIGEN (R19): `rechazo_tienda` esta FUERA de
+   * `ORIGEN_TIPOS_VISITA_REAL`, igual que `reprogramacion_tienda` y por la misma razon — la orden
+   * YA TIENE contada su gestion `devuelta` real, y sumarla da el doble conteo de 160/R2.
+   *
+   * NO emite ningun movimiento de dinero en este instante (R18): el `cierre_id NULL` es lo que
+   * deja que los cinco feeds la cobren cuando se apruebe el cierre que la recoja, por el mismo
+   * mecanismo que cualquier gestion del mensajero.
+   *
+   * Devuelve `true` si transiciono; `false` si la orden ya salio de `devuelta` (carrera con el cron
+   * de la 99, o segundo envio). En esa rama el cron tampoco cobra dos veces: si gana la tienda,
+   * `escalarDevueltaSla` encuentra `count = 0` y no crea su gestion sintetica (R21).
+   */
+  rechazarDesdeDevuelta(input: RechazarDesdeDevueltaInput): Promise<boolean>;
 
   /**
    * Feature 237 (design §4.4, T5.1) — registra en UNA transaccion la gestion que LA TIENDA

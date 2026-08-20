@@ -8,6 +8,11 @@ import { CorteDiarioRepository } from "@/lib/repositories/CorteDiarioRepository"
 // no borrada, menos los que ya tienen un cierre ABIERTO ('solicitado'|'vencido'|'rechazado').
 // Mockea Prisma (sin DB real).
 
+// Feature 246 (T2.2): el ancla que el service calcula UNA vez por corrida y pasa a las dos capas.
+// Es la fecha CR de la jornada que la corrida CIERRA (`@db.Date`: medianoche UTC). Aqui se fija a
+// mano porque este test mide el `where`, no el calculo del ancla (eso es `corte-diario-service`).
+const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
+
 function buildPrisma(overrides: Record<string, unknown> = {}) {
   return {
     gestionOrden: { findMany: vi.fn().mockResolvedValue([]) },
@@ -25,7 +30,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cierreId: null });
@@ -41,7 +46,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
@@ -66,7 +71,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows.map((r) => r.mensajeroId).sort()).toEqual(["m1", "m2"]);
     expect(rows.filter((r) => r.mensajeroId === "m1")).toHaveLength(1);
@@ -82,7 +87,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     prisma.cierreDia.findMany.mockResolvedValue([{ mensajeroId: "m2" }]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
     // R10/R29: la consulta de excluidos filtra por los 3 estados ABIERTOS sobre los ids candidatos.
@@ -106,7 +111,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     );
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([]);
   });
@@ -115,7 +120,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const prisma = buildPrisma();
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([]);
     expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
@@ -126,7 +131,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     const prisma = buildPrisma();
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    await repo.findMensajerosConActividadSinCierre();
+    await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     const arg = prisma.gestionOrden.findMany.mock.calls[0][0];
     expect(arg.where).toEqual({ cierreId: null, anuladaAt: null });
@@ -139,7 +144,7 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([{ mensajeroId: "m1", zonaId: null }]);
   });
@@ -171,7 +176,7 @@ describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([{ mensajeroId: "m-ayuda", zonaId: "z9" }]);
   });
@@ -182,7 +187,7 @@ describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
     const prisma = buildPrisma();
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    await repo.findMensajerosConActividadSinCierre();
+    await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
     const { where } = prisma.orden.findMany.mock.calls[0][0] as {
       where: { deletedAt: null; estatus: { value: { in: string[] } }; mensajeroAsignadoId: unknown };
     };
@@ -210,8 +215,177 @@ describe("235/R26 — la seleccion del corte alcanza `ayuda_tienda`", () => {
     ]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T2.2, R11/R12/R14/R18/R19/R20) — LA SELECCION RESPETA EL DIA DE REPARTO.
+//
+// POR QUE ESTOS CASOS VIVEN AQUI Y NO EN EL SERVICIO. Este repo YA MIDIO CUATRO VECES que una
+// mutacion del `where` pasa en verde por los tests de servicio: usan dobles y NO VEN EL SQL. Asi
+// que el predicado se prueba donde vive, y con un doble que HONRA el `where` de verdad —filtra
+// filas— en vez de un `vi.fn()` mudo que devuelve lo que el test le dicta.
+//
+// EL PREDICADO: una orden esta PROTEGIDA si `fecha_reparto IS NOT NULL AND fecha_reparto >
+// diaCerrado`. Todo lo demas se barre exactamente como antes de esta ficha.
+// =================================================================================================
+
+interface FilaSeleccion {
+  mensajeroAsignadoId: string;
+  estatusValue: string;
+  fechaReparto: Date | null;
+  deletedAt?: Date | null;
+  zonaId?: string | null;
+}
+
+/** El `where` que `findMensajerosConActividadSinCierre` construye, tal como Prisma lo leeria. */
+interface WhereSeleccion {
+  deletedAt: null;
+  estatus: { value: { in: string[] } };
+  mensajeroAsignadoId: { not: null };
+  OR?: { fechaReparto?: null | { lte?: Date } }[];
+}
+
+/**
+ * Doble de Prisma CON SEMANTICA para `orden.findMany`: aplica de verdad el `where` recibido —
+ * incluido el `OR` de fecha— sobre un conjunto de filas. Si el `OR` desapareciera del repositorio,
+ * este doble dejaria de filtrar por fecha y los casos de abajo se pondrian ROJOS, que es todo el
+ * punto.
+ */
+function prismaQueHonraElWhere(filas: FilaSeleccion[]) {
+  const ordenFindMany = vi.fn(async (args: { where: WhereSeleccion; distinct?: string[] }) => {
+    const { where } = args;
+    const casaFecha = (f: FilaSeleccion) => {
+      if (where.OR === undefined) return true; // sin predicado de fecha: pasa todo (el `where` roto)
+      return where.OR.some((rama) => {
+        if (rama.fechaReparto === null) return f.fechaReparto === null;
+        const lte = rama.fechaReparto?.lte;
+        if (lte === undefined) return false;
+        return f.fechaReparto !== null && f.fechaReparto.getTime() <= lte.getTime();
+      });
+    };
+    const casa = (f: FilaSeleccion) =>
+      (f.deletedAt ?? null) === null &&
+      where.estatus.value.in.includes(f.estatusValue) &&
+      casaFecha(f);
+    const vistos = new Set<string>();
+    const out: { mensajeroAsignadoId: string; mensajeroAsignado: { zonaId: string | null } }[] = [];
+    for (const f of filas.filter(casa)) {
+      if (vistos.has(f.mensajeroAsignadoId)) continue; // `distinct`
+      vistos.add(f.mensajeroAsignadoId);
+      out.push({
+        mensajeroAsignadoId: f.mensajeroAsignadoId,
+        mensajeroAsignado: { zonaId: f.zonaId ?? "z1" },
+      });
+    }
+    return out;
+  });
+  return {
+    gestionOrden: { findMany: vi.fn(async () => [] as { mensajeroId: string }[]) },
+    orden: { findMany: ordenFindMany },
+    cierreDia: { findMany: vi.fn(async () => []) },
+  };
+}
+
+function seleccionar(filas: FilaSeleccion[], gestiones: { mensajeroId: string }[] = []) {
+  const prisma = prismaQueHonraElWhere(filas);
+  if (gestiones.length > 0) {
+    prisma.gestionOrden.findMany = vi.fn(async () =>
+      gestiones.map((g) => ({ mensajeroId: g.mensajeroId, mensajero: { zonaId: "z1" } })),
+    ) as unknown as typeof prisma.gestionOrden.findMany;
+  }
+  const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+  return repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
+}
+
+const MANANA = new Date("2026-08-21T00:00:00.000Z"); // > DIA_CERRADO: RESERVADA
+const HOY = new Date("2026-08-20T00:00:00.000Z"); // == DIA_CERRADO: se barre
+const AYER = new Date("2026-08-19T00:00:00.000Z"); // < DIA_CERRADO: se barre
+
+describe("246/R11-R14 — el dia de reparto decide quien entra en el corte", () => {
+  it("R14: sus UNICAS ordenes son de mañana -> NO entra en el corte (no recibe `vencido`)", async () => {
+    // EL caso de la ficha. Con el `OR` fuera del `where`, este mensajero vuelve a entrar, recibe
+    // su cierre `vencido` y —desde la 241— queda bloqueado para gestionar y cobrar mañana.
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-manana", estatusValue: "en_reparto", fechaReparto: MANANA },
+    ]);
+    expect(rows).toEqual([]);
+  });
+
+  it("R19/R20: sus ordenes NO tienen dia de reparto -> SI entra, exactamente como antes", async () => {
+    // `NULL` significa UNA sola cosa: «no reservada». El predicado no pregunta «¿es de hoy?».
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-sin-fecha", estatusValue: "en_reparto", fechaReparto: null },
+    ]);
+    expect(rows).toEqual([{ mensajeroId: "m-sin-fecha", zonaId: "z1" }]);
+  });
+
+  it("R12: sus ordenes son del dia que la corrida cierra -> SI entra", async () => {
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-hoy", estatusValue: "en_reparto", fechaReparto: HOY },
+    ]);
+    expect(rows).toEqual([{ mensajeroId: "m-hoy", zonaId: "z1" }]);
+  });
+
+  it("R12: sus ordenes son de AYER -> SI entra (la proteccion caduco sola)", async () => {
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-ayer", estatusValue: "en_reparto", fechaReparto: AYER },
+    ]);
+    expect(rows).toEqual([{ mensajeroId: "m-ayer", zonaId: "z1" }]);
+  });
+
+  it("R15: con una reservada Y una de hoy, SI entra — la mezcla no lo protege", async () => {
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-mixto", estatusValue: "en_reparto", fechaReparto: MANANA },
+      { mensajeroAsignadoId: "m-mixto", estatusValue: "en_reparto", fechaReparto: HOY },
+    ]);
+    expect(rows).toEqual([{ mensajeroId: "m-mixto", zonaId: "z1" }]);
+  });
+
+  it("la proteccion alcanza tambien a `ayuda_tienda`, no solo a `en_reparto` (235 intacta)", async () => {
+    const rows = await seleccionar([
+      { mensajeroAsignadoId: "m-ayuda", estatusValue: "ayuda_tienda", fechaReparto: MANANA },
+    ]);
+    expect(rows).toEqual([]);
+  });
+
+  it("R18: la rama de GESTIONES SIN CERRAR no cambia — entra aunque toda su carga sea de mañana", async () => {
+    // Es el limite declarado de design §5.3, y es deliberado: el `vencido` nace de TU jornada sin
+    // cerrar, no de lo que te asignaron para mañana. Si esto dejara de ser cierto, bastaria con
+    // recibir una asignacion nueva cada tarde para no cuadrar caja nunca.
+    const rows = await seleccionar(
+      [{ mensajeroAsignadoId: "m-gestiones", estatusValue: "en_reparto", fechaReparto: MANANA }],
+      [{ mensajeroId: "m-gestiones" }],
+    );
+    expect(rows).toEqual([{ mensajeroId: "m-gestiones", zonaId: "z1" }]);
+  });
+
+  it("R11/R16: el `where` lleva el `OR` con EL MISMO valor de `diaCerrado` que recibio", async () => {
+    // La forma, ademas del comportamiento: es la mitad de R16 que se puede medir aqui (la otra
+    // mitad —que la escritura diga lo mismo— vive en `cierre-dia-repository.test.ts`).
+    const prisma = prismaQueHonraElWhere([]);
+    const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
+    await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
+    const { where } = prisma.orden.findMany.mock.calls[0]![0] as { where: WhereSeleccion };
+    expect(where.OR).toEqual([{ fechaReparto: null }, { fechaReparto: { lte: DIA_CERRADO } }]);
+  });
+
+  it("el doble detecta lo que dice detectar (autocomprobacion): sin `OR`, la de mañana entra", async () => {
+    // Si el doble dejara de aplicar el filtro de fecha, los casos de arriba pasarian con el `where`
+    // roto. Esto lo demuestra: con el `OR` ausente, la reservada NO se filtra.
+    const prisma = prismaQueHonraElWhere([
+      { mensajeroAsignadoId: "m-manana", estatusValue: "en_reparto", fechaReparto: MANANA },
+    ]);
+    const sinOr = await prisma.orden.findMany({
+      where: {
+        deletedAt: null,
+        estatus: { value: { in: ["en_reparto", "ayuda_tienda"] } },
+        mensajeroAsignadoId: { not: null },
+      },
+    });
+    expect(sinOr).toHaveLength(1);
   });
 });

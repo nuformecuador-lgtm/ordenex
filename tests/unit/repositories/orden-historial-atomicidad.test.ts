@@ -191,7 +191,17 @@ describe("R7 · mecanismo raw-RETURNING (#7 asignarSatelite, #8 recoger)", () =>
     const prismaObj = prisma;
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     await expect(
-      repo.asignarSateliteLote(["o1"], "m", "z", idEstado("por_recoger"), idEstado("en_bodega_satelite"), HIST_ASIGNACION),
+      repo.asignarSateliteLote(
+        ["o1"],
+        "m",
+        "z",
+        idEstado("por_recoger"),
+        idEstado("en_bodega_satelite"),
+        HIST_ASIGNACION,
+        // Feature 246 (T3.3): el dia de reparto YA RESUELTO. Este caso mide la atomicidad del
+        // append, no el dia; basta con que el parametro exista para que la firma cuadre.
+        new Date("2026-08-20T00:00:00.000Z"),
+      ),
     ).rejects.toThrow("append boom");
   });
 

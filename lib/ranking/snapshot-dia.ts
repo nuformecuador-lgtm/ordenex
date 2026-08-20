@@ -20,6 +20,22 @@ import {
 // (`gestion_orden.created_at`, `orden.asignado_at`) produce la ventana 18:00-18:00 hora CR
 // que cerro la ficha 166. Es la trampa documentada del repo.
 //
+// ⚠️ MATIZ QUE LA FEATURE 246 OBLIGA A ESCRIBIR (T8.1, 2026-08-20), para que nadie lea el ⛔ de
+// arriba como «aqui no puede haber medianoches UTC» y acabe borrandolo por contradictorio:
+//
+//   La prohibicion es sobre USAR `startOfDayCR` COMO COTA DE UN `timestamp`. NO es sobre el valor.
+//   De hecho `fechaComoDate` (mas abajo) devuelve EXACTAMENTE esa medianoche UTC, a proposito,
+//   porque `ranking_snapshot_dia.fecha` es `@db.Date`.
+//
+//   Desde la 246 (D7) esa MISMA funcion tiene un segundo consumidor: el tercer parametro de
+//   `contarAsignadasPorMensajero`, que se compara contra `orden.fecha_reparto` —tambien
+//   `@db.Date`—. Es decir: en la misma llamada al repositorio conviven las DOS convenciones,
+//   `desde`/`hasta` con las 06:00 dentro y `diaReparto` sin ellas. Cada una en su sitio.
+//
+//   `RankingService` (el ranking EN VIVO) importa `fechaComoDate` de aqui por ese motivo, y no por
+//   acoplamiento: usar la misma funcion es lo que hace que el vivo y el congelado no puedan
+//   contar dias distintos (246/R41).
+//
 // ⛔ Derivar el dia serializando el instante a ISO en UTC tampoco vale: emite la fecha en
 // UTC, asi que despues de las 18:00 CR ya devuelve el dia siguiente. Por eso el unico camino
 // a la fecha calendario es `fechaCalendarioCR`.

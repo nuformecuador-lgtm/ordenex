@@ -97,8 +97,10 @@ describe("feature 94: admin en escritura -> permitido (delegado al service con e
     );
 
     expect(r).toEqual({ status: "ok", resultados: [] });
+    // Feature 246 (T3.1, R4): idem bodega central — la peticion no trae `dia`, zod le pone
+    // `"hoy"` y el borde lo entrega sin transformar.
     expect(service.asignarDesdeBodega).toHaveBeenCalledWith(
-      { ordenIds: ["o1"], mensajeroId: "m1" },
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "hoy" },
       ADMIN,
     );
   });
