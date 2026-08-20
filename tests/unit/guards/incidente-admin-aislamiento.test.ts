@@ -23,6 +23,11 @@ import { TRANSICIONES } from "@/lib/types/order-status-transiciones";
 // el doble esta vacio).
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
+// Feature 246 (T2.2): el corte recibe el dia que la corrida CIERRA. Aqui es irrelevante —lo que
+// se mide es que el autor del incidente no entre por ninguna rama— pero el parametro es
+// obligatorio a proposito: olvidar cablearlo rompe el typecheck en vez de dejar el corte mudo.
+const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
+
 const AUTOR_ADMIN = "u-admin";
 const MENSAJERO = "u-men";
 const HOY = new Date("2026-07-30T06:00:00.000Z");
@@ -106,7 +111,7 @@ describe("R38 — un incidente del ADMIN no hace que el corte diario devuelva a 
     });
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows.map((r) => r.mensajeroId)).not.toContain(AUTOR_ADMIN);
     expect(rows).toEqual([]);
@@ -132,7 +137,7 @@ describe("R38 — un incidente del ADMIN no hace que el corte diario devuelva a 
     });
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows.map((r) => r.mensajeroId)).toContain(AUTOR_ADMIN);
   });
@@ -154,7 +159,7 @@ describe("R38 — un incidente del ADMIN no hace que el corte diario devuelva a 
     });
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
-    const rows = await repo.findMensajerosConActividadSinCierre();
+    const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
     expect(rows.map((r) => r.mensajeroId)).toEqual([MENSAJERO]);
   });

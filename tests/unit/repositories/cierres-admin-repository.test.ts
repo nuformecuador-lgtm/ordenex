@@ -335,11 +335,20 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
     // mas filas trae. `take: 2` porque son dos familias y con `take: 1` una podria tapar a la otra
     // segun el orden de lectura.
     //
+    // ⏳ 2026-08-20 (feature 240, D6/R43): la lista pasa de DOS a TRES con `rechazo_tienda`, que es
+    // la SEGUNDA via por la que la tienda registra una gestion (rechazar a mano una devolucion ya
+    // anclada). Y el `take` pasa de `2` a `3` por la razon que el parrafo de arriba ya daba: con un
+    // `take` mas corto que el numero de familias, una taparia a la otra segun el orden de lectura y
+    // `desdeAyudaTienda` saldria `false` sobre una gestion que SI registro la tienda — dejandola
+    // deshacible por el mensajero. Es dinero, no cosmetica.
+    //
     // El literal se conserva como literal: es el censo de lo que esta consulta puede traer.
     const select = prisma.gestionOrden.findMany.mock.calls[0][0].select;
     expect(select.historialEstados).toEqual({
-      where: { origenTipo: { in: ["escalado_devuelta_sla", "gestion_tienda_ayuda"] } },
-      take: 2,
+      where: {
+        origenTipo: { in: ["escalado_devuelta_sla", "gestion_tienda_ayuda", "rechazo_tienda"] },
+      },
+      take: 3,
       select: { origenTipo: true },
     });
     // R1/R2: la clasificacion sale del historial, no del monto.

@@ -38,6 +38,10 @@ import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
   inicioDelDiaSiguienteCREnUtc,
+  // Feature 246 (T5.1, R26): la convencion `@db.Date` para comparar contra `fecha_reparto`. NO se
+  // usan las otras dos de este mismo import —esas son las cotas `timestamp` de los KPIs del dia—:
+  // aqui conviven las DOS convenciones y confundirlas desplaza el dia seis horas (ficha 166).
+  startOfDayCR,
 } from "@/lib/utils/fecha-cr";
 
 // Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo sobre las guías (texto fijo i18n-ready,
@@ -151,7 +155,16 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     return bloqueados.has(usuarioId);
   }
 
-  async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
+  /**
+   * Feature 246 (T5.1, R25/R26): `now` es el reloj INYECTABLE con el que se decide que ordenes
+   * estan reservadas para mañana. Con default para que el borde siga llamando sin argumentos; los
+   * tests lo pasan, porque «al llegar el dia la etiqueta desaparece sola» solo se puede probar
+   * moviendo el reloj y no esperando a mañana.
+   */
+  async listarMisAsignaciones(
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Los KPIs de entregadas son DEL DIA, no acumulados: el mensajero mira esta fila para
@@ -159,8 +172,17 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // La ventana es la del dia de Costa Rica y se calcula AQUI (una sola vez, compartida
     // por los dos KPIs) para que ambos midan exactamente el mismo dia aunque el reloj
     // cruce la medianoche entre las dos queries del `Promise.all`.
-    const hoy = fechaCalendarioCR();
+    const hoy = fechaCalendarioCR(now);
     const dia = { desde: inicioDelDiaCREnUtc(hoy), hasta: inicioDelDiaSiguienteCREnUtc(hoy) };
+    // Feature 246 (T5.1, R22/R25/R26) — EL DIA DE COSTA RICA EN CURSO, en la convencion `@db.Date`
+    // (medianoche UTC de la fecha CR), que es la de la columna `fecha_reparto`. Se calcula UNA vez
+    // para todo el listado, para que dos cards del mismo render no puedan caer a distinto lado de
+    // la medianoche.
+    //
+    // ⚠️ Es OTRA convencion que la de `dia` (justo arriba): aquellas cotas son `...T06:00:00.000Z`
+    // porque comparan contra columnas `timestamp` (`gestion_orden.created_at`). Usar aquellas aqui
+    // desplazaria el dia seis horas — es la trampa que cerro la ficha 166.
+    const hoyComoFecha = startOfDayCR(now);
 
     const [ordenEnGestionId, rows, entregadas, montoGestionadas, ruta, marcadasLuego] =
       await Promise.all([
@@ -211,6 +233,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         intentosEntrega: intentos.get(row.id) ?? 0,
+        // Feature 246 (T5.1, R22/R25/R26): «para mañana» = reservada para un dia ESTRICTAMENTE
+        // posterior al de Costa Rica en curso. `>` y no `>=`: una orden reservada para HOY no es
+        // «para mañana», es de hoy. Y por eso la etiqueta caduca sola (R25): al llegar el dia
+        // reservado, `fechaReparto > hoyComoFecha` deja de cumplirse sin que nadie escriba nada.
+        // `null` (orden anterior a la feature, o «hoy» explicito) -> `false`.
+        esParaManana:
+          row.fechaReparto != null && row.fechaReparto.getTime() > hoyComoFecha.getTime(),
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.

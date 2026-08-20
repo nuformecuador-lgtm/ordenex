@@ -14,6 +14,9 @@ import type {
 } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
+// Feature 240 (T4.2): el predicado REAL, para derivar `desdeAyudaTienda` desde la FAMILIA en vez
+// de escribir el booleano a mano. Es lo que ata la guardia del service con la lista de familias.
+import { esGestionDeLaTienda } from "@/lib/utils/gestion-de-la-tienda-flag";
 
 // Feature 37 — tests unit del CierreDiaService (mocks de repos + dobles de
 // ISignedUrlProvider/findCentralZonaId, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,
@@ -1102,6 +1105,13 @@ describe("Feature 237 · deshacerGestion — la gestion de LA TIENDA (D3/R38)", 
   it("R38: el mensaje es ACCIONABLE — dice quien lo hizo, que solo ella puede corregirlo y por donde", async () => {
     // No es un «no se puede» a secas: el mensajero tiene el paquete en la moto y necesita saber a
     // quien acudir. Se lee el texto tal cual, que es lo que vera en pantalla.
+    //
+    // ⏳ 2026-08-20 (feature 240, D10/R43) — EL TEXTO PIERDE «desde su pantalla de ayuda», y el
+    // literal se actualiza A MANO porque ES el contrato de lo que el mensajero lee. Desde la 240 la
+    // tienda tambien resuelve rechazando a mano una devolucion ya anclada, que NO pasa por esa
+    // pantalla: sobre esas gestiones la frase vieja seria FALSA. No se parte en dos mensajes por
+    // familia — al mensajero le da igual desde donde lo hizo la tienda; lo que necesita saber es
+    // que no es suyo y a quien escribirle.
     const repo = fakeRepo({
       findGestionParaDeshacer: vi.fn(async () =>
         gestionDeshacer({
@@ -1118,8 +1128,10 @@ describe("Feature 237 · deshacerGestion — la gestion de LA TIENDA (D3/R38)", 
     expect(r).toEqual({
       status: "conflict",
       motivo:
-        "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.",
+        "Esta orden la resolvió la tienda; solo ella puede corregirlo. Escribile por el chat de la orden.",
     });
+    // Y la pantalla que ya no corresponde no vuelve por la puerta de atras.
+    expect(r.status === "conflict" && r.motivo).not.toContain("pantalla de ayuda");
   });
 
   it("R38: la guardia va DESPUES de la de propiedad — una gestion AJENA sigue dando `forbidden` pelado", async () => {
@@ -1158,6 +1170,96 @@ describe("Feature 237 · deshacerGestion — la gestion de LA TIENDA (D3/R38)", 
 
     expect(r).toEqual({ status: "ok", ordenId: "o1" });
     expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// 💰 FEATURE 240 (T4.2, D6/R43) — EL RECHAZO MANUAL DE LA TIENDA TAMPOCO SE DESHACE.
+//
+// `CierreDiaService` NO cambia ni una linea: sigue leyendo `gestion.desdeAyudaTienda`. Lo que cambia
+// es DE DONDE SALE ese booleano — `ORIGENES_GESTION_DE_LA_TIENDA` pasa de un valor a una lista—.
+// Por eso estos casos derivan la bandera con el PREDICADO REAL a partir de la FAMILIA, en vez de
+// escribir `true` a mano: asi el caso ata las dos mitades y se pone rojo si alguien saca
+// `rechazo_tienda` de la lista, que es la unica forma de que este agujero se reabra.
+//
+// POR QUE IMPORTA MAS QUE EN LA 237: la gestion sintetica del rechazo manual nace con
+// `mensajero_id` = ese mensajero (es lo que la mete en su cierre) y `cierre_id NULL`, asi que pasa
+// las ocho guardias igual. Pero aqui el paquete NO esta en la moto: volvio a la bodega y se escaneo
+// al aprobar el cierre anterior (238). Deshacer devolveria a `en_reparto` —reasignada al mensajero—
+// una orden cuyo paquete el mensajero no tiene, y borraria el `cobroRechazado` que la tienda
+// decidio y pago con un aviso que le dijo que no se podia deshacer.
+// ---------------------------------------------------------------------------------------------
+describe("Feature 240 · deshacerGestion — el rechazo MANUAL de la tienda (D6/R43)", () => {
+  it("💰 R43: una gestion de familia `rechazo_tienda` -> `conflict`, SIN escribir nada", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          // ⭑ La bandera se DERIVA de la familia con el predicado de produccion, no se escribe.
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "rechazo_tienda" }]),
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({
+      status: "conflict",
+      motivo:
+        "Esta orden la resolvió la tienda; solo ella puede corregirlo. Escribile por el chat de la orden.",
+    });
+    // 💰 Lo que de verdad protege: NI UNA escritura.
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("CONTROL POSITIVO: la gestion `rechazada` del propio MENSAJERO se sigue deshaciendo", async () => {
+    // Sin este contraste, el caso de arriba estaria verde tambien si la guardia bloqueara TODO
+    // deshacer de una `rechazada`. La guardia discrimina por la FAMILIA de origen, no por el
+    // resultado ni por el estado — y la familia `gestion` (la visita en calle) no es de la tienda.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "gestion" }]),
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("💰 D6: la sintetica de la REPROGRAMACION de escritorio (100) SIGUE deshaciendose — agujero hermano DECLARADO", async () => {
+    // ⚠️ ESTE CASO AFIRMA UN AGUJERO ABIERTO, a proposito, y no es un descuido: la auditoria de la
+    // pila lo dejo como «no se pudo determinar» y la 240 lo determina. `reprogramacion_tienda`
+    // tambien es una gestion sintetica de la tienda y tambien pasa las ocho guardias, asi que HOY
+    // el mensajero puede revertir esa decision de escritorio.
+    //
+    // No se cierra aqui porque es dinero NEUTRO (`reprogramada` no emite ningun concepto, a
+    // diferencia de `rechazada`) y cambiar la conducta de la feature 100 sin pedirlo es alcance
+    // ajeno. Queda propuesto como ficha aparte. El dia que esa ficha lo cierre, ESTE CASO SE PONE
+    // ROJO — y ese rojo es la señal de que se cerro, no una regresion: hay que darle la vuelta,
+    // como la 237 hizo con el suyo.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "reprogramacion_tienda" }]),
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
   });
 });
 

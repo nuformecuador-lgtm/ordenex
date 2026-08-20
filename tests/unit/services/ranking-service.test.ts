@@ -393,3 +393,92 @@ describe("RankingService.editarPremio — autz y validacion (R10/R11/R16/R19)", 
     expect(upsertPremio).not.toHaveBeenCalled();
   });
 });
+
+// =================================================================================================
+// FEATURE 246 (T6.3/T6.4, D7 firmada el 2026-08-20) — EL VIVO PASA EL DIA DE REPARTO, Y CON SU
+// CONVENCION.
+//
+// ⚠️ QUE SE MIDE AQUI Y QUE NO. Aqui NO se mide el `WHERE` —eso vive en
+// `ranking-repository.test.ts`, y este repo ya midio cuatro veces que un test de servicio con
+// dobles pasa en verde con el `where` mutado—. Aqui se mide el CABLEADO: que valor exacto recibe el
+// repositorio, con que convencion, y que el vivo y el congelado usen EL MISMO criterio (R41).
+// =================================================================================================
+describe("246/R41 — el vivo pasa el dia de reparto con la convencion `@db.Date`", () => {
+  /** Captura los TRES argumentos del denominador para un instante dado. */
+  async function argsDelDenominador(now: Date) {
+    const { service, contarAsignadasPorMensajero } = buildDeps({ mensajeros: [] });
+    await service.obtenerRanking(MAESTRO, now);
+    return contarAsignadasPorMensajero.mock.calls[0] as unknown as [Date, Date, Date];
+  }
+
+  it("el tercer argumento es la MEDIANOCHE UTC de la fecha CR, no las 06:00Z", async () => {
+    // 2026-07-16T12:00:00Z = 06:00 CR del 16 -> dia CR = 2026-07-16.
+    const [desde, hasta, diaReparto] = await argsDelDenominador(
+      new Date("2026-07-16T12:00:00.000Z"),
+    );
+    // Las cotas del respaldo conservan SU convencion (features 144/166): 06:00Z.
+    expect(desde.toISOString()).toBe("2026-07-16T06:00:00.000Z");
+    expect(hasta.toISOString()).toBe("2026-07-17T06:00:00.000Z");
+    // Y el dia de reparto la SUYA (feature 46, columnas `@db.Date`): 00:00Z del MISMO dia.
+    expect(diaReparto.toISOString()).toBe("2026-07-16T00:00:00.000Z");
+  });
+
+  it("las dos convenciones no se confunden: `diaReparto` = `desde` − 6 h, y no al reves", async () => {
+    // Si alguien derivara una de la otra al reves, el denominador miraria el dia SIGUIENTE.
+    const [desde, , diaReparto] = await argsDelDenominador(new Date("2026-07-16T12:00:00.000Z"));
+    expect(desde.getTime() - diaReparto.getTime()).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it("a las 19:00 CR sigue siendo el MISMO dia (el off-by-one de la 166, por la otra puerta)", async () => {
+    // 2026-07-17T01:00:00Z = 19:00 CR del 16. En UTC ya es dia 17.
+    const [, , diaReparto] = await argsDelDenominador(new Date("2026-07-17T01:00:00.000Z"));
+    expect(diaReparto.toISOString()).toBe("2026-07-16T00:00:00.000Z");
+  });
+
+  it("a las 23:59 CR y a las 00:01 CR el dia de reparto cambia (la frontera real)", async () => {
+    const [, , antes] = await argsDelDenominador(new Date("2026-07-17T05:59:00.000Z"));
+    const [, , despues] = await argsDelDenominador(new Date("2026-07-17T06:01:00.000Z"));
+    expect(antes.toISOString()).toBe("2026-07-16T00:00:00.000Z");
+    expect(despues.toISOString()).toBe("2026-07-17T00:00:00.000Z");
+  });
+
+  it("R39: el NUMERADOR sigue recibiendo DOS argumentos — no se le añade el dia de reparto", async () => {
+    // R39 dice que el numerador no cambia, y eso hay que afirmarlo, no dejarlo implicito.
+    const { service, contarEntregadasPorMensajero } = buildDeps({ mensajeros: [] });
+    await service.obtenerRanking(MAESTRO, NOW);
+    expect(contarEntregadasPorMensajero.mock.calls[0]).toHaveLength(2);
+  });
+});
+
+describe("246/R40 — la asimetria declarada: entregar hoy algo reservado para mañana", () => {
+  it("el numerador de HOY y el denominador de MAÑANA se piden con dias distintos, a proposito", async () => {
+    // R40 es una asimetria CONSCIENTE (limite declarado 4 de requirements.md), no un cabo suelto:
+    // el numerador cuenta la entrega el dia en que se hizo y el denominador cuenta la orden el dia
+    // para el que se reservo. El sistema YA convive con ella en el otro sentido —una orden
+    // asignada ayer y entregada hoy— hasta el punto de que `ranking_snapshot_fila` renuncia a
+    // proposito a un `CHECK entregadas <= asignadas`.
+    //
+    // Lo que se puede afirmar desde el servicio es esto: la entrega se cuenta por la VENTANA de
+    // `created_at` y la orden por el DIA de reparto, y son dos criterios distintos sobre la misma
+    // orden. Alinearlos esta descartado con motivo en design §10-F.
+    const { service, contarEntregadasPorMensajero, contarAsignadasPorMensajero } = buildDeps({
+      mensajeros: [{ id: "m1", nombre: "Ana" }],
+      entregadas: [{ mensajeroId: "m1", total: 1 }], // entrego hoy
+      asignadas: [], // ...pero la orden cuenta en el denominador de MAÑANA
+    });
+
+    const res = await service.obtenerRanking(MAESTRO, NOW);
+
+    expect(res.status).toBe("ok");
+    const fila = res.status === "ok" ? res.data.ranking[0] : null;
+    // 1 entregada / 0 asignadas: el porcentaje queda INDEFINIDO (no explota, no es 100 %).
+    expect(fila?.entregadasHoy).toBe(1);
+    expect(fila?.asignadasHoy).toBe(0);
+    expect(fila?.pct).toBeNull();
+    // Y las dos consultas efectivamente miran cosas distintas.
+    const numerador = contarEntregadasPorMensajero.mock.calls[0] as unknown as [Date, Date];
+    const denominador = contarAsignadasPorMensajero.mock.calls[0] as unknown as [Date, Date, Date];
+    expect(numerador).toHaveLength(2);
+    expect(denominador).toHaveLength(3);
+  });
+});

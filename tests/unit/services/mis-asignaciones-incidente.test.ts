@@ -59,6 +59,9 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
     crearGestionDesdeAyuda: vi.fn(async () => "g-desde-ayuda"),
+    // Feature 240: tampoco lo usa `MisAsignacionesService` (el rechazo manual es de la tienda,
+    // por `RechazoTiendaService`); el doble lo declara porque la interfaz lo exige.
+    rechazarDesdeDevuelta: vi.fn(async () => true),
     ...overrides,
   };
 }

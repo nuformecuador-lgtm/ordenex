@@ -92,6 +92,9 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
     // servicio); el doble lo declara porque la interfaz lo exige.
     crearGestionDesdeAyuda: vi.fn(async () => "g-desde-ayuda"),
+    // Feature 240: tampoco lo usa `MisAsignacionesService` (el rechazo manual es de la tienda,
+    // por `RechazoTiendaService`); el doble lo declara porque la interfaz lo exige.
+    rechazarDesdeDevuelta: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -1291,5 +1294,147 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.kpis).toMatchObject({ pendientes: 0, porCobrar: 0, totalACobrar: 0 });
     expect(r.ruta.paradasSinOptimizar).toBe(0);
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T5.1, R22-R26) — `esParaManana`, DERIVADO EN EL SERVIDOR.
+//
+// El cliente NO vuelve a decidir que dia es hoy. Es el mismo criterio con el que este DTO saca
+// `estatusValue` ya resuelto en vez de dejar que el navegador interprete un id de catalogo: un
+// portatil con la hora corrida no puede etiquetar mal una orden (R26/R29).
+//
+// Y la propiedad que de verdad importa es R25: la etiqueta CADUCA SOLA. Al llegar el dia reservado,
+// LA MISMA FILA pasa a `false` sin que nadie escriba nada. Es la misma propiedad que hace segura a
+// la columna (D2): una fecha vence sola, una marca necesita quien la apague.
+// =================================================================================================
+describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R22-R26)", () => {
+  /** 14:00 hora de pared de Costa Rica del 20 de agosto. */
+  const HOY_14H = new Date("2026-08-20T20:00:00.000Z");
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+  const DIA_21 = new Date("2026-08-21T00:00:00.000Z");
+  const DIA_19 = new Date("2026-08-19T00:00:00.000Z");
+
+  function conFilas(filas: Partial<MiAsignacionRow>[]) {
+    return fakeRepo({
+      findMisAsignaciones: vi.fn(async () => filas.map((f) => asignacionRow(f))),
+    });
+  }
+
+  /** Todas las cards del listado, de los tres grupos, indexadas por id. */
+  function cardsPorId(r: Awaited<ReturnType<MisAsignacionesService["listarMisAsignaciones"]>>) {
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    return new Map(
+      [...r.porRecoger, ...r.porGestionar, ...r.conAyuda].map((o) => [o.id, o]),
+    );
+  }
+
+  it("R22/R26: la reservada para MAÑANA llega con `esParaManana: true`", async () => {
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    expect(cardsPorId(r).get("manana")?.esParaManana).toBe(true);
+  });
+
+  it("R26: la de HOY y la SIN FECHA llegan con `esParaManana: false`", async () => {
+    const repo = conFilas([
+      { id: "hoy", estatusValue: "por_recoger", fechaReparto: DIA_20 },
+      { id: "sin", estatusValue: "por_recoger", fechaReparto: null },
+      { id: "ayer", estatusValue: "en_reparto", fechaReparto: DIA_19 },
+    ]);
+    const cards = cardsPorId(await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H));
+    expect(cards.get("hoy")?.esParaManana).toBe(false);
+    expect(cards.get("sin")?.esParaManana).toBe(false);
+    expect(cards.get("ayer")?.esParaManana).toBe(false);
+  });
+
+  it("R25: al pasar el dia, LA MISMA FILA pasa a `false` sin ninguna escritura", async () => {
+    // EL caso de R25, y el que distingue una FECHA de una MARCA. Las filas del repositorio son
+    // BYTE A BYTE las mismas; lo unico que cambia es el reloj. Con una marca booleana esto no
+    // podria pasar: seguiria diciendo «para mañana» hasta que alguien la apagara.
+    const filas: Partial<MiAsignacionRow>[] = [
+      { id: "reservada", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ];
+
+    const hoy = cardsPorId(
+      await newService(conFilas(filas)).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    );
+    const manana = cardsPorId(
+      await newService(conFilas(filas)).listarMisAsignaciones(
+        MENSAJERO,
+        new Date("2026-08-21T20:00:00.000Z"), // 14:00 CR del 21: YA es el dia reservado
+      ),
+    );
+
+    expect(hoy.get("reservada")?.esParaManana).toBe(true);
+    expect(manana.get("reservada")?.esParaManana).toBe(false);
+  });
+
+  it("R23: la reservada NO se oculta — aparece en su grupo de siempre", async () => {
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "en-reparto-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
+      { id: "ayuda-manana", estatusValue: "ayuda_tienda", fechaReparto: DIA_21 },
+    ]);
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    // Los TRES grupos siguen siendo los de siempre: la ficha añade un dato por fila, NO un cuarto
+    // grupo. Y ninguna orden desaparece por estar reservada (D5: la reserva protege del CRON, no
+    // del mensajero).
+    expect(r.porRecoger.map((o) => o.id)).toEqual(["manana"]);
+    expect(r.porGestionar.map((o) => o.id)).toEqual(["en-reparto-manana"]);
+    expect(r.conAyuda.map((o) => o.id)).toEqual(["ayuda-manana"]);
+  });
+
+  it("R24: la reserva NO cambia nada de lo que el mensajero puede hacer con la orden", async () => {
+    // La reserva es una proteccion frente al corte, no un candado. Lo que se puede afirmar aqui
+    // es que la card llega COMPLETA —con todo lo que la UI necesita para recogerla y gestionarla—
+    // y que el unico campo nuevo es el informativo.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21, montoCobrar: 100 },
+    ]);
+    const card = cardsPorId(
+      await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    ).get("manana");
+    expect(card?.estatusValue).toBe("por_recoger"); // sigue recogible
+    expect(card?.montoCobrar).toBe(100);
+    expect(card?.numGuia).toBe(1);
+    expect(card?.esParaManana).toBe(true);
+  });
+
+  it("R26: el DTO no lleva la fecha cruda — el cliente no puede re-decidir el dia", async () => {
+    // Si la fecha viajara al navegador, alguien acabaria comparandola con `new Date()` alli, y la
+    // etiqueta pasaria a depender del reloj del dispositivo. Se manda el booleano YA resuelto.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const card = cardsPorId(
+      await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    ).get("manana");
+    expect(card).not.toHaveProperty("fechaReparto");
+  });
+
+  it("R26/R17: a las 23:59 CR el dia sigue siendo el 20, no el 21 (la frontera real)", async () => {
+    // `2026-08-21T05:59:00Z` = 23:59 CR del 20. En UTC ya es dia 21: si el servicio comparara
+    // contra el dia UTC, la reservada para el 21 dejaria de etiquetarse una hora antes de tiempo.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const cards = cardsPorId(
+      await newService(repo).listarMisAsignaciones(
+        MENSAJERO,
+        new Date("2026-08-21T05:59:00.000Z"),
+      ),
+    );
+    expect(cards.get("manana")?.esParaManana).toBe(true);
+  });
+
+  it("R35: la proyeccion del repositorio trae el dia SIN una consulta nueva", async () => {
+    // T3.7: el dato viaja en la lectura que ya existe. Si hiciera falta una consulta aparte, seria
+    // un N+1 sobre la pantalla mas caliente del portal.
+    const repo = conFilas([{ id: "o1", estatusValue: "por_recoger", fechaReparto: DIA_21 }]);
+    await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
   });
 });

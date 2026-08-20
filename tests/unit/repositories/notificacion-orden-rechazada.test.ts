@@ -158,6 +158,71 @@ describe("R19 — el escalado automatico por SLA NO notifica", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// FEATURE 240 (T2.4, R45) — el RECHAZO MANUAL DE LA TIENDA tampoco notifica.
+//
+// El texto del aviso es «Una orden fue rechazada POR EL DESTINATARIO». Sobre un rechazo manual eso
+// es FALSO por partida doble: no lo rechazo el destinatario, y ni siquiera hubo destinatario delante
+// —el paquete volvio a la bodega y se escaneo al aprobar el cierre (238) dias antes—. Este repo
+// tiene escrito lo que cuesta un dato que miente con formato de dato.
+//
+// La ausencia se AFIRMA, no se deja como hueco: un requisito de «no pasa nada» sin test es
+// indistinguible de un olvido, y aqui el olvido seria ensanchar la igualdad de `emitir.ts` la
+// proxima vez que alguien vea un `rechazada` sin aviso y lo tome por un fallo.
+// ---------------------------------------------------------------------------------------------
+
+/** Entrada de lote: `devuelta -> rechazada` decidido por la TIENDA (transicion #67, feature 240). */
+function rechazoManualDeLaTienda() {
+  return {
+    ordenId: "o-1",
+    estatusOrigenId: idEstado("devuelta"),
+    estatusDestinoId: idEstado("rechazada"),
+    actorUsuarioId: "tienda-1", // a diferencia del cron, aqui SI hay una persona
+    origenTipo: "rechazo_tienda" as const,
+  };
+}
+
+describe("R45 (240) — el rechazo MANUAL de la tienda NO emite el aviso del destinatario", () => {
+  it("no crea ninguna notificacion cuando el rechazo viene de `rechazo_tienda`", async () => {
+    const { tx, creadas } = buildTx();
+
+    await appendCambioEstado(
+      tx as unknown as ChokePointTx,
+      [rechazoManualDeLaTienda()],
+      async () => {},
+    );
+
+    expect(creadas).toHaveLength(0);
+    expect(tx.orden.findMany).not.toHaveBeenCalled(); // ni siquiera consulta la orden
+  });
+
+  it("CONTROL POSITIVO: el mismo destino con familia `gestion` SI notifica", () => {
+    // Sin este control, el caso de arriba estaria verde tambien si el emisor se hubiera roto
+    // entero y no notificara nunca. La pareja es lo que hace que la ausencia signifique algo.
+    const { tx, creadas } = buildTx();
+    return appendCambioEstado(
+      tx as unknown as ChokePointTx,
+      [rechazoPorGestion()],
+      async () => {},
+    ).then(() => {
+      expect(creadas).toHaveLength(4);
+    });
+  });
+
+  it("en un lote con las TRES vias a `rechazada`, solo notifica la del mensajero", async () => {
+    // Las tres aterrizan en el mismo estado y solo una describe un rechazo del destinatario.
+    const { tx, creadas } = buildTx();
+
+    await appendCambioEstado(
+      tx as unknown as ChokePointTx,
+      [rechazoPorSla(), rechazoManualDeLaTienda(), rechazoPorGestion()],
+      async () => {},
+    );
+
+    expect(creadas).toHaveLength(4);
+  });
+});
+
 describe("R20 — si la transaccion revierte, no queda ninguna notificacion", () => {
   it("la emision vive dentro del mismo tx que el append (no hay canal fuera de la tx)", async () => {
     const { tx, creadas } = buildTx();

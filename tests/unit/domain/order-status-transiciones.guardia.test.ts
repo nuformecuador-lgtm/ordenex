@@ -461,8 +461,12 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // Feature 237 (2026-08-20): 59 -> 61 y 57 -> 59. Suma #65/#66 (`ayuda_tienda -> reprogramada`
     // y `-> rechazada`, dos pares NUEVOS) y NO retira ninguna. Comparten `via` entre si, pero un
     // par lo define origen -> destino, asi que cuentan como dos en las dos columnas.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(61); // +2: 157; +3 -1: 239; +3: 235; +2: 237
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(59); // +2: 157; +3 -1: 239; +3: 235; +2: 237
+    // Feature 240 (2026-08-20): 61 -> 62 y 59 -> 59. Suma #67 (`devuelta -> rechazada` decidido por
+    // la tienda) y NO retira ninguna. ⚠️ Es la PRIMERA alta desde la 158 que NO sube los pares: ese
+    // par YA lo tenia #21 (el cron de plazo vencido), asi que #21/#67 son el TERCER duplicado
+    // historico del inventario y la diferencia `aristas - pares` pasa de 2 a 3.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(62); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(59); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +0: 240 (par repetido)
   });
 });
 
@@ -658,10 +662,12 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 158/PR2: 42/40/2 -> 52/50/2 con las diez del ADMIN, las diez pares NUEVOS.
   // Feature 239 (2026-08-19): 54/52/2 -> 56/54/2 con #59/#60/#61 (pares nuevos) menos #14.
   // Feature 237 (2026-08-20): 59/57/2 -> 61/59/2 con #65/#66 (pares nuevos), sin bajas.
-  it("los recuentos del inventario son 61 flujo / 59 pares / 2 creacion", () => {
+  // Feature 240 (2026-08-20): 61/59/2 -> 62/59/2 con #67, que REPITE el par de #21 (`devuelta ->
+  // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
+  it("los recuentos del inventario son 62 flujo / 59 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 61, // feature 237 (2026-08-20): 59 -> 61, dos altas y ninguna baja
-      paresUnicos: 59, // feature 237: las dos altas son pares NUEVOS
+      aristasFlujo: 62, // feature 240 (2026-08-20): 61 -> 62, una alta y ninguna baja
+      paresUnicos: 59, // feature 240: la alta REPITE el par de #21, asi que los pares no se mueven
       aristasCreacion: 2,
     });
   });
@@ -728,10 +734,20 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
     ).toThrow(TransicionIlegalError);
   });
 
-  it("las SIETE salidas de `devuelta` se conservan intactas (siguen teniendo productor)", () => {
+  it("las OCHO salidas de `devuelta`: las siete de la 239 intactas + la de la 240", () => {
     // `devuelta` pasa a significar "devolucion ANCLADA"; sus salidas son el camino de esas
-    // ordenes y no cambian. Si alguna cayera, una devolucion confirmada se quedaria sin salida.
-    expect(TRANSICIONES.devuelta).toHaveLength(7);
+    // ordenes. Si alguna cayera, una devolucion confirmada se quedaria sin salida.
+    //
+    // ⏳ 2026-08-20 (feature 240) — ESTE CASO SE LLAMABA «las SIETE salidas de `devuelta` se
+    // conservan intactas» y afirmaba `toHaveLength(7)`. Se actualiza A MANO, y su sentido no
+    // cambia: las SIETE de la 239 siguen aqui, una a una, y lo que se anade es la OCTAVA (#67, el
+    // rechazo manual de la tienda). El invariante que este caso protege son las siete de arriba;
+    // el recuento absoluto se mueve con cada alta declarada.
+    //
+    // ⚠️ ESTE LITERAL ES EL CONTRATO (R7): es el censo CERRADO de lo que se puede hacer con una
+    // devolucion anclada. Se actualiza a mano cuando alguien decide una alta, y JAMAS se sustituye
+    // por una derivacion de `TRANSICIONES.devuelta` — eso quedaria verde para siempre.
+    expect(TRANSICIONES.devuelta).toHaveLength(8);
     expect(TRANSICIONES.devuelta.map((d) => `${d.to}:${d.via}`).sort()).toEqual(
       [
         "en_bodega_central:liberacion_devuelta_sla",
@@ -741,8 +757,33 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
         "en_reparto:deshacer_gestion",
         "rechazada:escalado_devuelta_sla",
         "reprogramada:reprogramacion_tienda",
+        "rechazada:rechazo_tienda", // #67 (240): la tienda dueña decide, sin esperar al plazo
       ].sort(),
     );
+  });
+
+  it("240/R6/R7: `rechazo_tienda` produce UNA sola arista, y sale de `devuelta`", () => {
+    // El valor de enum y el grafo tienen que decir lo mismo. Si alguien declarara una segunda
+    // arista con este `via` —entregar desde `devuelta`, mandarla a bodega, devolverla otra vez—
+    // aqui se veria: R7 concede EXACTAMENTE una salida nueva y ninguna mas.
+    const conEstaVia = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
+      (destinos as readonly { to: string; via: string }[])
+        .filter((d) => d.via === "rechazo_tienda")
+        .map((d) => `${origen} -> ${d.to}`),
+    );
+    expect(conEstaVia).toEqual(["devuelta -> rechazada"]);
+  });
+
+  it("240/R26: el rechazo manual NO es el del cron — el par se comparte, la familia no", () => {
+    // Los dos llegan a `rechazada` desde `devuelta` y cobran lo mismo (D1), pero la familia es lo
+    // unico que distingue «lo decidio una persona» de «se vencio el plazo». Si alguien las
+    // fusionara, la pestaña «Rechazadas por plazo vencido» (102) —cuyo predicado ES
+    // `escalado_devuelta_sla`— listaria rechazos que no vencieron ningun plazo.
+    const aRechazada = TRANSICIONES.devuelta.filter((d) => d.to === "rechazada");
+    expect(aRechazada.map((d) => d.via).sort()).toEqual([
+      "escalado_devuelta_sla",
+      "rechazo_tienda",
+    ]);
   });
 });
 

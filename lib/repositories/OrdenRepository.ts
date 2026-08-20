@@ -51,6 +51,10 @@ import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // cada superficie sale de aqui y de ningun otro sitio; ver `novedadWhere`.
 import { ESTATUS_POR_GRUPO, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 246 (T3.5, R8): la convencion `@db.Date` para las vias que reasignan SIN eleccion de
+// dia. `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui desplazaria el dia.
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type {
@@ -1901,7 +1905,20 @@ export class OrdenRepository implements IOrdenRepository {
             mensajeroAsignadoId: d.mensajeroAsignadoId,
             // Feature 76/R23 (W1): estampa `asignado_at = now` SOLO cuando se asigna un
             // mensajero (valor no nulo); si la decision no lleva mensajero no se toca.
-            ...(d.mensajeroAsignadoId != null ? { asignadoAt: new Date() } : {}),
+            //
+            // FEATURE 246 (T3.5, R8/R10) — Y CON EL, EL DIA DE REPARTO. Tras la 156 esta rama esta
+            // MUERTA en la practica: «generar guia» ya no decide mensajero (156/R2), asi que
+            // `d.mensajeroAsignadoId` es siempre `null` y este spread no se aplica nunca. Aun asi
+            // el dia va aqui, dentro del MISMO spread condicional, por dos motivos: (a) la
+            // invariante R10 es «las dos columnas se escriben juntas», y una excepcion «porque hoy
+            // no pasa» es justo la clase de excepcion que un dia deja de ser cierta; (b) la
+            // guardia `fecha-reparto-acompana-asignado-at` censa el arbol entero y ESTE sitio fue
+            // el que encontro — el spec listaba cinco limpiezas y este estampado no estaba.
+            //
+            // El dia es el de Costa Rica EN CURSO porque esta via NO ofrece la eleccion (R8).
+            ...(d.mensajeroAsignadoId != null
+              ? { asignadoAt: new Date(), fechaReparto: startOfDayCR() }
+              : {}),
           },
           select: { numGuia: true },
         });
@@ -1932,6 +1949,10 @@ export class OrdenRepository implements IOrdenRepository {
     mensajeroId: string,
     estatusId: string,
     historial: HistorialContexto,
+    // Feature 246 (T3.3, R7): el dia de reparto YA RESUELTO por el servicio. Aqui no se calcula
+    // ninguna fecha: un solo sitio que sabe traducir «hoy/mañana» es un solo sitio donde ese
+    // criterio puede equivocarse.
+    fechaReparto: Date,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
     // Feature 49/#4 (R7/R8/R12): updateMany + append en la MISMA tx. La guarda del
@@ -1947,7 +1968,17 @@ export class OrdenRepository implements IOrdenRepository {
         // Feature 76/R23 (W2): al fijar el mensajero, estampa `asignado_at = now`.
         // Feature 101/R5 (gate F1.4-Q1): al reasignar desde la bodega central apaga
         // `prioridad` en la MISMA escritura (una orden no hereda prioridad a ciclos futuros).
-        data: { mensajeroAsignadoId: mensajeroId, estatusId, asignadoAt: new Date(), prioridad: false },
+        // Feature 246 (T3.3, R7/R10): `fechaReparto` va en la MISMA escritura que `asignadoAt`.
+        // Nunca en una segunda pasada: si la segunda fallara, la orden quedaria con mensajero y
+        // sin dia —indistinguible de una anterior a la feature— y el corte de esa misma noche se
+        // la llevaria por delante.
+        data: {
+          mensajeroAsignadoId: mensajeroId,
+          estatusId,
+          asignadoAt: new Date(),
+          fechaReparto,
+          prioridad: false,
+        },
       });
       // R8: registra SOLO las filas efectivamente afectadas (las existentes).
       await appendCambioEstado(
@@ -2116,7 +2147,10 @@ export class OrdenRepository implements IOrdenRepository {
           where: { id },
           // R9. Feature 76/LC1 (C2): al limpiar el mensajero, limpia tambien
           // `asignado_at` (defensivo, mantiene el invariante asignado_at<->mensajero).
-          data: { estatusId, mensajeroAsignadoId: null, asignadoAt: null },
+          // Feature 246 (T3.5, R9/R10): `fechaReparto: null` acompana a `asignadoAt: null`. La
+          // orden vuelve a bodega sin mensajero, asi que no puede conservar un dia de reparto: una
+          // reserva sin duenno es un dato que el corte tendria que interpretar.
+          data: { estatusId, mensajeroAsignadoId: null, asignadoAt: null, fechaReparto: null },
         });
       }
       // R13: destino en_ruta_bodega_satelite; append en la MISMA tx (R7).
@@ -2669,6 +2703,12 @@ export class OrdenRepository implements IOrdenRepository {
     destinoEstatusId: string,
     origenEstatusId: string,
     historial: HistorialContexto,
+    // Feature 246 (T3.3, R7): el dia de reparto YA RESUELTO por el servicio, igual que en la
+    // bodega central (D4: la regla no depende de desde que bodega te asignaron). Entra en el `SET`
+    // como TEXTO `YYYY-MM-DD` con `::date` explicito, no como `Date`: ver
+    // `fechaRepartoComoTexto`, que explica por que pasar el `Date` dejaria el dia a merced del
+    // `TimeZone` de la sesion de Postgres.
+    fechaReparto: Date,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
     // ⚠️ FEATURE 241 (2026-08-20) — AQUI VIVIA EL `NOT EXISTS` SOBRE `cierre_dia`, Y SE FUE.
@@ -2701,6 +2741,7 @@ export class OrdenRepository implements IOrdenRepository {
         UPDATE "orden"
         SET "mensajero_asignado_id" = ${mensajeroId},
             "asignado_at" = NOW(),
+            "fecha_reparto" = ${fechaRepartoComoTexto(fechaReparto)}::date,
             "estatus_id" = ${destinoEstatusId},
             "prioridad" = false,
             "updated_at" = NOW()
@@ -2773,11 +2814,20 @@ export class OrdenRepository implements IOrdenRepository {
           noTransicionadas.push(item.ordenId);
           continue;
         }
+        // Feature 246 (T3.5, R9/R10): el `SET` de abajo limpia `fecha_reparto` en la MISMA
+        // sentencia que `asignado_at`. Deshacer la asignacion deshace tambien la reserva: una
+        // reserva sin mensajero es un dato huerfano que el corte tendria que interpretar.
+        //
+        // El porque va AQUI ARRIBA y no dentro del `SET`: un comentario `--` dentro de la clausula
+        // no es solo estetica — el test de integracion `deshacer-asignacion.trazabilidad-carga`
+        // interpreta este SQL con una base en memoria que parsea el `SET` asignacion por
+        // asignacion, y un comentario ahi dentro lo revienta. Medido, no supuesto.
         const rows = await tx.$queryRaw<{ id: string }[]>`
           UPDATE "orden"
           SET "estatus_id" = ${item.destinoEstatusId},
               "mensajero_asignado_id" = NULL,
               "asignado_at" = NULL,
+              "fecha_reparto" = NULL,
               "updated_at" = NOW()
           WHERE "id" = ${item.ordenId}
             AND "estatus_id" = ${origenEstatusId}

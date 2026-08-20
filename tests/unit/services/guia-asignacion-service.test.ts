@@ -627,15 +627,27 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     });
     const service = newService(repo);
 
-    const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
+    // Feature 246 (T3.2, R4/R5): sin `dia` en la peticion, el servicio la trata como «hoy» y
+    // resuelve la fecha con el reloj INYECTADO. Un reloj real haria esta asercion dependiente del
+    // dia en que se corra la suite.
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+      new Date("2026-08-20T20:00:00.000Z"), // 14:00 CR del 20
+    );
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados).toEqual([{ ordenId: "o1", estado: "por_recoger" }]);
-    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(["o1"], "m1", "os-espera", {
-      actorUsuarioId: "u-maestro",
-      origenTipo: "asignacion_bodega",
-    });
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1"],
+      "m1",
+      "os-espera",
+      { actorUsuarioId: "u-maestro", origenTipo: "asignacion_bodega" },
+      // Feature 246 (R4/R7): el dia de reparto YA RESUELTO llega en la MISMA llamada. `hoy` por
+      // defecto = el comportamiento anterior a esta ficha.
+      new Date("2026-08-20T00:00:00.000Z"),
+    );
     // R5/R26: NUNCA toca num_guia; el metodo dedicado ni siquiera lo recibe como parametro.
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
@@ -1313,5 +1325,110 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
       ["recolectando"], // lo que ocupa es la recoleccion ASIGNADA, no la que espera sin dueño
     );
     expect(r.status).toBe("ok");
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T3.2, R3/R4/R5/R6/R7) — LA ELECCION SE RESUELVE A FECHA EN EL SERVIDOR.
+// =================================================================================================
+describe("246/R3-R7 — asignarDesdeBodega resuelve el dia de reparto", () => {
+  /** 14:00 hora de pared de Costa Rica del 20 de agosto. */
+  const TARDE_DEL_20 = new Date("2026-08-20T20:00:00.000Z");
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+  const DIA_21 = new Date("2026-08-21T00:00:00.000Z");
+
+  function repoConDosOrdenes() {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 55 }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central", numGuia: 56 }),
+      ]),
+    });
+  }
+
+  /** La fecha que el servicio le pasa al repositorio (5.º argumento). */
+  function fechaEscrita(repo: ReturnType<typeof fakeRepo>): Date {
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    return call[4] as Date;
+  }
+
+  it('R4/R5: sin `dia` -> «hoy», resuelto con el reloj del SERVIDOR', async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it('R5: `dia: "manana"` -> la fecha CR del dia SIGUIENTE, no un booleano', async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    // Una FECHA ABSOLUTA, no una marca «para mañana»: una fecha vence sola (D2/R13).
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("R3: UNA asignacion, UN dia de reparto — el lote entero recibe la misma fecha", async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1", "o2"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    // Los dos ids van en UNA sola llamada, con UNA sola fecha: no hay forma de que el lote se
+    // parta en dos dias.
+    expect(call[0]).toEqual(["o1", "o2"]);
+    expect((call[4] as Date).toISOString()).toBe(DIA_21.toISOString());
+    expect((repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("R5/R17: a las 23:59 CR «mañana» sigue siendo el dia siguiente en HORA DE COSTA RICA", async () => {
+    // 2026-08-21T05:59:00Z = 23:59 CR del 20. En UTC ya es dia 21: si el servicio usara el dia
+    // UTC, «mañana» seria el 22 y la orden quedaria protegida DOS noches.
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      new Date("2026-08-21T05:59:00.000Z"),
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("R6: la fecha la pone el SERVIDOR — el input no tiene por donde colar una", async () => {
+    // El borde ya lo impide (zod solo acepta el token), pero el servicio tampoco leeria una:
+    // una peticion con una fecha de sobra produce exactamente la misma escritura.
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      {
+        ordenIds: ["o1"],
+        mensajeroId: "m1",
+        dia: "hoy",
+        // @ts-expect-error — el contrato NO admite una fecha; el caso existe para demostrarlo.
+        fechaReparto: new Date("2030-01-01T00:00:00.000Z"),
+      },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it("R7: la fecha va en la MISMA llamada que fija el mensajero, no en una segunda pasada", async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    // Una sola escritura de asignacion, y lleva las dos cosas.
+    expect((repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    expect(call[1]).toBe("m1"); // el mensajero
+    expect(call[4]).toBeInstanceOf(Date); // ...y el dia, juntos
   });
 });

@@ -92,6 +92,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
           estatusId: input.destinoEstatusId, // R12 (destino ya resuelto por el service)
           mensajeroAsignadoId: null, // R13: handoff limpio a la bodega
           asignadoAt: null, // feature 76/LC1 (C3): limpia el timestamp de asignacion (defensivo)
+          fechaReparto: null, // feature 246/R9/R10: el dia de reparto SIEMPRE acompana a `asignado_at`
           liberadaReprogramadaAt: input.corridaAt, // R13: marca de auditoria/aviso
           prioridad: true, // feature 110/R1: liberada de reprogramada -> reasignacion prioritaria
         },

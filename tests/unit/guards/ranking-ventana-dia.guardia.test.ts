@@ -161,3 +161,108 @@ describe("RankingService · ventana del dia natural CR (166)", () => {
     expect(sinEspacios(modelo)).toContain('descripcionString?@map("descripcion")');
   });
 });
+
+// =================================================================================================
+// FEATURE 246 (T6.6, D7 firmada el 2026-08-20) — LA GUARDIA APRENDE A LEER LAS *DOS* CONVENCIONES.
+//
+// ⚠️ ESTE BLOQUE AMPLIA LA GUARDIA, NO LA RELAJA, y la diferencia importa: si acabara aceptando
+// cualquier fecha, dejaria de proteger del off-by-one de la 166 — que es todo su motivo de existir.
+//
+// QUE CAMBIO. Hasta la 246, el ranking usaba UNA sola convencion de fecha: cotas `timestamp`
+// (`...T06:00:00.000Z`, `inicioDelDiaCREnUtc`) contra `gestion_orden.created_at` y
+// `orden.asignado_at`. Con D7 firmada, el denominador pasa a contar por DIA DE REPARTO, y
+// `orden.fecha_reparto` es `@db.Date`: su convencion es la MEDIANOCHE UTC de la fecha calendario CR.
+//
+// AHORA CONVIVEN LAS DOS EN LA MISMA CONSULTA. La prohibicion de `startOfDayCR` en estos dos
+// archivos SIGUE EN PIE —y por eso los literales prohibidos de arriba NO se tocan—: el tercer valor
+// se calcula con `fechaComoDate`, que es LITERALMENTE la misma funcion que usa el snapshot
+// congelado. Eso hace dos cosas a la vez: mantiene la guardia entera y hace que R41 («el vivo y el
+// congelado cuentan igual») se cumpla por construccion en vez de por disciplina.
+//
+// LO QUE ESTE BLOQUE IMPIDE, dicho como propiedad: que alguien cruce las convenciones. Que use una
+// cota `timestamp` como valor de la columna `DATE`, o el valor `DATE` como cota de un `timestamp`.
+// =================================================================================================
+describe("RankingRepository · las DOS convenciones de fecha, cada una en su sitio (246/T6.6)", () => {
+  const codigoRepo = () => sinEspacios(soloCodigo(fs.readFileSync(REPO_PATH, "utf8")));
+  const codigoService = () => sinEspacios(soloCodigo(fs.readFileSync(SERVICE_PATH, "utf8")));
+
+  it("el denominador compara `fechaReparto` contra el parametro `diaReparto`, y nada mas", () => {
+    const codigo = codigoRepo();
+    // La rama principal: la columna `DATE` contra el valor `DATE`.
+    expect(codigo).toContain("fechaReparto:diaReparto");
+    // La rama de respaldo: la columna `DATE` a NULL + la ventana `timestamp`. Las dos cosas EN LA
+    // MISMA rama es lo que la hace disjunta de la primera.
+    expect(codigo).toContain("fechaReparto:null,asignadoAt:{gte:desde,lt:hasta}");
+  });
+
+  it("NO cruza las convenciones: `diaReparto` nunca es cota de `asignadoAt` ni al reves", () => {
+    const codigo = codigoRepo();
+    // Si alguien escribiera `asignadoAt: { gte: diaReparto }`, la ventana empezaria seis horas
+    // antes de lo debido y arrastraria las 18:00-24:00 CR del dia ANTERIOR: el defecto de la 166.
+    expect(codigo).not.toContain("asignadoAt:{gte:diaReparto");
+    expect(codigo).not.toContain("asignadoAt:diaReparto");
+    // Y al reves: la columna `DATE` comparada contra una cota `timestamp` se iria un dia entero.
+    expect(codigo).not.toContain("fechaReparto:desde");
+    expect(codigo).not.toContain("fechaReparto:hasta");
+    expect(codigo).not.toContain("fechaReparto:{gte:desde");
+  });
+
+  it("el repositorio NO deriva una fecha de la otra: las tres llegan del llamador", () => {
+    const codigo = codigoRepo();
+    // Derivar `diaReparto` restandole 6 h a `desde` seria una SEGUNDA definicion del dia, metida
+    // en el peor sitio posible: dentro de la consulta, donde nadie la busca.
+    expect(codigo).not.toContain("6*60*60*1000");
+    expect(codigo).not.toContain("21600000");
+    expect(codigo).not.toMatch(/newDate\(desde/);
+    expect(codigo).not.toMatch(/newDate\(hasta/);
+    // Y sigue sin leer el reloj (ya cubierto arriba, se reafirma con el parametro nuevo delante).
+    expect(codigo).not.toMatch(/newDate\(\)/);
+  });
+
+  it("R39: el NUMERADOR no gana ninguna fecha nueva — sigue con `createdAt` y sus dos cotas", () => {
+    const codigo = codigoRepo();
+    expect(codigo).toContain("createdAt:{gte:desde,lt:hasta}");
+    // El numerador tiene que seguir anclado a algo que no reciba escrituras tardias: el snapshot
+    // se congela a las 02:00 CR del dia siguiente y es inmutable (design §10-F).
+    const numerador =
+      codigo.slice(
+        codigo.indexOf("contarEntregadasPorMensajero"),
+        codigo.indexOf("contarAsignadasPorMensajero"),
+      ) || "";
+    expect(numerador).not.toBe("");
+    expect(numerador).not.toContain("fechaReparto");
+  });
+
+  it("el SERVICE calcula el valor `DATE` con `fechaComoDate`, el MISMO helper que el congelado", () => {
+    // R41 por construccion: si el vivo usara un helper propio, el vivo y el snapshot podrian
+    // divergir en la convencion de esta fecha sin que ningun test lo notara.
+    const fuente = fs.readFileSync(SERVICE_PATH, "utf8");
+    expect(fuente).toContain("fechaComoDate");
+    expect(fuente).toContain("@/lib/ranking/snapshot-dia");
+    expect(codigoService()).toContain("fechaComoDate(hoyCR)");
+  });
+
+  it("y el service SIGUE sin usar `startOfDayCR`: la prohibicion de la 166 no se relaja", () => {
+    // Es el punto de esta ampliacion. `startOfDayCR` devolveria EL MISMO valor que
+    // `fechaComoDate(hoyCR)` —no es que el valor este mal—, pero tenerla escrita en este archivo
+    // reabre la puerta a usarla tambien como cota de un `timestamp`, que es lo prohibido. La
+    // guardia se queda entera.
+    expect(codigoService()).not.toContain("startOfDayCR");
+    expect(codigoRepo()).not.toContain("startOfDayCR");
+  });
+
+  it("el censo detecta lo que dice detectar (autocomprobacion del bloque nuevo)", () => {
+    // Las dos formas de cruzar las convenciones, escritas a mano: si el censo dejara de verlas,
+    // los `not.toContain` de arriba pasarian con el codigo roto.
+    expect(sinEspacios(soloCodigo("where: { asignadoAt: { gte: diaReparto, lt: hasta } }"))).toContain(
+      "asignadoAt:{gte:diaReparto",
+    );
+    expect(sinEspacios(soloCodigo("where: { fechaReparto: desde }"))).toContain(
+      "fechaReparto:desde",
+    );
+    // Y no confunde la forma CORRECTA con una infraccion.
+    expect(sinEspacios(soloCodigo("where: { fechaReparto: diaReparto }"))).not.toContain(
+      "fechaReparto:desde",
+    );
+  });
+});

@@ -70,12 +70,28 @@ describe("Feature 237 · enum — la familia `gestion_tienda_ayuda` (T1.1, R5)",
     // Un timestamp anterior al ultimo aplicado deja la migracion fuera del orden de `deploy` en
     // cualquier base que ya estuviera al dia: se marcaria como pendiente y se aplicaria «en el
     // pasado». Se comprueba contra el arbol real, no contra un numero copiado.
+    //
+    // ⏳ 2026-08-20 (feature 240) — ESTE CASO AFIRMABA `todas[todas.length - 1] === enumDirName`,
+    // es decir «esta es la ULTIMA carpeta del arbol». Era cierto mientras la 237 fue la migracion
+    // mas reciente, y dejo de serlo en cuanto la 240 anadio la suya. Pero «ser la ultima para
+    // siempre» NUNCA fue el requisito —lo habria roto la siguiente ficha, fuera cual fuera—: el
+    // requisito es que su timestamp sea POSTERIOR al de todas las que ya existian cuando se
+    // escribio. Eso es lo que se afirma ahora, contra el arbol y sin numeros copiados.
+    //
+    // Es la correccion de una asercion demasiado fuerte, no un aflojamiento: sigue poniendose roja
+    // ante el fallo real que vigilaba —una carpeta con timestamp «en el pasado»—.
     const todas = fs
       .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
-    expect(todas[todas.length - 1]).toBe(enumDirName);
+    const anteriores = todas.slice(0, todas.indexOf(enumDirName));
+    expect(anteriores.length).toBeGreaterThan(0); // el censo mira algo de verdad
+    // La ULTIMA que existia antes de esta, medida en el arbol: la 238 (confirmacion fisica).
+    expect(anteriores[anteriores.length - 1]).toBe(
+      "20260819170000_gestion_orden_confirmacion_fisica",
+    );
+    for (const previa of anteriores) expect(previa < enumDirName).toBe(true);
   });
 
   it("el UP es ADITIVO: ni tablas, ni columnas, ni RLS, ni movimientos de orden (R47)", () => {
@@ -119,13 +135,22 @@ describe("Feature 237 · el DOWN deja la base legible por el codigo anterior (R4
     // Las dos de la 235 SI estan: este down revierte SOLO lo que su up anadio.
     expect(valores).toContain(IDA);
     expect(valores).toContain(VUELTA);
-    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade.
-    // Mientras esta sea la ULTIMA migracion del enum, la igualdad es la asercion correcta; el dia
-    // que otra ficha anada un valor mas, este caso se pone rojo y lo que hay que hacer NO es
-    // editar este `down.sql` —seria una foto historica— sino nombrar el valor nuevo aqui, como ya
-    // hizo la 237 con el down de la 235.
+    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade y
+    // menos los que anadieron las migraciones POSTERIORES a ella.
+    //
+    // ⏳ 2026-08-20 (feature 240) — EL DIA LLEGO, y llego el mismo dia. Este caso decia: «mientras
+    // esta sea la ULTIMA migracion del enum, la igualdad es la asercion correcta; el dia que otra
+    // ficha anada un valor mas, este caso se pone rojo y lo que hay que hacer NO es editar este
+    // `down.sql` —seria una foto historica— sino nombrar el valor nuevo aqui». Eso es exactamente
+    // lo que se hace: `rechazo_tienda` (240) entra en la lista de POSTERIORES y el `down.sql` de
+    // la 237 no se toca ni una linea.
+    const POSTERIORES = ["rechazo_tienda"]; // feature 240 (2026-08-20)
     expect(new Set(valores)).toEqual(
-      new Set((ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter((v) => v !== FAMILIA)),
+      new Set(
+        (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
+          (v) => v !== FAMILIA && !POSTERIORES.includes(v),
+        ),
+      ),
     );
   });
 

@@ -198,6 +198,16 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   // dos desenlaces y las otras tres siguen sin productor.
   { n: "65", origen: "ayuda_tienda", destino: "reprogramada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
   { n: "66", origen: "ayuda_tienda", destino: "rechazada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
+  // Feature 240 (2026-08-20) — EL RECHAZO MANUAL DE LA TIENDA. A diferencia de las tres altas
+  // anteriores, esta NO es un par nuevo: `devuelta -> rechazada` YA estaba declarado por #21 (el
+  // cron de plazo vencido). Es el TERCER duplicado historico del inventario, hermano exacto de
+  // #19/#23 y #20/#24 — mismo par, familia distinta porque quien decide es otro—. Por eso
+  // `aristasFlujo` sube y `paresUnicos` NO (ver el recuento).
+  //
+  // NO se retira #21: el cron sigue escalando por su cuenta las devoluciones que nadie resuelve.
+  // Las dos vias conviven y la carrera entre ellas la cierra la guarda del `updateMany` (quien
+  // llegue segundo obtiene count = 0 y no deja efectos), no una exclusion en el grafo.
+  { n: "67", origen: "devuelta", destino: "rechazada", via: "rechazo_tienda", callSite: "RechazoTiendaService.rechazar -> GestionOrdenRepository.rechazarDesdeDevuelta (240)" },
 ];
 
 /**
@@ -236,18 +246,32 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
  * Los 52 - 50 = 2 duplicados que quedan son #19/#23 y #20/#24 (SLA vs. recuperacion manual). El
  * tercer duplicado historico (#3/#7b) se fue con el estado de fulfillment. Ninguna de las diez
  * aristas del camino del admin repite un par ya declarado, por eso la diferencia no se mueve.
+ *
+ * ⏳ 2026-08-20 (feature 240): la frase de arriba —«los 2 duplicados que quedan»— vale hasta la
+ * 237 incluida. La 240 anade un TERCERO, #21/#67, y la diferencia `aristas - pares` pasa de 2 a 3.
+ * Ver la nota de `paresUnicos`.
  */
 export const RECUENTO_INVENTARIO = {
   // 2026-08-19 (feature 239): 54 -> 56. Suma TRES (#59/#60/#61) y RETIRA UNA (#14).
   // 2026-08-19 (feature 235): 56 -> 59. Suma TRES (#62/#63/#64) y NO retira NINGUNA.
   // 2026-08-20 (feature 237): 59 -> 61. Suma DOS (#65/#66) y NO retira NINGUNA.
-  aristasFlujo: 61, // +2 (157); +3 -1 (239); +3 (235); +2 (237)
+  // 2026-08-20 (feature 240): 61 -> 62. Suma UNA (#67) y NO retira NINGUNA.
+  aristasFlujo: 62, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240)
   // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
   // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
   // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
   // la 235. Asi que la aritmetica de pares sigue a la de aristas y la diferencia aristas - pares
   // se queda en 2 (los duplicados historicos #19/#23 y #20/#24). Los dos pares nuevos comparten
   // `via` entre si, pero eso no los hace duplicados: lo que cuenta un par es origen -> destino.
+  //
+  // 2026-08-20 (feature 240): 59 -> 59, SIN CAMBIO, y aqui la aritmetica DEJA de seguir a la de
+  // aristas por primera vez desde la 158. La arista #67 (`devuelta -> rechazada` por la tienda)
+  // repite un par que #21 (el cron de plazo vencido) YA tenia declarado, asi que suma arista y no
+  // suma par. Con eso la diferencia `aristas - pares` pasa de 2 a **3** y los duplicados vigentes
+  // son TRES: #19/#23, #20/#24 y #21/#67. Los tres son el mismo patron —el mismo movimiento de
+  // estado producido por dos actores distintos, el sistema y una persona— y en los tres lo que los
+  // separa es la FAMILIA, que es justo lo que hace falta para poder responder despues «¿quien
+  // decidio esto?» sin adivinarlo por el par de estatus.
   paresUnicos: 59,
   aristasCreacion: 2,
 } as const;

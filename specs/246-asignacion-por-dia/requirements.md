@@ -392,14 +392,38 @@ de `medium`, y una medición (M5/M6/M7) que hay que hacer antes de escribir la c
   respaldo; sin ella, el despliegue es un incidente de dinero.
 - **Una asimetría nueva** (R40), acotada en el límite declarado 4.
 
-**D10 · ¿El tablero del día sigue al ranking? [FIRMA]**
+**D10 · ¿El tablero del día sigue al ranking? [FIRMA] → FIRMADA EL 2026-08-20: NO LO SIGUE.**
 `TableroDiaRepository` cuenta «asignadas hoy» con el **mismo** `asignado_at` y lo dice en su
 cabecera: *«es el denominador del ranking diario del mensajero y moverla mueve su pago y su premio»*.
 Si el ranking cambia de criterio y el tablero no, **dos pantallas del mismo maestro muestran dos
 cifras distintas de "asignadas hoy" el mismo día**, y ninguna de las dos está mal.
-**Recomendación: sí, que lo siga**, y en esta misma ficha: el coste es la misma cláusula en una
-consulta que ya existe, y el tablero es sólo lectura. **Qué se rompe si no:** el maestro pierde la
-capacidad de cuadrar una pantalla contra la otra, que es justo para lo que abre las dos.
+**Recomendación de este spec era: sí, que lo siga**, y en esta misma ficha: el coste es la misma
+cláusula en una consulta que ya existe, y el tablero es sólo lectura. **Qué se rompe si no:** el
+maestro pierde la capacidad de cuadrar una pantalla contra la otra, que es justo para lo que abre
+las dos.
+
+**Lo que se firmó, y por qué en contra de esa recomendación:** el tablero **NO** sigue al ranking.
+Tres razones, con las mediciones delante:
+
+1. **El tablero y el ranking no miden lo mismo, y ahora se nota porque el ranking cambió.** El
+   tablero responde «¿qué carga le eché hoy a este mensajero?» —una pregunta de **operación**, y
+   para ésa `asignado_at` es el dato correcto: la orden entró en su montón hoy, la reserve para
+   quien la reserve—. El ranking responde «¿de qué día es esta orden a efectos de su porcentaje?».
+   Alinearlos no habría hecho que las dos pantallas dijeran la verdad: habría hecho que **el
+   tablero dejara de responder su propia pregunta**.
+2. **El tablero está a una decisión de distancia del dinero, y esta ficha ya arrastró bastante.**
+   D7 se firmó en contra de la recomendación y con eso entraron el podio y `premio_ranking`.
+   Meter además el CTE `ids_del_dia` —que alimenta la pantalla con la que el maestro cuadra el
+   día— habría sido una tercera superficie en una ficha que se leía como «un selector y un cron».
+3. **El coste de no hacerlo es una nota, y la nota ya está escrita.** Lo que la recomendación
+   temía —«dos cifras distintas sin explicación se leen como un error de la app»— se cierra
+   diciéndolo donde se ve: la cabecera de `TableroDiaRepository` explica ahora que desde el
+   despliegue las dos cifras **pueden diferir el mismo día**, cuál mide qué, y que es deliberado.
+
+**Consecuencia aceptada, escrita donde se ve y no en una nota al pie:** desde el despliegue, una
+orden asignada hoy para mañana **cuenta HOY en el tablero y MAÑANA en el ranking**. Ninguna de las
+dos está mal. Si algún día se quiere alinearlas, es una decisión nueva —y el `OR` ya está escrito
+y probado en `RankingRepository` para copiarlo.
 
 **D11 · ¿Se recalcula el ranking ya congelado? [FIRMA — es historia que ya se pagó]**
 **Recomendación: NO, y no se da por hecho en ninguna parte del diseño.** `ranking_snapshot_dia` y
@@ -464,9 +488,9 @@ Tres decisiones firmadas. **Dos con la recomendación de este spec, una en contr
   arrastró el ranking.
   **Lo que la firma cambia en el spec:** sección **H** nueva (R36-R46), R33 reescrito, el índice de
   `design.md` §2.1 (donde antes decía «sin índice»), tres mediciones nuevas (**M5**, **M6**, **M7**)
-  más un `EXPLAIN` (**M8**), una tanda nueva en `tasks.md`, y **dos decisiones que la firma abre y que
-  siguen ABIERTAS**: **D10** (¿el tablero del día sigue al ranking?) y **D11** (¿se recalcula la
-  historia congelada? — **recomendación: no**, y en ningún sitio del diseño se da por hecho).
+  más un `EXPLAIN` (**M8**), una tanda nueva en `tasks.md`, y **dos decisiones que la firma abrió y que
+  **YA ESTÁN FIRMADAS, las dos el mismo día**: **D10** (el tablero **NO** sigue al ranking) y
+  **D11** (**no** se recalcula la historia congelada).
 
 ### Veredicto de complejidad
 
@@ -484,6 +508,22 @@ Tres decisiones firmadas. **Dos con la recomendación de este spec, una en contr
 
 Sigue **sin** llegar a lo que este repo llama una ficha de dinero de primer orden —no emite ni un
 movimiento de wallet, no toca totales de cierre ni tarifas—, pero `medium` ya no la describe.
+
+### D10 — FIRMADA el 2026-08-20: **el tablero del día NO sigue al ranking**
+
+**En contra de la recomendación de este spec**, y con su porqué en **D10**. El resumen: el tablero
+responde una pregunta de **operación** («¿qué carga le eché hoy?») y para ésa `asignado_at` es el
+dato correcto; alinearlo con el ranking le habría quitado su propia respuesta. Además, D7 ya metió
+el podio y `premio_ranking` en una ficha que se leía como «un selector y un cron», y el CTE
+`ids_del_dia` alimenta la pantalla con la que el maestro cuadra el día: era una tercera superficie.
+
+**Lo que la firma obliga a hacer, y está hecho:** corregir la cabecera de `TableroDiaRepository`,
+que afirmaba que `asignado_at` «es el denominador del ranking diario». **Con D7 eso dejó de ser
+cierto**, se firme D10 como se firme. El comentario nuevo dice qué mide cada cifra, que **pueden
+diferir el mismo día** desde el despliegue, y que es deliberado — porque dos cifras distintas sin
+explicación se leen como un error de la app.
+
+**T6.7 queda `N/A`**: no se toca el CTE.
 
 ### D11 — FIRMADA el 2026-08-20: **solo hacia adelante, no se recalcula nada**
 

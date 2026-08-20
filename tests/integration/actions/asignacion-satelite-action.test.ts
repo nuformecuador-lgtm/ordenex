@@ -77,8 +77,11 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
       status: "ok",
       resultados: [{ ordenId: ORDEN, estado: "por_recoger" }],
     });
+    // Feature 246 (T3.1, R2/R4): el borde pasa el `dia` TAL CUAL al servicio, sin coercion. La
+    // peticion no lo traia, asi que zod le puso el default `"hoy"` — el comportamiento anterior a
+    // esta ficha (R4). Si el borde lo transformara, o si el default se perdiera, este caso lo dice.
     expect(service.asignar).toHaveBeenCalledWith(
-      { ordenIds: [ORDEN], mensajeroId: MENSAJERO },
+      { ordenIds: [ORDEN], mensajeroId: MENSAJERO, dia: "hoy" },
       ADMIN,
     );
   });

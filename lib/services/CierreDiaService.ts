@@ -77,8 +77,15 @@ const MSG_ORDEN_MOVIDA = "Esta orden ya fue procesada por la bodega; ya no se pu
 const MSG_ORDEN_BORRADA = "Esta orden fue eliminada; ya no se puede deshacer su gestion."; // R6
 // 💰 Feature 237 (T5.5, D3 firmada por el humano el 2026-08-20, R38). ACCIONABLE: le dice al
 // mensajero QUE paso, POR QUE no puede tocarlo y A QUIEN acudir — no es un «no se puede» a secas.
+//
+// ⏳ 2026-08-20 (feature 240, D10/R43) — EL MENSAJE DEJA DE NOMBRAR LA PANTALLA. Decia «la resolvió
+// la tienda DESDE SU PANTALLA DE AYUDA», y desde la 240 hay un segundo camino —el rechazo manual de
+// una devolucion ya anclada— que NO pasa por esa pantalla. Sobre esas gestiones la frase seria
+// FALSA, y este repo tiene escrito lo que cuesta un dato que miente con formato de dato. No se
+// sustituye por dos mensajes, uno por familia: al mensajero le da igual desde donde lo hizo la
+// tienda; lo que necesita saber es que no es suyo y a quien escribirle.
 const MSG_GESTION_DE_LA_TIENDA =
-  "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.";
+  "Esta orden la resolvió la tienda; solo ella puede corregirlo. Escribile por el chat de la orden.";
 const MSG_CATALOGO = "catalogo de estados incompleto (seed pendiente)"; // patron `gestionar` (36)
 
 // Feature 67/R18: unico estado desde el que se puede volver a gestionar (`ORIGEN_GESTION` de
@@ -598,6 +605,18 @@ export class CierreDiaService implements ICierreDiaService {
     // El desenlace elegido (D3-b) tiene su precio DECLARADO: un rechazo equivocado de la tienda no
     // tiene deshacer. Se acepta porque el peor caso es recuperable —el paquete vuelve a la tienda
     // por el flujo de devolucion— mientras que el contrario borra dinero sin consentimiento.
+    //
+    // ⏳ 2026-08-20 (feature 240, D6/R43) — ESTA GUARDIA NO CAMBIA NI UNA LINEA, y eso es lo
+    // interesante: lo que cambia es DE DONDE SALE el booleano. `ORIGENES_GESTION_DE_LA_TIENDA`
+    // (`lib/utils/gestion-de-la-tienda-flag.ts`) pasa de un valor a una lista, y con eso el rechazo
+    // manual de una devolucion anclada queda cubierto por la MISMA guarda, no por una segunda.
+    // Aqui con mas motivo todavia: sin ella, el mensajero devolveria a `en_reparto` —reasignada a
+    // el— una orden cuyo paquete esta FISICAMENTE EN LA BODEGA desde el cierre anterior.
+    //
+    // ⚠️ Lo que sigue FUERA, medido y declarado: la gestion sintetica de la REPROGRAMACION de
+    // escritorio (100, `reprogramacion_tienda`) tambien pasa las ocho guardias y HOY SE PUEDE
+    // deshacer. Es dinero neutro (`reprogramada` no emite ningun concepto) y es alcance de otra
+    // ficha; se nombra en la lista para que sea una ausencia decidida y no un olvido.
     if (gestion.desdeAyudaTienda) {
       return { status: "conflict", motivo: MSG_GESTION_DE_LA_TIENDA };
     }
@@ -700,7 +719,7 @@ export function toDetalleDTO(
     // 💰 Feature 237 (D6/R41): passthrough del OTRO flag derivado del historial. Este SI lo lleva
     // la vista en vivo del mensajero, y es su razon de ser: sin el, firma un cierre con una
     // gestion que no hizo y una evidencia que no subio, y no puede explicarla si le preguntan.
-    // El service no re-deriva nada — el predicado vive en `lib/utils/gestion-tienda-ayuda-flag.ts`
+    // El service no re-deriva nada — el predicado vive en `lib/utils/gestion-de-la-tienda-flag.ts`
     // y los tres repositorios que producen la fila lo aplican sobre el historial.
     desdeAyudaTienda: g.desdeAyudaTienda,
     // Feature 158/R9/R34: passthrough de la causa tipificada del incidente. La pueblan los DOS

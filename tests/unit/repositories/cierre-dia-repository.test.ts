@@ -153,11 +153,16 @@ describe("💰 Feature 237 — `desdeAyudaTienda` en la fila del cierre (D6/R41)
 
     await repo.findGestionesPendientes("m1");
 
+    // ⏳ 2026-08-20 (feature 240, D6/R43): `origenTipo` pasa de una IGUALDAD a un `in` de las dos
+    // familias con las que la tienda registra una gestion (la pestaña de ayuda y el rechazo manual
+    // de una devolucion anclada). Ninguna consulta nueva y el mismo indice —`ordenId` sigue
+    // DELANTE, que es lo que este caso vigila—: lo unico que cambia es cuantas familias acepta el
+    // filtro. `reprogramacion_tienda` sigue FUERA a proposito (D6).
     const arg = (prisma.ordenHistorialEstado.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.where).toEqual({
       ordenId: { in: ["o-tienda", "o-propia"] },
       gestionOrdenId: { in: ["g-tienda", "g-propia"] },
-      origenTipo: "gestion_tienda_ayuda",
+      origenTipo: { in: ["gestion_tienda_ayuda", "rechazo_tienda"] },
     });
     expect(arg.select).toEqual({ gestionOrdenId: true });
   });
@@ -527,12 +532,21 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     return tx;
   }
 
+  // Feature 246 (T2.3): el ancla de la corrida — la fecha CR de la jornada que el corte CIERRA
+  // (`@db.Date`: medianoche UTC). La calcula el service una vez y viaja dentro de `corteSinGestionar`
+  // para que sea LITERALMENTE el mismo valor que filtro la seleccion (R16).
+  const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
+  // Feature 246: el `OR` que separa lo reservado de lo barrible, tal como el repo lo construye.
+  const OR_NO_RESERVADA = [{ fechaReparto: null }, { fechaReparto: { lte: DIA_CERRADO } }];
+
   const CORTE = {
     enRepartoEstatusId: idEstado("en_reparto"),
     // Feature 235 (T4.4, R26): OBLIGATORIO en `CorteSinGestionarInput`. Un olvido de cableado
     // rompe el TYPECHECK en vez de dejar ordenes en ayuda sin barrer para siempre.
     ayudaEstatusId: idEstado("ayuda_tienda"),
     sinGestionarEstatusId: idEstado("sin_gestionar"),
+    // Feature 246 (T2.3, R11/R16): tambien OBLIGATORIO, y por el mismo motivo.
+    diaCerrado: DIA_CERRADO,
   };
   function corteInput(overrides: Record<string, unknown> = {}) {
     return {
@@ -562,10 +576,19 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       mensajeroAsignadoId: "m1",
       estatusId: idEstado("en_reparto"),
       deletedAt: null,
+      OR: OR_NO_RESERVADA, // feature 246/R11: el dia entra en el WHERE, no en memoria
     });
     // updateMany GUARDADO por estatus_id=en_reparto -> sin_gestionar; NO limpia mensajero (Q1).
     const upd = tx.orden.updateMany.mock.calls[0][0];
-    expect(upd.where).toEqual({ id: { in: ["o1", "o2"] }, estatusId: idEstado("en_reparto"), deletedAt: null });
+    expect(upd.where).toEqual({
+      id: { in: ["o1", "o2"] },
+      estatusId: idEstado("en_reparto"),
+      deletedAt: null,
+      // Feature 246 (R11/R16): el filtro de dia SE REPITE en el `updateMany`, que es quien de
+      // verdad escribe. Dejarlo solo en el pre-SELECT haria que una orden reservada que entrase
+      // por la lista de ids se barriera igual.
+      OR: OR_NO_RESERVADA,
+    });
     expect(upd.data).toEqual({ estatusId: idEstado("sin_gestionar") });
     expect(upd.data).not.toHaveProperty("mensajeroAsignadoId"); // se conserva
     expect(upd.data).not.toHaveProperty("prioridad"); // money-safe: no toca prioridad
@@ -650,6 +673,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       mensajeroAsignadoId: "m1",
       estatusId: idEstado("ayuda_tienda"),
       deletedAt: null,
+      OR: OR_NO_RESERVADA, // feature 246/R11: la proteccion alcanza tambien al bloque de ayuda
     });
     // DOS `updateMany`, cada uno GUARDADO por SU origen.
     expect(tx.orden.updateMany).toHaveBeenCalledTimes(2);
@@ -657,6 +681,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       id: { in: ["a1", "a2"] },
       estatusId: idEstado("ayuda_tienda"),
       deletedAt: null,
+      OR: OR_NO_RESERVADA,
     });
   });
 
@@ -1902,5 +1927,271 @@ describe("Feature 158/R16 — crearCierre vincula tambien las gestiones `inciden
     expect(calls[2][0].data.ingresoBodegaRechazo.toString()).toBe("0");
     // Y la `indemnizacion` NO se toca al SOLICITAR: se captura al APROBAR (R19/R22).
     for (const c of calls) expect(c[0].data).not.toHaveProperty("indemnizacion");
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T2.3/T3.4, R8/R10/R11/R12/R15/R20) — EL BARRIDO DEL CORTE Y EL DIA DE REPARTO.
+//
+// POR QUE ESTOS CASOS VIVEN AQUI Y NO EN EL SERVICIO. Aqui es donde vive el `WHERE`. Este repo ya
+// midio CUATRO VECES que una mutacion del `where` pasa en verde por los tests de servicio, porque
+// usan dobles y no ven el SQL. El doble de abajo aplica DE VERDAD el `OR` de fecha sobre un
+// conjunto de filas: si el `OR` sale del `updateMany`, estos casos se ponen ROJOS.
+// =================================================================================================
+describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no ha llegado", () => {
+  const DIA_CERRADO_B = new Date("2026-08-20T00:00:00.000Z");
+  const F_MANANA = new Date("2026-08-21T00:00:00.000Z"); // reservada: sobrevive
+  const F_HOY = new Date("2026-08-20T00:00:00.000Z"); // == diaCerrado: se barre
+  const F_AYER = new Date("2026-08-19T00:00:00.000Z"); // < diaCerrado: se barre
+
+  interface FilaBarrido {
+    id: string;
+    estatusId: string;
+    fechaReparto: Date | null;
+  }
+
+  interface RamaFecha {
+    fechaReparto?: null | { lte?: Date };
+  }
+
+  /** ¿Casa esta fila el `OR` de fecha que el repositorio metio en el `where`? */
+  function casaFecha(f: FilaBarrido, or: RamaFecha[] | undefined): boolean {
+    if (or === undefined) return true; // el `where` SIN el predicado: no filtra nada
+    return or.some((rama) => {
+      if (rama.fechaReparto === null) return f.fechaReparto === null;
+      const lte = rama.fechaReparto?.lte;
+      if (lte === undefined) return false;
+      return f.fechaReparto !== null && f.fechaReparto.getTime() <= lte.getTime();
+    });
+  }
+
+  /**
+   * `tx` cuyo `orden.findMany` y `orden.updateMany` HONRAN el `where`: filtran por estatus de
+   * origen y por el `OR` de fecha sobre `filas`. `updateMany` ademas registra QUE ids escribio,
+   * que es lo que se afirma (el `count` de siempre no distingue «no la vio» de «no la escribio»).
+   */
+  function buildTxSemantico(filas: FilaBarrido[]) {
+    const escritas: string[] = [];
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
+      orden: {
+        findMany: vi.fn(
+          async (args: { where: { estatusId: string; OR?: RamaFecha[] } }) =>
+            filas
+              .filter((f) => f.estatusId === args.where.estatusId && casaFecha(f, args.where.OR))
+              .map((f) => ({ id: f.id })),
+        ),
+        updateMany: vi.fn(
+          async (args: {
+            where: { id: { in: string[] }; estatusId: string; OR?: RamaFecha[] };
+          }) => {
+            const alcanzadas = filas.filter(
+              (f) =>
+                args.where.id.in.includes(f.id) &&
+                f.estatusId === args.where.estatusId &&
+                casaFecha(f, args.where.OR),
+            );
+            for (const f of alcanzadas) escritas.push(f.id);
+            return { count: alcanzadas.length };
+          },
+        ),
+      },
+      gestionOrden: {
+        updateMany: vi.fn(async () => ({ count: 0 })),
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
+    };
+    return { tx, escritas };
+  }
+
+  function corteConDia(filas: FilaBarrido[]) {
+    const { tx, escritas } = buildTxSemantico(filas);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+    return {
+      escritas,
+      tx,
+      run: () =>
+        repo.crearCierre({
+          mensajeroId: "m1",
+          estado: "vencido" as const,
+          destinoTipo: "bodega_satelite" as const,
+          destinoZonaId: "z1",
+          corteSinGestionar: {
+            enRepartoEstatusId: idEstado("en_reparto"),
+            ayudaEstatusId: idEstado("ayuda_tienda"),
+            sinGestionarEstatusId: idEstado("sin_gestionar"),
+            diaCerrado: DIA_CERRADO_B,
+          },
+          totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+          pagoByGestionId: {},
+          totalPagoMensajero: "0.00",
+          ingresoByGestionId: {},
+          totalIngresoBodegaRechazos: "0.00",
+        }),
+    };
+  }
+
+  it("R11: la orden reservada para MAÑANA no se barre — y sin nada mas que barrer, no hay cierre", async () => {
+    // EL caso de la ficha, medido donde se escribe. Sin el `OR` en el `updateMany`, `escritas`
+    // trae la orden y el cierre `vencido` nace: exactamente lo que la 241 convierte en un bloqueo.
+    const { run, escritas } = corteConDia([
+      { id: "o-manana", estatusId: idEstado("en_reparto"), fechaReparto: F_MANANA },
+    ]);
+
+    const id = await run();
+
+    expect(escritas).toEqual([]);
+    expect(id).toBeNull(); // guarda «algo paso»: 0 gestiones + 0 transiciones -> rollback
+  });
+
+  it("R12: la de AYER y la SIN FECHA se barren exactamente como antes de esta ficha", async () => {
+    const { run, escritas } = corteConDia([
+      { id: "o-ayer", estatusId: idEstado("en_reparto"), fechaReparto: F_AYER },
+      { id: "o-sin", estatusId: idEstado("en_reparto"), fechaReparto: null },
+    ]);
+
+    const id = await run();
+
+    expect(escritas.sort()).toEqual(["o-ayer", "o-sin"]);
+    expect(id).toBe("cv1");
+  });
+
+  it("R12: la reservada para HOY (== el dia que la corrida cierra) SI se barre", async () => {
+    // El limite exacto del predicado: `>` protege, `>=` no. Si alguien cambiara el operador,
+    // este caso o el de mañana cae.
+    const { run, escritas } = corteConDia([
+      { id: "o-hoy", estatusId: idEstado("en_reparto"), fechaReparto: F_HOY },
+    ]);
+
+    await run();
+
+    expect(escritas).toEqual(["o-hoy"]);
+  });
+
+  it("R15: MEZCLA — se barren solo las NO protegidas y la reservada queda intacta", async () => {
+    const { run, escritas } = corteConDia([
+      { id: "o-hoy", estatusId: idEstado("en_reparto"), fechaReparto: F_HOY },
+      { id: "o-manana", estatusId: idEstado("en_reparto"), fechaReparto: F_MANANA },
+      { id: "a-manana", estatusId: idEstado("ayuda_tienda"), fechaReparto: F_MANANA },
+      { id: "a-sin", estatusId: idEstado("ayuda_tienda"), fechaReparto: null },
+    ]);
+
+    const id = await run();
+
+    expect(escritas.sort()).toEqual(["a-sin", "o-hoy"]);
+    expect(id).toBe("cv1"); // hubo barrido, asi que el `vencido` se crea (R15)
+  });
+
+  it("R11: el historial NO registra la reservada — no hubo transicion que registrar", async () => {
+    const { run, tx } = corteConDia([
+      { id: "o-hoy", estatusId: idEstado("en_reparto"), fechaReparto: F_HOY },
+      { id: "o-manana", estatusId: idEstado("en_reparto"), fechaReparto: F_MANANA },
+    ]);
+
+    await run();
+
+    const filas = (
+      tx.ordenHistorialEstado.createMany.mock.calls as unknown as {
+        data: { ordenId: string }[];
+      }[][]
+    ).flatMap((c) => c[0].data);
+    expect(filas.map((f) => f.ordenId)).toEqual(["o-hoy"]);
+  });
+
+  it("R20: `NULL` significa UNA cosa — el predicado no pregunta «¿es de hoy?»", async () => {
+    // Una orden sin fecha se barre TANTO si el dia cerrado es hoy como si es otro cualquiera:
+    // `NULL` entra por la primera rama del `OR` y no depende del valor de `diaCerrado`.
+    const { run, escritas } = corteConDia([
+      { id: "o-sin", estatusId: idEstado("en_reparto"), fechaReparto: null },
+    ]);
+    await run();
+    expect(escritas).toEqual(["o-sin"]);
+  });
+
+  it("el doble detecta lo que dice detectar (autocomprobacion del filtro de fecha)", async () => {
+    // Si `casaFecha` dejara de filtrar, todos los casos de arriba pasarian con el `where` roto.
+    const fila: FilaBarrido = {
+      id: "x",
+      estatusId: idEstado("en_reparto"),
+      fechaReparto: F_MANANA,
+    };
+    expect(casaFecha(fila, undefined)).toBe(true); // sin `OR`: pasa (el `where` roto)
+    expect(
+      casaFecha(fila, [{ fechaReparto: null }, { fechaReparto: { lte: DIA_CERRADO_B } }]),
+    ).toBe(false); // con `OR`: la reservada NO pasa
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T3.4, R8/R10) — DESHACER UNA GESTION ESTAMPA EL DIA DE HOY.
+// =================================================================================================
+describe("246/R8 — deshacer gestion re-estampa asignacion Y dia de reparto", () => {
+  const INPUT_DESHACER = {
+    gestionId: "g1",
+    ordenId: "o1",
+    mensajeroId: "m1",
+    actorUsuarioId: "m1",
+    estatusEsperadoId: idEstado("en_bodega_central"),
+    estatusEnRepartoId: idEstado("en_reparto"),
+  };
+
+  function txDeshacer() {
+    return {
+      gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      orden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
+      usuario: { update: vi.fn(), updateMany: vi.fn() },
+    };
+  }
+
+  it("R8/R10: estampa `fechaReparto` en la MISMA escritura que `asignadoAt`", async () => {
+    // POR QUE: esta via no ofrece la eleccion de dia (nadie esta asignando un lote), asi que el
+    // dia es el de Costa Rica en curso. Y va JUNTO a `asignadoAt` porque las dos columnas no
+    // pueden contar historias distintas: si `asignado_at` dijera «te la acabo de reasignar» y
+    // `fecha_reparto` conservara la reserva de ayer, el corte de esta noche decidiria con un dato
+    // que ya no describe nada.
+    const tx = txDeshacer();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.anularGestionYDevolverAGestion(INPUT_DESHACER);
+
+    const data = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].data as {
+      asignadoAt: Date;
+      fechaReparto: Date;
+    };
+    expect(data.asignadoAt).toBeInstanceOf(Date);
+    expect(data.fechaReparto).toBeInstanceOf(Date);
+    // Es la convencion `@db.Date`: medianoche UTC de la fecha calendario CR. Si alguien usara
+    // `inicioDelDiaCREnUtc` (06:00Z) el dia se desplazaria seis horas — la trampa de la 166.
+    expect(data.fechaReparto.getUTCHours()).toBe(0);
+    expect(data.fechaReparto.getUTCMinutes()).toBe(0);
+    expect(data.fechaReparto.getUTCSeconds()).toBe(0);
+    expect(data.fechaReparto.getUTCMilliseconds()).toBe(0);
+  });
+
+  it("R8: el dia estampado es el DIA CR del instante de la escritura, no uno futuro", async () => {
+    const tx = txDeshacer();
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.anularGestionYDevolverAGestion(INPUT_DESHACER);
+
+    const data = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].data as {
+      asignadoAt: Date;
+      fechaReparto: Date;
+    };
+    // El dia de reparto NUNCA puede ser posterior al instante en que se asigno: si lo fuera, el
+    // corte de esta noche lo tomaria por una reserva y no barreria nunca esa orden.
+    expect(data.fechaReparto.getTime()).toBeLessThanOrEqual(data.asignadoAt.getTime());
   });
 });

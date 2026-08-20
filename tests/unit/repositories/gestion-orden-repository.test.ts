@@ -27,6 +27,8 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     longitud: new Prisma.Decimal("-84.0907246"),
     notas: null,
     mensajeroAsignadoId: "m1",
+    // Feature 246 (T3.7, R35): dia de reparto CRUDO (`@db.Date`: medianoche UTC de la fecha CR).
+    fechaReparto: new Date("2026-08-21T00:00:00.000Z"),
     estatus: { value: "por_recoger" },
     tienda: { nombre: "Tienda X" },
     zona: { nombre: "Centro" },
@@ -57,6 +59,35 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     expect(rows[0].tiendaNombre).toBe("Tienda X");
     expect(rows[0].montoCobrar).toBe(100);
     expect(rows[0].estatusValue).toBe("por_recoger");
+  });
+
+  // Feature 246 (T3.7, R35/R26): el dia de reparto viaja en la proyeccion QUE YA EXISTE. Sin
+  // consulta nueva: seria un N+1 sobre la pantalla mas caliente del portal del mensajero.
+  it("246/R35: pide `fechaReparto` en el select y la emite CRUDA, sin interpretarla", async () => {
+    const findMany = vi.fn(async () => [fakeAsignacionRow()]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+
+    const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
+    expect(arg.select.fechaReparto).toBe(true);
+    // CRUDA a proposito: quien decide si es «para mañana» es el SERVICIO, que tiene reloj. Un
+    // repositorio que devolviera el booleano tendria que leer la hora, y entonces dos filas del
+    // mismo listado podrian caer a distinto lado de la medianoche.
+    expect(rows[0].fechaReparto).toBeInstanceOf(Date);
+    expect((rows[0].fechaReparto as Date).toISOString()).toBe("2026-08-21T00:00:00.000Z");
+    expect(rows[0]).not.toHaveProperty("esParaManana");
+    // Y UNA sola consulta para todo el listado.
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("246/R35: una orden sin reserva emite `null`, no `undefined`", async () => {
+    const findMany = vi.fn(async () => [fakeAsignacionRow({ fechaReparto: null })]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+
+    expect(rows[0].fechaReparto).toBeNull();
   });
 
   it("R9: estados vacios -> no consulta y devuelve []", async () => {

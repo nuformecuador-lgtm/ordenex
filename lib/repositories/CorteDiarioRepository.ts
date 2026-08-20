@@ -25,6 +25,12 @@ const ESTADOS_CIERRE_ABIERTOS: CierreEstado[] = ["solicitado", "vencido", "recha
 // Es UNION, no sustitucion: `en_reparto` sigue estando. La guardia
 // `tests/unit/guards/carga-del-mensajero.guardia.test.ts` censa las dos listas y exige que digan lo
 // mismo.
+//
+// FEATURE 246 (T2.2/T8.1) — LA SELECCION YA NO ES SOLO POR ESTATUS: ES POR ESTATUS **Y DIA**.
+// Esta lista sigue diciendo QUE estados barre el corte, pero desde la 246 una orden en uno de esos
+// estados solo arrastra a su mensajero al bucle si su `fecha_reparto` NO es posterior al dia que la
+// corrida cierra (o si no tiene ninguna). El predicado de dia esta abajo, en el `where` de la rama
+// (b), y es EL MISMO que aplica `CierreDiaRepository.crearCierre` al escribir (R16).
 const ESTADOS_A_BARRER = ["en_reparto", "ayuda_tienda"];
 
 type CortePrismaClient = Pick<PrismaClient, "gestionOrden" | "orden" | "cierreDia">;
@@ -46,8 +52,14 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
    * (`estado IN ('solicitado','vencido','rechazado')`), para no crear un 2.º cierre bloqueante ni
    * violar el invariante generalizado (R30). Devuelve `zonaId` (usuario.zona_id) para derivar el
    * destino (R1). Solo queries (sin logica de negocio).
+   *
+   * FEATURE 246 (T2.2, R11/R14/R16/R17): `diaCerrado` llega YA CALCULADO desde el service —la
+   * fecha CR de la jornada que esta corrida cierra— y se usa tal cual en el `where` de la rama
+   * (b). Aqui NO se calcula ninguna fecha y NO hay aritmetica de zona horaria: si cada repositorio
+   * la derivara por su cuenta, dos consultas de la MISMA corrida podrian caer a distinto lado de
+   * la medianoche.
    */
-  async findMensajerosConActividadSinCierre(): Promise<MensajeroSinCierreRow[]> {
+  async findMensajerosConActividadSinCierre(diaCerrado: Date): Promise<MensajeroSinCierreRow[]> {
     // (a) actividad del dia aun sin cerrar. Feature 67/R17: una gestion ANULADA NO cuenta.
     const pendientes = await this.prisma.gestionOrden.findMany({
       where: { cierreId: null, anuladaAt: null },
@@ -65,6 +77,15 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
         deletedAt: null,
         estatus: { value: { in: ESTADOS_A_BARRER } },
         mensajeroAsignadoId: { not: null },
+        // Feature 246 (R11/R12/R16/R20) — EL PREDICADO GEMELO. Es LITERALMENTE el mismo `OR` que
+        // aplica `CierreDiaRepository.crearCierre` al escribir; si los dos dejaran de decir lo
+        // mismo, el barrido quedaria correcto «de crearCierre hacia dentro» y roto desde la
+        // seleccion hacia fuera — la forma exacta del fallo que la 235 costo.
+        //
+        // Se pregunta «¿esta reservada para un dia que AUN NO HA LLEGADO?», no «¿es de hoy?»: por
+        // eso `fechaReparto: null` entra POR LA PRIMERA RAMA y se barre igual que siempre (R19/R20).
+        // `NULL` significa una sola cosa aqui, y es «no reservada».
+        OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }],
       },
       distinct: ["mensajeroAsignadoId"],
       select: { mensajeroAsignadoId: true, mensajeroAsignado: { select: { zonaId: true } } },

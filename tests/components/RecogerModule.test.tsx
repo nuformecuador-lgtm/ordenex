@@ -558,3 +558,110 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     expect(screen.getByText("No hay órdenes por recoger.")).toBeInTheDocument();
   });
 });
+
+// Feature 246 (T5.2/T5.3) — LO QUE VE EL MENSAJERO con una orden RESERVADA para el día siguiente,
+// en el grupo «Por recoger», que es donde vive el 99 % de lo reservado.
+//
+// `esParaManana` llega YA RESUELTO desde el servidor (R26): el navegador no compara ninguna fecha
+// ni lee ningún reloj, así que estos casos fijan la orden con el booleano puesto, igual que lo
+// haría el DTO real. El texto se afirma con su literal escrito A MANO, nunca contra la constante
+// que lo produce.
+describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
+  /** La card de una remisión, sea cual sea la vista montada. */
+  function cardDe(numRemision: string): HTMLElement {
+    return screen.getByRole("article", {
+      name: new RegExp(`Orden ${numRemision}`),
+    });
+  }
+
+  it("R22: la card de la orden reservada dice «Para mañana» CON PALABRAS, y la de hoy no", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-MAN", esParaManana: true }),
+        makeAsignacion({ id: "r2", numRemision: "REM-HOY", esParaManana: false }),
+      ],
+    });
+
+    // La presencia y la ausencia, EMPAREJADAS y en la misma pantalla: sola, la ausencia
+    // pasaría en verde también si la segunda card no se hubiera renderizado.
+    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+    expect(within(cardDe("REM-HOY")).queryByText("Para mañana")).toBeNull();
+  });
+
+  it("R22: también lo dice en la vista DETALLE — la marca no depende de cómo se mire", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-MAN", esParaManana: true }),
+      ],
+    });
+
+    await cambiarVista(user, "Detalle");
+
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Órdenes por recoger" }),
+      ).toBeNull(),
+    );
+    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+  });
+
+  it("R22: sin el campo (DTO anterior a la feature) la card NO inventa la marca", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-VIEJA" })],
+    });
+
+    // Emparejado con su presencia: la card existe y se lee; lo que no está es la marca.
+    expect(within(cardDe("REM-VIEJA")).getByText(/REM-VIEJA/)).toBeInTheDocument();
+    expect(within(cardDe("REM-VIEJA")).queryByText("Para mañana")).toBeNull();
+  });
+
+  it("R23: la orden reservada APARECE en su grupo de siempre — no se oculta ni se mueve", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({ id: "r1", numRemision: "REM-MAN", esParaManana: true }),
+      ],
+    });
+
+    const region = listado();
+    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
+    // Y cuenta en el contador del grupo: reservar no la saca de lo que el mensajero tiene
+    // pendiente de recoger.
+    expect(
+      within(region).getByText("1 Órdenes nuevas asignadas"),
+    ).toBeInTheDocument();
+    // Sigue habiendo por donde recogerla (la tarjeta de recogida se monta con el grupo lleno).
+    expect(accesoRecogida()).toBeInTheDocument();
+  });
+
+  it("R24: la orden reservada SE PUEDE RECOGER — la Server Action se llama con su id", async () => {
+    const user = userEvent.setup();
+    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          numGuia: 1001,
+          esParaManana: true,
+        }),
+      ],
+    });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1001");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    // ES LA MITAD DE D5 QUE UN TEST PUEDE SOSTENER: la reserva protege del corte de la noche,
+    // NO es un candado contra el mensajero. Que la acción SE LLAME es la afirmación; que no
+    // aparezca un error no lo sería (también estaría en verde si no pasara nada).
+    await vi.waitFor(() =>
+      expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r1"] }),
+    );
+    expect(errorMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+});

@@ -14,9 +14,39 @@ import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 // Feature 192 (B2.2/B7.2/B8.1-B8.3, design.md §5 y §5.bis) — LAS DOS CONSULTAS DEL TABLERO.
 //
 // SOLO LECTURA. Ni un `INSERT`, `UPDATE` ni `DELETE`; en particular NUNCA sobre
-// `orden.asignado_at` (R59): es el denominador del ranking diario del mensajero y moverla
-// mueve su pago y su premio. Aqui se lee en un `WHERE` y en un `SELECT`, y nada mas. Un
-// guardia lo atornilla (`tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts`).
+// `orden.asignado_at` (R59). Aqui se lee en un `WHERE` y en un `SELECT`, y nada mas. Un guardia lo
+// atornilla (`tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts`).
+//
+// ⚠️ CORRECCION (feature 246 / T8.1, 2026-08-20) — ESTE COMENTARIO AFIRMABA ALGO QUE YA NO ES
+// CIERTO, y se corrige en vez de dejarlo envejecer. Decia que `asignado_at` «es el denominador del
+// ranking diario del mensajero». Con **D7 firmada** (en contra de la recomendacion del spec de la
+// 246), el denominador del ranking pasa a contarse por **dia de reparto**
+// (`orden.fecha_reparto`), y `asignado_at` queda como la **rama de respaldo** de ese denominador:
+// solo cuenta las ordenes que NO tienen dia de reparto — las anteriores al despliegue.
+//
+// ⚠️ Y DE AHI SALE UNA CONSECUENCIA QUE HAY QUE SABER ANTES DE MIRAR ESTA PANTALLA: el CTE
+// `ids_del_dia` de aqui abajo sigue contando «asignadas hoy» por `asignado_at`, sin la rama del
+// dia de reparto. Por tanto, **desde el despliegue de la 246 el «asignadas hoy» de este tablero y
+// el denominador de `/ranking` pueden dar cifras distintas el mismo dia**: una orden asignada hoy
+// para mañana cuenta AQUI hoy y en el ranking mañana. Ninguna de las dos esta mal; miden cosas
+// distintas.
+//
+// ⚠️ Y ESO ES DELIBERADO: **D10 se firmo el 2026-08-20 y dice que este tablero NO sigue al
+// ranking**, en contra de la recomendacion del diseño. El motivo, en una linea: las dos pantallas
+// NO miden lo mismo. Este tablero responde «¿que carga le eche HOY a este mensajero?» —una
+// pregunta de OPERACION, y para esa `asignado_at` es el dato correcto: la orden entro en su monton
+// hoy, la reserve para el dia que la reserve—. El ranking responde «¿de que dia es esta orden a
+// efectos de su porcentaje?». Alinearlos no habria hecho que las dos dijeran la verdad: le habria
+// quitado a este su propia respuesta.
+//
+// Consecuencia practica, dicha aqui para que nadie la diagnostique como un bug: una orden asignada
+// hoy para mañana **cuenta HOY en esta pantalla y MAÑANA en `/ranking`**. Ninguna de las dos esta
+// mal. El razonamiento completo esta en `specs/246-asignacion-por-dia/requirements.md` §D10 y en
+// `design.md` §6.bis.7. Si algun dia se quiere alinearlas, el `OR` ya esta escrito y probado en
+// `RankingRepository` para copiarlo — pero es una decision nueva, no un arreglo.
+//
+// Lo que NO cambia: mover `asignado_at` sigue moviendo el pago y el premio de un mensajero, asi
+// que esta pantalla sigue sin escribirla NUNCA.
 //
 // Sin logica de negocio y sin validacion de permisos: el `filtro` llega YA resuelto por la
 // lista blanca del servicio. Lo que si hace este archivo es ESCRIBIRLO en el `WHERE` (R10),
@@ -197,6 +227,12 @@ export class TableroDiaRepository implements ITableroDiaRepository {
    * R37 — el predicado de `ids_reparto` (`mensajero_asignado_id IS NOT NULL` + rango de
    * `asignado_at`) es exactamente el prefijo del indice `(mensajero_asignado_id,
    * asignado_at)` que YA existe. Esta feature no crea ninguno.
+   *
+   * ⚠️ FEATURE 246 (2026-08-20): ese indice pasa a ser `(mensajero_asignado_id, asignado_at,
+   * fecha_reparto)` — se AMPLIA, no se sustituye por otro distinto. El prefijo sigue sirviendo a
+   * esta consulta con EL MISMO `Index Cond`, verificado con `EXPLAIN` y no supuesto. Si alguien
+   * reordenara las columnas de ese indice (p. ej. poniendo `fecha_reparto` delante), esta consulta
+   * perderia su plan sin que nada aqui se rompiera: por eso queda escrito de quien depende.
    */
   async contarPorMensajero(
     ventana: VentanaDiaCR,
