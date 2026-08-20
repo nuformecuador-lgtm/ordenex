@@ -2870,15 +2870,15 @@
       "name": "ayuda a la tienda: la pestana propia en novedades y su card",
       "spec_path": "specs/236-ayuda-tienda-novedades/",
       "description": "Fullstack. Hoy las ordenes con ayuda entran MEZCLADAS en la pestana de siempre, distinguidas solo por un badge de texto. Esta ficha les da su pestana propia, con la card y las acciones que el pedido describe, y REPONE la lectura del hilo del lado de la tienda: la nota con la que el mensajero pide ayuda hoy se escribe y NADIE la lee. Auditoria: progress/auditoria_ayuda_tienda.md (§4). Diseno: progress/design_pila_ayuda_tienda.md (F2).",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/236-ayuda-tienda-novedades",
       "depends_on": 235,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || EL DEFECTO MAS VISIBLE QUE ARREGLA: la nota de la solicitud de ayuda es obligatoria, se publica en el hilo... y la tienda no puede leerla, porque el commit 55723c83 retiro el boton «Notas» y el montaje del modal. El propio codigo lo dice en NovedadAcciones. La nota sin lector es la mitad del pedido tirada. || Hoy la card OCULTA «Reprogramar» y «Devolver» en las ordenes con ayuda, que es lo contrario de «aparece con la card que tiene todas las acciones». || Absorbe la ficha 228, que queda superada."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "IN_PROGRESS el 2026-08-19, con la 235 ya mergeada. Puerta humana PASADA: 47 requisitos EARS y 9 decisiones resueltas en specs/236-ayuda-tienda-novedades/requirements.md. || FIRMADO POR EL HUMANO: la pestana se llama «Ayuda solicitada» y va PRIMERA (se aparta a proposito del §F2, que decia «Ayuda a gestionar»: «gestionar» es el verbo del MENSAJERO en este repo); descarga PROPIA por pestana, y la de devoluciones deja de traer las de ayuda; y «Habilitar» deja de afirmar que habilito cuando no movio nada. || MEDIDO contra produccion: 0 notas vivas y 0 ordenes en devuelta/ayuda_tienda sobre 141 vivas. La ficha es PROSPECTIVA -no rescata datos, impide que se pierdan- y el ESTADO VACIO es el primero que la tienda vera. || CONFLICTO: toca /novedades y HabilitarNovedadResult, que la 240 tambien tocara. D8 se firma antes para que no se sobrescriban en silencio. || RIESGO nº1 del design: la guardia hilo-ventana-alcanzable se pondra roja por razon legitima; la reparacion esta escrita en design §2.4 y SUBE la propiedad. NO relajarla."
     },
     {
       "id": 237,

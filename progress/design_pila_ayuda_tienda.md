@@ -107,6 +107,13 @@ Lo que este cambio hace con Q5 es **cambiarle la forma**, con saldo mixto:
 
 ### F2 · La pestaña «Ayuda a gestionar» en novedades
 
+> ✏️ **EL ROTULO CAMBIA, firmado por el humano el 2026-08-19 (ficha 236, D6): la pestaña se llama
+> «Ayuda solicitada», no «Ayuda a gestionar».** La razón: **«gestionar» es el verbo del MENSAJERO**
+> en este repo —«por gestionar», «Gestionar más tarde», «Gestionar esta orden»— así que ponerlo en la
+> pantalla de la tienda le atribuye un gesto que no es suyo; y menos ahora, que **gestionar desde
+> ayuda es la ficha 237** y todavía no existe. Va **primera** de las tres pestañas, y el chip de la
+> card pasa a «Esperando tu respuesta».
+
 - Tercera pestaña en `NovedadesTabs.tsx`; predicado hermano de `novedadWhere`.
 - «Habilitar» llama a `rescatarOrdenAyuda` de F1. El hilo se monta **dentro de la card**.
 - El juego de botones se decide **según el origen de la orden, en un solo sitio**.
