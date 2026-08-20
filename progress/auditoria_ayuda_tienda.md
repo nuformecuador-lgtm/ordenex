@@ -112,6 +112,13 @@ la pestaña nueva; la gestión de la tienda que cuenta como del mensajero; «Hab
 desenlace de las no gestionadas; el escaneo al aprobar; el re-anclaje del reloj; la evidencia y el
 motivo obligatorios.
 
+> ✅ **AL DÍA — 2026-08-19.** De esta lista **caen dos parciales y una ausencia**, entregadas por la
+> ficha **236**: «la nota se escribe y **nadie la lee**» (la tienda la lee desde su card, y responde
+> sin rescatar) y «**la pestaña nueva**» (existe, se llama «Ayuda solicitada» y va primera). Las
+> ausencias de «que la orden salga de la ruta», «el bloqueo del cierre explícito» y ««Habilitar» =
+> rescate» las cerró la **235**; «el escaneo al aprobar», la **238**. Siguen abiertas: la gestión de
+> la tienda que cuenta como del mensajero (**237**) y el desenlace de las no gestionadas.
+
 **Hace lo contrario (1):** el punto 12. `NovedadAcciones.tsx:116` —
 `puedeHabilitar = esDevuelta || novedad.ayuda === true` — así que «Habilitar» aparece justo en las
 cards que vienen de un cierre, que es donde el pedido decía que **no** debía estar.

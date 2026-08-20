@@ -28,7 +28,7 @@
       > Lo que la re-medición puede cambiar: si ya hay órdenes en `ayuda_tienda`, la ficha pasa de
       > **prospectiva** a **correctiva** —hay solicitudes reales esperando lectura desde el primer
       > minuto— y el aviso a las tiendas deja de ser opcional.
-- [ ] **T0.2 — Firmar las decisiones abiertas.** **D1** (qué muestra la pestaña), **D2** («Habilitar»
+- [x] **T0.2 — Firmar las decisiones abiertas.** **D1** (qué muestra la pestaña), **D2** («Habilitar»
       conserva la nota), **D3** (la descarga), **D4** (escribir sin rescatar), **D5** (dónde se monta
       el hilo), **D6** (**todos los textos**), **D7** (el orden de la lista), **D8** («Habilitar» que
       no mueve nada).
@@ -43,7 +43,7 @@
 
 ## T1 — La declaración única *(inerte: puede salir suelta)*
 
-- [ ] **T1.1 — `lib/types/novedad-grupo.ts`** (módulo puro): `GrupoNovedad`, `GRUPOS_NOVEDAD` (que
+- [x] **T1.1 — `lib/types/novedad-grupo.ts`** (módulo puro): `GrupoNovedad`, `GRUPOS_NOVEDAD` (que
       además fija el **orden de las pestañas**), `ESTATUS_POR_GRUPO` con
       `satisfies Record<GrupoNovedad, OrderStatusValue>`, y `grupoDeEstatus()` **derivado del mapa**.
       **Hecho:** `tests/unit/types/novedad-grupo.test.ts` afirma: los dos grupos están declarados;
@@ -58,43 +58,43 @@
 
 ## T2 — El corte en el servidor *(mismo PR que T3-T6; subagente de backend)*
 
-- [ ] **T2.1 — `novedadWhere(tiendaId, grupo)`**: pierde el `OR` y pasa a ser una igualdad tomada de
+- [x] **T2.1 — `novedadWhere(tiendaId, grupo)`**: pierde el `OR` y pasa a ser una igualdad tomada de
       `ESTATUS_POR_GRUPO`. **El nombre del método NO cambia** (`design.md` §2.2: la guardia del hilo
       lo localiza por nombre).
       **Hecho:** `tests/unit/repositories/orden-repository.novedades.test.ts` actualizado con nota
       fechada: por **cada** grupo de `GRUPOS_NOVEDAD` el `where` es `{ tiendaId, deletedAt: null,
       estatus: { value } }` y **nada más** (`Object.keys(where).sort()` fijado); ninguna rama lleva
       clave hermana; el cuerpo no menciona ninguna marca persistida. **Depende de:** T1.1.
-- [ ] **T2.2 — El rename y el grupo obligatorio**: `countNovedadesByTienda(tiendaId, grupo)` y
+- [x] **T2.2 — El rename y el grupo obligatorio**: `countNovedadesByTienda(tiendaId, grupo)` y
       `findNovedadesByTienda(tiendaId, grupo, pagination)` en `IOrdenRepository` y en el repositorio.
       **Hecho:** el typecheck **rompe** en todo call-site que no pase grupo — esa es la señal
       buscada—; ningún método conserva el nombre viejo. **Depende de:** T2.1.
-- [ ] **T2.3 — La invariante, ahora iterando los grupos.** El caso «count y find comparten
+- [x] **T2.3 — La invariante, ahora iterando los grupos.** El caso «count y find comparten
       EXACTAMENTE el mismo where» pasa a recorrer `GRUPOS_NOVEDAD`.
       **Hecho:** el caso itera (no se duplica a mano), así que un grupo nuevo entra **solo** a la
       aserción; y un caso testigo afirma que **una orden de un grupo no casa el predicado del otro**.
       **Depende de:** T2.2. **Cubre:** R4, R9.
-- [ ] **T2.4 — [P] El servicio gana el grupo.** `listar({ page, pageSize, grupo })` y
+- [x] **T2.4 — [P] El servicio gana el grupo.** `listar({ page, pageSize, grupo })` y
       `listarCompleto({ grupo })`, **sin partirse en dos** (`design.md` §3). Para el grupo `ayuda`
       **no se consulta la causa** y el DTO la emite `null`.
       **Hecho:** `tests/unit/services/NovedadesService.test.ts` con: rol distinto de `adminTienda`
       → `forbidden` **antes** de tocar el repo, en los dos grupos y en los dos métodos; para `ayuda`
       `findCausasDevueltaVigentes` **no se llama**; el alcance sale del actor y nunca del input.
       **Depende de:** T2.2. **Cubre:** R10, R11, R26 (mitad).
-- [ ] **T2.5 — El orden de la lista de ayuda (D7).** `findFechaSolicitudAyuda(ordenIds)` —**una**
+- [x] **T2.5 — El orden de la lista de ayuda (D7).** `findFechaSolicitudAyuda(ordenIds)` —**una**
       consulta agregada por página, molde de `findCausasDevueltaVigentes`— y el servicio ordena el
       grupo `ayuda` por esa fecha, con `createdAt` como fallback documentado.
       **Hecho:** un caso afirma **una sola** llamada para toda la página (nunca una por fila), otro
       el orden resultante, y otro que una orden sin fecha de solicitud cae al fallback sin romper.
       **Depende de:** T2.4. **Cubre:** R17.
-- [ ] **T2.6 — Las dos Server Actions nuevas.** `listarAyudaTiendaAction` y
+- [x] **T2.6 — Las dos Server Actions nuevas.** `listarAyudaTiendaAction` y
       `listarAyudaTiendaCompletoAction`, espejo literal de las de devoluciones. **El grupo NO viaja en
       el input** (`design.md` §4).
       **Hecho:** `tests/unit/actions/novedades-ayuda.test.ts`: sin sesión → `unauthenticated` **sin
       tocar el servicio**; `page` inválido → `validation_error`; el listado completo rechaza
       **cualquier** clave (`.strict()`); y un caso afirma que **no existe** ninguna clave de entrada
       con la que el cliente pueda elegir el grupo. **Depende de:** T2.4. **Cubre:** R2 (mitad), R11.
-- [ ] **T2.7 — Reparar `hilo-ventana-alcanzable`** (`design.md` §2.4). Los estatus de la pantalla de
+- [x] **T2.7 — Reparar `hilo-ventana-alcanzable`** (`design.md` §2.4). Los estatus de la pantalla de
       la tienda pasan a leerse del **valor importado** `ESTATUS_POR_GRUPO`; se **añade** la aserción
       que ata el predicado al mapa (el cuerpo de `novedadWhere` **no contiene ningún literal de
       estatus**); y la propiedad **sube**: los estatus que la tienda alcanza son **exactamente**
@@ -111,16 +111,16 @@
 
 ## T3 — Las descargas *(mismo PR; subagente de backend)*
 
-- [ ] **T3.1 — [P] La descarga de devoluciones deja de traer las de ayuda.** Sale del grupo, sin
+- [x] **T3.1 — [P] La descarga de devoluciones deja de traer las de ayuda.** Sale del grupo, sin
       tocar su archivo de columnas.
       **Hecho:** un caso afirma que el listado completo del grupo `devolucion` no incluye ninguna
       orden en el estatus de ayuda. **Depende de:** T2.4. **Cubre:** R38.
-- [ ] **T3.2 — [P] El archivo de columnas de la descarga de ayuda**, **sin** columna de causa, con
+- [x] **T3.2 — [P] El archivo de columnas de la descarga de ayuda**, **sin** columna de causa, con
       intentos de contacto e intentos de entrega. Módulo puro, valores crudos (`null` = celda vacía).
       **Hecho:** `tests/unit/descarga/ayuda-descarga-columnas.test.ts` afirma las columnas exactas,
       que **no** existe la de causa, que la guía nula deja celda vacía (no el placeholder de
       pantalla) y que el `0` de intentos **sí** viaja. **Depende de:** T0.2 (D3). **Cubre:** R39.
-- [ ] **T3.3 — El tope de filas, en el servidor, para los dos grupos.**
+- [x] **T3.3 — El tope de filas, en el servidor, para los dos grupos.**
       **Hecho:** un caso por grupo: superado el tope → `limite_excedido` con **conteos y ninguna
       fila**. **Depende de:** T2.4. **Cubre:** R37, R40.
 
@@ -130,25 +130,25 @@
 
 ## T4 — La pestaña y sus textos *(mismo PR; subagente de FRONTEND)*
 
-- [ ] **T4.1 — La tercera pestaña.** `NovedadesTabs` pasa a tres ítems **en el orden de
+- [x] **T4.1 — La tercera pestaña.** `NovedadesTabs` pasa a tres ítems **en el orden de
       `GRUPOS_NOVEDAD`** (ayuda primero, D6), conservando `keepMounted`; la página añade su pre-fetch
       al `Promise.all` y su fallback a vacío.
       **Hecho:** `tests/components/NovedadesTabs.test.tsx` afirma los tres rótulos y que cambiar de
       pestaña **no reinicia** la paginación de la otra; `NovedadesPage.test.tsx` gana el caso de que
       un fallo de la lectura de ayuda **no** tumba la página. **Depende de:** T2.6.
       **Cubre:** R1, R12, R15.
-- [ ] **T4.2 — El módulo, parametrizado por grupo** (rótulos del estado vacío, `aria-label` de la
+- [x] **T4.2 — El módulo, parametrizado por grupo** (rótulos del estado vacío, `aria-label` de la
       lista, de la paginación y de la descarga), **sin duplicar** el componente.
       **Hecho:** un caso por grupo comprueba que los nombres accesibles de la lista y de la
       paginación son los suyos y no los del otro. **Depende de:** T4.1.
-- [ ] **T4.3 — [P] El estado vacío de la pestaña de ayuda (R16).** Título y detalle firmados en D6.
+- [x] **T4.3 — [P] El estado vacío de la pestaña de ayuda (R16).** Título y detalle firmados en D6.
       **Hecho:** se lee **el texto**, no la ausencia de filas; y se afirma que **no** se renderiza una
       lista vacía. Es el primer estado que la tienda va a conocer (medición). **Depende de:** T4.2.
       **Cubre:** R16.
-- [ ] **T4.4 — [P] El subtítulo de la página deja de mentir (R14).** Nombra las **tres** superficies.
+- [x] **T4.4 — [P] El subtítulo de la página deja de mentir (R14).** Nombra las **tres** superficies.
       **Hecho:** un caso lee el texto y afirma que ya **no** dice el de hoy. Español con tildes, sin
       siglas ni jerga. **Depende de:** T0.2 (D6). **Cubre:** R13, R14.
-- [ ] **T4.5 — [P] El corte es del servidor, y se prueba desde el cliente (R2).**
+- [x] **T4.5 — [P] El corte es del servidor, y se prueba desde el cliente (R2).**
       **Hecho:** el módulo pinta **lo que recibe**; un caso le pasa a la pestaña de ayuda una lista
       con una orden de otro grupo y afirma que el componente **no la filtra** — la partición no vive
       aquí. Y un censo afirma que **ningún componente de `/novedades` particiona `items` por
@@ -160,7 +160,7 @@
 
 ## T5 — La card y el punto único de los botones *(mismo PR; subagente de FRONTEND)*
 
-- [ ] **T5.1 — `novedad-acciones-catalogo.ts`**: `AccionNovedad`, `ACCIONES_POR_GRUPO` con
+- [x] **T5.1 — `novedad-acciones-catalogo.ts`**: `AccionNovedad`, `ACCIONES_POR_GRUPO` con
       `satisfies Record<GrupoNovedad, readonly AccionNovedad[]>`. `contacto` **dentro** de la tabla.
       `habilitar` en `devolucion` **con su comentario de dueño** (punto 12 → ficha 240).
       **Hecho:** `tests/unit/types/novedad-acciones-catalogo.test.ts` fija el juego exacto de cada
@@ -169,13 +169,13 @@
       grupo nuevo en `ESTATUS_POR_GRUPO` rompe aquí el typecheck, así que lo que el servidor lista y
       lo que la pantalla ofrece no pueden describir grupos distintos (R6).
       **Depende de:** T1.1, T0.2. **Cubre:** R6, R18, R20.
-- [ ] **T5.2 — `NovedadAcciones` se reescribe contra la tabla.** Desaparecen `esDevuelta`, `esAyuda`,
+- [x] **T5.2 — `NovedadAcciones` se reescribe contra la tabla.** Desaparecen `esDevuelta`, `esAyuda`,
       `puedeHabilitar` y los tres `...(cond ? [x] : [])`. El grupo sale de
       `grupoDeEstatus(novedad.estatusValue)`; `null` → **ninguna acción de resolución** (R21).
       **Hecho:** `tests/components/NovedadAcciones.test.tsx`: un caso por grupo censa **los nombres
       accesibles** de la fila (ni uno más ni uno menos); un caso con un estatus ajeno afirma que sólo
       quedan los de contacto. **Depende de:** T5.1. **Cubre:** R21, R22, R23.
-- [ ] **T5.3 — Guardia de copia única (R19).**
+- [x] **T5.3 — Guardia de copia única (R19).**
       `tests/unit/guards/novedad-acciones-una-tabla.guardia.test.ts`: censo del árbol; ningún archivo
       de `app/(app)/novedades/` fuera del catálogo y sus tests decide si una acción se ofrece
       comparando `estatusValue` con un literal.
@@ -183,12 +183,12 @@
       (**autocomprobación dentro del propio archivo**). ⚠️ El censo se escribe **en un archivo de
       test, nunca por `node -e`**: ahí `\b` llega como backspace y el censo miente en verde.
       **Depende de:** T5.2. **Cubre:** R19.
-- [ ] **T5.4 — [P] El chip de la card y la causa (R26).** El grupo de ayuda deja de pintar «Ayuda ·
+- [x] **T5.4 — [P] El chip de la card y la causa (R26).** El grupo de ayuda deja de pintar «Ayuda ·
       \<causa\>» y pasa al texto firmado en D6.
       **Hecho:** un caso afirma que sobre una orden del grupo de ayuda **no** aparece ningún texto de
       causa, ni siquiera «Sin causa registrada» — R26 prohíbe también **anunciar su ausencia**.
       **Depende de:** T5.2. **Cubre:** R26.
-- [ ] **T5.5 — «Habilitar» desde la pestaña de ayuda (R24/R25).** La fila sale de la lista y el total
+- [x] **T5.5 — «Habilitar» desde la pestaña de ayuda (R24/R25).** La fila sale de la lista y el total
       baja. Si se firmó **D8**, el aviso distingue «se devolvió a la ruta» de «no se movió».
       **Hecho:** un caso para el camino feliz (fila fuera, total −1) y otro para el rescate que **no
       se aplica**: la pantalla **no afirma** que la devolvió. **Depende de:** T5.2, T0.2 (D2, D8).
@@ -200,36 +200,36 @@
 
 ## T6 — El hilo del lado tienda *(mismo PR; subagente de FRONTEND)*
 
-- [ ] **T6.1 — Reponer el montaje.** `NovedadesModule` gana `ordenConHilo` (montaje condicional con
+- [x] **T6.1 — Reponer el montaje.** `NovedadesModule` gana `ordenConHilo` (montaje condicional con
       `key={orden.id}`) y la acción `conversacion` lo abre. **No se escribe ningún hilo nuevo**:
       `HiloNotasNovedadModal` está entero en disco.
       **Hecho:** `tests/components/NovedadesHilo.test.tsx` afirma que la acción existe en la fila del
       grupo de ayuda, que abre el modal, y que **con el modal cerrado el hilo no está en el árbol**.
       **Depende de:** T5.2. **Cubre:** R27.
-- [ ] **T6.2 — El motivo de la ayuda se lee (R28).** Con el hilo devolviendo la nota que el mensajero
+- [x] **T6.2 — El motivo de la ayuda se lee (R28).** Con el hilo devolviendo la nota que el mensajero
       publicó al pedir ayuda, la tienda la ve con su autor y su hora.
       **Hecho:** un caso lo afirma leyendo el texto de la nota. **Es el requisito por el que existe
       esta ficha**: si sólo se puede cubrir uno, es éste. **Depende de:** T6.1. **Cubre:** R28.
-- [ ] **T6.3 — [P] No se lee el hilo al listar (R29).**
+- [x] **T6.3 — [P] No se lee el hilo al listar (R29).**
       **Hecho:** al renderizar una página, `listarNotasOrden` **no se llama ni una vez**; y
       `NovedadDTO` **no gana ninguna clave de notas** (afirmado sobre el DTO, no sobre un comentario).
       **Depende de:** T6.1. **Cubre:** R29.
-- [ ] **T6.4 — [P] `puedeEscribir` viene del servidor (R30/R31/R32/R34).**
+- [x] **T6.4 — [P] `puedeEscribir` viene del servidor (R30/R31/R32/R34).**
       **Hecho:** con `puedeEscribir: true` el campo de escritura está y publicar **no** cambia el
       estado ni saca la fila; con `false`, el aviso de solo lectura se lee **y** el campo no se monta.
       Y un censo afirma que el modal **no compara el estatus** para decidirlo. **Depende de:** T6.1.
       **Cubre:** R30, R31, R32, R34.
-- [ ] **T6.5 — [P] El hilo vacío y los fallos (R33/R35).**
+- [x] **T6.5 — [P] El hilo vacío y los fallos (R33/R35).**
       **Hecho:** hilo sin notas → se lee el texto del estado vacío **y**, si puede escribir, el campo
       sigue ofreciéndose; y un caso por desenlace (`forbidden`, `unauthenticated`, fallo de
       transporte) leyendo **su** mensaje, distinto de los otros dos. **Depende de:** T6.1.
       **Cubre:** R33, R35.
-- [ ] **T6.6 — La enmienda de R35 de la 235, cerrada (R36).** Un test que cruza
+- [x] **T6.6 — La enmienda de R35 de la 235, cerrada (R36).** Un test que cruza
       `VENTANA_ESCRITURA` con las superficies montadas: **cada rol con ventana sobre `ayuda_tienda`
       tiene un sitio donde escribir** — el mensajero, `HiloNotasAyudaModal`; la tienda, éste.
       **Hecho:** el caso vive junto a la guardia del hilo (T2.7) y se pone **rojo** si se desmonta
       cualquiera de los dos. **Depende de:** T2.7, T6.1. **Cubre:** R36.
-- [ ] **T6.7 — [P] Los comentarios que dejan de ser ciertos.** `@sin-superficie` de
+- [x] **T6.7 — [P] Los comentarios que dejan de ser ciertos.** `@sin-superficie` de
       `HiloNotasNovedadModal`, la nota de `NovedadAcciones` («la tienda YA NO LEE NI RESPONDE el
       hilo») y la frase «esta pantalla lista exactamente las órdenes `devuelta`».
       **Hecho:** reescritos, **no borrados**: se conserva qué pasó y por qué, con fecha. Un
@@ -241,31 +241,31 @@
 
 ## T7 — Lo que no cambia, mutación y ver la app
 
-- [ ] **T7.1 — [P] Lo que esta ficha NO toca (R41-R46).** Sin código: se corre y se deja constancia
+- [x] **T7.1 — [P] Lo que esta ficha NO toca (R41-R46).** Sin código: se corre y se deja constancia
       de que siguen verdes **sin modificarse** las guardias de dinero (`ordenes-columnas-money-safe`,
       `dinero-sin-centimos`), las dos de criterio de intento, la de transiciones exhaustivas, la
       frontera de `orden_nota`, y las suites del portal del mensajero y del plazo de devolución.
       **Hecho:** la lista de suites y su resultado en `progress/impl_236.md`. Un rojo ahí **no es una
       aserción a actualizar**: es que aterrizó trabajo que no es de esta ficha. **Depende de:** T6.
       **Cubre:** R41, R42, R43, R44, R45, R46.
-- [ ] **T7.2 — [P] Nada de PII en registros (R47).** Censo: ningún `console.*` ni registro de
+- [x] **T7.2 — [P] Nada de PII en registros (R47).** Censo: ningún `console.*` ni registro de
       diagnóstico de los archivos tocados emite cuerpo de nota, teléfono, dirección ni nombre.
       **Hecho:** verde, con la lista de archivos barridos. **Depende de:** T6. **Cubre:** R47.
-- [ ] **T7.3 — Mutación: el corte del servidor corta de verdad.** Hacer que `novedadWhere` ignore el
+- [x] **T7.3 — Mutación: el corte del servidor corta de verdad.** Hacer que `novedadWhere` ignore el
       grupo (devolver el `OR` de hoy) y comprobar que la suite se pone **roja**.
       **Hecho:** **salida real pegada** en `progress/impl_236.md`, con el nombre de los tests que
       caen. Sin esa salida no cuenta: este repo ya tuvo un arnés de mutaciones que reportó 9/9
       supervivientes **dos veces sin haber ejecutado un test**. **Depende de:** T2, T4.
-- [ ] **T7.4 — [P] Mutación: el punto único de los botones.** Añadir `reprogramar` al grupo `ayuda` en
+- [x] **T7.4 — [P] Mutación: el punto único de los botones.** Añadir `reprogramar` al grupo `ayuda` en
       la tabla y comprobar que cae el censo de nombres accesibles de T5.2.
       **Hecho:** ídem, con salida real. **Depende de:** T5.
-- [ ] **T7.5 — [P] Mutación: la lectura del hilo.** Desmontar la acción `conversacion` y comprobar que
+- [x] **T7.5 — [P] Mutación: la lectura del hilo.** Desmontar la acción `conversacion` y comprobar que
       caen T6.1, T6.2 y **T6.6** — es la mutación que protege el motivo por el que existe la ficha.
       **Hecho:** ídem, con salida real. **Depende de:** T6.
-- [ ] **T7.6 — Guardias completas.** `pnpm run test:guardias` entero, con **atención especial** a
+- [x] **T7.6 — Guardias completas.** `pnpm run test:guardias` entero, con **atención especial** a
       `hilo-ventana-alcanzable` (T2.7), `orden-nota-frontera` y la guardia nueva de T5.3.
       **Hecho:** todas verdes. **Depende de:** T7.1-T7.5.
-- [ ] **T7.7 — VER LA APP, no sólo la suite.** En esta pila un recorrido de minutos encontró **dos
+- [x] **T7.7 — VER LA APP, no sólo la suite.** En esta pila un recorrido de minutos encontró **dos
       defectos serios** que la suite no veía (`progress/recorrido_235.md` §8), y el de la 238 encontró
       un **bloqueo duro**. Recorrido, como `adminTienda`:
       pedir ayuda desde el mensajero → entrar a `/novedades` → **ver la pestaña nueva y que es la
@@ -292,11 +292,11 @@
 
 ## T8 — Cierre documental
 
-- [ ] **T8.1 — [P] Cerrar la enmienda de R35 de la 235.** En
+- [x] **T8.1 — [P] Cerrar la enmienda de R35 de la 235.** En
       `specs/235-ayuda-tienda-estatus/requirements.md` §«RECONCILIACIÓN DE R35», anotar **CERRADA con
       fecha** y con el PR: su dueño era esta ficha.
       **Hecho:** la sección deja de leerse como deuda viva.
-- [ ] **T8.2 — [P] Anotar el aterrizaje** en `progress/design_pila_ayuda_tienda.md` §F2 (fecha, PR y
+- [x] **T8.2 — [P] Anotar el aterrizaje** en `progress/design_pila_ayuda_tienda.md` §F2 (fecha, PR y
       las respuestas a D1-D8) y en `progress/auditoria_ayuda_tienda.md` §4 (caen «la pestaña nueva» y
       «la nota se escribe y nadie la lee»).
       **Hecho:** ninguna de las dos secciones contradice al código.
