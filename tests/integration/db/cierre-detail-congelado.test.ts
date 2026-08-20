@@ -49,6 +49,10 @@ interface TarifaRow {
   valorFleteGam: Prisma.Decimal;
   valorFleteDevuelto: Prisma.Decimal;
   valorFleteDevueltoGam: Prisma.Decimal;
+  // 2026-08-19: columna NOT NULL de `tarifas` que el batch del resolver SELECCIONA (camino del
+  // snapshot). Va aqui, no en el escenario, porque el doble modela la FILA: si falta, el
+  // resolver lee `undefined.toFixed(2)` y estos tres casos mueren antes de medir nada.
+  fulfillment: Prisma.Decimal;
   comisionCod: Prisma.Decimal;
   ivaFlete: Prisma.Decimal;
   ivaComisionCod: Prisma.Decimal;
@@ -100,6 +104,7 @@ function makeDb() {
       valorFleteGam: dec("1500.00"),
       valorFleteDevuelto: dec("400.00"),
       valorFleteDevueltoGam: dec("600.00"),
+      fulfillment: dec("300.00"),
       comisionCod: dec("5.00"),
       ivaFlete: dec("13.00"),
       ivaComisionCod: dec("13.00"),
@@ -424,6 +429,7 @@ describe("Feature 69/R18 — cambiar la tarifa entre SOLICITAR y APROBAR no muev
       valorFleteGam: dec("8888.00"),
       valorFleteDevuelto: dec("9999.00"),
       valorFleteDevueltoGam: dec("9999.00"),
+      fulfillment: dec("8000.00"), // tambien MUY distinto del de `ta1` (300.00)
       comisionCod: dec("50.00"),
       ivaFlete: dec("99.00"),
       ivaComisionCod: dec("99.00"),
