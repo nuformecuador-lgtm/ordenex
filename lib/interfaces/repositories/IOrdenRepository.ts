@@ -5,6 +5,8 @@ import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHist
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
+import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -1371,23 +1373,32 @@ export interface IOrdenRepository {
   incrementarIntentoContacto(ordenId: string): Promise<number>;
 
   /**
-   * Feature 99/R7/R8 (Q7): cuenta las NOVEDADES de `tiendaId`. El predicado se ANCLA AL ESTADO
-   * REAL: una orden es novedad si su estatus ACTUAL es `devuelta` (R7), es de la tienda (R9) y no
-   * esta borrada (R5). Bajo la feature 99 la orden REPOSA en `devuelta` hasta que el cron SLA la
-   * libere/escale o la 100 la resuelva; al salir cae del conteo sin doble conteo (R8). Reemplaza
-   * el predicado por gestion vigente + estatus abierto de la feature 89 (ya innecesario).
-   * Alimenta el `total` paginado; comparte `where` con `findDevueltasByTienda` (R8).
+   * Feature 236 (T2.2, R4/R10): cuenta las NOVEDADES del `grupo` en `tiendaId`. El predicado es una
+   * IGUALDAD CON EL ESTADO ACTUAL tomada de `ESTATUS_POR_GRUPO` (`lib/types/novedad-grupo.ts`) —
+   * `ayuda` -> `ayuda_tienda`, `devolucion` -> `devuelta`—, mas la tienda del actor y `deleted_at IS
+   * NULL`. Alimenta el `total` paginado y comparte `where` con `findNovedadesByTienda` (R4).
+   *
+   * `grupo` es OBLIGATORIO y no opcional con default a proposito: un olvido de cableado tiene que
+   * romper el TYPECHECK, no listar en silencio el grupo equivocado. Mismo criterio que
+   * `CorteSinGestionarInput.ayudaEstatusId` (235) y `ResolverCierreInput.confirmacionFisica` (238).
+   *
+   * Sustituye a `countDevueltasByTienda(tiendaId)`, que decia «devueltas» y contaba las dos
+   * poblaciones a la vez.
    */
-  countDevueltasByTienda(tiendaId: string): Promise<number>;
+  countNovedadesByTienda(tiendaId: string, grupo: GrupoNovedad): Promise<number>;
   /**
-   * Feature 99/R7/R8/R9 (Q7): una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado que
-   * `countDevueltasByTienda` (estatus actual `= devuelta` + no borrada, R8), ordenada por
-   * `Orden.createdAt` desc (fallback; el orden estricto por fecha de la ultima gestion `devuelta`
-   * vigente lo aplica el service con la fecha traida por `findCausasDevueltaVigentes`, R9).
-   * `skip`/`take` para la paginacion. Solo los campos que consume el DTO + `createdAt`.
+   * Feature 236 (T2.2, R4/R10): una PAGINA de NOVEDADES del `grupo` en `tiendaId`, con el MISMO
+   * predicado que `countNovedadesByTienda` (R4). `orderBy Orden.createdAt desc` es el FALLBACK; el
+   * orden real lo aplica el service segun el grupo: la devolucion por la fecha de su ultima gestion
+   * vigente (`findCausasDevueltaVigentes`), la ayuda por la fecha de la SOLICITUD
+   * (`findFechaSolicitudAyuda`, D7/R17). `skip`/`take` para la paginacion. Solo los campos que
+   * consume el DTO + `createdAt`.
+   *
+   * Sustituye a `findDevueltasByTienda(tiendaId, pagination)`.
    */
-  findDevueltasByTienda(
+  findNovedadesByTienda(
     tiendaId: string,
+    grupo: GrupoNovedad,
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]>;
   /**
@@ -1398,8 +1409,25 @@ export interface IOrdenRepository {
    * `Map<ordenId, { causa, fecha }>` quedandose con la fila MAS RECIENTE por orden (R6). Las
    * ordenes sin fila en el mapa (sin gestion vigente) NO aparecen -> causa ausente (R7). `[]`
    * -> `Map` vacio.
+   *
+   * Feature 236 (R26): SOLO se consulta para el grupo `devolucion`. Sobre una orden en ayuda
+   * devolveria la causa de una devolucion ANTERIOR YA DESHECHA — un dato cierto que no describe por
+   * que esa orden esta en la pantalla, y que el archivo de la descarga publicaba como «Sin causa
+   * registrada» sobre algo que no es una devolucion.
    */
   findCausasDevueltaVigentes(ordenIds: string[]): Promise<Map<string, CausaDevueltaVigente>>;
+  /**
+   * Feature 236 (T2.5, D7/R17): fecha de la SOLICITUD DE AYUDA VIVA de TODAS las ordenes de la
+   * pagina, en UNA sola consulta agregada — hermana exacta de `findCausasDevueltaVigentes`, sobre
+   * `orden_historial_estado` en vez de sobre `gestion_orden`.
+   *
+   * Filtra por la familia de origen de la IDA (`solicitud_ayuda_tienda`, feature 235/P2), ordena
+   * desc y se queda con la MAS RECIENTE por orden: una orden puede haber sido rescatada y vuelta a
+   * pedir, y lo que ordena la pestaña es la espera VIVA. Las ordenes sin ninguna transicion de esa
+   * familia NO entran al mapa -> el service cae a `Orden.createdAt` (fallback documentado). `[]` ->
+   * `Map` vacio sin disparar la query. NUNCA una consulta por fila.
+   */
+  findFechaSolicitudAyuda(ordenIds: string[]): Promise<Map<string, Date>>;
 
   // --- Feature 102: rechazos por SLA de la tienda (superficie derivada de solo-lectura) ---
 

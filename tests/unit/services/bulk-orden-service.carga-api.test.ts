@@ -157,8 +157,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
     transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
     incrementarIntentoContacto: vi.fn(async (): Promise<number> => 0),
-    countDevueltasByTienda: vi.fn(async (): Promise<number> => 0),
-    findDevueltasByTienda: vi.fn(async () => []),
+    // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
+    countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),
+    findNovedadesByTienda: vi.fn(async () => []),
+    findFechaSolicitudAyuda: vi.fn(async () => new Map()),
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),

@@ -2756,13 +2756,13 @@
       "name": "transicion habilitar novedad (la tienda devuelve la orden a circulacion)",
       "spec_path": null,
       "description": "Fullstack. HOY NO EXISTE la arista 'la tienda habilita una orden devuelta y vuelve a circular'. Medido en lib/types/order-status-transiciones.ts:221-228: desde `devuelta` hay cinco aristas -en_bodega_central/en_bodega_satelite por SLA (#19/#20), rechazada por escalado (#21), reprogramada por reprogramacion_tienda (#22) y las recuperaciones manuales (#23/#24)- y NINGUNA es esa. Mientras tanto `app/(app)/novedades/_components/HabilitarNovedadModal.tsx` ya existe con su nota OBLIGATORIA y su firma DEFINITIVA `onConfirmar(nota: string)`, en MAQUETA declarada (su cabecera :37 lo dice) y con el consumidor lanzando un toast de 'no disponible' (NovedadesModule.tsx:155-163). Esta ficha construye la transicion real Y emite el UNICO aviso al mensajero, 'orden reactivada'.",
-      "status": "pending",
+      "status": "superseded",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": null,
       "depends_on": 227,
-      "status_note": "RENUMERADA DE 222 A 228 el 2026-08-15 junto con su hermana (221 -> 227): otras sesiones tomaron 221-226 en dev. Conserva slug y contenido. || DADA DE ALTA el 2026-08-14 al pasar la puerta humana de la 227, que la partio aqui. LA DEPENDENCIA VA AL REVES DE LO QUE PARECE y conviene no re-discutirlo: la 227 NO necesita esta ficha -entrega el hilo completo y util sin ella-; es ESTA la que necesita el hilo de la 227 donde sembrar su nota obligatoria. || ALCANCE: elegir el estatus destino, decidir si conserva el mensajero asignado, añadir la arista al grafo, muy probablemente un valor nuevo del enum orden_historial_origen_tipo (con migracion y down.sql que recrea el tipo), service + Server Action, cablear HabilitarNovedadModal, y los tests de la guardia de transiciones. Mas la notificacion. Tamaño comparable a la feature 100, no un añadido de una tanda. || LA NOTA DEL MODAL VA COMO PRIMERA NOTA DEL HILO, en la MISMA transaccion y ANTES del cambio de estatus: si se escribiera despues, la orden ya no estaria `devuelta` y el R14 de la 227 la rechazaria. El modal hoy no acota longitud ni revalida en el borde; al cablearlo debe aplicar el mismo esquema de 200 caracteres, porque una guarda de UI no protege un dato (lo advierte el propio archivo). || AVISO CRITICO HEREDADO (design §8.1 de la 227): si esta transicion aterriza en un estatus DISTINTO de `en_reparto`, el mensajero podra LEER el hilo pero NO RESPONDER -por la ventana asimetrica de la 227- y el aviso 'orden reactivada' lo llevaria a un hilo MUDO. Elegir el estatus destino con eso delante. || COSTE DE LA NOTIFICACION, YA MEDIDO POR EL SPEC DE LA 227 - no re-medir: solo hay que migrar el enum NotificacionEvento (inventario CERRADO de 4 valores, db/schema.prisma:1887-1894), NO NotificacionTipo, que ya tiene alert|box|warning reutilizables. El ALTER TYPE ADD VALUE va SOLO en su migracion porque Postgres no permite usar un valor recien añadido en la misma transaccion (55P04) y Prisma corre cada migration.sql en una; precedente literal en 20260721130000_orden_historial_origen_tipo_resolver_novedad/migration.sql:12-18. El down.sql debe RECREAR el tipo (no hay DROP VALUE) y hay que verificar si el recreate obliga a recrear el indice unico parcial notificacion_dedupe_key y los parciales del listado. Piezas: lib/types/notificacion.ts:14-18, lib/notificaciones/emitir.ts, notificadores.ts, wiring patron CierreDiaService, y CINCO suites que enumeran el inventario cerrado. || DECISION PROPIA DE ESTA FICHA, no heredada: el emisor central hace no-op si existe una notificacion NO LEIDA para el mismo (evento, entidad, destinatario) (emitir.ts:58-77). Con entidadId = ordenId eso significa que la segunda habilitacion de la misma orden no avisa hasta que el mensajero lea la primera. Probablemente sea lo deseado, pero hay que decidirlo."
+      "status_note": "SUPERADA por la 236, mergeada el 2026-08-19. La transicion de «Habilitar» ya existe como el punto unico de rescate de la 235 (rescatarOrdenAyuda) y la 236 le puso su pestana, su card y la lectura del hilo. No queda nada propio que hacer aqui; lo que sigue abierto de esa pantalla es el punto 12 del pedido y «Rechazar», que son de la 240."
     },
     {
       "id": 229,
@@ -2870,15 +2870,15 @@
       "name": "ayuda a la tienda: la pestana propia en novedades y su card",
       "spec_path": "specs/236-ayuda-tienda-novedades/",
       "description": "Fullstack. Hoy las ordenes con ayuda entran MEZCLADAS en la pestana de siempre, distinguidas solo por un badge de texto. Esta ficha les da su pestana propia, con la card y las acciones que el pedido describe, y REPONE la lectura del hilo del lado de la tienda: la nota con la que el mensajero pide ayuda hoy se escribe y NADIE la lee. Auditoria: progress/auditoria_ayuda_tienda.md (§4). Diseno: progress/design_pila_ayuda_tienda.md (F2).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/236-ayuda-tienda-novedades",
       "depends_on": 235,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || EL DEFECTO MAS VISIBLE QUE ARREGLA: la nota de la solicitud de ayuda es obligatoria, se publica en el hilo... y la tienda no puede leerla, porque el commit 55723c83 retiro el boton «Notas» y el montaje del modal. El propio codigo lo dice en NovedadAcciones. La nota sin lector es la mitad del pedido tirada. || Hoy la card OCULTA «Reprogramar» y «Devolver» en las ordenes con ayuda, que es lo contrario de «aparece con la card que tiene todas las acciones». || Absorbe la ficha 228, que queda superada."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "DONE el 2026-08-19. Revision OK tras un rechazo POR TRAZABILIDAD (ningun .ts que tocar): una fila del mapa citaba un test que NUNCA existio y una bitacora publicaba una salida que no se reproducia. Acta con las dos partes en progress/review_236.md. || La tienda por fin LEE el motivo de la solicitud de ayuda, y responde sin rescatar la orden. La nota llevaba dias con contenido y sin lector desde que 55723c83 retiro el boton y su montaje. || CIERRA la enmienda de R35 de la 235: los dos roles vuelven a tener superficie alcanzable. || EL CORTE VIVE EN EL SERVIDOR y sale de una sola declaracion; count y find comparten predicado por construccion. La guardia hilo-ventana-alcanzable se reparo SUBIENDO la propiedad (igualdad exacta con la ventana de escritura), no relajandola. || ABIERTO: T0.1, re-medir produccion ANTES DE DESPLEGAR (0 ordenes en ayuda_tienda y 0 en devuelta cuando se midio; esa foto caduca). Sin ver con los ojos: la descarga por pestana (el sandbox bloquea) y D8, que necesita ganar la carrera contra el mensajero. || CONFLICTO: la 237 y la 240 comparten ACCIONES_POR_GRUPO, NovedadesModule y HabilitarNovedadResult. No en paralelo."
     },
     {
       "id": 237,

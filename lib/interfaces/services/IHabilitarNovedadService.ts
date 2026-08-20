@@ -26,9 +26,17 @@ export interface IHabilitarNovedadService {
    * hilo —visible, no perdido— y se corrige repitiendo la accion. El inverso, una orden retirada de
    * `/novedades` sin que conste por que, es el que NO puede ocurrir.
    *
-   * La ventana del `adminTienda` (`devuelta`) hace de guarda de estatus sin escribir ninguna: una
-   * orden que esta en `/novedades` por AYUDA y sigue en reparto NO se puede habilitar, que es
-   * coherente con que la UI tampoco ofrezca el boton sobre ella (`NovedadAcciones`).
+   * La ventana del `adminTienda` hace de guarda de estatus sin escribir ninguna: sea cual sea el
+   * estado, si el actor no puede escribir en el hilo de esa orden tampoco puede habilitarla.
+   *
+   * ⚠️ 2026-08-19 (feature 235/R34): esa ventana son ahora DOS estados —`devuelta` y
+   * `ayuda_tienda`—, asi que la tienda SI puede habilitar una orden con ayuda pedida; de hecho es
+   * su desenlace natural, y `NovedadAcciones` ofrece el boton sobre ella (feature 236/R22). Este
+   * parrafo decia lo contrario y era un arrastre de cuando la ventana tenia un solo valor.
+   *
+   * ⚠️ 2026-08-19 (feature 236, T5.5 — D8, R25): `ok` gana `rescatada`. Publicar la nota y mover la
+   * orden son DOS cosas, y hasta hoy la segunda se descartaba: la pantalla no tenia forma de saber
+   * si el rescate se aplico y afirmaba que si. Ver `HabilitarNovedadServiceResult`.
    */
   habilitar(
     input: HabilitarNovedadInput,

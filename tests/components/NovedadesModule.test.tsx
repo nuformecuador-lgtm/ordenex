@@ -24,9 +24,15 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // 2026-08-14: el módulo importa TAMBIÉN la lectura del listado completo (la que alimenta la
 // descarga). Un mock de módulo que no la declare no es un mock incompleto: vitest lanza al
 // resolver el import, así que el archivo entero moriría antes del primer caso.
+// Feature 236 (T4.2): el módulo importa las CUATRO lecturas (una pareja por grupo) y elige la del
+// suyo con `RECURSOS_POR_GRUPO`. El mock las declara todas por el mismo motivo que arriba: vitest
+// lanza al resolver el import, así que una que faltara mataría el archivo entero antes del primer
+// caso — no dejaría un caso rojo, dejaría cero casos.
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: vi.fn(),
   listarNovedadesCompletoAction: vi.fn(),
+  listarAyudaTiendaAction: vi.fn(),
+  listarAyudaTiendaCompletoAction: vi.fn(),
 }));
 
 // Feature 100 (T3.1/T3.2) — la acción "Reprogramar" ejecuta la reprogramación vía
@@ -56,19 +62,22 @@ const intentoContactoMock = vi.mocked(registrarIntentoContactoOrden);
 /** El re-fetch de página (R22). Sirve de anti-vacío: conmutar de vista NO debe invocarlo. */
 const listarNovedadesMock = vi.mocked(listarNovedadesAction);
 
-const { successMock, errorMock, infoMock } = vi.hoisted(() => ({
+const { successMock, errorMock, infoMock, warningMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
   // 2026-08-12: el canal `info` deja de ser un `vi.fn()` anónimo porque los dos botones de
   // MAQUETA ("Habilitar", "Rechazar") avisan por él y hay que poder afirmarlo.
   infoMock: vi.fn(),
+  // Feature 236 (D8): tampoco `warning`. Es el canal por el que la pantalla dice que la nota se
+  // publicó pero la orden NO volvió a la ruta, y un `vi.fn()` anónimo no deja leer ese texto.
+  warningMock: vi.fn(),
 }));
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
     success: successMock,
     error: errorMock,
-    warning: vi.fn(),
+    warning: warningMock,
     info: infoMock,
     show: vi.fn(),
     dismiss: vi.fn(),
@@ -141,7 +150,7 @@ afterEach(() => {
 
 describe("NovedadesModule", () => {
   it("R10: lista vacia -> estado vacio, sin filas", () => {
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
 
     expect(screen.getByText(/No tenés órdenes en devolución/i)).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Órdenes en devolución" })).toBeNull();
@@ -150,6 +159,7 @@ describe("NovedadesModule", () => {
   it("R9: por cada orden muestra guia, destinatario y botones de contacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", numGuia: 12345, destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -176,6 +186,7 @@ describe("NovedadesModule", () => {
   it("R9: numGuia null -> placeholder legible, no rompe la fila", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ numGuia: null })]}
         total={1}
         page={1}
@@ -192,6 +203,7 @@ describe("NovedadesModule", () => {
   it("pinta el producto de la novedad junto al icono de paquete (no un hueco)", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ producto: "Licuadora Oster", peso: 2.75 })]}
         total={1}
         page={1}
@@ -213,6 +225,7 @@ describe("NovedadesModule", () => {
   it("peso null (orden sin peso registrado) -> raya, y el producto SIGUE visible", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ producto: "Caja sellada", peso: null })]}
         total={1}
         page={1}
@@ -236,6 +249,7 @@ describe("NovedadesModule", () => {
   it("R11: muestra la etiqueta ES de la causa, nunca el slug crudo del enum", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ causa: "not_found" })]}
         total={1}
         page={1}
@@ -250,6 +264,7 @@ describe("NovedadesModule", () => {
   it("R7: causa null -> 'Sin causa registrada'", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ causa: null })]}
         total={1}
         page={1}
@@ -269,10 +284,25 @@ describe("NovedadesModule", () => {
   // `estatusValue: "ayuda_tienda"`. NO es una reescritura de los casos: el comportamiento visible
   // que afirman es EXACTAMENTE el mismo, lo que cambia es de dónde sale la verdad. La bandera se
   // retiró con su columna y el estatus la sustituye.
+  //
+  // ⚠️ FEATURE 236 (T5.4, R26 — D6 firmada por el humano el 2026-08-19): los DOS casos del badge
+  // cambian de aserción, y hay que decir por qué en vez de tocarlos en silencio.
+  //
+  //   · el texto pasa de «Ayuda solicitada» a **«Esperando tu respuesta»**: dentro de una pestaña
+  //     que ya se llama «Ayuda solicitada», repetirlo en cada card no informa;
+  //   · y la rama «Ayuda · \<causa\>» DESAPARECE. Esa causa venía de una devolución ANTERIOR ya
+  //     deshecha y no describe por qué la orden está en la pantalla — R26 prohíbe atribuírsela,
+  //     mostrarla **y anunciar su ausencia**. El caso que afirmaba «dice las DOS cosas» pasa a
+  //     afirmar lo contrario, que es lo que se decidió: NINGUNA causa sobre una orden en ayuda.
+  //
+  // Los fixtures se montan ya bajo `grupo="ayuda"`, que es la pestaña donde el servidor las lista
+  // desde esta ficha. El chip NO lo decide esa prop: lo decide el grupo de la FILA (ver el caso
+  // «el módulo pinta lo que recibe» más abajo, R2).
 
-  it("en `ayuda_tienda` sin causa -> badge «Ayuda solicitada», no «Sin causa registrada»", () => {
+  it("en el grupo de ayuda el chip dice «Esperando tu respuesta», no «Sin causa registrada»", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -280,15 +310,16 @@ describe("NovedadesModule", () => {
       />,
     );
 
-    expect(screen.getByText("Ayuda solicitada")).toBeInTheDocument();
+    expect(screen.getByText("Esperando tu respuesta")).toBeInTheDocument();
     // No hay devolución de la que registrar causa: anunciar su ausencia señalaría un hueco
-    // que no existe.
+    // que no existe (R26).
     expect(screen.queryByText("Sin causa registrada")).toBeNull();
   });
 
-  it("con ayuda pedida y una causa arrastrada: el badge dice las DOS cosas, sin tapar una con la otra", () => {
+  it("R26: con una causa ARRASTRADA, sobre una orden en ayuda no aparece ninguna causa", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ causa: "not_found", estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -296,12 +327,31 @@ describe("NovedadesModule", () => {
       />,
     );
 
-    expect(screen.getByText("Ayuda · Cliente no localizado")).toBeInTheDocument();
+    // El chip es el suyo…
+    expect(screen.getByText("Esperando tu respuesta")).toBeInTheDocument();
+    // …y la causa que el DTO trae NO se pinta en ninguna parte: ni sola, ni pegada al chip.
+    expect(screen.queryByText("Cliente no localizado")).toBeNull();
+    expect(screen.queryByText("Ayuda · Cliente no localizado")).toBeNull();
+    expect(screen.queryByText("Sin causa registrada")).toBeNull();
+    // CONTROL POSITIVO de la aserción de arriba: la MISMA causa, sobre una orden del grupo de
+    // devolución, SÍ se lee. Sin esto, las tres negativas pasarían igual con la card sin montar.
+    cleanup();
+    render(
+      <NovedadesModule
+        grupo="devolucion"
+        items={[novedad({ causa: "not_found", estatusValue: "devuelta" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    expect(screen.getByText("Cliente no localizado")).toBeInTheDocument();
   });
 
   it("sobre una orden que NO está devuelta no se ofrecen las acciones de devolución", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -310,7 +360,7 @@ describe("NovedadesModule", () => {
     );
 
     // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
-    // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
+    // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo (R23).
     expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Rechazar la orden/ })).toBeNull();
     // «Habilitar» SÍ: es el desenlace de la solicitud de ayuda del lado de la tienda (pedido
@@ -318,16 +368,21 @@ describe("NovedadesModule", () => {
     expect(
       screen.getByRole("button", { name: /^Habilitar la orden/ }),
     ).toBeInTheDocument();
-    // Lo que SÍ sigue: el contacto y el registro de intentos. (El botón «Notas» se retiró de
-    // esta pantalla el 2026-08-18 por pedido humano; ver la cabecera de `NovedadAcciones`.)
+    // Lo que SÍ sigue: el contacto y el registro de intentos.
     expect(
       screen.getByRole("button", { name: /^Registrar un intento de contacto/ }),
     ).toBeInTheDocument();
+    // Feature 236 (R27/R22): y lo NUEVO — la conversación, que es por donde la tienda lee el
+    // motivo con el que el mensajero pidió la ayuda. Estuvo retirada desde el 2026-08-18.
+    expect(
+      screen.getByRole("button", { name: /^Abrir la conversación de la orden/ }),
+    ).toBeInTheDocument();
   });
 
-  it("sin ayuda pedida y sin estar devuelta, «Habilitar» tampoco se ofrece", () => {
+  it("R21: sobre un estatus que no es de ningún grupo sólo quedan los de contacto", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
@@ -336,13 +391,23 @@ describe("NovedadesModule", () => {
     );
 
     // La excepción es el estatus de AYUDA, no «cualquier orden en reparto»: sin solicitud viva no
-    // hay nada que habilitar. Es el CASO NEGATIVO de la traducción literal de la 235.
+    // hay nada que habilitar. Es el CASO NEGATIVO de la traducción literal de la 235, y desde la
+    // 236 es además R21: `grupoDeEstatus` devuelve `null` y no se ofrece NINGUNA acción que
+    // resuelva la orden. Nótese que la pestaña montada es la de AYUDA: el juego de botones lo
+    // decide el estado de la FILA, no la pestaña.
     expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Abrir la conversación de la orden/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^Registrar un intento de contacto/ }),
+    ).toBeNull();
+    // CONTROL POSITIVO: la card SÍ está montada, y el contacto —que no resuelve nada— sigue ahí.
+    expect(screen.getByRole("button", { name: "Llamar a Ana Cliente" })).toBeInTheDocument();
   });
 
   it("sobre una devuelta, las acciones de devolución siguen ofreciéndose", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad()]}
         total={1}
         page={1}
@@ -356,7 +421,7 @@ describe("NovedadesModule", () => {
   // --- Pedido humano 2026-08-18: «+1 intento de contacto» y su contador ---
 
   it("sobre una devolución corriente NO aparece: el contador es para las órdenes atascadas", () => {
-    render(<NovedadesModule items={[novedad()]} total={1} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[novedad()]} total={1} page={1} pageSize={10} />);
 
     expect(
       screen.queryByRole("button", { name: /^Registrar un intento de contacto/ }),
@@ -366,6 +431,7 @@ describe("NovedadesModule", () => {
   it("con ayuda pedida aparece el botón y el contador, con el `0` incluido", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ intentosContacto: 0, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -385,6 +451,7 @@ describe("NovedadesModule", () => {
   it("el contador arranca en el valor del servidor, no en cero", () => {
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ intentosContacto: 4, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -402,6 +469,7 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "ok", intentosContacto: 9 });
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -426,6 +494,7 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "forbidden" });
     render(
       <NovedadesModule
+        grupo="ayuda"
         items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
@@ -447,6 +516,7 @@ describe("NovedadesModule", () => {
   it("R22: renderiza la Pagination con el total y la pagina recibidos", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad()]}
         total={25}
         page={2}
@@ -466,6 +536,7 @@ describe("NovedadesModule", () => {
   it("R1: cada orden ofrece la acción 'Reprogramar' junto a los botones de contacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -483,6 +554,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "ok" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -527,6 +599,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "ok" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -551,6 +624,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -583,6 +657,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "forbidden" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -723,6 +798,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ numGuia: 12345, destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -750,6 +826,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -796,6 +873,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("las tres acciones son botones de ICONO: sin texto visible, con su nombre accesible intacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -818,6 +896,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("al enfocar una acción, su tooltip revela la etiqueta que antes estaba escrita", async () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -853,6 +932,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     async (nombreAccesible, textoTooltip) => {
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -879,6 +959,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -918,6 +999,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -958,6 +1040,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -987,6 +1070,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1026,6 +1110,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1066,7 +1151,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     async (vista) => {
       const user = userEvent.setup();
       render(
-        <NovedadesModule items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
+        <NovedadesModule grupo="devolucion" items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
       );
       await conmutarA(user, vista);
 
@@ -1092,7 +1177,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("vista Mosaico: en el detalle desplegado los campos nulos se leen como «—», no vacíos", async () => {
     const user = userEvent.setup();
     render(
-      <NovedadesModule items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
     );
 
     const card = cardDe("Ana Cliente");
@@ -1117,6 +1202,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -1136,6 +1222,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("guía null: el placeholder legible de R9 sigue siendo el identificador de la card", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ numGuia: null, destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1157,6 +1244,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   function renderUna() {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1182,7 +1270,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   });
 
   it("sin órdenes no hay conmutador: no hay cards que conmutar", () => {
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
 
     expect(
       screen.queryByRole("group", { name: "Vista de las órdenes" }),
@@ -1221,6 +1309,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente", intentosEntrega: 2 })]}
           total={1}
           page={1}
@@ -1239,6 +1328,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[
           novedad({ id: "o1", destinatario: "Uno" }),
           novedad({ id: "o2", destinatario: "Dos" }),
@@ -1262,7 +1352,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   it("la paginación convive con el conmutador: cambiar de vista no la toca", async () => {
     const user = userEvent.setup();
     render(
-      <NovedadesModule items={[novedad()]} total={25} page={2} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad()]} total={25} page={2} pageSize={10} />,
     );
 
     await conmutarA(user, "Detalle");
@@ -1281,11 +1371,19 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
 // confirmar, que hoy es un aviso (el último caso lo fija, y se pondrá rojo el día que se
 // cablee la transición real — que es lo que se quiere).
 describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
-  /** Abre el modal de habilitar de la orden de Ana y lo devuelve. */
+  /**
+   * Abre el modal de habilitar de la orden de Ana y lo devuelve.
+   *
+   * Feature 236 (T5.5): se abre desde la PESTAÑA DE AYUDA, sobre una orden en `ayuda_tienda`, que
+   * es donde «Habilitar» significa lo que dice —devolver la orden a la ruta por el punto único de
+   * rescate de la 235—. Sobre una devolución anclada el rescate es un no-op deliberado y su dueño
+   * es la ficha 240.
+   */
   async function abrirHabilitar(user: ReturnType<typeof userEvent.setup>) {
     render(
       <NovedadesModule
-        items={[novedad({ destinatario: "Ana Cliente" })]}
+        grupo="ayuda"
+        items={[novedad({ destinatario: "Ana Cliente", estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -1337,13 +1435,22 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
     expect(within(dialog).queryByRole("alert")).toBeNull();
   });
 
-  // Pedido humano 2026-08-18 — los dos desenlaces de «Habilitar», que desde hoy SÍ ejecuta
-  // una transición. La nota viaja con la orden; el estatus NO se toca (eso es del servidor y
-  // se afirma en su propio test) — aquí se afirma lo que la PANTALLA hace con la respuesta.
-  it("confirmar con nota llama a la acción y saca la orden de la lista", async () => {
+  // Pedido humano 2026-08-18 — los desenlaces de «Habilitar», que desde entonces SÍ ejecuta una
+  // transición. La nota viaja con la orden; el estatus lo mueve el servidor (y se afirma en su
+  // propio test) — aquí se afirma lo que la PANTALLA hace con la respuesta.
+  //
+  // ⚠️ FEATURE 236 (T5.5 — D8, firmada por el humano el 2026-08-19, R24/R25): los desenlaces pasan
+  // de DOS a TRES, y el caso feliz cambia de aserción. Hasta hoy este test fijaba «Orden
+  // habilitada» + fila fuera para CUALQUIER `ok`, incluido el `ok` de una orden que nadie movió —
+  // la carrera con «Recuperar» del mensajero—. La fila desaparecía por optimismo de cliente y
+  // reaparecía al recargar, sin que nada lo explicara. Ahora el resultado trae `rescatada` y la
+  // pantalla distingue «se devolvió a la ruta» de «no se movió». El fixture gana esa clave: sin
+  // ella, este caso mediría un desenlace que el servidor ya no produce.
+  it("R24: rescatada -> avisa que volvió a la ruta, la fila sale y el total baja", async () => {
     habilitarMock.mockResolvedValue({
       status: "ok",
       nota: { id: "n1" },
+      rescatada: true,
     } as unknown as Awaited<ReturnType<typeof habilitarNovedad>>);
     const user = userEvent.setup();
     const dialog = await abrirHabilitar(user);
@@ -1360,11 +1467,42 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
         nota: "El cliente pidió reintentar",
       }),
     );
-    await waitFor(() => expect(successMock).toHaveBeenCalledWith("Orden habilitada."));
-    // La fila desaparece: sus dos banderas de novedad quedaron apagadas.
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden volvió a la ruta."),
+    );
+    // La fila sale de la lista y el total lo refleja: de «1 de 1» a la lista vacía (R24).
     await waitFor(() => expect(screen.queryByText("Ana Cliente")).toBeNull());
+    expect(screen.getByText("Ningún mensajero te pidió ayuda")).toBeInTheDocument();
     // No se tocó la mutación de la pantalla hermana.
     expect(reprogramarMock).not.toHaveBeenCalled();
+  });
+
+  it("R25: si el rescate NO se aplicó, la pantalla no afirma que la devolvió y la fila se queda", async () => {
+    // El caso real: el mensajero pulsó «Recuperar» un segundo antes. La nota SÍ se publicó —quedó
+    // en el hilo, no se perdió— pero la orden no se movió.
+    habilitarMock.mockResolvedValue({
+      status: "ok",
+      nota: { id: "n1" },
+      rescatada: false,
+    } as unknown as Awaited<ReturnType<typeof habilitarNovedad>>);
+    const user = userEvent.setup();
+    const dialog = await abrirHabilitar(user);
+
+    await user.type(within(dialog).getByLabelText(/^Nota/), "Ya podés seguir");
+    await user.click(within(dialog).getByRole("button", { name: "Habilitar" }));
+
+    // El aviso es SUYO y dice las dos mitades: la nota se publicó, la orden no se movió.
+    await waitFor(() => expect(warningMock).toHaveBeenCalledTimes(1));
+    const aviso = warningMock.mock.calls[0][0] as string;
+    expect(aviso).toContain("Tu nota se publicó");
+    expect(aviso).toContain("no volvió a la ruta");
+    // Y NO se afirma lo contrario por ningún otro canal.
+    expect(successMock).not.toHaveBeenCalled();
+    expect(errorMock).not.toHaveBeenCalled();
+    // La fila SIGUE ahí: quitarla mientras se dice que no se movió sería cambiar una mentira por
+    // otra —y es literalmente lo que pasaba antes de D8, con reaparición al recargar—.
+    expect(screen.getAllByText("Ana Cliente").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ningún mensajero te pidió ayuda")).toBeNull();
   });
 
   it("si la acción rechaza, avisa y la orden SIGUE en la lista", async () => {
@@ -1392,6 +1530,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R18: cada novedad muestra el dato etiquetado junto a sus otros campos", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente", intentosEntrega: 2 })]}
         total={1}
         page={1}
@@ -1410,6 +1549,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R19: con 0 intentos el dato SE MUESTRA (no se omite ni se deja vacío)", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", intentosEntrega: 0 })]}
         total={1}
         page={1}
@@ -1423,7 +1563,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
 
   it("R19: sin el campo (DTO viejo) muestra 0", () => {
     render(
-      <NovedadesModule items={[novedad({ id: "o1" })]} total={1} page={1} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad({ id: "o1" })]} total={1} page={1} pageSize={10} />,
     );
     expect(
       within(screen.getByRole("listitem")).getByText("Intentos: 0"),
@@ -1433,6 +1573,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R26: cada novedad lleva SU número", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[
           novedad({ id: "o1", destinatario: "Uno", intentosEntrega: 3 }),
           novedad({ id: "o2", destinatario: "Dos", intentosEntrega: 0 }),
@@ -1450,6 +1591,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R20/R32: el dato no trae umbral y el estado vacío sigue sin lista", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", intentosEntrega: 2 })]}
         total={1}
         page={1}
@@ -1461,7 +1603,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
     ).toBe("Intentos: 2");
     cleanup();
 
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
     expect(screen.queryByText(/Intentos/)).toBeNull();
   });
 });

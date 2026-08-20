@@ -423,3 +423,13 @@ cerrado lo que sigue abierto.
 
 **Dueño y fecha de muerte: ficha 236**, que es la inmediatamente siguiente de la pila. Si la 236 se
 retrasara, esto pasa a ser deuda visible en producción y hay que reabrir la decisión.
+
+> ✅ **CERRADA el 2026-08-19 — la 236 entregó la superficie que faltaba.** La tienda **lee el motivo**
+> desde la card de su pestaña propia («Ayuda solicitada»), y **escribe sin rescatar la orden**, que es
+> lo que R34 ya le permitía y no tenía dónde ejercer. Visto en pantalla, no deducido:
+> `progress/recorrido_236.md` §3 y §4.
+>
+> Con esto **R35 se lee otra vez tal como se redactó**: los dos roles tienen superficie alcanzable.
+> La enmienda deja de ser deuda viva y queda como lo que fue — el acta de por qué la ficha 235 no
+> podía cumplirlo sola.
+

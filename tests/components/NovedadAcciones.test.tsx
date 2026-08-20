@@ -1,0 +1,201 @@
+// @vitest-environment jsdom
+// FEATURE 236 (T5.2 — R21/R22/R23) — LA FILA OFRECE LO QUE LA TABLA DICE, Y NADA MÁS.
+//
+// **Por qué este archivo existe aparte de `NovedadesModule.test.tsx`.** Aquel monta la card POS
+// entera y mide la pantalla; éste ataca el panel de acciones DIRECTAMENTE, que es donde vive la
+// decisión. La diferencia importa: hasta el 2026-08-19 esa decisión eran condiciones sueltas
+// (`esDevuelta`, `esAyuda`, `puedeHabilitar = esDevuelta || esAyuda`) y bastaba con añadir una
+// acción sin acordarse del otro grupo para que apareciera donde no debía — que es exactamente el
+// defecto del punto 12, todavía vivo y con dueño (ficha 240).
+//
+// **Lo que se mide es un CENSO CERRADO de nombres accesibles**, ni uno más ni uno menos. Un censo
+// abierto («están estos tres») pasaría igual con un cuarto botón de más, que es la forma que tiene
+// esta pantalla de romperse.
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { NovedadAcciones } from "@/app/(app)/novedades/_components/NovedadAcciones";
+import type { NovedadDTO } from "@/lib/types/novedad";
+
+vi.mock("@/lib/actions/orden-ayuda", () => ({
+  solicitarAyudaOrden: vi.fn(),
+  recuperarOrdenAyuda: vi.fn(),
+  registrarIntentoContactoOrden: vi.fn(),
+}));
+
+vi.mock("@/hooks/useToast", () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+    show: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
+const DESTINATARIO = "Ana Cliente";
+
+function novedad(over: Partial<NovedadDTO> = {}): NovedadDTO {
+  return {
+    id: "o1",
+    numGuia: 12345,
+    numRemision: "REM-001",
+    estatusValue: "devuelta",
+    intentosContacto: 0,
+    destinatario: DESTINATARIO,
+    telefonoDest: "88887777",
+    direccion: "Av. Central 120",
+    producto: "Zapatos",
+    peso: 1.5,
+    montoCobrar: 24500,
+    latitud: 9.9281,
+    longitud: -84.0907,
+    notas: null,
+    tiendaNombre: "Tienda Demo",
+    zonaNombre: "GAM Oeste",
+    provinciaNombre: "San José",
+    cantonNombre: "Escazú",
+    distritoNombre: "San Rafael",
+    secuenciaRuta: null,
+    causa: "not_found",
+    intentosEntrega: 2,
+    ...over,
+  };
+}
+
+const handlers = {
+  onReprogramar: vi.fn(),
+  onHabilitar: vi.fn(),
+  onDevolver: vi.fn(),
+  onConversacion: vi.fn(),
+};
+
+function renderAcciones(over: Partial<NovedadDTO> = {}) {
+  return render(<NovedadAcciones novedad={novedad(over)} {...handlers} />);
+}
+
+/** Los nombres accesibles de TODOS los controles de la fila, en el orden en que se pintan. */
+function censoDeBotones(): string[] {
+  return screen
+    .getAllByRole("button")
+    .map((b) => b.getAttribute("aria-label") ?? b.textContent ?? "");
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
+  it("R22: la fila de AYUDA ofrece exactamente cinco controles, y son los suyos", () => {
+    renderAcciones({ estatusValue: "ayuda_tienda" });
+
+    expect(censoDeBotones()).toEqual([
+      "Llamar a Ana Cliente",
+      "WhatsApp a Ana Cliente",
+      "Habilitar la orden de Ana Cliente",
+      "Abrir la conversación de la orden de Ana Cliente",
+      "Registrar un intento de contacto con la orden de Ana Cliente",
+    ]);
+  });
+
+  it("la fila de DEVOLUCIÓN ofrece exactamente cinco controles, y son OTROS", () => {
+    renderAcciones({ estatusValue: "devuelta" });
+
+    // El espejo del caso de arriba. Es lo que convierte las ausencias de cada uno en afirmaciones:
+    // «no hay Reprogramar en ayuda» sólo dice algo si hay un sitio donde SÍ lo hay.
+    //
+    // ⚠️ «Habilitar» aparece aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido
+    // humano, al revés de lo que pedía). Su dueño es la ficha 240; esta ficha lo trasladó a una
+    // celda de `ACCIONES_POR_GRUPO` sin arreglarlo, y este literal es donde esa deuda se ve.
+    expect(censoDeBotones()).toEqual([
+      "Llamar a Ana Cliente",
+      "WhatsApp a Ana Cliente",
+      "Reprogramar la orden de Ana Cliente",
+      "Habilitar la orden de Ana Cliente",
+      "Rechazar la orden de Ana Cliente",
+    ]);
+  });
+
+  it("R21: un estatus que no es de ningún grupo se queda SÓLO con el contacto", () => {
+    // `grupoDeEstatus` devuelve `null` y no se ofrece ninguna acción que RESUELVA la orden. No
+    // puede ocurrir con los predicados del servidor —sólo lista esos dos estados— y por eso mismo
+    // hay que escribirlo: el día que un tercer camino traiga una fila por otra vía, la pantalla no
+    // se inventará botones para ella.
+    renderAcciones({ estatusValue: "en_reparto" });
+
+    expect(censoDeBotones()).toEqual([
+      "Llamar a Ana Cliente",
+      "WhatsApp a Ana Cliente",
+    ]);
+  });
+
+  it("los tres censos son DISTINTOS entre sí (anti-vacuidad)", () => {
+    // Si `censoDeBotones` estuviera roto —devolviendo siempre lo mismo, o siempre vacío— los tres
+    // casos de arriba podrían pasar a la vez sin medir nada. Esto lo caza.
+    const censos: string[][] = [];
+    for (const estatus of ["ayuda_tienda", "devuelta", "en_reparto"]) {
+      cleanup();
+      renderAcciones({ estatusValue: estatus });
+      censos.push(censoDeBotones());
+    }
+    expect(new Set(censos.map((c) => c.join("|"))).size).toBe(3);
+    expect(censos.every((c) => c.length > 0)).toBe(true);
+  });
+});
+
+describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => {
+  it("«Conversación» abre el hilo de ESTA orden, y no toca ninguna otra acción", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Abrir la conversación de la orden de Ana Cliente",
+      }),
+    );
+
+    expect(handlers.onConversacion).toHaveBeenCalledTimes(1);
+    expect(handlers.onConversacion.mock.calls[0][0]).toMatchObject({ id: "o-ayuda" });
+    expect(handlers.onHabilitar).not.toHaveBeenCalled();
+    expect(handlers.onReprogramar).not.toHaveBeenCalled();
+    expect(handlers.onDevolver).not.toHaveBeenCalled();
+  });
+
+  it("«Habilitar» desde la fila de ayuda llama a su handler con la orden", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+    );
+
+    expect(handlers.onHabilitar).toHaveBeenCalledTimes(1);
+    expect(handlers.onHabilitar.mock.calls[0][0]).toMatchObject({ id: "o-ayuda" });
+    expect(handlers.onConversacion).not.toHaveBeenCalled();
+  });
+
+  it("cada botón de icono es SOLO icono, con su nombre accesible en el propio control", () => {
+    renderAcciones({ estatusValue: "ayuda_tienda" });
+
+    // El tooltip NO es el nombre del botón: aparece al pasar el puntero o al enfocar, y quien
+    // navega con lector de pantalla —o desde una pantalla táctil, donde no hay hover— necesita el
+    // nombre EN el control. Si alguien borra el `aria-label` «porque ya está el tooltip», el
+    // control se queda mudo y ningún test que busque por ese mismo label lo diría.
+    for (const nombre of [
+      "Habilitar la orden de Ana Cliente",
+      "Abrir la conversación de la orden de Ana Cliente",
+    ]) {
+      const boton = screen.getByRole("button", { name: nombre });
+      expect(boton.textContent).toBe("");
+      expect(boton.querySelector("svg")).not.toBeNull();
+      // El icono es decorativo: lo anuncia el `aria-label`, no el svg.
+      expect(boton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+});

@@ -35,8 +35,17 @@ import { rescatarOrdenAyuda } from "@/lib/services/rescate-ayuda";
  * exactamente lo que hacia antes (la bandera ya estaba apagada) y lo que la 239 dejo dicho: la
  * devolucion se ve mientras siga en `devuelta`, se pulse lo que se pulse. QUE «habilitar» deba
  * ademas moverla, y adonde, es la pregunta que la puerta humana del 2026-08-19 asigno a la ficha
- * 240. Por eso el resultado que se devuelve es el de la NOTA, no el del rescate: la nota es la
- * puerta y es lo que la pantalla necesita para refrescar el hilo.
+ * 240. Por eso el resultado que se devuelve sigue siendo el de la NOTA: la nota es la puerta y es
+ * lo que la pantalla necesita para refrescar el hilo.
+ *
+ * ⚠️ FEATURE 236 (T5.5 — D8, firmada el 2026-08-19, R25) — EL NO-OP DEJA DE SER MUDO. Hasta hoy el
+ * resultado del rescate se descartaba entero, y con el la unica forma que la pantalla tenia de
+ * saber si habia pasado algo. Consecuencia real: si el mensajero recuperaba la orden un segundo
+ * antes, la tienda leia «Orden habilitada» sobre una orden que nadie movio, y la fila desaparecia
+ * hasta la siguiente recarga. Ahora se propaga como `rescatada`, un booleano y nada mas: NO se
+ * traduce el `forbidden` opaco del rescate a un motivo (el punto unico no dice cual de sus cinco
+ * puertas cerro, y adivinarlo aqui seria inventarlo), y NO se convierte en un fallo — la nota se
+ * publico de verdad, asi que sigue siendo `ok`.
  *
  * POR QUE NO SE COMPRUEBA EL ROL NI EL ESTATUS AQUI. Los comprueba ya `OrdenNotaService.publicar`:
  * limita el hilo a `{ adminTienda, mensajero }` y aplica la ventana de cada rol
@@ -75,16 +84,18 @@ export class HabilitarNovedadService implements IHabilitarNovedadService {
     // no tiene nada mejor que decir. Y sobre todo, NO se mueve nada.
     if (publicada.status !== "ok") return publicada;
 
-    // R8 - EL PUNTO UNICO DE RESCATE, el mismo que llama «Recuperar». Su resultado NO se propaga:
-    // sobre una orden que no esta en `ayuda_tienda` devuelve `forbidden` y es un no-op deliberado
-    // (ver el JSDoc de la clase). Idempotente por construccion: un segundo «Habilitar» encuentra la
-    // orden ya en `en_reparto`, la guarda de estado lo rechaza y no se escribe historial (R9).
-    await rescatarOrdenAyuda(
+    // R8 - EL PUNTO UNICO DE RESCATE, el mismo que llama «Recuperar». Sobre una orden que no esta
+    // en `ayuda_tienda` devuelve `forbidden` y es un no-op deliberado (ver el JSDoc de la clase).
+    // Idempotente por construccion: un segundo «Habilitar» encuentra la orden ya en `en_reparto`,
+    // la guarda de estado lo rechaza y no se escribe historial (R9).
+    const rescate = await rescatarOrdenAyuda(
       { notaRepo: this.notaRepo, ordenRepo: this.repo },
       input.ordenId,
       actor,
     );
 
-    return publicada;
+    // 236/D8/R25: el resultado sigue siendo el de la NOTA — lo unico que se le añade es SI la orden
+    // se movio, para que la pantalla no pueda afirmar que la devolvio cuando no la devolvio.
+    return { ...publicada, rescatada: rescate.status === "ok" };
   }
 }

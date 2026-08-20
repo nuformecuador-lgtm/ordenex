@@ -107,9 +107,28 @@ Lo que este cambio hace con Q5 es **cambiarle la forma**, con saldo mixto:
 
 ### F2 · La pestaña «Ayuda a gestionar» en novedades
 
+> ✏️ **EL ROTULO CAMBIA, firmado por el humano el 2026-08-19 (ficha 236, D6): la pestaña se llama
+> «Ayuda solicitada», no «Ayuda a gestionar».** La razón: **«gestionar» es el verbo del MENSAJERO**
+> en este repo —«por gestionar», «Gestionar más tarde», «Gestionar esta orden»— así que ponerlo en la
+> pantalla de la tienda le atribuye un gesto que no es suyo; y menos ahora, que **gestionar desde
+> ayuda es la ficha 237** y todavía no existe. Va **primera** de las tres pestañas, y el chip de la
+> card pasa a «Esperando tu respuesta».
+
 - Tercera pestaña en `NovedadesTabs.tsx`; predicado hermano de `novedadWhere`.
 - «Habilitar» llama a `rescatarOrdenAyuda` de F1. El hilo se monta **dentro de la card**.
 - El juego de botones se decide **según el origen de la orden, en un solo sitio**.
+
+> ✅ **ATERRIZÓ el 2026-08-19** — ficha **236**. Lo que el diseño de la pila no había previsto:
+> 1. **El corte tenía que dejar de escribir estatus.** `novedadWhere` perdió el `OR` y los dos
+>    métodos del repo piden `grupo` **obligatorio**, así que el typecheck señaló los seis call-sites.
+>    Una orden vive en una pestaña **por construcción**, no por disciplina.
+> 2. **La descarga también estaba mezclada**, y su columna «Causa de devolución» decía «Sin causa
+>    registrada» sobre algo que no es una devolución: mentía **con formato de dato**. Ahora hay una
+>    descarga por pestaña (D3, firmada).
+> 3. **El estado vacío es la superficie principal del día uno.** Medido: 0 órdenes en `ayuda_tienda`
+>    y 0 en `devuelta` en producción, sobre 141 vivas.
+> 4. **«Habilitar» afirmaba haber habilitado aunque la carrera con el mensajero dejara la orden
+>    quieta** (D8, firmada). Toca un tipo que la **240** también tocará.
 
 ### F3 · La gestión de la tienda que cuenta como del mensajero
 

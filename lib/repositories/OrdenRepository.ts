@@ -47,6 +47,9 @@ import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+// Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
+// cada superficie sale de aqui y de ningun otro sitio; ver `novedadWhere`.
+import { ESTATUS_POR_GRUPO, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
@@ -79,8 +82,11 @@ function hayFilasPorInsertar(
  */
 const ESTATUS_EN_REPARTO = "en_reparto";
 
-/** Feature 235/R30: el estatus de la SOLICITUD DE AYUDA viva; segunda rama de `novedadWhere`. */
-const ESTATUS_AYUDA = "ayuda_tienda";
+// ⚰️ FEATURE 236 (T2.1) — AQUI VIVIA `ESTATUS_AYUDA = "ayuda_tienda"`, la segunda rama del `OR` de
+// `novedadWhere`. No se ha perdido: se MUDO a `ESTATUS_POR_GRUPO.ayuda` (`lib/types/novedad-grupo.ts`),
+// que es el mismo valor en el sitio donde tambien lo lee la pantalla. Tenerlo aqui como `const`
+// privado significaba que la interfaz no podia leerlo y tenia que reescribirlo — dos literales, dos
+// verdades. Ver la cabecera de `novedadWhere`.
 
 // Feature 106 (design §4, R19/R20): unicos estados desde los que la tienda puede cancelar
 // una orden via API; cualquier otro (incl. una orden ya en `devolviendo_a_tienda`) es 409.
@@ -183,6 +189,7 @@ type OrdenPrismaClient = Pick<
   | "cierreDia" // feature 41: bloqueo derivado del mensajero / bodega (R12/R17)
   | "cierreBodega" // feature 41: causa (ii) del bloqueo de bodega (R17)
   | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
+  | "ordenHistorialEstado" // feature 236: fecha de la solicitud de ayuda, que ordena su pestaña (D7/R17)
   | "carga" // feature 141: lote de carga masiva asegurado en la tx de la insercion batch
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
@@ -284,13 +291,18 @@ const ESTATUS_EN_BODEGA_CENTRAL = "en_bodega_central";
 // (mismo criterio que `contarPorDestinoVigentes`, feature 67).
 const RESULTADO_DEVUELTA = "devuelta";
 
-// Feature 99 (Q7): `order_status.value` en el que REPOSA una devolucion diferida. El predicado
-// de /novedades se ancla a este estado real (no a la gestion vigente).
-const ESTATUS_DEVUELTA = "devuelta";
+// ⚰️ FEATURE 236 (T2.1) — y aqui, `ESTATUS_DEVUELTA = "devuelta"`, la primera rama de aquel `OR`.
+// Mismo destino y mismo motivo que su hermana de arriba: hoy es `ESTATUS_POR_GRUPO.devolucion`.
 
 // Feature 102 (T7): `order_status.value` de una orden rechazada. La superficie de rechazos por
 // SLA de la tienda se ancla a este estado real (mientras la orden REPOSE en `rechazada`, R15).
 const ESTATUS_RECHAZADA = "rechazada";
+
+// Feature 236 (T2.5, D7): familia de origen de LA IDA de la ayuda (`en_reparto -> ayuda_tienda`,
+// feature 235/P2). Es de donde sale la fecha con la que se ordena la pestaña de ayuda: la que lleva
+// mas esperando, primero. La VUELTA (`rescate_ayuda_tienda`) no se lee aqui — describe el final de
+// una espera, no su comienzo.
+const ORIGEN_TIPO_SOLICITUD_AYUDA = "solicitud_ayuda_tienda";
 
 /**
  * Serializa una fecha `@db.Date` (guardada a medianoche UTC) a `YYYY-MM-DD`.
@@ -2935,76 +2947,48 @@ export class OrdenRepository implements IOrdenRepository {
     };
   }
 
-  // --- Feature 87/89: lista de novedades (devoluciones del mensajero de la tienda) ---
+  // --- Feature 87/89 → 236: las DOS superficies de `/novedades`, una por grupo ---
+  // (el rotulo decia «devoluciones del mensajero de la tienda» y llevaba un año listando dos cosas)
 
   /**
-   * Feature 99/R7-R9 (Q7): predicado CENTRAL de una NOVEDAD, ANCLADO AL ESTADO REAL. Extraido
-   * para que `count` y `find` usen EXACTAMENTE el mismo `where` (R8/239-R21: total y pagina
-   * cuentan el mismo universo). Una orden es novedad si: es de la tienda del actor (R9), no esta
-   * borrada (R5) y su estatus ACTUAL ES `devuelta` (R7). Bajo la feature 99 la orden REPOSA en
-   * `devuelta` hasta que el cron SLA la libere/escale o la feature 100 la resuelva; al salir de
-   * `devuelta` cae del predicado sin doble conteo (R8).
+   * Feature 236 (T2.1, design §2.2 — R3/R4/R5/R9/R10): predicado CENTRAL de UNA superficie de
+   * `/novedades`, ANCLADO AL ESTADO REAL y **parametrizado por el grupo**.
    *
-   * FEATURE 239 (T3.1, R18/R20/R30) - la rama de la devolucion vuelve a ser una IGUALDAD DE
-   * ESTADO, sin ninguna marca persistida al lado. Entre el 2026-08-18 y hoy exigia ademas
-   * `gestion_aprobada = true`, y esa columna es la mitad implementada del fallo: recortaba lo que
-   * la tienda VE sin mover el RELOJ del SLA, asi que habia devoluciones que se escalaban a
-   * `rechazada` y se COBRABAN sin haber sido visibles nunca.
+   * QUE CAMBIO HOY, Y POR QUE. Hasta el 2026-08-19 este metodo era un `OR` de DOS igualdades de
+   * estado —`devuelta` y `ayuda_tienda`— y devolvia las dos poblaciones MEZCLADAS: la orden sobre
+   * la que un mensajero pedia ayuda salia bajo la pestaña «En devolucion», con un subtitulo que no
+   * era cierto de ella y sin ninguna forma de leer el motivo. El `OR` no era un fallo de datos: era
+   * una pantalla que no distinguia dos cosas que ya eran distintas AQUI. La 236 parte el predicado
+   * en dos, y el corte nace en el SERVIDOR o no nace (R2): un corte de cliente deja la orden
+   * alcanzable por las demas vias, que es la leccion que la 235 aprendio a la mala con su `useMemo`.
    *
-   * Ahora el recorte lo hace el ESTADO: una devolucion sin confirmar esta en
-   * `devolucion_por_confirmar`, no en `devuelta`, asi que no casa este predicado - y tampoco corre
-   * su ventana de SLA, porque el cron tambien filtra por `devuelta`. Las dos mitades miran EL
-   * MISMO HECHO (R20: la visibilidad no depende de ninguna marca distinta del estado).
+   * R9 (ninguna orden en dos pestañas) SALE GRATIS y conviene decir por que: con dos predicados de
+   * IGUALDAD SOBRE EL MISMO CAMPO, la disyuncion es excluyente POR EL TIPO DE DATO —una orden tiene
+   * un `estatus_id` y solo uno—. Deja de ser una propiedad que sostener y pasa a ser una
+   * consecuencia de que el discriminante sea el estado. El `OR` de ayer, en cambio, necesitaba un
+   * comentario explicando que Prisma devolveria una sola vez a la orden que casara las dos ramas.
    *
-   * Y el retiro de la columna ES el arreglo del recorte retroactivo (R30): `gestion_aprobada` era
-   * `NOT NULL DEFAULT false`, asi que TODA devolucion anterior a ella caia del listado. Al
-   * desaparecer, esas devoluciones vuelven a verse solas, sin backfill.
+   * R3/D1: es una IGUALDAD CON EL ESTADO ACTUAL y NADA MAS. Ninguna clave hermana, ninguna marca
+   * persistida. Las dos que hubo aqui costaron una ficha cada una: `orden.ayuda` dejaba la fila en
+   * `/novedades` para siempre (el corte nocturno la barria sin apagar el flag, auditoria §2.1) y
+   * `gestion_aprobada` borraba retroactivamente devoluciones vivas mientras su reloj corria
+   * (239/R30). Las dos columnas estan retiradas, y las dos guardias que impiden su vuelta, vivas.
+   *
+   * R5: el value NO se escribe aqui. Sale de `ESTATUS_POR_GRUPO` (`lib/types/novedad-grupo.ts`),
+   * que es TAMBIEN de donde la pantalla saca el juego de botones de cada fila (R6): asi lo que el
+   * servidor lista y lo que la interfaz ofrece no pueden describir grupos distintos.
+   *
+   * ⚠️ EL NOMBRE DEL METODO NO CAMBIA, y es deliberado: la guardia
+   * `tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts` lo localiza con
+   * `/private\s+novedadWhere\s*\(/` y REVIENTA si no lo encuentra. Renombrarlo la pondria roja por
+   * una razon que no es la suya. Lo que esa guardia SI vigila ahora es que este cuerpo no contenga
+   * ningun literal de estatus: su unico origen admisible es el mapa (design §2.4).
    */
-  private novedadWhere(tiendaId: string): Prisma.OrdenWhereInput {
+  private novedadWhere(tiendaId: string, grupo: GrupoNovedad): Prisma.OrdenWhereInput {
     return {
-      tiendaId,
-      deletedAt: null, // R5: excluye borradas
-      // DOS razones de mirar la orden, no una: la devolucion que REPOSA en `devuelta` (R7/R18),
-      // o la orden sobre la que el mensajero PIDIO AYUDA y que por eso esta en `ayuda_tienda`
-      // (235/R30). Sin esta segunda rama la solicitud de ayuda no tendria donde aparecer, porque
-      // la unica pantalla de la tienda es esta.
-      //
-      // ⚠️ SE CONSERVA LA FORMA `OR` DE DOS IGUALDADES Y NO SE COLAPSA A
-      // `{ estatus: { value: { in: [...] } } }`. La razon es concreta, no estetica: la guardia
-      // `tests/unit/guards/hilo-ventana-alcanzable.guardia.test.ts` LEE ESTE PREDICADO DEL TEXTO
-      // FUENTE con el patron `estatus\s*:\s*\{\s*value\s*:\s*([^,}]+?)\s*\}` y REVIENTA si
-      // deja de casar. Un `in` la pondria roja sin que nada estuviera mal. Si algun dia se
-      // prefiere el `in`, se cambia la extraccion A LA VEZ — no se borra la comprobacion.
-      //
-      // El `OR` mantiene lo esencial del predicado central: `count` y `find` lo siguen
-      // compartiendo (R8/239-R21), asi que total y pagina cuentan el mismo universo y una orden
-      // que este en las DOS ramas a la vez (devuelta Y con ayuda pedida antes) aparece UNA sola
-      // vez, no dos.
-      OR: [
-        // Feature 239/R18/R20: IGUALDAD DE ESTADO, y nada mas. `devuelta` significa desde la 239
-        // «devolucion ANCLADA»: confirmada en el cierre, visible para la tienda y con el reloj
-        // corriendo. Las tres cosas a la vez, o ninguna. Ninguna marca persistida al lado: esa era
-        // `gestion_aprobada`, la mitad implementada del fallo, y la retira esta misma tanda.
-        // Feature 239/R18/R20: IGUALDAD DE ESTADO, y nada mas. `devuelta` significa desde la 239
-        // «devolucion ANCLADA»: confirmada en el cierre, visible para la tienda y con el reloj
-        // corriendo. Las tres cosas a la vez, o ninguna.
-        { estatus: { value: ESTATUS_DEVUELTA } },
-        // Feature 235/R30/R32/R33 — ⚰️ AQUI MURIO EL TAPON DE LA 239, y esta es su acta.
-        //
-        // Del 2026-08-18 al 2026-08-19 esta rama fue `{ ayuda: true, estatus: en_reparto }`: una
-        // MARCA PERSISTIDA (`orden.ayuda`) mas un estatus. Nacio sin la clave de estatus —y esa
-        // fue la FUGA PERMANENTE de la auditoria §2.1: una orden con el flag encendido se quedaba
-        // en `/novedades` para siempre (`sin_gestionar`, en bodega, incluso entregada), porque el
-        // corte nocturno la barria sin apagar el flag y nadie mas lo apagaba—. La 239 le puso la
-        // clave como TAPON CON DUEÑO y lo escribio aqui: «la ficha 235 RETIRA el booleano `ayuda`;
-        // cuando entre, esta rama entera sobra».
-        //
-        // Sobra. La solicitud de ayuda YA NO EXISTE COMO DATO SEPARADO DEL ESTADO, asi que R32 y
-        // R33 se cumplen POR CONSTRUCCION y no por una comprobacion que alguien deba recordar: una
-        // solicitud antigua no puede sostener la fila despues de que la orden salga del estatus,
-        // porque no hay ninguna solicitud antigua que pueda quedarse encendida.
-        { estatus: { value: ESTATUS_AYUDA } },
-      ],
+      tiendaId, // R10: acotada a la tienda del actor
+      deletedAt: null, // R10: excluye borradas
+      estatus: { value: ESTATUS_POR_GRUPO[grupo] },
     };
   }
 
@@ -3081,18 +3065,28 @@ export class OrdenRepository implements IOrdenRepository {
     return fila.intentosContacto;
   }
 
-  /** Feature 99/R7/R8: cuenta las NOVEDADES de `tiendaId` (predicado central, mismo `where` que find). */
-  async countDevueltasByTienda(tiendaId: string): Promise<number> {
+  /**
+   * Feature 236 (T2.2, R4): cuenta las NOVEDADES del `grupo` en `tiendaId`. Mismo predicado
+   * central que `findNovedadesByTienda` —los dos llaman a `this.novedadWhere(tiendaId, grupo)` con
+   * el MISMO grupo recibido—, asi que el total y la pagina cuentan el mismo universo POR
+   * CONSTRUCCION y no por una comprobacion que alguien deba recordar.
+   *
+   * El nombre viejo era `countDevueltasByTienda`, decia «devueltas» y llevaba un año contando dos
+   * poblaciones. El rename ES la señal buscada: el typecheck señalo uno a uno los call-sites y
+   * ninguno pudo quedarse llamando a la version de un solo grupo.
+   */
+  async countNovedadesByTienda(tiendaId: string, grupo: GrupoNovedad): Promise<number> {
     return this.prisma.orden.count({
-      where: this.novedadWhere(tiendaId),
+      where: this.novedadWhere(tiendaId, grupo),
     });
   }
 
   /**
-   * Feature 99/R7/R8/R9: una PAGINA de NOVEDADES de `tiendaId` con el MISMO predicado central
-   * que `countDevueltasByTienda` (R8), ordenada por `Orden.createdAt` desc (fallback documentado;
-   * el service reordena por la fecha de la ultima gestion `devuelta` vigente, R9). El `select`
-   * proyecta lo que consume el DTO + `createdAt`.
+   * Feature 236 (T2.2, R4/R10): una PAGINA de NOVEDADES del `grupo` en `tiendaId`, con el MISMO
+   * predicado central que `countNovedadesByTienda`. `orderBy` por `Orden.createdAt` desc es el
+   * FALLBACK documentado; el orden real lo decide el service segun el grupo (la devolucion, por la
+   * fecha de su ultima gestion vigente; la ayuda, por la fecha de la SOLICITUD — D7/R17). El
+   * `select` proyecta lo que consume el DTO + `createdAt`.
    *
    * 2026-08-13 (pedido humano): el `select` se ancha para cubrir TODO `NovedadOrdenRow`, que
    * desde hoy espeja a `MiAsignacionRow` (`/novedades` pinta las mismas cards POS que el portal
@@ -3102,12 +3096,13 @@ export class OrdenRepository implements IOrdenRepository {
    * decimales se convierten con `.toNumber()` —nunca `parseFloat`— para que ningun
    * `Prisma.Decimal` cruce al service ni al borde RSC.
    */
-  async findDevueltasByTienda(
+  async findNovedadesByTienda(
     tiendaId: string,
+    grupo: GrupoNovedad,
     pagination: { skip: number; take: number },
   ): Promise<NovedadOrdenRow[]> {
     const rows = await this.prisma.orden.findMany({
-      where: this.novedadWhere(tiendaId),
+      where: this.novedadWhere(tiendaId, grupo),
       orderBy: { createdAt: "desc" },
       skip: pagination.skip,
       take: pagination.take,
@@ -3188,6 +3183,43 @@ export class OrdenRepository implements IOrdenRepository {
       if (!map.has(row.ordenId)) {
         map.set(row.ordenId, { causa: row.causaDevolucion, fecha: row.createdAt });
       }
+    }
+    return map;
+  }
+
+  /**
+   * Feature 236 (T2.5, D7/R17): fecha de la SOLICITUD DE AYUDA viva de TODAS las ordenes de la
+   * pagina, en UNA sola consulta agregada.
+   *
+   * POR QUE ESTA FECHA Y NO OTRA. La pregunta que la tienda se hace al abrir la pestaña de ayuda es
+   * «¿cual lleva mas tiempo esperandome?», y NINGUNA otra fecha la responde: la de creacion de la
+   * orden no tiene nada que ver con cuando se pidio ayuda, y la de la ultima gestion `devuelta`
+   * —la que ordena la otra pestaña— habla de una devolucion anterior ya deshecha.
+   *
+   * DE DONDE SALE. Del historial de estado, por la FAMILIA DE ORIGEN de la ida
+   * (`solicitud_ayuda_tienda`, feature 235/P2). Se toma la MAS RECIENTE por orden: una orden puede
+   * haber sido rescatada y vuelta a pedir, y lo que cuenta es la espera VIVA, no la primera de su
+   * historia. Las ordenes sin ninguna transicion de esa familia NO entran al mapa — el service cae
+   * a `Orden.createdAt` como fallback documentado.
+   *
+   * MISMO MOLDE Y MISMO COSTE que `findCausasDevueltaVigentes`: UNA consulta por pagina, NUNCA una
+   * por fila (el N+1 que el contrato de `lib/types/novedad.ts` prohibe). `[]` -> `Map` vacio sin
+   * disparar la query. El acceso usa `orden_historial_actor_origen_created_idx` solo parcialmente
+   * (no lidera por `orden_id`): con paginas de 10 filas el coste es despreciable, y si la medicion
+   * del despliegue lo desmintiera el arreglo es un indice, no un rediseño (design §1.2).
+   */
+  async findFechaSolicitudAyuda(ordenIds: string[]): Promise<Map<string, Date>> {
+    if (ordenIds.length === 0) return new Map();
+    const rows = await this.prisma.ordenHistorialEstado.findMany({
+      where: { ordenId: { in: ordenIds }, origenTipo: ORIGEN_TIPO_SOLICITUD_AYUDA },
+      orderBy: { createdAt: "desc" },
+      select: { ordenId: true, createdAt: true },
+    });
+    const map = new Map<string, Date>();
+    for (const row of rows) {
+      // Vienen desc: la PRIMERA por `ordenId` es la solicitud VIVA. Las anteriores son ciclos de
+      // ayuda ya cerrados con su rescate, y no describen la espera de hoy.
+      if (!map.has(row.ordenId)) map.set(row.ordenId, row.createdAt);
     }
     return map;
   }
