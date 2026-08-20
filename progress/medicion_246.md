@@ -94,3 +94,22 @@ lectura era correcta**. Y si M2 sigue en cero después, tampoco significa que so
 la reserva está haciendo su trabajo. **Esta ficha no se puede evaluar por el mismo número que la
 justificó.**
 
+---
+
+## ⚠️ CÓMO LEER ESTOS NÚMEROS — producción es hoy un entorno de PRUEBAS
+
+**Confirmado por el humano el 2026-08-20.** Las mediciones de este archivo salen de la base de
+producción, pero **esa base se está usando para probar**, no para operar.
+
+Consecuencia, y es importante para quien lea esto dentro de seis meses:
+
+- Los números **describen fielmente lo que el código hace** — un doble cobro medido es un doble cobro
+  real del código, y un `0` con denominador sigue significando que ese camino no se ejerció.
+- Lo que **NO** se puede concluir de ellos es **frecuencia operativa**. «Deshacer se usa un 12 %» o
+  «el corte sólo barrió 2 órdenes» describen **cómo se ha probado la app**, no cómo la usa la
+  operación. Un número bajo puede ser «no pasa» o «nadie lo ha probado aún», y la base no distingue.
+- **Los importes cobrados de más no corresponden a dinero real de una tienda real.** Por eso no hay
+  devolución que hacer, y por eso el defecto se arregla hacia adelante.
+
+⏳ **El día que producción pase a ser producción de verdad, TODO esto hay que re-medirlo**, y las
+conclusiones de frecuencia hay que rehacerlas desde cero.

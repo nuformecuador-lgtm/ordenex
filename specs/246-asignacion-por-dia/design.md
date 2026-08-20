@@ -7,9 +7,15 @@
 
 ## 0. El cambio, en una línea de causa y efecto
 
-Una orden gana un **día de reparto**. El corte deja de barrer —y de generar `vencido` por— las
-órdenes cuyo día de reparto **aún no ha llegado**. Nada más cambia: ni un estado, ni un importe, ni
-un total de cierre.
+Una orden gana un **día de reparto**. De ahí salen **dos** consecuencias:
+
+1. **El corte** deja de barrer —y de generar `vencido` por— las órdenes cuyo día de reparto **aún no
+   ha llegado** (§5).
+2. **El ranking** deja de contar «asignadas hoy» por `asignado_at` y pasa a contarlas por día de
+   reparto (§6.bis). Esto entra por la firma de **D7**, tomada el 2026-08-20 **en contra de la
+   recomendación de este spec**, y es lo que mete el **podio y `premio_ranking`** dentro del alcance.
+
+Nada más cambia: ni un estado, ni un importe, ni un total de cierre, ni un movimiento de wallet.
 
 ---
 
@@ -50,12 +56,32 @@ fechaReparto DateTime? @map("fecha_reparto") @db.Date
   contra `now()` y a reintroducir el desfase de seis horas del que avisa `lib/analytics/ranges.ts`.
 - **Nullable y sin default** (R19): las filas anteriores quedan en `NULL` y el corte las barre igual
   que hoy. **Cero backfill.**
-- **Sin índice**, y no es un olvido: el barrido filtra por `mensajero_asignado_id` (que ya tiene
-  `@@index`), y la fecha es un filtro **residual** sobre las órdenes de **un** mensajero. La
-  selección filtra por `estatus_id` (indexado) sobre la población en `en_reparto`, que a medianoche
-  es pequeña — **cuantificada en M2**. Un índice que nadie usa se paga en cada escritura de la tabla
-  más caliente del sistema; ese razonamiento es literal de
-  `20260819170000_gestion_orden_confirmacion_fisica/migration.sql`.
+- **CON índice `@@index([fechaReparto])` — y esto cambió con la firma de D7.**
+  ⚠️ **Este punto decía «sin índice» antes de la puerta humana del 2026-08-20, y con D7 firmada eso
+  dejó de ser cierto.** Se deja escrito el porqué de las dos versiones:
+  - **Para el corte, el índice sobra.** El barrido filtra por `mensajero_asignado_id` (que ya tiene
+    `@@index`) y la fecha es un filtro **residual** sobre las órdenes de **un** mensajero. La
+    selección filtra por `estatus_id` (indexado) sobre la población en `en_reparto`, que a medianoche
+    es pequeña — **cuantificada en M2**.
+  - **Para el ranking, hace falta.** `contarAsignadasPorMensajero` es un `groupBy` sobre `orden`
+    **sin igualdad por mensajero** (`mensajeroAsignadoId: { not: null }` + rango de fecha), y lo
+    ejecuta cada carga de `/ranking` —que abre el maestro **y cada mensajero**— más el cron del
+    snapshot. Con el denominador movido a `fecha_reparto` (§6.bis), la consulta pasa a filtrar por
+    esta columna: sin índice es un recorrido completo de una tabla que sólo crece, y
+    `docs/architecture.md` lista «queries sin índice en rutas calientes o crons frecuentes» entre los
+    anti-patrones que el reviewer rechaza.
+  - **El coste es real y se declara:** un índice más que mantener en **cada escritura** de la tabla
+    más caliente del sistema. Ese razonamiento —«un índice que nadie usa se paga en cada escritura»—
+    es literal de `20260819170000_gestion_orden_confirmacion_fisica/migration.sql`, y aquí se paga a
+    conciencia porque **sí** hay quien lo usa.
+  - **Se confirma midiendo, no suponiendo (M8).** El `EXPLAIN` de T0 tiene que decir dos cosas: qué
+    plan usa **hoy** el denominador (puede que ya sea un recorrido completo, en cuyo caso el índice
+    **mejora** el estado actual en vez de empeorarlo) y qué plan usaría con la columna nueva. **Si el
+    `EXPLAIN` dice que el índice no se usa, el índice no se crea** y R44 se replantea.
+  - **Una sola columna, no `(mensajero_asignado_id, fecha_reparto)`:** la consulta del ranking agrupa
+    por mensajero pero **no filtra** por él, así que un compuesto con el mensajero delante no la
+    serviría — es exactamente el motivo por el que el índice `(mensajero_asignado_id, asignado_at)`
+    que existe hoy tampoco la sirve del todo.
 - **Sin `CHECK`.** «Sólo hoy o mañana» es una regla del **borde** (zod) y del servicio; expresarla en
   la base exigiría comparar contra `now()` dentro de una restricción, que es una segunda definición
   del día — prohibido por §3.
@@ -70,7 +96,12 @@ vuelo que también añaden migraciones).
 
 ```sql
 ALTER TABLE "orden" ADD COLUMN "fecha_reparto" DATE;
+CREATE INDEX "orden_fecha_reparto_idx" ON "orden" ("fecha_reparto");
 ```
+
+⚠️ **El `CREATE INDEX` es condicional a M8**: si el `EXPLAIN` de T0 dice que el planificador no lo
+usa para el denominador, **no se escribe**, y el `migration.sql` lo dice en vez de crearlo «por si
+acaso». Un índice de más en `orden` no es gratis.
 
 El `migration.sql` lleva su razonamiento **entero** arriba, al nivel de la 238: qué es, por qué una
 columna y no una tabla lateral (D1), por qué una fecha y no una marca (D2), qué significa `NULL` (una
@@ -80,6 +111,7 @@ reordena, no borra, no toca filas, no toca índices, no toca RLS).
 ### 2.3 El `down.sql`, pensado
 
 ```sql
+DROP INDEX IF EXISTS "orden_fecha_reparto_idx";
 ALTER TABLE "orden" DROP COLUMN IF EXISTS "fecha_reparto";
 ```
 
@@ -88,6 +120,9 @@ ALTER TABLE "orden" DROP COLUMN IF EXISTS "fecha_reparto";
   **devuelve al corte su comportamiento anterior**, y por tanto **la primera corrida posterior barrerá
   las órdenes que estaban reservadas para mañana**. No es una reversión inocua como la de la 238 (que
   sólo perdía un rastro de auditoría). Quien haga rollback tiene que saberlo.
+- **Segunda consecuencia, desde D7:** el denominador del ranking vuelve a `asignado_at` (§6.bis), así
+  que **el ranking del día del rollback cambia de números**. Los snapshots ya congelados **no** se
+  ven afectados (son inmutables, R42) — sólo el día en curso.
 - **R21 se cumple** porque el código anterior a esta feature **nunca leyó** esta columna: la base
   revertida es exactamente la que ese código espera.
 - `IF EXISTS` para que el rollback sea idempotente.
@@ -326,6 +361,139 @@ esParaManana: boolean;   // derivado EN EL SERVIDOR: fechaReparto > startOfDayCR
 
 ---
 
+## 6.bis El denominador del ranking *(D7, firmada el 2026-08-20 EN CONTRA de la recomendación)*
+
+> Sección **añadida después de la puerta humana**. La recomendación de este spec era no tocar el
+> ranking aquí; el humano firmó lo contrario con el coste delante. El registro de esa decisión está
+> en `requirements.md` §D7 y §«PUERTA HUMANA PASADA». Aquí sólo está el **cómo**.
+
+### 6.bis.1 Qué mide hoy, exactamente
+
+| Pieza | Archivo | Hoy |
+| --- | --- | --- |
+| Numerador | `RankingRepository.contarEntregadasPorMensajero` | `gestion_orden` con `resultado='entregada'`, `anulada_at IS NULL`, `created_at` en `[desde, hasta)` del día CR. |
+| **Denominador** | `RankingRepository.contarAsignadasPorMensajero` | `orden` con `mensajero_asignado_id IS NOT NULL` y **`asignado_at` en `[desde, hasta)`**. |
+| Ventana | `RankingService` (vivo) y `lib/ranking/snapshot-dia.ts` (congelado) | `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` — cotas contra columnas `timestamp`. |
+| Podio y premio | `lib/ranking/orden-ranking.ts` + `premio_ranking` | Módulo **puro** compartido por el vivo y el snapshot. **No se toca** (R45). |
+| Congelado | `ranking_snapshot_dia` / `ranking_snapshot_fila` | Inmutables. El cron corre a las 02:00 CR y congela **el día anterior**. |
+
+### 6.bis.2 El cambio, y las DOS convenciones de fecha que chocan aquí
+
+El denominador pasa a contar **por día de reparto**. Y aquí aparece la trampa del repo en su forma
+más peligrosa, porque **las dos convenciones de fecha conviven en la misma consulta**:
+
+- `fecha_reparto` es `DATE` ⇒ se compara contra **medianoche UTC de la fecha CR** (`startOfDayCR` /
+  `fechaComoDate`).
+- `asignado_at` es `timestamp` ⇒ se compara contra **`...T06:00:00.000Z`**
+  (`inicioDelDiaCREnUtc`), que es lo que ya hacen el vivo y el snapshot.
+
+Mezclarlas desplaza el día seis horas, y este repo **ya cerró esa ficha una vez** (la 166: una
+entrega de las 19:00 CR contaba para el día siguiente). `snapshot-dia.ts` lleva un ⛔ explícito
+prohibiendo importar `startOfDayCR`. **Esa prohibición sigue en pie para las cotas del numerador**;
+lo que esta ficha añade es un segundo parámetro, con **su propia** convención, para el denominador.
+
+```ts
+// IRankingRepository — la firma cambia, y el cambio es la señal
+contarAsignadasPorMensajero(
+  desde: Date,        // timestamp: cota del respaldo por `asignado_at` (convención 144/166)
+  hasta: Date,
+  diaReparto: Date,   // DATE: medianoche UTC de la fecha CR (convención 46) ← NUEVO
+): Promise<ConteoPorMensajero[]>;
+```
+
+Los tres los calcula **el llamador** (`RankingService` para el vivo, `snapshot-dia.ts` para el
+congelado) y **no** se derivan uno del otro dentro del repositorio: derivar `diaReparto` restando
+seis horas a `desde` sería exactamente la segunda definición del día que §3 prohíbe.
+
+### 6.bis.3 La consulta, y por qué es un `OR` y no un `COALESCE`
+
+```ts
+const rows = await this.prisma.orden.groupBy({
+  by: ["mensajeroAsignadoId"],
+  where: {
+    mensajeroAsignadoId: { not: null },
+    OR: [
+      // R36: la orden reservada para ESE día
+      { fechaReparto: diaReparto },
+      // R37/R43: respaldo para las órdenes sin día de reparto — las anteriores al despliegue
+      { fechaReparto: null, asignadoAt: { gte: desde, lt: hasta } },
+    ],
+  },
+  _count: { _all: true },
+});
+```
+
+**Por qué un `OR` de dos predicados y no `COALESCE(fecha_reparto, dia(asignado_at)) = X`:** el
+`COALESCE` mezcla las dos convenciones dentro de una expresión, **no es indexable** por ningún índice
+existente ni por el nuevo, y obligaría a meter `- interval '6 hours'` en el SQL — la segunda
+definición del día que §3 prohíbe. El `OR`, en cambio, tiene **las dos ramas indexables por separado**
+(la primera por `orden_fecha_reparto_idx`, la segunda por el índice que ya existe) y Postgres las
+combina con un `BitmapOr`. **M8 lo confirma; si el `EXPLAIN` dice otra cosa, manda el `EXPLAIN`.**
+
+**Por qué la segunda rama lleva `fechaReparto: null` y no sólo el rango:** sin ese `null`, una orden
+asignada hoy para mañana entraría **por las dos ramas** —en el denominador de hoy por `asignado_at` y
+en el de mañana por `fecha_reparto`— y quedaría **contada dos veces en días distintos**. La cláusula
+`null` hace las dos ramas **disjuntas por construcción**, que es lo que garantiza que cada orden
+aporte exactamente 1 a exactamente un día. Es la aserción que más barato se rompe y la que un test
+tiene que vigilar.
+
+### 6.bis.4 El día del despliegue (R43) — el punto de dinero
+
+Es el momento en que esta parte de la ficha puede hacer daño, y es **un solo día**:
+
+- Las órdenes asignadas **antes** del despliegue tienen `fecha_reparto = NULL` para siempre (no hay
+  backfill, y no lo habrá: §10-I).
+- Si el denominador contase **sólo** `fecha_reparto = X`, esas órdenes **desaparecerían del
+  denominador**. Con el numerador intacto, **todos los porcentajes subirían de golpe**, el umbral de
+  podio (`RANKING_MIN_ASIGNADAS`) dejaría fuera a quien no tuviera órdenes nuevas, y **el podio de ese
+  día sería falso para todos a la vez** — con su premio.
+- La segunda rama del `OR` lo cierra: esas órdenes siguen contando **por donde contaban antes**. El
+  día del despliegue el denominador es **exactamente el de siempre** para las viejas y el nuevo para
+  las nuevas.
+- El respaldo **envejece solo**: pasados unos días no queda ninguna orden viva sin `fecha_reparto`.
+  **No se retira igualmente**, porque es también la respuesta correcta para cualquier orden que llegue
+  a tener mensajero por una vía que no estampe la columna.
+
+### 6.bis.5 Quién gana y quién pierde
+
+| Quién | Efecto | Por qué |
+| --- | --- | --- |
+| **Gana** el mensajero al que la bodega asigna de noche para el día siguiente | Su porcentaje de **hoy** deja de bajar por órdenes que no podía entregar hoy | Es el defecto que D7 corrige. Hoy esas órdenes engordan el denominador del día que acaba sin poder aportar numerador. |
+| **Pierde** el mensajero que **entrega hoy** una orden reservada para mañana | Sube hoy (numerador sin denominador) y **baja mañana** (denominador sin numerador) | R40. Neto ≈ 0 en dos días, pero **el podio es diario**, así que puede mover un premio de un día a otro. Sólo ocurre si él elige entregar antes de tiempo (D5 se lo permite). |
+| **Nadie** retroactivamente | Los rankings congelados no cambian | R42: `ranking_snapshot_*` son inmutables. El cambio es prospectivo **por construcción**, no por una fecha de corte que alguien tenga que recordar. |
+| **Todos, un solo día**, si se implementa mal | Podio falso el día del despliegue | §6.bis.4. Es el motivo por el que la segunda rama del `OR` no es opcional. |
+
+**Cuánto de esto es dinero:** `premio_ranking` guarda tres montos con su rótulo y **no emite ningún
+movimiento de wallet** —no existe categoría para premios en `WalletMovimientoCategoria`—. Es decir:
+el sistema **no mueve** ese dinero, pero **decide a quién se le paga**. **M6** da el importe mensual
+en juego y **M7** dice en cuántos días el podio habría cambiado; hasta tener los dos, cualquier
+afirmación sobre «cuánto cuesta» sería inventada.
+
+### 6.bis.6 El snapshot: por qué el criterio nuevo no lo rompe
+
+`RankingSnapshotService` reusa **los mismos tres repositorios** que el vivo y el **mismo** módulo puro
+de orden/podio. Por eso R41 se cumple casi por construcción: cambiar `contarAsignadasPorMensajero`
+cambia los dos a la vez. Sólo hay que darle el tercer parámetro, y sale de
+`fechaComoDate(fechaObjetivo(now))` — que **ya existe** en `snapshot-dia.ts` y ya devuelve la
+convención `DATE` correcta. No hay helper nuevo que escribir.
+
+**R46 (el denominador está cerrado antes de congelarse) se cumple por el alcance de la ficha, no por
+suerte:** `fecha_reparto = X` sólo puede escribirse eligiendo «hoy» el día `X` o «mañana» el día
+`X-1`. Las dos cosas ocurren **antes** de las 02:00 CR del día `X+1`, que es cuando el cron congela
+`X`. **Con una fecha futura arbitraria esto dejaría de ser cierto** —alguien podría asignar para un
+día ya congelado— y haría falta un requisito nuevo. Es un argumento más a favor del alcance estrecho.
+
+### 6.bis.7 El tablero del día (D10, ABIERTA)
+
+`TableroDiaRepository.cteIdsDelDia` cuenta «asignadas hoy» con el mismo `asignado_at`, y su cabecera
+avisa de que esa columna «es el denominador del ranking diario». Si D10 se firma que **sí**, el `OR`
+de §6.bis.3 se replica en ese CTE —es SQL crudo parametrizado, así que la fecha entra como parámetro
+más, sin zona horaria— y las dos pantallas vuelven a cuadrar. Si se firma que **no**, hay que decirlo
+en la cabecera del tablero: dos cifras distintas de «asignadas hoy» sin una nota que lo explique se
+leen como un error de la app.
+
+---
+
 ## 7. La pantalla de quien asigna
 
 Dos modales, un componente compartido:
@@ -368,15 +536,34 @@ Dos modales, un componente compartido:
    `tests/unit/repositories/orden-repository.asignacion-satelite.test.ts`: el `data`/`SET` de la
    asignación gana un campo.
 
+**Rojos ESPERADOS que aparecen SÓLO por D7** (antes de la firma estaban en la lista de regresión):
+
+6. **Typecheck en todo doble de `IRankingRepository`** al ganar `contarAsignadasPorMensajero` su
+   tercer parámetro. Obligatorio, no opcional: un parámetro con default dejaría el vivo y el snapshot
+   contando distinto sin que nadie se entere, que es justo lo que R41 prohíbe.
+7. `tests/unit/repositories/ranking-repository.test.ts` — el `where` del `groupBy` pasa de un rango a
+   un `OR` de dos ramas.
+8. `tests/unit/services/ranking-service.test.ts` y
+   `tests/unit/services/ranking-snapshot-service.test.ts` — los dobles del repo reciben un argumento
+   más y hay que afirmar **qué** valor reciben (es la mitad de R41).
+9. `tests/unit/guards/ranking-ventana-dia.guardia.test.ts` — vigila que las cotas del día del ranking
+   sean las de la convención 144/166. **Sigue siendo cierto para el numerador y para la rama de
+   respaldo**, pero ahora hay una tercera fecha con **otra** convención. La guardia hay que
+   **enseñarle a leer las dos**, no relajarla: si acaba aceptando cualquier fecha, deja de proteger
+   del off-by-one de la 166.
+10. `tests/unit/repositories/tablero-dia-sql.test.ts` — **sólo si D10 se firma que sí.** Si D10 se
+    firma que no, este archivo vuelve a la lista de regresión.
+
 **Rojos que son REGRESIÓN** (si aparecen, alguien tocó lo que esta ficha no toca):
 
 - `tests/unit/guards/carga-del-mensajero.guardia.test.ts` — las listas de estatus **no cambian** en
   esta ficha. Un rojo ahí significa que alguien movió `ESTADOS_A_BARRER` o `ESTADOS_REPARTO_PENDIENTE`.
-- `tests/unit/guards/ranking-ventana-dia.guardia.test.ts`, `tests/unit/services/ranking-service.test.ts`,
-  `tests/unit/repositories/tablero-dia-sql.test.ts` — R33: el denominador **sigue** siendo
-  `asignado_at`. Un rojo ahí es D7 colándose por la puerta de atrás.
-- `tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts` — esta ficha **no** cambia quién
-  escribe `asignado_at`, sólo **acompaña** cada escritura.
+- `tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts` — R33: esta ficha **no** cambia
+  quién escribe `asignado_at`, sólo **acompaña** cada escritura y **lee** la columna. Un rojo aquí es
+  una escritura nueva sobre `asignado_at`, que nadie pidió.
+- Cualquier test de `lib/ranking/orden-ranking.ts` (orden, podio, redondeo) — R45: el criterio de
+  ordenación y de podio **no se toca**. Un rojo ahí es la ficha metiéndose donde no debe.
+- `tests/unit/guards/ranking-snapshot-cron.guardia.test.ts` — el cron y su idempotencia no cambian.
 - Cualquier guardia money-safe o de dinero: R30 dice que aquí no se mueve un céntimo.
 
 ---
@@ -452,6 +639,135 @@ WHERE c.estado = 'vencido'
 GROUP BY 1 ORDER BY 1;
 ```
 
+**M5 — ¿Cuánto se movería el denominador?** ⚠️ **PROXY**: la columna no existe todavía, así que se
+aproxima con «asignadas a partir de las 18:00 CR que **no** se desenlazaron ese mismo día» — que es
+lo que bodega marcaría «mañana» si el selector existiera. **Es una hipótesis sobre una conducta
+humana que aún no ocurre**, y hay que pegarla con esa etiqueta.
+
+```sql
+WITH asignadas AS (
+  SELECT o.id,
+         (o.asignado_at - INTERVAL '6 hours')::date            AS dia_asignacion_cr,
+         EXTRACT(HOUR FROM (o.asignado_at - INTERVAL '6 hours')) AS hora_cr
+  FROM orden o
+  WHERE o.asignado_at >= NOW() - INTERVAL '30 days'
+    AND o.mensajero_asignado_id IS NOT NULL
+),
+desenlace AS (
+  SELECT g.orden_id, MIN((g.created_at - INTERVAL '6 hours')::date) AS dia_gestion_cr
+  FROM gestion_orden g
+  WHERE g.anulada_at IS NULL AND g.created_at >= NOW() - INTERVAL '31 days'
+  GROUP BY 1
+)
+SELECT a.dia_asignacion_cr,
+       COUNT(*)                                        AS denominador_actual,
+       COUNT(*) FILTER (WHERE a.hora_cr >= 18)         AS asignadas_tarde,
+       COUNT(*) FILTER (
+         WHERE a.hora_cr >= 18
+           AND (d.dia_gestion_cr IS NULL OR d.dia_gestion_cr > a.dia_asignacion_cr)
+       )                                               AS se_moverian_a_manana
+FROM asignadas a
+LEFT JOIN desenlace d ON d.orden_id = a.id
+GROUP BY 1 ORDER BY 1;
+```
+
+**Cómo se lee:** `se_moverian_a_manana / denominador_actual` es la fracción del denominador que
+cambia de día. **Autocomprobación:** `denominador_actual` sumado tiene que cuadrar con
+`SELECT COUNT(*) FROM orden WHERE asignado_at >= NOW() - INTERVAL '30 days' AND mensajero_asignado_id
+IS NOT NULL`.
+
+**M6 — ¿Cuánto dinero mueve `premio_ranking`?**
+
+```sql
+SELECT posicion, monto, descripcion FROM premio_ranking ORDER BY posicion;
+
+SELECT COUNT(*)                                             AS dias_congelados,
+       COUNT(*) FILTER (WHERE f.podios > 0)                 AS dias_con_podio,
+       SUM(f.premio_total)                                  AS premio_repartido_30d
+FROM ranking_snapshot_dia s
+LEFT JOIN LATERAL (
+  SELECT COUNT(*) FILTER (WHERE x.posicion IS NOT NULL) AS podios,
+         COALESCE(SUM(x.premio_monto), 0)               AS premio_total
+  FROM ranking_snapshot_fila x
+  WHERE x.snapshot_id = s.id
+) f ON TRUE
+WHERE s.fecha >= CURRENT_DATE - 30;
+```
+
+`premio_repartido_30d` es **el importe que esta decisión pone en juego al mes**. Si sale `0` o `NULL`,
+comprobar antes de concluir que «no hay dinero»: puede ser que los montos de `premio_ranking` estén
+sin configurar, que es distinto de que el premio no exista.
+
+**M7 — ¿Cambia el podio?** El número que decide si D7 es cosmético o caro. Sustituir `:min_asignadas`
+por el valor real de `RANKING_MIN_ASIGNADAS` (default **1**).
+
+```sql
+WITH entregadas AS (
+  SELECT (g.created_at - INTERVAL '6 hours')::date AS d, g.mensajero_id, COUNT(*) AS n
+  FROM gestion_orden g
+  WHERE g.resultado = 'entregada' AND g.anulada_at IS NULL
+    AND g.created_at >= NOW() - INTERVAL '31 days'
+  GROUP BY 1, 2
+),
+asig_actual AS (
+  SELECT (o.asignado_at - INTERVAL '6 hours')::date AS d,
+         o.mensajero_asignado_id AS mensajero_id, COUNT(*) AS n
+  FROM orden o
+  WHERE o.asignado_at >= NOW() - INTERVAL '31 days' AND o.mensajero_asignado_id IS NOT NULL
+  GROUP BY 1, 2
+),
+asig_proxy AS (   -- lo asignado a partir de las 18:00 CR cuenta al dia siguiente
+  SELECT CASE WHEN EXTRACT(HOUR FROM (o.asignado_at - INTERVAL '6 hours')) >= 18
+              THEN (o.asignado_at - INTERVAL '6 hours')::date + 1
+              ELSE (o.asignado_at - INTERVAL '6 hours')::date END AS d,
+         o.mensajero_asignado_id AS mensajero_id, COUNT(*) AS n
+  FROM orden o
+  WHERE o.asignado_at >= NOW() - INTERVAL '31 days' AND o.mensajero_asignado_id IS NOT NULL
+  GROUP BY 1, 2
+),
+top_actual AS (
+  SELECT a.d, ARRAY_AGG(a.mensajero_id ORDER BY (e.n::numeric / a.n) DESC, e.n DESC, a.mensajero_id)
+                FILTER (WHERE TRUE) AS podio
+  FROM asig_actual a JOIN entregadas e ON e.d = a.d AND e.mensajero_id = a.mensajero_id
+  WHERE a.n >= :min_asignadas
+  GROUP BY a.d
+),
+top_proxy AS (
+  SELECT a.d, ARRAY_AGG(a.mensajero_id ORDER BY (e.n::numeric / a.n) DESC, e.n DESC, a.mensajero_id)
+                FILTER (WHERE TRUE) AS podio
+  FROM asig_proxy a JOIN entregadas e ON e.d = a.d AND e.mensajero_id = a.mensajero_id
+  WHERE a.n >= :min_asignadas
+  GROUP BY a.d
+)
+SELECT ta.d,
+       ta.podio[1:3] AS podio_actual,
+       tp.podio[1:3] AS podio_proxy,
+       (ta.podio[1:3] IS DISTINCT FROM tp.podio[1:3]) AS cambia
+FROM top_actual ta JOIN top_proxy tp ON tp.d = ta.d
+ORDER BY ta.d;
+```
+
+⚠️ **Esta consulta reimplementa a mano el criterio de orden que en el código vive en
+`lib/ranking/orden-ranking.ts`.** Es aceptable para **medir** —no para decidir en producción—, pero
+al pegar el resultado hay que decirlo: si el comparador real desempata distinto, el recuento de días
+que cambian puede diferir en los empates. **Autocomprobación:** contar cuántos días salen y comprobar
+que coincide con `SELECT COUNT(*) FROM ranking_snapshot_dia WHERE fecha >= CURRENT_DATE - 30`.
+
+**M8 — ¿Hace falta el índice?** `EXPLAIN` **sin `ANALYZE`** (no ejecuta, no escribe):
+
+```sql
+EXPLAIN
+SELECT o.mensajero_asignado_id, COUNT(*)
+FROM orden o
+WHERE o.mensajero_asignado_id IS NOT NULL
+  AND o.asignado_at >= '2026-08-19T06:00:00Z' AND o.asignado_at < '2026-08-20T06:00:00Z'
+GROUP BY 1;
+```
+
+Y, sobre una base **con la migración ya aplicada** (local o preview, no producción), el mismo
+`EXPLAIN` de la consulta del `OR` de §6.bis.3. **Si el planificador no usa
+`orden_fecha_reparto_idx`, el índice no se crea.**
+
 ---
 
 ## 10. Alternativas descartadas
@@ -493,7 +809,34 @@ frontera. Quien asigne a las 04:30 tendría el mismo problema, y a cambio el `ve
 verdad no cerró su día llegaría cuatro horas tarde. Además no distingue **quién** quiso qué, que es
 justo lo que la ficha pide.
 
-### F · Que el corte **no cree `vencido`** a nadie que tenga órdenes reservadas
+### F · Alinear el numerador con el día de reparto *(alternativa de D7)*
+Si el denominador cuenta por día de reparto, lo simétrico sería contar la **entrega** en el día de
+reparto de su orden, y así numerador y denominador de una misma orden caerían siempre en el mismo día
+(desaparecería la asimetría de R40). **Descartada por un bloqueo duro: el snapshot es inmutable y se
+congela a las 02:00 CR del día siguiente.** Con el numerador anclado al día de reparto, una entrega
+tardía —una orden reservada para `D` entregada el `D+2`— tendría que sumarse al numerador de `D`, que
+**ya está congelado** y no se puede reescribir sin romper la inmutabilidad de `ranking_snapshot_*` y
+la idempotencia del cron (la unicidad de `fecha` **es** esa idempotencia). El numerador **tiene** que
+estar anclado a algo que no reciba escrituras tardías, y `gestion_orden.created_at` lo está.
+
+### G · Rellenar `fecha_reparto` hacia atrás *(backfill)*
+Poner a las órdenes existentes la fecha CR de su `asignado_at` dejaría una columna sin nulos y una
+consulta de una sola rama. **Descartada por dos motivos:** (1) es un `UPDATE` masivo sobre la tabla
+más caliente del sistema para inventar un dato que **nadie eligió** —esas órdenes nunca tuvieron día
+de reparto, y escribirlo sería afirmar que sí—; (2) no hace falta: la segunda rama del `OR`
+(§6.bis.3) da **exactamente** el mismo resultado sin tocar una fila, y envejece sola. El repo ya tomó
+esta misma decisión en la 238 («el histórico NO se backfillea: no hay confirmación cierta que
+inventar»).
+
+### H · Un **índice de expresión** para el denominador
+`CREATE INDEX ON orden ((COALESCE(fecha_reparto, (asignado_at - interval '6 hours')::date)))`
+permitiría escribir el denominador como un `COALESCE` de una sola rama y seguir indexado.
+**Descartada porque incrusta las seis horas de Costa Rica en el esquema**: sería una segunda
+definición del día operativo, en el peor sitio posible —un índice, donde nadie la busca y de donde
+nadie la actualiza—. §3 lo prohíbe y `lib/analytics/ranges.ts` documenta el off-by-one al que lleva.
+El `OR` de dos ramas indexables consigue lo mismo sin esa concesión.
+
+### I · Que el corte **no cree `vencido`** a nadie que tenga órdenes reservadas
 Parece proteger mejor al mensajero (§5.3). **Descartada porque abre una puerta de escape al cierre**:
 bastaría con recibir una asignación nueva cada tarde para no tener que cuadrar caja nunca. La regla
 que se mantiene es la sana: el `vencido` nace de **tu** jornada sin cerrar, no de lo que te asignaron
@@ -511,7 +854,12 @@ para mañana.
 | 4 | **Los dos predicados divergen** — el fallo de la 235, repetido. | R16 + guardia de censo dedicada (T6), que se autocomprueba poniéndose roja al desalinear uno de los dos. |
 | 5 | **La suite de servicio no ve el `WHERE`.** Este repo ya midió cuatro veces que una mutación del `WHERE` pasa en verde por los tests de servicio (usan dobles). | Los casos que **de verdad** protegen R11/R12 viven en el **repositorio**, con dobles que honran el `where`, y hay una mutación obligatoria (T6) con salida real pegada. |
 | 6 | **Una orden protegida para siempre.** | Imposible por construcción: el máximo reservable es un día (D2) y el ancla del corte avanza sola (§5.1). Hay un caso de test que corre **dos** cortes consecutivos y afirma que la segunda corrida sí la barre (R13). |
-| 7 | **El ranking castiga al mensajero** (D7). | No se arregla; se **nombra**, se mide y se deja como ficha aparte. R33 lo congela para que nadie lo mueva de tapadillo. |
+| 7 | **El podio del día del despliegue sale falso** si el denominador contase sólo `fecha_reparto = X`: las órdenes anteriores desaparecen, todos los porcentajes suben y el premio se lo lleva quien no debe. **Es el peligro de dinero de esta ficha.** | La segunda rama del `OR` (§6.bis.3, R37/R43) y un test que la ejercita con una mezcla de órdenes con y sin fecha. **Mutación obligatoria**: quitar esa rama tiene que poner rojo un caso, con salida real. |
+| 8 | **Doble conteo entre las dos ramas del `OR`**: sin la cláusula `fechaReparto: null`, una orden asignada hoy para mañana entra en los denominadores de **los dos** días. | Las ramas son disjuntas por construcción; hay un caso testigo dedicado y su mutación. |
+| 9 | **Mezclar las dos convenciones de fecha** en la misma consulta del ranking (`DATE` a medianoche UTC vs `timestamp` a las 06:00Z): desplaza el día seis horas — el defecto que cerró la 166. | §6.bis.2 lo nombra; los tres valores los calcula el **llamador** y ninguno se deriva del otro; `ranking-ventana-dia.guardia.test.ts` se **amplía**, no se relaja. |
+| 10 | **Un índice de más en la tabla más caliente**, pagado en cada escritura de `orden`, por una consulta que quizá ya estaba haciendo un recorrido completo. | **M8 decide**: si el `EXPLAIN` no lo usa, no se crea. La decisión se toma con el plan delante, no con una intuición. |
+| 11 | **La ficha se lleva por delante el ranking sin que nadie lo espere.** D7 se firmó en contra de la recomendación; quien lea el título de la ficha dentro de seis meses no adivinará que aquí se movió el podio. | El registro está en `requirements.md` §D7 y §«PUERTA HUMANA PASADA», con la recomendación original íntegra, y en la `status_note` de la ficha. |
+| 12 | **M5 y M7 son PROXIES** y es fácil pegarlos como si fueran el efecto real. | Van etiquetados en los dos archivos y con autocomprobación; M7 además **reimplementa a mano** el comparador que en el código vive en un módulo puro, y eso se dice al pegar el resultado. |
 
 ---
 
@@ -521,5 +869,14 @@ para mañana.
   «quiénes entran en el bucle» por estatus: pasa a describir **estatus + día**.
 - El comentario del bloque `corteSinGestionar` en `CierreDiaRepository.crearCierre`.
 - La cabecera de `lib/utils/fecha-cr.ts`, con el tercer consumidor de `startOfDayCR`.
-- `progress/impl_246.md`: mediciones M1-M4 con su autocomprobación, salidas reales de las mutaciones
-  y el recorrido de «ver la app».
+- **La cabecera de `RankingRepository`**, que hoy describe el denominador como «órdenes asignadas
+  HOY(CR) por mensajero actualmente asignado»: pasa a describir las **dos ramas** y por qué son
+  disjuntas.
+- **El comentario de `TableroDiaRepository`** que dice que `asignado_at` «es el denominador del
+  ranking diario»: **deja de ser cierto** con D7 firmada. Se corrige diga lo que diga D10 — si el
+  tablero no sigue al ranking, ese comentario tiene que explicar por qué las dos cifras difieren.
+- **El ⛔ de `lib/ranking/snapshot-dia.ts`** que prohíbe importar `startOfDayCR`: sigue vigente para
+  las cotas del numerador, pero ahora convive con una fecha `DATE` que **sí** usa esa convención. El
+  comentario tiene que distinguir las dos o invitará a borrarlo.
+- `progress/impl_246.md`: mediciones **M1-M8** con su autocomprobación y con la etiqueta de PROXY en
+  M5/M7, salidas reales de las mutaciones y el recorrido de «ver la app».
