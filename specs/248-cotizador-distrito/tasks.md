@@ -17,118 +17,118 @@
 
 ## T1 — Resolución geográfica compartida (D12 / firma 4) · CAMINO CRÍTICO
 
-- [ ] **T1.1** Crear `lib/utils/resolucion-geografica.ts` (util PURO, sin acceso a datos) con la
+- [x] **T1.1** Crear `lib/utils/resolucion-geografica.ts` (util PURO, sin acceso a datos) con la
       extracción **literal** de `normalize`, `lookup` y `resolveGeo` de `BulkOrdenService.ts:42-178`,
       más `zonaDeDistrito(zonas)` con los tres estados (`unica` / `ninguna` / `ambigua`).
       *Hecho:* el módulo no importa Prisma ni ningún repositorio; los mensajes de `fieldErrors` son
       **carácter a carácter** los de hoy.
-- [ ] **T1.2** `BulkOrdenService` delega en el util: se borran las copias privadas y se conserva la
+- [x] **T1.2** `BulkOrdenService` delega en el util: se borran las copias privadas y se conserva la
       firma y el resultado de `resolveGeo`.
       *Hecho:* `BulkOrdenService` no contiene ya lógica de matching por nombre.
-- [ ] **T1.3** `OrdenRepository.findDistritosByCantonIds` (`:1210-1218`) puebla `zonaId`/`esCentral`
+- [x] **T1.3** `OrdenRepository.findDistritosByCantonIds` (`:1210-1218`) puebla `zonaId`/`esCentral`
       llamando a `zonaDeDistrito`, en lugar del ternario `zonas.length === 1`.
       *Hecho:* `DistritoRow` sale idéntico (0 y >1 zonas → `zonaId: null`, `esCentral: false`).
-- [ ] **T1.4** **NO REGRESIÓN (bloqueante, R36):** correr las suites existentes de carga masiva,
+- [x] **T1.4** **NO REGRESIÓN (bloqueante, R36):** correr las suites existentes de carga masiva,
       carga por API, listado por API key y cierre **sin modificar ni un test**.
       *Hecho:* todas verdes con el archivo de test intacto. **Si hay que tocar un test, el refactor
       cambió comportamiento: se revierte T1.2/T1.3 y se rehace**; no se ajusta el test.
 
 ## T2 — Tipos y configuración (depende de T1)
 
-- [ ] **T2.1** `lib/types/cotizador.ts`: zod de entrada de ambas superficies (incluye `cantidad`
+- [x] **T2.1** `lib/types/cotizador.ts`: zod de entrada de ambas superficies (incluye `cantidad`
       1..1000 y `cobra_comision` opcional default `true`) + DTOs de salida. Todo importe es `string`.
       *Hecho:* `pnpm run typecheck` verde y el DTO público **no declara** ninguna clave monetaria.
-- [ ] **T2.2 [P]** `lib/config/cotizador.ts`: tope de `cantidad` (1000) por configuración, sin
+- [x] **T2.2 [P]** `lib/config/cotizador.ts`: tope de `cantidad` (1000) por configuración, sin
       hardcode en el service (D16).
       *Hecho:* el service no contiene el literal del tope.
 
 ## T3 — Dominio de COBERTURA (depende de T2)
 
-- [ ] **T3.1** `ICoberturaDistritoRepository` + `CoberturaDistritoRepository`: catálogo delgado
+- [x] **T3.1** `ICoberturaDistritoRepository` + `CoberturaDistritoRepository`: catálogo delgado
       (provincias, cantones, distritos y **zonas crudas** del distrito). **No proyecta tarifas.**
       *Hecho:* no importa `TarifaVigentePorTiendaRepository` ni selecciona `tarifasTienda`.
-- [ ] **T3.2** `CoberturaService` (+ interfaz): resuelve el trío con el util de T1.1 y ramifica por
+- [x] **T3.2** `CoberturaService` (+ interfaz): resuelve el trío con el util de T1.1 y ramifica por
       los tres estados de `zonaDeDistrito` (R2/R3/R4).
       *Hecho:* el módulo **no importa** `ingreso-ordenex` ni nada de tarifas.
-- [ ] **T3.3 [P]** Catálogo geográfico **sin zonas** para la cascada pública, leído por el Server
+- [x] **T3.3 [P]** Catálogo geográfico **sin zonas** para la cascada pública, leído por el Server
       Component (D13).
       *Hecho:* la proyección no incluye `zona` ni `esCentral`.
 
 ## T4 — Superficie pública `/cotizador` (depende de T3)
 
-- [ ] **T4.1** `app/cotizador/page.tsx` (Server Component público) + `CotizadorForm.tsx` (client) con
+- [x] **T4.1** `app/cotizador/page.tsx` (Server Component público) + `CotizadorForm.tsx` (client) con
       la cascada provincia → cantón → distrito (R9).
       *Hecho:* la página renderiza sin sesión en local y la cascada acota cantones/distritos.
-- [ ] **T4.2** **Copy de compensación del riesgo aceptado (R11, D3):** texto visible que dice que ahí
+- [x] **T4.2** **Copy de compensación del riesgo aceptado (R11, D3):** texto visible que dice que ahí
       se consulta **cobertura** y que el **costeo** se obtiene por el canal con API key.
       *Hecho:* el texto está en el render inicial (no detrás de un click) y hay test que lo afirma.
-- [ ] **T4.3** `lib/actions/cobertura-publica.ts`: `'use server'`, **sin** `resolveActorFromSession`
+- [x] **T4.3** `lib/actions/cobertura-publica.ts`: `'use server'`, **sin** `resolveActorFromSession`
       (con el comentario que explica que la ausencia es deliberada, patrón `rastreo-publico.ts:17-22`)
       y **sin rate limit** (D14, con su porqué escrito en el archivo); zod → service; nunca lanza.
       *Hecho:* toda salida es un resultado discriminado.
-- [ ] **T4.4** Añadir `/cotizador` a `PUBLIC_ROUTES` en `middleware.ts`.
+- [x] **T4.4** Añadir `/cotizador` a `PUBLIC_ROUTES` en `middleware.ts`.
       *Hecho:* la ruta responde 200 sin cookie; ninguna otra ruta cambia de comportamiento.
 
 ## T5 — Canal por API key (depende de T3; paralelizable con T4)
 
-- [ ] **T5.1 [P]** `CotizadorService` (+ interfaz): compone cobertura + tarifa +
+- [x] **T5.1 [P]** `CotizadorService` (+ interfaz): compone cobertura + tarifa +
       `derivarIngresoOrden("entregada")` / `("devuelta")` + `pagoTiendaOrdenex`.
       *Hecho:* **cero** fórmulas monetarias propias en el archivo.
-- [ ] **T5.2** Neto **negativo** del escenario DEVUELTA (R21/D6): se **niega** el derivado
+- [x] **T5.2** Neto **negativo** del escenario DEVUELTA (R21/D6): se **niega** el derivado
       (`Prisma.Decimal(...).neg().toFixed(2)`), sin recalcular importes.
       *Hecho:* `"-1695.00"` para flete devolución 1500,00 + IVA 195,00, y **ninguna** llamada a
       `pagoTiendaOrdenex` en esta rama.
-- [ ] **T5.3** Multiplicación por N: unitario ya redondeado × N con
+- [x] **T5.3** Multiplicación por N: unitario ya redondeado × N con
       `Prisma.Decimal.mul(...).toFixed(2)`, incluido el neto negativo (R26/D7).
       *Hecho:* test verde con un caso donde redondear al final daría otro número.
-- [ ] **T5.4** `app/api/ordenes/api-key/cotizar/route.ts`: `extraerBearer` + `buildAutenticar` +
+- [x] **T5.4** `app/api/ordenes/api-key/cotizar/route.ts`: `extraerBearer` + `buildAutenticar` +
       401/403 + zod 422, con `handleCotizarApi(req, deps)` exportado para inyección (patrón
       `app/api/ordenes/api-key/route.ts:48-86`).
       *Hecho:* el handler no contiene lógica de negocio ni queries.
-- [ ] **T5.5 [P]** Degradación sin tarifa vigente: `tarifaVigente: false` + conceptos `"0.00"` (R30).
+- [x] **T5.5 [P]** Degradación sin tarifa vigente: `tarifaVigente: false` + conceptos `"0.00"` (R30).
       *Hecho:* no lanza, responde 200.
-- [ ] **T5.6 [P]** Bloque `supuesto` en la respuesta, con la cantidad interpolada (R28).
+- [x] **T5.6 [P]** Bloque `supuesto` en la respuesta, con la cantidad interpolada (R28).
       *Hecho:* presente en toda respuesta con `escenarios`.
-- [ ] **T5.7** `cobra_comision` opcional con default `true` (R33/D15), propagado tal cual a
+- [x] **T5.7** `cobra_comision` opcional con default `true` (R33/D15), propagado tal cual a
       `derivarIngresoOrden` y devuelto como eco en la respuesta.
       *Hecho:* con `false`, el escenario ENTREGADA **omite** `comisionCod` e `ivaComisionCod` (no los
       emite en `"0.00"`).
 
 ## T6 — Contrato publicado y listas firmadas (depende de T4.4 y T5.4)
 
-- [ ] **T6.1** Actualizar `LISTAS_ESPERADAS.PUBLIC_ROUTES` en
+- [x] **T6.1** Actualizar `LISTAS_ESPERADAS.PUBLIC_ROUTES` en
       `tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts:54-61` con `/cotizador`, en su
       posición real y con el comentario que dice de qué feature viene (R38).
       *Hecho:* `pnpm run test:guardias` verde y la contraprueba del archivo sigue intacta.
-- [ ] **T6.2** Actualizar `tests/unit/api/openapi-177-paths-pdf-y-carga-id.test.ts:71-97`: 7 → 8
+- [x] **T6.2** Actualizar `tests/unit/api/openapi-177-paths-pdf-y-carga-id.test.ts:71-97`: 7 → 8
       paths, en TS y en el `.yaml`, mismo orden.
       *Hecho:* el test pasa **y** sigue cazando un path de más o de menos.
-- [ ] **T6.3** `lib/api/openapi-spec.ts`: path + schemas nuevos. Documenta el default de
+- [x] **T6.3** `lib/api/openapi-spec.ts`: path + schemas nuevos. Documenta el default de
       `cobra_comision` (R34), el supuesto de homogeneidad (R28), la deuda de `tarifas.status` (R31),
       que `fulfillment` **no** se cotiza (R32) y que **el neto negativo de DEVUELTA no existe en el
       cierre** (R22).
       *Hecho:* el spec JSON de `/api/docs/openapi` renderiza en Swagger UI sin error.
-- [ ] **T6.4** `docs/api/api-key-openapi.yaml`: espejo textual exacto de T6.3.
+- [x] **T6.4** `docs/api/api-key-openapi.yaml`: espejo textual exacto de T6.3.
       *Hecho:* los guards de paridad TS↔yaml pasan.
-- [ ] **T6.5 [P]** `docs/api/ordenex-api-key.postman_collection.json`: request nuevo con Bearer y
+- [x] **T6.5 [P]** `docs/api/ordenex-api-key.postman_collection.json`: request nuevo con Bearer y
       cuerpo de ejemplo (incluye `cantidad` y `cobra_comision`).
       *Hecho:* la colección importa sin error y el request devuelve 200 contra local.
 
 ## T7 — Guardias propias (depende de T4 y T5)
 
-- [ ] **T7.1** Guardia de **aislamiento del público** (R10): el grafo de imports de la Server Action
+- [x] **T7.1** Guardia de **aislamiento del público** (R10): el grafo de imports de la Server Action
       pública, `CoberturaService`, `CoberturaDistritoRepository` y `app/cotizador/**` no alcanza
       `ingreso-ordenex`, `TarifaVigentePorTienda` ni `prisma.tarifa`. Con contraprueba.
       *Hecho:* la guardia se pone roja si se inyecta un import de tarifa en memoria.
-- [ ] **T7.2 [P]** Guardia de **claves del DTO público** contra literal firmado (R6) + contraprueba.
-- [ ] **T7.3 [P]** Guardia de **una sola definición de la zona del distrito** (R35): el ternario
+- [x] **T7.2 [P]** Guardia de **claves del DTO público** contra literal firmado (R6) + contraprueba.
+- [x] **T7.3 [P]** Guardia de **una sola definición de la zona del distrito** (R35): el ternario
       `zonas.length === 1` (y equivalentes) no aparece fuera de `lib/utils/resolucion-geografica.ts`.
       *Hecho:* con control de no-vacuidad (el censo encuentra el módulo compartido).
-- [ ] **T7.4 [P]** Guardia de **sin migración / sin esquema** (R39), con control de no-vacuidad.
+- [x] **T7.4 [P]** Guardia de **sin migración / sin esquema** (R39), con control de no-vacuidad.
 
 ## T8 — Cierre
 
-- [ ] **T8.1** `progress/impl_248.md` con el mapa `R<n> → test` **completo** (40 filas) y la salida
+- [x] **T8.1** `progress/impl_248.md` con el mapa `R<n> → test` **completo** (40 filas) y la salida
       real de los tests.
 - [ ] **T8.2** `./init.sh` completo en verde, con el baseline de `dev` medido en la misma sesión
       (los baselines caducan con cualquier PR ajeno).

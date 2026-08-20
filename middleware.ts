@@ -17,6 +17,11 @@ const PUBLIC_ROUTES = [
   // listar el prefijo `/api/docs` explicitamente o el spec redirige a /login y la UI no renderiza.
   "/api-docs",
   "/api/docs",
+  // Feature 248 (D3, firma 3 del gate humano del 2026-08-20): el cotizador de cobertura por
+  // distrito es una PAGINA PUBLICA sin sesion (R1). `startsWith` abre `/cotizador/*` y nada mas.
+  // Lo que esa superficie entrega es cobertura, nunca un importe: su Server Action no resuelve
+  // actor y su grafo de imports no alcanza el resolver de tarifas (R6/R10).
+  "/cotizador",
 ];
 
 // Endpoints que NO usan cookie de sesion porque traen su PROPIA autenticacion

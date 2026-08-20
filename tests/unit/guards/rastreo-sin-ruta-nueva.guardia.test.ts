@@ -47,10 +47,17 @@ function listaDelMiddleware(nombre: string): string[] {
 
 /** El contenido FIRMADO de cada lista. Cualquier alteracion pone esta guardia roja. */
 const LISTAS_ESPERADAS: Record<string, string[]> = {
-  // Paginas publicas fuera de `(app)`: login, recuperacion (20), postulacion (21) y la
-  // documentacion publica de la API (106). `/` NO esta aqui, y es la clave de la feature 229:
-  // se resuelve por coincidencia EXACTA mas abajo, porque el `startsWith` de esta lista
-  // volveria publica la app entera.
+  // Paginas publicas fuera de `(app)`: login, recuperacion (20), postulacion (21), la
+  // documentacion publica de la API (106) y el cotizador de cobertura (248). `/` NO esta aqui,
+  // y es la clave de la feature 229: se resuelve por coincidencia EXACTA mas abajo, porque el
+  // `startsWith` de esta lista volveria publica la app entera.
+  //
+  // ⚠ RE-FIRMA DELIBERADA, NO "hacer pasar el test" (feature 248, R38/T6.1). Esta lista ES el
+  // contrato: mientras nadie la toque, la guardia caza cualquier ruta publica nueva. La 248
+  // añade `/cotizador` a PROPOSITO —pagina publica sin sesion, firma 3 del gate humano del
+  // 2026-08-20— y por eso la firma se amplia EN EL MISMO PR, en la posicion real que la entrada
+  // ocupa en `middleware.ts` (la comparacion es posicional). Cualquier OTRA alteracion sigue
+  // poniendo esta guardia roja, hoy y dentro de veinte features.
   PUBLIC_ROUTES: [
     "/login",
     "/api/health",
@@ -58,6 +65,7 @@ const LISTAS_ESPERADAS: Record<string, string[]> = {
     "/postulacion",
     "/api-docs",
     "/api/docs",
+    "/cotizador", // feature 248 (D3/R1/R38)
   ],
   // Endpoints con autenticacion propia (Bearer o firma HMAC), validada en el handler.
   SELF_AUTH_ROUTES: ["/api/cron", "/api/ordenes/api-key", "/api/webhooks"],

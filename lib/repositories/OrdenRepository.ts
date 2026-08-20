@@ -8,6 +8,8 @@ import type {
   HistorialContexto,
 } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+// Feature 248 (D12/R35): la regla del distrito multi-zona vive en un util puro compartido.
+import { zonaDeDistrito } from "@/lib/utils/resolucion-geografica";
 import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
@@ -1201,21 +1203,39 @@ export class OrdenRepository implements IOrdenRepository {
         id: true,
         nombre: true,
         cantonId: true,
-        zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
+        // Feature 248 (D12/R35): el `nombre` de la zona se selecciona porque es lo que pide
+        // la firma compartida de `zonaDeDistrito` (el cotizador lo necesita para nombrar la
+        // zona cubierta). NO cambia `DistritoRow`, que no expone ese campo.
+        zonas: {
+          select: { zonaId: true, zona: { select: { esCentral: true, nombre: true } } },
+        },
       },
     });
     // Un distrito con EXACTAMENTE una zona resuelve orden.zona_id; con 0 zonas -> sin zona
     // asignada (error de fila); con >1 -> ambiguo/no derivable -> null (mismo trato seguro:
     // no se inventa una zona). El caso normal de negocio es 1 zona por distrito.
-    return rows.map((d) => ({
-      id: d.id,
-      nombre: d.nombre,
-      cantonId: d.cantonId,
-      zonaId: d.zonas.length === 1 ? d.zonas[0].zonaId : null,
-      // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
-      // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
-      esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
-    }));
+    //
+    // Feature 248 (D12/R35): esa regla ya no se decide aqui con un ternario propio; vive UNA
+    // sola vez en `lib/utils/resolucion-geografica.ts` y este repositorio la consulta. El
+    // resultado es identico al historico: solo `unica` puebla zonaId/esCentral.
+    return rows.map((d) => {
+      const zona = zonaDeDistrito(
+        d.zonas.map((z) => ({
+          zonaId: z.zonaId,
+          nombre: z.zona.nombre,
+          esCentral: z.zona.esCentral,
+        })),
+      );
+      return {
+        id: d.id,
+        nombre: d.nombre,
+        cantonId: d.cantonId,
+        zonaId: zona.estado === "unica" ? zona.zonaId : null,
+        // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
+        // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
+        esCentral: zona.estado === "unica" ? zona.esCentral : false,
+      };
+    });
   }
 
   /** R27: insercion masiva en lotes de `batchSize`, tolerando carreras de num_remision. */

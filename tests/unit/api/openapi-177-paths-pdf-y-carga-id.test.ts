@@ -12,6 +12,11 @@ import { openApiSpec } from "@/lib/api/openapi-spec";
 // cada afirmación se hace sobre AMBOS artefactos. Los guards hermanos
 // (`openapi-contrato-en-reparto.test.ts`, `openapi-carga-row-paridad.test.ts`) cubren los enums de
 // estado y `CargaRow`; este cubre los paths y `CargaResponse`.
+//
+// Feature 248 (R37) — la lista firmada pasa de 7 a 8 paths con el alta del cotizador. Lo que el
+// cotizador DICE (neto negativo ajeno al cierre, supuesto de homogeneidad, deuda de
+// `tarifas.status`, `fulfillment` fuera, default de `cobra_comision`) lo mide su propia guardia:
+// `tests/unit/api/openapi-248-cotizador.test.ts`.
 
 const YAML_PATH = path.join(__dirname, "..", "..", "..", "docs", "api", "api-key-openapi.yaml");
 const yaml = fs.readFileSync(YAML_PATH, "utf8");
@@ -66,8 +71,16 @@ function pathsDelYaml(): string[] {
 const PATH_DETALLE_POR_ID = "/api/ordenes/api-key/orden/{id}";
 const PATH_PDF_ORDEN = "/api/ordenes/api-key/orden/{id}/generate";
 const PATH_PDF_CARGA = "/api/ordenes/api-key/carga/{cargaId}/generate";
+// Feature 248/R37 — ALTA DELIBERADA del octavo endpoint: el cotizador por distrito del canal
+// por API key (`POST /api/ordenes/api-key/cotizar`, al final de `paths`).
+//
+// Esta lista firmada ES el contrato: no se toca para «arreglar el test», sino cuando un PR
+// amplía el contrato a propósito, y ese PR es el de la feature 248. La guardia sigue midiendo lo
+// mismo con la misma dureza (`toHaveLength` + `toEqual`): un path de más, uno de menos o uno
+// fuera de orden la pone roja, en el objeto TS y en el `.yaml`.
+const PATH_COTIZAR = "/api/ordenes/api-key/cotizar";
 
-/** Los 7 endpoints que el canal por API key publica tras la feature 177. */
+/** Los 8 endpoints que el canal por API key publica tras la feature 248. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
@@ -76,13 +89,14 @@ const PATHS_ESPERADOS = [
   PATH_DETALLE_POR_ID,
   PATH_PDF_ORDEN,
   PATH_PDF_CARGA,
+  PATH_COTIZAR, // feature 248/R37
 ];
 
-describe("177/R41 — el OpenAPI publica los siete endpoints del canal por API key", () => {
+describe("177/R41 + 248/R37 — el OpenAPI publica los ocho endpoints del canal por API key", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente siete paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(7);
+  it("el objeto TS declara exactamente ocho paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(8);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -92,8 +106,10 @@ describe("177/R41 — el OpenAPI publica los siete endpoints del canal por API k
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos siete paths, en el mismo orden", () => {
-    expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
+  it("el .yaml publicado declara los mismos ocho paths, en el mismo orden", () => {
+    const delYaml = pathsDelYaml();
+    expect(delYaml).toHaveLength(8);
+    expect(delYaml).toEqual(PATHS_ESPERADOS);
   });
 
   it("la consulta por identificador es GET y reutiliza el schema OrdenDetalle de la 106", () => {

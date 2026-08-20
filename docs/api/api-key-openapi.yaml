@@ -457,6 +457,208 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
+  "/api/ordenes/api-key/cotizar":
+    post:
+      tags:
+        - Órdenes
+      summary: Cotizar el envío a un distrito
+      operationId: cotizarEnvio
+      description: |-
+        Cotiza el envío a un distrito para la tienda dueña de la key. **Solo lee**: no crea
+        órdenes, no reserva nada y no deja rastro. La tienda sale de la key: no hay ninguna
+        clave de tienda en el cuerpo (una clave así se ignora).
+
+        La respuesta trae los **dos escenarios a la vez** —`entregada` y `devuelta`—, y cada uno
+        con su desglose `unitario` y su `total` por las N órdenes. El `total` es el valor
+        unitario **ya redondeado** multiplicado por N, no el redondeo final de una multiplicación
+        sin redondear: así es como el cierre acumula los importes orden por orden.
+
+        **Todo importe es una CADENA de escala 2** (p. ej. `"2200.00"`, `"-1695.00"`), nunca un
+        número JSON: el dinero no viaja en punto flotante.
+
+        **⚠ El `netoTienda` del escenario DEVUELTA es NEGATIVO y NO EXISTE EN EL CIERRE.** Es un
+        número **del cotizador** —«cuánto te cuesta si vuelve»—, no un asiento, y **no debe
+        cuadrarse contra ninguna línea de cierre**. La razón es del cálculo del cierre: el pago a
+        la tienda **no descuenta el flete de devolución**, porque una devolución no recauda COD y
+        por tanto no aporta al total general. Si intentás cuadrar este neto contra un cierre, la
+        diferencia que te salga no es un error del cierre.
+
+        **Supuesto de la cotización múltiple (`cantidad` > 1):** las N órdenes comparten
+        **distrito y monto a cobrar**, y la respuesta lo declara en el campo `supuesto`. Una
+        canasta heterogénea NO se cotiza multiplicando: la comisión COD es un porcentaje del
+        monto, así que N montos distintos no son una multiplicación. Para montos distintos,
+        cotizá una vez por monto.
+
+        **Tarifa aplicada:** la **vigente al momento de cotizar** (el cierre congela la suya
+        aparte, así que una cotización guardada no es una promesa de precio).
+
+        **Deuda heredada, declarada:** la tarifa cotizada es la más reciente **no borrada** de la
+        tienda; el resolver **no filtra por `tarifas.status`**, así que **una tarifa marcada
+        `inactivo` que no haya sido borrada puede cotizarse**. Es exactamente la misma tarifa que
+        aplicaría el cierre hoy: el cotizador **hereda** esa deuda, no la introduce, y su arreglo
+        es una ficha aparte.
+
+        **`fulfillment` no se cotiza.** Ninguna fórmula del cierre lo usa hoy, así que no aparece
+        en ninguna respuesta ni en ningún schema de este contrato. Cotizarlo prometería un cobro
+        que el cierre no aplica.
+
+        Si el distrito no resuelve **exactamente una** zona (ninguna, o varias), la respuesta es
+        200 con el bloque `cobertura` y `costos: null`: no se elige una zona arbitraria y no se
+        lee ninguna tarifa.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CotizacionRequest"
+            examples:
+              tresOrdenes:
+                summary: "Tres órdenes al mismo distrito, con comisión COD"
+                value:
+                  provincia: San José
+                  canton: Central
+                  distrito: Carmen
+                  monto_cobrar: "25000.00"
+                  cantidad: 3
+                  cobra_comision: true
+              unaSinComision:
+                summary: "Una orden sin comisión COD (cantidad ausente = 1)"
+                value:
+                  provincia: San José
+                  canton: Central
+                  distrito: Carmen
+                  monto_cobrar: "25000.00"
+                  cobra_comision: false
+      responses:
+        "200":
+          description: "Cotización resuelta. Con cobertura de exactamente una zona trae los costos; con 0 o >1 zonas trae `costos: null`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CotizacionResponse"
+              examples:
+                conComision:
+                  summary: "Tres órdenes, tarifa vigente, con comisión COD"
+                  value:
+                    cobertura:
+                      estado: cubierto
+                      zonaNombre: GAM
+                    tarifaVigente: true
+                    cantidad: 3
+                    montoCobrar: "25000.00"
+                    cobraComision: true
+                    supuesto: las 3 órdenes comparten distrito y monto a cobrar
+                    escenarios:
+                      entregada:
+                        unitario:
+                          flete: "2200.00"
+                          ivaFlete: "286.00"
+                          comisionCod: "875.00"
+                          ivaComisionCod: "113.75"
+                          costoTotal: "3474.75"
+                          netoTienda: "21525.25"
+                        total:
+                          flete: "6600.00"
+                          ivaFlete: "858.00"
+                          comisionCod: "2625.00"
+                          ivaComisionCod: "341.25"
+                          costoTotal: "10424.25"
+                          netoTienda: "64575.75"
+                      devuelta:
+                        unitario:
+                          fleteDevolucion: "1500.00"
+                          ivaFleteDevolucion: "195.00"
+                          costoTotal: "1695.00"
+                          netoTienda: "-1695.00"
+                        total:
+                          fleteDevolucion: "4500.00"
+                          ivaFleteDevolucion: "585.00"
+                          costoTotal: "5085.00"
+                          netoTienda: "-5085.00"
+                sinComision:
+                  summary: "Con `cobra_comision: false`: comisionCod e ivaComisionCod se OMITEN (no van en \"0.00\")"
+                  value:
+                    cobertura:
+                      estado: cubierto
+                      zonaNombre: GAM
+                    tarifaVigente: true
+                    cantidad: 1
+                    montoCobrar: "25000.00"
+                    cobraComision: false
+                    supuesto: la cotización corresponde a 1 orden con ese distrito y ese monto a cobrar
+                    escenarios:
+                      entregada:
+                        unitario:
+                          flete: "2200.00"
+                          ivaFlete: "286.00"
+                          costoTotal: "2486.00"
+                          netoTienda: "22514.00"
+                        total:
+                          flete: "2200.00"
+                          ivaFlete: "286.00"
+                          costoTotal: "2486.00"
+                          netoTienda: "22514.00"
+                      devuelta:
+                        unitario:
+                          fleteDevolucion: "1500.00"
+                          ivaFleteDevolucion: "195.00"
+                          costoTotal: "1695.00"
+                          netoTienda: "-1695.00"
+                        total:
+                          fleteDevolucion: "1500.00"
+                          ivaFleteDevolucion: "195.00"
+                          costoTotal: "1695.00"
+                          netoTienda: "-1695.00"
+                sinTarifaVigente:
+                  summary: "La tienda no tiene tarifa vigente: `tarifaVigente: false` y todo en \"0.00\" (no es «gratis»)"
+                  value:
+                    cobertura:
+                      estado: cubierto
+                      zonaNombre: GAM
+                    tarifaVigente: false
+                    cantidad: 1
+                    montoCobrar: "25000.00"
+                    cobraComision: true
+                    supuesto: la cotización corresponde a 1 orden con ese distrito y ese monto a cobrar
+                    escenarios:
+                      entregada:
+                        unitario:
+                          flete: "0.00"
+                          ivaFlete: "0.00"
+                          comisionCod: "0.00"
+                          ivaComisionCod: "0.00"
+                          costoTotal: "0.00"
+                          netoTienda: "25000.00"
+                        total:
+                          flete: "0.00"
+                          ivaFlete: "0.00"
+                          comisionCod: "0.00"
+                          ivaComisionCod: "0.00"
+                          costoTotal: "0.00"
+                          netoTienda: "25000.00"
+                      devuelta:
+                        unitario:
+                          fleteDevolucion: "0.00"
+                          ivaFleteDevolucion: "0.00"
+                          costoTotal: "0.00"
+                          netoTienda: "0.00"
+                        total:
+                          fleteDevolucion: "0.00"
+                          ivaFleteDevolucion: "0.00"
+                          costoTotal: "0.00"
+                          netoTienda: "0.00"
+                coberturaNoResuelta:
+                  summary: "El distrito no resuelve exactamente una zona: sin bloque de costos"
+                  value:
+                    cobertura:
+                      estado: no_determinado
+                    costos: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 components:
   securitySchemes:
     bearerAuth:
@@ -820,6 +1022,241 @@ components:
         generado:
           type: boolean
           description: "`true` si el PDF se construyó en esta llamada; `false` si se reutilizó el ya almacenado y solo se volvió a firmar."
+    CotizacionRequest:
+      type: object
+      description: "Entrada de la cotización. La geografía se identifica **por nombre** (el mismo trío con el que la carga por API crea órdenes), no por uuid. **No hay ninguna clave de tienda**: la tienda es la dueña de la API key, y una clave así en el cuerpo se ignora."
+      required:
+        - provincia
+        - canton
+        - distrito
+        - monto_cobrar
+      properties:
+        provincia:
+          type: string
+          minLength: 1
+          description: Nombre de la provincia.
+        canton:
+          type: string
+          minLength: 1
+          description: "Nombre del cantón, dentro de esa provincia."
+        distrito:
+          type: string
+          minLength: 1
+          description: "Nombre del distrito, dentro de ese cantón."
+        monto_cobrar:
+          type: string
+          pattern: '^\d{1,12}(\.\d{1,2})?$'
+          example: "25000.00"
+          description: "Monto a cobrar (COD) **por orden**, como CADENA con hasta 2 decimales (p. ej. \"25000.00\"). Nunca un número: el dinero no viaja en punto flotante. Sobre él se calcula la comisión COD."
+        cantidad:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          description: "Cantidad de órdenes a cotizar (entero 1..1000; ambos extremos se aceptan). **Ausente vale 1.** Fuera de rango o no entero devuelve 422 sin cotizar. Con N > 1 aplica el supuesto de homogeneidad: las N órdenes comparten distrito y monto a cobrar."
+        cobra_comision:
+          type: boolean
+          default: true
+          description: "Si la tienda paga comisión COD sobre el monto cobrado. **Ausente vale `true`**, que es el caso caro (añade comisión COD + su IVA): una cotización que se equivoca hacia arriba no da sorpresas al alza, porque la factura posterior será menor o igual a lo cotizado. Con `false`, el escenario `entregada` **omite** `comisionCod` e `ivaComisionCod` (no los emite en \"0.00\")."
+    CoberturaBloque:
+      type: object
+      description: "Cobertura del distrito consultado. Nunca publica el id de la zona ni su flag interno de zona central: solo el estado y, si está cubierto, el **nombre** de la zona."
+      required:
+        - estado
+      properties:
+        estado:
+          type: string
+          enum:
+            - cubierto
+            - sin_cobertura
+            - no_determinado
+          description: "`cubierto`: el distrito resuelve exactamente una zona. `sin_cobertura`: ninguna. `no_determinado`: más de una zona, así que no se deriva ninguna (no se elige una arbitraria)."
+        zonaNombre:
+          type: string
+          description: "Nombre de la zona que cubre el distrito. Presente SOLO con `estado: \"cubierto\"`."
+    ImportesEntregada:
+      type: object
+      description: |-
+        Desglose del escenario **ENTREGADA**, con los cuatro conceptos por separado. Todos los
+        valores son cadenas de escala 2.
+
+        `comisionCod` e `ivaComisionCod` **se OMITEN** cuando la cotización va con
+        `cobra_comision: false`: no se emiten en "0.00", porque un concepto ausente y uno en
+        cero no dicen lo mismo.
+      required:
+        - flete
+        - ivaFlete
+        - costoTotal
+        - netoTienda
+      properties:
+        flete:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "2200.00"
+          description: "Flete de la zona del distrito, según la tarifa vigente de la tienda."
+        ivaFlete:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "286.00"
+          description: IVA del flete.
+        comisionCod:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "875.00"
+          description: "Comisión COD (porcentaje sobre el monto a cobrar). **Ausente** si `cobra_comision` es `false`."
+        ivaComisionCod:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "113.75"
+          description: "IVA de la comisión COD. **Ausente** si `cobra_comision` es `false`."
+        costoTotal:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "3474.75"
+          description: "Suma de los conceptos presentes: lo que Ordenex factura si la orden se entrega."
+        netoTienda:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "21525.25"
+          description: "Lo que recibe la tienda: monto a cobrar menos (flete + IVA) menos (comisión COD + IVA de la comisión). Este sí es el número que el cierre paga."
+    ImportesDevuelta:
+      type: object
+      description: |-
+        Desglose del escenario **DEVUELTA**: flete de devolución y su IVA. Sin comisión COD, sin
+        IVA de comisión y sin monto COD a recibir, porque una devolución no recauda.
+      required:
+        - fleteDevolucion
+        - ivaFleteDevolucion
+        - costoTotal
+        - netoTienda
+      properties:
+        fleteDevolucion:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "1500.00"
+          description: "Flete de devolución de la zona, según la tarifa vigente de la tienda."
+        ivaFleteDevolucion:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "195.00"
+          description: IVA del flete de devolución.
+        costoTotal:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "1695.00"
+          description: "Flete de devolución + su IVA: lo que cuesta que la orden vuelva."
+        netoTienda:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "-1695.00"
+          description: |-
+            **NEGATIVO**, igual a `-(fleteDevolucion + ivaFleteDevolucion)`.
+
+            **⚠ Este número NO EXISTE EN EL CIERRE y no debe cuadrarse contra ninguna línea de
+            cierre.** Es un número **del cotizador** («cuánto te cuesta si vuelve»), no un asiento:
+            el pago a la tienda **no descuenta el flete de devolución**, porque una devolución no
+            recauda COD y por tanto no aporta al total general.
+    EscenarioEntregada:
+      type: object
+      description: "El escenario ENTREGADA publicado dos veces: por orden (`unitario`) y por las N (`total`)."
+      required:
+        - unitario
+        - total
+      properties:
+        unitario:
+          $ref: "#/components/schemas/ImportesEntregada"
+        total:
+          $ref: "#/components/schemas/ImportesEntregada"
+    EscenarioDevuelta:
+      type: object
+      description: "El escenario DEVUELTA publicado dos veces: por orden (`unitario`) y por las N (`total`)."
+      required:
+        - unitario
+        - total
+      properties:
+        unitario:
+          $ref: "#/components/schemas/ImportesDevuelta"
+        total:
+          $ref: "#/components/schemas/ImportesDevuelta"
+    EscenarioCotizacion:
+      type: object
+      description: |-
+        Los dos escenarios de la cotización, en la misma respuesta. En cada uno, el `total` es
+        el valor `unitario` **ya redondeado** multiplicado por la `cantidad`, no el redondeo
+        final de una multiplicación sin redondear: así es como el cierre acumula los importes
+        orden por orden.
+      required:
+        - entregada
+        - devuelta
+      properties:
+        entregada:
+          $ref: "#/components/schemas/EscenarioEntregada"
+        devuelta:
+          $ref: "#/components/schemas/EscenarioDevuelta"
+    CotizacionConCostos:
+      type: object
+      description: "Cotización con costos: el distrito resolvió exactamente una zona, así que hubo tarifa que leer."
+      required:
+        - cobertura
+        - tarifaVigente
+        - cantidad
+        - montoCobrar
+        - cobraComision
+        - supuesto
+        - escenarios
+      properties:
+        cobertura:
+          $ref: "#/components/schemas/CoberturaBloque"
+        tarifaVigente:
+          type: boolean
+          description: |-
+            `false` cuando la tienda no tiene tarifa vigente: en ese caso todos los conceptos
+            van en "0.00", y esta bandera existe para que ese cero **no se lea como «gratis»**.
+
+            **Deuda heredada, declarada:** la tarifa cotizada es la más reciente **no borrada** de
+            la tienda; el resolver **no filtra por `tarifas.status`**, así que **una tarifa marcada
+            `inactivo` que no haya sido borrada puede cotizarse**. Es la misma tarifa que aplicaría
+            el cierre hoy: el cotizador hereda esa deuda, no la introduce.
+        cantidad:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: "Eco de la cantidad aplicada (1 si el parámetro vino ausente)."
+        montoCobrar:
+          type: string
+          pattern: '^-?\d+\.\d{2}$'
+          example: "25000.00"
+          description: "Eco del monto a cobrar aplicado, normalizado a escala 2."
+        cobraComision:
+          type: boolean
+          description: "Eco del parámetro `cobra_comision` aplicado, con su default `true` ya resuelto: leyéndolo se sabe qué se cotizó sin adivinar."
+        supuesto:
+          type: string
+          example: las 3 órdenes comparten distrito y monto a cobrar
+          description: |-
+            **Supuesto de homogeneidad** de la cotización múltiple, en texto: las N órdenes
+            comparten **distrito y monto a cobrar**. Sin él, un integrador multiplicaría una
+            canasta heterogénea y la comisión COD saldría mal: es un porcentaje del monto, así
+            que N montos distintos NO son una multiplicación.
+        escenarios:
+          $ref: "#/components/schemas/EscenarioCotizacion"
+    CotizacionSinCostos:
+      type: object
+      description: "Cotización sin costos: el distrito no resolvió exactamente una zona (ninguna, o varias), así que no se eligió una zona arbitraria y no se leyó ninguna tarifa."
+      required:
+        - cobertura
+        - costos
+      properties:
+        cobertura:
+          $ref: "#/components/schemas/CoberturaBloque"
+        costos:
+          type: "null"
+          description: "Siempre `null` en esta variante: no hay bloque `escenarios`."
+    CotizacionResponse:
+      oneOf:
+        - $ref: "#/components/schemas/CotizacionConCostos"
+        - $ref: "#/components/schemas/CotizacionSinCostos"
+      description: "Respuesta de la cotización: con costos si la cobertura resolvió una zona, o con `costos: null` si no."
   responses:
     Unauthorized:
       description: "API key ausente, mal formada o desconocida."

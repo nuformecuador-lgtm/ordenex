@@ -29,7 +29,12 @@ import type {
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
-import { normalizeName } from "@/lib/utils/normalize";
+import {
+  indexBy,
+  normalize,
+  resolveGeo,
+  type GeoResult,
+} from "@/lib/utils/resolucion-geografica";
 import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
 import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 
@@ -39,142 +44,18 @@ import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 // hubiera recolectado. Las tres vias comparten ahora el mismo punto de decision
 // (`resolverDestinoCreacion`), aplicado sobre el dueño de la orden.
 
-// La resolucion geografica compara nombres del archivo contra los de la DB con el
-// MISMO normalizador que indexa el arbol de zonas (lib/utils/normalize): minusculas,
-// sin acentos, sin caracteres especiales y con espacios colapsados. Aplicarlo a
-// AMBOS lados evita rechazar filas por erratas tipograficas (mayusculas, acentos,
-// "San  Pedro" con doble espacio, puntuacion).
-function normalize(value: string): string {
-  return normalizeName(value);
-}
-
+// Feature 248 (D12/R35): `normalize`, `indexBy`, `lookup` y `resolveGeo` —con sus tipos
+// `LookupResult`, `ResolvedGeo` y `GeoResult`— ya NO viven aqui. Se extrajeron sin cambiar
+// una coma a `lib/utils/resolucion-geografica.ts` para que el cotizador resuelva la
+// geografia con LA MISMA definicion que la crea (una definicion, dos lecturas). Este
+// service las importa: la firma, el resultado y los mensajes de `fieldErrors` son los de
+// siempre (R36: los tests de carga masiva y de carga por API pasan sin tocarse).
+//
+// `distinct` se queda aqui a proposito: no es resolucion geografica (se usa tambien para
+// deduplicar num_remision, ver `cargarMasiva`), asi que no tiene sitio en un util cuyo
+// alcance es la geografia.
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
-}
-
-// R19/R20: indice ambiguo-aware, clave normalizada -> filas candidatas.
-// length 0 = no existe; length 1 = resuelto; length > 1 = ambiguo dentro del padre.
-function indexBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
-  const index = new Map<string, T[]>();
-  for (const row of rows) {
-    const key = keyOf(row);
-    const bucket = index.get(key);
-    if (bucket) bucket.push(row);
-    else index.set(key, [row]);
-  }
-  return index;
-}
-
-type LookupResult<T> =
-  | { status: "found"; row: T }
-  | { status: "missing" }
-  | { status: "ambiguous" };
-
-function lookup<T>(index: Map<string, T[]>, key: string): LookupResult<T> {
-  const bucket = index.get(key);
-  if (!bucket || bucket.length === 0) return { status: "missing" };
-  if (bucket.length > 1) return { status: "ambiguous" };
-  return { status: "found", row: bucket[0] };
-}
-
-interface ResolvedGeo {
-  provinciaId: string;
-  zonaId: string;
-  cantonId: string;
-  distritoId: string | null;
-  // Feature 98/R2: flag de la zona resuelta del distrito, para elegir la columna del flete al
-  // tarifar la carga por API. La via sesion lo ignora (R9).
-  esCentral: boolean;
-}
-
-type GeoResult =
-  | { ok: true; geo: ResolvedGeo }
-  | { ok: false; fieldErrors: Record<string, string[]> };
-
-// R19/R20/R21: resuelve provincia -> canton (dentro de la provincia) -> distrito
-// (dentro del canton) por nombre. El distrito es OBLIGATORIO y de el se deriva
-// zonaId (modelo por-distrito, feature 24/R4/R11 decision b); una fila sin distrito,
-// con distrito no resoluble, o con distrito sin zona -> error de fila.
-function resolveGeo(
-  raw: { provincia: string; canton: string; distrito: string },
-  provinciaIndex: Map<string, ProvinciaRow[]>,
-  cantonIndex: Map<string, CantonRow[]>,
-  distritoIndex: Map<string, DistritoRow[]>,
-): GeoResult {
-  const provinciaResult = lookup(provinciaIndex, normalize(raw.provincia));
-  if (provinciaResult.status !== "found") {
-    return {
-      ok: false,
-      fieldErrors: {
-        provincia: [
-          provinciaResult.status === "ambiguous"
-            ? "provincia ambigua"
-            : "provincia no encontrada",
-        ],
-      },
-    };
-  }
-  const provincia = provinciaResult.row;
-
-  const cantonResult = lookup(cantonIndex, `${provincia.id}::${normalize(raw.canton)}`);
-  if (cantonResult.status !== "found") {
-    return {
-      ok: false,
-      fieldErrors: {
-        canton: [
-          cantonResult.status === "ambiguous"
-            ? "canton ambiguo en la provincia"
-            : "canton no encontrado en la provincia",
-        ],
-      },
-    };
-  }
-  const canton = cantonResult.row;
-
-  // Feature 24/R4/R11: la zona de la orden se deriva del DISTRITO, que pasa a ser
-  // obligatorio. Sin distrito no hay forma de resolver orden.zona_id (NOT NULL).
-  if (raw.distrito.trim() === "") {
-    return {
-      ok: false,
-      fieldErrors: {
-        distrito: ["distrito requerido: la zona de la orden se deriva del distrito"],
-      },
-    };
-  }
-
-  const distritoResult = lookup(distritoIndex, `${canton.id}::${normalize(raw.distrito)}`);
-  if (distritoResult.status !== "found") {
-    return {
-      ok: false,
-      fieldErrors: {
-        distrito: [
-          distritoResult.status === "ambiguous"
-            ? "distrito ambiguo en el canton"
-            : "distrito no encontrado en el canton",
-        ],
-      },
-    };
-  }
-  const distrito = distritoResult.row;
-  // Feature 24/R4/R11 (reconciliacion feature 54): la zona de la orden se deriva
-  // del DISTRITO (orden.zona_id es NOT NULL). Un distrito sin zona -> error de fila.
-  if (distrito.zonaId === null) {
-    return {
-      ok: false,
-      fieldErrors: { distrito: [`el distrito '${raw.distrito.trim()}' no tiene zona asignada`] },
-    };
-  }
-
-  return {
-    ok: true,
-    geo: {
-      provinciaId: provincia.id,
-      zonaId: distrito.zonaId,
-      cantonId: canton.id,
-      distritoId: distrito.id,
-      esCentral: distrito.esCentral, // feature 98/R2: flag de la zona del distrito.
-    },
-  };
 }
 
 // Feature 142 (design.md §4) — extractor de geografia INYECTADO POR VIA.
