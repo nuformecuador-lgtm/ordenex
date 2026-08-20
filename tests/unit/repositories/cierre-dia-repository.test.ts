@@ -52,7 +52,16 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       findFirst: vi.fn(),
     },
     orden: { count: vi.fn() },
-    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    // Feature 237 (T5.5, D3): `findGestionParaDeshacer` LEE el historial para saber si la gestion
+    // la registro la tienda. Por defecto no hay fila de esa familia -> la registro el mensajero,
+    // que es el caso de siempre.
+    ordenHistorialEstado: {
+      findFirst: vi.fn(async () => null),
+      // Feature 237 (D6/R41): la lectura EN LOTE de «¿cual la registro la tienda?». Por defecto
+      // ninguna: el caso de siempre es que las registro el mensajero.
+      findMany: vi.fn(async () => [] as { gestionOrdenId: string | null }[]),
+    },
+    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
     // Feature 69/T10: el snapshot y el resolver batch viven en la tx de `crearCierre`.
     cierreDetail: { createMany: vi.fn() },
     tarifa: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -79,6 +88,124 @@ function buildTarifaRepo(
 
 beforeEach(async () => {
   await sembrarCatalogoEstados(); // feature 140: la guardia del choke point es de fallo CERRADO (catalogo real + pares legales)
+});
+
+// ---------------------------------------------------------------------------------------------
+// 💰 FEATURE 237 (D6 firmada por el HUMANO el 2026-08-20, R41) — LA FILA DEL CIERRE DEL DIA DICE
+// QUIEN GESTIONO.
+//
+// Por que importa, y no es cosmetica: la orden desaparece del portal del mensajero en cuanto sale
+// de `ayuda_tienda`, y a la vez le APARECE en su «Cierre del dia» una gestion con evidencia y
+// motivo que no son suyos. Sin este dato **firma un cierre con una gestion que no hizo y una
+// evidencia que no subio**, y no puede explicarla si le preguntan. Es SU dinero (el
+// `cobroRechazado` sale de su tarifa) y SU intento de entrega.
+//
+// La derivacion vive en el repositorio y ningun test de servicio la ve —alli el repo es un doble—,
+// asi que el `where` se comprueba AQUI, donde se ejecuta.
+// ---------------------------------------------------------------------------------------------
+describe("💰 Feature 237 — `desdeAyudaTienda` en la fila del cierre (D6/R41)", () => {
+  /** Dos gestiones de la misma orden: una la registro la tienda, la otra el mensajero. */
+  function conDosGestiones(deLaTienda: string[]) {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([
+      detalleRow({ id: "g-tienda", ordenId: "o-tienda" }),
+      detalleRow({ id: "g-propia", ordenId: "o-propia" }),
+    ]);
+    (prisma.ordenHistorialEstado.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(
+      deLaTienda.map((gestionOrdenId) => ({ gestionOrdenId })),
+    );
+    return prisma;
+  }
+
+  // ⭑ EL CASO EMPAREJADO. Una bandera que siempre es `true` pasa igual de verde que una correcta:
+  // lo que dice algo es que las DOS filas de la MISMA lectura salgan con valores DISTINTOS.
+  it("la de la TIENDA llega con `true` y la del MENSAJERO con `false`, en la misma lectura", async () => {
+    const prisma = conDosGestiones(["g-tienda"]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const rows = await repo.findGestionesPendientes("m1");
+
+    expect(rows.map((r) => [r.gestionId, r.desdeAyudaTienda])).toEqual([
+      ["g-tienda", true],
+      ["g-propia", false],
+    ]);
+  });
+
+  it("sin ninguna gestion de la tienda, las dos llegan con `false`", async () => {
+    const prisma = conDosGestiones([]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const rows = await repo.findGestionesPendientes("m1");
+
+    expect(rows.every((r) => r.desdeAyudaTienda === false)).toBe(true);
+  });
+
+  // 💰 EL `WHERE`, PROBADO DONDE VIVE. Las tres condiciones tienen dueño:
+  //   - `ordenId` es RENDIMIENTO y esta MEDIDO (2026-08-20, `EXPLAIN` con `enable_seqscan = off`):
+  //     sin el, el plan cae a **Seq Scan** sobre una tabla append-only que crece con CADA
+  //     transicion del sistema; con el, **Bitmap Heap Scan** por `[orden_id, created_at]`.
+  //   - `gestionOrdenId` acota a ESTAS gestiones: sin el, cualquier orden que alguna vez resolvio
+  //     la tienda marcaria TODAS sus gestiones, incluidas las del mensajero.
+  //   - `origenTipo` es la familia: sin el, toda gestion con historial saldria `true`.
+  it("el `where` lleva las tres condiciones, con `ordenId` DELANTE (el que usa el indice)", async () => {
+    const prisma = conDosGestiones(["g-tienda"]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.findGestionesPendientes("m1");
+
+    const arg = (prisma.ordenHistorialEstado.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.where).toEqual({
+      ordenId: { in: ["o-tienda", "o-propia"] },
+      gestionOrdenId: { in: ["g-tienda", "g-propia"] },
+      origenTipo: "gestion_tienda_ayuda",
+    });
+    expect(arg.select).toEqual({ gestionOrdenId: true });
+  });
+
+  // NO es N+1, y esto tambien esta medido: una consulta para las N filas, no una por fila.
+  it("UNA sola consulta para las N gestiones (no una por fila)", async () => {
+    const prisma = conDosGestiones(["g-tienda"]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.findGestionesPendientes("m1");
+
+    expect(prisma.ordenHistorialEstado.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin gestiones no se consulta el historial (ni una consulta de mas)", async () => {
+    const prisma = buildPrisma();
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.findGestionesPendientes("m1")).toEqual([]);
+    expect(prisma.ordenHistorialEstado.findMany).not.toHaveBeenCalled();
+  });
+
+  // El OTRO camino que ve el mensajero: el detalle de un cierre suyo ya solicitado.
+  it("el detalle de un cierre PROPIO tambien lo lleva, por la misma via", async () => {
+    const prisma = conDosGestiones(["g-tienda"]);
+    prisma.cierreDia.findFirst.mockResolvedValue({
+      id: "c1",
+      estado: "solicitado",
+      solicitadoAt: new Date("2026-08-20T10:00:00.000Z"),
+      resueltoAt: null,
+      motivoRechazo: null,
+      totalEfectivo: new Prisma.Decimal("0.00"),
+      totalSimpe: new Prisma.Decimal("0.00"),
+      totalTransferencia: new Prisma.Decimal("0.00"),
+      totalGeneral: new Prisma.Decimal("0.00"),
+      totalPagoMensajero: new Prisma.Decimal("0.00"),
+      totalIngresoBodegaRechazos: new Prisma.Decimal("0.00"),
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    expect(r?.gestiones.map((g) => [g.gestionId, g.desdeAyudaTienda])).toEqual([
+      ["g-tienda", true],
+      ["g-propia", false],
+    ]);
+  });
 });
 
 describe("CierreDiaRepository.findGestionesPendientes (R2/R3)", () => {
@@ -905,6 +1032,78 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
       cierreId: null, // R2
       anuladaAt: null, // R3
       orden: { deletedAt: null, estatusId: idEstado("en_bodega_central"), estatusValue: "en_bodega_central" }, // R5/R6
+      desdeAyudaTienda: false, // feature 237 (D3/R38): la registro el mensajero, no la tienda
+    });
+  });
+
+  // 💰 FEATURE 237 (T5.5, D3/R38) — EL `WHERE` DE «¿la registro la tienda?», PROBADO DONDE VIVE.
+  //
+  // Esta consulta NO la ve ningun test de servicio: alli el repositorio es un doble y devuelve el
+  // booleano ya hecho. Una mutacion del `where` —quitarle el `origenTipo`, o el `gestionOrdenId`—
+  // dejaria en verde toda la suite del servicio y rompería la guardia en produccion. Por eso se
+  // mira aqui, sobre el `where` real que sale hacia Prisma.
+  describe("Feature 237 — `desdeAyudaTienda` (D3/R38)", () => {
+    function conHistorial(filaHistorial: { id: string } | null) {
+      const prisma = buildPrisma();
+      prisma.gestionOrden.findUnique.mockResolvedValue({
+        id: "g1",
+        ordenId: "o1",
+        mensajeroId: "m1",
+        resultado: "rechazada",
+        cierreId: null,
+        anuladaAt: null,
+        orden: { deletedAt: null, estatusId: idEstado("rechazada"), estatus: { value: "rechazada" } },
+      });
+      (prisma.ordenHistorialEstado.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(
+        filaHistorial,
+      );
+      return prisma;
+    }
+
+    it("el `where` filtra por la orden, por LA GESTION y por la familia `gestion_tienda_ayuda`", async () => {
+      const prisma = conHistorial(null);
+      const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+      await repo.findGestionParaDeshacer("g1");
+
+      const where = (prisma.ordenHistorialEstado.findFirst as ReturnType<typeof vi.fn>).mock
+        .calls[0][0].where;
+      expect(where).toEqual({
+        // El `ordenId` NO es decorativo: `orden_historial_estado` no tiene indice por
+        // `gestion_orden_id`, y repetirlo hace que el planner entre por
+        // `@@index([ordenId, createdAt])`. Sin el, esta consulta recorre entera una tabla
+        // append-only que crece con CADA transicion del sistema, en el camino de un boton.
+        ordenId: "o1",
+        // Sin `gestionOrdenId`, cualquier gestion de una orden que ALGUNA VEZ resolvio la tienda
+        // dejaria de poder deshacerse, incluidas las propias del mensajero. El filtro tiene que
+        // ser por ESTA gestion.
+        gestionOrdenId: "g1",
+        // Y sin `origenTipo`, TODA gestion con historial daria `true` y nadie podria deshacer nada.
+        origenTipo: "gestion_tienda_ayuda",
+      });
+    });
+
+    it("con una fila de esa familia -> `desdeAyudaTienda: true`", async () => {
+      const prisma = conHistorial({ id: "h1" });
+      const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+      const row = await repo.findGestionParaDeshacer("g1");
+      expect(row?.desdeAyudaTienda).toBe(true);
+    });
+
+    it("sin fila de esa familia -> `desdeAyudaTienda: false` (el caso del mensajero)", async () => {
+      const prisma = conHistorial(null);
+      const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+      const row = await repo.findGestionParaDeshacer("g1");
+      expect(row?.desdeAyudaTienda).toBe(false);
+    });
+
+    it("si la gestion no existe, NO se consulta el historial (no se paga una query de mas)", async () => {
+      const prisma = buildPrisma();
+      prisma.gestionOrden.findUnique.mockResolvedValue(null);
+      const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+      expect(await repo.findGestionParaDeshacer("nope")).toBeNull();
+      expect(prisma.ordenHistorialEstado.findFirst).not.toHaveBeenCalled();
     });
   });
 

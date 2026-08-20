@@ -2885,15 +2885,15 @@
       "name": "la gestion que hace la tienda cuenta como del mensajero",
       "spec_path": "specs/237-gestion-tienda-ayuda/",
       "description": "Fullstack. Desde la pestana de ayuda la tienda puede REPROGRAMAR o RECHAZAR, y esa gestion cuenta como si la hubiera hecho el mensajero: entra a su cierre, cuenta como intento y mueve el dinero igual. Exige los MISMOS requisitos que la del mensajero (evidencia en imagen y motivo en texto). Nada de esto existe hoy. Diseno: progress/design_pila_ayuda_tienda.md (F3).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/237-gestion-tienda-ayuda",
       "depends_on": 236,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 por la auditoria como NO implementada. Es la mas delicada en DINERO. || La fila de gestion_orden lleva mensajero_id = el mensajero (para caer en su cierre) y el historial actor_usuario_id = la tienda; su origen_tipo entra en ORIGEN_TIPOS_VISITA_REAL para que cuente como intento. || INVARIANTE QUE LA SOSTIENE: una orden en ayuda BLOQUEA la solicitud de cierre, asi que la gestion cae antes del snapshot de totales y `deshacerGestion` sigue funcionando. Hay que probarla: si deja de bloquear, el dinero se rompe en silencio. Ojo que hoy ese bloqueo es accidental (ver la 235). || Reutiliza la subida compensada de evidencias de MisAsignacionesService.gestionar; no se escribe una segunda."
+      "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "DONE el 2026-08-20. Revision OK tras un rechazo: el recorrido con la app estaba marcado hecho y se habia parado en el paso 6 de 9 -- justo antes de los tres pasos de DINERO. Hechos y anotados en progress/recorrido_237.md. || LA PROPIEDAD CENTRAL, MEDIDA CONTRA POSTGRES: la gestion que registra la tienda lleva mensajero_id = EL MENSAJERO y actor del historial = LA TIENDA, asi que el dinero cae en el cierre de el. Verificado con importe real: 1.000 de ingreso de bodega sobre una fila registrada por la tienda, dentro del cierre del mensajero. || Y LAS DOS FEATURES COMPONEN: la ventana de confirmacion fisica de la 238 pide el paquete que gestiono la tienda. Era el riesgo n1 3 del design. || FIRMADO POR EL HUMANO: el mensajero NO puede deshacerla (deshacer se usa 7 de 57 veces y un rechazo mueve hasta 1.000); evidencia en imagen en los DOS desenlaces; y la fila del cierre lleva el badge «La tienda» con el motivo y la evidencia. || DEFECTO QUE SOLO SE VIO MIRANDO: el boton «Devolver a gestion» estaba habilitado y su modal prometia algo que el servidor iba a rechazar siempre. Ahora esta apagado con el motivo en el aria-label, porque un boton disabled sale del orden de tabulacion y el title no lo alcanza un teclado. || ABIERTO: T0.1, re-medir la poblacion en ayuda ANTES DE DESPLEGAR (hoy 0 sobre 141 porque la 235 no esta en produccion). Deudas heredadas con dueno: D5-a (IncidenteAdminService sigue con su copia de la subida compensada) y D8 (motivoSchema sin tope). || OJO: el design decia que el cobro por rechazo se debitaba a la tienda y ERA FALSO -- es ingreso de bodega. Pero un rechazo SI le debita el flete de devolucion + IVA, por otra via y desde otra tarifa. Corregido en el spec."
     },
     {
       "id": 238,

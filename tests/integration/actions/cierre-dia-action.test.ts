@@ -48,6 +48,7 @@ const GESTION_DESHACIBLE: GestionDeshacerRow = {
   cierreId: null,
   anuladaAt: null,
   orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+  desdeAyudaTienda: false, // feature 237 (D3): la registro el mensajero, no la tienda
 };
 
 // Repo en memoria: findGestionesPendientes solo devuelve las NO vinculadas;
@@ -142,6 +143,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
     ingresoBodegaRechazo: null, // feature 56: snapshot (derivado en vivo por el service)
     esRechazoSla: false, // feature 102
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,

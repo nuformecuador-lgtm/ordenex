@@ -86,8 +86,18 @@ describe("RESULTADOS_QUE_CUENTAN_COMO_INTENTO — el criterio declarado (215/R1/
 // SLA y la reprogramacion de escritorio de la tienda— entran al cierre del mensajero por la
 // puerta de atras y, sin esta lista, sumarian un intento que nadie hizo. [💰]
 describe("ORIGEN_TIPOS_VISITA_REAL — el discriminador de las sinteticas (215/R34)", () => {
-  it("R34-a: la lista es EXACTAMENTE `gestion` (la visita del mensajero en calle)", () => {
-    expect(ORIGEN_TIPOS_VISITA_REAL).toEqual(["gestion"]);
+  it("R34-a: la lista es EXACTAMENTE `gestion` + `gestion_tienda_ayuda` (la visita y su desenlace)", () => {
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6) — ACTUALIZADO A MANO, de `["gestion"]` a dos miembros.
+    // `gestion_tienda_ayuda` es la gestion que registra LA TIENDA desde la pestaña de ayuda sobre
+    // una orden que el mensajero SI se llevo a la calle y no supo cerrar: es el desenlace de esa
+    // visita, no una gestion sintetica de escritorio. Las dos familias de la 235
+    // (`solicitud_ayuda_tienda` / `rescate_ayuda_tienda`) siguen fuera —pedir auxilio no es un
+    // intento— y el caso R34-c de abajo lo comprueba solo, porque deriva `fuera` de esta lista.
+    //
+    // ESTE LITERAL ES EL CONTRATO: es el censo cerrado que impide que una familia entre de rebote
+    // y empiece a cobrar. Se actualiza a mano en cada alta decidida; NUNCA se sustituye por una
+    // derivacion de su propia fuente, que quedaria verde para siempre.
+    expect(ORIGEN_TIPOS_VISITA_REAL).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   // EL CASO QUE PROTEGE EL DINERO (R34-c). Con lista NEGRA (`none`/`notIn` sobre las sinteticas
@@ -164,13 +174,23 @@ describe("TRANSICIONES — guardia de NO-REGRESION del mapa cerrado (215/R14)", 
   // R14: el mapa NO se toca. Este caso ya existia con la 160; lo que cambia es lo que AFIRMA.
   // Antes derivaba de aqui que la arista #13 contaba como intento y la #22 no. Ahora NINGUNA
   // arista decide intentos: solo se comprueba que el mapa sigue igual.
-  it("R14: siguen existiendo EXACTAMENTE 2 aristas con destino `reprogramada` (#13 y #22)", () => {
+  it("R14: siguen existiendo EXACTAMENTE 3 aristas con destino `reprogramada` (#13, #22 y #65)", () => {
+    // ⏳ 2026-08-20 (feature 237): eran DOS y son TRES. La tercera es
+    // `ayuda_tienda -> reprogramada` (#65), la que registra LA TIENDA desde la pestaña de ayuda.
+    // El censo se amplia a mano y se sigue enumerando entero: lo que este caso vigila es que
+    // ninguna arista aparezca sin que alguien la haya decidido.
+    //
+    // Las TRES tienen `via` distinto, y la diferencia es exactamente lo que decide el dinero:
+    // `gestion` y `gestion_tienda_ayuda` estan en `ORIGEN_TIPOS_VISITA_REAL` (cuentan intento),
+    // `reprogramacion_tienda` no (es un tramite de escritorio sobre una orden que ya tiene su
+    // `devuelta` contada, y sumarla seria el doble conteo de 160/R2).
     const aReprogramada = aristas.filter((a) => a.destino === "reprogramada");
-    expect(aReprogramada).toHaveLength(2);
+    expect(aReprogramada).toHaveLength(3);
     expect(aReprogramada).toEqual(
       expect.arrayContaining([
         { origen: "en_reparto", destino: "reprogramada", via: "gestion" }, // #13
         { origen: "devuelta", destino: "reprogramada", via: "reprogramacion_tienda" }, // #22
+        { origen: "ayuda_tienda", destino: "reprogramada", via: "gestion_tienda_ayuda" }, // #65 (237)
       ]),
     );
   });

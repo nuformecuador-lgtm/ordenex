@@ -73,9 +73,32 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // `lib/types/webhook-eventos.ts`.
   // Mismas dos ausencias que la ida: ni visita real (R11) ni con gestion.
   "rescate_ayuda_tienda",
-  // ⚠️ `gestion_tienda_ayuda` NO se declara aqui (P2, firmada): su productor es la ficha 237 y la
-  // convencion del repo es que un valor de enum nace en el commit de su productor. Precedente
-  // literal: `incidente` (154), declarado sin productor, «costo el tren 154+155+156».
+  // Feature 237 (T1.2, R5) — EL DESENLACE: `ayuda_tienda -> reprogramada | rechazada`, disparado
+  // por el ADMINTIENDA DUEÑO de la orden desde la pestaña de ayuda de `/novedades`
+  // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`).
+  //
+  // ⏳ 2026-08-20: aqui decia «`gestion_tienda_ayuda` NO se declara (P2, firmada): su productor es
+  // la ficha 237». Esta es la ficha 237 y este es el commit de su productor, asi que la nota se
+  // cumple y se sustituye por el valor. La convencion sigue viva: un valor de enum nace CON su
+  // productor (precedente `incidente`, 154, que costo el tren 154+155+156).
+  //
+  // FAMILIA PROPIA Y NO `gestion` (R4/R5): quien registra es la tienda y quien queda atribuido es
+  // el mensajero, asi que son dos hechos distintos. Con `gestion` el historial diria que el acto lo
+  // hizo el mensajero, y ese historial es la UNICA evidencia de quien decidio el rechazo que se le
+  // cobra a la tienda.
+  //
+  // ⚠️ SI ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (R6), al reves que las dos familias de la 235 que
+  // tiene justo encima. El argumento completo vive en `specs/237-gestion-tienda-ayuda/design.md`
+  // §7.3 y, en corto: `solicitud_ayuda_tienda` y `rescate_ayuda_tienda` son pedir auxilio y
+  // retirarlo —el mensajero sigue en la calle y no ha intentado entregar nada—, mientras que esta
+  // familia es EL DESENLACE de esa visita, sobre una orden en la que el mensajero no registro
+  // ninguno. Contarla es contar UNA visita UNA vez. Y no contradice que `reprogramacion_tienda`
+  // quede fuera: aquella se hace sobre una orden que YA tiene una `devuelta` real contada, asi que
+  // sumarla produce el doble conteo que 160/R2 evitaba.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  // mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (ver la nota de esa lista).
+  "gestion_tienda_ayuda",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -170,6 +193,24 @@ export const ORIGEN_TIPOS_CON_GESTION = [
 // El `satisfies` rompe el build si un valor deja de existir en el SEED (y por tanto en el enum).
 export const ORIGEN_TIPOS_VISITA_REAL = [
   "gestion", // feature 36: `crearGestionYTransicionar` — el mensajero gestiono la orden en calle
+  // Feature 237 (T2.1, R6) — 2026-08-20. LA TIENDA resuelve desde la pestaña de ayuda
+  // (`crearGestionDesdeAyuda`) una orden que el mensajero se llevo a la calle y no supo cerrar.
+  // El acto lo registra la tienda, pero LA VISITA LA HIZO EL MENSAJERO y esta fila es su
+  // desenlace: por eso cuenta, y cuenta UNA vez (el grano de `contarIntentosVigentes` es el
+  // cierre, `groupBy(["cierreId"])`).
+  //
+  // POR QUE ESTA Y `reprogramacion_tienda` NO — es la objecion obvia y se responde aqui para que
+  // nadie la «corrija» en ninguna de las dos direcciones:
+  //   - `reprogramacion_tienda` (100) se hace sobre una orden que YA TIENE una gestion `devuelta`
+  //     real contada. Sumarla dara el DOBLE CONTEO que 160/R2 evitaba.
+  //   - `gestion_tienda_ayuda` se hace sobre una orden en la que el mensajero NO registro ningun
+  //     desenlace: pedir ayuda no cuenta (235/R11, y las dos familias de la ayuda estan fuera de
+  //     esta lista). Sin ella, esa visita no la cuenta NADIE.
+  //
+  // Consecuencia BUSCADA, no un efecto lateral: sube el conteo de intentos, adelanta el escalado
+  // del cron SLA (99) y con el el `cobroRechazado` (56). Aqui esa direccion es correcta porque es
+  // la propia tienda quien decide el desenlace, sabiendo el precio (el aviso de D7 se lo dice).
+  "gestion_tienda_ayuda",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 // Feature 215 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de

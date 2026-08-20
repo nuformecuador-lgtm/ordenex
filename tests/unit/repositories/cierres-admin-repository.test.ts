@@ -326,11 +326,20 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
 
     const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
 
-    // R1: el select del historial va acotado a `origen_tipo = escalado_devuelta_sla`, take 1.
+    // R1: el select del historial va ACOTADO a las familias que se derivan, y a ninguna mas.
+    //
+    // ⏳ 2026-08-20 (feature 237, D6/R41): pasa de UNA igualdad a un `in` de DOS familias, y de
+    // `take: 1` a `take: 2`. La segunda es `gestion_tienda_ayuda`, de la que sale
+    // `desdeAyudaTienda`. Se hizo ASI —ensanchando esta lectura— y no con una segunda consulta,
+    // precisamente para que el detalle de admin no pague ni una consulta de mas: es la pagina que
+    // mas filas trae. `take: 2` porque son dos familias y con `take: 1` una podria tapar a la otra
+    // segun el orden de lectura.
+    //
+    // El literal se conserva como literal: es el censo de lo que esta consulta puede traer.
     const select = prisma.gestionOrden.findMany.mock.calls[0][0].select;
     expect(select.historialEstados).toEqual({
-      where: { origenTipo: "escalado_devuelta_sla" },
-      take: 1,
+      where: { origenTipo: { in: ["escalado_devuelta_sla", "gestion_tienda_ayuda"] } },
+      take: 2,
       select: { origenTipo: true },
     });
     // R1/R2: la clasificacion sale del historial, no del monto.

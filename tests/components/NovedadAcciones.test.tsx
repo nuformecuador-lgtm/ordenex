@@ -70,6 +70,8 @@ const handlers = {
   onHabilitar: vi.fn(),
   onDevolver: vi.fn(),
   onConversacion: vi.fn(),
+  // Feature 237 (T7.1): UN handler para los dos desenlaces, con el modo como segundo argumento.
+  onGestionarDesdeAyuda: vi.fn(),
 };
 
 function renderAcciones(over: Partial<NovedadDTO> = {}) {
@@ -92,19 +94,26 @@ afterEach(() => {
 });
 
 describe("NovedadAcciones — censo por grupo (236/R22/R23)", () => {
-  it("R22: la fila de AYUDA ofrece exactamente cinco controles, y son los suyos", () => {
+  // ⚠️ FEATURE 237 (T7.1, 2026-08-20) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO, y el que decía
+  // «sobre una orden en ayuda NO se ofrecen Reprogramar ni Rechazar» está reescrito más abajo.
+  // No es una aserción que se actualiza para que pase: es el PRODUCTO de la ficha. Hasta hoy la
+  // tienda podía avisar y devolver la orden al mensajero, pero no resolverla; ahora tiene sus dos
+  // desenlaces. El censo pasa de cinco controles a SIETE.
+  it("R22/237: la fila de AYUDA ofrece exactamente siete controles, y son los suyos", () => {
     renderAcciones({ estatusValue: "ayuda_tienda" });
 
     expect(censoDeBotones()).toEqual([
       "Llamar a Ana Cliente",
       "WhatsApp a Ana Cliente",
+      "Reprogramar la orden de Ana Cliente",
+      "Rechazar la orden de Ana Cliente",
       "Habilitar la orden de Ana Cliente",
       "Abrir la conversación de la orden de Ana Cliente",
       "Registrar un intento de contacto con la orden de Ana Cliente",
     ]);
   });
 
-  it("la fila de DEVOLUCIÓN ofrece exactamente cinco controles, y son OTROS", () => {
+  it("la fila de DEVOLUCIÓN ofrece exactamente cinco controles, y NO son los de la ayuda", () => {
     renderAcciones({ estatusValue: "devuelta" });
 
     // El espejo del caso de arriba. Es lo que convierte las ausencias de cada uno en afirmaciones:
@@ -197,5 +206,93 @@ describe("NovedadAcciones — cada control llama a SU handler (236/R27)", () => 
       // El icono es decorativo: lo anuncia el `aria-label`, no el svg.
       expect(boton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     }
+  });
+});
+
+// =================================================================================================
+// FEATURE 237 (T7.1 — R1, mitad de pantalla) — LOS DOS DESENLACES DE LA AYUDA VAN A OTRO SITIO.
+// =================================================================================================
+//
+// Lo que estos casos protegen no es que los botones existan (eso ya lo dice el censo de arriba),
+// sino que «Reprogramar» **de la ayuda** y «Reprogramar» **de la devolución** —mismo rótulo, mismo
+// icono, misma gramática de nombre accesible— llamen a COSAS DISTINTAS. Reutilizar las claves de
+// la devolución habría obligado a ramificar por grupo dentro del componente, y una ramificación
+// mal hecha aquí manda la orden a `ReprogramacionTiendaService`, que la rechaza con `conflict`, o
+// —peor— manda una devolución al camino que cobra un rechazo en el cierre de un mensajero.
+describe("NovedadAcciones — 237: la ayuda resuelve por su propia puerta", () => {
+  it("«Reprogramar» de la fila de AYUDA abre la ventana en modo reprogramar", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
+    );
+
+    expect(handlers.onGestionarDesdeAyuda).toHaveBeenCalledTimes(1);
+    expect(handlers.onGestionarDesdeAyuda.mock.calls[0][0]).toMatchObject({
+      id: "o-ayuda",
+    });
+    expect(handlers.onGestionarDesdeAyuda.mock.calls[0][1]).toBe("reprogramar");
+    // Y NO el de la devolución, que es el que llama al servicio de la feature 100.
+    expect(handlers.onReprogramar).not.toHaveBeenCalled();
+  });
+
+  it("«Rechazar» de la fila de AYUDA abre la ventana en modo rechazar", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-ayuda", estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
+    );
+
+    expect(handlers.onGestionarDesdeAyuda).toHaveBeenCalledTimes(1);
+    expect(handlers.onGestionarDesdeAyuda.mock.calls[0][1]).toBe("rechazar");
+    // `onDevolver` es la MAQUETA de la 240 (avisa por toast y no muta nada). Que no se llame es
+    // justo lo que distingue el rechazo con dinero detrás del botón que todavía no hace nada.
+    expect(handlers.onDevolver).not.toHaveBeenCalled();
+  });
+
+  it("y los dos modos son DISTINTOS entre sí (anti-vacuidad del literal)", async () => {
+    // Si `RESULTADO_POR_MODO` o los dos handlers se cablearan al mismo valor, los dos casos de
+    // arriba podrían pasar por separado y la tienda estaría rechazando cuando pulsa reprogramar.
+    const user = userEvent.setup();
+    renderAcciones({ estatusValue: "ayuda_tienda" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
+    );
+
+    const modos = handlers.onGestionarDesdeAyuda.mock.calls.map((c) => c[1]);
+    expect(modos).toEqual(["reprogramar", "rechazar"]);
+  });
+
+  it("el ESPEJO: «Reprogramar» de la fila de DEVOLUCIÓN sigue yendo a la feature 100", async () => {
+    // El par positivo/negativo. Sin él, «no se llamó a `onReprogramar`» del primer caso pasaría
+    // igual si alguien borrara la acción de la devolución entera.
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
+    );
+
+    expect(handlers.onReprogramar).toHaveBeenCalledTimes(1);
+    expect(handlers.onReprogramar.mock.calls[0][0]).toMatchObject({ id: "o-devuelta" });
+    expect(handlers.onGestionarDesdeAyuda).not.toHaveBeenCalled();
+  });
+
+  it("y «Rechazar» de la fila de DEVOLUCIÓN sigue siendo la maqueta de la 240", async () => {
+    const user = userEvent.setup();
+    renderAcciones({ id: "o-devuelta", estatusValue: "devuelta" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
+    );
+
+    expect(handlers.onDevolver).toHaveBeenCalledTimes(1);
+    expect(handlers.onGestionarDesdeAyuda).not.toHaveBeenCalled();
   });
 });

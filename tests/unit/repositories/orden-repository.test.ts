@@ -885,9 +885,20 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
 
   it("R17(b): el GRAFO no ofrece salida de `ayuda_tienda` hacia asignacion, ruteo ni recoleccion", () => {
     // La via que sobrevive a un refactor del WHERE: aunque alguien la colara en un listado, la
-    // accion moriria en el choke point. Las DOS unicas salidas son el rescate y el corte.
+    // accion moriria en el choke point.
+    //
+    // ⏳ 2026-08-20 (feature 237): las salidas pasan de DOS a CUATRO. A los dos caminos de vuelta
+    // (el rescate y el corte) se suman los DOS DESENLACES que la tienda puede registrar desde su
+    // pestaña de ayuda (#65 `reprogramada`, #66 `rechazada`), con su productor. Lo que R17(b)
+    // vigila NO cambia: ninguna de las cuatro lleva a asignacion, ruteo ni recoleccion — el
+    // paquete sigue en la moto, no en un estante.
     const salidas = TRANSICIONES.ayuda_tienda.map((d) => d.to);
-    expect([...salidas].sort()).toEqual(["en_reparto", "sin_gestionar"]);
+    expect([...salidas].sort()).toEqual([
+      "en_reparto",
+      "rechazada",
+      "reprogramada",
+      "sin_gestionar",
+    ]);
     for (const destino of [
       "por_recoger", // asignacion a mensajero
       "en_ruta_bodega_satelite", // ruteo a satelite

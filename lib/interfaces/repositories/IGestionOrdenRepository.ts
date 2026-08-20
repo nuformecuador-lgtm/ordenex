@@ -165,6 +165,37 @@ export interface ReprogramarDesdeDevueltaInput {
   actorUsuarioId: string; // R11: el adminTienda que reprograma
 }
 
+/**
+ * Feature 237 (design §4.4, R2/R3/R4/R5/R9/R24) — entrada de LA GESTION QUE REGISTRA LA TIENDA
+ * desde la pestaña de ayuda. Los dos estatus vienen ya resueltos por el service
+ * (`findEstatusIdByValue` + `ESTATUS_POR_RESULTADO`), como en `ReprogramarDesdeDevueltaInput`.
+ *
+ * ⚠️ LOS DOS IDS DE USUARIO SON PERSONAS DISTINTAS, y ese es el corazon de la ficha:
+ *   - `mensajeroId` = el mensajero ASIGNADO a la orden. Es a quien se ATRIBUYE la gestion
+ *     (`gestion_orden.mensajero_id`) y, por tanto, EN QUE CIERRE CAE: `crearCierre` vincula por
+ *     `{ mensajeroId, cierreId: null, anuladaAt: null }` y `findGestionesPendientes` filtra igual.
+ *     💰 Si aqui entrara el id de la tienda, la fila NO se vincularia a ningun cierre NUNCA:
+ *     quedaria fuera de los cinco feeds de dinero, fuera del snapshot, fuera del escaneo de la
+ *     confirmacion fisica (238) y fuera del conteo de intentos. La ficha dejaria de cumplirse sin
+ *     que nada fallara. Es la mutacion T8.1 y por eso R3 es un requisito de DINERO.
+ *   - `actorUsuarioId` = el adminTienda que lo REGISTRO. Va al historial
+ *     (`orden_historial_estado.actor_usuario_id`, R4) y es la unica evidencia de quien decidio el
+ *     rechazo que se le cobra a la tienda. No se persiste en ninguna columna nueva: ya esta ahi.
+ */
+export interface CrearGestionDesdeAyudaInput {
+  ordenId: string;
+  /** GUARDA del `updateMany` (R23/R24): la orden tiene que seguir en el estatus de ayuda. */
+  estatusAyudaId: string;
+  /** Destino, del mapa unico `ESTATUS_POR_RESULTADO` (239). NO de la identidad de nombre (R26). */
+  estatusDestinoId: string;
+  /** R3: a QUIEN se atribuye la gestion -> en que cierre cae. El MENSAJERO, no la tienda. */
+  mensajeroId: string;
+  /** R4: QUIEN la registro. La TIENDA. Solo va al historial. */
+  actorUsuarioId: string;
+  /** `resultado` + `motivo` + `evidencias` (+ `fechaReprogramacion`), ya validados en el borde. */
+  gestion: GestionOrdenData;
+}
+
 export interface IGestionOrdenRepository {
   /**
    * R9/R13: ordenes del mensajero (`mensajero_asignado_id = mensajeroId`), no
@@ -290,4 +321,40 @@ export interface IGestionOrdenRepository {
    * de `GestionOrdenRepository.reprogramarDesdeDevuelta`.
    */
   reprogramarDesdeDevuelta(input: ReprogramarDesdeDevueltaInput): Promise<boolean>;
+
+  /**
+   * Feature 237 (design §4.4, T5.1) — registra en UNA transaccion la gestion que LA TIENDA
+   * resuelve desde la pestaña de ayuda, atribuida al MENSAJERO de la orden.
+   *
+   * En este orden, y el orden importa:
+   *   1. `updateMany` GUARDADO por `{ id, estatusId: estatusAyudaId, deletedAt: null }` ->
+   *      `estatusDestinoId`. La comprobacion del estado de origen va EN LA MISMA SENTENCIA que lo
+   *      muta (R24), asi que no hay ventana entre comprobar y escribir: sobre esta fila hay DOS
+   *      actores (el mensajero puede recuperarla, el corte de la noche puede llevarsela) y la
+   *      guarda en el service seria una lectura optimista, no una barrera.
+   *      `count === 0` ⇒ devuelve `null` SIN EFECTOS: ni gestion, ni evidencias, ni historial
+   *      (R25). Y con eso la IDEMPOTENCIA sale gratis (R28): el segundo envio encuentra la orden
+   *      ya fuera de ayuda. No hay codigo de idempotencia porque un segundo mecanismo puede
+   *      divergir del primero.
+   *   2. `gestion_orden` con `mensajeroId` = el mensajero y `cierreId: null` (R3/R9). El `NULL` es
+   *      lo que deja que la vincule EL MISMO mecanismo que vincula las del mensajero, sin camino
+   *      propio.
+   *   3. las N filas de `gestion_orden_evidencia`, en la MISMA tx (R2/R15).
+   *   4. `appendCambioEstado` por el choke point (R4/R5): actor = LA TIENDA,
+   *      `origen_tipo = gestion_tienda_ayuda`, enlazando la gestion.
+   *
+   * LO QUE **NO** HACE, y cada ausencia es una decision (design §4.2):
+   *   - NO toca `usuario.orden_en_gestion_id` (R10). `crearGestionYTransicionar` si lo limpia,
+   *     pero copiar ese bloque aqui le ARRANCARIA AL MENSAJERO OTRA ORDEN que estuviera
+   *     gestionando: una orden en ayuda no puede ser su orden en gestion —`escogerParaGestion`
+   *     exige `en_reparto` y la solicitud de ayuda ya libero el puntero (235/R7)— asi que el
+   *     puntero apunta a otra cosa. Es un fallo, no una diferencia de estilo.
+   *   - NO toca `mensajero_asignado_id` ni `prioridad` (R10), NO escribe ningun importe (R11), NO
+   *     escribe ubicacion (R18: la tienda gestiona desde un escritorio) y NO encola
+   *     reoptimizacion de ruta (la orden salio de la ruta al entrar en ayuda; `transicionarAyuda`
+   *     tampoco encola: paridad deliberada).
+   *
+   * Devuelve el id de la gestion creada, o `null` si la orden ya no estaba en ayuda.
+   */
+  crearGestionDesdeAyuda(input: CrearGestionDesdeAyudaInput): Promise<string | null>;
 }

@@ -184,6 +184,20 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "62", origen: "en_reparto", destino: "ayuda_tienda", via: "solicitud_ayuda_tienda", callSite: "SolicitudAyudaService.solicitar -> OrdenRepository.transicionarAyuda (235)" },
   { n: "63", origen: "ayuda_tienda", destino: "en_reparto", via: "rescate_ayuda_tienda", callSite: "rescatarOrdenAyuda -> OrdenRepository.transicionarAyuda (235; lo llaman SolicitudAyudaService.recuperar y HabilitarNovedadService.habilitar)" },
   { n: "64", origen: "ayuda_tienda", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService.ejecutarCorte -> CierreDiaRepository.crearCierre, bloque guardado por ayuda_tienda (235)" },
+  // Feature 237 (2026-08-20) — LAS DOS GESTIONES DE LA TIENDA desde la pestaña de ayuda. Pares
+  // NUEVOS los dos (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada` no estaban
+  // declarados por nadie) y no se retira ninguna: son desenlaces que ANTES no existian, no el
+  // relevo de otro productor.
+  //
+  // Comparten call-site (un solo metodo de repositorio decide el destino con el mapa
+  // `ESTATUS_POR_RESULTADO` de la 239), igual que #65/#66 comparten `via`. Lo que las separa es el
+  // `resultado` de la gestion que las produce.
+  //
+  // NO hay una tercera, cuarta ni quinta arista de gestion desde `ayuda_tienda`
+  // (`-> entregada`, `-> devolucion_por_confirmar`, `-> incidente`): 237/R1 concede EXACTAMENTE
+  // dos desenlaces y las otras tres siguen sin productor.
+  { n: "65", origen: "ayuda_tienda", destino: "reprogramada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
+  { n: "66", origen: "ayuda_tienda", destino: "rechazada", via: "gestion_tienda_ayuda", callSite: "GestionDesdeAyudaService.gestionar -> GestionOrdenRepository.crearGestionDesdeAyuda (237)" },
 ];
 
 /**
@@ -226,11 +240,14 @@ export const INVENTARIO_CREACION: readonly AristaCreacionInventario[] = [
 export const RECUENTO_INVENTARIO = {
   // 2026-08-19 (feature 239): 54 -> 56. Suma TRES (#59/#60/#61) y RETIRA UNA (#14).
   // 2026-08-19 (feature 235): 56 -> 59. Suma TRES (#62/#63/#64) y NO retira NINGUNA.
-  aristasFlujo: 59, // +2 (157); +3 -1 (239); +3 (235)
-  // 52 -> 54 (239) -> 57 (235): las tres altas de la 235 son pares NUEVOS (`en_reparto ->
-  // ayuda_tienda`, `ayuda_tienda -> en_reparto`, `ayuda_tienda -> sin_gestionar`; ninguno estaba
-  // declarado), asi que la aritmetica de pares sigue a la de aristas y la diferencia
-  // aristas - pares se queda en 2 (los duplicados historicos #19/#23 y #20/#24).
-  paresUnicos: 57,
+  // 2026-08-20 (feature 237): 59 -> 61. Suma DOS (#65/#66) y NO retira NINGUNA.
+  aristasFlujo: 61, // +2 (157); +3 -1 (239); +3 (235); +2 (237)
+  // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
+  // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
+  // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
+  // la 235. Asi que la aritmetica de pares sigue a la de aristas y la diferencia aristas - pares
+  // se queda en 2 (los duplicados historicos #19/#23 y #20/#24). Los dos pares nuevos comparten
+  // `via` entre si, pero eso no los hace duplicados: lo que cuenta un par es origen -> destino.
+  paresUnicos: 59,
   aristasCreacion: 2,
 } as const;

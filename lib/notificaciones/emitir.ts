@@ -131,6 +131,24 @@ export async function emitirOrdenRechazada(
 const DESTINO_RECHAZO: OrderStatusValue = "rechazada";
 const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
 
+// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — `gestion_tienda_ayuda` QUEDA FUERA A PROPOSITO, y
+// esto se escribe aqui para que la AUSENCIA sea una DECISION y no un olvido.
+//
+// Desde la 237 la TIENDA puede rechazar una orden desde su pestaña de ayuda. Esa transicion
+// tambien aterriza en `rechazada`, pero con `origen_tipo = gestion_tienda_ayuda`, asi que la
+// igualdad de arriba NO la alcanza y el aviso NO se emite.
+//
+// POR QUE NO SE AMPLIA EL FILTRO: el texto del aviso es «Una orden fue rechazada POR EL
+// DESTINATARIO», y aqui eso seria FALSO — rechazo la tienda, sobre un paquete que el destinatario
+// no llego a ver. Este repo tiene escrito lo que cuesta un dato que miente con formato de dato
+// (236/D3, la columna «Sin causa registrada»). Y el aviso no es el mecanismo de nada: el paquete
+// llega igual a `por_devolver`/`por_devolver_a_tienda` al aprobar el cierre (139), que es donde
+// bodega lo ve.
+//
+// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de que viene un rechazo de
+// esta clase. Si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision — no ensanchar
+// esta igualdad. Afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`.
+
 /**
  * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por
  * `destino === "rechazada" && origenTipo === "gestion"`: el escalado por SLA

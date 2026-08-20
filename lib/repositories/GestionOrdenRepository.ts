@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  CrearGestionDesdeAyudaInput,
   GestionOrdenData,
   IGestionOrdenRepository,
   MiAsignacionRow,
@@ -102,6 +103,97 @@ function gestionadasDelDiaWhere(mensajeroId: string, dia: VentanaDia) {
     estatus: { value: { notIn: ESTADOS_EN_MANO_DEL_MENSAJERO } },
     gestiones: { some: gestionDelDia(mensajeroId, dia) },
   } satisfies Prisma.OrdenWhereInput;
+}
+
+/**
+ * Feature 119/212 + 237 (T5.1) — EL INSERT de una gestion y de sus filas hijas, en UN solo sitio.
+ *
+ * Lo comparten los DOS caminos que crean una `gestion_orden` en este repositorio: el del mensajero
+ * (`crearGestionYTransicionar`) y el de la tienda desde ayuda (`crearGestionDesdeAyuda`). Se
+ * extrajo al escribir el segundo, porque 237/R2 exige que la fila de la tienda tenga «la MISMA
+ * forma» que la del mensajero para ese resultado — y dos INSERT paralelos son exactamente como esa
+ * igualdad deja de ser cierta sin que nadie lo note.
+ *
+ * Corre SIEMPRE dentro de la `$transaction` del llamador: recibe el `tx`, no el cliente. Lo que NO
+ * hace es transicionar la orden, tocar punteros ni appendear historial: eso lo decide cada camino.
+ */
+async function insertarGestionConHijas(
+  tx: Prisma.TransactionClient,
+  ordenId: string,
+  mensajeroId: string,
+  gestion: GestionOrdenData,
+): Promise<string> {
+  // Feature 119 (R12): PORTADA denormalizada = evidencia indice 0 (o la primera si no hay
+  // un 0 explicito). Retro-compat: si el caller aun pasa la portada suelta y no la lista,
+  // se cae a `evidenciaStoragePath/_content_type`. La escriben el MISMO INSERT que las hijas.
+  const cover =
+    gestion.evidencias?.find((e) => e.indice === 0) ?? gestion.evidencias?.[0] ?? null;
+  const coverStoragePath = cover?.storagePath ?? gestion.evidenciaStoragePath ?? null;
+  const coverContentType = cover?.contentType ?? gestion.evidenciaContentType ?? null;
+  const creada = await tx.gestionOrden.create({
+    data: {
+      ordenId,
+      mensajeroId,
+      resultado: gestion.resultado,
+      montoRecibido:
+        gestion.montoRecibido != null ? new Prisma.Decimal(gestion.montoRecibido) : null,
+      metodoPago: gestion.metodoPago ?? null,
+      // Feature 119 (R12): dual-write de la portada (indice 0) en las columnas viejas para que
+      // los consumidores actuales (cierres 37/38/40, API 106) sigan mostrando UNA foto sin cambios.
+      evidenciaStoragePath: coverStoragePath,
+      evidenciaContentType: coverContentType,
+      motivo: gestion.motivo ?? null,
+      fechaReprogramacion: gestion.fechaReprogramacion
+        ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
+        : null,
+      // Feature 73/R11/R13: la causa entra en el MISMO INSERT que la gestion, dentro de
+      // la tx que cambia el estatus -> si algo falla, la causa NO queda persistida
+      // (atomicidad ya provista, sin firma nueva).
+      causaDevolucion: gestion.causaDevolucion ?? null,
+      // Feature 158/R6/R9: la causa del incidente entra en el MISMO INSERT que la gestion,
+      // dentro de la tx que cambia el estatus -> si algo falla, NADA queda persistido
+      // (atomicidad ya provista, sin firma nueva). `indemnizacion` NO se escribe aqui: el
+      // monto lo captura el admin al APROBAR el cierre (R19/R22).
+      causaIncidente: gestion.causaIncidente ?? null,
+      // Feature 193 (R1/R6): la ubicacion entra en el MISMO INSERT que la gestion, dentro
+      // de la tx que cambia el estatus -> si algo falla, NO queda una ubicacion huerfana
+      // apuntando a una gestion que no existe (atomicidad ya provista, sin firma nueva).
+      // Decimal, no Float: mismo criterio que `montoRecibido` unas lineas arriba.
+      ubicacionLat:
+        gestion.ubicacionLat != null ? new Prisma.Decimal(gestion.ubicacionLat) : null,
+      ubicacionLng:
+        gestion.ubicacionLng != null ? new Prisma.Decimal(gestion.ubicacionLng) : null,
+      ubicacionAusencia: gestion.ubicacionAusencia ?? null,
+    },
+    select: { id: true },
+  });
+  // Feature 119 (R1/R2/R9): las N filas hijas se insertan en la MISMA transaccion (todo-o-nada
+  // con la gestion + la transicion). Vacio (reprogramada / sin fotos) no inserta nada.
+  if (gestion.evidencias && gestion.evidencias.length > 0) {
+    await tx.gestionOrdenEvidencia.createMany({
+      data: gestion.evidencias.map((e) => ({
+        gestionId: creada.id,
+        storagePath: e.storagePath,
+        contentType: e.contentType,
+        indice: e.indice,
+      })),
+    });
+  }
+  // Feature 212 (R17/R20): las 0..N lineas del DESGLOSE del recaudo se insertan en la MISMA
+  // transaccion que la gestion y la transicion (todo-o-nada): si algo falla mas abajo, no
+  // queda ninguna linea huerfana ni una gestion sin su desglose. Lista vacia (entrega sin
+  // cobro, o cualquier otro resultado) no inserta nada. `monto` como `Prisma.Decimal`, mismo
+  // criterio que `montoRecibido`: aqui no entra un float.
+  if (gestion.pagos && gestion.pagos.length > 0) {
+    await tx.gestionOrdenPago.createMany({
+      data: gestion.pagos.map((p) => ({
+        gestionId: creada.id,
+        metodo: p.metodo,
+        monto: new Prisma.Decimal(p.monto),
+      })),
+    });
+  }
+  return creada.id;
 }
 
 type GestionPrismaClient = Pick<
@@ -382,76 +474,12 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         where: { id: ordenId },
         select: { estatusId: true },
       });
-      // Feature 119 (R12): PORTADA denormalizada = evidencia indice 0 (o la primera si no hay
-      // un 0 explicito). Retro-compat: si el caller aun pasa la portada suelta y no la lista,
-      // se cae a `evidenciaStoragePath/_content_type`. La escriben el MISMO INSERT que las hijas.
-      const cover =
-        gestion.evidencias?.find((e) => e.indice === 0) ?? gestion.evidencias?.[0] ?? null;
-      const coverStoragePath = cover?.storagePath ?? gestion.evidenciaStoragePath ?? null;
-      const coverContentType = cover?.contentType ?? gestion.evidenciaContentType ?? null;
-      const creada = await tx.gestionOrden.create({
-        data: {
-          ordenId,
-          mensajeroId,
-          resultado: gestion.resultado,
-          montoRecibido:
-            gestion.montoRecibido != null ? new Prisma.Decimal(gestion.montoRecibido) : null,
-          metodoPago: gestion.metodoPago ?? null,
-          // Feature 119 (R12): dual-write de la portada (indice 0) en las columnas viejas para que
-          // los consumidores actuales (cierres 37/38/40, API 106) sigan mostrando UNA foto sin cambios.
-          evidenciaStoragePath: coverStoragePath,
-          evidenciaContentType: coverContentType,
-          motivo: gestion.motivo ?? null,
-          fechaReprogramacion: gestion.fechaReprogramacion
-            ? new Date(`${gestion.fechaReprogramacion}T00:00:00.000Z`)
-            : null,
-          // Feature 73/R11/R13: la causa entra en el MISMO INSERT que la gestion, dentro de
-          // la tx que cambia el estatus -> si algo falla, la causa NO queda persistida
-          // (atomicidad ya provista, sin firma nueva).
-          causaDevolucion: gestion.causaDevolucion ?? null,
-          // Feature 158/R6/R9: la causa del incidente entra en el MISMO INSERT que la gestion,
-          // dentro de la tx que cambia el estatus -> si algo falla, NADA queda persistido
-          // (atomicidad ya provista, sin firma nueva). `indemnizacion` NO se escribe aqui: el
-          // monto lo captura el admin al APROBAR el cierre (R19/R22).
-          causaIncidente: gestion.causaIncidente ?? null,
-          // Feature 193 (R1/R6): la ubicacion entra en el MISMO INSERT que la gestion, dentro
-          // de la tx que cambia el estatus -> si algo falla, NO queda una ubicacion huerfana
-          // apuntando a una gestion que no existe (atomicidad ya provista, sin firma nueva).
-          // Decimal, no Float: mismo criterio que `montoRecibido` unas lineas arriba.
-          ubicacionLat:
-            gestion.ubicacionLat != null ? new Prisma.Decimal(gestion.ubicacionLat) : null,
-          ubicacionLng:
-            gestion.ubicacionLng != null ? new Prisma.Decimal(gestion.ubicacionLng) : null,
-          ubicacionAusencia: gestion.ubicacionAusencia ?? null,
-        },
-        select: { id: true },
-      });
-      // Feature 119 (R1/R2/R9): las N filas hijas se insertan en la MISMA transaccion (todo-o-nada
-      // con la gestion + la transicion). Vacio (reprogramada / sin fotos) no inserta nada.
-      if (gestion.evidencias && gestion.evidencias.length > 0) {
-        await tx.gestionOrdenEvidencia.createMany({
-          data: gestion.evidencias.map((e) => ({
-            gestionId: creada.id,
-            storagePath: e.storagePath,
-            contentType: e.contentType,
-            indice: e.indice,
-          })),
-        });
-      }
-      // Feature 212 (R17/R20): las 0..N lineas del DESGLOSE del recaudo se insertan en la MISMA
-      // transaccion que la gestion y la transicion (todo-o-nada): si algo falla mas abajo, no
-      // queda ninguna linea huerfana ni una gestion sin su desglose. Lista vacia (entrega sin
-      // cobro, o cualquier otro resultado) no inserta nada. `monto` como `Prisma.Decimal`, mismo
-      // criterio que `montoRecibido`: aqui no entra un float.
-      if (gestion.pagos && gestion.pagos.length > 0) {
-        await tx.gestionOrdenPago.createMany({
-          data: gestion.pagos.map((p) => ({
-            gestionId: creada.id,
-            metodo: p.metodo,
-            monto: new Prisma.Decimal(p.monto),
-          })),
-        });
-      }
+      // Feature 237 (T5.1): el INSERT de la gestion + sus filas hijas se EXTRAJO a un helper
+      // privado, compartido con `crearGestionDesdeAyuda`. `gestion_orden_evidencia` se inserta
+      // desde UN solo sitio; lo que cambia entre los dos caminos es el actor, la familia de
+      // origen y las guardas, no la forma de la fila (237/R2: «la misma forma que la del
+      // mensajero»).
+      const gestionCreadaId = await insertarGestionConHijas(tx, ordenId, mensajeroId, gestion);
       await tx.orden.update({
         where: { id: ordenId },
         data: { estatusId: nuevoEstatusId },
@@ -491,7 +519,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           actorUsuarioId: mensajeroId, // R21
           origenTipo: gestion.resultado === "incidente" ? "incidente" : "gestion", // R23 / 158 Q-G
           motivo: gestion.motivo ?? null, // R22
-          gestionOrdenId: creada.id,
+          gestionOrdenId: gestionCreadaId,
         },
       ]);
       // Feature 99 (R1/R29): la rama `devuelta` YA NO aplica una transicion de seguimiento
@@ -511,9 +539,9 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         this.jobRepo,
         tx as unknown as JobTxClient,
         mensajeroId,
-        creada.id,
+        gestionCreadaId,
       );
-      return creada.id;
+      return gestionCreadaId;
     });
   }
 
@@ -607,6 +635,87 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         },
       ]);
       return true;
+    });
+  }
+
+  /**
+   * Feature 237 (design §4.4, T5.1, R2/R3/R4/R5/R9/R10/R18/R24/R25/R28) — LA GESTION QUE
+   * REGISTRA LA TIENDA desde la pestaña de ayuda, atribuida al MENSAJERO de la orden.
+   *
+   * Molde de forma: `reprogramarDesdeDevuelta` (100), que ya hace exactamente esto para otro
+   * origen —`updateMany` guardado, gestion con el `mensajero_id` que corresponde, `cierre_id`
+   * nulo y append con actor = adminTienda y familia propia—. NO se generaliza aquel metodo: su
+   * semantica (derivar el mensajero de la ultima `devuelta` vigente) es otra.
+   *
+   * POR QUE NO SE REUSA `crearGestionYTransicionar`, que es la pregunta obvia (design §4.2):
+   *   1. fija dentro `actorUsuarioId = mensajeroId` y `origenTipo = "gestion"|"incidente"`. Aqui
+   *      quien registra y quien queda atribuido son PERSONAS DISTINTAS (R4/R5), y dejar `gestion`
+   *      atribuiria al mensajero un acto que no hizo.
+   *   2. limpia `usuario.ordenEnGestionId` del mensajero SEA CUAL SEA la orden a la que apunte.
+   *      Una orden en `ayuda_tienda` no puede ser su orden en gestion (`escogerParaGestion` exige
+   *      `en_reparto` y la solicitud de ayuda ya libero el puntero, 235/R7), asi que copiar ese
+   *      bloque LE ARRANCARIA DE LAS MANOS OTRA ORDEN que estuviera gestionando. Es un fallo, no
+   *      una diferencia de estilo (R10).
+   *   3. su `orden.update` va por PK y SIN guarda de estado: se apoya en que el service ya
+   *      valido. Aqui hay DOS actores sobre la misma fila —el mensajero puede recuperarla y el
+   *      corte de la noche puede llevarsela— y la guarda tiene que ir EN EL WHERE (R24).
+   *
+   * Devuelve el id de la gestion, o `null` si la orden ya no estaba en el estatus de ayuda: la
+   * carrera la perdio la tienda y no queda NI UN efecto (R25). El service compensa las evidencias.
+   */
+  async crearGestionDesdeAyuda(input: CrearGestionDesdeAyudaInput): Promise<string | null> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1) R23/R24 — LA BARRERA. La comprobacion del estado de origen viaja EN LA MISMA SENTENCIA
+      //    que lo muta, asi que entre comprobar y escribir no hay ventana. `data` toca UNICAMENTE
+      //    `estatusId`: money-safe, sin rozar montos, mensajero asignado ni prioridad (R10/R11).
+      const result = await tx.orden.updateMany({
+        where: {
+          id: input.ordenId,
+          estatusId: input.estatusAyudaId, // guarda de carrera (mensajero / corte) e idempotencia
+          deletedAt: null,
+        },
+        data: { estatusId: input.estatusDestinoId },
+      });
+      // R25/R28: la orden ya salio de ayuda -> ni gestion, ni evidencias, ni historial. Y con esto
+      // la idempotencia del doble envio sale por construccion, sin un segundo mecanismo que
+      // pudiera divergir de este.
+      if (result.count === 0) return null;
+
+      // 2/3) R2/R3/R9 — la gestion y sus N evidencias, por el helper COMPARTIDO con el camino del
+      //    mensajero: misma forma de fila para el mismo resultado. `mensajeroId` es EL MENSAJERO
+      //    (💰 R3: es lo unico que hace que `crearCierre` la vincule y que el dinero salga solo) y
+      //    `cierreId` queda NULO por el default de la columna, para que la vincule EL MISMO
+      //    mecanismo que vincula las suyas (R9), sin camino propio.
+      //
+      //    La ubicacion NO se escribe (R18): `GestionOrdenData` la trae opcional y este camino no
+      //    la puebla — la tienda gestiona desde un escritorio y no hay presencia que registrar.
+      const gestionId = await insertarGestionConHijas(
+        tx,
+        input.ordenId,
+        input.mensajeroId,
+        input.gestion,
+      );
+
+      // 4) R4/R5 — el choke point, con su guardia de transicion de fallo cerrado. Actor = LA
+      //    TIENDA (la unica evidencia de quien decidio) y familia PROPIA `gestion_tienda_ayuda`,
+      //    que es la que hace que esta gestion cuente como intento (R6) sin que el historial
+      //    mienta sobre quien la registro. Origen = el estatus de ayuda, fijado por la guarda del
+      //    paso 1: no se re-lee, se sabe.
+      await appendCambioEstado(tx, [
+        {
+          ordenId: input.ordenId,
+          estatusOrigenId: input.estatusAyudaId,
+          estatusDestinoId: input.estatusDestinoId,
+          actorUsuarioId: input.actorUsuarioId, // R4: el adminTienda
+          origenTipo: "gestion_tienda_ayuda", // R5
+          motivo: input.gestion.motivo ?? null,
+          gestionOrdenId: gestionId,
+        },
+      ]);
+
+      // NO se encola reoptimizacion de ruta: la orden salio de la ruta al entrar en ayuda y
+      // `transicionarAyuda` (235) tampoco encola. Paridad deliberada, no olvido.
+      return gestionId;
     });
   }
 }

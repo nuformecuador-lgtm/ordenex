@@ -79,6 +79,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     pagoMensajero: null, // feature 39: snapshot (override para R16)
     ingresoBodegaRechazo: null, // feature 56: snapshot (override para R15)
     esRechazoSla: false, // feature 102: clasificacion SLA/manual (override para R8/R9)
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
@@ -596,6 +597,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
             metodoPago: null,
             ingresoBodegaRechazo: "3.00",
             esRechazoSla: true, // escalado por el cron SLA (99)
+            desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
           }),
           gestionRow({
             gestionId: "man",
@@ -604,6 +606,7 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
             metodoPago: null,
             ingresoBodegaRechazo: "2.00",
             esRechazoSla: false, // rechazo manual del mensajero
+            desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
           }),
         ],
       })),

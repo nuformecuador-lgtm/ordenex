@@ -163,6 +163,9 @@ describe("R21 — camino 1 (vivo): `CierreDiaRepository.findGestionesPendientes`
   function prismaDoble(filas: unknown[]) {
     return {
       gestionOrden: { findMany: vi.fn().mockResolvedValue(filas) },
+      // Feature 237 (D6/R41): la lectura EN LOTE de «¿cual la registro la tienda?». Vacia: estos
+      // casos miran el desglose de pagos, no de quien es la gestion.
+      ordenHistorialEstado: { findMany: vi.fn().mockResolvedValue([]) },
       orden: { count: vi.fn() },
       cierreDia: { count: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
       cierreDetail: { findMany: vi.fn() },
@@ -214,6 +217,7 @@ describe("R21 — camino 1 (vivo): `CierreDiaRepository.findGestionesPendientes`
   it("una gestión SIN líneas llega con `[]`, nunca con `undefined`", () => {
     const row = toPendienteRow(
       filaEnVivo({ resultado: "reprogramada", montoRecibido: null, pagos: [] }) as never,
+      false, // feature 237 (D6/R41): el flag lo resuelve el repo en lote; aqui no se ejercita
     );
     expect(row.pagos).toEqual([]);
   });
@@ -366,6 +370,7 @@ describe("R21/R22/R30 — los mappers serializan el desglose sin tocar el orden"
           { metodo: "transferencia", monto: new Prisma.Decimal("3.00") },
         ],
       }) as never,
+      false, // feature 237 (D6/R41): irrelevante para el orden del desglose
     );
     expect(row.pagos.map((p) => p.metodo)).toEqual(["efectivo", "SINPE", "transferencia"]);
   });

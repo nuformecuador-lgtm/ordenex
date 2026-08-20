@@ -103,6 +103,9 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
       FAMILIA,
       "solicitud_ayuda_tienda",
       "rescate_ayuda_tienda",
+      // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
+      // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
+      "gestion_tienda_ayuda",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),
@@ -225,7 +228,11 @@ describe("Feature 239 · el codigo y la base dicen lo mismo (sin drift)", () => 
   // (56) — dinero real cobrado a la tienda antes de tiempo, en silencio.
   it("R16: `anclaje_devolucion` NO esta en `ORIGEN_TIPOS_VISITA_REAL`", () => {
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain(FAMILIA);
-    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6): el censo pasa de UNO a DOS miembros, a mano.
+    // `gestion_tienda_ayuda` (la gestion que registra la tienda desde la pestaña de ayuda) SI es
+    // visita real: es el desenlace de la visita que el mensajero si hizo. El literal se conserva
+    // como literal a proposito —es el contrato— y no se sustituye por su propia fuente.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   it("`anclaje_devolucion` NO esta en `ORIGEN_TIPOS_CON_GESTION`", () => {

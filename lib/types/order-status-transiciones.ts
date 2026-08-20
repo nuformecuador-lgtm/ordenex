@@ -280,18 +280,34 @@ export const TRANSICIONES = {
   //       por este estatus de origen, para que el historial registre el origen REAL (R27) y no uno
   //       supuesto.
   //
+  // FEATURE 237 (T3.1, R1/R45) — LAS DOS GESTIONES DE LA TIENDA, que llegan CON su productor
+  // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`):
+  //   #65 `-> reprogramada` y #66 `-> rechazada`, las dos con `via: "gestion_tienda_ayuda"` y
+  //       actor = el adminTienda DUEÑO de la orden. La fila que producen se atribuye al MENSAJERO
+  //       (`gestion_orden.mensajero_id`), que es lo que la mete en SU cierre y mueve el dinero
+  //       igual; quien la registro lo dice `orden_historial_estado.actor_usuario_id`.
+  //
+  // ⏳ 2026-08-20 — AQUI DECIA, y ya no es cierto: «`ayuda_tienda -> entregada / reprogramada /
+  // devolucion_por_confirmar / rechazada / incidente`: son LAS GESTIONES. Las trae la ficha 237
+  // JUNTO A SU PRODUCTOR», y «consecuencia VIVA mientras la 237 no entre: desde aqui solo se sale
+  // rescatando o por el corte de la noche». La 237 entro y trajo DOS de las cinco. La nota se
+  // reescribe en vez de borrarse porque su razon sigue en pie para las OTRAS TRES.
+  //
   // LO QUE **NO** SE DECLARA, y por que importa decirlo:
-  //   - `ayuda_tienda -> entregada / reprogramada / devolucion_por_confirmar / rechazada /
-  //     incidente`: son LAS GESTIONES. Las trae la ficha 237 JUNTO A SU PRODUCTOR
-  //     (`gestionarDesdeAyuda`). Declararlas aqui repetiria el error que la 154 cometio con
-  //     #43/#44 y que «costo el tren 154+155+156». Consecuencia VIVA mientras la 237 no entre:
-  //     desde aqui solo se sale rescatando o por el corte de la noche. Es un estado con salida, no
-  //     un pozo.
+  //   - `ayuda_tienda -> entregada`, `-> devolucion_por_confirmar` y `-> incidente`: las tres
+  //     SIGUEN SIN PRODUCTOR y siguen fuera (237/R1). El diseño firmado de la pila concede a la
+  //     tienda EXACTAMENTE dos desenlaces desde ayuda —reprogramar y rechazar— y ninguno mas: la
+  //     tienda no puede declarar entregado un paquete que no vio, ni devolver por su cuenta lo que
+  //     sigue en la moto del mensajero, ni reportar un incidente que no presencio. Declarar una
+  //     arista sin productor es el error que la 154 cometio con #43/#44 y que «costo el tren
+  //     154+155+156».
   //   - `ayuda_tienda -> en_bodega_*`: no hay recuperacion manual desde aqui. El paquete esta en
   //     la moto, no en un estante.
   ayuda_tienda: [
     { to: "en_reparto", via: "rescate_ayuda_tienda", rol: "mensajero / adminTienda" }, // #63 (235)
     { to: "sin_gestionar", via: "corte_sin_gestionar", rol: "sistema/cron" }, // #64 (235)
+    { to: "reprogramada", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña)" }, // #65 (237)
+    { to: "rechazada", via: "gestion_tienda_ayuda", rol: "adminTienda (dueña)" }, // #66 (237)
   ],
   devuelta: [
     { to: "en_bodega_central", via: "liberacion_devuelta_sla", rol: "sistema/cron" }, // #19

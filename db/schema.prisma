@@ -1615,6 +1615,7 @@ enum OrdenHistorialOrigenTipo {
   anclaje_devolucion // feature 239 (P8): ANCLAJE de la devolucion — al APROBAR el cierre, devolucion_por_confirmar -> devuelta (actor admin). Enlaza la gestion ancla. NO es visita real (no cuenta intentos)
   solicitud_ayuda_tienda // feature 235 (P2): LA IDA de la ayuda — en_reparto -> ayuda_tienda (actor = el mensajero asignado). NO es visita real (no cuenta intentos). No enlaza gestion
   rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
+  gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
 
   @@map("orden_historial_origen_tipo")
 }

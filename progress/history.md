@@ -3655,3 +3655,38 @@ investigación fue la especificación**. Gate completo **1219 archivos / 15822 t
   por el hueco — **el cero es suerte de calendario**.
 - **Nació una ficha de aquí:** la **246**, cuando el humano señaló que asignar de noche hace que el
   cron deshaga la asignación. Su spec está escrito y su medición hecha.
+
+## 2026-08-20 — 237 (la gestión que hace la tienda cuenta como del mensajero)
+
+**50 requisitos EARS, 44 tareas, 1 migración de enum con su `down.sql`.** La ficha **más delicada en
+dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
+
+- **La propiedad central, medida contra Postgres y no contra la pantalla:** la gestión que registra
+  la tienda lleva `mensajero_id` = **el mensajero** y el actor del historial = **la tienda**. Por eso
+  el dinero cae en **su** cierre. Verificado con importe real: **₡1.000 de ingreso de bodega sobre
+  una fila registrada por la tienda, dentro del cierre del mensajero.**
+- **Las dos features componen:** la ventana de confirmación física de la **238** pide el paquete que
+  gestionó la tienda. Era el **riesgo nº 3** del design, cuya mitigación escrita era «se recorre en
+  T9» — y se recorrió.
+- **Los números convirtieron una precaución en necesidad.** «El mensajero no puede deshacer la
+  gestión de la tienda» se firmó con dos medidas delante: **deshacer se usa (7 de 57 gestiones, 12 %)**
+  y un rechazo mueve **hasta ₡1.000**. Sin ellas parecía un caso de borde; con ellas, pasaría de
+  verdad y cada vez borraría en silencio dinero que decidió otra persona.
+- 🔴 **El recorrido se marcó hecho parado en el paso 6 de 9**, y la revisión lo rechazó **con razón**:
+  los tres que faltaban eran los de dinero. Es el mismo error de marcar por lotes que ya había
+  aparecido en la 236.
+- 🔴 **Un botón que siempre fallaba**, encontrado mirando: «Devolver a gestión» estaba habilitado y su
+  modal prometía algo que el servidor iba a rechazar siempre. No fallaba en silencio —el aviso
+  llegaba— pero **después** de confirmar. Ahora está apagado con el motivo en el `aria-label`, porque
+  **un botón `disabled` sale del orden de tabulación** y su `title` es inalcanzable con el teclado.
+- **Dos afirmaciones del propio spec eran falsas y se corrigieron en el spec, no en el código:** un
+  literal que decía estar en dos sitios estaba en **seis**; y el design afirmaba que el cobro por
+  rechazo se **debita a la tienda** — es **ingreso de bodega**. Ojo con la conclusión contraria, que
+  también sería falsa: un rechazo **sí** le debita el flete de devolución + IVA, por **otra** vía y
+  desde **otra** tarifa.
+- **Un cero que no era un fallo.** El primer intento de ver el dinero dio `0` — y la derivación **sí
+  había corrido** (`0`, no `NULL`): la base local no tenía tarifa con cobro por rechazo. La
+  diferencia entre `0` y `NULL` era todo.
+- **Deuda con dueño:** `IncidenteAdminService` sigue con su copia de la subida compensada (D5-a) y
+  `motivoSchema` sigue sin tope (D8). Y **T0.1 queda abierta a propósito**: re-medir antes de
+  desplegar.

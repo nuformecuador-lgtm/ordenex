@@ -26,8 +26,21 @@ import {
 // que discrepen es la señal.
 const JUEGO_ESPERADO: Record<GrupoNovedad, AccionNovedad[]> = {
   // R22: llamar, WhatsApp, devolver la orden a la ruta, abrir la conversación y registrar un
-  // intento de contacto. R23: NADA que presuponga una devolución.
-  ayuda: ["contacto", "habilitar", "conversacion", "intentoContacto"],
+  // intento de contacto.
+  //
+  // ⚠️ FEATURE 237 (T7.1, 2026-08-20): entran los DOS DESENLACES que la tienda puede registrar
+  // desde la ayuda, con CLAVES PROPIAS (`reprogramarDesdeAyuda` / `rechazarDesdeAyuda`) y no las
+  // del grupo de devolución. El juego pasa de cuatro a SEIS. No es un añadido cosmético: cada una
+  // de esas dos celdas crea una gestión atribuida al mensajero que entra en su cierre, suma un
+  // intento y mueve dinero, así que el censo de aquí es lo que impide que aparezcan donde no deben.
+  ayuda: [
+    "contacto",
+    "reprogramarDesdeAyuda",
+    "rechazarDesdeAyuda",
+    "habilitar",
+    "conversacion",
+    "intentoContacto",
+  ],
   // `habilitar` está aquí por TRADUCCIÓN LITERAL del estado de hoy (el punto 12 del pedido humano,
   // al revés de lo que pedía). No es un descuido de esta ficha: su dueño es la 240, y este test es
   // el sitio donde esa deuda queda escrita y medida. Cuando la 240 la corrija, este literal cambia
@@ -43,6 +56,10 @@ const ACCIONES_DECLARADAS: AccionNovedad[] = [
   "rechazar",
   "intentoContacto",
   "conversacion",
+  // Feature 237 (T7.1): las dos de la ayuda. Son claves DISTINTAS de `reprogramar`/`rechazar`, y
+  // que aparezcan las cuatro en esta lista es lo que lo hace visible.
+  "reprogramarDesdeAyuda",
+  "rechazarDesdeAyuda",
 ];
 
 describe("236/R18 — la tabla es el censo EXACTO de lo que ofrece cada grupo", () => {
@@ -55,17 +72,42 @@ describe("236/R18 — la tabla es el censo EXACTO de lo que ofrece cada grupo", 
     },
   );
 
-  it("R23: el grupo de ayuda NO ofrece nada que presuponga una devolución", () => {
+  it("R23: el grupo de ayuda NO ofrece las acciones que presuponen una devolución", () => {
     // Dicho como negativo aparte del censo, para que siga siendo legible cuando el censo crezca:
     // `ReprogramacionTiendaService` rechaza con `conflict` toda orden fuera de `devuelta`, así que
-    // el botón sólo conseguiría que la tienda descubriera el límite pulsándolo. Gestionar DESDE
-    // ayuda es la ficha 237.
+    // el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
     expect(ACCIONES_POR_GRUPO.ayuda).not.toContain("reprogramar");
     expect(ACCIONES_POR_GRUPO.ayuda).not.toContain("rechazar");
     // CONTROL POSITIVO de las dos ausencias: el grupo de devolución SÍ las tiene. Sin él, las dos
     // negativas pasarían igual con la tabla vacía.
     expect(ACCIONES_POR_GRUPO.devolucion).toContain("reprogramar");
     expect(ACCIONES_POR_GRUPO.devolucion).toContain("rechazar");
+  });
+
+  // =============================================================================================
+  // FEATURE 237 (T7.1 — R1, mitad de pantalla)
+  // =============================================================================================
+  it("237/R1: la ayuda ofrece SUS dos desenlaces, y con claves propias", () => {
+    // El caso de arriba y éste son el par: la ayuda no tiene las acciones de la DEVOLUCIÓN, pero sí
+    // tiene las suyas. Sin este positivo, aquel negativo se cumpliría igual si alguien borrara los
+    // dos botones de la ayuda entera — y el producto de esta ficha desaparecería en verde.
+    expect(ACCIONES_POR_GRUPO.ayuda).toContain("reprogramarDesdeAyuda");
+    expect(ACCIONES_POR_GRUPO.ayuda).toContain("rechazarDesdeAyuda");
+    // Y son claves DISTINTAS de las de la devolución, no las mismas con otro destino: si se
+    // reutilizaran, `NovedadAcciones` tendría que ramificar por grupo para elegir a qué servicio
+    // llama, que es la decisión fuera de la tabla que R18/R19 de la 236 prohíben.
+    expect(ACCIONES_POR_GRUPO.devolucion).not.toContain("reprogramarDesdeAyuda");
+    expect(ACCIONES_POR_GRUPO.devolucion).not.toContain("rechazarDesdeAyuda");
+  });
+
+  it("237/R1: y NINGÚN desenlace más nace de la ayuda", () => {
+    // La ficha declara DOS aristas desde `ayuda_tienda` (#65 y #66) y ningún productor para las
+    // otras tres. Una acción de «Entregar», «Devolver» o «Reportar incidente» en este grupo sería
+    // un botón que llama a una transición que no existe — el error que «costó el tren 154+155+156».
+    // Se escribe como un censo del sufijo, no una a una, para que también cace las que nadie ha
+    // inventado todavía.
+    const desdeAyuda = ACCIONES_POR_GRUPO.ayuda.filter((a) => a.endsWith("DesdeAyuda"));
+    expect([...desdeAyuda]).toEqual(["reprogramarDesdeAyuda", "rechazarDesdeAyuda"]);
   });
 
   it("R27: la conversación existe, y sólo en el grupo de ayuda", () => {
@@ -135,21 +177,27 @@ describe("236/R21 — fallo cerrado: un estado sin grupo no ofrece nada que resu
   it("ninguna acción de RESOLUCIÓN sobrevive ahí", () => {
     // Dicho una a una y no como igualdad, para que siga siendo cierto si mañana entra una acción
     // nueva que tampoco resuelva nada (un «Ver historial», por ejemplo).
-    for (const accion of [
+    // Feature 237: las dos de la ayuda entran en esta lista con más motivo que ninguna. Un estado
+    // sin grupo que ofreciera «Rechazar desde ayuda» dispararía un cobro sobre una orden de la que
+    // la pantalla no sabe ni en qué estado está.
+    const DE_RESOLUCION = [
       "reprogramar",
       "habilitar",
       "rechazar",
       "conversacion",
       "intentoContacto",
-    ] as const) {
+      "reprogramarDesdeAyuda",
+      "rechazarDesdeAyuda",
+    ] as const;
+    for (const accion of DE_RESOLUCION) {
       expect(ACCIONES_SIN_GRUPO, accion).not.toContain(accion);
     }
-    // CONTROL POSITIVO: esas cinco SÍ existen en algún grupo, así que las cinco ausencias de
+    // CONTROL POSITIVO: esas siete SÍ existen en algún grupo, así que las siete ausencias de
     // arriba dicen algo. Sin esto pasarían igual con la unión vacía.
     const enAlgunGrupo = new Set<string>(
       GRUPOS_NOVEDAD.flatMap((grupo) => [...ACCIONES_POR_GRUPO[grupo]]),
     );
-    for (const accion of ["reprogramar", "habilitar", "rechazar", "conversacion", "intentoContacto"]) {
+    for (const accion of DE_RESOLUCION) {
       expect([...enAlgunGrupo], accion).toContain(accion);
     }
   });
