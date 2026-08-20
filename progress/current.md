@@ -9,7 +9,47 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-19. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-19, noche. **EMPIEZA A LEER POR AQUÍ**
+
+**Dos fichas mergeadas hoy, las dos con revisión OK y gate completo verde. No hay ninguna ficha
+`in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+
+### ▶️ Qué sigue
+
+1. **236** — la pestaña propia de ayuda en `/novedades`. **Marca el reloj**: hasta que entre, la
+   tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede leer el motivo**.
+2. **237** → **240**. La 237 hereda dos avisos escritos: la invariante «una orden en ayuda bloquea el
+   cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia de las siete listas **vigila
+   pero no descubre** una octava.
+3. **241**, independiente.
+
+### ⚠️ Antes de desplegar la 238 — acción HUMANA (T0.3)
+
+Avisar a bodega de que **el gesto cambia**: a partir del despliegue, aprobar un cierre exige tener
+los paquetes delante y escanear su guía. La medición dice que **no bloquea** —0 cierres en cola el
+2026-08-19— pero **esa foto caduca en cuanto un mensajero cierre su día**: re-medir justo antes de
+desplegar, no antes de mergear.
+
+### 🔴 `dev` llegó ROJO, y es la TERCERA vez
+
+El merge del branch `ux` ([#401](https://github.com/nuformecuador-lgtm/ordenex/pull/401), 142
+archivos) dejó en `dev` **tres tests money-critical de la 69 en rojo** y **dos migraciones sin
+`down.sql`**. Los tres arreglos van dentro del PR de la 238, y están explicados ahí.
+
+**La causa de fondo no está arreglada:** en este repo **un PR en verde no dice nada sobre los
+tests** —el único check es el build de Vercel, que compila y migra pero no ejecuta la suite—. Antes
+de mergear algo que conviva con features recién llegadas, hay que correr el gate **sobre el árbol
+mergeado**, no mirar el estado del PR. Y al ramificar, **dar por hecho que `dev` puede estar rojo**:
+si el gate sale rojo, comprobar si el rojo es tuyo antes de tocar nada.
+
+---
+
+## ✅ AL DÍA — 2026-08-19 (la 235)
 
 **La 235 («ayuda a la tienda: estatus propio») está MERGEADA en `dev`** — PR
 [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402), commit `32b4064f`, ficha en `done`,
