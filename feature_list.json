@@ -2945,7 +2945,7 @@
       "name": "investigar las guardas de bloqueo que se retiraron sin pedirlo",
       "spec_path": null,
       "description": "Backend. El commit 6a0e6d36 («el bloqueo por cierres pasa de alguno a mas de los tolerados») ademas RETIRO la guarda de mensajero bloqueado en la asignacion de guias (GuiaAsignacionService, antes un conflict) y una causa del bloqueo de bodega satelite (OrdenRepository). El umbral viejo sigue aplicandose en otras superficies, asi que la lectura y la escritura ya no coinciden. Nadie lo pidio. Investigar si fue deliberado antes de tocarlo. Auditoria: progress/auditoria_ayuda_tienda.md (§5).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "backend",
@@ -2953,7 +2953,7 @@
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "IN_PROGRESS el 2026-08-20. Investigacion cerrada en progress/investigacion_241.md; el commit 6a0e6d36 ESTA EN PRODUCCION. || HUBO MOTIVO REAL (un cierre sin aprobar congelaba una bodega satelite entera) pero NO hay deadlock: los cinco caminos tienen salida. || EL HALLAZGO: el tope quedo en «mas de 1» y el invariante 109/R30 impide tener 2, asi que no subio un umbral -- APAGO EL PREDICADO ENTERO, incluidas tres superficies que el commit dice no haber tocado. Y son TRES guardas retiradas, no dos: la de AsignacionSateliteService no estaba ni en la ficha ni en la auditoria. || FIRMADO POR EL HUMANO el 2026-08-20: se bloquea SOLO con vencido o rechazado --la pelota en el tejado del mensajero-- y NUNCA con solicitado, que es espera del admin (mediana 8,2 h, p90 22,1 h). Recibir asignaciones no se bloquea nunca, que es lo que se pidio el 2026-08-18. || Y se quita el NOT EXISTS del SQL crudo del satelite, que conserva el criterio viejo y bloquea justo lo que la regla permite: hoy deja elegir al mensajero y luego falla con un conflict vacio y el mensaje «Actualiza la lista y vuelve a intentarlo», que es falso. || MEDIDO en produccion: 0 mensajeros con cierre abierto (sobre 4), 12 cierres todos aprobados, 0 asignaciones historicas a mensajero con cierre abierto sobre 26 ordenes asignadas. Nada paso por el hueco todavia; el cero es suerte de calendario y caduca en cuanto alguien cierre su dia."
+      "status_note": "DONE el 2026-08-20, PR #408. Gate completo EXIT 0: 1219 archivos / 15822 tests / 345 s. || LA REGLA, firmada por el humano: solicitar cierre nunca dos pendientes (ya funcionaba); recibir asignaciones SIEMPRE se puede; gestionar y cobrar se bloquea SOLO con vencido o rechazado, NUNCA con solicitado, que es espera del admin (mediana 8,2 h, p90 22,1 h). || EL PUNTO UNICO SIGUE SIENDO UNO: «recibir» no es un predicado que devuelva vacio, es un sitio donde NO HAY predicado. El predicado se renombra a findMensajerosBloqueadosParaGestion y se SACA de las interfaces de asignacion: alli no se puede llamar. || Se borro la guarda POR ZONA de rutearABodegaSatelite (firmado): habria resucitado sola al reparar el predicado, y es la que congela una bodega entera por una persona. || Se quito el NOT EXISTS del satelite, que fallaba con un conflict vacio y un mensaje falso. Y la frase que mentia vivia en CINCO sitios de lib/, DOS en lib/interfaces/ que es el contrato. || ABIERTO: re-medir produccion antes de desplegar. Cuando se midio habia 0 mensajeros con cierre abierto sobre 4 y 0 asignaciones historicas a mensajero bloqueado sobre 26; ese cero es suerte de calendario."
     },
     {
       "id": 242,
@@ -3020,15 +3020,15 @@
       "name": "elegir para que dia es la asignacion, y que el corte lo respete",
       "spec_path": "specs/246-asignacion-por-dia/",
       "description": "Fullstack. Al asignar ordenes a un mensajero, elegir si son para el reparto de hoy o el del dia siguiente, y que el corte nocturno no barra ni genere cierre vencido por las de manana. Hoy no existe el concepto de fecha de reparto: asignar de noche hace que el cron deshaga la asignacion y cree un vencido injusto.",
-      "status": "pending",
+      "status": "spec_ready",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/246-asignacion-por-dia",
       "depends_on": null,
-      "spec_ready_at": null,
+      "spec_ready_at": "2026-08-20",
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-20 por pedido humano, durante la 241. || EL DEFECTO: el corte nocturno se lleva a sin_gestionar todo lo que siga en en_reparto y crea un cierre vencido. Si bodega asigna a las 10 pm, el cron deshace esa asignacion esa misma noche y el mensajero se come un vencido que no merecia. || ENGANCHA CON LA 241: alli se firmo que un vencido bloquea al mensajero para gestionar. Un vencido nacido de este defecto seria un bloqueo INJUSTO, asi que esto no es comodidad: evita que la regla castigue a quien no debe. || ALCANCE TOMADO POR EL LEADER, revisable en el spec: HOY / MANANA, que es lo minimo que resuelve el caso. Una fecha futura cualquiera es planificacion de ruta y es otra feature. || DECISIONES ABIERTAS para el spec: donde vive la fecha (columna nueva en la tabla orden, que es la mas caliente, o derivada), y que se lee para lo ya asignado (por defecto «de hoy», que no exige migracion de datos)."
+      "status_note": "DADA DE ALTA el 2026-08-20 por pedido humano, durante la 241. || EL DEFECTO: el corte nocturno se lleva a sin_gestionar todo lo que siga en en_reparto y crea un cierre vencido. Si bodega asigna a las 10 pm, el cron deshace esa asignacion esa misma noche y el mensajero se come un vencido que no merecia. || ENGANCHA CON LA 241: alli se firmo que un vencido bloquea al mensajero para gestionar. Un vencido nacido de este defecto seria un bloqueo INJUSTO, asi que esto no es comodidad: evita que la regla castigue a quien no debe. || ALCANCE TOMADO POR EL LEADER, revisable en el spec: HOY / MANANA, que es lo minimo que resuelve el caso. Una fecha futura cualquiera es planificacion de ruta y es otra feature. || DECISIONES ABIERTAS para el spec: donde vive la fecha (columna nueva en la tabla orden, que es la mas caliente, o derivada), y que se lee para lo ya asignado (por defecto «de hoy», que no exige migracion de datos). || SPEC LISTO el 2026-08-20: 35 requisitos EARS y 9 decisiones. HALLAZGO QUE CAMBIA EL ENCUADRE: asignar deja la orden en por_recoger y el corte NO barre por_recoger, asi que el defecto solo muerde si el mensajero YA RECOGIO. || MEDIDO: el corte ha barrido 2 ordenes en toda la vida de la base (sobre 612 filas de historial) y NINGUNA se habia asignado esa tarde-noche; nadie carga la furgoneta despues de las 18:00. LECTURA ELEGIDA POR EL HUMANO: bodega ya evita asignar de noche porque sabe que el cron se lo come, asi que el cero es el sintoma del apano y no prueba de que no haga falta. La ficha no arregla un fallo: QUITA UNA RESTRICCION OPERATIVA AUTOIMPUESTA. || OJO al evaluarla: no se puede medir con el numero que la justifico. Si tras desplegarla suben las asignaciones nocturnas, eso CONFIRMA la lectura. || PENDIENTE DE FIRMA: D1 (columna orden.fecha_reparto DATE), D2 (fecha absoluta, no marca «para manana»), D4 (las dos superficies) y D7 (el ranking no se toca)."
     }
   ]
 }
