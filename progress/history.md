@@ -3581,3 +3581,40 @@ confirman: su paquete no vuelve, se indemniza.
 - **Deuda del despliegue (T0.3):** avisar a bodega de que el gesto cambia. La medición dice que **no
   bloquea** —0 cierres en cola—, pero **esa foto caduca**: re-medir justo antes de desplegar, no
   antes de mergear.
+
+## 2026-08-19 — 236 (la ayuda tiene pestaña propia, y la tienda por fin lee el motivo)
+
+**47 requisitos EARS, 40 tareas, sin migración: esta ficha no persiste nada.** Absorbe la **228**,
+que queda **superada**.
+
+- **El defecto que arregla, dicho por lo que se vio:** la nota con la que el mensajero pide ayuda es
+  **obligatoria**, se publica en el hilo… y nadie la leía, desde que `55723c83` retiró el botón
+  «Notas» y con él su **único montaje**, dejando el modal entero en disco y sin cablear. En el
+  recorrido apareció el detalle que lo resume: **la nota ya estaba ahí** —la escribió el recorrido de
+  la 235— y **nadie podía verla**. El hilo llevaba días con contenido y sin lector.
+- **Cierra la enmienda de R35 de la 235.** Los dos roles vuelven a tener superficie alcanzable, así
+  que el requisito se lee otra vez tal como se redactó, y la enmienda pasa de deuda viva a acta.
+- **El corte vive en el servidor y sale de una sola declaración.** `novedadWhere` perdió el `OR` y
+  los dos métodos del repo piden `grupo` **obligatorio**: el typecheck señaló los seis call-sites en
+  vez de dejar que alguno se quedara con el predicado viejo. Una orden vive en una pestaña **por
+  construcción**, no por disciplina — que es justo lo que la 235 tuvo que arreglar a la mala.
+- **La guardia que el diseño predijo se puso roja, y se reparó SUBIENDO la propiedad**: de
+  «intersección no vacía» a **igualdad exacta** con la ventana de escritura de la tienda. Medido: con
+  la mutación, el caso viejo de intersección **sigue verde** y sólo cae la igualdad nueva. Subir
+  sirvió; relajarla habría dejado la guardia mirando a otro lado.
+- **El estado vacío es superficie de pleno derecho**, y no por gusto: medido contra producción, hay
+  **0 órdenes en `ayuda_tienda` y 0 en `devuelta`** sobre 141 vivas. La pestaña **nace vacía** y será
+  lo primero —y por un tiempo lo único— que la tienda conozca.
+- **La medición mató una decisión antes de llegar a firma:** iba a preguntarse si había notas
+  huérfanas que recuperar. **No existen.** La ficha es **prospectiva**: no rescata datos, impide que
+  se pierdan desde el primer día en que la 235 salga.
+- 🔴 **La revisión RECHAZÓ, y por trazabilidad, no por código** — ningún `.ts` que tocar. Una fila del
+  mapa citaba un test que **nunca existió en ninguna rama**, y una bitácora publicaba una salida que
+  **no se reproduce**: `vitest` no falla con un filtro que no casa nada, lo ignora en silencio, así
+  que aquellos números no salieron de aquel comando. **Cuarta ficha seguida** con una cita falsa en el
+  mapa. Una salida publicada que no se reproduce es indistinguible de una inventada.
+- **Deuda declarada:** re-medir producción **antes de desplegar** (la foto caduca); y dos cosas
+  cubiertas por test pero **no vistas con los ojos** — la descarga por pestaña (el sandbox bloquea
+  las descargas que la propia página inicia) y D8, que necesita **ganar la carrera** al mensajero.
+- ⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
+  No en paralelo.**

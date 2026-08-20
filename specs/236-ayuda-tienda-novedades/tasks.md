@@ -248,6 +248,11 @@
       **Hecho:** la lista de suites y su resultado en `progress/impl_236.md`. Un rojo ahí **no es una
       aserción a actualizar**: es que aterrizó trabajo que no es de esta ficha. **Depende de:** T6.
       **Cubre:** R41, R42, R43, R44, R45, R46.
+      > ✅ **La lista, que faltaba (añadida el 2026-08-19 tras la revisión):**
+      > `dinero-sin-centimos`, `ordenes-columnas-money-safe`, `orden-nota-frontera`,
+      > `superficie-de-uso`, `anclaje-vs-intentos`, `deriva-primer-intento` y `RepartoAyuda` —
+      > **7 suites / 110 tests, verdes y sin modificarse**. Están en el mapa de
+      > `progress/impl_236_frontend.md` §«R41-R46». Un rojo en cualquiera **es regresión**.
 - [x] **T7.2 — [P] Nada de PII en registros (R47).** Censo: ningún `console.*` ni registro de
       diagnóstico de los archivos tocados emite cuerpo de nota, teléfono, dirección ni nombre.
       **Hecho:** verde, con la lista de archivos barridos. **Depende de:** T6. **Cubre:** R47.
@@ -300,7 +305,7 @@
       las respuestas a D1-D8) y en `progress/auditoria_ayuda_tienda.md` §4 (caen «la pestaña nueva» y
       «la nota se escribe y nadie la lee»).
       **Hecho:** ninguna de las dos secciones contradice al código.
-- [ ] **T8.3 — Cerrar la ficha, y declarar la 228 superada.** `feature_list.json` **lo estampa el
+- [x] **T8.3 — Cerrar la ficha, y declarar la 228 superada.** `feature_list.json` **lo estampa el
       leader**: estado, `status_note` de 3-6 líneas técnicas —el detalle vive en `progress/`, no
       duplicado en el JSON— y la **228 como superada** (`design.md` §14).
       **Hecho:** `./init.sh` completo verde **con el árbol quieto**, el mapa `R<n> → test` en
@@ -371,7 +376,7 @@
 | R42 | `order-status-transiciones` y la guardia de transiciones exhaustivas **verdes sin tocar** (T7.1) |
 | R43 | Suites de `DevolucionSlaService` y del anclaje de la 239 **verdes sin tocar** (T7.1) |
 | R44 | `RepartoAyuda.test.tsx` y las suites del portal del mensajero **verdes sin tocar** (T7.1) |
-| R45 | `tests/unit/types/ventana-hilo-notas.test.ts` **verde sin tocar** (T7.1) |
+| R45 | `tests/unit/services/orden-nota-service.test.ts:380` — un `toEqual` **literal** sobre las dos listas de `VENTANA_ESCRITURA`, **verde sin tocar** (T7.1). ⚠️ Esta fila citaba `tests/unit/types/ventana-hilo-notas.test.ts`, **que nunca ha existido en ninguna rama**; corregido el 2026-08-19 tras la revisión |
 | R46 | Las dos guardias de criterio de intento **verdes sin tocar** + los casos de intentos de contacto reubicados (T7.1) |
 | R47 | Censo de T7.2 |
 

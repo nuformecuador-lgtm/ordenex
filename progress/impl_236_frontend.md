@@ -198,6 +198,31 @@ los genera: comparar un texto con su propia fuente está siempre verde. Está di
 
 ---
 
+
+### R41-R46 — los requisitos de NO REGRESIÓN
+
+Añadidos el 2026-08-19 **tras la revisión**: faltaban en el mapa de las dos bitácoras, y
+`CHECKPOINTS.md` exige que cada `R<n>` tenga el suyo. Se cumplen por **dos mitades**, y las dos se
+midieron.
+
+| Req | Qué prohíbe | Cómo se comprueba |
+| --- | --- | --- |
+| **R41** | tocar montos o movimientos de dinero | `dinero-sin-centimos` · `ordenes-columnas-money-safe`, **verdes sin modificarse**; y el diff no toca ninguna ruta de dinero |
+| **R42** | añadir/retirar estados o transiciones | el diff **no toca** el catálogo de estados ni ninguna migración: esta ficha **no persiste nada** |
+| **R43** | cambiar cuándo una orden entra o sale del estatus de ayuda | `RepartoAyuda` verde sin tocar; esa transición vive en la 235 y su fuente no está en el diff |
+| **R44** | cambiar lo que el mensajero ve o puede hacer | `RepartoAyuda` verde sin tocar; el diff **no toca** el portal del mensajero |
+| **R45** | cambiar la ventana de escritura del hilo | `tests/unit/services/orden-nota-service.test.ts:380` — `toEqual` **literal** sobre las dos listas de `VENTANA_ESCRITURA`, **intacto y verde** · `orden-nota-frontera` |
+| **R46** | cambiar el conteo de intentos | `anclaje-vs-intentos` · `deriva-primer-intento`, verdes sin modificarse; el diff no toca los contadores |
+
+**La mitad sustantiva es el diff:** `git diff --name-only` contra la base no incluye catálogo de
+estados, migraciones, portal del mensajero, `DevolucionSlaService`, `lib/types/ventana-hilo-notas.ts`
+ni los contadores de intentos. **Ninguna.** La otra mitad son las **siete suites** que vigilan esas
+rutas, verdes y **sin modificarse**: `dinero-sin-centimos`, `ordenes-columnas-money-safe`,
+`orden-nota-frontera`, `superficie-de-uso`, `anclaje-vs-intentos`, `deriva-primer-intento` y
+`RepartoAyuda` — **110 tests**.
+
+⚠️ Un rojo en cualquiera de esas siete **es regresión, no una aserción que haya que cambiar**.
+
 ## 7 · Mutaciones — una a una, vitest corrido, salida real leída y citada
 
 **Método.** Script `mutar.py` (escrito a archivo, **nunca `node -e`**) que **aborta si el texto a
@@ -288,11 +313,22 @@ $ pnpm exec vitest related --run <los 11 archivos de produccion tocados>
 
 ```
 $ pnpm exec vitest run tests/components/RepartoAyuda.test.tsx \
-    tests/unit/types/ventana-hilo-notas.test.ts \
     tests/unit/services/rescate-ayuda-service.test.ts
- Test Files  3 passed (3)
-      Tests  54 passed (54)
+ Test Files  2 passed (2)
+      Tests  33 passed (33)
 ```
+
+> ⚠️ **CORREGIDO el 2026-08-19 tras la revisión, y hay que decir qué pasó.** Este bloque publicaba
+> `3 passed (3) / 54 tests` sobre un comando que incluía `tests/unit/types/ventana-hilo-notas.test.ts`
+> — un archivo que **nunca ha existido en ninguna rama**. `vitest` **no falla** con un filtro que no
+> casa nada: lo ignora en silencio. Así que **esos números no salieron de ese comando**, y
+> re-ejecutarlo hoy da `2 passed (2) / 33 tests`, que es lo que ahora queda escrito.
+>
+> No cambia ninguna conclusión —las dos suites que sí existen están verdes y son las que sostienen
+> la afirmación— pero **una salida publicada tiene que reproducirse**. Una que no lo hace es
+> indistinguible de una inventada, y este repo ya pagó un arnés de mutaciones que reportaba
+> resultados sin haber ejecutado nada. La cobertura real de R45 vive en
+> `tests/unit/services/orden-nota-service.test.ts:380`.
 
 **R47 — censo de PII en registros:** `grep -rn "console\."` sobre `app/(app)/novedades/` y sobre los
 cuatro archivos de `lib/` tocados → **ninguna ocurrencia**. Esta tanda no añade ni un registro de
