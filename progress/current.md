@@ -9,7 +9,48 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-19, noche. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-19, cierre. **EMPIEZA A LEER POR AQUÍ**
+
+**Tres fichas mergeadas hoy, las tres con revisión OK y gate completo verde. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+
+La **228** queda **superada** por la 236.
+
+### ▶️ Qué sigue
+
+1. **237** — la gestión de la tienda que cuenta como del mensajero. Hereda dos avisos escritos: la
+   invariante «una orden en ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y
+   la guardia de las siete listas **vigila pero no descubre** una octava.
+2. **240** — el punto 12 del pedido («Habilitar» aparece donde no debía) y «Rechazar».
+3. **241**, independiente.
+
+⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
+No en paralelo.**
+
+### ⚠️ Antes de desplegar — dos acciones HUMANAS
+
+- **238 / T0.3:** avisar a bodega de que el gesto cambia: aprobar exige tener los paquetes delante.
+- **236 / T0.1 y 238 / T0.1:** **re-medir producción**. Las dos mediciones se tomaron con la 235 aún
+  sin desplegar, y **caducan en cuanto salga**.
+
+### 🧾 El patrón que se repitió las tres veces
+
+**Ver la app encontró lo que la suite no**, en dos de las tres: un **cierre que no se podía aprobar
+nunca** (238) y **dos defectos de card** (235). Y **la trazabilidad falló en las cuatro fichas
+seguidas**: filas del mapa citando tests que no existen, y una bitácora publicando una salida que no
+se reproduce. `vitest` **no falla** con un filtro que no casa nada — lo ignora en silencio.
+
+Y **`dev` llegó rojo por tercera vez** con el merge de `ux` (#401). La causa de fondo sigue viva: un
+PR en verde aquí **no dice nada de los tests**, porque el único check es un build.
+
+---
+
+## ✅ AL DÍA — 2026-08-19, noche (la 235 y la 238)
 
 **Dos fichas mergeadas hoy, las dos con revisión OK y gate completo verde. No hay ninguna ficha
 `in_progress`.**
