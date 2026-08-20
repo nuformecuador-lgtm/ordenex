@@ -1,7 +1,7 @@
 # impl 238 — confirmación física de los paquetes al aprobar el cierre
 
 Rama `feature/238-confirmacion-fisica-cierre`, base `origin/dev` = `fc17148e`.
-Spec: `specs/238-confirmacion-fisica-cierre/{requirements,design,tasks}.md` (R1–R42, T0–T6).
+Spec: `specs/238-confirmacion-fisica-cierre/{requirements,design,tasks}.md` (R1–R44, T0–T6).
 
 ---
 

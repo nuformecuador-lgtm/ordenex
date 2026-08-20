@@ -2900,7 +2900,7 @@
       "name": "confirmacion fisica de los paquetes al aprobar el cierre",
       "spec_path": "specs/238-confirmacion-fisica-cierre/",
       "description": "Fullstack. Aprobar un cierre deja de ser un click: pide escanear o teclear las guias de lo que vuelve fisicamente a bodega (devoluciones, rechazos y reprogramadas) y BLOQUEA hasta completarlas. Los INCIDENTES no cuentan para ese bloqueo. Reusa el escaner de guias que ya existe. Diseno: progress/design_pila_ayuda_tienda.md (F4).",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
@@ -2908,7 +2908,7 @@
       "depends_on": null,
       "spec_ready_at": "2026-08-19",
       "spec_approved_at": "2026-08-19",
-      "status_note": "IN_PROGRESS el 2026-08-19. Puerta humana PASADA y escrita en specs/238-confirmacion-fisica-cierre/requirements.md: D1 (marca por gestion, gestion_orden.confirmada_fisica_at) y D2 (NO se aprueba con faltantes, sin escapatoria) FIRMADAS; D3 y D8 resueltas POR MEDICION contra produccion (0 ordenes vivas sin num_guia, 0 cierres en solicitado). || Consecuencia aceptada de D2: un solo paquete perdido devuelve el cierre entero, y es deliberado -es la friccion que hace que los paquetes aparezcan-. La salida ya existe: rechazar con motivo. || CONFLICTO DE ARCHIVOS: toca resolverCierre, CierresAdminService, lib/types/cierres-admin.ts y CierresAdminModule.tsx. NO trabajar en paralelo con nada que vuelva sobre la transaccion de aprobacion. || Backend (T1-T3) antes que frontend (T4): T4 lee contratos que T2/T3 mueven."
+      "status_note": "DONE el 2026-08-19. Gate completo verde; revision OK con 0 bloqueantes (progress/review_238.md). || D2 SIN ESCAPATORIA por firma humana: un solo paquete perdido devuelve el cierre entero, y la salida es rechazar con motivo. Los incidentes NO se confirman. || DESPLIEGUE (T0.3, lo unico abierto): avisar a bodega de que aprobar exige tener los paquetes delante. Medido 0 cierres en cola, asi que no bloquea, PERO esa foto CADUCA -- re-medir justo antes de desplegar. || Trae 1 migracion aditiva (gestion_orden.confirmada_fisica_at) con down.sql y round-trip probado. La marca se escribe dentro de la transaccion de aprobacion, ANTES del anclaje de la 239, con test que fija el orden. || OJO para quien vuelva a esta pantalla: una orden puede tener DOS gestiones vivas en el mismo cierre (1 par de 48 en produccion). Una lectura confirma TODAS las filas de esa guia; resolverlo con un find deja la segunda inalcanzable y el cierre no se puede aprobar nunca. La correccion depende de que orden.numGuia sea @unique, y hay un test que lo fija."
     },
     {
       "id": 239,

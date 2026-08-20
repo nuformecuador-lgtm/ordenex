@@ -286,7 +286,7 @@
 - [x] **T6.2 — [P] Anotar en `specs/239-devolucion-espera-cierre/design.md` §13** que la 238 añade una
       condición más a la aprobación y refuerza su riesgo 1 (población congelada).
       **Hecho:** la sección lo dice y no contradice al código.
-- [ ] **T6.3 — Cerrar la ficha.** `feature_list.json` (lo estampa el leader): estado, `status_note` de
+- [x] **T6.3 — Cerrar la ficha.** `feature_list.json` (lo estampa el leader): estado, `status_note` de
       3-6 líneas técnicas —el detalle vive en `progress/`, no duplicado en el JSON— y el mapa
       `R<n> → test` en `progress/impl_238.md`.
       **Hecho:** `./init.sh` completo verde con el árbol quieto, y el SHA medido comparado contra
@@ -300,7 +300,7 @@
 | --- | --- |
 | R1 | `tests/unit/types/gestion-retorno.test.ts` — «los cinco resultados están declarados y la lista se deriva del `Record`» |
 | R2 | `tests/unit/repositories/cierres-admin-retornables.test.ts` — «el conjunto son las gestiones vigentes del cierre que vuelven» |
-| R3 | `gestion-retorno.test.ts` — «`incidente` está declarado como no-retornable» · `tests/unit/services/cierres-admin-confirmacion-fisica.test.ts` — «un incidente del cierre no entra en el conjunto esperado ni bloquea» (**mutación T5.4**) |
+| R3 | `gestion-retorno.test.ts` — «`incidente` está declarado como no-retornable» · `cierres-admin-retornables.test.ts` y `-sql-real.test.ts` — «los `incidente` no salen». **La mutación T5.4 la matan éstos, NO el test del servicio**: esa suite usa dobles del repo y es estructuralmente incapaz de verla (medido: la mutación mata 10 casos en 4 archivos y el del servicio es justo el que sobrevive). El caso del servicio cubre R3 desde su lado —«un incidente del cierre no entra en el conjunto esperado ni bloquea»— pero no es su red |
 | R4 | `cierres-admin-retornables.test.ts` — «una gestión cuya orden ya cambió de estatus sigue en el conjunto» |
 | R5 | typecheck (el `satisfies Record<GestionResultado, boolean>`) + `tests/unit/guards/confirmacion-incidentes-excluidos.guardia.test.ts` |
 | R6 | `cierres-admin-retornables.test.ts` — «fuera de alcance devuelve `[]` sin distinguirse de inexistente» |
@@ -323,7 +323,7 @@
 | R23 | `cierres-admin-confirmacion-fisica.test.ts` (repo) — «toda gestión anclada quedó confirmada en la misma tx» · `cierres-admin-anclaje-devolucion.test.ts` verde **sin tocar** |
 | R24 | ídem — «rechazar no escribe ninguna marca» + typecheck (`never` en la rama `rechazado`) |
 | R25 | ídem — «un cierre ya aprobado da `conflict` y no ejecuta el bloque» |
-| R26 | ídem — «la válvula de escape no confirma nada; la aprobación posterior sí exige la lista completa» |
+| R26 | **POR CONSTRUCCIÓN, no por un test propio** (m1 de la revisión: el caso que esta fila afirmaba **no existe**). `forzarSolicitudVencido` toca **sólo** `cierreDia.estado`, y `confirmadaFisicaAt` se escribe en **un único sitio** del árbol, dentro de la rama `aprobado` de `resolverCierre`; verificado por censo, no por cita. La **segunda** mitad —que la aprobación posterior sí exige la lista completa— sí está medida, por R7/R8 |
 | R27 | `CierresAdminConfirmacionFisica.test.tsx` — «dice con texto cuántas faltan y qué hacer» (se lee el texto, no el `disabled`) |
 | R28 | ídem — «se confirma por cámara» y «se confirma por número tecleado» |
 | R29 | ídem — «código no interpretable: avisa y no marca nada» |
@@ -336,9 +336,9 @@
 | R36 | ídem — «con la ventana cerrada, la tarjeta de escaneo no está en el árbol» |
 | R37 | ídem — «con incidentes y retornables, la confirmación va antes que los montos» |
 | R38 | `tests/unit/services/cierres-admin-service.test.ts` — «el adminSatélite recibe la misma exigencia» |
-| R39 | `tests/unit/services/cierre-bodega-service.test.ts` — «el cierre de bodega no pide confirmación física» |
+| R39 | `tests/unit/services/cierres-bodega-admin-service.test.ts:654` — «el cierre de bodega no pide confirmación física». **Ojo al nombre**: el archivo que este mapa citaba antes (`cierre-bodega-service.test.ts`) existe y **no** menciona la 238; `aprobarCierreBodega` vive en `CierresBodegaAdminService`, junto a sus tres hermanos (ver la nota de T5.1) |
 | R40 | `tests/unit/guards/aprobacion-escrituras-cubiertas.guardia.test.ts` — inventario con los dos bloques de `tx.gestionOrden.updateMany` y sus dos suites |
-| R41 | `cierres-admin-caja-cod.test.ts` y las suites de idempotencia de los cinco feeds, **verdes y sin diff** (T3.9, anotado en `progress/impl_238.md`) |
+| R41 | El caso de **orden dentro de la transacción** de `cierres-admin-confirmacion-fisica.test.ts` (repo) y el de `wallet-idempotencia`, que son los que se ponen rojos si el bloque aterriza mal. ⚠️ `cierres-admin-caja-cod.test.ts` y las suites de los cinco feeds están verdes **pero pasan `confirmacionFisica: []`**, así que el bloque nuevo nunca se ejecuta allí: su verde es coherencia, **no evidencia** (m6 de la revisión) |
 | R42 | `aprobacion-escrituras-cubiertas.guardia.test.ts`, frente 2, tras re-apuntar `cierres-admin-indemnizacion.test.ts` (T3.8) |
 | R43 | `tests/integration/db/confirmacion-fisica-migration.test.ts` — «aplica, re-aplica y revierte» |
 | R44 | `cierres-admin-confirmacion-fisica.test.ts` (repo) — «el error lleva sólo el id del cierre» |

@@ -198,6 +198,18 @@ export type LecturaInterpretada =
  * cierre imposible de aprobar por ninguna vía. El servidor no tiene ese candado: dedupe por
  * `gestionId` (no por guía) y compara la guía contra la de CADA gestión, así que dos entradas
  * con la misma `numGuia` y distinto `gestionId` le valen.
+ *
+ * ⚠️ **PREMISA DE LA QUE DEPENDE LA CORRECCIÓN DE TODO ESTO: `orden.numGuia` es `@unique`**
+ * (`db/schema.prisma`, modelo `Orden`). Ésa —y sólo ésa— es la razón por la que «todas las filas
+ * de esta guía» significa «un solo bulto». Una guía identifica UNA orden; una orden es UN paquete
+ * físico; luego confirmar de golpe todas sus filas es atestiguar el bulto que se tiene delante, ni
+ * uno más. **Si esa unicidad desapareciera, esto dejaría de ser una corrección y pasaría a ser un
+ * agujero**: una sola lectura daría por confirmados paquetes DISTINTOS y bodega estaría firmando
+ * que tiene delante algo que no tiene. Nada del código lo avisaría —ni el typecheck, ni la
+ * pantalla, que seguiría comportándose igual—, así que la premisa se vigila donde se escribe: el
+ * caso «PREMISA» de `tests/components/CierresAdminConfirmacionFisica.test.tsx` lee
+ * `db/schema.prisma` y se pone rojo si el `@unique` de `numGuia` se cae. No se delega en la
+ * guardia de la 229, que fija lo mismo por un motivo suyo y se iría con ella.
  */
 export function interpretarLectura(
   texto: string,
@@ -251,6 +263,12 @@ export function interpretarLectura(
 /**
  * La CLAVE del paquete FÍSICO de una fila. Dos gestiones vivas de la misma orden llegan con la
  * misma guía y son **un solo bulto** en el estante: cuentan una vez.
+ *
+ * La guía sirve de clave del bulto **por la misma premisa que sostiene `interpretarLectura`:
+ * `orden.numGuia` es `@unique`** (`db/schema.prisma`, modelo `Orden`). Si dos órdenes pudieran
+ * compartir guía, `guia:<numGuia>` fundiría paquetes DISTINTOS en una sola entrada del contador:
+ * el total saldría corto y bodega pondría delante menos bultos de los que debe. Ahí la premisa
+ * no protege una confirmación de más, sino un total de menos — el mismo agujero por el otro lado.
  *
  * Sin guía no hay forma de saber si dos filas son el mismo bulto, así que cada una cuenta por su
  * cuenta. No es un detalle: colapsarlas rebajaría el total y, con él, el número de paquetes que

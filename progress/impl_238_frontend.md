@@ -595,3 +595,159 @@ quieto. **El servidor de dev de `localhost:3000` no se tocó**: el recorrido lo 
    esta pantalla. El cliente lo trata bien; queda sin responder si esa duplicidad *debería* existir
    (1 de 48 pares medidos). Si algún día se elimina en origen, este arreglo pasa a ser una red que
    no se dispara — que es como debe quedar.
+
+---
+
+# Addenda 2 — acabado de la revisión: m4 y m7 (2026-08-19)
+
+Dos hallazgos **menores** de `progress/review_238.md`, sobre `0a0df331`. El veredicto ya era **OK**:
+esto no cambia comportamiento. **Sin commit.** Sólo dos archivos, los dos de la capa de
+presentación; `lib/`, los tests de backend y el servidor de dev de `localhost:3000` no se tocaron.
+
+## m4 — la premisa que sostiene el arreglo, escrita donde se toma la decisión
+
+`app/(app)/cierres-admin/_components/cierre-confirmacion-fisica.tsx`, en **los dos** sitios donde la
+decisión se toma:
+
+- **`interpretarLectura`** — un bloque marcado ⚠️ **PREMISA**: «una lectura confirma todas las filas
+  de esa guía» es correcto *porque* `orden.numGuia` es `@unique` (`db/schema.prisma`, modelo
+  `Orden`). Una guía identifica UNA orden; una orden es UN paquete físico. Se nombra explícitamente
+  qué pasa si esa unicidad cae: **deja de ser una corrección y pasa a ser un agujero** —una lectura
+  daría por confirmados paquetes distintos y bodega firmaría tener delante algo que no tiene— y que
+  **nada del código lo avisaría**.
+- **`clavePaquete`** — el mismo agujero por el otro lado: sin unicidad, `guia:<numGuia>` fundiría
+  bultos distintos en una entrada del contador y el total saldría **corto**, o sea bodega pondría
+  delante menos paquetes de los que debe.
+
+Los dos comentarios apuntan al caso que vigila la premisa, para que no se quede en prosa.
+
+## m4 (segunda mitad) — la guardia: **sí**, y por qué
+
+La revisión la dejaba a criterio. Se hizo, y con argumentos medidos, no por precaución:
+
+1. **El patrón ya existe en este repo**, dos veces y una de ellas *en este mismo archivo de test*:
+   el caso del montaje condicional de la cámara lee `CierresAdminModule.tsx` con `readFileSync`; y
+   `tests/unit/guards/rastreo-sin-ruta-nueva.guardia.test.ts:215` lee `db/schema.prisma` y fija
+   **este mismo** `@unique`. No hay nada que improvisar: se imita.
+2. **No se delega en la de la 229.** Fija lo mismo, pero por un motivo suyo (su R34, «esta feature
+   no necesita migración») y **vive dentro de esa feature**: el día que la 229 se retire o se
+   reescriba, el pin se va con ella y la 238 se queda sin red sin que nadie lo note. Es exactamente
+   la lección de «el test que vive dentro de lo que borras», ya pagada aquí con una regresión en
+   producción.
+3. **El coste es un `it` de nueve líneas**, no un archivo de guardia nuevo. Desproporcionado habría
+   sido montar un censo; esto es una aserción.
+
+Vive en `tests/components/CierresAdminConfirmacionFisica.test.tsx`, en un `describe("PREMISA — …")`
+al final, junto al bloque de la guía repetida que es lo que protege. Se acota al bloque
+`model Orden { … }` **a propósito**: hay un segundo `numGuia` en el esquema que es una copia y
+**no** lleva `@unique` (ni debe), y un barrido del archivo entero los confundiría. La extracción se
+comprueba a sí misma (`@@map("orden")`), para que un renombrado del modelo no la deje muda.
+
+## m7 — el texto visible que no tenía aserción
+
+`CONFIRMACION_DETALLE` ya tiene su caso, con el **literal escrito a mano** (con tildes) y **sin
+importar la constante**: compararlo contra la fuente que lo produce está siempre verde. El caso
+afirma además que ese texto es la **descripción accesible** del diálogo (`aria-describedby`), no un
+párrafo cualquiera: si mañana se mudara al cuerpo seguiría viéndose, pero dejaría de anunciarse a
+quien no ve, y ésa es una regresión muda.
+
+**El barrido encontró más, y también se cubrieron.** La revisión decía «el único string sin
+literal»; no lo era. Los cuatro textos con los que esta feature configura `EscanerGuiaCard` —el
+nombre accesible de la tarjeta, su título, su descripción y la etiqueta del botón— tampoco tenían
+aserción, y son tan visibles como el resto. Tienen ya un caso propio, que además comprueba que el
+acierto **nombra la guía** (`Guía 7001 confirmada.`) y no dice sólo «confirmada».
+
+**Lo que queda sin literal, y por qué:** `ESCANER_ERROR_CAMARA` («No se pudo abrir la cámara.»). Sólo
+aparece si `Html5Qrcode.start` **rechaza**, y el doble de este archivo resuelve siempre; forzarlo
+pide reprogramar el doble para todo el archivo. Queda anotado, no tapado.
+
+**Fuera del alcance de la 238 — confirmado que sigue igual:** `MSG_INDEMNIZACION_AJENA` («Este monto
+no corresponde a un incidente de este cierre.») y `MSG_INDEMNIZACION_DUPLICADA` («Hay dos montos
+para el mismo incidente.»), los dos de la **158**, siguen **sin literal en ningún test** (grep sobre
+`tests/`: cero). Esta ficha no los tocó; no es regresión suya y no se arreglan desde aquí.
+
+## Que mueren: medido, no supuesto
+
+Tres mutaciones, **una a la vez**, cada una aplicada con un script escrito **a archivo** (nunca
+`node -e`) con guardia de coincidencia única, restaurada y verificada por `sha256` antes de la
+siguiente. Los scripts se borraron al terminar.
+
+**Mutación A — el texto de `CONFIRMACION_DETALLE` sin tildes** (`cierre-confirmacion-fisica.tsx`):
+
+| | sha256 |
+| --- | --- |
+| antes | `a727045340ce1025cdb6324e368b971400ade8b31e04458f411d01f1878dc185` |
+| mutado | `a1d1c93ef5a88415b7d885dc8b4890e63f259c68d843b86251ff9d4901b629bc` |
+| después | `a727045340ce1025cdb6324e368b971400ade8b31e04458f411d01f1878dc185` |
+
+```
+ × la ventana explica CON PALABRAS qué hay que hacer antes de aprobar 170ms
+ FAIL  tests/components/CierresAdminConfirmacionFisica.test.tsx
+TestingLibraryElementError: Unable to find an element with the text: Antes de aprobar, tené
+delante cada paquete que vuelve a bodega y confirmá su guía: escaneá el código o escribí el número.
+ Tests  1 failed | 32 passed (33)
+```
+
+**Mutación B — quitar el `@unique` de `numGuia`** (`db/schema.prisma`, restaurado):
+
+| | sha256 |
+| --- | --- |
+| antes | `d34dfd09057f3a412656b1a588ba3155f0d13e7f0cd3e08c0328018b13b5893d` |
+| mutado | `75c7720d736ac88f63354db137a3b12e47565dcc2c57a88f1ac8f713d788de1b` |
+| después | `d34dfd09057f3a412656b1a588ba3155f0d13e7f0cd3e08c0328018b13b5893d` |
+
+```
+ × `db/schema.prisma` declara `numGuia` como `@unique` en el modelo `Orden` 6ms
+AssertionError: expected '\n  id                     String    …' to match /numGuia\s+Int\?\s+@unique\s+@map\("nu…/
+ Tests  1 failed | 32 passed (33)
+```
+
+Y el rojo **fue exactamente uno**: los otros 32 casos siguieron verdes con la unicidad caída. Ésa es
+la medición que justifica el hallazgo entero — la premisa es invisible al comportamiento, y sin esta
+aserción nadie se enteraría.
+
+**Mutación C — `ESCANER_DESCRIPCION` sin tildes** (`cierre-confirmacion-fisica.tsx`):
+
+| | sha256 |
+| --- | --- |
+| antes | `a727045340ce1025cdb6324e368b971400ade8b31e04458f411d01f1878dc185` |
+| mutado | `30a6ec4a7b5a0fbdc5883996a9b31db0448e23db820357916a3049bee9bb754d` |
+| después | `a727045340ce1025cdb6324e368b971400ade8b31e04458f411d01f1878dc185` |
+
+```
+ × la tarjeta de captura se presenta con SUS textos, y el acierto nombra la guía 190ms
+ FAIL  … > T4.2 — la ventana dice, con palabras, qué acto físico se está pidiendo
+Expected element to have text content: …
+ Tests  1 failed | 33 passed (34)
+```
+
+## Verificación, con el árbol restaurado
+
+```
+$ pnpm run typecheck
+> tsc --noEmit
+(sin salida)
+
+$ pnpm exec eslint app/(app)/cierres-admin/_components/cierre-confirmacion-fisica.tsx \
+    tests/components/CierresAdminConfirmacionFisica.test.tsx
+LINT_EXIT=0   (0 errores, 0 avisos)
+
+$ pnpm exec vitest run tests/components/CierresAdminConfirmacionFisica.test.tsx
+ Test Files  1 passed (1)
+      Tests  34 passed (34)          <- 31 antes + 3 casos nuevos
+
+$ pnpm exec vitest run tests/components/CierresAdmin
+ Test Files  7 passed (7)
+      Tests  158 passed (158)        <- 157 antes de esta addenda
+```
+
+`sha256` final de los archivos tocados y del esquema (para probar que quedó como estaba):
+
+| archivo | sha256 |
+| --- | --- |
+| `cierre-confirmacion-fisica.tsx` | `a727045340ce1025cdb6324e368b971400ade8b31e04458f411d01f1878dc185` |
+| `CierresAdminConfirmacionFisica.test.tsx` | `181b76891aa0ccb7fb43ed1dcfa6c52a64f17255b9f46d93c57194fbcc7f4b1b` |
+| `db/schema.prisma` | `d34dfd09057f3a412656b1a588ba3155f0d13e7f0cd3e08c0328018b13b5893d` (= original) |
+
+El gate (`./init.sh`) **no** se corrió desde aquí: lo corre el humano con el árbol quieto. Los otros
+menores de la revisión (m1, m2, m3, m5, m6, m8) son de spec/documentación y **no** son de este rol.

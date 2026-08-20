@@ -378,6 +378,57 @@ describe("T4.1/R7 — con paquetes que vuelven, aprobar pasa SIEMPRE por la vent
 // T4.2 — la ventana: qué muestra (R33) y la cámara desmontada (R36)
 // ---------------------------------------------------------------------------------------------
 
+describe("T4.2 — la ventana dice, con palabras, qué acto físico se está pidiendo", () => {
+  it("la descripción del diálogo es su texto exacto y es lo que se anuncia al abrirla", async () => {
+    // Este texto no es decoración: es la INSTRUCCIÓN de un acto físico («tené delante cada
+    // paquete»), y quien la lee está de pie en el mostrador con la caja en la mano. Era el único
+    // string de la feature sin aserción, o sea justo el que un refactor reescribe sin que nadie
+    // se entere.
+    //
+    // El literal va ESCRITO A MANO, con sus tildes, y NO importado de `CONFIRMACION_DETALLE`:
+    // compararlo contra la constante que lo produce estaría siempre verde y no vigilaría nada.
+    const user = userEvent.setup();
+    conGrupos({ devuelta: [DEV_1] });
+    const dialog = await abrirVentana(user);
+
+    const DESCRIPCION =
+      "Antes de aprobar, tené delante cada paquete que vuelve a bodega y confirmá su guía: escaneá el código o escribí el número.";
+    const nodo = within(dialog).getByText(DESCRIPCION);
+    // Y no es un párrafo suelto en cualquier sitio: es la DESCRIPCIÓN ACCESIBLE del diálogo, que
+    // es lo que un lector de pantalla anuncia al abrirlo. Si mañana el texto se mudara al cuerpo
+    // seguiría viéndose, pero dejaría de anunciarse — una regresión muda para quien no ve.
+    expect(nodo.id).not.toBe("");
+    expect(dialog.getAttribute("aria-describedby")).toBe(nodo.id);
+  });
+
+  it("la tarjeta de captura se presenta con SUS textos, y el acierto nombra la guía", async () => {
+    // El barrido de textos sin aserción no encontró sólo la descripción del diálogo: los cuatro
+    // textos con los que esta feature configura `EscanerGuiaCard` —el nombre accesible de la
+    // tarjeta, su título, su descripción y la etiqueta del botón— tampoco tenían literal, y son
+    // tan visibles como los demás. Todos escritos a mano, ninguno importado.
+    const user = userEvent.setup();
+    conGrupos({ devuelta: [DEV_1] });
+    const dialog = await abrirVentana(user);
+
+    // El nombre accesible dice que escanear y teclear son EL MISMO acto en la misma tarjeta; si
+    // se leyera como dos superficies, quien no ve buscaría la segunda.
+    const tarjeta = within(dialog).getByRole("region", {
+      name: "Confirmar por número de guía o escaneo",
+    });
+    expect(
+      within(tarjeta).getByRole("heading", { name: "Confirmar paquete recibido" }),
+    ).toBeInTheDocument();
+    expect(tarjeta).toHaveTextContent("Escaneá el código de la guía o escribí su número");
+    expect(within(tarjeta).getByRole("button", { name: "Confirmar" })).toBeInTheDocument();
+
+    // Y el acierto se dice CON EL NÚMERO: «confirmada» a secas no distingue cuál de las catorce
+    // acaba de entrar, que es justo lo que se necesita saber escaneando una tanda seguida.
+    expect(tarjeta.textContent).not.toContain("confirmada.");
+    await teclear(user, dialog, "7001");
+    expect(tarjeta.textContent).toContain("Guía 7001 confirmada.");
+  });
+});
+
 describe("T4.2/R33 — cada fila muestra guía, remisión, destinatario, resultado y estado", () => {
   it("las tres filas del conjunto esperado, agrupadas por resultado", async () => {
     const user = userEvent.setup();
@@ -1107,5 +1158,36 @@ describe("el contador dice PAQUETES y cuenta paquetes, no filas", () => {
     expect(
       within(dialog).getByRole("button", { name: "Confirmar y aprobar" }),
     ).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// PREMISA — lo que hace CORRECTO todo el bloque de arriba, y que ningún test de comportamiento ve
+// ---------------------------------------------------------------------------------------------
+//
+// «Una lectura confirma todas las filas de esa guía» sólo es una corrección —y no un agujero—
+// porque `orden.numGuia` es `@unique`: una guía identifica UNA orden, una orden es UN paquete
+// físico. Si esa unicidad se cayera, la misma lectura daría por confirmados paquetes DISTINTOS y
+// bodega estaría firmando que tiene delante algo que no tiene; y en el contador, `guia:<numGuia>`
+// fundiría bultos distintos y el total saldría corto.
+//
+// **Nada del comportamiento lo notaría**: la pantalla haría exactamente lo mismo, el typecheck
+// pasaría y los treinta y tantos casos de este archivo seguirían verdes, porque todos parten de
+// fixtures donde una guía repetida ES la misma orden. Por eso la premisa se vigila donde se
+// escribe, leyendo el esquema — el mismo recurso que ya usa este archivo para vigilar el montaje
+// condicional de la cámara, y que la 229 usa para fijar este mismo `@unique` por un motivo suyo.
+// No se delega en aquélla: vive dentro de otra feature y se iría con ella.
+describe("PREMISA — `orden.numGuia` es @unique, y de eso depende que el arreglo sea correcto", () => {
+  it("`db/schema.prisma` declara `numGuia` como `@unique` en el modelo `Orden`", async () => {
+    const { readFileSync } = await import("node:fs");
+    const schema = readFileSync("db/schema.prisma", "utf8");
+
+    // Se acota al modelo `Orden` a propósito: hay otro `numGuia` en el esquema (una COPIA, sin
+    // `@unique`, y así debe seguir), y un barrido del archivo entero lo confundiría con éste.
+    const modeloOrden = schema.match(/model Orden \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    // Que la extracción no sea vacua: si el modelo se renombrara, `modeloOrden` sería "" y las
+    // dos aserciones de abajo pasarían a rojo por la razón correcta, no por un regex mudo.
+    expect(modeloOrden).toContain('@@map("orden")');
+    expect(modeloOrden).toMatch(/numGuia\s+Int\?\s+@unique\s+@map\("num_guia"\)/);
   });
 });
