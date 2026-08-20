@@ -1610,7 +1610,13 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * SOLO cambia `estado` (money-safe, R16/R21: no toca snapshot ni `resuelto_por`/`resuelto_at`).
    * `count === 0` -> `conflict` (existe en alcance pero ya no es `vencido`) o `fuera_de_alcance`.
    * NO alimenta wallets ni corre en $transaction: no es una resolucion (no mueve dinero), solo
-   * reencamina el `vencido` al flujo normal de aprobacion. El desbloqueo ocurre al APROBAR (R18).
+   * reencamina el `vencido` al flujo normal de aprobacion.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20): decia «el desbloqueo ocurre al APROBAR (R18)» y hoy es al reves —
+   * esta valvula DESBLOQUEA EN EL ACTO, porque deja el cierre en `solicitado` y ese estado ya no
+   * bloquea la gestion. Va en la direccion de por que existe (111/R16: «evitar el bloqueo
+   * permanente del mensajero y su bodega»): el mensajero vuelve a trabajar y el dinero sigue
+   * esperando aprobacion, que es de quien depende.
    */
   async forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult> {
     const alcanceGuard = alcanceWhere(alcance);

@@ -50,7 +50,6 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
   it("listarMensajerosParaAsignacion", async () => {
     const ordenRepo = {
       findMensajerosByZona: vi.fn(),
-      findMensajerosBloqueados: vi.fn(),
       findMensajerosConOrdenesEn: vi.fn(), // feature 157
 
     };
@@ -234,14 +233,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       { id: "m1", nombre: "Ana" },
       { id: "m2", nombre: "Beto" },
     ]);
-    // Ajuste maestro: m2 tiene un cierre abierto -> viaja en bloqueadosIds.
-    const findMensajerosBloqueados = vi
-      .fn()
-      .mockResolvedValue(new Set(["m2"]));
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       },
@@ -249,20 +243,29 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       getActor: getActor(MAESTRO),
     });
 
+    // ⚠️ FEATURE 241 (2026-08-20) — ESTE `toEqual` LLEVABA `bloqueadosIds: ["m2"]`, y era el
+    // CONTRATO: afirmaba que la accion marcaba en el selector a quien arrastrara un cierre. Se
+    // quita a proposito, no por conveniencia. Asignar no se bloquea por cierres (regla 2 firmada),
+    // la pantalla ya ignoraba el dato desde el 2026-08-18, y seguir calculandolo era una consulta
+    // a `cierre_dia` por cada carga del listado cuyo unico destino posible era volver a bloquear.
+    //
+    // Sigue siendo un LITERAL exhaustivo a proposito: si alguien vuelve a emitir `bloqueadosIds`,
+    // este `toEqual` se pone rojo. Y no puede hacerlo por descuido — el predicado ya no figura en
+    // el `Pick<IOrdenRepository, ...>` de `ListarMensajerosDeps`, asi que la accion NO PUEDE
+    // llamarlo sin que alguien lo vuelva a declarar con su nombre "ParaGestion" delante.
     expect(r).toEqual({
       status: "ok",
       mensajeros: [
         { id: "m1", nombre: "Ana" },
         { id: "m2", nombre: "Beto" },
       ],
-      bloqueadosIds: ["m2"],
       // Feature 157: las dos caras de la regla de dedicacion viajan con la lista, para que
-      // cada modal deshabilite la suya con el motivo a la vista.
+      // cada modal deshabilite la suya con el motivo a la vista. Esta regla SI sigue viva: es de
+      // carga de trabajo, no de cierres.
       conRepartoIds: [],
       conRecoleccionIds: [],
     });
     expect(findMensajerosByZona).toHaveBeenCalledWith("z-gam"); // R5: filtrado por zona GAM
-    expect(findMensajerosBloqueados).toHaveBeenCalledWith(["m1", "m2"]);
   });
 
   // ===============================================================================================
@@ -283,13 +286,11 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const findMensajerosByZona = vi
       .fn()
       .mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
-    const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
     const findMensajerosConOrdenesEn = vi.fn(async () => new Set<string>());
 
     await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         findMensajerosConOrdenesEn,
       },
       zonaRepo: { findCentralZonaId },
@@ -310,7 +311,6 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const findMensajerosByZona = vi
       .fn()
       .mockResolvedValue([{ id: "m1", nombre: "Ana" }]);
-    const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
     // El doble responde como la query real: ocupado si se le pregunta por el estatus de ayuda.
     const findMensajerosConOrdenesEn = vi.fn(async (_ids: string[], estados: string[]) =>
       estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
@@ -319,7 +319,6 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         findMensajerosConOrdenesEn,
       },
       zonaRepo: { findCentralZonaId },
@@ -332,11 +331,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   it("R5: sin zona GAM configurada -> lista vacia, sin consultar mensajeros", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue(null);
     const findMensajerosByZona = vi.fn();
-    const findMensajerosBloqueados = vi.fn();
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       },
@@ -351,11 +348,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   it("feature 94: admin (paridad con maestro) tambien puede listar", async () => {
     const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
     const findMensajerosByZona = vi.fn().mockResolvedValue([]);
-    const findMensajerosBloqueados = vi.fn().mockResolvedValue(new Set());
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       },
@@ -369,11 +364,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
   it("mensajero/adminTienda -> forbidden", async () => {
     const findCentralZonaId = vi.fn();
     const findMensajerosByZona = vi.fn();
-    const findMensajerosBloqueados = vi.fn();
     const r = await listarMensajerosParaAsignacion({
       ordenRepo: {
         findMensajerosByZona,
-        findMensajerosBloqueados,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       },

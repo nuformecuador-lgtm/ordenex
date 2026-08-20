@@ -120,9 +120,15 @@ export type ListarMensajerosParaAsignacionResult =
       status: "ok";
       mensajeros: MensajeroLiteDTO[];
       /**
-       * Ajuste maestro: ids de mensajeros GAM con un cierre abierto (`solicitado`/
-       * `vencido`). La UI los deshabilita en el selector para no asignarles nuevas
-       * órdenes. Opcional (aditivo): ausente = ninguno bloqueado.
+       * ⚠️ FEATURE 241 (2026-08-20) — YA NO SE EMITE NUNCA. Traía los ids de mensajeros GAM con
+       * un cierre abierto para que el selector los deshabilitara; el 2026-08-18 la pantalla dejó
+       * de mirarlos y ahora la acción deja de calcularlos, porque asignar no se bloquea por
+       * cierres (regla 2) y un dato así solo invita a volver a bloquear.
+       *
+       * Se conserva DECLARADO y opcional para no romper a `OrdenesListado.tsx`, que lo lee con
+       * `?? []`. Quitarlo del tipo toca la capa de UI y es de otra ficha. Nadie debe empezar a
+       * rellenarlo: si hace falta marcar a alguien en el selector, el motivo será otro
+       * (`conRepartoIds` / `conRecoleccionIds`, la regla de dedicación, que sí sigue viva).
        */
       bloqueadosIds?: string[];
       /**

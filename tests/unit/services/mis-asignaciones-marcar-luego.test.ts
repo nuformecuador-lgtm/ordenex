@@ -58,8 +58,8 @@ function fakeRepo(rows: MiAsignacionRow[]): IGestionOrdenRepository {
 
 const fakeOrdenRepo = {
   findEstatusIdByValue: vi.fn(async () => "x"),
-  findMensajerosBloqueados: vi.fn(async () => new Set<string>()),
-} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados">;
+  findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion">;
 
 const fakeRutaRepo = {
   findByMensajero: vi.fn(async () => null),

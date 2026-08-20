@@ -35,8 +35,11 @@ type AsignacionSateliteRepo = Pick<
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
-  | "existeBodegaSateliteBloqueada" // feature 41/R18
-  | "findMensajerosBloqueados" // feature 41/R14
+  | "existeBodegaSateliteBloqueada" // feature 41/R18 (hoy: solo la causa (ii), el cierre de la bodega)
+  // ⚠️ FEATURE 241: `findMensajerosBloqueadosParaGestion` YA NO FIGURA AQUI, y su ausencia es el
+  // mecanismo. Asignar es RECIBIR TRABAJO y eso no se bloquea nunca (regla 2, firmada el
+  // 2026-08-20). Mientras el metodo no este en este `Pick`, este service no puede consultarlo
+  // aunque el doble de test lo ofrezca: la regla deja de depender de que nadie escriba la llamada.
   | "findParaAsignabilidad" // feature 92/R8: gate de coordenadas
 >;
 
@@ -94,10 +97,21 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       };
     }
 
-    // 3b. Feature 41/R14 RETIRADA (pedido humano 2026-08-18): aqui se rechazaba al mensajero que
-    //     arrastrara un cierre abierto o vencido. Asignar debe poder hacerse igual, asi que la
-    //     guarda se va. El predicado sigue vivo en el repo para las superficies que no son
-    //     asignacion (gestion, recoleccion en tienda, aviso del panel del mensajero).
+    // 3b. Feature 41/R14 RETIRADA (2026-08-18) y FEATURE 241 (2026-08-20): AQUI ESTABA EL FALLO
+    //     VIVO, no solo una guarda ausente.
+    //
+    //     Aqui se rechazaba al mensajero con un cierre abierto. La guarda se retiro... y el
+    //     `NOT EXISTS` que `asignarSateliteLote` llevaba dentro del UPDATE crudo NO, con el
+    //     criterio de antes. Resultado en produccion: esta pantalla dejaba elegir al mensajero,
+    //     el UPDATE tocaba 0 filas y el adminSatelite recibia «Actualiza la lista y vuelve a
+    //     intentarlo» — falso, porque las ordenes estaban bien y reintentar no lo arreglaba nunca.
+    //     Lectura y escritura afirmando lo contrario sobre la misma accion.
+    //
+    //     La 241 lo cierra por el lado de la regla: se quito el `NOT EXISTS` del repositorio. Las
+    //     DOS comprobaciones dicen ahora lo mismo —asignar no mira cierres— y ese motivo ya no
+    //     tiene camino por el que emitirse. El predicado sigue vivo en el repo, pero renombrado a
+    //     `findMensajerosBloqueadosParaGestion` y fuera de este `Pick`: es de gestionar y cobrar,
+    //     no de asignar.
 
     const ordenIds = input.ordenIds;
 

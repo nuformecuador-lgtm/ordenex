@@ -1039,8 +1039,12 @@ export class CierresAdminService implements ICierresAdminService {
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
 
     // R16: transicion guardada por estado ('vencido') + alcance en el repo. Money-safe (R21):
-    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`. R18: NO desbloquea; el
-    // desbloqueo ocurre al APROBAR el `solicitado` resultante (que registra la auditoria, R17).
+    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`.
+    //
+    // ⚠️ FEATURE 241 (2026-08-20): aqui decia «R18: NO desbloquea; el desbloqueo ocurre al APROBAR
+    // el `solicitado` resultante». SI DESBLOQUEA, en el acto: `solicitado` salio de
+    // `ESTADOS_CIERRE_BLOQUEAN_GESTION`. Lo que sigue ocurriendo solo al aprobar es la resolucion
+    // del dinero y la auditoria (R17), que es otra cosa.
     const res = await this.repo.forzarSolicitudVencido(cierreId, scope.alcance);
     if (res === "updated") return { status: "ok", cierreId, estado: "solicitado" };
     if (res === "conflict") return { status: "conflict" }; // ya no es `vencido`

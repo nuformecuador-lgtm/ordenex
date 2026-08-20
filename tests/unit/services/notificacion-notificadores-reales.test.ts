@@ -291,7 +291,7 @@ describe("el DEFAULT de los tres services es inocuo POR CONSTRUCCION", () => {
     const service = new CierreDiaService(
       repo as never,
       { findCentralZonaId: vi.fn() } as never,
-      { findUsuarioZonaId: vi.fn(), findMensajerosBloqueados: vi.fn() } as never,
+      { findUsuarioZonaId: vi.fn(), findMensajerosBloqueadosParaGestion: vi.fn() } as never,
       { createSignedUrls: vi.fn() } as never,
       { resolvePagoTarifa: vi.fn() } as never,
     );

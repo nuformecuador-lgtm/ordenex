@@ -64,7 +64,7 @@ const ROL_SATELITE = "adminSatelite";
 
 /**
  * Metodos de repo que consume el service (inyeccion por constructor, `Pick` para dobles de test
- * sin DB). `findMensajerosBloqueados` NO figura A PROPOSITO (Q1 CERRADA, R19): el cierre
+ * sin DB). `findMensajerosBloqueadosParaGestion` NO figura A PROPOSITO (Q1 CERRADA, R19): el cierre
  * pendiente del mensajero no bloquea el deshacer, y dejarlo fuera del tipo hace imposible
  * consultarlo por descuido.
  */
@@ -210,7 +210,7 @@ export class DeshacerAsignacionService implements IDeshacerAsignacionService {
       }
     }
 
-    // 8. R19 (Q1 CERRADA): NO se consulta `findMensajerosBloqueados`. El cierre pendiente del
+    // 8. R19 (Q1 CERRADA): NO se consulta `findMensajerosBloqueadosParaGestion`. El cierre pendiente del
     // mensajero NO bloquea el deshacer (la orden nunca se recogio, no hay dinero asociado y el
     // gate de asignacion existe justamente para lo contrario). La ASIGNACION lo sigue
     // aplicando: la asimetria es deliberada (design §8-Q1) y esta fijada por un test.

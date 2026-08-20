@@ -224,8 +224,13 @@ export interface ICierreDiaRepository {
    * toca totales snapshot, pago/ingreso, `cierre_id` de gestiones, ni `resuelto_por`/`resuelto_at`/
    * `motivo_rechazo`/`solicitado_at` (money-safe). Devuelve `true` si afecto 1 fila; `false` si 0
    * (el `rechazado` ya fue re-solicitado/resuelto entre la lectura y la escritura -> el service lo
-   * traduce a `conflict`). Anti-TOCTOU sin locks. El desbloqueo definitivo + la liberacion de
-   * `sin_gestionar` ocurren SOLO al APROBAR (R16).
+   * traduce a `conflict`). Anti-TOCTOU sin locks.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20): esta linea decia «el desbloqueo definitivo + la liberacion de
+   * `sin_gestionar` ocurren SOLO al APROBAR (R16)». La segunda mitad sigue siendo cierta; la
+   * primera NO. El bloqueo para GESTIONAR se levanta con esta misma escritura, porque `solicitado`
+   * dejo de bloquear (`ESTADOS_CIERRE_BLOQUEAN_GESTION`). La liberacion de `sin_gestionar` si es
+   * del admin al aprobar (109/R16), por otro camino.
    */
   transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean>;
   /**

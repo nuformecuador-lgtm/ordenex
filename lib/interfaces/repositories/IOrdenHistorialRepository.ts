@@ -121,7 +121,7 @@ export interface IOrdenHistorialRepository {
    *   - Las ordenes SIN filas que cumplan el criterio NO aparecen en el Map: el llamador
    *     resuelve el default con `?? 0` (R8).
    *   - `ordenIds` vacio -> Map vacio SIN emitir consulta alguna (R7), patron
-   *     `OrdenRepository.findMensajerosBloqueados`.
+   *     `OrdenRepository.findMensajerosBloqueadosParaGestion`.
    */
   contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>>;
   /**
@@ -172,7 +172,7 @@ export interface IOrdenHistorialRepository {
    * (actor_usuario_id, origen_tipo, created_at), R32.
    *
    * `limite <= 0` -> lista vacia SIN emitir consulta (patron
-   * `contarIntentosVigentesEnLote` / `OrdenRepository.findMensajerosBloqueados`).
+   * `contarIntentosVigentesEnLote` / `OrdenRepository.findMensajerosBloqueadosParaGestion`).
    */
   findRecoleccionesDeActor(
     actorUsuarioId: string,

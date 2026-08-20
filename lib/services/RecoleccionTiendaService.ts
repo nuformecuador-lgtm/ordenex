@@ -36,9 +36,9 @@ import {
 const ORIGEN_RECOLECCION = "recolectando";
 const DESTINO_RECOLECCION = "en_ruta_bodega_central";
 
-// Feature 111/R1: mismo texto que usa `MisAsignacionesService` para el bloqueo total. Mientras
-// el mensajero tenga un cierre `solicitado`/`vencido` sin resolver no mueve ninguna guia, y
-// recolectar es mover una.
+// Feature 111/R1 -> 241: mismo texto que usa `MisAsignacionesService`. Mientras el mensajero tenga
+// un cierre `vencido` o `rechazado` sin resolver no mueve ninguna guia, y recolectar es mover una.
+// Con `solicitado` SI recolecta: la pelota esta en el tejado del admin, no en el suyo.
 const MSG_BLOQUEADO =
   "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias.";
 
@@ -57,7 +57,7 @@ type RecoleccionTiendaRepo = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recolectarEnTienda"
-  | "findMensajerosBloqueados"
+  | "findMensajerosBloqueadosParaGestion"
 >;
 
 // Feature 167 — la LECTURA del apartado consume otros dos repos, tambien por `Pick` para poder
@@ -94,9 +94,11 @@ export class RecoleccionTiendaService implements IRecoleccionTiendaService {
     // 1. Rol: solo el mensajero recolecta (R29). Maestro/admin NO tienen camino aqui.
     if (actor.rol !== "mensajero") return { status: "forbidden" };
 
-    // 2. Bloqueo por cierre pendiente, ANTES de leer la orden (R31): mismo orden que `gestionar`,
-    //    de modo que un mensajero bloqueado no llega siquiera a saber si la guia existe.
-    const bloqueados = await this.repo.findMensajerosBloqueados([actor.usuarioId]);
+    // 2. Bloqueo por cierre `vencido`/`rechazado`, ANTES de leer la orden (R31): mismo orden que
+    //    `gestionar`, de modo que un mensajero bloqueado no llega siquiera a saber si la guia
+    //    existe. Feature 241: recolectar en tienda es COBRAR, asi que le toca la politica de
+    //    gestion — no la de asignacion, que no bloquea nunca.
+    const bloqueados = await this.repo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
     if (bloqueados.has(actor.usuarioId)) {
       return { status: "conflict", motivo: MSG_BLOQUEADO };
     }

@@ -111,11 +111,11 @@ const MSG_MENSAJERO_CON_REPARTO =
 const MSG_MENSAJERO_CON_RECOLECCION =
   "el mensajero tiene una recoleccion en tienda pendiente: debe cerrarla antes de recibir reparto";
 
-// Ajuste maestro: motivo cuando una orden se rutearia a una bodega satelite que tiene al
-// menos un mensajero BLOQUEADO (mas cierres abiertos de los tolerados). Asi la bodega esta
-// cuadrando caja: no recibe ordenes nuevas hasta resolverlo.
-const MSG_BODEGA_SATELITE_BLOQUEADA =
-  "bodega satelite bloqueada: tiene un mensajero con un cierre abierto";
+// FEATURE 241 (2026-08-20) — AQUI VIVIA `MSG_BODEGA_SATELITE_BLOQUEADA`, el motivo del `conflict`
+// al rutear ordenes hacia una bodega satelite con algun mensajero en cierre. Se va con la guarda
+// que lo emitia (ver `rutearABodegaSatelite`). El mapper de la UI conserva su entrada por el
+// fragmento "bodega satelite bloqueada" (`guia-decision-error-messages.ts`): no estorba y es de
+// otra capa, pero hoy ya nadie produce ese motivo.
 
 function distinct(values: string[]): string[] {
   return [...new Set(values)];
@@ -163,33 +163,6 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       });
     }
     return detalle;
-  }
-
-  /**
-   * Ajuste maestro: de `zonaIds` (zonas destino satelite), devuelve las que estan
-   * BLOQUEADAS para recibir nuevas ordenes porque AL MENOS 1 de sus mensajeros tiene un
-   * cierre abierto (`solicitado`/`vencido`): con un cierre pendiente la bodega esta
-   * cuadrando caja y no recibe ordenes nuevas hasta resolverlo. Una zona sin mensajeros
-   * NO se bloquea (no hay cierre que resolver). Misma regla que el gate de seleccion del
-   * maestro y que `existeBodegaSateliteBloqueada`, para que no diverjan.
-   * Reutiliza primitivas de repo existentes (sin ampliar la interfaz):
-   * `findMensajerosByZona` + `findMensajerosBloqueados` por zona.
-   */
-  private async zonasSateliteBloqueadas(zonaIds: string[]): Promise<Set<string>> {
-    const zonasUnicas = distinct(zonaIds);
-    if (zonasUnicas.length === 0) return new Set();
-    const bloqueadas = new Set<string>();
-    await Promise.all(
-      zonasUnicas.map(async (zonaId) => {
-        const mensajeros = await this.repo.findMensajerosByZona(zonaId);
-        if (mensajeros.length === 0) return;
-        const bloqueados = await this.repo.findMensajerosBloqueados(
-          mensajeros.map((m) => m.id),
-        );
-        if (bloqueados.size > 0) bloqueadas.add(zonaId);
-      }),
-    );
-    return bloqueadas;
   }
 
   /**
@@ -348,15 +321,22 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R29/R17: aborta sin efectos
 
-    // --- Feature 41/R13/R23 RETIRADA (pedido humano 2026-08-18) ---
-    // Aqui vivia la guarda de "mensajero bloqueado por cierre abierto/vencido", que impedia
-    // asignarle guias a quien arrastrara un cierre sin resolver. SE RETIRA: asignar a un
-    // mensajero debe poder hacerse tenga o no cierres pendientes.
+    // --- Feature 41/R13/R23 RETIRADA (pedido humano 2026-08-18, RATIFICADA el 2026-08-20) ---
+    // Aqui vivia la guarda de "mensajero bloqueado por cierre", que impedia asignarle guias a
+    // quien arrastrara un cierre sin resolver. SE QUEDA RETIRADA: asignar a un mensajero se puede
+    // hacer tenga o no cierres pendientes, y da igual en que estado esten. Es la REGLA 2 de la
+    // feature 241, firmada por el humano: recibir asignaciones NO SE BLOQUEA NUNCA.
     //
-    // El predicado NO desaparece del repo (`findMensajerosBloqueados`) porque otras superficies
-    // lo siguen usando —`deshacerGestion`, la recoleccion en tienda y el aviso del panel del
-    // mensajero—, y esas NO estaban en el alcance de este cambio. Lo que se retira es su efecto
-    // sobre ESTA accion.
+    // ⚠️ LA VERSION ANTERIOR DE ESTE COMENTARIO DECIA UNA COSA FALSA, y conviene que quede escrito
+    // porque es el origen de la ficha 241: afirmaba que `deshacerGestion`, la recoleccion en tienda
+    // y el aviso del panel «no estaban en el alcance de este cambio». Si lo estaban — leian el
+    // MISMO predicado que ese commit acababa de apagar con un tope inalcanzable, y se apagaron con
+    // el sin que nadie lo pidiera. Un mensajero podia gestionar y COBRAR todo el dia con un cierre
+    // sin resolver al que ese dinero no podia ir.
+    //
+    // Hoy no puede volver a pasar por accidente: el predicado se llama
+    // `findMensajerosBloqueadosParaGestion` y este service no lo consulta. Bloquear la ASIGNACION
+    // aqui exigiria escribir el nombre "ParaGestion" en una accion que no gestiona nada.
 
     // --- Feature 157: simetrica de la anterior. Un mensajero con una recoleccion sin
     //     confirmar tiene un viaje a la tienda comprometido; darle reparto ahora lo obliga
@@ -406,8 +386,8 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
   /**
    * Feature 157 (R3-R9) — cuarta accion del mismo service: el maestro decide QUE mensajero va
    * a la tienda a recolectar. Vive aqui, y no en un service nuevo, porque es la misma
-   * responsabilidad que las otras tres y reusa sus mismas piezas (`findByIdsForTransicion`,
-   * `findMensajerosBloqueados` y el contrato `DetalleConflicto` que la UI ya sabe pintar).
+   * responsabilidad que las otras tres y reusa sus mismas piezas (`findByIdsForTransicion` y el
+   * contrato `DetalleConflicto` que la UI ya sabe pintar).
    *
    * Es la unica que NO transiciona: la orden sigue en `por_recolectar_en_tienda` hasta que el
    * mensajero confirme la recoleccion. Dos ausencias deliberadas frente a `asignarDesdeBodega`:
@@ -461,8 +441,11 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- 5. R7 RETIRADA (pedido humano 2026-08-18): ver `asignarDesdeBodega`. Un cierre abierto
-    //     o vencido ya no impide mandar a un mensajero a recolectar. ---
+    // --- 5. R7 RETIRADA (pedido humano 2026-08-18, ratificada el 2026-08-20 por la regla 2 de la
+    //     feature 241): ver `asignarDesdeBodega`. Ningun estado de cierre impide mandar a un
+    //     mensajero a recolectar — recibir trabajo no se bloquea. Lo que SI sigue bloqueado para
+    //     el es GESTIONAR lo que ya tiene, y eso se decide en otro sitio (`MisAsignacionesService`,
+    //     `RecoleccionTiendaService`), con otro predicado y con solo dos estados. ---
 
     // --- 5b. Regla de dedicacion: quien recolecta va sin carga de reparto ---
     const conReparto = await this.repo.findMensajerosConOrdenesEn(
@@ -609,24 +592,24 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R17: aborta sin efectos
 
-    // --- Ajuste maestro: no se rutea a una bodega satelite cuyos mensajeros esten TODOS
-    // en cierre. Aqui todas las ordenes son NO-GAM (destino su zona satelite). ---
-    const zonasDestino = new Set<string>();
-    for (const id of ordenIds) {
-      const orden = ordenMap.get(id);
-      if (orden && orden.zonaId !== centralZonaId) zonasDestino.add(orden.zonaId);
-    }
-    const zonasBloqueadas = await this.zonasSateliteBloqueadas([...zonasDestino]);
-    if (zonasBloqueadas.size > 0) {
-      const detalleZona: DetalleConflicto[] = [];
-      for (const id of ordenIds) {
-        const orden = ordenMap.get(id);
-        if (orden && orden.zonaId !== centralZonaId && zonasBloqueadas.has(orden.zonaId)) {
-          detalleZona.push({ ordenId: id, motivo: MSG_BODEGA_SATELITE_BLOQUEADA });
-        }
-      }
-      if (detalleZona.length > 0) return { status: "conflict", detalle: detalleZona };
-    }
+    // --- FEATURE 241 (2026-08-20): AQUI SE COMPROBABA QUE LA BODEGA SATELITE DE DESTINO NO
+    //     TUVIERA NINGUN MENSAJERO EN CIERRE, y se va.
+    //
+    // Rutear ordenes a una bodega ES que esa bodega RECIBA TRABAJO, y la regla firmada dice que
+    // recibir no se bloquea nunca. Ademas esta era la version mas desproporcionada del bloqueo:
+    // por-ZONA y no por-mensajero, asi que el cierre de UNA persona paraba la bodega entera —
+    // companeros sin ningun cierre incluidos— hasta que alguien aprobara, con una mediana de
+    // 8,2 h y un p90 de 22,1 h de espera (investigacion 241 §5). Un satelite que cerraba a las
+    // 18:00 no podia mover nada hasta la manana siguiente.
+    //
+    // NO SE «QUEDO SIN EFECTO», SE QUITA. Desde el 2026-08-18 no disparaba nunca porque el
+    // predicado que consultaba estaba apagado por un tope inalcanzable; al reparar el predicado
+    // en esta misma ficha habria vuelto a la vida SIN que nadie lo decidiera. Dejarla escrita
+    // habria sido reponer por accidente justo lo que la regla 2 prohibe.
+    //
+    // Lo que NO cambia: el cierre de la PROPIA bodega hacia la central (causa (ii) de
+    // `existeBodegaSateliteBloqueada`) sigue bloqueando en la pantalla del satelite. Eso no es el
+    // cierre de un mensajero y nadie lo ha tocado.
 
     const estatusRutaSateliteId = await this.repo.findEstatusIdByValue(
       ESTATUS_EN_RUTA_BODEGA_SATELITE,

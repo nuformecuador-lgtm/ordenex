@@ -63,10 +63,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 function newService(repo: IGestionOrdenRepository) {
   const ordenRepo: Pick<
     IOrdenRepository,
-    "findEstatusIdByValue" | "findMensajerosBloqueados"
+    "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
   > = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
   };
   const storage: IFileStorage = {
     upload: vi.fn(async (input: { path: string }) => input.path),

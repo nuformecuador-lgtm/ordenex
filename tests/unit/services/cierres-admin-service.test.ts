@@ -1311,9 +1311,19 @@ describe("CierresAdminService.forzarSolicitudVencido (feature 111/R16/R17/R18)",
     expect(repo.forzarSolicitudVencido).not.toHaveBeenCalled();
   });
 
-  it("R18: la válvula deja el cierre en `solicitado` (sigue bloqueante); NO lo aprueba directo", async () => {
-    // `vencido -> solicitado` NO desbloquea: el estado resultante SIGUE siendo bloqueante
-    // (findMensajerosBloqueados incluye `solicitado`). El desbloqueo llega al APROBARLO luego.
+  it("R18: la válvula deja el cierre en `solicitado`; NO lo aprueba directo", async () => {
+    // ⚠️ FEATURE 241 (2026-08-20) — LO QUE ESTE COMENTARIO DECÍA YA NO ES CIERTO, y es una
+    // consecuencia real de la regla firmada, no una errata. Decía: «`vencido -> solicitado` NO
+    // desbloquea: el estado resultante SIGUE siendo bloqueante». Desde la 241 `solicitado` NO
+    // bloquea, así que esta válvula SÍ desbloquea al mensajero para gestionar, en el acto.
+    //
+    // Va en la dirección de por qué existe (111/R16): es la salida para el mensajero AUSENTE con
+    // un `vencido` que nadie envía, y su motivo declarado es «evitar el bloqueo permanente del
+    // mensajero y su bodega». Antes lo dejaba igual de bloqueado hasta que alguien aprobara; ahora
+    // lo devuelve a trabajar y el dinero sigue esperando aprobación, que es de quien depende.
+    //
+    // Lo que el test AFIRMA no cambia y sigue siendo el punto: la válvula transiciona, no aprueba,
+    // y no mueve dinero (R21).
     const repo = fakeRepo({ forzarSolicitudVencido: vi.fn(async () => "updated" as const) });
     const { service } = newService({ repo });
     const r = await service.forzarSolicitudVencido("c-venc", MAESTRO);

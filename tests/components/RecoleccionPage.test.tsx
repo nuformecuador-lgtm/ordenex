@@ -229,7 +229,7 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
 
     expect(escaner()).toBeNull();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /resolver tu cierre pendiente/i,
+      /resolver tu cierre/i,
     );
   });
 
