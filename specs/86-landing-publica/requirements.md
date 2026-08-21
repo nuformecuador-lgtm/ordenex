@@ -30,9 +30,19 @@ se mantiene; mantén los colores que se están usando."*
 
 - **R2** — La landing DEBE renderizar una barra superior pegajosa que contenga:
   (a) el logo/wordmark de Ordenex, (b) los enlaces de sección a las anclas de la
-  propia página (`#servicios`, `#como-funciona`, `#politicas`), (c) un enlace
-  «Trabajá con nosotros» cuyo destino es `/postulacion`, y (d) un enlace
-  «Ingresar» cuyo destino es `/login`.
+  propia página (`#servicios`, `#como-funciona`, `#politicas`,
+  `#trabaja-con-nosotros`), **en el mismo orden en que la página compone esas
+  secciones**, y (c) un enlace «Ingresar» cuyo destino es `/login`.
+
+  > ⚠️ **CORREGIDO el 2026-08-20 sobre lo reportado en producción.** Aquí decía que
+  > «Trabajá con nosotros» apunta a **`/postulacion`**, y eso resultó ser un defecto,
+  > no un requisito: sacaba al visitante de la landing **y se saltaba dos de las tres
+  > vías de la sección** —postular vehículo y postular bodega abren
+  > `PostularRecursoModal` sin salir de la página; solo «Quiero postularme» va a
+  > `/postulacion`—. Ahora es un ancla, como los otros tres. El orden tampoco estaba
+  > escrito y por eso divergió: la nav ponía «Trabajá con nosotros» en tercer lugar
+  > cuando su sección es **la última**. Fijado por test que deriva ambas listas del
+  > DOM, no de una constante escrita a mano.
 
 - **R3** — La landing DEBE renderizar, bajo la barra, las secciones del home
   público en este orden: hero, servicios (`#servicios`), banda de cifras, cómo
