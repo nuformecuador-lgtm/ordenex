@@ -114,13 +114,82 @@ run_if() {
   ok "$1 paso"
 }
 
+# -------------------------------------------------------------------------------------------------
+# EL MODO RAPIDO SE NIEGA SOLO CUANDO EL CAMBIO NO ES BARATO (2026-08-20)
+# -------------------------------------------------------------------------------------------------
+#
+# Por que existe esto. Hasta hoy la regla era "el gate completo antes de CADA PR, sin excepcion", y
+# se cumplia: mover un enlace de la nav de la landing costaba 16.346 tests y entre 5 y 11 minutos,
+# cuando lo relacionado con ese cambio eran 21 tests + las guardias = ~33 segundos. La regla no
+# distinguia un cambio de texto de una migracion, asi que cobraba lo mismo por los dos.
+#
+# Pero relajarla a secas abriria un agujero REAL, no teorico: `test:rapido` corre
+# `vitest --changed origin/dev`, que selecciona por GRAFO DE IMPORTS y solo mira TU diff. Hay dos
+# cosas que ese grafo no ve:
+#
+#   (a) lo que no se relaciona por imports  -> ya cubierto: las guardias corren SIEMPRE, y son
+#       justo las que recorren el arbol de archivos en vez de importar lo que vigilan;
+#   (b) el radio de explosion de un cambio que toca los CIMIENTOS -el esquema, los catalogos de
+#       tipos compartidos, la configuracion de build, el dinero-. Ahi "los tests relacionados" es
+#       una respuesta que suena bien y no lo es: el import de un enum lo tiene medio repo, y una
+#       migracion no la importa nadie.
+#
+# Por eso el modo rapido MIRA TU DIFF y se niega si toca algo de la lista. No es un aviso que se
+# pueda ignorar por prisa: es un `fail`. La salida es correr el gate completo, que es exactamente
+# lo que esos cambios merecen.
+#
+# La lista se mantiene ESTRECHA a proposito -medido el 2026-08-20: los nombres de dinero son 190 de
+# 1136 archivos de codigo, un 17 %-. Si crece hasta atrapar todo, vuelve el problema que esto viene
+# a resolver.
+# `init.sh` se vigila A SI MISMO: tocar el gate cambia LA MEDIDA con la que se mide todo lo demas,
+# y un fallo aqui no se ve como un test rojo, se ve como un verde que no significa nada.
+RUTAS_SENSIBLES='^db/migrations/|^db/schema\.prisma$|^lib/types/|^init\.sh$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
+NOMBRES_DE_DINERO='^(lib|app|components)/.*(cierre|tarifa|pago|wallet|liquidacion|ingreso|egreso|caja|comision|flete|moneda|cobro|factura|premio)'
+
+exigir_completo_si_toca_lo_sensible() {
+  git rev-parse --git-dir >/dev/null 2>&1 || { warn "no es un repo git: no se puede clasificar el cambio"; return 0; }
+  local base
+  base="$(git merge-base origin/dev HEAD 2>/dev/null || true)"
+  if [ -z "$base" ]; then
+    warn "sin 'origin/dev' a mano: no se puede clasificar el cambio. Si toca esquema, tipos, config o dinero, corre './init.sh' completo."
+    return 0
+  fi
+
+  # El diff va contra la BASE COMUN y contra el arbol de trabajo a la vez: asi entra tanto lo ya
+  # commiteado en la rama como lo que todavia no lo esta. Mirar solo una de las dos deja fuera la
+  # mitad de los casos.
+  local cambiados
+  cambiados="$( { git diff --name-only "$base" -- . ; git ls-files --others --exclude-standard ; } | sort -u )"
+  [ -n "$cambiados" ] || { warn "sin cambios frente a origin/dev: nada que clasificar"; return 0; }
+
+  local sensibles
+  sensibles="$(printf '%s
+' "$cambiados" | grep -Ei "$RUTAS_SENSIBLES|$NOMBRES_DE_DINERO" || true)"
+
+  if [ -n "$sensibles" ]; then
+    echo "${YELLOW}Tu cambio toca cimientos, y para eso el modo rapido no alcanza:${NC}"
+    printf '%s
+' "$sensibles" | sed 's/^/    /'
+    echo ""
+    echo "  El modo rapido corre 'vitest --changed', que selecciona por grafo de IMPORTS."
+    echo "  Una migracion no la importa nadie, y un tipo compartido lo importa medio repo:"
+    echo "  en los dos casos 'los tests relacionados' no es la respuesta correcta."
+    fail "esto exige el gate completo. Corre: ./init.sh"
+  fi
+
+  ok "el cambio no toca esquema, tipos compartidos, config ni dinero: el modo rapido basta"
+}
+
 if [ -f package.json ]; then
+  # La clasificacion va ANTES que typecheck y lint a proposito: si el cambio exige el gate
+  # completo, decirlo despues de un minuto de espera seria cobrarte la espera dos veces.
+  [ "$MODO" = "rapido" ] && exigir_completo_si_toca_lo_sensible
   run_if typecheck
   run_if lint
   if [ "$MODO" = "rapido" ]; then
     run_if test:rapido
     warn "modo rapido: solo los tests relacionados con tus cambios + las guardias."
-    warn "Antes de abrir el PR corre './init.sh' sin flags."
+    warn "El completo NO es opcional antes de una release a prod: ahi se corre './init.sh' a secas."
   else
     run_if test
   fi

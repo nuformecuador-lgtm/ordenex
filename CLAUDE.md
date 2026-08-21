@@ -29,13 +29,22 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
    No hagas circular el contenido completo por el chat.
 4. **Trazabilidad.** Cada requisito `R<n>` debe terminar mapeado a un test concreto.
    El reviewer rechaza si falta alguno.
-5. **Verificación ejecutable, en dos niveles.** Nada se da por "hecho" sin que pase el gate.
-   Pero el gate tiene dos: **`./init.sh --rapido`** para cerrar una tanda (typecheck + lint +
-   los tests que el grafo relaciona con tu cambio + **todas** las guardias, ~1 min), y
-   **`./init.sh`** completo para cerrar la feature y **antes de cada PR, sin excepción**
-   (~5 min). Correr los 10.000 tests en cada tanda no es rigor, es una sala de espera; correr
-   solo los rápidos antes de un merge sí es un agujero. Detalle y límites en
-   `docs/verification.md`. "Compila" no es "funciona".
+5. **Verificación ejecutable, y el arnés decide cuánta.** Nada se da por "hecho" sin pasar el
+   gate, pero el gate tiene dos niveles y **ya no eliges tú**:
+   - **`./init.sh --rapido`** es el gate normal, también **para abrir un PR** (typecheck + lint +
+     los tests que el grafo relaciona con tu cambio + **todas** las guardias, ~1 min).
+   - **`./init.sh`** completo es obligatorio **antes de una release a `prod`, sin excepción**, y
+     **después de cada merge a `dev`** (ahí corre en segundo plano: no te hace esperar, pero si
+     `dev` se rompió se sabe enseguida y con un culpable claro).
+   - **El modo rápido se niega solo** cuando tu diff toca los cimientos —migraciones,
+     `db/schema.prisma`, `lib/types/`, configuración de build o archivos con nombre de dinero— y
+     te manda al completo. Es un `fail`, no un aviso: no depende de que alguien se acuerde.
+
+   Por qué así, medido el 2026-08-20: mover un enlace de la nav costaba **16.346 tests y 5–11 min**
+   cuando lo relacionado eran **21 tests + las guardias, ~33 s**. Pero relajar la regla a secas
+   dejaría un agujero real: `--changed` solo ve **tu** diff, así que **no detecta un `dev` que ya
+   venía rojo** —pasó tres veces en este repo— y por eso existe la corrida completa post-merge.
+   Detalle y límites en `docs/verification.md`. "Compila" no es "funciona".
 6. **No inventes.** Si un dato no está en `docs/`, `specs/` o el código, es
    desconocido: pregunta o márcalo como abierto. No lo rellenes con supuestos.
 
