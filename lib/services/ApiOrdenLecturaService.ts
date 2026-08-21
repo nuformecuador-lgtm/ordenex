@@ -15,6 +15,7 @@ import type {
   ApiOrdenListadoDTO,
 } from "@/lib/types/api-orden";
 import { gestionConfig } from "@/lib/config/gestion";
+import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 
 // Subconjunto del repo que este service consume (DI ligera para tests, sin construir toda la
 // superficie de IOrdenRepository).
@@ -53,7 +54,7 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
   ) {}
 
   async listar(actor: Actor, params: ApiOrdenListarParams): Promise<ApiOrdenListadoDTO> {
-    const { limit, offset, estado } = params;
+    const { limit, offset, estado, desde, hasta, numGuia, numRemision } = params;
     let estatusId: string | undefined;
     if (estado) {
       // R8: el filtro solo acota; no puede ampliar el scope (el owner ya va forzado en el repo).
@@ -62,9 +63,21 @@ export class ApiOrdenLecturaService implements IApiOrdenLecturaService {
       if (!id) return { items: [], pagination: { limit, offset, total: 0 } };
       estatusId = id;
     }
+    // Feature 257 (R5/R6/R7): la decision de negocio "el dia operativo es el dia natural de Costa
+    // Rica" vive AQUI; el repo solo habla de instantes. `inicioDelDiaCREnUtc` deja ambos bordes en
+    // `...T06:00:00.000Z` y `inicioDelDiaSiguienteCREnUtc` hace `hasta` INCLUSIVO con una cota
+    // superior EXCLUSIVA. OJO con la trampa del repo: el helper de medianoche UTC de la
+    // convencion `@db.Date` (feature 46) NO sirve aqui —`created_at` es `timestamp`— y devolveria
+    // la ventana 18:00-18:00 hora CR, que es el off-by-one de la ficha 166.
+    const createdAtDesde = desde ? inicioDelDiaCREnUtc(desde) : undefined;
+    const createdAtHasta = hasta ? inicioDelDiaSiguienteCREnUtc(hasta) : undefined;
     const { items, total } = await this.repo.listByOwner({
-      ownerId: actor.usuarioId, // R4/R6/R7: owner = actor, forzado en el repo
+      ownerId: actor.usuarioId, // R4/R6/R7 (106) + R20 (257): owner = actor, forzado en el repo
       estatusId,
+      createdAtDesde,
+      createdAtHasta,
+      numGuia,
+      numRemision,
       skip: offset,
       take: limit,
     });
