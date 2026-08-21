@@ -293,3 +293,101 @@ sí se editaron son censos de inventario cerrado que esta ficha **amplía legít
 **Veredicto:** backend completo y verificado contra Postgres real —incluida la garantía de que una
 postulación pendiente de hace dos años sobrevive a la purga—; el único rojo del gate es el que el
 spec declara esperado y que se apaga cuando entre el frontend.
+
+
+---
+---
+
+# FRONTEND — anexo del leader (2026-08-21)
+
+> Lo escribe el leader porque el subagente de frontend no publica `.md`. Los mensajes de error van
+> **literales**, no parafraseados.
+
+## 8 · Lo que entra
+
+| archivo | qué |
+| --- | --- |
+| `app/_landing/PostularRecursoModal.tsx` | **deja de ser maqueta**: cableado a `postularRecurso`, `useTransition` + `try/catch`, `switch` exhaustivo, acuse D9, botón «Enviando…», aviso en `role="alert"`. La cabecera ya no se declara maqueta |
+| `app/(app)/_components/AdminMaestroDashboard.tsx` | dos `ContenedorSeccion` y descripción corregida (R36) |
+| `tests/unit/guards/novedad-acciones-sin-maqueta.guardia.test.ts` | **sólo los imports** (D7). 19 casos antes, 19 después, ninguno tocado |
+| `tests/fixtures/deteccion-maqueta.ts` · `tests/fixtures/superficies-publicas.ts` | los detectores extraídos y el censo, con `app/postulacion` por D10 |
+| `tests/unit/guards/landing-sin-maqueta.guardia.test.ts` | la guardia nueva, 23 casos |
+| `PostulacionRecursoPanel/Card` + 4 archivos de test | el panel del admin y su cobertura |
+
+`LandingPostular.tsx` **no se tocó**. `HomePageMaestro.test.tsx` y `PostulacionesPendientesPanel.test.tsx`
+quedaron verdes **sin modificarse** (R43).
+
+## 9 · T8.5 — LOS DOS ROJOS DE RECAÍDA, literales
+
+SHA de `PostularRecursoModal.tsx`: `a84a74be` → mutado → `a84a74be`, idéntico en los dos ciclos.
+
+### Rojo 1 — volver a la maqueta (`setEnviado(true)`, sin import ni llamada) · mutado `1c242605`
+
+```
+FAIL tests/unit/guards/landing-sin-maqueta.guardia.test.ts > 253/R39 > cada productor se importa Y se invoca dentro de una raiz publica
+AssertionError: una superficie PUBLICA promete un resultado que NINGUN archivo suyo produce: es la
+maqueta de `PostularRecursoModal`, que validaba, pintaba «Postulacion enviada» y no enviaba nada.
++ [
++   "postularVehiculo -> `postularRecurso` (lib/actions/postulacion-recurso): nadie la importa",
++   "postularBodega  -> `postularRecurso` (lib/actions/postulacion-recurso): nadie la importa",
++ ]
+
+Tests  3 failed | 20 passed (23)
+```
+
+Con esa misma mutación, `PostularRecursoModal.test.tsx`: **9 failed | 2 passed (11)**.
+
+### Rojo 2 — el `import` EN PIE, la invocación borrada · mutado `af2c3a21`
+
+```
+FAIL tests/unit/guards/landing-sin-maqueta.guardia.test.ts > 253/R39 > cada productor se importa Y se invoca dentro de una raiz publica
++ [
++   "postularVehiculo -> `postularRecurso`: la importan app/_landing/PostularRecursoModal.tsx pero NINGUNA la llama",
++   "postularBodega  -> `postularRecurso`: la importan app/_landing/PostularRecursoModal.tsx pero NINGUNA la llama",
++ ]
+
+Tests  2 failed | 21 passed (23)
+```
+
+**Y en ese estado `eslint` sobre el archivo da `0 errors, 1 warning` y sale con `ESLINT_EXIT=0`.**
+El linter no la caza; la guardia sí. Ésta es la quinta forma de replantar una maqueta que la
+revisión del 2026-08-20 encontró viva, y por eso el frente 2 mide **la invocación** y no el import.
+
+## 10 · La extracción (D7) queda justificada por MEDIDA, no por argumento
+
+Relajar `invocaElSimbolo` **en el fixture compartido** pone **rojas las dos guardias a la vez**:
+
+```
+4 failed | 38 passed (42)
+```
+
+cada una por su propio bloque de autocomprobación. Si los detectores se hubieran duplicado, esa
+relajación habría dejado **una de las dos ciega** — que es exactamente la objeción de `design.md`
+§14-H, ahora con número.
+
+## 11 · El rojo esperado, apagado por cableado REAL
+
+`superficie-de-uso.guardia.test.ts` → **18 passed**. Las tres acciones nuevas quedan alcanzables
+porque hay pantalla que las dispara, **no** porque se las haya exceptuado: `grep` de
+`@sin-superficie` vacío en los dos módulos de acciones y en los componentes nuevos.
+
+## 12 · Gate completo
+
+```
+✓ typecheck   ✓ lint (0 errors, 97 warnings preexistentes, ninguna de la 253)
+Test Files  1257 passed (1257)
+     Tests  16603 passed | 26 skipped (16629)
+INIT_EXIT=0
+```
+
+**+54 sobre el backend**: 53 casos nuevos y el rojo de `superficie-de-uso` apagado. LF en los 13
+archivos tocados.
+
+## 13 · Lo que queda abierto de esta ficha
+
+- **T10 — «ver la app»**: pendiente. En este repo mirar la pantalla ha encontrado, repetidamente,
+  lo que la suite no ve. No se marca hasta hacerse.
+- **Deuda descubierta, no arreglada:** `pnpm run db:rollback` revierte siempre la última carpeta
+  **por orden alfabético**, así que con dos migraciones nuevas correrlo dos veces revierte **dos
+  veces** la de los enums y deja la de la tabla aplicada. Hubo que ejecutar su `down.sql` a mano.
+  Ficha aparte.
