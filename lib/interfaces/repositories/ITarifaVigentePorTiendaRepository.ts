@@ -52,6 +52,23 @@ export interface ITarifaVigentePorTiendaRepository {
   resolveTarifaPorTienda(tiendaId: string): Promise<TarifaVigente | null>;
 
   /**
+   * Feature 255 (design.md §4, decision D6) — resolver de la TARIFA COTIZABLE de una tienda.
+   * `where: { tiendaId, deletedAt: null, status: "activo" }`, `orderBy createdAt desc`, first.
+   *
+   * Es un metodo NUEVO, no un parametro de `resolveTarifaPorTienda`: alli `status` NO entra en
+   * el WHERE (deuda (g) de la feature 69, con salida en la feature 70) y dos tests lo afirman.
+   *
+   * Por que aqui SI se filtra `status`: en el camino de liquidacion un `null` degrada a
+   * conceptos 0.00 (un cobro equivocado se convertiria en un cobro CERO, callado). En la
+   * cotizacion NO: `null` dispara un `409` explicito (R13), asi que filtrar no puede producir
+   * un precio falso, solo una negativa nombrada.
+   *
+   * SALIDA NOMBRADA (deuda declarada): cuando la feature 70 cierre y el resolver compartido
+   * filtre `status`, este metodo se COLAPSA en `resolveTarifaPorTienda` y desaparece.
+   */
+  resolveTarifaCotizablePorTienda(tiendaId: string): Promise<TarifaVigente | null>;
+
+  /**
    * Feature 69 (design §3.1) — version BATCH y tx-aware del resolver: misma regla de
    * seleccion (R20/R22) para N tiendas en UNA sola query (sin N+1). El `tx` permite
    * resolver dentro de la `$transaction` de `crearCierre` (el snapshot se congela ahi).

@@ -2,7 +2,7 @@
   "info": {
     "name": "Ordenex — API key (canal integradores)",
     "_postman_id": "b7d1f0a2-1770-4f2e-9a55-0177ea51ordx",
-    "description": "Los 7 endpoints accesibles con API key (`Authorization: Bearer ordx_...`).\n\nGenerada desde el contrato publicado del repo (`lib/api/openapi-spec.ts`, espejo en `docs/api/api-key-openapi.yaml`).\n\n## Antes de empezar\n\n1. Edita las variables de la colección: `baseUrl` y `apiKey`.\n2. Lanza **Carga › lote válido**: sus tests guardan `cargaId`, `numGuia` y `numRemision` en las variables, así que el resto de peticiones funcionan sin tocar nada.\n\n## Reglas que aplican a los 7\n\n- El **dueño va forzado a la key**: una orden o un lote de otro integrador responde `404`, idéntico a inexistente. No hay forma de leer ni generar nada ajeno.\n- Los errores tienen forma uniforme: `{ status, code, message }`, con `code` en `VALIDATION_ERROR | UNAUTHORIZED | FORBIDDEN | NOT_FOUND | CONFLICT | INTERNAL`.\n- Sin header `Authorization`, o con esquema distinto de `Bearer`, responde `401` sin tocar base de datos ni storage.",
+    "description": "Los 8 endpoints accesibles con API key (`Authorization: Bearer ordx_...`).\n\nGenerada desde el contrato publicado del repo (`lib/api/openapi-spec.ts`, espejo en `docs/api/api-key-openapi.yaml`).\n\n## Antes de empezar\n\n1. Edita las variables de la colección: `baseUrl` y `apiKey`.\n2. Lanza **Carga › lote válido**: sus tests guardan `cargaId`, `numGuia` y `numRemision` en las variables, así que el resto de peticiones funcionan sin tocar nada.\n\n## Reglas que aplican a los 8\n\n- El **dueño va forzado a la key**: una orden o un lote de otro integrador responde `404`, idéntico a inexistente. No hay forma de leer ni generar nada ajeno.\n- Los errores tienen forma uniforme: `{ status, code, message }`, con `code` en `VALIDATION_ERROR | UNAUTHORIZED | FORBIDDEN | NOT_FOUND | CONFLICT | INTERNAL`.\n- Sin header `Authorization`, o con esquema distinto de `Bearer`, responde `401` sin tocar base de datos ni storage.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -14,11 +14,227 @@
     { "key": "apiKey", "value": "ordx_pega_aqui_tu_key", "description": "El secreto se muestra UNA sola vez al crearla en Configuración > API." },
     { "key": "numGuia", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." },
     { "key": "numRemision", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." },
-    { "key": "cargaId", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." }
+    { "key": "cargaId", "value": "", "description": "Se rellena solo al correr 'Carga › lote válido'." },
+    { "key": "loteSobreTope", "value": "", "description": "La rellena y la vacía el propio 'Cotización › 422: lote por encima del tope'. No se edita a mano." }
   ],
   "item": [
     {
-      "name": "1 · Carga de órdenes",
+      "name": "1 · Cotización (antes de cargar)",
+      "description": "`POST /api/ordenes/api-key/cotizacion` — dice cuánto costaría un lote **antes de crear nada**.\n\n**Lectura pura:** no crea órdenes, no consume `num_guia`, no persiste ni audita nada. Se puede llamar tantas veces como haga falta.\n\n**Mismo cuerpo que la carga**, sin recortarlo: las claves que la cotización no usa se ignoran. Dos diferencias: `num_remision` es **opcional** (aquí solo correlaciona, y **no** se deduplica ni contra el lote ni contra las órdenes existentes) y lo único que hace falta para poner precio es la terna geográfica.\n\n**Dos escenarios por fila.** `entregado`: cinco conceptos (`flete`, `iva`, `comision`, `ivaComision`, `total`), donde `total` es **lo que RECIBE la tienda** = monto a cobrar − los cuatro conceptos. `devuelto`: cuatro (sin `ivaComision`), donde `total` es **NEGATIVO** = lo que la tienda **debe** por el flete de devolución, y `comision` es un **cero explícito** (una devolución no cobra comisión COD). Se asume `cobra_comision = true`.\n\n**Importes solo formateados** (`₡1.578,00`, signo delante del símbolo). No hay campo crudo en paralelo.\n\n**`totales` es una SUMA de las filas cotizadas, no el precio del lote.** Por eso declara `filasSumadas` y `filasExcluidas`, y su suma es igual a `total`.\n\n**`422` vs `200` con filas en `error`:** el `422` es del **LOTE** (vacío, o por encima del tope de 5000). Un problema de **una fila** —terna ausente, distrito no encontrado o ambiguo, distrito sin zona, `monto_cobrar` inválido— **no** es `422`: es `200`, esa fila vuelve con `resultado: \"error\"`, y el resto del lote se cotiza igual.",
+      "item": [
+        {
+          "name": "lote válido (3 filas) — desglose por fila y totales del lote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('las 3 filas se cotizan', () => {",
+                  "  pm.expect(b.total).to.eql(3);",
+                  "  pm.expect(b.cotizadas).to.eql(3);",
+                  "  pm.expect(b.conError).to.eql(0);",
+                  "  pm.expect(b.filas).to.have.lengthOf(3);",
+                  "});",
+                  "pm.test('cada fila trae los DOS escenarios, y el devuelto no lleva ivaComision', () => {",
+                  "  b.filas.forEach((f, i) => {",
+                  "    pm.expect(f.fila, 'indice 1-based').to.eql(i + 1);",
+                  "    pm.expect(f.resultado).to.eql('cotizada');",
+                  "    pm.expect(f).to.not.have.property('errores');",
+                  "    pm.expect(f.costos.entregado).to.have.all.keys('flete', 'iva', 'comision', 'ivaComision', 'total');",
+                  "    pm.expect(f.costos.devuelto).to.have.all.keys('flete', 'iva', 'comision', 'total');",
+                  "  });",
+                  "});",
+                  "// Los importes viajan SOLO formateados: no hay campo crudo escala 2 en paralelo.",
+                  "// No se comprueba el simbolo (sale de configuracion), sino que hay separador",
+                  "// decimal seguido de DOS digitos, que es lo que esta feature garantiza.",
+                  "pm.test('los importes van formateados, con dos decimales', () => {",
+                  "  const dosDecimales = /\\D\\d{2}$/;",
+                  "  const c = b.filas[0].costos;",
+                  "  [...Object.values(c.entregado), ...Object.values(c.devuelto)].forEach((v) => {",
+                  "    pm.expect(v, v).to.be.a('string').and.to.match(dosDecimales);",
+                  "  });",
+                  "});",
+                  "pm.test('el bloque de lote cuadra: filasSumadas + filasExcluidas === total', () => {",
+                  "  pm.expect(b.totales.filasSumadas + b.totales.filasExcluidas).to.eql(b.total);",
+                  "  pm.expect(b.totales.filasSumadas).to.eql(b.cotizadas);",
+                  "  pm.expect(b.totales.filasExcluidas).to.eql(b.conError);",
+                  "});",
+                  "console.log('lote entregado:', b.totales.entregado.total, '| lote devuelto:', b.totales.devuelto.total);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "La misma geografía que usa **Carga › lote válido**: se cotiza primero y se carga después. `num_remision` es opcional; aquí se manda solo para reconocer cada fila en la respuesta.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-0001\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central, 200m norte del parque\",\n      \"monto_cobrar\": \"25900\"\n    },\n    {\n      \"num_remision\": \"REM-0002\",\n      \"provincia\": \"Alajuela\",\n      \"canton\": \"Alajuela\",\n      \"distrito\": \"Alajuela\",\n      \"direccion\": \"100m sur de la iglesia, casa azul\",\n      \"monto_cobrar\": \"48000\"\n    },\n    {\n      \"num_remision\": \"REM-0003\",\n      \"provincia\": \"Cartago\",\n      \"canton\": \"Cartago\",\n      \"distrito\": \"Oriental\",\n      \"direccion\": \"Frente a la escuela, portón verde\",\n      \"monto_cobrar\": \"12500\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "lote mínimo (1 fila, sin num_remision)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "Lo mínimo que acepta: la terna geográfica. Sin `num_remision`, la fila vuelve con `numRemision: null`. Sin `monto_cobrar`, la base de la comisión es cero y `entregado.total` sale **negativo**: no hay COD que cubra lo facturado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"provincia\": \"San José\",\n      \"canton\": \"Escazú\",\n      \"distrito\": \"San Rafael\",\n      \"direccion\": \"Multiplaza, local 12\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "lote mixto: una cubierta y una sin cobertura (200 con contadores)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('200, no 422: un problema de UNA fila no tumba el lote', () => pm.response.to.have.status(200));",
+                  "pm.test('una cotizada y una en error', () => {",
+                  "  pm.expect(b.total).to.eql(2);",
+                  "  pm.expect(b.cotizadas).to.eql(1);",
+                  "  pm.expect(b.conError).to.eql(1);",
+                  "});",
+                  "pm.test('la fila en error no trae costos, y el motivo va bajo su clave', () => {",
+                  "  const mala = b.filas.find((f) => f.resultado === 'error');",
+                  "  pm.expect(mala).to.not.have.property('costos');",
+                  "  pm.expect(mala.errores).to.have.property('distrito');",
+                  "  console.log('motivo:', mala.errores.distrito[0]);",
+                  "});",
+                  "pm.test('la fila sin cobertura NO aporta al total del lote', () => {",
+                  "  pm.expect(b.totales.filasSumadas).to.eql(1);",
+                  "  pm.expect(b.totales.filasExcluidas).to.eql(1);",
+                  "  pm.expect(b.totales.filasSumadas + b.totales.filasExcluidas).to.eql(b.total);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "El caso que enseña los contadores. La segunda fila lleva un distrito que no existe en su cantón, así que vuelve con `resultado: \"error\"` y **no aporta ni un cero** al bloque `totales`. Un total que sumara las filas sin cobertura afirmaría un precio que nadie va a pagar; por eso `totales` declara cuántas filas sumó y cuántas dejó fuera.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"num_remision\": \"REM-OK\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central, 200m norte del parque\",\n      \"monto_cobrar\": \"25900\"\n    },\n    {\n      \"num_remision\": \"REM-SIN-COBERTURA\",\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Distrito Que No Existe\",\n      \"direccion\": \"Dirección cualquiera\",\n      \"monto_cobrar\": \"10000\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "200 (no 422): terna ausente y monto_cobrar inválido",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "Los errores **de fila** no son `422`. La primera fila no trae la terna geográfica y la segunda manda un `monto_cobrar` que no es un decimal no negativo: las dos vuelven en `200` con `resultado: \"error\"` y el detalle bajo la clave del campo. Comparalo con los dos `422` de abajo, que sí son del **lote**.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"direccion\": \"Sin provincia, cantón ni distrito\",\n      \"monto_cobrar\": \"10000\"\n    },\n    {\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central\",\n      \"monto_cobrar\": \"no-es-un-numero\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "409: la tienda no tiene tarifa vigente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 CONFLICT', () => pm.response.to.have.status(409));",
+                  "const b = pm.response.json();",
+                  "pm.test('el mensaje explica la precondicion, sin filtrar datos', () => {",
+                  "  pm.expect(b.code).to.eql('CONFLICT');",
+                  "  pm.expect(b.message).to.include('tarifa vigente');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "**Solo responde así si la tienda de la key no tiene ninguna tarifa cotizable** (`deleted_at IS NULL` y `status = 'activo'`); con una tarifa activa, este mismo cuerpo devuelve `200`.\n\nEs `409` y no `422` a propósito: el cuerpo es válido, lo que falta es una precondición del **estado de la cuenta**. Y **no se cotiza ninguna fila**: sin tarifa no hay precio, y devolver `\"0.00\"` sería una mentira sobre dinero servida como precio. El mensaje es una cadena fija: `la tienda no tiene una tarifa vigente asociada: no se puede cotizar`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": [\n    {\n      \"provincia\": \"San José\",\n      \"canton\": \"San José\",\n      \"distrito\": \"Carmen\",\n      \"direccion\": \"Av. Central\",\n      \"monto_cobrar\": \"25900\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "422: lote vacío",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "`ordenes` exige al menos 1 fila. Es un error del **lote**, así que no se cotiza nada: `422 VALIDATION_ERROR`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordenes\": []\n}"
+            }
+          }
+        },
+        {
+          "name": "422: lote por encima del tope (5001 filas)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// El tope por lote es 5000 filas, el mismo de la carga. Generar el cuerpo aqui",
+                  "// evita meter 5001 filas literales dentro de la coleccion.",
+                  "const filas = Array.from({ length: 5001 }, () => ({",
+                  "  provincia: 'San José',",
+                  "  canton: 'San José',",
+                  "  distrito: 'Carmen',",
+                  "  direccion: 'Av. Central',",
+                  "  monto_cobrar: '1000',",
+                  "}));",
+                  "pm.collectionVariables.set('loteSobreTope', JSON.stringify({ ordenes: filas }));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 VALIDATION_ERROR', () => pm.response.to.have.status(422));",
+                  "// La variable pesa cientos de KB: se vacia para no dejarla en el entorno.",
+                  "pm.collectionVariables.set('loteSobreTope', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/cotizacion", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "cotizacion"] },
+            "description": "El otro error del **lote**: por encima de 5000 filas responde `422` sin cotizar ninguna. El cuerpo lo construye el script de pre-request en `{{loteSobreTope}}`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{loteSobreTope}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Carga de órdenes",
       "description": "`POST /api/ordenes/api-key/carga` — crea órdenes en firme. Cada una nace en `por_recolectar_en_tienda` y recibe su `num_guia` en el acto.\n\n**Éxito parcial:** un `200` puede contener filas con `error`. Cada fila se clasifica en `creada`, `duplicada` (mismo `num_remision`) o `error`. El lote acepta de 1 a 5000 filas.",
       "item": [
         {
@@ -105,7 +321,7 @@
       ]
     },
     {
-      "name": "2 · Listado de órdenes",
+      "name": "3 · Listado de órdenes",
       "description": "`GET /api/ordenes/api-key` — página de órdenes propias. El filtro `estado` solo acota; nunca amplía el alcance, y los parámetros desconocidos (`tiendaId`, etc.) se ignoran.",
       "item": [
         {
@@ -178,7 +394,7 @@
       ]
     },
     {
-      "name": "3 · Detalle por número de guía",
+      "name": "4 · Detalle por número de guía",
       "description": "`GET /api/ordenes/api-key/{numGuia}` — detalle de una orden propia, con sus evidencias como URLs firmadas de corta duración. Solo acepta el **número de guía** (entero). Para buscar también por remisión, usa el endpoint 5.",
       "item": [
         {
@@ -201,7 +417,7 @@
       ]
     },
     {
-      "name": "4 · Cancelar una orden",
+      "name": "5 · Cancelar una orden",
       "description": "`PUT /api/ordenes/api-key/{numGuia}/cancelar` — **sin cuerpo**. Solo procede desde `en_bodega_central` o `en_ruta_bodega_central`, y transiciona a `devolviendo_a_tienda`. Cualquier otro estado devuelve `409`.",
       "item": [
         {
@@ -216,7 +432,7 @@
       ]
     },
     {
-      "name": "5 · Consulta por guía O remisión",
+      "name": "6 · Consulta por guía O remisión",
       "description": "`GET /api/ordenes/api-key/orden/{id}` — mismo detalle que el endpoint 3, pero `{id}` se resuelve contra `num_guia` **y** `num_remision`.\n\n**Precedencia:** primero se busca por guía; solo si no hay coincidencia se prueba la remisión. Si una orden tuviera como remisión la guía de otra, gana la de la guía.",
       "item": [
         {
@@ -255,7 +471,7 @@
       ]
     },
     {
-      "name": "6 · PDF de etiqueta de una orden",
+      "name": "7 · PDF de etiqueta de una orden",
       "description": "`POST /api/ordenes/api-key/orden/{id}/generate` — **sin cuerpo**. Devuelve una URL firmada que vence en 5 minutos.\n\nLa primera llamada construye el PDF (`generado: true`); las siguientes reutilizan el mismo documento y solo lo vuelven a firmar (`generado: false`), así que la `url` cambia en cada llamada aunque el PDF sea idéntico. **No hay modo de forzar la regeneración.**\n\nSolo responde a `POST`: un `GET` no genera nada.",
       "item": [
         {
@@ -292,7 +508,7 @@
       ]
     },
     {
-      "name": "7 · PDF consolidado de un lote",
+      "name": "8 · PDF consolidado de un lote",
       "description": "`POST /api/ordenes/api-key/carga/{cargaId}/generate` — **sin cuerpo**. Mismo contrato que el PDF por orden, pero sobre el consolidado de todas las etiquetas imprimibles del lote (solo órdenes propias y vivas).\n\nEl `cargaId` es el uuid que devuelve la carga. Un lote sin etiquetas imprimibles, o que excede el tope de etiquetas por PDF, devuelve `409`.",
       "item": [
         {
@@ -324,7 +540,7 @@
       ]
     },
     {
-      "name": "8 · Autenticación (casos de error)",
+      "name": "9 · Autenticación (casos de error)",
       "description": "Comprobaciones del borde de autenticación. Ninguna toca base de datos ni storage.",
       "item": [
         {
