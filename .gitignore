@@ -37,6 +37,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Log del servidor de desarrollo. Se redirige a un ARCHIVO a proposito, porque es la
+# unica via para leer el OTP de `adminTienda`/`adminSatelite` al recorrer la app con
+# Playwright (no hay proveedor de email: ver `OtpChallengeIssuer`). OJO: ese archivo
+# lleva OTPs y CONTRASENAS EN CLARO -el log de dev de Next imprime los argumentos de
+# cada server action, `login({...,"password":"..."})` incluido-, asi que no puede
+# acabar en un commit por descuido.
+dev.log
+*.dev.log
+
 # env files (can opt-in for committing if needed)
 .env*
 

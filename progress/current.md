@@ -29,11 +29,12 @@ implementada y la ficha llevaba semanas mintiendo.
 
 | # | Qué | Estado |
 | --- | --- | --- |
-| **239** | el alta de tienda por OTP | `spec_ready` — **le falta «ver la app»**, y necesita el servidor levantado por el OTP |
+| **239** | la devolución espera al cierre | `done` — **«ver la app» HECHA el 2026-08-20**, ver `progress/recorrido_239.md`. Quedan abiertas T0.3 (avisar a integradores) y T6.4 |
 | **247** | **el doble cobro del flete de devolución** | `pending` — **medido**: `1 de 16`, ₡2.486 a NUFORM. Dos cierres aprobados, seis días de diferencia, el mismo paquete |
 | **248** | los errores de `/novedades` salen **mudos** | `pending` — la **feature 100 comparte el hueco idéntico** |
 | **220** | e2e | `pending`, pero **su premisa está podrida**: 13 de 20 specs son `NOT EXECUTED` |
 | **249** | la regla del `down.sql` obligatorio **no la vigila nadie** | `pending` — **tres migraciones llevan seis días sin `down.sql` con el gate en verde**, y van cinco en dos semanas |
+| **250** | el aviso al mensajero dice «Devuelta» cuando la orden está en «Devolución por confirmar» | `pending` — **salió del recorrido de la 239**: es la coincidencia resultado↔estado que esa ficha vino a romper, viva en un retorno al que no llegó |
 
 ### ⚠️ Antes de desplegar — acciones HUMANAS que se arrastran
 
