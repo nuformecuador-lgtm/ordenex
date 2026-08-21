@@ -10,6 +10,8 @@ import type { RawRow } from "@/lib/parsers/spreadsheet";
 // para el 2do parametro requerido del constructor; estos tests no lo ejercitan.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
   resolveTarifaPorTienda: vi.fn(async () => null),
+  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
+  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
   resolveTarifasPorTiendas: vi.fn(async () => new Map()),
 };
 
@@ -959,6 +961,7 @@ describe("BulkOrdenService.cargarMasiva — sin resolución de flete (feature 98
     const repo = buildRepo();
     const tarifaSpy: ITarifaVigentePorTiendaRepository = {
       resolveTarifaPorTienda: vi.fn(async () => null),
+      resolveTarifaCotizablePorTienda: vi.fn(async () => null), // feature 255, no usado aqui
       resolveTarifasPorTiendas: vi.fn(async () => new Map()),
     };
     const r = await new BulkOrdenService(repo, tarifaSpy).cargarMasiva([row()], TIENDA);

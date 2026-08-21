@@ -44,6 +44,8 @@ const UUID_NUEVO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
   resolveTarifaPorTienda: vi.fn(async () => null),
+  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
+  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
   resolveTarifasPorTiendas: vi.fn(async () => new Map()),
 };
 
