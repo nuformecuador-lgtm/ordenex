@@ -196,6 +196,10 @@ export const openApiSpec = {
           "Devuelve las órdenes del dueño de la key, paginadas por `offset`/`limit`, con `total`",
           "para recorrer páginas. El filtro opcional `estado` solo acota; nunca amplía el alcance.",
           "Parámetros desconocidos (p. ej. `tiendaId`) se ignoran.",
+          "",
+          "Los filtros `desde`/`hasta`, `num_guia` y `num_remision` son opcionales, se combinan",
+          "en AND y solo ACOTAN dentro de tus órdenes: un número de guía o de remisión que",
+          "pertenece a otra tienda devuelve una página vacía (`items: []`, `total: 0`), nunca 404.",
         ].join("\n"),
         parameters: [
           {
@@ -218,6 +222,38 @@ export const openApiSpec = {
             required: false,
             description: "Filtra por estado exacto del catálogo.",
             schema: { type: "string", enum: ORDER_STATUS_ENUM },
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario mínima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6).",
+            schema: { type: "string", format: "date", example: "2026-08-01" },
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario máxima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6), así que cubre las 24 horas completas de ese día.",
+            schema: { type: "string", format: "date", example: "2026-08-21" },
+          },
+          {
+            name: "num_guia",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de guía exacto. Excluye las órdenes que aún no tienen guía asignada.",
+            schema: { type: "integer", minimum: 1, example: 100234 },
+          },
+          {
+            name: "num_remision",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de remisión exacto (sin prefijo, sin subcadena, distingue mayúsculas).",
+            schema: { type: "string", minLength: 1, example: "REM-0001" },
           },
         ],
         responses: {
