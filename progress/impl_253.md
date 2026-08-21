@@ -391,3 +391,109 @@ archivos tocados.
   **por orden alfabético**, así que con dos migraciones nuevas correrlo dos veces revierte **dos
   veces** la de los enums y deja la de la tabla aplicada. Hubo que ejecutar su `down.sql` a mano.
   Ficha aparte.
+
+
+---
+
+# T0 — Las mediciones (ejecutadas por el leader el 2026-08-21)
+
+> La revisión rechazó por, entre otras cosas, que **T0.1 y T0.3 nunca se ejecutaron**. Aquí están,
+> con su fecha, su denominador y su hora de medición: **06:02 UTC del 2026-08-21**, vía MCP de
+> Supabase, **solo lectura**, contra producción.
+
+## M5 / P4 — **desde cuándo miente la maqueta**. RESPONDIDA
+
+```
+2026-08-16  6e840bb1  feat(landing): postulacion de recurso desde un modal en la landing
+2026-08-21  e26cc30f  feat(253): frontend — el modal deja de mentir, …
+```
+
+**Nació el 2026-08-16 y `origin/prod` la contiene** (comprobado con `git branch -r --contains`).
+**Cinco días en producción** dando acuse de recibo de algo que no ocurría. No es un detalle
+arqueológico: es la ventana en la que cualquiera pudo postular un vehículo o una bodega y quedarse
+esperando una llamada que nadie iba a hacer.
+
+## M1 — postulaciones de mensajero por estado (el hermano vivo)
+
+| medida | valor |
+| --- | --- |
+| mensajeros, total | **5** |
+| en `pendiente` | **1** |
+| en `activo` | **3** |
+
+**Dimensiona el panel nuevo**: el volumen es de **unidades**, que es lo que sostiene D1 (las dos
+clases mezcladas, no en dos bloques con su propia paginación para repartir tres filas).
+
+## M2 — usuarios y última alta
+
+| medida | valor |
+| --- | --- |
+| usuarios, total | **12** |
+| última alta | **2026-08-21 03:33 UTC** |
+
+⚠️ **Re-verificado, no citado**: la 252 midió **11** el 2026-08-20 y el spec exigía no repetir ese
+número de memoria. Bien que se exigiera, porque **cambió**: el alta nueva es
+**«MensajeroP Prueba», `pendiente`, rol `mensajero`**, creada a las 03:33 de hoy — es decir,
+**después** de que el arreglo de la 252 llegara a producción. Es la confirmación en producción de
+que aquel defecto quedó cerrado.
+
+## M3 — el aviso del hermano, para dimensionar D6
+
+| medida | valor |
+| --- | --- |
+| avisos `postulacion_mensajero_pendiente` | **4** |
+| notificaciones totales | **84** |
+
+**El denominador importa**: 4 de 84. El mecanismo de la campana está vivo y en uso, así que
+replicarlo para la 253 —lo firmado en D6— se apoya en algo que ya funciona, no en una apuesta.
+
+## M4 — declarada NO MEDIBLE (T0.2)
+
+Las postulaciones de recurso perdidas **no dejaron fila, ni log, ni correo**. No son recuperables
+**ni contables**. Lo único conocido son las dos que hizo el humano. Enlaza con **P1**, que queda
+**sin acción** por la misma razón.
+
+---
+
+## ⚠️ Cómo leer estos números
+
+**Producción se está usando hoy como entorno de PRUEBAS** (confirmado por el humano el 2026-08-20).
+Describen fielmente lo que el código hace, pero **no dicen frecuencia operativa**. Los 5 días de M5
+sí son reales y no dependen de eso: es tiempo de calendario con la maqueta desplegada.
+
+
+---
+
+# Mapa `R<n> → test` — LAS 19 FILAS DE PANTALLA Y GUARDIA
+
+> La revisión encontró que el mapa cubría **25 de 44**: el anexo del frontend listaba **archivos**,
+> no **casos**. Un mapa que nombra un archivo no es trazabilidad — en la 236, una fila citó un
+> archivo de test **que no existía en ninguna rama** y nadie lo notó, porque `vitest` **no falla**
+> con un filtro que no casa nada: lo ignora en silencio. Aquí va el nombre del **caso**.
+
+| R | Caso que lo cubre |
+| --- | --- |
+| **R1** | `253/R1` › *con `ok` del servidor se pinta el acuse, y el envío llevó los cinco campos normalizados* · *💀 MIENTRAS la acción no ha resuelto, el acuse NO está* |
+| **R2** | `253/R2 + R5 + R17` › los tres desenlaces (`validation_error`, `rate_limited`, `error`) + *💀 PROMESA RECHAZADA*, los cuatro con `valoresIntactos()` |
+| **R3** | `253/R3` › *dos clicks seguidos producen UNA sola invocación, y el botón dice que está enviando* |
+| **R5** | `253/R2 + R5 + R17` › *los tres desenlaces de fallo tienen texto propio, no vacío y DISTINTO entre sí* (+ el `Record<Exclude<…,"ok">,string>` en typecheck) |
+| **R6** | `253/R6` › *dice que la postulación QUEDÓ REGISTRADA, y el texto de la maqueta no vuelve* |
+| **R7** | `LandingPage.test.tsx` (verde sin tocarse) + `253/R1` › *las DOS tarjetas disparan la MISMA operación, con su `tipo`* |
+| **R17** | `253/R2 + R5 + R17` › *`rate_limited` tiene texto PROPIO, distinto del error genérico* |
+| **R29** | `253/R29` › *tipo, nombre, teléfono, correo, el mensaje COMPLETO y la fecha* · *la fecha se pinta en la zona de Costa Rica* · *una bodega se etiqueta como bodega* |
+| **R30** | Panel › *la paginación existe y cambia de página pidiendo la siguiente* |
+| **R31** | Panel › *confirmar llama a la acción con el id y refresca el listado* + Card › *una atendida dice QUIÉN la atendió y CUÁNDO* |
+| **R33** | Panel › *«Atendidas» vuelve a pedir el listado con el filtro puesto y vuelve a la página 1* · *en «Atendidas» no hay botón de atender, y el estado vacío es el suyo* |
+| **R34** | Panel › *conflict / not_found / forbidden: mensaje visible, y la fila sigue ahí* (3 casos) · *una promesa ROTA tampoco deja el panel mudo* |
+| **R35** | Panel › *sin pendientes, dice qué va a aparecer ahí y por qué* |
+| **R36** | Dashboard › *ya no se describe la pantalla entera como «Postulaciones de mensajeros pendientes»* · *los dos bloques están, cada uno con su título y su propio listado* |
+| **R37** | `landing-sin-maqueta.guardia.test.ts` entera (23 casos) |
+| **R38** | Frente 1 › *el módulo declarado existe, es de servidor y exporta ese símbolo* + Frente 3 › *ningún `sinOperacion` está vacío* · *hoy NINGUNA superficie se declara sin operación* |
+| **R39** | Frente 2 › *cada productor se importa Y se invoca dentro de una raíz pública* · *y el que la llama es un archivo REAL* + bloque 0 › *💀 el `import` en pie SIN la llamada NO cuenta como cableado* |
+| **R40** | Frente 4 › *ninguna Server Action pública se dispara sin estar declarada* · *anti-vacuidad* · *la lista de exentos no tiene basura* + Frente 5 › *todo archivo público con formulario está apuntado* · *todo archivo que el censo nombra EXISTE* · *el barrido ENCUENTRA formularios de verdad* |
+| **R41** | Bloque 0 completo (11 casos), incluidos `LA_MAQUETA_253`, `IMPORT_SIN_LLAMADA` y `FORM_SIN_CENSO` |
+| **R42** | `pnpm run test:guardias` → 126 archivos, con los **23 casos** de `landing-sin-maqueta` en la salida **sin estar en ninguna lista** |
+| **R43** | Gate completo: 1257 archivos verdes, con las suites de la 21/22/23 y la de rastreo **sin tocar** |
+| **R44** | Frente 2 › mapa `consultarRastreoPublico ← app/_landing/RastreoDialog.tsx` + Frente 4 anti-vacuidad (declarado como productor **real**, no como excepción) |
+
+**Comprobado que los archivos citados EXISTEN** — es el error concreto que la 236 dejó pasar.
