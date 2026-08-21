@@ -3,6 +3,7 @@ import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
 import type { SelectOption } from "@/components/ui/select";
 import type { VehiculoValue } from "@prisma/client";
 import { Logo } from "@/components/shared/Logo";
+import { VolverAlInicioLink } from "@/components/shared/VolverAlInicioLink";
 import { PostulacionForm } from "./_components/PostulacionForm";
 
 // Opt-out del prerender estatico: esta pagina publica consulta catalogos de DB
@@ -73,8 +74,14 @@ export default async function PostulacionPage() {
         </p>
       </div>
 
-      {/* Panel de formulario */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-8 bg-background px-6 py-12">
+      {/* Panel de formulario. `relative` ancla la salida a la landing en la
+        esquina superior SIN meterla en el flujo del flex: como un hijo más del
+        panel empujaría hacia abajo el formulario, que se centra con
+        `justify-center`. Va en ESTE panel y no en el de marca (`hidden ...
+        md:flex`), porque en móvil el de marca no existe y es justo ahí donde
+        esta es la única salida de la pantalla. */}
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-8 bg-background px-6 py-12">
+        <VolverAlInicioLink className="absolute left-3 top-3" />
         {/* Wordmark compacto, solo visible en movil */}
         <div className="md:hidden">
           {/* Feature 208: el wordmark de móvil vive sobre `bg-background`, que gira
