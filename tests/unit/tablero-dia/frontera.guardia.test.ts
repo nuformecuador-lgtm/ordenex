@@ -296,8 +296,19 @@ describe("(d) R36/R39/R55 · ninguna capa trae las ordenes del dia a memoria", (
   it("cada consulta del repositorio es agregada (R36/R39) o paginada (R55): ninguna suelta", () => {
     const codigo = codigoDe("lib/repositories/TableroDiaRepository.ts");
     const consultas = consultasCrudas(codigo);
-    // Dos: el tablero y el detalle. Una tercera obliga a pasar por aqui y justificarse.
-    expect(consultas).toHaveLength(2);
+    // TRES, en el orden en que aparecen en el archivo:
+    //   1. `contarPorMensajero`   — el tablero, una fila por mensajero      -> AGREGADA
+    //   2. `listarOrdenesDelDia`  — el detalle, una fila por orden          -> PAGINADA
+    //   3. `contarEntregasPorHora` — FEATURE 258: entregas por hora de pared CR -> AGREGADA
+    //
+    // La tercera la añadio la feature 258 (B3.1) y pasar por aqui fue una TAREA con nombre, no
+    // un daño colateral: es el sitio donde alguien se justifica. Es agregada porque agrupa por
+    // HORA (`GROUP BY 1`) y devuelve como mucho 24 filas — nunca una fila por orden. Si
+    // perdiera su `GROUP BY`, el problema seria la consulta, no este guardia.
+    //
+    // ⛔ Una CUARTA obliga a volver aqui. Y esta clausula NO se afloja: bajar el
+    // `toHaveLength` a `toBeGreaterThan` o quitar la clasificacion la convierte en decorado.
+    expect(consultas).toHaveLength(3);
 
     const clasificacion = consultas.map((sql) =>
       esAgregada(sql) ? "agregada" : esPaginada(sql) ? "paginada" : "SIN LIMITE",
@@ -305,9 +316,18 @@ describe("(d) R36/R39/R55 · ninguna capa trae las ordenes del dia a memoria", (
     expect(
       clasificacion,
       "El unico acceso por ORDEN admisible es el detalle, y va paginado con LIMIT/OFFSET " +
-        "como el listado de ordenes. El tablero agrupa por mensajero: sus filas son " +
-        "mensajeros, no ordenes.",
-    ).toEqual(["agregada", "paginada"]);
+        "como el listado de ordenes. El tablero agrupa por mensajero y la serie de entregas " +
+        "agrupa por hora: sus filas son mensajeros y horas, no ordenes.",
+    ).toEqual(["agregada", "paginada", "agregada"]);
+
+    // Y CUAL es cual, para que la clasificacion posicional de arriba no se pueda satisfacer
+    // con tres consultas cualesquiera: cada posicion lleva la marca de SU consulta.
+    expect(consultas[0]).toContain("GROUP BY a.mensajero_id");
+    expect(consultas[1]).toContain("OFFSET");
+    expect(consultas[2]).toMatch(/EXTRACT\(EPOCH FROM/);
+    expect(consultas[2]).toContain("GROUP BY 1");
+    // R53 — la hora sale de `ventana.desde`, jamas de una zona horaria escrita en el SQL.
+    expect(consultas[2]).not.toMatch(/AT TIME ZONE|America\/Costa_Rica/);
 
     // `queryRawUnsafe` acepta una cadena montada a mano: ni interpolacion segura ni forma
     // analizable. Aqui no hay ninguna, y este assert impide que aparezca.

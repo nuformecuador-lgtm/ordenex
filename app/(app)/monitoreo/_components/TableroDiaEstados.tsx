@@ -1,15 +1,27 @@
-// Feature 192 (F2.3) — los estados de la pantalla, cada uno DISTINGUIBLE en el DOM.
+// Feature 192 (F2.3) + Feature 258 (F2.1) — los estados de la pantalla, cada uno
+// DISTINGUIBLE en el DOM por su `data-slot` (R30) y cada uno con SU icono (R24/R25).
 //
-// Son tres cosas distintas y no pueden parecer la misma:
+// Son cosas distintas y no pueden parecer la misma:
 //   - CARGANDO (skeleton): todavia no hay dato.
-//   - VACIO (R33): hay dato y dice que hoy no hay ninguna orden asignada en el alcance del
-//     actor. NO es un error, y por eso no se pinta como tal.
-//   - FALLO DE REFRESCO (R32): hay dato viejo en pantalla y la ultima re-consulta fallo. El
+//   - VACIO (R33 de la 192): hay dato y dice que hoy no hay ninguna orden asignada en el
+//     alcance del actor. NO es un error, y por eso no se pinta como tal.
+//   - FALLO DE REFRESCO (R9/R32): hay dato viejo en pantalla y la ultima re-consulta fallo. El
 //     aviso acompaña a las tarjetas ya cargadas; NUNCA las sustituye ni las pone a cero.
+//   - SIN COINCIDENCIAS (R42): el vacio lo produjo LO QUE ESCRIBISTE, no el dia. Texto e
+//     icono distintos del de arriba, y una salida para quitar el filtro.
+//
+// ─── EL ICONO NUNCA ES EL UNICO PORTADOR (R29) ────────────────────────────────────────────
+// Todos van `aria-hidden` (o los pinta la primitiva como decorativos) y el mensaje sigue
+// siendo legible como texto con los `<svg>` suprimidos. El icono acelera el reconocimiento;
+// no lo sustituye.
 //
 // Componentes puros, sin estado propio: quien los monta decide cual toca.
 
+import { CalendarDays, Loader2, Search, TriangleAlert } from "lucide-react";
+
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -23,7 +35,18 @@ const FALLO_TITULO = "No se pudo actualizar";
 const FALLO_DESCRIPCION =
   "Se siguen mostrando los últimos datos obtenidos; puede que ya no estén al día. Se reintentará solo.";
 
-/** Esqueleto de carga: misma rejilla que el tablero real, para que no salte el layout. */
+const SIN_COINCIDENCIAS_TITULO = "Ningún mensajero coincide con el filtro";
+const SIN_COINCIDENCIAS_DESCRIPCION =
+  "El día sí tiene órdenes asignadas: lo que no encuentra nada es el texto que escribiste.";
+export const QUITAR_FILTRO = "Quitar el filtro";
+
+/**
+ * Esqueleto de carga: misma rejilla que el tablero real, para que no salte el layout.
+ *
+ * R28 — el icono NO sustituye el anuncio accesible: la region conserva `role="status"`,
+ * `aria-busy="true"` y su nombre accesible, y el `Loader2` va dentro y `aria-hidden`.
+ * `motion-safe:` deja quieta la rueda para quien pidio menos movimiento.
+ */
 export function TableroDiaSkeleton({ tarjetas = 6 }: Readonly<{ tarjetas?: number }>) {
   return (
     <div
@@ -31,43 +54,94 @@ export function TableroDiaSkeleton({ tarjetas = 6 }: Readonly<{ tarjetas?: numbe
       role="status"
       aria-busy="true"
       aria-label={CARGANDO}
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+      className="flex flex-col gap-3"
     >
-      {Array.from({ length: tarjetas }, (_, indice) => (
-        <Card key={indice} aria-hidden="true">
-          <CardHeader>
-            <Skeleton className="h-5 w-40" />
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </CardContent>
-        </Card>
-      ))}
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 aria-hidden="true" className="size-4 motion-safe:animate-spin" />
+        {CARGANDO}
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: tarjetas }, (_, indice) => (
+          <Card key={indice} aria-hidden="true">
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
 
-/** R33 — vacio EXPLICITO. Es un estado normal del dia, no un fallo. */
+/**
+ * R21/R33 — vacio EXPLICITO, con la primitiva `EmptyState`. Es un estado normal del dia, no
+ * un fallo: por eso no hay ningun `role="alert"` aqui.
+ *
+ * `CalendarDays` y no `Inbox`: lo que esta vacio es EL DIA, no una bandeja. `Inbox` —el que
+ * usa el listado de ordenes— diria «esta lista no tiene resultados», que es otra cosa.
+ * El icono entra por la prop `icon` (R26), de modo que la primitiva lo pinte decorativo.
+ */
 export function TableroDiaVacio() {
   return (
     <Card data-slot="tablero-dia-vacio">
-      <CardHeader>
-        <p className="font-heading text-base">{VACIO_TITULO}</p>
-      </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground">{VACIO_DESCRIPCION}</p>
+        <EmptyState
+          icon={CalendarDays}
+          title={VACIO_TITULO}
+          description={VACIO_DESCRIPCION}
+        />
       </CardContent>
     </Card>
   );
 }
 
-/** R32 — el refresco fallo: se avisa SIN vaciar el tablero ni mostrar ceros. */
+/**
+ * R22/R32 — el refresco fallo: se avisa SIN vaciar el tablero ni mostrar ceros.
+ *
+ * `TriangleAlert` y no un icono de rotura: la señal es «cuidado con lo que estas leyendo»,
+ * no «se rompio». Los datos siguen ahi y pueden estar viejos.
+ *
+ * ⚠️ El icono va como PRIMER HIJO del `Alert` (R27): la primitiva aplica
+ * `has-[>svg]:grid-cols-[auto_1fr]` y sin esa posicion la rejilla de dos columnas no se forma.
+ */
 export function TableroDiaAvisoRefresco() {
   return (
     <Alert data-slot="tablero-dia-aviso-refresco" variant="destructive">
+      <TriangleAlert aria-hidden="true" />
       <AlertTitle>{FALLO_TITULO}</AlertTitle>
       <AlertDescription>{FALLO_DESCRIPCION}</AlertDescription>
     </Alert>
+  );
+}
+
+/**
+ * R42 — el vacio DEL FILTRO. Distinto en texto y en `data-slot` del vacio del dia, con su
+ * propio icono (`Search`: el vacio lo produjo lo que escribiste) y con una salida.
+ *
+ * Sin la accion, quien filtro mal se queda mirando una pantalla vacia sin saber que el dia si
+ * tiene trabajo.
+ */
+export function TableroDiaSinCoincidencias({
+  onQuitarFiltro,
+}: Readonly<{ onQuitarFiltro: () => void }>) {
+  return (
+    <Card data-slot="tablero-dia-sin-coincidencias">
+      <CardContent>
+        <EmptyState
+          icon={Search}
+          title={SIN_COINCIDENCIAS_TITULO}
+          description={SIN_COINCIDENCIAS_DESCRIPCION}
+          action={
+            <Button type="button" variant="outline" onClick={onQuitarFiltro}>
+              {QUITAR_FILTRO}
+            </Button>
+          }
+        />
+      </CardContent>
+    </Card>
   );
 }

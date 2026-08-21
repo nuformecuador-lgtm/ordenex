@@ -10,8 +10,10 @@
 // ninguna otra parte del arbol.
 
 import type { GestionResultado } from "@prisma/client";
+import type { ComponentProps } from "react";
 
 import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import type { Badge } from "@/components/ui/badge";
 import {
   estatusDelBucket,
   type BucketSinResultado,
@@ -86,3 +88,102 @@ export function ayudaBucket(bucket: BucketSinResultado): string {
   const estatus = estatusDelBucket(bucket).map(estatusLabel).join(", ");
   return `${SIGNIFICADO_BUCKET[bucket]}. Estatus: ${estatus}.`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Feature 258 (F1.1/F5.1) — el VOCABULARIO VISUAL de los ocho contadores      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Las OCHO claves de contador, en el orden en que se pintan: los cinco desenlaces y
+ * despues los tres cubos. Una sola lista para la barra de composicion y para su nombre
+ * accesible, derivada de las dos que ya existian.
+ */
+export type ClaveContador = ClaveResultado | BucketSinResultado;
+
+export const CLAVES_CONTADOR = [
+  ...CLAVES_RESULTADO,
+  ...CLAVES_BUCKET,
+] as const satisfies readonly ClaveContador[];
+
+/** La etiqueta visible de cualquiera de los ocho, sin que el llamador sepa de que grupo es. */
+export function etiquetaContador(clave: ClaveContador): string {
+  return clave in ETIQUETA_RESULTADO
+    ? ETIQUETA_RESULTADO[clave as ClaveResultado]
+    : ETIQUETA_BUCKET[clave as BucketSinResultado];
+}
+
+/**
+ * La variante sale del PROPIO componente (`ComponentProps<typeof Badge>`), no de
+ * `VariantProps<typeof badgeVariants>`: el identificador literal `badgeVariants` esta
+ * censado por `frontera.guardia.test.ts` (R18) y nombrarlo aqui pondria el guardia rojo.
+ */
+type VarianteContador = NonNullable<ComponentProps<typeof Badge>["variant"]>;
+
+/**
+ * R15/R16/R17 — la variante semantica de cada contador. UNA sola declaracion en el arbol.
+ *
+ * ⚠️ CLAVADO POR CLAVE DE CONTADOR (`entregadas`), NUNCA por value del catalogo de estatus
+ * ni de `gestion_resultado` (`entregada`). No es estilo: el censo de la clausula (f) de
+ * `frontera.guardia.test.ts` solo se dispara cuando la CLAVE es un value de
+ * `ORDER_STATUS_SEED`, asi que el par `entregada: "success"` seria un segundo mapa de color
+ * de estatus y el guardia se pondria rojo — con razon.
+ *
+ * ── EL COLOR CODIFICA GRAVEDAD, NO IDENTIDAD (design.md §4)
+ * El par semantico del sistema de diseño tiene CUATRO colores y aqui hay OCHO contadores.
+ * En vez de inventar dos semanticos nuevos (que obligaria a definir sus tres roles con sus
+ * contrastes medidos en los dos temas: eso es una ficha de sistema de diseño, no de una
+ * pantalla), el color dice **cuan bien o mal termino**, y la identidad la llevan siempre la
+ * etiqueta y la cifra que van DENTRO del mismo `Badge`. Por eso hay colisiones a proposito
+ * (`reprogramadas`/`devueltas`, `rechazadas`/`incidentes`), `sinRecoger` va en `secondary`
+ * —lo que todavia no arranco no lleva acento— y `otros` va sin color, para que se note que
+ * es el cajon de sastre y no una categoria mas.
+ *
+ * `satisfies Record<...>` EXHAUSTIVO: un sexto resultado o un cuarto cubo NO COMPILA sin
+ * variante asignada (R16).
+ */
+export const VARIANTE_CONTADOR = {
+  entregadas: "success",
+  reprogramadas: "warning",
+  devueltas: "warning",
+  rechazadas: "danger",
+  incidentes: "danger",
+  sinRecoger: "secondary",
+  enReparto: "info",
+  otros: "outline",
+} as const satisfies Record<ClaveContador, VarianteContador>;
+
+/**
+ * R67 — el color de cada segmento de la barra de composicion. Misma regla de clavado que
+ * `VARIANTE_CONTADOR`: por clave de contador, jamas por value de estatus.
+ *
+ * ── POR QUE ESTOS TOKENS Y NO OTROS
+ * - La BASE semantica es el rol correcto para una barra: `DESIGN.md` dice literalmente que
+ *   la base es «borde, acento y punto de estado (dot, icono, barra)». El `-soft` es fondo de
+ *   chip y el `-strong` es texto; ninguno pinta un segmento.
+ * - Los tres contadores SIN semantico propio van a `--chart-*`, que GIRAN con el tema
+ *   (se declaran en `:root` y se redefinen en `.dark`/`.tema-sistema`). Son los mismos tres
+ *   colores de la maqueta, ya tokenizados: `chart-6` el morado, `chart-11` el marron y
+ *   `chart-12` el gris. No se inventa ninguna paleta.
+ * - `otros` va sin acento: es el cajon de sastre, y `DESIGN.md` reserva la saturacion para
+ *   accion y estado.
+ *
+ * ⚠️ `enReparto` NO va en `bg-info`, y no es un descuido — es la salida que `design.md` §11.6
+ * dejo escrita y F7.3 mandaba comprobar. `--color-info` (`#1a56db`) es un hex FIJO y oscuro y
+ * la pista `bg-muted` gira: medido con `tests/fixtures/contraste.ts` sobre los tokens reales
+ * de `app/globals.css`, ese par da **2.34:1 en tema oscuro**, por debajo del 3:1 que WCAG
+ * 1.4.11 pide a un objeto grafico. `chart-13` gira (`#1e3a8a` claro / `#93c5fd` oscuro) y da
+ * **9.41 / 8.03**. Lo fija un test: `TableroDiaComposicion.test.tsx` › «se separa de la pista
+ * en los DOS temas». **Nunca un hex nuevo.**
+ *
+ * ⛔ Ni un hex, ni una utilidad de paleta cruda de Tailwind (R46).
+ */
+export const COLOR_SEGMENTO = {
+  entregadas: "bg-success",
+  reprogramadas: "bg-warning",
+  devueltas: "bg-chart-6",
+  rechazadas: "bg-danger",
+  incidentes: "bg-chart-11",
+  sinRecoger: "bg-chart-12",
+  enReparto: "bg-chart-13",
+  otros: "bg-muted-foreground/40",
+} as const satisfies Record<ClaveContador, string>;

@@ -85,6 +85,10 @@ function tablero(filas: readonly FilaTableroDia[], generadoAt = AHORA.toISOStrin
     alcance: "global",
     filas,
     totales: acumulado,
+    // FEATURE 258 (B4.5) — el contrato gana `ritmoEntregas`, obligatorio. Serie minima pero
+    // COHERENTE con estos totales: su ULTIMO punto es `totales.entregadas` (R52). No se pone
+    // `[]`, que seria un valor que el servicio no produce nunca.
+    ritmoEntregas: [{ hora: 0, acumulado: acumulado.entregadas }],
   };
 }
 

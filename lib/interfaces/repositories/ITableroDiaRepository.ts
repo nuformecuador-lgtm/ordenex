@@ -1,7 +1,8 @@
 // Feature 192 (B2.1/B7.1, design.md §5 y §5.bis) — EL PUERTO DE LECTURA DEL TABLERO.
 //
-// Contrato NEUTRAL: sin Prisma, sin Next y sin `process.env`. Las dos consultas de la
-// feature viven detras de el, y las dos comparten el mismo recorte multi-tenant.
+// Contrato NEUTRAL: sin Prisma, sin Next y sin `process.env`. Las TRES consultas de la
+// feature viven detras de el (la tercera la añade la 258) y las tres comparten el mismo
+// recorte multi-tenant.
 //
 // El `filtro` NO es un `where` de Prisma ni una cadena SQL: es el ALCANCE ya traducido por
 // la lista blanca del servicio (`design.md §3.3`). Que sea una union de dos variantes —y no
@@ -41,6 +42,20 @@ export interface PaginaOrdenesDelDia {
   readonly total: number;
 }
 
+/**
+ * FEATURE 258 (B2.2, R50/R58) — el HISTOGRAMA de entregas del dia por hora de pared de CR.
+ *
+ * ⚠️ Trae SOLO las horas CON entregas: las horas sin ninguna NO aparecen. Rellenar los huecos
+ * y acumular es aritmetica de presentacion de datos —pura, probable sin base— y por eso vive
+ * en el servicio (`acumularPorHora`), no aqui. Devolver 24 filas obligaria a un `generate_series`
+ * dentro del SQL para no aportar nada: el `GROUP BY` minimo es el que devuelve lo que hay.
+ */
+export interface EntregasEnHora {
+  /** Hora de pared de Costa Rica, 0..23. */
+  readonly hora: number;
+  readonly entregadas: number;
+}
+
 export interface ITableroDiaRepository {
   /**
    * R36/R39 — UNA sola consulta agregada; devuelve una fila por mensajero con ordenes
@@ -61,4 +76,22 @@ export interface ITableroDiaRepository {
     mensajeroId: string,
     pagina: PaginaDetalle,
   ): Promise<PaginaOrdenesDelDia>;
+
+  /**
+   * FEATURE 258 (R50/R51/R58) — UNA consulta AGREGADA (`GROUP BY`) que reparte por hora de
+   * pared de CR el MISMO conjunto de ordenes que produce el contador `entregadas` de
+   * `contarPorMensajero`: universo "asignada hoy", dentro del alcance, cuya ULTIMA gestion
+   * vigente del dia tiene resultado `entregada`. Una orden cuenta una sola vez, en la hora de
+   * ESA gestion final.
+   *
+   * De ahi sale el cuadre de R52 sin comprobarlo despues: el acumulado final de la serie es la
+   * cardinalidad del conjunto, es decir `totales.entregadas`.
+   *
+   * El recorte de alcance vuelve a viajar como PARAMETRO, igual que en las otras dos: aqui no
+   * hay RLS debajo y este `filtro` es la frontera multi-tenant.
+   */
+  contarEntregasPorHora(
+    ventana: VentanaDiaCR,
+    filtro: FiltroAlcanceTablero,
+  ): Promise<readonly EntregasEnHora[]>;
 }

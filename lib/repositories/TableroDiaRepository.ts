@@ -1,6 +1,7 @@
 import { Prisma, type GestionResultado, type PrismaClient } from "@prisma/client";
 
 import type {
+  EntregasEnHora,
   FilaConteoMensajero,
   FiltroAlcanceTablero,
   ITableroDiaRepository,
@@ -11,7 +12,8 @@ import type { OrdenDetalleDia, TotalesTableroDia } from "@/lib/types/tablero-dia
 import { ESTATUS_CON_BUCKET_EXPLICITO, estatusDelBucket } from "@/lib/types/tablero-dia";
 import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 
-// Feature 192 (B2.2/B7.2/B8.1-B8.3, design.md §5 y §5.bis) — LAS DOS CONSULTAS DEL TABLERO.
+// Feature 192 (B2.2/B7.2/B8.1-B8.3, design.md §5 y §5.bis) — LAS CONSULTAS DEL TABLERO.
+// Feature 258 (B3.1) añade la TERCERA: el histograma de entregas por hora (al final del archivo).
 //
 // SOLO LECTURA. Ni un `INSERT`, `UPDATE` ni `DELETE`; en particular NUNCA sobre
 // `orden.asignado_at` (R59). Aqui se lee en un `WHERE` y en un `SELECT`, y nada mas. Un guardia lo
@@ -52,12 +54,14 @@ import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 // lista blanca del servicio. Lo que si hace este archivo es ESCRIBIRLO en el `WHERE` (R10),
 // que es donde vive la frontera multi-tenant de esta pantalla: no hay RLS debajo.
 //
-// ⚠ LAS DOS CONSULTAS COMPARTEN DEFINICION Y NO SE PUEDEN TOCAR POR SEPARADO:
+// ⚠ LAS TRES CONSULTAS COMPARTEN DEFINICION Y NO SE PUEDEN TOCAR POR SEPARADO:
 //   - el universo "asignada hoy" es el MISMO fragmento (`cteIdsDelDia`, R57/R58);
 //   - "resultado del dia" es la MISMA definicion (ultima gestion vigente de la ventana):
-//     `DISTINCT ON` en el tablero, `LATERAL ... LIMIT 1` en el detalle.
-// Si una cambia y la otra no, el detalle contradice a la tarjeta y R51 se rompe. El test de
-// cuadre (`tests/integration/tablero-dia-detalle-cuadre.test.ts`) es el que lo caza.
+//     `DISTINCT ON` en el tablero y en la serie por hora, `LATERAL ... LIMIT 1` en el detalle.
+// Si una cambia y las otras no, el detalle contradice a la tarjeta (R51 de la 192) o la linea
+// contradice al contador `entregadas` que se pinta a su lado (R52 de la 258). Los tests de
+// cuadre (`tests/integration/tablero-dia-detalle-cuadre.test.ts` y
+// `tests/integration/tablero-dia-ritmo.test.ts`) son los que lo cazan.
 
 /** Cliente Prisma MINIMO consumido: solo SQL crudo (patron de `AnaliticaOperativaViva`). */
 type TableroDiaPrismaClient = Pick<PrismaClient, "$queryRaw">;
@@ -87,6 +91,18 @@ export const CONTADOR_POR_RESULTADO = {
   incidente: "incidentes",
 } as const satisfies Record<GestionResultado, keyof TotalesTableroDia>;
 
+/**
+ * FEATURE 258 (B3.1) — el value del enum que cuenta la serie de entregas acumuladas.
+ *
+ * `satisfies GestionResultado` lo ata al enum: si el value se renombrara, esto deja de
+ * compilar en vez de producir una serie siempre a cero. Y
+ * `tests/unit/repositories/tablero-dia-ritmo-sql.test.ts` afirma ademas que
+ * `CONTADOR_POR_RESULTADO[RESULTADO_ENTREGADA] === "entregadas"`, que es lo que ata la serie
+ * AL CONTADOR con el que tiene que cuadrar (R52) en vez de fiarlo a que los dos nombres se
+ * parezcan.
+ */
+export const RESULTADO_ENTREGADA = "entregada" satisfies GestionResultado;
+
 /** Fila cruda del tablero. `COUNT` devuelve `bigint`: se convierte en el mapeo (nota 5). */
 interface FilaConteoRow {
   mensajero_id: string;
@@ -100,6 +116,15 @@ interface FilaConteoRow {
   sin_recoger: bigint;
   en_reparto: bigint;
   otros: bigint;
+}
+
+/**
+ * Fila cruda del histograma. `hora` sale ya como `int` del `::int` del SELECT; `COUNT` viene
+ * como `bigint` y se convierte en el mapeo, como en el tablero.
+ */
+interface FilaEntregasEnHoraRow {
+  hora: number;
+  entregadas: bigint;
 }
 
 interface FilaDetalleRow {
@@ -352,6 +377,94 @@ export class TableroDiaRepository implements ITableroDiaRepository {
       ordenes: filas.map(aOrdenDetalle),
       total: filas.length === 0 ? 0 : Number(filas[0].total),
     };
+  }
+
+  /**
+   * FEATURE 258 (B3.1, R50/R51/R53/R58) — LA TERCERA CONSULTA: el histograma de entregas del
+   * dia por hora de pared de Costa Rica. AGREGADA (`GROUP BY`), de SOLO LECTURA, con el
+   * recorte de alcance como parametro.
+   *
+   * ⚠️ VA LA ULTIMA DEL ARCHIVO A PROPOSITO. `tests/unit/tablero-dia/frontera.guardia.test.ts`
+   * clasifica las plantillas `$queryRaw` EN EL ORDEN EN QUE APARECEN EN EL TEXTO y afirma
+   * `["agregada", "paginada", "agregada"]`. Moverla de sitio pone ese guardia rojo.
+   *
+   * CUENTA EXACTAMENTE EL MISMO CONJUNTO QUE `entregadas` de `contarPorMensajero`, y por eso
+   * reutiliza `cteIdsDelDia` y `fragmentoDeAlcance` en vez de copiarlos: si el universo
+   * "asignada hoy" cambia, cambia para las tres consultas a la vez, que es la unica forma de
+   * que R51/R52 sigan siendo ciertos. El `DISTINCT ON (orden_id)` con el desempate
+   * `created_at DESC, id DESC` es la MISMA definicion de "resultado del dia" del tablero: cada
+   * orden aporta 1, en la hora de su gestion FINAL. Sin el, una orden con dos gestiones
+   * `entregada` aportaria dos (`GestionOrden` no tiene `@@unique(ordenId)`) y la linea diria un
+   * numero distinto del contador que se pinta a su lado.
+   *
+   * LA HORA SALE DE `ventana.desde`, NO DE UNA ZONA HORARIA EN SQL (R53). Costa Rica es UTC-6
+   * fijo y sin horario de verano, y `ventana.desde` ES las 00:00 de pared de CR: restar y
+   * dividir entre 3600 da la hora de pared directamente, 0..23, por construccion.
+   *   ⛔ `AT TIME ZONE 'America/Costa_Rica'` esta descartado: meteria una SEGUNDA fuente de
+   *      verdad de la zona horaria —una en `lib/utils/fecha-cr.ts` y otra dentro de una cadena
+   *      SQL— y ataria el resultado al catalogo `tzdata` del servidor Postgres. Los off-by-one
+   *      de esta familia ya costaron la ficha 166.
+   *   ⛔ Agrupar en TypeScript sobre las ordenes del dia esta descartado: es lo que prohibe el
+   *      guardia (`findMany`, consultas ni agregadas ni paginadas) y es la deuda de la 191.
+   *
+   * EL DIVISOR SE ESCRIBE COMO `INTERVAL '1 hour'` Y NO COMO `3600`, y no es estilo: el
+   * guardia `tests/unit/analytics/cache-config.guardia.test.ts` prohibe el literal `3600` en
+   * todo `lib/repositories/` porque ese numero es el TTL de la cache de analitica y tiene que
+   * vivir en UNA sola constante. Escribirlo aqui —aunque signifique "segundos que tiene una
+   * hora" y no tenga nada que ver con aquel TTL— pone ese guardia rojo. La forma de interval
+   * dice ademas lo que hace: cuantas horas ENTERAS caben en lo transcurrido.
+   * ⛔ No lo "simplifiques" de vuelta a `/ 3600`: rompe un guardia ajeno.
+   *
+   * Se conserva el `FLOOR(EPOCH / …)` en vez de `EXTRACT(HOUR FROM intervalo)` a proposito:
+   * `EXTRACT(HOUR ...)` sobre un interval DESCARTA en silencio la componente de dias, asi que
+   * si alguien ampliara la ventana mas alla de 24 h las horas del dia siguiente se colarian
+   * disfrazadas de 0..23. Con el `FLOOR` saldria un 24, que es un fallo que se ve.
+   *
+   * El `::timestamp` explicito sobre el parametro es deliberado: el driver manda los
+   * parametros sin tipo y la inferencia del operador `-` sobre `timestamp - unknown` es
+   * ambigua en Postgres. Con el cast, el parametro se interpreta EXACTAMENTE igual que en las
+   * comparaciones `created_at >= ${ventana.desde}` de arriba, que ya estan probadas contra
+   * Postgres real.
+   *
+   * Devuelve SOLO las horas con entregas: rellenar los huecos y acumular es del servicio.
+   */
+  async contarEntregasPorHora(
+    ventana: VentanaDiaCR,
+    filtro: FiltroAlcanceTablero,
+  ): Promise<readonly EntregasEnHora[]> {
+    const filas = await this.prisma.$queryRaw<FilaEntregasEnHoraRow[]>`
+      WITH ${cteIdsDelDia(ventana)},
+      asignadas AS (
+        SELECT o."id" AS orden_id
+        FROM ids_del_dia d
+        JOIN "orden" o ON o."id" = d.id
+        WHERE o."mensajero_asignado_id" IS NOT NULL
+          AND o."deleted_at" IS NULL
+          AND ${fragmentoDeAlcance(filtro)}
+      ),
+      resultado_final AS (
+        SELECT DISTINCT ON (g."orden_id")
+               g."orden_id"   AS orden_id,
+               g."resultado"  AS resultado,
+               g."created_at" AS at
+        FROM "gestion_orden" g
+        JOIN asignadas a ON a.orden_id = g."orden_id"
+        WHERE g."anulada_at" IS NULL
+          AND g."created_at" >= ${ventana.desde}
+          AND g."created_at" <  ${ventana.hasta}
+        ORDER BY g."orden_id", g."created_at" DESC, g."id" DESC
+      )
+      SELECT FLOOR(
+               EXTRACT(EPOCH FROM (r.at - ${ventana.desde}::timestamp))
+               / EXTRACT(EPOCH FROM INTERVAL '1 hour')
+             )::int     AS hora,
+             COUNT(*)   AS entregadas
+      FROM resultado_final r
+      WHERE r.resultado = ${RESULTADO_ENTREGADA}::"gestion_resultado"
+      GROUP BY 1
+      ORDER BY 1`;
+
+    return filas.map((f) => ({ hora: Number(f.hora), entregadas: Number(f.entregadas) }));
   }
 }
 
