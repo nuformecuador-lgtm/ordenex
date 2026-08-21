@@ -3,6 +3,7 @@
 // NO es un archivo de test (no acaba en `.test.ts`): vitest no lo recoge.
 
 import type {
+  EntregasEnHora,
   FilaConteoMensajero,
   FiltroAlcanceTablero,
   ITableroDiaRepository,
@@ -29,6 +30,8 @@ export interface LlamadaDetalle extends LlamadaConteo {
 export class RepositorioDoble implements ITableroDiaRepository {
   readonly conteos: LlamadaConteo[] = [];
   readonly detalles: LlamadaDetalle[] = [];
+  /** Feature 258 — las llamadas a la serie por hora, apuntadas igual que las otras dos. */
+  readonly ritmos: LlamadaConteo[] = [];
 
   constructor(
     private readonly filasPorFiltro: (filtro: FiltroAlcanceTablero) => FilaConteoMensajero[] = () =>
@@ -37,6 +40,7 @@ export class RepositorioDoble implements ITableroDiaRepository {
       filtro: FiltroAlcanceTablero,
       mensajeroId: string,
     ) => PaginaOrdenesDelDia = () => ({ ordenes: [], total: 0 }),
+    private readonly ritmoPorFiltro: (filtro: FiltroAlcanceTablero) => EntregasEnHora[] = () => [],
   ) {}
 
   async contarPorMensajero(
@@ -55,6 +59,19 @@ export class RepositorioDoble implements ITableroDiaRepository {
   ): Promise<PaginaOrdenesDelDia> {
     this.detalles.push({ ventana, filtro, mensajeroId, pagina });
     return this.paginaPorFiltro(filtro, mensajeroId);
+  }
+
+  /**
+   * Feature 258 — el HISTOGRAMA por hora. Devuelve solo las horas CON entregas, como el
+   * repositorio real: si el doble rellenara los huecos, el test de "sin huecos" del servicio
+   * estaria comprobando el doble en vez de `acumularPorHora`.
+   */
+  async contarEntregasPorHora(
+    ventana: VentanaDiaCR,
+    filtro: FiltroAlcanceTablero,
+  ): Promise<readonly EntregasEnHora[]> {
+    this.ritmos.push({ ventana, filtro });
+    return this.ritmoPorFiltro(filtro);
   }
 }
 

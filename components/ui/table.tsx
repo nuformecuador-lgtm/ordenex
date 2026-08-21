@@ -4,7 +4,16 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * @sin-superficie la unica tabla de listas de la app es `components/shared/DataTable`
+ * (DESIGN.md, «las tablas crudas se migran a esta»). El ULTIMO consumidor de esta primitiva
+ * cruda era el detalle de un mensajero del tablero del dia, y la feature 258 (F3.1, R23/R35)
+ * lo migro a `DataTable` + `Pagination` dentro de un `Modal`. Queda en disco a proposito: R20
+ * de esa ficha prohibe anadir, renombrar o eliminar archivos de `components/ui/`, asi que
+ * retirar la primitiva —o hacer que `DataTable` se apoye en ella, que es la otra salida— es
+ * un chore aparte y una decision del humano, no un dano colateral de un rediseno de pantalla.
+ */
+export function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
@@ -105,7 +114,6 @@ function TableCaption({
 }
 
 export {
-  Table,
   TableHeader,
   TableBody,
   TableFooter,

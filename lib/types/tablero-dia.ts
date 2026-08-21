@@ -135,6 +135,34 @@ export interface FilaTableroDia {
 /** R30 — los totales tienen la forma de una fila menos su identidad. */
 export type TotalesTableroDia = Omit<FilaTableroDia, "mensajeroId" | "mensajeroNombre">;
 
+/**
+ * FEATURE 258 (B2.1, R50/R52) — un punto de la serie de entregas ACUMULADAS del dia.
+ *
+ * `hora` es la hora de PARED de Costa Rica (0..23) del dia representado; `acumulado` es el
+ * numero de ordenes entregadas desde el inicio del dia CR hasta el FIN de esa hora.
+ *
+ * ⚠️ EL ACUMULADO DE UNA HORA PUEDE BAJAR ENTRE DOS LECTURAS, Y ESO ES CORRECTO (R72).
+ * La serie NO es un registro historico de lo que se vio a cada hora: se RECONSTRUYE entera en
+ * cada lectura contando, igual que el contador `entregadas`, la ULTIMA gestion vigente del dia
+ * de cada orden. Si una orden entregada a las 10:00 se reprograma a las 15:00, su ultima
+ * gestion ya no es `entregada` y el punto de las 10:00 baja en uno — exactamente igual que baja
+ * el contador `entregadas` que se pinta a dos centimetros de la linea.
+ *
+ * Se decidio asi el 2026-08-21 (decision humana, `design.md` §3 y §12.6) despues de ver este
+ * caso concreto: se prefiere una curva que retrocede y CUADRA a una curva bonita que miente.
+ * La alternativa —contar cualquier gestion `entregada` del dia— da una curva que nunca baja
+ * pero infla (una orden con dos gestiones aportaria dos) y contradice al contador de al lado.
+ *
+ * **Si estas leyendo esto porque viste el grafico retroceder: no es un bug, no lo "arregles".**
+ * `tests/integration/tablero-dia-ritmo.test.ts` lo fija como comportamiento ESPERADO.
+ */
+export interface PuntoRitmoEntregas {
+  /** Hora de pared de Costa Rica, 0..23. */
+  readonly hora: number;
+  /** Ordenes entregadas desde el inicio del dia CR hasta el FIN de `hora`. */
+  readonly acumulado: number;
+}
+
 export interface TableroDia {
   /** `YYYY-MM-DD` calendario de Costa Rica del dia representado (R34). */
   readonly fecha: string;
@@ -148,6 +176,65 @@ export interface TableroDia {
   readonly alcance: "global" | "zona";
   readonly filas: readonly FilaTableroDia[];
   readonly totales: TotalesTableroDia;
+  /**
+   * FEATURE 258 (R50/R52/R54) — entregas ACUMULADAS por hora de pared de CR, sin huecos desde
+   * la hora 0 hasta la hora de pared del instante de lectura. Su ULTIMO punto es
+   * `totales.entregadas`: la serie es una particion por hora del MISMO conjunto de ordenes que
+   * produce ese contador, asi que el cuadre es cierto por construccion y no a posteriori.
+   *
+   * Campo OBLIGATORIO a proposito, no opcional: opcional dejaria que una implementacion lo
+   * olvidara y la pantalla se quedara sin linea sin que nada se pusiera rojo.
+   *
+   * Nunca esta vacia mientras haya dia: si el dia no registra ninguna entrega, trae los puntos
+   * `0..H` con `acumulado` 0. Es la CAPA DE PRESENTACION la que decide no dibujar una linea
+   * plana a cero (R59), no el contrato.
+   */
+  readonly ritmoEntregas: readonly PuntoRitmoEntregas[];
+}
+
+/**
+ * FEATURE 258 (B2.1c, R43/R65) — LA UNICA SUMA DE LOS OCHO CONTADORES DEL ARBOL.
+ *
+ * Vivia dentro de `TableroDiaService` (feature 192, R30) y se MUEVE aqui sin cambiar una
+ * linea de su cuerpo. El motivo no es cosmetico: con filtro por nombre activo, el bloque de
+ * totales se recalcula sobre las tarjetas VISIBLES (R43), y ese recalculo lo hace un Client
+ * Component que NO puede importar el servicio sin arrastrarse `lib/analytics/alcance` y el
+ * adaptador de cache al navegador. Este modulo es exactamente el sitio: su cabecera ya declara
+ * que no importa `repositories/`, `services/`, `@/lib/db` ni `next/headers`.
+ *
+ * ⛔ NO se duplica (R65). Dos implementaciones de esta suma son dos identidades de ocho
+ * sumandos distintas, y pueden divergir sin que ningun test lo note: es justo la falla que R3
+ * persigue. Los dos consumidores —el servicio, para los totales del dia; el modulo de cliente,
+ * para los de lo filtrado— llaman a ESTA.
+ *
+ * Los totales los suma quien pinta y no la base, para que sean por construccion la suma de lo
+ * que el usuario ve y para que la identidad de R3 se herede de cada fila al bloque de totales.
+ */
+export function sumarTotalesTablero(filas: readonly FilaTableroDia[]): TotalesTableroDia {
+  return filas.reduce<TotalesTableroDia>(
+    (acc, f) => ({
+      asignadas: acc.asignadas + f.asignadas,
+      entregadas: acc.entregadas + f.entregadas,
+      reprogramadas: acc.reprogramadas + f.reprogramadas,
+      devueltas: acc.devueltas + f.devueltas,
+      rechazadas: acc.rechazadas + f.rechazadas,
+      incidentes: acc.incidentes + f.incidentes,
+      sinRecoger: acc.sinRecoger + f.sinRecoger,
+      enReparto: acc.enReparto + f.enReparto,
+      otros: acc.otros + f.otros,
+    }),
+    {
+      asignadas: 0,
+      entregadas: 0,
+      reprogramadas: 0,
+      devueltas: 0,
+      rechazadas: 0,
+      incidentes: 0,
+      sinRecoger: 0,
+      enReparto: 0,
+      otros: 0,
+    },
+  );
 }
 
 /* -------------------------------------------------------------------------- */
