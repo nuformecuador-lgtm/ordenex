@@ -9,7 +9,65 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-20, cierre. **EMPIEZA A LEER POR AQUÍ**
+## 🚀 DESPLEGADO A PRODUCCIÓN — 2026-08-20. **EMPIEZA A LEER POR AQUÍ**
+
+**La pila entera de la ayuda a la tienda salió a producción.** Release
+[#414](https://github.com/nuformecuador-lgtm/ordenex/pull/414) (`dev` → `prod`, merge commit
+`0931e0fa`): **32 commits · 481 archivos · 9 migraciones**, y el despliegue de Vercel terminó en
+verde.
+
+**Dentro van 235, 236, 237, 238, 240, 241 y 246**, más el lote `ux` (#401). **La 239 NO iba: ya
+estaba en producción** desde el 19 de agosto (PR #400) — verificado en la base, no supuesto.
+
+### Lo que se verificó DESPUÉS de desplegar, contra la base de producción
+
+| comprobación | resultado |
+| --- | --- |
+| migraciones aplicadas | **128 → 137**, exactamente las 9. **0 revertidas** |
+| última | `20260820190000_orden_historial_origen_rechazo_tienda` |
+| `orden.ayuda` (la que **se borra**) | **ya no existe** |
+| `orden.fecha_reparto` (246) · `order_status.ayuda_tienda` (235) · `gestion_orden.confirmada_fisica_at` (238) | **los tres existen** |
+| **órdenes totales** | **163 antes y 163 después** — el `DROP` no perdió una fila |
+| errores de runtime nuevos | **ninguno del despliegue nuevo** (los 4 grupos vivos son del anterior) |
+
+### La migración destructiva, re-medida el mismo día
+
+Su cabecera avisaba de que la foto de agosto caducaba. Se re-midió antes de mergear:
+
+| medida | valor |
+| --- | --- |
+| filas medidas | **163** |
+| `ayuda IS TRUE` | **0** |
+| `ayuda IS FALSE` | **163** |
+
+**El cero no es de universo vacío:** 163 filas en `false` prueban que la columna se lee y que el
+filtro discrimina. Y las 163 órdenes siguen ahí después del `DROP`.
+
+### Y las re-mediciones de despliegue que las fichas exigían
+
+| qué | valor | por qué importaba |
+| --- | --- | --- |
+| **cierres en cola** | **0** de 16 | la ventana nueva de la **238** no bloqueó a nadie |
+| órdenes en el pre-estado · gestiones `devuelta` sin cierre | 0 · 0 | nada a medio anclar |
+| asignadas después de las 18:00 CR | 3 de 33 | proxy del denominador de la 246 |
+| gestiones deshechas | 8 de 66 (12 %) | coherente con lo medido para la 237 |
+
+⚠️ **Producción se está usando como entorno de PRUEBAS**, así que estos números dicen lo que el
+código hace, **no frecuencia operativa**.
+
+### 🔴 Lo que los logs de producción destaparon, y NO es de esta release
+
+**La optimización de ruta no corre en producción.** 23 errores en 24 h por
+`GOOGLE_ROUTE_OPT_PROJECT_ID` ausente, en `/api/cron/procesar-jobs` y en
+**`/mis-asignaciones/reparto`** — la pantalla del mensajero. El código **degrada solo y lo dice**
+(«se usa el local»), así que nadie ve un fallo: el mensajero recibe un orden calculado por la
+heurística local en vez de por Google. Las fichas **91 y 97 están en `done`** con la credencial sin
+poner. **Ficha 251**, y su pregunta es para el humano: *¿debe estar configurada, o el fallback local
+es lo querido?* No hay spec de la 97 que lo diga, así que **no se supone**.
+
+---
+
+## ✅ Cierre de la tanda — 2026-08-20
 
 **Cinco fichas mergeadas en dos días, las cinco con revisión OK. Ninguna `in_progress`.**
 
@@ -35,6 +93,7 @@ implementada y la ficha llevaba semanas mintiendo.
 | **220** | e2e | `pending`, pero **su premisa está podrida**: 13 de 20 specs son `NOT EXECUTED` |
 | **249** | la regla del `down.sql` obligatorio **no la vigila nadie** | `pending` — **tres migraciones llevan seis días sin `down.sql` con el gate en verde**, y van cinco en dos semanas |
 | **250** | el aviso al mensajero dice «Devuelta» cuando la orden está en «Devolución por confirmar» | `pending` — **salió del recorrido de la 239**: es la coincidencia resultado↔estado que esa ficha vino a romper, viva en un retorno al que no llegó |
+| **251** | la **optimización de ruta no corre en producción**: falta `GOOGLE_ROUTE_OPT_PROJECT_ID` | `pending` — **preexistente**, 23 errores en 24 h; degrada al cálculo local **en silencio**. La pregunta (¿debe configurarse?) es **para el humano** |
 
 ### ⚠️ Antes de desplegar — acciones HUMANAS que se arrastran
 
