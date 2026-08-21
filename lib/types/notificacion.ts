@@ -15,10 +15,19 @@ export type NotificacionEvento =
   | "orden_rechazada"
   | "carga_masiva_terminada"
   | "postulacion_mensajero_pendiente"
-  | "cierre_dia_por_aprobar";
+  | "cierre_dia_por_aprobar"
+  // Feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica.
+  | "postulacion_recurso_pendiente";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
-export type NotificacionEntidadTipo = "orden" | "usuario" | "cierre_dia" | "carga";
+export type NotificacionEntidadTipo =
+  | "orden"
+  | "usuario"
+  | "cierre_dia"
+  | "carga"
+  // Feature 253 (D6): fila de `postulacion_recurso`. NO es un `usuario`: esta postulacion no
+  // crea ninguna cuenta (design §14-C), asi que reusar `usuario` seria un dato falso.
+  | "postulacion_recurso";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

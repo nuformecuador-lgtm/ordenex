@@ -149,6 +149,7 @@ model Usuario {
   liquidacionRepartosRegistrados      LiquidacionReparto[]      @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -1998,6 +1999,7 @@ enum NotificacionEvento {
   carga_masiva_terminada
   postulacion_mensajero_pendiente
   cierre_dia_por_aprobar
+  postulacion_recurso_pendiente // feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica
 
   @@map("notificacion_evento")
 }
@@ -2009,6 +2011,7 @@ enum NotificacionEntidadTipo {
   usuario
   cierre_dia
   carga
+  postulacion_recurso // feature 253 (D6): la entidad es una fila de `postulacion_recurso`, que NO es un `usuario` (no crea cuenta)
 
   @@map("notificacion_entidad_tipo")
 }
@@ -2250,4 +2253,49 @@ model RankingSnapshotFila {
   @@unique([snapshotId, mensajeroId]) // R13: un mensajero no puede aparecer dos veces en el mismo dia
   @@unique([snapshotId, puesto]) // R13: dos filas no pueden ocupar el mismo puesto
   @@map("ranking_snapshot_fila")
+}
+
+// Feature 253 (design §2.3) — tipo del recurso ofrecido en una postulacion de la landing
+// publica. Enum Postgres nativo (patron RolValue / MetodoPagoValue): son DOS y cerrados, y la
+// tarjeta que abre el formulario ya los fija (`LandingPostular.tsx`).
+enum PostulacionRecursoTipo {
+  vehiculo
+  bodega
+
+  @@map("postulacion_recurso_tipo")
+}
+
+// Feature 253 (design §2.3, R21) — una persona del PUBLICO ofrece un vehiculo o una bodega desde
+// la landing. No es una cuenta: sin login, sin documentos, sin cedula y sin aprobacion que
+// conceda acceso (por eso NO vive en `usuario`, design §14-C).
+//
+// POR QUE `atendida_at` + `atendida_por_id` Y NO UN ENUM DE ESTADO (design §3/§14-F): hay
+// exactamente DOS situaciones —pendiente (`atendida_at IS NULL`, la escribe la Server Action
+// publica) y atendida (la escribe un administrador con nombre y hora)—, y un enum de dos valores
+// no guarda QUIEN ni CUANDO, que es justo el dato que se busca cuando alguien pregunta si a esa
+// persona la llamaron. Es el mismo patron de mutacion UNICA y en un solo sentido que
+// `orden_nota.deleted_at`. NO se declara ningun tercer estado: un valor sin productor es deuda.
+//
+// SIN `@@unique` sobre `correo` ni sobre `telefono` (R25): quien tiene un vehiculo Y una bodega
+// postula dos veces, y quien corrige su mensaje vuelve a enviar.
+//
+// EL CHECK `postulacion_recurso_atendida_completa` (las dos columnas de la atencion van juntas o
+// no van) VIVE SOLO EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que
+// `notificacion_destinatario_xor`). Su existencia la afirma el test estatico de la migracion.
+model PostulacionRecurso {
+  id            String                 @id @default(uuid())
+  tipo          PostulacionRecursoTipo
+  nombre        String
+  telefono      String
+  correo        String // normalizado en el borde: recortado y en minusculas (R12/R20)
+  mensaje       String // texto libre topado en el borde (R13); sin cota seria una puerta abierta
+  createdAt     DateTime               @default(now()) @map("created_at")
+  atendidaAt    DateTime?              @map("atendida_at") // NULL = pendiente
+  atendidaPorId String?                @map("atendida_por_id")
+
+  atendidaPor Usuario? @relation("PostulacionRecursoAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([atendidaAt, createdAt]) // R26: el listado del panel (`atendida_at IS NULL ORDER BY created_at DESC`) y el barrido del cron de purga
+  @@index([atendidaPorId]) // segunda FK indexada (patron `orden_nota`): sin el, el RESTRICT recorre la tabla al borrar un usuario
+  @@map("postulacion_recurso")
 }

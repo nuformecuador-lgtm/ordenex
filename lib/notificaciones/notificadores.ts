@@ -25,9 +25,11 @@ import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
   emitirPostulacionPendiente,
+  emitirPostulacionRecursoPendiente,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
   type PostulacionContexto,
+  type PostulacionRecursoContexto,
 } from "@/lib/notificaciones/emitir";
 
 /**
@@ -53,6 +55,8 @@ export type PostulacionNotificador = (ctx: PostulacionContexto) => Promise<void>
 export type CierreNotificador = (ctx: CierrePorAprobarContexto) => Promise<void>;
 /** Firma del notificador de carga masiva terminada (R22/R25). */
 export type CargaMasivaNotificador = (ctx: CargaMasivaContexto) => Promise<void>;
+/** Feature 253 (D6). Firma del notificador de postulacion de vehiculo/bodega pendiente. */
+export type PostulacionRecursoNotificador = (ctx: PostulacionRecursoContexto) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -61,7 +65,8 @@ export type CargaMasivaNotificador = (ctx: CargaMasivaContexto) => Promise<void>
  */
 export const notificadorNoOp: PostulacionNotificador &
   CierreNotificador &
-  CargaMasivaNotificador = async () => {};
+  CargaMasivaNotificador &
+  PostulacionRecursoNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -117,6 +122,26 @@ export function notificarCargaMasivaTerminadaCon(
   };
 }
 
+/**
+ * Feature 253 (D6)/R25: emite el aviso de postulacion de recurso pendiente contra `repo`,
+ * absorbiendo su fallo. BEST-EFFORT y no transaccional, por la misma razon que sus tres hermanos:
+ * corre DESPUES de que la fila ya este persistida, y un aviso perdido no puede invalidar una
+ * postulacion que la persona ya dio por enviada. Al reves seria mucho peor: que la campana
+ * decidiera si se registra o no lo que alguien escribio en la landing.
+ */
+export function notificarPostulacionRecursoPendienteCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): PostulacionRecursoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "postulacion_recurso_pendiente",
+      () => emitirPostulacionRecursoPendiente(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -128,3 +153,6 @@ export const notificarCierreDiaPorAprobarReal: CierreNotificador = async (ctx) =
 
 export const notificarCargaMasivaTerminadaReal: CargaMasivaNotificador = async (ctx) =>
   notificarCargaMasivaTerminadaCon(repoReal())(ctx);
+
+export const notificarPostulacionRecursoPendienteReal: PostulacionRecursoNotificador = async (ctx) =>
+  notificarPostulacionRecursoPendienteCon(repoReal())(ctx);
