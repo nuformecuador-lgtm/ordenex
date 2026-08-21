@@ -3832,3 +3832,31 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - **Reemplaza al cotizador del PR #418**, cerrado por decision del responsable de producto: cotizaba
   una sola por distrito, emitia crudo y devolvia ceros sin tarifa. Su rama no se borro. **Aviso de
   registro: el id 248 esta usado dos veces** y hay que renumerar conservando el slug.
+
+## 2026-08-21 — 258 · monitoreo: el tablero del día sobre las primitivas
+- Rediseño de `/monitoreo` sobre la dirección A aprobada: los ocho contadores pasan a la
+  primitiva `Badge`, los cinco estados llevan icono vía `EmptyState`/`Alert`, el detalle deja el
+  `Sheet` y pasa a `Modal` + `DataTable` + `Pagination`, y entra una lectura nueva de backend —
+  entregas acumuladas por hora, que REUSA `GraficaLineas` de analítica sin abrir su
+  confinamiento de `recharts`.
+- Requisitos cubiertos: R1..R78 (revisión APROBADA, 78/78 verificados uno a uno).
+- **Lo que encontró ver la app y la suite no podía**, con 16.790 tests en verde: la cifra de
+  «Reprogramadas» fuera de la caja visible (estaba en el DOM, así que `toHaveTextContent`
+  pasaba); la gráfica en 371 px con ocho horas planas; la etiqueta partiéndose dentro de la
+  palabra (pasa el test de recorte porque no desborda); y la cabecera recortándose **en
+  silencio** entre 768 y 830 px, porque `SidebarInset` usa `overflow-x-clip`.
+- La causa del último no era la aparente: `CardHeader` es `grid-cols-[1fr_auto]` y ese `1fr`
+  toma como mínimo el *min-content* de su hijo, así que con el avatar de ancho fijo y el nombre
+  en `nowrap` **el `truncate` nunca llegaba a activarse**. Faltaba `min-w-0`.
+- Lección reutilizable: tres mediciones seguidas dieron verde sobre una pantalla con un número
+  recortado. El criterio era correcto; fallaba **dónde se aplicaba** — siempre sobre la pieza
+  recién tocada, nunca sobre la caja que la contiene.
+- Renumerada de 255 a 258: otra sesión mergeó una 255 distinta mientras ésta se implementaba.
+  El id se comprobó al darla de alta y entonces el máximo era 254 — **el pre-vuelo caduca**.
+- Deuda dejada: `components/ui/table.tsx` queda **sin consumidores** al migrar el detalle a
+  `DataTable`. Anotada, no borrada. Salida recomendada: un chore que haga a `DataTable`
+  apoyarse en la primitiva, para que «la única tabla de listas» de `DESIGN.md` sea cierto por
+  construcción y desaparezca la excepción.
+- Guardias tocadas, ninguna aflojada: `frontera` queda **más** estricta (marca cada consulta por
+  posición); `cobertura-tablas` sube conteos exactos sin perder descargas; la de `recharts` sin
+  diff.
