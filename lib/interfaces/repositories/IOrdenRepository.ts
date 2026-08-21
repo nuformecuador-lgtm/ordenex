@@ -681,10 +681,18 @@ export interface IOrdenRepository {
    * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
    * el WHERE, no ampliable desde el input) y no borradas (`deleted_at IS NULL`). Opcional
    * `estatusId` acota por estado. Devuelve `{ items, total }` para la paginacion offset/limit.
+   *
+   * Feature 257 (R18/R20): los filtros opcionales llegan como ESCALARES TIPADOS, nunca como un
+   * fragmento de `WhereInput`; asi ningun llamador puede colar un `tiendaId` propio. La ventana
+   * de `createdAt` es SEMIABIERTA: `createdAtDesde` inclusiva, `createdAtHasta` EXCLUSIVA.
    */
   listByOwner(params: {
     ownerId: string;
     estatusId?: string;
+    createdAtDesde?: Date;
+    createdAtHasta?: Date;
+    numGuia?: number;
+    numRemision?: string;
     skip: number;
     take: number;
   }): Promise<ApiOrdenListResult>;

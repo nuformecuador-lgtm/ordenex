@@ -3806,3 +3806,29 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - **Probado en los dos sentidos**, que es donde mueren estos filtros, y con un falso positivo
   instructivo por el camino: la primera tanda dijo «se niega» en la landing y era **el instrumento**
   —había añadido texto inválido a un `.tsx` y lo que fallaba era el typecheck—.
+
+## 2026-08-21 · Cotizar un lote por API key, sin crear la orden para saber
+
+**PR #432** · `POST /api/ordenes/api-key/cotizacion`
+
+- **La decision de la feature es una sola, y es sobre dinero:** sin tarifa vigente el borde
+  **da error**, no ceros. La carga tolera la ausencia de tarifa y emite `"0.00"` (gap D1/R8 de la
+  98) porque el paquete se mueve igual y se liquida despues; en una **cotizacion** ese cero es un
+  **precio equivocado servido como precio**. La asimetria entre las dos vias es deliberada y esta
+  escrita: no se "unifico" tocando la carga.
+- **No se reimplemento ni una multiplicacion.** Los dos escenarios salen de llamar dos veces a
+  `derivarIngresoOrden`, la misma funcion que usa el cierre. El precedente estaba medido: la 204
+  encontro **un centimo de diferencia en 14 de 66 ordenes** cuando el navegador recalculaba por su
+  cuenta, por dos causas distintas —binario y un redondeo intermedio que faltaba—.
+- **El total de lote declara lo que NO sumo.** Contadores de cotizadas y excluidas, porque una
+  fila sin cobertura no tiene precio. Un total que calla las excluidas se lee como el precio del
+  lote sin serlo: la misma familia de fallo silencioso de las fichas 248, 252 y 254.
+- **Los 2 decimales chocaban con la 230**, que decidio que el dinero se pinta sin centimos. No se
+  debilito esa guardia: gano un **diente 6**, hermano de la excepcion que ya tenian las descargas
+  XLSX/CSV, que afirma **en positivo** que este camino si emite decimales. Una cotizacion es un
+  contrato de maquina, no una pantalla. Se verifico mutandolo, y los dientes 1-5 quedaron intactos.
+- **El censo de OpenAPI subio de 7 a 8 paths en el mismo commit** que publica la ruta, nunca en un
+  commit de arreglo posterior — se endurecio (lista exacta, ordenada, con espejo en el `.yaml`).
+- **Reemplaza al cotizador del PR #418**, cerrado por decision del responsable de producto: cotizaba
+  una sola por distrito, emitia crudo y devolvia ceros sin tarifa. Su rama no se borro. **Aviso de
+  registro: el id 248 esta usado dos veces** y hay que renumerar conservando el slug.

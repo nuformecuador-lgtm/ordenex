@@ -1620,17 +1620,41 @@ export class OrdenRepository implements IOrdenRepository {
    * (`tienda_id = ownerId` no opcional) + `deleted_at IS NULL`; ningun parametro externo
    * puede ampliarlo. `estatusId` opcional acota por estado. `total` con el MISMO where para
    * paginar de forma determinista.
+   *
+   * Feature 257 (R18/R20/R23/R25): los filtros nuevos llegan como ESCALARES TIPADOS (`Date`,
+   * `number`, `string`), jamas como un fragmento de `WhereInput`; si se aceptara un fragmento,
+   * un integrador podria inyectar su propio `tiendaId`. La ventana de `createdAt` es
+   * SEMIABIERTA (`gte` / `lt`, NUNCA `lte`): el service ya movio la cota superior al comienzo
+   * del dia siguiente en CR para que `hasta` sea inclusivo.
    */
   async listByOwner(params: {
     ownerId: string;
     estatusId?: string;
+    createdAtDesde?: Date;
+    createdAtHasta?: Date;
+    numGuia?: number;
+    numRemision?: string;
     skip: number;
     take: number;
   }): Promise<ApiOrdenListResult> {
+    // R20/R23: `tiendaId` y `deletedAt` se escriben PRIMERO y de forma INCONDICIONAL. No es
+    // estilo: en un object literal, un spread POSTERIOR que repitiera `tiendaId` lo pisaria (gana
+    // el ultimo valor escrito) y el listado devolveria ordenes ajenas sin fallar ruidosamente.
     const where: Prisma.OrdenWhereInput = {
-      tiendaId: params.ownerId, // R6/R7: owner FORZADO
-      deletedAt: null, // R11
+      tiendaId: params.ownerId, // R6/R7 (106) + R20 (257): owner FORZADO
+      deletedAt: null, // R11 (106) + R23 (257)
       ...(params.estatusId ? { estatusId: params.estatusId } : {}),
+      // R15: igualdad estricta sobre columna nullable -> `num_guia = $1` no casa con NULL en SQL.
+      ...(params.numGuia !== undefined ? { numGuia: params.numGuia } : {}),
+      ...(params.numRemision !== undefined ? { numRemision: params.numRemision } : {}),
+      ...(params.createdAtDesde || params.createdAtHasta
+        ? {
+            createdAt: {
+              ...(params.createdAtDesde ? { gte: params.createdAtDesde } : {}),
+              ...(params.createdAtHasta ? { lt: params.createdAtHasta } : {}),
+            },
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.orden.findMany({

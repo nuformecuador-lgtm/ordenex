@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { Prisma } from "@prisma/client";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -7,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { formatearValor } from "@/components/private/analytics/formato";
 import { PriceLabel } from "@/components/shared/PriceLabel";
 import { formatMonto, formatMontoString, monedaConfig, money } from "@/lib/config/moneda";
+import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
 import { lineasSinComentarios, quitarComentarios } from "../../fixtures/sin-comentarios";
 
 /**
@@ -19,7 +21,7 @@ import { lineasSinComentarios, quitarComentarios } from "../../fixtures/sin-come
  * los centimos vuelvan a una esquina de la app sin que nadie se entere. Sin esta
  * guardia, el rojo llegaria meses despues y en forma de queja del humano.
  *
- * CINCO DIENTES, y cada uno con su contraprueba dentro del propio archivo:
+ * SEIS DIENTES, y cada uno con su contraprueba dentro del propio archivo:
  *
  *   1. COMPORTAMIENTO — ningun camino de dinero emite el separador decimal
  *      seguido de un digito. Corpus determinista de >100 importes por los cinco
@@ -27,11 +29,19 @@ import { lineasSinComentarios, quitarComentarios } from "../../fixtures/sin-come
  *   2. ESTRUCTURA — nadie en `app/**` ni `components/**` serializa un importe
  *      saltandose el formateador compartido (R19b).
  *   3. FRONTERA — los modulos de descarga XLSX/CSV NO pasan por el formateador:
- *      la contabilidad conserva los centimos (R16).
+ *      la contabilidad conserva los centimos (R16). Es la PRIMERA de las dos
+ *      excepciones declaradas de esta guardia —descargas XLSX/CSV Y SALIDAS DE
+ *      MAQUINA—; la segunda la vigila el diente 6.
  *   4. NO-OBJETIVO — porcentaje, duracion y conteo de analitica NO se tocan
  *      (R15, D2), y la rama verbatim queda declarada como excepcion (C2).
  *   5. PROSA — ningun docstring de la superficie de dinero sigue prometiendo
  *      decimales (R18, C4).
+ *   6. SALIDAS DE MAQUINA — hermano explicito del diente 3, añadido por la
+ *      feature 255: el formateador de la cotizacion por API key
+ *      (`lib/utils/monto-cotizacion.ts`) NO es ninguno de los cinco caminos
+ *      publicos, ninguna pantalla lo importa, y SI emite exactamente dos
+ *      decimales a proposito porque su salida es un contrato JSON de maquina
+ *      (255/R40, R41, R42).
  *
  * El separador decimal se lee de `monedaConfig`, NO se escribe a mano: es la
  * decision Q1(b) del spec. El campo dejo de gobernar la salida y su oficio nuevo
@@ -374,7 +384,10 @@ describe("guardia 230 · diente 2 — nadie serializa un importe a mano", () => 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Diente 3 — la frontera de las descargas: la contabilidad conserva los centimos.
+// Diente 3 — la frontera de las descargas XLSX/CSV y las salidas de maquina:
+// la contabilidad conserva los centimos. Esta mitad vigila las DESCARGAS; la
+// otra excepcion de la misma familia —las salidas de maquina— vive en el
+// diente 6, al final de este archivo.
 // ───────────────────────────────────────────────────────────────────────────
 
 const MODULOS_DE_DESCARGA: readonly string[] = [
@@ -552,5 +565,148 @@ describe("guardia 230 · diente 5 — ningun docstring promete decimales (R18)",
       "export const x = 1;",
     ].join("\n");
     expect(promesasEnProsa(honesto, "honesto")).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Diente 6 — salidas de maquina: el contrato JSON SI lleva centimos (255/R41).
+//
+// Hermano explicito del diente 3 y con su misma forma (censo por ruta +
+// contraprueba). El diente 3 declara la primera excepcion de esta guardia —las
+// descargas XLSX/CSV, "la contabilidad los necesita"—; esta es la segunda: un
+// importe que viaja en un contrato JSON y lo lee un integrador, no una persona.
+// Las dos cosas son compatibles y conviene que quede escrito: dentro de seis
+// meses, quien encuentre un `toFixed(2)` de dinero en `lib/` no debe leerlo
+// como una incoherencia que hay que "arreglar".
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Las salidas de MAQUINA censadas una a una, con su motivo. Igual que el censo
+ * del diente 3: si el modulo se mueve o se borra, el test cae en vez de salirse
+ * del alcance en silencio, y añadir una salida nueva obliga a tocar este archivo
+ * y a escribir por que.
+ *
+ * SOBRE LA RUTA DEL CANAL POR API KEY. `design.md` §6 (decision b) contemplaba
+ * nombrar aqui `app/api/ordenes/api-key/cotizacion/route.ts` como excepcion
+ * prevista al barrido de pantallas. Resulto INNECESARIA: el route handler NO
+ * importa el formateador, porque el formateo ocurre entero en `lib/` (el service
+ * compone los importes y la ruta solo devuelve el JSON ya hecho). Asi que la
+ * afirmacion de abajo es la fuerte —ninguna pantalla lo importa, CERO
+ * excepciones— y el propio barrido de `app/**` vigila esa ruta: si algun dia
+ * alguien mueve el formateo al handler, esta guardia se pone roja. No se declara
+ * una excepcion que el codigo no necesita.
+ */
+const SALIDAS_DE_MAQUINA: readonly { ruta: string; porque: string }[] = [
+  {
+    ruta: "lib/utils/monto-cotizacion.ts",
+    porque:
+      "importes del contrato JSON de la cotizacion por API key (feature 255): los lee un integrador, no una persona, y un precio servido como respuesta no puede perder centimos por el camino",
+  },
+];
+
+/** Un import de una salida de maquina, por el alias o por ruta relativa. */
+const IMPORTA_SALIDA_DE_MAQUINA = /from\s+["'][^"']*\/monto-cotizacion["']/;
+
+/** Los nombres de los CINCO caminos publicos, tal cual se exportan hoy. */
+const EXPORTA_CAMINO_PUBLICO =
+  /export\s+(?:async\s+)?(?:function|const|class)\s+(formatMontoString|money|formatMonto|PriceLabel|formatearValor)\b/;
+
+/** El separador decimal CONFIGURADO seguido de EXACTAMENTE dos digitos. Lo exigido. */
+const EXACTAMENTE_DOS_DECIMALES = new RegExp(
+  `${escaparRegex(monedaConfig.separadorDecimal)}\\d\\d$`,
+);
+
+describe("guardia 230 · diente 6 — las salidas de maquina SI llevan centimos (255/R41)", () => {
+  it("el censo existe, vive fuera de los arboles de pantalla y no es un camino publico (R40)", () => {
+    expect(SALIDAS_DE_MAQUINA.length).toBeGreaterThan(0);
+    for (const { ruta, porque } of SALIDAS_DE_MAQUINA) {
+      expect(existsSync(path.join(RAIZ, ruta)), `${ruta} no existe`).toBe(true);
+      expect(porque.length, `${ruta} esta censado sin motivo`).toBeGreaterThan(20);
+      // R40: fuera de `app/**` y `components/**`, que es donde barre el diente 2.
+      for (const arbol of ARBOLES_DE_PANTALLA) {
+        expect(ruta.startsWith(`${arbol}/`), `${ruta} vive en un arbol de pantalla`).toBe(false);
+      }
+      // Y no es ninguno de los cinco caminos publicos disfrazado: no exporta
+      // ninguno de sus cinco nombres.
+      const nombrado = EXPORTA_CAMINO_PUBLICO.exec(codigo(ruta));
+      expect(nombrado?.[1] ?? null, `${ruta} exporta un camino publico de dinero`).toBeNull();
+    }
+    // Los cinco caminos publicos siguen siendo cinco: si alguien añadiera uno,
+    // el regex de arriba se quedaria corto sin que nadie lo notara.
+    expect(CAMINOS_STRING.length + CAMINOS_NUMERO.length).toBe(5);
+  });
+
+  it("ninguna pantalla importa una salida de maquina, sin excepciones (R40, R41)", () => {
+    const hallazgos: string[] = [];
+    for (const dir of ARBOLES_DE_PANTALLA) {
+      for (const absoluta of listarFuentes(path.join(RAIZ, dir))) {
+        const ruta = relativa(absoluta);
+        lineasSinComentarios(readFileSync(absoluta, "utf8")).forEach((linea, indice) => {
+          if (IMPORTA_SALIDA_DE_MAQUINA.test(linea)) hallazgos.push(`${ruta}:${indice + 1}`);
+        });
+      }
+    }
+    expect(
+      hallazgos,
+      "una pantalla consumio el formateador de la cotizacion: el dinero que se PINTA va sin centimos y sale de `@/lib/config/moneda`",
+    ).toEqual([]);
+
+    // El route handler del canal por API key entra en ese barrido —vive en
+    // `app/**`— y hoy pasa porque NO importa el formateador. Se ancla aqui para
+    // que el barrido de arriba no pueda estar verde por no haber mirado el
+    // fuente que la feature 255 añadio.
+    const rutaDelCanal = "app/api/ordenes/api-key/cotizacion/route.ts";
+    expect(existsSync(path.join(RAIZ, rutaDelCanal)), `${rutaDelCanal} no existe`).toBe(true);
+    expect(IMPORTA_SALIDA_DE_MAQUINA.test(codigo(rutaDelCanal))).toBe(false);
+  });
+
+  it("el formateador de la cotizacion SI emite exactamente dos decimales (R35, R41)", () => {
+    // La afirmacion en POSITIVO, que es el punto de este diente: si alguien
+    // "alinea" el modulo con las pantallas y le quita los centimos, esto se pone
+    // ROJO y la cotizacion no pierde dinero en silencio.
+    expect(CORPUS_STRING.length).toBeGreaterThan(100);
+    const sinLosDosDecimales = CORPUS_STRING.filter(
+      (entrada) =>
+        !EXACTAMENTE_DOS_DECIMALES.test(formatMontoCotizacion(new Prisma.Decimal(entrada))),
+    );
+    expect(
+      sinLosDosDecimales,
+      "el formateador de la cotizacion dejo de emitir los dos decimales del contrato",
+    ).toEqual([]);
+  });
+
+  it("y convive con las pantallas: el MISMO importe va sin centimos por el camino publico", () => {
+    // Las dos cosas a la vez y sobre el mismo numero, para que la coexistencia
+    // quede escrita y no se relea como una incoherencia.
+    const importe = "13331832.72";
+    expect(formatMontoCotizacion(new Prisma.Decimal(importe))).toMatch(EXACTAMENTE_DOS_DECIMALES);
+    expect(formatMontoString(importe)).not.toMatch(CON_DECIMAL);
+  });
+
+  it("CONTRAPRUEBA: un modulo que DEJARA de emitir decimales seria cazado", () => {
+    // La mutacion escrita dentro del test, como la del diente 3: alguien pasa el
+    // formateador de la cotizacion por el camino publico de las pantallas para
+    // "unificar el aspecto del dinero". El detector dispara en todo el corpus.
+    const formateadorAlineadoConLasPantallas = (valor: Prisma.Decimal): string =>
+      formatMontoString(valor.toFixed(2));
+
+    const cazados = CORPUS_STRING.filter(
+      (entrada) =>
+        !EXACTAMENTE_DOS_DECIMALES.test(
+          formateadorAlineadoConLasPantallas(new Prisma.Decimal(entrada)),
+        ),
+    );
+    expect(cazados.length).toBeGreaterThan(100);
+
+    // Y el detector de imports caza a una pantalla que lo consumiera...
+    const ficticio = `
+      import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
+      export function Celda({ monto }: { monto: Prisma.Decimal }) { return formatMontoCotizacion(monto); }
+    `;
+    expect(IMPORTA_SALIDA_DE_MAQUINA.test(quitarComentarios(ficticio))).toBe(true);
+    // ...sin denunciar un import cualquiera del modulo de moneda.
+    expect(IMPORTA_SALIDA_DE_MAQUINA.test(`import { money } from "@/lib/config/moneda";`)).toBe(
+      false,
+    );
   });
 });
