@@ -15,6 +15,16 @@ const CLASE_ENLACE =
  * el router de Next fuerza `scroll-behavior: auto` mientras salta al ancla, lo
  * que anularía el desplazamiento suave declarado en `globals.css`.
  *
+ * Van en el MISMO orden en que `app/page.tsx` compone las secciones (servicios →
+ * cómo funciona → políticas → postular); un test lo fija leyendo los `href` de
+ * esta nav contra los `id` que la página renderiza.
+ *
+ * «Trabajá con nosotros» apunta a `#trabaja-con-nosotros`, no a `/postulacion`:
+ * esa sección ofrece TRES vías —postular vehículo, postular bodega y postularse
+ * como persona— y solo la tercera lleva a `/postulacion`; las otras dos abren
+ * `PostularRecursoModal` sin salir de la página. Enlazar la ruta directa se
+ * saltaba las otras dos.
+ *
  * «Rastrear envío» YA NO es inerte (feature 229): es el disparador del diálogo de
  * consulta pública por guía, y su botón lo emite `RastreoDialog` —isla cliente
  * montada aquí dentro, igual que la landing hace con sus cifras
@@ -38,11 +48,11 @@ export function LandingNav() {
         <a href="#como-funciona" className={CLASE_ENLACE}>
           Cómo funciona
         </a>
-        <Link href="/postulacion" className={CLASE_ENLACE}>
-          Trabajá con nosotros
-        </Link>
         <a href="#politicas" className={CLASE_ENLACE}>
           Políticas
+        </a>
+        <a href="#trabaja-con-nosotros" className={CLASE_ENLACE}>
+          Trabajá con nosotros
         </a>
       </div>
 
