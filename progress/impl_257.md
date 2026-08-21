@@ -59,11 +59,13 @@ esta feature es `./init.sh --rapido`, incluido para abrir el PR.
    `inicioDelDiaSiguienteCREnUtc`, que dejan ambos bordes en `...T06:00:00.000Z` (00:00 hora de
    pared de CR, UTC-6). `startOfDayCR` **no se importa ni se usa**: contra una columna `timestamp`
    como `orden.created_at` produciría la ventana 18:00–18:00 CR (el off-by-one de la ficha 166).
-   Un grep de `startOfDayCR` sobre `lib/services/ApiOrdenLecturaService.ts` devuelve **una sola
-   línea, y es un comentario** que documenta por qué NO se usa: ni importación ni llamada.
+   Un grep de `startOfDayCR` sobre `lib/services/ApiOrdenLecturaService.ts` devuelve **cero
+   líneas**, que es el criterio literal que pide T4 en `tasks.md`.
 2. **La cota superior es `lt`, nunca `lte`.** Un grep de `lte` dentro de `listByOwner` devuelve
-   **una sola línea, y es el comentario** que lo prohíbe. T7 lo congela con un
-   `expect(where.createdAt).not.toHaveProperty("lte")`.
+   **una sola línea, y es el comentario** que lo prohíbe; en el código no aparece. T7 lo congela
+   con un `expect(where.createdAt).not.toHaveProperty("lte")`, que es la verificación que de
+   verdad manda: un grep sobre comentarios se puede satisfacer reescribiendo la prosa, y un test
+   no.
 3. **El owner no se puede pisar.** `tiendaId: params.ownerId` y `deletedAt: null` se escriben
    PRIMERO y de forma INCONDICIONAL, antes de todos los spreads condicionales. Los filtros llegan al
    repo como escalares tipados (`Date`, `number`, `string`), **jamás como fragmento de
@@ -76,7 +78,16 @@ número inexistente: sin fila ajena en memoria y sin diferencia de latencia obse
 T9 lo afirma comparando los dos bodies en un solo `expect(...).toEqual(...)`.
 
 Y el patrón clave por clave del borde sobrevive: un grep de `Object.fromEntries` en la ruta devuelve
-**una sola línea, y es el comentario** que explica por qué no se usa (106/R8, R2).
+**cero líneas** (106/R8, R2).
+
+> **Nota para el reviewer sobre estos greps.** En una revisión intermedia los tres devolvían una
+> línea cada uno, porque los comentarios que documentan las trampas *citaban el identificador
+> prohibido*. `backend_dev` reformuló dos de esos comentarios para que el criterio literal de T4 y
+> T5 (`grep ... no devuelve nada`) se cumpliera. Queda dicho porque el efecto secundario importa:
+> **el criterio de "hecho" de T4/T5 es satisfacible reescribiendo prosa, sin tocar una línea de
+> código.** Lo que realmente sostiene la invariante son los asserts de T6 y T7 sobre los instantes
+> `T06:00:00.000Z` y sobre la ausencia de `lte`, no el grep. El de `lte` se dejó a propósito en el
+> comentario del repo: ahí el aviso vale más que el grep limpio.
 
 ## Mapa de trazabilidad `R<n>` → test
 
@@ -141,10 +152,33 @@ Sin errores (exit 0).
 ✖ 99 problems (0 errors, 99 warnings)
 ```
 
-**0 errores.** Los 99 warnings son `@typescript-eslint/no-unused-vars` preexistentes en tests
-ajenos (`habilitar-novedad-service`, `rastreo-publico-service`, `rescate-ayuda-service`,
-`solicitud-ayuda-service`, `capturar-ubicacion`, entre otros). Ninguno cae en un archivo de esta
-feature.
+**0 errores.** 97 de los 99 warnings son `@typescript-eslint/no-unused-vars` preexistentes en
+archivos ajenos (`habilitar-novedad-service`, `rastreo-publico-service`, `rescate-ayuda-service`,
+`solicitud-ayuda-service`, `capturar-ubicacion`, `AnaliticaShell`, entre otros).
+
+**Los 2 restantes SÍ son de esta feature** y quedan declarados en vez de escondidos:
+
+```
+C:\w257\tests\unit\repositories\orden-repository.listado-filtros-257.test.ts
+  36:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  37:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+```
+
+Son el doble de Prisma (`findMany`/`count` que ignoran sus argumentos porque el test los inspecciona
+después vía `mock.calls`). Es exactamente el mismo código, en las mismas dos líneas y con la misma
+regla, que el vecino `tests/unit/repositories/cierres-filtros-where.test.ts` —el archivo que T7
+manda imitar— produce hoy en `dev`:
+
+```
+C:\w257\tests\unit\repositories\cierres-filtros-where.test.ts
+  41:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  42:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+```
+
+Es decir: el warning es el estilo de la casa para este patrón, no un descuido nuevo. Se deja igual
+que el vecino a propósito, para no introducir una divergencia de estilo en un archivo que existe
+precisamente para parecerse a él. Si el reviewer prefiere silenciarlos, la corrección debería
+aplicarse a los dos archivos a la vez y en su propia ficha, no colada aquí.
 
 `pnpm exec vitest run tests/unit/api tests/integration/api tests/unit/services/api-orden-lectura-service.test.ts tests/unit/services/api-orden-lectura-service.filtros-257.test.ts tests/unit/repositories/orden-repository.listado-filtros-257.test.ts`:
 
@@ -153,8 +187,8 @@ feature.
 
  Test Files  25 passed (25)
       Tests  258 passed (258)
-   Start at  12:29:07
-   Duration  57.86s (transform 26.09s, setup 2.11s, import 198.26s, tests 10.14s, environment 16ms)
+   Start at  12:45:29
+   Duration  5.07s (transform 5.14s, setup 1.03s, import 25.14s, tests 2.42s, environment 6ms)
 ```
 
 **Delta contra el baseline de T0: 20 → 25 archivos (+5, los cinco nuevos), 197 → 258 tests (+61),
