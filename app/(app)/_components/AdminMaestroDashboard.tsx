@@ -2,31 +2,41 @@ import { AppPage } from "@/components/shared/AppPage";
 import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { PostulacionesPendientesPanel } from "./PostulacionesPendientesPanel";
+import { PostulacionRecursoPanel } from "./PostulacionRecursoPanel";
 
 /**
  * Dashboard del admin maestro (feature 23, R5). Server Component al estilo de
- * `AdminTiendaDashboard` (feature 26): compone el shell (`AppPage`) y, como
- * unico bloque funcional, el panel de postulaciones pendientes. No obtiene
- * datos sensibles por props; el panel cliente consume las Server Actions de la
- * feature 22 (que autorizan por rol en el backend).
+ * `AdminTiendaDashboard` (feature 26): compone el shell (`AppPage`) y los bloques
+ * funcionales. No obtiene datos sensibles por props; los paneles cliente consumen
+ * las Server Actions (que autorizan por rol en el backend).
  *
- * Encima de ese panel va el contenedor «Entregas». Es presentacion pura: no pinta cuerpo
- * mientras no reciba hijos, asi que hoy solo aporta su encabezado.
+ * Aqui NO hay nada de entregas, y es a proposito: la BARRA DE FILTROS de entregas se movio
+ * a la pagina de analitica por pedido humano del 2026-08-17, que es su sitio. Fuera del
+ * shell, este dashboard no pinta mas que los dos paneles de postulaciones.
  *
- * La BARRA DE FILTROS de entregas NO vive aqui (pedido humano del 2026-08-17): su sitio es
- * la pagina de analitica. Este componente vuelve a no tener mas bloque funcional que el
- * panel de postulaciones.
+ * Feature 253 (T7.3, design §7) — el panel de VEHICULOS Y BODEGAS entra DEBAJO del de
+ * mensajeros, cada uno en su `ContenedorSeccion` con su titulo. Sin ruta nueva y sin item de
+ * sidebar: `/dashboard` ya es la pantalla de aterrizaje de `maestro` y `admin`, asi que lo ven
+ * al entrar.
+ *
+ * ⚠️ R36 — LA DESCRIPCION DE LA PAGINA SE CORRIGIO EN LA MISMA TANDA. Decia "Postulaciones de
+ * mensajeros pendientes", que describia la pantalla ENTERA; con dos paneles esa frase pasaba a
+ * ser falsa en pequeno, y un texto que dejo de ser cierto es exactamente lo que esta ficha vino
+ * a cerrar una capa mas arriba.
  */
-const TITULO_ENTREGAS = "Entregas";
-
 export function AdminMaestroDashboard() {
   return (
     <AppPage
       title="Panel maestro"
-      description="Postulaciones de mensajeros pendientes"
+      description="Postulaciones pendientes: mensajeros, y vehículos o bodegas ofrecidos desde la web"
     >
-      <ContenedorSeccion titulo={TITULO_ENTREGAS} />
-      <PostulacionesPendientesPanel />
+      <ContenedorSeccion titulo="Postulaciones de mensajeros">
+        <PostulacionesPendientesPanel />
+      </ContenedorSeccion>
+
+      <ContenedorSeccion titulo="Vehículos y bodegas ofrecidos">
+        <PostulacionRecursoPanel />
+      </ContenedorSeccion>
     </AppPage>
   );
 }
