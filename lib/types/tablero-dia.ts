@@ -50,6 +50,14 @@ export type BucketSinResultado = "sinRecoger" | "enReparto" | "otros";
  * devolucion que el mensajero acaba de registrar—, asi que cuenta en `devueltas` del primer eje
  * y no puede aparecer como "trabajo parado" en `sinRecoger` ni en `enReparto`.
  *
+ * FEATURE 235 (T1.5, 2026-08-19) — `ayuda_tienda` TAMPOCO esta aqui, y es la MISMA clase de
+ * decision: el mapa es PARCIAL con default `otros`, asi que absorbe el value nuevo sin quejarse y
+ * la decision hay que AFIRMARLA (`buckets-estatus.test.ts`). Los buckets `sinRecoger` y `enReparto`
+ * describen el AVANCE NORMAL del dia —lo que espera salir y lo que va en la calle—; una orden
+ * DETENIDA esperando a que la tienda conteste no es ninguno de los dos: contarla en `enReparto`
+ * diria que el reparto avanza cuando lo que hay es una parada. Cae en `otros`, que es el bucket que
+ * delata que el mapa se quedo corto — y aqui no se quedo corto: se quedo asi a proposito.
+ *
  * El `satisfies` sobre `OrderStatusValue` es lo que hace que un RENAME del catalogo no
  * compile (R46); que no falte ni sobre ningun value lo comprueba el guardia.
  */

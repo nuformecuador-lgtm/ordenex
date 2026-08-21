@@ -98,7 +98,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     // regla lo overridean para simular reparto o recoleccion pendiente.
     findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 41/R13: por defecto nadie bloqueado (los tests de bloqueo lo overridean).
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,
       porMensajeros: false,
@@ -269,7 +269,7 @@ describe("156/R2 — generarGuia NO escribe mensajero_asignado_id ni asignado_at
     await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
 
     expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
-    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 });
 
@@ -483,7 +483,7 @@ describe("156 — guardas retiradas de generar guia (R10/R11/R12/R13)", () => {
   it("R10: con TODOS los mensajeros en cierre abierto, generar guia sigue funcionando", async () => {
     const repo = fakeRepo({
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_ZONA),
-      findMensajerosBloqueados: vi.fn(
+      findMensajerosBloqueadosParaGestion: vi.fn(
         async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"]),
       ),
     });
@@ -501,7 +501,7 @@ describe("156 — guardas retiradas de generar guia (R10/R11/R12/R13)", () => {
         ordenRow({ id: "o1", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_ZONA),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
     });
     const service = newService(repo);
 
@@ -576,12 +576,18 @@ describe("GuiaAsignacionService.generarGuia — validation_error si falta el see
 
 // Pedido humano 2026-08-18 — R13 RETIRADA. Este bloque afirmaba que asignar desde bodega a un
 // mensajero con cierre abierto daba `conflict`. Se invierte: la asignacion pasa.
+//
+// FEATURE 241 (2026-08-20) — SE QUEDA ASI, y ahora por una regla firmada en vez de por un tope
+// inalcanzable. Recibir asignaciones NO SE BLOQUEA NUNCA, sea cual sea el estado del cierre. Lo
+// que ese mismo mensajero NO podra hacer es GESTIONAR lo que se le asigne, si su cierre esta
+// `vencido` o `rechazado` — eso se decide en `MisAsignacionesService`, con otro predicado, y sus
+// tres casos estan en `mis-asignaciones-service.test.ts` (feature 111, R1/R4).
 describe("GuiaAsignacionService — el cierre abierto YA NO bloquea (R13 retirada)", () => {
   it("asignarDesdeBodega hacia un mensajero con cierre abierto -> persiste", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
     const service = newService(repo);
 
@@ -590,7 +596,7 @@ describe("GuiaAsignacionService — el cierre abierto YA NO bloquea (R13 retirad
     expect(r.status).toBe("ok");
     expect(repo.asignarBodegaLote).toHaveBeenCalled();
     // Ni siquiera se pregunta: la guarda se fue entera, no solo su efecto.
-    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 });
 
@@ -621,15 +627,27 @@ describe("GuiaAsignacionService.asignarDesdeBodega (R26-R29)", () => {
     });
     const service = newService(repo);
 
-    const r = await service.asignarDesdeBodega({ ordenIds: ["o1"], mensajeroId: "m1" }, MAESTRO);
+    // Feature 246 (T3.2, R4/R5): sin `dia` en la peticion, el servicio la trata como «hoy» y
+    // resuelve la fecha con el reloj INYECTADO. Un reloj real haria esta asercion dependiente del
+    // dia en que se corra la suite.
+    const r = await service.asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+      new Date("2026-08-20T20:00:00.000Z"), // 14:00 CR del 20
+    );
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") throw new Error("unreachable");
     expect(r.resultados).toEqual([{ ordenId: "o1", estado: "por_recoger" }]);
-    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(["o1"], "m1", "os-espera", {
-      actorUsuarioId: "u-maestro",
-      origenTipo: "asignacion_bodega",
-    });
+    expect(repo.asignarBodegaLote).toHaveBeenCalledWith(
+      ["o1"],
+      "m1",
+      "os-espera",
+      { actorUsuarioId: "u-maestro", origenTipo: "asignacion_bodega" },
+      // Feature 246 (R4/R7): el dia de reparto YA RESUELTO llega en la MISMA llamada. `hoy` por
+      // defecto = el comportamiento anterior a esta ficha.
+      new Date("2026-08-20T00:00:00.000Z"),
+    );
     // R5/R26: NUNCA toca num_guia; el metodo dedicado ni siquiera lo recibe como parametro.
     expect(repo.generarGuiaLote).not.toHaveBeenCalled();
   });
@@ -869,61 +887,74 @@ describe("Feature 30 + 156 — rutearABodegaSatelite (R13/R16/R17 · 156/R15/R16
   });
 });
 
-// Decision del humano 2026-07-16: la regla se unifica a >=1 (antes "TODOS"): basta un
-// mensajero con cierre abierto para que la bodega destino no reciba ordenes nuevas.
-// Feature 156: los casos de `generarGuia` de este bloque se mudaron a "guardas retiradas"
-// (R11) — numerar ya no rutea a ninguna bodega satelite. El de `rutearABodegaSatelite`, que es
-// quien de verdad envia el paquete, se conserva INTACTO.
-describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en cierre", () => {
+// ⚠️ FEATURE 241 (2026-08-20) — BLOQUE INVERTIDO. Aqui vivia «no rutear a bodega satelite con >=1
+// mensajero en cierre», una regla del humano del 2026-07-16 que dos casos afirmaban como `conflict`.
+//
+// SE VA, y no por inercia: es la version mas desproporcionada del bloqueo por cierre —por ZONA y no
+// por mensajero—, asi que el cierre de UNA persona paraba la bodega entera, companeros limpios
+// incluidos, con una espera de 8,2 h de mediana y 22,1 h en p90 (investigacion 241 §5). Rutear
+// ordenes a una bodega ES que esa bodega reciba trabajo, y la regla firmada dice que recibir no se
+// bloquea nunca.
+//
+// Y HABIA QUE DECIDIRLO EXPLICITAMENTE, no dejarlo pasar: desde el 2026-08-18 esta guarda no
+// disparaba porque el predicado estaba apagado por un tope inalcanzable. Al reparar el predicado en
+// esta misma ficha habria RESUCITADO sola, sin que nadie lo pidiera. Por eso se borra el codigo y
+// no solo su efecto.
+//
+// Los casos se conservan invertidos —no se borran— porque son el testigo: si alguien repone el
+// bloqueo por zona, estos dos se ponen rojos y nombran el sitio.
+describe("Feature 241 — rutear a bodega satelite YA NO mira los cierres de sus mensajeros", () => {
   const MENSAJEROS_LIMON = [
     { id: "m-lim1", nombre: "Ana" },
     { id: "m-lim2", nombre: "Beto" },
   ];
 
-  it("rutearABodegaSatelite: zona destino con TODOS los mensajeros en cierre -> conflict, sin persistir", async () => {
+  it("zona destino con TODOS los mensajeros en cierre -> rutea igual (ok)", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"])),
+      // Los dobles siguen diciendo que estan bloqueados PARA GESTIONAR: el punto es que rutear ya
+      // no lo pregunta. Ni siquiera necesita saber quienes son los mensajeros de la zona.
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1", "m-lim2"])),
     });
     const service = newService(repo);
 
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 
-    expect(r.status).toBe("conflict");
-    if (r.status !== "conflict") throw new Error("unreachable");
-    expect(r.detalle).toEqual([
-      { ordenId: "o1", motivo: expect.stringContaining("bodega satelite bloqueada") },
-    ]);
-    expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
-    expect(repo.findMensajerosByZona).toHaveBeenCalledWith(NO_GAM_ZONA_ID);
+    expect(r.status).toBe("ok");
+    expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledTimes(1);
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
+    // La guarda entera se fue: tampoco se pide el censo de la zona para evaluarla.
+    expect(repo.findMensajerosByZona).not.toHaveBeenCalled();
   });
 
-  it("rutearABodegaSatelite: 1 solo mensajero de la zona destino en cierre -> conflict", async () => {
+  it("1 solo mensajero de la zona destino en cierre -> rutea igual (ok)", async () => {
+    // El caso que mas dolia: un companero cierra su dia y la bodega entera dejaba de recibir.
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(["m-lim1"])),
     });
     const service = newService(repo);
 
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 
-    expect(r.status).toBe("conflict");
-    expect(repo.rutearBodegaSateliteLote).not.toHaveBeenCalled();
+    expect(r.status).toBe("ok");
+    expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledTimes(1);
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 
-  it("rutearABodegaSatelite: NINGUN mensajero de la zona destino en cierre -> rutea normal (ok)", async () => {
+  it("NINGUN mensajero de la zona destino en cierre -> rutea normal (ok)", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
       findMensajerosByZona: vi.fn(async () => MENSAJEROS_LIMON),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const service = newService(repo);
 
@@ -933,13 +964,13 @@ describe("Ajuste maestro — no rutear a bodega satelite con >=1 mensajero en ci
     expect(repo.rutearBodegaSateliteLote).toHaveBeenCalledTimes(1);
   });
 
-  it("rutearABodegaSatelite: zona destino SIN mensajeros -> no bloquea (rutea ok)", async () => {
+  it("zona destino SIN mensajeros -> rutea ok", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [
         ordenRow({ id: "o1", estatusValue: "en_bodega_central", zonaId: NO_GAM_ZONA_ID, zonaEsGam: false }),
       ]),
-      findMensajerosByZona: vi.fn(async () => []), // sin mensajeros: no hay cierre que resolver
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+      findMensajerosByZona: vi.fn(async () => []),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const service = newService(repo);
 
@@ -1067,12 +1098,14 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
     expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
   });
 
-  // Pedido humano 2026-08-18 — R7 RETIRADA (misma decision que R13): un cierre abierto o vencido
-  // no impide mandar a alguien a recolectar.
+  // Pedido humano 2026-08-18 — R7 RETIRADA (misma decision que R13), ratificada por la regla 2 de
+  // la feature 241: ningun estado de cierre impide mandar a alguien a recolectar. Lo que SI le
+  // impide un `vencido`/`rechazado` es CONFIRMAR esa recoleccion cuando llegue a la tienda —
+  // recolectar es cobrar—, y eso vive en `RecoleccionTiendaService` con su propio caso.
   it("mensajero con cierre pendiente -> se le asigna la recoleccion igual", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: ORIGEN })]),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
 
     const r = await newService(repo).asignarRecoleccion(
@@ -1082,7 +1115,7 @@ describe("GuiaAsignacionService.asignarRecoleccion (feature 157)", () => {
 
     expect(r.status).toBe("ok");
     expect(repo.asignarRecoleccionLote).toHaveBeenCalled();
-    expect(repo.findMensajerosBloqueados).not.toHaveBeenCalled();
+    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 
   it("R9: una orden SIN coordenadas SI se asigna (el gate no corre: no entra a ninguna ruta)", async () => {
@@ -1168,10 +1201,73 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
 
     // Si preguntara por `por_recolectar_en_tienda`, el segundo lote de un mismo viaje a la
     // tienda seria inasignable: el mensajero ya tendria la primera orden encima.
+    //
+    // FEATURE 235 (2026-08-19): la lista pasa a TRES. `ayuda_tienda` significa literalmente que el
+    // paquete SIGUE CON EL, en la calle (R1), asi que ocupa igual que `en_reparto`. Censo CERRADO:
+    // uno de mas bloquearia a quien no lleva nada; uno de menos —el que se cayo al mover el
+    // estatus— manda a recolectar a quien va cargado.
     expect(repo.findMensajerosConOrdenesEn).toHaveBeenCalledWith(
       ["m1"],
-      ["por_recoger", "en_reparto"],
+      ["por_recoger", "en_reparto", "ayuda_tienda"],
     );
+  });
+
+  // ===============================================================================================
+  // FEATURE 235 (R1 + regla de dedicacion de la 157) — LA ORDEN EN AYUDA OCUPA AL MENSAJERO.
+  //
+  // ⚠️ ESTO SE ROMPIO Y NADIE LO VIO. Mientras la ayuda fue un BOOLEANO, la orden seguia en
+  // `en_reparto` y esta lista la contaba sola. Al moverla a un estatus propio, un mensajero con el
+  // paquete encima paso a leerse como SIN CARGA y el maestro podia mandarlo a recolectar a una
+  // tienda — contra la regla que el humano firmo el 2026-07-31 y que el propio archivo explica:
+  // «quien va a una tienda a recoger un lote sale con el vehiculo vacio y vuelve a la central».
+  //
+  // El barrido de la 235 (T3.4/R17) miro los listados que OFRECEN ORDENES; esta es otra familia:
+  // las listas que describen la OCUPACION DEL MENSAJERO. La guardia
+  // `carga-del-mensajero.guardia.test.ts` censa la familia entera para que no vuelva a pasar.
+  // ===============================================================================================
+  it("235: no se le asigna una recoleccion a quien tiene una orden en `ayuda_tienda`", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      // El doble responde como responderia la query real: pregunta por los tres estados y este
+      // mensajero tiene una orden en uno de ellos.
+      findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
+        estados.includes("ayuda_tienda") ? new Set(["m1"]) : new Set<string>(),
+      ),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r).toMatchObject({
+      status: "conflict",
+      detalle: [{ ordenId: "o1", motivo: expect.stringMatching(/sin carga/i) }],
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("235 (CASO NEGATIVO): si `ayuda_tienda` saliera de la lista, este mensajero pasaria", async () => {
+    // La contraprueba que da sentido al caso de arriba: el MISMO doble, y lo unico que decide es si
+    // el service pregunta o no por el estatus de ayuda. Sin este par, el caso anterior pasaria
+    // igual con un doble que dijera «ocupado» siempre.
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: ORIGEN_RECOLECCION }),
+      ]),
+      findMensajerosConOrdenesEn: vi.fn(async (_ids: string[], estados: string[]) =>
+        estados.includes("por_devolver") ? new Set(["m1"]) : new Set<string>(),
+      ),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
   });
 
   it("un mensajero con OTRAS recolecciones SÍ recibe más del mismo viaje", async () => {
@@ -1229,5 +1325,110 @@ describe("GuiaAsignacionService — dedicación: reparto y recolección no se me
       ["recolectando"], // lo que ocupa es la recoleccion ASIGNADA, no la que espera sin dueño
     );
     expect(r.status).toBe("ok");
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T3.2, R3/R4/R5/R6/R7) — LA ELECCION SE RESUELVE A FECHA EN EL SERVIDOR.
+// =================================================================================================
+describe("246/R3-R7 — asignarDesdeBodega resuelve el dia de reparto", () => {
+  /** 14:00 hora de pared de Costa Rica del 20 de agosto. */
+  const TARDE_DEL_20 = new Date("2026-08-20T20:00:00.000Z");
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+  const DIA_21 = new Date("2026-08-21T00:00:00.000Z");
+
+  function repoConDosOrdenes() {
+    return fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central", numGuia: 55 }),
+        ordenRow({ id: "o2", estatusValue: "en_bodega_central", numGuia: 56 }),
+      ]),
+    });
+  }
+
+  /** La fecha que el servicio le pasa al repositorio (5.º argumento). */
+  function fechaEscrita(repo: ReturnType<typeof fakeRepo>): Date {
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    return call[4] as Date;
+  }
+
+  it('R4/R5: sin `dia` -> «hoy», resuelto con el reloj del SERVIDOR', async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it('R5: `dia: "manana"` -> la fecha CR del dia SIGUIENTE, no un booleano', async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    // Una FECHA ABSOLUTA, no una marca «para mañana»: una fecha vence sola (D2/R13).
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("R3: UNA asignacion, UN dia de reparto — el lote entero recibe la misma fecha", async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1", "o2"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    // Los dos ids van en UNA sola llamada, con UNA sola fecha: no hay forma de que el lote se
+    // parta en dos dias.
+    expect(call[0]).toEqual(["o1", "o2"]);
+    expect((call[4] as Date).toISOString()).toBe(DIA_21.toISOString());
+    expect((repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("R5/R17: a las 23:59 CR «mañana» sigue siendo el dia siguiente en HORA DE COSTA RICA", async () => {
+    // 2026-08-21T05:59:00Z = 23:59 CR del 20. En UTC ya es dia 21: si el servicio usara el dia
+    // UTC, «mañana» seria el 22 y la orden quedaria protegida DOS noches.
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      new Date("2026-08-21T05:59:00.000Z"),
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_21.toISOString());
+  });
+
+  it("R6: la fecha la pone el SERVIDOR — el input no tiene por donde colar una", async () => {
+    // El borde ya lo impide (zod solo acepta el token), pero el servicio tampoco leeria una:
+    // una peticion con una fecha de sobra produce exactamente la misma escritura.
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      {
+        ordenIds: ["o1"],
+        mensajeroId: "m1",
+        dia: "hoy",
+        // @ts-expect-error — el contrato NO admite una fecha; el caso existe para demostrarlo.
+        fechaReparto: new Date("2030-01-01T00:00:00.000Z"),
+      },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    expect(fechaEscrita(repo).toISOString()).toBe(DIA_20.toISOString());
+  });
+
+  it("R7: la fecha va en la MISMA llamada que fija el mensajero, no en una segunda pasada", async () => {
+    const repo = repoConDosOrdenes();
+    await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m1", dia: "manana" },
+      MAESTRO,
+      TARDE_DEL_20,
+    );
+    // Una sola escritura de asignacion, y lleva las dos cosas.
+    expect((repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    const call = (repo.asignarBodegaLote as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    expect(call[1]).toBe("m1"); // el mensajero
+    expect(call[4]).toBeInstanceOf(Date); // ...y el dia, juntos
   });
 });

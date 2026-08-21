@@ -4,6 +4,7 @@ import type { CierreBodegaResumenRow } from "@/lib/interfaces/repositories/ICier
 import type {
   CierreBodegaDetalleCierreRow,
   ICierresBodegaAdminRepository,
+  ResolverCierreBodegaInput,
 } from "@/lib/interfaces/repositories/ICierresBodegaAdminRepository";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
@@ -84,6 +85,7 @@ function gestionRow(overrides: Partial<CierreGestionPendienteRow> = {}): CierreG
     pagoMensajero: "5.00", // feature 39/R20: snapshot del pago de la gestion
     ingresoBodegaRechazo: "0.00", // feature 56/R19: snapshot del ingreso de la gestion
     esRechazoSla: false, // feature 102
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
@@ -630,5 +632,88 @@ describe("CierresBodegaAdminService — R11: aprobar bodega NO genera ingresos d
     expect((service as unknown as Record<string, unknown>).cajaCodFeedService).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).construirIngresoCod).toBeUndefined();
     expect((repo as unknown as Record<string, unknown>).crearMovimientos).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 238 (T5.1, R39) — EL CIERRE DE BODEGA **NO** HEREDA LA CONFIRMACION FISICA.
+//
+// Sin codigo: el caso existe para que la AUSENCIA sea una decision y no un olvido. Cuarta
+// afirmacion de la misma linea que las tres de arriba (42/43/44 y el contra-entrega), ahora para
+// la 238.
+//
+// LA RAZON, y es de fondo: el nivel 2 agrega `cierre_dia` **YA APROBADOS**, y cada uno de ellos
+// paso por su propia confirmacion fisica en el nivel 1. Pedirla otra vez seria pedirle a bodega
+// que escanee dos veces el mismo paquete. Ademas `CierreBodegaRepository` y
+// `CierresBodegaAdminRepository` **no tocan `orden` ni el choke point**: no hay ninguna orden que
+// mover ni ninguna gestion que marcar.
+//
+// UBICACION — DISCREPANCIA CON EL SPEC, declarada: `tasks.md` situa este caso en
+// `cierre-bodega-service.test.ts`, pero ahi vive el servicio del MENSAJERO (solicitar el cierre de
+// bodega). `aprobarCierreBodega` vive en `CierresBodegaAdminService`, y sus tres hermanos «esta
+// feature no llega al nivel 2» estan en ESTE archivo. Se pone donde vive.
+describe("Feature 238 (R39) — aprobar un CierreBodega NO pide confirmacion fisica", () => {
+  it("R39: la aprobacion del nivel 2 no lee ningun conjunto de paquetes que vuelven", async () => {
+    // El doble se tipa con el input REAL: asi el literal de (2) se compara contra lo que el
+    // servicio manda de verdad, y no contra un `unknown` que aceptaria cualquier cosa.
+    const resolver = vi.fn<(input: ResolverCierreBodegaInput) => Promise<"updated">>(
+      async () => "updated",
+    );
+    const repo = fakeRepo({ resolverCierreBodega: resolver });
+    const { service } = newService({ repo });
+
+    const r = await service.aprobarCierreBodega("cb1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    // (1) UNA sola llamada al repositorio, y es la transicion. Si alguien hiciera que el nivel 2
+    // exigiera la confirmacion, tendria que LEER el conjunto esperado de algun sitio — y esa
+    // lectura seria una llamada mas, aqui.
+    const llamadasAlRepo = Object.entries(repo).filter(
+      ([, metodo]) => (metodo as ReturnType<typeof vi.fn>).mock?.calls.length > 0,
+    );
+    expect(llamadasAlRepo.map(([nombre]) => nombre)).toEqual(["resolverCierreBodega"]);
+
+    // (2) El input de la transicion es EXACTAMENTE el de siempre: cuatro claves, ninguna de
+    // confirmacion. El literal es el contrato — una clave nueva lo pone rojo.
+    expect(resolver.mock.calls[0][0]).toEqual({
+      id: "cb1",
+      nuevoEstado: "aprobado",
+      resueltoPor: "adm-maestro",
+      motivoRechazo: null,
+    });
+
+    // (3) El servicio no tiene con que exigirla: ni colaborador, ni metodo de lectura.
+    expect((service as unknown as Record<string, unknown>).cierresAdminRepo).toBeUndefined();
+    expect(
+      (repo as unknown as Record<string, unknown>).findGestionesRetornablesDelCierre,
+    ).toBeUndefined();
+  });
+
+  it("R39: `aprobarCierreBodega` sigue aceptando (cierreBodegaId, actor) y nada mas", async () => {
+    // Un tercer parametro de confirmacion cambiaria esta aridad. No es una prueba fuerte por si
+    // sola —un parametro CON default no la movería—, pero (1) y (2) de arriba si lo cazan.
+    expect(CierresBodegaAdminService.prototype.aprobarCierreBodega.length).toBe(2);
+  });
+
+  it("R39: ni el servicio ni sus repositorios NOMBRAN la confirmacion fisica", async () => {
+    // Censo de texto sobre los tres archivos del nivel 2. Es el frente que caza el intento mas
+    // probable: «reutilizar» aqui la marca de la 238 sin pensar en que ya se confirmo en el
+    // nivel 1. Se pone rojo con solo plantar el nombre.
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const raiz = path.resolve(__dirname, "../../..");
+    const archivos = [
+      "lib/services/CierresBodegaAdminService.ts",
+      "lib/repositories/CierresBodegaAdminRepository.ts",
+      "lib/repositories/CierreBodegaRepository.ts",
+    ];
+    for (const rel of archivos) {
+      const fuente = readFileSync(path.join(raiz, rel), "utf8");
+      for (const nombre of ["confirmacionFisica", "confirmadaFisicaAt", "confirmada_fisica_at"]) {
+        expect(fuente, `${rel} nombra ${nombre}: el nivel 2 no confirma paquetes (R39)`).not.toContain(
+          nombre,
+        );
+      }
+    }
   });
 });

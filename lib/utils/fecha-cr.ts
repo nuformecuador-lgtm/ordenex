@@ -15,6 +15,18 @@ const CR_OFFSET_MS = 6 * 60 * 60 * 1000; // UTC-6
  * Devuelve la medianoche UTC de la fecha CALENDARIO de Costa Rica correspondiente a
  * `now`. Ejemplos (UTC-6): `2026-07-15T05:59:00Z` (23:59 CR del 14) -> `2026-07-14`;
  * `2026-07-15T06:00:00Z` (00:00 CR del 15) -> `2026-07-15`.
+ *
+ * CONSUMIDORES (para que se vea de un vistazo que columnas dependen de esta convencion):
+ *   - feature 46  — `gestion_orden.fecha_reprogramacion` (`@db.Date`), el caso original;
+ *   - feature 246 — `orden.fecha_reparto` (`@db.Date`): el DIA DE REPARTO de una asignacion.
+ *     De aqui salen las tres cosas de esa ficha: la fecha que escribe la asignacion
+ *     (`lib/utils/dia-reparto.ts`), el ancla del corte nocturno (`CorteDiarioService`
+ *     .diaQueElCorteCierra`, que es esto MENOS UN DIA) y el `esParaManana` del portal del
+ *     mensajero.
+ *
+ * ⚠️ NO la uses como cota contra columnas `timestamp` (`asignado_at`, `gestion_orden.created_at`):
+ * para eso esta `inicioDelDiaCREnUtc`, seis horas mas tarde. Confundirlas es el off-by-one que
+ * cerro la ficha 166, y hay guardias que lo vigilan.
  */
 export function startOfDayCR(now: Date = new Date()): Date {
   // Corre el reloj -6h para que los campos UTC representen la hora de pared de CR.

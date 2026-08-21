@@ -66,10 +66,10 @@ function servicioReal(estatusValue = "devuelta") {
         ? {
             tiendaId: TIENDA,
             mensajeroAsignadoId: null,
+            // Feature 235: aqui viajaba tambien `ayuda: false`, la bandera que abria una segunda
+            // puerta al adminTienda. Se retiro con la columna: la ventana vuelve a depender SOLO
+            // del estatus (R36), que es lo que estos casos ya median.
             estatusValue,
-            // 2026-08-18: la ventana del adminTienda tambien se abre con ayuda viva. Aqui `false`
-            // para que estos casos sigan midiendo la ventana por ESTATUS y nada mas.
-            ayuda: false,
             deletedAt: null,
           }
         : null,

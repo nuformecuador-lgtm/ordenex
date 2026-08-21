@@ -52,10 +52,15 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     expect(upd.where).toEqual({ id: "o1", estatusId: idEstado("devuelta"), deletedAt: null });
     // R13/R14: destino de bodega + handoff limpio (mensajero + asignado_at a null).
     // Feature 110/R2/R4/R6: prioridad=true va DENTRO del mismo data (una sola escritura).
+    // Feature 246 (T3.5, R9/R10): `fechaReparto: null` entra en la MISMA igualdad EXACTA, y por
+    // el mismo motivo que el resto: la invariante es que el dia de reparto solo tiene valor
+    // mientras la orden tenga mensajero. Una reserva sin duenno seria un dato que el corte
+    // tendria que interpretar — la clase de dato que la 235 pago con una fuga permanente.
     expect(upd.data).toEqual({
       estatusId: idEstado("en_bodega_satelite"),
       mensajeroAsignadoId: null,
       asignadoAt: null,
+      fechaReparto: null, // feature 246/R9/R10
       prioridad: true,
     });
     // R17: append por el choke point, actor = el admin (NO NULL), origen_tipo recuperacion_manual.
@@ -101,9 +106,12 @@ describe("recuperarABodega (R13/R14/R17/R21)", () => {
     const data = prisma.orden.updateMany.mock.calls[0][0].data;
     // R2: prioridad encendida en el mismo data del updateMany guardado.
     expect(data.prioridad).toBe(true);
+    // Feature 246 (T3.5, R9/R10): el censo CERRADO de claves gana `fechaReparto`. Que sea cerrado
+    // es lo que hace que un olvido en cualquiera de los seis sitios de limpieza se vea.
     expect(Object.keys(data).sort()).toEqual([
       "asignadoAt",
       "estatusId",
+      "fechaReparto",
       "mensajeroAsignadoId",
       "prioridad",
     ]);

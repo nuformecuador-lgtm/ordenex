@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { diaRepartoSchema } from "@/lib/types/dia-reparto";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { MensajeroLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
@@ -231,6 +232,12 @@ export type RecibirLoteResult =
 export const asignarSateliteSchema = z.object({
   ordenIds: z.array(z.string().uuid()).min(1),
   mensajeroId: z.string().uuid(),
+  // Feature 246 (T3.1, R2/R3/R4/R6, decision D4) — EL MISMO campo que en bodega central, con el
+  // MISMO enum y el MISMO default. D4 se firmo asi por una razon operativa: dejar el satelite
+  // fuera haria que la regla del sistema dependiera de DESDE QUE BODEGA te asignaron, y eso no se
+  // le puede explicar a quien opera. Que las dos superficies importen `diaRepartoSchema` de un
+  // unico archivo es lo que impide que un dia acepten vocabularios distintos.
+  dia: diaRepartoSchema.default("hoy"),
 });
 export type AsignarSateliteActionInput = z.infer<typeof asignarSateliteSchema>;
 

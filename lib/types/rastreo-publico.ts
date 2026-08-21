@@ -98,6 +98,13 @@ export const HITO_POR_ESTATUS = {
   // confirmar es la bodega, que es asunto interno. Un hito propio le contaría un trámite
   // nuestro; retrasar el hito hasta la aprobación le escondería un hecho que ya ocurrió.
   devolucion_por_confirmar: "no_entregado",
+  // Feature 235/R38 (P3 firmada 2026-08-19): EL MISMO HITO QUE `en_reparto`. Para el destinatario
+  // no ha cambiado nada —el paquete sigue con el mensajero— y quien resuelve la incidencia es
+  // asunto interno. Ademas el rastreo COLAPSA LAS RACHAS del mismo hito, asi que el viaje entero
+  // `en_reparto -> ayuda_tienda -> en_reparto` se ve como UNA SOLA entrada «En reparto»: el
+  // destinatario no ve ningun tramite nuestro, ni al pedir ayuda ni al rescatar. Precedente exacto:
+  // `sin_gestionar -> en_reparto`, riesgo aceptado y firmado en la 229 (G8).
+  ayuda_tienda: "en_reparto",
 } as const satisfies Record<OrderStatusValue, HitoPublico>;
 
 /**

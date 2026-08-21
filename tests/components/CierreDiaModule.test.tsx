@@ -108,6 +108,7 @@ function makeGestion(
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
     esRechazoSla: false, // feature 102
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
     // sobreescriben.
     causaIncidente: null,
@@ -551,21 +552,46 @@ describe("CierreDiaModule", () => {
     ).toBeInTheDocument();
   });
 
-  // ---------- Feature 41 (F2, R21) + Feature 111 (R12) ----------
+  // ---------- Feature 41 (F2, R21) + Feature 111 (R12) → Feature 241 ----------
+  //
+  // ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO DEL AVISO CAMBIÓ Y ESTOS ASERTOS CON ÉL. Decía «No
+  // puedes gestionar NI RECIBIR NUEVAS ASIGNACIONES hasta resolver tu cierre pendiente», y las dos
+  // afirmaciones eran falsas: recibir asignaciones no se bloquea nunca, y `solicitado` ya no
+  // bloquea gestionar. Un aviso que prohíbe más de lo que el servidor rechaza hace que el mensajero
+  // deje de intentar cosas que sí puede hacer.
+  //
+  // EL LITERAL VA ESCRITO A MANO, COMPLETO, y NO importado de `BLOQUEO_AVISO` — la constante ni
+  // siquiera se exporta, y aunque se exportara compararla contra sí misma estaría siempre verde:
+  // cambiar el copy cambiaría el aserto con él y esto no vigilaría nada. Aquí el texto es el
+  // CONTRATO con el mensajero, así que se fija entero: si alguien lo edita, este archivo se pone
+  // rojo y obliga a decidir a conciencia, que es justo lo que faltó cuando el backend corrigió su
+  // copia y ésta se quedó mintiendo sin que nada avisara.
 
-  it("R12: bloqueado muestra el aviso accionable de BLOQUEO TOTAL (no gestionar NI recibir)", () => {
+  const AVISO_BLOQUEO_ESPERADO =
+    "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones: te esperan en «Entregas». Resuélvelo con el botón de abajo.";
+
+  it("R12/241: bloqueado muestra el aviso con el alcance real (no gestionar ni cobrar; recibir SÍ)", () => {
     renderModule({ bloqueado: true });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente/i,
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent(AVISO_BLOQUEO_ESPERADO);
   });
 
-  it("R12: sin bloqueo NO muestra el aviso de bloqueo total", () => {
+  it("R12/241: el aviso NO afirma que se dejen de recibir asignaciones", () => {
+    renderModule({ bloqueado: true });
+
+    // Guardia de la regresión concreta: la frase vieja prohibía recibir, que es lo único que el
+    // servidor NO bloquea en ningún estado. Que el aviso diga la verdad no basta si mañana vuelve
+    // a colarse la negación; se afirma también su ausencia.
+    const aviso = screen.getByRole("alert");
+    expect(aviso).not.toHaveTextContent(/ni recibir/i);
+    expect(aviso).not.toHaveTextContent(/nuevas asignaciones/i);
+  });
+
+  it("R12/241: sin bloqueo NO muestra el aviso", () => {
     renderModule({ bloqueado: false });
 
     expect(
-      screen.queryByText(/no puedes gestionar ni recibir nuevas asignaciones/i),
+      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
     ).not.toBeInTheDocument();
   });
 
@@ -640,14 +666,46 @@ describe("CierreDiaModule", () => {
     ).toBeDisabled();
   });
 
-  it("R31: el aviso comunica que un cierre rechazado NO es terminal (bloquea hasta re-solicitar + aprobar)", () => {
+  // ⚠️ FEATURE 241 (2026-08-20) — ESTE CASO AFIRMABA LA MENTIRA. Pedía `/sigue bloqueando/i` y
+  // `/apruebe/i` juntos, que es literalmente la promesa falsa: que el bloqueo dura hasta que la
+  // bodega apruebe. Lo hace `transicionarRechazadoASolicitado` escribiendo `estado='solicitado'`,
+  // y `solicitado` no está en `ESTADOS_CIERRE_BLOQUEAN_GESTION` — el bloqueo se levanta al
+  // REENVIAR. El error iba en la dirección cara: le decía al mensajero que estaba MÁS bloqueado de
+  // lo que estaba, y esperar de brazos cruzados no da ningún síntoma.
+  //
+  // Literales A MANO, como el aviso de bloqueo de más arriba y por lo mismo: la constante no se
+  // exporta, y compararla contra sí misma estaría siempre verde.
+
+  const AVISO_RECHAZADO_ESPERADO =
+    "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación: con eso se levanta el bloqueo y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe.";
+
+  it("R31/241: el aviso del rechazado dice cuándo se levanta el bloqueo (al reenviar, no al aprobar)", () => {
     renderModule({ tieneRechazado: true });
 
     const region = screen.getByRole("region", { name: "Cierre rechazado" });
-    // No se lee como "resuelto/cerrado": sigue bloqueando hasta re-enviarlo y que lo aprueben.
+    expect(region).toHaveTextContent(AVISO_RECHAZADO_ESPERADO);
+    // Lo que el aviso SIGUE aportando y no se perdió al corregirlo: un rechazado no es terminal.
     expect(region).toHaveTextContent(/no queda cerrado/i);
-    expect(region).toHaveTextContent(/sigue bloqueando/i);
-    expect(region).toHaveTextContent(/apruebe/i);
+  });
+
+  it("R31/241: el aviso NO promete que el bloqueo dure hasta que la bodega apruebe", () => {
+    renderModule({ tieneRechazado: true });
+
+    // Guardia de la regresión concreta, en su forma NEGATIVA: que hoy diga la verdad no impide que
+    // mañana vuelva a colarse la espera inventada, así que se afirma su ausencia.
+    const region = screen.getByRole("region", { name: "Cierre rechazado" });
+    expect(region).not.toHaveTextContent(/sigue bloqueando/i);
+    expect(region).not.toHaveTextContent(/y tu bodega lo apruebe/i);
+  });
+
+  it("R13/241: el aviso del vencido sigue diciendo que se destraba AL ENVIARLO", () => {
+    renderModule({ tieneVencido: true });
+
+    // Este no se cambió: se revisó con la regla nueva y ya era cierto (envíalo -> destraba). Se
+    // fija a mano para que deje de depender de que alguien vuelva a comprobarlo.
+    expect(screen.getByRole("region", { name: "Cierre vencido" })).toHaveTextContent(
+      "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.",
+    );
   });
 
   it("R31: sin cierre rechazado NO aparece el CTA del rechazado", () => {
@@ -1082,5 +1140,254 @@ describe("Feature 213 — desglose de pago en la tabla del cierre del día", () 
     } finally {
       METODO_LABEL.SINPE = original;
     }
+  });
+});
+
+// =================================================================================================
+// FEATURE 237 (T7.5 — R41, D6) — LA FILA DICE QUIEN REGISTRO LA GESTION.
+// =================================================================================================
+//
+// **Lo que protege.** Desde la 237 la TIENDA puede resolver una orden que sigue en la moto del
+// mensajero, y esa gestion se le atribuye a el: entra en este cierre, suma un intento y mueve el
+// mismo dinero. Sin la marca, el mensajero firma su cierre con una gestion que no hizo y una
+// evidencia que no subio, y no puede explicarla si le preguntan. La orden ya desaparecio de su
+// portal (R40), asi que esta pantalla es el UNICO sitio donde la vuelve a ver.
+//
+// ⚠️ EL PAR PRESENCIA / AUSENCIA VA EN LA MISMA TABLA, y es deliberado: una marca que aparece en
+// TODAS las filas pasa igual de verde que una que no aparece en ninguna. Los dos casos que se
+// afirman aqui viven sobre el MISMO render, asi que uno no puede estar bien y el otro vacio.
+//
+// ⚠️ LOS TEXTOS, ESCRITOS A MANO. No se importan `GESTION_TIENDA_BADGE_LABEL` ni `..._NOTA`:
+// comparar un texto con la constante que lo genera esta siempre verde, y en esta misma rama se
+// arreglaron dos avisos que mentian exactamente por eso.
+describe("Cierre del día — 237/R41: la gestión que registró la tienda va marcada", () => {
+  /** La `<tr>` que contiene ese número de guía. */
+  function filaDeGuia(guia: string): HTMLElement {
+    const fila = screen.getByText(guia).closest("tr");
+    expect(fila, `no hay ninguna fila con la guía ${guia}`).not.toBeNull();
+    return fila as HTMLElement;
+  }
+
+  /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
+  function renderConLasDos() {
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g-tienda",
+        resultado: "rechazada",
+        numGuia: 5555,
+        numRemision: "REM-TIENDA",
+        desdeAyudaTienda: true,
+      }),
+      makeGestion({
+        gestionId: "g-mensajero",
+        resultado: "rechazada",
+        numGuia: 7777,
+        numRemision: "REM-MENSAJERO",
+        desdeAyudaTienda: false,
+      }),
+    ];
+    renderModule({ grupos });
+  }
+
+  it("la fila de la TIENDA lleva la marca y la del MENSAJERO no (el par, en la misma tabla)", () => {
+    renderConLasDos();
+
+    // Presencia: dice QUIÉN, no sólo que la fila es distinta.
+    expect(within(filaDeGuia("5555")).getByText("La tienda")).toBeInTheDocument();
+    // Ausencia: y su significado es «la registraste vos», no «no lo sé» — el DTO trae el campo
+    // obligatorio y derivado del historial, que nace en la misma transacción que la gestión.
+    expect(within(filaDeGuia("7777")).queryByText("La tienda")).toBeNull();
+  });
+
+  it("la marca trae su nota accesible, que es lo que le deja explicarla si le preguntan", () => {
+    renderConLasDos();
+    const marca = within(filaDeGuia("5555")).getByText("La tienda");
+
+    // El literal completo, a mano. Dice desde dónde se hizo, que el motivo y la foto no son suyos,
+    // y que aun así cuenta en su cierre: las tres cosas que necesita para responder.
+    const NOTA =
+      "Esta gestión la registró la tienda desde «Ayuda solicitada», no vos: el motivo y la foto son suyos. Cuenta en tu cierre igual.";
+    expect(marca).toHaveAttribute("title", NOTA);
+    // `title` es sólo para el puntero: quien navega con lector de pantalla —o desde un móvil, donde
+    // no hay hover— necesita el nombre en el propio control.
+    expect(marca).toHaveAttribute("aria-label", NOTA);
+  });
+
+  it("la nota nombra las tres cosas: quién, con qué evidencia y que cuenta igual", () => {
+    // Anti-degradación: un «Registrada por la tienda» seco pasaría el caso de arriba si alguien
+    // acortara el texto, pero no éste. Lo que no puede perderse es que la evidencia no es suya y
+    // que el cierre la incluye de todos modos — es lo que hace que la marca sirva de algo.
+    renderConLasDos();
+    const nota = within(filaDeGuia("5555"))
+      .getByText("La tienda")
+      .getAttribute("title") as string;
+
+    expect(nota).toContain("Ayuda solicitada");
+    expect(nota).toContain("el motivo y la foto son suyos");
+    expect(nota).toContain("Cuenta en tu cierre igual");
+  });
+
+  it("la marca NO se come la guía: el número sigue ahí", () => {
+    // El badge cuelga del número, que es el identificador con el que el mensajero busca el paquete.
+    // Si lo sustituyera, la marca costaría más de lo que informa.
+    renderConLasDos();
+    const fila = filaDeGuia("5555");
+
+    expect(within(fila).getByText("5555")).toBeInTheDocument();
+    expect(within(fila).getByText("REM-TIENDA")).toBeInTheDocument();
+  });
+
+  it("vale para los DOS desenlaces que la tienda puede registrar, no sólo para el rechazo", () => {
+    // La 237 declaró dos aristas desde `ayuda_tienda`: `reprogramada` y `rechazada`. Marcar sólo
+    // una dejaría la mitad de las gestiones de la tienda indistinguibles de las del mensajero.
+    const grupos = emptyGrupos();
+    grupos.reprogramada = [
+      makeGestion({
+        gestionId: "g-repro-tienda",
+        resultado: "reprogramada",
+        numGuia: 4444,
+        desdeAyudaTienda: true,
+      }),
+    ];
+    grupos.entregada = [
+      // El contraste: una entrega NUNCA puede venir de la tienda (no hay arista), y aquí se ve.
+      makeGestion({
+        gestionId: "g-entrega",
+        resultado: "entregada",
+        numGuia: 3333,
+        desdeAyudaTienda: false,
+      }),
+    ];
+    renderModule({ grupos });
+
+    expect(within(filaDeGuia("4444")).getByText("La tienda")).toBeInTheDocument();
+    expect(within(filaDeGuia("3333")).queryByText("La tienda")).toBeNull();
+  });
+});
+
+// =================================================================================================
+// FEATURE 237 (D3/R38) — «DEVOLVER A GESTION» NO SE OFRECE SOBRE LA GESTION DE LA TIENDA.
+// =================================================================================================
+//
+// **El defecto que cierra, y de donde salio.** Lo encontro el recorrido con la app del 2026-08-20,
+// no la suite: el boton salia HABILITADO en la fila de la tienda, abria su modal —que promete «la
+// orden volvera a tu lista para gestionar»— y el servidor lo rechazaba. Un boton que SIEMPRE falla,
+// detras de un modal que afirma lo que no va a pasar.
+//
+// ⚠️ EL PAR VA EN LA MISMA TABLA: una accion que nunca esta disponible pasa igual de verde que una
+// que siempre lo esta. Los dos casos viven sobre el MISMO render.
+//
+// ⚠️ LOS TEXTOS, A MANO. No se importa `DESHACER_BLOQUEO_TIENDA`: compararlo con la constante que
+// lo genera estaria siempre verde.
+describe("Cierre del día — 237/D3: la gestión de la tienda no se puede devolver a gestión", () => {
+  /** El motivo, escrito a mano. Es el MISMO que devuelve el servidor si se llega por otra vía. */
+  const MOTIVO =
+    "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.";
+
+  /** La `<tr>` que contiene ese número de guía. */
+  function fila(guia: string): HTMLElement {
+    const tr = screen.getByText(guia).closest("tr");
+    expect(tr, `no hay ninguna fila con la guía ${guia}`).not.toBeNull();
+    return tr as HTMLElement;
+  }
+
+  /** El botón de acciones de esa fila, sea cual sea su nombre accesible. */
+  function botonDeshacer(guia: string): HTMLElement {
+    return within(fila(guia)).getByRole("button", { name: /^Devolver a gestión/ });
+  }
+
+  /** Dos rechazos en la MISMA sección: uno de la tienda (5555) y uno del mensajero (7777). */
+  function renderConLasDos() {
+    const grupos = emptyGrupos();
+    grupos.rechazada = [
+      makeGestion({
+        gestionId: "g-tienda",
+        resultado: "rechazada",
+        numGuia: 5555,
+        numRemision: "REM-TIENDA",
+        desdeAyudaTienda: true,
+      }),
+      makeGestion({
+        gestionId: "g-mensajero",
+        resultado: "rechazada",
+        numGuia: 7777,
+        numRemision: "REM-MENSAJERO",
+        desdeAyudaTienda: false,
+      }),
+    ];
+    renderModule({ grupos });
+  }
+
+  it("la fila de la TIENDA lo tiene bloqueado y la del MENSAJERO no (el par, misma tabla)", () => {
+    renderConLasDos();
+
+    expect(botonDeshacer("5555")).toBeDisabled();
+    // El par: sin esto, «está deshabilitado» pasaría igual con la columna entera apagada, que es
+    // otro defecto —y peor: le quitaría al mensajero el deshacer de TODAS sus gestiones—.
+    expect(botonDeshacer("7777")).toBeEnabled();
+  });
+
+  it("y dice POR QUÉ: el motivo va en el `title` y también en el nombre accesible", () => {
+    renderConLasDos();
+    const boton = botonDeshacer("5555");
+
+    expect(boton).toHaveAttribute("title", MOTIVO);
+    // En el NOMBRE y no sólo en el `title`: un botón `disabled` sale del orden de tabulación, así
+    // que su tooltip es inalcanzable con el teclado. Quien navega con lector de pantalla lo lee al
+    // recorrer la tabla.
+    const nombre = boton.getAttribute("aria-label") as string;
+    expect(nombre).toContain("no disponible");
+    expect(nombre).toContain(MOTIVO);
+    // Y sigue diciendo QUÉ ES y sobre QUÉ orden: el motivo se suma al nombre, no lo sustituye.
+    expect(nombre).toContain("Devolver a gestión la orden REM-TIENDA");
+  });
+
+  it("el motivo es ACCIONABLE: dice a quién acudir, no un «no se puede» a secas", () => {
+    // Anti-degradación. Un «No podés deshacer esta gestión.» pasaría los dos casos de arriba, y
+    // dejaría al mensajero con un botón apagado y ninguna salida.
+    renderConLasDos();
+    const titulo = botonDeshacer("5555").getAttribute("title") as string;
+
+    expect(titulo).toContain("la resolvió la tienda");
+    expect(titulo).toContain("Escribile por el chat de la orden");
+  });
+
+  it("pulsarlo NO abre el modal que promete devolver la orden, ni llama al servidor", async () => {
+    const user = userEvent.setup();
+    renderConLasDos();
+
+    await user.click(botonDeshacer("5555"));
+
+    // El modal es el que afirma «la orden volverá a tu lista para gestionar»: sobre esta fila esa
+    // frase es falsa, y no llegar a enseñarla es el punto entero de la tanda.
+    expect(screen.queryByRole("dialog", { name: "Devolver la orden a gestión" })).toBeNull();
+    expect(deshacerMock).not.toHaveBeenCalled();
+
+    // El par: el mismo gesto sobre la fila del mensajero SÍ abre el modal. Sin esto, «no se abre»
+    // pasaría igual con el modal roto para todas las filas.
+    await user.click(botonDeshacer("7777"));
+    expect(
+      await screen.findByRole("dialog", { name: "Devolver la orden a gestión" }),
+    ).toBeInTheDocument();
+  });
+
+  it("RED DE SEGURIDAD: si se llegara a enviar, el motivo del servidor se muestra tal cual", async () => {
+    // Contesta la pregunta del recorrido: ¿el mensajero se entera cuando el servidor rechaza? SÍ —
+    // `confirmarDeshacer` pinta el `motivo` del `conflict` sin reescribirlo (67/R38). Hoy ese
+    // camino ya no es alcanzable desde esta pantalla (el botón está apagado), y por eso este caso
+    // se monta sobre una fila NORMAL con la respuesta de D3 forzada: lo que afirma es que la
+    // pantalla no se come el mensaje, no que el botón siga ofreciéndose.
+    deshacerMock.mockResolvedValue({ status: "conflict", motivo: MOTIVO });
+    const user = userEvent.setup();
+    renderConLasDos();
+
+    await user.click(botonDeshacer("7777"));
+    const dialog = await screen.findByRole("dialog", { name: "Devolver la orden a gestión" });
+    await user.click(within(dialog).getByRole("button", { name: "Devolver a gestión" }));
+
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalledWith(MOTIVO));
+    expect(successMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 });

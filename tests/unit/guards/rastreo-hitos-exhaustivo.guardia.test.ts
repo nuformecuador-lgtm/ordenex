@@ -48,6 +48,11 @@ const TABLA_FIRMADA: Record<OrderStatusValue, HitoPublico> = {
   // destinatario no cambia nada —el paquete no se le entrego—; lo que falta (la confirmacion en
   // bodega) es un tramite interno que el rastreo publico no cuenta.
   devolucion_por_confirmar: "no_entregado",
+  // Feature 235/R38 (P3 firmada 2026-08-19): EL MISMO hito que `en_reparto`. Para el destinatario
+  // no cambia nada -el paquete sigue con el mensajero- y quien resuelve la incidencia es asunto
+  // interno. Como el rastreo COLAPSA rachas del mismo hito, el viaje
+  // `en_reparto -> ayuda_tienda -> en_reparto` se ve como UNA sola entrada «En reparto».
+  ayuda_tienda: "en_reparto",
 };
 
 describe("R16 — el mapeo de hitos cubre el catalogo vigente entero", () => {

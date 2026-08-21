@@ -179,6 +179,7 @@ describe("GestionarOrdenPanel — hilo de notas", () => {
           orden({ id: "g2", numGuia: 1002, destinatario: "Beto Ruiz", secuenciaRuta: 2 }),
           orden({ id: "g3", numGuia: 1003, destinatario: "Caro Díaz", secuenciaRuta: 3 }),
         ]}
+        conAyuda={[]}
         ordenEnGestionId={null}
         ruta={RUTA}
         bloqueado={false}

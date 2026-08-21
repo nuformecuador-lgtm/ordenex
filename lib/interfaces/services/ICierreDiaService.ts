@@ -69,6 +69,15 @@ export interface CierreDetalleGestion {
   // por defecto (esa vista no expone el desglose SLA).
   esRechazoSla: boolean;
   /**
+   * 💰 Feature 237 (D6, R41) — `true` si la gestion la registro LA TIENDA desde su pestaña de
+   * ayuda. La fila del cierre del dia del mensajero lo dice CON PALABRAS, para que no firme como
+   * suya una gestion que no hizo, con una evidencia que no subio.
+   *
+   * Passthrough puro desde `CierreGestionPendienteRow`: el servicio no re-deriva la clasificacion,
+   * igual que con `esRechazoSla`.
+   */
+  desdeAyudaTienda: boolean;
+  /**
    * Feature 158/R9/R34: causa TIPIFICADA del incidente (`danado`/`perdido`/`robado`), leida de
    * `gestion_orden.causa_incidente`. `null` en cualquier otro resultado — es un campo POR
    * RAMA, como `metodoPago` o `fechaReprogramacion`.

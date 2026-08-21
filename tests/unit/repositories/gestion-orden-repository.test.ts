@@ -27,6 +27,8 @@ function fakeAsignacionRow(overrides: Record<string, unknown> = {}) {
     longitud: new Prisma.Decimal("-84.0907246"),
     notas: null,
     mensajeroAsignadoId: "m1",
+    // Feature 246 (T3.7, R35): dia de reparto CRUDO (`@db.Date`: medianoche UTC de la fecha CR).
+    fechaReparto: new Date("2026-08-21T00:00:00.000Z"),
     estatus: { value: "por_recoger" },
     tienda: { nombre: "Tienda X" },
     zona: { nombre: "Centro" },
@@ -57,6 +59,35 @@ describe("GestionOrdenRepository.findMisAsignaciones (R9/R13)", () => {
     expect(rows[0].tiendaNombre).toBe("Tienda X");
     expect(rows[0].montoCobrar).toBe(100);
     expect(rows[0].estatusValue).toBe("por_recoger");
+  });
+
+  // Feature 246 (T3.7, R35/R26): el dia de reparto viaja en la proyeccion QUE YA EXISTE. Sin
+  // consulta nueva: seria un N+1 sobre la pantalla mas caliente del portal del mensajero.
+  it("246/R35: pide `fechaReparto` en el select y la emite CRUDA, sin interpretarla", async () => {
+    const findMany = vi.fn(async () => [fakeAsignacionRow()]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+
+    const arg = (findMany.mock.calls[0] as unknown[])[0] as { select: Record<string, unknown> };
+    expect(arg.select.fechaReparto).toBe(true);
+    // CRUDA a proposito: quien decide si es «para mañana» es el SERVICIO, que tiene reloj. Un
+    // repositorio que devolviera el booleano tendria que leer la hora, y entonces dos filas del
+    // mismo listado podrian caer a distinto lado de la medianoche.
+    expect(rows[0].fechaReparto).toBeInstanceOf(Date);
+    expect((rows[0].fechaReparto as Date).toISOString()).toBe("2026-08-21T00:00:00.000Z");
+    expect(rows[0]).not.toHaveProperty("esParaManana");
+    // Y UNA sola consulta para todo el listado.
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("246/R35: una orden sin reserva emite `null`, no `undefined`", async () => {
+    const findMany = vi.fn(async () => [fakeAsignacionRow({ fechaReparto: null })]);
+    const repo = new GestionOrdenRepository({ orden: { findMany } } as never);
+
+    const rows = await repo.findMisAsignaciones("m1", ["por_recoger"]);
+
+    expect(rows[0].fechaReparto).toBeNull();
   });
 
   it("R9: estados vacios -> no consulta y devuelve []", async () => {
@@ -174,16 +205,37 @@ describe("GestionOrdenRepository.sumMontoCobrarGestionadas (KPI 'Total a cobrar'
   // siguen en reparto. Si la query no excluyera `en_reparto`, una orden gestionada hoy como
   // reprogramada y liberada de vuelta a reparto el mismo dia (feature 46) caeria en los DOS
   // conjuntos y su monto se sumaria dos veces.
-  it("EXCLUYE en_reparto para no solaparse con la otra mitad del total", async () => {
+  it("EXCLUYE lo que el mensajero LLEVA EN LA MANO, para no solaparse con la otra mitad", async () => {
     const { repo, aggregate } = repoConAggregate(null);
 
     const total = await repo.sumMontoCobrarGestionadas("m1", DIA);
 
     expect(total).toBe(0); // sin gestionadas / montos nulos -> 0, no null
     const arg = (aggregate.mock.calls[0] as unknown[])[0] as { where: Record<string, unknown> };
-    expect(arg.where.estatus).toEqual({ value: { not: "en_reparto" } });
+    // FEATURE 235 (R21, 2026-08-19): de UN value a DOS. El otro sumando (`porCobrar`) se calcula
+    // sobre `porGestionar UNION conAyuda`, asi que el conjunto «en la mano» crecio y esta red
+    // tenia que crecer con el. Censo CERRADO: uno de mas dejaria fuera dinero que si se gestiono.
+    expect(arg.where.estatus).toEqual({ value: { notIn: ["en_reparto", "ayuda_tienda"] } });
     expect(arg.where.mensajeroAsignadoId).toBe("m1");
     expect(arg.where.deletedAt).toBeNull();
+  });
+
+  // Feature 235 (R21): el predicado, aplicado a filas, para que el caso de arriba no afirme solo
+  // una forma. Los dos estados «en la mano» quedan fuera; los desenlaces, dentro.
+  it("235/R21: el predicado deja fuera `en_reparto` Y `ayuda_tienda`, y deja dentro los desenlaces", async () => {
+    const { repo, aggregate } = repoConAggregate(null);
+
+    await repo.sumMontoCobrarGestionadas("m1", DIA);
+    const arg = (aggregate.mock.calls[0] as unknown[])[0] as {
+      where: { estatus: { value: { notIn: string[] } } };
+    };
+    const cuenta = (estatus: string) => !arg.where.estatus.value.notIn.includes(estatus);
+
+    expect(cuenta("en_reparto")).toBe(false);
+    expect(cuenta("ayuda_tienda")).toBe(false);
+    for (const dentro of ["entregada", "reprogramada", "rechazada", "devolucion_por_confirmar"]) {
+      expect(cuenta(dentro), `${dentro} SI cuenta como gestionada del dia`).toBe(true);
+    }
   });
 });
 

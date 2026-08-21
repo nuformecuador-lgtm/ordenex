@@ -31,6 +31,13 @@ export const EXCLUDE_POR_ROL: Record<string, string[]> = {
     // pantalla de la tienda justo el estado que la 239 decide que no debe ver todavía (P3: en el
     // limbo la tienda no ve nada). Maestro/admin SÍ lo ven: solo excluyen "pendiente".
     "devolucion_por_confirmar",
+    // Feature 235/R37/R45 (T1.5, 2026-08-19) — `ayuda_tienda` **NO se excluye para NADIE**, y por
+    // eso NO figura en esta lista. Es una decisión con su caso negativo escrito: a diferencia de
+    // `devuelta` y `devolucion_por_confirmar`, que se le excluyen al adminTienda porque son
+    // estados que no opera, el estatus de ayuda **es su pantalla de trabajo** — la solicitud se le
+    // hace A ELLA. Maestro/admin lo ven también (solo excluyen "pendiente"). Este mapa es PARCIAL:
+    // un estado no listado AUTO-APARECE como opción, así que la decisión aquí es la ausencia y
+    // hay que afirmarla en test (`tests/components/OrdenesExcludePorRol.test.ts`).
   ],
 };
 

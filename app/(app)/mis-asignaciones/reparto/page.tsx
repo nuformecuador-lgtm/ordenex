@@ -45,6 +45,9 @@ export default async function RepartoPage() {
       <KpisMensajero kpis={result.kpis} />
       <RepartoModule
         porGestionar={result.porGestionar}
+        // Feature 235 (R18): la tercera lista llega YA SEPARADA del servidor; el módulo no vuelve
+        // a decidir el corte.
+        conAyuda={result.conAyuda}
         ordenEnGestionId={result.ordenEnGestionId}
         ruta={result.ruta}
         bloqueado={bloqueado}

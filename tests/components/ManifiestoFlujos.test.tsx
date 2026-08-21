@@ -283,6 +283,10 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
         open
         ordenes={[makeOrden({ id: "o1" }), makeOrden({ id: "o2" })]}
         mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        // Feature 246 (T4.2): las fechas del selector de dia bajan de la pagina. Aqui se pasan
+        // fijas porque este archivo prueba el MANIFIESTO, no el dia de reparto; lo unico que
+        // hace falta es que el modal se pueda montar con el contrato completo.
+        fechasDiaReparto={{ hoy: "2026-08-20", manana: "2026-08-21" }}
         onOpenChange={vi.fn()}
         onSuccess={vi.fn()}
       />,
@@ -340,6 +344,8 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
         open
         ordenes={[makeRecepcion({ id: "s1", estatusValue: "en_bodega_satelite" })]}
         mensajeros={[{ id: "m1", nombre: "Ana" }]}
+        // Feature 246 (T4.3): idem — este archivo prueba el manifiesto, no el dia de reparto.
+        fechasDiaReparto={{ hoy: "2026-08-20", manana: "2026-08-21" }}
         onOpenChange={vi.fn()}
         onSuccess={vi.fn()}
       />,

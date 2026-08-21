@@ -554,6 +554,7 @@ function gestion(i: number, resultado: CierreResultado): CierreDetalleGestion {
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     causaIncidente: null,
     indemnizacion: null,
   };

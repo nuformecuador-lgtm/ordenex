@@ -9,7 +9,342 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-18, noche. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
+
+**Cuatro releases a producción en esta sesión, todas verificadas contra la base después de
+desplegar.** Ninguna ficha `in_progress`.
+
+| # | Qué | Release |
+| --- | --- | --- |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | #414 |
+| **239** | «ver la app» hecha — la tarea que llevaba sin hacer con la ficha ya mergeada | — |
+| — | la nav de la landing baja a su sección y respeta el orden de la página | #417 |
+| — | botón «Volver al inicio» en login y postulación | #421 |
+| **252** | 🔴 **la postulación se perdía con documentos pesados** | #424 |
+| **253** | 🔴 **postular vehículo o bodega era una MAQUETA que decía «enviada»** | #430 |
+
+### 🔴 Los dos defectos que perdían datos de usuarios reales
+
+**252 — la postulación moría en silencio.** Medido contra producción mandando cuerpos crecientes:
+`4 MB → pasa`, `5 MB → 413`. Los archivos del humano pesaban 2,16 MB × 5 = **10,8 MB**. El
+formulario validaba **5 MB por documento** contra un límite de **5 MB para toda la petición**:
+admitía 25 MB y el transporte moría a los 5. **Y ese 413 no aparece en ningún log**, porque el
+rechazo ocurre antes de que la petición sea una invocación registrada — por eso era invisible por
+los dos lados. Arreglado reusando `comprimirImagen`, que **ya existía y usaban otras tres
+pantallas**: la postulación era la única superficie de subida que nunca la adoptó.
+**Confirmado en producción:** hay un alta de mensajero `pendiente` del 2026-08-21 03:33 UTC.
+
+**253 — la maqueta que mentía.** `PostularRecursoModal` validaba, pintaba «Postulación enviada» y
+**no enviaba nada**. Medido con `git log --follow`: **nació el 2026-08-16 y `prod` la contenía —
+cinco días en producción**. Quien postulara en esa ventana no recibió nunca una llamada, y **no hay
+forma de saber quiénes fueron**: no dejaron fila, ni log, ni correo.
+
+### 🛡️ El arnés cambió: `--rapido` pasa a ser el gate normal
+
+Medido: mover un enlace de la nav costaba **16.346 tests y 5–11 min**; lo relacionado eran **21 +
+las guardias, ~33 s**. Ahora:
+
+- **`--rapido` es el gate de un PR** (~80 s en la práctica).
+- **`./init.sh` completo** es obligatorio **antes de una release a `prod`** y **después de cada
+  merge a `dev`** — ahí es donde se caza un `dev` roto, que es el único agujero que el modo rápido
+  no puede ver por diseño (`--changed` compara *contra* `dev`).
+- **`--rapido` se niega solo** si el diff toca migraciones, `db/schema.prisma`, `lib/types/`,
+  config de build, nombres de dinero **o el propio `init.sh`**. Es un `fail`, no un aviso.
+
+Probado en los dos sentidos, que es donde mueren estos filtros. Y ya se ejerció de verdad: **se
+negó ante el backend de la 253** (toca `db/migrations` y `lib/types`).
+
+### ▶️ Qué queda, y una que necesita decisión HUMANA
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **251** | ⚠️ **la optimización de ruta NO corre en producción** | falta `GOOGLE_ROUTE_OPT_PROJECT_ID`. Degrada al cálculo local **en silencio**, y uno de los sitios donde salta es la pantalla del mensajero. **¿Debe configurarse o el fallback es lo querido? Es una pregunta para el humano, no un defecto confirmado** |
+| **247** | el doble cobro del flete de devolución | medido: `1 de 16`, ₡2.486 a NUFORM |
+| **248** | los errores de `/novedades` salen mudos | la feature 100 comparte el hueco |
+| **249** | el chequeo del `down.sql` **avisa pero no falla** | tres migraciones llevan sin él desde el 2026-08-14 |
+| **250** | el aviso dice «Devuelta» cuando la orden está en «Devolución por confirmar» | |
+| **254** | `db:rollback` revierte **por orden alfabético** | no alcanza a la 2.ª migración de una tanda, **y no lo dice** |
+| **220** | e2e | su premisa sigue podrida: 13 de 20 specs son `NOT EXECUTED` |
+
+### 🧾 El patrón de la sesión: los fallos MUDOS
+
+**252, 253, 248, 250 y 254 son la misma familia**: el sistema no falla, *aparenta*. Un acuse falso,
+un 413 sin log, un botón que no hace nada, un aviso que nombra el estado equivocado, un rollback
+que dice que revirtió. **Ninguno rompe un test.** Por eso la 253 no se dio por cerrada hasta que su
+guardia se demostró **roja en las dos formas de recaída** — y en una de ellas `eslint` da `0 errors`
+y sale con código 0: el linter no la caza.
+
+---
+
+## 🚀 Desplegado a producción — 2026-08-20
+
+**La pila entera de la ayuda a la tienda salió a producción.** Release
+[#414](https://github.com/nuformecuador-lgtm/ordenex/pull/414) (`dev` → `prod`, merge commit
+`0931e0fa`): **32 commits · 481 archivos · 9 migraciones**, y el despliegue de Vercel terminó en
+verde.
+
+**Dentro van 235, 236, 237, 238, 240, 241 y 246**, más el lote `ux` (#401). **La 239 NO iba: ya
+estaba en producción** desde el 19 de agosto (PR #400) — verificado en la base, no supuesto.
+
+### Lo que se verificó DESPUÉS de desplegar, contra la base de producción
+
+| comprobación | resultado |
+| --- | --- |
+| migraciones aplicadas | **128 → 137**, exactamente las 9. **0 revertidas** |
+| última | `20260820190000_orden_historial_origen_rechazo_tienda` |
+| `orden.ayuda` (la que **se borra**) | **ya no existe** |
+| `orden.fecha_reparto` (246) · `order_status.ayuda_tienda` (235) · `gestion_orden.confirmada_fisica_at` (238) | **los tres existen** |
+| **órdenes totales** | **163 antes y 163 después** — el `DROP` no perdió una fila |
+| errores de runtime nuevos | **ninguno del despliegue nuevo** (los 4 grupos vivos son del anterior) |
+
+### La migración destructiva, re-medida el mismo día
+
+Su cabecera avisaba de que la foto de agosto caducaba. Se re-midió antes de mergear:
+
+| medida | valor |
+| --- | --- |
+| filas medidas | **163** |
+| `ayuda IS TRUE` | **0** |
+| `ayuda IS FALSE` | **163** |
+
+**El cero no es de universo vacío:** 163 filas en `false` prueban que la columna se lee y que el
+filtro discrimina. Y las 163 órdenes siguen ahí después del `DROP`.
+
+### Y las re-mediciones de despliegue que las fichas exigían
+
+| qué | valor | por qué importaba |
+| --- | --- | --- |
+| **cierres en cola** | **0** de 16 | la ventana nueva de la **238** no bloqueó a nadie |
+| órdenes en el pre-estado · gestiones `devuelta` sin cierre | 0 · 0 | nada a medio anclar |
+| asignadas después de las 18:00 CR | 3 de 33 | proxy del denominador de la 246 |
+| gestiones deshechas | 8 de 66 (12 %) | coherente con lo medido para la 237 |
+
+⚠️ **Producción se está usando como entorno de PRUEBAS**, así que estos números dicen lo que el
+código hace, **no frecuencia operativa**.
+
+### 🔴 Lo que los logs de producción destaparon, y NO es de esta release
+
+**La optimización de ruta no corre en producción.** 23 errores en 24 h por
+`GOOGLE_ROUTE_OPT_PROJECT_ID` ausente, en `/api/cron/procesar-jobs` y en
+**`/mis-asignaciones/reparto`** — la pantalla del mensajero. El código **degrada solo y lo dice**
+(«se usa el local»), así que nadie ve un fallo: el mensajero recibe un orden calculado por la
+heurística local en vez de por Google. Las fichas **91 y 97 están en `done`** con la credencial sin
+poner. **Ficha 251**, y su pregunta es para el humano: *¿debe estar configurada, o el fallback local
+es lo querido?* No hay spec de la 97 que lo diga, así que **no se supone**.
+
+---
+
+## ✅ Cierre de la tanda — 2026-08-20
+
+**Cinco fichas mergeadas en dos días, las cinco con revisión OK. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+| **241** | investigación de las guardas de bloqueo retiradas | [#408](https://github.com/nuformecuador-lgtm/ordenex/pull/408) |
+| **237** | la gestión que hace la tienda cuenta como del mensajero | [#410](https://github.com/nuformecuador-lgtm/ordenex/pull/410) |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | **#411** |
+
+La **228** queda **superada** por la 236. La **74** se cerró **por auditoría**: ya estaba
+implementada y la ficha llevaba semanas mintiendo.
+
+### ▶️ Qué queda por implementar
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **239** | la devolución espera al cierre | `done` — **«ver la app» HECHA el 2026-08-20**, ver `progress/recorrido_239.md`. Quedan abiertas T0.3 (avisar a integradores) y T6.4 |
+| **247** | **el doble cobro del flete de devolución** | `pending` — **medido**: `1 de 16`, ₡2.486 a NUFORM. Dos cierres aprobados, seis días de diferencia, el mismo paquete |
+| **248** | los errores de `/novedades` salen **mudos** | `pending` — la **feature 100 comparte el hueco idéntico** |
+| **220** | e2e | `pending`, pero **su premisa está podrida**: 13 de 20 specs son `NOT EXECUTED` |
+| **249** |  el chequeo del `down.sql` **existe pero solo avisa** | `pending` — **tres migraciones llevan seis días sin `down.sql` con el gate en verde**, y van cinco en dos semanas |
+| **250** | el aviso al mensajero dice «Devuelta» cuando la orden está en «Devolución por confirmar» | `pending` — **salió del recorrido de la 239**: es la coincidencia resultado↔estado que esa ficha vino a romper, viva en un retorno al que no llegó |
+| **251** | la **optimización de ruta no corre en producción**: falta `GOOGLE_ROUTE_OPT_PROJECT_ID` | `pending` — **preexistente**, 23 errores en 24 h; degrada al cálculo local **en silencio**. La pregunta (¿debe configurarse?) es **para el humano** |
+
+### ⚠️ Antes de desplegar — acciones HUMANAS que se arrastran
+
+- **238 / T0.3:** avisar a bodega de que **el gesto cambia**: aprobar exige tener los paquetes
+  delante y escanear su guía.
+- **Re-medir producción** antes de desplegar la **236**, la **237**, la **238** y la **246**. Las
+  cuatro mediciones se tomaron con fichas todavía sin desplegar y **caducan al salir**.
+
+### ⚠️ PRODUCCIÓN SE ESTÁ USANDO COMO ENTORNO DE PRUEBAS
+
+Confirmado por el humano el **2026-08-20**, y hay que saberlo para leer cualquier medición de
+`progress/medicion_*.md`. Los números **describen fielmente lo que el código hace** —un doble cobro
+medido es un doble cobro real del código—, pero **no dicen frecuencia operativa**: un número bajo
+puede ser «no pasa» o «nadie lo ha probado aún», y la base no distingue. Los importes cobrados de
+más **no son dinero real de una tienda real**, por eso el defecto de la 247 se arregla **hacia
+adelante** y no hay devolución que hacer. **El día que producción sea producción de verdad, todo
+esto hay que re-medirlo.**
+
+### 🧾 Los dos patrones que se repitieron en las cinco fichas
+
+**Una suite verde no encuentra una maqueta.** La 240 destapó un botón que llevaba **desde el
+2026-08-12** sin hacer nada, con **las tres capas de tests de esa superficie en verde** todo ese
+tiempo. Una maqueta no rompe nada — por eso «ver la app» ha encontrado, en esta pila, un cierre
+imposible de aprobar (238), dos defectos de card (235), un botón que siempre fallaba (237) y siete
+textos rotos. Lo que no se mira, no está verificado.
+
+### 📌 Una excepción a la regla 1, escrita para que no se convierta en costumbre
+
+La 240 y la 246 corrieron **las dos `in_progress` en la zona `fullstack` a la vez y compartiendo
+cinco archivos**. `CLAUDE.md` admite dos por zona **«siempre sin conflicto de archivos entre
+ellas»**, así que esto fue una excepción. Salió limpio —cada edición lleva su ficha citada, ninguna
+reescribió un archivo entero, y el gate completo lo confirma— pero **salió limpio porque se vigiló,
+no porque la regla lo permitiera**. Si vuelve a hacer falta, que se decida a propósito y con la
+misma vigilancia; y **el gate nunca en paralelo con un subagente que muta el árbol**, porque
+entonces su veredicto no vale.
+
+**Y marcar tareas por lotes miente.** Pasó en la 236 (T8), volvió a pasar en la 237 (recorrido
+marcado hecho **parado en el paso 6 de 9**, y los tres que faltaban eran los de dinero) y la
+revisión lo rechazó **con razón** las dos veces. En la 240 y la 246 las tareas quedan marcadas una a
+una, con **cinco abiertas a propósito** y el motivo escrito al lado.
+
+---
+
+## ✅ AL DÍA — 2026-08-19, cierre. **EMPIEZA A LEER POR AQUÍ**
+
+**Tres fichas mergeadas hoy, las tres con revisión OK y gate completo verde. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+
+La **228** queda **superada** por la 236.
+
+### ▶️ Qué sigue
+
+1. **237** — la gestión de la tienda que cuenta como del mensajero. Hereda dos avisos escritos: la
+   invariante «una orden en ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y
+   la guardia de las siete listas **vigila pero no descubre** una octava.
+2. **240** — el punto 12 del pedido («Habilitar» aparece donde no debía) y «Rechazar».
+3. **241**, independiente.
+
+⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
+No en paralelo.**
+
+### ⚠️ Antes de desplegar — dos acciones HUMANAS
+
+- **238 / T0.3:** avisar a bodega de que el gesto cambia: aprobar exige tener los paquetes delante.
+- **236 / T0.1 y 238 / T0.1:** **re-medir producción**. Las dos mediciones se tomaron con la 235 aún
+  sin desplegar, y **caducan en cuanto salga**.
+
+### 🧾 El patrón que se repitió las tres veces
+
+**Ver la app encontró lo que la suite no**, en dos de las tres: un **cierre que no se podía aprobar
+nunca** (238) y **dos defectos de card** (235). Y **la trazabilidad falló en las cuatro fichas
+seguidas**: filas del mapa citando tests que no existen, y una bitácora publicando una salida que no
+se reproduce. `vitest` **no falla** con un filtro que no casa nada — lo ignora en silencio.
+
+Y **`dev` llegó rojo por tercera vez** con el merge de `ux` (#401). La causa de fondo sigue viva: un
+PR en verde aquí **no dice nada de los tests**, porque el único check es un build.
+
+---
+
+## ✅ AL DÍA — 2026-08-19, noche (la 235 y la 238)
+
+**Dos fichas mergeadas hoy, las dos con revisión OK y gate completo verde. No hay ninguna ficha
+`in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+
+### ▶️ Qué sigue
+
+1. **236** — la pestaña propia de ayuda en `/novedades`. **Marca el reloj**: hasta que entre, la
+   tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede leer el motivo**.
+2. **237** → **240**. La 237 hereda dos avisos escritos: la invariante «una orden en ayuda bloquea el
+   cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia de las siete listas **vigila
+   pero no descubre** una octava.
+3. **241**, independiente.
+
+### ⚠️ Antes de desplegar la 238 — acción HUMANA (T0.3)
+
+Avisar a bodega de que **el gesto cambia**: a partir del despliegue, aprobar un cierre exige tener
+los paquetes delante y escanear su guía. La medición dice que **no bloquea** —0 cierres en cola el
+2026-08-19— pero **esa foto caduca en cuanto un mensajero cierre su día**: re-medir justo antes de
+desplegar, no antes de mergear.
+
+### 🔴 `dev` llegó ROJO, y es la TERCERA vez
+
+El merge del branch `ux` ([#401](https://github.com/nuformecuador-lgtm/ordenex/pull/401), 142
+archivos) dejó en `dev` **tres tests money-critical de la 69 en rojo** y **dos migraciones sin
+`down.sql`**. Los tres arreglos van dentro del PR de la 238, y están explicados ahí.
+
+**La causa de fondo no está arreglada:** en este repo **un PR en verde no dice nada sobre los
+tests** —el único check es el build de Vercel, que compila y migra pero no ejecuta la suite—. Antes
+de mergear algo que conviva con features recién llegadas, hay que correr el gate **sobre el árbol
+mergeado**, no mirar el estado del PR. Y al ramificar, **dar por hecho que `dev` puede estar rojo**:
+si el gate sale rojo, comprobar si el rojo es tuyo antes de tocar nada.
+
+---
+
+## ✅ AL DÍA — 2026-08-19 (la 235)
+
+**La 235 («ayuda a la tienda: estatus propio») está MERGEADA en `dev`** — PR
+[#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402), commit `32b4064f`, ficha en `done`,
+39/39 tareas. La revisión la había **RECHAZADO** con 4 bloqueantes; los cuatro se cerraron:
+
+| | qué era | cómo quedó |
+| --- | --- | --- |
+| **B1** | el corte de la noche no barría al mensajero que acababa el día en ayuda | cerrado en `db23911b`, censando las **siete** listas de «qué ocupa a un mensajero» y con guardia que las cruza |
+| **B2** | la regla de dedicación de la 157 leía «sin carga» a quien lleva el paquete | ídem |
+| **B3** | R35 pedía superficie de lectura para los dos roles y la tienda no la tiene | **reconciliado en el spec**: el propio `requirements.md` se contradecía (su «fuera de alcance» ya difería la pantalla de la tienda a la 236) |
+| **B4** | `tasks.md` con 0/39 y trabajo abierto dentro | cerrado: **38/39**, con **T8.1 hecho de verdad** (ver abajo). La única sin marcar es T8.3 —gate completo y PR—, que no puede marcarse antes de correrse |
+
+Y el último menor, **m4**: el rescate estaba apagado en pantalla para el mensajero bloqueado, contra
+R25 — arreglado, con test que se sabe poner rojo.
+
+### ▶️ Qué sigue, en orden
+
+1. **236** — la pestaña propia de ayuda en `/novedades` y su card. **Es la siguiente y corre prisa**:
+   hasta que entre, la tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede
+   leer el motivo**. Ver el aviso de despliegue de abajo.
+2. **238** — confirmación física de los paquetes al aprobar el cierre. **No depende de ninguna** y ya
+   tiene spec completo y decisiones firmadas: puede arrancar sin esperar a nadie, incluso en paralelo
+   con la 236 (zona `fullstack`, y ahora mismo no hay ninguna `in_progress`).
+3. **237** → **240**, en ese orden. La **237** hereda dos avisos escritos: la invariante «una orden en
+   ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia nueva de las
+   siete listas **vigila pero no descubre** una octava.
+4. **241** — investigación de las guardas de bloqueo retiradas. Independiente, cuando toque.
+
+### 🔀 ORDEN DE MERGEO Y DE DESPLIEGUE (cierra **T0.3** de la 235)
+
+**235 → 236 → 237 → 240**, en ese orden. La **241** (investigación de las guardas de bloqueo
+retiradas) es independiente y puede ir cuando sea. La **238** no depende de ninguna y puede arrancar
+en paralelo, ya con spec completo y decisiones firmadas.
+
+⚠️ **La 235 YA ESTÁ EN `dev`, así que la 236 marca el reloj.** Medido en pantalla el 2026-08-19: con
+la 235 sola, la tienda ve la orden en `/novedades` con el chip «Ayuda solicitada» **bajo la pestaña
+«En devolución»** y **sin ninguna forma de leer el motivo** que el mensajero escribió (su card no
+tiene botón de notas). No es peor que hoy —hoy tampoco lo lee—, pero es una solicitud de ayuda cuyo
+motivo la tienda no puede abrir. La 236 es la que le da pestaña, card y lectura del hilo.
+
+### ⚠️ Aviso para la 237: la guardia nueva **vigila, pero no descubre**
+
+La guardia de las siete listas de «qué ocupa a un mensajero» cruza los gemelos entre sí —que es donde
+vivieron B1 y B2— pero su censo está **cerrado a mano** (`toHaveLength(7)`) y **no recorre el árbol**
+buscando una octava. Sabe de las siete que alguien le declaró. Si la 237 abre una lista nueva de esa
+familia, **la guardia no la va a encontrar sola**: hay que declararla. La red contra un *estatus*
+nuevo sigue siendo el `satisfies Record<OrderStatusValue, …>` de los mapas exhaustivos.
+
+### 👀 T8.1 — la app, vista
+
+Se recorrió entero, con Playwright y los dos roles: el mensajero pide ayuda → la orden sale del
+listado y del mapa → baja a su sección con los KPI **quietos** → hilo → «Recuperar»; y la tienda la
+ve en `/novedades` y la rescata con «Habilitar». **Encontró dos defectos que la suite no veía** (el
+chip de la card decía «En reparto», y la card llevaba «Pendiente de optimizar» contra R15), los dos
+arreglados en esta misma tanda. Detalle completo, con el texto leído del navegador, en
+`progress/recorrido_235.md`.
+
+
+## AL DÍA — 2026-08-18, noche
 
 > **Producción sigue sana y sin tocar**: `prod` en la release del 15-ago (PR #388), **cero errores de
 > runtime en 3 días**. Todo lo de hoy está en esta rama, pendiente de PR.

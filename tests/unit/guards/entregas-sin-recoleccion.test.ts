@@ -72,17 +72,25 @@ describe("Feature 167 — Entregas no monta ninguna superficie de recoleccion (R
     }
   }
 
-  it("la lectura de Entregas pide EXACTAMENTE los dos estados de su propio flujo (R34)", () => {
+  it("la lectura de Entregas pide EXACTAMENTE los estados de su propio flujo (R34)", () => {
     const src = sinComentarios(leer("lib/services/MisAsignacionesService.ts"));
     const llamada = src.match(/findMisAsignaciones\(\s*actor\.usuarioId,\s*\[([^\]]*)\]/);
 
     expect(llamada, "no se encontro la llamada a findMisAsignaciones").not.toBeNull();
-    // Dos constantes, ni una mas: la forma fuerte de R34 es que la lista sea CERRADA.
+    // Lista CERRADA, que es la forma fuerte de R34: ni una constante mas de las decididas.
+    //
+    // 2026-08-19 (feature 235/T3.1, R18/R19) — PASA DE DOS A TRES, con nota fechada y por la
+    // puerta: `ESTADO_AYUDA` se lee porque el portal tiene que entregar esas ordenes YA SEPARADAS
+    // desde el servidor. Lo que la 167 aislo NO se toca y se dice abajo como negativo: la
+    // recoleccion en tienda (`recolectando`) sigue teniendo su propio contrato y su propio
+    // service, y NO entra aqui.
     const estados = llamada![1]
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    expect(estados).toEqual(["ORIGEN_RECOGER", "ESTADO_EN_REPARTO"]);
+    expect(estados).toEqual(["ORIGEN_RECOGER", "ESTADO_EN_REPARTO", "ESTADO_AYUDA"]);
+    expect(estados).not.toContain("ESTADO_RECOLECTANDO");
+    expect(src).not.toMatch(/=\s*"recolectando"/);
   });
 
   it("el guard mira archivos que EXISTEN (si se renombran, se actualiza aqui)", () => {

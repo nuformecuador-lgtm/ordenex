@@ -12,6 +12,7 @@ import type {
   Alcance,
   CierreAdminResumenRow,
   GestionIncidenteDelCierre,
+  GestionRetornableDelCierre,
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
@@ -28,6 +29,7 @@ import type {
   CierreDetalleAdminServiceResult,
   ForzarSolicitudVencidoServiceResult,
   ICierresAdminService,
+  ConfirmacionFisicaInput,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
   ListarGestionesDescargaServiceResult,
@@ -72,15 +74,42 @@ const msgDescuadre = (total: string) => `El desglose debe sumar exactamente ${to
 // Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto
 // fijo i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla),
 // nunca al mensajero, al destinatario ni al monto.
-const MSG_INDEMNIZACION_FALTANTE = "Falta el monto de indemnizacion de este incidente.";
+const MSG_INDEMNIZACION_FALTANTE = "Falta el monto de indemnización de este incidente.";
 const MSG_INDEMNIZACION_AJENA =
   "Este monto no corresponde a un incidente de este cierre.";
 const MSG_INDEMNIZACION_DUPLICADA = "Hay dos montos para el mismo incidente.";
 
+// Feature 238 (T2.2, design §3.2, R9-R13) — los SEIS desenlaces de la confirmacion fisica, uno
+// por correccion posible de quien esta en el mostrador con el paquete en la mano. Texto fijo
+// i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla), nunca
+// al mensajero, al destinatario ni a la tienda (R44).
+//
+// CON TILDES, y los once mensajes de este bloque con ellas (decision del leader, 2026-08-19).
+// Estos textos NO son identificadores ni logs: salen por `fieldErrors` a la pantalla de bodega y
+// los lee una persona con el paquete en la mano. El 2026-08-07 este repo encontro SIETE etiquetas
+// mal escritas que doce mil tests daban por buenas —entre ellas «Ordenes creadas», la palabra
+// central del producto, en la primera pantalla del maestro—: ninguna suite miraba el texto que lee
+// un humano. La consistencia con los vecinos era el argumento para no divergir; la salida fue
+// arreglar los once, no heredar el defecto.
+const MSG_CONFIRMACION_FALTANTE = "Falta confirmar la recepción de este paquete.";
+const MSG_CONFIRMACION_AJENA = "Esta gestión no pertenece a lo que vuelve en este cierre.";
+const MSG_CONFIRMACION_DUPLICADA = "Este paquete se confirmó dos veces.";
+// R11: mensaje PROPIO, distinto del de gestion ajena. La diferencia no es cosmetica: «no
+// pertenece» invita a buscar el paquete, y aqui el paquete NO EXISTE (se perdio, se robo o se
+// dano) y lo que corresponde es indemnizarlo (158).
+const MSG_CONFIRMACION_INCIDENTE =
+  "Los incidentes no se confirman: el paquete no vuelve a bodega.";
+const MSG_CONFIRMACION_GUIA_DISTINTA = "La guía leída no es la de este paquete.";
+// R13: la orden llego a reparto sin guia. Medido el 2026-08-19: hoy no existe esa poblacion.
+// Se bloquea y se DICE, nunca se omite en silencio — omitirla dejaria un paquete aprobado sin
+// que nadie lo tuviera delante, que es justo lo que esta feature viene a impedir.
+const MSG_CONFIRMACION_SIN_GUIA =
+  "Este paquete no tiene número de guía y no se puede confirmar. Avisá a un administrador.";
+
 // Feature 239 (T2.1, R9): catalogo incompleto -> la aprobacion NO ocurre. Texto SIN PII y con el
 // mismo tono accionable que el resto (patron `MSG_CATALOGO` de la 36/67).
 const MSG_CATALOGO_ANCLAJE =
-  "No se puede aprobar: el catalogo de estados esta incompleto (seed pendiente).";
+  "No se puede aprobar: el catálogo de estados está incompleto (seed pendiente).";
 
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
@@ -542,10 +571,27 @@ export class CierresAdminService implements ICierresAdminService {
     // incidentes se aprueba exactamente como hoy; uno CON incidentes y lista vacia cae en la
     // guardia de cobertura de abajo, asi que el default no abre ningun agujero.
     indemnizaciones: ReadonlyArray<IndemnizacionCapturadaInput> = [],
+    // Feature 238 (R7/R15/R16): cuarto parametro posicional con default, exactamente como la 158
+    // anadio el tercero. `[]` = «no se confirmo nada», que NO es lo mismo que «no habia nada que
+    // confirmar»: si el cierre tiene retornables, la guardia de abajo lo rechaza (R15).
+    confirmacionFisica: ReadonlyArray<ConfirmacionFisicaInput> = [],
   ): Promise<AprobarCierreServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R1
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // Feature 238 (T2.2, design §3.2, R7-R16) — COBERTURA EXACTA DE LOS PAQUETES QUE VUELVEN, y
+    // va ANTES que la de indemnizaciones POR LA MISMA RAZON por la que la pantalla pone la
+    // ventana de escaneo antes que la captura de montos (R37): si falta un paquete, no tiene
+    // sentido validar dinero que se va a descartar. Las dos guardias son independientes y las dos
+    // devuelven ANTES de tocar el repo (R14), asi que un envio incompleto no llega ni a abrir la
+    // transaccion de aprobacion.
+    const errorConfirmacion = await this.validarConfirmacionFisica(
+      cierreId,
+      scope.alcance,
+      confirmacionFisica,
+    );
+    if (errorConfirmacion !== null) return errorConfirmacion;
 
     // Feature 158 (R19/R20/R21/R25) — COBERTURA EXACTA, ANTES de tocar el repo. El conjunto de
     // `gestionId` recibidos debe ser IGUAL al de gestiones `incidente` del cierre, leidas
@@ -633,6 +679,11 @@ export class CierresAdminService implements ICierresAdminService {
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,
+      // Feature 238/R17: las gestiones cuyo paquete bodega declaro tener delante, ya con su
+      // cobertura EXACTA verificada arriba. Solo viajan los ids: la guia ya se contrasto (R12) y
+      // el repo no la persiste. OBLIGATORIO en esta rama —puede ser `[]`, pero no puede faltar—
+      // para que un olvido de cableado rompa el typecheck en vez de dejar la marca sin escribir.
+      confirmacionFisica: confirmacionFisica.map(({ gestionId }) => ({ gestionId })),
     });
     if (res === "updated") {
       // Feature 172 (T C.2, §8/R16): el pendiente se deriva DESPUES de que la aprobacion haya
@@ -710,6 +761,92 @@ export class CierresAdminService implements ICierresAdminService {
       cierre.totalEfectivo,
       pagados[cierreId] ?? "0.00",
     );
+  }
+
+  /**
+   * Feature 238 (T2.2, design §3.2, R7-R16) — COBERTURA EXACTA de la confirmacion fisica.
+   * ESPEJO de `validarCoberturaIndemnizaciones`, y por el mismo motivo: el borde (zod) no sabe
+   * que gestiones tiene ese cierre, asi que la cobertura solo se puede comprobar leyendo el
+   * cierre DENTRO del alcance del actor. Eso es logica de negocio y vive aqui (design §10-F).
+   *
+   * Devuelve `null` si el conjunto de `gestionId` recibidos es IGUAL al de gestiones del cierre
+   * que vuelven a bodega; si no, un `validation_error` con un error POR GESTION (R8/R9/R10), que
+   * es lo que permite a la pantalla pintarlo en SU fila y no como un bloqueo mudo.
+   *
+   * NO hay puerta de escape (D2, firmada el 2026-08-19): un solo paquete perdido devuelve el
+   * cierre entero. La salida cuando un paquete no llego YA EXISTE y es rechazar el cierre con
+   * motivo, que se lo devuelve al mensajero. Esa friccion es exactamente lo que hace que los
+   * paquetes aparezcan; ablandarla aqui la deshace el primer dia de prisa.
+   */
+  private async validarConfirmacionFisica(
+    cierreId: string,
+    alcance: Alcance,
+    confirmacionFisica: ReadonlyArray<ConfirmacionFisicaInput>,
+  ): Promise<{ status: "validation_error"; fieldErrors: Record<string, string[]> } | null> {
+    const esperadas = await this.repo.findGestionesRetornablesDelCierre(cierreId, alcance);
+    // R16: un cierre SIN nada que devolver se aprueba con el MISMO comportamiento y el MISMO
+    // payload que antes de esta feature — ni una consulta mas aguas abajo. Medido: es 3 de cada
+    // 12 cierres, un camino de igual rango, no un `else` de cortesia.
+    if (esperadas.length === 0 && confirmacionFisica.length === 0) return null;
+
+    const porId = new Map<string, GestionRetornableDelCierre>(
+      esperadas.map((g) => [g.gestionId, g]),
+    );
+    const fieldErrors: Record<string, string[]> = {};
+    const vistos = new Set<string>();
+
+    // La lectura de los incidentes es PEREZOSA y se hace COMO MUCHO UNA VEZ: solo hace falta
+    // para redactar el mensaje de una entrada que no esta en el conjunto esperado (R11), que es
+    // el camino de error. En el camino feliz —el que corre siempre en produccion— no se paga.
+    let idsIncidente: Set<string> | null = null;
+    const esIncidenteDeEsteCierre = async (gestionId: string): Promise<boolean> => {
+      idsIncidente ??= new Set(
+        (await this.repo.findGestionesIncidenteDelCierre(cierreId, alcance)).map(
+          (g) => g.gestionId,
+        ),
+      );
+      return idsIncidente.has(gestionId);
+    };
+
+    for (const { gestionId, numGuia } of confirmacionFisica) {
+      if (vistos.has(gestionId)) {
+        // R10: la misma gestion confirmada dos veces. Sin esto, dos entradas cubririan una sola
+        // gestion y el conteo cuadraria con un paquete menos delante.
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_DUPLICADA];
+        continue;
+      }
+      vistos.add(gestionId);
+      const esperada = porId.get(gestionId);
+      if (esperada === undefined) {
+        // R11 vs R10: distinguir el INCIDENTE de la gestion ajena. Los incidentes de ESTE cierre
+        // ya se leen para la cobertura de la 158, asi que no cuesta una consulta mas. Y la
+        // distincion importa: «no pertenece» invita a buscar el paquete; el incidente no hay
+        // donde buscarlo.
+        fieldErrors[gestionId] = [
+          (await esIncidenteDeEsteCierre(gestionId))
+            ? MSG_CONFIRMACION_INCIDENTE
+            : MSG_CONFIRMACION_AJENA,
+        ];
+        continue;
+      }
+      if (esperada.numGuia === null) {
+        // R13: la orden no tiene numero de guia. La gestion NO se omite del conjunto esperado
+        // (sale de la lectura como cualquier otra) y aqui se bloquea nombrando el motivo.
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_SIN_GUIA];
+      } else if (esperada.numGuia !== numGuia) {
+        // R12: se leyo una guia que no es la de este paquete. Es la diferencia entre «bodega
+        // tuvo ESTE paquete delante» y «bodega escaneo algo».
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_GUIA_DISTINTA];
+      }
+    }
+
+    // R9: falta la confirmacion de alguna gestion del conjunto esperado -> error en ESA gestion.
+    for (const { gestionId } of esperadas) {
+      if (!vistos.has(gestionId)) fieldErrors[gestionId] = [MSG_CONFIRMACION_FALTANTE];
+    }
+
+    if (Object.keys(fieldErrors).length === 0) return null;
+    return { status: "validation_error", fieldErrors };
   }
 
   /**
@@ -902,8 +1039,12 @@ export class CierresAdminService implements ICierresAdminService {
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
 
     // R16: transicion guardada por estado ('vencido') + alcance en el repo. Money-safe (R21):
-    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`. R18: NO desbloquea; el
-    // desbloqueo ocurre al APROBAR el `solicitado` resultante (que registra la auditoria, R17).
+    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`.
+    //
+    // ⚠️ FEATURE 241 (2026-08-20): aqui decia «R18: NO desbloquea; el desbloqueo ocurre al APROBAR
+    // el `solicitado` resultante». SI DESBLOQUEA, en el acto: `solicitado` salio de
+    // `ESTADOS_CIERRE_BLOQUEAN_GESTION`. Lo que sigue ocurriendo solo al aprobar es la resolucion
+    // del dinero y la auditoria (R17), que es otra cosa.
     const res = await this.repo.forzarSolicitudVencido(cierreId, scope.alcance);
     if (res === "updated") return { status: "ok", cierreId, estado: "solicitado" };
     if (res === "conflict") return { status: "conflict" }; // ya no es `vencido`

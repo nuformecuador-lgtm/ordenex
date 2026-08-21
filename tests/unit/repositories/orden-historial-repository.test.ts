@@ -601,8 +601,13 @@ describe("el discriminador de las gestiones SINTETICAS (215/R12/R18-b/R34) [💰
   // vez de por un `gestion_orden_id` SIN indice, design §3.4).
   it("R34-c: el `some` filtra por familia con `in` y repite el `ordenId` (sin `none`/`notIn`)", async () => {
     const where = await whereIndividual();
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6): la lista blanca pasa de UNO a DOS miembros.
+    // `gestion_tienda_ayuda` (la gestion que registra la tienda desde la pestaña de ayuda) SI es
+    // visita real: es el desenlace de la visita que el mensajero si hizo. El literal se conserva
+    // como literal a proposito —es el censo cerrado que impide que una familia entre de rebote— y
+    // NO se sustituye por `[...ORIGEN_TIPOS_VISITA_REAL]`, que quedaria verde para siempre.
     expect(where.historialEstados).toEqual({
-      some: { ordenId: "o1", origenTipo: { in: ["gestion"] } },
+      some: { ordenId: "o1", origenTipo: { in: ["gestion", "gestion_tienda_ayuda"] } },
     });
     const json = JSON.stringify(where);
     expect(json).not.toContain("none");

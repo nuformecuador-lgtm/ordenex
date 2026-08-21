@@ -7,8 +7,12 @@ import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { Pagination } from "@/components/shared/Pagination";
 import { useToast } from "@/hooks/useToast";
 import {
+  listarAyudaTiendaAction,
+  listarAyudaTiendaCompletoAction,
   listarNovedadesAction,
   listarNovedadesCompletoAction,
+  type ListarNovedadesActionResult,
+  type ListarNovedadesCompletoActionResult,
 } from "@/lib/actions/novedades";
 import { CAUSA_DEVOLUCION_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-devolucion-options";
 import { PosOrderCardDetalle } from "@/app/(app)/mis-asignaciones/_components/pos-card/PosOrderCardDetalle";
@@ -21,38 +25,79 @@ import {
   CLASE_FASE,
   useTransicionVista,
 } from "@/app/(app)/mis-asignaciones/_components/useTransicionVista";
+import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { NovedadDTO } from "@/lib/types/novedad";
+import { grupoDeEstatus, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 
+import {
+  COLUMNAS_DESCARGA_AYUDA,
+  filaDescargaAyuda,
+  TITULO_DESCARGA_AYUDA,
+} from "./ayuda-descarga-columnas";
+import {
+  GestionarDesdeAyudaModal,
+  GESTION_AYUDA_ERROR_FORBIDDEN,
+  GESTION_AYUDA_ERROR_SESION,
+  GESTION_AYUDA_EXITO,
+  type DesenlaceGestionDesdeAyuda,
+  type ModoGestionDesdeAyuda,
+} from "./GestionarDesdeAyudaModal";
 import { HabilitarNovedadModal } from "./HabilitarNovedadModal";
+import { HiloNotasNovedadModal } from "./HiloNotasNovedadModal";
 import { NovedadAcciones } from "./NovedadAcciones";
 import { novedadAOrdenCard, SECCIONES_NOVEDAD } from "./novedad-a-orden-card";
+import { TEXTOS_POR_GRUPO } from "./novedad-grupo-textos";
 import {
   COLUMNAS_DESCARGA_NOVEDADES,
   filaDescargaNovedad,
   TITULO_DESCARGA_NOVEDADES,
 } from "./novedades-descarga-columnas";
+import {
+  RechazarNovedadModal,
+  RECHAZO_CONFLICTO,
+  RECHAZO_ERROR_CONFIG,
+  RECHAZO_ERROR_FORBIDDEN,
+  RECHAZO_ERROR_NOT_FOUND,
+  RECHAZO_ERROR_SESION,
+  RECHAZO_SIN_GESTION_ORIGEN,
+  RECHAZO_EXITO,
+  type DesenlaceRechazo,
+} from "./RechazarNovedadModal";
 import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 
 // Feature 87 (T12, design §3.2) — modulo cliente de `/novedades`. Recibe TODO por props
 // desde el Server Component padre (que ya valido rol adminTienda y pre-fetch pagina 1, R18):
-// componente PRIVADO (datos sensibles de la tienda por props, arquitectura §private). Por
-// cada orden `devuelta` muestra la guia (o placeholder si `null`, R9), el destinatario, la
-// causa con etiqueta ES (`CAUSA_DEVOLUCION_LABEL`, R7/R9/R11) y los `ContactoButtons`. Al
-// cambiar de pagina re-fetch por Server Action `listarNovedadesAction({ page })` (lectura
-// interna, NO fetch a /api; el telefono es PII), patron `MiWalletModule` (R22). Lista vacia
-// -> estado vacio legible (R10).
+// componente PRIVADO (datos sensibles de la tienda por props, arquitectura §private). Al
+// cambiar de pagina re-fetch por Server Action (lectura interna, NO fetch a /api; el telefono
+// es PII), patron `MiWalletModule` (R22). Lista vacia -> estado vacio legible (R10).
+//
+// ⚠️ FEATURE 236 (T4.1/T4.2, design §5) — EL MISMO MODULO SIRVE A DOS PESTAÑAS, y por eso recibe
+// `grupo`. Hasta el 2026-08-19 esta pantalla listaba DOS POBLACIONES bajo UNA sola pestaña, porque
+// el predicado del servidor era un `OR` de dos igualdades de estado y aqui se pintaban seguidas:
+// una orden sobre la que el mensajero pedia ayuda aparecia bajo «En devolución», bajo un subtitulo
+// que no era cierto de ella. Ahora el corte lo hace el SERVIDOR (una accion por grupo) y este
+// modulo se monta DOS VECES, una por pestaña.
+//
+//  - **No se duplico el componente**: lo que sabe hacer —conmutador de vista, paginacion, cards
+//    POS, modales, descarga— es identico para los dos grupos. Lo unico que cambia son los ROTULOS
+//    (`TEXTOS_POR_GRUPO`) y los RECURSOS de servidor (`RECURSOS_POR_GRUPO`), los dos indexados por
+//    `GrupoNovedad` con `satisfies`: un grupo nuevo no compila hasta que alguien decida los suyos.
+//  - **Este modulo NO PARTICIONA `items`** (R2/R8). Pinta lo que recibe, en el orden en que lo
+//    recibe. La particion vive en el servidor o no vive: la 235 aprendio a la mala que un corte de
+//    cliente deja la orden alcanzable por otras vias (era un `useMemo` y la orden seguia siendo
+//    parada del optimizador, del mapa y del panel de gestion). Y el ORDEN tampoco se toca: la
+//    pestaña de ayuda llega ya ascendente por fecha de solicitud (D7/R17), resuelta en el servicio.
 //
 // 2026-08-12 (pedido humano) — LA FILA YA NO SE PINTA AQUÍ. Cada novedad se muestra con las
-// MISMAS cards que las órdenes del mensajero, y las acciones de esta pantalla —WhatsApp,
-// Llamar, Reprogramar, y las dos de MAQUETA "Habilitar" y "Rechazar"— bajan como un solo
-// nodo por su prop `acciones` (`NovedadAcciones`). Lo que eso cambia y lo que no:
+// MISMAS cards que las órdenes del mensajero, y las acciones de esta pantalla bajan como un
+// solo nodo por su prop `acciones` (`NovedadAcciones`). Lo que eso cambia y lo que no:
 //
-//  - NO cambia lo que se ve: guía (o su placeholder, R9), destinatario, causa en etiqueta ES
-//    (R7/R11) e intentos (feature 160/R18/R19) siguen en pantalla, en los slots que la card
-//    ya tenía. La CAUSA viaja por la prop `estado` —el badge de la card—, que acepta texto
-//    libre por diseño (`pos-estado`: «cae a las clases de En reparto si es un texto libre»).
+//  - NO cambia lo que se ve: guía (o su placeholder, R9), destinatario, el badge de la fila e
+//    intentos (feature 160/R18/R19) siguen en pantalla, en los slots que la card ya tenía. El
+//    badge viaja por la prop `estado` de la card, que acepta texto libre por diseño
+//    (`pos-estado`: «cae a las clases de En reparto si es un texto libre»).
 //  - NO cambia la estructura de la lista: sigue siendo `<ul>/<li>`, no un `DataTable`, que
 //    es lo que la feature 160 (R26) verificó contra este componente. La card es un
 //    `<article>` DENTRO de cada `<li>`.
@@ -94,7 +139,7 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 //     sitio.
 //   · `cobro: true` — las dos lo pintan ("Cobrar" + `formatMonto(montoCobrar)`). El monto es
 //     el REAL de la orden: lo que se IBA a cobrar en la entrega que no se completó, que es
-//     justo lo que la tienda necesita ver junto a la devolución. `montoCobrar` es
+//     justo lo que la tienda necesita ver junto a la novedad. `montoCobrar` es
 //     `number | null`: sin monto la card pinta la raya larga, no un "₡0" inventado.
 //   · `detalle: true` — MOSAICO: monta el `Collapsible` "Ver detalle completo" con
 //     `AsignacionDetalle` dentro (Pedido / Entrega / Cobro), hoy con dato real en las tres.
@@ -109,7 +154,74 @@ import { ReprogramarNovedadModal } from "./ReprogramarNovedadModal";
 // visible (la guía ocupa el slot de `numRemision`, R9). Ese archivo explica el porqué de las
 // cuatro compuertas; no se apaga ni se enciende una sección sin leerlo.
 
+/**
+ * Lo que cada pestaña necesita DEL SERVIDOR, indexado por grupo.
+ *
+ * Son DOS Server Actions por grupo y no una con bandera, y esa es una decision del borde (design
+ * §4): si el cliente eligiera el grupo, estaria eligiendo QUE ESTATUS SE CONSULTA. Aqui se elige a
+ * que funcion se llama, no que filtra.
+ *
+ * La DESCARGA va en la misma tabla porque D3 la ata a la pestaña: «el archivo publica lo que la
+ * pantalla enseña». El de ayuda tiene sus columnas propias —sin «Causa de devolución», que sobre
+ * una orden que nunca se devolvio decia «Sin causa registrada» y eso es una afirmacion falsa con
+ * formato de dato (R26/R39)—.
+ */
+interface RecursosGrupoNovedad {
+  listarPagina: (input: { page: number }) => Promise<ListarNovedadesActionResult>;
+  listarCompleto: () => Promise<ListarNovedadesCompletoActionResult>;
+  tituloDescarga: string;
+  columnasDescarga: DescargaColumna[];
+  filaDescarga: (novedad: NovedadDTO) => DescargaFila;
+}
+
+const RECURSOS_POR_GRUPO = {
+  ayuda: {
+    listarPagina: listarAyudaTiendaAction,
+    listarCompleto: listarAyudaTiendaCompletoAction,
+    tituloDescarga: TITULO_DESCARGA_AYUDA,
+    columnasDescarga: COLUMNAS_DESCARGA_AYUDA,
+    filaDescarga: filaDescargaAyuda,
+  },
+  devolucion: {
+    listarPagina: listarNovedadesAction,
+    listarCompleto: listarNovedadesCompletoAction,
+    tituloDescarga: TITULO_DESCARGA_NOVEDADES,
+    columnasDescarga: COLUMNAS_DESCARGA_NOVEDADES,
+    filaDescarga: filaDescargaNovedad,
+  },
+} as const satisfies Record<GrupoNovedad, RecursosGrupoNovedad>;
+
+/**
+ * 💰 Feature 240 (T5.3, R31) — QUÉ SE LE DICE A LA TIENDA CUANDO EL RECHAZO NO SE APLICA, por
+ * estado. `ok` y `conflict` NO están aquí: los dos tienen su propio camino en `resolverRechazo`
+ * —uno quita la fila, el otro relee la página— y meterlos en una tabla de errores los haría
+ * parecer lo que no son.
+ *
+ * Es una tabla y no un `switch` por la misma razón que `ACCIONES_POR_GRUPO`: el día que el
+ * resultado del servicio gane un estado, el typecheck reclama su mensaje en vez de dejarlo caer en
+ * el `default` en silencio.
+ */
+const MENSAJE_POR_FALLO_DEL_RECHAZO: Record<
+  Exclude<DesenlaceRechazo["status"], "ok" | "conflict">,
+  string
+> = {
+  forbidden: RECHAZO_ERROR_FORBIDDEN,
+  not_found: RECHAZO_ERROR_NOT_FOUND,
+  config_error: RECHAZO_ERROR_CONFIG,
+  unauthenticated: RECHAZO_ERROR_SESION,
+  // 2026-08-20: esta entrada NO se anadio por gusto — sin ella este `Record` NO COMPILA, que es
+  // justo lo que el comentario de arriba promete. El estado nacio de un recorrido en el que la
+  // tienda pulso «Rechazar» y no vio nada: la accion salia por `INTERNAL` y el borde lanzaba.
+  sin_gestion_origen: RECHAZO_SIN_GESTION_ORIGEN,
+};
+
 export interface NovedadesModuleProps {
+  /**
+   * Por que esta orden esta en la pantalla. **Obligatorio y sin default**: un olvido de cableado
+   * tiene que romper el typecheck, no montar una pestaña con los rotulos y la descarga de la otra.
+   * Mismo criterio que el `grupo` del servicio y del repositorio (design §9).
+   */
+  grupo: GrupoNovedad;
   items: NovedadDTO[];
   total: number;
   page: number;
@@ -122,34 +234,37 @@ function causaLabel(causa: NovedadDTO["causa"]): string {
 }
 
 /**
- * Pedido humano 2026-08-18 — el badge de la card, ahora que esta pantalla tiene DOS clases de
- * fila. Hasta hoy todas las órdenes estaban devueltas y el badge sólo tenía que decir la causa;
- * desde la solicitud de ayuda una fila puede estar aquí por estar devuelta, por tener ayuda
- * pedida, o por las dos cosas.
+ * El badge de la card. Lo decide **el grupo de la FILA**, no el de la pestaña: este modulo pinta lo
+ * que recibe y no filtra nada (R2), asi que el chip tiene que describir la orden que tiene delante.
  *
- * La ayuda va PRIMERO cuando existe porque es lo accionable: alguien está esperando respuesta
- * ahora. Y cuando además hay causa, se dicen las dos —«Ayuda · Cliente ausente»— en vez de tapar
- * una con la otra: una devuelta con ayuda pedida no es lo mismo que una devuelta a secas ni que
- * una orden en reparto atascada, y el badge es lo único que las distingue en la lista.
+ * FEATURE 236 (T5.4, R26 — D6 firmada el 2026-08-19). Hasta hoy una orden en ayuda mostraba
+ * «Ayuda solicitada» o, si arrastraba una causa, «Ayuda · \<causa\>». Las dos cosas cambian:
  *
- * Sin causa el texto es «Ayuda solicitada» y no «Ayuda · Sin causa registrada»: en una orden que
- * sigue en reparto no HAY devolución de la que registrar causa, así que anunciar su ausencia
- * sería señalar un hueco que no existe.
+ *  - el texto pasa a **«Esperando tu respuesta»**, porque dentro de una pestaña que ya se llama
+ *    «Ayuda solicitada» repetirlo en cada card no informa;
+ *  - y la CAUSA desaparece de esa rama. Era un ARRASTRE: venia de una devolucion ANTERIOR ya
+ *    deshecha y no describe por que esa orden esta en la pantalla. R26 prohibe atribuirsela,
+ *    mostrarla **y anunciar su ausencia**, asi que tampoco cae a «Sin causa registrada».
+ *
+ * Para la devolucion no cambia nada: su señal sigue siendo la causa, que es lo unico que distingue
+ * una devolucion de otra en la lista (R7/R11 de la 87).
  */
 function badgeNovedad(novedad: NovedadDTO): string {
-  if (!novedad.ayuda) return causaLabel(novedad.causa);
-  return novedad.causa
-    ? `Ayuda · ${CAUSA_DEVOLUCION_LABEL[novedad.causa]}`
-    : "Ayuda solicitada";
+  const grupo = grupoDeEstatus(novedad.estatusValue);
+  const chipFijo = grupo ? TEXTOS_POR_GRUPO[grupo].chipFijo : null;
+  return chipFijo ?? causaLabel(novedad.causa);
 }
 
 export function NovedadesModule({
+  grupo,
   items: initialItems,
   total: initialTotal,
   page: initialPage,
   pageSize,
 }: NovedadesModuleProps) {
   const toast = useToast();
+  const textos = TEXTOS_POR_GRUPO[grupo];
+  const recursos = RECURSOS_POR_GRUPO[grupo];
 
   const [items, setItems] = useState(initialItems);
   const [total, setTotal] = useState(initialTotal);
@@ -163,9 +278,24 @@ export function NovedadesModule({
   // estados y no uno con discriminante: son dos modales distintos, y fundirlos obligaría a
   // preguntar cuál está abierto en cada render para nada.
   const [ordenAHabilitar, setOrdenAHabilitar] = useState<NovedadDTO | null>(null);
-  // Feature 227 (T3.3): orden con el HILO de notas abierto (null = cerrado). Mismo patrón
-  // que los dos modales de arriba, por el mismo motivo: el hilo se pide al abrir UNA orden y
-  // nunca para la lista (design §4/A6, N+1).
+  // Feature 227 (T3.3) / feature 236 (T6.1, R27/R29): orden con el HILO de notas abierto
+  // (null = cerrado). Mismo patrón que los dos modales de arriba, por el mismo motivo: el hilo se
+  // pide al abrir UNA orden y NUNCA para la lista — seria una consulta por orden de la pagina
+  // (N+1), y el contrato de `lib/types/novedad.ts` lo prohibe con esas palabras.
+  const [ordenConHilo, setOrdenConHilo] = useState<NovedadDTO | null>(null);
+  // Feature 237 (T7.3): la orden que la tienda está a punto de RESOLVER, con el desenlace elegido
+  // (null = ventana cerrada). Va como UN estado con el modo dentro y no como dos estados: las dos
+  // acciones abren la MISMA ventana y no pueden estar abiertas a la vez, así que dos estados
+  // obligarían a preguntar cuál manda en cada render y admitirían el estado imposible «las dos».
+  const [ordenAGestionarDesdeAyuda, setOrdenAGestionarDesdeAyuda] = useState<{
+    orden: NovedadDTO;
+    modo: ModoGestionDesdeAyuda;
+  } | null>(null);
+  // 💰 Feature 240 (T5.3): la orden que la tienda está a punto de RECHAZAR (null = ventana cerrada).
+  // Mismo patrón que sus tres hermanos de arriba y por el mismo motivo: son ventanas distintas y no
+  // pueden estar abiertas a la vez, así que un estado con discriminante sólo añadiría una pregunta
+  // en cada render.
+  const [ordenARechazar, setOrdenARechazar] = useState<NovedadDTO | null>(null);
 
   // 2026-08-13: mismo conmutador y misma transición que las cuatro pantallas del portal del
   // mensajero, sobre las MISMAS piezas. `vista` es la que toca RENDERIZAR (el hook sostiene
@@ -179,30 +309,64 @@ export function NovedadesModule({
   } = useTransicionVista<VistaCards>("mosaico");
 
   /**
-   * MAQUETA (2026-08-12): "Rechazar" (rotulado "Devolver" hasta 2026-08-19) está en la fila
-   * pero todavía no hace nada — su comportamiento no está decidido y no existe en el backend (ver la cabecera de
-   * `NovedadAcciones`). Avisa por toast en vez de callar: un botón que no responde se lee
-   * como una app rota, y el usuario de esta pantalla es una tienda, no quien pidió la
-   * maqueta. El día que se cablee, este handler desaparece.
+   * 💰 FEATURE 240 (T5.3, design §10.2 — R30/R31/R32) — LO QUE LA PANTALLA HACE CON EL RECHAZO.
+   *
+   * **Lo que había aquí hasta el 2026-08-20, y por qué se cuenta en vez de borrarlo:** un handler
+   * llamado `avisarNoDisponible` que hacía `toast.info("Esta acción todavía no está disponible.")`
+   * y se pasaba como `onDevolver`. Su propio JSDoc lo declaraba MAQUETA desde el 2026-08-12 y
+   * terminaba diciendo «el día que se cablee, este handler desaparece». Este es ese día: desapareció.
+   *
+   * **`ok` y `conflict` se dicen DISTINTO** (R31). Un `conflict` significa que la orden dejó de
+   * estar en la devolución anclada entre que la tienda abrió la ventana y pulsó —el cron de plazo
+   * vencido la escaló, o la bodega la recuperó—, así que **no se escribió nada** y la pantalla no
+   * puede afirmar que rechazó.
+   *
+   * **`ok` quita la fila y baja el total** (R30) por el MISMO camino que su hermana «Reprogramar»
+   * (`sacarDeLaLista`): el servidor ya confirmó que la orden salió de la devolución, así que no
+   * hay optimismo que corregir. **`conflict` RELEE la página** en vez de quitar nada: ahí la fila
+   * desaparece —o se queda— por el dato, que es literalmente la lección de 236/D8 sobre esta misma
+   * card.
+   *
+   * `forbidden` no se traduce a un motivo concreto: el borde no dice si la orden existe, en qué
+   * estado está ni de quién es, así que adivinarlo aquí sería inventarlo.
    */
-  function avisarNoDisponible() {
-    toast.info("Esta acción todavía no está disponible.");
+  async function resolverRechazo(res: DesenlaceRechazo) {
+    const orden = ordenARechazar;
+    if (!orden) return;
+    setOrdenARechazar(null);
+    if (res.status === "ok") {
+      sacarDeLaLista(orden.id);
+      toast.success(RECHAZO_EXITO);
+      return;
+    }
+    if (res.status === "conflict") {
+      toast.warning(RECHAZO_CONFLICTO);
+      await cambiarPagina(page);
+      return;
+    }
+    toast.error(MENSAJE_POR_FALLO_DEL_RECHAZO[res.status]);
   }
 
   /**
-   * Pedido humano 2026-08-18 — "Habilitar" DEJA DE SER MAQUETA. La nota que el modal exige
-   * se publica en el hilo de la orden y la orden pierde su bandera `ayuda`.
+   * «Habilitar»: publica la nota obligatoria en el hilo de la orden y **devuelve la orden a la
+   * ruta** por el punto único de rescate de la 235 (`ayuda_tienda → en_reparto`).
    *
-   * ⚠️ CORREGIDO el 2026-08-19 (feature 239/T3.1): esto decía «sus dos banderas de novedad
-   * (`ayuda` y `gestion_aprobada`)». `gestion_aprobada` YA NO EXISTE — se retiró porque
-   * recortaba lo que la tienda ve sin mover el reloj del SLA, y por esa vía se cobraban
-   * rechazos de órdenes que nunca habían sido visibles. La devolución se lista ahora por
-   * IGUALDAD DE ESTADO, así que «Habilitar» ya no puede sacarla de la pantalla mientras su
-   * plazo corra: sobre una orden `devuelta` esta acción solo retira la solicitud de ayuda.
+   * ⚠️ FEATURE 236 (T5.5, D8 firmada por el humano el 2026-08-19 — R24/R25) — LA PANTALLA DEJA DE
+   * AFIRMAR QUE HABILITÓ CUANDO NO MOVIÓ NADA.
    *
-   * NO cambia el estatus: la orden sigue `devuelta`. Lo que se decidió aquí es qué deja de
-   * ver la tienda, no adónde va la orden —esa parte sigue abierta (ver la cabecera de
-   * `NovedadAcciones`)—, así que la fila se quita de la lista igual que tras reprogramar.
+   * **Qué pasaba.** El resultado que se leía aquí es el de la NOTA, no el del rescate. Si el
+   * mensajero recuperaba la orden un segundo antes, la tienda publicaba su nota, la fila
+   * **desaparecía** de la pantalla y el aviso decía «Orden habilitada» — sobre una orden que nadie
+   * movió. Al recargar, volvía, y nada lo explicaba. Es la carrera poco frecuente, sí, pero la
+   * pantalla afirmaba algo falso, que es justo lo que esta ficha corrige en los otros dos sitios
+   * (el subtítulo y la pestaña).
+   *
+   * **Qué se hace ahora.** El resultado trae `rescatada`, y los dos desenlaces se dicen distinto:
+   *
+   *  - `rescatada: true` → la orden volvió a la ruta: sale de la lista y el total baja (R24).
+   *  - `rescatada: false` → la nota SÍ se publicó (quedó en el hilo, no se perdió) pero la orden no
+   *    se movió, así que **la fila se queda donde está** y el aviso lo dice. Quitarla mientras se
+   *    afirma que no se movió sería sustituir una mentira por otra.
    *
    * El modal se cierra al confirmar y no al resolver: la acción ya validó la nota, y dejarlo
    * abierto invitaría a un segundo clic que publicaría una segunda nota.
@@ -213,9 +377,15 @@ export function NovedadesModule({
     setOrdenAHabilitar(null);
     const res = await habilitarNovedad({ ordenId: orden.id, nota });
     if (res.status === "ok") {
-      setItems((prev) => prev.filter((n) => n.id !== orden.id));
-      setTotal((prev) => Math.max(0, prev - 1));
-      toast.success("Orden habilitada.");
+      if (res.rescatada) {
+        setItems((prev) => prev.filter((n) => n.id !== orden.id));
+        setTotal((prev) => Math.max(0, prev - 1));
+        toast.success("La orden volvió a la ruta.");
+        return;
+      }
+      toast.warning(
+        "Tu nota se publicó, pero la orden no volvió a la ruta: puede que el mensajero ya la haya recuperado. Actualizá la pantalla.",
+      );
       return;
     }
     // `forbidden` es opaco a propósito (hereda el del hilo): no se traduce a un motivo
@@ -223,8 +393,59 @@ export function NovedadesModule({
     toast.error("No se pudo habilitar la orden.");
   }
 
-  /** T3.1: tras reprogramar con éxito la orden sale de `devuelta` -> se quita de la lista. */
-  function handleReprogramada(ordenId: string) {
+  /**
+   * ⚠️ FEATURE 237 (T7.3/T7.4, design §12.3 — R25/R27) — LO QUE LA PANTALLA HACE CON EL DESENLACE.
+   *
+   * **Los dos caminos RECARGAN, y ésa es la decisión.** Ni el éxito ni la carrera perdida quitan la
+   * fila con un `filter` de cliente: se relee la página de la pestaña por Server Action y la fila
+   * desaparece —o se queda— **por el dato**. Es literalmente la lección de 236/D8 sobre esta misma
+   * card: «Habilitar» quitaba la fila por optimismo y al recargar volvía, sin que nada lo
+   * explicara. Y con la relectura el TOTAL baja de verdad (R27), en vez de un contador que se
+   * decrementa a mano y puede desviarse del servidor.
+   *
+   * **`ok` y `conflict` se dicen DISTINTO** (R25): un `conflict` significa que la orden dejó de
+   * estar en ayuda entre que la tienda abrió la ventana y pulsó —el mensajero la recuperó, o la
+   * cortó la noche—, así que **no se creó ninguna gestión** y la pantalla no puede afirmar que
+   * resolvió. El texto lo redacta el SERVIDOR (`MENSAJES_GESTION_DESDE_AYUDA`) y se muestra tal
+   * cual: reescribirlo aquí serían dos verdades sobre la misma carrera.
+   *
+   * `forbidden` es OPACO a propósito (hereda el del hilo): el borde no dice si la orden existe, en
+   * qué estado está ni de quién es, así que adivinar un motivo concreto aquí sería inventarlo.
+   */
+  async function resolverDesdeAyuda(res: DesenlaceGestionDesdeAyuda) {
+    const pendiente = ordenAGestionarDesdeAyuda;
+    if (!pendiente) return;
+    setOrdenAGestionarDesdeAyuda(null);
+    if (res.status === "ok") {
+      toast.success(GESTION_AYUDA_EXITO[pendiente.modo]);
+      await cambiarPagina(page);
+      return;
+    }
+    if (res.status === "conflict") {
+      toast.warning(res.motivo);
+      await cambiarPagina(page);
+      return;
+    }
+    toast.error(
+      res.status === "forbidden"
+        ? GESTION_AYUDA_ERROR_FORBIDDEN
+        : GESTION_AYUDA_ERROR_SESION,
+    );
+  }
+
+  /**
+   * La orden salió de la devolución anclada: se quita de la lista y el total baja.
+   *
+   * Lo usan LAS DOS salidas que el servidor confirma sobre esta card —«Reprogramar» (feature 100) y
+   * «Rechazar» (feature 240/R30)—, y por eso el nombre dice lo que hace y no cuál de las dos lo
+   * pidió: hasta el 2026-08-20 se llamaba `handleReprogramada`, que dejó de ser cierto en cuanto
+   * tuvo un segundo llamador.
+   *
+   * ⚠️ Sólo se usa cuando el servidor devolvió `ok`. Ahí no hay optimismo que corregir: la
+   * transición ya ocurrió. La carrera perdida tiene otro camino (relee la página), porque quitar una
+   * fila que sigue estando es la mentira que 236/D8 midió sobre esta misma card.
+   */
+  function sacarDeLaLista(ordenId: string) {
     setItems((prev) => prev.filter((n) => n.id !== ordenId));
     setTotal((prev) => Math.max(0, prev - 1));
   }
@@ -233,7 +454,7 @@ export function NovedadesModule({
   async function cambiarPagina(nextPage: number) {
     setLoading(true);
     try {
-      const res = await listarNovedadesAction({ page: nextPage });
+      const res = await recursos.listarPagina({ page: nextPage });
       if (res.status !== "ok") {
         if (res.status === "forbidden") {
           toast.error("No tenés permiso para ver las novedades.");
@@ -253,19 +474,16 @@ export function NovedadesModule({
   }
 
   if (items.length === 0) {
-    // R10: estado vacio legible en vez de una lista sin filas.
+    // R10/R16: estado vacio CON TEXTO en vez de una lista sin filas. No es un caso marginal: con
+    // `ayuda_tienda` = 0 y `devuelta` = 0 medidos en produccion el 2026-08-19, es el PRIMER estado
+    // que la tienda va a conocer, y durante un tiempo el unico. Dice que aparecera ahi y cuando.
     return (
       <div
         className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-10 text-center"
         role="status"
       >
-        <p className="text-base font-medium text-foreground">
-          No tenés órdenes en devolución
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Cuando una de tus órdenes vuelva a la tienda, aparecerá acá con su causa y los
-          botones de contacto.
-        </p>
+        <p className="text-base font-medium text-foreground">{textos.vacioTitulo}</p>
+        <p className="text-sm text-muted-foreground">{textos.vacioDetalle}</p>
       </div>
     );
   }
@@ -290,12 +508,16 @@ export function NovedadesModule({
             (`filasDesdeResultado`) y el mismo contrato. Lo que descarga es el LISTADO ENTERO, no
             la página visible: por eso llama a una lectura dedicada y no proyecta `items`, que
             son las diez de la página. El tope de filas lo evalúa el SERVIDOR y el mensaje del
-            límite —con total y tope— lo redacta el adaptador común, no esta pantalla. */}
+            límite —con total y tope— lo redacta el adaptador común, no esta pantalla.
+
+            Feature 236 (D3/R37): UNA DESCARGA POR PESTAÑA. El título, las columnas y la lectura
+            salen de `RECURSOS_POR_GRUPO`, así que el archivo publica exactamente lo que su
+            pestaña enseña — el de ayuda sin la columna de causa (R39). */}
         <DescargarDatasetButton
-          titulo={TITULO_DESCARGA_NOVEDADES}
-          columnas={COLUMNAS_DESCARGA_NOVEDADES}
+          titulo={recursos.tituloDescarga}
+          columnas={recursos.columnasDescarga}
           obtenerFilas={() =>
-            filasDesdeResultado(listarNovedadesCompletoAction(), filaDescargaNovedad)
+            filasDesdeResultado(recursos.listarCompleto(), recursos.filaDescarga)
           }
           // Sin `formatos`: descarga DIRECTA en xlsx, como las ~27 tablas de la app. El menú de
           // elección lo montan solo los dos exports de analítica, que sí declaran varios.
@@ -312,7 +534,7 @@ export function NovedadesModule({
           entre vistas es la DISPOSICIÓN: grilla para las cards compactas, columna para las
           filas. La clase de fase anima la lista entera como bloque. */}
       <ul
-        aria-label="Órdenes en devolución"
+        aria-label={textos.listaAriaLabel}
         className={`${
           vistaCards === "mosaico"
             ? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
@@ -327,24 +549,28 @@ export function NovedadesModule({
               // pinta (`mostrarRuta={false}`). Se pasa el tamaño de la página porque es el
               // dato honesto que esta pantalla tiene, no un cero de relleno.
               total={items.length}
-              // El badge de la card lleva la CAUSA de devolución, que es la señal de esta
-              // pantalla (R7/R11). No hay estado de reparto que anunciar: todas las órdenes
-              // de la lista están devueltas, así que repetirlo por fila no diría nada.
+              // El badge lo decide el GRUPO DE LA FILA (ver `badgeNovedad`). No hay estado de
+              // reparto que anunciar: lo que la tienda necesita saber de un vistazo es por qué
+              // esa orden está en su pantalla.
               estado={badgeNovedad(novedad)}
               // Sin `onGestionar`: de aquí no se gestiona nada, así que la card es de
               // solo-visualización — no clickeable ni enfocable (ver `pos-seleccion`).
               mostrarRuta={false}
               secciones={SECCIONES_NOVEDAD}
-              // Las cinco acciones de esta pantalla, como UN nodo (pedido humano). Las dos
-              // cards les hacen sitio al pie —la de detalle tras un borde punteado, la de
-              // mosaico a hueso— y ninguna sabe qué son, así que el panel no cambia al
-              // conmutar de vista.
+              // Las acciones de esta pantalla, como UN nodo (pedido humano). Las dos cards les
+              // hacen sitio al pie —la de detalle tras un borde punteado, la de mosaico a
+              // hueso— y ninguna sabe qué son, así que el panel no cambia al conmutar de vista.
+              // CUÁLES son lo decide `ACCIONES_POR_GRUPO`, no este JSX.
               acciones={
                 <NovedadAcciones
                   novedad={novedad}
                   onReprogramar={setOrdenAReprogramar}
                   onHabilitar={setOrdenAHabilitar}
-                  onDevolver={avisarNoDisponible}
+                  onRechazar={setOrdenARechazar}
+                  onConversacion={setOrdenConHilo}
+                  onGestionarDesdeAyuda={(orden, modo) =>
+                    setOrdenAGestionarDesdeAyuda({ orden, modo })
+                  }
                 />
               }
             />
@@ -358,7 +584,7 @@ export function NovedadesModule({
         total={total}
         onPageChange={cambiarPagina}
         disabled={loading}
-        ariaLabel="Paginación de novedades"
+        ariaLabel={textos.paginacionAriaLabel}
       />
 
       {/* T3.1/T3.2: modal de reprogramación (fecha + motivo opcional). Montado SOLO
@@ -370,7 +596,7 @@ export function NovedadesModule({
           onOpenChange={(open) => {
             if (!open) setOrdenAReprogramar(null);
           }}
-          onReprogramada={handleReprogramada}
+          onReprogramada={sacarDeLaLista}
         />
       ) : null}
 
@@ -388,6 +614,60 @@ export function NovedadesModule({
         />
       ) : null}
 
+      {/* Feature 236 (T6.1, R27/R29) — EL HILO DE LA ORDEN, repuesto. Mismo montaje condicional y
+          misma `key` que los dos de arriba, y por el mismo motivo elevado a requisito: con el modal
+          cerrado el hilo NO ESTÁ EN EL ÁRBOL, así que listar una página no lo lee ni una vez
+          (R29), y `key={orden.id}` hace que la lectura arranque fresca en cada apertura.
+
+          Es el MISMO gesto que el lado mensajero (`RepartoModule` monta `HiloNotasAyudaModal`
+          desde su card), y es deliberado: las dos pantallas dicen lo mismo con el mismo gesto
+          (R36). No se escribió ningún hilo nuevo — el modal estaba entero en disco desde que el
+          2026-08-18 se retiró el botón «Notas» y con él su único montaje. */}
+      {ordenConHilo ? (
+        <HiloNotasNovedadModal
+          key={ordenConHilo.id}
+          orden={ordenConHilo}
+          onOpenChange={(open) => {
+            if (!open) setOrdenConHilo(null);
+          }}
+        />
+      ) : null}
+
+      {/* Feature 237 (T7.3) — LA VENTANA CON LA QUE LA TIENDA RESUELVE. Mismo montaje condicional
+          y misma `key` que los tres de arriba, y aquí el motivo pesa más que en ellos: con la
+          ventana cerrada NO ESTÁ EN EL ÁRBOL, así que ni el selector de fotos ni la fecha de
+          mañana existen mientras se navega la lista, y `key={orden.id}` hace que el formulario
+          arranque vacío en cada apertura — una foto o un motivo heredados de la orden anterior
+          acabarían en la evidencia de un cobro que no les corresponde.
+
+          `modo` NO va en la `key`: cambiar de desenlace sobre la MISMA orden (abrir «Rechazar»
+          tras cerrar «Reprogramar») remonta igual porque el estado pasa por `null` al cerrarse. */}
+      {/* 💰 Feature 240 (T5.3) — LA VENTANA DEL RECHAZO. Mismo montaje condicional y misma `key`
+          que los cuatro de arriba, y aquí el motivo es de dinero: con la ventana cerrada NO ESTÁ EN
+          EL ÁRBOL, y `key={orden.id}` hace que el motivo arranque vacío en cada apertura — un motivo
+          heredado de la orden anterior acabaría explicando un cobro que no le corresponde. */}
+      {ordenARechazar ? (
+        <RechazarNovedadModal
+          key={ordenARechazar.id}
+          orden={ordenARechazar}
+          onOpenChange={(open) => {
+            if (!open) setOrdenARechazar(null);
+          }}
+          onResuelto={(res) => void resolverRechazo(res)}
+        />
+      ) : null}
+
+      {ordenAGestionarDesdeAyuda ? (
+        <GestionarDesdeAyudaModal
+          key={ordenAGestionarDesdeAyuda.orden.id}
+          orden={ordenAGestionarDesdeAyuda.orden}
+          modo={ordenAGestionarDesdeAyuda.modo}
+          onOpenChange={(open) => {
+            if (!open) setOrdenAGestionarDesdeAyuda(null);
+          }}
+          onResuelto={(res) => void resolverDesdeAyuda(res)}
+        />
+      ) : null}
     </div>
   );
 }

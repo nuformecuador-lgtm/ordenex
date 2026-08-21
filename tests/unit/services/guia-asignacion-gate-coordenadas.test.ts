@@ -52,7 +52,7 @@ function fakeRepo(over: Record<string, unknown> = {}): IOrdenRepository {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS[v] ?? null),
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
-    findMensajerosBloqueados: vi.fn(async () => new Set<string>()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
     // Feature 157 (regla de dedicacion): nadie ocupado, para no interferir con el gate.
     findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
     findMensajerosByZona: vi.fn(async () => []),

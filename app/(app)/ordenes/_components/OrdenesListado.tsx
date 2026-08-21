@@ -19,6 +19,7 @@ import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { Column } from "@/components/shared/DataTable";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { BUSQUEDA_MIN_CHARS, type OrdenListItemDTO } from "@/lib/types/orden";
+import type { FechasDiaReparto } from "@/lib/utils/dia-reparto-textos";
 
 import { OrdenesModule, type AccionLote } from "./OrdenesModule";
 import { OrdenesCargaMasivaButton } from "./OrdenesCargaMasivaButton";
@@ -113,6 +114,11 @@ const ESTADO_REPROGRAMADA = "reprogramada";
 // eso es SOLO la bodega central (zonaEsGam). Las devueltas de zona satélite las recupera
 // el adminSatelite de la zona (en /recepcion-satelite), así que su check se bloquea en
 // vez de dejar seleccionarlas y vaciar el modal (R15).
+// Feature 246 (T4.2): «no bajaron fechas de la página». Constante de módulo y no un literal en
+// la desestructuración para no crear un objeto nuevo en cada render, que reventaría la
+// memorización de cualquier hijo que llegue a compararlas.
+const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
+
 const ESTADO_DEVUELTA = "devuelta";
 const MOTIVO_DEVUELTA_NO_CENTRAL =
   "Orden de zona satélite: la recupera el admin de la bodega satélite de su zona.";
@@ -172,6 +178,7 @@ export function OrdenesListado({
   incluirFiltroReasignables = true,
   permitirDescarga = true,
   puedeReportarIncidente = false,
+  fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: Readonly<{
   exclude?: string[];
   puedeCargarMasiva?: boolean;
@@ -232,6 +239,17 @@ export function OrdenesListado({
    * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» que la PÁGINA resolvió en el
+   * servidor con el día de Costa Rica. Sólo se transportan hasta `AsignarBodegaModal`.
+   *
+   * POR QUÉ EL DEFECTO SON DOS CADENAS VACÍAS Y NO UNA FECHA CALCULADA AQUÍ: éste es un
+   * componente de cliente, y cualquier valor que se inventara saldría del reloj del navegador —
+   * lo único que R29 prohíbe. Sin fechas, el selector se lee igual («Hoy» / «Mañana») y sólo
+   * pierde la precisión de la fecha; con una fecha inventada, mentiría. Se degrada, no se
+   * falsea.
+   */
+  fechasDiaReparto?: FechasDiaReparto;
 }>) {
   const { mutate } = useSWRConfig();
   const { data: catalogo, isLoading } = useSWR(
@@ -827,6 +845,9 @@ export function OrdenesListado({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
+            // Feature 246 (T4.2, R29): las fechas bajan de la página, que las resolvió en el
+            // servidor. Este componente sólo las transporta: no las calcula ni las corrige.
+            fechasDiaReparto={fechasDiaReparto}
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />

@@ -1,0 +1,98 @@
+-- Feature 246 (T1.1, design §2.1/§2.2, R19/R21/R44) — EL DIA DE REPARTO de una orden.
+--
+-- QUE ES. La fecha calendario de Costa Rica PARA LA QUE bodega hizo la asignacion. Hoy ese
+-- concepto no existe: `asignado_at` dice CUANDO se asigno, no PARA QUE DIA. Esa ausencia es la que
+-- hace que el corte nocturno (`/api/cron/corte-diario`, 00:00 CR) deshaga una asignacion hecha esa
+-- misma noche y le cree al mensajero un `cierre_dia` en estado `vencido` que —desde la ficha 241—
+-- lo BLOQUEA para gestionar y cobrar al dia siguiente. Con esta columna el corte puede distinguir
+-- «esta orden es de la jornada que acabo» de «esta orden es de la que empieza».
+--
+-- POR QUE UNA COLUMNA EN `orden` Y NO UNA TABLA LATERAL (D1, FIRMADA el 2026-08-20). La
+-- alternativa era `orden_reparto_programado(orden_id PK, fecha)`, con filas solo para lo diferido.
+-- Se descarto por dos motivos concretos: (a) el corte pasaria de DOS consultas que tienen que decir
+-- lo mismo a TRES, cada una con su JOIN/NOT EXISTS — y la guardia que hoy vigila las dos existe
+-- precisamente porque dos ya eran demasiadas; (b) la fila lateral habria que BORRARLA en cada
+-- reasignacion, cada liberacion por plazo, cada deshacer-asignacion y cada barrido, que es
+-- exactamente la forma del defecto que la 235 pago con una fuga permanente en /novedades.
+--
+-- POR QUE UNA FECHA ABSOLUTA Y NO UNA MARCA «PARA MAÑANA» (D2, FIRMADA el 2026-08-20). Una marca
+-- relativa NO CADUCA SOLA: al dia siguiente sigue diciendo «para mañana», el corte la protegeria
+-- otra vez, y otra, y la orden NO SE BARRE NUNCA. Una fecha vence sola: `X` deja de ser futuro por
+-- el mero paso del tiempo, sin que nadie escriba nada (R13). Y como el producto solo ofrece
+-- hoy/mañana, la proteccion queda ACOTADA POR CONSTRUCCION a una noche.
+--
+-- `DATE`, NO `TIMESTAMP`. Es una fecha calendario, no un instante. Es la convencion ya establecida
+-- del repo para esto (`gestion_orden.fecha_reprogramacion`, `pago.fecha_pago`,
+-- `gasto_fijo_plantilla.fecha_cobro`, `analytics_daily.fecha`) y se compara siempre contra
+-- `startOfDayCR` (medianoche UTC de la fecha CR). Un `timestamp` invitaria a compararla contra
+-- `now()` y a reintroducir el desfase de seis horas del que avisa `lib/analytics/ranges.ts`.
+--
+-- QUE SIGNIFICA `NULL`, Y POR QUE SIGNIFICA UNA SOLA COSA (D3/R20). Significa «esta orden NO esta
+-- reservada para un dia que aun no ha llegado»: o es anterior a esta feature, o no tiene mensajero.
+-- La opcion «HOY» escribe la fecha de hoy EXPLICITA, no `NULL`, para que la columna pueda responder
+-- «¿para que dia quedo esta asignacion?» (R35) en vez de obligar a cada lector futuro a re-derivar
+-- «NULL = hoy» por su cuenta. Y el predicado del corte no pregunta «¿es de hoy?» sino «¿esta
+-- reservada para un dia que aun no ha llegado?», a lo que NULL responde una sola cosa: no.
+--
+-- NULLABLE Y SIN DEFAULT ⇒ CERO BACKFILL (R19). Las filas anteriores quedan en `NULL` y el corte
+-- las barre exactamente igual que hoy. Rellenarlas hacia atras con la fecha CR de su `asignado_at`
+-- seria un UPDATE masivo sobre la tabla mas caliente del sistema para inventar un dato QUE NADIE
+-- ELIGIO. Ademas no hace falta: la segunda rama del `OR` del denominador del ranking da exactamente
+-- el mismo resultado sin tocar una fila, y envejece sola. Misma decision que tomo la 238.
+--
+-- SIN `CHECK`. «Solo hoy o mañana» es una regla del BORDE (zod) y del servicio. Expresarla en la
+-- base exigiria comparar contra `now()` dentro de una restriccion, que es una segunda definicion
+-- del dia — prohibido por design §3.
+--
+-- ADITIVA en cuanto a datos: no crea tablas, no crea enums, no renombra columnas, no reordena, no
+-- borra, no toca filas y no toca RLS. `orden` ya tiene su regimen.
+ALTER TABLE "orden" ADD COLUMN "fecha_reparto" DATE;
+
+-- =================================================================================================
+-- EL INDICE — Y AQUI LA PREGUNTA CAMBIO DOS VECES. La historia entera esta en `design.md` §2.1;
+-- este bloque es el resumen ejecutable, para que quien lea el SQL no tenga que ir a buscarla.
+--
+-- v1 (antes de la puerta humana): «SIN INDICE». Al CORTE le sobra —filtra por
+--     `mensajero_asignado_id`, ya indexado, y la fecha es residual sobre las ordenes de UN
+--     mensajero— y un indice que nadie usa se paga en cada escritura de la tabla mas caliente.
+--
+-- v2 (tras firmar D7): «CON INDICE `orden_fecha_reparto_idx` de UNA columna». El denominador del
+--     ranking pasa a filtrar por `fecha_reparto` en un `groupBy` SIN igualdad por mensajero, y eso
+--     se ejecuta en cada carga de `/ranking`. Sin indice: recorrido completo (R44).
+--
+-- v3 (MEDIDO, y es la que se aplica): **LA PREGUNTA ESTABA MAL FORMULADA Y EL INDICE DE v2 ERA EL
+--     REMEDIO EQUIVOCADO.** El `EXPLAIN` de produccion revelo que la consulta de HOY **ya se sirve
+--     con un `Index Only Scan`** sobre `(mensajero_asignado_id, asignado_at)`, que YA existe: el
+--     mejor plan posible, sin tocar el heap. La pregunta no era «¿falta un indice?», era **«¿el
+--     `OR` sobre `fecha_reparto` rompe ese `Index Only Scan`?»**. Respuesta medida: SI lo rompe,
+--     porque `fecha_reparto` no esta en ese indice — y `orden_fecha_reparto_idx` NO lo arregla:
+--     lo EMPEORA, porque hace atractivo un `BitmapOr` que degrada a `Bitmap Heap Scan` (toca el
+--     heap). Con `fecha_reparto` como TERCERA COLUMNA CLAVE del compuesto, en cambio, el plan
+--     vuelve a ser `Index Only Scan`. Los cuatro planes medidos estan en `progress/impl_246.md`.
+--
+-- POR ESO ESTA MIGRACION **AMPLIA** EL INDICE QUE YA EXISTE EN VEZ DE CREAR UNO NUEVO:
+--   · el numero de indices de `orden` NO cambia — se sustituye uno por su version de tres columnas,
+--     asi que el coste de escritura sube solo por 4 bytes de ancho de entrada, no por un indice mas;
+--   · el PREFIJO se conserva: `(mensajero_asignado_id, asignado_at)` sigue sirviendo a quien lo
+--     usaba (`TableroDiaRepository.cteIdsDelDia`, la 76). MEDIDO, no supuesto: el `Index Cond` de
+--     la consulta de hoy sale identico con el indice ampliado.
+--
+-- LO QUE NINGUN INDICE ARREGLA, Y SE DECLARA COMO COSTE DE D7: con el `OR`, el `Index Cond` se
+-- reduce a `mensajero_asignado_id IS NOT NULL` y el acotado por rango de `asignado_at` se PIERDE —
+-- un btree no puede expresar una disyuncion entre DOS columnas como un rango. El plan sigue siendo
+-- `Index Only Scan` (no toca el heap), pero recorre el indice ENTERO en vez de la porcion de un
+-- dia. La forma que lo recuperaria —partir el `OR` en dos consultas— esta medida y nombrada en
+-- `design.md` §2.1 como seguimiento; NO se hace aqui porque reestructura la consulta del podio
+-- justo despues de firmarla.
+--
+-- ⏳ NINGUNA DE LAS DOS BASES TIENE VOLUMEN PARA DECIDIR POR COSTE: produccion tiene 141 ordenes
+-- vivas y la local 67. A esa escala el planificador hace `Seq Scan` con indice y sin el. Lo que
+-- esta medido es la FORMA del plan (con `enable_seqscan = off`), no su coste. **Re-medir con
+-- volumen antes de confiar en cualquiera de estos planes.**
+--
+-- Se CREA primero y se BORRA despues: nunca hay una ventana en la que el prefijo se quede sin
+-- indice que lo sirva.
+CREATE INDEX "orden_mensajero_asignado_at_fecha_reparto_idx"
+  ON "orden" ("mensajero_asignado_id", "asignado_at", "fecha_reparto");
+
+DROP INDEX IF EXISTS "orden_mensajero_asignado_id_asignado_at_idx";

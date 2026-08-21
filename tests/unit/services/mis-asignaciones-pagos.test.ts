@@ -51,14 +51,20 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
+    // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
+    // servicio); el doble lo declara porque la interfaz lo exige.
+    crearGestionDesdeAyuda: vi.fn(async () => "g-desde-ayuda"),
+    // Feature 240: tampoco lo usa `MisAsignacionesService` (el rechazo manual es de la tienda,
+    // por `RechazoTiendaService`); el doble lo declara porque la interfaz lo exige.
+    rechazarDesdeDevuelta: vi.fn(async () => true),
     ...overrides,
   };
 }
 
 function newService(repo: IGestionOrdenRepository) {
-  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> = {
+  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
   };
   const storage: IFileStorage = {
     upload: vi.fn(async (input: { path: string }) => input.path),

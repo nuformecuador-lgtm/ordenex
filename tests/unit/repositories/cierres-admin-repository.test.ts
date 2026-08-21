@@ -326,11 +326,29 @@ describe("CierresAdminRepository.findCierreByIdEnAlcance (R6/R13)", () => {
 
     const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
 
-    // R1: el select del historial va acotado a `origen_tipo = escalado_devuelta_sla`, take 1.
+    // R1: el select del historial va ACOTADO a las familias que se derivan, y a ninguna mas.
+    //
+    // ⏳ 2026-08-20 (feature 237, D6/R41): pasa de UNA igualdad a un `in` de DOS familias, y de
+    // `take: 1` a `take: 2`. La segunda es `gestion_tienda_ayuda`, de la que sale
+    // `desdeAyudaTienda`. Se hizo ASI —ensanchando esta lectura— y no con una segunda consulta,
+    // precisamente para que el detalle de admin no pague ni una consulta de mas: es la pagina que
+    // mas filas trae. `take: 2` porque son dos familias y con `take: 1` una podria tapar a la otra
+    // segun el orden de lectura.
+    //
+    // ⏳ 2026-08-20 (feature 240, D6/R43): la lista pasa de DOS a TRES con `rechazo_tienda`, que es
+    // la SEGUNDA via por la que la tienda registra una gestion (rechazar a mano una devolucion ya
+    // anclada). Y el `take` pasa de `2` a `3` por la razon que el parrafo de arriba ya daba: con un
+    // `take` mas corto que el numero de familias, una taparia a la otra segun el orden de lectura y
+    // `desdeAyudaTienda` saldria `false` sobre una gestion que SI registro la tienda — dejandola
+    // deshacible por el mensajero. Es dinero, no cosmetica.
+    //
+    // El literal se conserva como literal: es el censo de lo que esta consulta puede traer.
     const select = prisma.gestionOrden.findMany.mock.calls[0][0].select;
     expect(select.historialEstados).toEqual({
-      where: { origenTipo: "escalado_devuelta_sla" },
-      take: 1,
+      where: {
+        origenTipo: { in: ["escalado_devuelta_sla", "gestion_tienda_ayuda", "rechazo_tienda"] },
+      },
+      take: 3,
       select: { origenTipo: true },
     });
     // R1/R2: la clasificacion sale del historial, no del monto.
@@ -550,6 +568,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -575,6 +594,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -601,6 +621,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -622,6 +643,7 @@ describe("CierresAdminRepository.resolverCierre (R10/R12/R13/R14/R15)", () => {
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -751,6 +773,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -793,6 +816,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -813,6 +837,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -843,6 +868,7 @@ describe("CierresAdminRepository.resolverCierre — enganche wallet (feature 42/
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -868,6 +894,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -911,6 +938,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -931,6 +959,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -957,6 +986,7 @@ describe("CierresAdminRepository.resolverCierre — enganche ledger por tienda (
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -986,6 +1016,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });
@@ -1034,6 +1065,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -1054,6 +1086,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
       alcance: ALCANCE_SAT,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-sat",
       motivoRechazo: null,
     });
@@ -1081,6 +1114,7 @@ describe("CierresAdminRepository.resolverCierre — enganche pago al mensajero (
         alcance: ALCANCE_MAESTRO,
         nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
         resueltoPor: "adm-maestro",
         motivoRechazo: null,
       }),
@@ -1143,6 +1177,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
       liberacionSinGestionar: LIBERACION,
@@ -1251,6 +1286,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });

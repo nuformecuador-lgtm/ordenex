@@ -7,16 +7,21 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { descargaConfig } from "@/lib/config/descarga";
+import { GRUPOS_NOVEDAD, type GrupoNovedad } from "@/lib/types/novedad-grupo";
 import { fakeIntentosEnLote, llamadasIntentos } from "@/tests/fixtures/intentos-entrega";
 
-// Feature 89/99 (T14) — service de NOVEDADES con el repo mockeado (sin DB/HTTP). INVIERTE al
-// predicado de la feature 99 (Q7): la novedad se ancla al ESTADO REAL `estatus = devuelta`, no a
-// "gestion devuelta vigente + estatus abierto". El service ya NO computa un conjunto de estatus
-// CERRADOS; solo acota por tienda y delega el filtro de estado al repo. Cubre R8 (count y find
-// sobre el mismo universo), R9 (acota `tienda = actor.usuarioId`), R10 (causa al DTO, null si no
-// hay), R11 (rol != adminTienda -> forbidden), R12/R13 (paginacion 10, orden por recencia, shape).
-// El predicado de la query (`estatus = devuelta`) se ejercita a nivel de repo en
-// orden-repository.novedades.test.ts.
+// Feature 89/99 (T14) → FEATURE 236 (T2.4/T2.5/T3.1/T3.3) — service de NOVEDADES con el repo
+// mockeado (sin DB/HTTP).
+//
+// ⚠️ 2026-08-19 — NOTA FECHADA. Hasta hoy el service listaba UNA cosa que en realidad eran DOS: las
+// devoluciones ancladas y las ordenes sobre las que un mensajero pidio ayuda, mezcladas bajo la
+// misma pestaña. La 236 le da el GRUPO, y con el cambian tres cosas y solo tres: el predicado (que
+// aplica el repo), si se consulta la CAUSA, y el ORDEN. Todo lo demas —el rol como primera guarda,
+// el alcance saliendo del actor, la proyeccion unica compartida por pagina y archivo— se conserva y
+// se sigue afirmando aqui.
+//
+// El PREDICADO en si se ejercita a nivel de repo (`orden-repository.novedades.test.ts`), donde vive:
+// estos dobles no ven el SQL y afirmar aqui la forma del `where` seria afirmar nada.
 
 const ADMIN: Actor = { usuarioId: "tienda-1", rol: "adminTienda" };
 const OTRA_TIENDA: Actor = { usuarioId: "tienda-2", rol: "adminTienda" };
@@ -27,14 +32,15 @@ const PAGE_SIZE = 10;
 
 type RepoMethods = Pick<
   IOrdenRepository,
-  "countDevueltasByTienda" | "findDevueltasByTienda" | "findCausasDevueltaVigentes"
+  | "countNovedadesByTienda"
+  | "findNovedadesByTienda"
+  | "findCausasDevueltaVigentes"
+  | "findFechaSolicitudAyuda"
 >;
 
-// 2026-08-13 (pedido humano): la fila del repo es AHORA la orden completa (`NovedadOrdenRow`
-// espeja a `MiAsignacionRow`), porque `NovedadDTO` extiende `MiAsignacionDTO` y `/novedades`
-// pinta las MISMAS cards POS que el portal del mensajero. El repo ya entrega todo
-// serializable: los tres decimales (peso, monto, lat/lng) como `number | null` y los
-// catalogos con el nombre resuelto.
+// 2026-08-13 (pedido humano): la fila del repo es la orden completa (`NovedadOrdenRow` espeja a
+// `MiAsignacionRow`), porque `NovedadDTO` extiende `MiAsignacionDTO` y `/novedades` pinta las
+// MISMAS cards POS que el portal del mensajero. El repo ya entrega todo serializable.
 function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
   return {
     id: "o1",
@@ -50,9 +56,8 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
     latitud: 9.9333296,
     longitud: -84.0833282,
     notas: "Tocar el timbre",
-    // Solicitud de ayuda (2026-08-18): el default es la fila que llega por ESTAR devuelta, no por
-    // tener ayuda pedida. Los casos de ayuda lo sobreescriben.
-    ayuda: false,
+    // Feature 235 (T6.1, R40): aqui vivia `ayuda: false`. Se retiro con la columna; la razon por
+    // la que la fila esta en el listado la dice `estatusValue`, que ya viaja en esta misma fila.
     intentosContacto: 0,
     tiendaNombre: "Tienda Uno",
     zonaNombre: "GAM",
@@ -66,71 +71,98 @@ function ordenRow(overrides: Partial<NovedadOrdenRow> = {}): NovedadOrdenRow {
 
 function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   return {
-    countDevueltasByTienda: vi.fn(async () => 0),
-    findDevueltasByTienda: vi.fn(async () => []),
+    countNovedadesByTienda: vi.fn(async () => 0),
+    findNovedadesByTienda: vi.fn(async () => []),
     findCausasDevueltaVigentes: vi.fn(async () => new Map<string, CausaDevueltaVigente>()),
+    findFechaSolicitudAyuda: vi.fn(async () => new Map<string, Date>()),
     ...overrides,
   };
 }
 
 // Feature 160: derivador de intentos EN LOTE, dependencia REQUERIDA del constructor. Por
-// defecto Map vacio, que ejerce el `?? 0` del servicio (R14); los tests de la 160 usan su
-// propio doble.
+// defecto Map vacio, que ejerce el `?? 0` del servicio (R14).
 const intentos = fakeIntentosEnLote();
 
-describe("NovedadesService.listar (feature 89)", () => {
-  it("R11: rol != adminTienda -> forbidden sin tocar el repo", async () => {
+/** Atajo de lectura: la pagina 1 del grupo pedido. */
+function paginaDe(grupo: GrupoNovedad) {
+  return { page: 1, pageSize: PAGE_SIZE, grupo };
+}
+
+// =============================================================================================
+// R11 — el rol es la PRIMERA guarda, en los dos grupos y en los dos metodos
+// =============================================================================================
+
+describe("236/R11 — sin rol de administracion de tienda no se devuelve nada, ni totales", () => {
+  it("rol != adminTienda -> forbidden sin tocar el repo, en CADA grupo y CADA metodo", async () => {
     for (const actor of [MENSAJERO, MAESTRO]) {
-      const repo = fakeRepo();
+      for (const grupo of GRUPOS_NOVEDAD) {
+        const repo = fakeRepo();
+        const service = new NovedadesService(repo, intentos);
+
+        expect(await service.listar(paginaDe(grupo), actor)).toEqual({ status: "forbidden" });
+        expect(await service.listarCompleto({ grupo }, actor)).toEqual({ status: "forbidden" });
+
+        // R11 pide que NI SIQUIERA se revelen los totales: el conteo no llega a hacerse.
+        expect(repo.countNovedadesByTienda, `${actor.rol}/${grupo}`).not.toHaveBeenCalled();
+        expect(repo.findNovedadesByTienda).not.toHaveBeenCalled();
+      }
+    }
+  });
+});
+
+// =============================================================================================
+// R10 — el alcance sale del ACTOR, nunca del input
+// =============================================================================================
+
+describe("236/R10 — la tienda sale del actor y el grupo llega al repo", () => {
+  it("acota al `tiendaId = actor.usuarioId` en count y en la lista, con el grupo pedido", async () => {
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 3),
+        findNovedadesByTienda: vi.fn(async () => [ordenRow()]),
+      });
       const service = new NovedadesService(repo, intentos);
-      const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, actor);
-      expect(res).toEqual({ status: "forbidden" });
-      expect(repo.countDevueltasByTienda).not.toHaveBeenCalled();
-      expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+      await service.listar(paginaDe(grupo), OTRA_TIENDA);
+
+      expect(repo.countNovedadesByTienda).toHaveBeenCalledWith("tienda-2", grupo);
+      expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-2", grupo, {
+        skip: 0,
+        take: PAGE_SIZE,
+      });
     }
   });
 
-  it("R9: acota al `tiendaId = actor.usuarioId` en count y en la lista", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 3),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
-    });
-    const service = new NovedadesService(repo, intentos);
-    await service.listar({ page: 1, pageSize: PAGE_SIZE }, OTRA_TIENDA);
+  it("R4: count y find reciben EXACTAMENTE los mismos tienda y grupo (nada que pueda divergir)", async () => {
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 1),
+        findNovedadesByTienda: vi.fn(async () => [ordenRow()]),
+      });
+      await new NovedadesService(repo, intentos).listar(paginaDe(grupo), ADMIN);
 
-    // Feature 99: sin conjunto `cerrados` -> el service solo pasa la tienda (+ paginacion en find).
-    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-2");
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-2", {
-      skip: 0,
-      take: PAGE_SIZE,
-    });
+      const argsCount = (repo.countNovedadesByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
+      const argsFind = (repo.findNovedadesByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(argsCount).toEqual(["tienda-1", grupo]);
+      expect(argsFind.slice(0, 2)).toEqual(["tienda-1", grupo]);
+      // find lleva la paginacion como 3.er argumento y NADA mas.
+      expect(argsFind[2]).toEqual({ skip: 0, take: PAGE_SIZE });
+      expect(argsFind).toHaveLength(3);
+    }
   });
+});
 
-  it("R8: count y find se invocan sobre el MISMO universo (misma tienda, sin conjunto de cerrados)", async () => {
+// =============================================================================================
+// R26 — la causa SOLO se consulta para la devolucion
+// =============================================================================================
+
+describe("236/R26 — a una orden en ayuda no se le atribuye causa de devolucion", () => {
+  it("grupo `ayuda`: `findCausasDevueltaVigentes` NO se llama, y la causa sale null", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow()]),
-    });
-    const service = new NovedadesService(repo, intentos);
-    await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
-
-    // Feature 99 (Q7): el service YA NO computa un conjunto de estatus CERRADOS; el filtro de
-    // estado (`estatus = devuelta`) vive en el repo (orden-repository.novedades.test.ts). Aqui se
-    // afirma que ambos metodos reciben SOLO la tienda: sin segundo argumento `cerrados` que
-    // pudiera divergir entre count y find.
-    const argsCount = (repo.countDevueltasByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
-    const argsFind = (repo.findDevueltasByTienda as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(argsCount).toEqual(["tienda-1"]);
-    expect(argsFind[0]).toBe("tienda-1");
-    // find lleva la paginacion como 2.º argumento; NO un conjunto de estatus.
-    expect(argsFind[1]).toEqual({ skip: 0, take: PAGE_SIZE });
-    expect(argsFind).toHaveLength(2);
-  });
-
-  it("R10: la causa fluye al DTO desde la ultima gestion `devuelta` vigente", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "ayuda_tienda" })]),
+      // Si la consulta se hiciera, devolveria la causa de una devolucion ANTERIOR ya deshecha:
+      // un dato cierto que NO describe por que la orden esta en la pantalla. Este doble la tiene
+      // cargada a proposito, para que el caso caiga si alguien vuelve a consultarla.
       findCausasDevueltaVigentes: vi.fn(
         async () =>
           new Map<string, CausaDevueltaVigente>([
@@ -138,45 +170,111 @@ describe("NovedadesService.listar (feature 89)", () => {
           ]),
       ),
     });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
 
-    expect(res.status).toBe("ok");
+    expect(repo.findCausasDevueltaVigentes).not.toHaveBeenCalled();
     if (res.status !== "ok") throw new Error("esperaba ok");
-    expect(res.items[0].causa).toBe("not_found");
-    // R8: una sola consulta agregada, con los ids de la pagina.
-    expect(repo.findCausasDevueltaVigentes).toHaveBeenCalledTimes(1);
-    expect(repo.findCausasDevueltaVigentes).toHaveBeenCalledWith(["o1"]);
+    expect(res.items[0].causa).toBeNull();
   });
 
-  it("R10: orden sin gestion vigente / causa nula -> causa null (no rompe)", async () => {
+  it("grupo `devolucion`: SI se llama, una vez, con los ids de la pagina (control positivo)", async () => {
+    // El positivo del negativo de arriba: sin el, «no se llama» estaria verde tambien si nadie
+    // llamara nunca.
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "sin-gestion" }),
-        ordenRow({ id: "causa-nula" }),
-      ]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
       findCausasDevueltaVigentes: vi.fn(
         async () =>
           new Map<string, CausaDevueltaVigente>([
-            // "sin-gestion" no aparece -> causa ausente; "causa-nula" con causa null.
-            ["causa-nula", { causa: null, fecha: new Date("2026-01-05T00:00:00Z") }],
+            ["o1", { causa: "not_found", fecha: new Date("2026-02-01T00:00:00Z") }],
           ]),
       ),
     });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
+    expect(repo.findCausasDevueltaVigentes).toHaveBeenCalledTimes(1);
+    expect(repo.findCausasDevueltaVigentes).toHaveBeenCalledWith(["o1"]);
     if (res.status !== "ok") throw new Error("esperaba ok");
-    const byId = new Map(res.items.map((i) => [i.id, i.causa]));
-    expect(byId.get("sin-gestion")).toBeNull();
-    expect(byId.get("causa-nula")).toBeNull();
+    expect(res.items[0].causa).toBe("not_found");
   });
 
-  it("R12: ordena por la fecha de la ultima gestion vigente desc (mas reciente primero)", async () => {
+  it("y a la inversa: la fecha de solicitud NO se consulta para el grupo de devolucion", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 3),
-      findDevueltasByTienda: vi.fn(async () => [
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+    });
+    await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
+    expect(repo.findFechaSolicitudAyuda).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================================
+// R17 / D7 — el orden de la pestaña de ayuda: la que lleva MAS esperando, primero
+// =============================================================================================
+
+describe("236/R17 — la lista de ayuda se ordena por la fecha de la SOLICITUD", () => {
+  it("UNA sola consulta para toda la pagina, con todos sus ids (nunca una por fila)", async () => {
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 3),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "a", estatusValue: "ayuda_tienda" }),
+        ordenRow({ id: "b", estatusValue: "ayuda_tienda" }),
+        ordenRow({ id: "c", estatusValue: "ayuda_tienda" }),
+      ]),
+    });
+    await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    expect(repo.findFechaSolicitudAyuda).toHaveBeenCalledTimes(1);
+    expect(repo.findFechaSolicitudAyuda).toHaveBeenCalledWith(["a", "b", "c"]);
+  });
+
+  it("la que pidio ayuda ANTES va primero (ascendente), aunque su orden sea mas nueva", async () => {
+    // El caso que separa D7-(a) de D7-(b): si se ordenara por `createdAt` desc —el fallback de
+    // hoy—, «reciente» saldria primera. Lo que la tienda pregunta es cual lleva mas esperando.
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "reciente", estatusValue: "ayuda_tienda", createdAt: new Date("2026-05-01T00:00:00Z") }),
+        ordenRow({ id: "esperando", estatusValue: "ayuda_tienda", createdAt: new Date("2026-01-01T00:00:00Z") }),
+      ]),
+      findFechaSolicitudAyuda: vi.fn(
+        async () =>
+          new Map<string, Date>([
+            ["reciente", new Date("2026-06-02T10:00:00Z")], // pidio ayuda hace un rato
+            ["esperando", new Date("2026-06-01T08:00:00Z")], // lleva un dia mas esperando
+          ]),
+      ),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    expect(res.items.map((i) => i.id)).toEqual(["esperando", "reciente"]);
+  });
+
+  it("una orden SIN fecha de solicitud cae al fallback `createdAt` sin romper el orden", async () => {
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [
+        ordenRow({ id: "con-solicitud", estatusValue: "ayuda_tienda", createdAt: new Date("2026-05-01T00:00:00Z") }),
+        ordenRow({ id: "sin-solicitud", estatusValue: "ayuda_tienda", createdAt: new Date("2026-01-01T00:00:00Z") }),
+      ]),
+      findFechaSolicitudAyuda: vi.fn(
+        async () => new Map<string, Date>([["con-solicitud", new Date("2026-06-01T08:00:00Z")]]),
+      ),
+    });
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("ayuda"), ADMIN);
+
+    if (res.status !== "ok") throw new Error("esperaba ok");
+    // La sin solicitud entra por su `createdAt` (2026-01), que es anterior: va primera. Lo que
+    // importa es que NO desaparece ni rompe: el fallback esta documentado en el service.
+    expect(res.items.map((i) => i.id)).toEqual(["sin-solicitud", "con-solicitud"]);
+    expect(res.items).toHaveLength(2);
+  });
+
+  it("R12 (sin cambios): la DEVOLUCION sigue ordenando por su gestion vigente, desc", async () => {
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [
         ordenRow({ id: "vieja", createdAt: new Date("2026-01-01T00:00:00Z") }),
         ordenRow({ id: "nueva", createdAt: new Date("2026-01-02T00:00:00Z") }),
       ]),
@@ -190,60 +288,67 @@ describe("NovedadesService.listar (feature 89)", () => {
           ]),
       ),
     });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items.map((i) => i.id)).toEqual(["vieja", "nueva"]);
   });
 
-  it("R12 (fallback): sin gestion vigente ordena por Orden.createdAt desc", async () => {
+  it("R12 (fallback): sin gestion vigente la devolucion ordena por `createdAt` DESC", async () => {
+    // Y aqui esta la diferencia con la ayuda, dicha sobre los mismos datos: mismo fallback,
+    // sentido contrario. Si alguien unificara los dos ordenes, uno de los dos casos cae.
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [
         ordenRow({ id: "b", createdAt: new Date("2026-01-01T00:00:00Z") }),
         ordenRow({ id: "a", createdAt: new Date("2026-05-01T00:00:00Z") }),
       ]),
-      // Sin causas vigentes -> mapa vacio -> fallback a createdAt de la orden.
-      findCausasDevueltaVigentes: vi.fn(
-        async () => new Map<string, CausaDevueltaVigente>(),
-      ),
     });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items.map((i) => i.id)).toEqual(["a", "b"]);
   });
+});
 
+// =============================================================================================
+// La paginacion y el estado vacio (que es el PRIMER estado que la tienda va a conocer)
+// =============================================================================================
+
+describe("NovedadesService.listar — paginacion y lista vacia", () => {
   it("R13/R12: respuesta { items, total, page, pageSize } y skip derivado de la pagina", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 25),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      countNovedadesByTienda: vi.fn(async () => 25),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
     });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 3, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, intentos).listar(
+      { page: 3, pageSize: PAGE_SIZE, grupo: "devolucion" },
+      ADMIN,
+    );
 
     expect(res).toMatchObject({ status: "ok", total: 25, page: 3, pageSize: PAGE_SIZE });
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items).toHaveLength(1);
-    // page 3, pageSize 10 -> skip 20 (paginacion de 10 por pagina, R12).
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", {
+    // page 3, pageSize 10 -> skip 20.
+    expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-1", "devolucion", {
       skip: 20,
       take: PAGE_SIZE,
     });
   });
 
-  it("R8/R13: pagina vacia -> items [] con total, sin pedir causas (no N+1 en vacio)", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 0),
-      findDevueltasByTienda: vi.fn(async () => []),
-    });
-    const service = new NovedadesService(repo, intentos);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+  it("la pestaña VACIA responde `ok` con total y sin consultas agregadas, en los DOS grupos", async () => {
+    // Medido el 2026-08-19 en produccion: `devuelta` = 0 y `ayuda_tienda` = 0 sobre 141 ordenes
+    // vivas en 11 estatus. El camino vacio no es marginal — es el PRIMERO que va a correr.
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo();
+      const doble = fakeIntentosEnLote();
+      const res = await new NovedadesService(repo, doble).listar(paginaDe(grupo), ADMIN);
 
-    expect(res).toEqual({ status: "ok", items: [], total: 0, page: 1, pageSize: PAGE_SIZE });
-    expect(repo.findCausasDevueltaVigentes).not.toHaveBeenCalled();
+      expect(res).toEqual({ status: "ok", items: [], total: 0, page: 1, pageSize: PAGE_SIZE });
+      expect(repo.findCausasDevueltaVigentes, grupo).not.toHaveBeenCalled();
+      expect(repo.findFechaSolicitudAyuda, grupo).not.toHaveBeenCalled();
+      expect(doble.contarIntentosEnLote, grupo).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -252,13 +357,12 @@ describe("NovedadesService.listar (feature 89)", () => {
 describe("NovedadesService.listar — intentos de entrega en lote (160/R11-R15/R26)", () => {
   it("R11/R14: cada novedad sale con `intentosEntrega` numerico, el `0` INCLUIDO", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
     });
     // `n2` no viene en el mapa -> 0.
     const doble = fakeIntentosEnLote({ n1: 3 });
-    const service = new NovedadesService(repo, doble);
-    const res = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const res = await new NovedadesService(repo, doble).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     const porId = new Map(res.items.map((i) => [i.id, i.intentosEntrega]));
@@ -268,122 +372,53 @@ describe("NovedadesService.listar — intentos de entrega en lote (160/R11-R15/R
 
   it("R12/R15: UNA sola llamada, con los ids de la pagina YA acotada a la tienda del actor", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "n1" }), ordenRow({ id: "n2" })]),
     });
     const doble = fakeIntentosEnLote();
-    await new NovedadesService(repo, doble).listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    await new NovedadesService(repo, doble).listar(paginaDe("devolucion"), ADMIN);
 
     expect(doble.contarIntentosEnLote).toHaveBeenCalledTimes(1);
     expect(llamadasIntentos(doble)).toEqual([["n1", "n2"]]);
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", {
+    expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-1", "devolucion", {
       skip: 0,
       take: PAGE_SIZE,
     });
   });
 
-  it("R13: pagina vacia -> ni una llamada al derivador", async () => {
-    const doble = fakeIntentosEnLote();
-    await new NovedadesService(fakeRepo(), doble).listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
-    expect(doble.contarIntentosEnLote).not.toHaveBeenCalled();
-  });
-
   it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
     const doble = fakeIntentosEnLote();
     const res = await new NovedadesService(fakeRepo(), doble).listar(
-      { page: 1, pageSize: PAGE_SIZE },
+      paginaDe("devolucion"),
       MENSAJERO,
     );
     expect(res).toEqual({ status: "forbidden" });
     expect(doble.contarIntentosEnLote).not.toHaveBeenCalled();
   });
-});
 
-// --- 2026-08-12 (pedido humano): producto y peso en el DTO ---
-// `/novedades` monta la card POS en su vista MOSAICO, que pinta el producto (junto al icono
-// de paquete) y el peso (`formatPeso`) SIN compuerta. La decision fue TRAER el dato real de
-// la orden, no apagar la seccion. El servicio proyecta ambos campos SIEMPRE (patron aditivo:
-// opcionales en el tipo para no romper fixtures, pero emitidos en cada item).
-
-describe("NovedadesService.listar — producto y peso al DTO", () => {
-  it("proyecta producto y peso de la orden en cada item", async () => {
+  it("la pagina de AYUDA tambien cuenta intentos, con la misma unica llamada", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "o1", producto: "Licuadora", peso: 2.75 }),
-      ]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "a1", estatusValue: "ayuda_tienda" })]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const doble = fakeIntentosEnLote({ a1: 2 });
+    const res = await new NovedadesService(repo, doble).listar(paginaDe("ayuda"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
-    expect(res.items[0].producto).toBe("Licuadora");
-    expect(res.items[0].peso).toBe(2.75);
-  });
-
-  it("peso ausente viaja como null: ni 0, ni cadena vacia (la card pinta la raya)", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "sin-peso", producto: "Caja", peso: null }),
-      ]),
-    });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
-
-    if (res.status !== "ok") throw new Error("esperaba ok");
-    const item = res.items[0];
-    expect(item.peso).toBeNull();
-    expect(item.peso).not.toBe(0);
-    // `producto` es NOT NULL en el schema: siempre hay texto que pintar al lado del icono.
-    expect(item.producto).toBe("Caja");
-  });
-
-  it("los campos son SIEMPRE emitidos y 100% serializables (borde RSC)", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "a", producto: "Uno", peso: 0.5 }),
-        ordenRow({ id: "b", producto: "Dos", peso: null }),
-      ]),
-    });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
-
-    if (res.status !== "ok") throw new Error("esperaba ok");
-    for (const item of res.items) {
-      expect(Object.keys(item)).toEqual(expect.arrayContaining(["producto", "peso"]));
-      expect(typeof item.producto).toBe("string");
-      expect(item.peso === null || typeof item.peso === "number").toBe(true);
-      // Sin Decimal ni Date: el DTO sobrevive a un round-trip JSON sin perder nada.
-      expect(JSON.parse(JSON.stringify(item))).toEqual(item);
-    }
+    expect(res.items[0].intentosEntrega).toBe(2);
+    expect(doble.contarIntentosEnLote).toHaveBeenCalledTimes(1);
   });
 });
 
-// --- 2026-08-13 (pedido humano): la orden COMPLETA al DTO ---
-// `NovedadDTO` extiende `MiAsignacionDTO`, asi que `/novedades` pinta las mismas cards POS
-// que «En reparto»/«Entregas» con datos REALES y no con los rellenos que el adaptador de
-// front inventaba. Aqui se afirma que cada campo de la fila llega al DTO con su valor, que
-// los ausentes viajan como `null` (nunca `""` ni `0`), y las dos unicas cosas que el service
-// decide por si mismo: `secuenciaRuta` fijo en `null` y `createdAt` que NO viaja.
+// --- 2026-08-12/13 (pedido humano): la orden COMPLETA al DTO, con sus decimales y sus nulos ---
 
 describe("NovedadesService.listar — la orden completa al DTO (card POS compartida)", () => {
   it("propaga TODOS los campos de la fila con su valor real", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items[0]).toMatchObject({
@@ -411,8 +446,8 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
 
   it("los campos AUSENTES viajan como null: ni cadena vacia ni cero", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [
         ordenRow({
           id: "pelada",
           peso: null,
@@ -425,10 +460,7 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
         }),
       ]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     const item = res.items[0];
@@ -447,7 +479,6 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
       expect(item[campo]).not.toBe("");
       expect(item[campo]).not.toBe(0);
     }
-    // Los NOT NULL del schema siguen presentes en la misma orden.
     expect(item.producto).toBe("Zapatos");
     expect(item.numRemision).toBe("REM-001");
     expect(item.zonaNombre).toBe("GAM");
@@ -455,31 +486,21 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
 
   it("`secuenciaRuta` es SIEMPRE null: una novedad no es parada de ninguna ruta", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "a" }), ordenRow({ id: "b" })]),
+      countNovedadesByTienda: vi.fn(async () => 2),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "a" }), ordenRow({ id: "b" })]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     for (const item of res.items) expect(item.secuenciaRuta).toBeNull();
   });
 
   it("`estatusValue` sale de la fila (proyectado), no hardcodeado en el service", async () => {
-    // El predicado del repo ya ancla la lista a `devuelta`; el service NO reafirma el valor
-    // por su cuenta. Si la fila trae otra cosa, el DTO la refleja: es un dato, no una constante.
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "o1", estatusValue: "otro_valor" }),
-      ]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "otro_valor" })]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     expect(res.items[0].estatusValue).toBe("otro_valor");
@@ -487,13 +508,10 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
 
   it("`createdAt` NO viaja al DTO: es de la fila del repo y muere en el ordenamiento", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
     });
-    const res = await new NovedadesService(repo, intentos).listar(
-      { page: 1, pageSize: PAGE_SIZE },
-      ADMIN,
-    );
+    const res = await new NovedadesService(repo, intentos).listar(paginaDe("devolucion"), ADMIN);
 
     if (res.status !== "ok") throw new Error("esperaba ok");
     const item = res.items[0];
@@ -502,118 +520,171 @@ describe("NovedadesService.listar — la orden completa al DTO (card POS compart
     for (const valor of Object.values(item)) expect(valor).not.toBeInstanceOf(Date);
     expect(JSON.parse(JSON.stringify(item))).toEqual(item);
   });
+
+  it("R29: el DTO no gana NINGUNA clave de notas — el hilo no viaja en el listado", async () => {
+    // Feature 236 (design §7.4): el hilo se lee SOLO al abrirlo. Si viajara aqui costaria una
+    // consulta por orden de la pagina (N+1) para un dato que solo se mira al abrir una orden.
+    // Se afirma sobre el DTO, no sobre un comentario.
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 1),
+        findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      });
+      const res = await new NovedadesService(repo, intentos).listar(paginaDe(grupo), ADMIN);
+      if (res.status !== "ok") throw new Error("esperaba ok");
+      const claves = Object.keys(res.items[0]);
+      for (const prohibida of ["notasHilo", "hilo", "notasOrden", "conversacion", "puedeEscribir"]) {
+        expect(claves, `${grupo} / ${prohibida}`).not.toContain(prohibida);
+      }
+      // `notas` SI viaja y es OTRA cosa: la nota que la tienda escribio AL CREAR la orden.
+      expect(claves).toContain("notas");
+    }
+  });
 });
 
-// 2026-08-14 (pedido humano) — el MISMO listado sin recorte por pagina, que es de donde sale el
-// archivo de la descarga. Lo que estos casos fijan es lo que separa «el listado entero» de «una
-// pagina grande»: el tope se evalua en el SERVIDOR y con el CONTEO (superarlo no lee ni una fila
-// ni devuelve un dataset truncado), el alcance sigue saliendo del actor y la proyeccion es la
-// MISMA que la de la pagina —dos proyecciones distintas de la misma fila serian dos listados—.
-describe("NovedadesService.listarCompleto (descarga)", () => {
-  it("rol != adminTienda -> forbidden sin tocar el repo", async () => {
+// =============================================================================================
+// La DESCARGA (T3.1/T3.3) — mismo predicado y mismo alcance que la pestaña, tope en el servidor
+// =============================================================================================
+
+describe("236/R37/R38/R40 — `listarCompleto`, una descarga por grupo", () => {
+  it("R11: rol != adminTienda -> forbidden sin tocar el repo, en los dos grupos", async () => {
     for (const actor of [MENSAJERO, MAESTRO]) {
-      const repo = fakeRepo();
-      const res = await new NovedadesService(repo, intentos).listarCompleto(actor);
-      expect(res).toEqual({ status: "forbidden" });
-      expect(repo.countDevueltasByTienda).not.toHaveBeenCalled();
-      expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+      for (const grupo of GRUPOS_NOVEDAD) {
+        const repo = fakeRepo();
+        const res = await new NovedadesService(repo, intentos).listarCompleto({ grupo }, actor);
+        expect(res).toEqual({ status: "forbidden" });
+        expect(repo.countNovedadesByTienda).not.toHaveBeenCalled();
+        expect(repo.findNovedadesByTienda).not.toHaveBeenCalled();
+      }
     }
   });
 
-  it("devuelve el listado ENTERO de la tienda del actor, sin recorte por pagina", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 25),
-      findDevueltasByTienda: vi.fn(async () =>
-        Array.from({ length: 25 }, (_, i) => ordenRow({ id: `o${i}` })),
-      ),
-    });
-    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+  it("R37: el listado ENTERO del grupo, con el MISMO alcance y el MISMO predicado que su pestaña", async () => {
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 25),
+        findNovedadesByTienda: vi.fn(async () =>
+          Array.from({ length: 25 }, (_, i) => ordenRow({ id: `o${i}` })),
+        ),
+      });
+      const res = await new NovedadesService(repo, intentos).listarCompleto({ grupo }, ADMIN);
 
+      if (res.status !== "ok") throw new Error("esperaba ok");
+      expect(res.items).toHaveLength(25);
+      expect(res.total).toBe(25);
+      // El alcance sale del actor y el grupo es el pedido; la lectura pide las 25, no una pagina.
+      expect(repo.countNovedadesByTienda).toHaveBeenCalledWith("tienda-1", grupo);
+      expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-1", grupo, {
+        skip: 0,
+        take: 25,
+      });
+    }
+  });
+
+  it("R38: el archivo de DEVOLUCIONES no puede traer una orden en ayuda", async () => {
+    // El grupo con el que se pide el conteo y la lectura ES el predicado: pedir `devolucion` no
+    // puede devolver `ayuda_tienda`, porque el repo filtra por igualdad de estado. Lo que se
+    // afirma aqui —donde vive la decision— es que el service PIDE el grupo correcto y no toca
+    // ningun camino que mezcle. El predicado en si se prueba en el repo.
+    const repo = fakeRepo({
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "d1", estatusValue: "devuelta" })]),
+    });
+    const res = await new NovedadesService(repo, intentos).listarCompleto(
+      { grupo: "devolucion" },
+      ADMIN,
+    );
+
+    expect(repo.countNovedadesByTienda).toHaveBeenCalledWith("tienda-1", "devolucion");
+    expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-1", "devolucion", {
+      skip: 0,
+      take: 1,
+    });
+    // Ni el conteo ni la lectura se hacen NUNCA sin grupo, que era la forma de mezclar.
+    for (const llamada of (repo.countNovedadesByTienda as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(llamada).toHaveLength(2);
+      expect(llamada[1]).toBe("devolucion");
+    }
     if (res.status !== "ok") throw new Error("esperaba ok");
-    expect(res.items).toHaveLength(25);
-    expect(res.total).toBe(25);
-    // El alcance sale del actor (R9) y la lectura pide las 25, no una pagina de 10.
-    expect(repo.countDevueltasByTienda).toHaveBeenCalledWith("tienda-1");
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", { skip: 0, take: 25 });
+    expect(res.items.map((i) => i.estatusValue)).toEqual(["devuelta"]);
   });
 
-  it("misma proyeccion que la pagina: causa vigente, intentos y ningun `Date`", async () => {
+  it("misma proyeccion que la pagina, en los dos grupos: el archivo no puede decir otra cosa", async () => {
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => 1),
+        findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+        findCausasDevueltaVigentes: vi.fn(
+          async () =>
+            new Map<string, CausaDevueltaVigente>([
+              ["o1", { causa: "not_found", fecha: new Date("2026-02-01T00:00:00Z") }],
+            ]),
+        ),
+      });
+      const service = new NovedadesService(repo, intentos);
+      const completo = await service.listarCompleto({ grupo }, ADMIN);
+      const pagina = await service.listar(paginaDe(grupo), ADMIN);
+
+      if (completo.status !== "ok" || pagina.status !== "ok") throw new Error("esperaba ok");
+      expect(completo.items, grupo).toEqual(pagina.items);
+      expect(completo.items[0]).not.toHaveProperty("createdAt");
+    }
+  });
+
+  it("235/R40: el DTO transporta `estatusValue` y NINGUNA marca de ayuda", async () => {
     const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 1),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
-      findCausasDevueltaVigentes: vi.fn(
-        async () =>
-          new Map<string, CausaDevueltaVigente>([
-            ["o1", { causa: "not_found", fecha: new Date("2026-02-01T00:00:00Z") }],
-          ]),
-      ),
+      countNovedadesByTienda: vi.fn(async () => 1),
+      findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "ayuda_tienda" })]),
     });
     const service = new NovedadesService(repo, intentos);
-    const completo = await service.listarCompleto(ADMIN);
-    const pagina = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
+    const pagina = await service.listar(paginaDe("ayuda"), ADMIN);
 
-    if (completo.status !== "ok" || pagina.status !== "ok") throw new Error("esperaba ok");
-    expect(completo.items).toEqual(pagina.items);
-    expect(completo.items[0].causa).toBe("not_found");
-    expect(completo.items[0]).not.toHaveProperty("createdAt");
+    if (pagina.status !== "ok") throw new Error("esperaba ok");
+    expect(pagina.items[0].estatusValue).toBe("ayuda_tienda");
+    // Ninguna marca paralela: una sola verdad sobre el mismo hecho.
+    expect(pagina.items[0]).not.toHaveProperty("ayuda");
   });
 
-  // Pedido humano 2026-08-18 — `ayuda` viaja al DTO. La pantalla NO puede derivarlo del estatus:
-  // una orden devuelta tambien puede tener ayuda pedida de antes, y una en reparto solo esta en
-  // este listado por la ayuda. Sin el campo, el badge no podria distinguirlas.
-  it("`ayuda` se proyecta al DTO tal cual llega de la fila, en la pagina y en el archivo", async () => {
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => 2),
-      findDevueltasByTienda: vi.fn(async () => [
-        ordenRow({ id: "o1", ayuda: true, estatusValue: "en_reparto" }),
-        ordenRow({ id: "o2", ayuda: false }),
-      ]),
-      findCausasDevueltaVigentes: vi.fn(async () => new Map<string, CausaDevueltaVigente>()),
-    });
-    const service = new NovedadesService(repo, intentos);
-    const pagina = await service.listar({ page: 1, pageSize: PAGE_SIZE }, ADMIN);
-    const completo = await service.listarCompleto(ADMIN);
+  it("el listado vacio no consulta causas, ni solicitudes, ni intentos (los dos grupos)", async () => {
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({ countNovedadesByTienda: vi.fn(async () => 0) });
+      const res = await new NovedadesService(repo, intentos).listarCompleto({ grupo }, ADMIN);
 
-    if (pagina.status !== "ok" || completo.status !== "ok") throw new Error("esperaba ok");
-    expect(pagina.items.map((i) => [i.id, i.ayuda])).toEqual([
-      ["o1", true],
-      ["o2", false],
-    ]);
-    // El `false` SIEMPRE se emite: es un valor conocido, no un dato ausente.
-    expect(pagina.items[1]).toHaveProperty("ayuda", false);
-    // Una sola proyeccion: el archivo no puede decir otra cosa que la pagina.
-    expect(completo.items).toEqual(pagina.items);
+      expect(res).toEqual({ status: "ok", items: [], total: 0 });
+      expect(repo.findNovedadesByTienda, grupo).not.toHaveBeenCalled();
+      expect(repo.findCausasDevueltaVigentes, grupo).not.toHaveBeenCalled();
+      expect(repo.findFechaSolicitudAyuda, grupo).not.toHaveBeenCalled();
+    }
   });
 
-  it("el listado vacio no consulta causas ni intentos", async () => {
-    const repo = fakeRepo({ countDevueltasByTienda: vi.fn(async () => 0) });
-    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
-
-    expect(res).toEqual({ status: "ok", items: [], total: 0 });
-    expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
-    expect(repo.findCausasDevueltaVigentes).not.toHaveBeenCalled();
-  });
-
-  it("superado el tope: `limite_excedido` con conteos, sin leer una sola fila", async () => {
+  it("R40: superado el tope -> `limite_excedido` con conteos y NINGUNA fila, por grupo", async () => {
     const limite = descargaConfig.MAX_FILAS;
-    const repo = fakeRepo({ countDevueltasByTienda: vi.fn(async () => limite + 1) });
-    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({ countNovedadesByTienda: vi.fn(async () => limite + 1) });
+      const res = await new NovedadesService(repo, intentos).listarCompleto({ grupo }, ADMIN);
 
-    expect(res).toEqual({ status: "limite_excedido", total: limite + 1, limite });
-    // Ni filas truncadas ni PII en el resultado: el aviso lleva SOLO conteos.
-    expect(res).not.toHaveProperty("items");
-    expect(repo.findDevueltasByTienda).not.toHaveBeenCalled();
+      expect(res, grupo).toEqual({ status: "limite_excedido", total: limite + 1, limite });
+      // Ni filas truncadas ni PII en el resultado: el aviso lleva SOLO conteos, y el tope se
+      // evaluo con el CONTEO — sin leer una sola fila.
+      expect(res).not.toHaveProperty("items");
+      expect(repo.findNovedadesByTienda, grupo).not.toHaveBeenCalled();
+    }
   });
 
-  it("justo EN el tope todavia hay archivo (el limite no se pasa por uno)", async () => {
+  it("justo EN el tope todavia hay archivo (el limite no se pasa por uno), por grupo", async () => {
     const limite = descargaConfig.MAX_FILAS;
-    const repo = fakeRepo({
-      countDevueltasByTienda: vi.fn(async () => limite),
-      findDevueltasByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
-    });
-    const res = await new NovedadesService(repo, intentos).listarCompleto(ADMIN);
+    for (const grupo of GRUPOS_NOVEDAD) {
+      const repo = fakeRepo({
+        countNovedadesByTienda: vi.fn(async () => limite),
+        findNovedadesByTienda: vi.fn(async () => [ordenRow({ id: "o1" })]),
+      });
+      const res = await new NovedadesService(repo, intentos).listarCompleto({ grupo }, ADMIN);
 
-    expect(res.status).toBe("ok");
-    expect(repo.findDevueltasByTienda).toHaveBeenCalledWith("tienda-1", { skip: 0, take: limite });
+      expect(res.status, grupo).toBe("ok");
+      expect(repo.findNovedadesByTienda).toHaveBeenCalledWith("tienda-1", grupo, {
+        skip: 0,
+        take: limite,
+      });
+    }
   });
 });

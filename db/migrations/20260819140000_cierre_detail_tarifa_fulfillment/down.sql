@@ -1,0 +1,23 @@
+-- DOWN — suelta `cierre_detail.tarifa_fulfillment`, el monto de fulfillment CONGELADO en el
+-- detalle del cierre.
+--
+-- ⚠️ ESTE ARCHIVO SE ANADIO EL 2026-08-19, DESPUES de que la migracion aterrizara en `dev` (PR
+-- #401, branch `ux`), porque venia SIN EL. La guardia de la 227
+-- (`orden-mensajero-meta-drop-nota-migration.test.ts`) lo exige para toda migracion posterior a
+-- `20260815120000_orden_nota`, y sin el `dev` estaba ROJO. El `migration.sql` NO se toco: editar
+-- una migracion ya aplicada produce drift, porque lo anadido despues no llega nunca a la base
+-- donde ya corrio.
+--
+-- PERDIDA DE DATO DECLARADA, y es la MENOS grave posible: se pierden los montos de fulfillment
+-- congelados en los cierres. El propio `migration.sql` declara que esta columna **NO ENTRA EN LA
+-- FORMULA** —`derivarIngresoOrden` no la suma, las wallets no la mueven, el `total` no la
+-- incluye—: se congela para MOSTRARLA. Asi que revertir no descuadra ningun cierre ni mueve un
+-- centimo; lo unico que desaparece es la celda en el detalle y en sus descargas, que vuelve a
+-- verse vacia. Esa celda vacia es ademas un estado que el codigo anterior ya sabe leer, porque la
+-- columna nacio NULLABLE y SIN BACKFILL: las filas previas a la migracion ya estaban en NULL.
+--
+-- Por eso mismo la reversion cumple el criterio del repo («la base revertida es la que el codigo
+-- anterior espera»): ese codigo nunca leyo esta columna.
+--
+-- `IF EXISTS` para que el rollback sea IDEMPOTENTE: se puede correr dos veces sin fallar.
+ALTER TABLE "cierre_detail" DROP COLUMN IF EXISTS "tarifa_fulfillment";

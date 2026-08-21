@@ -63,6 +63,36 @@ const LA_QUE_SOLO_LA_EXPLICA = "20260731130000_order_status_recolectando/migrati
 const MIGRACIONES_QUE_TOCAN_LA_COLUMNA = [
   "20260716120000_orden_asignado_at/down.sql",
   "20260716120000_orden_asignado_at/migration.sql",
+  // ── FEATURE 246 (2026-08-20) — LA TERCERA Y CUARTA ENTRADA, MIRADAS A MANO ────────────────────
+  //
+  // La cabecera de arriba lo pedia con todas las letras: «si aparece una tercera, hay que mirarla
+  // a mano antes de tocar esta lista». Esto es ese recibo.
+  //
+  // QUE HACE LA 246 CON `asignado_at`: **nada a los datos**. Lo que hace es INDEXARLA junto a
+  // `fecha_reparto`. El `EXPLAIN` de produccion mostro que la consulta del denominador del ranking
+  // se sirve con un `Index Only Scan` sobre `(mensajero_asignado_id, asignado_at)`, y que el `OR`
+  // que la 246 anade sobre `fecha_reparto` lo ROMPIA porque esa columna no estaba en el indice. La
+  // migracion AMPLIA ese indice a `(mensajero_asignado_id, asignado_at, fecha_reparto)` — y el
+  // `down.sql` repone el de dos columnas, por eso son DOS entradas y no una.
+  //
+  // POR QUE SE CONCEDE EL PERMISO Y NO SE RELAJA EL CENSO. Habria sido mas comodo ensenarle a esta
+  // guardia que «un `CREATE INDEX` no toca la columna». Seria FALSO en el sentido que importa
+  // —quien puede reindexar puede reordenar, y reordenar las columnas de ese indice le quita el plan
+  // a `TableroDiaRepository` sin romper nada mas— y ademas contradiria el precedente: la entrada
+  // original de esta lista (`20260716120000_orden_asignado_at`) entro aqui precisamente por su
+  // `ADD COLUMN` **+ `CREATE INDEX`**. Indexar es tocar, para esta lista. Se declara.
+  //
+  // Y EL PERMISO NO ES UN CHEQUE EN BLANCO: el caso «246: …» de mas abajo exige que en estas dos
+  // entradas `asignado_at` aparezca UNICAMENTE dentro de `CREATE INDEX` / `DROP INDEX`. Si alguna
+  // pasara a escribir la columna, cae ese caso — no este.
+  "20260820180000_orden_fecha_reparto/down.sql",
+  "20260820180000_orden_fecha_reparto/migration.sql",
+];
+
+/** Las entradas de la lista blanca que SOLO pueden indexar la columna, nunca escribirla. */
+const SOLO_PUEDEN_INDEXAR = [
+  "20260820180000_orden_fecha_reparto/migration.sql",
+  "20260820180000_orden_fecha_reparto/down.sql",
 ];
 
 function migracionesQueTocanAsignadoAt(): string[] {
@@ -116,6 +146,47 @@ describe("asignado_at es de SOLO LECTURA en toda la feature", () => {
       `${LA_QUE_SOLO_LA_EXPLICA} paso a TOCAR asignado_at en SQL vivo`,
     ).not.toContain("asignado_at");
     expect(migracionesQueTocanAsignadoAt()).not.toContain(LA_QUE_SOLO_LA_EXPLICA);
+  });
+
+  it("246: el permiso nuevo es SOLO para indexar — ni una escritura sobre la columna", () => {
+    // Esto es lo que convierte las dos entradas nuevas de la lista blanca en un permiso ACOTADO en
+    // vez de en un cheque en blanco. Se exige, sentencia a sentencia, que toda aparicion de
+    // `asignado_at` en SQL VIVO caiga dentro de un `CREATE INDEX` o de un `DROP INDEX`.
+    //
+    // Si manana alguien anade a esa migracion un `UPDATE "orden" SET "asignado_at" = …` —el
+    // "ya que estamos" contra el que existe toda esta guardia— este caso cae, y cae ANTES de que
+    // la lista blanca de arriba parezca haberlo autorizado.
+    for (const ruta of SOLO_PUEDEN_INDEXAR) {
+      const vivo = quitarComentariosSql(fs.readFileSync(path.join(MIGRACIONES, ruta), "utf8"));
+      expect(vivo, `${ruta} ya no menciona la columna: sobra de la lista blanca`).toContain(
+        "asignado_at",
+      );
+      const sentencias = vivo
+        .split(";")
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0);
+      expect(sentencias.length, `${ruta} sin sentencias que censar`).toBeGreaterThan(0);
+      for (const sentencia of sentencias) {
+        if (!sentencia.includes("asignado_at")) continue;
+        expect(
+          /^(CREATE INDEX|DROP INDEX)\b/i.test(sentencia),
+          `${ruta} toca \`asignado_at\` fuera de un indice:\n${sentencia.slice(0, 200)}`,
+        ).toBe(true);
+      }
+      // Y ninguna forma de escritura de datos, dicha aparte por si el reparto por `;` fallara.
+      expect(ESCRITURAS_SQL.test(vivo), `${ruta} contiene SQL de escritura`).toBe(false);
+    }
+  });
+
+  it("246: el censo de ese permiso detecta lo que dice detectar (autocomprobacion)", () => {
+    // Si el reparto por `;` o el regex dejaran de medir, el caso de arriba pasaria en verde con una
+    // escritura dentro. Se prueba contra respuestas conocidas, en las DOS direcciones.
+    const legal = 'CREATE INDEX "x" ON "orden" ("mensajero_asignado_id", "asignado_at")';
+    const ilegal = 'UPDATE "orden" SET "asignado_at" = NOW()';
+    expect(/^(CREATE INDEX|DROP INDEX)\b/i.test(legal)).toBe(true);
+    expect(/^(CREATE INDEX|DROP INDEX)\b/i.test(ilegal)).toBe(false);
+    expect(ESCRITURAS_SQL.test(ilegal)).toBe(true);
+    expect(ESCRITURAS_SQL.test(legal)).toBe(false);
   });
 
   it("el repositorio SI la lee: la columna aparece en un WHERE y en un SELECT", () => {

@@ -49,6 +49,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 // Feature 49: contextos de historial (actor = el maestro) para los 3 puntos del maestro.
 const HIST_GUIA = { actorUsuarioId: "maestro-1", origenTipo: "generacion_guia" } as const;
 const HIST_BODEGA = { actorUsuarioId: "maestro-1", origenTipo: "asignacion_bodega" } as const;
+// Feature 246 (T3.3): el dia de reparto YA RESUELTO por el servicio (convencion `@db.Date`:
+// medianoche UTC de la fecha calendario CR). El repositorio no calcula fechas.
+const FECHA_REPARTO = new Date("2026-08-20T00:00:00.000Z");
 const HIST_RUTEO = { actorUsuarioId: "maestro-1", origenTipo: "ruteo_satelite" } as const;
 
 beforeEach(async () => {
@@ -321,9 +324,16 @@ describe("OrdenRepository.rutearBodegaSateliteLote (feature 30/R10/R13)", () => 
     expect(sql).not.toContain("nextval");
     expect(ordenId).toBe("o1");
     // R9: fija estatus y deja mensajeroAsignadoId NULL. Feature 76/LC1 (C2): limpia asignado_at.
+    // Feature 246 (T3.5, R9/R10): y limpia tambien `fechaReparto`, en la MISMA escritura. La orden
+    // vuelve a bodega sin mensajero, asi que no puede conservar una reserva huerfana.
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o1" },
-      data: { estatusId: idEstado("en_ruta_bodega_satelite"), mensajeroAsignadoId: null, asignadoAt: null },
+      data: {
+        estatusId: idEstado("en_ruta_bodega_satelite"),
+        mensajeroAsignadoId: null,
+        asignadoAt: null,
+        fechaReparto: null,
+      },
     });
   });
 
@@ -498,9 +508,18 @@ describe("OrdenRepository.generarGuiaLote (R5/R19/R25)", () => {
     );
 
     // Feature 76/R23 (W1): con mensajero no nulo estampa asignado_at = now.
+    // Feature 246 (T3.5, R8/R10): junto a `asignadoAt` va SIEMPRE `fechaReparto`. Esta via NO
+    // ofrece la eleccion de dia, asi que estampa el dia de Costa Rica EN CURSO. La igualdad es
+    // EXACTA a proposito: es la invariante «las dos columnas se escriben juntas», y esta rama es
+    // justo la que la guardia `fecha-reparto-acompana-asignado-at` encontro y el spec no listaba.
     expect(tx.orden.update).toHaveBeenCalledWith({
       where: { id: "o1" },
-      data: { estatusId: idEstado("por_recoger"), mensajeroAsignadoId: "m1", asignadoAt: expect.any(Date) },
+      data: {
+        estatusId: idEstado("por_recoger"),
+        mensajeroAsignadoId: "m1",
+        asignadoAt: expect.any(Date),
+        fechaReparto: expect.any(Date),
+      },
       select: { numGuia: true },
     });
     expect(resultados).toEqual([{ ordenId: "o1", numGuia: 7 }]);
@@ -631,7 +650,13 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     tx.orden.updateMany.mockResolvedValue({ count: 2 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const count = await repo.asignarBodegaLote(["o1", "o2"], "m1", idEstado("por_recoger"), HIST_BODEGA);
+    const count = await repo.asignarBodegaLote(
+      ["o1", "o2"],
+      "m1",
+      idEstado("por_recoger"),
+      HIST_BODEGA,
+      FECHA_REPARTO,
+    );
 
     expect(count).toBe(2);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -639,10 +664,14 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     expect(arg.where).toEqual({ id: { in: ["o1", "o2"] } });
     // Feature 76/R23 (W2): asignacion de bodega siempre estampa asignado_at = now.
     // Feature 101/R5 (gate F1.4-Q1): la reasignacion desde bodega central apaga prioridad: false.
+    // Feature 246 (T3.3, R7): `fechaReparto` va en la MISMA `data` que `asignadoAt`. Igualdad
+    // EXACTA a proposito: si se cayera del cableado, el lote quedaria con mensajero y sin dia
+    // —indistinguible de una orden anterior a la feature— y el corte de esa noche se lo llevaria.
     expect(arg.data).toEqual({
       mensajeroAsignadoId: "m1",
       estatusId: idEstado("por_recoger"),
       asignadoAt: expect.any(Date),
+      fechaReparto: FECHA_REPARTO,
       prioridad: false, // feature 101/R5
     });
     expect(arg.data).not.toHaveProperty("numGuia");
@@ -655,7 +684,7 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     tx.orden.updateMany.mockResolvedValue({ count: 1 });
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    await repo.asignarBodegaLote(["o1"], "m1", idEstado("por_recoger"), HIST_BODEGA);
+    await repo.asignarBodegaLote(["o1"], "m1", idEstado("por_recoger"), HIST_BODEGA, FECHA_REPARTO);
 
     const arg = tx.ordenHistorialEstado.createMany.mock.calls[0][0];
     expect(arg.data).toEqual([
@@ -675,7 +704,9 @@ describe("OrdenRepository.asignarBodegaLote (R26 · feature 49/#4)", () => {
     const { prisma, tx } = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    expect(await repo.asignarBodegaLote([], "m1", idEstado("por_recoger"), HIST_BODEGA)).toBe(0);
+    expect(
+      await repo.asignarBodegaLote([], "m1", idEstado("por_recoger"), HIST_BODEGA, FECHA_REPARTO),
+    ).toBe(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
   });

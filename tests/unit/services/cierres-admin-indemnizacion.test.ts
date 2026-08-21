@@ -47,6 +47,9 @@ function fakeRepo(overrides: Partial<ICierresAdminRepository> = {}): ICierresAdm
     resolverCierre: vi.fn(async () => "updated" as const),
     forzarSolicitudVencido: vi.fn(async () => "updated" as const),
     findGestionesIncidenteDelCierre: vi.fn(async () => []),
+    // Feature 238 (T1.3): el conjunto esperado de la confirmacion fisica. Doble VACIO por
+    // defecto: sin nada que devolver, la guardia de la 238 deja el camino de esta suite intacto.
+    findGestionesRetornablesDelCierre: vi.fn(async () => []),
     // Feature 230 (T2.1): el doble implementa la interfaz ENTERA. Estos casos no ejercitan la
     // descarga detallada; devolver el conjunto vacio deja el camino de la 38 intacto.
     findGestionesPorAlcanceCompleto: vi.fn(async () => []),
@@ -131,6 +134,10 @@ describe("R19/R20 — falta el monto de alguna gestion `incidente`", () => {
     if (r.status !== "validation_error") throw new Error("esperaba validation_error");
     expect(Object.keys(r.fieldErrors)).toEqual([G2]);
     expect(r.fieldErrors[G2][0]).toMatch(/falta el monto/i);
+    // El texto COMPLETO, tildes incluidas. Es lo que LEE el admin en su fila, asi que el literal
+    // ES el contrato: el `/falta el monto/i` de arriba es ciego justo a la parte que se escribe
+    // mal (2026-08-19, decision del leader de tildar los once mensajes de este modulo).
+    expect(r.fieldErrors[G2][0]).toBe("Falta el monto de indemnización de este incidente.");
     expect(repo.resolverCierre).not.toHaveBeenCalled();
   });
 });

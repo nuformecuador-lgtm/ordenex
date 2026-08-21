@@ -273,7 +273,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    *
    * Las ordenes sin filas que cumplan el criterio NO aparecen en el Map (Postgres no emite
    * grupos vacios); el llamador aplica `?? 0` (R8). Guarda temprana con `ids` vacio: Map vacio
-   * SIN query (R7), patron `OrdenRepository.findMensajerosBloqueados`.
+   * SIN query (R7), patron `OrdenRepository.findMensajerosBloqueadosParaGestion`.
    */
   async contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>> {
     if (ordenIds.length === 0) return new Map(); // R7: ni una consulta

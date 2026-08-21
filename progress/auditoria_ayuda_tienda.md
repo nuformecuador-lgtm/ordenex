@@ -112,6 +112,37 @@ la pestaña nueva; la gestión de la tienda que cuenta como del mensajero; «Hab
 desenlace de las no gestionadas; el escaneo al aprobar; el re-anclaje del reloj; la evidencia y el
 motivo obligatorios.
 
+> ✅ **AL DÍA — 2026-08-20.** Cae también **«la gestión de la tienda que cuenta como del
+> mensajero»**, entregada por la **237**: la tienda reprograma o rechaza desde su pestaña, con foto y
+> motivo **obligatorios**, y la gestión entra en el cierre del mensajero con **su** `mensajero_id` —
+> verificado contra Postgres, no contra la pantalla. En la fila de su cierre el mensajero ve el badge
+> **«La tienda»** con el motivo y la evidencia, y **no puede deshacerla**: el botón queda apagado con
+> la razón en el `aria-label`.
+> **De la lista original sólo queda abierto el desenlace de las no gestionadas.** El punto 12 y
+> «Rechazar» son de la **240**.
+>
+> ✅ **AL DÍA — 2026-08-19.** De esta lista **caen dos parciales y una ausencia**, entregadas por la
+> ficha **236**: «la nota se escribe y **nadie la lee**» (la tienda la lee desde su card, y responde
+> sin rescatar) y «**la pestaña nueva**» (existe, se llama «Ayuda solicitada» y va primera). Las
+> ausencias de «que la orden salga de la ruta», «el bloqueo del cierre explícito» y ««Habilitar» =
+> rescate» las cerró la **235**; «el escaneo al aprobar», la **238**. Siguen abiertas: la gestión de
+> la tienda que cuenta como del mensajero (**237**) y el desenlace de las no gestionadas.
+
+> ✅ **CAE UNA MÁS — 2026-08-20, ficha 237: «la gestión de la tienda que cuenta como del
+> mensajero».** Desde la pestaña «Ayuda solicitada» la tienda puede **reprogramar** y **rechazar**
+> (esos dos desenlaces y ninguno más), con **motivo y foto obligatorios en los dos** (D2, firmada
+> por el humano), y la fila que produce es —para todo lo que mira `gestion_orden`— una fila más del
+> mensajero: entra en **su** cierre, suma **un** intento de entrega y mueve el **mismo** dinero.
+> Con ella cae también la ausencia de «la evidencia y el motivo obligatorios» **en esta vía**.
+>
+> Dos cosas que la auditoría no había visto y que la 237 tuvo que decidir:
+> - el mensajero **podía deshacer** la gestión de la tienda (pasaba las ocho guardias) y borrar en
+>   silencio hasta ₡1.000 que ella había decidido. Ya no puede (D3, R38).
+> - el bloqueo del cierre tiene **dos rutas exentas**, así que una gestión posterior de la tienda
+>   cae en el cierre **siguiente**. Se acepta y se prueba (D1, R32), no se descubre en producción.
+>
+> De las nueve ausencias de §4 queda **una**: el desenlace de las no gestionadas.
+
 **Hace lo contrario (1):** el punto 12. `NovedadAcciones.tsx:116` —
 `puedeHabilitar = esDevuelta || novedad.ayuda === true` — así que «Habilitar» aparece justo en las
 cards que vienen de un cierre, que es donde el pedido decía que **no** debía estar.
@@ -166,3 +197,26 @@ orden testigo de otro cierre, matada por mutación.
 
 **Lo que NO cierra esta ficha** y sigue en pie: §4 (la mayoría de los 17 puntos del pedido, que son
 las fichas 235-238 y 240) y §5 (las guardas retiradas, ficha 241).
+
+
+---
+
+## CERRADO TAMBIÉN §2.1 Y §2.3 — 2026-08-19 (feature 235)
+
+La 235 migró la solicitud de ayuda de un **booleano** a un **estatus propio** y retiró la columna.
+Con eso:
+
+- **§2.1, la fuga permanente**: deja de existir su causa. Ya no hay una marca que sobreviva a que la
+  orden cambie de estado, así que no hay nada que se quede en `/novedades` para siempre. El tapón
+  que la 239 puso como parche se retiró en el mismo movimiento.
+- **§2.3, la raíz común** («una columna que hay que apagar a mano»): resuelta. Los dos apagadores
+  colapsaron en **un solo punto de escritura**, y el resto de las salidas ya no tienen nada que
+  apagar.
+- **§4**: la orden ahora **sí sale de la ruta**, del mapa y de la gestión del mensajero, y el
+  bloqueo del cierre pasó de accidental a **explícito**. El corte de «sección aparte», que era solo
+  de cliente, subió al servidor.
+
+Queda en pie de esta auditoría: el resto de §4 (fichas 236, 237, 238 y 240) y §5 (ficha 241).
+
+> ⏳ 2026-08-20: la **237** ya aterrizó (ver la nota de §4). De §4 quedan la ficha **240** y el
+> desenlace de las no gestionadas; §5 sigue siendo la **241**.

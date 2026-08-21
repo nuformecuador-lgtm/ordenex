@@ -60,3 +60,31 @@ describe("EXCLUDE_POR_ROL — el pre-estado de la devolucion (239/R26)", () => {
     expect(EXCLUDE_POR_ROL[RolValue.admin]).not.toContain(PRE_ESTADO);
   });
 });
+
+// Feature 235 (T1.5, R37/R45) — el estatus de la AYUDA no se excluye para NADIE, y la decision
+// solo queda protegida si se afirma con su CASO NEGATIVO al lado: este mapa es PARCIAL, asi que
+// un estado que no se liste AUTO-APARECE como opcion, y una ausencia por olvido se vería igual
+// que una ausencia decidida.
+describe("EXCLUDE_POR_ROL — el estatus de la ayuda a la tienda (235/R37/R45)", () => {
+  const AYUDA = "ayuda_tienda";
+
+  it("235/R37: el `adminTienda` SI ve `ayuda_tienda` en su filtro — es su pantalla de trabajo", () => {
+    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
+    expect(excluidos).not.toContain(AYUDA);
+  });
+
+  it("235/R45 (CASO NEGATIVO): y eso lo distingue de `devuelta` y del pre-estado, que SI se le excluyen", () => {
+    // Sin este contraste, el caso de arriba solo diria «no esta en la lista». Lo que hay que
+    // afirmar es POR QUE no esta: la solicitud de ayuda se le hace A ELLA, mientras que `devuelta`
+    // y `devolucion_por_confirmar` son estados que la tienda no opera.
+    const excluidos = EXCLUDE_POR_ROL[RolValue.adminTienda];
+    expect(excluidos).toContain("devuelta");
+    expect(excluidos).toContain("devolucion_por_confirmar");
+    expect(excluidos).not.toContain(AYUDA);
+  });
+
+  it("235/R37: maestro y admin tambien lo ven (solo excluyen `pendiente`)", () => {
+    expect(EXCLUDE_POR_ROL[RolValue.maestro]).not.toContain(AYUDA);
+    expect(EXCLUDE_POR_ROL[RolValue.admin]).not.toContain(AYUDA);
+  });
+});

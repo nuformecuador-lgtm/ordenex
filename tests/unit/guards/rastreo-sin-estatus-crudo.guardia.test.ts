@@ -135,11 +135,11 @@ function valuesInternosFiltrados(valor: unknown): string[] {
 
 /* -------------------------------------------------------------------------- */
 
-describe("R15 — un historial que atraviesa los 21 estatus no publica ningún value interno", () => {
-  it("CONTROL DE NO-VACUIDAD: el escenario recorre de verdad los veinte values del catalogo", () => {
-    expect(ORDER_STATUS_SEED).toHaveLength(21); // 2026-08-19 (239): +devolucion_por_confirmar
-    expect(TRANSICIONES).toHaveLength(21); // 2026-08-19 (239)
-    expect(new Set(TRANSICIONES.map((t) => t.estatusValue)).size).toBe(21); // 2026-08-19 (239)
+describe("R15 — un historial que atraviesa los 22 estatus no publica ningún value interno", () => {
+  it("CONTROL DE NO-VACUIDAD: el escenario recorre de verdad los 22 values del catalogo", () => {
+    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): +ayuda_tienda
+    expect(TRANSICIONES).toHaveLength(22); // 2026-08-19 (235)
+    expect(new Set(TRANSICIONES.map((t) => t.estatusValue)).size).toBe(22); // 2026-08-19 (235)
   });
 
   it("DEMOSTRACION de la homonimia: el `includes` ciego daria rojo contra un resultado CORRECTO", () => {

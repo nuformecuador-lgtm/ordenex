@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 
+import type {
+  IOrdenNotaRepository,
+  OrdenParaHilo,
+} from "@/lib/interfaces/repositories/IOrdenNotaRepository";
+import type { TransicionAyudaInput } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenNotaService } from "@/lib/interfaces/services/IOrdenNotaService";
 import { HabilitarNovedadService } from "@/lib/services/HabilitarNovedadService";
@@ -8,13 +13,22 @@ import type { OrdenNotaDTO } from "@/lib/types/orden-nota";
 // Pedido humano 2026-08-18 — el SERVICE de «HABILITAR» una novedad, con dobles. Sin DB, sin HTTP.
 //
 // Lo que estos tests vigilan NO es «que funcione»: es la unica propiedad delicada de un servicio de
-// composicion, que es EL ORDEN. La nota lleva la autorizacion, asi que va primero; apagar las
-// banderas es consecuencia. Si alguien invierte las dos llamadas «porque da igual», el efecto es
-// que una orden ajena queda retirada de `/novedades` por quien no podia tocarla. Por eso hay un
-// test que mira el rechazo Y el repositorio a la vez.
+// composicion, que es EL ORDEN. La nota lleva la autorizacion, asi que va primero; el efecto es
+// consecuencia. Si alguien invierte las dos llamadas «porque da igual», el efecto es que una orden
+// ajena queda retirada de `/novedades` por quien no podia tocarla. Por eso hay un test que mira el
+// rechazo Y el repositorio a la vez.
+//
+// FEATURE 235 (T2.2, R8) — EL EFECTO CAMBIA: de apagar una bandera (`habilitarNovedad`) a llamar al
+// PUNTO UNICO DE RESCATE, el mismo que usa «Recuperar» del lado del mensajero. La cobertura del
+// rescate en si (guarda de estado, idempotencia, money-safe, las dos puertas) vive en
+// `rescate-ayuda-service.test.ts`, que ataca esa funcion directamente; aqui se mide LA
+// COMPOSICION: que la nota sigue siendo la puerta y que el efecto es el rescate.
 
 const ORDEN = "11111111-1111-4111-8111-111111111111";
-const actorTienda: Actor = { usuarioId: "u-tienda", rol: "adminTienda" };
+const TIENDA = "u-tienda";
+const ID_AYUDA = "s-ayuda";
+const ID_EN_REPARTO = "s-en-reparto";
+const actorTienda: Actor = { usuarioId: TIENDA, rol: "adminTienda" };
 
 const NOTA: OrdenNotaDTO = {
   id: "n1",
@@ -26,14 +40,35 @@ const NOTA: OrdenNotaDTO = {
   eliminada: false,
 };
 
-function build(publicar: IOrdenNotaService["publicar"]) {
-  const repo = { habilitarNovedad: vi.fn(async (): Promise<void> => {}) };
-  const service = new HabilitarNovedadService({ publicar }, repo);
-  return { service, repo };
+function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
+  return {
+    tiendaId: TIENDA,
+    mensajeroAsignadoId: "u-mensajero",
+    estatusValue: "ayuda_tienda",
+    deletedAt: null,
+    ...over,
+  };
+}
+
+function build(
+  publicar: IOrdenNotaService["publicar"],
+  orden: OrdenParaHilo | null = ordenParaHilo(),
+) {
+  const repo = {
+    findEstatusIdByValue: vi.fn(async (value: string) =>
+      value === "ayuda_tienda" ? ID_AYUDA : value === "en_reparto" ? ID_EN_REPARTO : null,
+    ),
+    transicionarAyuda: vi.fn(async (_input: TransicionAyudaInput): Promise<boolean> => true),
+  };
+  const notaRepo: Pick<IOrdenNotaRepository, "findOrdenParaHilo"> = {
+    findOrdenParaHilo: vi.fn(async () => orden),
+  };
+  const service = new HabilitarNovedadService({ publicar }, repo, notaRepo);
+  return { service, repo, notaRepo };
 }
 
 describe("HabilitarNovedadService.habilitar", () => {
-  it("publica la nota en el hilo y apaga las banderas de novedad", async () => {
+  it("235/R8: publica la nota en el hilo y RESCATA la orden por el punto unico", async () => {
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
     const { service, repo } = build(publicar);
 
@@ -42,28 +77,56 @@ describe("HabilitarNovedadService.habilitar", () => {
       actorTienda,
     );
 
-    expect(r).toEqual({ status: "ok", nota: NOTA });
+    // FEATURE 236 (T5.5 — D8, firmada el 2026-08-19, R25): el `ok` gana `rescatada`. El literal se
+    // actualiza en vez de relajarse porque ES EL CONTRATO: es lo que la pantalla lee para decidir
+    // si puede decir «la orden volvio a la ruta». Aqui el rescate SI se aplico (la orden estaba en
+    // `ayuda_tienda`), asi que `true`; su caso espejo esta al final del archivo.
+    expect(r).toEqual({ status: "ok", nota: NOTA, rescatada: true });
     // La nota viaja como CUERPO, con el actor de la sesion. El autor no viaja en el input.
     expect(publicar).toHaveBeenCalledWith(
       { ordenId: ORDEN, cuerpo: "El cliente pidio reintentar" },
       actorTienda,
     );
-    expect(repo.habilitarNovedad).toHaveBeenCalledWith(ORDEN);
+    // Y el efecto es la MISMA transicion que produce «Recuperar», con la tienda como actor.
+    expect(repo.transicionarAyuda).toHaveBeenCalledWith({
+      ordenId: ORDEN,
+      estatusOrigenId: ID_AYUDA,
+      estatusDestinoId: ID_EN_REPARTO,
+      actorUsuarioId: TIENDA,
+      origenTipo: "rescate_ayuda_tienda",
+    });
   });
 
-  it("si el hilo RECHAZA, no apaga ninguna bandera y devuelve su mismo resultado", async () => {
+  it("la nota va PRIMERO: es la que lleva la autorizacion", async () => {
+    const orden: string[] = [];
+    const publicar = vi.fn(async () => {
+      orden.push("publicar");
+      return { status: "ok" as const, nota: NOTA };
+    });
+    const { service, repo } = build(publicar);
+    repo.transicionarAyuda.mockImplementation(async () => {
+      orden.push("rescatar");
+      return true;
+    });
+
+    await service.habilitar({ ordenId: ORDEN, nota: "ya esta" }, actorTienda);
+
+    expect(orden).toEqual(["publicar", "rescatar"]);
+  });
+
+  it("si el hilo RECHAZA, no rescata nada y devuelve su mismo resultado", async () => {
     // La puerta es la del hilo: rol sin acceso, orden de otra tienda, orden inexistente o fuera de
-    // la ventana `devuelta` llegan aqui como el MISMO `forbidden` opaco.
+    // la ventana del rol llegan aqui como el MISMO `forbidden` opaco.
     const publicar = vi.fn(async () => ({ status: "forbidden" as const }));
     const { service, repo } = build(publicar);
 
     const r = await service.habilitar({ ordenId: ORDEN, nota: "da igual" }, actorTienda);
 
     expect(r).toEqual({ status: "forbidden" });
-    expect(repo.habilitarNovedad).not.toHaveBeenCalled();
+    expect(repo.transicionarAyuda).not.toHaveBeenCalled();
   });
 
-  it("una nota vacia tras recortar la rechaza el hilo, y tampoco apaga nada", async () => {
+  it("una nota vacia tras recortar la rechaza el hilo, y tampoco rescata nada", async () => {
     const publicar = vi.fn(async () => ({
       status: "validation_error" as const,
       fieldErrors: { cuerpo: ["la nota es obligatoria"] },
@@ -76,20 +139,22 @@ describe("HabilitarNovedadService.habilitar", () => {
       status: "validation_error",
       fieldErrors: { cuerpo: ["la nota es obligatoria"] },
     });
-    expect(repo.habilitarNovedad).not.toHaveBeenCalled();
+    expect(repo.transicionarAyuda).not.toHaveBeenCalled();
   });
 
-  it("es idempotente: habilitar dos veces publica dos notas y apaga dos veces", async () => {
+  it("235/R9: es idempotente — el segundo «Habilitar» publica su nota y NO transiciona", async () => {
+    // Idempotencia POR CONSTRUCCION: la guarda de estado del punto unico rechaza la orden que ya
+    // volvio a `en_reparto`. Las dos notas quedan en el hilo, que es lo que de verdad paso.
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
-    const { service, repo } = build(publicar);
+    const primera = build(publicar, ordenParaHilo({ estatusValue: "ayuda_tienda" }));
+    const segunda = build(publicar, ordenParaHilo({ estatusValue: "en_reparto" }));
 
-    await service.habilitar({ ordenId: ORDEN, nota: "una" }, actorTienda);
-    await service.habilitar({ ordenId: ORDEN, nota: "otra" }, actorTienda);
+    await primera.service.habilitar({ ordenId: ORDEN, nota: "una" }, actorTienda);
+    await segunda.service.habilitar({ ordenId: ORDEN, nota: "otra" }, actorTienda);
 
-    // Las dos notas quedan en el hilo (es lo que de verdad paso); el estado final de la orden es
-    // el mismo que tras la primera. Ninguna de las dos escrituras necesita saber de la otra.
     expect(publicar).toHaveBeenCalledTimes(2);
-    expect(repo.habilitarNovedad).toHaveBeenCalledTimes(2);
+    expect(primera.repo.transicionarAyuda).toHaveBeenCalledTimes(1);
+    expect(segunda.repo.transicionarAyuda).not.toHaveBeenCalled();
   });
 });
 
@@ -104,39 +169,62 @@ describe("HabilitarNovedadService.habilitar", () => {
 // misma habia dado por gestionada, sin ningun aviso.
 //
 // COMO SE CIERRA, y es lo importante: NO con una comprobacion nueva que alguien tenga que
-// recordar, sino RETIRANDO la palanca. La rama de la devolucion en `novedadWhere` es ahora una
-// igualdad de estado, asi que ninguna bandera puede sacarla de la pantalla. Mientras la orden
-// siga en `devuelta` —o sea, mientras su reloj corra— sigue visible. Es el enunciado literal de
-// R23 satisfecho por construccion.
+// recordar, sino RETIRANDO la palanca. La rama de la devolucion en `novedadWhere` es una igualdad
+// de estado, asi que ninguna bandera puede sacarla de la pantalla — y desde la 235 ya NO QUEDA
+// NINGUNA BANDERA que apagar.
 // ---------------------------------------------------------------------------------------------
-describe("239/R23 — habilitar retira la AYUDA, no la devolucion", () => {
-  it("apaga la novedad por UNA sola via, y esa via ya no puede ocultar una devolucion", async () => {
+describe("239/R23 + 235 — habilitar retira la AYUDA, y NUNCA una devolucion", () => {
+  it("sobre una devolucion ANCLADA (`devuelta`): publica la nota y NO mueve el estatus", async () => {
+    // Es el caso que junta las dos fichas. La guarda de estado del rescate rechaza todo lo que no
+    // sea `ayuda_tienda`, asi que «Habilitar» sobre una devuelta es exactamente lo que era antes:
+    // una nota en el hilo y nada mas. Que la orden deba ademas MOVERSE, y adonde, lo decide la
+    // ficha 240 (puerta humana del 2026-08-19), no un cambio suelto aqui.
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
-    const { service, repo } = build(publicar);
+    const { service, repo } = build(publicar, ordenParaHilo({ estatusValue: "devuelta" }));
 
-    const r = await service.habilitar({ ordenId: ORDEN, nota: "hablamos con el cliente" }, actorTienda);
+    const r = await service.habilitar(
+      { ordenId: ORDEN, nota: "hablamos con el cliente" },
+      actorTienda,
+    );
 
-    expect(r.status).toBe("ok");
-    // La escritura sigue siendo UNA y sobre la misma orden. Lo que cambio es QUE apaga, y eso se
-    // fija donde vive el `data` real: `orden-repository.novedades.test.ts`, caso «R23:
-    // `habilitarNovedad` apaga SOLO `ayuda`». Aqui el repo es un doble y no tendria nada que
-    // medir; duplicar la asercion daria una segunda fuente de verdad sobre la misma escritura.
-    expect(repo.habilitarNovedad).toHaveBeenCalledTimes(1);
-    expect(repo.habilitarNovedad).toHaveBeenCalledWith(ORDEN);
-    // Y sigue yendo DESPUES de la nota, que es la que lleva la autorizacion.
+    // El resultado sigue siendo el de la NOTA: la puerta es la nota, no el rescate.
+    //
+    // FEATURE 236 (T5.5 — D8, firmada el 2026-08-19, R25) — Y AHORA EL NO-OP SE DICE. Hasta hoy el
+    // resultado del rescate se descartaba entero, asi que la pantalla no tenia forma de saber si
+    // habia pasado algo: publicaba la nota, quitaba la fila por optimismo y avisaba «Orden
+    // habilitada» sobre una orden que nadie movio. `rescatada: false` es un `ok` de pleno derecho
+    // —la nota se publico y quedo en el hilo— que ademas DICE que el estatus no cambio.
+    expect(r).toEqual({ status: "ok", nota: NOTA, rescatada: false });
     expect(publicar).toHaveBeenCalledTimes(1);
+    expect(repo.transicionarAyuda).not.toHaveBeenCalled();
   });
 
-  it("este servicio no tiene ninguna via para mover el estatus de la orden", async () => {
-    // R23 se cumple por las DOS mitades a la vez: la orden no se esconde y tampoco se mueve. Si
-    // manana «habilitar» tuviera que transicionarla, lo decide la ficha 240 (puerta humana del
-    // 2026-08-19), no un cambio suelto aqui. El `Pick` del constructor es lo que lo impone: este
-    // servicio solo conoce un metodo del repositorio.
+  it("236/D8: `rescatada` distingue los dos desenlaces, y no es una constante", () => {
+    // El anti-vacuidad del par de arriba: los dos casos viven en describes distintos, asi que si
+    // alguien fijara `rescatada` a un literal los dos seguirian pasando por separado... salvo por
+    // este, que los pone uno al lado del otro sobre el MISMO servicio.
+    const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
+    const enAyuda = build(publicar, ordenParaHilo({ estatusValue: "ayuda_tienda" }));
+    const devuelta = build(publicar, ordenParaHilo({ estatusValue: "devuelta" }));
+
+    return Promise.all([
+      enAyuda.service.habilitar({ ordenId: ORDEN, nota: "una" }, actorTienda),
+      devuelta.service.habilitar({ ordenId: ORDEN, nota: "otra" }, actorTienda),
+    ]).then(([a, b]) => {
+      expect(a).toMatchObject({ status: "ok", rescatada: true });
+      expect(b).toMatchObject({ status: "ok", rescatada: false });
+    });
+  });
+
+  it("235: este servicio NO tiene ninguna via para apagar una marca persistida", async () => {
+    // El `Pick` del constructor es lo que lo impone. Hasta el 2026-08-19 conocia
+    // `habilitarNovedad`, el `update` ciego a `ayuda = false`; hoy conoce el punto unico y el
+    // resolvedor del catalogo, y nada mas. Si alguien repusiera un apagador, esto cae.
     const publicar = vi.fn(async () => ({ status: "ok" as const, nota: NOTA }));
     const { service, repo } = build(publicar);
 
     await service.habilitar({ ordenId: ORDEN, nota: "cerrada" }, actorTienda);
 
-    expect(Object.keys(repo)).toEqual(["habilitarNovedad"]);
+    expect(Object.keys(repo).sort()).toEqual(["findEstatusIdByValue", "transicionarAyuda"]);
   });
 });

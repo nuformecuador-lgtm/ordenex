@@ -27,6 +27,7 @@ import { useFiltroCantonDistrito } from "./useFiltroCantonDistrito";
 import { MarcarLuegoToggle } from "./MarcarLuegoToggle";
 import { GestionarOrdenPanel } from "./GestionarOrdenPanel";
 import { GestionarOrdenCardButton } from "./GestionarOrdenCardButton";
+import { HiloNotasAyudaModal } from "./HiloNotasAyudaModal";
 import { ChatFlotante } from "./chat/ChatFlotante";
 import { PosOrderCardDetalle } from "./pos-card/PosOrderCardDetalle";
 import { RecuperarAyudaButton } from "./RecuperarAyudaButton";
@@ -71,6 +72,14 @@ import type {
 export interface RepartoModuleProps {
   /** Órdenes en `en_reparto` (por gestionar), YA ordenadas por la ruta (R28). */
   porGestionar: MiAsignacionDTO[];
+  /**
+   * Feature 235 (R18/R19): órdenes en `ayuda_tienda` del mensajero, YA SEPARADAS POR EL
+   * SERVIDOR. Hasta el 2026-08-19 esta lista se derivaba AQUÍ, con un `useMemo` sobre la bandera
+   * `orden.ayuda`, y por eso las órdenes con ayuda seguían siendo paradas del mapa, contactos del
+   * chat y candidatas del panel: el corte era MAQUETACIÓN. Ahora llega hecho y este módulo no
+   * vuelve a decidirlo.
+   */
+  conAyuda: MiAsignacionDTO[];
   /** Orden activa en gestión (R19/R20); `null` = ninguna, todas gestionables. */
   ordenEnGestionId: string | null;
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
@@ -100,6 +109,17 @@ const SIN_RESULTADOS_REPARTO = "Ninguna guía en reparto coincide con la búsque
 const AYUDA_SECCION_TITULO = "Con ayuda solicitada";
 const AYUDA_SECCION_AYUDA =
   "Tu tienda las está viendo en Novedades. Con «Recuperar» retirás la solicitud y la orden vuelve arriba.";
+// Feature 235 (R35): rótulo de la acción que abre el hilo desde la card de ayuda. Dice de qué es
+// la pantalla que abre, no qué componente monta.
+const AYUDA_ACCION_HILO = "Conversación";
+// Feature 235 (T8.1) — CHIP DE ESTADO de la card de ayuda. Sigue la gramática de los otros cuatro
+// («En gestión», «En detalle», «En reparto», «Por recoger»: preposición + sustantivo) y comparte la
+// palabra «ayuda» con el encabezado de la sección y con el `EstatusBadge` de la tienda, así que no
+// es un tercer sinónimo. La forma CORTA se descartó en `/ordenes` por ambigua —allí maestro/admin
+// la ven suelta entre veintiún estados y no sabrían a quién se le pidió (R37)—, pero aquí la
+// desambiguación está pegada: el chip vive DENTRO de la sección «Con ayuda solicitada», cuyo texto
+// de ayuda ya dice que la tienda las está viendo en Novedades.
+const AYUDA_CARD_ESTADO = "En ayuda";
 const SIN_PENDIENTES_TODAS_CON_AYUDA =
   "Todas tus órdenes en reparto tienen ayuda solicitada; están abajo.";
 
@@ -116,6 +136,7 @@ const SIN_PENDIENTES_TODAS_CON_AYUDA =
 
 export function RepartoModule({
   porGestionar,
+  conAyuda,
   ordenEnGestionId,
   ruta,
   bloqueado,
@@ -239,30 +260,31 @@ export function RepartoModule({
     [porGestionarFiltrado],
   );
 
-  // Pedido humano 2026-08-18 — LAS ÓRDENES CON AYUDA SOLICITADA SALEN DEL LISTADO PRINCIPAL y
-  // se agrupan abajo, en su propia sección.
+  // Feature 235 (T3.3, R18) — ⚰️ AQUÍ VIVÍA EL CORTE DE CLIENTE, y su desaparición ES la feature.
   //
-  // POR QUÉ SE PARTEN AQUÍ Y NO EN EL SERVIDOR: `porGestionar` es el mismo dato para las dos
-  // secciones —las órdenes en reparto de este mensajero— y sigue siendo UNA sola lectura. Partirlo
-  // en el service habría convertido un corte de PRESENTACIÓN en dos listados con dos contratos,
-  // y el mapa de ruta, el buscador, el filtro de cantón/distrito y el chat seguirían necesitando
-  // el conjunto entero de todas formas.
+  // Eran dos `useMemo` sobre `orden.ayuda`: uno partía `porGestionarVisual` en dos listas y otro
+  // calculaba las «candidatas» del panel. Funcionaban para lo que se veía y para nada más: la
+  // orden con ayuda seguía dentro de `porGestionar`, así que seguía siendo parada del mapa,
+  // contacto del chat, candidata de `TrayectoVivoButton` y —sobre todo— GESTIONABLE. El corte era
+  // maquetación sobre un dato que no se había movido.
   //
-  // El corte se aplica DESPUÉS del filtrado y del reordenado, sobre `porGestionarVisual`, para
-  // que las dos secciones respeten el buscador, el filtro y el orden de ruta que ya llegaba.
-  const [visualSinAyuda, visualConAyuda] = useMemo<
-    [MiAsignacionDTO[], MiAsignacionDTO[]]
-  >(() => {
-    const sin: MiAsignacionDTO[] = [];
-    const con: MiAsignacionDTO[] = [];
-    for (const orden of porGestionarVisual) {
-      (orden.ayuda ? con : sin).push(orden);
-    }
-    return [sin, con];
-  }, [porGestionarVisual]);
+  // Ahora el servidor manda TRES listas y este módulo pinta lo que llega. `visualSinAyuda` es
+  // directamente el resultado del buscador/filtro/reordenado sobre `porGestionar`, que ya no
+  // contiene ninguna orden con ayuda.
+  const visualSinAyuda = porGestionarVisual;
 
   // R30: la ruta no refleja el estado real si la última optimización falló
   // (`desactualizada`) o si entraron paradas nuevas sin posición todavía.
+  // Feature 235 (P8, firmada 2026-08-19) — EL CHAT CONSERVA A ESOS CLIENTES. Es una línea, y sin
+  // ella el mensajero pierde EN SILENCIO la única entrada al chat que le queda sobre un paquete que
+  // sigue llevando encima: al salir del grupo «en reparto», la orden se caía de la lista de
+  // contactos. Contrapartida aceptada: la lista de contactos deja de coincidir con la de cards de
+  // arriba.
+  const contactosChat = useMemo<MiAsignacionDTO[]>(
+    () => [...porGestionar, ...conAyuda],
+    [porGestionar, conAyuda],
+  );
+
   const rutaDesactualizada =
     ruta.estado === "desactualizada" || ruta.paradasSinOptimizar > 0;
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
@@ -282,6 +304,10 @@ export function RepartoModule({
   // mensajero acaba de pedir explícitamente «desde donde estoy», y seguir resaltando el
   // tramo que arranca en el origen de la optimización sería ignorar lo que pidió.
   const [trayectoVivo, setTrayectoVivo] = useState<string | null>(null);
+
+  // Feature 235 (R35): la orden cuyo HILO está abierto, o `null`. Carga bajo demanda, mismo
+  // montaje que `HiloNotasNovedadModal` hace del lado tienda: el hilo no viaja en el listado.
+  const [hiloOrden, setHiloOrden] = useState<MiAsignacionDTO | null>(null);
   const tramoResaltado = trayectoVivo ?? ruta.tramoSiguiente?.encodedPolyline ?? null;
 
   // Orden que el mensajero eligió explícitamente para el panel de detalle. Es
@@ -300,25 +326,18 @@ export function RepartoModule({
   //
   // Pedido humano 2026-08-18 — al pedir ayuda, el panel TOMA LA SIGUIENTE. El backend suelta el
   // puntero 1-a-1 y el módulo limpia su preferencia, así que la orden mostrada vuelve a decidirse
-  // por el caso (3), «la primera de la lista» — y si esa primera fuera justo la que acaba de pedir
-  // ayuda, el panel se quedaría exactamente donde estaba y el gesto no habría servido de nada.
+  // por «la primera de la lista».
   //
-  // De ahí esta lista: los CANDIDATOS a ocupar el panel por defecto son las que NO tienen ayuda
-  // pedida. Sólo afecta al caso (3): una orden con ayuda elegida a mano —desde el botón
-  // «Gestionar» de su card, abajo— sigue mandando, porque eso es una decisión explícita y no un
-  // default. Y si TODAS tienen ayuda pedida, el panel vuelve a la primera de la lista entera: es
-  // preferible mostrar una orden marcada que dejar el panel vacío teniendo órdenes en reparto.
-  const candidatasPanel = useMemo<MiAsignacionDTO[]>(
-    () => porGestionarFiltrado.filter((o) => !o.ayuda),
-    [porGestionarFiltrado],
-  );
+  // Feature 235: esto ya no necesita ningún filtro. Aquí había un `candidatasPanel` que excluía a
+  // mano las órdenes con la bandera encendida, precisamente porque seguían en `porGestionar` y la
+  // primera de la lista podía ser justo la que acababa de pedir ayuda. Ahora salen del grupo al
+  // transicionar, así que `porGestionarFiltrado` ya no las contiene y la exclusión sobra.
 
   const detalleOrden = useMemo<MiAsignacionDTO | null>(() => {
     if (porGestionarFiltrado.length === 0) return null;
     if (ordenEnGestionId !== null) {
       return (
         porGestionarFiltrado.find((o) => o.id === ordenEnGestionId) ??
-        candidatasPanel[0] ??
         porGestionarFiltrado[0]
       );
     }
@@ -326,8 +345,8 @@ export function RepartoModule({
       const elegida = porGestionarFiltrado.find((o) => o.id === seleccionId);
       if (elegida) return elegida;
     }
-    return candidatasPanel[0] ?? porGestionarFiltrado[0];
-  }, [porGestionarFiltrado, candidatasPanel, ordenEnGestionId, seleccionId]);
+    return porGestionarFiltrado[0];
+  }, [porGestionarFiltrado, ordenEnGestionId, seleccionId]);
 
   // Feature 113/R5 — MODO FOCO: flag DERIVADO de una sola fuente de verdad
   // (`ordenEnGestionId`, backend, robusto a recarga). Con una gestión activa y sin
@@ -456,36 +475,78 @@ export function RepartoModule({
    * son las órdenes atascadas, la fila ancha deja leer de un vistazo cuál es cuál, y esta sección
    * no participa del conmutador mosaico/detalle de arriba.
    *
-   * Sus acciones son «Recuperar» —retira la solicitud y la devuelve al listado principal— y el
-   * MISMO `GestionarOrdenCardButton` de las demás. Lo segundo no es un extra: sin él, pedir ayuda
-   * dejaría la orden imposible de gestionar hasta recuperarla, porque desde el rediseño la card
-   * ya no selecciona al tocarla y ese botón es la única puerta al panel.
+   * Feature 235 (T3.5/T5.2, R19/R35) — SUS ACCIONES CAMBIAN, y las dos por un motivo medible:
+   *
+   *  - PIERDE «Gestionar». Ese botón llamaba a `escogerParaGestion`, y desde la 235 esa acción
+   *    devuelve `conflict` sobre una orden en `ayuda_tienda` (`cargarOrdenGestionable` exige
+   *    `en_reparto`). Dejarlo sería un botón que siempre falla. Las gestiones DESDE ayuda son la
+   *    ficha 237, con sus aristas y su productor.
+   *  - GANA «Conversación». Sin ella, el mensajero tendría la ventana de escritura abierta sobre
+   *    esta orden (`ayuda_tienda` está en su ventana, R34) y NINGÚN sitio donde ejercerla: el hilo
+   *    del mensajero vive dentro de `GestionarOrdenPanel`, que ya no es alcanzable para estas
+   *    órdenes. Es el permiso inejercitable de siempre, y R35 lo prohíbe.
+   *
+   *  - CONSERVA «Recuperar», que es el rescate: devuelve la orden a `en_reparto` y con ella arriba.
+   *    Y lo conserva TAMBIÉN con el mensajero bloqueado (R25), ver el comentario del botón.
    */
   function renderCardConAyuda(orden: MiAsignacionDTO) {
     return (
       <PosOrderCardDetalle
         orden={orden}
-        total={porGestionar.length}
-        esActiva={ordenEnGestionId === orden.id}
-        esDetalle={detalleOrden?.id === orden.id}
+        total={porGestionar.length + conAyuda.length}
+        esActiva={false}
+        esDetalle={false}
+        /* Feature 235 (N1 de la re-revisión) — HOY ESTA PROP NO APAGA NADA, y se conserva a
+           propósito. `PosOrderCardDetalle` la usa en un solo sitio: el gate de selección de
+           `posSeleccionHandlers`, que calcula `Boolean(onGestionar) && !bloqueado`. Esta card NO
+           pasa `onGestionar` (perdió «Gestionar», ver arriba), así que el gate ya está apagado
+           venga lo que venga aquí. Queda porque es inerte por COINCIDENCIA —que esta card no monte
+           acción de selección—, no por diseño: cuando la 237 le devuelva las gestiones desde ayuda,
+           el bloqueo del mensajero (111/R14) tiene que valer sin que nadie lo redescubra. */
         bloqueado={bloqueado}
+        /* Feature 235 (T8.1) — SIN esta prop el chip decía «En reparto», que es exactamente lo que
+           esta ficha convirtió en falso: `estadoPorDefecto(false, false)` devuelve ese literal. Para
+           los otros tres valores el chip describe la situación de la orden; aquí afirmaba la
+           contraria. El COLOR lo DECLARA `ESTADO_CLASSNAME` con entrada propia (`bg-warning
+           text-navy`, con el porqué de `warning` escrito allí). Coincide con lo que daba el fallback
+           de texto libre, y aun así se declara: el fallback significa «no sé qué es este rótulo», así
+           que heredar de él una decisión de color la vuelve indistinguible de un accidente y la
+           movería en silencio si alguien retoca «En reparto». Lo fija `RepartoAyuda.test.tsx`. */
+        estado={AYUDA_CARD_ESTADO}
+        /* Feature 235 (R15) — LA CARD NO LLEVA MARCAS DE RUTA. R15 prohíbe pintar estas órdenes
+           como parada y contarlas entre las pendientes de optimizar; el servicio ya las deja fuera
+           de `paradasSinOptimizar` y del mapa, pero la card seguía luciendo el nº de parada («·»,
+           con su «Sin posición en la ruta» accesible) y el badge «Pendiente de optimizar» — o sea,
+           la lógica migró y la superficie no. Esta sección es una superficie SIN ruta, como «Por
+           recoger»: estas órdenes llegan sin `secuenciaRuta` a propósito. `mostrarRuta={false}`
+           apaga EXACTAMENTE esas dos marcas (comprobado en `PosOrderCardDetalle`) y nada más: la
+           navegación, el nº de remisión, el destinatario, los intentos, el monto y «Gestionar más
+           tarde» siguen intactos. */
+        mostrarRuta={false}
         acciones={
           <div className="flex items-center justify-between gap-2">
+            {/* Feature 235 (R25) — LA EXCEPCIÓN AL BLOQUEO, y es deliberada: este botón NO recibe
+                `disabled={bloqueado}`. No hace falta apoyarla en que «el resto de la card sí está
+                bloqueada», que además hoy es falso —el `bloqueado` de arriba no apaga nada en esta
+                card, ver su comentario—: se sostiene sola, porque el rescate es justamente
+                la SALIDA del deadlock que documenta `lib/services/rescate-ayuda.ts`: un mensajero
+                con un cierre `vencido` y una orden en ayuda no podría ni rescatarla —bloqueado— ni
+                cerrar —la orden en ayuda le bloquea el cierre, R22—. El servicio se lo permite a
+                propósito; apagarlo aquí dejaba el permiso vivo en el servidor y muerto en la
+                pantalla, que es el permiso inejercitable que R35 prohíbe. */}
             <RecuperarAyudaButton
               ordenId={orden.id}
               numRemision={orden.numRemision}
               onRecuperada={() => router.refresh()}
-              disabled={bloqueado}
             />
-            <GestionarOrdenCardButton
-              numRemision={orden.numRemision}
-              disabled={
-                bloqueado ||
-                ordenEnGestionId !== null ||
-                detalleOrden?.id === orden.id
-              }
-              onConfirmar={() => seleccionar(orden)}
-            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setHiloOrden(orden)}
+            >
+              {AYUDA_ACCION_HILO}
+            </Button>
           </div>
         }
       />
@@ -687,16 +748,20 @@ export function RepartoModule({
                 onVistaChange={cambiarVista}
               />
             </div>
-            {porGestionarFiltrado.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
-              </p>
-            ) : visualSinAyuda.length === 0 ? (
+            {porGestionarFiltrado.length === 0 && !buscando && conAyuda.length > 0 ? (
               /* Hay órdenes, pero TODAS están abajo con ayuda solicitada. Sin este caso el
-                 listado principal quedaría en blanco, sin decir por qué, justo debajo de un
-                 encabezado que anuncia órdenes en reparto. */
+                 listado principal diría «No hay órdenes en reparto» justo encima de una sección
+                 llena de órdenes en reparto — que es lo contrario de lo que pasa.
+
+                 Feature 235: la condición cambió con el corte. Antes se derivaba de que la lista
+                 partida en cliente quedara vacía; ahora se lee de las DOS props, que es de donde
+                 sale la verdad desde que el servidor las separa. */
               <p className="text-sm text-muted-foreground">
                 {SIN_PENDIENTES_TODAS_CON_AYUDA}
+              </p>
+            ) : porGestionarFiltrado.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {buscando ? SIN_RESULTADOS_REPARTO : "No hay órdenes en reparto."}
               </p>
             ) : vistaCards === "mosaico" ? (
               /* Pedido humano: en MOSAICO las cards van en carrusel (`CarruselCards`,
@@ -731,7 +796,7 @@ export function RepartoModule({
                 No están escondidas ni deshabilitadas: siguen siendo órdenes en reparto de este
                 mensajero y se pueden gestionar desde aquí. Lo que cambia es que dejan de
                 mezclarse con las que avanzan solas, que es lo que se pidió. */}
-            {visualConAyuda.length > 0 ? (
+            {conAyuda.length > 0 ? (
               <section
                 aria-label={AYUDA_SECCION_TITULO}
                 className="mt-6 flex flex-col gap-3 border-t border-border pt-4"
@@ -745,7 +810,7 @@ export function RepartoModule({
                   </p>
                 </div>
                 <ul className="flex flex-col gap-3">
-                  {visualConAyuda.map((orden) => (
+                  {conAyuda.map((orden) => (
                     <li key={orden.id}>{renderCardConAyuda(orden)}</li>
                   ))}
                 </ul>
@@ -772,8 +837,20 @@ export function RepartoModule({
           detalle, que leía la misma conversación; ese panel se borró por decisión humana tras
           perder su montaje en `6dc18dc2`, así que este botón es hoy la ÚNICA entrada al chat:
           si se borra, el mensajero se queda sin poder escribirle al cliente. */}
+      {/* Feature 235 (R35): el hilo del mensajero para una orden en ayuda. `key` por orden para que
+          la lectura arranque fresca en cada apertura; se monta solo con una orden abierta. */}
+      {hiloOrden !== null ? (
+        <HiloNotasAyudaModal
+          key={hiloOrden.id}
+          orden={hiloOrden}
+          onOpenChange={(open) => {
+            if (!open) setHiloOrden(null);
+          }}
+        />
+      ) : null}
+
       <ChatFlotante
-        ordenes={porGestionar}
+        ordenes={contactosChat}
         ordenEnDetalleId={detalleOrden?.id ?? null}
         abierto={chatAbierto}
         onAbiertoChange={setChatAbierto}

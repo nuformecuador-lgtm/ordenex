@@ -1,8 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, useTransition } from "react";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { z } from "zod";
 
 import {
   Dialog,
@@ -16,14 +15,36 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/shared/FormField";
+import { postularRecurso } from "@/lib/actions/postulacion-recurso";
+import {
+  postulacionRecursoSchema,
+  type PostularRecursoResult,
+  type RecursoTipo,
+} from "@/lib/types/postulacion-recurso";
 
 /**
  * Modal de postulación de recurso (vehículo o bodega) de la landing pública.
  *
- * MAQUETA. El botón «Enviar postulación» valida y pinta la confirmación, pero NO
- * envía nada: todavía no está decidido el destino de los datos (tabla propia,
- * correo al equipo o WhatsApp). El único punto que hay que tocar cuando se
- * decida es `handleSubmit`; el resto —campos, validación, estados— ya está.
+ * Feature 253 (T6.1) — ESTE ARCHIVO DEJÓ DE SER UNA MAQUETA, y conviene saber de qué venía.
+ * Hasta esta ficha, `handleSubmit` validaba y hacía `setEnviado(true)` con un `// TODO`: la
+ * pantalla daba acuse de recibo de algo que NO ocurría, en producción, a personas que no tenían
+ * ninguna otra forma de enterarse. Ahora llama a la Server Action pública `postularRecurso`, que
+ * escribe la fila, y **el acuse sólo se pinta tras un `ok`** (R1).
+ *
+ * Tres cosas que este archivo sostiene y que no hay que deshacer por descuido:
+ *
+ *  1. **NINGÚN DESENLACE ES MUDO (R2).** Todo lo que no sea `ok` —validación, límite de tasa,
+ *     fallo del servidor o una promesa rechazada— termina pintando un aviso EN PANTALLA, y lo que
+ *     la persona escribió se queda en los campos. Es la lección literal de las fichas 248 y 240
+ *     (§9.6): sin el `try/catch`, la promesa rechazada se pierde dentro de la transición, la
+ *     persona ve la pantalla rota y pierde todo lo que escribió.
+ *  2. **EL MAPA DE TEXTOS ESTÁ TIPADO (R5).** `TEXTO_POR_FALLO` es un
+ *     `Record<Exclude<PostularRecursoResult["status"], "ok">, string>`: si mañana la acción gana un
+ *     desenlace nuevo, **el typecheck se rompe** hasta que alguien le escriba su texto. Un mensaje
+ *     equivocado es peor que ninguno, así que el desenlace nuevo no se disfraza de uno existente.
+ *  3. **EL SCHEMA ES EL DEL SERVIDOR (R14).** `postulacionRecursoSchema` vive en `lib/types/` y lo
+ *     validan cliente y servidor. La validación de aquí es una cortesía —ahorra un viaje— y no una
+ *     garantía: el servidor revalida el objeto entero.
  *
  * Va en cliente porque el diálogo tiene estado; `LandingPostular` sigue siendo
  * Server Component y solo monta este trigger en dos de sus tres tarjetas.
@@ -34,7 +55,7 @@ import { FormField } from "@/components/shared/FormField";
  * portal en tema oscuro.
  */
 
-export type RecursoTipo = "vehiculo" | "bodega";
+export type { RecursoTipo };
 
 interface Copy {
   readonly titulo: string;
@@ -67,17 +88,51 @@ const CLASE_CTA =
   "mt-1 inline-flex items-center gap-1.5 self-start rounded-md border border-brand bg-brand px-3.5 py-2.5 text-[13px] font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark";
 
 const CLASE_ENVIAR =
-  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-brand bg-brand px-4 text-sm font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark";
+  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-brand bg-brand px-4 text-sm font-semibold text-white transition hover:border-brand-dark hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark disabled:cursor-not-allowed disabled:opacity-60";
 
-const formSchema = z.object({
-  nombre: z.string().trim().min(1, "Escribí tu nombre"),
-  telefono: z.string().trim().min(7, "Escribí un teléfono de contacto"),
-  correo: z.string().trim().email("Escribí un correo válido"),
-  mensaje: z.string().trim().min(1, "Contanos brevemente qué tenés"),
-});
+/**
+ * D9 FIRMADA — el acuse dice lo que DE VERDAD pasó: la postulación quedó registrada. No promete
+ * ningún plazo (R6).
+ *
+ * El texto anterior —«Recibimos tus datos…»— pasa a ser cierto por primera vez con esta ficha; se
+ * cambia igualmente **para que el commit muestre que la frase se revisó**.
+ */
+const TEXTO_ACUSE =
+  "Recibimos tu postulación. Queda registrada y nuestro equipo te contacta al teléfono o al correo que dejaste.";
 
-type Campo = keyof z.infer<typeof formSchema>;
+/**
+ * R5 — un texto propio POR DESENLACE, y el tipo lo obliga.
+ *
+ * `Record<Exclude<PostularRecursoResult["status"], "ok">, string>`: añadir un desenlace a
+ * `PostularRecursoResult` sin escribirle su texto **no compila**. Es el mecanismo que la 240 usó a
+ * propósito (`progress/impl_240.md` §9.3).
+ *
+ * R17 — `rate_limited` tiene texto PROPIO, distinto del error genérico: a quien le dicen «hubo un
+ * problema» reintenta y vuelve a chocar; a quien le dicen «esperá unos minutos», no.
+ */
+const TEXTO_POR_FALLO: Record<Exclude<PostularRecursoResult["status"], "ok">, string> = {
+  validation_error:
+    "Revisá los campos marcados: hay algo que todavía no podemos aceptar. Lo que escribiste sigue acá.",
+  rate_limited:
+    "Ya recibimos varias postulaciones desde este dispositivo. Esperá unos minutos y volvé a intentarlo.",
+  error:
+    "No pudimos registrar tu postulación. Volvé a intentarlo en unos minutos; lo que escribiste sigue acá.",
+};
+
+/**
+ * Lo que se dice cuando la promesa se rompe: red caída, transporte que ni siquiera llega como
+ * respuesta, o cualquier excepción inesperada.
+ *
+ * Va APARTE del mapa a propósito: no es un `status` de la acción —la acción nunca lanza— sino el
+ * suelo del `try/catch`. Mezclarlo con `error` haría creer que el servidor contestó algo.
+ */
+const TEXTO_ENVIO_INTERRUMPIDO =
+  "No se pudo enviar la postulación. Revisá tu conexión y volvé a intentarlo; lo que escribiste sigue acá.";
+
+type Campo = "nombre" | "telefono" | "correo" | "mensaje";
 type Errores = Partial<Record<Campo, string>>;
+
+const CAMPOS: readonly Campo[] = ["nombre", "telefono", "correo", "mensaje"];
 
 const VACIO: Record<Campo, string> = {
   nombre: "",
@@ -85,6 +140,23 @@ const VACIO: Record<Campo, string> = {
   correo: "",
   mensaje: "",
 };
+
+/**
+ * R15 — los errores por campo del servidor (o de zod aquí mismo) se colocan EN SU CAMPO, para que
+ * la pantalla pueda señalar al culpable.
+ *
+ * Sólo se recogen los cuatro campos que el formulario pinta. `tipo` no tiene control visible —lo
+ * fija la tarjeta de la landing (P5)—, así que un error suyo no tendría dónde aparecer: para eso
+ * está el aviso general, que se pinta SIEMPRE que hay un `validation_error`.
+ */
+function erroresDeCampo(fieldErrors: Record<string, string[] | undefined>): Errores {
+  const salida: Errores = {};
+  for (const campo of CAMPOS) {
+    const mensaje = fieldErrors[campo]?.[0];
+    if (mensaje) salida[campo] = mensaje;
+  }
+  return salida;
+}
 
 export function PostularRecursoModal({
   tipo,
@@ -96,7 +168,9 @@ export function PostularRecursoModal({
   const [abierto, setAbierto] = useState(false);
   const [valores, setValores] = useState<Record<Campo, string>>(VACIO);
   const [errores, setErrores] = useState<Errores>({});
+  const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [enviado, setEnviado] = useState(false);
+  const [enviando, iniciarEnvio] = useTransition();
 
   const setCampo = (campo: Campo, valor: string) => {
     setValores((prev) => ({ ...prev, [campo]: valor }));
@@ -108,26 +182,65 @@ export function PostularRecursoModal({
     if (!siguiente) {
       setValores(VACIO);
       setErrores({});
+      setErrorGeneral(null);
       setEnviado(false);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = formSchema.safeParse(valores);
+    // R3, primera barrera: el botón ya está `disabled` mientras hay un envío en curso, y esto
+    // sigue en pie si alguien le quita el atributo.
+    if (enviando) return;
+
+    // `tipo` viaja con el resto: hasta esta ficha era una prop que sólo elegía el copy y no
+    // llegaba a ninguna parte.
+    const parsed = postulacionRecursoSchema.safeParse({ ...valores, tipo });
     if (!parsed.success) {
-      const fieldErrors = parsed.error.flatten().fieldErrors;
-      setErrores({
-        nombre: fieldErrors.nombre?.[0],
-        telefono: fieldErrors.telefono?.[0],
-        correo: fieldErrors.correo?.[0],
-        mensaje: fieldErrors.mensaje?.[0],
-      });
+      setErrores(erroresDeCampo(parsed.error.flatten().fieldErrors));
+      setErrorGeneral(null);
       return;
     }
     setErrores({});
-    // TODO: aquí va el envío real cuando se decida el destino de la postulación.
-    setEnviado(true);
+    setErrorGeneral(null);
+
+    iniciarEnvio(async () => {
+      try {
+        // ⭑ EL ENVÍO REAL. `parsed.data` va ya normalizado por el mismo schema que el servidor
+        // revalida (R14/R20): recortado, y el correo en minúsculas.
+        const resultado = await postularRecurso(parsed.data);
+
+        switch (resultado.status) {
+          case "ok":
+            // R1: el acuse se pinta AQUÍ y en ningún otro sitio — sólo cuando la fila existe.
+            setEnviado(true);
+            break;
+          case "validation_error":
+            // R2/R15: el campo culpable se señala y NADA se limpia.
+            setErrores(erroresDeCampo(resultado.fieldErrors));
+            setErrorGeneral(TEXTO_POR_FALLO.validation_error);
+            break;
+          case "rate_limited":
+            setErrorGeneral(TEXTO_POR_FALLO.rate_limited);
+            break;
+          case "error":
+            setErrorGeneral(TEXTO_POR_FALLO.error);
+            break;
+          default: {
+            // Si mañana la acción gana un desenlace nuevo, ESTA línea rompe el typecheck y obliga
+            // a escribirle su texto. En ejecución, el suelo: avisa, no calla.
+            const _exhaustivo: never = resultado;
+            setErrorGeneral(TEXTO_ENVIO_INTERRUMPIDO);
+            void _exhaustivo;
+            break;
+          }
+        }
+      } catch {
+        // R2 — sin este `catch` la promesa rechazada se pierde dentro de la transición y la
+        // persona se queda mirando un formulario que no responde (fichas 248 y 240 §9.6).
+        setErrorGeneral(TEXTO_ENVIO_INTERRUMPIDO);
+      }
+    });
   };
 
   return (
@@ -142,10 +255,7 @@ export function PostularRecursoModal({
           <div className="flex flex-col items-center gap-3 py-4 text-center">
             <CheckCircle2 className="size-10 text-brand" aria-hidden="true" />
             <DialogTitle className="text-lg">Postulación enviada</DialogTitle>
-            <DialogDescription>
-              Recibimos tus datos. Nuestro equipo te contacta al teléfono o al correo
-              que dejaste.
-            </DialogDescription>
+            <DialogDescription>{TEXTO_ACUSE}</DialogDescription>
             <DialogClose className={`${CLASE_ENVIAR} mt-2 max-w-[200px]`}>
               Cerrar
             </DialogClose>
@@ -224,8 +334,28 @@ export function PostularRecursoModal({
                 />
               </FormField>
 
-              <button type="submit" className={`${CLASE_ENVIAR} mt-1`}>
-                Enviar postulación
+              {/*
+                R2 — el aviso vive DENTRO del formulario, encima del botón, y con `role="alert"`
+                para que un lector de pantalla lo anuncie sin tener que ir a buscarlo. No sustituye
+                a los errores por campo: los acompaña.
+              */}
+              {errorGeneral ? (
+                <p
+                  role="alert"
+                  data-testid="postular-recurso-aviso"
+                  className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger-strong"
+                >
+                  {errorGeneral}
+                </p>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={enviando}
+                aria-busy={enviando}
+                className={`${CLASE_ENVIAR} mt-1`}
+              >
+                {enviando ? "Enviando…" : "Enviar postulación"}
               </button>
             </form>
           </>

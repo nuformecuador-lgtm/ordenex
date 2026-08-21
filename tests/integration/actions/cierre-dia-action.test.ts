@@ -48,6 +48,7 @@ const GESTION_DESHACIBLE: GestionDeshacerRow = {
   cierreId: null,
   anuladaAt: null,
   orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+  desdeAyudaTienda: false, // feature 237 (D3): la registro el mensajero, no la tienda
 };
 
 // Repo en memoria: findGestionesPendientes solo devuelve las NO vinculadas;
@@ -106,7 +107,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
     findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 67/R18
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {
@@ -142,6 +143,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: snapshot (derivado en vivo por el service)
     ingresoBodegaRechazo: null, // feature 56: snapshot (derivado en vivo por el service)
     esRechazoSla: false, // feature 102
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,

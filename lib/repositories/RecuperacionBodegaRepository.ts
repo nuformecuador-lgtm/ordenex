@@ -49,6 +49,7 @@ export class RecuperacionBodegaRepository implements IRecuperacionBodegaReposito
           estatusId: input.destinoEstatusId, // R13 (destino ya resuelto por el service)
           mensajeroAsignadoId: null, // R14: handoff limpio a la bodega (nuevo intento)
           asignadoAt: null, // R14: limpia el timestamp de asignacion
+          fechaReparto: null, // feature 246/R9/R10: el dia de reparto SIEMPRE acompana a `asignado_at`
           prioridad: true, // feature 110/R2: recuperada a bodega -> reasignacion prioritaria
         },
       });

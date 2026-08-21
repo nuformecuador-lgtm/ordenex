@@ -4,6 +4,7 @@ import { MapPin, Navigation } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
+import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
 
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
@@ -107,9 +108,15 @@ export function PosOrderCardDetalle({
           >
             {estado}
           </span>
-          {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18), solo si aplican. */}
+          {/* Marcas de EXCEPCIÓN (R28 / feature 115/R18 / feature 246/R22), solo si aplican. */}
           {mostrarRuta && orden.secuenciaRuta === null ? (
             <Badge variant="outline">Pendiente de optimizar</Badge>
+          ) : null}
+          {/* Feature 246 (T5.2, R22): orden RESERVADA para el día siguiente, dicha con palabras.
+              El dato lo deriva el servidor (`esParaManana`, R26) y deja de ser cierto solo, al
+              llegar el día (R25). No oculta ni bloquea nada (R23/R24, decisión D5). */}
+          {orden.esParaManana ? (
+            <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
           ) : null}
           {orden.marcarLuego ? (
             <Badge variant="warning">Gestionar más tarde</Badge>

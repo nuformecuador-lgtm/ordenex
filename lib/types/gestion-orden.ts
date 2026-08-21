@@ -190,7 +190,14 @@ export function esFechaFutura(value: string, now: Date = new Date()): boolean {
   return value >= mananaCalendarioCR(now);
 }
 
-const fechaFuturaSchema = z
+/**
+ * Feature 237 (T5.2, R14) — SE EXPORTA, no se copia. La 237 necesita exactamente esta regla en el
+ * borde de la gestion que registra la tienda desde ayuda, y una segunda copia de «mañana o
+ * posterior en el calendario de CR» seria una segunda verdad sobre una fecha: el off-by-one que
+ * `esFechaFutura` explica ahi arriba (el dia UTC ya es el siguiente entre las 18:00 y la
+ * medianoche de CR) se arreglo UNA vez y tiene que seguir arreglado en los dos caminos.
+ */
+export const fechaFuturaSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "fecha invalida")
   .refine(
@@ -198,7 +205,18 @@ const fechaFuturaSchema = z
     "la fecha debe ser mañana o posterior",
   );
 
-const motivoSchema = z.string().trim().min(1, "motivo requerido");
+/**
+ * Feature 237 (T5.2, D8) — SE EXPORTA, tal cual, para el borde de la gestion desde ayuda.
+ *
+ * ⚠️ DEUDA HEREDADA Y COMPARTIDA, DECLARADA (D8, firmada el 2026-08-20): este schema NO tiene
+ * TOPE de longitud. La 235 dejo escrita la leccion contraria para la nota de ayuda (tope revalidado
+ * en el borde, no solo en la interfaz). Se decidio REUTILIZARLO igualmente en vez de poner un tope
+ * solo en la via nueva: dos reglas distintas para el mismo campo es una divergencia que nadie
+ * recuerda seis meses despues, y la via SIN tope seguiria siendo la que mas se usa. El agujero es
+ * de la gestion ENTERA y cerrarlo aqui a medias es peor que nombrarlo. Cuando se cierre, se cierra
+ * aqui y vale para los dos.
+ */
+export const motivoSchema = z.string().trim().min(1, "motivo requerido");
 
 // Feature 73 (R1/R6): causa TIPIFICADA de la devolucion. La obligatoriedad vive AQUI, en el
 // borde (F1.4-b: sin CHECK en la base), y SOLO en la rama `devuelta`. Un valor fuera del
@@ -395,13 +413,19 @@ export type GestionarActionInput = z.infer<typeof gestionarSchema>;
 
 // --- Resultados expuestos por la Server Action (agregan `unauthenticated`) ---
 
-// Feature 167 (R34): DOS grupos. Lo que espera al mensajero EN LA TIENDA salio a su apartado
-// propio (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
+// Feature 167 (R34): lo que espera al mensajero EN LA TIENDA salio a su apartado propio
+// (`/recoleccion`) con su propio contrato (`ListarRecoleccionResult`).
+//
+// Feature 235 (T3.1, R18): TRES grupos. El tercero son las ordenes en `ayuda_tienda`, separadas EN
+// EL SERVIDOR — antes el portal recibia dos listas y partia la de reparto en el cliente, con lo que
+// la orden con ayuda seguia siendo parada del mapa y gestionable. Esta forma espeja a
+// `ListarMisAsignacionesServiceResult`; si divergen, el typecheck lo dice en el borde.
 export type ListarMisAsignacionesResult =
   | {
       status: "ok";
       porRecoger: MiAsignacionDTO[];
       porGestionar: MiAsignacionDTO[];
+      conAyuda: MiAsignacionDTO[];
       ordenEnGestionId: string | null;
       kpis: MisAsignacionesKpis; // Feature 61
       ruta: RutaResumenDTO; // Feature 92/R27/R28/R30

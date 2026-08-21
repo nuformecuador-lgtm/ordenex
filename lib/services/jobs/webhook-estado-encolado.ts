@@ -10,7 +10,7 @@ import type {
 } from "@/lib/interfaces/repositories/IJobRepository";
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
-import { esEventoPublico } from "@/lib/types/webhook-eventos";
+import { esTransicionEmitible } from "@/lib/types/webhook-eventos";
 
 /**
  * R27/D5 FIJADO = 5: limite de intentos del tipo `webhook_estado` (override por-fila en el
@@ -106,7 +106,10 @@ export async function emitirWebhooksEstado(
   const candidatas = entradas.filter((e) => elegiblesSet.has(e.ordenId));
   if (candidatas.length === 0) return;
 
-  // Paso 2 (R15): resolver el `value` del estatus destino y filtrar por EVENTOS_PUBLICOS.
+  // Paso 2 (R15): resolver el `value` del estatus destino y filtrar por la POLITICA
+  // (`esTransicionEmitible`, `lib/types/webhook-eventos.ts`), que desde la feature 235 mira DOS
+  // cosas: el estado destino (EVENTOS_PUBLICOS, R15) y la FAMILIA de origen
+  // (ORIGENES_SIN_EVENTO_PUBLICO, 235/P4). La decision NO se escribe aqui: este modulo pregunta.
   const destinoIds = Array.from(new Set(candidatas.map((e) => e.estatusDestinoId)));
   const estados = await tx.$queryRaw<EstadoRow[]>`
     SELECT os."id" AS id, os."value" AS value
@@ -118,7 +121,11 @@ export async function emitirWebhooksEstado(
   const ocurridoAtISO = now().toISOString();
   for (const entrada of candidatas) {
     const estado = valuePorId.get(entrada.estatusDestinoId);
-    if (estado === undefined || !esEventoPublico(estado)) continue; // R15: fuera de la politica
+    // Feature 235 (P4): la familia entra en la decision. El rescate `ayuda_tienda -> en_reparto`
+    // NO emite, para que ningun integrador reciba `en_reparto` dos veces sobre la misma orden;
+    // los reingresos LEGITIMOS al mismo estado (una `reprogramada` liberada, un `deshacer_gestion`)
+    // siguen emitiendo, porque la excepcion es por FAMILIA y nunca por estado.
+    if (estado === undefined || !esTransicionEmitible(estado, entrada.origenTipo)) continue;
 
     await repo.enqueue(
       "webhook_estado",

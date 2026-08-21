@@ -32,6 +32,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       status: "ok" as const,
       porRecoger: [],
       porGestionar: [],
+    conAyuda: [], // feature 235 (R18): el tercer grupo, separado en el servidor
       ordenEnGestionId: null,
       kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     // Feature 92/R27/R30: bloque de estado de la ruta que acompana al listado.

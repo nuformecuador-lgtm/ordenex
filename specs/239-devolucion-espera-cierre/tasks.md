@@ -218,7 +218,19 @@
       criterios de intento, y las tres guardias nuevas de esta feature.
       **Hecho:** todas verdes. Un rojo en los criterios de intento significa que alguien los unificó:
       **es regresión, no aserción a cambiar.** **Depende de:** T4.
-- [ ] **T5.6 — Ver la app, no solo la suite.** Gestionar una devolución → comprobar que la tienda
+> ✅ **T5.6 — HECHA el 2026-08-20**, con los tres roles y Playwright, y **cada propiedad comprobada
+> contra Postgres**. Recorrido completo en `progress/recorrido_239.md`. Los seis pasos que pedía la
+> tarea se ejecutaron: la gestión deja la orden en `devolucion_por_confirmar` y no en `devuelta`; la
+> tienda **no** la ve; el rastreo público pinta **el mismo hito** («No fue posible entregarlo») en el
+> pre-estado y ya anclada, **con la misma hora**; al aprobar el cierre **tres órdenes anclaron en el
+> mismo milisegundo** (`23:41:07.191Z` — la misma transacción, que es lo que R4 exige); la tienda
+> pasa a verlas; y **deshacer desde el pre-estado devuelve la orden a `en_reparto`**, cumpliendo lo
+> que su modal promete.
+>
+> 🔴 **Y encontró un defecto que la suite no ve:** el aviso al mensajero dice «Devuelta» cuando la
+> orden está en «Devolución por confirmar». Es la coincidencia resultado↔estado que esta misma ficha
+> vino a romper, viva en un retorno al que no llegó. **Ficha 250.**
+- [x] **T5.6 — Ver la app, no solo la suite.** Gestionar una devolución → comprobar que la tienda
       **no** la ve → aprobar el cierre → verla aparecer en `/novedades` → comprobar que el rastreo
       público muestra el mismo hito en los dos momentos → deshacer una gestión del día desde el
       pre-estado.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/shared/Modal";
@@ -103,10 +104,18 @@ export interface CierreDiaModuleProps {
    */
   cierresPasados: CierresPasadosPagina;
   /**
-   * Feature 41/R21: `true` si el mensajero está BLOQUEADO (tiene un cierre
-   * `solicitado`/`vencido` pendiente). Derivado server-side y pasado por props; el
-   * módulo solo muestra el aviso accionable. Feature 111/R12: el bloqueo es TOTAL
-   * (no puede gestionar NI recibir); el aviso lo comunica.
+   * Feature 41/R21: `true` si el mensajero está BLOQUEADO para GESTIONAR Y COBRAR.
+   * Derivado server-side (`estadoBloqueoMensajero` → `findMensajerosBloqueadosParaGestion`)
+   * y pasado por props; el módulo solo muestra el aviso, nunca re-deriva el estado del
+   * cierre en el cliente.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20) — QUÉ LO ENCIENDE HOY, porque cambió: `vencido` o
+   * `rechazado`, y NADA MÁS. Este doc decía «tiene un cierre `solicitado`/`vencido`
+   * pendiente» y «el bloqueo es TOTAL (no puede gestionar NI recibir)»; las dos cosas son
+   * falsas con la regla firmada. Con `solicitado` la pelota está en el tejado del admin
+   * (mediana 8,2 h, p90 22,1 h) y el mensajero trabaja con normalidad, así que el flag
+   * llega en `false` y el aviso NO se pinta: el filtro vive en el predicado del servidor,
+   * no aquí. Y recibir asignaciones no se bloquea nunca, en ningún estado.
    */
   bloqueado: boolean;
   /**
@@ -126,13 +135,42 @@ export interface CierreDiaModuleProps {
   tieneRechazado: boolean;
 }
 
-// Feature 41/R21 + 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado,
-// i18n-ready). El bloqueo abarca gestionar Y recibir: el mensajero debe resolver su
-// cierre pendiente antes de operar con las guías.
+// Feature 41/R21 + 111/R12 → 241: aviso accionable del bloqueo (texto separado, i18n-ready).
+//
+// ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO CAMBIÓ PORQUE DECÍA DOS COSAS FALSAS. Decía «No puedes
+// gestionar NI RECIBIR NUEVAS ASIGNACIONES hasta resolver tu cierre pendiente», y este comentario
+// remataba con «el bloqueo abarca gestionar Y recibir»:
+//   · «ni recibir nuevas asignaciones» es falso SIEMPRE — recibir no se bloquea en ningún estado
+//     (pedido humano del 2026-08-18, ratificado por la regla firmada). Ninguna superficie de
+//     asignación consulta el predicado de bloqueo.
+//   · «No puedes gestionar» es falso con `solicitado` — pero eso ya no llega hasta aquí: el flag
+//     `bloqueado` sólo se enciende con `vencido`/`rechazado` (ver su doc en las props).
+// Un aviso que prohíbe MÁS de lo que el servidor rechaza es peor que no avisar: el mensajero deja
+// de intentar cosas que sí puede hacer, y el trabajo que le siguen asignando se le queda parado.
+//
+// Es la SEGUNDA copia del texto; la primera vive en `lib/constants/bloqueo-mensajero.ts` para los
+// dos portales ("Entregas" y "Recolección"). NO se importa de allí a propósito: esa variante
+// remata con «Ve a «Cierre del día» para resolverlo» y aquí el mensajero YA está en esa pantalla,
+// con el CTA del vencido/rechazado a la vista. Lo único que se comparte es el criterio: decir qué
+// NO puede, qué SÍ puede, y cómo salir.
+//
+// Qué NO repite: el «envíalo a aprobación» y el porqué del estado los dicen `VENCIDO_AVISO` /
+// `RECHAZADO_AVISO` justo debajo, cada uno con su CTA. Lo que ninguno de los dos dice —y es lo que
+// aporta éste— es el ALCANCE: qué significa exactamente «tu operación» bloqueada.
 const BLOQUEO_AVISO =
-  "No puedes gestionar ni recibir nuevas asignaciones hasta resolver tu cierre pendiente.";
+  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones: te esperan en «Entregas». Resuélvelo con el botón de abajo.";
 
 // Feature 111/R13: CTA + aviso del cierre `vencido` (texto separado, i18n-ready).
+//
+// FEATURE 241 (2026-08-20) — REVISADO CON LA REGLA NUEVA DELANTE, Y SOBREVIVE TAL CUAL. Se miro
+// por lo mismo que hundio a `RECHAZADO_AVISO` de aqui abajo, y sale limpio en los dos frentes:
+//   · CUANDO SE LEVANTA EL BLOQUEO: dice «envialo a aprobacion PARA DESTRABAR tu operacion», o sea
+//     que destraba AL ENVIAR. Es exactamente lo que hace el codigo — `transicionarVencidoASolicitado`
+//     escribe `estado = 'solicitado'` y `solicitado` NO esta en `ESTADOS_CIERRE_BLOQUEAN_GESTION`,
+//     asi que el mensajero sale del conjunto bloqueado en esa misma escritura.
+//   · ASIGNACIONES: no las menciona, que es lo correcto — recibir no se bloquea nunca.
+// Queda anotado para que la proxima revision no tenga que re-litigarlo: NO es un olvido, esta
+// comprobado contra el predicado.
 const VENCIDO_AVISO =
   "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.";
 const VENCIDO_CTA_LABEL = "Solicitar aprobación del cierre vencido";
@@ -142,11 +180,26 @@ const VENCIDO_CONFIRM_DETALLE =
 const VENCIDO_OK = "Cierre vencido enviado a aprobación.";
 
 // Feature 109/R31: CTA + aviso del cierre `rechazado` (texto separado, i18n-ready).
-// En el modelo GLOBAL un cierre `rechazado` NO es terminal: sigue bloqueando la operación
-// hasta que el mensajero lo VUELVA A SOLICITAR y su bodega lo APRUEBE (espejo del `vencido`).
-// El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+// En el modelo GLOBAL un cierre `rechazado` NO es terminal: bloquea, y es RE-SOLICITABLE (espejo
+// del `vencido`). El copy lo deja explícito para que no se lea como "resuelto/cerrado".
+//
+// ⚠️ FEATURE 241 (2026-08-20) — DECÍA QUE EL BLOQUEO DURABA MÁS DE LO QUE DURA, Y ESA DIRECCIÓN DEL
+// ERROR ES LA CARA. Remataba con «sigue bloqueando tu operación hasta que lo vuelvas a enviar a
+// aprobación Y TU BODEGA LO APRUEBE». Falso: `transicionarRechazadoASolicitado` escribe
+// `estado = 'solicitado'`, y `solicitado` NO está en `ESTADOS_CIERRE_BLOQUEAN_GESTION`
+// (`["vencido","rechazado"]`) — el único predicado que gatea gestionar y cobrar, y el que consultan
+// `MisAsignacionesService`, `CierreDiaService.deshacerGestion` y `RecoleccionTiendaService`. O sea:
+// el bloqueo se levanta EN ESA MISMA ESCRITURA, sin que la bodega toque nada.
+//
+// Prometer una espera que no existe no es un matiz de redacción: manda al mensajero a esperar de
+// brazos cruzados una aprobación que no necesita para volver a trabajar —mediana 8,2 h, p90 22,1 h—
+// y es una pérdida de jornada silenciosa, sin ningún síntoma que la delate.
+//
+// Lo que NO se prometió a cambio: que reenviar le devuelva las órdenes congeladas. La liberación de
+// `sin_gestionar` sí ocurre solo al APROBAR (109/R16, `CierresAdminService`), así que el texto habla
+// de lo que recupera —gestionar y cobrar— y no de recuperar las órdenes.
 const RECHAZADO_AVISO =
-  "Tu cierre fue rechazado, pero no queda cerrado: sigue bloqueando tu operación hasta que lo vuelvas a enviar a aprobación y tu bodega lo apruebe.";
+  "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación: con eso se levanta el bloqueo y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe.";
 const RECHAZADO_CTA_LABEL = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_DETALLE =
@@ -175,6 +228,43 @@ const DESHACER_DETALLE =
 const DESHACER_OK = "Gestión deshecha; la orden volvió a tu lista para gestionar.";
 const DESHACER_FORBIDDEN = "No podés deshacer esta gestión.";
 const DESHACER_ERROR = "No se pudo deshacer la gestión. Intentá de nuevo.";
+
+// =================================================================================================
+// FEATURE 237 (D3 firmada por el humano, R38) — «DEVOLVER A GESTION» NO SE OFRECE SOBRE LO QUE
+// REGISTRO LA TIENDA.
+// =================================================================================================
+//
+// **El defecto que cierra, encontrado VIENDO LA APP y no por la suite** (2026-08-20, recorrido T9.1):
+// el boton salia HABILITADO en la fila de una gestion de la tienda, abria su modal —que promete «la
+// orden volvera a tu lista para gestionar»— y el servidor lo rechazaba, correctamente, por la
+// guardia 3-bis de `CierreDiaService.deshacerGestion`. O sea: un boton que SIEMPRE falla, detras de
+// un modal que afirma lo que no va a pasar. Es la misma clase de defecto que la 235 quito de esta
+// pila («dejarlo seria un boton que siempre falla»), aqui del reves: no es un permiso sin
+// superficie, es una superficie sin permiso.
+//
+// **Por que DESHABILITADO CON SU MOTIVO y no oculto.** Ocultarlo deja la fila mas limpia, pero un
+// control que desaparece sin explicacion hace que el mensajero se pregunte por que en unas filas si
+// y en otras no — y esa pregunta es exactamente la que la marca «La tienda» de la fila acaba de
+// empezar a responder: la fila ya dice QUIEN la registro; decir aqui POR QUE no puede tocarla cierra
+// el razonamiento en el mismo sitio. Ademas es el tratamiento que ESTA MISMA PANTALLA ya usa para
+// «no podes, y este es el motivo»: el boton «Solicitar cierre» va `disabled` con `motivoBloqueo` en
+// su `title`. Y mantiene la columna «Acciones» alineada: todas las filas tienen su control en el
+// mismo sitio, una de ellas apagada — un «—» suelto entre botones se lee peor.
+//
+// **El motivo viaja tambien en el NOMBRE ACCESIBLE, no solo en `title`.** Un boton `disabled` sale
+// del orden de tabulacion, asi que su tooltip es inalcanzable con el teclado; poniendolo tambien en
+// el nombre, quien navega con lector de pantalla lo lee al recorrer la tabla. Misma tecnica que la
+// marca de la fila (`GESTION_TIENDA_BADGE_NOTA`).
+//
+// ⚠️ EL TEXTO ES EL MISMO que devuelve el servidor si alguien llega a la accion por otra via
+// (`MSG_GESTION_DE_LA_TIENDA`, `lib/services/CierreDiaService.ts`). Esta duplicado a proposito y hay
+// que decirlo: esa constante NO se exporta y traerla aqui arrastraria Prisma al navegador. Con el
+// boton apagado el mensaje del servidor es practicamente inalcanzable desde esta pantalla, asi que
+// el riesgo de que divergan es bajo — pero si alguien cambia uno, tiene que cambiar el otro: son
+// las dos mitades de la MISMA regla, dicha antes y despues.
+const DESHACER_BLOQUEO_TIENDA =
+  "Esta orden la resolvió la tienda desde su pantalla de ayuda; solo ella puede corregirlo. Escribile por el chat de la orden.";
+
 /** Nombre accesible del botón de la fila (R35): identifica SU orden, no el botón genérico. */
 function deshacerAriaLabel(g: CierreDetalleGestion): string {
   return `${DESHACER_LABEL} la orden ${g.numRemision} · ${g.destinatario}`;
@@ -444,7 +534,11 @@ export function CierreDiaModule({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* ---------- Aviso de bloqueo TOTAL del mensajero (feature 41/R21 + 111/R12) ---------- */}
+      {/* ---------- Aviso de bloqueo para gestionar y cobrar (feature 41/R21 + 111/R12 → 241) ----
+          Se pinta con el booleano tal cual llega del servidor: `bloqueado` YA significa
+          «vencido o rechazado» (241), así que un cierre `solicitado` no entra por aquí y no hay
+          nada que filtrar en el cliente. Va antes que los CTA del vencido/rechazado porque enuncia
+          el ALCANCE del bloqueo; el «qué hacer» y su botón vienen justo debajo. */}
       {bloqueado ? (
         <p
           role="alert"
@@ -850,12 +944,61 @@ function TotalItem({
   );
 }
 
+// =================================================================================================
+// FEATURE 237 (T7.5 — R41, D6 firmada por el humano) — LA FILA DICE QUIEN LA REGISTRO.
+// =================================================================================================
+//
+// **El problema, dicho con lo que le pasa a una persona.** Desde la 237 la TIENDA puede resolver
+// una orden que sigue en la moto del mensajero, y esa gestion se atribuye a el: entra en ESTE
+// cierre, suma un intento y mueve el mismo dinero. Sin la marca, el mensajero firma su cierre del
+// dia con una gestion que no hizo y una evidencia que no subio, y no puede explicarla si le
+// preguntan. La orden, ademas, ya desaparecio de su portal (R40), asi que esta pantalla es el UNICO
+// sitio donde la vuelve a ver.
+//
+// **Por que un `Badge` inline y no una columna propia.** Es el tratamiento que esta MISMA fila
+// (`CierreDetalleGestion`) ya usa para marcar la excepcion sin pagar una columna en cada registro:
+// `renderPagoMensajero` (56/R23) cuelga un badge del monto solo cuando falta la tarifa, con su nota
+// en `title`/`aria-label`. No se inventa nada. La alternativa —una columna al estilo de
+// `renderRechazoOrigen` (102/R9), que pinta badge en TODAS las filas— cuesta ancho en una tabla que
+// ya tiene diez columnas y `overflow-x-auto`, y obligaria a rotular «Vos» veinte veces para marcar
+// una. Aqui la marca viaja pegada al numero de guia, que es la celda mas corta y la primera que se
+// lee.
+//
+// **Que significa que NO este el badge:** que la gestion la registro el mensajero. NO es «no lo
+// se»: `desdeAyudaTienda` es obligatorio en el DTO y se deriva del historial, que nace en la MISMA
+// transaccion que la gestion (ver `lib/utils/gestion-de-la-tienda-flag.ts`). La ausencia es una
+// afirmacion, y por eso su test va emparejado con el de la presencia.
+
+/** Rotulo de la marca. Dice QUIEN, no solo que la fila es distinta, y cabe en una celda apretada. */
+export const GESTION_TIENDA_BADGE_LABEL = "La tienda";
+
+/**
+ * La nota accesible del badge (`title` + `aria-label`). El rotulo dice quien; la nota dice lo que el
+ * mensajero necesita para explicarla si le preguntan: desde donde se hizo, que el motivo y la foto
+ * no son suyos, y que aun asi cuenta en este cierre.
+ */
+export const GESTION_TIENDA_BADGE_NOTA =
+  "Esta gestión la registró la tienda desde «Ayuda solicitada», no vos: el motivo y la foto son suyos. Cuenta en tu cierre igual.";
+
 // --- Columnas comunes a TODAS las secciones (R4; feature 158: tambien al grupo `incidente`) ---
 const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
   {
     id: "numGuia",
     value: "Nº Guía",
-    render: (g) => <span className="font-semibold">{g.numGuia ?? "—"}</span>,
+    render: (g) => (
+      <span className="inline-flex items-center gap-2">
+        <span className="font-semibold">{g.numGuia ?? "—"}</span>
+        {g.desdeAyudaTienda ? (
+          <Badge
+            variant="secondary"
+            title={GESTION_TIENDA_BADGE_NOTA}
+            aria-label={GESTION_TIENDA_BADGE_NOTA}
+          >
+            {GESTION_TIENDA_BADGE_LABEL}
+          </Badge>
+        ) : null}
+      </span>
+    ),
   },
   { id: "numRemision", value: "Nº Remisión", minWidth: "120px" },
   { id: "destinatario", value: "Destinatario" },
@@ -899,18 +1042,29 @@ function columnasPara(
   const columnaAcciones: Column<CierreDetalleGestion> = {
     id: "acciones",
     value: DESHACER_COL,
-    render: (g) => (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-label={deshacerAriaLabel(g)}
-        disabled={deshaciendo === g.gestionId}
-        onClick={() => pedirDeshacer(g)}
-      >
-        {DESHACER_LABEL}
-      </Button>
-    ),
+    render: (g) => {
+      // Feature 237 (D3/R38): la gestion que registro LA TIENDA no la puede deshacer el mensajero.
+      // El servidor lo rechaza igual (guardia 3-bis) — esto no es la defensa, es no ofrecer una
+      // accion que solo puede acabar en error, y decir por que.
+      const bloqueadaPorTienda = g.desdeAyudaTienda;
+      return (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={
+            bloqueadaPorTienda
+              ? `${deshacerAriaLabel(g)} — no disponible: ${DESHACER_BLOQUEO_TIENDA}`
+              : deshacerAriaLabel(g)
+          }
+          title={bloqueadaPorTienda ? DESHACER_BLOQUEO_TIENDA : undefined}
+          disabled={bloqueadaPorTienda || deshaciendo === g.gestionId}
+          onClick={() => pedirDeshacer(g)}
+        >
+          {DESHACER_LABEL}
+        </Button>
+      );
+    },
   };
   if (resultado === "entregada") {
     return [

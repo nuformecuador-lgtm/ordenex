@@ -51,4 +51,25 @@ describe("ESTADOS_BODEGA_SATELITE — el pre-estado NO entra en el listado (239/
   it("`devuelta` SIGUE en el listado: una devolucion ya ANCLADA si es suya", () => {
     expect(ESTADOS_BODEGA_SATELITE as readonly string[]).toContain("devuelta");
   });
+
+  // Feature 235 (T1.5, R37/R45): misma clase de decision que la de la 239, con otra razon.
+  it("235/R37: `ayuda_tienda` NO entra en el listado — el paquete esta en la moto, no en el estante", () => {
+    expect(ESTADOS_BODEGA_SATELITE as readonly string[]).not.toContain("ayuda_tienda");
+    // Y la lista sigue teniendo CINCO: el censo cerrado es lo que delata un value colado.
+    expect(ESTADOS_BODEGA_SATELITE).toHaveLength(5);
+  });
+
+  it("235/R45 (CASO NEGATIVO): una seleccion que pida `ayuda_tienda` devuelve NADA", () => {
+    // La interseccion con la lista blanca no puede ampliarla. Sin este caso, «no esta en la
+    // lista» no demostraria que el borde tampoco lo cuela.
+    expect(estadosDelListado(["ayuda_tienda"])).toEqual([]);
+  });
+
+  it("235: la decision es COHERENTE con el grafo — `ayuda_tienda` no tiene salida a bodega", () => {
+    // Igual que con el pre-estado de la 239: si apareciera en el listado sin arista hacia una
+    // bodega, el adminSatelite veria una fila sobre la que no puede hacer nada.
+    const destinos = TRANSICIONES.ayuda_tienda.map((d) => d.to);
+    expect(destinos).not.toContain("en_bodega_satelite");
+    expect(destinos).not.toContain("en_bodega_central");
+  });
 });

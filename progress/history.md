@@ -3498,3 +3498,311 @@ ojo: se resuelve y se valida**, que cuesta un `JSON.parse`.
   esta ficha puede salir a producción antes que la 235, que la retirará entera. Y **antes de
   desplegar** faltan dos cosas que no son código: re-medir producción y **avisar a los integradores**
   de que `devuelta` les llegará al aprobar bodega y no al gestionar el mensajero.
+
+## 2026-08-19 — 235 (la ayuda a la tienda deja de ser una bandera y pasa a ser un estatus)
+
+**PR [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402)** · 46 requisitos EARS, 39
+tareas, 3 migraciones con su `down.sql` · gate completo **1192 archivos / 15453 tests / 347 s**.
+
+- **El fallo que cierra, en una línea:** una bandera al lado del estado obliga a que **cada**
+  consulta se acuerde de filtrarla, y basta con que una no lo haga para que la orden siga
+  apareciendo donde ya no debería. `orden.ayuda` se **retira**; nace `ayuda_tienda`.
+- **La revisión RECHAZÓ la primera pasada, con razón**, y los dos bloqueantes de código eran
+  **regresión de esta misma ficha y del mismo patrón**: al pasar de bandera a estatus, las listas
+  que responden *«¿qué ocupa a este mensajero?»* no se ampliaron. El **corte de la noche** dejaba
+  fuera al mensajero que acababa el día con todo en ayuda —ni cierre `vencido` ni barrido— y la
+  **regla de dedicación de la 157** lo leía como «sin carga», así que se le podía mandar a
+  recolectar con el paquete encima.
+- **En vez de arreglar los dos sueltos se censó la familia entera**: siete listas, con las tres
+  rotas más **una cuarta latente** que nadie había pedido buscar. Y una guardia que **lee las siete
+  del fuente** y cruza los gemelos entre sí (servicio↔selector, selección↔ids del corte,
+  portal↔bloqueo). ⚠️ Vigila, pero **no descubre** una octava: el censo está cerrado a mano.
+- **El test que parecía cubrir el primer caso llamaba a `crearCierre` a mano**, un nivel por debajo
+  de donde el sistema falla. El nuevo entra por `ejecutarCorte` con el repositorio real.
+- **Un requisito que se contradecía consigo mismo.** R35 prometía la lectura del hilo para los dos
+  roles mientras la sección de alcance del **mismo documento** difería la pantalla de la tienda a la
+  236. Se enmendó con fecha, dueño y condición de reapertura: un requisito que miente es peor que
+  uno ausente.
+- **Ver la app encontró lo que 15.000 tests daban por bueno.** El recorrido con los dos roles
+  (`progress/recorrido_235.md`) confirmó en pantalla lo que más se jugaba —al pedir ayuda **los
+  cuatro KPI no bajan**, P7/R20— y sacó **dos defectos**: el chip de la card decía «En reparto»,
+  que es justo lo que la ficha volvió falso, y la card llevaba «Pendiente de optimizar», que **R15
+  prohíbe por su nombre**. El servicio ya la dejaba fuera del número; la superficie se había
+  quedado atrás. Tercera vez el mismo patrón en una sola ficha.
+- **Un permiso que vivía en el servidor y moría en la pantalla** (R25): con el mensajero bloqueado
+  por un cierre sin resolver, la UI le apagaba el rescate que el servicio le concede **a propósito**
+  —comprobarlo allí crearía un deadlock con R22: ni rescatar ni cerrar—. Se quitó, y con él **la
+  prop `disabled` del botón**, cuyo JSDoc documentaba exactamente la conducta prohibida.
+- **Un color que viajaba de polizón.** El chip nuevo heredaba su color del *fallback* de «texto
+  libre», que significa «no sé qué es este rótulo»: apoyar ahí una decisión la vuelve
+  indistinguible de un accidente. Ahora tiene entrada propia y un test — y la mutación que prueba
+  algo **no** es borrar la entrada (eso cae al fallback y da el mismo color, verde), sino la que
+  cambia el color.
+- **Deuda declarada y con dueño:** la tienda **ve** la solicitud de ayuda y **no puede leer el
+  motivo**; su card cae bajo la pestaña «En devolución». Lo arregla la **236**, y por eso ⚠️ **la
+  235 y la 236 salen juntas o seguidas**. Orden acordado: **235 → 236 → 237 → 240**.
+
+## 2026-08-19 — 238 (aprobar el cierre exige tener los paquetes delante)
+
+**44 requisitos EARS, 39 tareas, 1 migración aditiva con su `down.sql`.** Bodega ya no aprueba un
+cierre a ciegas: los paquetes que **vuelven** —`devuelta`, `rechazada`, `reprogramada`— hay que
+confirmarlos escaneando su guía, y sin cobertura completa no se aprueba. Los incidentes **no** se
+confirman: su paquete no vuelve, se indemniza.
+
+- **D2 sin escapatoria, y es deliberado:** un solo paquete perdido devuelve el cierre entero. La
+  salida ya existía y es la correcta —rechazar con motivo, que se lo devuelve al mensajero— y la
+  fricción es justo lo que hace que los paquetes aparezcan. Por eso el bloqueo **habla**: dice
+  cuántas faltan y qué hacer si una no llegó. Un bloqueo mudo se lee como una app rota.
+- **La medición contra producción le cambió el diseño a la ficha**, y nada de esto estaba en el
+  spec: «sin retornables» es **3 de cada 12** cierres —un camino de igual rango, no un `else`— y el
+  techo de un cierre son **14 paquetes**, no dos ni tres. Por eso el contador y el motivo del bloqueo
+  van fijos arriba con la lista desplazándose debajo: al final de catorce filas no existirían.
+- 🔴 **Ver la app encontró un cierre que NO SE PODÍA APROBAR NUNCA.** Una orden puede tener **dos
+  gestiones vivas en el mismo cierre** —medido en producción: **1 par de 48**, y justo del tipo cuyo
+  paquete vuelve— y resolver `guía → gestión` con un `find` dejaba la segunda fila inalcanzable: el
+  contador clavado en 11 de 12, el botón muerto y **ningún mensaje** que lo explicara. El servidor no
+  tenía ese candado (su duplicado es por `gestionId`), así que era puramente de pantalla. Ahora una
+  lectura confirma **todas** las filas de esa guía —hay un solo paquete físico— y el contador cuenta
+  paquetes, no filas.
+- 🔴 **Y un test que estaba verde por el estado ambiental**: afirmaba «gestión creada antes de la
+  feature ⇒ nunca marcada», que es **falso por diseño** (un cierre viejo aprobado hoy marca gestiones
+  viejas). Pasaba sólo porque nadie había ejercido la feature y **se habría puesto rojo en producción
+  con la primera aprobación**. Sustituido por dos invariantes que siguen siendo ciertas con la
+  feature en uso, y ninguna basta sola.
+- **El `WHERE` se probó donde vive.** Además del doble que *aplica* el predicado, hay un archivo que
+  ejecuta el método real contra Postgres sembrando en una transacción que siempre revierte. Quitarle
+  `resultado` al `where` mata los dos lados; los tests de servicio, que usan dobles, **no lo ven**.
+- **Tres sitios donde el spec estaba equivocado, y se corrigió el SPEC, no el código:** T5.4 nombraba
+  una suite estructuralmente incapaz de ver su mutación, T5.1 situaba su test en un archivo donde la
+  función no vive, y design §5.3 decía «casa UNA gestión».
+- **Una premisa invisible, ahora escrita y atornillada:** el arreglo es correcto **porque
+  `orden.numGuia` es `@unique`». Quitar ese `@unique` deja 32 casos verdes y sólo uno rojo — el que
+  se añadió para eso.
+- **Deuda del despliegue (T0.3):** avisar a bodega de que el gesto cambia. La medición dice que **no
+  bloquea** —0 cierres en cola—, pero **esa foto caduca**: re-medir justo antes de desplegar, no
+  antes de mergear.
+
+## 2026-08-19 — 236 (la ayuda tiene pestaña propia, y la tienda por fin lee el motivo)
+
+**47 requisitos EARS, 40 tareas, sin migración: esta ficha no persiste nada.** Absorbe la **228**,
+que queda **superada**.
+
+- **El defecto que arregla, dicho por lo que se vio:** la nota con la que el mensajero pide ayuda es
+  **obligatoria**, se publica en el hilo… y nadie la leía, desde que `55723c83` retiró el botón
+  «Notas» y con él su **único montaje**, dejando el modal entero en disco y sin cablear. En el
+  recorrido apareció el detalle que lo resume: **la nota ya estaba ahí** —la escribió el recorrido de
+  la 235— y **nadie podía verla**. El hilo llevaba días con contenido y sin lector.
+- **Cierra la enmienda de R35 de la 235.** Los dos roles vuelven a tener superficie alcanzable, así
+  que el requisito se lee otra vez tal como se redactó, y la enmienda pasa de deuda viva a acta.
+- **El corte vive en el servidor y sale de una sola declaración.** `novedadWhere` perdió el `OR` y
+  los dos métodos del repo piden `grupo` **obligatorio**: el typecheck señaló los seis call-sites en
+  vez de dejar que alguno se quedara con el predicado viejo. Una orden vive en una pestaña **por
+  construcción**, no por disciplina — que es justo lo que la 235 tuvo que arreglar a la mala.
+- **La guardia que el diseño predijo se puso roja, y se reparó SUBIENDO la propiedad**: de
+  «intersección no vacía» a **igualdad exacta** con la ventana de escritura de la tienda. Medido: con
+  la mutación, el caso viejo de intersección **sigue verde** y sólo cae la igualdad nueva. Subir
+  sirvió; relajarla habría dejado la guardia mirando a otro lado.
+- **El estado vacío es superficie de pleno derecho**, y no por gusto: medido contra producción, hay
+  **0 órdenes en `ayuda_tienda` y 0 en `devuelta`** sobre 141 vivas. La pestaña **nace vacía** y será
+  lo primero —y por un tiempo lo único— que la tienda conozca.
+- **La medición mató una decisión antes de llegar a firma:** iba a preguntarse si había notas
+  huérfanas que recuperar. **No existen.** La ficha es **prospectiva**: no rescata datos, impide que
+  se pierdan desde el primer día en que la 235 salga.
+- 🔴 **La revisión RECHAZÓ, y por trazabilidad, no por código** — ningún `.ts` que tocar. Una fila del
+  mapa citaba un test que **nunca existió en ninguna rama**, y una bitácora publicaba una salida que
+  **no se reproduce**: `vitest` no falla con un filtro que no casa nada, lo ignora en silencio, así
+  que aquellos números no salieron de aquel comando. **Cuarta ficha seguida** con una cita falsa en el
+  mapa. Una salida publicada que no se reproduce es indistinguible de una inventada.
+- **Deuda declarada:** re-medir producción **antes de desplegar** (la foto caduca); y dos cosas
+  cubiertas por test pero **no vistas con los ojos** — la descarga por pestaña (el sandbox bloquea
+  las descargas que la propia página inicia) y D8, que necesita **ganar la carrera** al mensajero.
+- ⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
+  No en paralelo.**
+
+## 2026-08-20 — 241 (el bloqueo por cierre distingue a quién le toca mover ficha)
+
+**PR [#408](https://github.com/nuformecuador-lgtm/ordenex/pull/408)** · `sdd: false`: **la
+investigación fue la especificación**. Gate completo **1219 archivos / 15822 tests / 345 s**.
+
+- **El encargo fue «entender antes de arreglar», y era el correcto.** Un `git revert` habría
+  reintroducido íntegra la queja humana que originó el commit: **un cierre sin aprobar congelaba una
+  bodega satélite entera**, compañeros limpios incluidos.
+- **No subió un umbral: apagó el predicado.** Quedó en `> 1` y el invariante 109/R30 impide tener
+  dos, así que **ningún valor ≥ 1 significa nada** — incluidas **tres superficies que el propio
+  commit afirma no haber tocado**. Y eran **tres** guardas retiradas, no dos.
+- **La regla firmada distingue de quién es la pelota:** `solicitado` es espera del **admin**
+  —mediana 8,2 h, p90 22,1 h— y no bloquea nada; `vencido` y `rechazado` sí. **Recibir asignaciones
+  no se bloquea nunca.**
+- **La decisión de fondo:** «recibir» **no es un predicado que devuelva vacío, es un sitio donde no
+  hay predicado**. Por eso no se metió un parámetro: se **renombró** a
+  `findMensajerosBloqueadosParaGestion` y se **sacó de las interfaces** de asignación, donde ahora
+  **no se puede llamar**. La ficha nació de un nombre que no decía su política.
+- **Una guarda que se habría resucitado sola.** La versión **por zona** de `rutearABodegaSatelite`
+  no disparaba por el tope apagado; al reparar el predicado habría vuelto **sin que nadie lo
+  decidiera**. Se borró con firma.
+- 🔴 **Una frase que mentía, y en la dirección cara.** El aviso decía «no puedes gestionar **ni
+  recibir** nuevas asignaciones»: falso en las dos mitades, y le dice al mensajero que está **más
+  bloqueado de lo que está**, así que **espera de brazos cruzados una aprobación que ya no
+  necesita**. Su test la comparaba contra su propia constante — siempre verde. Al tirar del hilo, la
+  misma afirmación vivía en **cinco sitios de `lib/`**, **dos en `lib/interfaces/`**, que es el
+  contrato y lo que más se lee.
+- **Un tripwire que hizo su trabajo y nadie escuchó:** el de la 172 se puso rojo **en el commit que
+  cambió la lista**. Y de los «seis tests invertidos» que la investigación listó, **uno no lo era**
+  —se contó por su forma sintáctica— mientras **cuatro asertos que sí eran contrato** no estaban en
+  la lista.
+- **Deuda declarada:** re-medir producción antes de desplegar. Cuando se midió: **0 mensajeros con
+  cierre abierto** sobre 4 y **0 asignaciones históricas** a mensajero bloqueado sobre 26. Nada pasó
+  por el hueco — **el cero es suerte de calendario**.
+- **Nació una ficha de aquí:** la **246**, cuando el humano señaló que asignar de noche hace que el
+  cron deshaga la asignación. Su spec está escrito y su medición hecha.
+
+## 2026-08-20 — 237 (la gestión que hace la tienda cuenta como del mensajero)
+
+**50 requisitos EARS, 44 tareas, 1 migración de enum con su `down.sql`.** La ficha **más delicada en
+dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
+
+- **La propiedad central, medida contra Postgres y no contra la pantalla:** la gestión que registra
+  la tienda lleva `mensajero_id` = **el mensajero** y el actor del historial = **la tienda**. Por eso
+  el dinero cae en **su** cierre. Verificado con importe real: **₡1.000 de ingreso de bodega sobre
+  una fila registrada por la tienda, dentro del cierre del mensajero.**
+- **Las dos features componen:** la ventana de confirmación física de la **238** pide el paquete que
+  gestionó la tienda. Era el **riesgo nº 3** del design, cuya mitigación escrita era «se recorre en
+  T9» — y se recorrió.
+- **Los números convirtieron una precaución en necesidad.** «El mensajero no puede deshacer la
+  gestión de la tienda» se firmó con dos medidas delante: **deshacer se usa (7 de 57 gestiones, 12 %)**
+  y un rechazo mueve **hasta ₡1.000**. Sin ellas parecía un caso de borde; con ellas, pasaría de
+  verdad y cada vez borraría en silencio dinero que decidió otra persona.
+- 🔴 **El recorrido se marcó hecho parado en el paso 6 de 9**, y la revisión lo rechazó **con razón**:
+  los tres que faltaban eran los de dinero. Es el mismo error de marcar por lotes que ya había
+  aparecido en la 236.
+- 🔴 **Un botón que siempre fallaba**, encontrado mirando: «Devolver a gestión» estaba habilitado y su
+  modal prometía algo que el servidor iba a rechazar siempre. No fallaba en silencio —el aviso
+  llegaba— pero **después** de confirmar. Ahora está apagado con el motivo en el `aria-label`, porque
+  **un botón `disabled` sale del orden de tabulación** y su `title` es inalcanzable con el teclado.
+- **Dos afirmaciones del propio spec eran falsas y se corrigieron en el spec, no en el código:** un
+  literal que decía estar en dos sitios estaba en **seis**; y el design afirmaba que el cobro por
+  rechazo se **debita a la tienda** — es **ingreso de bodega**. Ojo con la conclusión contraria, que
+  también sería falsa: un rechazo **sí** le debita el flete de devolución + IVA, por **otra** vía y
+  desde **otra** tarifa.
+- **Un cero que no era un fallo.** El primer intento de ver el dinero dio `0` — y la derivación **sí
+  había corrido** (`0`, no `NULL`): la base local no tenía tarifa con cobro por rechazo. La
+  diferencia entre `0` y `NULL` era todo.
+- **Deuda con dueño:** `IncidenteAdminService` sigue con su copia de la subida compensada (D5-a) y
+  `motivoSchema` sigue sin tope (D8). Y **T0.1 queda abierta a propósito**: re-medir antes de
+  desplegar.
+
+---
+
+## 2026-08-20 · Feature 240 — el rechazo manual de la tienda deja de ser una maqueta
+
+**PR #411** (junto con la 246) · zona `fullstack` · complejidad alta · `done`
+
+- 🔴 **Tres defectos que llevaban semanas en pantalla, y ninguno lo veía la suite.** «Devolver a
+  gestión» era una **maqueta desde el 2026-08-12** —el botón existía, el modal se abría, y no pasaba
+  nada—; su nombre además era el equivocado. «Habilitar» aparecía justo en las cards que vienen de un
+  cierre, que es **donde el pedido decía que no debía estar**. Está medido y es el hallazgo que más
+  vale de esta ficha: **las tres capas de tests de esa superficie estuvieron verdes esas dos
+  semanas**. Una maqueta no rompe nada — por eso una suite verde no la encuentra.
+- **La paridad con el cron es la ficha entera, y se verificó contra Postgres**, no contra la
+  pantalla: el rechazo manual escribe la **gestión sintética** con `mensajero_id` **puesto** y
+  `cierre_id` **NULL**, igual que la del corte automático. Sin ella, rechazar a mano saldría **gratis**
+  y esperar al plazo **costaría** — dos precios para el mismo hecho, decididos por quién pulsa antes.
+- **La guardia anti-maqueta tiene cuatro frentes**, y hubo que arreglarla **durante la revisión**:
+  sobrevivía una quinta forma de replantar el botón —dejar el import y quitar la invocación— porque
+  su frente 2 medía **el import** aunque su mensaje dijera «llama». Ahora comprueba la invocación.
+  Detalle que lo hacía invisible: `"lint": "eslint"` **sin `--max-warnings=0`**, así que un import
+  muerto no ponía nada en rojo.
+- **Un agente se apartó de mi instrucción, y tenía razón.** Le dije que el fallo silencioso al
+  rechazar saliera como `conflict`; midió que **la pantalla descarta el motivo de un `conflict` y
+  pinta un texto fijo** que sería falso. Usó un estado propio que **rompe el typecheck** hasta que
+  alguien le escriba su texto: el fallo se hace notar en la compilación, no en la cara del usuario.
+- **Dos hallazgos salen a ficha aparte, no se cuelan aquí:** el **doble cobro del flete** (247 — está
+  medido, `1 de 16`, ₡2.486 a NUFORM, y **no lo introduce esta ficha**: le abre una segunda puerta) y
+  los **errores mudos de `/novedades`** (248), que la **feature 100 comparte idénticos**.
+- **Abierto y dicho:** T8.2 —la mitad del recorrido que **no** se hizo: ver la orden rechazada desde
+  el mensajero y desde bodega— y T4.3, que es una **cita equivocada en el spec** (nombra un archivo
+  del portal del mensajero), comprobada dos veces.
+
+## 2026-08-20 · Feature 246 — al asignar se elige para qué día
+
+**PR #411** (junto con la 240) · zona `fullstack` · complejidad alta · `done`
+
+- **Una fecha, no una marca.** El selector guarda `fecha_reparto` **absoluta**, y la razón está
+  firmada: **una fecha vence sola; una marca necesita a alguien que la apague** — que es exactamente
+  el defecto que pagó la 235. Las dos opciones enseñan la **fecha concreta** («20 de agosto», «21 de
+  agosto»), y **las resuelve el servidor**: el corte es a medianoche de Costa Rica y un reloj de
+  navegador en otro huso habría dado otro día sin avisar.
+- 🔴 **El ancla del corte no es «hoy»**, es **el día que la corrida cierra**. Era el punto donde la
+  ficha se rompía sola —el cron que corre a las 23:59 y termina pasada la medianoche se llevaría por
+  delante las asignaciones de mañana— y hoy tiene mutación propia: **9 rojos**.
+- **El `EXPLAIN` cambió la pregunta.** Contra producción, la consulta de hoy se sirve con un **`Index
+  Only Scan` sobre un compuesto que YA EXISTÍA**. Así que lo que había que preguntar no era «¿falta
+  un índice?» sino **«¿el `OR` nuevo rompe el índice que ya cubría?»**. Medidos cuatro escenarios
+  **por forma del plan**: el índice nuevo era **el peor de los tres**. Se **retiró** y se **amplió el
+  compuesto** a tres columnas — el número de índices no sube.
+- **D7 se firmó EN CONTRA de la recomendación** (corregir el denominador del ranking aquí en vez de
+  en ficha aparte), y por eso la ficha subió a complejidad alta. Con el importe delante: **₡10.000
+  reparte el premio en toda la historia**, y **las posiciones 2 y 3 están sin configurar** — si algún
+  día se configuran, lo que está en juego se multiplica.
+- **D11: solo hacia adelante**, que además es lo que el código ya impone — los snapshots de ranking
+  son **inmutables por diseño**.
+- **Abierto y dicho:** T0.1, re-medir antes de desplegar. R44 está medido **por forma** con
+  `enable_seqscan=off` sobre **141/67 filas**: **ninguna de las dos bases tiene volumen** para que el
+  plan de hoy prediga el de mañana.
+
+---
+
+## 2026-08-21 · Feature 253 — postular vehículo o bodega deja de ser una maqueta
+
+**PR #429**, release **#430** · zona `fullstack` · complejidad media · `done`
+
+- 🔴 **La maqueta llevaba CINCO DÍAS en producción**, y eso se midió en vez de suponerse:
+  `git log --follow` la sitúa el **2026-08-16** y `origin/prod` la contenía. Validaba, pintaba
+  «Postulación enviada. Recibimos tus datos» y **no enviaba nada**. **No fallaba: mentía.** Quien
+  postulara en esa ventana no recibió nunca una llamada, y **no hay forma de saber quiénes fueron**:
+  no dejaron fila, ni log, ni correo. Se declaró **no medible** por escrito en vez de inventar un
+  número.
+- **La encontró un usuario, no la suite** — y no podía encontrarla: un `setEnviado(true)` sin envío
+  **no rompe ningún test**. La guardia anti-maqueta existía desde la 240 **pero acotaba su ámbito
+  con `const PANTALLA = "app/(app)/novedades"`**, así que la landing quedaba fuera **por
+  construcción**. Ése era el agujero de proceso, no sólo el defecto.
+- **La guardia se demostró ROJA en las dos formas de recaída**, que es lo único que la hace valer:
+  volviendo a la maqueta (`3 failed | 20 passed`) y dejando **el `import` en pie sin la invocación**
+  (`2 failed | 21 passed`). En ese segundo estado **`eslint` da `0 errors` y sale con código 0**:
+  el linter no la caza, la guardia sí.
+- **Extraer los detectores en vez de duplicarlos quedó justificado por MEDIDA:** relajar el detector
+  en el fixture compartido pone **rojas las dos guardias a la vez** (`4 failed | 38 passed`).
+  Duplicar habría dejado una ciega.
+- 💣 **El cron de purga es lo más peligroso de la ficha** —borra, es irreversible y lo ejecuta un
+  job desatendido—. Mutando el `WHERE` (`atendida_at` → `created_at`), el test **de integración**
+  canta que se borran **las tres** filas, incluida la pendiente de dos años; **y el test de servicio
+  con dobles da `11 passed`, en verde**. Un doble no ve el SQL: la condición de un borrado
+  desatendido se prueba **donde vive**.
+- **Dos decisiones se firmaron EN CONTRA de la recomendación** y ampliaron el alcance: el aviso en
+  la campana (que necesitó **dos** valores de enum, no uno — reusar `usuario` habría sido un dato
+  falso y habría roto la deduplicación) y la retención a 6 meses (el cron).
+- 🔴 **La revisión RECHAZÓ, y con razón: tres bloqueantes, ninguno de código.** Tareas sin marcar,
+  el **T0 nunca ejecutado**, y el mapa `R→test` cubriendo **25 de 44** porque listaba *archivos* en
+  vez de *casos*. Ese último es exactamente el error que la 236 dejó pasar: `vitest` **no falla**
+  con un filtro que no casa nada.
+- **Abierto y dicho:** T10.3 (los caminos feos y el límite de tasa no se ejercieron) y T10.4 (los
+  textos no se leyeron uno a uno).
+
+## 2026-08-21 · El arnés: `--rapido` pasa a ser el gate normal
+
+**PR #419** · cambio de la regla 5 de `CLAUDE.md`
+
+- **El motivo, medido:** mover un enlace de la nav de la landing costó **16.346 tests y 5–11
+  minutos**, cuando lo relacionado eran **21 tests + las guardias ≈ 33 segundos**. La regla cobraba
+  lo mismo por un cambio de texto que por una migración.
+- **Lo que NO se hizo: relajarla a secas.** `--changed` selecciona por grafo de imports y sólo mira
+  **tu** diff. Cada hueco tiene su tapa: las guardias corren siempre; `--rapido` **se niega solo**
+  ante cimientos; y **la corrida completa post-merge sobre `dev`** cubre el que menos se ve —
+  `--changed` compara *contra* `dev`, así que **un rojo heredado no aparece en tu diff**, y en este
+  repo `dev` llegó rojo **tres veces**.
+- **`init.sh` se vigila a sí mismo**, porque tocar el gate cambia **la medida** con la que se mide
+  todo lo demás: un fallo ahí no se ve como un rojo, se ve como **un verde que no significa nada**.
+  El propio PR que introdujo la regla fue el primero en chocar con ella.
+- **Probado en los dos sentidos**, que es donde mueren estos filtros, y con un falso positivo
+  instructivo por el camino: la primera tanda dijo «se niega» en la landing y era **el instrumento**
+  —había añadido texto inválido a un `.tsx` y lo que fallaba era el typecheck—.

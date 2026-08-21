@@ -25,6 +25,10 @@ y `./init.sh` deben quedar en verde al final (regla 5 CLAUDE.md).
 
 ## Bloque 2 — Landing pública
 
+> ⚠️ **El texto de T3 describe el estado de 2026-07 y quedó atrás.** «Trabajá con nosotros»
+> **ya no** es un `<Link href="/postulacion">`: es un `<a>` al ancla `#trabaja-con-nosotros` de
+> esta misma página (corregido el 2026-08-20; ver el aviso de R2). Se deja el texto original
+> como foto de lo que se construyó entonces, no como descripción de lo vigente.
 - [x] **T3. Crear `app/page.tsx`** (R2, R3, R4, R5).
   Server Component público (fuera de `(app)`). Topbar: `<Logo/>` + `<Link
   href="/postulacion">Trabaja con nosotros</Link>` + `<Link

@@ -53,13 +53,19 @@ function fakeRepo(rows: MiAsignacionRow[]): IGestionOrdenRepository {
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
     reprogramarDesdeDevuelta: vi.fn(async () => true),
+    // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
+    // servicio); el doble lo declara porque la interfaz lo exige.
+    crearGestionDesdeAyuda: vi.fn(async () => "g-desde-ayuda"),
+    // Feature 240: tampoco lo usa `MisAsignacionesService` (el rechazo manual es de la tienda,
+    // por `RechazoTiendaService`); el doble lo declara porque la interfaz lo exige.
+    rechazarDesdeDevuelta: vi.fn(async () => true),
   };
 }
 
 const fakeOrdenRepo = {
   findEstatusIdByValue: vi.fn(async () => "x"),
-  findMensajerosBloqueados: vi.fn(async () => new Set<string>()),
-} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados">;
+  findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion">;
 
 const fakeRutaRepo = {
   findByMensajero: vi.fn(async () => null),

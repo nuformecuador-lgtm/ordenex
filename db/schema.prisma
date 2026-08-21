@@ -149,6 +149,7 @@ model Usuario {
   liquidacionRepartosRegistrados      LiquidacionReparto[]      @relation("LiquidacionRepartoRegistrador") // feature 205/R29: repartos que este usuario (maestro/admin) registro
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
+  postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -498,11 +499,24 @@ model Orden {
   direccion              String? // feature 15/R1: nuevo, carga masiva
   montoCobrar            Decimal?  @map("monto_cobrar") @db.Decimal(12, 2) // feature 15/R1
   mensajeroAsignadoId    String?   @map("mensajero_asignado_id") // feature 17/R7: mensajero ASIGNADO (decision del maestro); feature 159: unica fuente de verdad del mensajero de una orden
-  asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas); fuente del denominador del ranking diario
+  asignadoAt             DateTime? @map("asignado_at") // feature 76/R23/R24: instante de la ultima (re)asignacion de mensajero (NULL = nunca asignado / historicas). OJO: desde la 246/D7 ya NO es la fuente unica del denominador del ranking — solo la RAMA DE RESPALDO, para las ordenes sin `fecha_reparto`
+  // Feature 246 (D1+D2, firmadas el 2026-08-20) — DIA DE REPARTO: la fecha calendario de Costa Rica
+  // PARA LA QUE se hizo la asignacion. `@db.Date` (no `timestamp`): es una fecha, no un instante, y
+  // se compara contra la medianoche UTC de la fecha CR (`startOfDayCR`, convencion 46). Una FECHA
+  // ABSOLUTA y no una marca «para mañana» porque una fecha VENCE SOLA —el corte la deja de proteger
+  // por el mero paso del tiempo— mientras que una marca necesita quien la apague, y el dia que ese
+  // apagado falle la orden no se barre NUNCA: el defecto exacto que pago la 235 tres lineas mas
+  // abajo. NULL significa UNA sola cosa: «no esta reservada para un dia que aun no ha llegado»
+  // (R20) — orden anterior a esta feature, o sin mensajero. Sin default y sin backfill (R19).
+  fechaReparto           DateTime? @map("fecha_reparto") @db.Date
   cobraComision          Boolean   @default(true) @map("cobra_comision") // feature 42/R26: la orden lleva cobro de comision COD (default true = retro-compatible); la 42 la LEE (no la captura editable, deuda A5)
   prioridad              Boolean   @default(false) @map("prioridad") // feature 101/R1: flag de reasignacion prioritaria (ON al liberar por SLA 99, OFF al reasignar mensajero desde bodega); default false = sin backfill (R11)
-  ayuda                  Boolean   @default(false) @map("ayuda") // flag opcional de solicitud de ayuda sobre la orden; default false = sin backfill
-  intentosContacto       Int       @default(0) @map("intentos_contacto") // conteo de intentos de contacto que la TIENDA registra sobre la orden desde /novedades; default 0 = sin backfill. Es CUMULATIVO y sobrevive a que `ayuda` se apague: es historial de gestion, no estado de la solicitud
+  // Feature 235 (T6.1, R40, 2026-08-19): aqui vivia la columna booleana de la SOLICITUD DE AYUDA.
+  // Se RETIRA y la sustituye un estatus propio (`ayuda_tienda`), porque una marca persistida tiene
+  // tantos sitios de limpieza como transiciones tenga el estado que acompana y ninguno rompe el
+  // build cuando se olvida: ya produjo la fuga permanente de /novedades y una segunda puerta en la
+  // ventana de escritura del hilo. La guardia `ayuda-columna-retirada` impide que vuelva.
+  intentosContacto       Int       @default(0) @map("intentos_contacto") // conteo de intentos de contacto que la TIENDA registra sobre la orden desde /novedades; default 0 = sin backfill. Es CUMULATIVO y sobrevive a que la solicitud de ayuda se retire: es historial de gestion de la tienda, no estado de la solicitud
   liberadaReprogramadaAt DateTime? @map("liberada_reprogramada_at") // feature 46/R13/R18: instante de liberacion programada (NULL = nunca liberada por reprogramacion); auditoria + fuente del aviso derivado
   // Feature 91 (design §1.1, R1): resultado de la geocodificacion de `direccion`. TODAS
   // nullable: una orden sin geocodificar las tiene vacias. `geocode_precision` y
@@ -573,7 +587,21 @@ model Orden {
   @@index([estatusId])
   @@index([createdAt])
   @@index([mensajeroAsignadoId]) // feature 17/R7
-  @@index([mensajeroAsignadoId, asignadoAt]) // feature 76/R1: denominador del ranking diario (asignadas HOY por mensajero)
+  // Feature 76/R1 + FEATURE 246 (D7) — EL INDICE DEL DENOMINADOR DEL RANKING, AMPLIADO A TRES.
+  //
+  // Era `(mensajeroAsignadoId, asignadoAt)`. El `EXPLAIN` de produccion (M8) mostro que la consulta
+  // de HOY se sirve con un `Index Only Scan` sobre el —el mejor plan posible, sin tocar el heap— y
+  // que el `OR` del denominador nuevo lo ROMPIA, porque `fechaReparto` no estaba dentro. Un indice
+  // suelto por `fechaReparto` NO lo arregla: lo empeora (hace atractivo un `BitmapOr` que degrada a
+  // `Bitmap Heap Scan`). Con la fecha como TERCERA COLUMNA CLAVE, el plan vuelve a ser `Index Only
+  // Scan` y el PREFIJO de dos columnas sigue sirviendo a quien lo usaba (`TableroDiaRepository`,
+  // la 76) — medido, no supuesto. El numero de indices de `orden` NO sube: se sustituye uno.
+  //
+  // Lo que ningun indice arregla y se declara como coste de D7: con el `OR`, el `Index Cond` se
+  // reduce a `mensajeroAsignadoId IS NOT NULL` y se pierde el acotado por rango de `asignadoAt`
+  // (un btree no expresa una disyuncion entre dos columnas como un rango). Sigue sin tocar el heap,
+  // pero recorre el indice entero. Ver `design.md` §2.1.
+  @@index([mensajeroAsignadoId, asignadoAt, fechaReparto], map: "orden_mensajero_asignado_at_fecha_reparto_idx")
   // Feature 144/B5: filtros de zona y geografia del listado (`IN (...)` en ruta caliente:
   // findMany + count por cada cambio de filtro). `createdAt` ya esta indexado arriba.
   @@index([zonaId])
@@ -827,6 +855,17 @@ model GestionOrden {
   // R6: las tres columnas admiten DOS formas validas, (lat,lng,NULL) o (NULL,NULL,motivo).
   // Media coordenada no es una ubicacion.
   ubicacionAusencia    GestionUbicacionAusencia? @map("ubicacion_ausencia")
+  // Feature 238 (R17/R20/R21): instante en que BODEGA confirmo tener el PAQUETE delante, escrito
+  // DENTRO de la transaccion de aprobacion del cierre y solo sobre las gestiones cuyo paquete
+  // vuelve (`devuelta`/`rechazada`/`reprogramada`). NULL = gestion que no vuelve a bodega, o
+  // gestion de un cierre aprobado ANTES de esta feature (el historico NO se backfillea, R20).
+  // Mismo patron snapshot-escrito-despues que `indemnizacion` (158), `pago_mensajero` (39) e
+  // `ingreso_bodega_rechazo` (56).
+  //
+  // NO ES UN RELOJ (R21): coincide con `cierre_dia.resuelto_at` de la misma transaccion y NADA
+  // deriva de aqui plazos, vencimientos ni importes. Nace SIN LECTORES a proposito y hay una
+  // guardia que lo mantiene asi (`confirmacion-sin-lectores.guardia.test.ts`).
+  confirmadaFisicaAt   DateTime?                 @map("confirmada_fisica_at")
   anuladaAt            DateTime?                 @map("anulada_at") // feature 67/R11: instante de la anulacion; NULL = gestion VIGENTE (patron cierre_id IS NULL de la 37)
   anuladaPor           String?                   @map("anulada_por") // feature 67/R11: FK -> usuario que la deshizo (espejo de cierre_dia.resuelto_por)
   // Pedido humano (2026-08-19): rastro de la CORRECCION del desglose de pago por un
@@ -1598,6 +1637,10 @@ enum OrdenHistorialOrigenTipo {
   deshacer_asignacion // feature 149: reversion de asignacion/ruteo antes de la recogida (por_recoger -> en_bodega_central/en_bodega_satelite; en_ruta_bodega_satelite -> en_bodega_central)
   asignacion_recoleccion // feature 157 (ampliacion): el maestro decide quien va a la tienda (por_recolectar_en_tienda -> recolectando)
   anclaje_devolucion // feature 239 (P8): ANCLAJE de la devolucion — al APROBAR el cierre, devolucion_por_confirmar -> devuelta (actor admin). Enlaza la gestion ancla. NO es visita real (no cuenta intentos)
+  solicitud_ayuda_tienda // feature 235 (P2): LA IDA de la ayuda — en_reparto -> ayuda_tienda (actor = el mensajero asignado). NO es visita real (no cuenta intentos). No enlaza gestion
+  rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
+  gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
+  rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
 
   @@map("orden_historial_origen_tipo")
 }
@@ -1956,6 +1999,7 @@ enum NotificacionEvento {
   carga_masiva_terminada
   postulacion_mensajero_pendiente
   cierre_dia_por_aprobar
+  postulacion_recurso_pendiente // feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica
 
   @@map("notificacion_evento")
 }
@@ -1967,6 +2011,7 @@ enum NotificacionEntidadTipo {
   usuario
   cierre_dia
   carga
+  postulacion_recurso // feature 253 (D6): la entidad es una fila de `postulacion_recurso`, que NO es un `usuario` (no crea cuenta)
 
   @@map("notificacion_entidad_tipo")
 }
@@ -2208,4 +2253,49 @@ model RankingSnapshotFila {
   @@unique([snapshotId, mensajeroId]) // R13: un mensajero no puede aparecer dos veces en el mismo dia
   @@unique([snapshotId, puesto]) // R13: dos filas no pueden ocupar el mismo puesto
   @@map("ranking_snapshot_fila")
+}
+
+// Feature 253 (design §2.3) — tipo del recurso ofrecido en una postulacion de la landing
+// publica. Enum Postgres nativo (patron RolValue / MetodoPagoValue): son DOS y cerrados, y la
+// tarjeta que abre el formulario ya los fija (`LandingPostular.tsx`).
+enum PostulacionRecursoTipo {
+  vehiculo
+  bodega
+
+  @@map("postulacion_recurso_tipo")
+}
+
+// Feature 253 (design §2.3, R21) — una persona del PUBLICO ofrece un vehiculo o una bodega desde
+// la landing. No es una cuenta: sin login, sin documentos, sin cedula y sin aprobacion que
+// conceda acceso (por eso NO vive en `usuario`, design §14-C).
+//
+// POR QUE `atendida_at` + `atendida_por_id` Y NO UN ENUM DE ESTADO (design §3/§14-F): hay
+// exactamente DOS situaciones —pendiente (`atendida_at IS NULL`, la escribe la Server Action
+// publica) y atendida (la escribe un administrador con nombre y hora)—, y un enum de dos valores
+// no guarda QUIEN ni CUANDO, que es justo el dato que se busca cuando alguien pregunta si a esa
+// persona la llamaron. Es el mismo patron de mutacion UNICA y en un solo sentido que
+// `orden_nota.deleted_at`. NO se declara ningun tercer estado: un valor sin productor es deuda.
+//
+// SIN `@@unique` sobre `correo` ni sobre `telefono` (R25): quien tiene un vehiculo Y una bodega
+// postula dos veces, y quien corrige su mensaje vuelve a enviar.
+//
+// EL CHECK `postulacion_recurso_atendida_completa` (las dos columnas de la atencion van juntas o
+// no van) VIVE SOLO EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que
+// `notificacion_destinatario_xor`). Su existencia la afirma el test estatico de la migracion.
+model PostulacionRecurso {
+  id            String                 @id @default(uuid())
+  tipo          PostulacionRecursoTipo
+  nombre        String
+  telefono      String
+  correo        String // normalizado en el borde: recortado y en minusculas (R12/R20)
+  mensaje       String // texto libre topado en el borde (R13); sin cota seria una puerta abierta
+  createdAt     DateTime               @default(now()) @map("created_at")
+  atendidaAt    DateTime?              @map("atendida_at") // NULL = pendiente
+  atendidaPorId String?                @map("atendida_por_id")
+
+  atendidaPor Usuario? @relation("PostulacionRecursoAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([atendidaAt, createdAt]) // R26: el listado del panel (`atendida_at IS NULL ORDER BY created_at DESC`) y el barrido del cron de purga
+  @@index([atendidaPorId]) // segunda FK indexada (patron `orden_nota`): sin el, el RESTRICT recorre la tabla al borrar un usuario
+  @@map("postulacion_recurso")
 }

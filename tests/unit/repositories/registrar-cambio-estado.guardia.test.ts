@@ -418,7 +418,8 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         fila.value !== "por_recolectar_en_tienda" &&
         fila.value !== "incidente" &&
         fila.value !== "recolectando" && // feature 157 (ampliacion): otro value posterior
-        fila.value !== "devolucion_por_confirmar", // feature 239 (2026-08-19): idem
+        fila.value !== "devolucion_por_confirmar" && // feature 239 (2026-08-19): idem
+        fila.value !== "ayuda_tienda", // feature 235 (2026-08-19): idem
     );
     // 17 y no 18: la foto de la DB pre-154 tenia 18 values, pero la feature 155 retiro uno de
     // ellos del catalogo TS (y de la DB, con su migracion), asi que este fixture ya no lo
@@ -441,7 +442,9 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
         a.origen !== "recolectando" && // feature 157 (ampliacion)
         a.destino !== "recolectando" &&
         a.origen !== "devolucion_por_confirmar" && // feature 239 (2026-08-19)
-        a.destino !== "devolucion_por_confirmar",
+        a.destino !== "devolucion_por_confirmar" &&
+        a.origen !== "ayuda_tienda" && // feature 235 (2026-08-19)
+        a.destino !== "ayuda_tienda",
     );
     // Feature 158: las aristas que TOCAN los values de la 154 pasan de 2 a 13. El PR 1 anadio
     // #53 (`incidente -> en_reparto`, el deshacer del mensajero) y el PR 2 las DIEZ del camino
@@ -452,7 +455,11 @@ describe("Q7 — fallo CERRADO: sin catalogo no hay escritura", () => {
     // Feature 239 (2026-08-19): el filtro excluye ademas las TRES que tocan
     // `devolucion_por_confirmar` (#59 la gestion, #60 el anclaje, #61 el deshacer), asi que el
     // descuento sube de 15 a 18.
-    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 18; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239)
+    // Feature 235 (2026-08-19): y las TRES que tocan `ayuda_tienda` (#62 la solicitud, #63 el
+    // rescate, #64 el corte de la noche), asi que sube de 18 a 21.
+    // Feature 237 (2026-08-20): y las DOS que SALEN de `ayuda_tienda` hacia los desenlaces de la
+    // tienda (#65 `-> reprogramada`, #66 `-> rechazada`), asi que sube de 21 a 23.
+    const ARISTAS_QUE_TOCAN_LOS_VALUES_154 = 23; // #43, #44 (154) + #53 + #48-#52/#54-#58 (158) + #45b/#46b (157) + #59/#60/#61 (239) + #62/#63/#64 (235) + #65/#66 (237)
     expect(previas).toHaveLength(
       RECUENTO_INVENTARIO.aristasFlujo - ARISTAS_QUE_TOCAN_LOS_VALUES_154,
     );

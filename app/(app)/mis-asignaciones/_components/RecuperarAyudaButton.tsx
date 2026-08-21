@@ -25,6 +25,15 @@ import { recuperarOrdenAyuda } from "@/lib/actions/orden-ayuda";
 // `Undo2` es el MISMO icono que el repo ya usa para «Devolver» en `/novedades` y en el panel de
 // gestión: no se eligió por parecerse a la palabra, sino porque en este repo ese dibujo ya
 // significa «devolver esto a donde estaba».
+//
+// ⚠️ FEATURE 235 (R25) — ESTE BOTÓN NO TIENE PROP `disabled`, Y ES A PROPÓSITO. La tuvo, con el
+// sentido «`true` con el mensajero bloqueado por cierre pendiente (feature 111/R14)», y eso
+// contradecía R25: el rescate DEBE seguir disponible con el mensajero bloqueado, porque es la
+// salida del deadlock que documenta `lib/services/rescate-ayuda.ts` (cierre `vencido` + orden en
+// ayuda = ni rescatar ni cerrar). El servicio nunca comprobó el bloqueo; solo la pantalla lo
+// negaba, y un permiso que existe en el servidor y no se puede ejercer en la UI es lo que R35
+// prohíbe. La prop se retiró en vez de corregir su doc para que no haya por dónde reponer la
+// conducta: lo único que apaga este botón es su propio envío en curso.
 
 export interface RecuperarAyudaButtonProps {
   ordenId: string;
@@ -32,15 +41,12 @@ export interface RecuperarAyudaButtonProps {
   numRemision: string;
   /** Se invoca tras un `ok` para que el módulo relea el listado (la orden cambia de sección). */
   onRecuperada: () => void;
-  /** `true` con el mensajero bloqueado por cierre pendiente (feature 111/R14). */
-  disabled?: boolean;
 }
 
 export function RecuperarAyudaButton({
   ordenId,
   numRemision,
   onRecuperada,
-  disabled,
 }: RecuperarAyudaButtonProps) {
   const toast = useToast();
   const [enviando, setEnviando] = useState(false);
@@ -73,7 +79,7 @@ export function RecuperarAyudaButton({
       variant="outline"
       size="sm"
       className="shrink-0"
-      disabled={disabled || enviando}
+      disabled={enviando}
       onClick={handleClick}
       aria-label={`Retirar la solicitud de ayuda de la orden ${numRemision}`}
     >

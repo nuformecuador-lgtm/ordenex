@@ -40,7 +40,6 @@ function buildGuiaService(): IGuiaAsignacionService {
 function buildOrdenRepo(): Pick<
   IOrdenRepository,
   | "findMensajerosByZona"
-  | "findMensajerosBloqueados"
   | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
 > {
   return new OrdenRepository(getPrismaClient());
@@ -59,7 +58,6 @@ export interface ListarMensajerosDeps {
   ordenRepo?: Pick<
     IOrdenRepository,
     | "findMensajerosByZona"
-    | "findMensajerosBloqueados"
     | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
@@ -181,21 +179,33 @@ export async function listarMensajerosParaAsignacion(
     }
     const repo = deps.ordenRepo ?? buildOrdenRepo();
     const mensajeros = await repo.findMensajerosByZona(centralZonaId);
-    // Ajuste maestro: marca los mensajeros GAM con un cierre abierto para que la UI los
-    // deshabilite en el selector (no se les asignan nuevas órdenes hasta resolverlo).
     const ids = mensajeros.map((m) => m.id);
-    const bloqueados = await repo.findMensajerosBloqueados(ids);
+    // FEATURE 241 (2026-08-20) — AQUI SE CONSULTABA QUIEN TENIA UN CIERRE ABIERTO, para marcarlo
+    // en el selector del maestro. Se va, y no es solo ahorro: era una consulta a `cierre_dia` en
+    // CADA carga del listado cuyo resultado la pantalla tiraba a propósito desde el 2026-08-18
+    // (`OrdenesListado.tsx`). Un dato que nadie usa y que nadie DEBE usar —asignar no se bloquea
+    // por cierres (regla 2)— es una trampa esperando a que alguien lo «aproveche» para
+    // deshabilitar un mensajero que el servidor acepta.
+    //
+    // `bloqueadosIds` deja de viajar en la respuesta. El campo sigue declarado como opcional en
+    // `ListarMensajerosParaAsignacionResult` para no romper a la pantalla, que ya lo lee con
+    // `?? []`; retirarlo del tipo es limpieza de la capa de UI, no de esta.
     // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
     // Se marcan las DOS caras para que cada modal deshabilite la suya y el maestro vea el
     // motivo en vez de toparse con un rechazo del servidor al confirmar.
+    //
+    // ⚠️ Feature 235: la primera lista es el GEMELO DE INTERFAZ de `ESTADOS_REPARTO_PENDIENTE`
+    // (`GuiaAsignacionService`). Las dos tienen que decir lo mismo o el selector deja elegir a un
+    // mensajero al que el servidor va a rechazar — que es el «rechazo al confirmar» que este
+    // marcador existe para evitar. `ayuda_tienda` entra en las dos: el paquete sigue con él (R1).
+    // La guardia `carga-del-mensajero.guardia.test.ts` cruza las dos y falla si divergen.
     const [conReparto, conRecoleccion] = await Promise.all([
-      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto"]),
+      repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto", "ayuda_tienda"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
     ]);
     return {
       status: "ok" as const,
       mensajeros,
-      bloqueadosIds: [...bloqueados],
       conRepartoIds: [...conReparto],
       conRecoleccionIds: [...conRecoleccion],
     };

@@ -181,7 +181,7 @@ function cierreService(repo: ReturnType<typeof cierreRepo>, notificar: CierreNot
       findUsuarioZonaId: vi.fn().mockResolvedValue("zona-1"),
       findUsuarioVehiculoId: vi.fn().mockResolvedValue("veh-1"),
       findEstatusIdByValue: vi.fn(),
-      findMensajerosBloqueados: vi.fn().mockResolvedValue([]),
+      findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue([]),
     } as never,
     { createSignedUrls: vi.fn().mockResolvedValue({}) } as never,
     { resolvePagoTarifa: vi.fn().mockResolvedValue(null) } as never,
@@ -378,18 +378,28 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
     expect(sql).not.toMatch(/job_tipo/);
   });
 
-  it("el enum de eventos es el inventario CERRADO de D1: exactamente cuatro", () => {
+  it("el enum de eventos sigue siendo un inventario CERRADO: exactamente cinco", () => {
+    // ⚠️ ERA CUATRO hasta el 2026-08-20. La feature 253 (D6, firmada por el humano EN CONTRA de la
+    // recomendacion de su propio spec) anadio `postulacion_recurso_pendiente` con su migracion de
+    // enum y su `down.sql` de recreacion — que es exactamente el precio que D1 puso a anadir un
+    // evento, y por eso este test se actualiza en vez de relajarse.
+    //
+    // La lista sigue siendo LITERAL a proposito: el contrato de D1 no es "hay N eventos", es "los
+    // eventos son ESTOS y cada uno tiene un productor identificado". Cambiarla por una derivacion
+    // del propio schema dejaria el test siempre verde y no diria nada.
     const schema = fs.readFileSync(path.join(ROOT, "db", "schema.prisma"), "utf8");
     const eventos = /enum NotificacionEvento \{([\s\S]*?)\n\}/.exec(schema)![1];
     const valores = eventos
       .split("\n")
-      .map((l) => l.trim())
+      // El valor de la 253 lleva comentario al final de linea; se corta antes de comparar.
+      .map((l) => l.trim().split(/\s+\/\//)[0].trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"));
     expect(valores).toEqual([
       "orden_rechazada",
       "carga_masiva_terminada",
       "postulacion_mensajero_pendiente",
       "cierre_dia_por_aprobar",
+      "postulacion_recurso_pendiente", // feature 253 / D6
     ]);
   });
 });

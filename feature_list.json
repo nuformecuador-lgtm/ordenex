@@ -811,13 +811,13 @@
       "id": 74,
       "name": "explotar la causa de devolucion (mostrarla y agruparla)",
       "description": "SALIDA de la decision (c) de la gate F1.4 de la feature 73 (humano, 2026-07-15: 'solo capturar por ahora'). Se registra como feature y no como comentario suelto por el precedente EXPLICITO de este repo: un pendiente fuera del backlog no lo prioriza nadie -- es exactamente lo que le paso a la 68 ('aun no llegamos a esa parte del flujo') y termino bloqueando el despliegue; la 70 nacio por la misma razon. QUE PASA: la 73 anade `gestion_orden.causa_devolucion` (enum `not_found`/`wrong_number`/`wrong_address`, nullable) y la CAPTURA con radios en el panel del mensajero, pero por decision consciente del humano NADIE LA LEE: la columna nace de SOLO ESCRITURA. La MOTIVACION DECLARADA del humano al elegir 'campo propio + enum' sobre 'concatenar en motivo' (decision (a) de la misma gate) fue justamente que la causa sea CONSULTABLE/AGRUPABLE -- metricas de 'cuantas devoluciones por direccion errada', deteccion de tiendas que cargan datos malos. Esta feature es la que entrega ESE valor; sin ella la 73 paga el coste de una migracion sin cobrar el beneficio que la justifico. ALCANCE SUGERIDO (lo formaliza el spec_author, NO esta aprobado): (1) exponer la causa en la linea de tiempo / `HistorialOrdenSheet` de la feature 49 -- `design.md §8.6` de la 73 dejo el camino documentado: el DTO del historial YA resuelve `motivo` desde la gestion, asi que es cambio minimo y SIN migracion; (2) reporte agregado 'devoluciones por causa' y/o deteccion de tiendas con datos malos (celular/direccion errados son un problema de la TIENDA, no del mensajero: ahi esta el valor de negocio). OJO AL PRIVILEGIO DE VISIBILIDAD: reusar las MISMAS reglas ya existentes (49/R27, ratificadas por 47/R17) -- maestro/admin todas; adminTienda solo su tienda; mensajero solo las asignadas/actuadas; adminSatelite solo su zona. NO inventar permiso nuevo. NOTA SOBRE EL DATO: la columna es NULLABLE por decision (a) de la 73 -- las gestiones `devuelta` ANTERIORES a la 73 NO tienen causa y no se puede derivar del texto libre. Cualquier agregado DEBE tratar el NULL como 'sin causa registrada' y NO como una cuarta causa ni repartirlo entre las 3; un grafico que ignore ese hueco mentira sobre el periodo previo a la 73. LA 73 NO SE TOCA al cerrar esta: su alcance (captura) esta cerrado y su spec deja anotado en 3 sitios que el 'solo escritura' es deliberado. ESTADO VERIFICADO CONTRA dev (2026-07-28): la parte (1) 'mostrarla' YA ESTA ENTREGADA por el modulo de novedades -- app/(app)/novedades/_components/NovedadesModule.tsx pinta la causa de la ultima gestion devuelta vigente con CAUSA_DEVOLUCION_LABEL y trata el NULL como 'Sin causa registrada'. LO QUE QUEDA: la causa en la linea de tiempo de HistorialOrdenSheet.tsx (hoy no la menciona en ninguna linea) y el agregado 'devoluciones por causa' / deteccion de tiendas con datos malos.",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "low",
       "zone": "fullstack",
       "branch": null,
       "depends_on": 73,
-      "status_note": "AUDITORIA 2026-07-26: la CAPTURA de la causa ya existe (app/(app)/mis-asignaciones/_components/causa-devolucion-options.ts + GestionarOrdenPanel.tsx, con migracion gestion_orden_causa_devolucion y lib/types/causa-devolucion.ts). LO QUE FALTA ES EXPLOTARLA: la causa NO se muestra ni se agrupa en los listados (cero referencias a causaDevolucion en app/(app)/ordenes ni app/(app)/cierre-dia). Alcance real = mostrar la causa en el listado y agrupar/contar por causa."
+      "status_note": "DONE por AUDITORIA el 2026-08-20, no por una tanda propia: se implemento de refilon y la ficha se quedo abierta. || VERIFICADO EN EL CODIGO, no deducido: la causa de devolucion se MUESTRA y se AGRUPA en el anillo de analitica DevolucionesPorCausaAnillo.tsx, servido por ConteoDevolucionesService.porCausa, sobre el mismo enum de la 73 (not_found / wrong_number / wrong_address). Eso es exactamente lo que pedia la decision (c) de la gate F1.4 de la 73: salir de «solo capturar por ahora». || OJO al leer sus cifras: el anillo cuenta GESTIONES, no ordenes, y esta declarado asi en su cabecera. Una orden devuelta dos veces aporta dos."
     },
     {
       "id": 75,
@@ -2650,7 +2650,7 @@
       "zone": "frontend",
       "branch": null,
       "depends_on": null,
-      "status_note": "RENUMERADA DE 218 A 220 el 2026-08-13 al remergear dev para el PR #368: otra sesion tomo 218 y 219 mientras este PR estaba abierto, y manda quien ya esta en dev. Conserva contenido y motivo intactos. Es la CUARTA colision de ids de esta familia; la leccion ya esta escrita en la 212 y se confirma otra vez: el id se comprueba contra dev justo antes de publicar, y OTRA VEZ al remergear. || DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos."
+      "status_note": "RENUMERADA DE 218 A 220 el 2026-08-13 al remergear dev para el PR #368: otra sesion tomo 218 y 219 mientras este PR estaba abierto, y manda quien ya esta en dev. Conserva contenido y motivo intactos. Es la CUARTA colision de ids de esta familia; la leccion ya esta escrita en la 212 y se confirma otra vez: el id se comprueba contra dev justo antes de publicar, y OTRA VEZ al remergear. || DADA DE ALTA el 2026-08-13 por el leader de la 213, al cerrar su [Q5]. La deuda la detecto el implementer y la CONFIRMO el reviewer de forma independiente, que ademas subrayo la consecuencia: el unico camino de prueba que une la captura del mensajero con el dinero del cierre no se ejecuta. || NO ES CULPA DE LA 213 NI SE ARREGLA AHI: por decision humana [Q5] del 2026-08-13, la 213 se limito a la parte del recaudo para no arrastrar trabajo ajeno a su PR. Esta ficha recoge el resto. || ARRANCA POR LA PREGUNTA DE FONDO, no por los helpers: si ningun gate corre los e2e, arreglarlos los deja igual de muertos dentro de un mes. Decidir primero donde corren -y con que base de datos- y despues arreglarlos. || AUDITADA el 2026-08-20: SIGUE ABIERTA, pero su premisa hay que revisarla antes de trabajarla. El archivo e2e/mis-asignaciones.spec.ts existe, y 13 de los 20 specs de e2e/ estan marcados NOT EXECUTED: este repo NO tiene arnes de Playwright vivo. Actualizar un spec que nadie corre no arregla nada. Antes de tomarla hay que decidir si se levanta el arnes o si la ficha se cierra como inaplicable; el sustituto que este repo si usa es «ver la app», que en la pila de ayuda encontro tres defectos que la suite no veia."
     },
     {
       "id": 221,
@@ -2756,13 +2756,13 @@
       "name": "transicion habilitar novedad (la tienda devuelve la orden a circulacion)",
       "spec_path": null,
       "description": "Fullstack. HOY NO EXISTE la arista 'la tienda habilita una orden devuelta y vuelve a circular'. Medido en lib/types/order-status-transiciones.ts:221-228: desde `devuelta` hay cinco aristas -en_bodega_central/en_bodega_satelite por SLA (#19/#20), rechazada por escalado (#21), reprogramada por reprogramacion_tienda (#22) y las recuperaciones manuales (#23/#24)- y NINGUNA es esa. Mientras tanto `app/(app)/novedades/_components/HabilitarNovedadModal.tsx` ya existe con su nota OBLIGATORIA y su firma DEFINITIVA `onConfirmar(nota: string)`, en MAQUETA declarada (su cabecera :37 lo dice) y con el consumidor lanzando un toast de 'no disponible' (NovedadesModule.tsx:155-163). Esta ficha construye la transicion real Y emite el UNICO aviso al mensajero, 'orden reactivada'.",
-      "status": "pending",
+      "status": "superseded",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": null,
       "depends_on": 227,
-      "status_note": "RENUMERADA DE 222 A 228 el 2026-08-15 junto con su hermana (221 -> 227): otras sesiones tomaron 221-226 en dev. Conserva slug y contenido. || DADA DE ALTA el 2026-08-14 al pasar la puerta humana de la 227, que la partio aqui. LA DEPENDENCIA VA AL REVES DE LO QUE PARECE y conviene no re-discutirlo: la 227 NO necesita esta ficha -entrega el hilo completo y util sin ella-; es ESTA la que necesita el hilo de la 227 donde sembrar su nota obligatoria. || ALCANCE: elegir el estatus destino, decidir si conserva el mensajero asignado, añadir la arista al grafo, muy probablemente un valor nuevo del enum orden_historial_origen_tipo (con migracion y down.sql que recrea el tipo), service + Server Action, cablear HabilitarNovedadModal, y los tests de la guardia de transiciones. Mas la notificacion. Tamaño comparable a la feature 100, no un añadido de una tanda. || LA NOTA DEL MODAL VA COMO PRIMERA NOTA DEL HILO, en la MISMA transaccion y ANTES del cambio de estatus: si se escribiera despues, la orden ya no estaria `devuelta` y el R14 de la 227 la rechazaria. El modal hoy no acota longitud ni revalida en el borde; al cablearlo debe aplicar el mismo esquema de 200 caracteres, porque una guarda de UI no protege un dato (lo advierte el propio archivo). || AVISO CRITICO HEREDADO (design §8.1 de la 227): si esta transicion aterriza en un estatus DISTINTO de `en_reparto`, el mensajero podra LEER el hilo pero NO RESPONDER -por la ventana asimetrica de la 227- y el aviso 'orden reactivada' lo llevaria a un hilo MUDO. Elegir el estatus destino con eso delante. || COSTE DE LA NOTIFICACION, YA MEDIDO POR EL SPEC DE LA 227 - no re-medir: solo hay que migrar el enum NotificacionEvento (inventario CERRADO de 4 valores, db/schema.prisma:1887-1894), NO NotificacionTipo, que ya tiene alert|box|warning reutilizables. El ALTER TYPE ADD VALUE va SOLO en su migracion porque Postgres no permite usar un valor recien añadido en la misma transaccion (55P04) y Prisma corre cada migration.sql en una; precedente literal en 20260721130000_orden_historial_origen_tipo_resolver_novedad/migration.sql:12-18. El down.sql debe RECREAR el tipo (no hay DROP VALUE) y hay que verificar si el recreate obliga a recrear el indice unico parcial notificacion_dedupe_key y los parciales del listado. Piezas: lib/types/notificacion.ts:14-18, lib/notificaciones/emitir.ts, notificadores.ts, wiring patron CierreDiaService, y CINCO suites que enumeran el inventario cerrado. || DECISION PROPIA DE ESTA FICHA, no heredada: el emisor central hace no-op si existe una notificacion NO LEIDA para el mismo (evento, entidad, destinatario) (emitir.ts:58-77). Con entidadId = ordenId eso significa que la segunda habilitacion de la misma orden no avisa hasta que el mensajero lea la primera. Probablemente sea lo deseado, pero hay que decidirlo."
+      "status_note": "SUPERADA por la 236, mergeada el 2026-08-19. La transicion de «Habilitar» ya existe como el punto unico de rescate de la 235 (rescatarOrdenAyuda) y la 236 le puso su pestana, su card y la lectura del hilo. No queda nada propio que hacer aqui; lo que sigue abierto de esa pantalla es el punto 12 del pedido y «Rechazar», que son de la 240."
     },
     {
       "id": 229,
@@ -2784,7 +2784,7 @@
       "name": "el dinero se pinta sin centimos",
       "spec_path": "specs/230-dinero-sin-centimos/",
       "description": "Fullstack. Los importes se pintan SIN centimos en toda la app: 1.234,56 pasa a 1.235, REDONDEANDO (half away from zero), no truncando. El formato tiene un unico punto de paso -`formatMontoString` en lib/config/moneda.ts, que consolido la 201- y por ahi entran los 128 archivos que muestran dinero. Es cambio de PRESENTACION y solo de presentacion: la base sigue en DECIMAL(12,2), el dinero sigue cruzando la frontera como string de escala 2, y las descargas XLSX/CSV -que no pasan por el formateador- conservan los centimos para contabilidad.",
-      "status": "in_progress",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
@@ -2792,7 +2792,7 @@
       "depends_on": null,
       "spec_ready_at": "2026-08-18",
       "spec_approved_at": "2026-08-18",
-      "status_note": "REGISTRADA el 2026-08-18 a peticion del humano: los dos decimales despues de la coma hacen ruido. DECISIONES FIRMADAS: redondear y no truncar; y SOLO dinero -los porcentajes (84,2 %) y las duraciones (1,5 h) de analitica son decimas, no centesimas-. || EL REDONDEO VA SOBRE EL STRING, con acarreo manual: Number(, parseFloat( y parseInt( estan prohibidos en el camino del dinero por tres guardias vivas, y el repo ya perdio un centimo asi. Bordes: acarreo (999,50 -> 1.000), cero sin signo (-0,49 -> 0) e importes que no caben exactos en un number. || EL COSTE NO ESTA EN EL FORMATEADOR sino en lo que lo afirma: 276 apariciones en 265 lineas de 39 archivos de test; se releen UNA A UNA, no se barren con sed. || UNA FUGA MEDIDA: OrdenesCargaResumen.tsx:97 pinta montoCobrar.toFixed(2) crudo. || GUARDIA NUEVA, o la proxima feature reintroduce los centimos. || CONSECUENCIA ACEPTADA: una columna de filas redondeadas puede no cuadrar a ojo con su total por +-1 o +-2. || PUERTA HUMANA PASADA el 2026-08-18. Spec: 20 requisitos EARS, 34 tasks en 7 bloques, trazabilidad 20/20 comprobada POR EL LEADER de forma independiente (cero huerfanos, cero fantasmas). Q1 RESUELTA: separadorDecimal se CONSERVA con oficio nuevo -pasa de ser el separador que se pinta a ser el caracter que la guardia vigila-; retirarlo obligaba a la guardia a escribir la coma a mano, el hardcode de contexto que docs/architecture.md prohibe. Q2 RESUELTA Y AMPLIADA: el humano NO acepta que se sigan escribiendo centimos, pero eso toca el DATO y sale en la ficha 232. Q3: las cuatro contradicciones C1-C4 se aceptan resueltas como propone el design. || CHOQUE CONOCIDO CON LA 231 (otra sesion): esta feature reescribe aserciones en 5 archivos de test de wallet -wallet-tiendas-desglose (22), wallet-tiendas-pago (13), mi-wallet-page (13), wallet-mensajeros-page (8) y wallet-desglose-egresos-card (8)-, que son la superficie que la 231 va a tocar. No deben correr a la vez."
+      "status_note": "REGISTRADA el 2026-08-18 a peticion del humano: los dos decimales despues de la coma hacen ruido. DECISIONES FIRMADAS: redondear y no truncar; y SOLO dinero -los porcentajes (84,2 %) y las duraciones (1,5 h) de analitica son decimas, no centesimas-. || EL REDONDEO VA SOBRE EL STRING, con acarreo manual: Number(, parseFloat( y parseInt( estan prohibidos en el camino del dinero por tres guardias vivas, y el repo ya perdio un centimo asi. Bordes: acarreo (999,50 -> 1.000), cero sin signo (-0,49 -> 0) e importes que no caben exactos en un number. || EL COSTE NO ESTA EN EL FORMATEADOR sino en lo que lo afirma: 276 apariciones en 265 lineas de 39 archivos de test; se releen UNA A UNA, no se barren con sed. || UNA FUGA MEDIDA: OrdenesCargaResumen.tsx:97 pinta montoCobrar.toFixed(2) crudo. || GUARDIA NUEVA, o la proxima feature reintroduce los centimos. || CONSECUENCIA ACEPTADA: una columna de filas redondeadas puede no cuadrar a ojo con su total por +-1 o +-2. || PUERTA HUMANA PASADA el 2026-08-18. Spec: 20 requisitos EARS, 34 tasks en 7 bloques, trazabilidad 20/20 comprobada POR EL LEADER de forma independiente (cero huerfanos, cero fantasmas). Q1 RESUELTA: separadorDecimal se CONSERVA con oficio nuevo -pasa de ser el separador que se pinta a ser el caracter que la guardia vigila-; retirarlo obligaba a la guardia a escribir la coma a mano, el hardcode de contexto que docs/architecture.md prohibe. Q2 RESUELTA Y AMPLIADA: el humano NO acepta que se sigan escribiendo centimos, pero eso toca el DATO y sale en la ficha 232. Q3: las cuatro contradicciones C1-C4 se aceptan resueltas como propone el design. || CHOQUE CONOCIDO CON LA 231 (otra sesion): esta feature reescribe aserciones en 5 archivos de test de wallet -wallet-tiendas-desglose (22), wallet-tiendas-pago (13), mi-wallet-page (13), wallet-mensajeros-page (8) y wallet-desglose-egresos-card (8)-, que son la superficie que la 231 va a tocar. No deben correr a la vez. || CERRADA POR EL LEADER el 2026-08-19, como correccion de papeleo y no como trabajo propio. Su codigo se mergeo en el PR #392 y esta EN PRODUCCION desde la release del 2026-08-18 (prod 448d5169), pero la ficha seguia `in_progress` y ocupaba uno de los dos slots de la zona fullstack, bloqueando el arranque de la pila 235-241. Si su sesion tenia trabajo pendiente DENTRO de la ficha, que la reabra: no se reviso su contenido, solo se constato que el codigo esta mergeado y desplegado."
     },
     {
       "id": 231,
@@ -2855,60 +2855,60 @@
       "name": "ayuda a la tienda: estatus propio y el viaje completo de ida y vuelta",
       "spec_path": "specs/235-ayuda-tienda-estatus/",
       "description": "Fullstack. La solicitud de ayuda YA EXISTE en dev como un BOOLEANO `orden.ayuda` (merge #396, sin ficha ni spec). Esta ficha la migra a un ESTATUS propio y completa el viaje: hoy la orden nunca sale de `en_reparto`, asi que sigue siendo parada del optimizador y del mapa, sigue gestionable desde su card, y el corte nocturno la barre dejando el flag encendido. Auditoria: progress/auditoria_ayuda_tienda.md (§2, §4). Diseno aprobado: progress/design_pila_ayuda_tienda.md (F1).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/235-ayuda-tienda-estatus",
       "depends_on": null,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras auditar lo mergeado: lo que existe es un flag, y el humano firmo migrar al estatus. || POR QUE IMPORTA: con un booleano, cada superficie que deberia excluir la orden tiene que filtrarlo A MANO. Hoy no lo filtran el optimizador de ruta (findParadasEnReparto), el mapa, el chat, `TrayectoVivoButton` ni el listado del servidor: el corte a la seccion aparte es SOLO de cliente (RepartoModule). Con un estatus, la guardia de transiciones rompe el build si falta un caso. || El bloqueo del cierre hoy funciona POR ACCIDENTE (la orden sigue `en_reparto`) y tiene dos rutas exentas: `vencido -> solicitado` y `rechazado -> solicitado`. Debe pasar a ser explicito. || El corte nocturno tiene que barrer el estatus nuevo, que es el desenlace «no gestionada» que el humano pidio."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "DONE el 2026-08-19, PR #402 contra dev. Gate completo EXIT 0: 1192 archivos / 15453 tests / 347 s. || La revision RECHAZO la primera pasada; los dos bloqueantes de codigo eran REGRESION de esta misma ficha y del mismo patron: al pasar de bandera a estatus, las listas de «que ocupa a un mensajero» no se ampliaron (el corte de la noche y la regla de dedicacion de la 157). Se censo la familia entera -siete listas, con una cuarta rota que nadie pidio buscar- y hay guardia que las lee del fuente. OJO: vigila, pero NO descubre una octava (censo cerrado a mano); si la 237 abre una lista nueva, hay que declararla. || R35 se ENMENDO: el spec se contradecia consigo mismo. La tienda ve la solicitud y NO puede leer el motivo, y su card cae bajo la pestana «En devolucion». Dueno: la 236. || DESPLIEGUE: la 235 y la 236 salen JUNTAS O SEGUIDAS. Orden acordado 235 -> 236 -> 237 -> 240. || Trae 3 migraciones (order_status gana ayuda_tienda, el enum de origen dos values, y se RETIRA la columna orden.ayuda), las tres con down.sql y rollback probado contra el motor. || Ver la app (T8.1) saco dos defectos que la suite daba por buenos; detalle en progress/recorrido_235.md y progress/review_235_r2.md."
     },
     {
       "id": 236,
       "name": "ayuda a la tienda: la pestana propia en novedades y su card",
       "spec_path": "specs/236-ayuda-tienda-novedades/",
       "description": "Fullstack. Hoy las ordenes con ayuda entran MEZCLADAS en la pestana de siempre, distinguidas solo por un badge de texto. Esta ficha les da su pestana propia, con la card y las acciones que el pedido describe, y REPONE la lectura del hilo del lado de la tienda: la nota con la que el mensajero pide ayuda hoy se escribe y NADIE la lee. Auditoria: progress/auditoria_ayuda_tienda.md (§4). Diseno: progress/design_pila_ayuda_tienda.md (F2).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/236-ayuda-tienda-novedades",
       "depends_on": 235,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || EL DEFECTO MAS VISIBLE QUE ARREGLA: la nota de la solicitud de ayuda es obligatoria, se publica en el hilo... y la tienda no puede leerla, porque el commit 55723c83 retiro el boton «Notas» y el montaje del modal. El propio codigo lo dice en NovedadAcciones. La nota sin lector es la mitad del pedido tirada. || Hoy la card OCULTA «Reprogramar» y «Devolver» en las ordenes con ayuda, que es lo contrario de «aparece con la card que tiene todas las acciones». || Absorbe la ficha 228, que queda superada."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "DONE el 2026-08-19. Revision OK tras un rechazo POR TRAZABILIDAD (ningun .ts que tocar): una fila del mapa citaba un test que NUNCA existio y una bitacora publicaba una salida que no se reproducia. Acta con las dos partes en progress/review_236.md. || La tienda por fin LEE el motivo de la solicitud de ayuda, y responde sin rescatar la orden. La nota llevaba dias con contenido y sin lector desde que 55723c83 retiro el boton y su montaje. || CIERRA la enmienda de R35 de la 235: los dos roles vuelven a tener superficie alcanzable. || EL CORTE VIVE EN EL SERVIDOR y sale de una sola declaracion; count y find comparten predicado por construccion. La guardia hilo-ventana-alcanzable se reparo SUBIENDO la propiedad (igualdad exacta con la ventana de escritura), no relajandola. || ABIERTO: T0.1, re-medir produccion ANTES DE DESPLEGAR (0 ordenes en ayuda_tienda y 0 en devuelta cuando se midio; esa foto caduca). Sin ver con los ojos: la descarga por pestana (el sandbox bloquea) y D8, que necesita ganar la carrera contra el mensajero. || CONFLICTO: la 237 y la 240 comparten ACCIONES_POR_GRUPO, NovedadesModule y HabilitarNovedadResult. No en paralelo."
     },
     {
       "id": 237,
       "name": "la gestion que hace la tienda cuenta como del mensajero",
       "spec_path": "specs/237-gestion-tienda-ayuda/",
       "description": "Fullstack. Desde la pestana de ayuda la tienda puede REPROGRAMAR o RECHAZAR, y esa gestion cuenta como si la hubiera hecho el mensajero: entra a su cierre, cuenta como intento y mueve el dinero igual. Exige los MISMOS requisitos que la del mensajero (evidencia en imagen y motivo en texto). Nada de esto existe hoy. Diseno: progress/design_pila_ayuda_tienda.md (F3).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/237-gestion-tienda-ayuda",
       "depends_on": 236,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 por la auditoria como NO implementada. Es la mas delicada en DINERO. || La fila de gestion_orden lleva mensajero_id = el mensajero (para caer en su cierre) y el historial actor_usuario_id = la tienda; su origen_tipo entra en ORIGEN_TIPOS_VISITA_REAL para que cuente como intento. || INVARIANTE QUE LA SOSTIENE: una orden en ayuda BLOQUEA la solicitud de cierre, asi que la gestion cae antes del snapshot de totales y `deshacerGestion` sigue funcionando. Hay que probarla: si deja de bloquear, el dinero se rompe en silencio. Ojo que hoy ese bloqueo es accidental (ver la 235). || Reutiliza la subida compensada de evidencias de MisAsignacionesService.gestionar; no se escribe una segunda."
+      "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "DONE el 2026-08-20. Revision OK tras un rechazo: el recorrido con la app estaba marcado hecho y se habia parado en el paso 6 de 9 -- justo antes de los tres pasos de DINERO. Hechos y anotados en progress/recorrido_237.md. || LA PROPIEDAD CENTRAL, MEDIDA CONTRA POSTGRES: la gestion que registra la tienda lleva mensajero_id = EL MENSAJERO y actor del historial = LA TIENDA, asi que el dinero cae en el cierre de el. Verificado con importe real: 1.000 de ingreso de bodega sobre una fila registrada por la tienda, dentro del cierre del mensajero. || Y LAS DOS FEATURES COMPONEN: la ventana de confirmacion fisica de la 238 pide el paquete que gestiono la tienda. Era el riesgo n1 3 del design. || FIRMADO POR EL HUMANO: el mensajero NO puede deshacerla (deshacer se usa 7 de 57 veces y un rechazo mueve hasta 1.000); evidencia en imagen en los DOS desenlaces; y la fila del cierre lleva el badge «La tienda» con el motivo y la evidencia. || DEFECTO QUE SOLO SE VIO MIRANDO: el boton «Devolver a gestion» estaba habilitado y su modal prometia algo que el servidor iba a rechazar siempre. Ahora esta apagado con el motivo en el aria-label, porque un boton disabled sale del orden de tabulacion y el title no lo alcanza un teclado. || ABIERTO: T0.1, re-medir la poblacion en ayuda ANTES DE DESPLEGAR (hoy 0 sobre 141 porque la 235 no esta en produccion). Deudas heredadas con dueno: D5-a (IncidenteAdminService sigue con su copia de la subida compensada) y D8 (motivoSchema sin tope). || OJO: el design decia que el cobro por rechazo se debitaba a la tienda y ERA FALSO -- es ingreso de bodega. Pero un rechazo SI le debita el flete de devolucion + IVA, por otra via y desde otra tarifa. Corregido en el spec."
     },
     {
       "id": 238,
       "name": "confirmacion fisica de los paquetes al aprobar el cierre",
       "spec_path": "specs/238-confirmacion-fisica-cierre/",
       "description": "Fullstack. Aprobar un cierre deja de ser un click: pide escanear o teclear las guias de lo que vuelve fisicamente a bodega (devoluciones, rechazos y reprogramadas) y BLOQUEA hasta completarlas. Los INCIDENTES no cuentan para ese bloqueo. Reusa el escaner de guias que ya existe. Diseno: progress/design_pila_ayuda_tienda.md (F4).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/238-confirmacion-fisica-cierre",
       "depends_on": null,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-18; confirmada el 2026-08-19 como NO implementada (`aprobarCierreSchema` sigue siendo {cierreId, indemnizaciones} y no se monta ningun escaner). INDEPENDIENTE de las de ayuda: puede ir en paralelo. || Engancha en la tercera rama de `pedirAprobacion()`, junto a la de indemnizaciones, y el parametro sigue el patron de `indemnizaciones` en el contrato de `aprobarCierre`. || La confirmacion se persiste DENTRO de la transaccion de `resolverCierre`. || Reusa QrScanner, EscanerGuiaCard, EscanerModal y extractNumGuiaFromScan: seis pantallas ya lo hacen."
+      "spec_ready_at": "2026-08-19",
+      "spec_approved_at": "2026-08-19",
+      "status_note": "DONE el 2026-08-19. Gate completo verde; revision OK con 0 bloqueantes (progress/review_238.md). || D2 SIN ESCAPATORIA por firma humana: un solo paquete perdido devuelve el cierre entero, y la salida es rechazar con motivo. Los incidentes NO se confirman. || DESPLIEGUE (T0.3, lo unico abierto): avisar a bodega de que aprobar exige tener los paquetes delante. Medido 0 cierres en cola, asi que no bloquea, PERO esa foto CADUCA -- re-medir justo antes de desplegar. || Trae 1 migracion aditiva (gestion_orden.confirmada_fisica_at) con down.sql y round-trip probado. La marca se escribe dentro de la transaccion de aprobacion, ANTES del anclaje de la 239, con test que fija el orden. || OJO para quien vuelva a esta pantalla: una orden puede tener DOS gestiones vivas en el mismo cierre (1 par de 48 en produccion). Una lectura confirma TODAS las filas de esa guia; resolverlo con un find deja la segunda inalcanzable y el cierre no se puede aprobar nunca. La correccion depende de que orden.numGuia sea @unique, y hay un test que lo fija."
     },
     {
       "id": 239,
@@ -2930,30 +2930,30 @@
       "name": "rechazo manual de la tienda y limpieza de la card de novedades",
       "spec_path": "specs/240-rechazo-manual-tienda/",
       "description": "Fullstack. `devuelta -> rechazada` hoy solo la dispara el cron: se abre la arista para adminTienda y el boton que dice «Devolver» pasa a llamarse «Rechazar» y a hacer algo. Se retira «Habilitar» de las cards que vienen de un cierre, donde hoy SI aparece. Y se pone la guardia que falta para que el boton «Notas» no vuelva. Auditoria: progress/auditoria_ayuda_tienda.md (§3, §4). Diseno: progress/design_pila_ayuda_tienda.md (F6).",
-      "status": "pending",
+      "status": "done",
       "sdd": true,
       "complexity": "medium",
       "zone": "fullstack",
       "branch": "feature/240-rechazo-manual-tienda",
       "depends_on": 239,
-      "spec_ready_at": null,
-      "spec_approved_at": null,
-      "status_note": "REESCRITA el 2026-08-19 tras la auditoria. || El punto 12 del pedido esta hoy AL REVES: `puedeHabilitar = esDevuelta || novedad.ayuda === true`, asi que «Habilitar» aparece justo en las cards que vienen de un cierre, que es donde no debia estar. || «Devolver» sigue siendo MAQUETA desde el 2026-08-12 y ademas su nombre era equivocado: lo pedido es RECHAZAR. || La retirada del boton «Notas» se hizo SIN GUARDIA: se borraron dos tests y el mensaje de commit afirma que la cobertura se conservo. No se conservo. Nada falla si alguien lo repone."
+      "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "DONE el 2026-08-20. Revision OK tras un rechazo por dos bloqueantes acotados, los dos cerrados. || TRES DEFECTOS QUE LLEVABAN SEMANAS: «Devolver» era MAQUETA desde el 2026-08-12 y su nombre era el equivocado; «Habilitar» aparecia justo en las cards que vienen de un cierre, que es donde NO debia estar; y faltaba la guardia. Esta medido que superficie-de-uso NO ve una maqueta: sus tres capas estuvieron verdes esas dos semanas. || PARIDAD CON EL CRON firmada y VERIFICADA CONTRA POSTGRES: el rechazo escribe la gestion sintetica con mensajero_id puesto y cierre_id NULL. Sin ella, rechazar a mano saldria gratis y esperar al plazo costaria. || LA GUARDIA ANTI-MAQUETA tiene CUATRO frentes y mata las CINCO formas de replantarla, incluida la que sobrevivio en la revision (dejar el import y quitar la invocacion). Su frente 2 medIa el import aunque su mensaje dijera «llama»; ahora comprueba la invocacion. || ABIERTO A PROPOSITO: T4.3 -el spec cita un archivo del portal del mensajero, comprobado dos veces- y T8.2, la mitad del recorrido que NO se hizo (ver la orden rechazada desde el mensajero y desde bodega). || HALLAZGOS QUE SALEN A FICHA APARTE: el doble cobro del flete (247) y los errores mudos de /novedades (248), que la feature 100 comparte identico."
     },
     {
       "id": 241,
       "name": "investigar las guardas de bloqueo que se retiraron sin pedirlo",
       "spec_path": null,
       "description": "Backend. El commit 6a0e6d36 («el bloqueo por cierres pasa de alguno a mas de los tolerados») ademas RETIRO la guarda de mensajero bloqueado en la asignacion de guias (GuiaAsignacionService, antes un conflict) y una causa del bloqueo de bodega satelite (OrdenRepository). El umbral viejo sigue aplicandose en otras superficies, asi que la lectura y la escritura ya no coinciden. Nadie lo pidio. Investigar si fue deliberado antes de tocarlo. Auditoria: progress/auditoria_ayuda_tienda.md (§5).",
-      "status": "pending",
+      "status": "done",
       "sdd": false,
       "complexity": "low",
       "zone": "backend",
-      "branch": null,
+      "branch": "feature/241-guardas-bloqueo",
       "depends_on": null,
       "spec_ready_at": null,
       "spec_approved_at": null,
-      "status_note": "DADA DE ALTA el 2026-08-19 por decision del humano: se saca de la pila de ayuda y se mira aparte. || Cambia QUIEN PUEDE RECIBIR ASIGNACIONES, que no estaba en ningun pedido. || Primero averiguar si hubo motivo (puede haber un deadlock real detras); solo despues decidir si se repone."
+      "status_note": "DONE el 2026-08-20, PR #408. Gate completo EXIT 0: 1219 archivos / 15822 tests / 345 s. || LA REGLA, firmada por el humano: solicitar cierre nunca dos pendientes (ya funcionaba); recibir asignaciones SIEMPRE se puede; gestionar y cobrar se bloquea SOLO con vencido o rechazado, NUNCA con solicitado, que es espera del admin (mediana 8,2 h, p90 22,1 h). || EL PUNTO UNICO SIGUE SIENDO UNO: «recibir» no es un predicado que devuelva vacio, es un sitio donde NO HAY predicado. El predicado se renombra a findMensajerosBloqueadosParaGestion y se SACA de las interfaces de asignacion: alli no se puede llamar. || Se borro la guarda POR ZONA de rutearABodegaSatelite (firmado): habria resucitado sola al reparar el predicado, y es la que congela una bodega entera por una persona. || Se quito el NOT EXISTS del satelite, que fallaba con un conflict vacio y un mensaje falso. Y la frase que mentia vivia en CINCO sitios de lib/, DOS en lib/interfaces/ que es el contrato. || ABIERTO: re-medir produccion antes de desplegar. Cuando se midio habia 0 mensajeros con cierre abierto sobre 4 y 0 asignaciones historicas a mensajero bloqueado sobre 26; ese cero es suerte de calendario."
     },
     {
       "id": 242,
@@ -3014,6 +3014,113 @@
       "spec_ready_at": null,
       "spec_approved_at": null,
       "status_note": "DADA DE ALTA el 2026-08-19 al poner dev en verde (243). || CONTRASTE UTIL: la seccion de finanzas comentada en la propia `page.tsx` SI evito su lectura (`cargarKpisFinancieros()` ya no se llama, y su comentario lo dice). La del shell no: sigue pidiendo sus paneles con la <section> comentada. || Cuidado al limpiarlo: si las secciones vuelven, la lectura hace falta. El tripwire «Contrato del shell reducido» de AnaliticaShell.test.tsx avisa cuando alguien descomente."
+    },
+    {
+      "id": 246,
+      "name": "elegir para que dia es la asignacion, y que el corte lo respete",
+      "spec_path": "specs/246-asignacion-por-dia/",
+      "description": "Fullstack. Al asignar ordenes a un mensajero, elegir si son para el reparto de hoy o el del dia siguiente, y que el corte nocturno no barra ni genere cierre vencido por las de manana. Hoy no existe el concepto de fecha de reparto: asignar de noche hace que el cron deshaga la asignacion y cree un vencido injusto.",
+      "status": "done",
+      "sdd": true,
+      "complexity": "high",
+      "zone": "fullstack",
+      "branch": "feature/246-asignacion-por-dia",
+      "depends_on": null,
+      "spec_ready_at": "2026-08-20",
+      "spec_approved_at": "2026-08-20",
+      "status_note": "DONE el 2026-08-20. Revision OK sin bloqueantes. || Al asignar se elige HOY o MANANA con FECHA ABSOLUTA -no una marca: una fecha vence sola, una marca necesita quien la apague, y ese es el defecto que pago la 235-. El selector muestra las dos fechas concretas y las resuelve el SERVIDOR, no el navegador. || EL ANCLA DEL CORTE NO ES «HOY» sino el dia que la corrida cierra: era el punto donde la ficha se rompia sola. Mutado: 9 rojos. || EL INDICE: el EXPLAIN contra produccion mostro que la consulta se servia con un INDEX ONLY SCAN sobre un compuesto que YA EXISTIA, asi que la pregunta no era «¿falta un indice?» sino «¿el OR rompe el que ya cubria?». Medidos cuatro escenarios por FORMA del plan: el indice nuevo era EL PEOR DE LOS TRES. Se retiro y se AMPLIO el compuesto a tres columnas; el numero de indices no sube. || D7 se firmo EN CONTRA de la recomendacion (el ranking entra aqui) y por eso la ficha subio a complejidad alta. D11: solo hacia adelante, y es lo que el codigo impone -los snapshots son inmutables por diseno-. || ABIERTO: T0.1, re-medir antes de desplegar. Y R44 esta medido POR FORMA con enable_seqscan=off, sobre 141/67 filas: ninguna base tiene volumen para que el plan de hoy prediga el de manana."
+    },
+    {
+      "id": 247,
+      "name": "el flete de devolucion se cobra dos veces cuando una devuelta acaba rechazada",
+      "spec_path": "specs/247-doble-flete-devolucion/",
+      "description": "Backend. `derivarIngresoOrden` factura `ingreso_flete_devolucion` para `devuelta` Y para `rechazada`, asi que una orden que pasa por los dos estados se lo cobra dos veces a la tienda. Existe desde la feature 99 y lo dispara el cron; la 240 le abre una segunda puerta manual.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "backend",
+      "branch": "feature/247-doble-flete-devolucion",
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-20 durante el spec de la 240, que se comprometio a abrirla si la medicion no era cero. NO ES CERO. || MEDIDO EN PRODUCCION, con nombre: la orden 63050 de la tienda NUFORM pago el flete de devolucion DOS VECES -- 2.200 + 13 % el 2026-07-22 como `devuelta`, y otra vez el 2026-07-28 como `rechazada`, los dos cierres APROBADOS. Sobrecoste 2.486. Denominador: 1 de 16 ordenes con gestion devuelta/rechazada en cierre aprobado. || NO LO INTRODUCE LA 240 ni la 239: viene de la 99 y lo dispara el cron. Lo que hace la 240 es abrirle una segunda puerta (el rechazo manual), asi que puede volverlo frecuente. || SIN DEVOLUCION DE DINERO: el humano confirmo el 2026-08-20 que produccion se usa hoy como entorno de pruebas, asi que los importes cobrados no corresponden a operacion real. Si eso cambia, hay que re-medir ANTES de arreglar y decidir que se hace con lo ya cobrado. || Detalle y consultas en progress/medicion_240.md."
+    },
+    {
+      "id": 248,
+      "name": "los errores de /novedades salen mudos: el usuario pulsa y no pasa nada",
+      "spec_path": "specs/248-errores-mudos-novedades/",
+      "description": "Fullstack. `toResolverNovedadActionError` solo traduce dos codigos y cualquier otro cae en un `default: throw`; los modales de rechazar y reprogramar llaman a su accion SIN try/catch. Por ahi salen mudos los cuatro TransicionNoValidableError del choke point, TransicionIlegalError y cualquier error de Prisma: el usuario pulsa, y no pasa nada.",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "medium",
+      "zone": "fullstack",
+      "branch": "feature/248-errores-mudos-novedades",
+      "depends_on": null,
+      "spec_ready_at": null,
+      "spec_approved_at": null,
+      "status_note": "DADA DE ALTA el 2026-08-20, encontrada al recorrer la app durante la 240: la tienda pulso «Rechazar» con su motivo escrito y NO PASO NADA -- ni cambio ni aviso--. El servidor devolvia INTERNAL y la pantalla no sabe pintarlo. || EL CASO CONCRETO de la 240 ya esta cerrado con un estado propio, pero EL AGUJERO DE FONDO SIGUE ABIERTO y no es solo de esa ficha: la FEATURE 100 comparte el mismo hueco, identico, en `reprogramarNovedad` y `recuperarABodega`. || NO se arreglo dentro de la 240 a proposito: tocarlo cambia la conducta de la 100, que es dinero vivo y ficha ajena. || OJO al disenar: convertir todo en `conflict` NO sirve. La pantalla DESCARTA el motivo de un conflict y pinta un texto fijo -- «esta orden ya no estaba en devolucion»--, asi que un error distinto saldria con un mensaje FALSO. Cambiar un boton mudo por un mensaje que miente es peor. || El patron que si funciono en la 240: un estado propio en el resultado, que ROMPE EL TYPECHECK de la pantalla hasta que alguien le escriba su texto. || Tabla completa del censo en progress/impl_240.md 9.6."
+    },
+    {
+      "id": 249,
+      "title": "el chequeo del down.sql existe pero solo AVISA: no rompe el gate",
+      "description": "Guardia que censa db/migrations y exige down.sql en cada carpeta.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "status_note": "DADA DE ALTA el 2026-08-20 y CORREGIDA el mismo dia, al leer init.sh para otra cosa. || LO QUE ESCRIBI PRIMERO ERA IMPRECISO: dije que «no la vigila nadie». SI la vigila: init.sh seccion 6 recorre db/migrations/ y lista las que no tienen down.sql. Lo que pasa es que usa `warn`, no `fail`, ASI QUE NO ROMPE EL GATE. Por eso tres migraciones llevan desde el 2026-08-14 sin down.sql con el gate en VERDE todos los dias: el aviso estaba ahi y nadie lo leyo. || ESO HACE LA FICHA MUCHO MAS BARATA: no hay que escribir una guardia nueva que recorra el arbol -ya existe y ya recorre-. Es cambiar `warn` por `fail`. || PERO NO ES UN CAMBIO DE UNA LINEA, y ahi esta el trabajo real: hoy hay TRES migraciones sin down.sql (20260814120000_ruta_optimizada_trazado, 20260814140000_ruta_parada_tramo, 20260814160000_ruta_tramo_vivo_at). Cambiar a `fail` sin mas deja el gate ROJO para todo el mundo desde el primer minuto. || AL DISENAR, decidir primero cual de las dos: (a) escribir los tres down.sql que faltan y luego endurecer -lo limpio-, o (b) endurecer con una lista de excepciones heredadas CON FECHA Y MOTIVO al lado, que es honesto pero se pudre si nadie la vacia. Si se elige (b), que la lista sea CERRADA: una migracion nueva sin down.sql tiene que romper igual. || OJO: escribir un down.sql a posteriori no es rellenar un hueco. Los de esta pila se verificaron contra Postgres DENTRO de una transaccion que se revierte, y se corrieron DOS VECES para probar idempotencia. Un down.sql que nadie ejecuto es papel."
+    },
+    {
+      "id": 250,
+      "title": "el aviso al mensajero dice «Devuelta» cuando la orden esta en «Devolucion por confirmar»",
+      "description": "El retorno de gestionar pasa un resultado por el mapa de etiquetas de ESTADO.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "status_note": "DADA DE ALTA el 2026-08-20, encontrada al RECORRER LA APP para cerrar T5.6 de la 239 -tarea que llevaba sin hacer con la ficha ya mergeada-. || LO QUE SE VE: el mensajero guarda la gestion y le sale «Orden QA-R-0013: Devuelta.». La orden NO esta devuelta: esta en «Devolucion por confirmar», que es como la nombra la propia app en /ordenes del admin. El aviso contradice a la etiqueta que el mismo producto usa. || NO ES UN TEXTO MAL ESCRITO: es la coincidencia que la 239 vino a romper, viva en un sitio al que la ficha no llego. MisAsignacionesService.ts:566 devuelve { estado: input.resultado } -el campo se llama estado y lleva un resultado- y GestionarOrdenPanel.tsx:668 lo pinta con estatusLabel(), que es el mapa de ESTADOS DE ORDEN. || POR QUE NADIE LO VIO: para entregada, rechazada y reprogramada acierta DE CASUALIDAD, porque resultado y estado se llaman igual. Solo falla en devuelta, que es justo el unico que la 239 separo. Lo dice el comentario de la propia bisagra en lib/types/gestion-destino.ts: «nunca fue una regla, era una coincidencia sostenida a mano». || AL DISENAR: el arreglo obvio -devolver el estado real- puede no ser el correcto; conviene decidir si el aviso debe nombrar EL RESULTADO DE SU GESTION o EL ESTADO DE LA ORDEN, que ya no son lo mismo. Y renombrar el campo, porque `estado` mintiendo es lo que permitio el error. || SEVERIDAD BAJA -es un aviso, no mueve dinero- pero es LA UNICA SUPERFICIE que todavia equipara resultado con estado, y R26 de la 239 pide clasificacion explicita en TODAS las que nombran estados. Evidencia completa en progress/recorrido_239.md seccion 8."
+    },
+    {
+      "id": 251,
+      "title": "la optimizacion de ruta NO corre en produccion: falta GOOGLE_ROUTE_OPT_PROJECT_ID",
+      "description": "Decidir si la credencial debe configurarse o si el fallback local es lo querido.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "status_note": "DADA DE ALTA el 2026-08-20, vista en los logs de runtime de Vercel al verificar la release de esa noche. NO la introduce esa release: es PREEXISTENTE. || MEDIDO en las ultimas 24 h: 23 errores en 3 grupos, todos RutaNoConfiguradoError por «credencial incompleta (falta GOOGLE_ROUTE_OPT_PROJECT_ID)», en /api/cron/procesar-jobs y en /mis-asignaciones/reparto -o sea, LA PANTALLA DEL MENSAJERO-. || QUE PASA HOY: el codigo degrada solo y lo dice -«el trazado por calles lanzo; se usa el local»-, asi que nadie ve un fallo: el mensajero recibe un orden de reparto calculado por la heuristica local en vez de por Google. Las fichas 91 y 97 estan en done, asi que la feature se dio por entregada con la credencial sin poner. || LO QUE NO SE SABE, Y NO SE INVENTA: si esa variable DEBE estar configurada o si el fallback local es lo querido a proposito -por coste, por ejemplo-. No hay spec de la 97 en specs/ y el codigo solo dice que lanza un error tipado. ES UNA PREGUNTA PARA EL HUMANO, no un defecto confirmado. || SI LA RESPUESTA ES «debe estar»: son tres variables -PROJECT_ID, SA_EMAIL, SA_PRIVATE_KEY- y hay que ponerlas SOLO en Production, no en Production+Preview a la vez. || SI LA RESPUESTA ES «el local basta»: entonces esto no deberia salir como ERROR en los logs cada vez, porque enmascara los errores de verdad; bajarlo a aviso y decirlo una vez."
+    },
+    {
+      "id": 252,
+      "title": "la postulacion se pierde en silencio: 5 documentos contra un limite de cuerpo de 5 MB",
+      "description": "El formulario admite 25 MB y el transporte muere a los 5, sin decir nada.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "status_note": "DADA DE ALTA el 2026-08-20 tras un INCIDENTE REAL EN PRODUCCION reportado por el humano: envio una postulacion y la pantalla se cayo con «This page couldn't load». || MEDIDO: la postulacion NO SE GUARDO. 0 usuarios creados en 3 horas, y el cero discrimina -11 usuarios en total, 2 en la ultima semana, el ultimo hace 7 horas-. Se perdio. || NI UN ERROR EN LOS LOGS: 0 errores de runtime, 0 respuestas 4xx y 0 5xx en esa ventana. El fallo ocurre ANTES de que corra el codigo de la aplicacion, que es justo por que no deja rastro y por que el navegador muestra un fallo de carga en vez de un mensaje. || LA CONTRADICCION, verificable leyendo dos archivos: el formulario pide CINCO documentos, valida 5 MB POR DOCUMENTO (POSTULACION_MAX_FILE_BYTES en lib/config/postulacion.ts) y NO LOS COMPRIME; el limite de cuerpo de las Server Actions es 5 MB PARA TODA LA PETICION (serverActions.bodySizeLimit en next.config.ts). La pantalla admite hasta 25 MB y el transporte muere a los 5. Una foto de movil pesa 2-5 MB: CON DOS YA SE PASA. || DE DONDE VIENE: ese limite se subio de 1 MB a 5 MB para la EVIDENCIA DE GESTION, que es UNA foto y que ademas se comprime en el cliente (~400 KB). Nadie recalculo que pasaba con las cinco de la postulacion. El comentario de next.config.ts lo dice: esta razonado para un solo archivo. || SEGUNDO CANDIDATO, NO DESCARTADO: hubo un despliegue a produccion a las 02:12:29Z y la actividad del humano en /postulacion fue de 02:13 a 02:17. Un envio desde una pagina cargada ANTES del despliegue puede morir por desfase de version, y el proyecto NO tiene proteccion de desfase configurada. Los dos candidatos explican el sintoma; los distingue el TAMANO DE LAS FOTOS que subio, dato que falta. || AL DISENAR: comprimir en el cliente como ya hace GestionarOrdenPanel es lo que ataca la causa -no solo subir el limite, porque 5 fotos sin comprimir se comen cualquier tope razonable-. Y pase lo que pase, EL FALLO NO PUEDE SER MUDO: hoy el usuario pierde todo lo que escribio sin saber por que. Ojo con la 248, que es el mismo patron en /novedades."
+    },
+    {
+      "id": 253,
+      "title": "postular vehiculo o bodega es una MAQUETA que dice «enviada» y no envia nada",
+      "description": "Darles destino real: tabla propia y panel en el admin.",
+      "zone": "fullstack",
+      "status": "done",
+      "sdd": true,
+      "complexity": "media",
+      "status_note": "DONE el 2026-08-21. Revision OK tras un RECHAZO por tres bloqueantes, NINGUNO DE CODIGO -tareas sin marcar, T0 sin ejecutar y el mapa R->test cubriendo 25 de 44-; los tres cerrados. || MEDIDO Y RESPONDE A P4: la maqueta nacio el 2026-08-16 y `origin/prod` la contenia. CINCO DIAS EN PRODUCCION dando acuse de recibo de algo que no ocurria. Eso no es arqueologia: es la ventana en la que cualquiera pudo postular y quedarse esperando una llamada. || LA GUARDIA ES LO QUE EVITA LA RECAIDA, y esta DEMOSTRADA ROJA en sus dos formas: volviendo a la maqueta (3 failed) y dejando el import EN PIE sin la invocacion (2 failed). En ese segundo estado `eslint` da 0 errors y sale con codigo 0: EL LINTER NO LA CAZA, LA GUARDIA SI. || D7 QUEDA JUSTIFICADA POR MEDIDA: relajar el detector en el fixture compartido pone rojas LAS DOS guardias a la vez (4 failed | 38 passed). Duplicar habria dejado una ciega. || EL CRON DE PURGA es lo mas peligroso -borra, es irreversible y lo ejecuta un job desatendido-. Mutando el WHERE (`atendida_at` -> `created_at`) el test de INTEGRACION canta que se borran las TRES filas incluida la pendiente de dos anos, Y EL TEST DE SERVICIO CON DOBLES DA 11 PASSED EN VERDE. Un doble no ve el SQL. || D6 NECESITO DOS valores de enum, no uno: `notificacion.entidad_tipo` es NOT NULL y reusar `usuario` habria sido un dato falso -no crea cuenta- y habria roto la dedupe. || ABIERTO Y DICHO: T10.3 (los caminos feos y el limite de tasa no se ejercieron) y T10.4 (los textos no se leyeron uno a uno). Y deuda descubierta: `pnpm run db:rollback` no alcanza a la migracion de la tabla cuando van dos en la misma tanda -revierte por orden alfabetico-; ficha aparte.",
+      "spec_path": "specs/253-postulacion-recursos",
+      "branch": "feat/253-impl-backend"
+    },
+    {
+      "id": 254,
+      "title": "db:rollback revierte por orden alfabetico y no alcanza a la segunda migracion de una tanda",
+      "description": "Con dos migraciones nuevas, correrlo dos veces revierte dos veces la misma.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "status_note": "DADA DE ALTA el 2026-08-21, encontrada al implementar la 253, que trajo DOS migraciones en la misma tanda. || QUE PASA: `scripts/db-rollback.ts` revierte siempre la ULTIMA CARPETA POR ORDEN ALFABETICO. Con dos migraciones nuevas, correrlo dos veces revierte DOS VECES la misma -la de los enums- y deja la otra APLICADA. Hubo que ejecutar su `down.sql` a mano y borrar su fila de `_prisma_migrations`. || POR QUE IMPORTA MAS DE LO QUE PARECE: la herramienta no falla, dice que revirtio. Quien la use creyendo que dejo la base limpia se queda con media tanda aplicada y sin saberlo. Es un fallo SILENCIOSO, la misma familia que la 248 y la 252. || NO SE ARREGLO EN LA 253 a proposito -fuera de alcance-, pero la release del 2026-08-21 ya salio con esas dos migraciones: SI HAY QUE REVERTIRLA, el `down.sql` de 20260820200000_postulacion_recurso se ejecuta A MANO. || AL DISENAR: el orden correcto es el de APLICACION (`finished_at` en `_prisma_migrations`), no el alfabetico del sistema de archivos; suelen coincidir pero no tienen por que -y este repo ya vivio una migracion RENUMERADA que dejo una fila fantasma-. Y deberia revertir la tanda entera o negarse, no una a medias. || OJO AL PROBARLO: no basta con que el script diga que revirtio. Hay que comprobar CONTRA POSTGRES que las dos filas se fueron de `_prisma_migrations` y que el esquema volvio, que es como se descubrio esto."
     }
   ]
 }

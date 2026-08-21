@@ -38,6 +38,13 @@ export const TEXTO_ORDEN_RECHAZADA = "Una orden fue rechazada por el destinatari
 export const TEXTO_POSTULACION_PENDIENTE =
   "Una postulación de mensajero está pendiente de aprobación.";
 export const TEXTO_CIERRE_POR_APROBAR = "Un mensajero envió su cierre del día para aprobación.";
+/**
+ * Feature 253 (D6). El texto NO nombra a la persona, ni su teléfono, ni su correo, ni una palabra
+ * de su mensaje (R19): quién es y qué ofrece se lee en el panel, que es donde la autorización por
+ * rol vive. El aviso solo dice que hay algo que atender.
+ */
+export const TEXTO_POSTULACION_RECURSO_PENDIENTE =
+  "Alguien ofreció un vehículo o una bodega desde la web.";
 export function textoCargaMasivaTerminada(creadas: number): string {
   return `Carga masiva terminada: ${creadas} ${creadas === 1 ? "orden cargada" : "órdenes cargadas"}.`;
 }
@@ -130,6 +137,39 @@ export async function emitirOrdenRechazada(
 /** Estado destino y familia de origen que identifican el rechazo DEL DESTINATARIO (R18/R19). */
 const DESTINO_RECHAZO: OrderStatusValue = "rechazada";
 const ORIGEN_RECHAZO_DEL_DESTINATARIO = "gestion";
+
+// ⚠️ FEATURE 237 (D4, firmada el 2026-08-20) — `gestion_tienda_ayuda` QUEDA FUERA A PROPOSITO, y
+// esto se escribe aqui para que la AUSENCIA sea una DECISION y no un olvido.
+//
+// Desde la 237 la TIENDA puede rechazar una orden desde su pestaña de ayuda. Esa transicion
+// tambien aterriza en `rechazada`, pero con `origen_tipo = gestion_tienda_ayuda`, asi que la
+// igualdad de arriba NO la alcanza y el aviso NO se emite.
+//
+// POR QUE NO SE AMPLIA EL FILTRO: el texto del aviso es «Una orden fue rechazada POR EL
+// DESTINATARIO», y aqui eso seria FALSO — rechazo la tienda, sobre un paquete que el destinatario
+// no llego a ver. Este repo tiene escrito lo que cuesta un dato que miente con formato de dato
+// (236/D3, la columna «Sin causa registrada»). Y el aviso no es el mecanismo de nada: el paquete
+// llega igual a `por_devolver`/`por_devolver_a_tienda` al aprobar el cierre (139), que es donde
+// bodega lo ve.
+//
+// LO QUE SE PIERDE, DECLARADO: los admins no reciben el aviso anticipado de que viene un rechazo de
+// esta clase. Si el humano lo quiere, hace falta un TEXTO PROPIO y es otra decision — no ensanchar
+// esta igualdad. Afirmado en `tests/unit/services/gestion-desde-ayuda-cierre-aprobacion.test.ts`.
+//
+// ⚠️ FEATURE 240 (R45) — `rechazo_tienda` QUEDA FUERA POR LA MISMA RAZON, y se escribe aparte
+// porque es un caso distinto que llega al mismo sitio.
+//
+// Desde la 240 la tienda puede rechazar a mano una devolucion ya anclada (`devuelta -> rechazada`,
+// familia `rechazo_tienda`). Tambien aterriza en `rechazada` y tampoco la alcanza la igualdad de
+// arriba, asi que el aviso NO se emite. Y aqui el texto seria todavia mas falso que en el caso de
+// la 237: el paquete ni siquiera esta en la calle — volvio a la bodega, se escaneo al aprobar el
+// cierre (238) y lleva dias esperando. Decir «rechazada por el destinatario» sobre eso es contar un
+// hecho que no ocurrio.
+//
+// Y como en la 237, el aviso no es el mecanismo de nada: la orden llega igual a
+// `por_devolver`/`por_devolver_a_tienda` al aprobarse el cierre que recoja la gestion sintetica
+// (139). Afirmado con su CONTROL POSITIVO en
+// `tests/unit/repositories/notificacion-orden-rechazada.test.ts`.
 
 /**
  * Emisor REAL usado por defecto en `appendCambioEstado` (design §4.1). Filtra el lote por
@@ -238,6 +278,53 @@ export async function emitirPostulacionPendiente(
       anexo: ctx.nombre,
       entidadTipo: "usuario" as const,
       entidadId: ctx.postulanteId,
+      destinatario,
+    })),
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature 253 (D6) — Postulacion de vehiculo o bodega pendiente. BEST-EFFORT.
+// ---------------------------------------------------------------------------
+
+/** Lo MINIMO que el aviso necesita. Ni `nombre`, ni `correo`, ni `telefono`, ni `mensaje`: R19
+ *  prohibe que esos tres ultimos salgan de la fila, y el nombre no aporta nada aqui. */
+export interface PostulacionRecursoContexto {
+  postulacionId: string;
+  /** `vehiculo` | `bodega`. Solo alimenta el anexo, que es la unica pista del aviso. */
+  tipo: "vehiculo" | "bodega";
+}
+
+/** Etiqueta legible del tipo para el anexo. No es PII y ahorra abrir el panel para saber que es. */
+const ANEXO_POR_TIPO: Record<PostulacionRecursoContexto["tipo"], string> = {
+  vehiculo: "Vehiculo",
+  bodega: "Bodega",
+};
+
+/**
+ * D6: DOS filas `warning` sin alcance, a `maestro` y `admin` (espejo exacto de quien autoriza el
+ * panel, `ROLES_ATENCION` de `PostulacionRecursoService`). Misma forma que el aviso de postulacion
+ * de mensajero, del que este es hermano.
+ *
+ * `entidadTipo` es `postulacion_recurso` y NO `usuario`: esta postulacion no crea ninguna cuenta
+ * (design §14-C), y con `usuario` el `entidad_id` apuntaria a una tabla en la que esa fila no
+ * existe. El valor lo anade la migracion `*_notificacion_evento_postulacion_recurso`.
+ */
+export async function emitirPostulacionRecursoPendiente(
+  repo: INotificacionRepository,
+  ctx: PostulacionRecursoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    ROLES_ADMINISTRACION.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "postulacion_recurso_pendiente" as const,
+      descripcion: TEXTO_POSTULACION_RECURSO_PENDIENTE,
+      anexo: ANEXO_POR_TIPO[ctx.tipo],
+      entidadTipo: "postulacion_recurso" as const,
+      entidadId: ctx.postulacionId,
       destinatario,
     })),
     tx,
