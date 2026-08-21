@@ -76,6 +76,42 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
     return toTarifaVigente(t);
   }
 
+  /**
+   * Feature 255 (design.md §4, decision D6) — TARIFA COTIZABLE de una tienda: no borrada
+   * (`deletedAt IS NULL`) Y en estado `activo`; entre varias candidatas, la MAS RECIENTE
+   * (`orderBy createdAt desc`, first). `null` si no hay ninguna.
+   *
+   * POR QUE ESTE METODO FILTRA `status` Y `resolveTarifaPorTienda` NO. No es una
+   * inconsistencia ni un olvido: es la MISMA pregunta con dos respuestas porque el coste de
+   * equivocarse es opuesto en cada camino.
+   * - En el camino de liquidacion (carga/cierre), `null` NO bloquea: degrada a conceptos
+   *   0.00 (gap R9 de la feature 69). Filtrar alli convertiria un cobro equivocado (tarifa
+   *   `inactivo`) en un cobro CERO, y callado. Por eso la deuda (g) sigue abierta y su
+   *   decision es de la feature 70, no de esta.
+   * - En la COTIZACION, `null` no degrada a nada: dispara un `409` explicito (feature 255,
+   *   R13) y no se emite ni un importe. Filtrar `status` aqui no puede producir un precio
+   *   falso; produce una negativa nombrada. Ese es todo el argumento (R15).
+   *
+   * SALIDA NOMBRADA de la deuda: cuando la feature 70 cierre y el resolver compartido filtre
+   * `status`, este metodo se COLAPSA en `resolveTarifaPorTienda` y se borra. Mientras tanto,
+   * el `TODO:` de arriba y los tests que afirman la AUSENCIA de `status` en los dos metodos
+   * existentes siguen siendo el contrato de aquel camino: este metodo no los toca.
+   *
+   * Riesgo declarado (ventana 255 <-> 70): una tarifa `inactivo` cotizara `409` y liquidara
+   * contra esa misma tarifa en el cierre. Hoy es teorico — la 70 midio CERO tarifas inactivas
+   * en produccion — y queda escrito para saber donde mirar el dia que exista la primera.
+   */
+  async resolveTarifaCotizablePorTienda(tiendaId: string): Promise<TarifaVigente | null> {
+    const t = await this.prisma.tarifa.findFirst({
+      // El WHERE de la cotizacion: `status: "activo"` ADEMAS del soft-delete.
+      where: { tiendaId, deletedAt: null, status: "activo" },
+      orderBy: { createdAt: "desc" }, // la mas reciente entre las candidatas
+      select: TARIFA_SELECT,
+    });
+    if (t === null) return null; // -> 409 en el borde de cotizacion (R13), nunca 0.00 (R15)
+    return toTarifaVigente(t);
+  }
+
   async resolveTarifasPorTiendas(
     tx: TarifaTxClient,
     tiendaIds: string[],

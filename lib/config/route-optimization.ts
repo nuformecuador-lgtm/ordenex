@@ -38,6 +38,13 @@ function readSecret(name: string): string | null {
  * nombre canonico del codigo es `GOOGLE_WIF_*`. Se aceptan LOS DOS para no obligar a
  * renombrar variables ya configuradas en Vercel; el canonico gana si ambos estan presentes.
  * Si algun dia el entorno queda unificado, borrar el alias es un cambio de una linea.
+ *
+ * EL PROJECT ID LO USA POR OTRO MOTIVO (ficha 251): ahi el alias no evita un renombrado,
+ * corrige una TRAMPA. `RutaNoConfiguradoError` se lanza citando `GOOGLE_ROUTE_OPT_PROJECT_ID`
+ * (`google-sa-token.ts`), pero durante meses el UNICO nombre que se leia era
+ * `GOOGLE_CLOUD_PROJECT_ID`: quien seguia el mensaje al pie de la letra creaba en Vercel una
+ * variable que el codigo jamas miraba, y el log seguia diciendo exactamente lo mismo. Aceptar
+ * los dos hace que el error y la lectura no puedan volver a divergir.
  */
 function readSecretConAlias(canonico: string, alias: string): string | null {
   return readSecret(canonico) ?? readSecret(alias);
@@ -85,7 +92,10 @@ function readRoutingPreference(name: string): RoutingPreference {
 }
 
 export interface RouteOptimizationConfig {
-  /** Proyecto GCP donde esta habilitado el SKU de Route Optimization. `null` si falta. */
+  /**
+   * Proyecto GCP donde esta habilitado el SKU de Route Optimization. `null` si falta.
+   * Alias aceptado: `GOOGLE_CLOUD_PROJECT_ID` (el nombre con el que ya vive en `.env`).
+   */
   GOOGLE_ROUTE_OPT_PROJECT_ID: string | null;
   /** Email de la service account (claim `iss` del JWT). `null` si falta. */
   GOOGLE_ROUTE_OPT_SA_EMAIL: string | null;
@@ -132,7 +142,10 @@ export interface RouteOptimizationConfig {
 export function loadRouteOptimizationConfig(): RouteOptimizationConfig {
   const pem = readSecret("GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY");
   return {
-    GOOGLE_ROUTE_OPT_PROJECT_ID: readSecret("GOOGLE_CLOUD_PROJECT_ID"),
+    GOOGLE_ROUTE_OPT_PROJECT_ID: readSecretConAlias(
+      "GOOGLE_ROUTE_OPT_PROJECT_ID",
+      "GOOGLE_CLOUD_PROJECT_ID",
+    ),
     GOOGLE_ROUTE_OPT_SA_EMAIL: readSecret("GOOGLE_ROUTE_OPT_SA_EMAIL"),
     GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY: pem === null ? null : pem.replace(/\\n/g, "\n"),
     GOOGLE_WIF_PROJECT_NUMBER: readSecretConAlias(

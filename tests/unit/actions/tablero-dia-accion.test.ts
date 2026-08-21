@@ -29,6 +29,17 @@ const TABLERO: ResultadoTableroDia = {
       enReparto: 0,
       otros: 0,
     },
+    // FEATURE 258 (B4.5) — el literal ES el contrato y se EXTIENDE con el campo nuevo, no se
+    // afloja a `expect.objectContaining` ni se deriva de la funcion que lo produce. Que este
+    // fixture rompiera al añadir `ritmoEntregas` es justamente lo que hace que el contrato se
+    // propague a todos los sitios que construyen un `TableroDia`.
+    //
+    // Serie coherente con estos totales: un dia sin ninguna entrega trae sus puntos `0..H` con
+    // acumulado 0 (no una lista vacia: la lista vacia es cosa del adaptador de la grafica).
+    ritmoEntregas: [
+      { hora: 0, acumulado: 0 },
+      { hora: 1, acumulado: 0 },
+    ],
   },
 };
 
@@ -84,6 +95,22 @@ describe("leerTableroDia", () => {
       new Date("2026-08-08T19:00:00.000Z"),
     );
     expect(leerTableroDia.length).toBeLessThanOrEqual(1);
+  });
+
+  it("la serie de entregas por hora viaja DENTRO del tablero y el borde no la toca (R57)", async () => {
+    const service = servicioDoble();
+    const resultado = await leerTableroDia({
+      service,
+      getActor: async () => ({ usuarioId: "u1", rol: "admin", zonaId: null }),
+    });
+
+    if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+    // Identidad, no igualdad: demuestra que el borde DEVUELVE lo del servicio sin recomponerlo.
+    // Una Server Action que rearmara el objeto podria perder el campo sin que nadie lo notara.
+    expect(resultado.tablero.ritmoEntregas).toBe(
+      (TABLERO as { tablero: { ritmoEntregas: unknown } }).tablero.ritmoEntregas,
+    );
+    expect(resultado.tablero.generadoAt).toBe("2026-08-08T19:00:00.000Z");
   });
 
   it("el instante de referencia es inyectable: un test puede fijar el reloj (R16)", async () => {

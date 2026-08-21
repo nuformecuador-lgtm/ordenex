@@ -67,7 +67,17 @@ const PATH_DETALLE_POR_ID = "/api/ordenes/api-key/orden/{id}";
 const PATH_PDF_ORDEN = "/api/ordenes/api-key/orden/{id}/generate";
 const PATH_PDF_CARGA = "/api/ordenes/api-key/carga/{cargaId}/generate";
 
-/** Los 7 endpoints que el canal por API key publica tras la feature 177. */
+// ALTA de la feature 255 (R47) — el OCTAVO endpoint del canal. Esta lista estaba firmada en
+// SIETE desde la 177 y publicar la cotización la puso ROJA: ESE es su trabajo. Sube a OCHO A
+// PROPÓSITO, en el mismo commit que publica el endpoint, y no de contrabando. Qué se añadió y
+// por qué: `POST /api/ordenes/api-key/cotizacion` es un borde de LECTURA PURA —cotiza el precio
+// y la cobertura de un lote sin crear órdenes, sin consumir guías y sin persistir nada—, y se
+// publica en el canal por API key porque lo consume el mismo integrador, con la misma key y con
+// el mismo cuerpo que manda a `/carga`. Un endpoint que sirve precios y no está en el contrato
+// publicado es un precio sin contrato: por eso el alta va aquí y en el `.yaml` a la vez.
+const PATH_COTIZACION = "/api/ordenes/api-key/cotizacion";
+
+/** Los 8 endpoints que el canal por API key publica tras la 177 y la 255. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
@@ -76,13 +86,14 @@ const PATHS_ESPERADOS = [
   PATH_DETALLE_POR_ID,
   PATH_PDF_ORDEN,
   PATH_PDF_CARGA,
+  PATH_COTIZACION,
 ];
 
-describe("177/R41 — el OpenAPI publica los siete endpoints del canal por API key", () => {
+describe("177/R41 + 255/R47 — el OpenAPI publica los ocho endpoints del canal por API key", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente siete paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(7);
+  it("el objeto TS declara exactamente ocho paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(8);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -92,7 +103,7 @@ describe("177/R41 — el OpenAPI publica los siete endpoints del canal por API k
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos siete paths, en el mismo orden", () => {
+  it("el .yaml publicado declara los mismos ocho paths, en el mismo orden", () => {
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
@@ -205,5 +216,129 @@ describe("177/R45 — CargaResponse publica el cargaId que exige el endpoint de 
     expect(ejemplo.cargaId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     // El .yaml publica el MISMO valor de ejemplo: si uno cambia, el otro miente.
     expect(yaml).toContain(`cargaId: "${ejemplo.cargaId}"`);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Feature 255 — el borde de cotización, publicado. Dos afirmaciones y solo dos en este archivo:
+// que el canal declara OCHO endpoints en los DOS artefactos (R47) y que la descripción publicada
+// del octavo declara el supuesto de comisión (R29). El resto del contrato de la cotización lo
+// cubren sus propias suites; aquí vive lo que esta guardia ya congelaba: la lista de paths.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("255/R47 — el canal por API key publica OCHO endpoints, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran ocho paths, el mismo octavo y en la misma posición", () => {
+    const clavesTs = Object.keys(openApiSpec.paths);
+    const clavesYaml = pathsDelYaml();
+    expect(clavesTs).toHaveLength(8);
+    expect(clavesYaml).toHaveLength(8);
+    expect(clavesTs[7]).toBe(PATH_COTIZACION);
+    expect(clavesYaml[7]).toBe(PATH_COTIZACION);
+    // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
+    expect(clavesYaml).toEqual(clavesTs);
+  });
+
+  it("el octavo endpoint es POST y devuelve CotizacionResponse", () => {
+    const operacion = openApiSpec.paths[PATH_COTIZACION];
+    expect(Object.keys(operacion)).toEqual(["post"]);
+    expect(operacion.post.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/CotizacionResponse",
+    });
+  });
+});
+
+describe("255/R29 — la descripción del endpoint declara el supuesto", () => {
+  const descripcion: string = openApiSpec.paths[PATH_COTIZACION].post.description;
+
+  it("la descripción publicada menciona el supuesto `cobra_comision = true`", () => {
+    // El supuesto NO viaja como campo del cuerpo (se descartó `supuestos.cobraComision`): el
+    // sitio donde un integrador busca los supuestos de un precio es el contrato publicado. Si
+    // esta línea desaparece, el precio pasa a afirmar una comisión que nadie declaró.
+    expect(descripcion).toContain("cobra_comision = true");
+    expect(descripcion).toMatch(/comisi[oó]n COD/i);
+  });
+
+  it("el .yaml publica el MISMO supuesto: si uno lo dice y el otro no, uno miente", () => {
+    expect(yaml).toContain("cobra_comision = true");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Feature 255 (R21) — CotizacionRow NO promete un rechazo que el servidor no hace.
+//
+// El borde valida el cuerpo GRUESO (`ordenes: array de records de texto`, 1..tope) y aplica
+// `filaCotizacionSchema` FILA A FILA dentro del service: una fila sin `provincia` NO tumba el
+// lote, sale 200 con esa fila en `resultado: "error"` y las demás se cotizan igual. Declarar la
+// terna en `required` haría que un cliente generado con validación estricta rechazara EN LOCAL
+// un cuerpo que el servidor acepta y responde 200. El que manda es el código: el documento
+// describe lo que el borde hace, no al revés.
+//
+// Ojo con la asimetría: esto vale para el schema de ENTRADA. En los schemas de RESPUESTA
+// (`CotizacionEscenarioEntregado/Devuelto`, `CotizacionCostos`, `CotizacionRowResult`,
+// `CotizacionTotales`, `CotizacionResponse`) `required` SÍ es una promesa que el servidor
+// cumple siempre (R26/R27/R28/R52/R54) y quitarlo debilitaría el contrato.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta no es un 422", () => {
+  const cotizacionRow: Record<string, unknown> = openApiSpec.components.schemas.CotizacionRow;
+
+  it("el objeto TS no declara `required` en el schema de entrada por fila", () => {
+    expect(Object.keys(cotizacionRow)).not.toContain("required");
+    expect(Object.keys(cotizacionRow.properties as object)).toEqual([
+      "provincia",
+      "canton",
+      "distrito",
+      "direccion",
+      "monto_cobrar",
+      "num_remision",
+    ]);
+  });
+
+  it("el .yaml tampoco lo declara: el espejo dice lo mismo", () => {
+    const bloque = bloqueDeSchema("CotizacionRow");
+    expect(bloque.filter((l) => l === "      required:")).toEqual([]);
+  });
+
+  it("la descripción explica cuándo es 422 del lote y cuándo es 200 con la fila en error", () => {
+    const descripcion = String(cotizacionRow.description);
+    for (const texto of [descripcion, yaml]) {
+      expect(texto).toMatch(/NO es un 422 del lote/);
+      expect(texto).toMatch(/resultado: ("|\\")error("|\\")/);
+      expect(texto).toMatch(/éxito parcial/i);
+    }
+  });
+
+  it("los schemas de RESPUESTA conservan su `required`: ahí sí es una promesa cumplida", () => {
+    const schemas = openApiSpec.components.schemas;
+    expect([...schemas.CotizacionEscenarioEntregado.required]).toEqual([
+      "flete",
+      "iva",
+      "comision",
+      "ivaComision",
+      "total",
+    ]);
+    expect([...schemas.CotizacionEscenarioDevuelto.required]).toEqual([
+      "flete",
+      "iva",
+      "comision",
+      "total",
+    ]);
+    expect([...schemas.CotizacionCostos.required]).toEqual(["entregado", "devuelto"]);
+    expect([...schemas.CotizacionRowResult.required]).toEqual([
+      "fila",
+      "numRemision",
+      "resultado",
+    ]);
+    expect([...schemas.CotizacionTotales.required]).toEqual([
+      "filasSumadas",
+      "filasExcluidas",
+      "entregado",
+      "devuelto",
+    ]);
+    expect([...schemas.CotizacionResponse.required]).toEqual([
+      "total",
+      "cotizadas",
+      "conError",
+      "totales",
+      "filas",
+    ]);
   });
 });

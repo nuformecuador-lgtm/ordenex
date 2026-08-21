@@ -9,7 +9,148 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 DESPLEGADO A PRODUCCIÓN — 2026-08-20. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
+
+**Cuatro releases a producción en esta sesión, todas verificadas contra la base después de
+desplegar.** Ninguna ficha `in_progress` al cerrar esa tanda; la **258** entró después (bloque de abajo).
+
+| # | Qué | Release |
+| --- | --- | --- |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | #414 |
+| **239** | «ver la app» hecha — la tarea que llevaba sin hacer con la ficha ya mergeada | — |
+| — | la nav de la landing baja a su sección y respeta el orden de la página | #417 |
+| — | botón «Volver al inicio» en login y postulación | #421 |
+| **252** | 🔴 **la postulación se perdía con documentos pesados** | #424 |
+| **253** | 🔴 **postular vehículo o bodega era una MAQUETA que decía «enviada»** | #430 |
+
+### 🔴 Los dos defectos que perdían datos de usuarios reales
+
+**252 — la postulación moría en silencio.** Medido contra producción mandando cuerpos crecientes:
+`4 MB → pasa`, `5 MB → 413`. Los archivos del humano pesaban 2,16 MB × 5 = **10,8 MB**. El
+formulario validaba **5 MB por documento** contra un límite de **5 MB para toda la petición**:
+admitía 25 MB y el transporte moría a los 5. **Y ese 413 no aparece en ningún log**, porque el
+rechazo ocurre antes de que la petición sea una invocación registrada — por eso era invisible por
+los dos lados. Arreglado reusando `comprimirImagen`, que **ya existía y usaban otras tres
+pantallas**: la postulación era la única superficie de subida que nunca la adoptó.
+**Confirmado en producción:** hay un alta de mensajero `pendiente` del 2026-08-21 03:33 UTC.
+
+**253 — la maqueta que mentía.** `PostularRecursoModal` validaba, pintaba «Postulación enviada» y
+**no enviaba nada**. Medido con `git log --follow`: **nació el 2026-08-16 y `prod` la contenía —
+cinco días en producción**. Quien postulara en esa ventana no recibió nunca una llamada, y **no hay
+forma de saber quiénes fueron**: no dejaron fila, ni log, ni correo.
+
+### 🛡️ El arnés cambió: `--rapido` pasa a ser el gate normal
+
+Medido: mover un enlace de la nav costaba **16.346 tests y 5–11 min**; lo relacionado eran **21 +
+las guardias, ~33 s**. Ahora:
+
+- **`--rapido` es el gate de un PR** (~80 s en la práctica).
+- **`./init.sh` completo** es obligatorio **antes de una release a `prod`** y **después de cada
+  merge a `dev`** — ahí es donde se caza un `dev` roto, que es el único agujero que el modo rápido
+  no puede ver por diseño (`--changed` compara *contra* `dev`).
+- **`--rapido` se niega solo** si el diff toca migraciones, `db/schema.prisma`, `lib/types/`,
+  config de build, nombres de dinero **o el propio `init.sh`**. Es un `fail`, no un aviso.
+
+Probado en los dos sentidos, que es donde mueren estos filtros. Y ya se ejerció de verdad: **se
+negó ante el backend de la 253** (toca `db/migrations` y `lib/types`).
+
+### 🟡 EN VUELO — 258 · el tablero del día de `/monitoreo`
+
+Alta el 2026-08-21: el humano eligió la **dirección A** del lienzo de diseño de la ruta
+([lienzo](https://claude.ai/code/artifact/fcc00a76-16ee-449e-b6c4-cb700bf3289a), cuatro direcciones comparadas).
+
+`fullstack`, `sdd: true`. **Frontend:** los ocho contadores pasan a la primitiva `Badge` —así el
+modo oscuro deja de depender de esta feature—, cada estado lleva icono (`EmptyState` / `Alert`), el
+detalle deja el `Sheet` y pasa a `Modal` + `DataTable` + `Pagination`, y entran filtro por nombre
+(`Input`) y densidad (`SegmentedToggle`). Pedido explícito del humano: **no crear primitivas
+nuevas**. **Backend:** la línea de «entregas acumuladas por hora» **no tiene dato** —el servicio
+devuelve conteos del día, no una serie— y el humano pidió construirla en esta misma ficha. Eso es
+lo que la vuelve `fullstack` y `sdd`.
+
+**Decisiones humanas ya tomadas** (2026-08-21): el detalle **sigue paginado** —el SQL es
+`LIMIT/OFFSET` y la guardia de frontera prohíbe traer el día a memoria—, y la línea por hora entra
+aquí en vez de en ficha aparte.
+
+**Lo que ya se sabe que va a doler:** toca `lib/types/tablero-dia.ts`, así que **`./init.sh
+--rapido` se negará solo** y la corrida completa es obligatoria; y
+`tests/unit/tablero-dia/frontera.guardia.test.ts` censa **todo** `app/(app)/monitoreo` (prohíbe
+`findMany`, SQL sin `LIMIT`, leer el rol, nombrar `badgeVariants` y declarar etiquetas o colores
+por estatus).
+
+**Estado (2026-08-21):** spec escrita y aprobada por el humano (78 requisitos, R1–R78), backend y
+frontend implementados, **`./init.sh` completo en verde** (1.269 archivos · 16.803 tests) y
+**revisión APROBADA sin bloqueantes** — el reviewer verificó los 78 uno a uno y corrió por su
+cuenta 10.028 tests de las suites afectadas más 1.910 de las 127 guardias.
+
+**Lo que encontró VER LA APP y la suite no podía ver.** Con 16.790 tests en verde, la cifra del
+contador «Reprogramadas» quedaba **fuera de la caja visible** en la tarjeta: el número estaba en el
+DOM —así que `toHaveTextContent` pasaba— pero no se leía. Medido en el navegador
+(`scrollWidth > clientWidth`), era el único de los ocho, porque es la etiqueta más larga y la
+columna mide 109 px. Y la gráfica medía **371 px**, más alta que cualquier otra cosa de la página,
+con las ocho primeras horas planas en cero. Ambos corregidos y **remedidos**: cero recortes y la
+gráfica en 209 px. El test que lo fija NO mira `textContent` —ése pasaba con el defecto puesto—,
+sino el reparto del espacio.
+
+**Decisiones humanas de la ficha:** detalle paginado (25, lo dice la configuración); la línea por
+hora entra en esta ficha y **cuadra con el contador `entregadas` aunque un punto pueda bajar**; la
+barra apilada y el avatar entran; el filtro NO va a la URL; y la línea **reusa `GraficaLineas`** de
+analítica sin abrir su confinamiento de `recharts` — dos de los tres costes que el leader le
+atribuyó a esa reutilización resultaron FALSOS al medirlos, y está escrito en el design para que
+nadie rehaga el razonamiento al revés.
+
+**Deuda que deja, dicha y no escondida:** `components/ui/table.tsx` se quedó **sin un solo
+consumidor** al migrar el detalle a `DataTable`. Va anotada `@sin-superficie`, y esa anotación es
+**la primera excepción de la capa R-B** de `superficie-de-uso.guardia.test.ts`, cuyo propio código
+dice que su mensaje vale más precisamente por no tener ninguna. Recomendación del leader: **chore
+aparte que haga a `DataTable` apoyarse en la primitiva** — así la primitiva recupera su único
+consumidor correcto, `DESIGN.md` («la única tabla de listas») pasa a ser cierto por construcción y
+la excepción desaparece. La alternativa honesta es borrarla; lo que no conviene es quedarse con la
+excepción.
+
+**Cierre (2026-08-21).** Cuatro defectos encontrados MIRANDO LA PANTALLA, ninguno detectable por la
+suite: la cifra de «Reprogramadas» fuera de la caja visible; la gráfica en 371 px con ocho horas
+planas; la etiqueta partiéndose dentro de la palabra (pasa el test de recorte, porque no desborda); y
+la cabecera de la tarjeta **recortándose en silencio** entre 768 y 830 px —«13» se leía «1»— porque
+`SidebarInset` usa `overflow-x-clip` y lo que no cabe no scrollea: desaparece.
+
+**La causa del cuarto no era la aparente.** El `scrollWidth` de la cabecera estaba clavado en 259 px
+a cualquier ancho: `CardHeader` es `grid-cols-[1fr_auto]` y ese `1fr` toma como mínimo el min-content
+de su hijo, así que con el avatar de ancho fijo y el nombre en `nowrap` **el `truncate` nunca llegaba
+a activarse**. Faltaba `min-w-0`.
+
+**La lección, que es la parte reutilizable:** tres mediciones seguidas dieron verde sobre una pantalla
+con un número recortado. El criterio era el correcto; fallaba **dónde se aplicaba** — siempre sobre la
+pieza recién tocada, nunca sobre la caja que la contiene. La matriz final (2.352 comprobaciones) se
+demostró capaz de ponerse **roja** quitando el arreglo, y ahí salió un caso que nadie había listado:
+1280 px en densidad compacta.
+
+**Gate final:** `./init.sh` completo, `INIT_EXIT=0`, 1.269 archivos · 16.815 tests · 26 skipped.
+**Sin commit, sin push y sin PR**: el árbol de `feat/258-monitoreo-backend` está sucio a propósito,
+a la espera de decisión humana.
+
+### ▶️ Qué queda, y una que necesita decisión HUMANA
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **251** | ⚠️ **la optimización de ruta NO corre en producción** | falta `GOOGLE_ROUTE_OPT_PROJECT_ID`. Degrada al cálculo local **en silencio**, y uno de los sitios donde salta es la pantalla del mensajero. **¿Debe configurarse o el fallback es lo querido? Es una pregunta para el humano, no un defecto confirmado** |
+| **247** | el doble cobro del flete de devolución | medido: `1 de 16`, ₡2.486 a NUFORM |
+| **248** | los errores de `/novedades` salen mudos | la feature 100 comparte el hueco |
+| **249** | el chequeo del `down.sql` **avisa pero no falla** | tres migraciones llevan sin él desde el 2026-08-14 |
+| **250** | el aviso dice «Devuelta» cuando la orden está en «Devolución por confirmar» | |
+| **254** | `db:rollback` revierte **por orden alfabético** | no alcanza a la 2.ª migración de una tanda, **y no lo dice** |
+| **220** | e2e | su premisa sigue podrida: 13 de 20 specs son `NOT EXECUTED` |
+
+### 🧾 El patrón de la sesión: los fallos MUDOS
+
+**252, 253, 248, 250 y 254 son la misma familia**: el sistema no falla, *aparenta*. Un acuse falso,
+un 413 sin log, un botón que no hace nada, un aviso que nombra el estado equivocado, un rollback
+que dice que revirtió. **Ninguno rompe un test.** Por eso la 253 no se dio por cerrada hasta que su
+guardia se demostró **roja en las dos formas de recaída** — y en una de ellas `eslint` da `0 errors`
+y sale con código 0: el linter no la caza.
+
+---
+
+## 🚀 Desplegado a producción — 2026-08-20
 
 **La pila entera de la ayuda a la tienda salió a producción.** Release
 [#414](https://github.com/nuformecuador-lgtm/ordenex/pull/414) (`dev` → `prod`, merge commit

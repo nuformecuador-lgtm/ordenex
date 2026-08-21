@@ -42,3 +42,24 @@ export function ventanaDelDiaEnCursoCR(now: Date): VentanaDiaCR {
     hasta: inicioDelDiaSiguienteCREnUtc(fecha),
   };
 }
+
+/**
+ * Feature 258 (B1.1, design.md §6) — la HORA DE PARED de Costa Rica (0..23) de `instante`
+ * dentro de `ventana`.
+ *
+ * Es la MISMA aritmetica de la ventana y por eso vive aqui: `ventana.desde` YA es las 00:00
+ * de pared de CR de `ventana.fecha`, asi que la diferencia en horas ES la hora de pared, por
+ * construccion. No hay conversion de zona horaria en ningun sitio, no hay `new Date()` propio
+ * y NO se usa `startOfDayCR` (R53): esa devuelve la medianoche UTC y correria la hora seis
+ * puestos.
+ *
+ * El recorte a `[0, 23]` no es defensivo por gusto: `instante` es el `now` de la lectura y
+ * puede caer fuera de la ventana por desfase de relojes (o porque un test congele el reloj en
+ * otro dia). Un indice negativo o un 24 produciria una serie con horas que no existen.
+ */
+export function horaDeParedCR(ventana: VentanaDiaCR, instante: Date): number {
+  const horasTranscurridas = Math.floor(
+    (instante.getTime() - ventana.desde.getTime()) / (60 * 60 * 1000),
+  );
+  return Math.min(23, Math.max(0, horasTranscurridas));
+}

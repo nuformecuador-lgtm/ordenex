@@ -70,6 +70,14 @@ export function buildOptimizacionRutaService(now: () => Date = () => new Date())
   const config = loadRouteOptimizationConfig();
   optlog("build — config cargada", {
     projectId: config.GOOGLE_ROUTE_OPT_PROJECT_ID ?? "AUSENTE",
+    // Ficha 251: solo los NOMBRES de las `GOOGLE_*` que ve el proceso, nunca sus valores
+    // (R14). Existe porque `AUSENTE` es AMBIGUO: `readSecret` colapsa "la variable no esta
+    // en el entorno" y "esta pero vale cadena vacia" al mismo `null`, y esos dos casos se
+    // arreglan de forma distinta -uno es redesplegar, el otro es corregir el valor-. Sin
+    // esta linea hay que adivinar cual de los dos es, y ya se adivino mal una vez.
+    clavesGoogle: Object.keys(process.env)
+      .filter((k) => k.startsWith("GOOGLE_"))
+      .sort(),
     useAdc: config.GOOGLE_ROUTE_OPT_USE_ADC,
     timeoutMs: config.ROUTE_OPT_TIMEOUT_MS,
     maxParadas: config.RUTA_MAX_PARADAS,

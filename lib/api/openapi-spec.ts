@@ -196,6 +196,10 @@ export const openApiSpec = {
           "Devuelve las órdenes del dueño de la key, paginadas por `offset`/`limit`, con `total`",
           "para recorrer páginas. El filtro opcional `estado` solo acota; nunca amplía el alcance.",
           "Parámetros desconocidos (p. ej. `tiendaId`) se ignoran.",
+          "",
+          "Los filtros `desde`/`hasta`, `num_guia` y `num_remision` son opcionales, se combinan",
+          "en AND y solo ACOTAN dentro de tus órdenes: un número de guía o de remisión que",
+          "pertenece a otra tienda devuelve una página vacía (`items: []`, `total: 0`), nunca 404.",
         ].join("\n"),
         parameters: [
           {
@@ -218,6 +222,38 @@ export const openApiSpec = {
             required: false,
             description: "Filtra por estado exacto del catálogo.",
             schema: { type: "string", enum: ORDER_STATUS_ENUM },
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario mínima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6).",
+            schema: { type: "string", format: "date", example: "2026-08-01" },
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario máxima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6), así que cubre las 24 horas completas de ese día.",
+            schema: { type: "string", format: "date", example: "2026-08-21" },
+          },
+          {
+            name: "num_guia",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de guía exacto. Excluye las órdenes que aún no tienen guía asignada.",
+            schema: { type: "integer", minimum: 1, example: 100234 },
+          },
+          {
+            name: "num_remision",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de remisión exacto (sin prefijo, sin subcadena, distingue mayúsculas).",
+            schema: { type: "string", minLength: 1, example: "REM-0001" },
           },
         ],
         responses: {
@@ -534,6 +570,175 @@ export const openApiSpec = {
         },
       },
     },
+    // Feature 255 (R47) — OCTAVO endpoint del canal: cotización previa, lectura pura.
+    "/api/ordenes/api-key/cotizacion": {
+      post: {
+        tags: ["Órdenes"],
+        summary: "Cotización de un lote (no crea nada)",
+        operationId: "cotizarOrdenes",
+        description: [
+          "Cotiza un lote de filas **sin crear nada**: por cada fila devuelve si hay cobertura y",
+          "cuánto costaría la orden en los DOS escenarios posibles (entregada y devuelta), más un",
+          "bloque `totales` con la suma del lote.",
+          "",
+          "**Acepta el MISMO cuerpo que `POST /api/ordenes/api-key/carga`, sin recortarlo.** Las",
+          "filas son pares clave/valor de TEXTO, con la geografía en columnas SEPARADAS",
+          "(`provincia`, `canton`, `distrito`, `direccion`) y `monto_cobrar` como texto. Las claves",
+          "que la cotización no usa se ignoran en silencio. `num_remision` es OPCIONAL aquí y solo",
+          "sirve para correlacionar la respuesta con tu fila: si no viene, la fila responde",
+          "`numRemision: null`. No hay deduplicación de ninguna clase, ni contra el lote ni contra",
+          `las órdenes existentes. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas: el mismo tope`,
+          "que la carga.",
+          "",
+          "**Lectura pura.** Este endpoint NO crea órdenes, NO consume ningún número de guía y NO",
+          "persiste nada: ni orden, ni lote de carga, ni historial, ni movimiento de wallet, ni",
+          "notificación, ni registro de auditoría. Llamarlo dos veces con el mismo cuerpo no cambia",
+          "ningún estado.",
+          "",
+          "**Supuesto declarado: `cobra_comision = true`.** La cotización asume que la orden que se",
+          "crearía cobra comisión COD (el mismo default de la columna `orden.cobra_comision`), así",
+          "que el escenario entregado incluye siempre `comision` e `ivaComision`. Una orden que",
+          "acabara creándose sin comisión costaría menos que lo cotizado aquí.",
+          "",
+          "**Los importes se emiten SOLO formateados.** Cada importe viene en una única forma:",
+          "símbolo de moneda, parte entera agrupada con separador de miles, separador decimal y",
+          "exactamente DOS decimales, con el signo negativo DELANTE del símbolo (`-₡1.578,00`). NO",
+          "hay un campo crudo de escala 2 en paralelo: el string formateado ES el contrato. Si tu",
+          "integración necesita operar con el número, parsealo en tu lado.",
+          "",
+          "**`totales` es una SUMA de las filas cotizadas, NO el precio del lote.** El precio",
+          "depende de la zona de CADA fila, así que el bloque suma únicamente las filas con",
+          "resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y",
+          "`filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó",
+          "fuera se leería como «esto cuesta el lote» cuando no lo es. El bloque se emite SIEMPRE:",
+          "si ninguna fila resulta cotizable, llega con todos sus importes en cero,",
+          "`filasSumadas: 0` y `filasExcluidas` igual a `total`.",
+          "",
+          "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
+          "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
+          "sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.",
+          "",
+          "Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es **409** y no se",
+          "cotiza ninguna fila. Es la asimetría deliberada con `/carga`, que sí tolera la falta de",
+          "tarifa con `costoEnvio: \"0.00\"`: en una cotización, un cero sería una mentira sobre",
+          "dinero servida como precio.",
+        ].join("\n"),
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CotizacionRequest" },
+              examples: {
+                dosFilas: {
+                  summary: "Dos filas (una con cobertura, una con distrito inexistente)",
+                  value: {
+                    ordenes: [
+                      {
+                        provincia: "San José",
+                        canton: "Escazú",
+                        distrito: "San Rafael",
+                        direccion: "Multiplaza, local 12",
+                        monto_cobrar: "25900",
+                        num_remision: "REM-0001",
+                      },
+                      {
+                        provincia: "San José",
+                        canton: "Escazú",
+                        distrito: "Distrito que no existe",
+                        direccion: "Sin referencia",
+                        monto_cobrar: "18000",
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Lote cotizado (puede incluir filas con error).",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CotizacionResponse" },
+                examples: {
+                  resumen: {
+                    summary: "Una cotizada (con sus dos escenarios) y una con error",
+                    value: {
+                      total: 2,
+                      cotizadas: 1,
+                      conError: 1,
+                      totales: {
+                        filasSumadas: 1,
+                        filasExcluidas: 1,
+                        entregado: {
+                          flete: "₡2.500,00",
+                          iva: "₡325,00",
+                          comision: "₡906,50",
+                          ivaComision: "₡117,85",
+                          total: "₡22.050,65",
+                        },
+                        devuelto: {
+                          flete: "₡1.396,46",
+                          iva: "₡181,54",
+                          comision: "₡0,00",
+                          total: "-₡1.578,00",
+                        },
+                      },
+                      filas: [
+                        {
+                          fila: 1,
+                          numRemision: "REM-0001",
+                          resultado: "cotizada",
+                          costos: {
+                            entregado: {
+                              flete: "₡2.500,00",
+                              iva: "₡325,00",
+                              comision: "₡906,50",
+                              ivaComision: "₡117,85",
+                              total: "₡22.050,65",
+                            },
+                            devuelto: {
+                              flete: "₡1.396,46",
+                              iva: "₡181,54",
+                              comision: "₡0,00",
+                              total: "-₡1.578,00",
+                            },
+                          },
+                        },
+                        {
+                          fila: 2,
+                          numRemision: null,
+                          resultado: "error",
+                          errores: { distrito: ["distrito no encontrado en el canton"] },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "409": {
+            description:
+              "La tienda dueña de la key no tiene una tarifa vigente: no se cotiza ninguna fila.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                example: {
+                  status: "error",
+                  code: "CONFLICT",
+                  message: "la tienda no tiene una tarifa vigente asociada: no se puede cotizar",
+                },
+              },
+            },
+          },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -757,6 +962,158 @@ export const openApiSpec = {
             description:
               "`true` si el PDF se construyó en esta llamada; `false` si se reutilizó el ya almacenado y solo se volvió a firmar.",
           },
+        },
+      },
+      // ── Feature 255 — cotización previa (lectura pura). Todos los importes son STRINGS ya
+      // formateados (símbolo + miles + exactamente 2 decimales, signo delante del símbolo):
+      // NO existe un campo crudo de escala 2 en paralelo.
+      CotizacionRequest: {
+        type: "object",
+        required: ["ordenes"],
+        properties: {
+          ordenes: {
+            type: "array",
+            minItems: 1,
+            maxItems: MAX_CARGA_ROWS,
+            description: `Filas a cotizar (1..${MAX_CARGA_ROWS}, el mismo tope que la carga). Todos los valores son texto.`,
+            items: { $ref: "#/components/schemas/CotizacionRow" },
+          },
+        },
+      },
+      CotizacionRow: {
+        type: "object",
+        description: [
+          "Una fila a cotizar. Es la MISMA fila cruda que acepta `POST /api/ordenes/api-key/carga`:",
+          "podés mandar el cuerpo de la carga sin recortarlo y las claves que la cotización no usa",
+          "se ignoran. `num_remision` es opcional y solo correlaciona.",
+          "",
+          "NINGUNA clave de la fila está en `required`, y es deliberado: el servidor NO rechaza el",
+          "lote por una fila incompleta. La terna geográfica (`provincia`, `canton`, `distrito`) es",
+          "NECESARIA para poder cotizar la fila, pero su ausencia NO es un 422 del lote: esa fila",
+          "vuelve con `resultado: \"error\"` y el detalle bajo la clave del campo que falta, y las",
+          "demás filas se cotizan igual (éxito parcial). Declararla `required` haría que un cliente",
+          "generado con validación estricta rechazara EN LOCAL un cuerpo que el servidor acepta y",
+          "responde 200.",
+          "",
+          "Cuándo recibís 422: solo por el lote entero — `ordenes` vacío o por encima del tope",
+          "(o un valor que no sea texto). Cuándo recibís 200 con filas en `error`: por cualquier",
+          "problema de una fila concreta — terna ausente o vacía, distrito no encontrado, distrito",
+          "ambiguo, distrito sin zona asignada, o `monto_cobrar` con formato inválido.",
+        ].join("\n"),
+        properties: {
+          provincia: {
+            type: "string",
+            description:
+              "Necesaria para cotizar la fila. Si falta, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+          },
+          canton: {
+            type: "string",
+            description:
+              "Necesario para cotizar la fila. Si falta, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+          },
+          distrito: {
+            type: "string",
+            description:
+              "Su zona decide la columna de flete. Necesario para cotizar la fila: si falta, no se encuentra, es ambiguo o no tiene zona, la fila sale con `resultado: \"error\"` (no un 422 del lote).",
+          },
+          direccion: { type: "string", description: "Se acepta; no participa del precio." },
+          monto_cobrar: {
+            type: "string",
+            description:
+              "Monto COD como texto (p. ej. \"25900\"). Base de la comisión; vacío o ausente se trata como cero.",
+          },
+          num_remision: {
+            type: "string",
+            description:
+              "OPCIONAL: solo correlación. No se deduplica ni contra el lote ni contra las órdenes existentes.",
+          },
+        },
+        additionalProperties: { type: "string" },
+      },
+      CotizacionEscenarioEntregado: {
+        type: "object",
+        description:
+          "Costo si la orden se ENTREGA: cinco conceptos. `total` es lo que RECIBE la tienda = monto a cobrar − (flete + iva + comision + ivaComision), y es negativo si no hay COD que cubra lo facturado.",
+        required: ["flete", "iva", "comision", "ivaComision", "total"],
+        properties: {
+          flete: { type: "string", description: "Flete de la zona del distrito, formateado." },
+          iva: { type: "string", description: "IVA del flete, formateado." },
+          comision: { type: "string", description: "Comisión COD, formateada." },
+          ivaComision: { type: "string", description: "IVA de la comisión, formateado." },
+          total: { type: "string", description: "Lo que recibe la tienda, formateado." },
+        },
+      },
+      CotizacionEscenarioDevuelto: {
+        type: "object",
+        description:
+          "Costo si la orden se DEVUELVE: cuatro conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `total` es la DEUDA de la tienda = −(flete + iva), y por eso es negativo.",
+        required: ["flete", "iva", "comision", "total"],
+        properties: {
+          flete: { type: "string", description: "Flete de devolución, formateado." },
+          iva: { type: "string", description: "IVA del flete de devolución, formateado." },
+          comision: {
+            type: "string",
+            description: "Siempre cero formateado: una devolución no cobra comisión COD.",
+          },
+          total: { type: "string", description: "Deuda de la tienda, formateada (negativa)." },
+        },
+      },
+      CotizacionCostos: {
+        type: "object",
+        description: "Los DOS escenarios de una fila con cobertura. Ausente en una fila `error`.",
+        required: ["entregado", "devuelto"],
+        properties: {
+          entregado: { $ref: "#/components/schemas/CotizacionEscenarioEntregado" },
+          devuelto: { $ref: "#/components/schemas/CotizacionEscenarioDevuelto" },
+        },
+      },
+      CotizacionRowResult: {
+        type: "object",
+        description:
+          "Resultado por fila. No existe `duplicada`: sin persistencia no significa nada.",
+        required: ["fila", "numRemision", "resultado"],
+        properties: {
+          fila: { type: "integer", description: "Índice 1-based dentro de `ordenes`." },
+          numRemision: {
+            type: ["string", "null"],
+            description: "El `num_remision` que mandaste, tal cual; `null` si la fila no lo trajo.",
+          },
+          resultado: { type: "string", enum: ["cotizada", "error"] },
+          costos: { $ref: "#/components/schemas/CotizacionCostos" },
+          errores: {
+            type: "object",
+            description: "Errores por campo (solo en `error`).",
+            additionalProperties: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+      CotizacionTotales: {
+        type: "object",
+        description:
+          "SUMA de las filas cotizadas, NO el precio del lote: el precio depende de la zona de cada fila. Suma únicamente las filas con resultado `cotizada` y declara cuántas sumó y cuántas dejó fuera (`filasSumadas + filasExcluidas === total`). Se emite SIEMPRE, en cero si ninguna fila resultó cotizable.",
+        required: ["filasSumadas", "filasExcluidas", "entregado", "devuelto"],
+        properties: {
+          filasSumadas: {
+            type: "integer",
+            description: "Filas que aportaron a estos importes (las `cotizada`).",
+          },
+          filasExcluidas: {
+            type: "integer",
+            description: "Filas que NO aportaron nada (las `error`). El total no las cuenta.",
+          },
+          entregado: { $ref: "#/components/schemas/CotizacionEscenarioEntregado" },
+          devuelto: { $ref: "#/components/schemas/CotizacionEscenarioDevuelto" },
+        },
+      },
+      CotizacionResponse: {
+        type: "object",
+        required: ["total", "cotizadas", "conError", "totales", "filas"],
+        properties: {
+          total: { type: "integer", description: "Filas recibidas." },
+          cotizadas: { type: "integer" },
+          conError: { type: "integer" },
+          totales: { $ref: "#/components/schemas/CotizacionTotales" },
+          filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
         },
       },
     },
