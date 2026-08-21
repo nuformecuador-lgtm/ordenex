@@ -117,6 +117,84 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifaPorTienda (R20/R22/R23)"
   });
 });
 
+// Feature 255 (T4, R12) — el metodo NUEVO. No sustituye a `resolveTarifaPorTienda` ni le
+// añade un parametro: convive con el. Los tres tests de arriba que afirman la AUSENCIA de
+// `status` en los dos metodos existentes (deuda (g) de la 69) siguen siendo el contrato del
+// camino de LIQUIDACION y no se tocan; este describe fija el contrato del camino de COTIZACION,
+// donde `null` no degrada a 0.00 sino que dispara un 409 (design 255 §4).
+describe("TarifaVigentePorTiendaRepository.resolveTarifaCotizablePorTienda (feature 255, R12)", () => {
+  it("R12: resolveTarifaCotizablePorTienda filtra deletedAt null Y status activo, la mas reciente", async () => {
+    const prisma = buildPrisma();
+    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
+
+    await buildRepo(prisma).resolveTarifaCotizablePorTienda("t1");
+
+    const args = prisma.tarifa.findFirst.mock.calls[0]![0];
+    // El WHERE EXACTO: los tres filtros, ni uno mas.
+    expect(args.where).toEqual({ tiendaId: "t1", deletedAt: null, status: "activo" });
+    expect(Object.keys(args.where)).toContain("status");
+    expect(args.where.deletedAt).toBeNull();
+    // Entre varias candidatas, la MAS RECIENTE.
+    expect(args.orderBy).toEqual({ createdAt: "desc" });
+  });
+
+  it("R12: entre varias candidatas devuelve la MAS RECIENTE (la primera del orderBy desc)", async () => {
+    const prisma = buildPrisma();
+    // `findFirst` + `orderBy createdAt desc` = la mas reciente. Se simula el contrato de Prisma
+    // devolviendo la fila que ese orden dejaria primera.
+    prisma.tarifa.findFirst.mockResolvedValue(
+      tarifaRow({ id: "reciente", valorFlete: new Prisma.Decimal("999") }),
+    );
+
+    const t = await buildRepo(prisma).resolveTarifaCotizablePorTienda("t1");
+
+    expect(prisma.tarifa.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.tarifa.findFirst.mock.calls[0]![0].orderBy).toEqual({ createdAt: "desc" });
+    expect(t?.valorFlete).toBe("999.00");
+  });
+
+  it("R12: proyecta los mismos 7 campos como STRING escala 2 (money-safe, sin number)", async () => {
+    const prisma = buildPrisma();
+    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
+
+    const t = await buildRepo(prisma).resolveTarifaCotizablePorTienda("t1");
+
+    expect(t).toEqual({
+      valorFlete: "1000.00",
+      valorFleteGam: "1500.00",
+      valorFleteDevuelto: "400.00",
+      valorFleteDevueltoGam: "600.00",
+      comisionCod: "5.00",
+      ivaFlete: "13.00",
+      ivaComisionCod: "13.00",
+    });
+  });
+
+  it("R12/R13: sin candidata devuelve `null` (y ahi el borde de cotizacion responde 409)", async () => {
+    const prisma = buildPrisma();
+    prisma.tarifa.findFirst.mockResolvedValue(null);
+
+    await expect(
+      buildRepo(prisma).resolveTarifaCotizablePorTienda("t1"),
+    ).resolves.toBeNull();
+  });
+
+  it("no altera el WHERE del resolver de liquidacion: los dos metodos consultan distinto", async () => {
+    // La contraprueba de que el metodo nuevo NO se colo dentro del existente (deuda (g) intacta).
+    const prisma = buildPrisma();
+    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
+    const repo = buildRepo(prisma);
+
+    await repo.resolveTarifaPorTienda("t1");
+    await repo.resolveTarifaCotizablePorTienda("t1");
+
+    const whereLiquidacion = prisma.tarifa.findFirst.mock.calls[0]![0].where;
+    const whereCotizacion = prisma.tarifa.findFirst.mock.calls[1]![0].where;
+    expect(JSON.stringify(whereLiquidacion)).not.toContain("status");
+    expect(JSON.stringify(whereCotizacion)).toContain("status");
+  });
+});
+
 describe("TarifaVigentePorTiendaRepository.resolveTarifasPorTiendas (R20/R22/R23, batch)", () => {
   it("resuelve N tiendas con UNA sola query (`tienda_id IN (...)`), sin N+1", async () => {
     const prisma = buildPrisma();

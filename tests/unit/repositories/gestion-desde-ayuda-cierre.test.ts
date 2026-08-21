@@ -223,6 +223,8 @@ function buildStore(filas: FilaGestion[]) {
 
 const TARIFA_REPO: ITarifaVigentePorTiendaRepository = {
   resolveTarifaPorTienda: vi.fn(async () => null),
+  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). Este camino no lo usa.
+  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
   resolveTarifasPorTiendas: vi.fn(async (_tx: unknown, ids: string[]) => {
     const m = new Map<string, null>();
     for (const id of ids) m.set(id, null);

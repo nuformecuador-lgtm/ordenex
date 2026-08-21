@@ -13,6 +13,8 @@ import type { RawRow } from "@/lib/parsers/spreadsheet";
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
   resolveTarifaPorTienda: vi.fn(async () => null),
+  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). Esta via no lo invoca.
+  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
   resolveTarifasPorTiendas: vi.fn(async () => new Map()),
 };
 
