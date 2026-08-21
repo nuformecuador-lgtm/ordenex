@@ -38,6 +38,13 @@ export const TEXTO_ORDEN_RECHAZADA = "Una orden fue rechazada por el destinatari
 export const TEXTO_POSTULACION_PENDIENTE =
   "Una postulación de mensajero está pendiente de aprobación.";
 export const TEXTO_CIERRE_POR_APROBAR = "Un mensajero envió su cierre del día para aprobación.";
+/**
+ * Feature 253 (D6). El texto NO nombra a la persona, ni su teléfono, ni su correo, ni una palabra
+ * de su mensaje (R19): quién es y qué ofrece se lee en el panel, que es donde la autorización por
+ * rol vive. El aviso solo dice que hay algo que atender.
+ */
+export const TEXTO_POSTULACION_RECURSO_PENDIENTE =
+  "Alguien ofreció un vehículo o una bodega desde la web.";
 export function textoCargaMasivaTerminada(creadas: number): string {
   return `Carga masiva terminada: ${creadas} ${creadas === 1 ? "orden cargada" : "órdenes cargadas"}.`;
 }
@@ -271,6 +278,53 @@ export async function emitirPostulacionPendiente(
       anexo: ctx.nombre,
       entidadTipo: "usuario" as const,
       entidadId: ctx.postulanteId,
+      destinatario,
+    })),
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature 253 (D6) — Postulacion de vehiculo o bodega pendiente. BEST-EFFORT.
+// ---------------------------------------------------------------------------
+
+/** Lo MINIMO que el aviso necesita. Ni `nombre`, ni `correo`, ni `telefono`, ni `mensaje`: R19
+ *  prohibe que esos tres ultimos salgan de la fila, y el nombre no aporta nada aqui. */
+export interface PostulacionRecursoContexto {
+  postulacionId: string;
+  /** `vehiculo` | `bodega`. Solo alimenta el anexo, que es la unica pista del aviso. */
+  tipo: "vehiculo" | "bodega";
+}
+
+/** Etiqueta legible del tipo para el anexo. No es PII y ahorra abrir el panel para saber que es. */
+const ANEXO_POR_TIPO: Record<PostulacionRecursoContexto["tipo"], string> = {
+  vehiculo: "Vehiculo",
+  bodega: "Bodega",
+};
+
+/**
+ * D6: DOS filas `warning` sin alcance, a `maestro` y `admin` (espejo exacto de quien autoriza el
+ * panel, `ROLES_ATENCION` de `PostulacionRecursoService`). Misma forma que el aviso de postulacion
+ * de mensajero, del que este es hermano.
+ *
+ * `entidadTipo` es `postulacion_recurso` y NO `usuario`: esta postulacion no crea ninguna cuenta
+ * (design §14-C), y con `usuario` el `entidad_id` apuntaria a una tabla en la que esa fila no
+ * existe. El valor lo anade la migracion `*_notificacion_evento_postulacion_recurso`.
+ */
+export async function emitirPostulacionRecursoPendiente(
+  repo: INotificacionRepository,
+  ctx: PostulacionRecursoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    ROLES_ADMINISTRACION.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "postulacion_recurso_pendiente" as const,
+      descripcion: TEXTO_POSTULACION_RECURSO_PENDIENTE,
+      anexo: ANEXO_POR_TIPO[ctx.tipo],
+      entidadTipo: "postulacion_recurso" as const,
+      entidadId: ctx.postulacionId,
       destinatario,
     })),
     tx,

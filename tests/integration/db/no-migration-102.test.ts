@@ -38,6 +38,20 @@ const CONCEPTOS_PROHIBIDOS = [
 // La UNICA carpeta de migracion con concepto de notificacion admitida: la de la feature 146.
 const MIGRACION_NOTIFICACIONES_146 = "_notificacion";
 
+/**
+ * Carpetas de migracion con concepto de notificacion que SI estan admitidas, ademas de la 146.
+ *
+ * ⚠️ ESTA LISTA NO RELAJA LA GUARDIA: sigue siendo cerrada, y cada entrada tiene que decir de que
+ * feature es y por que. Lo que la 102 afirma es que ELLA no introdujo infra de notificaciones
+ * (R3/R17); no que ninguna feature posterior pueda volver a tocar la de la 146. Anadida el
+ * 2026-08-20 por la feature 253 (D6), que suma UN valor a `notificacion_evento` y otro a
+ * `notificacion_entidad_tipo` — sin tablas, sin columnas y sin modelos nuevos, que es lo que el
+ * resto de este archivo sigue comprobando.
+ */
+const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
+  "_notificacion_evento_postulacion_recurso", // feature 253 / D6
+] as const;
+
 describe("Feature 102 · SIN migracion nueva (R3)", () => {
   it("no hay carpeta de migracion que introduzca la clasificacion SLA (por concepto)", () => {
     for (const dir of migrationDirs) {
@@ -48,13 +62,29 @@ describe("Feature 102 · SIN migracion nueva (R3)", () => {
     }
   });
 
-  it("la unica migracion de notificaciones es la de la feature 146", () => {
+  it("la unica migracion de notificaciones es la de la 146, salvo las declaradas arriba", () => {
     const conNotificacion = migrationDirs.filter((d) =>
       /notificac|notification|campana/i.test(d),
     );
-    expect(conNotificacion).toEqual([
-      conNotificacion.find((d) => d.endsWith(MIGRACION_NOTIFICACIONES_146)),
-    ]);
+    const noDeclaradas = conNotificacion.filter(
+      (d) =>
+        !d.endsWith(MIGRACION_NOTIFICACIONES_146) &&
+        !MIGRACIONES_NOTIFICACIONES_POSTERIORES.some((s) => d.endsWith(s)),
+    );
+    expect(
+      noDeclaradas,
+      "hay una migracion con concepto de notificacion que nadie declaro en " +
+        "`MIGRACIONES_NOTIFICACIONES_POSTERIORES`: o es de la 102 (y entonces R3/R17 se rompio) o " +
+        "es de otra feature y hay que nombrarla ahi con su motivo",
+    ).toEqual([]);
+    // Anti-vacuidad: la de la 146 tiene que seguir estando (si el filtro dejara de encontrar
+    // nada, este test estaria verde sin haber comprobado nada).
+    expect(conNotificacion.some((d) => d.endsWith(MIGRACION_NOTIFICACIONES_146))).toBe(true);
+    // Y cada carpeta declarada como posterior tiene que EXISTIR: una excepcion que sobrevive a su
+    // motivo es basura.
+    for (const sufijo of MIGRACIONES_NOTIFICACIONES_POSTERIORES) {
+      expect(conNotificacion.some((d) => d.endsWith(sufijo)), `sobra ${sufijo}`).toBe(true);
+    }
   });
 
   it("schema.prisma NO tiene columna snapshot de la clasificacion SLA (ni en gestion ni en cierre)", () => {

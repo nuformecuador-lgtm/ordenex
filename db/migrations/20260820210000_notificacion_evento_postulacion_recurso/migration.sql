@@ -1,0 +1,32 @@
+-- Feature 253 (D6, FIRMADA EN CONTRA de la recomendacion del spec el 2026-08-21) — el aviso en la
+-- campana cuando llega una postulacion de vehiculo o bodega.
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'postulacion_recurso_pendiente'
+--   `notificacion_entidad_tipo` += 'postulacion_recurso'
+--
+-- POR QUE TAMBIEN EL SEGUNDO, dicho a proposito porque el spec solo nombraba el primero:
+-- `notificacion.entidad_tipo` es NOT NULL y discrimina a que tabla apunta `entidad_id` (referencia
+-- POLIMORFICA, sin FK, feature 146 §1.2). Los cuatro valores vigentes son `orden`, `usuario`,
+-- `cierre_dia` y `carga`, y NINGUNO describe una fila de `postulacion_recurso`. Reusar `usuario`
+-- para que cupiera seria escribir un dato FALSO con formato de dato —la postulacion de recurso no
+-- crea ninguna cuenta (design §14-C)— y ademas romperia la dedupe: el indice unico
+-- `notificacion_dedupe_key` es por `(evento, entidad_id, destinatario)`, y un `entidad_id` que no
+-- identifica a un usuario dentro del cubo `usuario` es una colision esperando. La alternativa de
+-- emitir con `entidad_id NULL` desactiva la dedupe entera (`emitirFilas` la salta cuando es NULL),
+-- asi que dos postulaciones seguidas producirian dos avisos identicos sin que nadie los pudiera
+-- agrupar.
+--
+-- POR QUE VA SOLA (sin ningun USO de los valores en la misma transaccion): Postgres NO permite
+-- USAR un valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma
+-- Migrate corre cada `migration.sql` en una. Aqui SOLO se anaden los valores; su primer uso ocurre
+-- en runtime (`emitirPostulacionRecursoPendiente`), en transacciones posteriores. Mismo precedente
+-- que `rechazo_tienda` (240), `gestion_tienda_ayuda` (237) y `anclaje_devolucion` (239).
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`notificacion` conserva la suya
+-- de la feature 146). No hay BACKFILL: ninguna notificacion existente cambia de evento ni de
+-- entidad, y las postulaciones perdidas por la maqueta NO dejaron fila, asi que no hay nada que
+-- avisar hacia atras (P1, sin accion).
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'postulacion_recurso_pendiente';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'postulacion_recurso';
