@@ -3055,6 +3055,7 @@
       "complexity": "high",
       "zone": "fullstack",
       "branch": "feature/248-cotizador-distrito",
+      "merged_pr": 418,
       "depends_on": null,
       "spec_ready_at": "2026-08-20",
       "spec_approved_at": "2026-08-20",
