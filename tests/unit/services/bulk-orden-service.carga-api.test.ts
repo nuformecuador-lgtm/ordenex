@@ -29,6 +29,8 @@ const TARIFA: TarifaVigente = {
 function buildTarifaRepo(tarifa: TarifaVigente | null = TARIFA): ITarifaVigentePorTiendaRepository {
   return {
     resolveTarifaPorTienda: vi.fn(async () => tarifa),
+    // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
+    resolveTarifaCotizablePorTienda: vi.fn(async () => tarifa),
     resolveTarifasPorTiendas: vi.fn(async () => new Map()),
   };
 }
