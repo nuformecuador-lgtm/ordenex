@@ -13,10 +13,17 @@ import { Button } from "@/components/ui/button";
 
 // Feature 63 (reuse mensajero -> adminSatelite): sección REUTILIZABLE "por aceptar"
 // extraída de "Por recoger" del mensajero. Un banner con el contador de nuevas
-// arriba de la lista + un botón "aceptar todas" (lote) + tarjetas con botón
-// "aceptar" por-orden. Componente de presentación puro: NO conoce Server Actions ni
-// estado de negocio; el consumidor cablea `onAceptarTodas`/`onAceptarUna` y el
-// render del detalle. Textos entran por props (i18n-ready), sin hardcodear en la UI.
+// arriba de la lista + tarjetas con botón "aceptar" por-orden. Componente de
+// presentación puro: NO conoce Server Actions ni estado de negocio; el consumidor
+// cablea `onAceptarUna` y el render del detalle. Textos entran por props
+// (i18n-ready), sin hardcodear en la UI.
+//
+// Pedido humano del 2026-08-19 — SIN acción en lote. El botón "aceptar todas" se
+// retira: aceptar de golpe todo lo que hay en pantalla se firma sin mirar, y era
+// justo lo que la feature 96 ya había quitado del "Por recoger" del mensajero. La
+// recepción queda orden por orden (o por guía, con el escáner), que es donde el
+// paquete se comprueba de verdad. El camino en lote del servidor (`recibirLote`)
+// sigue existiendo y se usa con UN id.
 
 /** Forma mínima que cada orden debe cumplir para renderizar título y acciones. */
 export interface PorAceptarOrdenBase {
@@ -36,14 +43,10 @@ export interface PorAceptarSectionProps<T extends PorAceptarOrdenBase> {
   /** Órdenes a listar en este apartado. */
   ordenes: T[];
   /**
-   * Lote: acepta TODAS las órdenes listadas (recibe todos sus ids). Opcional: solo se
-   * usa con `mostrarAcciones` (una lista de solo-visualización no lo necesita).
+   * Una: acepta la orden indicada por su id. Opcional: solo se usa con
+   * `mostrarAcciones` (una lista de solo-visualización no lo necesita).
    */
-  onAceptarTodas?: (ids: string[]) => void;
-  /** Una: acepta la orden indicada por su id. Opcional (ver `onAceptarTodas`). */
   onAceptarUna?: (id: string) => void;
-  /** Texto del botón en lote ("Recoger todas" / "Aceptar todas"). Opcional. */
-  textoBotonTodas?: string;
   /** Texto del botón por-orden ("Recoger" / "Aceptar"). Opcional. */
   textoBotonUna?: string;
   /** Texto cuando no hay órdenes. */
@@ -61,8 +64,8 @@ export interface PorAceptarSectionProps<T extends PorAceptarOrdenBase> {
   /** Clases de la `<ul>` (p. ej. una grilla). Default: columna con separación. */
   listClassName?: string;
   /**
-   * Si es `false`, oculta el botón en lote y los botones por-orden (p. ej. el
-   * adminSatelite sin zona: se listan, pero no se puede aceptar). Default `true`.
+   * Si es `false`, oculta los botones por-orden (p. ej. el adminSatelite sin zona:
+   * se listan, pero no se puede aceptar). Default `true`.
    */
   mostrarAcciones?: boolean;
 }
@@ -75,9 +78,7 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
   titulo,
   nuevasLabel,
   ordenes,
-  onAceptarTodas,
   onAceptarUna,
-  textoBotonTodas,
   textoBotonUna,
   vacio,
   renderDetalle,
@@ -87,18 +88,7 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
 }: PorAceptarSectionProps<T>) {
   return (
     <section aria-label={titulo} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">{titulo}</h2>
-        {mostrarAcciones ? (
-          <Button
-            type="button"
-            onClick={() => onAceptarTodas?.(ordenes.map((o) => o.id))}
-            disabled={ordenes.length === 0}
-          >
-            {textoBotonTodas}
-          </Button>
-        ) : null}
-      </div>
+      <h2 className="text-lg font-semibold">{titulo}</h2>
 
       {/* Banner con el contador de nuevas, arriba de la lista (sólo si hay). */}
       {ordenes.length > 0 ? (

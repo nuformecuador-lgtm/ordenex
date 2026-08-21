@@ -13,15 +13,20 @@ import {
   FilterComponent,
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
+import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
 import {
   conBadgePrioridad,
   resaltarFilaPrioridad,
 } from "@/components/shared/PrioridadResalte";
 import { SelectAllCheckbox } from "@/components/shared/SelectAllCheckbox";
-import type {
-  CatalogoFiltrosSateliteDTO,
-  RecepcionSateliteDTO,
-} from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import { BUSQUEDA_MIN_CHARS } from "@/lib/types/orden";
+import {
+  CATALOGO_FILTROS_VACIO,
+  CLAVE_BUSQUEDA,
+  PLACEHOLDER_BUSQUEDA,
+} from "@/app/(app)/ordenes/_components/ordenes-filtros-def";
 
 // Feature 158 (T2.7, decisión del humano del 2026-07-30): el reporte de incidente también
 // vive en la bodega satélite. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`;
@@ -31,6 +36,7 @@ import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { recibidasColumns } from "./recibidas-columns";
 import { COLUMNAS_DESCARGA_SATELITE } from "./satelite-descarga-columnas";
 import {
+  CLAVE_ESTADO,
   construirFiltrosSatelite,
   etiquetaEstado,
   seleccionAFiltroSatelite,
@@ -90,10 +96,14 @@ export interface SateliteOrdenesListadoProps {
    */
   totalSinFiltros: number;
   /**
-   * T K.2 (R46): opciones de cantón y distrito del CONJUNTO del actor, independientes de
-   * la página visible. Alimentan los dos desplegables.
+   * T K.2 (R46): opciones de la GEOGRAFÍA, independientes de la página visible.
+   *
+   * Pedido humano (2026-08-19): es el catálogo de `/ordenes` (`obtenerCatalogoFiltrosOrdenes`),
+   * que para el adminSatelite viene acotado a SU zona —geografía de la zona, sin zonas y sin
+   * cuentas tienda—. `null` si no cargó: la barra se monta igual, con sus controles sin
+   * opciones y la tabla viva (R64 de la 144).
    */
-  catalogo: CatalogoFiltrosSateliteDTO;
+  catalogo: CatalogoFiltrosOrdenesDTO | null;
   /** Emite los tres filtros elegidos; el módulo pide con ellos la página al servidor (R45). */
   onFiltroChange: (filtro: FiltroBodegaSatelite) => void;
   /**
@@ -175,23 +185,77 @@ export function SateliteOrdenesListado({
   const [seleccion, setSeleccion] = useState<FilterSelection>({});
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
 
-  // R46: las opciones salen del CATÁLOGO del conjunto, no de la página visible. Elegir un
+  /**
+   * Término del BUSCADOR, aparte de la selección agregada: `FilterComponent` emite SU
+   * selección completa en cada cambio, así que guardarlo ahí dentro lo borraría al marcar un
+   * cantón. Mismo reparto que en `/ordenes`.
+   */
+  const [termino, setTermino] = useState("");
+  /** Claves de los filtros PUESTOS en la barra desde el selector (la barra nace con el buscador). */
+  const [filtrosActivos, setFiltrosActivos] = useState<string[]>([]);
+  /** Contador de "Limpiar todo": `FilterComponent` es dueño de su selección, se remonta limpio. */
+  const [resetFiltros, setResetFiltros] = useState(0);
+
+  // R46: las opciones salen del CATÁLOGO de la zona, no de la página visible. Elegir un
   // cantón tampoco borra los demás del desplegable: el catálogo no depende de la selección.
-  const filtros = useMemo(() => construirFiltrosSatelite(catalogo), [catalogo]);
+  // Sin catálogo, los controles se declaran igual pero deshabilitados (R64 de la 144).
+  const filtros = useMemo(
+    () =>
+      construirFiltrosSatelite(catalogo ?? CATALOGO_FILTROS_VACIO).map((f) =>
+        catalogo === null && f.key !== CLAVE_ESTADO ? { ...f, disabled: true } : f,
+      ),
+    [catalogo],
+  );
+
+  /** Lo que ofrece el selector de la barra: cada filtro declarado, por su clave y su etiqueta. */
+  const filtrosOfrecidos = useMemo(
+    () => filtros.map((f) => ({ key: f.key, label: f.label })),
+    [filtros],
+  );
+
+  /** Solo se montan los filtros PEDIDOS, en el orden en que se declararon. */
+  const filtrosMontados = useMemo(
+    () => filtros.filter((f) => filtrosActivos.includes(f.key)),
+    [filtros, filtrosActivos],
+  );
 
   /** `true` si hay algún filtro marcado (cambia el contador y el mensaje de vacío). */
-  const hayFiltros = Object.values(seleccion).some((valores) => valores.length > 0);
+  const hayFiltros =
+    termino !== "" || Object.values(seleccion).some((valores) => valores.length > 0);
+
+  function emitir(nueva: FilterSelection, terminoNuevo: string) {
+    setSeleccionados(new Set());
+    // El término entra como UN filtro más, bajo su misma clave, para que
+    // `seleccionAFiltroSatelite` siga siendo el único punto que conoce la forma del filtro.
+    const completa: FilterSelection =
+      terminoNuevo !== "" ? { ...nueva, [CLAVE_BUSQUEDA]: [terminoNuevo] } : nueva;
+    onFiltroChange(seleccionAFiltroSatelite(completa));
+  }
 
   /**
    * Filtrar cambia el CONJUNTO, así que la página que se está viendo puede no existir en el
    * nuevo resultado y las filas marcadas pueden desaparecer de la vista. Se emite el filtro
    * (el módulo vuelve a la página 1) y se limpia la selección: actuar sobre una fila que ya
-   * no se ve es actuar a ciegas. Mismo criterio que `OrdenesModule` (feature 144).
+   * no se ve es actuar a ciegas.
    */
   function cambiarFiltros(nueva: FilterSelection) {
     setSeleccion(nueva);
+    emitir(nueva, termino);
+  }
+
+  function cambiarTermino(nuevo: string) {
+    setTermino(nuevo);
+    emitir(seleccion, nuevo);
+  }
+
+  /** Deja la barra como recién abierta: sin término, sin valores y sin filtros puestos. */
+  function limpiarFiltros() {
+    setSeleccion({});
+    setTermino("");
+    setFiltrosActivos([]);
+    setResetFiltros((n) => n + 1);
     setSeleccionados(new Set());
-    onFiltroChange(seleccionAFiltroSatelite(nueva));
+    onFiltroChange({});
   }
 
   function toggleUno(id: string, checked: boolean) {
@@ -390,12 +454,28 @@ export function SateliteOrdenesListado({
     <section aria-label={TITULO_BODEGA} className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">{TITULO_BODEGA}</h2>
 
-      <FilterComponent
-        filters={filtros}
-        onChange={cambiarFiltros}
-        showClearAll
-        debounceMs={0}
-      />
+      {/* Pedido humano (2026-08-19): la MISMA barra de `/ordenes` — buscador permanente,
+          selector de filtros y "Limpiar todo" al final de la fila. */}
+      <BuscadorFiltros
+        label="Buscar"
+        placeholder={PLACEHOLDER_BUSQUEDA}
+        minChars={BUSQUEDA_MIN_CHARS}
+        onChange={cambiarTermino}
+        filtros={filtrosOfrecidos}
+        activos={filtrosActivos}
+        onActivosChange={setFiltrosActivos}
+        onLimpiarTodo={limpiarFiltros}
+        hayFiltrosAplicados={filtrosActivos.length > 0 || hayFiltros}
+      >
+        {filtrosMontados.length > 0 ? (
+          <FilterComponent
+            key={resetFiltros}
+            filters={filtrosMontados}
+            onChange={cambiarFiltros}
+            debounceMs={0}
+          />
+        ) : null}
+      </BuscadorFiltros>
 
       {/* Barra de acciones de lote: aparece con la selección y ofrece SOLO la transición
           válida para el estado común de lo seleccionado. */}

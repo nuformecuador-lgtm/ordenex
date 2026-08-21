@@ -84,6 +84,7 @@ function makeGestion(
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
     // sobreescriben.
     causaIncidente: null,

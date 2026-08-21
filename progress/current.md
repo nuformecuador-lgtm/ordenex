@@ -9,7 +9,216 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-18, noche. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-20, cierre. **EMPIEZA A LEER POR AQUÍ**
+
+**Cinco fichas mergeadas en dos días, las cinco con revisión OK. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+| **241** | investigación de las guardas de bloqueo retiradas | [#408](https://github.com/nuformecuador-lgtm/ordenex/pull/408) |
+| **237** | la gestión que hace la tienda cuenta como del mensajero | [#410](https://github.com/nuformecuador-lgtm/ordenex/pull/410) |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | **#411** |
+
+La **228** queda **superada** por la 236. La **74** se cerró **por auditoría**: ya estaba
+implementada y la ficha llevaba semanas mintiendo.
+
+### ▶️ Qué queda por implementar
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **239** | la devolución espera al cierre | `done` — **«ver la app» HECHA el 2026-08-20**, ver `progress/recorrido_239.md`. Quedan abiertas T0.3 (avisar a integradores) y T6.4 |
+| **247** | **el doble cobro del flete de devolución** | `pending` — **medido**: `1 de 16`, ₡2.486 a NUFORM. Dos cierres aprobados, seis días de diferencia, el mismo paquete |
+| **248** | los errores de `/novedades` salen **mudos** | `pending` — la **feature 100 comparte el hueco idéntico** |
+| **220** | e2e | `pending`, pero **su premisa está podrida**: 13 de 20 specs son `NOT EXECUTED` |
+| **249** | la regla del `down.sql` obligatorio **no la vigila nadie** | `pending` — **tres migraciones llevan seis días sin `down.sql` con el gate en verde**, y van cinco en dos semanas |
+| **250** | el aviso al mensajero dice «Devuelta» cuando la orden está en «Devolución por confirmar» | `pending` — **salió del recorrido de la 239**: es la coincidencia resultado↔estado que esa ficha vino a romper, viva en un retorno al que no llegó |
+
+### ⚠️ Antes de desplegar — acciones HUMANAS que se arrastran
+
+- **238 / T0.3:** avisar a bodega de que **el gesto cambia**: aprobar exige tener los paquetes
+  delante y escanear su guía.
+- **Re-medir producción** antes de desplegar la **236**, la **237**, la **238** y la **246**. Las
+  cuatro mediciones se tomaron con fichas todavía sin desplegar y **caducan al salir**.
+
+### ⚠️ PRODUCCIÓN SE ESTÁ USANDO COMO ENTORNO DE PRUEBAS
+
+Confirmado por el humano el **2026-08-20**, y hay que saberlo para leer cualquier medición de
+`progress/medicion_*.md`. Los números **describen fielmente lo que el código hace** —un doble cobro
+medido es un doble cobro real del código—, pero **no dicen frecuencia operativa**: un número bajo
+puede ser «no pasa» o «nadie lo ha probado aún», y la base no distingue. Los importes cobrados de
+más **no son dinero real de una tienda real**, por eso el defecto de la 247 se arregla **hacia
+adelante** y no hay devolución que hacer. **El día que producción sea producción de verdad, todo
+esto hay que re-medirlo.**
+
+### 🧾 Los dos patrones que se repitieron en las cinco fichas
+
+**Una suite verde no encuentra una maqueta.** La 240 destapó un botón que llevaba **desde el
+2026-08-12** sin hacer nada, con **las tres capas de tests de esa superficie en verde** todo ese
+tiempo. Una maqueta no rompe nada — por eso «ver la app» ha encontrado, en esta pila, un cierre
+imposible de aprobar (238), dos defectos de card (235), un botón que siempre fallaba (237) y siete
+textos rotos. Lo que no se mira, no está verificado.
+
+### 📌 Una excepción a la regla 1, escrita para que no se convierta en costumbre
+
+La 240 y la 246 corrieron **las dos `in_progress` en la zona `fullstack` a la vez y compartiendo
+cinco archivos**. `CLAUDE.md` admite dos por zona **«siempre sin conflicto de archivos entre
+ellas»**, así que esto fue una excepción. Salió limpio —cada edición lleva su ficha citada, ninguna
+reescribió un archivo entero, y el gate completo lo confirma— pero **salió limpio porque se vigiló,
+no porque la regla lo permitiera**. Si vuelve a hacer falta, que se decida a propósito y con la
+misma vigilancia; y **el gate nunca en paralelo con un subagente que muta el árbol**, porque
+entonces su veredicto no vale.
+
+**Y marcar tareas por lotes miente.** Pasó en la 236 (T8), volvió a pasar en la 237 (recorrido
+marcado hecho **parado en el paso 6 de 9**, y los tres que faltaban eran los de dinero) y la
+revisión lo rechazó **con razón** las dos veces. En la 240 y la 246 las tareas quedan marcadas una a
+una, con **cinco abiertas a propósito** y el motivo escrito al lado.
+
+---
+
+## ✅ AL DÍA — 2026-08-19, cierre. **EMPIEZA A LEER POR AQUÍ**
+
+**Tres fichas mergeadas hoy, las tres con revisión OK y gate completo verde. Ninguna `in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+| **236** | la ayuda tiene pestaña propia, y la tienda por fin lee el motivo | [#406](https://github.com/nuformecuador-lgtm/ordenex/pull/406) |
+
+La **228** queda **superada** por la 236.
+
+### ▶️ Qué sigue
+
+1. **237** — la gestión de la tienda que cuenta como del mensajero. Hereda dos avisos escritos: la
+   invariante «una orden en ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y
+   la guardia de las siete listas **vigila pero no descubre** una octava.
+2. **240** — el punto 12 del pedido («Habilitar» aparece donde no debía) y «Rechazar».
+3. **241**, independiente.
+
+⚠️ **La 237 y la 240 comparten `ACCIONES_POR_GRUPO`, `NovedadesModule` y `HabilitarNovedadResult`.
+No en paralelo.**
+
+### ⚠️ Antes de desplegar — dos acciones HUMANAS
+
+- **238 / T0.3:** avisar a bodega de que el gesto cambia: aprobar exige tener los paquetes delante.
+- **236 / T0.1 y 238 / T0.1:** **re-medir producción**. Las dos mediciones se tomaron con la 235 aún
+  sin desplegar, y **caducan en cuanto salga**.
+
+### 🧾 El patrón que se repitió las tres veces
+
+**Ver la app encontró lo que la suite no**, en dos de las tres: un **cierre que no se podía aprobar
+nunca** (238) y **dos defectos de card** (235). Y **la trazabilidad falló en las cuatro fichas
+seguidas**: filas del mapa citando tests que no existen, y una bitácora publicando una salida que no
+se reproduce. `vitest` **no falla** con un filtro que no casa nada — lo ignora en silencio.
+
+Y **`dev` llegó rojo por tercera vez** con el merge de `ux` (#401). La causa de fondo sigue viva: un
+PR en verde aquí **no dice nada de los tests**, porque el único check es un build.
+
+---
+
+## ✅ AL DÍA — 2026-08-19, noche (la 235 y la 238)
+
+**Dos fichas mergeadas hoy, las dos con revisión OK y gate completo verde. No hay ninguna ficha
+`in_progress`.**
+
+| # | Qué | PR |
+| --- | --- | --- |
+| **235** | la ayuda a la tienda pasa de una bandera a un estatus propio | [#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402) |
+| **238** | aprobar el cierre exige tener los paquetes delante | [#404](https://github.com/nuformecuador-lgtm/ordenex/pull/404) |
+
+### ▶️ Qué sigue
+
+1. **236** — la pestaña propia de ayuda en `/novedades`. **Marca el reloj**: hasta que entre, la
+   tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede leer el motivo**.
+2. **237** → **240**. La 237 hereda dos avisos escritos: la invariante «una orden en ayuda bloquea el
+   cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia de las siete listas **vigila
+   pero no descubre** una octava.
+3. **241**, independiente.
+
+### ⚠️ Antes de desplegar la 238 — acción HUMANA (T0.3)
+
+Avisar a bodega de que **el gesto cambia**: a partir del despliegue, aprobar un cierre exige tener
+los paquetes delante y escanear su guía. La medición dice que **no bloquea** —0 cierres en cola el
+2026-08-19— pero **esa foto caduca en cuanto un mensajero cierre su día**: re-medir justo antes de
+desplegar, no antes de mergear.
+
+### 🔴 `dev` llegó ROJO, y es la TERCERA vez
+
+El merge del branch `ux` ([#401](https://github.com/nuformecuador-lgtm/ordenex/pull/401), 142
+archivos) dejó en `dev` **tres tests money-critical de la 69 en rojo** y **dos migraciones sin
+`down.sql`**. Los tres arreglos van dentro del PR de la 238, y están explicados ahí.
+
+**La causa de fondo no está arreglada:** en este repo **un PR en verde no dice nada sobre los
+tests** —el único check es el build de Vercel, que compila y migra pero no ejecuta la suite—. Antes
+de mergear algo que conviva con features recién llegadas, hay que correr el gate **sobre el árbol
+mergeado**, no mirar el estado del PR. Y al ramificar, **dar por hecho que `dev` puede estar rojo**:
+si el gate sale rojo, comprobar si el rojo es tuyo antes de tocar nada.
+
+---
+
+## ✅ AL DÍA — 2026-08-19 (la 235)
+
+**La 235 («ayuda a la tienda: estatus propio») está MERGEADA en `dev`** — PR
+[#402](https://github.com/nuformecuador-lgtm/ordenex/pull/402), commit `32b4064f`, ficha en `done`,
+39/39 tareas. La revisión la había **RECHAZADO** con 4 bloqueantes; los cuatro se cerraron:
+
+| | qué era | cómo quedó |
+| --- | --- | --- |
+| **B1** | el corte de la noche no barría al mensajero que acababa el día en ayuda | cerrado en `db23911b`, censando las **siete** listas de «qué ocupa a un mensajero» y con guardia que las cruza |
+| **B2** | la regla de dedicación de la 157 leía «sin carga» a quien lleva el paquete | ídem |
+| **B3** | R35 pedía superficie de lectura para los dos roles y la tienda no la tiene | **reconciliado en el spec**: el propio `requirements.md` se contradecía (su «fuera de alcance» ya difería la pantalla de la tienda a la 236) |
+| **B4** | `tasks.md` con 0/39 y trabajo abierto dentro | cerrado: **38/39**, con **T8.1 hecho de verdad** (ver abajo). La única sin marcar es T8.3 —gate completo y PR—, que no puede marcarse antes de correrse |
+
+Y el último menor, **m4**: el rescate estaba apagado en pantalla para el mensajero bloqueado, contra
+R25 — arreglado, con test que se sabe poner rojo.
+
+### ▶️ Qué sigue, en orden
+
+1. **236** — la pestaña propia de ayuda en `/novedades` y su card. **Es la siguiente y corre prisa**:
+   hasta que entre, la tienda ve la solicitud de ayuda bajo la pestaña «En devolución» y **no puede
+   leer el motivo**. Ver el aviso de despliegue de abajo.
+2. **238** — confirmación física de los paquetes al aprobar el cierre. **No depende de ninguna** y ya
+   tiene spec completo y decisiones firmadas: puede arrancar sin esperar a nadie, incluso en paralelo
+   con la 236 (zona `fullstack`, y ahora mismo no hay ninguna `in_progress`).
+3. **237** → **240**, en ese orden. La **237** hereda dos avisos escritos: la invariante «una orden en
+   ayuda bloquea el cierre» es **falsa en las dos rutas de re-solicitud**, y la guardia nueva de las
+   siete listas **vigila pero no descubre** una octava.
+4. **241** — investigación de las guardas de bloqueo retiradas. Independiente, cuando toque.
+
+### 🔀 ORDEN DE MERGEO Y DE DESPLIEGUE (cierra **T0.3** de la 235)
+
+**235 → 236 → 237 → 240**, en ese orden. La **241** (investigación de las guardas de bloqueo
+retiradas) es independiente y puede ir cuando sea. La **238** no depende de ninguna y puede arrancar
+en paralelo, ya con spec completo y decisiones firmadas.
+
+⚠️ **La 235 YA ESTÁ EN `dev`, así que la 236 marca el reloj.** Medido en pantalla el 2026-08-19: con
+la 235 sola, la tienda ve la orden en `/novedades` con el chip «Ayuda solicitada» **bajo la pestaña
+«En devolución»** y **sin ninguna forma de leer el motivo** que el mensajero escribió (su card no
+tiene botón de notas). No es peor que hoy —hoy tampoco lo lee—, pero es una solicitud de ayuda cuyo
+motivo la tienda no puede abrir. La 236 es la que le da pestaña, card y lectura del hilo.
+
+### ⚠️ Aviso para la 237: la guardia nueva **vigila, pero no descubre**
+
+La guardia de las siete listas de «qué ocupa a un mensajero» cruza los gemelos entre sí —que es donde
+vivieron B1 y B2— pero su censo está **cerrado a mano** (`toHaveLength(7)`) y **no recorre el árbol**
+buscando una octava. Sabe de las siete que alguien le declaró. Si la 237 abre una lista nueva de esa
+familia, **la guardia no la va a encontrar sola**: hay que declararla. La red contra un *estatus*
+nuevo sigue siendo el `satisfies Record<OrderStatusValue, …>` de los mapas exhaustivos.
+
+### 👀 T8.1 — la app, vista
+
+Se recorrió entero, con Playwright y los dos roles: el mensajero pide ayuda → la orden sale del
+listado y del mapa → baja a su sección con los KPI **quietos** → hilo → «Recuperar»; y la tienda la
+ve en `/novedades` y la rescata con «Habilitar». **Encontró dos defectos que la suite no veía** (el
+chip de la card decía «En reparto», y la card llevaba «Pendiente de optimizar» contra R15), los dos
+arreglados en esta misma tanda. Detalle completo, con el texto leído del navegador, en
+`progress/recorrido_235.md`.
+
+
+## AL DÍA — 2026-08-18, noche
 
 > **Producción sigue sana y sin tocar**: `prod` en la release del 15-ago (PR #388), **cero errores de
 > runtime en 3 días**. Todo lo de hoy está en esta rama, pendiente de PR.

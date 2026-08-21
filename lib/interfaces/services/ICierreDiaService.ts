@@ -69,6 +69,15 @@ export interface CierreDetalleGestion {
   // por defecto (esa vista no expone el desglose SLA).
   esRechazoSla: boolean;
   /**
+   * 💰 Feature 237 (D6, R41) — `true` si la gestion la registro LA TIENDA desde su pestaña de
+   * ayuda. La fila del cierre del dia del mensajero lo dice CON PALABRAS, para que no firme como
+   * suya una gestion que no hizo, con una evidencia que no subio.
+   *
+   * Passthrough puro desde `CierreGestionPendienteRow`: el servicio no re-deriva la clasificacion,
+   * igual que con `esRechazoSla`.
+   */
+  desdeAyudaTienda: boolean;
+  /**
    * Feature 158/R9/R34: causa TIPIFICADA del incidente (`danado`/`perdido`/`robado`), leida de
    * `gestion_orden.causa_incidente`. `null` en cualquier otro resultado — es un campo POR
    * RAMA, como `metodoPago` o `fechaReprogramacion`.
@@ -123,6 +132,10 @@ export interface TarifaSnapshotDTO {
   comisionCod: string; // % 0..100 sobre montoCobrar
   ivaFlete: string; // % 0..100 sobre el flete
   ivaComisionCod: string; // % 0..100 sobre la comision
+  // Monto FIJO de fulfillment congelado (2026-08-19). `null` en los cierres anteriores a la
+  // columna: no hay valor correcto que inventar hacia atras, y un "0.00" diria "no se cobro",
+  // que es otra cosa. NO participa del `total` del ingreso: no es un concepto de la formula.
+  fulfillment: string | null;
 }
 
 /**

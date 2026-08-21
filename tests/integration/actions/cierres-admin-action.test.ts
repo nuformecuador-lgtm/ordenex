@@ -128,7 +128,46 @@ describe("cierres-admin actions — delegacion en el service", () => {
     expect(r).toMatchObject({ status: "ok", estado: "aprobado" });
     // Feature 158/R36: sin `indemnizaciones` en el request, el `.default([])` del schema hace
     // que llegue la lista VACIA — el contrato de la 38 sigue siendo valido tal cual.
-    expect(service.aprobarCierre).toHaveBeenCalledWith(CIERRE_ID, MAESTRO, []);
+    //
+    // Feature 238/R15/R16 (2026-08-19): el literal GANA un cuarto argumento, y se AMPLIA en vez
+    // de aflojarse a proposito. Este literal ES el contrato del borde: dice que la Server Action
+    // pasa exactamente lo que el schema produjo, sin coercion y sin campos inventados. Un
+    // `expect.anything()` en el cuarto hueco dejaria de vigilar justo lo que R15 fija: que «sin
+    // el campo» llega como lista VACIA al servicio, y no como `undefined`.
+    expect(service.aprobarCierre).toHaveBeenCalledWith(CIERRE_ID, MAESTRO, [], []);
+  });
+
+  it("238/R14/R15: la confirmacion fisica llega al servicio SIN transformar", async () => {
+    const service = fakeService();
+    const confirmacionFisica = [
+      { gestionId: "22222222-2222-4222-8222-222222222222", numGuia: 9001 },
+      { gestionId: "33333333-3333-4333-8333-333333333333", numGuia: 9002 },
+    ];
+
+    await aprobarCierre(
+      { cierreId: CIERRE_ID, confirmacionFisica },
+      { service, getActor: actorMaestro },
+    );
+
+    // Tal cual: mismos ids, mismos numeros, mismo orden. El borde valida la FORMA y nada mas;
+    // quien decide si eso CUBRE el conjunto que vuelve es el servicio, contra las gestiones
+    // reales del cierre (R14). Una coercion aqui seria una segunda regla que puede divergir.
+    expect(service.aprobarCierre).toHaveBeenCalledWith(CIERRE_ID, MAESTRO, [], confirmacionFisica);
+  });
+
+  it("238/R12: una guia no entera o <= 0 muere en el BORDE, sin tocar el service", async () => {
+    for (const numGuia of [0, -1, 12.5]) {
+      const service = fakeService();
+      const r = await aprobarCierre(
+        {
+          cierreId: CIERRE_ID,
+          confirmacionFisica: [{ gestionId: "22222222-2222-4222-8222-222222222222", numGuia }],
+        },
+        { service, getActor: actorMaestro },
+      );
+      expect(r.status, `numGuia = ${numGuia}`).toBe("validation_error");
+      expect(service.aprobarCierre).not.toHaveBeenCalled();
+    }
   });
 
   it("rechazarCierre con motivo -> delega con cierreId + motivo (trim del zod) + actor", async () => {

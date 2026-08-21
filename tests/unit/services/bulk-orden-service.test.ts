@@ -73,7 +73,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     // Feature 170 (T K.1/T K.2): la pagina del listado satelite y el catalogo de sus filtros.
     findRecepcionSatelitePaginada: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    findRecepcionSateliteGeoByZona: vi.fn().mockResolvedValue([]),
     // Feature 184 (T A.1/T A.2): el conjunto completo del listado y la vigencia de ids.
     findRecepcionSateliteCompleta: vi.fn().mockResolvedValue([]),
     findIdsVigentesEnBodega: vi.fn().mockResolvedValue([]),
@@ -90,12 +89,14 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
-    marcarAyuda: vi.fn().mockResolvedValue(undefined),
-    desmarcarAyuda: vi.fn().mockResolvedValue(undefined),
-    habilitarNovedad: vi.fn().mockResolvedValue(undefined),
+    // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
+    // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
+    transicionarAyuda: vi.fn().mockResolvedValue(true),
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
-    countDevueltasByTienda: vi.fn().mockResolvedValue(0),
-    findDevueltasByTienda: vi.fn().mockResolvedValue([]),
+    // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
+    countNovedadesByTienda: vi.fn().mockResolvedValue(0),
+    findNovedadesByTienda: vi.fn().mockResolvedValue([]),
+    findFechaSolicitudAyuda: vi.fn().mockResolvedValue(new Map()),
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),
@@ -118,7 +119,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
     deshacerAsignacionLote: vi.fn(async () => 0),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,

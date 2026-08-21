@@ -11,8 +11,15 @@ const PROVINCIAS = [{ id: "p1", nombre: "San Jose" }];
 const CANTONES = [{ id: "c1", nombre: "Central", padreId: "p1" }];
 const DISTRITOS = [{ id: "d1", nombre: "Carmen", padreId: "c1" }];
 
-function actor(rol: string): Actor {
-  return { usuarioId: "u1", rol: rol as RolValue };
+/** La cadena geografica de UNA zona: otro conjunto, no un subconjunto del de arriba. */
+const GEO_ZONA = {
+  provincias: [{ id: "p9", nombre: "Limon" }],
+  cantones: [{ id: "c9", nombre: "Pococi", padreId: "p9" }],
+  distritos: [{ id: "d9", nombre: "Guapiles", padreId: "c9" }],
+};
+
+function actor(rol: string, zonaId?: string | null): Actor {
+  return { usuarioId: "u1", rol: rol as RolValue, zonaId };
 }
 
 function buildService(demoras: Partial<Record<string, number>> = {}) {
@@ -32,6 +39,7 @@ function buildService(demoras: Partial<Record<string, number>> = {}) {
     listProvinciasLite: lectura("provincias", PROVINCIAS),
     listCantonesLite: lectura("cantones", CANTONES),
     listDistritosLite: lectura("distritos", DISTRITOS),
+    listGeografiaLitePorZona: lectura("geo-zona", GEO_ZONA),
   };
   return {
     service: new FiltrosOrdenesService(zonaRepo, userRepo, geoRepo),
@@ -54,7 +62,7 @@ describe("autorizacion (R52/R53)", () => {
     expect(geoRepo.listDistritosLite).not.toHaveBeenCalled();
   });
 
-  for (const rol of ["mensajero", "adminSatelite", "apiKey", "invitado"]) {
+  for (const rol of ["mensajero", "apiKey", "invitado"]) {
     it(`R53: rol \`${rol}\` -> \`forbidden\` sin datos`, async () => {
       const { service, zonaRepo, geoRepo } = buildService();
       const r = await service.obtenerCatalogo(actor(rol));
@@ -71,6 +79,46 @@ describe("autorizacion (R52/R53)", () => {
       expect(r.status).toBe("ok");
     });
   }
+});
+
+describe("acotamiento por rol del propio catalogo", () => {
+  it("adminTienda: la lista de cuentas tienda va VACIA y su lectura ni se dispara", async () => {
+    const { service, userRepo } = buildService();
+    const r = await service.obtenerCatalogo(actor("adminTienda"));
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    // No es que el control no se declare (eso lo hace la barra): es que el dato no viaja.
+    expect(r.catalogo.tiendas).toEqual([]);
+    expect(userRepo.listCuentasTienda).not.toHaveBeenCalled();
+    // Lo demas lo sigue recibiendo entero: su alcance es su tienda, no una zona.
+    expect(r.catalogo.zonas).toEqual(ZONAS);
+    expect(r.catalogo.cantones).toEqual(CANTONES);
+  });
+
+  it("adminSatelite: sin zonas, sin tiendas y con la geografia de SU zona", async () => {
+    const { service, zonaRepo, userRepo, geoRepo } = buildService();
+    const r = await service.obtenerCatalogo(actor("adminSatelite", "z-satelite"));
+    expect(r).toEqual({
+      status: "ok",
+      catalogo: { zonas: [], tiendas: [], ...GEO_ZONA },
+    });
+    // La zona sale del actor, y el catalogo del pais no se lee siquiera.
+    expect(geoRepo.listGeografiaLitePorZona).toHaveBeenCalledWith("z-satelite");
+    expect(geoRepo.listProvinciasLite).not.toHaveBeenCalled();
+    expect(geoRepo.listCantonesLite).not.toHaveBeenCalled();
+    expect(geoRepo.listDistritosLite).not.toHaveBeenCalled();
+    expect(zonaRepo.listLite).not.toHaveBeenCalled();
+    expect(userRepo.listCuentasTienda).not.toHaveBeenCalled();
+  });
+
+  it("adminSatelite SIN zona: catalogo vacio y ninguna lectura", async () => {
+    const { service, geoRepo } = buildService();
+    const r = await service.obtenerCatalogo(actor("adminSatelite", null));
+    expect(r).toEqual({
+      status: "ok",
+      catalogo: { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
+    });
+    expect(geoRepo.listGeografiaLitePorZona).not.toHaveBeenCalled();
+  });
 });
 
 describe("resolucion del catalogo (R47/R48)", () => {

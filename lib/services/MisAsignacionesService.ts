@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { GESTION_MIME_EXTENSION, gestionConfig, type GestionMimeType } from "@/lib/config/gestion";
+import { gestionConfig } from "@/lib/config/gestion";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type {
@@ -26,6 +26,11 @@ import type {
   RecogerInput,
   RecogerServiceResult,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import {
+  compensarEvidencias,
+  subirEvidenciasCompensadas,
+  type EvidenciaSubida,
+} from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
@@ -33,18 +38,35 @@ import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
   inicioDelDiaSiguienteCREnUtc,
+  // Feature 246 (T5.1, R26): la convencion `@db.Date` para comparar contra `fecha_reparto`. NO se
+  // usan las otras dos de este mismo import —esas son las cotas `timestamp` de los KPIs del dia—:
+  // aqui conviven las DOS convenciones y confundirlas desplaza el dia seis horas (ficha 166).
+  startOfDayCR,
 } from "@/lib/utils/fecha-cr";
 
-// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
-// i18n-ready, SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre
-// `solicitado`/`vencido` sin resolver no puede gestionar NI recoger/escoger.
+// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo sobre las guías (texto fijo i18n-ready,
+// SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre `vencido` o `rechazado` sin
+// resolver no puede gestionar NI recoger/escoger.
+//
+// Feature 241 (2026-08-20): `solicitado` SALIO de esa lista. Quien ya pidio su cierre no tiene
+// nada que resolver —espera al admin— y sigue trabajando con normalidad.
 const MSG_BLOQUEADO =
   "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
 const ESTADO_EN_REPARTO = "en_reparto";
+/**
+ * Feature 235 (R18/R19): el estatus de la SOLICITUD DE AYUDA viva. El panel lo LEE -esas ordenes
+ * siguen siendo del mensajero y las tiene que ver- pero en un grupo APARTE, cortado aqui y no en
+ * el cliente.
+ */
+const ESTADO_AYUDA = "ayuda_tienda";
 // Unico estado de origen valido para gestionar los 4 resultados (R18).
+//
+// Feature 235 (R16): que siga siendo `en_reparto` -y no una lista- es lo que hace que una orden en
+// `ayuda_tienda` deje de ser gestionable SIN escribir ninguna guarda nueva: `cargarOrdenGestionable`
+// la rechaza con `conflict` sola. Antes pasaba, porque con la bandera la orden seguia en reparto.
 const ORIGEN_GESTION = "en_reparto";
 
 // El `value` de order_status destino coincide 1:1 con el `resultado` de la
@@ -62,12 +84,13 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    // Feature 111/R1-R4: + `findMensajerosBloqueados` — MISMO predicado derivado de la
-    // asignación (`solicitado`/`vencido`), sin duplicar la derivación ni flag persistido. La
-    // guarda de bloqueo total lo consume en gestionar/recoger/escoger.
+    // Feature 111/R1-R4 -> 241: + `findMensajerosBloqueadosParaGestion`. Lo consume la guarda de
+    // gestionar/recoger/escoger, que es EXACTAMENTE lo que ese predicado bloquea: este service ES
+    // «gestionar y cobrar». Ya no es «el mismo predicado que la asignación» — la asignación no
+    // consulta ninguno.
     private readonly ordenRepo: Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueados"
+      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
     >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
@@ -119,16 +142,29 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 
   /**
-   * Feature 111/R1-R4/R2 — predicado de bloqueo total: `true` si el mensajero tiene un cierre
-   * en estado bloqueante (`solicitado`/`vencido`). REUSA `findMensajerosBloqueados` (mismo
-   * helper derivado de la asignación); NO duplica la derivación ni introduce un flag persistido.
+   * Feature 111/R1-R4/R2 — predicado de bloqueo: `true` si el mensajero tiene un cierre `vencido`
+   * o `rechazado`. NO duplica la derivación ni introduce un flag persistido: la lista de estados
+   * vive entera en `OrdenRepository`, con el porqué de la asimetría escrito al lado.
+   *
+   * Feature 241: lo que este `true` impide es GESTIONAR Y COBRAR. Ese mismo mensajero sigue
+   * recibiendo asignaciones nuevas —esa puerta no la cierra nadie— y sigue pudiendo solicitar su
+   * cierre, que es la salida (111/R9, 109/R28).
    */
   private async estaBloqueado(usuarioId: string): Promise<boolean> {
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueados([usuarioId]);
+    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([usuarioId]);
     return bloqueados.has(usuarioId);
   }
 
-  async listarMisAsignaciones(actor: Actor): Promise<ListarMisAsignacionesServiceResult> {
+  /**
+   * Feature 246 (T5.1, R25/R26): `now` es el reloj INYECTABLE con el que se decide que ordenes
+   * estan reservadas para mañana. Con default para que el borde siga llamando sin argumentos; los
+   * tests lo pasan, porque «al llegar el dia la etiqueta desaparece sola» solo se puede probar
+   * moviendo el reloj y no esperando a mañana.
+   */
+  async listarMisAsignaciones(
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<ListarMisAsignacionesServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Los KPIs de entregadas son DEL DIA, no acumulados: el mensajero mira esta fila para
@@ -136,8 +172,17 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // La ventana es la del dia de Costa Rica y se calcula AQUI (una sola vez, compartida
     // por los dos KPIs) para que ambos midan exactamente el mismo dia aunque el reloj
     // cruce la medianoche entre las dos queries del `Promise.all`.
-    const hoy = fechaCalendarioCR();
+    const hoy = fechaCalendarioCR(now);
     const dia = { desde: inicioDelDiaCREnUtc(hoy), hasta: inicioDelDiaSiguienteCREnUtc(hoy) };
+    // Feature 246 (T5.1, R22/R25/R26) — EL DIA DE COSTA RICA EN CURSO, en la convencion `@db.Date`
+    // (medianoche UTC de la fecha CR), que es la de la columna `fecha_reparto`. Se calcula UNA vez
+    // para todo el listado, para que dos cards del mismo render no puedan caer a distinto lado de
+    // la medianoche.
+    //
+    // ⚠️ Es OTRA convencion que la de `dia` (justo arriba): aquellas cotas son `...T06:00:00.000Z`
+    // porque comparan contra columnas `timestamp` (`gestion_orden.created_at`). Usar aquellas aqui
+    // desplazaria el dia seis horas — es la trampa que cerro la ficha 166.
+    const hoyComoFecha = startOfDayCR(now);
 
     const [ordenEnGestionId, rows, entregadas, montoGestionadas, ruta, marcadasLuego] =
       await Promise.all([
@@ -147,7 +192,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // (`/recoleccion`, `RecoleccionTiendaService.listarRecoleccion`). Que el estado
         // `recolectando` NO se lea es la forma FUERTE del aislamiento: lo que no se lee no
         // puede contaminar los KPIs, el mapa, la ruta ni el corte del dia (R36).
-        this.repo.findMisAsignaciones(actor.usuarioId, [ORIGEN_RECOGER, ESTADO_EN_REPARTO]), // R9/R13
+        // Feature 235 (R18/R19): + `ESTADO_AYUDA`. El corte de la 167/R34 se ensancha a TRES
+        // estatus, por la puerta y con su requisito delante; `recolectando` SIGUE FUERA, que es lo
+        // que aquella feature aislo.
+        this.repo.findMisAsignaciones(actor.usuarioId, [
+          ORIGEN_RECOGER,
+          ESTADO_EN_REPARTO,
+          ESTADO_AYUDA,
+        ]), // R9/R13
         this.repo.contarEntregadas(actor.usuarioId, dia), // Feature 61: KPI entregadas (HOY)
         this.repo.sumMontoCobrarGestionadas(actor.usuarioId, dia), // "Total a cobrar" (parte gestionada HOY)
         this.rutaRepo.findByMensajero(actor.usuarioId), // Feature 92/R28: secuencia optimizada
@@ -169,6 +221,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     const porRecoger: MiAsignacionDTO[] = [];
     const porGestionar: MiAsignacionDTO[] = [];
+    // Feature 235 (R18): TERCER acumulador. El corte lo hace el SERVIDOR, por `estatusValue`, y no
+    // un `useMemo` del cliente sobre una bandera.
+    const conAyuda: MiAsignacionDTO[] = [];
     for (const row of rows) {
       // Feature 115 (R17): merge de la marca por orden (patron de `secuencias`); `false` si no
       // hay fila. Se aplica a AMBOS grupos: la marca es un dato de la pareja (mensajero, orden).
@@ -178,12 +233,23 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         intentosEntrega: intentos.get(row.id) ?? 0,
+        // Feature 246 (T5.1, R22/R25/R26): «para mañana» = reservada para un dia ESTRICTAMENTE
+        // posterior al de Costa Rica en curso. `>` y no `>=`: una orden reservada para HOY no es
+        // «para mañana», es de hoy. Y por eso la etiqueta caduca sola (R25): al llegar el dia
+        // reservado, `fechaReparto > hoyComoFecha` deja de cumplirse sin que nadie escriba nada.
+        // `null` (orden anterior a la feature, o «hoy» explicito) -> `false`.
+        esParaManana:
+          row.fechaReparto != null && row.fechaReparto.getTime() > hoyComoFecha.getTime(),
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
         porRecoger.push(dto);
       } else if (row.estatusValue === ESTADO_EN_REPARTO) {
         porGestionar.push({ ...dto, secuenciaRuta: secuencias.get(row.id) ?? null });
+      } else if (row.estatusValue === ESTADO_AYUDA) {
+        // R15: SIN `secuenciaRuta`. Una orden detenida esperando a la tienda no es parada de
+        // ninguna ruta optimizada, asi que no lleva posicion ni entra en `paradasSinOptimizar`.
+        conAyuda.push(dto);
       }
     }
 
@@ -216,21 +282,37 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // las ordenes en reparto del mensajero, asi que la base ya respondio esa pregunta.
     // Preguntarsela de nuevo seria una segunda fuente de verdad para el mismo numero, libre
     // de discrepar de la lista que lo acompaña.
-    const codEnReparto = porGestionar.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
+    //
+    // FEATURE 235 (P7/R20, FIRMADA el 2026-08-19) - LOS TRES KPI SE DERIVAN DE
+    // `porGestionar` UNION `conAyuda`, Y ESO HAY QUE DECIDIRLO A MANO. Al sacar las ordenes en
+    // ayuda del grupo «por gestionar», el comportamiento POR DEFECTO seria el contrario: los tres
+    // BAJARIAN al pedir ayuda. Se firmo que no: el paquete sigue en la moto y su COD sigue por
+    // cobrar, asi que si el «Total a cobrar» bajara, el numero dejaria de describir la jornada del
+    // mensajero y ademas PREMIARIA pedir ayuda.
+    const enManoDelMensajero = [...porGestionar, ...conAyuda];
+    const codEnReparto = enManoDelMensajero.reduce((sum, o) => sum + (o.montoCobrar ?? 0), 0);
     const kpis: MisAsignacionesKpis = {
-      pendientes: porGestionar.length,
+      pendientes: enManoDelMensajero.length,
       entregadas,
       porCobrar: codEnReparto,
       // Total a cobrar DEL DIA = lo que el mensajero YA gestiono hoy (cualquier resultado)
-      // + lo que todavia lleva en reparto. Los dos sumandos son DISJUNTOS: la query excluye
-      // `en_reparto`, que es justo lo que aporta `codEnReparto`. No se mueve al gestionar
-      // —la orden solo cambia de sumando— y se reinicia al cruzar la medianoche CR.
+      // + lo que todavia lleva en la mano (en reparto o con ayuda pedida).
+      //
+      // R21 - LOS DOS SUMANDOS SIGUEN SIENDO DISJUNTOS, y hay que comprobarlo ahora que el
+      // segundo creció. `sumMontoCobrarGestionadas` exige `gestiones: { some: ... }` Y
+      // `estatus.value != en_reparto`. Una orden en `ayuda_tienda` NO TIENE GESTION del dia -no se
+      // puede gestionar desde ahi (R16), esas aristas son de la ficha 237- asi que no entra en el
+      // primer sumando por la condicion de gestion, no por la de estatus. Ninguna orden se cuenta
+      // dos veces. No se mueve al gestionar -la orden solo cambia de sumando- y se reinicia al
+      // cruzar la medianoche CR.
       totalACobrar: codEnReparto + montoGestionadas,
     };
     return {
       status: "ok",
       porRecoger,
       porGestionar,
+      // R18: el cliente recibe las tres listas ya separadas y NO vuelve a decidir el corte.
+      conAyuda,
       ordenEnGestionId,
       kpis,
       // Feature 92 (R27/R30): sin ruta persistida el estado es `vigente` con
@@ -335,10 +417,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
-    // Feature 111/R1/R2/R3 (obligatorio): bloqueo total — un mensajero con un cierre pendiente
-    // (`solicitado`/`vencido`) NO puede GESTIONAR. Guarda al INICIO, ANTES de cargar la orden y
-    // de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni transición, ni
-    // fila `gestion_orden`). MISMO predicado derivado de la asignación (R2). Sin PII (R20).
+    // Feature 111/R1/R2/R3 (obligatorio) -> 241: un mensajero con un cierre `vencido` o
+    // `rechazado` NO puede GESTIONAR; con `solicitado` SÍ. Guarda al INICIO, ANTES de cargar la
+    // orden y de subir la evidencia a Storage -> sin efectos parciales (R3: ni upload, ni
+    // transición, ni fila `gestion_orden`). Sin PII (R20).
+    //
+    // ESTA ES LA GUARDA QUE SOSTIENE LA CAJA, y por eso sobrevivió a la regla 2: si el mensajero
+    // pudiera seguir cobrando con un cierre sin resolver, el dinero del día nuevo se acumularía
+    // sin cierre al que ir y el admin estaría cuadrando una caja que ya no es todo lo que él
+    // tiene en la mano. Que ASIGNARLE órdenes no se bloquee es otra cosa: recibirlas no cobra.
     if (await this.estaBloqueado(actor.usuarioId)) {
       return { status: "conflict", motivo: MSG_BLOQUEADO };
     }
@@ -404,12 +491,19 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }
 
     // Feature 119 (R9/R10): subida SECUENCIAL y determinista de las N evidencias ANTES de la
-    // transaccion, acumulando en `uploaded` los paths ya subidos para poder COMPENSAR
-    // (storage.remove) ante cualquier fallo. El bucle secuencial hace la compensacion trivial:
-    // `uploaded` contiene EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un
-    // Promise.all que rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
-    const uploaded: string[] = [];
-    const evidencias: { storagePath: string; contentType: string; indice: number }[] = [];
+    // transaccion, acumulando los paths ya subidos para poder COMPENSAR (storage.remove) ante
+    // cualquier fallo. El bucle secuencial hace la compensacion trivial: lo acumulado contiene
+    // EXACTAMENTE lo subido hasta el fallo (sin rastrear promesas de un `Promise.all` que
+    // rechaza). Para el tope de 3 fotos el costo de no paralelizar es despreciable.
+    //
+    // FEATURE 237 (T4.2, D5) — 2026-08-20: el bucle y su compensacion VIVIAN AQUI y se extrajeron
+    // a `lib/services/evidencias-compensadas.ts`. La conducta observable no cambia (mismos paths,
+    // misma secuencia, misma compensacion en los dos fallos): lo que cambia es que ahora hay UN
+    // solo sitio donde arreglarla. El motivo: la 237 necesitaba exactamente esta maquinaria y ya
+    // habia DOS copias (esta y la de `IncidenteAdminService`); escribir la suya habrian sido tres.
+    // `IncidenteAdminService` queda como deuda declarada con dueño, no se arrastro aqui.
+    let uploaded: string[] = [];
+    let evidencias: EvidenciaSubida[] = [];
     if (
       input.resultado === "entregada" ||
       input.resultado === "rechazada" ||
@@ -419,26 +513,17 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       // `min(1)`, asi que aqui nunca llega una lista vacia.
       input.resultado === "incidente"
     ) {
-      try {
-        for (let i = 0; i < input.evidencias.length; i++) {
-          const ev = input.evidencias[i];
-          const ext = GESTION_MIME_EXTENSION[ev.contentType as GestionMimeType] ?? "bin";
-          // `-i` garantiza unicidad del path entre las fotos de la MISMA gestion (mismo `Date.now()`).
-          const path = `${input.ordenId}/${input.resultado}-${Date.now()}-${i}.${ext}`;
-          const stored = await this.storage.upload({
-            path,
-            bytes: ev.bytes,
-            contentType: ev.contentType,
-          });
-          uploaded.push(stored);
-          evidencias.push({ storagePath: stored, contentType: ev.contentType, indice: i });
-        }
-      } catch (error) {
-        // R10: falla la subida #k -> borrar las k-1 ya subidas y NO persistir NADA (el repo ni
-        // se invoca). El fallo se propaga como error, no como resultado de dominio.
-        if (uploaded.length > 0) await this.storage.remove(uploaded);
-        throw error;
-      }
+      // R10: si falla la subida #k, el modulo borra las k-1 ya subidas y PROPAGA el error, asi que
+      // el repo ni se invoca y no persiste NADA. El fallo sigue siendo un error, no un resultado
+      // de dominio.
+      const subida = await subirEvidenciasCompensadas(this.storage, {
+        ordenId: input.ordenId,
+        // El prefijo es el `resultado`: distingue las fotos de dos gestiones sobre la MISMA orden.
+        prefijo: `${input.resultado}-`,
+        evidencias: input.evidencias,
+      });
+      uploaded = subida.paths;
+      evidencias = subida.evidencias;
     }
 
     const gestion = buildGestionData(input, evidencias);
@@ -459,7 +544,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     } catch (error) {
       // R11: la transaccion fallo DESPUES de subir -> borrar las N evidencias subidas
       // (best-effort) y propagar; no queda ninguna fila persistida.
-      if (uploaded.length > 0) await this.storage.remove(uploaded);
+      await compensarEvidencias(this.storage, uploaded);
       throw error;
     }
 
@@ -559,10 +644,8 @@ export function toDTO(row: MiAsignacionRow): MiAsignacionDTO {
     // Feature 115 (R17): default `false`; el llamador lo sobreescribe con la marca real del
     // actor (`marcadasLuego.has(row.id)`). Aqui SIEMPRE nace un boolean concreto.
     marcarLuego: false,
-    // Solicitud de ayuda (2026-08-18): flag de la ORDEN, no del actor, asi que sale de la fila y
-    // no hay nada que mezclarle despues. `?? false` porque la fila lo declara opcional (patron
-    // aditivo): un doble de test que no lo ponga produce `false`, no `undefined`.
-    ayuda: row.ayuda ?? false,
+    // Feature 235 (T6.1, R40): aqui se emitia `ayuda: row.ayuda ?? false`. Se retira con la
+    // columna: `estatusValue` -que ya viaja arriba- dice si hay una solicitud de ayuda viva.
     // Feature 227 (R21): aqui nacia `notaPrivada: null` (feature 116). El campo ya no existe en
     // `MiAsignacionDTO` y el DTO no emite ninguna nota privada del mensajero.
   };

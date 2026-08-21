@@ -38,6 +38,7 @@ import {
   COMISION_CON_IVA_LABEL,
   FLETE_CON_IVA_LABEL,
   FLETE_DEV_CON_IVA_LABEL,
+  FULFILLMENT_COL,
   INDEMNIZACION_COL,
   INGRESO_BODEGA_RECHAZOS_COL,
   INGRESO_TOTAL_COL,
@@ -47,7 +48,7 @@ import {
   RECHAZO_ORIGEN_COL,
   RECHAZO_SLA_BADGE_LABEL,
 } from "./cierre-labels";
-import { desgloseDescarga } from "./desglose-pago";
+import { celdasMediosPago, COLUMNAS_MEDIOS_PAGO } from "./medios-pago-descarga-columnas";
 
 /** Encabezado de la marca de evidencia: dice SI la hay, nunca dónde está (R22). */
 export const TIENE_EVIDENCIA_COL = "Tiene evidencia";
@@ -106,8 +107,9 @@ function tieneEvidencia(gestion: CierreDetalleGestion): string {
 export const COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS: DescargaColumna[] = [
   ...COMUNES,
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "recibido", encabezado: "Recibido" },
-  { clave: "metodo", encabezado: "Método" },
+  ...COLUMNAS_MEDIOS_PAGO,
   { clave: "fleteConIva", encabezado: FLETE_CON_IVA_LABEL },
   { clave: "comisionConIva", encabezado: COMISION_CON_IVA_LABEL },
   { clave: "ingresoTotal", encabezado: INGRESO_TOTAL_COL },
@@ -115,17 +117,22 @@ export const COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS: DescargaColumna[] = [
 ];
 
 /**
- * El método de pago sale como ETIQUETA LEGIBLE (R8), nunca el value del enum. Feature 213
- * (R26-R31): la celda «Método» lleva el DESGLOSE completo —una sola celda, una sola fila, sin
- * columna nueva— y los montos van MONEY-SAFE, el STRING del snapshot tal cual.
+ * El recaudo sale con UNA COLUMNA POR MEDIO DE PAGO —«Efectivo», «SINPE», «Transferencia»—, no
+ * en la celda única «Método» que llevaba el desglose concatenado (feature 213, R26-R31): la
+ * hoja de cálculo suma la columna de un medio sin tener que parsear «Efectivo 100 + SINPE 50».
+ *
+ * El encabezado sigue siendo la ETIQUETA LEGIBLE del medio (R8), nunca el value del enum, y los
+ * montos siguen MONEY-SAFE: el STRING del snapshot tal cual. El medio por el que no entró dinero
+ * deja la celda VACÍA (`null`), que no es un cero.
  */
 export function filaDescargaGestionEntregada(gestion: CierreDetalleGestion): DescargaFila {
   const ingreso = gestion.ingresoOrdenex;
   return {
     ...celdasComunes(gestion),
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
+    fulfillment: ingreso?.tarifa?.fulfillment ?? null,
     recibido: gestion.montoRecibido,
-    metodo: desgloseDescarga(gestion.pagos),
+    ...celdasMediosPago(gestion.pagos),
     fleteConIva: ingreso ? ingreso.fleteConIva : null,
     comisionConIva: ingreso ? ingreso.comisionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,
@@ -140,6 +147,7 @@ export function filaDescargaGestionEntregada(gestion: CierreDetalleGestion): Des
 export const COLUMNAS_DESCARGA_GESTIONES_REPROGRAMADAS: DescargaColumna[] = [
   ...COMUNES,
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "nuevaFecha", encabezado: "Nueva fecha" },
   { clave: "motivo", encabezado: "Motivo" },
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
@@ -155,6 +163,7 @@ export function filaDescargaGestionReprogramada(
   return {
     ...celdasComunes(gestion),
     montoCobrar: gestion.ingresoOrdenex ? gestion.ingresoOrdenex.montoCobrar : null,
+    fulfillment: gestion.ingresoOrdenex?.tarifa?.fulfillment ?? null,
     nuevaFecha: gestion.fechaReprogramacion,
     motivo: gestion.motivo,
     pagoMensajero: gestion.pagoMensajero,
@@ -168,9 +177,9 @@ export function filaDescargaGestionReprogramada(
 export const COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS: DescargaColumna[] = [
   ...COMUNES,
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "motivo", encabezado: "Motivo" },
-  { clave: "fleteDevolucion", encabezado: "Flete devolución" },
-  { clave: "ivaFleteDevolucion", encabezado: "IVA flete dev." },
+  { clave: "fleteDevolucionConIva", encabezado: FLETE_DEV_CON_IVA_LABEL },
   { clave: "ingresoTotal", encabezado: INGRESO_TOTAL_COL },
   { clave: "pagoMensajero", encabezado: PAGO_MENSAJERO_COL },
 ];
@@ -180,9 +189,9 @@ export function filaDescargaGestionDevuelta(gestion: CierreDetalleGestion): Desc
   return {
     ...celdasComunes(gestion),
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
+    fulfillment: ingreso?.tarifa?.fulfillment ?? null,
     motivo: gestion.motivo,
-    fleteDevolucion: ingreso ? ingreso.fleteDevolucion : null,
-    ivaFleteDevolucion: ingreso ? ingreso.ivaFleteDevolucion : null,
+    fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
     ingresoTotal: ingreso ? ingreso.total : null,
     pagoMensajero: gestion.pagoMensajero,
   };
@@ -196,6 +205,7 @@ export const COLUMNAS_DESCARGA_GESTIONES_RECHAZADAS: DescargaColumna[] = [
   ...COMUNES,
   { clave: "origenRechazo", encabezado: RECHAZO_ORIGEN_COL },
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "motivo", encabezado: "Motivo" },
   { clave: "tieneEvidencia", encabezado: TIENE_EVIDENCIA_COL },
   { clave: "fleteDevolucionConIva", encabezado: FLETE_DEV_CON_IVA_LABEL },
@@ -216,6 +226,7 @@ export function filaDescargaGestionRechazada(gestion: CierreDetalleGestion): Des
     origenRechazo:
       gestion.esRechazoSla === true ? RECHAZO_SLA_BADGE_LABEL : RECHAZO_MANUAL_BADGE_LABEL,
     montoCobrar: ingreso ? ingreso.montoCobrar : null,
+    fulfillment: ingreso?.tarifa?.fulfillment ?? null,
     motivo: gestion.motivo,
     tieneEvidencia: tieneEvidencia(gestion),
     fleteDevolucionConIva: ingreso ? ingreso.fleteDevolucionConIva : null,
@@ -232,6 +243,7 @@ export function filaDescargaGestionRechazada(gestion: CierreDetalleGestion): Des
 export const COLUMNAS_DESCARGA_GESTIONES_INCIDENTES: DescargaColumna[] = [
   ...COMUNES,
   { clave: "montoCobrar", encabezado: MONTO_COBRAR_COL },
+  { clave: "fulfillment", encabezado: FULFILLMENT_COL },
   { clave: "causa", encabezado: CAUSA_INCIDENTE_COL },
   { clave: "motivo", encabezado: "Motivo" },
   { clave: "tieneEvidencia", encabezado: TIENE_EVIDENCIA_COL },
@@ -249,6 +261,7 @@ export function filaDescargaGestionIncidente(gestion: CierreDetalleGestion): Des
   return {
     ...celdasComunes(gestion),
     montoCobrar: gestion.ingresoOrdenex ? gestion.ingresoOrdenex.montoCobrar : null,
+    fulfillment: gestion.ingresoOrdenex?.tarifa?.fulfillment ?? null,
     causa: gestion.causaIncidente
       ? CAUSA_INCIDENTE_LABEL[gestion.causaIncidente] ?? gestion.causaIncidente
       : null,

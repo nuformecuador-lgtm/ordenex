@@ -14,6 +14,9 @@ import type {
 } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
+// Feature 240 (T4.2): el predicado REAL, para derivar `desdeAyudaTienda` desde la FAMILIA en vez
+// de escribir el booleano a mano. Es lo que ata la guardia del service con la lista de familias.
+import { esGestionDeLaTienda } from "@/lib/utils/gestion-de-la-tienda-flag";
 
 // Feature 37 — tests unit del CierreDiaService (mocks de repos + dobles de
 // ISignedUrlProvider/findCentralZonaId, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,
@@ -51,6 +54,7 @@ function pendiente(overrides: Partial<CierreGestionPendienteRow> = {}): CierreGe
     pagoMensajero: null, // feature 39: en vivo el snapshot es null; el service lo DERIVA
     ingresoBodegaRechazo: null, // feature 56: en vivo el snapshot es null; el service lo DERIVA
     esRechazoSla: false, // feature 102/R11: la vista en vivo del mensajero no expone el desglose
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente. `null` por defecto en el resto
     // de resultados; los casos del incidente los sobreescriben.
     causaIncidente: null,
@@ -102,6 +106,9 @@ function gestionDeshacer(overrides: Partial<GestionDeshacerRow> = {}): GestionDe
     cierreId: null, // R1: dentro de la ventana
     anuladaAt: null, // R1: vigente
     orden: { deletedAt: null, estatusId: "s-entregada", estatusValue: "entregada" },
+    // Feature 237 (T5.5, D3): el default es «la registro el mensajero», que es el caso feliz del
+    // deshacer. Los casos de la 237 lo ponen en `true`.
+    desdeAyudaTienda: false,
     ...overrides,
   };
 }
@@ -125,7 +132,7 @@ function newService(opts: {
   signedUrls?: ISignedUrlProvider;
   // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
-  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueados`.
+  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueadosParaGestion`.
   bloqueados?: string[];
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
@@ -141,13 +148,13 @@ function newService(opts: {
     ),
     // Feature 111/R5: predicado de bloqueo (default = NO bloqueado). Los tests de bloqueo lo
     // sobreescriben (Set con el mensajero) via `bloqueados`.
-    findMensajerosBloqueados: vi.fn(
+    findMensajerosBloqueadosParaGestion: vi.fn(
       async (): Promise<Set<string>> =>
         opts.bloqueados ? new Set(opts.bloqueados) : new Set<string>(),
     ),
   } as unknown as Pick<
     IOrdenRepository,
-    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueados"
+    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
   >;
   const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
@@ -178,9 +185,11 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     const { service, repo } = newService();
     await service.listarCierreDia(MENSAJERO);
     expect(repo.findGestionesPendientes).toHaveBeenCalledWith("m1");
+    // Feature 235 (T4.1, R23): la lista gana `ayuda_tienda` POR SU NOMBRE.
     expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith("m1", [
       "por_recoger",
       "en_reparto",
+      "ayuda_tienda",
     ]);
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
   });
@@ -1051,6 +1060,209 @@ describe("Feature 67 · deshacerGestion — autorizacion (R8/R9)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// 💰 FEATURE 237 (T5.5, D3 firmada por el HUMANO el 2026-08-20, R38/R39) — LA GESTION QUE
+// REGISTRO LA TIENDA NO SE DESHACE.
+//
+// El hallazgo que obligo a escribir esto: la gestion de la tienda nace con `mensajero_id` = el
+// mensajero (237/R3, lo que la mete en su cierre) y con `cierre_id = NULL` (R9). Con eso PASA LAS
+// OCHO GUARDIAS: es «suya», la ventana esta abierta, es la ultima y el estado esperado casa. Sin la
+// guardia nueva, el mensajero revierte la decision de la tienda —la orden vuelve a `en_reparto`
+// reasignada a el, desaparecen el intento y el `cobroRechazado`— y LA TIENDA NO SE ENTERA, porque
+// la fila ya no esta en ninguna de sus pestañas.
+//
+// Y los numeros lo convierten de precaucion en necesidad (medido en produccion el 2026-08-20):
+// deshacer se usa en 7 de 57 gestiones (12 %) y un rechazo mueve hasta ₡1.000.
+//
+// El precio de D3-b esta DECLARADO: un rechazo equivocado de la tienda no tiene deshacer. Se acepta
+// porque su peor caso es recuperable (el paquete vuelve por el flujo de devolucion) y el contrario
+// borra dinero sin consentimiento de quien lo decidio.
+// ---------------------------------------------------------------------------------------------
+describe("Feature 237 · deshacerGestion — la gestion de LA TIENDA (D3/R38)", () => {
+  it.each(["reprogramada", "rechazada"] as const)(
+    "R38: una gestion `%s` registrada por la tienda -> `conflict`, SIN escribir nada",
+    async (resultado) => {
+      const repo = fakeRepo({
+        findGestionParaDeshacer: vi.fn(async () =>
+          gestionDeshacer({
+            resultado,
+            desdeAyudaTienda: true,
+            orden: { deletedAt: null, estatusId: `s-${resultado}`, estatusValue: resultado },
+          }),
+        ),
+      });
+      const { service } = newService({ repo });
+
+      const r = await service.deshacerGestion("g1", MENSAJERO);
+
+      expect(r.status).toBe("conflict");
+      // 💰 Lo que de verdad protege: NI UNA escritura. Si esta llamada ocurriera, el intento y el
+      // `cobroRechazado` desaparecerian con ella.
+      expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R38: el mensaje es ACCIONABLE — dice quien lo hizo, que solo ella puede corregirlo y por donde", async () => {
+    // No es un «no se puede» a secas: el mensajero tiene el paquete en la moto y necesita saber a
+    // quien acudir. Se lee el texto tal cual, que es lo que vera en pantalla.
+    //
+    // ⏳ 2026-08-20 (feature 240, D10/R43) — EL TEXTO PIERDE «desde su pantalla de ayuda», y el
+    // literal se actualiza A MANO porque ES el contrato de lo que el mensajero lee. Desde la 240 la
+    // tienda tambien resuelve rechazando a mano una devolucion ya anclada, que NO pasa por esa
+    // pantalla: sobre esas gestiones la frase vieja seria FALSA. No se parte en dos mensajes por
+    // familia — al mensajero le da igual desde donde lo hizo la tienda; lo que necesita saber es
+    // que no es suyo y a quien escribirle.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: true,
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({
+      status: "conflict",
+      motivo:
+        "Esta orden la resolvió la tienda; solo ella puede corregirlo. Escribile por el chat de la orden.",
+    });
+    // Y la pantalla que ya no corresponde no vuelve por la puerta de atras.
+    expect(r.status === "conflict" && r.motivo).not.toContain("pantalla de ayuda");
+  });
+
+  it("R38: la guardia va DESPUES de la de propiedad — una gestion AJENA sigue dando `forbidden` pelado", async () => {
+    // Si estuviera antes, el mensaje «la resolvio la tienda» se emitiria sobre una gestion que no
+    // es suya y filtraria informacion de una orden ajena. El orden de las guardias es la
+    // proteccion, no un detalle de estilo.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({ mensajeroId: "m2", desdeAyudaTienda: true }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("R38: NO se rompe el deshacer de nadie — la gestion PROPIA del mensajero se sigue deshaciendo", async () => {
+    // El contraste obligatorio: la guardia nueva discrimina por la FAMILIA de origen, no por el
+    // estado ni por el resultado. Una `rechazada` del propio mensajero sobre una orden en el mismo
+    // estado se deshace exactamente como antes.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: false,
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// 💰 FEATURE 240 (T4.2, D6/R43) — EL RECHAZO MANUAL DE LA TIENDA TAMPOCO SE DESHACE.
+//
+// `CierreDiaService` NO cambia ni una linea: sigue leyendo `gestion.desdeAyudaTienda`. Lo que cambia
+// es DE DONDE SALE ese booleano — `ORIGENES_GESTION_DE_LA_TIENDA` pasa de un valor a una lista—.
+// Por eso estos casos derivan la bandera con el PREDICADO REAL a partir de la FAMILIA, en vez de
+// escribir `true` a mano: asi el caso ata las dos mitades y se pone rojo si alguien saca
+// `rechazo_tienda` de la lista, que es la unica forma de que este agujero se reabra.
+//
+// POR QUE IMPORTA MAS QUE EN LA 237: la gestion sintetica del rechazo manual nace con
+// `mensajero_id` = ese mensajero (es lo que la mete en su cierre) y `cierre_id NULL`, asi que pasa
+// las ocho guardias igual. Pero aqui el paquete NO esta en la moto: volvio a la bodega y se escaneo
+// al aprobar el cierre anterior (238). Deshacer devolveria a `en_reparto` —reasignada al mensajero—
+// una orden cuyo paquete el mensajero no tiene, y borraria el `cobroRechazado` que la tienda
+// decidio y pago con un aviso que le dijo que no se podia deshacer.
+// ---------------------------------------------------------------------------------------------
+describe("Feature 240 · deshacerGestion — el rechazo MANUAL de la tienda (D6/R43)", () => {
+  it("💰 R43: una gestion de familia `rechazo_tienda` -> `conflict`, SIN escribir nada", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          // ⭑ La bandera se DERIVA de la familia con el predicado de produccion, no se escribe.
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "rechazo_tienda" }]),
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({
+      status: "conflict",
+      motivo:
+        "Esta orden la resolvió la tienda; solo ella puede corregirlo. Escribile por el chat de la orden.",
+    });
+    // 💰 Lo que de verdad protege: NI UNA escritura.
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("CONTROL POSITIVO: la gestion `rechazada` del propio MENSAJERO se sigue deshaciendo", async () => {
+    // Sin este contraste, el caso de arriba estaria verde tambien si la guardia bloqueara TODO
+    // deshacer de una `rechazada`. La guardia discrimina por la FAMILIA de origen, no por el
+    // resultado ni por el estado — y la familia `gestion` (la visita en calle) no es de la tienda.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "rechazada",
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "gestion" }]),
+          orden: { deletedAt: null, estatusId: "s-rechazada", estatusValue: "rechazada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+  });
+
+  it("💰 D6: la sintetica de la REPROGRAMACION de escritorio (100) SIGUE deshaciendose — agujero hermano DECLARADO", async () => {
+    // ⚠️ ESTE CASO AFIRMA UN AGUJERO ABIERTO, a proposito, y no es un descuido: la auditoria de la
+    // pila lo dejo como «no se pudo determinar» y la 240 lo determina. `reprogramacion_tienda`
+    // tambien es una gestion sintetica de la tienda y tambien pasa las ocho guardias, asi que HOY
+    // el mensajero puede revertir esa decision de escritorio.
+    //
+    // No se cierra aqui porque es dinero NEUTRO (`reprogramada` no emite ningun concepto, a
+    // diferencia de `rechazada`) y cambiar la conducta de la feature 100 sin pedirlo es alcance
+    // ajeno. Queda propuesto como ficha aparte. El dia que esa ficha lo cierre, ESTE CASO SE PONE
+    // ROJO — y ese rojo es la señal de que se cerro, no una regresion: hay que darle la vuelta,
+    // como la 237 hizo con el suyo.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          desdeAyudaTienda: esGestionDeLaTienda([{ origenTipo: "reprogramacion_tienda" }]),
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+  });
+});
+
 describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R30/R32/R34)", () => {
   it("R18/R19: pide al repo `en_reparto` como destino y el mensajero AUTOR como asignado", async () => {
     const repo = fakeRepo({
@@ -1449,7 +1661,7 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
 
     expect(r.status).toBe("conflict");
     // R5 (Q2, belt-and-suspenders): usa el MISMO predicado derivado, ANTES de cualquier lectura.
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
     expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_reparto
   });
@@ -1891,5 +2103,114 @@ describe("listarCierreDia — el DTO de gestion expone el desglose del recaudo (
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.grupos.reprogramada[0].pagos).toEqual([]);
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T4.1/T4.2/T4.3, R22/R23/R24/R25) — EL BLOQUEO DEL CIERRE, EXPLICITO Y NO ACCIDENTAL.
+//
+// QUE HABIA. Una orden con ayuda pedida bloqueaba el cierre POR ACCIDENTE: la solicitud era una
+// BANDERA y la orden seguia en `en_reparto`, que si estaba en `ESTADOS_PENDIENTES`. NADIE habia
+// escrito nunca «una orden en ayuda bloquea el cierre», asi que el dia que la orden dejara de estar
+// en `en_reparto` —exactamente lo que hace esta ficha— el bloqueo habria desaparecido EN SILENCIO,
+// y un mensajero habria podido cerrar el dia con un paquete todavia en la mano.
+//
+// R23 pide que el bloqueo se derive de una LISTA EXPLICITA en la que el estatus figure POR SU
+// NOMBRE. Eso es todo el cambio funcional, y estos casos son lo que lo vuelve auditable.
+// =================================================================================================
+describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
+  it("R23: la lista de estados pendientes NOMBRA `ayuda_tienda`", async () => {
+    // Se lee de la llamada real al repo, no de una constante importada: `ESTADOS_PENDIENTES` es
+    // privado del modulo y afirmar una copia seria un espejo de si mismo.
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO);
+
+    const estados = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as string[];
+    expect(estados).toContain("ayuda_tienda");
+    // Censo CERRADO: uno de mas bloquearia a mensajeros que no tienen nada en la mano.
+    expect(estados).toEqual(["por_recoger", "en_reparto", "ayuda_tienda"]);
+  });
+
+  it("R22: con una orden en `ayuda_tienda`, `solicitarCierre` devuelve conflict con motivo accionable", async () => {
+    // El repo cuenta 1 porque el estatus esta en la lista; si saliera de ella, contaria 0 y el
+    // cierre se crearia con el paquete todavia en la moto.
+    const repo = fakeRepo({ contarOrdenesPendientesGestion: vi.fn(async () => 1) });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") return;
+    expect(r.motivo).toContain("gestionalas antes de cerrar");
+    // Sin PII (R46): el motivo no nombra la orden, ni al mensajero, ni al cierre.
+    expect(r.motivo).not.toMatch(/m1|o1|c1/);
+    expect(repo.crearCierre).not.toHaveBeenCalled();
+  });
+
+  it("R22: el gate de la pantalla dice lo mismo — `puedesSolicitar` en false", async () => {
+    const repo = fakeRepo({
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+      findGestionesPendientes: vi.fn(async () => [pendiente()]),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.puedesSolicitar).toBe(false);
+    // Los dos consumidores de la lista dicen lo mismo: el gate y la precondicion. Si divergieran,
+    // el boton estaria activo y la accion fallaria al pulsarlo.
+    expect(r.motivoBloqueo).toContain("gestionalas antes de cerrar");
+  });
+});
+
+// =================================================================================================
+// FEATURE 235 (T4.2, R24) — LAS DOS RUTAS EXENTAS SIGUEN EXENTAS. Aqui NO se cambia codigo: se
+// AFIRMA la exencion para que nadie la «arregle» por simetria.
+//
+// ⚠️ QUITARLES LA EXENCION REABRE EL DEADLOCK QUE LA 111/R9 CERRO: el mensajero con un cierre
+// `vencido` esta BLOQUEADO para gestionar, asi que si ademas no pudiera enviar su vencido a
+// aprobacion por tener pendientes, quedaria atrapado sin ninguna salida. Con `ayuda_tienda` en la
+// lista, estas dos rutas se comportan EXACTAMENTE igual que con `en_reparto`: una orden en ayuda no
+// las bloquea, igual que hoy no las bloquea una orden en reparto.
+//
+// CONSECUENCIA DECLARADA PARA LA FICHA 237 (design §8): su invariante —«una orden en ayuda BLOQUEA
+// la solicitud de cierre, asi que la gestion de la tienda cae antes del snapshot»— es cierta para
+// la CREACION de un cierre y FALSA para estas dos rutas de re-solicitud. En ellas el cierre ya
+// existe con sus gestiones vinculadas, asi que una gestion posterior nace con `cierre_id = NULL` y
+// cae en el cierre SIGUIENTE. No rompe dinero, pero la 237 tiene que probarlo.
+// =================================================================================================
+describe("235 · las dos rutas exentas de la precondicion (T4.2, R24)", () => {
+  it("R24: con un cierre `vencido` y una orden en `ayuda_tienda`, transiciona a `solicitado`", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => true),
+      transicionarVencidoASolicitado: vi.fn(async () => true),
+      // Hay una orden en ayuda: el conteo la incluye porque el estatus esta en la lista.
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
+    // Y la exencion, dicha como lo que es: esta rama ni siquiera CONSULTA los pendientes.
+    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
+  });
+
+  it("R24: el gemelo para `rechazado` — misma exencion, mismo motivo", async () => {
+    const repo = fakeRepo({
+      existeCierreVencido: vi.fn(async () => false),
+      existeCierreRechazado: vi.fn(async () => true),
+      transicionarRechazadoASolicitado: vi.fn(async () => true),
+      contarOrdenesPendientesGestion: vi.fn(async () => 1),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.solicitarCierre(MENSAJERO);
+
+    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
+    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
   });
 });

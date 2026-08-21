@@ -124,6 +124,7 @@ function gestionConEvidencia(): CierreGestionPendienteRow {
     pagoMensajero: "5.00",
     ingresoBodegaRechazo: "0.00",
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     causaIncidente: null,
     indemnizacion: null,
   });

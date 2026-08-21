@@ -160,6 +160,7 @@ function aprobar(repo: CierresAdminRepository) {
     alcance: ALCANCE_MAESTRO,
     nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
     resueltoPor: "adm-maestro",
     motivoRechazo: null,
     devolucionRechazadas: DEVOLUCION,
@@ -282,6 +283,7 @@ describe("CierresAdminRepository.resolverCierre — devolucion de `rechazada` (f
       alcance: ALCANCE_MAESTRO,
       nuevoEstado: "aprobado",
       anclajeDevolucion: ANCLAJE_DEVOLUCION, // feature 239/T2.1: obligatorio al aprobar
+      confirmacionFisica: [], // feature 238/T3.2: obligatorio al aprobar (vacio = el cierre no devuelve nada)
       resueltoPor: "adm-maestro",
       motivoRechazo: null,
     });

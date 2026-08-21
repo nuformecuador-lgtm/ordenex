@@ -126,7 +126,9 @@ function SidebarCollapseToggle() {
       // top-full + -translate-y-1/2 → centrado sobre la línea header/content.
       // right-0 (arista de padding del header sin borde = borde del sidebar) +
       // translate-x-1/2 → mitad del botón sobresale fuera. hidden md:flex → solo
-      // desktop. z-20 para quedar sobre el sidebar-container (z-10).
+      // desktop. z-20 lo pone por encima de sus hermanos DENTRO del sidebar; quedar por
+      // encima de la barra de filtros de la página es cosa del `z-30` del contenedor (ver
+      // `SidebarRoot` más abajo), porque ése es el contexto de apilamiento que cuenta.
       className={cn(
         "absolute top-full right-0 z-20 hidden size-7 -translate-y-1/2 translate-x-1/2",
         "md:flex items-center justify-center rounded-full cursor-pointer",
@@ -245,7 +247,24 @@ export function Sidebar({
   }, [items.length]);
 
   return (
-    <SidebarRoot collapsible="icon">
+    // `z-30` (pedido humano 2026-08-19): SUBE EL SIDEBAR ENTERO, y hay que saber por qué no
+    // basta con subirle el z-index al botón de colapsar.
+    //
+    // Ese botón cuelga del `SidebarHeader`, que va dentro del contenedor `fixed … z-10` de
+    // `components/ui/sidebar.tsx`. Un elemento posicionado CON z-index crea un contexto de
+    // apilamiento: todo lo de dentro compite entre sí, pero contra el resto de la página el
+    // bloque entero vale lo que valga el contenedor. Por eso el `z-20` del botón no lo sacaba
+    // de debajo de la barra de filtros pegajosa de `/analítica` (también `z-20`, y posterior en
+    // el DOM): no estaban compitiendo. Subir el contexto es lo único que lo levanta.
+    //
+    // El botón es la ÚNICA parte del sidebar que se solapa con la columna de contenido —sobre-
+    // sale media anchura por el borde derecho (patrón «rail»)—, así que esto no tapa nada más.
+    // Y sigue por debajo de `z-50`, que es donde viven los portales (modales, tooltips y los
+    // desplegables de los filtros), que deben quedar encima de todo.
+    //
+    // Va aquí y no editando `components/ui/sidebar.tsx`: `cn` usa `tailwind-merge`, así que
+    // esta clase gana al `z-10` del primitivo sin tocar el archivo vendorizado.
+    <SidebarRoot collapsible="icon" className="z-30">
       {/* min-h-14 conserva el alto del logo al colapsar sin recortar el botón
           (que sobresale del borde); por eso NO se usa overflow-hidden aquí. */}
       <SidebarHeader className="px-3 py-4 relative min-h-14 justify-center">

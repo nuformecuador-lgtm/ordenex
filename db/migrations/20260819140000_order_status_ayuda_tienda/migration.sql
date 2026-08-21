@@ -1,0 +1,37 @@
+-- Feature 235 (T1.1, R1) — alta del estatus `ayuda_tienda` en el catalogo `order_status`.
+-- P1 FIRMADA por el humano el 2026-08-19 (value, etiqueta y color con la recomendacion del spec).
+--
+-- QUE ARREGLA. Hoy la solicitud de ayuda de un mensajero es un BOOLEANO (`orden.ayuda`, merge #396,
+-- sin ficha ni spec) y la orden NUNCA sale de `en_reparto`. Consecuencia: cada superficie que
+-- deberia excluirla tiene que acordarse de leer esa columna, y no la lee NINGUNA — ni el
+-- optimizador de ruta (`findParadasEnReparto`), ni el mapa, ni el chat, ni el listado del portal,
+-- ni la guardia de gestionabilidad. El corte a «seccion aparte» es SOLO DE CLIENTE
+-- (`RepartoModule`), y el bloqueo del cierre funciona POR ACCIDENTE, porque la orden sigue en
+-- `en_reparto` (`progress/auditoria_ayuda_tienda.md` §2/§4).
+--
+-- Con un ESTATUS, `satisfies Record<OrderStatusValue, ...>` de `TRANSICIONES` ROMPE EL BUILD hasta
+-- que alguien decide las aristas del value nuevo, y esas cinco superficies pasan a filtrar por
+-- construccion. Con un booleano no se entera nadie.
+--
+-- SIGNIFICADO: «el mensajero pidio ayuda a la tienda sobre esta orden; el paquete sigue con el, en
+-- la calle». No es un desenlace: tiene entrada (#62) y dos salidas (#63 rescate, #64 corte de la
+-- noche), asi que no es terminal ni vestigial.
+--
+-- `order_status` es TABLA de valores, no enum
+-- (`20260714123909_reconcile_fks_drop_order_status_value` hizo el camino enum -> tabla para poder
+-- referenciarlo por FK), asi que el alta es un INSERT.
+--
+-- IDEMPOTENTE: `INSERT ... SELECT ... WHERE NOT EXISTS` por `value` (indice unico
+-- `order_status_value_key`). Mismo patron exacto que la 139, la 154, la 157 y la 239.
+--
+-- SIN BACKFILL, y es una decision (P6, R41/R43). P6 quedo resuelta POR MEDICION, no por firma:
+-- medido contra produccion el 2026-08-19 (MCP, solo lectura) hay 0 ordenes con `ayuda = true`,
+-- ni en reparto ni fuera. Luego GRANDFATHER SIN SCRIPT. Y aunque el conjunto no fuera vacio, mover
+-- ordenes de estado desde SQL esta PROHIBIDO (R41): toda transicion pasa por el punto unico de
+-- escritura (`appendCambioEstado`), asi que seria un script, no una migracion.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`order_status` es catalogo
+-- publico de solo lectura y conserva la suya).
+INSERT INTO "order_status" ("id", "value")
+SELECT gen_random_uuid()::text, 'ayuda_tienda'
+WHERE NOT EXISTS (SELECT 1 FROM "order_status" WHERE "value" = 'ayuda_tienda');

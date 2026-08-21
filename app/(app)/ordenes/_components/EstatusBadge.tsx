@@ -39,6 +39,11 @@ export const ORDER_STATUS_LABELS: Record<OrderStatusValue, string> = {
   // todavía no la confirmó al aprobar el cierre. La etiqueta nombra QUIÉN FALTA, no promete un
   // desenlace: «por confirmar», no «pendiente» (que se leería como lo contrario).
   devolucion_por_confirmar: "Devolución por confirmar",
+  // Feature 235/R37 (P1 firmada 2026-08-19): la etiqueta dice A QUIÉN SE LE PIDIÓ, que es lo que
+  // no se puede deducir de «Ayuda solicitada» a secas cuando maestro/admin la ven en `/ordenes`
+  // junto a otros veintiún estados. Se descartó la forma corta por ambigua; la longitud (28) está
+  // dentro de lo que ya existe («Devolviendo a bodega central», 28).
+  ayuda_tienda: "Ayuda solicitada a la tienda",
 };
 
 /**
@@ -85,6 +90,12 @@ const ORDER_STATUS_VARIANT: Record<OrderStatusValue, BadgeVariant> = {
   // la confirmación: un estado de alerta con acción pendiente, no un error ni un tránsito. Sin
   // refuerzo de acento en `ORDER_STATUS_CLASS`, igual que `devuelta`.
   devolucion_por_confirmar: "warning",
+  // Feature 235/R37: `warning` es la variante que este repo da a los estados de ESPERA CON ACCIÓN
+  // PENDIENTE (`por_devolver`, `sin_gestionar`, `devuelta`, `devolucion_por_confirmar`), que es
+  // exactamente lo que es: el paquete sigue en la calle y alguien tiene que hacer algo. Ni error
+  // (`danger`) ni tránsito (`info`). Sin refuerzo de acento en `ORDER_STATUS_CLASS`, igual que
+  // `devuelta`.
+  ayuda_tienda: "warning",
 };
 
 /**
@@ -137,5 +148,9 @@ export function EstatusBadge({
   const variant = known ? ORDER_STATUS_VARIANT[value] : "secondary";
   const extra = known ? ORDER_STATUS_CLASS[value] : undefined;
 
-  return <Badge variant={variant} className={cn(extra)}>{label}</Badge>;
+  return (
+    <Badge variant={variant} className={cn(extra)}>
+      {label}
+    </Badge>
+  );
 }

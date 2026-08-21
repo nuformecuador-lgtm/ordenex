@@ -147,23 +147,42 @@ describe("feature 172 — los no objetivos, verificados sobre el código", () =>
     expect(schema).not.toMatch(/model\s+\w*(Periodo|Ciclo)\w*Tienda\w*\s*\{/);
   });
 
-  it("R67: los estados que bloquean al mensajero siguen siendo exactamente los tres de la 111", () => {
+  it("R67: los estados que bloquean al mensajero son EXACTAMENTE `vencido` y `rechazado`", () => {
     // La lista vive en un solo sitio y la 172 no la toca. Se lee del código, no del diff:
     // así el día que alguien le añada (o le quite) un estado, este test lo dirá aunque la
     // rama de la 172 haga años que se mergeó.
+    //
+    // ⚠️ ACTUALIZADO POR LA FEATURE 241 (2026-08-20), Y ESTE TRIPWIRE HIZO SU TRABAJO: se puso rojo
+    // en el commit que cambió la lista, que es exactamente para lo que existe. Hasta hoy exigía
+    // `["solicitado","vencido","rechazado"]` y la constante se llamaba `ESTADOS_CIERRE_BLOQUEANTES`.
+    // El humano firmó que `solicitado` NO bloquea —es espera del admin, no del mensajero— y la
+    // constante pasó a decir para qué bloquea: `ESTADOS_CIERRE_BLOQUEAN_GESTION`.
+    //
+    // Lo que R67 protege NO cambia: la 172 (pagar a las tiendas) no toca ni lee esta lista. El
+    // literal se REEXPRESA con la regla nueva en vez de relajarse a un `toContain`, porque un
+    // tripwire que acepta cualquier lista no vigila nada.
     const repo = codigo("lib/repositories/OrdenRepository.ts");
-    const declaracion = repo.match(/ESTADOS_CIERRE_BLOQUEANTES\s*:\s*CierreEstado\[\]\s*=\s*\[([^\]]*)\]/);
-    expect(declaracion, "no se encontró ESTADOS_CIERRE_BLOQUEANTES").not.toBeNull();
+    const declaracion = repo.match(
+      /ESTADOS_CIERRE_BLOQUEAN_GESTION\s*:\s*CierreEstado\[\]\s*=\s*\[([^\]]*)\]/,
+    );
+    expect(declaracion, "no se encontró ESTADOS_CIERRE_BLOQUEAN_GESTION").not.toBeNull();
 
     const estados = [...declaracion![1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
-    expect(estados).toEqual(["solicitado", "vencido", "rechazado"]);
+    expect(estados).toEqual(["vencido", "rechazado"]);
     // `aprobado` NO bloquea: es la mitad que hace que pagar después de aprobar sea posible
     // (R18) y la que un descuido convertiría en un mensajero bloqueado por un pago pendiente.
     expect(estados).not.toContain("aprobado");
+    // `solicitado` tampoco, y desde la 241 es una decisión firmada, no una omisión.
+    expect(estados).not.toContain("solicitado");
 
     // Ningún archivo de la 172 nombra esa constante: no la lee, no la extiende, no la copia.
+    // (Ni la vieja ni la nueva: el rename no puede ser la vía por la que la 172 se cuele.)
     for (const ruta of CODIGO_DE_LA_FEATURE) {
-      expect(codigo(ruta), `${ruta} nombra ESTADOS_CIERRE_BLOQUEANTES`).not.toContain(
+      const fuente = codigo(ruta);
+      expect(fuente, `${ruta} nombra ESTADOS_CIERRE_BLOQUEAN_GESTION`).not.toContain(
+        "ESTADOS_CIERRE_BLOQUEAN_GESTION",
+      );
+      expect(fuente, `${ruta} nombra ESTADOS_CIERRE_BLOQUEANTES`).not.toContain(
         "ESTADOS_CIERRE_BLOQUEANTES",
       );
     }

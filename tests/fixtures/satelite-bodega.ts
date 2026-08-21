@@ -3,18 +3,12 @@
 //
 // Existe por lo mismo que `pagina-inicial.ts`: seis archivos de la suite montan esa pantalla
 // y todos necesitan las dos piezas nuevas —la página que el Server Component pre-carga y el
-// catálogo de cantón/distrito del CONJUNTO (R46)—. Escritas a mano en cada uno, el catálogo
-// acabaría derivándose de las filas de la página por inercia, y entonces ningún test podría
-// distinguir «las opciones del conjunto» de «las de la página visible», que es justo lo que
-// R46 separa.
-import {
-  derivarCantones,
-  derivarDistritos,
-} from "@/lib/utils/filtro-canton-distrito";
-import type {
-  CatalogoFiltrosSateliteDTO,
-  RecepcionSateliteDTO,
-} from "@/lib/interfaces/services/IRecepcionSateliteService";
+// catálogo de la geografía, que es del CONJUNTO (R46)—. Escritas a mano en cada uno, el
+// catálogo acabaría derivándose de las filas de la página por inercia, y entonces ningún test
+// podría distinguir «las opciones del conjunto» de «las de la página visible», que es justo lo
+// que R46 separa.
+import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrdenesBodegaPagina } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
 
 /** Tamaño de página por defecto del dominio (`lib/config/recepcion-satelite.ts`). */
@@ -37,22 +31,45 @@ export function paginaBodega(
 }
 
 /**
- * El catálogo que la Server Action de T K.2 devuelve para un conjunto de órdenes: las mismas
- * funciones puras que usa el servicio, aplicadas al CONJUNTO que se le pase (no a una
- * página). Un test que quiera comprobar R46 le pasa el conjunto entero y monta la pantalla
- * con una página recortada.
+ * El catálogo de los filtros tal como le llega al `adminSatelite`: el de `/ordenes`
+ * (`obtenerCatalogoFiltrosOrdenes`), que para ese rol viene ACOTADO — la geografía de SU zona,
+ * sin zonas y sin cuentas tienda.
+ *
+ * Pedido humano (2026-08-19): antes se derivaba de las órdenes y sus opciones eran NOMBRES.
+ * Ahora son ids, como en `/ordenes`. En producción salen de la N:M de la zona; aquí se derivan
+ * de las órdenes que el test monta —que es la geografía de esa zona en el caso de prueba— y se
+ * usa el propio nombre como id, para que lo que se lee en el desplegable y lo que viaja al
+ * servidor sigan siendo legibles en los asserts.
  */
 export function catalogoSatelite(
   ordenes: readonly RecepcionSateliteDTO[],
-): CatalogoFiltrosSateliteDTO {
-  const cantones = derivarCantones(ordenes);
+): CatalogoFiltrosOrdenesDTO {
+  const unicos = <T extends { id: string }>(filas: T[]): T[] => [
+    ...new Map(filas.map((f) => [f.id, f])).values(),
+  ];
   return {
-    cantones,
-    distritos: cantones.flatMap((canton) =>
-      derivarDistritos(ordenes, canton.value).map((distrito) => ({
-        ...distrito,
-        parentValue: canton.value,
+    // El adminSatelite no recibe ni zonas ni cuentas tienda: su barra no declara esos
+    // controles, y el servicio tampoco le entrega el dato.
+    zonas: [],
+    tiendas: [],
+    provincias: unicos(
+      ordenes.map((o) => ({ id: o.provinciaNombre, nombre: o.provinciaNombre })),
+    ),
+    cantones: unicos(
+      ordenes.map((o) => ({
+        id: o.cantonNombre,
+        nombre: o.cantonNombre,
+        padreId: o.provinciaNombre,
       })),
+    ),
+    distritos: unicos(
+      ordenes
+        .filter((o) => o.distritoNombre !== null)
+        .map((o) => ({
+          id: o.distritoNombre as string,
+          nombre: o.distritoNombre as string,
+          padreId: o.cantonNombre,
+        })),
     ),
   };
 }

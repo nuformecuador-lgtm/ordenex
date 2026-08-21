@@ -1,0 +1,24 @@
+-- DOWN (feature 235, retiro de `orden.ayuda`): repone la COLUMNA, con el mismo tipo, la misma
+-- nulabilidad y el mismo default que tenia (`20260818120000_orden_ayuda`).
+--
+-- ⚠️ PERDIDA DE DATO DECLARADA: repone la columna, NO sus valores. Todas las filas quedan en
+-- `false`.
+--
+-- POR QUE ES ACEPTABLE, y no un atajo: despues de la 235 ningun valor de esa columna significa
+-- nada — quien dice si hay una solicitud de ayuda viva es el ESTADO de la orden (`ayuda_tienda`), y
+-- el codigo que la escribia (`marcarAyuda` / `desmarcarAyuda` / `habilitarNovedad`) ya no existe.
+-- Ademas, el codigo ANTERIOR la leia con `DEFAULT false`, que es exactamente lo que este down deja:
+-- una base que ese codigo puede leer sin romperse (R42). Lo que ese codigo veria es la seccion de
+-- ayuda del portal vacia y la rama de ayuda de `/novedades` sin filas, hasta que se pidan
+-- solicitudes nuevas — que es el estado en el que ese codigo dejaba a las ordenes de todos modos
+-- cuando la bandera estaba apagada. Mismo razonamiento, misma forma, que
+-- `20260819130000_orden_retiro_gestion_aprobada/down.sql`.
+--
+-- ⚠️ ORDEN DEL ROLLBACK: este down es el PRIMERO de los tres de la feature (se revierte en orden
+-- inverso al de aplicacion). Repone la columna PERO no devuelve ninguna orden desde `ayuda_tienda`
+-- a `en_reparto`: si al revertir quedaran ordenes en el estatus de ayuda, el codigo anterior las
+-- vera con un estatus que no conoce y las pintara con el chip neutro (R41 de la 155), con la
+-- bandera en `false`. Moverlas desde SQL esta PROHIBIDO (R41).
+--
+-- `IF NOT EXISTS` para que el rollback sea idempotente (se puede correr dos veces sin fallar).
+ALTER TABLE "orden" ADD COLUMN IF NOT EXISTS "ayuda" boolean NOT NULL DEFAULT false;

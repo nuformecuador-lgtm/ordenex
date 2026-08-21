@@ -11,27 +11,25 @@ import type {
 } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type {
-  CreatedPreset,
   ListarOrdenesCompletoInput,
   ListarOrdenesInput,
-  OrdenFilterInput,
   SortDir,
   SortField,
 } from "@/lib/types/orden";
+import { soloDigitosSiPareceNumero } from "@/lib/utils/busqueda-orden";
+// Pedido humano (2026-08-19): el rango de creacion y el termino de busqueda los traduce el
+// util COMPARTIDO, porque la barra de este listado se aplica tambien a la bodega satelite y
+// las dos superficies tienen que entender lo mismo por «ultimos 7 dias» y por un termino con
+// separadores. Aqui se queda solo lo que es propio de `/ordenes`: la ruta rapida por guia.
 import {
-  normalizarTerminoBusqueda,
-  soloDigitosSiPareceNumero,
-} from "@/lib/utils/busqueda-orden";
+  rangoCreacion,
+  terminoDeBusqueda,
+} from "@/lib/utils/filtros-listado-ordenes";
 // Feature 151: el limite de filas de `listarCompleto`. `ordenesConfig` salio de este archivo
 // al integrar la 155, y `resolverDestinoCreacion` salio el 2026-08-07 con el alta manual: los
 // dos eran del camino de CREACION, que este servicio ya no tiene. Quien los usa hoy es
 // `BulkOrdenService`, que es por donde se crean las ordenes de verdad.
 import { descargaConfig } from "@/lib/config/descarga";
-import {
-  inicioDelDiaCREnUtc,
-  inicioDelDiaSiguienteCREnUtc,
-  inicioDeUltimosNDiasCREnUtc,
-} from "@/lib/utils/fecha-cr";
 
 // Roles reconocidos por las lecturas (los demas -> forbidden, R24). maestro/admin ven todo
 // (R20); adminTienda/mensajero con acotamiento (R21/R23). Se llamaba "del CRUD" cuando este
@@ -46,7 +44,7 @@ const KNOWN_ROLES = new Set<string>(["maestro", "admin", "adminTienda", "mensaje
 // Feature 144/B1 (R30/R43): el mapa crece a los cinco catalogos. Las TRES claves
 // temporales (`created_preset`/`created_desde`/`created_hasta`) NO estan aqui a
 // proposito: no son columnas, se traducen a un rango `createdAt: { gte, lt }`
-// calculado server-side (ver `rangoCreacion`).
+// calculado server-side (`rangoCreacion`, en `lib/utils/filtros-listado-ordenes`).
 const FILTER_TO_COLUMN = {
   status_id: "estatusId",
   zona_id: "zonaId",
@@ -55,42 +53,6 @@ const FILTER_TO_COLUMN = {
   canton_id: "cantonId",
   distrito_id: "distritoId",
 } as const;
-
-// Dias de cada atajo de antiguedad (R41). El dominio ya lo cierra `CREATED_PRESETS`
-// en el schema; este mapa solo traduce el valor a un numero de dias.
-const PRESET_DIAS: Record<CreatedPreset, number> = {
-  "7d": 7,
-  "15d": 15,
-  "30d": 30,
-  "90d": 90,
-};
-
-/**
- * Feature 144 (R41/R42/R43) — bordes temporales del filtro de creacion, calculados
- * SERVER-SIDE en horario de Costa Rica (UTC-6 fijo). Nunca se aceptan instantes del
- * reloj del cliente: solo fechas calendario o un atajo de dominio cerrado.
- *
- *   - atajo "Nd"  -> `gte` = 00:00 CR de hace N-1 dias (N dias calendario incl. hoy).
- *   - `desde: D`  -> `gte` = 00:00 CR de D.
- *   - `hasta: H`  -> `lt`  = 00:00 CR del dia SIGUIENTE a H  => H es INCLUSIVO.
- *   - un solo extremo -> rango abierto por el otro lado.
- *
- * Atajo y rango no pueden coexistir: `ordenFilterSchema` lo rechaza antes (R40).
- * Devuelve `undefined` si no hay ninguna clave temporal (sin filtro, R45).
- */
-function rangoCreacion(
-  filter: OrdenFilterInput | undefined,
-  ahora: Date,
-): { gte?: Date; lt?: Date } | undefined {
-  if (!filter) return undefined;
-  if (filter.created_preset) {
-    return { gte: inicioDeUltimosNDiasCREnUtc(PRESET_DIAS[filter.created_preset], ahora) };
-  }
-  const rango: { gte?: Date; lt?: Date } = {};
-  if (filter.created_desde) rango.gte = inicioDelDiaCREnUtc(filter.created_desde);
-  if (filter.created_hasta) rango.lt = inicioDelDiaSiguienteCREnUtc(filter.created_hasta);
-  return rango.gte || rango.lt ? rango : undefined;
-}
 
 /**
  * Feature 169 (design §5) — mayor valor representable por `num_guia`, que es `int4`. Un
@@ -182,10 +144,11 @@ export class OrdenService implements IOrdenService {
         return;
       }
     }
-    where.busqueda = normalizarTerminoBusqueda(termino);
-    // `digitos` ya es solo digitos: normalizarlo seria la identidad. Se compara contra la
-    // forma normalizada para no mandar dos veces lo mismo cuando el termino ya venia limpio.
-    if (digitos !== null && digitos !== where.busqueda) where.busquedaDigitos = digitos;
+    // Las dos formas del termino salen del util compartido con la bodega satelite: aqui
+    // solo queda la decision propia de este listado (la ruta rapida de arriba).
+    const { busqueda, busquedaDigitos } = terminoDeBusqueda(termino);
+    where.busqueda = busqueda;
+    if (busquedaDigitos !== undefined) where.busquedaDigitos = busquedaDigitos;
   }
 
   private construirWhere(

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { montoPositivoSchema } from "@/lib/types/wallet";
+import { METODO_PAGO_SEED } from "@/lib/types/metodo-pago";
 import { cierreConfig } from "@/lib/config/cierre";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
@@ -14,6 +15,7 @@ import type {
   AprobarCierreServiceResult,
   RechazarCierreServiceResult,
   ForzarSolicitudVencidoServiceResult,
+  ActualizarPagosGestionServiceResult,
 } from "@/lib/interfaces/services/ICierresAdminService";
 
 // Feature 38 — schemas zod del borde de las Server Actions "Cierres del dia" del
@@ -75,6 +77,26 @@ export const indemnizacionSchema = z.object({
   }, `El monto no puede superar ${INDEMNIZACION_MONTO_MAX}.`),
 });
 
+/**
+ * Feature 238 (T2.1, design §3.1, R7/R12) — UNA gestion confirmada FISICAMENTE por bodega.
+ *
+ * `numGuia` es lo que bodega LEYO (camara o teclado); el servicio comprueba que casa con la guia
+ * de la orden de esa gestion (R12), de modo que un fallo de mapeo del cliente sea un
+ * `validation_error` por entrada y NO una confirmacion falsa de un paquete que nadie tuvo
+ * delante.
+ *
+ * Es un OBJETO y no un `string[]` de ids por dos motivos: lleva el dato que R12 verifica, y puede
+ * crecer sin romper el contrato si algun dia se decide registrar el medio (D7, hoy descartado).
+ *
+ * Lo que vive en el borde es la FORMA (uuid, entero positivo). La COBERTURA —que lo confirmado
+ * sea exactamente el conjunto que vuelve— la valida el SERVICE contra las gestiones reales del
+ * cierre: el borde no sabe que gestiones tiene ese cierre (design §10-F, misma razon que la 158).
+ */
+export const confirmacionFisicaSchema = z.object({
+  gestionId: z.string().uuid(),
+  numGuia: z.number().int().positive(),
+});
+
 // Feature 158 (R19/R36): `aprobarCierre` gana la lista de indemnizaciones. `.default([])` la
 // hace RETROCOMPATIBLE con el contrato de la 38: un cierre sin incidentes se aprueba
 // exactamente como hoy, sin campos nuevos obligatorios. La cobertura EXACTA (que no falte ni
@@ -83,9 +105,16 @@ export const indemnizacionSchema = z.object({
 export const aprobarCierreSchema = z.object({
   cierreId: z.string().uuid(),
   indemnizaciones: z.array(indemnizacionSchema).default([]),
+  // Feature 238 (T2.1, R15/R16): el `.default([])` NO abre ningun agujero. Un cierre CON
+  // retornables y lista vacia cae en la guardia de cobertura del servicio (R15: «sin campo» se
+  // trata como confirmacion vacia y se le aplica R8 sin excepcion). Lo que el default preserva es
+  // R16: un cierre sin nada que devolver —3 de cada 12 medidos en produccion, no un caso raro— se
+  // aprueba con el MISMO payload de siempre.
+  confirmacionFisica: z.array(confirmacionFisicaSchema).default([]),
 });
 
 export type IndemnizacionInput = z.infer<typeof indemnizacionSchema>;
+export type ConfirmacionFisicaBordeInput = z.infer<typeof confirmacionFisicaSchema>;
 export type AprobarCierreInput = z.infer<typeof aprobarCierreSchema>;
 
 // Feature 111/R16: la valvula de escape identifica el cierre `vencido` a destrabar por su id
@@ -98,6 +127,46 @@ export const rechazarCierreSchema = z.object({
   cierreId: z.string().uuid(),
   motivo: z.string().trim().min(1),
 });
+
+/**
+ * Pedido humano (2026-08-19) — CORRECCIÓN del desglose de pago de una gestión de un cierre
+ * ABIERTO por un admin/maestro. Las líneas NUEVAS sustituyen enteras a las anteriores.
+ *
+ * **El total NO viaja.** Lo que se corrige es CÓMO se cobró, no CUÁNTO: el total es
+ * `gestion_orden.monto_recibido`, que el servicio lee de la base y contra el que cuadra la
+ * suma. Aceptarlo del cliente sería dejar que la pantalla decida cuánto dinero declaró el
+ * mensajero, que es exactamente lo que esta corrección no debe poder hacer.
+ *
+ * **Los montos son STRING**, como los de la indemnización de arriba y por lo mismo: viajan de
+ * extremo a extremo sin pasar por `number`, y solo se convierten a `Prisma.Decimal` al
+ * comparar y al escribir. `montoPositivoSchema` ya rechaza el vacío, el 0, el negativo, los
+ * tres decimales y la coma.
+ *
+ * **Al menos una línea** (`.min(1)`): una entrega que cobró no puede quedarse sin decir cómo.
+ * Y el desglose vacío no es un caso de esta pantalla — una entrega SIN cobro no tiene nada que
+ * repartir, y el servicio la rechaza por su `monto_recibido` en cero.
+ */
+export const actualizarPagosGestionSchema = z
+  .object({
+    gestionId: z.string().uuid(),
+    lineas: z
+      .array(
+        z.object({
+          metodo: z.enum(METODO_PAGO_SEED),
+          monto: montoPositivoSchema,
+        }),
+      )
+      .min(1, "el desglose necesita al menos un método"),
+  })
+  .strict()
+  // Espejo EXACTO del `@@unique(gestion_id, metodo)`: dos transferencias se registran como UNA
+  // línea con el monto ya sumado. Misma regla que el borde del mensajero (feature 212/R11).
+  .refine((v) => new Set(v.lineas.map((l) => l.metodo)).size === v.lineas.length, {
+    path: ["lineas"],
+    message: "cada metodo de pago puede aparecer una sola vez",
+  });
+
+export type ActualizarPagosGestionInput = z.infer<typeof actualizarPagosGestionSchema>;
 
 export type CierreIdInput = z.infer<typeof cierreIdSchema>;
 export type RechazarCierreInput = z.infer<typeof rechazarCierreSchema>;
@@ -264,6 +333,14 @@ export type AprobarCierreResult =
 export type RechazarCierreResult =
   | RechazarCierreServiceResult
   | { status: "unauthenticated" };
+/**
+ * Pedido humano (2026-08-19): resultado de la Server Action que corrige el desglose de pago de
+ * una gestion (dominio del service + `validation_error` de zod / `unauthenticated` sin sesion).
+ */
+export type ActualizarPagosGestionResult =
+  | ActualizarPagosGestionServiceResult
+  | { status: "unauthenticated" };
+
 // Feature 111/R16: resultado de la Server Action de la valvula de escape (dominio del service
 // + `validation_error` de zod / `unauthenticated` sin sesion, resueltos en el borde).
 export type ForzarSolicitudVencidoResult =

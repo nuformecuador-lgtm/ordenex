@@ -51,6 +51,82 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // NO entra en `ORIGEN_TIPOS_VISITA_REAL`: es una confirmacion administrativa en bodega, no una
   // visita de calle; contarla subiria los intentos y cobraria antes de tiempo (R16).
   "anclaje_devolucion",
+  // Feature 235 (P2, R10) — LA IDA del viaje de la ayuda: `en_reparto -> ayuda_tienda`, disparada
+  // por el MENSAJERO ASIGNADO (`SolicitudAyudaService.solicitar`). Familia propia, y no reuso de
+  // `ajuste_estado`, porque el historial es la unica evidencia de que hubo una solicitud: sin ella
+  // el sentido habria que deducirlo del par de estatus, que es la clase de derivacion que se
+  // vuelve falsa en cuanto el grafo gana una arista.
+  // NO entra en `ORIGEN_TIPOS_VISITA_REAL` (R11): pedir auxilio NO es una visita fallida — el
+  // mensajero sigue en la calle con el paquete y no ha intentado entregar nada. Contarla subiria
+  // los intentos, adelantaria el escalado del cron SLA (99) y cobraria el rechazo (56) antes de
+  // tiempo. Tampoco en `ORIGEN_TIPOS_CON_GESTION`: su fila nace con `gestion_orden_id` NULO.
+  "solicitud_ayuda_tienda",
+  // Feature 235 (P2, R10) — LA VUELTA: `ayuda_tienda -> en_reparto`, el RESCATE. Una sola familia
+  // aunque la disparen DOS actores (el mensajero con «Recuperar» y la tienda con «Habilitar»),
+  // porque el hecho es el mismo y el punto de escritura es UNO (R8); quien lo hizo lo dice
+  // `actor_usuario_id`, no la familia.
+  // ⚠️ ESTA FAMILIA ES LA CLAVE DE LA EXCEPCION DE WEBHOOK (P4, firmada EN CONTRA de la
+  // recomendacion del spec el 2026-08-19): el rescate NO emite evento publico, para que ningun
+  // integrador reciba `en_reparto` dos veces sobre la misma orden. La excepcion se aplica por
+  // FAMILIA y jamas por estado destino — si se hiciera por estado, se silenciarian los reingresos
+  // legitimos (una reprogramada liberada dejaria de avisar) y ESO SI seria una regresion. Ver
+  // `lib/types/webhook-eventos.ts`.
+  // Mismas dos ausencias que la ida: ni visita real (R11) ni con gestion.
+  "rescate_ayuda_tienda",
+  // Feature 237 (T1.2, R5) — EL DESENLACE: `ayuda_tienda -> reprogramada | rechazada`, disparado
+  // por el ADMINTIENDA DUEÑO de la orden desde la pestaña de ayuda de `/novedades`
+  // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`).
+  //
+  // ⏳ 2026-08-20: aqui decia «`gestion_tienda_ayuda` NO se declara (P2, firmada): su productor es
+  // la ficha 237». Esta es la ficha 237 y este es el commit de su productor, asi que la nota se
+  // cumple y se sustituye por el valor. La convencion sigue viva: un valor de enum nace CON su
+  // productor (precedente `incidente`, 154, que costo el tren 154+155+156).
+  //
+  // FAMILIA PROPIA Y NO `gestion` (R4/R5): quien registra es la tienda y quien queda atribuido es
+  // el mensajero, asi que son dos hechos distintos. Con `gestion` el historial diria que el acto lo
+  // hizo el mensajero, y ese historial es la UNICA evidencia de quien decidio el rechazo que se le
+  // cobra a la tienda.
+  //
+  // ⚠️ SI ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (R6), al reves que las dos familias de la 235 que
+  // tiene justo encima. El argumento completo vive en `specs/237-gestion-tienda-ayuda/design.md`
+  // §7.3 y, en corto: `solicitud_ayuda_tienda` y `rescate_ayuda_tienda` son pedir auxilio y
+  // retirarlo —el mensajero sigue en la calle y no ha intentado entregar nada—, mientras que esta
+  // familia es EL DESENLACE de esa visita, sobre una orden en la que el mensajero no registro
+  // ninguno. Contarla es contar UNA visita UNA vez. Y no contradice que `reprogramacion_tienda`
+  // quede fuera: aquella se hace sobre una orden que YA tiene una `devuelta` real contada, asi que
+  // sumarla produce el doble conteo que 160/R2 evitaba.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  // mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (ver la nota de esa lista).
+  "gestion_tienda_ayuda",
+  // Feature 240 (T1.3, D8/R6) — EL RECHAZO MANUAL DE LA TIENDA: `devuelta -> rechazada`, decidido
+  // por el ADMINTIENDA DUEÑO de la orden desde la card de devolucion de `/novedades`
+  // (`RechazoTiendaService.rechazar` -> `GestionOrdenRepository.rechazarDesdeDevuelta`).
+  //
+  // FAMILIA PROPIA, y las dos alternativas eran mas baratas — por eso se dice que rompen:
+  //   - `escalado_devuelta_sla` (99) es el MISMO par origen->destino, asi que la tentacion es
+  //     obvia. Pero ese valor ES el predicado de la pestaña «Rechazadas por plazo vencido» (102,
+  //     `OrdenRepository`) y de `esRechazoSla`: reusarlo listaria ahi rechazos que no vencieron
+  //     ningun plazo y etiquetaria la decision de una persona como un vencimiento del reloj.
+  //   - `gestion` atribuiria AL MENSAJERO la decision de la tienda —y esta fila es la unica
+  //     evidencia de quien decidio un cobro— ademas de sumar un intento de mas (ver abajo).
+  //
+  // ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (R19), al reves que `gestion_tienda_ayuda` que tiene
+  // justo encima. No es un olvido: el argumento es LITERALMENTE el que ya esta escrito para
+  // `reprogramacion_tienda` unas lineas mas arriba — esta transicion se hace sobre una orden que
+  // YA TIENE una gestion `devuelta` real contada, asi que sumarla da el DOBLE CONTEO que 160/R2
+  // evitaba. Y no contradice a la 237: aquella se hace sobre una orden en la que el mensajero NO
+  // registro ningun desenlace, asi que sin ella esa visita no la cuenta nadie; aqui ya esta
+  // contada. Quien meta esta familia en esa lista hace que el rechazo manual sume +1 de mas,
+  // adelante el escalado del cron (99) sobre OTRAS ordenes y cobre el `cobroRechazado` (56) antes
+  // de tiempo, en silencio.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado:
+  // mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (ver la nota de esa lista).
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R44): el integrador recibe `rechazada` igual que
+  // hoy. La unica excepcion por familia sigue siendo el rescate de la 235.
+  "rechazo_tienda",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];
@@ -145,6 +221,24 @@ export const ORIGEN_TIPOS_CON_GESTION = [
 // El `satisfies` rompe el build si un valor deja de existir en el SEED (y por tanto en el enum).
 export const ORIGEN_TIPOS_VISITA_REAL = [
   "gestion", // feature 36: `crearGestionYTransicionar` — el mensajero gestiono la orden en calle
+  // Feature 237 (T2.1, R6) — 2026-08-20. LA TIENDA resuelve desde la pestaña de ayuda
+  // (`crearGestionDesdeAyuda`) una orden que el mensajero se llevo a la calle y no supo cerrar.
+  // El acto lo registra la tienda, pero LA VISITA LA HIZO EL MENSAJERO y esta fila es su
+  // desenlace: por eso cuenta, y cuenta UNA vez (el grano de `contarIntentosVigentes` es el
+  // cierre, `groupBy(["cierreId"])`).
+  //
+  // POR QUE ESTA Y `reprogramacion_tienda` NO — es la objecion obvia y se responde aqui para que
+  // nadie la «corrija» en ninguna de las dos direcciones:
+  //   - `reprogramacion_tienda` (100) se hace sobre una orden que YA TIENE una gestion `devuelta`
+  //     real contada. Sumarla dara el DOBLE CONTEO que 160/R2 evitaba.
+  //   - `gestion_tienda_ayuda` se hace sobre una orden en la que el mensajero NO registro ningun
+  //     desenlace: pedir ayuda no cuenta (235/R11, y las dos familias de la ayuda estan fuera de
+  //     esta lista). Sin ella, esa visita no la cuenta NADIE.
+  //
+  // Consecuencia BUSCADA, no un efecto lateral: sube el conteo de intentos, adelanta el escalado
+  // del cron SLA (99) y con el el `cobroRechazado` (56). Aqui esa direccion es correcta porque es
+  // la propia tienda quien decide el desenlace, sabiendo el precio (el aviso de D7 se lo dice).
+  "gestion_tienda_ayuda",
 ] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 // Feature 215 (T4, R13/R28): aqui vivia `ORIGEN_TIPOS_REPROGRAMADA_INTENTO`, la lista blanca de

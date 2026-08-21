@@ -9,6 +9,7 @@ import type {
 } from "@/lib/interfaces/services/ICorteDiarioService";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { computeTotales, derivarPagos, derivarIngresoBodega } from "@/lib/utils/cierre-totales";
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -19,6 +20,10 @@ type OrdenRepo = Pick<IOrdenRepository, "findUsuarioVehiculoId" | "findEstatusId
 // Feature 109 (R4): estados del catalogo que consume la transicion del corte diario.
 const ESTADO_EN_REPARTO = "en_reparto";
 const ESTADO_SIN_GESTIONAR = "sin_gestionar";
+// Feature 235 (T4.4, R26): el corte barre TAMBIEN las ordenes con ayuda pedida. Sin esto, un
+// mensajero que dejara el dia con ordenes en `ayuda_tienda` se quedaria con ellas colgando y su
+// cierre bloqueado para siempre.
+const ESTADO_AYUDA = "ayuda_tienda";
 // Reusa la 37: gestiones pendientes del mensajero + creacion transaccional del cierre
 // (parametrizada con estado='vencido', feature 41/C1).
 type CierreRepo = Pick<ICierreDiaRepository, "findGestionesPendientes" | "crearCierre">;
@@ -29,6 +34,36 @@ export interface CorteDiarioLogger {
   warn(message: string): void;
 }
 const defaultLogger: CorteDiarioLogger = { warn: (m) => console.warn(m) };
+
+/** CR es UTC-6 FIJO (sin horario de verano): restar 24 h ES restar un dia calendario. */
+const UN_DIA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Feature 246 (T2.1, design §5.1, R11/R13/R17) — EL ANCLA DEL CORTE, Y ES DONDE ESTA FICHA SE
+ * ROMPE SOLA SI NADIE LEE ESTO.
+ *
+ * `diaCerrado` es la fecha CR de la JORNADA QUE LA CORRIDA CIERRA, es decir el dia ANTERIOR al
+ * que la corrida inaugura. NO es «hoy».
+ *
+ * POR QUE EL ANCLA INGENUA NO SIRVE. El cron corre a las 00:00 CR del dia `D+1`, asi que
+ * `startOfDayCR(now)` ya vale `D+1`. Una orden que bodega reservo anoche «para mañana» tiene
+ * `fecha_reparto = D+1`. Con el predicado «protegida si `fecha_reparto > startOfDayCR(now)`»,
+ * `D+1 > D+1` es FALSO y la orden SE BARRE: justo lo que esta ficha viene a impedir. Cambiar el
+ * operador a `>=` la salvaria esa noche, pero dejaria el predicado dependiendo del INSTANTE exacto
+ * en que Vercel dispara el cron. El error esta en el ANCLA, no en el operador.
+ *
+ * ROBUSTEZ SI EL CRON SE ADELANTA. Si dispara a las 23:5x CR del dia `D`, `startOfDayCR` da `D` y
+ * `diaCerrado = D-1`: se barre todo lo de `D-1` hacia atras y lo de `D` sobrevive una corrida mas.
+ * Se RETRASA un barrido; no se PIERDE ninguno, porque la corrida siguiente lo alcanza. Anclarlo en
+ * `now` sin restar el dia tiene el defecto inverso, que si pierde la proteccion.
+ *
+ * Y LA PROTECCION CADUCA SOLA (R13): como el maximo reservable es «mañana» (D2), `diaCerrado`
+ * avanza un dia cada noche y alcanza a la orden reservada en la corrida SIGUIENTE. Ninguna orden
+ * puede quedar protegida dos veces, y nadie tiene que escribir nada para que expire.
+ */
+export function diaQueElCorteCierra(now: Date): Date {
+  return new Date(startOfDayCR(now).getTime() - UN_DIA_MS);
+}
 
 /**
  * Feature 41 — logica de negocio del corte diario (R6-R11). Por cada mensajero con
@@ -48,23 +83,33 @@ export class CorteDiarioService implements ICorteDiarioService {
     private readonly logger: CorteDiarioLogger = defaultLogger,
   ) {}
 
-  async ejecutarCorte(): Promise<CorteDiarioResult> {
+  async ejecutarCorte(now: Date = new Date()): Promise<CorteDiarioResult> {
+    // Feature 246 (T2.1, R16/R17): el ancla se calcula UNA vez por corrida y viaja como PARAMETRO
+    // a las DOS capas —la que SELECCIONA y la que ESCRIBE—, para que no puedan decir cosas
+    // distintas. Ver `diaQueElCorteCierra`: es el dia que la corrida CIERRA, no el que inaugura.
+    const diaCerrado = diaQueElCorteCierra(now);
     // R1: la clasificacion a central usa la zona central (o null: fallback satelite).
     const centralZonaId = await this.zonaRepo.findCentralZonaId();
     // Feature 109 (T1.3, R4): resuelve UNA vez los estatus ids de la transicion del corte. Si el
     // catalogo aun no tiene `sin_gestionar` (seed pendiente), se omite la transicion y el corte se
     // comporta como la 41 (solo `vencido` por gestiones) — no bloquea el flujo money-critical.
-    const [enRepartoEstatusId, sinGestionarEstatusId] = await Promise.all([
+    const [enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId] = await Promise.all([
       this.ordenRepo.findEstatusIdByValue(ESTADO_EN_REPARTO),
+      this.ordenRepo.findEstatusIdByValue(ESTADO_AYUDA),
       this.ordenRepo.findEstatusIdByValue(ESTADO_SIN_GESTIONAR),
     ]);
+    // Feature 235: los TRES o ninguno. `ayudaEstatusId` es obligatorio en `CorteSinGestionarInput`,
+    // asi que un olvido de cableado rompe el typecheck en vez de dejar ordenes sin barrer.
     const corteSinGestionar =
-      enRepartoEstatusId !== null && sinGestionarEstatusId !== null
-        ? { enRepartoEstatusId, sinGestionarEstatusId }
+      enRepartoEstatusId !== null && ayudaEstatusId !== null && sinGestionarEstatusId !== null
+        ? // Feature 246 (T2.3): `diaCerrado` viaja DENTRO del input del barrido, no como argumento
+          // suelto, para que el mismo valor que filtro la seleccion filtre la escritura (R16).
+          { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId, diaCerrado }
         : undefined;
     // R4/R7/R10: mensajeros que "debian cerrar" (gestiones sin cerrar) O que dejaron ordenes en
     // `en_reparto` al pasar de dia; sin un cierre ABIERTO (R10/R29).
-    const mensajeros = await this.corteRepo.findMensajerosConActividadSinCierre();
+    // Feature 246 (R11/R14/R16): el MISMO `diaCerrado` que recibira `crearCierre`.
+    const mensajeros = await this.corteRepo.findMensajerosConActividadSinCierre(diaCerrado);
 
     let vencidosCreados = 0;
     let mensajerosSinZona = 0;
@@ -102,8 +147,10 @@ export class CorteDiarioService implements ICorteDiarioService {
         estado: "vencido",
         destinoTipo,
         destinoZonaId: m.zonaId,
-        // Feature 109 (T1.3, R4/R6): en la MISMA tx transiciona `en_reparto -> sin_gestionar` del
-        // mensajero (via choke point). undefined si el catalogo no lo soporta (seed pendiente).
+        // Feature 109 (T1.3, R4/R6) + feature 235 (T4.4, R26): en la MISMA tx transiciona a
+        // `sin_gestionar` las ordenes del mensajero que sigan en `en_reparto` Y las que esten en
+        // `ayuda_tienda`, cada una desde SU origen real (via choke point). undefined si el catalogo
+        // no lo soporta (seed pendiente).
         corteSinGestionar,
         totales,
         pagoByGestionId,

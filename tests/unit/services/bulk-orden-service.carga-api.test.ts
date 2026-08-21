@@ -130,7 +130,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRecepcionSateliteByZona: vi.fn().mockResolvedValue([]),
     // Feature 170 (T K.1/T K.2): la pagina del listado satelite y el catalogo de sus filtros.
     findRecepcionSatelitePaginada: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-    findRecepcionSateliteGeoByZona: vi.fn().mockResolvedValue([]),
     // Feature 184 (T A.1/T A.2): el conjunto completo del listado y la vigencia de ids.
     findRecepcionSateliteCompleta: vi.fn().mockResolvedValue([]),
     findIdsVigentesEnBodega: vi.fn().mockResolvedValue([]),
@@ -145,7 +144,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recolectarEnTienda: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,
@@ -155,12 +154,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // [89] Lecturas de /novedades, incorporadas a `IOrdenRepository` al mergear `dev`. La
     // carga por API no las usa; se stubean neutras para satisfacer la interfaz completa.
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
-    marcarAyuda: vi.fn(async (): Promise<void> => {}),
-    desmarcarAyuda: vi.fn(async (): Promise<void> => {}),
-    habilitarNovedad: vi.fn(async (): Promise<void> => {}),
+    // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
+    transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
     incrementarIntentoContacto: vi.fn(async (): Promise<number> => 0),
-    countDevueltasByTienda: vi.fn(async (): Promise<number> => 0),
-    findDevueltasByTienda: vi.fn(async () => []),
+    // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
+    countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),
+    findNovedadesByTienda: vi.fn(async () => []),
+    findFechaSolicitudAyuda: vi.fn(async () => new Map()),
     // Feature 92 (R8/R35): metodos nuevos de lectura de `IOrdenRepository`. Estos
     // tests no ejercitan el gate de coordenadas ni la ruta: devuelven vacio.
     findParaAsignabilidad: vi.fn(async () => []),

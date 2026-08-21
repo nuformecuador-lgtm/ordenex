@@ -100,7 +100,7 @@ const PAGE_SIZE = 3;
 const LISTADO = "Órdenes de la bodega";
 const PAGINACION = "Paginación de las órdenes de la bodega";
 /** La sección de arriba: su botón es la acción que relee el listado sin tocar la selección. */
-const ACEPTAR_TODAS = "Aceptar todas";
+const ACEPTAR = "Aceptar";
 
 function etiqueta(i: number): string {
   return `REM-${String(i).padStart(2, "0")}`;
@@ -246,9 +246,18 @@ function casilla(remision: string): HTMLElement {
   return within(tabla()).getByRole("checkbox", { name: `Seleccionar ${remision}` });
 }
 
-/** El texto de la barra de selección, del que el aviso es una coletilla subordinada. */
+/**
+ * El texto de la barra de selección, del que el aviso es una coletilla subordinada.
+ *
+ * Pedido humano (2026-08-19): desde que esta pantalla monta la barra de `/ordenes`, la seccion
+ * tiene DOS regiones `role="status"` —el aviso del minimo de caracteres del buscador (vacio
+ * salvo cuando falta teclear) y esta—, asi que se elige por lo que DICE, no por ser la unica.
+ */
 function barra(): HTMLElement {
-  return within(region()).getByRole("status");
+  const status = within(region())
+    .getAllByRole("status")
+    .filter((n) => (n.textContent ?? "").trim() !== "");
+  return status[status.length - 1]!;
 }
 
 /** El aviso, buscado por lo que DICE: que hay marcas fuera y que no entran. */
@@ -277,7 +286,7 @@ async function irAPagina(
 
 /**
  * Dispara una RELECTURA del listado sin tocar la selección, la página ni los filtros: acepta
- * lo que hay en «Por recibir», que es una acción de otra sección de la pantalla y termina —como
+ * la orden de «Por recibir», que es una acción de otra sección de la pantalla y termina —como
  * todas— releyendo del servidor. Se ancla a que la tabla enseñe las filas nuevas, que es la
  * señal POSITIVA de que la lectura llegó (esperar a que «algo desaparezca» se cumple también
  * antes de que la acción empiece).
@@ -286,16 +295,36 @@ async function releerListado(
   user: ReturnType<typeof userEvent.setup>,
   visiblesTrasLaRelectura: string[],
 ) {
-  await user.click(screen.getByRole("button", { name: ACEPTAR_TODAS }));
+  await user.click(
+    within(screen.getByRole("region", { name: "Por recibir" })).getByRole("button", {
+      name: ACEPTAR,
+    }),
+  );
   await waitFor(() => expect(remisionesVisibles()).toEqual(visiblesTrasLaRelectura));
 }
 
 /** Elige una opción del filtro multi de la barra (mismo recorrido que los demás archivos). */
+/**
+ * PIDE un filtro en el selector de la barra. Pedido humano (2026-08-19): esta pantalla monta
+ * `BuscadorFiltros`, la barra de `/ordenes`, y ahi los filtros NO estan puestos de entrada.
+ */
+async function pedirFiltro(user: ReturnType<typeof userEvent.setup>, label: string) {
+  if (screen.queryByRole("listbox", { name: "Filtros" }) === null) {
+    await user.click(screen.getByRole("button", { name: /^Filtros/ }));
+  }
+  const puesto = within(await screen.findByRole("listbox", { name: "Filtros" })).getByRole(
+    "option",
+    { name: label },
+  );
+  if (puesto.getAttribute("aria-selected") !== "true") await user.click(puesto);
+}
+
 async function filtrarPor(
   user: ReturnType<typeof userEvent.setup>,
   filtro: string,
   opcion: string,
 ) {
+  await pedirFiltro(user, filtro);
   const abierto = screen.queryByRole("listbox", { name: filtro });
   const lista =
     abierto ??

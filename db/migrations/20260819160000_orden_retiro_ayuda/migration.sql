@@ -1,0 +1,39 @@
+-- Feature 235 (T6.1, R40/P5) — RETIRA `orden.ayuda`.
+--
+-- QUE ERA. Un `boolean NOT NULL DEFAULT false` anadido el 2026-08-18
+-- (`20260818120000_orden_ayuda`) para marcar que un mensajero habia pedido ayuda a la tienda sobre
+-- una orden. Era la mitad implementada CON EL DISEÑO EQUIVOCADO: la orden nunca salia de
+-- `en_reparto`, asi que seguia siendo parada del optimizador y del mapa, seguia siendo gestionable,
+-- y el corte a «seccion aparte» era SOLO DE CLIENTE. El bloqueo del cierre funcionaba POR
+-- ACCIDENTE (`progress/auditoria_ayuda_tienda.md` §2/§4).
+--
+-- QUE LA SUSTITUYE. El ESTADO de la orden: `ayuda_tienda`
+-- (`20260819140000_order_status_ayuda_tienda`). Las cinco superficies que debian excluirla pasan a
+-- hacerlo POR CONSTRUCCION, y el mapa exhaustivo de transiciones rompe el build si alguien anade
+-- un estado sin decidir sus aristas.
+--
+-- POR QUE SE RETIRA EN VEZ DE DEJARLA MUERTA (P5, FIRMADA el 2026-08-19). Convivir ES el fallo:
+-- una marca persistida y un estado son DOS VERDADES sobre el mismo hecho, y divergen en cuanto una
+-- transicion se olvide de una de las dos. Ademas mueren con ella las DOS deudas que la 239 dejo
+-- CON DUEÑO ESCRITO: el tapon de `novedadWhere` («la ficha 235 RETIRA el booleano `ayuda`; cuando
+-- entre, esta rama entera sobra») y la reconciliacion de su R19 (la SEGUNDA PUERTA de
+-- `estaEnVentanaDeEscritura`, que abria la ventana del adminTienda en cualquier estatus). Y los DOS
+-- APAGADORES de hoy (`desmarcarAyuda` de «Recuperar» y `habilitarNovedad` de «Habilitar») colapsan
+-- en UN SOLO punto de escritura (R8).
+--
+-- DATOS EN VUELO (P6, resuelta POR MEDICION el 2026-08-19, no por firma): medido contra produccion
+-- via MCP, solo lectura, la columna EXISTE —`prod` ya llevaba el merge #396— pero hay 0 ordenes con
+-- la bandera encendida, ni en reparto ni fuera (autocomprobado sobre 141 ordenes vivas). Luego
+-- GRANDFATHER: se retira la columna y no hay nada que transicionar. La foto caduca y se RE-MIDE el
+-- dia del despliegue.
+--
+-- LO QUE **NO** SE RETIRA: `orden.intentos_contacto`. Es historial ACUMULATIVO de la tienda, se
+-- registra a mano, sobrevive deliberadamente a que la solicitud se retire y su propio contrato dice
+-- que no debe atarse a la bandera. Sale de esta feature intacto.
+--
+-- R41: NO mueve ninguna orden entre estados. No hay un solo `UPDATE "orden" SET estatus_id`, ni
+-- aqui ni en el down: toda transicion pasa por el punto unico de escritura (`appendCambioEstado`).
+--
+-- Sin RLS nueva: `orden` conserva la suya. No crea tablas ni indices. La columna que se retira NO
+-- tenia indice.
+ALTER TABLE "orden" DROP COLUMN "ayuda";

@@ -1,179 +1,265 @@
 "use client";
 
-import { Power, RotateCcw, Undo2 } from "lucide-react";
+import { MessagesSquare, Power, RotateCcw, Undo2 } from "lucide-react";
 
 import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { grupoDeEstatus } from "@/lib/types/novedad-grupo";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
+import type { ModoGestionDesdeAyuda } from "./GestionarDesdeAyudaModal";
 import { IntentoContactoAccion } from "./IntentoContactoAccion";
+import {
+  ACCIONES_POR_GRUPO,
+  ACCIONES_SIN_GRUPO,
+  type AccionNovedad,
+} from "./novedad-acciones-catalogo";
 
 // 2026-08-12 (pedido humano) — LAS ACCIONES de una novedad, extraídas para viajar como un
 // solo nodo en la prop `acciones` de la card POS: `acciones={<NovedadAcciones … />}`.
 //
-// Son las de la fila de `/novedades` —WhatsApp y Llamar (`ContactoButtons`, feature
-// 87/R12/R15/R16) y "Reprogramar" (feature 100/R1)— y siguen siendo exclusivas de esta
-// pantalla: la card no las conoce, sólo les hace sitio al pie. Ése es el reparto que
-// permite reutilizar la card sin que las órdenes del mensajero hereden botones que allí no
-// van (su contacto vive en el panel de gestión).
-//
-// ⚠️ MAQUETA DECLARADA (2026-08-12, decisión del humano) — "Habilitar" y "Devolver" son
-// DOS BOTONES SIN TRANSICIÓN DETRÁS. Su semántica todavía no está decidida y NO existe en
-// el repo: no hay Server Action, ni service, ni cambio de estatus para ninguno de los dos
-// (se buscó: "Habilitar" no aparece en ningún sitio, y los dos "Devolver" que existen son
-// otra cosa — el desenlace de gestión del mensajero, que marca la orden `devuelta`, y
-// `devolverATienda` de la feature 48, que la devuelve DESDE bodega y no aplica a una orden
-// ya devuelta).
-//
-// Lo que SÍ es real y está probado: "Habilitar" abre su modal y ese modal EXIGE una nota
-// para poder confirmar (`HabilitarNovedadModal`). Lo que falta es qué pasa al confirmar.
-//
-// Qué falta para que dejen de ser maqueta, y por qué no se resolvió aquí: cada uno es una
-// transición de estado con consecuencias fuera de esta pantalla —el plazo de la feature
-// 102 corre desde la devolución, así que "habilitar" una orden decide si el SLA se
-// reinicia, se congela o sigue— y eso se decide en un spec, no en un `onClick`.
-//
-// Mientras tanto los dos avisan por toast que no están disponibles. Es deliberado: un
-// botón que no hace NADA al pulsarlo se lee como un bug de la app, y uno deshabilitado sin
-// explicación se lee como "no tenés permiso". El día que se cableen, lo único que cambia
-// es el cuerpo de los dos handlers que el módulo pasa.
+// Siguen siendo exclusivas de esta pantalla: la card no las conoce, sólo les hace sitio al pie. Ése
+// es el reparto que permite reutilizar la card sin que las órdenes del mensajero hereden botones
+// que allí no van (su contacto vive en el panel de gestión).
 //
 // La card las aloja dentro de su `<article>` y su gate de selección ignora los clicks que
 // nacen en un control (`pos-seleccion`), así que ninguno de estos botones puede seleccionar
 // la orden de rebote — hoy da igual, porque la card de novedades no es seleccionable, y
 // mañana no habrá que acordarse.
 //
-// ⚠️ RETIRADO 2026-08-18 (pedido humano): el botón «Notas», que era la puerta —y la ÚNICA— por la
-// que esta pantalla abría el HILO de la orden (feature 227/T3.3). Con él se fue el montaje de
-// `HiloNotasNovedadModal` en `NovedadesModule`.
+// =================================================================================================
+// ⚠️ FEATURE 236 (T5.2, design §6 — R18/R19/R21) — QUÉ SE OFRECE YA NO SE DECIDE AQUÍ.
+// =================================================================================================
 //
-// CONSECUENCIA, escrita aquí para que nadie la redescubra depurando: desde `/novedades` la tienda
-// YA NO LEE NI RESPONDE el hilo. Eso incluye el MOTIVO de una solicitud de ayuda, que el mensajero
-// publica precisamente como una nota de ese hilo — la tienda ve que la orden pidió ayuda (el badge)
-// y puede registrar intentos de contacto, pero no lee lo que el mensajero escribió.
+// Hasta el 2026-08-19 este componente lo decidía con CONDICIONES SUELTAS (`esDevuelta`, `esAyuda`,
+// `puedeHabilitar = esDevuelta || esAyuda`, tres `...(cond ? [x] : [])` y un `{esAyuda ? … : null}`
+// al final). Ese diseño **ya produjo un defecto** —«Habilitar» aparece justo en las cards que vienen
+// de un cierre, al revés de lo que el pedido decía— y lo produjo porque nada obligaba a la sexta
+// condición: se añadía una acción y ningún sitio reclamaba la decisión para el otro grupo.
 //
-// Lo que NO se tocó: el hilo sigue vivo entero (tabla, service, Server Actions) y el mensajero lo
-// sigue leyendo y escribiendo desde su panel. `HiloNotasNovedadModal.tsx` se conserva en disco sin
-// montar: está en la lista firmada de la guardia `orden-nota-frontera`, así que borrarlo es una
-// decisión aparte y no la consecuencia de quitar un botón.
+// Ahora el juego sale de `ACCIONES_POR_GRUPO`, indexada por el MISMO `GrupoNovedad` que el servidor
+// usa para decidir qué lista. Lo que queda aquí es cómo se PINTA cada acción, no cuál se ofrece.
+//
+// ⚠️ **FEATURE 240 (T5.1, R33 — 2026-08-20): el punto 12 ya no está aquí.** Hasta hoy esta nota
+// terminaba diciendo «el defecto del punto 12 se conserva **tal cual**, ahora como una celda de esa
+// tabla: su dueño es la ficha 240». La 240 borró esa celda: «Habilitar» sale del grupo de devolución
+// y queda sólo en el de ayuda. Que corregirlo haya sido borrar UNA PALABRA de una tabla —y no
+// desenredar cinco condiciones sueltas repartidas por este archivo— es exactamente lo que la 236
+// compró al centralizarlo.
+//
+// =================================================================================================
+// ⚠️ FEATURE 236 (T6.1/T6.7, R27) — LA TIENDA VUELVE A LEER EL HILO, Y AQUÍ ESTÁ LA PUERTA.
+// =================================================================================================
+//
+// **Lo que decía este archivo hasta el 2026-08-19, y ya no es cierto:** «desde `/novedades` la
+// tienda YA NO LEE NI RESPONDE el hilo. Eso incluye el MOTIVO de una solicitud de ayuda». Era la
+// consecuencia de que el 2026-08-18 se retirara el botón «Notas» (pedido humano) y con él el único
+// montaje de `HiloNotasNovedadModal`.
+//
+// **Qué cambió y por qué se cuenta en vez de borrarlo:** la 235 hizo la nota del mensajero
+// OBLIGATORIA al pedir ayuda, así que a partir de ella el motivo se escribía y nadie podía leerlo.
+// Esta ficha repone la superficie con la acción «Conversación» —el MISMO gesto y el mismo montaje
+// que el lado mensajero (`HiloNotasAyudaModal` desde su card, feature 235/R35)— y con eso los dos
+// roles con ventana de escritura sobre `ayuda_tienda` tienen dónde ejercerla (R36). No se escribió
+// ningún hilo nuevo: el modal estaba entero en disco, sin montar.
+//
+// **No es un botón «Notas» de vuelta en las cards de devolución**: la conversación sale de la tabla
+// y hoy la tabla sólo se la da al grupo de ayuda.
+//
+// =================================================================================================
+// ⚠️ FEATURE 237 (T7.1, R1) — LA FILA DE AYUDA PASA DE «AVISAR» A «RESOLVER», Y ESO CUESTA DINERO.
+// =================================================================================================
+//
+// Hasta el 2026-08-20 la tienda podía leer el problema, responder en el hilo y devolverle la orden
+// al mensajero, pero no RESOLVERLA. Esta ficha añade sus dos desenlaces —«Reprogramar» y
+// «Rechazar»— y hay que decir aquí lo que un clic dispara: la gestión que crean se atribuye al
+// MENSAJERO, entra en su cierre del día, suma un intento de entrega y mueve el mismo dinero (los
+// hasta ₡1.000 de un rechazo —`cobroRechazado`— NO se le cobran a la tienda: son **ingreso de
+// bodega** y caen en el cierre DEL MENSAJERO, medido. A la tienda un rechazo **sí** le cuesta, pero
+// por otra vía: el **flete de devolución** más IVA). El precio se dice con palabras en la ventana
+// (`GestionarDesdeAyudaModal`, aviso fijo de D7), no en este panel: aquí sólo se abre la puerta.
+//
+// Las dos acciones cuelgan de `ACCIONES_POR_GRUPO` como CELDAS, no de una condición suelta. Es la
+// misma regla de arriba y no una repetición ociosa: `reprogramar`/`rechazar` (del grupo de
+// devolución) llaman a OTRO servicio, así que reutilizar sus claves obligaría a ramificar por grupo
+// dentro de este componente — la decisión fuera de la tabla que la guardia de la 236 caza.
 
 export interface NovedadAccionesProps {
   novedad: NovedadDTO;
   /** Abre el modal de reprogramación para esta orden (feature 100/T3.1). */
   onReprogramar: (novedad: NovedadDTO) => void;
-  /** MAQUETA: sin comportamiento decidido (ver la cabecera de este archivo). */
+  /** Abre el modal de «Habilitar» (nota obligatoria) que dispara el rescate de la 235. */
   onHabilitar: (novedad: NovedadDTO) => void;
-  /** MAQUETA: sin comportamiento decidido (ver la cabecera de este archivo). */
-  onDevolver: (novedad: NovedadDTO) => void;
+  /**
+   * 💰 Feature 240 (T5.3/R27): abre la ventana con la que la tienda RECHAZA una orden de la
+   * devolución anclada (`RechazarNovedadModal`).
+   *
+   * ⚠️ **Hasta el 2026-08-20 esta prop se llamaba `onDevolver` y su JSDoc decía «MAQUETA:
+   * «Rechazar» todavía no tiene transición detrás; avisa por toast (ficha 240)».** Las dos cosas
+   * dejaron de ser ciertas a la vez: la transición existe (`devuelta → rechazada` decidida por la
+   * tienda) y el nombre viejo nombraba la transición que faltaba decidir. Ya está decidida, así que
+   * el nombre pasa a decir la verdad.
+   */
+  onRechazar: (novedad: NovedadDTO) => void;
+  /** Feature 236 (R27): abre el HILO de notas de esta orden. */
+  onConversacion: (novedad: NovedadDTO) => void;
+  /**
+   * Feature 237 (T7.1/T7.3): abre `GestionarDesdeAyudaModal` sobre esta orden en el modo pedido.
+   *
+   * **UN solo handler para las dos acciones, con el modo como parámetro**, y no dos props: las dos
+   * abren la MISMA ventana y sólo cambian el rótulo y el campo de fecha. Dos props obligarían al
+   * padre a mantener dos estados que nunca pueden estar abiertos a la vez.
+   */
+  onGestionarDesdeAyuda: (novedad: NovedadDTO, modo: ModoGestionDesdeAyuda) => void;
 }
 
-export function NovedadAcciones({
-  novedad,
-  onReprogramar,
-  onHabilitar,
-  onDevolver,
-}: NovedadAccionesProps) {
-  // Los tres botones de acción comparten forma (outline · icono) y patrón de `aria-label`
-  // («<Verbo> la orden de <destinatario>»), que es lo que los distingue entre sí cuando la
-  // lista trae varias filas y el icono de todos los "Reprogramar" es el mismo.
+/** Cómo se pinta una acción de icono: su etiqueta visible, su icono y cómo se nombra a sí misma. */
+interface AccionIcono {
+  /** Texto del tooltip. Es la ayuda VISUAL de quien ve el icono y no lo reconoce. */
+  etiqueta: string;
+  Icono: typeof RotateCcw;
+  /**
+   * Nombre accesible del control. NO es el tooltip: un tooltip aparece al pasar el puntero o al
+   * enfocar, y quien navega con lector de pantalla necesita el nombre en el propio control —igual
+   * que quien usa la pantalla táctil de un móvil, donde no hay hover que lo revele—. Es más largo a
+   * propósito porque nombra la orden concreta de la fila, que es lo que distingue un «Reprogramar»
+   * de los diez de la lista.
+   */
+  nombreAccesible: (destinatario: string) => string;
+  onClick: (novedad: NovedadDTO, props: NovedadAccionesProps) => void;
+}
+
+/**
+ * Los iconos NO se eligieron por parecerse a la palabra: `RotateCcw` y `Undo2` son los MISMOS que
+ * el panel de gestión del mensajero usa para «Reprogramar» y «Devolver» (`GestionarOrdenPanel`),
+ * así que las dos pantallas dicen lo mismo con el mismo dibujo. `Power` es propio de «Habilitar»
+ * —no lo usa nadie más en el repo— porque esa acción no tiene gemela en ninguna otra superficie, y
+ * `MessagesSquare` es propio de «Conversación» por el mismo motivo: dos globos son dos personas
+ * hablando, que es exactamente lo que el hilo de la orden es.
+ */
+const ICONO_POR_ACCION: Record<
+  Exclude<AccionNovedad, "contacto" | "intentoContacto">,
+  AccionIcono
+> = {
+  reprogramar: {
+    etiqueta: "Reprogramar",
+    Icono: RotateCcw,
+    nombreAccesible: (destinatario) => `Reprogramar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onReprogramar(novedad),
+  },
+  habilitar: {
+    etiqueta: "Habilitar",
+    Icono: Power,
+    nombreAccesible: (destinatario) => `Habilitar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onHabilitar(novedad),
+  },
+  // Pedido humano 2026-08-19 — el botón se LLAMA «Rechazar» (etiqueta visible, tooltip y nombre
+  // accesible); antes decía «Devolver».
   //
-  // 2026-08-12 (pedido humano): pasan de TEXTO a ICONO + TOOLTIP, con el patrón que ya usa
-  // el repo (`EtiquetaOrdenAccion`, `ReportarIncidenteAccion`): `TooltipTrigger render={…}`
-  // envolviendo el `Button`, para que el disparador SEA el botón y no un `<span>` extra que
-  // rompa el foco de teclado.
+  // ⚠️ **FEATURE 240 (T5.3/T5.4, 2026-08-20).** Aquí decía: «El prop conserva su nombre porque
+  // nombra la transición que falta decidir, no el rótulo del control». Esa transición ya está
+  // decidida y declarada (`devuelta → rechazada`, familia propia, decidida por la tienda dueña), así
+  // que el prop pasa a llamarse `onRechazar` y el rótulo y el nombre coinciden. El RÓTULO, el
+  // tooltip, el icono y el nombre accesible no cambian: lo que cambia es que ahora hay algo detrás.
+  rechazar: {
+    etiqueta: "Rechazar",
+    Icono: Undo2,
+    nombreAccesible: (destinatario) => `Rechazar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onRechazar(novedad),
+  },
+  // Feature 236 (R27). El rótulo es «Conversación», el MISMO que el lado mensajero (`RepartoModule`
+  // › `AYUDA_ACCION_HILO`): las dos pantallas nombran igual el mismo hilo. El nombre accesible se
+  // aparta de la gramática «<Verbo> la orden de X» porque aquí el verbo no es la palabra visible;
+  // «Conversación la orden de Ana» no es español.
+  conversacion: {
+    etiqueta: "Conversación",
+    Icono: MessagesSquare,
+    nombreAccesible: (destinatario) =>
+      `Abrir la conversación de la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onConversacion(novedad),
+  },
+  // ===============================================================================================
+  // FEATURE 237 (T7.1, D7 firmada) — LOS DOS DESENLACES QUE LA TIENDA PUEDE REGISTRAR DESDE AYUDA.
+  // ===============================================================================================
   //
-  // EL TOOLTIP NO ES EL NOMBRE DEL BOTÓN, y por eso el `aria-label` se conserva palabra por
-  // palabra. Un tooltip aparece al pasar el puntero o al enfocar; quien navega con lector
-  // de pantalla necesita el nombre en el propio control, y quien usa la pantalla táctil de
-  // un móvil no tiene hover con el que descubrirlo. El texto corto del tooltip es la ayuda
-  // VISUAL de quien ve el icono y no lo reconoce; el `aria-label` es el nombre accesible,
-  // más largo a propósito porque nombra la orden concreta de la fila.
+  // Los RÓTULOS son «Reprogramar» y «Rechazar», sin la palabra «entrega» detrás y sin el verbo
+  // «gestionar»: 236/D6 firmó «gestionar» como VERBO DEL MENSAJERO, y aquí ese verbo describe el
+  // efecto —que se dice en el aviso de la ventana—, no la acción del botón.
   //
-  // Los iconos NO se eligieron por parecerse a la palabra: `RotateCcw` y `Undo2` son los
-  // MISMOS que el panel de gestión del mensajero ya usa para "Reprogramar" y "Devolver"
-  // (`GestionarOrdenPanel`), así que las dos pantallas dicen lo mismo con el mismo dibujo.
-  // `Power` es propio de "Habilitar" —no lo usa nadie más en el repo— porque esa acción no
-  // tiene gemela en ninguna otra superficie.
-  //
-  // ⚠️ Pedido humano 2026-08-18 — ESTA PANTALLA LISTA TAMBIÉN ÓRDENES QUE NO ESTÁN DEVUELTAS: las
-  // que tienen una solicitud de ayuda viva (`OrdenRepository.novedadWhere`), que siguen en reparto.
-  // «Reprogramar» y «Devolver» presuponen una devolución, así que sobre una de ésas no se ofrecen.
-  //
-  // Y no es cosmética: `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden que no
-  // esté en `devuelta` (comprobado, es la guarda real). Ofrecer el botón igual sólo consigue que
-  // la tienda descubra el límite pulsándolo. Los otros dos son maqueta, así que ahí lo único que
-  // se evita es un aviso sobre una acción que además no aplicaba.
-  //
-  // Lo que SÍ se conserva siempre: el contacto (llamar/WhatsApp) y, sobre una orden con ayuda
-  // pedida, «+1 intento de contacto».
-  const esDevuelta = novedad.estatusValue === "devuelta";
-  // «HABILITAR» ES LA EXCEPCIÓN (pedido humano 2026-08-18): también se ofrece cuando hay una
-  // SOLICITUD DE AYUDA viva, aunque la orden siga en reparto. Es el desenlace de esa solicitud del
-  // lado de la tienda — su modal exige una nota, y al confirmar apaga la bandera y la orden sale
-  // de esta pantalla. Las otras dos siguen atadas a `devuelta` porque presuponen una devolución
-  // que sobre una orden en reparto no existe.
-  const puedeHabilitar = esDevuelta || novedad.ayuda === true;
-  const acciones: {
-    etiqueta: string;
-    Icono: typeof RotateCcw;
-    onClick: () => void;
-  }[] = [
-    ...(esDevuelta
-      ? [
-          {
-            etiqueta: "Reprogramar",
-            Icono: RotateCcw,
-            onClick: () => onReprogramar(novedad),
-          },
-        ]
-      : []),
-    ...(puedeHabilitar
-      ? [{ etiqueta: "Habilitar", Icono: Power, onClick: () => onHabilitar(novedad) }]
-      : []),
-    ...(esDevuelta
-      ? [{ etiqueta: "Devolver", Icono: Undo2, onClick: () => onDevolver(novedad) }]
-      : []),
-  ];
+  // Los ICONOS son los MISMOS que las acciones homónimas del grupo de devolución, y eso es
+  // deliberado: `RotateCcw` y `Undo2` son los que el panel de gestión del mensajero usa para
+  // «Reprogramar» y «Devolver», así que las tres pantallas dicen lo mismo con el mismo dibujo. Las
+  // dos parejas NUNCA coinciden en una fila —cada una vive en un grupo— así que no hay ambigüedad
+  // que resolver con un icono distinto sólo por distinguir.
+  reprogramarDesdeAyuda: {
+    etiqueta: "Reprogramar",
+    Icono: RotateCcw,
+    nombreAccesible: (destinatario) => `Reprogramar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onGestionarDesdeAyuda(novedad, "reprogramar"),
+  },
+  rechazarDesdeAyuda: {
+    etiqueta: "Rechazar",
+    Icono: Undo2,
+    nombreAccesible: (destinatario) => `Rechazar la orden de ${destinatario}`,
+    onClick: (novedad, props) => props.onGestionarDesdeAyuda(novedad, "rechazar"),
+  },
+};
+
+export function NovedadAcciones(props: NovedadAccionesProps) {
+  const { novedad } = props;
+
+  // R21 — FALLO CERRADO. El grupo sale del estado por `grupoDeEstatus`, que se deriva del MISMO
+  // mapa que el predicado del servidor. `null` (un estado que no pertenece a ningún grupo) deja la
+  // fila con lo que no resuelve nada: el contacto y nada más.
+  const grupo = grupoDeEstatus(novedad.estatusValue);
+  const acciones: readonly AccionNovedad[] = grupo
+    ? ACCIONES_POR_GRUPO[grupo]
+    : ACCIONES_SIN_GRUPO;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ContactoButtons
-        telefono={novedad.telefonoDest}
-        nombre={novedad.destinatario}
-      />
-      {acciones.map(({ etiqueta, Icono, onClick }) => (
-        <Tooltip key={etiqueta}>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                // `icon` (size-8) y no `icon-sm`: es el mismo cuadrado que ya tienen
-                // "Llamar" y "WhatsApp" a su izquierda (`ContactoButtons` en tamaño `sm`),
-                // y cinco botones en fila con dos tamaños distintos se leen como dos
-                // grupos de acciones que aquí no existen.
-                size="icon"
-                className="shrink-0"
-                onClick={onClick}
-                aria-label={`${etiqueta} la orden de ${novedad.destinatario}`}
-              >
-                <Icono className="size-4" aria-hidden="true" />
-              </Button>
-            }
-          />
-          <TooltipContent>{etiqueta}</TooltipContent>
-        </Tooltip>
-      ))}
-      {/* Pedido humano 2026-08-18 — «+1 intento de contacto» y su contador, SOLO sobre una orden
-          con ayuda pedida. Va al final de la fila y no entre las otras: las de arriba resuelven
-          la orden (la reprograman, la habilitan, la devuelven) y ésta no resuelve nada — deja
-          constancia de que se intentó. Mezclarla con ellas sugeriría que también cambia algo.
-
-          No entra en el arreglo `acciones` de arriba porque no comparte su forma: lleva estado
-          propio, llama a su Server Action y arrastra un contador al lado. Meterla ahí habría
-          obligado a que aquella lista supiera de todo eso para una sola de sus entradas. */}
-      {novedad.ayuda ? <IntentoContactoAccion novedad={novedad} /> : null}
+      {acciones.map((accion) => {
+        if (accion === "contacto") {
+          return (
+            <ContactoButtons
+              key={accion}
+              telefono={novedad.telefonoDest}
+              nombre={novedad.destinatario}
+            />
+          );
+        }
+        // «+1 intento de contacto» no comparte la forma de las de icono: lleva estado propio, llama
+        // a su Server Action y arrastra un contador al lado. Y no resuelve la orden —deja constancia
+        // de que se intentó—, por eso la tabla la pone al final y no entre las otras.
+        if (accion === "intentoContacto") {
+          return <IntentoContactoAccion key={accion} novedad={novedad} />;
+        }
+        const { etiqueta, Icono, nombreAccesible, onClick } = ICONO_POR_ACCION[accion];
+        return (
+          <Tooltip key={accion}>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  // `icon` (size-8) y no `icon-sm`: es el mismo cuadrado que ya tienen
+                  // «Llamar» y «WhatsApp» a su izquierda (`ContactoButtons` en tamaño `sm`),
+                  // y varios botones en fila con dos tamaños distintos se leen como dos
+                  // grupos de acciones que aquí no existen.
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => onClick(novedad, props)}
+                  aria-label={nombreAccesible(novedad.destinatario)}
+                >
+                  <Icono className="size-4" aria-hidden="true" />
+                </Button>
+              }
+            />
+            <TooltipContent>{etiqueta}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }

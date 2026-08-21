@@ -33,6 +33,10 @@ const LABELS_ESPERADAS: Record<(typeof ORDER_STATUS_SEED)[number], string> = {
   // Feature 239/R26 (2026-08-19): el catalogo pasa de 20 a 21 values. La etiqueta nombra a quien
   // le toca actuar (la bodega confirma al aprobar el cierre), no el desenlace.
   devolucion_por_confirmar: "Devolución por confirmar",
+  // Feature 235/R37 (2026-08-19): el catalogo pasa de 21 a 22 values. La etiqueta dice A QUIEN se
+  // le pidio la ayuda, que es lo que no se deduce de «Ayuda solicitada» a secas cuando maestro y
+  // admin la ven en /ordenes junto a otros veintiun estados.
+  ayuda_tienda: "Ayuda solicitada a la tienda",
 };
 
 describe("estatusLabel — mapa de presentación value → label (R17)", () => {

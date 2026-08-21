@@ -217,10 +217,15 @@ describe("liberarDevueltaSla (R15/R18/R19/R24/R25)", () => {
     // deja de correr su reloj por construccion, sin ninguna bandera que alguien tenga que
     // acordarse de apagar. Igualdad EXACTA a proposito: lo que se afirma es que no queda ni un
     // resto de la columna en la escritura.
+    // Feature 246 (T3.5, R9/R10): `fechaReparto: null` entra en la MISMA igualdad EXACTA, y por
+    // el mismo motivo que el resto: la invariante es que el dia de reparto solo tiene valor
+    // mientras la orden tenga mensajero. Una reserva sin duenno seria un dato que el corte
+    // tendria que interpretar — la clase de dato que la 235 pago con una fuga permanente.
     expect(upd.data).toEqual({
       estatusId: idEstado("en_bodega_satelite"),
       mensajeroAsignadoId: null, // R15: handoff limpio a la bodega
       asignadoAt: null,
+      fechaReparto: null, // feature 246/R9/R10
       prioridad: true, // feature 101/R2
     });
     // R18/R19: append por el choke point, actor NULL, origen_tipo liberacion_devuelta_sla.

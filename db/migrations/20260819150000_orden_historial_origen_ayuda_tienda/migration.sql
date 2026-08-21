@@ -1,0 +1,38 @@
+-- Feature 235 (T1.2, R10/P2) — anade los DOS valores de esta feature al enum
+-- `orden_historial_origen_tipo`, una familia POR CADA SENTIDO del viaje:
+--
+--   `solicitud_ayuda_tienda`  la IDA:    en_reparto   -> ayuda_tienda   (actor = el mensajero)
+--   `rescate_ayuda_tienda`    la VUELTA: ayuda_tienda -> en_reparto     (actor = el mensajero o
+--                                                                        la tienda dueña)
+--
+-- POR QUE DOS Y NO UNA (R10 literal: «con una familia de origen propia por cada sentido, distinta
+-- de las existentes»). Las dos direcciones son hechos distintos —pedir auxilio y retirarlo— y el
+-- historial es la unica evidencia de la operacion; con una sola familia habria que deducir el
+-- sentido del par de estatus, que es exactamente el tipo de derivacion que se vuelve falsa en
+-- cuanto el grafo gana una arista. Ademas la VUELTA la disparan DOS actores distintos y su familia
+-- es la clave por la que la politica de webhooks la distingue (ver abajo).
+--
+-- NINGUNA de las dos entra en `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`) — R11.
+-- Pedir ayuda NO es una visita fallida: el mensajero sigue en la calle con el paquete y no ha
+-- intentado entregar nada. Meterlas ahi subiria el conteo de intentos de entrega, adelantaria el
+-- escalado del cron de SLA (99) y COBRARIA UN RECHAZO ANTES DE TIEMPO (56) — la direccion del
+-- error que `specs/215` declara prohibida, y que cuesta dinero real a la tienda, en silencio.
+-- Tampoco entran en `ORIGEN_TIPOS_CON_GESTION`: sus filas nacen con `gestion_orden_id` NULO
+-- porque no vienen de ninguna gestion.
+--
+-- ⚠️ `gestion_tienda_ayuda`, el TERCER valor que el diseño aprobado enumera, NO SE DECLARA AQUI
+-- (P2, firmada). Su productor es la ficha 237 y la convencion del repo es que un valor de enum
+-- nace en el commit de su productor. Precedente literal: `incidente` (154), declarado sin
+-- productor, «costo el tren 154+155+156».
+--
+-- POR QUE VA SOLA (sin ningun uso de los valores en la misma transaccion): Postgres NO permite
+-- USAR un valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma
+-- Migrate corre cada migration.sql en una transaccion. Aqui SOLO se anaden los valores; su primer
+-- uso ocurre en runtime (`SolicitudAyudaService` / el punto unico de rescate), en transacciones
+-- posteriores. Mismo precedente que `anclaje_devolucion` (239), `asignacion_recoleccion` (157),
+-- `deshacer_asignacion` (149) y `devolucion_rechazada` (139).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva su
+-- RLS de la feature 49). No crea tablas ni columnas. No mueve ninguna orden de estado (R41).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'solicitud_ayuda_tienda';
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'rescate_ayuda_tienda';

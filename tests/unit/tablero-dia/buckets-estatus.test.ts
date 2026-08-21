@@ -50,6 +50,11 @@ const TABLA_APROBADA: Record<OrderStatusValue, BucketSinResultado> = {
   // pre-estado tiene gestion del dia (la devolucion que el mensajero acaba de registrar), asi
   // que cuenta en `devueltas` y no puede caer en `sinRecoger` ni en `enReparto`.
   devolucion_por_confirmar: "otros",
+  // Feature 235 (2026-08-19): `ayuda_tienda` cae en `otros` y NO en `enReparto`. Es una decision
+  // afirmada aqui porque `BUCKET_POR_ESTATUS` es PARCIAL y absorbe un value nuevo sin quejarse:
+  // los buckets `sinRecoger`/`enReparto` describen el avance normal del dia, y una orden detenida
+  // esperando a que la tienda conteste no es ninguno de los dos.
+  ayuda_tienda: "otros",
 };
 
 describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () => {
@@ -69,6 +74,22 @@ describe("R43 — clasificacion de una orden sin gestion vigente en el dia", () 
     // veces y culpar al mensajero de una orden que ya gestiono.
     expect(estatusDelBucket("sinRecoger")).not.toContain("devolucion_por_confirmar");
     expect(estatusDelBucket("enReparto")).not.toContain("devolucion_por_confirmar");
+  });
+
+  // Feature 235 (T1.5, R37/R45): la MISMA clase de decision, con otra razon. `BUCKET_POR_ESTATUS`
+  // es PARCIAL con default `otros`, asi que absorbe un value nuevo EN SILENCIO — la unica forma de
+  // que la decision sea auditable es afirmarla, con su caso negativo al lado.
+  it("235/R37: `ayuda_tienda` NO tiene bucket explicito — cae en `otros`, no en `enReparto`", () => {
+    expect(Object.keys(BUCKET_POR_ESTATUS)).not.toContain("ayuda_tienda");
+    expect(bucketDeEstatus("ayuda_tienda")).toBe("otros");
+  });
+
+  it("235/R45 (CASO NEGATIVO): y `en_reparto` SI lo tiene — la diferencia es la decision", () => {
+    // Sin este contraste, el caso de arriba solo diria «no esta en el mapa». Lo que hay que
+    // afirmar es POR QUE: `enReparto` describe el avance normal del dia, y una orden detenida
+    // esperando a que la tienda conteste no es avance, es una parada.
+    expect(bucketDeEstatus("en_reparto")).toBe("enReparto");
+    expect(bucketDeEstatus("ayuda_tienda")).not.toBe("enReparto");
   });
 
   it("los tres casos nombrados en R43 son los unicos con bucket EXPLICITO", () => {

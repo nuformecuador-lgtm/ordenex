@@ -10,6 +10,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
+import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
 import { UbicacionTrigger } from "../UbicacionTrigger";
@@ -168,13 +169,27 @@ export function PosOrderCardMosaico({
         </UbicacionTrigger>
       ) : null}
 
-      {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde): marcas de
-          EXCEPCIÓN, solo si aplican, para no engordar el mosaico. */}
-      {(mostrarRuta && orden.secuenciaRuta === null) || orden.marcarLuego ? (
+      {/* R28 (pendiente de optimizar) + feature 115/R18 (gestionar más tarde) + feature 246/R22
+          (para mañana): marcas de EXCEPCIÓN, solo si aplican, para no engordar el mosaico. */}
+      {(mostrarRuta && orden.secuenciaRuta === null) ||
+      orden.marcarLuego ||
+      orden.esParaManana ? (
         <div className="flex flex-wrap gap-1.5">
           {mostrarRuta && orden.secuenciaRuta === null ? (
             <Badge variant="outline" className="w-fit">
               Pendiente de optimizar
+            </Badge>
+          ) : null}
+          {/* Feature 246 (T5.2, R22): la orden está RESERVADA para el día siguiente. Se dice con
+              PALABRAS y no sólo con un color, porque un chip de otro tono no explica qué es.
+              `esParaManana` lo decide el SERVIDOR (R26) y caduca solo al llegar el día (R25):
+              aquí no se compara ninguna fecha ni se lee ningún reloj.
+              R23/R24 — la marca no oculta ni bloquea nada: la card sigue entera y la orden se
+              puede recoger y gestionar igual. La reserva protege del corte de la noche, no del
+              mensajero (decisión D5). */}
+          {orden.esParaManana ? (
+            <Badge variant="info" className="w-fit">
+              {ETIQUETA_PARA_MANANA}
             </Badge>
           ) : null}
           {orden.marcarLuego ? (

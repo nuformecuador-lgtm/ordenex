@@ -38,6 +38,37 @@ const sinSuscripcion = () => () => {};
 const enCliente = () => true;
 const enServidor = () => false;
 
+// --- `prefers-reduced-motion` (2026-08-19) --------------------------------
+//
+// Se añadió al montar este contador en los KPI de analítica, que es donde estaba escrito el
+// requisito: R28 de la 130 prohíbe animar a quien pidió menos movimiento, y la cabecera de
+// `KpiCard` decía justamente que animar exigía enseñarle esto al componente compartido antes.
+//
+// Va aquí y no en una clase CSS porque esta animación NO es CSS: la cuenta la lleva
+// `react-countup` con `requestAnimationFrame`, y la regla `@media (prefers-reduced-motion)` de
+// `globals.css` no puede detener JavaScript. Quien pidió menos movimiento ve la cifra FINAL
+// puesta de una vez — nunca un cero congelado, que sería perder el dato en vez de la animación.
+//
+// Se SUSCRIBE al cambio (no se lee una vez) para que cambiar el ajuste del sistema con la
+// pantalla abierta surta efecto sin recargar. Las tres funciones son de módulo por la misma
+// razón que las de arriba: `useSyncExternalStore` compara identidades.
+const CONSULTA_MOVIMIENTO = "(prefers-reduced-motion: reduce)";
+
+function suscribirAMovimiento(alCambiar: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const consulta = window.matchMedia(CONSULTA_MOVIMIENTO);
+  consulta.addEventListener("change", alCambiar);
+  return () => consulta.removeEventListener("change", alCambiar);
+}
+
+const menosMovimientoEnCliente = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia(CONSULTA_MOVIMIENTO).matches;
+
+/** En el servidor no hay preferencia que consultar: se anima, y el cliente corrige si toca. */
+const menosMovimientoEnServidor = () => false;
+
 export interface KpiValorAnimadoProps {
   value?: string | number | null;
   /** Formatea como monto con la moneda configurada (`lib/config/moneda.ts`). */
@@ -82,6 +113,36 @@ export interface KpiValorAnimadoProps {
    * existe —son cifras de marca, no un saldo— y el arranque limpio si se nota.
    */
   arrancarEnCero?: boolean;
+  /**
+   * Formateo PROPIO de cada fotograma, para cifras que no son ni un monto ni un entero pelado
+   * (2026-08-19: los KPI de analítica, cuyo texto lo decide la UNIDAD de la métrica —«45 %»,
+   * «2,3 h»— vía `formatearValor`).
+   *
+   * Gana sobre `moneda` y `prefijo`: quien pasa su formateador lo pasa entero.
+   *
+   * ⚠ MEMOIZALA en el llamador (`useCallback`). `react-countup` reinicia la cuenta desde
+   * `start` en un efecto que depende de la IDENTIDAD de `formattingFn`, así que una función
+   * recreada en cada render relanza la animación con cualquier re-render del padre.
+   */
+  formatear?: (n: number) => string;
+  /**
+   * RESOLUCION de la cuenta: cuantos decimales conserva el valor de CADA FOTOGRAMA. No decide
+   * el texto —de eso se ocupa `formatear`—, decide cuantos pasos distintos hay entre 0 y el
+   * final.
+   *
+   * Existe porque countup.js redondea `frameVal` a `decimalPlaces` ANTES de formatearlo
+   * (`countUp.js:73`), asi que con el 0 de siempre una cifra que vive ENTRE 0 y 1 —un
+   * porcentaje que llega como fraccion— no cuenta: todos sus fotogramas redondean a 0 y la
+   * tarjeta salta del 0 % al 84,2 % de una vez. Con `decimales={3}` esa misma cuenta tiene
+   * cientos de pasos y se ve subir.
+   *
+   * Por defecto `0`, que es el comportamiento de siempre para conteos y magnitudes grandes.
+   *
+   * ⛔ EN MODO MONEDA SE IGNORA y se fuerza a 0 (feature 230 / R14): el texto del dinero ya no
+   * lleva centimos, y recalcularlos en cada fotograma para no mostrarlos es trabajo que no se
+   * ve. Que esta puerta no pueda reabrirlos es a proposito.
+   */
+  decimales?: number;
   className?: string;
 }
 
@@ -91,6 +152,8 @@ export function KpiValorAnimado({
   prefijo = "",
   animarAlSerVisible = false,
   arrancarEnCero = false,
+  formatear: formatearPropio,
+  decimales = 0,
   className,
 }: Readonly<KpiValorAnimadoProps>) {
   const amount = toValidNumber(value);
@@ -98,8 +161,13 @@ export function KpiValorAnimado({
   // `formatear` —que en moneda es `formatMonto`— y desde la 230 no emite parte
   // decimal; pero `decimals` gobierna el valor de CADA FOTOGRAMA, asi que dejarlo
   // en 2 haria que el contador recalculara centimos durante toda la animacion para
-  // un texto que ya no los muestra. El modo no moneda ya era 0 y no cambia.
-  const decimals = 0;
+  // un texto que ya no los muestra.
+  //
+  // Fuera del dinero manda `decimales`, que por defecto sigue siendo 0: lo unico que cambia
+  // es que ahora una cifra menor que 1 puede pedir la resolucion que su cuenta necesita (ver
+  // la prop). Se sanea aqui —entero y no negativo— porque countup.js lo pasa tal cual a
+  // `toFixed`, que revienta con un valor absurdo.
+  const decimals = moneda ? 0 : Math.max(0, Math.trunc(decimales));
 
   // `false` en el servidor y durante la hidratacion, `true` en cuanto corre en el navegador.
   // Va con `useSyncExternalStore` y no con un `useState` + `useEffect`: React usa el snapshot
@@ -142,7 +210,7 @@ export function KpiValorAnimado({
   // ejemplo) relanzaría el conteo desde 0. `moneda` y `prefijo` son los únicos valores
   // reactivos que la función lee (`formatMonto` y `monedaConfig` son de módulo), así
   // que el formato sigue correcto.
-  const formatear = useCallback(
+  const formatearPorDefecto = useCallback(
     (n: number) =>
       prefijo +
       (moneda
@@ -153,12 +221,24 @@ export function KpiValorAnimado({
           }).format(n)),
     [moneda, prefijo],
   );
+  const formatear = formatearPropio ?? formatearPorDefecto;
+
+  // Quien pidió menos movimiento no ve la cuenta: ve el valor final, ya formateado, desde el
+  // primer fotograma. No se toca ninguna otra rama —ni el arranque en cero, ni la puerta de
+  // visibilidad— porque aquéllas deciden CUÁNDO animar y ésta decide SI se anima.
+  const menosMovimiento = useSyncExternalStore(
+    suscribirAMovimiento,
+    menosMovimientoEnCliente,
+    menosMovimientoEnServidor,
+  );
 
   // El envoltorio es SIEMPRE el mismo nodo, con las mismas clases, esté o no el contador
   // dentro: así el hueco no cambia de tamaño al entrar y el ancla del observador no se mueve.
   return (
     <span ref={ancla} className={cn("tabular-nums whitespace-nowrap", className)}>
-      {montado && enPantalla ? (
+      {menosMovimiento ? (
+        formatear(amount)
+      ) : montado && enPantalla ? (
         /* start=0: la animación sube desde ahí una vez montado el contador. Ojo, `start` NO
            gobierna el HTML inicial —react-countup emite ahí el valor final—; de eso se
            ocupa `arrancarEnCero`. */

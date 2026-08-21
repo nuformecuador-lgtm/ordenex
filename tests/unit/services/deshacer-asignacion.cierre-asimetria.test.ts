@@ -22,6 +22,19 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 // bloqueo por cierre existio en uno de los dos durante meses y su retirada fue una decision, no un
 // descuido.
 //
+// ⚠️ FEATURE 241 (2026-08-20) — LA ASIMETRIA VOLVIO, PERO EN OTRO EJE, y conviene decirlo aqui para
+// que nadie lea esta coincidencia como «los cierres ya no bloquean nada». Hoy el corte no pasa
+// entre asignar y deshacer-asignacion —los dos son movimientos de BODEGA y ninguno bloquea— sino
+// entre RECIBIR TRABAJO y GESTIONARLO:
+//
+//   asignar / deshacer asignacion / rutear  -> NUNCA bloquean, con cierre o sin el (regla 2).
+//   gestionar / recoger / escoger / deshacer GESTION / recolectar en tienda
+//                                           -> SI bloquean, y solo con `vencido` o `rechazado`.
+//
+// Los dos casos de este archivo siguen en el lado que no bloquea, asi que siguen verdes tal cual.
+// Ojo con el detalle que los mantiene ciertos por partida doble: el mensajero de aqui arrastra un
+// cierre `solicitado`, que desde la 241 NO bloquea NINGUNA de las dos cosas.
+//
 // Los dos asertos siguen siendo sobre EL MISMO mensajero (`m-cierre`) con un cierre `solicitado`.
 
 const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
@@ -46,10 +59,10 @@ const ORDEN: OrdenTransicionRow = {
 };
 
 describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", () => {
-  it("revierte la orden y NO consulta findMensajerosBloqueados (el gate no aplica)", async () => {
+  it("revierte la orden y NO consulta findMensajerosBloqueadosParaGestion (el gate no aplica)", async () => {
     // El espia esta DISPONIBLE en el doble; el service no puede invocarlo porque su `Pick` no
     // lo incluye. El aserto fija esa decision de diseño, no solo la implementacion actual.
-    const findMensajerosBloqueados = vi.fn(
+    const findMensajerosBloqueadosParaGestion = vi.fn(
       async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
     );
     const deshacerAsignacionLote = vi.fn(async () => 1);
@@ -58,7 +71,7 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
       findByIdsForTransicion: vi.fn(async () => [ORDEN]),
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID[v] ?? null),
       deshacerAsignacionLote,
-      findMensajerosBloqueados,
+      findMensajerosBloqueadosParaGestion,
     };
     const service = new DeshacerAsignacionService(
       repo,
@@ -73,14 +86,14 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
 
     expect(r.status).toBe("ok"); // el cierre pendiente NO es causa de rechazo (R19)
     expect(deshacerAsignacionLote).toHaveBeenCalledTimes(1);
-    expect(findMensajerosBloqueados).not.toHaveBeenCalled();
+    expect(findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 });
 
 describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18)", () => {
   it("GuiaAsignacionService.asignarDesdeBodega -> ok, sin consultar el gate de cierres", async () => {
     const asignarBodegaLote = vi.fn(async (ids: string[]) => ids.length);
-    const findMensajerosBloqueados = vi.fn(
+    const findMensajerosBloqueadosParaGestion = vi.fn(
       async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
     );
     const repo = {
@@ -103,7 +116,7 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18
       ),
       // El doble sigue diciendo que este mensajero esta bloqueado: el punto es que ya nadie
       // pregunta.
-      findMensajerosBloqueados,
+      findMensajerosBloqueadosParaGestion,
       findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
       asignarBodegaLote,
     } as unknown as IOrdenRepository;
@@ -124,6 +137,6 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18
     expect(r.status).toBe("ok");
     expect(asignarBodegaLote).toHaveBeenCalledTimes(1);
     // La simetria con `deshacer`: ninguno de los dos consulta ya el gate de cierres.
-    expect(findMensajerosBloqueados).not.toHaveBeenCalled();
+    expect(findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 });

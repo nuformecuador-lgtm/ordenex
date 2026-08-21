@@ -88,6 +88,13 @@ const NUCLEO = FUENTES.filter(({ ruta }) =>
 /** Lo que el descubrimiento TIENE que haber encontrado (design §2 y §5). */
 const NUCLEO_ESPERADO = [
   "app/(app)/novedades/_components/HiloNotasNovedadModal.tsx",
+  // Feature 235 (T5.2, R35, 2026-08-19): el montaje del hilo del lado MENSAJERO, para las ordenes
+  // en `ayuda_tienda`. Entra al NUCLEO por la puerta y con su requisito delante: sin el, el
+  // mensajero tendria la ventana de escritura abierta (`ayuda_tienda` esta en su ventana, R34) y
+  // NINGUN sitio donde ejercerla, porque su hilo vivia dentro de `GestionarOrdenPanel` y ese panel
+  // ya no alcanza a estas ordenes. Es el mismo montaje que el modal de la tienda, sobre el MISMO
+  // componente compartido: no se escribio ningun hilo nuevo.
+  "app/(app)/mis-asignaciones/_components/HiloNotasAyudaModal.tsx",
   "components/shared/HiloNotasOrden.tsx",
   "lib/actions/orden-notas.ts",
   "lib/interfaces/repositories/IOrdenNotaRepository.ts",

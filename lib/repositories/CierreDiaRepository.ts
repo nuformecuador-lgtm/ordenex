@@ -14,7 +14,13 @@ import type {
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
+// Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
+// Costa Rica EN CURSO. `startOfDayCR` es el helper de la convencion `@db.Date`, la misma que usa
+// `fecha_reparto`; `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui
+// desplazaria el dia seis horas — la trampa que cerro la ficha 166.
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -43,7 +49,16 @@ class NoAnulable extends Error {}
 // `tarifa` (el resolver batch corre DENTRO de esa misma tx, design §3.1).
 type CierrePrismaClient = Pick<
   PrismaClient,
-  "gestionOrden" | "orden" | "cierreDia" | "cierreDetail" | "tarifa" | "$transaction"
+  | "gestionOrden"
+  | "orden"
+  | "cierreDia"
+  | "cierreDetail"
+  | "tarifa"
+  // Feature 237 (T5.5, D3): + `ordenHistorialEstado` para LEER —solo leer— de que familia nacio
+  // una gestion candidata a deshacerse. Este repositorio no escribe historial: eso pasa siempre
+  // por el choke point (`appendCambioEstado`).
+  | "ordenHistorialEstado"
+  | "$transaction"
 >;
 
 // Feature 69 (design §3, paso 5) — proyeccion del snapshot: TODO lo que `cierre_detail`
@@ -78,7 +93,9 @@ const SNAPSHOT_SELECT = {
 type SnapshotRow = Prisma.GestionOrdenGetPayload<{ select: typeof SNAPSHOT_SELECT }>;
 
 // Money-safe: STRING escala 2 -> Decimal (nunca number/parseFloat), R11. `null` = la tienda
-// no tenia tarifa vigente al solicitar (gap R9): las 8 columnas quedan NULL, todas o ninguna.
+// no tenia tarifa vigente al solicitar (gap R9): las 9 columnas quedan NULL, todas o ninguna.
+// `tarifaFulfillment` (2026-08-19) entra por la MISMA puerta aunque no alimente la formula:
+// congelarlo aparte seria abrir una segunda regla de "todas o ninguna".
 function tarifaColumnas(t: TarifaVigenteResuelta | null) {
   if (t === null) {
     return {
@@ -90,6 +107,7 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
       tarifaComisionCod: null,
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
+      tarifaFulfillment: null,
     };
   }
   return {
@@ -101,6 +119,7 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
     tarifaComisionCod: new Prisma.Decimal(t.comisionCod),
     tarifaIvaFlete: new Prisma.Decimal(t.ivaFlete),
     tarifaIvaComisionCod: new Prisma.Decimal(t.ivaComisionCod),
+    tarifaFulfillment: new Prisma.Decimal(t.fulfillment),
   };
 }
 
@@ -157,7 +176,10 @@ function decimalToString(d: Prisma.Decimal | null): string | null {
 
 // Mapper de la proyeccion WITH_DETALLE a la fila de dominio. Exportado para reuso
 // por CierresAdminRepository (feature 38).
-export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
+export function toPendienteRow(
+  row: DetalleRow,
+  desdeAyudaTienda: boolean,
+): CierreGestionPendienteRow {
   return {
     gestionId: row.id,
     ordenId: row.ordenId,
@@ -192,6 +214,11 @@ export function toPendienteRow(row: DetalleRow): CierreGestionPendienteRow {
     // Feature 102/R11: la vista EN VIVO del mensajero (37) NO expone el desglose SLA -> `false`.
     // La clasificacion SLA solo la deriva el detalle del admin (38/40) desde el historial.
     esRechazoSla: false,
+    // 💰 Feature 237 (D6/R41): lo contrario que el de arriba — este SI se deriva para la vista del
+    // mensajero, porque es SU cierre el que tiene que decir que la gestion la hizo la tienda. Llega
+    // ya resuelto por `marcarDesdeAyudaTienda`, que lo lee EN LOTE (una consulta para las N filas,
+    // no una por fila).
+    desdeAyudaTienda,
     // Feature 158/R9: la causa SI viaja a la vista del mensajero — es el hecho que el mismo
     // reporto, no un dato de dinero ni de otro actor.
     causaIncidente: row.causaIncidente,
@@ -294,6 +321,44 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
   ) {}
 
+  /**
+   * 💰 Feature 237 (D6/R41) — ¿cuales de estas gestiones las registro LA TIENDA?
+   *
+   * UNA sola consulta para las N filas (nunca una por fila), y con `orden_id` DELANTE. Ese orden
+   * no es cosmetico y esta MEDIDO, no supuesto (2026-08-20, `EXPLAIN` sobre la base local con
+   * `enable_seqscan = off`):
+   *
+   *   - con `origen_tipo + gestion_orden_id` (lo que produce un `select` anidado de Prisma):
+   *     **Seq Scan**. `orden_historial_estado` NO tiene indice por `gestion_orden_id` —la FK no
+   *     crea indice en Postgres— y su unica alternativa es recorrer entero
+   *     `orden_historial_actor_origen_created_idx`, cuya columna guia es `actor_usuario_id`.
+   *   - añadiendo `orden_id`: **Bitmap Heap Scan** por
+   *     `orden_historial_estado_orden_id_created_at_idx`, tocando solo las filas de esas ordenes.
+   *
+   * Es el MISMO truco que documenta `whereIntentosVigentes` (`OrdenHistorialRepository`) y que usa
+   * `findGestionParaDeshacer` unas lineas mas abajo. **No se crea ningun indice nuevo**: se entra
+   * por el que ya existe. Sin esto, la pantalla mas caliente del cierre recorreria una tabla
+   * append-only que crece con CADA transicion del sistema.
+   *
+   * Lista vacia -> ni una consulta.
+   */
+  private async marcarDesdeAyudaTienda(rows: DetalleRow[]): Promise<Set<string>> {
+    if (rows.length === 0) return new Set();
+    const filas = await this.prisma.ordenHistorialEstado.findMany({
+      where: {
+        ordenId: { in: [...new Set(rows.map((r) => r.ordenId))] }, // la columna GUIA del indice
+        gestionOrdenId: { in: rows.map((r) => r.id) },
+        // Feature 237/R41 + 240/R43: de UNA igualdad a un `in` de la lista. Ninguna consulta
+        // nueva y el mismo indice: lo unico que cambia es cuantas familias acepta el filtro.
+        origenTipo: { in: [...ORIGENES_GESTION_DE_LA_TIENDA] },
+      },
+      select: { gestionOrdenId: true },
+    });
+    return new Set(
+      filas.map((f) => f.gestionOrdenId).filter((id): id is string => id !== null),
+    );
+  }
+
   /** R2/R3: gestiones del mensajero sin cierre (cierre_id IS NULL) + detalle. */
   async findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]> {
     const rows = await this.prisma.gestionOrden.findMany({
@@ -307,7 +372,8 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
-    return rows.map(toPendienteRow);
+    const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
+    return rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id)));
   }
 
   /** R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes. */
@@ -437,36 +503,90 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         });
 
         // Feature 109 (T1.2, R4/R6/R22): CORTE DIARIO — transiciona en la MISMA tx las ordenes que
-        // siguen en `en_reparto` del mensajero a `sin_gestionar`, CONSERVANDO
-        // `mensajero_asignado_id` (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al
-        // liberar al aprobar, R16) y registrando el cambio por el CHOKE POINT (49) con actor null y
-        // `origen_tipo = corte_sin_gestionar`. Pre-SELECT de ids + updateMany GUARDADO por
-        // `estatus_id = en_reparto` (money-safe: NO toca prioridad ni totales) -> el append es SOLO
-        // de las que efectivamente transicionaron (R6/R8). Ausente el input = flujo 37 sin cambios.
+        // el mensajero dejo sin desenlace a `sin_gestionar`, CONSERVANDO `mensajero_asignado_id`
+        // (asociacion orden<->cierre por mensajero, Q1: se limpia SOLO al liberar al aprobar, R16)
+        // y registrando el cambio por el CHOKE POINT (49) con actor null y
+        // `origen_tipo = corte_sin_gestionar`. Ausente el input = flujo 37 sin cambios.
+        //
+        // FEATURE 235 (T4.4, R26/R27/R28) — DOS BLOQUES GUARDADOS, NO UNO CON DOS ORIGENES.
+        //
+        // Antes habia un solo bloque: pre-SELECT por `estatusId = enReparto`, `updateMany` guardado
+        // por ese mismo id, y un `appendCambioEstado` con `estatusOrigenId: enRepartoEstatusId` y el
+        // comentario «la guarda garantiza este origen». ESE COMENTARIO ES LA RAZON POR LA QUE NO SE
+        // PUEDE METER `ayuda_tienda` EN UN `in`: con dos origenes posibles en un solo `updateMany`,
+        // el append tendria que INVENTARSE de cual salia cada fila, y escribiria un historial falso
+        // — justo lo que R27 prohibe («el estado de origen REAL, y NO uno supuesto»).
+        //
+        // Asi que el bloque se recorre UNA VEZ POR ORIGEN. Cada vuelta lleva su propia guarda en el
+        // WHERE y su propio append, y `sinGestionarTransicionadas` ACUMULA las dos: un mensajero
+        // cuyo dia entero acabo en ayuda SI genera su cierre `vencido` (guarda «algo paso», R26).
+        //
+        // R29 se cumple POR CONSTRUCCION: despues del barrido la orden esta en `sin_gestionar` y no
+        // queda ninguna señal de ayuda viva, porque no existe ninguna marca que apagar. Ese era
+        // EXACTAMENTE el agujero de la auditoria §2.1 (el corte barria la orden sin apagar la
+        // bandera y la fila se quedaba en `/novedades` para siempre), cerrado por el mismo
+        // mecanismo que lo creo.
+        //
+        // MONEY-NEUTRAL (R28): el `data` de las dos vueltas toca UNICAMENTE `estatusId`. Ni
+        // `prioridad`, ni `mensajeroAsignadoId`, ni un solo total del cierre. Igual que antes.
+        //
+        // FEATURE 246 (T2.3, R11/R12/R15/R16) — EL DIA ENTRA EN EL `WHERE`, NO EN MEMORIA.
+        //
+        // El corte deja de barrer las ordenes RESERVADAS para un dia que aun no ha llegado. La
+        // condicion es `fecha_reparto IS NULL OR fecha_reparto <= diaCerrado`, y va en el `where`
+        // del pre-`SELECT` Y en el del `updateMany` guardado — no en un `filter` posterior. Filtrar
+        // en memoria dejaria el `updateMany` escribiendo sobre filas que la lista ya descarto en
+        // cuanto alguien tocara una de las dos, y el `updateMany` es quien de verdad escribe.
+        //
+        // Es EL MISMO predicado que aplica `CorteDiarioRepository` al SELECCIONAR (R16), con el
+        // MISMO valor: `diaCerrado` viaja dentro de `corteSinGestionar` desde el service, que lo
+        // calcula una vez por corrida.
+        //
+        // R15 se cumple por construccion: si el mensajero ademas tiene gestiones sin cerrar, su
+        // `vencido` se crea igual (lo decide `vinculadas.count` mas abajo) y aqui solo se barren
+        // las NO protegidas. Las reservadas se quedan donde estan, en la mano del mensajero.
         let sinGestionarTransicionadas = 0;
         if (corteSinGestionar) {
-          const { enRepartoEstatusId, sinGestionarEstatusId } = corteSinGestionar;
-          const enReparto = await tx.orden.findMany({
-            where: {
-              mensajeroAsignadoId: mensajeroId,
-              estatusId: enRepartoEstatusId,
-              deletedAt: null,
-            },
-            select: { id: true },
-          });
-          if (enReparto.length > 0) {
-            const ids = enReparto.map((o) => o.id);
+          const { enRepartoEstatusId, ayudaEstatusId, sinGestionarEstatusId, diaCerrado } =
+            corteSinGestionar;
+          // R20: se pregunta «¿esta reservada para un dia que AUN NO ha llegado?», no «¿es de
+          // hoy?». A eso `NULL` responde una sola cosa —no— y por eso se barre igual que siempre.
+          const noReservadaParaDespues = [
+            { fechaReparto: null },
+            { fechaReparto: { lte: diaCerrado } },
+          ];
+          for (const origenEstatusId of [enRepartoEstatusId, ayudaEstatusId]) {
+            const pendientes = await tx.orden.findMany({
+              where: {
+                mensajeroAsignadoId: mensajeroId,
+                estatusId: origenEstatusId,
+                deletedAt: null,
+                OR: noReservadaParaDespues, // feature 246/R11
+              },
+              select: { id: true },
+            });
+            if (pendientes.length === 0) continue; // no-op: ni update, ni append, ni ruido
+            const ids = pendientes.map((o) => o.id);
             const movidas = await tx.orden.updateMany({
-              where: { id: { in: ids }, estatusId: enRepartoEstatusId, deletedAt: null },
+              // LA GUARDA: `estatusId: origenEstatusId`. Es lo que garantiza que el origen que se
+              // registra abajo es el REAL de esta vuelta y no el de la otra.
+              // Feature 246 (R11/R16): el filtro de dia se REPITE aqui a proposito. Es la escritura
+              // real; el pre-SELECT solo sirve para el historial.
+              where: {
+                id: { in: ids },
+                estatusId: origenEstatusId,
+                deletedAt: null,
+                OR: noReservadaParaDespues,
+              },
               data: { estatusId: sinGestionarEstatusId },
             });
-            sinGestionarTransicionadas = movidas.count;
+            sinGestionarTransicionadas += movidas.count;
             if (movidas.count > 0) {
               await appendCambioEstado(
                 tx,
                 ids.map((ordenId) => ({
                   ordenId,
-                  estatusOrigenId: enRepartoEstatusId, // la guarda garantiza este origen
+                  estatusOrigenId: origenEstatusId, // R27: el origen de SU bloque, no uno supuesto
                   estatusDestinoId: sinGestionarEstatusId,
                   actorUsuarioId: null, // R6: sistema/cron
                   origenTipo: "corte_sin_gestionar", // R6
@@ -557,7 +677,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
 
         if (filas.length > 0) {
           // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 8 columnas quedan
+          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
           // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
           const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
             tx,
@@ -644,7 +764,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       orderBy: { createdAt: "desc" },
       ...WITH_DETALLE,
     });
-    return { cierre: toCierrePasadoDTO(cierre), gestiones: rows.map(toPendienteRow) };
+    const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
+    return {
+      cierre: toCierrePasadoDTO(cierre),
+      gestiones: rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id))),
+    };
   }
 
   /**
@@ -696,6 +820,27 @@ export class CierreDiaRepository implements ICierreDiaRepository {
       },
     });
     if (row === null) return null;
+    // 💰 Feature 237 (T5.5, D3/R38) — ¿la registro LA TIENDA desde la pestaña de ayuda? Se deriva
+    // del historial, que es donde ya esta escrito quien la registro (`actor_usuario_id` +
+    // `origen_tipo`), en vez de una columna nueva que habria que mantener.
+    //
+    // ⚠️ EL `ordenId` REPETIDO NO ES DECORATIVO — es rendimiento, y es el mismo truco que usa
+    // `whereIntentosVigentes` (`OrdenHistorialRepository`). `orden_historial_estado` NO tiene
+    // indice por `gestion_orden_id`: los tres que existen son `[ordenId, createdAt]`,
+    // `[ordenId, estatusDestinoId]` y `[actorUsuarioId, origenTipo, createdAt]`, y la FK no crea
+    // indice en Postgres. Filtrando tambien por `orden_id` el planner entra por
+    // `@@index([ordenId, createdAt])` y `gestion_orden_id` queda como filtro residual sobre el
+    // puñado de filas de esa orden. Sin el, esta consulta recorreria entera una tabla append-only
+    // que crece con CADA transicion del sistema — en el camino de un boton. No se crea un indice
+    // nuevo: se copia el acceso que ya estaba medido.
+    const deLaTienda = await this.prisma.ordenHistorialEstado.findFirst({
+      where: {
+        ordenId: row.ordenId,
+        gestionOrdenId: row.id,
+        origenTipo: "gestion_tienda_ayuda",
+      },
+      select: { id: true },
+    });
     return {
       gestionId: row.id,
       ordenId: row.ordenId,
@@ -708,6 +853,7 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         estatusId: row.orden.estatusId, // R5: id REAL (guardia del UPDATE, sin re-resolver catalogo)
         estatusValue: row.orden.estatus.value,
       },
+      desdeAyudaTienda: deLaTienda !== null,
     };
   }
 
@@ -752,10 +898,18 @@ export class CierreDiaRepository implements ICierreDiaRepository {
           where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
           // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero
           // autor (reasignacion efectiva) -> estampa `asignado_at = now`.
+          //
+          // FEATURE 246 (T3.4, R8/R10): esta via NO ofrece la eleccion de dia —nadie esta
+          // asignando un lote, se esta deshaciendo una gestion—, asi que el dia de reparto es el
+          // DIA DE COSTA RICA EN CURSO. La razon de estamparlo aqui y no dejarlo como estaba: las
+          // dos columnas no pueden contar historias distintas. Si `asignado_at` dijera «te la
+          // acabo de reasignar» y `fecha_reparto` conservara la reserva de ayer, el corte de esta
+          // misma noche la protegeria o la barreria segun un dato que ya no describe nada.
           data: {
             estatusId: estatusEnRepartoId,
             mensajeroAsignadoId: mensajeroId,
             asignadoAt: new Date(),
+            fechaReparto: startOfDayCR(),
           },
         });
         if (movida.count === 0) throw new NoAnulable();

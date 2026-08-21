@@ -94,9 +94,25 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     expect(valores).toHaveLength(26);
     expect(valores).not.toContain(FAMILIA);
-    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade.
+    // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade
+    // Y menos los que se anadieron DESPUES: el `down.sql` es una FOTO HISTORICA y no se toca, asi
+    // que lo que se ajusta al crecer el enum es el conjunto que se le descuenta al SEED vigente.
+    //
+    // Feature 235 (2026-08-19): entran `solicitud_ayuda_tienda` y `rescate_ayuda_tienda`.
+    const POSTERIORES = new Set<string>([
+      FAMILIA,
+      "solicitud_ayuda_tienda",
+      "rescate_ayuda_tienda",
+      // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
+      // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
+      "gestion_tienda_ayuda",
+      // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda desde
+      // la devolucion anclada. Cuarta ficha seguida que pasa por aqui sin tocar este `down.sql`, y
+      // eso es exactamente lo que el patron busca: la foto historica no se retoca nunca.
+      "rechazo_tienda",
+    ]);
     expect(new Set(valores)).toEqual(
-      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => v !== FAMILIA)),
+      new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),
     );
   });
 
@@ -201,7 +217,13 @@ describe("Feature 239 · el codigo y la base dicen lo mismo (sin drift)", () => 
 
   it("`ORDER_STATUS_SEED` incluye el pre-estado, y como APENDICE (no reordena)", () => {
     expect(ORDER_STATUS_SEED as readonly string[]).toContain(PRE_ESTADO);
-    expect(ORDER_STATUS_SEED[ORDER_STATUS_SEED.length - 1]).toBe(PRE_ESTADO);
+    // 2026-08-19 (feature 235): el pre-estado deja de ser el ULTIMO porque `ayuda_tienda` se
+    // apendio DESPUES. Lo que este caso afirma sigue siendo lo mismo —que la 239 no reordeno a
+    // nadie— y se dice de la forma que sobrevive a la siguiente feature aditiva: su posicion es la
+    // penultima, e inmediatamente despues del value que ya estaba antes de ella.
+    const i = (ORDER_STATUS_SEED as readonly string[]).indexOf(PRE_ESTADO);
+    expect(i).toBe(ORDER_STATUS_SEED.length - 2);
+    expect(ORDER_STATUS_SEED[i - 1]).toBe("recolectando"); // el ultimo antes de la 239 (157)
   });
 
   // R16 — EL CASO QUE PROTEGE EL DINERO. Si la familia del anclaje entrara en la lista de visita
@@ -210,7 +232,11 @@ describe("Feature 239 · el codigo y la base dicen lo mismo (sin drift)", () => 
   // (56) — dinero real cobrado a la tienda antes de tiempo, en silencio.
   it("R16: `anclaje_devolucion` NO esta en `ORIGEN_TIPOS_VISITA_REAL`", () => {
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain(FAMILIA);
-    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6): el censo pasa de UNO a DOS miembros, a mano.
+    // `gestion_tienda_ayuda` (la gestion que registra la tienda desde la pestaña de ayuda) SI es
+    // visita real: es el desenlace de la visita que el mensajero si hizo. El literal se conserva
+    // como literal a proposito —es el contrato— y no se sustituye por su propia fuente.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   it("`anclaje_devolucion` NO esta en `ORIGEN_TIPOS_CON_GESTION`", () => {

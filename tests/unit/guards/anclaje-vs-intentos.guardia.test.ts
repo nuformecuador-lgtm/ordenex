@@ -183,7 +183,11 @@ describe("239/R16 — las dos listas de INCLUSION siguen separadas", () => {
     // La barrera que impide que la confirmacion administrativa cuente como una visita del
     // mensajero. Si cae, cada aprobacion suma +1 y el escalado se adelanta.
     expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("anclaje_devolucion");
-    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion"]);
+    // ⚠️ 2026-08-20 (feature 237, T2.1/R6): el censo pasa de UNO a DOS miembros, a mano.
+    // `gestion_tienda_ayuda` (la gestion que registra la tienda desde la pestaña de ayuda) SI es
+    // visita real: es el desenlace de la visita que el mensajero si hizo. El literal se conserva
+    // como literal a proposito —es el contrato— y no se sustituye por su propia fuente.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).toEqual(["gestion", "gestion_tienda_ayuda"]);
   });
 
   it("el criterio de intentos sigue declarandose por RESULTADO, no por instante", () => {

@@ -93,6 +93,7 @@ function makeGestion(
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
     // sobreescriben.
     causaIncidente: null,
@@ -250,6 +251,9 @@ describe("R17 — el incidente NO trae las columnas de dinero de un rechazo", ()
       "producto",
       "tiendaNombre",
       "montoCobrar",
+      // 2026-08-19: el monto FIJO de fulfillment de la tarifa congelada. Va en las cinco
+      // secciones, junto a «A cobrar», porque es de la ORDEN y no del resultado.
+      "fulfillment",
       "causaIncidente", // feature 158/R34 (T2.3, 2026-07-30)
       "motivo",
       "evidencia",

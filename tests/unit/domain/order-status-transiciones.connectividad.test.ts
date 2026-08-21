@@ -206,7 +206,7 @@ describe("R14/R15 — el grafo de TRANSICIONES no tiene callejones sin salida", 
 });
 
 describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
-  it("los value que aparecen en el mapa, terminales y creacion cubren los 19 del SEED", () => {
+  it("los value que aparecen en el mapa, terminales y creacion cubren los 22 del SEED", () => {
     const cubiertos = new Set<string>([...CREACION, ...TERMINALES]);
     for (const [origen, destinos] of Object.entries(TRANSICIONES)) {
       cubiertos.add(origen);
@@ -218,7 +218,7 @@ describe("R16 — cobertura EXACTA del catalogo, sin exenciones", () => {
     );
     expect(faltantes, `value del catalogo sin clasificar: ${faltantes.join(", ")}`).toEqual([]);
     expect(sobrantes, `value fuera del catalogo: ${sobrantes.join(", ")}`).toEqual([]);
-    expect(ORDER_STATUS_SEED.length).toBe(21); // 154: 18 -> 20; 155: 20 -> 19; 157: 19 -> 20; 239: 20 -> 21 (2026-08-19)
+    expect(ORDER_STATUS_SEED.length).toBe(22); // 154: 18 -> 20; 155: 20 -> 19; 157: 19 -> 20; 239: 20 -> 21; 235: 21 -> 22 (2026-08-19)
   });
 
   // Feature 154/R25: los DOS values nuevos quedan clasificados en el mapa. Es la contraparte

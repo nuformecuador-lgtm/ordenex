@@ -62,6 +62,7 @@ function nota(over: Partial<OrdenNotaDTO> = {}): OrdenNotaDTO {
 function montar(props: {
   notas: OrdenNotaDTO[];
   puedeEscribir: boolean;
+  compositorColapsado?: boolean;
   onPublicar?: HiloNotasOrdenProps["onPublicar"];
   onBorrar?: HiloNotasOrdenProps["onBorrar"];
   onRefrescar?: HiloNotasOrdenProps["onRefrescar"];
@@ -78,6 +79,7 @@ function montar(props: {
       onPublicar={onPublicar}
       onBorrar={onBorrar}
       onRefrescar={onRefrescar}
+      compositorColapsado={props.compositorColapsado}
     />,
   );
   return { onPublicar, onBorrar, onRefrescar };
@@ -294,5 +296,96 @@ describe("HiloNotasOrden", () => {
     // Las vecinas quedan intactas.
     expect(within(filas[0]).getByText("Primera")).toBeTruthy();
     expect(within(filas[2]).getByText("Tercera")).toBeTruthy();
+  });
+});
+
+// Pedido humano del 2026-08-19 — en el panel de gestión el hilo se LEE: las notas y un botón
+// «Agregar nota». El compositor no se pinta hasta pedirlo. Se afirma la AUSENCIA del área de
+// texto, no solo la presencia del botón: sin eso, dejarla montada y meramente escondida
+// pasaría por bueno.
+describe("HiloNotasOrden — compositor plegado (pedido humano 2026-08-19)", () => {
+  it("con `compositorColapsado` lista las notas y ofrece «Agregar nota», sin área de texto", () => {
+    montar({
+      notas: [nota({ cuerpo: "El cliente no estaba." })],
+      puedeEscribir: true,
+      compositorColapsado: true,
+    });
+
+    expect(screen.getByText("El cliente no estaba.")).toBeTruthy();
+    const agregar = screen.getByRole("button", { name: "Agregar nota" });
+    expect(agregar).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Escribí una nota")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Publicar nota" })).toBeNull();
+  });
+
+  it("al pulsar «Agregar nota» se despliega el compositor con el foco dentro", async () => {
+    const user = userEvent.setup();
+    montar({ notas: [], puedeEscribir: true, compositorColapsado: true });
+
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
+
+    const area = screen.getByLabelText("Escribí una nota");
+    expect(area).toBeTruthy();
+    // Quien pidió escribir ya puede teclear: sin foco haría falta un segundo clic.
+    expect(document.activeElement).toBe(area);
+    expect(screen.getByRole("button", { name: "Publicar nota" })).toBeTruthy();
+  });
+
+  it("«Cancelar» pliega el compositor y CONSERVA lo tecleado", async () => {
+    const user = userEvent.setup();
+    montar({ notas: [], puedeEscribir: true, compositorColapsado: true });
+
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
+    await user.type(screen.getByLabelText("Escribí una nota"), "Medio escrito");
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // El cierre tiene un tramo de animación: lo que importa es que vuelve el disparador…
+    expect(screen.getByRole("button", { name: "Agregar nota" })).toBeTruthy();
+    // …y que al reabrir el borrador sigue ahí (cerrar no es descartar).
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
+    expect(screen.getByLabelText("Escribí una nota")).toHaveValue("Medio escrito");
+  });
+
+  it("publicar con éxito vuelve a plegar el compositor y relee el hilo", async () => {
+    const user = userEvent.setup();
+    const onPublicar = vi.fn().mockResolvedValue({ status: "ok", nota: nota() });
+    const { onRefrescar } = montar({
+      notas: [],
+      puedeEscribir: true,
+      compositorColapsado: true,
+      onPublicar,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Agregar nota" }));
+    await user.type(screen.getByLabelText("Escribí una nota"), "Ya la entregué");
+    await user.click(screen.getByRole("button", { name: "Publicar nota" }));
+
+    await vi.waitFor(() => expect(onRefrescar).toHaveBeenCalled());
+    expect(onPublicar).toHaveBeenCalledWith({
+      ordenId: ORDEN_ID,
+      cuerpo: "Ya la entregué",
+    });
+    expect(screen.getByRole("button", { name: "Agregar nota" })).toBeTruthy();
+  });
+
+  it("sin la prop, el compositor sigue abierto de entrada (modal de novedades)", () => {
+    montar({ notas: [], puedeEscribir: true });
+
+    expect(screen.getByLabelText("Escribí una nota")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Agregar nota" })).toBeNull();
+    // Y no aparece un «Cancelar» que no plegaría nada.
+    expect(screen.queryByRole("button", { name: "Cancelar" })).toBeNull();
+  });
+
+  it("en solo lectura no hay ni compositor ni botón para pedirlo", () => {
+    montar({
+      notas: [nota()],
+      puedeEscribir: false,
+      compositorColapsado: true,
+    });
+
+    expect(screen.queryByRole("button", { name: "Agregar nota" })).toBeNull();
+    expect(screen.queryByLabelText("Escribí una nota")).toBeNull();
+    expect(screen.getByText("Ahora mismo solo podés leer este hilo.")).toBeTruthy();
   });
 });

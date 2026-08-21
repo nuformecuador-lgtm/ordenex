@@ -1,0 +1,38 @@
+-- Feature 237 (T1.1, R5/R47) — anade el TERCER y ultimo valor del viaje de la ayuda al enum
+-- `orden_historial_origen_tipo`:
+--
+--   `gestion_tienda_ayuda`  ayuda_tienda -> reprogramada | rechazada  (actor = el adminTienda
+--                                                                     dueño de la orden)
+--
+-- POR QUE UNA FAMILIA PROPIA Y NO `gestion` (R5, y es la alternativa D del design §13, la mas
+-- barata y por eso la mas peligrosa): con `gestion` el historial ATRIBUIRIA AL MENSAJERO un acto
+-- que no hizo, y el historial es la unica evidencia de quien decidio el rechazo que se le cobra a
+-- la tienda — el dato que alguien pedira el dia de la primera disputa. Ademas haria
+-- INDISTINGUIBLES las dos poblaciones, y sin poder distinguirlas no se puede responder ni «¿puede
+-- el mensajero deshacerla?» (D3) ni «¿que ve el mensajero?» (D6). Con `reprogramacion_tienda`
+-- seria peor todavia: esa familia esta DELIBERADAMENTE fuera de `ORIGEN_TIPOS_VISITA_REAL`
+-- (215/R12) y meterla dentro haria contar de mas la reprogramacion de escritorio de la 100.
+--
+-- ⚠️ ESTA FAMILIA SI ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`, R6), al
+-- reves que las DOS de la 235. La diferencia no es un descuido y esta razonada en design §7.3:
+-- `solicitud_ayuda_tienda` / `rescate_ayuda_tienda` son pedir auxilio y retirarlo —el mensajero
+-- sigue en la calle y no ha intentado entregar nada—, mientras que `gestion_tienda_ayuda` es EL
+-- DESENLACE de esa visita, sobre una orden en la que el mensajero NO registro ninguno. Contarla es
+-- contar UNA visita UNA vez. Consecuencia buscada y declarada: suma un intento de entrega, lo que
+-- adelanta el escalado del cron de SLA (99) y el `cobroRechazado` (56) — DINERO REAL cobrado a la
+-- tienda, que aqui es correcto porque es la propia tienda quien lo decide con un click.
+--
+-- SI enlaza gestion (`gestion_orden_id` poblado) y aun asi NO entra en `ORIGEN_TIPOS_CON_GESTION`:
+-- mismo caso que `escalado_devuelta_sla` y `anclaje_devolucion` (esa lista solo desambigua la
+-- NULIDAD del enlace, 67/R25-R26). Ver la nota de esa lista.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR un
+-- valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma Migrate corre
+-- cada migration.sql en una. Aqui SOLO se anade el valor; su primer uso ocurre en runtime
+-- (`GestionOrdenRepository.crearGestionDesdeAyuda`), en transacciones posteriores. Mismo
+-- precedente que `solicitud_ayuda_tienda`/`rescate_ayuda_tienda` (235), `anclaje_devolucion` (239),
+-- `asignacion_recoleccion` (157) y `devolucion_rechazada` (139).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva su
+-- RLS de la feature 49). No crea tablas ni columnas. No mueve ninguna orden de estado (R47).
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'gestion_tienda_ayuda';

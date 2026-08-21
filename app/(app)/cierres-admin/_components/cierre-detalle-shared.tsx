@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/shared/Modal";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { filasLocales } from "@/components/shared/descarga-resultado";
-import { money, SIN_MONTO_RAYA } from "@/lib/config/moneda";
+import { money } from "@/lib/config/moneda";
 import { cn } from "@/lib/utils";
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type {
@@ -41,9 +41,12 @@ import {
   INGRESO_TOTAL_COL,
   CAUSA_INCIDENTE_COL,
   INDEMNIZACION_COL,
+  METODO_LABEL,
+  FULFILLMENT_COL,
 } from "./cierre-labels";
-// Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
-import { desglosePantalla } from "./desglose-pago";
+// Feature 213 (T6/T7): el desglose de pago vive en UN solo sitio (R25). De ahí salen también
+// el orden de los medios y el monto de cada uno, que es lo que estas tablas pintan por columna.
+import { CLAVE_MEDIO_PAGO, MEDIOS_PAGO, montoPorMetodo } from "./desglose-pago";
 import {
   COLUMNAS_DESCARGA_GESTIONES_DEVUELTAS,
   COLUMNAS_DESCARGA_GESTIONES_ENTREGADAS,
@@ -70,9 +73,9 @@ import {
 // `cierre-labels.ts` (módulo PURO, sin React) y se RE-EXPORTAN desde aquí, sin cambiar ni un
 // texto: los consumidores que ya las importaban de este archivo siguen igual, y el módulo de
 // columnas de export puede leerlas sin arrastrar `Card`/`Badge`/`DataTable`.
-// Feature 213 (T7): la etiqueta de método YA NO se re-exporta desde aquí. Su único uso de
-// pantalla era componer la celda «Método», y eso lo hace ahora `desglose-pago.ts` a partir
-// del DESGLOSE (R23/R25): quien necesite la etiqueta la pide a ese módulo, no a este.
+// Feature 213 (T7): la etiqueta de método SIGUE sin re-exportarse desde aquí. Este archivo la
+// importa —encabeza una columna por medio de pago—, pero quien la necesite la pide a
+// `cierre-labels.ts`, que es donde vive y de donde la leen por igual la pantalla y el archivo.
 export {
   RESULTADO_LABEL,
   ESTADO_LABEL,
@@ -785,27 +788,44 @@ export function desgloseAriaLabel(g: CierreDetalleGestion): string {
 }
 
 /**
- * Feature 213 (T7/R21) — celda «Método» de las dos tablas del detalle (cierres de mensajero
- * y de bodega comparten esta declaración). Deriva del DESGLOSE del DTO, nunca del campo
- * escalar (R23), y sin líneas pinta el MISMO marcador de ausencia de siempre (R22).
+ * UNA COLUMNA POR MEDIO DE PAGO en las dos tablas del detalle (cierres de mensajero y de bodega
+ * comparten esta declaración), en lugar de la celda única «Método» que llevaba el desglose
+ * concatenado (feature 213, T7/R21).
  *
- * Es un componente y no un string suelto porque con 2+ métodos la celda es una lista corta:
- * la columna es estrecha y `whitespace-pre-line` no es una opción sin meter el separador en
- * el texto. El FORMATO —qué dice cada línea— vive en `desglose-pago.ts`, uno para los cinco
- * consumidores; aquí solo se decide el envoltorio.
+ * Cada columna enseña SOLO el monto que entró por ese medio, formateado con `money()` —moneda
+ * de configuración, nunca un símbolo incrustado—; el medio sin línea pinta el MISMO marcador de
+ * ausencia de siempre (R22), que es lo que `money(null)` ya hace. El monto sale del DESGLOSE del
+ * DTO, nunca del campo escalar (R23), y el orden de las columnas es el del enum, uno para todos
+ * los consumidores, en `desglose-pago.ts`.
  */
-function DesglosePagoCelda({
-  pagos,
-}: Readonly<{ pagos: CierreDetalleGestion["pagos"] }>) {
-  const texto = desglosePantalla(pagos);
-  return <span className="whitespace-normal">{texto ?? SIN_MONTO_RAYA}</span>;
-}
+const COLUMNAS_MEDIO_PAGO: Column<CierreDetalleGestion>[] = MEDIOS_PAGO.map((metodo) => ({
+  id: CLAVE_MEDIO_PAGO[metodo],
+  value: METODO_LABEL[metodo],
+  render: (g) => money(montoPorMetodo(g.pagos)[metodo]),
+}));
 
 // --- Columnas de dinero derivado por orden (solo el detalle admin las puebla) ---
 const COLUMNA_MONTO_COBRAR: Column<CierreDetalleGestion> = {
   id: "montoCobrar",
   value: MONTO_COBRAR_COL,
   render: (g) => money(g.ingresoOrdenex?.montoCobrar ?? null),
+};
+
+/**
+ * Monto FIJO de fulfillment, leído de la tarifa CONGELADA del cierre (2026-08-19).
+ *
+ * NO es un concepto derivado y por eso no sale de `columnaConcepto`: `derivarIngresoOrden` no
+ * lo calcula, no entra en el «Total Ordenex» y no mueve wallets. Es un dato de la tarifa que el
+ * cierre recuerda, y se pinta junto a «A cobrar» porque se lee con él.
+ *
+ * Vacío ("—") en dos casos que se ven igual y significan cosas distintas: la tienda no tenía
+ * tarifa vigente al solicitar (gap R9), o el cierre es anterior a la columna
+ * `cierre_detail.tarifa_fulfillment` (sin backfill: no hay valor correcto que inventar).
+ */
+const COLUMNA_FULFILLMENT: Column<CierreDetalleGestion> = {
+  id: "fulfillment",
+  value: FULFILLMENT_COL,
+  render: (g) => money(g.ingresoOrdenex?.tarifa?.fulfillment ?? null),
 };
 
 /** Columna de un concepto derivado; `null` (no aplica a este resultado) → "—" vía `money`. */
@@ -913,7 +933,7 @@ export const COLUMNAS_COMUNES: Column<CierreDetalleGestion>[] = [
 
 /**
  * Construye las columnas de una sección del detalle: las comunes (R11) + las
- * específicas del resultado (monto+método si entregada R13; fecha+motivo si
+ * específicas del resultado (monto + una columna por medio de pago si entregada R13; fecha+motivo si
  * reprogramada; motivo si devuelta; motivo+evidencia firmada si rechazada, R12).
  */
 export function columnasPara(
@@ -929,6 +949,7 @@ export function columnasPara(
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
+      COLUMNA_FULFILLMENT,
       COLUMNA_CAUSA_INCIDENTE,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
       COLUMNA_EVIDENCIA(verEvidencia),
@@ -939,12 +960,9 @@ export function columnasPara(
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
+      COLUMNA_FULFILLMENT,
       { id: "monto", value: "Recibido", render: (g) => money(g.montoRecibido) },
-      {
-        id: "metodo",
-        value: "Método",
-        render: (g) => <DesglosePagoCelda pagos={g.pagos} />,
-      },
+      ...COLUMNAS_MEDIO_PAGO,
       // Conceptos que aplican a una ENTREGA, cada uno CON su IVA (los de devolución no se
       // listan acá: serían una columna de "—" en todas las filas). El split flete/IVA vive
       // en la fila desplegable.
@@ -961,6 +979,7 @@ export function columnasPara(
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
+      COLUMNA_FULFILLMENT,
       {
         id: "fechaReprogramacion",
         value: "Nueva fecha",
@@ -974,9 +993,17 @@ export function columnasPara(
     return [
       ...COLUMNAS_COMUNES,
       COLUMNA_MONTO_COBRAR,
+      COLUMNA_FULFILLMENT,
       { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
-      columnaConcepto("fleteDevolucion", "Flete devolución", (i) => i.fleteDevolucion),
-      columnaConcepto("ivaFleteDevolucion", "IVA flete dev.", (i) => i.ivaFleteDevolucion),
+      // 2026-08-19: el flete de devolución se pinta AGRUPADO con su IVA, igual que en la
+      // sección de rechazadas. El par partido (flete / IVA por separado) se retiró: son dos
+      // columnas para un importe que siempre se lee sumado, y el split sigue disponible en la
+      // fila desplegable del desglose.
+      columnaConcepto(
+        "fleteDevolucionConIva",
+        FLETE_DEV_CON_IVA_LABEL,
+        (i) => i.fleteDevolucionConIva,
+      ),
       COLUMNA_INGRESO_TOTAL,
       COLUMNA_PAGO_MENSAJERO,
     ];
@@ -987,6 +1014,7 @@ export function columnasPara(
     ...COLUMNAS_COMUNES,
     COLUMNA_RECHAZO_ORIGEN,
     COLUMNA_MONTO_COBRAR,
+    COLUMNA_FULFILLMENT,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
     COLUMNA_EVIDENCIA(verEvidencia),
     columnaConcepto(

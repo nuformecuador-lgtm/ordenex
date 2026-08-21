@@ -1,3 +1,4 @@
+import type { Faceta } from "@/lib/analytics/presentacion";
 import type { FilterDef } from "@/components/shared/FilterComponent";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
@@ -41,6 +42,28 @@ export const CLAVE_TIENDA = "tienda_id";
 export const CLAVE_MENSAJERO = "mensajero_id";
 
 /**
+ * Las TRES facetas recortables por rol, con la clave del control que las dibuja.
+ *
+ * Quien decide cuales se ofrecen NO es este modulo: es `recorteDePresentacion` (feature
+ * 133), que razona sobre el ALCANCE resuelto por la 122 y no sobre una tabla rol ->
+ * dimension. Aqui solo se traduce su respuesta a claves de filtro. Sin esa traduccion, el
+ * adminTienda veria un selector de tienda cuyo unico valor legal es la suya y el
+ * adminSatelite uno de zona con la lista vacia — un control que no informa y otro que
+ * parece averiado.
+ *
+ * La cadena geografica NO esta aqui a proposito: no es una faceta del recorte, se ofrece
+ * siempre, y lo que la acota es el CATALOGO (el adminSatelite recibe la de su zona).
+ */
+const CLAVE_POR_FACETA: Readonly<Record<Faceta, string>> = {
+  zona: CLAVE_ZONA,
+  tienda: CLAVE_TIENDA,
+  mensajero: CLAVE_MENSAJERO,
+};
+
+/** Las tres, para el caso «no se recorto nada» (maestro/admin). */
+const TODAS_LAS_FACETAS: readonly Faceta[] = ["zona", "tienda", "mensajero"];
+
+/**
  * Declara los SIETE filtros de la barra de entregas: fecha, zona, provincia, canton,
  * distrito, tienda y mensajero. Funcion PURA: catalogo -> declaraciones.
  *
@@ -61,13 +84,21 @@ export const CLAVE_MENSAJERO = "mensajero_id";
 export function construirFiltrosEntregas(
   cat: CatalogoFiltrosOrdenesDTO,
   mensajeros: readonly MensajeroLiteDTO[],
-  opts: { ahora?: Date } = {},
+  opts: { ahora?: Date; facetas?: readonly Faceta[] } = {},
 ): FilterDef[] {
   // `ahora` inyectable para poder fijar los rangos de los atajos en los tests, igual
   // que hace `construirFiltrosOrdenes`.
   const ahora = opts.ahora ?? new Date();
 
-  return [
+  // Las facetas que el rol NO tiene ofrecidas se caen enteras: ni control montado ni
+  // entrada en el selector de «Filtros». Un filtro que no se declara no puede filtrar.
+  const ofrecidas = new Set<string>(
+    (opts.facetas ?? TODAS_LAS_FACETAS).map((f) => CLAVE_POR_FACETA[f]),
+  );
+  const esFaceta = (clave: string) =>
+    (Object.values(CLAVE_POR_FACETA) as string[]).includes(clave);
+
+  const declarados: FilterDef[] = [
     {
       // UN solo filtro de tiempo, con los atajos DENTRO del propio calendario: es la
       // misma decision (p) de la 144, y aqui ademas los atajos son literalmente los suyos.
@@ -143,4 +174,6 @@ export function construirFiltrosEntregas(
       options: mensajeros.map((m) => ({ value: m.id, label: m.nombre })),
     },
   ];
+
+  return declarados.filter((f) => !esFaceta(f.key) || ofrecidas.has(f.key));
 }

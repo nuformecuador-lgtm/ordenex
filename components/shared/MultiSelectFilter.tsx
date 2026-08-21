@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Minus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,12 @@ export interface MultiSelectFilterProps {
   searchPlaceholder?: string;
   /** Mensaje cuando la busqueda no deja opciones. Default: "Sin coincidencias". */
   emptyMessage?: string;
+  /**
+   * Pedido humano del 2026-08-19 — texto de la opcion que marca/desmarca TODAS.
+   * Default: "Todos". Se ofrece siempre que haya opciones que marcar; ponerlo a `null`
+   * la retira (un filtro donde marcarlo todo no signifique nada util).
+   */
+  todosLabel?: string | null;
   disabled?: boolean;
   className?: string;
 }
@@ -59,6 +65,7 @@ export function MultiSelectFilter({
   placeholder = "Todos",
   searchPlaceholder = "Buscar…",
   emptyMessage = "Sin coincidencias",
+  todosLabel = "Todos",
   disabled = false,
   className,
 }: MultiSelectFilterProps) {
@@ -121,6 +128,39 @@ export function MultiSelectFilter({
     onChange(
       seleccion.has(v) ? value.filter((x) => x !== v) : [...value, v],
     );
+  }
+
+  /**
+   * Pedido humano del 2026-08-19 — estado de la opcion "Todos": `"todas"`, `"algunas"`
+   * o `"ninguna"`. Se mide sobre las opciones VISIBLES, no sobre `options`: con el
+   * buscador puesto, "Todos" es "todos los que estoy viendo", que es lo unico que el
+   * usuario puede comprobar de un vistazo. Un tri-estado y no un booleano porque
+   * "algunas marcadas" no es lo mismo que "ninguna", y pintarlo igual haria que el
+   * primer clic pareciera aleatorio.
+   */
+  const estadoTodos: "todas" | "algunas" | "ninguna" = useMemo(() => {
+    if (visibles.length === 0) return "ninguna";
+    const marcadas = visibles.filter((o) => seleccion.has(o.value)).length;
+    if (marcadas === 0) return "ninguna";
+    return marcadas === visibles.length ? "todas" : "algunas";
+  }, [visibles, seleccion]);
+
+  /**
+   * Marca las visibles que falten, o las desmarca TODAS si ya estaban todas. Con la
+   * lista acotada por el buscador se toca solo lo visible: lo marcado fuera de la
+   * busqueda se conserva —desmarcar a ciegas seleccion que no esta en pantalla es
+   * justo lo que convierte este atajo en una trampa.
+   */
+  function alternarTodos() {
+    const visiblesValues = visibles.map((o) => o.value);
+    if (estadoTodos === "todas") {
+      const fuera = new Set(visiblesValues);
+      onChange(value.filter((v) => !fuera.has(v)));
+      return;
+    }
+    // Se AÑADEN las que faltan al final, igual que hace `alternar` con una sola: lo ya
+    // marcado no se reordena y nada que estuviera en `value` desaparece por el camino.
+    onChange([...value, ...visiblesValues.filter((v) => !seleccion.has(v))]);
   }
 
   // Resumen del boton: nada marcado -> placeholder; 1 -> su etiqueta; N -> conteo.
@@ -218,6 +258,51 @@ export function MultiSelectFilter({
             />
           </div>
           <ul role="listbox" aria-label={label} aria-multiselectable className="max-h-64 overflow-y-auto p-1">
+            {/* Pedido humano del 2026-08-19: "Todos" encabeza la lista y marca o desmarca
+                de una vez lo que hay debajo. Va DENTRO del listbox y como una opcion mas
+                —`role="option"` con su `aria-selected`— para que un lector de pantalla la
+                anuncie con el mismo idioma que las demas; separada por una linea porque
+                no es una opcion del dominio, es un atajo sobre ellas. */}
+            {todosLabel !== null && visibles.length > 0 ? (
+              <li className="mb-1 border-b border-border pb-1">
+                <button
+                  type="button"
+                  role="option"
+                  // `role="option"` porque lo ES: se marca y se desmarca dentro del mismo
+                  // `listbox`, y esconderlo del rol lo dejaría fuera del lector de pantalla.
+                  // El `data-` es el gancho con el que un test cuenta las opciones DEL
+                  // CATÁLOGO sin contar ésta, que no viene del catálogo.
+                  data-todos="true"
+                  aria-selected={estadoTodos === "todas"}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    estadoTodos !== "ninguna" && "font-medium",
+                  )}
+                  onClick={alternarTodos}
+                >
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                      estadoTodos === "ninguna"
+                        ? "opacity-50"
+                        : "bg-primary text-primary-foreground",
+                    )}
+                    aria-hidden
+                  >
+                    {estadoTodos === "todas" ? (
+                      <Check className="h-3 w-3" />
+                    ) : estadoTodos === "algunas" ? (
+                      // Parcial: ni marcado ni vacio. El guion dice "hay algo debajo
+                      // marcado, pero no todo", que es lo que decide si el clic marca o
+                      // desmarca.
+                      <Minus className="h-3 w-3" />
+                    ) : null}
+                  </span>
+                  <span className="truncate">{todosLabel}</span>
+                </button>
+              </li>
+            ) : null}
             {visibles.length === 0 ? (
               <li className="px-2 py-1.5 text-sm text-muted-foreground">
                 {emptyMessage}

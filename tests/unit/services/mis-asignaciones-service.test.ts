@@ -34,6 +34,8 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   // Feature 239 (2026-08-19): gestionar `devuelta` ya NO resuelve el estatus `devuelta`, sino el
   // PRE-ESTADO. El fake tiene que conocerlo o la rama cae en "catalogo incompleto".
   devolucion_por_confirmar: "os-devolucion-por-confirmar",
+  // Feature 235 (2026-08-19): el estatus de la solicitud de ayuda viva.
+  ayuda_tienda: "os-ayuda-tienda",
 };
 
 function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
@@ -87,17 +89,23 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
     recogerLote: vi.fn(async (ids: string[]) => ids.length),
     crearGestionYTransicionar: vi.fn(async () => "g1"),
     reprogramarDesdeDevuelta: vi.fn(async () => true), // feature 100: no lo usa MisAsignacionesService
+    // Feature 237: `MisAsignacionesService` NO lo usa (la tienda gestiona por su propio
+    // servicio); el doble lo declara porque la interfaz lo exige.
+    crearGestionDesdeAyuda: vi.fn(async () => "g-desde-ayuda"),
+    // Feature 240: tampoco lo usa `MisAsignacionesService` (el rechazo manual es de la tienda,
+    // por `RechazoTiendaService`); el doble lo declara porque la interfaz lo exige.
+    rechazarDesdeDevuelta: vi.fn(async () => true),
     ...overrides,
   };
 }
 
 function fakeOrdenRepo(
   bloqueados: string[] = [],
-): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueados"> {
+): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
     // Feature 111/R1-R4: predicado de bloqueo total (default = NO bloqueado).
-    findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
+    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
   };
 }
 
@@ -223,8 +231,12 @@ describe("listarMisAsignaciones — intentos de entrega en lote (160/R11-R15/R24
     expect(r.status).toBe("ok");
     expect(llamadasIntentos(intentos)).toEqual([[]]);
     // R15: el alcance lo impuso la consulta del repo, acotada al actor.
-    // Feature 167 (R34): y a EXACTAMENTE los dos estados del flujo de Entregas.
-    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+    // Feature 167 (R34) + 235 (R18): y a EXACTAMENTE los TRES estados del flujo de Entregas.
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recoger",
+      "en_reparto",
+      "ayuda_tienda",
+    ]);
   });
 
   it("R15: un rol no autorizado ni siquiera llega al derivador", async () => {
@@ -261,7 +273,12 @@ describe("listarMisAsignaciones (R9-R13)", () => {
     expect(r.porGestionar.map((o) => o.id)).toEqual(["b"]);
     expect(r.ordenEnGestionId).toBe("b");
     // R13: la consulta se hizo con el mensajero del actor.
-    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", ["por_recoger", "en_reparto"]);
+    // Feature 235 (T3.1, R18): el corte pasa a TRES estados. `recolectando` SIGUE fuera (167/R34).
+    expect(repo.findMisAsignaciones).toHaveBeenCalledWith("m1", [
+      "por_recoger",
+      "en_reparto",
+      "ayuda_tienda",
+    ]);
   });
 
   it("Feature 61: KPIs = pendientes (en_reparto), entregadas (conteo) y porCobrar (suma COD de en_reparto; null=0)", async () => {
@@ -372,6 +389,142 @@ describe("listarMisAsignaciones (R9-R13)", () => {
 });
 
 // --- recogerAsignaciones (R14-R17) ---
+
+// =================================================================================================
+// FEATURE 235 (T3.1/T3.6) — EL TERCER GRUPO, Y LOS KPI QUE NO BAJAN.
+//
+// Las dos mitades de la ficha que NO se caen solas al mover el estatus:
+//   - R18/R19: la separacion SUBE AL SERVIDOR. Antes el portal recibia dos listas y partia la de
+//     reparto en el cliente con un `useMemo` sobre `orden.ayuda`; la orden marcada seguia dentro de
+//     `porGestionar` y por tanto seguia siendo parada del mapa, contacto del chat y GESTIONABLE.
+//   - R20/R21 (P7, firmada): los KPI del dia SIGUEN CONTANDO las ordenes en ayuda. Es una decision
+//     explicita porque el comportamiento POR DEFECTO al sacarlas del grupo seria el CONTRARIO: los
+//     tres bajarian al pedir ayuda, el numero dejaria de describir la jornada del mensajero y
+//     ademas PREMIARIA pedir ayuda.
+// =================================================================================================
+describe("235 · el tercer grupo y los KPI del dia (T3.1/T3.6, R16/R18/R19/R20/R21)", () => {
+  it("R18: las de ayuda salen en `conAyuda` y NO en `porGestionar`", async () => {
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "a", estatusValue: "por_recoger" }),
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.porRecoger.map((o) => o.id)).toEqual(["a"]);
+    expect(r.porGestionar.map((o) => o.id)).toEqual(["b"]);
+    expect(r.conAyuda.map((o) => o.id)).toEqual(["c"]);
+    // Cada orden en UNA sola lista: si el corte se hiciera mal, la de ayuda saldria dos veces.
+    expect([...r.porRecoger, ...r.porGestionar, ...r.conAyuda].map((o) => o.id).sort()).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("R15: las de ayuda NO llevan `secuenciaRuta` ni cuentan en `paradasSinOptimizar`", async () => {
+    // Una orden detenida esperando a la tienda no es parada de ninguna ruta optimizada. Si
+    // contara como «parada sin optimizar», la pantalla avisaria de que la ruta esta
+    // desactualizada por una orden que no puede entrar en ninguna ruta.
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto" }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda" }),
+      ]),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.conAyuda[0]!.secuenciaRuta).toBeNull();
+    // Sin ruta persistida, la unica sin posicion que se cuenta es la de `porGestionar`.
+    expect(r.ruta.paradasSinOptimizar).toBe(1);
+  });
+
+  it("R20 (P7): una orden que pasa a `ayuda_tienda` NO cambia ninguno de los tres KPI", async () => {
+    // ⭑ LA MUTACION QUE MATA ESTE CASO: derivar los KPI solo de `porGestionar`. El paquete sigue
+    // en la moto y su COD sigue por cobrar; si el «Total a cobrar» bajara al pedir ayuda, el
+    // numero dejaria de describir la jornada y premiaria pedir ayuda.
+    const antes = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
+        asignacionRow({ id: "c", estatusValue: "en_reparto", montoCobrar: 250 }),
+      ]),
+      contarEntregadas: vi.fn(async () => 7),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+    const despues = fakeRepo({
+      // La MISMA orden `c`, ahora en ayuda. Es lo unico que cambia entre los dos escenarios.
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "b", estatusValue: "en_reparto", montoCobrar: 100 }),
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+      ]),
+      contarEntregadas: vi.fn(async () => 7),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+
+    const rAntes = await newService(antes).listarMisAsignaciones(MENSAJERO);
+    const rDespues = await newService(despues).listarMisAsignaciones(MENSAJERO);
+
+    if (rAntes.status !== "ok" || rDespues.status !== "ok") throw new Error("esperaba ok");
+    expect(rDespues.kpis).toEqual(rAntes.kpis);
+    // Y el valor concreto, para que el caso no pase por comparar dos ceros:
+    expect(rDespues.kpis).toEqual({
+      pendientes: 2,
+      entregadas: 7,
+      porCobrar: 350,
+      totalACobrar: 750,
+    });
+  });
+
+  it("R21: el COD de una gestionada hoy y el de una en ayuda NO se suman dos veces", async () => {
+    // Los dos sumandos de `totalACobrar` siguen siendo DISJUNTOS, y ahora hay que decir por que:
+    // `sumMontoCobrarGestionadas` exige `gestiones: { some: ... }`, y una orden en `ayuda_tienda`
+    // NO tiene gestion del dia —no se puede gestionar desde ahi (R16), esas aristas son de la
+    // 237—. El doble devuelve 400 por la gestionada; los 250 de la de ayuda entran UNA vez, por
+    // el otro sumando.
+    const repo = fakeRepo({
+      findMisAsignaciones: vi.fn(async () => [
+        asignacionRow({ id: "c", estatusValue: "ayuda_tienda", montoCobrar: 250 }),
+      ]),
+      sumMontoCobrarGestionadas: vi.fn(async () => 400),
+    });
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.kpis.porCobrar).toBe(250);
+    expect(r.kpis.totalACobrar).toBe(650); // 250 + 400, no 900
+  });
+
+  it("R16: `escogerParaGestion` sobre una orden en `ayuda_tienda` devuelve `conflict`", async () => {
+    // No hay guarda nueva: `cargarOrdenGestionable` exige `en_reparto` y la orden ya no lo esta.
+    // Con la bandera esto PASABA —la orden seguia en reparto— y el apartado aparte no impedia
+    // nada: era maquetacion.
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
+    });
+    const r = await newService(repo).escogerParaGestion("o1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") return;
+    expect(r.motivo).toContain("en_reparto");
+    // Y NO fija el puntero: sin efectos parciales.
+    expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
+  });
+
+  it("R16: `gestionar` sobre una orden en `ayuda_tienda` devuelve `conflict` y no crea gestion", async () => {
+    const repo = fakeRepo({
+      findByIdsParaGestion: vi.fn(async () => [gestionRow({ estatusValue: "ayuda_tienda" })]),
+    });
+    const input = { ordenId: "o1", resultado: "entregada", pagos: [] } as unknown as GestionarInput;
+    const r = await newService(repo).gestionar(input, MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
+  });
+});
 
 describe("recogerAsignaciones (R14-R17)", () => {
   it("R12: rol != mensajero -> forbidden", async () => {
@@ -777,7 +930,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       });
       const ordenRepo = {
         findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-        findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+        findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
       };
       const service = new MisAsignacionesService(
         repo,
@@ -812,7 +965,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     const repo = fakeRepo();
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -835,7 +988,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       findEstatusIdByValue: vi.fn(async (v: string) =>
         v === "devolucion_por_confirmar" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
       ),
-      findMensajerosBloqueados: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -961,9 +1114,14 @@ describe("liberarGestion (R35)", () => {
 });
 
 // ============================================================================
-// Feature 111 — bloqueo total del mensajero (R1/R2/R3/R4/R20). Un mensajero con un cierre
-// `solicitado`/`vencido` no puede gestionar NI recoger/escoger. MISMO predicado derivado
-// (`findMensajerosBloqueados`), guarda ANTES de cualquier efecto (sin efectos parciales).
+// Feature 111 — bloqueo del mensajero (R1/R2/R3/R4/R20) -> FEATURE 241. Un mensajero con un
+// cierre `vencido` o `rechazado` no puede gestionar NI recoger/escoger; con `solicitado` SÍ puede.
+// Guarda ANTES de cualquier efecto (sin efectos parciales).
+//
+// ⚠️ QUÉ MIDE ESTE BLOQUE Y QUÉ NO. Aquí `findMensajerosBloqueadosParaGestion` es un DOBLE que
+// devuelve el Set que se le pide, así que estos casos prueban la GUARDA (que corta antes de
+// cualquier efecto), no la LISTA DE ESTADOS — el doble no sabe qué estado tiene el cierre. Los tres
+// casos por estado, con el repositorio real detrás, están en `cierre-bloqueo-asimetria.test.ts`.
 // ============================================================================
 
 describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
@@ -999,14 +1157,18 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
     // R2: reusa el MISMO predicado derivado (doble espía).
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     // R3: sin efectos parciales (la guarda está ANTES de la subida y de la tx).
     expect(storage.upload).not.toHaveBeenCalled();
     expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
   });
 
-  it("R2: rechazado/aprobado NO bloquean (Set vacío) -> gestionar procede normal", async () => {
-    // `fakeOrdenRepo([])` = ningún estado bloqueante presente (rechazado/aprobado no cuentan).
+  it("R2: mensajero NO bloqueado (Set vacío) -> gestionar procede normal", async () => {
+    // ⚠️ TÍTULO CORREGIDO POR LA FEATURE 241. Decía «rechazado/aprobado NO bloquean», y desde la
+    // feature 109 eso ya era falso de `rechazado` — el doble devuelve un Set vacío y nunca supo de
+    // qué estado hablaba, así que el título afirmaba algo que el caso no podía comprobar. Lo que
+    // mide, y es útil, es el CONTROL del bloque: con el predicado en vacío la gestión pasa entera,
+    // de modo que los `conflict` de los casos de arriba vienen de la guarda y no de otra cosa.
     const repo = fakeRepo();
     const r = await newService(repo).gestionar(entrega(), MENSAJERO);
     expect(r.status).toBe("ok");
@@ -1020,7 +1182,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.detalle[0].motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
 
@@ -1031,7 +1193,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 
     expect(r.status).toBe("conflict");
     if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueados).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
   });
 
@@ -1056,7 +1218,7 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
 describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167)", () => {
   const RECOLECTANDO = "recolectando";
 
-  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\"]`, ni un estado mas", async () => {
+  it("R34: pide EXACTAMENTE `[\"por_recoger\", \"en_reparto\", \"ayuda_tienda\"]`, ni un estado mas", async () => {
     const repo = fakeRepo();
 
     await newService(repo).listarMisAsignaciones(MENSAJERO);
@@ -1064,10 +1226,19 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
     // Lista EXACTA (no `arrayContaining`): la forma fuerte de R34. Si alguien reintrodujera
     // `recolectando` "porque estaba antes", este caso lo caza antes que la pantalla.
+    //
+    // 2026-08-19 (feature 235/T3.1, R18/R19) — EL CENSO PASA DE 2 A 3, con nota fechada y por la
+    // puerta: `ayuda_tienda` se lee porque el portal tiene que ENTREGAR esas ordenes YA SEPARADAS
+    // desde el servidor. Lo que la 167 aislo se conserva intacto y se dice abajo como negativo:
+    // `recolectando` SIGUE FUERA.
     expect(repo.findMisAsignaciones).toHaveBeenCalledWith(MENSAJERO.usuarioId, [
       "por_recoger",
       "en_reparto",
+      "ayuda_tienda",
     ]);
+    const estados = (repo.findMisAsignaciones as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as string[];
+    expect(estados).not.toContain(RECOLECTANDO);
   });
 
   it("R34: el resultado NO declara ningun grupo de recoleccion", async () => {
@@ -1075,7 +1246,11 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
 
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r).not.toHaveProperty("porRecolectar");
+    // 2026-08-19 (feature 235/R18): el contrato gana `conAyuda`, el tercer grupo. La lista sigue
+    // siendo CERRADA, que es lo que impide que reaparezca un grupo de recoleccion por la puerta
+    // de atras.
     expect(Object.keys(r).sort()).toEqual([
+      "conAyuda",
       "kpis",
       "ordenEnGestionId",
       "porGestionar",
@@ -1119,5 +1294,147 @@ describe("MisAsignacionesService — corte limpio de la recoleccion (feature 167
     if (r.status !== "ok") throw new Error("esperaba ok");
     expect(r.kpis).toMatchObject({ pendientes: 0, porCobrar: 0, totalACobrar: 0 });
     expect(r.ruta.paradasSinOptimizar).toBe(0);
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 (T5.1, R22-R26) — `esParaManana`, DERIVADO EN EL SERVIDOR.
+//
+// El cliente NO vuelve a decidir que dia es hoy. Es el mismo criterio con el que este DTO saca
+// `estatusValue` ya resuelto en vez de dejar que el navegador interprete un id de catalogo: un
+// portatil con la hora corrida no puede etiquetar mal una orden (R26/R29).
+//
+// Y la propiedad que de verdad importa es R25: la etiqueta CADUCA SOLA. Al llegar el dia reservado,
+// LA MISMA FILA pasa a `false` sin que nadie escriba nada. Es la misma propiedad que hace segura a
+// la columna (D2): una fecha vence sola, una marca necesita quien la apague.
+// =================================================================================================
+describe("listarMisAsignaciones — el dia de reparto que ve el mensajero (246/R22-R26)", () => {
+  /** 14:00 hora de pared de Costa Rica del 20 de agosto. */
+  const HOY_14H = new Date("2026-08-20T20:00:00.000Z");
+  const DIA_20 = new Date("2026-08-20T00:00:00.000Z");
+  const DIA_21 = new Date("2026-08-21T00:00:00.000Z");
+  const DIA_19 = new Date("2026-08-19T00:00:00.000Z");
+
+  function conFilas(filas: Partial<MiAsignacionRow>[]) {
+    return fakeRepo({
+      findMisAsignaciones: vi.fn(async () => filas.map((f) => asignacionRow(f))),
+    });
+  }
+
+  /** Todas las cards del listado, de los tres grupos, indexadas por id. */
+  function cardsPorId(r: Awaited<ReturnType<MisAsignacionesService["listarMisAsignaciones"]>>) {
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    return new Map(
+      [...r.porRecoger, ...r.porGestionar, ...r.conAyuda].map((o) => [o.id, o]),
+    );
+  }
+
+  it("R22/R26: la reservada para MAÑANA llega con `esParaManana: true`", async () => {
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    expect(cardsPorId(r).get("manana")?.esParaManana).toBe(true);
+  });
+
+  it("R26: la de HOY y la SIN FECHA llegan con `esParaManana: false`", async () => {
+    const repo = conFilas([
+      { id: "hoy", estatusValue: "por_recoger", fechaReparto: DIA_20 },
+      { id: "sin", estatusValue: "por_recoger", fechaReparto: null },
+      { id: "ayer", estatusValue: "en_reparto", fechaReparto: DIA_19 },
+    ]);
+    const cards = cardsPorId(await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H));
+    expect(cards.get("hoy")?.esParaManana).toBe(false);
+    expect(cards.get("sin")?.esParaManana).toBe(false);
+    expect(cards.get("ayer")?.esParaManana).toBe(false);
+  });
+
+  it("R25: al pasar el dia, LA MISMA FILA pasa a `false` sin ninguna escritura", async () => {
+    // EL caso de R25, y el que distingue una FECHA de una MARCA. Las filas del repositorio son
+    // BYTE A BYTE las mismas; lo unico que cambia es el reloj. Con una marca booleana esto no
+    // podria pasar: seguiria diciendo «para mañana» hasta que alguien la apagara.
+    const filas: Partial<MiAsignacionRow>[] = [
+      { id: "reservada", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ];
+
+    const hoy = cardsPorId(
+      await newService(conFilas(filas)).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    );
+    const manana = cardsPorId(
+      await newService(conFilas(filas)).listarMisAsignaciones(
+        MENSAJERO,
+        new Date("2026-08-21T20:00:00.000Z"), // 14:00 CR del 21: YA es el dia reservado
+      ),
+    );
+
+    expect(hoy.get("reservada")?.esParaManana).toBe(true);
+    expect(manana.get("reservada")?.esParaManana).toBe(false);
+  });
+
+  it("R23: la reservada NO se oculta — aparece en su grupo de siempre", async () => {
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+      { id: "en-reparto-manana", estatusValue: "en_reparto", fechaReparto: DIA_21 },
+      { id: "ayuda-manana", estatusValue: "ayuda_tienda", fechaReparto: DIA_21 },
+    ]);
+    const r = await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    if (r.status !== "ok") throw new Error("se esperaba ok");
+    // Los TRES grupos siguen siendo los de siempre: la ficha añade un dato por fila, NO un cuarto
+    // grupo. Y ninguna orden desaparece por estar reservada (D5: la reserva protege del CRON, no
+    // del mensajero).
+    expect(r.porRecoger.map((o) => o.id)).toEqual(["manana"]);
+    expect(r.porGestionar.map((o) => o.id)).toEqual(["en-reparto-manana"]);
+    expect(r.conAyuda.map((o) => o.id)).toEqual(["ayuda-manana"]);
+  });
+
+  it("R24: la reserva NO cambia nada de lo que el mensajero puede hacer con la orden", async () => {
+    // La reserva es una proteccion frente al corte, no un candado. Lo que se puede afirmar aqui
+    // es que la card llega COMPLETA —con todo lo que la UI necesita para recogerla y gestionarla—
+    // y que el unico campo nuevo es el informativo.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21, montoCobrar: 100 },
+    ]);
+    const card = cardsPorId(
+      await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    ).get("manana");
+    expect(card?.estatusValue).toBe("por_recoger"); // sigue recogible
+    expect(card?.montoCobrar).toBe(100);
+    expect(card?.numGuia).toBe(1);
+    expect(card?.esParaManana).toBe(true);
+  });
+
+  it("R26: el DTO no lleva la fecha cruda — el cliente no puede re-decidir el dia", async () => {
+    // Si la fecha viajara al navegador, alguien acabaria comparandola con `new Date()` alli, y la
+    // etiqueta pasaria a depender del reloj del dispositivo. Se manda el booleano YA resuelto.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const card = cardsPorId(
+      await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H),
+    ).get("manana");
+    expect(card).not.toHaveProperty("fechaReparto");
+  });
+
+  it("R26/R17: a las 23:59 CR el dia sigue siendo el 20, no el 21 (la frontera real)", async () => {
+    // `2026-08-21T05:59:00Z` = 23:59 CR del 20. En UTC ya es dia 21: si el servicio comparara
+    // contra el dia UTC, la reservada para el 21 dejaria de etiquetarse una hora antes de tiempo.
+    const repo = conFilas([
+      { id: "manana", estatusValue: "por_recoger", fechaReparto: DIA_21 },
+    ]);
+    const cards = cardsPorId(
+      await newService(repo).listarMisAsignaciones(
+        MENSAJERO,
+        new Date("2026-08-21T05:59:00.000Z"),
+      ),
+    );
+    expect(cards.get("manana")?.esParaManana).toBe(true);
+  });
+
+  it("R35: la proyeccion del repositorio trae el dia SIN una consulta nueva", async () => {
+    // T3.7: el dato viaja en la lectura que ya existe. Si hiciera falta una consulta aparte, seria
+    // un N+1 sobre la pantalla mas caliente del portal.
+    const repo = conFilas([{ id: "o1", estatusValue: "por_recoger", fechaReparto: DIA_21 }]);
+    await newService(repo).listarMisAsignaciones(MENSAJERO, HOY_14H);
+    expect(repo.findMisAsignaciones).toHaveBeenCalledTimes(1);
   });
 });

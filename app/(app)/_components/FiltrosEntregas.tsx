@@ -9,6 +9,7 @@ import {
   type FilterDef,
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
+import type { Faceta } from "@/lib/analytics/presentacion";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import { listarMensajerosParaAsignacion } from "@/lib/actions/ordenes-guia";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
@@ -103,7 +104,25 @@ async function mensajerosFetcher(): Promise<MensajeroLiteDTO[]> {
  * tabla `orden`, que si tiene `provincia_id`, `canton_id` y `distrito_id` como columnas
  * propias. El motivo por el que no estaban desaparecio; el criterio es el mismo.
  */
-export function FiltrosEntregas() {
+export interface FiltrosEntregasProps {
+  /**
+   * Feature 133 (D5) — las facetas de filtro que ESTE actor puede elegir, tal como las
+   * resolvio `recorteDePresentacion` en el servidor. Es un array de strings: no cruza la
+   * frontera RSC ni un id, ni un nombre, ni el rol.
+   *
+   * Lo que decide: si se declaran los controles de zona, tienda y mensajero. La fecha y la
+   * cadena geografica van siempre — a esta ultima la acota el CATALOGO, no el recorte.
+   *
+   * Omitirlo declara las tres, que es lo que ve el alcance global. Se pasa siempre desde la
+   * ruta; el default existe para no obligar a los tests a montar el recorte entero.
+   */
+  facetas?: readonly Faceta[];
+}
+
+export function FiltrosEntregas({ facetas }: Readonly<FiltrosEntregasProps> = {}) {
+  // Sin la faceta de mensajero no se pide el directorio: su accion responde `forbidden` a
+  // quien no la tiene ofrecida, y pedir algo para tirarlo es un viaje al servidor por nada.
+  const ofreceMensajeros = facetas === undefined || facetas.includes("mensajero");
   // Las dos lecturas van en la MISMA oleada, sin encadenarse: el catalogo no depende de
   // los mensajeros ni al reves, y esperar a uno para pedir el otro haria la barra el
   // doble de lenta sin que nada lo delatara.
@@ -112,9 +131,11 @@ export function FiltrosEntregas() {
     catalogoFetcher,
     { revalidateOnFocus: false },
   );
-  const { data: mensajeros } = useSWR("entregas:mensajeros", mensajerosFetcher, {
-    revalidateOnFocus: false,
-  });
+  const { data: mensajeros } = useSWR(
+    ofreceMensajeros ? "entregas:mensajeros" : null,
+    mensajerosFetcher,
+    { revalidateOnFocus: false },
+  );
 
   // Mientras carga NO se dan por perdidas las opciones: `undefined` (en vuelo) y `null`
   // (no cargo) son dos cosas distintas, y confundirlas deshabilitaria la barra entera
@@ -189,6 +210,7 @@ export function FiltrosEntregas() {
     const declarados = construirFiltrosEntregas(
       catalogo ?? CATALOGO_VACIO,
       mensajeros ?? SIN_MENSAJEROS,
+      { facetas },
     );
     // Sin catalogo, los filtros que dependen de el se deshabilitan en vez de
     // desaparecer: un filtro ausente parece que no existe, uno deshabilitado dice que
@@ -196,7 +218,7 @@ export function FiltrosEntregas() {
     return catalogo === null
       ? declarados.map((f) => (f.kind === "dateRange" ? f : { ...f, disabled: true }))
       : declarados;
-  }, [catalogo, mensajeros]);
+  }, [catalogo, mensajeros, facetas]);
 
   const ofrecidos = useMemo(
     () => filtros.map((f) => ({ key: f.key, label: f.label })),

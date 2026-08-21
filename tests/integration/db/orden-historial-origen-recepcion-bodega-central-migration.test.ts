@@ -95,6 +95,16 @@ describe("Feature 138 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
           // Feature 239 (2026-08-19): el `down.sql` de ESTA migracion NO se toca (es una foto
       // historica); lo que se ajusta es el conjunto que se le descuenta al SEED vigente.
       "anclaje_devolucion",
+      // Feature 235 (2026-08-19): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE. Las dos
+      // familias de la ayuda se descuentan del SEED vigente, no se anaden a la foto historica.
+      "solicitud_ayuda_tienda",
+      "rescate_ayuda_tienda",
+      // Feature 237 (2026-08-20): idem — el `down.sql` de ESTA migracion sigue SIN TOCARSE (foto
+      // historica). `gestion_tienda_ayuda` se descuenta del SEED vigente, no se anade a la foto.
+      "gestion_tienda_ayuda",
+      // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
+      // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
+      "rechazo_tienda",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_138.has(v))),

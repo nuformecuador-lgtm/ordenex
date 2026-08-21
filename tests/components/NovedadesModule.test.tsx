@@ -11,10 +11,11 @@ import {
 import userEvent from "@testing-library/user-event";
 
 import { NovedadesModule } from "@/app/(app)/novedades/_components/NovedadesModule";
-import { listarNovedadesAction } from "@/lib/actions/novedades";
+import { listarAyudaTiendaAction, listarNovedadesAction } from "@/lib/actions/novedades";
 import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 import { registrarIntentoContactoOrden } from "@/lib/actions/orden-ayuda";
-import { reprogramarNovedad } from "@/lib/actions/resolver-novedad";
+import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
+import { rechazarNovedad, reprogramarNovedad } from "@/lib/actions/resolver-novedad";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
@@ -24,15 +25,25 @@ import type { NovedadDTO } from "@/lib/types/novedad";
 // 2026-08-14: el módulo importa TAMBIÉN la lectura del listado completo (la que alimenta la
 // descarga). Un mock de módulo que no la declare no es un mock incompleto: vitest lanza al
 // resolver el import, así que el archivo entero moriría antes del primer caso.
+// Feature 236 (T4.2): el módulo importa las CUATRO lecturas (una pareja por grupo) y elige la del
+// suyo con `RECURSOS_POR_GRUPO`. El mock las declara todas por el mismo motivo que arriba: vitest
+// lanza al resolver el import, así que una que faltara mataría el archivo entero antes del primer
+// caso — no dejaría un caso rojo, dejaría cero casos.
 vi.mock("@/lib/actions/novedades", () => ({
   listarNovedadesAction: vi.fn(),
   listarNovedadesCompletoAction: vi.fn(),
+  listarAyudaTiendaAction: vi.fn(),
+  listarAyudaTiendaCompletoAction: vi.fn(),
 }));
 
 // Feature 100 (T3.1/T3.2) — la acción "Reprogramar" ejecuta la reprogramación vía
 // esta Server Action; se mockea para verificar la invocación con la fecha elegida.
+// Feature 240 (T5.3): `rechazarNovedad` entra en ESTE mismo mock y no en otro. No es cosmetica:
+// `RechazarNovedadModal` la importa de este modulo, y un mock que no la declare no deja un caso
+// rojo — vitest lanza al resolver el import y el archivo entero muere antes del primer caso.
 vi.mock("@/lib/actions/resolver-novedad", () => ({
   reprogramarNovedad: vi.fn(),
+  rechazarNovedad: vi.fn(),
 }));
 
 // Pedido humano 2026-08-18 — sobre una orden con ayuda pedida el módulo monta también
@@ -50,25 +61,47 @@ vi.mock("@/lib/actions/orden-ayuda", () => ({
   registrarIntentoContactoOrden: vi.fn(),
 }));
 
+// Feature 237 (T7.3) — la Server Action que dispara la ventana «Resolver la orden por tu cuenta».
+// Se mockea por el mismo motivo que las otras: importarla de verdad arrastraria Prisma y Supabase
+// Storage a jsdom, y el archivo entero moriria al resolver el import, no en un caso rojo.
+vi.mock("@/lib/actions/gestion-desde-ayuda", () => ({
+  gestionarDesdeAyuda: vi.fn(),
+}));
+
 const reprogramarMock = vi.mocked(reprogramarNovedad);
+const rechazarMock = vi.mocked(rechazarNovedad);
 const habilitarMock = vi.mocked(habilitarNovedad);
 const intentoContactoMock = vi.mocked(registrarIntentoContactoOrden);
+const gestionarDesdeAyudaMock = vi.mocked(gestionarDesdeAyuda);
+/** La relectura de la PESTAÑA DE AYUDA: es la que la 237 dispara tras resolver (R27). */
+const listarAyudaMock = vi.mocked(listarAyudaTiendaAction);
 /** El re-fetch de página (R22). Sirve de anti-vacío: conmutar de vista NO debe invocarlo. */
 const listarNovedadesMock = vi.mocked(listarNovedadesAction);
 
-const { successMock, errorMock, infoMock } = vi.hoisted(() => ({
+const { successMock, errorMock, infoMock, warningMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
   errorMock: vi.fn(),
-  // 2026-08-12: el canal `info` deja de ser un `vi.fn()` anónimo porque los dos botones de
-  // MAQUETA ("Habilitar", "Devolver") avisan por él y hay que poder afirmarlo.
+  // ⚠️ FEATURE 240 (T5.4, 2026-08-20) — EL CANAL `info` SE QUEDÓ SIN USUARIOS EN ESTE MÓDULO.
+  //
+  // **Lo que decía este comentario hasta hoy:** «2026-08-12: el canal `info` deja de ser un
+  // `vi.fn()` anónimo porque los dos botones de MAQUETA ("Habilitar", "Rechazar") avisan por él y
+  // hay que poder afirmarlo». «Habilitar» dejó de ser maqueta el 2026-08-18 y «Rechazar» hoy, así
+  // que ya no queda ni un `toast.info` en `NovedadesModule`.
+  //
+  // **Y por eso sigue con nombre, en vez de volver a ser anónimo:** ahora sirve para lo contrario
+  // —afirmar que NADIE avisa por él—, que es la aserción que se pondría roja si alguien repusiera
+  // un aviso de «esto todavía no está disponible» en lugar de cablear la operación.
   infoMock: vi.fn(),
+  // Feature 236 (D8): tampoco `warning`. Es el canal por el que la pantalla dice que la nota se
+  // publicó pero la orden NO volvió a la ruta, y un `vi.fn()` anónimo no deja leer ese texto.
+  warningMock: vi.fn(),
 }));
 
 vi.mock("@/hooks/useToast", () => ({
   useToast: () => ({
     success: successMock,
     error: errorMock,
-    warning: vi.fn(),
+    warning: warningMock,
     info: infoMock,
     show: vi.fn(),
     dismiss: vi.fn(),
@@ -141,7 +174,7 @@ afterEach(() => {
 
 describe("NovedadesModule", () => {
   it("R10: lista vacia -> estado vacio, sin filas", () => {
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
 
     expect(screen.getByText(/No tenés órdenes en devolución/i)).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Órdenes en devolución" })).toBeNull();
@@ -150,6 +183,7 @@ describe("NovedadesModule", () => {
   it("R9: por cada orden muestra guia, destinatario y botones de contacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", numGuia: 12345, destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -176,6 +210,7 @@ describe("NovedadesModule", () => {
   it("R9: numGuia null -> placeholder legible, no rompe la fila", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ numGuia: null })]}
         total={1}
         page={1}
@@ -192,6 +227,7 @@ describe("NovedadesModule", () => {
   it("pinta el producto de la novedad junto al icono de paquete (no un hueco)", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ producto: "Licuadora Oster", peso: 2.75 })]}
         total={1}
         page={1}
@@ -213,6 +249,7 @@ describe("NovedadesModule", () => {
   it("peso null (orden sin peso registrado) -> raya, y el producto SIGUE visible", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ producto: "Caja sellada", peso: null })]}
         total={1}
         page={1}
@@ -236,6 +273,7 @@ describe("NovedadesModule", () => {
   it("R11: muestra la etiqueta ES de la causa, nunca el slug crudo del enum", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ causa: "not_found" })]}
         total={1}
         page={1}
@@ -250,6 +288,7 @@ describe("NovedadesModule", () => {
   it("R7: causa null -> 'Sin causa registrada'", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ causa: null })]}
         total={1}
         page={1}
@@ -262,81 +301,155 @@ describe("NovedadesModule", () => {
 
   // --- Pedido humano 2026-08-18: la solicitud de AYUDA ---
   // Esta pantalla dejó de ser «las devueltas de mi tienda» para ser «lo que mi tienda tiene que
-  // mirar»: entran también órdenes que siguen EN REPARTO porque el mensajero pidió ayuda. El
-  // badge es lo único que distingue en la lista una cosa de la otra.
+  // mirar»: entran también órdenes sobre las que el mensajero pidió ayuda. El badge es lo único
+  // que distingue en la lista una cosa de la otra.
+  //
+  // FEATURE 235 (T5.4, 2026-08-19) — los fixtures pasan de `ayuda: true` a
+  // `estatusValue: "ayuda_tienda"`. NO es una reescritura de los casos: el comportamiento visible
+  // que afirman es EXACTAMENTE el mismo, lo que cambia es de dónde sale la verdad. La bandera se
+  // retiró con su columna y el estatus la sustituye.
+  //
+  // ⚠️ FEATURE 236 (T5.4, R26 — D6 firmada por el humano el 2026-08-19): los DOS casos del badge
+  // cambian de aserción, y hay que decir por qué en vez de tocarlos en silencio.
+  //
+  //   · el texto pasa de «Ayuda solicitada» a **«Esperando tu respuesta»**: dentro de una pestaña
+  //     que ya se llama «Ayuda solicitada», repetirlo en cada card no informa;
+  //   · y la rama «Ayuda · \<causa\>» DESAPARECE. Esa causa venía de una devolución ANTERIOR ya
+  //     deshecha y no describe por qué la orden está en la pantalla — R26 prohíbe atribuírsela,
+  //     mostrarla **y anunciar su ausencia**. El caso que afirmaba «dice las DOS cosas» pasa a
+  //     afirmar lo contrario, que es lo que se decidió: NINGUNA causa sobre una orden en ayuda.
+  //
+  // Los fixtures se montan ya bajo `grupo="ayuda"`, que es la pestaña donde el servidor las lista
+  // desde esta ficha. El chip NO lo decide esa prop: lo decide el grupo de la FILA (ver el caso
+  // «el módulo pinta lo que recibe» más abajo, R2).
 
-  it("ayuda sin causa (la orden sigue en reparto) -> badge «Ayuda solicitada», no «Sin causa registrada»", () => {
+  it("en el grupo de ayuda el chip dice «Esperando tu respuesta», no «Sin causa registrada»", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        grupo="ayuda"
+        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
       />,
     );
 
-    expect(screen.getByText("Ayuda solicitada")).toBeInTheDocument();
+    expect(screen.getByText("Esperando tu respuesta")).toBeInTheDocument();
     // No hay devolución de la que registrar causa: anunciar su ausencia señalaría un hueco
-    // que no existe.
+    // que no existe (R26).
     expect(screen.queryByText("Sin causa registrada")).toBeNull();
   });
 
-  it("devuelta Y con ayuda pedida: el badge dice las DOS cosas, sin tapar una con la otra", () => {
+  it("R26: con una causa ARRASTRADA, sobre una orden en ayuda no aparece ninguna causa", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: "not_found" })]}
+        grupo="ayuda"
+        items={[novedad({ causa: "not_found", estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
       />,
     );
 
-    expect(screen.getByText("Ayuda · Cliente no localizado")).toBeInTheDocument();
+    // El chip es el suyo…
+    expect(screen.getByText("Esperando tu respuesta")).toBeInTheDocument();
+    // …y la causa que el DTO trae NO se pinta en ninguna parte: ni sola, ni pegada al chip.
+    expect(screen.queryByText("Cliente no localizado")).toBeNull();
+    expect(screen.queryByText("Ayuda · Cliente no localizado")).toBeNull();
+    expect(screen.queryByText("Sin causa registrada")).toBeNull();
+    // CONTROL POSITIVO de la aserción de arriba: la MISMA causa, sobre una orden del grupo de
+    // devolución, SÍ se lee. Sin esto, las tres negativas pasarían igual con la card sin montar.
+    cleanup();
+    render(
+      <NovedadesModule
+        grupo="devolucion"
+        items={[novedad({ causa: "not_found", estatusValue: "devuelta" })]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+    expect(screen.getByText("Cliente no localizado")).toBeInTheDocument();
   });
 
-  it("sobre una orden que NO está devuelta no se ofrecen las acciones de devolución", () => {
+  // ⚠️ FEATURE 237 (T7.1, 2026-08-20) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO. Hasta hoy decía
+  // «sobre una orden que NO está devuelta no se ofrecen las acciones de devolución» y afirmaba que
+  // en la ayuda NO había «Reprogramar» ni «Rechazar», porque las dos de entonces presuponían una
+  // devolución que sobre una orden en la moto no existe. Lo que cambió es que la 237 declaró las
+  // dos aristas que faltaban desde `ayuda_tienda` y su productor: ahora los dos botones existen,
+  // pero son OTROS —claves propias, otro servicio, otra ventana— y por eso el caso se reescribe en
+  // vez de borrarse. La razón vieja sigue siendo cierta de las acciones de la DEVOLUCIÓN.
+  it("237: la orden en ayuda ofrece SUS dos desenlaces, que no son los de la devolución", async () => {
+    const user = userEvent.setup();
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, causa: null, estatusValue: "en_reparto" })]}
+        grupo="ayuda"
+        items={[novedad({ causa: null, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
       />,
     );
 
-    // `ReprogramacionTiendaService` ya rechaza con `conflict` toda orden fuera de `devuelta`:
-    // ofrecer el botón sólo conseguiría que la tienda descubriera el límite pulsándolo.
-    expect(screen.queryByRole("button", { name: /^Reprogramar la orden/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Devolver la orden/ })).toBeNull();
-    // «Habilitar» SÍ: es el desenlace de la solicitud de ayuda del lado de la tienda (pedido
-    // humano 2026-08-18), y por eso es la única de las tres que no está atada a `devuelta`.
+    // Existen los dos, con los rótulos de D7.
+    expect(
+      screen.getByRole("button", { name: /^Reprogramar la orden/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Rechazar la orden/ })).toBeInTheDocument();
+    // «Habilitar» SÍ seguía: es el desenlace de la solicitud de ayuda del lado de la tienda
+    // (pedido humano 2026-08-18), y por eso es la única que nunca estuvo atada a `devuelta`.
     expect(
       screen.getByRole("button", { name: /^Habilitar la orden/ }),
     ).toBeInTheDocument();
-    // Lo que SÍ sigue: el contacto y el registro de intentos. (El botón «Notas» se retiró de
-    // esta pantalla el 2026-08-18 por pedido humano; ver la cabecera de `NovedadAcciones`.)
+    // Lo que SÍ sigue: el contacto y el registro de intentos.
     expect(
       screen.getByRole("button", { name: /^Registrar un intento de contacto/ }),
     ).toBeInTheDocument();
+    // Feature 236 (R27/R22): la conversación, que es por donde la tienda lee el motivo con el que
+    // el mensajero pidió la ayuda. Estuvo retirada desde el 2026-08-18.
+    expect(
+      screen.getByRole("button", { name: /^Abrir la conversación de la orden/ }),
+    ).toBeInTheDocument();
+
+    // Y «Reprogramar» lleva a la ventana de la 237, NO al modal de reprogramación de la feature
+    // 100: se distingue por el aviso del precio, que aquél no tiene y no puede tener. Se abre AL
+    // FINAL porque el diálogo es modal y esconde del árbol de accesibilidad todo lo de detrás.
+    await user.click(screen.getByRole("button", { name: /^Reprogramar la orden/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Resolver la orden por tu cuenta");
+    expect(dialog).toHaveTextContent("mueve el dinero igual");
+    expect(reprogramarMock).not.toHaveBeenCalled();
   });
 
-  it("sin ayuda pedida y sin estar devuelta, «Habilitar» tampoco se ofrece", () => {
+  it("R21: sobre un estatus que no es de ningún grupo sólo quedan los de contacto", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: false, causa: null, estatusValue: "en_reparto" })]}
+        grupo="ayuda"
+        items={[novedad({ causa: null, estatusValue: "en_reparto" })]}
         total={1}
         page={1}
         pageSize={10}
       />,
     );
 
-    // La excepción es la AYUDA, no el estatus: sin bandera viva no hay nada que habilitar.
+    // La excepción es el estatus de AYUDA, no «cualquier orden en reparto»: sin solicitud viva no
+    // hay nada que habilitar. Es el CASO NEGATIVO de la traducción literal de la 235, y desde la
+    // 236 es además R21: `grupoDeEstatus` devuelve `null` y no se ofrece NINGUNA acción que
+    // resuelva la orden. Nótese que la pestaña montada es la de AYUDA: el juego de botones lo
+    // decide el estado de la FILA, no la pestaña.
     expect(screen.queryByRole("button", { name: /^Habilitar la orden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Abrir la conversación de la orden/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^Registrar un intento de contacto/ }),
+    ).toBeNull();
+    // CONTROL POSITIVO: la card SÍ está montada, y el contacto —que no resuelve nada— sigue ahí.
+    expect(screen.getByRole("button", { name: "Llamar a Ana Cliente" })).toBeInTheDocument();
   });
 
   it("sobre una devuelta, las acciones de devolución siguen ofreciéndose", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad()]}
         total={1}
         page={1}
@@ -350,7 +463,7 @@ describe("NovedadesModule", () => {
   // --- Pedido humano 2026-08-18: «+1 intento de contacto» y su contador ---
 
   it("sobre una devolución corriente NO aparece: el contador es para las órdenes atascadas", () => {
-    render(<NovedadesModule items={[novedad()]} total={1} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[novedad()]} total={1} page={1} pageSize={10} />);
 
     expect(
       screen.queryByRole("button", { name: /^Registrar un intento de contacto/ }),
@@ -360,7 +473,8 @@ describe("NovedadesModule", () => {
   it("con ayuda pedida aparece el botón y el contador, con el `0` incluido", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 0 })]}
+        grupo="ayuda"
+        items={[novedad({ intentosContacto: 0, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -379,7 +493,8 @@ describe("NovedadesModule", () => {
   it("el contador arranca en el valor del servidor, no en cero", () => {
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 4 })]}
+        grupo="ayuda"
+        items={[novedad({ intentosContacto: 4, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -396,7 +511,8 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "ok", intentosContacto: 9 });
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        grupo="ayuda"
+        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -420,7 +536,8 @@ describe("NovedadesModule", () => {
     intentoContactoMock.mockResolvedValue({ status: "forbidden" });
     render(
       <NovedadesModule
-        items={[novedad({ ayuda: true, intentosContacto: 2 })]}
+        grupo="ayuda"
+        items={[novedad({ intentosContacto: 2, estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -441,6 +558,7 @@ describe("NovedadesModule", () => {
   it("R22: renderiza la Pagination con el total y la pagina recibidos", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad()]}
         total={25}
         page={2}
@@ -460,6 +578,7 @@ describe("NovedadesModule", () => {
   it("R1: cada orden ofrece la acción 'Reprogramar' junto a los botones de contacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -477,6 +596,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "ok" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -521,6 +641,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "ok" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -545,6 +666,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "conflict", motivo: "estado" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -577,6 +699,7 @@ describe("NovedadesModule", () => {
     reprogramarMock.mockResolvedValue({ status: "forbidden" });
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -717,6 +840,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ numGuia: 12345, destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -744,6 +868,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -759,27 +884,38 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       // Y por eso se ejerce en las DOS vistas: el panel viaja a la card elegida, y las dos
       // aceptan `acciones` por su cuenta (no hay herencia entre ellas). Si una dejara de
       // renderizar la prop, la otra seguiría verde.
+      // ⚠️ FEATURE 240 (T5.5, 2026-08-20): este censo tenía «Habilitar la orden de Ana Cliente»
+      // dentro y pasa a CUATRO nombres. Es el punto 12, cerrado (R33). Actualizado a mano.
       const card = cardDe("Ana Cliente");
       for (const nombre of [
         "Llamar a Ana Cliente",
         "WhatsApp a Ana Cliente",
         "Reprogramar la orden de Ana Cliente",
-        "Habilitar la orden de Ana Cliente",
-        "Devolver la orden de Ana Cliente",
+        "Rechazar la orden de Ana Cliente",
       ]) {
         expect(within(card).getByRole("button", { name: nombre })).toBeInTheDocument();
       }
+      // La AUSENCIA, emparejada con las cuatro presencias de arriba y DENTRO de la misma card: sin
+      // ellas, «no está Habilitar» pasaría igual si la card no hubiera renderizado el panel.
+      expect(
+        within(card).queryByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      ).toBeNull();
     },
   );
 
-  // MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Devolver" existen en la fila pero su
-  // comportamiento NO está decidido y no hay backend detrás. Estos dos casos son lo que
-  // impide que la maqueta se confunda con una función terminada: afirman que los botones
-  // están (para que el layout no se rompa sin avisar) y que NO mutan nada.
+  // ⚠️ 2026-08-20 (FEATURE 240) — LA MAQUETA SE ACABÓ, Y ESTE BLOQUE SE PUSO ROJO COMO SE PREVIÓ.
   //
-  // El día que se cableen, este bloque se pone rojo — y eso es exactamente lo que tiene que
-  // pasar: obligará a escribir el test de la transición real en vez de heredar el silencio.
-  // 2026-08-12 (pedido humano): las tres acciones son ICONO + TOOLTIP, ya no texto.
+  // **Lo que decía esta nota hasta hoy:** «MAQUETA DECLARADA (2026-08-12): "Habilitar" y "Rechazar"
+  // (antes "Devolver") existen en la fila pero su comportamiento NO está decidido y no hay backend
+  // detrás… El día que se cableen, este bloque se pone rojo — y eso es exactamente lo que tiene que
+  // pasar: obligará a escribir el test de la transición real en vez de heredar el silencio».
+  //
+  // Eso es lo que pasó: «Habilitar» se cableó el 2026-08-18 y «Rechazar» hoy. El test de la
+  // transición real vive en `tests/components/RechazarNovedad.test.tsx`; aquí queda lo que sigue
+  // siendo de este archivo —que los controles son icono + nombre accesible— y el caso que afirma
+  // que el aviso de «todavía no está disponible» YA NO EXISTE.
+  //
+  // 2026-08-12 (pedido humano): las acciones son ICONO + TOOLTIP, ya no texto.
   //
   // Lo que estos dos casos protegen es la parte que se rompe callando: al quitar el texto
   // visible, el ÚNICO nombre que le queda al botón es su `aria-label`. Si alguien lo borra
@@ -787,9 +923,10 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   // y sin nombre para una pantalla táctil (donde no hay hover que revele nada) — y ningún
   // test de los de arriba se daría cuenta, porque todos buscan por ese mismo `aria-label`
   // y fallarían por "no encuentro el botón", no por "el botón no se puede nombrar".
-  it("las tres acciones son botones de ICONO: sin texto visible, con su nombre accesible intacto", () => {
+  it("las acciones son botones de ICONO: sin texto visible, con su nombre accesible intacto", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -797,7 +934,8 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       />,
     );
 
-    for (const verbo of ["Reprogramar", "Habilitar", "Devolver"]) {
+    // 2026-08-20 (240/R33): eran tres verbos; «Habilitar» salió del grupo de devolución.
+    for (const verbo of ["Reprogramar", "Rechazar"]) {
       const boton = screen.getByRole("button", {
         name: `${verbo} la orden de Ana Cliente`,
       });
@@ -812,6 +950,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("al enfocar una acción, su tooltip revela la etiqueta que antes estaba escrita", async () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -824,13 +963,16 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     // `userEvent.hover` (se comprobó: el popup no llega a montarse ni esperando 3 s). El
     // foco ejerce el MISMO camino de apertura del componente, y de paso cubre al usuario de
     // teclado, que es quien más lo necesita: con el ratón siempre queda el hover real.
+    // 2026-08-20 (240/R33): este caso enfocaba «Habilitar», que ya no está en la devolución. Se
+    // mueve a «Reprogramar», que sigue en la misma fila y ejerce EL MISMO camino de apertura del
+    // tooltip; lo que se mide es el patrón `TooltipTrigger render={<Button …/>}`, no ese botón.
     fireEvent.focus(
-      screen.getByRole("button", { name: "Habilitar la orden de Ana Cliente" }),
+      screen.getByRole("button", { name: "Reprogramar la orden de Ana Cliente" }),
     );
 
     // El tooltip trae la palabra que antes estaba impresa en el botón. Que sea la MISMA no
     // es casual: es lo que hace que quitar el texto no pierda información.
-    expect(await screen.findByText("Habilitar")).toBeInTheDocument();
+    expect(await screen.findByText("Reprogramar")).toBeInTheDocument();
   });
 
   // 2026-08-12 (pedido humano) — "Llamar" y "WhatsApp" eran los DOS únicos botones de la
@@ -847,6 +989,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     async (nombreAccesible, textoTooltip) => {
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -869,10 +1012,18 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     },
   );
 
-  it("MAQUETA: 'Devolver' avisa que no está disponible y no toca la lista", async () => {
+  // ⚠️ FEATURE 240 (T5.3/T5.4) — ESTE CASO CAMBIA DE SENTIDO A PROPÓSITO.
+  //
+  // **Lo que afirmaba hasta el 2026-08-20:** «MAQUETA: 'Rechazar' avisa que no está disponible y no
+  // toca la lista», con `expect(infoMock).toHaveBeenCalledWith("Esta acción todavía no está
+  // disponible.")` dentro. Ése era el aviso de la maqueta, y estuvo verde las dos semanas en que el
+  // botón no hizo nada. Ahora afirma **lo contrario**: pulsar abre la ventana y **nadie avisa por
+  // el canal `info`**.
+  it("240/R27: 'Rechazar' abre la ventana en vez de avisar que no está disponible", async () => {
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -881,17 +1032,24 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     );
 
     await user.click(
-      screen.getByRole("button", { name: "Devolver la orden de Ana Cliente" }),
+      screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" }),
     );
 
-    expect(infoMock).toHaveBeenCalledWith("Esta acción todavía no está disponible.");
-    // No resuelve la novedad: la fila sigue ahí y no se llamó a la única mutación que esta
-    // pantalla tiene cableada.
+    // La ventana está: es la presencia que empareja con la ausencia de abajo. Sin ella, «no se
+    // avisó por `info`» pasaría igual si el botón se hubiera quedado sin handler.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Rechazar la orden");
+    // Y el aviso de la maqueta NO vuelve por ningún canal.
+    expect(infoMock).not.toHaveBeenCalled();
+
+    // Abrir no muta: la operación se dispara al confirmar, y eso se mide en
+    // `tests/components/RechazarNovedad.test.tsx`.
     // La fila sigue en pantalla. Se cuenta en vez de usar `getByText`: desde que el
     // desplegable está encendido, el destinatario aparece dos veces en la card mosaico.
     // (Y no se usa `cardDe`: con un diálogo abierto el resto del árbol queda `aria-hidden`,
     // así que la consulta por ROL no encontraría el `<article>` aunque siga ahí.)
     expect(screen.getAllByText("Ana Cliente").length).toBeGreaterThan(0);
+    expect(rechazarMock).not.toHaveBeenCalled();
     expect(reprogramarMock).not.toHaveBeenCalled();
     expect(errorMock).not.toHaveBeenCalled();
     expect(successMock).not.toHaveBeenCalled();
@@ -912,6 +1070,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -952,6 +1111,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -981,6 +1141,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1020,6 +1181,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1060,7 +1222,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
     async (vista) => {
       const user = userEvent.setup();
       render(
-        <NovedadesModule items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
+        <NovedadesModule grupo="devolucion" items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
       );
       await conmutarA(user, vista);
 
@@ -1086,7 +1248,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("vista Mosaico: en el detalle desplegado los campos nulos se leen como «—», no vacíos", async () => {
     const user = userEvent.setup();
     render(
-      <NovedadesModule items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad(NOVEDAD_NULA)]} total={1} page={1} pageSize={10} />,
     );
 
     const card = cardDe("Ana Cliente");
@@ -1111,6 +1273,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente" })]}
           total={1}
           page={1}
@@ -1130,6 +1293,7 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
   it("guía null: el placeholder legible de R9 sigue siendo el identificador de la card", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ numGuia: null, destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1151,6 +1315,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   function renderUna() {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ destinatario: "Ana Cliente" })]}
         total={1}
         page={1}
@@ -1176,7 +1341,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   });
 
   it("sin órdenes no hay conmutador: no hay cards que conmutar", () => {
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
 
     expect(
       screen.queryByRole("group", { name: "Vista de las órdenes" }),
@@ -1215,6 +1380,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
       const user = userEvent.setup();
       render(
         <NovedadesModule
+        grupo="devolucion"
           items={[novedad({ destinatario: "Ana Cliente", intentosEntrega: 2 })]}
           total={1}
           page={1}
@@ -1233,6 +1399,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
     const user = userEvent.setup();
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[
           novedad({ id: "o1", destinatario: "Uno" }),
           novedad({ id: "o2", destinatario: "Dos" }),
@@ -1256,7 +1423,7 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
   it("la paginación convive con el conmutador: cambiar de vista no la toca", async () => {
     const user = userEvent.setup();
     render(
-      <NovedadesModule items={[novedad()]} total={25} page={2} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad()]} total={25} page={2} pageSize={10} />,
     );
 
     await conmutarA(user, "Detalle");
@@ -1275,11 +1442,19 @@ describe("NovedadesModule — conmutador de vista (2026-08-13)", () => {
 // confirmar, que hoy es un aviso (el último caso lo fija, y se pondrá rojo el día que se
 // cablee la transición real — que es lo que se quiere).
 describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
-  /** Abre el modal de habilitar de la orden de Ana y lo devuelve. */
+  /**
+   * Abre el modal de habilitar de la orden de Ana y lo devuelve.
+   *
+   * Feature 236 (T5.5): se abre desde la PESTAÑA DE AYUDA, sobre una orden en `ayuda_tienda`, que
+   * es donde «Habilitar» significa lo que dice —devolver la orden a la ruta por el punto único de
+   * rescate de la 235—. Sobre una devolución anclada el rescate es un no-op deliberado y su dueño
+   * es la ficha 240.
+   */
   async function abrirHabilitar(user: ReturnType<typeof userEvent.setup>) {
     render(
       <NovedadesModule
-        items={[novedad({ destinatario: "Ana Cliente" })]}
+        grupo="ayuda"
+        items={[novedad({ destinatario: "Ana Cliente", estatusValue: "ayuda_tienda" })]}
         total={1}
         page={1}
         pageSize={10}
@@ -1331,13 +1506,22 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
     expect(within(dialog).queryByRole("alert")).toBeNull();
   });
 
-  // Pedido humano 2026-08-18 — los dos desenlaces de «Habilitar», que desde hoy SÍ ejecuta
-  // una transición. La nota viaja con la orden; el estatus NO se toca (eso es del servidor y
-  // se afirma en su propio test) — aquí se afirma lo que la PANTALLA hace con la respuesta.
-  it("confirmar con nota llama a la acción y saca la orden de la lista", async () => {
+  // Pedido humano 2026-08-18 — los desenlaces de «Habilitar», que desde entonces SÍ ejecuta una
+  // transición. La nota viaja con la orden; el estatus lo mueve el servidor (y se afirma en su
+  // propio test) — aquí se afirma lo que la PANTALLA hace con la respuesta.
+  //
+  // ⚠️ FEATURE 236 (T5.5 — D8, firmada por el humano el 2026-08-19, R24/R25): los desenlaces pasan
+  // de DOS a TRES, y el caso feliz cambia de aserción. Hasta hoy este test fijaba «Orden
+  // habilitada» + fila fuera para CUALQUIER `ok`, incluido el `ok` de una orden que nadie movió —
+  // la carrera con «Recuperar» del mensajero—. La fila desaparecía por optimismo de cliente y
+  // reaparecía al recargar, sin que nada lo explicara. Ahora el resultado trae `rescatada` y la
+  // pantalla distingue «se devolvió a la ruta» de «no se movió». El fixture gana esa clave: sin
+  // ella, este caso mediría un desenlace que el servidor ya no produce.
+  it("R24: rescatada -> avisa que volvió a la ruta, la fila sale y el total baja", async () => {
     habilitarMock.mockResolvedValue({
       status: "ok",
       nota: { id: "n1" },
+      rescatada: true,
     } as unknown as Awaited<ReturnType<typeof habilitarNovedad>>);
     const user = userEvent.setup();
     const dialog = await abrirHabilitar(user);
@@ -1354,11 +1538,42 @@ describe("NovedadesModule — modal de Habilitar (nota obligatoria)", () => {
         nota: "El cliente pidió reintentar",
       }),
     );
-    await waitFor(() => expect(successMock).toHaveBeenCalledWith("Orden habilitada."));
-    // La fila desaparece: sus dos banderas de novedad quedaron apagadas.
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden volvió a la ruta."),
+    );
+    // La fila sale de la lista y el total lo refleja: de «1 de 1» a la lista vacía (R24).
     await waitFor(() => expect(screen.queryByText("Ana Cliente")).toBeNull());
+    expect(screen.getByText("Ningún mensajero te pidió ayuda")).toBeInTheDocument();
     // No se tocó la mutación de la pantalla hermana.
     expect(reprogramarMock).not.toHaveBeenCalled();
+  });
+
+  it("R25: si el rescate NO se aplicó, la pantalla no afirma que la devolvió y la fila se queda", async () => {
+    // El caso real: el mensajero pulsó «Recuperar» un segundo antes. La nota SÍ se publicó —quedó
+    // en el hilo, no se perdió— pero la orden no se movió.
+    habilitarMock.mockResolvedValue({
+      status: "ok",
+      nota: { id: "n1" },
+      rescatada: false,
+    } as unknown as Awaited<ReturnType<typeof habilitarNovedad>>);
+    const user = userEvent.setup();
+    const dialog = await abrirHabilitar(user);
+
+    await user.type(within(dialog).getByLabelText(/^Nota/), "Ya podés seguir");
+    await user.click(within(dialog).getByRole("button", { name: "Habilitar" }));
+
+    // El aviso es SUYO y dice las dos mitades: la nota se publicó, la orden no se movió.
+    await waitFor(() => expect(warningMock).toHaveBeenCalledTimes(1));
+    const aviso = warningMock.mock.calls[0][0] as string;
+    expect(aviso).toContain("Tu nota se publicó");
+    expect(aviso).toContain("no volvió a la ruta");
+    // Y NO se afirma lo contrario por ningún otro canal.
+    expect(successMock).not.toHaveBeenCalled();
+    expect(errorMock).not.toHaveBeenCalled();
+    // La fila SIGUE ahí: quitarla mientras se dice que no se movió sería cambiar una mentira por
+    // otra —y es literalmente lo que pasaba antes de D8, con reaparición al recargar—.
+    expect(screen.getAllByText("Ana Cliente").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ningún mensajero te pidió ayuda")).toBeNull();
   });
 
   it("si la acción rechaza, avisa y la orden SIGUE en la lista", async () => {
@@ -1386,6 +1601,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R18: cada novedad muestra el dato etiquetado junto a sus otros campos", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", destinatario: "Ana Cliente", intentosEntrega: 2 })]}
         total={1}
         page={1}
@@ -1404,6 +1620,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R19: con 0 intentos el dato SE MUESTRA (no se omite ni se deja vacío)", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", intentosEntrega: 0 })]}
         total={1}
         page={1}
@@ -1417,7 +1634,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
 
   it("R19: sin el campo (DTO viejo) muestra 0", () => {
     render(
-      <NovedadesModule items={[novedad({ id: "o1" })]} total={1} page={1} pageSize={10} />,
+      <NovedadesModule grupo="devolucion" items={[novedad({ id: "o1" })]} total={1} page={1} pageSize={10} />,
     );
     expect(
       within(screen.getByRole("listitem")).getByText("Intentos: 0"),
@@ -1427,6 +1644,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R26: cada novedad lleva SU número", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[
           novedad({ id: "o1", destinatario: "Uno", intentosEntrega: 3 }),
           novedad({ id: "o2", destinatario: "Dos", intentosEntrega: 0 }),
@@ -1444,6 +1662,7 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
   it("R20/R32: el dato no trae umbral y el estado vacío sigue sin lista", () => {
     render(
       <NovedadesModule
+        grupo="devolucion"
         items={[novedad({ id: "o1", intentosEntrega: 2 })]}
         total={1}
         page={1}
@@ -1455,7 +1674,236 @@ describe("NovedadesModule — intentos de entrega (feature 160)", () => {
     ).toBe("Intentos: 2");
     cleanup();
 
-    render(<NovedadesModule items={[]} total={0} page={1} pageSize={10} />);
+    render(<NovedadesModule grupo="devolucion" items={[]} total={0} page={1} pageSize={10} />);
     expect(screen.queryByText(/Intentos/)).toBeNull();
+  });
+});
+
+// =================================================================================================
+// FEATURE 237 (T7.3/T7.4 — R25/R27) — LA VENTANA CON LA QUE LA TIENDA RESUELVE, CABLEADA.
+// =================================================================================================
+//
+// Lo que estos casos protegen es el TRAMO entre el botón y la lista, que es donde 236/D8 encontró
+// el defecto sobre esta misma card: «Habilitar» quitaba la fila por optimismo y afirmaba haber
+// habilitado aunque la carrera dejara la orden quieta. Aquí hay más en juego: un `ok` significa que
+// se creó una gestión en el cierre de OTRA persona, con un intento y con dinero detrás.
+describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
+  function montarAyuda(over: Partial<NovedadDTO> = {}) {
+    render(
+      <NovedadesModule
+        grupo="ayuda"
+        items={[
+          novedad({
+            id: "o1",
+            destinatario: "Ana Cliente",
+            estatusValue: "ayuda_tienda",
+            ...over,
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={10}
+      />,
+    );
+  }
+
+  /** Abre la ventana por el botón de la card y devuelve el diálogo. */
+  async function abrir(
+    user: ReturnType<typeof userEvent.setup>,
+    boton: "Reprogramar" | "Rechazar",
+  ) {
+    await user.click(
+      screen.getByRole("button", { name: boton + " la orden de Ana Cliente" }),
+    );
+    return screen.findByRole("dialog");
+  }
+
+  /** Rellena motivo y una foto (D2: obligatoria en los dos desenlaces) y confirma. */
+  async function completarYEnviar(
+    user: ReturnType<typeof userEvent.setup>,
+    dialog: HTMLElement,
+    confirmar: "Reprogramar" | "Rechazar",
+  ) {
+    await user.upload(
+      within(dialog).getByLabelText("Fotos de evidencia"),
+      new File(["x"], "f0.jpg", { type: "image/jpeg" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("list", { name: "Fotos de evidencia seleccionadas" }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Motivo"), {
+      target: { value: "El cliente ya no quiere el pedido" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: confirmar }));
+  }
+
+  it("T7.3: con la ventana cerrada NO está en el árbol", () => {
+    montarAyuda();
+    // La ausencia. Su par es el caso siguiente, que la abre: sin él, esto pasaría igual con la
+    // pantalla entera rota. Importa porque, montada siempre, la ventana traería un selector de
+    // fotos y una fecha por cada orden de la página.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Esto cuenta como una gestión del mensajero/)).toBeNull();
+  });
+
+  it("T7.3: «Rechazar» de la card abre la ventana, con su aviso del precio", async () => {
+    const user = userEvent.setup();
+    montarAyuda();
+
+    const dialog = await abrir(user, "Rechazar");
+
+    expect(dialog).toHaveTextContent("Resolver la orden por tu cuenta");
+    // El literal, a mano: es el que le dice a la tienda que está a punto de cobrarse a sí misma.
+    expect(
+      within(dialog).getByText(
+        "Esto cuenta como una gestión del mensajero: entra en su cierre del día, suma un intento de entrega y mueve el dinero igual. Por eso pide foto y motivo.",
+      ),
+    ).toBeInTheDocument();
+    // Y la orden que nombra es la de la fila, no otra de la página.
+    expect(dialog).toHaveTextContent("Ana Cliente");
+  });
+
+  it("T7.3: «Reprogramar» de la card abre la MISMA ventana, con el campo de fecha", async () => {
+    const user = userEvent.setup();
+    montarAyuda();
+
+    const dialog = await abrir(user, "Reprogramar");
+
+    expect(within(dialog).getByLabelText("Nueva fecha")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Reprogramar" })).toBeInTheDocument();
+  });
+
+  it("R27: tras el éxito lo dice, RELEE la pestaña y la fila sale de la lista", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "o1",
+      resultado: "rechazada",
+    });
+    // La relectura es la que quita la fila: el servidor ya no la lista y el total baja a 0. No se
+    // filtra en el cliente — es la lección de 236/D8 sobre esta misma card.
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden quedó rechazada."),
+    );
+    await waitFor(() => expect(listarAyudaMock).toHaveBeenCalledWith({ page: 1 }));
+    // La fila desaparece POR EL DATO: la lista de la pestaña ya no está y en su sitio queda el
+    // estado vacío. Con un `filter` de cliente esto pasaría igual, y por eso se afirma además la
+    // llamada de arriba: lo que se mide es que se releyó.
+    await waitFor(() =>
+      expect(screen.queryByRole("list", { name: "Órdenes con ayuda solicitada" })).toBeNull(),
+    );
+  });
+
+  it("R27: y al reprogramar el aviso nombra ESE desenlace, no el otro", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "ok",
+      ordenId: "o1",
+      resultado: "reprogramada",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Reprogramar");
+
+    await completarYEnviar(user, dialog, "Reprogramar");
+
+    // El par del caso anterior: si el aviso fuera uno solo («Listo»), los dos pasarían y la tienda
+    // no sabría cuál de las dos cosas acaba de hacer.
+    await waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La orden quedó reprogramada."),
+    );
+    expect(successMock).not.toHaveBeenCalledWith("La orden quedó rechazada.");
+  });
+
+  it("R25: con `conflict` NO afirma que resolvió, dice el texto del servidor y RECARGA", async () => {
+    // La carrera: el mensajero recuperó la orden —o la cortó la noche— entre que la tienda abrió la
+    // ventana y pulsó. NO se creó ninguna gestión, así que no hay intento ni cobro, y la pantalla
+    // no puede decir «La orden quedó rechazada». Es literalmente el defecto que 236/D8 arregló
+    // sobre esta misma card, con dinero detrás esta vez.
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "Esta orden ya no está esperando tu respuesta.",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(warningMock).toHaveBeenCalledWith(
+        "Esta orden ya no está esperando tu respuesta.",
+      ),
+    );
+    // Ni éxito ni error: el desenlace es otro, y se dice por su propio canal.
+    expect(successMock).not.toHaveBeenCalled();
+    // Y se RECARGA igual: la fila que ya no corresponde desaparece POR EL DATO, no por optimismo.
+    await waitFor(() => expect(listarAyudaMock).toHaveBeenCalledWith({ page: 1 }));
+  });
+
+  it("R22: un `forbidden` avisa con un texto opaco y NO recarga (no se movió nada)", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({ status: "forbidden" });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith("No tenés permiso para resolver esta orden."),
+    );
+    // El borde no dice si la orden existe, en qué estado está ni de quién es; adivinar un motivo
+    // concreto aquí sería inventarlo. Y como no cambió nada, releer la página sería ruido.
+    expect(listarAyudaMock).not.toHaveBeenCalled();
+    expect(successMock).not.toHaveBeenCalled();
+  });
+
+  it("la ventana se cierra tras el desenlace, sea cual sea", async () => {
+    gestionarDesdeAyudaMock.mockResolvedValue({
+      status: "conflict",
+      motivo: "Esta orden ya no está esperando tu respuesta.",
+    });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+    const dialog = await abrir(user, "Rechazar");
+
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    // Dejarla abierta invitaría a un segundo envío sobre una orden que ya no está en ayuda.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

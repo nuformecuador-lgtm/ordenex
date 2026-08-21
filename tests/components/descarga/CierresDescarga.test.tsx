@@ -254,6 +254,7 @@ function gestion(
     ingresoBodegaRechazo: null,
     tarifaFaltante: false,
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     causaIncidente: null,
     indemnizacion: null,
     ...over,
@@ -346,6 +347,7 @@ function gruposConEvidencia(): CierreGrupos {
         motivo: "Cliente ausente",
         evidenciaUrl: EVIDENCIA_FIRMADA,
         esRechazoSla: true,
+        desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
         ingresoBodegaRechazo: "5.00",
       }),
     ],

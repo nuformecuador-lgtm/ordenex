@@ -49,6 +49,21 @@ import { INDEMNIZACION_MONTO_MAX } from "@/lib/types/cierres-admin";
 // módulo que usa el panel del mensajero para capturarla). El admin decide el monto MIRANDO la
 // causa: no puede ser un slug crudo ni, peor, no estar.
 import { CAUSA_INCIDENTE_LABEL } from "@/app/(app)/mis-asignaciones/_components/causa-incidente-options";
+// Feature 238 (T4.1, design §5.1): la ventana de confirmación física. El CUERPO vive en su
+// propio archivo (es presentación); el estado y la decisión de cuándo se abre viven acá, que
+// es donde ya viven los otros tres modales de esta pantalla.
+import {
+  ConfirmacionFisicaCuerpo,
+  interpretarLectura,
+  progresoDePaquetes,
+  retornablesDelCierre,
+  gestionesDelCierre,
+  CONFIRMACION_TITULO,
+  CONFIRMACION_DETALLE,
+  CONFIRMACION_CONTINUAR,
+  CONFIRMACION_APROBAR,
+  type MedioDeCaptura,
+} from "./cierre-confirmacion-fisica";
 // `moneyTope` lo usan los mensajes de la indemnizacion (feature 230 de `dev`); los tres
 // simbolos de tabla que `dev` importaba aqui se fueron con la tira de comprobantes.
 import { money, moneyTope } from "./cierre-detalle-shared";
@@ -82,6 +97,7 @@ import {
   clavePagosDeCierre,
 } from "./PagoMensajeroSeccion";
 import { RegistrarPagoMensajeroDialog } from "./RegistrarPagoMensajeroDialog";
+import { CorregirPagosDialog } from "./CorregirPagosDialog";
 
 // Feature 38 (T13, R3-R11): módulo cliente de "Cierres del día" del admin. Recibe
 // del Server Component padre los cierres del alcance ya resueltos (pendientes de
@@ -132,6 +148,17 @@ export interface CierresAdminModuleProps {
    * ofrece pagar a nadie, en vez de ofrecérselo a todos.
    */
   puedeRegistrarPago?: boolean;
+  /**
+   * Pedido humano (2026-08-19) — permiso de CORREGIR el desglose de pago de una gestión de un
+   * cierre abierto. Se resuelve server-side con el MISMO predicado que el servicio
+   * (`esAccesoTotal`): maestro y admin, y nadie más.
+   *
+   * Es otra prop y no `puedeRegistrarPago` aunque hoy coincida el predicado: pagar un cierre
+   * aprobado y corregir lo que un mensajero declaró son dos permisos distintos, y fundirlos
+   * aquí haría que separarlos mañana exigiera desenredar la pantalla. Opcional y con default
+   * `false` — FALLA CERRADO, igual que su vecina.
+   */
+  puedeCorregirPagos?: boolean;
   /**
    * Pedido humano del 2026-08-16 — opciones de los filtros (bodegas destino y mensajeros), ya
    * acotadas al alcance del actor y resueltas por el Server Component: es una lectura de solo
@@ -327,6 +354,7 @@ export function CierresAdminModule({
   historico,
   sinZona,
   puedeRegistrarPago = false,
+  puedeCorregirPagos = false,
   catalogoFiltros = CATALOGO_FILTROS_CIERRES_VACIO,
 }: Readonly<CierresAdminModuleProps>) {
   const router = useRouter();
@@ -341,6 +369,10 @@ export function CierresAdminModule({
   const [detalle, setDetalle] = useState<DetalleAbierto | null>(null);
   // Evidencia (URL firmada, R7) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
+  // Pedido humano (2026-08-19): la gestión cuyo desglose se está corrigiendo; `null` = diálogo
+  // cerrado. Va aquí, con el resto de los hooks, y no junto al bloque que lo usa: los hooks se
+  // llaman todos, siempre y en el mismo orden.
+  const [corrigiendo, setCorrigiendo] = useState<CierreDetalleGestion | null>(null);
   // Sub-modal de rechazo (R11): true = abierto.
   const [rechazando, setRechazando] = useState(false);
   // Motivo del rechazo (obligatorio, R11) + su error de validación.
@@ -359,6 +391,23 @@ export function CierresAdminModule({
   // Errores por gestión que devuelve el SERVIDOR (`fieldErrors` con clave = gestionId,
   // `CierresAdminService.validarCoberturaIndemnizaciones`). Se pintan por fila.
   const [montoErrores, setMontoErrores] = useState<Record<string, string>>({});
+  // --- Feature 238 (T4.1/T4.2, R7/R35/R36): la ventana de CONFIRMACIÓN FÍSICA ---
+  // Sólo se abre si el cierre TIENE gestiones que vuelven a bodega; sin ellas la aprobación
+  // sigue siendo el gesto de hoy (R16). No es un `else` de cortesía: medido el 2026-08-19, es
+  // 3 de cada 12 cierres.
+  const [confirmando, setConfirmando] = useState(false);
+  // Lo confirmado en esta sesión: `gestionId -> numGuia leído`. Vive acá, y no dentro de la
+  // ventana, para que cerrarla sin completar (R35) no obligue a re-escanear lo ya leído; se
+  // descarta en `cerrarDetalle`, junto a los montos. Mismo criterio que la 158.
+  const [confirmadas, setConfirmadas] = useState<Record<string, number>>({});
+  // R29-R32: qué pasó con la ÚLTIMA lectura. Persistente y no un toast, que se va solo.
+  const [avisoLectura, setAvisoLectura] = useState<string | null>(null);
+  // Confirmación persistente del último acierto (patrón de `RecogerPaqueteCard`).
+  const [ultimaGuiaConfirmada, setUltimaGuiaConfirmada] = useState<number | null>(null);
+  // Errores del servidor de la confirmación física, por gestión. Conjunto de claves DISJUNTO
+  // del de `montoErrores` por construcción: un `incidente` no vuelve a bodega, así que ninguna
+  // gestión puede estar en los dos (el servicio lo afirma con un test, no lo razona).
+  const [confirmacionErrores, setConfirmacionErrores] = useState<Record<string, string>>({});
   // Feature 172/T E.1 (§8): oferta de pago tras aprobar; null = no se está ofreciendo nada.
   const [ofertaPago, setOfertaPago] = useState<OfertaPago | null>(null);
 
@@ -468,6 +517,24 @@ export function CierresAdminModule({
   // detalle que ya se pidió al servidor (`grupos.incidente`), no de una consulta aparte:
   // el conjunto que la UI pide indemnizar es exactamente el que el service exige cubrir.
   const incidentes: CierreDetalleGestion[] = detalle?.grupos.incidente ?? [];
+  // Feature 238/R2/R7: el CONJUNTO ESPERADO — las gestiones del cierre cuyo paquete vuelve a
+  // bodega. Sale del MISMO detalle ya cargado, filtrado por el punto único
+  // (`RESULTADOS_QUE_VUELVEN`): la pantalla no decide por su cuenta qué vuelve, porque decidirlo
+  // dos veces es cómo se llega a que bodega escanee todo lo que ve y el botón siga bloqueado.
+  const retornables: CierreDetalleGestion[] = detalle
+    ? retornablesDelCierre(detalle.grupos)
+    : [];
+  // R30/R31: las cinco secciones, para poder distinguir la guía ajena de la que sí es del
+  // cierre pero no vuelve.
+  const gestionesDelCierreAbierto: CierreDetalleGestion[] = detalle
+    ? gestionesDelCierre(detalle.grupos)
+    : [];
+  // R27: cuántos paquetes faltan por tener delante. Es el número que bloquea y el que se dice, y
+  // por eso sale del MISMO cálculo que pinta la ventana (`progresoDePaquetes`): son PAQUETES,
+  // no filas — dos gestiones vivas de la misma orden comparten guía y son un solo bulto. El
+  // candado no se ablanda: un paquete cuenta como hecho sólo si todas sus filas están
+  // confirmadas, así que «faltan 0» sigue queriendo decir «no queda ninguna fila pendiente».
+  const faltanPorConfirmar = progresoDePaquetes(retornables, confirmadas).faltan;
   // R34: no se puede confirmar mientras falte o sea inválido algún monto. Mismo criterio
   // que el servidor (`montoValido` de la wallet: > 0, hasta 2 decimales, sin `parseFloat`) —
   // incluido el TOPE (m5): sin él la UI habilitaba «Confirmar» con un monto de 11 dígitos que
@@ -515,7 +582,7 @@ export function CierresAdminModule({
     }
     if (result.status === "no_encontrada") {
       toast.error("El cierre ya no está disponible. Actualizando la lista.");
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "unauthenticated") {
@@ -554,6 +621,36 @@ export function CierresAdminModule({
     setIndemnizando(false);
     setMontos({});
     setMontoErrores({});
+    // Feature 238/R35: lo mismo con la confirmación física. Nada de esto está persistido en
+    // ningún sitio —no existe una confirmación a medias en el servidor—, así que descartarlo es
+    // literalmente olvidarlo; el siguiente cierre arranca con sus propias filas.
+    setConfirmando(false);
+    setConfirmadas({});
+    setConfirmacionErrores({});
+    setAvisoLectura(null);
+    setUltimaGuiaConfirmada(null);
+  }
+
+  /**
+   * Pedido humano del 2026-08-19 — tras aceptar / rechazar / destrabar, LA LISTA tiene que
+   * enterarse. `router.refresh()` a secas no bastaba: sólo vuelve a resolver el Server
+   * Component, y sus páginas entran acá como `fallbackData`, que SWR usa una vez y nunca
+   * vuelve a mirar. Con datos ya en caché, el cierre resuelto seguía sentado en la cola hasta
+   * recargar a mano.
+   *
+   * Se revalidan TODAS las claves de los dos listados —cualquier página, cualquier
+   * combinación de filtros—, no sólo la visible: una decisión mueve la fila de la cola al
+   * histórico y recorre la paginación de ambos, así que dejar el resto de páginas en caché
+   * sería volver a la misma mentira una página más allá.
+   */
+  function refrescarListas() {
+    void mutate(
+      (clave) =>
+        Array.isArray(clave) &&
+        (clave[0] === "cierres-admin:pendientes" ||
+          clave[0] === "cierres-admin:historico"),
+    );
+    router.refresh();
   }
 
   /** Traduce un resultado de dominio de error a feedback accionable + refresco. */
@@ -577,23 +674,27 @@ export function CierresAdminModule({
       toast.error("No se pudo resolver el cierre. Intentá de nuevo.");
     }
     cerrarDetalle();
-    router.refresh();
+    refrescarListas();
   }
 
   /**
-   * R10 + feature 158/R22/R36: aprueba el cierre abierto. `indemnizaciones` sólo viaja
-   * cuando el cierre TIENE incidentes; sin ellos se manda el MISMO payload de la 38
-   * (`{ cierreId }`), así el camino sin incidentes no cambia ni un byte (R36).
+   * R10 + feature 158/R22/R36 + feature 238/R16: aprueba el cierre abierto.
+   *
+   * Cada lista viaja SÓLO si su rama existe: `indemnizaciones` cuando el cierre tiene
+   * incidentes, `confirmacionFisica` cuando tiene paquetes que vuelven. Un cierre sin ninguna
+   * de las dos cosas manda el MISMO payload de la 38 (`{ cierreId }`, ni una clave más), que es
+   * lo que hace que ese camino —3 de cada 12 cierres, medido— no cambie ni un byte.
    */
   async function confirmarAprobacion(
     indemnizaciones?: { gestionId: string; monto: string }[],
+    confirmacionFisica?: { gestionId: string; numGuia: number }[],
   ) {
     if (!detalle) return;
-    const result = await aprobarCierre(
-      indemnizaciones === undefined
-        ? { cierreId: detalle.cierre.cierreId }
-        : { cierreId: detalle.cierre.cierreId, indemnizaciones },
-    );
+    const result = await aprobarCierre({
+      cierreId: detalle.cierre.cierreId,
+      ...(indemnizaciones === undefined ? {} : { indemnizaciones }),
+      ...(confirmacionFisica === undefined ? {} : { confirmacionFisica }),
+    });
     if (result.status === "ok") {
       // El cierre YA está aprobado y el mensajero, libre (feature 111): esta rama solo puede
       // AÑADIR cosas, nunca condicionar lo anterior (R17/R18). Se declara el éxito, se cierra
@@ -606,7 +707,7 @@ export function CierresAdminModule({
 
       toast.success("Cierre aprobado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
 
       // R16 — se OFRECE registrar el pago si queda algo pendiente y el actor puede pagar.
       // [P3]/R6: un `adminSatelite` aprueba y aquí no ve nada; el flujo termina como hoy y la
@@ -616,28 +717,60 @@ export function CierresAdminModule({
       }
       return;
     }
-    // Feature 158/R19-R21: el servidor valida la cobertura EXACTA de los montos y devuelve
-    // un error POR GESTIÓN. Se pintan en su fila y el sub-modal SIGUE ABIERTO: cerrarlo
-    // obligaría a recapturar todo lo ya tecleado.
+    // Feature 158/R19-R21 y feature 238/T4.7: el servidor valida las DOS coberturas exactas y
+    // devuelve sus errores POR GESTIÓN. Se pintan en su fila y la ventana SIGUE ABIERTA:
+    // cerrarla obligaría a recapturar —o a re-escanear— todo.
     if (result.status === "validation_error") {
-      setMontoErrores(
-        Object.fromEntries(
-          Object.entries(result.fieldErrors).map(([campo, mensajes]) => [
-            campo,
-            mensajes[0] ?? INDEMNIZACION_FALTAN,
-          ]),
-        ),
-      );
+      repartirErroresDelServidor(result.fieldErrors);
       return;
     }
     manejarErrorDecision(result.status);
   }
 
   /**
-   * Feature 158/R34: pulsa "Aprobar" en el detalle. Con incidentes abre el sub-modal de
-   * captura; sin incidentes aprueba directo, exactamente como hasta ahora (R36).
+   * Feature 238 (T4.7) — reparte los `fieldErrors` del servidor entre las DOS ventanas.
+   *
+   * Las claves son ids de gestión en los dos casos, y los conjuntos son disjuntos por
+   * construcción (un `incidente` no vuelve a bodega), así que basta preguntar si la gestión
+   * está en el conjunto esperado. Y la ventana que se abre es la que TIENE el error: si el
+   * servidor discute la confirmación física, teclear montos no arregla nada.
+   *
+   * Una clave que no case con ninguna de las dos ramas cae en el bolsón de los montos, que es
+   * exactamente donde caía antes de esta feature: no se pierde ni cambia de sitio.
+   */
+  function repartirErroresDelServidor(fieldErrors: Record<string, string[]>) {
+    const idsRetornables = new Set(retornables.map((g) => g.gestionId));
+    const deConfirmacion: Record<string, string> = {};
+    const deMontos: Record<string, string> = {};
+    for (const [campo, mensajes] of Object.entries(fieldErrors)) {
+      const mensaje = mensajes[0] ?? INDEMNIZACION_FALTAN;
+      if (idsRetornables.has(campo)) deConfirmacion[campo] = mensaje;
+      else deMontos[campo] = mensaje;
+    }
+    setConfirmacionErrores(deConfirmacion);
+    setMontoErrores(deMontos);
+    if (Object.keys(deConfirmacion).length > 0) {
+      setIndemnizando(false);
+      setConfirmando(true);
+    }
+  }
+
+  /**
+   * Feature 158/R34 + feature 238/R7/R37: pulsa "Aprobar" en el detalle. TRES caminos de igual
+   * rango, no uno con dos excepciones:
+   *
+   *   - con paquetes que vuelven  -> la ventana de confirmación física (y los montos después,
+   *     R37: si falta un paquete no se llega a teclear dinero que se va a descartar);
+   *   - sin ellos y con incidentes -> el sub-modal de montos, como hasta hoy;
+   *   - sin ninguna de las dos cosas -> se aprueba directo, byte a byte como hasta hoy (R16).
    */
   function pedirAprobacion() {
+    if (retornables.length > 0) {
+      setConfirmacionErrores({});
+      setAvisoLectura(null);
+      setConfirmando(true);
+      return;
+    }
     if (incidentes.length === 0) {
       void confirmarAprobacion();
       return;
@@ -646,11 +779,77 @@ export function CierresAdminModule({
     setIndemnizando(true);
   }
 
+  /**
+   * Feature 238 (R29-R32) — una guía leída, por cámara o tecleada. Devuelve `true` sólo si
+   * marcó una fila; con `false` el campo conserva lo escrito para poder corregirlo (patrón de
+   * `RecogerPaqueteCard`).
+   *
+   * Ninguno de los cuatro desenlaces manda nada al servidor: la resolución es local contra el
+   * detalle ya cargado, y el envío ocurre una sola vez, al confirmar la ventana.
+   */
+  function leerGuia(texto: string, medio: MedioDeCaptura): boolean {
+    const lectura = interpretarLectura(
+      texto,
+      medio,
+      gestionesDelCierreAbierto,
+      confirmadas,
+    );
+    if (lectura.tipo === "aviso") {
+      setAvisoLectura(lectura.mensaje);
+      return false;
+    }
+    // Una lectura puede cubrir MÁS DE UNA fila: hay un solo paquete físico, y si dos gestiones
+    // vivas de la misma orden comparten guía, las dos quedan cubiertas por ese único gesto.
+    // Pedir dos escaneos de la misma caja sería pedir que se atestigüe dos veces un solo acto —
+    // y con `find` la segunda fila no había forma de confirmarla nunca.
+    setConfirmadas((prev) => {
+      const siguiente = { ...prev };
+      for (const gestionId of lectura.gestionIds) siguiente[gestionId] = lectura.numGuia;
+      return siguiente;
+    });
+    setUltimaGuiaConfirmada(lectura.numGuia);
+    setAvisoLectura(null);
+    // Confirmar limpia el error del servidor de LAS FILAS CONFIRMADAS (no el de las otras),
+    // igual que teclear limpia el del monto en el sub-modal de la 158.
+    setConfirmacionErrores((prev) => {
+      if (!lectura.gestionIds.some((gestionId) => prev[gestionId])) return prev;
+      const resto = { ...prev };
+      for (const gestionId of lectura.gestionIds) delete resto[gestionId];
+      return resto;
+    });
+    return true;
+  }
+
+  /** Feature 238/R7: lo confirmado, en la forma que el borde del servidor espera. */
+  function listaConfirmacionFisica(): { gestionId: string; numGuia: number }[] {
+    return retornables
+      .filter((g) => confirmadas[g.gestionId] !== undefined)
+      .map((g) => ({ gestionId: g.gestionId, numGuia: confirmadas[g.gestionId] }));
+  }
+
+  /**
+   * Feature 238 (R37) — se completó la confirmación física. Si el cierre además trae
+   * incidentes, queda el paso de los montos; si no, se aprueba con la lista confirmada.
+   */
+  async function continuarTrasConfirmacion() {
+    if (faltanPorConfirmar > 0) return; // R27: el botón ya está deshabilitado; doble candado.
+    if (incidentes.length > 0) {
+      setConfirmando(false);
+      setMontoErrores({});
+      setIndemnizando(true);
+      return;
+    }
+    await confirmarAprobacion(undefined, listaConfirmacionFisica());
+  }
+
   /** Feature 158/R34: confirma la aprobación CON los montos capturados. */
   async function confirmarAprobacionConMontos() {
     if (!todosLosMontosValidos) return; // R34: el botón ya está deshabilitado; doble candado.
     await confirmarAprobacion(
       incidentes.map((g) => ({ gestionId: g.gestionId, monto: montos[g.gestionId].trim() })),
+      // Feature 238/R16: sin nada que devolver, la clave NO viaja y el payload de la 158 queda
+      // exactamente como estaba.
+      retornables.length > 0 ? listaConfirmacionFisica() : undefined,
     );
   }
 
@@ -669,7 +868,7 @@ export function CierresAdminModule({
     if (result.status === "ok") {
       toast.success("Cierre rechazado correctamente.");
       cerrarDetalle();
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "validation_error") {
@@ -696,7 +895,7 @@ export function CierresAdminModule({
         "Cierre vencido destrabado; quedó como solicitado para aprobación.",
       );
       setDestrabar(null);
-      router.refresh();
+      refrescarListas();
       return;
     }
     if (result.status === "conflict") {
@@ -711,7 +910,7 @@ export function CierresAdminModule({
       toast.error("No se pudo destrabar el cierre. Intentá de nuevo.");
     }
     setDestrabar(null);
-    router.refresh();
+    refrescarListas();
   }
 
   const cierreAbierto = detalle?.cierre ?? null;
@@ -725,6 +924,15 @@ export function CierresAdminModule({
   // camino normal es que el mensajero lo solicite (→ `solicitado`); la excepción es la
   // válvula de escape del admin (R16). El histórico sigue siendo solo lectura.
   const esResoluble = cierreAbierto?.estado === "solicitado";
+  /**
+   * Pedido humano (2026-08-19): el desglose se corrige mientras el cierre está ABIERTO — la
+   * plata todavía no está aprobada—. NO es `esResoluble`: un `vencido` es un cierre abierto que
+   * el mensajero nunca solicitó, y su desglose es tan corregible como el de un `solicitado`.
+   * El servidor exige lo mismo; esto solo decide si se ofrece.
+   */
+  const ofrecerCorreccionPagos =
+    puedeCorregirPagos &&
+    (cierreAbierto?.estado === "solicitado" || cierreAbierto?.estado === "vencido");
 
   return (
     // `gap-4` y no `gap-8` (pedido humano del 2026-08-16): entre la barra de filtros y las
@@ -915,6 +1123,24 @@ export function CierresAdminModule({
               ganancia={detalle.ganancia}
               pagoTienda={detalle.pagoTienda}
               onVerEvidencia={setEvidencia}
+              // Ausente cuando no se puede corregir: la hoja vuelve a ser de solo lectura sin
+              // que la fila tenga que saber nada de roles ni de estados.
+              onCorregirPagos={ofrecerCorreccionPagos ? setCorrigiendo : undefined}
+            />
+
+            {/* Pedido humano (2026-08-19): el editor del desglose, el MISMO que usa el
+                mensajero. Tras corregir se RELEE el detalle del servidor —los totales del
+                cierre los recalculó él en la misma transacción— y se refrescan las listas,
+                porque el total del cierre también cambia de balde en la tabla. */}
+            <CorregirPagosDialog
+              gestion={corrigiendo}
+              onOpenChange={(open) => {
+                if (!open) setCorrigiendo(null);
+              }}
+              onCorregido={async () => {
+                if (cierreAbierto) await abrirDetalle(cierreAbierto.cierreId);
+                refrescarListas();
+              }}
             />
 
             {/* ---------- Feature 172 (T E.2, R19/R27/R28/R49): pago al mensajero ----------
@@ -930,7 +1156,7 @@ export function CierresAdminModule({
                 puedeAnular={puedeRegistrarPago}
                 onRegistrado={async () => {
                   await abrirDetalle(cierreAbierto.cierreId);
-                  router.refresh();
+                  refrescarListas();
                 }}
               />
             ) : null}
@@ -1005,6 +1231,51 @@ export function CierresAdminModule({
             </p>
           ) : null}
         </div>
+      </Modal>
+
+      {/* ---------- Ventana de CONFIRMACIÓN FÍSICA (feature 238/R7/R27/R33-R37) ----------
+          Va ANTES del sub-modal de montos en el archivo y en el flujo (R37): si falta un
+          paquete, no se llega a teclear dinero que se va a descartar.
+
+          `closeOnConfirm={false}`: la confirmación puede volver del servidor con errores por
+          fila, y cerrarla obligaría a re-escanear catorce guías.
+
+          `confirmDisabled` MÁS el texto de la barra de estado (R27): el motivo del bloqueo se
+          dice con palabras y nombra la salida —rechazar el cierre—, porque no hay ninguna otra
+          (D2, firmada: un solo paquete perdido devuelve el cierre entero, y es deliberado). */}
+      <Modal
+        open={confirmando}
+        onOpenChange={(next) => {
+          // R35: cerrar sin completar no envía nada y no persiste nada; el cierre sigue
+          // `solicitado`. Lo ya escaneado se conserva mientras el detalle siga abierto.
+          if (!next) {
+            setConfirmando(false);
+            setAvisoLectura(null);
+          }
+        }}
+        title={CONFIRMACION_TITULO}
+        description={CONFIRMACION_DETALLE}
+        confirmLabel={
+          incidentes.length > 0 ? CONFIRMACION_CONTINUAR : CONFIRMACION_APROBAR
+        }
+        confirmDisabled={faltanPorConfirmar > 0}
+        onConfirm={continuarTrasConfirmacion}
+        closeOnConfirm={false}
+      >
+        {/* R36: la tarjeta de escaneo —y con ella `QrScanner`— se MONTA con la ventana y se
+            desmonta al cerrarla; no se esconde por CSS. Así la cámara apagada no depende de lo
+            que la primitiva de diálogo haga con su contenido, y se puede afirmar con un test. */}
+        {confirmando ? (
+          <ConfirmacionFisicaCuerpo
+            retornables={retornables}
+            incidentes={incidentes}
+            confirmadas={confirmadas}
+            errores={confirmacionErrores}
+            aviso={avisoLectura}
+            ultimaGuiaConfirmada={ultimaGuiaConfirmada}
+            onLectura={leerGuia}
+          />
+        ) : null}
       </Modal>
 
       {/* ---------- Sub-modal de captura de indemnizaciones (feature 158/R19/R34) ----------
@@ -1145,7 +1416,7 @@ export function CierresAdminModule({
             // Refresco DIRIGIDO de los comprobantes de ESE cierre (R33) + la ruta, para que
             // el listado vuelva a traer el pendiente derivado por el servidor (R26).
             await mutate(clavePagosDeCierre(ofertaPago.cierreId));
-            router.refresh();
+            refrescarListas();
           }}
         />
       ) : null}

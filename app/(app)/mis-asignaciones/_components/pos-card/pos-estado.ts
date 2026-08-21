@@ -6,7 +6,13 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // no lo usa (su badge va sólido en la cabecera navy); vive aquí para que mosaico y
 // detalle pinten EXACTAMENTE el mismo lenguaje de color y no diverjan.
 
-/** Etiqueta de estado que las cards del mensajero saben pintar. */
+/**
+ * Etiqueta de estado que `estadoPorDefecto` DERIVA de los flags del módulo. No es el censo
+ * de todo lo que las cards saben pintar: el consumidor puede pasar su propio rótulo por la
+ * prop `estado` —«En ayuda» lo hace (feature 235/R37)— y esos no entran aquí, porque esta
+ * unión es lo que la función de abajo puede devolver y anunciarle un valor que nunca sale
+ * de ella sería falso. Por eso `estadoBadgeClass` recibe `string` y no esta unión.
+ */
 export type PosEstado = "En gestión" | "En detalle" | "En reparto" | "Por recoger";
 
 /**
@@ -23,6 +29,17 @@ const ESTADO_CLASSNAME: Record<string, string> = {
   "En detalle": "bg-navy text-white",
   "En reparto": "bg-warning text-navy",
   "Por recoger": "bg-secondary text-secondary-foreground",
+  // Feature 235 (R37) — chip de la card de «Con ayuda solicitada» (`RepartoModule`). Por qué
+  // `warning`: es la familia que este repo da a los estados de ESPERA CON ACCIÓN PENDIENTE, la
+  // misma que `EstatusBadge` asigna a `ayuda_tienda` y la del `text-warning-strong` del
+  // encabezado de esa sección; ni `danger` (no hay fallo) ni `info` (no es un aviso pasivo). Va
+  // SÓLIDO como sus cuatro vecinos —`warning` y `navy` son tokens fijos del `@theme`, o sea
+  // fijo-sobre-fijo y los 8.1:1 de arriba—, no en el tratamiento suave de `Badge variant="warning"`
+  // (`bg-warning-soft text-warning-strong`): misma familia, distinto tratamiento.
+  // Y por qué tiene entrada PROPIA aunque coincida con el fallback: el fallback significa «no sé
+  // qué es este rótulo», así que apoyar en él una decisión de color la vuelve indistinguible de un
+  // accidente y la movería EN SILENCIO el día que alguien retoque «En reparto».
+  "En ayuda": "bg-warning text-navy",
 };
 
 /** Clases del badge para `estado`; cae a las de "En reparto" si es un texto libre. */

@@ -2,6 +2,7 @@
 // mensajero. DTOs propios (no amplian OrdenDTO) para no alterar el contrato del
 // CRUD de ordenes (feature 6/7), patron lib/types/carga-masiva-resumen.ts.
 import { z } from "zod";
+import { diaRepartoSchema } from "@/lib/types/dia-reparto";
 
 // Feature 156 (R14): la entrada de "Generar guia" es un LOTE DE IDS y NADA MAS. El
 // contrato previo (`decisiones: [{ ordenId, mensajeroId }]`) se retiro: generar guia
@@ -28,6 +29,16 @@ export type GenerarGuiaActionInput = z.infer<typeof generarGuiaSchema>;
 export const asignarBodegaSchema = z.object({
   ordenIds: z.array(z.string().min(1)).min(1), // cota del lote: ver el bloque de arriba
   mensajeroId: z.string().min(1),
+  // Feature 246 (T3.1, R3/R4/R6): para que dia es el lote. UN token para TODO el lote (R3): una
+  // asignacion, un dia de reparto.
+  //
+  // `.default("hoy")` y NO obligatorio (R4): una peticion sin el campo se comporta EXACTAMENTE
+  // como antes de esta feature. Falla SEGURO. El precio se declara: un frontend que se olvide de
+  // mandarlo no rompe nada y nadie se entera, y por eso T4 exige un test de componente que afirme
+  // que el modal MANDA la opcion elegida.
+  //
+  // NO se acepta una fecha (R6): el cliente manda un token, la fecha la pone el servidor.
+  dia: diaRepartoSchema.default("hoy"),
 });
 export type AsignarBodegaActionInput = z.infer<typeof asignarBodegaSchema>;
 
@@ -120,9 +131,15 @@ export type ListarMensajerosParaAsignacionResult =
       status: "ok";
       mensajeros: MensajeroLiteDTO[];
       /**
-       * Ajuste maestro: ids de mensajeros GAM con un cierre abierto (`solicitado`/
-       * `vencido`). La UI los deshabilita en el selector para no asignarles nuevas
-       * órdenes. Opcional (aditivo): ausente = ninguno bloqueado.
+       * ⚠️ FEATURE 241 (2026-08-20) — YA NO SE EMITE NUNCA. Traía los ids de mensajeros GAM con
+       * un cierre abierto para que el selector los deshabilitara; el 2026-08-18 la pantalla dejó
+       * de mirarlos y ahora la acción deja de calcularlos, porque asignar no se bloquea por
+       * cierres (regla 2) y un dato así solo invita a volver a bloquear.
+       *
+       * Se conserva DECLARADO y opcional para no romper a `OrdenesListado.tsx`, que lo lee con
+       * `?? []`. Quitarlo del tipo toca la capa de UI y es de otra ficha. Nadie debe empezar a
+       * rellenarlo: si hace falta marcar a alguien en el selector, el motivo será otro
+       * (`conRepartoIds` / `conRecoleccionIds`, la regla de dedicación, que sí sigue viva).
        */
       bloqueadosIds?: string[];
       /**

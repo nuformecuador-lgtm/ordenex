@@ -1,8 +1,12 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
+  ActualizarPagosGestionInput,
+  ActualizarPagosGestionResult,
   Alcance,
   CierreAdminResumenRow,
+  GestionEditableDelCierre,
   GestionIncidenteDelCierre,
+  GestionRetornableDelCierre,
   ICierresAdminRepository,
   ResolverCierreInput,
   ResolverCierreResult,
@@ -31,6 +35,10 @@ import type {
 } from "@/lib/types/filtros-cierres";
 import { inicioDelDiaCREnUtc, inicioDelDiaSiguienteCREnUtc } from "@/lib/utils/fecha-cr";
 import { ESTADOS_COLA_CIERRE_DIA } from "@/lib/utils/colas-cierre";
+// Feature 238 (T1.3/T3.3): el PUNTO UNICO de «que paquete vuelve a bodega». Lo leen las DOS
+// consultas de esta feature —la del conjunto esperado y la de la marca— para que no puedan
+// divergir entre si ni de lo que la pantalla pinta.
+import { RESULTADOS_QUE_VUELVEN } from "@/lib/types/gestion-retorno";
 
 /** Valores de rol que este catálogo consulta. Salen del seed, no se inventan aquí. */
 const ROL_ADMIN_SATELITE = "adminSatelite";
@@ -38,9 +46,15 @@ const ROL_MENSAJERO = "mensajero";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
 import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
+import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
+import {
+  esGestionDeLaTienda,
+  ORIGENES_GESTION_DE_LA_TIENDA,
+} from "@/lib/utils/gestion-de-la-tienda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
+import { computeTotales } from "@/lib/utils/cierre-totales";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -54,6 +68,18 @@ const ESTADOS_RESOLUBLES: CierreEstado[] = ["solicitado"];
 // ABIERTO ABANDONADO (`vencido` o —modelo GLOBAL 109— `rechazado`) a `solicitado`, en nombre del
 // mensajero ausente que dejaria su bodega bloqueada; guardada por estado. Solo cambia `estado`.
 const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
+
+// Pedido humano (2026-08-19): cierre ABIERTO = la plata todavia no esta aprobada. Es el unico
+// momento en el que un admin/maestro puede CORREGIR el reparto por metodo que declaro el
+// mensajero. `aprobado` y `rechazado` quedan congelados: el primero porque ya se liquido, el
+// segundo porque su correccion es re-solicitarlo y volver a declararlo.
+//
+// NO es `ESTADOS_RESOLUBLES` (solo `solicitado`): un `vencido` es un cierre abierto que el
+// mensajero nunca llego a solicitar, y su desglose es tan corregible como el de un `solicitado`.
+const ESTADOS_ABIERTOS: CierreEstado[] = ["solicitado", "vencido"];
+
+// El unico resultado con desglose que corregir: los otros cuatro no cobran nada (R8/R25).
+const RESULTADO_ENTREGADA = "entregada" as const;
 const ESTADO_SOLICITADO: CierreEstado = "solicitado";
 
 /**
@@ -111,6 +137,7 @@ export const DETALLE_ADMIN_SELECT = {
   tarifaValorFleteGam: true,
   tarifaValorFleteDevuelto: true,
   tarifaValorFleteDevueltoGam: true,
+  tarifaFulfillment: true, // 2026-08-19: monto congelado que el detalle y las descargas muestran
   tarifaComisionCod: true,
   tarifaIvaFlete: true,
   tarifaIvaComisionCod: true,
@@ -120,6 +147,20 @@ export const DETALLE_ADMIN_SELECT = {
 // Feature 102/T2 (R1/R3): + la relacion `historialEstados` ACOTADA al origen SLA (feature 99),
 // para DERIVAR `esRechazoSla` por gestion sin columna/migracion nueva. `where` + `take: 1` la
 // dejan barata (a lo sumo una fila por gestion); el util `esRechazoSla` es el predicado.
+/**
+ * Las familias de historial que ESTA proyeccion necesita leer, y las UNICAS. Fuera del `as const`
+ * del select a proposito: `as const` congelaria el array como `readonly`, y el filtro de Prisma
+ * pide uno mutable. Cada miembro alimenta una derivacion pura distinta sobre el MISMO array.
+ */
+const FAMILIAS_DERIVADAS_DEL_HISTORIAL: OrdenHistorialOrigenTipo[] = [
+  ORIGEN_TIPO_RECHAZO_SLA, // feature 102/R1: `esRechazoSla`
+  // Feature 237/R41 + 240/R43: `desdeAyudaTienda`. Paso de UN valor a la LISTA, porque la tienda
+  // registra gestiones por dos caminos (la pestaña de ayuda y el rechazo manual de una devolucion
+  // anclada). Se expande aqui y no se cita el valor suelto: el dia que la lista crezca, esta
+  // proyeccion se entera sola.
+  ...ORIGENES_GESTION_DE_LA_TIENDA,
+];
+
 export const GESTION_ADMIN_SELECT = {
   id: true,
   ordenId: true,
@@ -139,9 +180,24 @@ export const GESTION_ADMIN_SELECT = {
   // fallback al par escalar: una proyeccion que lo olvide da CERO, no un total plausible.
   // `orderBy` sobre el enum nativo = orden de declaracion (efectivo, SINPE, transferencia).
   pagos: { select: { metodo: true, monto: true }, orderBy: { metodo: "asc" } },
+  // Feature 237 (D6/R41) — el `where` pasa de UNA igualdad a un `in` de DOS familias, y con eso
+  // esta MISMA lectura alimenta AHORA DOS derivaciones (`esRechazoSla` y `desdeAyudaTienda`).
+  // ⭑ COSTE: **CERO consultas nuevas** en los dos detalles de admin — la relacion ya se pedia; lo
+  // unico que cambia es cuantas familias acepta su filtro. Se hizo asi, y no con una segunda
+  // lectura, precisamente porque esta es la pagina que mas filas trae.
+  //
+  // `take` = TANTAS COMO FAMILIAS FILTRADAS, y no `take: 1`: son familias distintas y una gestion
+  // podria, en teoria, tener fila de varias. Con un `take` corto una taparia a la otra segun el
+  // orden de lectura, que es la clase de fallo que se ve en produccion y nunca en un test.
+  //
+  // ⏳ 2026-08-20 (feature 240): aqui habia un `2` LITERAL, correcto mientras las familias fueran
+  // dos. Al entrar `rechazo_tienda` serian tres y el `2` habria empezado a truncar EN SILENCIO —el
+  // fallo exacto contra el que ese comentario avisaba—. Se ata al tamaño de la lista para que no
+  // vuelva a poder desincronizarse: quien añada una familia ya no tiene que acordarse de este
+  // numero.
   historialEstados: {
-    where: { origenTipo: ORIGEN_TIPO_RECHAZO_SLA }, // feature 102/R1: solo la fila del cron SLA
-    take: 1,
+    where: { origenTipo: { in: FAMILIAS_DERIVADAS_DEL_HISTORIAL } },
+    take: FAMILIAS_DERIVADAS_DEL_HISTORIAL.length,
     select: { origenTipo: true },
   },
 } as const;
@@ -172,6 +228,9 @@ function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
     comisionCod: t.comisionCod,
     ivaFlete: t.ivaFlete,
     ivaComisionCod: t.ivaComisionCod,
+    // Se lee de la COLUMNA, no de `tarifaDe`: esa reconstruye la `TarifaVigente` que consume la
+    // formula, y el fulfillment no es una entrada de la formula.
+    fulfillment: d.tarifaFulfillment === null ? null : d.tarifaFulfillment.toFixed(2),
   };
 }
 
@@ -273,8 +332,14 @@ export function toPendienteRowDesdeSnapshot(
     pagoMensajero: decimalToString(g.pagoMensajero),
     ingresoBodegaRechazo: decimalToString(g.ingresoBodegaRechazo),
     // Feature 102/R1/R9: `true` si la gestion tiene una transicion del cron SLA enlazada
-    // (`historialEstados` ya viene acotado a ese origen por `GESTION_ADMIN_SELECT`).
+    // (`historialEstados` ya viene acotado a esas familias por `GESTION_ADMIN_SELECT`).
     esRechazoSla: esRechazoSla(g.historialEstados),
+    // Feature 237 (D6/R41) + 240 (R43): y `true` si la registro LA TIENDA — por la pestaña de
+    // ayuda o rechazando a mano una devolucion anclada. Sale de
+    // LA MISMA lectura de historial que la linea de arriba: dos predicados PUROS sobre un solo
+    // array, ninguna consulta de mas. El detalle de admin lo lleva por la misma razon que el del
+    // mensajero: quien audita un cobro tiene que poder ver QUIEN lo decidio.
+    desdeAyudaTienda: esGestionDeLaTienda(g.historialEstados),
     // Feature 158/R9/R34: la causa del incidente, para que el admin sepa QUE paso antes de
     // decidir el monto de la indemnizacion. `null` en cualquier otro resultado.
     causaIncidente: g.causaIncidente,
@@ -347,6 +412,30 @@ export class IndemnizacionNoAplicableError extends Error {
   constructor(readonly cierreId: string) {
     super(`indemnizacion no aplicable a una gestion del cierre ${cierreId}`);
     this.name = "IndemnizacionNoAplicableError";
+  }
+}
+
+/**
+ * Feature 238 (T3.3, design §4.2, R18/R44) — la marca de confirmacion fisica apunta a una gestion
+ * que NO cumple la guardia `(id IN ids, cierreId, resultado IN RESULTADOS_QUE_VUELVEN)`: no
+ * existe, es de otro cierre, o su paquete no vuelve a bodega.
+ *
+ * Se LANZA para que la `$transaction` revierta TODO (R18): la aprobacion del cierre, los cinco
+ * feeds de dinero, la liberacion de `sin_gestionar`, la devolucion de las `rechazada` y el anclaje
+ * de la 239. Sin efectos parciales, y en particular sin un cierre aprobado cuyos paquetes nadie
+ * confirmo.
+ *
+ * Es un error de PROGRAMACION o de CARRERA, no un resultado de dominio: el servicio ya valido la
+ * cobertura EXACTA antes de llamar, asi que llegar aqui significa que el cierre cambio entre la
+ * lectura y la escritura.
+ *
+ * Mensaje SIN PII (R44, patron `IndemnizacionNoAplicableError`): solo el id del cierre — ni
+ * gestiones, ni guias, ni destinatarios, ni actores.
+ */
+export class ConfirmacionFisicaNoAplicableError extends Error {
+  constructor(readonly cierreId: string) {
+    super(`confirmacion fisica no aplicable a una gestion del cierre ${cierreId}`);
+    this.name = "ConfirmacionFisicaNoAplicableError";
   }
 }
 
@@ -683,6 +772,44 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     }));
   }
 
+  /**
+   * Feature 238 (T1.3, design §3.3, R2/R4/R6) — el CONJUNTO ESPERADO de la confirmacion fisica.
+   * Molde literal de `findGestionesIncidenteDelCierre`, con tres diferencias que importan:
+   *
+   *  - `resultado IN RESULTADOS_QUE_VUELVEN` en vez de `= 'incidente'`, y la lista sale del PUNTO
+   *    UNICO (`lib/types/gestion-retorno.ts`), no de un literal aqui. Que este WHERE, el de la
+   *    escritura de la marca y el de la pantalla lean la MISMA declaracion es lo que impide
+   *    exigir la confirmacion de una gestion que la escritura despues no encontraria.
+   *  - `anuladaAt: null` como DEFENSA EXPLICITA, no como filtro necesario: una gestion con
+   *    `cierre_id` poblado no puede anularse (el vinculo solo lo reciben gestiones vigentes,
+   *    `CierreDiaRepository` «PUNTO MONEY-CRITICAL» de la 67, y `deshacerGestion` exige
+   *    `cierre_id IS NULL`). Se escribe igual, por simetria con el bloque de anclaje de la 239.
+   *  - La proyeccion trae `orden.numGuia` para que R12 se pueda verificar en el servicio contra
+   *    la guia REAL del paquete, en la misma consulta y sin un N+1 por fila.
+   *
+   * El ALCANCE va en el WHERE, por la relacion al cierre (R6): nunca se filtra en memoria, y un
+   * cierre fuera de alcance devuelve `[]` sin distinguirse de uno inexistente.
+   */
+  async findGestionesRetornablesDelCierre(
+    cierreId: string,
+    alcance: Alcance,
+  ): Promise<GestionRetornableDelCierre[]> {
+    const rows = await this.prisma.gestionOrden.findMany({
+      where: {
+        cierreId,
+        resultado: { in: [...RESULTADOS_QUE_VUELVEN] },
+        anuladaAt: null,
+        cierre: alcanceWhere(alcance),
+      },
+      select: { id: true, resultado: true, orden: { select: { numGuia: true } } },
+    });
+    return rows.map((r) => ({
+      gestionId: r.id,
+      numGuia: r.orden.numGuia,
+      resultado: r.resultado,
+    }));
+  }
+
   /** R2/R4/R5/R8/R9: cierres del alcance, mas reciente primero, totales -> string. */
   async findCierresByAlcance(alcance: Alcance): Promise<CierreAdminResumenRow[]> {
     const rows = await this.prisma.cierreDia.findMany({
@@ -974,6 +1101,122 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * `rechazado` NO alimenta. La distincion count===0 (conflict vs fuera_de_alcance) queda
    * igual.
    */
+  /**
+   * Pedido humano (2026-08-19) — la gestion a corregir, con el alcance en el WHERE.
+   *
+   * `cierre: { is: {...} }` y no `cierreId` a secas: la guardia tiene que ser sobre el CIERRE
+   * (su destino), que es donde vive el alcance. Una gestion sin cierre no casa el `is` y sale
+   * `null`, que es justo lo que se quiere: esta correccion es la de un cierre.
+   */
+  async findGestionEditableEnCierre(
+    gestionId: string,
+    alcance: Alcance,
+  ): Promise<GestionEditableDelCierre | null> {
+    const fila = await this.prisma.gestionOrden.findFirst({
+      where: {
+        id: gestionId,
+        anuladaAt: null,
+        cierre: { is: alcanceWhere(alcance) },
+      },
+      select: {
+        id: true,
+        cierreId: true,
+        resultado: true,
+        montoRecibido: true,
+        cierre: { select: { estado: true } },
+        pagos: { select: { metodo: true, monto: true } },
+      },
+    });
+    if (!fila || fila.cierreId === null || fila.cierre === null) return null;
+    return {
+      gestionId: fila.id,
+      cierreId: fila.cierreId,
+      cierreEstado: fila.cierre.estado,
+      resultado: fila.resultado,
+      // Money-safe: STRING escala 2, nunca `Number`.
+      montoRecibido: fila.montoRecibido === null ? null : fila.montoRecibido.toFixed(2),
+      pagos: toLineasPago(fila.pagos),
+    };
+  }
+
+  async actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+  ): Promise<ActualizarPagosGestionResult> {
+    const { gestionId, alcance, editadoPor, lineas } = input;
+    const alcanceGuard = alcanceWhere(alcance);
+
+    return this.prisma.$transaction(async (tx) => {
+      // (1) Anti-TOCTOU: la MISMA condicion que dejo pasar la lectura, reevaluada al escribir.
+      // El sello del rastro ES la guardia — si no se sella, no se toca ni una linea.
+      const sello = await tx.gestionOrden.updateMany({
+        where: {
+          id: gestionId,
+          anuladaAt: null,
+          resultado: RESULTADO_ENTREGADA,
+          cierre: { is: { estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard } },
+        },
+        data: { pagosEditadosAt: new Date(), pagosEditadosPor: editadoPor },
+      });
+      if (sello.count !== 1) {
+        // No se distingue «se cerro entre medias» de «no es tuyo»: la lectura previa ya
+        // decidio eso con informacion fresca, y aqui cualquiera de los dos es lo mismo.
+        const existe = await tx.gestionOrden.count({ where: { id: gestionId } });
+        return { status: existe > 0 ? ("conflict" as const) : ("fuera_de_alcance" as const) };
+      }
+
+      // (2) El desglose es un CONJUNTO: se sustituye entero. Un `upsert` por metodo dejaria
+      // viva la linea del metodo que la correccion quita.
+      await tx.gestionOrdenPago.deleteMany({ where: { gestionId } });
+      if (lineas.length > 0) {
+        await tx.gestionOrdenPago.createMany({
+          data: lineas.map((l: ActualizarPagosGestionInput["lineas"][number]) => ({
+            gestionId,
+            metodo: l.metodo,
+            monto: new Prisma.Decimal(l.monto),
+          })),
+        });
+      }
+
+      // (3) Los totales del cierre, recalculados con la MISMA funcion que los congelo al
+      // solicitarlo, sobre las gestiones de ESE cierre. Recalcular (y no sumar un delta) es lo
+      // que garantiza que snapshot y lineas no puedan divergir.
+      //
+      // El conjunto es el mismo que vio `computeTotales` al crear el cierre: las gestiones
+      // vinculadas y no anuladas. (Anular exige `cierre_id IS NULL`, feature 67, asi que dentro
+      // de un cierre no hay anuladas; el filtro se escribe igual, por si esa regla cambia.)
+      const deLaGestion = await tx.gestionOrden.findUnique({
+        where: { id: gestionId },
+        select: { cierreId: true },
+      });
+      const cierreId = deLaGestion?.cierreId ?? null;
+      if (cierreId === null) throw new Error("gestion sin cierre tras el sello");
+
+      const gestiones = await tx.gestionOrden.findMany({
+        where: { cierreId, anuladaAt: null },
+        select: { resultado: true, pagos: { select: { metodo: true, monto: true } } },
+      });
+      const totales = computeTotales(
+        gestiones.map((g) => ({ resultado: g.resultado, pagos: toLineasPago(g.pagos) })),
+      );
+
+      // (4) El snapshot, con la MISMA guardia de estado y alcance. `total_general` va tambien:
+      // no puede cambiar —solo cambia de balde—, y escribirlo es lo que hace que un descuadre
+      // se vea como un fallo aqui en vez de como un numero raro tres pantallas mas alla.
+      const actualizados = await tx.cierreDia.updateMany({
+        where: { id: cierreId, estado: { in: ESTADOS_ABIERTOS }, ...alcanceGuard },
+        data: {
+          totalEfectivo: new Prisma.Decimal(totales.efectivo),
+          totalSimpe: new Prisma.Decimal(totales.simpe),
+          totalTransferencia: new Prisma.Decimal(totales.transferencia),
+          totalGeneral: new Prisma.Decimal(totales.general),
+        },
+      });
+      if (actualizados.count !== 1) throw new Error("cierre no actualizado");
+
+      return { status: "updated" as const, totales };
+    });
+  }
+
   async resolverCierre(input: ResolverCierreInput): Promise<ResolverCierreResult> {
     const {
       cierreId,
@@ -989,6 +1232,11 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // Se lee aqui, fuera de la tx, para que el bloque de abajo no vuelva a estrechar el tipo.
     const anclajeDevolucion =
       input.nuevoEstado === "aprobado" ? input.anclajeDevolucion : undefined;
+    // Feature 238 (T3.2/T3.3): igual que el anclaje, solo existe en la rama `aprobado`. Al
+    // rechazar queda `[]` y el bloque de abajo no corre — que es R24 sostenido por el tipo, no
+    // por un `if` que alguien pueda mover.
+    const confirmacionFisica =
+      input.nuevoEstado === "aprobado" ? input.confirmacionFisica : [];
     const alcanceGuard = alcanceWhere(alcance);
 
     const count = await this.prisma.$transaction(async (tx) => {
@@ -1144,6 +1392,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
                     estatusId: destinoEstatusId,
                     mensajeroAsignadoId: null, // R16: handoff limpio a la bodega
                     asignadoAt: null, // R16
+                    fechaReparto: null, // feature 246/R9/R10: acompana SIEMPRE a `asignado_at`
                     prioridad: true, // R17: reasignacion prioritaria (101/110)
                   },
                 });
@@ -1229,6 +1478,57 @@ export class CierresAdminRepository implements ICierresAdminRepository {
             }
           }
         }
+
+        // ------------------------------------------------------------------------------------
+        // Feature 238 (T3.3, design §4, R17-R23) — LA MARCA DE CONFIRMACION FISICA.
+        //
+        // BODEGA DECLARO TENER ESTOS PAQUETES DELANTE. La cobertura EXACTA —que lo confirmado sea
+        // igual al conjunto que vuelve, ni falta ni sobra— ya la verifico el SERVICIO antes de
+        // abrir esta transaccion (R14); aqui solo se persiste el hecho, en la MISMA tx que aprueba
+        // (R17), de modo que no pueda existir un cierre aprobado sin sus marcas ni marcas de un
+        // cierre que no se aprobo.
+        //
+        // VA AQUI, entre la devolucion de las `rechazada` (139) y el ANCLAJE (239), y no es
+        // estetico: se lee en el orden operativo —se confirma que el paquete esta, y a
+        // continuacion la devolucion se ancla y se vuelve visible para la tienda—. Ademas es
+        // MONEY-NEUTRAL (`data` con una sola clave) y los cinco feeds de dinero estan TODOS por
+        // delante, asi que no mueve ninguna asercion de orden de
+        // `cierres-admin-caja-cod.test.ts`. Un rojo alli significa que este bloque aterrizo mal:
+        // es regresion, no asercion a actualizar.
+        //
+        // UNA consulta, no N. A diferencia del bucle de indemnizaciones —que escribe un valor
+        // distinto por fila— aqui el valor es el MISMO para todas, asi que un solo `updateMany`
+        // hace el trabajo. El techo real medido es de 14 gestiones por cierre.
+        if (confirmacionFisica.length > 0) {
+          const ids = confirmacionFisica.map((c) => c.gestionId);
+          const aplicado = await tx.gestionOrden.updateMany({
+            where: {
+              id: { in: ids },
+              // `cierreId` y `resultado` son GUARDIA del WHERE, no filtro cosmetico: sin el
+              // primero, aprobar un cierre podria marcar gestiones de OTRO; sin el segundo,
+              // podria marcar un `incidente` —cuyo paquete no vuelve y por tanto nadie tuvo
+              // delante—. Las dos tienen su caso testigo.
+              cierreId,
+              resultado: { in: [...RESULTADOS_QUE_VUELVEN] },
+            },
+            // R19 — MONEY-NEUTRAL: el `data` lleva EXACTAMENTE esta clave y ninguna mas. Ningun
+            // feed lee esta columna (nace sin lectores) y ninguno lee `orden.estatus_id`, asi que
+            // no hay ruta por la que esto toque un importe.
+            data: { confirmadaFisicaAt: new Date() },
+          });
+          // R18 — FALLO CERRADO. Si alguna no caso la guardia, se lanza y la `$transaction`
+          // revierte TODO. Es el equivalente del `count !== 1` del bucle de indemnizaciones.
+          if (aplicado.count !== ids.length) {
+            throw new ConfirmacionFisicaNoAplicableError(cierreId);
+          }
+        }
+        // R22 — IDEMPOTENCIA POR CONSTRUCCION, sin una linea de codigo de idempotencia: este
+        // bloque vive dentro del `res.count === 1 && aprobado`, y el `updateMany` del cierre esta
+        // guardado por `estado IN ESTADOS_RESOLUBLES = ["solicitado"]`. Un cierre ya aprobado
+        // devuelve `count = 0` y la rama entera no se ejecuta. NO se anade `confirmadaFisicaAt:
+        // null` al WHERE: haria que un reintento legitimo tras un rollback lanzara por
+        // `count !== ids.length`.
+        // ------------------------------------------------------------------------------------
 
         // ------------------------------------------------------------------------------------
         // Feature 239 (T2.2, design §3, R4-R10) — EL ANCLAJE DE LA DEVOLUCION.
@@ -1351,7 +1651,13 @@ export class CierresAdminRepository implements ICierresAdminRepository {
    * SOLO cambia `estado` (money-safe, R16/R21: no toca snapshot ni `resuelto_por`/`resuelto_at`).
    * `count === 0` -> `conflict` (existe en alcance pero ya no es `vencido`) o `fuera_de_alcance`.
    * NO alimenta wallets ni corre en $transaction: no es una resolucion (no mueve dinero), solo
-   * reencamina el `vencido` al flujo normal de aprobacion. El desbloqueo ocurre al APROBAR (R18).
+   * reencamina el `vencido` al flujo normal de aprobacion.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20): decia «el desbloqueo ocurre al APROBAR (R18)» y hoy es al reves —
+   * esta valvula DESBLOQUEA EN EL ACTO, porque deja el cierre en `solicitado` y ese estado ya no
+   * bloquea la gestion. Va en la direccion de por que existe (111/R16: «evitar el bloqueo
+   * permanente del mensajero y su bodega»): el mensajero vuelve a trabajar y el dinero sigue
+   * esperando aprobacion, que es de quien depende.
    */
   async forzarSolicitudVencido(cierreId: string, alcance: Alcance): Promise<ResolverCierreResult> {
     const alcanceGuard = alcanceWhere(alcance);

@@ -343,3 +343,110 @@ describe("R6 — el cron SLA, el drawer y el lote ven EL MISMO numero", () => {
     expect(mapa.get("o5")).toBeUndefined(); // sin gestiones -> `?? 0`
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// FEATURE 237 (T2.2, R6/R7) — LA GESTION QUE REGISTRA LA TIENDA DESDE LA PESTAÑA DE AYUDA. [💰]
+//
+// Es la promesa central de la ficha: la tienda resuelve, y eso «cuenta como si lo hubiera hecho
+// el mensajero». Aqui se comprueba la mitad del INTENTO (la del dinero del cierre esta en
+// `tests/unit/repositories/gestion-desde-ayuda-cierre.test.ts`).
+//
+// Se monta sobre el MISMO evaluador semantico del predicado real, asi que lo que se afirma es el
+// criterio unico y no una copia suya: si alguien quitara `gestion_tienda_ayuda` de
+// `ORIGEN_TIPOS_VISITA_REAL` (mutacion T8.2), estos casos caen.
+// ---------------------------------------------------------------------------------------------
+
+/** Gestion registrada por LA TIENDA desde ayuda: misma forma, otra familia de historial. */
+function gestionDeLaTienda(
+  resultado: string,
+  cierreId: string | null,
+  cierreEstado: string | null = "aprobado",
+): FilaGestionFake {
+  return gestion(resultado, cierreId, cierreEstado, {
+    origenTiposHistorial: ["gestion_tienda_ayuda"],
+  });
+}
+
+describe("237/R6/R7 — la gestion de la tienda desde ayuda cuenta UN intento, y uno solo", () => {
+  it.each([
+    {
+      caso: "R6: una orden que paso por ayuda y resolvio LA TIENDA, con su cierre aprobado",
+      filas: [gestionDeLaTienda("rechazada", "c1")],
+      esperado: 1,
+    },
+    {
+      caso: "R6: lo mismo con `reprogramada` (los dos desenlaces que la ficha concede)",
+      filas: [gestionDeLaTienda("reprogramada", "c1")],
+      esperado: 1,
+    },
+    {
+      caso: "R7: DOS gestiones vigentes de la tienda en el MISMO cierre aprobado",
+      filas: [gestionDeLaTienda("reprogramada", "c1"), gestionDeLaTienda("rechazada", "c1")],
+      esperado: 1,
+    },
+    {
+      caso: "R7: una del MENSAJERO y otra de la TIENDA en el mismo cierre aprobado",
+      filas: [gestion("reprogramada", "c1"), gestionDeLaTienda("rechazada", "c1")],
+      esperado: 1,
+    },
+    {
+      caso: "R6: con el cierre en `solicitado` todavia no cuenta (el ancla es la APROBACION)",
+      filas: [gestionDeLaTienda("rechazada", "c1", "solicitado")],
+      esperado: 0,
+    },
+    {
+      caso: "R6: sin cierre (recien registrada) no cuenta: espera al cierre que la vincule",
+      filas: [gestionDeLaTienda("rechazada", null, null)],
+      esperado: 0,
+    },
+    {
+      caso: "R39: anulada -> deja de contar, venga de donde venga",
+      filas: [{ ...gestionDeLaTienda("rechazada", "c1"), anuladaAt: new Date("2026-07-19") }],
+      esperado: 0,
+    },
+  ])("$caso -> $esperado, identico en drawer, cron y lote", async ({ filas, esperado }) => {
+    const { service } = montar(filas);
+
+    const drawer = await service.obtenerHistorial(ORDEN, MAESTRO);
+    if (drawer.status !== "ok") throw new Error("esperaba ok");
+    const delCron = await service.contarIntentos(ORDEN);
+    const lote = await service.contarIntentosEnLote([ORDEN]);
+
+    expect(drawer.intentos).toBe(esperado);
+    expect(delCron).toBe(esperado);
+    expect(lote.get(ORDEN) ?? 0).toBe(esperado);
+    expect(new Set([drawer.intentos, delCron, lote.get(ORDEN) ?? 0]).size).toBe(1);
+  });
+
+  // R7, el caso que la ficha promete con estas palabras: «suma UN intento», no dos. Una orden en
+  // la que el mensajero pidio ayuda y la tienda la resolvio tiene UNA visita de calle, y esa
+  // visita se cuenta una vez. Si la solicitud de ayuda tambien contara (las dos familias de la
+  // 235 estan FUERA de la lista, 235/R11), el numero seria 2 y el cron SLA escalaria antes de
+  // tiempo, cobrando el `cobroRechazado` (56) a la tienda por adelantado.
+  it("R7: pedir ayuda + resolver la tienda = 1 intento, no 2 (la solicitud no cuenta)", async () => {
+    // La MISMA gestion, con las tres familias de la ayuda en su historial: la ida y la vuelta que
+    // la orden fue acumulando, mas la del desenlace. Solo la tercera es visita real.
+    const { service } = montar([
+      gestion("rechazada", "c1", "aprobado", {
+        origenTiposHistorial: [
+          "solicitud_ayuda_tienda", // 235: pedir auxilio NO es un intento
+          "rescate_ayuda_tienda", // 235: retirarlo tampoco
+          "gestion_tienda_ayuda", // 237: el desenlace SI
+        ],
+      }),
+    ]);
+    expect(await service.contarIntentos(ORDEN)).toBe(1);
+  });
+
+  it("R6: sin la familia del desenlace, la MISMA gestion no contaria (la lista es lo que decide)", async () => {
+    // El contraste que hace que el caso de arriba diga algo: una gestion identica cuyo historial
+    // solo tiene las dos familias de la 235 NO cuenta. Es decir, lo que suma el intento es
+    // exactamente `gestion_tienda_ayuda` estando en `ORIGEN_TIPOS_VISITA_REAL`, y nada mas.
+    const { service } = montar([
+      gestion("rechazada", "c1", "aprobado", {
+        origenTiposHistorial: ["solicitud_ayuda_tienda", "rescate_ayuda_tienda"],
+      }),
+    ]);
+    expect(await service.contarIntentos(ORDEN)).toBe(0);
+  });
+});

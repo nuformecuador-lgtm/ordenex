@@ -266,6 +266,49 @@ describe("R18 — colapso de rachas del mismo hito (G9)", () => {
       "en_reparto",
     ]);
   });
+
+  // -----------------------------------------------------------------------------------------
+  // FEATURE 235 (T1.4, R38) — el ciclo de AYUDA A LA TIENDA es INVISIBLE para el destinatario.
+  //
+  // P3 se firmo el 2026-08-19: `ayuda_tienda` comparte hito con `en_reparto`, porque para el
+  // cliente final no ha cambiado nada — el paquete sigue con el mensajero — y quien resuelve la
+  // incidencia es asunto interno. Este caso es lo que convierte esa firma en un hecho comprobable:
+  // el colapso de rachas hace que las TRES transiciones se vean como UNA sola entrada.
+  //
+  // Va aqui, junto al caso hermano de la reprogramada, a proposito: los dos son el mismo mecanismo
+  // y sus resultados son DISTINTOS (uno colapsa, el otro no). Leerlos juntos es lo que explica por
+  // que.
+  // -----------------------------------------------------------------------------------------
+  it("235/R38: `en_reparto -> ayuda_tienda -> en_reparto` produce UNA sola entrada «En reparto»", () => {
+    return (async () => {
+      const { service } = build(ORDEN_VIVA, [
+        transicion("2026-08-10T14:00:00.000Z", "en_reparto"),
+        transicion("2026-08-10T16:00:00.000Z", "ayuda_tienda"), // el mensajero pide ayuda
+        transicion("2026-08-10T18:00:00.000Z", "en_reparto"), // la tienda o el mensajero la rescata
+      ]);
+      const resultado = await service.consultar(4321, "7766");
+      if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+
+      // UNA entrada, con la fecha de la PRIMERA de la racha: el destinatario no ve ningun tramite
+      // nuestro, ni al pedir ayuda ni al rescatar.
+      expect(resultado.envio.linea).toEqual([
+        { hito: "en_reparto", fecha: "2026-08-10T08:00-06:00" },
+      ]);
+    })();
+  });
+
+  it("235/R38: y el hito VIGENTE mientras la orden esta en ayuda sigue siendo «En reparto»", () => {
+    return (async () => {
+      const { service } = build(ORDEN_VIVA, [
+        transicion("2026-08-10T14:00:00.000Z", "en_reparto"),
+        transicion("2026-08-10T16:00:00.000Z", "ayuda_tienda"),
+      ]);
+      const resultado = await service.consultar(4321, "7766");
+      if (resultado.estado !== "ok") throw new Error("se esperaba ok");
+      // Sin este caso, el anterior no distinguiria «colapsa» de «la ultima no se pinta».
+      expect(resultado.envio.linea.map((e) => e.hito)).toEqual(["en_reparto"]);
+    })();
+  });
 });
 
 describe("R19 — dia y hora en el calendario del negocio", () => {

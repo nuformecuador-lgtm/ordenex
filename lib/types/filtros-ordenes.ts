@@ -34,6 +34,20 @@ export interface CuentaTiendaDTO extends OpcionCatalogo {
   activa: boolean;
 }
 
+/**
+ * La CADENA GEOGRAFICA sola (provincias + cantones + distritos), que es la parte del
+ * catalogo que se puede servir ACOTADA a una zona. Existe porque el adminSatelite recibe
+ * la geografia de SU zona y nada mas: sin este tipo, el repositorio tendria que devolver
+ * tres listas sueltas y el service volveria a componerlas en el mismo orden en dos sitios.
+ */
+export interface GeografiaFiltrosDTO {
+  provincias: OpcionCatalogo[];
+  /** `padreId` = provinciaId. */
+  cantones: OpcionConPadre[];
+  /** `padreId` = cantonId. */
+  distritos: OpcionConPadre[];
+}
+
 /** Las cinco colecciones del catalogo, cada una en orden determinista (`nombre asc`, R49). */
 export interface CatalogoFiltrosOrdenesDTO {
   zonas: OpcionCatalogo[];

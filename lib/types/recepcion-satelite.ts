@@ -1,13 +1,12 @@
 import { z } from "zod";
-import type {
-  CatalogoFiltrosSateliteDTO,
-  RecepcionSateliteDTO,
-} from "@/lib/interfaces/services/IRecepcionSateliteService";
+import { diaRepartoSchema } from "@/lib/types/dia-reparto";
+import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { MensajeroLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
 import { paginaInputSchema } from "@/lib/types/pagina-input";
+import { conRefinesDeCreacion, ordenFilterBase } from "@/lib/types/orden";
 import { ESTADOS_BODEGA_SATELITE } from "@/lib/utils/estados-bodega-satelite";
 
 // Feature 33 — validacion de borde (zod) de la recepcion por QR y tipos de
@@ -47,16 +46,46 @@ export type RecibirLoteActionInput = z.infer<typeof recibirLoteSchema>;
  *  - `z.enum(ESTADOS_BODEGA_SATELITE)` — el filtro de estado solo admite los cinco estados de
  *    ESTA pantalla. Sin el, un `estados: ["entregada"]` seria una entrada valida cuyo unico
  *    freno estaria en el servicio.
- *  - canton y distrito son NOMBRES, no ids: son exactamente los `value` que el catalogo de
- *    T K.2 ofrece, que es lo que el filtro de cliente comparaba.
+ *  - provincia, canton y distrito son IDs (pedido humano 2026-08-19): las mismas claves y los
+ *    mismos valores que la barra de `/ordenes`, tomados de `ordenFilterBase`. Antes eran
+ *    NOMBRES, derivados de las ordenes cargadas; ahora las opciones salen de la geografia de
+ *    la ZONA del actor, que es lo que el catalogo de `/ordenes` ya sabe entregarle acotado.
  */
-export const listarOrdenesBodegaPaginadoSchema = paginaInputSchema(recepcionSateliteConfig)
+/**
+ * Pedido humano (2026-08-19) — los filtros que esta barra COMPARTE con la de `/ordenes`:
+ * geografia (por ID), tiempo de creacion y buscador de texto libre. Se toman del schema de
+ * alla (`ordenFilterBase.pick`), no se reescriben: las claves, sus limites (`BUSQUEDA_MIN_CHARS`,
+ * `YYYY-MM-DD`, listas no vacias) y su forma son EXACTAMENTE los mismos, asi que las dos
+ * superficies no pueden aceptar cosas distintas por «el mismo filtro».
+ *
+ * `zona_id` y `tienda_id` NO se toman: la zona sale del actor —declararla como filtro seria
+ * ofrecer el alcance como entrada— y el adminSatelite no ve el directorio de cuentas tienda.
+ */
+const FILTROS_COMPARTIDOS = ordenFilterBase.pick({
+  provincia_id: true,
+  canton_id: true,
+  distrito_id: true,
+  created_preset: true,
+  created_desde: true,
+  created_hasta: true,
+  q: true,
+}).shape;
+
+/**
+ * Base SIN los `refine` del tiempo: `.omit()`/`.extend()` solo existen sobre un `ZodObject`,
+ * y de esta base cuelgan el schema del conjunto y el de la vigencia. Los dos `refine` se
+ * aplican al final, uno por schema (`conRefinesDeCreacion`).
+ */
+const listarOrdenesBodegaPaginadoBase = paginaInputSchema(recepcionSateliteConfig)
   .extend({
     estados: z.array(z.enum(ESTADOS_BODEGA_SATELITE)).optional(),
-    cantones: z.array(z.string().trim().min(1)).optional(),
-    distritos: z.array(z.string().trim().min(1)).optional(),
+    ...FILTROS_COMPARTIDOS,
   })
   .strict();
+
+export const listarOrdenesBodegaPaginadoSchema = conRefinesDeCreacion(
+  listarOrdenesBodegaPaginadoBase,
+);
 
 export type ListarOrdenesBodegaPaginadoActionInput = z.infer<
   typeof listarOrdenesBodegaPaginadoSchema
@@ -72,9 +101,13 @@ export type ListarOrdenesBodegaPaginadoActionInput = z.infer<
  * la pagina: la barrera de ALCANCE es de este listado y no debe depender de que el schema base
  * nunca se afloje. Un `zonaId` colado muere aqui, sin llegar al servicio (R4/R17).
  */
-export const listarOrdenesBodegaCompletoSchema = listarOrdenesBodegaPaginadoSchema
+const listarOrdenesBodegaCompletoBase = listarOrdenesBodegaPaginadoBase
   .omit({ page: true, pageSize: true })
   .strict();
+
+export const listarOrdenesBodegaCompletoSchema = conRefinesDeCreacion(
+  listarOrdenesBodegaCompletoBase,
+);
 
 export type ListarOrdenesBodegaCompletoActionInput = z.infer<
   typeof listarOrdenesBodegaCompletoSchema
@@ -90,14 +123,16 @@ export type ListarOrdenesBodegaCompletoActionInput = z.infer<
  * porque esta lista acaba en un `IN` de SQL y la propone el cliente (Q2, default 500).
  * Pasarse devuelve `validation_error` y la seleccion NO se toca (R22).
  */
-export const listarIdsVigentesBodegaSchema = listarOrdenesBodegaCompletoSchema
-  .extend({
-    ids: z
-      .array(z.string().uuid())
-      .min(1)
-      .max(recepcionSateliteConfig.MAX_IDS_VIGENCIA),
-  })
-  .strict();
+export const listarIdsVigentesBodegaSchema = conRefinesDeCreacion(
+  listarOrdenesBodegaCompletoBase
+    .extend({
+      ids: z
+        .array(z.string().uuid())
+        .min(1)
+        .max(recepcionSateliteConfig.MAX_IDS_VIGENCIA),
+    })
+    .strict(),
+);
 
 export type ListarIdsVigentesBodegaActionInput = z.infer<typeof listarIdsVigentesBodegaSchema>;
 
@@ -136,12 +171,6 @@ export type ListarIdsVigentesBodegaResult =
   | { status: "ok"; ids: string[] }
   | { status: "forbidden" }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "unauthenticated" };
-
-/** Feature 170 — FASE 2 (T K.2, R46): opciones de canton y distrito del conjunto del actor. */
-export type ObtenerCatalogoFiltrosSateliteResult =
-  | { status: "ok"; catalogo: CatalogoFiltrosSateliteDTO }
-  | { status: "forbidden" }
   | { status: "unauthenticated" };
 
 export type ListarRecepcionSateliteResult =
@@ -203,6 +232,12 @@ export type RecibirLoteResult =
 export const asignarSateliteSchema = z.object({
   ordenIds: z.array(z.string().uuid()).min(1),
   mensajeroId: z.string().uuid(),
+  // Feature 246 (T3.1, R2/R3/R4/R6, decision D4) — EL MISMO campo que en bodega central, con el
+  // MISMO enum y el MISMO default. D4 se firmo asi por una razon operativa: dejar el satelite
+  // fuera haria que la regla del sistema dependiera de DESDE QUE BODEGA te asignaron, y eso no se
+  // le puede explicar a quien opera. Que las dos superficies importen `diaRepartoSchema` de un
+  // unico archivo es lo que impide que un dia acepten vocabularios distintos.
+  dia: diaRepartoSchema.default("hoy"),
 });
 export type AsignarSateliteActionInput = z.infer<typeof asignarSateliteSchema>;
 

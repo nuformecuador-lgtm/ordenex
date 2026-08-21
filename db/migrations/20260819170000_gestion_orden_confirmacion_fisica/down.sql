@@ -1,0 +1,20 @@
+-- DOWN (feature 238, T3.1, R43) — suelta `gestion_orden.confirmada_fisica_at`.
+--
+-- ⚠️ PERDIDA DE DATO DECLARADA: se pierden todas las marcas de confirmacion fisica. Es exactamente
+-- el mismo trato que el down de la 158 da a los montos de indemnizacion y el de la 73 a las causas
+-- de devolucion: la columna nacio en esta migracion, asi que revertirla es soltarla.
+--
+-- POR QUE R43 SE CUMPLE («la reversion deja la base en un estado que el codigo anterior puede
+-- leer»): el codigo anterior a esta feature NUNCA leyo esta columna —nace sin lectores, y hay una
+-- guardia que lo mantiene asi—, de modo que la base revertida es EXACTAMENTE la que ese codigo
+-- espera. No hay ningun `SELECT`, ningun `select` de Prisma y ninguna derivacion que se quede sin
+-- su dato.
+--
+-- Lo que SI se pierde con el rollback es el rastro auditable de que bodega declaro tener los
+-- paquetes de los cierres aprobados en la ventana revertida. Los cierres siguen aprobados y el
+-- dinero sigue movido: revertir esta migracion NO desaprueba nada. Lo unico que desaparece es la
+-- distincion entre «confirmado» y «aprobado antes de que esto existiera» (R20), que es la misma
+-- foto que tendria un cierre anterior al despliegue.
+--
+-- `IF EXISTS` para que el rollback sea idempotente (se puede correr dos veces sin fallar).
+ALTER TABLE "gestion_orden" DROP COLUMN IF EXISTS "confirmada_fisica_at";

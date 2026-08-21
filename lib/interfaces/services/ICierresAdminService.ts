@@ -6,6 +6,7 @@ import type {
   FiltrosDescargaGestiones,
 } from "@/lib/types/filtros-cierres";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
+import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
@@ -222,6 +223,19 @@ export interface IndemnizacionCapturadaInput {
   monto: string;
 }
 
+/**
+ * Feature 238 (T2.2, R7/R12) — UNA gestion que bodega declara tener DELANTE, ya validada en el
+ * borde (uuid + entero positivo).
+ *
+ * `numGuia` es lo que se LEYO —camara o teclado, el medio no se registra (D7)— y el servicio lo
+ * contrasta con la guia REAL de la orden de esa gestion. Sin ese contraste, un fallo de mapeo del
+ * cliente confirmaria el paquete equivocado y nadie se enteraria: el conteo cuadraria igual.
+ */
+export interface ConfirmacionFisicaInput {
+  gestionId: string;
+  numGuia: number;
+}
+
 // R10/R12-R14: aprobar un cierre `solicitado` del alcance.
 // Feature 158 (R19/R20/R21): + `validation_error` cuando los montos de indemnizacion no cubren
 // EXACTAMENTE las gestiones `incidente` del cierre (falta alguna, sobra alguna, o alguna no es
@@ -267,6 +281,27 @@ export type ForzarSolicitudVencidoServiceResult =
   | { status: "forbidden" }
   | { status: "no_encontrada" }
   | { status: "conflict" };
+
+/**
+ * Pedido humano (2026-08-19) — desenlaces de la CORRECCIÓN del desglose de pago de una gestión
+ * desde el detalle de un cierre abierto.
+ *
+ *  - `forbidden`: el rol no corrige desgloses. Son maestro y admin, y NADIE más — ni siquiera
+ *    el `adminSatelite`, que sí tiene alcance para VER los cierres de su bodega: reescribir lo
+ *    que un mensajero declaró haber cobrado no es lectura de su bodega, es tocar la caja.
+ *  - `no_encontrada`: la gestión no existe, no está en un cierre, o su cierre no es del alcance.
+ *    Los tres van juntos a propósito: distinguirlos revelaría cierres ajenos.
+ *  - `conflict`: el cierre dejó de estar ABIERTO (lo aprobaron o rechazaron mientras el diálogo
+ *    estaba abierto). La corrección NO se aplica; la pantalla recarga y enseña el estado nuevo.
+ *  - `validation_error`: la suma no cuadra con lo que el mensajero declaró, o la gestión no es
+ *    una entrega con cobro. Por campo, como el resto de este borde.
+ */
+export type ActualizarPagosGestionServiceResult =
+  | { status: "ok"; gestionId: string; totales: CierreTotales }
+  | { status: "forbidden" }
+  | { status: "no_encontrada" }
+  | { status: "conflict" }
+  | { status: "validation_error"; fieldErrors: Record<string, string[]> };
 
 export interface ICierresAdminService {
   /**
@@ -379,11 +414,33 @@ export interface ICierresAdminService {
    * tocar el repo; con la cobertura correcta, la escritura de los montos y la emision del
    * egreso ocurren en la MISMA transaccion que la aprobacion. Por defecto `[]`, que es el
    * camino RETROCOMPATIBLE de un cierre sin incidentes (R36).
+   *
+   * Feature 238 (R7-R16): `confirmacionFisica` trae UNA entrada por gestion del cierre cuyo
+   * PAQUETE vuelve a bodega (`devuelta`, `rechazada`, `reprogramada`). El service exige
+   * COBERTURA EXACTA contra las gestiones reales —ni falta ni sobra— ANTES de las
+   * indemnizaciones y ANTES de tocar el repo (R14): si falta un paquete no tiene sentido validar
+   * montos que se van a descartar. Con la cobertura correcta, la marca por gestion se escribe
+   * DENTRO de la misma transaccion que aprueba (R17). Por defecto `[]`, que es el camino
+   * INTACTO de un cierre sin nada que devolver (R16) — 3 de cada 12 cierres medidos.
    */
+  /**
+   * Pedido humano (2026-08-19) — corrige el reparto por método de UNA gestión de un cierre
+   * ABIERTO. Solo maestro/admin.
+   *
+   * Lo que NO puede hacer, y es la mitad del contrato: mover el total. La suma de las líneas
+   * tiene que ser EXACTAMENTE `gestion_orden.monto_recibido`, comparada en `Prisma.Decimal`
+   * contra el valor de la base —nunca contra un total que venga del cliente—. El dinero que el
+   * mensajero declaró sigue siendo el suyo; lo que cambia es en qué balde cae.
+   */
+  actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+    actor: Actor,
+  ): Promise<ActualizarPagosGestionServiceResult>;
   aprobarCierre(
     cierreId: string,
     actor: Actor,
     indemnizaciones?: ReadonlyArray<IndemnizacionCapturadaInput>,
+    confirmacionFisica?: ReadonlyArray<ConfirmacionFisicaInput>,
   ): Promise<AprobarCierreServiceResult>;
   /**
    * R11-R15: rechaza un cierre `solicitado` del alcance con motivo obligatorio
@@ -399,9 +456,13 @@ export interface ICierresAdminService {
    * Feature 111/R16/R17/R18 — VALVULA DE ESCAPE (emergencia): destraba un `vencido`
    * ABANDONADO de su alcance transicionandolo `vencido -> solicitado` en nombre del mensajero.
    * Acotada por rol+zona destino (mismo `resolveAlcance` que aprobar/rechazar) y guardada por
-   * estado en el repo (0 filas -> conflict). NO recalcula el snapshot (R21) y NO desbloquea
-   * (R18: el desbloqueo ocurre al aprobar el `solicitado` resultante, que registra
-   * `resuelto_por`/`resuelto_at`, R17). Fuera de alcance -> no_encontrada.
+   * estado en el repo (0 filas -> conflict). NO recalcula el snapshot (R21).
+   * Fuera de alcance -> no_encontrada.
+   *
+   * ⚠️ FEATURE 241 (2026-08-20): decia «y NO desbloquea (R18: el desbloqueo ocurre al aprobar el
+   * `solicitado` resultante…)». SI DESBLOQUEA, en el acto, porque `solicitado` dejo de bloquear la
+   * gestion. Lo que el `aprobar` posterior sigue haciendo —y que esta valvula no hace— es RESOLVER:
+   * registrar `resuelto_por`/`resuelto_at` (R17) y mover el dinero.
    */
   forzarSolicitudVencido(
     cierreId: string,

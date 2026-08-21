@@ -395,6 +395,11 @@ describe("/ordenes — 'Asignar mensajero' desde bodega solo lleva órdenes GAM 
       expect(asignarMock).toHaveBeenCalledWith({
         ordenIds: ["o-gam"],
         mensajeroId: "m1",
+        // Feature 246 (R1/R27): el modal manda SIEMPRE el día del lote, y sin tocar el
+        // selector ese día es «hoy». Este archivo prueba el filtro por zona GAM, no el día;
+        // el literal se conserva porque un `expect.objectContaining` dejaría de ver que el
+        // campo viaja, que es lo que la 246 necesita que nadie pueda perder en silencio.
+        dia: "hoy",
       }),
     );
     expect(asignarMock).toHaveBeenCalledTimes(1);
@@ -441,6 +446,11 @@ describe("/ordenes — 'Asignar mensajero' desde bodega solo lleva órdenes GAM 
       expect(asignarMock).toHaveBeenCalledWith({
         ordenIds: ["o-gam"],
         mensajeroId: "m1",
+        // Feature 246 (R1/R27): el modal manda SIEMPRE el día del lote, y sin tocar el
+        // selector ese día es «hoy». Este archivo prueba el filtro por zona GAM, no el día;
+        // el literal se conserva porque un `expect.objectContaining` dejaría de ver que el
+        // campo viaja, que es lo que la 246 necesita que nadie pueda perder en silencio.
+        dia: "hoy",
       }),
     );
     expect(asignarMock).toHaveBeenCalledTimes(1);

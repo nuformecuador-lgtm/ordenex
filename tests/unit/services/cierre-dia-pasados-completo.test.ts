@@ -125,6 +125,7 @@ function gestion(n: number): CierreGestionPendienteRow {
     pagoMensajero: null,
     ingresoBodegaRechazo: null,
     esRechazoSla: false,
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     causaIncidente: null,
     indemnizacion: null,
   });

@@ -20,6 +20,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ICierresAdminService } from "@/lib/interfaces/services/ICierresAdminService";
 import {
   cierreIdSchema,
+  actualizarPagosGestionSchema,
   aprobarCierreSchema,
   rechazarCierreSchema,
   forzarSolicitudVencidoSchema,
@@ -37,6 +38,7 @@ import {
   type AprobarCierreResult,
   type RechazarCierreResult,
   type ForzarSolicitudVencidoResult,
+  type ActualizarPagosGestionResult,
 } from "@/lib/types/cierres-admin";
 import { filtrosDescargaGestionesSchema } from "@/lib/types/filtros-cierres";
 import type { CatalogoFiltrosCierresDTO } from "@/lib/types/filtros-cierres";
@@ -306,7 +308,36 @@ export async function aprobarCierre(
     const service = deps.service ?? buildService();
     // Feature 158/R19: la lista viaja TAL CUAL (montos STRING, sin coercion a number). Ausente
     // en el request -> `[]` por el `.default([])` del schema -> camino de la 38 intacto (R36).
-    return service.aprobarCierre(data.cierreId, actor, data.indemnizaciones);
+    // Feature 238/R14/R15: la confirmacion fisica viaja IGUAL de tal cual — el borde valida la
+    // FORMA (uuid, entero positivo) y nada mas. Quien decide si cubre el conjunto esperado es el
+    // servicio, contra las gestiones reales del cierre y dentro del alcance del actor; una
+    // coercion aqui seria una segunda regla que puede divergir de aquella.
+    return service.aprobarCierre(
+      data.cierreId,
+      actor,
+      data.indemnizaciones,
+      data.confirmacionFisica,
+    );
+  });
+  return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
+}
+
+/**
+ * Pedido humano (2026-08-19) — corrige el desglose de pago de una gestion de un cierre ABIERTO.
+ * Mutacion interna -> Server Action (patron aprobar/rechazar). El borde resuelve el actor y
+ * valida la forma (`validation_error` de zod); el ROL, el ALCANCE, el estado del cierre y el
+ * cuadre de la suma los decide el service, que es quien puede mirar la base.
+ */
+export async function actualizarPagosGestion(
+  input: unknown,
+  deps: CierresAdminDeps = {},
+): Promise<ActualizarPagosGestionResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError();
+    const data = actualizarPagosGestionSchema.parse(input); // ZodError -> VALIDATION_ERROR
+    const service = deps.service ?? buildService();
+    return service.actualizarPagosGestion(data, actor);
   });
   return isAppErrorShape(r) ? toCierresAdminActionError(r) : r;
 }

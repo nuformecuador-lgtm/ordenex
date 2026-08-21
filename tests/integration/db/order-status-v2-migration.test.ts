@@ -106,7 +106,7 @@ describe("Feature 154 · SEED del catalogo — los dos values del flujo v2 (R1/R
     const previosVigentes = PREVIOS_18.filter((v) => v !== RETIRADO_155);
     expect(ORDER_STATUS_SEED.slice(0, previosVigentes.length)).toEqual(previosVigentes);
     // 20: la 157 apendio `recolectando` DESPUES de los dos de la 154.
-    expect(ORDER_STATUS_SEED).toHaveLength(21); // 2026-08-19 (239): +devolucion_por_confirmar
+    expect(ORDER_STATUS_SEED).toHaveLength(22); // 2026-08-19 (235): +ayuda_tienda
     expect(ORDER_STATUS_SEED as readonly string[]).not.toContain(RETIRADO_155);
   });
 });
@@ -150,6 +150,7 @@ describe("Feature 154 · UP — alta aditiva e idempotente en la tabla catalogo 
     const APENDIDOS_DESPUES = [
       "recolectando", // feature 157 (ampliacion)
       "devolucion_por_confirmar", // feature 239 (2026-08-19): el pre-estado de la devolucion
+      "ayuda_tienda", // feature 235 (2026-08-19): la solicitud de ayuda viva del mensajero
     ];
     expect([...dosVeces].filter((v) => v !== RETIRADO_155).sort()).toEqual(
       [...ORDER_STATUS_SEED]

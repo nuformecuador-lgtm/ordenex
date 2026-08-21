@@ -132,6 +132,7 @@ function makeGestion(
     ingresoBodegaRechazo: null, // feature 56
     tarifaFaltante: false, // feature 56/R23
     esRechazoSla: false, // feature 102
+    desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
     // Feature 158/R9/R19: campos POR RAMA del incidente; los casos del incidente los
     // sobreescriben.
     causaIncidente: null,
@@ -495,6 +496,7 @@ describe("CierresAdminModule", () => {
             comisionCod: "3.00",
             ivaFlete: "13.00",
             ivaComisionCod: "13.00",
+            fulfillment: "500.00",
           },
         },
       }),
@@ -791,6 +793,7 @@ describe("CierresAdminModule", () => {
         destinatario: "Cliente SLA",
         ingresoBodegaRechazo: "6000.00",
         esRechazoSla: true,
+        desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
       }),
       makeGestion({
         gestionId: "g-man",
@@ -799,6 +802,7 @@ describe("CierresAdminModule", () => {
         destinatario: "Cliente Manual",
         ingresoBodegaRechazo: "3200.00",
         esRechazoSla: false,
+        desdeAyudaTienda: false, // feature 237 (D6/R41): la registro el mensajero, no la tienda
       }),
     ];
     verDetalleMock.mockResolvedValue({

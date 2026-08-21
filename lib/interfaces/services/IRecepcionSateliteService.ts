@@ -1,7 +1,7 @@
+import type { CreatedPreset } from "@/lib/types/orden";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
-import type { OpcionFiltro } from "@/lib/utils/filtro-canton-distrito";
 
 // Feature 33 — contrato del servicio de la bodega satelite: listar "Mis
 // asignaciones" del adminSatelite (dos grupos: por recibir / recibidas) y recibir
@@ -93,15 +93,10 @@ export type ListarRecepcionSateliteServiceResult =
  * semantica: lista ausente o vacia = «todos», y los tres se cruzan en AND. Aqui NO hay —ni
  * puede haber— una clave de alcance (`zonaId`): la zona sale del actor, siempre.
  */
-export interface ListarOrdenesBodegaPaginadoInput {
+export interface ListarOrdenesBodegaPaginadoInput
+  extends ListarOrdenesBodegaCompletoInput {
   page: number;
   pageSize: number;
-  /** `estatus.value` elegidos; se intersecan con la lista blanca de los cinco (R44). */
-  estados?: string[];
-  /** Nombres de canton elegidos (los `value` que ofrece el catalogo de T K.2). */
-  cantones?: string[];
-  /** Nombres de distrito elegidos. Una orden sin distrito queda fuera bajo este filtro. */
-  distritos?: string[];
 }
 
 /**
@@ -121,10 +116,28 @@ export type ListarOrdenesBodegaPaginadoServiceResult =
 export interface ListarOrdenesBodegaCompletoInput {
   /** `estatus.value` elegidos; se intersecan con la lista blanca de los cinco (R4). */
   estados?: string[];
-  /** Nombres de canton elegidos; vacio/ausente = todos. */
-  cantones?: string[];
-  /** Nombres de distrito elegidos; una orden sin distrito queda fuera bajo este filtro. */
-  distritos?: string[];
+  /**
+   * Pedido humano (2026-08-19) — geografia, tiempo y buscador con las MISMAS claves y la
+   * MISMA semantica que el `filter` de `/ordenes`: esta pantalla monta aquella barra, sin la
+   * zona (sale del actor) ni la tienda (no ve el directorio de cuentas).
+   *
+   * Geografia por ID (antes eran nombres): las opciones salen de la geografia de la ZONA del
+   * actor. Lista ausente o vacia = todas; las tres se cruzan en AND.
+   */
+  provincia_id?: string[];
+  canton_id?: string[];
+  /** Con distritos elegidos, una orden SIN distrito queda fuera del conjunto. */
+  distrito_id?: string[];
+  /**
+   * Filtro de creacion: atajo de antiguedad O rango de fechas calendario, nunca los dos
+   * (el borde lo rechaza). El servicio los traduce a instantes con el huso de Costa Rica; el
+   * cliente no manda instantes jamas.
+   */
+  created_preset?: CreatedPreset;
+  created_desde?: string;
+  created_hasta?: string;
+  /** Termino del buscador, ya validado por el borde (minimo y maximo de `/ordenes`). */
+  q?: string;
 }
 
 /**
@@ -153,25 +166,6 @@ export interface ListarIdsVigentesBodegaInput extends ListarOrdenesBodegaComplet
  */
 export type ListarIdsVigentesBodegaServiceResult =
   | { status: "ok"; ids: string[] }
-  | { status: "forbidden" };
-
-/**
- * Feature 170 — FASE 2 (T K.2, R46) — opciones de los desplegables de canton y distrito,
- * derivadas del CONJUNTO del actor y no de la pagina visible.
- *
- * Es la misma forma que `construirFiltrosSatelite` produce hoy en el cliente —incluido el
- * `parentValue` que encadena distrito con su canton—, para que la pantalla solo cambie de
- * ORIGEN y no de contrato.
- */
-export interface CatalogoFiltrosSateliteDTO {
-  cantones: OpcionFiltro[];
-  /** `parentValue` = `value` del canton al que pertenece el distrito. */
-  distritos: (OpcionFiltro & { parentValue: string })[];
-}
-
-/** R44/R46: rol ajeno -> `forbidden` sin catalogo; sin zona -> catalogo vacio. */
-export type ObtenerCatalogoFiltrosSateliteServiceResult =
-  | { status: "ok"; catalogo: CatalogoFiltrosSateliteDTO }
   | { status: "forbidden" };
 
 // R11-R18: maquina de resultados de la recepcion por QR (design §2.3). Todos los
@@ -255,14 +249,6 @@ export interface IRecepcionSateliteService {
     input: ListarIdsVigentesBodegaInput,
     actor: Actor,
   ): Promise<ListarIdsVigentesBodegaServiceResult>;
-  /**
-   * Feature 170 — FASE 2 (T K.2, R44/R46): opciones de canton y distrito del CONJUNTO del
-   * actor, independientes del recorte de pagina. Mismo guard de rol y misma zona que
-   * `listar`; sin zona -> catalogo vacio.
-   */
-  obtenerCatalogoFiltros(
-    actor: Actor,
-  ): Promise<ObtenerCatalogoFiltrosSateliteServiceResult>;
   /**
    * R11-R18: recibe una orden por su `num_guia` (lo que codifica el QR:
    * `/paquete/<numGuia>`). Transiciona a en_bodega_satelite solo si sigue en

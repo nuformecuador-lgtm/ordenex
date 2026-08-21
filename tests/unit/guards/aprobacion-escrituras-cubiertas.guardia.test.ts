@@ -49,6 +49,9 @@ const SUITES_DE_LA_TRANSACCION = [
   "tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts",
   "tests/unit/repositories/cierres-admin-caja-cod.test.ts",
   "tests/unit/repositories/cierres-admin-indemnizacion.test.ts",
+  // Feature 238 (T3.7): la suite de la marca de confirmacion fisica EJECUTA esta transaccion, asi
+  // que entra en el censo del frente 2 como cualquier otra.
+  "tests/unit/repositories/cierres-admin-confirmacion-fisica.test.ts",
   "tests/integration/db/wallet-idempotencia.test.ts",
   "tests/integration/db/cierre-detail-congelado.test.ts",
 ] as const;
@@ -62,12 +65,24 @@ const ESCRITURAS_DE_LA_APROBACION = [
   {
     escritura: "tx.cierreDia.updateMany",
     que: "la transicion del propio cierre, guardada por estado resoluble + alcance",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-repository.test.ts",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-repository.test.ts"],
   },
   {
+    // Feature 238 (T3.7): esta escritura pasa a describir DOS bloques, con las DOS suites que los
+    // nombran. Cada uno tiene su guardia propia en el WHERE y cada uno escribe una columna
+    // distinta; comparten el delegado y nada mas. Una sola entrada aqui volveria a dejar media
+    // escritura sin dueno declarado, que es la forma exacta del fallo de agosto de 2026.
     escritura: "tx.gestionOrden.updateMany",
-    que: "feature 158: el monto de indemnizacion, guardado por (cierreId, resultado)",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-indemnizacion.test.ts",
+    que:
+      "DOS bloques comparten esta escritura: el monto de INDEMNIZACION (158), guardado por " +
+      "`(id, cierreId, resultado = incidente)` y escrito fila a fila; y la MARCA DE " +
+      "CONFIRMACION FISICA (238), guardada por `(id IN ids, cierreId, resultado IN " +
+      "retornables)` y escrita de una sola vez. Los conjuntos de gestiones que tocan son " +
+      "DISJUNTOS: un `incidente` no vuelve a bodega.",
+    cubiertaPor: [
+      "tests/unit/repositories/cierres-admin-indemnizacion.test.ts",
+      "tests/unit/repositories/cierres-admin-confirmacion-fisica.test.ts",
+    ],
   },
   {
     escritura: "tx.orden.updateMany",
@@ -75,12 +90,39 @@ const ESCRITURAS_DE_LA_APROBACION = [
       "TRES bloques comparten esta escritura: liberacion de `sin_gestionar` (109), devolucion " +
       "de `rechazada` (139) y ANCLAJE de la devolucion (239). Los tres rutean por ids y van " +
       "guardados por su estado de origen.",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
   },
   {
     escritura: "appendCambioEstado",
     que: "el historial de las tres transiciones de arriba, por el punto unico de escritura",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
+  },
+] as const;
+
+/**
+ * Escrituras del MISMO ARCHIVO que NO son de la transaccion de aprobacion, cada una con la suite
+ * que la nombra. El censo del frente 1 es por archivo —no sabe distinguir una transaccion de
+ * otra—, asi que sin esta lista una escritura ajena a la aprobacion solo tendria dos salidas:
+ * declararse como «de la aprobacion», que seria falso, o quedarse el arbol rojo.
+ *
+ * La EXIGENCIA es la misma y por eso van declaradas y no exentas: cada entrada nombra la suite
+ * que asierta sobre su `where` o su `data`. Lo que esta lista concede es el rotulo, no la
+ * cobertura; el fallo de agosto de 2026 fue una escritura que NADIE miraba, y eso lo sigue
+ * cerrando este archivo para todo lo que se escriba aqui dentro.
+ */
+const ESCRITURAS_FUERA_DE_LA_APROBACION = [
+  {
+    escritura: "tx.gestionOrdenPago.deleteMany",
+    que:
+      "correccion del desglose de pago (2026-08-19): borra las lineas VIGENTES de la gestion " +
+      "antes de reinsertarlas. Transaccion propia (`actualizarPagosGestion`), disparada desde " +
+      "el detalle de un cierre ABIERTO, no desde la resolucion.",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-corregir-pagos-where.test.ts"],
+  },
+  {
+    escritura: "tx.gestionOrdenPago.createMany",
+    que: "correccion del desglose de pago: las lineas NUEVAS, que sustituyen enteras a las anteriores",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-corregir-pagos-where.test.ts"],
   },
 ] as const;
 
@@ -88,15 +130,15 @@ const ESCRITURAS_DE_LA_APROBACION = [
 const ESCRITURAS_POR_REPO_INYECTADO = [
   {
     escritura: "this.walletMovimientoRepo.crearMovimientos",
-    cubiertaPor: "tests/integration/db/wallet-idempotencia.test.ts",
+    cubiertaPor: ["tests/integration/db/wallet-idempotencia.test.ts"],
   },
   {
     escritura: "this.walletTiendaMovimientoRepo.crearMovimientos",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-repository.test.ts",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-repository.test.ts"],
   },
   {
     escritura: "this.pagoMensajeroMovimientoRepo.crearMovimientos",
-    cubiertaPor: "tests/unit/repositories/cierres-admin-repository.test.ts",
+    cubiertaPor: ["tests/unit/repositories/cierres-admin-repository.test.ts"],
   },
 ] as const;
 
@@ -113,22 +155,55 @@ describe("239/R33 — el inventario de escrituras de la aprobacion esta CERRADO"
     // verde sin haber mirado el codigo. Se exige que encuentre las que sabemos que hay.
     expect(censadas.length).toBeGreaterThanOrEqual(3);
 
-    const declaradas = new Set<string>(ESCRITURAS_DE_LA_APROBACION.map((e) => e.escritura));
+    const declaradas = new Set<string>(
+      [...ESCRITURAS_DE_LA_APROBACION, ...ESCRITURAS_FUERA_DE_LA_APROBACION].map(
+        (e) => e.escritura,
+      ),
+    );
     const noDeclaradas = censadas.filter((e) => !declaradas.has(e));
     expect(
       noDeclaradas,
-      "escritura sobre `tx` sin entrada en ESCRITURAS_DE_LA_APROBACION: declarala con la suite " +
-        "que la nombra, o el fallo de agosto de 2026 se repite",
+      "escritura sobre `tx` sin entrada en ESCRITURAS_DE_LA_APROBACION ni en " +
+        "ESCRITURAS_FUERA_DE_LA_APROBACION: declarala con la suite que la nombra, o el fallo " +
+        "de agosto de 2026 se repite",
     ).toEqual([]);
   });
 
-  it("cada escritura declarada apunta a un archivo de test que EXISTE", () => {
-    for (const e of [...ESCRITURAS_DE_LA_APROBACION, ...ESCRITURAS_POR_REPO_INYECTADO]) {
-      expect(
-        fs.existsSync(path.join(REPO_ROOT, e.cubiertaPor)),
-        `${e.escritura} cita ${e.cubiertaPor}, que no existe`,
-      ).toBe(true);
+  it("cada escritura declarada apunta a archivos de test que EXISTEN", () => {
+    // Merge 238 <- dev (2026-08-19): se conserva lo mas fuerte de cada lado. La forma de LISTA
+    // viene de la 238 (una escritura puede estar nombrada por varias suites, y la lista vacia se
+    // detecta); las TRES listas vienen de `dev`, porque ESCRITURAS_FUERA_DE_LA_APROBACION es una
+    // lista declarada mas y sus suites citadas tienen que existir igual que las demas — dejarla
+    // fuera de este recorrido la convertiria en la unica declaracion que nadie comprueba.
+    for (const e of [
+      ...ESCRITURAS_DE_LA_APROBACION,
+      ...ESCRITURAS_FUERA_DE_LA_APROBACION,
+      ...ESCRITURAS_POR_REPO_INYECTADO,
+    ]) {
+      // Cada entrada cita AL MENOS una suite: una lista vacia seria una escritura declarada sin
+      // nadie que la mire, que es lo que esta guardia existe para impedir.
+      expect(e.cubiertaPor.length, `${e.escritura} no cita ninguna suite`).toBeGreaterThan(0);
+      for (const suite of e.cubiertaPor) {
+        expect(
+          fs.existsSync(path.join(REPO_ROOT, suite)),
+          `${e.escritura} cita ${suite}, que no existe`,
+        ).toBe(true);
+      }
     }
+  });
+
+  it("238/T3.7: la suite que NOMBRA la marca de confirmacion la afirma de verdad", () => {
+    // «Nombrar» = tener al menos una asercion sobre su `where` o su `data`, no simplemente
+    // atravesarla. Se comprueba que la suite citada mira las dos guardas y la clave escrita; sin
+    // esto, la entrada del inventario podria apuntar a un archivo que solo pasa por encima.
+    const suite = fs.readFileSync(
+      path.join(REPO_ROOT, "tests/unit/repositories/cierres-admin-confirmacion-fisica.test.ts"),
+      "utf8",
+    );
+    expect(suite).toContain("confirmadaFisicaAt");
+    expect(suite).toContain("ConfirmacionFisicaNoAplicableError");
+    expect(suite).toMatch(/TESTIGO del `cierreId`/);
+    expect(suite).toMatch(/TESTIGO del `resultado`/);
   });
 
   it("las escrituras por repositorio inyectado siguen invocandose en la transaccion", () => {

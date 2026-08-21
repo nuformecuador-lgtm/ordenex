@@ -1,0 +1,20 @@
+-- Monto FIJO de fulfillment de la tarifa, CONGELADO en el detalle del cierre.
+--
+-- POR QUE CONGELARLO Y NO LEERLO VIVO: `cierre_detail` existe para que un cierre solicitado
+-- ayer se lea manana igual que ayer (feature 69). El listado de `/ordenes` si lee el
+-- fulfillment vivo de la tarifa activa de la tienda, y ahi es correcto —habla del presente—;
+-- en un cierre no lo seria: la tarifa puede cambiar despues de solicitarlo y el mismo cierre
+-- mostraria dos numeros distintos en dos dias distintos.
+--
+-- NO ENTRA EN LA FORMULA. `derivarIngresoOrden` no lo suma, las wallets no lo mueven y el
+-- `total` del ingreso no lo incluye: se congela para MOSTRARLO en el detalle del cierre y en
+-- sus descargas. Si algun dia tiene que cobrarse, ese es otro cambio y pasa por la formula.
+--
+-- NULLABLE, y SIN BACKFILL a proposito: las filas anteriores a esta columna no tienen un valor
+-- correcto que inventar (la tarifa de entonces pudo cambiar desde que se congelaron), y un
+-- 0.00 mentiria diciendo "no se cobro fulfillment". NULL se ve como celda vacia, que es la
+-- lectura fiel: "este cierre no lo registro". Es el mismo criterio con el que las otras ocho
+-- columnas de tarifa quedan NULL cuando la tienda no tenia tarifa vigente al solicitar (R9).
+--
+-- Sin tablas nuevas => sin RLS nueva: la columna hereda las politicas de `cierre_detail`.
+ALTER TABLE "cierre_detail" ADD COLUMN "tarifa_fulfillment" DECIMAL(12,2);

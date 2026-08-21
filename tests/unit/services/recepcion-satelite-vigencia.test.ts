@@ -57,12 +57,8 @@ describe("RecepcionSateliteService.listarIdsVigentesBodega (feature 184, T A.3)"
 
     // Y al repositorio no le llega ningun recorte: la pregunta es sobre el conjunto.
     const vigencia = filtros.find((f) => f.metodo === "vigencia")!;
-    expect(Object.keys(vigencia.filtro).sort()).toEqual([
-      "cantonNombres",
-      "distritoNombres",
-      "estatusValues",
-      "zonaId",
-    ]);
+    // Las claves NO elegidas no viajan: el filtro que se pide es el que se aplica.
+    expect(Object.keys(vigencia.filtro).sort()).toEqual(["estatusValues", "zonaId"]);
   });
 
   it("una orden que salió del listado vuelve como NO vigente (R18)", async () => {

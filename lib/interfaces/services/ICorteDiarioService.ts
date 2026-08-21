@@ -17,7 +17,13 @@ export interface ICorteDiarioService {
   /**
    * R6-R11: ejecuta el corte diario. Idempotente (R9): una vez vinculadas las gestiones
    * al `vencido` (`cierre_id` deja de ser NULL) una segunda corrida no las ve pendientes.
-   * Omite al mensajero sin zona (P2). No conoce HTTP ni la fecha del cron.
+   * Omite al mensajero sin zona (P2). No conoce HTTP.
+   *
+   * FEATURE 246 (T2.1): `now` es el RELOJ INYECTABLE de la corrida. De el sale —una sola vez— el
+   * dia que la corrida CIERRA, que es lo que decide que ordenes estan reservadas para un dia que
+   * aun no ha llegado y por tanto no se barren (R11). Con default para que el route handler del
+   * cron siga llamando sin argumentos; los tests lo pasan siempre, porque esta ficha se prueba
+   * moviendo el reloj y no esperando a medianoche.
    */
-  ejecutarCorte(): Promise<CorteDiarioResult>;
+  ejecutarCorte(now?: Date): Promise<CorteDiarioResult>;
 }

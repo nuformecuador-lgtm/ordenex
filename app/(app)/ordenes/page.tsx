@@ -5,6 +5,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { obtenerCatalogoFiltrosOrdenes } from "@/lib/actions/filtros-ordenes";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
+import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 
 import { OrdenesModule } from "./_components/OrdenesModule";
 import { OrdenesListado } from "./_components/OrdenesListado";
@@ -94,6 +95,21 @@ export default async function OrdenesPage() {
   // transición, así que el interruptor no se le declara.
   const incluirFiltroReasignables = rol !== RolValue.adminTienda;
 
+  // Feature 246 (T4.2, R5/R29): las etiquetas del selector de día se resuelven AQUÍ, en el
+  // servidor, con el día de Costa Rica. No bajan como `Date` ni como instante: bajan como las dos
+  // fechas calendario ya decididas, `YYYY-MM-DD`. El navegador no vuelve a interpretar nada — un
+  // portátil con la hora corrida no puede etiquetar mal una opción.
+  //
+  // ⚠️ Esto se calcula UNA VEZ, al renderizar la página. Es el caso de la medianoche (decisión
+  // D6, `design.md` §4.4): una pestaña abierta desde ayer enseña las fechas de ayer, aunque el
+  // día al que va el lote lo decide el servidor al ENVIAR. Está medido (M1: la asignación más
+  // tardía de los últimos 30 días es a las 20:00) y el escape está diseñado y NO implementado a
+  // propósito. El porqué entero vive en `components/shared/SelectorDiaReparto.tsx`.
+  const fechasDiaReparto = {
+    hoy: fechaCalendarioCR(),
+    manana: mananaCalendarioCR(),
+  };
+
   return (
     <AppPage title="Órdenes" description="Listado y gestión de órdenes">
       {usaFiltroEstado ? (
@@ -108,6 +124,7 @@ export default async function OrdenesPage() {
           incluirFiltroTienda={incluirFiltroTienda}
           incluirFiltroReasignables={incluirFiltroReasignables}
           puedeReportarIncidente={puedeReportarIncidente}
+          fechasDiaReparto={fechasDiaReparto}
         />
       ) : (
         // adminSatelite / mensajero / sin sesión: listado plano previo, SIN

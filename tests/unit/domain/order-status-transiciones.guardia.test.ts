@@ -27,7 +27,7 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
     },
   );
 
-  it("el inventario de flujo tiene las 56 aristas y 54 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b + 239 #59/#60/#61 - #14)", () => {
+  it("el inventario de flujo tiene las 59 aristas y 57 pares unicos (A.3 + #43/#44 - #4/#6/#7c - #1/#2/#3/#7b + 149 #45-#47 + 158 #53 + 158 admin #48-#52/#54-#58 + 157 #45b/#46b + 239 #59/#60/#61 - #14 + 235 #62/#63/#64)", () => {
     expect(INVENTARIO_FLUJO).toHaveLength(RECUENTO_INVENTARIO.aristasFlujo);
     const pares = new Set(INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino}`));
     expect(pares.size).toBe(RECUENTO_INVENTARIO.paresUnicos);
@@ -39,6 +39,89 @@ describe("R8 — la guardia acepta TODAS las transiciones del inventario", () =>
       .sort();
     const enInventario = INVENTARIO_FLUJO.map((a) => `${a.origen}->${a.destino} (${a.via})`).sort();
     expect(enMapa).toEqual(enInventario);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// FEATURE 235 — el estatus de la AYUDA A LA TIENDA y sus tres aristas (R12).
+//
+// Lo que estos casos protegen no es que las tres existan (eso ya lo dice el inventario de arriba):
+// es que las SALIDAS de `ayuda_tienda` sean EXACTAMENTE dos. R12 lo pide con esas palabras —
+// «declarar como legales exactamente las transiciones que tengan productor, y NINGUNA sin
+// productor»— y el precedente de lo contrario esta escrito en el repo: la 154 declaro #43/#44 sin
+// productor y «costo el tren 154+155+156».
+// ---------------------------------------------------------------------------------------------
+describe("235+237 — el estatus de ayuda: sus CUATRO salidas, y ni una mas (235/R12, 237/R1)", () => {
+  it("235/R2: `en_reparto -> ayuda_tienda` es legal (#62, la solicitud del mensajero)", () => {
+    expect(() => assertTransicionValida("en_reparto", "ayuda_tienda")).not.toThrow();
+  });
+
+  it("235/R8: `ayuda_tienda -> en_reparto` es legal (#63, el rescate por cualquiera de los dos lados)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "en_reparto")).not.toThrow();
+  });
+
+  it("235/R26: `ayuda_tienda -> sin_gestionar` es legal (#64, el corte de la noche)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "sin_gestionar")).not.toThrow();
+  });
+
+  it("237/R1: `ayuda_tienda -> reprogramada` es legal (#65, la tienda reprograma desde ayuda)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "reprogramada")).not.toThrow();
+  });
+
+  it("237/R1: `ayuda_tienda -> rechazada` es legal (#66, la tienda rechaza desde ayuda)", () => {
+    expect(() => assertTransicionValida("ayuda_tienda", "rechazada")).not.toThrow();
+  });
+
+  it("235/R12 + 237/R1: las salidas de `ayuda_tienda` son EXACTAMENTE esas cuatro, enumeradas enteras", () => {
+    // Censo CERRADO sobre el mapa real. Una salida de mas aqui es una arista sin productor (el
+    // fallo de la 154); una de menos deja el estatus convertido en un POZO del que no se sale.
+    //
+    // ⏳ 2026-08-20 (feature 237): pasa de DOS a CUATRO. Las dos altas llegan CON su productor
+    // (`GestionDesdeAyudaService.gestionar` -> `GestionOrdenRepository.crearGestionDesdeAyuda`), y
+    // comparten `via` porque son el mismo acto con dos resultados.
+    const salidas = TRANSICIONES.ayuda_tienda.map((d) => `${d.to} (${d.via})`).sort();
+    expect(salidas).toEqual([
+      "en_reparto (rescate_ayuda_tienda)",
+      "rechazada (gestion_tienda_ayuda)",
+      "reprogramada (gestion_tienda_ayuda)",
+      "sin_gestionar (corte_sin_gestionar)",
+    ]);
+  });
+
+  it.each([
+    // ⏳ 2026-08-20 (feature 237): `reprogramada` y `rechazada` SALEN de esta lista — ya son
+    // legales, con productor, dos casos mas arriba. Las TRES que quedan siguen ilegales A
+    // PROPOSITO (237/R1): la tienda no puede declarar entregado un paquete que no vio, ni devolver
+    // por su cuenta lo que sigue en la moto, ni reportar un incidente que no presencio. Si alguna
+    // se vuelve legal sin traer su productor, este caso lo dice.
+    ["entregada"],
+    ["devolucion_por_confirmar"],
+    ["incidente"],
+    // Y las dos bodegas: no hay recuperacion manual desde aqui, el paquete esta en la moto.
+    ["en_bodega_central"],
+    ["en_bodega_satelite"],
+  ] as const)(
+    "235/R12 + 237/R1: `ayuda_tienda -> %s` sigue siendo ILEGAL (no tiene productor)",
+    (destino) => {
+      expect(() => assertTransicionValida("ayuda_tienda", destino)).toThrow(TransicionIlegalError);
+    },
+  );
+
+  it("235: `en_reparto` conserva sus SEIS salidas previas — pedir ayuda no sustituye a ninguna", () => {
+    const destinos = TRANSICIONES.en_reparto.map((d) => d.to).sort();
+    expect(destinos).toEqual([
+      "ayuda_tienda",
+      "devolucion_por_confirmar",
+      "entregada",
+      "incidente",
+      "rechazada",
+      "reprogramada",
+      "sin_gestionar",
+    ]);
+  });
+
+  it("235: no se puede NACER en el estatus de ayuda (no esta en ESTADOS_CREACION)", () => {
+    expect(() => assertTransicionValida(null, "ayuda_tienda")).toThrow(TransicionIlegalError);
   });
 });
 
@@ -373,8 +456,17 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // Feature 239 (2026-08-19): 54 -> 56 y 52 -> 54. Suma #59/#60/#61 (tres pares NUEVOS) y
     // RETIRA #14 (`en_reparto -> devuelta`, par unico). Es la primera feature de esta lista que
     // da de BAJA una arista de `gestion`.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(56); // +2: feature 157; +3 -1: feature 239
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(54); // +2: feature 157; +3 -1: feature 239
+    // Feature 235 (2026-08-19): 56 -> 59 y 54 -> 57. Suma #62/#63/#64 (tres pares NUEVOS) y NO
+    // retira ninguna: pedir ayuda no sustituye a ningun desenlace de `en_reparto`, lo anade.
+    // Feature 237 (2026-08-20): 59 -> 61 y 57 -> 59. Suma #65/#66 (`ayuda_tienda -> reprogramada`
+    // y `-> rechazada`, dos pares NUEVOS) y NO retira ninguna. Comparten `via` entre si, pero un
+    // par lo define origen -> destino, asi que cuentan como dos en las dos columnas.
+    // Feature 240 (2026-08-20): 61 -> 62 y 59 -> 59. Suma #67 (`devuelta -> rechazada` decidido por
+    // la tienda) y NO retira ninguna. ⚠️ Es la PRIMERA alta desde la 158 que NO sube los pares: ese
+    // par YA lo tenia #21 (el cron de plazo vencido), asi que #21/#67 son el TERCER duplicado
+    // historico del inventario y la diferencia `aristas - pares` pasa de 2 a 3.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(62); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(59); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +0: 240 (par repetido)
   });
 });
 
@@ -569,10 +661,13 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 158/PR1: 41/39/2 -> 42/40/2 con #53 (`incidente -> en_reparto`), par NUEVO.
   // Feature 158/PR2: 42/40/2 -> 52/50/2 con las diez del ADMIN, las diez pares NUEVOS.
   // Feature 239 (2026-08-19): 54/52/2 -> 56/54/2 con #59/#60/#61 (pares nuevos) menos #14.
-  it("los recuentos del inventario son 56 flujo / 54 pares / 2 creacion", () => {
+  // Feature 237 (2026-08-20): 59/57/2 -> 61/59/2 con #65/#66 (pares nuevos), sin bajas.
+  // Feature 240 (2026-08-20): 61/59/2 -> 62/59/2 con #67, que REPITE el par de #21 (`devuelta ->
+  // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
+  it("los recuentos del inventario son 62 flujo / 59 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 56, // feature 239
-      paresUnicos: 54, // feature 239
+      aristasFlujo: 62, // feature 240 (2026-08-20): 61 -> 62, una alta y ninguna baja
+      paresUnicos: 59, // feature 240: la alta REPITE el par de #21, asi que los pares no se mueven
       aristasCreacion: 2,
     });
   });
@@ -639,10 +734,20 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
     ).toThrow(TransicionIlegalError);
   });
 
-  it("las SIETE salidas de `devuelta` se conservan intactas (siguen teniendo productor)", () => {
+  it("las OCHO salidas de `devuelta`: las siete de la 239 intactas + la de la 240", () => {
     // `devuelta` pasa a significar "devolucion ANCLADA"; sus salidas son el camino de esas
-    // ordenes y no cambian. Si alguna cayera, una devolucion confirmada se quedaria sin salida.
-    expect(TRANSICIONES.devuelta).toHaveLength(7);
+    // ordenes. Si alguna cayera, una devolucion confirmada se quedaria sin salida.
+    //
+    // ⏳ 2026-08-20 (feature 240) — ESTE CASO SE LLAMABA «las SIETE salidas de `devuelta` se
+    // conservan intactas» y afirmaba `toHaveLength(7)`. Se actualiza A MANO, y su sentido no
+    // cambia: las SIETE de la 239 siguen aqui, una a una, y lo que se anade es la OCTAVA (#67, el
+    // rechazo manual de la tienda). El invariante que este caso protege son las siete de arriba;
+    // el recuento absoluto se mueve con cada alta declarada.
+    //
+    // ⚠️ ESTE LITERAL ES EL CONTRATO (R7): es el censo CERRADO de lo que se puede hacer con una
+    // devolucion anclada. Se actualiza a mano cuando alguien decide una alta, y JAMAS se sustituye
+    // por una derivacion de `TRANSICIONES.devuelta` — eso quedaria verde para siempre.
+    expect(TRANSICIONES.devuelta).toHaveLength(8);
     expect(TRANSICIONES.devuelta.map((d) => `${d.to}:${d.via}`).sort()).toEqual(
       [
         "en_bodega_central:liberacion_devuelta_sla",
@@ -652,8 +757,33 @@ describe("239/R29 — el pre-estado de la devolucion y la baja de `en_reparto ->
         "en_reparto:deshacer_gestion",
         "rechazada:escalado_devuelta_sla",
         "reprogramada:reprogramacion_tienda",
+        "rechazada:rechazo_tienda", // #67 (240): la tienda dueña decide, sin esperar al plazo
       ].sort(),
     );
+  });
+
+  it("240/R6/R7: `rechazo_tienda` produce UNA sola arista, y sale de `devuelta`", () => {
+    // El valor de enum y el grafo tienen que decir lo mismo. Si alguien declarara una segunda
+    // arista con este `via` —entregar desde `devuelta`, mandarla a bodega, devolverla otra vez—
+    // aqui se veria: R7 concede EXACTAMENTE una salida nueva y ninguna mas.
+    const conEstaVia = Object.entries(TRANSICIONES).flatMap(([origen, destinos]) =>
+      (destinos as readonly { to: string; via: string }[])
+        .filter((d) => d.via === "rechazo_tienda")
+        .map((d) => `${origen} -> ${d.to}`),
+    );
+    expect(conEstaVia).toEqual(["devuelta -> rechazada"]);
+  });
+
+  it("240/R26: el rechazo manual NO es el del cron — el par se comparte, la familia no", () => {
+    // Los dos llegan a `rechazada` desde `devuelta` y cobran lo mismo (D1), pero la familia es lo
+    // unico que distingue «lo decidio una persona» de «se vencio el plazo». Si alguien las
+    // fusionara, la pestaña «Rechazadas por plazo vencido» (102) —cuyo predicado ES
+    // `escalado_devuelta_sla`— listaria rechazos que no vencieron ningun plazo.
+    const aRechazada = TRANSICIONES.devuelta.filter((d) => d.to === "rechazada");
+    expect(aRechazada.map((d) => d.via).sort()).toEqual([
+      "escalado_devuelta_sla",
+      "rechazo_tienda",
+    ]);
   });
 });
 

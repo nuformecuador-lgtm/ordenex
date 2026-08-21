@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import type {
   CatalogoFiltrosCierresDTO,
@@ -11,6 +12,7 @@ import type {
   Alcance,
   CierreAdminResumenRow,
   GestionIncidenteDelCierre,
+  GestionRetornableDelCierre,
   ICierresAdminRepository,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
 import type { ILiquidacionPagoRepository } from "@/lib/interfaces/repositories/ILiquidacionPagoRepository";
@@ -18,12 +20,16 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreGrupos } from "@/lib/interfaces/services/ICierreDiaService";
+import type { ActualizarPagosGestionInput } from "@/lib/types/cierres-admin";
+import type { CierreEstado } from "@/lib/types/cierre";
 import type {
+  ActualizarPagosGestionServiceResult,
   AprobarCierreServiceResult,
   CierreAdminResumen,
   CierreDetalleAdminServiceResult,
   ForzarSolicitudVencidoServiceResult,
   ICierresAdminService,
+  ConfirmacionFisicaInput,
   IndemnizacionCapturadaInput,
   ListarCierresAdminServiceResult,
   ListarGestionesDescargaServiceResult,
@@ -54,18 +60,56 @@ const ROL_ADMIN_SATELITE = "adminSatelite";
 // Mensaje accionable cuando falta el motivo de rechazo (R11).
 const MSG_MOTIVO_REQUERIDO = "El motivo de rechazo es obligatorio.";
 
+// Pedido humano (2026-08-19) — estados del cierre en los que su desglose todavia se corrige.
+// Misma lista que la guardia del repositorio; aqui sirve para dar un `conflict` legible ANTES
+// de abrir la transaccion, no para sustituirla (la de verdad es la del WHERE).
+const ESTADOS_CIERRE_ABIERTO: CierreEstado[] = ["solicitado", "vencido"];
+
+// Mensajes de la correccion del desglose. Sin PII y sin nombrar al mensajero: dicen QUE esta
+// mal, que es lo unico que el admin necesita para arreglarlo.
+const MSG_PAGOS_SOLO_ENTREGA = "Solo una entrega tiene desglose de pago que corregir.";
+const MSG_PAGOS_SIN_COBRO = "Esta orden no tiene cobro asociado: no hay nada que repartir.";
+const msgDescuadre = (total: string) => `El desglose debe sumar exactamente ${total}.`;
+
 // Feature 158 (R19/R20/R21) — mensajes accionables de la captura de indemnizaciones. Texto
 // fijo i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla),
 // nunca al mensajero, al destinatario ni al monto.
-const MSG_INDEMNIZACION_FALTANTE = "Falta el monto de indemnizacion de este incidente.";
+const MSG_INDEMNIZACION_FALTANTE = "Falta el monto de indemnización de este incidente.";
 const MSG_INDEMNIZACION_AJENA =
   "Este monto no corresponde a un incidente de este cierre.";
 const MSG_INDEMNIZACION_DUPLICADA = "Hay dos montos para el mismo incidente.";
 
+// Feature 238 (T2.2, design §3.2, R9-R13) — los SEIS desenlaces de la confirmacion fisica, uno
+// por correccion posible de quien esta en el mostrador con el paquete en la mano. Texto fijo
+// i18n-ready y SIN PII: nombran la gestion por su id (que el admin ya tiene en pantalla), nunca
+// al mensajero, al destinatario ni a la tienda (R44).
+//
+// CON TILDES, y los once mensajes de este bloque con ellas (decision del leader, 2026-08-19).
+// Estos textos NO son identificadores ni logs: salen por `fieldErrors` a la pantalla de bodega y
+// los lee una persona con el paquete en la mano. El 2026-08-07 este repo encontro SIETE etiquetas
+// mal escritas que doce mil tests daban por buenas —entre ellas «Ordenes creadas», la palabra
+// central del producto, en la primera pantalla del maestro—: ninguna suite miraba el texto que lee
+// un humano. La consistencia con los vecinos era el argumento para no divergir; la salida fue
+// arreglar los once, no heredar el defecto.
+const MSG_CONFIRMACION_FALTANTE = "Falta confirmar la recepción de este paquete.";
+const MSG_CONFIRMACION_AJENA = "Esta gestión no pertenece a lo que vuelve en este cierre.";
+const MSG_CONFIRMACION_DUPLICADA = "Este paquete se confirmó dos veces.";
+// R11: mensaje PROPIO, distinto del de gestion ajena. La diferencia no es cosmetica: «no
+// pertenece» invita a buscar el paquete, y aqui el paquete NO EXISTE (se perdio, se robo o se
+// dano) y lo que corresponde es indemnizarlo (158).
+const MSG_CONFIRMACION_INCIDENTE =
+  "Los incidentes no se confirman: el paquete no vuelve a bodega.";
+const MSG_CONFIRMACION_GUIA_DISTINTA = "La guía leída no es la de este paquete.";
+// R13: la orden llego a reparto sin guia. Medido el 2026-08-19: hoy no existe esa poblacion.
+// Se bloquea y se DICE, nunca se omite en silencio — omitirla dejaria un paquete aprobado sin
+// que nadie lo tuviera delante, que es justo lo que esta feature viene a impedir.
+const MSG_CONFIRMACION_SIN_GUIA =
+  "Este paquete no tiene número de guía y no se puede confirmar. Avisá a un administrador.";
+
 // Feature 239 (T2.1, R9): catalogo incompleto -> la aprobacion NO ocurre. Texto SIN PII y con el
 // mismo tono accionable que el resto (patron `MSG_CATALOGO` de la 36/67).
 const MSG_CATALOGO_ANCLAJE =
-  "No se puede aprobar: el catalogo de estados esta incompleto (seed pendiente).";
+  "No se puede aprobar: el catálogo de estados está incompleto (seed pendiente).";
 
 // Feature 109 (T3.1, R16): estados del catalogo que consume la LIBERACION de `sin_gestionar` al
 // aprobar (destinos de bodega por zona de la orden).
@@ -527,10 +571,27 @@ export class CierresAdminService implements ICierresAdminService {
     // incidentes se aprueba exactamente como hoy; uno CON incidentes y lista vacia cae en la
     // guardia de cobertura de abajo, asi que el default no abre ningun agujero.
     indemnizaciones: ReadonlyArray<IndemnizacionCapturadaInput> = [],
+    // Feature 238 (R7/R15/R16): cuarto parametro posicional con default, exactamente como la 158
+    // anadio el tercero. `[]` = «no se confirmo nada», que NO es lo mismo que «no habia nada que
+    // confirmar»: si el cierre tiene retornables, la guardia de abajo lo rechaza (R15).
+    confirmacionFisica: ReadonlyArray<ConfirmacionFisicaInput> = [],
   ): Promise<AprobarCierreServiceResult> {
     const scope = await this.resolveAlcance(actor);
     if (scope.status === "forbidden") return { status: "forbidden" }; // R1
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
+
+    // Feature 238 (T2.2, design §3.2, R7-R16) — COBERTURA EXACTA DE LOS PAQUETES QUE VUELVEN, y
+    // va ANTES que la de indemnizaciones POR LA MISMA RAZON por la que la pantalla pone la
+    // ventana de escaneo antes que la captura de montos (R37): si falta un paquete, no tiene
+    // sentido validar dinero que se va a descartar. Las dos guardias son independientes y las dos
+    // devuelven ANTES de tocar el repo (R14), asi que un envio incompleto no llega ni a abrir la
+    // transaccion de aprobacion.
+    const errorConfirmacion = await this.validarConfirmacionFisica(
+      cierreId,
+      scope.alcance,
+      confirmacionFisica,
+    );
+    if (errorConfirmacion !== null) return errorConfirmacion;
 
     // Feature 158 (R19/R20/R21/R25) — COBERTURA EXACTA, ANTES de tocar el repo. El conjunto de
     // `gestionId` recibidos debe ser IGUAL al de gestiones `incidente` del cierre, leidas
@@ -618,6 +679,11 @@ export class CierresAdminService implements ICierresAdminService {
       // Feature 158/R22: los montos ya con cobertura EXACTA verificada. El repo los escribe
       // GUARDADOS por `(cierreId, resultado)` y emite el egreso en la MISMA tx.
       indemnizaciones,
+      // Feature 238/R17: las gestiones cuyo paquete bodega declaro tener delante, ya con su
+      // cobertura EXACTA verificada arriba. Solo viajan los ids: la guia ya se contrasto (R12) y
+      // el repo no la persiste. OBLIGATORIO en esta rama —puede ser `[]`, pero no puede faltar—
+      // para que un olvido de cableado rompa el typecheck en vez de dejar la marca sin escribir.
+      confirmacionFisica: confirmacionFisica.map(({ gestionId }) => ({ gestionId })),
     });
     if (res === "updated") {
       // Feature 172 (T C.2, §8/R16): el pendiente se deriva DESPUES de que la aprobacion haya
@@ -698,6 +764,92 @@ export class CierresAdminService implements ICierresAdminService {
   }
 
   /**
+   * Feature 238 (T2.2, design §3.2, R7-R16) — COBERTURA EXACTA de la confirmacion fisica.
+   * ESPEJO de `validarCoberturaIndemnizaciones`, y por el mismo motivo: el borde (zod) no sabe
+   * que gestiones tiene ese cierre, asi que la cobertura solo se puede comprobar leyendo el
+   * cierre DENTRO del alcance del actor. Eso es logica de negocio y vive aqui (design §10-F).
+   *
+   * Devuelve `null` si el conjunto de `gestionId` recibidos es IGUAL al de gestiones del cierre
+   * que vuelven a bodega; si no, un `validation_error` con un error POR GESTION (R8/R9/R10), que
+   * es lo que permite a la pantalla pintarlo en SU fila y no como un bloqueo mudo.
+   *
+   * NO hay puerta de escape (D2, firmada el 2026-08-19): un solo paquete perdido devuelve el
+   * cierre entero. La salida cuando un paquete no llego YA EXISTE y es rechazar el cierre con
+   * motivo, que se lo devuelve al mensajero. Esa friccion es exactamente lo que hace que los
+   * paquetes aparezcan; ablandarla aqui la deshace el primer dia de prisa.
+   */
+  private async validarConfirmacionFisica(
+    cierreId: string,
+    alcance: Alcance,
+    confirmacionFisica: ReadonlyArray<ConfirmacionFisicaInput>,
+  ): Promise<{ status: "validation_error"; fieldErrors: Record<string, string[]> } | null> {
+    const esperadas = await this.repo.findGestionesRetornablesDelCierre(cierreId, alcance);
+    // R16: un cierre SIN nada que devolver se aprueba con el MISMO comportamiento y el MISMO
+    // payload que antes de esta feature — ni una consulta mas aguas abajo. Medido: es 3 de cada
+    // 12 cierres, un camino de igual rango, no un `else` de cortesia.
+    if (esperadas.length === 0 && confirmacionFisica.length === 0) return null;
+
+    const porId = new Map<string, GestionRetornableDelCierre>(
+      esperadas.map((g) => [g.gestionId, g]),
+    );
+    const fieldErrors: Record<string, string[]> = {};
+    const vistos = new Set<string>();
+
+    // La lectura de los incidentes es PEREZOSA y se hace COMO MUCHO UNA VEZ: solo hace falta
+    // para redactar el mensaje de una entrada que no esta en el conjunto esperado (R11), que es
+    // el camino de error. En el camino feliz —el que corre siempre en produccion— no se paga.
+    let idsIncidente: Set<string> | null = null;
+    const esIncidenteDeEsteCierre = async (gestionId: string): Promise<boolean> => {
+      idsIncidente ??= new Set(
+        (await this.repo.findGestionesIncidenteDelCierre(cierreId, alcance)).map(
+          (g) => g.gestionId,
+        ),
+      );
+      return idsIncidente.has(gestionId);
+    };
+
+    for (const { gestionId, numGuia } of confirmacionFisica) {
+      if (vistos.has(gestionId)) {
+        // R10: la misma gestion confirmada dos veces. Sin esto, dos entradas cubririan una sola
+        // gestion y el conteo cuadraria con un paquete menos delante.
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_DUPLICADA];
+        continue;
+      }
+      vistos.add(gestionId);
+      const esperada = porId.get(gestionId);
+      if (esperada === undefined) {
+        // R11 vs R10: distinguir el INCIDENTE de la gestion ajena. Los incidentes de ESTE cierre
+        // ya se leen para la cobertura de la 158, asi que no cuesta una consulta mas. Y la
+        // distincion importa: «no pertenece» invita a buscar el paquete; el incidente no hay
+        // donde buscarlo.
+        fieldErrors[gestionId] = [
+          (await esIncidenteDeEsteCierre(gestionId))
+            ? MSG_CONFIRMACION_INCIDENTE
+            : MSG_CONFIRMACION_AJENA,
+        ];
+        continue;
+      }
+      if (esperada.numGuia === null) {
+        // R13: la orden no tiene numero de guia. La gestion NO se omite del conjunto esperado
+        // (sale de la lectura como cualquier otra) y aqui se bloquea nombrando el motivo.
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_SIN_GUIA];
+      } else if (esperada.numGuia !== numGuia) {
+        // R12: se leyo una guia que no es la de este paquete. Es la diferencia entre «bodega
+        // tuvo ESTE paquete delante» y «bodega escaneo algo».
+        fieldErrors[gestionId] = [MSG_CONFIRMACION_GUIA_DISTINTA];
+      }
+    }
+
+    // R9: falta la confirmacion de alguna gestion del conjunto esperado -> error en ESA gestion.
+    for (const { gestionId } of esperadas) {
+      if (!vistos.has(gestionId)) fieldErrors[gestionId] = [MSG_CONFIRMACION_FALTANTE];
+    }
+
+    if (Object.keys(fieldErrors).length === 0) return null;
+    return { status: "validation_error", fieldErrors };
+  }
+
+  /**
    * Feature 158 (R19/R20/R21) — COBERTURA EXACTA de los montos de indemnizacion. Devuelve
    * `null` si el conjunto de `gestionId` recibidos es IGUAL al de gestiones `incidente` del
    * cierre; si no, un `validation_error` con un error POR GESTION (la UI los pinta por fila).
@@ -759,6 +911,94 @@ export class CierresAdminService implements ICierresAdminService {
     return { status: "validation_error", fieldErrors };
   }
 
+  /**
+   * Pedido humano (2026-08-19) — CORRECCIÓN del desglose de pago de una gestión de un cierre
+   * ABIERTO, desde el detalle del cierre. Solo maestro/admin.
+   *
+   * Las cuatro guardias, en este orden y todas ANTES de escribir:
+   *
+   *  1. **Rol.** `esAccesoTotal` y nada más. El `adminSatelite` tiene alcance para VER los
+   *     cierres de su bodega (`resolveAlcance` se lo da), y aquí se le niega A PROPÓSITO:
+   *     reescribir lo que un mensajero declaró haber cobrado no es leer su bodega. Por eso el
+   *     guard va antes de resolver el alcance y no se apoya en él.
+   *  2. **Alcance.** La gestión tiene que estar en un cierre del alcance del actor; el
+   *     repositorio lo impone en el WHERE. Fuera de alcance e inexistente son el mismo
+   *     desenlace: distinguirlos revelaría cierres ajenos.
+   *  3. **Estado.** El cierre tiene que estar ABIERTO. Aprobado ya se liquidó; rechazado se
+   *     corrige re-solicitándolo. Se comprueba aquí para dar un `conflict` legible, y OTRA VEZ
+   *     dentro de la transacción (anti-TOCTOU): entre este `if` y la escritura cabe una
+   *     aprobación de otro admin.
+   *  4. **La suma.** En `Prisma.Decimal`, contra el `monto_recibido` que está EN LA BASE. El
+   *     total no viaja en la petición justamente para que esta comparación no pueda hacerse
+   *     contra un número que eligió la pantalla.
+   */
+  async actualizarPagosGestion(
+    input: ActualizarPagosGestionInput,
+    actor: Actor,
+  ): Promise<ActualizarPagosGestionServiceResult> {
+    if (!esAccesoTotal(actor.rol)) return { status: "forbidden" }; // guardia 1
+
+    const scope = await this.resolveAlcance(actor);
+    // Acceso total siempre resuelve alcance; las otras dos ramas son inalcanzables tras el
+    // guard de rol y se tratan como «aquí no hay nada tuyo» en vez de asumirlo.
+    if (scope.status !== "ok") return { status: "forbidden" };
+
+    const gestion = await this.repo.findGestionEditableEnCierre(
+      input.gestionId,
+      scope.alcance,
+    );
+    if (gestion === null) return { status: "no_encontrada" }; // guardia 2
+
+    if (!ESTADOS_CIERRE_ABIERTO.includes(gestion.cierreEstado)) {
+      return { status: "conflict" }; // guardia 3
+    }
+
+    // Solo una ENTREGA reparte dinero; los otros cuatro resultados no cobran nada (R8/R25), así
+    // que no hay desglose que corregir y aceptar uno inventaría un cobro.
+    if (gestion.resultado !== "entregada") {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [MSG_PAGOS_SOLO_ENTREGA] },
+      };
+    }
+
+    // Una entrega SIN cobro (`monto_recibido` 0 o NULL) no tiene nada que repartir: cero
+    // colones no se dividen entre métodos, son CERO líneas (misma regla 4 del borde del
+    // mensajero, feature 212/R14).
+    const montoRecibido = new Prisma.Decimal(gestion.montoRecibido ?? 0);
+    if (montoRecibido.lte(0)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [MSG_PAGOS_SIN_COBRO] },
+      };
+    }
+
+    // Guardia 4: la suma, exacta. `Prisma.Decimal` y no `number`: 0.1 + 0.2 en coma flotante no
+    // es 0.3, y este número decide cuánto se le paga a una persona.
+    const suma = input.lineas.reduce(
+      (acc, l) => acc.plus(new Prisma.Decimal(l.monto)),
+      new Prisma.Decimal(0),
+    );
+    if (!suma.equals(montoRecibido)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { lineas: [msgDescuadre(montoRecibido.toFixed(2))] },
+      };
+    }
+
+    const res = await this.repo.actualizarPagosGestion({
+      gestionId: input.gestionId,
+      alcance: scope.alcance,
+      editadoPor: actor.usuarioId, // el rastro: quién reescribió lo que declaró el mensajero
+      lineas: input.lineas,
+    });
+    if (res.status === "updated") {
+      return { status: "ok", gestionId: input.gestionId, totales: res.totales };
+    }
+    if (res.status === "conflict") return { status: "conflict" };
+    return { status: "no_encontrada" };
+  }
+
   async rechazarCierre(
     cierreId: string,
     motivo: string,
@@ -799,8 +1039,12 @@ export class CierresAdminService implements ICierresAdminService {
     if (scope.status === "sinZona") return { status: "no_encontrada" }; // R13
 
     // R16: transicion guardada por estado ('vencido') + alcance en el repo. Money-safe (R21):
-    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`. R18: NO desbloquea; el
-    // desbloqueo ocurre al APROBAR el `solicitado` resultante (que registra la auditoria, R17).
+    // NO recalcula el snapshot ni toca `resuelto_por`/`resuelto_at`.
+    //
+    // ⚠️ FEATURE 241 (2026-08-20): aqui decia «R18: NO desbloquea; el desbloqueo ocurre al APROBAR
+    // el `solicitado` resultante». SI DESBLOQUEA, en el acto: `solicitado` salio de
+    // `ESTADOS_CIERRE_BLOQUEAN_GESTION`. Lo que sigue ocurriendo solo al aprobar es la resolucion
+    // del dinero y la auditoria (R17), que es otra cosa.
     const res = await this.repo.forzarSolicitudVencido(cierreId, scope.alcance);
     if (res === "updated") return { status: "ok", cierreId, estado: "solicitado" };
     if (res === "conflict") return { status: "conflict" }; // ya no es `vencido`

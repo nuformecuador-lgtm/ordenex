@@ -1,3 +1,4 @@
+import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
 // Feature 99 (design §6, R15/D3) — POLITICA de eventos publicos: los estados del ciclo de
@@ -30,6 +31,10 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // no rompe su codigo — pero SIGUE SIENDO un cambio de contrato observable, con el retraso medido
 // contra produccion (mediana 8,2 h · p90 22,1 h · max 48,2 h): hay que AVISAR A LOS INTEGRADORES
 // ANTES DE DESPLEGAR (T0.3 de la ficha; bloquea el despliegue, no el codigo).
+// FEATURE 235 (P4, FIRMADA por el humano el 2026-08-19) — `ayuda_tienda` NO entra aqui, y ademas
+// el RESCATE de vuelta a `en_reparto` tampoco emite: ver `ORIGENES_SIN_EVENTO_PUBLICO` mas abajo.
+// El vocabulario publico NO gana ningun valor por causa de esta feature (R39): un integrador no
+// sabria interpretar «el mensajero pidio ayuda a la tienda», que es un tramite interno nuestro.
 export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStatusValue>([
   "por_recolectar_en_tienda", // feature 155/R43: evento de NACIMIENTO de la rama (b)
   "en_ruta_bodega_central",
@@ -46,4 +51,50 @@ export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStat
 /** `true` si el valor de estado destino es un evento publico emitible (R15). */
 export function esEventoPublico(estado: string): boolean {
   return EVENTOS_PUBLICOS.has(estado as OrderStatusValue);
+}
+
+// FEATURE 235 (P4, FIRMADA EN CONTRA DE LA RECOMENDACION DEL SPEC el 2026-08-19) — la UNICA
+// excepcion a la politica de arriba, y esta escrita POR FAMILIA DE ORIGEN, jamas por estado.
+//
+// QUE SE FIRMO. El humano NO acepta que un integrador reciba `en_reparto` DOS VECES sobre la misma
+// orden. `ayuda_tienda` no entra en `EVENTOS_PUBLICOS` (la IDA no se emite), pero la VUELTA —el
+// rescate `ayuda_tienda -> en_reparto`— si emitiria, porque `en_reparto` SI esta en la politica.
+// Con esta lista, el ciclo de ayuda entero queda INVISIBLE desde fuera: ni la ida ni la vuelta.
+//
+// ⚠️ POR QUE POR FAMILIA Y NO POR ESTADO. Es el punto delicado entero, escrito aqui para que nadie
+// lo "simplifique": si la excepcion se implementara por ESTADO DESTINO (`en_reparto` deja de
+// emitir), se silenciarian los REINGRESOS LEGITIMOS —una `reprogramada` liberada por el cron
+// (`liberacion_reprogramada`), un `deshacer_gestion`, una recogida (`recoleccion`)— y ESO SI seria
+// una regresion, no un ajuste de contrato. La clave de idempotencia del emisor lleva el INSTANTE
+// precisamente para admitir el reingreso a un mismo estado (patron de la feature 47), asi que esos
+// reingresos funcionan y deben seguir funcionando.
+//
+// ⚠️ Y POR QUE UNA LISTA DE EXCLUSION AQUI ES SEGURA, al reves que en `ORIGEN_TIPOS_VISITA_REAL`:
+// alli una lista negra hace que una familia FUTURA empiece a CONTAR sola (dinero cobrado de mas);
+// aqui una familia futura empieza a EMITIR sola, que es el comportamiento por defecto de siempre y
+// la direccion segura del error (un evento de mas es ruido; un evento de menos es un integrador
+// que no se entera). Ampliar esta lista es reducir el contrato publico y tiene que costar una
+// decision explicita: por eso el test la fija por IGUALDAD y se pone rojo si alguien la ensancha.
+export const ORIGENES_SIN_EVENTO_PUBLICO = [
+  "rescate_ayuda_tienda", // feature 235: la VUELTA del ciclo de ayuda (P4)
+] as const satisfies readonly OrdenHistorialOrigenTipo[];
+
+const SET_ORIGENES_SIN_EVENTO: ReadonlySet<string> = new Set<string>(ORIGENES_SIN_EVENTO_PUBLICO);
+
+/** `true` si la FAMILIA de la transicion esta exceptuada de emitir evento publico (235/P4). */
+export function esFamiliaSinEventoPublico(origenTipo: string): boolean {
+  return SET_ORIGENES_SIN_EVENTO.has(origenTipo);
+}
+
+/**
+ * LA DECISION DE EMITIR, en un solo punto (R39). El emisor
+ * (`lib/services/jobs/webhook-estado-encolado.ts`) pregunta AQUI y no re-deriva nada: su firma, su
+ * contrato y el de `emitirBestEffort` quedan intactos — la excepcion vive en la POLITICA, no en el
+ * emisor.
+ *
+ * Se emite si y solo si: el estado destino es publico (R15) **y** la familia de origen no esta
+ * exceptuada (235/P4).
+ */
+export function esTransicionEmitible(estadoDestino: string, origenTipo: string): boolean {
+  return esEventoPublico(estadoDestino) && !esFamiliaSinEventoPublico(origenTipo);
 }
