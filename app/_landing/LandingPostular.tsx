@@ -67,7 +67,14 @@ const TARJETAS: readonly Tarjeta[] = [
  */
 export function LandingPostular() {
   return (
-    <section className="border-y border-asfalto-1 bg-kraft-inset">
+    <section
+      id="trabaja-con-nosotros"
+      // `scroll-mt-16` no es adorno: la nav es `sticky`, así que sin ese margen
+      // de scroll el ancla deja el título justo DEBAJO de la barra. Mismo apaño
+      // manual que `LandingPoliticas`; las secciones que usan la primitiva
+      // `Seccion` lo traen de serie.
+      className="scroll-mt-16 border-y border-asfalto-1 bg-kraft-inset"
+    >
       <div className="mx-auto max-w-[1200px] px-6 py-16 md:px-12 md:py-[88px]">
         <RotuloSeccion>Sumate a Ordenex</RotuloSeccion>
         <TituloSeccion>

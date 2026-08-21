@@ -8,7 +8,7 @@ import { render, screen } from "@testing-library/react";
 // (no hay fetch ni async). Se importa vía `await import("@/app/page")` para no
 // arrastrar el módulo a otros tests del mismo archivo.
 describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
-  it("R2: la barra superior tiene el logo, las anclas de sección y los enlaces «Trabajá con nosotros» → /postulacion e «Ingresar» → /login", async () => {
+  it("R2: la barra superior tiene el logo, las anclas de sección y el enlace «Ingresar» → /login", async () => {
     const { default: LandingPage } = await import("@/app/page");
     render(LandingPage());
 
@@ -21,19 +21,59 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
     );
     expect(wordmarks.length).toBeGreaterThanOrEqual(1);
 
-    const trabaja = screen.getAllByRole("link", { name: "Trabajá con nosotros" });
-    expect(trabaja.length).toBeGreaterThanOrEqual(1);
-    trabaja.forEach((el) => expect(el).toHaveAttribute("href", "/postulacion"));
-
     const ingresar = screen.getAllByRole("link", { name: /^Ingresar$/ });
     expect(ingresar.length).toBeGreaterThanOrEqual(1);
     ingresar.forEach((el) => expect(el).toHaveAttribute("href", "/login"));
 
-    // Las tres anclas de sección salen desde la barra.
-    for (const ancla of ["#servicios", "#como-funciona", "#politicas"]) {
+    // Las cuatro anclas de sección salen desde la barra.
+    for (const ancla of ["#servicios", "#como-funciona", "#politicas", "#trabaja-con-nosotros"]) {
       expect(screen.getAllByRole("link", { name: new RegExp(".") })
         .some((el) => el.getAttribute("href") === ancla)).toBe(true);
     }
+  });
+
+  it("R2b: «Trabajá con nosotros» de la nav baja a la sección de esta página, no a /postulacion", async () => {
+    const { default: LandingPage } = await import("@/app/page");
+    const { container } = render(LandingPage());
+
+    // Esa sección ofrece tres vías: vehículo y bodega abren un modal aquí mismo
+    // y solo «Quiero postularme» va a /postulacion. Enlazar la ruta desde la nav
+    // se saltaba las otras dos.
+    const nav = container.querySelector("nav")!;
+    const trabaja = [...nav.querySelectorAll<HTMLAnchorElement>("a")].find(
+      (el) => el.textContent?.trim() === "Trabajá con nosotros",
+    );
+    const href = trabaja?.getAttribute("href");
+
+    expect(href).toMatch(/^#/);
+    expect(href).not.toBe("/postulacion");
+    // Y el ancla aterriza en una sección real, con el margen de scroll que la
+    // deja bajo la barra pegajosa en vez de tapada por ella.
+    const destino = container.querySelector(href!);
+    expect(destino).not.toBeNull();
+    expect(destino!.classList.contains("scroll-mt-16")).toBe(true);
+  });
+
+  it("R2c: los enlaces de sección de la nav van en el mismo orden en que la página compone las secciones", async () => {
+    const { default: LandingPage } = await import("@/app/page");
+    const { container } = render(LandingPage());
+
+    const nav = container.querySelector("nav")!;
+    const anclasNav = [...nav.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].map(
+      (el) => el.getAttribute("href")!.slice(1),
+    );
+    // Guardia contra el verde vacío: si la nav se quedara sin anclas, comparar
+    // dos listas vacías pasaría sin comprobar nada.
+    expect(anclasNav.length).toBeGreaterThanOrEqual(4);
+
+    // El orden esperado NO se escribe a mano: se lee del DOM que `app/page.tsx`
+    // produce, en orden de documento, quedándose con los destinos que la nav
+    // enlaza. Si se reordena la nav sin reordenar la página (o al revés), rojo.
+    const ordenDeLaPagina = [...container.querySelectorAll<HTMLElement>("main [id]")]
+      .map((el) => el.id)
+      .filter((id) => anclasNav.includes(id));
+
+    expect(anclasNav).toEqual(ordenDeLaPagina);
   });
 
   it("R3: existen las secciones del home y el hero trae titular y cifras", async () => {
