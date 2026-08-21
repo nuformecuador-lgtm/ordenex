@@ -9,7 +9,74 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 DESPLEGADO A PRODUCCIÓN — 2026-08-20. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
+
+**Cuatro releases a producción en esta sesión, todas verificadas contra la base después de
+desplegar.** Ninguna ficha `in_progress`.
+
+| # | Qué | Release |
+| --- | --- | --- |
+| **240 + 246** | el rechazo manual deja de ser maqueta · elegir el día de la asignación | #414 |
+| **239** | «ver la app» hecha — la tarea que llevaba sin hacer con la ficha ya mergeada | — |
+| — | la nav de la landing baja a su sección y respeta el orden de la página | #417 |
+| — | botón «Volver al inicio» en login y postulación | #421 |
+| **252** | 🔴 **la postulación se perdía con documentos pesados** | #424 |
+| **253** | 🔴 **postular vehículo o bodega era una MAQUETA que decía «enviada»** | #430 |
+
+### 🔴 Los dos defectos que perdían datos de usuarios reales
+
+**252 — la postulación moría en silencio.** Medido contra producción mandando cuerpos crecientes:
+`4 MB → pasa`, `5 MB → 413`. Los archivos del humano pesaban 2,16 MB × 5 = **10,8 MB**. El
+formulario validaba **5 MB por documento** contra un límite de **5 MB para toda la petición**:
+admitía 25 MB y el transporte moría a los 5. **Y ese 413 no aparece en ningún log**, porque el
+rechazo ocurre antes de que la petición sea una invocación registrada — por eso era invisible por
+los dos lados. Arreglado reusando `comprimirImagen`, que **ya existía y usaban otras tres
+pantallas**: la postulación era la única superficie de subida que nunca la adoptó.
+**Confirmado en producción:** hay un alta de mensajero `pendiente` del 2026-08-21 03:33 UTC.
+
+**253 — la maqueta que mentía.** `PostularRecursoModal` validaba, pintaba «Postulación enviada» y
+**no enviaba nada**. Medido con `git log --follow`: **nació el 2026-08-16 y `prod` la contenía —
+cinco días en producción**. Quien postulara en esa ventana no recibió nunca una llamada, y **no hay
+forma de saber quiénes fueron**: no dejaron fila, ni log, ni correo.
+
+### 🛡️ El arnés cambió: `--rapido` pasa a ser el gate normal
+
+Medido: mover un enlace de la nav costaba **16.346 tests y 5–11 min**; lo relacionado eran **21 +
+las guardias, ~33 s**. Ahora:
+
+- **`--rapido` es el gate de un PR** (~80 s en la práctica).
+- **`./init.sh` completo** es obligatorio **antes de una release a `prod`** y **después de cada
+  merge a `dev`** — ahí es donde se caza un `dev` roto, que es el único agujero que el modo rápido
+  no puede ver por diseño (`--changed` compara *contra* `dev`).
+- **`--rapido` se niega solo** si el diff toca migraciones, `db/schema.prisma`, `lib/types/`,
+  config de build, nombres de dinero **o el propio `init.sh`**. Es un `fail`, no un aviso.
+
+Probado en los dos sentidos, que es donde mueren estos filtros. Y ya se ejerció de verdad: **se
+negó ante el backend de la 253** (toca `db/migrations` y `lib/types`).
+
+### ▶️ Qué queda, y una que necesita decisión HUMANA
+
+| # | Qué | Estado |
+| --- | --- | --- |
+| **251** | ⚠️ **la optimización de ruta NO corre en producción** | falta `GOOGLE_ROUTE_OPT_PROJECT_ID`. Degrada al cálculo local **en silencio**, y uno de los sitios donde salta es la pantalla del mensajero. **¿Debe configurarse o el fallback es lo querido? Es una pregunta para el humano, no un defecto confirmado** |
+| **247** | el doble cobro del flete de devolución | medido: `1 de 16`, ₡2.486 a NUFORM |
+| **248** | los errores de `/novedades` salen mudos | la feature 100 comparte el hueco |
+| **249** | el chequeo del `down.sql` **avisa pero no falla** | tres migraciones llevan sin él desde el 2026-08-14 |
+| **250** | el aviso dice «Devuelta» cuando la orden está en «Devolución por confirmar» | |
+| **254** | `db:rollback` revierte **por orden alfabético** | no alcanza a la 2.ª migración de una tanda, **y no lo dice** |
+| **220** | e2e | su premisa sigue podrida: 13 de 20 specs son `NOT EXECUTED` |
+
+### 🧾 El patrón de la sesión: los fallos MUDOS
+
+**252, 253, 248, 250 y 254 son la misma familia**: el sistema no falla, *aparenta*. Un acuse falso,
+un 413 sin log, un botón que no hace nada, un aviso que nombra el estado equivocado, un rollback
+que dice que revirtió. **Ninguno rompe un test.** Por eso la 253 no se dio por cerrada hasta que su
+guardia se demostró **roja en las dos formas de recaída** — y en una de ellas `eslint` da `0 errors`
+y sale con código 0: el linter no la caza.
+
+---
+
+## 🚀 Desplegado a producción — 2026-08-20
 
 **La pila entera de la ayuda a la tienda salió a producción.** Release
 [#414](https://github.com/nuformecuador-lgtm/ordenex/pull/414) (`dev` → `prod`, merge commit

@@ -3749,3 +3749,60 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - **Abierto y dicho:** T0.1, re-medir antes de desplegar. R44 está medido **por forma** con
   `enable_seqscan=off` sobre **141/67 filas**: **ninguna de las dos bases tiene volumen** para que el
   plan de hoy prediga el de mañana.
+
+---
+
+## 2026-08-21 · Feature 253 — postular vehículo o bodega deja de ser una maqueta
+
+**PR #429**, release **#430** · zona `fullstack` · complejidad media · `done`
+
+- 🔴 **La maqueta llevaba CINCO DÍAS en producción**, y eso se midió en vez de suponerse:
+  `git log --follow` la sitúa el **2026-08-16** y `origin/prod` la contenía. Validaba, pintaba
+  «Postulación enviada. Recibimos tus datos» y **no enviaba nada**. **No fallaba: mentía.** Quien
+  postulara en esa ventana no recibió nunca una llamada, y **no hay forma de saber quiénes fueron**:
+  no dejaron fila, ni log, ni correo. Se declaró **no medible** por escrito en vez de inventar un
+  número.
+- **La encontró un usuario, no la suite** — y no podía encontrarla: un `setEnviado(true)` sin envío
+  **no rompe ningún test**. La guardia anti-maqueta existía desde la 240 **pero acotaba su ámbito
+  con `const PANTALLA = "app/(app)/novedades"`**, así que la landing quedaba fuera **por
+  construcción**. Ése era el agujero de proceso, no sólo el defecto.
+- **La guardia se demostró ROJA en las dos formas de recaída**, que es lo único que la hace valer:
+  volviendo a la maqueta (`3 failed | 20 passed`) y dejando **el `import` en pie sin la invocación**
+  (`2 failed | 21 passed`). En ese segundo estado **`eslint` da `0 errors` y sale con código 0**:
+  el linter no la caza, la guardia sí.
+- **Extraer los detectores en vez de duplicarlos quedó justificado por MEDIDA:** relajar el detector
+  en el fixture compartido pone **rojas las dos guardias a la vez** (`4 failed | 38 passed`).
+  Duplicar habría dejado una ciega.
+- 💣 **El cron de purga es lo más peligroso de la ficha** —borra, es irreversible y lo ejecuta un
+  job desatendido—. Mutando el `WHERE` (`atendida_at` → `created_at`), el test **de integración**
+  canta que se borran **las tres** filas, incluida la pendiente de dos años; **y el test de servicio
+  con dobles da `11 passed`, en verde**. Un doble no ve el SQL: la condición de un borrado
+  desatendido se prueba **donde vive**.
+- **Dos decisiones se firmaron EN CONTRA de la recomendación** y ampliaron el alcance: el aviso en
+  la campana (que necesitó **dos** valores de enum, no uno — reusar `usuario` habría sido un dato
+  falso y habría roto la deduplicación) y la retención a 6 meses (el cron).
+- 🔴 **La revisión RECHAZÓ, y con razón: tres bloqueantes, ninguno de código.** Tareas sin marcar,
+  el **T0 nunca ejecutado**, y el mapa `R→test` cubriendo **25 de 44** porque listaba *archivos* en
+  vez de *casos*. Ese último es exactamente el error que la 236 dejó pasar: `vitest` **no falla**
+  con un filtro que no casa nada.
+- **Abierto y dicho:** T10.3 (los caminos feos y el límite de tasa no se ejercieron) y T10.4 (los
+  textos no se leyeron uno a uno).
+
+## 2026-08-21 · El arnés: `--rapido` pasa a ser el gate normal
+
+**PR #419** · cambio de la regla 5 de `CLAUDE.md`
+
+- **El motivo, medido:** mover un enlace de la nav de la landing costó **16.346 tests y 5–11
+  minutos**, cuando lo relacionado eran **21 tests + las guardias ≈ 33 segundos**. La regla cobraba
+  lo mismo por un cambio de texto que por una migración.
+- **Lo que NO se hizo: relajarla a secas.** `--changed` selecciona por grafo de imports y sólo mira
+  **tu** diff. Cada hueco tiene su tapa: las guardias corren siempre; `--rapido` **se niega solo**
+  ante cimientos; y **la corrida completa post-merge sobre `dev`** cubre el que menos se ve —
+  `--changed` compara *contra* `dev`, así que **un rojo heredado no aparece en tu diff**, y en este
+  repo `dev` llegó rojo **tres veces**.
+- **`init.sh` se vigila a sí mismo**, porque tocar el gate cambia **la medida** con la que se mide
+  todo lo demás: un fallo ahí no se ve como un rojo, se ve como **un verde que no significa nada**.
+  El propio PR que introdujo la regla fue el primero en chocar con ella.
+- **Probado en los dos sentidos**, que es donde mueren estos filtros, y con un falso positivo
+  instructivo por el camino: la primera tanda dijo «se niega» en la landing y era **el instrumento**
+  —había añadido texto inválido a un `.tsx` y lo que fallaba era el typecheck—.
