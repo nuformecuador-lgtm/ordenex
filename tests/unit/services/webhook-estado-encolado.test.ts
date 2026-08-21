@@ -17,6 +17,7 @@ const VALUE_POR_ID: Record<string, string> = {
   "s-entregada": "entregada", // publico
   "s-en-reparto": "en_reparto", // publico
   "s-fulfillment": "en_preparacion", // NO publico (interno de preparacion en bodega)
+  "s-ayuda-tienda": "ayuda_tienda", // publico desde la decision humana del 2026-08-21
 };
 
 function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
@@ -136,35 +137,51 @@ describe("R12 — solo ordenes elegibles (owner suscrito activo y rol apiKey)", 
 });
 
 // =================================================================================================
-// FEATURE 235 (T1.5, P4 FIRMADA EN CONTRA DE LA RECOMENDACION, 2026-08-19) — el ciclo de AYUDA no
-// se emite, y la excepcion es POR FAMILIA DE ORIGEN.
+// DECISION HUMANA 2026-08-21 — REVIERTE la 235/P4: el ciclo de AYUDA se emite ENTERO.
 //
-// El humano no acepta que un integrador reciba `en_reparto` dos veces sobre la misma orden. La IDA
-// (`-> ayuda_tienda`) no se emite porque ese value no es publico; la VUELTA si lo seria, porque
-// `en_reparto` esta en la politica — de ahi la excepcion.
+// P4 lo dejaba invisible desde fuera: la IDA (`-> ayuda_tienda`) no emitia porque ese value no era
+// publico, y la VUELTA (el rescate a `en_reparto`, que si lo es) quedaba exenta POR FAMILIA. Hoy
+// `ayuda_tienda` esta en `EVENTOS_PUBLICOS` y la lista de familias exentas esta vacia, asi que el
+// integrador recibe los dos eventos — incluido un `en_reparto` repetido sobre la misma orden, que
+// es exactamente lo que P4 evitaba y ahora se acepta a proposito.
 //
-// ⚠️ EL SEGUNDO CASO ES EL QUE HAY QUE MIRAR. Si alguien implementara la excepcion POR ESTADO en
-// vez de por familia, el primero seguiria verde y el segundo caeria: una `reprogramada` liberada
-// por el cron dejaria de avisar al integrador, y eso SI es una regresion. El requisito 2 de la
-// firma pide exactamente esto: «un test que falle si alguien amplia la excepcion a otra familia».
+// ⚠️ EL SEGUNDO CASO SIGUE SIENDO EL QUE HAY QUE MIRAR: la emision de un reingreso legitimo a
+// `en_reparto` no depende de esta decision y no puede caerse por ella. Si algun dia se vuelve a
+// silenciar algo, tiene que ser POR FAMILIA; por ESTADO se llevaria por delante estos casos.
 // =================================================================================================
-describe("235/P4 — el RESCATE de la ayuda no emite evento, pero los reingresos legitimos SI", () => {
-  it("`ayuda_tienda -> en_reparto` via `rescate_ayuda_tienda`: NO encola nada", async () => {
+describe("2026-08-21 — el ciclo de ayuda emite entero, y los reingresos legitimos siguen igual", () => {
+  it("la IDA `en_reparto -> ayuda_tienda` via `solicitud_ayuda_tienda`: SI encola", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-ayuda-tienda", "solicitud_ayuda_tienda")],
+      repo,
+      () => new Date("2026-08-21T10:00:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(payload.estatusDestinoId).toBe("s-ayuda-tienda");
+  });
+
+  it("la VUELTA `ayuda_tienda -> en_reparto` via `rescate_ayuda_tienda`: SI encola (revierte P4)", async () => {
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1"])); // la orden SI tiene integrador suscrito
     await emitirWebhooksEstado(
       tx,
       [entrada("o1", "s-en-reparto", "rescate_ayuda_tienda")],
       repo,
-      () => new Date("2026-08-19T10:00:00.000Z"),
+      () => new Date("2026-08-21T10:00:00.000Z"),
     );
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(payload.estatusDestinoId).toBe("s-en-reparto");
   });
 
   it("MISMA orden, MISMO estado destino, OTRA familia: `liberacion_reprogramada` SI encola", async () => {
-    // El control que impide que la excepcion se implemente por estado. Es literalmente el mismo
-    // `enqueue`, el mismo `tx` y el mismo `s-en-reparto` del caso de arriba: lo unico que cambia es
-    // la familia.
+    // El control que impide que una exencion futura se implemente por estado. Es literalmente el
+    // mismo `enqueue`, el mismo `tx` y el mismo `s-en-reparto` del caso de arriba: lo unico que
+    // cambia es la familia.
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1"]));
     await emitirWebhooksEstado(
@@ -179,22 +196,23 @@ describe("235/P4 — el RESCATE de la ayuda no emite evento, pero los reingresos
     expect(payload.estatusDestinoId).toBe("s-en-reparto");
   });
 
-  it("en un LOTE mixto, solo cae la del rescate: la excepcion no contamina a sus vecinas", async () => {
+  it("en un LOTE mixto emiten todas las publicas, y solo cae la de estado interno", async () => {
     const { repo, enqueue } = buildRepo();
-    const tx = buildTx(new Set(["o1", "o2", "o3"]));
+    const tx = buildTx(new Set(["o1", "o2", "o3", "o4"]));
     await emitirWebhooksEstado(
       tx,
       [
-        entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // exceptuada
+        entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // ya NO exceptuada (2026-08-21)
         entrada("o2", "s-en-reparto", "recoleccion"), // la entrada NORMAL a reparto
         entrada("o3", "s-entregada", "gestion"), // otro estado publico
+        entrada("o4", "s-fulfillment", "gestion"), // estado interno: sigue sin emitir
       ],
       repo,
-      () => new Date("2026-08-19T10:00:00.000Z"),
+      () => new Date("2026-08-21T10:00:00.000Z"),
     );
     const ordenesEncoladas = (
       enqueue.mock.calls as unknown as [string, Record<string, unknown>][]
     ).map((c) => c[1].ordenId);
-    expect(ordenesEncoladas.sort()).toEqual(["o2", "o3"]);
+    expect(ordenesEncoladas.sort()).toEqual(["o1", "o2", "o3"]);
   });
 });

@@ -160,10 +160,12 @@ describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
 });
 
 describe("153/R13 — eventos publicos de webhook", () => {
-  // Feature 155/R43: pasa de 9 a 10 con `por_recolectar_en_tienda`. La ampliacion es ADITIVA:
-  // el conteo sube y ningun estado sale (lo verifica el test siguiente, contra la foto de la 153).
-  it("EVENTOS_PUBLICOS tiene 10 elementos (9 de la 153 + el nacimiento de la 155)", () => {
-    expect(EVENTOS_PUBLICOS.size).toBe(10);
+  // Feature 155/R43: paso de 9 a 10 con `por_recolectar_en_tienda`. Decision humana del
+  // 2026-08-21 (revierte 235/P4): de 10 a 11 con `ayuda_tienda`. Las dos ampliaciones son
+  // ADITIVAS: el conteo sube y ningun estado sale (lo verifica el test siguiente, contra la
+  // foto de la 153).
+  it("EVENTOS_PUBLICOS tiene 11 elementos (9 de la 153 + la 155 + `ayuda_tienda`)", () => {
+    expect(EVENTOS_PUBLICOS.size).toBe(11);
   });
 
   it("155/R43: los 9 eventos previos siguen TODOS en la politica (nadie deja de recibir)", () => {

@@ -31,10 +31,17 @@ import type { OrderStatusValue } from "@/lib/types/order-status";
 // no rompe su codigo — pero SIGUE SIENDO un cambio de contrato observable, con el retraso medido
 // contra produccion (mediana 8,2 h · p90 22,1 h · max 48,2 h): hay que AVISAR A LOS INTEGRADORES
 // ANTES DE DESPLEGAR (T0.3 de la ficha; bloquea el despliegue, no el codigo).
-// FEATURE 235 (P4, FIRMADA por el humano el 2026-08-19) — `ayuda_tienda` NO entra aqui, y ademas
-// el RESCATE de vuelta a `en_reparto` tampoco emite: ver `ORIGENES_SIN_EVENTO_PUBLICO` mas abajo.
-// El vocabulario publico NO gana ningun valor por causa de esta feature (R39): un integrador no
-// sabria interpretar «el mensajero pidio ayuda a la tienda», que es un tramite interno nuestro.
+// FEATURE 235 (P4, FIRMADA por el humano el 2026-08-19) — `ayuda_tienda` NO entraba aqui, y ademas
+// el RESCATE de vuelta a `en_reparto` tampoco emitia (`ORIGENES_SIN_EVENTO_PUBLICO`), con lo que el
+// ciclo de ayuda entero era invisible desde fuera.
+//
+// ⚠️ DECISION HUMANA 2026-08-21 — ESA FIRMA QUEDA REVERTIDA, y las DOS mitades a la vez. El
+// vocabulario publico SI gana `ayuda_tienda` (abajo) y la excepcion por familia se vacia (ver
+// `ORIGENES_SIN_EVENTO_PUBLICO`). Van juntas a proposito: emitir la IDA sin emitir la VUELTA le
+// dejaria al integrador la orden colgada en un estado del que nunca la veria salir hasta el
+// desenlace. Es un cambio de contrato OBSERVABLE en la direccion de MAS eventos (dos nuevos por
+// orden que pase por ayuda, incluido un `en_reparto` repetido sobre la misma orden — precisamente
+// lo que P4 evitaba). AVISAR A LOS INTEGRADORES ANTES DE DESPLEGAR, misma politica que la 239/T0.3.
 export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStatusValue>([
   "por_recolectar_en_tienda", // feature 155/R43: evento de NACIMIENTO de la rama (b)
   "en_ruta_bodega_central",
@@ -46,6 +53,10 @@ export const EVENTOS_PUBLICOS: ReadonlySet<OrderStatusValue> = new Set<OrderStat
   "rechazada",
   "devolviendo_a_tienda",
   "devuelta_a_tienda",
+  // Decision humana 2026-08-21: la solicitud de ayuda del mensajero SI se le cuenta al integrador.
+  // Documentado ademas en el enum publico del OpenAPI (`lib/api/openapi-spec.ts`, 4 sitios + el
+  // .yaml espejo), porque desde hoy puede llegarle en un webhook y en las respuestas del canal.
+  "ayuda_tienda",
 ]);
 
 /** `true` si el valor de estado destino es un evento publico emitible (R15). */
@@ -53,31 +64,38 @@ export function esEventoPublico(estado: string): boolean {
   return EVENTOS_PUBLICOS.has(estado as OrderStatusValue);
 }
 
-// FEATURE 235 (P4, FIRMADA EN CONTRA DE LA RECOMENDACION DEL SPEC el 2026-08-19) — la UNICA
-// excepcion a la politica de arriba, y esta escrita POR FAMILIA DE ORIGEN, jamas por estado.
+// LA UNICA excepcion a la politica de arriba, y esta escrita POR FAMILIA DE ORIGEN, jamas por
+// estado. HOY ESTA VACIA: no hay ninguna familia exenta y `esTransicionEmitible` se reduce, de
+// hecho, a `esEventoPublico`. El mecanismo se conserva —no el contenido— porque es el unico sitio
+// donde una exencion puede escribirse sin romper los reingresos legitimos (ver el aviso de abajo).
 //
-// QUE SE FIRMO. El humano NO acepta que un integrador reciba `en_reparto` DOS VECES sobre la misma
-// orden. `ayuda_tienda` no entra en `EVENTOS_PUBLICOS` (la IDA no se emite), pero la VUELTA —el
-// rescate `ayuda_tienda -> en_reparto`— si emitiria, porque `en_reparto` SI esta en la politica.
-// Con esta lista, el ciclo de ayuda entero queda INVISIBLE desde fuera: ni la ida ni la vuelta.
+// HISTORIA. La feature 235 (P4, firmada EN CONTRA de la recomendacion del spec el 2026-08-19) metio
+// aqui `rescate_ayuda_tienda`: como `ayuda_tienda` no era evento publico, la IDA no se emitia, y
+// con esta lista tampoco la VUELTA (`ayuda_tienda -> en_reparto`, que si emitiria porque
+// `en_reparto` esta en la politica). El motivo declarado: que ningun integrador recibiera
+// `en_reparto` dos veces sobre la misma orden.
 //
-// ⚠️ POR QUE POR FAMILIA Y NO POR ESTADO. Es el punto delicado entero, escrito aqui para que nadie
-// lo "simplifique": si la excepcion se implementara por ESTADO DESTINO (`en_reparto` deja de
-// emitir), se silenciarian los REINGRESOS LEGITIMOS —una `reprogramada` liberada por el cron
-// (`liberacion_reprogramada`), un `deshacer_gestion`, una recogida (`recoleccion`)— y ESO SI seria
-// una regresion, no un ajuste de contrato. La clave de idempotencia del emisor lleva el INSTANTE
-// precisamente para admitir el reingreso a un mismo estado (patron de la feature 47), asi que esos
-// reingresos funcionan y deben seguir funcionando.
+// DECISION HUMANA 2026-08-21 — esa firma queda revertida. `ayuda_tienda` ES evento publico y el
+// ciclo se emite ENTERO: ida y vuelta. El `en_reparto` repetido pasa a ser aceptado a proposito —
+// es el precio de que el integrador vea salir la orden del estado en que la vio entrar—. Nada de
+// esto toca al emisor: su firma y su contrato siguen igual, porque la decision vive en la POLITICA.
+//
+// ⚠️ SI ALGUN DIA SE VUELVE A EXCEPTUAR ALGO, QUE SEA POR FAMILIA Y NO POR ESTADO. Es el punto
+// delicado entero, escrito aqui para que nadie lo "simplifique": si la excepcion se implementara
+// por ESTADO DESTINO (`en_reparto` deja de emitir), se silenciarian los REINGRESOS LEGITIMOS —una
+// `reprogramada` liberada por el cron (`liberacion_reprogramada`), un `deshacer_gestion`, una
+// recogida (`recoleccion`)— y ESO SI seria una regresion, no un ajuste de contrato. La clave de
+// idempotencia del emisor lleva el INSTANTE precisamente para admitir el reingreso a un mismo
+// estado (patron de la feature 47), asi que esos reingresos funcionan y deben seguir funcionando.
 //
 // ⚠️ Y POR QUE UNA LISTA DE EXCLUSION AQUI ES SEGURA, al reves que en `ORIGEN_TIPOS_VISITA_REAL`:
 // alli una lista negra hace que una familia FUTURA empiece a CONTAR sola (dinero cobrado de mas);
 // aqui una familia futura empieza a EMITIR sola, que es el comportamiento por defecto de siempre y
 // la direccion segura del error (un evento de mas es ruido; un evento de menos es un integrador
-// que no se entera). Ampliar esta lista es reducir el contrato publico y tiene que costar una
-// decision explicita: por eso el test la fija por IGUALDAD y se pone rojo si alguien la ensancha.
-export const ORIGENES_SIN_EVENTO_PUBLICO = [
-  "rescate_ayuda_tienda", // feature 235: la VUELTA del ciclo de ayuda (P4)
-] as const satisfies readonly OrdenHistorialOrigenTipo[];
+// que no se entera). Llenar esta lista es reducir el contrato publico y tiene que costar una
+// decision explicita: por eso el test la fija por IGUALDAD —hoy, contra la lista VACIA— y se pone
+// rojo si alguien la ensancha.
+export const ORIGENES_SIN_EVENTO_PUBLICO = [] as const satisfies readonly OrdenHistorialOrigenTipo[];
 
 const SET_ORIGENES_SIN_EVENTO: ReadonlySet<string> = new Set<string>(ORIGENES_SIN_EVENTO_PUBLICO);
 

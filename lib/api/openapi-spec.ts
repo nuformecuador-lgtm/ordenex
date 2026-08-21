@@ -38,6 +38,12 @@ const ORDER_STATUS_ENUM = [
   "rechazada",
   "en_bodega_satelite",
   "devuelta_a_tienda",
+  // Decision humana 2026-08-21 (REVIERTE la 235/P4): `ayuda_tienda` pasa a ser evento publico
+  // (`EVENTOS_PUBLICOS`), asi que el integrador lo va a RECIBIR por webhook y a leer en las
+  // respuestas del canal. Documentarlo deja de ser opcional: entregar un value que el contrato
+  // no declara es lo mismo que no tener contrato. Alta ADITIVA — ningun value existente se
+  // renombra, se reordena ni se retira.
+  "ayuda_tienda",
 ];
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).

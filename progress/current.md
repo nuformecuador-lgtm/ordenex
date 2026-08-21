@@ -9,6 +9,29 @@
 > `git show <rev>:progress/current.md`.
 
 
+## 🛠️ Features en curso — 2026-08-21
+
+| # | Zona | Estado | Qué |
+| --- | --- | --- | --- |
+| **257** | backend | **`in_progress`** — aprobada en la puerta; worktree `C:/w257` | `GET /api/ordenes/api-key` gana filtros por **rango de fechas**, `num_guia` y `num_remision`. Spec en `specs/257-api-key-filtros-listado/`. |
+| **256** | backend | **`spec_ready`** — puerta humana PASADA, fase 2 EN ESPERA | el webhook de `devuelta` viaja con el motivo tipificado. Spec en `specs/256-webhook-motivo-devolucion/`. Rama `feature/256-webhook-motivo-devolucion` + worktree `C:/w256` ya creados desde `origin/dev` (8070b508). |
+
+**⛔ POR QUE LA 256 NO ABRE FASE 2 TODAVIA.** Dos razones, y la segunda es la que manda:
+1. **Cupo.** `backend` ya tiene DOS `in_progress` — la 255 (PR #432 abierto) y la 257 (implementandose en `C:/w257`). Una tercera rompe la regla 1 y `./init.sh` la valida.
+2. **Conflicto de archivos real, no teorico.** La 257 tiene ahora mismo modificados `lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml` — y la 256, por la decision (f) de su puerta, tiene que tocar **esos mismos dos archivos** para publicar el evento en una seccion `webhooks:`. Correrlas en paralelo es un conflicto garantizado en el borde del contrato publico, que es justo donde peor se resuelve a mano.
+
+**Se desbloquea** cuando la 257 aterrice (o cuando el humano decida el orden). La spec de la 256 esta completa y firmada: la fase 2 arranca sin re-preguntar nada.
+
+Las dos nacen del cuestionario de integración de **Dropi** revisado hoy.
+
+**Corrección de una afirmación anterior de esta bitácora:** aquí se dio por hecho que «no hay
+conflicto de archivos entre ellas». Es **falso** desde que la puerta de la 256 decidió publicar el
+evento en el OpenAPI: las dos escriben `lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml`.
+Ver el bloque ⛔ de arriba. La rama y el worktree de la 257 ya existen; el párrafo sobre su
+«desviación deliberada de F1.0» quedó obsoleto y se retira.
+
+---
+
 ## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
 
 **Cuatro releases a producción en esta sesión, todas verificadas contra la base después de

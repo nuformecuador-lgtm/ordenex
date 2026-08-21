@@ -181,6 +181,7 @@ paths:
               - rechazada
               - en_bodega_satelite
               - devuelta_a_tienda
+              - ayuda_tienda
       responses:
         "200":
           description: Página de órdenes.
@@ -530,6 +531,7 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
         destinatario:
           type: string
         telefonoDest:
@@ -737,6 +739,7 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
         costoEnvio:
           type: string
           description: "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD."
@@ -799,6 +802,7 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
         estado:
           type: string
           const: devolviendo_a_tienda

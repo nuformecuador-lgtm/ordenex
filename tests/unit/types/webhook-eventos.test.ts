@@ -33,9 +33,10 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     expect(esEventoPublico("devuelta")).toBe(true);
   });
 
-  it("la lista NO cambio de tamano con la 239: sigue teniendo los 10 values de la 155", () => {
-    // Si esto sube a 11, alguien anadio el pre-estado (o algun otro) al contrato publico sin
-    // pasar por la puerta humana. La lista se congela por CONTENIDO, no solo por conteo.
+  it("la lista esta congelada por CONTENIDO: los 10 de la 155 + `ayuda_tienda` (2026-08-21)", () => {
+    // Si esto cambia, alguien movio el contrato publico sin pasar por la puerta humana. Se
+    // congela por CONTENIDO, no solo por conteo. El unico alta desde la 155 es `ayuda_tienda`,
+    // decidida por el humano el 2026-08-21 (revierte 235/P4); el pre-estado de la 239 SIGUE fuera.
     expect([...EVENTOS_PUBLICOS].sort()).toEqual(
       [
         "por_recolectar_en_tienda",
@@ -48,6 +49,7 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
         "rechazada",
         "devolviendo_a_tienda",
         "devuelta_a_tienda",
+        "ayuda_tienda",
       ].sort(),
     );
   });
@@ -58,41 +60,54 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     }
   });
 
-  // Feature 235 (T1.5, R39): el catalogo gano `ayuda_tienda` y la lista NO se movio.
-  it("235/R39: `ayuda_tienda` NO es evento publico — el vocabulario no crece por esta feature", () => {
-    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
-    expect(esEventoPublico("ayuda_tienda")).toBe(false);
-    expect(EVENTOS_PUBLICOS.size).toBe(10);
+  // Decision humana 2026-08-21 — REVIERTE la 235/R39: `ayuda_tienda` entra en el contrato publico.
+  it("2026-08-21: `ayuda_tienda` SI es evento publico — el integrador ve la solicitud de ayuda", () => {
+    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(true);
+    expect(esEventoPublico("ayuda_tienda")).toBe(true);
+    expect(EVENTOS_PUBLICOS.size).toBe(11);
+  });
+
+  it("el value emitido esta DECLARADO en el enum publico del OpenAPI (contrato completo)", async () => {
+    // Emitir un estado que el contrato no documenta es lo mismo que no tener contrato: el
+    // integrador recibiria un `estado` que su cliente generado no sabe deserializar. El .yaml
+    // publicado se verifica aparte, como espejo exacto de este literal
+    // (`tests/unit/api/openapi-contrato-en-reparto.test.ts`).
+    const { openApiSpec } = await import("@/lib/api/openapi-spec");
+    const enumEstado = openApiSpec.components.schemas.OrdenListItem.properties.estado.enum;
+    expect(enumEstado).toContain("ayuda_tienda");
   });
 });
 
 // =================================================================================================
-// FEATURE 235 — P4, FIRMADA EN CONTRA DE LA RECOMENDACION DEL SPEC (2026-08-19).
+// DECISION HUMANA 2026-08-21 — REVIERTE la 235/P4 (que a su vez se habia firmado en contra de la
+// recomendacion del spec el 2026-08-19).
 //
-// El humano NO acepta que un integrador reciba `en_reparto` DOS VECES sobre la misma orden. Como
-// `ayuda_tienda` no es evento publico, la IDA ya no se emite; la VUELTA (el rescate) SI se emitiria,
-// porque `en_reparto` esta en la politica. De ahi esta excepcion.
+// P4 silenciaba el ciclo de ayuda ENTERO: la ida no emitia porque `ayuda_tienda` no era publico, y
+// la vuelta (el rescate) tampoco, por esta lista de familias exentas. Hoy emiten LAS DOS: el
+// integrador ve entrar la orden en ayuda y ve salirla. El `en_reparto` repetido sobre la misma
+// orden —lo que P4 evitaba— se acepta a proposito.
 //
-// ⚠️ ESTE BLOQUE ES EL QUE TIENE QUE PONERSE ROJO SI ALGUIEN AMPLIA LA EXCEPCION A OTRA FAMILIA.
-// El requisito 2 de la firma lo pide con esas palabras. Y el motivo esta escrito en el requisito 1:
-// implementarla POR ESTADO —o ensancharla a otra familia— silencia los REINGRESOS LEGITIMOS a
-// `en_reparto`, y eso si es una regresion.
+// ⚠️ ESTE BLOQUE SIGUE SIENDO EL QUE TIENE QUE PONERSE ROJO SI ALGUIEN METE UNA FAMILIA AQUI. Lo
+// que cambio es la lista esperada (vacia), no el control: cada familia que entre deja de avisar a
+// los integradores, y eso se decide en una puerta humana, no en un commit. Y el motivo de que la
+// exencion sea POR FAMILIA sigue en pie: implementarla POR ESTADO silenciaria los REINGRESOS
+// LEGITIMOS a `en_reparto`, y eso si es una regresion.
 // =================================================================================================
-describe("235/P4 — la excepcion de webhook es POR FAMILIA, y exactamente UNA", () => {
-  it("la lista de familias exceptuadas es EXACTAMENTE `rescate_ayuda_tienda`", () => {
-    // Igualdad literal, no `toContain`. Es el CONTRATO: cada familia que entre aqui deja de
-    // avisar a los integradores, y eso se decide en una puerta humana, no en un commit.
-    expect([...ORIGENES_SIN_EVENTO_PUBLICO]).toEqual(["rescate_ayuda_tienda"]);
-    expect(ORIGENES_SIN_EVENTO_PUBLICO).toHaveLength(1);
+describe("2026-08-21 — el ciclo de ayuda emite entero; la exencion por familia queda VACIA", () => {
+  it("no hay NINGUNA familia exceptuada", () => {
+    // Igualdad literal, no `toContain`: la lista se congela por contenido.
+    expect([...ORIGENES_SIN_EVENTO_PUBLICO]).toEqual([]);
+    expect(ORIGENES_SIN_EVENTO_PUBLICO).toHaveLength(0);
   });
 
-  it("el RESCATE no se emite, aunque su estado destino SI sea publico", () => {
-    // Las dos mitades de la afirmacion, para que se vea que la exencion la pone la familia y no
-    // el estado: `en_reparto` es publico...
+  it("el RESCATE `ayuda_tienda -> en_reparto` SI se emite (revierte P4)", () => {
     expect(esEventoPublico("en_reparto")).toBe(true);
-    // ...y aun asi esta transicion concreta no se emite.
-    expect(esTransicionEmitible("en_reparto", "rescate_ayuda_tienda")).toBe(false);
-    expect(esFamiliaSinEventoPublico("rescate_ayuda_tienda")).toBe(true);
+    expect(esTransicionEmitible("en_reparto", "rescate_ayuda_tienda")).toBe(true);
+    expect(esFamiliaSinEventoPublico("rescate_ayuda_tienda")).toBe(false);
+  });
+
+  it("la IDA `en_reparto -> ayuda_tienda` tambien se emite", () => {
+    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(true);
   });
 
   it.each([
@@ -108,20 +123,12 @@ describe("235/P4 — la excepcion de webhook es POR FAMILIA, y exactamente UNA",
     // Y una que ni siquiera toca `en_reparto`, para que no se lea como una lista de reingresos.
     ["gestion"],
   ] as const)(
-    "REINGRESO LEGITIMO a `en_reparto` via `%s`: SIGUE emitiendo (la excepcion no se contagia)",
+    "REINGRESO LEGITIMO a `en_reparto` via `%s`: SIGUE emitiendo",
     (familia) => {
       expect(esTransicionEmitible("en_reparto", familia)).toBe(true);
       expect(esFamiliaSinEventoPublico(familia)).toBe(false);
     },
   );
-
-  it("la IDA tampoco emite, pero por OTRA razon: su estado destino no es publico", () => {
-    // Se afirma por separado a proposito. Si algun dia `ayuda_tienda` entrara en
-    // `EVENTOS_PUBLICOS`, este caso caeria y obligaria a decidir si la ida debe emitirse — en vez
-    // de que la excepcion de la vuelta lo tape en silencio.
-    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(false);
-    expect(esFamiliaSinEventoPublico("solicitud_ayuda_tienda")).toBe(false);
-  });
 
   it("un estado NO publico sigue sin emitir, venga de la familia que venga", () => {
     expect(esTransicionEmitible("sin_gestionar", "corte_sin_gestionar")).toBe(false);

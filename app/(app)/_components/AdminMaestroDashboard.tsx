@@ -2,6 +2,7 @@ import { AppPage } from "@/components/shared/AppPage";
 
 import { PostulacionesPendientesPanel } from "./PostulacionesPendientesPanel";
 import { PostulacionRecursoPanel } from "./PostulacionRecursoPanel";
+import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 /**
  * Dashboard del admin maestro (feature 23, R5). Server Component al estilo de

@@ -121,10 +121,12 @@ export async function emitirWebhooksEstado(
   const ocurridoAtISO = now().toISOString();
   for (const entrada of candidatas) {
     const estado = valuePorId.get(entrada.estatusDestinoId);
-    // Feature 235 (P4): la familia entra en la decision. El rescate `ayuda_tienda -> en_reparto`
-    // NO emite, para que ningun integrador reciba `en_reparto` dos veces sobre la misma orden;
-    // los reingresos LEGITIMOS al mismo estado (una `reprogramada` liberada, un `deshacer_gestion`)
-    // siguen emitiendo, porque la excepcion es por FAMILIA y nunca por estado.
+    // La familia entra en la decision (mecanismo de la 235/P4). Hoy NINGUNA familia esta
+    // exceptuada —la lista quedo vacia con la decision humana del 2026-08-21, que revirtio P4—,
+    // asi que el ciclo de ayuda emite ENTERO: la ida (`-> ayuda_tienda`, ya evento publico) y la
+    // vuelta (el rescate `ayuda_tienda -> en_reparto`). El segundo argumento se sigue pasando
+    // porque la exencion por FAMILIA es el unico modo de silenciar algo sin cargarse los
+    // reingresos legitimos a un mismo estado; la decision no se re-deriva aqui, se pregunta.
     if (estado === undefined || !esTransicionEmitible(estado, entrada.origenTipo)) continue;
 
     await repo.enqueue(
