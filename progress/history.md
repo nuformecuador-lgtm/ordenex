@@ -3929,3 +3929,33 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - Deuda dejada, dicha y no escondida: el mapa de `tasks.md` prometía para R19 una cláusula de
   guardia que **no existe** (mapa corregido, cláusula **debida**), y la re-medición de R27 debería
   ser un paso de **lista de release** — que este repo todavía no tiene.
+
+## 2026-08-22 — 264 · el cierre recuerda qué órdenes barrió el corte
+- Reporte del humano mirando un cierre **vencido**: «el cierre no está enlistando los no
+  gestionados, y eso es importante verlo». En su captura los conteos sumaban 3 y no había dónde ver
+  el resto.
+- **No era una pestaña olvidada, era estructural.** El detalle se construye entero sobre las
+  gestiones, y una orden barrida a `sin_gestionar` **no tiene gestión**: no podía aparecer ahí por
+  construcción. Y la única relación cierre↔orden barrida era un predicado vivo que la **aprobación
+  destruye** (libera la orden y le borra el mensajero), así que el cierre aprobado —el que se
+  audita, porque ya movió dinero— mostraba cero, indistinguible de uno que no barrió ninguna.
+- Tabla puente escrita **dentro de la misma transacción** del barrido, con los descriptivos
+  congelados. **Ni una columna de dinero**: que esta lista no pueda mover un total no es disciplina
+  de la capa de arriba, es que no hay nada ahí que sumar.
+- **Backfill medido antes de desplegar y confirmado después**: 4 filas, cierre `8F88DCD5`, sin
+  tocar una sola fila existente. Los tres sellos de tiempo del cierre siguen siendo el mismo
+  instante, o sea que esa fila no se ha escrito.
+- **Una decisión del propio spec era inimplementable**: `design.md` §6 situaba el DTO donde habría
+  metido el cliente de Prisma en el bundle del navegador **del mensajero**. La cazó una guardia
+  ajena que recorre el grafo de imports. Se invirtió la dependencia; la ruta que el diseño nombra
+  sigue resolviendo.
+- **Una mutación demuestra por qué existe su guardia:** con el defecto puesto —una superficie que
+  deja de pasar la lista— `typecheck` da **exit 0**. El compilador no lo ve; la guardia sí.
+- **Y otra desmiente al spec:** F4 pedía dar de alta pares de contraste que **ya existían**. Clonar
+  un par con la misma tinta y el mismo fondo no es una medición, es el mismo número dos veces. Se
+  cerró por **sección** —la mitad que el cierre global declara no cubrir— y se demostró con un color
+  malo: la guardia nueva roja, la global verde.
+- ⚠️ **Deuda declarada, no disimulada: el spec no tenía tarea de «ver la app»**, siendo una ficha
+  puramente visual. Y no podía tenerla en local: no existe ni una orden `sin_gestionar` ni un cierre
+  vencido en esa base. **La verificación con datos naturales sólo es posible en producción**, y
+  queda como paso posterior a la release.
