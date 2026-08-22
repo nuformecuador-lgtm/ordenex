@@ -9,7 +9,75 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ⏸️ ESPERANDO MERGE — 2026-08-22, 04:30 CR. **EMPIEZA A LEER POR AQUÍ**
+## 🚦 RELEASE LISTA PARA SALIR — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+
+`dev` está en `b16c8c8e` y lleva **tres cosas que producción todavía no tiene**: la **256**
+(el evento de `devuelta` con su motivo tipificado), la **268** (el webhook del ciclo de ayuda y del
+incidente) y el papeleo de cierre de la **264**. La release es un PR `dev` → `prod`.
+
+### La puerta que la bloqueaba, y cómo se descargó
+
+**T8 de la 268 —aviso a integradores— bloqueaba el despliegue, no el código.** Antes de redactar
+nada se midió **a quién** hay que avisar, contra producción y en sólo lectura:
+
+| medición | resultado |
+| --- | --- |
+| `webhook_suscripcion` (suscripciones de webhook) | **0 filas.** Nadie recibe un solo evento hoy |
+| `api_key` activas | **1** — `Dropi` (`ordx_H6-YSbM`), creada el 2026-08-20 |
+| órdenes creadas por esa key | **0**, `max(created_at) = null` |
+
+No hay a quién romperle nada, y los cuatro cambios son además aditivos. **Decisión humana del
+2026-08-22: cerrar T8 por medición y desplegar.** El aviso no se tira: pasa de puerta de despliegue
+a **material de onboarding de Dropi**, que debe tenerlo *antes* de conectar.
+
+### Convención nueva: `docs/api/CHANGELOG.md`
+
+El aviso vive ahí, versionado junto al contrato que describe. Existe porque esta misma task
+**heredó el agujero de 239/T0.3**: pedía este mismo aviso, nunca se marcó y la feature salió igual —
+no había dónde escribirlo ni a qué canal mandarlo. A partir de ahora, todo cambio observable del
+canal entra como entrada fechada **antes de la release**.
+
+### Pendiente de decisión humana
+
+1. **Canal y contacto del aviso** (pregunta abierta 5 de la 268, sigue sin respuesta). Alguien tiene
+   que entregarle a Dropi la entrada del changelog antes de que conecte.
+2. **Puerta humana de la 262 y la 265** — los dos specs escritos y mergeados, sin una línea de
+   implementación. La 265 deja 6 preguntas abiertas (las duras: la forma real de `skippedShipments`
+   y el umbral en km); la 262 trae su B0.1 medida: **M1 = 0 filas**.
+3. **Apagar `RUTA_DEBUG_LOG`** — hoy encendida por defecto, vuelca coordenadas de destinatarios a
+   los logs de Vercel. Era un override consciente para diagnosticar justo lo que cierra la 265.
+4. **`docs/release.md`** — sigue sin existir. Es la razón de que mediciones que caducan acaben
+   siendo casillas de un solo uso.
+5. **255** — pedir los dos renglones de qué está mal exactamente en el cotizador de la 248, y
+   renumerar el **id 248 duplicado** conservando el slug.
+
+### Verificación pendiente EN PRODUCCIÓN (no se puede en local)
+
+La sección «Órdenes sin gestionar» de la **264**, ya desplegada: cierre `8F88DCD5`, debe listar las
+**4 guías** y el pie seguir en **₡14.900 general y ₡2.000 de pago al mensajero**. En local no existe
+ni una orden `sin_gestionar` ni un cierre vencido, y por eso la ficha declaró la deuda en vez de
+disimularla.
+
+### Deuda declarada sin ficha propia
+
+- **268/M5** — el `where` de `gestiones` del detalle no filtra `anuladaAt`: un `incidente` **anulado**
+  puede seguir exponiendo su foto por API key. Merece ficha propia, no un parche.
+- **261/R19** — el mapa de `tasks.md` prometía una cláusula de guardia que no existe. El mapa quedó
+  corregido; la cláusula sigue debiéndose.
+
+### El registro mentía, y se corrigió
+
+`feature_list.json` daba la **255** y la **257** como `in_progress` con sus PRs mergeados y sus
+revisiones aprobadas, la **256** y la **263** como `pending` estando una en `dev` y la otra **en
+producción**, y **no tenía ficha de la 268** —otra sesión la numeró así cuando el id más alto aquí
+era 265; los 266 y 267 no existen—. Las cinco quedan al día. **Ninguna ficha `in_progress`.**
+
+Sigue pendiente, y es escritura de verdad: **`progress/history.md` no tiene entrada de la 255, la
+256, la 257 ni la 268.**
+
+---
+
+## 2026-08-22, 04:30 CR — tanda anterior (cerrada)
 
 `dev` está en `d6dd96b4` y **no se ha movido**: hay **seis PRs abiertos** y nada mergeado. Ese es
 el único bloqueo real de esta tanda.
