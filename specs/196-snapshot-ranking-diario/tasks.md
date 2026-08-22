@@ -206,6 +206,19 @@ hecho**. Gate por tanda: `./init.sh --rapido`; gate final y antes del PR: `./ini
   `/ranking` siguen verdes.
 - **Depende de**: T4.3
 
+> **APÉNDICE — 2026-08-21: la mitad `/ranking` de esta tarea fue REVERTIDA.** El texto de
+> arriba se conserva **intacto**, porque un spec es la foto de su momento y aquel enlace se
+> puso a conciencia —era la puerta más visible al histórico recién creado—; pero **ya no está
+> vigente**. Motivo, en una línea: el humano pidió el 2026-08-21 borrarlo porque, entregado
+> como `actions` del `AppPage`, aterrizaba en el hueco de acciones de la cabecera —entre la
+> descripción y los controles de la derecha— y se leía como «un botón flotando». El histórico
+> **no queda inalcanzable**: el subítem «Histórico» bajo «Ranking» de
+> `lib/auth/menu-visibility.ts` —la otra mitad de esta misma tarea— **se queda**, y hereda del
+> padre los mismos tres roles (`maestro`, `admin`, `mensajero`) que pueden ver `/ranking`, así
+> que nadie pierde el acceso. R36 sigue vigente palabra por palabra: al borrar tampoco se tocó
+> `obtenerRanking`/`editarPremio`, y `app/(app)/ranking/page.tsx` vuelve a ser exactamente la
+> pantalla que dejó la feature 76.
+
 ### [x] T4.6 — Tests de página y módulo
 - **Crea**: `tests/components/RankingHistoricoPage.test.tsx`,
   `tests/components/RankingHistoricoModule.test.tsx`
