@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AnularGestionInput,
   CierreGestionPendienteRow,
+  CierreSinGestionRow,
   CierreSolicitadoInfo,
   CrearCierreInput,
   GestionDeshacerRow,
@@ -15,6 +16,12 @@ import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaServic
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
+// Feature 264 (B9): la MISMA proyeccion y el MISMO orden que usa el detalle del admin.
+import {
+  ORDEN_SIN_GESTION,
+  SIN_GESTION_SELECT,
+  toSinGestionRow,
+} from "@/lib/utils/cierre-sin-gestion";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
 // Costa Rica EN CURSO, en la convencion `@db.Date` de `fecha_reparto`.
@@ -62,6 +69,9 @@ type CierrePrismaClient = Pick<
   | "orden"
   | "cierreDia"
   | "cierreDetail"
+  // Feature 264 (B3/B9): el VINCULO cierre <-> orden barrida. Se ESCRIBE en la tx del corte
+  // (`crearCierre`) y se LEE en el detalle propio del mensajero (`findCierrePropioConGestiones`).
+  | "cierreSinGestion"
   | "tarifa"
   // Feature 237 (T5.5, D3): + `ordenHistorialEstado` para LEER —solo leer— de que familia nacio
   // una gestion candidata a deshacerse. Este repositorio no escribe historial: eso pasa siempre
@@ -264,6 +274,10 @@ const CIERRE_PASADO_SELECT = {
   // rechazó, por qué (sin el motivo no sabe qué corregir).
   resueltoAt: true,
   motivoRechazo: true,
+  // Feature 264 (R27/R28): la marca viaja con la cabecera. NO entra en `CierrePasadoDTO` —el
+  // DTO del historico no la necesita— sino que el detalle propio la lee de esta misma fila,
+  // sin una segunda consulta.
+  sinGestionRegistrado: true,
 } as const;
 
 type CierrePasadoSelectRow = Prisma.CierreDiaGetPayload<{
@@ -572,7 +586,20 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                 deletedAt: null,
                 OR: noReservadaParaDespues, // feature 246/R11
               },
-              select: { id: true },
+              // FEATURE 264 (B3, R1/R9/R11): el pre-SELECT proyecta ADEMAS los descriptivos que la
+              // fila del vinculo congela. Es una sola consulta —la que ya se hacia—, no una
+              // segunda: cuando llegue el `createMany` la orden YA estara en `sin_gestionar` y
+              // releerla devolveria lo mismo, pero costaria otra ida a la base dentro de la
+              // transaccion del cron.
+              select: {
+                id: true,
+                numGuia: true,
+                numRemision: true,
+                destinatario: true,
+                producto: true,
+                tienda: { select: { nombre: true } },
+                zona: { select: { nombre: true } },
+              },
             });
             if (pendientes.length === 0) continue; // no-op: ni update, ni append, ni ruido
             const ids = pendientes.map((o) => o.id);
@@ -601,6 +628,45 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                   origenTipo: "corte_sin_gestionar", // R6
                 })),
               );
+              // FEATURE 264 (B3, R1/R2/R4/R11) — EL VINCULO PERSISTIDO, EN ESTA MISMA TRANSACCION.
+              //
+              // POR QUE AQUI Y NO EN UNA LECTURA POSTERIOR. Hasta hoy la relacion cierre <-> orden
+              // barrida era un predicado VIVO (`orden.mensajero_asignado_id = cierre.mensajero_id
+              // AND estatus = sin_gestionar`), y la APROBACION lo destruye: libera la orden a
+              // bodega y le borra `mensajero_asignado_id`. Un cierre `aprobado` —el que se audita,
+              // porque es el que ya movio dinero— mostraba CERO ordenes, indistinguible de uno que
+              // de verdad no barrio ninguna. Escribirlo aqui es lo unico que sobrevive a eso (R5).
+              //
+              // R2/R3 SE CUMPLEN POR LA TRANSACCION: si algo revienta despues, ni el barrido ni
+              // este vinculo quedan. R6 tambien, y sin una linea: `crearCierre` sin
+              // `corteSinGestionar` (flujo 37) no entra a este bloque.
+              //
+              // R4 — `estatusOrigenId: origenEstatusId` es el origen de SU vuelta. Es literalmente
+              // la razon por la que este bucle tiene dos vueltas guardadas (feature 235/R27): con
+              // dos origenes en un solo `updateMany` habria que INVENTARSE de cual salio cada
+              // fila.
+              //
+              // MONEY-NEUTRAL: `cierre_sin_gestion` no tiene ni una columna de dinero, asi que
+              // esta escritura no puede mover un total ni aunque quisiera. No es disciplina: es
+              // que no hay donde guardar un importe.
+              //
+              // `skipDuplicates`: el `@@unique([cierreId, ordenId])` es la red por si una segunda
+              // corrida del corte entrara por el mismo cierre. Mismo criterio que el
+              // `ON CONFLICT DO NOTHING` del backfill de la migracion.
+              await tx.cierreSinGestion.createMany({
+                data: pendientes.map((o) => ({
+                  cierreId: cierre.id,
+                  ordenId: o.id,
+                  numGuia: o.numGuia,
+                  numRemision: o.numRemision,
+                  destinatario: o.destinatario,
+                  producto: o.producto,
+                  tiendaNombre: o.tienda.nombre,
+                  zonaNombre: o.zona.nombre,
+                  estatusOrigenId: origenEstatusId, // R4: el origen REAL de esta vuelta
+                })),
+                skipDuplicates: true,
+              });
             }
           }
         }
@@ -759,24 +825,54 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   async findCierrePropioConGestiones(
     cierreId: string,
     mensajeroId: string,
-  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null> {
+  ): Promise<{
+    cierre: CierrePasadoDTO;
+    gestiones: CierreGestionPendienteRow[];
+    sinGestion: CierreSinGestionRow[];
+    sinGestionRegistrado: boolean;
+  } | null> {
     const cierre = await this.prisma.cierreDia.findFirst({
       where: { id: cierreId, mensajeroId }, // scope propio en el WHERE
       select: CIERRE_PASADO_SELECT,
     });
     if (cierre === null) return null;
 
-    const rows = await this.prisma.gestionOrden.findMany({
-      // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
-      // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
-      where: { cierreId, anuladaAt: null },
-      orderBy: { createdAt: "desc" },
-      ...WITH_DETALLE,
-    });
+    const [rows, sinGestion] = await Promise.all([
+      this.prisma.gestionOrden.findMany({
+        // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
+        // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
+        where: { cierreId, anuladaAt: null },
+        orderBy: { createdAt: "desc" },
+        ...WITH_DETALLE,
+      }),
+      // FEATURE 264 (B9/Q1, R7/R12/R30) — LA MISMA LISTA, PARA LA MISMA PANTALLA.
+      //
+      // `CierreFacturaDetalle` lo renderizan DOS modulos: el del admin y el del propio mensajero.
+      // Siendo el mismo componente, la seccion aparece en los dos (R30) — que pintara en uno y
+      // callara en otro es el arreglo a medias que se corrigio en la 263. Asi que el camino del
+      // mensajero tiene que TRAER el dato, no solo saber pintarlo.
+      //
+      // Consulta GEMELA a la del admin: mismo `select` y mismo `orderBy`, importados del mismo
+      // sitio, para que el mismo cierre no se lea distinto segun quien lo abra.
+      //
+      // SIN GUARDIA NUEVA: cuelga de `cierreId`, y el `findFirst` de arriba ya acoto ese id por
+      // `mensajeroId` en el WHERE. Un cierre ajeno devolvio `null` y esta consulta ni se ejecuta.
+      //
+      // Nada de dinero cruza por aqui, asi que la regla de audiencia de la 38/40 (§7.2, «el
+      // mensajero no ve la plata de la empresa») no aplica: son SUS ordenes, las que le
+      // bloquearon el cierre.
+      this.prisma.cierreSinGestion.findMany({
+        where: { cierreId },
+        orderBy: ORDEN_SIN_GESTION,
+        select: SIN_GESTION_SELECT,
+      }),
+    ]);
     const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
     return {
       cierre: toCierrePasadoDTO(cierre),
       gestiones: rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id))),
+      sinGestion: sinGestion.map(toSinGestionRow),
+      sinGestionRegistrado: cierre.sinGestionRegistrado, // R27/R28
     };
   }
 

@@ -1,7 +1,10 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CierreResultado, CierreTotales } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type {
+  CierreGestionPendienteRow,
+  CierreSinGestionRow,
+} from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { CierreGestionDescargaDTO } from "@/lib/interfaces/services/ICierresAdminService";
 import type { FiltrosDescargaGestiones } from "@/lib/types/filtros-cierres";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
@@ -336,7 +339,19 @@ export interface ICierresAdminRepository {
   findCierreByIdEnAlcance(
     cierreId: string,
     alcance: Alcance,
-  ): Promise<{ cierre: CierreAdminResumenRow; gestiones: CierreGestionPendienteRow[] } | null>;
+  ): Promise<{
+    cierre: CierreAdminResumenRow;
+    gestiones: CierreGestionPendienteRow[];
+    /**
+     * Feature 264 (B4/R7) — las ordenes que el corte barrio al crear ESTE cierre y ningun otro.
+     * El acotamiento por cierre va en el `where` de su propia consulta, no en un filtro en
+     * memoria; el ALCANCE (R8) no se repite porque el `findFirst` de arriba ya devolvio `null` y
+     * corto antes de llegar aqui, que es el mismo camino por el que hoy se protegen las gestiones.
+     */
+    sinGestion: CierreSinGestionRow[];
+    /** R27/R28: `false` = cierre ANTERIOR al registro; `[]` con `false` NO es «no hubo ninguna». */
+    sinGestionRegistrado: boolean;
+  } | null>;
   /**
    * Feature 158 (T1.12, R19/R21/R25): las gestiones con `resultado = incidente` vinculadas a ESE
    * cierre, acotadas por el alcance en el WHERE (nunca en memoria). Es lo que el service necesita

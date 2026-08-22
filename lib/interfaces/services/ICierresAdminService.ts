@@ -12,6 +12,7 @@ import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 import type {
   CierreGrupos,
+  CierreOrdenSinGestion,
   CierreResultado,
   CierreTotales,
   IngresoOrdenexDTO,
@@ -193,6 +194,13 @@ export type ListarGestionesDescargaServiceResult =
 // R6-R9/R13: detalle completo de UN cierre. Reusa CierreGrupos (grupos por
 // resultado) de la 37. `no_encontrada` = id inexistente o fuera de alcance (R13, no
 // se distingue). `forbidden` = rol invalido (R1).
+// Feature 264 — el DTO de una orden sin gestionar se DECLARA en `ICierreDiaService` y se
+// re-exporta aqui. El sentido de la dependencia no es un capricho: al reves, este archivo
+// arrastraba `lib/types/cierres-admin.ts` y `lib/types/wallet.ts` —que importan `Prisma` como
+// VALOR— al grafo del panel del mensajero, y con ellos el cliente de Prisma al bundle del
+// navegador. Lo cazo `tests/unit/guards/pagos-captura.guardia.test.ts`.
+export type { CierreOrdenSinGestion } from "@/lib/interfaces/services/ICierreDiaService";
+
 export type CierreDetalleAdminServiceResult =
   | {
       status: "ok";
@@ -212,6 +220,22 @@ export type CierreDetalleAdminServiceResult =
       // DERIVADO: `cierre.totales.general` - `fleteConIva` - `comisionConIva` (STRING
       // money-safe). Lo que se le paga a la tienda. Puede ser NEGATIVO.
       pagoTienda: string;
+      /**
+       * Feature 264 (R7) — las ordenes que el corte barrio al crear ESTE cierre y ningun otro.
+       * `[]` significa «no hubo ninguna» SOLO si `sinGestionRegistrado` es `true`.
+       */
+      ordenesSinGestion: CierreOrdenSinGestion[];
+      /**
+       * Feature 264 (R27/R28) — `false` = este cierre es ANTERIOR al registro y su lista es
+       * IRRECUPERABLE (la aprobacion ya borro el unico rastro que habia). `[]` con `false` NO es
+       * «no hubo ninguna»: es «no lo sabemos», y la pantalla tiene que DECIRLO. Una seccion
+       * ausente o vacia en ese caso comunica «no hubo ninguna», que es tranquilizador y falso.
+       *
+       * Los dos campos viajan JUNTOS SIEMPRE, y por eso esto no se modela como
+       * `ordenesSinGestion: CierreOrdenSinGestion[] | null`: un `null` obliga a CADA consumidor a
+       * acordarse de distinguir los dos casos, y ya sabemos como acaba eso.
+       */
+      sinGestionRegistrado: boolean;
     }
   | { status: "forbidden" } // rol invalido (R1)
   | { status: "no_encontrada" }; // id inexistente o de otra bodega/zona (R13)

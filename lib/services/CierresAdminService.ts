@@ -561,6 +561,16 @@ export class CierresAdminService implements ICierresAdminService {
       desgloseIngresoBodegaRechazos,
       ganancia,
       pagoTienda,
+      // FEATURE 264 (B5, R7/R9/R27) — MAPEO DIRECTO, y deliberadamente aburrido.
+      //
+      // Passthrough puro de lo que el repositorio congelo: sin firmar URLs (no hay evidencia que
+      // firmar), sin derivar nada y sin rozar `totalesIngreso`, `ganancia`, `pagoTienda` ni
+      // `desgloseIngresoBodegaRechazos`. R19/R20 se cumplen aqui por AUSENCIA de codigo: no hay
+      // ninguna linea que sume esta lista a un total, porque no hay en ella nada que sumar.
+      ordenesSinGestion: found.sinGestion,
+      // R27/R28: se emite TAL CUAL. Traducir un `false` a «lista vacia» seria volver a confundir
+      // «no lo sabemos» con «no hubo ninguna», que es justo lo que esta feature vino a separar.
+      sinGestionRegistrado: found.sinGestionRegistrado,
     };
   }
 

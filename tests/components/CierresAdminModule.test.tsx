@@ -312,6 +312,8 @@ describe("CierresAdminModule", () => {
   it("R8/R9: al abrir el detalle muestra los totales snapshot como string (sin reparsear)", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
@@ -347,6 +349,8 @@ describe("CierresAdminModule", () => {
   it("el detalle muestra el ingreso bruto y NO muestra card de ganancia cuando es ≥ 0", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
@@ -374,6 +378,8 @@ describe("CierresAdminModule", () => {
   it("el detalle muestra el pago a tienda derivado server-side (sin recalcular)", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({
@@ -402,6 +408,8 @@ describe("CierresAdminModule", () => {
   it("muestra 'Debe' en rojo cuando la ganancia es negativa (el pago supera el ingreso)", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", totalPagoMensajero: "1500.00" }),
@@ -428,6 +436,8 @@ describe("CierresAdminModule", () => {
   it("el detalle muestra el ingreso de Ordenex del cierre por concepto", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -502,6 +512,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -538,6 +550,8 @@ describe("CierresAdminModule", () => {
       makeGestion({ gestionId: "g1", resultado: "entregada", numRemision: "REM-9" }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -571,6 +585,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -610,6 +626,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -654,6 +672,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -694,6 +714,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -726,6 +748,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -749,6 +773,8 @@ describe("CierresAdminModule", () => {
   it("feature 102/R8: el ingreso de bodega por rechazos muestra el total y los subtotales SLA y manual separados", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       // 6000 (SLA) + 3200 (manual) === 9200 (total snapshot), particionado server-side (R5).
       desgloseIngresoBodegaRechazos: makeDesglose({
@@ -806,6 +832,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose({
         sla: "6000.00",
@@ -846,6 +874,8 @@ describe("CierresAdminModule", () => {
       }),
     ];
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1" }),
@@ -883,6 +913,8 @@ describe("CierresAdminModule", () => {
   it("R10: aprobar llama a aprobarCierre, muestra éxito y refresca", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -915,6 +947,8 @@ describe("CierresAdminModule", () => {
   it("R11: rechazar sin motivo NO llama a la action y muestra el error de validación", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -946,6 +980,8 @@ describe("CierresAdminModule", () => {
   it("R11: rechazar con motivo llama a rechazarCierre, muestra éxito y refresca", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -989,6 +1025,8 @@ describe("CierresAdminModule", () => {
   it("R5: un cierre del histórico se abre en solo lectura, sin botones de decisión", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c2", estado: "aprobado", resueltoAt: "2026-07-12T00:00:00.000Z" }),
@@ -1021,6 +1059,8 @@ describe("CierresAdminModule", () => {
   it("aprobar conflict: muestra toast de 'ya resuelto' y refresca", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),
@@ -1114,6 +1154,8 @@ describe("CierresAdminModule", () => {
   it("R15: un 'vencido' NO es resoluble por la vía normal — su detalle NO expone aprobar/rechazar", async () => {
     const user = userEvent.setup();
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       desgloseIngresoBodegaRechazos: makeDesglose(), // feature 102 (T10/T11)
       cierre: makeResumen({ cierreId: "cv", estado: "vencido" }),

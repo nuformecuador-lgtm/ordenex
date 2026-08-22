@@ -94,7 +94,14 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findCierrePropioConGestiones: vi.fn(async (cierreId: string) => {
       const cierre = cierres.find((c) => c.cierreId === cierreId);
       if (!cierre) return null;
-      return { cierre, gestiones: gestionesPorCierre.get(cierreId) ?? [] };
+      // Feature 264: el detalle propio devuelve tambien el par (lista, marca) — aqui vacio y
+      // registrado, que es el cierre sin barridas de siempre.
+      return {
+        cierre,
+        gestiones: gestionesPorCierre.get(cierreId) ?? [],
+        sinGestion: [],
+        sinGestionRegistrado: true,
+      };
     }),
     // Feature 170 (T I.1): version paginada del mismo listado (no la ejercita esta suite).
     findCierresByMensajeroPaginado: vi.fn(async () => ({ items: [...cierres], total: cierres.length })),

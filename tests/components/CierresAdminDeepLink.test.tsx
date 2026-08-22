@@ -148,6 +148,11 @@ function detalleOk(cierreId: string, mensajeroNombre = "Zoe del Histórico") {
     totalesIngreso: zeroIngreso(),
     ganancia: "0.00",
     pagoTienda: "0.00",
+    // Feature 264: el contrato del detalle trae SIEMPRE el par (lista, marca). Aqui van en su
+    // valor neutro —«registrado, y no hubo ninguna»— porque esta suite mide enlaces profundos,
+    // no la seccion; los casos de la seccion viven en su propio archivo.
+    ordenesSinGestion: [],
+    sinGestionRegistrado: true,
   };
 }
 
