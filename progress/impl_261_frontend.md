@@ -253,3 +253,44 @@ Se corrió `tests/unit/guards` entero (131 archivos en la corrida ampliada) adem
 `tests/components` y `tests/unit/tablero-dia`: **cero rojos**. En particular la de prosa de la B9,
 que es la que el backend avisó que se dispara con una **cita** del texto viejo — los comentarios
 nuevos **parafrasean**, no citan.
+
+---
+
+## §F6 — Ver la app (cerrado el 2026-08-22 por el leader)
+
+El frontend dejó este riesgo declarado y sin verificar, y con razón: *«el aviso es la frase MÁS
+LARGA de la tarjeta en mosaico y ningún test mide ancho ni truncado, porque jsdom no sabe de
+layout»*. Medido en Chromium real contra la app local, con 4 órdenes **con guía** sobre
+`mensajero.qa@ordenex.test` (2 para hoy, 2 reservadas para el día siguiente).
+
+Frase medida: `avisoReservaParaOtroDia` renderizada como `<p role="note">` en `PosOrderCardMosaico`
+— «Esta orden es para el reparto del 23 de agosto. Ese día podrás recogerla y gestionarla.»
+
+| ancho | caja | líneas | recorte | rompe palabra |
+| --- | --- | --- | --- | --- |
+| 320 px | 244×50 | 3 | no | no |
+| 360 px | 284×33 | 2 | no | no |
+| 390 px | 314×33 | 2 | no | no |
+| 768 px | 197×50 | 3 | no | no |
+| 1280 px | 288×33 | 2 | no | no |
+
+Palabra más larga «gestionarla.» = 67 px, siempre por debajo del ancho de caja. **Sin recorte y sin
+palabra partida en ningún ancho**, incluido 320 px.
+
+**Autocomprobación, sin la cual el OK no vale.** Se estranguló el propio nodo en vivo: ancho 40 px →
+`rompe:true`; alto 10 px con `overflow:hidden` → `recorte:true`. Los dos detectores saben ponerse
+rojos. (El reviewer lo repitió después con sonda propia y obtuvo los mismos números.)
+
+**Verificado de paso en la app:** el bloqueo de R12 funciona — `Gestionar` sale `disabled`
+exactamente en las dos órdenes reservadas y activo en el resto.
+
+### Las tres sondas equivocadas que hubo antes, porque son la parte útil
+
+1. Capturó etiquetas `<script>` (ancho 0) y las contó como falsos ⚠️.
+2. Midió el chip **«Para mañana»** —la etiqueta de la feature 246— en vez del aviso nuevo.
+3. Sembró órdenes **sin `num_guia`**: el botón caía por un bloqueo PREVIO («Esta orden aún no tiene
+   guía asignada; no se puede gestionar») y la reserva **no llegaba a evaluarse**. Encima la regex
+   buscaba «otro día»/«su día», que no aparecen en la redacción real.
+
+Ninguna de las tres medía lo que decía medir, y las tres habrían pasado por verificación. La buena
+es la cuarta. **Una sonda mal escrita fabrica y oculta defectos con la misma facilidad.**

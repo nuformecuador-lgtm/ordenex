@@ -414,3 +414,28 @@ un patrón de operación**. Lo que el dato SÍ sostiene, y basta para revertir D
 `fecha_reparto` ACTUAL, y el defecto que esta ficha arregla **pisaba justo esa columna al anular**.
 Toda anulación anterior que hubiera borrado una reserva es hoy invisible para esta medida. **Un
 cero aquí no absuelve**; el 1 que aparece es el caso del humano, que se reparó a mano.
+
+---
+
+## M1' — re-medición de B0.3 (2026-08-22, contra producción por MCP)
+
+`M1' = 0`. Consulta deliberadamente **más ancha** que M1 y M2 juntas —órdenes con
+`fecha_reparto > (now() AT TIME ZONE 'America/Costa_Rica')::date`, **sin filtrar por estado**—:
+conjunto vacío. Si la 261 se despliega ahora, **ninguna orden heredada queda bloqueada de golpe**.
+
+**P1 no se re-abre**: la condición era «si M1 creció respecto a las 2 del 2026-08-21». Bajó a 0.
+
+**Por qué es 0, dicho entero para que no se lea como «el riesgo no existía».** Las dos órdenes que
+M1 contó el 21 llegaron a su día:
+
+| guía | fecha_reparto | estado | mensajero |
+| --- | --- | --- | --- |
+| 17496963 | 2026-08-22 | `en_reparto` | Jose |
+| 57998428 | 2026-08-22 | `en_reparto` | Jose |
+
+Mismo estado y mismo mensajero que tenían. Eso es **R7 comprobado contra la realidad y no contra un
+doble**: la marca caducó sola al llegar el día, sin que ninguna escritura la desactivara. Y de paso
+**R20**: el corte de esa noche no las barrió.
+
+⚠️ **Este número caduca.** En cuanto alguien asigne una orden para mañana vuelve a haber heredadas.
+Ver C3: la consulta debería ser un paso de la lista de release, que hoy el repo no tiene.
