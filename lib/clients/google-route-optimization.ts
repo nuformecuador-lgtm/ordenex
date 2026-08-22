@@ -151,7 +151,6 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
     const medir = cronometro();
     let respuesta: Response;
     try {
-      console.log('optimizer***: token', token, url)
       respuesta = await this.fetchImpl(url, {
         method: "POST",
         headers: {
