@@ -3860,3 +3860,42 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - Guardias tocadas, ninguna aflojada: `frontera` queda **más** estricta (marca cada consulta por
   posición); `cobertura-tablas` sube conteos exactos sin perder descargas; la de `recharts` sin
   diff.
+
+## 2026-08-21 — 259 · el tablero del día cuenta por día de reparto
+- `/monitoreo` contaba «asignadas hoy» por `asignado_at`. Una orden asignada hoy **para mañana**
+  aparecía hoy y caía en el cubo `sinRecoger` («el mensajero todavía no arrancó con ellas»): la
+  pantalla **acusaba a alguien de ir retrasado por trabajo que aún no era suyo**. Pasa a contarse
+  por día de reparto, alineada con `/ranking`.
+- Requisitos cubiertos: R1..R26 (revisión APROBADA, 26/26).
+- Revierte **D10** (firmada el 2026-08-20) con apéndice fechado en el spec de la 246. La guardia
+  comprueba **las dos direcciones**: que el puntero está **y** que el texto original sigue
+  verbatim — sin esa segunda mitad, «anotar» acaba siendo «reescribir por la puerta de atrás».
+- El predicado **no se inventó**: se copió el de `RankingRepository`, con sus dos ramas disjuntas.
+- **El spec corrigió al leader en lo principal:** la rama de recolección no podía quedarse igual.
+  A las 08:00 mandan a Ana a recoger; a las 14:00 la orden se reasigna a Beto **para mañana** y
+  `mensajero_asignado_id` **se sobrescribe** — la orden reaparecía hoy en la tarjeta de Beto. La
+  acusación volvía por la otra puerta, sobre quien ni fue a recoger.
+- **Dos mutaciones sobreviven y está dicho por qué**, en vez de cobrarse como prueba. El reviewer
+  verificó las dos explicaciones por su cuenta y son ciertas.
+- Cinco literales corregidos, no los tres que el leader listó: censar el árbol ganó a enumerar de
+  memoria, por segunda vez en la misma ficha.
+- ⚠️ **T8.1 (el aviso a quien opera) quedó EXENTA por decisión humana**, marcada `[~]` con fecha:
+  desde el despliegue, lo asignado para mañana desaparece del tablero de hoy **sin aviso previo**.
+
+## 2026-08-21 — 260 · el detalle del tablero muestra la orden completa
+- El modal pasa de 4 columnas propias a montar `ordenesColumns` del listado (20 con «Resultado del
+  día») con su **propio** `DataTable`. **No** se monta `OrdenesListado`: traería acciones por lote,
+  carga masiva y escáner QR a una pantalla de lectura.
+- Requisitos cubiertos: R1..R46 (revisión APROBADA, 46/46).
+- **Hallazgo de seguridad:** `/ordenes` **no recorta dinero por rol, recorta por PUERTA**, y esa
+  puerta cierra el paso al `adminSatelite` — que **sí** entra a `/monitoreo`. Había un rol que
+  habría visto flete y comisión: dinero que la aplicación le niega en su propia pantalla. El
+  recorte por alcance es **columna y dato**; lo recortado no viaja al cliente.
+- **Una guardia que no podía fallar nunca:** los centinelas de dinero eran cadenas y `PriceLabel`
+  las pinta `₡0` igual que un campo recortado, así que la cláusula pasaba con el recorte puesto
+  **y sin él**. Corregidos a números; verificado que ninguna otra cláusula tiene ese defecto.
+- **Un criterio del spec no era alcanzable** (B8) y se dijo en vez de fingirlo; la garantía real
+  vive en el test de integración del método directo. La task afirmaba lo contrario: corregida.
+- Una guardia **ajena** se puso roja y **no se tocó**: el tipo se movió a un módulo sin imports.
+- Deuda dejada: `components/ui/table.tsx` sigue sin consumidores desde la 258, anotada y con chore
+  recomendado (que `DataTable` se apoye en la primitiva).
