@@ -3234,6 +3234,16 @@
       "sdd": true,
       "complexity": "media",
       "status_note": "DADA DE ALTA el 2026-08-22 por reporte del humano: «el cierre no esta enlistando los no gestionados, y eso es importante verlo». || NO ES UNA PESTANA QUE SE OLVIDARON: ES ESTRUCTURAL. `TAB_TONO` en `cierre-factura.tsx` es un `Record<CierreResultado, ...>` con EXACTAMENTE cinco claves -entregada, reprogramada, devuelta, rechazada, incidente-, que son los cinco valores del enum `gestion_resultado`. El detalle entero se construye sobre las GESTIONES. Una orden que el corte barrio a `sin_gestionar` NO TIENE GESTION, asi que no puede aparecer ahi por construccion. || POR QUE DUELE MAS DE LO QUE PARECE: el cierre VENCIDO se crea PRECISAMENTE por ordenes sin gestionar -es lo que el corte diario hace a medianoche-. O sea que la pantalla esconde justo aquello que motivo el cierre que se esta mirando. En la captura del humano los conteos suman 3 y no hay donde ver el resto. || ALCANCE REAL: hay que llevar esas ordenes hasta el detalle, y hoy no viajan. Por eso es `sdd: true` y no un arreglo de presentacion como la 263. || A DECIDIR EN EL SPEC, no suponer: (a) de donde salen -el corte las deja en `sin_gestionar`, pero el cierre las relaciona por otra via-; (b) si son una pestana mas o una seccion aparte, porque NO son un resultado y meterlas como sexta pestana diria que si lo son; (c) que columnas tienen sentido -no hay cobrado, ni metodo, ni evidencia-; (d) si cuentan en los totales del pie, que hoy dicen «Total recaudado ... N entregas». || OJO CON EL DINERO: estas ordenes no tienen gestion, luego no tienen `pago_mensajero` ni recaudo. Que aparezcan en el detalle NO puede mover ni un total, y eso hay que afirmarlo con un test, no darlo por hecho."
+    },
+    {
+      "id": 265,
+      "title": "el optimizador de ruta lee lo que el proveedor le dice",
+      "description": "Google responde que no pudo servir 6 paradas y el cliente lo traduce a «forma inesperada»: error duro, mensajero sin ruta y el cron reintentando y facturando en bucle.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "status_note": "DADA DE ALTA el 2026-08-22 con evidencia de produccion: el cron `/api/cron/procesar-jobs` falla en bucle desde el 21-ago 19:50 (72 eventos, 24 usuarios). La respuesta de Google trae `skippedShipments`, `validationErrors` y `metrics.skippedMandatoryShipmentCount`; el cliente parsea SOLO `routes`, lo traduce a «forma inesperada», NO degrada, y se paga una llamada por minuto que no puede salir bien. Causa medida: origen en Medellin y paradas en Costa Rica. Alcance aprobado por el humano: leer esos campos y dar el motivo real, degradar al calculo local cuando la secuencia no cubra todas las paradas, y cortar antes de la llamada facturada. El detalle vive en `specs/265-optimizador-lee-al-proveedor/`: 34 requisitos, 6 preguntas abiertas (las duras son la forma real de `skippedShipments` y el umbral en km) y dos hallazgos aparte anotados alli."
     }
   ]
 }
