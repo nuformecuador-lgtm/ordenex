@@ -17,6 +17,10 @@ const VALUE_POR_ID: Record<string, string> = {
   "s-entregada": "entregada", // publico
   "s-en-reparto": "en_reparto", // publico
   "s-fulfillment": "en_preparacion", // NO publico (interno de preparacion en bodega)
+  // Feature 268: los dos values que la 268 hace publicos, y uno que sigue NO siendolo.
+  "s-ayuda-tienda": "ayuda_tienda", // publico desde la 268/R1
+  "s-incidente": "incidente", // publico desde la 268/R2
+  "s-sin-gestionar": "sin_gestionar", // NO publico (corte de la noche, 268/R13)
 };
 
 function buildTx(ordenesElegibles: Set<string>): WebhookEmisorTx {
@@ -136,27 +140,68 @@ describe("R12 — solo ordenes elegibles (owner suscrito activo y rol apiKey)", 
 });
 
 // =================================================================================================
-// FEATURE 235 (T1.5, P4 FIRMADA EN CONTRA DE LA RECOMENDACION, 2026-08-19) — el ciclo de AYUDA no
-// se emite, y la excepcion es POR FAMILIA DE ORIGEN.
+// FEATURE 235 (T1.5, P4 FIRMADA EN CONTRA DE LA RECOMENDACION, 2026-08-19).
 //
-// El humano no acepta que un integrador reciba `en_reparto` dos veces sobre la misma orden. La IDA
-// (`-> ayuda_tienda`) no se emite porque ese value no es publico; la VUELTA si lo seria, porque
-// `en_reparto` esta en la politica — de ahi la excepcion.
+// ⏳ 2026-08-22 (FEATURE 268/R8/R9) — AQUI DECIA, y ya no es cierto: «el ciclo de AYUDA no se emite,
+// y la excepcion es POR FAMILIA DE ORIGEN. El humano no acepta que un integrador reciba
+// `en_reparto` dos veces sobre la misma orden. La IDA (`-> ayuda_tienda`) no se emite porque ese
+// value no es publico; la VUELTA si lo seria (...) — de ahi la excepcion».
 //
-// ⚠️ EL SEGUNDO CASO ES EL QUE HAY QUE MIRAR. Si alguien implementara la excepcion POR ESTADO en
-// vez de por familia, el primero seguiria verde y el segundo caeria: una `reprogramada` liberada
-// por el cron dejaria de avisar al integrador, y eso SI es una regresion. El requisito 2 de la
-// firma pide exactamente esto: «un test que falle si alguien amplia la excepcion a otra familia».
+// La 268 revierte 235/P4 y las dos mitades del ciclo emiten: la IDA porque `ayuda_tienda` entra en
+// la politica (R8) y la VUELTA porque la exencion por familia queda vacia (R9). Emitir solo la ida
+// era la MEDIA feature: el integrador veria entrar la orden en ayuda y no la veria salir nunca.
+//
+// ⚠️ LO QUE HAY QUE SEGUIR MIRANDO. Los reingresos LEGITIMOS a `en_reparto` (R12) siguen encolando,
+// igual que antes: si alguien reimplementara una exencion POR ESTADO destino sobre `en_reparto`,
+// esos casos caerian, y eso SI seria una regresion. Y el emisor sigue PREGUNTANDO a
+// `esTransicionEmitible` sin re-derivar la politica (R14): estos casos se mueven al cambiar la
+// politica, no al cambiar el emisor.
 // =================================================================================================
-describe("235/P4 — el RESCATE de la ayuda no emite evento, pero los reingresos legitimos SI", () => {
-  it("`ayuda_tienda -> en_reparto` via `rescate_ayuda_tienda`: NO encola nada", async () => {
+describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos legitimos siguen", () => {
+  it("268/R8: la IDA `en_reparto -> ayuda_tienda` via `solicitud_ayuda_tienda` SI encola", async () => {
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1"])); // la orden SI tiene integrador suscrito
     await emitirWebhooksEstado(
       tx,
+      [entrada("o1", "s-ayuda-tienda", "solicitud_ayuda_tienda")],
+      repo,
+      () => new Date("2026-08-22T10:00:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(tipo).toBe("webhook_estado");
+    expect(payload.estatusDestinoId).toBe("s-ayuda-tienda");
+  });
+
+  // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «`ayuda_tienda -> en_reparto` via
+  // `rescate_ayuda_tienda`: NO encola nada». El caso se INVIERTE (268/R9), no se borra: es el
+  // rastro de que 235/P4 se revirtio a proposito.
+  it("268/R9 (invierte 235/P4): el RESCATE `ayuda_tienda -> en_reparto` SI encola", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+    await emitirWebhooksEstado(
+      tx,
       [entrada("o1", "s-en-reparto", "rescate_ayuda_tienda")],
       repo,
-      () => new Date("2026-08-19T10:00:00.000Z"),
+      () => new Date("2026-08-22T10:00:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(tipo).toBe("webhook_estado");
+    expect(payload.estatusDestinoId).toBe("s-en-reparto");
+  });
+
+  it("268/R13: `ayuda_tienda -> sin_gestionar` via `corte_sin_gestionar` NO encola", async () => {
+    // El corte de la noche sigue en silencio, y por la razon de siempre: el estado DESTINO no es
+    // publico. No hace falta ninguna exencion por familia para eso — que es justo por lo que la
+    // exencion pudo quedar vacia sin perder este comportamiento.
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-sin-gestionar", "corte_sin_gestionar")],
+      repo,
+      () => new Date("2026-08-22T23:59:00.000Z"),
     );
     expect(enqueue).not.toHaveBeenCalled();
   });
@@ -179,22 +224,122 @@ describe("235/P4 — el RESCATE de la ayuda no emite evento, pero los reingresos
     expect(payload.estatusDestinoId).toBe("s-en-reparto");
   });
 
-  it("en un LOTE mixto, solo cae la del rescate: la excepcion no contamina a sus vecinas", async () => {
+  // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «en un LOTE mixto, solo cae la del rescate: la
+  // excepcion no contamina a sus vecinas», con `["o2", "o3"]`. Sin exencion no cae ninguna; el caso
+  // se conserva invertido porque sigue siendo el que detecta una exencion reintroducida a escondidas
+  // en el emisor (R14) o por estado destino.
+  it("268/R9/R12: en un LOTE mixto no cae NINGUNA — ya no hay familia exceptuada", async () => {
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1", "o2", "o3"]));
     await emitirWebhooksEstado(
       tx,
       [
-        entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // exceptuada
+        entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // antes exceptuada (235/P4)
         entrada("o2", "s-en-reparto", "recoleccion"), // la entrada NORMAL a reparto
         entrada("o3", "s-entregada", "gestion"), // otro estado publico
       ],
       repo,
-      () => new Date("2026-08-19T10:00:00.000Z"),
+      () => new Date("2026-08-22T10:00:00.000Z"),
     );
     const ordenesEncoladas = (
       enqueue.mock.calls as unknown as [string, Record<string, unknown>][]
     ).map((c) => c[1].ordenId);
-    expect(ordenesEncoladas.sort()).toEqual(["o2", "o3"]);
+    expect(ordenesEncoladas.sort()).toEqual(["o1", "o2", "o3"]);
+  });
+});
+
+// =================================================================================================
+// FEATURE 268/R11 — el INCIDENTE avisa, y se llega a el por DOS caminos con familias distintas.
+//
+// No es un detalle de cobertura: la arista #44 la produce el MENSAJERO (familia `gestion`, desde
+// `en_reparto`) y las #48-#52 las produce el ADMIN (familia `incidente`, desde los estados de
+// bodega/ruta). Si la politica se hubiera escrito por familia en vez de por estado destino, uno de
+// los dos caminos se quedaria en silencio: por eso se afirman los dos.
+// =================================================================================================
+describe("268/R11 — la transicion a `incidente` encola, por cualquiera de sus dos caminos", () => {
+  it("via familia `gestion` desde `en_reparto` (arista #44, el camino del MENSAJERO)", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-incidente", "gestion")],
+      repo,
+      () => new Date("2026-08-22T11:00:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [tipo, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(tipo).toBe("webhook_estado");
+    expect(payload.estatusDestinoId).toBe("s-incidente");
+  });
+
+  it("via familia `incidente` desde `en_bodega_central` (arista #48, el camino del ADMIN)", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o2"]));
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o2", "s-incidente", "incidente")],
+      repo,
+      () => new Date("2026-08-22T11:05:00.000Z"),
+    );
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const [, payload] = enqueue.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(payload.estatusDestinoId).toBe("s-incidente");
+    expect(payload.ordenId).toBe("o2");
+  });
+});
+
+// =================================================================================================
+// FEATURE 268/R10 — LA PREMISA QUE HACE ACEPTABLE REVERTIR 235/P4.
+//
+// Con la 268, una orden que pasa por el ciclo de ayuda emite `en_reparto` DOS VECES (la entrada
+// normal y el rescate). Eso solo es admisible si los dos eventos son DISTINGUIBLES: la `dedupeKey`
+// —que ES el `eventoId` que ve el integrador— lleva el INSTANTE (features 47 y 99), asi que el
+// segundo evento no choca con la fila `done` del primero ni lo descarta el `ON CONFLICT DO NOTHING`
+// en silencio, y el consumidor puede deduplicar por ese id.
+//
+// ⚠️ ESTE CASO ES EL QUE SE PONE ROJO SI ALGUIEN QUITA EL INSTANTE DE LA CLAVE. Comprobado a mano:
+// pasando el MISMO `now()` a las dos invocaciones, las dos claves coinciden y el aserto cae.
+// =================================================================================================
+describe("268/R10 — dos `en_reparto` sobre la MISMA orden producen dedupeKey DISTINTA", () => {
+  it("misma orden y mismo estatusDestinoId, dos instantes: dos claves distintas", async () => {
+    const { repo, enqueue } = buildRepo();
+    const tx = buildTx(new Set(["o1"]));
+
+    // 1.a mitad: la entrada NORMAL a reparto (la recoleccion del mensajero).
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-en-reparto", "recoleccion")],
+      repo,
+      () => new Date("2026-08-22T09:00:00.000Z"),
+    );
+    // 2.a mitad: el RESCATE del ciclo de ayuda, horas despues, sobre la MISMA orden y el MISMO
+    // estado destino. Antes de la 268 esta no se emitia (235/P4); ahora si.
+    await emitirWebhooksEstado(
+      tx,
+      [entrada("o1", "s-en-reparto", "rescate_ayuda_tienda")],
+      repo,
+      () => new Date("2026-08-22T14:30:00.000Z"),
+    );
+
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    const calls = enqueue.mock.calls as unknown as [
+      string,
+      Record<string, unknown>,
+      { dedupeKey: string },
+    ][];
+    // Misma orden, mismo estado destino: lo unico que las separa es el instante.
+    expect(calls[0][1].ordenId).toBe("o1");
+    expect(calls[1][1].ordenId).toBe("o1");
+    expect(calls[0][1].estatusDestinoId).toBe("s-en-reparto");
+    expect(calls[1][1].estatusDestinoId).toBe("s-en-reparto");
+    expect(calls[0][1].ocurridoAt).not.toBe(calls[1][1].ocurridoAt);
+    // Y las claves son DISTINTAS, que es lo que impide el descarte en silencio.
+    expect(calls[0][2].dedupeKey).not.toBe(calls[1][2].dedupeKey);
+    expect(calls[0][2].dedupeKey).toBe(
+      dedupeKeyWebhookEstado("o1", "s-en-reparto", "2026-08-22T09:00:00.000Z"),
+    );
+    expect(calls[1][2].dedupeKey).toBe(
+      dedupeKeyWebhookEstado("o1", "s-en-reparto", "2026-08-22T14:30:00.000Z"),
+    );
   });
 });
