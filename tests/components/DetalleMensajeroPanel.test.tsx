@@ -6,8 +6,13 @@
 //
 //   - la mitad de USO: se abre pulsando la tarjeta y también con el teclado (R47), la selección
 //     queda en la URL para que el enlace se pueda compartir (R50), y lo que se pinta son las
-//     cuatro columnas del listado y NINGUNA más (R49) con el chip de estatus del listado, no
-//     uno nuevo (R48);
+//     columnas del listado —con su chip de estatus, no uno nuevo (R48)—;
+//
+//     ⛔ FEATURE 260, 2026-08-21 — R49 («el detalle son CUATRO columnas y ninguna más») QUEDA
+//     REVERTIDA por pedido humano: el detalle monta ahora el módulo de columnas del listado
+//     entero. R49 no se borra —sigue legible en `specs/192-tablero-dia-mensajeros/`, con su
+//     nota de reversión fechada—, y el `describe` que la medía dice en su sitio qué la
+//     sustituyó y dónde vive ahora la decisión;
 //   - la mitad de SEGURIDAD: el parámetro de la URL **no es una autorización** (R62) —el
 //     detalle se le pide siempre a la Server Action— y los tres casos malos (id inexistente,
 //     mensajero de otra zona, mensajero sin órdenes hoy) muestran EXACTAMENTE el mismo aviso
@@ -34,6 +39,8 @@ import type {
   TableroDia,
 } from "@/lib/types/tablero-dia";
 import { iniciales } from "@/app/(app)/monitoreo/_components/filtrar-mensajeros";
+import { columnasDetalle } from "@/app/(app)/monitoreo/_components/detalle-columnas";
+import { ordenDelDetalle } from "@/tests/fixtures/orden-detalle-dia";
 import { quitarComentarios } from "../fixtures/sin-comentarios";
 
 vi.mock("@/lib/actions/tablero-dia", () => ({
@@ -133,18 +140,31 @@ function tableroCon(filas: readonly FilaTableroDia[]): TableroDia {
   };
 }
 
-const orden = (parcial: Partial<OrdenDetalleDia> = {}): OrdenDetalleDia => ({
-  ordenId: "o-1",
-  numGuia: "GUIA-001",
-  estatus: "en_reparto",
-  resultadoDelDia: null,
-  cliente: "Marta Solís",
-  destino: "Barrio Escalante, casa azul",
-  asignadoAt: AHORA.toISOString(),
-  ...parcial,
-});
+/**
+ * FEATURE 260 (F4) — la fila del detalle YA NO tiene contrato propio: ES la del listado de
+ * ordenes (`OrdenListItemDTO`) mas el resultado del dia y el instante de asignacion. Por eso
+ * este constructor delega en el fixture COMPARTIDO en vez de escribir siete campos a mano: un
+ * fixture propio y a medias volveria a ser una segunda idea de lo que es una orden, que es
+ * justo lo que esta feature retira.
+ *
+ * La traduccion de los cuatro campos que este archivo usaba —y que ya no existen—:
+ *   `ordenId` → `id` · `estatus` → `estatusValue` · `cliente` → `destinatario` ·
+ *   `destino` → `direccion`. Y `numGuia` pasa de `string` a `number | null`.
+ */
+const orden = (parcial: Partial<OrdenDetalleDia> = {}): OrdenDetalleDia =>
+  ordenDelDetalle({
+    id: "o-1",
+    numGuia: 1001,
+    destinatario: "Marta Solís",
+    direccion: "Barrio Escalante, casa azul",
+    asignadoAt: AHORA.toISOString(),
+    ...parcial,
+  });
 
-function detalleCon(ordenes: readonly OrdenDetalleDia[]): DetalleMensajeroDia {
+function detalleCon(
+  ordenes: readonly OrdenDetalleDia[],
+  alcance: DetalleMensajeroDia["alcance"] = "global",
+): DetalleMensajeroDia {
   return {
     mensajeroId: "m-1",
     fecha: FECHA_CR,
@@ -152,13 +172,18 @@ function detalleCon(ordenes: readonly OrdenDetalleDia[]): DetalleMensajeroDia {
     total: ordenes.length,
     pagina: 1,
     pageSize: 25,
+    // FEATURE 260 (R12) — con QUE alcance resolvio el servidor. Decide que columnas se montan
+    // (R14), y viaja en la respuesta porque la pantalla no puede —ni debe— deducirlo.
+    alcance,
   };
 }
 
 const okTablero = (filas: readonly FilaTableroDia[]) =>
   ({ estado: "ok", tablero: tableroCon(filas) }) as const;
-const okDetalle = (ordenes: readonly OrdenDetalleDia[]) =>
-  ({ estado: "ok", detalle: detalleCon(ordenes) }) as const;
+const okDetalle = (
+  ordenes: readonly OrdenDetalleDia[],
+  alcance: DetalleMensajeroDia["alcance"] = "global",
+) => ({ estado: "ok", detalle: detalleCon(ordenes, alcance) }) as const;
 
 function renderModulo() {
   return render(
@@ -249,8 +274,21 @@ describe("Feature 192 · R47/R50 — la tarjeta abre el detalle y la selección 
   });
 });
 
-describe("Feature 192 · R48/R49 — el lenguaje visual y las columnas son las del listado", () => {
-  it("muestra CUATRO columnas y ninguna más", async () => {
+describe("Feature 260 · R20/R21/R29 — el panel monta el módulo de columnas del listado", () => {
+  // ⛔ REVERSIÓN DE R49 DE LA FEATURE 192 — 2026-08-21.
+  //
+  // Aquí vivía «muestra CUATRO columnas y ninguna más», que medía la decisión de R49: el
+  // alcance del detalle cerrado en Nº Guía · Estado · Resultado del día · Cliente / destino.
+  // Esa decisión QUEDA REVERTIDA por pedido humano —el detalle debe mostrar todos los datos de
+  // la orden— y la sustituye la feature 260, que monta `ordenesColumns`. R49 no se borra: sigue
+  // legible, con su nota de reversión fechada, en `specs/192-tablero-dia-mensajeros/`.
+  //
+  // QUÉ columnas son y en qué orden lo mide `tests/unit/components/detalle-columnas.test.tsx`,
+  // que es donde vive esa decisión. Lo que se mide AQUÍ es lo que sólo se ve con el panel
+  // montado: que la tabla del modal es exactamente la que ese módulo produce, y que montarlo no
+  // trajo ni una acción a una pantalla de lectura.
+
+  it("las cabeceras de la tabla son las del módulo de columnas, para el alcance del servidor", async () => {
     const usuario = userEvent.setup();
     renderModulo();
     await waitFor(() => expect(tarjeta()).toBeInTheDocument());
@@ -261,19 +299,77 @@ describe("Feature 192 · R48/R49 — el lenguaje visual y las columnas son las d
       .getAllByRole("columnheader")
       .map((th) => th.textContent?.trim());
 
-    expect(cabeceras).toEqual([
-      "Nº Guía",
-      "Estado",
-      "Resultado del día",
-      "Cliente / destino",
-    ]);
-    // R49 lo dice por escrito: nada de hora de la última gestión, monto recaudado ni motivo de
-    // reprogramación. Ampliarlo después es aditivo; colarlo ahora, no.
-    for (const prohibida of [/hora/i, /monto/i, /motivo/i]) {
-      expect(cabeceras.some((c) => c && prohibida.test(c))).toBe(false);
-    }
+    // Derivado del módulo, nunca de una lista literal: el día que `/ordenes` gane o pierda una
+    // columna, el detalle la gana o la pierde sin tocar nada (R26).
+    expect(cabeceras).toEqual(columnasDetalle("global").map((columna) => columna.value));
+    expect(cabeceras.length).toBeGreaterThan(15);
   });
 
+  it("R14 — con alcance `zona` el servidor manda menos columnas y el panel monta ESAS", async () => {
+    // La otra mitad del recorte, vista desde el panel: el alcance no se deduce aquí, llega en
+    // la respuesta y decide qué se monta.
+    leerDetalleMock.mockResolvedValue(okDetalle([orden()], "zona"));
+    const usuario = userEvent.setup();
+    renderModulo();
+    await waitFor(() => expect(tarjeta()).toBeInTheDocument());
+    await usuario.click(tarjeta());
+
+    const tabla = await screen.findByRole("table");
+    const cabeceras = within(tabla)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim());
+
+    expect(cabeceras).toEqual(columnasDetalle("zona").map((columna) => columna.value));
+    expect(cabeceras.length).toBeLessThan(columnasDetalle("global").length);
+  });
+
+  it("R21 — montar el módulo NO trajo ninguna acción: ni selección, ni acciones, ni descarga", async () => {
+    const usuario = userEvent.setup();
+    renderModulo();
+    await waitFor(() => expect(tarjeta()).toBeInTheDocument());
+    await usuario.click(tarjeta());
+
+    const tabla = await screen.findByRole("table");
+    const dialogo = screen.getByRole("dialog");
+
+    // El checkbox de selección por lote y la columna «Acciones» los antepone `OrdenesModule`,
+    // no el módulo de columnas: si aparecieran aquí, es que se montó el contenedor.
+    expect(within(tabla).queryAllByRole("checkbox")).toEqual([]);
+    const cabeceras = within(tabla)
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim() ?? "");
+    for (const prohibida of [/acciones/i, /desglose/i, /seleccionar/i]) {
+      expect(cabeceras.some((c) => prohibida.test(c)), `cabecera prohibida: ${prohibida}`).toBe(
+        false,
+      );
+    }
+    // Ni descarga del dataset, ni barra de filtros, ni escáner, ni carga masiva.
+    for (const prohibido of [/descargar/i, /carga masiva/i, /escane/i, /filtrar/i]) {
+      expect(within(dialogo).queryAllByRole("button", { name: prohibido })).toEqual([]);
+    }
+    // Y una sola tabla en el diálogo: el detalle no monta un segundo listado dentro.
+    expect(within(dialogo).getAllByRole("table")).toHaveLength(1);
+  });
+
+  it("R21/R29 — el panel no monta el contenedor del listado y la fila se identifica por la orden", () => {
+    // Censo de fuente. `rowKey` no es observable desde el DOM —`DataTable` cae a `row.id`
+    // igualmente—, así que se mide donde se declara; y `OrdenesListado` no aparece por ningún
+    // lado, que es lo que impide que las nueve acciones por lote entren por esta puerta.
+    const fuente = quitarComentarios(
+      readFileSync(
+        path.join(process.cwd(), "app/(app)/monitoreo/_components/DetalleMensajeroPanel.tsx"),
+        "utf8",
+      ),
+    );
+    expect(fuente).toMatch(/rowKey="id"/);
+    expect(fuente).not.toContain("OrdenesListado");
+    for (const prop of ["renderExpanded", "descarga=", "filtros="]) {
+      expect(fuente, `el detalle ofrece ${prop}`).not.toContain(prop);
+    }
+  });
+});
+
+describe("Feature 192 · R48 — el lenguaje visual es el del listado", () => {
   it("el chip de estatus es EL del listado (mismas clases), no un segundo juego de colores", async () => {
     const usuario = userEvent.setup();
     renderModulo();
@@ -295,8 +391,8 @@ describe("Feature 192 · R48/R49 — el lenguaje visual y las columnas son las d
   it("el resultado del día se etiqueta con el mapa compartido, y el vacío es «—»", async () => {
     leerDetalleMock.mockResolvedValue(
       okDetalle([
-        orden({ ordenId: "o-1", resultadoDelDia: null }),
-        orden({ ordenId: "o-2", numGuia: "GUIA-002", resultadoDelDia: "reprogramada" }),
+        orden({ id: "o-1", resultadoDelDia: null }),
+        orden({ id: "o-2", numGuia: 1002, resultadoDelDia: "reprogramada" }),
       ]),
     );
     const usuario = userEvent.setup();
@@ -305,23 +401,35 @@ describe("Feature 192 · R48/R49 — el lenguaje visual y las columnas son las d
     await usuario.click(tarjeta());
 
     const tabla = await screen.findByRole("table");
-    const filaSinResultado = within(tabla).getByText("GUIA-001").closest("tr") as HTMLElement;
-    const filaConResultado = within(tabla).getByText("GUIA-002").closest("tr") as HTMLElement;
+    const filaSinResultado = within(tabla).getByText("1001").closest("tr") as HTMLElement;
+    const filaConResultado = within(tabla).getByText("1002").closest("tr") as HTMLElement;
 
     expect(within(filaSinResultado).getByText("—")).toBeInTheDocument();
     expect(within(filaConResultado).getByText("Reprogramada")).toBeInTheDocument();
   });
 
-  it("el panel no declara un segundo mapa de estatus → etiqueta ni colores propios (censo)", () => {
+  it("el vocabulario del listado se CONSUME, y ni el panel ni sus columnas declaran otro (censo)", () => {
     // Donde una segunda declaración haría daño de verdad es aquí: el mismo estatus leído
     // distinto en dos pantallas. El censo mira el CÓDIGO, no lo renderizado.
-    const fuente = readFileSync(
-      path.join(process.cwd(), "app/(app)/monitoreo/_components/DetalleMensajeroPanel.tsx"),
-      "utf8",
-    );
-    expect(fuente).toContain("app/(app)/ordenes/_components/EstatusBadge");
+    //
+    // FEATURE 260 — el import del chip CAMBIÓ DE ARCHIVO, no desapareció: el panel ya no pinta
+    // ninguna celda, monta el módulo de columnas y es ÉSE el que consume el vocabulario del
+    // listado (`ordenes-columns` trae `EstatusBadge`; `estatus-label` etiqueta el resultado del
+    // día). Exigirlo en el panel después de esta feature sería exigir que el panel volviera a
+    // declarar columnas.
+    const fuenteDe = (ruta: string) =>
+      readFileSync(path.join(process.cwd(), ruta), "utf8");
+
+    const panel = fuenteDe("app/(app)/monitoreo/_components/DetalleMensajeroPanel.tsx");
+    const columnas = fuenteDe("app/(app)/monitoreo/_components/detalle-columnas.ts");
+
+    expect(panel).toContain("./detalle-columnas");
+    expect(columnas).toContain("app/(app)/ordenes/_components/ordenes-columns");
+    expect(columnas).toContain("app/(app)/ordenes/_components/estatus-label");
+
     for (const senal of ["ORDER_STATUS_LABELS =", "bg-success-soft", "bg-danger-soft", "badgeVariants"]) {
-      expect(fuente, `el panel declara ${senal} por su cuenta`).not.toContain(senal);
+      expect(panel, `el panel declara ${senal} por su cuenta`).not.toContain(senal);
+      expect(columnas, `el módulo de columnas declara ${senal} por su cuenta`).not.toContain(senal);
     }
   });
 });
@@ -411,9 +519,10 @@ describe("Feature 192 · R52 — el detalle no sobrevive a la tarjeta que lo abr
    Mapea: R31, R32, R33, R34, R35, R36, R62, R75.
 
    Lo que sigue arriba, sin tocar: apertura con ratón y teclado, `?mensajero=` en la URL,
-   cierre con Escape que limpia el parámetro sin re-consultar, las cuatro columnas, la
-   comparación de clases con `EstatusBadge`, el «—» del resultado vacío, los tres casos malos
-   con el mismo texto y sin tabla, el censo de fuente y el cierre con aviso.
+   cierre con Escape que limpia el parámetro sin re-consultar, las columnas (que la feature 260
+   pasó de cuatro propias al módulo del listado), la comparación de clases con `EstatusBadge`,
+   el «—» del resultado vacío, los tres casos malos con el mismo texto y sin tabla, el censo de
+   fuente y el cierre con aviso.
 
    Lo que cambia es el CONTENEDOR, y cambia a propósito. El `data-slot` del panel se movió del
    `SheetContent` a un `div` dentro de `children` del `Modal` porque `Modal` tiene props
@@ -522,7 +631,7 @@ describe("Feature 258 · R35/R75 — la tabla es `DataTable` y la paginación vi
     // de la paginación seguiría diciendo 25 y este test no se enteraría.
     const PAGE_SIZE_DEL_SERVIDOR = 7;
     const muchas = Array.from({ length: PAGE_SIZE_DEL_SERVIDOR }, (_, i) =>
-      orden({ ordenId: `o-${i}`, numGuia: `GUIA-${i}` }),
+      orden({ id: `o-${i}`, numGuia: 1000 + i }),
     );
     leerDetalleMock.mockResolvedValue({
       estado: "ok",
@@ -533,6 +642,7 @@ describe("Feature 258 · R35/R75 — la tabla es `DataTable` y la paginación vi
         total: 20,
         pagina: 1,
         pageSize: PAGE_SIZE_DEL_SERVIDOR,
+        alcance: "global",
       },
     });
 
@@ -660,7 +770,7 @@ describe("Feature 259 · R24/R25 — la cabecera del detalle dice «para hoy»",
   it("en plural: «N órdenes asignadas para hoy»", async () => {
     const usuario = userEvent.setup();
     leerDetalleMock.mockResolvedValue(
-      okDetalle([orden(), orden({ ordenId: "o-2", numGuia: "GUIA-002" })]),
+      okDetalle([orden(), orden({ id: "o-2", numGuia: 1002 })]),
     );
     renderModulo();
     await waitFor(() => expect(tarjeta()).toBeInTheDocument());

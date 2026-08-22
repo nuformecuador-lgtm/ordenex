@@ -3,12 +3,13 @@ import { Prisma, type GestionResultado, type PrismaClient } from "@prisma/client
 import type {
   EntregasEnHora,
   FilaConteoMensajero,
+  FilaDelDia,
   FiltroAlcanceTablero,
   ITableroDiaRepository,
   PaginaDetalle,
   PaginaOrdenesDelDia,
 } from "@/lib/interfaces/repositories/ITableroDiaRepository";
-import type { OrdenDetalleDia, TotalesTableroDia } from "@/lib/types/tablero-dia";
+import type { TotalesTableroDia } from "@/lib/types/tablero-dia";
 import { ESTATUS_CON_BUCKET_EXPLICITO, estatusDelBucket } from "@/lib/types/tablero-dia";
 import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 
@@ -138,13 +139,16 @@ interface FilaEntregasEnHoraRow {
   entregadas: bigint;
 }
 
+/**
+ * FEATURE 260 (B2) — LA FILA CRUDA DEL DETALLE, ADELGAZADA. Se fueron `num_guia`, `s."value"`,
+ * `destinatario` y `direccion`: lo que se PINTA de cada orden lo resuelve el camino que ya
+ * produce el elemento del listado (`OrdenRepository.findListItemsByIds`), y proyectarlo
+ * tambien aqui seria la SEGUNDA proyeccion que R2 prohibe. Quedan el identificador con el que
+ * se hidrata y los dos datos que son del DIA y no de la orden.
+ */
 interface FilaDetalleRow {
   orden_id: string;
-  num_guia: number | null;
-  estatus: string;
   resultado_del_dia: GestionResultado | null;
-  cliente: string;
-  destino: string | null;
   asignado_at: Date;
   total: bigint;
 }
@@ -397,6 +401,21 @@ export class TableroDiaRepository implements ITableroDiaRepository {
    * `total` sale de `COUNT(*) OVER ()`, es decir del mismo `SELECT` que las filas: un segundo
    * viaje podria discrepar de la pagina que acompana y el cuadre con `asignadas` seria
    * casual en vez de cierto.
+   *
+   * ⚠️ FEATURE 260 (B2, 2026-08-21) — ESTA CONSULTA DECIDE **QUIEN ENTRA, CUANTOS HAY Y EN QUE
+   * ORDEN**, y ya no decide QUE SE PINTA. Su `SELECT` adelgazo: se fueron `num_guia`,
+   * `s."value"`, `destinatario`, `direccion` y con ellos el `JOIN "order_status"`, que solo
+   * servia a ese `SELECT`. Los campos de la orden los hidrata despues
+   * `OrdenRepository.findListItemsByIds` sobre los ids de ESTA pagina, con el MISMO `include` y
+   * el MISMO mapeo que el listado de ordenes: dos proyecciones de fila de orden a elemento de
+   * listado son dos cosas que pueden divergir (R2).
+   *
+   * ⛔ LO QUE **NO** SE TOCO, Y NO ES CASUALIDAD: el `WITH ids_del_dia`, el `LATERAL`, el
+   * `COUNT(*) OVER ()`, el `ORDER BY`, el `LIMIT/OFFSET` y —sobre todo— LA POSICION de esta
+   * consulta en el archivo. `tests/unit/tablero-dia/frontera.guardia.test.ts` clasifica las
+   * plantillas `$queryRaw` POR EL ORDEN EN QUE APARECEN EN EL TEXTO y afirma
+   * `["agregada","paginada","agregada"]`: esta es la segunda y es la paginada. Una CUARTA
+   * consulta rompe ese guardia, y por eso la 260 no añade ninguna (R38).
    */
   async listarOrdenesDelDia(
     ventana: VentanaDiaCR,
@@ -407,19 +426,14 @@ export class TableroDiaRepository implements ITableroDiaRepository {
     const offset = (pagina.pagina - 1) * pagina.pageSize;
     const filas = await this.prisma.$queryRaw<FilaDetalleRow[]>`
       WITH ${cteIdsDelDia(ventana)}
-      SELECT o."id"           AS orden_id,
-             o."num_guia"     AS num_guia,
-             s."value"        AS estatus,
-             r.resultado      AS resultado_del_dia,
-             o."destinatario" AS cliente,
-             o."direccion"    AS destino,
+      SELECT o."id"      AS orden_id,
+             r.resultado AS resultado_del_dia,
              -- Una orden que entro por el camino de recoleccion tiene asignado_at NULL
              -- (R59: la 157 NO lo estampa a proposito). Se cae al instante de la transicion
              -- de recoleccion del dia, que es lo que de verdad la puso en manos de alguien.
              COALESCE(o."asignado_at", rec.at, ${ventana.desde}) AS asignado_at,
              COUNT(*) OVER ()                                    AS total
       FROM "orden" o
-      JOIN "order_status" s ON s."id" = o."estatus_id"
       LEFT JOIN LATERAL (
         SELECT g."resultado" AS resultado
         FROM "gestion_orden" g
@@ -446,7 +460,7 @@ export class TableroDiaRepository implements ITableroDiaRepository {
       LIMIT ${pagina.pageSize} OFFSET ${offset}`;
 
     return {
-      ordenes: filas.map(aOrdenDetalle),
+      filas: filas.map(aFilaDelDia),
       total: filas.length === 0 ? 0 : Number(filas[0].total),
     };
   }
@@ -540,14 +554,10 @@ export class TableroDiaRepository implements ITableroDiaRepository {
   }
 }
 
-function aOrdenDetalle(f: FilaDetalleRow): OrdenDetalleDia {
+function aFilaDelDia(f: FilaDetalleRow): FilaDelDia {
   return {
     ordenId: f.orden_id,
-    numGuia: f.num_guia === null ? null : String(f.num_guia),
-    estatus: f.estatus,
     resultadoDelDia: f.resultado_del_dia,
-    cliente: f.cliente,
-    destino: f.destino ?? "",
     asignadoAt: f.asignado_at.toISOString(),
   };
 }

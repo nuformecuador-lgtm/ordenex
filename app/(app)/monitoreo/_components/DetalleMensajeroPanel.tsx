@@ -25,16 +25,19 @@
 //  - El cierre por Escape y por el fondo lo da `Modal` con `dismissible` por defecto, y
 //    desemboca en el mismo `onCerrar` de siempre (R32).
 //
-// ─── LO QUE SE REUTILIZA Y LO QUE NO (R19/R37) ───────────────────────────────────────────
+// ─── LO QUE SE REUTILIZA Y LO QUE NO (R19/R37 · FEATURE 260 R20/R21) ─────────────────────
 //
-// Se reutiliza el VOCABULARIO VISUAL del estatus: `EstatusBadge` y `estatusLabel` del listado
-// de ordenes. **Aqui no se declara ni un mapa de estatus → etiqueta ni un color de estatus**:
-// una segunda declaracion divergiria en silencio y la misma orden se leeria distinta en dos
-// pantallas.
+// Se reutiliza el MODULO DE COLUMNAS del listado de ordenes entero (`./detalle-columnas`), y
+// con el su vocabulario visual del estatus. **Aqui no se declara ni una definicion de columna,
+// ni un mapa de estatus → etiqueta, ni un color de estatus**: una segunda declaracion
+// divergiria en silencio y la misma orden se leeria distinta en dos pantallas.
 //
 // Y la tabla es `DataTable`, la unica del repo, sin `renderExpanded` (antepondria una columna
-// con su `<th>` y rompería las CUATRO exactas de R35), sin `descarga` y sin `filtros` (dos
-// acciones que este tablero no debe ofrecer).
+// de expansion, que es una accion), sin `descarga` y sin `filtros` (dos acciones mas que este
+// tablero no debe ofrecer). Con 20 columnas la tabla desborda: lo resuelve la propia primitiva
+// DENTRO de su caja (`overflow-x-auto` + flechas), y por eso el envoltorio de aqui lleva
+// `min-w-0` — sin el, un contenedor flex se niega a encoger por debajo de su contenido y la
+// tabla empujaria el dialogo en vez de desplazarse (R28).
 //
 // NO se monta `OrdenesListado`: es un contenedor de 11 props de negocio —acciones por lote,
 // carga masiva, escaner QR, catalogos de filtros, historial— atado a `/ordenes`.
@@ -51,42 +54,42 @@ import { Inbox } from "lucide-react";
 import { useState } from "react";
 import useSWR from "swr";
 
-import { EstatusBadge } from "@/app/(app)/ordenes/_components/EstatusBadge";
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
-import { DataTable, type Column } from "@/components/shared/DataTable";
+import { DataTable } from "@/components/shared/DataTable";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Modal } from "@/components/shared/Modal";
 import { Pagination } from "@/components/shared/Pagination";
 import { leerDetalleMensajeroDia } from "@/lib/actions/tablero-dia";
-import type { OrdenDetalleDia } from "@/lib/types/tablero-dia";
+import type { AlcanceTableroDia, OrdenDetalleDia } from "@/lib/types/tablero-dia";
 
+import { columnasDetalle } from "./detalle-columnas";
 import { iniciales } from "./filtrar-mensajeros";
 
 const TITULO_GENERICO = "Órdenes del día";
-const SIN_DATO = "—";
 const CERRAR = "Cerrar";
 
 /**
- * R35 — las columnas del detalle, y NINGUNA mas. La lista esta aqui, en un sitio, para que
- * añadir una sea un cambio visible y no un `<td>` colado en el cuerpo de la tabla: el humano
- * cerro el alcance en estas cuatro (nada de hora de la ultima gestion, monto recaudado ni
- * motivo de reprogramacion; ampliarlo despues es aditivo).
+ * ⛔ REVERSION DE R49 DE LA FEATURE 192 — 2026-08-21.
+ *
+ * Aqui vivia `COLUMNAS`, y con ella la decision que R49 tomo: «las columnas del detalle, y
+ * NINGUNA mas», cerrada por el humano en cuatro (Nº Guia, Estado, Resultado del dia, Cliente /
+ * destino). Esa decision QUEDA REVERTIDA, con fecha y motivo, y no se borra: sigue escrita
+ * junto a R49 en `specs/192-tablero-dia-mensajeros/requirements.md`.
+ *
+ *   Motivo: pedido humano —el detalle debe mostrar TODOS los datos de la orden—, sustituido por
+ *   la feature 260, que monta `ordenesColumns` (`app/(app)/ordenes/_components/ordenes-columns`)
+ *   a traves de `./detalle-columnas` en vez de declarar columnas propias. Con la unica columna
+ *   que el listado no tiene —«Resultado del dia»— son 20 en alcance `global` y 17 en `zona`.
+ *
+ * Este comentario sustituye al de R49 en vez de suprimirlo: si el criterio cambia y el
+ * comentario se queda, el codigo miente.
+ *
+ * MIENTRAS NO SE SABE EL ALCANCE se monta el MAS RESTRICTIVO. Es una decision de fallo cerrado:
+ * durante la carga el detalle todavia no llego, y estrenar las columnas de dinero para
+ * retirarlas medio segundo despues las enseñaria —vacias, pero enseñadas— a quien no puede
+ * verlas. Sale del servidor (R12) y no se deduce aqui: un componente de cliente no puede leer
+ * el papel del actor, y tampoco debe.
  */
-const COLUMNAS: Column<OrdenDetalleDia>[] = [
-  { id: "guia", value: "Nº Guía", render: (orden) => orden.numGuia ?? SIN_DATO },
-  // R37 — el chip del listado, no uno nuevo.
-  { id: "estatus", value: "Estado", render: (orden) => <EstatusBadge value={orden.estatus} /> },
-  {
-    id: "resultado",
-    value: "Resultado del día",
-    render: (orden) => resultadoLegible(orden.resultadoDelDia),
-  },
-  {
-    id: "cliente",
-    value: "Cliente / destino",
-    render: (orden) => <ClienteDestino orden={orden} />,
-  },
-];
+const ALCANCE_MIENTRAS_CARGA: AlcanceTableroDia = "zona";
 
 /**
  * R13 — EL aviso. Uno solo, identico para los tres casos malos, y sin eco del id recibido: el
@@ -95,24 +98,6 @@ const COLUMNAS: Column<OrdenDetalleDia>[] = [
 const AVISO_SIN_ORDENES = "No hay órdenes que mostrar para esta selección de hoy.";
 
 const CARGANDO = "Cargando el detalle del mensajero";
-
-/** R19 — la etiqueta del resultado del dia sale del MISMO mapa que el resto de la aplicacion. */
-function resultadoLegible(resultado: OrdenDetalleDia["resultadoDelDia"]): string {
-  // Los cinco valores de `gestion_resultado` existen tambien como values del catalogo de
-  // estatus, asi que `estatusLabel` los traduce sin declarar un segundo mapa; y su fallback ya
-  // resuelve el `null` como "—" y un valor desconocido como el value crudo.
-  return estatusLabel(resultado);
-}
-
-/** El cliente y su destino en una celda, como en el listado: son una sola idea. */
-function ClienteDestino({ orden }: Readonly<{ orden: OrdenDetalleDia }>) {
-  return (
-    <div className="flex flex-col">
-      <span>{orden.cliente || SIN_DATO}</span>
-      <span className="text-xs text-muted-foreground">{orden.destino || SIN_DATO}</span>
-    </div>
-  );
-}
 
 /** R71 — avatar de iniciales en la cabecera. Decorativo; el nombre completo va al lado. */
 function TituloConAvatar({ nombre }: Readonly<{ nombre: string }>) {
@@ -192,7 +177,14 @@ export function DetalleMensajeroPanel({
       cancelLabel={CERRAR}
       size="xl"
     >
-      <div data-slot="detalle-mensajero-panel" className="flex flex-col gap-3">
+      {/*
+        `min-w-0`: el envoltorio del PANEL, que es la caja que contiene a la tabla. Sin el, un
+        contenedor flex se niega a encoger por debajo del ancho de su contenido (`min-width:
+        auto`) y las 20 columnas empujarian el dialogo en vez de desplazarse dentro de su caja
+        (R28). Va aqui y NUNCA en `Modal` ni en `DataTable`: una primitiva compartida no puede
+        saber de esta pantalla.
+      */}
+      <div data-slot="detalle-mensajero-panel" className="flex min-w-0 flex-col gap-3">
         {/*
           R36 — con cero ordenes y sin carga en curso NO se monta `DataTable`: renderiza
           siempre un `<table>`, tambien vacio, y enseñar el esqueleto de una tabla que no
@@ -209,10 +201,16 @@ export function DetalleMensajeroPanel({
           </div>
         ) : (
           <>
+            {/*
+              FEATURE 260 (R20/R29) — las columnas del listado de ordenes, montadas con el
+              alcance QUE VINO DEL SERVIDOR, y la fila identificada por el id de la orden.
+              Ni `renderExpanded`, ni `descarga`, ni `filtros`: las tres son acciones y esta
+              es una vista de lectura (R21/R30).
+            */}
             <DataTable
-              columns={COLUMNAS}
+              columns={columnasDetalle(detalle?.alcance ?? ALCANCE_MIENTRAS_CARGA)}
               data={[...ordenes]}
-              rowKey="ordenId"
+              rowKey="id"
               isLoading={cargando}
               ariaLabel={cargando ? CARGANDO : TITULO_GENERICO}
             />

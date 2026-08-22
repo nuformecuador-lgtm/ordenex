@@ -157,7 +157,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     expect(cuadres).toHaveLength(2);
     for (const c of cuadres) {
       expect(c.detalle.total).toBe(c.asignadas);
-      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+      expect(c.detalle.filas).toHaveLength(c.asignadas);
       // Y la identidad de los ocho sumandos se mantiene en la tarjeta comparada (R25).
       expect(c.suma).toBe(c.asignadas);
     }
@@ -182,7 +182,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
 
     for (const c of cuadres) {
       expect(c.detalle.total).toBe(c.asignadas);
-      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+      expect(c.detalle.filas).toHaveLength(c.asignadas);
     }
     expect(cuadres.map((c) => c.asignadas).sort()).toEqual([1, 6]);
   });
@@ -207,8 +207,8 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       };
     });
 
-    const conResultado = detalle.pagina.ordenes.filter((o) => o.resultadoDelDia !== null);
-    const sinResultado = detalle.pagina.ordenes.filter((o) => o.resultadoDelDia === null);
+    const conResultado = detalle.pagina.filas.filter((f) => f.resultadoDelDia !== null);
+    const sinResultado = detalle.pagina.filas.filter((f) => f.resultadoDelDia === null);
 
     // Las dos consultas comparten la definicion de "resultado del dia" (`DISTINCT ON` y
     // `LATERAL ... LIMIT 1`): si una cambiara sin la otra, estas dos cuentas divergirian.
@@ -222,15 +222,18 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     expect(sinResultado).toHaveLength(
       detalle.fila.sinRecoger + detalle.fila.enReparto + detalle.fila.otros,
     );
-    expect(conResultado.filter((o) => o.resultadoDelDia === "entregada")).toHaveLength(
+    expect(conResultado.filter((f) => f.resultadoDelDia === "entregada")).toHaveLength(
       detalle.fila.entregadas,
     );
-    expect(conResultado.filter((o) => o.resultadoDelDia === "reprogramada")).toHaveLength(
+    expect(conResultado.filter((f) => f.resultadoDelDia === "reprogramada")).toHaveLength(
       detalle.fila.reprogramadas,
     );
   });
 
   it("FEATURE 259 (R14) — el cuadre aguanta mezclando rama (a), rama (b) y recoleccion", async () => {
+    // Los ids del RUIDO de mañana, apuntados durante la siembra para poder afirmar abajo que no
+    // se colaron en la pagina del dia.
+    const idsDeManana: string[] = [];
     // ⚠️ ESTE ARCHIVO AFIRMA UNA IGUALDAD Y LA 259 MUEVE UN LADO DE ELLA. No se afloja nada: los
     // casos que ya existian siguen VERDES SIN TOCARLOS porque ninguno fijaba `fecha_reparto`, o
     // sea que todos ejercitan la rama (b). Lo que hace falta es un caso que ejercite tambien la
@@ -281,13 +284,15 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
       // ── RUIDO QUE NO ES DE HOY ────────────────────────────────────────────────────────────
       // Reservada para mañana: fuera de la tarjeta Y fuera del detalle. Si una consulta la
       // dejara entrar y la otra no, este caso cae — que es justo para lo que existe.
-      await crearOrden(tx, base, {
-        clave: "cuadre259-para-manana",
-        estatus: "por_recoger",
-        mensajeroId: base.mensajero1,
-        asignadoAt: instanteCR(FECHA_CR, "14:00"),
-        fechaReparto: diaReparto("2001-06-16"),
-      });
+      idsDeManana.push(
+        await crearOrden(tx, base, {
+          clave: "cuadre259-para-manana",
+          estatus: "por_recoger",
+          mensajeroId: base.mensajero1,
+          asignadoAt: instanteCR(FECHA_CR, "14:00"),
+          fechaReparto: diaReparto("2001-06-16"),
+        }),
+      );
       const recoleccionParaManana = await crearOrden(tx, base, {
         clave: "cuadre259-recoleccion-manana",
         estatus: "por_recoger",
@@ -295,6 +300,7 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
         asignadoAt: instanteCR(FECHA_CR, "14:00"),
         fechaReparto: diaReparto("2001-06-16"),
       });
+      idsDeManana.push(recoleccionParaManana);
       await transicionDeRecoleccion(
         tx,
         base,
@@ -307,12 +313,15 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     expect(cuadres).toHaveLength(1);
     for (const c of cuadres) {
       expect(c.detalle.total).toBe(c.asignadas);
-      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+      expect(c.detalle.filas).toHaveLength(c.asignadas);
       expect(c.suma).toBe(c.asignadas);
     }
     expect(cuadres[0].asignadas).toBe(5);
     // Y el ruido no se coló por el detalle: ninguna orden de mañana aparece en la pagina.
-    const claves = cuadres[0].detalle.ordenes.map((o) => o.cliente);
-    expect(claves.filter((c) => c.includes("manana"))).toEqual([]);
+    // FEATURE 260 — se comprueba por ID y no por el nombre del destinatario, que esta consulta
+    // ya no proyecta: los ids se apuntaron durante la siembra, arriba.
+    expect(idsDeManana).toHaveLength(2);
+    const enLaPagina = new Set(cuadres[0].detalle.filas.map((f) => f.ordenId));
+    expect(idsDeManana.filter((id) => enLaPagina.has(id))).toEqual([]);
   });
 });

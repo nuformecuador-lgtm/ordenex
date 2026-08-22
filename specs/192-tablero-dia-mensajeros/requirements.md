@@ -283,6 +283,18 @@ columnas que el listado de órdenes: número de guía, estatus actual, resultado
 lo hay, y destino/cliente en el mismo formato. NO DEBE añadir hora de la última gestión,
 monto recaudado ni motivo de reprogramación (ampliarlo después es aditivo).
 
+> **APÉNDICE — 2026-08-21: R49 fue SUPERSEDIDA por la feature 260.** El texto de arriba se
+> conserva **intacto**, porque un spec es la foto de su momento y aquel alcance se cerró a
+> conciencia —para que el detalle no se convirtiera en un segundo listado de órdenes dentro de
+> un modal—; pero **ya no está vigente**. Motivo, en una línea: el humano pidió el 2026-08-21
+> que el detalle muestre **todos los datos de la orden**, y la 260 lo resuelve **montando el
+> propio módulo de columnas del listado** (`ordenesColumns`) con su propio `DataTable` y **sin
+> una sola acción** — que es lo contrario de un segundo listado: es el MISMO, y por eso las dos
+> pantallas ya no pueden divergir. R48 sigue vigente y se cumple mejor que antes: el chip de
+> estatus y las etiquetas ya no se consumen a mano, vienen dentro del módulo que se reutiliza.
+> Lo único que el alcance nuevo deja fuera por decisión propia es «Liberada el», que pertenece a
+> la variante acotada al estado `reprogramada`. Ver `specs/260-detalle-columnas-listado/`.
+
 **R50** *(cerrado el 2026-08-08)* — El sistema DEBE abrir el detalle como **panel sobre el
 tablero**, con el mensajero seleccionado reflejado en la URL, de modo que la vista sea
 enlazable y compartible; y MIENTRAS el detalle está abierto DEBE permitir volver al

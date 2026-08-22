@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { TableroDiaCacheMemoria } from "@/lib/cache/tablero-dia-cache-memoria";
 import { TABLERO_DIA_CACHE_TTL_SEGUNDOS } from "@/lib/config/tablero-dia-cache";
-import { TableroDiaService, claveDeTablero } from "@/lib/services/TableroDiaService";
+import { claveDeTablero } from "@/lib/services/TableroDiaService";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 192 (B9.6) — R34, R66, R68, R70, R72.
 //
@@ -36,7 +36,7 @@ function montar(inicio: string) {
   const t = reloj(inicio);
   const repo = new RepositorioDoble(() => [fila("m1", "Ana Aguilar", { entregadas: 1 })]);
   const cache = new TableroDiaCacheMemoria({ ahora: () => t.now().getTime() });
-  return { t, repo, cache, service: new TableroDiaService(repo, cache) };
+  return { t, repo, cache, service: servicioDelTablero(repo, cache) };
 }
 
 describe("TableroDiaService — la cache de servidor", () => {

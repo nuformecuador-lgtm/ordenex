@@ -61,6 +61,10 @@ import type {
   ParadaRutaRow,
   TransicionAyudaInput,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+// Feature 260 (B3): el recorte de alcance del tablero del dia, como TIPO. La union de dos
+// variantes viaja hasta el `WHERE` sin pasar por un `string | undefined` que convertiria
+// «no se» en «sin recorte».
+import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 
 /**
  * Feature 141 (R28/R35) — ¿queda alguna fila del batch por insertar? Se compara contra el
@@ -1028,6 +1032,43 @@ export class OrdenRepository implements IOrdenRepository {
     ]);
 
     return { items: items.map(toListItemDTO), total };
+  }
+
+  /**
+   * FEATURE 260 (B3, R2/R11/R19/R40) — los elementos de listado de una lista ACOTADA de ids.
+   *
+   * Patron identico a `findEtiquetasByIds` / `findManifiestoByIds` y, sobre todo, a
+   * `findRecepcionSateliteByIds`, que ya combina ids + zona + `deletedAt: null`. Lo que este
+   * metodo NO hace es tan importante como lo que hace: no filtra por fecha, no ordena, no
+   * pagina y **no proyecta a mano**. Recibe una lista de ids —como mucho el tamaño de pagina
+   * del detalle— y devuelve el DTO con el MISMO `include` y el MISMO mapeo que `list()`.
+   *
+   * ⚠️ EL `findMany` DE AQUI QUEDA FUERA DEL CENSO DE `frontera.guardia`, y se dice claro en
+   * vez de rodearse: ese guardia prohibe `findMany` sobre el arbol de la feature del tablero, y
+   * este archivo no esta en ese arbol (tiene medio centenar de `findMany` legitimos, asi que
+   * meterlo no es opcion). Esta verde porque el guardia NO LLEGA, no porque la regla se cumpla
+   * sola. Lo que si se cumple es el FONDO de la regla —«no traer el dia a memoria»—: la
+   * consulta va por `id IN (<= pageSize)`, y lo cubren dos tests, uno de servicio (que la lista
+   * de ids es EXACTAMENTE la de la pagina) y uno de integracion contra Postgres (que el `WHERE`
+   * recorta de verdad la borrada y la de otra zona).
+   */
+  async findListItemsByIds(
+    ids: readonly string[],
+    filtro: FiltroAlcanceTablero,
+  ): Promise<OrdenListItemDTO[]> {
+    if (ids.length === 0) return []; // R5: cero ids, cero consultas
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        id: { in: [...ids] },
+        deletedAt: null, // R19: una orden borrada no vuelve nunca
+        // R11 — el recorte multi-tenant, otra vez. No se fia de que los ids llegaran ya
+        // recortados por la consulta anterior: dos puertas a las mismas filas son dos sitios
+        // donde hay que aplicar la frontera.
+        ...(filtro.tipo === "zona" ? { zonaId: filtro.zonaId } : {}),
+      },
+      ...WITH_ESTATUS_Y_TIENDA, // R2: el MISMO include que `list()`
+    });
+    return rows.map(toListItemDTO); // R2: el MISMO mapeo que `list()`
   }
 
   async update(

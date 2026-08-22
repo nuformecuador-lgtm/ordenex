@@ -5,6 +5,16 @@ import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHist
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// FEATURE 260 (B3) — el recorte de alcance del tablero, importado como TIPO en vez de declarado
+// otra vez aqui: una segunda union de las mismas dos variantes es una segunda definicion que
+// puede quedarse atras (design.md §4.2 y §13/A7).
+//
+// ⚠️ SE IMPORTA DEL MODULO SIN DEPENDENCIAS, NO DE `ITableroDiaRepository`. El design daba por
+// gratis esa segunda arista entre puertos y NO lo es: abria un camino de imports desde este
+// puerto hasta `lib/analytics/alcance` y `lib/auth/acceso-total`, que un panel de CLIENTE ya
+// alcanza. Lo puso rojo `tests/unit/guards/pagos-captura.guardia.test.ts`, y el camino entero
+// esta escrito en `lib/types/alcance-tablero.ts`.
+import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
 
@@ -781,6 +791,27 @@ export interface IOrdenRepository {
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
   findById(id: string): Promise<OrdenDTO | null>;
   list(params: ListOrdenesParams): Promise<ListOrdenesResult>;
+  /**
+   * FEATURE 260 (B3, R2/R11/R19/R40) — LOS ELEMENTOS DE LISTADO DE UNA LISTA **ACOTADA** DE IDS.
+   *
+   * Reusa el `include` `WITH_ESTATUS_Y_TIENDA` y el mapeo `toListItemDTO`, los MISMOS que
+   * `list()`: misma proyeccion, mismo derivador de dinero (`costosListadoOrden`, feature 204) y
+   * ninguna segunda forma que pueda desviarse. Si el listado gana un campo, quien consuma esto
+   * lo gana solo.
+   *
+   * El `filtro` es la MISMA frontera multi-tenant que ya aplico quien produjo los ids, y se
+   * aplica DOS VECES a proposito (R11): esta consulta no se fia de que la lista llegara ya
+   * recortada. Es una union de dos variantes y no un `zonaId?: string` suelto porque un
+   * `string | undefined` convierte «no se» en «sin recorte», que es la forma fail-open que la
+   * feature 192 se nego a escribir.
+   *
+   * `deletedAt: null` (R19) y `ids` vacio -> `[]` SIN consultar (R5). No ordena: quien pide los
+   * ids ya decidio el orden y lo reimpone al hidratar (R4).
+   */
+  findListItemsByIds(
+    ids: readonly string[],
+    filtro: FiltroAlcanceTablero,
+  ): Promise<OrdenListItemDTO[]>;
   /**
    * Aplica cambios solo si la orden existe y no esta borrada; null si no (R36).
    * Feature 49/#11 (R19/R20): SI el update cambia `estatus_id`, registra la transicion en

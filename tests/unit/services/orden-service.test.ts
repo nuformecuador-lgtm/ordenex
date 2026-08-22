@@ -49,6 +49,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
   return {
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [listItem()], total: 1 }),
+    // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
+    findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn().mockResolvedValue(dto()),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27

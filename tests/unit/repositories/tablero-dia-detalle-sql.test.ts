@@ -134,11 +134,7 @@ describe("TableroDiaRepository.listarOrdenesDelDia — el SQL", () => {
     const { prisma } = espiar([
       {
         orden_id: "o1",
-        num_guia: 1234,
-        estatus: "en_reparto",
-        resultado_del_dia: null,
-        cliente: "Ana Solis",
-        destino: "Barrio X, casa 3",
+        resultado_del_dia: "entregada",
         asignado_at: asignadoAt,
         total: BigInt(7),
       },
@@ -153,14 +149,10 @@ describe("TableroDiaRepository.listarOrdenesDelDia — el SQL", () => {
 
     expect(pagina.total).toBe(7);
     expect(typeof pagina.total).toBe("number");
-    expect(pagina.ordenes).toEqual([
+    expect(pagina.filas).toEqual([
       {
         ordenId: "o1",
-        numGuia: "1234",
-        estatus: "en_reparto",
-        resultadoDelDia: null,
-        cliente: "Ana Solis",
-        destino: "Barrio X, casa 3",
+        resultadoDelDia: "entregada",
         asignadoAt: asignadoAt.toISOString(),
       },
     ]);
@@ -175,7 +167,53 @@ describe("TableroDiaRepository.listarOrdenesDelDia — el SQL", () => {
       PAGINA,
     );
 
-    expect(pagina).toEqual({ ordenes: [], total: 0 });
+    expect(pagina).toEqual({ filas: [], total: 0 });
     expect(consultas).toHaveLength(1);
+  });
+});
+
+// FEATURE 260 (B2) — LA PROYECCION ADELGAZO, Y ESO SE AFIRMA.
+//
+// Esta consulta decide QUIEN entra, cuantas hay y en que orden; ya no decide que se pinta. Si
+// alguien volviera a proyectar aqui `num_guia`, el estatus, el destinatario o la direccion,
+// habria DOS proyecciones de fila de orden a elemento de listado y podrian divergir sin que
+// nada se pusiera rojo — que es exactamente lo que R2 prohibe.
+describe("TableroDiaRepository.listarOrdenesDelDia — la proyeccion de la feature 260", () => {
+  async function sqlDelDetalle(): Promise<string> {
+    const { prisma, consultas } = espiar();
+    await new TableroDiaRepository(prisma).listarOrdenesDelDia(
+      VENTANA,
+      { tipo: "global" },
+      MENSAJERO,
+      PAGINA,
+    );
+    return consultas[0].text;
+  }
+
+  it.each([
+    ['o."num_guia"', "la guia la trae la hidratacion, con el mismo mapeo que el listado"],
+    ['s."value"', "el estatus tambien, y con el se fue el JOIN a `order_status`"],
+    ['o."destinatario"', "el destinatario lo pinta la columna del listado"],
+    ['o."direccion"', "la direccion, igual"],
+    ['JOIN "order_status"', "ese JOIN solo servia al SELECT que ya no existe"],
+  ])("ya NO proyecta %s (R2)", async (fragmento) => {
+    expect(await sqlDelDetalle()).not.toContain(fragmento);
+  });
+
+  it("sigue proyectando lo que SI decide: el id, el resultado del dia y el instante", async () => {
+    const sql = await sqlDelDetalle();
+    expect(sql).toMatch(/o\."id"\s+AS orden_id/);
+    expect(sql).toMatch(/r\.resultado AS resultado_del_dia/);
+    expect(sql).toContain("AS asignado_at");
+    // R8 — el total sigue saliendo del MISMO SELECT que las filas, no de un segundo viaje.
+    expect(sql).toContain("COUNT(*) OVER ()");
+  });
+
+  it("R38 — el adelgazamiento no toco el universo del dia ni la paginacion", async () => {
+    const sql = await sqlDelDetalle();
+    expect(sql).toContain("ids_del_dia");
+    expect(sql).toContain("LEFT JOIN LATERAL");
+    expect(sql).toMatch(/LIMIT\s+\$\d+\s+OFFSET\s+\$\d+/);
+    expect(sql).toMatch(/ORDER BY COALESCE/);
   });
 });
