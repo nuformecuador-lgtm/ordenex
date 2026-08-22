@@ -525,6 +525,13 @@ explicación se leen como un error de la app.
 
 **T6.7 queda `N/A`**: no se toca el CTE.
 
+> **APÉNDICE — 2026-08-21: D10 fue SUPERSEDIDA por la feature 259.** El texto de arriba se conserva
+> **intacto**, porque un spec es la foto de su momento y aquella decisión se tomó a conciencia; pero
+> **ya no está vigente**. Motivo, en una línea: D10 razonó sobre `asignadas` y no sobre el cubo
+> `sinRecoger`, donde una orden reservada para mañana entraba etiquetada como «el mensajero todavía
+> no arrancó con ellas» — un retraso que no existe. Desde el 2026-08-21 el tablero del día cuenta
+> por **día de reparto**, alineado con `/ranking`. Ver `specs/259-tablero-dia-por-reparto/`.
+
 ### D11 — FIRMADA el 2026-08-20: **solo hacia adelante, no se recalcula nada**
 
 Con la recomendación del spec. El cambio del denominador del ranking **rige desde el despliegue** y

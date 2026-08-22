@@ -61,8 +61,12 @@ const DENEGADO_DESCRIPCION =
   "Tu cuenta no puede consultar las órdenes por mensajero del día. Si creés que debería, pedí acceso a un administrador.";
 
 const DESAPARECIDO_TITULO = "Se cerró el detalle";
+// FEATURE 259 (T7.2) — R24/R25: «asignadas hoy» → «asignadas PARA hoy». Este es el CUARTO sitio,
+// el que no estaba en la pregunta original: dejarlo haría que la misma pantalla dijera dos cosas
+// distintas —el vacío y la tarjeta hablando del día para el que se asignó, y este aviso del día
+// en que se asignó— sobre exactamente el mismo conteo.
 const DESAPARECIDO_DESCRIPCION =
-  "El mensajero que estabas viendo ya no tiene órdenes asignadas hoy dentro de tu alcance, así que su tarjeta salió del tablero.";
+  "El mensajero que estabas viendo ya no tiene órdenes asignadas para hoy dentro de tu alcance, así que su tarjeta salió del tablero.";
 
 /**
  * R2/R3 — un denegado se dice, NUNCA se pinta como un tablero de ceros. Son dos cosas

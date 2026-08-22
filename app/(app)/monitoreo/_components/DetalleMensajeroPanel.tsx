@@ -179,8 +179,11 @@ export function DetalleMensajeroPanel({
         mensajeroNombre ? <TituloConAvatar nombre={mensajeroNombre} /> : TITULO_GENERICO
       }
       description={
+        // FEATURE 259 (T7.2) — R24/R25: «asignadas hoy» → «asignadas PARA hoy», con la misma
+        // frase que el nombre accesible de la tarjeta desde la que se abre este panel. Las dos
+        // cifras son la misma (R14) y no pueden describirse con criterios distintos.
         detalle
-          ? `${detalle.total} ${detalle.total === 1 ? "orden asignada" : "órdenes asignadas"} hoy`
+          ? `${detalle.total} ${detalle.total === 1 ? "orden asignada" : "órdenes asignadas"} para hoy`
           : TITULO_GENERICO
       }
       // R34 — es lectura, no una decision: no hay «Confirmar». La unica salida visible es

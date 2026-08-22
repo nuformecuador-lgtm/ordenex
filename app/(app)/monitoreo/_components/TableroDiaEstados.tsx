@@ -3,7 +3,7 @@
 //
 // Son cosas distintas y no pueden parecer la misma:
 //   - CARGANDO (skeleton): todavia no hay dato.
-//   - VACIO (R33 de la 192): hay dato y dice que hoy no hay ninguna orden asignada en el
+//   - VACIO (R33 de la 192): hay dato y dice que no hay ninguna orden asignada PARA HOY en el
 //     alcance del actor. NO es un error, y por eso no se pinta como tal.
 //   - FALLO DE REFRESCO (R9/R32): hay dato viejo en pantalla y la ultima re-consulta fallo. El
 //     aviso acompaña a las tarjetas ya cargadas; NUNCA las sustituye ni las pone a cero.
@@ -27,9 +27,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const CARGANDO = "Cargando el tablero del día";
 
-const VACIO_TITULO = "Sin órdenes asignadas hoy";
+// ─── FEATURE 259 (T7.1) — R23/R24/R25: el vacio dice QUE cuenta la pantalla, y ya no promete ──
+// Hasta el 2026-08-21 el titulo decia «Sin órdenes asignadas hoy» y la descripcion cerraba con
+// «En cuanto se asigne la primera, aparecerá aquí». Esa promesa paso a ser FALSA con el criterio
+// nuevo: el tablero cuenta por el dia PARA EL QUE se asigno la orden, asi que lo que se asigne
+// hoy para mañana no aparece aqui — aparece en el tablero de mañana. El texto nuevo describe lo
+// que la pantalla cuenta y dice DONDE va a parar lo demas, en vez de prometer algo que no ocurre.
+// Lenguaje de quien opera (R25): «para hoy», nunca el nombre de una columna ni una sigla.
+const VACIO_TITULO = "Sin órdenes asignadas para hoy";
 const VACIO_DESCRIPCION =
-  "Ningún mensajero tiene órdenes asignadas hoy dentro de tu alcance. En cuanto se asigne la primera, aparecerá aquí.";
+  "Ningún mensajero tiene órdenes asignadas para hoy dentro de tu alcance. El tablero muestra el trabajo de hoy: lo que se asigne para otro día aparecerá en el tablero de ese día.";
 
 const FALLO_TITULO = "No se pudo actualizar";
 const FALLO_DESCRIPCION =

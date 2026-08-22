@@ -40,6 +40,20 @@ export function instanteCR(fecha: string, horaCR: string): Date {
   return new Date(Date.UTC(y, m - 1, d, hh + 6, mm, ss ?? 0));
 }
 
+/**
+ * FEATURE 259 (T3.1) — el valor de `orden.fecha_reparto` para una fecha calendario CR.
+ *
+ * ⚠️ ES LA **MEDIANOCHE UTC** DE ESA FECHA, NO LAS 06:00Z, y la diferencia no es cosmética: la
+ * columna es `@db.Date` y ésa es la convención del repo para ese tipo (feature 46, y lo que
+ * devuelve `resolverFechaReparto`). Las cotas `…T06:00:00.000Z` de `instanteCR` son para las
+ * columnas `timestamp` (`asignado_at`, `gestion_orden.created_at`). Mezclarlas es el off-by-one
+ * de seis horas que cerró la ficha 166, y aquí sembraría el día equivocado sin que nada avise.
+ */
+export function diaReparto(fecha: string): Date {
+  const [y, m, d] = fecha.split("-").map((n) => Number.parseInt(n, 10));
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 /** Las 19:00 hora de Costa Rica: el caso de R13, con la ventana ya bien entrada. */
 export const AHORA = instanteCR(FECHA_CR, "19:00");
 export const VENTANA = ventanaDelDiaEnCursoCR(AHORA);
@@ -143,6 +157,16 @@ export interface SemillaOrden {
    * el camino de RECOLECCION (R57): la 157 no estampa esta columna a proposito.
    */
   readonly asignadoAt?: Date | null;
+  /**
+   * FEATURE 259 — `orden.fecha_reparto` (`@db.Date`), el DIA PARA EL QUE bodega hizo la
+   * asignacion. Se construye con `diaReparto("2001-06-15")`, nunca con `instanteCR`.
+   *
+   * `undefined` = NULL, y eso NO es un descuido: es la rama (b), el respaldo por `asignado_at`
+   * para las ordenes anteriores a la 246 (no hay backfill y no lo habra). Ningun test escrito
+   * antes de la 259 fija este campo, asi que **todos ellos ejercitan la rama (b)** y siguen
+   * siendo evidencia valida de que ese respaldo funciona.
+   */
+  readonly fechaReparto?: Date | null;
 }
 
 export async function crearOrden(
@@ -164,6 +188,7 @@ export async function crearOrden(
       cantonId: base.cantonId,
       mensajeroAsignadoId: semilla.mensajeroId ?? null,
       asignadoAt: semilla.asignadoAt ?? null,
+      fechaReparto: semilla.fechaReparto ?? null,
       createdAt: instanteCR(FECHA_CR, "07:00"),
     },
     select: { id: true },
