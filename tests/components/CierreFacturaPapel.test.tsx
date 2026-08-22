@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 
 import path from "node:path";
 
@@ -690,5 +690,245 @@ describe("Feature 223 — sin diálogo: todas las candidatas, y con CERO no pasa
         "página saldría en blanco, y no hay pantalla que lo muestre: es el fallo más caro de la " +
         "ficha y la guarda `:has()` de cada selector es lo único que lo impide.",
     ).toEqual([]);
+  });
+});
+
+/* ================================================================== *
+ * Feature 263 — la cabecera no puede contradecirse, y la guía no puede
+ * pisar al destinatario.
+ *
+ * ⚠️ LO QUE ESTE BLOQUE **NO** DEMUESTRA. Del defecto de la rejilla aquí se fija la
+ * ANATOMÍA (qué clase lleva cada celda y que los dos sitios comparten plantilla), nunca el
+ * resultado: jsdom no hace layout y `scrollWidth`/`clientWidth` valen 0 para todo — ya está
+ * escrito así en `tests/components/TableroDiaTarjetas.test.tsx`. Que ninguna celda se pinte
+ * sobre la vecina y que las columnas queden alineadas se mide EN EL NAVEGADOR y vive en
+ * `progress/impl_263.md` (R9 y R14 no tienen test de suite, y eso es correcto: uno que dijera
+ * medirlo estaría mintiendo).
+ *
+ * Los literales de texto se escriben AQUÍ a mano. Importar el `Record` de rótulos del
+ * componente dejaría estos casos verdes con cualquier texto.
+ * ================================================================== */
+
+/** El detalle con la cabecera que se quiera, localizado por su nombre accesible. */
+function detalle(
+  over: Partial<CierreFacturaCabecera> = {},
+  g: CierreDetalleGestion = gestion(),
+): HTMLElement {
+  render(
+    <CierreFacturaDetalle
+      cierre={{ ...CABECERA, ...over }}
+      grupos={{ ...emptyGrupos(), entregada: [g] }}
+    />,
+  );
+  return screen.getByRole("region", {
+    name: "Comprobante detallado del cierre de Ana Pérez",
+  });
+}
+
+/** La tarjeta compacta YA DESPLEGADA: la columna «Fechas» sólo se monta al abrirla. */
+function resumenDesplegado(over: Partial<CierreAdminResumen> = {}): HTMLElement {
+  render(<CierreFacturaResumen cierre={{ ...RESUMEN, ...over }} />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ver detalles del cierre de Ana Pérez" }),
+  );
+  return screen.getByRole("region", { name: "Comprobante del cierre de Ana Pérez" });
+}
+
+const RESUELTO_AT = "2026-08-14T09:30:00.000Z";
+
+describe("Feature 263 — la cabecera dice la verdad sobre el estado (R1–R5)", () => {
+  it("un cierre VENCIDO se rotula «Solicitud»: no hay comprobante de lo no resuelto (R1)", () => {
+    const hoja = detalle({ estado: "vencido", resueltoAt: null });
+
+    expect(within(hoja).getByText("Solicitud #C1000001")).toBeTruthy();
+    expect(
+      within(hoja).queryAllByText(/Comprobante/).length,
+      "llamar «Comprobante» a un cierre vencido es la mitad de la contradicción que reportó " +
+        "el humano: el comprobante se emite cuando algo se resolvió, y aquí no se resolvió nada",
+    ).toBe(0);
+  });
+
+  it("un cierre SOLICITADO, lo mismo: todavía no es un comprobante (R1)", () => {
+    const hoja = detalle({ estado: "solicitado", resueltoAt: null });
+
+    expect(within(hoja).getByText("Solicitud #C1000001")).toBeTruthy();
+    expect(within(hoja).queryAllByText(/Comprobante/).length).toBe(0);
+  });
+
+  it("aprobado y rechazado SÍ son comprobantes: alguien los resolvió (R2)", () => {
+    for (const estado of ["aprobado", "rechazado"] as const) {
+      const hoja = detalle({ estado, resueltoAt: RESUELTO_AT });
+      expect(
+        within(hoja).getByText("Comprobante #C1000001"),
+        `un cierre ${estado} tiene fecha de resolución y un badge que lo dice: «Comprobante» ` +
+          "no deja nada ambiguo",
+      ).toBeTruthy();
+      expect(within(hoja).queryAllByText(/Solicitud #/).length).toBe(0);
+      cleanup();
+    }
+  });
+
+  it("sin fecha de resolución NO se pinta la pieza «Resuelto», ni con guion (R3)", () => {
+    for (const estado of ["solicitado", "vencido"] as const) {
+      const hoja = detalle({ estado, resueltoAt: null });
+
+      expect(
+        hoja.textContent,
+        "un guion no es un dato: es el hueco donde iría un dato, y en una cabecera de cuatro " +
+          "palabras obliga a interpretarlo justo cuando el badge de estado de al lado ya lo dice",
+      ).not.toContain("Resuelto");
+      expect(within(hoja).getByText("Solicitado 2026-08-13")).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("con fecha de resolución se pintan las dos fechas, con los rótulos de siempre (R4)", () => {
+    const hoja = detalle({ estado: "aprobado", resueltoAt: RESUELTO_AT });
+
+    expect(
+      within(hoja).getByText("Solicitado 2026-08-13 · Resuelto 2026-08-14"),
+    ).toBeTruthy();
+  });
+
+  it("el folio y la fecha de solicitud salen en los CUATRO estados (R5)", () => {
+    for (const estado of ["solicitado", "vencido", "aprobado", "rechazado"] as const) {
+      const sinResolver = estado === "solicitado" || estado === "vencido";
+      const hoja = detalle({ estado, resueltoAt: sinResolver ? null : RESUELTO_AT });
+
+      expect(
+        hoja.textContent,
+        "el folio es la identidad del documento en los cuatro estados: sin él la hoja impresa " +
+          "deja de identificar de qué cierre habla (feature 223)",
+      ).toContain("#C1000001");
+      expect(hoja.textContent).toContain("Solicitado 2026-08-13");
+      cleanup();
+    }
+  });
+
+  it("los nombres accesibles de las hojas NO cambiaron: son el localizador de los tests (R6)", () => {
+    expect(detalle({ estado: "vencido", resueltoAt: null })).toBeTruthy();
+    cleanup();
+    expect(resumenDesplegado({ estado: "vencido" })).toBeTruthy();
+  });
+});
+
+describe("Feature 263 — la tarjeta compacta tenía el MISMO guion (R13)", () => {
+  it("sin fecha de resolución, la columna «Fechas» no pinta la línea ni el guion", () => {
+    const fechas = within(
+      resumenDesplegado({ estado: "vencido", resueltoAt: null }),
+    ).getByRole("region", { name: "Fechas" });
+
+    expect(fechas.textContent).toContain("Solicitado");
+    expect(
+      fechas.textContent,
+      "es el mismo defecto de la cabecera, en la misma pantalla, a nueve líneas: arreglar sólo " +
+        "uno se lee como dos comportamientos deliberados y manda a buscar la diferencia que los " +
+        "explica, que no existe",
+    ).not.toContain("Resuelto");
+    expect(fechas.textContent).not.toContain("—");
+  });
+
+  it("con fecha de resolución sí la pinta: ahí el dato existe", () => {
+    const fechas = within(
+      resumenDesplegado({ estado: "aprobado", resueltoAt: RESUELTO_AT }),
+    ).getByRole("region", { name: "Fechas" });
+
+    expect(fechas.textContent).toContain("Resuelto");
+    expect(fechas.textContent).toContain("2026-08-14");
+  });
+});
+
+/** El `<button>` de la única fila de la pestaña activa. */
+function filaBoton(g: CierreDetalleGestion = gestion()): HTMLElement {
+  const hoja = detalle({}, g);
+  return within(hoja).getByRole("button", {
+    name: `Detalle de la orden ${g.numRemision} · ${g.destinatario}`,
+  });
+}
+
+/** El fragmento `grid-cols-[…]` de un nodo, LEÍDO DEL DOM (nunca escrito a mano). */
+function plantillaRejilla(el: HTMLElement): string | null {
+  return el.className.match(/grid-cols-\[[^\]]+\]/)?.[0] ?? null;
+}
+
+describe("Feature 263 — anatomía de la rejilla: quién cede y quién no (R7/R8/R10/R11/R12)", () => {
+  it("la celda de la guía no lleva `truncate`, `overflow-hidden` ni `break-*` (R7)", () => {
+    const guia = within(filaBoton()).getByText("1001");
+
+    for (const prohibida of ["truncate", "overflow-hidden", "break-words", "break-all"]) {
+      expect(
+        guia.className,
+        "es literalmente el primer defecto de la 258: allí un `overflow-x-clip` se comía la " +
+          "cifra en silencio y 16.800 tests pasaban. Un número a medias es un número FALSO",
+      ).not.toContain(prohibida);
+    }
+    expect(guia.className).toContain("whitespace-nowrap");
+    expect(
+      /min-w-\[\d+px\]/.test(guia.className),
+      "la guía dejó de ser una caja de 40 px fijos, pero necesita un PISO: es lo que hace que " +
+        "la cabecera y todas las filas resuelvan al mismo ancho aunque sean rejillas distintas",
+    ).toBe(true);
+  });
+
+  it("el que cede es el destinatario, con elipsis, y por eso lleva `min-w-0` (R8)", () => {
+    const boton = filaBoton();
+    const nombre = within(boton).getByText("Ana Pérez");
+    const remision = within(boton).getByText("REM-001 · Caja mediana");
+
+    expect(nombre.className).toContain("truncate");
+    expect(remision.className).toContain("truncate");
+    expect(
+      nombre.parentElement?.className,
+      "sin `min-w-0` el mínimo automático del flex-item vuelve a ser el min-content del texto " +
+        "y `truncate` NO llega a activarse nunca — lección literal de la 258",
+    ).toContain("min-w-0");
+  });
+
+  it("guía y destinatario son dos nodos distintos, no un texto pegado", () => {
+    const boton = filaBoton();
+    const guia = within(boton).getByText("1001");
+    const nombre = within(boton).getByText("Ana Pérez");
+
+    expect(guia).not.toBe(nombre);
+    expect(guia.contains(nombre)).toBe(false);
+    expect(nombre.contains(guia)).toBe(false);
+  });
+
+  it("sin número de guía la celda sigue mostrando «—», igual que antes (R11)", () => {
+    // La primera celda de la rejilla ES la de la guía: se localiza por posición porque su
+    // texto («—») lo comparten las dos celdas de dinero cuando no hay montos.
+    const celdaGuia = filaBoton(gestion({ numGuia: null })).firstElementChild;
+
+    expect(celdaGuia?.textContent).toBe("—");
+    expect((celdaGuia as HTMLElement).className).toContain("whitespace-nowrap");
+  });
+
+  it("el destinatario recortado conserva su texto en el DOM y en el nombre accesible (R12)", () => {
+    const largo = "María Fernanda de los Ángeles Rodríguez Villalobos Montenegro";
+    const boton = filaBoton(gestion({ destinatario: largo }));
+
+    expect(
+      within(boton).getByText(largo).textContent,
+      "lo que se recorta es la PINTURA, no el dato: el texto completo sigue en el DOM",
+    ).toBe(largo);
+    expect(boton.getAttribute("aria-label")).toContain(largo);
+    expect(boton.getAttribute("aria-label")).toContain("REM-001");
+  });
+
+  it("la cabecera de columnas y la fila usan LA MISMA plantilla de rejilla (R10)", () => {
+    const hoja = detalle();
+    const cabeceraCols = within(hoja).getByText("Guía").parentElement as HTMLElement;
+    const fila = within(hoja).getByRole("button", {
+      name: "Detalle de la orden REM-001 · Ana Pérez",
+    });
+
+    const dePlantilla = plantillaRejilla(cabeceraCols);
+    expect(dePlantilla).not.toBeNull();
+    expect(
+      plantillaRejilla(fila),
+      "son dos rejillas INDEPENDIENTES —la cabecera y cada fila— y lo único que las mantiene " +
+        "alineadas es que sus cinco tracks resuelvan igual. El literal duplicado ya se había " +
+        "puesto de acuerdo por casualidad una vez; tocar uno solo descuadra el otro",
+    ).toBe(dePlantilla);
   });
 });

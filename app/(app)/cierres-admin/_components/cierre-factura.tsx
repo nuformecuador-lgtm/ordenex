@@ -28,7 +28,7 @@ import type {
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 
 import {
   money,
@@ -138,6 +138,18 @@ import { desglosePantalla } from "./desglose-pago";
 // --- Etiquetas propias de la factura (texto separado, i18n-ready) ---
 const FACTURA_TITULO = "Cierre del día";
 const FACTURA_FOLIO_LABEL = "Comprobante";
+// Feature 263 (R1/R2): el sustantivo que precede al folio lo decide el ESTADO, no el azar.
+// Un cierre sin resolver no es un comprobante —no se ha emitido nada— y llamarlo así junto a
+// un «Resuelto —» es la contradicción que reportó el humano. `Solicitud` no inventa
+// vocabulario: reusa el «Solicitado <fecha>» que ya está en la misma cabecera desde la 38.
+// El `Record` es exhaustivo a propósito: un quinto valor en `CierreEstado` pone el typecheck
+// rojo y obliga a decidir su rótulo en vez de heredar el que había en silencio.
+const FACTURA_FOLIO_LABEL_POR_ESTADO: Record<CierreEstado, string> = {
+  aprobado: FACTURA_FOLIO_LABEL,
+  rechazado: FACTURA_FOLIO_LABEL,
+  solicitado: "Solicitud",
+  vencido: "Solicitud",
+};
 const FACTURA_MENSAJERO_LABEL = "Mensajero";
 const FACTURA_SOLICITADO_LABEL = "Solicitado";
 const FACTURA_RESUELTO_LABEL = "Resuelto";
@@ -688,15 +700,22 @@ function HojaResumen({
             {solicitadoAt === undefined ? null : (
               <section aria-label={RESUMEN_FECHAS_TITULO}>
                 <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
+                {/* Feature 263 (R13): sin fecha de resolución la línea NO se pinta. Era el
+                    MISMO guion de la cabecera, en la MISMA pantalla, nueve líneas más arriba;
+                    arreglar sólo uno se leería como dos comportamientos deliberados. Sin
+                    ella, «Solicitado» pasa a ser la última y pierde su borde punteado. */}
                 <LineaFecha
                   label={FACTURA_SOLICITADO_LABEL}
                   value={fecha(solicitadoAt)}
+                  ultima={!resueltoAt}
                 />
-                <LineaFecha
-                  label={FACTURA_RESUELTO_LABEL}
-                  value={fecha(resueltoAt ?? null)}
-                  ultima
-                />
+                {resueltoAt ? (
+                  <LineaFecha
+                    label={FACTURA_RESUELTO_LABEL}
+                    value={fecha(resueltoAt)}
+                    ultima
+                  />
+                ) : null}
               </section>
             )}
           </div>
@@ -904,6 +923,50 @@ export interface CierreFacturaDetalleProps {
  */
 const FILA_CORREGIR_METODOS = "Corregir métodos de pago";
 
+/**
+ * Feature 263 (R7–R10, R14) — la plantilla de la rejilla de órdenes, en UN solo sitio.
+ *
+ * POR QUÉ ES UNA CONSTANTE Y NO UN LITERAL REPETIDO. La cabecera de columnas y cada fila son
+ * rejillas INDEPENDIENTES —cada fila es su propio contenedor `grid`—; hoy quedan alineadas
+ * sólo porque los cinco tracks resuelven al mismo número. El literal
+ * `grid-cols-[40px_1.4fr_1fr_1fr_24px]` vivía duplicado en los dos sitios, así que tocar uno
+ * descuadraba la cabecera de sus filas. Con una constante, esa trampa no puede activarse por
+ * descuido.
+ *
+ * QUÉ CAMBIÓ Y POR QUÉ:
+ * - Guía: de `40px` FIJOS a `auto` + un piso en px (`FILA_GUIA_CELDA`). 40 px no caben ni una
+ *   guía de 8 dígitos (~60 px): el número no podía encoger ni recortarse, y se pintaba encima
+ *   del destinatario. No es `max-content` a secas porque un track dependiente del contenido se
+ *   resuelve POR SEPARADO en cada rejilla: una fila con guía corta y otra con guía larga
+ *   dejarían las columnas de dinero desplazadas entre sí y respecto de la cabecera (rompe
+ *   R10). Con `auto` + piso, en el caso normal el piso gana en todas y TODAS resuelven al
+ *   mismo número. Si algún día llega una guía más larga que el piso, esa fila CRECE —un par de
+ *   píxeles desalineada, feo pero legible— en vez de mentir tapando al vecino.
+ * - Destinatario y dinero: `minmax(0, …)`. `1.4fr` es `minmax(auto, 1.4fr)`, y ese `auto` es el
+ *   min-content del texto: por eso hoy el destinatario TAMPOCO puede ceder. Con el mínimo en 0
+ *   sí cede, que es lo que R8 decide — quien pierde texto es el nombre, con elipsis, nunca la
+ *   guía (precedente de la 258, `MensajeroCard.tsx`: el nombre propio se trunca, la cifra no).
+ */
+const FILA_GRID_COLS =
+  "grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_24px]";
+
+/**
+ * La celda de la guía, en la fila Y en la cabecera de columnas: el mismo piso servido por la
+ * misma constante, o las dos rejillas resolverían distinto.
+ *
+ * EL PISO ESTÁ DIMENSIONADO A 9 DÍGITOS, y el dato que hay detrás CADUCÓ EL DÍA QUE SE MIDIÓ:
+ * el 2026-08-21 producción tenía 163 órdenes con guía, todas de 8 dígitos (`10187406` …
+ * `99619074`). Eso es una foto, no una ley — en ningún sitio del repo (schema, tipos,
+ * validación, importador) se declara que la guía tenga 8 dígitos para siempre—, así que el
+ * ancho no se aprieta contra ella. Un dígito de holgura cuesta ~12 px de cabecera; quedarse
+ * justo cuesta exactamente este mismo defecto otra vez.
+ *
+ * PROHIBIDO aquí: `truncate`, `overflow-hidden`, `break-words`, `break-all`. Es literalmente
+ * el primer defecto de la 258 (`overflow-x-clip` se comía la cifra en silencio y 16.800 tests
+ * pasaban): un número a medias es un número FALSO, peor que uno que se sale.
+ */
+const FILA_GUIA_CELDA = "min-w-[80px] whitespace-nowrap tabular-nums";
+
 // --- Rótulos de la tabla compacta del detalle (texto separado, i18n-ready) ---
 const FILA_GUIA_COL = "Guía";
 const FILA_DESTINATARIO_COL = "Destinatario";
@@ -1102,14 +1165,28 @@ function FilaGestion({
             : `Detalle de la orden ${g.numRemision} · ${g.destinatario}`
         }
         onClick={() => setOpen((v) => !v)}
-        className="grid w-full grid-cols-[40px_1.4fr_1fr_1fr_24px] items-center gap-2 px-2 py-2.5 text-left transition-colors hover:bg-muted/50"
+        className={cn(
+          "grid w-full items-center gap-2 px-2 py-2.5 text-left transition-colors hover:bg-muted/50",
+          FILA_GRID_COLS,
+        )}
       >
-        <span className="text-[13px] font-medium text-foreground">
+        <span
+          className={cn(
+            "text-[13px] font-medium text-foreground",
+            FILA_GUIA_CELDA,
+          )}
+        >
           {g.numGuia ?? "—"}
         </span>
-        <span className="flex flex-col">
-          <span className="text-[13px] text-foreground">{g.destinatario}</span>
-          <span className="text-[11px] text-muted-foreground">
+        {/* `min-w-0` no es adorno: sin él el mínimo automático de este flex-item vuelve a ser
+            el min-content del texto y `truncate` NO llega a activarse nunca (lección literal
+            de la 258). El texto sigue COMPLETO en el DOM y en el `aria-label` del botón (R12):
+            lo que se recorta es la pintura, no el dato. */}
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-[13px] text-foreground">
+            {g.destinatario}
+          </span>
+          <span className="truncate text-[11px] text-muted-foreground">
             {g.numRemision} · {g.producto}
           </span>
         </span>
@@ -1311,12 +1388,20 @@ export function CierreFacturaDetalle({
           </span>
         </div>
         <div className="flex flex-col items-end gap-0.5 text-[11px] text-muted-foreground">
+          {/* Feature 263 (R1–R5): el sustantivo sale del ESTADO y la pieza «Resuelto» del
+              DATO. Son dos criterios distintos a propósito: así el guion no puede reaparecer
+              por ninguna combinación, y una incoherencia (`aprobado` sin fecha) se lee rara y
+              VERDADERA en vez de rara y falsa. Precedente del propio archivo (`:685-688`):
+              rellenar con guiones diría «no tiene fecha» donde lo cierto es otra cosa. */}
           <span className="font-mono">
-            {FACTURA_FOLIO_LABEL} #{folio(cierre.cierreId)}
+            {FACTURA_FOLIO_LABEL_POR_ESTADO[cierre.estado]} #
+            {folio(cierre.cierreId)}
           </span>
           <span>
-            {FACTURA_SOLICITADO_LABEL} {fecha(cierre.solicitadoAt)} ·{" "}
-            {FACTURA_RESUELTO_LABEL} {fecha(cierre.resueltoAt)}
+            {FACTURA_SOLICITADO_LABEL} {fecha(cierre.solicitadoAt)}
+            {cierre.resueltoAt
+              ? ` · ${FACTURA_RESUELTO_LABEL} ${fecha(cierre.resueltoAt)}`
+              : null}
           </span>
         </div>
       </div>
@@ -1487,9 +1572,16 @@ export function CierreFacturaDetalle({
         {/* La sección activa conserva el nombre accesible que tenía su tabla
             ("Entregadas", "Rechazadas"…): es como la localizan los tests y el E2E. */}
         <section aria-label={RESULTADO_LABEL[tab]} className="pt-2">
-          <div className="grid grid-cols-[40px_1.4fr_1fr_1fr_24px] gap-2 px-2 py-1 text-[11px] text-muted-foreground">
-            <span>{FILA_GUIA_COL}</span>
-            <span>{FILA_DESTINATARIO_COL}</span>
+          {/* Misma plantilla que la fila, servida por la MISMA constante: son dos rejillas
+              independientes y es lo único que las mantiene alineadas (R10). */}
+          <div
+            className={cn(
+              "grid gap-2 px-2 py-1 text-[11px] text-muted-foreground",
+              FILA_GRID_COLS,
+            )}
+          >
+            <span className={FILA_GUIA_CELDA}>{FILA_GUIA_COL}</span>
+            <span className="min-w-0 truncate">{FILA_DESTINATARIO_COL}</span>
             <span className="text-right">
               {esMensajero ? FILA_RECIBIDO_LABEL : FILA_COBRADO_COL}
             </span>
