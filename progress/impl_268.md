@@ -243,5 +243,67 @@ no existe en la base actual: **drift de la base local en `cierre_dia`**. Este di
   values nuevos, el `en_reparto` que puede llegar dos veces (se deduplica por `eventoId`), la causa
   tipificada en español, y `evidenciasUrl`. El PR puede mergearse a `dev` sin esto; **la release a
   `prod`, no**. Sigue sin constar en `docs/` cuál es el canal ni el plazo (pregunta abierta 5).
+  ⏳ **2026-08-22 — DESCARGADA POR MEDICIÓN por el leader.** 0 suscripciones de webhook y la
+  única key sin usar: no hay a quién romperle nada. El aviso quedó escrito en
+  `docs/api/CHANGELOG.md`. Detalle y consultas al final de esta bitácora.
 - **T9 — `feature_list.json` y `progress/current.md`**: bookkeeping del leader, por instrucción
   expresa. Esta bitácora es la parte de T9 que sí me toca.
+
+---
+
+# T8 — aviso a integradores: DESCARGADA POR MEDICIÓN (2026-08-22, leader)
+
+La task decía «el aviso está enviado y su envío consta con fecha». Antes de mandar nada, el leader
+midió **a quién**. Las dos consultas, contra **producción y en sólo lectura**, con su resultado:
+
+### ¿Cuántos integradores reciben webhooks hoy?
+
+```sql
+SELECT ws.id, ws.activa, ws.created_at, u.email
+FROM webhook_suscripcion ws
+JOIN usuario u ON u.id = ws.owner_usuario_id
+LEFT JOIN api_key ak ON ak.usuario_id = u.id;
+```
+
+**Resultado: 0 filas.** No existe ni una suscripción de webhook en producción — ni activa ni de
+baja. Hoy **nadie recibe un solo evento**.
+
+### ¿Cuántas API keys hay, y se han usado?
+
+```sql
+SELECT ak.estado, count(*) FROM api_key ak GROUP BY ak.estado;
+```
+
+**Resultado: 1 fila — `activa: 1`.** Una única key, `Dropi` (`ordx_H6-YSbM`), creada el
+**2026-08-20 19:31 UTC**, es decir dos días antes de esta release. Y no ha llegado a usarse:
+
+```sql
+SELECT count(*), max(created_at) FROM orden WHERE tienda_id = '<usuario dedicado de la key>';
+```
+
+**Resultado: 0 órdenes, `max = null`.**
+
+### Por qué eso descarga la puerta, y qué NO significa
+
+T8 existe para que un integrador **no se entere por una rotura** de que el contrato cambió. Está
+medido que ese integrador no existe todavía: 0 suscripciones consumiendo el webhook, y la única key
+dada de alta sin una sola orden. **No hay a quién romperle nada**, y los cuatro cambios son además
+aditivos.
+
+Lo que **no** significa: que el aviso sobre. Significa que deja de ser una puerta de despliegue y
+pasa a ser **material de onboarding** de Dropi, que debe tenerlo **antes de conectar**, no después.
+
+Decisión humana del 2026-08-22: cerrar T8 por medición y desplegar.
+
+### Dónde vive el aviso
+
+En **`docs/api/CHANGELOG.md`**, entrada `2026-08-22`, redactado cubriendo las cuatro cosas que T8
+enumera. Es un archivo nuevo y una **convención nueva**, decidida en la misma sesión: el aviso de un
+cambio de contrato se escribe ahí **antes de la release**, versionado junto al contrato que
+describe. El ejemplo JSON de la entrada es el `examples.incidente` del contrato publicado copiado
+literal, para que aviso y contrato no puedan derivar.
+
+Eso cierra de paso el agujero que esta misma task heredó: **239/T0.3 pedía este mismo aviso y nunca
+se marcó** —la feature salió a producción con la casilla abierta— porque no había dónde escribirlo
+ni a qué canal mandarlo. La pregunta abierta 5 (canal y plazo) **sigue sin respuesta** y es la única
+parte de T8 que queda viva: cuando Dropi conecte, alguien tiene que entregarle esa entrada.
