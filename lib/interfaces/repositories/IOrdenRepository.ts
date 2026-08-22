@@ -651,10 +651,15 @@ export interface ApiOrdenListResult {
 }
 
 // Feature 106 — UNA evidencia de la orden en el detalle. El repo devuelve el `storagePath`
-// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los dos que llevan
-// evidencia (entregada/rechazada), garantizado por el WHERE de la query.
+// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los que llevan
+// evidencia, garantizado por el WHERE / el mapeo de la query.
+//
+// FEATURE 268/R27 (2026-08-22): `incidente` es el TERCER value, y cubre las DOS procedencias del
+// incidente —la gestion del mensajero y el registro `orden_incidente` del admin—, que se mapean a
+// este mismo tipo. No hay campo que diga de cual viene: es deliberado (el integrador pregunta por
+// las fotos del incidente, no por quien las subio) y anadirlo seria exponer estructura interna.
 export interface ApiOrdenEvidenciaRow {
-  resultado: "entregada" | "rechazada";
+  resultado: "entregada" | "rechazada" | "incidente";
   storagePath: string;
   contentType: string | null;
 }

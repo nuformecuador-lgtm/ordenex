@@ -8,6 +8,7 @@ import {
   esTransicionEmitible,
 } from "@/lib/types/webhook-eventos";
 import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
+import { ORDEN_HISTORIAL_ORIGEN_TIPO_SEED } from "@/lib/types/orden-historial";
 
 // Feature 239 (T1.7, R26/R27, P2 FIRMADA el 2026-08-19) — la politica de eventos publicos es un
 // `Set` PARCIAL: no rompe el build, asi que un value nuevo se queda fuera EN SILENCIO. La unica
@@ -16,11 +17,20 @@ import { ORDER_STATUS_SEED } from "@/lib/types/order-status";
 // La decision: el pre-estado NO es evento publico. El vocabulario que ve el integrador no gana
 // un valor nuevo — anadirlo le obligaria a manejar un estado que no sabe interpretar—. Lo que
 // cambia es CUANDO llega `devuelta`: antes al gestionar el mensajero, ahora al aprobar el cierre.
+//
+// ⏳ 2026-08-22 (FEATURE 268) — este archivo se puso rojo A PROPOSITO y se ACTUALIZA con la
+// decision escrita al lado; nunca se relaja a un aserto de tamano (R18, alternativa A6 descartada:
+// un `size` no detecta un intercambio —un value entra y otro sale— y convierte la puerta humana en
+// un contador). La 268 revierte 235/P4: entran `ayuda_tienda` (la IDA del ciclo de ayuda) e
+// `incidente`, y la exencion por familia queda VACIA, de modo que el rescate vuelve a emitir. Las
+// dos mitades del ciclo van juntas o no van.
 
 const PRE_ESTADO = "devolucion_por_confirmar";
 
 describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (239/P2/R27)", () => {
   it("R27/P2: `devolucion_por_confirmar` NO es evento publico", () => {
+    // 268/R4: se CONSERVA intacto. La 268 amplia el vocabulario, pero el pre-estado NO entra «por
+    // simetria»: la decision 239/P2 sigue firmada y en pie.
     expect(EVENTOS_PUBLICOS.has(PRE_ESTADO)).toBe(false);
     expect(esEventoPublico(PRE_ESTADO)).toBe(false);
   });
@@ -33,11 +43,14 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
     expect(esEventoPublico("devuelta")).toBe(true);
   });
 
-  it("la lista NO cambio de tamano con la 239: sigue teniendo los 10 values de la 155", () => {
-    // Si esto sube a 11, alguien anadio el pre-estado (o algun otro) al contrato publico sin
-    // pasar por la puerta humana. La lista se congela por CONTENIDO, no solo por conteo.
+  it("268/R1/R2/R3: la lista es EXACTAMENTE estos 12 values (los 10 previos + los 2 de la 268)", () => {
+    // Congelada por CONTENIDO (R18), no por conteo. Si esto cambia, alguien toco el contrato
+    // publico sin pasar por la puerta humana. El `size` de abajo ACOMPANA a la igualdad; jamas la
+    // sustituye.
     expect([...EVENTOS_PUBLICOS].sort()).toEqual(
       [
+        // Los DIEZ vigentes antes de la 268. R3: el cambio es estrictamente ADITIVO y ninguno de
+        // estos puede salir — ningun integrador deja de recibir un evento que hoy recibe.
         "por_recolectar_en_tienda",
         "en_ruta_bodega_central",
         "en_bodega_central",
@@ -48,51 +61,113 @@ describe("EVENTOS_PUBLICOS — el pre-estado NO entra en el contrato publico (23
         "rechazada",
         "devolviendo_a_tienda",
         "devuelta_a_tienda",
+        // Los DOS que trae la 268.
+        "ayuda_tienda", // R1
+        "incidente", // R2
       ].sort(),
     );
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
   });
 
   it("todos los values emitidos existen en el catalogo vigente (sin fantasmas)", () => {
+    // R17: se conserva tal cual. Los dos values de la 268 ya existen en el SEED (sin migracion).
     for (const value of EVENTOS_PUBLICOS) {
       expect(ORDER_STATUS_SEED as readonly string[]).toContain(value);
     }
   });
 
-  // Feature 235 (T1.5, R39): el catalogo gano `ayuda_tienda` y la lista NO se movio.
-  it("235/R39: `ayuda_tienda` NO es evento publico — el vocabulario no crece por esta feature", () => {
-    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(false);
-    expect(esEventoPublico("ayuda_tienda")).toBe(false);
-    expect(EVENTOS_PUBLICOS.size).toBe(10);
+  // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «235/R39: `ayuda_tienda` NO es evento publico —
+  // el vocabulario no crece por esta feature», con `EVENTOS_PUBLICOS.size === 10`. El caso se
+  // INVIERTE en vez de borrarse, para que quede rastro de que 235/P4 se revirtio a proposito
+  // (268/R1/R2) y no por descuido.
+  it("268/R1/R2 (invierte 235/R39): `ayuda_tienda` e `incidente` SI son eventos publicos", () => {
+    expect(EVENTOS_PUBLICOS.has("ayuda_tienda")).toBe(true);
+    expect(esEventoPublico("ayuda_tienda")).toBe(true);
+    expect(EVENTOS_PUBLICOS.has("incidente")).toBe(true);
+    expect(esEventoPublico("incidente")).toBe(true);
   });
 });
 
 // =================================================================================================
 // FEATURE 235 — P4, FIRMADA EN CONTRA DE LA RECOMENDACION DEL SPEC (2026-08-19).
 //
-// El humano NO acepta que un integrador reciba `en_reparto` DOS VECES sobre la misma orden. Como
-// `ayuda_tienda` no es evento publico, la IDA ya no se emite; la VUELTA (el rescate) SI se emitiria,
-// porque `en_reparto` esta en la politica. De ahi esta excepcion.
+// ⏳ 2026-08-22 (FEATURE 268/R5/R6/R9) — AQUI DECIA, y ya no es cierto: «El humano NO acepta que un
+// integrador reciba `en_reparto` DOS VECES sobre la misma orden (...). De ahi esta excepcion»; y
+// «ESTE BLOQUE ES EL QUE TIENE QUE PONERSE ROJO SI ALGUIEN AMPLIA LA EXCEPCION A OTRA FAMILIA».
 //
-// ⚠️ ESTE BLOQUE ES EL QUE TIENE QUE PONERSE ROJO SI ALGUIEN AMPLIA LA EXCEPCION A OTRA FAMILIA.
-// El requisito 2 de la firma lo pide con esas palabras. Y el motivo esta escrito en el requisito 1:
-// implementarla POR ESTADO —o ensancharla a otra familia— silencia los REINGRESOS LEGITIMOS a
-// `en_reparto`, y eso si es una regresion.
+// La 268 REVIERTE 235/P4: la lista de familias exceptuadas queda VACIA y el rescate vuelve a
+// emitir. Lo que NO cambia —y por eso este bloque se reescribe en vez de borrarse— es el
+// MECANISMO: la constante, su restriccion de tipo, `esFamiliaSinEventoPublico` y
+// `esTransicionEmitible` siguen existiendo con la misma firma (R6, alternativa A2 descartada). Es
+// el unico sitio donde una exencion futura puede escribirse POR FAMILIA; sin el, la implementacion
+// natural seria por ESTADO destino, que es justo la regresion que 235 documento y prohibio.
+//
+// ⚠️ EL BLOQUE SIGUE SIENDO EL QUE SE PONE ROJO SI ALGUIEN ANADE UNA FAMILIA AQUI: la lista se fija
+// por IGUALDAD (R18), asi que ensancharla —reducir el contrato publico— cuesta una decision.
 // =================================================================================================
-describe("235/P4 — la excepcion de webhook es POR FAMILIA, y exactamente UNA", () => {
-  it("la lista de familias exceptuadas es EXACTAMENTE `rescate_ayuda_tienda`", () => {
+describe("268 — la exencion por familia queda VACIA, pero el MECANISMO sigue en pie", () => {
+  it("268/R5: la lista de familias exceptuadas esta VACIA", () => {
     // Igualdad literal, no `toContain`. Es el CONTRATO: cada familia que entre aqui deja de
     // avisar a los integradores, y eso se decide en una puerta humana, no en un commit.
-    expect([...ORIGENES_SIN_EVENTO_PUBLICO]).toEqual(["rescate_ayuda_tienda"]);
-    expect(ORIGENES_SIN_EVENTO_PUBLICO).toHaveLength(1);
+    expect([...ORIGENES_SIN_EVENTO_PUBLICO]).toEqual([]);
+    expect(ORIGENES_SIN_EVENTO_PUBLICO).toHaveLength(0);
   });
 
-  it("el RESCATE no se emite, aunque su estado destino SI sea publico", () => {
-    // Las dos mitades de la afirmacion, para que se vea que la exencion la pone la familia y no
-    // el estado: `en_reparto` es publico...
+  it("268/R6: el mecanismo de exencion por familia sigue exportado y con su comportamiento", () => {
+    // No basta con que la lista este vacia: el punto es que el MECANISMO no se borro (A2). Se
+    // afirman las dos piezas por separado, con su comportamiento observable de siempre.
+    expect(typeof esFamiliaSinEventoPublico).toBe("function");
+    expect(typeof esTransicionEmitible).toBe("function");
+    // Con la lista vacia NINGUNA familia esta exceptuada: ni la que lo estuvo (`rescate_...`) ni
+    // ninguna otra, ni un origen cualquiera que no exista en el catalogo.
+    expect(esFamiliaSinEventoPublico("rescate_ayuda_tienda")).toBe(false);
+    expect(esFamiliaSinEventoPublico("familia_que_no_existe")).toBe(false);
+    for (const familia of ORDEN_HISTORIAL_ORIGEN_TIPO_SEED) {
+      expect(esFamiliaSinEventoPublico(familia)).toBe(false);
+    }
+    // Y `esTransicionEmitible` sigue diciendo `false` cuando el destino NO es publico, venga de
+    // la familia que venga: la politica por ESTADO no se ha tocado.
+    expect(esTransicionEmitible("en_preparacion", "gestion")).toBe(false);
+    expect(esTransicionEmitible("por_recoger", "recoleccion")).toBe(false);
+  });
+
+  // 268/R7 — MIENTRAS la lista este vacia, `esTransicionEmitible` es EQUIVALENTE a
+  // `esEventoPublico` para TODA familia declarada. Se recorre el SEED entero a proposito: si
+  // manana alguien ensancha la exencion sin pasar por la puerta, este caso cae junto al de
+  // igualdad de arriba.
+  it("268/R7: `esTransicionEmitible(estado, familia) === esEventoPublico(estado)` para TODA familia", () => {
+    const ESTADOS_MUESTRA = [
+      // publicos (incluidos los dos que trae la 268)
+      "en_reparto",
+      "entregada",
+      "ayuda_tienda",
+      "incidente",
+      "devuelta_a_tienda",
+      // NO publicos
+      "en_preparacion",
+      "por_recoger",
+      "sin_gestionar",
+      "devolucion_por_confirmar",
+      "en_bodega_satelite",
+    ] as const;
+
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.length).toBeGreaterThan(0);
+    for (const familia of ORDEN_HISTORIAL_ORIGEN_TIPO_SEED) {
+      for (const estado of ESTADOS_MUESTRA) {
+        expect(esTransicionEmitible(estado, familia)).toBe(esEventoPublico(estado));
+      }
+    }
+  });
+
+  // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «el RESCATE no se emite, aunque su estado destino
+  // SI sea publico». El caso se INVIERTE (268/R9): la VUELTA del ciclo de ayuda vuelve a emitir,
+  // porque emitir solo la IDA dejaria al integrador viendo entrar la orden en ayuda y no verla
+  // salir nunca. El `en_reparto` REPETIDO es el coste aceptado por escrito (R10), soportable
+  // porque la clave de idempotencia lleva el instante y los dos eventos tienen `eventoId` distinto.
+  it("268/R9 (invierte 235/P4): el RESCATE SI se emite", () => {
     expect(esEventoPublico("en_reparto")).toBe(true);
-    // ...y aun asi esta transicion concreta no se emite.
-    expect(esTransicionEmitible("en_reparto", "rescate_ayuda_tienda")).toBe(false);
-    expect(esFamiliaSinEventoPublico("rescate_ayuda_tienda")).toBe(true);
+    expect(esTransicionEmitible("en_reparto", "rescate_ayuda_tienda")).toBe(true);
+    expect(esFamiliaSinEventoPublico("rescate_ayuda_tienda")).toBe(false);
   });
 
   it.each([
@@ -110,20 +185,23 @@ describe("235/P4 — la excepcion de webhook es POR FAMILIA, y exactamente UNA",
   ] as const)(
     "REINGRESO LEGITIMO a `en_reparto` via `%s`: SIGUE emitiendo (la excepcion no se contagia)",
     (familia) => {
+      // 268/R12: se conserva TAL CUAL. Vaciar la exencion no puede alterar ninguno de estos casos.
       expect(esTransicionEmitible("en_reparto", familia)).toBe(true);
       expect(esFamiliaSinEventoPublico(familia)).toBe(false);
     },
   );
 
-  it("la IDA tampoco emite, pero por OTRA razon: su estado destino no es publico", () => {
-    // Se afirma por separado a proposito. Si algun dia `ayuda_tienda` entrara en
-    // `EVENTOS_PUBLICOS`, este caso caeria y obligaria a decidir si la ida debe emitirse — en vez
-    // de que la excepcion de la vuelta lo tape en silencio.
-    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(false);
+  // ⏳ 2026-08-22 — AQUI DECIA, y ya no es cierto: «la IDA tampoco emite, pero por OTRA razon: su
+  // estado destino no es publico (...) si algun dia `ayuda_tienda` entrara en `EVENTOS_PUBLICOS`,
+  // este caso caeria y obligaria a decidir si la ida debe emitirse». Ese dia es hoy y la decision
+  // esta tomada: la IDA emite (268/R1/R8).
+  it("268/R8 (invierte 235): la IDA `-> ayuda_tienda` SI emite", () => {
+    expect(esTransicionEmitible("ayuda_tienda", "solicitud_ayuda_tienda")).toBe(true);
     expect(esFamiliaSinEventoPublico("solicitud_ayuda_tienda")).toBe(false);
   });
 
   it("un estado NO publico sigue sin emitir, venga de la familia que venga", () => {
+    // 268/R13: el corte de la noche (`ayuda_tienda -> sin_gestionar`) sigue en silencio.
     expect(esTransicionEmitible("sin_gestionar", "corte_sin_gestionar")).toBe(false);
     expect(esTransicionEmitible("devolucion_por_confirmar", "gestion")).toBe(false);
   });

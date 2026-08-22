@@ -44,6 +44,7 @@ function ordenDetalleRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date("2026-07-22T14:03:11.000Z"),
     estatus: { value: "entregada" },
     gestiones: [],
+    incidentesAdmin: [], // 268/R27: segunda procedencia de las evidencias (incidente del ADMIN)
     ...overrides,
   };
 }
@@ -230,15 +231,41 @@ describe("OrdenRepository.findDetalleByOrdenIdForOwner (feature 177, T7)", () =>
     expect("deletedAt" in where).toBe(true);
   });
 
-  it("R16: acota las evidencias a entregada/rechazada con evidencia_storage_path no nulo", async () => {
+  it("R16 (+268/R27): acota las evidencias a entregada/rechazada/incidente con evidencia_storage_path no nulo", async () => {
     const prisma = buildPrisma();
     (prisma.orden.findFirst as Mock).mockResolvedValue(ordenDetalleRow());
 
     await repoCon(prisma).findDetalleByOrdenIdForOwner("o-1", OWNER);
 
+    // FEATURE 268 (T6c, 2026-08-22): el `in` gana `incidente` (camino del MENSAJERO). El camino
+    // del ADMIN no crea gestion, asi que viaja aparte por `incidentesAdmin`; ambos se mapean al
+    // mismo array `evidencias[]`. Ver design §7.3 (opcion a+).
     const gestiones = (prisma.orden.findFirst as Mock).mock.calls[0][0].select.gestiones;
-    expect(gestiones.where.resultado.in).toEqual(["entregada", "rechazada"]);
+    expect(gestiones.where.resultado.in).toEqual(["entregada", "rechazada", "incidente"]);
     expect(gestiones.where.evidenciaStoragePath).toEqual({ not: null });
+  });
+
+  it("268/R27: la variante por id trae tambien la evidencia del incidente del ADMIN", async () => {
+    const prisma = buildPrisma();
+    (prisma.orden.findFirst as Mock).mockResolvedValue(
+      ordenDetalleRow({
+        estatus: { value: "incidente" },
+        gestiones: [], // el admin NO crea gestion: sin el mapeo de `incidentesAdmin` esto sale []
+        incidentesAdmin: [
+          { evidencias: [{ storagePath: "incidentes/i1/portada.jpg", contentType: "image/png" }] },
+        ],
+      }),
+    );
+
+    const res = await repoCon(prisma).findDetalleByOrdenIdForOwner("o-1", OWNER);
+
+    expect(res!.evidencias).toEqual([
+      {
+        resultado: "incidente",
+        storagePath: "incidentes/i1/portada.jpg",
+        contentType: "image/png",
+      },
+    ]);
   });
 
   it("R17: findDetalleByNumGuiaForOwner NO cambio de firma ni de proyeccion (misma que la variante por id)", async () => {

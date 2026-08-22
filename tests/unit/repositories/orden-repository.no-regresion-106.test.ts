@@ -20,6 +20,22 @@ const OWNER = "store-1";
 /**
  * Proyeccion EXACTA que la feature 106 enviaba a Prisma en `findDetalleByNumGuiaForOwner`.
  * Copia literal congelada: si produccion anade, quita o renombra un campo, este test cae.
+ *
+ * ⚠️ FEATURE 268 (T6c / R27, 2026-08-22) — AQUI DECIA `resultado: { in: ["entregada",
+ * "rechazada"] }` Y NO EXISTIA `incidentesAdmin`, y ya no es cierto. Los dos cambios son
+ * DELIBERADOS y estan firmados en `specs/268-webhook-ayuda-incidente/design.md` §7.3 (opcion a+):
+ *
+ *   - el `in` gana `incidente` -> las evidencias del incidente del MENSAJERO (arista #44, familia
+ *     `gestion`), que hasta ahora no salian por NINGUN endpoint del canal;
+ *   - `incidentesAdmin` es la segunda procedencia -> el incidente del ADMIN (aristas #48-#52) NO
+ *     crea gestion ninguna, asi que ampliar solo el `in` habria dejado 5 de las 6 aristas sin
+ *     fotos y EN SILENCIO (esa es la opcion (a) que el design descarta por su nombre).
+ *
+ * Lo que este literal SIGUE congelando y no ha cambiado: los nueve campos publicos de la orden, la
+ * forma del bloque `gestiones` (mismas claves, mismo `select`, mismo `orderBy`, mismo filtro de
+ * `evidenciaStoragePath`) y el `where` del metodo. La no-regresion de la 106 es que su respuesta
+ * para una orden entregada o rechazada es byte a byte la de antes: eso lo afirma
+ * `orden-repository.api-lectura.test.ts`.
  */
 const SELECT_DETALLE_106 = {
   numGuia: true,
@@ -33,7 +49,7 @@ const SELECT_DETALLE_106 = {
   estatus: { select: { value: true } },
   gestiones: {
     where: {
-      resultado: { in: ["entregada", "rechazada"] },
+      resultado: { in: ["entregada", "rechazada", "incidente"] }, // 268/R27
       evidenciaStoragePath: { not: null },
     },
     select: {
@@ -41,6 +57,16 @@ const SELECT_DETALLE_106 = {
       evidenciaStoragePath: true,
       evidenciaContentType: true,
       createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+  // 268/R27: la portada (indice 0) del incidente del ADMIN, y nada mas del tramite.
+  incidentesAdmin: {
+    select: {
+      evidencias: {
+        where: { indice: 0 },
+        select: { storagePath: true, contentType: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   },

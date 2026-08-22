@@ -185,6 +185,8 @@ paths:
               - rechazada
               - en_bodega_satelite
               - devuelta_a_tienda
+              - ayuda_tienda
+              - incidente
         - name: desde
           in: query
           required: false
@@ -636,8 +638,21 @@ paths:
           $ref: "#/components/responses/ValidationError"
 # Feature 256/R24 — WEBHOOKS SALIENTES. Sección de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
 # `paths:`): lo que Ordenex ENVÍA al callback del integrador, no lo que el integrador pide.
-# Espejo textual de `openApiSpec.webhooks` (lib/api/openapi-spec.ts). El campo `data.estado` va
-# como `type: string` con prosa y SIN `enum` de estados a propósito (design 256 §5.2).
+# Espejo textual de `openApiSpec.webhooks` (lib/api/openapi-spec.ts).
+#
+# ⏳ 2026-08-22 (FEATURE 268/R28/R29/R30) — AQUÍ DECÍA, y ya no es cierto:
+# «El campo `data.estado` va como `type: string` con prosa y SIN `enum` de estados a propósito
+# (design 256 §5.2)».
+# Ahora SÍ lleva `enum`, DERIVADO de `EVENTOS_PUBLICOS` (`lib/types/webhook-eventos.ts`) y con
+# orden alfabético determinista: son los 12 values que este webhook puede emitir de verdad, un
+# SUBCONJUNTO del catálogo de `OrdenListItem.estado`. El miedo de la 256 —«sería un 5.º catálogo
+# de estados y pondría roja `openapi-contrato-en-reparto.test.ts`»— era infundado: esa guardia
+# cuenta enums con el predicado `esEnumDeEstado`, que exige `entregada` **Y** el estado interno de
+# recogida; este enum no lleva el segundo, así que no entra en el recuento y los bloques siguen
+# siendo CUATRO. Lo verifica `tests/unit/api/openapi-webhook-contrato.test.ts`, no la fe.
+# El bloque `data` gana además la clave OPCIONAL `evidenciasUrl` (R24) y `motivo` amplía su enum
+# con las tres causas de incidente, en español (R20).
+#
 # La prosa evita la subcadena «intentos» a proposito: `tests/unit/types/intentos-no-alcance.test.ts`
 # (160/R31) la prohibe en todo el contrato.
 webhooks:
@@ -706,7 +721,11 @@ webhooks:
                   description: "Instante del cambio de estado (ISO 8601, UTC)."
                 data:
                   type: object
-                  description: "Forma ÚNICA: las cuatro claves están SIEMPRE presentes, sea cual sea el estado. El consumidor no ramifica por estado para saber si un campo existe."
+                  # ⏳ 2026-08-22 (feature 268/R28) — la frase de la 256 decia «las cuatro claves
+                  # están SIEMPRE presentes» a secas. Sigue siendo verdad para esas cuatro, pero ya
+                  # no describe el objeto entero: hay una QUINTA clave, `evidenciasUrl`, que es
+                  # OPCIONAL y se OMITE salvo en `incidente`. Se dice cual es cual.
+                  description: "Las cuatro claves `numGuia`, `numRemision`, `estado` y `motivo` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` viaja como `null` cuando no aplica, nunca omitido). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`."
                   required:
                     - numGuia
                     - numRemision
@@ -723,7 +742,24 @@ webhooks:
                       description: Remisión de la orden (la que envió el integrador).
                     estado:
                       type: string
-                      description: "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). No se enumera aquí para no duplicar el catálogo: la lista vigente es la de ese schema."
+                      # feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
+                      # Contiene `entregada` pero NO el estado interno de recogida, asi que
+                      # `esEnumDeEstado` de `openapi-contrato-en-reparto.test.ts` NO lo cuenta:
+                      # los bloques de catalogo siguen siendo CUATRO.
+                      enum:
+                        - ayuda_tienda
+                        - devolviendo_a_tienda
+                        - devuelta
+                        - devuelta_a_tienda
+                        - en_bodega_central
+                        - en_reparto
+                        - en_ruta_bodega_central
+                        - entregada
+                        - incidente
+                        - por_recolectar_en_tienda
+                        - rechazada
+                        - reprogramada
+                      description: "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de preparación y ruteo satélite que ese catálogo documenta (`en_preparacion`, `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error."
                     motivo:
                       type:
                         - string
@@ -732,15 +768,31 @@ webhooks:
                         - not_found
                         - wrong_number
                         - wrong_address
+                        - danado
+                        - perdido
+                        - robado
                         - null
                       description: |-
-                        Causa TIPIFICADA de la devolución, con el value crudo del enum y sin traducir:
-                        `not_found` (destinatario no encontrado), `wrong_number` (teléfono equivocado),
-                        `wrong_address` (dirección equivocada).
+                        Causa TIPIFICADA del cambio de estado, con el value crudo del enum y sin traducir. El
+                        campo transporta DOS enums distintos y cuál aplica lo decide `estado`:
 
-                        Es `null` en todo evento cuyo `estado` NO sea `devuelta`, y es `null` **también** en una
-                        `devuelta` sin causa registrada (órdenes devueltas antes de que la causa se pidiera; ese
-                        histórico no se rellenó). El contrato no distingue «no hubo causa» de «no se registró»:
+                        - **`estado: "devuelta"`** → causa de la devolución: `not_found` (destinatario no
+                          encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección
+                          equivocada). Estos tres NO aparecen nunca con otro estado.
+                        - **`estado: "incidente"`** → causa del incidente: `danado`, `perdido`, `robado`. Estos
+                          tres NO aparecen nunca con otro estado.
+                        - **cualquier otro `estado`** → siempre `null`.
+
+                        ⚠️ **La asimetría de idioma es DELIBERADA, no un error que corregir.** Las causas de
+                        devolución van en INGLÉS y las de incidente en ESPAÑOL (`danado` sin eñe, `perdido`,
+                        `robado`) porque cada enum se publicó con el value crudo de su catálogo interno y
+                        renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.
+                        Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.
+
+                        Es `null` en todo evento cuyo `estado` NO sea `devuelta` ni `incidente`, y es `null`
+                        **también** en una `devuelta` (o un `incidente`) sin causa registrada — órdenes cerradas
+                        antes de que la causa se pidiera; ese histórico no se rellenó. El contrato no distingue
+                        «no hubo causa» de «no se registró»:
                         en los dos casos viaja `null`, el campo NUNCA se omite y la entrega es normal.
 
                         **Es el motivo VIGENTE EN EL MOMENTO DE LA ENTREGA**, no una foto del instante del
@@ -752,15 +804,55 @@ webhooks:
                         ⚠️ Transporta EXCLUSIVAMENTE la causa tipificada. NO es el texto libre que el mensajero
                         escribe al gestionar la orden —que comparte el nombre `motivo` en la base de datos y NO
                         se emite NUNCA en este webhook—, ni ningún otro dato del destinatario.
-            example:
-              evento: orden.estado_actualizado
-              eventoId: "webhook_estado:018f2c31-0000-4000-8000-000000000001:7:2026-08-21T10:00:00.000Z"
-              ocurridoAt: "2026-08-21T10:00:00.000Z"
-              data:
-                numGuia: 100234
-                numRemision: "REM-0001"
-                estado: devuelta
-                motivo: not_found
+                    # feature 268/R24/R30 — la QUINTA clave, y la unica OPCIONAL del objeto:
+                    # deliberadamente FUERA de `required`.
+                    evidenciasUrl:
+                      type: string
+                      format: uri
+                      description: |-
+                        Enlace al detalle de esta orden en el canal por API key
+                        (`GET /api/ordenes/api-key/orden/{id}`), cuyo array `evidencias[]` incluye las
+                        evidencias del incidente con `resultado: "incidente"`.
+
+                        **Es el único campo OPCIONAL de `data`.** Viaja SOLO en los eventos con
+                        `estado: "incidente"`, y se OMITE —no viaja como `null`— tanto en cualquier otro
+                        estado como en un `incidente` para el que no se pueda resolver el enlace. Ramificá
+                        por «la clave existe», no por su valor.
+
+                        ⚠️ **NO es una URL firmada y NO lleva credencial.** Es un enlace ESTABLE y
+                        determinista: sin token, sin expiración, no caduca, y las dos entregas de un mismo
+                        `eventoId` (por ejemplo tras un reintento) llevan exactamente el mismo valor. Por eso
+                        **no podés abrirlo sin autenticarte**: invocalo con tu propio
+                        `Authorization: Bearer ordx_...`, igual que cualquier otra llamada al canal, y el
+                        detalle te devolverá las URLs firmadas frescas de las fotos, con su TTL corto. La
+                        credencial la ponés vos; el cuerpo del webhook nunca la transporta.
+            # feature 268/R30 — el ejemplo de la 256 (`devuelta`/`not_found`) NO se pierde: pasa a
+            # ser el primero de un mapa `examples`, y se le suma el caso de `incidente`, que es el
+            # unico que muestra la clave opcional `evidenciasUrl` y la causa en español.
+            examples:
+              devuelta:
+                summary: Devolución con causa tipificada (sin `evidenciasUrl`)
+                value:
+                  evento: orden.estado_actualizado
+                  eventoId: "webhook_estado:018f2c31-0000-4000-8000-000000000001:7:2026-08-21T10:00:00.000Z"
+                  ocurridoAt: "2026-08-21T10:00:00.000Z"
+                  data:
+                    numGuia: 100234
+                    numRemision: "REM-0001"
+                    estado: devuelta
+                    motivo: not_found
+              incidente:
+                summary: "Incidente: causa en español y enlace estable a las evidencias"
+                value:
+                  evento: orden.estado_actualizado
+                  eventoId: "webhook_estado:018f2c31-0000-4000-8000-000000000002:21:2026-08-22T14:30:00.000Z"
+                  ocurridoAt: "2026-08-22T14:30:00.000Z"
+                  data:
+                    numGuia: 100235
+                    numRemision: "REM-0002"
+                    estado: incidente
+                    motivo: robado
+                    evidenciasUrl: "https://app.ordenex.co/api/ordenes/api-key/orden/018f2c31-0000-4000-8000-000000000002"
       responses:
         "200":
           description: "Recepción confirmada. Cualquier 2xx vale; cualquier otra respuesta se trata como fallo transitorio y la entrega se reintenta."
@@ -837,6 +929,8 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
+            - incidente
         destinatario:
           type: string
         telefonoDest:
@@ -887,7 +981,9 @@ components:
           $ref: "#/components/schemas/Pagination"
     Evidencia:
       type: object
-      description: Evidencia de entrega/rechazo con URL firmada de corta duración.
+      # feature 268/R31: espejo del objeto TS — las evidencias del INCIDENTE (mensajero y admin)
+      # se exponen con la MISMA forma, y por eso `resultado` gana un tercer value.
+      description: "Evidencia de entrega, rechazo o incidente, con URL firmada de corta duración. Las de incidente llegan con `resultado: \"incidente\"` y son las que enlaza el campo `evidenciasUrl` del webhook."
       required:
         - resultado
         - contentType
@@ -899,6 +995,7 @@ components:
           enum:
             - entregada
             - rechazada
+            - incidente
         contentType:
           type:
             - string
@@ -1044,6 +1141,8 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
+            - incidente
         costoEnvio:
           type: string
           description: "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD."
@@ -1106,6 +1205,8 @@ components:
             - rechazada
             - en_bodega_satelite
             - devuelta_a_tienda
+            - ayuda_tienda
+            - incidente
         estado:
           type: string
           const: devolviendo_a_tienda

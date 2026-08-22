@@ -119,11 +119,47 @@ const API_ORDEN_SELECT = {
 // `evidencia_storage_path` no nulo). Se extrae a una constante para que la variante por
 // `num_guia` (106) y la variante por `id` (177) NO puedan divergir en su proyeccion (R16/R17):
 // `findDetalleByNumGuiaForOwner` sigue devolviendo exactamente lo mismo que antes.
+//
+// FEATURE 268 (T6c, 2026-08-22) — LAS EVIDENCIAS DEL `incidente`, POR SUS **DOS** PROCEDENCIAS.
+// Hasta aqui un incidente no aparecia por NINGUN endpoint del canal, y son 6 las aristas de
+// entrada a `incidente` que se quedaban sin fotos. Hay dos caminos y hacen falta los dos:
+//
+//   1. MENSAJERO (arista #44, familia `gestion`) -> fila en `gestion_orden` con
+//      `resultado = incidente` y la portada denormalizada en `evidencia_storage_path` (119/R12).
+//      Basta con anadir `incidente` al `in` de abajo.
+//   2. ADMIN (aristas #48-#52, familia `incidente`) -> **no crea gestion ninguna**: crea
+//      `orden_incidente` (relacion `incidentesAdmin`) con sus evidencias 1..N en
+//      `orden_incidente_evidencia`. Por eso se suma esa segunda relacion a ESTE MISMO select.
+//
+// Cubrir solo (1) fallaria EN SILENCIO en 5 de las 6 aristas —justo las del paquete danado en
+// bodega—; es la opcion (a) que `design.md` §7.3 descarta por su nombre.
+//
+// REGLA DE CONTENIDO (design §7.3, pregunta abierta 4): se expone **LA PORTADA (indice 0)** de
+// cada registro, no las 1..N, igual que hoy se expone UNA foto por gestion. Es deliberado: la
+// deuda 1..N de la 119 no se reabre dentro de esta ficha.
+//
+// DOS DECISIONES que el spec dejaba abiertas y que se cierran AQUI (2026-08-22, feature 268):
+//
+//   a. NO se filtra `orden_incidente.estado` (`solicitado`/`aprobado`/`rechazado`). Ese estado es
+//      el del tramite de INDEMNIZACION, no el de si el incidente OCURRIO: la orden esta en estado
+//      `incidente` sea cual sea, y el integrador pregunta por las fotos del incidente, no por el
+//      desenlace economico. Filtrar por `aprobado` esconderia las fotos justo MIENTRAS el tramite
+//      se decide, que es cuando se miran.
+//   b. El `where` de `gestiones` CONSERVA su forma actual, incluido que hoy NO filtra `anuladaAt`.
+//      Anadir `incidente` sigue exactamente la misma regla que ya rige a `entregada`/`rechazada`;
+//      "arreglar" lo de `anuladaAt` aqui seria un cambio de comportamiento fuera de alcance que
+//      ademas moveria lo que ven las evidencias de entrega/rechazo, que hoy ya funcionan.
+//
+// Alcance de lectura: `OrdenIncidente` NO tiene owner propio —cuelga de `orden` por FK—, asi que
+// el scope sigue siendo el mismo `where` de la orden (`tienda_id = ownerId AND deleted_at IS
+// NULL`) de los dos `findDetalleBy*ForOwner`. No hay regla de alcance nueva que escribir, y por
+// eso la valvula declarada en design §7.3 no se dispara.
 const API_ORDEN_DETALLE_SELECT = {
   ...API_ORDEN_SELECT,
   gestiones: {
     where: {
-      resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
+      // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO.
+      resultado: { in: ["entregada", "rechazada", "incidente"] },
       evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
     },
     select: {
@@ -131,6 +167,18 @@ const API_ORDEN_DETALLE_SELECT = {
       evidenciaStoragePath: true,
       evidenciaContentType: true,
       createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+  // 268/R27: el incidente del ADMIN. Solo la PORTADA de cada registro (`indice: 0`, a lo sumo una
+  // fila por `@@unique([incidenteId, indice])`), y ni un campo mas: ni `causa`, ni `motivo`, ni
+  // `indemnizacion`, ni quien lo reporto. El detalle publico no crece con datos internos.
+  incidentesAdmin: {
+    select: {
+      evidencias: {
+        where: { indice: 0 },
+        select: { storagePath: true, contentType: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   },
@@ -155,6 +203,11 @@ type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
     evidenciaContentType: string | null;
     createdAt: Date;
   }[];
+  // 268/R27: el camino del ADMIN. `evidencias` viene acotado a la portada por el `where` del
+  // select, asi que es `[]` o un unico elemento.
+  incidentesAdmin: {
+    evidencias: { storagePath: string; contentType: string }[];
+  }[];
 };
 
 function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
@@ -171,17 +224,42 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
   };
 }
 
-/** Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes. */
+/**
+ * Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes.
+ *
+ * FEATURE 268/R27 (2026-08-22): las DOS procedencias del incidente caen en el MISMO array
+ * `evidencias[]`, con la misma forma que las de entrega/rechazo. El consumidor no distingue —ni
+ * debe— si la foto la subio el mensajero o el admin: para el es "la evidencia del incidente".
+ * Primero las gestiones (por `createdAt`), luego los incidentes del admin (por `createdAt`).
+ */
 function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow {
+  const deGestiones = row.gestiones.map((g) => ({
+    // `resultado` esta acotado por el WHERE a estos tres valores.
+    resultado: g.resultado as "entregada" | "rechazada" | "incidente",
+    // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
+    storagePath: g.evidenciaStoragePath!,
+    contentType: g.evidenciaContentType,
+  }));
+
+  // 268/R27: un incidente del admin SIN evidencias se OMITE. Emitir una entrada con
+  // `storagePath` vacio o `undefined` mandaria al service a firmar un path que no existe y el
+  // integrador recibiria un item con `url: undefined`: peor que la ausencia, porque parece un
+  // fallo del canal. Sin foto no hay evidencia que exponer.
+  const deIncidentesAdmin = row.incidentesAdmin.flatMap((i) => {
+    const portada = i.evidencias[0]; // `where: { indice: 0 }` -> 0 o 1 elementos
+    if (!portada) return [];
+    return [
+      {
+        resultado: "incidente" as const,
+        storagePath: portada.storagePath,
+        contentType: portada.contentType,
+      },
+    ];
+  });
+
   return {
     ...toApiOrdenRow(row),
-    evidencias: row.gestiones.map((g) => ({
-      // `resultado` esta acotado por el WHERE a estos dos valores.
-      resultado: g.resultado as "entregada" | "rechazada",
-      // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
-      storagePath: g.evidenciaStoragePath!,
-      contentType: g.evidenciaContentType,
-    })),
+    evidencias: [...deGestiones, ...deIncidentesAdmin],
   };
 }
 

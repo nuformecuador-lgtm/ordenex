@@ -109,7 +109,8 @@ export async function emitirWebhooksEstado(
   // Paso 2 (R15): resolver el `value` del estatus destino y filtrar por la POLITICA
   // (`esTransicionEmitible`, `lib/types/webhook-eventos.ts`), que desde la feature 235 mira DOS
   // cosas: el estado destino (EVENTOS_PUBLICOS, R15) y la FAMILIA de origen
-  // (ORIGENES_SIN_EVENTO_PUBLICO, 235/P4). La decision NO se escribe aqui: este modulo pregunta.
+  // (ORIGENES_SIN_EVENTO_PUBLICO, el mecanismo de 235/P4, con la lista VACIA desde la 268/R5). La
+  // decision NO se escribe aqui: este modulo PREGUNTA y no re-deriva nada (268/R14).
   const destinoIds = Array.from(new Set(candidatas.map((e) => e.estatusDestinoId)));
   const estados = await tx.$queryRaw<EstadoRow[]>`
     SELECT os."id" AS id, os."value" AS value
@@ -121,10 +122,17 @@ export async function emitirWebhooksEstado(
   const ocurridoAtISO = now().toISOString();
   for (const entrada of candidatas) {
     const estado = valuePorId.get(entrada.estatusDestinoId);
-    // Feature 235 (P4): la familia entra en la decision. El rescate `ayuda_tienda -> en_reparto`
-    // NO emite, para que ningun integrador reciba `en_reparto` dos veces sobre la misma orden;
-    // los reingresos LEGITIMOS al mismo estado (una `reprogramada` liberada, un `deshacer_gestion`)
-    // siguen emitiendo, porque la excepcion es por FAMILIA y nunca por estado.
+    // ⏳ 2026-08-22 (FEATURE 268/R9/R14) — AQUI DECIA, y ya no es cierto: «Feature 235 (P4): la
+    // familia entra en la decision. El rescate `ayuda_tienda -> en_reparto` NO emite, para que
+    // ningun integrador reciba `en_reparto` dos veces sobre la misma orden». La 268 revierte 235/P4
+    // y el rescate SI emite: una orden que pasa por ayuda produce `en_reparto` dos veces, y eso es
+    // el coste aceptado por escrito (la `dedupeKey` de abajo lleva el instante, asi que los dos
+    // eventos tienen `eventoId` distinto y el consumidor deduplica).
+    //
+    // Lo que NO cambia, y es lo unico que este bucle necesita saber: la familia SIGUE entrando en
+    // la decision y la decision SIGUE viviendo en la politica. Este modulo pregunta a
+    // `esTransicionEmitible` y no re-deriva la regla ni duplica ninguna lista — si manana vuelve a
+    // hacer falta exceptuar una familia, se escribe alli y aqui no se toca nada.
     if (estado === undefined || !esTransicionEmitible(estado, entrada.origenTipo)) continue;
 
     await repo.enqueue(
