@@ -23,6 +23,13 @@ import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-esta
 
 const MENSAJERO = "m-1";
 const T0 = new Date("2026-07-20T12:00:00.000Z");
+/**
+ * Feature 261 (B5): `recogerLote` recibe el DIA DE COSTA RICA EN CURSO ya resuelto por el
+ * servicio, y lo mete en su `WHERE`. Este archivo mide el ENCOLADO de la reoptimizacion, no el
+ * predicado del dia (eso vive en `tests/integration/db/recoger-lote-dia-reserva.int.test.ts`,
+ * contra Postgres real): aqui basta con un dia valido y constante.
+ */
+const DIA_CR = new Date("2026-07-20T00:00:00.000Z");
 
 interface Fila {
   tipo: JobTipo;
@@ -117,7 +124,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
 
     expect(cola.ruta).toHaveLength(1);
     // PII: el payload lleva SOLO el id del mensajero.
@@ -138,6 +145,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
       MENSAJERO,
       idEstado("por_recoger"),
       idEstado("en_reparto"),
+      DIA_CR,
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -147,7 +155,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma, tx } = prismaRecoger([{ id: "o1" }]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
 
     // El 4.º argumento de `enqueue` es el cliente transaccional del writer (outbox).
     expect(cola.ruta[0].tx).toBe(tx);
@@ -158,7 +166,7 @@ describe("R16 — recoger encola una reoptimizacion DIFERIDA", () => {
     const { prisma } = prismaRecoger([]);
     const cola = new ColaEnMemoria();
 
-    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"));
+    await repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
 
     expect(cola.ruta).toHaveLength(0);
   });
@@ -174,6 +182,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
       MENSAJERO,
       idEstado("por_recoger"),
       idEstado("en_reparto"),
+      DIA_CR,
     );
     const runAfterPrimero = cola.ruta[0].opts.runAfter;
 
@@ -184,6 +193,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
       MENSAJERO,
       idEstado("por_recoger"),
       idEstado("en_reparto"),
+      DIA_CR,
     );
 
     expect(cola.ruta).toHaveLength(1);
@@ -194,7 +204,7 @@ describe("R17 — dos recogidas en la MISMA ventana producen UNA fila", () => {
     const cola = new ColaEnMemoria();
     for (const m of ["m-1", "m-2"]) {
       const { prisma } = prismaRecoger([{ id: "o1" }]);
-      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_reparto"));
+      await repoRecoger(prisma, cola, T0).recogerLote(["o1"], m, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
     }
     expect(cola.ruta).toHaveLength(2);
   });
@@ -224,6 +234,7 @@ describe("R19 — gestionar encola una reoptimizacion INMEDIATA", () => {
       MENSAJERO,
       idEstado("por_recoger"),
       idEstado("en_reparto"),
+      DIA_CR,
     );
     expect(cola.ruta).toHaveLength(1);
 
@@ -249,7 +260,7 @@ describe("R16/R19 — una transaccion REVERTIDA no deja jobs huerfanos", () => {
     const cola = new ColaEnMemoria();
 
     await expect(
-      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto")),
+      repoRecoger(prisma, cola).recogerLote(["o1"], MENSAJERO, idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR),
     ).rejects.toThrow();
 
     // El encolado va DESPUES del append en la misma tx: nunca llego a ejecutarse.

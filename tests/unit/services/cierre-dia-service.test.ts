@@ -23,6 +23,13 @@ import { esGestionDeLaTienda } from "@/lib/utils/gestion-de-la-tienda-flag";
 // R9,R10,R11,R12,R15,R16,R17.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
+
+/**
+ * FEATURE 261 (B6, R19) — el reloj que se INYECTA al deshacer. 04:30Z del 22 de agosto son las
+ * 22:30 CR del 21: la hora esta elegida para que el dia UTC y el dia de Costa Rica NO coincidan,
+ * que es el unico caso en el que se nota si alguien deriva el dia con el helper equivocado.
+ */
+const DESHACER_NOW = new Date("2026-08-22T04:30:00.000Z");
 const OTRO_ROL: Actor = { usuarioId: "u1", rol: "adminSatelite" };
 
 const ZONA_MENSAJERO = "z-cartago";
@@ -1276,7 +1283,10 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
     });
     const { service, ordenRepo } = newService({ repo });
 
-    const r = await service.deshacerGestion("g1", MENSAJERO);
+    // FEATURE 261 (B6/B10, R19): el reloj se INYECTA. 22:30 CR del 21 = 04:30Z del 22, a
+    // proposito: el dia UTC y el dia CR NO coinciden, asi que el `diaEnCurso` que el servicio
+    // calcula solo puede salir «2026-08-21» si usa el helper correcto.
+    const r = await service.deshacerGestion("g1", MENSAJERO, DESHACER_NOW);
 
     expect(r).toEqual({ status: "ok", ordenId: "o1" });
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto"); // R18
@@ -1287,6 +1297,10 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
       actorUsuarioId: "m1", // R11/R20: rastro de quien deshizo
       estatusEsperadoId: "s-bodega", // R5: id REAL leido (guardia optimista de la escritura)
       estatusEnRepartoId: "s-reparto", // R18
+      // 261/R16/R19: los DOS salen del MISMO `now`. Si el instante saliera del reloj de
+      // Postgres y el dia del de la aplicacion, podrian caer a distinto lado de la medianoche.
+      asignadoAt: DESHACER_NOW,
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
     });
   });
 
@@ -1728,7 +1742,7 @@ describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () =
     });
     const { service, ordenRepo } = newService({ repo });
 
-    await service.deshacerGestion("g1", MENSAJERO);
+    await service.deshacerGestion("g1", MENSAJERO, DESHACER_NOW);
 
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto");
     expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith({
@@ -1738,6 +1752,8 @@ describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () =
       actorUsuarioId: "m1",
       estatusEsperadoId: "s-incidente", // guardia optimista sobre el estado REAL leido
       estatusEnRepartoId: "s-reparto",
+      asignadoAt: DESHACER_NOW, // feature 261 (R19): reloj inyectado
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
     });
   });
 

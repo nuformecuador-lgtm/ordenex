@@ -291,6 +291,10 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
       estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1", // 💰 R3: a quien se ATRIBUYE
       actorUsuarioId: "tienda-1", // R4: quien la REGISTRA
+      // Feature 261 (B17): la segunda capa del bloqueo por reserva. Este archivo mide DINERO
+      // (que la gestion caiga en el cierre del mensajero), no el predicado del dia: basta con un
+      // dia valido para que la orden sembrada, que no tiene reserva, pase la guarda.
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
       gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
     });
     expect(gestionId).not.toBeNull();
@@ -322,6 +326,7 @@ describe("💰 R29 — la gestion de la tienda entra en el cierre del mensajero,
       estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
       gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
     });
 
@@ -575,6 +580,7 @@ describe("💰 R30 — los movimientos son IDENTICOS venga la gestion del mensaj
       estatusDestinoId: idEstado("rechazada"),
       mensajeroId: "mensajero-1",
       actorUsuarioId: "tienda-1",
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"), // feature 261 (B17)
       gestion: { resultado: "rechazada", motivo: "el cliente no la quiere", evidencias: [] },
     });
     expect(gestionId).not.toBeNull();

@@ -32,6 +32,21 @@ export interface OrdenParaHilo {
   // necesita.
   /** Borrado logico de la orden: el service lo trata como «no existe» (R10). */
   deletedAt: Date | null;
+  /**
+   * Feature 261 (B15, design §3.bis) — DIA DE REPARTO CRUDO de la orden (`@db.Date`). `null` =
+   * sin reserva. Lo consume la PUERTA A de la via de la tienda
+   * (`GestionDesdeAyudaService.gestionar`): una orden reservada para un dia posterior no se
+   * resuelve desde la pestaña de ayuda (R28), y el rechazo tiene que ocurrir ANTES de subir
+   * evidencias (R29) — o sea, a partir de esta misma fila.
+   *
+   * OBJECION PREVISIBLE, y por que no aplica: «esta es la lectura MINIMA para autorizar y la
+   * comparten notas y rescate». `mensajeroAsignadoId` vive en esta misma fila y lo consume UN
+   * solo consumidor (ese mismo servicio, en su paso 5): el precedente esta en el archivo. Y la
+   * pregunta que responde este campo —«¿puede resolverse hoy?»— es del genero que esta fila sirve.
+   *
+   * Viaja CRUDO: quien decide si es «reservada» es el servicio, con su reloj inyectable (R31).
+   */
+  fechaReparto: Date | null;
 }
 
 /** Datos de la fila a crear. El `autorId` y el `rolAutor` los fija SIEMPRE el service con el

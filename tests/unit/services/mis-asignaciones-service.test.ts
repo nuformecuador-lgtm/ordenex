@@ -46,6 +46,9 @@ function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
     mensajeroAsignadoId: "m1",
     montoCobrar: 100,
     zonaId: "z-satelite", // feature 47: por defecto una zona satelite (no la central)
+    // Feature 261 (B1): `fechaReparto` es OBLIGATORIO en `OrdenGestionRow` (sin `?`) porque es
+    // el insumo de la guarda de reserva. `null` = sin reserva, que es el caso por defecto.
+    fechaReparto: null,
     ...overrides,
   };
 }
@@ -539,12 +542,26 @@ describe("recogerAsignaciones (R14-R17)", () => {
         gestionRow({ id: "o2", estatusValue: "por_recoger" }),
       ]),
     });
-    const r = await newService(repo).recogerAsignaciones({ ordenIds: ["o1", "o2"] }, MENSAJERO);
+    // FEATURE 261 (B4/B5, R6): el reloj se INYECTA. 22:30 CR del 21 = 04:30Z del 22, a
+    // proposito: el dia UTC y el dia CR no coinciden, asi que el `diaEnCurso` que viaja al
+    // `WHERE` solo puede ser «21» si el servicio usa el helper correcto.
+    const r = await newService(repo).recogerAsignaciones(
+      { ordenIds: ["o1", "o2"] },
+      MENSAJERO,
+      new Date("2026-08-22T04:30:00.000Z"),
+    );
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.recogidas.sort()).toEqual(["o1", "o2"]);
-    expect(repo.recogerLote).toHaveBeenCalledWith(["o1", "o2"], "m1", "os-espera", "os-reparto");
+    expect(repo.recogerLote).toHaveBeenCalledWith(
+      ["o1", "o2"],
+      "m1",
+      "os-espera",
+      "os-reparto",
+      // 261/B5: el dia de Costa Rica en curso, ya resuelto, viaja a la escritura.
+      new Date("2026-08-21T00:00:00.000Z"),
+    );
   });
 
   it("R17: orden de OTRO mensajero -> forbidden, sin recoger", async () => {

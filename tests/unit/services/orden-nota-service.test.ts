@@ -109,6 +109,10 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
       // retiro con la columna y la ventana vuelve a depender SOLO del estatus, que es lo que todos
       // los casos de este archivo ya median.
       deletedAt: null,
+      // Feature 261 (B15): `fechaReparto` es OBLIGATORIO en `OrdenParaHilo`. El hilo de notas NO
+      // lo consume —lo consume la puerta A de la via de la tienda—, asi que aqui es siempre
+      // `null` y estos casos no cambian de comportamiento.
+      fechaReparto: null,
       notas: "nota de la tienda, escrita en la carga masiva",
       ...over,
     });
@@ -152,6 +156,7 @@ function escenario(opciones: { filas?: FilaFake[]; ordenes?: Record<string, Part
             mensajeroAsignadoId: o.mensajeroAsignadoId,
             estatusValue: o.estatusValue,
             deletedAt: o.deletedAt,
+            fechaReparto: o.fechaReparto, // feature 261 (B15)
           }
         : null;
     }),
@@ -527,8 +532,17 @@ describe("R25 — la nota de la TIENDA no se toca", () => {
         // ella: la ventana vuelve a depender solo de `estatusValue` (R36). La lista sigue siendo
         // cerrada a proposito — es lo que impide que `notas` (la nota de la TIENDA, otra cosa) se
         // cuele aqui algun dia.
+        //
+        // ⏳ FEATURE 261 (B15, 2026-08-22): ENTRA `fechaReparto`, y entra POR LA PUERTA. Lo
+        // consume la puerta A de la via de la tienda (`GestionDesdeAyudaService`), que tiene que
+        // rechazar una orden reservada para otro dia ANTES de subir evidencias (R29) — o sea, a
+        // partir de esta misma fila. La objecion previsible («esta es la lectura MINIMA para
+        // autorizar») ya tiene precedente en el archivo: `mensajeroAsignadoId` vive aqui y lo
+        // consume UN solo consumidor, ese mismo servicio. El hilo de notas NO lo lee, y este
+        // caso lo sigue demostrando: la lista sigue CERRADA y `notas` sigue fuera.
         "deletedAt",
         "estatusValue",
+        "fechaReparto",
         "mensajeroAsignadoId",
         "tiendaId",
       ]);

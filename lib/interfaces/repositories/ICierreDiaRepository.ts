@@ -221,6 +221,24 @@ export interface AnularGestionInput {
   actorUsuarioId: string; // R11/R20: quien deshace (rastro + actor del historial)
   estatusEsperadoId: string; // R5: estado en el que la orden DEBE seguir estando
   estatusEnRepartoId: string; // R18: destino
+  /**
+   * FEATURE 261 (B6/B7, R16/R19) — el INSTANTE de la reasignacion, resuelto por el SERVICIO.
+   *
+   * Va como parametro y NO como `NOW()` del motor a proposito: si el instante saliera del reloj
+   * de Postgres y el dia (`diaEnCurso`) del reloj de la aplicacion, las dos columnas podrian
+   * caer a distinto lado de la medianoche de Costa Rica — la clase exacta de
+   * segunda-definicion-del-dia que este repo persigue. Los dos salen del MISMO `now`.
+   */
+  asignadoAt: Date;
+  /**
+   * FEATURE 261 (B6/B7, R17/R18/R19) — el DIA DE COSTA RICA EN CURSO (convencion `@db.Date`:
+   * medianoche UTC de la fecha calendario CR), resuelto por el SERVICIO con `startOfDayCR(now)`.
+   *
+   * NO se calcula dentro del repositorio —que es lo que hacia hasta la 261, leyendo el reloj del
+   * proceso— ni se deriva del reloj del motor. Es el reloj inyectable de R19: sin el, «deshacer a
+   * las 23:59 del 21» no se puede probar sin falsear el reloj global.
+   */
+  diaEnCurso: Date;
 }
 
 /** Feature 146 (R24): proyeccion minima del cierre `solicitado` para componer su aviso. */
@@ -359,6 +377,11 @@ export interface ICierreDiaRepository {
    * Ambas escrituras van GUARDADAS en su WHERE (concurrencia-segura): si la gestion dejo de ser
    * deshacible o la orden se movio entre la lectura y la escritura, afecta 0 filas -> rollback
    * -> `false` SIN efectos parciales (el service lo traduce a `conflict`). `true` = deshecha.
+   *
+   * FEATURE 261 (B7, R16/R17/R18) — el paso (2) escribe `fecha_reparto` EN LA MISMA sentencia
+   * que `asignado_at` (la invariante 246/R10 se conserva entera), pero ya no la baja siempre a
+   * hoy: **una reserva a FUTURO se conserva**. La regla vive en un `CASE` dentro del `SET`, asi
+   * que decide sobre la fila y no sobre una lectura previa.
    */
   anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean>;
 }

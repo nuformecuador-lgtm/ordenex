@@ -100,14 +100,55 @@ export interface MiAsignacionDTO {
    * ejecute ninguna accion y sin que se escriba nada en la base. No hay marca que apagar, que es
    * la misma propiedad que hace segura a la columna (D2).
    *
-   * R23/R24 — NO oculta ni bloquea nada. La orden aparece en su grupo de siempre y se puede
-   * recoger y gestionar igual: la reserva protege del CRON, no del mensajero (decision D5, que la
-   * medicion M3 cerro — nadie carga la furgoneta despues de las 18:00).
+   * ⛔ DECISION D5 (246) — ADOPTADA el 2026-08-20, REVERTIDA el 2026-08-21. SUPERSEDIDA por
+   * `specs/261-dia-reparto-protege`.
+   *
+   * Lo que aqui se afirmaba —y con autoridad— era R24: que la marca no bloqueaba nada, que la
+   * orden se trabajaba igual y que la reserva era una defensa SOLO frente al corte nocturno. Ya
+   * NO es cierto, asi que no se deja escrito como si lo fuera. El texto original de aquella
+   * decision se conserva INTACTO donde le corresponde, en el spec que la firmo
+   * (`specs/246-asignacion-por-dia/requirements.md`, §D5), con su apendice fechado al pie: un
+   * spec es la foto de su momento; un contrato describe lo que el sistema hace HOY.
+   *
+   * MOTIVO DE LA REVERSION: D5 se apoyaba en la medicion **M3** («nadie carga la furgoneta
+   * despues de las 18:00»), y M3 quedo REFUTADA por una prueba humana en PRODUCCION: la guia
+   * **17496963** se gestiono `entregada` a las 22:10 CR del 21 estando reservada para el 22.
+   * Deshacer esa misma gestion, ocho minutos despues, bajo `fecha_reparto` de 2026-08-22 a
+   * 2026-08-21 en silencio. La etiqueta viajaba en este DTO y ninguna capa la consultaba para
+   * decidir: era una ETIQUETA, no una puerta.
+   *
+   * LO QUE VALE HOY: la reserva protege del CRON **Y** del mensajero. Una orden reservada para
+   * un dia posterior al de Costa Rica en curso NO se puede recoger (R1), NI escoger para gestion
+   * (R3), NI gestionar (R2) — ni por el mensajero ni por la tienda desde la pestaña de ayuda
+   * (R28). Lo que NO cambia es R23: la orden sigue **visible, en su grupo de siempre**; lo que se
+   * restringe es la ACCION, no la visibilidad (R9).
+   *
+   * ⚠️ RIESGO ACEPTADO POR EL HUMANO EL 2026-08-22, escrito aqui porque este es el sitio donde
+   * se decide el bloqueo (261/R33): **hoy NO EXISTE NINGUNA SUPERFICIE para corregir el dia de
+   * reparto de una orden ya asignada**. Medido dos veces: `fechaReparto` no aparece en un solo
+   * componente de escritura. Si bodega marca un lote para el dia equivocado, ese lote queda
+   * inalcanzable para TODO EL MUNDO —ni bodega, ni el maestro, ni el admin, ni el mensajero—
+   * hasta que llegue ese dia, y la unica salida es un `UPDATE` a mano en produccion, como el que
+   * hubo que hacer el 2026-08-21. Lo resuelve la **ficha 262**; mientras no exista, esto es
+   * cierto y no se suaviza.
    *
    * Opcional (`?`) por el patron aditivo de `marcarLuego?`/`intentosEntrega?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia.
    */
   esParaManana?: boolean;
+  /**
+   * Feature 261 (B1/B4, R11/R14) — el DIA DE REPARTO como fecha calendario `YYYY-MM-DD`, YA
+   * RESUELTA EN EL SERVIDOR con el dia de Costa Rica. `null` = la orden no tiene dia de reparto.
+   *
+   * Existe para que la card pueda decir QUE DIA sin construir un `Date` en el navegador: leer
+   * `YYYY-MM-DD` con el reloj del cliente es exactamente la puerta que R14 cierra. Se pone en
+   * palabras con `avisoReservaParaOtroDia` (`lib/utils/dia-reparto-textos.ts`), que no importa
+   * `Date` ni `Intl`.
+   *
+   * `esParaManana` se conserva intacto y sigue siendo el booleano derivado (246/R26): este campo
+   * NO lo sustituye, lo acompaña.
+   */
+  fechaRepartoISO?: string | null;
   // Feature 235 (T6.1, R40): aqui vivia `ayuda?: boolean`, la bandera de la ORDEN. Se retira con
   // la columna. Quien quiera saber si hay una solicitud de ayuda viva mira `estatusValue`, que ya
   // viaja mas arriba en este mismo DTO: es `ayuda_tienda` o no lo es. Una verdad, no dos.
@@ -252,6 +293,16 @@ export interface RecogerInput {
 export interface DetalleConflicto {
   ordenId: string;
   motivo: string;
+  /**
+   * Feature 261 (B1/B4, design §4) — CODIGO DE MAQUINA del rechazo, para que la UI no tenga que
+   * leer prosa. Hoy `motivo` mezcla texto humano («orden borrada») con jerga («estado de origen
+   * no permitido: en_bodega_central»), asi que una pantalla que quisiera distinguir un caso
+   * tendria que comparar cadenas.
+   *
+   * Aditivo y opcional a proposito: los rechazos que ya existian NO lo emiten y nadie tiene que
+   * inventarles uno. Hoy el unico valor es el de la reserva.
+   */
+  codigo?: "reservada_para_otro_dia";
 }
 
 export type RecogerServiceResult =
@@ -343,12 +394,23 @@ export interface IMisAsignacionesService {
    * Feature 246 (T5.1, R25/R26): `now` es el reloj inyectable del que sale `esParaManana`.
    */
   listarMisAsignaciones(actor: Actor, now?: Date): Promise<ListarMisAsignacionesServiceResult>;
-  /** R14-R17: transiciona por_recoger -> en_reparto (lote o de a una). */
-  recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult>;
-  /** R19-R21: fija la orden activa 1-a-1; conflict si ya hay otra activa. */
-  escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult>;
-  /** R18/R22-R32: registra la gestion (4 resultados) con atomicidad storage<->DB. */
-  gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult>;
+  /**
+   * R14-R17: transiciona por_recoger -> en_reparto (lote o de a una).
+   *
+   * Feature 261 (R1/R6): `now` es el reloj INYECTABLE del que sale el dia de Costa Rica en curso
+   * con el que se decide si una orden esta reservada. Espejo exacto de `listarMisAsignaciones`,
+   * que la 246 ya dejo asi para poder probar que la etiqueta caduca sola. Sin esto, R6 y R7 no
+   * son testeables sin falsear el reloj global del proceso.
+   */
+  recogerAsignaciones(
+    input: RecogerInput,
+    actor: Actor,
+    now?: Date,
+  ): Promise<RecogerServiceResult>;
+  /** R19-R21: fija la orden activa 1-a-1; conflict si ya hay otra activa. Feature 261 (R3/R6): `now` inyectable. */
+  escogerParaGestion(ordenId: string, actor: Actor, now?: Date): Promise<EscogerServiceResult>;
+  /** R18/R22-R32: registra la gestion (4 resultados) con atomicidad storage<->DB. Feature 261 (R2/R6): `now` inyectable. */
+  gestionar(input: GestionarInput, actor: Actor, now?: Date): Promise<GestionarServiceResult>;
   /** R35: libera el puntero de bloqueo del propio actor si apunta a esa orden. */
   liberarGestion(ordenId: string, actor: Actor): Promise<LiberarServiceResult>;
 }

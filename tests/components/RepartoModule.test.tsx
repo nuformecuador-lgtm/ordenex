@@ -2397,8 +2397,129 @@ describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
     expect(diceParada(cardDe("REM-MAN"), 1, 1)).toBe(true);
   });
 
-  it("R24: la reservada SE PUEDE GESTIONAR — `escogerParaGestion` sí se llama", async () => {
+  it("R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    // 261/R11: el badge dice QUÉ es la orden; esta línea dice por qué el botón de abajo está gris
+    // y desde cuándo dejará de estarlo. La fecha la resolvió el SERVIDOR (R14).
+    expect(
+      within(cardDe("REM-MAN")).getByText(
+        "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+// =================================================================================================
+// FEATURE 261 (F3/F5, R12) — EL CONTROL QUE LLEVA A GESTIONAR, DESHABILITADO.
+// =================================================================================================
+//
+// ⏳ REVIERTE LA DECISIÓN D5 DE LA 246. Aquella decía que la reserva protegía del corte nocturno y
+// no del mensajero; la refutó una prueba humana en producción (la guía 17496963, gestionada
+// `entregada` a las 22:10 CR del 21 estando reservada para el 22). Desde el 2026-08-21 una orden
+// reservada no se gestiona hasta su día.
+//
+// LA FORMA DEL BLOQUEO ES LA QUE EL REPO YA USA con el mensajero bloqueado por un cierre pendiente:
+// el control se apaga, la card se queda ENTERA y en su sitio, y el motivo va en palabras al lado.
+// Se restringe la ACCIÓN, no la visibilidad (R9). El humano descartó explícitamente la alternativa
+// de moverla a una sección propia (P3/A7): lo que se saca del grupo de siempre está a un paso de
+// esconderse.
+//
+// Y el bloqueo de verdad NO está aquí: vive en el servidor (R1-R5). Esto es defensa suave, la
+// misma que el portal ya aplica al cierre pendiente — pero es la que evita que el mensajero saque
+// la caja de la furgoneta para nada.
+describe("RepartoModule — el botón de gestionar de una reservada (feature 261/R12)", () => {
+  const AVISO_22 =
+    "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.";
+
+  /** El botón «Gestionar» del pie de la card de esa remisión. */
+  function botonGestionarDe(numRemision: string): HTMLElement {
+    return screen.getByRole("button", { name: `Gestionar la orden ${numRemision}` });
+  }
+
+  it("R12: el botón «Gestionar» de la reservada está DESHABILITADO, y el de la de hoy no", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-HOY",
+          estatusValue: "en_reparto",
+          esParaManana: false,
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    // El par, en la misma pantalla. La primera orden es la que ocupa el panel de detalle, así que
+    // su botón está apagado por OTRO motivo (ya está abierta); la que este caso mide es la
+    // segunda, cuyo único impedimento es el día.
+    expect(botonGestionarDe("REM-MAN")).toBeDisabled();
+    expect(
+      within(cardDe("REM-MAN")).getByText(AVISO_22),
+      "un botón gris sin explicación es un misterio: el motivo va en palabras al lado",
+    ).toBeInTheDocument();
+  });
+
+  it("R12: la mitad POSITIVA — sin reserva ese mismo botón está habilitado", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-UNO", estatusValue: "en_reparto" }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-DOS",
+          estatusValue: "en_reparto",
+          esParaManana: false,
+        }),
+      ],
+    });
+
+    // Sin esto, un `disabled` puesto a `true` a secas pasaría el caso anterior.
+    expect(botonGestionarDe("REM-DOS")).toBeEnabled();
+  });
+
+  it("R9: la card reservada NO se esconde ni se recorta — sigue entera y en su sección", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          secuenciaRuta: 1,
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    const region = screen.getByRole("region", { name: "En reparto / por gestionar" });
+    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
+    // Y conserva su posición en la ruta: bloquear la acción no la degrada a «sin posición» ni la
+    // saca del mapa (R10). Sigue en la moto.
+    expect(diceParada(cardDe("REM-MAN"), 1, 1)).toBe(true);
+  });
+
+  it("R12: y por el panel tampoco — pulsar «Gestionar» dice el motivo y NO fija el puntero", async () => {
     const user = userEvent.setup();
+    // ⚠️ ESTE CASO NO ES REDUNDANTE CON EL BOTÓN GRIS: el panel arranca en la PRIMERA orden del
+    // grupo, así que una reservada puede estar delante sin que nadie haya pulsado la card. Sin
+    // esta guarda, el `conflict` del servidor se traduciría a «ya tienes otra orden activa en
+    // gestión» — falso, y mandaría a buscar un problema que no existe.
     renderModule({
       porGestionar: [
         makeAsignacion({
@@ -2407,6 +2528,7 @@ describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
           numGuia: 1001,
           estatusValue: "en_reparto",
           esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
         }),
       ],
     });
@@ -2415,15 +2537,34 @@ describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
     await user.type(within(panel).getByLabelText("Número de guía"), "1001");
     await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
 
-    // La otra mitad de D5: la reserva protege del corte de la noche, NO es un candado contra el
-    // mensajero. Se afirma que la acción SE LLAMA; «no aparece un error» no lo probaría, porque
-    // también estaría en verde si no pasara nada.
-    await vi.waitFor(() =>
-      expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }),
-    );
-    // Y llega a los cuatro resultados: puede entregarla hoy si quiere.
-    expect(
-      await screen.findByRole("button", { name: "Entregar" }),
-    ).toBeInTheDocument();
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalledWith(AVISO_22));
+    // Que se diga es la mitad; que el puntero NO se fije es la otra. Sin ella, el caso pasaría
+    // igual con un aviso que avisa y escoge de todos modos.
+    expect(escogerMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Entregar" })).toBeNull();
+  });
+
+  it("R12: y con la orden de HOY el mismo panel SÍ escoge — la regla no bloquea de más", async () => {
+    const user = userEvent.setup();
+    escogerMock.mockResolvedValue({ status: "ok", ordenId: "g1" });
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-HOY",
+          numGuia: 1001,
+          estatusValue: "en_reparto",
+          esParaManana: false,
+          fechaRepartoISO: "2026-08-21",
+        }),
+      ],
+    });
+
+    const panel = await abrirGestion(user);
+    await user.type(within(panel).getByLabelText("Número de guía"), "1001");
+    await user.click(within(panel).getByRole("button", { name: "Gestionar" }));
+
+    await vi.waitFor(() => expect(escogerMock).toHaveBeenCalledWith({ ordenId: "g1" }));
+    expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
   });
 });

@@ -4,7 +4,10 @@ import { MapPin, Navigation } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
-import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
+import {
+  avisoReservaParaOtroDia,
+  ETIQUETA_PARA_MANANA,
+} from "@/lib/utils/dia-reparto-textos";
 
 import { UbicacionTrigger } from "../UbicacionTrigger";
 import { formatMonto } from "./pos-format";
@@ -114,7 +117,11 @@ export function PosOrderCardDetalle({
           ) : null}
           {/* Feature 246 (T5.2, R22): orden RESERVADA para el día siguiente, dicha con palabras.
               El dato lo deriva el servidor (`esParaManana`, R26) y deja de ser cierto solo, al
-              llegar el día (R25). No oculta ni bloquea nada (R23/R24, decisión D5). */}
+              llegar el día (R25).
+              ⏳ FEATURE 261 (2026-08-21): la decisión D5 quedó REVERTIDA — la reserva ya no
+              protege sólo del corte, también del mensajero: la orden no se puede recoger ni
+              gestionar hasta su día, y el bloqueo vive en el servidor. R23 sigue en pie: la marca
+              **no oculta** la orden y la card sigue entera. Ver `specs/261-dia-reparto-protege`. */}
           {orden.esParaManana ? (
             <Badge variant="info">{ETIQUETA_PARA_MANANA}</Badge>
           ) : null}
@@ -138,6 +145,16 @@ export function PosOrderCardDetalle({
         {verIntentos ? (
           <p className="text-[11px] font-semibold text-muted-foreground">
             <IntentosDato intentos={valorIntentos(orden)} />
+          </p>
+        ) : null}
+        {/* Feature 261 (F2, R11): el badge dice QUÉ es la orden; esta línea dice POR QUÉ todavía
+            no se puede trabajar y DESDE QUÉ DÍA se podrá. El literal NO se escribe aquí: sale de
+            la fuente única (`avisoReservaParaOtroDia`, R15), la misma frase que devuelve el
+            servidor al rechazar y la misma que lee la tienda. La fecha llega YA RESUELTA en
+            `fechaRepartoISO` (R14): aquí no se construye ningún `Date`. */}
+        {orden.esParaManana ? (
+          <p role="note" className="text-[11px] font-semibold text-muted-foreground">
+            {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
           </p>
         ) : null}
       </div>

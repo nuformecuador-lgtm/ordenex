@@ -19,6 +19,12 @@ import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignaciones
 // El texto se afirma con su literal ESCRITO A MANO, nunca contra la constante que lo produce:
 // comparar un texto con su propia fuente está siempre verde.
 //
+// ⏳ FEATURE 261 (2026-08-21) — LA REGLA CAMBIÓ. La decisión D5 de la 246 quedó REVERTIDA: la
+// reserva ya no es sólo una etiqueta que protege del corte nocturno, también bloquea al mensajero.
+// El badge sigue exactamente igual (R9: la orden no se esconde ni sale de su grupo), y debajo de él
+// aparece el aviso que explica desde qué día se podrá trabajar — su bloque está al pie de este
+// archivo. Ver `specs/261-dia-reparto-protege`.
+//
 // Las cards refrescan desde el router al gestionar; se mockea para montarlas en jsdom.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -94,16 +100,117 @@ describe("pos-card — «Para mañana» en las tres vistas (feature 246/R22)", (
       expect(screen.getByText("REM-1")).toBeInTheDocument();
     });
 
-    it(`R23/R24: la card ${nombre} reservada conserva TODO lo demás — ni se oculta ni se recorta`, () => {
+    it(`R23: la card ${nombre} reservada conserva TODO lo demás — ni se oculta ni se recorta`, () => {
       render(<Card orden={makeOrden({ esParaManana: true })} total={1} />);
 
-      // La reserva protege del corte de la noche, NO del mensajero (decisión D5): la card
-      // conserva su identificación, su destinatario y su ubicación, así que la orden se puede
-      // trabajar igual. (`getAllByText`: las tres vistas repiten alguno de estos datos entre la
-      // cabecera y el detalle desplegable, y lo que este caso afirma es que NO desaparecen.)
+      // 261/R9: lo que se restringe es la ACCIÓN, no la visibilidad. La card conserva su
+      // identificación, su destinatario y su ubicación, y sigue montada entera — igual que con el
+      // mensajero bloqueado por un cierre pendiente, que es el patrón que el usuario ya conoce.
+      // (`getAllByText`: las tres vistas repiten alguno de estos datos entre la cabecera y el
+      // detalle desplegable, y lo que este caso afirma es que NO desaparecen.)
       expect(screen.getByText("REM-1")).toBeInTheDocument();
       expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Escazú/).length).toBeGreaterThan(0);
+    });
+  }
+});
+
+// =================================================================================================
+// FEATURE 261 (F2/F5, R11) — EL AVISO EN PALABRAS, DEBAJO DEL BADGE.
+// =================================================================================================
+//
+// El badge dice QUÉ es la orden; no dice por qué el botón de gestionar está gris ni desde cuándo
+// dejará de estarlo. Desde la 261 la reserva BLOQUEA —recoger, escoger y gestionar—, así que la
+// card tiene que explicarlo con palabras y nombrando el día: el mensajero está en la calle con el
+// paquete en la mano y enterarse al intentarlo le cuesta un viaje.
+//
+// LOS LITERALES VAN ESCRITOS A MANO, nunca contra `avisoReservaParaOtroDia`: comparar un texto con
+// la función que lo genera está siempre verde. Que la card lo IMPORTE en vez de copiarlo lo prueba
+// el test de fuente única (`tests/unit/utils/dia-reparto-textos.test.ts`, R15).
+describe("pos-card — el aviso de la reserva, con su día (feature 261/R11)", () => {
+  const AVISO_22 =
+    "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.";
+  const AVISO_SIN_FECHA =
+    "Esta orden es para un día de reparto posterior. Podrás recogerla y gestionarla ese día.";
+
+  for (const [nombre, Card] of CARDS) {
+    it(`R11: la card ${nombre} dice desde QUÉ DÍA se podrá, con la fecha en palabras`, () => {
+      render(
+        <Card
+          orden={makeOrden({ esParaManana: true, fechaRepartoISO: "2026-08-22" })}
+          total={1}
+        />,
+      );
+
+      // La fecha la resolvió el SERVIDOR y viaja en el DTO (R14): la card no construye ningún
+      // `Date` ni compara nada con el reloj del navegador.
+      expect(screen.getByText(AVISO_22)).toBeInTheDocument();
+      // Y el badge SIGUE (246/R22): son dos cosas distintas, no una sustituye a la otra.
+      expect(screen.getByText("Para mañana")).toBeInTheDocument();
+    });
+
+    it(`R11: la card ${nombre} de HOY no dice nada de esto`, () => {
+      render(
+        <Card
+          orden={makeOrden({ esParaManana: false, fechaRepartoISO: "2026-08-21" })}
+          total={1}
+        />,
+      );
+
+      // Ausencia EMPAREJADA con una presencia de la misma card: sin esto, el `toBeNull` estaría
+      // verde también si la card no se hubiera renderizado.
+      expect(screen.getByText("REM-1")).toBeInTheDocument();
+      expect(screen.queryByText(AVISO_22)).toBeNull();
+      expect(screen.queryByText(AVISO_SIN_FECHA)).toBeNull();
+    });
+
+    it(`R11: la card ${nombre} sin fecha en el DTO sigue diciendo algo CIERTO`, () => {
+      // Una orden reservada cuya fecha no llegó (DTO viejo, o `null`): la frase pierde precisión
+      // pero no deja de ser verdad. Lo que no puede pasar es que la card se quede muda con el
+      // botón apagado, que es el misterio que este aviso existe para evitar.
+      render(
+        <Card orden={makeOrden({ esParaManana: true, fechaRepartoISO: null })} total={1} />,
+      );
+
+      expect(screen.getByText(AVISO_SIN_FECHA)).toBeInTheDocument();
+    });
+
+    it(`R9: la card ${nombre} con el aviso sigue montada ENTERA`, () => {
+      render(
+        <Card
+          orden={makeOrden({ esParaManana: true, fechaRepartoISO: "2026-08-22" })}
+          total={1}
+        />,
+      );
+
+      // El aviso NO recorta la card: se restringe la acción, no la visibilidad. Si un día alguien
+      // decidiera «simplificar» la card reservada, este caso se pone rojo.
+      expect(screen.getByText(AVISO_22)).toBeInTheDocument();
+      expect(screen.getByText("REM-1")).toBeInTheDocument();
+      expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Escazú/).length).toBeGreaterThan(0);
+    });
+
+    it(`R7: la card ${nombre} deja de decirlo al llegar el día, sin que nadie escriba nada`, () => {
+      // La MISMA fila: lo único que cambia es el booleano que el servidor deriva del paso del
+      // tiempo. No hay marca que apagar ni aviso que retirar a mano.
+      const { rerender } = render(
+        <Card
+          orden={makeOrden({ esParaManana: true, fechaRepartoISO: "2026-08-22" })}
+          total={1}
+        />,
+      );
+      expect(screen.getByText(AVISO_22)).toBeInTheDocument();
+
+      rerender(
+        <Card
+          orden={makeOrden({ esParaManana: false, fechaRepartoISO: "2026-08-22" })}
+          total={1}
+        />,
+      );
+
+      expect(screen.queryByText(AVISO_22)).toBeNull();
+      expect(screen.getByText("REM-1")).toBeInTheDocument();
     });
   }
 });
