@@ -935,9 +935,24 @@ describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () 
     "flex flex-wrap items-start justify-between gap-3 break-inside-avoid border-b border-border pb-4",
     // 5 — la franja del pie, con el total.
     "-mx-5 -mb-5 flex flex-wrap items-center justify-between gap-3 break-inside-avoid border-t border-border bg-muted/50 px-5 py-3",
+    // ── Feature 264 (2026-08-22): la hoja gana la seccion «Ordenes sin gestionar», y con ella
+    //    DOS piezas mas. Este rojo es el que R19 pide («una pieza que la reciba sin estar en la
+    //    lista DEBE poner la verificacion en rojo»): se revisa y se da de alta, no se relaja.
+    //
+    // 6 — la FILA de una orden sin gestionar. Mismo criterio que la pieza 1 y por la misma
+    //     razon: se repite N veces y es la que decide donde caen los cortes. Partida, deja la
+    //     guia en una pagina y el destinatario en la siguiente. Es el gemelo de la pieza 1 sin
+    //     desplegable (la fila no es un boton: la seccion es de consulta, R31).
+    "mb-2 grid break-inside-avoid items-center gap-2 rounded-[10px] border border-border px-2 py-2.5",
+    // 7 — el ENCABEZADO de esa seccion (titulo + conteo + la nota que dice que no tienen dinero
+    //     asociado). Mismo criterio que la pieza 4, la cabecera de la hoja: partido, la primera
+    //     pagina deja una lista de ordenes sin decir que son ni por que no llevan importe. La
+    //     SECCION entera NO lo lleva —puede tener sesenta filas (R34) y superar el alto de una
+    //     pagina—, y eso lo comprueba el caso de R20 de aqui abajo.
+    "flex break-inside-avoid flex-col gap-1 border-b border-border pb-2",
   ];
 
-  it("`break-inside-avoid` esta EXACTAMENTE en las cinco piezas de la lista cerrada", () => {
+  it("`break-inside-avoid` esta EXACTAMENTE en las piezas de la lista cerrada", () => {
     const cadenas = [...hoja.matchAll(/"([^"]*break-inside-avoid[^"]*)"/g)].map((m) => m[1]!);
     expect(
       cadenas.sort(),
@@ -963,6 +978,16 @@ describe("feature 223 — que NO se parte, y donde NO se aplica (R19, R20)", () 
       "el panel de la pestaña activa",
       () => {
         const i = hoja.indexOf("aria-label={RESULTADO_LABEL[tab]}");
+        return hoja.slice(i, hoja.indexOf(">", i));
+      },
+    ],
+    // Feature 264: la seccion nueva entra por la MISMA puerta y con el MISMO criterio. Sin
+    // recorte (R34) puede traer sesenta filas: infragmentable seria mas alta que una pagina, y
+    // eso es el recorte que la 223 vino a cerrar, reintroducido por la puerta de atras.
+    [
+      "la seccion de ordenes sin gestionar",
+      () => {
+        const i = hoja.indexOf("aria-label={SIN_GESTION_TITULO}");
         return hoja.slice(i, hoja.indexOf(">", i));
       },
     ],

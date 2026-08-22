@@ -21,14 +21,22 @@ import type {
   CierreBodegaResumen,
   CierreBodegaResumenLite,
 } from "@/lib/interfaces/services/ICierreBodegaService";
+// Feature 264 — `CierreOrdenSinGestion` se importa de AQUÍ y no de `ICierresAdminService`, que
+// es donde lo sitúa `design.md §6`. No es una preferencia: el DTO se DECLARA en este archivo y
+// el contrato del admin lo RE-EXPORTA, porque la dirección contraria mete
+// `lib/types/{cierres-admin,wallet}.ts` —que importan `Prisma` como VALOR— en el grafo del
+// navegador y `tests/unit/guards/pagos-captura.guardia.test.ts` se pone roja. Está escrito en
+// los dos contratos y en `progress/impl_264_backend.md §3`; no se "arregle" de vuelta.
 import type {
   CierrePasadoDTO,
   CierreDetalleGestion,
   CierreGrupos,
+  CierreOrdenSinGestion,
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 
 import {
   money,
@@ -159,7 +167,19 @@ const FACTURA_LIQUIDACION_TITULO = "Liquidación";
 const FACTURA_ORDENES_TITULO = "Órdenes del cierre";
 const FACTURA_TOTAL_GENERAL_LABEL = "Total general";
 const FACTURA_MOTIVO_RECHAZO_LABEL = "Motivo de rechazo";
-const FACTURA_ORDENES_KPI_LABEL = "Órdenes";
+/**
+ * Feature 264 (Q4/R21) — ESTE KPI CUENTA GESTIONES, Y AHORA LO DICE.
+ *
+ * Se llamaba `FACTURA_ORDENES_KPI_LABEL` y valía «Órdenes»; el número no ha cambiado ni una
+ * unidad (sigue sumando `ORDEN_RESULTADOS`, ver `gestiones` en `CierreFacturaDetalle`). Lo que
+ * estaba mal era el nombre, y se volvió insostenible al añadir debajo la sección de órdenes SIN
+ * gestionar: con doce filas de órdenes a la vista, un KPI rotulado «Órdenes: 3» son dos números
+ * que se desmienten en la misma pantalla, que es exactamente lo que R21 prohíbe.
+ *
+ * Se renombra también la CONSTANTE, no solo su valor: un identificador que dice «Órdenes» y
+ * pinta «Gestiones» es la próxima confusión ya escrita.
+ */
+const FACTURA_GESTIONES_KPI_LABEL = "Gestiones";
 // --- Rótulos de la tarjeta compacta del resumen ---
 const RESUMEN_TOTAL_LABEL = "Total";
 const RESUMEN_VER_DETALLES = "Ver detalles";
@@ -914,6 +934,22 @@ export interface CierreFacturaDetalleProps {
    * para el rol que no corrige y en la vista del mensajero.
    */
   onCorregirPagos?: (g: CierreDetalleGestion) => void;
+  /**
+   * Feature 264 (R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear ESTE
+   * cierre. Ni una lleva monto: no tienen gestión, así que no hay nada que sumar (R10).
+   */
+  ordenesSinGestion?: CierreOrdenSinGestion[];
+  /**
+   * Feature 264 (R27/R28) — `false` ⇒ el cierre es ANTERIOR al registro y su lista es
+   * irrecuperable: la sección pinta el AVISO en vez de la lista. `[]` con `true` es «no hubo
+   * ninguna»; `[]` con `false` es «no lo sabemos», y son dos pantallas distintas.
+   *
+   * Las dos props son OPCIONALES por los dobles de test que ya montaban la hoja, pero las DOS
+   * superficies que la renderizan las pasan (R30) y eso lo vigila
+   * `tests/unit/guards/cierre-detalle-superficies.guardia.test.ts`: «opcional en el tipo» es
+   * justo por donde se cuela un arreglo a medias, y el typecheck no caza un prop ausente.
+   */
+  sinGestionRegistrado?: boolean;
 }
 
 /**
@@ -967,6 +1003,24 @@ const FILA_GRID_COLS =
  */
 const FILA_GUIA_CELDA = "min-w-[80px] whitespace-nowrap tabular-nums";
 
+/**
+ * Feature 264 (R18) — la plantilla de la rejilla de la sección de órdenes SIN GESTIONAR.
+ *
+ * NO ES UNA TERCERA COPIA DE `FILA_GRID_COLS`, y la diferencia no es cosmética: esta sección
+ * tiene TRES columnas —guía, destinatario, tienda— y las otras dos de `FILA_GRID_COLS` son
+ * **Cobrado** e **Ingreso total**, que para estas órdenes NO EXISTEN (R10/R18: no hay gestión,
+ * luego no hay monto), más la celda del chevron, que tampoco existe porque la fila no se
+ * despliega (R31). Reusar la plantilla de cinco tracks pintaría dos columnas de dinero vacías,
+ * que es justo lo que R18 prohíbe: una columna con «—» en el 100 % de las filas se lee como
+ * «este dato falta» cuando lo cierto es «este dato no existe».
+ *
+ * Los DOS primeros tracks son, carácter a carácter, los dos primeros de `FILA_GRID_COLS`, y el
+ * piso de la guía es la MISMA constante (`FILA_GUIA_CELDA`): la guía se lee igual en las dos
+ * secciones y hereda su prohibición de recortarse. Las dos rejillas de esta sección —cabecera
+ * de columnas y filas— la comparten, que es lo único que las mantiene alineadas entre sí.
+ */
+const SIN_GESTION_GRID_COLS = "grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)]";
+
 // --- Rótulos de la tabla compacta del detalle (texto separado, i18n-ready) ---
 const FILA_GUIA_COL = "Guía";
 const FILA_DESTINATARIO_COL = "Destinatario";
@@ -978,6 +1032,43 @@ const FILA_NUEVA_FECHA_LABEL = "Nueva fecha";
 const FILA_VER_EVIDENCIA = "Ver evidencia";
 const FOOTER_RECAUDADO_LABEL = "Total recaudado";
 const FOOTER_ENTREGAS_LABEL = "entregas";
+
+// --- Feature 264: rótulos de la sección de órdenes SIN GESTIONAR (i18n-ready) ---
+const SIN_GESTION_TITULO = "Órdenes sin gestionar";
+/**
+ * R17 — la nota fija. Dice las dos cosas que hacen falta para leer la sección sin equivocarse:
+ * de dónde salieron estas órdenes (el corte del día) y por qué no tienen ni una columna de
+ * dinero (no tienen gestión, así que no hay nada que cobrar ni que pagar).
+ */
+const SIN_GESTION_NOTA =
+  "El corte del día las cerró sin gestión. No tienen dinero asociado.";
+/**
+ * R28 — «no lo sabemos» NO es «no hubo ninguna». Un cierre anterior al registro no tiene lista
+ * que enseñar, y callarse comunica «no barrió ninguna»: tranquilizador y falso. Este aviso es
+ * la razón de existir de `sinGestionRegistrado`.
+ */
+const SIN_GESTION_NO_REGISTRADO =
+  "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.";
+/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
+const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
+
+/**
+ * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la
+ * mano del mensajero del que esperaba respuesta de la tienda, y eso cambia qué se hace con él.
+ *
+ * `Partial` y no `Record` exhaustivo A PROPÓSITO: el corte solo barre desde `ESTADOS_A_BARRER`
+ * (`en_reparto`, `ayuda_tienda`), así que sólo esos dos pueden llegar. Cualquier otro valor —o
+ * `null`, que es lo que viaja cuando NO CONSTA— hace que la pieza se OMITA (R32). Nada de un
+ * «—» permanente: un marcador de ausencia fijo es el mismo silencio ambiguo de R28 en pequeño.
+ *
+ * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
+ * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
+ * no en un chip de una tabla de estados.
+ */
+const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
+  en_reparto: "En reparto",
+  ayuda_tienda: "Ayuda de la tienda",
+};
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
@@ -1330,6 +1421,142 @@ function FilaGestion({
 }
 
 /**
+ * Feature 264 (R18, R31, R32) — fila de una orden que el corte cerró SIN GESTIÓN.
+ *
+ * Es un `<div>`, no un `<button aria-expanded>`, y eso es el requisito y no una simplificación:
+ * no hay segundo nivel que desplegar —ni desglose de ingreso, ni evidencia, ni pagos— porque no
+ * hay gestión de la que colgarlo. La sección es de CONSULTA (R31).
+ *
+ * Tres columnas y ninguna de dinero (R18). El estado de origen viaja pegado a la línea del
+ * producto y **desaparece** cuando no consta (R32): no se pinta un guion en su lugar.
+ */
+function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
+  const origen = o.estatusOrigen
+    ? SIN_GESTION_ORIGEN_LABEL[o.estatusOrigen]
+    : undefined;
+  return (
+    // `break-inside-avoid` (feature 223): mismo criterio que `FilaGestion` — la fila se repite N
+    // veces y es la que decide dónde caen los cortes. Partida, deja la guía en una página y el
+    // destinatario en la siguiente.
+    <div
+      role="listitem"
+      className={cn(
+        "mb-2 grid break-inside-avoid items-center gap-2 rounded-[10px] border border-border px-2 py-2.5",
+        SIN_GESTION_GRID_COLS,
+      )}
+    >
+      <span
+        className={cn("text-[13px] font-medium text-foreground", FILA_GUIA_CELDA)}
+      >
+        {/* La orden puede no tener guía todavía; ahí el «—» SÍ corresponde: el dato existe y
+            está vacío. Es el caso contrario al del estado de origen (R32). */}
+        {o.numGuia ?? "—"}
+      </span>
+      {/* `min-w-0`: sin él el mínimo automático del flex-item es el min-content del texto y
+          `truncate` no llega a activarse nunca (lección literal de la 258). */}
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-[13px] text-foreground">
+          {o.destinatario}
+        </span>
+        <span className="truncate text-[11px] text-muted-foreground">
+          {o.numRemision} · {o.producto}
+          {origen ? ` · ${origen}` : null}
+        </span>
+      </span>
+      <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+        {o.tiendaNombre}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Feature 264 (R13–R18, R28, R34) — LA SECCIÓN DE ÓRDENES SIN GESTIONAR.
+ *
+ * ── POR QUÉ ES UNA SECCIÓN HERMANA Y NO UNA SEXTA PESTAÑA (`design.md §3`)
+ * `TAB_TONO`, `RESULTADO_LABEL`, `RESULTADO_VACIO` y `ORDEN_RESULTADOS` son
+ * `Record<CierreResultado, …>`, y `CierreResultado` es el enum `gestion_resultado` de Postgres.
+ * Una sexta clave obligaría a ensanchar ese tipo con un valor que el enum NO tiene, y la mentira
+ * se propagaría a todo lo que consume `CierreGrupos` (descargas, retornables de la 238,
+ * incidentes de la 158). Una orden sin gestionar **no es un resultado: es la ausencia de uno**.
+ * El `tablist` sigue emitiendo exactamente cinco pestañas (R14).
+ *
+ * ── LOS TRES ESTADOS, Y POR QUÉ SON TRES (`design.md §3.1`, R15/R28)
+ *   registrado + ≥1 orden → la sección con su lista y su conteo
+ *   registrado + 0 órdenes → NADA. Es la lectura correcta: no hubo ninguna
+ *   NO registrado        → la sección con el AVISO y SIN lista, aunque llegaran órdenes
+ * La tercera fila es la feature entera de Q3. Sin ella, un cierre anterior al registro se
+ * pintaría como la segunda y diría «no hubo ninguna», que es tranquilizador y falso.
+ *
+ * ── SIN RECORTE (R34). Ni un `slice`, ni un tope: se listan todas. Una lista truncada en
+ * silencio se lee como una lista completa, y aquí el número es justamente el que motivó el
+ * cierre. Si algún día se añadiera un tope, la regla ya está escrita: habría que decir cuántas
+ * no se muestran, junto al conteo del encabezado.
+ */
+function SeccionSinGestion({
+  ordenes,
+  registrado,
+}: Readonly<{ ordenes: readonly CierreOrdenSinGestion[]; registrado: boolean }>) {
+  // R15 — la ÚNICA combinación que no pinta nada. Se pide `registrado` explícitamente: con la
+  // marca en `false` la sección aparece igual, porque no tener lista y no haber tenido órdenes
+  // son cosas distintas (R28).
+  if (registrado && ordenes.length === 0) return null;
+
+  return (
+    <section aria-label={SIN_GESTION_TITULO} className="flex flex-col">
+      {/* `break-inside-avoid` (feature 223): el encabezado lleva el título, el conteo y la nota
+          que explica que estas órdenes no tienen dinero. Partido, la primera página deja una
+          lista de órdenes sin decir qué son. La SECCIÓN entera no lo lleva —puede tener sesenta
+          filas y superar el alto de una página—, igual que la de las pestañas. */}
+      <div className="flex break-inside-avoid flex-col gap-1 border-b border-border pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+            {SIN_GESTION_TITULO}
+          </h4>
+          {registrado ? (
+            // R16 — cuántas son. Tono `warning` y no neutro: es una anomalía operativa, no una
+            // salida rutinaria del reparto (mismo criterio con el que la 158 puso `incidente`
+            // en `warning`). Sin lista que contar no se pinta ningún número: un «0» aquí sería
+            // exactamente el «no hubo ninguna» que R28 prohíbe.
+            <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6875rem] text-warning-strong">
+              {ordenes.length}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {registrado ? SIN_GESTION_NOTA : SIN_GESTION_NO_REGISTRADO}
+        </p>
+      </div>
+
+      {registrado ? (
+        <>
+          {/* Misma plantilla que la fila, servida por la MISMA constante: son dos rejillas
+              independientes y es lo único que las mantiene alineadas. */}
+          <div
+            className={cn(
+              "grid gap-2 px-2 py-1 text-[11px] text-muted-foreground",
+              SIN_GESTION_GRID_COLS,
+            )}
+          >
+            <span className={FILA_GUIA_CELDA}>{FILA_GUIA_COL}</span>
+            <span className="min-w-0 truncate">{FILA_DESTINATARIO_COL}</span>
+            <span className="min-w-0 truncate">{FILA_TIENDA_LABEL}</span>
+          </div>
+          {/* `list`/`listitem` y no una tabla: son filas de consulta sin cabecera semántica de
+              columna, y el rol de lista le da a quien usa lector de pantalla el recuento sin
+              tener que fiarse de la píldora. */}
+          <div role="list" aria-label={SIN_GESTION_LISTA_LABEL}>
+            {ordenes.map((o) => (
+              <FilaSinGestion key={o.ordenId} o={o} />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * El detalle del cierre leído como documento: los dos totales de cabecera (pago a
  * tienda e ingreso por rechazos), la liquidación completa (bruto − pago = ganancia /
  * deuda) y las órdenes en pestañas por resultado, cada una desplegable. Todos los
@@ -1345,11 +1572,19 @@ export function CierreFacturaDetalle({
   audiencia = "admin",
   onVerEvidencia,
   onCorregirPagos,
+  ordenesSinGestion = [],
+  // Feature 264 (R28): el default es `true` —«registrado»— porque es lo que vale para todo
+  // cierre nacido después de la migración, y porque el estado que MIENTE es el otro: presentar
+  // un cierre como «no lo sabemos» sin serlo escondería una lista que sí existe.
+  sinGestionRegistrado = true,
 }: Readonly<CierreFacturaDetalleProps>) {
   // Vista del MENSAJERO: la misma hoja, sin la plata de la empresa (design §7.2).
   const esMensajero = audiencia === "mensajero";
   const gananciaNegativa = ganancia !== undefined && esMontoNegativo(ganancia);
-  const ordenes = ORDEN_RESULTADOS.reduce(
+  // Feature 264 (Q4/R21): se llamaba `ordenes` y cuenta GESTIONES —suma los cinco resultados—.
+  // El número no cambia; el nombre sí, porque debajo hay ahora una sección de órdenes que este
+  // KPI no cuenta y no debe contar (R19/R20: son lecturas de dinero y de entregas).
+  const gestiones = ORDEN_RESULTADOS.reduce(
     (total, resultado) => total + (grupos[resultado]?.length ?? 0),
     0,
   );
@@ -1467,7 +1702,7 @@ export function CierreFacturaDetalle({
           value={cierre.totalPagoMensajero}
           moneda
         />
-        <KpiFactura label={FACTURA_ORDENES_KPI_LABEL} value={ordenes} />
+        <KpiFactura label={FACTURA_GESTIONES_KPI_LABEL} value={gestiones} />
       </div>
 
       <BloqueRenglones
@@ -1607,6 +1842,15 @@ export function CierreFacturaDetalle({
           )}
         </section>
       </section>
+
+      {/* Feature 264 (R13) — las órdenes que el corte cerró SIN gestión: sección HERMANA de la
+          de pestañas, después de ella y ANTES del pie. No entra en ningún total: el pie y los
+          KPI siguen contando gestiones y dinero, y estas órdenes no tienen ni una cosa ni la
+          otra (R19/R20). */}
+      <SeccionSinGestion
+        ordenes={ordenesSinGestion}
+        registrado={sinGestionRegistrado}
+      />
 
       {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron.
           `break-inside-avoid` (feature 223, pieza 5 de 5): franja corta y con el total; no
