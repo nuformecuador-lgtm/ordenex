@@ -6,6 +6,7 @@ import {
   VENTANA,
   crearGestion,
   crearOrden,
+  diaReparto,
   instanteCR,
   repositorio,
   sembrarBase,
@@ -227,5 +228,91 @@ describeSiHayBase("detalle vs tarjeta — el cuadre (Postgres real)", () => {
     expect(conResultado.filter((o) => o.resultadoDelDia === "reprogramada")).toHaveLength(
       detalle.fila.reprogramadas,
     );
+  });
+
+  it("FEATURE 259 (R14) — el cuadre aguanta mezclando rama (a), rama (b) y recoleccion", async () => {
+    // ⚠️ ESTE ARCHIVO AFIRMA UNA IGUALDAD Y LA 259 MUEVE UN LADO DE ELLA. No se afloja nada: los
+    // casos que ya existian siguen VERDES SIN TOCARLOS porque ninguno fijaba `fecha_reparto`, o
+    // sea que todos ejercitan la rama (b). Lo que hace falta es un caso que ejercite tambien la
+    // rama (a) y la de recoleccion A LA VEZ — que es donde el cuadre se rompería si la tarjeta y
+    // el detalle dejaran de compartir `cteIdsDelDia`.
+    const cuadres = await cuadrar(async (tx, base) => {
+      // (a) reservada para hoy, ASIGNADA AYER: con el criterio viejo no estaria en la pantalla.
+      await crearOrden(tx, base, {
+        clave: "cuadre259-a-ayer",
+        estatus: "en_reparto",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR("2001-06-14", "16:00"),
+        fechaReparto: diaReparto(FECHA_CR),
+      });
+      // (a) reservada para hoy y asignada hoy.
+      await crearOrden(tx, base, {
+        clave: "cuadre259-a-hoy",
+        estatus: "por_recoger",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "07:00"),
+        fechaReparto: diaReparto(FECHA_CR),
+      });
+      // (b) sin dia de reparto: el respaldo por `asignado_at`.
+      await crearOrden(tx, base, {
+        clave: "cuadre259-b",
+        estatus: "por_recoger",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "08:00"),
+      });
+      // Recoleccion de hoy sin dia de reparto: entra solo por el historial.
+      const soloRecoleccion = await crearOrden(tx, base, {
+        clave: "cuadre259-recoleccion",
+        estatus: "recolectando",
+        mensajeroId: base.mensajero1,
+        asignadoAt: null,
+      });
+      await transicionDeRecoleccion(tx, base, soloRecoleccion, instanteCR(FECHA_CR, "08:30"));
+      // Recoleccion de hoy Y reservada para hoy: alcanzable por dos caminos, cuenta UNA vez.
+      const porDosCaminos = await crearOrden(tx, base, {
+        clave: "cuadre259-dos-caminos",
+        estatus: "en_reparto",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "07:30"),
+        fechaReparto: diaReparto(FECHA_CR),
+      });
+      await transicionDeRecoleccion(tx, base, porDosCaminos, instanteCR(FECHA_CR, "07:45"));
+
+      // ── RUIDO QUE NO ES DE HOY ────────────────────────────────────────────────────────────
+      // Reservada para mañana: fuera de la tarjeta Y fuera del detalle. Si una consulta la
+      // dejara entrar y la otra no, este caso cae — que es justo para lo que existe.
+      await crearOrden(tx, base, {
+        clave: "cuadre259-para-manana",
+        estatus: "por_recoger",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "14:00"),
+        fechaReparto: diaReparto("2001-06-16"),
+      });
+      const recoleccionParaManana = await crearOrden(tx, base, {
+        clave: "cuadre259-recoleccion-manana",
+        estatus: "por_recoger",
+        mensajeroId: base.mensajero2,
+        asignadoAt: instanteCR(FECHA_CR, "14:00"),
+        fechaReparto: diaReparto("2001-06-16"),
+      });
+      await transicionDeRecoleccion(
+        tx,
+        base,
+        recoleccionParaManana,
+        instanteCR(FECHA_CR, "08:00"),
+      );
+    }, () => ({ tipo: "global" }));
+
+    // Solo la tarjeta de Ana: la de Beto no existe hoy (su unica orden es de mañana).
+    expect(cuadres).toHaveLength(1);
+    for (const c of cuadres) {
+      expect(c.detalle.total).toBe(c.asignadas);
+      expect(c.detalle.ordenes).toHaveLength(c.asignadas);
+      expect(c.suma).toBe(c.asignadas);
+    }
+    expect(cuadres[0].asignadas).toBe(5);
+    // Y el ruido no se coló por el detalle: ninguna orden de mañana aparece en la pagina.
+    const claves = cuadres[0].detalle.ordenes.map((o) => o.cliente);
+    expect(claves.filter((c) => c.includes("manana"))).toEqual([]);
   });
 });

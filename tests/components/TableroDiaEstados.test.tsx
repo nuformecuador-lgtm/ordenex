@@ -20,6 +20,9 @@
 //     el reconocimiento, no lo sustituye;
 //   - que los cinco siguen distinguiéndose en el DOM por su `data-slot` (R30).
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
@@ -34,6 +37,7 @@ import {
   TableroDiaSkeleton,
   TableroDiaVacio,
 } from "@/app/(app)/monitoreo/_components/TableroDiaEstados";
+import { quitarComentarios } from "../fixtures/sin-comentarios";
 
 afterEach(cleanup);
 
@@ -44,7 +48,11 @@ afterEach(cleanup);
  */
 const ESTADOS = [
   { nombre: "cargando", slot: "tablero-dia-skeleton", pinta: () => <TableroDiaSkeleton /> },
-  { nombre: "sin órdenes hoy", slot: "tablero-dia-vacio", pinta: () => <TableroDiaVacio /> },
+  {
+    nombre: "sin órdenes para hoy",
+    slot: "tablero-dia-vacio",
+    pinta: () => <TableroDiaVacio />,
+  },
   {
     nombre: "refresco fallido",
     slot: "tablero-dia-aviso-refresco",
@@ -184,4 +192,125 @@ describe("Feature 258 · R29 — ningún icono es el único portador de informac
       ).toBeGreaterThan(10);
     },
   );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   FEATURE 259 (T7) — LA PANTALLA YA NO DICE LO CONTRARIO DE LO QUE CUENTA
+
+   Desde el 2026-08-21 el tablero cuenta por el día PARA EL QUE se asignó la orden, no por el
+   día en que se asignó. Cuatro textos quedaron diciendo lo contrario, y el peor prometía algo
+   que ya no ocurre: «En cuanto se asigne la primera, aparecerá aquí» es FALSO si esa primera
+   se asigna para mañana. Es la familia de defectos que este repo llama «el sistema no falla,
+   aparenta»: no rompe ningún test, no la caza `eslint`, y sólo se ve abriendo la app.
+
+   Aquí se miden dos de los cuatro sitios (los que este archivo puede renderizar) y, por
+   fuente, la regla de lenguaje (R25) sobre los cuatro.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Los cuatro archivos con texto del día, por RUTA. Se censa la fuente y no lo renderizado
+ * porque dos de las cuatro frases no se pintan desde aquí: el `aria-label` de la tarjeta y la
+ * cabecera del detalle piden el módulo entero con SWR, y viven en sus propios archivos de test.
+ */
+const FUENTES_CON_TEXTO_DEL_DIA = [
+  "app/(app)/monitoreo/_components/TableroDiaEstados.tsx",
+  "app/(app)/monitoreo/_components/TableroDiaModule.tsx",
+  "app/(app)/monitoreo/_components/MensajeroCard.tsx",
+  "app/(app)/monitoreo/_components/DetalleMensajeroPanel.tsx",
+] as const;
+
+/**
+ * R25 — la jerga que un texto de esta pantalla NO puede usar: el nombre interno de la idea
+ * («día de reparto»), el nombre de las columnas y las siglas. Esta app ya arrastra una deuda
+ * por escribir una sigla en una pantalla; el detector existe para que no haya una segunda.
+ */
+const JERGA: readonly RegExp[] = [
+  /d[ií]a de reparto/i,
+  /fecha_reparto/,
+  /asignado_at/,
+  /\bSLA\b/,
+];
+
+/** Los patrones de jerga que aparecen en un texto. Función pura: se autocomprueba abajo. */
+function jergaEn(texto: string): string[] {
+  return JERGA.filter((patron) => patron.test(texto)).map((patron) => patron.source);
+}
+
+/** El texto visible de un estado ya renderizado. */
+function textoDe(slot: string): string {
+  return raiz(slot).textContent ?? "";
+}
+
+describe("Feature 259 · R23 — el vacío ya NO promete que la siguiente asignación aparecerá aquí", () => {
+  it("dice qué cuenta la pantalla, y la promesa vieja NO está", () => {
+    render(<TableroDiaVacio />);
+    const texto = textoDe("tablero-dia-vacio");
+
+    expect(texto).toContain("Sin órdenes asignadas para hoy");
+    expect(texto).toContain("Ningún mensajero tiene órdenes asignadas para hoy dentro de tu alcance.");
+    expect(
+      texto,
+      "volvió «aparecerá aquí»: es falso si esa primera orden se asigna para otro día",
+    ).not.toMatch(/aparecer[áa] aqu[ií]/i);
+  });
+
+  it("en vez de prometer, dice DÓNDE aparece lo que se asigna para otro día", () => {
+    // No es adorno: sin esta frase, quien asigne para mañana verá desaparecer sus órdenes del
+    // tablero de hoy y lo leerá como «se perdieron».
+    render(<TableroDiaVacio />);
+    expect(textoDe("tablero-dia-vacio")).toContain(
+      "lo que se asigne para otro día aparecerá en el tablero de ese día",
+    );
+  });
+});
+
+describe("Feature 259 · R24 — los textos renderizables dicen «para hoy», no «hoy»", () => {
+  it("el estado vacío", () => {
+    render(<TableroDiaVacio />);
+    const texto = textoDe("tablero-dia-vacio");
+    expect(texto).toMatch(/asignadas para hoy/);
+    expect(texto, "volvió el criterio viejo: «asignadas hoy»").not.toMatch(/asignadas hoy/i);
+  });
+
+  it("el aviso de «se cerró el detalle» — el CUARTO sitio, el que no estaba en la pregunta", () => {
+    render(<AvisoTarjetaDesaparecida />);
+    const texto = textoDe("tablero-dia-aviso-desaparecido");
+
+    expect(texto).toContain(
+      "ya no tiene órdenes asignadas para hoy dentro de tu alcance",
+    );
+    expect(
+      texto,
+      "volvió «asignadas hoy»: la misma pantalla diría dos cosas distintas del mismo conteo",
+    ).not.toMatch(/asignadas hoy/i);
+  });
+
+  it("⛔ el vacío del FILTRO no entra en esta ficha y sigue intacto", () => {
+    // Habla del texto que escribiste, no del día: cambiarlo sería pasarse del alcance.
+    render(<TableroDiaSinCoincidencias onQuitarFiltro={() => {}} />);
+    expect(textoDe("tablero-dia-sin-coincidencias")).toContain(
+      "El día sí tiene órdenes asignadas: lo que no encuentra nada es el texto que escribiste.",
+    );
+  });
+});
+
+describe("Feature 259 · R25 — lenguaje de quien opera, en los CUATRO sitios", () => {
+  it.each(FUENTES_CON_TEXTO_DEL_DIA)("%s no nombra la jerga interna", (ruta) => {
+    const codigo = quitarComentarios(readFileSync(path.join(process.cwd(), ruta), "utf8"));
+    expect(
+      jergaEn(codigo),
+      "un texto de esta pantalla nombra la idea interna, una columna o una sigla",
+    ).toEqual([]);
+  });
+
+  it("el detector NO es decorado: marca lo que infringe y no marca lo que no", () => {
+    // Sin esto, la cláusula de arriba podría estar verde por no detectar nada.
+    expect(jergaEn("Sin órdenes con día de reparto hoy")).toContain("d[ií]a de reparto");
+    expect(jergaEn('const x = "fecha_reparto";')).toContain("fecha_reparto");
+    expect(jergaEn("o.asignado_at")).toContain("asignado_at");
+    // `String.raw` y no `"\bSLA\b"`: en una cadena normal `\b` es un BACKSPACE, no dos
+    // caracteres, y la comparación con `RegExp.source` falla por un motivo que no es el suyo.
+    expect(jergaEn("Vence el SLA")).toContain(String.raw`\bSLA\b`);
+    expect(jergaEn("Ningún mensajero tiene órdenes asignadas para hoy.")).toEqual([]);
+  });
 });

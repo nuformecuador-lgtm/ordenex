@@ -57,7 +57,10 @@ export function MensajeroCard({
       // R31 — con el detalle abierto la tarjeta esta "pulsada": el estado de seleccion que ya
       // se veia con el anillo tambien se OYE, en vez de ser solo color.
       aria-pressed={seleccionado}
-      aria-label={`${fila.mensajeroNombre}: ${fila.asignadas} ${ETIQUETA_ASIGNADAS.toLowerCase()} hoy — ${ACCION_TARJETA}`}
+      // FEATURE 259 (T7.2) — R24/R25: «asignadas hoy» → «asignadas PARA hoy». El tablero cuenta
+      // por el dia para el que se asigno la orden, no por el dia en que se asigno; lo que dejo de
+      // ser cierto es el «hoy», no el contador. `ETIQUETA_ASIGNADAS` NO se toca a proposito.
+      aria-label={`${fila.mensajeroNombre}: ${fila.asignadas} ${ETIQUETA_ASIGNADAS.toLowerCase()} para hoy — ${ACCION_TARJETA}`}
       data-mensajero={fila.mensajeroId}
       data-seleccionado={seleccionado ? "" : undefined}
       onClick={() => onSeleccionar(fila.mensajeroId)}

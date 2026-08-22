@@ -5,6 +5,7 @@ import {
   FECHA_CR,
   VENTANA,
   crearOrden,
+  diaReparto,
   instanteCR,
   repositorio,
   sembrarBase,
@@ -128,5 +129,37 @@ describeSiHayBase("tablero del dia — aislamiento multi-tenant (Postgres real)"
     });
 
     expect(filas).toEqual([]);
+  });
+
+  it("FEATURE 259 (R16) — una orden RESERVADA para hoy en la zona B tampoco se ve desde la A", async () => {
+    // La rama (a) es un camino NUEVO al universo del dia, y un camino nuevo es un sitio nuevo
+    // donde el recorte multi-tenant podria haberse quedado fuera. El recorte NO se movio: sigue
+    // aplicandose UNA vez, despues de la union, sobre `orden.zona_id` — asi que la rama (a)
+    // hereda la frontera sin declararla otra vez. Esto lo mide.
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarBase(tx);
+      await crearOrden(tx, base, {
+        clave: "reservada-zona-b",
+        estatus: "por_recoger",
+        zonaId: base.zonaB,
+        mensajeroId: base.mensajero1,
+        // ASIGNADA AYER: sin la rama (a) esta orden no estaria en el tablero de hoy por
+        // ningun otro camino, asi que el caso mide de verdad la rama nueva.
+        asignadoAt: instanteCR("2001-06-14", "16:00"),
+        fechaReparto: diaReparto(FECHA_CR),
+      });
+
+      const repo = repositorio(tx);
+      return {
+        deA: mias(await repo.contarPorMensajero(VENTANA, { tipo: "zona", zonaId: base.zonaA })),
+        deB: mias(await repo.contarPorMensajero(VENTANA, { tipo: "zona", zonaId: base.zonaB })),
+      };
+    });
+
+    expect(resultado.deA).toEqual([]);
+    // Y la otra direccion, para que el caso no pueda pasar por no ver nada en ninguna parte.
+    expect(resultado.deB).toHaveLength(1);
+    expect(resultado.deB[0]).toMatchObject({ asignadas: 1, sinRecoger: 1 });
+    expect(resultado.deB[0].asignadas).toBe(sumaDeLosOcho(resultado.deB[0]));
   });
 });

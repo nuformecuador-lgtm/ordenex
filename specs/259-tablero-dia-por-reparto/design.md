@@ -292,7 +292,7 @@ El índice que existe hoy es `("mensajero_asignado_id", "asignado_at", "fecha_re
    `tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts`, que es **una guardia de dinero**:
    ahí las entradas se conceden mirándolas a mano, no de paso.
 
-**Lo que sí se hace:** dejar el `EXPLAIN` de la consulta nueva escrito en `progress/impl_259.md`
+**Lo que sí se hace:** dejar el `EXPLAIN` de la consulta nueva escrito en `progress/impl_259_backend.md`
 (forma, no coste, y dicho así) para que quien un día vea la pantalla lenta sepa dónde mirar: la rama
 (a) no tiene ningún índice que empiece por `fecha_reparto`, y ése es el sitio.
 
@@ -436,7 +436,7 @@ un cubo dentro de la de hoy.
 | **Un test de servicio con dobles no ve el `WHERE`.** En este repo ya hubo un caso donde una mutación del `WHERE` dejaba **11 tests de servicio en verde**. | El criterio se prueba **contra Postgres real** (`tests/integration/tablero-dia-*.test.ts`) y `tasks.md` exige **matarlo con mutaciones** y reportar qué pasó. |
 | **La integración se salta sin base y reporta verde.** `describeSiHayBase` usa `describe.skip` si no hay `DATABASE_URL`. | `tasks.md` exige reportar **cuántos casos se EJECUTARON** (no «pasaron»): una suite saltada no es evidencia de nada. |
 | **La rama (a) no la ejercita ningún test de hoy**, porque la siembra nunca fija `fechaReparto`. | La siembra gana el campo y los casos nuevos lo usan; la mutación M2 lo demuestra. |
-| **El plan de la consulta puede degradarse con volumen.** | `EXPLAIN` anotado en `progress/impl_259.md` diciendo que mide **forma**, no coste; §3.1 declara que el razonamiento de indexabilidad **no está medido aquí**, y §6 dice dónde mirar. |
+| **El plan de la consulta puede degradarse con volumen.** | `EXPLAIN` anotado en `progress/impl_259_backend.md` diciendo que mide **forma**, no coste; §3.1 declara que el razonamiento de indexabilidad **no está medido aquí**, y §6 dice dónde mirar. |
 | **La pantalla diría una cosa y el texto otra.** | Cerrado: los **cuatro** literales entran en esta ficha (R23-R25, tanda **T7**), y se comprueban leyendo el texto en los tests de componente que ya existen. |
 | **Quien opera lee «desaparecieron» donde hay «están en mañana».** | Cerrado: aviso obligatorio **antes de desplegar** (T8), que **bloquea la release**. |
 | **`dev` se mueve mientras tanto** (la 260 toca el mismo contrato del detalle). | La 260 toca `lib/types/tablero-dia.ts` y el detalle; ésta toca `cteIdsDelDia`. No hay intersección de archivos salvo el repositorio: **no correr las dos a la vez sobre `TableroDiaRepository.ts`**. |

@@ -651,3 +651,35 @@ describe("Feature 258 · M-1/R71 — el avatar de iniciales en la CABECERA del d
     expect(dialogo.textContent).not.toContain("m-desconocido");
   });
 });
+
+describe("Feature 259 · R24/R25 — la cabecera del detalle dice «para hoy»", () => {
+  // Esta cifra y la de la tarjeta son la MISMA (R14 de la 259): describirlas con criterios
+  // distintos —«asignadas hoy» aquí, «asignadas para hoy» allá— haría que la pantalla dijera
+  // dos cosas del mismo número. El texto viejo, además, dejó de ser cierto: el tablero cuenta
+  // por el día PARA EL QUE se asignó la orden, no por el día en que se asignó.
+  it("en plural: «N órdenes asignadas para hoy»", async () => {
+    const usuario = userEvent.setup();
+    leerDetalleMock.mockResolvedValue(
+      okDetalle([orden(), orden({ ordenId: "o-2", numGuia: "GUIA-002" })]),
+    );
+    renderModulo();
+    await waitFor(() => expect(tarjeta()).toBeInTheDocument());
+    await usuario.click(tarjeta());
+
+    expect(await screen.findByText("2 órdenes asignadas para hoy")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/órdenes asignadas hoy/i),
+      "volvió el texto anterior: la cabecera describe el día en que se asignó",
+    ).toBeNull();
+  });
+
+  it("en singular también: «1 orden asignada para hoy»", async () => {
+    const usuario = userEvent.setup();
+    leerDetalleMock.mockResolvedValue(okDetalle([orden()]));
+    renderModulo();
+    await waitFor(() => expect(tarjeta()).toBeInTheDocument());
+    await usuario.click(tarjeta());
+
+    expect(await screen.findByText("1 orden asignada para hoy")).toBeInTheDocument();
+  });
+});
