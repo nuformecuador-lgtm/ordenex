@@ -24,6 +24,7 @@ import {
 import type {
   CierreDetalleGestion,
   CierreGrupos,
+  CierreOrdenSinGestion,
   CierreTotales,
   CierrePasadoDTO,
   CierreResultado,
@@ -78,6 +79,20 @@ import {
 // cierres. Las mutaciones (Solicitar cierre; feature 67/R35-R38: Devolver a gestión)
 // van por Server Action y refrescan la ruta para releer el estado del servidor. Los
 // montos llegan como STRING (money-safe): se renderizan tal cual, sin `parseFloat`/`Number`.
+
+/**
+ * Feature 264 (Q1/R30) — lo que el visor de un cierre PASADO tiene cargado del servidor. Es una
+ * sola lectura (`verCierrePasado`) y por eso es un solo estado: los grupos por resultado y, en
+ * pie de igualdad, las órdenes que el corte cerró sin gestión con su marca de registro.
+ *
+ * `sinGestionRegistrado` no se deriva de que la lista esté vacía: `[]` con `true` es «no hubo
+ * ninguna» y `[]` con `false` es «no lo sabemos» (R28). Son dos pantallas distintas.
+ */
+interface DetalleCierrePasado {
+  grupos: CierreGrupos;
+  ordenesSinGestion: CierreOrdenSinGestion[];
+  sinGestionRegistrado: boolean;
+}
 
 /** Feature 170 — FASE 2 (T I.2): la página de «Cierres solicitados» tal como la da el servidor. */
 export interface CierresPasadosPagina {
@@ -405,7 +420,13 @@ export function CierreDiaModule({
   // Pedido humano: cierre pasado ABIERTO en el visor de detalle; null = modal cerrado. El
   // detalle se pide bajo demanda (no viaja en las props de la página: son N cierres).
   const [cierreAbierto, setCierreAbierto] = useState<CierrePasadoDTO | null>(null);
-  const [detalleGrupos, setDetalleGrupos] = useState<CierreGrupos | null>(null);
+  // Feature 264 (Q1/R30): el estado guardaba SOLO `grupos` y ahora guarda también las órdenes
+  // sin gestionar y su marca. Van juntos en un objeto y no en tres `useState` sueltos porque
+  // los tres llegan de la MISMA lectura: separarlos permitiría un render con la lista de un
+  // cierre y los grupos de otro.
+  const [detallePasado, setDetallePasado] = useState<DetalleCierrePasado | null>(
+    null,
+  );
   const [detalleError, setDetalleError] = useState<string | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
@@ -424,13 +445,20 @@ export function CierreDiaModule({
   /** Abre el visor de un cierre pasado y carga su detalle (solo lectura). */
   async function abrirDetalle(cierre: CierrePasadoDTO) {
     setCierreAbierto(cierre);
-    setDetalleGrupos(null);
+    setDetallePasado(null);
     setDetalleError(null);
     setCargandoDetalle(true);
     try {
       const result = await verCierrePasado({ cierreId: cierre.cierreId });
       if (result.status === "ok") {
-        setDetalleGrupos(result.grupos);
+        setDetallePasado({
+          grupos: result.grupos,
+          // Feature 264 (R30): el mismo par de campos que el detalle del admin, por el mismo
+          // camino. No es plata de la empresa —la lista no tiene ni un importe—, así que la
+          // regla de audiencia de la 38/40 no aplica: son SUS órdenes.
+          ordenesSinGestion: result.ordenesSinGestion,
+          sinGestionRegistrado: result.sinGestionRegistrado,
+        });
         return;
       }
       // `no_encontrada` = el cierre ya no existe o no es suyo (no se distinguen, igual que
@@ -849,7 +877,7 @@ export function CierreDiaModule({
                 {detalleError}
               </p>
             ) : null}
-            {detalleGrupos ? (
+            {detallePasado ? (
               <>
                 {/* MISMO comprobante que usa el admin (`CierreFacturaDetalle`), en su
                     variante `mensajero`: sin el ingreso de Ordenex ni la liquidación (no es
@@ -868,7 +896,13 @@ export function CierreDiaModule({
                     resueltoAt: cierreAbierto.resueltoAt ?? null,
                     motivoRechazo: cierreAbierto.motivoRechazo ?? null,
                   }}
-                  grupos={detalleGrupos}
+                  grupos={detallePasado.grupos}
+                  // Feature 264 (R30): las MISMAS dos props que pasa el módulo del admin. El
+                  // componente es UNO: pintarla en una pantalla y callarla en la otra es el
+                  // arreglo a medias que se corrigió en la 263, y lo vigila
+                  // `cierre-detalle-superficies.guardia.test.ts`.
+                  ordenesSinGestion={detallePasado.ordenesSinGestion}
+                  sinGestionRegistrado={detallePasado.sinGestionRegistrado}
                   onVerEvidencia={setEvidencia}
                 />
                 <p role="note" className="text-xs text-muted-foreground">

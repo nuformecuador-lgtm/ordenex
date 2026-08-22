@@ -302,6 +302,14 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
     ].sort();
 
     // Foto tomada el 2026-08-13, con la 217 ya aplicada.
+    //
+    // ACTUALIZADA el 2026-08-22 por la feature 264, y este rojo es exactamente el momento de
+    // revisión que R5 quiere provocar: la hoja gana una SECCIÓN nueva —«Órdenes sin
+    // gestionar»—, así que sí hubo un cambio de layout de verdad. La única utilidad no
+    // cromática que entra es `pb-2` (el filete bajo el encabezado de esa sección); todo lo
+    // demás de la sección reusa las que ya estaban (`mb-2`, `px-2`, `py-2.5`, `gap-1`, `gap-2`,
+    // `rounded-[10px]`, `rounded-full`, `text-[13px]`, `text-[11px]`, `text-[0.6875rem]`…).
+    // Ni una utilidad se fue.
     expect(halladas).toEqual([
       "border", "border-b", "border-b-2", "border-dashed", "border-dotted", "border-t",
       "border-t-[3px]", "divide-y",
@@ -313,7 +321,7 @@ describe("feature 217 — censo de fuente de la hoja de la factura", () => {
       "md:gap-2", "md:gap-2.5", "md:gap-4", "md:gap-5", "md:px-5", "md:text-[11px]",
       "md:text-[22px]",
       "mt-3", "mt-auto",
-      "p-5", "pb-3", "pb-4", "pl-12", "pt-2", "pt-2.5",
+      "p-5", "pb-2", "pb-3", "pb-4", "pl-12", "pt-2", "pt-2.5",
       "px-1.5", "px-2", "px-3", "px-4", "px-5",
       "py-0", "py-0.5", "py-1", "py-1.5", "py-2", "py-2.5", "py-3", "py-3.5", "py-4",
       "rounded-[10px]", "rounded-full", "rounded-md", "rounded-xl",
@@ -475,7 +483,10 @@ const INVENTARIO: Par[] = [
     utilidades: ["text-foreground", "hover:text-foreground"],
     anclas:
       "renglones :193/:208, caja de pago :271/:279, títulos :508/:1101, total :563, " +
-      "motivo :572/:1327, pestaña activa :857, dato de fila desplegada :885, fila :927/:931/:936",
+      "motivo :572/:1327, pestaña activa :857, dato de fila desplegada :885, fila :927/:931/:936" +
+      // Feature 264: la guía y el destinatario de una orden SIN GESTIONAR. Mismo par que la
+      // fila de gestión (misma tinta, mismo papel), sin el `hover` — esa fila no es un botón.
+      ", fila sin gestionar (`FilaSinGestion`: guía y destinatario)",
   },
   {
     id: "P2",
@@ -515,7 +526,11 @@ const INVENTARIO: Par[] = [
     utilidades: ["text-muted-foreground"],
     anclas:
       ":197, :230, :268, :276, :509, :540, :557, :571, :858, :932, :946, :953, :1106, :1114, " +
-      ":1288, :1300",
+      ":1288, :1300" +
+      // Feature 264: el título de la sección de órdenes sin gestionar, su NOTA fija (R17) o su
+      // AVISO de cierre no registrado (R28), la cabecera de columnas y, en cada fila, la línea
+      // de `remisión · producto · estado de origen` y la tienda.
+      ", sección sin gestionar (`SeccionSinGestion` y `FilaSinGestion`)",
   },
   {
     id: "P6",
@@ -555,12 +570,19 @@ const INVENTARIO: Par[] = [
   },
   {
     id: "P10",
-    papel: "las píldoras de conteo de reprogramadas e incidentes: ámbar sobre ámbar al 15 %",
+    papel:
+      "las píldoras de conteo de reprogramadas e incidentes, y la de la sección de órdenes sin " +
+      "gestionar: ámbar sobre ámbar al 15 %",
     tinta: "warning-strong",
     fondo: { clase: "capa", color: { de: "paleta", nombre: "warning" }, alpha: 0.15, sobre: CARD },
     umbral: 4.5,
     utilidades: ["bg-warning/15", "text-warning-strong"],
-    anclas: ":841",
+    // Feature 264: la píldora de la sección nueva cuelga del MISMO par —misma tinta, misma capa
+    // ámbar al 15 %, y sobre el papel de la hoja, no dentro de ninguna otra superficie—, así que
+    // no estrena medición: estrena OCURRENCIA, y por eso se ancla aquí en vez de clonar el par.
+    // El tono `warning` no es decorativo: una orden que el corte cerró sin gestión es una
+    // anomalía operativa, no una salida rutinaria del reparto (mismo criterio de la 158).
+    anclas: ":841, y el conteo de `SeccionSinGestion` (feature 264)",
   },
   {
     id: "P11",
@@ -803,7 +825,10 @@ const INVENTARIO: Par[] = [
     utilidades: ["border-border", "border-border/60", "divide-border/60"],
     anclas:
       ":203, :233, :245, :267, :275, :339, :376, :581, :665, :913, :954, :1050, :1098, " +
-      ":1273, :1317",
+      ":1273, :1317" +
+      // Feature 264: el filete bajo el encabezado de la sección sin gestionar y el borde de
+      // cada una de sus filas. Separadores, sin texto encima: mismo exento, mismo motivo.
+      ", filete y filas de `SeccionSinGestion`",
   },
 ];
 
@@ -1092,5 +1117,156 @@ describe("feature 217 — el inventario CERRADO de pares de la hoja (R6, R7, R16
       expect(SUELO[par.id].claro).toBeGreaterThan(1);
       expect(SUELO[par.id].oscuro).toBeGreaterThan(1);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 264 · LA SECCIÓN «ÓRDENES SIN GESTIONAR», PAR A PAR  ·  F4
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `tasks.md` F4 pedía «dar de alta los pares de la sección nueva». Al confrontarlo con el
+ * inventario resultó que **la sección no estrena ni un par**: sus cuatro utilidades de color
+ * —`text-foreground`, `text-muted-foreground`, `text-warning-strong` sobre `bg-warning/15`, y
+ * `border-border`— ya estaban medidas (P1, P5, P10, P18) y se leen sobre las MISMAS superficies
+ * que allí se declaran. Se anclaron en sus pares (arriba) en vez de clonarlos: un par duplicado
+ * con el mismo hex no es una medición nueva, es el mismo número escrito dos veces.
+ *
+ * Pero eso deja justo el hueco que el CIERRE global declara no cubrir: cierra por UTILIDAD, no
+ * por PAR, así que **recombinar dos utilidades ya declaradas sobre un fondo nuevo no lo caza**, y
+ * una sección entera nueva es precisamente una recombinación grande. La red de eso era «humana:
+ * al mover una pieza hay que releer el inventario». Aquí esa relectura queda ESCRITA y
+ * ejecutable, acotada a la sección de esta feature:
+ *
+ *  1. Se extrae del fuente el bloque de la sección (sus dos componentes) y se censan sus
+ *     utilidades de color: si mañana alguien mete un `text-brand` o un `bg-primary` ahí dentro,
+ *     este caso se pone rojo aunque el CIERRE global lo dé por bueno (`text-brand` ESTÁ
+ *     declarado en el inventario… como exento, para un wordmark).
+ *  2. Cada utilidad se ancla a MANO a su par, y toda la que pinte TINTA tiene que caer en un par
+ *     MEDIBLE que cumpla AA en los DOS temas. Un exento (decorativo) no vale para texto.
+ *
+ * ── LO QUE NO AFIRMA, dicho al tamaño real
+ * El anclaje utilidad → par lo escribe una persona, no se deduce del JSX: este caso NO comprueba
+ * que `text-warning-strong` esté de verdad dentro del `bg-warning/15` y no sobre el papel.
+ * Resolver el fondo efectivo de cada nodo exige recorrer el árbol JSX a través de `cn()`,
+ * condicionales y `children`, que es la clase de análisis que este archivo descarta por escrito
+ * —produce respuestas plausibles y falsas, y aprueba con un número—. Lo que sí queda cerrado es
+ * que la sección no pinte con nada sin medir, que es de donde salen los pares que nadie miró.
+ */
+describe("feature 264 — la sección de órdenes sin gestionar no pinta con nada sin medir (F4)", () => {
+  /** El bloque de fuente de la sección: sus dos componentes, con la prosa ya fuera. */
+  const seccion = (() => {
+    const desde = hoja.indexOf("function FilaSinGestion(");
+    const hasta = hoja.indexOf("export function CierreFacturaDetalle(");
+    return hoja.slice(desde, hasta);
+  })();
+
+  /** Qué papel cumple una utilidad: tinta (texto), superficie (fondo) o trazo (borde). */
+  type Rol = "tinta" | "superficie" | "trazo";
+
+  const PARES_DE_LA_SECCION: {
+    utilidad: string;
+    par: string;
+    rol: Rol;
+    papel: string;
+  }[] = [
+    {
+      utilidad: "text-foreground",
+      par: "P1",
+      rol: "tinta",
+      papel: "la guía y el destinatario de cada fila",
+    },
+    {
+      utilidad: "text-muted-foreground",
+      par: "P5",
+      rol: "tinta",
+      papel:
+        "el título, la nota fija (R17) o el aviso de cierre no registrado (R28), la cabecera " +
+        "de columnas, la línea de `remisión · producto · origen` y la tienda",
+    },
+    {
+      utilidad: "text-warning-strong",
+      par: "P10",
+      rol: "tinta",
+      papel: "el número de la píldora de conteo (R16)",
+    },
+    {
+      utilidad: "bg-warning/15",
+      par: "P10",
+      rol: "superficie",
+      papel: "el fondo de esa misma píldora",
+    },
+    {
+      utilidad: "border-border",
+      par: "P18",
+      rol: "trazo",
+      papel: "el filete bajo el encabezado y el borde de cada fila",
+    },
+  ];
+
+  it("el extractor encontró de verdad la sección (si no, todo lo de abajo pasa sin mirar nada)", () => {
+    expect(
+      seccion.length,
+      "no se localizó el bloque de `FilaSinGestion`/`SeccionSinGestion` en la hoja: el censo " +
+        "estaría midiendo una cadena vacía y este describe entero sería decorativo",
+    ).toBeGreaterThan(500);
+    expect(seccion).toContain("SeccionSinGestion");
+    expect(seccion).toContain("SIN_GESTION_GRID_COLS");
+  });
+
+  it("sus utilidades de color son EXACTAMENTE las declaradas: ni una nueva, ni una menos", () => {
+    const NO_SON_COLOR = new Set(["text-xs", "border", "border-b"]);
+    const ES_TAMANO = /^(?:text|border(?:-[trblxy])?)-\[[\d.]+(?:px|rem|em)\]$/;
+    const CANDIDATO = /^(?:[a-z]+:)*(?:text|bg|border|ring|fill|stroke|divide|from|via|to)-/;
+
+    const palabras = seccion.match(/[A-Za-z0-9_:./#[\]%-]+/g) ?? [];
+    const halladas = [
+      ...new Set(
+        palabras.filter(
+          (p) => CANDIDATO.test(p) && !NO_SON_COLOR.has(p) && !ES_TAMANO.test(p),
+        ),
+      ),
+    ].sort();
+
+    expect(
+      halladas,
+      "la paleta de la sección de órdenes sin gestionar cambió. Toda utilidad de color de aquí " +
+        "dentro tiene que estar anclada a un par MEDIDO del inventario: el CIERRE global no " +
+        "caza esto, porque cierra por utilidad y no por par, y una sección entera nueva es una " +
+        "recombinación.",
+    ).toEqual([...PARES_DE_LA_SECCION.map((p) => p.utilidad)].sort());
+  });
+
+  it.each(
+    PARES_DE_LA_SECCION.filter((p) => p.rol === "tinta").map(
+      (p) => [p.utilidad, p] as const,
+    ),
+  )("%s es TEXTO: cae en un par MEDIBLE que cumple AA en los dos temas", (_u, entrada) => {
+    const par = INVENTARIO.find((p) => p.id === entrada.par);
+    expect(par, `${entrada.par} no existe en el inventario`).toBeDefined();
+    expect(
+      typeof par!.umbral,
+      `${entrada.utilidad} pinta ${entrada.papel} —es TEXTO— y su par ${entrada.par} no está ` +
+        "medido. Un par exento o de deuda ajena no vale para texto de una sección nueva: si " +
+        "hace falta, se mide y se le pone suelo.",
+    ).toBe("number");
+
+    for (const tema of ["claro", "oscuro"] as const) {
+      expect(
+        contraste(token(tema, par!.tinta), hexDeFondo(tema, par!)),
+        `${entrada.par} en tema ${tema} no llega a 4.5:1 y la sección lo usa para ${entrada.papel}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("la sección no estrena superficie: su único fondo propio es el de la píldora", () => {
+    const fondos = [
+      ...new Set(seccion.match(/(?:[a-z]+:)?bg-[a-z][a-z0-9-]*(?:\/\d+)?/g) ?? []),
+    ];
+    expect(
+      fondos.sort(),
+      "la sección estrenó un fondo. Todo texto que caiga encima estrena par, y el CIERRE global " +
+        "no lo va a ver si la utilidad ya estaba declarada en otro sitio de la hoja.",
+    ).toEqual(["bg-warning/15"]);
   });
 });
