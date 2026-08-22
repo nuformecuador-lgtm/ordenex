@@ -11,7 +11,7 @@ archivo de test (`tests/components/CierreFacturaPapel.test.tsx`). Los bloques **
 
 ## Bloque A — la cabecera y la tarjeta compacta
 
-### T1 · Mapa `estado → rótulo` y condición de la fecha de resolución `[P con B]`
+### [x] T1 · Mapa `estado → rótulo` y condición de la fecha de resolución `[P con B]`
 
 Añadir junto a `FACTURA_FOLIO_LABEL` (`:139-150`) un `Record<CierreEstado, string>` con los cuatro
 rótulos de la tabla de `design.md` §2 (`aprobado`/`rechazado` → «Comprobante»; `solicitado`/`vencido`
@@ -22,7 +22,7 @@ rótulos de la tabla de `design.md` §2 (`aprobado`/`rechazado` → «Comprobant
 la cadena «Resuelto —»; ningún `aria-label` del archivo cambió (R6, verificable con `git diff`).
 **Depende de:** nada.
 
-### T1b · El mismo guion en la tarjeta compacta (R13) `[P con T4]`
+### [x] T1b · El mismo guion en la tarjeta compacta (R13) `[P con T4]`
 
 En `:691-699`, no renderizar la `LineaFecha` de «Resuelto» cuando `resueltoAt` es nulo; «Solicitado»
 pasa a ser la `ultima`. El sustantivo de esa tarjeta (`FACTURA_TITULO`, «Cierre del día») **no se
@@ -31,7 +31,7 @@ toca**.
 sigue desapareciendo cuando `solicitadoAt` es `undefined` (comportamiento de `:685-688`, intacto).
 **Depende de:** nada.
 
-### T2 · Tests de la cabecera y de la tarjeta (R1–R5, R13) `[P con T4]`
+### [x] T2 · Tests de la cabecera y de la tarjeta (R1–R5, R13) `[P con T4]`
 
 En `CierreFacturaPapel.test.tsx`: cuatro casos sobre `CierreFacturaDetalle`, uno por estado —
 `aprobado`/`rechazado` → «Comprobante #\<folio\>» + las dos fechas; `solicitado`/`vencido` →
@@ -42,7 +42,7 @@ línea ni el guion. Literales escritos en el test, **nunca** importados del `Rec
 **Hecho cuando:** los seis pasan **y** T3 los ha matado.
 **Depende de:** T1, T1b.
 
-### T3 · Matar los tests de T2 con dos mutaciones
+### [x] T3 · Matar los tests de T2 con dos mutaciones
 
 (a) Revertir a mano `:1313-1321` al comportamiento viejo (las tres piezas siempre, `fecha(resueltoAt)`
 con su guion, «Comprobante» fijo). (b) Revertir `:691-699` a la `LineaFecha` incondicional. Correr
@@ -57,7 +57,7 @@ mutación, ese caso no vale y se reescribe.**
 
 ## Bloque B — la rejilla
 
-### T4 · Una sola constante para la plantilla, y la guía deja de ser una caja de 40 px `[P con A]`
+### [x] T4 · Una sola constante para la plantilla, y la guía deja de ser una caja de 40 px `[P con A]`
 
 1. Extraer la plantilla a una constante del módulo y consumirla en `:1105` **y** `:1490` (los dos
    únicos sitios; verificado con `rg "grid-cols-\["` sobre el archivo antes y después).
@@ -70,7 +70,7 @@ mutación, ese caso no vale y se reescribe.**
 lint verdes; la celda vacía sigue pintando «—» (R11).
 **Depende de:** nada.
 
-### T5 · Medición en el navegador con guías de 8 y de 9 dígitos (R7–R10, R14)
+### [x] T5 · Medición en el navegador con guías de 8 y de 9 dígitos (R7–R10, R14)
 
 Playwright, `/cierres-admin` (sesión admin) y `/cierre-dia` (sesión mensajero), con una guía de
 8 dígitos (el caso real), otra de **9** (R14: el techo medido más un dígito de holgura) y otra más
@@ -87,7 +87,7 @@ arreglo (`git stash` de T4) y debe reportar el solapamiento del caso de 8 dígit
 verde en las dos versiones no midió nada — pasó en la 258.
 **Depende de:** T4.
 
-### T6 · Tests de anatomía de la rejilla (R7/R8/R11/R12) `[P con T2]`
+### [x] T6 · Tests de anatomía de la rejilla (R7/R8/R11/R12) `[P con T2]`
 
 En `CierreFacturaPapel.test.tsx`: la celda de la guía no lleva `truncate` ni `break-`; la del
 destinatario lleva `truncate` y `min-w-0`; son dos nodos distintos; sin `numGuia` sale «—»; el
@@ -102,7 +102,7 @@ del destinatario a la de la guía → el caso de anatomía debe ponerse rojo. Ro
 
 ---
 
-## T8 · Regresión de impresión (feature 223)
+## [x] T8 · Regresión de impresión (feature 223)
 
 Con la hoja desplegada, imprimir a PDF `/cierres-admin`: la fila conserva su `break-inside-avoid` y
 la rejilla nueva no parte la fila ni desalinea las columnas en papel.
@@ -110,7 +110,7 @@ la rejilla nueva no parte la fila ni desalinea las columnas en papel.
 columnas alineadas. Se anota en `progress/impl_263.md`.
 **Depende de:** T4.
 
-## T9 · Gate
+## [x] T9 · Gate
 
 `./init.sh --rapido`, escribiendo `INIT_EXIT=$?` **dentro** del log (no confiar en el exit code de la
 cadena). El diff no toca migraciones, `db/schema.prisma`, `lib/types/` ni configuración de build, así
