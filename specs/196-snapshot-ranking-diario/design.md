@@ -247,6 +247,9 @@ export interface RankingSnapshotData {
   defensa real sigue siendo el `notFound` de la página.
 - `/ranking` (vivo) **no cambia** salvo el enlace al histórico: `obtenerRanking` y
   `editarPremio` siguen igual (R36).
+  > **2026-08-21:** ese enlace fue **borrado** a petición del humano (se leía como un botón
+  > flotando en la cabecera). `/ranking` ya no cambia ni en eso; la puerta al histórico es el
+  > subítem del menú. Detalle y motivo en la nota de **T4.5** de `tasks.md`.
 
 ## 7. Descarga
 
