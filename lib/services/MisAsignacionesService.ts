@@ -34,6 +34,10 @@ import {
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 261 (B2/B4, R15): el vocabulario del bloqueo por reserva vive en UN solo sitio, y el
+// servidor usa esa MISMA fuente en el motivo que devuelve. No se reescribe el literal aqui.
+import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
 import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
@@ -52,6 +56,23 @@ import {
 // nada que resolver —espera al admin— y sigue trabajando con normalidad.
 const MSG_BLOQUEADO =
   "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
+
+/**
+ * FEATURE 261 (B4, R1/R2/R3) — ¿esta orden esta RESERVADA para un dia posterior al de Costa Rica
+ * en curso? Es el MISMO criterio que produce la etiqueta `esParaManana` del listado (246/R26) y
+ * el MISMO que aplica la via de la tienda (`GestionDesdeAyudaService`, R31): una sola pregunta,
+ * un solo sitio donde puede equivocarse.
+ *
+ * `>` y NO `>=`, y es la diferencia entre bloquear lo que toca y bloquear todo: una orden
+ * reservada para HOY no esta reservada para «otro dia», es de hoy y se trabaja. Y por eso el
+ * bloqueo CADUCA SOLO (R7): al llegar el dia reservado, la MISMA fila deja de cumplir esto sin
+ * que nadie ejecute ninguna accion ni se escriba nada en la base.
+ *
+ * `null` (orden anterior a la 246, o «hoy» explicito) -> `false` (R8): nada cambia para ellas.
+ */
+function estaReservadaParaOtroDia(fechaReparto: Date | null, diaEnCurso: Date): boolean {
+  return fechaReparto !== null && fechaReparto.getTime() > diaEnCurso.getTime();
+}
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
@@ -238,8 +259,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // «para mañana», es de hoy. Y por eso la etiqueta caduca sola (R25): al llegar el dia
         // reservado, `fechaReparto > hoyComoFecha` deja de cumplirse sin que nadie escriba nada.
         // `null` (orden anterior a la feature, o «hoy» explicito) -> `false`.
-        esParaManana:
-          row.fechaReparto != null && row.fechaReparto.getTime() > hoyComoFecha.getTime(),
+        esParaManana: estaReservadaParaOtroDia(row.fechaReparto ?? null, hoyComoFecha),
+        // Feature 261 (B4, R11/R14): la fecha calendario, RESUELTA AQUI. La card la pone en
+        // palabras sin construir ningun `Date`: leer `YYYY-MM-DD` con el reloj del navegador es
+        // exactamente la puerta que R14 cierra. `null` = la orden no tiene dia de reparto.
+        fechaRepartoISO:
+          row.fechaReparto != null ? fechaRepartoComoTexto(row.fechaReparto) : null,
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
@@ -338,7 +363,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }; // R10
   }
 
-  async recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult> {
+  /**
+   * Feature 261 (B4, R1/R6): `now` inyectable. Se resuelve el dia de Costa Rica UNA vez por
+   * llamada, para que dos ordenes del mismo lote no puedan caer a distinto lado de la medianoche.
+   */
+  async recogerAsignaciones(
+    input: RecogerInput,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<RecogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     const ordenIds = distinct(input.ordenIds);
@@ -364,6 +397,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         return { status: "forbidden" };
       }
     }
+    // Feature 261 (B4, R6): EL DIA DE COSTA RICA EN CURSO, en la convencion `@db.Date` de
+    // `fecha_reparto`. Se resuelve UNA vez, aqui, y viaja resuelto hasta el `WHERE` de la
+    // escritura. `startOfDayCR` y no `inicioDelDiaCREnUtc`: aquella es la cota de las columnas
+    // `timestamp` y desplazaria el dia seis horas (la trampa que cerro la ficha 166).
+    const diaEnCurso = startOfDayCR(now);
+
     // R17: origen invalido / borrada -> conflict (aborta sin efectos).
     const detalle: DetalleConflicto[] = [];
     for (const id of ordenIds) {
@@ -372,6 +411,20 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         detalle.push({ ordenId: id, motivo: "orden borrada" });
       } else if (row.estatusValue !== ORIGEN_RECOGER) {
         detalle.push({ ordenId: id, motivo: `estado de origen no permitido: ${row.estatusValue}` });
+      } else if (estaReservadaParaOtroDia(row.fechaReparto, diaEnCurso)) {
+        // FEATURE 261 (R1/R4) — LA RESERVA BLOQUEA TAMBIEN AL MENSAJERO. Revierte la decision D5
+        // de la 246 —la que dejaba la reserva como defensa SOLO frente al corte—, refutada en
+        // 2026-08-21. Va en el MISMO bucle que sus hermanas y ANTES de cualquier efecto: como
+        // ellas, un solo detalle aborta el lote entero sin transicion, sin historial y sin tocar
+        // el puntero de gestion.
+        //
+        // `conflict` y no `forbidden`: la orden SI es suya; lo que falla es el momento. Esa
+        // distincion ya la usa este servicio (`forbidden` = ajena o inexistente).
+        detalle.push({
+          ordenId: id,
+          motivo: RESERVA_MOTIVO_SERVIDOR, // R15: la MISMA fuente que lee la pantalla
+          codigo: "reservada_para_otro_dia", // para que la UI no tenga que leer prosa
+        });
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle };
@@ -387,14 +440,22 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    await this.repo.recogerLote(ordenIds, actor.usuarioId, origenId, destinoId); // R15/R16
+    // Feature 261 (B5, R5): el dia viaja YA RESUELTO al `WHERE` de la escritura. La guarda de
+    // arriba es la que RESPONDE (con un motivo en palabras); esta es la que GANA LAS CARRERAS y
+    // la que rechaza una peticion que no venga del portal.
+    await this.repo.recogerLote(ordenIds, actor.usuarioId, origenId, destinoId, diaEnCurso); // R15/R16
     // Feature 92 (R23): el origen se persiste DESPUES de la transicion, y su fallo no la
     // revierte: el mensajero ya recogio, eso es lo que importa.
     await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
     return { status: "ok", recogidas: ordenIds };
   }
 
-  async escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult> {
+  /** Feature 261 (B4, R3/R6): `now` inyectable, del que sale el dia de Costa Rica en curso. */
+  async escogerParaGestion(
+    ordenId: string,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<EscogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Feature 111/R4 (Q3): bloqueo total — mensajero con cierre pendiente no puede ESCOGER una
@@ -406,6 +467,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const guardia = await this.cargarOrdenGestionable(ordenId, actor);
     if (guardia.status !== "ok") return guardia;
 
+    // FEATURE 261 (R3/R4) — una orden reservada para un dia posterior NO SE ESCOGE. Va aqui,
+    // junto a sus hermanas y ANTES de fijar el puntero 1-a-1: rechazar despues dejaria al
+    // mensajero con el puntero puesto sobre una orden que no puede trabajar (efecto parcial).
+    if (estaReservadaParaOtroDia(guardia.orden.fechaReparto, startOfDayCR(now))) {
+      return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
+    }
+
     // R19-R21: fija el puntero de forma idempotente; si ya hay OTRA activa -> conflict.
     const fijada = await this.repo.setOrdenEnGestion(actor.usuarioId, ordenId);
     if (!fijada) {
@@ -414,7 +482,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     return { status: "ok", ordenId };
   }
 
-  async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
+  /** Feature 261 (B4, R2/R6): `now` inyectable, del que sale el dia de Costa Rica en curso. */
+  async gestionar(
+    input: GestionarInput,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Feature 111/R1/R2/R3 (obligatorio) -> 241: un mensajero con un cierre `vencido` o
@@ -433,6 +506,23 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     const guardia = await this.cargarOrdenGestionable(input.ordenId, actor);
     if (guardia.status !== "ok") return guardia;
     const orden = guardia.orden;
+
+    // FEATURE 261 (R2/R4) — NO SE REGISTRA UN RESULTADO EN UN DIA QUE NO ES. Va JUNTO a la guarda
+    // del cierre pendiente —o sea, ANTES de subir la evidencia a Storage, antes de la transicion
+    // y antes de la fila `gestion_orden`—: ese orden es lo que garantiza R4, «sin efectos».
+    //
+    // ⚠️ DEUDA DECLARADA, no escondida (design §3 «puerta ausente»): esta guarda vive SOLO en el
+    // servicio. `GestionOrdenRepository.crearGestionYTransicionar` hace `orden.update` por PK sin
+    // re-comprobar NADA —ni el estatus de origen— y esta ficha no le inventa una puerta SQL solo
+    // para el dia: seria la unica de siete condiciones re-comprobada en la escritura, y quien
+    // leyera ese `WHERE` concluiria que las otras seis tambien estan ahi. La carrera no existe
+    // por construccion: para gestionar hay que estar en `en_reparto`, y ninguna de las tres
+    // entradas a ese estado baja un dia futuro (`recogerLote` lleva el dia en su `WHERE`, el
+    // rescate desde ayuda no lo toca, y el deshacer conserva la reserva futura desde esta misma
+    // ficha).
+    if (estaReservadaParaOtroDia(orden.fechaReparto, startOfDayCR(now))) {
+      return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
+    }
 
     // R21: no gestionar una orden distinta de la activa (si hay una activa).
     const activa = await this.repo.getOrdenEnGestion(actor.usuarioId);

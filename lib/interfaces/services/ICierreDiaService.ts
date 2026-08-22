@@ -383,6 +383,18 @@ export interface ICierreDiaService {
    * Solo el propio mensajero dueño de la gestion (F1.4-f); cualquier otro rol -> `forbidden`.
    * NO toca el puntero `usuario.orden_en_gestion_id` (R29/R30, F1.4-c): la orden se retoma con
    * `escogerParaGestion` (36), que ya tiene la guardia 1-a-1.
+   *
+   * FEATURE 261 (B6, R17/R18/R19) — `now` es el reloj INYECTABLE del que salen los DOS valores
+   * que la escritura necesita: el instante de la reasignacion (`asignado_at = now`) y el dia de
+   * Costa Rica en curso (`startOfDayCR(now)`). Un solo reloj para las dos columnas.
+   *
+   * Y la regla del dia cambia: al deshacer, el dia de reparto pasa a ser el de hoy **salvo que
+   * la orden ya este reservada para un dia POSTERIOR**, en cuyo caso se CONSERVA. Una reserva
+   * futura no se cancela por reponer una asignacion.
    */
-  deshacerGestion(gestionId: string, actor: Actor): Promise<DeshacerGestionServiceResult>;
+  deshacerGestion(
+    gestionId: string,
+    actor: Actor,
+    now?: Date,
+  ): Promise<DeshacerGestionServiceResult>;
 }

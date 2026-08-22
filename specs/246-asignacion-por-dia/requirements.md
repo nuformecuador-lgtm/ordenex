@@ -350,6 +350,20 @@ aparece un fallo nuevo: «tengo el paquete y la app no me deja». **Este es el p
 si nadie recoge de noche, el candado es barato y se puede reconsiderar; si se recoge de noche,
 el candado está descartado.
 
+> **APÉNDICE — 2026-08-21: D5 fue SUPERSEDIDA por la feature 261.** El texto de arriba se conserva
+> **intacto**, porque un spec es la foto de su momento y aquella decisión se tomó a conciencia y con
+> sus razones; pero **ya no está vigente**, y con ella caen **R24** y la nota 3 de los límites
+> declarados. Motivo, en una línea: D5 se apoyaba en la medición **M3** («nadie carga la furgoneta
+> después de las 18:00») y **M3 quedó refutada por una prueba humana en producción** — la guía
+> **17496963** se recogió y se gestionó `entregada` a las **22:10 CR del 21 de agosto de 2026**
+> estando reservada para el **22**. Es decir: el propio D5 escribió cuál era su condición de
+> caducidad («este es el punto donde M3 manda»), y esa condición se cumplió. Desde el 2026-08-21 la
+> reserva protege del **cron y también del mensajero**: una orden reservada para un día posterior no
+> se puede recoger, ni escoger para gestión, ni gestionar — ni por el mensajero ni por la tienda
+> desde la pestaña de ayuda. Lo que **no** cambia es **R23**: la orden sigue visible y en su grupo
+> de siempre; lo que se restringe es la acción, no la visibilidad. Ver
+> `specs/261-dia-reparto-protege`.
+
 **D6 · El formulario abierto a caballo de la medianoche.**
 **Recomendación: aceptarlo y nombrarlo.** El servidor resuelve «hoy/mañana» **en el momento de
 enviar**; si el modal se abrió a las 23:58 y se envía a las 00:01, «mañana» significará un día más

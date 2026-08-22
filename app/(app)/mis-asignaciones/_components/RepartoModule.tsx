@@ -19,6 +19,9 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+// Feature 261 (F3, R15): el motivo del bloqueo por reserva sale de la fuente ÚNICA — la misma
+// frase que pinta la card, la que devuelve el servidor y la que lee la tienda.
+import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
 import { normalizeName } from "@/lib/utils/normalize";
 
 import { coincideBusqueda } from "./mis-asignaciones-buscador";
@@ -361,6 +364,11 @@ export function RepartoModule({
   // 111/R14: si el mensajero está BLOQUEADO no se puede escoger (defensa suave).
   function seleccionar(orden: MiAsignacionDTO) {
     if (bloqueado) return;
+    // Feature 261 (F3, R12): la orden RESERVADA para un día posterior no se lleva al panel de
+    // gestión. Misma defensa suave que la de arriba —silenciosa, porque a esta función sólo se
+    // llega desde un control que ya está deshabilitado— y con la misma defensa real detrás: el
+    // servidor rechaza igual (R3/R5).
+    if (orden.esParaManana) return;
     if (ordenEnGestionId !== null && ordenEnGestionId !== orden.id) return;
     setSeleccionId(orden.id);
   }
@@ -374,6 +382,15 @@ export function RepartoModule({
     // gestión; se le remite a resolver su cierre. El backend (R1/R4) rechaza igual.
     if (bloqueado) {
       toast.error(BLOQUEO_AVISO);
+      return false;
+    }
+    // Feature 261 (F3, R12/R13) — Y LA MISMA GUARDA AQUÍ, que no es redundante: el panel arranca
+    // en la PRIMERA orden del grupo, así que una reservada puede estar delante sin haber pulsado
+    // ningún botón de card. Sin esto, el `conflict` del servidor se traduciría a «ya tienes otra
+    // orden activa en gestión», que es falso y manda a buscar un problema que no existe. El texto
+    // sale de la fuente única, con el día que la orden trae consigo (R15).
+    if (detalleOrden.esParaManana) {
+      toast.error(avisoReservaParaOtroDia(detalleOrden.fechaRepartoISO));
       return false;
     }
     const result = await escogerParaGestion({ ordenId: detalleOrden.id });
@@ -451,11 +468,19 @@ export function RepartoModule({
                 (feature 111/R14) y mientras HAYA una gestión activa (R19/R20): ni las otras
                 órdenes —el puntero 1-a-1 no deja cambiar de orden— ni la que se está
                 gestionando, que ya está abierta en el panel y no hay nada que "gestionar"
-                de nuevo desde su card. */}
+                de nuevo desde su card.
+                Feature 261 (F3, R12): y con la orden RESERVADA para un día posterior, que es
+                una cuarta condición de la MISMA familia y por eso vive en la misma expresión.
+                El mensajero está en la calle con el paquete en la mano: enterarse ANTES de
+                intentarlo le ahorra sacar la caja de la furgoneta. El porqué no lo dice el
+                botón gris —eso sería un misterio— sino el aviso en palabras que la card pinta
+                encima (F2). Y la card sigue montada ENTERA: se restringe la ACCIÓN, no la
+                visibilidad (R9), igual que con el cierre pendiente. */}
             <GestionarOrdenCardButton
               numRemision={orden.numRemision}
               disabled={
                 bloqueado ||
+                Boolean(orden.esParaManana) ||
                 ordenEnGestionId !== null ||
                 // La que YA está en el panel: es la que se está gestionando ahora mismo, así
                 // que su botón no ofrece nada (llevaría al panel donde ya está) y confirmar

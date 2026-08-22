@@ -30,6 +30,15 @@ export interface IGestionDesdeAyudaService {
    * R2-R26 — registra el desenlace y devuelve un resultado de DOMINIO (nunca lanza para expresar
    * un rechazo). Las ocho comprobaciones y su orden estan en `design.md` §6 y en el propio
    * servicio, con el porque de cada una.
+   *
+   * FEATURE 261 (B16, R28/R31) — `now` es el reloj INYECTABLE con el que esta via decide si la
+   * orden esta reservada para un dia posterior. Es EL MISMO CRITERIO Y EL MISMO DIA que el de la
+   * via del mensajero (`startOfDayCR(now)`, comparacion `>`): si el problema es que se registre
+   * un resultado en un dia que no es, da igual quien lo registre.
    */
-  gestionar(input: GestionDesdeAyudaInput, actor: Actor): Promise<GestionarDesdeAyudaResult>;
+  gestionar(
+    input: GestionDesdeAyudaInput,
+    actor: Actor,
+    now?: Date,
+  ): Promise<GestionarDesdeAyudaResult>;
 }

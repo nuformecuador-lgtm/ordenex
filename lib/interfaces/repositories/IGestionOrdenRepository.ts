@@ -92,6 +92,20 @@ export interface OrdenGestionRow {
    * orden sin zona -> el service cae al fallback central (`en_bodega_central`).
    */
   zonaId: string | null;
+  /**
+   * Feature 261 (B1, design §4) — DIA DE REPARTO CRUDO de la orden (`@db.Date`: medianoche UTC
+   * de la fecha calendario CR). `null` = orden anterior a la 246, o sin reserva.
+   *
+   * ⚠️ OBLIGATORIO, SIN `?`, Y ES DELIBERADO. El resto de campos aditivos de este archivo
+   * (`MiAsignacionRow.tiendaTelefono?`, `MiAsignacionRow.fechaReparto?`) llevan `?` para no
+   * romper los fixtures que se construyen sin ellos. Aqui romperlos es EL OBJETIVO: este campo
+   * es el insumo de una PUERTA (261/R1-R3), no un dato de pantalla. Un fixture que se lo olvide
+   * tiene que romper el build, no apagar la guarda en silencio devolviendo `undefined`.
+   *
+   * Viaja CRUDO: quien decide si esta reservada es el SERVICIO, que tiene reloj inyectable
+   * (261/R6). Un repositorio que devolviera ya el booleano tendria que leer la hora.
+   */
+  fechaReparto: Date | null;
 }
 
 // Datos de la gestion a insertar (R23/R26/R28/R30). Campos nullable segun el
@@ -265,6 +279,18 @@ export interface CrearGestionDesdeAyudaInput {
   actorUsuarioId: string;
   /** `resultado` + `motivo` + `evidencias` (+ `fechaReprogramacion`), ya validados en el borde. */
   gestion: GestionOrdenData;
+  /**
+   * FEATURE 261 (B17, R30) — PUERTA B de la via de la tienda: el DIA DE COSTA RICA EN CURSO
+   * (convencion `@db.Date`), que entra en el `where` del `updateMany` junto a la guarda de
+   * estatus que ya existe. Si la reserva cambia entre la comprobacion del servicio (paso 5-bis)
+   * y esta escritura, `count === 0` -> `null` -> el servicio COMPENSA las evidencias ya subidas
+   * y responde `conflict`. Ese camino de fallo YA existia: no se escribe uno nuevo.
+   *
+   * Va como `Date` y no como texto `YYYY-MM-DD`: esto entra en un `updateMany` de PRISMA, que
+   * conoce el tipo de la columna. La advertencia de `fechaRepartoComoTexto` (el driver `pg`
+   * serializando un `Date` como `timestamptz`) es especifica del SQL CRUDO.
+   */
+  diaEnCurso: Date;
 }
 
 export interface IGestionOrdenRepository {
@@ -342,12 +368,19 @@ export interface IGestionOrdenRepository {
    * las ordenes de `ordenIds` que pertenecen al mensajero y estan en el origen
    * (guardia de propiedad + origen en el WHERE). Devuelve el numero de filas
    * afectadas. El llamador DEBE haber validado el lote (R17) antes de invocar.
+   *
+   * FEATURE 261 (B5, R1/R5) — `diaEnCurso` es el DIA DE COSTA RICA EN CURSO (convencion
+   * `@db.Date`) y entra en el `WHERE` como cuarta guardia, junto a propiedad, origen y
+   * no-borrada: una orden reservada para un dia POSTERIOR no se recoge. El dia lo resuelve el
+   * SERVICIO y viaja ya resuelto (doctrina de `lib/utils/dia-reparto.ts`): ningun repositorio
+   * lee el reloj para decidir un dia de reparto (R6).
    */
   recogerLote(
     ordenIds: string[],
     mensajeroId: string,
     origenEstatusId: string,
     destinoEstatusId: string,
+    diaEnCurso: Date,
   ): Promise<number>;
 
   /**

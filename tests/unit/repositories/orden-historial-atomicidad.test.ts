@@ -215,9 +215,16 @@ describe("R7 · mecanismo raw-RETURNING (#7 asignarSatelite, #8 recoger)", () =>
     };
     const prisma = { $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)) };
     const repo = new GestionOrdenRepository(prisma as never);
-    await expect(repo.recogerLote(["o1"], "m1", idEstado("por_recoger"), idEstado("en_reparto"))).rejects.toThrow(
-      "raw boom",
-    );
+    await expect(
+      // Feature 261 (B5): 5.º argumento = el dia de Costa Rica en curso, ya resuelto.
+      repo.recogerLote(
+        ["o1"],
+        "m1",
+        idEstado("por_recoger"),
+        idEstado("en_reparto"),
+        new Date("2026-07-20T00:00:00.000Z"),
+      ),
+    ).rejects.toThrow("raw boom");
     expect(ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
 });

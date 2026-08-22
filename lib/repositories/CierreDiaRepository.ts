@@ -17,10 +17,19 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
-// Costa Rica EN CURSO. `startOfDayCR` es el helper de la convencion `@db.Date`, la misma que usa
-// `fecha_reparto`; `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui
-// desplazaria el dia seis horas — la trampa que cerro la ficha 166.
-import { startOfDayCR } from "@/lib/utils/fecha-cr";
+// Costa Rica EN CURSO, en la convencion `@db.Date` de `fecha_reparto`.
+//
+// ⚠️ FEATURE 261 (B7, R19) — AQUI VIVIA `import { startOfDayCR }`, y se RETIRO A PROPOSITO. Este
+// repositorio llamaba `startOfDayCR()` SIN ARGUMENTO, o sea LEIA EL RELOJ DEL PROCESO para decidir
+// un dia de reparto. Eso choca de frente con la doctrina que la propia 246 escribio tres archivos
+// mas alla («`now` es un PARAMETRO con default: el reloj se inyecta en los tests y jamas se lee
+// dentro del calculo») y hacia imposible probar «deshacer a las 23:59 del 21» sin falsear el reloj
+// global del proceso. Desde la 261 el DIA lo resuelve el SERVICIO (`CierreDiaService
+// .deshacerGestion`, con su `now` inyectable) y llega ya resuelto en `AnularGestionInput`. Ningun
+// repositorio vuelve a leer el reloj para decidir un dia de reparto. NO lo vuelvas a importar.
+//
+// Lo unico que este archivo hace con ese dia es SERIALIZARLO para el SQL crudo:
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
@@ -873,8 +882,21 @@ export class CierreDiaRepository implements ICierreDiaRepository {
    * si alguna afecta 0 filas, el sentinela fuerza el rollback -> `false` sin efectos parciales.
    */
   async anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean> {
-    const { gestionId, ordenId, mensajeroId, actorUsuarioId, estatusEsperadoId, estatusEnRepartoId } =
-      input;
+    const {
+      gestionId,
+      ordenId,
+      mensajeroId,
+      actorUsuarioId,
+      estatusEsperadoId,
+      estatusEnRepartoId,
+      asignadoAt,
+      diaEnCurso,
+    } = input;
+    // Feature 261 (B7): el dia entra al SQL como TEXTO `YYYY-MM-DD` con `::date` explicito. El
+    // porque esta en `dia-reparto.ts` y no es teorico: el driver `pg` serializa un `Date` de JS
+    // como `timestamptz` y Postgres lo convierte a `date` con el `TimeZone` DE LA SESION, asi que
+    // el dia dependeria de la configuracion del servidor de base de datos.
+    const diaTexto = fechaRepartoComoTexto(diaEnCurso);
     try {
       return await this.prisma.$transaction(async (tx) => {
         // 1) R11: ANULA con rastro (quien la deshizo + cuando). Guardias: sigue siendo del
@@ -888,31 +910,62 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         if (anulada.count === 0) throw new NoAnulable();
 
         // 2) R18/R19: devuelve la orden a `en_reparto` (unico estado desde el que se puede
-        // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajeroAsignadoId`
+        // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajero_asignado_id`
         // incondicional: es idempotente cuando la asignacion ya era ese mensajero
         // (entregada/reprogramada/rechazada) y repone la que el seguimiento de un reintento
         // limpio (47/R6, `limpiaMensajero: true`). No puede pisar a otro mensajero: una
         // reasignacion habria cambiado el estado y esta misma guardia fallaria.
         // Guardias: la orden sigue EXACTAMENTE en el estado leido (R5) y no esta borrada (R6).
-        const movida = await tx.orden.updateMany({
-          where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
-          // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero
-          // autor (reasignacion efectiva) -> estampa `asignado_at = now`.
-          //
-          // FEATURE 246 (T3.4, R8/R10): esta via NO ofrece la eleccion de dia —nadie esta
-          // asignando un lote, se esta deshaciendo una gestion—, asi que el dia de reparto es el
-          // DIA DE COSTA RICA EN CURSO. La razon de estamparlo aqui y no dejarlo como estaba: las
-          // dos columnas no pueden contar historias distintas. Si `asignado_at` dijera «te la
-          // acabo de reasignar» y `fecha_reparto` conservara la reserva de ayer, el corte de esta
-          // misma noche la protegeria o la barreria segun un dato que ya no describe nada.
-          data: {
-            estatusId: estatusEnRepartoId,
-            mensajeroAsignadoId: mensajeroId,
-            asignadoAt: new Date(),
-            fechaReparto: startOfDayCR(),
-          },
-        });
-        if (movida.count === 0) throw new NoAnulable();
+        //
+        // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero autor
+        // (reasignacion efectiva) -> estampa `asignado_at`.
+        //
+        // FEATURE 246 (T3.4, R8/R10) — EL MOTIVO ORIGINAL, QUE SIGUE SIENDO CIERTO Y NO SE TIRA:
+        // esta via NO ofrece la eleccion de dia —nadie esta asignando un lote, se esta
+        // deshaciendo una gestion—, asi que el dia de reparto se estampa AQUI, en la misma
+        // escritura que `asignado_at`, porque LAS DOS COLUMNAS NO PUEDEN CONTAR HISTORIAS
+        // DISTINTAS. Si `asignado_at` dijera «te la acabo de reasignar» y `fecha_reparto`
+        // conservara la reserva de AYER, el corte de esta misma noche la protegeria o la barreria
+        // segun un dato que ya no describe nada.
+        //
+        // ⚠️ FEATURE 261 (B7, R16/R17/R18) — LO QUE AQUEL RAZONAMIENTO NO CONTEMPLO: LA RESERVA A
+        // FUTURO. Ahi la combinacion «reasignada ahora, para un dia que aun no llega» NO es una
+        // incoherencia: es exactamente lo que produce la via de asignacion cuando bodega elige
+        // «mañana» (`asignado_at = NOW()`, `fecha_reparto = mañana`). Bajarla a hoy no repara
+        // nada: CANCELA UNA DECISION QUE ALGUIEN TOMO A PROPOSITO, sin avisar, y entrega la orden
+        // al corte de esa misma noche. Medido en produccion el 2026-08-21 con la guia 17496963:
+        // gestionada 22:10, anulada 22:18, y en ese mismo instante `fecha_reparto` paso de
+        // 2026-08-22 a 2026-08-21.
+        //
+        // LA REGLA NUEVA, con su excepcion nombrada: el dia de reparto se escribe SIEMPRE en la
+        // misma escritura que `asignado_at`; al deshacer, ese dia es el de Costa Rica EN CURSO,
+        // SALVO que la orden ya este reservada para un dia POSTERIOR — una reserva futura no se
+        // cancela por reponer una asignacion.
+        //
+        // POR QUE UN `CASE` EN LA SENTENCIA Y NO UNA LECTURA PREVIA EN TypeScript: el `WHERE` de
+        // este `UPDATE` solo protege `estatus_id`, asi que una fecha leida antes y escrita
+        // despues podria pisarse con una decision rancia — el mismo genero de defecto que esta
+        // ficha arregla. El `CASE` decide SOBRE LA FILA: no hay ventana entre leer y escribir.
+        // Y no `GREATEST(...)`, que tambien funcionaria en Postgres (ignora los NULL) pero cuya
+        // semantica es especifica del motor y contraria a lo que la mayoria espera.
+        //
+        // El `NULL` cae por el `ELSE` sin caso especial: `NULL > x` es `NULL`, que no es `TRUE`,
+        // asi que una orden sin dia queda con el dia de hoy — que es R18 y lo que ya hacia.
+        const movidas = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE "orden"
+          SET "estatus_id" = ${estatusEnRepartoId},
+              "mensajero_asignado_id" = ${mensajeroId},
+              "asignado_at" = ${asignadoAt},
+              "fecha_reparto" = CASE
+                WHEN "fecha_reparto" > ${diaTexto}::date THEN "fecha_reparto"
+                ELSE ${diaTexto}::date
+              END,
+              "updated_at" = NOW()
+          WHERE "id" = ${ordenId}
+            AND "estatus_id" = ${estatusEsperadoId}
+            AND "deleted_at" IS NULL
+          RETURNING "id"`;
+        if (movidas.length === 0) throw new NoAnulable();
 
         // 3) R20/R21/R23: CHOKE POINT del historial (49) en la MISMA tx que el cambio de estado.
         // Origen = estado real previo, destino = `en_reparto`, actor = quien deshizo,
