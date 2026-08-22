@@ -173,6 +173,11 @@ function ordenHeredada(overrides: Fila = {}): Fila {
     downloadStoragePath: null, // ...y referencia nueva sin poblar
     estatus: { value: "en_bodega_central" },
     gestiones: [],
+    // 268/R27 (2026-08-22): `API_ORDEN_DETALLE_SELECT` trae ahora tambien `incidentesAdmin` (la
+    // segunda procedencia de las evidencias del incidente). Esta fila la lee
+    // `findDetalleByOrdenIdForOwner`, asi que el mock tiene que devolver la relacion; el PDF de
+    // etiquetas no la usa para nada.
+    incidentesAdmin: [],
     tienda: { nombre: "Tienda Uno" },
     zona: { nombre: "GAM" },
     provincia: { nombre: "Pichincha" },

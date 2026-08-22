@@ -3,12 +3,14 @@ import { randomBytes } from "node:crypto";
 import { WebhookEstadoService, WebhookEntregaFallidaError } from "@/lib/services/WebhookEstadoService";
 import { WebhookSecretKeyError, cifrarSecreto } from "@/lib/crypto/webhook-secret-cipher";
 import { firmarWebhook } from "@/lib/crypto/webhook-firma";
-import type { WebhookConfig } from "@/lib/config/webhook";
+import { loadWebhookConfig, type WebhookConfig } from "@/lib/config/webhook";
 import type { IWebhookOrdenReader, DatosEntregaOrden } from "@/lib/interfaces/repositories/IWebhookOrdenReader";
 import type { IWebhookSuscripcionRepository, WebhookSuscripcionActiva } from "@/lib/interfaces/repositories/IWebhookSuscripcionRepository";
 import type { IWebhookSender, WebhookOutcome } from "@/lib/interfaces/external/IWebhookSender";
 import type { JobDTO } from "@/lib/interfaces/repositories/IJobRepository";
 import { CAUSA_DEVOLUCION_SEED, type CausaDevolucion } from "@/lib/types/causa-devolucion";
+import { CAUSA_INCIDENTE_SEED, type CausaIncidente } from "@/lib/types/causa-incidente";
+import { gestionConfig } from "@/lib/config/gestion";
 import { EVENTOS_PUBLICOS, ORIGENES_SIN_EVENTO_PUBLICO } from "@/lib/types/webhook-eventos";
 
 // Feature 99 (R17/R19-R24/R29/R30/R31/R32) — handler de entrega. DI por interfaces; sin red
@@ -24,10 +26,15 @@ const SECRET_ENC = cifrarSecreto(CLAVE, SECRETO);
 const NUM_REMISION = "REM-DEL-OWNER-A";
 const DESTINATARIO = "Juan Perez"; // PII que NUNCA debe ir al payload/log
 
+/** ⏳ 2026-08-22 (268/R24): origin con el que se construye `data.evidenciasUrl`. */
+const ORIGIN = "https://app.ordenex.co";
+const ORDEN_ID = "orden-1";
+
 const config: WebhookConfig = {
   WEBHOOK_TIMEOUT_MS: 10_000,
   WEBHOOK_REPLAY_WINDOW_S: 300,
   WEBHOOK_SECRET_ENC_KEY: CLAVE,
+  WEBHOOK_APP_ORIGIN: ORIGIN,
 };
 
 const DATOS_BASE: DatosEntregaOrden = {
@@ -39,11 +46,27 @@ const DATOS_BASE: DatosEntregaOrden = {
   // Feature 256: en el DTO INTERNO el campo se llama `causaDevolucion`; `motivo` es solo el
   // nombre de cable (design §2.3). El caso base es un `en_reparto` sin devolucion.
   causaDevolucion: null,
+  // ⏳ 2026-08-22 (268): el hermano, tambien con su nombre propio en el DTO interno.
+  causaIncidente: null,
 };
 
 /** Feature 256 — datos de una orden que transiciona a `devuelta` con su causa vigente. */
 function datosDevuelta(causaDevolucion: CausaDevolucion | null): DatosEntregaOrden {
   return { ...DATOS_BASE, estado: "devuelta", causaDevolucion };
+}
+
+/** ⏳ 2026-08-22 (268) — datos de una orden que transiciona a `incidente` con su causa vigente. */
+function datosIncidente(causaIncidente: CausaIncidente | null): DatosEntregaOrden {
+  return { ...DATOS_BASE, estado: "incidente", causaIncidente };
+}
+
+/** El job de un evento cuyo estado destino es `incidente`. */
+function jobIncidente(): JobDTO {
+  return job({
+    ordenId: ORDEN_ID,
+    estatusDestinoId: "s-incidente",
+    ocurridoAt: "2026-08-22T10:00:00.000Z",
+  });
 }
 
 /** El job de un evento cuyo estado destino es `devuelta`. */
@@ -468,13 +491,237 @@ describe("256/R20-R21 — los desenlaces y el aislamiento por owner, con el camp
   });
 });
 
-describe("256/R17 — el conjunto de transiciones que emiten evento NO cambia", () => {
-  it("256/R17: esta feature no anade ni quita eventos publicos ni familias exceptuadas", async () => {
+describe("256/R17 — el conjunto de transiciones que emiten evento", () => {
+  it("256/R17 + 268/R1-R5: el recuento de eventos publicos y de familias exceptuadas", async () => {
     // Congelado por TAMANO aqui (el congelador por IGUALDAD vive en
-    // `tests/unit/types/webhook-eventos.test.ts`, que esta feature NO edita). Anadir o quitar un
-    // estado publico, o ensanchar la lista de exclusion, pone rojos los dos.
-    expect(EVENTOS_PUBLICOS.size).toBe(10);
-    expect(ORIGENES_SIN_EVENTO_PUBLICO.length).toBe(1);
+    // `tests/unit/types/webhook-eventos.test.ts`, que esta task NO edita).
+    //
+    // ⏳ 2026-08-22 (feature 268, T1) — ACTUALIZADO, no borrado: la 268 SI cambia la politica a
+    // proposito (10 -> 12 con `ayuda_tienda` e `incidente`, R1-R3) y vacia la lista de exencion
+    // (1 -> 0, R5, revirtiendo 235/P4). Lo que el test sigue protegiendo es que NADIE mueva esos
+    // numeros sin querer: cualquier alta o baja futura lo pone rojo igual que antes.
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
+    expect(ORIGENES_SIN_EVENTO_PUBLICO.length).toBe(0);
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// ⏳ 2026-08-22 — Feature 268 (T6a/T6b): la causa del INCIDENTE en `data.motivo` y el enlace
+// ESTABLE a las evidencias en `data.evidenciasUrl`. Todo lo que se afirma aqui se afirma sobre el
+// STRING REAL que recibe el sender (o su `JSON.parse`), nunca sobre un objeto intermedio.
+// -----------------------------------------------------------------------------------------------
+
+describe("268/R20-R21 — `data.motivo` transporta tambien la causa del incidente", () => {
+  it("268/R20 (1): incidente del MENSAJERO -> la causa viaja en `motivo`", async () => {
+    // El DTO no dice de donde vino la causa: el reader ya resolvio las dos procedencias. Este
+    // caso y el siguiente son el par que exige leer LAS DOS (design §7.3).
+    const { service, entregar } = buildService({ datos: datosIncidente("danado") });
+    await service.ejecutar(jobIncidente());
+    const body = JSON.parse(cuerpoDe(entregar));
+    expect(body.data.estado).toBe("incidente");
+    expect(body.data.motivo).toBe("danado"); // espanol, sin traducir (158/Q-B)
+  });
+
+  it("268/R20 (2): incidente del ADMIN -> la causa viaja en `motivo`", async () => {
+    const { service, entregar } = buildService({ datos: datosIncidente("robado") });
+    await service.ejecutar(jobIncidente());
+    expect(JSON.parse(cuerpoDe(entregar)).data.motivo).toBe("robado");
+  });
+
+  it("268/R20: los tres values del SEED salen CRUDOS, en espanol y sin etiqueta de UI", async () => {
+    for (const causa of CAUSA_INCIDENTE_SEED) {
+      const { service, entregar } = buildService({ datos: datosIncidente(causa) });
+      await service.ejecutar(jobIncidente());
+      const cuerpo = cuerpoDe(entregar);
+      expect(JSON.parse(cuerpo).data.motivo).toBe(causa);
+      for (const etiqueta of ["Dañado", "Danado", "Perdido", "Robado", "motivoLabel"]) {
+        expect(cuerpo).not.toContain(etiqueta);
+      }
+    }
+  });
+
+  it("268/R21 (3): en un evento `entregada` el campo EXISTE y vale null (convencion de la 256)", async () => {
+    // R21 pide «la misma convencion de ausencia que fije la 256», y la 256 fijo PRESENTE-CON-NULL,
+    // no la omision: su OpenAPI documenta forma UNICA para las cuatro claves.
+    const { service, entregar } = buildService({
+      datos: { ...DATOS_BASE, estado: "entregada", causaIncidente: "perdido" },
+    });
+    await service.ejecutar(job());
+    const body = JSON.parse(cuerpoDe(entregar));
+    expect("motivo" in body.data).toBe(true);
+    expect(body.data.motivo).toBeNull();
+    expect(cuerpoDe(entregar)).not.toContain("perdido"); // la causa vigente NO se publica aqui
+  });
+
+  it("268/R21 (4): un `incidente` SIN causa resoluble emite null y entrega con normalidad", async () => {
+    const { service, entregar } = buildService({ datos: datosIncidente(null) });
+    await expect(service.ejecutar(jobIncidente())).resolves.toBeUndefined();
+    const body = JSON.parse(cuerpoDe(entregar));
+    expect("motivo" in body.data).toBe(true);
+    expect(body.data.motivo).toBeNull(); // sin valor por defecto inventado
+    expect(entregar).toHaveBeenCalledTimes(1); // la entrega NO falla por esto
+  });
+
+  it("268/R20: la causa de DEVOLUCION y la de INCIDENTE no se cruzan nunca", async () => {
+    // Una orden que arrastra las dos causas vigentes: cada evento publica LA SUYA.
+    const datos: DatosEntregaOrden = {
+      ...DATOS_BASE,
+      causaDevolucion: "not_found",
+      causaIncidente: "robado",
+    };
+    const a = buildService({ datos: { ...datos, estado: "devuelta" } });
+    await a.service.ejecutar(jobDevuelta());
+    expect(JSON.parse(cuerpoDe(a.entregar)).data.motivo).toBe("not_found");
+    expect(cuerpoDe(a.entregar)).not.toContain("robado");
+
+    const b = buildService({ datos: { ...datos, estado: "incidente" } });
+    await b.service.ejecutar(jobIncidente());
+    expect(JSON.parse(cuerpoDe(b.entregar)).data.motivo).toBe("robado");
+    expect(cuerpoDe(b.entregar)).not.toContain("not_found");
+  });
+});
+
+describe("268/R22-R25 — `data.evidenciasUrl`: estable, determinista y sin credencial", () => {
+  const ENLACE = `${ORIGIN}/api/ordenes/api-key/orden/${ORDEN_ID}`;
+
+  it("268/R24 (1): en `incidente` viaja el enlace EXACTO; en `entregada` la clave NO existe", async () => {
+    const a = buildService({ datos: datosIncidente("danado") });
+    await a.service.ejecutar(jobIncidente());
+    const bodyIncidente = JSON.parse(cuerpoDe(a.entregar));
+    expect(bodyIncidente.data.evidenciasUrl).toBe(ENLACE);
+    // Orden de claves congelado: la firma se calcula sobre el string serializado.
+    expect(Object.keys(bodyIncidente.data)).toEqual([
+      "numGuia",
+      "numRemision",
+      "estado",
+      "motivo",
+      "evidenciasUrl",
+    ]);
+
+    const b = buildService({ datos: { ...DATOS_BASE, estado: "entregada" } });
+    await b.service.ejecutar(job());
+    const bodyEntregada = JSON.parse(cuerpoDe(b.entregar));
+    // R24: no viaja. Se afirma por AUSENCIA DE CLAVE, no con `toBeUndefined()` a secas.
+    expect(Object.keys(bodyEntregada.data)).not.toContain("evidenciasUrl");
+    expect("evidenciasUrl" in bodyEntregada.data).toBe(false);
+    expect(cuerpoDe(b.entregar)).not.toContain("evidenciasUrl");
+  });
+
+  it("268/R19: el cuerpo de un evento NO-incidente conserva EXACTAMENTE sus claves de siempre", async () => {
+    const { service, entregar } = buildService();
+    await service.ejecutar(job());
+    const body = JSON.parse(cuerpoDe(entregar));
+    expect(Object.keys(body)).toEqual(["evento", "eventoId", "ocurridoAt", "data"]);
+    expect(Object.keys(body.data)).toEqual(["numGuia", "numRemision", "estado", "motivo"]);
+    expect(body.evento).toBe("orden.estado_actualizado");
+  });
+
+  it("268/R24 (2): con el origin SIN resolver el campo se OMITE (y `loadWebhookConfig` no lanza)", async () => {
+    // Ni ruta relativa ni `https://undefined/...`: no hay campo.
+    const ordenes: IWebhookOrdenReader = { findDatosEntrega: vi.fn(async () => datosIncidente("danado")) };
+    const suscripciones = {
+      findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+    } as unknown as IWebhookSuscripcionRepository;
+    const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
+    const service = new WebhookEstadoService(
+      ordenes,
+      suscripciones,
+      { entregar },
+      { ...config, WEBHOOK_APP_ORIGIN: null },
+      () => new Date("2026-08-22T10:00:05.000Z"),
+    );
+    await expect(service.ejecutar(jobIncidente())).resolves.toBeUndefined();
+
+    const cuerpo = cuerpoDe(entregar);
+    expect(Object.keys(JSON.parse(cuerpo).data)).not.toContain("evidenciasUrl");
+    expect(cuerpo).not.toContain("undefined");
+    expect(cuerpo).not.toContain("/api/ordenes/api-key/orden");
+    expect(JSON.parse(cuerpo).data.motivo).toBe("danado"); // la causa SI sigue viajando
+
+    // El invariante del modulo de config: nunca lanza, tampoco sin `NEXT_PUBLIC_APP_URL`.
+    const previo = process.env.NEXT_PUBLIC_APP_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    expect(() => loadWebhookConfig()).not.toThrow();
+    expect(loadWebhookConfig().WEBHOOK_APP_ORIGIN).toBeNull();
+    if (previo !== undefined) process.env.NEXT_PUBLIC_APP_URL = previo;
+  });
+
+  it("268/R25 (3): el MISMO job con relojes distintos entrega un cuerpo BYTE-IDENTICO", async () => {
+    // Este caso se pone ROJO si alguien sustituye el enlace por una URL FIRMADA de Storage: el
+    // token y la expiracion cambiarian entre el intento 1 y el intento 5.
+    const entregas: string[] = [];
+    for (const instante of ["2026-08-22T10:00:05.000Z", "2026-08-22T19:31:47.000Z"]) {
+      const ordenes: IWebhookOrdenReader = {
+        findDatosEntrega: vi.fn(async () => datosIncidente("perdido")),
+      };
+      const suscripciones = {
+        findActivaByOwner: vi.fn(async () => ({ url: "https://a.example.com/hook", secret: SECRET_ENC })),
+      } as unknown as IWebhookSuscripcionRepository;
+      const entregar = vi.fn(async () => ({ status: "ok" }) as WebhookOutcome);
+      const service = new WebhookEstadoService(
+        ordenes,
+        suscripciones,
+        { entregar },
+        config,
+        () => new Date(instante),
+      );
+      await service.ejecutar(jobIncidente());
+      entregas.push(cuerpoDe(entregar, 0));
+    }
+    const [cuerpo1, cuerpo2] = entregas;
+    expect(cuerpo1).toBe(cuerpo2); // byte a byte, sobre el string entregado al sender
+    expect(JSON.parse(cuerpo1).data.evidenciasUrl).toBe(ENLACE);
+    expect(JSON.parse(cuerpo1).eventoId).toBe(JSON.parse(cuerpo2).eventoId);
+  });
+
+  it("268/R22 (4): el cuerpo NO lleva bucket, token, firma de S3 ni storage_path", async () => {
+    const { service, entregar } = buildService({ datos: datosIncidente("danado") });
+    await service.ejecutar(jobIncidente());
+    const cuerpo = cuerpoDe(entregar); // el STRING REAL que recibe el sender
+
+    expect(cuerpo).not.toContain(gestionConfig.EVIDENCIA_BUCKET);
+    for (const rastro of ["token=", "X-Amz", "storage_path", "storagePath", "sign/", "signed"]) {
+      expect(cuerpo).not.toContain(rastro);
+    }
+    // Y lo que SI lleva: un enlace sin query string ninguna.
+    const url = new URL(JSON.parse(cuerpo).data.evidenciasUrl);
+    expect(url.search).toBe("");
+    expect(url.pathname).toBe(`/api/ordenes/api-key/orden/${ORDEN_ID}`);
+  });
+
+  it("268/R25: el enlace no depende de la base, solo del origin y del ordenId del payload", async () => {
+    // Misma orden, mismo enlace, AUNQUE la causa leida cambie entre intentos (la ventana
+    // declarada de la 256/R15): el enlace no consulta Storage ni depende del estado de la base.
+    const { service, entregar } = buildService({ datos: datosIncidente("danado") });
+    await service.ejecutar(jobIncidente());
+    const { service: s2, entregar: e2 } = buildService({ datos: datosIncidente(null) });
+    await s2.ejecutar(jobIncidente());
+    expect(JSON.parse(cuerpoDe(e2)).data.evidenciasUrl).toBe(
+      JSON.parse(cuerpoDe(entregar)).data.evidenciasUrl,
+    );
+    expect(JSON.parse(cuerpoDe(e2)).data.motivo).toBeNull();
+
+    // Otra orden -> otro enlace: el `ordenId` sale del payload del job, no de la lectura.
+    const { service: s3, entregar: e3 } = buildService({ datos: datosIncidente("danado") });
+    await s3.ejecutar(
+      job({ ordenId: "orden-2", estatusDestinoId: "s-incidente", ocurridoAt: "2026-08-22T10:00:00.000Z" }),
+    );
+    expect(JSON.parse(cuerpoDe(e3)).data.evidenciasUrl).toBe(
+      `${ORIGIN}/api/ordenes/api-key/orden/orden-2`,
+    );
+  });
+
+  it("268/R18: la firma verifica contra el cuerpo YA ampliado con el enlace", async () => {
+    const { service, entregar } = buildService({ datos: datosIncidente("robado") });
+    await service.ejecutar(jobIncidente());
+    const [, cuerpo, headers] = entregar.mock.calls[0] as unknown as [
+      string,
+      string,
+      Record<string, string>,
+    ];
+    expect(cuerpo).toContain(`"evidenciasUrl":"${ENLACE}"`);
+    const ts = Number(headers["X-Ordenex-Timestamp"]);
+    expect(headers["X-Ordenex-Signature"]).toBe(`sha256=${firmarWebhook(SECRETO, ts, cuerpo)}`);
   });
 });
 

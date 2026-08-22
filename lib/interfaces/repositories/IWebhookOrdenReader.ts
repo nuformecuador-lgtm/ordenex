@@ -2,6 +2,7 @@
 // del catalogo de estado. Repo de solo-lectura, separado de `IOrdenRepository` (que es
 // enorme): el handler solo necesita resolver el destino y el cuerpo de entrega.
 import type { CausaDevolucion } from "@/lib/types/causa-devolucion";
+import type { CausaIncidente } from "@/lib/types/causa-incidente";
 
 /** Datos para construir el cuerpo de entrega (D3). `estado` es el `value` del destino. */
 export interface DatosEntregaOrden {
@@ -33,6 +34,35 @@ export interface DatosEntregaOrden {
    * libre del mensajero, que no se emite jamas (R22).
    */
   causaDevolucion: CausaDevolucion | null;
+  /**
+   * ⏳ 2026-08-22 (feature 268, R20/R21) — causa TIPIFICADA del incidente VIGENTE de la orden,
+   * hermana exacta de `causaDevolucion` de arriba y con el mismo razonamiento.
+   *
+   * DOS PROCEDENCIAS, las dos obligatorias (design §7.3): resolver solo la primera dejaria sin
+   * causa CINCO de las seis aristas de entrada a `incidente`.
+   *  1. MENSAJERO (arista #44, familia `gestion`): `gestion_orden.causa_incidente` de la gestion
+   *     con `resultado = 'incidente'` VIGENTE (`anulada_at IS NULL`), la mas reciente.
+   *  2. ADMIN (aristas #48-#52, familia `incidente`): NO crea gestion ninguna; crea
+   *     `orden_incidente.causa` (MISMO enum, `db/schema.prisma:979`), la mas reciente.
+   * Si las dos existieran, manda la mas reciente por `created_at` (ver el reader). En la practica
+   * solo una procedencia existe por orden, porque las aristas son disjuntas.
+   *
+   * `null` cuando no hay incidente resoluble, con los mismos dos caminos que colapsan a proposito
+   * (no hubo / no se registro): el contrato publico no los distingue.
+   *
+   * Value CRUDO del enum `GestionCausaIncidente` en ESPANOL (`danado` | `perdido` | `robado`), sin
+   * traducir. La asimetria con `causaDevolucion` (que va en INGLES) es una decision CONSCIENTE y
+   * FIRMADA del humano (73/F1.4-g y 158/Q-B): NO se «corrige» aqui ni se abre ticket de
+   * consistencia en ninguna de las dos direcciones. El tipo se importa de
+   * `lib/types/causa-incidente.ts` —NUNCA de `@prisma/client`— por el doble candado de
+   * exhaustividad de la 73/158.
+   *
+   * Campo REQUERIDO, no opcional, por la misma razon que su hermano: un `?` dejaria pasar en
+   * silencio a quien se olvide de proyectarlo. `motivo` es solo el nombre de CABLE que comparten
+   * las dos causas en el contrato publico (256, design §2.3); aqui el concepto se llama por su
+   * nombre propio.
+   */
+  causaIncidente: CausaIncidente | null;
 }
 
 export interface IWebhookOrdenReader {
