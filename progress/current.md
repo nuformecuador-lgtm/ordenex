@@ -9,7 +9,37 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ⏸️ ESPERANDO MERGE — 2026-08-22, 04:30 CR. **EMPIEZA A LEER POR AQUÍ**
+## ✅ AL DÍA — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+
+**Una release a producción ya desplegada y verificada contra la base**, y la 264 completa esperando
+la siguiente.
+
+| ficha | estado |
+| --- | --- |
+| **261** · el día de reparto reservado protege de verdad | ✅ en producción, revisión APROBADA |
+| **263** · el comprobante del cierre y la guía que pisaba | ✅ en producción |
+| **264** · el cierre recuerda qué órdenes barrió el corte | ✅ backend en producción · frontend en `dev`, esperando release |
+| **262** y **265** | specs escritos, **esperando puerta humana** |
+
+🔴 **Un `access_token` OAuth2 se estaba imprimiendo en claro en los logs de producción** desde el
+2026-08-14. Retirado y desplegado, con guardia de carpeta que impide que vuelva.
+
+### Pendiente de decisión humana
+1. **`docs/release.md`** — el repo no tiene lista de release, y por eso mediciones que caducan
+   acaban siendo casillas de un solo uso. Propuesto, no creado.
+2. **Apagar `RUTA_DEBUG_LOG`** cuando aterrice la 265: vuelca coordenadas de destinatarios a los
+   logs de Vercel.
+3. **Puerta humana de 262 y 265.**
+
+### Verificación pendiente en PRODUCCIÓN (no se puede hacer en local)
+La sección «Órdenes sin gestionar» de la 264: en la base local **no existe ni una orden
+`sin_gestionar` ni un cierre vencido**. En producción sí — el cierre `8F88DCD5` con sus 4 órdenes.
+Tras la release: comprobar que la sección aparece, lista las cuatro guías, y que los totales del pie
+siguen en **₡14.900 general y ₡2.000 de pago al mensajero**, que es como estaban medidos antes.
+
+---
+
+## 2026-08-22, 04:30 CR — tanda anterior (cerrada)
 
 `dev` está en `d6dd96b4` y **no se ha movido**: hay **seis PRs abiertos** y nada mergeado. Ese es
 el único bloqueo real de esta tanda.
