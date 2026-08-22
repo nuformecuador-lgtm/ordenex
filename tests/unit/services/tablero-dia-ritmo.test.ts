@@ -6,7 +6,7 @@ import type { EntregasEnHora } from "@/lib/interfaces/repositories/ITableroDiaRe
 import { TableroDiaService, acumularPorHora } from "@/lib/services/TableroDiaService";
 import type { TableroDia } from "@/lib/types/tablero-dia";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 258 (B4.3) — R50, R52, R54, R56, R57.
 //
@@ -31,10 +31,10 @@ function servicioCon(
 ): { service: TableroDiaService; repo: RepositorioDoble } {
   const repo = new RepositorioDoble(
     () => filas,
-    () => ({ ordenes: [], total: 0 }),
+    () => ({ filas: [], total: 0 }),
     () => histograma,
   );
-  return { service: new TableroDiaService(repo), repo };
+  return { service: servicioDelTablero(repo), repo };
 }
 
 async function tableroDe(
@@ -169,12 +169,12 @@ describe("TableroDiaService — la serie de entregas acumuladas (R50)", () => {
   it("un acierto de cache NO vuelve a llamar a `contarEntregasPorHora` (R57)", async () => {
     const repo = new RepositorioDoble(
       () => [fila("m1", "Ana", { entregadas: 1 })],
-      () => ({ ordenes: [], total: 0 }),
+      () => ({ filas: [], total: 0 }),
       () => [{ hora: 5, entregadas: 1 }],
     );
     let ahora = AHORA.getTime();
     const cache = new TableroDiaCacheMemoria({ ahora: () => ahora });
-    const service = new TableroDiaService(repo, cache);
+    const service = servicioDelTablero(repo, cache);
 
     const primera = await service.obtener(ADMIN, new Date(ahora));
     ahora += 5_000;
@@ -214,10 +214,10 @@ describe("TableroDiaService — la serie de entregas acumuladas (R50)", () => {
   it("la serie se recorta con el MISMO filtro de alcance que los conteos (R55)", async () => {
     const repo = new RepositorioDoble(
       () => [],
-      () => ({ ordenes: [], total: 0 }),
+      () => ({ filas: [], total: 0 }),
       () => [],
     );
-    const service = new TableroDiaService(repo);
+    const service = servicioDelTablero(repo);
 
     await service.obtener({ usuarioId: "u-3", rol: "adminSatelite", zonaId: "z-9" }, AHORA);
 

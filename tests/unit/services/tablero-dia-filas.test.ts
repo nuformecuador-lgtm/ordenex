@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { TableroDiaService } from "@/lib/services/TableroDiaService";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 192 (B3.4) — R25, R28, R29, R30.
 //
@@ -15,7 +14,7 @@ const AHORA = new Date("2026-08-08T19:00:00.000Z");
 const ADMIN = { usuarioId: "u-1", rol: "admin", zonaId: null };
 
 async function tableroDe(filas: ReturnType<typeof fila>[]) {
-  const service = new TableroDiaService(new RepositorioDoble(() => filas));
+  const service = servicioDelTablero(new RepositorioDoble(() => filas));
   const resultado = await service.obtener(ADMIN, AHORA);
   if (resultado.estado !== "ok") throw new Error("se esperaba ok");
   return resultado.tablero;

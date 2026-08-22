@@ -155,8 +155,13 @@ describe("R65 · hay UNA sola implementacion de la suma en el arbol", () => {
     expect(servicio.codigo).not.toMatch(/function sumarTotales\b/);
     expect(servicio.codigo).not.toMatch(/reduce<\s*TotalesTableroDia\s*>/);
     expect(servicio.codigo).toMatch(/sumarTotalesTablero/);
+    // FEATURE 260 — el patron admite ahora OTROS nombres en la misma linea de import
+    // (`recortarPorAlcance` entro con el recorte por alcance). Lo que esta clausula afirma es
+    // que la suma SE IMPORTA del modulo de contrato en vez de declararse aqui; exigir que sea
+    // el unico especificador de la linea no aportaba nada a eso y convertia un import
+    // agrupado —que es lo que hace el formateador del repo— en un falso rojo.
     expect(servicio.codigo).toMatch(
-      /import\s*\{\s*sumarTotalesTablero\s*\}\s*from\s*"@\/lib\/types\/tablero-dia"/,
+      /import\s*\{[^}]*\bsumarTotalesTablero\b[^}]*\}\s*from\s*"@\/lib\/types\/tablero-dia"/,
     );
   });
 

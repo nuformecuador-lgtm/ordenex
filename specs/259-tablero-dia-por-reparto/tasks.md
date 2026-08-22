@@ -281,7 +281,18 @@
 > Firmado (D4). No es una nota al pie: es una tarea con criterio de hecho, y sin ella **no se
 > despliega**.
 
-- [ ] **T8.1 — Avisar a quien opera, ANTES de la release:** a partir del despliegue, **lo que se
+- [~] **T8.1 — Avisar a quien opera, ANTES de la release.** ⚠️ **EXENTA POR DECISIÓN HUMANA el
+      2026-08-21**, no hecha. El leader la planteó como condición de despliegue y el humano
+      respondió literalmente «tranqui no hay que avisar». Se marca `[~]` —ni hecha ni pendiente—
+      **para que el historial no quede incoherente**: sin esta anotación, quien lea esta tarea
+      dentro de un mes encuentra una casilla bloqueante sin marcar y una release que ocurrió
+      igual, y no puede saber si fue una decisión o un descuido. **Fue una decisión.**
+      Lo que se aceptó, dicho entero: desde el despliegue, quien asigne para mañana verá esas
+      órdenes desaparecer del tablero de hoy, y sin aviso previo puede leerlo como «se perdieron».
+
+      El texto original de la tarea, conservado:
+
+- [ ] ~~**T8.1 — Avisar a quien opera, ANTES de la release:**~~ a partir del despliegue, **lo que se
       asigne hoy para mañana deja de aparecer en el tablero de hoy** y aparece mañana. No se ha
       perdido nada; cambió el día en que se cuenta.
       **Por qué bloquea:** el maestro que asigne para mañana verá **desaparecer** esas órdenes en el

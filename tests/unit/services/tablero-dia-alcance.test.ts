@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ActorAnalitica } from "@/lib/analytics/alcance";
 import { TableroDiaService } from "@/lib/services/TableroDiaService";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 192 (B3.3) — R1, R3, R4, R5, R7, R9.
 //
@@ -18,7 +18,7 @@ const ZONA_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function servicio(): { service: TableroDiaService; repo: RepositorioDoble } {
   const repo = new RepositorioDoble(() => [fila("m1", "Juan Perez", { entregadas: 2 })]);
-  return { service: new TableroDiaService(repo), repo };
+  return { service: servicioDelTablero(repo), repo };
 }
 
 function actor(rol: string, zonaId: string | null = null): ActorAnalitica {

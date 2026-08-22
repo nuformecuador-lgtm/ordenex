@@ -10,16 +10,19 @@ import type {
   FiltroAlcanceTablero,
   ITableroDiaRepository,
 } from "@/lib/interfaces/repositories/ITableroDiaRepository";
+import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type { ITableroDiaService } from "@/lib/interfaces/services/ITableroDiaService";
 import type {
   FilaTableroDia,
   MotivoTableroDia,
+  OrdenDetalleDia,
   PuntoRitmoEntregas,
   ResultadoDetalleDia,
   ResultadoTableroDia,
   TableroDia,
 } from "@/lib/types/tablero-dia";
-import { sumarTotalesTablero } from "@/lib/types/tablero-dia";
+import { recortarPorAlcance, sumarTotalesTablero } from "@/lib/types/tablero-dia";
 import { horaDeParedCR, ventanaDelDiaEnCursoCR } from "@/lib/utils/ventana-dia-cr";
 
 // Feature 192 (B3.2/B7.4/B9.4/B9.5, design.md §3 y §5.quater) — EL SERVICIO DEL TABLERO.
@@ -163,8 +166,24 @@ export function acumularPorHora(
 }
 
 export class TableroDiaService implements ITableroDiaService {
+  /**
+   * FEATURE 260 (B6) — el servicio gana DOS colaboradores, y los dos son OBLIGATORIOS.
+   *
+   * Opcionales dejarian que una construccion se los olvidara y el detalle saliera vacio, o sin
+   * intentos, **sin que nada se pusiera rojo**: la familia de fallo mudo que este repo persigue.
+   * Mismo criterio que `ritmoEntregas` en la 258 y que `historial` en `OrdenService` (160).
+   *
+   * Se inyectan ESTRECHADOS con `Pick` —patron de `ApiOrdenLecturaService` y de
+   * `lib/actions/liberacion-reprogramada.ts`—: el tablero no recibe la superficie entera de
+   * `IOrdenRepository`, que tiene medio centenar de metodos de escritura que no le tocan.
+   *
+   * `cache` se queda el ULTIMO por ser el unico con valor por defecto. Consecuencia declarada:
+   * su posicion cambio, asi que todas las construcciones existentes se tocaron (B6).
+   */
   constructor(
     private readonly repositorio: ITableroDiaRepository,
+    private readonly ordenes: Pick<IOrdenRepository, "findListItemsByIds">,
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
     private readonly cache: ITableroDiaCache = tableroDiaCacheNula(),
   ) {}
 
@@ -237,6 +256,26 @@ export class TableroDiaService implements ITableroDiaService {
    * R73 — NO pasa por la cache. Se abre por clic, no en bucle, y su consulta va por indice:
    * no hay escaneo que amortiguar. Cachearlo multiplicaria las claves —una por mensajero Y
    * por alcance— y con ellas la superficie del riesgo de R67, a cambio de nada.
+   *
+   * ── FEATURE 260 (B5) — DOS PASOS, Y UN SOLO DUEÑO DE CADA DECISION ────────────────────────
+   *
+   *   1. autorizar                        ← el alcance, otra vez y antes de consultar nada
+   *   2. `listarOrdenesDelDia`            ← QUIEN entra, CUANTAS hay y EN QUE ORDEN
+   *   3. cero filas ⇒ detalle vacio       ← sin una consulta mas
+   *   4. `findListItemsByIds` + intentos  ← QUE trae cada una (el camino del listado)
+   *   5. reordenar · anexar · descartar   ← el orden del paso 2 se REIMPONE
+   *   6. `recortarPorAlcance`             ← la frontera de DATOS
+   *
+   * POR QUE DOS PASOS Y NO UNO: el paso 2 responde algo que el listado de ordenes no sabe
+   * responder —«asignada hoy» es la union de dos caminos y «resultado del dia» es la ultima
+   * gestion no anulada de la ventana, resuelta con un `LATERAL`—, y nada de eso es expresable
+   * como `where` de Prisma sobre `orden`. El paso 4 responde la otra pregunta, «¿que se pinta
+   * de una orden?», y esa YA estaba respondida en un sitio.
+   *
+   * Y por que dos pasos NO reabren la posibilidad de divergir: el paso 4 no tiene criterio
+   * propio. No filtra por fecha, no ordena y no proyecta a mano — recibe una lista de ids y
+   * devuelve el DTO con el mismo `include` y el mismo mapeo que el listado. Si mañana el
+   * listado gana un campo, el detalle lo trae solo (R26).
    */
   async detalle(
     actor: ActorAnalitica | null,
@@ -249,21 +288,57 @@ export class TableroDiaService implements ITableroDiaService {
 
     const ventana = ventanaDelDiaEnCursoCR(now);
     const pageSize = ordenesConfig.DEFAULT_PAGE_SIZE;
-    const pagina1 = await this.repositorio.listarOrdenesDelDia(ventana, auth.filtro, mensajeroId, {
-      pagina,
-      pageSize,
+    const alcance = auth.filtro.tipo;
+    const paginaDelDia = await this.repositorio.listarOrdenesDelDia(
+      ventana,
+      auth.filtro,
+      mensajeroId,
+      { pagina, pageSize },
+    );
+
+    const envolver = (ordenes: readonly OrdenDetalleDia[]): ResultadoDetalleDia => ({
+      estado: "ok",
+      detalle: { mensajeroId, fecha: ventana.fecha, ordenes, total: paginaDelDia.total, pagina, pageSize, alcance },
     });
 
-    return {
-      estado: "ok",
-      detalle: {
-        mensajeroId,
-        fecha: ventana.fecha,
-        ordenes: pagina1.ordenes,
-        total: pagina1.total,
-        pagina,
-        pageSize,
-      },
-    };
+    // R5 — sin filas no hay nada que hidratar NI que contar: cero consultas mas. Es ademas lo
+    // que mantiene indistinguibles los tres casos malos (R31/R32): los tres llegan aqui con la
+    // pagina vacia y salen por esta misma linea.
+    if (paginaDelDia.filas.length === 0) return envolver([]);
+
+    const ids = paginaDelDia.filas.map((f) => f.ordenId);
+    // R40 — la lista que viaja es EXACTAMENTE la de la pagina (<= pageSize ids), nunca una
+    // consulta sin acotar. Las dos lecturas son independientes: encadenarlas sumaria latencias.
+    const [items, intentos] = await Promise.all([
+      this.ordenes.findListItemsByIds(ids, auth.filtro),
+      this.historial.contarIntentosEnLote(ids),
+    ]);
+    const porId = new Map(items.map((item) => [item.id, item]));
+
+    // R4 — el orden lo decidio la consulta del dia y aqui se REIMPONE recorriendo sus filas: la
+    // hidratacion no ordena (y no podria: no conoce `asignado_at`).
+    const ordenes = paginaDelDia.filas.flatMap((fila) => {
+      const item = porId.get(fila.ordenId);
+      // R7 — un id que no resuelve (borrada entre las dos consultas, o fuera del alcance que la
+      // hidratacion vuelve a aplicar) se OMITE. Devolver media fila seria peor que no devolverla.
+      if (item === undefined) return [];
+      return [
+        recortarPorAlcance(
+          {
+            ...item,
+            // R6 — el `0` es un valor CONOCIDO, no un dato ausente: el criterio unico de
+            // intentos no devuelve las ordenes sin ninguno y el `?? 0` es quien lo dice.
+            intentosEntrega: intentos.get(fila.ordenId) ?? 0,
+            resultadoDelDia: fila.resultadoDelDia,
+            asignadoAt: fila.asignadoAt,
+          },
+          // R13/R46 — LA FRONTERA DE DATOS. Lo recortado no viaja al cliente: que un campo no
+          // se pinte no basta, si llega en el payload se puede leer.
+          alcance,
+        ),
+      ];
+    });
+
+    return envolver(ordenes);
   }
 }

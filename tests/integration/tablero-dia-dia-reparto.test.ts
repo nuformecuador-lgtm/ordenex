@@ -249,7 +249,7 @@ describeSiHayBase("tablero del día — el criterio es el DÍA DE REPARTO (Postg
           );
           // R14 — el detalle de esa tarjeta trae exactamente lo que la tarjeta dice.
           expect(pagina.total).toBe(fila.asignadas);
-          ids.push(...pagina.ordenes.map((o) => o.ordenId));
+          ids.push(...pagina.filas.map((f) => f.ordenId));
         }
         porDia.push({ fecha: ventana.fecha, filas, ids });
       }

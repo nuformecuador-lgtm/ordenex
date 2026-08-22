@@ -363,8 +363,27 @@ export interface RefNombre {
 export interface OrdenTiendaRef {
   id: string;
   nombre: string;
-  email: string;
-  telefono: string;
+  /**
+   * Feature 260 (T0.1, R13/R43) — CONTACTO DE LA TIENDA, AHORA OPCIONAL. `OrdenRepository`
+   * SIEMPRE los envia (`toRelaciones`, sobre el `select` de `WITH_ESTATUS_Y_TIENDA`), asi que
+   * `/ordenes` los sigue recibiendo exactamente igual que antes (R46: en alcance `global` no
+   * se recorta nada). El `?` no dice "puede que no existan": dice que **se pueden retirar**.
+   *
+   * POR QUE, y por que aqui y no en un tipo derivado: el detalle del tablero del dia
+   * (`OrdenDetalleDia`) es este mismo elemento, y en alcance `zona` —el `adminSatelite`, que
+   * tiene PROHIBIDO `/ordenes` (`app/(app)/ordenes/page.tsx`: `notFound()`)— el contacto de la
+   * tienda NO puede viajar al cliente. Con `string` obligatorio, "no viajar" no era
+   * representable. Derivar el tipo del detalle con `Omit`/`Partial<Pick<…>>` en vez de aflojar
+   * este dejaria de hacerlo asignable a `OrdenListItemDTO` y montar las columnas del listado
+   * exigiria un **cast** — la costura por la que las dos pantallas divergen sin que el
+   * compilador diga nada (`specs/260-detalle-columnas-listado/design.md` §3.1 y §13/A8).
+   *
+   * Medido antes de tocarlo (design.md §1.10): estos dos campos se ESCRIBEN en
+   * `OrdenRepository.toRelaciones` y NO LOS LEE NADIE por este tipo. El `tienda.telefono` de
+   * `GestionOrdenRepository` sale de un `select` propio y alimenta otro DTO.
+   */
+  email?: string;
+  telefono?: string;
   tarifa: TarifaDTO | null;
 }
 

@@ -30,7 +30,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 
 ## BLOQUE 0 — El contrato (lo escribe `backend_dev`; el frontend depende de él)
 
-- [ ] **T0.1 · El contacto de la tienda pasa a ser opcional.** En `lib/types/orden.ts`,
+- [x] **T0.1 · El contacto de la tienda pasa a ser opcional.** En `lib/types/orden.ts`,
       `OrdenTiendaRef.email` y `.telefono` pasan a `email?: string` / `telefono?: string`. Es lo que
       hace **representable** el recorte de R13 sin declarar un segundo tipo (`design.md §3.1`).
       **Hecho:** `pnpm typecheck` verde **sin tocar ningún consumidor** —está medido que se escriben
@@ -38,7 +38,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       tipo dice por qué son opcionales y quién los envía siempre.
       → **R13, R43**
 
-- [ ] **T0.2 · El contrato compartido.** En `lib/types/tablero-dia.ts`: `OrdenDetalleDia` pasa a ser
+- [x] **T0.2 · El contrato compartido.** En `lib/types/tablero-dia.ts`: `OrdenDetalleDia` pasa a ser
       `OrdenListItemDTO & { resultadoDelDia; asignadoAt }` (`import type` de `@/lib/types/orden`), y
       `DetalleMensajeroDia` gana `alcance: "global" | "zona"`.
       **Hecho:** `pnpm typecheck` señala **exactamente** los consumidores que hay que migrar (esa
@@ -47,7 +47,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       cast); y `lib/types/tablero-dia.ts` no importa nada de `repositories/`, `services/`,
       `@/lib/db` ni `next/headers`. Depende de T0.1. → **R1, R12**
 
-- [ ] **T0.3 · La lista única de lo restringido y su recorte.** En el mismo módulo:
+- [x] **T0.3 · La lista única de lo restringido y su recorte.** En el mismo módulo:
       `CAMPOS_SOLO_ALCANCE_GLOBAL` (`orden: [fleteConIva, comisionConIva]`,
       `tienda: [email, telefono, tarifa]`) con su `satisfies` contra `keyof OrdenListItemDTO` y
       `keyof OrdenTiendaRef`, y `recortarPorAlcance(orden, alcance)` pura.
@@ -60,13 +60,13 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 
 ## BLOQUE BACKEND (`backend_dev`)
 
-- [ ] **B1 · El puerto del tablero adelgaza.** En `ITableroDiaRepository`: `PaginaOrdenesDelDia`
+- [x] **B1 · El puerto del tablero adelgaza.** En `ITableroDiaRepository`: `PaginaOrdenesDelDia`
       pasa a `{ filas: FilaDelDia[]; total }` con `FilaDelDia = { ordenId, resultadoDelDia,
       asignadoAt }`.
       **Hecho:** compila y `tests/unit/services/_doble-tablero-dia.ts` queda actualizado.
       Depende de T0.2. → **R3**
 
-- [ ] **B2 · El `SELECT` de la 2ª consulta adelgaza.** En `TableroDiaRepository.listarOrdenesDelDia`:
+- [x] **B2 · El `SELECT` de la 2ª consulta adelgaza.** En `TableroDiaRepository.listarOrdenesDelDia`:
       se retiran `num_guia`, `s."value"`, `destinatario`, `direccion` y el `JOIN "order_status"`.
       **No se toca** el `WITH ids_del_dia`, ni el `LATERAL`, ni el `COUNT(*) OVER ()`, ni el
       `ORDER BY`, ni el `LIMIT/OFFSET`, ni la POSICIÓN de la consulta en el archivo.
@@ -75,7 +75,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       `tests/unit/repositories/tablero-dia-detalle-sql.test.ts` actualizado a la nueva proyección.
       Depende de B1. → **R3, R8, R38**
 
-- [ ] **B3 · El método de hidratación.** `findListItemsByIds(ids, filtro: FiltroAlcanceTablero)` en
+- [x] **B3 · El método de hidratación.** `findListItemsByIds(ids, filtro: FiltroAlcanceTablero)` en
       `IOrdenRepository` + `OrdenRepository`, reusando `WITH_ESTATUS_Y_TIENDA` y `toListItemDTO`.
       Lista vacía → `[]` sin consultar.
       **Hecho:** test de repositorio que afirma el `where` (`id: { in: ids }`, `deletedAt: null`,
@@ -83,7 +83,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       `include` es literalmente el mismo objeto que usa `list()`. `[P]` con B4.
       → **R2, R11, R19, R40**
 
-- [ ] **B4 · [P] El test que mata el `WHERE` donde vive.** Test de **integración** contra Postgres:
+- [x] **B4 · [P] El test que mata el `WHERE` donde vive.** Test de **integración** contra Postgres:
       una orden borrada y una orden de otra zona **no** vuelven de `findListItemsByIds`, aunque su
       id esté en la lista.
       **Hecho:** el test se demuestra ROJO mutando el `where` (quitar `deletedAt: null`, y quitar el
@@ -91,7 +91,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       test de servicio con dobles **no ve el SQL** —medido cuatro veces en este repo—, así que este
       paso no es opcional. `[P]` con B3. → **R11, R19**
 
-- [ ] **B5 · La composición en el servicio.** `TableroDiaService.detalle`: autorizar → página del
+- [x] **B5 · La composición en el servicio.** `TableroDiaService.detalle`: autorizar → página del
       día → si 0 filas, detalle vacío sin más consultas → `Promise.all([findListItemsByIds,
       contarIntentosEnLote])` → reordenar por los ids de la página, anexar `resultadoDelDia` y
       `asignadoAt`, descartar ids sin fila → **`recortarPorAlcance`** → devolver con `alcance`,
@@ -103,7 +103,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       pierde nada (R46). Depende de T0.3, B1, B3.
       → **R4, R5, R6, R7, R9, R10, R11, R12, R13, R46**
 
-- [ ] **B6 · Cableado y firma del constructor.** `TableroDiaService(repositorio, ordenes, historial,
+- [x] **B6 · Cableado y firma del constructor.** `TableroDiaService(repositorio, ordenes, historial,
       cache = tableroDiaCacheNula())` — `ordenes` e `historial` **obligatorios** (opcionales dejarían
       que alguien los olvidara y el detalle saliera vacío sin ponerse rojo). `construirServicio()` en
       `lib/actions/tablero-dia.ts` los instancia.
@@ -112,7 +112,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       `tablero-dia-cache-aislamiento.guardia`, `tablero-dia-ritmo`, `_doble-tablero-dia.ts`— y
       `pnpm typecheck` verde. Depende de B5. → **R6, R10**
 
-- [ ] **B7 · Los tres casos malos siguen siendo indistinguibles.** Revisar que ningún camino nuevo
+- [x] **B7 · Los tres casos malos siguen siendo indistinguibles.** Revisar que ningún camino nuevo
       pueda distinguirlos: la hidratación no se ejecuta con cero filas, y el `denegado` sigue
       saliendo antes de cualquier consulta.
       **Hecho:** `tests/unit/actions/tablero-dia-detalle-accion.test.ts` y
@@ -120,25 +120,33 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       que las respuestas de los tres casos son **byte a byte** la misma salvo la fecha.
       Depende de B5. → **R31, R32, R33**
 
-- [ ] **B8 · Aislamiento de extremo a extremo.** Ampliar
+- [x] **B8 · Aislamiento de extremo a extremo.** Ampliar
       `tests/integration/tablero-dia-detalle-aislamiento.test.ts`: un actor de zona A que pide el
       detalle de un mensajero con órdenes de A **y** de B recibe sólo las de A, **ya hidratadas**, y
       sin ninguno de los cinco campos restringidos.
-      **Hecho:** el test se demuestra rojo quitando el `filtro` de la llamada de hidratación.
+      **Hecho, CON CORRECCIÓN (2026-08-21):** este criterio **no es alcanzable como estaba
+      escrito**, y se deja dicho en vez de fingirlo. Se ejecutó la mutación —quitar el `filtro`
+      de la hidratación— y el test **siguió verde**, y no por flojo: `listarOrdenesDelDia` ya
+      aplica `fragmentoDeAlcance` en su `WHERE`, así que la consulta del día entrega sólo ids de
+      la zona y hidratar con filtro global devuelve **las mismas filas**. Ese segundo filtro es
+      defensa en profundidad y sólo es observable entrando por la puerta que se salta la primera
+      consulta. **La garantía real vive en `tests/integration/orden-list-items-by-ids.test.ts`**,
+      que llama al método directo con un id de otra zona; ahí la mutación SÍ mata. Verificado por
+      el reviewer leyendo el SQL: la explicación es cierta, no cómoda.
       Depende de B5. → **R11, R13**
 
-- [ ] **B9 · [P] Cuadre con la tarjeta.** `tests/integration/tablero-dia-detalle-cuadre.test.ts`
+- [x] **B9 · [P] Cuadre con la tarjeta.** `tests/integration/tablero-dia-detalle-cuadre.test.ts`
       sigue verde: el `total` del detalle cuadra con `asignadas` de la tarjeta.
       **Hecho:** verde sin tocar su aserción de cuadre. Depende de B5. → **R3, R8**
 
-- [ ] **B10 · [P] Solo lectura.** `tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts`
+- [x] **B10 · [P] Solo lectura.** `tests/unit/tablero-dia/asignado-at-solo-lectura.guardia.test.ts`
       verde: la feature sigue sin escribir. **Hecho:** verde. → **R36**
 
 ---
 
 ## BLOQUE FRONTEND (`frontend_dev`) — arranca con el backend verde
 
-- [ ] **F1 · El módulo de columnas.** Nuevo
+- [x] **F1 · El módulo de columnas.** Nuevo
       `app/(app)/monitoreo/_components/detalle-columnas.ts`: `COLUMNA_RESULTADO_ID`,
       `COLUMNAS_SOLO_ALCANCE_GLOBAL`, `PRIMERAS` y `columnasDetalle(alcance)` que **deriva** de
       `ordenesColumns` (añade la propia, quita las restringidas fuera de `global`, reordena).
@@ -148,7 +156,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       identificador que empiece por `sumar`, ni lee `.rol`.
       → **R20, R22, R23, R24, R27, R45**
 
-- [ ] **F2 · El test de las columnas, derivado y no literal.** Afirma, en los dos alcances, que los
+- [x] **F2 · El test de las columnas, derivado y no literal.** Afirma, en los dos alcances, que los
       ids montados son **exactamente** los calculados desde `ordenesColumns.map(c => c.id)` (más la
       propia, menos las restringidas), que los cinco de `PRIMERAS` van delante y en ese orden, y que
       **`liberada` no está** en ninguno de los dos.
@@ -156,14 +164,14 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       **no** contiene una lista literal de ids —eso sería la aserción-contra-su-propia-fuente que
       este repo ya pagó—. Depende de F1. → **R14, R16, R23, R25, R26, R45**
 
-- [ ] **F3 · El panel monta las columnas.** `DetalleMensajeroPanel.tsx`: fuera la constante
+- [x] **F3 · El panel monta las columnas.** `DetalleMensajeroPanel.tsx`: fuera la constante
       `COLUMNAS` de cuatro, dentro `columnasDetalle(detalle.alcance)`; `rowKey="id"`; sin
       `renderExpanded`, sin `descarga`, sin `filtros`. `Modal` + `DataTable` + `Pagination` siguen
       importándose **en este archivo** (lo exige la cláusula (g) del guardia de primitivas).
       **Hecho:** `tests/unit/tablero-dia/primitivas.guardia.test.ts` verde. Depende de F1.
       → **R20, R21, R29, R30**
 
-- [ ] **F4 · Actualizar `tests/components/DetalleMensajeroPanel.test.tsx`.** Está anclado a las
+- [x] **F4 · Actualizar `tests/components/DetalleMensajeroPanel.test.tsx`.** Está anclado a las
       cuatro columnas y **se va a poner rojo**: no es una sorpresa, es esta tarea.
       Qué cambia: el constructor de fixture `orden()` pasa a producir un `OrdenListItemDTO` completo
       (patrón `makeOrden` de `tests/unit/components/ordenes-columns.test.tsx`); el test «muestra
@@ -177,7 +185,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       **Hecho:** todos los `describe` preexistentes verdes o migrados con su motivo escrito.
       Depende de F3. → **R9, R21, R30, R31, R32, R33, R34**
 
-- [ ] **F5 · La mitad de pantalla del recorte.** Test que monta el detalle con `alcance: "zona"` y un
+- [x] **F5 · La mitad de pantalla del recorte.** Test que monta el detalle con `alcance: "zona"` y un
       DTO **completamente poblado** (flete, comisión, tarifa y contacto de la tienda incluidos, como
       si el servidor se hubiera olvidado de recortar) y afirma que las cabeceras «Flete + IVA»,
       «Fulfillment» y «Comisión + IVA» **no están**, que «Monto a cobrar» **sí**, y que ninguna celda
@@ -185,7 +193,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       **Hecho:** rojo si se quita el filtrado de `COLUMNAS_SOLO_ALCANCE_GLOBAL`. Depende de F3.
       → **R14, R15, R16, R17**
 
-- [ ] **F6 · Ancho y scroll, EN EL NAVEGADOR.** Con el modal abierto y datos reales, a 1280 / 1024 /
+- [x] **F6 · Ancho y scroll, EN EL NAVEGADOR.** Con el modal abierto y datos reales, a 1280 / 1024 /
       830 / 768 px y en las dos densidades: la tabla desborda **dentro** de su caja, aparecen las
       flechas, ninguna cabecera ni celda queda recortada, y el diálogo no gana barra horizontal
       propia. Si falta un `min-w-0`, va en el envoltorio del panel — **nunca** en `Modal` ni en
@@ -194,7 +202,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
       tres mediciones verdes sobre una pantalla con un número recortado), y anotado en
       `progress/impl_260.md`. Depende de F3. → **R28**
 
-- [ ] **F7 · [P] La guardia del dinero alcanza a `/monitoreo`.** Añadir
+- [x] **F7 · [P] La guardia del dinero alcanza a `/monitoreo`.** Añadir
       `app/(app)/monitoreo/_components/detalle-columnas.ts` a `TABLAS_DE_ORDENES` y
       `app/(app)/monitoreo/_components` a `ARBOLES` en
       `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts`.
@@ -206,7 +214,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 
 ## GUARDIA — la que impide volver atrás (R44)
 
-- [ ] **V1 · `tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts`.** Cuatro cláusulas
+- [x] **V1 · `tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts`.** Cuatro cláusulas
       (`design.md §5.3`), atadas por **centinelas** porque las dos mitades hablan vocabularios
       distintos:
       **(a)** `recortarPorAlcance(dto, "zona")` no deja ningún centinela; con `"global"` los deja
@@ -227,30 +235,30 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 
 ## CIERRE
 
-- [ ] **C1 · La reversión de R49, con fecha y motivo.** Anotar en
+- [x] **C1 · La reversión de R49, con fecha y motivo.** Anotar en
       `specs/192-tablero-dia-mensajeros/requirements.md` junto a R49 (sin borrarlo) y sustituir el
       docstring de `COLUMNAS` en `DetalleMensajeroPanel.tsx` por la nota de reversión.
       **Hecho:** las dos anotaciones llevan fecha `2026-08-21` y el motivo, y R49 sigue legible.
       → **R42**
 
-- [ ] **C2 · Techo de superficie.** Test que afirma que las claves de un elemento del detalle son un
+- [x] **C2 · Techo de superficie.** Test que afirma que las claves de un elemento del detalle son un
       **subconjunto** de las de un `OrdenListItemDTO` (más `resultadoDelDia` y `asignadoAt`), nunca
       un superconjunto.
       **Hecho:** rojo si se añade un campo propio al elemento del detalle. → **R18, R43**
 
-- [ ] **C3 · Guardias del árbol, íntegras.** `frontera.guardia`, `primitivas.guardia`,
+- [x] **C3 · Guardias del árbol, íntegras.** `frontera.guardia`, `primitivas.guardia`,
       `buckets-estatus.guardia`, `cache-sin-invalidacion.guardia`,
       `asignado-at-solo-lectura.guardia` y la nueva `recorte-por-alcance.guardia` verdes con los
       archivos nuevos ya en el árbol.
       **Hecho:** las seis verdes. → **R35, R37, R38, R39, R44**
 
-- [ ] **C4 · Gate completo.** `./init.sh` (NO `--rapido`) en verde sobre el árbol final, con el exit
+- [x] **C4 · Gate completo.** `./init.sh` (NO `--rapido`) en verde sobre el árbol final, con el exit
       code escrito dentro del log. Antes de abrir el PR, comparar el SHA medido con `origin/dev`:
       el pre-vuelo caduca.
       **Hecho:** salida real pegada en `progress/impl_260.md`, con nº de archivos y de tests.
       → gate
 
-- [ ] **C5 · Mapa `R<n> → test` en `progress/impl_260.md`.** Los **46** requisitos, cada uno con su
+- [x] **C5 · Mapa `R<n> → test`.** (Vive partido entre `impl_260_backend.md` §7 e `impl_260_frontend.md` §10; el reviewer cruzó los 46 uno a uno y cubren 46/46.) Los **46** requisitos, cada uno con su
       test concreto. Un requisito sin test es hallazgo bloqueante del reviewer.
       **Hecho:** 46/46 mapeados.
 
@@ -287,7 +295,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 | R25 | idem — cada id de `PRIMERAS` existe |
 | R26 | idem — el conjunto se calcula desde `ordenesColumns`, no de una lista literal |
 | R27 | `frontera.guardia` (f) + `detalle-columnas.test.ts` — «—» con resultado nulo |
-| R28 | F6 (navegador, anotado en `progress/impl_260.md`) + `DetalleMensajeroPanel.test.tsx` monta una sola tabla |
+| R28 | F6 (navegador, anotado en `progress/impl_260_frontend.md §R28`) + `DetalleMensajeroPanel.test.tsx` monta una sola tabla |
 | R29 | `tests/components/DetalleMensajeroPanel.test.tsx` — `rowKey="id"` |
 | R30 | idem — sin «Confirmar», con «Cerrar» |
 | R31 | idem — los tres casos malos, mismo texto |
@@ -301,7 +309,7 @@ log (`INIT_EXIT=$?`), que un `echo` posterior lo tapa.
 | R39 | idem (c) |
 | R40 | `tests/unit/services/tablero-dia-detalle-hidratacion.test.ts` — la lista de ids es la de la página, acotada |
 | R41 | `tests/unit/guards/ordenes-columnas-money-safe.guardia.test.ts` (censo ampliado) |
-| R42 | `tests/unit/tablero-dia/reversion-r49.test.ts` — censo de fuente: la nota fechada existe y R49 sigue legible |
+| R42 | `tests/unit/tablero-dia/reversion-r49.guardia.test.ts` — censo de fuente: la nota fechada existe y R49 sigue legible |
 | R43 | `tests/unit/tablero-dia/detalle-contrato.test.ts` — una sola declaración: el `satisfies` de `CAMPOS_SOLO_ALCANCE_GLOBAL` y la asignabilidad del elemento |
 | R44 | `tests/unit/tablero-dia/recorte-por-alcance.guardia.test.ts` (d) + las tres mutaciones ejecutadas en `progress/impl_260.md` |
 | R45 | `tests/unit/components/detalle-columnas.test.ts` — `liberada` no está en ninguno de los dos alcances |
