@@ -9,7 +9,74 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
+## ⏸️ ESPERANDO MERGE — 2026-08-22, 04:30 CR. **EMPIEZA A LEER POR AQUÍ**
+
+`dev` está en `d6dd96b4` y **no se ha movido**: hay **seis PRs abiertos** y nada mergeado. Ese es
+el único bloqueo real de esta tanda.
+
+### Orden de merge, y por qué ese orden
+
+| # | PR | qué lleva | por qué ahí |
+| --- | --- | --- | --- |
+| 1 | **#446** | 🔴 el `access_token` OAuth2 fuera de los logs de producción + guardia de carpeta | independiente |
+| 2 | **#448** | 263 · el comprobante del cierre y la guía que pisaba al destinatario | **desbloquea el frontend de la 264** |
+| 3 | **#450** | 264 · bloque backend (tabla nueva + migración) | no se solapa |
+| 4 | **#447** | spec de la 265 + su ficha | **añade** al final de `feature_list.json` |
+| 5 | **#451** | spec de la 262, con B0.1 ya medida | añade `specs/` nuevo |
+| 6 | **#449** | cierre de la 261 (papeleo + F6 + M1') | **modifica** la ficha 261: va después de los que añaden |
+
+Hay además un **#434** de otra sesión (feature 256) que GitHub no sabe si mergea. No es de esta
+tanda y no se ha tocado.
+
+### Bloqueado, y por qué
+
+- **Frontend de la 264** — espera a que **#448** entre: los dos escriben en `cierre-factura.tsx`.
+- **Implementación de la 262 y de la 265** — las dos están en **puerta humana**. La 265 deja 6
+  preguntas abiertas (las duras: la forma real de `skippedShipments` y el umbral en km); la 262
+  deja 3.
+- **Release a `prod`** — decidida por el humano: **el hotfix del token sale con ella**, no suelto.
+  Cuando los PRs entren, toca gate **completo** sobre el SHA final —el que corrió el reviewer ya no
+  vale, `dev` se habrá movido— y abrir la release.
+
+### Decisiones pendientes del humano
+
+1. Mergear los seis PRs.
+2. **`docs/release.md`**: el repo no tiene lista de release, y por eso mediciones que caducan
+   (R27 de la 261) acaban siendo casillas de un solo uso. Propuesto, no creado: es convención nueva.
+3. **Apagar `RUTA_DEBUG_LOG`** cuando aterrice la 265. Hoy vuelca coordenadas de destinatarios a
+   los logs de Vercel; era un override consciente «para diagnosticar un problema abierto», y ese
+   problema es justo el que la 265 cierra.
+
+### Lo que esta tanda encontró y no estaba buscando
+
+- 🔴 **Un `access_token` OAuth2 imprimiéndose en claro** en los logs de producción desde el
+  2026-08-14, dos líneas debajo del `describirToken()` que existe para no revelarlo. Entró en `dev`
+  y llegó a `prod` sin que nada lo cazara: no rompía ningún test y `eslint` no lo ve.
+- **El optimizador de ruta no leía lo que el proveedor le decía.** Google contestaba en
+  `skippedShipments` / `validationErrors` que no podía servir las paradas, y el código lo traducía a
+  «forma inesperada»: error duro, mensajero sin ruta, cron reintentando y facturando. Causa medida:
+  el origen GPS estaba en Medellín y las paradas en Costa Rica, a ~1.040 km. → ficha **265**.
+- **`geocode_precision` se escribe y no lo lee nadie.** La feature 91 dejó dicho que «el umbral de
+  calidad lo decidirá el primer consumidor»; el primer consumidor llegó y no decidió nada, así que
+  un centroide de distrito entra en la ruta indistinguible de un `ROOFTOP`. → hallazgo H1, sin ficha.
+- **Dos guardias que no podían fallar**, encontradas midiendo y no leyendo: la de la 263 comparaba
+  cajas en vez de tinta (la caja se queda en su track mientras el texto se desborda), y la de la
+  invariante `fecha_reparto`/`asignado_at` **ni siquiera vería** una escritura que sólo toque el día.
+- **Una decisión de diseño del spec de la 264 era inimplementable**: habría metido el cliente de
+  Prisma en el bundle del navegador del mensajero. La cazó una guardia ajena.
+- **Tres sondas mías equivocadas** antes de medir bien el F6 de la 261. Ninguna medía lo que decía
+  medir, y las tres habrían pasado por verificación.
+
+### Verificado contra producción (sólo lectura, MCP)
+
+- **R7 y R20 de la 261, en la realidad**: las dos órdenes reservadas (guías 17496963 y 57998428)
+  llegaron a su día con el mismo estado y el mismo mensajero. La marca caducó sola, sin escrituras.
+- **M1' = 0** y **M1 de la 262 = 0** (esta sin acotar estado). **M2 = 35**, pero ninguna en
+  `por_recoger` ni `en_reparto`: todas en estados que R6 excluye. `D3'` no se re-abre.
+
+---
+
+## 2026-08-21 — tanda anterior (cerrada)
 
 **Cuatro releases a producción en esta sesión, todas verificadas contra la base después de
 desplegar.** Ninguna ficha `in_progress` al cerrar esa tanda; la **258** entró después (bloque de abajo).

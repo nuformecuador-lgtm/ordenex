@@ -3899,3 +3899,33 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - Una guardia **ajena** se puso roja y **no se tocó**: el tipo se movió a un módulo sin imports.
 - Deuda dejada: `components/ui/table.tsx` sigue sin consumidores desde la 258, anotada y con chore
   recomendado (que `DataTable` se apoye en la primitiva).
+
+## 2026-08-22 — 261 · el día de reparto reservado protege del mensajero y de la tienda
+- Reporte del humano probando en **producción**: gestionó desde la cuenta del mensajero una orden
+  que era para el día siguiente. Tres defectos; el tercero **no estaba en el reporte**, lo encontró
+  la medición: **deshacer una gestión borraba la reserva, en silencio**. Medido al minuto —
+  gestionada 22:10, anulada 22:18, y en ese instante `fecha_reparto` pasó de 22 a 21.
+- **Una decisión firmada cayó con evidencia, no con anécdota.** D5 de la 246 («la reserva protege
+  del CRON, no del mensajero») se cerró con la medición «nadie carga la furgoneta después de las
+  18:00»; M3' contra producción dice que **las 22:00 son la hora con más recogidas del día** (9 de
+  43). Dicho entero: buena parte son pruebas del propio humano y 43 en 30 días no es un patrón —
+  pero basta para lo que importa, que la premisa «a esa hora no pasa nada» era falsa.
+- El comentario que justificaba la regla vieja era **bueno** («las dos columnas no pueden contar
+  historias distintas») y **se conserva**: lo que no contemplaba era la reserva a futuro, donde no
+  repara una incoherencia sino que cancela una decisión tomada a propósito. Se **anexa** fechado,
+  no se pisa.
+- La tienda también, por decisión humana: si el problema es registrar un resultado en el día que no
+  es, da igual quién lo registre.
+- Requisitos cubiertos: R1..R33 (revisión **APROBADA**, 33/33). 26 mutaciones, cero supervivientes;
+  el reviewer reprodujo 5 a mano y las 5 dieron el rojo exacto que decía la bitácora.
+- **Corrida completa POST-merge sobre `dev` hecha de verdad** (`d6dd96b4`, 17.268 tests, exit 0):
+  es el hueco que `docs/verification.md` señala y que casi nunca se cierra.
+- **Tres sondas equivocadas antes de la buena en F6** — una capturó `<script>`, otra midió el chip
+  de la 246, otra sembró órdenes sin guía y midió un bloqueo previo. Ninguna medía lo que decía. La
+  lección queda escrita en `impl_261_frontend.md`: una sonda mal escrita fabrica y oculta defectos
+  con la misma facilidad.
+- **R7 y R20 comprobados contra la realidad**: las dos órdenes reservadas llegaron a su día con el
+  mismo estado y el mismo mensajero. La marca caducó sola, sin que ninguna escritura la desactivara.
+- Deuda dejada, dicha y no escondida: el mapa de `tasks.md` prometía para R19 una cláusula de
+  guardia que **no existe** (mapa corregido, cláusula **debida**), y la re-medición de R27 debería
+  ser un paso de **lista de release** — que este repo todavía no tiene.

@@ -35,7 +35,7 @@
   **Hecho:** números pegados. M3' es **la evidencia que sustituye a la anécdota** en la reversión de
   D5 (§8 del design): su resultado se cita en el texto de la reversión.
 
-- [ ] **B0.3 — Re-medir M1 y M2 justo antes de desplegar.** Son fotos y caducan. ⛔ **Mismo bloqueo
+- [x] **B0.3 — Re-medir M1 y M2 justo antes de desplegar.** ✅ **2026-08-22, contra produccion por MCP: `M1' = 0`.** Consulta mas ancha que M1 y M2 juntas (`fecha_reparto > hoy_CR`, sin filtrar por estado): conjunto VACIO. No hay ninguna orden heredada que la regla fuese a bloquear al desplegar. **P1 NO se re-abre**: M1 no crecio, bajo de 2 a 0. El motivo de que sea 0 esta dicho entero y no es «el riesgo no existia»: las dos ordenes que M1 conto el 21 (guias 17496963 y 57998428) **llegaron a su dia** — mismo estado, mismo mensajero, `fecha_reparto` de hoy. Eso es **R7 comprobado contra la realidad**: la marca caduco sola sin que nadie escribiera una fila. Son fotos y caducan. ⛔ **Mismo bloqueo
   que B0.2**: la corre el leader con el MCP, con las consultas ya escritas en
   `progress/impl_261_backend.md`.
   **Hecho:** segunda tanda de números pegada, con su hora. ⚠️ **Si M1 creció respecto a las 2
@@ -275,7 +275,7 @@
   **Hecho:** `tests/components/GestionarDesdeAyudaModal.test.tsx` (**existe**) cubre el caso, leyendo
   el **mismo string** que el servicio.
 
-- [ ] **F6 — Ver la app.** (dep. F5, F7)
+- [x] **F6 — Ver la app.** (dep. F5, F7) ✅ **2026-08-22, Chromium real contra la app local.** Medido y **autocomprobado**; detalle en `progress/impl_261_frontend.md` §F6.
   Playwright manual en preview con una cuenta de mensajero de QA: una orden reservada en «Por
   recoger» (escanear → mensaje), una reservada en «Reparto» (botón gris + aviso), una de hoy (todo
   funciona), y comprobar que **KPIs y mapa no cambiaron** (R10). Y con una cuenta de **tienda**: una
@@ -287,13 +287,13 @@
 
 ## CIERRE
 
-- [ ] **C1 — `./init.sh` COMPLETO en verde.** No hay modo rápido en esta ficha (nombre de dinero).
+- [x] **C1 — `./init.sh` COMPLETO en verde.** ✅ Pre-merge: 1.297 archivos / 17.268 tests, `INIT_EXIT=0`. Y **repetido POST-merge por el reviewer** sobre el commit de merge `d6dd96b4` en worktree aislado, con los mismos numeros: es la corrida que `docs/verification.md` exige despues de cada merge a `dev`, y aqui si esta hecha. No hay modo rápido en esta ficha (nombre de dinero).
   **Hecho:** salida pegada, con `INIT_EXIT=$?` **escrito dentro del log** — un `echo` posterior ya
   tapó aquí un gate rojo haciéndolo pasar por «exit code 0».
-- [ ] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR (otra sesión puede haberlo movido).
-- [ ] **C3 — B0.3 (re-medición) hecha y escrita** antes de desplegar a producción. P1 ya está firmada
+- [x] **C2 — Pre-vuelo contra `origin/dev`** ✅ Hecho antes del PR #444; mergeado en `d6dd96b4` sin que otra sesion moviera `dev` en medio. justo antes del PR (otra sesión puede haberlo movido).
+- [x] **C3 — B0.3 (re-medición) hecha y escrita** ✅ Ver B0.3: `M1' = 0` el 2026-08-22. ⚠️ **PERO ESTA CASILLA TIENE LA FORMA EQUIVOCADA Y HAY QUE DECIRLO**: una medicion que caduca no se cierra marcandola una vez. `M1' = 0` es cierto HOY; en cuanto alguien asigne una orden para manana vuelve a haber heredadas, y el despliegue puede caer en cualquier momento. Lo correcto es que la consulta sea un **paso de la lista de release**, no una casilla de esta ficha. Hoy el repo **no tiene lista de release** donde ponerla: queda propuesto y sin hacer. antes de desplegar a producción. P1 ya está firmada
   («se dejan correr»); lo que la re-medición decide es si **sigue siendo válida**.
-- [ ] **C4 — La ficha 262 registrada** antes de desplegar. Es la contrapartida del riesgo aceptado en
+- [x] **C4 — La ficha 262 registrada** ✅ Verificado en `feature_list.json` de `origin/dev`: id 262, `pending`, y R33 la nombra. antes de desplegar. Es la contrapartida del riesgo aceptado en
   `design.md` §7.2: mientras no exista, un lote mal marcado no se corrige desde ninguna pantalla. La
   registra el leader; aquí sólo se comprueba que **existe** y que **R33 la nombra**.
 
@@ -321,7 +321,7 @@
 | R16 | Las dos columnas, una escritura | B14 (guardia `fecha-reparto-acompana-asignado-at`) · **B12** |
 | R17 | **La reserva futura se conserva** | **B12 caso 1** ⚠️ |
 | R18 | Día pasado o ausente → hoy | **B12 casos 2 y 3** |
-| R19 | Reloj inyectable, no en el repo ni en el motor | B10 `cierre-dia-deshacer-dia-reparto` · B9 (cláusula: el repo no nombra `startOfDayCR`) |
+| R19 | Reloj inyectable, no en el repo ni en el motor | B10 `cierre-dia-deshacer-dia-reparto` (22:30 CR → día 21) · `cierre-dia-repository` (el día entra como PARÁMETRO `::date`, sin reloj dentro del SQL) ⚠️ **corregido el 2026-08-22**: este mapa prometía una cláusula de guardia «el repo no nombra `startOfDayCR`» que **no existe** (`grep` = 0). R19 sí está cubierto por los dos tests citados; la cláusula queda **debida**, no dada por hecha. |
 | R20 | El corte de esa noche sigue sin barrerla | **B12** (cuarta aserción del caso 1) |
 | R21 | El corte no se toca | B14 (`corte-diario-service.test.ts` + repo del corte) |
 | R22 | Sin escrituras nuevas del día | B14 (guardia `fecha-reparto-acompana-asignado-at`, censo ≥ 6) |
