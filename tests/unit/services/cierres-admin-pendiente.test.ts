@@ -343,6 +343,8 @@ describe("R26 — el detalle de un cierre tambien trae su pendiente", () => {
   function repoConDetalle(estado: CierreAdminResumenRow["estado"]): ICierresAdminRepository {
     return fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: row({ cierreId: "c1", estado }),
         gestiones: [],
       })),

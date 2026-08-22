@@ -3860,3 +3860,72 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - Guardias tocadas, ninguna aflojada: `frontera` queda **más** estricta (marca cada consulta por
   posición); `cobertura-tablas` sube conteos exactos sin perder descargas; la de `recharts` sin
   diff.
+
+## 2026-08-21 — 259 · el tablero del día cuenta por día de reparto
+- `/monitoreo` contaba «asignadas hoy» por `asignado_at`. Una orden asignada hoy **para mañana**
+  aparecía hoy y caía en el cubo `sinRecoger` («el mensajero todavía no arrancó con ellas»): la
+  pantalla **acusaba a alguien de ir retrasado por trabajo que aún no era suyo**. Pasa a contarse
+  por día de reparto, alineada con `/ranking`.
+- Requisitos cubiertos: R1..R26 (revisión APROBADA, 26/26).
+- Revierte **D10** (firmada el 2026-08-20) con apéndice fechado en el spec de la 246. La guardia
+  comprueba **las dos direcciones**: que el puntero está **y** que el texto original sigue
+  verbatim — sin esa segunda mitad, «anotar» acaba siendo «reescribir por la puerta de atrás».
+- El predicado **no se inventó**: se copió el de `RankingRepository`, con sus dos ramas disjuntas.
+- **El spec corrigió al leader en lo principal:** la rama de recolección no podía quedarse igual.
+  A las 08:00 mandan a Ana a recoger; a las 14:00 la orden se reasigna a Beto **para mañana** y
+  `mensajero_asignado_id` **se sobrescribe** — la orden reaparecía hoy en la tarjeta de Beto. La
+  acusación volvía por la otra puerta, sobre quien ni fue a recoger.
+- **Dos mutaciones sobreviven y está dicho por qué**, en vez de cobrarse como prueba. El reviewer
+  verificó las dos explicaciones por su cuenta y son ciertas.
+- Cinco literales corregidos, no los tres que el leader listó: censar el árbol ganó a enumerar de
+  memoria, por segunda vez en la misma ficha.
+- ⚠️ **T8.1 (el aviso a quien opera) quedó EXENTA por decisión humana**, marcada `[~]` con fecha:
+  desde el despliegue, lo asignado para mañana desaparece del tablero de hoy **sin aviso previo**.
+
+## 2026-08-21 — 260 · el detalle del tablero muestra la orden completa
+- El modal pasa de 4 columnas propias a montar `ordenesColumns` del listado (20 con «Resultado del
+  día») con su **propio** `DataTable`. **No** se monta `OrdenesListado`: traería acciones por lote,
+  carga masiva y escáner QR a una pantalla de lectura.
+- Requisitos cubiertos: R1..R46 (revisión APROBADA, 46/46).
+- **Hallazgo de seguridad:** `/ordenes` **no recorta dinero por rol, recorta por PUERTA**, y esa
+  puerta cierra el paso al `adminSatelite` — que **sí** entra a `/monitoreo`. Había un rol que
+  habría visto flete y comisión: dinero que la aplicación le niega en su propia pantalla. El
+  recorte por alcance es **columna y dato**; lo recortado no viaja al cliente.
+- **Una guardia que no podía fallar nunca:** los centinelas de dinero eran cadenas y `PriceLabel`
+  las pinta `₡0` igual que un campo recortado, así que la cláusula pasaba con el recorte puesto
+  **y sin él**. Corregidos a números; verificado que ninguna otra cláusula tiene ese defecto.
+- **Un criterio del spec no era alcanzable** (B8) y se dijo en vez de fingirlo; la garantía real
+  vive en el test de integración del método directo. La task afirmaba lo contrario: corregida.
+- Una guardia **ajena** se puso roja y **no se tocó**: el tipo se movió a un módulo sin imports.
+- Deuda dejada: `components/ui/table.tsx` sigue sin consumidores desde la 258, anotada y con chore
+  recomendado (que `DataTable` se apoye en la primitiva).
+
+## 2026-08-22 — 261 · el día de reparto reservado protege del mensajero y de la tienda
+- Reporte del humano probando en **producción**: gestionó desde la cuenta del mensajero una orden
+  que era para el día siguiente. Tres defectos; el tercero **no estaba en el reporte**, lo encontró
+  la medición: **deshacer una gestión borraba la reserva, en silencio**. Medido al minuto —
+  gestionada 22:10, anulada 22:18, y en ese instante `fecha_reparto` pasó de 22 a 21.
+- **Una decisión firmada cayó con evidencia, no con anécdota.** D5 de la 246 («la reserva protege
+  del CRON, no del mensajero») se cerró con la medición «nadie carga la furgoneta después de las
+  18:00»; M3' contra producción dice que **las 22:00 son la hora con más recogidas del día** (9 de
+  43). Dicho entero: buena parte son pruebas del propio humano y 43 en 30 días no es un patrón —
+  pero basta para lo que importa, que la premisa «a esa hora no pasa nada» era falsa.
+- El comentario que justificaba la regla vieja era **bueno** («las dos columnas no pueden contar
+  historias distintas») y **se conserva**: lo que no contemplaba era la reserva a futuro, donde no
+  repara una incoherencia sino que cancela una decisión tomada a propósito. Se **anexa** fechado,
+  no se pisa.
+- La tienda también, por decisión humana: si el problema es registrar un resultado en el día que no
+  es, da igual quién lo registre.
+- Requisitos cubiertos: R1..R33 (revisión **APROBADA**, 33/33). 26 mutaciones, cero supervivientes;
+  el reviewer reprodujo 5 a mano y las 5 dieron el rojo exacto que decía la bitácora.
+- **Corrida completa POST-merge sobre `dev` hecha de verdad** (`d6dd96b4`, 17.268 tests, exit 0):
+  es el hueco que `docs/verification.md` señala y que casi nunca se cierra.
+- **Tres sondas equivocadas antes de la buena en F6** — una capturó `<script>`, otra midió el chip
+  de la 246, otra sembró órdenes sin guía y midió un bloqueo previo. Ninguna medía lo que decía. La
+  lección queda escrita en `impl_261_frontend.md`: una sonda mal escrita fabrica y oculta defectos
+  con la misma facilidad.
+- **R7 y R20 comprobados contra la realidad**: las dos órdenes reservadas llegaron a su día con el
+  mismo estado y el mismo mensajero. La marca caducó sola, sin que ninguna escritura la desactivara.
+- Deuda dejada, dicha y no escondida: el mapa de `tasks.md` prometía para R19 una cláusula de
+  guardia que **no existe** (mapa corregido, cláusula **debida**), y la re-medición de R27 debería
+  ser un paso de **lista de release** — que este repo todavía no tiene.

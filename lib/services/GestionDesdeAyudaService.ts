@@ -15,6 +15,13 @@ import {
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { GestionarDesdeAyudaResult } from "@/lib/types/gestion-desde-ayuda";
 import { estaEnVentanaDeEscritura } from "@/lib/types/ventana-hilo-notas";
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 261 (B16, R15/R32): el texto del bloqueo por reserva sale de la fuente UNICA, no se
+// reescribe aqui — la tienda tiene que leer la misma frase que el mensajero.
+import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
+// Feature 261 (B16, R31): el MISMO helper de la convencion `@db.Date` que usa la via del
+// mensajero. Mismo criterio y mismo dia; `inicioDelDiaCREnUtc` desplazaria el dia seis horas.
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 /**
  * Feature 237 (design §6, T5.3) — LA TIENDA RESUELVE UNA ORDEN DESDE LA PESTAÑA DE AYUDA, y esa
@@ -71,9 +78,15 @@ const MSG_CATALOGO = "Catálogo de estados incompleto; avisá a un administrador
 export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
   constructor(private readonly deps: GestionDesdeAyudaDeps) {}
 
+  /**
+   * FEATURE 261 (B16, R28/R31) — `now` es el reloj inyectable del que sale el dia de Costa Rica
+   * en curso. Con default para que el borde siga llamando sin argumentos; los tests lo pasan,
+   * porque «el bloqueo caduca solo al llegar el dia» solo se puede probar moviendo el reloj.
+   */
   async gestionar(
     input: GestionDesdeAyudaInput,
     actor: Actor,
+    now: Date = new Date(),
   ): Promise<GestionarDesdeAyudaResult> {
     // 1) R19/R22 — LA PUERTA DEL HILO, entera y sin reescribirla: rol con hilo, orden viva y
     //    pertenencia (la tienda dueña o el mensajero asignado). Es la MISMA funcion que usan las
@@ -122,6 +135,37 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
       return { status: "conflict", motivo: MSG_SIN_MENSAJERO };
     }
 
+    // 💰 5-bis) FEATURE 261 (R28/R29/R31/R32) — LA TIENDA TAMPOCO RESUELVE EL DIA QUE NO ES.
+    //
+    //    Decision humana P2 (2026-08-22), y su razonamiento se hace propio aqui: si el problema
+    //    es que se registre un resultado —y se mueva dinero— en un dia que no es, DA IGUAL QUIEN
+    //    LO REGISTRE. La orden llega a `ayuda_tienda` CONSERVANDO su dia de reparto (pedir ayuda
+    //    no lo toca, 235/R6), asi que este es el mismo defecto por otra puerta y con otro actor.
+    //
+    //    POR QUE AQUI Y NO MAS ABAJO: exactamente el motivo que ya escribio el paso 3 —«antes de
+    //    subir nada, para no dejar fotos huerfanas en el bucket por el camino previsible»—. Un
+    //    rechazo previsible pertenece ANTES del upload. Es literalmente R29: sin evidencia en
+    //    Storage, sin fila de gestion, sin transicion y sin fila de historial. La segunda red es
+    //    el `where` del `updateMany` (paso 8, R30), que gana la carrera y compensa las fotos.
+    //
+    //    `conflict` y no `forbidden`: la orden SI es suya; lo que falla es el momento.
+    //
+    //    ⚠️ NO se reutiliza `MisAsignacionesService.gestionar` para esto (design A11): aquel
+    //    metodo existe con cuatro candados que esta via no puede pasar, y abrirle un modo o un
+    //    actor suplantado a un metodo money-critical los deja todos a un `if` de abrirse.
+    const diaEnCurso = startOfDayCR(now);
+    const fechaReparto = acceso.orden.fechaReparto;
+    if (fechaReparto !== null && fechaReparto.getTime() > diaEnCurso.getTime()) {
+      // R32: el motivo lleva el DIA, con palabras, sin siglas ni nombres de columna, y sale de
+      // la MISMA fuente que lee la card del mensajero (R15).
+      return {
+        status: "conflict",
+        motivo: MENSAJES_GESTION_DESDE_AYUDA.reservadaParaOtroDia(
+          fechaRepartoComoTexto(fechaReparto),
+        ),
+      };
+    }
+
     // 6) FALLO CERRADO al resolver el catalogo. Si el seed no tiene alguno de los dos values, la
     //    operacion se rechaza ENTERA sin mover nada: una escritura a medias sobre el estado es
     //    peor que un error visible. Mismo criterio que `rescatarOrdenAyuda` y `CierreDiaService`.
@@ -167,6 +211,10 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
         mensajeroId,
         // R4: la TIENDA, solo para el historial. Quien decidio el rechazo que se le cobra.
         actorUsuarioId: actor.usuarioId,
+        // Feature 261 (R30): el MISMO dia que decidio el paso 5-bis, ahora en el `where` de la
+        // escritura. Si la reserva cambio por el camino, `count === 0` -> `null` -> se compensan
+        // las fotos y se responde `conflict` por el camino que YA existia.
+        diaEnCurso,
         gestion: {
           resultado: input.resultado,
           motivo: input.motivo,
@@ -183,6 +231,13 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
     }
 
     if (gestionId === null) {
+      // Feature 261 (R30): este camino cubre ahora DOS carreras —la orden salio de ayuda, o paso
+      // a estar reservada para un dia posterior— y devuelve el mismo motivo para las dos. Es
+      // deliberado y esta declarado: el repo solo puede decir «0 filas», y escribir un segundo
+      // camino de fallo para distinguirlas obligaria a re-leer la fila DENTRO de la transaccion
+      // para decidir que mentira contar. Las dos son ciertas en lo que importa —la orden ya no
+      // se puede resolver ahora— y el rechazo PREVISIBLE, el que un humano va a ver de verdad,
+      // es el del paso 5-bis, que si nombra el dia.
       await compensarEvidencias(this.deps.storage, paths);
       return { status: "conflict", motivo: MSG_FUERA_DE_AYUDA };
     }
@@ -196,4 +251,15 @@ export const MENSAJES_GESTION_DESDE_AYUDA = {
   fueraDeAyuda: MSG_FUERA_DE_AYUDA,
   sinMensajero: MSG_SIN_MENSAJERO,
   catalogo: MSG_CATALOGO,
+  /**
+   * FEATURE 261 (B16, R15/R32) — el rechazo por reserva. Es una FUNCION y no un `MSG_*` fijo, y
+   * la diferencia importa: R32 exige que la pantalla nombre **el dia desde el que podra**, y un
+   * literal congelado o no lo diria o mentiria (`fecha_reparto` es un `DATE` libre: un `UPDATE` a
+   * mano puede dejar +2, y en esta misma ficha hubo uno en produccion).
+   *
+   * NO se reescribe el texto aqui: es `avisoReservaParaOtroDia` de `lib/utils/dia-reparto-textos`
+   * tal cual, la MISMA frase que lee la card del mensajero. La pantalla y sus tests siguen
+   * leyendo de este objeto (D7); lo que se comparte es la fuente, no una copia.
+   */
+  reservadaParaOtroDia: avisoReservaParaOtroDia,
 } as const;

@@ -87,6 +87,9 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
         tiendaId: true,
         mensajeroAsignadoId: true,
         deletedAt: true,
+        // Feature 261 (B15, R28/R29): el dia de reparto, insumo de la PUERTA A de la via de la
+        // tienda. Viaja crudo; quien decide «reservada» es el service, con su reloj (R31).
+        fechaReparto: true,
         // Feature 235: la ventana depende SOLO de esto. Aqui se leia ademas `ayuda`, la bandera
         // que abria una segunda puerta al adminTienda; se retiro con la columna.
         estatus: { select: { value: true } },
@@ -98,6 +101,7 @@ export class OrdenNotaRepository implements IOrdenNotaRepository {
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
       estatusValue: orden.estatus.value,
       deletedAt: orden.deletedAt,
+      fechaReparto: orden.fechaReparto,
     };
   }
 }

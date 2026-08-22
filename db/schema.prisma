@@ -396,6 +396,8 @@ model OrderStatus {
 
   analyticsDaily AnalyticsDaily[] // feature 123/R33/R36: filas del rollup diario congeladas en este estatus al corte del dia
 
+  cierresSinGestionOrigen CierreSinGestion[] // feature 264/R4: barridos del corte que SALIERON de este estatus
+
   @@map("order_status")
 }
 
@@ -575,6 +577,7 @@ model Orden {
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
+  cierresSinGestion     CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
@@ -1070,12 +1073,23 @@ model CierreDia {
 
   cierreBodegaId String? @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
 
-  mensajero          Usuario           @relation("CierreMensajero", fields: [mensajeroId], references: [id])
-  destinoZona        Zona              @relation(fields: [destinoZonaId], references: [id])
-  resueltoPorUsuario Usuario?          @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
-  cierreBodega       CierreBodega?     @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
+  // Feature 264 (R27/R28/R29) — «NINGUNA» Y «NO LO SABEMOS» SON COSAS DISTINTAS.
+  // `true` = las ordenes sin gestionar de este cierre SI se registraron, sea cuantas sea
+  // (incluido cero: «registrado y ninguna» es una lectura correcta). `false` = este cierre es
+  // ANTERIOR al registro y su lista es IRRECUPERABLE — la aprobacion ya borro el unico rastro
+  // que habia. Sin esta columna, un cierre viejo se pintaria sin seccion y diria «no hubo
+  // ninguna», que es tranquilizador y FALSO. El `DEFAULT true` marca a los cierres nuevos sin
+  // escribir una linea en el camino caliente del corte (lo pone Postgres); la migracion baja a
+  // `false` exactamente los que no se pueden reconstruir (`estado` fuera de los tres abiertos).
+  sinGestionRegistrado Boolean @default(true) @map("sin_gestion_registrado")
+
+  mensajero          Usuario            @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona        Zona               @relation(fields: [destinoZonaId], references: [id])
+  resueltoPorUsuario Usuario?           @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  cierreBodega       CierreBodega?      @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
+  sinGestion         CierreSinGestion[] // feature 264/R1: las ordenes que el corte barrio a `sin_gestionar` al crear este cierre
   liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
 
   @@index([mensajeroId])
@@ -1770,6 +1784,62 @@ model CierreDetail {
   @@unique([cierreId, ordenId]) // R2: el grano. Es tambien el indice de la ruta caliente (los feeds filtran por cierre_id)
   @@index([ordenId]) // trazar en que cierres aparecio una orden
   @@map("cierre_detail")
+}
+
+// Feature 264 (R1/R2/R4/R5/R7/R9/R10/R11): el VINCULO PERSISTIDO entre un cierre y cada orden
+// que el corte diario barrio a `sin_gestionar` al crearlo.
+//
+// EL PORQUE (structural, no cosmetico): el detalle de un cierre se construye ENTERO sobre las
+// gestiones (`gestion_orden.cierre_id` + `cierre_detail`), y una orden barrida por el corte NO
+// TIENE GESTION. Hasta hoy la unica relacion cierre <-> orden barrida era un predicado VIVO
+// (`orden.mensajero_asignado_id = cierre.mensajero_id AND estatus = sin_gestionar`) que la
+// APROBACION destruye: libera la orden a bodega y le borra `mensajero_asignado_id`. Es decir, el
+// cierre que se audita —el aprobado, el que ya movio dinero— mostraba CERO ordenes barridas y lo
+// mostraba igual que un cierre que de verdad no barrio ninguna.
+//
+// NI UNA COLUMNA DE DINERO, y no es una promesa de la capa de arriba: es que no hay nada que
+// sumar. Estas ordenes no tienen gestion, luego no tienen `pago_mensajero`, ni recaudo, ni
+// tarifa. Si algun dia aparece aqui un `Decimal`, es un bug de diseño (lo vigila
+// `tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts`).
+//
+// Grano `(cierre_id, orden_id)` y NO una columna en `orden`: una orden puede ser barrida,
+// liberada, reasignada y barrida otra vez en OTRO cierre; una columna sobrescribiria el vinculo
+// anterior. Misma razon por la que `cierre_detail` es tabla y no columnas.
+model CierreSinGestion {
+  id       String @id @default(uuid())
+  cierreId String @map("cierre_id")
+  ordenId  String @map("orden_id")
+
+  // --- descriptivos CONGELADOS al barrer (R11). Copia, no identidad. ---
+  // Precedente exacto de la feature 69/T18: el detalle de un cierre ya creado se leia navegando
+  // `gestion_orden.orden.*` y el admin veia los valores de HOY, no los del cierre que revisa. No
+  // hay motivo para repetir ese error en la mitad NUEVA de la misma pantalla.
+  numGuia      Int?   @map("num_guia") // SIN @unique: es copia, no identidad
+  numRemision  String @map("num_remision")
+  destinatario String
+  producto     String
+  tiendaNombre String @map("tienda_nombre")
+  zonaNombre   String @map("zona_nombre") // contexto de auditoria del barrido; hoy no se pinta
+
+  // R4: el estatus REAL del que salio esta orden (`en_reparto` | `ayuda_tienda`), tomado de la
+  // vuelta del bucle que la barrio y NUNCA supuesto — es literalmente la razon por la que ese
+  // bucle tiene dos vueltas (feature 235/R27). NULL = no consta (R32/R33): la fila OMITE la pieza
+  // en pantalla, no pinta un guion.
+  estatusOrigenId String? @map("estatus_origen_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE, como `cierre_detail` (69/R10).
+
+  cierre        CierreDia    @relation(fields: [cierreId], references: [id])
+  orden         Orden        @relation(fields: [ordenId], references: [id])
+  // `onDelete: Restrict` NO es el default de Prisma para una relacion OPCIONAL (seria SetNull):
+  // se declara porque la migracion crea la FK con ON DELETE RESTRICT, igual que sus dos hermanas.
+  // Sin esta linea, todo `migrate dev` propondria drop+add de la FK.
+  estatusOrigen OrderStatus? @relation(fields: [estatusOrigenId], references: [id], onDelete: Restrict)
+
+  @@unique([cierreId, ordenId]) // el grano, y el indice de la ruta caliente (se filtra por cierre_id)
+  @@index([ordenId]) // trazar en que cierres se barrio una orden
+  @@map("cierre_sin_gestion")
 }
 
 // Feature 81 (design §2): una API key emitida por un maestro. La key en claro NUNCA

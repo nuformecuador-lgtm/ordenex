@@ -37,6 +37,11 @@ import {
   notificadorNoOp,
   type CierreNotificador,
 } from "@/lib/notificaciones/notificadores";
+// Feature 261 (B6, R19): el dia de reparto que escribe el DESHACER se resuelve AQUI, en el
+// servicio, a partir del `now` inyectable — ya no dentro del repositorio. `startOfDayCR` es el
+// helper de la convencion `@db.Date` de `fecha_reparto`; `inicioDelDiaCREnUtc` es la de las
+// columnas `timestamp` y aqui desplazaria el dia seis horas (ficha 166).
+import { startOfDayCR } from "@/lib/utils/fecha-cr";
 
 // Solo el rol autorizado en el modulo (R1/R2): el mensajero, SIEMPRE acotado a su
 // propio `usuario.id` (el filtro por mensajero vive en el repo, en el WHERE).
@@ -340,7 +345,16 @@ export class CierreDiaService implements ICierreDiaService {
       grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
     }
 
-    return { status: "ok", cierre: found.cierre, grupos };
+    return {
+      status: "ok",
+      cierre: found.cierre,
+      grupos,
+      // Feature 264 (B9/Q1, R30): el MISMO par de campos que el detalle del admin, por el mismo
+      // camino y con el mismo mapeo (ninguno). Es el mismo componente de pantalla: si aqui no
+      // viajaran, el mensajero veria una hoja que le calla justo lo que le bloqueo el cierre.
+      ordenesSinGestion: found.sinGestion,
+      sinGestionRegistrado: found.sinGestionRegistrado, // R27/R28
+    };
   }
 
   /**
@@ -558,7 +572,11 @@ export class CierreDiaService implements ICierreDiaService {
    * Todas devuelven SIN efectos. El orden importa: autz (R8/R9) antes que negocio, y las
    * lecturas mas baratas primero.
    */
-  async deshacerGestion(gestionId: string, actor: Actor): Promise<DeshacerGestionServiceResult> {
+  async deshacerGestion(
+    gestionId: string,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<DeshacerGestionServiceResult> {
     // 1) R8 (F1.4-f): SOLO el rol mensajero, antes de tocar el repo. El admin no tiene ventana
     // para deshacer (la ventana muere al solicitar el cierre, que es cuando el admin lo ve).
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
@@ -658,6 +676,17 @@ export class CierreDiaService implements ICierreDiaService {
       actorUsuarioId: actor.usuarioId, // R11/R20: rastro de quien deshizo
       estatusEsperadoId: gestion.orden.estatusId, // R5: id REAL leido (guardia optimista)
       estatusEnRepartoId,
+      // FEATURE 261 (B6, R16/R19) — UN SOLO RELOJ PARA LAS DOS COLUMNAS. Hasta esta ficha el
+      // instante salia de un `new Date()` dentro del repositorio y el dia de un `startOfDayCR()`
+      // SIN argumento —es decir, el acceso a datos leia el reloj del proceso—, que choca con la
+      // doctrina que la propia 246 escribio (`dia-reparto.ts`: «`now` es un PARAMETRO con
+      // default: el reloj se inyecta en los tests y jamas se lee dentro del calculo») y hacia
+      // imposible probar «deshacer a las 23:59 del 21» sin falsear el reloj global.
+      asignadoAt: now,
+      // `startOfDayCR` es el helper de la convencion `@db.Date`, la misma de `fecha_reparto`.
+      // `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui desplazaria el
+      // dia seis horas — la trampa que cerro la ficha 166.
+      diaEnCurso: startOfDayCR(now),
     });
     if (!ok) return { status: "conflict", motivo: MSG_ORDEN_MOVIDA };
 

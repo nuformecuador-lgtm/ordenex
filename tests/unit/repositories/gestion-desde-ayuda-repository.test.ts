@@ -85,6 +85,13 @@ const EVIDENCIAS = [
   },
 ];
 
+/**
+ * Feature 261 (B17): el DIA DE COSTA RICA EN CURSO que el servicio resuelve y pasa a la
+ * escritura (convencion `@db.Date`). Aqui entra como `Date` —no como texto— porque el `where`
+ * es de Prisma, que conoce el tipo de la columna.
+ */
+const DIA_CR = new Date("2026-08-21T00:00:00.000Z");
+
 /** El caso base: la tienda RECHAZA. Los dos ids de usuario son personas distintas. */
 const INPUT = {
   ordenId: "o1",
@@ -92,6 +99,7 @@ const INPUT = {
   estatusDestinoId: idEstado("rechazada"),
   mensajeroId: "mensajero-1", // 💰 R3: a quien se ATRIBUYE
   actorUsuarioId: "tienda-1", // R4: quien la REGISTRA
+  diaEnCurso: DIA_CR, // feature 261 (R30): la segunda capa del bloqueo por reserva
   gestion: {
     resultado: "rechazada" as const,
     motivo: "el cliente no la quiere",
@@ -119,11 +127,16 @@ beforeEach(async () => {
 /* -------------------------------------------------------------------------- */
 
 describe("crearGestionDesdeAyuda — la guarda va en el WHERE que muta (R24)", () => {
-  it("R24: el `where` del `updateMany` es exactamente `{ id, estatusId: ayuda, deletedAt: null }`", async () => {
+  it("R24 + 261/R30: el `where` del `updateMany` lleva estado, borrado y DIA DE REPARTO", async () => {
     // El literal ES el contrato: cualquier condicion de mas o de menos cambia QUE filas puede tocar
     // la tienda. Si `estatusId` desapareciera (mutacion T8.3), la tienda podria resolver una orden
     // que el mensajero ya recupero o que el corte de la noche ya se llevo — y sobre esa fila hay
     // DOS actores, asi que no es un caso hipotetico.
+    //
+    // FEATURE 261 (B17, R30): + el `OR` del dia. Con un doble esto afirma la FORMA del `where`,
+    // no que Postgres seleccione las filas que decimos: eso lo prueba
+    // `tests/integration/db/gestion-desde-ayuda-dia-reserva.int.test.ts`, y es esa la que mata
+    // la mutacion M-o.
     const { repo, ordenUpdateMany } = buildTxRepo();
     await repo.crearGestionDesdeAyuda(INPUT);
 
@@ -135,6 +148,10 @@ describe("crearGestionDesdeAyuda — la guarda va en el WHERE que muta (R24)", (
       id: "o1",
       estatusId: idEstado("ayuda_tienda"),
       deletedAt: null,
+      // Predicado COPIADO del corte, no reinventado: `NULL` entra por la primera rama (una orden
+      // sin dia se resuelve igual que siempre) y es `lte` —no `lt`— porque una orden reservada
+      // para HOY es de hoy.
+      OR: [{ fechaReparto: null }, { fechaReparto: { lte: DIA_CR } }],
     });
   });
 

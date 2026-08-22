@@ -121,3 +121,40 @@ export function confirmacionDiaReparto(dia: DiaReparto, fechas: FechasDiaReparto
  * sobre medir color en el navegador. Un chip de otro tono no dice QUÉ es la orden; este texto sí.
  */
 export const ETIQUETA_PARA_MANANA = "Para mañana";
+
+/**
+ * FEATURE 261 (B2, R11/R13/R15/R32) — LA FRASE ÚNICA del bloqueo por reserva. La leen la card
+ * del mensajero, el rechazo del escáner, el botón deshabilitado de «Reparto» y el modal de la
+ * tienda; y el SERVIDOR devuelve esta misma frase en el `motivo` de sus `conflict`.
+ *
+ * POR QUÉ LLEVA LA FECHA Y NO LA PALABRA «mañana», que sería más corta: el alcance del producto
+ * tope a «mañana» (246/D2), pero `fecha_reparto` es un `DATE` libre y **un `UPDATE` a mano puede
+ * dejar +2**. No es hipotético: en esta misma ficha hubo uno, autorizado, en producción el
+ * 2026-08-21. Si el texto dijera «mañana», la app mentiría justo en el caso en que un humano
+ * tocó la fila. Con la fecha, la frase es cierta siempre.
+ *
+ * SIN SIGLAS Y SIN NOMBRES DE COLUMNA, la misma regla con la que el repo retiró «SLA» del
+ * frontend: no dice «reserva», ni «corte», ni `fecha_reparto`, ni una fecha en `YYYY-MM-DD`.
+ *
+ * Y SIN RELOJ (R14): reutiliza `fechaLegible`, que es puro y no construye ningún `Date`. Este
+ * módulo sigue sin importar `Date` ni `Intl`.
+ *
+ * @param fechaISO fecha calendario `YYYY-MM-DD` YA resuelta por el servidor, o `null`/`undefined`
+ *   si no hay ninguna que mostrar (la frase sigue siendo cierta, sólo pierde precisión).
+ */
+export function avisoReservaParaOtroDia(fechaISO: string | null | undefined): string {
+  const fecha = fechaISO ? fechaLegible(fechaISO) : "";
+  return fecha
+    ? `Esta orden es para el reparto del ${fecha}. Ese día podrás recogerla y gestionarla.`
+    : "Esta orden es para un día de reparto posterior. Podrás recogerla y gestionarla ese día.";
+}
+
+/**
+ * R15 — el motivo que devuelve EL SERVIDOR cuando rechaza por reserva, en los rechazos que no
+ * llevan la fecha consigo (escoger y gestionar del mensajero, y el detalle de recoger, que viaja
+ * además con `codigo: "reservada_para_otro_dia"` para que la UI pinte la variante CON fecha).
+ *
+ * Es la MISMA función, invocada sin fecha: una sola fuente, no un segundo literal que pueda
+ * divergir del anterior a la primera corrección de estilo.
+ */
+export const RESERVA_MOTIVO_SERVIDOR = avisoReservaParaOtroDia(null);

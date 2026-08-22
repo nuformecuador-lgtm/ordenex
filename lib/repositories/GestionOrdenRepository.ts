@@ -19,6 +19,9 @@ import {
   encolarOptimizacionInmediata,
 } from "@/lib/services/jobs/optimizacion-ruta-encolado";
 import { loadRouteOptimizationConfig } from "@/lib/config/route-optimization";
+// Feature 261 (B5): el dia de reparto entra al SQL crudo como texto `YYYY-MM-DD` con `::date`.
+// NO se importa `startOfDayCR`: este repositorio NO resuelve ningun dia, lo RECIBE resuelto.
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 
 // Feature 61: estado terminal de entrega para el KPI "entregadas" del portal.
 const ESTATUS_ENTREGADA = "entregada";
@@ -466,6 +469,9 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
         mensajeroAsignadoId: true,
         montoCobrar: true,
         zonaId: true, // feature 47/R5: insumo del ruteo a bodega responsable en un reintento
+        // Feature 261 (B3, R1/R2/R3): insumo de la guarda de reserva de las TRES operaciones del
+        // mensajero. Viaja crudo; quien decide «reservada» es el service, con su reloj.
+        fechaReparto: true,
         estatus: { select: { value: true } },
       },
     });
@@ -476,6 +482,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
       mensajeroAsignadoId: r.mensajeroAsignadoId,
       montoCobrar: r.montoCobrar ? r.montoCobrar.toNumber() : null,
       zonaId: r.zonaId,
+      fechaReparto: r.fechaReparto,
     }));
   }
 
@@ -523,12 +530,20 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     return result.count > 0;
   }
 
-  /** R15/R16: guardia de propiedad + origen en el WHERE; devuelve filas afectadas. */
+  /**
+   * R15/R16: guardia de propiedad + origen en el WHERE; devuelve filas afectadas.
+   *
+   * FEATURE 261 (B5, R1/R4/R5/R7/R8) — CUARTA GUARDIA: el DIA DE REPARTO. Una orden reservada
+   * para un dia POSTERIOR al de Costa Rica en curso no se recoge, y el rechazo vive AQUI —en la
+   * sentencia que muta— y no solo en el service: una peticion que no venga del portal se rechaza
+   * igual (R5), y no hay ventana entre comprobar y escribir.
+   */
   async recogerLote(
     ordenIds: string[],
     mensajeroId: string,
     origenEstatusId: string,
     destinoEstatusId: string,
+    diaEnCurso: Date,
   ): Promise<number> {
     if (ordenIds.length === 0) return 0;
     // Feature 49/#8 (R7/R8/R16): UPDATE guardado por propiedad + origen, con `RETURNING id`
@@ -537,7 +552,19 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
     // aparece en el RETURNING, no deja rastro). El actor es el propio mensajero (`mensajeroId`
     // ya es `actor.usuarioId`); origen = `origenEstatusId` (fijado por la guarda). `updated_at`
     // se fija a mano (el raw no dispara el @updatedAt de Prisma). Devuelve el count de filas.
+    // Feature 261 (B5): el dia entra como TEXTO `YYYY-MM-DD` con `::date` EXPLICITO, no como
+    // `Date`. El porque esta escrito en `dia-reparto.ts` y no es teorico: el driver `pg`
+    // serializa un `Date` de JS como `timestamptz` y Postgres lo convierte a `date` con el
+    // `TimeZone` DE LA SESION — o sea, el dia dependeria de la configuracion del servidor de
+    // base de datos. `'2026-08-21'::date` es el 21 en cualquier sesion.
+    const diaTexto = fechaRepartoComoTexto(diaEnCurso);
     return this.prisma.$transaction(async (tx) => {
+      // Feature 261 (R1/R8): el predicado del dia es COPIADO del corte, no reinventado — es
+      // literalmente el `OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }]` de
+      // `CorteDiarioRepository.findMensajerosConPendientes` y de `CierreDiaRepository.crearCierre`.
+      // Dos formas distintas de la misma pregunta acaban midiendo cosas distintas; ya paso aqui.
+      // `IS NULL` entra por la primera rama y se recoge igual que siempre (R8), y es `<=` y no
+      // `<` porque una orden reservada para HOY es de hoy: se recoge.
       const rows = await tx.$queryRaw<{ id: string }[]>`
         UPDATE "orden"
         SET "estatus_id" = ${destinoEstatusId},
@@ -546,6 +573,7 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           AND "mensajero_asignado_id" = ${mensajeroId}
           AND "estatus_id" = ${origenEstatusId}
           AND "deleted_at" IS NULL
+          AND ("fecha_reparto" IS NULL OR "fecha_reparto" <= ${diaTexto}::date)
         RETURNING "id"`;
       await appendCambioEstado(
         tx,
@@ -815,12 +843,24 @@ export class GestionOrdenRepository implements IGestionOrdenRepository {
           id: input.ordenId,
           estatusId: input.estatusAyudaId, // guarda de carrera (mensajero / corte) e idempotencia
           deletedAt: null,
+          // FEATURE 261 (B17, R30) — LA SEGUNDA CAPA DEL BLOQUEO POR RESERVA. La primera es el
+          // paso 5-bis del service, que rechaza ANTES de subir fotos (R29); esta es la que gana
+          // la carrera: si la reserva cambia entre aquella comprobacion y esta escritura, la
+          // orden NO transiciona. Predicado COPIADO del corte, no reinventado
+          // (`CorteDiarioRepository` / `crearCierre`): `NULL` entra por la primera rama y se
+          // resuelve igual que siempre, y `lte` —no `lt`— porque una orden reservada para HOY es
+          // de hoy.
+          OR: [{ fechaReparto: null }, { fechaReparto: { lte: input.diaEnCurso } }],
         },
         data: { estatusId: input.estatusDestinoId },
       });
       // R25/R28: la orden ya salio de ayuda -> ni gestion, ni evidencias, ni historial. Y con esto
       // la idempotencia del doble envio sale por construccion, sin un segundo mecanismo que
       // pudiera divergir de este.
+      //
+      // Feature 261 (R30): este MISMO `null` cubre ahora tambien «la orden paso a estar reservada
+      // para un dia posterior». No hay camino de fallo nuevo: el service ya compensa las
+      // evidencias subidas y responde `conflict` — solo cambia el motivo que devuelve.
       if (result.count === 0) return null;
 
       // 2/3) R2/R3/R9 — la gestion y sus N evidencias, por el helper COMPARTIDO con el camino del

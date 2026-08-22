@@ -36,6 +36,9 @@ import {
   type ModoGestionDesdeAyuda,
 } from "@/app/(app)/novedades/_components/GestionarDesdeAyudaModal";
 import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
+// Feature 261 (F7, R32): los mensajes del SERVICIO, para afirmar que la frase que sube al padre es
+// la MISMA que el servidor emite. El literal de cada caso sigue escrito a mano.
+import { MENSAJES_GESTION_DESDE_AYUDA } from "@/lib/services/GestionDesdeAyudaService";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
@@ -505,6 +508,37 @@ describe("237/R25 — un `conflict` sube al padre TAL CUAL, sin traducirlo a éx
         status: "conflict",
         motivo: "Esta orden ya no está esperando tu respuesta.",
       }),
+    );
+  });
+
+  // FEATURE 261 (F7, R32) — EL SEGUNDO RECHAZO QUE VIAJA POR ESTE MISMO CABLE: la orden reservada
+  // para un día de reparto posterior. Decisión humana P2 (2026-08-22): si el problema es que se
+  // registre un resultado en un día que no es, da igual quién lo registre.
+  //
+  // ⚠️ EL CONTROL NO SE DESHABILITA — decisión firmada (261/design §5.4, alternativa A13): la
+  // tienda está en un escritorio y el rechazo es instantáneo; el mensajero está en la calle con el
+  // paquete y por eso a él sí se le apaga el botón de antemano. Aquí se ofrece y se explica.
+  it("261/R32: la reserva se rechaza con SU DÍA, y el confirmar nunca estuvo apagado por eso", async () => {
+    const user = userEvent.setup();
+    // El literal, a mano. La aserción de al lado es la que prueba que ES el del servidor: la
+    // frase sale de `dia-reparto-textos` y el servicio la re-exporta, no la copia (R15).
+    const AVISO_22 =
+      "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.";
+    expect(MENSAJES_GESTION_DESDE_AYUDA.reservadaParaOtroDia("2026-08-22")).toBe(AVISO_22);
+
+    gestionarMock.mockResolvedValue({ status: "conflict", motivo: AVISO_22 });
+    const onResuelto = montar("rechazar");
+    await subirFotos(user, 1);
+    escribirMotivo("El cliente ya no quiere el pedido");
+
+    // La asimetría, fijada donde vive: el botón se OFRECE. Si un día alguien lo apagara «ya que
+    // estamos», este caso se pone rojo y obliga a reabrir la decisión en vez de deslizarla.
+    expect(confirmar("rechazar")).toBeEnabled();
+
+    await user.click(confirmar("rechazar"));
+
+    await waitFor(() =>
+      expect(onResuelto).toHaveBeenCalledWith({ status: "conflict", motivo: AVISO_22 }),
     );
   });
 });

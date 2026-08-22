@@ -34,6 +34,9 @@ function gestionRow(overrides: Partial<OrdenGestionRow> = {}): OrdenGestionRow {
     mensajeroAsignadoId: "m1",
     montoCobrar: 8000,
     zonaId: null,
+    // Feature 261 (B1): `fechaReparto` es OBLIGATORIO en `OrdenGestionRow` (sin `?`) porque es
+    // el insumo de la guarda de reserva. `null` = sin reserva, que es el caso por defecto.
+    fechaReparto: null,
     ...overrides,
   };
 }

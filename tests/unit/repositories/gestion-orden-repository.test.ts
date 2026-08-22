@@ -308,6 +308,12 @@ function colaFake() {
   };
 }
 
+/**
+ * Feature 261 (B5): el DIA DE COSTA RICA EN CURSO que el servicio resuelve y pasa a la
+ * escritura, en la convencion `@db.Date` (medianoche UTC de la fecha calendario CR).
+ */
+const DIA_CR = new Date("2026-07-20T00:00:00.000Z");
+
 describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   // Feature 49/#8: recogerLote pasa a `$queryRaw ... RETURNING "id"` en un `$transaction`;
   // el count = rows.length y el append cubre EXACTAMENTE los ids retornados (R8).
@@ -324,7 +330,13 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
   it("guardia propiedad + origen en el SQL; devuelve filas afectadas (rows.length)", async () => {
     const { repo, $queryRaw } = buildRecogerRepo([{ id: "o1" }, { id: "o2" }]);
 
-    const n = await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_reparto"));
+    const n = await repo.recogerLote(
+      ["o1", "o2"],
+      "m1",
+      idEstado("por_recoger"),
+      idEstado("en_reparto"),
+      DIA_CR,
+    );
 
     expect(n).toBe(2);
     const call = $queryRaw.mock.calls[0] as unknown[];
@@ -340,12 +352,39 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
     expect(values).toContain(idEstado("en_reparto")); // destino en_reparto
   });
 
+  // FEATURE 261 (B5, R1/R8) — LA CUARTA GUARDIA. Ojo con lo que este caso PUEDE y NO PUEDE
+  // demostrar: con un doble, el `$queryRaw` no ejecuta nada, asi que esto afirma la FORMA del
+  // SQL y el valor del parametro, no que Postgres seleccione las filas que decimos. Eso se
+  // prueba contra la base real en `tests/integration/db/recoger-lote-dia-reserva.int.test.ts`
+  // — y es esa la que mata las mutaciones M-d y M-e, no esta.
+  it("261/R1: el `WHERE` lleva el dia de reparto, y el dia entra como TEXTO con `::date`", async () => {
+    const { repo, $queryRaw } = buildRecogerRepo([{ id: "o1" }]);
+
+    await repo.recogerLote(["o1"], "m1", idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
+
+    const call = $queryRaw.mock.calls[0] as unknown[];
+    const strings = (call[0] as string[]).join(" ");
+    const values = call.slice(1);
+    // El predicado COPIADO del corte: `(IS NULL OR <= dia)`. Una orden sin dia se recoge (R8).
+    expect(strings).toMatch(/"fecha_reparto" IS NULL OR "fecha_reparto" <=/);
+    expect(strings).toMatch(/::date/);
+    // El dia viaja como `YYYY-MM-DD`, NO como `Date`: un `Date` lo serializa el driver `pg` como
+    // `timestamptz` y Postgres lo convierte a `date` con el `TimeZone` DE LA SESION.
+    expect(values).toContain("2026-07-20");
+    expect(values.some((v) => v instanceof Date)).toBe(false);
+    // Y ninguna aritmetica de zona horaria dentro de la sentencia: el dia lo decide el servidor
+    // de aplicacion y entra como parametro.
+    expect(strings).not.toMatch(/NOW\(\)\s*::\s*date/i);
+    expect(strings).not.toMatch(/CURRENT_DATE/i);
+    expect(strings).not.toMatch(/AT TIME ZONE/i);
+  });
+
   // Feature 49/#8 (R16/R8): 1 historial por orden recogida (actor = el mensajero); una
   // que perdio la guarda no aparece en el RETURNING -> no deja rastro.
   it("R16/R8: registra historial (recoleccion) solo de los ids retornados", async () => {
     const { repo, createMany } = buildRecogerRepo([{ id: "o1" }]); // solo 1 de 2 gano la guarda
 
-    await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_reparto"));
+    await repo.recogerLote(["o1", "o2"], "m1", idEstado("por_recoger"), idEstado("en_reparto"), DIA_CR);
 
     const arg = (createMany.mock.calls[0] as unknown[])[0] as { data: unknown[] };
     expect(arg.data).toEqual([
@@ -363,7 +402,7 @@ describe("GestionOrdenRepository.recogerLote (R15 · feature 49/#8)", () => {
 
   it("lista vacia -> no abre transaccion y devuelve 0", async () => {
     const { repo, $transaction } = buildRecogerRepo([]);
-    expect(await repo.recogerLote([], "m1", "a", "b")).toBe(0);
+    expect(await repo.recogerLote([], "m1", "a", "b", DIA_CR)).toBe(0);
     expect($transaction).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,10 @@ import { habilitarNovedad } from "@/lib/actions/habilitar-novedad";
 import { registrarIntentoContactoOrden } from "@/lib/actions/orden-ayuda";
 import { gestionarDesdeAyuda } from "@/lib/actions/gestion-desde-ayuda";
 import { rechazarNovedad, reprogramarNovedad } from "@/lib/actions/resolver-novedad";
+// Feature 261 (F7, R32): el objeto de mensajes del SERVICIO. Se importa para afirmar que la frase
+// que la pantalla pinta es la MISMA que el servidor emite (una regla, un texto), nunca para
+// comparar el texto consigo mismo: el literal de cada caso va escrito a mano.
+import { MENSAJES_GESTION_DESDE_AYUDA } from "@/lib/services/GestionDesdeAyudaService";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { NovedadDTO } from "@/lib/types/novedad";
 
@@ -1883,6 +1887,57 @@ describe("NovedadesModule — 237: resolver desde la pestaña de ayuda", () => {
     // concreto aquí sería inventarlo. Y como no cambió nada, releer la página sería ruido.
     expect(listarAyudaMock).not.toHaveBeenCalled();
     expect(successMock).not.toHaveBeenCalled();
+  });
+
+  // ===============================================================================================
+  // FEATURE 261 (F7, R32) — LA TIENDA TAMPOCO PUEDE RESOLVER EL DÍA QUE NO ES.
+  // ===============================================================================================
+  //
+  // Decisión humana P2 (2026-08-22): *si el problema es que se registre un resultado en un día que
+  // no es, da igual quién lo registre*. El servidor bloquea esta vía en DOS capas (R28-R31) y
+  // devuelve `conflict` con la MISMA frase que lee el mensajero, nombrando el día.
+  //
+  // ⚠️ AQUÍ EL CONTROL **NO** SE DESHABILITA, y es una decisión firmada (design §5.4, A13), no un
+  // olvido: el mensajero está en la calle con el paquete en la mano —enterarse al intentarlo le
+  // cuesta un viaje— y la tienda está en un escritorio, donde el rechazo es un clic y la respuesta
+  // inmediata. Deshabilitarlo exigiría meter el día en `NovedadDTO` y derivarlo con un reloj en el
+  // servicio de novedades, para una población que se midió en 2 órdenes. Este caso fija esa
+  // asimetría para que nadie la «arregle» sin reabrir la decisión.
+  //
+  // El literal va escrito A MANO; que sea EL MISMO que emite el servidor lo comprueba la aserción
+  // contra `MENSAJES_GESTION_DESDE_AYUDA`, que es de donde sale la frase de verdad.
+  it("261/R32: la reserva se rechaza con palabras y con SU DÍA, y el botón NO estaba apagado", async () => {
+    const AVISO_22 =
+      "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.";
+    // La frase del servidor y la que se pinta son la MISMA, y no por coincidencia: la fuente es
+    // una (261/R15). Si alguien reescribiera una de las dos, esta línea lo delata.
+    expect(MENSAJES_GESTION_DESDE_AYUDA.reservadaParaOtroDia("2026-08-22")).toBe(AVISO_22);
+
+    gestionarDesdeAyudaMock.mockResolvedValue({ status: "conflict", motivo: AVISO_22 });
+    listarAyudaMock.mockResolvedValue({
+      status: "ok",
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    });
+    const user = userEvent.setup();
+    montarAyuda();
+
+    // La asimetría, medida donde vive: el control está OFRECIDO, no apagado.
+    const boton = screen.getByRole("button", { name: "Rechazar la orden de Ana Cliente" });
+    expect(boton).toBeEnabled();
+
+    const dialog = await abrir(user, "Rechazar");
+    await completarYEnviar(user, dialog, "Rechazar");
+
+    await waitFor(() => expect(warningMock).toHaveBeenCalledWith(AVISO_22));
+    // Ni éxito ni error opaco: no se creó ninguna gestión, así que la pantalla no puede afirmar
+    // que resolvió — y el motivo que da es el REAL, no «la orden ya no está esperando».
+    expect(successMock).not.toHaveBeenCalled();
+    expect(warningMock).not.toHaveBeenCalledWith(
+      "Esta orden ya no está esperando tu respuesta.",
+    );
   });
 
   it("la ventana se cierra tras el desenlace, sea cual sea", async () => {

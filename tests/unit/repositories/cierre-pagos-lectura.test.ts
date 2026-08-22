@@ -246,10 +246,14 @@ describe("R21 — camino 2 (admin): `CierresAdminRepository.findCierreByIdEnAlca
           motivoRechazo: null,
           mensajero: { nombre: "Ana" },
           destinoZona: { nombre: "Cartago" },
+          sinGestionRegistrado: true, // feature 264 (R27): la marca por cierre
         }),
       },
       gestionOrden: { findMany: vi.fn().mockResolvedValue([filaAdmin()]) },
       cierreDetail: { findMany: vi.fn().mockResolvedValue([filaSnapshot()]) },
+      // Feature 264 (B4): la tercera consulta del detalle. Vacia: este cierre no barrio nada, y
+      // esta suite mide el DESGLOSE de pagos, no la lista.
+      cierreSinGestion: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: vi.fn(),
     };
   }

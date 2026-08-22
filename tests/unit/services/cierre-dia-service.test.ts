@@ -23,6 +23,13 @@ import { esGestionDeLaTienda } from "@/lib/utils/gestion-de-la-tienda-flag";
 // R9,R10,R11,R12,R15,R16,R17.
 
 const MENSAJERO: Actor = { usuarioId: "m1", rol: "mensajero" };
+
+/**
+ * FEATURE 261 (B6, R19) — el reloj que se INYECTA al deshacer. 04:30Z del 22 de agosto son las
+ * 22:30 CR del 21: la hora esta elegida para que el dia UTC y el dia de Costa Rica NO coincidan,
+ * que es el unico caso en el que se nota si alguien deriva el dia con el helper equivocado.
+ */
+const DESHACER_NOW = new Date("2026-08-22T04:30:00.000Z");
 const OTRO_ROL: Actor = { usuarioId: "u1", rol: "adminSatelite" };
 
 const ZONA_MENSAJERO = "z-cartago";
@@ -307,6 +314,8 @@ describe("verCierrePasado — detalle de un cierre propio (solo lectura)", () =>
   it("devuelve la cabecera + las gestiones agrupadas, con el pago SNAPSHOT (no re-derivado)", async () => {
     const repo = fakeRepo({
       findCierrePropioConGestiones: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: CIERRE_PASADO,
         gestiones: [
           // El snapshot congelado dice 4.00 aunque la tarifa de HOY pague 5.00 (TARIFA_DEFECTO):
@@ -331,7 +340,7 @@ describe("verCierrePasado — detalle de un cierre propio (solo lectura)", () =>
   it("firma las evidencias y, si el storage falla, sirve el detalle SIN ellas", async () => {
     const gestiones = [pendiente({ gestionId: "g1", evidenciaStoragePath: "o1/foto.jpg" })];
     const repo = fakeRepo({
-      findCierrePropioConGestiones: vi.fn(async () => ({ cierre: CIERRE_PASADO, gestiones })),
+      findCierrePropioConGestiones: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre: CIERRE_PASADO, gestiones })),
     });
 
     const okSigner = fakeSignedUrls();
@@ -1276,7 +1285,10 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
     });
     const { service, ordenRepo } = newService({ repo });
 
-    const r = await service.deshacerGestion("g1", MENSAJERO);
+    // FEATURE 261 (B6/B10, R19): el reloj se INYECTA. 22:30 CR del 21 = 04:30Z del 22, a
+    // proposito: el dia UTC y el dia CR NO coinciden, asi que el `diaEnCurso` que el servicio
+    // calcula solo puede salir «2026-08-21» si usa el helper correcto.
+    const r = await service.deshacerGestion("g1", MENSAJERO, DESHACER_NOW);
 
     expect(r).toEqual({ status: "ok", ordenId: "o1" });
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto"); // R18
@@ -1287,6 +1299,10 @@ describe("Feature 67 · deshacerGestion — transicion y efectos (R18/R19/R29/R3
       actorUsuarioId: "m1", // R11/R20: rastro de quien deshizo
       estatusEsperadoId: "s-bodega", // R5: id REAL leido (guardia optimista de la escritura)
       estatusEnRepartoId: "s-reparto", // R18
+      // 261/R16/R19: los DOS salen del MISMO `now`. Si el instante saliera del reloj de
+      // Postgres y el dia del de la aplicacion, podrian caer a distinto lado de la medianoche.
+      asignadoAt: DESHACER_NOW,
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
     });
   });
 
@@ -1728,7 +1744,7 @@ describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () =
     });
     const { service, ordenRepo } = newService({ repo });
 
-    await service.deshacerGestion("g1", MENSAJERO);
+    await service.deshacerGestion("g1", MENSAJERO, DESHACER_NOW);
 
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("en_reparto");
     expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledWith({
@@ -1738,6 +1754,8 @@ describe("Feature 158 · deshacerGestion de un `incidente` (R14/R15, Q-D)", () =
       actorUsuarioId: "m1",
       estatusEsperadoId: "s-incidente", // guardia optimista sobre el estado REAL leido
       estatusEnRepartoId: "s-reparto",
+      asignadoAt: DESHACER_NOW, // feature 261 (R19): reloj inyectado
+      diaEnCurso: new Date("2026-08-21T00:00:00.000Z"),
     });
   });
 
@@ -2212,5 +2230,118 @@ describe("235 · las dos rutas exentas de la precondicion (T4.2, R24)", () => {
 
     expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
     expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
+  });
+});
+
+// ==============================================================================================
+// FEATURE 264 (B9/Q1, R30) — EL DETALLE PROPIO DEL MENSAJERO TRAE LA MISMA LISTA QUE EL DEL ADMIN.
+//
+// `CierreFacturaDetalle` lo renderizan DOS modulos: el del admin y el del propio mensajero. Siendo
+// el MISMO componente, la seccion aparece en los dos (R30) — que pintara en uno y callara en otro
+// es el arreglo a medias que se corrigio en la 263. Aqui se cubre el lado de los DATOS: si el
+// servicio del mensajero no emitiera estos dos campos, la pantalla no tendria con que pintarla y
+// el arreglo quedaria a medias otra vez, esta vez sin que ningun typecheck lo dijera.
+//
+// Nada de dinero cruza por aqui: la lista no tiene ni un campo de importe, asi que la regla de
+// audiencia de la 38/40 (§7.2, «el mensajero no ve la plata de la empresa») no aplica. Son SUS
+// ordenes, las que le bloquearon el cierre.
+// ==============================================================================================
+
+describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegistrado`", () => {
+  const CIERRE_DEL_MENSAJERO = {
+    cierreId: "c1",
+    estado: "vencido" as const,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: "z1",
+    totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+    totalPagoMensajero: "0.00",
+    totalIngresoBodegaRechazos: "0.00",
+    solicitadoAt: "2026-08-20T06:00:00.000Z",
+    resueltoAt: null,
+    motivoRechazo: null,
+  };
+
+  const BARRIDA = {
+    ordenId: "o-barrida",
+    numGuia: 91,
+    numRemision: "REM-91",
+    destinatario: "Dora",
+    producto: "Caja",
+    tiendaNombre: "Tienda W",
+    zonaNombre: "Cartago",
+    estatusOrigen: "ayuda_tienda" as const,
+  };
+
+  function repoCon(sinGestion: (typeof BARRIDA)[], sinGestionRegistrado = true) {
+    return fakeRepo({
+      findCierrePropioConGestiones: vi.fn(async () => ({
+        cierre: CIERRE_DEL_MENSAJERO,
+        gestiones: [],
+        sinGestion,
+        sinGestionRegistrado,
+      })),
+    });
+  }
+
+  it("R30: el detalle propio trae la lista del cierre, con sus ocho campos", async () => {
+    const { service } = newService({ repo: repoCon([BARRIDA]) });
+
+    const r = await service.verCierrePasado("c1", MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.ordenesSinGestion).toEqual([BARRIDA]);
+    expect(r.sinGestionRegistrado).toBe(true);
+  });
+
+  it("R30/R7: pide SOLO el cierre que se abrio, y con el mensajero de la SESION", async () => {
+    // El acotamiento no sale de la peticion: el `mensajeroId` lo pone el servicio desde el actor,
+    // y la lista cuelga del `cierre_id` que el repo ya cruzo con el en el WHERE.
+    const repo = repoCon([BARRIDA]);
+    const { service } = newService({ repo });
+
+    await service.verCierrePasado("c1", MENSAJERO);
+
+    expect(repo.findCierrePropioConGestiones).toHaveBeenCalledWith("c1", "m1");
+    expect(repo.findCierrePropioConGestiones).toHaveBeenCalledTimes(1);
+  });
+
+  it("R30: un cierre AJENO sigue cayendo en `no_encontrada`, sin lista ni marca", async () => {
+    const repo = fakeRepo(); // el doble devuelve `null` por defecto
+    const { service } = newService({ repo });
+
+    const r = await service.verCierrePasado("c-de-otro", MENSAJERO);
+
+    // Indistinguible de un id inexistente: ni un campo de mas por el que deducir que existe.
+    expect(r).toEqual({ status: "no_encontrada" });
+    expect(Object.keys(r)).toEqual(["status"]);
+  });
+
+  it("R27/R28: la marca viaja tal cual — `[]` con `false` NO es «no hubo ninguna»", async () => {
+    const { service } = newService({ repo: repoCon([], false) });
+
+    const r = await service.verCierrePasado("c1", MENSAJERO);
+
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.ordenesSinGestion).toEqual([]);
+    expect(r.sinGestionRegistrado).toBe(false);
+  });
+
+  it("R19/R20: la lista no mueve ni un total ni entra en ningun grupo del mensajero", async () => {
+    // Caso EMPAREJADO: mismo cierre, con tres barridas y sin ninguna. Los grupos y los totales
+    // salen identicos; lo unico que cambia es la lista.
+    const conLista = await newService({
+      repo: repoCon([BARRIDA, { ...BARRIDA, ordenId: "b" }, { ...BARRIDA, ordenId: "c" }]),
+    }).service.verCierrePasado("c1", MENSAJERO);
+    const sinLista = await newService({ repo: repoCon([]) }).service.verCierrePasado(
+      "c1",
+      MENSAJERO,
+    );
+    if (conLista.status !== "ok" || sinLista.status !== "ok") throw new Error("esperaba ok");
+
+    expect(conLista.grupos).toEqual(sinLista.grupos);
+    expect(conLista.cierre).toEqual(sinLista.cierre);
+    // Contrapunto: la lista SI llego (si no, las dos igualdades de arriba serian triviales).
+    expect(conLista.ordenesSinGestion).toHaveLength(3);
+    expect(sinLista.ordenesSinGestion).toHaveLength(0);
   });
 });

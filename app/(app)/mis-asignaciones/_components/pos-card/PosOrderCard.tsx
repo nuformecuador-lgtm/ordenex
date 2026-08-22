@@ -15,7 +15,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
-import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
+import {
+  avisoReservaParaOtroDia,
+  ETIQUETA_PARA_MANANA,
+} from "@/lib/utils/dia-reparto-textos";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
@@ -197,7 +200,15 @@ export function PosOrderCard({
             {/* Feature 246 (T5.2, R22). La marca va TAMBIÉN aquí, y no sólo en las dos cards que
                 el portal monta hoy: las tres son PARALELAS, no variantes, y una card que no
                 dijera «Para mañana» dejaría de distinguir la orden reservada en cuanto alguien
-                la montara. Que hoy no esté montada no la hace correcta. */}
+                la montara. Que hoy no esté montada no la hace correcta.
+                ⏳ FEATURE 261 (2026-08-21, F4) — LA REGLA CAMBIÓ y este comentario con ella. La
+                decisión D5 de la 246 —la que dejaba la reserva como defensa sólo frente al corte
+                nocturno— quedó REVERTIDA: una orden reservada para un día posterior ya no se
+                puede recoger, ni escoger, ni gestionar hasta ese día, y el bloqueo real vive en
+                el servidor. R23 sigue en pie: la marca no esconde la orden y la card se monta
+                entera — lo que se restringe es la ACCIÓN, no la visibilidad (R9). Por eso debajo
+                va el aviso en palabras: un control gris sin explicación es un misterio.
+                Ver `specs/261-dia-reparto-protege`. */}
             {orden.esParaManana ? (
               <Badge variant="info" className="w-fit">
                 {ETIQUETA_PARA_MANANA}
@@ -209,6 +220,17 @@ export function PosOrderCard({
               </Badge>
             ) : null}
           </div>
+        ) : null}
+
+        {/* Feature 261 (F2, R11): el badge dice QUÉ es la orden; esta línea dice POR QUÉ todavía
+            no se puede trabajar y DESDE QUÉ DÍA se podrá. El literal NO se escribe aquí: sale de
+            la fuente única (`avisoReservaParaOtroDia`, R15), la misma frase que devuelve el
+            servidor cuando rechaza y la misma que lee la tienda. La fecha viaja YA RESUELTA por
+            el servidor en `fechaRepartoISO` (R14): aquí no se construye ningún `Date`. */}
+        {orden.esParaManana ? (
+          <p role="note" className="text-xs font-semibold text-muted-foreground">
+            {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
+          </p>
         ) : null}
 
         {verNavegacion ? <PosNavBlock orden={orden} /> : null}

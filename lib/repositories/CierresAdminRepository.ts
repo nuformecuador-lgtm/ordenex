@@ -11,7 +11,10 @@ import type {
   ResolverCierreInput,
   ResolverCierreResult,
 } from "@/lib/interfaces/repositories/ICierresAdminRepository";
-import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
+import type {
+  CierreGestionPendienteRow,
+  CierreSinGestionRow,
+} from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { IWalletMovimientoRepository } from "@/lib/interfaces/repositories/IWalletMovimientoRepository";
 import type { IWalletFeedService } from "@/lib/interfaces/services/IWalletFeedService";
 import type { IWalletTiendaMovimientoRepository } from "@/lib/interfaces/repositories/IWalletTiendaMovimientoRepository";
@@ -55,6 +58,13 @@ import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 import { computeTotales } from "@/lib/utils/cierre-totales";
+// Feature 264 (B4): la proyeccion y el ORDEN de la lista de ordenes sin gestionar, declarados
+// una sola vez y compartidos con el detalle propio del mensajero (misma pantalla, mismo dato).
+import {
+  ORDEN_SIN_GESTION,
+  SIN_GESTION_SELECT,
+  toSinGestionRow,
+} from "@/lib/utils/cierre-sin-gestion";
 
 // Estados de ORIGEN que la resolucion NORMAL (aprobar/rechazar) puede transicionar (R12).
 // Feature 111/R15 (Q1-B): se RETIRA `vencido` (revierte parcialmente la 41 R19). El approve/
@@ -106,7 +116,15 @@ const CAJA_COD_FEED: ICajaCodFeedService = new CajaCodFeedService();
 // ampliarla es una decisión que se ve en el diff.
 type CierresAdminPrismaClient = Pick<
   PrismaClient,
-  "cierreDia" | "gestionOrden" | "cierreDetail" | "zona" | "usuario" | "$transaction"
+  | "cierreDia"
+  | "gestionOrden"
+  | "cierreDetail"
+  // Feature 264 (B4): SOLO LECTURA. La escritura del vinculo vive en la tx del corte
+  // (`CierreDiaRepository.crearCierre`); aqui unicamente se lee para pintar el detalle.
+  | "cierreSinGestion"
+  | "zona"
+  | "usuario"
+  | "$transaction"
 >;
 
 // Feature 69/T18 (R15) — proyeccion del detalle del cierre YA CREADO: los DESCRIPTIVOS
@@ -1007,10 +1025,18 @@ export class CierresAdminRepository implements ICierresAdminRepository {
   async findCierreByIdEnAlcance(
     cierreId: string,
     alcance: Alcance,
-  ): Promise<{ cierre: CierreAdminResumenRow; gestiones: CierreGestionPendienteRow[] } | null> {
+  ): Promise<{
+    cierre: CierreAdminResumenRow;
+    gestiones: CierreGestionPendienteRow[];
+    sinGestion: CierreSinGestionRow[];
+    sinGestionRegistrado: boolean;
+  } | null> {
     const cierre = await this.prisma.cierreDia.findFirst({
       where: { id: cierreId, ...alcanceWhere(alcance) }, // R13: guardia de alcance en el WHERE
-      select: CIERRE_RESUMEN_SELECT,
+      // Feature 264 (R27/R28): la marca se pide SOLO aqui, no en `CIERRE_RESUMEN_SELECT`. Los
+      // otros cinco usos de esa proyeccion son LISTADOS, que no pintan la seccion: ensancharla
+      // les cobraria una columna por fila a cambio de nada.
+      select: { ...CIERRE_RESUMEN_SELECT, sinGestionRegistrado: true },
     });
     if (cierre === null) return null; // R13: no existe o de otra bodega/zona (no se distingue)
 
@@ -1019,7 +1045,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
     // admin veia los valores de HOY, no los del cierre que esta revisando.
     // R19 sale de aqui gratis: una orden con `deleted_at` sigue mostrandose, y ahora por
     // diseño y no por el accidente de que `WITH_DETALLE` no filtraba `deletedAt`.
-    const [gestiones, detalle] = await Promise.all([
+    const [gestiones, detalle, sinGestion] = await Promise.all([
       this.prisma.gestionOrden.findMany({
         where: { cierreId }, // R6: gestiones vinculadas a ESTE cierre
         orderBy: { createdAt: "desc" },
@@ -1029,10 +1055,34 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         where: { cierreId },
         select: DETALLE_ADMIN_SELECT,
       }),
+      // FEATURE 264 (B4, R7/R12) — LAS ORDENES QUE EL CORTE BARRIO AL CREAR ESTE CIERRE.
+      //
+      // Tercera consulta del MISMO `Promise.all`, no una tercera ida a la base en serie: el
+      // detalle ya paga dos y esta viaja con ellas.
+      //
+      // R7 va en el `where`, NO en un filtro en memoria: es la unica forma de que las barridas de
+      // OTRO cierre del mismo mensajero —o de otro mensajero— no puedan colarse. Este repo ya
+      // midio cuatro veces que una mutacion de un `where` sobrevive en verde a los tests de
+      // servicio, que usan dobles y no ven el SQL; por eso existe
+      // `tests/integration/db/cierre-sin-gestion-sql-real.test.ts`.
+      //
+      // EL ALCANCE (R8) NO SE REPITE, y no es un olvido: el `findFirst` de arriba ya devolvio
+      // `null` y corto antes de llegar aqui si el cierre no casa. Es el mismo camino por el que
+      // hoy se protegen las gestiones.
+      this.prisma.cierreSinGestion.findMany({
+        where: { cierreId },
+        orderBy: ORDEN_SIN_GESTION, // R12: determinista, con los `null` de guia en sitio estable
+        select: SIN_GESTION_SELECT, // sin `createdAt`: no se pinta (design §2.1)
+      }),
     ]);
     const byOrden = new Map(detalle.map((d) => [d.ordenId, d]));
     return {
       cierre: toResumenRow(cierre),
+      // R11: lo congelado, tal cual. Ni un `JOIN` con la orden VIVA, que es el error que la
+      // feature 69/T18 ya pago una vez en esta misma pantalla.
+      sinGestion: sinGestion.map(toSinGestionRow),
+      // R27/R28: viaja SIEMPRE junto a la lista. `[]` con `false` no es «no hubo ninguna».
+      sinGestionRegistrado: cierre.sinGestionRegistrado,
       // Grano: N gestiones de una orden comparten su UNICA fila congelada.
       // Sin fallback (R14/decision (a)): si falta la fila, es un error DURO, no un silencio
       // que muestre datos vivos disfrazados de congelados.

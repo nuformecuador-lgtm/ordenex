@@ -46,6 +46,9 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
     mensajeroAsignadoId: "u-mensajero",
     estatusValue: "ayuda_tienda",
     deletedAt: null,
+    // Feature 261 (B15): `fechaReparto` es OBLIGATORIO en `OrdenParaHilo` (insumo de la puerta
+    // A de la via de la tienda). `null` = sin reserva, el caso por defecto.
+    fechaReparto: null,
     ...over,
   };
 }

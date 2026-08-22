@@ -1,6 +1,7 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 import type {
   CierrePasadoDTO,
   CierreTotales,
@@ -17,6 +18,33 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 // orden ya resuelto (R3/R4). `montoRecibido` en STRING (money-safe, R9), null salvo
 // entregada. `evidenciaStoragePath` es el path CRUDO del bucket privado; el service
 // lo FIRMA antes de exponerlo (R5).
+/**
+ * Feature 264 (R9/R10) — UNA ORDEN QUE EL CORTE DIARIO BARRIO A `sin_gestionar` al crear el
+ * cierre, leida de `cierre_sin_gestion`.
+ *
+ * NO es un resultado de gestion: es la AUSENCIA de uno. Por eso NO lleva —ni puede llevar— monto
+ * cobrado, monto recibido, metodo de pago, pago al mensajero, ingreso de Ordenex, ingreso de
+ * bodega, indemnizacion, evidencia ni resultado (R10). Si algun dia aparece uno de esos campos
+ * aqui, es un bug de diseño y no una mejora: la garantia de que esta lista no mueve un total
+ * (R19/R20/R22) es que no hay nada que sumar.
+ *
+ * Todos los descriptivos son los CONGELADOS al barrer (R11), no los que la orden tenga hoy.
+ * Vive en este archivo —y no en el del admin— porque lo devuelven los DOS repositorios: el
+ * detalle del admin y el detalle propio del mensajero comparten componente de pantalla, asi que
+ * tienen que compartir tambien la forma del dato.
+ */
+export interface CierreSinGestionRow {
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  producto: string;
+  tiendaNombre: string;
+  zonaNombre: string;
+  /** `en_reparto` | `ayuda_tienda`; `null` SOLO si no consta (R4/R32/R33). */
+  estatusOrigen: OrderStatusValue | null;
+}
+
 export interface CierreGestionPendienteRow {
   gestionId: string;
   ordenId: string;
@@ -221,6 +249,24 @@ export interface AnularGestionInput {
   actorUsuarioId: string; // R11/R20: quien deshace (rastro + actor del historial)
   estatusEsperadoId: string; // R5: estado en el que la orden DEBE seguir estando
   estatusEnRepartoId: string; // R18: destino
+  /**
+   * FEATURE 261 (B6/B7, R16/R19) — el INSTANTE de la reasignacion, resuelto por el SERVICIO.
+   *
+   * Va como parametro y NO como `NOW()` del motor a proposito: si el instante saliera del reloj
+   * de Postgres y el dia (`diaEnCurso`) del reloj de la aplicacion, las dos columnas podrian
+   * caer a distinto lado de la medianoche de Costa Rica — la clase exacta de
+   * segunda-definicion-del-dia que este repo persigue. Los dos salen del MISMO `now`.
+   */
+  asignadoAt: Date;
+  /**
+   * FEATURE 261 (B6/B7, R17/R18/R19) — el DIA DE COSTA RICA EN CURSO (convencion `@db.Date`:
+   * medianoche UTC de la fecha calendario CR), resuelto por el SERVICIO con `startOfDayCR(now)`.
+   *
+   * NO se calcula dentro del repositorio —que es lo que hacia hasta la 261, leyendo el reloj del
+   * proceso— ni se deriva del reloj del motor. Es el reloj inyectable de R19: sin el, «deshacer a
+   * las 23:59 del 21» no se puede probar sin falsear el reloj global.
+   */
+  diaEnCurso: Date;
 }
 
 /** Feature 146 (R24): proyeccion minima del cierre `solicitado` para componer su aviso. */
@@ -321,7 +367,18 @@ export interface ICierreDiaRepository {
   findCierrePropioConGestiones(
     cierreId: string,
     mensajeroId: string,
-  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null>;
+  ): Promise<{
+    cierre: CierrePasadoDTO;
+    gestiones: CierreGestionPendienteRow[];
+    /**
+     * Feature 264 (B9/R7/R30) — las ordenes que el corte barrio al crear ESTE cierre. Cuelgan de
+     * `cierre_id`, que el `findFirst` de arriba ya acoto por `mensajero_id` en el WHERE: heredan
+     * ese alcance y NO necesitan guardia propia ni un filtro en memoria.
+     */
+    sinGestion: CierreSinGestionRow[];
+    /** R27/R28: `false` = cierre ANTERIOR al registro; `[]` con `false` NO es «no hubo ninguna». */
+    sinGestionRegistrado: boolean;
+  } | null>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres del
    * mensajero + el TOTAL del conjunto.
@@ -359,6 +416,11 @@ export interface ICierreDiaRepository {
    * Ambas escrituras van GUARDADAS en su WHERE (concurrencia-segura): si la gestion dejo de ser
    * deshacible o la orden se movio entre la lectura y la escritura, afecta 0 filas -> rollback
    * -> `false` SIN efectos parciales (el service lo traduce a `conflict`). `true` = deshecha.
+   *
+   * FEATURE 261 (B7, R16/R17/R18) — el paso (2) escribe `fecha_reparto` EN LA MISMA sentencia
+   * que `asignado_at` (la invariante 246/R10 se conserva entera), pero ya no la baja siempre a
+   * hoy: **una reserva a FUTURO se conserva**. La regla vive en un `CASE` dentro del `SET`, asi
+   * que decide sobre la fila y no sobre una lectura previa.
    */
   anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean>;
 }
