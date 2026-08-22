@@ -345,7 +345,16 @@ export class CierreDiaService implements ICierreDiaService {
       grupos[g.resultado].push(toDetalleDTO(g, urlByPath));
     }
 
-    return { status: "ok", cierre: found.cierre, grupos };
+    return {
+      status: "ok",
+      cierre: found.cierre,
+      grupos,
+      // Feature 264 (B9/Q1, R30): el MISMO par de campos que el detalle del admin, por el mismo
+      // camino y con el mismo mapeo (ninguno). Es el mismo componente de pantalla: si aqui no
+      // viajaran, el mensajero veria una hoja que le calla justo lo que le bloqueo el cierre.
+      ordenesSinGestion: found.sinGestion,
+      sinGestionRegistrado: found.sinGestionRegistrado, // R27/R28
+    };
   }
 
   /**

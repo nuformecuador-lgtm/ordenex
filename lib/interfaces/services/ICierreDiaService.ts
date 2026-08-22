@@ -2,6 +2,7 @@ import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { CierreEstado, CierreDestinoTipo } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
 
@@ -260,11 +261,58 @@ export type ListarCierreDiaServiceResult =
  * re-derivan de la tarifa de hoy) y la indemnizacion sigue sin viajar (design §7.2: no es
  * plata suya; la consulta ni la selecciona).
  */
+/**
+ * Feature 264 (R9/R10) — UNA ORDEN QUE EL CORTE DIARIO BARRIO A `sin_gestionar` al crear un
+ * cierre.
+ *
+ * NO es un resultado de gestion: no tiene gestion, y por eso NO tiene NI UN campo de dinero. Ni
+ * monto cobrado, ni monto recibido, ni metodo de pago, ni pago al mensajero, ni ingreso de
+ * Ordenex, ni ingreso de bodega, ni indemnizacion, ni evidencia, ni resultado (R10). Si algun dia
+ * aparece uno aqui, es un bug de diseño y no una mejora: R19/R20/R22 dicen que estas ordenes no
+ * mueven un solo total, y la unica forma de que eso sea IMPOSIBLE en vez de VIGILADO es que no
+ * haya campo donde meter un importe. Lo vigila
+ * `tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts`.
+ *
+ * Los descriptivos son los CONGELADOS al barrer (R11), no los que la orden tenga hoy.
+ *
+ * VIVE AQUI Y NO EN EL CONTRATO DEL ADMIN, aunque el design lo situara alli. Declararlo en
+ * `ICierresAdminService.ts` obligaba a que ESTE archivo lo importara, y esa arista nueva metia
+ * `lib/types/cierres-admin.ts` y `lib/types/wallet.ts` —que importan `Prisma` como VALOR— en el
+ * grafo que recorre el panel del mensajero: el bundle del navegador se llevaba el cliente de
+ * Prisma entero. Lo cazo `tests/unit/guards/pagos-captura.guardia.test.ts` (R19 de la 212), y por
+ * eso la dependencia va en el sentido que ya existia: el contrato del admin depende de este, no
+ * al reves. Desde alli se RE-EXPORTA, asi que la ruta que nombra el design sigue resolviendo.
+ */
+export interface CierreOrdenSinGestion {
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  producto: string;
+  tiendaNombre: string;
+  zonaNombre: string;
+  /** `en_reparto` | `ayuda_tienda`; `null` SOLO si no consta (R4/R32/R33). */
+  estatusOrigen: OrderStatusValue | null;
+}
+
 export type VerCierrePasadoServiceResult =
   | {
       status: "ok";
       cierre: CierrePasadoDTO;
       grupos: CierreGrupos; // por resultado (mismo reuso que la vista en vivo)
+      /**
+       * Feature 264 (Q1/R30) — EL MISMO PAR DE CAMPOS QUE EL DETALLE DEL ADMIN, porque es EL MISMO
+       * COMPONENTE de pantalla (`CierreFacturaDetalle`, renderizado por los dos modulos). Que
+       * pintara la seccion en una superficie y la callara en la otra es el arreglo a medias que se
+       * corrigio en la 263.
+       *
+       * Nada de dinero cruza por aqui —la lista no tiene ni un campo de importe—, asi que la regla
+       * de audiencia de la 38/40 (§7.2: «el mensajero no ve la plata de la empresa») no aplica:
+       * son SUS ordenes, las que le bloquearon el cierre.
+       */
+      ordenesSinGestion: CierreOrdenSinGestion[];
+      /** R27/R28: `false` = cierre ANTERIOR al registro. `[]` con `false` NO es «no hubo ninguna». */
+      sinGestionRegistrado: boolean;
     }
   | { status: "forbidden" } // rol != mensajero
   | { status: "no_encontrada" }; // id inexistente o de otro mensajero (no se distinguen)

@@ -120,6 +120,9 @@ function cierreResumenRow(overrides: Record<string, unknown> = {}) {
     motivoRechazo: null,
     mensajero: { nombre: "Ana Mensajera" },
     destinoZona: { nombre: "Central" },
+    // Feature 264 (R27): la marca por cierre. `true` = sus ordenes sin gestionar SI se
+    // registraron (sean cuantas sean, incluido cero).
+    sinGestionRegistrado: true,
     ...overrides,
   };
 }
@@ -134,6 +137,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     gestionOrden: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
     cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
+    // Feature 264 (B4): la TERCERA consulta del detalle — las ordenes que el corte barrio al
+    // crear el cierre. Vacio por defecto (el cierre normal no barrio ninguna).
+    cierreSinGestion: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 173/T B.2: al aprobar, el feed del contra-entrega LEE el ledger por tienda para
     // saber cuanto se le acredito a las tiendas en ESE cierre. En esta suite el repositorio
     // del ledger es un doble que no escribe nada, asi que el ledger esta VACIO — y devolver
@@ -1304,5 +1310,146 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
 
     expect(r).toBe("conflict");
     expect(prisma.orden.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// ==============================================================================================
+// FEATURE 264 (B4, R7/R9/R11/R12/R27) — EL DETALLE DEL ADMIN TRAE LAS ORDENES SIN GESTIONAR.
+//
+// Lo que este bloque puede demostrar y lo que NO. Puede demostrar la FORMA del retorno, que el
+// `where` y el `orderBy` que se emiten son los que decimos, y que el alcance corta antes. NO
+// puede demostrar que ese `where` seleccione de verdad las filas correctas: eso es semantica de
+// Postgres y un doble es una re-implementacion mia de ella. Ese trabajo lo hace
+// `tests/integration/db/cierre-sin-gestion-sql-real.test.ts`, contra la base, porque este repo ya
+// midio cuatro veces que una mutacion de un `where` sobrevive en verde por aqui arriba.
+// ==============================================================================================
+
+describe("264/B4 — findCierreByIdEnAlcance devuelve las ordenes sin gestionar del cierre", () => {
+  /** La fila CRUDA tal como la proyecta `SIN_GESTION_SELECT` (con la relacion del estatus). */
+  function sinGestionRow(overrides: Record<string, unknown> = {}) {
+    return {
+      ordenId: "o-barrida",
+      numGuia: 77,
+      numRemision: "REM-77",
+      destinatario: "Beto",
+      producto: "Sobre",
+      tiendaNombre: "Tienda Y",
+      zonaNombre: "Heredia",
+      estatusOrigen: { value: "ayuda_tienda" },
+      ...overrides,
+    };
+  }
+
+  function prismaConLista(filas: Record<string, unknown>[], cierre = cierreResumenRow()) {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findFirst.mockResolvedValue(cierre);
+    prisma.gestionOrden.findMany.mockResolvedValue([]);
+    (prisma.cierreSinGestion.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(filas);
+    return prisma;
+  }
+
+  it("R7/R12: consulta por `cierre_id` en el WHERE y con un `orderBy` explicito", async () => {
+    const prisma = prismaConLista([sinGestionRow()]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    const arg = (prisma.cierreSinGestion.findMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      where: unknown;
+      orderBy: unknown;
+      select: Record<string, unknown>;
+    };
+    // R7: el acotamiento va en el WHERE. Un filtro en memoria dejaria que las barridas de OTRO
+    // cierre del mismo mensajero viajaran hasta el servicio antes de descartarse.
+    expect(arg.where).toEqual({ cierreId: "c1" });
+    // R12: orden estable y determinista entre dos lecturas del MISMO cierre.
+    expect(arg.orderBy).toEqual([{ numGuia: "asc" }, { numRemision: "asc" }]);
+    // `created_at` NO se proyecta: en las filas del backfill valdria la fecha de la migracion, y
+    // un dato que miente en el 100 % de las filas viejas es peor que un dato ausente.
+    expect(arg.select).not.toHaveProperty("createdAt");
+  });
+
+  it("R9: la lista viaja con los ocho campos y el estatus de origen ya traducido", async () => {
+    const prisma = prismaConLista([sinGestionRow()]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.sinGestion).toEqual([
+      {
+        ordenId: "o-barrida",
+        numGuia: 77,
+        numRemision: "REM-77",
+        destinatario: "Beto",
+        producto: "Sobre",
+        tiendaNombre: "Tienda Y",
+        zonaNombre: "Heredia",
+        estatusOrigen: "ayuda_tienda",
+      },
+    ]);
+  });
+
+  it("R10: ni un campo de dinero en las filas que salen del repositorio", async () => {
+    const prisma = prismaConLista([sinGestionRow()]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    const claves = Object.keys(r?.sinGestion[0] ?? {}).join(" ").toLowerCase();
+    for (const palabra of [
+      "monto",
+      "pago",
+      "cobro",
+      "ingreso",
+      "tarifa",
+      "comision",
+      "evidencia",
+      "resultado",
+    ]) {
+      expect(claves).not.toContain(palabra);
+    }
+  });
+
+  it("R9/R32: sin guia y sin estatus de origen viajan como `null`, no se omiten ni se inventan", async () => {
+    const prisma = prismaConLista([sinGestionRow({ numGuia: null, estatusOrigen: null })]);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    expect(r?.sinGestion).toHaveLength(1); // NO se descarta la fila
+    expect(r?.sinGestion[0].numGuia).toBeNull();
+    expect(r?.sinGestion[0].estatusOrigen).toBeNull();
+  });
+
+  it("R27: emite `sinGestionRegistrado` tal cual lo tiene el cierre (aqui, `false`)", async () => {
+    const prisma = prismaConLista([], cierreResumenRow({ sinGestionRegistrado: false }));
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO);
+
+    // `[]` + `false` NO es «no hubo ninguna»: es «no lo sabemos». Los dos viajan juntos.
+    expect(r?.sinGestion).toEqual([]);
+    expect(r?.sinGestionRegistrado).toBe(false);
+    // Contrapunto obligatorio: con la marca en `true` el mismo `[]` significa otra cosa.
+    const otro = buildPrisma();
+    otro.cierreDia.findFirst.mockResolvedValue(cierreResumenRow());
+    otro.gestionOrden.findMany.mockResolvedValue([]);
+    const { repo: repo2 } = makeRepo(otro as unknown as Record<string, unknown>);
+    expect((await repo2.findCierreByIdEnAlcance("c1", ALCANCE_MAESTRO))?.sinGestionRegistrado).toBe(
+      true,
+    );
+  });
+
+  it("R8: fuera de alcance corta ANTES de consultar la lista (no se distingue de inexistente)", async () => {
+    const prisma = prismaConLista([sinGestionRow()]);
+    prisma.cierreDia.findFirst.mockResolvedValue(null);
+    const { repo } = makeRepo(prisma as unknown as Record<string, unknown>);
+
+    const r = await repo.findCierreByIdEnAlcance("c-ajeno", ALCANCE_SAT);
+
+    expect(r).toBeNull();
+    // La guardia de alcance NO se repite en la consulta de la lista, y no hace falta: el
+    // `findFirst` ya devolvio `null` y el `Promise.all` ni se lanza.
+    expect(prisma.cierreSinGestion.findMany).not.toHaveBeenCalled();
   });
 });

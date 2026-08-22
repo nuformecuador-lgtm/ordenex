@@ -492,6 +492,8 @@ describe("CierreDiaModule", () => {
   it("el histórico ofrece 'Ver' y abre el comprobante del cierre con sus órdenes", async () => {
     const user = userEvent.setup();
     verCierrePasadoMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       cierre: CIERRE_PASADO,
       grupos: {

@@ -370,6 +370,8 @@ describe("CierresAdminPage — Feature 172 [P3]/R6: quién recibe la oferta de p
     const cola = paginaInicial([CIERRE]);
     pendientesPaginadoMock.mockResolvedValue({ status: "ok", page: 1, ...cola });
     verDetalleMock.mockResolvedValue({
+      ordenesSinGestion: [],
+      sinGestionRegistrado: true,
       status: "ok",
       cierre: CIERRE,
       // Sin incidentes: aprobar no pasa por el sub-modal de la 158 (R36).

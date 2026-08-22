@@ -372,6 +372,8 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
   it("suma el ingreso por concepto y deriva la ganancia = bruto - pago al mensajero", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
         gestiones: [
           gestionRow({
@@ -426,6 +428,8 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
   it("la ganancia es negativa si el cierre no factura pero igual paga al mensajero", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalPagoMensajero: "1500.00" }),
         // Una reprogramación no aporta a ningún concepto.
         gestiones: [gestionRow({ gestionId: "a", resultado: "reprogramada" })],
@@ -444,6 +448,8 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
   it("R6/R9: agrupa las gestiones por resultado con montos string escala 2", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", montoRecibido: "30.00", metodoPago: "SINPE" }),
@@ -474,6 +480,8 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
   it("R7: firma la evidencia en lote y expone SOLO la URL firmada, nunca el storage_path", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(),
         gestiones: [
           gestionRow({
@@ -501,7 +509,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
       totales: { efectivo: "1.00", simpe: "2.00", transferencia: "3.00", general: "6.00" },
     });
     const repo = fakeRepo({
-      findCierreByIdEnAlcance: vi.fn(async () => ({ cierre, gestiones: [] })),
+      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre, gestiones: [] })),
     });
     const { service } = newService({ repo });
     const r = await service.verCierreDetalle("c1", MAESTRO);
@@ -512,6 +520,8 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
   it("R16: cada gestion del detalle expone el pago al mensajero SNAPSHOTEADO (no recomputado)", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalPagoMensajero: "5.00" }),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", pagoMensajero: "5.00" }),
@@ -532,6 +542,8 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
   it("R15: cada gestion rechazada del detalle expone el ingreso de bodega SNAPSHOTEADO (no recomputado)", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalIngresoBodegaRechazos: "3.00" }),
         gestiones: [
           gestionRow({ gestionId: "a", resultado: "entregada", ingresoBodegaRechazo: "0.00" }),
@@ -572,7 +584,7 @@ describe("CierresAdminService.verCierreDetalle — detalle y evidencia (R6/R7/R9
 
   it("R16: ver detalle NO muta (nunca invoca resolverCierre)", async () => {
     const repo = fakeRepo({
-      findCierreByIdEnAlcance: vi.fn(async () => ({ cierre: resumenRow(), gestiones: [gestionRow()] })),
+      findCierreByIdEnAlcance: vi.fn(async () => ({ sinGestion: [], sinGestionRegistrado: true, cierre: resumenRow(), gestiones: [gestionRow()] })),
     });
     const { service } = newService({ repo });
     await service.verCierreDetalle("c1", MAESTRO);
@@ -588,6 +600,8 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
   function repoConMezcla() {
     return fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalIngresoBodegaRechazos: "5.00" }),
         gestiones: [
           gestionRow({
@@ -645,6 +659,8 @@ describe("CierresAdminService.verCierreDetalle — desglose SLA/manual (feature 
     // cumple aunque las gestiones no cuadren (cierre pre-migracion / dato historico).
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({
           totales: { efectivo: "10.00", simpe: "5.00", transferencia: "0.00", general: "15.00" },
           totalPagoMensajero: "5.00",
@@ -1345,6 +1361,8 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
   it("R18: la gestion `incidente` cae en `grupos.incidente` y no se mezcla con las otras", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "g1", resultado: "entregada" }),
@@ -1375,6 +1393,8 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
   it("R17: un incidente NO aporta ingreso de Ordenex a los totales del cierre", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ totalPagoMensajero: "0.00" }),
         gestiones: [
           gestionRow({
@@ -1419,6 +1439,8 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
   it("R34: el detalle del admin expone `causaIncidente` e `indemnizacion` por gestión", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow({ estado: "aprobado" }),
         gestiones: [
           gestionRow({
@@ -1450,6 +1472,8 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
   it("R19: mientras el cierre sigue `solicitado` el monto es `null` (no 0.00)", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(), // `solicitado`
         gestiones: [
           gestionRow({
@@ -1477,6 +1501,8 @@ describe("Feature 158 · verCierreDetalle — la causa y el monto llegan al DTO 
   it("R35: las gestiones de los otros cuatro resultados llegan con los dos campos en `null`", async () => {
     const repo = fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(),
         gestiones: [
           gestionRow({ gestionId: "g1", resultado: "entregada" }),
@@ -1507,6 +1533,8 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
   function repoConEvidencias() {
     return fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: resumenRow(),
         gestiones: [
           gestionRow({
@@ -1546,5 +1574,159 @@ describe("CierresAdminService.verCierreDetalle — el storage no puede bloquear 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
     expect(r.grupos.entregada[0]!.evidenciaUrl).toBeNull();
+  });
+});
+
+// ==============================================================================================
+// FEATURE 264 (B5, R7/R8/R9/R10/R27) — EL DTO DEL DETALLE LLEVA LA LISTA, Y NO LLEVA DINERO.
+//
+// El servicio no deriva nada de esta lista: la pasa tal cual. Eso es deliberado y es la mitad de
+// la garantia de R19/R20 —la otra mitad es que la tabla no tiene ni una columna `DECIMAL`—. Aqui
+// se afirma lo que el servicio EMITE; que las filas sean las del cierre correcto se prueba contra
+// Postgres (`cierre-sin-gestion-sql-real.test.ts`), porque este doble no ve el SQL.
+// ==============================================================================================
+
+describe("264/B5 — verCierreDetalle emite las ordenes sin gestionar", () => {
+  function sinGestionDTO(overrides: Record<string, unknown> = {}) {
+    return {
+      ordenId: "o-barrida",
+      numGuia: 42,
+      numRemision: "REM-42",
+      destinatario: "Carla",
+      producto: "Caja",
+      tiendaNombre: "Tienda Z",
+      zonaNombre: "Alajuela",
+      estatusOrigen: "en_reparto" as const,
+      ...overrides,
+    };
+  }
+
+  function repoConSinGestion(
+    sinGestion: ReturnType<typeof sinGestionDTO>[],
+    sinGestionRegistrado = true,
+  ) {
+    return fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [],
+        sinGestion,
+        sinGestionRegistrado,
+      })),
+    });
+  }
+
+  it("R9: los OCHO campos llegan al DTO, sin uno de mas y sin uno de menos", async () => {
+    const repo = repoConSinGestion([sinGestionDTO()]);
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    // Igualdad EXACTA y no `toMatchObject`: lo que SOBRA importa tanto como lo que falta. Un
+    // campo de dinero colandose aqui es justo lo que R10 prohibe, y `toMatchObject` lo dejaria
+    // pasar en verde.
+    expect(r.ordenesSinGestion).toEqual([
+      {
+        ordenId: "o-barrida",
+        numGuia: 42,
+        numRemision: "REM-42",
+        destinatario: "Carla",
+        producto: "Caja",
+        tiendaNombre: "Tienda Z",
+        zonaNombre: "Alajuela",
+        estatusOrigen: "en_reparto",
+      },
+    ]);
+  });
+
+  it("R9/R32: `numGuia: null` y `estatusOrigen: null` son casos VIVOS, no filas descartadas", async () => {
+    const repo = repoConSinGestion([
+      sinGestionDTO({ ordenId: "sin-guia", numGuia: null, estatusOrigen: null }),
+      sinGestionDTO(),
+    ]);
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.ordenesSinGestion).toHaveLength(2);
+    expect(r.ordenesSinGestion[0].numGuia).toBeNull();
+    expect(r.ordenesSinGestion[0].estatusOrigen).toBeNull();
+  });
+
+  it("R19/R20: la lista NO se cuela en ningun grupo ni mueve un solo importe del DTO", async () => {
+    // El caso EMPAREJADO: el mismo cierre, con y sin lista. Los cinco grupos y los siete importes
+    // tienen que salir IDENTICOS. Si alguien concatenara estas ordenes a `grupos.entregada` —o
+    // las sumara a un total— este caso se pone rojo.
+    const gestion = gestionRow({ gestionId: "g1", resultado: "entregada", montoRecibido: "30.00" });
+    const conLista = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [gestion],
+        sinGestion: [sinGestionDTO(), sinGestionDTO({ ordenId: "b" }), sinGestionDTO({ ordenId: "c" })],
+        sinGestionRegistrado: true,
+      })),
+    });
+    const sinLista = fakeRepo({
+      findCierreByIdEnAlcance: vi.fn(async () => ({
+        cierre: resumenRow(),
+        gestiones: [gestion],
+        sinGestion: [],
+        sinGestionRegistrado: true,
+      })),
+    });
+
+    const a = await newService({ repo: conLista }).service.verCierreDetalle("c1", MAESTRO);
+    const b = await newService({ repo: sinLista }).service.verCierreDetalle("c1", MAESTRO);
+    if (a.status !== "ok" || b.status !== "ok") throw new Error("los dos deben ser ok");
+
+    expect(a.grupos).toEqual(b.grupos);
+    expect(a.totalesIngreso).toEqual(b.totalesIngreso);
+    expect(a.desgloseIngresoBodegaRechazos).toEqual(b.desgloseIngresoBodegaRechazos);
+    expect(a.ganancia).toBe(b.ganancia);
+    expect(a.pagoTienda).toBe(b.pagoTienda);
+    expect(a.cierre.totales).toEqual(b.cierre.totales);
+    // Y el contrapunto que impide que esto sea verde por vacio: la lista SI llego.
+    expect(a.ordenesSinGestion).toHaveLength(3);
+    expect(b.ordenesSinGestion).toHaveLength(0);
+  });
+
+  it("R27: un cierre marcado como NO registrado emite `false` con la lista vacia", async () => {
+    const repo = repoConSinGestion([], false);
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.ordenesSinGestion).toEqual([]);
+    // ⭑ El campo que separa «no hubo ninguna» de «no lo sabemos». Traducir el `false` a lista
+    // vacia a secas seria volver a confundirlas, que es toda la razon de ser de esta columna.
+    expect(r.sinGestionRegistrado).toBe(false);
+  });
+
+  it("R27: el mismo `[]` con la marca en `true` significa «no hubo ninguna»", async () => {
+    const { service } = newService({ repo: repoConSinGestion([], true) });
+
+    const r = await service.verCierreDetalle("c1", MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.ordenesSinGestion).toEqual([]);
+    expect(r.sinGestionRegistrado).toBe(true);
+  });
+
+  it("R8: fuera de alcance -> `no_encontrada`, sin lista y sin distinguirse de inexistente", async () => {
+    // El repo devuelve `null` (su WHERE ya cruzo el alcance). El servicio no puede emitir ni una
+    // fila, ni un conteo, ni una marca: el resultado es el MISMO que para un id que no existe.
+    const repo = fakeRepo({ findCierreByIdEnAlcance: vi.fn(async () => null) });
+    const { service } = newService({ repo });
+
+    const r = await service.verCierreDetalle("c-ajeno", MAESTRO);
+
+    expect(r).toEqual({ status: "no_encontrada" });
+    expect(Object.keys(r)).toEqual(["status"]); // ni `ordenesSinGestion` ni `sinGestionRegistrado`
   });
 });
