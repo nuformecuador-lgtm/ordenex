@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TableroDiaCacheMemoria } from "@/lib/cache/tablero-dia-cache-memoria";
 import { TableroDiaService } from "@/lib/services/TableroDiaService";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 192 (B7.5) — R40, R42, R73.
 //
@@ -21,9 +21,9 @@ const SATELITE_X = { usuarioId: "u-sat", rol: "adminSatelite", zonaId: ZONA_X };
 function montar(): { service: TableroDiaService; repo: RepositorioDoble } {
   const repo = new RepositorioDoble(
     () => [fila("m1", "Ana", { entregadas: 1 })],
-    () => ({ ordenes: [], total: 0 }),
+    () => ({ filas: [], total: 0 }),
   );
-  return { service: new TableroDiaService(repo), repo };
+  return { service: servicioDelTablero(repo), repo };
 }
 
 describe("TableroDiaService.detalle — la frontera, otra vez", () => {
@@ -89,6 +89,10 @@ describe("TableroDiaService.detalle — la frontera, otra vez", () => {
         total: 0,
         pagina: 1,
         pageSize: 25,
+        // FEATURE 260 (R12) — el alcance con el que se resolvio viaja tambien en el detalle
+        // VACIO: la pantalla decide con el que columnas monta, y un vacio sin alcance la
+        // dejaria sin saber cual pintar en cuanto lleguen filas.
+        alcance: "global",
       },
     });
   });
@@ -96,10 +100,10 @@ describe("TableroDiaService.detalle — la frontera, otra vez", () => {
   it("llama SIEMPRE al repositorio: el detalle no pasa por la cache (R73)", async () => {
     const repo = new RepositorioDoble(
       () => [],
-      () => ({ ordenes: [], total: 0 }),
+      () => ({ filas: [], total: 0 }),
     );
     const cache = new TableroDiaCacheMemoria({ ahora: () => AHORA.getTime() });
-    const service = new TableroDiaService(repo, cache);
+    const service = servicioDelTablero(repo, cache);
 
     await service.detalle(MAESTRO, AHORA, MENSAJERO);
     await service.detalle(MAESTRO, AHORA, MENSAJERO);

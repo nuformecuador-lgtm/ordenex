@@ -2,13 +2,17 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  AHORA,
   FECHA_CR,
+  IMPORTE_CENTINELA_TARIFA,
   VENTANA,
   crearGestion,
   crearOrden,
+  crearTarifaActiva,
   instanteCR,
   repositorio,
   sembrarBase,
+  servicioReal,
   transicionDeRecoleccion,
 } from "./_semilla-tablero-dia";
 import {
@@ -76,9 +80,9 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
       };
     });
 
-    expect(resultado.deA.ordenes).toHaveLength(2);
+    expect(resultado.deA.filas).toHaveLength(2);
     expect(resultado.deA.total).toBe(2);
-    expect(resultado.deB.ordenes).toHaveLength(3);
+    expect(resultado.deB.filas).toHaveLength(3);
     expect(resultado.deB.total).toBe(3);
     expect(resultado.global.total).toBe(5);
   });
@@ -119,7 +123,7 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
       };
     });
 
-    const vacio = { ordenes: [], total: 0 };
+    const vacio = { filas: [], total: 0 };
     expect(resultado.inexistente).toEqual(vacio);
     expect(resultado.fueraDeAlcance).toEqual(vacio);
     expect(resultado.sinOrdenesHoy).toEqual(vacio);
@@ -128,7 +132,7 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
   it("el detalle no muestra las ordenes de OTRO mensajero de la misma zona (R47)", async () => {
     const resultado = await enTransaccionRevertida(prisma, async (tx) => {
       const base = await sembrarBase(tx);
-      await crearOrden(tx, base, {
+      const deAna = await crearOrden(tx, base, {
         clave: "de-ana",
         estatus: "en_reparto",
         mensajeroId: base.mensajero1,
@@ -141,16 +145,21 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
         asignadoAt: instanteCR(FECHA_CR, "07:00"),
       });
 
-      return repositorio(tx).listarOrdenesDelDia(
-        VENTANA,
-        { tipo: "global" },
-        base.mensajero1,
-        PAGINA,
-      );
+      return {
+        deAna,
+        pagina: await repositorio(tx).listarOrdenesDelDia(
+          VENTANA,
+          { tipo: "global" },
+          base.mensajero1,
+          PAGINA,
+        ),
+      };
     });
 
-    expect(resultado.total).toBe(1);
-    expect(resultado.ordenes[0].cliente).toBe("Cliente de-ana");
+    expect(resultado.pagina.total).toBe(1);
+    // FEATURE 260 — esta consulta ya no proyecta el destinatario: identifica la fila por su id,
+    // que es lo unico que decide (quien entra). El nombre lo trae despues la hidratacion.
+    expect(resultado.pagina.filas.map((f) => f.ordenId)).toEqual([resultado.deAna]);
   });
 
   it("las ordenes del dia ANTERIOR no aparecen en el detalle de hoy (R47)", async () => {
@@ -170,7 +179,7 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
       );
     });
 
-    expect(resultado).toEqual({ ordenes: [], total: 0 });
+    expect(resultado).toEqual({ filas: [], total: 0 });
   });
 
   it("trae el resultado del dia de cada orden y el estatus crudo, sin inventar etiquetas (R49)", async () => {
@@ -195,25 +204,36 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
         resultado: "entregada",
         at: instanteCR(FECHA_CR, "13:00"),
       });
-      await crearOrden(tx, base, {
+      const pendiente = await crearOrden(tx, base, {
         clave: "pendiente",
         estatus: "por_recoger",
         mensajeroId: base.mensajero1,
         asignadoAt: instanteCR(FECHA_CR, "08:00"),
       });
 
-      return repositorio(tx).listarOrdenesDelDia(
-        VENTANA,
-        { tipo: "global" },
-        base.mensajero1,
-        PAGINA,
-      );
+      return {
+        entregada,
+        pendiente,
+        pagina: await repositorio(tx).listarOrdenesDelDia(
+          VENTANA,
+          { tipo: "global" },
+          base.mensajero1,
+          PAGINA,
+        ),
+      };
     });
 
-    expect(resultado.total).toBe(2);
-    // Orden determinista: `asignado_at` DESC. La de las 08:00 va primero.
-    expect(resultado.ordenes.map((o) => o.estatus)).toEqual(["por_recoger", "entregada"]);
-    expect(resultado.ordenes.map((o) => o.resultadoDelDia)).toEqual([null, "entregada"]);
+    expect(resultado.pagina.total).toBe(2);
+    // Orden determinista: `asignado_at` DESC. La de las 08:00 (la pendiente) va primero.
+    expect(resultado.pagina.filas.map((f) => f.ordenId)).toEqual([
+      resultado.pendiente,
+      resultado.entregada,
+    ]);
+    // FEATURE 260 — el ESTATUS ya no sale de aqui (lo trae la hidratacion, con el mismo mapeo
+    // que el listado). Lo que esta consulta sigue decidiendo, y por eso se sigue afirmando, es
+    // el RESULTADO DEL DIA: la ultima gestion vigente de la ventana, con dos gestiones de por
+    // medio y ganando la mas reciente.
+    expect(resultado.pagina.filas.map((f) => f.resultadoDelDia)).toEqual([null, "entregada"]);
   });
 
   it("una orden del camino de RECOLECCION aparece en el detalle con un asignadoAt util (R57)", async () => {
@@ -238,7 +258,7 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
     expect(resultado.total).toBe(1);
     // `asignado_at` es NULL en la base (R59: no se estampa). El detalle cae al instante de la
     // transicion, que es cuando la orden paso de verdad a manos del mensajero.
-    expect(resultado.ordenes[0].asignadoAt).toBe(instanteCR(FECHA_CR, "08:00").toISOString());
+    expect(resultado.filas[0].asignadoAt).toBe(instanteCR(FECHA_CR, "08:00").toISOString());
   });
 
   it("la paginacion recorta la pagina pero no el total (R55)", async () => {
@@ -265,9 +285,122 @@ describeSiHayBase("detalle del mensajero — aislamiento (Postgres real)", () =>
       };
     });
 
-    expect(resultado.primera.ordenes).toHaveLength(2);
+    expect(resultado.primera.filas).toHaveLength(2);
     expect(resultado.primera.total).toBe(5);
-    expect(resultado.tercera.ordenes).toHaveLength(1);
+    expect(resultado.tercera.filas).toHaveLength(1);
     expect(resultado.tercera.total).toBe(5);
+  });
+});
+
+// FEATURE 260 (B8) — EL AISLAMIENTO, YA HIDRATADO Y DE EXTREMO A EXTREMO.
+//
+// Los casos de arriba miden el repositorio. Estos miden el SERVICIO REAL contra Postgres: la
+// consulta del dia, la hidratacion por el camino del listado de ordenes, los intentos y el
+// recorte por alcance, todo junto. Es el unico sitio donde se puede afirmar a la vez que el
+// satelite ve SOLO lo suyo y que lo que ve NO TRAE el dinero que su rol no puede ver.
+//
+// Por que hace falta ademas de los tests de servicio con dobles: un doble no ve el SQL, y las
+// dos mitades de esta feature que pueden fallar en silencio son dos `WHERE`.
+describeSiHayBase("detalle del mensajero — hidratado y recortado (Postgres real)", () => {
+  let prisma: PrismaClient;
+
+  beforeAll(() => {
+    prisma = crearPrismaDeTest();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /** Siembra un mensajero con ordenes en las DOS zonas y una tarifa activa en su tienda. */
+  async function sembrarDosZonas(tx: Parameters<typeof sembrarBase>[0]) {
+    const base = await sembrarBase(tx);
+    await crearTarifaActiva(tx, base);
+    for (const [clave, zonaId] of [
+      ["a1", base.zonaA],
+      ["a2", base.zonaA],
+      ["b1", base.zonaB],
+    ] as const) {
+      await crearOrden(tx, base, {
+        clave,
+        estatus: "en_reparto",
+        zonaId,
+        mensajeroId: base.mensajero1,
+        montoCobrar: "54321.00",
+        asignadoAt: instanteCR(FECHA_CR, "07:00"),
+      });
+    }
+    return base;
+  }
+
+  it("un satelite de la zona A recibe SOLO las ordenes de A, ya hidratadas (R11)", async () => {
+    const detalle = await enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarDosZonas(tx);
+      const resultado = await servicioReal(tx).detalle(
+        { usuarioId: base.maestro, rol: "adminSatelite", zonaId: base.zonaA },
+        AHORA,
+        base.mensajero1,
+      );
+      if (resultado.estado !== "ok") throw new Error(`se esperaba ok, llego ${resultado.motivo}`);
+      return resultado.detalle;
+    });
+
+    expect(detalle.alcance).toBe("zona");
+    expect(detalle.total).toBe(2);
+    expect(detalle.ordenes).toHaveLength(2);
+    // HIDRATADAS: traen los campos del elemento del listado, que la consulta del dia ya no
+    // proyecta. Si la hidratacion no se hubiera ejecutado, esto vendria `undefined`.
+    expect(detalle.ordenes.map((o) => o.destinatario).sort()).toEqual([
+      "Cliente a1",
+      "Cliente a2",
+    ]);
+    expect(detalle.ordenes.every((o) => o.relaciones?.tienda?.nombre === "Tienda")).toBe(true);
+    expect(detalle.ordenes.every((o) => o.intentosEntrega === 0)).toBe(true);
+  });
+
+  it("y lo que recibe NO TRAE ninguno de los cinco campos restringidos (R13)", async () => {
+    const payloads = await enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarDosZonas(tx);
+      const servicio = servicioReal(tx);
+      const leer = async (rol: string, zonaId: string | null) => {
+        const resultado = await servicio.detalle(
+          { usuarioId: base.maestro, rol, zonaId },
+          AHORA,
+          base.mensajero1,
+        );
+        if (resultado.estado !== "ok") throw new Error(`se esperaba ok, llego ${resultado.motivo}`);
+        return resultado.detalle;
+      };
+      return {
+        deZona: await leer("adminSatelite", base.zonaA),
+        global: await leer("maestro", null),
+      };
+    });
+
+    const jsonZona = JSON.stringify(payloads.deZona);
+    // El importe de la tarifa es irrepetible: si viaja la tarifa, viaja el.
+    expect(jsonZona).not.toContain(IMPORTE_CENTINELA_TARIFA);
+    expect(jsonZona).not.toContain("@f192.local"); // el correo de la tienda sembrada
+    expect(jsonZona).not.toContain("88880000"); // su telefono
+    for (const orden of payloads.deZona.ordenes) {
+      expect(orden.fleteConIva).toBeUndefined();
+      expect(orden.comisionConIva).toBeUndefined();
+      expect(orden.relaciones?.tienda?.tarifa).toBeNull();
+      expect(orden.relaciones?.tienda?.email).toBeUndefined();
+      expect(orden.relaciones?.tienda?.telefono).toBeUndefined();
+      // R17 — el monto a cobrar SI, en los dos alcances.
+      expect(orden.montoCobrar).toBe(54321);
+    }
+
+    // ⛔ Y LA MITAD QUE IMPIDE QUE ESTO SEA VERDE POR VACIO: en alcance `global` los cinco SI
+    // viajan. Sin esta comprobacion, una hidratacion que no trajera nunca la tarifa —o una
+    // siembra sin tarifa activa— dejaria el bloque de arriba verde sin haber retirado nada.
+    const jsonGlobal = JSON.stringify(payloads.global);
+    expect(jsonGlobal).toContain(IMPORTE_CENTINELA_TARIFA);
+    expect(jsonGlobal).toContain("@f192.local");
+    expect(jsonGlobal).toContain("88880000");
+    expect(payloads.global.ordenes.every((o) => o.fleteConIva !== undefined)).toBe(true);
+    expect(payloads.global.ordenes.every((o) => o.comisionConIva !== undefined)).toBe(true);
+    expect(payloads.global.total).toBe(3);
   });
 });

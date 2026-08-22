@@ -128,6 +128,37 @@ demostró capaz de ponerse **roja** quitando el arreglo, y ahí salió un caso q
 **Sin commit, sin push y sin PR**: el árbol de `feat/258-monitoreo-backend` está sucio a propósito,
 a la espera de decisión humana.
 
+### 🟡 EN VUELO — 259 y 260 · lo que salió de USAR la pantalla
+
+Las dos nacen del humano usando `/monitoreo` ya desplegada, y las dos **revierten una decisión
+anterior con fecha y motivo**.
+
+**259 · el tablero cuenta por día de reparto** (`fullstack`, 26 requisitos, revisión APROBADA sin
+bloqueantes). Una orden asignada hoy **para mañana** aparecía hoy y caía en el cubo `sinRecoger`,
+cuya ayuda dice «el mensajero todavía no arrancó con ellas»: la pantalla **acusaba a alguien de ir
+retrasado por trabajo que aún no era suyo**. Revierte **D10** (firmada el 2026-08-20) con un
+apéndice fechado en el spec de la 246, cuya guardia comprueba **las dos direcciones** — que el
+puntero está y que el texto original sigue verbatim.
+
+El predicado no se inventó: se copió el de `RankingRepository`. **Y el spec me corrigió en lo
+principal:** yo afirmé que la rama de recolección «se queda como está», y sólo vale en el instante
+de la transición — si a las 08:00 mandan a Ana a recoger y a las 14:00 la orden se reasigna a Beto
+para mañana, reaparece hoy en la tarjeta de **Beto**. La acusación volvía por la otra puerta.
+
+⛔ **T8.1 bloquea la release, no el PR:** quien asigne para mañana verá esas órdenes desaparecer
+del tablero de hoy. Sin aviso previo se lee como «se perdieron» — la misma familia de fallos mudos
+que esta sesión lleva persiguiendo.
+
+**260 · la orden completa en el modal** (`fullstack`, 46 requisitos, spec aprobado, **sin
+empezar**). Reusa `ordenesColumns` con el `DataTable` propio, nunca `OrdenesListado`. **El hallazgo
+que la cambió:** yo dije «copiamos la regla por rol de `/ordenes`»; **no existe esa regla** — ese
+listado no recorta dinero por rol, recorta por PUERTA, y esa puerta le cierra el paso al
+`adminSatelite`, que **sí** entra a `/monitoreo`. Había un rol que vería dinero que la app le niega.
+
+**Van en serie, y no por intuición:** la intersección de sus `tasks.md` da tres archivos de código
+comunes, uno de ellos el test que afirma que el total del detalle cuadra con el `asignadas` de la
+tarjeta — la costura entre las dos, y cada ficha mueve un lado de esa igualdad.
+
 ### ▶️ Qué queda, y una que necesita decisión HUMANA
 
 | # | Qué | Estado |

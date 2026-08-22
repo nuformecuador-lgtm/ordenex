@@ -4,7 +4,7 @@ import { TableroDiaCacheMemoria } from "@/lib/cache/tablero-dia-cache-memoria";
 import type { ITableroDiaCache } from "@/lib/interfaces/external/ITableroDiaCache";
 import { TableroDiaService } from "@/lib/services/TableroDiaService";
 
-import { RepositorioDoble, fila } from "./_doble-tablero-dia";
+import { RepositorioDoble, fila, servicioDelTablero } from "./_doble-tablero-dia";
 
 // Feature 192 (B9.7) — R67, R69. **ESTE ES EL TEST DE SEGURIDAD DE LA FEATURE.**
 //
@@ -42,7 +42,7 @@ function montar(): { service: TableroDiaService; repo: RepositorioDoble; cache: 
         : [fila("m-y", "Mensajero Y", { entregadas: 1 })],
   );
   const cache = new TableroDiaCacheMemoria({ ahora: () => AHORA.getTime() });
-  return { service: new TableroDiaService(repo, cache), repo, cache };
+  return { service: servicioDelTablero(repo, cache), repo, cache };
 }
 
 async function nombresDe(
@@ -98,7 +98,7 @@ describe("cache del tablero — aislamiento entre alcances", () => {
         return cache.envolver(clave, producir);
       },
     };
-    const conEspia = new TableroDiaService(
+    const conEspia = servicioDelTablero(
       new RepositorioDoble(() => [fila("m-x", "Mensajero X", { entregadas: 1 })]),
       espia,
     );

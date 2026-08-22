@@ -3,12 +3,13 @@ import { Prisma, type GestionResultado, type PrismaClient } from "@prisma/client
 import type {
   EntregasEnHora,
   FilaConteoMensajero,
+  FilaDelDia,
   FiltroAlcanceTablero,
   ITableroDiaRepository,
   PaginaDetalle,
   PaginaOrdenesDelDia,
 } from "@/lib/interfaces/repositories/ITableroDiaRepository";
-import type { OrdenDetalleDia, TotalesTableroDia } from "@/lib/types/tablero-dia";
+import type { TotalesTableroDia } from "@/lib/types/tablero-dia";
 import { ESTATUS_CON_BUCKET_EXPLICITO, estatusDelBucket } from "@/lib/types/tablero-dia";
 import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 
@@ -26,26 +27,37 @@ import type { VentanaDiaCR } from "@/lib/utils/ventana-dia-cr";
 // (`orden.fecha_reparto`), y `asignado_at` queda como la **rama de respaldo** de ese denominador:
 // solo cuenta las ordenes que NO tienen dia de reparto — las anteriores al despliegue.
 //
-// ⚠️ Y DE AHI SALE UNA CONSECUENCIA QUE HAY QUE SABER ANTES DE MIRAR ESTA PANTALLA: el CTE
-// `ids_del_dia` de aqui abajo sigue contando «asignadas hoy» por `asignado_at`, sin la rama del
-// dia de reparto. Por tanto, **desde el despliegue de la 246 el «asignadas hoy» de este tablero y
-// el denominador de `/ranking` pueden dar cifras distintas el mismo dia**: una orden asignada hoy
-// para mañana cuenta AQUI hoy y en el ranking mañana. Ninguna de las dos esta mal; miden cosas
-// distintas.
+// ⚠️ FEATURE 259 (2026-08-21) — QUE MIDE ESTA PANTALLA, DICHO ANTES DE LEER NADA MAS. El universo
+// del dia se determina por el **DIA DE REPARTO** de la orden (`orden.fecha_reparto`), con una rama
+// de RESPALDO por `asignado_at` para las ordenes que no tienen esa columna. Es EXACTAMENTE el
+// criterio del denominador de `/ranking`: se COPIA de `RankingRepository.contarAsignadasPorMensajero`
+// —donde vive su razonamiento entero— y no se reinventa aqui.
 //
-// ⚠️ Y ESO ES DELIBERADO: **D10 se firmo el 2026-08-20 y dice que este tablero NO sigue al
-// ranking**, en contra de la recomendacion del diseño. El motivo, en una linea: las dos pantallas
-// NO miden lo mismo. Este tablero responde «¿que carga le eche HOY a este mensajero?» —una
-// pregunta de OPERACION, y para esa `asignado_at` es el dato correcto: la orden entro en su monton
-// hoy, la reserve para el dia que la reserve—. El ranking responde «¿de que dia es esta orden a
-// efectos de su porcentaje?». Alinearlos no habria hecho que las dos dijeran la verdad: le habria
-// quitado a este su propia respuesta.
+// ⚠️ MISMO CRITERIO DEL DIA, PERO NO EL MISMO UNIVERSO, y conviene saberlo antes de comparar las
+// dos cifras: este tablero tiene ademas la rama de RECOLECCION (`ids_recoleccion`, feature 157 /
+// 192-R57), que `/ranking` no tiene. Si un dia las dos pantallas no cuadran, la diferencia son
+// recolecciones — no un desacuerdo sobre de que dia es una orden.
 //
-// Consecuencia practica, dicha aqui para que nadie la diagnostique como un bug: una orden asignada
-// hoy para mañana **cuenta HOY en esta pantalla y MAÑANA en `/ranking`**. Ninguna de las dos esta
-// mal. El razonamiento completo esta en `specs/246-asignacion-por-dia/requirements.md` §D10 y en
-// `design.md` §6.bis.7. Si algun dia se quiere alinearlas, el `OR` ya esta escrito y probado en
-// `RankingRepository` para copiarlo — pero es una decision nueva, no un arreglo.
+// ── D10, SUPERADA. No se borra: se conserva para que dentro de seis meses se pueda reconstruir
+//    por que se decidio una cosa y luego la contraria. ─────────────────────────────────────────
+//
+//    **D10 se firmo el 2026-08-20** y decia que este tablero NO seguia al ranking: que contase
+//    «asignadas hoy» por `asignado_at`, en contra de la recomendacion del diseño de la 246. Su
+//    argumento —que es bueno y por eso queda escrito— era que las dos pantallas no miden lo mismo:
+//    este tablero responderia «¿que carga le eche HOY a este mensajero?», una pregunta de
+//    OPERACION, y para esa `asignado_at` es el dato correcto.
+//
+//    **D10 QUEDA REVERTIDA EL 2026-08-21** por la feature 259 (`specs/259-tablero-dia-por-reparto/`,
+//    decision humana). EL MOTIVO, EN UNA LINEA: D10 razono sobre `asignadas` y NO sobre el cubo
+//    `sinRecoger`. Esta pantalla no publica «que carga le eche hoy» en ninguna parte: publica ocho
+//    cubos, y una orden reservada para mañana caia en `sinRecoger`, cuya ayuda visible dice «el
+//    mensajero todavia no arranco con ellas». Es decir, la cifra que D10 defendia entraba a la
+//    pantalla con una etiqueta que AFIRMA UN RETRASO QUE NO EXISTE, sobre trabajo que todavia no
+//    es de nadie.
+//
+//    LO QUE SE PIERDE Y SE ACEPTA: la pregunta de operacion «¿que le asigne hoy?» deja de tener
+//    respuesta en esta pantalla. Si algun dia hace falta, es un CONTADOR NUEVO — no un criterio
+//    distinto para los ocho que ya hay, que romperia la identidad de R25.
 //
 // Lo que NO cambia: mover `asignado_at` sigue moviendo el pago y el premio de un mensajero, asi
 // que esta pantalla sigue sin escribirla NUNCA.
@@ -127,48 +139,106 @@ interface FilaEntregasEnHoraRow {
   entregadas: bigint;
 }
 
+/**
+ * FEATURE 260 (B2) — LA FILA CRUDA DEL DETALLE, ADELGAZADA. Se fueron `num_guia`, `s."value"`,
+ * `destinatario` y `direccion`: lo que se PINTA de cada orden lo resuelve el camino que ya
+ * produce el elemento del listado (`OrdenRepository.findListItemsByIds`), y proyectarlo
+ * tambien aqui seria la SEGUNDA proyeccion que R2 prohibe. Quedan el identificador con el que
+ * se hidrata y los dos datos que son del DIA y no de la orden.
+ */
 interface FilaDetalleRow {
   orden_id: string;
-  num_guia: number | null;
-  estatus: string;
   resultado_del_dia: GestionResultado | null;
-  cliente: string;
-  destino: string | null;
   asignado_at: Date;
   total: bigint;
 }
 
 /**
- * B8.1 — LOS DOS CAMINOS DE "ASIGNADA HOY", declarados UNA sola vez y consumidos por el
- * tablero y por el detalle (design.md §1.ter, R57/R58/R64).
+ * B8.1 — LOS DOS CAMINOS DE "ASIGNADA HOY", declarados UNA sola vez y consumidos por las TRES
+ * consultas: tablero, detalle y serie por hora (design.md §1.ter, R57/R58/R64). Un cambio de
+ * criterio aqui alcanza a las tres a la vez, que es la unica forma de que la tarjeta, el
+ * detalle y la linea no puedan contradecirse (259/R13).
+ *
+ * ── FEATURE 259 (2026-08-21) — EL CRITERIO DEL DIA, EN TRES LINEAS ────────────────────────
+ *
+ * 1. `fecha_reparto IS NULL` EN LA RAMA (b) NO SOBRA. Sin esa clausula, una orden asignada hoy
+ *    para mañana entraria por LAS DOS ramas —hoy por `asignado_at`, mañana por `fecha_reparto`—
+ *    y quedaria contada en DOS dias distintos. Con ella, las ramas son DISJUNTAS y cada orden
+ *    aporta exactamente 1 a exactamente un dia, por construccion (R7).
+ * 2. ES UN `OR` PARTIDO EN DOS `SELECT`, NO UN `COALESCE(fecha_reparto, dia(asignado_at))`. El
+ *    `COALESCE` mezcla las dos convenciones en una expresion, no es indexable por ningun indice
+ *    y obligaria a derivar el dia calendario dentro del SQL — la SEGUNDA definicion del dia que
+ *    el diseño de la 192 prohibe (R8). Se parte en dos `SELECT` unidos, en vez de un `OR` en un
+ *    solo `WHERE`, para que cada rama pueda apoyarse por separado en el indice
+ *    `(mensajero_asignado_id, asignado_at, fecha_reparto)`. ⚠️ Ese razonamiento de indexabilidad
+ *    NO esta medido en esta ficha (design.md §3.1): se apoya en los `EXPLAIN` de la 246, que son
+ *    de OTRA consulta. Lo que si es seguro es que las dos formas devuelven el MISMO conjunto
+ *    (ramas disjuntas), asi que partir el `OR` no arriesga nada.
+ * 3. EL PREDICADO ES EL DE `RankingRepository.contarAsignadasPorMensajero`, citado por nombre a
+ *    proposito: alli vive su razonamiento entero y alli hay que ir si un dia cambia. Aqui la
+ *    FORMA es distinta (SQL crudo, dos `SELECT`) pero el CRITERIO es el mismo.
+ *
+ * El dia viaja como `ventana.fecha` (`YYYY-MM-DD`) con un `::date` explicito (R9): mismo objeto
+ * `VentanaDiaCR` que produce `desde`/`hasta`, asi que el dia de la rama (a) y el rango de la
+ * rama (b) no pueden divergir. Un `Date` de JavaScript contra una columna `DATE` en SQL crudo
+ * es la trampa que documenta `lib/utils/dia-reparto.ts`: el driver lo manda con el offset local
+ * del proceso y Postgres lo convierte con la zona DE LA SESION.
  *
  * ⛔ `UNION`, **nunca** `UNION ALL`. Es la linea de la que depende que los numeros cuadren:
  * una orden alcanzable por los dos caminos aparecería DOS veces con `UNION ALL`, inflando
  * `asignadas` y rompiendo la identidad de R25 en silencio. Un `LEFT JOIN` al historial
  * tendria el mismo fallo multiplicado (una reasignacion de recoleccion genera dos filas).
  *
- * R60 — `ids_recoleccion` selecciona SOLO `orden_id`, jamas `actor_usuario_id`: el actor del
- * historial es el maestro que DECIDE, no quien reparte. Agrupar por el pondria las ordenes en
- * la tarjeta del maestro.
+ * R60 — `ids_recoleccion` selecciona SOLO `orden_id`, jamas el actor del historial: ese actor es
+ * el maestro que DECIDE, no quien reparte. Agrupar por el pondria las ordenes en su tarjeta.
  *
- * R10/nota 9 — aqui NO se filtra por zona a proposito: `ids_recoleccion` no conoce todavia la
- * orden. El recorte multi-tenant se aplica UNA vez, DESPUES de la union, sobre `orden`.
+ * R10/nota 9 + 259/R16 — EL RECORTE MULTI-TENANT NO SE MUEVE AQUI, y el motivo cambio. Antes era
+ * que `ids_recoleccion` «no conoce todavia la orden»; desde la 259 SI la conoce (hace `JOIN` con
+ * ella para mirar su dia de reparto), asi que esa razon ya no vale y no puede quedarse escrita.
+ * La razon de hoy es otra: DOS SITIOS QUE RECORTAN INQUILINOS SON DOS SITIOS DONDE EQUIVOCARSE.
+ * El recorte se aplica UNA vez, DESPUES de la union, sobre `orden` — y un test de forma cuenta
+ * las apariciones de `zona_id` para que siga siendo una.
  */
 function cteIdsDelDia(ventana: VentanaDiaCR): Prisma.Sql {
   return Prisma.sql`
     ids_reparto AS (
+      -- (a) RESERVADA para este dia. Es la rama que hace que una orden asignada hoy para
+      --     mañana cuente MAÑANA y no hoy.
       SELECT o."id" AS id
       FROM "orden" o
       WHERE o."mensajero_asignado_id" IS NOT NULL
+        AND o."fecha_reparto" = ${ventana.fecha}::date
+      UNION
+      -- (b) RESPALDO para las ordenes SIN dia de reparto (las anteriores a la 246: no hay
+      --     backfill y no lo habra). El "fecha_reparto IS NULL" de aqui abajo NO SOBRA: es lo
+      --     que hace las dos ramas DISJUNTAS y lo que impide que una misma orden se cuente en
+      --     DOS dias distintos (hoy por asignado_at, mañana por fecha_reparto).
+      SELECT o."id" AS id
+      FROM "orden" o
+      WHERE o."mensajero_asignado_id" IS NOT NULL
+        AND o."fecha_reparto" IS NULL
         AND o."asignado_at" >= ${ventana.desde}
         AND o."asignado_at" <  ${ventana.hasta}
     ),
     ids_recoleccion AS (
       SELECT DISTINCT h."orden_id" AS id
       FROM "orden_historial_estado" h
+      JOIN "orden" o2 ON o2."id" = h."orden_id"
       WHERE h."origen_tipo" = ${ORIGEN_ASIGNACION_RECOLECCION}::"orden_historial_origen_tipo"
         AND h."created_at" >= ${ventana.desde}
         AND h."created_at" <  ${ventana.hasta}
+        -- 259/R11 — «hoy lo mandaron a recoger» SI es un evento de hoy, pero no si esa orden ya
+        --     quedo RESERVADA para otro dia. LA SECUENCIA QUE LO JUSTIFICA, porque no se deduce
+        --     leyendo la linea: 08:00, mandan a Ana a recoger a la tienda (fila de historial de
+        --     hoy; asignado_at y fecha_reparto siguen nulos). 14:00, la orden ya esta en bodega
+        --     y se asigna a Beto PARA MAÑANA — y mensajero_asignado_id SE SOBRESCRIBE. Sin esta
+        --     clausula la rama la pesca hoy, y el CTE agrupa por el mensajero ACTUAL: aparece
+        --     hoy en la tarjeta de BETO, en el cubo sinRecoger («todavia no arranco con
+        --     ellas»), que es trabajo parado de quien ni fue a recoger ni tiene que repartirla
+        --     hoy. La acusacion que la 259 vino a quitar, entrando por la otra puerta.
+        --     ⛔ NO se «simplifica» quitandola: es una linea que no rompe ningun test si
+        --     desaparece, y este comentario es lo unico que lo impide.
+        AND (o2."fecha_reparto" IS NULL OR o2."fecha_reparto" = ${ventana.fecha}::date)
     ),
     ids_del_dia AS (
       SELECT id FROM ids_reparto
@@ -249,8 +319,8 @@ export class TableroDiaRepository implements ITableroDiaRepository {
    * `@@unique(ordenId)`. El desempate `g."id" DESC` no es defensivo: sin el, dos gestiones
    * con el mismo `created_at` harian el resultado no determinista.
    *
-   * R37 — el predicado de `ids_reparto` (`mensajero_asignado_id IS NOT NULL` + rango de
-   * `asignado_at`) es exactamente el prefijo del indice `(mensajero_asignado_id,
+   * R37 — el predicado de la RAMA (b) de `ids_reparto` (`mensajero_asignado_id IS NOT NULL` +
+   * rango de `asignado_at`) es exactamente el prefijo del indice `(mensajero_asignado_id,
    * asignado_at)` que YA existe. Esta feature no crea ninguno.
    *
    * ⚠️ FEATURE 246 (2026-08-20): ese indice pasa a ser `(mensajero_asignado_id, asignado_at,
@@ -258,6 +328,12 @@ export class TableroDiaRepository implements ITableroDiaRepository {
    * esta consulta con EL MISMO `Index Cond`, verificado con `EXPLAIN` y no supuesto. Si alguien
    * reordenara las columnas de ese indice (p. ej. poniendo `fecha_reparto` delante), esta consulta
    * perderia su plan sin que nada aqui se rompiera: por eso queda escrito de quien depende.
+   *
+   * ⚠️ FEATURE 259 (2026-08-21): la RAMA (a) —`fecha_reparto = <dia>`— NO tiene ningun indice que
+   * empiece por esa columna, y esta ficha NO crea ninguno (R20). El motivo esta medido en la 246:
+   * un indice liderado por `fecha_reparto` hace atractivo un `BitmapOr` que degrada el plan DEL
+   * DENOMINADOR DEL RANKING, que es una consulta con dinero detras. Si algun dia esta pantalla va
+   * lenta, ESE es el sitio donde mirar (design.md §6).
    */
   async contarPorMensajero(
     ventana: VentanaDiaCR,
@@ -325,6 +401,21 @@ export class TableroDiaRepository implements ITableroDiaRepository {
    * `total` sale de `COUNT(*) OVER ()`, es decir del mismo `SELECT` que las filas: un segundo
    * viaje podria discrepar de la pagina que acompana y el cuadre con `asignadas` seria
    * casual en vez de cierto.
+   *
+   * ⚠️ FEATURE 260 (B2, 2026-08-21) — ESTA CONSULTA DECIDE **QUIEN ENTRA, CUANTOS HAY Y EN QUE
+   * ORDEN**, y ya no decide QUE SE PINTA. Su `SELECT` adelgazo: se fueron `num_guia`,
+   * `s."value"`, `destinatario`, `direccion` y con ellos el `JOIN "order_status"`, que solo
+   * servia a ese `SELECT`. Los campos de la orden los hidrata despues
+   * `OrdenRepository.findListItemsByIds` sobre los ids de ESTA pagina, con el MISMO `include` y
+   * el MISMO mapeo que el listado de ordenes: dos proyecciones de fila de orden a elemento de
+   * listado son dos cosas que pueden divergir (R2).
+   *
+   * ⛔ LO QUE **NO** SE TOCO, Y NO ES CASUALIDAD: el `WITH ids_del_dia`, el `LATERAL`, el
+   * `COUNT(*) OVER ()`, el `ORDER BY`, el `LIMIT/OFFSET` y —sobre todo— LA POSICION de esta
+   * consulta en el archivo. `tests/unit/tablero-dia/frontera.guardia.test.ts` clasifica las
+   * plantillas `$queryRaw` POR EL ORDEN EN QUE APARECEN EN EL TEXTO y afirma
+   * `["agregada","paginada","agregada"]`: esta es la segunda y es la paginada. Una CUARTA
+   * consulta rompe ese guardia, y por eso la 260 no añade ninguna (R38).
    */
   async listarOrdenesDelDia(
     ventana: VentanaDiaCR,
@@ -335,19 +426,14 @@ export class TableroDiaRepository implements ITableroDiaRepository {
     const offset = (pagina.pagina - 1) * pagina.pageSize;
     const filas = await this.prisma.$queryRaw<FilaDetalleRow[]>`
       WITH ${cteIdsDelDia(ventana)}
-      SELECT o."id"           AS orden_id,
-             o."num_guia"     AS num_guia,
-             s."value"        AS estatus,
-             r.resultado      AS resultado_del_dia,
-             o."destinatario" AS cliente,
-             o."direccion"    AS destino,
+      SELECT o."id"      AS orden_id,
+             r.resultado AS resultado_del_dia,
              -- Una orden que entro por el camino de recoleccion tiene asignado_at NULL
              -- (R59: la 157 NO lo estampa a proposito). Se cae al instante de la transicion
              -- de recoleccion del dia, que es lo que de verdad la puso en manos de alguien.
              COALESCE(o."asignado_at", rec.at, ${ventana.desde}) AS asignado_at,
              COUNT(*) OVER ()                                    AS total
       FROM "orden" o
-      JOIN "order_status" s ON s."id" = o."estatus_id"
       LEFT JOIN LATERAL (
         SELECT g."resultado" AS resultado
         FROM "gestion_orden" g
@@ -374,7 +460,7 @@ export class TableroDiaRepository implements ITableroDiaRepository {
       LIMIT ${pagina.pageSize} OFFSET ${offset}`;
 
     return {
-      ordenes: filas.map(aOrdenDetalle),
+      filas: filas.map(aFilaDelDia),
       total: filas.length === 0 ? 0 : Number(filas[0].total),
     };
   }
@@ -468,14 +554,10 @@ export class TableroDiaRepository implements ITableroDiaRepository {
   }
 }
 
-function aOrdenDetalle(f: FilaDetalleRow): OrdenDetalleDia {
+function aFilaDelDia(f: FilaDetalleRow): FilaDelDia {
   return {
     ordenId: f.orden_id,
-    numGuia: f.num_guia === null ? null : String(f.num_guia),
-    estatus: f.estatus,
     resultadoDelDia: f.resultado_del_dia,
-    cliente: f.cliente,
-    destino: f.destino ?? "",
     asignadoAt: f.asignado_at.toISOString(),
   };
 }

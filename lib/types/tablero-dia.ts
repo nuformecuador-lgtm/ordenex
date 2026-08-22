@@ -10,6 +10,11 @@
 import type { GestionResultado } from "@prisma/client";
 
 import type { MotivoDenegacion } from "@/lib/analytics/alcance";
+// FEATURE 260 — importacion de TIPO: se borra al compilar y no arrastra un byte al navegador,
+// asi que la cabecera de este modulo («no importa `repositories/`, `services/`, `@/lib/db` ni
+// `next/headers`») sigue siendo cierta. Es lo que permite que la fila del detalle SEA la del
+// listado sin declarar un tipo paralelo (design.md §3.2).
+import type { OrdenListItemDTO, OrdenTiendaRef } from "@/lib/types/orden";
 import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-status";
 
 /* -------------------------------------------------------------------------- */
@@ -241,17 +246,34 @@ export function sumarTotalesTablero(filas: readonly FilaTableroDia[]): TotalesTa
 /* 3. El detalle de un mensajero (design.md §6, R47-R51)                       */
 /* -------------------------------------------------------------------------- */
 
-export interface OrdenDetalleDia {
-  readonly ordenId: string;
-  readonly numGuia: string | null;
-  /** Value crudo de `order_status`; la etiqueta y el color los pone `EstatusBadge` (R48). */
-  readonly estatus: string;
+/**
+ * FEATURE 260 (T0.2, R1/R18) — LA FILA DEL DETALLE **ES** LA DEL LISTADO DE ORDENES.
+ *
+ * Sustituye a los siete campos propios de la feature 192 (R47-R51) y REVIERTE su R49 —el
+ * alcance cerrado en cuatro columnas—, con fecha y motivo escritos en
+ * `specs/192-tablero-dia-mensajeros/requirements.md`. La decision no se borra: se anota.
+ *
+ * Es una INTERSECCION con `OrdenListItemDTO`, no un tipo paralelo, y eso es lo que hace que
+ * `ordenesColumns` se monte sobre estas filas **sin un solo cast** (`Column<T>` es
+ * contravariante en el parametro de `render` bajo `strictFunctionTypes`, asi que un subtipo
+ * estricto encaja). Un tipo paralelo seria una segunda declaracion que puede divergir del
+ * listado sin que nada se ponga rojo — justo lo que esta feature viene a cerrar (R2/R26).
+ *
+ * Solo añade DOS campos, y ninguno de los dos existe en el listado porque ninguno es de la
+ * orden: son del DIA. Nada mas se añade nunca aqui (R18: subconjunto, jamas superconjunto).
+ */
+export type OrdenDetalleDia = OrdenListItemDTO & {
+  /** Ultima gestion VIGENTE del dia de esa orden; `null` si hoy no se gestiono. */
   readonly resultadoDelDia: GestionResultado | null;
-  readonly cliente: string;
-  readonly destino: string;
-  /** ISO-8601 UTC. */
+  /**
+   * ISO-8601 UTC. ORDENA la pagina del dia y NO se pinta en ninguna columna: se conserva
+   * porque es el campo contra el que los tests de integracion afirman ese orden.
+   */
   readonly asignadoAt: string;
-}
+};
+
+/** El alcance con el que se resolvio una lectura del tablero. Lista blanca, no el rol. */
+export type AlcanceTableroDia = "global" | "zona";
 
 export interface DetalleMensajeroDia {
   readonly mensajeroId: string;
@@ -261,6 +283,97 @@ export interface DetalleMensajeroDia {
   readonly total: number;
   readonly pagina: number;
   readonly pageSize: number;
+  /**
+   * FEATURE 260 (R12) — CON QUE ALCANCE SE RESOLVIO. Decide que columnas monta la pantalla
+   * (R14). Viaja en la respuesta y NO se deduce en el cliente: un componente de cliente no
+   * puede leer el rol —lo prohibe la clausula (c) del guardia de frontera— y tampoco debe,
+   * porque el alcance ya lo resolvio el servidor y aqui solo se consume su respuesta.
+   */
+  readonly alcance: AlcanceTableroDia;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3.bis El recorte por alcance (design.md §5, R13/R43/R46)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * FEATURE 260 (T0.3, R13/R43) — LO QUE **NO SALE** DEL ALCANCE GLOBAL. Una sola declaracion.
+ *
+ * POR QUE EXISTE, y no es cosmetica: `/ordenes` no admite al satelite de zona
+ * (`app/(app)/ordenes/page.tsx` le hace `notFound()`), asi que estas cifras y estos datos de
+ * contacto son cosas que ese alcance NUNCA ha podido ver. `/monitoreo` si lo admite, y no
+ * puede ser la puerta de atras. El monto a cobrar SI se conserva en los dos alcances (R17):
+ * ya lo ve en su propia pantalla de recepcion.
+ *
+ * El recorte es COLUMNA **y** DATO. Las dos mitades, o el cero miente: sin la mitad servidor
+ * el dato viaja al navegador aunque no se pinte y se lee con un `View source`; sin la mitad
+ * pantalla, `PriceLabel` convierte el hueco en `₡0`, que se lee como «esta orden no paga
+ * flete» — una afirmacion falsa, peor que enseñar la cifra (R15).
+ *
+ * El `satisfies` ata cada nombre a su tipo: un rename en `lib/types/orden.ts` deja de
+ * COMPILAR aqui, en vez de filtrar el campo en silencio.
+ */
+export const CAMPOS_SOLO_ALCANCE_GLOBAL = {
+  orden: ["fleteConIva", "comisionConIva"],
+  tienda: ["email", "telefono", "tarifa"],
+} as const satisfies {
+  orden: readonly (keyof OrdenListItemDTO)[];
+  tienda: readonly (keyof OrdenTiendaRef)[];
+};
+
+/**
+ * R13/R46 — PURA. Con `global` devuelve la orden intacta (R46: no se recorta nada por debajo
+ * del techo de R18); con `zona`, sin los campos de `CAMPOS_SOLO_ALCANCE_GLOBAL`.
+ *
+ * Como se retira cada uno: los cuatro opcionales (`fleteConIva`, `comisionConIva`,
+ * `tienda.email`, `tienda.telefono`) SE BORRAN —la clave deja de existir, asi que no viaja ni
+ * como `undefined` en el JSON—; `tienda.tarifa` se pone a `null`, que es un valor legitimo del
+ * tipo y el que ya tiene una tienda sin tarifa activa. Ninguna columna montada en `zona` los
+ * lee, asi que ese `null` no puede leerse como una afirmacion falsa.
+ */
+export function recortarPorAlcance(
+  orden: OrdenDetalleDia,
+  alcance: AlcanceTableroDia,
+): OrdenDetalleDia {
+  if (alcance === "global") return orden;
+
+  const recortada = sinClaves(orden, CAMPOS_SOLO_ALCANCE_GLOBAL.orden);
+  const relaciones = orden.relaciones;
+  if (relaciones === undefined) return recortada;
+
+  return {
+    ...recortada,
+    relaciones: {
+      ...relaciones,
+      tienda: relaciones.tienda === null ? null : recortarTienda(relaciones.tienda),
+    },
+  };
+}
+
+/**
+ * Los tres campos de tienda de la lista, retirados DERIVANDOLOS de ella y no reescribiendo sus
+ * nombres aqui: una segunda lista es lo que R43 prohibe.
+ */
+function recortarTienda(tienda: OrdenTiendaRef): OrdenTiendaRef {
+  const recortada = sinClaves(tienda, CAMPOS_SOLO_ALCANCE_GLOBAL.tienda);
+  // `tarifa` es OBLIGATORIA en el tipo, asi que no puede desaparecer: se repone a `null`, el
+  // mismo valor que ya tiene una tienda sin tarifa activa. `email` y `telefono` si desaparecen.
+  return { ...recortada, tarifa: null };
+}
+
+/**
+ * Copia sin las claves dadas. `K extends keyof T` acepta solo nombres que EXISTEN en el tipo,
+ * asi que un rename en `lib/types/orden.ts` rompe la llamada en vez de filtrar en silencio; y
+ * `Partial<T>` en la copia es lo que hace representable el `delete`.
+ *
+ * El `as T` de la salida es deliberado y esta acotado: quien retira una clave OBLIGATORIA
+ * (`tarifa`) la repone inmediatamente, y quien retira opcionales no rompe nada. Sin el, cada
+ * llamador tendria que volver a enumerar los campos — la segunda lista que R43 prohibe.
+ */
+function sinClaves<T extends object, K extends keyof T>(objeto: T, claves: readonly K[]): T {
+  const copia: Partial<T> = { ...objeto };
+  for (const clave of claves) delete copia[clave];
+  return copia as T;
 }
 
 /* -------------------------------------------------------------------------- */

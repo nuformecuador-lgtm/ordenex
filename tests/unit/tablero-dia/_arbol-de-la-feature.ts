@@ -21,6 +21,12 @@ export const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 /** Los archivos de backend de la feature. Deben existir todos. */
 export const ARCHIVOS_BACKEND = [
   "lib/types/tablero-dia.ts",
+  // FEATURE 260 (B3) — el recorte de alcance salio de `ITableroDiaRepository` a su propio
+  // modulo SIN IMPORTS para que `IOrdenRepository` pudiera pedirlo sin arrastrar el resolutor
+  // de alcance hasta un panel de cliente (el porque, medido, vive en el propio archivo). Entra
+  // en el censo porque es contrato de esta feature: las clausulas de abajo lo miran igual que
+  // al resto.
+  "lib/types/alcance-tablero.ts",
   "lib/utils/ventana-dia-cr.ts",
   "lib/interfaces/repositories/ITableroDiaRepository.ts",
   "lib/interfaces/services/ITableroDiaService.ts",

@@ -284,8 +284,15 @@ describe("Estados de la pantalla (R32, R33)", () => {
   it("R33: el vacío se dice de forma EXPLÍCITA y no como error", () => {
     render(<TableroDiaVacio />);
 
-    expect(screen.getByText(/Sin órdenes asignadas hoy/i)).toBeInTheDocument();
-    expect(screen.getByText(/aparecerá aquí/i)).toBeInTheDocument();
+    // FEATURE 259 (T7.1) — las dos aserciones se actualizan A CONCIENCIA, no se aflojan:
+    //   · la primera sigue afirmando UNA frase concreta, la nueva («…para hoy»);
+    //   · la segunda cambia de signo: lo que antes se exigía presente («aparecerá aquí»)
+    //     ahora se exige AUSENTE (R23). Esa promesa es falsa desde que la pantalla cuenta
+    //     por el día PARA EL QUE se asignó la orden: si la primera se asigna para mañana,
+    //     no aparecerá aquí. En su lugar se afirma la frase que sí es cierta.
+    expect(screen.getByText(/Sin órdenes asignadas para hoy/i)).toBeInTheDocument();
+    expect(screen.queryByText(/aparecerá aquí/i)).toBeNull();
+    expect(screen.getByText(/aparecerá en el tablero de ese día/i)).toBeInTheDocument();
     // No es un error: no hay ningún `role="alert"` en el estado vacío.
     expect(screen.queryByRole("alert")).toBeNull();
     // Y no se disfraza de tablero con ceros: no hay ni una tarjeta.
@@ -714,5 +721,29 @@ describe("Feature 258 · la cabecera de la tarjeta cede por el NOMBRE, nunca por
     const avatar = titulo.querySelector('[aria-hidden="true"]') as HTMLElement;
 
     expect(clases(avatar)).toContain("shrink-0");
+  });
+});
+
+describe("Feature 259 · R24/R25 — el nombre accesible de la tarjeta dice «para hoy»", () => {
+  // Por qué esto es un test y no una revisión visual: un `aria-label` NO se ve en la pantalla.
+  // Un lector de pantalla venía anunciando «21 asignadas hoy» sobre un conteo que ya no es «lo
+  // que se asignó hoy» sino «lo que está asignado PARA hoy». No rompe nada: sólo miente.
+  it("anuncia «N asignadas para hoy», y ya no «N asignadas hoy»", () => {
+    render(<MensajeroCard fila={fila()} onSeleccionar={() => {}} />);
+    const etiqueta = tarjetaDe("m-1").getAttribute("aria-label") ?? "";
+
+    expect(etiqueta).toContain("Ana Rojas: 21 asignadas para hoy");
+    // Y la frase vieja, exigida AUSENTE: «asignadas hoy» sin el «para» es el texto de antes.
+    expect(
+      etiqueta,
+      "volvió el texto anterior: la tarjeta se anuncia por el día en que se asignó",
+    ).not.toMatch(/asignadas hoy/i);
+  });
+
+  it("⛔ la etiqueta del contador sigue siendo «Asignadas»", () => {
+    // R25 — lo que dejó de ser cierto es el «hoy» que la acompaña, no el contador. Si alguien
+    // renombra esta etiqueta, se pasó del alcance de la 259.
+    render(<MensajeroCard fila={fila()} onSeleccionar={() => {}} />);
+    expect(contador(tarjetaDe("m-1"), "asignadas")).toHaveTextContent("Asignadas");
   });
 });

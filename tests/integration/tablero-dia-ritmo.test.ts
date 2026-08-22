@@ -12,6 +12,7 @@ import {
   VENTANA,
   crearGestion,
   crearOrden,
+  diaReparto,
   instanteCR,
   repositorio,
   sembrarBase,
@@ -371,5 +372,69 @@ describeSiHayBase("tablero del dia — la serie de entregas por hora (Postgres r
     });
 
     expect([...serie]).toEqual([]);
+  });
+
+  it("FEATURE 259 (R15) — con ordenes de las DOS ramas, el ultimo acumulado sigue siendo `entregadas`", async () => {
+    // El cuadre de R52/R15 no depende de COMO entra la orden al universo del dia, sino de que
+    // la serie y el contador lean el MISMO universo. Aqui se mezcla a proposito:
+    //   · rama (a): reservada para hoy, ASIGNADA AYER — con el criterio viejo no estaria;
+    //   · rama (a): reservada para hoy y asignada hoy;
+    //   · rama (b): sin dia de reparto, por `asignado_at` (el respaldo);
+    //   · y ruido que NO debe entrar: una reservada para MAÑANA, entregada hoy.
+    const { serie, filas } = await medir(async (tx, base) => {
+      const entregar = async (ordenId: string, hora: string): Promise<void> => {
+        await crearGestion(tx, {
+          ordenId,
+          mensajeroId: base.mensajero1,
+          resultado: "entregada",
+          at: instanteCR(FECHA_CR, hora),
+        });
+      };
+
+      await entregar(
+        await crearOrden(tx, base, {
+          clave: "r259-a-ayer",
+          estatus: "entregada",
+          mensajeroId: base.mensajero1,
+          asignadoAt: instanteCR("2001-06-14", "16:00"),
+          fechaReparto: diaReparto(FECHA_CR),
+        }),
+        "09:00",
+      );
+      await entregar(
+        await crearOrden(tx, base, {
+          clave: "r259-a-hoy",
+          estatus: "entregada",
+          mensajeroId: base.mensajero1,
+          asignadoAt: instanteCR(FECHA_CR, "07:00"),
+          fechaReparto: diaReparto(FECHA_CR),
+        }),
+        "11:00",
+      );
+      await entregar(await ordenDelDia(tx, base, "r259-b-respaldo"), "13:00");
+      // Reservada para MAÑANA: no es del dia, asi que ni entra en la serie ni en el contador —
+      // ni aunque alguien le registrara una gestion hoy.
+      await entregar(
+        await crearOrden(tx, base, {
+          clave: "r259-para-manana",
+          estatus: "entregada",
+          mensajeroId: base.mensajero1,
+          asignadoAt: instanteCR(FECHA_CR, "14:00"),
+          fechaReparto: diaReparto("2001-06-16"),
+        }),
+        "15:00",
+      );
+    });
+
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ asignadas: 3, entregadas: 3 });
+    // Las tres entregas del dia, cada una en su hora de pared. La de las 15:00 NO esta.
+    expect([...serie]).toEqual([
+      { hora: 9, entregadas: 1 },
+      { hora: 11, entregadas: 1 },
+      { hora: 13, entregadas: 1 },
+    ]);
+    // R15/R52 — el ultimo punto de la serie acumulada ES el contador que se pinta a su lado.
+    expect(totalDeLaSerie(serie)).toBe(filas[0].entregadas);
   });
 });
