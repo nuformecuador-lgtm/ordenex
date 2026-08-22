@@ -9,11 +9,15 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚦 RELEASE LISTA PARA SALIR — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+## ✅ RELEASE DESPLEGADA — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
 
-`dev` está en `b16c8c8e` y lleva **tres cosas que producción todavía no tiene**: la **256**
-(el evento de `devuelta` con su motivo tipificado), la **268** (el webhook del ciclo de ayuda y del
-incidente) y el papeleo de cierre de la **264**. La release es un PR `dev` → `prod`.
+**`prod` = `465c5234`, desplegado y verificado READY**, sin errores de runtime. Salió por el PR
+**#458** y lleva la **256** (el evento de `devuelta` con su motivo tipificado), la **268** (el
+webhook del ciclo de ayuda y del incidente) y el papeleo de cierre de la **264**.
+
+Gate **completo** sobre `969c611c` antes de abrir la release: **1307 archivos, 17.502 tests, 26
+saltados, `INIT_EXIT=0`** leído dentro del log. Y se comprobó que `dev` no se había movido entre la
+medición y la release.
 
 ### La puerta que la bloqueaba, y cómo se descargó
 
@@ -74,6 +78,29 @@ era 265; los 266 y 267 no existen—. Las cinco quedan al día. **Ninguna ficha 
 
 Sigue pendiente, y es escritura de verdad: **`progress/history.md` no tiene entrada de la 255, la
 256, la 257 ni la 268.**
+
+### Y había tres fichas más, varadas fuera de `dev`
+
+El commit **`63dc081a`** —«chore(268): registra las fichas 266, 267 y 268 en la rama»— se empujó a
+`feature/268-webhook-ayuda-incidente` **después** de que el PR #456 ya estuviera mergeado, así que
+**nunca llegó a `dev`**. Apareció mirando los deployments de Vercel, no el repo.
+
+- **266** · habilitar un pedido con novedad por API key — pedido literal del humano, del bloque
+  NOVEDADES del **cuestionario de integración de Dropi**.
+- **267** · analítica de la propia tienda por API key — también de Dropi. Revierte a propósito una
+  decisión de diseño firmada (`ROLES_SIN_ANALITICA = ['apiKey']`).
+- **268** · su versión de la ficha, que chocaba con la registrada aquí.
+
+Las dos primeras se rescataron **tal cual**, sin reescribir el análisis ni el pedido del humano, y
+de la 268 varada se injertó lo único que la de aquí no tenía: el pedido que la originó. **Y dos
+avisos suyos ya no valen, porque la release de hoy los resolvió:** la dependencia de la 266 con la
+268 está satisfecha —`ORIGENES_SIN_EVENTO_PUBLICO` está **vacía** en `dev`, así que la familia del
+rescate ya emite— y el «coordinar con la rama `ux`» quedó sin objeto. Queda en pie afirmarlo con un
+test de emisión, no asumirlo.
+
+**Dropi no es un integrador dormido: está a mitad de integrarse.** Key creada el 2026-08-20, cero
+órdenes, y dos features suyas en la cola. Por eso el changelog tiene que llegarle antes de que
+conecte.
 
 ---
 
