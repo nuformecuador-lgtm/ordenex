@@ -90,6 +90,15 @@ export class WebhookEstadoService {
         numGuia: datos.numGuia,
         numRemision: datos.numRemision,
         estado: datos.estado,
+        // Feature 256 (R1-R7). ⚠️ DOS `motivo` DISTINTOS QUE COMPARTEN NOMBRE, y esta es la UNICA
+        // linea donde el nombre publico se pega al dato: `data.motivo` transporta la causa
+        // TIPIFICADA de la devolucion (enum cerrado de 3 valores,
+        // `gestion_orden.causa_devolucion`, `db/schema.prisma:823`) y NO es `gestion_orden.motivo`
+        // (`db/schema.prisma:814`), el TEXTO LIBRE que escribe el mensajero, que no se emite
+        // JAMAS (R22). En el resto del codigo el concepto se llama `causaDevolucion`: no se
+        // «unifican». La POLITICA de contrato —solo se publica en un evento de devolucion— vive
+        // AQUI, no en el repositorio, que siempre responde «cual es la causa vigente de la orden».
+        motivo: datos.estado === "devuelta" ? datos.causaDevolucion : null,
       },
     });
 

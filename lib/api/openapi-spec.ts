@@ -740,6 +740,161 @@ export const openApiSpec = {
       },
     },
   },
+  // ---------------------------------------------------------------------------------------------
+  // Feature 256/R24 — WEBHOOKS SALIENTES. Seccion de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
+  // `paths:`): describe lo que Ordenex ENVIA al callback del integrador, no lo que el integrador
+  // pide. Va aqui y NO dentro de `paths` a proposito: la lista de endpoints del canal por API key
+  // esta congelada en `tests/unit/api/openapi-177-paths-pdf-y-carga-id.test.ts` y publicar un
+  // webhook no es dar de alta un endpoint.
+  //
+  // ⚠️ `data.estado` se documenta como `type: string` con PROSA que remite al catalogo de
+  // `OrdenListItem`, SIN `enum` literal de estados: enumerarlo aqui añadiria un 5.º catalogo de
+  // estados al contrato y pondria ROJA `tests/unit/api/openapi-contrato-en-reparto.test.ts`
+  // (design 256 §5.2). El `enum` de los tres valores de `motivo` SI se escribe: no es un catalogo
+  // de estados y no la afecta.
+  //
+  // ⚠️ Ojo tambien con la PROSA: `tests/unit/types/intentos-no-alcance.test.ts` (160/R31) prohibe
+  // la subcadena «intentos» en TODO el spec serializado. Por eso aqui se habla de «reintento», en
+  // singular: no lo «corrijas» al plural.
+  webhooks: {
+    "orden.estado_actualizado": {
+      post: {
+        tags: ["Órdenes"],
+        summary: "Cambio de estado de una orden (evento saliente)",
+        operationId: "webhookOrdenEstadoActualizado",
+        // La entrega no lleva `Authorization`: se autentica con la firma HMAC de las cabeceras.
+        security: [],
+        description: [
+          "Ordenex **envía** este evento al callback configurado por el dueño de la tienda cada vez",
+          "que una orden suya cambia a un estado publicable. Es una petición SALIENTE de Ordenex",
+          "hacia el integrador: no es un endpoint que el integrador llame.",
+          "",
+          "El destino se deriva SIEMPRE del dueño de la orden: un evento nunca se entrega al callback",
+          "de otro dueño.",
+          "",
+          "**Firma.** Cada entrega lleva `X-Ordenex-Timestamp` (instante unix en segundos) y",
+          "`X-Ordenex-Signature` (`sha256=<hex>`, HMAC-SHA256 sobre la cadena",
+          "`${timestamp}.${cuerpo}` con el secreto de la suscripción). El `cuerpo` es el JSON EXACTO",
+          "recibido, byte a byte: verificá la firma sobre el texto crudo ANTES de parsearlo, y",
+          "descartá las entregas cuyo timestamp quede fuera de tu ventana anti-replay.",
+          "",
+          "**Idempotencia.** Una misma entrega puede repetirse (reintento tras un fallo transitorio,",
+          "o duplicado): deduplicá por `eventoId`, que es determinista para un mismo cambio de estado.",
+          "",
+          "Respondé 2xx para confirmar la recepción; cualquier otra respuesta se trata como fallo",
+          "transitorio y la entrega se reintenta.",
+        ].join("\n"),
+        parameters: [
+          {
+            name: "X-Ordenex-Signature",
+            in: "header",
+            required: true,
+            description:
+              "Firma de la entrega: `sha256=<hex>`, HMAC-SHA256 de `${timestamp}.${cuerpo}` con el secreto de la suscripción.",
+            schema: { type: "string", pattern: "^sha256=[0-9a-f]{64}$" },
+          },
+          {
+            name: "X-Ordenex-Timestamp",
+            in: "header",
+            required: true,
+            description:
+              "Instante unix en SEGUNDOS en que se firmó la entrega. Entra en el mensaje firmado y es el insumo de tu ventana anti-replay.",
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["evento", "eventoId", "ocurridoAt", "data"],
+                properties: {
+                  evento: {
+                    type: "string",
+                    const: "orden.estado_actualizado",
+                    description: "Nombre del evento. Estable.",
+                  },
+                  eventoId: {
+                    type: "string",
+                    description:
+                      "Identificador determinista del evento (`webhook_estado:<ordenId>:<estatusDestinoId>:<ocurridoAt>`). Dos entregas del MISMO cambio de estado lo repiten: deduplicá por este valor.",
+                  },
+                  ocurridoAt: {
+                    type: "string",
+                    format: "date-time",
+                    description: "Instante del cambio de estado (ISO 8601, UTC).",
+                  },
+                  data: {
+                    type: "object",
+                    description:
+                      "Forma ÚNICA: las cuatro claves están SIEMPRE presentes, sea cual sea el estado. El consumidor no ramifica por estado para saber si un campo existe.",
+                    required: ["numGuia", "numRemision", "estado", "motivo"],
+                    properties: {
+                      numGuia: {
+                        type: ["integer", "null"],
+                        description: "Número de guía de la orden (null si aún no está asignado).",
+                      },
+                      numRemision: {
+                        type: "string",
+                        description: "Remisión de la orden (la que envió el integrador).",
+                      },
+                      estado: {
+                        type: "string",
+                        description:
+                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). No se enumera aquí para no duplicar el catálogo: la lista vigente es la de ese schema.",
+                      },
+                      motivo: {
+                        type: ["string", "null"],
+                        enum: ["not_found", "wrong_number", "wrong_address", null],
+                        description: [
+                          "Causa TIPIFICADA de la devolución, con el value crudo del enum y sin traducir:",
+                          "`not_found` (destinatario no encontrado), `wrong_number` (teléfono equivocado),",
+                          "`wrong_address` (dirección equivocada).",
+                          "",
+                          "Es `null` en todo evento cuyo `estado` NO sea `devuelta`, y es `null` **también** en una",
+                          "`devuelta` sin causa registrada (órdenes devueltas antes de que la causa se pidiera; ese",
+                          "histórico no se rellenó). El contrato no distingue «no hubo causa» de «no se registró»:",
+                          "en los dos casos viaja `null`, el campo NUNCA se omite y la entrega es normal.",
+                          "",
+                          "**Es el motivo VIGENTE EN EL MOMENTO DE LA ENTREGA**, no una foto del instante del",
+                          "cambio de estado: el webhook dice exactamente lo mismo que dice la aplicación en ese",
+                          "instante. Si la devolución se re-gestiona entre dos entregas del mismo `eventoId`, la",
+                          "segunda lleva la causa vigente entonces; deduplicá por `eventoId` y quedate con la",
+                          "última entrega.",
+                          "",
+                          "⚠️ Transporta EXCLUSIVAMENTE la causa tipificada. NO es el texto libre que el mensajero",
+                          "escribe al gestionar la orden —que comparte el nombre `motivo` en la base de datos y NO",
+                          "se emite NUNCA en este webhook—, ni ningún otro dato del destinatario.",
+                        ].join("\n"),
+                      },
+                    },
+                  },
+                },
+              },
+              example: {
+                evento: "orden.estado_actualizado",
+                eventoId: "webhook_estado:018f2c31-0000-4000-8000-000000000001:7:2026-08-21T10:00:00.000Z",
+                ocurridoAt: "2026-08-21T10:00:00.000Z",
+                data: {
+                  numGuia: 100234,
+                  numRemision: "REM-0001",
+                  estado: "devuelta",
+                  motivo: "not_found",
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Recepción confirmada. Cualquier 2xx vale; cualquier otra respuesta se trata como fallo transitorio y la entrega se reintenta.",
+          },
+        },
+      },
+    },
+  },
   components: {
     securitySchemes: {
       bearerAuth: {
