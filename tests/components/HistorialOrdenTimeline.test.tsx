@@ -233,4 +233,264 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
       textoCorreccionDiaReparto("2026-08-21", "2026-08-22"),
     );
   });
+
+  /* ---------- FEATURE 262 (F8, R37/R38/R39/R41) — el resto de la suite de pantalla ---------- */
+
+  /**
+   * ⬛ LO QUE ESTA TANDA (F7/F8) AÑADE, y por qué cada cosa está donde está.
+   *
+   * Las tres de arriba las escribió la tanda de backend con el alcance mínimo. Lo que faltaba
+   * —y es lo que `tasks.md > F8` enumera— son tres cosas que un render SÍ puede afirmar y las
+   * de arriba no afirmaban:
+   *
+   *  1. **«Se distingue POR TEXTO y no sólo por color»**, sobre el render de verdad. Se afirma
+   *     en las DOS mitades, porque una sola no dice nada:
+   *       · leyendo **sólo `textContent`** —donde no queda ni una clase de estilo— la entrada
+   *         sigue siendo identificable, y ninguna transición lo es (la palabra DISCRIMINA);
+   *       · y la diferencia visual que hay **encima** de esa palabra incluye al menos una marca
+   *         que **no es de color** (el filo discontinuo, el anillo hueco), con el clasificador
+   *         auto-probado en las dos direcciones. Distinguir por color a secas no vale en este
+   *         repo: hay guardia de contraste y una lección medida sobre el color en el navegador.
+   *  2. **La lista LARGA con las dos clases mezcladas**: que dos correcciones distintas no se
+   *     contaminen entre sí y que el orden que llega sea exactamente el que se pinta (**R41**).
+   *  3. **El nombre accesible de la lista y el sello**, que son las dos cosas de esta pantalla
+   *     que sólo existen en el DOM y nunca en el texto visible.
+   *
+   * Y una corrección de método sobre las tres de arriba: aquéllas afirman la etiqueta contra
+   * `ETIQUETA_CORRECCION_DIA`, que es **la constante que llena la pantalla**. Eso está verde
+   * pase lo que pase con el texto. Aquí el literal se escribe **a mano**, letra por letra.
+   */
+
+  /** Una SEGUNDA corrección, en el sentido contrario y con otro actor: sirve de contraprueba. */
+  const CORRECCION_VUELTA: OrdenHistorialEntradaDTO = {
+    clase: "correccion_dia",
+    fechaAnteriorISO: "2026-08-22",
+    fechaNuevaISO: "2026-08-21",
+    actorNombre: "Luis Bodega",
+    motivo: "el cliente pidió recibirlo el mismo día",
+    createdAt: new Date("2026-08-23T11:02:00Z"),
+  };
+
+  /**
+   * Los tokens de clase que deciden el ASPECTO de una entrada: los del `<li>` más los de su
+   * punto decorativo. El punto es el primer hijo `span[aria-hidden]` del `<li>`; se toma con
+   * `:scope >` a propósito, porque la rama de transición tiene OTRO `span[aria-hidden]` —la
+   * flecha— metido dentro del `<p>`.
+   */
+  function clasesDeLaEntrada(li: HTMLElement): Set<string> {
+    const tokens = new Set<string>(Array.from(li.classList));
+    const punto = li.querySelector(":scope > span[aria-hidden='true']");
+    for (const c of Array.from(punto?.classList ?? [])) tokens.add(c);
+    return tokens;
+  }
+
+  /**
+   * ¿El token cambia la FORMA de la marca —tamaño, grosor del filo, estilo del filo, esquinas,
+   * giro— en vez de su color?
+   *
+   * La POSICIÓN queda fuera a propósito: mover el punto un píxel no distingue nada, y si contara
+   * como «marca de forma» bastaría un `-left-` distinto para pasar la comprobación de abajo sin
+   * haber distinguido nada de verdad.
+   */
+  const MARCAS_DE_FORMA = [
+    /^size-/,
+    /^w-/,
+    /^h-/,
+    /^rounded/,
+    /^border-\d/,
+    /^border-(solid|dashed|dotted|double|hidden|none)$/,
+    /^rotate-/,
+  ];
+  const esMarcaDeForma = (token: string) => MARCAS_DE_FORMA.some((r) => r.test(token));
+
+  it("AUTOCOMPROBACIÓN: el clasificador separa forma de color en las DOS direcciones", () => {
+    // En este repo una guardia estática pasó verde con el detector roto: encontraba cero porque
+    // no encontraba NADA. Antes de creerle nada al test de abajo, se le pregunta por respuestas
+    // conocidas.
+    for (const color of [
+      "bg-primary",
+      "bg-popover",
+      "border-border",
+      "border-primary",
+      "text-muted-foreground",
+    ]) {
+      expect(esMarcaDeForma(color), `«${color}» es de COLOR y se contó como forma`).toBe(false);
+    }
+    for (const forma of ["border-dashed", "border-2", "size-2.5", "rounded-full"]) {
+      expect(esMarcaDeForma(forma), `«${forma}» es de FORMA y no se contó`).toBe(true);
+    }
+    // La posición NO cuenta: un píxel de desplazamiento no es una marca.
+    expect(esMarcaDeForma("-left-[6px]")).toBe(false);
+    expect(esMarcaDeForma("top-1.5")).toBe(false);
+  });
+
+  it("R38/R39: se distingue POR TEXTO — leyendo sólo las palabras, sin una sola clase de estilo", () => {
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[0], CORRECCION, ENTRADAS[1]]} />);
+    const items = screen.getAllByRole("listitem");
+    const textos = items.map((li) => li.textContent ?? "");
+
+    // El literal va A MANO: contra `ETIQUETA_CORRECCION_DIA` estaría comparando la pantalla con
+    // la constante que la llena, y eso está verde pase lo que pase.
+    expect(textos[1]).toContain("Día de reparto");
+    expect(textos[1]).toContain("Del 21 de agosto al 22 de agosto");
+
+    // Y la palabra DISCRIMINA: ninguna transición la dice. Sin esta mitad, «se distingue por
+    // texto» se cumpliría con una palabra que estuviera en todas las entradas.
+    expect(textos[0]).not.toContain("Día de reparto");
+    expect(textos[2]).not.toContain("Día de reparto");
+
+    // ANTI-VACUIDAD: las transiciones no están vacías; cada una se lee por SU propio texto.
+    expect(textos[0]).toContain(L.en_preparacion);
+    expect(textos[2]).toContain(L.reprogramada);
+
+    // Y el punto de la izquierda no aporta NADA a esta lectura: es decorativo y está oculto al
+    // lector de pantalla, así que lo de arriba es literalmente todo lo que se oye.
+    const punto = items[1].querySelector(":scope > span[aria-hidden='true']");
+    expect(punto, "la entrada perdió su marca").not.toBeNull();
+    expect(punto?.textContent ?? "").toBe("");
+  });
+
+  it("F7: y NO SÓLO por color — la marca de la corrección difiere en algo que no es un tono", () => {
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[1], CORRECCION]} />);
+    const [transicion, correccion] = screen.getAllByRole("listitem");
+
+    const deTransicion = clasesDeLaEntrada(transicion);
+    const deCorreccion = clasesDeLaEntrada(correccion);
+
+    // (1) No se pintan igual. Antes de F7 SÍ se pintaban igual —mismo punto, mismo filo— y esta
+    //     línea es la que lo impide volver a ser así.
+    const diferencia = [
+      ...Array.from(deCorreccion).filter((t) => !deTransicion.has(t)),
+      ...Array.from(deTransicion).filter((t) => !deCorreccion.has(t)),
+    ];
+    expect(
+      diferencia,
+      "la corrección se pinta EXACTAMENTE igual que una transición",
+    ).not.toHaveLength(0);
+
+    // (2) Y lo que las diferencia no es SÓLO el tono: hay al menos una marca de forma, que es lo
+    //     único que sobrevive a una captura en escala de grises o a un daltonismo.
+    expect(
+      diferencia.filter(esMarcaDeForma),
+      `la única diferencia visual es de color: ${diferencia.join(" ")}`,
+    ).not.toHaveLength(0);
+
+    // (3) CONTRAPRUEBA, y de paso la mitad de R45 que se ve en pantalla: la transición NO ganó
+    //     ninguna de esas marcas. El filo de la corrección es discontinuo y el de la transición
+    //     sigue siendo continuo; el punto de la corrección es un anillo y el de la transición
+    //     sigue siendo un disco lleno.
+    expect(deCorreccion.has("border-dashed")).toBe(true);
+    expect(deTransicion.has("border-dashed")).toBe(false);
+    expect(Array.from(deCorreccion).some((t) => /^border-\d/.test(t))).toBe(true);
+    expect(Array.from(deTransicion).some((t) => /^border-\d/.test(t))).toBe(false);
+  });
+
+  it("R37/R41: en una lista LARGA y mezclada, cada entrada sale en su sitio y con SUS datos", () => {
+    // Siete entradas, dos de ellas correcciones EN SENTIDOS CONTRARIOS. El componente no ordena
+    // (R41): pinta el array tal cual llega, que es el que fusionó el servidor.
+    const entradas: OrdenHistorialEntradaDTO[] = [
+      ENTRADAS[0],
+      ENTRADAS[1],
+      CORRECCION,
+      ENTRADAS[2],
+      CORRECCION_VUELTA,
+      {
+        clase: "transicion" as const,
+        estatusOrigenValue: "en_bodega_central",
+        estatusDestinoValue: "en_reparto",
+        origenTipo: "asignacion_bodega",
+        actorNombre: "Bodega Central",
+        motivo: null,
+        createdAt: new Date("2026-08-24T09:00:00Z"),
+      },
+      {
+        clase: "transicion" as const,
+        estatusOrigenValue: "en_reparto",
+        estatusDestinoValue: "entregada",
+        origenTipo: "gestion",
+        actorNombre: "Ana Mensajera",
+        motivo: null,
+        createdAt: new Date("2026-08-24T17:45:00Z"),
+      },
+    ];
+
+    render(<HistorialOrdenTimeline entradas={entradas} />);
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(7);
+
+    // Las dos correcciones están donde el servidor las puso, y NO SE CONTAMINAN: cada una lleva
+    // sus fechas, su actor y su motivo. Los literales, a mano.
+    expect(items[2].textContent ?? "").toContain("Del 21 de agosto al 22 de agosto");
+    expect(items[2].textContent ?? "").toContain("Ana Pérez");
+    expect(items[2].textContent ?? "").not.toContain("Del 22 de agosto al 21 de agosto");
+    expect(items[4].textContent ?? "").toContain("Del 22 de agosto al 21 de agosto");
+    expect(items[4].textContent ?? "").toContain("Luis Bodega");
+    expect(items[4].textContent ?? "").toContain("Motivo: el cliente pidió recibirlo el mismo día");
+    expect(items[4].textContent ?? "").not.toContain("Del 21 de agosto al 22 de agosto");
+
+    // Exactamente DOS entradas son correcciones: ni se duplica ninguna ni se come ninguna.
+    const conEtiqueta = items.filter((li) => (li.textContent ?? "").includes("Día de reparto"));
+    expect(conEtiqueta).toHaveLength(2);
+
+    // Las cinco transiciones siguen leyéndose como siempre, en su sitio (R45 en pantalla).
+    expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
+    expect(within(items[1]).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(within(items[3]).getByText(L.en_bodega_central)).toBeInTheDocument();
+    expect(within(items[5]).getByText(L.en_reparto)).toBeInTheDocument();
+    expect(within(items[6]).getByText(L.entregada)).toBeInTheDocument();
+
+    // R39: ninguna etiqueta del catálogo dentro de las dos correcciones, ni la flecha.
+    for (const correccion of conEtiqueta) {
+      for (const etiqueta of Object.values(L)) {
+        expect(within(correccion).queryByText(etiqueta)).toBeNull();
+      }
+      expect(correccion.textContent ?? "").not.toContain("→");
+    }
+
+    // R38, sobre la lista ENTERA: ni una fecha en `YYYY-MM-DD` a la vista.
+    expect(screen.getByRole("list").textContent ?? "").not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("R37: dos correcciones seguidas sobre la misma orden son DOS entradas, no una", () => {
+    // Lo que la puerta humana pide comprobar en la app (F6): corregir dos veces → dos entradas.
+    // Aquí se afirma la mitad que sí depende de la pantalla.
+    render(<HistorialOrdenTimeline entradas={[CORRECCION, CORRECCION_VUELTA]} />);
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent ?? "").toContain("Del 21 de agosto al 22 de agosto");
+    expect(items[1].textContent ?? "").toContain("Del 22 de agosto al 21 de agosto");
+    // Y la ida no se lee igual que la vuelta: si la frase fuera simétrica, el rastro no serviría
+    // para lo que existe.
+    expect(items[0].textContent).not.toBe(items[1].textContent);
+  });
+
+  it("R39: el nombre accesible de la lista ya no la anuncia como si todo fuesen estados", () => {
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[0], CORRECCION]} />);
+
+    // Literal A MANO: es el contrato que localizan los specs de Playwright y el test de la 155.
+    expect(
+      screen.getByRole("list", { name: "Línea de tiempo de la orden" }),
+    ).toBeInTheDocument();
+    // Y ya no promete «de estados», que con la 262 dejó de ser cierto para toda la lista: hay
+    // una entrada dentro que NO es un estado (R39), y a quien navega con lector de pantalla se
+    // le estaba anunciando lo contrario.
+    expect(screen.queryByRole("list", { name: "Línea de tiempo de estados" })).toBeNull();
+  });
+
+  it("R38/R41: el sello de la corrección es un `<time>` con el instante, en la zona FIJA del componente", () => {
+    render(<HistorialOrdenTimeline entradas={[CORRECCION]} />);
+
+    const sello = screen.getByRole("listitem").querySelector("time");
+    expect(sello, "la corrección perdió su sello de hora").not.toBeNull();
+    // El instante exacto queda legible por máquina, sin depender del formato visible.
+    expect(sello?.getAttribute("datetime")).toBe("2026-08-22T15:14:00.000Z");
+    // Y lo VISIBLE va en la zona fija de Costa Rica, no en UTC ni en la del entorno que renderiza:
+    // 15:14 UTC son las 9:14 allí. Si el componente soltara el reloj del navegador, este número
+    // cambiaría con la máquina.
+    expect(sello?.textContent ?? "").toMatch(/9:14/);
+    expect(sello?.textContent ?? "").not.toMatch(/15:14/);
+    // R38: tampoco aquí se escapa un `YYYY-MM-DD`.
+    expect(sello?.textContent ?? "").not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
 });

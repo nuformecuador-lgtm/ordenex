@@ -184,3 +184,62 @@ describe("HistorialOrdenSheet — badge 'Intento X de N' (feature 47, R15/R16/R1
     ).toBeNull();
   });
 });
+
+/* ================================================================================= */
+/* FEATURE 262 (F7, R39) — lo que el drawer PROMETE al abrirse                        */
+/* ================================================================================= */
+
+/**
+ * La descripción del diálogo decía «Cambios de estado de la orden en orden cronológico.» desde
+ * la 49, cuando la lista tenía UNA sola clase de entrada. Desde la 262 tiene dos, y una de ellas
+ * NO es un cambio de estado (**R39**): dejarla como estaba prometía una cosa y enseñaba otra.
+ *
+ * No es un detalle cosmético. La `SheetDescription` es lo que el lector de pantalla anuncia al
+ * abrir el diálogo, así que era justo la puerta por la que R39 se incumplía sin que se viera —y
+ * ningún test la miraba: el literal no estaba fijado en ningún sitio del repo.
+ */
+describe("HistorialOrdenSheet (feature 262, F7/R39) — la descripción nombra las DOS clases", () => {
+  const CORRECCION: OrdenHistorialEntradaDTO = {
+    clase: "correccion_dia",
+    fechaAnteriorISO: "2026-08-21",
+    fechaNuevaISO: "2026-08-22",
+    actorNombre: "Ana Pérez",
+    motivo: "la bodega marcó el lote para el día siguiente por error",
+    createdAt: new Date("2026-08-22T15:14:00Z"),
+  };
+
+  it("dice que dentro hay cambios de estado Y correcciones del día de reparto", async () => {
+    const user = userEvent.setup();
+    render(
+      <HistorialOrdenSheet
+        ordenId="o1"
+        obtenerHistorial={fakeAction({
+          status: "ok",
+          entradas: [ENTRADA, CORRECCION],
+          intentos: 0,
+          umbral: 3,
+        })}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Ver historial de la orden/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Literal A MANO: es el contrato del texto, no una comprobación contra quien lo genera.
+    expect(
+      within(dialog).getByText(
+        "Cambios de estado y correcciones del día de reparto, en orden cronológico.",
+      ),
+    ).toBeInTheDocument();
+
+    // Y ya NO promete sólo cambios de estado, que con la 262 dejó de ser cierto.
+    expect(
+      within(dialog).queryByText("Cambios de estado de la orden en orden cronológico."),
+      "el drawer volvió a prometer sólo cambios de estado",
+    ).toBeNull();
+
+    // ANTI-VACUIDAD: la promesa se cumple en la misma pantalla — dentro hay una entrada de cada
+    // clase. Sin esto, el texto podría estar prometiendo algo que el drawer no enseña.
+    expect(await within(dialog).findByText(LABEL_DESTINO)).toBeInTheDocument();
+    expect(within(dialog).getByText("Del 21 de agosto al 22 de agosto")).toBeInTheDocument();
+  });
+});

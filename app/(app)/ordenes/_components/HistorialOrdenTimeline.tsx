@@ -28,12 +28,22 @@ import { estatusLabel } from "./estatus-label";
 
 /**
  * @pendiente-262-f6 F6 (ver la app) sigue sin hacerse para esta pantalla: falta abrir «Ver
- * historial» de una orden corregida con cuenta maestro/admin y con adminTienda, y comprobar en
- * vivo que la entrada se lee y se distingue. La rama de correccion se escribio en la tanda de
- * backend con el alcance MINIMO —estructura y textos, nada de pulido visual— porque `B24` rompia
- * el build aqui y una rama con el build roto no pasa el gate. Lo que queda es de F7/F8: el estilo
- * fino y el resto de la suite de pantalla. `tests/unit/guards/historial-correccion-dia.guardia.
- * test.ts` explica que vigila cada clausula y por que esta anotacion no se borra sola.
+ * historial» de una orden corregida, en PREVIEW, con cuenta maestro/admin y con adminTienda, y
+ * comprobar en vivo que la entrada se lee, se distingue y sale en su sitio cronologico.
+ *
+ * QUE CAMBIO Y QUE NO, para que nadie lea esta anotacion desactualizada. La tanda de backend la
+ * dejo cubriendo DOS cosas: F6 y el pulido de F7/F8. **El pulido de F7/F8 ya esta hecho** —el
+ * estilo de la entrada (anillo hueco y filo discontinuo, ninguno de color), el nombre accesible
+ * de la lista, la descripcion del drawer y la suite de pantalla con la lista larga y el «se
+ * distingue por texto»—, asi que esa mitad se RETIRA del texto. F6 no, y no se retira: ninguna
+ * comprobacion automatica puede abrir un navegador contra preview con tres cuentas reales, y
+ * este repo tiene la leccion medida de que ver la app encontro 7 textos rotos que 12.000 tests
+ * daban por buenos. Lo que jsdom NO puede afirmar es justo lo visual: las clases de Tailwind
+ * ahi son cadenas, nadie calcula el `border-style` ni el contraste del anillo.
+ *
+ * `tests/unit/guards/historial-correccion-dia.guardia.test.ts` explica que vigila cada clausula
+ * y por que esta anotacion no se borra sola: quien la retire tiene que hacerlo A PROPOSITO,
+ * borrando tambien la clausula (f) de esa guardia y dejando la evidencia en `progress/`.
  */
 
 // Formateo FIJO a la zona de Costa Rica: la lectura del timestamp es estable y determinista
@@ -68,7 +78,14 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
   }
 
   return (
-    <ol aria-label="Línea de tiempo de estados" className="flex flex-col gap-4">
+    // F7 — EL NOMBRE ACCESIBLE DE LA LISTA YA NO PUEDE DECIR «de estados». Decia «Línea de
+    // tiempo de estados» desde la 49, cuando la lista tenia UNA sola clase de entrada. Con la
+    // 262 tiene dos, y una de ellas NO ES UN ESTADO (R39): a quien navega con lector de
+    // pantalla se le anunciaba la lista entera como si lo fuera, que es exactamente lo que R39
+    // prohibe, por la unica puerta donde no se ve. Los cuatro consumidores del nombre viejo se
+    // actualizaron (un test de componente de la 155 y tres specs de Playwright); el nombre
+    // nuevo queda fijado a mano en `tests/components/HistorialOrdenTimeline.test.tsx`.
+    <ol aria-label="Línea de tiempo de la orden" className="flex flex-col gap-4">
       {entradas.map((entrada, index) => {
         const createdMs = entrada.createdAt.getTime();
         // La `key` antepone la CLASE: con dos fuentes, dos entradas del mismo instante en la
@@ -114,18 +131,41 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
             // R39: en esta rama NO se llama a `estatusLabel` ni se pinta la flecha de estados.
             // Una correccion no tiene estado de origen ni de destino, y presentarla como una
             // transicion seria mentir sobre la maquina de estados.
+            //
+            // F7 — LA ENTRADA SE DISTINGUE POR TEXTO, Y ADEMAS POR FORMA. NUNCA POR COLOR.
+            // Lo que la distingue de verdad es la primera linea, que dice QUE es (R38/R39, design
+            // §14.4). Encima de eso, y solo encima, hay dos marcas VISUALES que sobreviven a una
+            // captura en escala de grises y a cualquier daltonismo, porque no son de color:
+            //
+            //   · el punto es un ANILLO HUECO (`border-2` + `bg-background`) y no un disco lleno;
+            //   · el filo de la entrada es DISCONTINUO (`border-dashed`) y no continuo.
+            //
+            // Los TOKENS DE COLOR son EXACTAMENTE los mismos que usa la transicion
+            // (`border-border`, `border-primary`): no se introduce ningun tono nuevo. Este repo
+            // tiene guardia de contraste y una leccion escrita sobre medir color en el navegador
+            // -la herramienta miente-, asi que un tono distinto no habria demostrado nada y
+            // ademas no dice QUE es la entrada. `tests/components/HistorialOrdenTimeline.test.tsx`
+            // afirma las dos mitades: que se distingue leyendo SOLO el texto, y que la diferencia
+            // visual incluye al menos una marca que NO es de color.
             return (
               <li
                 key={key}
-                className="relative flex flex-col gap-1 border-l-2 border-border pl-4"
+                className="relative flex flex-col gap-1 border-l-2 border-dashed border-border pl-4"
               >
+                {/* El hueco del anillo va en `bg-popover` y NO en `bg-background`, y esto se
+                    MIDIO en un navegador, no se supuso: la superficie donde vive esta lista es
+                    el `SheetContent` del drawer, que es `bg-popover` (`components/ui/sheet.tsx`).
+                    Con `bg-background` el hueco salia en `rgb(10,21,36)` sobre un panel
+                    `rgb(16,32,58)` en tema oscuro -un disco mas oscuro, no un hueco-. Y
+                    `--popover` vale lo MISMO que `--card` en los dos temas, asi que tambien casa
+                    si esta lista acaba dentro de una card. */}
                 <span
                   aria-hidden="true"
-                  className="absolute top-1.5 -left-[5px] size-2 rounded-full bg-primary"
+                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
                 />
-                <p className="flex flex-wrap items-center gap-1 text-sm font-medium">
-                  <span>{ETIQUETA_CORRECCION_DIA}</span>
-                </p>
+                {/* La primera linea nombra la CLASE de entrada; el orden de las cinco lineas es
+                    el de design §14.4 y no se altera. */}
+                <p className="text-sm font-medium">{ETIQUETA_CORRECCION_DIA}</p>
                 <p className="text-sm">
                   {textoCorreccionDiaReparto(entrada.fechaAnteriorISO, entrada.fechaNuevaISO)}
                 </p>

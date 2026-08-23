@@ -124,8 +124,21 @@ export function HistorialOrdenSheet({
         <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{titulo}</SheetTitle>
+            {/*
+              FEATURE 262 (F7) — LA DESCRIPCION DEL DRAWER YA NO PUEDE DECIR SOLO «cambios de
+              estado». Decia «Cambios de estado de la orden en orden cronológico.» desde la 49,
+              cuando el drawer mostraba UNA sola clase de entrada. Desde la 262 muestra tambien
+              las correcciones del dia de reparto, que NO son cambios de estado (R39): dejarlo
+              como estaba prometia una cosa y enseñaba otra, y es la descripcion que el lector
+              de pantalla anuncia al abrir el dialogo.
+
+              Se NOMBRAN las dos clases en vez de irse a un generico tipo «todo lo que le ha
+              pasado a la orden»: quien abre esto esta operando y necesita saber que hay dentro.
+              Sin siglas y sin nombres de columna, la misma regla con la que este repo retiro
+              «SLA» del frontend.
+            */}
             <SheetDescription>
-              Cambios de estado de la orden en orden cronológico.
+              Cambios de estado y correcciones del día de reparto, en orden cronológico.
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 overflow-y-auto px-4 pb-6">

@@ -25,6 +25,11 @@ import { describe, it, expect } from "vitest";
  *  - **(f)** la deuda de F6 sigue ANOTADA con su motivo, y quitarla es un acto consciente;
  *  - **(g)** los tests de pantalla de esa entrada siguen existiendo — borrar un componente o su
  *    test se lleva por delante la red de features ajenas, y en este repo ya costó una regresión.
+ *  - **(i)** *(añadido por F7/F8)* la entrada se distingue **también por FORMA y no sólo por
+ *    color**, y la suite que lo afirma sigue en su sitio. Una comprobación estática no puede
+ *    medir un color en un navegador —este repo tiene la lección escrita de que la herramienta
+ *    miente—, pero **sí** puede afirmar que el estilo de la corrección no volvió a ser el mismo
+ *    de una transición y que las marcas que la distinguen no son de tono.
  *
  * **Y el detector se auto-prueba (h).** En este repo una guardia estática pasó VERDE con su
  * detector roto: encontraba cero porque no encontraba NADA. Aquí el extractor de ramas se prueba
@@ -259,6 +264,69 @@ describe("262/R38-R39 — la entrada de corrección conserva sus tests de pantal
     expect(test, "desapareció la aserción de las dos fechas en palabras").toContain(
       "Del 21 de agosto al 22 de agosto",
     );
+  });
+});
+
+/* ============================================================================================ */
+/* (i) F7/F8 — LA ENTRADA NO SE PINTA COMO UNA TRANSICIÓN, Y NO SE DISTINGUE SÓLO POR COLOR      */
+/* ============================================================================================ */
+
+describe("262/F7 — la corrección tiene marca propia, y la marca no es un tono", () => {
+  const CORRECCION = ramaDelSwitch(CODIGO, "correccion_dia") ?? "";
+  const TRANSICION = ramaDelSwitch(CODIGO, "transicion") ?? "";
+
+  it("el filo de la corrección es DISCONTINUO y el de la transición sigue siendo continuo", () => {
+    // Hasta F7 las dos ramas compartían `className` letra por letra: la entrada se distinguía
+    // por su texto —que es lo que R39 exige— y por NADA más. Volver a igualarlas muere aquí.
+    expect(CORRECCION, "la corrección perdió su filo discontinuo").toContain("border-dashed");
+    expect(TRANSICION, "la transición ganó el filo de la corrección (R45)").not.toContain(
+      "border-dashed",
+    );
+  });
+
+  it("el punto de la corrección es un ANILLO hueco, no un disco lleno", () => {
+    // `border-<n>` en el punto = anillo. La transición no lo lleva y no debe llevarlo.
+    expect(CORRECCION).toMatch(/border-\d/);
+    expect(TRANSICION).not.toMatch(/border-\d/);
+  });
+
+  it("las dos marcas son de FORMA: no se introdujo ningún tono nuevo en esta rama", () => {
+    // Distinguir por color a secas no vale, y meter un color nuevo tampoco sería la respuesta:
+    // este repo tiene guardia de contraste y una lección medida sobre leer color en el
+    // navegador. Los tokens de color de la corrección son los MISMOS de la transición.
+    const tonos = CORRECCION.match(/\b(?:bg|text|border)-[a-z]+(?:-[a-z0-9]+)*/g) ?? [];
+    const PERMITIDOS = new Set([
+      // `bg-popover` es la superficie del drawer, no un tono decorativo: es lo que hace que el
+      // hueco del anillo sea un HUECO y no un disco de otro color. Medido en un navegador.
+      "bg-popover",
+      "bg-primary",
+      "border-border",
+      "border-primary",
+      "text-sm",
+      "text-xs",
+      "text-muted-foreground",
+      "border-dashed",
+    ]);
+    // `border-2` y `border-l-2` son GROSORES, no tonos: fuera del recuento.
+    const GROSOR = /^border(-[lrtbxy])?-\d+$/;
+    const nuevos = tonos.filter((t) => !PERMITIDOS.has(t) && !GROSOR.test(t));
+    expect(nuevos, `la corrección introdujo tonos propios: ${nuevos.join(" ")}`).toHaveLength(0);
+    // ANTI-VACUIDAD: el extractor encontró tokens de verdad, no una lista vacía.
+    expect(tonos.length, "el extractor de tokens no encontró NADA").toBeGreaterThan(3);
+  });
+
+  it("la suite de pantalla que afirma las dos mitades sigue existiendo", () => {
+    // «El test que vive dentro de lo que borras», otra vez: sin estas piezas, el estilo de
+    // arriba quedaría afirmado sólo por lectura estática y nadie miraría el render.
+    const test = leer(TEST_DE_PANTALLA);
+    for (const ancla of [
+      "clasesDeLaEntrada", // lee las clases del <li> y de su punto sobre el render
+      "esMarcaDeForma", // separa forma de color, y se auto-prueba en las dos direcciones
+      "Del 22 de agosto al 21 de agosto", // la SEGUNDA corrección: la lista larga y sin contaminación
+      "Línea de tiempo de la orden", // el nombre accesible, fijado a mano
+    ]) {
+      expect(test, `desapareció de la suite de pantalla: \`${ancla}\``).toContain(ancla);
+    }
   });
 });
 
