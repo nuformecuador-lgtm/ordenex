@@ -1,4 +1,5 @@
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
+import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -756,6 +757,118 @@ export const openApiSpec = {
         },
       },
     },
+    // Feature 267 (R39) — NOVENO endpoint del canal: la analitica de las propias ordenes.
+    //
+    // La lista de paths estaba firmada en OCHO desde la 255 y publicar esto la puso ROJA: ESE es
+    // su trabajo. Sube a NUEVE A PROPOSITO, en el mismo commit que publica el endpoint y en los
+    // DOS artefactos (aqui y en `docs/api/api-key-openapi.yaml`), no de contrabando.
+    "/api/ordenes/api-key/analitica": {
+      get: {
+        tags: ["Órdenes"],
+        summary: "Serie diaria de una métrica sobre tus órdenes",
+        operationId: "consultarAnalitica",
+        description: [
+          "Devuelve una **serie diaria** de UNA métrica, calculada exclusivamente sobre las",
+          "órdenes de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar:",
+          "sale de la propia key, así que no hay ningún parámetro para pedir datos de otra tienda",
+          "(y si se envía uno, se ignora).",
+          "",
+          "**Una métrica por llamada.** El parámetro `metrica` acepta únicamente los ids del `enum`",
+          "de abajo, que es el catálogo publicado de este canal. Una métrica que no esté en esa",
+          "lista responde **403**, exactamente igual que una métrica que no existe: las dos",
+          "respuestas son idénticas a propósito.",
+          "",
+          "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
+          "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
+          "(UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo",
+          "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
+          "ventana no puede superar 366 días contando ambos extremos.",
+          "",
+          "**`cobertura` viene SIEMPRE y hay que leerla.** `fechasNoComparables` son días del rango",
+          "que caen por debajo del horizonte de nuestro histórico: en esos días la cifra no es",
+          "comparable con el resto de la serie, y tratarlos como un cero es leer una caída que no",
+          "ocurrió. `penumbra` declara una limitación permanente y conocida del histórico.",
+          "",
+          "**El día en curso llega marcado `parcial: true`,** con el instante de corte usado",
+          "(`corteAt`, ISO 8601). Sin ese marcador, el día de hoy se leería como un día cerrado.",
+          "Los dos campos son opcionales y aditivos: quien los ignore no se rompe.",
+          "",
+          "**`valor` puede ser `null`, y `null` NO es `0`:** significa «no se sabe» (por ejemplo,",
+          "una tasa cuyo denominador fue cero ese día).",
+          "",
+          "Este canal no publica importes ni identifica a los mensajeros de la operación.",
+        ].join("\n"),
+        parameters: [
+          {
+            name: "metrica",
+            in: "query",
+            required: true,
+            description: "Id de la métrica. Solo los valores del enum se publican por este canal.",
+            // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
+            // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
+            // diverja de lo que el endpoint concede de verdad.
+            schema: { type: "string", enum: [...METRICAS_API_KEY] },
+            example: "entregas",
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-01",
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-21",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Serie diaria de la métrica pedida, sobre tus órdenes.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AnaliticaSerie" },
+                examples: {
+                  serie: {
+                    summary: "Tres días, el último en curso",
+                    value: {
+                      metrica: "entregas",
+                      unidad: "conteo",
+                      unidadDeConteo: "gestion",
+                      rango: { desde: "2026-08-19", hasta: "2026-08-21" },
+                      puntos: [
+                        { fecha: "2026-08-19", valor: 41 },
+                        { fecha: "2026-08-20", valor: 37 },
+                        {
+                          fecha: "2026-08-21",
+                          valor: 12,
+                          parcial: true,
+                          corteAt: "2026-08-21T18:40:00.000Z",
+                        },
+                      ],
+                      cobertura: {
+                        fechasNoComparables: [],
+                        penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
   },
   // ---------------------------------------------------------------------------------------------
   // Feature 256/R24 — WEBHOOKS SALIENTES. Seccion de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
@@ -1393,6 +1506,79 @@ export const openApiSpec = {
           conError: { type: "integer" },
           totales: { $ref: "#/components/schemas/CotizacionTotales" },
           filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
+        },
+      },
+      // Feature 267 (R39) — el contrato de `GET /api/ordenes/api-key/analitica`. Es el espejo
+      // publicado de `AnaliticaSerieApiKeyDTO` (`lib/api/analitica-api-key-dto.ts`): si el DTO
+      // gana o pierde un campo, este schema y el `.yaml` cambian con el, en el mismo commit.
+      AnaliticaSerie: {
+        type: "object",
+        required: ["metrica", "unidad", "unidadDeConteo", "rango", "puntos", "cobertura"],
+        properties: {
+          metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
+          unidad: {
+            type: "string",
+            description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
+          },
+          unidadDeConteo: {
+            type: "string",
+            description: "Qué se cuenta: gestiones u órdenes. Va explícito para que la cifra no se lea al revés.",
+          },
+          rango: {
+            type: "object",
+            description: "Eco del rango efectivo, en el mismo formato que la petición.",
+            required: ["desde", "hasta"],
+            properties: {
+              desde: { type: "string", format: "date", example: "2026-08-19" },
+              hasta: {
+                type: "string",
+                format: "date",
+                description: "Inclusivo, hora de Costa Rica.",
+                example: "2026-08-21",
+              },
+            },
+          },
+          puntos: {
+            type: "array",
+            description: "Un punto por día calendario CR del rango.",
+            items: {
+              type: "object",
+              required: ["fecha", "valor"],
+              properties: {
+                fecha: { type: "string", format: "date", example: "2026-08-21" },
+                valor: {
+                  type: ["number", "null"],
+                  description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0.",
+                },
+                parcial: {
+                  type: "boolean",
+                  description: "Presente y `true` solo en el día en curso, que aún no está cerrado.",
+                },
+                corteAt: {
+                  type: "string",
+                  format: "date-time",
+                  description: "Instante (ISO 8601) usado como cota superior del punto parcial.",
+                },
+              },
+            },
+          },
+          cobertura: {
+            type: "object",
+            description: "Qué sabe la respuesta sobre sus propios límites. Se emite SIEMPRE.",
+            required: ["fechasNoComparables", "penumbra"],
+            properties: {
+              fechasNoComparables: {
+                type: "array",
+                description: "Días del rango por debajo del horizonte del histórico: no comparables con el resto de la serie.",
+                items: { type: "string", format: "date" },
+              },
+              penumbra: {
+                type: "string",
+                description: "Limitación permanente y declarada del histórico, nunca estimada.",
+                example: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+              },
+            },
+          },
         },
       },
     },
