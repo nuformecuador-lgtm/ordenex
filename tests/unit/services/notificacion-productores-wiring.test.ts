@@ -378,11 +378,17 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
     expect(sql).not.toMatch(/job_tipo/);
   });
 
-  it("el enum de eventos sigue siendo un inventario CERRADO: exactamente cinco", () => {
+  it("el enum de eventos sigue siendo un inventario CERRADO: exactamente seis", () => {
     // ⚠️ ERA CUATRO hasta el 2026-08-20. La feature 253 (D6, firmada por el humano EN CONTRA de la
     // recomendacion de su propio spec) anadio `postulacion_recurso_pendiente` con su migracion de
     // enum y su `down.sql` de recreacion — que es exactamente el precio que D1 puso a anadir un
     // evento, y por eso este test se actualiza en vez de relajarse.
+    //
+    // ⚠️ Y ERA CINCO hasta el 2026-08-22. La feature 262 (D7, P2 respondida SI por la puerta humana,
+    // otra vez EN CONTRA de la recomendacion del spec) anade `dia_reparto_corregido`: al mensajero
+    // se le avisa cuando le corrigen el dia de reparto de una orden suya. Pago el mismo precio —dos
+    // `ALTER TYPE`, su `down.sql` de recreacion con los CINCO previos y este test rojo—, y que este
+    // test se pusiera rojo ES LA PRUEBA de que el inventario sigue cerrado.
     //
     // La lista sigue siendo LITERAL a proposito: el contrato de D1 no es "hay N eventos", es "los
     // eventos son ESTOS y cada uno tiene un productor identificado". Cambiarla por una derivacion
@@ -400,6 +406,7 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       "postulacion_mensajero_pendiente",
       "cierre_dia_por_aprobar",
       "postulacion_recurso_pendiente", // feature 253 / D6
+      "dia_reparto_corregido", // feature 262 / D7
     ]);
   });
 });

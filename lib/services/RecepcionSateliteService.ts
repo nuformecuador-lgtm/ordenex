@@ -461,5 +461,6 @@ function toDTO(row: RecepcionSateliteRow): RecepcionSateliteDTO {
     cantonNombre: row.cantonNombre,
     distritoNombre: row.distritoNombre,
     prioridad: row.prioridad, // feature 101/R9: propaga el flag al DTO (resalte de fila R8)
+    fechaRepartoISO: row.fechaRepartoISO, // feature 262/B8 (R16): el dia por orden, ya serializado por el repo
   };
 }

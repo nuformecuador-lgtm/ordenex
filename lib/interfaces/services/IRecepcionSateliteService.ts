@@ -41,6 +41,18 @@ export interface RecepcionSateliteDTO {
    * envia, `0` incluido (R14).
    */
   intentosEntrega?: number;
+  /**
+   * FEATURE 262 (B8, R16/R17): dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO por el
+   * repositorio; `null` = sin dia. Es lo que la pantalla de correccion del listado satelite muestra
+   * POR ORDEN antes de confirmar («17496963 · hoy está para el 22 de agosto»), y sin ello se
+   * corregiria a ciegas un lote mixto.
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `prioridad?` e `intentosEntrega?`: no rompe
+   * fixtures ni mocks de UI que construyen el DTO sin el; el service SIEMPRE lo envia. STRING y
+   * nunca `Date`: un `@db.Date` formateado con el reloj del navegador devuelve el dia anterior en
+   * media America (R17).
+   */
+  fechaRepartoISO?: string | null;
 }
 
 // R3/R4/R5/R6/R8: dos grupos separados (por recibir vs recibidas) + nombre de la

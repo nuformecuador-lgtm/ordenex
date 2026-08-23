@@ -137,13 +137,27 @@ const RUTA_CORTE_REPO = "lib/repositories/CorteDiarioRepository.ts";
 const RUTA_CORTE_SERVICE = "lib/services/CorteDiarioService.ts";
 const RUTA_PORTAL = "lib/services/MisAsignacionesService.ts";
 const RUTA_KPI_REPO = "lib/repositories/GestionOrdenRepository.ts";
+// Feature 262 (B10): la lista de estados sobre los que se ofrece corregir el día de reparto.
+const RUTA_CORRECCION_DIA = "lib/services/CorreccionDiaRepartoService.ts";
 
 interface MiembroDeLaFamilia {
   /** Cómo se llama en la conversación, no cómo se llama la constante. */
   nombre: string;
   ruta: string;
-  /** La pregunta que esta lista responde. Las dos únicas de esta familia. */
-  pregunta: "que ocupa al mensajero" | "a quien barre el corte";
+  /**
+   * La pregunta que esta lista responde.
+   *
+   * ⚠️ TERCER VALOR AÑADIDO POR LA FEATURE 262 (B10), Y **DECLARADO** EN VEZ DE COLADO. La lista de
+   * la corrección del día pertenece a esta familia —decide sobre «lo que el mensajero lleva
+   * encima»— pero NO responde ninguna de las dos preguntas anteriores: no dice quién está ocupado
+   * ni a quién barre el corte, dice **dónde vive todavía el día de reparto**. Meterla como si
+   * respondiera otra dejaría el censo diciendo una cosa por otra, que es exactamente el defecto que
+   * esta guardia vino a cerrar.
+   */
+  pregunta:
+    | "que ocupa al mensajero"
+    | "a quien barre el corte"
+    | "donde vive el dia de reparto";
   estatus: () => string[];
   /** `true` si `ayuda_tienda` DEBE estar. La razón va en el mensaje del test. */
   incluyeAyuda: boolean;
@@ -223,18 +237,51 @@ const FAMILIA: readonly MiembroDeLaFamilia[] = [
       "235/R21: es la EXCLUSIÓN que mantiene disjuntos los dos sumandos del total del día. El otro " +
       "sumando se calcula sobre `porGestionar ∪ conAyuda`, así que esta red tiene que cubrir lo mismo",
   },
+  {
+    nombre: "los estados donde el día de reparto todavía decide (`ESTADOS_CON_DIA_DE_REPARTO_VIVO`)",
+    ruta: RUTA_CORRECCION_DIA,
+    pregunta: "donde vive el dia de reparto",
+    estatus: () =>
+      listaConstante(
+        leer(RUTA_CORRECCION_DIA),
+        RUTA_CORRECCION_DIA,
+        "ESTADOS_CON_DIA_DE_REPARTO_VIVO",
+      ),
+    incluyeAyuda: true,
+    razon:
+      "262/R6 + 235/R1: es la lista que decide SOBRE QUÉ ÓRDENES se puede corregir el día. Con " +
+      "`ayuda_tienda` fuera, la orden bloqueada por la otra puerta —261/R28 impide que la tienda " +
+      "la resuelva mientras esté reservada, y el paquete SIGUE con el mensajero— se queda sin " +
+      "forma de rescatarse, que es precisamente el agujero que esta ficha viene a cerrar",
+  },
 ];
 
 describe("0 — el censo de esta guardia no está vacío ni miente", () => {
-  it("la familia tiene los SIETE miembros conocidos, y cada uno responde una de las dos preguntas", () => {
+  it("la familia tiene los OCHO miembros conocidos, y cada uno responde una de las TRES preguntas", () => {
     // Censo CERRADO. Si aparece una lista nueva de esta familia, hay que declararla aquí con su
     // decisión: eso es justo lo que no pasó con las dos que se rompieron.
-    expect(FAMILIA).toHaveLength(7);
+    //
+    // ⚠️ ERA SIETE hasta el 2026-08-22. La feature 262 añade
+    // `ESTADOS_CON_DIA_DE_REPARTO_VIVO` con su TERCERA pregunta declarada: la lista pertenece a
+    // esta familia pero no dice ni quién está ocupado ni a quién barre el corte.
+    expect(FAMILIA).toHaveLength(8);
     for (const m of FAMILIA) {
       expect(
-        ["que ocupa al mensajero", "a quien barre el corte"],
+        ["que ocupa al mensajero", "a quien barre el corte", "donde vive el dia de reparto"],
         `${m.nombre}: pregunta desconocida`,
       ).toContain(m.pregunta);
+    }
+    // Y las tres preguntas tienen AL MENOS un miembro: una pregunta declarada y sin lista que la
+    // responda sería una categoría vacía que da la impresión de estar vigilando algo.
+    for (const pregunta of [
+      "que ocupa al mensajero",
+      "a quien barre el corte",
+      "donde vive el dia de reparto",
+    ]) {
+      expect(
+        FAMILIA.some((m) => m.pregunta === pregunta),
+        `nadie responde «${pregunta}»`,
+      ).toBe(true);
     }
   });
 

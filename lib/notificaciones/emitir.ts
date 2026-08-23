@@ -12,6 +12,11 @@ import type {
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
 import type { OrderStatusValue } from "@/lib/types/order-status";
+// Feature 262 (B19, R18/R47): la fecha del aviso se pone en palabras con la MISMA funcion que la
+// asignacion y el portal del mensajero. Lo que se importa es la CONVERSION de fecha, no otro
+// literal: las cadenas de notificacion siguen viviendo solo en este archivo (146 §4.6). Y
+// `fechaLegible` es pura — no importa `Date` ni `Intl`.
+import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 
 /**
  * Cliente transaccional que el emisor del rechazo necesita: las dos tablas de la feature +
@@ -47,6 +52,28 @@ export const TEXTO_POSTULACION_RECURSO_PENDIENTE =
   "Alguien ofreció un vehículo o una bodega desde la web.";
 export function textoCargaMasivaTerminada(creadas: number): string {
   return `Carga masiva terminada: ${creadas} ${creadas === 1 ? "orden cargada" : "órdenes cargadas"}.`;
+}
+/**
+ * Feature 262 (D7, R47) — el aviso al mensajero cuando le corrigen el día de una orden suya.
+ *
+ * ⚠️ NOMBRA LA FECHA, NUNCA «hoy» NI «mañana», y es la mitad del requisito. Un aviso que dijera
+ * «pasó a hoy» y se leyera a la mañana siguiente sería FALSO — y la campana guarda 30 días
+ * (`VENTANA_DIAS`). Es el mismo argumento con el que la 261 puso la fecha en
+ * `avisoReservaParaOtroDia`: «si el texto dijera mañana, la app mentiría».
+ *
+ * UN SOLO TEXTO PARA LOS DOS SENTIDOS (R55). «Pasó al reparto del X» es cierto tanto si el día se
+ * adelantó como si se retrasó, y evita que el emisor tenga que decidir cuál es cuál. El mensajero
+ * compara con lo que ya sabe; la app no le explica su propia agenda.
+ *
+ * SIN el motivo escrito por quien corrigió (R48/A24): es texto libre de 10 a 300 caracteres escrito
+ * por un humano y puede contener cualquier cosa, incluido un teléfono o un nombre. El motivo se lee
+ * en el historial de la orden, que sí autoriza por orden.
+ */
+export function textoDiaRepartoCorregido(fechaNuevaISO: string): string {
+  const fecha = fechaLegible(fechaNuevaISO);
+  return fecha
+    ? `Una orden tuya pasó al reparto del ${fecha}.`
+    : "Una orden tuya cambió de día de reparto.";
 }
 
 /** Roles que aprueban postulaciones y cierres (espejo de ROLES_APROBADORES, F1.4-2). */
@@ -327,6 +354,67 @@ export async function emitirPostulacionRecursoPendiente(
       entidadId: ctx.postulacionId,
       destinatario,
     })),
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature 262 (D7) — Al mensajero le corrigieron el dia de una orden suya. BEST-EFFORT.
+// ---------------------------------------------------------------------------
+
+/** Lo MINIMO que el aviso necesita. Ni direccion, ni telefono, ni destinatario, ni monto (R48). */
+export interface DiaRepartoCorregidoContexto {
+  /**
+   * Id de la fila de `orden_dia_reparto_cambio`: LA ENTIDAD del aviso.
+   *
+   * ⚠️ NO ES EL `ordenId`, Y ES EL HALLAZGO QUE DECIDE ESTE DISENO (design §15.2/§15.3, A20).
+   * `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+   * destinatario_usuario_id)` con `NULLS NOT DISTINCT`. Con el id de la ORDEN, esa clave admitiria
+   * UNA sola fila por (evento, orden, mensajero) PARA SIEMPRE —ni siquiera despues de que el primer
+   * aviso se lea— y `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`: la
+   * SEGUNDA correccion de esa orden no avisaria nunca, en silencio absoluto. Y «mañana -> hoy sobre
+   * una orden que el mensajero ya lleva encima» —el caso por el que existe esta feature— es
+   * precisamente el que llega en segundo lugar. Con el id del CAMBIO, cada correccion es una
+   * entidad distinta: la clave nunca colisiona y R50 es una propiedad ESTRUCTURAL.
+   */
+  cambioId: string;
+  /** El destinatario, y el UNICO (R51): el mensajero asignado de esa orden. */
+  mensajeroUsuarioId: string;
+  /** `YYYY-MM-DD` ya resuelto por el servidor. El aviso nombra la FECHA, no «hoy»/«mañana» (R47). */
+  fechaNuevaISO: string;
+  /** La guia si existe; si no, el numero de remision. Copia exacta de `emitirOrdenRechazada`. */
+  anexo: string;
+}
+
+/**
+ * R46/R50/R51 — UNA fila `box` dirigida al mensajero asignado, y a nadie mas.
+ *
+ * `tipo: "box"` (icono de paquete) y no `alert` ni `warning`: esto es un PAQUETE QUE CAMBIO DE DIA,
+ * no una alarma ni algo pendiente de aprobacion. `alert` teñiria de rojo una correccion legitima de
+ * planificacion (`NotificationsBell.tsx:55-63`).
+ *
+ * LOS ADMINS NO SE AVISAN (R51): ellos son quienes corrigen. La tienda tampoco. Es —junto con el de
+ * carga masiva— la unica notificacion de este repo dirigida a UNA persona; el precedente del
+ * destinatario por usuario es `emitirCargaMasivaTerminada`.
+ */
+export async function emitirDiaRepartoCorregido(
+  repo: INotificacionRepository,
+  ctx: DiaRepartoCorregidoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "box",
+        evento: "dia_reparto_corregido",
+        descripcion: textoDiaRepartoCorregido(ctx.fechaNuevaISO),
+        anexo: ctx.anexo,
+        entidadTipo: "orden_dia_reparto_cambio",
+        entidadId: ctx.cambioId,
+        destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+      },
+    ],
     tx,
   );
 }

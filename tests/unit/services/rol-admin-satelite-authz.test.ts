@@ -160,6 +160,8 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
     deshacerAsignacionLote: vi.fn(async () => 0),
+    // Feature 262: writer de la correccion del dia de reparto, exigido por IOrdenRepository.
+    corregirDiaRepartoLote: vi.fn(async () => []),
     ...overrides,
   };
 }

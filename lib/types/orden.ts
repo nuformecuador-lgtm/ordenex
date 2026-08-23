@@ -328,6 +328,25 @@ export type OrdenListItemDTO = OrdenDTO & {
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
   /**
+   * FEATURE 262 (B8, design §7.2) — dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO por el
+   * repositorio. `null` = la orden no esta reservada para un dia que aun no ha llegado.
+   *
+   * PARA QUE: R16 exige que la pantalla de correccion muestre, POR ORDEN, el dia para el que esta
+   * marcada hoy («17496963 · hoy está para el 22 de agosto»). Es lo que impide corregir a ciegas un
+   * lote mixto.
+   *
+   * STRING Y NUNCA `Date`, por las dos razones que el propio tipo ya documenta en
+   * `fechaReprogramacion`: el `DataTable` de este repo descarta objetos al renderizar, y un
+   * `@db.Date` leido por Prisma es la medianoche UTC de esa fecha — formatearlo en el navegador con
+   * la hora local devuelve el dia ANTERIOR en media America (R17: ni una fecha se calcula en el
+   * cliente). Opcional (`?`) por el patron aditivo del resto del DTO: no rompe los fixtures de UI;
+   * el repositorio SIEMPRE lo envia.
+   *
+   * NO es una columna nueva del listado (limite declarado 2, A7): el dia se ve por orden DENTRO de
+   * la pantalla de correccion, que es donde se decide.
+   */
+  fechaRepartoISO?: string | null;
+  /**
    * Feature 160 (R11/R14/R16) + 215 (R6/R20): intentos de entrega de la orden, resueltos EN EL
    * MISMO LOTE de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215 ese
    * criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un resultado

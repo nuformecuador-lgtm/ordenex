@@ -80,6 +80,9 @@ export function filaSatelite(
       cantonNombre: canton,
       distritoNombre: distrito,
       prioridad,
+      // Feature 262 (B8): el dia de reparto por orden, ya serializado. `null` en el almacen porque
+      // este fixture mide FILTROS y PAGINACION, no el dia; ninguna asercion cambia por el.
+      fechaRepartoISO: null,
     },
   };
 }
