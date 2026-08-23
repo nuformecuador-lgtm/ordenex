@@ -89,9 +89,13 @@ describe("trazado enchufado", () => {
     const { service } = montar(routes);
     const res = await service.ejecutar("m-1", { motivo: "manual" });
 
+    // Feature 265: el desenlace `ok` del servicio crece con `secuenciaFuente`. El doble del
+    // cliente de este archivo hace de proveedor, asi que aqui vale `proveedor`. Se afirma
+    // LITERAL a proposito: es el contrato que sube hasta el toast del mensajero.
     expect(res).toEqual({
       status: "ok",
       paradas: 2,
+      secuenciaFuente: "proveedor",
       trazado: {
         encodedPolyline: POLILINEA,
         distanciaM: 5400,
