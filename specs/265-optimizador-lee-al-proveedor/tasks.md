@@ -495,6 +495,14 @@
   **Hecho:** salida pegada, con `INIT_EXIT=$?` **escrito dentro del log** — un `echo` posterior ya
   tapó aquí un gate rojo haciéndolo pasar por «exit code 0». Y la línea del paso 6 («migraciones sin
   down.sql») **no menciona** la migración nueva.
+  ✅ **Verde en TRES corridas independientes**, todas con `INIT_EXIT=0` dentro del log: el bloque
+  frontend (`impl_265_frontend.md` §6.2), el reviewer (`review_265.md` §1) y la rama de la revisión
+  (`impl_265_backend.md` §8.5) — esta última con **1319 archivos · 17.793 verdes · 26 saltados · 99
+  warnings, 0 errores**, exactamente los mismos números que midió el reviewer, porque el arreglo de
+  **B1 no añade ningún test**: le pone dientes a uno que ya existía. La lista del paso 6 **no crece**
+  (las tres `ruta_*` del 2026-08-14 y nada más). ⚠️ El del bloque backend salió `INIT_EXIT=1` por
+  **dos rojos de la base local compartida** con la 262, y **se curaron solos al mergear la 262**, tal
+  como esa bitácora predijo.
 - [x] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR: otra sesión puede haberlo movido, y
   el hotfix del token (**B0.3**) toca el mismo archivo.
   ✅ Hecho **dos veces**: por el bloque frontend contra `c9e0e056` (`impl_265_frontend.md` §6.2) y
