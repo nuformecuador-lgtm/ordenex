@@ -31,6 +31,20 @@ import { optlog, opterror } from "@/lib/logging/optimizer-log";
 export interface FallbackLogger {
   warn(message: string): void;
 }
+/**
+ * ⚠️ ESTE `warn` NO LLEGA A NADIE EN PRODUCCION, Y ESTA ASI A PROPOSITO.
+ *
+ * Es un no-op, y la construccion real (`buildOptimizacionRutaService`,
+ * `lib/services/jobs/optimizacion-ruta-handler.ts`) NO le pasa logger, asi que los dos avisos
+ * agregados de mas abajo (265/R12 y el de la credencial ausente) se escriben contra este
+ * objeto vacio. LIMITE DECLARADO 5 de la ficha 265 (`design.md` §14.3), cerrado asi por la
+ * puerta humana P8: quien se entera de que una ruta se ordeno en local es la operacion,
+ * consultando `ruta_optimizada.secuencia_fuente` —dato persistido—, y el mensajero, por el
+ * aviso de su pantalla. Su hermano vive en `OptimizacionRutaService.ts`, con la misma nota.
+ *
+ * ⚠️ No cuelgues nada de estos `warn`: escribirlos no es avisar. Menor **m11** de
+ * `progress/review_265.md`. Si hicieran falta de verdad, se inyecta un logger real aqui.
+ */
 const defaultLogger: FallbackLogger = { warn: () => {} };
 
 export class FallbackRouteOptimizationClient implements IRouteOptimizationClient {
@@ -74,8 +88,9 @@ export class FallbackRouteOptimizationClient implements IRouteOptimizationClient
         optlog("fallback — SIN credencial: se ordena en local con Haversine", {
           motivo: error.message,
         });
-        // Aviso agregado, sin PII: util para que un operador note que se esta ordenando en
-        // local por falta de credencial, en vez de creer que Google esta activo.
+        // Aviso agregado, sin PII. ⚠️ HOY NADIE LO LEE: el logger por defecto es un no-op y la
+        // construccion real no inyecta otro (ver `defaultLogger`, limite declarado 5). Quien
+        // hace visible este caso es `secuencia_fuente = 'local'` en la fila, no esta linea.
         this.logger.warn(
           "[optimizacion_ruta] sin credencial de proveedor; usando orden local aproximado (Haversine)",
         );

@@ -552,8 +552,9 @@
   1. **La última frase de arriba está CADUCADA.** El default del código **sí se tocó**, y estaba
      autorizado: la segunda puerta de `requirements.md` cerró **P7** como «se **INVIERTE EL DEFAULT
      EN EL CÓDIGO**». Hoy la traza **nace apagada** y se enciende con `RUTA_DEBUG_LOG=1`. La
-     desactualizada es esta task (y `design.md` §1 y §16.1); lo correcto es el código. Hallazgo
-     **m6** de la revisión.
+     desactualizada es esta task; lo correcto es el código. Hallazgo **m6** de la revisión.
+     ✅ **`design.md` §1 y §16.1 ya están corregidos** (2026-08-23, rama `fix/265-menores-revision`):
+     arrastraban la misma frase vieja y hoy dicen que P7 se cerró invirtiendo el default.
   2. **Por eso la task queda en gran parte SUPERADA:** poner `RUTA_DEBUG_LOG=0` en un entorno **ya
      no hace falta** para apagar la traza. Lo que sigue vivo es comprobar **cero** líneas
      `optimizer***:` tras un despliegue, y **no** dejar la variable puesta a `1` en ningún entorno.

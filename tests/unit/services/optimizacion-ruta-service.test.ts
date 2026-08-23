@@ -701,3 +701,146 @@ describe("resultado exitoso", () => {
     expect(metaDe(rutas).calculadaAt).toEqual(T0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// Feature 265 (R33) — LAS GUARDAS CORTAN EN ESTE ORDEN, no sólo cortan
+// ═══════════════════════════════════════════════════════════════════════════════════════
+//
+// R33 pide dos cosas y hasta hoy sólo se probaba una: «las cinco guardas de coste DEBEN
+// seguir cortando exactamente igual **y en el mismo orden**». Cada guarda tiene su test con
+// su `expect(client.optimizar).not.toHaveBeenCalled()` —eso es «cortan igual»— pero **el
+// ORDEN no lo fijaba ningun test**: descansaba en el comentario normativo de la cabecera de
+// `OptimizacionRutaService.ts`, y un comentario no se pone rojo. Hallazgo **m7** de
+// `progress/review_265.md`.
+//
+// Por que el orden importa, y no es cosmetica: esta elegido para que **lo barato corte antes
+// que lo caro**. Reordenarlo no cambia el resultado en los casos de un solo motivo —por eso
+// los tests de cada guarda seguirian verdes— pero si cambia **cuanto se paga y cuanto se
+// lee** cuando dos motivos coinciden, que es el caso real (un job viejo de un mensajero que
+// ademas acaba de pulsar el boton). Y en un caso concreto no es solo coste: `centroide()`
+// devuelve `NaN` con cero paradas, asi que la guarda de 0 o 1 parada **tiene** que ir antes
+// de que alguien resuelva un origen.
+//
+// La tecnica: montar escenarios donde DOS guardas cortarian a la vez y afirmar CUAL gano.
+// Cada guarda devuelve su propia `razon`, asi que el ganador es observable sin espiar nada
+// interno.
+describe("265/R33 — las guardas cortan EN ESTE ORDEN (lo barato antes que lo caro)", () => {
+  it("R20 antes que R34: job obsoleto Y dentro del intervalo -> gana `obsoleta`", async () => {
+    // Las dos condiciones son ciertas: la ruta se calculo justo ahora (0 s < 10 s de
+    // intervalo) y el job es MAS VIEJO que ese calculo.
+    const { service, client, paradasRepo } = build({
+      ruta: ruta({ calculadaAt: T0 }),
+      paradas: [parada("o1"), parada("o2")],
+      now: T0,
+    });
+
+    const r = await service.ejecutar(MENSAJERO, {
+      motivo: "manual",
+      jobCreatedAt: new Date(T0.getTime() - 60_000),
+    });
+
+    // Si R34 se adelantase, esto diria `intervalo_minimo`. Mismo ahorro, distinta verdad: el
+    // job NO se descarto por impaciencia del mensajero, se descarto porque ya no tenia nada
+    // que hacer, y eso es lo que la cola registra.
+    expect(r).toEqual({ status: "omitida", razon: "obsoleta" });
+    expect(client.optimizar).not.toHaveBeenCalled();
+    // Y ninguna de las dos lee las paradas: las dos guardas baratas van ANTES del `SELECT`.
+    expect(paradasRepo.findParadasEnReparto).not.toHaveBeenCalled();
+  });
+
+  it("R34 antes que R35: sin paradas Y dentro del intervalo -> gana `intervalo_minimo`, y NO se lee la base", async () => {
+    const { service, client, paradasRepo, rutas } = build({
+      ruta: ruta({ calculadaAt: T0 }),
+      paradas: [], // R35 tambien cortaria, con `sin_paradas`
+      now: T0,
+    });
+
+    const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
+
+    expect(r).toEqual({ status: "omitida", razon: "intervalo_minimo" });
+    expect(client.optimizar).not.toHaveBeenCalled();
+    // ESTA es la asercion que hace que el orden valga dinero y no solo etiquetas: R34 corta
+    // ANTES de `findParadasEnReparto`, asi que el doble clic del mensajero no cuesta ni una
+    // lectura de base. Si R35 se adelantase, la consulta se haria siempre.
+    expect(paradasRepo.findParadasEnReparto).not.toHaveBeenCalled();
+    expect(rutas.reemplazarSecuencia).not.toHaveBeenCalled();
+  });
+
+  it("R35 antes que R36: UNA parada Y la misma huella que la ultima vez -> gana `sin_paradas`", async () => {
+    const origenPersistido = {
+      origenLat: 9.93,
+      origenLng: -84.09,
+      origenAt: T0,
+      origenFuente: "gps" as const,
+    };
+
+    // Primera corrida: sin huella previa. Sirve para OBTENER la huella real que el servicio
+    // calcula para esta parada y este origen — se lee de lo que persistio, no se reimplementa
+    // el hash aqui (reimplementarlo seria compararlo contra si mismo).
+    const primera = build({
+      ruta: ruta(origenPersistido),
+      paradas: [parada("o1")],
+      now: T0,
+    });
+    await primera.service.ejecutar(MENSAJERO, { motivo: "debounce" });
+    const huellaReal = metaDe(primera.rutas).huellaSet;
+    expect(huellaReal, "la primera corrida tiene que dejar una huella escrita").toBeTruthy();
+
+    // Segunda corrida: MISMA parada, MISMO origen y la huella ya guardada + ruta vigente. Las
+    // dos guardas cortarian.
+    const { service, client, rutas } = build({
+      ruta: ruta({ ...origenPersistido, huellaSet: huellaReal, estado: "vigente" }),
+      paradas: [parada("o1")],
+      now: T0,
+    });
+
+    const r = await service.ejecutar(MENSAJERO, { motivo: "debounce" });
+
+    // Si R36 se adelantase, esto seria `sin_cambios` y —lo que de verdad importa— la
+    // secuencia trivial NO se reescribiria: una ruta que se quedo con UNA parada dejaria de
+    // reafirmar `secuenciaFuente: null`, y la marca vieja («la ordeno el proveedor») se
+    // quedaria pegada a una ruta que ya nadie ordeno.
+    expect(r).toMatchObject({ status: "omitida", razon: "sin_paradas" });
+    expect(client.optimizar).not.toHaveBeenCalled();
+    expect(rutas.reemplazarSecuencia).toHaveBeenCalledTimes(1);
+    expect(metaDe(rutas).secuenciaFuente).toBeNull();
+  });
+
+  it("el recorte R38 va ANTES de la guarda del origen (265/R16): el centroide es el de las paradas que SE ENVIAN", async () => {
+    // Origen `gps` en Medellin (el del incidente) y paradas en Costa Rica: la guarda R16
+    // descarta el origen y lo sustituye por el centroide. La pregunta que fija el orden es
+    // **de que paradas** sale ese centroide.
+    const { service, client } = build({
+      ruta: ruta({
+        origenLat: 6.3422343,
+        origenLng: -75.514335,
+        origenAt: T0,
+        origenFuente: "gps",
+      }),
+      paradas: [
+        parada("o1", { latitud: 9.93, longitud: -84.09 }),
+        parada("o2", { latitud: 9.95, longitud: -84.11 }),
+        // La tercera queda FUERA del tope y esta muy lejos: si entrara en el centroide, se
+        // notaria en el primer decimal.
+        parada("o3", { latitud: 20, longitud: -100 }),
+      ],
+      config: { RUTA_MAX_PARADAS: 2, RUTA_ORIGEN_MAX_KM: 200 },
+      now: T0,
+    });
+
+    await service.ejecutar(MENSAJERO, { motivo: "debounce" });
+
+    expect(client.optimizar).toHaveBeenCalledTimes(1);
+    const enviado = client.optimizar.mock.calls[0][0] as {
+      origen: { lat: number; lng: number };
+      paradas: { ordenId: string }[];
+    };
+    expect(enviado.paradas.map((p) => p.ordenId)).toEqual(["o1", "o2"]);
+    // Centroide de las DOS que se envian: (9.93+9.95)/2 y (-84.09 + -84.11)/2.
+    expect(enviado.origen.lat).toBeCloseTo(9.94, 6);
+    expect(enviado.origen.lng).toBeCloseTo(-84.1, 6);
+    // Con las TRES el centroide seria (13,29…, -89,4…): el orden de los pasos es lo unico
+    // que separa un numero del otro, y el que se envia al proveedor tiene que describir las
+    // paradas que van en la misma peticion.
+  });
+});

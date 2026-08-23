@@ -6,7 +6,8 @@
 // trabajando. Este archivo NUNCA emite coordenadas, direccion ni credencial por el logger
 // ni por un mensaje de error, y no usa `console.*`.
 //
-// ═══ LAS CUATRO GUARDAS DE COSTE SON LO IMPORTANTE DE ESTE ARCHIVO ═══
+// ═══ LAS CINCO GUARDAS DE COSTE SON LO IMPORTANTE DE ESTE ARCHIVO ═══
+// (decia «CUATRO» y siempre listo CINCO; corregido con el cierre de menores de la 265)
 // Cada llamada a `optimizeTours` se FACTURA. El orden de los pasos esta elegido para que
 // las guardas mas baratas corten antes que las caras:
 //
@@ -21,6 +22,14 @@
 //        Va ANTES de la huella (265/R20) porque la huella debe describir el origen que
 //        REALMENTE se envia; si no, la guarda de «sin cambios» cortaria por lo que no fue.
 //   R36  mismo conjunto de paradas y mismo origen que la ultima vez      -> 0 llamadas
+//
+// ⚠️ ESTE ORDEN YA NO VIVE SOLO EN ESTE COMENTARIO. 265/R33 exige que las guardas corten
+// «exactamente igual Y EN EL MISMO ORDEN», y hasta el cierre de menores de la 265 lo unico
+// que lo sostenia era este parrafo — un comentario no se pone rojo. Lo fija ahora
+// `tests/unit/services/optimizacion-ruta-service.test.ts`, describe «265/R33 — las guardas
+// cortan EN ESTE ORDEN»: monta casos donde DOS guardas cortarian a la vez y afirma cual gana.
+// Si reordenas algo de esta lista, ese describe te lo dice; los tests de cada guarda por
+// separado, NO (medido: reordenar R20 y R34 mata 1 test de 40).
 //
 // ═══ ANTE FALLO DEL PROVEEDOR SE CONSERVA EL ULTIMO ORDEN VALIDO (R27) ═══
 // Decision explicita del humano. NUNCA se borra la secuencia previa y NUNCA se cae en
@@ -59,6 +68,24 @@ export interface ParadasRepo {
 export interface RutaLogger {
   warn(message: string): void;
 }
+/**
+ * ⚠️ ESTE `warn` NO LLEGA A NADIE EN PRODUCCION, Y ESTA ASI A PROPOSITO.
+ *
+ * Es un no-op, y la UNICA construccion real del servicio (`buildOptimizacionRutaService`,
+ * `lib/services/jobs/optimizacion-ruta-handler.ts`) pasa `undefined` en esta posicion, asi que
+ * los avisos AGREGADOS de 265/R19 y R30 —«paradas recortadas al tope», «origen descartado por
+ * incoherencia geografica»— se emiten contra este objeto vacio. LIMITE DECLARADO 5 de la ficha
+ * 265 (`design.md` §14.3), cerrado asi por la puerta humana P8: la operacion se entera de que
+ * una ruta se ordeno en local consultando `ruta_optimizada.secuencia_fuente`, que es un dato
+ * persistido, no un log que expira. Su hermano vive en `lib/clients/fallback-route-optimization.ts`,
+ * con la misma nota.
+ *
+ * ⚠️ Consecuencia practica, para que nadie la descubra tarde: **no cuelgues nada de estos
+ * `warn`**. Escribirlos no es avisar, y leer el codigo puede dar la impresion contraria — que
+ * es justo por lo que la revision de la 265 lo anoto (menor **m11**). Si algun dia hacen falta
+ * de verdad, se inyecta un logger real en `buildOptimizacionRutaService`; el hueco ya esta
+ * abierto en el constructor y no hace falta tocar el servicio.
+ */
 const defaultLogger: RutaLogger = { warn: () => {} };
 
 /** El proveedor fallo (transitorio o config invalida). La cola aplica su backoff. */

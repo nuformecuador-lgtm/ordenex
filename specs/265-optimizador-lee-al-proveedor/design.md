@@ -15,7 +15,7 @@
 | Degradar a Haversine en ese desenlace, con la secuencia **completa** | ~~Distinguir en la UI una ruta local de una optimizada~~ → **ENTRA** desde el 2026-08-22 (P3): §13 y §14 |
 | **Que el mensajero sepa que su orden es aproximado** (P3): columna, DTO y dos avisos | Cambiar la escalera del origen o el aviso de origen aproximado de la 92 (§14.4) |
 | **Que el límite del origen viva en un solo sitio y se declare sin calibrar** (P2): §15 | Calibrar ese límite con datos reales — **M1 no se pudo medir** y así queda escrito |
-| **Apagar la traza de diagnóstico** (P4) y que nada dependa de ella: §16 | Invertir el valor por defecto de `RUTA_DEBUG_LOG` en el código → **P7** |
+| **Apagar la traza de diagnóstico** (P4) y que nada dependa de ella: §16 | ~~Invertir el valor por defecto de `RUTA_DEBUG_LOG` en el código~~ → **ENTRA** desde el 2026-08-22 (P7): §16.1 |
 | Una guarda de coherencia del origen **antes** de la llamada facturada | Validar las paradas entre sí → límite declarado 4 |
 | Que el fallo del proveedor deje de llegar crudo a la pantalla del mensajero | La **calidad de la geocodificación** → hallazgo **H1**, ficha aparte |
 | Anexar la premisa caducada con su guardia | El `console.log` del token → hallazgo **H2**, hotfix aparte |
@@ -697,8 +697,18 @@ pregunta**.
 
 ### 16.1 · Qué es exactamente el cambio
 
-`RUTA_DEBUG_LOG=0` en el entorno. **Cero líneas de código**: `activo()` ya lee esa variable en cada
-llamada (`lib/logging/optimizer-log.ts:37-39`). Se documenta el **nombre** en `.env.example` —que es
+> ⏳ **CORREGIDO 2026-08-23 (m6 de la revisión) — ESTE PÁRRAFO DECÍA LO CONTRARIO DE LO QUE HACE EL
+> CÓDIGO.** Lo que decía: «`RUTA_DEBUG_LOG=0` en el entorno. **Cero líneas de código**: `activo()` ya
+> lee esa variable en cada llamada». Describía el plan **antes de P7**, y **P7 se cerró al revés**:
+> «se **INVIERTE EL DEFAULT EN EL CÓDIGO**» (segunda puerta de `requirements.md`). O sea: `activo()`
+> **sí se tocó**, y lo correcto es el código, no este párrafo.
+
+**Qué es el cambio hoy:** `activo()` (`lib/logging/optimizer-log.ts`) sólo devuelve `true` cuando
+`RUTA_DEBUG_LOG` vale `1` o `true`. La traza **nace apagada en todo entorno** —incluido cualquiera
+que se cree mañana— sin depender de que alguien se acuerde de poner una variable, y la variable pasa
+a ser el interruptor para **encenderla** a propósito cuando haya que diagnosticar.
+
+Lo que sigue en pie del párrafo original: se documenta el **nombre** en `.env.example` —que es
 para lo que ese archivo existe, y donde ya vive su hermano `WHATSAPP_DEBUG_LOG` (`:13-15`)—, junto a
 `RUTA_ORIGEN_MAX_KM`.
 
@@ -710,6 +720,12 @@ para lo que ese archivo existe, y donde ya vive su hermano `WHATSAPP_DEBUG_LOG` 
 **En qué entornos** lo decide el humano (**P7**). Y se fija **por entorno**, nunca de una vez para
 Production y Preview: en este repo una variable puesta en los dos a la vez ya apuntó al proyecto
 Supabase equivocado en uno de ellos.
+
+> ⏳ **ANEXO 2026-08-23 (m6).** Con el default ya invertido, **poner la variable no hace falta para
+> apagar nada**: los dos entornos nacen apagados. Lo único que queda de este párrafo es la
+> precaución de **no** ponerla en Production y Preview a la vez el día que alguien la use para
+> **encender** la traza. La task **C7** queda en gran parte superada por lo mismo, y así está
+> anotada dentro de ella.
 
 ### 16.2 · Lo que se pierde, dicho sin adornos
 
@@ -734,7 +750,7 @@ fuera de la base. Su propio módulo manda apagarla cuando el diagnóstico termin
 | que el orden de una ruta es local | **`secuencia_fuente`** (§13): una columna, consultable con un `SELECT` |
 | que el mensajero está viendo un orden aproximado | el **aviso A** de §14 |
 
-**Esto ya está verificado por construcción, no de palabra:** `tests/setup/jest-dom.ts:28` pone
+**Esto ya está verificado por construcción, no de palabra:** `tests/setup/jest-dom.ts` pone
 `process.env.RUTA_DEBUG_LOG = "0"` para **toda** la suite. Es decir, cada test de esta ficha corre
 **con la traza apagada**, y cualquier lógica que dependiese de ella saldría roja. Se añade además un
 test explícito que lo afirma, para que la propiedad tenga nombre y no dependa de que nadie toque esa
@@ -838,18 +854,18 @@ task **C1** exige el completo.
 | Una excepción del cliente marca `desactualizada` y lanza el tipado (R24, R26) | Unitario del servicio | Se afirma `marcarDesactualizada` llamada **y** el tipo del error. |
 | La pantalla recibe `conflict`, no una excepción (R25) | Unitario de la action | `tests/unit/actions/…`: molde de los `rejects.toThrow(/AppErrorCode inesperado/)` que ya existen — aquí la aserción es **la contraria**. |
 | La premisa anexada y el razonamiento intacto (R27-R29) | Guardia de prosa | §8.1. |
-| Las cinco guardas de coste siguen igual (R33) | Los tests que ya existen | `optimizacion-ruta-service.test.ts`, `optimizacion-ruta-origen.test.ts`. |
+| Las cinco guardas de coste siguen igual **y en el mismo orden** (R33) | Los tests que ya existen **+ uno nuevo para el orden** | `optimizacion-ruta-service.test.ts`, `optimizacion-ruta-origen.test.ts`. ⏳ **AMPLIADO 2026-08-23 (m7):** «los tests que ya existen» cubrían la mitad «cortan igual» —cada guarda con su **0 llamadas**— pero **no la mitad «en el mismo orden»**, que descansaba en el comentario normativo de la cabecera del servicio, y un comentario no se pone rojo. Lo fija `describe("265/R33 — las guardas cortan EN ESTE ORDEN…")`: escenarios donde **dos** guardas cortarían a la vez, afirmando **cuál gana** por su `razon` y por lo que se ahorra (con el intervalo mínimo, `findParadasEnReparto` no llega a llamarse). |
 | **La columna existe, es nullable y tiene `down.sql` (R35)** | Test estático de migración | Molde de `tests/integration/db/ruta-optimizada-migracion.test.ts`: lee el SQL por regex, sin levantar Postgres. |
-| **El repo escribe y proyecta la procedencia (R35, R36)** | Integración de repositorio | `tests/integration/repositories/ruta-optimizada-repo.test.ts` **ya existe**: es el único sitio donde el `WHERE` y el `UPDATE` reales se miran de verdad. |
+| **El repo escribe y proyecta la procedencia (R35, R36)** | Integración de repositorio | `tests/integration/repositories/ruta-optimizada-repo.test.ts` **ya existe**: afirma los **argumentos** con los que el repositorio llama a Prisma (el `where`, y el `update` y el `create` del `upsert`) y que la escritura ocurre **dentro de la misma transacción**. ⏳ **CORREGIDO 2026-08-23 (m4):** aquí decía «es el único sitio donde el `WHERE` y el `UPDATE` **reales** se miran de verdad», y **eso es falso**: `tests/integration/repositories/**` **no levanta Postgres** —Prisma va mockeado, patrón de toda esa carpeta—, así que el SQL real **no lo ejecuta nadie ahí**. Un `WHERE` mutado que Prisma acepte pasa este test en verde. Quien sí mira el SQL: el **test estático de la migración** (por regex sobre el `.sql`), el `@map` de `db/schema.prisma` y **F6** contra el Postgres local. |
 | **La procedencia viaja del cliente a la fila (R35, R36, R37)** | Unitario del servicio, con dobles | Se afirma el **argumento** con el que se llamó a `reemplazarSecuencia`, no el resultado. |
 | **Degradar marca `local`; el proveedor marca `proveedor` (R35)** | Unitario del compuesto | Cubre el camino de la credencial ausente **y** el de `sin_solucion` con el mismo aserto. |
 | **El aviso persistente aparece y desaparece según el dato (R38, R45)** | Componente | `tests/components/RepartoModule.test.tsx` **ya existe** y ya tiene el fixture `RUTA_VIGENTE`. |
 | **El texto no lleva jerga ni PII (R40, R41, R42)** | Componente | Aserción sobre el **DOM renderizado** (`/degrad|fallback|haversine|proveedor|optimizador/i` no aparece), no sobre una constante: comparar un texto contra la función que lo genera siempre sale verde. |
-| **Las tres señales conviven y siguen distintas (R43)** | Componente | Origen `centroide` + trazado `local` + orden `local` a la vez → los tres textos presentes. |
+| **Las tres señales conviven y siguen distintas (R43)** | Componente ×2 | Origen `centroide` + trazado `local` + orden `local` a la vez. ⏳ **CORREGIDO 2026-08-23 (m3):** aquí decía «los **tres textos** presentes» y en el DOM sólo hay **dos**: la tercera señal es una **línea punteada**, no una frase. Se prueba en dos sitios y por eso son dos tests: `RepartoModule.test.tsx` afirma los dos textos y que la geometría `local` llega a las props del mapa; `RutaMapaInner.test.tsx` afirma que **esas props se convierten en `dashArray`** y que con `fuente: "routes"` la línea sale **continua**. Sin el segundo, la señal se quedaba a medio camino y nadie la miraba. |
 | **La falta de credencial también avisa (R44)** | Unitario del compuesto + componente | El compuesto marca `local`; el componente avisa igual. Sin nombrar la causa. |
 | **El toast dice la verdad (R39)** | Unitario de la action + componente del botón | La action devuelve `secuenciaFuente`; el botón no dice «Ruta sincronizada.» a secas. |
 | **El límite vive en un solo sitio y se declara sin calibrar (R46, R47)** | Guardia de prosa + barrido del árbol | §15. Con autocomprobación: un árbol simulado con el literal duplicado **tiene que** ponerla roja. |
-| **Nada depende de la traza (R48)** | Toda la suite + un test explícito | `tests/setup/jest-dom.ts:28` ya pone `RUTA_DEBUG_LOG=0` para todos los tests. El explícito le pone nombre a la propiedad. |
+| **Nada depende de la traza (R48)** | Toda la suite + un test explícito | `tests/setup/jest-dom.ts` ya pone `process.env.RUTA_DEBUG_LOG = "0"` para todos los tests (línea sin número a propósito: los números rotan). El explícito le pone nombre a la propiedad. |
 | **Sin códigos de motivo, el motivo sigue completo (R49)** | Unitario del cliente | Fixture **sin** ningún código → el motivo nombra causa y conteos, y no contiene `undefined` ni un hueco. |
 
 ### 10.3 · ⚠️ El test que hay que **cambiar**, y por qué eso no puede pasar en silencio
@@ -903,13 +919,28 @@ llevarse por delante su test.
 | M-ac | Hacer que el motivo o el aviso se emitan **sólo** por `optlog` | los tests, que corren con `RUTA_DEBUG_LOG=0` (R48) |
 | M-ad | Imprimir `códigos: undefined` cuando la respuesta no trae ninguno | test del cliente sin códigos (R49) |
 | **M-ae** | Mover el `optlog` de «informa saltos» **dentro de la rama de `sin_solucion`** (avisar sólo cuando ya es tarde) | test del cliente «R8: una respuesta UTILIZABLE … Y QUEDA ESCRITA» |
+| **M-af** | Borrar el `dashArray` de la línea del mapa (`RutaMapaInner`) | `RutaMapaInner.test.tsx`: la tercera señal de R43 (2 de 3 rojos) |
+| **M-ag** | Invertir la condición del `dashArray` (puntear lo que **sí** sigue calles) | `RutaMapaInner.test.tsx` (3 de 3 rojos) |
+| **M-ah** | Poner la guarda del intervalo mínimo **por delante** de la de obsolescencia | `optimizacion-ruta-service.test.ts` «265/R33 … R20 antes que R34» |
+| **M-ai** | Bajar la guarda del intervalo mínimo **por detrás** de la lectura de paradas | «265/R33 … R34 antes que R35», por el `SELECT` que deja de ahorrarse |
+| **M-aj** | Que la guarda de 0/1 parada deje de cubrir el caso de **una** (decide R36) | «265/R33 … R35 antes que R36» |
+| **M-ak** | Calcular la coherencia del origen sobre las paradas **sin recortar** | «265/R33 … el recorte R38 va ANTES de la guarda del origen» |
 
 ⏳ **`M-ae` la añade la revisión del 2026-08-22** (`progress/review_265.md`, bloqueante **B1**): la
 tabla salió con **treinta** mutaciones y **ninguna para R8**, así que el arnés no tapaba ese hueco.
 Medido por el reviewer y confirmado al aplicarla: el test que se llamaba de R8 afirmaba **sólo**
 `status: ok`, y el único que afirmaba la línea de traza (el de **R1**) usa una respuesta
 `sin_solucion` — o sea **no utilizable**—, así que **sobrevive** a esta mutación. Con eso, mover el
-`optlog` dejaba la suite entera en verde. Son **treinta y una**.
+`optlog` dejaba la suite entera en verde.
+
+⏳ **`M-af` a `M-ak` las añade el cierre de menores del 2026-08-23** (`review_265.md`, menores **m3**
+y **m7**). Cubren las dos propiedades que estaban escritas en el diseño y en un comentario pero **no
+en un test**: la tercera señal de R43 —el dibujo punteado, que sólo se afirmaba hasta las *props* del
+mapa— y el **orden** de las guardas de coste que R33 exige y que ningún test fijaba. Las seis se
+corrieron una a una con su salida pegada en `progress/impl_265_backend.md`. Nótese lo que miden
+`M-ah` y `M-ai`: cada una mata **un solo** test de los 40 del archivo, o sea que **todos los demás
+sobreviven a reordenar las guardas** — que es exactamente el agujero que m7 describía. Son
+**treinta y siete**.
 
 ⚠️ **El arnés de mutaciones debe autocomprobarse.** En este repo ya reportó «9/9 supervivientes» dos
 veces **sin haber ejecutado un solo test**. Cada mutación se pega con **su salida real** en
