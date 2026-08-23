@@ -372,16 +372,56 @@ describe("265/R2 — la AUSENCIA de los tres campos nuevos no rompe nada", () =>
     }
   });
 
-  it("R8: una respuesta UTILIZABLE que ademas trae avisos sigue siendo `ok`", async () => {
-    const fetchImpl = vi.fn(async () =>
-      respuesta(200, {
-        routes: [{ visits: SEIS_PARADAS.map((_, shipmentIndex) => ({ shipmentIndex })) }],
-        validationErrors: [{ algo: 1 }],
-        skippedShipments: [],
-      }),
-    );
-    const r = await client(fetchImpl).optimizar(INPUT_6);
-    expect(r).toMatchObject({ status: "ok", fuente: "proveedor" });
+  it("R8: una respuesta UTILIZABLE que ademas trae avisos sigue siendo `ok` Y QUEDA ESCRITA", async () => {
+    // ⚠️ Las DOS mitades importan, y la segunda es la que R8 exige de verdad: el sistema deja
+    // escrito lo que el proveedor informo *aunque la respuesta sea utilizable*. Sin la
+    // asercion sobre la traza, este test solo afirmaba `status: ok` y entonces mover el
+    // `optlog` dentro de la rama de `sin_solucion` —que es EL defecto que R8 vigila, «solo se
+    // avisa cuando ya es tarde»— dejaba la suite entera en verde. Medido: mutacion M-ae.
+    //
+    // El otro unico sitio del arbol que afirma esta linea (el test «R1: los TRES campos se
+    // leen de verdad») usa `RESPUESTA_DEL_INCIDENTE`, que es un caso `sin_solucion`, o sea una
+    // respuesta que NO es utilizable: no cubre este requisito y sobrevive a esa mutacion.
+    //
+    // Se enciende la traza a proposito, como en el test de R1: por diseno (R48) NINGUNA
+    // decision depende de ella, asi que es la unica superficie donde R8 es observable.
+    const previo = process.env.RUTA_DEBUG_LOG;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.RUTA_DEBUG_LOG = "1";
+    try {
+      const fetchImpl = vi.fn(async () =>
+        respuesta(200, {
+          routes: [{ visits: SEIS_PARADAS.map((_, shipmentIndex) => ({ shipmentIndex })) }],
+          validationErrors: [{ algo: 1 }],
+          skippedShipments: [],
+        }),
+      );
+
+      const r = await client(fetchImpl).optimizar(INPUT_6);
+
+      // Mitad 1: la respuesta SE USA. Los avisos no la descalifican.
+      expect(r).toMatchObject({ status: "ok", fuente: "proveedor" });
+
+      // Mitad 2: y aun asi el sistema lo dejo escrito.
+      const linea = log.mock.calls.find(
+        (c) => typeof c[0] === "string" && (c[0] as string).includes("informa saltos"),
+      );
+      expect(
+        linea,
+        "la respuesta era UTILIZABLE y traia avisos: la traza tenia que decirlo IGUAL",
+      ).toBeDefined();
+      // `skippedShipments: 0` es justo lo que distingue este caso del de R1: aqui no se salto
+      // ni una parada y el aviso viene solo de `validationErrors`.
+      expect(linea?.[1]).toEqual({
+        skippedShipments: 0,
+        validationErrors: true,
+        skippedMandatoryShipmentCount: null,
+      });
+    } finally {
+      log.mockRestore();
+      if (previo === undefined) delete process.env.RUTA_DEBUG_LOG;
+      else process.env.RUTA_DEBUG_LOG = previo;
+    }
   });
 });
 

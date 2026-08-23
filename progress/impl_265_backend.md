@@ -116,7 +116,7 @@ está compartida con la 262). `prisma migrate status` quedó en «Database schem
 | R5 | El motivo lleva conteos | ídem (misma aserción, `servidas 0 de 6`) |
 | R6 | El motivo no filtra nada | ídem → «ni coordenadas, ni ordenId, ni indices …» |
 | R7 | Códigos de motivo, si existen | ídem → «R7: con codigos reconocibles, se citan LOS CODIGOS» + autocomprobación del extractor |
-| R8 | La traza lo dice aunque la respuesta sirva | ídem → «R1: los TRES campos …» (la línea es la de R8) y «R8: una respuesta UTILIZABLE …» |
+| R8 | La traza lo dice aunque la respuesta sirva | ⏳ **CORREGIDO el 2026-08-22 (§8.1):** esta fila **mentía**. El de R1 usa una respuesta `sin_solucion` (**no** utilizable) y el llamado de R8 afirmaba **sólo** `status: ok`, así que **ninguno de los dos** cubría R8. Hoy sí: `google-…` → «R8: una respuesta UTILIZABLE que ademas trae avisos sigue siendo `ok` **Y QUEDA ESCRITA**», que exige la línea con `skippedShipments: 0` y `validationErrors: true`. Medido con **M-ae** |
 | R9 | «No cubre todas» → orden local | `fallback-route-optimization.test.ts` → «265/R9-R11 …» (3 casos) |
 | R10 | Nunca una secuencia parcial persistida | ídem → «R10: la secuencia devuelta cubre TODAS …» · `optimizacion-ruta-service.test.ts` → «no persiste nada, marca desactualizada …» |
 | R11 | «Algunas» = «ninguna» | `fallback-…` → los tres casos parametrizados (0, 4, 5 de 6) · cliente → «R11: servir ALGUNAS (4 de 6)» |
@@ -155,6 +155,9 @@ está compartida con la 262). `prisma migrate status` quedó en «Database schem
 ---
 
 ## 5 · Mutaciones — 25 de las 30, con su salida real
+
+> ⏳ **2026-08-22:** las cinco restantes (`M-v`…`M-z`) están en `impl_265_frontend.md` §5, y la
+> revisión añadió una **31.ª**, **`M-ae`** (la que faltaba para **R8**) → **§8.1**.
 
 Arnés: `scratchpad/mutar.py`, que aplica **una** mutación, corre los tests que deben cazarla y
 **revierte siempre** (`finally`). No hay veredicto agregado: abajo va el nombre del test que se
@@ -320,3 +323,272 @@ nueva **no aparece**. No se tocan las tres viejas: editar una migración ya apli
 9. **No corrí F6** (ver la app): depende del bloque frontend, que no es mío.
 
 10. **`feature_list.json` y `progress/current.md` no se tocaron**, como se me indicó.
+
+---
+
+## 8 · Anexo del 2026-08-22 — los dos bloqueantes de la revisión, cerrados
+
+> Rama `fix/265-bloqueantes-revision`, desde `origin/dev` en **`96940710`**. Encargo acotado:
+> **B1**, **B2** y **m1** de `progress/review_265.md`. **Ni una línea de producción cambia**: el
+> reviewer ya había medido que el código está sano. Los 11 menores (**m2**-**m11**) **no se tocan**:
+> no estaban en el encargo, y `review_265.md` **no se edita** — es el informe del reviewer.
+
+### 8.1 · B1 — `R8` ya tiene un test que muerde, y está medido
+
+**El agujero, tal como lo dejó el bloque backend.** El test que se llamaba de R8
+(`tests/unit/clients/google-route-optimization.test.ts`) montaba el escenario correcto —las seis
+visitas servidas **más** `validationErrors` presente— y luego afirmaba **sólo**
+`toMatchObject({ status: "ok", fuente: "proveedor" })`. No comprobaba que se escribiera nada. Y el
+**único** sitio de toda la suite que afirmaba la línea «informa saltos» era el test de **R1**, que
+usa `RESPUESTA_DEL_INCIDENTE` — un caso **`sin_solucion`**, o sea una respuesta que **NO** es
+utilizable. Con eso, el requisito («la traza lo dice **aunque la respuesta sirva**») no lo defendía
+nadie, y el mapa `R → test` de §4 lo daba por cubierto con dos tests.
+
+**Lo que se añadió.** El mismo test enciende la traza a propósito —como hace el de R1— y exige la
+línea, con el payload exacto que distingue este caso del de R1: `skippedShipments: 0`
+(no se saltó ni una parada; el aviso viene **sólo** de `validationErrors`), `validationErrors: true`
+y `skippedMandatoryShipmentCount: null`. Las dos mitades quedan en el mismo `it`, con el nombre
+actualizado (`… sigue siendo ok Y QUEDA ESCRITA`): un nombre que promete lo que el cuerpo no
+comprueba es peor que no tenerlo.
+
+**La mutación `M-ae`, corrida de verdad, en las dos direcciones.** Arnés:
+`scratchpad/mutar_mae.py`, que mueve el bloque `optlog` de `lib/clients/google-route-optimization.ts`
+**detrás del `return ok`** —es decir, dentro de la rama de `sin_solucion`: «sólo se avisa cuando ya
+es tarde», que es literalmente el defecto que R8 vigila—. Se autocomprueba de tres formas, porque en
+este repo un arnés ya reportó «9/9 supervivientes» **dos veces sin ejecutar un solo test**: (1)
+**aborta** si el bloque a mutar no está tal cual en el archivo; (2) corre la **base sin mutar** antes
+de nada y exige verde; (3) **restaura siempre** en `finally` y comprueba el diff.
+
+**(a) Con el test de HOY — la mutación MUERE:**
+
+```
+=== BASE SIN MUTAR ===
+ Test Files  1 passed (1)
+      Tests  32 passed (32)
+exit = 0
+
+=== MUTADO (M-ae: el optlog se mueve tras el `return ok`) ===
+ ❯ tests/unit/clients/google-route-optimization.test.ts (32 tests | 1 failed) 22ms
+     × R8: una respuesta UTILIZABLE que ademas trae avisos sigue siendo `ok` Y QUEDA ESCRITA 3ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 31 passed (32)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  … > 265/R2 — la AUSENCIA de los tres campos nuevos no rompe nada > R8: una respuesta
+ UTILIZABLE que ademas trae avisos sigue siendo `ok` Y QUEDA ESCRITA
+AssertionError: la respuesta era UTILIZABLE y traia avisos: la traza tenia que decirlo IGUAL:
+expected undefined to be defined
+ ❯ tests/unit/clients/google-route-optimization.test.ts:412:9
+exit = 1
+=== RESTAURADO. diff sobre el archivo: '' ===
+```
+
+**(b) Con el test ANTERIOR (el de `origin/dev`) — la misma mutación SOBREVIVE.** Esto es lo que
+convierte el arreglo en una medición y no en una promesa: se repuso el archivo de test tal como
+estaba en `dev` y se corrió **la misma** mutación:
+
+```
+--- test ANTERIOR (el de dev) puesto en su sitio ---
+375:  it("R8: una respuesta UTILIZABLE que ademas trae avisos sigue siendo `ok`", async () => {
+
+=== BASE SIN MUTAR ===
+ Test Files  1 passed (1)
+      Tests  32 passed (32)
+exit = 0
+
+=== MUTADO (M-ae: el optlog se mueve tras el `return ok`) ===
+exit = 0          <- VERDE. La mutacion sobrevivia, tal como midio el reviewer.
+=== RESTAURADO. diff sobre el archivo: '' ===
+```
+
+Nótese el detalle que lo hace exacto: en **(a)** cae **1 de 32** y sobreviven **31**, entre ellos
+**el test de R1** — que es justo la razón por la que el agujero existía. Y el conteo de tests **no
+cambia** (32 antes y después): no se añadió un test, se le pusieron dientes al que ya estaba.
+
+⚠️ **Se commiteó ANTES de mutar** (`bc640875`). Restaurar sobre un archivo modificado y sin
+commitear se lleva el trabajo por delante; hoy mismo ya le pasó a otro agente aquí. Efecto secundario
+visto y corregido: Python reescribe el archivo con **CRLF** en Windows, lo que deja el árbol marcado
+como modificado **con un diff vacío**; se normalizó reponiendo el blob y se verificó por bytes
+(`CRLF: 0`, 425 saltos de línea).
+
+**`design.md` §10.4 gana `M-ae`**, que es el otro medio de B1: la tabla salió con **treinta**
+mutaciones y **ninguna para R8**, así que el arnés tampoco tapaba el hueco. Son **treinta y una**.
+
+### 8.2 · B2 — `tasks.md` pasa de 0/43 a 38 `[x]` · 5 `[ ]`
+
+Marcadas **leyendo las dos bitácoras** y verificando en el árbol lo verificable, no a ojo. El archivo
+lleva ahora una cabecera con la tabla de las cinco que siguen vivas, **cada una con su motivo y de
+quién es**, y cada task en `[ ]` repite su estado **al lado**, donde lo va a leer quien la tome:
+
+| task | estado |
+| --- | --- |
+| **B0.1** | ⛔ **No tomable, y se cierra así.** La traza que era su única vía **se apaga en esta misma release** (P4). P1 y P5 quedan abiertas y declaradas. Marcarla `[x]` sería mentir; rellenarla, inventar |
+| **C3** | Pre-despliegue. M1 no se pudo medir → el umbral es **declarado, no derivado** |
+| **C5** | **H1 no tiene ficha** (medido, §8.4). **H2 sí está resuelto**. Registrar fichas es del leader |
+| **C7** | Variable de entorno, no código. Y **en gran parte superada**: el default ya se invirtió, así que poner `RUTA_DEBUG_LOG=0` ya no hace falta para apagarla |
+| **C8** | Post-despliegue. No hay despliegue todavía: sin número no se marca |
+
+Y **tres `[x]` llevan su letra pequeña escrita** con ⏳, porque un `[x]` liso sobre ellas también
+escondería deuda: **B0.4** (la task se hizo, pero **M1 volvió «no medible»** — de ahí nace C3),
+**B16** (las 30 se corrieron **repartidas** entre los dos bloques, y ahora son **31** con `M-ae`) y
+**F6** (hecha en **local**, no en preview; la mitad «no se llama al proveedor con ese origen» no se
+distingue sin credencial, y esa mitad la cubre el unitario que afirma el **argumento** de
+`client.optimizar`).
+
+**Nota sobre C7, que además es una deriva spec ↔ código** (**m6** del reviewer): la task dice «el
+valor por defecto del código **no se toca**, eso es P7» y **el código sí lo tocó** — con
+autorización, porque la segunda puerta de `requirements.md` cerró P7 como «se **INVIERTE EL DEFAULT
+EN EL CÓDIGO**». Lo correcto es el código; lo desactualizado, la task. Queda anotado **dentro de
+C7**, que es donde alguien lo va a leer antes de tomarla. `design.md` §1 y §16.1 arrastran la misma
+frase vieja y **no se han tocado**: eso es m6 y no estaba en este encargo.
+
+### 8.3 · m1 — `B0.2`, la medición que existía pero no estaba pegada
+
+La task exigía «los dos números pegados **con el snippet que los produjo**». El snippet, ejecutado
+con `pnpm exec tsx` sobre las coordenadas de la traza `client/google — ENTRADA` del incidente
+(`requirements.md` §2):
+
+```ts
+import { distanciaHaversineKm } from "@/lib/geo/polilinea";
+
+const origen = { lat: 6.3422343, lng: -75.514335 };   // Medellin, `fuente: 'gps'`
+const paradas = [
+  { lat: 9.9029459, lng: -83.6815776 },               // i=0
+  { lat: 9.9747225, lng: -84.2068436 },               // i=1..5, las cinco identicas
+  { lat: 9.9747225, lng: -84.2068436 },
+  { lat: 9.9747225, lng: -84.2068436 },
+  { lat: 9.9747225, lng: -84.2068436 },
+  { lat: 9.9747225, lng: -84.2068436 },
+];
+
+// Misma aritmetica que `centroide()` en `lib/services/OptimizacionRutaService.ts:116`
+// (es privada del modulo, no se puede importar; se reproduce verbatim).
+const centroide = {
+  lat: paradas.reduce((s, p) => s + p.lat, 0) / paradas.length,
+  lng: paradas.reduce((s, p) => s + p.lng, 0) / paradas.length,
+};
+
+console.log("origen -> parada repetida :", distanciaHaversineKm(origen, paradas[1]!).toFixed(4));
+console.log("parada i=0 <-> i=1..5     :", distanciaHaversineKm(paradas[0]!, paradas[1]!).toFixed(4));
+console.log("centroide                 :", centroide);
+console.log("origen -> CENTROIDE       :", distanciaHaversineKm(origen, centroide).toFixed(4));
+```
+
+Salida real:
+
+```
+origen -> parada repetida : 1038.3712 km
+parada i=0 <-> i=1..5     : 58.0813 km
+centroide                 : { lat: 9.962759733333334, lng: -84.11929926666667 }
+origen -> CENTROIDE       : 1028.9960 km  <- el que usa la guarda R16
+```
+
+**Los tres números, y qué significa cada uno:**
+
+| medida | valor | para qué sirve |
+| --- | --- | --- |
+| origen → parada repetida | **1.038,3712 km** | confirma el **≈1.040 km** del spec. El «unos 1.400 km» del reporte original era el equivocado |
+| parada i=0 ↔ i=1..5 | **58,0813 km** | la **cota inferior legítima**: dos paradas del mismo día y del mismo país. Cualquier umbral tiene que dejar pasar esto |
+| origen → **centroide** | **1.028,9960 km** | **es el que de verdad compara la guarda `R16`**, y el que nadie había calculado. A 1.029 km del centroide, con el umbral en 200, el origen se descarta con muchísimo margen |
+
+El reviewer lo recalculó por su cuenta y le dio **1.028,99**: es el mismo número truncado a dos
+decimales en vez de redondeado (1.028,996 → **1.029,00**). No hay discrepancia, y se escribe con
+cuatro decimales para que no vuelva a haberla. **Los números del spec eran correctos: no se corrige
+`requirements.md` §2 ni `design.md` §6.4.** Lo que faltaba era la evidencia, y ya está aquí.
+
+El script se ejecutó y **se borró**: era de un solo uso y no tiene por qué quedarse en el repo. El
+texto de arriba es literalmente lo que corrió.
+
+### 8.4 · C2, C6 y la mitad medible de C5
+
+**C2 — pre-vuelo.** `origin/dev` sigue en **`96940710`**, la misma base de la que nació esta rama.
+Nadie la movió mientras corría este encargo. ⚠️ **El pre-vuelo caduca**: quien abra el PR lo repite.
+
+**C6 — el blob commiteado, no el árbol.** Verificado sobre `bc640875` leyendo cada archivo **desde
+su blob** (`show HEAD:<ruta>`), no desde el árbol de trabajo:
+
+```
+tasks.md   -> 38 lineas '- [x]'
+tasks.md   -> las 5 en '- [ ]' son exactamente B0.1, C3, C5, C7, C8
+design.md  -> 'M-ae' en :905 (la fila de la tabla) y :907 (el porque)
+test       -> :375 «Y QUEDA ESCRITA» · :416 skippedShipments: 0, · :417 validationErrors: true,
+```
+
+Se comprueba porque el árbol **no distingue** «lo commiteé» de «alguien lo revirtió»: en este repo
+otra sesión ya reseteó una rama.
+
+**C5 — lo que se pudo medir, medido; lo que es del leader, sin tocar.** Buscando la línea del token
+en el archivo del cliente **tal como está en `origin/dev`**: **cero coincidencias** (`exit=1`). O
+sea **H2 (token en el log) está resuelto en `dev`**, y de paso eso cierra la mitad que le faltaba a
+**B0.3** («falta confirmarlo contra el remoto»; el árbol local no prueba el remoto). **H1**, en
+cambio, **no tiene ficha**: barrido sobre `feature_list.json` buscando la calidad de la
+geocodificación / `geocode_precision` como ficha propia → **cero**; los ids vivos alrededor son 265,
+266, 267, 268 y 269, y ninguno es H1. Registrarla es del leader, así que **C5 se queda en `[ ]`** con
+esto escrito al lado. **`feature_list.json` no se ha tocado.**
+
+### 8.5 · C1 — el gate `./init.sh` COMPLETO, en verde
+
+Escrito para que el exit code **no lo tape un `echo`** (en este repo un `echo` posterior ya hizo
+pasar un gate rojo por «exit code 0»): `{ ./init.sh; echo "INIT_EXIT=$?"; } > gate.log 2>&1`, y el
+valor se lee **dentro** del log. Antes del gate, `prisma generate --schema db/schema.prisma`: el
+cliente vive en un `node_modules` **compartido** por *junction* y otra sesión puede regenerarlo por
+debajo, dejando un typecheck rojo con tipos que sí existen (ya pasó dos veces en el bloque backend).
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=2)
+✓ specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+✓ typecheck paso
+-> pnpm run lint
+✖ 99 problems (0 errors, 99 warnings)
+✓ lint paso
+-> pnpm run test
+ Test Files  1319 passed (1319)
+      Tests  17793 passed | 26 skipped (17819)
+   Duration  347.91s
+✓ test paso
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+Cuatro cosas que se comprueban aquí y no se dan por supuestas:
+
+1. **`INIT_EXIT=0` está DENTRO del log**, en su última línea, no detrás de un `echo` del shell.
+2. **Los números son EXACTAMENTE los de la corrida del reviewer** (`1319` archivos, `17793` verdes,
+   `26` saltados) — y tienen que serlo: **no se añadió ningún test**, se le pusieron dientes a uno que
+   ya existía. Si el total hubiera cambiado, algo más habría pasado.
+3. **99 *warnings*, 0 errores**: los mismos 99 que midieron los dos bloques y el reviewer. **Ninguno
+   sale de esta rama.**
+4. **La lista de «migraciones sin `down.sql`» NO crece**: siguen siendo las tres `ruta_*` del
+   2026-08-14 que ya venían así, y que **no se tocan** (editar una migración aplicada es *drift*).
+
+**No hubo rojo que diagnosticar**, así que no hizo falta distinguir «timeout bajo carga» de «base
+compartida». Se anota igual porque es la trampa que este árbol tiene puesta: los rojos de
+`tests/integration/db/…-migration.test.ts` comparan **enums de la base local** contra listas
+literales, y con dos features migrando contra la misma base local salen rojos que **no son de tu
+rama**. Aquí ya no aparecen: las migraciones de la 262 están en el árbol desde que se mergeó.
+
+`gate.log` **no se commitea**.
+
+### 8.6 · Lo que este anexo NO hizo, dicho para que nadie lo suponga
+
+1. **Ni una línea de código de producción.** El diff son tres archivos: el test del cliente,
+   `design.md` (la fila de `M-ae`) y `tasks.md` (las marcas), más esta bitácora. `lib/`, `app/`,
+   `db/` y `components/` están intactos.
+2. **Los 11 menores (`m2`-`m11`) siguen abiertos**, incluidos los tres que son deuda de prosa barata
+   y que alguien debería tomar: **m4** (la frase de `design.md` §10.2 que llama «el único sitio donde
+   el `WHERE` real se mira» a un archivo con Prisma mockeado), **m5** (el comentario de
+   `google-route-optimization.ts:208` que sigue diciendo «se apaga con `RUTA_DEBUG_LOG=0`», caducado
+   por la inversión del default) y **m6** en `design.md` §1/§16.1. **No estaban en el encargo.**
+3. **`progress/review_265.md` no se ha editado.** Es el informe del reviewer y se queda como está,
+   con su veredicto RECHAZADO: quien lo revise después compara ese informe con este anexo.
+4. **`feature_list.json` y `progress/current.md` no se han tocado.** Son del leader. Con ellos se
+   quedan **C5** (registrar la ficha de H1) y **m8** (la entrada en `progress/history.md`).
+5. **No se abrió PR ni se mergeó nada.**
