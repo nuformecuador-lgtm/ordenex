@@ -20,10 +20,15 @@ import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { PostularMensajeroCommand } from "@/lib/interfaces/services/IPostulacionMensajeroService";
 import { DOCUMENTO_TIPOS } from "@/lib/types/postulacion-mensajero";
 
-// Feature 146 — camino REAL de los tres notificadores best-effort (R22, R23, R24, R25).
+// Feature 146 — camino REAL de los notificadores best-effort (R22, R23, R24, R25).
 //
-// El default del constructor de los tres services es el NO-OP, y el notificador real se cablea
-// en el composition root. Esto es lo que permite que este archivo pruebe el camino que corre en
+// ⚠️ 2026-08-23: eran TRES cuando se escribio este archivo; hoy son CINCO (la 253 anadio el de
+// la postulacion de recurso y la 262 el del dia de reparto corregido). Los casos de emision de
+// abajo siguen cubriendo los tres originales; el censo del final —«el camino real esta CABLEADO
+// en el composition root»— cubre los cinco y se contrasta contra el arbol.
+//
+// El default del constructor de cada uno de esos services es el NO-OP, y el notificador real se
+// cablea en el composition root. Esto es lo que permite que este archivo pruebe el camino que corre en
 // produccion: se construye `notificar*Con(repoDoble)` —la MISMA funcion que usa el binding real,
 // solo que con el repositorio inyectado— y se verifica que emite lo esperado, y que un fallo se
 // absorbe y se registra en vez de propagarse.
@@ -232,7 +237,7 @@ describe("el notificador real, cableado en un service, emite de punta a punta", 
   });
 });
 
-describe("el DEFAULT de los tres services es inocuo POR CONSTRUCCION", () => {
+describe("el DEFAULT de un service con notificador es inocuo POR CONSTRUCCION", () => {
   it("notificadorNoOp no hace nada y no lanza", async () => {
     await expect(notificadorNoOp({} as never)).resolves.toBeUndefined();
   });
@@ -325,16 +330,53 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
-  it("los defaults de los tres services son el no-op, no el notificador real", () => {
-    for (const servicio of [
-      "PostulacionMensajeroService.ts",
-      "CierreDiaService.ts",
-      "BulkOrdenService.ts",
-    ]) {
+  // ⚠️ 2026-08-23 (feature 262, F6) — ESTE CENSO DECIA «TRES» Y EN EL ARBOL HABIA CINCO.
+  // La 253 anadio `PostulacionRecursoService` y la 262 anadio `CorreccionDiaRepartoService`, los
+  // dos con su notificador best-effort y su default no-op, y NINGUNO entraba aqui: un service
+  // que se cablease con el notificador real en su propio constructor —o que se olvidase de
+  // cablearlo en el composition root— no habria puesto rojo nada. El censo se AMPLIA, no se
+  // relaja: la lista sigue siendo LITERAL por el mismo motivo que la del enum de eventos
+  // (`notificacion-productores-wiring.test.ts`), y debajo hay una comprobacion que la contrasta
+  // contra el arbol para que un SEXTO service no pueda quedarse fuera en silencio.
+  const SERVICES_CON_NOTIFICADOR = [
+    "PostulacionMensajeroService.ts",
+    "CierreDiaService.ts",
+    "BulkOrdenService.ts",
+    "PostulacionRecursoService.ts", // feature 253 / D6
+    "CorreccionDiaRepartoService.ts", // feature 262 / D7
+  ] as const;
+
+  it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
+    expect(leer("lib", "actions", "postulacion-recurso.ts")).toContain(
+      "notificarPostulacionRecursoPendienteReal",
+    );
+  });
+
+  it("lib/actions/corregir-dia-reparto.ts inyecta el notificador real", () => {
+    expect(leer("lib", "actions", "corregir-dia-reparto.ts")).toContain(
+      "notificarDiaRepartoCorregidoReal",
+    );
+  });
+
+  it("los defaults de los CINCO services son el no-op, no el notificador real", () => {
+    for (const servicio of SERVICES_CON_NOTIFICADOR) {
       const fuente = leer("lib", "services", servicio);
       expect(fuente).toMatch(/Notificador = notificadorNoOp/);
       expect(fuente).not.toMatch(/Notificador = notificar\w*Real/);
     }
+  });
+
+  it("el censo esta COMPLETO: no hay ningun otro service con notificador por constructor", () => {
+    // Contra el ARBOL, no contra la propia lista: es lo unico que convierte «son estos cinco» en
+    // una afirmacion que se puede romper. Si manana entra un sexto service con notificador y
+    // nadie lo apunta arriba, este test lo nombra.
+    const dir = path.join(ROOT, "lib", "services");
+    const conNotificador = fs
+      .readdirSync(dir)
+      .filter((n) => n.endsWith(".ts"))
+      .filter((n) => /Notificador = notificadorNoOp/.test(fs.readFileSync(path.join(dir, n), "utf8")))
+      .sort();
+    expect(conNotificador).toEqual([...SERVICES_CON_NOTIFICADOR].sort());
   });
 
   it("ningun modulo de lib/ ni app/ apaga la emision segun el entorno de test", () => {
