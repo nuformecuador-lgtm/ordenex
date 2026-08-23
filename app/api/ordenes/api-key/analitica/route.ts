@@ -1,6 +1,6 @@
 // Feature 267 (T7, design §4.1/§4.2) — EL CASCARON HTTP de la analitica por el canal de API key.
 //
-// `GET /api/ordenes/api-key/analitica?metrica=<id>&desde=YYYY-MM-DD&hasta=YYYY-MM-DD`
+// `GET /api/ordenes/api-key/analitica?metricas=<id>[,<id>...]|all&desde=YYYY-MM-DD&hasta=YYYY-MM-DD`
 // con `Authorization: Bearer ordx_...`.
 //
 // QUE HACE ESTE ARCHIVO, Y NADA MAS: bearer, query, status y JSON. Los cuatro pasos de la
@@ -17,6 +17,12 @@
 // allowlist nominal de este unico camino. Es decir: la guardia de 126/R1 sigue verde DE VERDAD,
 // no por casualidad. Si manana alguien "simplifica" este cascaron cableando aqui el servicio, se
 // pone roja, y debe.
+//
+// ⚠ Y POR ESO `metricas` SE RESUELVE EN `lib/api/analitica-api-key-metricas.ts` (P4-bis):
+// expandir `all` exige leer la lista blanca, que vive en `@/lib/analytics/**`, y la guardia de
+// 134/R3 prohibe importar de ahi desde CUALQUIER archivo de `app/api` —tambien desde el camino
+// nominalmente autorizado—. Este cascaron no nombra ni un modulo de analitica: pasa la cadena
+// cruda y recibe la lista resuelta.
 //
 // ORDEN NORMATIVO, heredado de la 255 (`cotizacion/route.ts`) y exigido por 267/R23:
 //   auth (401/403)  ->  query (422)  ->  preparar (403 | 422)  ->  servicio (200)
@@ -40,7 +46,8 @@ import {
   consultarAnaliticaIntegrador,
   type AnaliticaIntegradorDeps,
 } from "@/lib/api/analitica-integrador";
-import { proyectarSerieApiKey } from "@/lib/api/analitica-api-key-dto";
+import { proyectarRespuestaApiKey } from "@/lib/api/analitica-api-key-dto";
+import { resolverMetricasPedidas } from "@/lib/api/analitica-api-key-metricas";
 
 // El runtime de Node es OBLIGATORIO: Prisma y el hash de la API key no corren en edge.
 export const runtime = "nodejs";
@@ -58,11 +65,13 @@ export interface AnaliticaApiKeyDeps {
 /**
  * 267/R27 — el schema declara TRES claves y ninguna mas.
  *
- * `metrica` es un `string` a secas y NO un `enum` de la lista blanca, y es una decision, no un
+ * `metricas` es un `string` a secas y NO un `enum` de la lista blanca, y es una decision, no un
  * descuido (267/R16): si el borde rechazara con 422 las metricas no publicables, un tercero
  * podria SONDEAR desde fuera cuales existen en el catalogo comparando 422 contra 403. La lista
  * blanca la aplica `resolverAlcance`, que devuelve el MISMO 403 mudo para «existe pero no se
- * publica» y para «no existe».
+ * publica» y para «no existe». Por eso lo unico que este schema exige de `metricas` es que sea
+ * una cadena no vacia: la FORMA la valida `resolverMetricasPedidas`, que tampoco mira el
+ * catalogo.
  *
  * `desde` y `hasta` son AMBOS OBLIGATORIOS (decision P3 del 2026-08-23) y se validan como fecha
  * CALENDARIO REAL con `esFechaCalendarioValida` —la misma funcion que la 257—, que hace el
@@ -78,7 +87,7 @@ export interface AnaliticaApiKeyDeps {
  */
 const analiticaQuerySchema = z
   .object({
-    metrica: z.string().trim().min(1),
+    metricas: z.string().trim().min(1),
     desde: z
       .string()
       .refine(esFechaCalendarioValida, { message: "Fecha invalida (formato YYYY-MM-DD)." }),
@@ -113,13 +122,22 @@ export async function handleAnaliticaApiKey(
     // No se ignoran «por politica»: es que no existe la linea que los leeria.
     const sp = new URL(req.url).searchParams;
     const raw: Record<string, string> = {};
-    if (sp.has("metrica")) raw.metrica = sp.get("metrica") ?? "";
+    if (sp.has("metricas")) raw.metricas = sp.get("metricas") ?? "";
     if (sp.has("desde")) raw.desde = sp.get("desde") ?? "";
     if (sp.has("hasta")) raw.hasta = sp.get("hasta") ?? "";
     const parsed = analiticaQuerySchema.safeParse(raw);
     if (!parsed.success) {
       const fieldErrors = z.flattenError(parsed.error).fieldErrors as Record<string, string[]>;
       throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors }); // -> 422
+    }
+
+    // 2-bis. P4-bis — LA LISTA DEL LOTE. El 422 sale con la clave publica `metricas`, la misma
+    // que llego en la query, para que el integrador sepa que corregir sin adivinar.
+    const metricas = resolverMetricasPedidas(parsed.data.metricas);
+    if (!metricas.ok) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, {
+        fieldErrors: { metricas: [metricas.mensaje] },
+      }); // -> 422
     }
 
     // 3. EL BORDE CONSTRUYE EL FILTRO INTERNO (design §4.2): no lo recibe. `desde`/`hasta` del
@@ -129,7 +147,7 @@ export async function handleAnaliticaApiKey(
     const salida = await consultarAnaliticaIntegrador(
       {
         actor: auth.actor,
-        metricaId: parsed.data.metrica,
+        metricaIds: metricas.ids,
         raw: { rango: "personalizado", desde: parsed.data.desde, hasta: parsed.data.hasta },
       },
       deps.analitica,
@@ -142,17 +160,16 @@ export async function handleAnaliticaApiKey(
     switch (salida.status) {
       case "ok":
         // 267/R31 — proyeccion explicita campo a campo. El objeto interno NUNCA se serializa
-        // tal cual: un campo nuevo del contrato de la 126 no se publica solo.
-        return proyectarSerieApiKey(salida.datos);
+        // tal cual: un campo nuevo del contrato de la 126 no se publica solo. El sobre publica
+        // el rango UNA vez y las series en el orden pedido (R45/R47/R48).
+        //
+        // El `switch` es exhaustivo a proposito: un estado nuevo del resultado de dominio debe
+        // romper la compilacion, no caer en un `default` que responda 200.
+        return proyectarRespuestaApiKey(salida.series);
       case "validation_error":
         // 267/R25/R26 — aqui aterrizan el rango invertido y el tope de ventana, con sus
         // `fieldErrors` en las MISMAS claves publicas (`desde`/`hasta`) que llegaron en la query.
         throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: salida.fieldErrors });
-      case "unauthenticated":
-        // Inalcanzable por este canal (el actor ya venia resuelto del autenticador), pero el
-        // `switch` es exhaustivo a proposito: un estado nuevo del resultado de dominio debe
-        // romper la compilacion, no caer en un `default` que responda 200.
-        throw new UnauthenticatedError();
       case "forbidden":
         throw new ForbiddenError();
     }

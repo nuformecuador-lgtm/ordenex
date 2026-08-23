@@ -125,7 +125,7 @@ quinto argumento `"api_key"` explícito** — es la pieza que activa la rama de 
 `AnaliticaOperativaDeps`.
 
 **Hecho cuando** `tests/unit/api/analitica-integrador-borde.test.ts` está verde con: espía que
-comprueba **una** llamada a `prepararConsultaAnalitica` (R14); un `forbidden` que llama al logger
+comprueba **una llamada por métrica pedida** a `prepararConsultaAnalitica` (R14); un `forbidden` que llama al logger
 (R32 — el test espía el **logger**, no el status: la trampa de `normalizeError` está en
 `design.md §4.4`); política `seudonima` en la consulta (R35); filtro con `mensajero_id` ⇒ 403
 auditado (R37); y **cero** llamadas al repositorio en todos los caminos denegados.
@@ -149,7 +149,8 @@ cadena serializada no contiene ningún uuid (R36).
 
 `app/api/ordenes/api-key/analitica/route.ts`: `runtime = "nodejs"`, bearer con
 `extraerBearer`/`buildAutenticar` de `lib/api/api-key-request.ts` (no se reescribe la extracción),
-query **clave por clave**, schema zod con `metrica`/`desde`/`hasta`, y llamada al borde de T5. El
+query **clave por clave**, schema zod con `metricas`/`desde`/`hasta` (⟨P4-bis⟩, era `metrica`), y
+llamada al borde de T5. El
 handler **no** nombra el servicio ni el repositorio de analítica (así la guardia 126/R1 sigue verde
 de verdad, no por casualidad).
 
@@ -208,6 +209,49 @@ habría fallado.
 
 ---
 
+## [x] T12 — El lote de métricas ⟨P4-bis, 2026-08-23⟩ (posterior a T11; reabre T5, T6, T7, T9)
+
+Llega DESPUÉS del PR abierto y **cambia el contrato público antes de mergear**, que es el momento
+barato de hacerlo: `metrica=<id>` nunca llegó a `dev`, así que no hay integrador al que romperle
+nada. Cuatro piezas:
+
+1. `lib/analytics/publicacion-api-key.ts` — el centinela `METRICAS_TODAS = "all"`, junto a la lista
+   que expande (si vivieran separados, un alta y el significado de `all` podrían divergir).
+2. `lib/api/analitica-api-key-metricas.ts` — **archivo nuevo**: `resolverMetricasPedidas`, la cadena
+   cruda → lista servida (CSV, `all`, sin mezclar, deduplicada, orden pedido, tope = tamaño de la
+   lista blanca). Vive en `lib/api/` por la guardia de 134/R3 ⟨P4-bis.g⟩.
+3. `lib/api/analitica-integrador.ts` — `metricaIds: readonly string[]`, un `now()` para todo el
+   lote, preparar TODAS antes de consultar NINGUNA, consultas **en serie**, y el `denegar` que
+   nombra la métrica culpable en el log.
+4. `lib/api/analitica-api-key-dto.ts` — el sobre `AnaliticaRespuestaApiKeyDTO`; la serie pierde
+   `rango` (sube a la raíz) y conserva su `cobertura`.
+
+Y el contrato publicado en los DOS artefactos: parámetro `metricas` con el enum + `all`, schema
+`AnaliticaRespuesta` y ejemplo de dos métricas.
+
+**Hecho cuando** están verdes, con estos asertos y no con otros:
+`analitica-api-key-route.test.ts` — tres ids ⇒ 200 con las tres series **en el orden pedido** y
+`rango` sólo en la raíz (R45/R47/R48); `all` ⇒ exactamente `METRICAS_API_KEY`, comparado contra la
+FUENTE (R46); `all,entregas`, `a,,b`, `metricas=` y más ids que publicables ⇒ 422 en
+`fieldErrors.metricas` con cero consultas (R46); id repetido ⇒ una sola serie y una sola consulta
+(R47); lote con una no publicable ⇒ **403 mudo, cero consultas** e idéntico byte a byte al de un id
+inexistente (R16/R45).
+`analitica-integrador-borde.test.ts` — N métricas ⇒ N preparaciones y N consultas en orden; lote
+denegado ⇒ cero consultas y **un** registro de auditoría con la métrica culpable; entrada inválida
+⇒ corta en la primera; diez métricas ⇒ `now` invocado **una** vez y un solo rango (R48).
+`analitica-api-key-contrato.test.ts` — el sobre con una sola métrica ya tiene forma de lote (R45);
+orden conservado (R47); cobertura POR SERIE, no hoisteada; rango divergente o lista vacía ⇒ lanza
+(R48).
+`publicacion-api-key.test.ts` — ningún id del catálogo se llama `all` (R46).
+`openapi-177-paths-pdf-y-carga-id.test.ts` — el parámetro es `metricas`, su enum es
+`METRICAS_API_KEY + all` derivado de la fuente en el TS y en el `.yaml`, la 200 apunta a
+`AnaliticaRespuesta` y `AnaliticaSerie` ya no exige `rango` (R28/R39).
+`export-csv-frontera.guardia.test.ts` — **verde sin editarla**: el handler no importa de
+`@/lib/analytics/**` ⟨P4-bis.g⟩. Se puso roja al primer intento y la respuesta fue mover el código,
+no relajar la guardia.
+
+---
+
 ## [ ] T11 — Gate y PR (depende de todo)
 
 1. `git diff --stat origin/dev` y comprobar con el diff REAL que no aparecen `db/`, migraciones,
@@ -222,5 +266,10 @@ habría fallado.
    junto, no en tres tandas.
 
 **Hecho cuando:** gate en verde con la salida pegada en `progress/impl_267.md`, tabla
-`R1..R44 → test` completa (ningún requisito sin test) y el PR abierto con ese cuerpo. Verificación
+`R1..R48 → test` completa (ningún requisito sin test) y el PR abierto con ese cuerpo. Verificación
 humana del reviewer para los puntos 3 y 4.
+
+⚠️ **El cuerpo del PR también anuncia P4-bis** (T12): el endpoint sirve un LOTE (`metricas=a,b,c` o
+`all`) y la 200 es el sobre `{ rango, metricas[] }`. Es contrato público que cambia de forma respecto
+a lo que el PR anunciaba antes; se cambia AHORA porque `metrica=<id>` nunca llegó a `dev` y no hay
+nadie a quien romperle nada.

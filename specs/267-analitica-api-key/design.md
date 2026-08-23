@@ -189,14 +189,17 @@ de lo que ve la tienda dueña de sus órdenes.**
 
 ## 4. El endpoint
 
-### 4.1 Ruta y forma ⟨P4⟩
+### 4.1 Ruta y forma ⟨P4 · revisada por P4-bis⟩
 
 ```
-GET /api/ordenes/api-key/analitica?metrica=<id>&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+GET /api/ordenes/api-key/analitica?metricas=<id>[,<id>...]|all&desde=YYYY-MM-DD&hasta=YYYY-MM-DD
 Authorization: Bearer ordx_...
 ```
 
-Una métrica por llamada. Convivencia de rutas: segmento estático hermano de `[numGuia]/`, mismo
+**Un LOTE de métricas por llamada** ⟨P4-bis, 2026-08-23⟩. La ruta no cambió; la granularidad, sí:
+P4 había cerrado «una métrica por llamada» y el humano la reabrió. Su objeción —«un endpoint
+multi-métrica obliga a decidir qué pasa cuando una de las pedidas está prohibida»— se responde en
+§4.5, no se ignora: **el lote es todo o nada**. Convivencia de rutas: segmento estático hermano de `[numGuia]/`, mismo
 precedente que `carga/`, `orden/` y `cotizacion/` — el estático gana al dinámico en el App Router.
 
 **Middleware: NADA que tocar (R41).** `middleware.ts:32` declara `/api/ordenes/api-key` en
@@ -208,7 +211,7 @@ re-investigue ni «arregle» el middleware de paso.
 
 | Parámetro | Tipo público | Obligatorio | Semántica |
 | --- | --- | --- | --- |
-| `metrica` | `string` | **sí** | id del catálogo publicable |
+| `metricas` | `string` (CSV) | **sí** | ids publicables separados por comas, o `all` ⟨P4-bis⟩ |
 | `desde` | `YYYY-MM-DD` | **sí** ⟨P3⟩ | fecha calendario CR, cota inferior inclusiva |
 | `hasta` | `YYYY-MM-DD` | **sí** ⟨P3⟩ | fecha calendario CR, cota superior **inclusiva** |
 
@@ -217,8 +220,20 @@ Publicar aquí `rango: "personalizado" | "dia" | …` (el vocabulario interno de
 `desde`/`hasta` en el listado (257) y presets aquí. Se traduce por dentro:
 
 ```
-raw = { rango: "personalizado", desde, hasta }   →  prepararConsultaAnalitica(raw, actor, metrica, now)
+raw = { rango: "personalizado", desde, hasta }   →  prepararConsultaAnalitica(raw, actor, metricaId, now)
+                                                    (una llamada POR MÉTRICA del lote, R14)
 ```
+
+**`metricas` se resuelve ANTES, y no en el handler** ⟨P4-bis.g⟩. `lib/api/analitica-api-key-metricas.ts`
+convierte la cadena cruda en la lista que se va a servir: parte por comas, rechaza elementos
+vacíos, expande `all` desde `METRICAS_API_KEY`, prohíbe mezclar `all` con ids, deduplica
+conservando la primera aparición y corta si llegan más ids que métricas publicables (tras
+deduplicar no puede haber más ids válidos que la lista blanca, así que una lista más larga contiene
+por fuerza algo que no se publica). **No comprueba que los ids existan ni que sean publicables**: si
+lo hiciera, un 422 y un 403 dirían cosas distintas y la lista blanca se podría reconstruir desde
+fuera (R16). Vive en `lib/api/` porque expandir `all` exige leer `@/lib/analytics/**` y la guardia
+de 134/R3 prohíbe ese import desde cualquier archivo de `app/api` — también desde el camino que P6
+autorizó nominalmente.
 
 Es decir: el borde HTTP **construye el filtro interno**, no lo recibe. Consecuencias buenas y
 buscadas: `zona_id`, `tienda_id` y `mensajero_id` **no tienen forma de llegar** desde la query
@@ -241,17 +256,32 @@ tal cual** (R31): el borde proyecta campo a campo a un DTO público declarado en
 
 ```jsonc
 {
-  "metrica": "entregas",
-  "unidad": "conteo",
-  "unidadDeConteo": "gestion",
-  "rango":  { "desde": "2026-08-01", "hasta": "2026-08-21" },   // YYYY-MM-DD CR, como la 257
-  "puntos": [
-    { "fecha": "2026-08-20", "valor": 37 },
-    { "fecha": "2026-08-21", "valor": 12, "parcial": true, "corteAt": "2026-08-21T18:40:00.000Z" }
-  ],
-  "cobertura": { "fechasNoComparables": [], "penumbra": "ordenes_vivas_al_horizonte_sin_transicion_posterior" }
+  "rango": { "desde": "2026-08-01", "hasta": "2026-08-21" },    // YYYY-MM-DD CR, como la 257
+  "metricas": [                                                 // en el orden pedido ⟨P4-bis.f⟩
+    {
+      "metrica": "entregas",
+      "unidad": "conteo",
+      "unidadDeConteo": "gestion",
+      "puntos": [
+        { "fecha": "2026-08-20", "valor": 37 },
+        { "fecha": "2026-08-21", "valor": 12, "parcial": true, "corteAt": "2026-08-21T18:40:00.000Z" }
+      ],
+      "cobertura": { "fechasNoComparables": [], "penumbra": "ordenes_vivas_al_horizonte_sin_transicion_posterior" }
+    }
+  ]
 }
 ```
+
+**Esta forma es la misma con una métrica y con diez** ⟨P4-bis.c, R45⟩: un contrato que cambiara de
+forma según cuántas se pidieron obligaría al integrador a escribir dos parsers y a elegir entre
+ellos mirando su propia petición.
+
+**Por qué el `rango` sube a la raíz y la `cobertura` no** ⟨P4-bis.d⟩. Las N series se resuelven con
+el MISMO `raw` y el MISMO instante (R48), así que su rango es idéntico por construcción y repetirlo
+invitaría a leerlo como si pudiera diferir. `cobertura` **no** es así: `fechasNoComparables` sale
+del historial que cada métrica necesita, de modo que dos métricas del mismo rango pueden no ser
+comparables en los mismos días. Subirla a la raíz publicaría la cobertura de una como si fuera la
+de todas — la asimetría es la parte correcta.
 
 - `rango` se publica con `desdeFecha`/`hastaFecha` del `RangoResuelto` (`types.ts:249-252`), no con
   los `Date`: así el eco del rango habla el mismo idioma que la entrada (R24) y **ningún `Date`
@@ -273,16 +303,19 @@ Errores: `401`/`403`/`422` con la shape global del repo (`appErrorToResponse`), 
 
 ```
 app/api/ordenes/api-key/analitica/route.ts     ← cascarón HTTP: bearer, query, status, JSON
-lib/api/analitica-integrador.ts                ← EL BORDE: los cuatro pasos de la 126
+lib/api/analitica-api-key-metricas.ts          ← `metricas` cruda → lista resuelta ⟨P4-bis.g⟩
+lib/api/analitica-integrador.ts                ← EL BORDE: los cuatro pasos de la 126, por métrica
+lib/api/analitica-api-key-dto.ts               ← el sobre público `{ rango, metricas[] }`
 ```
 
 `lib/api/analitica-integrador.ts` es el hermano de `lib/actions/analitica-operativa.ts` para el
 canal público, y recorre **los mismos cuatro pasos, en el mismo orden**:
 
 1. actor (aquí: el de `ApiKeyAuthResult.ok`, no el de la sesión);
-2. `prepararConsultaAnalitica(raw, actor, metricaId, now, "api_key")` — una sola llamada (R14), con
-   el **quinto argumento explícito** que distingue este canal del de sesión (§1.3): es la única
-   diferencia de invocación entre este borde y `lib/actions/analitica-operativa.ts:110`;
+2. `prepararConsultaAnalitica(raw, actor, metricaId, now, "api_key")` — **una llamada por métrica
+   del lote y ninguna más** (R14, reformulado por P4-bis), con el **quinto argumento explícito** que
+   distingue este canal del de sesión (§1.3): es la única diferencia de invocación entre este borde
+   y `lib/actions/analitica-operativa.ts:110`;
 3. `forbidden` ⇒ `logger.logError(describirDenegado({...}))` **y después** responder (R32) — con la
    trampa ya conocida: `normalizeError` sólo llama al logger en la rama del error desconocido
    (`lib/errors/normalize.ts:22,45`), así que lanzar `ForbiddenError` y confiar en
@@ -291,6 +324,28 @@ canal público, y recorre **los mismos cuatro pasos, en el mismo orden**:
 4. `ok` ⇒ `AnaliticaOperativaService.consultar(consulta)` — **el mismo servicio, el mismo
    repositorio y la misma caché** que el canal de sesión (R43). No hay repositorio nuevo, no hay
    consulta nueva, no hay `$queryRaw` (R13).
+
+### 4.5 El lote: todo o nada, un solo reloj, en serie ⟨P4-bis⟩
+
+Tres decisiones que el borde hace estructurales, y las tres tienen un fallo concreto detrás:
+
+- **TODO O NADA (R16/R45).** Se preparan TODAS las consultas antes de ejecutar NINGUNA; si una sola
+  métrica deniega, el borde devuelve `forbidden` sin haber tocado el repositorio. Es la respuesta a
+  la objeción que P4 dejó abierta. El éxito parcial queda descartado porque una respuesta que sirve
+  «las que puede» y calla las demás contesta, **con una sola petición**, a «¿qué ids están en la
+  lista blanca?» — el oráculo que R16 existe para cerrar. Hacia fuera el 403 es mudo e idéntico;
+  hacia dentro, el log de auditoría nombra **la** métrica culpable, porque si no un denegado de un
+  lote de diez no se puede diagnosticar.
+- **UN SOLO RELOJ (R48).** `now()` se lee una vez para todo el lote y se le pasa congelado al
+  servicio. Con un `now()` por métrica, un lote a caballo de la medianoche de Costa Rica devolvería
+  en la MISMA respuesta series con rangos distintos y un `corteAt` que se mueve entre ellas. El
+  proyector del DTO lo comprueba y **lanza** en vez de publicar el rango de la primera como si fuera
+  el de todas.
+- **EN SERIE, no `Promise.all` (P8).** El lote está acotado por construcción —tras deduplicar,
+  cualquier id fuera de la lista blanca deniega la petición entera, así que nunca hay más consultas
+  que métricas publicables—, pero cada una pega al rollup. Ejecutarlas en paralelo multiplicaría por
+  10 la concurrencia contra la base **desde un canal público**, que es justo lo que P8 no quiso
+  abrir al renunciar al rate limit.
 
 El oráculo (`sondeaIdentidadDeMensajero`) se invoca **igual que en la Server Action**
 (`analitica-operativa.ts:132-134`), sin duplicar el predicado (R37). Con política `seudonima` y un
@@ -484,9 +539,9 @@ ya existe y debe seguir verde o actualizarse con la decisión escrita.
 | R11 | `alcance-api-key.test.ts` › «actor sin usuarioId útil ⇒ denegado y cero llamadas al repositorio» |
 | R12 | `tests/unit/analytics/cache-clave.test.ts` › «267/R12 · mismo rango, misma métrica, mismo filtro: la clave DIFIERE por el sujeto del alcance» (escrito en la revisión del 2026-08-23) + `cache-clave-alcance.guardia.test.ts` › «cada variante produce una clave DISTINTA, y el id entra en ella» |
 | R13 | `tests/unit/analytics/alcance-obligatorio.guardia.test.ts` (existente, **sin excepciones nuevas**) |
-| R14 | `tests/unit/api/analitica-integrador-borde.test.ts` › «una sola llamada a prepararConsultaAnalitica» (espía) |
+| R14 | `tests/unit/api/analitica-integrador-borde.test.ts` › «con UNA métrica, prepararConsultaAnalitica se llama exactamente una vez» + «tres métricas: tres preparaciones, tres consultas y tres series EN ORDEN» (espía) |
 | R15 | `tests/unit/analytics/publicacion-api-key.test.ts` › «sólo los ids de la lista se conceden» |
-| R16 | `analitica-api-key-route.test.ts` › «métrica no publicable y métrica inexistente devuelven respuestas idénticas» |
+| R16 | `analitica-api-key-route.test.ts` › «métrica no publicable y métrica inexistente devuelven respuestas idénticas» + «`entregas,sin_gestionar` es 403 mudo y CERO consultas» + «ese 403 es idéntico byte a byte al de un lote con un id inexistente» |
 | R17 | `publicacion-api-key.test.ts` › «ninguna métrica publicable es financiera» |
 | R18 | `publicacion-api-key.test.ts` › «ninguna publicable tiene adminTienda: prohibido» |
 | R19 | `publicacion-api-key.test.ts` › «ninguna publicable está sólo declarada» |
@@ -498,7 +553,7 @@ ya existe y debe seguir verde o actualizarse con la decisión escrita.
 | R25 | `analitica-api-key-route.test.ts` › «desde > hasta ⇒ 422 con fieldErrors.hasta» |
 | R26 | `analitica-api-key-route.test.ts` › «ventana de 367 días ⇒ 422» |
 | R27 | `analitica-api-key-route.test.ts` › «clave desconocida en la query no cambia la respuesta» |
-| R28 | `analitica-api-key-contrato.test.ts` › «la respuesta 200 declara metrica, unidad, unidadDeConteo, rango, puntos y cobertura» |
+| R28 | `analitica-api-key-contrato.test.ts` › «proyecta exactamente las CINCO claves de nivel superior de una serie» + «la respuesta 200 es SIEMPRE el sobre `{ rango, metricas[] }`» |
 | R29 | `analitica-api-key-contrato.test.ts` › «cobertura siempre presente» |
 | R30 | `analitica-api-key-contrato.test.ts` › «JSON.stringify no lanza y no hay Date ni BigInt» |
 | R31 | `analitica-api-key-contrato.test.ts` › «un campo nuevo del contrato interno NO aparece en la respuesta» (serie con campo extra inyectado) |
@@ -515,6 +570,10 @@ ya existe y debe seguir verde o actualizarse con la decisión escrita.
 | R42 | `tablero-operativo-frontera.guardia.test.ts` › «un segundo handler sintético de analítica en app/api sigue cayendo» |
 | R43 | suites existentes de 122/126/128/131/176 verdes sin editar sus asertos de comportamiento |
 | R44 | `tests/unit/guards/schema-drift…` (existente) + ausencia de `db/migrations/**` en el diff, verificada por el reviewer |
+| R45 | `analitica-api-key-route.test.ts` › «tres ids separados por coma: 200 con las tres series, EN EL ORDEN PEDIDO» + `analitica-api-key-contrato.test.ts` › «con UNA sola métrica ya tiene forma de lote» + `analitica-integrador-borde.test.ts` › «con una no publicable en medio, CERO consultas» |
+| R46 | `analitica-api-key-route.test.ts` › «`metricas=all` sirve exactamente `METRICAS_API_KEY`» (comparado contra la FUENTE) + «`all` mezclado con un id es 422» + «un elemento vacío es 422» + «más ids que métricas publicables es 422» + `publicacion-api-key.test.ts` › «ningún id del catálogo se llama `all`» |
+| R47 | `analitica-api-key-route.test.ts` › «un id repetido se sirve UNA vez, conservando su primera posición» + `analitica-api-key-contrato.test.ts` › «conserva el orden de las series que recibe» |
+| R48 | `analitica-integrador-borde.test.ts` › «con diez métricas, `now` se invoca una vez y todas comparten rango» + `analitica-api-key-contrato.test.ts` › «si dos series NO comparten rango, lanza» + «una lista vacía lanza» |
 
 ### 10.1 Corrección de la revisión del 2026-08-23
 

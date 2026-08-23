@@ -11,7 +11,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  proyectarRespuestaApiKey,
   proyectarSerieApiKey,
+  type AnaliticaRespuestaApiKeyDTO,
   type AnaliticaSerieApiKeyDTO,
 } from "@/lib/api/analitica-api-key-dto";
 import { PENUMBRA, type SerieOperativa } from "@/lib/types/analitica-operativa";
@@ -80,16 +82,19 @@ function clavesProfundas(valor: unknown, acc: Set<string> = new Set()): Set<stri
 /* -------------------------------------------------------------------------- */
 
 describe("R28 — la respuesta 200 declara metrica, unidad, unidadDeConteo, rango, puntos y cobertura", () => {
-  it("proyecta exactamente las seis claves de nivel superior, ni una mas", () => {
+  it("proyecta exactamente las CINCO claves de nivel superior de una serie, ni una mas", () => {
+    // P4-bis: `rango` ya no esta aqui. Es de la RESPUESTA, no de cada serie: con el lote, las N
+    // series comparten rango por construccion y repetirlo invitaria a leerlo como si pudiera
+    // diferir entre metricas.
     const dto = proyectarSerieApiKey(serieBase());
 
     expect(Object.keys(dto).sort()).toEqual(
-      ["cobertura", "metrica", "puntos", "rango", "unidad", "unidadDeConteo"].sort(),
+      ["cobertura", "metrica", "puntos", "unidad", "unidadDeConteo"].sort(),
     );
   });
 
-  it("publica el rango como YYYY-MM-DD CR con `hasta` inclusivo, no como los Date internos", () => {
-    const dto = proyectarSerieApiKey(serieBase());
+  it("publica el rango del SOBRE como YYYY-MM-DD CR con `hasta` inclusivo, no como los Date internos", () => {
+    const dto = proyectarRespuestaApiKey([serieBase()]);
 
     expect(dto.rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-21" });
     // El `preset` es vocabulario interno: no se publica (design §7.4).
@@ -131,7 +136,7 @@ describe("R28 — la respuesta 200 declara metrica, unidad, unidadDeConteo, rang
 
     expect(dto.puntos).toEqual([]);
     expect(Object.keys(dto).sort()).toEqual(
-      ["cobertura", "metrica", "puntos", "rango", "unidad", "unidadDeConteo"].sort(),
+      ["cobertura", "metrica", "puntos", "unidad", "unidadDeConteo"].sort(),
     );
   });
 });
@@ -226,7 +231,7 @@ describe("R30 — todo numero es `number | null` y todo instante es ISO", () => 
   });
 
   it("los `Date` del RangoResuelto se quedan dentro: el rango publico son dos cadenas", () => {
-    const dto = proyectarSerieApiKey(serieBase());
+    const dto = proyectarRespuestaApiKey([serieBase()]);
 
     expect(typeof dto.rango.desde).toBe("string");
     expect(typeof dto.rango.hasta).toBe("string");
@@ -261,7 +266,7 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
     expect(dto).not.toHaveProperty("costoTotalCentimos");
     expect(dto).not.toHaveProperty("diagnosticoInterno");
     expect(Object.keys(dto).sort()).toEqual(
-      ["cobertura", "metrica", "puntos", "rango", "unidad", "unidadDeConteo"].sort(),
+      ["cobertura", "metrica", "puntos", "unidad", "unidadDeConteo"].sort(),
     );
   });
 
@@ -312,13 +317,14 @@ describe("R31 — un campo nuevo del contrato interno NO aparece en la respuesta
       ],
     } as unknown as SerieOperativa;
 
-    expect([...clavesProfundas(proyectarSerieApiKey(serie))].sort()).toEqual(
+    expect([...clavesProfundas(proyectarRespuestaApiKey([serie]))].sort()).toEqual(
       [
         "cobertura",
         "corteAt",
         "fecha",
         "fechasNoComparables",
         "metrica",
+        "metricas",
         "parcial",
         "penumbra",
         "puntos",
@@ -384,11 +390,105 @@ describe("R36 — la cadena serializada no contiene ningun uuid", () => {
       "metrica",
       "unidad",
       "unidadDeConteo",
-      "rango",
       "puntos",
       "cobertura",
     ];
 
-    expect(claves).toHaveLength(6);
+    expect(claves).toHaveLength(5);
+
+    type ClavesDelSobre = keyof AnaliticaRespuestaApiKeyDTO;
+    const delSobre: ClavesDelSobre[] = ["rango", "metricas"];
+    expect(delSobre).toHaveLength(2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* P4-bis — EL SOBRE: R45 (forma unica), R47 (orden), R48 (rango comun)        */
+/* -------------------------------------------------------------------------- */
+
+describe("R45 — la respuesta 200 es SIEMPRE el sobre `{ rango, metricas[] }`", () => {
+  it("con UNA sola metrica ya tiene forma de lote: no hay dos formas del mismo endpoint", () => {
+    // Si la respuesta cambiara de forma segun cuantas metricas se pidieron, el integrador
+    // tendria que escribir dos parsers para un solo endpoint —y elegir entre ellos mirando su
+    // propia peticion, que es justo lo que un contrato existe para evitar.
+    const dto = proyectarRespuestaApiKey([serieBase()]);
+
+    expect(Object.keys(dto).sort()).toEqual(["metricas", "rango"]);
+    expect(dto.metricas).toHaveLength(1);
+    expect(dto.metricas[0]?.metrica).toBe("entregas");
+  });
+
+  it("R47 — conserva el orden de las series que recibe, sin reordenar por id ni por catalogo", () => {
+    const series = ["tasa_entrega", "entregas", "devoluciones"].map((metricaId) => ({
+      ...serieBase(),
+      metricaId,
+    }));
+
+    const dto = proyectarRespuestaApiKey(series);
+
+    expect(dto.metricas.map((m) => m.metrica)).toEqual([
+      "tasa_entrega",
+      "entregas",
+      "devoluciones",
+    ]);
+  });
+
+  it("cada serie del lote lleva SU propia cobertura: no se hoistea una para todas", () => {
+    // `fechasNoComparables` depende del historial que cada metrica necesita, asi que dos
+    // metricas del mismo rango pueden no ser comparables en los mismos dias. Subir la cobertura
+    // a la raiz publicaria la de una como si fuera la de todas.
+    const dto = proyectarRespuestaApiKey([
+      { ...serieBase(), metricaId: "entregas" },
+      {
+        ...serieBase(),
+        metricaId: "tiempo_ciclo",
+        cobertura: { fechasNoComparables: ["2026-08-01"], penumbra: PENUMBRA },
+      },
+    ]);
+
+    expect(dto.metricas[0]?.cobertura.fechasNoComparables).toEqual([]);
+    expect(dto.metricas[1]?.cobertura.fechasNoComparables).toEqual(["2026-08-01"]);
+    expect(dto).not.toHaveProperty("cobertura");
+  });
+
+  it("R31 sigue mordiendo dentro del sobre: un campo nuevo de la serie interna no cruza", () => {
+    const serie = {
+      ...serieBase(),
+      costoTotalCentimos: 123_456,
+    } as unknown as SerieOperativa;
+
+    const dto = proyectarRespuestaApiKey([serie]);
+
+    expect(dto.metricas[0]).not.toHaveProperty("costoTotalCentimos");
+    expect(JSON.stringify(dto)).not.toContain("costoTotalCentimos");
+  });
+});
+
+describe("R48 — el rango es UNO para todo el lote, y no se publica una mentira si no lo es", () => {
+  it("con dos series del mismo rango, lo publica una sola vez en la raiz", () => {
+    const dto = proyectarRespuestaApiKey([
+      { ...serieBase(), metricaId: "entregas" },
+      { ...serieBase(), metricaId: "devoluciones" },
+    ]);
+
+    expect(dto.rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-21" });
+    for (const serie of dto.metricas) expect(serie).not.toHaveProperty("rango");
+  });
+
+  it("si dos series NO comparten rango, lanza en vez de publicar el de la primera", () => {
+    // Estado imposible mientras el borde lea el reloj una sola vez (R48). Que sea imposible hoy
+    // no lo hace seguro manana: un 500 honesto es mejor que una respuesta que dice que las diez
+    // series cubren un rango que una de ellas no cubre.
+    const otra: SerieOperativa = {
+      ...serieBase(),
+      metricaId: "devoluciones",
+      rango: { ...serieBase().rango, hastaFecha: "2026-08-22" },
+    };
+
+    expect(() => proyectarRespuestaApiKey([serieBase(), otra])).toThrow(/rango/i);
+  });
+
+  it("una lista vacia lanza: `{ metricas: [] }` se leeria como «no hay datos», y seria falso", () => {
+    expect(() => proyectarRespuestaApiKey([])).toThrow();
   });
 });

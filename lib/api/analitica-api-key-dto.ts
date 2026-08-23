@@ -38,6 +38,12 @@
 // MISMO idioma que la entrada del endpoint, que es el que publico la 257 en el listado por API
 // key (decision P3). Dos convenciones de fecha en el mismo canal son una trampa.
 //
+// P4-bis (2026-08-23) — LA RESPUESTA ES UN LOTE. El endpoint sirve N metricas de una vez, asi que
+// la unidad publicada ya no es la serie suelta sino el SOBRE `AnaliticaRespuestaApiKeyDTO`: el
+// `rango` UNA vez en la raiz y las series en `metricas[]`. La forma es la misma se pida una
+// metrica o diez: un contrato que cambiara de forma segun cuantas se pidieron obligaria a
+// escribir dos parsers para el mismo endpoint.
+//
 // Modulo puro: sin `next/*`, sin Prisma, sin `process.env`, sin efectos al importarse.
 
 import type { MetricaUnidad, UnidadDeConteo } from "@/lib/analytics/types";
@@ -47,7 +53,14 @@ import type { Penumbra, SerieOperativa } from "@/lib/types/analitica-operativa";
 /* La forma publica                                                            */
 /* -------------------------------------------------------------------------- */
 
-/** Eco del rango efectivo, en el mismo formato que la entrada (P3, R24/R28). */
+/**
+ * Eco del rango efectivo, en el mismo formato que la entrada (P3, R24/R28).
+ *
+ * P4-bis (2026-08-23) — VIVE EN LA RAIZ DE LA RESPUESTA, NO DENTRO DE CADA SERIE. Con el lote,
+ * las N series se resuelven con EL MISMO `raw` y EL MISMO instante, asi que su rango es el MISMO
+ * por construccion (R48). Repetirlo N veces invitaria a leerlo como si pudiera diferir entre
+ * metricas, que es justo la pregunta que este contrato no quiere abrir.
+ */
 export interface RangoApiKeyDTO {
   /** `YYYY-MM-DD` calendario CR, inclusivo. */
   readonly desde: string;
@@ -76,20 +89,40 @@ export interface CoberturaApiKeyDTO {
 }
 
 /**
- * R28 — la respuesta `200` de `GET /api/ordenes/api-key/analitica`.
+ * R28 — UNA de las series de la respuesta `200`.
  *
  * Cualquier campo que no este declarado AQUI no se publica, aunque exista en el contrato
  * interno. Anadir uno es una decision de contrato publico; quitarlo, una rotura.
+ *
+ * P4-bis — SIN `rango`: el rango es de la RESPUESTA, no de cada serie (ver `RangoApiKeyDTO`).
  */
 export interface AnaliticaSerieApiKeyDTO {
   /** Id de la metrica, de la lista blanca de `lib/analytics/publicacion-api-key.ts`. */
   readonly metrica: string;
   readonly unidad: MetricaUnidad;
   readonly unidadDeConteo: UnidadDeConteo;
-  readonly rango: RangoApiKeyDTO;
   readonly puntos: readonly PuntoApiKeyDTO[];
-  /** R29 — OBLIGATORIO. Nunca `cobertura?`. */
+  /** R29 — OBLIGATORIO, EN CADA SERIE. Nunca `cobertura?`, y nunca una sola para el lote. */
   readonly cobertura: CoberturaApiKeyDTO;
+}
+
+/**
+ * R45/R28 — la respuesta `200` de `GET /api/ordenes/api-key/analitica`, SIEMPRE con esta forma.
+ *
+ * Tambien cuando se pide UNA sola metrica: una respuesta que cambiara de forma segun cuantas
+ * metricas se pidieron obligaria al integrador a escribir dos parsers para el mismo endpoint.
+ * El array conserva el ORDEN pedido (y el de la lista blanca cuando se pidio `all`), R47.
+ *
+ * ⚠ `cobertura` NO se hoistea junto al rango, y no es una asimetria descuidada: el horizonte
+ * comparable depende de la METRICA (`fechasNoComparables` sale del historial que cada una
+ * necesita), asi que dos metricas del mismo rango pueden tener coberturas distintas. Subirla a
+ * la raiz publicaria la cobertura de una como si fuera la de todas.
+ */
+export interface AnaliticaRespuestaApiKeyDTO {
+  /** R48 — comun a todas las series: mismo `raw`, mismo instante, mismo rango resuelto. */
+  readonly rango: RangoApiKeyDTO;
+  /** Una entrada por metrica concedida, en el orden pedido. Nunca vacio. */
+  readonly metricas: readonly AnaliticaSerieApiKeyDTO[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -149,12 +182,6 @@ export function proyectarSerieApiKey(serie: SerieOperativa): AnaliticaSerieApiKe
     metrica: serie.metricaId,
     unidad: serie.unidad,
     unidadDeConteo: serie.unidadDeConteo,
-    // Del `RangoResuelto` salen SOLO las dos fechas calendario: los `Date` (`desde`/`hasta`) y el
-    // `preset` interno se quedan dentro (R30 y §7.4: el vocabulario interno no se publica).
-    rango: {
-      desde: serie.rango.desdeFecha,
-      hasta: serie.rango.hastaFecha,
-    },
     puntos: serie.puntos.map(proyectarPunto),
     // R29 — se construye SIEMPRE, tambien cuando no hay fechas no comparables: la lista vacia es
     // una afirmacion («todo el rango es comparable»), no una ausencia de dato.
@@ -163,4 +190,39 @@ export function proyectarSerieApiKey(serie: SerieOperativa): AnaliticaSerieApiKe
       penumbra: serie.cobertura.penumbra,
     },
   };
+}
+
+/**
+ * P4-bis/R45 — el SOBRE de la respuesta: el rango una vez, y las N series en el orden pedido.
+ *
+ * Las dos invariantes que esta funcion NO da por supuestas, porque un 500 honesto es mejor que
+ * una respuesta que miente:
+ *
+ *  1. **La lista nunca esta vacia.** El cascaron ya rechaza `metricas` vacio con un 422 y `all`
+ *     expande a una lista no vacia, asi que llegar aqui sin series es un estado imposible: se
+ *     lanza en vez de publicar `{ metricas: [] }`, que un integrador leeria como «no hay datos»
+ *     cuando lo que hubo fue un bug nuestro.
+ *  2. **Todas las series comparten rango** (R48). Lo garantiza el borde llamando UNA vez al
+ *     reloj para todo el lote; si algun dia dejara de hacerlo, publicar el rango de la primera
+ *     serie como si fuera el de todas seria una mentira silenciosa. Se comprueba, y se lanza.
+ */
+export function proyectarRespuestaApiKey(
+  series: readonly SerieOperativa[],
+): AnaliticaRespuestaApiKeyDTO {
+  const primera = series[0];
+  if (primera === undefined) {
+    throw new Error("analitica api key: no se publica una respuesta sin ninguna serie");
+  }
+  const rango: RangoApiKeyDTO = {
+    // Del `RangoResuelto` salen SOLO las dos fechas calendario: los `Date` (`desde`/`hasta`) y el
+    // `preset` interno se quedan dentro (R30 y §7.4: el vocabulario interno no se publica).
+    desde: primera.rango.desdeFecha,
+    hasta: primera.rango.hastaFecha,
+  };
+  for (const serie of series) {
+    if (serie.rango.desdeFecha !== rango.desde || serie.rango.hastaFecha !== rango.hasta) {
+      throw new Error("analitica api key: las series del lote no comparten rango (R48)");
+    }
+  }
+  return { rango, metricas: series.map(proyectarSerieApiKey) };
 }

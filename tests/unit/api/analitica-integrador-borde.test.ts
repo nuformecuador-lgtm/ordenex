@@ -92,12 +92,12 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("267/R14 · una sola llamada al punto de entrada, con el canal explicito", () => {
-  it("`prepararConsultaAnalitica` se llama EXACTAMENTE una vez", async () => {
+describe("267/R14 · una llamada al punto de entrada POR METRICA, con el canal explicito", () => {
+  it("con UNA metrica, `prepararConsultaAnalitica` se llama EXACTAMENTE una vez", async () => {
     const { deps } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -109,7 +109,7 @@ describe("267/R14 · una sola llamada al punto de entrada, con el canal explicit
     const { deps } = montar();
 
     await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -136,7 +136,7 @@ describe("267/R35 · la consulta de este canal viaja SIEMPRE con politica seudon
     const { deps, consultar } = montar();
 
     await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -149,7 +149,7 @@ describe("267/R35 · la consulta de este canal viaja SIEMPRE con politica seudon
     const { deps, consultar } = montar();
 
     await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -162,7 +162,7 @@ describe("267/R35 · la consulta de este canal viaja SIEMPRE con politica seudon
     const { deps, consultar } = montar();
 
     await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -177,7 +177,7 @@ describe("267/R32 · el denegado deja rastro ANTES de responder, y responde mudo
     const { deps, logError, consultar } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "egresos", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["egresos"], raw: raw() },
       deps,
     );
 
@@ -195,7 +195,7 @@ describe("267/R32 · el denegado deja rastro ANTES de responder, y responde mudo
     const { deps, logError, consultar } = montar();
 
     const inexistente = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "metrica-que-no-existe", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["metrica-que-no-existe"], raw: raw() },
       deps,
     );
 
@@ -214,7 +214,7 @@ describe("267/R32 · el denegado deja rastro ANTES de responder, y responde mudo
     const { deps, logError, consultar } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: { usuarioId: "", rol: "apiKey" }, metricaId: "entregas", raw: raw() },
+      { actor: { usuarioId: "", rol: "apiKey" }, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -228,7 +228,7 @@ describe("267/R32 · el denegado deja rastro ANTES de responder, y responde mudo
     const { deps, logError, consultar } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw({ tienda_id: ["tienda-ajena"] }) },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw({ tienda_id: ["tienda-ajena"] }) },
       deps,
     );
 
@@ -244,7 +244,7 @@ describe("267/R32 · el denegado deja rastro ANTES de responder, y responde mudo
     const { deps, logError, consultar } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: { rango: "personalizado" } },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: { rango: "personalizado" } },
       deps,
     );
 
@@ -263,7 +263,7 @@ describe("267/R37 · el oraculo de identidad tambien vigila este canal", () => {
     const r = await consultarAnaliticaIntegrador(
       {
         actor: INTEGRADOR,
-        metricaId: "entregas",
+        metricaIds: ["entregas"],
         raw: raw({ mensajero_id: ["11111111-1111-4111-8111-111111111111"] }),
       },
       deps,
@@ -284,7 +284,7 @@ describe("267/R37 · el oraculo de identidad tambien vigila este canal", () => {
     const { deps, consultar } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
@@ -298,12 +298,184 @@ describe("267 · el camino concedido devuelve la serie del servicio, sin tocarla
     const { deps } = montar();
 
     const r = await consultarAnaliticaIntegrador(
-      { actor: INTEGRADOR, metricaId: "entregas", raw: raw() },
+      { actor: INTEGRADOR, metricaIds: ["entregas"], raw: raw() },
       deps,
     );
 
     expect(r.status).toBe("ok");
     if (r.status !== "ok") return;
-    expect(r.datos).toBe(SERIE_VACIA);
+    // La serie viaja POR REFERENCIA: el borde no la copia, no la normaliza y no la recorta. Quien
+    // proyecta al contrato publico es el DTO, y este test se pone rojo si alguien mete aqui una
+    // transformacion «de paso».
+    expect(r.series).toEqual([SERIE_VACIA]);
+    expect(r.series[0]).toBe(SERIE_VACIA);
+  });
+});
+
+/* -------------------------------------------------------------------------------------------- */
+/* P4-bis — EL LOTE (R45, R47, R48)                                                               */
+/* -------------------------------------------------------------------------------------------- */
+
+/**
+ * Doble que ECHA la metrica de cada consulta, para poder afirmar el ORDEN de la salida en vez de
+ * conformarse con «llegaron tres». Un doble que devolviera siempre la misma serie dejaria pasar
+ * un borde que barajara el lote.
+ */
+function servicioQueEcha() {
+  const consultar = vi.fn(async (consulta: ConsultaAnalitica): Promise<SerieOperativa> => {
+    return { ...SERIE_VACIA, metricaId: consulta.metrica.id };
+  });
+  const service: IAnaliticaOperativaService = {
+    consultar,
+    async consultarAgregado(): Promise<never> {
+      throw new Error("este borde sirve la SERIE, no el agregado");
+    },
+  };
+  return { service, consultar };
+}
+
+describe("267/R45 · el lote prepara y consulta UNA vez por metrica, en el orden pedido", () => {
+  it("tres metricas: tres preparaciones, tres consultas y tres series EN ORDEN", async () => {
+    const { service, consultar } = servicioQueEcha();
+    const pedidas = ["entregas", "devoluciones", "tasa_entrega"];
+
+    const r = await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: pedidas, raw: raw() },
+      { service, logger: { logError: vi.fn() }, now: () => AHORA },
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(prepararEspia).toHaveBeenCalledTimes(3);
+    expect(consultar).toHaveBeenCalledTimes(3);
+    // El orden del array publicado es el orden pedido, no el que decida el catalogo ni el azar
+    // de una resolucion concurrente (R47).
+    expect(r.series.map((s) => s.metricaId)).toEqual(pedidas);
+    expect(consultar.mock.calls.map((c) => c[0].metrica.id)).toEqual(pedidas);
+  });
+
+  it("y cada consulta lleva el canal `api_key` y el recorte a la tienda del actor", async () => {
+    const { service, consultar } = servicioQueEcha();
+
+    await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: ["entregas", "devoluciones"], raw: raw() },
+      { service, logger: { logError: vi.fn() }, now: () => AHORA },
+    );
+
+    for (const call of prepararEspia.mock.calls) expect(call[4]).toBe("api_key");
+    for (const call of consultar.mock.calls) {
+      expect(call[0].alcance).toEqual({ tipo: "tienda", tiendaId: "u-integrador" });
+      expect(call[0].politicaIdentidad).toBe("seudonima");
+    }
+  });
+});
+
+describe("267/R45 · el lote es TODO O NADA: una metrica denegada no deja pasar a las demas", () => {
+  it("con una no publicable en medio, CERO consultas: ni siquiera las validas se sirven", async () => {
+    // Si el lote sirviera «las que se puede», la respuesta diria por omision cuales son
+    // publicables: seria el oraculo de la lista blanca que R16 existe para cerrar, y ademas
+    // regalado en una sola peticion en vez de una por id.
+    const { service, consultar } = servicioQueEcha();
+    const logError = vi.fn();
+
+    const r = await consultarAnaliticaIntegrador(
+      {
+        actor: INTEGRADOR,
+        metricaIds: ["entregas", "egresos", "devoluciones"],
+        raw: raw(),
+      },
+      { service, logger: { logError }, now: () => AHORA },
+    );
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(consultar).not.toHaveBeenCalled();
+  });
+
+  it("el log de auditoria nombra LA metrica que denego, no el lote entero", async () => {
+    const { service } = servicioQueEcha();
+    const logError = vi.fn();
+
+    await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: ["entregas", "egresos", "devoluciones"], raw: raw() },
+      { service, logger: { logError }, now: () => AHORA },
+    );
+
+    // Un solo registro, y con el id culpable dentro: sin esto, diagnosticar el 403 de un lote de
+    // diez seria adivinar.
+    expect(logError).toHaveBeenCalledTimes(1);
+    const registro = logError.mock.calls[0]![0] as Record<string, unknown>;
+    expect(registro.metricaId).toBe("egresos");
+    expect(registro.motivo).toBe("metrica_prohibida");
+  });
+
+  it("una metrica inexistente en el lote produce el MISMO resultado, sin motivo hacia fuera", async () => {
+    const { service } = servicioQueEcha();
+
+    const noPublicable = await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: ["entregas", "egresos"], raw: raw() },
+      { service, logger: { logError: vi.fn() }, now: () => AHORA },
+    );
+    const inexistente = await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: ["entregas", "no-existe-en-el-catalogo"], raw: raw() },
+      { service, logger: { logError: vi.fn() }, now: () => AHORA },
+    );
+
+    expect(inexistente).toEqual(noPublicable);
+    expect(Object.keys(inexistente)).toEqual(["status"]);
+  });
+
+  it("una entrada invalida corta en la PRIMERA metrica: el filtro es el mismo para todas", async () => {
+    const { service, consultar } = servicioQueEcha();
+    const logError = vi.fn();
+
+    const r = await consultarAnaliticaIntegrador(
+      {
+        actor: INTEGRADOR,
+        metricaIds: ["entregas", "devoluciones", "rechazos"],
+        raw: { rango: "personalizado" },
+      },
+      { service, logger: { logError }, now: () => AHORA },
+    );
+
+    expect(r.status).toBe("validation_error");
+    expect(prepararEspia).toHaveBeenCalledTimes(1);
+    expect(consultar).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
+  });
+});
+
+describe("267/R48 · el reloj se lee UNA sola vez para todo el lote", () => {
+  it("con diez metricas, `now` se invoca una vez y todas comparten rango", async () => {
+    // Si cada metrica leyera su propio reloj, un lote a caballo de la medianoche de Costa Rica
+    // devolveria en la MISMA respuesta series con rangos distintos, y el `corteAt` del punto
+    // parcial se moveria entre ellas.
+    const { service, consultar } = servicioQueEcha();
+    const now = vi.fn(() => AHORA);
+    const diez = [
+      "entregas",
+      "devoluciones",
+      "rechazos",
+      "reprogramaciones",
+      "ordenes_creadas",
+      "ordenes_por_estado",
+      "tasa_entrega",
+      "tasa_devolucion",
+      "tasa_rechazo",
+      "tiempo_ciclo",
+    ];
+
+    const r = await consultarAnaliticaIntegrador(
+      { actor: INTEGRADOR, metricaIds: diez, raw: raw() },
+      { service, logger: { logError: vi.fn() }, now },
+    );
+
+    expect(r.status).toBe("ok");
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(consultar).toHaveBeenCalledTimes(10);
+    const rangos = consultar.mock.calls.map((c) => [
+      c[0].rango.desdeFecha,
+      c[0].rango.hastaFecha,
+    ]);
+    expect(new Set(rangos.map((r2) => r2.join("/"))).size).toBe(1);
   });
 });

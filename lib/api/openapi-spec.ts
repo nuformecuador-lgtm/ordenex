@@ -1,5 +1,5 @@
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
-import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
+import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -765,18 +765,26 @@ export const openApiSpec = {
     "/api/ordenes/api-key/analitica": {
       get: {
         tags: ["Órdenes"],
-        summary: "Serie diaria de una métrica sobre tus órdenes",
+        summary: "Series diarias de tus métricas sobre tus órdenes",
         operationId: "consultarAnalitica",
         description: [
-          "Devuelve una **serie diaria** de UNA métrica, calculada exclusivamente sobre las",
-          "órdenes de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar:",
-          "sale de la propia key, así que no hay ningún parámetro para pedir datos de otra tienda",
-          "(y si se envía uno, se ignora).",
+          "Devuelve una **serie diaria por métrica**, calculada exclusivamente sobre las órdenes",
+          "de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar: sale de",
+          "la propia key, así que no hay ningún parámetro para pedir datos de otra tienda (y si se",
+          "envía uno, se ignora).",
           "",
-          "**Una métrica por llamada.** El parámetro `metrica` acepta únicamente los ids del `enum`",
-          "de abajo, que es el catálogo publicado de este canal. Una métrica que no esté en esa",
-          "lista responde **403**, exactamente igual que una métrica que no existe: las dos",
-          "respuestas son idénticas a propósito.",
+          "**Varias métricas por llamada.** `metricas` acepta una lista separada por comas",
+          "(`metricas=entregas,devoluciones`) o el valor especial **`all`**, que trae todas las",
+          "publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve",
+          "una sola vez, conservando su primera posición.",
+          "",
+          "**La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una",
+          "vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se",
+          "pidió `all`).",
+          "",
+          "**El lote es todo o nada.** Si UNA de las métricas pedidas no está en el `enum` de",
+          "abajo, la llamada entera responde **403** y no se sirve ninguna — exactamente el mismo",
+          "403 que una métrica que no existe: las dos respuestas son idénticas a propósito.",
           "",
           "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
           "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
@@ -800,15 +808,20 @@ export const openApiSpec = {
         ].join("\n"),
         parameters: [
           {
-            name: "metrica",
+            name: "metricas",
             in: "query",
             required: true,
-            description: "Id de la métrica. Solo los valores del enum se publican por este canal.",
+            description:
+              "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
             // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
             // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
-            // diverja de lo que el endpoint concede de verdad.
-            schema: { type: "string", enum: [...METRICAS_API_KEY] },
-            example: "entregas",
+            // diverja de lo que el endpoint concede de verdad. El centinela viaja en el MISMO
+            // enum y desde la MISMA fuente, por el mismo motivo.
+            schema: {
+              type: "string",
+              enum: [...METRICAS_API_KEY, METRICAS_TODAS],
+            },
+            example: "entregas,devoluciones",
           },
           {
             name: "desde",
@@ -831,32 +844,55 @@ export const openApiSpec = {
         ],
         responses: {
           "200": {
-            description: "Serie diaria de la métrica pedida, sobre tus órdenes.",
+            description: "Series diarias de las métricas pedidas, sobre tus órdenes.",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/AnaliticaSerie" },
+                schema: { $ref: "#/components/schemas/AnaliticaRespuesta" },
                 examples: {
                   serie: {
-                    summary: "Tres días, el último en curso",
+                    summary: "Dos métricas, tres días, el último en curso",
                     value: {
-                      metrica: "entregas",
-                      unidad: "conteo",
-                      unidadDeConteo: "gestion",
                       rango: { desde: "2026-08-19", hasta: "2026-08-21" },
-                      puntos: [
-                        { fecha: "2026-08-19", valor: 41 },
-                        { fecha: "2026-08-20", valor: 37 },
+                      metricas: [
                         {
-                          fecha: "2026-08-21",
-                          valor: 12,
-                          parcial: true,
-                          corteAt: "2026-08-21T18:40:00.000Z",
+                          metrica: "entregas",
+                          unidad: "conteo",
+                          unidadDeConteo: "gestion",
+                          puntos: [
+                            { fecha: "2026-08-19", valor: 41 },
+                            { fecha: "2026-08-20", valor: 37 },
+                            {
+                              fecha: "2026-08-21",
+                              valor: 12,
+                              parcial: true,
+                              corteAt: "2026-08-21T18:40:00.000Z",
+                            },
+                          ],
+                          cobertura: {
+                            fechasNoComparables: [],
+                            penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+                          },
+                        },
+                        {
+                          metrica: "tasa_entrega",
+                          unidad: "porcentaje",
+                          unidadDeConteo: "gestion",
+                          puntos: [
+                            { fecha: "2026-08-19", valor: 0.93 },
+                            { fecha: "2026-08-20", valor: null },
+                            {
+                              fecha: "2026-08-21",
+                              valor: 0.9,
+                              parcial: true,
+                              corteAt: "2026-08-21T18:40:00.000Z",
+                            },
+                          ],
+                          cobertura: {
+                            fechasNoComparables: [],
+                            penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+                          },
                         },
                       ],
-                      cobertura: {
-                        fechasNoComparables: [],
-                        penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
-                      },
                     },
                   },
                 },
@@ -1511,22 +1547,18 @@ export const openApiSpec = {
       // Feature 267 (R39) — el contrato de `GET /api/ordenes/api-key/analitica`. Es el espejo
       // publicado de `AnaliticaSerieApiKeyDTO` (`lib/api/analitica-api-key-dto.ts`): si el DTO
       // gana o pierde un campo, este schema y el `.yaml` cambian con el, en el mismo commit.
-      AnaliticaSerie: {
+      // P4-bis (2026-08-23) — EL SOBRE. El endpoint sirve un LOTE, asi que la unidad publicada
+      // es esta y no la serie suelta: el `rango` UNA vez —lo comparten todas por construccion— y
+      // las series en `metricas[]`, en el orden pedido. La forma no cambia con el numero de
+      // metricas pedidas: un contrato que cambiara de forma obligaria a escribir dos parsers.
+      AnaliticaRespuesta: {
         type: "object",
-        required: ["metrica", "unidad", "unidadDeConteo", "rango", "puntos", "cobertura"],
+        required: ["rango", "metricas"],
         properties: {
-          metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
-          unidad: {
-            type: "string",
-            description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
-          },
-          unidadDeConteo: {
-            type: "string",
-            description: "Qué se cuenta: gestiones u órdenes. Va explícito para que la cifra no se lea al revés.",
-          },
           rango: {
             type: "object",
-            description: "Eco del rango efectivo, en el mismo formato que la petición.",
+            description:
+              "Eco del rango efectivo, común a todas las series y en el mismo formato que la petición.",
             required: ["desde", "hasta"],
             properties: {
               desde: { type: "string", format: "date", example: "2026-08-19" },
@@ -1537,6 +1569,26 @@ export const openApiSpec = {
                 example: "2026-08-21",
               },
             },
+          },
+          metricas: {
+            type: "array",
+            description: "Una entrada por métrica pedida, en el orden pedido. Nunca vacío.",
+            items: { $ref: "#/components/schemas/AnaliticaSerie" },
+          },
+        },
+      },
+      AnaliticaSerie: {
+        type: "object",
+        required: ["metrica", "unidad", "unidadDeConteo", "puntos", "cobertura"],
+        properties: {
+          metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
+          unidad: {
+            type: "string",
+            description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
+          },
+          unidadDeConteo: {
+            type: "string",
+            description: "Qué se cuenta: gestiones u órdenes. Va explícito para que la cifra no se lea al revés.",
           },
           puntos: {
             type: "array",

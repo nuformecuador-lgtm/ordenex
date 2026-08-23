@@ -1,7 +1,7 @@
 # impl 267 — analitica de la propia tienda por API key
 
 > Worktree `C:/w267`, rama `feature/267-analitica-api-key`.
-> Spec en `specs/267-analitica-api-key/` (44 requisitos, R1-R44).
+> Spec en `specs/267-analitica-api-key/` (48 requisitos, R1-R48; R45-R48 los trajo P4-bis).
 
 ## T0 — puerta cerrada y punto de partida
 
@@ -158,8 +158,8 @@ superficie mas ancha.
 
 ## Trazabilidad
 
-La tabla `R1..R44 -> test` vive en `specs/267-analitica-api-key/design.md`, y se verifico que **no
-queda ningun requisito sin mapear** (comprobado recorriendo R1..R44 contra el design).
+La tabla `R1..R48 -> test` vive en `specs/267-analitica-api-key/design.md`, y se verifico que **no
+queda ningun requisito sin mapear** (comprobado recorriendo R1..R48 contra el design).
 
 ## Pendiente, y NO lo hace el implementer
 
@@ -281,3 +281,69 @@ contradice al otro.
 Queda anotado porque el aviso era razonable: el agente vio un archivo cambiar bajo sus pies y
 PARO a decirlo en vez de sobrescribirlo, que es exactamente lo que debe hacer en un repo con
 treinta worktrees vivos.
+
+---
+
+## P4-bis (2026-08-23, DESPUES del PR) — el endpoint sirve un LOTE de metricas
+
+Pedido literal del humano: «que pueda pasarle las metricas como `string[]`, que pueda traer todas
+las metricas en conjunto en lugar de una por una; con el array puede traer solo las seleccionadas y
+`all` trae todo». Reabre **P4**, que habia cerrado «una metrica por llamada».
+
+**Se hace AHORA y no despues de mergear, a proposito**: `metrica=<id>` nunca llego a `dev`, asi que
+no hay ningun integrador consumiendolo. Cambiar la forma del contrato hoy cuesta un commit; despues
+del merge costaria una version del canal.
+
+### Las decisiones, y la que costo pensar
+
+| # | decision | por que |
+| --- | --- | --- |
+| a | `metricas=a,b,c` (CSV), no clave repetida | mantiene la lectura CLAVE POR CLAVE de 106/R8: `sp.get` sigue devolviendo un `string` |
+| b | `metricas=all` expande la lista blanca; no se mezcla con ids | `all,entregas` es ambiguo y un contrato publico no adivina |
+| c | la 200 es SIEMPRE el sobre `{ rango, metricas[] }` | dos formas del mismo endpoint = dos parsers para el integrador |
+| d | `rango` a la raiz, `cobertura` NO | el rango es identico por construccion; `fechasNoComparables` depende de la METRICA |
+| e | **lote todo-o-nada**: una no publicable deniega la peticion entera | el exito parcial contesta «que ids estan en la lista blanca» con UNA peticion |
+| f | duplicados deduplicados (primera aparicion), orden pedido conservado | ni pagar dos veces al rollup ni un 422 antipatico |
+| g | `resolverMetricasPedidas` vive en `lib/api/`, no en el handler | la guardia 134/R3 prohibe importar `@/lib/analytics/**` desde `app/api` |
+
+**(e) es la que responde a la objecion que P4 dejo escrita** —«un endpoint multi-metrica obliga a
+decidir que hacer cuando una de las pedidas esta prohibida»—. La respuesta es 403 del lote, y el
+motivo no es comodidad: un lote que sirve «las que puede» y calla las demas RECONSTRUYE la lista
+blanca desde fuera con una sola llamada, que es exactamente el oraculo que R16 cierra. Hacia dentro,
+en cambio, el log de auditoria SI nombra la metrica culpable: sin eso, un 403 de un lote de diez no
+se puede diagnosticar.
+
+### La guardia que se puso roja, y lo que NO se hizo
+
+Primer intento: el handler importaba `METRICAS_API_KEY` para expandir `all`.
+`export-csv-frontera.guardia.test.ts` (134/R3) se puso **roja**, y con razon: prohibe que CUALQUIER
+archivo de `app/api` importe de `@/lib/analytics/**`, tambien el camino que P6 autorizo nominalmente.
+La respuesta fue **mover el codigo** a `lib/api/analitica-api-key-metricas.ts`, no ensanchar la
+allowlist por tercera vez. La guardia sigue exactamente como estaba.
+
+### Verificacion
+
+- `npx tsc --noEmit`: **limpio**.
+- `npx eslint` sobre los seis archivos tocados: **limpio**.
+- `npx vitest run tests/unit/api tests/unit/analytics`: **160 archivos / 1922 tests / 0 rojos**
+  (antes de P4-bis: 160 / 1888). Las tres guardias de frontera, verdes **sin editarlas**.
+
+### Archivos
+
+| archivo | que cambio |
+| --- | --- |
+| `lib/analytics/publicacion-api-key.ts` | + `METRICAS_TODAS = "all"`, junto a la lista que expande |
+| `lib/api/analitica-api-key-metricas.ts` | **nuevo** — `resolverMetricasPedidas` |
+| `lib/api/analitica-integrador.ts` | `metricaIds[]`, un `now()` por lote, preparar-todas-antes-de-consultar-ninguna, consultas en SERIE, `ResultadoIntegrador` propio |
+| `lib/api/analitica-api-key-dto.ts` | + `AnaliticaRespuestaApiKeyDTO` y `proyectarRespuestaApiKey`; la serie pierde `rango` |
+| `app/api/.../analitica/route.ts` | `metricas` en el schema, 422 propio de la lista, proyeccion del sobre |
+| `lib/api/openapi-spec.ts` + `docs/api/api-key-openapi.yaml` | parametro `metricas` con enum + `all`, schema `AnaliticaRespuesta`, ejemplo de dos metricas |
+
+### Deuda declarada, no olvido
+
+**P8 queda tocada.** Su argumento era «el tope de 366 dias **y una metrica por llamada** acotan el
+peor caso»; la segunda mitad ya no vale y el peor caso pasa de 1 a 10 consultas al rollup por
+peticion. La decision se mantiene —sin rate limit en esta ficha— con dos mitigaciones escritas: el
+lote esta acotado POR CONSTRUCCION (mas ids que publicables = 422; cualquier id fuera de la lista
+blanca = 403 del lote) y las consultas van **en serie**, no con `Promise.all`, para no multiplicar
+por diez la concurrencia contra la base desde un canal publico.

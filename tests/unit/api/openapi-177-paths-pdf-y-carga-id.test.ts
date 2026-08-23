@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 
 import { openApiSpec } from "@/lib/api/openapi-spec";
-import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
+import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
 
 // Feature 177 (R41, R45) — contrato publicado del canal por API key tras la alta de los tres
 // endpoints nuevos (consulta por guía/remisión y PDF de etiqueta por orden y por lote) y la
@@ -391,11 +391,13 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     expect(clavesYaml).toEqual(clavesTs);
   });
 
-  it("el noveno endpoint es GET y devuelve AnaliticaSerie", () => {
+  it("el noveno endpoint es GET y devuelve AnaliticaRespuesta (el SOBRE del lote)", () => {
     const operacion = openApiSpec.paths[PATH_ANALITICA];
     expect(Object.keys(operacion)).toEqual(["get"]);
+    // P4-bis: la unidad publicada es el sobre, no la serie suelta. Si esto volviera a apuntar a
+    // `AnaliticaSerie`, el contrato prometeria una forma que el endpoint ya no devuelve.
     expect(operacion.get.responses["200"].content["application/json"].schema).toEqual({
-      $ref: "#/components/schemas/AnaliticaSerie",
+      $ref: "#/components/schemas/AnaliticaRespuesta",
     });
     // 401/403/422 por `$ref` a las responses que el canal ya declara: una shape de error propia
     // para este endpoint sería una segunda forma de decir «no» en el mismo contrato.
@@ -411,18 +413,21 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     }
   });
 
-  it("el enum de `metrica` SE DERIVA de la lista blanca, no es una copia literal", () => {
+  it("el enum de `metricas` SE DERIVA de la lista blanca más el centinela `all`", () => {
     // Si el enum se hubiera copiado a mano, un alta o una baja en `METRICAS_API_KEY` dejaría el
     // contrato publicado prometiendo métricas que el endpoint no concede (o callando las que
-    // sí). Se compara contra la fuente, no contra una lista repetida en este test.
-    const metrica = parametroDeAnalitica("metrica");
-    expect(metrica.required).toBe(true);
-    expect([...((metrica.schema as { enum?: readonly string[] }).enum ?? [])]).toEqual([
+    // sí). Se compara contra la fuente, no contra una lista repetida en este test. `all` va al
+    // final y desde la MISMA fuente (P4-bis): el centinela y la lista que expande se declaran
+    // juntos o acaban divergiendo.
+    const metricas = parametroDeAnalitica("metricas");
+    expect(metricas.required).toBe(true);
+    expect([...((metricas.schema as { enum?: readonly string[] }).enum ?? [])]).toEqual([
       ...METRICAS_API_KEY,
+      METRICAS_TODAS,
     ]);
 
     // Y el `.yaml` publica los MISMOS ids, en el MISMO orden: si uno cambia, el otro miente.
-    const inicio = lineasYaml.findIndex((l) => l === "        - name: metrica");
+    const inicio = lineasYaml.findIndex((l) => l === "        - name: metricas");
     expect(inicio).toBeGreaterThan(-1);
     const idsYaml: string[] = [];
     for (let i = inicio; i < lineasYaml.length; i++) {
@@ -430,7 +435,7 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
       if (m) idsYaml.push(m[1]);
       else if (idsYaml.length > 0) break;
     }
-    expect(idsYaml).toEqual([...METRICAS_API_KEY]);
+    expect(idsYaml).toEqual([...METRICAS_API_KEY, METRICAS_TODAS]);
   });
 
   it("`desde` y `hasta` son OBLIGATORIOS y se publican como fecha calendario inclusiva", () => {
@@ -448,7 +453,7 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     expect(hasta.description).toContain("INCLUSIVA");
     expect(hasta.description).toContain("366");
     // Y no se publican presets: el vocabulario interno de rangos no cruza al contrato público.
-    expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metrica", "desde", "hasta"]);
+    expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
   });
 
   it("el schema AnaliticaSerie exige `cobertura`, en el objeto TS y en el .yaml", () => {
@@ -457,14 +462,9 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     // que el contrato interno de la 126 se negó a permitir.
     const schema = openApiSpec.components.schemas.AnaliticaSerie;
     const requeridas = [...schema.required];
-    expect(requeridas).toEqual([
-      "metrica",
-      "unidad",
-      "unidadDeConteo",
-      "rango",
-      "puntos",
-      "cobertura",
-    ]);
+    // P4-bis: sin `rango`. Es del sobre, porque las N series de un lote lo comparten por
+    // construcción (mismo `raw`, mismo instante).
+    expect(requeridas).toEqual(["metrica", "unidad", "unidadDeConteo", "puntos", "cobertura"]);
 
     const bloque = bloqueDeSchema("AnaliticaSerie");
     const requeridasYaml = subBloque(bloque, "required", 6)
@@ -475,5 +475,24 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
       .filter((l) => indent(l) === 8)
       .map((l) => l.trim().replace(/:$/, ""));
     expect(propiedades).toEqual(requeridas);
+  });
+
+  it("P4-bis — el sobre `AnaliticaRespuesta` declara rango + metricas[], en el TS y en el .yaml", () => {
+    // El sobre es lo que un integrador parsea de verdad. Si el array de series dejara de
+    // apuntar a `AnaliticaSerie`, el contrato publicaría dos formas para la misma cosa.
+    const schema = openApiSpec.components.schemas.AnaliticaRespuesta;
+    expect([...schema.required]).toEqual(["rango", "metricas"]);
+    expect(schema.properties.metricas.items).toEqual({
+      $ref: "#/components/schemas/AnaliticaSerie",
+    });
+
+    const bloque = bloqueDeSchema("AnaliticaRespuesta");
+    const requeridasYaml = subBloque(bloque, "required", 6)
+      .filter((l) => /^\s*-\s+/.test(l))
+      .map((l) => l.replace(/^\s*-\s+/, "").trim());
+    expect(requeridasYaml).toEqual(["rango", "metricas"]);
+    expect(bloque.some((l) => l.includes('$ref: "#/components/schemas/AnaliticaSerie"'))).toBe(
+      true,
+    );
   });
 });

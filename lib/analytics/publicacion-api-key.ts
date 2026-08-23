@@ -79,3 +79,18 @@ export type MetricaPublicableApiKey = (typeof METRICAS_API_KEY)[number];
 export function esMetricaPublicableApiKey(id: string): id is MetricaPublicableApiKey {
   return (METRICAS_API_KEY as readonly string[]).includes(id);
 }
+
+/**
+ * P4-bis (2026-08-23) — EL CENTINELA que pide TODO lo publicable en una sola llamada:
+ * `?metricas=all`.
+ *
+ * Vive AQUI y no en el cascaron HTTP por una razon concreta: `all` significa «exactamente
+ * `METRICAS_API_KEY`», asi que el centinela y la lista que expande tienen que poder leerse de un
+ * vistazo. Si vivieran en archivos distintos, un alta en la lista y el significado de `all`
+ * podrian divergir sin que nadie lo notara.
+ *
+ * ⚠ NO PUEDE COLISIONAR CON UN ID DEL CATALOGO, y no se confia en que nadie llame `all` a una
+ * metrica: `publicacion-api-key.test.ts` lo comprueba contra el catalogo entero. Si algun dia
+ * naciera una metrica con este id, el centinela la eclipsaria en silencio.
+ */
+export const METRICAS_TODAS = "all";

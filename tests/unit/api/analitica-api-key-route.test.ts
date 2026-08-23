@@ -7,6 +7,7 @@ import type { ConsultaAnalitica } from "@/lib/analytics/consulta";
 import type { ErrorLogger } from "@/lib/errors/logger";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
 import type { SerieOperativa } from "@/lib/types/analitica-operativa";
+import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
 
 // Feature 267 (T7) — EL CASCARON HTTP, probado por donde duele.
 //
@@ -94,7 +95,7 @@ function pedir(query: string, conKey = true): Request {
 }
 
 /** La query valida de referencia: una metrica publicable y una ventana de tres dias. */
-const QUERY_OK = `?metrica=${PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`;
+const QUERY_OK = `?metricas=${PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`;
 
 /** Espia de los cinco canales de `console` (por donde saldria un secreto sin querer). */
 function spyConsole() {
@@ -161,7 +162,7 @@ describe("267/R23 · usuario dedicado inactivo: 403, y tambien antes de cualquie
 
     // Sin este caso, un handler que parsease primero devolveria 422 y le confirmaria al
     // portador de una key desactivada que su peticion llego a la capa de validacion.
-    const res = await handleAnaliticaApiKey(pedir("?metrica=&desde=x&hasta=y"), deps);
+    const res = await handleAnaliticaApiKey(pedir("?metricas=&desde=x&hasta=y"), deps);
 
     expect(res.status).toBe(403);
   });
@@ -175,8 +176,8 @@ describe("267/R24 · `desde`/`hasta` son `YYYY-MM-DD` CR y `hasta` es INCLUSIVO"
   it("los dos son obligatorios: falta uno => 422 en su propio campo (decision P3)", async () => {
     const { deps, consultar } = montar();
 
-    const sinHasta = await handleAnaliticaApiKey(pedir(`?metrica=${PUBLICABLE}&desde=2026-08-01`), deps);
-    const sinDesde = await handleAnaliticaApiKey(pedir(`?metrica=${PUBLICABLE}&hasta=2026-08-01`), deps);
+    const sinHasta = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&desde=2026-08-01`), deps);
+    const sinDesde = await handleAnaliticaApiKey(pedir(`?metricas=${PUBLICABLE}&hasta=2026-08-01`), deps);
 
     expect(sinHasta.status).toBe(422);
     expect(sinDesde.status).toBe(422);
@@ -197,14 +198,17 @@ describe("267/R24 · `desde`/`hasta` son `YYYY-MM-DD` CR y `hasta` es INCLUSIVO"
     expect(consulta.rango.hastaFecha).toBe("2026-08-03");
     expect(consulta.rango.preset).toBe("personalizado");
     // Y el eco del cuerpo habla el mismo idioma que la entrada, no el interno.
-    expect((await res.json()).rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+    const cuerpo = await res.json();
+    expect(cuerpo.rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+    // P4-bis: una sola metrica ya viaja dentro del sobre, con la misma forma que diez.
+    expect(cuerpo.metricas.map((m: { metrica: string }) => m.metrica)).toEqual([PUBLICABLE]);
   });
 
   it("una fecha que el calendario no tiene (`2026-02-31`) es 422, no un dia rodado en silencio", async () => {
     const { deps, consultar } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metrica=${PUBLICABLE}&desde=2026-02-31&hasta=2026-03-05`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2026-02-31&hasta=2026-03-05`),
       deps,
     );
 
@@ -218,7 +222,7 @@ describe("267/R25 · `desde` posterior a `hasta` es 422 en `fieldErrors.hasta`, 
     const { deps, consultar } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metrica=${PUBLICABLE}&desde=2026-08-10&hasta=2026-08-01`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2026-08-10&hasta=2026-08-01`),
       deps,
     );
 
@@ -235,7 +239,7 @@ describe("267/R26 · el tope de ventana", () => {
     const { deps } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metrica=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-01`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-01`),
       deps,
     );
 
@@ -246,7 +250,7 @@ describe("267/R26 · el tope de ventana", () => {
     const { deps, consultar } = montar();
 
     const res = await handleAnaliticaApiKey(
-      pedir(`?metrica=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-02`),
+      pedir(`?metricas=${PUBLICABLE}&desde=2025-08-01&hasta=2026-08-02`),
       deps,
     );
 
@@ -305,11 +309,11 @@ describe("267/R16 · «existe pero no es tuya» y «no existe» son la MISMA res
     const inexistente = montar();
 
     const a = await handleAnaliticaApiKey(
-      pedir(`?metrica=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
+      pedir(`?metricas=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
       noPublicable.deps,
     );
     const b = await handleAnaliticaApiKey(
-      pedir(`?metrica=${INEXISTENTE}&desde=2026-08-01&hasta=2026-08-03`),
+      pedir(`?metricas=${INEXISTENTE}&desde=2026-08-01&hasta=2026-08-03`),
       inexistente.deps,
     );
 
@@ -329,11 +333,11 @@ describe("267/R16 · «existe pero no es tuya» y «no existe» son la MISMA res
     const inexistente = montar();
 
     await handleAnaliticaApiKey(
-      pedir(`?metrica=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
+      pedir(`?metricas=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
       noPublicable.deps,
     );
     await handleAnaliticaApiKey(
-      pedir(`?metrica=${INEXISTENTE}&desde=2026-08-01&hasta=2026-08-03`),
+      pedir(`?metricas=${INEXISTENTE}&desde=2026-08-01&hasta=2026-08-03`),
       inexistente.deps,
     );
 
@@ -370,7 +374,7 @@ describe("267/R10 · datos de otra tienda", () => {
     const salida = await consultarAnaliticaIntegrador(
       {
         actor: ACTOR,
-        metricaId: PUBLICABLE,
+        metricaIds: [PUBLICABLE],
         raw: {
           rango: "personalizado",
           desde: "2026-08-01",
@@ -402,11 +406,11 @@ describe("267/R33 · ni la key ni el header `Authorization` aparecen en el log n
     const respuestas = [
       await handleAnaliticaApiKey(pedir(QUERY_OK), ok.deps),
       await handleAnaliticaApiKey(
-        pedir(`?metrica=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
+        pedir(`?metricas=${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
         denegado.deps,
       ),
       await handleAnaliticaApiKey(
-        pedir(`?metrica=${PUBLICABLE}&desde=2026-08-10&hasta=2026-08-01`),
+        pedir(`?metricas=${PUBLICABLE}&desde=2026-08-10&hasta=2026-08-01`),
         invalido.deps,
       ),
       await handleAnaliticaApiKey(pedir(QUERY_OK), inactivo.deps),
@@ -433,5 +437,170 @@ describe("267/R33 · ni la key ni el header `Authorization` aparecen en el log n
         expect(JSON.stringify(call)).not.toContain(SECRETO);
       }
     }
+  });
+});
+
+/* -------------------------------------------------------------------------------------------- */
+/* P4-bis — `metricas` COMO LISTA (R45, R46, R47)                                                 */
+/* -------------------------------------------------------------------------------------------- */
+
+describe("267/R45 · el lote: varias metricas en una sola llamada", () => {
+  it("tres ids separados por coma: 200 con las tres series, EN EL ORDEN PEDIDO", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir("?metricas=tasa_entrega,entregas,devoluciones&desde=2026-08-01&hasta=2026-08-03"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo.metricas.map((m: { metrica: string }) => m.metrica)).toEqual([
+      "tasa_entrega",
+      "entregas",
+      "devoluciones",
+    ]);
+    // El rango se publica UNA vez, en la raiz, y no dentro de cada serie (R48).
+    expect(cuerpo.rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+    for (const serie of cuerpo.metricas) expect(serie).not.toHaveProperty("rango");
+    expect(consultar).toHaveBeenCalledTimes(3);
+  });
+
+  it("los espacios alrededor de los ids no cambian nada: `a, b` es `a,b`", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir("?metricas=entregas,%20devoluciones&desde=2026-08-01&hasta=2026-08-03"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(consultar.mock.calls.map((c) => c[0].metrica.id)).toEqual([
+      "entregas",
+      "devoluciones",
+    ]);
+  });
+
+  it("R47 — un id repetido se sirve UNA vez, conservando su primera posicion", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir("?metricas=entregas,devoluciones,entregas&desde=2026-08-01&hasta=2026-08-03"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo.metricas.map((m: { metrica: string }) => m.metrica)).toEqual([
+      "entregas",
+      "devoluciones",
+    ]);
+    // Y el rollup no paga dos veces por la misma cifra.
+    expect(consultar).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("267/R46 · `all` trae TODA la lista blanca, y no se mezcla con ids", () => {
+  it("`metricas=all` sirve exactamente `METRICAS_API_KEY`, en el orden de la lista", async () => {
+    // Se compara contra la FUENTE, no contra una lista repetida aqui: si manana se da de alta
+    // una metrica publicable, `all` tiene que traerla sin que nadie toque este test.
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir("?metricas=all&desde=2026-08-01&hasta=2026-08-03"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo.metricas.map((m: { metrica: string }) => m.metrica)).toEqual([
+      ...METRICAS_API_KEY,
+    ]);
+    expect(consultar).toHaveBeenCalledTimes(METRICAS_API_KEY.length);
+  });
+
+  it("`all` mezclado con un id es 422 en `metricas`: un contrato publico no adivina", async () => {
+    const { deps, consultar } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir("?metricas=all,entregas&desde=2026-08-01&hasta=2026-08-03"),
+      deps,
+    );
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).details.fieldErrors).toHaveProperty("metricas");
+    expect(consultar).not.toHaveBeenCalled();
+  });
+
+  it("un elemento vacio (`a,,b`, `metricas=`) es 422, no un lote a medias", async () => {
+    const vacioEnMedio = montar();
+    const claveVacia = montar();
+
+    const a = await handleAnaliticaApiKey(
+      pedir("?metricas=entregas,,devoluciones&desde=2026-08-01&hasta=2026-08-03"),
+      vacioEnMedio.deps,
+    );
+    const b = await handleAnaliticaApiKey(
+      pedir("?metricas=&desde=2026-08-01&hasta=2026-08-03"),
+      claveVacia.deps,
+    );
+
+    expect(a.status).toBe(422);
+    expect(b.status).toBe(422);
+    expect(vacioEnMedio.consultar).not.toHaveBeenCalled();
+    expect(claveVacia.consultar).not.toHaveBeenCalled();
+  });
+
+  it("mas ids que metricas publicables es 422 y NO llega a preparar consultas", async () => {
+    // Tras deduplicar nunca puede haber mas ids validos que metricas publicables, asi que una
+    // lista mas larga contiene necesariamente algo que no se publica. Se corta antes de preparar
+    // cien consultas para denegar despues.
+    const { deps, consultar } = montar();
+    const demasiados = Array.from({ length: METRICAS_API_KEY.length + 1 }, (_, i) => `m${i}`);
+
+    const res = await handleAnaliticaApiKey(
+      pedir(`?metricas=${demasiados.join(",")}&desde=2026-08-01&hasta=2026-08-03`),
+      deps,
+    );
+
+    expect(res.status).toBe(422);
+    expect(consultar).not.toHaveBeenCalled();
+  });
+});
+
+describe("267/R16 + R45 · un lote con UNA metrica no publicable no sirve NADA", () => {
+  it("`entregas,sin_gestionar` es 403 mudo y CERO consultas, tambien para la publicable", async () => {
+    // El exito parcial seria el peor de los mundos: la respuesta diria por omision cuales ids
+    // estan en la lista blanca, y bastaria UNA peticion para reconstruirla entera. Por eso el
+    // lote es todo o nada.
+    const { deps, consultar, logError } = montar();
+
+    const res = await handleAnaliticaApiKey(
+      pedir(`?metricas=${PUBLICABLE},${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
+      deps,
+    );
+
+    expect(res.status).toBe(403);
+    expect(consultar).not.toHaveBeenCalled();
+    // Por dentro SI queda el rastro, con el id culpable: es donde el motivo puede vivir.
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect((logError.mock.calls[0]![0] as Record<string, unknown>).metricaId).toBe(NO_PUBLICABLE);
+  });
+
+  it("y ese 403 es identico byte a byte al de un lote con un id inexistente", async () => {
+    const noPublicable = montar();
+    const inexistente = montar();
+
+    const a = await handleAnaliticaApiKey(
+      pedir(`?metricas=${PUBLICABLE},${NO_PUBLICABLE}&desde=2026-08-01&hasta=2026-08-03`),
+      noPublicable.deps,
+    );
+    const b = await handleAnaliticaApiKey(
+      pedir(`?metricas=${PUBLICABLE},${INEXISTENTE}&desde=2026-08-01&hasta=2026-08-03`),
+      inexistente.deps,
+    );
+
+    expect(a.status).toBe(403);
+    expect(await b.text()).toBe(await a.text());
   });
 });

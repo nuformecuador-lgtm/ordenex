@@ -3,6 +3,7 @@ import { METRICAS, getMetrica } from "@/lib/analytics/metrics";
 import type { Metrica } from "@/lib/analytics/types";
 import {
   METRICAS_API_KEY,
+  METRICAS_TODAS,
   esMetricaPublicableApiKey,
 } from "@/lib/analytics/publicacion-api-key";
 
@@ -120,5 +121,18 @@ describe("R20 · una metrica nueva del catalogo NO se publica sola", () => {
     expect(catalogoAmpliado.filter((m) => esMetricaPublicableApiKey(m.id)).map((m) => m.id)).toEqual(
       PUBLICADAS.map((m) => m.id),
     );
+  });
+});
+
+describe("P4-bis/R46 · el centinela `all` no puede eclipsar a una metrica", () => {
+  it("ningun id del catalogo se llama `all`", () => {
+    // Si algun dia naciera una metrica con ese id, `?metricas=all` la expandiria a la lista
+    // entera en vez de servirla, y nadie se enteraria: el endpoint seguiria devolviendo 200.
+    expect(METRICAS.map((m) => m.id)).not.toContain(METRICAS_TODAS);
+    expect(getMetrica(METRICAS_TODAS)).toBeUndefined();
+  });
+
+  it("y tampoco esta en la lista blanca, que es la que `all` expande", () => {
+    expect(esMetricaPublicableApiKey(METRICAS_TODAS)).toBe(false);
   });
 });

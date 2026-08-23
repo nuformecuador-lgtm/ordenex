@@ -126,9 +126,9 @@ y para cualquier alcance distinto, sin modificar `claveDeConsulta` ni `claveDeAl
 `alcance-obligatorio.guardia.test.ts`: toda lectura nueva DEBE viajar dentro del tipo opaco
 `ConsultaAnalitica`, sin SQL crudo ni reconstrucción del filtro a mano.
 
-**R14** — El sistema DEBE obtener la consulta por una única llamada a
-`prepararConsultaAnalitica(...)` y NO DEBE exponer ninguna función pública que devuelva un filtro
-parseado sin alcance.
+**R14** — El sistema DEBE obtener cada consulta por una única llamada a
+`prepararConsultaAnalitica(...)` —**una por métrica pedida y ninguna más** (P4-bis)— y NO DEBE
+exponer ninguna función pública que devuelva un filtro parseado sin alcance.
 
 ### C · Qué métricas se publican (lista BLANCA)
 
@@ -137,7 +137,10 @@ blanca explícita y única; una métrica ausente de esa lista NO se publica.
 
 **R16** — CUANDO se pide una métrica que no está en la lista blanca, el sistema DEBE responder
 `403` **con la misma respuesta byte a byte** que para una métrica que no existe en el catálogo: la
-respuesta NO DEBE permitir distinguir «existe pero no es tuya» de «no existe».
+respuesta NO DEBE permitir distinguir «existe pero no es tuya» de «no existe». CUANDO se piden
+varias y **alguna** no es publicable, el sistema DEBE denegar **el lote entero** con ese mismo
+`403` y NO DEBE servir las demás: un éxito parcial diría por omisión qué ids están en la lista
+blanca, y bastaría UNA petición para reconstruirla.
 
 **R17** — El sistema NO DEBE admitir en la lista blanca ninguna métrica de `dominio: "financiera"`.
 
@@ -179,8 +182,9 @@ sistema DEBE responder `422`.
 schema ninguna clave que no esté declarada; una clave desconocida no puede alterar el resultado.
 
 **R28** — CUANDO la consulta es válida y concedida, el sistema DEBE responder `200` con un objeto
-que declare, como mínimo: el id de la métrica, su unidad, su unidad de conteo, el rango efectivo
-(`desde`/`hasta` como `YYYY-MM-DD` CR), la serie de puntos y el bloque `cobertura`.
+que declare el rango efectivo (`desde`/`hasta` como `YYYY-MM-DD` CR) y un array `metricas`, y cada
+entrada de ese array DEBE declarar, como mínimo: el id de la métrica, su unidad, su unidad de
+conteo, la serie de puntos y el bloque `cobertura`.
 
 **R29** — El bloque `cobertura` DEBE ser OBLIGATORIO en toda respuesta `200`: «cero» y «no se sabe»
 no pueden ser el mismo número para el integrador.
@@ -239,6 +243,24 @@ la serie, la agregación, la caché y la seudonimización de los cinco roles lec
 idénticas.
 
 **R44** — El sistema NO DEBE requerir migración, ni cambio en `db/schema.prisma`, ni cambio de RLS.
+
+### G · El lote de métricas (P4-bis, 2026-08-23)
+
+**R45** — El sistema DEBE aceptar VARIAS métricas en una sola llamada, por el parámetro `metricas`
+como lista separada por comas, y DEBE responder con la MISMA forma —el sobre `{ rango, metricas[] }`—
+se pida una métrica o diez: la forma de la respuesta NO DEBE depender de cuántas se pidieron.
+
+**R46** — El sistema DEBE aceptar el valor especial `all` como «todas las publicables», expandido
+desde la MISMA lista blanca de R15; `all` NO DEBE combinarse con ids (`all,entregas` es `422`), y
+NINGUNA métrica del catálogo puede llamarse `all` (comprobado por test contra el catálogo).
+
+**R47** — El sistema DEBE conservar el ORDEN pedido en el array de la respuesta (el de la lista
+blanca cuando se pidió `all`) y DEBE servir UNA sola vez un id repetido, conservando su primera
+posición.
+
+**R48** — El sistema DEBE leer el reloj **una sola vez por petición**: todas las series de un lote
+DEBEN compartir el rango resuelto y el mismo instante de corte. El sistema NO DEBE publicar un
+rango en la raíz si alguna serie no lo comparte (fallar es correcto; publicarlo, mentir).
 
 ---
 
@@ -340,6 +362,46 @@ se congeló y con qué motivo — y para que cualquiera pueda vetar una sin rele
 | **P6** | **SÍ se autoriza tocar las dos guardias de frontera**, convirtiéndolas en **allowlist nominal de UN SOLO camino**, con la decisión fechada escrita dentro del propio guardia. La prohibición de `app/api` sigue intacta para todo lo demás. **Queda EXPRESAMENTE PROHIBIDA** la alternativa de renombrar la ruta para esquivar el regex: eso sería pasar el guardia sin pasar su motivo. | R42 |
 | **P7** | Se **acepta** la lista blanca de ids: no es una tabla de alcance (no dice qué ve nadie, sólo qué se publica). Se ata al catálogo **por test**, no por confianza. | R17–R19 |
 | **P8** | **Sin rate limit** en esta ficha. Decisión consciente, no olvido: el tope de 366 días y una métrica por llamada acotan el peor caso. Si se reabre, es ficha nueva. | — |
+
+---
+
+## PUERTA — P4-bis, decidida el 2026-08-23 (posterior, y REVIERTE P4)
+
+Pedido literal del humano: «que pueda pasarle las métricas como `string[]`, que pueda traer todas
+las métricas en conjunto en lugar de una por una; con el array puede traer solo las seleccionadas
+y `all` trae todo».
+
+**Esto deroga la mitad de P4.** La ruta no cambia; la granularidad, sí: el endpoint pasa de UNA
+métrica por llamada a un LOTE. Se deja escrito lo que P4 argumentaba, porque su objeción era buena
+y hay que responderla, no taparla:
+
+> «Un endpoint multi-métrica obligaría a decidir qué hacer cuando una de las cinco pedidas está
+> prohibida (¿403 del lote? ¿éxito parcial?), que es una decisión de contrato que nadie ha pedido.»
+
+Ahora sí se ha pedido, y la decisión es **403 del lote entero** (R16). El éxito parcial queda
+EXPRESAMENTE DESCARTADO, y no por gusto: un lote que sirve «las que puede» y calla las demás
+responde, con una sola petición, a la pregunta «¿qué ids están en la lista blanca?» — que es
+exactamente el oráculo que R16 existe para cerrar. La objeción de P4 no era que el lote fuera malo:
+era que la pregunta estuviera sin responder.
+
+| # | decisión cerrada | requisitos afectados |
+| --- | --- | --- |
+| **P4-bis.a** | `metricas` es una **lista separada por comas** (`metricas=a,b,c`), no una clave repetida. Mantiene la lectura CLAVE POR CLAVE de 106/R8: `sp.get` sigue devolviendo un `string` y no se abre el multivalor para una sola clave. | R45, R27 |
+| **P4-bis.b** | **`all`** trae todas las publicables, expandido desde `METRICAS_API_KEY`. No se combina con ids. Se comprueba por test que ningún id del catálogo se llama `all`: si naciera, el centinela lo eclipsaría en silencio. | R46 |
+| **P4-bis.c** | La respuesta es **siempre el sobre** `{ rango, metricas[] }`, también con una sola métrica. Dos formas para el mismo endpoint obligarían al integrador a escribir dos parsers y a elegir mirando su propia petición. | R45, R28 |
+| **P4-bis.d** | El **`rango` se publica UNA vez, en la raíz**; la **`cobertura` NO se hoistea** y va en cada serie. No es una asimetría descuidada: el rango es idéntico por construcción (mismo `raw`, mismo instante), pero `fechasNoComparables` depende del historial que cada métrica necesita, así que dos métricas del mismo rango pueden no ser comparables en los mismos días. | R28, R29, R48 |
+| **P4-bis.e** | **Lote todo-o-nada**: una sola métrica no publicable deniega la petición entera, con el mismo 403 mudo y CERO consultas a la base. | R16, R45 |
+| **P4-bis.f** | **Duplicados deduplicados** (primera aparición gana) y **orden pedido conservado**. Rechazar un duplicado con 422 sería antipático sin ganar nada; servirlo dos veces, trabajo pagado dos veces contra el rollup. | R47 |
+| **P4-bis.g** | El resolutor de la lista vive en **`lib/api/analitica-api-key-metricas.ts`**, no en el handler: expandir `all` exige leer la lista blanca (`@/lib/analytics/**`) y la guardia de 134/R3 prohíbe ese import desde CUALQUIER archivo de `app/api`, también desde el camino nominalmente autorizado por P6. La guardia se respeta entera; no se estrecha una tercera vez. | R42, R46 |
+
+⚠️ **P8 QUEDA TOCADA Y HAY QUE DECIRLO.** Su argumento era «el tope de 366 días **y una métrica por
+llamada** acotan el peor caso». La segunda mitad ya no vale: el peor caso pasa de 1 a
+`METRICAS_API_KEY.length` consultas al rollup por petición (hoy **10**), un factor 10. **La decisión
+se mantiene —sin rate limit en esta ficha—** con dos mitigaciones escritas: (a) el lote está acotado
+POR CONSTRUCCIÓN, porque tras deduplicar cualquier id fuera de la lista blanca deniega la petición
+entera, así que nunca hay más consultas que métricas publicables; (b) las consultas se ejecutan en
+SERIE, no con `Promise.all`, para no multiplicar por 10 la concurrencia contra la base desde un
+canal público. Si el rate limit se reabre, sigue siendo ficha nueva.
 
 ⚠️ **La más delicada es P6**, y conviene decirlo en voz alta: autoriza modificar dos guardias
 ARQUITECTÓNICAS. El argumento que la sostiene es que el propio guardia dice que los route handlers

@@ -14,7 +14,7 @@ import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepa
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
-import type { ResultadoOperativo } from "@/lib/types/analitica-operativa";
+import type { SerieOperativa } from "@/lib/types/analitica-operativa";
 
 // Feature 267 (T5, design §4.4) — EL BORDE DEL CANAL INTEGRADOR.
 //
@@ -24,11 +24,12 @@ import type { ResultadoOperativo } from "@/lib/types/analitica-operativa";
 //
 //   1. actor — aqui el de `ApiKeyAuthResult.ok` (la cuenta dedicada 1:1 de la key), NO el de
 //      la sesion: este modulo no lee cookies y no sabe que existe `next/headers`;
-//   2. `prepararConsultaAnalitica(raw, actor, metricaId, now, "api_key")` — UNA sola llamada
-//      (267/R14). El QUINTO argumento explicito es la unica diferencia de invocacion frente a
-//      la Server Action, y es la pieza que activa la rama de concesion de `resolverAlcance`
-//      (267/R1). Sin el, el default `"interno"` denegaria por 267/R6, que es exactamente lo
-//      que debe pasar si alguien copia esta llamada a otro sitio sin pensar;
+//   2. `prepararConsultaAnalitica(raw, actor, metricaId, now, "api_key")` — UNA llamada POR
+//      METRICA PEDIDA y ni una mas (267/R14, reformulado por P4-bis: el endpoint sirve un LOTE
+//      desde el 2026-08-23). El QUINTO argumento explicito es la unica diferencia de invocacion
+//      frente a la Server Action, y es la pieza que activa la rama de concesion de
+//      `resolverAlcance` (267/R1). Sin el, el default `"interno"` denegaria por 267/R6, que es
+//      exactamente lo que debe pasar si alguien copia esta llamada a otro sitio sin pensar;
 //   3. `forbidden` => `logger.logError(describirDenegado(...))` **y DESPUES** responder;
 //   4. `ok` => `AnaliticaOperativaService.consultar`. EL MISMO servicio, EL MISMO repositorio
 //      y LA MISMA cache que el canal de sesion (267/R43). No hay repositorio nuevo, no hay
@@ -53,11 +54,29 @@ import type { ResultadoOperativo } from "@/lib/types/analitica-operativa";
 //     pueden salir en ningun log (267/R33): lo unico que este modulo recibe del integrador es
 //     un actor ya resuelto y un filtro.
 
+/**
+ * P4-bis/R45 — el resultado de dominio del canal integrador. Es el hermano de
+ * `ResultadoOperativo` (126) con UNA diferencia: `ok` lleva N series, no una.
+ *
+ * No se reusa `ResultadoOperativo` con un array dentro porque ese tipo es el contrato del canal
+ * de sesion y R43 exige dejarlo intacto. Y no declara `unauthenticated`: por este canal el actor
+ * llega YA resuelto del autenticador, asi que ese estado no se produce aqui — declararlo seria
+ * pedirle al cascaron que tradujera un caso imposible.
+ */
+export type ResultadoIntegrador =
+  | { readonly status: "ok"; readonly series: readonly SerieOperativa[] }
+  | { readonly status: "validation_error"; readonly fieldErrors: Record<string, string[]> }
+  | { readonly status: "forbidden" };
+
 /** Lo que el cascaron HTTP le entrega al borde, ya autenticado. */
 export interface EntradaIntegrador {
   /** El actor de `ApiKeyAuthResult.ok`: la cuenta dedicada de la key, con su `usuarioId`. */
   readonly actor: ActorAnalitica;
-  readonly metricaId: string;
+  /**
+   * Las metricas pedidas, YA resueltas por el cascaron: `all` expandido, duplicados fuera y en
+   * el orden en que se van a publicar (R47). Este borde no las interpreta ni las reordena.
+   */
+  readonly metricaIds: readonly string[];
   /**
    * El filtro interno de la 135, que CONSTRUYE el cascaron a partir de `desde`/`hasta`
    * (design §4.2). Se recibe como `unknown` porque quien valida es el paso 2 y no este borde:
@@ -128,49 +147,77 @@ function construirServicio(now: () => Date): IAnaliticaOperativaService {
 export async function consultarAnaliticaIntegrador(
   entrada: EntradaIntegrador,
   deps: AnaliticaIntegradorDeps = {},
-): Promise<ResultadoOperativo> {
+): Promise<ResultadoIntegrador> {
   const logger = deps.logger ?? defaultLogger;
   const now = deps.now ?? (() => new Date());
 
-  // (2) UNA sola llamada, con el canal EXPLICITO (267/R14, 267/R1).
-  const preparada = prepararConsultaAnalitica(
-    entrada.raw,
-    entrada.actor,
-    entrada.metricaId,
-    now(),
-    "api_key",
-  );
+  // P4-bis/R48 — EL RELOJ SE LEE UNA SOLA VEZ PARA TODO EL LOTE, y no es una micro-optimizacion:
+  // el instante decide el rango resuelto y el `corteAt` del punto parcial. Un `now()` por metrica
+  // podria cruzar la medianoche de Costa Rica a mitad del lote y devolver, en la MISMA respuesta,
+  // dos series con rangos distintos y un `corteAt` que se mueve entre ellas.
+  const instante = now();
 
-  if (preparada.status === "validation_error") {
-    // Se devuelve SIN consultar: el repositorio recibe CERO llamadas. Y NO se audita, porque
-    // no hay denegado que registrar: un filtro malformado tampoco puede servir para sondear
-    // el catalogo ni los permisos de nadie.
-    return { status: "validation_error", fieldErrors: preparada.fieldErrors };
-  }
+  // (2) PREPARAR TODAS ANTES DE CONSULTAR NINGUNA (R45/R46). Una llamada a
+  // `prepararConsultaAnalitica` POR METRICA —con el canal EXPLICITO (267/R14, 267/R1)— y ni una
+  // mas. El lote es TODO O NADA: si una sola metrica se deniega, no se consulta ninguna, asi que
+  // no existe la respuesta a medias que obligaria al integrador a distinguir por fila cual paso.
+  const consultas = [];
+  for (const metricaId of entrada.metricaIds) {
+    const preparada = prepararConsultaAnalitica(
+      entrada.raw,
+      entrada.actor,
+      metricaId,
+      instante,
+      "api_key",
+    );
 
-  // (3) El denegado del resolutor: metrica inexistente, metrica no publicable, actor sin id
-  // util, tienda ajena... Todos salen por la MISMA puerta, auditados y mudos, de modo que
-  // desde fuera son indistinguibles (267/R16).
-  if (preparada.status === "forbidden") {
-    return denegar(logger, preparada.motivo, entrada);
-  }
+    if (preparada.status === "validation_error") {
+      // Se devuelve SIN consultar: el repositorio recibe CERO llamadas. Y NO se audita, porque
+      // no hay denegado que registrar: un filtro malformado tampoco puede servir para sondear
+      // el catalogo ni los permisos de nadie. El filtro es el MISMO para todas las metricas, asi
+      // que si falla, falla en la primera: no hay nada que ganar recorriendo el resto.
+      return { status: "validation_error", fieldErrors: preparada.fieldErrors };
+    }
 
-  // EL ORACULO (126/R24, 267/R37), REUTILIZADO Y NO REIMPLEMENTADO. Con politica `seudonima`
-  // —que en este canal es SIEMPRE (267/R35)— un filtro que nombre `mensajero_id` permitiria
-  // confirmar POR EL CONTEO si ese mensajero trabajo para el integrador, pese a la
-  // seudonimizacion de la salida. Como el cascaron nunca escribe `mensajero_id`, esto es
-  // defensa en profundidad y no una via viva; duplicar el predicado aqui reabriria por esta
-  // puerta el agujero que la 126 cerro, que es literalmente lo que aquella feature advirtio
-  // para el CSV de la 134.
-  if (sondeaIdentidadDeMensajero(preparada.consulta.filtro, preparada.consulta.politicaIdentidad)) {
-    return denegar(logger, "filtro_fuera_de_alcance", entrada);
+    // (3) El denegado del resolutor: metrica inexistente, metrica no publicable, actor sin id
+    // util, tienda ajena... Todos salen por la MISMA puerta, auditados y mudos, de modo que
+    // desde fuera son indistinguibles (267/R16). Y con el lote esa indistinguibilidad se vuelve
+    // MAS importante, no menos: un desenlace por fila («esta si, esta no») seria un oraculo que
+    // reconstruye la lista blanca entera con una sola peticion.
+    if (preparada.status === "forbidden") {
+      return denegar(logger, preparada.motivo, entrada, metricaId);
+    }
+
+    // EL ORACULO (126/R24, 267/R37), REUTILIZADO Y NO REIMPLEMENTADO. Con politica `seudonima`
+    // —que en este canal es SIEMPRE (267/R35)— un filtro que nombre `mensajero_id` permitiria
+    // confirmar POR EL CONTEO si ese mensajero trabajo para el integrador, pese a la
+    // seudonimizacion de la salida. Como el cascaron nunca escribe `mensajero_id`, esto es
+    // defensa en profundidad y no una via viva; duplicar el predicado aqui reabriria por esta
+    // puerta el agujero que la 126 cerro, que es literalmente lo que aquella feature advirtio
+    // para el CSV de la 134.
+    if (
+      sondeaIdentidadDeMensajero(preparada.consulta.filtro, preparada.consulta.politicaIdentidad)
+    ) {
+      return denegar(logger, "filtro_fuera_de_alcance", entrada, metricaId);
+    }
+
+    consultas.push(preparada.consulta);
   }
 
   // (4) El servicio se construye AQUI y no antes: en todos los caminos denegados no llega a
   // existir, asi que el repositorio no recibe ni una llamada.
-  const service = deps.service ?? construirServicio(now);
-  const datos = await service.consultar(preparada.consulta);
-  return { status: "ok", datos };
+  const service = deps.service ?? construirServicio(() => instante);
+
+  // SECUENCIAL, Y ES UNA DECISION (design §4.4). El lote esta acotado por construccion —tras
+  // deduplicar, cualquier id fuera de la lista blanca deniega el lote entero, asi que nunca hay
+  // mas consultas que metricas publicables— pero cada una pega al rollup. Un `Promise.all` sobre
+  // ese lote multiplicaria por N la concurrencia contra la base desde un canal PUBLICO, que es
+  // justo lo que P8 no quiso abrir al renunciar al rate limit.
+  const series: SerieOperativa[] = [];
+  for (const consulta of consultas) {
+    series.push(await service.consultar(consulta));
+  }
+  return { status: "ok", series };
 }
 
 /**
@@ -186,12 +233,18 @@ function denegar(
   logger: ErrorLogger,
   motivo: Parameters<typeof describirDenegado>[0]["motivo"],
   entrada: EntradaIntegrador,
+  /**
+   * LA metrica que denego, no el lote entero. Hacia fuera el lote es indistinguible (R16), pero
+   * el log de auditoria tiene que decir CUAL de las N pedidas fue: sin eso, un denegado de un
+   * lote de diez no se puede diagnosticar.
+   */
+  metricaId: string,
 ): { readonly status: "forbidden" } {
   logger.logError(
     describirDenegado({
       motivo,
       actor: entrada.actor,
-      metricaId: entrada.metricaId,
+      metricaId,
       filtro: entrada.raw,
     }),
   );
