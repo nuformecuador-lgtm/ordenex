@@ -2,6 +2,12 @@
 
 > Lee `requirements.md` antes que esto. Aquí sólo van las **decisiones**, con lo que se descartó y
 > por qué. Todo lo que se afirma como «medido» se leyó en el árbol y se cita por archivo y línea.
+>
+> ⬛ **2026-08-22 — LA PUERTA HUMANA ENSANCHÓ LA FICHA.** P1 y P2 se respondieron **en contra** de la
+> recomendación de este documento y P3 a favor. El alcance nuevo vive en **§14** (el rastro en «Ver
+> historial»), **§15** (el aviso al mensajero) y **§16** (P3, confirmación explícita de que nada
+> cambia). §1, §10, §11, §12 y §13 quedan actualizadas; **§2 a §9 no se reescriben**: siguen siendo
+> correctas y son el cimiento sobre el que se apoya lo nuevo.
 
 ---
 
@@ -11,8 +17,10 @@
 | --- | --- |
 | Una operación de **lote** que fija el día de reparto de órdenes ya asignadas | Cambiar el **estado**, el mensajero, la guía o el instante de asignación (**R1**) |
 | Las **dos superficies** que ya eligen el día al asignar: `/ordenes` y `/recepcion-satelite` | Una pantalla nueva (§4.2, **A3**) |
-| El **rastro** de cada corrección: tabla nueva, migración con `down.sql` y RLS (§5) | Una **pantalla** para leer el rastro (límite 3, **P1**) |
-| El **cierre por la puerta** del riesgo aceptado en 261/R33 (§9) | Avisar al mensajero (límite 4, **P2**) |
+| El **rastro** de cada corrección: tabla nueva, migración con `down.sql` y RLS (§5) | Una **pantalla propia** para el rastro: se ve dentro de «Ver historial», que ya existe (§14, **A15**) |
+| ⬛ **El rastro DENTRO de «Ver historial»** (P1): DTO en unión, fusión de dos fuentes en el servicio y una entrada sin transición (§14) | Llevar «Ver historial» a una superficie nueva — el mensajero y el `adminSatelite` siguen sin ese drawer (límite 7, **P5**) |
+| ⬛ **El aviso al mensajero** (P2): valor nuevo en dos enums, migración con `down.sql` de recreación y emisor best-effort (§15) | Push, WhatsApp o correo: el aviso viaja por la campana y por nada más (límite 11) |
+| El **cierre por la puerta** del riesgo aceptado en 261/R33 (§9) | Backfill de avisos o de entradas de historial hacia atrás: no hay nada que rellenar (la tabla nace en esta ficha) |
 | La **excepción declarada** a la invariante 246/R10, con su guardia (§6.3) | Cualquier backfill o reparación automática (**R33**) |
 
 **Una migración, ninguna alteración.** La tabla del rastro es **nueva**; `orden` no cambia de forma:
@@ -22,6 +30,13 @@ ni columna, ni índice, ni default. `fecha_reparto` sigue siendo `DateTime? @db.
 y `db/schema.prisma`, dos de las rutas que `docs/verification.md` (§ tabla) declara sin escape:
 «una migración no la importa nadie: ningún test sale seleccionado por tocarla». **`./init.sh`
 completo, obligatorio.**
+
+⬛ **Y desde el 2026-08-22 se niega por CINCO vías independientes, no por una.** Vale la pena
+contarlas porque una sola bastaría y aquí ninguna es opcional: (1) `db/migrations/**` de la tabla del
+rastro (§5.2); (2) `db/migrations/**` de la ampliación de los dos enums (§15.2); (3)
+`db/schema.prisma`; (4) `lib/types/orden.ts` y `lib/types/recepcion-satelite.ts` (§8); (5)
+`lib/types/notificacion.ts` y `lib/types/orden-historial.ts`, los dos también bajo `lib/types/**`
+(§14.1, §15.2). **`./init.sh` COMPLETO antes del PR, sin excepción** (`tasks.md` § CIERRE, **C1**).
 
 ---
 
@@ -360,6 +375,10 @@ return this.prisma.$transaction(async (tx) => {
     FOR UPDATE`;
 
   // 2. LA CORRECCIÓN, GUARDADA. `RETURNING "id"` = EXACTAMENTE las que ganaron la guarda.
+  // ⬛ 2026-08-22: el `RETURNING` de abajo se ENSANCHA en §15.5 (el aviso necesita mensajero,
+  //    guía y remisión). El `SET` NO cambia: sigue siendo `{fecha_reparto, updated_at}`, que es la
+  //    huella que vigila la guardia de §6.3 — y el censo corta al PRIMER `WHERE`, así que el
+  //    `RETURNING` queda fuera de la huella por construcción. Ver §15.5 para la forma final.
   const movidas = await tx.$queryRaw<{ id: string }[]>`
     UPDATE "orden"
     SET "fecha_reparto" = ${fechaRepartoComoTexto(fecha)}::date,
@@ -604,6 +623,17 @@ es la foto de su momento; el molde es el que la propia 261 le puso a §D5 de la 
 | Textos y modal (**R10**, **R16**-**R19**) | Componente + unitario | Que el módulo de textos no importe `Date`/`Intl` y que la pantalla lea **el mismo string** que el servidor. |
 | El cierre de la 261 (**R34**-**R36**) | Guardia de prosa | §9. |
 | No-regresión de la ruta y de los indicadores (**R32**) | Los tests que ya existen + `ver la app` | La corrección no cambia `estatus_id`, y la ruta se arma de `findParadasEnReparto`. |
+| ⬛ La **fusión** de las dos fuentes y su orden (**R37**, **R40**, **R41**, **R45**) | **Servicio, con dobles** | La regla es de composición pura: dos listas entran, una sale. Un doble por fuente permite forzar el empate de instante, que contra Postgres real es difícil de provocar a voluntad. |
+| ⬛ La **lectura** del rastro por orden y su índice (**R37**) | **Postgres real** | Es un `WHERE` + `ORDER BY`; un doble no ve el SQL (medido cuatro veces en este repo). |
+| ⬛ La entrada **sin transición** en pantalla (**R38**, **R39**) | Componente | Que NO aparezca ninguna etiqueta de estado y que las dos fechas salgan de la fuente única. |
+| ⬛ Que el build **rompa** si alguien la trata como transición (**R42**) | `pnpm typecheck` + `@ts-expect-error` | Una unión discriminada sin consumidor exhaustivo no la caza ningún test de runtime. |
+| ⬛ Que el rastreo público **no la vea** (**R43**) | Guardia existente + **Postgres real** | Es una ausencia: `rastreo-frontera.guardia` ya prohíbe que ese borde nombre el DTO, y el repo público lee otra tabla. |
+| ⬛ La autorización heredada (**R44**) | **Servicio, con dobles** | Los cuatro roles con visibilidad y los dos sin ella, sobre la MISMA llamada. |
+| ⬛ El aviso: destinatario, texto con fecha, dos correcciones → dos avisos (**R46**, **R47**, **R48**, **R50**, **R51**) | Unitario del emisor, con repositorio doble | Es el patrón exacto de `notificacion-productores.test.ts`. |
+| ⬛ Que un aviso caído **no** tumbe la corrección (**R49**) | Unitario del servicio | Molde literal de «R25 — un aviso que falla no tumba la carga masiva». |
+| ⬛ El enum: inventario cerrado, migración aditiva y `down` que recrea (**R52**, **R53**, **R54**) | Lectura de los `.sql` + **Postgres real** | Molde literal de `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts`, incluido el `down` ejercitado de verdad. |
+| ⬛ Los dos sentidos del aviso sobre una orden en la calle (**R55**) | Unitario del servicio + `ver la app` | El caso que la puerta humana nombró: «mañana → hoy» con el paquete ya encima. |
+| ⬛ P3: el vocabulario no cambia (**R56**) | Los tests que YA existen | §16: es una confirmación, no un cambio. Su prueba es que `dia-reparto.ts` no aparece en el diff. |
 
 ### 10.2 · Ningún test puede saltarse en silencio
 
@@ -688,6 +718,68 @@ corrección sobre un lote elegido a mano, y por el mismo motivo — quien selecc
 **A14 · Ofrecerla también sobre `en_bodega_central` / `en_bodega_satelite`.** Descartada: ahí la
 orden **no tiene día** (ni mensajero); lo que hace falta es asignarla, y esa pantalla ya existe.
 
+### ⬛ Alternativas del alcance añadido el 2026-08-22
+
+**A15 · Un panel propio para leer el rastro**, en vez de meterlo en «Ver historial». Descartada por
+lo mismo que A3 descartó la pantalla de corrección: obliga a construir un buscador de órdenes que ya
+existe, y **separa el rastro de la única línea de tiempo que la gente ya abre para entender qué le
+pasó a una orden**. La respuesta a P1 fue literalmente «tiene que verse en Ver historial».
+
+**A16 · Añadir los campos de la corrección al DTO actual y hacer `estatusDestinoValue` nullable.**
+Es la opción de una línea. Descartada, y es el corazón de §14.1: con campos opcionales, **cada
+consumidor sigue compilando** y pinta «undefined → undefined» o una fila vacía. Un DTO que admite una
+entrada sin transición **sin obligar a nadie a mirarla** es la definición del fallo mudo que este
+repo tiene documentado cinco veces. La unión discriminada rompe el build en cada consumidor: ese rojo
+**es** la funcionalidad.
+
+**A17 · Discriminar por presencia de campo** (`"fechaNuevaISO" in entrada`) en vez de por un campo
+`clase` explícito. Descartada: funciona hoy y deja de funcionar el día que aparezca una tercera
+clase de entrada, que caería en el `else` sin que nada se pusiera rojo. Con discriminante explícito,
+el `switch` es exhaustivo y TypeScript lo demuestra (**R42**).
+
+**A18 · Fusionar las dos fuentes en el COMPONENTE** y dejar el servicio como está. Descartada:
+`R26` de la 49 puso el orden cronológico en el servicio y **R41** lo confirma. Ordenar en el
+navegador metería una segunda definición del orden, y el componente tendría que comparar `Date`s —
+justo lo que la 261 y la 246 sacaron del cliente.
+
+**A19 · Escribir la corrección como fila de `orden_historial_estado` "sólo para que se vea".** Es A1
+otra vez, ahora con la excusa de la pantalla. Sigue descartada por las **tres consecuencias medidas**
+de §4.5 —rompe «Deshacer asignación», el choke point la rechaza por transición ilegal y emite un
+webhook falso a los integradores— y ninguna de las tres se ablanda porque ahora haya un motivo
+visual. La pantalla se resuelve leyendo dos tablas; la máquina de estados no se toca.
+
+**A20 · Reusar `entidad_tipo = 'orden'` con `entidad_id = <ordenId>` para el aviso.** Descartada, y
+es el hallazgo más importante de §15: `notificacion_dedupe_key` es UNIQUE sobre
+`(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT`
+(`db/migrations/20260727120000_notificacion/migration.sql:89-92`). Con esa clave, la **segunda**
+corrección de la misma orden para el mismo mensajero **no produce aviso jamás** —ni siquiera después
+de que el primero se lea—, y `NotificacionRepository.crear` absorbe el `P2002` devolviendo `false`
+(`:116-118`): silencio absoluto. El caso que la puerta humana nombró («mañana → hoy» sobre una orden
+que ya lleva encima) es **exactamente** el que llega segundo.
+
+**A21 · Emitir el aviso con `entidad_id = NULL`** para desactivar la dedupe. Descartada: apaga la
+dedupe por **nulidad** en vez de por **clave**, deja `entidad_tipo = 'orden'` apuntando a ninguna
+orden concreta y vuelve inútil el índice `notificacion_entidad_idx` para estas filas. Es media
+verdad con formato de dato — la misma objeción que el `migration.sql` de la 253 escribió contra esta
+misma idea, sólo que allí el problema era el contrario (querían dedupe y la perdían).
+
+**A22 · Emitir el aviso DENTRO de la transacción de la corrección**, como hace el del rechazo.
+Descartada, y no por comodidad: dentro de una transacción de Postgres un error de sentencia aborta la
+transacción entera (lo dice el propio choke point,
+`lib/repositories/registrar-cambio-estado.ts:203-205`). O sea que un aviso caído **revertiría una
+corrección legítima** y devolvería a la orden al estado inalcanzable que esta ficha existe para
+sacarla. La dirección segura del error es la contraria: **la corrección manda, el aviso es cortesía**
+(**R49**).
+
+**A23 · Un solo aviso agregado por lote** («3 de tus órdenes cambiaron de día»). Descartada: no
+puede nombrar **qué** paquete, que es el único dato con el que el mensajero hace algo, y obligaría a
+inventar una entidad de «lote» que no existe en ninguna tabla. El coste declarado es el límite 10.
+
+**A24 · Meter el motivo escrito por quien corrige dentro del aviso.** Descartada: los textos de la
+campana son fijos y compuestos en un solo sitio (146 §4.6) y **R48** prohíbe PII; el motivo es texto
+libre de 10 a 300 caracteres escrito por un humano y puede contener cualquier cosa, incluido un
+teléfono o un nombre. El motivo se lee en el historial (§14), que sí tiene autorización por orden.
+
 ---
 
 ## 12 · Riesgos
@@ -701,6 +793,11 @@ orden **no tiene día** (ni mensajero); lo que hace falta es asignarla, y esa pa
 | La migración se edita después de aplicarse | Lección viva del repo: lo añadido tras aplicarse no llega nunca a esa base. Si hace falta cambiar algo, **migración nueva**. |
 | Otra sesión mueve `dev` mientras esto se implementa | Pre-vuelo contra `origin/dev` justo antes del PR (**C2**). |
 | El gate se corre a la vez que un subagente edita el árbol | Prohibido: el gate lee el árbol mutado y su veredicto no vale. Secuencia, no paralelismo. |
+| ⬛ El DTO en unión rompe consumidores que nadie tenía en el radar | Es el **objetivo**, no el riesgo: `pnpm typecheck` los enumera todos de una vez (§14.1). El riesgo real sería que NO rompiera. Inventario esperado en `tasks.md` **B24**. |
+| ⬛ Un aviso duplicado desaparece en silencio por la dedupe | Cerrado por construcción: la entidad del aviso es **la corrección**, no la orden, así que la clave única nunca colisiona (§15.3, **A20**). Probado con dos correcciones seguidas sobre la misma orden (**R50**). |
+| ⬛ La ampliación del enum rompe DOS tests que pertenecen a otras fichas | Conocido y con nombre: `tests/unit/services/notificacion-productores-wiring.test.ts:381-404` y `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts:162-185` enumeran los valores **literalmente**. Se **actualizan**, no se relajan (§15.4, **R52**). Que se pongan rojos es la prueba de que el inventario sigue cerrado. |
+| ⬛ Alguien «arregla» el orden cronológico moviéndolo al componente | **R41** + el test de servicio con empate de instante. El orden vive donde 49/R26 lo puso. |
+| ⬛ El rastro filtra al rastreo público al fusionar fuentes | Medido: el borde público lee `orden_historial_estado` con un `select` explícito de dos campos (`RastreoPublicoRepository:44-48`) y **no consume** el DTO; la guardia `rastreo-frontera` ya prohíbe que lo nombre. **R43** lo afirma para que la ausencia sea una comprobación y no una casualidad. |
 
 ---
 
@@ -716,11 +813,459 @@ orden **no tiene día** (ni mensajero); lo que hace falta es asignarla, y esa pa
 | **D3'** | Tampoco se crea un día donde no lo había, ni se borra. | §4.4 · R4-R5 |
 | **D4** | Rastro: tabla propia append-only, en la misma tx, con motivo obligatorio. **No** el historial de estados. | §4.5 · §5 · R20-R26 |
 | **D5** | La invariante 246/R10: **excepción legítima declarada**, `asignado_at` no se toca, y la guardia se ensancha para que sea la **única**. | §6.2 · §6.3 · R27-R29 |
+| ⬛ **D6** | El rastro **se ve en «Ver historial»**: DTO en **unión discriminada**, fusión y orden **en el servicio**, entrada **sin transición** en pantalla. | §14 · R37-R45 |
+| ⬛ **D7** | El aviso al mensajero: evento nuevo + **entidad nueva** (`orden_dia_reparto_cambio`), **best-effort fuera de la transacción**, un aviso por corrección. | §15 · R46-R55 |
+| ⬛ **D8** | El vocabulario del día **no cambia**: sigue siendo el token `hoy`/`manana` de 246/D2, y esta ficha **no toca** `lib/types/dia-reparto.ts`. | §16 · R56 |
 
-**Abiertas** (van a la puerta humana, con recomendación): **P1** rastro visible en «Ver historial»,
-**P2** aviso al mensajero, **P3** vocabulario más allá de «mañana». Texto completo en
-`requirements.md § Preguntas abiertas`.
+**Cerradas por la PUERTA HUMANA del 2026-08-22** (las tres, con su respuesta):
+
+| # | Pregunta | Respuesta | Consecuencia |
+| --- | --- | --- | --- |
+| **P1** | ¿El rastro se ve en «Ver historial»? | **SÍ** — contra la recomendación de este documento | Alcance nuevo: §14, **R37-R45**. Límite declarado 3, supersedido. |
+| **P2** | ¿Se avisa al mensajero? | **SÍ** — contra la recomendación | Alcance nuevo: §15, **R46-R55**. Dos valores de enum, una migración más, límite 4 supersedido. |
+| **P3** | ¿Hace falta más vocabulario que «hoy / mañana»? | **NO** — a favor de la recomendación | §16: **no cambia nada**, y se afirma explícitamente para que la ausencia de diff sea una decisión. |
+
+**Abiertas** (nacen del alcance nuevo, van a la MISMA puerta humana, con decisión por defecto ya
+tomada para no bloquear la implementación): **P4** ¿la tienda lee la corrección y su motivo?; **P5**
+¿el `adminSatelite` necesita leer el rastro que escribe? Texto completo en
+`requirements.md § Preguntas abiertas del alcance añadido`.
 
 **Regla que sigue en pie para la implementación:** si aparece un dato que no está en `docs/`, en
 `specs/` ni en el código, **se para y se pregunta** (CLAUDE.md, regla 6). Ninguna de estas decisiones
 autoriza a rellenar un hueco nuevo con un supuesto.
+
+---
+---
+
+# ⬛ 14 · D6 — El rastro SE VE en «Ver historial» (P1, cerrada **SÍ** el 2026-08-22)
+
+## 14.0 · Lo medido antes de proponer nada
+
+Todo lo que sigue se leyó en el árbol. Cinco piezas y una ausencia:
+
+| Pieza | Dónde | Qué dice hoy |
+| --- | --- | --- |
+| **El DTO** | `lib/types/orden-historial.ts:266-273` | Seis campos y ninguno opcional: `estatusOrigenValue: string \| null`, `estatusDestinoValue: **string**` (NO nullable), `origenTipo`, `actorNombre`, `motivo`, `createdAt`. **Es un DTO de transiciones y sólo de transiciones.** |
+| **Quién lo construye** | `OrdenHistorialRepository.toEntradaDTO:79-88`, alimentado por `findHistorialByOrden:230-237` | `findMany` sobre `orden_historial_estado` con `orderBy: { createdAt: "asc" }` y el `include` de etiquetas (`WITH_LABELS:42-48`). **Una sola fuente, una sola tabla.** |
+| **Quién lo sirve** | `OrdenHistorialService.obtenerHistorial:34-55` | Autoriza **primero** (`autorizar:86-110`), lee después, y suma `intentos` + `umbral`. El orden cronológico es responsabilidad **del servicio** (49/R26). |
+| **El borde** | `lib/actions/orden-historial.ts:44-56` (`buildService:31-37`) | Server Action; resuelve actor y arma el servicio con **dos** repos. |
+| **Quién lo pinta** | `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx:33-77` | `esCreacion = estatusOrigenValue === null` → «Creación · destino»; si no, «origen → destino» con `estatusLabel`. Componente **tonto**: recibe por props (49/R28). |
+| **Quién NO lo consume** | `lib/repositories/RastreoPublicoRepository.ts:44-48` | El rastreo público lee `orden_historial_estado` **directamente**, con un `select` de dos campos, y `tests/unit/guards/rastreo-frontera.guardia.test.ts:87-96` **prohíbe** que sus siete módulos nombren siquiera `OrdenHistorialEntradaDTO`. |
+
+**Y la medición que decide el alcance de esta sección:** el drawer se monta en
+`OrdenesModule.tsx:381` bajo la prop `mostrarHistorial`, que **sólo** pasa
+`app/(app)/ordenes/page.tsx:121` y `:132` — y esa misma página hace `notFound()` para `mensajero` y
+`adminSatelite` (`:55`). O sea: **el público de esta sección es maestro, admin y adminTienda.** El
+mensajero se entera por la campana (§15) y el `adminSatelite` no se entera dentro de la app (límite
+7, **P5**). Los dos canales no se solapan por casualidad: se reparten a propósito.
+
+> **El problema, en una frase, y es el que el spec ya había anticipado:** una corrección de día
+> **no tiene estado destino**, y `estatusDestinoValue` es `string` NOT NULL. No hay hueco donde
+> meterla sin mentir.
+
+## 14.1 · D6-a — El DTO se vuelve una **unión discriminada**
+
+```ts
+// lib/types/orden-historial.ts
+
+/** Feature 49 — una TRANSICIÓN de estado. Los seis campos de siempre, sin tocar. */
+export interface OrdenHistorialTransicionDTO {
+  clase: "transicion";
+  estatusOrigenValue: string | null;   // NULL = creación (49/R20)
+  estatusDestinoValue: string;         // sigue NOT NULL: una transición SIEMPRE tiene destino
+  origenTipo: OrdenHistorialOrigenTipo;
+  actorNombre: string | null;          // NULL = sistema/cron (49/R21)
+  motivo: string | null;
+  createdAt: Date;
+}
+
+/** Feature 262 (D6) — una CORRECCIÓN del día de reparto. NO tiene estado de origen ni destino. */
+export interface OrdenHistorialCorreccionDiaDTO {
+  clase: "correccion_dia";
+  fechaAnteriorISO: string;  // `YYYY-MM-DD` YA serializado por el repo (nunca un `Date`)
+  fechaNuevaISO: string;
+  actorNombre: string;       // NOT NULL: aquí nunca escribe un cron (§5.1) y `usuario.nombre` es NOT NULL
+  motivo: string;            // R21: obligatorio, así que aquí tampoco es opcional
+  createdAt: Date;
+}
+
+export type OrdenHistorialEntradaDTO =
+  | OrdenHistorialTransicionDTO
+  | OrdenHistorialCorreccionDiaDTO;
+```
+
+Cinco decisiones dentro, cada una con su porqué:
+
+1. **El NOMBRE `OrdenHistorialEntradaDTO` se conserva** y pasa a ser el de la unión. No es
+   cosmética: `IOrdenHistorialService.ObtenerHistorialServiceResult` lo nombra
+   (`:12`) y la guardia del borde público lo tiene en su lista de símbolos prohibidos
+   (`rastreo-frontera.guardia.test.ts:79`). Renombrarlo dejaría esa guardia vigilando un símbolo
+   muerto — verde para siempre y sin decir nada.
+2. **Discriminante EXPLÍCITO (`clase`) y no derivado por presencia de campo** (**A17**). Con `clase`
+   el `switch` es exhaustivo y TypeScript lo demuestra; con `"fechaNuevaISO" in entrada` una
+   tercera clase futura caería en el `else` en silencio.
+3. **`estatusDestinoValue` NO se vuelve nullable** (**A16**). Ése era el atajo de una línea y es el
+   fallo mudo: cada consumidor seguiría compilando y pintaría una fila vacía. Con la unión, **todos**
+   los consumidores rompen el build a la vez y hay que mirarlos uno a uno. Ese rojo **es** la
+   funcionalidad — mismo criterio con el que §8 quitó el `?` de `OrdenTransicionRow.fechaReparto`.
+4. **Las dos fechas viajan como `YYYY-MM-DD` ya serializado, jamás como `Date`.** Precedente literal
+   y verificado: `MisAsignacionesService.ts:266-267` hace `fechaRepartoComoTexto(row.fechaReparto)`
+   para `fechaRepartoISO` por esta misma razón (261/R14). Un `@db.Date` leído por Prisma es la
+   medianoche UTC de esa fecha; formatearlo en el navegador con la hora local devuelve el día
+   anterior en media América. Y de paso: el `DataTable` de este repo descarta objetos al renderizar
+   (`lib/types/orden.ts`, nota de `fechaReprogramacion`).
+5. **La corrección NO tiene `origenTipo`, y eso es deliberado.** `OrdenHistorialOrigenTipo` es el
+   censo cerrado de las familias de **escritura de `orden.estatus_id`**, respaldado por un enum de
+   Postgres y por el chequeo `_EnsureExhaustive` (`orden-historial.ts:253-260`). Añadirle un valor
+   para algo que **no escribe ningún estado** sería (a) una migración de enum más, (b) una mentira
+   sobre la máquina de estados y (c) una fila con `origen_tipo` que ninguna fila de
+   `orden_historial_estado` tendría nunca. La unión hace innecesario el valor: la clase ya lo dice.
+
+**R42, cómo se demuestra.** Además del `switch` exhaustivo en el componente (con
+`const _exhaustivo: never = entrada;` en el `default`, patrón `_EnsureExhaustive` del propio
+archivo), un test de tipos con `@ts-expect-error` (hay precedente: nueve archivos de `tests/` lo usan)
+afirma que **leer `estatusDestinoValue` sobre la unión sin estrechar NO compila**. Si alguien
+convirtiera la unión en una interfaz con opcionales, ese `@ts-expect-error` dejaría de tener error
+que suprimir y `pnpm typecheck` se pondría **rojo**. Es la única forma de que R42 no sea una promesa.
+
+## 14.2 · D6-b — La lectura del rastro: **repositorio propio**
+
+```
+lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository.ts   (nuevo)
+lib/repositories/OrdenDiaRepartoCambioRepository.ts               (nuevo)
+  findCorreccionesByOrden(ordenId: string): Promise<OrdenHistorialCorreccionDiaDTO[]>
+```
+
+- **Repo propio y no un método más en `OrdenHistorialRepository`**: son **tablas distintas**. Aquel
+  repo es el de `orden_historial_estado` y además es el **choke point del append** de estados
+  (`IOrdenHistorialRepository:9-12`); colgarle una lectura de otra tabla difumina justamente el
+  límite que hace que ese choke point signifique algo.
+- **Ordena `created_at ASC, id ASC`.** El desempate por `id` no es adorno: sin él, dos filas del
+  mismo instante salen en orden indefinido y la línea de tiempo cambiaría entre dos recargas. Es el
+  mismo motivo con el que `findOrigenesReversion` añadió `id DESC`
+  (`IOrdenHistorialRepository:138-141`: «el desempate por `id` sólo existe para que la consulta sea
+  determinista»).
+- **Resuelve sobre el índice `@@index([ordenId, createdAt])` que §5.1 ya declaró.** Aquella tabla se
+  diseñó con «la única consulta prevista: el rastro de esta orden» — y ésta es exactamente esa
+  consulta. No hace falta ningún índice nuevo: se comprueba, no se supone (**B28**).
+- **Mapea a DTO en el repositorio**, con `fechaRepartoComoTexto` para las dos fechas y el `nombre`
+  del actor por `include`. Es lo que ya hace `toEntradaDTO` en el repo hermano: mismo patrón, misma
+  capa, y el servicio recibe algo que sólo tiene que **mezclar**.
+
+## 14.3 · D6-c — La fusión y el orden viven **en el servicio**
+
+```ts
+// OrdenHistorialService.obtenerHistorial, tras `decision === "ok"`
+const [transiciones, correcciones] = await Promise.all([
+  this.historialRepo.findHistorialByOrden(ordenId),
+  this.correccionRepo.findCorreccionesByOrden(ordenId),
+]);
+const entradas = fusionarLineaDeTiempo(transiciones, correcciones); // función PURA, exportada
+```
+
+**Por qué aquí y no en el componente** (**A18**): 49/R26 puso el orden cronológico en el servicio y
+**R41** lo confirma. Ordenar en el navegador sería una **segunda** definición del orden y obligaría
+al componente a comparar `Date`s — lo que la 246 y la 261 sacaron del cliente a propósito.
+
+**La regla de orden, completa y sin huecos** (**R40**):
+
+1. Ascendente por `createdAt`.
+2. **Empate exacto de instante → primero la transición, después la corrección.** Es una regla
+   arbitraria y por eso se **declara** en vez de dejarla al `sort`: `Array.prototype.sort` es estable
+   desde ES2019, pero la estabilidad sólo fija el orden *dentro* de la lista de entrada, y aquí hay
+   **dos** listas. Sin regla, el orden dependería de cómo se concatenaron — un detalle de
+   implementación gobernando lo que alguien lee para entender qué pasó.
+3. **Dentro de cada fuente se preserva el orden que la fuente entregó.** El de correcciones es
+   determinista (§14.2). El de transiciones es `createdAt asc` a secas: **hoy tampoco desempata**, y
+   esta ficha **no lo cambia** — es una propiedad preexistente y arreglarla aquí sería tocar una
+   consulta que doce features consumen.
+
+**El sello de tiempo: por qué las dos fuentes son comparables.** Las dos columnas se llenan con el
+`DEFAULT` de la tabla, `CURRENT_TIMESTAMP`
+(`db/migrations/20260713120000_orden_historial_estado/migration.sql:39`; misma convención en §5.1,
+`createdAt DateTime @default(now())`). En Postgres `CURRENT_TIMESTAMP` es el instante de **inicio de
+la transacción**, no el del commit — así que dos escrituras solapadas pueden ordenarse por su inicio.
+**Es la propiedad que la línea de tiempo ya tiene hoy dentro de una sola tabla**; se hereda al
+fusionar y se declara (límite 9). Lo que **no** se hace es inventar un segundo criterio: usar la
+misma convención en las dos fuentes es lo que hace que compararlas signifique algo.
+
+**Y un caso que no puede darse, dicho para que nadie lo «arregle»:** una corrección y una transición
+de la **misma** transacción no existen — la corrección tiene prohibido escribir en
+`orden_historial_estado` (**R25**, §4.5) y ni siquiera podría (el choke point rechazaría
+`por_recoger → por_recoger`).
+
+## 14.4 · D6-d — La pantalla: una entrada **sin transición**
+
+`HistorialOrdenTimeline` pasa a `switch (entrada.clase)`. Para `"correccion_dia"`:
+
+```
+● Día de reparto
+  Del 21 de agosto al 22 de agosto
+  22 ago 2026, 09:14
+  Por Ana Pérez
+  Motivo: la bodega marcó el lote para el día siguiente por error
+```
+
+- **La primera línea es texto, no color.** Este repo tiene guardia de contraste y una lección escrita
+  sobre medir color en el navegador; distinguir la entrada sólo por un punto de otro tono no dice
+  **qué** es. La palabra «Día de reparto» sí.
+- **No aparece ninguna etiqueta de estado** (**R39**): en esta rama **no se llama a `estatusLabel`**
+  ni se pinta la flecha `→` de estado. Es afirmable en un test por ausencia.
+- **Las dos fechas salen de la fuente única** (**R18**): `lib/utils/dia-reparto-textos.ts` gana
+  `textoCorreccionDiaReparto(anteriorISO, nuevaISO)` → «Del 21 de agosto al 22 de agosto», compuesta
+  con `fechaLegible`, que ya es pura. **Ese módulo sigue sin importar `Date` ni `Intl`** (246/R29,
+  261/R14) — y por eso la fecha del día no pasa por el reloj del navegador (**R41**). El sello de
+  hora sí lo formatea el componente con su `Intl` fijo a `America/Costa_Rica`, que es lo que ya hace
+  hoy para todas las entradas (`HistorialOrdenTimeline.tsx:14-18`): son cosas distintas — un
+  **instante** frente a una **fecha calendario**.
+- **El componente no lleva ni un literal de fecha**: todos importados. Es lo que mata la mutación
+  M-x, y ahora también M-ac.
+- **La `key` de la lista** deja de poder ser `${index}-${createdMs}` a secas si dos fuentes empatan;
+  se le antepone `entrada.clase`. Detalle pequeño y con consecuencia real: dos `key` iguales en React
+  producen un remontado silencioso.
+
+## 14.5 · El inventario de lo que se rompe **a propósito**
+
+Convertir el DTO en unión rompe el build en todo consumidor que lea un campo de transición. Eso es el
+objetivo (**A16**), pero el inventario se escribe **antes** para que nadie lo confunda con un
+accidente. Los consumidores hoy, medidos con `grep` sobre `OrdenHistorialEntradaDTO`:
+
+| Archivo | Qué le pasa |
+| --- | --- |
+| `lib/repositories/OrdenHistorialRepository.ts` | `toEntradaDTO` añade `clase: "transicion"`. |
+| `lib/interfaces/repositories/IOrdenHistorialRepository.ts` | `findHistorialByOrden` pasa a devolver `OrdenHistorialTransicionDTO[]` (el tipo **estrecho**: ese método sólo lee transiciones, y decirlo evita que alguien crea que ya fusiona). |
+| `lib/interfaces/services/IOrdenHistorialService.ts` | `entradas` sigue siendo `OrdenHistorialEntradaDTO[]` — la unión. Sin cambio de nombre. |
+| `lib/services/OrdenHistorialService.ts` | Gana el tercer repo y la fusión (§14.3). |
+| `lib/actions/orden-historial.ts` | `buildService` instancia el repo nuevo. |
+| `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx` | `switch` exhaustivo (§14.4). |
+| `tests/components/HistorialOrdenTimeline.test.tsx`, `HistorialOrdenSheet.test.tsx`, `EstatusBadgeRetiroFulfillment.test.tsx`, `tests/unit/services/orden-historial-service.test.ts`, `tests/unit/actions/orden-historial-action.test.ts` | Sus fixtures ganan `clase: "transicion"`. **Ninguno cambia de aserción**: **R45** exige que una orden sin correcciones se lea exactamente igual que antes. |
+| `tests/unit/guards/rastreo-frontera.guardia.test.ts` | **No se toca.** Sigue prohibiendo el símbolo, que sigue existiendo con el mismo nombre. |
+
+---
+
+# ⬛ 15 · D7 — Al mensajero **se le avisa** (P2, cerrada **SÍ** el 2026-08-22)
+
+## 15.1 · Lo medido antes de proponer nada
+
+| Pregunta | Respuesta medida |
+| --- | --- |
+| ¿El mensajero ve la campana? | **Sí.** `/mis-asignaciones/reparto/page.tsx:41` y `/recoger/page.tsx:34` usan `AppPage` → `PageHeader` → `NotificationsBell` (`components/shared/AppPage.tsx:36`, `PageHeader.tsx:91`). |
+| ¿Con qué retardo? | **60 s** como máximo sin recargar: `refreshInterval: REFRESH_INTERVAL_MS` (`hooks/useNotificaciones.ts:63`, `lib/config/notificaciones.ts:17`), más revalidación al recuperar el foco. |
+| ¿Se puede dirigir un aviso a **una** persona? | **Sí**, y hay precedente: `destinatario: { tipo: "usuario", usuarioId }` en `emitirCargaMasivaTerminada` (`lib/notificaciones/emitir.ts:250`). El predicado de visibilidad lo resuelve por `destinatarioUsuarioId` (`NotificacionRepository.predicadoVisibilidad:39-50`). |
+| ¿Cuántos valores tiene el enum y qué cuesta uno más? | **Cinco** (`db/schema.prisma:2067-2075`). Cuesta: migración de enum, `down.sql` de recreación, el tipo de `lib/types/notificacion.ts:14-20` y **dos tests ajenos que enumeran la lista literalmente** (§15.4). |
+| ¿Cómo se emite: dentro o fuera de la transacción? | Las dos formas existen. Transaccional **sólo** el del rechazo (dentro del choke point, `registrar-cambio-estado.ts:206`); los otros tres son **best-effort** con `emitirBestEffort` (`lib/notificaciones/notificadores.ts:40-50`). |
+| ¿Hay dedupe? | **Sí, y es el hallazgo que decide el diseño.** Guardia por «no leída» (`emitirFilas:65-84`) **más** un índice UNIQUE permanente: `notificacion_dedupe_key` sobre `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL` (`db/migrations/20260727120000_notificacion/migration.sql:89-92`). |
+
+## 15.2 · D7-a — Los dos valores nuevos y su migración
+
+```sql
+-- db/migrations/<timestamp>_notificacion_evento_dia_reparto_corregido/migration.sql
+ALTER TYPE "notificacion_evento"       ADD VALUE IF NOT EXISTS 'dia_reparto_corregido';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'orden_dia_reparto_cambio';
+```
+
+**Migración SEPARADA de la del rastro (§5.2), y con timestamp POSTERIOR.** Molde literal de la 253,
+que hizo exactamente esto y escribió el porqué en su propio `migration.sql:21-25`: Postgres **no
+permite usar** un valor de enum recién añadido en la misma transacción que lo añadió (55P04), y
+Prisma Migrate corre cada `migration.sql` en una. Aquí sólo se añaden; el primer uso ocurre en
+runtime, en transacciones posteriores. Además, la entidad `orden_dia_reparto_cambio` **nombra una
+tabla que la migración anterior crea**: el orden entre las dos migraciones no es estético.
+
+**Por qué TAMBIÉN el segundo enum, que es la parte que se olvida.** `notificacion.entidad_tipo` es
+`NOT NULL` y discrimina a qué tabla apunta `entidad_id` (referencia polimórfica, sin FK). Los cinco
+valores vigentes son `orden`, `usuario`, `cierre_dia`, `carga` y `postulacion_recurso`, y **ninguno
+describe una fila de `orden_dia_reparto_cambio`**. Reusar `orden` es lo que hace **A20**, y **A20
+está descartada por una razón que no es de estilo**: con `entidad_id = <ordenId>`, la clave única
+`notificacion_dedupe_key` sólo admite **una** fila por (evento, orden, mensajero) **para siempre**, y
+la segunda corrección de esa orden no produciría aviso **nunca** —`crear` absorbe el `P2002` y
+devuelve `false` (`NotificacionRepository.ts:116-118`), sin ruido—. El caso que la puerta humana
+nombró, «mañana → hoy sobre una orden que el mensajero ya lleva encima», es **precisamente** el que
+llega en segundo lugar.
+
+### El `down.sql`: la pregunta obligatoria de este repo, hecha y respondida
+
+> **¿El `down.sql` del enum recrea-con-lista o sólo dropea?**
+
+Medido, sobre los **dos** downs que existen para estos tipos:
+
+| `down.sql` | Qué hace | Qué implica para esta ficha |
+| --- | --- | --- |
+| `20260727120000_notificacion/down.sql:11-13` (feature **146**, el que CREÓ los enums) | **Sólo dropea**: `DROP TYPE IF EXISTS "notificacion_entidad_tipo"; DROP TYPE IF EXISTS "notificacion_evento";` — porque allí se van también las tablas que los usan. **No recrea con lista.** | **NO SE TOCA.** Es una foto histórica y el valor que añadimos no cambia nada de lo que ese down debe hacer. |
+| `20260820210000_notificacion_evento_postulacion_recurso/down.sql:44-61` (feature **253**) | **Recrea con lista**: `RENAME TO *_old` → `CREATE TYPE` con los **cuatro** de la 146 → `ALTER COLUMN ... USING` → `DROP TYPE *_old`. | **NO SE TOCA.** Su lista es «el enum ANTES de la 253» y sigue siéndolo. Renumerar o editar una migración ya aplicada es la lección de *«migración editada en sitio = drift»*. |
+| **El nuestro** (nuevo) | **Recrea con lista**, misma forma, pero con **los CINCO valores previos** de `notificacion_evento` (los cuatro de la 146 **más** `postulacion_recurso_pendiente`) y **los CINCO** de `notificacion_entidad_tipo`. | Es el **único** down que tiene que conocer la lista de hoy. |
+
+Y las tres propiedades que ese `down.sql` debe conservar, copiadas del razonamiento de la 253 porque
+siguen valiendo palabra por palabra:
+
+1. **Irreversibilidad parcial declarada**: `ALTER TYPE ... DROP VALUE` no existe; recrear es la única
+   forma.
+2. **Precondición ruidosa** (**R54**): si queda **alguna** fila con `evento = 'dia_reparto_corregido'`
+   o `entidad_tipo = 'orden_dia_reparto_cambio'`, el `USING` falla y el rollback **aborta**. Es el
+   comportamiento **correcto**: esas filas son avisos que un mensajero puede no haber leído. Nada de
+   `DELETE` para «hacer sitio».
+3. **Los índices no se rehacen a mano**: en `notificacion_entidad_idx` y en `notificacion_dedupe_key`
+   la columna del enum entra como **columna** del índice y no en un predicado comparado contra un
+   literal del tipo viejo — el único caso que `ALTER COLUMN ... TYPE` no sabe reconstruir solo. Que
+   el `NULLS NOT DISTINCT` y el `WHERE` parcial **sobrevivan** no se supone: se mide contra Postgres
+   (**B22**), igual que lo midió la 253.
+
+## 15.3 · D7-b — El emisor: qué fila se escribe
+
+```ts
+// lib/notificaciones/emitir.ts  (§4.6 de la 146: los textos viven aquí y en ningún otro sitio)
+export interface DiaRepartoCorregidoContexto {
+  cambioId: string;            // id de la fila de `orden_dia_reparto_cambio` = LA ENTIDAD del aviso
+  mensajeroUsuarioId: string;  // el destinatario, y el único
+  fechaNuevaISO: string;       // `YYYY-MM-DD` ya resuelto por el servidor
+  anexo: string;               // la guía si existe; si no, el nº de remisión (patrón del rechazo)
+}
+
+export function textoDiaRepartoCorregido(fechaNuevaISO: string): string { /* §15.6 */ }
+
+export async function emitirDiaRepartoCorregido(
+  repo: INotificacionRepository,
+  ctx: DiaRepartoCorregidoContexto,
+): Promise<number> {
+  return emitirFilas(repo, [{
+    tipo: "box",
+    evento: "dia_reparto_corregido",
+    descripcion: textoDiaRepartoCorregido(ctx.fechaNuevaISO),
+    anexo: ctx.anexo,
+    entidadTipo: "orden_dia_reparto_cambio",
+    entidadId: ctx.cambioId,
+    destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+  }]);
+}
+```
+
+| Elección | Por qué |
+| --- | --- |
+| `entidadId` = **el id del cambio**, no el de la orden | La dedupe deja de poder morder: cada corrección es una entidad distinta, así que la clave única nunca colisiona y **R50** («dos correcciones, dos avisos») es una propiedad **estructural**, no una esperanza. Y el `entidad_id` sigue apuntando a una fila que existe de verdad. **A20** y **A21** descartadas. |
+| **Una** fila, no cuatro | Es la única notificación de este repo dirigida a **una** persona junto con la de carga masiva. Los admins **no** se avisan (**R51**): ellos son quienes corrigen. |
+| `tipo: "box"` (icono de paquete) | Los tres tipos son `alert` (rojo, `text-danger`), `box` y `warning` (`NotificationsBell.tsx:55-63`). Esto es un **paquete que cambió de día**, no una alarma ni algo pendiente de aprobación. `alert` teñiría de rojo una corrección legítima de planificación. |
+| `anexo` = guía, o remisión si no hay | Copia exacta de `emitirOrdenRechazada:113`. Identifica la orden **sin** exponer destinatario, dirección ni monto (**R48**). |
+| **Sin `motivo`** en el aviso | **A24**: el motivo es texto libre de 10-300 caracteres escrito por un humano y puede llevar PII. Se lee en el historial (§14), que autoriza por orden. |
+
+## 15.4 · D7-c — Los dos censos AJENOS que se ponen rojos (y se actualizan, no se relajan)
+
+Esto no es un efecto colateral: es **el precio que 146/D1 le puso a añadir un evento**, y por eso
+funciona.
+
+| Test | Línea | Qué afirma hoy | Qué hay que hacer |
+| --- | --- | --- | --- |
+| `tests/unit/services/notificacion-productores-wiring.test.ts` | `:381-404` | «el enum de eventos sigue siendo un inventario CERRADO: **exactamente cinco**», con la lista **literal**. | Añadir `"dia_reparto_corregido"` a la lista y decir **seis** en el título. **La lista sigue siendo literal**: el propio test explica por qué derivarla del esquema la dejaría siempre verde. |
+| `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts` | `:162-185` | Que el **esquema vivo** tiene exactamente `[...EVENTOS_146, "postulacion_recurso_pendiente"]` y `[...ENTIDADES_146, "postulacion_recurso"]`. | Actualizar **sólo esas dos aserciones** (son sobre el esquema de HOY). ⛔ Lo demás de ese archivo —el UP de la 253, su DOWN con cuatro valores, y «el down de la 146 no se toca»— **NO se toca**: son fotos históricas y siguen siendo ciertas. |
+
+⚠️ **Y una trampa de ese archivo, medida:** su helper `carpetaQueTerminaEn(sufijo)` hace un `find`
+sobre los nombres de carpeta **ordenados** (`:30-39`). La migración nueva **no puede** llamarse de
+forma que termine en `_notificacion` ni en `_notificacion_evento_postulacion_recurso`, o ese test
+empezaría a leer **otro** archivo y afirmaría cosas verdaderas sobre el fichero equivocado. El nombre
+propuesto (`_notificacion_evento_dia_reparto_corregido`) no colisiona; **se comprueba en B22.**
+
+## 15.5 · D7-d — El cableado: **best-effort y fuera de la transacción**
+
+```
+CorreccionDiaRepartoService.corregir(...)
+  ├─ 1. $transaction: SELECT FOR UPDATE → UPDATE guardado → rastro   (§6.1, intacto)
+  │     ↳ devuelve CorreccionDiaAplicada[]  (una por orden corregida)
+  └─ 2. FUERA de la tx, y sólo si (1) confirmó:
+        for (const c of aplicadas) await notificar(c)   ← emitirBestEffort
+```
+
+**Por qué fuera y best-effort** (**A22**): dentro de una transacción de Postgres un error de
+sentencia aborta la transacción entera —lo dice el propio choke point,
+`registrar-cambio-estado.ts:203-205`—, así que un aviso caído **revertiría la corrección** y devolvería
+la orden al estado inalcanzable que esta ficha existe para sacarla. La dirección segura del error es
+la contraria: **la corrección manda; el aviso es cortesía** (**R49**). Un aviso perdido degrada
+exactamente al comportamiento de antes de esta feature —el mensajero lo ve porque el botón deja de
+estar gris—, mientras que una corrección revertida deja el paquete atrapado.
+
+**Y no es un `catch` vacío** (`docs/conventions.md`): `emitirBestEffort("dia_reparto_corregido", …)`
+registra el fallo con contexto vía `defaultLogger` (`notificadores.ts:40-50`). Se reutiliza la
+función que ya existe; no se escribe una segunda.
+
+**Cableado, calcado de los otros tres** (`notificadores.ts:11-19`): el `default` del constructor del
+servicio es el **no-op**, y el notificador **real** se inyecta en el composition root —la Server
+Action `lib/actions/corregir-dia-reparto.ts`—. Una suite que construya el servicio sin inyectar no
+escribe nada, **por construcción**.
+
+### Lo que esto cambia del contrato de §8
+
+`corregirDiaRepartoLote` dejaba de devolver `Promise<number>`:
+
+```ts
+export interface CorreccionDiaAplicada {
+  ordenId: string;
+  cambioId: string;              // fila del rastro: la ENTIDAD del aviso (§15.3)
+  mensajeroAsignadoId: string;   // NOT NULL por el `WHERE` (§6.1)
+  numGuia: number | null;
+  numRemision: string;
+  fechaAnterior: Date;
+  fechaNueva: Date;
+}
+// IOrdenRepository
+corregirDiaRepartoLote(...): Promise<CorreccionDiaAplicada[]>   // antes: Promise<number>
+```
+
+- El `RETURNING` de §6.1 se ensancha a
+  `RETURNING "id", "mensajero_asignado_id", "num_guia", "num_remision"`. **El `SET` no cambia.**
+- `registrarCambioDiaReparto` (§5.3) **genera los `id` explícitamente** (`randomUUID()`) y los
+  devuelve en el mismo orden, en vez de dejarlos al `@default(uuid())`: `createMany` de Postgres no
+  devuelve ids, y el aviso necesita el del cambio. Sigue siendo un solo `createMany` y sigue siendo
+  el único sitio que inserta en esa tabla.
+- El conteo que el servicio usaba pasa a ser `aplicadas.length`. **R8** (todo-o-nada) no se toca: el
+  `throw` sigue estando antes.
+
+> ⚠️ **Consecuencia para la guardia de §6.3, y hay que decirla porque es el tipo de detalle que se
+> descubre en rojo:** el censo del día corta de `SET` al **primer** `WHERE`/`RETURNING`, y aquí el
+> `WHERE` va antes, así que la huella de columnas sigue siendo exactamente `{fecha_reparto,
+> updated_at}` y **la cláusula (d2) no cambia**. Pero la **autocomprobación** de B9 debe usar la
+> forma **FINAL** del SQL —la de este párrafo, con el `RETURNING` ancho—, no la de §6.1. Validar el
+> detector contra un texto que ya no existe en el árbol es una guardia que se cree verificada.
+
+## 15.6 · El texto del aviso
+
+> **«Una orden tuya pasó al reparto del 22 de agosto.»**  ·  anexo: `17496963`
+
+- **Nombra la FECHA, no «hoy» ni «mañana»** (**R47**). Un aviso que dijera «pasó a hoy» y se leyera a
+  la mañana siguiente sería **falso**, y la campana guarda 30 días (`VENTANA_DIAS`). Es el mismo
+  argumento con el que 261 puso la fecha en `avisoReservaParaOtroDia`
+  (`dia-reparto-textos.ts:129-134`): «si el texto dijera "mañana", la app mentiría».
+- **La fecha se pone en palabras con `fechaLegible`**, la misma función de la fuente única (**R18**),
+  que no importa `Date` ni `Intl`. La frase se **compone** en `emitir.ts` porque 146/§4.6 exige que
+  las cadenas de notificación vivan ahí y sólo ahí; lo que se importa es la conversión de fecha, no
+  otro literal. Precedente de texto-función en ese archivo: `textoCargaMasivaTerminada` (`:48-50`).
+- **Sin siglas, sin nombres de columna, sin `YYYY-MM-DD` a la vista**, la misma regla con la que este
+  repo retiró «SLA» del frontend.
+- **Un solo texto para los dos sentidos.** «Pasó al reparto del X» es cierto tanto si el día se
+  adelantó como si se retrasó, y evita tener que decidir en el emisor cuál es cuál. El mensajero
+  compara con lo que ya sabe; la app no le explica su propia agenda.
+
+---
+
+# ⬛ 16 · D8 — P3: el vocabulario del día **no cambia** (cerrada a favor de la recomendación)
+
+Se escribe **precisamente porque no hay diff**: una decisión que no deja rastro en el código es la
+que alguien reabre dentro de seis meses sin saber que ya se cerró.
+
+**Lo que se confirma:** la corrección sigue mandando el token `"hoy" | "manana"`
+(`lib/types/dia-reparto.ts:18-28`) y el servidor sigue traduciéndolo con
+`resolverFechaReparto(dia, now)`. **`lib/types/dia-reparto.ts` y `lib/utils/dia-reparto.ts` NO
+aparecen en el diff de esta ficha**, salvo por sus consumidores.
+
+**Lo que eso preserva, y es la razón de la respuesta:** con dos opciones que significan «el día en
+curso» y «el siguiente», **el pasado no es expresable** (§4.3). **R3** no depende de ningún `if` que
+alguien pueda relajar «para un caso puntual»: depende del contrato. Cambiarlo se vería en el diff, se
+discutiría y se decidiría.
+
+**Lo que sigue sin poder hacerse, sin cambios respecto a lo ya declarado:** fijar **+2**. Un `UPDATE`
+a mano en producción sí puede dejar +2 —pasó el 2026-08-21— y esa orden **se puede traer a «hoy»**,
+porque «hoy» es una de las dos opciones; lo que no se puede es **ponerla** en +2 desde la app. Sigue
+siendo el límite declarado 1, y sigue siendo una decisión de producto que tocaría **las dos**
+superficies.
+
+**Cómo se verifica una decisión de «no cambiar nada»** (**R56**): los tests que ya existen sobre
+`dia-reparto.ts` y los dos bordes de asignación siguen en verde **sin tocarlos**, el schema zod de
+esta ficha usa `diaRepartoSchema` **sin `.default`** (§4.3, mutación M-t) y el enum sigue teniendo
+**dos** valores. Si alguien añadiera un tercero, rompería a la vez el borde de la asignación y el de
+la corrección — que es exactamente la propiedad que P3 quiso conservar.
