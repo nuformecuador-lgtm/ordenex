@@ -12,6 +12,7 @@ const MAESTRO: Actor = { usuarioId: "u-maestro", rol: "maestro" };
 
 function entrada(): OrdenHistorialEntradaDTO {
   return {
+    clase: "transicion",
     estatusOrigenValue: null,
     estatusDestinoValue: "en_preparacion",
     origenTipo: "carga_masiva",

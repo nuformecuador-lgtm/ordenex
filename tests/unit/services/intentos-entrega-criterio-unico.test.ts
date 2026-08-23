@@ -109,6 +109,9 @@ function montar(filas: FilaGestionFake[]) {
   const service = new OrdenHistorialService(
     ordenRepo as unknown as IOrdenRepository,
     historialRepo as unknown as IOrdenHistorialRepository,
+    // Feature 262 (B26): el servicio EXIGE la segunda fuente. Este sitio solo usa el conteo de
+    // intentos, asi que un doble vacio basta y NO se conecta la tabla del rastro.
+    { findCorreccionesByOrden: async () => [] },
   );
   return { prisma, ordenRepo, service };
 }

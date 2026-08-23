@@ -52,6 +52,7 @@ import { EtiquetasDescargaService } from "@/lib/services/EtiquetasDescargaServic
 import { CargaNombreDuplicadoError } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
 import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
@@ -184,7 +185,11 @@ function buildManifiestoService(): IManifiestoService {
   return new ManifiestoService(
     ordenRepo,
     new ZonaRepository(prisma),
-    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

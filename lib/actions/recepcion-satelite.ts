@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
@@ -70,7 +71,11 @@ function buildService(): IRecepcionSateliteService {
   return new RecepcionSateliteService(
     ordenRepo,
     // Feature 160 (R11/R25): derivador de intentos EN LOTE (un solo lote para los 5 grupos).
-    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

@@ -25,6 +25,7 @@ afterEach(() => {
 });
 
 const ENTRADA: OrdenHistorialEntradaDTO = {
+  clase: "transicion",
   estatusOrigenValue: "en_reparto",
   estatusDestinoValue: "en_bodega_central",
   origenTipo: "liberacion_reprogramada",
