@@ -33,6 +33,10 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
 // Feature 30: por defecto la orden es GAM (zonaId === GAM_ZONA_ID).
 // Feature 156: el estatus por defecto pasa a `en_preparacion`, que es el UNICO origen valido
 // de "generar guia" tras esta feature (R4).
+// Feature 262 (B3): `fechaReparto` entra en la fila de transicion y es OBLIGATORIO —sin `?`—
+// porque es insumo de una guarda de la correccion del dia (R5/R7). El default es `null`, que es lo
+// que tienen las ordenes de estos casos (aun sin asignar), y ninguna asercion de este archivo
+// cambia por ello.
 function ordenRow(overrides: Partial<{
   id: string;
   estatusValue: string;
@@ -41,6 +45,7 @@ function ordenRow(overrides: Partial<{
   zonaId: string;
   zonaEsGam: boolean;
   tiendaId: string;
+  fechaReparto: Date | null;
 }> = {}) {
   return {
     id: "o1",
@@ -50,6 +55,7 @@ function ordenRow(overrides: Partial<{
     zonaId: GAM_ZONA_ID,
     zonaEsGam: true,
     tiendaId: "store-1",
+    fechaReparto: null,
     ...overrides,
   };
 }

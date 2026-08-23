@@ -66,6 +66,8 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: "gps",
     huellaSet: "h",
     ultimoError: null,
+    // Feature 265 (R35): esta suite mira el REORDENADO de la lectura, no la procedencia.
+    secuenciaFuente: null,
     trazado: null,
     tramoVivoAt: null,
     tramoPorOrden: new Map(),
@@ -228,10 +230,15 @@ describe("bloque `ruta` del resultado y KPIs", () => {
       }),
     );
 
+    // El `toEqual` LITERAL es el contrato de `RutaResumenDTO` hacia la pantalla: si crece un
+    // campo, este test tiene que crecer con el. Feature 265 anade `secuenciaFuente`, y `null`
+    // es lo correcto aqui — esta fixture no trae marca, y sin marca la pantalla no dice nada
+    // del orden (R45).
     expect(r.ruta).toEqual({
       estado: "desactualizada",
       calculadaAt: calculada,
       origenFuente: "centroide",
+      secuenciaFuente: null,
       paradasSinOptimizar: 1,
       trazado: null,
       tramoSiguiente: null,

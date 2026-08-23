@@ -22,6 +22,7 @@ import { ventanaDelDia } from "@/lib/analytics/rollup-dia";
 import { AnaliticaOperativaVivaRepository } from "@/lib/repositories/AnaliticaOperativaVivaRepository";
 import { completarPrimerIntentoEnCubos } from "@/lib/services/AnaliticaOperativaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { CuboRollup } from "@/lib/interfaces/repositories/IAnaliticaOperativaRollupRepository";
@@ -140,6 +141,7 @@ async function caminoIntradia(
   const historial = new OrdenHistorialService(
     new OrdenRepository(prismaDelHistorial),
     new OrdenHistorialRepository(prismaDelHistorial),
+    new OrdenDiaRepartoCambioRepository(prismaDelHistorial),
   );
   const intentos = await historial.contarIntentosEnLote([
     ...new Set(crudos.entregasVigentes.map((e) => e.ordenId)),

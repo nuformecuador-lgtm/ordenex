@@ -347,6 +347,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         estado: ruta?.estado ?? "vigente",
         calculadaAt: ruta?.calculadaAt ?? null,
         origenFuente: ruta?.origenFuente ?? null,
+        // Feature 265 (R35/R45): se sirve TAL CUAL lo tenga la fila. Sin ruta, o con la marca
+        // ausente, va `null` — que la pantalla lee como «no consta», nunca como «del proveedor».
+        secuenciaFuente: ruta?.secuenciaFuente ?? null,
         paradasSinOptimizar,
         // El trazado se sirve TAL CUAL lo tenga la fila. No se recalcula ni se pide nada
         // aqui: esta es una lectura de listado y no puede quedar colgada de una llamada

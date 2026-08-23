@@ -12,7 +12,9 @@ import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
+  CorreccionDiaConflictoError,
   DeshacerAsignacionConflictoError,
+  type CorreccionDiaAplicada,
   type DeshacerAsignacionItem,
   type CantonRow,
   type CreateOrdenData,
@@ -44,6 +46,10 @@ import {
   type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
+// Feature 262 (B4/B5): el CHOKE POINT del rastro de las correcciones del dia de reparto. Toda
+// escritura de `fecha_reparto` que no sea una asignacion ni una limpieza pasa por ahi, en su misma
+// transaccion y solo con las ordenes que efectivamente cambiaron.
+import { registrarCambioDiaReparto } from "@/lib/repositories/registrar-cambio-dia-reparto";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
@@ -602,6 +608,11 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // correcto (aqui NO aplica el off-by-one de `fecha-cr`, que solo afecta a
     // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
     fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
+    // Feature 262 (B8, R16/R17): el dia de reparto de la orden, ya serializado a `YYYY-MM-DD`. Sale
+    // de la columna `fecha_reparto` (`@db.Date`, medianoche UTC de la fecha calendario CR), asi que
+    // `toFechaISO` da el dia correcto sin tocar ninguna zona horaria. El navegador NO construye
+    // ninguna fecha: recibe el texto y lo pone en palabras con `fechaLegible`.
+    fechaRepartoISO: toFechaISO(row.fechaReparto),
     relaciones: toRelaciones(row),
   };
 }
@@ -757,6 +768,7 @@ const WITH_RECEPCION_SATELITE = {
     producto: true,
     montoCobrar: true,
     prioridad: true, // feature 101/R9: se pide explicito (es un `select`) para el sort R7 + resalte R8
+    fechaReparto: true, // feature 262/B8 (R16): el dia por orden que la pantalla de correccion muestra antes de confirmar
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
@@ -922,6 +934,9 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
     prioridad: row.prioridad, // feature 101/R9: propaga el flag para el sort R7 + resalte R8
+    // Feature 262/B8 (R16/R17): el dia de reparto ya serializado a `YYYY-MM-DD`. El navegador no
+    // construye ninguna fecha; recibe el texto y lo pone en palabras con `fechaLegible`.
+    fechaRepartoISO: toFechaISO(row.fechaReparto),
   };
 }
 
@@ -1631,6 +1646,12 @@ export class OrdenRepository implements IOrdenRepository {
         zona: { select: { esCentral: true } },
         // Tienda dueña: acota por tienda sin consulta extra (recepcion en origen).
         tiendaId: true,
+        // Feature 262 (B3/B6): el mensajero y el dia son INSUMO DE GUARDA de la correccion del dia
+        // de reparto (R5 «sin dia o sin mensajero, se rechaza nombrando el motivo»; R7 «ya es de
+        // ese dia»). Sin ellos el service no puede distinguir esos motivos y tendria que devolver
+        // un `conflict` generico — el mensaje falso que origino la ficha 241.
+        mensajeroAsignadoId: true,
+        fechaReparto: true,
       },
     });
     return rows.map((r) => ({
@@ -1641,6 +1662,8 @@ export class OrdenRepository implements IOrdenRepository {
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
+      mensajeroAsignadoId: r.mensajeroAsignadoId,
+      fechaReparto: r.fechaReparto,
     }));
   }
 
@@ -1717,6 +1740,9 @@ export class OrdenRepository implements IOrdenRepository {
         tiendaId: true,
         // Feature 157 (R30): dueño de la recoleccion, para la guardia de propiedad.
         mensajeroAsignadoId: true,
+        // Feature 262 (B3): `OrdenTransicionRow.fechaReparto` es OBLIGATORIO —sin `?`— porque es
+        // insumo de una guarda; las dos vias que construyen la fila lo emiten.
+        fechaReparto: true,
       },
     });
     if (!r) return null;
@@ -1729,6 +1755,7 @@ export class OrdenRepository implements IOrdenRepository {
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
       mensajeroAsignadoId: r.mensajeroAsignadoId,
+      fechaReparto: r.fechaReparto,
     };
   }
 
@@ -3017,6 +3044,137 @@ export class OrdenRepository implements IOrdenRepository {
       // El pre-read `mensajeroPrevioPorOrden` (arriba) ya deja el destinatario disponible.
 
       return transicionadas.length;
+    });
+  }
+
+  // --- Feature 262: corregir el dia de reparto de un lote YA asignado ---
+
+  /**
+   * Feature 262 (design §6.1/§15.5) — LA UNICA escritura del arbol que toca `fecha_reparto` sin
+   * tocar `asignado_at`, y esa excepcion esta DECLARADA y VIGILADA
+   * (`tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts`, clausulas d1-d4).
+   *
+   * ⚠️ EL `SET` ES EXACTAMENTE `{fecha_reparto, updated_at}`, Y ESA HUELLA ES EL CONTRATO CON LA
+   * GUARDIA. Si alguien le suma `"asignado_at" =`, `"mensajero_asignado_id" =` o `"estatus_id" =`,
+   * el conjunto de columnas deja de coincidir con la excepcion declarada y la guardia se pone
+   * ROJA. Es justo lo que debe pasar: eso ya no seria una correccion de dia.
+   *
+   * POR QUE NO SE TOCA `asignado_at` (design §6.2, A8). El esquema lo define como «instante de la
+   * ULTIMA (RE)ASIGNACION de mensajero»: corregir un dia no reasigna a nadie, asi que escribirlo
+   * FALSEARIA el dato. La invariante 246/R10 sobrevive entera por el `WHERE`, no por pisar una
+   * columna — esta escritura EXIGE mensajero y dia previos, asi que no puede crear un dia huerfano
+   * ni dejar un mensajero sin dia (R28).
+   *
+   * DOS SENTENCIAS Y NO UNA (A11). Un `UPDATE ... FROM (SELECT … FOR UPDATE) RETURNING id,
+   * prev.anterior` es correcto y mas corto, pero deja de tener un `SET` plano: el censo de la
+   * guardia corta al PRIMER `WHERE`, asi que absorberia el `WHERE` de la subconsulta y la huella de
+   * columnas se volveria delicada justo en la comprobacion que protege la excepcion.
+   */
+  async corregirDiaRepartoLote(
+    ordenIds: readonly string[],
+    fecha: Date,
+    estatusIds: readonly string[],
+    zonaId: string | null,
+    ctx: { actorUsuarioId: string; motivo: string },
+  ): Promise<CorreccionDiaAplicada[]> {
+    if (ordenIds.length === 0) return [];
+    // Fallo CERRADO: sin catalogo de estados admitidos no hay guarda de estado que aplicar, y un
+    // `IN ()` vacio no es SQL valido. El service resuelve los ids ANTES y rechaza si falta alguno;
+    // esto es la red por si alguien llama al repo directamente.
+    if (estatusIds.length === 0) throw new CorreccionDiaConflictoError([...ordenIds]);
+
+    // El dia entra como TEXTO `YYYY-MM-DD` con `::date` explicito. `fechaRepartoComoTexto` explica
+    // por que pasar el `Date` dejaria el dia a merced del `TimeZone` de la sesion de Postgres.
+    const diaTexto = fechaRepartoComoTexto(fecha);
+    const ids = [...ordenIds];
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. FOTO + BLOQUEO del dia anterior (R24). El `FOR UPDATE` es lo que impide que esta foto
+      //    quede rancia entre el SELECT y el UPDATE de abajo: sin el, el `fecha_anterior` del
+      //    rastro podria ser un valor que ya no era el de la fila, y un rastro que miente es peor
+      //    que no tenerlo (A12). `ORDER BY "id"` da un orden de bloqueo determinista entre dos
+      //    lotes concurrentes que se solapen.
+      const previas = await tx.$queryRaw<{ id: string; fecha_reparto: Date | null }[]>`
+        SELECT "id", "fecha_reparto"
+        FROM "orden"
+        WHERE "id" IN (${Prisma.join(ids)})
+        ORDER BY "id"
+        FOR UPDATE`;
+      const anteriorPorOrden = new Map(previas.map((p) => [p.id, p.fecha_reparto] as const));
+
+      // 2. LA CORRECCION, GUARDADA. El `RETURNING` trae lo que el AVISO necesita (§15.5): la fila
+      //    del `SET` no cambia por ello, y el censo de la guardia corta al primer `WHERE` —que va
+      //    antes—, asi que la huella de columnas sigue siendo `{fecha_reparto, updated_at}`.
+      //    `updated_at` a mano: el SQL crudo no dispara el `@updatedAt` de Prisma.
+      //
+      // ⚠️ SOBRE LAS CINCO GUARDAS DEL `WHERE`, Y UNA QUE ES REDUNDANTE A PROPOSITO.
+      // `"fecha_reparto" IS NOT NULL` no cambia el comportamiento: en la logica ternaria de SQL,
+      // `NULL <> '2026-08-21'` vale NULL —no TRUE—, asi que la fila sin dia tampoco entraria por el
+      // `<>` de la linea siguiente. Esta MEDIDO (mutacion M-h, 2026-08-22): quitarla sola no pone
+      // rojo ningun test. Se conserva por dos motivos y se dice en voz alta en vez de disimularlo:
+      // (a) ESCRIBE la regla R5 —«sin dia no hay correccion»— donde se aplica, en vez de dejarla
+      // colgando de una sutileza del motor que nadie recuerda al leer; y (b) el dia que alguien
+      // toque el `<>`, esta linea vuelve a ser la unica que impide ponerle dia a una orden que no
+      // lo tenia. Quitar LAS DOS si mata tests (pareja M-h+M-j en el bloque de mutaciones).
+      //
+      // El porque va AQUI ARRIBA y no como comentario `--` dentro del SQL: un backtick dentro de
+      // un template literal lo TERMINA, y este repo ya tiene escrito lo que cuesta escribir prosa
+      // con formato dentro de una sentencia (ver `deshacerAsignacionLote`).
+      const movidas = await tx.$queryRaw<
+        {
+          id: string;
+          mensajero_asignado_id: string;
+          num_guia: number | null;
+          num_remision: string;
+        }[]
+      >`
+        UPDATE "orden"
+        SET "fecha_reparto" = ${diaTexto}::date,
+            "updated_at" = NOW()
+        WHERE "id" IN (${Prisma.join(ids)})
+          AND "estatus_id" IN (${Prisma.join([...estatusIds])})
+          AND "mensajero_asignado_id" IS NOT NULL
+          AND "fecha_reparto" IS NOT NULL
+          AND "fecha_reparto" <> ${diaTexto}::date
+          AND "deleted_at" IS NULL
+          ${zonaId === null ? Prisma.empty : Prisma.sql`AND "zona_id" = ${zonaId}`}
+        RETURNING "id", "mensajero_asignado_id", "num_guia", "num_remision"`;
+
+      // 3. TODO-O-NADA (R8/R9): una sola perdedora aborta el lote COMPLETO. El `throw` va ANTES del
+      //    rastro, asi que un lote abortado no deja NI UNA fila en `orden_dia_reparto_cambio`.
+      if (movidas.length !== ids.length) {
+        const ganadoras = new Set(movidas.map((m) => m.id));
+        throw new CorreccionDiaConflictoError(ids.filter((id) => !ganadoras.has(id)));
+      }
+
+      const entradas = movidas.map((m) => {
+        const anterior = anteriorPorOrden.get(m.id);
+        // El `WHERE` exige `fecha_reparto IS NOT NULL`, y el `FOR UPDATE` de arriba bloqueo la
+        // misma fila: si aqui faltara, la foto y la escritura estarian describiendo filas
+        // distintas. Fallo CERRADO antes que un rastro con una fecha inventada.
+        if (!anterior) throw new CorreccionDiaConflictoError([m.id]);
+        return {
+          ordenId: m.id,
+          fechaAnterior: anterior,
+          fechaNueva: fecha,
+          actorUsuarioId: ctx.actorUsuarioId,
+          motivo: ctx.motivo,
+        };
+      });
+
+      // 4. EL RASTRO, en la MISMA tx y sobre EXACTAMENTE las que ganaron (R22).
+      const registradas = await registrarCambioDiaReparto(tx, entradas);
+      const cambioPorOrden = new Map(registradas.map((r) => [r.ordenId, r.cambioId] as const));
+
+      return movidas.map((m) => ({
+        ordenId: m.id,
+        cambioId: cambioPorOrden.get(m.id) as string,
+        mensajeroAsignadoId: m.mensajero_asignado_id,
+        numGuia: m.num_guia,
+        numRemision: m.num_remision,
+        fechaAnterior: anteriorPorOrden.get(m.id) as Date,
+        fechaNueva: fecha,
+      }));
     });
   }
 

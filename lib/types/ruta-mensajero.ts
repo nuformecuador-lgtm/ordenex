@@ -51,7 +51,25 @@ export type SincronizarRutaResult =
    * sobrevive en el estado del cliente hasta que se recargue la pagina. Tras un F5 el mapa
    * vuelve a la linea recta hasta la siguiente sincronizacion.
    */
-  | { status: "ok"; omitida: boolean; trazado?: TrazadoRuta }
+  | {
+      status: "ok";
+      omitida: boolean;
+      /**
+       * Feature 265 (R39, design §13.4) — QUIEN ordeno la secuencia que acaba de salir, para
+       * que el feedback inmediato no diga «Ruta sincronizada.» a secas cuando el orden es
+       * aproximado. Eso era una media verdad dicha en el peor momento.
+       *
+       * `null` cuando la ejecucion fue `omitida`: el toast habla de LO QUE ACABA DE PASAR, y
+       * si no se recalculo nada no tiene nada que decir. El aviso persistente ya esta en
+       * pantalla y `router.refresh()` lo trae al dia.
+       *
+       * A diferencia de `trazado`, esto NO es efimero: su fuente de verdad es
+       * `ruta_optimizada.secuencia_fuente`, que sobrevive al F5. Este campo es solo el atajo
+       * para no esperar al refresco.
+       */
+      secuenciaFuente: "proveedor" | "local" | null;
+      trazado?: TrazadoRuta;
+    }
   | { status: "conflict"; motivo: string }
   | { status: "forbidden" }
   | { status: "unauthenticated" }

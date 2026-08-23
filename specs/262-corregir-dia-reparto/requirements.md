@@ -224,6 +224,106 @@ sustituirla.
 
 ---
 
+# ⬛ ALCANCE AÑADIDO POR LA PUERTA HUMANA DEL 2026-08-22
+
+> Las tres secciones que siguen (**H**, **I**, **J**) NO estaban en la versión que pasó la puerta:
+> las abre el bloque «✅ PUERTA HUMANA PASADA» de más abajo, que respondió **P1 y P2 en contra de la
+> recomendación del spec** y **P3 a favor**. Numeración continúa donde acababa: **R37**.
+>
+> **Nada de R1-R36 se retira ni se reescribe.** Dos límites declarados quedan supersedidos con su
+> apéndice fechado (3 y 4), conservando su texto. Y **R25 no entra en conflicto con la sección H**:
+> R25 habla de la **tabla** `orden_historial_estado` —«no se añade ninguna entrada a la línea de
+> tiempo de estados»— y eso sigue siendo cierto y sigue probándose igual (**B13**). Lo que la sección
+> H añade es lo que se **LEE** en el drawer «Ver historial», que se arma de dos fuentes. Escribir en
+> la tabla de estados sigue **prohibido**.
+
+---
+
+## H · El rastro se ve en «Ver historial» (P1)
+
+**R37.** CUANDO alguien con visibilidad de la orden abra «Ver historial», el sistema DEBE mostrar,
+en la misma línea de tiempo y junto a las transiciones de estado, **una entrada por cada corrección
+del día de reparto** de esa orden.
+
+**R38.** El sistema DEBE mostrar, en cada entrada de corrección, el **día que tenía**, el **día que
+quedó**, **quién** la hizo, **cuándo** y su **motivo**; y DEBE mostrar las dos fechas en palabras,
+sin siglas, sin nombres de columna y sin `YYYY-MM-DD` a la vista.
+
+**R39.** El sistema DEBE presentar la entrada de corrección **sin estado de origen y sin estado
+destino**, y NO DEBE presentarla como una transición de estado ni etiquetarla con ningún estado del
+catálogo.
+
+**R40.** El sistema DEBE entregar la línea de tiempo **ordenada cronológicamente ascendente sobre las
+dos fuentes**; SI dos entradas comparten el mismo instante, ENTONCES el orden entre ellas DEBE ser
+**determinista** y no depender del orden en que se leyó cada fuente.
+
+**R41.** El sistema DEBE fusionar y ordenar las dos fuentes **en el servidor**; la pantalla NO DEBE
+mezclar fuentes, NO DEBE reordenar nada y NO DEBE construir ninguna fecha con el reloj del navegador.
+
+**R42.** El sistema DEBE hacer que **el build rompa** si algún consumidor de la línea de tiempo trata
+una entrada de corrección como si fuera una transición; esa comprobación NO DEBE poder satisfacerse
+por omisión.
+
+**R43.** La corrección NO DEBE aparecer en el **rastreo público** de la orden ni añadir ningún campo
+a lo que ese borde devuelve.
+
+**R44.** El sistema DEBE aplicar a las entradas de corrección **exactamente la misma autorización**
+que ya gobierna la línea de tiempo, sin añadir ninguna regla de visibilidad nueva.
+
+**R45.** MIENTRAS una orden no tenga ninguna corrección registrada, el sistema DEBE devolver una
+línea de tiempo **idéntica** a la que devolvía antes de esta feature: mismas entradas, mismo orden y
+mismo contenido.
+
+---
+
+## I · Al mensajero se le avisa (P2)
+
+**R46.** CUANDO una corrección quede efectivamente escrita, el sistema DEBE avisar al **mensajero
+asignado** de esa orden.
+
+**R47.** El sistema DEBE nombrar en el aviso **la fecha calendario** para la que queda la orden —no
+sólo «hoy» ni «mañana»—, de modo que el texto siga siendo cierto si se lee otro día; y DEBE
+identificar en el aviso **qué orden** es.
+
+**R48.** El sistema NO DEBE incluir en el aviso la dirección, el teléfono, el destinatario, el monto
+de la orden ni el motivo escrito por quien corrigió.
+
+**R49.** SI la emisión del aviso falla, ENTONCES la corrección DEBE permanecer escrita, la operación
+DEBE seguir devolviendo éxito, y el fallo DEBE quedar **registrado con contexto** (nunca tragado en
+silencio).
+
+**R50.** El sistema DEBE emitir **un aviso por cada corrección efectiva**: dos correcciones sucesivas
+sobre la **misma orden** y el **mismo mensajero** DEBEN producir **dos** avisos.
+
+**R51.** El sistema NO DEBE avisar de la corrección a nadie más que al mensajero asignado: ni a la
+tienda, ni a los roles de administración, ni a la bodega.
+
+**R52.** MIENTRAS el aviso exista, el inventario de eventos de la campana DEBE seguir siendo
+**cerrado y enumerado literalmente**: el valor nuevo DEBE estar declarado en el esquema, en el tipo
+de dominio y en la comprobación que los enumera, y esa comprobación NO DEBE relajarse a una
+derivación del propio esquema.
+
+**R53.** La migración que amplía el enum DEBE ser **aditiva** y DEBE traer un `down.sql` que recree
+el tipo con **la lista previa exacta**; y NO DEBE modificarse ningún `down.sql` de una migración
+anterior.
+
+**R54.** SI al revertir quedan filas que usan el valor nuevo, ENTONCES el `down.sql` DEBE fallar
+**ruidosamente** y NO DEBE borrar ni reescribir ninguna fila para «hacer sitio».
+
+**R55.** CUANDO la corrección mueva al día en curso una orden que el mensajero **ya lleva encima**, o
+cuando la mueva al día siguiente estando ya en la calle, el sistema DEBE emitir el aviso **igual en
+los dos sentidos**; y el desbloqueo (**R31**) NO DEBE depender de que el aviso se haya emitido.
+
+---
+
+## J · El vocabulario del día no cambia (P3)
+
+**R56.** El sistema DEBE seguir expresando el día con **las mismas dos opciones que la asignación** y
+NO DEBE aceptar ninguna otra forma de expresarlo: ni una fecha del cliente, ni un desplazamiento, ni
+un tercer valor.
+
+---
+
 ## Límites declarados (no son controles, son honestidad)
 
 1. **No se puede fijar un día más allá de «mañana».** La corrección habla el **mismo vocabulario que
@@ -240,9 +340,25 @@ sustituirla.
    muestra en «Ver historial» ni en ningún panel. Es una decisión de alcance con su pregunta abierta
    (**P1**), no un olvido: mezclarlo en la línea de tiempo obliga a fusionar dos fuentes en un DTO
    que hoy es de transiciones de estado.
+
+   > ⛔ **APÉNDICE FECHADO — 2026-08-22. Este límite YA NO VALE.** La puerta humana respondió **P1
+   > que SÍ** (bloque de arriba). El texto original se conserva porque es el razonamiento con el que
+   > se propuso lo contrario, y porque el trabajo duro que anticipaba —fusionar dos fuentes en un DTO
+   > que hoy sólo sabe de transiciones— es exactamente el que ahora hay que hacer. Lo que sustituye a
+   > este límite son **R37-R45** y `design.md` **§14**. Lo que **sigue siendo cierto** de la frase
+   > original: el rastro NO gana panel propio ni pantalla nueva; se ve **dentro de «Ver historial»**,
+   > que ya existe.
 4. **Al mensajero no se le avisa.** Si su orden pasa de mañana a hoy, se entera porque el botón deja
    de estar gris. Añadir una notificación exige un valor nuevo en un **enum cerrado a propósito**
    (`NotificacionEvento`, 146/D1) y por tanto una migración: es una decisión, y está en **P2**.
+
+   > ⛔ **APÉNDICE FECHADO — 2026-08-22. Este límite YA NO VALE.** La puerta humana respondió **P2
+   > que SÍ**. El precio que el texto original anticipaba se paga entero: valor nuevo en
+   > `NotificacionEvento` (y en `NotificacionEntidadTipo`, §15.2), migración de enum con su
+   > `down.sql` de recreación, y **gate `./init.sh` COMPLETO** por `db/migrations/**` y por
+   > `lib/types/notificacion.ts`. Lo sustituyen **R46-R55** y `design.md` **§15**. Lo que **sigue
+   > siendo cierto**: el desbloqueo no depende del aviso — la orden se puede trabajar en cuanto la
+   > fila está corregida (**R31**), el aviso sólo hace que el mensajero se entere sin mirar el botón.
 5. **El `adminSatelite` sólo alcanza lo que su listado le enseña.** Su pantalla ofrece cinco
    estados y `en_reparto` / `ayuda_tienda` no están entre ellos. Una orden satélite ya en la calle
    con el día equivocado la corrige maestro/admin desde `/ordenes`, que alcanza **cualquier zona**
@@ -251,6 +367,39 @@ sustituirla.
 6. **Sin migración de datos.** No hay backfill ni reparación automática de nada. Las órdenes que hoy
    están reservadas se corrigen **una a una, a mano y por una persona**, que es exactamente el
    punto de esta ficha.
+
+### Límites del alcance añadido el 2026-08-22 (H, I, J)
+
+7. **«Ver historial» sólo se alcanza desde `/ordenes`, y `/ordenes` no la ven ni el mensajero ni el
+   `adminSatelite`.** Medido: el drawer se monta en `OrdenesModule` con la prop `mostrarHistorial`,
+   que sólo pasa `app/(app)/ordenes/page.tsx:121` y `:132`; y esa misma página hace `notFound()` para
+   `mensajero` y `adminSatelite` (`page.tsx:55`). Consecuencia declarada y **buscada**: el
+   `adminSatelite` **escribe** un rastro que desde la app **no puede leer**, y el mensajero tampoco.
+   No es un agujero: es el reparto de canales de esta ficha — la sección **H** sirve a la oficina
+   (maestro/admin/adminTienda) y la sección **I** sirve al mensajero por la campana, que él sí ve
+   (`AppPage` → `PageHeader` → `NotificationsBell` en `/mis-asignaciones/reparto` y `/recoger`).
+   Llevar el drawer a una tercera superficie es ficha aparte.
+8. **El `adminTienda` lee el motivo que escribió la bodega.** La sección H no añade ninguna regla de
+   visibilidad (**R44**), así que la tienda ve la entrada de corrección de **sus** órdenes con su
+   motivo, igual que hoy ve el motivo de cada gestión. Es transparencia, no fuga: el motivo lo
+   escribe un humano de la operación sabiendo que queda escrito. Si se quisiera lo contrario haría
+   falta un **segundo** predicado de autorización sobre la misma pantalla — ver **P4**.
+9. **El sello de tiempo es el del INICIO de la transacción, no el del commit.** Las dos fuentes usan
+   `DEFAULT CURRENT_TIMESTAMP` (`db/migrations/20260713120000_orden_historial_estado/migration.sql:39`
+   para el historial; misma convención para el rastro, `design.md` §5.1), y en Postgres
+   `CURRENT_TIMESTAMP` es el instante en que **empezó** la transacción. Dos escrituras solapadas
+   pueden quedar ordenadas por su inicio y no por el orden real en que confirmaron. **Es una
+   propiedad que la línea de tiempo YA tiene hoy** dentro de una sola tabla; esta ficha la hereda al
+   fusionar dos, no la introduce y no la arregla.
+10. **Un lote de N órdenes del mismo mensajero produce N avisos.** El aviso es **por corrección**
+    (**R50**), como el de «orden rechazada» es por orden. Con `PAGE_SIZE: 50`
+    (`lib/config/notificaciones.ts`), un lote de más de 50 órdenes de un mismo mensajero empujaría
+    sus otros avisos fuera de la lista visible de la campana. Declarado, no mitigado: la población
+    medida es pequeña (**M1 = 0** el 2026-08-22) y agrupar el aviso costaría no poder decir **qué**
+    paquete cambió, que es el único dato accionable para quien lleva la furgoneta cargada.
+11. **El aviso viaja por la campana y por nada más.** Ni push, ni WhatsApp, ni correo. La campana
+    refresca cada **60 s** (`REFRESH_INTERVAL_MS`, `hooks/useNotificaciones.ts`) y revalida al
+    recuperar el foco: ése es el retardo máximo con el que el mensajero se entera sin recargar.
 
 ---
 
@@ -264,9 +413,44 @@ sustituirla.
 ⏳ **Caducan.** Son fotos: se re-miden **justo antes de desplegar**. Sus resultados se pegan en
 `progress/impl_262_*.md`, con la consulta al lado y la hora CR de la corrida.
 
+### ✅ Tomadas el 2026-08-22 a las 04:27 CR (producción, sólo lectura)
+
+**M1 = 0 filas.** Ninguna orden con `fecha_reparto` posterior al día CR en curso, **en ningún
+estado** —ni siquiera `por_recoger`, que era el caso que la medición de la 261 no cubría—. Las dos
+órdenes que aquella contó el 21 (guías 17496963 y 57998428) llegaron a su día.
+
+**M2 = 35**, pero **ninguna** en `por_recoger` ni `en_reparto`: todas en estados que R6 excluye. La
+decisión **D3'** de `design.md` §4.4 **no se re-abre**.
+
+Detalle y consultas en `progress/impl_262_backend.md`. ⏳ Siguen caducando: se re-miden antes de
+desplegar.
+
 ---
 
 ## Preguntas abiertas (para la puerta humana)
+
+> ## ✅ PUERTA HUMANA PASADA — 2026-08-22
+>
+> Las tres preguntas de abajo se conservan tal cual: son el razonamiento con el que se decidió.
+> **Las tres se respondieron en contra de la recomendación del spec**, y eso ensancha la ficha.
+>
+> **P1 — CERRADA: SÍ, el rastro tiene que verse en «Ver historial».** Entra alcance nuevo y el
+> diseño de §5 cambia. Lo que el spec ya dejó dicho y sigue siendo el trabajo duro: una corrección
+> de día **no tiene «estado destino»**, así que hay que decidir cómo se pinta una entrada sin
+> transición y cómo se fusionan dos fuentes en un DTO (`OrdenHistorialEntradaDTO`) que hoy sólo
+> sabe de transiciones de estado.
+>
+> **P2 — CERRADA: SÍ, hay que avisar al mensajero cuando le cambian el día.** Consecuencia que el
+> propio spec anticipa: `NotificacionEvento` es un **inventario cerrado a propósito** (146/D1, cinco
+> valores) y ampliarlo **exige migración de enum**. ⚠️ Eso arrastra dos cosas no negociables: el
+> `down.sql` de ese enum (mirar si el de ESE enum recrea-con-lista o sólo dropea, sin tocar los
+> `down.sql` previos, que son fotos históricas) y que **el gate de esta ficha pasa a ser
+> `./init.sh` COMPLETO**: tocar `db/migrations` hace que el modo rápido se niegue solo.
+>
+> **P3 — CERRADA: basta «hoy / mañana»**, el mismo vocabulario que al asignar (246/D2). Es la
+> recomendación del spec y la que **mantiene la propiedad fuerte**: con un token, mover al pasado es
+> **imposible por construcción**, no prohibido por un `if` que alguien puede relajar más adelante.
+
 
 > Las **cuatro decisiones** que la ficha exigía cerrar están **cerradas** y no figuran aquí: quién
 > (**R11**), desde dónde (**R13**), el pasado (**R3**) y el rastro (**R20-R26**). Su razonamiento
@@ -298,8 +482,59 @@ decirlo ahora: cambia las **dos** superficies y deja de ser un token.
 
 ---
 
+## Preguntas abiertas del alcance añadido (2026-08-22, para la MISMA puerta humana)
+
+> Las dos que siguen no estaban antes porque el alcance que las produce tampoco. **Ninguna bloquea
+> la implementación**: las dos llevan una decisión por defecto ya tomada en `design.md`, escrita de
+> forma que cambiarla sea un diff pequeño y localizado. Se preguntan porque son decisiones de
+> **producto**, no derivables de `docs/`, `specs/` ni del código (CLAUDE.md, regla 6).
+
+**P4 · ¿La tienda debe leer la corrección del día y su motivo?** Con **R44** («ninguna regla de
+visibilidad nueva»), el `adminTienda` verá en el historial de **sus** órdenes la entrada «Día de
+reparto · del 21 de agosto al 22 de agosto · Por Fulano · Motivo: …». Hoy ya lee el motivo de cada
+gestión por esa misma pantalla, así que no es una categoría nueva de dato. **Decisión por defecto:
+sí, misma visibilidad** — lo contrario obliga a un **segundo** predicado de autorización sobre la
+misma línea de tiempo, y dos roles leerían dos historias distintas de la misma orden. Si la respuesta
+es «no», el cambio es un filtro por rol en `OrdenHistorialService` y un requisito más; se dice ahora
+y no después de que una tienda lea el primero.
+
+**P5 · ¿El `adminSatelite` necesita leer el rastro que él mismo escribe?** Hoy no puede: `/ordenes`
+le hace `notFound()` (`page.tsx:55`) y es la única puerta al drawer (límite 7). Corrige el día desde
+`/recepcion-satelite` y el rastro de esa corrección le queda invisible dentro del producto.
+**Decisión por defecto: se deja así** — llevar el drawer al listado satélite es una superficie nueva,
+con su propia autorización y sus propios tests, y esta ficha ya paga dos migraciones. Si la operación
+lo necesita, es una ficha pequeña y separada; lo que **no** se hace es colarlo aquí sin decirlo.
+
+---
+
 ### Lo que este spec NO ha inventado
 
 Nada. Cada afirmación de este documento se leyó en `docs/`, en `specs/` o en el código, y las cuatro
 decisiones que la ficha 262 dejó abiertas están **cerradas con su razonamiento medido**. Si al
 implementar aparece un dato que no está en ninguno de los tres sitios, **se para y se pregunta**.
+
+#### Fuentes leídas para el alcance añadido del 2026-08-22 (ninguna heredada)
+
+`lib/types/orden-historial.ts` · `lib/repositories/OrdenHistorialRepository.ts` ·
+`lib/interfaces/repositories/IOrdenHistorialRepository.ts` ·
+`lib/interfaces/services/IOrdenHistorialService.ts` · `lib/services/OrdenHistorialService.ts` ·
+`lib/actions/orden-historial.ts` · `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx` ·
+`app/(app)/ordenes/_components/HistorialOrdenSheet.tsx` ·
+`app/(app)/ordenes/_components/OrdenesModule.tsx` · `app/(app)/ordenes/page.tsx` ·
+`lib/repositories/RastreoPublicoRepository.ts` · `tests/unit/guards/rastreo-frontera.guardia.test.ts` ·
+`lib/types/notificacion.ts` · `lib/notificaciones/emitir.ts` · `lib/notificaciones/notificadores.ts` ·
+`lib/repositories/NotificacionRepository.ts` ·
+`lib/interfaces/repositories/INotificacionRepository.ts` · `lib/config/notificaciones.ts` ·
+`hooks/useNotificaciones.ts` · `components/shared/NotificationsBell.tsx` ·
+`components/shared/PageHeader.tsx` · `components/shared/AppPage.tsx` ·
+`app/(app)/mis-asignaciones/reparto/page.tsx` · `app/(app)/layout.tsx` ·
+`db/schema.prisma` (`NotificacionEvento`, `NotificacionEntidadTipo`, `OrdenHistorialEstado`,
+`Usuario`) · `db/migrations/20260727120000_notificacion/{migration,down}.sql` ·
+`db/migrations/20260820210000_notificacion_evento_postulacion_recurso/{migration,down}.sql` ·
+`db/migrations/20260713120000_orden_historial_estado/migration.sql` ·
+`tests/unit/services/notificacion-productores-wiring.test.ts` ·
+`tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts` ·
+`tests/unit/services/notificacion-productores.test.ts` · `lib/types/dia-reparto.ts` ·
+`lib/utils/dia-reparto.ts` · `lib/utils/dia-reparto-textos.ts` ·
+`lib/services/MisAsignacionesService.ts` · `lib/interfaces/services/IMisAsignacionesService.ts` ·
+`tests/unit/guards/d5-revertida.guardia.test.ts`.

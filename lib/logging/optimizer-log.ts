@@ -12,6 +12,8 @@
 //   · En Vercel estas lineas quedan en el log del despliegue, accesible a quien tenga acceso
 //     al proyecto. Es exportacion de dato personal a un tercero (Vercel) fuera de la base.
 //   · APAGARLA cuando el diagnostico termine: `RUTA_DEBUG_LOG=0` en el entorno.
+//     ⏳ FEATURE 265 (2026-08-22): ese diagnostico termino y el DEFAULT SE INVIRTIO — hoy la
+//     traza nace APAGADA y se enciende a proposito con `RUTA_DEBUG_LOG=1`. Ver `activo()`.
 //
 // LO QUE NO SE IMPRIME, NI CON LA TRAZA ENCENDIDA: el `access_token`, el token OIDC de
 // Vercel, la clave privada PEM y el JSON de la assertion. De un token solo se dice SI llego
@@ -22,20 +24,38 @@
 const PREFIJO = "optimizer***:";
 
 /**
- * La traza esta ENCENDIDA por defecto y se apaga con `RUTA_DEBUG_LOG=0`. Al reves de lo
- * habitual, porque se anadio para diagnosticar un problema abierto: el default util es el
- * que responde a la pregunta que se esta investigando.
+ * ⏳ FEATURE 265 (2026-08-22, P7) — EL DEFAULT SE INVIERTE: LA TRAZA NACE APAGADA.
+ *
+ * Lo que decia esta funcion hasta hoy, y por que estaba escrito asi:
+ *
+ *   «La traza esta ENCENDIDA por defecto y se apaga con `RUTA_DEBUG_LOG=0`. Al reves de lo
+ *    habitual, porque se anadio para diagnosticar un problema abierto: el default util es el
+ *    que responde a la pregunta que se esta investigando.»
+ *
+ * Ese diagnostico TERMINO —lo cierra la 265— y el default se queda del lado inseguro: preview
+ * sigue volcando coordenadas de destinatarios al log de Vercel y CUALQUIER ENTORNO NUEVO NACE
+ * FILTRANDO, sin que nadie lo decida. Invertirlo lo apaga en todas partes sin depender de que
+ * alguien se acuerde de poner una variable. La variable se conserva como interruptor para
+ * ENCENDERLA a proposito cuando haya que diagnosticar, que es lo que siempre debio ser.
+ *
+ * Se activa con `RUTA_DEBUG_LOG=1` (o `true`). Cualquier otro valor —incluido `0`, un typo o
+ * la variable vacia— deja la traza APAGADA: ante la duda, no se exporta dato personal.
+ *
+ * ⚠️ NADA DEPENDE DE ESTA TRAZA (265/R48). Ninguna decision, ningun motivo registrado y ningun
+ * aviso al mensajero pasa por aqui: la degradacion se sabe por `ruta_optimizada.ultimo_error`,
+ * por `secuencia_fuente` y por el aviso de la pantalla. Si algo vuelve a colgarse de `optlog`,
+ * apagarla lo volveria invisible.
  *
  * ⚠️ NO MIRES AQUI SI ESTAS EN UN TEST. Hubo una version de esta funcion que devolvia
  * `false` cuando detectaba `VITEST`, y la tumbo una GUARDIA del repo
  * (`notificacion-notificadores-reales.test.ts`) que prohibe a `lib/` y `app/` cambiar de
  * comportamiento segun el entorno de test — con razon: un modulo que se comporta distinto
- * bajo test hace que los tests dejen de hablar del codigo real. El silencio en la suite se
- * consigue poniendo `RUTA_DEBUG_LOG=0` desde `tests/setup/jest-dom.ts`, que es codigo de
- * test y puede saber que es un test.
+ * bajo test hace que los tests dejen de hablar del codigo real. Con el default invertido, la
+ * suite ya sale silenciosa sola.
  */
 function activo(): boolean {
-  return process.env.RUTA_DEBUG_LOG !== "0";
+  const raw = (process.env.RUTA_DEBUG_LOG ?? "").toLowerCase();
+  return raw === "1" || raw === "true";
 }
 
 /**

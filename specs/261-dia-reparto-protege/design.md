@@ -438,6 +438,25 @@ bloqueo** —no sólo en este spec, que nadie relee— con el puntero a la **fic
 §8 la vigila. El día que la 262 aterrice, esa nota se retira **por la puerta**: con su fecha y su
 motivo, como se está haciendo aquí con D5.
 
+> ✅ **APÉNDICE FECHADO — 2026-08-22. El agujero de esta sección está CERRADO, y se cerró
+> exactamente por la puerta que el párrafo de arriba describía.** La ficha **262**
+> (`specs/262-corregir-dia-reparto`) montó la superficie: una acción por lote «Cambiar día de
+> reparto» en las **dos** pantallas donde también se elige el día al asignar —`/ordenes`
+> (maestro/admin, cualquier zona) y `/recepcion-satelite` (`adminSatelite`, su zona)—, con motivo
+> obligatorio y con rastro de quién, cuándo, desde qué día y hasta qué día. Ya **no** hace falta un
+> `UPDATE` a mano.
+>
+> **Lo que cambió en los tres soportes**, sin borrar nada: (1) la nota de
+> `lib/interfaces/services/IMisAsignacionesService.ts` pasó a decir el **cierre** —conservando el
+> razonamiento de por qué el riesgo se aceptó y diciendo **en pasado** que la única salida fue un
+> `UPDATE` a mano—; (2) la mitad (e) de `tests/unit/guards/d5-revertida.guardia.test.ts` **sigue
+> viva** y ahora exige las piezas del cierre, de modo que retirar la superficie sin decirlo la
+> pone roja; (3) este apéndice y el del *límite declarado 2* de `requirements.md`.
+>
+> **El texto original de esta sección se conserva INTACTO**, incluida la medición y el porqué: es
+> la única prueba de que el riesgo se aceptó a conciencia y no por descuido. Un spec es la foto de
+> su momento.
+
 ---
 
 ## 8 · D5 (261) — La reversión de D5 (246), escrita en los dos soportes

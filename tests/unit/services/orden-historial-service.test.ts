@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
+import type { IOrdenDiaRepartoCambioRepository } from "@/lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO } from "@/lib/types/orden";
-import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import type { OrdenHistorialTransicionDTO } from "@/lib/types/orden-historial";
 
 // Feature 49 (T4.1/T4.2) — tests del OrdenHistorialService (sin DB, dobles de repos).
 // Cubre R26 (linea de tiempo cronologica), R27 (autorizacion por visibilidad de la orden,
@@ -45,8 +46,13 @@ function ordenDTO(overrides: Partial<OrdenDTO> = {}): OrdenDTO {
   };
 }
 
-function entrada(overrides: Partial<OrdenHistorialEntradaDTO> = {}): OrdenHistorialEntradaDTO {
+// Feature 262 (B24): el DTO de transicion gana `clase`. NINGUNA asercion de este archivo cambia
+// —R45 exige que una orden SIN correcciones se lea exactamente igual que antes de la ficha.
+function entrada(
+  overrides: Partial<OrdenHistorialTransicionDTO> = {},
+): OrdenHistorialTransicionDTO {
   return {
+    clase: "transicion",
     estatusOrigenValue: null,
     estatusDestinoValue: "en_preparacion",
     origenTipo: "carga_masiva",
@@ -95,10 +101,28 @@ function historialRepo(overrides: Partial<HistorialRepoMethods> = {}): Historial
   };
 }
 
-function newService(o: OrdenRepoMethods = ordenRepo(), h: HistorialRepoMethods = historialRepo()) {
+// Feature 262 (B26): el servicio EXIGE la segunda fuente. En este archivo el doble devuelve
+// SIEMPRE lista vacia a proposito: lo que se prueba aqui es que, sin correcciones, la linea de
+// tiempo es la de antes (R45). La fusion tiene su propio archivo
+// (`tests/unit/services/orden-historial-fusion.test.ts`).
+function correccionRepo(
+  overrides: Partial<IOrdenDiaRepartoCambioRepository> = {},
+): IOrdenDiaRepartoCambioRepository {
+  return {
+    findCorreccionesByOrden: vi.fn(async () => []),
+    ...overrides,
+  };
+}
+
+function newService(
+  o: OrdenRepoMethods = ordenRepo(),
+  h: HistorialRepoMethods = historialRepo(),
+  c: IOrdenDiaRepartoCambioRepository = correccionRepo(),
+) {
   return new OrdenHistorialService(
     o as unknown as IOrdenRepository,
     h as unknown as IOrdenHistorialRepository,
+    c,
   );
 }
 
@@ -227,7 +251,14 @@ describe("obtenerHistorial — autorizacion por visibilidad (R27)", () => {
     if (r.status !== "ok") throw new Error("esperaba ok");
     // Las 2 filas siguen ahi: el deshacer NO borro ni modifico el rastro de la gestion.
     expect(r.entradas).toEqual([eGestion, eDeshacer]);
-    expect(r.entradas.map((e) => e.origenTipo)).toContain("deshacer_gestion");
+    // Feature 262 (B24): `origenTipo` solo existe en la clase `transicion`, asi que hay que
+    // ESTRECHAR antes de leerlo. Es el unico cambio de este archivo y no relaja nada: la
+    // asercion sigue siendo «entre las familias de las transiciones esta `deshacer_gestion`»,
+    // y el `toEqual` literal de la linea de arriba sigue comparando las DOS filas enteras.
+    const familias = r.entradas
+      .filter((e) => e.clase === "transicion")
+      .map((e) => e.origenTipo);
+    expect(familias).toContain("deshacer_gestion");
     // El service de lectura no muta el historial: no existe API de update/delete que llamar.
     expect(Object.keys(h)).toEqual(
       expect.not.arrayContaining(["actualizarHistorial", "borrarHistorial"]),

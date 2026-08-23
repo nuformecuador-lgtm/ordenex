@@ -125,6 +125,7 @@ describe("R26 — reemplazarSecuencia es ATOMICO y no puede violar los indices u
       calculadaAt: T0,
       origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
       huellaSet: "huella-1",
+      secuenciaFuente: "proveedor",
     });
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -143,6 +144,7 @@ describe("R26 — reemplazarSecuencia es ATOMICO y no puede violar los indices u
       calculadaAt: T0,
       origen: { lat: 9.93, lng: -84.09, fuente: "centroide" },
       huellaSet: "h",
+      secuenciaFuente: "local",
     });
 
     const { data } = tx.rutaOptimizadaParada.createMany.mock.calls[0][0] as unknown as {
@@ -166,6 +168,7 @@ describe("R26 — reemplazarSecuencia es ATOMICO y no puede violar los indices u
       calculadaAt: T0,
       origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
       huellaSet: "h",
+      secuenciaFuente: "proveedor",
     });
 
     const args = tx.rutaOptimizada.upsert.mock.calls[0][0] as unknown as {
@@ -183,6 +186,8 @@ describe("R26 — reemplazarSecuencia es ATOMICO y no puede violar los indices u
       calculadaAt: T0,
       origen: null,
       huellaSet: "h",
+      // 265/R37: sin paradas no hubo ordenacion, asi que no hay procedencia que afirmar.
+      secuenciaFuente: null,
     });
 
     expect(tx.rutaOptimizadaParada.deleteMany).toHaveBeenCalledTimes(1);
@@ -203,6 +208,7 @@ describe("R26 — reemplazarSecuencia es ATOMICO y no puede violar los indices u
         calculadaAt: T0,
         origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
         huellaSet: "h",
+        secuenciaFuente: "proveedor",
       }),
     ).rejects.toThrow("boom");
   });
@@ -233,5 +239,114 @@ describe("R27 — marcarDesactualizada NUNCA toca las paradas", () => {
       estado: "desactualizada",
       ultimoError: "d",
     });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Feature 265 (R35-R37, R45) — LA PROCEDENCIA DEL ORDEN, EN LA FILA
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+/** La cabecera escrita en el upsert de `reemplazarSecuencia`, tipada. */
+function cabeceraEscrita(tx: {
+  rutaOptimizada: { upsert: { mock: { calls: unknown[][] } } };
+}): { create: Record<string, unknown>; update: Record<string, unknown> } {
+  return tx.rutaOptimizada.upsert.mock.calls[0][0] as unknown as {
+    create: Record<string, unknown>;
+    update: Record<string, unknown>;
+  };
+}
+
+describe("265/R35 — la columna se ESCRIBE con la secuencia, en la misma transaccion", () => {
+  it.each(["proveedor", "local", null] as const)(
+    "secuenciaFuente %s llega a la cabecera, en create y en update",
+    async (fuente) => {
+      const { prisma, tx } = buildPrisma();
+
+      await repoDe(prisma).reemplazarSecuencia(MENSAJERO, ["o1", "o2"], {
+        calculadaAt: T0,
+        origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
+        huellaSet: "h",
+        secuenciaFuente: fuente,
+      });
+
+      // Una sola transaccion, la MISMA que reemplaza las paradas: no hay ningun instante
+      // visible en el que la marca y la secuencia que describe se contradigan.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const { create, update } = cabeceraEscrita(tx);
+      expect(update.secuenciaFuente).toBe(fuente);
+      expect(create.secuenciaFuente).toBe(fuente);
+    },
+  );
+
+  it("R36: recalcular de `local` a `proveedor` CAMBIA la marca, no la conserva", async () => {
+    // La mutacion que esto mata: no escribir la columna al reemplazar. Con la marca vieja
+    // pegada, una ruta reoptimizada por el proveedor seguiria avisando «orden aproximado» —o
+    // peor, al reves: una degradada seguiria pareciendo optima.
+    const primera = buildPrisma();
+    await repoDe(primera.prisma).reemplazarSecuencia(MENSAJERO, ["o1", "o2"], {
+      calculadaAt: T0,
+      origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
+      huellaSet: "h1",
+      secuenciaFuente: "local",
+    });
+    expect(cabeceraEscrita(primera.tx).update.secuenciaFuente).toBe("local");
+
+    const segunda = buildPrisma();
+    await repoDe(segunda.prisma).reemplazarSecuencia(MENSAJERO, ["o2", "o1"], {
+      calculadaAt: T0,
+      origen: { lat: 9.93, lng: -84.09, fuente: "gps" },
+      huellaSet: "h2",
+      secuenciaFuente: "proveedor",
+    });
+    expect(cabeceraEscrita(segunda.tx).update.secuenciaFuente).toBe("proveedor");
+  });
+
+  it("marcarDesactualizada NO toca la columna (deliberado)", async () => {
+    // La marca describe LA SECUENCIA PERSISTIDA, que tras un intento fallido sigue siendo la
+    // vieja. Borrarla aqui apagaria el aviso de una ruta que sigue ordenada en local.
+    const { prisma, upsert } = buildPrisma();
+
+    await repoDe(prisma).marcarDesactualizada(MENSAJERO, "optimizar ruta: HTTP 503");
+
+    const args = upsert.mock.calls[0][0] as unknown as {
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    expect(args.update).not.toHaveProperty("secuenciaFuente");
+    expect(args.create).not.toHaveProperty("secuenciaFuente");
+  });
+});
+
+describe("265/R45 — al LEER, la columna se estrecha y `null` significa «no consta»", () => {
+  function filaCon(secuenciaFuente: unknown) {
+    return {
+      id: "ruta-1",
+      mensajeroId: MENSAJERO,
+      estado: "vigente",
+      calculadaAt: T0,
+      origenLat: null,
+      origenLng: null,
+      origenAt: null,
+      origenFuente: null,
+      huellaSet: "h",
+      ultimoError: null,
+      secuenciaFuente,
+      paradas: [{ ordenId: "o1", secuencia: 1 }],
+    };
+  }
+
+  it.each([
+    ["local", "local"],
+    ["proveedor", "proveedor"],
+    [null, null],
+    // Una fila anterior a la feature, o basura de otra version: NO se da por buena como
+    // «proveedor». Afirmar que un orden vino del proveedor cuando no consta es lo que R45
+    // prohibe expresamente.
+    ["cualquier-cosa", null],
+    [undefined, null],
+  ])("fila con %j -> DTO con %j", async (enLaFila, esperado) => {
+    const { prisma } = buildPrisma({ rutaExistente: filaCon(enLaFila) });
+    const ruta = await repoDe(prisma).findByMensajero(MENSAJERO);
+    expect(ruta?.secuenciaFuente).toBe(esperado);
   });
 });

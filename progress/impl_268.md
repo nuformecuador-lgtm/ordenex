@@ -307,3 +307,12 @@ Eso cierra de paso el agujero que esta misma task heredó: **239/T0.3 pedía est
 se marcó** —la feature salió a producción con la casilla abierta— porque no había dónde escribirlo
 ni a qué canal mandarlo. La pregunta abierta 5 (canal y plazo) **sigue sin respuesta** y es la única
 parte de T8 que queda viva: cuando Dropi conecte, alguien tiene que entregarle esa entrada.
+
+### Pregunta abierta 5 — CERRADA el 2026-08-22
+
+**No hay aviso que entregar.** El humano: *«el changelog a Dropi no es necesario, estamos solo
+haciendo pruebas»*. Así que el canal y el plazo dejan de ser una incógnita pendiente: **no aplican**
+mientras la integración no sea real. La entrada de `docs/api/CHANGELOG.md` se queda escrita como
+material de onboarding para cuando lo sea — que es exactamente la forma en que T8 se descargó.
+
+Con esto **T8 no deja nada vivo**.

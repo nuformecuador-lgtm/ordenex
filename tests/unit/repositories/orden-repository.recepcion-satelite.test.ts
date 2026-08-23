@@ -125,6 +125,13 @@ describe("OrdenRepository.findRecepcionSateliteByZona (R6/R8/R9)", () => {
       cantonNombre: "Canton",
       distritoNombre: "Distrito",
       prioridad: true, // feature 101/R9
+      // Feature 262/B8 (R16): el dia de reparto por orden, ya serializado a `YYYY-MM-DD`. Aqui la
+      // fila sembrada no lo trae, asi que `toFechaISO` devuelve `null`.
+      //
+      // ⚠️ SE AÑADE AL LITERAL, NO SE RELAJA EL `toEqual`. Este literal ES el contrato de
+      // `RecepcionSateliteRow`: cambiarlo por `objectContaining` o por su propia fuente lo dejaria
+      // siempre verde y dejaria de avisar el dia que el repositorio se olvide de un campo.
+      fechaRepartoISO: null,
     });
     // R9: estatusValue distingue "Recibidas"; distrito/monto nullable resueltos; prioridad default.
     expect(rows[1].estatusValue).toBe("en_bodega_satelite");

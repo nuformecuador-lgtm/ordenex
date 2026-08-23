@@ -34,6 +34,7 @@ import { SateliteOrderCard } from "./SateliteOrderCard";
 import { SateliteOrdenesListado } from "./SateliteOrdenesListado";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteModal";
+import { CambiarDiaRepartoSateliteModal } from "./CambiarDiaRepartoSateliteModal";
 import { filaDescargaSatelite } from "./satelite-descarga-columnas";
 import {
   FILTRO_SATELITE_VACIO,
@@ -150,7 +151,9 @@ export interface RecepcionSateliteModuleProps {
   liberadasHoy?: LiberadaHoyRow[];
   /**
    * Feature 246 (T4.3, R29): fechas calendario de «hoy» y «mañana» resueltas por la PÁGINA con
-   * el día de Costa Rica. Sólo se transportan hasta `AsignarSateliteModal`.
+   * el día de Costa Rica. Sólo se transportan: hasta `AsignarSateliteModal` (elegir el día al
+   * asignar) y, desde la feature 262/F4, hasta `CambiarDiaRepartoSateliteModal` (corregirlo
+   * después). Las DOS pantallas leen las mismas dos fechas, resueltas una sola vez arriba.
    *
    * El defecto son dos cadenas vacías por el mismo motivo que en `/ordenes`: éste es código de
    * cliente y cualquier fecha que se inventara aquí saldría del reloj del navegador. Sin fechas
@@ -199,6 +202,12 @@ export function RecepcionSateliteModule({
     RecepcionSateliteDTO[]
   >([]);
   const [deshacerOpen, setDeshacerOpen] = useState(false);
+  // Feature 262/F4 (R13): lote que va al modal de «Cambiar día de reparto» y estado de ese
+  // modal. MISMO patrón que los otros dos: el listado entrega el snapshot al pulsar.
+  const [ordenesACambiarDia, setOrdenesACambiarDia] = useState<
+    RecepcionSateliteDTO[]
+  >([]);
+  const [cambiarDiaOpen, setCambiarDiaOpen] = useState(false);
   // Feature 148 (T13, R22): ids del ÚLTIMO envío a central que salieron `ok`. El lote
   // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
   // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
@@ -362,6 +371,29 @@ export function RecepcionSateliteModule({
   function handleDeshacerSuccess() {
     setOrdenesADeshacer([]);
     setDeshacerOpen(false);
+    void releerBodega();
+  }
+
+  /**
+   * Feature 262/F4 (R13/R14) — abre el modal de «Cambiar día de reparto» con lo seleccionado.
+   * Como «Deshacer asignación» y a diferencia de «Asignar», NO mira `bloqueoBodega`: un cierre
+   * de día pendiente no bloquea la corrección (R14).
+   */
+  function abrirCambiarDia(ordenes: RecepcionSateliteDTO[]) {
+    if (ordenes.length === 0) return;
+    setOrdenesACambiarDia(ordenes);
+    setCambiarDiaOpen(true);
+  }
+
+  /**
+   * Éxito ⇒ cierra y RELEE el estado del servidor. La orden NO cambia de estado ni de bodega
+   * —sigue en `por_recoger`, con su mismo mensajero—, así que no desaparece del listado: lo que
+   * cambia es su día de reparto, y releer es lo que hace que la pantalla deje de mostrar el
+   * viejo.
+   */
+  function handleCambiarDiaSuccess() {
+    setOrdenesACambiarDia([]);
+    setCambiarDiaOpen(false);
     void releerBodega();
   }
 
@@ -560,6 +592,7 @@ export function RecepcionSateliteModule({
           }
           onRecuperar={(ordenes) => void recuperarSeleccionadas(ordenes)}
           onDeshacerAsignacion={abrirDeshacer}
+          onCambiarDiaReparto={abrirCambiarDia}
           enviandoACentral={enviandoACentral}
           recuperando={recuperando}
           // Feature 158 (T2.7): el listado necesita `sinZona` SÓLO para la regla de
@@ -608,6 +641,17 @@ export function RecepcionSateliteModule({
         ordenes={ordenesADeshacer}
         onOpenChange={setDeshacerOpen}
         onSuccess={handleDeshacerSuccess}
+      />
+
+      {/* Feature 262/F4 (R13/R17): el selector sin preselección, el motivo obligatorio y la
+          traducción de errores viven en el modal COMPARTIDO con `/ordenes`; aquí sólo se le
+          entrega el lote y las dos fechas que resolvió la página, y se relee al terminar. */}
+      <CambiarDiaRepartoSateliteModal
+        open={cambiarDiaOpen}
+        ordenes={ordenesACambiarDia}
+        fechasDiaReparto={fechasDiaReparto}
+        onOpenChange={setCambiarDiaOpen}
+        onSuccess={handleCambiarDiaSuccess}
       />
     </div>
   );

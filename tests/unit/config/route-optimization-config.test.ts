@@ -23,6 +23,8 @@ const VARS = [
   "RUTA_ORIGEN_TTL_MIN",
   "RUTA_SYNC_MIN_INTERVALO_S",
   "RUTA_MAX_PARADAS",
+  // Feature 265 (R21): umbral de coherencia del origen, en km.
+  "RUTA_ORIGEN_MAX_KM",
   "ROUTES_ROUTING_PREFERENCE",
 ] as const;
 
@@ -188,6 +190,36 @@ describe("R10 — enteros: default ante ausente, vacio o invalido", () => {
         process.env.ROUTES_ROUTING_PREFERENCE = basura;
         expect(loadRouteOptimizationConfig().ROUTES_ROUTING_PREFERENCE).toBe("TRAFFIC_UNAWARE");
       }
+    });
+  });
+
+  describe("265/R21 — RUTA_ORIGEN_MAX_KM: configurable y sin lanzar NUNCA", () => {
+    it("ausente -> 200 km, el valor 🧭 declarado sin calibrar", () => {
+      limpiar();
+      expect(loadRouteOptimizationConfig().RUTA_ORIGEN_MAX_KM).toBe(200);
+    });
+
+    it.each([
+      ["vacia", ""],
+      ["no numerica", "abc"],
+      ["cero", "0"],
+      ["negativa", "-1"],
+      ["NaN", "NaN"],
+      ["solo unidades", "200km"],
+    ])("%s -> cae al default SIN lanzar", (_caso, valor) => {
+      // Un umbral en 0 haria que TODO origen se considerara incoherente y toda ruta se
+      // calculara desde el centroide, en silencio y para siempre. Un NaN haria lo mismo de
+      // forma aun mas opaca: `km > NaN` es `false`, o sea la guarda apagada sin avisar.
+      limpiar();
+      process.env.RUTA_ORIGEN_MAX_KM = valor;
+      expect(() => loadRouteOptimizationConfig()).not.toThrow();
+      expect(loadRouteOptimizationConfig().RUTA_ORIGEN_MAX_KM).toBe(200);
+    });
+
+    it("un valor valido se respeta (es configurable de verdad, no un adorno)", () => {
+      limpiar();
+      process.env.RUTA_ORIGEN_MAX_KM = "50";
+      expect(loadRouteOptimizationConfig().RUTA_ORIGEN_MAX_KM).toBe(50);
     });
   });
 

@@ -133,6 +133,27 @@ export interface RouteOptimizationConfig {
   /** R38: tope de paradas enviadas al proveedor en una optimizacion. */
   RUTA_MAX_PARADAS: number;
   /**
+   * Feature 265 (R16-R21, design §6.4 y §15) — distancia MAXIMA, en km, entre el origen
+   * resuelto y el centroide de las paradas. Por encima, el origen se DESCARTA y se usa el
+   * centroide: la llamada facturada deja de ser imposible y el mensajero recibe un orden en
+   * vez de un error duro.
+   *
+   * ═══ 🧭 VALOR PROPUESTO, NO CALIBRADO CON DATOS DE PRODUCCION ═══
+   * Fecha: 2026-08-22. Motivo: M1 NO SE PUDO MEDIR —`ruta_optimizada_parada` estaba vacia y
+   * habia 0 ordenes en `en_reparto`, asi que no habia centroide contra el que medir ningun
+   * origen—. Y el caso de ~1.040 km que inspiro esta guarda resulto ser UNA PRUEBA DEL PROPIO
+   * HUMANO, no evidencia de campo: que nadie lo cite despues como una medicion de la
+   * operacion real.
+   * Lo unico medido que acota el numero: dos paradas legitimas de la MISMA llamada distaban
+   * ~58 km, asi que el umbral tiene que quedar comodamente por encima de eso.
+   * Se declara sin base documental —igual que la 92 hizo con `RUTA_MAX_PARADAS = 100`— y se
+   * revisa con datos reales. Puntero: `specs/265-optimizador-lee-al-proveedor`.
+   *
+   * ⚠️ ESTE ES EL UNICO SITIO donde vive el numero (R46). Ningun otro modulo de produccion
+   * puede repetir el literal; lo vigila `tests/unit/guards/umbral-origen-declarado.guardia.test.ts`.
+   */
+  RUTA_ORIGEN_MAX_KM: number;
+  /**
    * Preferencia de trafico del TRAZADO. Default `TRAFFIC_UNAWARE` (SKU basico): subirlo
    * cuesta dinero por llamada, asi que es una decision explicita, nunca implicita.
    */
@@ -166,6 +187,8 @@ export function loadRouteOptimizationConfig(): RouteOptimizationConfig {
     RUTA_ORIGEN_TTL_MIN: readPositiveInt("RUTA_ORIGEN_TTL_MIN", 120),
     RUTA_SYNC_MIN_INTERVALO_S: readPositiveInt("RUTA_SYNC_MIN_INTERVALO_S", 10),
     RUTA_MAX_PARADAS: readPositiveInt("RUTA_MAX_PARADAS", 100),
+    // 🧭 200 km: ver la declaracion completa —y por que NO esta calibrado— en el contrato.
+    RUTA_ORIGEN_MAX_KM: readPositiveInt("RUTA_ORIGEN_MAX_KM", 200),
     ROUTES_ROUTING_PREFERENCE: readRoutingPreference("ROUTES_ROUTING_PREFERENCE"),
   };
 }

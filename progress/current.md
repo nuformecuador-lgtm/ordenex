@@ -9,11 +9,198 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚦 RELEASE LISTA PARA SALIR — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+## ✅ LAS DOS FICHAS CERRADAS — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
 
-`dev` está en `b16c8c8e` y lleva **tres cosas que producción todavía no tiene**: la **256**
-(el evento de `devuelta` con su motivo tipificado), la **268** (el webhook del ciclo de ayuda y del
-incidente) y el papeleo de cierre de la **264**. La release es un PR `dev` → `prod`.
+**Ninguna ficha `in_progress`.** `dev` con las dos features completas, revisadas y con sus
+bloqueantes cerrados.
+
+| | |
+| --- | --- |
+| **262** · corregir el día de reparto | `done` · 4 tandas · revisión RECHAZADA → **4 bloqueantes cerrados** · `F6` ejecutada |
+| **265** · el optimizador lee al proveedor | `done` · revisión RECHAZADA → cerrada → **re-revisión OK, 0 bloqueantes** |
+
+**Lo que queda vivo NO es código: son pasos de release**, y por eso existe `docs/release.md`. Si su
+sección «pendiente para la próxima release» tiene entradas, **la release no está terminada aunque el
+despliegue esté verde**.
+
+### El hallazgo de la 262, que es el patrón del día entero
+
+**`R32` no tenía ningún test que mordiera**, y el comentario de su test de integración prometía
+comprobar «ni gestión, ni historial, **ni ruta**» contando sólo las tres primeras. No se vio
+leyendo: se vio **inyectando el defecto exacto** y midiendo que **3.302 tests seguían verdes**.
+
+Es la misma familia que apareció cuatro veces más hoy: la puerta T8 protegiendo a **cero**
+integradores; el aviso de la 262 que se perdía la segunda vez por un `dedupe_key` que traga el
+conflicto; los `logger.warn` del optimizador **descartados en las dos capas**; y un requisito de la
+265 cuyo test montaba el escenario correcto y sólo afirmaba `status: ok`.
+
+**La prosa de este repo miente más que su código, y nada la vigila.** Tres comentarios corregidos hoy
+decían lo contrario de lo que hace el código, incluido uno que afirmaba que un `warn` servía «para
+que un operador note» algo — siendo un `{ warn: () => {} }`.
+
+### `F6` de la 262: ejecutada, con lo que no cubrió dicho
+
+Se hizo **en local, no en preview** (declarado: la base de preview es distinta desde julio y no
+sabemos si tiene cuentas). Pasó el caso central de punta a punta —el mensajero **intenta** recoger y
+no puede, se corrige, **se desbloquea solo**—, «Ver historial» entrada por entrada, la campana en
+**38,5 s** sin recargar, y `R32` con KPIs y mapa idénticos.
+
+**No cubrió**, y está en la lista de release: corregir desde `/recepcion-satelite`, el aislamiento
+entre zonas **sobre un listado con contenido** (se midió sobre uno vacío), y ningún caso de
+`ayuda_tienda`.
+
+### Pendiente de decisión humana
+
+- **El texto «Del 23 al 24 de agosto»** se lee como **rango de dos días** en la mitad de los casos.
+  Lo agrava que la entrada de corrección es **la única sin la flecha `A → B`**: toda la carga cae en
+  la preposición, y **falta el verbo**. Es contrato en `design.md` §14.4; no se tocó.
+- **Los píxeles del cierre `8F88DCD5`** (264): requiere entrar a producción como usuario.
+
+### Lo que el paralelismo enseñó hoy
+
+Nueve agentes en worktrees aislados. Funcionan, **pero no aíslan la base local ni `node_modules`**:
+la migración de una feature pone rojo el gate de las demás y el de `dev` limpio, y `prisma generate`
+se pisa —el último gana y al otro le desaparecen sus tipos a mitad de su gate—. Y **tres informes de
+revisión se quedaron sin commitear** en el árbol principal: ninguna herramienta lo señala.
+
+---
+
+## 🌙 CIERRE DE TANDA — 2026-08-22 (tanda anterior, cerrada)
+
+`prod` = `465c5234` (release #458, desplegada y verificada, sin errores de runtime).
+`dev` = `651aef2a`, gate **completo** en verde: 1319 archivos, **17.793 tests**, `INIT_EXIT=0`.
+
+La suite pasó de **17.502 a 17.793** en el día — **291 tests nuevos**, y **ni uno borrado ni
+encogido**: verificado archivo por archivo en las cuatro ramas antes de mergear.
+
+### Dónde está cada ficha, de verdad
+
+| ficha | en `dev` | lo que falta |
+| --- | --- | --- |
+| **265** · el optimizador lee al proveedor | backend + frontend + cierre de bloqueantes | **11 menores** de la revisión, y la mitad de `F6` que sólo se puede ver en **preview** |
+| **262** · corregir el día de reparto | backend + los dos modales + cierre de B14 | 🔴 **el BLOQUE HISTORIAL: `R37`-`R45` sin un solo test**, `F6`, y **la revisión entera** |
+
+**La 262 está más lejos de cerrar de lo que su estado sugiere.** Su bloque historial —el alcance que
+la puerta humana añadió— no se ha empezado, y necesita backend y UI en la **misma** tanda porque su
+primera tarea rompe el build a propósito en un componente.
+
+### La revisión de la 265 rechazó, y encontró lo de siempre
+
+**B1 — un requisito que el mapa daba por probado y no lo estaba.** El test de `R8` montaba el
+escenario correcto pero **sólo afirmaba `status: ok`**. Cerrado y **medido en las dos direcciones**:
+con el test nuevo la mutación muere; con el test que había en `dev`, **sobrevive**. Eso es un hecho,
+no una promesa.
+
+**B2 — 43 tareas y ninguna marcada**, con la feature ya mergeada. Ahora **38 `[x]` · 5 `[ ]`**, cada
+viva con su motivo. Y al hacerlo apareció **C5**: H1 no tiene ficha, así que se dejó abierta en vez
+de marcarla — marcarla habría sido justo el fallo mudo que B2 persigue.
+
+### Pendiente de decisión humana
+
+1. **¿Se lanza el bloque historial de la 262?** Es la última tanda grande de esa ficha.
+2. **Ficha para H1** (`geocode_precision` se escribe y no lo lee nadie): **propuesta, no registrada**.
+   Sin ella, `C5` de la 265 no se puede cerrar.
+3. **`vercel env ls production`** para saber si la **251** ya está resuelta. Medido: el error de
+   credencial **no aparece desde el 2026-07-29** y hay 57 jobs `done` sin error, el último de hoy —
+   pero eso no distingue «la variable está» de «el código dejó de mirarla».
+4. **Ver el cierre `8F88DCD5` en pantalla** (264): los datos están verificados —4 órdenes, ₡14.900,
+   ₡2.000— pero **nadie ha mirado los píxeles**, y era una ficha visual.
+
+### Deuda barata que alguien debería tomar
+
+- **`lib/clients/google-route-optimization.ts:208` miente**: dice «se apaga con `RUTA_DEBUG_LOG=0`»,
+  caducado desde que el default se invirtió.
+- **`design.md` §10.2 de la 265** llama «el único sitio donde el `WHERE` real se mira» a un archivo
+  con Prisma **mockeado**.
+- Tres tests ajenos usan `getByRole("alert")` **en singular** (`RepartoModule.test.tsx:839, :1152,
+  :1463`): un caso futuro con «bloqueado + orden local» dará un *multiple elements* que no dice lo
+  que parece. **No es deuda de esta tanda**, ya se rompe hoy con «bloqueado + desactualizada».
+
+### Lo que el paralelismo enseñó, y hay que recordar
+
+Seis agentes en worktrees aislados **funcionaron**. Pero los worktrees **no aíslan la base local ni
+`node_modules`**, y eso mordió dos veces:
+
+1. **La migración de la 262 puso rojo el gate de la 265 — y el de `dev` limpio.** Un test que compara
+   los valores de un enum **en la base** contra una lista literal empieza a fallar en todas partes.
+   Se reprodujo en `dev` sin código de ninguna rama antes de culpar a nadie, y se resolvió mergeando
+   primero la rama que traía los censos actualizados.
+2. **`prisma generate` se pisa entre worktrees**: el cliente vive en el `node_modules` compartido, así
+   que el último gana y al otro le desaparecen sus tipos **a mitad de su propio gate**. Hay que
+   regenerar justo antes de cada corrida.
+
+⚠️ **Y un agente corrió `scripts/seed-usuarios-qa.ts` contra la base local** (el hash no cuadraba con
+el `QA_PASSWORD` del `.env`). Eso **rota las cuatro cuentas QA a la vez**. Si un login local deja de
+funcionar, es esto y no el código.
+
+---
+
+## ✅ PUERTA HUMANA PASADA (262 y 265) — 2026-08-22 (tanda anterior, cerrada)
+
+Las dos fichas pasan a **`spec_ready`**. **Las dos crecieron en la puerta**, y la 265 además cambió
+de zona.
+
+### 262 · corregir el día de reparto — las tres respondidas EN CONTRA del spec
+
+| | decisión | lo que arrastra |
+| --- | --- | --- |
+| **P1** | **Sí**, el rastro se ve en «Ver historial» | Una corrección de día **no tiene «estado destino»**: hay que decidir cómo se pinta una entrada sin transición en un DTO que hoy sólo sabe de transiciones |
+| **P2** | **Sí**, se avisa al mensajero | `NotificacionEvento` es un inventario cerrado (146/D1): **migración de enum**, y por tanto **gate `./init.sh` COMPLETO** |
+| **P3** | **«hoy / mañana»**, como al asignar | Lo único recomendado que se aceptó, y lo que mantiene que mover al pasado sea **imposible por construcción** |
+
+### 265 · el optimizador lee al proveedor — `backend` → **`fullstack`**
+
+- **P3 = sí** (el mensajero sabe que su ruta se ordenó en local) → **eso mete UI** y cambia la zona.
+- **P2**: `RUTA_ORIGEN_MAX_KM = 200`, **declarado sin base documental** como la 92 con
+  `RUTA_MAX_PARADAS = 100`, porque **M1 no se pudo medir**.
+- **P4**: apagar `RUTA_DEBUG_LOG` **ya**. ⚠️ **Se lleva por delante P1 y P5**: esa traza era la única
+  vía a la respuesta cruda del proveedor —los logs de Vercel expiran la consulta— así que el schema
+  se queda **defensivo** y **R7 se implementa tolerando que no haya códigos de motivo**.
+- **P6**: no hay que re-encolar nada. Son **6** jobs, todos de hoy.
+
+⚠️ **Y una tensión que se deja escrita:** el humano confirmó que **el origen de Medellín es una
+prueba suya**. Los ~1.040 km que motivan **R21** son un **artefacto de pruebas**, no evidencia de
+campo. R21 se implementa igual —deja de pagar una llamada condenada y da orden local en vez de error
+duro— pero **su umbral no está calibrado con producción**.
+
+### Lo que se midió, y las dos trampas que salieron
+
+| # | resultado |
+| --- | --- |
+| **265/M1** | **No medible hoy**: `ruta_optimizada_parada` **vacía** y **0** órdenes en `en_reparto` |
+| **265/M2** | **6** jobs `failed` de «forma inesperada», todos de hoy (04:07–05:26). **0** rutas `desactualizada` |
+| **265/M3** | 1 de 2 rutas con origen en Medellín, `origen_at` de hoy 22:56 — y es de un **mensajero real con 38 órdenes**, no de la cuenta QA |
+| **262/M1-M2** | 0 y 35, ya medidas a las 04:27 CR. Caducan antes de desplegar |
+
+1. **M3, como el spec la define, no habría visto nada**: filtra `origen_fuente = 'gps'` y las dos
+   rutas son `ultima_conocida`.
+2. **Un primer M1 devolvió «20.015,1 km» y era basura**: `LEAST`/`GREATEST` **ignoran los NULL**, así
+   que `acos(-1)` da la antípoda. Habría fijado el umbral de R21 sobre un fantasma.
+
+### Hallazgo suelto: la 251 parece resuelta y nadie la cerró
+
+«La optimización de ruta NO corre en producción: falta `GOOGLE_ROUTE_OPT_PROJECT_ID`». Ese error
+**no aparece desde el 2026-07-29**, y hay **57** jobs en `done` sin error, el último **hoy a las
+22:56**. No la cierro: falta comprobar que la variable existe de verdad en producción y no que el
+código dejó de mirarla.
+
+### Decidido aparte: no hay aviso que entregarle a Dropi
+
+El humano lo dijo el 2026-08-22: **están sólo haciendo pruebas**. Eso **cierra la pregunta abierta 5
+de la 268** (canal y plazo del aviso). La entrada de `docs/api/CHANGELOG.md` se queda como material
+de onboarding para cuando la integración sea real.
+
+---
+
+## ✅ RELEASE DESPLEGADA — 2026-08-22 (tanda anterior, cerrada)
+
+**`prod` = `465c5234`, desplegado y verificado READY**, sin errores de runtime. Salió por el PR
+**#458** y lleva la **256** (el evento de `devuelta` con su motivo tipificado), la **268** (el
+webhook del ciclo de ayuda y del incidente) y el papeleo de cierre de la **264**.
+
+Gate **completo** sobre `969c611c` antes de abrir la release: **1307 archivos, 17.502 tests, 26
+saltados, `INIT_EXIT=0`** leído dentro del log. Y se comprobó que `dev` no se había movido entre la
+medición y la release.
 
 ### La puerta que la bloqueaba, y cómo se descargó
 
@@ -74,6 +261,29 @@ era 265; los 266 y 267 no existen—. Las cinco quedan al día. **Ninguna ficha 
 
 Sigue pendiente, y es escritura de verdad: **`progress/history.md` no tiene entrada de la 255, la
 256, la 257 ni la 268.**
+
+### Y había tres fichas más, varadas fuera de `dev`
+
+El commit **`63dc081a`** —«chore(268): registra las fichas 266, 267 y 268 en la rama»— se empujó a
+`feature/268-webhook-ayuda-incidente` **después** de que el PR #456 ya estuviera mergeado, así que
+**nunca llegó a `dev`**. Apareció mirando los deployments de Vercel, no el repo.
+
+- **266** · habilitar un pedido con novedad por API key — pedido literal del humano, del bloque
+  NOVEDADES del **cuestionario de integración de Dropi**.
+- **267** · analítica de la propia tienda por API key — también de Dropi. Revierte a propósito una
+  decisión de diseño firmada (`ROLES_SIN_ANALITICA = ['apiKey']`).
+- **268** · su versión de la ficha, que chocaba con la registrada aquí.
+
+Las dos primeras se rescataron **tal cual**, sin reescribir el análisis ni el pedido del humano, y
+de la 268 varada se injertó lo único que la de aquí no tenía: el pedido que la originó. **Y dos
+avisos suyos ya no valen, porque la release de hoy los resolvió:** la dependencia de la 266 con la
+268 está satisfecha —`ORIGENES_SIN_EVENTO_PUBLICO` está **vacía** en `dev`, así que la familia del
+rescate ya emite— y el «coordinar con la rama `ux`» quedó sin objeto. Queda en pie afirmarlo con un
+test de emisión, no asumirlo.
+
+**Dropi no es un integrador dormido: está a mitad de integrarse.** Key creada el 2026-08-20, cero
+órdenes, y dos features suyas en la cola. Por eso el changelog tiene que llegarle antes de que
+conecte.
 
 ---
 

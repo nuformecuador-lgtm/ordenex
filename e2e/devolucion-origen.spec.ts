@@ -27,7 +27,7 @@ import { test, expect, type Page } from "@playwright/test";
  *    feature 49/R27): `/ordenes` (listado plano) → columna "Estatus" con el badge
  *    "Devuelta a origen"; fila con `aria-label="Ver historial de la orden <remisión>"`
  *    (HistorialOrdenSheet) → Sheet role="dialog" name="Historial de la orden
- *    <remisión>" cuya `<ol aria-label="Línea de tiempo de estados">` incluye un
+ *    <remisión>" cuya `<ol aria-label="Línea de tiempo de la orden">` incluye un
  *    `<li>` "Rechazada → Devuelta a origen".
  *
  * PRECONDITION (seed):
@@ -153,7 +153,7 @@ test.describe.serial("Devolución a la tienda de origen — rechazada → devolv
     await expect(dialog).toBeVisible();
 
     const timeline = dialog.getByRole("list", {
-      name: "Línea de tiempo de estados",
+      name: "Línea de tiempo de la orden",
     });
     await expect(timeline).toBeVisible();
     await expect(dialog.getByText(UUID_RE)).toHaveCount(0);

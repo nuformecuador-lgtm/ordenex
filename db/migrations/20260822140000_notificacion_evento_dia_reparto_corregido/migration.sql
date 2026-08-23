@@ -1,0 +1,42 @@
+-- Feature 262 (B17, D7, design §15.2 — P2 CERRADA «SI» POR LA PUERTA HUMANA EL 2026-08-22, en
+-- contra de la recomendacion del propio spec) — el aviso en la campana cuando a una orden asignada
+-- le corrigen el dia de reparto.
+--
+-- QUE ANADE, y son DOS valores en DOS enums distintos:
+--
+--   `notificacion_evento`       += 'dia_reparto_corregido'
+--   `notificacion_entidad_tipo` += 'orden_dia_reparto_cambio'
+--
+-- POR QUE TAMBIEN EL SEGUNDO, QUE ES LA PARTE QUE SE OLVIDA. `notificacion.entidad_tipo` es
+-- NOT NULL y discrimina a que tabla apunta `entidad_id` (referencia POLIMORFICA, sin FK, 146 §1.2).
+-- Los cinco valores vigentes son `orden`, `usuario`, `cierre_dia`, `carga` y `postulacion_recurso`,
+-- y NINGUNO describe una fila de `orden_dia_reparto_cambio`.
+--
+-- ⚠️ Y REUSAR `orden` NO ES UNA CUESTION DE ESTILO: ES EL HALLAZGO QUE DECIDE ESTE DISENO (A20).
+-- `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+-- destinatario_usuario_id)` con `NULLS NOT DISTINCT` y `WHERE entidad_id IS NOT NULL`
+-- (`20260727120000_notificacion/migration.sql:89-92`). Con `entidad_id = <ordenId>`, esa clave
+-- admite UNA sola fila por (evento, orden, mensajero) PARA SIEMPRE —ni siquiera despues de que el
+-- primer aviso se lea—, y `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`
+-- (`:116-118`): silencio absoluto. Es decir, la SEGUNDA correccion de la misma orden no avisaria
+-- NUNCA — y «mañana -> hoy sobre una orden que el mensajero ya lleva encima» es exactamente el caso
+-- que la puerta humana nombro, y es exactamente el que llega en segundo lugar.
+-- Con la ENTIDAD siendo la fila del RASTRO, cada correccion es una entidad distinta: la clave unica
+-- nunca colisiona y «dos correcciones, dos avisos» (R50) es una propiedad ESTRUCTURAL, no una
+-- esperanza. Emitir con `entidad_id = NULL` (A21) tambien apagaria la dedupe, pero por NULIDAD en
+-- vez de por clave, dejaria `entidad_tipo` apuntando a ninguna fila concreta y volveria inutil
+-- `notificacion_entidad_idx` para estas filas: media verdad con formato de dato.
+--
+-- POR QUE VA SOLA, SEPARADA DE LA MIGRACION DEL RASTRO Y CON TIMESTAMP POSTERIOR. Postgres NO
+-- permite USAR un valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y
+-- Prisma Migrate corre cada `migration.sql` en una. Aqui SOLO se anaden los valores; su primer uso
+-- ocurre en runtime (`emitirDiaRepartoCorregido`), en transacciones posteriores. Mismo precedente
+-- que la 253, la 240, la 237 y la 239. Y ademas la entidad `orden_dia_reparto_cambio` NOMBRA una
+-- tabla que la migracion anterior (`*_orden_dia_reparto_cambio`) crea: el orden entre las dos no es
+-- estetico.
+--
+-- ADITIVA: no altera ninguna tabla, no crea columnas, no toca RLS (`notificacion` conserva la suya
+-- de la 146). SIN BACKFILL: ninguna notificacion existente cambia de evento ni de entidad, y no hay
+-- nada que avisar hacia atras (la tabla del rastro nace vacia en la migracion anterior).
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'dia_reparto_corregido';
+ALTER TYPE "notificacion_entidad_tipo" ADD VALUE IF NOT EXISTS 'orden_dia_reparto_cambio';

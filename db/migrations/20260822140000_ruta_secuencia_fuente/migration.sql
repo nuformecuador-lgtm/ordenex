@@ -1,0 +1,46 @@
+-- Feature 265 (design §13.2, R35-R37) — LA PROCEDENCIA DEL ORDEN se persiste.
+--
+-- Que hace: anade UNA columna NULLABLE a `ruta_optimizada`. Nada mas.
+--
+-- POR QUE. Hasta ahora una ruta ordenada por el CALCULO LOCAL era indistinguible de una
+-- ordenada por el proveedor: la secuencia persistida es una lista de `ordenId` con su
+-- posicion, identica venga de donde venga (se comprobo campo a campo). Y el orden lo calcula
+-- tambien el CRON, que no le devuelve nada a nadie, sobre una pantalla que es server-driven y
+-- sin SWR: lo que no este persistido no existe en el primer render y muere en el primer F5.
+-- Sin esta columna, un orden aproximado se le presenta al mensajero como si fuera optimo —y
+-- con la traza de diagnostico apagada, tampoco queda rastro para la operacion—.
+--
+-- ADITIVA Y NO BLOQUEANTE: `ADD COLUMN` nullable y sin DEFAULT no reescribe la tabla en
+-- Postgres (solo toca el catalogo). No renombra, no borra, no reordena.
+--
+-- ⛔ SIN BACKFILL. Las rutas existentes se quedan en NULL, que es el estado correcto: NO SE
+-- PUEDE saber quien ordeno una secuencia ya persistida sin volver a pagar una llamada por
+-- mensajero para averiguar algo que ya no importa. NULL significa «no consta», y la pantalla
+-- no dice nada de esas rutas (R45) en vez de afirmar que vinieron del proveedor. Se curan
+-- solas en la siguiente sincronizacion.
+--
+-- ⛔ SIN CHECK del vocabulario. Mismo criterio que las cuatro columnas del trazado: la
+-- invariante la garantiza el repositorio, que es el UNICO escritor, y un CHECK solo romperia
+-- las filas historicas que el parrafo de arriba manda dejar en NULL.
+--
+-- RLS: NO hay tabla nueva -> NO hay superficie RLS nueva. `ruta_optimizada` tiene RLS
+-- habilitada SIN policies (solo service role) desde su migracion original, y anadir una
+-- columna no la toca.
+--
+-- PII: NINGUNA. El valor es una de dos palabras de nuestro vocabulario. No es una coordenada,
+-- no es un identificador y no dice nada de ningun destinatario.
+
+-- Quien ordeno la secuencia que hay en `ruta_optimizada_parada`: 'proveedor' (Google Cloud
+-- Route Optimization) o 'local' (vecino mas cercano sobre distancia de circulo maximo).
+-- NULL = no consta: ruta anterior a esta feature, o el caso trivial de 0 o 1 parada, donde no
+-- hubo ordenacion que atribuir.
+--
+-- TEXT y no enum, mismo criterio escrito que sus dos hermanas de esta misma tabla
+-- (`origen_fuente` y `trazado_fuente`): el vocabulario es nuestro y la columna la escribe un
+-- unico repositorio. Ademas evita la mina conocida de este repo — un enum nuevo obliga a
+-- revisar como lo recrean los `down.sql` anteriores.
+--
+-- Se llama `secuencia_fuente` y NO `orden_fuente`: en este repo `orden` es una ENTIDAD (la
+-- guia del destinatario), asi que `orden_fuente` se leeria como «de donde salio la orden»,
+-- que es otra cosa. `reemplazarSecuencia` ya llama «secuencia» a lo que esta columna califica.
+ALTER TABLE "ruta_optimizada" ADD COLUMN "secuencia_fuente" TEXT;

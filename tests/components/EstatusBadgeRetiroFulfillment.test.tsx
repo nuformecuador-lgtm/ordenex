@@ -92,6 +92,7 @@ describe("155/R41 — un value fuera del catalogo del build degrada al chip neut
     // La migracion de la 155 deja rastro `retirado -> en_preparacion` (R35) y NO reescribe
     // el historial previo (R36): esta fila es exactamente lo que el usuario ve despues.
     const entrada: OrdenHistorialEntradaDTO = {
+      clase: "transicion",
       estatusOrigenValue: RETIRADO,
       estatusDestinoValue: "en_preparacion",
       origenTipo: "ajuste_estado",
@@ -104,7 +105,7 @@ describe("155/R41 — un value fuera del catalogo del build degrada al chip neut
 
     // La vista se monta y la transicion es legible: origen crudo -> destino con etiqueta.
     expect(
-      screen.getByRole("list", { name: "Línea de tiempo de estados" }),
+      screen.getByRole("list", { name: "Línea de tiempo de la orden" }),
     ).toBeInTheDocument();
     expect(screen.getByText(RETIRADO)).toBeInTheDocument();
     expect(screen.getByText(ORDER_STATUS_LABELS.en_preparacion)).toBeInTheDocument();

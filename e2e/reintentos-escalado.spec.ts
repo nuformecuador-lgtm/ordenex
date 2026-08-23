@@ -35,7 +35,7 @@ import { test, expect, type Page } from "@playwright/test";
  *      · Feature 47: un badge role="status" aria-label="Intentos de entrega: 3 de 3"
  *        con el texto legible "Intento 3 de 3" (SÓLO si la orden lleva ≥1 devolución,
  *        R16).
- *      · Feature 49: una `<ol aria-label="Línea de tiempo de estados">` (role="list")
+ *      · Feature 49: una `<ol aria-label="Línea de tiempo de la orden">` (role="list")
  *        con un `<li>` (role="listitem") por transición ("Creación · <destino>" o
  *        "<origen> → <destino>"), timestamp, "Por <actor|Sistema>" y "Motivo: <…>".
  *  - El escalado (`devuelta → rechazada`) lo dispara el SISTEMA (actor NULL → se
@@ -292,7 +292,7 @@ test.describe.serial("Reintentos y escalado — 3 devoluciones → rechazada (R8
 
     // R16/R30 — línea de tiempo con etiquetas legibles, sin UUIDs.
     const timeline = dialog.getByRole("list", {
-      name: "Línea de tiempo de estados",
+      name: "Línea de tiempo de la orden",
     });
     await expect(timeline).toBeVisible();
     await expect(dialog.getByText(UUID_RE)).toHaveCount(0);

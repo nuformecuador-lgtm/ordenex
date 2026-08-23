@@ -96,6 +96,9 @@ const RUTA: RutaResumenDTO = {
   estado: "vigente",
   calculadaAt: null,
   origenFuente: "gps",
+  // Feature 265 (R45): `null` = no consta quien ordeno las paradas. Es lo que exige el tipo,
+  // no un test que fallara: sin marca, la pantalla no dice nada del orden.
+  secuenciaFuente: null,
   paradasSinOptimizar: 0,
   // Los dos campos de la feature 92 (trazado persistido y tramo vivo) nacieron en `ux`
   // mientras este archivo nacia en `dev`, asi que el merge lo dejo corto: textualmente no

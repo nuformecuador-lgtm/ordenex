@@ -3,19 +3,65 @@
 > Lee `requirements.md` y `design.md` antes. Cada task lleva su **criterio de hecho**; `[P]` = puede
 > ir en paralelo con las de su bloque que no dependan de ella.
 >
-> **Zona `backend`.** No hay bloque de frontend: ningún componente cambia. La única superficie que
-> se toca de la UI es **indirecta** —la Server Action deja de lanzar— y se verifica en **F6**.
+> ~~**Zona `backend`.** No hay bloque de frontend: ningún componente cambia.~~ ⏳ **Caducado el
+> 2026-08-22:** P3 se respondió **sí**, la zona es **`fullstack`** y hay **BLOQUE FRONTEND**
+> (`FE1`-`FE4`). Se secuencia **backend → frontend**: el aviso no se puede pintar antes de que exista
+> el dato que lo enciende.
 >
-> ⚠️ **El gate lo corre el leader, no el subagente.** `backend_dev` corre `pnpm typecheck`,
-> `pnpm lint` y `pnpm exec vitest related --run <sus archivos>`. Nada más.
+> ⚠️ **El gate lo corre el leader, no el subagente.** `backend_dev` y `frontend_dev` corren
+> `pnpm typecheck`, `pnpm lint` y `pnpm exec vitest related --run <sus archivos>`. Nada más.
 >
-> ⚠️ **`./init.sh --rapido` SE NIEGA en esta ficha**, por un solo archivo: `.env.example` está en la
-> lista de `docs/verification.md`. El gate **completo** es obligatorio antes del PR. Ver
-> `design.md` §10.1.
+> ⚠️ **`./init.sh --rapido` SE NIEGA en esta ficha, y ya no por un archivo sino por CUATRO:**
+> `db/migrations/**`, `db/schema.prisma`, **`lib/types/ruta-mensajero.ts`** y `.env.example` — las
+> cuatro están en la lista de `docs/verification.md:37-43`. **El gate de esta ficha es `./init.sh`
+> COMPLETO**, es un `fail` del propio gate (no un aviso que haya que recordar) y es criterio de
+> «hecho» de **C1**. Ver `design.md` §10.1.
+>
+> 📍 **Lee antes `design.md` §13-§16**: son las decisiones de la puerta humana del 2026-08-22 y de
+> ellas salen las tasks nuevas (**B18-B26**, **FE1-FE4**, **C7-C8**).
+
+---
+
+## ✅ Estado de las tasks — pasada del 2026-08-22 (bloqueante **B2** de `progress/review_265.md`)
+
+> Las **43** salieron del implementer en `[ ]`, con la feature ya implementada y mergeada en `dev`.
+> El archivo así **no distingue lo hecho de lo pendiente**, que es justo cómo se esconde deuda en una
+> ficha `in_progress`. Esta pasada lo corrige leyendo las dos bitácoras
+> (`progress/impl_265_backend.md`, `progress/impl_265_frontend.md`) y verificando en el árbol lo que
+> se podía verificar — **no a ojo**.
+>
+> **38 `[x]` · 5 `[ ]`.** Las cinco que siguen vivas, y por qué, en una línea cada una:
+>
+> | task | por qué sigue en `[ ]` | de quién es |
+> | --- | --- | --- |
+> | **B0.1** | ⛔ **No tomable, y se cierra así:** el log de Vercel no expande la respuesta cruda y **P4 apaga la traza**, que era la única vía. La apaga **esta misma release**, así que no reaparece. **P1 y P5 quedan abiertas**; el schema es defensivo y R7 tolerante (**R49**). No se sustituye por una deducción. | cerrada, nadie |
+> | **C3** | **Pre-despliegue.** M1 **no se pudo medir** el 2026-08-22 (`ruta_optimizada_parada` vacía) y el umbral quedó **declarado, no derivado**. Re-medir con filas antes de producción; si el máximo legítimo se acerca a 200 km, **se para y se pregunta**. | leader / release |
+> | **C5** | **H1 (calidad de la geocodificación) NO tiene ficha en `feature_list.json`** — verificado el 2026-08-22 con `grep` sobre el registro: cero coincidencias. **H2 sí está resuelto** (B0.3: cero `console.log` en `origin/dev`). Registrar fichas es del leader; el subagente no toca `feature_list.json`. | leader |
+> | **C7** | **No es código: es una variable de entorno en Vercel.** `RUTA_DEBUG_LOG=0` en Production (y Preview según **P7**), **por entorno, nunca en los dos a la vez**. ⏳ Queda **en gran parte superada**: el default del código ya se invirtió (nace apagada), así que poner la variable ya no hace falta para apagarla — lo que sigue vivo es **decidir P7** y comprobar cero líneas `optimizer***:` tras un despliegue. | leader / release |
+> | **C8** | **Post-despliegue.** Contar los `optimizacion_ruta` en `failed` **posteriores** al despliegue con el motivo de esta familia. Cero es la prueba de que el arreglo funcionó; cualquier otro número se investiga antes de cerrar la ficha. | leader / release |
+>
+> ⚠️ **Tres `[x]` llevan una divergencia declarada al lado** (marcada con ⏳ en su task): **B0.4**
+> (M1 volvió «no medible» — de ahí sale C3), **B16** (⏳ **2026-08-23: ya no son 30 ni 31, son 37**
+> — `M-ae` la añadió el cierre de B1, y `M-af`/`M-ag` (m3) y `M-ah`…`M-ak` (m7) el de los menores;
+> el número de esta línea caducaba cada vez que alguien añadía una, así que **manda `design.md`
+> §10.4**, no este renglón. Se corrieron **repartidas**
+> entre los dos bloques, y la revisión añadió una **31.ª**, `M-ae`) y **F6** (se hizo en **local**,
+> no en preview, y la mitad «no se llama al proveedor con ese origen» no se distingue sin
+> credencial). Un `[x]` con letra pequeña sigue siendo un `[x]`; lo que no puede pasar es que la
+> letra pequeña no esté escrita.
 
 ---
 
 ## BLOQUE 0 — Antes de escribir una línea
+
+> ⏳ **ESTADO DEL BLOQUE 0 TRAS LA PUERTA HUMANA (2026-08-22).** Tres de las cuatro cambian:
+>
+> | task | qué pasó |
+> | --- | --- |
+> | **B0.1** | ⛔ **NO SE PUEDE TOMAR, y se cierra así.** La consulta de logs de Vercel expira aunque se acote a un deployment y a 90 minutos, y **P4 apaga la traza**, que era la única vía a la respuesta cruda. **P1 y P5 quedan abiertas**; el schema se queda defensivo (§3.1) y **R7 se implementa tolerando que no haya códigos** (**R49**). No se sustituye por una deducción: eso sería inventar. |
+> | **B0.2** | **Sigue viva tal cual.** Es barata y el número escrito tiene que ser el verdadero. |
+> | **B0.3** | **Medido en el árbol de `dev`:** `grep console.log lib/clients/google-route-optimization.ts` → **0 coincidencias**; la línea 154 es hoy el `fetchImpl`. Falta sólo confirmarlo contra `origin/dev` **remoto** (el árbol local no prueba el remoto). **H2 no se abre aquí.** |
+> | **B0.4** | **Tomada por el leader.** M1 **no medible** (`ruta_optimizada_parada` vacía, 0 en `en_reparto`) → el umbral queda declarado, no derivado (**P2**, R47). M2 = **6** jobs `failed`, todos del mismo día → **P6 cerrada, no se re-encola nada**. M3 = 1 de 2 orígenes en Medellín, **prueba del propio humano**. Las dos trampas de medición están escritas en `requirements.md`. |
 
 - [ ] **B0.1 — ⚠️ La forma REAL de `skippedShipments` y `validationErrors`.** (sin dependencias)
   Sacar de los logs de runtime de Vercel una respuesta cruda **completa** de
@@ -25,8 +71,14 @@
   propósito, o pedir el objeto al humano. **No se deduce de memoria** (`CLAUDE.md`, regla 6).
   **Hecho:** el JSON completo pegado en `progress/impl_265_backend.md`, y una línea que diga si hay
   códigos de motivo citables (→ R7 se mantiene) o no (→ R7 se retira **con esta medición al lado**).
+  ⛔ **SIGUE EN `[ ]` Y ASÍ SE QUEDA (2026-08-22).** No es un olvido: **no se pudo tomar** y no se
+  va a poder. La consulta de logs de Vercel expira aunque se acote a un deployment y a 90 minutos, y
+  **P4 apaga la traza en esta misma release**, con lo que la única vía a la respuesta cruda
+  desaparece. **P1 y P5 quedan abiertas y declaradas** (`impl_265_backend.md` §7.5); el schema se
+  queda defensivo y **R7 tolerante** (**R49**). Marcarla `[x]` sería mentir; rellenarla de memoria
+  sería inventar (`CLAUDE.md`, regla 6).
 
-- [ ] **B0.2 `[P]` — Recalcular las dos distancias con la función del repo.** (sin dependencias)
+- [x] **B0.2 `[P]` — Recalcular las dos distancias con la función del repo.** (sin dependencias)
   Ejecutar `distanciaHaversineKm` (`lib/geo/polilinea.ts`) sobre las coordenadas del log:
   origen `6.3422343,-75.514335` vs. centroide de las 6 paradas, y parada `9.9029459,-83.6815776` vs.
   `9.9747225,-84.2068436`.
@@ -35,15 +87,25 @@
   que ser el verdadero**.
   **Hecho:** los dos números pegados con el snippet que los produjo, y `requirements.md` §2 y
   `design.md` §6.4 corregidos si difieren.
+  ✅ **Ejecutada el 2026-08-22** (la medición existía pero no estaba pegada en ninguna bitácora —
+  hallazgo **m1** de la revisión). Los **tres** números y **el snippet que los produce** están en
+  `progress/impl_265_backend.md` §8: origen → parada repetida **1.038,3712 km**, parada ↔ parada
+  **58,0813 km** y —el que de verdad usa la guarda **R16**— origen → **centroide 1.028,9960 km**.
+  Los ≈1.040 y ≈58 escritos en el spec **son correctos**; no hay nada que corregir.
 
-- [ ] **B0.3 `[P]` — ¿Sigue el `console.log` del token en `origin/dev`?** (sin dependencias)
+- [x] **B0.3 `[P]` — ¿Sigue el `console.log` del token en `origin/dev`?** (sin dependencias)
   `git fetch origin && git show origin/dev:lib/clients/google-route-optimization.ts | grep -n "console.log"`.
   Hay refs locales `hotfix/token-en-logs-optimizer` y `fix/token-en-logs-optimizer-dev`: puede estar
   ya arreglado y el árbol leído estar viejo.
   **Hecho:** respuesta escrita. Si **sigue estando**, se avisa al leader **antes** de tocar el
   archivo (es un hotfix de seguridad, no esta ficha, y dos manos en el mismo archivo colisionan).
+  ✅ **Respuesta: NO sigue estando.** Confirmado contra el **remoto** el 2026-08-22, que era lo que
+  faltaba (el árbol local no prueba el remoto):
+  `git fetch origin dev && git show origin/dev:lib/clients/google-route-optimization.ts | grep -n "console.log"`
+  → **cero coincidencias** (`exit=1`). El hotfix del token (**H2**) ya está en `dev`; no hay que
+  avisar a nadie ni tocar ese archivo por este motivo.
 
-- [ ] **B0.4 — M1, M2 y M3 contra producción, sólo lectura (MCP Supabase).** (sin dependencias)
+- [x] **B0.4 — M1, M2 y M3 contra producción, sólo lectura (MCP Supabase).** (sin dependencias)
   Las tres consultas de `requirements.md` § Mediciones. **M1 es la que fija el umbral** de
   `RUTA_ORIGEN_MAX_KM` y sustituye al 🧭 200 propuesto (**P2**).
   ⛔ Probablemente **bloqueada para el subagente**: `DATABASE_URL` de producción es *sensitive* y el
@@ -51,6 +113,12 @@
   para pegar** y las corre el leader.
   **Hecho:** los tres números pegados con su consulta y su hora. ⚠️ **Si el máximo legítimo de M1 se
   acerca a 200 km, el umbral se re-abre**: se para y se pregunta antes de fijarlo.
+  ⏳ **`[x]` CON LETRA PEQUEÑA:** la tomó el leader y los tres resultados están en
+  `requirements.md` § Mediciones — pero **M1 volvió «NO SE PUDO MEDIR»** (`ruta_optimizada_parada`
+  vacía, 0 órdenes en `en_reparto`). La task está **hecha**; lo que **no** quedó es el número que
+  debía derivar el umbral, y por eso el umbral es **declarado** (**P2**, **R47**) y **`C3` sigue
+  viva**. M2 = **6** jobs `failed` del mismo día (**P6**: no se re-encola nada). M3 = 1 de 2
+  orígenes en Medellín, y el humano confirmó que **era una prueba suya**.
 
 ---
 
@@ -58,14 +126,14 @@
 
 ### Contratos
 
-- [ ] **B1 — El desenlace nuevo.** (dep. ninguna)
+- [x] **B1 — El desenlace nuevo.** (dep. ninguna)
   `lib/interfaces/external/IRouteOptimizationClient.ts`: `OptimizarOutcome` gana
   `{ status: "sin_solucion"; detalle: string; servidas: number; enviadas: number }`, documentado con
   **por qué es un desenlace y no un error** (`design.md` §4).
   **Hecho:** `pnpm typecheck` se pone **rojo** en todos los `switch` que no lo tratan — ese rojo es
   el objetivo, no un accidente. Se anota la lista de archivos señalados.
 
-- [ ] **B2 `[P]` — El umbral, en la config.** (dep. ninguna)
+- [x] **B2 `[P]` — El umbral, en la config.** (dep. ninguna)
   `lib/config/route-optimization.ts`: `RUTA_ORIGEN_MAX_KM: number`, leído con
   `readPositiveInt("RUTA_ORIGEN_MAX_KM", 200)` 🧭 (o el valor que fije B0.4). Documentar en el
   campo **de dónde sale** el número y que es 🧭 mientras M1 no lo confirme.
@@ -76,7 +144,7 @@
 
 ### El cliente: leer lo que el proveedor dice
 
-- [ ] **B3 — El schema se amplía, defensivo.** (dep. B0.1, B1)
+- [x] **B3 — El schema se amplía, defensivo.** (dep. B0.1, B1)
   `google-route-optimization.ts`: `respuestaSchema` suma `skippedShipments`, `validationErrors` y
   `metrics.skippedMandatoryShipmentCount`, **todos opcionales** (`design.md` §3.1). Sin
   `.passthrough()` en la raíz. Con el comentario que explique la trampa proto3-json aplicada a estos
@@ -84,7 +152,7 @@
   **Hecho:** una respuesta **sana** sin ninguno de los tres campos sigue parseando (**R2**), y la
   del incidente parsea entera.
 
-- [ ] **B4 — `traducirSecuencia` deja de lanzar en UN caso.** (dep. B1, B3)
+- [x] **B4 — `traducirSecuencia` deja de lanzar en UN caso.** (dep. B1, B3)
   Cuando la secuencia es válida pero **no cubre todas** las paradas → devuelve
   `{ status: "sin_solucion", … }` con `servidas`/`enviadas` y el motivo real (**R4**, **R5**).
   Los **otros tres** `throw` (sin `routes`, índice fuera de rango, índice repetido) **no se tocan**.
@@ -92,13 +160,13 @@
   (**R7**). Nunca coordenadas, `ordenId`, índices ni texto libre (**R6**).
   **Hecho:** B10 en verde; M-c, M-d y M-e matan sus tests.
 
-- [ ] **B5 `[P]` — La traza dice lo que se leyó.** (dep. B3)
+- [x] **B5 `[P]` — La traza dice lo que se leyó.** (dep. B3)
   `optlog` con el conteo de saltadas y la **presencia** de `validationErrors`, también cuando la
   respuesta es utilizable (**R8**).
   **Hecho:** la línea existe y no imprime ni una coordenada fuera de las que la traza ya imprime por
   el override consentido.
 
-- [ ] **B6 — La premisa caducada, anexada.** (dep. B4)
+- [x] **B6 — La premisa caducada, anexada.** (dep. B4)
   El razonamiento de `traducirSecuencia` se conserva **verbatim** (**R27**) y debajo entra el bloque
   `⏳ FEATURE 265 (2026-08-22) — …` con sus **cinco piezas** (`design.md` §8): marcador, fecha,
   palabra de caducidad, motivo medido (`skippedMandatoryShipmentCount = 6`, origen en otro país) y
@@ -108,7 +176,7 @@
 
 ### El compuesto: degradar cuando toca
 
-- [ ] **B7 — `sin_solucion` → Haversine.** (dep. B1, B4)
+- [x] **B7 — `sin_solucion` → Haversine.** (dep. B1, B4)
   `fallback-route-optimization.ts`: rama nueva con su `optlog` (motivo **real**, no «forma
   inesperada») y su `logger.warn` agregado (**R12**). La regla «cualquier otro error se re-lanza»
   **no se toca** (**R14**) y el `RutaNoConfiguradoError` sigue igual (**R30**).
@@ -117,7 +185,7 @@
 
 ### El servicio: cortar antes de facturar, y no romper la pantalla
 
-- [ ] **B8 — La guarda de coherencia del origen.** (dep. B2)
+- [x] **B8 — La guarda de coherencia del origen.** (dep. B2)
   `OptimizacionRutaService`: extraer `centroide(paradas)` (la cuenta del escalón 3, **una sola
   aritmética**), y entre `resolverOrigen` y el cálculo de la huella comparar
   `distanciaHaversineKm(origen, centroide)` con `RUTA_ORIGEN_MAX_KM`. Si se pasa: origen ←
@@ -127,7 +195,7 @@
   **Hecho:** B12 en verde; M-j, M-k, M-l, M-m y M-n matan sus tests. El comentario del paso entra en
   la lista de guardas de coste de la cabecera del archivo, con su motivo.
 
-- [ ] **B9 — El fallo del proveedor deja de escaparse.** (dep. B1)
+- [x] **B9 — El fallo del proveedor deja de escaparse.** (dep. B1)
   `try/catch` alrededor de `client.optimizar`: `opterror`, `marcarDesactualizada` y
   `throw new RutaIntentoFallidoError(<motivo saneado>)` (**R24**, **R26**). El motivo sale del error
   **sólo** si es una de nuestras clases; ante un error de librería, texto fijo (`design.md` §7).
@@ -137,7 +205,7 @@
 
 ### Tests
 
-- [ ] **B10 — Tests del cliente.** (dep. B3, B4, B5)
+- [x] **B10 — Tests del cliente.** (dep. B3, B4, B5)
   `tests/unit/clients/google-route-optimization.test.ts` (**existe**):
   - **Fixture con la respuesta real del incidente** (`routes:[{}]`, 6 saltadas, `metrics`) →
     `sin_solucion` con `servidas: 0`, `enviadas: 6` y motivo que nombra las paradas saltadas.
@@ -149,7 +217,7 @@
   ⚠️ **El test de la línea 113** («no cubre todas → lanza») se **reescribe**, no se borra: ver B14.
   **Hecho:** verde, y las mutaciones M-a…M-e producen rojo **con nombre**.
 
-- [ ] **B11 `[P]` — Tests del compuesto.** (dep. B7)
+- [x] **B11 `[P]` — Tests del compuesto.** (dep. B7)
   `tests/unit/clients/fallback-route-optimization.test.ts` (**existe**):
   - `sin_solucion` → se llama a Haversine y la secuencia devuelta contiene **exactamente** los
     `ordenId` de entrada, **todos** (**R9**, **R10**).
@@ -158,7 +226,7 @@
   - `RutaNoConfiguradoError` sigue degradando con su motivo actual (**R30**).
   **Hecho:** verde; M-f, M-g y M-h lo matan.
 
-- [ ] **B12 `[P]` — Tests del servicio, con dobles.** (dep. B8, B9)
+- [x] **B12 `[P]` — Tests del servicio, con dobles.** (dep. B8, B9)
   `tests/unit/services/optimizacion-ruta-origen.test.ts` y `optimizacion-ruta-service.test.ts`
   (**los dos existen**):
   - Origen a 1.040 km del centroide → se llama al proveedor **con el centroide**, no con el origen
@@ -177,7 +245,7 @@
   - **R33:** las cinco guardas de coste siguen cortando en el mismo orden.
   **Hecho:** verde; M-i…M-p producen rojo con nombre.
 
-- [ ] **B13 `[P]` — Test del job y de la action.** (dep. B7, B9)
+- [x] **B13 `[P]` — Test del job y de la action.** (dep. B7, B9)
   - `tests/unit/services/…` del handler: al degradar, `crearOptimizacionRutaHandler` **no lanza**
     (**R13**).
   - `tests/unit/actions/…` de `sincronizarRuta`: con el servicio lanzando `RutaIntentoFallidoError`,
@@ -186,7 +254,7 @@
     aquí ese `throw` era **el defecto**.
   **Hecho:** verde; M-o los mata.
 
-- [ ] **B14 — ⚠️ El test que cambia de sentido, y su red de repuesto.** (dep. B10, B11, B12)
+- [x] **B14 — ⚠️ El test que cambia de sentido, y su red de repuesto.** (dep. B10, B11, B12)
   `google-route-optimization.test.ts:113` decía «no cubre todas → **lanza** (nunca se persiste
   parcial)». Ese test estaba **bien**: protegía una invariante que sigue viva. Lo que cambia es
   **cómo** se protege.
@@ -197,7 +265,7 @@
   **Hecho:** escrito en `progress/impl_265_backend.md` **qué aserción se movió y adónde**. Borrar un
   test junto con lo que protegía ya costó aquí una regresión en producción.
 
-- [ ] **B15 — La guardia de la premisa.** (dep. B6)
+- [x] **B15 — La guardia de la premisa.** (dep. B6)
   `tests/unit/guards/premisa-saltos-caducada.guardia.test.ts`, molde de
   `tests/unit/tablero-dia/d10-revertida.guardia.test.ts` y de `d5-revertida`. Tres cláusulas
   (`design.md` §8.1): (a) testigo **verbatim** del razonamiento que sobrevive; (b) las **cinco
@@ -207,27 +275,191 @@
   otro que no) y **normaliza espacios**. M-q y M-r la matan. ⛔ Una guardia que no pueda fallar nunca
   **no cuenta**: aquí ya pasó.
 
-- [ ] **B16 — Matar todo con mutaciones.** (dep. B10, B11, B12, B13, B15)
-  Las **dieciocho** de `design.md` §10.4 (M-a … M-r), una a una.
+- [x] **B16 — Matar todo con mutaciones.** (dep. B10, B11, B12, B13, B15, B23, B24, FE3)
+  Las **treinta** de `design.md` §10.4 (M-a … M-ad), una a una. ⚠️ Eran dieciocho antes de la puerta
+  humana; las **doce** nuevas (M-s … M-ad) cubren la columna, los dos avisos, el umbral y la traza
+  apagada. Las de UI se corren contra los tests de componente de **FE3**.
   **Hecho:** por cada una, el comando y la **salida real** (nombre del test que se puso rojo)
   pegados en `progress/impl_265_backend.md`. ⚠️ Si el arnés dice «todas mueren» sin mostrar una
   corrida por mutación, **no cuenta**: aquí ya reportó 9/9 dos veces sin ejecutar un test.
+  ⏳ **`[x]` CON LETRA PEQUEÑA:** las 30 se corrieron **repartidas entre los dos bloques** —25 en
+  `impl_265_backend.md` §5 y las cinco de UI (`M-v`…`M-z`, más una propia `M-v2`) en
+  `impl_265_frontend.md` §5, porque mutan la pantalla y sus tests no existían aún—. Y **son 31**: la
+  revisión encontró que **R8 no tenía mutación** y se añadió **`M-ae`**, corrida y pegada con su
+  salida real en `impl_265_backend.md` §8. Dos honestidades ya escritas allí y que siguen valiendo:
+  `M-a` mató un test que hubo que **escribir primero**, y `M-o` **no** mata ningún test de la action
+  (la action usa un doble del servicio y no puede ver su `try/catch`).
 
-- [ ] **B17 — No-regresión.** (dep. B4, B7, B8, B9)
+- [x] **B17 — No-regresión.** (dep. B4, B7, B8, B9)
   - `tests/unit/clients/haversine-route-optimization.test.ts` y
     `tests/unit/services/optimizacion-ruta-{service,origen,trazado,tramo-vivo,encolado}.test.ts`
     **en verde sin tocarlos**, o con el cambio justificado por escrito.
   - Se comprueba que **no** se envía `ordenId` al proveedor (**R31**) y que ningún mensaje de error
     nuevo cita token, URL ni coordenadas (**R32**).
-  - Se comprueba que el diff **no** toca `db/`, `lib/types/` ni ningún archivo con nombre de dinero
-    (**R34** y `design.md` §10.1).
+  - ~~Se comprueba que el diff **no** toca `db/`, `lib/types/` ni ningún archivo con nombre de
+    dinero (**R34** y `design.md` §10.1).~~ ⏳ **Caducado el 2026-08-22:** el diff **sí** toca `db/`
+    y `lib/types/` (P3). Lo que se comprueba ahora es: **ningún archivo con nombre de dinero**, y
+    **el gate completo** (C1) en vez del rápido.
   **Hecho:** los tres puntos verificados y escritos.
+
+---
+
+## BLOQUE BACKEND — LO QUE AÑADE LA PUERTA HUMANA (§13, §15, §16)
+
+> Va **después** de B1-B17 y **antes** del bloque frontend. Cada task dice de qué sección del diseño
+> sale.
+
+### La procedencia del orden se persiste (§13)
+
+- [x] **B18 — La columna y su migración.** (dep. ninguna)
+  `db/migrations/20260822140000_ruta_secuencia_fuente/migration.sql`:
+  `ALTER TABLE "ruta_optimizada" ADD COLUMN "secuencia_fuente" TEXT;` — **nullable, sin DEFAULT, sin
+  CHECK, sin backfill, sin RLS nueva** (`design.md` §13.2), con la cabecera de prosa que explique el
+  porqué y el vocabulario (`'proveedor' | 'local'`), al estilo de
+  `20260814120000_ruta_optimizada_trazado`.
+  `down.sql`: `ALTER TABLE "ruta_optimizada" DROP COLUMN "secuencia_fuente";`
+  `db/schema.prisma`: `secuenciaFuente String? @map("secuencia_fuente")` junto a `origenFuente`.
+  ⚠️ **El nombre del directorio NO debe contener `ruta_optimizada`**:
+  `tests/integration/db/ruta-optimizada-migracion.test.ts:14-23` resuelve por `^\d+_<nombre>$` y
+  lanza si hay más de una coincidencia.
+  **Hecho:** `pnpm run db:migrate` aplica en local; `prisma migrate status` limpio; y la lista de
+  «migraciones sin down.sql» que imprime `./init.sh` (paso 6) **no crece** — hoy ya trae las tres
+  `ruta_*` del 2026-08-14, que **NO se tocan** (editar una migración aplicada es *drift*).
+
+- [x] **B19 `[P]` — El repositorio escribe y lee la procedencia.** (dep. B18)
+  `IRutaOptimizadaRepository`: `ReemplazarSecuenciaMeta.secuenciaFuente: "proveedor" | "local" | null`
+  y `RutaOptimizadaDTO.secuenciaFuente`. La unión se **espeja** como literal —el repo no importa de
+  `lib/interfaces/services/`, ver `:45-49`—.
+  `RutaOptimizadaRepository.reemplazarSecuencia`: la columna entra en el objeto `cabecera`, en la
+  **misma transacción** (`:135-153`). `marcarDesactualizada` **no la toca** y eso es deliberado
+  (`design.md` §13.3).
+  **Hecho:** B23 en verde; M-s y M-t matan sus tests.
+
+- [x] **B20 — El desenlace `ok` dice de dónde viene.** (dep. B1)
+  `IRouteOptimizationClient`: `SecuenciaFuente = "proveedor" | "local"` y `{ status: "ok"; secuencia;
+  fuente: SecuenciaFuente }` — **requerido, no opcional** (`design.md` §13.3, con el porqué).
+  Google → `"proveedor"`; Haversine → `"local"` siempre; el compuesto **propaga** lo que recibe, no
+  supone.
+  **Hecho:** `pnpm typecheck` señala en rojo cada productor que no se pronuncia; se anota la lista.
+
+- [x] **B21 — El servicio transporta la procedencia hasta la fila.** (dep. B19, B20)
+  `OptimizacionRutaService`: `outcome.fuente` → `reemplazarSecuencia`. En la rama trivial de 0/1
+  parada, **`null`**: no hubo ordenación (**R37**). El servicio **no decide** la procedencia.
+  **Hecho:** B23 en verde; M-s y M-u matan sus tests.
+
+- [x] **B22 — La procedencia llega a los dos bordes de lectura.** (dep. B21)
+  - `IOptimizacionRutaService`: `EjecutarOptimizacionResult.ok` gana `secuenciaFuente`.
+  - **`lib/types/ruta-mensajero.ts`**: `SincronizarRutaResult` rama `ok` gana
+    `secuenciaFuente: "proveedor" | "local" | null` (`null` cuando fue `omitida`). ⚠️ **Este archivo
+    es el que niega el gate rápido**; está asumido (`design.md` §10.1).
+  - `lib/actions/ruta-mensajero.ts`: lo reenvía.
+  - `IMisAsignacionesService.RutaResumenDTO` + `MisAsignacionesService`: `secuenciaFuente:
+    ruta?.secuenciaFuente ?? null`, al lado de `origenFuente` (`:346-354`).
+  **Hecho:** `pnpm typecheck` verde tras actualizar los **5** fixtures `RutaResumenDTO` de
+  `tests/components/` (`RepartoModule`, `RepartoAyuda`, `RepartoAyudaResueltaPorLaTienda`,
+  `MarcarLuegoToggle`, `GestionarOrdenPanelHilo`) — que salgan señalados **es el objetivo**, no un
+  estorbo.
+
+- [x] **B23 — Tests de la persistencia.** (dep. B18, B19, B21, B22)
+  - **Estático de migración**, molde de `tests/integration/db/ruta-optimizada-migracion.test.ts`:
+    la columna es TEXT y nullable, no hay backfill ni CHECK, y **existe `down.sql`** que la dropea.
+  - **Integración de repositorio** (`tests/integration/repositories/ruta-optimizada-repo.test.ts`,
+    **existe**): se escribe `local`, se lee `local`; se recalcula con `proveedor` y la marca
+    **cambia** (**R36**); `marcarDesactualizada` **no** la altera.
+    ⚠️ Es el único sitio donde el `UPDATE` real se mira: un doble no ve la columna.
+  - **Servicio con dobles**: se afirma el **argumento** de `reemplazarSecuencia` en los tres casos
+    (proveedor, local, rama trivial → `null`).
+  - **Compuesto**: degradar por `sin_solucion` **y** degradar por credencial ausente producen los dos
+    `fuente: "local"` (**R44**).
+  **Hecho:** verde; M-s, M-t y M-u producen rojo **con nombre**.
+  ⛔ **Un test de integración que sale verde sin datos no cuenta**: si la fixture no crea la ruta, el
+  test reporta `passed` sin comprobar nada. Se mata con una mutación antes de creerlo.
+
+### El umbral y la traza (§15, §16)
+
+- [x] **B24 — El umbral, en un solo sitio y declarado sin calibrar.** (dep. B2)
+  `lib/config/route-optimization.ts`: el comentario de contrato de `RUTA_ORIGEN_MAX_KM` lleva las
+  **cuatro piezas** de `design.md` §15.2 (marcador 🧭/`PROPUESTO`, «no calibrado con datos de
+  producción», fecha `2026-08-22` + motivo «M1 no se pudo medir; el caso de ≈1.040 km es una prueba
+  del propio humano», y el puntero `specs/265-optimizador-lee-al-proveedor`).
+  Guardia nueva `tests/unit/guards/umbral-origen-declarado.guardia.test.ts`: (a) las cuatro piezas
+  están y el fallo dice **cuál** falta; (b) el literal del default **no aparece** en ningún otro
+  módulo de `lib/`, `app/` o `components/` (**R46**).
+  **Hecho:** cada detector es una **función pura con autocomprobación** (un texto/árbol que infringe
+  y otro que no) y normaliza espacios. M-aa y M-ab la matan. ⛔ Una guardia que no puede fallar nunca
+  no cuenta.
+
+- [x] **B25 `[P]` — `.env.example` y la traza.** (dep. B2)
+  Documentar **los NOMBRES** (ese archivo nunca lleva valores): `RUTA_ORIGEN_MAX_KM` con su unidad
+  (km), su default y la nota de que es provisional; y **`RUTA_DEBUG_LOG`**, con lo que enciende y la
+  advertencia de que vuelca coordenadas de entrega al log — molde de `WHATSAPP_DEBUG_LOG` (`:13-15`).
+  ⚠️ Tocar `.env.example` niega el gate rápido; ya está asumido.
+  **Hecho:** las dos entradas escritas, sin ningún valor.
+  ⏳ **2026-08-23 — la frase «`RUTA_DEBUG_LOG` deja claro que se apaga con `0`» está CADUCADA.**
+  P7 cerró invirtiendo el default en el código: hoy la traza **nace apagada** y la variable sirve
+  para **encenderla** (`RUTA_DEBUG_LOG=1`). Lo que `.env.example` debe dejar claro es eso.
+  Es la misma frase que el barrido de `m5` corrigió en el cliente; aquí quedaba una copia.
+
+- [x] **B26 — Nada depende de la traza.** (dep. B4, B7, B8, B9, B21)
+  Test explícito de que el **motivo** de la degradación y la **procedencia** persistida se producen
+  igual con `RUTA_DEBUG_LOG=0` (**R48**), y de que un motivo **sin códigos de motivo** sigue
+  nombrando causa y conteos, sin `undefined` ni huecos (**R49**).
+  **Hecho:** verde; M-ac y M-ad los matan. Nota: `tests/setup/jest-dom.ts:28` ya pone la traza a `0`
+  para toda la suite, así que esto le pone **nombre** a una propiedad que hoy se cumple por accidente
+  del setup.
+
+---
+
+## BLOQUE FRONTEND — el mensajero se entera (§14)
+
+> **No arranca hasta que B22 esté hecha**: sin el campo en `RutaResumenDTO` y en
+> `SincronizarRutaResult` no hay nada que pintar. `frontend_dev` **no toca** `lib/`, `db/` ni las
+> actions.
+
+- [x] **FE1 — El aviso persistente.** (dep. B22)
+  `app/(app)/mis-asignaciones/_components/RepartoModule.tsx`: `Alert` con `variant="default"`
+  —**no `destructive`**: no es un error— hermano del aviso de ruta desactualizada (`:667-676`),
+  **fuera del acordeón del mapa** (`design.md` §14.1). Se muestra si y sólo si
+  `ruta.secuenciaFuente === "local"`.
+  Texto exacto de `design.md` §14.2:
+  **«El orden de las paradas es aproximado»** / «Lo calculamos en la app, por cercanía en línea
+  recta: no toma en cuenta calles ni tráfico. Revísalo antes de salir.»
+  **Hecho:** FE3 en verde; M-v y M-x matan sus tests. El aviso del **punto de partida** (`:707-712`)
+  queda **intacto** y puede verse a la vez (**R43**).
+
+- [x] **FE2 `[P]` — El toast deja de decir una media verdad.** (dep. B22)
+  `SincronizarRutaButton.tsx:82-85`: con `secuenciaFuente === "local"`, en vez de
+  «Ruta sincronizada.» va `toast.warning("Ruta ordenada de forma aproximada: revisa el orden de las
+  paradas.")`. El resto del `switch` **no se toca** (`conflict`, `forbidden`, `unauthenticated`,
+  `validation_error` siguen igual).
+  **Hecho:** FE3 en verde; M-y lo mata.
+
+- [x] **FE3 — Tests de componente.** (dep. FE1, FE2)
+  `tests/components/RepartoModule.test.tsx` (**existe**, con su fixture `RUTA_VIGENTE` en `:184-191`):
+  - `secuenciaFuente: "local"` → el aviso está; `"proveedor"` → **no** está; `null` → **no** está
+    (**R38**, **R45**).
+  - **Las tres señales a la vez**: origen `centroide` + trazado `local` + orden `local` → los **tres**
+    textos presentes y distintos (**R43**).
+  - **Saneo del texto, sobre el DOM renderizado** (no sobre una constante): no aparece
+    `/degrad|fallback|haversine|proveedor|optimizador/i` (**R41**) ni ninguna coordenada, dirección,
+    guía o id (**R42**).
+  - El botón: con orden local el toast **no** dice «Ruta sincronizada.» (**R39**).
+  ⚠️ **Aserción contra su propia fuente = siempre verde.** El texto se afirma **literal** en el test,
+  no importando la constante del componente.
+  **Hecho:** verde; M-v, M-w, M-x, M-y y M-z producen rojo con nombre.
+
+- [x] **FE4 — No-regresión de la pantalla.** (dep. FE1, FE2)
+  `tests/components/RepartoAyuda.test.tsx`, `RepartoAyudaResueltaPorLaTienda.test.tsx`,
+  `MarcarLuegoToggle.test.tsx`, `GestionarOrdenPanelHilo.test.tsx` y `MisAsignacionesPage.test.tsx`
+  **en verde**, con el único cambio de haber añadido el campo nuevo a sus fixtures.
+  **Hecho:** verde, y escrito qué fixture se tocó y por qué (que es «el tipo lo exige», no «el test
+  fallaba»).
 
 ---
 
 ## BLOQUE VERIFICACIÓN
 
-- [ ] **F6 — ⚠️ Ver la app.** (dep. todo el bloque backend)
+- [x] **F6 — ⚠️ Ver la app.** (dep. todo el bloque backend **y** el frontend)
   **No hay harness E2E ejecutable en este repo; ésta es su sustituta y no es opcional.** En preview,
   con una cuenta de **mensajero** de QA:
   1. `/mis-asignaciones/reparto` con al menos dos paradas asignadas → pulsar **sincronizar ruta**.
@@ -236,33 +468,113 @@
   2. Repetir **negando el permiso de geolocalización** → sigue funcionando (escalón `centroide`).
   3. Reproducir el caso del incidente en preview: dejar un origen incoherente persistido (o
      capturarlo con el navegador falseando la posición a otro país) y sincronizar → **la ruta sale
-     ordenada igual**, y en los logs se ve la línea de la guarda del origen y **no** la de la
-     llamada facturada con ese origen.
-  4. **Leer los logs de runtime de preview** (`optimizer***:`) y confirmar: aparece el motivo real de
-     la degradación, **no** «forma inesperada»; y no aparece ninguna coordenada en un mensaje de
-     error.
-  **Hecho:** capturas o transcripción en `progress/impl_265_backend.md`, con las cuatro
-  comprobaciones nombradas una a una. En este repo, mirar la app encontró **siete** textos rotos que
-  doce mil tests daban por buenos.
+     ordenada igual**, y **no** se llama al proveedor con ese origen.
+  4. **El mensajero se entera** (§14): con la ruta ordenada en local se ve el aviso
+     «El orden de las paradas es aproximado», el toast **no** dice «Ruta sincronizada.» a secas, y
+     tras un **F5 el aviso sigue ahí**. Con la ruta ordenada por el proveedor, **no** hay aviso.
+  5. **El origen aproximado y el orden aproximado se ven a la vez y se leen distintos** (**R43**).
+  ⏳ **Lo que ya NO se hace así (P4).** La versión anterior de esta task mandaba «leer los logs de
+  runtime de preview (`optimizer***:`)». Con la traza apagada esa evidencia puede no existir, así
+  que **la verificación no depende de ella**: los puntos 3, 4 y 5 se comprueban **en la pantalla**, y
+  el punto 3 se confirma además con una consulta de **sólo lectura**:
+  `select mensajero_id, estado, origen_fuente, secuencia_fuente, calculada_at from ruta_optimizada
+  where mensajero_id = '<qa>';` → `secuencia_fuente = 'local'`.
+  Leer el log sigue valiendo **si** la traza sigue encendida en preview (**P7**), pero es un extra.
+  **Hecho:** capturas o transcripción en `progress/impl_265_frontend.md`, con las **cinco**
+  comprobaciones nombradas una a una y la salida de la consulta pegada. En este repo, mirar la app
+  encontró **siete** textos rotos que doce mil tests daban por buenos.
+  ⏳ **`[x]` CON LETRA PEQUEÑA:** hecha, con las **cinco** comprobaciones transcritas en
+  `impl_265_frontend.md` §6 — pero **en LOCAL, no en preview** (desde ese bloque no había
+  despliegue). Los puntos **1, 2, 4 y 5** quedan cerrados con evidencia pegada, incluida la consulta
+  de sólo lectura devolviendo `origen_fuente = centroide` y `secuencia_fuente = local`. Del punto
+  **3** falta la mitad «y **no** se llama al proveedor con ese origen»: **en local no se distingue**,
+  porque sin credencial no se llama al proveedor nunca. Esa mitad **sí** está cubierta por unitario
+  (`optimizacion-ruta-origen.test.ts` afirma el **argumento** de `client.optimizar`). **Repetir en
+  preview antes de la release.**
 
 ---
 
 ## CIERRE
 
-- [ ] **C1 — `./init.sh` COMPLETO en verde.** No hay modo rápido en esta ficha (`.env.example`).
+- [x] **C1 — `./init.sh` COMPLETO en verde.** No hay modo rápido en esta ficha, y ahora por **cuatro**
+  razones: `db/migrations/**`, `db/schema.prisma`, `lib/types/ruta-mensajero.ts` y `.env.example`.
   **Hecho:** salida pegada, con `INIT_EXIT=$?` **escrito dentro del log** — un `echo` posterior ya
-  tapó aquí un gate rojo haciéndolo pasar por «exit code 0».
-- [ ] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR: otra sesión puede haberlo movido, y
+  tapó aquí un gate rojo haciéndolo pasar por «exit code 0». Y la línea del paso 6 («migraciones sin
+  down.sql») **no menciona** la migración nueva.
+  ✅ **Verde en TRES corridas independientes**, todas con `INIT_EXIT=0` dentro del log: el bloque
+  frontend (`impl_265_frontend.md` §6.2), el reviewer (`review_265.md` §1) y la rama de la revisión
+  (`impl_265_backend.md` §8.5) — esta última con **1319 archivos · 17.793 verdes · 26 saltados · 99
+  warnings, 0 errores**, exactamente los mismos números que midió el reviewer, porque el arreglo de
+  **B1 no añade ningún test**: le pone dientes a uno que ya existía. La lista del paso 6 **no crece**
+  (las tres `ruta_*` del 2026-08-14 y nada más). ⚠️ El del bloque backend salió `INIT_EXIT=1` por
+  **dos rojos de la base local compartida** con la 262, y **se curaron solos al mergear la 262**, tal
+  como esa bitácora predijo.
+- [x] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR: otra sesión puede haberlo movido, y
   el hotfix del token (**B0.3**) toca el mismo archivo.
-- [ ] **C3 — B0.4 (M1/M2/M3) hecha y escrita** antes de desplegar a producción, y el umbral fijado
-  con ese número delante en vez del 🧭 200.
-- [ ] **C4 — Las preguntas abiertas, respondidas o escaladas.** P1 la cierra B0.1. P2 la cierra
-  B0.4. **P3, P4, P5 y P6 las decide el humano** y no se rellenan con un supuesto.
-- [ ] **C5 — Los hallazgos aparte, registrados.** **H1** (calidad de la geocodificación: nadie lee
+  ✅ Hecho **dos veces**: por el bloque frontend contra `c9e0e056` (`impl_265_frontend.md` §6.2) y
+  otra vez el 2026-08-22 en la rama de la revisión, `fix/265-bloqueantes-revision`, contra
+  `origin/dev` en **`96940710`** (`impl_265_backend.md` §8). El pre-vuelo **caduca**: quien abra el
+  PR vuelve a comparar el SHA medido con `origin/dev` justo antes.
+- [ ] **C3 — Re-medir M1 antes de desplegar a producción**, con `ruta_optimizada_parada` ya con
+  filas. ⚠️ **El 2026-08-22 M1 NO se pudo medir** (tabla vacía, 0 órdenes en `en_reparto`) y por eso
+  el umbral se queda **declarado, no derivado** (**P2**, **R47**). Si al re-medir el máximo legítimo
+  se acerca a 200 km, **se para y se pregunta** antes de fijarlo. La consulta debe evitar la trampa
+  medida: `LEAST`/`GREATEST` **ignoran los NULL** y devuelven la antípoda.
+  ⛔ **SIGUE EN `[ ]`: es PRE-DESPLIEGUE y todavía no toca.** Nada de esta ficha la cierra, y el
+  umbral **no está calibrado** — su guardia sólo garantiza que eso siga **escrito**, no que el
+  número sea bueno. Es del leader / de la release.
+- [x] **C4 — Las preguntas abiertas, respondidas o escaladas.**
+  **Cerradas por el humano el 2026-08-22:** **P2** (umbral declarado), **P3** (sí, el mensajero lo
+  sabe), **P4** (apagar la traza ya), **P6** (no se re-encola nada).
+  **Siguen ABIERTAS y no se rellenan con un supuesto:** **P1** y **P5** (se quedaron sin vía al
+  apagar la traza; el schema es defensivo y R7 es tolerante), **P7** (¿la traza también apagada en
+  preview?) y **P8** (¿los avisos agregados deben llegar a algún canal?).
+- [x] **C5 — Los hallazgos aparte, registrados.** ✅ **CERRADA el 2026-08-23: H1 ya tiene ficha, es la 270** (`geocode_precision` se escribe y no lo lee nadie), registrada por el leader con la medición de la 265 que le da urgencia —cinco de las seis paradas de una ruta compartían coordenada exacta—. La mitad de H2 ya estaba resuelta. Lo de abajo es la foto de cuando **no** existía, y se conserva. **H1** (calidad de la geocodificación: nadie lee
   `geocode_precision`) merece su ficha. **H2** (token en el log) es un **hotfix**, no una ficha, y
   puede estar ya en marcha (B0.3). Los registra el leader; aquí sólo se comprueba que **existen**.
-- [ ] **C6 — Verificar el blob commiteado**, no sólo el árbol: `git show <sha>:specs/265-…` para los
+  ⛔ **SIGUE EN `[ ]`, y aquí está la mitad medida (2026-08-22):**
+  - **H2 → resuelto.** `git show origin/dev:lib/clients/google-route-optimization.ts | grep -n "console.log"`
+    → **cero coincidencias**. El hotfix ya está en `dev` (es la respuesta de **B0.3**).
+  - **H1 → NO tiene ficha.** `grep` sobre `feature_list.json` buscando la calidad de la
+    geocodificación / `geocode_precision` como ficha propia → **cero**. Los ids vivos alrededor son
+    265, 266, 267, 268 y 269, y ninguno es H1.
+  **Registrar la ficha es del leader**: el subagente **no toca `feature_list.json`**. Se deja en
+  `[ ]` para que la deuda se vea, no marcada por cortesía.
+- [x] **C6 — Verificar el blob commiteado**, no sólo el árbol: `git show <sha>:specs/265-…` para los
   tres archivos. Otra sesión ya reseteó una rama aquí.
+  ✅ Verificado el 2026-08-22 sobre el commit de esta rama, con los tres archivos leídos **desde el
+  blob** (`git show <sha>:specs/265-…`) y no desde el árbol de trabajo. Salida en
+  `impl_265_backend.md` §8. Se repite en cada commit que toque el spec: el árbol no distingue «lo
+  commiteé» de «alguien lo revirtió».
+- [ ] **C7 — ⚠️ Apagar `RUTA_DEBUG_LOG` (P4).** Decisión del humano, y **no es código**: es una
+  variable de entorno. `RUTA_DEBUG_LOG=0` en **Production** (y en Preview según responda **P7**),
+  fijada **por entorno, nunca en los dos a la vez** — en este repo una variable puesta a la vez en
+  Production y Preview ya apuntó al proyecto equivocado en uno de los dos.
+  ⚠️ **Coste asumido, escrito para que nadie lo descubra después:** se pierde la respuesta cruda del
+  proveedor, y con ella **P1 y P5** se quedan sin cerrar (`design.md` §16.2).
+  **Hecho:** la variable puesta, un despliegue posterior y **cero** líneas `optimizer***:` en los
+  logs de runtime de ese entorno. El valor por defecto del código **no se toca** (eso es P7).
+  ⛔ **SIGUE EN `[ ]`, y con dos correcciones que hay que leer antes de tomarla:**
+  1. **La última frase de arriba está CADUCADA.** El default del código **sí se tocó**, y estaba
+     autorizado: la segunda puerta de `requirements.md` cerró **P7** como «se **INVIERTE EL DEFAULT
+     EN EL CÓDIGO**». Hoy la traza **nace apagada** y se enciende con `RUTA_DEBUG_LOG=1`. La
+     desactualizada es esta task; lo correcto es el código. Hallazgo **m6** de la revisión.
+     ✅ **`design.md` §1 y §16.1 ya están corregidos** (2026-08-23, rama `fix/265-menores-revision`):
+     arrastraban la misma frase vieja y hoy dicen que P7 se cerró invirtiendo el default.
+  2. **Por eso la task queda en gran parte SUPERADA:** poner `RUTA_DEBUG_LOG=0` en un entorno **ya
+     no hace falta** para apagar la traza. Lo que sigue vivo es comprobar **cero** líneas
+     `optimizer***:` tras un despliegue, y **no** dejar la variable puesta a `1` en ningún entorno.
+  Si alguien la pone, va **por entorno, nunca en Production y Preview a la vez**. Es del leader.
+- [ ] **C8 — Después de desplegar: que no nazcan jobs nuevos con el error viejo.** M2 dejó **6** en
+  `failed`, todos del mismo día, y **P6 cerró que no se re-encola nada**: el flujo normal (recoger →
+  gestionar → sincronizar) los vuelve a encolar solo.
+  **Hecho:** contar los `optimizacion_ruta` en `failed` **posteriores al despliegue** con el motivo
+  de esta familia. Cero es la prueba de que el arreglo funcionó; cualquier otro número se investiga
+  antes de cerrar la ficha.
+  ⛔ **SIGUE EN `[ ]`: es POST-DESPLIEGUE y no hay despliegue todavía.** No se puede marcar sin el
+  número, y el número no existe aún. Es la única comprobación de que el arreglo funcionó **en
+  producción**, que es donde ocurrió el incidente: ninguna de las 17.000 pruebas verdes la
+  sustituye. Es del leader / de la release.
 
 ---
 
@@ -276,7 +588,7 @@
 | R4 | El motivo nombra las paradas saltadas | B10 · M-d |
 | R5 | El motivo lleva conteos | B10 |
 | R6 | El motivo no filtra nada | B10 (saneo) · M-e |
-| R7 | Códigos de motivo, si existen | B10 — **condicionado a B0.1**; si no existen, se retira con la medición escrita |
+| R7 | Códigos de motivo, si existen | B10 — ⏳ **B0.1 ya no se puede tomar** (P4 se llevó la traza): se implementa **tolerante** y su caso «no hay ninguno» es **R49** / **B26** |
 | R8 | La traza lo dice aunque la respuesta sirva | B5 · B10 |
 | R9 | «No cubre todas» → orden local | **B11** · B10 |
 | R10 | Nunca una secuencia parcial persistida | **B11** (cubre todas) · **B12** (sin compuesto, no persiste) |
@@ -303,4 +615,19 @@
 | R31 | No se envía `ordenId` | B17 · B10 (cuerpo de la petición) |
 | R32 | Nada de token, URL ni coordenadas en errores | B10 (saneo) · B17 |
 | R33 | Las cinco guardas de coste, intactas | B12 · B17 |
-| R34 | Sin migración | B17 (el diff no toca `db/`) |
+| R34 | Sin migración | ⏳ **Supersedida en parte por P3.** Lo que queda vivo —sin tabla nueva, sin RLS nueva, **sin backfill**— lo comprueba **B23** (estático de migración) |
+| R35 | La procedencia del orden se persiste y se puede consultar | **B23** (repo real + estático de migración) · B21 · M-s |
+| R36 | La marca es la de ESA secuencia, no la anterior | **B23** (recalcular cambia la marca) · M-t |
+| R37 | Sin secuencia que ordenar, no se afirma procedencia | B23 (rama trivial → `null`) · M-u |
+| R38 | Aviso visible desde el primer render | **FE3** · M-v |
+| R39 | El toast dice la verdad | **FE3** (botón) · B22 (la action lo devuelve) · M-y |
+| R40 | El texto dice qué pasa y qué hacer | FE3 (aserción literal sobre el DOM) |
+| R41 | Sin jerga ni siglas | FE3 (`/degrad\|fallback\|haversine\|proveedor\|optimizador/i` ausente) · M-z |
+| R42 | Sin coordenadas, direcciones, guías ni ids | FE3 · M-z |
+| R43 | Las tres señales conviven y siguen distintas | **FE3** (origen `centroide` + trazado `local` + orden `local`) · M-x |
+| R44 | La falta de credencial también avisa | **B23** (el compuesto marca `local`) · FE3 · M-w |
+| R45 | Sin dato, no se dice nada | FE3 (`null` → sin aviso) · M-v |
+| R46 | El umbral vive en un solo sitio | **B24** (guardia de barrido) · M-aa |
+| R47 | Declarado sin calibrar, con guardia | **B24** (las cuatro piezas) · M-ab · C3 |
+| R48 | Nada depende de la traza | **B26** + toda la suite (`jest-dom.ts:28` la apaga) · M-ac |
+| R49 | Sin códigos, el motivo sigue completo | **B26** · B10 · M-ad |

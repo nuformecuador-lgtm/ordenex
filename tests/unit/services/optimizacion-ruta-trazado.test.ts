@@ -34,6 +34,9 @@ const CONFIG: RouteOptimizationConfig = {
   RUTA_ORIGEN_TTL_MIN: 120,
   RUTA_SYNC_MIN_INTERVALO_S: 10,
   RUTA_MAX_PARADAS: 100,
+  // Feature 265: umbral de coherencia del origen. 200 km es el default del codigo; los tests
+  // que ejercitan la guarda lo bajan por `config` para no depender de el.
+  RUTA_ORIGEN_MAX_KM: 200,
   ROUTES_ROUTING_PREFERENCE: "TRAFFIC_UNAWARE",
 };
 
@@ -56,7 +59,10 @@ function montar(routes: IRoutesClient | null, secuencia = ["o-2", "o-1"]) {
   const paradasRepo = {
     findParadasEnReparto: async () => [parada("o-1", 9.94, -84.08), parada("o-2", 9.95, -84.07)],
   };
-  const client = { optimizar: async () => ({ status: "ok" as const, secuencia }) };
+  // Feature 265: `fuente` es REQUERIDA en el desenlace `ok`. Aqui el doble hace de proveedor.
+  const client = {
+    optimizar: async () => ({ status: "ok" as const, secuencia, fuente: "proveedor" as const }),
+  };
   const service = new OptimizacionRutaService(
     rutas,
     paradasRepo,
@@ -83,9 +89,13 @@ describe("trazado enchufado", () => {
     const { service } = montar(routes);
     const res = await service.ejecutar("m-1", { motivo: "manual" });
 
+    // Feature 265: el desenlace `ok` del servicio crece con `secuenciaFuente`. El doble del
+    // cliente de este archivo hace de proveedor, asi que aqui vale `proveedor`. Se afirma
+    // LITERAL a proposito: es el contrato que sube hasta el toast del mensajero.
     expect(res).toEqual({
       status: "ok",
       paradas: 2,
+      secuenciaFuente: "proveedor",
       trazado: {
         encodedPolyline: POLILINEA,
         distanciaM: 5400,

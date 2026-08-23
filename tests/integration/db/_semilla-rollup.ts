@@ -4,6 +4,7 @@ import type { GestionCausaDevolucion, GestionResultado, OrdenHistorialOrigenTipo
 import { AnaliticaRollupRepository } from "@/lib/repositories/AnaliticaRollupRepository";
 import { AnaliticaRollupService } from "@/lib/services/AnaliticaRollupService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import type { IAnaliticaRollupService } from "@/lib/interfaces/services/IAnaliticaRollupService";
@@ -376,6 +377,7 @@ export function crearServicio(tx: TxDeTest): IAnaliticaRollupService {
     new OrdenHistorialService(
       new OrdenRepository(prismaDelHistorial),
       new OrdenHistorialRepository(prismaDelHistorial),
+      new OrdenDiaRepartoCambioRepository(prismaDelHistorial),
     ),
     { now: () => new Date(), logger: { warn: () => {} } },
   );

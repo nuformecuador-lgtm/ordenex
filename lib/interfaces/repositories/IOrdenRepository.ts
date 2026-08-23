@@ -285,6 +285,63 @@ export interface OrdenTransicionRow {
    * de test de las features 138/139, y el repo SIEMPRE lo emite.
    */
   mensajeroAsignadoId?: string | null;
+  /**
+   * FEATURE 262 (B3, design §8) — dia de reparto de la orden. `null` = no esta reservada para un
+   * dia que aun no ha llegado (orden anterior a la 246, o sin mensajero).
+   *
+   * ⚠️ OBLIGATORIO, SIN `?`, Y ES DELIBERADO. El patron aditivo `?` de los campos de arriba existe
+   * para no romper fixtures; aqui romperlos es lo que se BUSCA. Este campo es insumo de una GUARDA
+   * (R5: «sin dia no hay correccion», R7: «ya es de ese dia»), y un fixture que se olvidara de
+   * emitirlo dejaria la guarda evaluando `undefined` — es decir, apagada, en silencio y en verde.
+   * Que el build senale uno a uno a todos los que lo construyen es el mecanismo, no un accidente.
+   * Mismo criterio que 261/B1.
+   */
+  fechaReparto: Date | null;
+}
+
+// --- Feature 262: correccion del dia de reparto de un lote ya asignado ---
+
+/**
+ * Feature 262 (design §15.5) — UNA orden efectivamente corregida, con lo que el AVISO al mensajero
+ * necesita para poder emitirse fuera de la transaccion (D7).
+ *
+ * Sale del `RETURNING` del `UPDATE` guardado, asi que describe EXACTAMENTE las filas que ganaron la
+ * guarda: ni una de mas —porque el lote se aborta entero si alguna pierde— ni una de menos (R22).
+ */
+export interface CorreccionDiaAplicada {
+  ordenId: string;
+  /** Fila de `orden_dia_reparto_cambio`: LA ENTIDAD del aviso (design §15.3, mata A20). */
+  cambioId: string;
+  /** NOT NULL por el `WHERE` (`mensajero_asignado_id IS NOT NULL`): sin mensajero no se corrige. */
+  mensajeroAsignadoId: string;
+  /** Para el anexo del aviso: la guia si existe, y si no la remision (patron del rechazo). */
+  numGuia: number | null;
+  numRemision: string;
+  /** El dia que la fila tenia EN EL INSTANTE DE LA ESCRITURA (R24), no el que se leyo al abrir. */
+  fechaAnterior: Date;
+  fechaNueva: Date;
+}
+
+/**
+ * Feature 262 (design §6.1, R8/R9) — al menos una orden del lote NO gano la guarda de escritura
+ * (estado / mensajero / dia presente / dia distinto / no borrada / zona). Se LANZA dentro de la
+ * `$transaction` para revertirla ENTERA: todo-o-nada REAL, mismo criterio que la 149 y por el mismo
+ * motivo — quien selecciona 20 ordenes y lee «se corrigieron 17» no sabe cuales tres faltan ni por
+ * que (A13).
+ *
+ * El `throw` va ANTES de escribir el rastro, asi que un lote abortado no deja NI UNA fila en
+ * `orden_dia_reparto_cambio` (R22).
+ *
+ * `ordenIdsNoCorregidas` NO se pinta como texto en la UI: sirve para que el service re-lea esas
+ * ordenes y componga el `detalle` por orden con motivos tipados (patron `detalleCarrera` de la 149).
+ */
+export class CorreccionDiaConflictoError extends Error {
+  constructor(public readonly ordenIdsNoCorregidas: readonly string[]) {
+    super(
+      `correccion de dia de reparto: ${ordenIdsNoCorregidas.length} orden(es) del lote no se corrigieron`,
+    );
+    this.name = "CorreccionDiaConflictoError";
+  }
 }
 
 /**
@@ -489,6 +546,14 @@ export interface RecepcionSateliteRow {
   // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
   // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
   prioridad: boolean;
+  /**
+   * Feature 262 (B8, R16): dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO. `null` = sin
+   * dia. Lo consume la pantalla de correccion del listado satelite, que necesita el MISMO dato que
+   * la de `/ordenes` — el `adminSatelite` es una de las dos bodegas que ELIGEN el dia al asignar
+   * (D1), asi que tiene que poder ver cual eligio antes de corregirlo. Nunca un `Date`: el
+   * navegador no construye fechas (R17).
+   */
+  fechaRepartoISO: string | null;
 }
 
 /**
@@ -1365,6 +1430,54 @@ export interface IOrdenRepository {
     historial: HistorialContexto & { motivo: string },
     zonaId: string | null,
   ): Promise<number>;
+
+  // --- Feature 262: corregir el dia de reparto de un lote YA asignado (R1/R8/R9/R20-R24) ---
+
+  /**
+   * Feature 262 (design §6.1) — CORRIGE el dia de reparto de un lote de ordenes ya asignadas, en
+   * UNA transaccion y sin tocar NADA MAS: ni el estado, ni el mensajero, ni la guia, ni
+   * `asignado_at` (R1/R27).
+   *
+   * Tres pasos dentro de la misma `$transaction`:
+   *
+   *  1. `SELECT "id","fecha_reparto" ... ORDER BY "id" FOR UPDATE` — foto Y BLOQUEO del dia
+   *     anterior. El `FOR UPDATE` es lo que impide que esa foto quede rancia entre el SELECT y el
+   *     UPDATE (R24): un rastro que afirma un `fecha_anterior` que ya no era es peor que no tener
+   *     rastro. El `ORDER BY "id"` da un orden de bloqueo determinista entre dos lotes que se
+   *     solapen.
+   *  2. `UPDATE` GUARDADO con las cinco guardas (estado admitido / mensajero presente / dia
+   *     presente / dia DISTINTO del elegido / no borrada) + `zona_id` cuando `zonaId` no es null
+   *     (adminSatelite: defensa en profundidad anti-TOCTOU, patron `deshacerAsignacionLote`), y
+   *     `RETURNING` de lo que el aviso necesita. El `SET` es EXACTAMENTE
+   *     `{fecha_reparto, updated_at}` — esa huella es la que vigila la guardia de la invariante
+   *     (`fecha-reparto-acompana-asignado-at.guardia.test.ts`, clausula d2): si alguien le suma
+   *     `mensajero_asignado_id` o `estatus_id`, la guardia se pone ROJA, que es justo lo que debe
+   *     pasar porque eso ya no seria una correccion de dia.
+   *  3. TODO-O-NADA (R8): si el numero de filas devueltas no es `ordenIds.length`, LANZA
+   *     `CorreccionDiaConflictoError` y la tx revierte ENTERA. El `throw` va ANTES del rastro.
+   *  4. El RASTRO, en la MISMA tx y sobre EXACTAMENTE las que ganaron (R22), via el choke point
+   *     `registrarCambioDiaReparto`.
+   *
+   * `fecha` llega YA RESUELTA por el service (`resolverFechaReparto(dia, now)`): un solo sitio que
+   * sabe traducir «hoy/mañana» (doctrina de `lib/utils/dia-reparto.ts`). El repo NO lee ningun
+   * reloj. Y entra al SQL como TEXTO `YYYY-MM-DD` con `::date` explicito (`fechaRepartoComoTexto`),
+   * nunca como `Date`: con un `Date`, el driver `pg` lo serializa como `timestamptz` y Postgres lo
+   * convierte a `date` con el `TimeZone` DE LA SESION — el dia dependeria de la configuracion del
+   * servidor de base de datos.
+   *
+   * Devuelve una `CorreccionDiaAplicada` por orden corregida (siempre `ordenIds.length`, por el
+   * todo-o-nada). El AVISO al mensajero NO se emite aqui: se emite FUERA de la transaccion y
+   * best-effort (design §15.5, A22) — dentro, un error de sentencia abortaria la tx y un aviso
+   * caido REVERTIRIA una correccion legitima, devolviendo la orden al estado inalcanzable del que
+   * esta ficha existe para sacarla.
+   */
+  corregirDiaRepartoLote(
+    ordenIds: readonly string[],
+    fecha: Date,
+    estatusIds: readonly string[],
+    zonaId: string | null,
+    ctx: { actorUsuarioId: string; motivo: string },
+  ): Promise<CorreccionDiaAplicada[]>;
 
   // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17/R23) ---
 

@@ -6,7 +6,8 @@
 // trabajando. Este archivo NUNCA emite coordenadas, direccion ni credencial por el logger
 // ni por un mensaje de error, y no usa `console.*`.
 //
-// ═══ LAS CUATRO GUARDAS DE COSTE SON LO IMPORTANTE DE ESTE ARCHIVO ═══
+// ═══ LAS CINCO GUARDAS DE COSTE SON LO IMPORTANTE DE ESTE ARCHIVO ═══
+// (decia «CUATRO» y siempre listo CINCO; corregido con el cierre de menores de la 265)
 // Cada llamada a `optimizeTours` se FACTURA. El orden de los pasos esta elegido para que
 // las guardas mas baratas corten antes que las caras:
 //
@@ -15,14 +16,30 @@
 //   R35  0 o 1 parada con coordenadas                                    -> 0 llamadas
 //        (con 1 parada SI se pide el trazado, que es otro SKU; ver la rama)
 //   R38  mas de RUTA_MAX_PARADAS -> se recorta, no se paga por el exceso
+//   ★    265/R16: origen incoherente con las paradas -> se SUSTITUYE por el centroide
+//        No corta la llamada: la ARREGLA. Con el origen a mil kilometros del racimo de
+//        paradas el modelo es irresoluble y lo unico seguro de esa llamada es que se paga.
+//        Va ANTES de la huella (265/R20) porque la huella debe describir el origen que
+//        REALMENTE se envia; si no, la guarda de «sin cambios» cortaria por lo que no fue.
 //   R36  mismo conjunto de paradas y mismo origen que la ultima vez      -> 0 llamadas
+//
+// ⚠️ ESTE ORDEN YA NO VIVE SOLO EN ESTE COMENTARIO. 265/R33 exige que las guardas corten
+// «exactamente igual Y EN EL MISMO ORDEN», y hasta el cierre de menores de la 265 lo unico
+// que lo sostenia era este parrafo — un comentario no se pone rojo. Lo fija ahora
+// `tests/unit/services/optimizacion-ruta-service.test.ts`, describe «265/R33 — las guardas
+// cortan EN ESTE ORDEN»: monta casos donde DOS guardas cortarian a la vez y afirma cual gana.
+// Si reordenas algo de esta lista, ese describe te lo dice; los tests de cada guarda por
+// separado, NO (medido: reordenar R20 y R34 mata 1 test de 40).
 //
 // ═══ ANTE FALLO DEL PROVEEDOR SE CONSERVA EL ULTIMO ORDEN VALIDO (R27) ═══
 // Decision explicita del humano. NUNCA se borra la secuencia previa y NUNCA se cae en
 // silencio a `createdAt desc`: la ruta se marca `desactualizada` (lo que alimenta el aviso
 // de la UI) y se LANZA para que la cola aplique su backoff.
 import { createHash } from "node:crypto";
-import type { IRouteOptimizationClient } from "@/lib/interfaces/external/IRouteOptimizationClient";
+import type {
+  IRouteOptimizationClient,
+  OptimizarOutcome,
+} from "@/lib/interfaces/external/IRouteOptimizationClient";
 import type {
   IRutaOptimizadaRepository,
   OrigenFuente,
@@ -38,7 +55,7 @@ import type {
   TrazadoTramo,
   TrazarTramoVivoResult,
 } from "@/lib/interfaces/services/IOptimizacionRutaService";
-import { codificarPolilinea, distanciaTotalM } from "@/lib/geo/polilinea";
+import { codificarPolilinea, distanciaHaversineKm, distanciaTotalM } from "@/lib/geo/polilinea";
 import { optlog, opterror } from "@/lib/logging/optimizer-log";
 import type { IRoutesClient } from "@/lib/interfaces/external/IRoutesClient";
 
@@ -51,6 +68,24 @@ export interface ParadasRepo {
 export interface RutaLogger {
   warn(message: string): void;
 }
+/**
+ * ⚠️ ESTE `warn` NO LLEGA A NADIE EN PRODUCCION, Y ESTA ASI A PROPOSITO.
+ *
+ * Es un no-op, y la UNICA construccion real del servicio (`buildOptimizacionRutaService`,
+ * `lib/services/jobs/optimizacion-ruta-handler.ts`) pasa `undefined` en esta posicion, asi que
+ * los avisos AGREGADOS de 265/R19 y R30 —«paradas recortadas al tope», «origen descartado por
+ * incoherencia geografica»— se emiten contra este objeto vacio. LIMITE DECLARADO 5 de la ficha
+ * 265 (`design.md` §14.3), cerrado asi por la puerta humana P8: la operacion se entera de que
+ * una ruta se ordeno en local consultando `ruta_optimizada.secuencia_fuente`, que es un dato
+ * persistido, no un log que expira. Su hermano vive en `lib/clients/fallback-route-optimization.ts`,
+ * con la misma nota.
+ *
+ * ⚠️ Consecuencia practica, para que nadie la descubra tarde: **no cuelgues nada de estos
+ * `warn`**. Escribirlos no es avisar, y leer el codigo puede dar la impresion contraria — que
+ * es justo por lo que la revision de la 265 lo anoto (menor **m11**). Si algun dia hacen falta
+ * de verdad, se inyecta un logger real en `buildOptimizacionRutaService`; el hueco ya esta
+ * abierto en el constructor y no hace falta tocar el servicio.
+ */
 const defaultLogger: RutaLogger = { warn: () => {} };
 
 /** El proveedor fallo (transitorio o config invalida). La cola aplica su backoff. */
@@ -62,11 +97,55 @@ export class RutaIntentoFallidoError extends Error {
 }
 
 /**
+ * Feature 265 (R24, R32, design §7) — errores NUESTROS cuyos mensajes ya estan saneados POR
+ * CONTRATO: citan la operacion y el estado, nunca el token, la URL ni una coordenada.
+ *
+ * ⚠️ SE COMPARA POR `name` Y NO CON `instanceof` A PROPOSITO. Un `instanceof` obligaria a este
+ * servicio a importar `lib/clients/google-route-optimization`, es decir a conocer el proveedor
+ * concreto — que es justo lo que `IRouteOptimizationClient` aisla (docs/architecture.md §2).
+ * Cada una de estas clases fija su `this.name` explicitamente.
+ */
+const ERRORES_SANEADOS: readonly string[] = [
+  "RutaRespuestaInvalidaError",
+  "RutaPeticionRechazadaError",
+  "RutaNoConfiguradoError",
+  "RutaTokenError",
+];
+
+/** Motivo de una excepcion del cliente, SIN filtrar nada (R32). */
+const MOTIVO_EXCEPCION_GENERICO = "optimizar ruta: el proveedor no respondio correctamente";
+
+export function motivoDeExcepcion(error: unknown): string {
+  // Ante un error de LIBRERIA se usa texto fijo: `error.message` de `google-auth-library` o de
+  // `fetch` puede traer la peticion completa colgada, y ahi es donde viven las cabeceras con el
+  // Bearer. Es la misma trampa que `opterror` ya documenta.
+  if (!(error instanceof Error) || !ERRORES_SANEADOS.includes(error.name)) {
+    return MOTIVO_EXCEPCION_GENERICO;
+  }
+  return error.message;
+}
+
+/**
  * Redondeo del origen para la huella de R36. 4 decimales ≈ 11 m: mas fino haria que el
  * jitter del GPS parado en un semaforo invalidara la huella y disparara una llamada
  * facturada por cada lectura. Mas grueso perderia cambios de calle reales.
  */
 const ORIGEN_DECIMALES = 4;
+
+/**
+ * Centroide aritmetico de las paradas. UNA sola aritmetica para los DOS consumidores —el
+ * escalon 3 de `resolverOrigen` y la guarda de coherencia de la 265—: dos cuentas del mismo
+ * punto es exactamente el genero de divergencia que este repo ya ha pagado antes.
+ *
+ * ⚠️ Con `paradas` vacio devuelve NaN. Es correcto que reviente ahi y no que invente un
+ * punto: la guarda R35 (0 o 1 parada) corta antes de que se pueda llamar sin paradas.
+ */
+function centroide(paradas: { latitud: number; longitud: number }[]): { lat: number; lng: number } {
+  return {
+    lat: paradas.reduce((s, p) => s + p.latitud, 0) / paradas.length,
+    lng: paradas.reduce((s, p) => s + p.longitud, 0) / paradas.length,
+  };
+}
 
 export class OptimizacionRutaService implements IOptimizacionRutaService {
   constructor(
@@ -178,6 +257,10 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
         calculadaAt: ahora,
         origen,
         huellaSet,
+        // Feature 265 (R37): con 0 o 1 parada NO HUBO ORDENACION, asi que no hay procedencia
+        // que afirmar. `null` es «no consta», y afirmar `proveedor` aqui seria mentir sobre
+        // un calculo que nadie hizo.
+        secuenciaFuente: null,
       });
 
       // El trazado SI se factura (Routes es su propio SKU). Se reusa el criterio de R36
@@ -225,7 +308,11 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
       );
     }
 
-    const origen = this.resolverOrigen(ruta, paradas, ahora);
+    // ── 265/R16-R23: coherencia del origen ────────────────────────────────────────
+    // Va DESPUES de resolver el origen (necesita uno ya resuelto) y DESPUES del recorte del
+    // tope (el centroide debe calcularse sobre las paradas que DE VERDAD se envian), y ANTES
+    // de la huella (R20): el origen que entra en la huella tiene que ser el que se envia.
+    const origen = this.origenCoherente(this.resolverOrigen(ruta, paradas, ahora), paradas);
 
     // ── R36: huella del conjunto + origen ─────────────────────────────────────────
     // Si nada cambio desde la ultima optimizacion valida, el resultado seria identico:
@@ -262,28 +349,62 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
     optlog("service — ninguna guarda corto: se LLAMA al proveedor (esto se factura)", {
       paradas: paradas.length,
     });
-    const outcome = await this.client.optimizar({
-      origen: { lat: origen.lat, lng: origen.lng },
-      paradas: paradas.map((p) => ({ ordenId: p.ordenId, lat: p.latitud, lng: p.longitud })),
-    });
+    // ⚠️ Feature 265 (R24-R26, design §7) — EL `try` NO ES DECORACION, ES EL DEFECTO MEDIDO.
+    // Sin el, una EXCEPCION del cliente (respuesta con forma invalida, HTTP 400, fallo del
+    // proveedor de token) atravesaba el servicio SIN pasar por `marcarDesactualizada` y
+    // llegaba cruda al borde, que la convertia en «AppErrorCode inesperado INTERNAL»: pantalla
+    // rota, 6 veces sobre 2 usuarios en produccion. Ahora cualquier excepcion recibe el MISMO
+    // trato que los desenlaces de fallo: se conserva el orden previo, se marca desactualizada
+    // y se lanza el fallo TIPADO —que la cola sigue viendo como excepcion (R26)—.
+    let outcome: OptimizarOutcome;
+    try {
+      outcome = await this.client.optimizar({
+        origen: { lat: origen.lat, lng: origen.lng },
+        paradas: paradas.map((p) => ({ ordenId: p.ordenId, lat: p.latitud, lng: p.longitud })),
+      });
+    } catch (error) {
+      opterror("service — el proveedor LANZO; se conserva el orden previo (R27)", error);
+      const motivo = motivoDeExcepcion(error);
+      await this.rutas.marcarDesactualizada(mensajeroId, motivo);
+      throw new RutaIntentoFallidoError(motivo);
+    }
 
     if (outcome.status === "ok") {
       await this.rutas.reemplazarSecuencia(mensajeroId, outcome.secuencia, {
         calculadaAt: ahora,
         origen,
         huellaSet,
+        // Feature 265 (R35/R36): el servicio TRANSPORTA la procedencia, no la decide. Va en
+        // la misma escritura que la secuencia que describe, asi que nunca puede quedar una
+        // marca vieja pegada a un orden nuevo.
+        secuenciaFuente: outcome.fuente,
       });
       optlog("service — SALIDA: ok, secuencia persistida", {
         secuencia: outcome.secuencia,
         paradas: outcome.secuencia.length,
+        secuenciaFuente: outcome.fuente,
       });
       const trazado = await this.trazar(outcome.secuencia, paradas, origen);
       await this.persistirTrazado(mensajeroId, huellaSet, trazado);
       return {
         status: "ok",
         paradas: outcome.secuencia.length,
+        secuenciaFuente: outcome.fuente,
         ...(trazado !== null ? { trazado } : {}),
       };
+    }
+
+    // ── 265/§5.3: `sin_solucion` SIN COMPUESTO = defensa en profundidad ────────────
+    // En produccion esto no deberia llegar aqui: `FallbackRouteOptimizationClient` lo
+    // intercepta y ordena en local. Pero si alguien cablea el cliente de Google SIN el
+    // compuesto (los tests lo hacen), el trato es el de un fallo del proveedor: se conserva el
+    // orden previo, se marca desactualizada y se lanza. NUNCA se persiste parcial, NUNCA se
+    // cae en silencio.
+    if (outcome.status === "sin_solucion") {
+      this.logger.warn(
+        `[optimizacion_ruta] el proveedor no sirvio todas las paradas (${outcome.servidas} de ` +
+          `${outcome.enviadas}) y no hay calculo local cableado: se conserva el orden previo`,
+      );
     }
 
     // R27: fallo del proveedor. NO se tocan las paradas — el ultimo orden valido queda
@@ -561,10 +682,52 @@ export class OptimizacionRutaService implements IOptimizacionRutaService {
         fuente: vigente && ruta.origenFuente === "gps" ? "gps" : "ultima_conocida",
       };
     }
-    // Escalon 3: centroide aritmetico de las paradas.
-    const lat = paradas.reduce((s, p) => s + p.latitud, 0) / paradas.length;
-    const lng = paradas.reduce((s, p) => s + p.longitud, 0) / paradas.length;
-    return { lat, lng, fuente: "centroide" };
+    // Escalon 3: centroide aritmetico de las paradas (la cuenta vive en `centroide`).
+    return { ...centroide(paradas), fuente: "centroide" };
+  }
+
+  /**
+   * Feature 265 (R16-R23, design §6) — ¿EL ORIGEN GUARDA RELACION CON LAS PARADAS?
+   *
+   * Medida: distancia de circulo maximo entre el origen y el centroide de las paradas que de
+   * verdad se van a enviar. Por encima de `RUTA_ORIGEN_MAX_KM` el origen se DESCARTA y se baja
+   * al escalon 3 de la escalera que la 92 ya diseño (gps -> ultima_conocida -> centroide).
+   *
+   * ═══ POR QUE SE SUSTITUYE Y NO SE CORTA EL TRABAJO (R23, alternativa A7) ═══
+   * Lo que esta roto es el punto de PARTIDA, no las paradas. Un mensajero con seis entregas
+   * tiene una ruta razonable entre ellas aunque no sepamos desde donde arranca; cortar el job
+   * le deja sin ninguna y reintroduce el bucle de reintentos que la 265 vino a cerrar.
+   *
+   * TRES PROPIEDADES QUE HAY QUE CONSERVAR SI ESTO SE TOCA:
+   *  · NO aplica cuando el origen YA es el centroide (R18): seria comparar un punto consigo
+   *    mismo —siempre 0— y ademas garantiza que la sustitucion no puede entrar en bucle.
+   *  · NO mira el TTL. Frescura y coherencia son cosas distintas: el origen del incidente era
+   *    `gps` RECIENTE y estaba en otro pais. Un TTL vencido ya tiene su propio tratamiento.
+   *  · ES PURA Y GRATIS (R22): dos sumas y una raiz sobre datos ya cargados. Cero llamadas
+   *    facturadas, cero lecturas de base.
+   */
+  private origenCoherente(
+    origen: { lat: number; lng: number; fuente: OrigenFuente },
+    paradas: { latitud: number; longitud: number }[],
+  ): { lat: number; lng: number; fuente: OrigenFuente } {
+    if (origen.fuente === "centroide") return origen;
+    const centro = centroide(paradas);
+    const km = distanciaHaversineKm(origen, centro);
+    if (km <= this.config.RUTA_ORIGEN_MAX_KM) return origen;
+
+    optlog("service — guarda 265/R16: origen incoherente, se sustituye por el centroide", {
+      km: Math.round(km),
+      maxKm: this.config.RUTA_ORIGEN_MAX_KM,
+      fuenteDescartada: origen.fuente,
+      paradas: paradas.length,
+    });
+    // Aviso AGREGADO (R19): distancia redondeada y numero de paradas. NUNCA coordenadas.
+    this.logger.warn(
+      `[optimizacion_ruta] origen descartado por incoherencia geografica: ${Math.round(km)} km ` +
+        `del centroide de ${paradas.length} paradas (maximo ${this.config.RUTA_ORIGEN_MAX_KM} km); ` +
+        "se usa el centroide",
+    );
+    return { ...centro, fuente: "centroide" };
   }
 
   /**

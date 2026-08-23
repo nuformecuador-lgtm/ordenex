@@ -30,7 +30,7 @@ import { test, expect, type Page } from "@playwright/test";
  *  - Cada fila añade un botón `aria-label="Ver historial de la orden <remisión>"`
  *    (HistorialOrdenSheet) que abre un Sheet (role="dialog") titulado
  *    "Historial de la orden <remisión>", cuyo cuerpo es una
- *    `<ol aria-label="Línea de tiempo de estados">` (role="list") con un `<li>`
+ *    `<ol aria-label="Línea de tiempo de la orden">` (role="list") con un `<li>`
  *    (role="listitem") por transición: "Creación · <destino>" o
  *    "<origen> → <destino>", el `<time>`, "Por <actor|Sistema>" y
  *    "Motivo: <motivo>" cuando existe (HistorialOrdenTimeline).
@@ -144,9 +144,9 @@ test.describe.serial("Historial de estados — línea de tiempo (R26/R27/R29/R30
 
     const dialog = await abrirHistorial(page);
 
-    // El cuerpo del drawer es la <ol aria-label="Línea de tiempo de estados">.
+    // El cuerpo del drawer es la <ol aria-label="Línea de tiempo de la orden">.
     const timeline = dialog.getByRole("list", {
-      name: "Línea de tiempo de estados",
+      name: "Línea de tiempo de la orden",
     });
     await expect(timeline).toBeVisible();
 
