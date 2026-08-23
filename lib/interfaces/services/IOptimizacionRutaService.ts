@@ -1,4 +1,5 @@
 // Feature 92 (design §5) — contrato del servicio de optimizacion de ruta.
+import type { SecuenciaFuente } from "@/lib/interfaces/external/IRouteOptimizationClient";
 
 /** Motivo del disparo. Solo `manual` esta sujeto al intervalo minimo de R34. */
 export type MotivoOptimizacion = "debounce" | "inmediato" | "manual";
@@ -63,7 +64,17 @@ export interface TrazadoTramo {
 }
 
 export type EjecutarOptimizacionResult =
-  | { status: "ok"; paradas: number; trazado?: TrazadoRuta }
+  | {
+      status: "ok";
+      paradas: number;
+      /**
+       * Feature 265 (R35, design §13.4) — QUIEN ordeno esta secuencia. Sube hasta el toast de
+       * la sincronizacion manual: un orden aproximado presentado como optimo es la clase de
+       * mentira silenciosa que esta casa persigue.
+       */
+      secuenciaFuente: SecuenciaFuente;
+      trazado?: TrazadoRuta;
+    }
   | {
       status: "omitida";
       razon: "obsoleta" | "intervalo_minimo" | "sin_paradas" | "sin_cambios";

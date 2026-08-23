@@ -120,6 +120,10 @@ export async function sincronizarRuta(
     return {
       status: "ok" as const,
       omitida: resultado.status === "omitida",
+      // Feature 265 (R39): la procedencia del orden RECIEN calculado. Con `omitida` va `null`
+      // —no se recalculo nada, asi que no hay nada nuevo que contar—; el aviso persistente de
+      // la pantalla ya cubre ese caso y no depende de esta respuesta.
+      secuenciaFuente: resultado.status === "ok" ? resultado.secuenciaFuente : null,
       ...(resultado.trazado !== undefined ? { trazado: resultado.trazado } : {}),
     };
   });

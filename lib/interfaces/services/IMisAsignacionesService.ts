@@ -173,6 +173,15 @@ export interface RutaResumenDTO {
    * que el punto de partida es aproximado y la UI debe poder decirlo.
    */
   origenFuente: "gps" | "ultima_conocida" | "centroide" | null;
+  /**
+   * Feature 265 (R35/R38/R45) — QUIEN ordeno las paradas: el proveedor o el calculo local.
+   * Es una señal DISTINTA de `origenFuente` y no se puede fundir con ella: una dice DESDE
+   * DONDE se calculo la ruta y esta dice QUIEN decidio el ORDEN. Pueden darse a la vez.
+   *
+   * `null` = NO CONSTA (ruta calculada antes de esta feature, o 0/1 parada). La pantalla no
+   * muestra aviso NI afirma que el orden vino del proveedor: no consta es no consta.
+   */
+  secuenciaFuente: "proveedor" | "local" | null;
   /** R28: cuantas ordenes en reparto NO tienen posicion todavia. */
   paradasSinOptimizar: number;
   /**

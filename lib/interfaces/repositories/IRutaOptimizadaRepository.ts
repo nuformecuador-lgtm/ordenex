@@ -8,6 +8,15 @@ export type OrigenFuente = "gps" | "ultima_conocida" | "centroide";
 /** Estado de la ruta. Espejo del enum nativo `ruta_estado`. */
 export type RutaEstadoValue = "vigente" | "desactualizada";
 
+/**
+ * Feature 265 (R35) — quien ordeno la secuencia persistida. Es un ESPEJO como literal de
+ * `SecuenciaFuente` (`lib/interfaces/external/IRouteOptimizationClient`), por el mismo motivo
+ * escrito unas lineas mas abajo para `TrazadoPersistido`: el repositorio NO debe importar de
+ * las capas de arriba, y que la columna y el dominio compartan vocabulario hoy no obliga a que
+ * lo compartan siempre. `null` = NO CONSTA (ruta anterior a la feature, o 0/1 parada).
+ */
+export type SecuenciaFuentePersistida = "proveedor" | "local";
+
 /** Cabecera de la ruta de un mensajero, con sus paradas ya posicionadas. */
 export interface RutaOptimizadaDTO {
   id: string;
@@ -20,6 +29,13 @@ export interface RutaOptimizadaDTO {
   origenFuente: OrigenFuente | null;
   huellaSet: string | null;
   ultimoError: string | null;
+  /**
+   * Feature 265 (R35/R45) — quien ordeno la secuencia que hay AHORA en `secuenciaPorOrden`.
+   * `null` significa NO CONSTA y NO significa «la ordeno el proveedor»: las rutas calculadas
+   * antes de esta feature se quedan asi a proposito (sin backfill), y la pantalla no dice
+   * nada de ellas. Se curan solas en la siguiente sincronizacion.
+   */
+  secuenciaFuente: SecuenciaFuentePersistida | null;
   /**
    * Trazado persistido de ESTA `huellaSet`. `null` si nunca se dibujo, si la secuencia se
    * reemplazo despues (se limpia en la misma transaccion) o si el ultimo dibujo salio del
@@ -76,6 +92,14 @@ export interface ReemplazarSecuenciaMeta {
   origen: { lat: number; lng: number; fuente: OrigenFuente } | null;
   /** R36: huella del conjunto de paradas + origen; evita repagar el mismo calculo. */
   huellaSet: string;
+  /**
+   * Feature 265 (R35/R36) — quien ordeno ESTA secuencia. Se escribe SIEMPRE junto a ella, en
+   * la misma transaccion: asi es imposible que quede una marca vieja pegada a un orden nuevo.
+   * `null` SOLO en el caso trivial de 0 o 1 parada, donde no hubo ordenacion que atribuir
+   * (R37). Es un campo REQUERIDO del objeto —con valor nullable— para que ningun productor
+   * pueda omitirlo y dejar que la columna signifique lo que ya significaba.
+   */
+  secuenciaFuente: SecuenciaFuentePersistida | null;
 }
 
 /** Ubicacion capturada por el navegador del mensajero (R23). */

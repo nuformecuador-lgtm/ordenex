@@ -2006,6 +2006,11 @@ model RutaOptimizada {
   origenFuente      String?    @map("origen_fuente")
   huellaSet         String?    @map("huella_set")
   ultimoError       String?    @map("ultimo_error")
+  // Feature 265 (20260822140000_ruta_secuencia_fuente): QUIEN ordeno la secuencia que hay en
+  // `ruta_optimizada_parada` — 'proveedor' o 'local'. NULL = no consta (ruta anterior a la
+  // feature, o el caso trivial de 0/1 parada). TEXT y no enum, mismo criterio que
+  // `origen_fuente` y `trazado_fuente`. Sin backfill: ver la migracion.
+  secuenciaFuente   String?    @map("secuencia_fuente")
   // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
   // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
   // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.

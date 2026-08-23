@@ -53,6 +53,10 @@ export class HaversineRouteOptimizationClient implements IRouteOptimizationClien
       actual = { lat: parada.lat, lng: parada.lng };
     }
 
-    return { status: "ok", secuencia };
+    // Feature 265 (R35, design §13.3): `local` SIEMPRE. Este cliente no habla con nadie, asi
+    // que no hay ningun camino por el que su orden pueda venir del proveedor. Lo declara el
+    // productor —no lo supone el que lo llama— para que la marca que acaba en la fila y en la
+    // pantalla del mensajero sea la de quien de verdad ordeno.
+    return { status: "ok", secuencia, fuente: "local" };
   }
 }

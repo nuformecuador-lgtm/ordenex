@@ -31,6 +31,9 @@ const CONFIG: RouteOptimizationConfig = {
   RUTA_ORIGEN_TTL_MIN: 120,
   RUTA_SYNC_MIN_INTERVALO_S: 10,
   RUTA_MAX_PARADAS: 100,
+  // Feature 265: umbral de coherencia del origen. 200 km es el default del codigo; los tests
+  // que ejercitan la guarda lo bajan por `config` para no depender de el.
+  RUTA_ORIGEN_MAX_KM: 200,
   ROUTES_ROUTING_PREFERENCE: "TRAFFIC_UNAWARE",
 };
 
@@ -52,6 +55,9 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: null,
     huellaSet: null,
     ultimoError: null,
+    // Feature 265 (R35): sin marca de procedencia por defecto; los tests que la necesitan la
+    // pasan por `over`. `null` = no consta, que es el estado de toda ruta anterior a la 265.
+    secuenciaFuente: null,
     trazado: null,
     tramoVivoAt: null,
     tramoPorOrden: new Map(),
@@ -88,7 +94,10 @@ function montar(opts: {
     marcarDesactualizada: async () => {},
   };
   const paradasRepo = { findParadasEnReparto: async () => opts.paradas ?? [] };
-  const client = { optimizar: async () => ({ status: "ok" as const, secuencia: [] }) };
+  // Feature 265: `fuente` es REQUERIDA en el desenlace `ok`. Este doble no se ejercita aqui.
+  const client = {
+    optimizar: async () => ({ status: "ok" as const, secuencia: [], fuente: "proveedor" as const }),
+  };
   const service = new OptimizacionRutaService(
     rutas,
     paradasRepo,

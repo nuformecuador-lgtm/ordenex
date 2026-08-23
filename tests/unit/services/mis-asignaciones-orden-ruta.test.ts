@@ -66,6 +66,8 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: "gps",
     huellaSet: "h",
     ultimoError: null,
+    // Feature 265 (R35): esta suite mira el REORDENADO de la lectura, no la procedencia.
+    secuenciaFuente: null,
     trazado: null,
     tramoVivoAt: null,
     tramoPorOrden: new Map(),
