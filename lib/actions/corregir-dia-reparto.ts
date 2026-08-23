@@ -94,6 +94,14 @@ function toCorregirDiaActionError(shape: AppErrorShape): BorderError {
  * `unauthenticated` (sin sesion) y `validation_error` (lote vacio, uuid invalido, `dia` ausente o
  * desconocido, motivo fuera de rango) se resuelven en el BORDE, sin construir el service ni tocar
  * dato alguno; `forbidden` / `sin_zona` / `conflict` los devuelve el service.
+ *
+ * @sin-superficie los dos modales que la disparan (`CambiarDiaRepartoModal` y su hermano del
+ * listado satelite, tareas F1-F4 de `specs/262-corregir-dia-reparto/tasks.md`) llegan DESPUES: la
+ * ficha es de zona `fullstack` y su `tasks.md` secuencia backend -> frontend a proposito, con el
+ * bloque de UI arrancando cuando los contratos ya estan en la rama. Esta anotacion es TEMPORAL y
+ * CADUCA SOLA: la otra mitad de esta misma guardia («ninguna anotacion sobrevive a su motivo») se
+ * pone roja en cuanto la accion recupere superficie, asi que quien monte los modales esta obligado
+ * a borrarla. Si el bloque de UI se cancelara, entonces lo que sobra es la accion entera.
  */
 export async function corregirDiaReparto(
   input: unknown,
