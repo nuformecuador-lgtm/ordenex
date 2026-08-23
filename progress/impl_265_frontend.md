@@ -304,8 +304,22 @@ Tres cosas que se comprueban aquí y no se dan por supuestas:
 `INIT_EXIT=1` con **2 rojos** de
 `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts`, que compara
 enums de la **base local compartida** contra una lista literal y veía de más un valor de la
-feature 262. **Aquí ya no aparecen**: `1317` archivos y `17742` tests, todos verdes. La 262
-mergeó su migración entre una corrida y otra. No se tocó ese test ni se relajó nada.
+feature 262. **Aquí ya no aparecen**: `1317` archivos y `17742` tests, todos verdes. No se tocó
+ese test ni se relajó nada.
+
+La causa, **medida y no supuesta**: las dos migraciones de la 262 ya están **en la base de esta
+rama** y no lo estaban en la del backend.
+
+```
+$ git ls-tree --name-only 241f1842 db/migrations/ | grep -c 'orden_dia_reparto_cambio|…_dia_reparto_corregido'  → 0
+$ git ls-tree --name-only c9e0e056 db/migrations/ | grep -c 'orden_dia_reparto_cambio|…_dia_reparto_corregido'  → 2
+```
+
+O sea: el rojo del backend era exactamente lo que dijo —el árbol iba por detrás de la base local
+compartida— y se curó solo al mergear la 262, sin que nadie tocara nada.
+
+**Pre-vuelo (C2):** `git fetch origin dev` → `origin/dev` sigue en `c9e0e056`, la misma base.
+Nadie la movió mientras corría este bloque.
 
 Antes del gate se corrió `pnpm exec prisma generate --schema db/schema.prisma`: el cliente vive
 en el `node_modules` **compartido** por *junction* y otra sesión puede regenerarlo por debajo,
