@@ -130,6 +130,13 @@ export interface RecepcionSateliteModuleProps {
    */
   mensajeros: { id: string; nombre: string }[];
   /**
+   * FEATURE 271 (T9.5, R32): de esos mensajeros, los que el servidor va a RECHAZAR por su cierre.
+   * Llega de la MISMA acción que la lista (`listarMensajerosSatelite`), resuelto con el MISMO
+   * predicado que aplica la escritura: aquí no se re-deriva ni se filtra nada, sólo se transporta
+   * al selector del modal.
+   */
+  mensajerosBloqueadosIds?: string[];
+  /**
    * Feature 41 (R22) + ajuste admin_satelite: bloqueo DERIVADO server-side de la bodega
    * satélite. Si `bloqueada` (todos los mensajeros con cierre O CierreBodega pendiente),
    * se muestra el aviso de bloqueo y se deshabilita "Asignar". Si NO está bloqueada pero
@@ -182,6 +189,7 @@ export function RecepcionSateliteModule({
   zonaNombre,
   sinZona,
   mensajeros,
+  mensajerosBloqueadosIds = [],
   bloqueoBodega,
   liberadasHoy = [],
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
@@ -627,6 +635,7 @@ export function RecepcionSateliteModule({
         open={modalOpen}
         ordenes={ordenesAAsignar}
         mensajeros={mensajeros}
+        mensajerosBloqueadosIds={mensajerosBloqueadosIds}
         // Feature 246 (T4.3, R29): resueltas por la página, en el servidor. Este módulo sólo
         // las transporta.
         fechasDiaReparto={fechasDiaReparto}

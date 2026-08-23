@@ -8,6 +8,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarRecoleccion } from "@/lib/actions/recoleccion-tienda";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 167 (R1/R2/R3/R6) — la página del apartado propio de recolección. Lo que este
 // archivo protege es el BORDE: quién puede abrirla (rol resuelto SOLO server-side, R3) y que
@@ -71,7 +72,7 @@ const escaner = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO, bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO });
   listarMock.mockResolvedValue({
     status: "ok",
     porRecolectar: [],
@@ -224,30 +225,21 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
 
   it("R9: el bloqueo por cierre pendiente lo deriva el SERVIDOR y apaga el escáner", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
+    // FEATURE 271: el DETALLE es lo único que viaja; el campo puente `bloqueado` se retiró con
+    // T9.3. Caso 5 de la tabla de verdad: un solo cierre, y espera a que el mensajero lo reenvíe.
     bloqueoMock.mockResolvedValue({
       status: "ok",
-      // Feature 271: el detalle es la fuente; `bloqueado` es el campo puente que la pantalla
-      // todavia consume (T9.3 lo retira).
-      bloqueo: {
-        bloqueado: true,
-        cierresAbiertos: 1,
-        cierresPorReenviar: 1,
-        aResolverPrimero: {
-          cierreId: "c1",
-          estado: "vencido" as const,
-          solicitadoAt: "2026-08-22T06:03:00.000Z",
-          jornadaCR: "2026-08-21",
-          resuelve: "mensajero" as const,
-        },
-      },
-      bloqueado: true,
+      bloqueo: bloqueoConVencido("2026-08-21"),
     });
 
     render(await RecoleccionPage());
 
     expect(escaner()).toBeNull();
+    // ⚠️ EL LITERAL VA A MANO Y COMPLETO. Comparar contra `avisoBloqueo(...)` estaría siempre
+    // verde: pasaría aunque la función devolviera basura. Es el texto que el humano aprobó
+    // (§10.2, caso 2) en su variante de portal, con el puntero a «Cierre del día».
     expect(screen.getByRole("alert")).toHaveTextContent(
-      /resolver tu cierre/i,
+      "Tienes un cierre sin enviar a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Ve a «Cierre del día» para enviarlo a aprobación.",
     );
   });
 

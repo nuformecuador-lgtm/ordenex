@@ -15,6 +15,7 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 227 (T3.5, design §5.2) — montaje del hilo del lado MENSAJERO, en el panel que YA
 // existe (P6: sin pantalla nueva) y justo donde estaba el editor de la nota privada retirada.
@@ -185,7 +186,7 @@ describe("GestionarOrdenPanel — hilo de notas", () => {
         conAyuda={[]}
         ordenEnGestionId={null}
         ruta={RUTA}
-        bloqueado={false}
+        bloqueo={SIN_BLOQUEO}
       />,
     );
 

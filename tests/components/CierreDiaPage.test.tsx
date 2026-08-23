@@ -115,7 +115,7 @@ function gestionEntregada(): CierreDetalleGestion {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO, bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO });
   listarMock.mockResolvedValue(resultadoBase());
 });
 

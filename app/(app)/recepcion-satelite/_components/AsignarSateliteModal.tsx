@@ -16,7 +16,10 @@ import {
 import type { AsignarSateliteResult } from "@/lib/types/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
-import { toMensajeroOptions } from "@/app/(app)/ordenes/_components/mensajero-options";
+import {
+  MOTIVO_BLOQUEADO_POR_CIERRE,
+  toMensajeroOptions,
+} from "@/app/(app)/ordenes/_components/mensajero-options";
 import { asignacionSateliteErrorMessage } from "./asignacion-satelite-error-messages";
 
 export interface AsignarSateliteModalProps {
@@ -25,6 +28,17 @@ export interface AsignarSateliteModalProps {
   ordenes: RecepcionSateliteDTO[];
   /** Mensajeros de la zona del adminSatelite (ya scoped server-side, R5). */
   mensajeros: { id: string; nombre: string }[];
+  /**
+   * FEATURE 271 (T9.5, R29/R32) — ids que `AsignacionSateliteService.asignar` va a RECHAZAR por
+   * su cierre. Se deshabilitan con el motivo a la vista.
+   *
+   * ⚠️ ESTA ES LA PANTALLA DEL INCIDENTE DEL 18/08: dejaba elegir a un mensajero que el servidor
+   * rechazaba, y el mensaje que devolvía no lo explicaba. Este selector NUNCA había tenido el
+   * dato —ni antes ni después de la 241—; el de la bodega central al menos lo tuvo. Es la mitad
+   * que faltaba, y por eso el conjunto tiene que ser EXACTAMENTE el que el servidor rechaza: ni
+   * uno más, ni uno menos.
+   */
+  mensajerosBloqueadosIds?: string[];
   /**
    * Feature 246 (T4.3, R29): las MISMAS fechas y el MISMO contrato que la bodega central. La
    * simetría no es estética: D4 se firmó para que la elección del día signifique exactamente lo
@@ -47,6 +61,7 @@ export function AsignarSateliteModal({
   open,
   ordenes,
   mensajeros,
+  mensajerosBloqueadosIds = [],
   fechasDiaReparto,
   onOpenChange,
   onSuccess,
@@ -78,10 +93,15 @@ export function AsignarSateliteModal({
   }
 
   const sinMensajeros = mensajeros.length === 0; // R6
-  // Pedido humano 2026-08-18: ya no se deshabilita a nadie por tener un cierre abierto — el
-  // service dejo de rechazarlo. Este selector no tiene ninguna otra regla de elegibilidad (la
-  // dedicacion reparto/recoleccion es de la central), asi que va sin motivos.
-  const mensajeroOptions = toMensajeroOptions(mensajeros);
+  // ⚠️ FEATURE 271 (T9.5, R32) — VUELVE EL DESHABILITADO POR CIERRE, Y AQUÍ ES DONDE MÁS IMPORTA.
+  // El 2026-08-18 se retiró porque el service había dejado de rechazarlo; desde el 2026-08-23 lo
+  // rechaza otra vez, así que no marcarlos devuelve la pantalla al estado exacto del incidente:
+  // el adminSatelite elige a alguien y el lote entero se cae sin efectos. Sigue sin haber ninguna
+  // otra regla de elegibilidad aquí (la dedicación reparto/recolección es de la central).
+  const mensajeroOptions = toMensajeroOptions(
+    mensajeros,
+    new Map(mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE])),
+  );
 
   async function handleConfirm() {
     if (!mensajeroId) {

@@ -11,14 +11,20 @@ import {
   escogerParaGestion,
   liberarGestion,
 } from "@/lib/actions/mis-asignaciones";
-// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready). Desde la
-// 167 lo COMPARTEN los dos portales del mensajero (Entregas y Recolección), así que vive en
-// `lib/constants/` para que no puedan divergir en un mensaje que el humano declaró preciso.
-import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
+// Feature 111/R12 -> FEATURE 271 (T9.1/T9.2): el aviso del bloqueo dejó de ser una constante y
+// pasó a ser un FORMATEADOR (texto separado, i18n-ready). Lo COMPARTEN los cuatro portales del
+// mensajero —Entregas, Por recoger, Recolección y Cierre del día— y vive en `lib/constants/`
+// para que no puedan divergir en un mensaje que el humano declaró preciso.
+//
+// ⚠️ POR QUÉ YA NO PUEDE SER FIJO: el aviso tiene que CONTAR cuántos cierres arrastra el
+// mensajero y cuál toca resolver primero (R43), y eso no cabe en una cadena constante. `conCta:
+// true` porque este portal NO es «Cierre del día»: hay que decirle a dónde ir (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // Feature 261 (F3, R15): el motivo del bloqueo por reserva sale de la fuente ÚNICA — la misma
 // frase que pinta la card, la que devuelve el servidor y la que lee la tienda.
 import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
@@ -88,11 +94,17 @@ export interface RepartoModuleProps {
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
   ruta: RutaResumenDTO;
   /**
-   * Feature 111/R12/R14: `true` si el mensajero está BLOQUEADO (cierre pendiente).
-   * El bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los controles de
-   * escoger y gestionar. Defensa SUAVE; el backend (R1/R4) es la defensa real.
+   * Feature 111/R12/R14 -> FEATURE 271 (T9.1): el DETALLE del bloqueo, no un booleano.
+   *
+   * Trae el veredicto (`bloqueado`) y con qué se ha llegado a él: cuántos cierres arrastra el
+   * mensajero, cuántos espera que él reenvíe y cuál toca resolver primero. La pantalla no
+   * re-deriva nada (R10): lo calcula el MISMO predicado que aplica el servidor al rechazar, así
+   * que el aviso no puede prometer lo que el servidor va a negar.
+   *
+   * Con `bloqueado` el bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los
+   * controles de escoger y gestionar. Defensa SUAVE; el backend (R25) es la defensa real.
    */
-  bloqueado: boolean;
+  bloqueo: BloqueoDetalle;
 }
 
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
@@ -142,10 +154,19 @@ export function RepartoModule({
   conAyuda,
   ordenEnGestionId,
   ruta,
-  bloqueado,
+  bloqueo,
 }: RepartoModuleProps) {
   const router = useRouter();
   const toast = useToast();
+
+  // FEATURE 271 (T9.1): el veredicto sale del detalle, no se re-deriva. Todo lo que este módulo
+  // apaga (foco, escoger, gestionar) cuelga de este booleano, exactamente como antes; lo que
+  // cambia es de dónde viene y que ahora el aviso puede CONTAR.
+  const bloqueado = bloqueo.bloqueado;
+  // El texto del aviso, compuesto UNA vez: lo pinta el panel y lo dice el toast de la guarda
+  // suave. Dos llamadas darían dos cadenas idénticas, pero también dos sitios donde cambiar
+  // `conCta` a medias.
+  const avisoDeBloqueo = avisoBloqueo(bloqueo, { conCta: true });
 
   // Feature 97: última ubicación GPS capturada por el botón de sincronización. Se usa como
   // punto de partida del mapa. Sobrevive a `router.refresh()` (estado de cliente), así que el
@@ -389,7 +410,7 @@ export function RepartoModule({
     // Feature 111/R14: guarda suave. El mensajero bloqueado no puede escoger para
     // gestión; se le remite a resolver su cierre. El backend (R1/R4) rechaza igual.
     if (bloqueado) {
-      toast.error(BLOQUEO_AVISO);
+      toast.error(avisoDeBloqueo);
       return false;
     }
     // Feature 261 (F3, R12/R13) — Y LA MISMA GUARDA AQUÍ, que no es redundante: el panel arranca
@@ -597,7 +618,7 @@ export function RepartoModule({
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoDeBloqueo}
         </p>
       ) : null}
 

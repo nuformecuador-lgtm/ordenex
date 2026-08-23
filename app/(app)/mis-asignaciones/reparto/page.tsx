@@ -4,6 +4,7 @@ import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import { KpisMensajero } from "../_components/KpisMensajero";
 import { RepartoModule } from "../_components/RepartoModule";
@@ -30,12 +31,17 @@ export default async function RepartoPage() {
   const result = await listarMisAsignaciones();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
-  // Feature 111/R12/R14: flag DERIVADO server-side de si el mensajero está BLOQUEADO
-  // (cierre `solicitado`/`vencido` pendiente). El bloqueo es TOTAL: el módulo muestra
-  // el aviso y desactiva/guarda los controles de gestionar/escoger (defensa
-  // suave; el backend R1/R4 es la defensa real). Si la acción degrada, no se bloquea.
-  const bloqueo = await estadoBloqueoMensajero();
-  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
+  // Feature 111/R12/R14 -> FEATURE 271: el DETALLE del bloqueo, DERIVADO server-side por la
+  // regla N/V (libre si arrastra un cierre a lo sumo y ninguno espera a que él lo reenvíe). El
+  // bloqueo es TOTAL —gestionar, cobrar y recibir trabajo nuevo—: el módulo muestra el aviso, que
+  // dice cuántos cierres arrastra y cuál toca primero, y desactiva los controles de
+  // gestionar/escoger (defensa suave; el backend R25 es la defensa real).
+  //
+  // Si la acción degrada (sin sesión), baja `SIN_BLOQUEO` y no se bloquea nada: un fallo de
+  // LECTURA no puede dejar al mensajero sin trabajar, y la escritura la sigue gateando el
+  // servidor.
+  const estado = await estadoBloqueoMensajero();
+  const bloqueo = estado.status === "ok" ? estado.bloqueo : SIN_BLOQUEO;
 
   return (
     <AppPage title="Reparto" description="Órdenes en reparto por gestionar">
@@ -50,7 +56,7 @@ export default async function RepartoPage() {
         conAyuda={result.conAyuda}
         ordenEnGestionId={result.ordenEnGestionId}
         ruta={result.ruta}
-        bloqueado={bloqueado}
+        bloqueo={bloqueo}
       />
     </AppPage>
   );

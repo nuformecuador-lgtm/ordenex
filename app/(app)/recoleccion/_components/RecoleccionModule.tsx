@@ -8,7 +8,12 @@ import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
-import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
+// Feature 111/R12 + 167/R9 -> FEATURE 271 (T9.1/T9.2): el aviso del bloqueo dejó de ser una
+// constante y pasó a ser un FORMATEADOR que CUENTA (cuántos cierres arrastra el mensajero y cuál
+// toca resolver primero, R43). El MISMO de los otros tres portales; `conCta: true` porque desde
+// aquí hay que decirle a dónde ir (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+import { SIN_BLOQUEO, type BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
 import type {
   RecolectadaHoyDTO,
@@ -82,19 +87,25 @@ export interface RecoleccionModuleProps {
   /** R31: hoy hay más recolecciones de las que trae `recolectadasHoy`. */
   recolectadasHoyRecortada?: boolean;
   /**
-   * Feature 111/R14 + 167/R9: con un cierre pendiente el mensajero NO mueve guías. Las dos
-   * listas siguen visibles (solo-visualización, R23) pero el bloque de acción no se renderiza
-   * y en su lugar va el aviso que dice por qué y qué hacer.
+   * Feature 111/R14 + 167/R9 -> FEATURE 271 (T9.1): el DETALLE del bloqueo, no un booleano.
+   * Bloqueado, el mensajero NO mueve guías: las dos listas siguen visibles
+   * (solo-visualización, R23) pero el bloque de acción no se renderiza y en su lugar va el aviso,
+   * que ahora dice además CUÁNTOS cierres arrastra y CUÁL toca primero (R43).
+   *
+   * ⚠️ Y RECOLECTAR EN TIENDA ES COBRAR: desde el 2026-08-23 (Q1) esta superficie se bloquea
+   * igual que las de reparto, sin excepción — el servidor la rechaza (R25/R31).
    */
-  bloqueado?: boolean;
+  bloqueo?: BloqueoDetalle;
 }
 
 export function RecoleccionModule({
   porRecolectar,
   recolectadasHoy,
   recolectadasHoyRecortada = false,
-  bloqueado = false,
+  bloqueo = SIN_BLOQUEO,
 }: Readonly<RecoleccionModuleProps>) {
+  // FEATURE 271 (T9.1): el veredicto sale del detalle, no se re-deriva aquí.
+  const bloqueado = bloqueo.bloqueado;
   const router = useRouter();
   const toast = useToast();
   const { recolectar, procesando } = useRecolectarPorGuia();
@@ -210,7 +221,7 @@ export function RecoleccionModule({
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoBloqueo(bloqueo, { conCta: true })}
         </p>
       ) : (
         /* R7 en su forma vigente (decisión del humano del 2026-07-31): el acceso al

@@ -117,20 +117,3 @@ function aposicionDeJornada(d: BloqueoDetalle): string {
 function unir(...partes: (string | null)[]): string {
   return partes.filter((p): p is string => p !== null && p !== "").join(" ");
 }
-
-/**
- * @deprecated FEATURE 271 — TEXTO PUENTE, no la fuente. Usa `avisoBloqueo(detalle, { conCta })`.
- *
- * Sobrevive SOLO mientras los tres portales del mensajero (`RepartoModule`, `RecogerModule`,
- * `RecoleccionModule`) sigan recibiendo un `bloqueado: boolean` en vez del `BloqueoDetalle`. La
- * tarea **T9.1** los cambia y esta constante se va con ellos.
- *
- * QUE SE LE QUITO HOY, y por que no se dejo: prometia que la asignacion seguia llegando, y eso
- * es FALSO desde la 271 —recibir trabajo nuevo, reparto y recolección, SI se bloquea—. Un aviso que
- * permite mas de lo que el servidor acepta es el fallo que la 241 documento al reves.
- *
- * QUE NO PUEDE DECIR, y por eso es puente y no solucion: no CUENTA (cuantos cierres arrastra ni
- * cual toca primero, R43). Para eso hace falta el detalle, que estos tres portales todavia no bajan.
- */
-export const BLOQUEO_AVISO =
-  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Tampoco puedes recibir trabajo nuevo. Ve a «Cierre del día» para resolverlo.";

@@ -56,3 +56,22 @@ export function bloqueoConVencido(jornadaCR: string | null = null): BloqueoDetal
 export function bloqueoPorAcumular(jornadaCR: string | null = null): BloqueoDetalle {
   return bloqueoDe({ n: 2, v: 0, jornadaCR });
 }
+
+/**
+ * El caso 7: el mas viejo esta `rechazado` y es RE-SOLICITABLE. Espejo de `bloqueoConVencido` para
+ * la rama que la pantalla distingue: el copy del rechazo dice algo que el del vencido no —que no
+ * queda cerrado—, asi que las dos ramas necesitan su fixture.
+ *
+ * `n = v` a proposito: solo cuando TODOS los abiertos son re-solicitables el mas viejo lo es, y
+ * este fixture existe para ejercitar justamente esa rama.
+ */
+export function bloqueoConRechazado(jornadaCR: string | null = null): BloqueoDetalle {
+  const base = bloqueoDe({ n: 1, v: 1, jornadaCR });
+  return {
+    ...base,
+    aResolverPrimero:
+      base.aResolverPrimero === null
+        ? null
+        : { ...base.aResolverPrimero, estado: "rechazado" },
+  };
+}

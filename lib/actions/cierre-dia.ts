@@ -80,22 +80,12 @@ export interface EstadoBloqueoMensajeroDeps {
  *
  * ⚠️ FEATURE 271: ya NO es un booleano. La pantalla tiene que decir CUANTOS cierres arrastra y
  * CUAL toca resolver primero (R43), y eso no cabe en un `bloqueado: boolean`. `bloqueado` sigue
- * DENTRO del detalle (`bloqueo.bloqueado`), que es donde la regla lo calcula.
+ * DENTRO del detalle (`bloqueo.bloqueado`), que es donde la regla lo calcula — y NO se duplica
+ * fuera: el campo puente que existio durante la pasada de backend se retiro con T9.3, en cuanto
+ * las cuatro pantallas pasaron a bajar el detalle entero.
  */
 export type EstadoBloqueoMensajeroResult =
-  | {
-      status: "ok";
-      bloqueo: BloqueoDetalle;
-      /**
-       * @deprecated FEATURE 271 — CAMPO PUENTE. Es EXACTAMENTE `bloqueo.bloqueado`, derivado aqui
-       * para que las cuatro pantallas que hoy bajan un `bloqueado: boolean` por props sigan
-       * compilando hasta la pasada de frontend (T9.1/T9.3), que es quien debe pasarlas al detalle.
-       *
-       * No se deriva por su cuenta en ningun sitio: sale del MISMO objeto (R10). En cuanto las
-       * pantallas consuman `bloqueo`, este campo se va.
-       */
-      bloqueado: boolean;
-    }
+  | { status: "ok"; bloqueo: BloqueoDetalle }
   | { status: "unauthenticated" };
 
 /**
@@ -126,7 +116,7 @@ export async function estadoBloqueoMensajero(
     if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el repo
     const repo = deps.ordenRepo ?? new OrdenRepository(getPrismaClient());
     const bloqueo = await repo.findBloqueoDetalle(actor.usuarioId);
-    return { status: "ok" as const, bloqueo, bloqueado: bloqueo.bloqueado };
+    return { status: "ok" as const, bloqueo };
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }

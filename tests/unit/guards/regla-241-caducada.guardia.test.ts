@@ -3,7 +3,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * FEATURE 271 (T8.2, R51) — GUARDIA: LA PROSA DE LA REGLA CADUCADA NO SOBREVIVE EN `lib/`.
+ * FEATURE 271 (T8.2 + T9.1, R51) — GUARDIA: LA PROSA DE LA REGLA CADUCADA NO SOBREVIVE EN EL
+ * CODIGO DE PRODUCCION (`lib/` **y** `app/`).
  *
  * POR QUE EXISTE. El 2026-08-20 la feature 241 firmó una regla —«RECIBIR ASIGNACIONES NUNCA se
  * bloquea»— y la escribió en NUEVE sitios del árbol. El 2026-08-23 el humano revirtió esa mitad.
@@ -14,12 +15,17 @@ import { join } from "node:path";
  * RECORRE EL ÁRBOL DE ARCHIVOS, no el grafo de imports: por eso ningún `vitest --changed` la
  * selecciona por relación y por eso el gate corre TODAS las guardias siempre.
  *
- * ⚠️ ALCANCE DECLARADO: `lib/` — la capa que esta pasada de BACKEND toca. `app/` queda FUERA a
- * propósito y con fecha: `CierreDiaModule.tsx` conserva su copia del aviso con la frase caducada
- * («Sí puedes seguir recibiendo asignaciones…»), y quien la retira es la tarea **T9.1** de la
- * pasada de frontend, que sustituye esa copia por `avisoBloqueo(detalle, { conCta: false })`.
- * Cuando eso ocurra, `RAICES` pasa a incluir `app` y esta guardia cubre R51 entero. Dejarlo
- * escrito aquí es la diferencia entre una ausencia DECIDIDA y un olvido.
+ * ⚠️ ALCANCE: `lib/` **y** `app/`. La pasada de BACKEND censó sólo `lib/` y lo dejó escrito con su
+ * razón: `CierreDiaModule.tsx` conservaba entonces su copia del aviso con la frase caducada («Sí
+ * puedes seguir recibiendo asignaciones…»), y quien la retiraba era **T9.1** de la pasada de
+ * FRONTEND. Hecho: esa copia se borró —el texto sale ya de `avisoBloqueo(detalle, { conCta })`—,
+ * así que `app` entra en `RAICES` y la guardia cubre R51 entero. **Que esta ampliación fuera un
+ * paso previsto y no un descubrimiento es la diferencia entre una ausencia decidida y un olvido.**
+ *
+ * QUÉ SIGUE FUERA, y por qué: `tests/`. Un test puede citar la frase derogada para afirmar que NO
+ * aparece —`bloqueo-textos.test.ts` lo hace, y es la aserción que impide reponerla—, así que
+ * censarlo pondría rojo justamente al que la vigila. La prosa caducada que quede en comentarios de
+ * tests ajenos es deuda de esos tests, no de esta guardia.
  */
 
 /** Las frases que la ficha 271 deroga. Cada una estuvo VIVA en el árbol hasta el 2026-08-23. */
@@ -47,7 +53,7 @@ const FRASES_CADUCADAS: { patron: RegExp; porque: string }[] = [
 ];
 
 /** Raíces que la guardia censa. Ver el aviso de alcance de la cabecera. */
-const RAICES = ["lib"];
+const RAICES = ["lib", "app"];
 
 const EXTENSIONES = [".ts", ".tsx"];
 
@@ -69,16 +75,24 @@ function archivosDe(raiz: string): string[] {
   return salida;
 }
 
-describe("271/T8.2 · guardia — la regla firmada el 2026-08-20 no sobrevive en `lib/` (R51)", () => {
+describe("271/T8.2+T9.1 · guardia — la regla firmada el 2026-08-20 no sobrevive en `lib/` ni en `app/` (R51)", () => {
   const archivos = RAICES.flatMap(archivosDe);
 
-  it("el censo encuentra archivos (si no, la guardia no estaría midiendo nada)", () => {
+  it("el censo encuentra archivos EN LAS DOS raíces (si no, la guardia no estaría midiendo nada)", () => {
     // Anti-vacuidad: una guardia que recorre cero archivos pasa siempre.
     expect(archivos.length).toBeGreaterThan(100);
+    // Y se comprueba RAÍZ POR RAÍZ: con `lib/` sola el total ya pasa de 100, así que un `app/`
+    // que dejara de censarse —renombrado, mal resuelto, lo que sea— sería invisible en el total.
+    // Es el mismo agujero que el `if (!fks) return;` de los tests de integración: verde sin mirar.
+    for (const raiz of RAICES) {
+      expect(archivosDe(raiz).length, `la raíz \`${raiz}\` no censó ni un archivo`).toBeGreaterThan(
+        50,
+      );
+    }
   });
 
   it.each(FRASES_CADUCADAS.map((f) => [f.patron.source, f.patron, f.porque] as const))(
-    "ninguna línea de `lib/` dice «%s»",
+    "ninguna línea de `lib/` ni de `app/` dice «%s»",
     (_fuente, patron, porque) => {
       const culpables: string[] = [];
       for (const archivo of archivos) {

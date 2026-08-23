@@ -358,11 +358,11 @@ export type SolicitarCierreServiceResult =
       // —transiciona el cierre re-solicitable más viejo, sea `vencido` o `rechazado` (R18)—, así que
       // un discriminador por estado ya no describe lo que pasó.
       //
-      // ⏳ LOS DOS VALORES VIEJOS SIGUEN DECLARADOS Y **NADIE LOS EMITE**. Se conservan sólo para
-      // que `CierreDiaModule.tsx` (que ramifica el toast sobre ellos) siga compilando hasta la pasada
-      // de frontend (T9.1/T9.3), que es quien debe borrarlos junto con sus dos ramas. Mientras tanto
-      // una re-solicitud cae en el toast genérico: menos específico, nunca falso.
-      via?: "creado" | "resolicitado" | "vencido_solicitado" | "rechazado_solicitado";
+      // ✅ LOS DOS VALORES VIEJOS YA NO ESTAN (retirados en la pasada de FRONTEND, T9 + limpieza):
+      // sobrevivían sólo para que `CierreDiaModule.tsx` ramificara su toast sobre ellos, y ese
+      // módulo consume ya `resolicitado`. Un valor que nadie emite y que la pantalla sigue mirando
+      // es una rama muerta que se lee como viva.
+      via?: "creado" | "resolicitado";
       // Presentes SOLO en la rama de creación (`via: "creado"`); ausentes al transicionar un
       // vencido (R8: no se re-lee ni recalcula el snapshot money-critical del cierre).
       cierreId?: string;

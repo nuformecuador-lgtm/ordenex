@@ -295,3 +295,194 @@ base `ordenex`): sin eso, los casos que leen `pg_enum` no pueden pasar.
 **Veredicto:** backend completo y verde, con los tres fallos mudos cerrados y probados por mutación;
 quedan declaradas cinco ausencias (R42 a medias, R14/R44 sin test nuevo, coste del corte sin medir,
 guardia de prosa sólo sobre `lib/`) y la tanda 9 entera para el frontend.
+
+---
+
+# impl 271 — FRONTEND (tanda 9 + limpieza)
+
+> Pasada de **FRONTEND**, sobre el backend de `9d1b9e03`. `app/**`, los TRES sitios de `lib/` que el
+> traspaso autorizaba explícitamente —los dos puentes deprecados y el tipo `via`—, y los tests de
+> todo eso. **No se tocó** `db/`, ni migraciones, ni ningún servicio ni repositorio.
+
+## Lo que se cerró
+
+| Tarea | Qué se hizo |
+| --- | --- |
+| **T9.1** | `BLOQUEO_AVISO` **retirada**. Los cuatro módulos consumen `avisoBloqueo(detalle, { conCta })`: los tres portales del mensajero con `conCta: true` y `CierreDiaModule` con `false`. La copia de `CierreDiaModule.tsx:175` —la que conservaba la frase caducada— **desapareció**; en su sitio queda escrito por qué no se arregló y se borró |
+| **T9.2** | Los literales, **a mano y completos**, en los cuatro módulos. Copiados de `tests/unit/notificaciones/bloqueo-textos.test.ts`, **nunca del formateador** |
+| **T9.3** | `CierreDiaModuleProps`: `bloqueado` + `tieneVencido` + `tieneRechazado` → **una sola** prop `bloqueo: BloqueoDetalle`. Las tres respondían a la misma pregunta por dos caminos (predicado / histórico de cierres) |
+| **T9.4** | `OrdenesListado` aplica `bloqueadosIds` a los **DOS** modales. `FiltrosEntregas` **no lo lee**, y eso ahora tiene guardia y prosa |
+| **T9.5** | `AsignarSateliteModal` deshabilita con `bloqueadosIds`, que baja de la página por `listarMensajerosSatelite` |
+| **T9.6** | Los tres `getByRole("alert")` de `RepartoModule.test.tsx` pasan a `getAllByRole` afirmando sobre el que interesa |
+| **R48** | `bloqueoMensajero` **pintado** en la fila del cierre, dentro del comprobante — que es el que usan **las dos** listas de la administración |
+| **Limpieza** | `via: "vencido_solicitado" \| "rechazado_solicitado"` **fuera** del tipo; el `bloqueado: boolean` puente de `EstadoBloqueoMensajeroResult` **fuera**; `"app"` añadido a `RAICES` de la guardia de prosa |
+
+## Archivos creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `tests/components/AsignacionBloqueoPorCierre.test.tsx` | T9.4: los dos modales deshabilitan, el filtro no — con guardia de árbol sobre `FiltrosEntregas.tsx` |
+| `tests/components/CierreAdminBloqueoMensajero.test.tsx` | R48: el marcador de la fila y su nota, con los tres plurales a mano |
+
+## Archivos modificados
+
+**Producción (`app/`)** — `cierre-dia/page.tsx` · `cierre-dia/_components/CierreDiaModule.tsx` ·
+`mis-asignaciones/reparto/page.tsx` · `mis-asignaciones/recoger/page.tsx` ·
+`mis-asignaciones/_components/RepartoModule.tsx` · `mis-asignaciones/_components/RecogerModule.tsx` ·
+`recoleccion/page.tsx` · `recoleccion/_components/RecoleccionModule.tsx` ·
+`ordenes/_components/OrdenesListado.tsx` · `ordenes/_components/AsignarBodegaModal.tsx` ·
+`ordenes/_components/AsignarRecoleccionModal.tsx` · `ordenes/_components/mensajero-options.ts` ·
+`recepcion-satelite/page.tsx` · `recepcion-satelite/_components/RecepcionSateliteModule.tsx` ·
+`recepcion-satelite/_components/AsignarSateliteModal.tsx` ·
+`cierres-admin/_components/cierre-detalle-shared.tsx` · `cierres-admin/_components/cierre-factura.tsx` ·
+`_components/FiltrosEntregas.tsx` (**sólo prosa**: es la ausencia deliberada de R33).
+
+**`lib/`, los cuatro sitios autorizados** — `lib/constants/bloqueo-mensajero.ts` (se va
+`BLOQUEO_AVISO`) · `lib/actions/cierre-dia.ts` (se va el campo puente) ·
+`lib/interfaces/services/ICierreDiaService.ts` (se van los dos `via` muertos).
+
+**Tests** — `RepartoModule` · `RecogerModule` · `RecoleccionModule` · `CierreDiaModule` ·
+`CierreDiaModuleIncidente` · `CierreDiaPage` · `MisAsignacionesPage` · `RecoleccionPage` ·
+`RepartoAyuda` · `RepartoAyudaResueltaPorLaTienda` · `MarcarLuegoToggle` ·
+`GestionarOrdenPanelHilo` · `AsignarSateliteModal` · `descarga/CierresDescarga` ·
+`paginacion/BajoRiesgoPaginacion` · `paginacion/paginacion-transversal` ·
+`tests/fixtures/bloqueo-cierre.ts` (+ `bloqueoConRechazado`) ·
+`tests/unit/guards/regla-241-caducada.guardia.test.ts`.
+
+---
+
+## Tres decisiones que NO son cosméticas, y su razón
+
+### 1. Un TERCER botón de reenvío, porque el caso 6 se quedaba sin ninguno
+
+`tieneVencido`/`tieneRechazado` **no se pueden derivar de `aResolverPrimero.estado` a secas**, y
+eso hay que decirlo porque es la derivación obvia y está mal:
+
+`aResolverPrimero` es el cierre **abierto** más viejo, que no siempre es el **re-solicitable** más
+viejo. En el **caso 6 de la tabla de verdad** —«solicitó el 1.º y dejó vencer el 2.º», N=2, V=1— el
+más viejo es el `solicitado`, que lo resuelve la bodega. Derivando de su estado, los dos CTA quedan
+apagados y **el mensajero se queda con un cierre que sí puede reenviar y sin ningún botón para
+hacerlo**, en un caso que el spec enumera como alcanzable. El servidor, mientras, sí se lo permite
+(R16/R18: transiciona el re-solicitable más viejo).
+
+Lo implementado: los dos CTA específicos salen cuando `aResolverPrimero.resuelve === "mensajero"`
+(ahí su estado SÍ describe lo que el servidor va a transicionar), y cuando
+`cierresPorReenviar >= 1` sin poder nombrarlo sale un **CTA neutro** («Enviar el cierre a
+aprobación»). Las tres ramas son excluyentes por construcción y hay test de cada una.
+
+⏳ **El dato que falta, anotado y NO implementado** (el traspaso pedía anotarlo, no programarlo):
+`BloqueoDetalle` no trae *el estado del cierre RE-SOLICITABLE más viejo*. Con él, el CTA neutro
+sobra. Mientras tanto el texto es **menos específico, nunca falso**.
+
+### 2. Los avisos del vencido y del rechazado PERDIERON su promesa
+
+Decían «Envíalo a aprobación **para destrabar tu operación**» y «con eso **se levanta el bloqueo**
+y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe». La feature 241 verificó
+esa segunda frase contra el predicado y era **cierta** — mientras un mensajero no pudiera tener más
+de un cierre abierto.
+
+Desde esta ficha puede tener dos, y entonces reenviar **no** lo desbloquea (**R8**). Una promesa
+condicional dicha en absoluto es una promesa falsa la mitad de las veces, y **R43** prohíbe
+prometer lo que el servidor va a rechazar. Los dos avisos se quedan con lo que es cierto siempre
+—qué pasó con ese cierre y dónde está el botón—; quién dice **qué pasa después** es el aviso de
+bloqueo de arriba, que sí distingue los dos casos y que **se pinta siempre que hay algo que
+reenviar** (tener un cierre re-solicitable implica estar bloqueado, por la propia regla).
+
+Los tests que afirmaban las frases viejas se reescribieron **con su porqué al lado**, y con la
+aserción negativa de las dos promesas retiradas.
+
+### 3. El toast de la re-solicitud sale del BOTÓN, no de `via`
+
+`via: "resolicitado"` unifica los dos valores viejos, así que la respuesta ya no distingue vencido
+de rechazado. Quien sí lo sabe es el botón que se pulsó: `confirmarSolicitud(okReenvio)` recibe su
+mensaje. Los tres toasts siguen siendo específicos y ninguno puede mentir, porque en las dos ramas
+específicas el cierre que el servidor transiciona **es** el que el botón nombra (el re-solicitable
+más viejo coincide con el abierto más viejo cuando éste es re-solicitable).
+
+---
+
+## La guardia de prosa ahora censa `app/`, y se comprobó que muerde
+
+`RAICES = ["lib", "app"]`. Y se le añadió un **anti-vacuidad por raíz**: con `lib/` sola el censo ya
+pasaba de 100 archivos, así que un `app/` que dejara de recorrerse habría sido invisible en el
+total — el mismo agujero que el `if (!fks) return;` de los tests de integración.
+
+**Contraprueba ejecutada** (no razonada):
+
+```
+1. Añadida a `CierreDiaModule.tsx` la línea «Si puedes seguir recibiendo asignaciones»
+   -> Test Files 1 failed | Tests 1 failed | 6 passed (7)
+2. Revertida
+   -> Test Files 1 passed | Tests 7 passed (7)
+```
+
+`tests/` queda **fuera de la guardia a propósito**: un test puede citar la frase derogada para
+afirmar que NO aparece —`bloqueo-textos.test.ts` lo hace, y es la aserción que impide reponerla—,
+así que censarlo pondría rojo justamente al que la vigila.
+
+---
+
+## Mapa `R<n>` → test (lo que aporta ESTA pasada)
+
+| R | Qué exige en pantalla | Test |
+| --- | --- | --- |
+| R32 | Los tres selectores marcan a los bloqueados | `AsignacionBloqueoPorCierre.test.tsx` → «el modal de REPARTO…» y «el modal de RECOLECCIÓN…»; `AsignarSateliteModal.test.tsx` → «R32: el mensajero bloqueado sale DESHABILITADO…» |
+| R33 | El FILTRO no bloquea | `AsignacionBloqueoPorCierre.test.tsx` → «ofrece a TODOS los mensajeros servidos…» + «guardia: `FiltrosEntregas.tsx` no LEE `bloqueadosIds`…» |
+| R34 | No bloquea a la bodega entera | `AsignacionBloqueoPorCierre.test.tsx` → «R34: su compañero sin cierres sigue elegible»; `AsignarSateliteModal.test.tsx` → «R34: y su compañera SIN cierres…» |
+| R43 | El aviso dice las tres cosas | Los cuatro portales: `RepartoModule` / `RecogerModule` / `RecoleccionModule` / `CierreDiaModule` → «271/§10.2 caso 1 / 2 / 3» |
+| R46 | Lenguaje claro, sin siglas | `CierreAdminBloqueoMensajero.test.tsx` → «R46: sin siglas ni nombres de estado…»; el motivo de los selectores es «tiene cierres sin resolver» |
+| R48 | La administración ve el bloqueo en la fila | `CierreAdminBloqueoMensajero.test.tsx` → los 9 casos |
+| R51 | Ninguna línea promete lo derogado | `regla-241-caducada.guardia.test.ts` (ahora también `app/`); + aserción negativa en los cuatro portales |
+| R52 | Los cuatro dicen lo mismo salvo el CTA | Los mismos literales en los cuatro archivos, con la ÚNICA diferencia del puntero (`CierreDiaModule` → «…con el botón de abajo»; los otros tres → «Ve a «Cierre del día»…») |
+| R60 | Sin jornada fiable, la fecha se omite | `RepartoModule` / `RecogerModule` / `CierreDiaModule` → «271/R60 · … la fecha DESAPARECE entera» |
+| R5 | Un `solicitado` a secas NO bloquea | Los cuatro portales → «271/R5 · un solo cierre YA enviado (N=1, V=0)…» |
+
+**Los cinco literales de §10.2:** los **tres al mensajero** se afirman en los cuatro módulos (son
+los que la pantalla pinta); los **dos a la bodega** son texto de notificación y siguen viviendo en
+`tests/unit/notificaciones/bloqueo-textos.test.ts`, que no cambió.
+
+---
+
+## Gate de esta pasada — parcial y DECLARADO como tal
+
+⚠️ **NO se corrió `./init.sh`.** Había otro agente trabajando en paralelo sobre esta misma feature,
+y en este repo el gate lee el árbol mutado por el subagente: su veredicto no valdría. El completo lo
+lanza el leader cuando las dos pasadas hayan aterrizado.
+
+Lo que **sí** se corrió, con su resultado:
+
+```
+pnpm exec tsc --noEmit                                    -> sin una sola línea de salida
+pnpm run lint                                             -> 99 problems (0 errors, 99 warnings)   [las 99 son previas]
+vitest run tests/components tests/unit/guards tests/unit/components
+                                                          -> Test Files 350 passed | Tests 4799 passed | 26 skipped
+vitest run tests/unit/actions tests/unit/notificaciones   -> Test Files  57 passed | Tests  748 passed
+vitest run tests/unit/services/{cierre-dia,guia-asignacion,asignacion-satelite,cierres-admin,cierre-bloqueo-superficies}-service…
+                                                          -> Test Files   5 passed | Tests  349 passed
+```
+
+**Lo que este gate parcial NO cubre, y hay que correr después:** `tests/integration/db` (esta pasada
+no toca base, pero el gate completo es de la feature, no de la pasada), `tests/unit/repositories` y
+el resto de `tests/unit/services`.
+
+---
+
+## Lo que NO se hizo, y por qué
+
+1. **T11.5 — «ver la app» sigue sin hacerse.** Es lo único que ve la pantalla de verdad, y en este
+   repo Playwright encontró en minutos siete textos rotos que 12.000 tests daban por buenos. Sin
+   levantar la app y entrar como mensajero con N=2, **el aviso nuevo no se ha visto nunca
+   renderizado**.
+2. **El dato que falta en `BloqueoDetalle`** (el estado del re-solicitable más viejo). Anotado
+   arriba; con él, el tercer CTA sobra. **No se implementó: es backend.**
+3. **R42 sigue a medias** (el productor del aviso de rechazo no está cableado). Es deuda del
+   backend, declarada en su pasada, y no se toca desde aquí.
+4. **La prosa caducada que queda en `tests/`.** `orden-repository.asignacion-satelite.test.ts:26` y
+   `guia-asignacion-service.test.ts:590` siguen afirmando en comentarios la regla del 20/08. Son
+   tests de la pasada de backend y la guardia no censa `tests/` a propósito (ver arriba). **Queda
+   escrito, no corregido**: tocar comentarios de tests ajenos a esta pasada sin correr su suite
+   entera es cómo se cuelan las regresiones que nadie atribuye.
+
+**Veredicto de la pasada de frontend:** T9.1–T9.6, R48 y la limpieza, cerradas y verdes; el hueco
+del caso 6 encontrado y tapado con su razón escrita; una ausencia de dato anotada y no inventada; y
+el gate completo pendiente del leader.

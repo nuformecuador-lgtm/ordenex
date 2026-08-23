@@ -12,6 +12,7 @@ import type {
   CierreTotales,
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 158 (T2.2 — R18/R17/Q-D) — el grupo "Incidentes" en el detalle del cierre del
 // MENSAJERO. Lo que este archivo protege:
@@ -114,9 +115,7 @@ function renderModule(grupos: CierreGrupos) {
       puedesSolicitar
       motivoBloqueo={null}
       cierresPasados={{ items: [], total: 0, pageSize: 25 }}
-      bloqueado={false}
-      tieneVencido={false}
-      tieneRechazado={false}
+      bloqueo={SIN_BLOQUEO}
     />
     </SWRConfig>,
   );

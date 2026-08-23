@@ -30,6 +30,11 @@ import type {
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreDestinoTipo } from "@/lib/types/cierre";
+// FEATURE 271 (T9.1): la copia local del aviso desapareció. El texto sale del formateador
+// COMPARTIDO con los otros tres portales, con `conCta: false` porque el mensajero YA está en
+// «Cierre del día» y remitirlo a la pantalla en la que está sería ruido (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 // Feature 158 (T2.3): la columna de la causa es la MISMA que la del detalle del admin — se
 // reusa en vez de reescribirla, para que las dos pantallas no puedan divergir en la etiqueta.
 import { COLUMNA_CAUSA_INCIDENTE } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
@@ -119,107 +124,92 @@ export interface CierreDiaModuleProps {
    */
   cierresPasados: CierresPasadosPagina;
   /**
-   * Feature 41/R21: `true` si el mensajero está BLOQUEADO para GESTIONAR Y COBRAR.
-   * Derivado server-side (`estadoBloqueoMensajero` → `findMensajerosBloqueadosPorCierres`)
-   * y pasado por props; el módulo solo muestra el aviso, nunca re-deriva el estado del
-   * cierre en el cliente.
+   * Feature 41/R21 + 111/R13 + 109/R31 -> FEATURE 271 (T9.3): el DETALLE del bloqueo, que
+   * SUSTITUYE a tres props (`bloqueado`, `tieneVencido`, `tieneRechazado`). Las tres respondían a
+   * la misma pregunta por caminos distintos —el predicado del servidor una, el histórico de
+   * cierres las otras dos— y dos fuentes para la misma pregunta es cómo se desincronizan.
    *
-   * ⚠️ FEATURE 241 (2026-08-20) — QUÉ LO ENCIENDE HOY, porque cambió: `vencido` o
-   * `rechazado`, y NADA MÁS. Este doc decía «tiene un cierre `solicitado`/`vencido`
-   * pendiente» y «el bloqueo es TOTAL (no puede gestionar NI recibir)»; las dos cosas son
-   * falsas con la regla firmada. Con `solicitado` la pelota está en el tejado del admin
-   * (mediana 8,2 h, p90 22,1 h) y el mensajero trabaja con normalidad, así que el flag
-   * llega en `false` y el aviso NO se pinta: el filtro vive en el predicado del servidor,
-   * no aquí. Y recibir asignaciones no se bloquea nunca, en ningún estado.
+   * Trae el veredicto de la regla N/V (libre si arrastra un cierre a lo sumo y ninguno espera a
+   * que él lo reenvíe), cuántos cierres arrastra, cuántos espera que él reenvíe y CUÁL toca
+   * resolver primero —con la fecha de su JORNADA, no la de su creación, que en un cierre vencido
+   * va un día por delante—. Todo derivado server-side por el MISMO predicado que aplica el
+   * servidor al rechazar (R10): la pantalla no re-deriva nada.
    */
-  bloqueado: boolean;
-  /**
-   * Feature 111/R13: `true` si el mensajero tiene un cierre `vencido`. Habilita un
-   * CTA diferenciado para SOLICITAR (enviar a aprobación) ese vencido, con
-   * INDEPENDENCIA del gate de creación (`puedesSolicitar`). Derivado server-side.
-   */
-  tieneVencido: boolean;
-  /**
-   * Feature 109/R31: `true` si el mensajero tiene un cierre `rechazado`. En el modelo
-   * GLOBAL un `rechazado` NO es terminal: bloquea y es RE-SOLICITABLE. Habilita el MISMO
-   * CTA de re-solicitud que el `vencido` (misma Server Action `solicitarCierre`, que el
-   * backend enruta a la transición `rechazado → solicitado`), con INDEPENDENCIA del gate
-   * de creación (`puedesSolicitar`). Derivado server-side. Excluyente del `vencido` en la
-   * práctica (invariante R30: nunca 2 cierres abiertos a la vez).
-   */
-  tieneRechazado: boolean;
+  bloqueo: BloqueoDetalle;
 }
 
-// Feature 41/R21 + 111/R12 → 241: aviso accionable del bloqueo (texto separado, i18n-ready).
+// =================================================================================================
+// FEATURE 271 (T9.1, R52) — LA SEGUNDA COPIA DEL AVISO DE BLOQUEO SE BORRÓ DE AQUÍ.
+// =================================================================================================
 //
-// ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO CAMBIÓ PORQUE DECÍA DOS COSAS FALSAS. Decía «No puedes
-// gestionar NI RECIBIR NUEVAS ASIGNACIONES hasta resolver tu cierre pendiente», y este comentario
-// remataba con «el bloqueo abarca gestionar Y recibir»:
-//   · «ni recibir nuevas asignaciones» es falso SIEMPRE — recibir no se bloquea en ningún estado
-//     (pedido humano del 2026-08-18, ratificado por la regla firmada). Ninguna superficie de
-//     asignación consulta el predicado de bloqueo.
-//   · «No puedes gestionar» es falso con `solicitado` — pero eso ya no llega hasta aquí: el flag
-//     `bloqueado` sólo se enciende con `vencido`/`rechazado` (ver su doc en las props).
-// Un aviso que prohíbe MÁS de lo que el servidor rechaza es peor que no avisar: el mensajero deja
-// de intentar cosas que sí puede hacer, y el trabajo que le siguen asignando se le queda parado.
+// Vivía en este archivo una constante `BLOQUEO_AVISO` propia, hermana de la de
+// `lib/constants/bloqueo-mensajero.ts`, y las dos afirmaban «Sí puedes seguir recibiendo
+// asignaciones». Desde el 2026-08-23 eso es FALSO —un mensajero bloqueado tampoco recibe trabajo
+// nuevo, ni reparto ni recolección— y un aviso que permite más de lo que el servidor acepta manda
+// al mensajero a intentar algo que le van a negar.
 //
-// Es la SEGUNDA copia del texto; la primera vive en `lib/constants/bloqueo-mensajero.ts` para los
-// dos portales ("Entregas" y "Recolección"). NO se importa de allí a propósito: esa variante
-// remata con «Ve a «Cierre del día» para resolverlo» y aquí el mensajero YA está en esa pantalla,
-// con el CTA del vencido/rechazado a la vista. Lo único que se comparte es el criterio: decir qué
-// NO puede, qué SÍ puede, y cómo salir.
-//
-// Qué NO repite: el «envíalo a aprobación» y el porqué del estado los dicen `VENCIDO_AVISO` /
-// `RECHAZADO_AVISO` justo debajo, cada uno con su CTA. Lo que ninguno de los dos dice —y es lo que
-// aporta éste— es el ALCANCE: qué significa exactamente «tu operación» bloqueada.
-const BLOQUEO_AVISO =
-  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones: te esperan en «Entregas». Resuélvelo con el botón de abajo.";
+// POR QUÉ NO SE ARREGLÓ LA COPIA Y SE BORRÓ ENTERA. Su única razón de existir era el remate: la
+// otra decía «Ve a «Cierre del día» para resolverlo» y aquí el mensajero YA está en esa pantalla.
+// Eso ahora es un parámetro (`conCta`). Y además el aviso pasó a CONTAR —cuántos cierres arrastra
+// y cuál toca resolver primero (R43)—: mantener dos fuentes de un texto que cuenta es garantizar
+// que divergirán, que es exactamente lo que pasó cuando el backend corrigió su copia y ésta se
+// quedó mintiendo sin que nada avisara.
 
-// Feature 111/R13: CTA + aviso del cierre `vencido` (texto separado, i18n-ready).
+// =================================================================================================
+// Feature 111/R13 + 109/R31 -> FEATURE 271 — LOS CTA DE RE-ENVÍO (textos separados, i18n-ready).
+// =================================================================================================
 //
-// FEATURE 241 (2026-08-20) — REVISADO CON LA REGLA NUEVA DELANTE, Y SOBREVIVE TAL CUAL. Se miro
-// por lo mismo que hundio a `RECHAZADO_AVISO` de aqui abajo, y sale limpio en los dos frentes:
-//   · CUANDO SE LEVANTA EL BLOQUEO: dice «envialo a aprobacion PARA DESTRABAR tu operacion», o sea
-//     que destraba AL ENVIAR. Es exactamente lo que hace el codigo — `transicionarVencidoASolicitado`
-//     escribe `estado = 'solicitado'` y `solicitado` NO esta en `ESTADOS_CIERRE_BLOQUEAN_GESTION`,
-//     asi que el mensajero sale del conjunto bloqueado en esa misma escritura.
-//   · ASIGNACIONES: no las menciona, que es lo correcto — recibir no se bloquea nunca.
-// Queda anotado para que la proxima revision no tenga que re-litigarlo: NO es un olvido, esta
-// comprobado contra el predicado.
+// ⚠️ LOS DOS AVISOS PERDIERON HOY SU PROMESA, Y NO ES UN RECORTE DE ESTILO. Decían «Envíalo a
+// aprobación PARA DESTRABAR tu operación» y «con eso SE LEVANTA EL BLOQUEO y sigues gestionando y
+// cobrando». Eso era cierto mientras un mensajero no podía tener más de un cierre abierto: enviar
+// el único que arrastraba lo dejaba libre en esa misma escritura. Desde la 271 puede arrastrar
+// DOS, y entonces enviar el que falta NO lo desbloquea —sigue bloqueado hasta que la bodega
+// apruebe el más antiguo (R8)—. Prometerlo lo manda a intentar gestionar y a que el servidor le
+// diga que no, que es el fallo que R43 prohíbe.
+//
+// QUIÉN DICE AHORA QUÉ PASA DESPUÉS: el aviso de bloqueo de arriba, que se pinta SIEMPRE que hay
+// algo que reenviar —tener un cierre re-solicitable implica estar bloqueado, por la propia regla—
+// y que sí distingue los dos casos («se desbloquea cuando la bodega apruebe el más antiguo» vs
+// «envíalo a aprobación con el botón de abajo»). Aquí abajo queda lo que es cierto siempre: qué
+// pasó con ese cierre y dónde está el botón.
+
 const VENCIDO_AVISO =
-  "Tienes un cierre vencido sin resolver. Envíalo a aprobación para destrabar tu operación.";
+  "Tu cierre venció sin enviarse a aprobación. Envíalo con el botón de abajo.";
 const VENCIDO_CTA_LABEL = "Solicitar aprobación del cierre vencido";
 const VENCIDO_CONFIRM_TITULO = "Solicitar aprobación del cierre vencido";
 const VENCIDO_CONFIRM_DETALLE =
   "Se enviará tu cierre vencido a tu bodega para aprobación. No se recalculan los montos ya registrados.";
 const VENCIDO_OK = "Cierre vencido enviado a aprobación.";
 
-// Feature 109/R31: CTA + aviso del cierre `rechazado` (texto separado, i18n-ready).
-// En el modelo GLOBAL un cierre `rechazado` NO es terminal: bloquea, y es RE-SOLICITABLE (espejo
-// del `vencido`). El copy lo deja explícito para que no se lea como "resuelto/cerrado".
-//
-// ⚠️ FEATURE 241 (2026-08-20) — DECÍA QUE EL BLOQUEO DURABA MÁS DE LO QUE DURA, Y ESA DIRECCIÓN DEL
-// ERROR ES LA CARA. Remataba con «sigue bloqueando tu operación hasta que lo vuelvas a enviar a
-// aprobación Y TU BODEGA LO APRUEBE». Falso: `transicionarRechazadoASolicitado` escribe
-// `estado = 'solicitado'`, y `solicitado` NO está en `ESTADOS_CIERRE_BLOQUEAN_GESTION`
-// (`["vencido","rechazado"]`) — el único predicado que gatea gestionar y cobrar, y el que consultan
-// `MisAsignacionesService`, `CierreDiaService.deshacerGestion` y `RecoleccionTiendaService`. O sea:
-// el bloqueo se levanta EN ESA MISMA ESCRITURA, sin que la bodega toque nada.
-//
-// Prometer una espera que no existe no es un matiz de redacción: manda al mensajero a esperar de
-// brazos cruzados una aprobación que no necesita para volver a trabajar —mediana 8,2 h, p90 22,1 h—
-// y es una pérdida de jornada silenciosa, sin ningún síntoma que la delate.
-//
-// Lo que NO se prometió a cambio: que reenviar le devuelva las órdenes congeladas. La liberación de
-// `sin_gestionar` sí ocurre solo al APROBAR (109/R16, `CierresAdminService`), así que el texto habla
-// de lo que recupera —gestionar y cobrar— y no de recuperar las órdenes.
+// Un cierre `rechazado` NO es terminal: bloquea, y es RE-SOLICITABLE (espejo del `vencido`). El
+// copy lo deja explícito para que no se lea como «resuelto/cerrado» — eso no cambió y sigue siendo
+// lo que este aviso aporta y el badge de estado no.
 const RECHAZADO_AVISO =
-  "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación: con eso se levanta el bloqueo y sigues gestionando y cobrando, sin esperar a que tu bodega lo apruebe.";
+  "Tu cierre fue rechazado, pero no queda cerrado. Vuelve a enviarlo a aprobación con el botón de abajo.";
 const RECHAZADO_CTA_LABEL = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_TITULO = "Solicitar aprobación del cierre rechazado";
 const RECHAZADO_CONFIRM_DETALLE =
   "Se enviará de nuevo tu cierre rechazado a tu bodega para aprobación. No se recalculan los montos ya registrados.";
 const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
+
+// ⚠️ FEATURE 271 — EL TERCER CTA, Y EXISTE POR UN CASO DE LA TABLA DE VERDAD, NO POR SIMETRÍA.
+//
+// Es el caso 6 del spec, alcanzable y medido: el mensajero solicitó su cierre del día 1 y dejó
+// vencer el del día 2. El que toca resolver PRIMERO es el más antiguo —el `solicitado`, que
+// resuelve la bodega—, así que el detalle no dice de qué clase es el que él sí puede reenviar:
+// sólo dice que hay uno. Sin este CTA, un mensajero con algo que reenviar se quedaría sin botón
+// para hacerlo y sin forma de descubrir por qué.
+//
+// ⏳ DEUDA DECLARADA, NO OLVIDO: el dato que falta es «el estado del cierre RE-SOLICITABLE más
+// viejo». `aResolverPrimero` es el cierre ABIERTO más viejo, que no siempre es el mismo. Mientras
+// no viaje, el texto es neutro: menos específico, nunca falso.
+const REENVIAR_AVISO =
+  "Tienes un cierre sin enviar a aprobación. Envíalo con el botón de abajo.";
+const REENVIAR_CTA_LABEL = "Enviar el cierre a aprobación";
+const REENVIAR_CONFIRM_TITULO = "Enviar el cierre a aprobación";
+const REENVIAR_CONFIRM_DETALLE =
+  "Se enviará tu cierre pendiente a tu bodega para aprobación. No se recalculan los montos ya registrados.";
+const REENVIAR_OK = "Cierre enviado a aprobación.";
 
 // Pedido humano: "ver" el detalle de un cierre YA solicitado (textos separados, i18n-ready).
 const VER_DETALLE_LABEL = "Ver";
@@ -394,13 +384,33 @@ export function CierreDiaModule({
   puedesSolicitar,
   motivoBloqueo,
   cierresPasados,
-  bloqueado,
-  tieneVencido,
-  tieneRechazado,
+  bloqueo,
 }: CierreDiaModuleProps) {
   const router = useRouter();
   const toast = useToast();
   const { mutate } = useSWRConfig();
+
+  // ---------------------------------------------------------------------------------------------
+  // FEATURE 271 (T9.3) — TODO LO QUE ESTA PANTALLA DECIDE SOBRE EL BLOQUEO SALE DE UN SOLO OBJETO.
+  // ---------------------------------------------------------------------------------------------
+  //
+  // Antes llegaban tres props que respondían a la misma pregunta por caminos distintos
+  // (`bloqueado` del predicado, `tieneVencido`/`tieneRechazado` del histórico de cierres). Aquí se
+  // DERIVAN las tres del `BloqueoDetalle`, sin volver a consultar nada: una sola fuente no puede
+  // desincronizarse consigo misma.
+  const bloqueado = bloqueo.bloqueado;
+
+  // El cierre que el MENSAJERO puede reenviar por su cuenta, si resulta ser el más viejo. Cuando
+  // el más viejo lo resuelve la administración —un `solicitado`—, esto es `null` aunque él tenga
+  // otro que reenviar: por eso existe el CTA neutro de más abajo.
+  const reenviable =
+    bloqueo.aResolverPrimero?.resuelve === "mensajero" ? bloqueo.aResolverPrimero : null;
+  const tieneVencido = reenviable?.estado === "vencido";
+  const tieneRechazado = reenviable?.estado === "rechazado";
+  // Hay algo que reenviar pero no se sabe de qué clase (caso 6 de la tabla de verdad). El conteo
+  // es la fuente: `cierresPorReenviar` cuenta EXACTAMENTE los que el servidor deja re-solicitar.
+  const tienePorReenviarSinNombrar =
+    bloqueo.cierresPorReenviar >= 1 && reenviable === null;
 
   // Confirmación de "Solicitar cierre"; true = modal abierto.
   const [confirmar, setConfirmar] = useState(false);
@@ -408,6 +418,8 @@ export function CierreDiaModule({
   const [confirmarVencido, setConfirmarVencido] = useState(false);
   // Feature 109/R31: confirmación del CTA del cierre `rechazado`; true = modal abierto.
   const [confirmarRechazado, setConfirmarRechazado] = useState(false);
+  // FEATURE 271: confirmación del CTA neutro de reenvío (caso 6); true = modal abierto.
+  const [confirmarReenvio, setConfirmarReenvio] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
   // Feature 67/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
@@ -500,19 +512,17 @@ export function CierreDiaModule({
    * el estado abierto del mensajero. El toast distingue por `via` (P2). Cierra los tres
    * modales pase lo que pase.
    */
-  async function confirmarSolicitud() {
+  async function confirmarSolicitud(okReenvio: string) {
     const result = await solicitarCierre();
     if (result.status === "ok") {
+      // FEATURE 271: el servidor ya no distingue `vencido_solicitado` de `rechazado_solicitado`
+      // —la re-solicitud se decide por EDAD, no por estado (R18)—, así que quien sabe qué acaba de
+      // pasar es el BOTÓN que se pulsó, y su mensaje llega por parámetro. `creado` sigue teniendo
+      // el suyo: es un cierre nuevo, no un reenvío.
       toast.success(
-        result.via === "vencido_solicitado"
-          ? VENCIDO_OK
-          : result.via === "rechazado_solicitado"
-            ? RECHAZADO_OK
-            : "Cierre solicitado correctamente.",
+        result.via === "resolicitado" ? okReenvio : "Cierre solicitado correctamente.",
       );
-      setConfirmar(false);
-      setConfirmarVencido(false);
-      setConfirmarRechazado(false);
+      cerrarConfirmaciones();
       refrescarListas();
       return;
     }
@@ -523,9 +533,15 @@ export function CierreDiaModule({
           ? "No tenés permiso para solicitar el cierre."
           : "No se pudo solicitar el cierre. Intentá de nuevo.";
     toast.error(mensaje);
+    cerrarConfirmaciones();
+  }
+
+  /** Cierra los cuatro modales de solicitud/reenvío pase lo que pase. */
+  function cerrarConfirmaciones() {
     setConfirmar(false);
     setConfirmarVencido(false);
     setConfirmarRechazado(false);
+    setConfirmarReenvio(false);
   }
 
   /**
@@ -562,25 +578,29 @@ export function CierreDiaModule({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* ---------- Aviso de bloqueo para gestionar y cobrar (feature 41/R21 + 111/R12 → 241) ----
-          Se pinta con el booleano tal cual llega del servidor: `bloqueado` YA significa
-          «vencido o rechazado» (241), así que un cierre `solicitado` no entra por aquí y no hay
-          nada que filtrar en el cliente. Va antes que los CTA del vencido/rechazado porque enuncia
-          el ALCANCE del bloqueo; el «qué hacer» y su botón vienen justo debajo. */}
+      {/* ---------- Aviso de bloqueo (feature 41/R21 + 111/R12 -> FEATURE 271, R43/R52) ----------
+          El veredicto y el texto salen del MISMO detalle que aplica el servidor: se pinta cuando
+          la regla dice BLOQUEADO —dos cierres sin aprobar, o uno esperando a que él lo reenvíe— y
+          nunca con un solo cierre ya enviado, que no bloquea nada.
+
+          Es el ÚNICO sitio de esta pantalla que dice CUÁNTOS cierres arrastra y CUÁL toca resolver
+          primero, y va antes que los CTA porque enuncia el ALCANCE; el «qué hacer» y su botón
+          vienen justo debajo. `conCta: false`: el mensajero YA está aquí, y mandarlo a la pantalla
+          en la que está sería ruido. */}
       {bloqueado ? (
         <p
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoBloqueo(bloqueo, { conCta: false })}
         </p>
       ) : null}
 
       {/* ---------- CTA del cierre vencido (feature 111/R13) ----------
-          Se ofrece SIEMPRE que haya un `vencido`, con INDEPENDENCIA del gate de
-          creación (`puedesSolicitar`): solicitar el vencido es la vía para destrabar
-          la operación. Llama a la MISMA action `solicitarCierre()`; el backend la
-          enruta a la transición vencido→solicitado. */}
+          Se ofrece SIEMPRE que el más viejo sea un `vencido`, con INDEPENDENCIA del gate de
+          creación (`puedesSolicitar`): enviarlo es lo único que depende de él. Llama a la MISMA
+          action `solicitarCierre()`; el backend transiciona el re-solicitable más viejo (R18),
+          que en esta rama es exactamente éste. */}
       {tieneVencido ? (
         <section
           aria-label="Cierre vencido"
@@ -599,10 +619,8 @@ export function CierreDiaModule({
       ) : null}
 
       {/* ---------- CTA del cierre rechazado (feature 109/R31) ----------
-          Mismo patrón que el `vencido` (mismo action `solicitarCierre()` → el backend
-          enruta a la transición rechazado→solicitado). Se ofrece SIEMPRE que haya un
-          `rechazado`, con INDEPENDENCIA del gate de creación (`puedesSolicitar`). El copy
-          comunica que un `rechazado` NO es terminal: bloquea hasta re-solicitar + aprobar. */}
+          Mismo patrón que el `vencido` y la misma action. El copy comunica que un `rechazado` NO
+          es terminal, que es lo que el badge de estado no dice. */}
       {tieneRechazado ? (
         <section
           aria-label="Cierre rechazado"
@@ -616,6 +634,28 @@ export function CierreDiaModule({
             onClick={() => setConfirmarRechazado(true)}
           >
             {RECHAZADO_CTA_LABEL}
+          </Button>
+        </section>
+      ) : null}
+
+      {/* ---------- CTA neutro de reenvío (FEATURE 271, caso 6 de la tabla de verdad) ----------
+          El mensajero tiene un cierre que puede reenviar, pero el que toca resolver PRIMERO es
+          otro —uno que resuelve la bodega—, así que el detalle no dice de qué clase es el suyo.
+          Sin este botón se quedaría con algo que hacer y sin dónde hacerlo. Las tres ramas son
+          EXCLUYENTES por construcción: ésta sólo se enciende cuando las otras dos están apagadas. */}
+      {tienePorReenviarSinNombrar ? (
+        <section
+          aria-label="Cierre por enviar a aprobación"
+          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
+        >
+          <p className="text-sm text-destructive">{REENVIAR_AVISO}</p>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-fit"
+            onClick={() => setConfirmarReenvio(true)}
+          >
+            {REENVIAR_CTA_LABEL}
           </Button>
         </section>
       ) : null}
@@ -801,7 +841,7 @@ export function CierreDiaModule({
         title="Solicitar cierre del día"
         description="Se agruparán todas tus gestiones pendientes en una solicitud de cierre. Esta acción no se puede deshacer."
         confirmLabel="Solicitar cierre"
-        onConfirm={confirmarSolicitud}
+        onConfirm={() => confirmarSolicitud(REENVIAR_OK)}
         closeOnConfirm={false}
       />
 
@@ -813,7 +853,7 @@ export function CierreDiaModule({
         title={VENCIDO_CONFIRM_TITULO}
         description={VENCIDO_CONFIRM_DETALLE}
         confirmLabel="Solicitar aprobación"
-        onConfirm={confirmarSolicitud}
+        onConfirm={() => confirmarSolicitud(VENCIDO_OK)}
         closeOnConfirm={false}
       />
 
@@ -825,7 +865,19 @@ export function CierreDiaModule({
         title={RECHAZADO_CONFIRM_TITULO}
         description={RECHAZADO_CONFIRM_DETALLE}
         confirmLabel="Solicitar aprobación"
-        onConfirm={confirmarSolicitud}
+        onConfirm={() => confirmarSolicitud(RECHAZADO_OK)}
+        closeOnConfirm={false}
+      />
+
+      {/* FEATURE 271: confirmación del CTA neutro (caso 6). Misma action que los otros dos; el
+          backend transiciona el cierre re-solicitable MÁS VIEJO, sea cual sea su estado (R18). */}
+      <Modal
+        open={confirmarReenvio}
+        onOpenChange={setConfirmarReenvio}
+        title={REENVIAR_CONFIRM_TITULO}
+        description={REENVIAR_CONFIRM_DETALLE}
+        confirmLabel="Enviar a aprobación"
+        onConfirm={() => confirmarSolicitud(REENVIAR_OK)}
         closeOnConfirm={false}
       />
 

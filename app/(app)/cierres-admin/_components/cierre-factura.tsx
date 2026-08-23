@@ -68,6 +68,7 @@ import {
   FLETE_DEV_CON_IVA_LABEL,
   INGRESO_TOTAL_LABEL,
   INGRESO_PANEL_LABEL,
+  MensajeroBloqueadoBadge,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -484,6 +485,14 @@ export function CierreFacturaResumen({
   acciones,
   rotulo,
 }: Readonly<CierreFacturaResumenProps>) {
+  // FEATURE 271 (R48): el bloqueo del DUEÑO de este cierre, junto al estado. Se pinta AQUÍ y no en
+  // cada listado porque las dos listas —la cola y el histórico— usan este mismo comprobante, y el
+  // caso que R48 viene a resolver aparece justo cuando la fila que falta está en la otra: un
+  // mensajero con dos cierres puede tener uno en cada lista.
+  //
+  // El dato es OPCIONAL en el tipo (aditivo): un consumidor que no lo traiga no pinta nada, en vez
+  // de afirmar «no bloqueado», que sería inventarse un veredicto.
+  const bloqueo = cierre.bloqueoMensajero;
   return (
     <HojaResumen
       titulo={FACTURA_TITULO}
@@ -491,7 +500,17 @@ export function CierreFacturaResumen({
       toggleSufijo={`del cierre de ${cierre.mensajeroNombre}`}
       folio={folio(cierre.cierreId)}
       estado={cierre.estado}
-      rotulo={rotulo}
+      rotulo={
+        <>
+          {rotulo}
+          {bloqueo?.bloqueado ? (
+            <MensajeroBloqueadoBadge
+              cierresAbiertos={bloqueo.cierresAbiertos}
+              cierresPorReenviar={bloqueo.cierresPorReenviar}
+            />
+          ) : null}
+        </>
+      }
       acciones={acciones}
       partes={[
         { icon: <User size={14} aria-hidden="true" />, texto: cierre.mensajeroNombre },
