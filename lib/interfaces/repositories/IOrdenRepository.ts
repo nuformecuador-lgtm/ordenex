@@ -363,11 +363,46 @@ export interface TransicionAyudaInput {
    * otro repo, y esa si es del sistema.
    */
   actorUsuarioId: string;
-  /** `solicitud_ayuda_tienda` (ida) o `rescate_ayuda_tienda` (vuelta). Ninguna es visita real (R11). */
+  /**
+   * `solicitud_ayuda_tienda` (ida), `rescate_ayuda_tienda` (vuelta) o `habilitacion_api` (la
+   * vuelta pedida por el INTEGRADOR, feature 266). Ninguna de las tres es visita real
+   * (235/R11, 266/R26).
+   *
+   * Feature 266 (T2.2, design §2.3) — el tercer miembro es **ADITIVO y no cambia el comportamiento
+   * de ningun llamador existente**: los dos services actuales (`SolicitudAyudaService.solicitar` y
+   * `rescatarOrdenAyuda`) siguen pasando su literal de siempre, y ninguna firma se toca.
+   *
+   * Y NO es «anadir props» en el sentido que la decision (1) de la ficha 266 prohibe: no se toca
+   * la firma de `rescatarOrdenAyuda`, ni la de `HabilitarNovedadService.habilitar`, ni ningun
+   * parametro de COMPORTAMIENTO. Lo que se amplia es el CENSO de familias que el punto unico sabe
+   * registrar, que es literalmente para lo que este campo existe.
+   */
   origenTipo: Extract<
     OrdenHistorialOrigenTipo,
-    "solicitud_ayuda_tienda" | "rescate_ayuda_tienda"
+    "solicitud_ayuda_tienda" | "rescate_ayuda_tienda" | "habilitacion_api"
   >;
+}
+
+/**
+ * Feature 266 (T3.1, design §4.2) — la lectura MINIMA que el service de habilitacion por API key
+ * necesita de UNA orden para decidir su rama.
+ *
+ * Son EXACTAMENTE los cuatro datos del discriminador (R12) y ni uno mas: `estatusValue` para la
+ * guarda de estado, `mensajeroAsignadoId` para separar la rama A de la B, `estatusId` para pasarlo
+ * como origen guardado de la transicion e `id` para escribir. La rama NO se deriva de ninguna otra
+ * columna, bandera ni historial, y este `select` acotado es lo que lo hace cierto: lo que no llega
+ * no se puede consultar por descuido.
+ */
+export interface OrdenParaHabilitacionApi {
+  id: string;
+  estatusId: string;
+  estatusValue: string;
+  /**
+   * `null` = el paquete ya volvio a bodega. No es una heuristica: los cuatro caminos que devuelven
+   * el paquete ponen esta columna a NULL, y pedir ayuda NO desasigna (el paquete sigue con el
+   * mensajero). De ahi salen las dos ramas.
+   */
+  mensajeroAsignadoId: string | null;
 }
 
 /**
@@ -1537,6 +1572,23 @@ export interface IOrdenRepository {
    * mensajero asignado (R6).
    */
   transicionarAyuda(input: TransicionAyudaInput): Promise<boolean>;
+
+  /**
+   * Feature 266 (T3.1, design §4.2, R3/R4) — LECTURA, y solo lectura, de la orden `numGuia` del
+   * OWNER, para que el service de habilitacion por API key decida su rama.
+   *
+   * El owner se fuerza EN EL `where` (`tienda_id = ownerId AND deleted_at IS NULL`), igual que en
+   * `cancelarViaApi`, y NO en un `if` posterior: asi no existe ninguna ruta en la que la orden se
+   * lea primero y se compruebe la pertenencia despues. `null` cubre los tres casos —no existe,
+   * esta borrada, es de otra tienda— sin distinguirlos, que es lo que R4 pide: el borde no es un
+   * oraculo del estado de una guia ajena.
+   *
+   * `select` ACOTADO a los cuatro campos del discriminador: no arrastra montos ni la fila entera.
+   */
+  findParaHabilitacionApi(
+    numGuia: number,
+    ownerId: string,
+  ): Promise<OrdenParaHabilitacionApi | null>;
 
   /**
    * Suma UNO al contador de intentos de contacto de la orden y devuelve el valor RESULTANTE.

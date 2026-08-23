@@ -151,6 +151,7 @@ model Usuario {
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
+  habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones que ESTE usuario dedicado de API key pidio por el canal integrador; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -587,6 +588,7 @@ model Orden {
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
   notasHilo             OrdenNota[]            @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
   diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
+  habilitacionesApi     OrdenHabilitacionApi[] @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -717,6 +719,38 @@ model OrdenNota {
   @@index([ordenId, createdAt]) // R3/R28: hilo ordenado en UNA sola consulta (forma del indice de ChatMensaje)
   @@index([autorId]) // segunda FK indexada (patron orden_mensajero_meta)
   @@map("orden_nota")
+}
+
+// Feature 266 (T1.2, design §2.2): BITACORA de las habilitaciones pedidas por el canal por API
+// key, comun a las DOS ramas del endpoint (R23). Fila APPEND-ONLY (R24): SIN updatedAt ni
+// deletedAt, y sin ningun metodo de actualizacion o borrado en su repositorio — una segunda
+// habilitacion de la misma orden con otra nota es un HECHO NUEVO, no una correccion. Mismo
+// criterio que OrdenHistorialEstado.
+//
+// ⚠️ NACE SIN LECTOR y se ACEPTA (D4, firmada 2026-08-23): es auditoria, ninguna superficie la
+// consulta, y exponerla es ficha aparte. Declarado en voz alta por el precedente de la 270.
+//
+// RLS habilitada sin policies (solo service role), patron OrdenNota/OrdenHistorialEstado/
+// GestionOrden: la unica puerta —la orden tiene que ser del owner de la key— vive en el service.
+model OrdenHabilitacionApi {
+  id             String  @id @default(uuid())
+  ordenId        String  @map("orden_id")
+  /// El usuario dedicado de la API key (`actor.usuarioId`), que es TAMBIEN el `tiendaId` de sus ordenes (R3).
+  actorUsuarioId String  @map("actor_usuario_id")
+  /// Obligatoria: recorte y tope de 200 caracteres en el borde (R7), el mismo de `OrdenNota.cuerpo`.
+  nota           String
+  /// ESCRITO y no derivado del par de estados: `true` = rama A (volvio a `en_reparto`), `false` = rama B (solo log).
+  cambioDeEstado Boolean @map("cambio_de_estado")
+  /// SNAPSHOT del `order_status.value` en el que la orden quedo. TEXT y no FK: si un value se renombra, la bitacora debe seguir diciendo lo que dijo.
+  estadoResultante String @map("estado_resultante")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  orden Orden   @relation("OrdenHabilitacionApiOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+  actor Usuario @relation("OrdenHabilitacionApiActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([ordenId, createdAt]) // todas las habilitaciones de una orden, ordenadas, en UNA consulta
+  @@index([actorUsuarioId]) // segunda FK indexada (patron orden_nota)
+  @@map("orden_habilitacion_api")
 }
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
@@ -1657,6 +1691,7 @@ enum OrdenHistorialOrigenTipo {
   rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
   gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
   rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
+  habilitacion_api // feature 266 (D5/R16): LA HABILITACION POR API KEY — ayuda_tienda -> en_reparto, pedida por el integrador en lote. Familia propia y NO `rescate_ayuda_tienda` (design §7, A3): `actor_usuario_id` no distingue las vias, porque el usuario dedicado de la key ES la tienda. NO es visita real (R26): nadie fue a ninguna puerta. No enlaza gestion. NO exceptuada de webhook (R27): la rama A emite `en_reparto`
 
   @@map("orden_historial_origen_tipo")
 }
