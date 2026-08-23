@@ -279,3 +279,247 @@ compartido**, y con un cliente rancio `tx.ordenDiaRepartoCambio` es `undefined`:
 integración de este bloque se caerían con un `TypeError` que **no tiene nada que ver con lo que se
 está midiendo**. Se corrió `pnpm exec prisma generate` antes de cada gate y antes del arnés de
 mutaciones. Quien retome esto: desconfía de un rojo que hable de `undefined`.
+
+---
+
+# ⬛ 9 · CIERRE DE LOS BLOQUEANTES 1, 3 Y 4 DE LA REVISIÓN — 2026-08-23
+
+> Rama `fix/262-bloqueantes-revision`, desde `origin/dev` en **`c63c7235`**. Worktree aislado,
+> `node_modules` por junction, `prisma generate` justo antes del gate.
+>
+> Encargo: `progress/review_262.md` (informe del reviewer, **no se editó**). Se cierran los
+> bloqueantes **1**, **3** y **4**. El **2** (`F6`, «ver la app») **no es de esta tanda**: necesita
+> un preview desplegado y cuentas de tres roles, y ni se tocó ni se marcó.
+
+## 9.1 · Archivos
+
+| Archivo | Qué cambió |
+| --- | --- |
+| `tests/integration/db/correccion-dia-reparto-efectos.int.test.ts` | **BLOQ. 1**: el bloque `R32` (3 tests nuevos, +1 helper `conOrdenEnRuta`, +2 catálogos en el `beforeAll`), y el comentario de `R31` deja de prometer «ni ruta» |
+| `specs/262-corregir-dia-reparto/tasks.md` | **BLOQ. 3**: 41 tasks marcadas, sección **ESTADO DE CIERRE**, evidencia de `B15`/`B4`/`B13`/`C1`/`C2`/`C5` y el motivo de las cuatro vivas |
+| `specs/262-corregir-dia-reparto/design.md` | la fila de `R32` de la tabla de estrategia de verificación, corregida y fechada |
+| `progress/impl_262_backend.md` | el mapa `R<n> → test`: la fila de `R32` |
+| `progress/history.md` | **BLOQ. 4**: la entrada de la 262 |
+| `progress/impl_262_historial.md` | esta sección |
+
+**No se tocó:** `progress/review_262.md`, `feature_list.json`, `progress/current.md`, ni una sola
+línea de `lib/` o `app/`. `gate.log` **no se commiteó**.
+
+## 9.2 · BLOQUEANTE 1 — `R32` ya tiene tres tests, y se demostró que muerden
+
+**El hueco, dicho sin rodeos.** `R32` («la corrección no altera la ruta optimizada del mensajero ni
+los indicadores de su portal») colgaba de `B15` —«correr las suites de ruta y de corte sin
+tocarlas»— y de `F6`. **Ninguna de las dos es una aserción.** Correr suites ajenas demuestra que lo
+que **ya se afirmaba** sigue afirmándose; no puede demostrar una propiedad que **nadie** afirma. La
+revisión lo midió con una mutación que sobrevivió a **3.302 tests**.
+
+**Dónde va el test, y por qué ahí.** En `correccion-dia-reparto-efectos.int.test.ts`, que es el
+archivo de las AUSENCIAS de esta ficha — y que además llevaba escrito en el comentario de `R31`
+«ni gestión, ni historial, **ni ruta**» y luego contaba sólo las dos primeras. Ese comentario
+prometía justo la aserción que faltaba.
+
+**Lo que hacía falta y no era obvio: RUTA SEMBRADA QUE PERDER.** Con las tablas de ruta vacías,
+cualquier `count()` da cero antes y cero después **haga lo que haga la corrección**. Una aserción
+así parece una comprobación y no lo es. El corpus (`conOrdenEnRuta`) siembra, dentro de la
+transacción que se revierte:
+
+- un **mensajero propio** —`ruta_optimizada.mensajero_id` es **UNIQUE**, así que reusar el usuario
+  semilla reventaría con `P2002` en cualquier máquina donde ese usuario ya tuviera ruta; y un
+  mensajero recién creado no tiene ninguna otra orden asignada, así que el listado del portal
+  describe exactamente lo sembrado y nada más. **La base local es compartida**: fabricar el corpus
+  dentro de la transacción es la única forma de que sea el mismo en todas las máquinas;
+- una orden **`en_reparto`** (el estado en el que una orden ES parada de la ruta) con
+  `montoCobrar` distinguible;
+- la **cabecera** de la ruta con sus columnas llenas (estado, `calculada_at`, origen, `huella_set`,
+  `secuencia_fuente`, las cuatro del trazado, `tramo_vivo_at`);
+- una **parada posicionada** con su tramo.
+
+**Los tres tests:**
+
+1. **`⭑⭑ R32: la correccion NO TOCA NI UNA FILA de la ruta optimizada del mensajero`** — compara
+   las **filas enteras** de `ruta_optimizada` y `ruta_optimizada_parada` leídas antes y después, no
+   un puñado de columnas elegidas. `updated_at` de la cabecera lleva `@updatedAt`: cualquier
+   escritura sobre ella, aunque no cambiara ningún valor de negocio, movería la fila y esto se
+   pondría rojo. Con anti-vacuidad doble: la corrección **ocurrió** (el día quedó en `HOY`) y
+   **había** una parada de esa orden que perder.
+2. **`⭑⭑ R32: los INDICADORES DEL PORTAL del mensajero no se mueven al corregir`** — llama a
+   `MisAsignacionesService.listarMisAsignaciones` **con los repositorios REALES sobre la
+   transacción** (`GestionOrdenRepository`, `RutaOptimizadaRepository`,
+   `OrdenMensajeroMetaRepository`) antes y después, y compara `kpis`, el `RutaResumenDTO` entero y
+   la secuencia por orden. El dato **viaja de la escritura real al lector real**, igual que en el
+   test de `R31`. Y la anti-vacuidad va en las **dos direcciones**: se afirma que
+   `fechaRepartoISO` pasó de `2026-08-22` a `2026-08-21` y que `esParaManana` pasó de `true` a
+   `false` — sin eso, «nada cambió» podría significar «no pasó nada» en vez de «pasó lo que debía».
+3. **`⭑ R32: la correccion no ENCOLA ninguna reoptimizacion de ruta`** — el otro camino por el que
+   la ruta se alteraría **sin tocar sus tablas**: encolar el job `optimizacion_ruta` (92/R16), como
+   sí hace `GestionOrdenRepository`. Delta medido **dentro** de la transacción, así que las filas
+   que ya hubiera en la base compartida son las mismas antes y después.
+
+### Las dos mutaciones, con su salida REAL
+
+⚠️ **Se commiteó ANTES de mutar** (`7674faed`): el arnés restaura con `git checkout --` y hoy ya
+borró trabajo sin commitear a dos agentes. El árbol se devolvió limpio después de cada una
+(`git status --short` vacío, verificado).
+
+**M-r32-a — la corrección borra las paradas de la ruta dentro de su propia transacción.** Es la
+sonda EXACTA del bloqueante 1, inyectada en `corregirDiaRepartoLote` justo después del `UPDATE`:
+
+```ts
+await tx.rutaOptimizadaParada.deleteMany({
+  where: { ordenId: { in: movidas.map((m) => m.id) } },
+});
+```
+
+```
+$ pnpm exec vitest run tests/integration/db/correccion-dia-reparto-efectos.int.test.ts
+
+     × ⭑⭑ R32: la correccion NO TOCA NI UNA FILA de la ruta optimizada del mensajero 34ms
+     × ⭑⭑ R32: los INDICADORES DEL PORTAL del mensajero no se mueven al corregir 37ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  …correccion-dia-reparto-efectos.int.test.ts > … > ⭑⭑ R32: la correccion NO TOCA NI UNA FILA
+       de la ruta optimizada del mensajero
+AssertionError: expected [] to deeply equal [ { …(7) } ]
+- [
+-   {
+-     "id": "1a329d0a-…",
+-     "ordenId": "39360fd5-…",
+-     "rutaId": "03a8f380-…",
+-     "secuencia": 1,
+-     "tramoDistanciaM": 1180,
+-     "tramoDuracionS": 210,
+-     "tramoPolilinea": "cxocFvxnhVoJnG",
+-   },
+- ]
++ []
+ ❯ tests/integration/db/correccion-dia-reparto-efectos.int.test.ts:599:30
+
+ FAIL  …correccion-dia-reparto-efectos.int.test.ts > … > ⭑⭑ R32: los INDICADORES DEL PORTAL del
+       mensajero no se mueven al corregir
+AssertionError: expected { estado: 'vigente', …(6) } to deeply equal { estado: 'vigente', …(6) }
+    "origenFuente": "gps",
+-   "paradasSinOptimizar": 0,
++   "paradasSinOptimizar": 1,
+    "secuenciaFuente": "proveedor",
+-   "tramoSiguiente": {
+-     "distanciaM": 1180,
+-     "duracionS": 210,
+-     "encodedPolyline": "cxocFvxnhVoJnG",
+-   },
++   "tramoSiguiente": null,
+ ❯ tests/integration/db/correccion-dia-reparto-efectos.int.test.ts:639:28
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 9 passed (11)
+```
+
+**M-r32-b — la corrección encola una reoptimización por cada orden movida** (`tx.job.create` con
+`tipo: "optimizacion_ruta"` dentro de la misma transacción):
+
+```
+$ pnpm exec vitest run tests/integration/db/correccion-dia-reparto-efectos.int.test.ts
+
+     × ⭑ R32: la correccion no ENCOLA ninguna reoptimizacion de ruta 18ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  …correccion-dia-reparto-efectos.int.test.ts > … > ⭑ R32: la correccion no ENCOLA ninguna
+       reoptimizacion de ruta
+AssertionError: expected 22 to be 21 // Object.is equality
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 passed (11)
+```
+
+**Restaurado y verde otra vez:** `Test Files 1 passed (1) · Tests 11 passed (11)`.
+
+### El mapa `R<n> → test`, corregido en las TRES fuentes que mentían
+
+| Dónde | Decía | Dice |
+| --- | --- | --- |
+| `progress/impl_262_backend.md` §2 | «B15 (suites de ruta y corte en verde, sin tocarlas)» | los tres tests, con la nota de que `B15` **no es un test** |
+| `specs/262-corregir-dia-reparto/tasks.md` (mapa final) | «B15 · F6» | **B13**, bloque R32; `B15` y `F6` **acompañan, no sustituyen** |
+| `specs/262-corregir-dia-reparto/design.md` (estrategia de verificación) | «Los tests que ya existen + `ver la app`» | **Postgres real con ruta sembrada**, con el porqué del fallo escrito |
+
+**Y el comentario de `R31` deja de prometer lo que no hace.** No se le añadió el conteo de ruta:
+esa orden no tiene ruta sembrada, así que sería un cero trivialmente verde. Se dice **eso** en el
+comentario y se apunta al bloque `R32`.
+
+## 9.3 · BLOQUEANTE 3 — `tasks.md` pasa de 1/46 a 42/46, leído de las bitácoras
+
+Las marcas salen de las cuatro bitácoras y de lo que la revisión re-midió, **no de mirar el
+árbol por encima**. Se añadió una sección **ESTADO DE CIERRE** al principio del archivo con la
+tabla de las cuatro vivas y su motivo en una línea. Lo que el reviewer señaló en concreto:
+
+- **`B15`** — hecha, pero sin evidencia. Ahora lleva **los cuatro puntos** con la lista de archivos
+  y sus números: **27 archivos, 549 tests, 0 rojos** en tres tandas (5/79 la guardia y el corte ·
+  11/227 asignación y deshacer · 11/243 ruta e indicadores). Más dos verificaciones de diff: la
+  guardia del día **sólo creció** (277 adiciones / 3 borrados, y los tres borrados son líneas de
+  armazón del constructor del censo, **ninguna aserción**), y `findParadasEnReparto` **no aparece**
+  en el diff de los cuatro merges de la ficha contra su primer padre.
+- **`B0.2` / `C3`** — **siguen `[ ]`**, con el motivo escrito: la foto de `M1` es del 2026-08-22
+  04:27 CR y **caducó**; es del leader (MCP de Supabase, `DATABASE_URL` de producción *sensitive*).
+- **`C7`** — **sigue `[ ]`**: `P4` y `P5` no se han llevado a la puerta humana y `requirements.md`
+  no tiene la respuesta fechada. Es decisión de producto.
+- **`F6`** — **sigue `[ ]`**, y no se tocó: es el bloqueante 2 y no es de esta tanda.
+- **`C5`** — marcada con evidencia: `prisma migrate status` sobre `localhost:5432/ordenex` responde
+  **«Database schema is up to date!»** con **143 migraciones**, y las dos de la ficha están en su
+  orden. La prueba fuerte no es esa línea, sino que los **11 tests** de
+  `correccion-dia-reparto-efectos.int` corren contra esa base y leen `orden_dia_reparto_cambio` y
+  su `pg_class.relrowsecurity`.
+- **`B4`** — marcada apuntando a dónde vive el `grep` que su criterio pedía: lo corrió la revisión
+  y quedó en `progress/review_262.md` §menor (e), **una sola** escritura en todo el árbol.
+
+## 9.4 · BLOQUEANTE 4 — la entrada de la 262 en `progress/history.md`
+
+Escrita al final del archivo (append-only), con la voz de las entradas de la 264 y la 268: prosa
+densa que dice **qué estaba roto y por qué era estructural**, no viñetas de changelog. Lo que no
+omite: que el aviso **se habría perdido en silencio la segunda vez** por el `dedupe_key` con
+`NULLS NOT DISTINCT`; que el rastro en «Ver historial» **obligó a pintar una entrada sin
+transición** en un DTO que sólo sabía de transiciones; que **mirar la pantalla encontró que el
+hueco del anillo era un disco más oscuro**, con los dos `rgb()` medidos; el fallo mudo de `R32` con
+sus 3.302 tests verdes; y la **deuda viva: `F6` sin ejecutar**.
+
+## 9.5 · El gate
+
+`./init.sh` **COMPLETO**, escrito para que el exit code no lo tape un `echo`
+(`./init.sh > gate.log 2>&1; echo "INIT_EXIT=$?" >> gate.log`), y **leído dentro del log**:
+
+```
+✓ typecheck paso
+✓ lint paso              (✖ 99 problems: 0 errors, 99 warnings — todos PREEXISTENTES)
+ Test Files  1324 passed (1324)
+      Tests  17881 passed | 26 skipped (17907)
+   Duration  351.65s
+✓ test paso
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Verde a la primera, sin un rojo que interpretar** — así que no hubo que distinguir timeout bajo
+carga de base compartida. El número cuadra: la revisión midió **17.878** sobre `c63c7235` y aquí
+son **17.881**, exactamente **+3**, los tres tests de `R32`; el conteo de archivos no se mueve
+(1.324) porque los tres viven en un archivo que ya existía. El aviso de «migraciones sin down.sql»
+es **preexistente** (tres carpetas de la feature 92) y esta rama no añade ninguna migración.
+
+⚠️ **`gate.log` no está en el repo**: se escribió en el árbol para poder leer `INIT_EXIT` dentro y
+se borró antes de commitear.
+
+## 9.6 · Lo que queda a deber
+
+1. **`F6` («ver la app») — NO HECHA**, y no era de esta tanda (bloqueante 2 de la revisión). Es LA
+   deuda viva de la ficha: necesita preview desplegado y cuentas de maestro/admin, `adminSatelite`
+   y mensajero. Sigue anotada junto al código y bajo guardia.
+2. **`B0.2` / `C3`** (re-medir `M1` contra producción, caducada) y **`C7`** (`P4` y `P5` a la
+   puerta humana): son del **leader**, no de un subagente.
+3. **Los seis menores de la revisión no se tocaron.** El encargo era 1, 3 y 4. Los dos de un
+   renglón —(a) el comentario de `HistorialOrdenTimeline.tsx:140` que dice `bg-background` donde el
+   código usa `bg-popover`, y (b) el censo de `notificacion-notificadores-reales.test.ts` que dice
+   cinco donde hay seis— **siguen abiertos** y conviene llevárselos en la pasada de `F6`, que ya
+   toca esa superficie.
+4. **El veredicto de la revisión sigue siendo RECHAZADO** hasta que `F6` se ejecute: cerrar tres de
+   cuatro bloqueantes no aprueba la ficha, y `progress/review_262.md` **no se editó** — es el
+   informe del reviewer, no un documento de trabajo.
+
+**Veredicto:** bloqueantes **1**, **3** y **4** cerrados y verificados; `R32` pasa de no tener
+ninguna aserción a tener tres que mueren con la mutación que las midió; el bloqueante **2** (`F6`)
+sigue abierto a propósito.

@@ -39,6 +39,33 @@
 
 ---
 
+## ⬛ ESTADO DE CIERRE — 2026-08-23
+
+> Escrito al cerrar los bloqueantes de `progress/review_262.md`. Hasta hoy este archivo tenía
+> **1 de 46** tasks marcada, que es exactamente el estado en el que «casi todo hecho» y «casi nada
+> hecho» se leen igual. Las marcas de abajo **no se pusieron a ojo**: salen de las cuatro bitácoras
+> (`progress/impl_262_{backend,frontend,historial,historial_ui}.md`) y de lo que la revisión
+> re-midió por su cuenta sobre el árbol.
+
+**42 de 46 hechas. Cuatro siguen vivas**, y ninguna de las cuatro es de implementación:
+
+| Viva | Por qué sigue viva, en una línea |
+| --- | --- |
+| **`B0.2`** | La foto de `M1` contra producción es del **2026-08-22 04:27 CR** y caducó; hay que repetirla, y es del **leader** (el MCP de Supabase). |
+| **`C3`** | Es «`B0.2` hecha y escrita antes de desplegar»: cuelga de la anterior y cae con ella. |
+| **`C7`** | `P4` (¿la tienda lee el motivo?) y `P5` (¿el `adminSatelite` lee el rastro que escribe?) **no se han llevado a la puerta humana**, y el spec las quiere respondidas ANTES de desplegar. |
+| **`F6`** | «Ver la app» **no se ha ejecutado**: necesita preview desplegado y cuentas de los tres roles. Es LA deuda de la ficha, está anotada junto al código y bajo guardia. |
+
+**Lo que cambió hoy y por qué importa.** `B15` estaba hecha de facto pero **sin su evidencia
+escrita**, y de ella colgaba `R32` — que resultó **no tener ningún test**. La revisión lo midió:
+inyectando en `corregirDiaRepartoLote` el borrado de las paradas de la ruta, **3.302 tests
+siguieron verdes**. `R32` ya tiene su test (bloque R32 de `correccion-dia-reparto-efectos.int`,
+dentro de **`B13`**) y se demostró que muerde con esa misma mutación. `B15` conserva su valor —la
+no-regresión— pero **deja de figurar como el test de `R32`**: correr suites ajenas no puede
+demostrar una propiedad que nadie afirma.
+
+---
+
 ## BLOQUE 0 — Mediciones (antes de nada, y otra vez antes de desplegar)
 
 - [x] **B0.1 — M1 y M2 contra producción, SOLO LECTURA (MCP de Supabase).** ✅ **2026-08-22, 04:27 CR. M1 = 0** (sin acotar estado, así que `por_recoger` entra) y **M2 = 35, pero NINGUNA en `por_recoger` ni `en_reparto`**: las 35 están en estados que R6 excluye. **D3' NO se re-abre.** Números y desglose en `progress/impl_262_backend.md`. Las corre **el leader**:
@@ -54,6 +81,9 @@
 
 - [ ] **B0.2 — Re-medir M1 justo antes de desplegar.** Es una foto y caduca.
   **Hecho:** segunda tanda pegada con su hora, al lado de la primera.
+  ⛔ **VIVA, y ya CADUCÓ**: los números de `B0.1` son del **2026-08-22 04:27 CR** y hoy es el 23.
+  Es del **leader**: el subagente no tiene el MCP de Supabase y la `DATABASE_URL` de producción es
+  *sensitive*.
 
 ---
 
@@ -61,7 +91,7 @@
 
 ### Cimientos
 
-- [ ] **B1 — La tabla del rastro: esquema + migración + `down.sql` + RLS.** (sin dependencias)
+- [x] **B1 — La tabla del rastro: esquema + migración + `down.sql` + RLS.** (sin dependencias)
   `db/schema.prisma`: `model OrdenDiaRepartoCambio` (`design.md` §5.1) y sus dos relaciones inversas
   (`Orden.diaRepartoCambios`, `Usuario`). Migración nueva con **`migration.sql`** (tabla + 2 FK +
   `CHECK (fecha_nueva <> fecha_anterior)` + 2 índices + `ENABLE ROW LEVEL SECURITY`) y **`down.sql`**
@@ -72,14 +102,14 @@
   tiene** `updated_at` ni `deleted_at` (**R23**).
   ⚠️ La migración **no se edita después de aplicarse**: si hay que cambiar algo, migración nueva.
 
-- [ ] **B2 `[P]` — Textos, en una sola fuente.** (sin dependencias)
+- [x] **B2 `[P]` — Textos, en una sola fuente.** (sin dependencias)
   `lib/utils/dia-reparto-textos.ts`: `avisoDiaActualDeLaOrden(fechaISO)` («hoy está para el 22 de
   agosto») y el título/ayuda del selector en modo corrección. Reutiliza `fechaLegible`; **no** se
   reescribe `confirmacionDiaReparto`, se **usa** (**R18**).
   **Hecho:** el archivo sigue **sin importar `Date` ni `Intl`** (**R17**), y no aparece ninguna sigla
   ni ningún nombre de columna en el texto visible.
 
-- [ ] **B3 — Contratos.** (sin dependencias)
+- [x] **B3 — Contratos.** (sin dependencias)
   - `IOrdenRepository`: `corregirDiaRepartoLote(...)`, `CorreccionDiaConflictoError`, y
     `OrdenTransicionRow.fechaReparto: Date | null` **sin `?`**.
   - `ICorreccionDiaRepartoService` (nuevo): `corregir(input, actor, now?: Date)` con el union
@@ -91,14 +121,16 @@
 
 ### La escritura
 
-- [ ] **B4 — El choke point del rastro.** (dep. B1, B3)
+- [x] **B4 — El choke point del rastro.** (dep. B1, B3)
   `lib/repositories/registrar-cambio-dia-reparto.ts`, molde de `registrar-cambio-estado.ts` pero sin
   webhook, sin notificaciones y sin catálogo: un `createMany` en el `tx` en curso, con la regla
   escrita arriba (`design.md` §5.3).
-  **Hecho:** no-op con lista vacía; y **no existe ningún otro sitio** que inserte en esa tabla
-  (`grep` del árbol pegado en `progress/`).
+  **Hecho ✅** no-op con lista vacía; y **no existe ningún otro sitio** que inserte en esa tabla.
+  El `grep` del árbol (`lib/`, `app/`, `scripts/`, `tests/`) sobre `ordenDiaRepartoCambio` lo
+  corrió la revisión y devolvió **una sola escritura** — queda pegado en `progress/review_262.md`
+  §menor (e), que además dice «no hace falta repetirlo».
 
-- [ ] **B5 — La escritura guardada.** (dep. B1, B3, B4)
+- [x] **B5 — La escritura guardada.** (dep. B1, B3, B4)
   `OrdenRepository.corregirDiaRepartoLote`: `$transaction` con (1) `SELECT … ORDER BY "id" FOR
   UPDATE`, (2) `UPDATE` guardado con `RETURNING "id"`, (3) `throw` si no ganaron todas, (4) rastro en
   la misma tx. SQL literal en `design.md` §6.1. El día entra como **texto `::date`** vía
@@ -107,7 +139,7 @@
   (estado, mensajero, día presente, día distinto, no borrada) más la zona cuando aplica. B12 en
   verde.
 
-- [ ] **B6 — El servicio.** (dep. B3, B5, B2)
+- [x] **B6 — El servicio.** (dep. B3, B5, B2)
   `lib/services/CorreccionDiaRepartoService.ts`: rol (`esAccesoTotal` **o** `adminSatelite`), zona
   server-side, `ESTADOS_CON_DIA_DE_REPARTO_VIVO`, pre-chequeo por orden con **motivo tipado**
   (no existe / borrada / estado no admitido / sin mensajero / sin día / ya es de ese día),
@@ -118,14 +150,14 @@
   `findMensajerosBloqueadosParaGestion` — que un cierre pendiente no bloquee (**R14**) es imposible
   de romper por descuido si el método no está en el tipo (patrón `DeshacerAsignacionRepo`).
 
-- [ ] **B7 — La Server Action.** (dep. B6)
+- [x] **B7 — La Server Action.** (dep. B6)
   `lib/actions/corregir-dia-reparto.ts`, molde literal de `lib/actions/deshacer-asignacion.ts`:
   `withErrorHandler` + `resolveActorFromSession` + zod (`ordenIds` uuid `.min(1)`, `dia`
   `diaRepartoSchema` **sin `.default`**, `motivo` `trim().min(10).max(300)`) + fábrica del servicio.
   **Hecho:** `parse({ ordenIds, motivo })` **sin `dia`** falla (**R2**, `design.md` §4.3), y el
   motivo de sólo espacios falla por `min(10)` tras el `trim`.
 
-- [ ] **B8 `[P]` — El día viaja en los dos DTO de listado.** (dep. B3)
+- [x] **B8 `[P]` — El día viaja en los dos DTO de listado.** (dep. B3)
   `OrdenRepository` (listado de `/ordenes`) y el repo del listado satélite emiten `fechaRepartoISO`
   ya serializada `YYYY-MM-DD` (patrón `fechaReprogramacion`, `lib/types/orden.ts:322-329`).
   **Hecho:** el DTO **no** lleva un `Date` (el DataTable descarta objetos al renderizar) y el
@@ -133,7 +165,7 @@
 
 ### Las guardias
 
-- [ ] **B9 — ⚠️ La guardia de la invariante, ensanchada.** (dep. B5)
+- [x] **B9 — ⚠️ La guardia de la invariante, ensanchada.** (dep. B5)
   `tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts`: **lo que ya vigila no se
   toca**. Se añade el censo «escrituras del DÍA» y las cláusulas **(d1)-(d4)** de `design.md` §6.3,
   con la excepción declarada (archivo + conjunto **exacto** de columnas + **exactamente una**), su
@@ -146,7 +178,7 @@
   en prosa y la próxima escritura del día entra por la misma puerta sin que nadie se entere —
   medido: la guardia actual **ni siquiera ve** una escritura que no toque `asignado_at`.
 
-- [ ] **B10 `[P]` — El censo de «la carga del mensajero» gana un miembro.** (dep. B6)
+- [x] **B10 `[P]` — El censo de «la carga del mensajero» gana un miembro.** (dep. B6)
   `tests/unit/guards/carga-del-mensajero.guardia.test.ts`: `ESTADOS_CON_DIA_DE_REPARTO_VIVO` entra en
   `FAMILIA`, con `incluyeAyuda: true` y su razón escrita. El campo `pregunta` gana un tercer valor,
   `"donde vive el dia de reparto"`, **declarado**: un miembro nuevo que se cuele respondiendo otra
@@ -155,7 +187,7 @@
 
 ### Tests del backend
 
-- [ ] **B11 — Tests de servicio, con dobles.** (dep. B6)
+- [x] **B11 — Tests de servicio, con dobles.** (dep. B6)
   `tests/unit/services/correccion-dia-reparto.test.ts`. Cubren: rol (**R11**), zona del
   `adminSatelite` y `sin_zona` (**R12**), cada motivo del pre-chequeo por separado —estado no
   admitido con **su nombre** (**R6**), sin mensajero y sin día (**R5**), ya es de ese día (**R7**)—,
@@ -164,7 +196,7 @@
   `forbidden` (**R15**).
   **Hecho:** verde, y M-a … M-f producen rojo **con nombre**.
 
-- [ ] **B12 — ⚠️ Postgres real: la escritura y el rastro.** (dep. B5)
+- [x] **B12 — ⚠️ Postgres real: la escritura y el rastro.** (dep. B5)
   `tests/integration/db/correccion-dia-reparto.int.test.ts`, con `_postgres-real.ts`.
   1. Siembra órdenes del mismo mensajero: una en `por_recoger` con día = mañana, una en `en_reparto`
      con día = mañana, una con día = hoy, una **sin** día, una de **otra zona**.
@@ -182,7 +214,7 @@
   el test revienta, no retorna** (un `if (!fks) return;` reporta `passed` sin comprobar nada). Todo
   dentro de `enTransaccionRevertida`, con `serializarEscriturasReales` como primera sentencia.
 
-- [ ] **B13 `[P]` — Postgres real: las ausencias y las consecuencias.** (dep. B1, B5)
+- [x] **B13 `[P]` — Postgres real: las ausencias y las consecuencias.** (dep. B1, B5)
   `tests/integration/db/correccion-dia-reparto-efectos.int.test.ts`.
   - **Ninguna** fila nueva en `orden_historial_estado` para la orden corregida, y su conteo de
     intentos de entrega **no cambia** (**R25**).
@@ -193,9 +225,17 @@
     tras corregir a mañana, **sí** la cumple tras corregir a hoy (**R30**).
   - Con la fila ya corregida a hoy, la guarda de reserva de la 261 **deja de dispararse** para esa
     orden, sin escribir nada más (**R31**).
-  **Hecho:** verde; mismas reglas de no-saltarse que B12.
+  - ⬛ **AÑADIDO EL 2026-08-23 — el bloque `R32`, que es lo que cerró el bloqueante 1 de la
+    revisión.** Con **ruta SEMBRADA** (mensajero propio, cabecera vigente y una parada posicionada
+    con su tramo): las **filas enteras** de `ruta_optimizada` y `ruta_optimizada_parada` son las
+    mismas antes y después; los **indicadores del portal** —`kpis`, `RutaResumenDTO` y la secuencia
+    por orden, por `MisAsignacionesService.listarMisAsignaciones` con los repositorios **reales**
+    sobre la transacción— tampoco se mueven; y el **delta de `jobs` `optimizacion_ruta`** es cero.
+  **Hecho ✅:** verde (**11 tests**); mismas reglas de no-saltarse que B12. Las dos mutaciones del
+  bloque R32 se corrieron y **matan con nombre** (salida real en `progress/impl_262_historial.md`
+  §9).
 
-- [ ] **B14 — El cierre del riesgo de la 261, en sus TRES soportes.** (dep. B6, F3, F4)
+- [x] **B14 — El cierre del riesgo de la 261, en sus TRES soportes.** (dep. B6, F3, F4)
   1. `lib/interfaces/services/IMisAsignacionesService.ts`: la nota del riesgo aceptado se
      **sustituye** por su cierre fechado (`design.md` §9), **conservando** el razonamiento de por qué
      se aceptó y diciendo en **pasado** que la única salida fue un `UPDATE` a mano.
@@ -206,7 +246,7 @@
   **Hecho:** `git diff` sobre el spec de la 261 muestra **sólo adiciones**, cero líneas borradas
   (**R36**); la guardia en verde; M-r la mata.
 
-- [ ] **B15 `[P]` — No-regresión.** (dep. B5)
+- [x] **B15 `[P]` — No-regresión.** (dep. B5)
   - `tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts` en verde **con sus cuatro
     cláusulas originales intactas**.
   - `corte-diario-service.test.ts` y el repo del corte, en verde (**R30** no rompe nada de la 109).
@@ -214,7 +254,37 @@
     **no retira** ninguna escritura del día (**R33**).
   - La ruta optimizada: `findParadasEnReparto` no cambia y no hay reoptimización encolada desde la
     corrección (**R32**).
-  **Hecho:** los cuatro puntos verificados y escritos, con la lista de archivos corridos.
+  **Hecho ✅ 2026-08-23 — LOS CUATRO PUNTOS, CON LA LISTA DE ARCHIVOS Y SUS NÚMEROS.** Corrido
+  con `pnpm exec vitest run <archivos>` en tres tandas; **27 archivos, 549 tests, 0 rojos**:
+  - **(1) la guardia de la invariante del día** — `fecha-reparto-acompana-asignado-at.guardia`
+    (más `rastreo-sin-ruta-nueva.guardia`, de la 229, corrida de paso); **(2) el corte de la 109**
+    — `corte-diario-service`, `corte-diario-seleccion`, `corte-diario-repository` →
+    **5 archivos, 79 tests**.
+  - **(3) las dos vías de asignación (246) y el deshacer (149/261)** —
+    `guia-asignacion-service`, `guia-asignacion-gate-coordenadas`, `asignacion-satelite-service`,
+    `asignacion-satelite-gate-coordenadas`, `orden-repository.asignacion-satelite`,
+    `deshacer-asignacion-service`, `deshacer-asignacion.cierre-asimetria`,
+    `orden-repository.deshacer-asignacion`, `mis-asignaciones-reserva-bloquea`,
+    `cierre-dia-deshacer-dia-reparto`, `deshacer-gestion-conserva-reserva.int` →
+    **11 archivos, 227 tests**.
+  - **(4) la ruta optimizada y los indicadores** — `optimizacion-ruta-service`,
+    `optimizacion-ruta-encolado`, `optimizacion-ruta-degradacion`, `optimizacion-ruta-origen`,
+    `optimizacion-ruta-trazado`, `optimizacion-ruta-tramo-vivo`, `mis-asignaciones-orden-ruta`,
+    `mis-asignaciones-service`, `orden-repository`, `ruta-optimizada-migracion.int`,
+    `ruta-optimizada-rollback.int` → **11 archivos, 243 tests**.
+  - **La guardia sólo CRECIÓ**: `git diff --numstat` del rango de la 262 sobre ese archivo da
+    **277 adiciones y 3 borrados**, y los tres borrados son las líneas de armazón del constructor
+    del censo (`const ESCRITURAS: Escritura[] = (() => {`, el `out.push(...)` y su `})();`) —
+    **ninguna aserción**.
+  - **`findParadasEnReparto` no aparece en el diff de la 262**: el `git diff` de los cuatro merges
+    (#463, #465, #472, #474) contra su primer padre no lo nombra ni una vez, y los únicos archivos
+    de ruta/corte/portal que la ficha toca son **`lib/interfaces/services/IMisAsignacionesService.ts`**
+    (la nota del cierre de la 261, `B14`: prosa, no comportamiento). `RutaOptimizadaRepository.ts`,
+    `OptimizacionRutaService.ts` y `MisAsignacionesService.ts` **no se tocaron**.
+  ⚠️ **`B15` NO ES EL TEST DE `R32`, Y CREER QUE LO ERA COSTÓ LA REVISIÓN.** Correr suites ajenas
+  demuestra que **lo que ya se afirmaba** sigue afirmándose; no puede demostrar una propiedad que
+  **nadie afirma**. El test de `R32` es de **B13** (bloque R32 de
+  `correccion-dia-reparto-efectos.int`, 2026-08-23), y se probó que muerde.
 
 ---
 
@@ -224,7 +294,7 @@
 > avanzar. **B25** y **B28** sí necesitan **B1** (la tabla del rastro) en la rama. Detalle completo en
 > `design.md` **§14**.
 
-- [ ] **B24 — ⚠️ El DTO se vuelve UNIÓN DISCRIMINADA, y el build rompe a propósito.** (dep. ninguna)
+- [x] **B24 — ⚠️ El DTO se vuelve UNIÓN DISCRIMINADA, y el build rompe a propósito.** (dep. ninguna)
   `lib/types/orden-historial.ts`: `OrdenHistorialTransicionDTO` (`clase: "transicion"` + los seis
   campos de siempre, **sin volver nullable `estatusDestinoValue`**) y
   `OrdenHistorialCorreccionDiaDTO` (`clase: "correccion_dia"`, `fechaAnteriorISO`, `fechaNuevaISO`,
@@ -236,7 +306,7 @@
   (el `_EnsureExhaustive` de ese archivo sigue intacto); (3) `rastreo-frontera.guardia` sigue en
   verde **sin tocarla** (el símbolo prohibido sigue existiendo con el mismo nombre).
 
-- [ ] **B25 `[P]` — El repositorio del rastro: lectura por orden.** (dep. B1, B24)
+- [x] **B25 `[P]` — El repositorio del rastro: lectura por orden.** (dep. B1, B24)
   `lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository.ts` +
   `lib/repositories/OrdenDiaRepartoCambioRepository.ts`:
   `findCorreccionesByOrden(ordenId)` → `OrdenHistorialCorreccionDiaDTO[]`, `ORDER BY created_at ASC,
@@ -246,7 +316,7 @@
   un instante), y el `ORDER BY` lleva el desempate por `id` — sin él, dos filas del mismo instante
   salen en orden indefinido.
 
-- [ ] **B26 — La fusión y el orden, en el SERVICIO.** (dep. B24, B25)
+- [x] **B26 — La fusión y el orden, en el SERVICIO.** (dep. B24, B25)
   `lib/services/OrdenHistorialService.ts`: tercer repo por constructor, las dos lecturas y una
   función **pura y exportada** `fusionarLineaDeTiempo(transiciones, correcciones)` con la regla de
   `design.md` §14.3 (ascendente por `createdAt`; empate exacto → **transición primero**; dentro de
@@ -256,7 +326,7 @@
   (**R41**); y la autorización **no se toca** (**R44**: la lectura nueva va DESPUÉS de
   `decision === "ok"`, no antes).
 
-- [ ] **B27 — Tests del historial fusionado, con dobles.** (dep. B26)
+- [x] **B27 — Tests del historial fusionado, con dobles.** (dep. B26)
   `tests/unit/services/orden-historial-fusion.test.ts`: entradas de las dos fuentes intercaladas →
   orden correcto (**R37**, **R40**); **empate exacto de instante** → transición primero, y el
   resultado **no cambia** si se invierte el orden en que se pasan las listas (**R40**); orden **sin
@@ -264,7 +334,7 @@
   ven las correcciones y los dos sin visibilidad no llegan a leerlas (**R44**).
   **Hecho:** verde, y M-y, M-z y M-aa producen rojo **con nombre**.
 
-- [ ] **B28 `[P]` — Postgres real: la lectura del rastro resuelve por el índice que ya existe.**
+- [x] **B28 `[P]` — Postgres real: la lectura del rastro resuelve por el índice que ya existe.**
   (dep. B1, B25)
   `tests/integration/db/correccion-dia-reparto-historial.int.test.ts`: sembradas N correcciones de
   una orden, `findCorreccionesByOrden` las devuelve **todas, en orden**, con el nombre del actor y el
@@ -272,7 +342,7 @@
   `design.md` §5.1 declaró «la única consulta prevista» **antes** de que existiera este consumidor.
   **Hecho:** verde con base; `describe.skip` **visible** sin base; **nada de `if (!fks) return;`**.
 
-- [ ] **B29 `[P]` — La ausencia: el rastreo público no la ve.** (dep. B24, B26)
+- [x] **B29 `[P]` — La ausencia: el rastreo público no la ve.** (dep. B24, B26)
   `tests/unit/guards/rastreo-frontera.guardia.test.ts` sigue **intacto y verde** (**R43**), y se
   añade la comprobación positiva en el test del rastreo público: una orden **con** corrección
   devuelve **exactamente** las mismas transiciones que sin ella.
@@ -286,7 +356,7 @@
 > Independiente del BLOQUE HISTORIAL: puede ir en paralelo. Detalle en `design.md` **§15**.
 > ⚠️ Toca `db/migrations/**` y `lib/types/notificacion.ts`: dos vías más del gate COMPLETO.
 
-- [ ] **B17 — ⚠️ Los DOS enums de la campana ganan su valor.** (dep. B1 por el orden de timestamps)
+- [x] **B17 — ⚠️ Los DOS enums de la campana ganan su valor.** (dep. B1 por el orden de timestamps)
   `db/schema.prisma`: `NotificacionEvento += dia_reparto_corregido` y
   `NotificacionEntidadTipo += orden_dia_reparto_cambio`, con su comentario de feature.
   `lib/types/notificacion.ts`: los dos tipos de dominio, igual.
@@ -306,7 +376,7 @@
   `db:rollback` revierte sin residuos.
   ⚠️ La migración **no se edita después de aplicarse**: si hay que cambiar algo, migración nueva.
 
-- [ ] **B18 — ⚠️ Los DOS censos AJENOS que se ponen rojos.** (dep. B17)
+- [x] **B18 — ⚠️ Los DOS censos AJENOS que se ponen rojos.** (dep. B17)
   Se **actualizan**, no se relajan — que se pongan rojos ES el precio que 146/D1 puso a añadir un
   evento, y funciona:
   1. `tests/unit/services/notificacion-productores-wiring.test.ts:381-404`: la lista literal gana
@@ -318,7 +388,7 @@
   **Hecho:** los dos en verde, y el `git diff` de esos dos archivos **no borra ninguna aserción**,
   sólo amplía listas (**R52**).
 
-- [ ] **B19 `[P]` — El emisor y su notificador best-effort.** (dep. B17)
+- [x] **B19 `[P]` — El emisor y su notificador best-effort.** (dep. B17)
   `lib/notificaciones/emitir.ts`: `DiaRepartoCorregidoContexto`, `textoDiaRepartoCorregido(fechaISO)`
   (compone con `fechaLegible`, **R18**) y `emitirDiaRepartoCorregido` — **una** fila, `tipo: "box"`,
   `destinatario: { tipo: "usuario", usuarioId: mensajero }`, `entidadTipo:
@@ -330,7 +400,7 @@
   `entidadId` es el **id del cambio** y no el de la orden — con el de la orden, la segunda corrección
   no avisaría **nunca** (`design.md` §15.2, **A20**).
 
-- [ ] **B20 — La escritura devuelve lo que el aviso necesita.** (dep. B4, B5)
+- [x] **B20 — La escritura devuelve lo que el aviso necesita.** (dep. B4, B5)
   `RETURNING "id", "mensajero_asignado_id", "num_guia", "num_remision"` en el `UPDATE` de §6.1 y
   `corregirDiaRepartoLote` → `Promise<CorreccionDiaAplicada[]>` (antes `Promise<number>`).
   `registrarCambioDiaReparto` **genera los `id` con `randomUUID()`** y los devuelve en orden
@@ -340,7 +410,7 @@
   con el `RETURNING` ancho: validar el detector contra un texto que ya no existe en el árbol es una
   guardia que se cree verificada (`design.md` §15.5).
 
-- [ ] **B21 — El servicio emite FUERA de la transacción.** (dep. B6, B19, B20)
+- [x] **B21 — El servicio emite FUERA de la transacción.** (dep. B6, B19, B20)
   `CorreccionDiaRepartoService`: tras confirmar la `$transaction`, un aviso por cada
   `CorreccionDiaAplicada`, vía el notificador inyectado (**default no-op**, real inyectado en la
   Server Action, patrón `notificadores.ts:11-19`).
@@ -349,7 +419,7 @@
   `catch` vacío (`docs/conventions.md`)—; (3) con la transacción revertida **no se emite ni un
   aviso**.
 
-- [ ] **B22 — ⚠️ Postgres real: la migración del enum y su DOWN ejercitado.** (dep. B17)
+- [x] **B22 — ⚠️ Postgres real: la migración del enum y su DOWN ejercitado.** (dep. B17)
   `tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts`, molde literal
   del de la 253: el UP **sólo** añade (dos sentencias, las dos `ALTER TYPE`, ni un `CREATE TABLE` ni
   un `ALTER TABLE`); el DOWN recrea los dos tipos con los **cinco** previos, con su `RENAME`, su
@@ -361,7 +431,7 @@
   carpeta nueva no rompe el `carpetaQueTerminaEn` de la 253 (§15.4); (3) `describe.skip` **visible**
   sin base.
 
-- [ ] **B23 — Tests del aviso.** (dep. B19, B21)
+- [x] **B23 — Tests del aviso.** (dep. B19, B21)
   `tests/unit/services/notificacion-dia-reparto-corregido.test.ts`, molde de
   `notificacion-productores.test.ts`: **una** fila y sólo una (**R51**: ni maestro, ni admin, ni
   tienda); destinatario = el **mensajero asignado** (**R46**); la descripción lleva la **fecha en
@@ -375,7 +445,7 @@
 
 ---
 
-- [ ] **B16 — Matar todo con mutaciones.** (dep. B9, B10, B11, B12, B13, B14, B18, B22, B23, B27,
+- [x] **B16 — Matar todo con mutaciones.** (dep. B9, B10, B11, B12, B13, B14, B18, B22, B23, B27,
   B28, B29, F5, F8)
   Las del **bloque de mutaciones** de más abajo, una a una.
   **Hecho:** por cada una, el comando y la **salida real** (nombre del test que se puso rojo) pegados
@@ -388,7 +458,7 @@
 
 > Arranca con `B2` y `B3` en la rama. No toca `lib/`, `db/` ni `tests/integration/`.
 
-- [ ] **F1 — El modal de la bodega central.** (dep. B2, B3, B7)
+- [x] **F1 — El modal de la bodega central.** (dep. B2, B3, B7)
   `app/(app)/ordenes/_components/CambiarDiaRepartoModal.tsx`, molde de `AsignarBodegaModal` +
   `DeshacerAsignacionModal`: lista del lote **con el día de cada orden** (**R16**),
   `SelectorDiaReparto` **sin preselección** (`design.md` §7.2) alimentado por `fechasDiaReparto`
@@ -396,25 +466,25 @@
   motivo válidos, y la confirmación de **R10** con `confirmacionDiaReparto`.
   **Hecho:** ningún literal de día escrito en el componente: todos importados (**R18**).
 
-- [ ] **F2 `[P]` — El modal de la bodega satélite.** (dep. B2, B3, B7)
+- [x] **F2 `[P]` — El modal de la bodega satélite.** (dep. B2, B3, B7)
   `app/(app)/recepcion-satelite/_components/CambiarDiaRepartoSateliteModal.tsx`, hermano del
   anterior (mismo reparto que `DeshacerAsignacionModal` / `DeshacerAsignacionSateliteModal`).
   **Hecho:** los dos modales leen **los mismos textos** y llaman a **la misma action**.
 
-- [ ] **F3 — La acción de lote en `/ordenes`.** (dep. F1)
+- [x] **F3 — La acción de lote en `/ordenes`.** (dep. F1)
   `OrdenesListado`: «Cambiar día de reparto» (`variant: "outline"`) en los casos `por_recoger`,
   `en_reparto` y `ayuda_tienda` de `accionesPara`; el modal montado junto a los demás; `handleSuccess`
   revalida las tablas.
   **Hecho:** con selección de **estados mezclados** no se ofrece (patrón del listado), y la puerta de
   la página **no se toca** (**R13**).
 
-- [ ] **F4 `[P]` — El botón en el listado satélite.** (dep. F2)
+- [x] **F4 `[P]` — El botón en el listado satélite.** (dep. F2)
   `SateliteOrdenesListado`: botón junto a «Deshacer asignación», visible con `por_recoger`
   seleccionado y `disabled` con estado mixto; cableado en `RecepcionSateliteModule`.
   **Hecho:** el `adminSatelite` llega a la corrección **sin pasar por `/ordenes`**, que le hace
   `notFound()` (`design.md` §4.1).
 
-- [ ] **F5 — Tests de componente.** (dep. F1, F2, F3, F4)
+- [x] **F5 — Tests de componente.** (dep. F1, F2, F3, F4)
   - `tests/components/CambiarDiaRepartoModal.test.tsx` (nuevo): el día actual de cada orden aparece
     **con la fecha legible** (**R16**); **no** hay opción preseleccionada y el confirmar arranca
     deshabilitado; sin motivo no se envía (**R21**); el `dia` elegido **viaja** en la llamada; la
@@ -426,7 +496,7 @@
     (**R17**).
   **Hecho:** verde; M-u, M-v y M-x las matan.
 
-- [ ] **⬛ F7 — El timeline pinta la entrada SIN transición.** (dep. B24, B26)
+- [x] **⬛ F7 — El timeline pinta la entrada SIN transición.** (dep. B24, B26)
   `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx`: `switch (entrada.clase)` con
   **exhaustividad demostrada** (`const _exhaustivo: never = entrada;` en el `default`). La rama
   `"correccion_dia"` pinta «Día de reparto» + `textoCorreccionDiaReparto(anteriorISO, nuevaISO)` +
@@ -438,7 +508,7 @@
   (**R41**); (2) el componente **no lleva ni un literal de fecha**: todos importados; (3) la rama de
   transición queda **idéntica** —el `git diff` de esa rama es sólo el `case`— (**R45**).
 
-- [ ] **⬛ F8 — Tests de componente del timeline y del tipo.** (dep. F7)
+- [x] **⬛ F8 — Tests de componente del timeline y del tipo.** (dep. F7)
   - `tests/components/HistorialOrdenTimeline.test.tsx`: una entrada de corrección se lee con **las
     dos fechas en palabras**, su actor y su motivo (**R38**); **no** aparece ninguna etiqueta de
     estado ni la flecha en esa entrada (**R39**); mezcladas, salen en orden y la de corrección se
@@ -472,6 +542,12 @@
   **Hecho:** capturas o transcripción en `progress/impl_262_frontend.md`, y el **rastro leído en la
   base** después de la prueba (una fila por corrección, con su motivo). En este repo mirar la app
   encontró **siete textos rotos** que doce mil tests daban por buenos.
+  ⛔ **VIVA, y es LA deuda de la ficha.** Necesita un **preview desplegado** y **tres cuentas**
+  (maestro/admin, `adminSatelite`, mensajero), que ningún subagente puede montar. Lo de
+  `progress/impl_262_historial_ui.md` §6 —una página de fixtures en `next dev`— acota el estilo
+  pero **no la sustituye**: no hubo datos reales, ni preview, ni las tres cuentas. La deuda está
+  anotada junto al código (`@pendiente-262-f6`) y **bajo guardia** (`historial-correccion-dia.guardia`
+  (f), que se pone roja si alguien retira la anotación).
 
 ---
 
@@ -526,19 +602,32 @@
 
 ## CIERRE
 
-- [ ] **C1 — `./init.sh` COMPLETO en verde.** No hay modo rápido en esta ficha (migración +
+- [x] **C1 — `./init.sh` COMPLETO en verde.** No hay modo rápido en esta ficha (migración +
   `lib/types/`).
-  **Hecho:** salida pegada, con `INIT_EXIT=$?` **escrito dentro del log** — un `echo` posterior ya
-  tapó aquí un gate rojo haciéndolo pasar por «exit code 0».
-- [ ] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR: otra sesión puede haberlo movido, y
+  **Hecho ✅ 2026-08-23:** salida pegada en `progress/impl_262_historial.md` §9, con
+  `INIT_EXIT=$?` **escrito dentro del log** — un `echo` posterior ya tapó aquí un gate rojo
+  haciéndolo pasar por «exit code 0». Corrido cuatro veces a lo largo de la ficha (una por tanda)
+  y una quinta tras cerrar los bloqueantes.
+- [x] **C2 — Pre-vuelo contra `origin/dev`** justo antes del PR: otra sesión puede haberlo movido, y
   el pre-vuelo caduca.
+  **Hecho ✅:** cada tanda lo comparó antes de su PR; la de cierre de bloqueantes salió de
+  **`c63c7235`** y lo vuelve a comparar justo antes de abrir el suyo.
 - [ ] **C3 — B0.2 (re-medición) hecha y escrita** antes de desplegar a producción.
-- [ ] **C4 — `progress/impl_262_backend.md` y `progress/impl_262_frontend.md`** con el mapa
+  ⛔ **VIVA.** Cuelga de `B0.2`, que no se ha hecho: sin la segunda foto no hay nada que escribir.
+- [x] **C4 — `progress/impl_262_backend.md` y `progress/impl_262_frontend.md`** con el mapa
   `R<n> → test` completo (abajo), las mediciones y las mutaciones con su salida real.
-- [ ] **C5 — Migrar la base local tras mergear** (`prisma migrate deploy`): un error «sólo de un rol»
+  **Hecho ✅:** los cuatro mapas (backend, frontend, historial, historial-UI) están escritos;
+  **el 2026-08-23 se corrigió la fila de `R32`**, que decía `B15` y `B15` no es un test.
+- [x] **C5 — Migrar la base local tras mergear** (`prisma migrate deploy`): un error «sólo de un rol»
   después del merge suele ser la tabla de migración faltante, no HMR. ⬛ Ahora son **DOS**
   migraciones (la del rastro y la de los enums) y el orden entre ellas importa.
-- [ ] **⬛ C6 — P3: la verificación de que NO cambia nada.** `git diff origin/dev...HEAD --stat` **no
+  **Hecho ✅ 2026-08-23:** `prisma migrate status` sobre `localhost:5432/ordenex` responde
+  **«Database schema is up to date!»** con **143 migraciones**, y las dos de la ficha están
+  aplicadas en su orden (`…130000_orden_dia_reparto_cambio` antes que
+  `…140000_notificacion_evento_dia_reparto_corregido`). La prueba fuerte no es esa línea: es que
+  los **11 tests** de `correccion-dia-reparto-efectos.int` corren contra esa base y leen
+  `orden_dia_reparto_cambio` y su `pg_class.relrowsecurity`.
+- [x] **⬛ C6 — P3: la verificación de que NO cambia nada.** `git diff origin/dev...HEAD --stat` **no
   lista** `lib/types/dia-reparto.ts` ni `lib/utils/dia-reparto.ts`, y el enum sigue teniendo **dos**
   valores. Es cómo se prueba una decisión de «no tocar»: por la ausencia, escrita (**R56**,
   `design.md` §16).
@@ -547,6 +636,8 @@
   tienen decisión por defecto tomada, así que **no bloquean**; pero se preguntan **antes** de
   desplegar, no después de que una tienda lea el primer motivo.
   **Hecho:** la respuesta —o el «se queda como está»— escrita y fechada en `requirements.md`.
+  ⛔ **VIVA.** Ninguna de las dos se ha llevado a la puerta humana, y `requirements.md` no tiene la
+  respuesta fechada. Es del **leader**: son decisiones de producto, no de implementación.
 
 ---
 
@@ -585,7 +676,7 @@
 | R29 | La comprobación existe y no es vacía | **B9** autocomprobación · B16 (M-q, M-w) |
 | R30 | El corte cambia de opinión con el día | **B13** |
 | R31 | Corregida a hoy, se desbloquea sola | **B13** |
-| R32 | Ruta e indicadores intactos | B15 · F6 |
+| R32 | Ruta e indicadores intactos | **B13** — `correccion-dia-reparto-efectos.int`, bloque R32 (2026-08-23): filas enteras de `ruta_optimizada`/`ruta_optimizada_parada` · los indicadores del portal por `listarMisAsignaciones` con repos reales · el delta de `jobs` `optimizacion_ruta`. `B15` (no-regresion) y `F6` (ver la app) **acompañan, no sustituyen**: ninguna de las dos es una asercion |
 | R33 | Sin escrituras nuevas del día fuera de ésta | **B9** (censo con cota y excepción única) · B15 |
 | R34 | El riesgo de la 261 se cierra escrito, sin borrar el porqué | **B14** · M-r |
 | R35 | La guardia de esa nota se actualiza, no se borra | **B14** (mitad (e) viva con las piezas del cierre) |
