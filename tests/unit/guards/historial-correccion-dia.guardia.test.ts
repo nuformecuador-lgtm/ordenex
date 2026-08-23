@@ -296,7 +296,9 @@ describe("262/F7 — la corrección tiene marca propia, y la marca no es un tono
     // navegador. Los tokens de color de la corrección son los MISMOS de la transición.
     const tonos = CORRECCION.match(/\b(?:bg|text|border)-[a-z]+(?:-[a-z0-9]+)*/g) ?? [];
     const PERMITIDOS = new Set([
-      "bg-background",
+      // `bg-popover` es la superficie del drawer, no un tono decorativo: es lo que hace que el
+      // hueco del anillo sea un HUECO y no un disco de otro color. Medido en un navegador.
+      "bg-popover",
       "bg-primary",
       "border-border",
       "border-primary",

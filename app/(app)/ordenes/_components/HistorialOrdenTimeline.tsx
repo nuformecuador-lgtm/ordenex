@@ -152,9 +152,16 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
                 key={key}
                 className="relative flex flex-col gap-1 border-l-2 border-dashed border-border pl-4"
               >
+                {/* El hueco del anillo va en `bg-popover` y NO en `bg-background`, y esto se
+                    MIDIO en un navegador, no se supuso: la superficie donde vive esta lista es
+                    el `SheetContent` del drawer, que es `bg-popover` (`components/ui/sheet.tsx`).
+                    Con `bg-background` el hueco salia en `rgb(10,21,36)` sobre un panel
+                    `rgb(16,32,58)` en tema oscuro -un disco mas oscuro, no un hueco-. Y
+                    `--popover` vale lo MISMO que `--card` en los dos temas, asi que tambien casa
+                    si esta lista acaba dentro de una card. */}
                 <span
                   aria-hidden="true"
-                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-background"
+                  className="absolute top-1.5 -left-[6px] size-2.5 rounded-full border-2 border-primary bg-popover"
                 />
                 {/* La primera linea nombra la CLASE de entrada; el orden de las cinco lineas es
                     el de design §14.4 y no se altera. */}

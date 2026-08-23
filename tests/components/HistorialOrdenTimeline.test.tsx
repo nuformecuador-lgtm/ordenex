@@ -309,7 +309,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     // conocidas.
     for (const color of [
       "bg-primary",
-      "bg-background",
+      "bg-popover",
       "border-border",
       "border-primary",
       "text-muted-foreground",
