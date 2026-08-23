@@ -22,12 +22,18 @@ import { describe, expect, it } from "vitest";
 // exigiera el puntero, un «ya que estamos» podria reescribir §D5 «para dejarlo coherente» y
 // borraria la unica prueba de que aquella decision se tomo a conciencia y con sus razones.
 //
-// ⚠️ Y VIGILA UNA TERCERA COSA, QUE NO ES DECORATIVA (R33): que junto a la reversion este escrito
-// que HOY NO EXISTE NINGUNA SUPERFICIE para corregir el dia de reparto de una orden ya asignada,
-// con el puntero a la **ficha 262**. Un riesgo aceptado que solo vive en un spec es un riesgo que
-// nadie vuelve a leer; este tiene que estar delante de quien abra el archivo donde se decide el
-// bloqueo. Cuando la 262 aterrice, la nota se retira POR LA PUERTA —con fecha y motivo—, no por un
-// «ya que estamos».
+// ⚠️ Y VIGILA UNA TERCERA COSA, QUE NO ES DECORATIVA (R33): que junto a la reversion este escrita
+// la nota del riesgo que el bloqueo abrio —corregir el dia de una orden ya asignada— en el mismo
+// sitio donde se decide ese bloqueo. Un riesgo que solo vive en un spec es un riesgo que nadie
+// vuelve a leer.
+//
+// ⬛ 2026-08-22 — LA 262 ATERRIZO Y LA NOTA CAMBIO DE SENTIDO, POR LA PUERTA. La mitad (e) ya no
+// exige las piezas del AGUJERO ABIERTO («no existe ninguna superficie», «la unica salida es un
+// `UPDATE` a mano»): exige las de su CIERRE —que la superficie existe, DONDE esta, desde cuando, y
+// el razonamiento de por que el riesgo se acepto mientras no la hubo, en pasado y sin borrar el
+// hecho—. Lo que NO se hizo, y es la mitad del valor: borrar la mitad (e) o relajarla a un
+// `toBe(true)`. Si se borrara, nadie se enteraria el dia que alguien retire la superficie «porque
+// no la usa nadie», y el agujero volveria sin ruido. Ver 262/R34-R35 y `design.md` §9 de la 262.
 //
 // Cada detector es una FUNCION PURA con su AUTOCOMPROBACION: se le da un texto que SI infringe y
 // otro que no. Sin eso, una guardia de prosa se queda verde POR VACIA en cuanto un rename deja de
@@ -193,26 +199,59 @@ function testigosQueFaltan(texto: string): string[] {
 }
 
 /* -------------------------------------------------------------------------- */
-/* (e) R33 — la nota del agujero abierto y el puntero a la 262                  */
+/* (e) R33 -> 262/R35 — la nota del agujero, AHORA la de su CIERRE              */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Las piezas de la nota que R33 exige EN EL CODIGO, en el sitio donde se decide el bloqueo. No
- * basta con nombrar la ficha: sin la frase, el numero «262» seria un puntero a nada; sin el
- * numero, la frase seria una queja sin dueño.
+ * ⬛ ACTUALIZADA POR LA FEATURE 262 (B14, 262/R34-R35), el 2026-08-22.
+ *
+ * Hasta hoy esta mitad exigia las piezas del AGUJERO ABIERTO: «no existe ninguna superficie»,
+ * el puntero a la ficha 262 y «la unica salida es un `UPDATE` a mano». Esas tres frases dejaron
+ * de ser ciertas en cuanto la 262 monto la superficie, asi que la nota se SUSTITUYO por su
+ * cierre — y esta lista se actualiza con ella.
+ *
+ * ⛔ LO QUE NO SE HIZO, Y ES LA MITAD DEL VALOR: no se borro esta mitad (e), y no se relajo a un
+ * `toBe(true)`. Si se hubiera borrado, nadie se enteraria el dia que alguien retire la
+ * superficie «porque no la usa nadie», y el agujero volveria sin ruido — que es exactamente el
+ * modo de fallo que la 261 escribio esta guardia para evitar. Sigue exigiendo piezas
+ * SEPARADAS para que el fallo diga CUAL falta.
+ *
+ * ⚠️ Y CONSERVA EL PORQUE (262/R34): el razonamiento de por que el riesgo se acepto NO se puede
+ * borrar de la nota. Sin el, quien lea el archivo dentro de seis meses vera una superficie y no
+ * entendera por que durante un tiempo no hubo ninguna — ni por que retirarla seria caro. Por eso
+ * hay una pieza que exige el pasado (`FUE un UPDATE a mano`) y otra que exige la 261.
  */
-const PIEZAS_DEL_AGUJERO: readonly { readonly nombre: string; readonly patron: RegExp }[] = [
+const PIEZAS_DEL_CIERRE: readonly { readonly nombre: string; readonly patron: RegExp }[] = [
   {
-    nombre: "la frase que dice que NO hay superficie para corregir el dia",
-    patron: /NO EXISTE NINGUNA SUPERFICIE|no existe ninguna superficie/i,
+    nombre: "la frase que dice que la superficie YA EXISTE",
+    patron: /YA EXISTE UNA SUPERFICIE|ya existe una superficie/i,
   },
-  { nombre: "que lo que no se puede corregir es el DIA DE REPARTO", patron: /dia de reparto/i },
-  { nombre: "el puntero a la ficha 262", patron: /ficha\s*\*{0,2}262/i },
-  { nombre: "la salida que queda mientras tanto (un `UPDATE` a mano)", patron: /UPDATE.{0,20}a mano/i },
+  { nombre: "que lo que se corrige es el DIA DE REPARTO", patron: /dia de reparto/i },
+  {
+    nombre: "DONDE esta la correccion: las DOS superficies, no una",
+    patron: /\/ordenes[\s\S]{0,300}\/recepcion-satelite/,
+  },
+  {
+    nombre: "el puntero a la ficha que la construyo (`specs/262-corregir-dia-reparto`)",
+    patron: /specs\/262-corregir-dia-reparto/,
+  },
+  {
+    nombre: "el puntero a la 261, que es la que acepto el riesgo (`specs/261-dia-reparto-protege`)",
+    patron: /specs\/261-dia-reparto-protege/,
+  },
+  { nombre: "la fecha del cierre (2026-08-22)", patron: /2026-08-22/ },
+  {
+    nombre: "que la unica salida FUE, EN PASADO, un `UPDATE` a mano (el hecho no se borra)",
+    patron: /\b(?:fue|era)\b[^.]{0,40}UPDATE.{0,20}a mano/i,
+  },
+  {
+    nombre: "el razonamiento de por que el riesgo se ACEPTO (no basta con decir que se cerro)",
+    patron: /riesgo se acepto|RIESGO SE ACEPTO|lo acepto[\s\S]{0,120}sabiendas/i,
+  },
 ];
 
-function piezasDelAgujeroQueFaltan(texto: string): string[] {
-  return PIEZAS_DEL_AGUJERO.filter(({ patron }) => !patron.test(texto)).map(({ nombre }) => nombre);
+function piezasDelCierreQueFaltan(texto: string): string[] {
+  return PIEZAS_DEL_CIERRE.filter(({ patron }) => !patron.test(texto)).map(({ nombre }) => nombre);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -283,16 +322,17 @@ describe("(c)+(d) el spec de la 246 lleva el apendice Y conserva su texto origin
   });
 });
 
-describe("(e) R33 — el agujero abierto esta escrito EN EL CODIGO, con el puntero a la 262", () => {
+describe("(e) 262/R34-R35 — el CIERRE del agujero esta escrito EN EL CODIGO, con su porque", () => {
   it("la nota vive junto a la reversion, en el sitio donde se decide el bloqueo", () => {
     expect(
-      piezasDelAgujeroQueFaltan(leer(CONTRATO)),
-      "R33: hoy NO existe ninguna superficie para corregir el dia de reparto de una orden ya " +
-        "asignada, y este bloqueo la hace falta. Con D5 vigente el escape era el propio mensajero " +
-        "(recogia y entregaba igual); al cerrarlo, un lote mal marcado queda inalcanzable para " +
-        "TODO EL MUNDO hasta que llegue ese dia, y la unica salida es un `UPDATE` a mano en " +
-        "produccion. El riesgo lo acepto el humano el 2026-08-22 y lo resuelve la ficha 262. Un " +
-        "riesgo aceptado que solo vive en un spec es un riesgo que nadie vuelve a leer.",
+      piezasDelCierreQueFaltan(leer(CONTRATO)),
+      "262/R34: la nota del riesgo aceptado (261/R33) NO se borra a secas: se SUSTITUYE por su " +
+        "cierre fechado. Tienen que estar las cuatro cosas — que la superficie ya existe, DONDE " +
+        "esta (las DOS pantallas, porque `/ordenes` le hace `notFound()` al adminSatelite), " +
+        "desde cuando, y el razonamiento de por que el riesgo se acepto mientras no la hubo. " +
+        "Esto ultimo en PASADO y sin borrar el hecho: la unica salida FUE un `UPDATE` a mano en " +
+        "produccion. Un riesgo cerrado del que solo queda «resuelto» es un riesgo que nadie " +
+        "entiende cuando alguien propone retirar la superficie porque no la usa nadie.",
     ).toEqual([]);
   });
 });
@@ -398,20 +438,52 @@ describe("autocomprobacion: sin esto, la guardia podria estar verde por vacia", 
     for (const frase of TESTIGOS_DEL_D5_ORIGINAL) expect(frase.length).toBeGreaterThan(40);
   });
 
-  it("(e) la nota del agujero sin el numero de la ficha no cuela", () => {
+  it("(e) la nota del CIERRE exige sus ocho piezas: quitar una sola la delata", () => {
+    // Una nota que dice lo mismo que la del contrato, escrita a mano aqui para que el detector
+    // se pruebe contra un texto de control y no contra el archivo que vigila.
     const buena =
+      "RIESGO CERRADO EL 2026-08-22. YA EXISTE UNA SUPERFICIE para corregir el dia de reparto de " +
+      "una orden ya asignada: una accion por lote en `/ordenes` y en `/recepcion-satelite`. " +
+      "Ficha: `specs/262-corregir-dia-reparto`. El riesgo se acepto en su momento porque la 261 " +
+      "(`specs/261-dia-reparto-protege`) cerro el bloqueo antes de que existiera la salida, y " +
+      "hasta entonces la unica salida FUE un `UPDATE` a mano en produccion.";
+    expect(piezasDelCierreQueFaltan(buena)).toEqual([]);
+
+    // ⭑ LA PIEZA QUE MAS IMPORTA, y la unica que un «ya que estamos» borraria sin pensarlo: el
+    // hecho de que hubo que tocar produccion a mano. Sin ella la nota queda limpia y falsa.
+    expect(piezasDelCierreQueFaltan(buena.replace("FUE un `UPDATE` a mano", "no hizo falta"))).toEqual([
+      "que la unica salida FUE, EN PASADO, un `UPDATE` a mano (el hecho no se borra)",
+    ]);
+    // Sin el puntero a la 261 la nota no dice QUIEN acepto el riesgo ni donde esta su razon.
+    expect(
+      piezasDelCierreQueFaltan(buena.replace("`specs/261-dia-reparto-protege`", "aquella ficha")),
+    ).toEqual([
+      "el puntero a la 261, que es la que acepto el riesgo (`specs/261-dia-reparto-protege`)",
+    ]);
+    // Y con UNA sola superficie nombrada tampoco: `/ordenes` le hace `notFound()` al
+    // adminSatelite, asi que una nota que solo la nombre describe media salida.
+    expect(
+      piezasDelCierreQueFaltan(buena.replace(" y en `/recepcion-satelite`", "")),
+    ).toEqual(["DONDE esta la correccion: las DOS superficies, no una"]);
+
+    // Y una nota que solo diga «resuelto» y nombre la ficha no salva NI UNA pieza: nombrar el
+    // numero de la ficha no es apuntar a ella, y «resuelto» no dice que se resolvio ni como.
+    expect(piezasDelCierreQueFaltan("resuelto, ver la ficha 262")).toHaveLength(
+      PIEZAS_DEL_CIERRE.length,
+    );
+  });
+
+  it("(e) el detector NO se conforma con la nota VIEJA: el agujero abierto ya no vale", () => {
+    // ⭑ La contraprueba de que esta mitad se ACTUALIZO y no se quedo mirando al vacio. Si
+    // alguien revirtiera la nota del contrato a la del riesgo abierto —o si la 262 se
+    // deshiciera sin tocar esto—, el texto de antes tiene que FALLAR aqui.
+    const notaVieja =
       "⚠️ Hoy NO EXISTE NINGUNA SUPERFICIE para corregir el dia de reparto de una orden ya " +
       "asignada; la unica salida es un `UPDATE` a mano en produccion. Lo resuelve la ficha 262.";
-    expect(piezasDelAgujeroQueFaltan(buena)).toEqual([]);
-    expect(piezasDelAgujeroQueFaltan(buena.replace("la ficha 262", "otra ficha"))).toEqual([
-      "el puntero a la ficha 262",
-    ]);
-    // Y una nota que solo nombre la ficha, sin decir QUE pasa, tampoco vale.
-    expect(piezasDelAgujeroQueFaltan("pendiente: ver la ficha 262")).toEqual([
-      "la frase que dice que NO hay superficie para corregir el dia",
-      "que lo que no se puede corregir es el DIA DE REPARTO",
-      "la salida que queda mientras tanto (un `UPDATE` a mano)",
-    ]);
+    expect(piezasDelCierreQueFaltan(notaVieja).length).toBeGreaterThan(0);
+    expect(piezasDelCierreQueFaltan(notaVieja)).toContain(
+      "la frase que dice que la superficie YA EXISTE",
+    );
   });
 
   it("`normalizar` colapsa saltos y sangria, que es de lo que depende (a)", () => {

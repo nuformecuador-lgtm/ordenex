@@ -39,6 +39,10 @@ import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
 import {
+  CAMBIAR_DIA_ACCION,
+  CambiarDiaRepartoModal,
+} from "./CambiarDiaRepartoModal";
+import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
   CLAVE_BUSQUEDA,
@@ -58,6 +62,7 @@ type ModalAbierto =
   | "devolver-tienda"
   | "recuperar-bodega"
   | "deshacer-asignacion"
+  | "cambiar-dia-reparto" // feature 262
   | null;
 
 async function mensajerosFetcher() {
@@ -241,7 +246,9 @@ export function OrdenesListado({
   puedeReportarIncidente?: boolean;
   /**
    * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» que la PÁGINA resolvió en el
-   * servidor con el día de Costa Rica. Sólo se transportan hasta `AsignarBodegaModal`.
+   * servidor con el día de Costa Rica. Sólo se transportan: hasta `AsignarBodegaModal` (elegir
+   * el día al asignar) y, desde la feature 262/F3, hasta `CambiarDiaRepartoModal` (corregirlo
+   * después). Las DOS pantallas leen las mismas dos fechas, resueltas una sola vez arriba.
    *
    * POR QUÉ EL DEFECTO SON DOS CADENAS VACÍAS Y NO UNA FECHA CALCULADA AQUÍ: éste es un
    * componente de cliente, y cualquier valor que se inventara saldría del reloj del navegador —
@@ -330,6 +337,14 @@ export function OrdenesListado({
     setOrdenesSeleccionadas(seleccionadas);
     setModalAbierto("deshacer-asignacion");
   }
+  // Feature 262/F3 (R13): "Cambiar día de reparto" sobre el lote seleccionado (`por_recoger`,
+  // `en_reparto` o `ayuda_tienda`, los tres estados donde el día todavía decide algo). SIN
+  // filtro por zona, igual que "Deshacer asignación": maestro/admin (`esAccesoTotal`) corrigen
+  // órdenes de CUALQUIER zona (design §4.1); el service revalida.
+  function abrirCambiarDia(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("cambiar-dia-reparto");
+  }
 
   // Señal de "desmarca todo" para la tabla: la selección vive en `OrdenesModule`, pero
   // quien sabe que una acción por lote se llevó a cabo es esta superficie. Se incrementa
@@ -393,6 +408,23 @@ export function OrdenesListado({
   // `RutearSateliteModal.tsx` seguían vivos, pero nadie podía dispararlos. Se reportó
   // desde PRODUCCIÓN como "desapareció el botón para rutear a satélite". Se remonta aquí,
   // que es la única superficie de la bodega central hoy.
+  /**
+   * Feature 262/F3 (R13, design §7.1) — la acción de corregir el día, declarada UNA vez y
+   * reusada por los TRES estados donde el día de reparto todavía decide algo. Es secundaria
+   * (`variant: "outline"`) en los tres: la primaria de `por_recoger` sigue siendo imprimir
+   * etiquetas, y `en_reparto` / `ayuda_tienda` no tenían ninguna hasta ahora.
+   *
+   * Se declara aquí y no dentro de cada `case` para que los tres botones no puedan divergir de
+   * etiqueta ni de `key` — la `key` es la que agrupa la acción cuando la selección mezcla
+   * estados, así que tres `key` distintas pintarían tres botones iguales.
+   */
+  const accionCambiarDia: AccionLote = {
+    key: "cambiar-dia-reparto",
+    label: CAMBIAR_DIA_ACCION,
+    variant: "outline",
+    onRun: abrirCambiarDia,
+  };
+
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
     switch (estatusValue) {
       // Feature 155/R32: el estado interno de fulfillment en bodega salió del
@@ -446,7 +478,25 @@ export function OrdenesListado({
             variant: "outline",
             onRun: abrirDeshacer,
           },
+          // Feature 262/F3: el caso PRINCIPAL — el lote está en la bodega, marcado para el día
+          // que no es.
+          accionCambiarDia,
         ];
+      // Feature 262/F3 (design §4.2) — los otros dos estados donde el día de reparto TODAVÍA
+      // decide algo, y que hasta ahora no tenían ninguna acción por lote en esta pantalla:
+      //
+      //  - `en_reparto` es la población que la 261 dejó ATRAPADA: el paquete ya está en la mano
+      //    del mensajero y, con el día equivocado, no puede gestionarlo. Sin este estado, esta
+      //    ficha no rescata el caso que la motivó.
+      //  - `ayuda_tienda` es el mismo bloqueo por la otra puerta (261/R28 impide que la tienda
+      //    resuelva una orden reservada) y el paquete sigue con el mensajero (235/R1).
+      //
+      // Los dos YA son opciones del filtro de estado para maestro/admin (`EXCLUDE_POR_ROL` sólo
+      // les excluye `pendiente`), así que no hace falta abrir ninguna pantalla ni ningún filtro
+      // nuevo para alcanzar la población atrapada.
+      case "en_reparto":
+      case "ayuda_tienda":
+        return [accionCambiarDia];
       case "en_bodega_central":
         return [
           {
@@ -884,6 +934,17 @@ export function OrdenesListado({
           <DeshacerAsignacionModal
             open={modalAbierto === "deshacer-asignacion"}
             ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Feature 262/F3 (R13/R17): éxito ⇒ `handleSuccess` cierra y revalida las tablas, de
+              modo que el listado vuelve a leer del servidor el día de cada orden. Las fechas
+              del selector bajan de la página, que las resolvió con el día de Costa Rica: este
+              componente sólo las transporta, igual que hace con `AsignarBodegaModal`. */}
+          <CambiarDiaRepartoModal
+            open={modalAbierto === "cambiar-dia-reparto"}
+            ordenes={ordenesSeleccionadas}
+            fechasDiaReparto={fechasDiaReparto}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />

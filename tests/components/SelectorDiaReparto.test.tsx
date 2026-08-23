@@ -28,6 +28,11 @@ function renderSelector(
       valor={props?.valor ?? "hoy"}
       onValorChange={onValorChange}
       fechas={props?.fechas ?? FECHAS}
+      // Feature 262: `titulo` y `ayuda` se pasan SOLO si el caso los da. Con `undefined` el
+      // componente cae a los suyos, que son los de la asignación — y ése es justamente el caso
+      // que un test comprueba.
+      titulo={props?.titulo}
+      ayuda={props?.ayuda}
     />,
   );
   return { onValorChange };
@@ -85,6 +90,63 @@ describe("SelectorDiaReparto — las dos opciones y el defecto (R27)", () => {
     expect(
       screen.getByRole("radio", { name: "Hoy · 20 de agosto" }),
     ).not.toBeChecked();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// ⬛ FEATURE 262 (F1, design §7.2) — EL MODO CORRECCIÓN: sin opción marcada y con su propio
+// título. Al ASIGNAR «Hoy» viene preseleccionado a propósito (246/R27); al CORREGIR no, porque la
+// mitad de las correcciones son «hoy → mañana» y la otra mitad «mañana → hoy».
+//
+// Los casos de arriba NO cubren esto: los dos valores que probaban eran siempre uno de los dos
+// tokens, así que el componente podría no haber sabido nunca representar «todavía no se ha
+// elegido» y todos habrían pasado igual.
+// ---------------------------------------------------------------------------------------------
+describe("SelectorDiaReparto — «sin elegir» es un estado representable (262/§7.2)", () => {
+  it("con `valor=''` NINGUNA de las dos opciones sale marcada", () => {
+    renderSelector({ valor: "" });
+
+    // Las DOS, emparejadas: que «Hoy» no esté marcada no significaría nada si el radio no se
+    // hubiera renderizado.
+    expect(screen.getByRole("radio", { name: "Hoy · 20 de agosto" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Mañana · 21 de agosto" })).not.toBeChecked();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+  });
+
+  it("desde «sin elegir» se puede elegir, y lo que emite sigue siendo el TOKEN", async () => {
+    const user = userEvent.setup();
+    const { onValorChange } = renderSelector({ valor: "" });
+
+    await user.click(screen.getByRole("radio", { name: "Hoy · 20 de agosto" }));
+
+    expect(onValorChange).toHaveBeenCalledTimes(1);
+    expect(onValorChange).toHaveBeenCalledWith("hoy");
+  });
+
+  it("el título y la ayuda se pueden sustituir, y el nombre accesible los SIGUE", () => {
+    // El nombre accesible del `radiogroup` sale del mismo texto que el título visible: quien
+    // oye el control y quien lo lee tienen que estar oyendo el mismo nombre. Si el título
+    // fuera prop y el `aria-label` se quedara fijo, esto se romperían por la mitad.
+    renderSelector({ titulo: "Nuevo día de reparto", ayuda: "Ayuda propia de la corrección" });
+
+    expect(
+      screen.getByRole("radiogroup", { name: "Nuevo día de reparto" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Nuevo día de reparto")).toBeInTheDocument();
+    expect(screen.getByText("Ayuda propia de la corrección")).toBeInTheDocument();
+    // Y el de la asignación DEJA de estar: la ausencia emparejada con su presencia.
+    expect(screen.queryByRole("radiogroup", { name: "Día de reparto" })).toBeNull();
+  });
+
+  it("sin esas props, el título y la ayuda siguen siendo los de ASIGNAR (nada cambia para la 246)", () => {
+    renderSelector();
+
+    expect(screen.getByRole("radiogroup", { name: "Día de reparto" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Todo el lote queda para el día que elijas. Puedes cambiarlo antes de asignar.",
+      ),
+    ).toBeInTheDocument();
   });
 });
 

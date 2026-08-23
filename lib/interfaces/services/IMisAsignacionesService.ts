@@ -123,14 +123,25 @@ export interface MiAsignacionDTO {
    * (R28). Lo que NO cambia es R23: la orden sigue **visible, en su grupo de siempre**; lo que se
    * restringe es la ACCION, no la visibilidad (R9).
    *
-   * ⚠️ RIESGO ACEPTADO POR EL HUMANO EL 2026-08-22, escrito aqui porque este es el sitio donde
-   * se decide el bloqueo (261/R33): **hoy NO EXISTE NINGUNA SUPERFICIE para corregir el dia de
-   * reparto de una orden ya asignada**. Medido dos veces: `fechaReparto` no aparece en un solo
-   * componente de escritura. Si bodega marca un lote para el dia equivocado, ese lote queda
-   * inalcanzable para TODO EL MUNDO —ni bodega, ni el maestro, ni el admin, ni el mensajero—
-   * hasta que llegue ese dia, y la unica salida es un `UPDATE` a mano en produccion, como el que
-   * hubo que hacer el 2026-08-21. Lo resuelve la **ficha 262**; mientras no exista, esto es
-   * cierto y no se suaviza.
+   * RIESGO CERRADO EL 2026-08-22 (261/R33 -> 262/R34). Sigue escrito aqui, y no borrado, porque
+   * este es el sitio donde se decide el bloqueo: quien venga a entender por que una orden
+   * reservada no se puede trabajar tiene que leer en el mismo sitio que hay una salida.
+   *
+   * LO QUE HOY ES CIERTO: YA EXISTE UNA SUPERFICIE para corregir el dia de reparto de una orden
+   * ya asignada. Es una accion por lote en las DOS pantallas donde tambien se elige el dia al
+   * asignar — `/ordenes` (maestro/admin, cualquier zona) y `/recepcion-satelite` (adminSatelite,
+   * su zona) —, exige un motivo escrito y deja rastro de quien la hizo, cuando, desde que dia y
+   * hasta que dia. Ficha: `specs/262-corregir-dia-reparto`. Si alguien retirara esa superficie
+   * «porque no la usa nadie», el agujero que se describe justo abajo volveria entero.
+   *
+   * POR QUE EL RIESGO SE ACEPTO, Y NO SE BORRA DE AQUI. El humano lo acepto el 2026-08-22 a
+   * sabiendas: la 261 (`specs/261-dia-reparto-protege`) cerro el bloqueo ANTES de que existiera
+   * la salida, porque con D5 vigente el escape era el propio mensajero y dejar la puerta abierta
+   * era peor que el hueco. Mientras duro, un lote marcado para el dia equivocado quedaba
+   * inalcanzable para TODO EL MUNDO —ni bodega, ni el maestro, ni el admin, ni el mensajero, ni
+   * la tienda— hasta que llegara ese dia, y la unica salida FUE un `UPDATE` a mano en produccion,
+   * como el que hubo que hacer el 2026-08-21 con la guia 17496963. Se dice en PASADO porque ya no
+   * es asi; se dice, y no se calla, porque paso.
    *
    * Opcional (`?`) por el patron aditivo de `marcarLuego?`/`intentosEntrega?`: no rompe los
    * fixtures que construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia.

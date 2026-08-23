@@ -226,6 +226,26 @@ relee.
    como el que hubo que hacer el 2026-08-21. **Riesgo aceptado por el humano el 2026-08-22**: se
    bloquea ahora y la corrección va en la **ficha 262**. Mientras la 262 no exista, esto es cierto y
    no se suaviza (**R33**).
+
+   > ✅ **APÉNDICE FECHADO — 2026-08-22. Este límite YA NO VALE: el agujero está CERRADO.** La
+   > ficha **262** (`specs/262-corregir-dia-reparto`) montó la superficie que este límite decía
+   > que no existía: una acción por lote —«Cambiar día de reparto»— en las **dos** pantallas donde
+   > también se elige el día al asignar, `/ordenes` (maestro/admin, cualquier zona) y
+   > `/recepcion-satelite` (`adminSatelite`, su zona). Son dos y no una porque `/ordenes` no
+   > recorta por rol sino por **puerta**: hace `notFound()` para `mensajero` y `adminSatelite`, así
+   > que con una sola superficie quien elige el día al asignar desde la satélite se habría quedado
+   > sin poder corregirlo. Pide **motivo escrito** y deja **rastro** de quién, cuándo, desde qué
+   > día y hasta qué día; el vocabulario sigue siendo «hoy / mañana» (262/R56), así que mover al
+   > pasado sigue siendo **inexpresable**.
+   >
+   > **El texto original se conserva ENTERO y no se toca**, porque es el razonamiento con el que
+   > el riesgo se aceptó: quien lea esto dentro de seis meses tiene que poder entender por qué
+   > durante un tiempo no hubo salida —y por qué la única que hubo fue un `UPDATE` a mano en
+   > producción, el 2026-08-21, sobre la guía 17496963—. El cierre también está escrito **en el
+   > código**, junto a la reversión de D5 (`lib/interfaces/services/IMisAsignacionesService.ts`), y
+   > bajo guardia: `tests/unit/guards/d5-revertida.guardia.test.ts`, mitad (e), que **sigue viva** y
+   > ahora exige las piezas del cierre en vez de las del agujero. Si alguien retirara la superficie
+   > «porque no la usa nadie», esa guardia se pone roja.
 3. **Una orden reservada a futuro y ya en reparto queda parada del mapa y contacto del chat.** No se
    toca: sigue en la mano del mensajero, y esconderla del mapa sería empezar a ocultar (R9).
 4. **La tienda no ve el control deshabilitado, sólo el rechazo explicado.** Decisión de alcance con
