@@ -17,7 +17,11 @@ export type NotificacionEvento =
   | "postulacion_mensajero_pendiente"
   | "cierre_dia_por_aprobar"
   // Feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica.
-  | "postulacion_recurso_pendiente";
+  | "postulacion_recurso_pendiente"
+  // Feature 262 (D7, P2 cerrada SI el 2026-08-22): a una orden asignada le corrigieron el dia de
+  // reparto. Unico destinatario: el MENSAJERO asignado (R46/R51). Los admins no se avisan — son
+  // quienes corrigen.
+  | "dia_reparto_corregido";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =
@@ -27,7 +31,13 @@ export type NotificacionEntidadTipo =
   | "carga"
   // Feature 253 (D6): fila de `postulacion_recurso`. NO es un `usuario`: esta postulacion no
   // crea ninguna cuenta (design §14-C), asi que reusar `usuario` seria un dato falso.
-  | "postulacion_recurso";
+  | "postulacion_recurso"
+  // Feature 262 (D7): fila de `orden_dia_reparto_cambio` — LA CORRECCION, no la orden. Reusar
+  // `orden` con `entidad_id = <ordenId>` (A20) haria que `notificacion_dedupe_key` admitiera UNA
+  // sola fila por (evento, orden, mensajero) para siempre, y `crear` absorbe el `P2002` devolviendo
+  // `false`: la SEGUNDA correccion de esa orden no avisaria nunca, en silencio. Con la correccion
+  // como entidad, «dos correcciones, dos avisos» (R50) es estructural.
+  | "orden_dia_reparto_cambio";
 
 /**
  * DTO que viaja al cliente (design §3.1). `read` NO es una columna de `notificacion`:

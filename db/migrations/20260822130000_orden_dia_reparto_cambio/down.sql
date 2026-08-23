@@ -1,0 +1,21 @@
+-- DOWN (feature 262, B1) — revierte EXACTAMENTE migration.sql.
+--
+-- `DROP TABLE` arrastra la PK (`orden_dia_reparto_cambio_pkey`), los dos indices
+-- (`orden_dia_reparto_cambio_orden_id_created_at_idx`,
+-- `orden_dia_reparto_cambio_actor_usuario_id_idx`), las dos FK
+-- (`orden_dia_reparto_cambio_orden_id_fkey`, `orden_dia_reparto_cambio_actor_usuario_id_fkey`),
+-- el CHECK (`orden_dia_reparto_cambio_dia_distinto`) y la RLS.
+--
+-- NO HAY `DROP TYPE` que hacer: esta migracion no crea ningun enum. El aviso al mensajero (D7) vive
+-- en OTRA migracion, posterior y separada (`*_notificacion_evento_dia_reparto_corregido`), que
+-- tiene su propio down de recreacion. Si se revierten las dos, el orden es el inverso al de
+-- aplicacion: primero la de los enums, despues esta.
+--
+-- ⚠️ DESTRUCTIVO Y SIN VUELTA, y se dice en voz alta: se lleva el rastro escrito, es decir QUIEN
+-- corrigio el dia de que orden, de que dia a que dia y por que. Es la evidencia de una operacion
+-- que cambia lo que el corte de la noche hace con esos paquetes y en que dia cuentan para el
+-- ranking (y detras del ranking hay `premio_ranking`). Es correcto para un down —devuelve la base
+-- al estado de SU momento— y por eso queda escrito aqui y no en un comentario de la ficha.
+--
+-- La tabla `orden` NO se toca: esta migracion nunca la altero.
+DROP TABLE IF EXISTS "orden_dia_reparto_cambio";

@@ -47,6 +47,7 @@ function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionS
     cantonNombre: "C",
     distritoNombre: "D",
     prioridad: false,
+    fechaRepartoISO: null, // feature 262/B8: el dia por orden, ya serializado por el repo
     ...overrides,
   };
 }

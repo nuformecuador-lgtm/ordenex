@@ -85,6 +85,19 @@ export const SELECTOR_DIA_AYUDA =
   "Todo el lote queda para el día que elijas. Puedes cambiarlo antes de asignar.";
 
 /**
+ * FEATURE 262 (B2, R18) — el MISMO selector, en modo CORRECCIÓN. Título y ayuda propios porque la
+ * frase de arriba dice «antes de asignar» y aquí ya está asignado: repetirla sería falsa.
+ *
+ * La ayuda nombra lo que la pantalla hace distinto (no hay opción marcada de salida) porque ésa es
+ * la decisión de §7.2: al asignar viene «Hoy» preseleccionado (246/R27), y aquí NO — la mitad de
+ * las correcciones son «hoy → mañana» y la otra mitad «mañana → hoy», así que una preselección
+ * convertiría un despiste en una corrección equivocada.
+ */
+export const SELECTOR_DIA_TITULO_CORRECCION = "Nuevo día de reparto";
+export const SELECTOR_DIA_AYUDA_CORRECCION =
+  "Elige el día al que pasa todo el lote. No hay ninguna opción marcada de salida.";
+
+/**
  * Etiqueta de una opción del selector: «Hoy · 20 de agosto».
  *
  * LA FECHA VA A LA VISTA A PROPÓSITO, y no es adorno: lo que se guarda es una FECHA ABSOLUTA, no
@@ -158,3 +171,25 @@ export function avisoReservaParaOtroDia(fechaISO: string | null | undefined): st
  * divergir del anterior a la primera corrección de estilo.
  */
 export const RESERVA_MOTIVO_SERVIDOR = avisoReservaParaOtroDia(null);
+
+/**
+ * FEATURE 262 (B2, R16/R18) — el día para el que UNA orden está marcada HOY, tal y como se lee en
+ * la lista del lote antes de confirmar la corrección: «hoy está para el 22 de agosto».
+ *
+ * POR QUÉ ES R16 Y NO ADORNO: es lo único que impide corregir a ciegas un lote mixto. Quien
+ * selecciona veinte órdenes y no ve el día de cada una no sabe cuáles está moviendo ni desde dónde.
+ *
+ * SIN SIGLAS Y SIN NOMBRES DE COLUMNA, y sin `YYYY-MM-DD` a la vista: la misma regla con la que
+ * este repo retiró «SLA» del frontend. No dice «reserva», ni «corte», ni `fecha_reparto`.
+ *
+ * Y SIN RELOJ (R17): reutiliza `fechaLegible`, que es puro. Este módulo sigue sin importar `Date`
+ * ni `Intl` — la fecha llega YA resuelta por el servidor (`fechaRepartoISO` del DTO del listado).
+ *
+ * @param fechaISO fecha calendario `YYYY-MM-DD` ya resuelta por el servidor, o `null`/`undefined`
+ *   si la orden no tiene día (caso que la corrección RECHAZA, R5, y que la pantalla debe poder
+ *   nombrar igualmente en vez de dejar el hueco en blanco).
+ */
+export function avisoDiaActualDeLaOrden(fechaISO: string | null | undefined): string {
+  const fecha = fechaISO ? fechaLegible(fechaISO) : "";
+  return fecha ? `hoy está para el ${fecha}` : "hoy no tiene día de reparto";
+}

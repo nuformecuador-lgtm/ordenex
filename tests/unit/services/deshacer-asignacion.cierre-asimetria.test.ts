@@ -56,6 +56,9 @@ const ORDEN: OrdenTransicionRow = {
   zonaId: ZONA_CENTRAL,
   zonaEsGam: true,
   tiendaId: "store-1",
+  // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. Ninguna
+  // asercion de este archivo cambia: lo que aqui se mide es que un cierre pendiente no bloquea.
+  fechaReparto: null,
 };
 
 describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", () => {

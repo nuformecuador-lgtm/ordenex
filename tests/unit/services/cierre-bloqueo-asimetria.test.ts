@@ -211,6 +211,9 @@ describe("241 · propiedad 2 — RECIBIR ASIGNACIONES no se bloquea con ningún 
     zonaId: ZONA_CENTRAL,
     zonaEsGam: true,
     tiendaId: "store-1",
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. `null` = la
+    // orden esta en bodega y aun no se asigno, que es el punto de partida de esta propiedad.
+    fechaReparto: null,
   };
 
   const gateTodoAsignable: IAsignabilidadCoordenadasService = {

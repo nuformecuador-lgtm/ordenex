@@ -50,6 +50,9 @@ function ordenRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionR
     zonaId: ZONA_CENTRAL,
     zonaEsGam: true,
     tiendaId: "store-1",
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. Ninguna
+    // asercion de este archivo cambia: el deshacer no lo lee, lo LIMPIA en su `SET`.
+    fechaReparto: null,
     ...overrides,
   };
 }

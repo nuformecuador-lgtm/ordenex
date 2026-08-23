@@ -87,6 +87,9 @@ function fila(
       cantonNombre: canton,
       distritoNombre: distrito,
       prioridad,
+      // Feature 262 (B8): el dia de reparto por orden, ya serializado. `null` aqui: este archivo
+      // mide filtros y paginacion, no el dia. Ninguna asercion cambia.
+      fechaRepartoISO: null,
     },
   };
 }

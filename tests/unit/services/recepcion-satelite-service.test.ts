@@ -42,6 +42,8 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
     zonaId: ZONA,
     zonaEsGam: false,
     tiendaId: "store-1",
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion.
+    fechaReparto: null,
     ...overrides,
   };
 }
@@ -63,6 +65,7 @@ function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionS
     cantonNombre: "C",
     distritoNombre: "D",
     prioridad: false, // feature 101/R9: el service propaga este flag al DTO (resalte R8)
+    fechaRepartoISO: null, // feature 262/B8: el dia por orden, ya serializado por el repo
     ...overrides,
   };
 }

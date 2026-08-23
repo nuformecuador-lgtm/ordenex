@@ -150,6 +150,7 @@ model Usuario {
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
+  diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -585,6 +586,7 @@ model Orden {
   // NO se llama `notas`: ese nombre ya lo ocupa la nota de la TIENDA (`orden.notas`, R14a),
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
   notasHilo             OrdenNota[]            @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
+  diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -2070,6 +2072,7 @@ enum NotificacionEvento {
   postulacion_mensajero_pendiente
   cierre_dia_por_aprobar
   postulacion_recurso_pendiente // feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica
+  dia_reparto_corregido // feature 262 (D7): a una orden asignada le corrigieron el dia de reparto; se avisa AL MENSAJERO asignado y a nadie mas (R46/R51)
 
   @@map("notificacion_evento")
 }
@@ -2082,6 +2085,7 @@ enum NotificacionEntidadTipo {
   cierre_dia
   carga
   postulacion_recurso // feature 253 (D6): la entidad es una fila de `postulacion_recurso`, que NO es un `usuario` (no crea cuenta)
+  orden_dia_reparto_cambio // feature 262 (D7): la entidad es la fila del RASTRO, no la orden. Con `orden` la clave unica `notificacion_dedupe_key` solo admitiria UN aviso por (evento, orden, mensajero) PARA SIEMPRE, y la segunda correccion de esa orden no avisaria nunca (design §15.2, A20)
 
   @@map("notificacion_entidad_tipo")
 }
@@ -2368,4 +2372,56 @@ model PostulacionRecurso {
   @@index([atendidaAt, createdAt]) // R26: el listado del panel (`atendida_at IS NULL ORDER BY created_at DESC`) y el barrido del cron de purga
   @@index([atendidaPorId]) // segunda FK indexada (patron `orden_nota`): sin el, el RESTRICT recorre la tabla al borrar un usuario
   @@map("postulacion_recurso")
+}
+
+/// Feature 262 (D4, design §5.1) — RASTRO de las correcciones del dia de reparto de una orden ya
+/// asignada. Fila INMUTABLE (patron `orden_historial_estado`): sin `updated_at`, sin `deleted_at`,
+/// sin soft delete. Una correccion posterior ANADE una fila; ninguna operacion reescribe una
+/// anterior (R23).
+///
+/// POR QUE UNA TABLA PROPIA Y NO `orden_historial_estado` (design §4.5, A1), y son TRES
+/// consecuencias MEDIDAS, no tres opiniones:
+///   1. Una fila falsa `por_recoger -> por_recoger` rompe «Deshacer asignacion»:
+///      `findOrigenesReversion` elige con `DISTINCT ON` la mas reciente cuyo destino es el estado
+///      ACTUAL y devolveria `por_recoger`, que NO esta en `NORMALIZACION_DESTINO` -> `conflict`
+///      con «sin historial», que ademas es falso.
+///   2. Ni siquiera se podria escribir: `appendCambioEstado` valida contra `TRANSICIONES` y
+///      `por_recoger -> por_recoger` no existe en ese grafo (ni debe: un bucle sobre si mismo es
+///      una mentira sobre la maquina de estados).
+///   3. Emitiria un webhook de estado DUPLICADO a cada integrador suscrito (99/R10-R11) sobre una
+///      orden que no se movio.
+/// Y una razon de FORMA encima de las tres: una fila del historial no tiene DONDE guardar «de que
+/// dia a que dia»; habria que esconder un dato estructurado dentro de `motivo`.
+model OrdenDiaRepartoCambio {
+  id String @id @default(uuid())
+
+  ordenId String @map("orden_id")
+
+  /// NOT NULL a proposito: la operacion EXIGE dia previo (R5), asi que una fila que dijera «no
+  /// tenia dia» no la puede escribir ningun productor. Nullable admitiria un estado irrepresentable.
+  fechaAnterior DateTime @map("fecha_anterior") @db.Date
+
+  /// `@db.Date` en las dos: son FECHAS, no instantes. Misma convencion que `orden.fecha_reparto`
+  /// (46/246). Un `timestamp` reabriria la trampa de las seis horas que cerro la 166.
+  fechaNueva DateTime @map("fecha_nueva") @db.Date
+
+  /// NOT NULL, al reves que `orden_historial_estado.actor_usuario_id` (donde NULL = cron): AQUI
+  /// SIEMPRE HAY UNA PERSONA, y quien corrigio es la evidencia. La FK es `Restrict` por el mismo
+  /// criterio que `orden_nota.autor_id` y `postulacion_recurso.atendida_por_id`.
+  actorUsuarioId String @map("actor_usuario_id")
+
+  /// R21: obligatorio, ya recortado en el borde (`trim().min(10).max(300)`).
+  motivo String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orden Orden   @relation("OrdenDiaRepartoCambioOrden", fields: [ordenId], references: [id])
+  actor Usuario @relation("OrdenDiaRepartoCambioActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// EL CHECK `orden_dia_reparto_cambio_dia_distinto` (`fecha_nueva <> fecha_anterior`) VIVE SOLO
+  /// EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que `notificacion_destinatario_xor`).
+  /// Es R7 puesto en la base: una «correccion» que no corrige nada no es escribible ni por error.
+  @@index([ordenId, createdAt]) // la UNICA consulta prevista: «el rastro de esta orden», en orden. Cubre ademas la FK a `orden` por prefijo
+  @@index([actorUsuarioId]) // la FK RESTRICT, indexada (patron `orden_nota`): sin el, borrar un usuario recorre la tabla
+  @@map("orden_dia_reparto_cambio")
 }
