@@ -105,7 +105,7 @@ describe("155/R41 — un value fuera del catalogo del build degrada al chip neut
 
     // La vista se monta y la transicion es legible: origen crudo -> destino con etiqueta.
     expect(
-      screen.getByRole("list", { name: "Línea de tiempo de estados" }),
+      screen.getByRole("list", { name: "Línea de tiempo de la orden" }),
     ).toBeInTheDocument();
     expect(screen.getByText(RETIRADO)).toBeInTheDocument();
     expect(screen.getByText(ORDER_STATUS_LABELS.en_preparacion)).toBeInTheDocument();
