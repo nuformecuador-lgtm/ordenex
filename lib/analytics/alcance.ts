@@ -27,6 +27,7 @@
 
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { getMetrica } from "@/lib/analytics/metrics";
+import { esMetricaPublicableApiKey } from "@/lib/analytics/publicacion-api-key";
 import { ROLES_ANALITICA } from "@/lib/analytics/types";
 import type { RolAnalitica } from "@/lib/analytics/types";
 
@@ -90,17 +91,88 @@ export type ResolucionAlcance =
 /* -------------------------------------------------------------------------- */
 
 /**
- * R11 / D9 — los `RolValue` del esquema que NO son lectores de analitica. Hoy solo la
- * cuenta de integracion `apiKey` (`db/schema.prisma:41`), denegada POR DISENO: si algun
- * dia se quiere reporting por API sera ficha propia con su puerta, no una excepcion
- * colada por aqui.
+ * Feature 267 (2026-08-23) — SE REVIERTE LA DECISION FIRMADA 122/R11-D9.
  *
- * NO es una segunda tabla de alcance (R8): no dice QUE ve nadie, solo quien no entra.
- * El guardia de R11 (`alcance-fuente-unica.guardia.test.ts`) exige que
- * `ROLES_ANALITICA ∪ ROLES_SIN_ANALITICA` sean EXACTAMENTE los seis `RolValue`, de modo
+ * Lo que decia esta constante hasta hoy, con estas palabras: «hoy solo la cuenta de
+ * integracion `apiKey` (`db/schema.prisma:41`), denegada POR DISENO: si algun dia se
+ * quiere reporting por API sera ficha propia con su puerta, no una excepcion colada por
+ * aqui». Esta es esa ficha, y su puerta fue la aprobacion humana del spec 267 el
+ * 2026-08-23. La 122 no se equivocaba: cerraba un canal que no tenia ni consumidor ni
+ * contrato. Lo que cambio es el hecho externo (un integrador pide indicadores) y lo que
+ * existe ahora (un canal por API key con contrato OpenAPI publicado y una cuenta
+ * dedicada 1:1 por key). No se afloja una defensa: se abre una segunda puerta con la
+ * MISMA cerradura.
+ *
+ * Por que el sujeto sigue acotado —y por que esto no es un agujero multi-tenant:
+ *   - la cuenta es DEDICADA: `api_key.usuario_id` es `@unique` (81/88, D6/R21), asi que
+ *     el integrador es otro `usuario` con su propio id;
+ *   - el recorte se hace por `actor.usuarioId` contra `orden.tienda_id` (FK a `usuario`),
+ *     exactamente igual que para un `adminTienda`. Como el id es propio, el integrador y
+ *     un `adminTienda` NUNCA son el mismo sujeto: no comparten filas, ni `tiendaId`, ni
+ *     entrada de cache;
+ *   - lo que se publica esta acotado ademas por la lista blanca de ids
+ *     (`publicacion-api-key.ts`), atada al catalogo por test (267/R17-R19, R34).
+ *
+ * Por que NO se creo una quinta variante de `AlcanceDatos` (267/R2): `claveDeAlcance`
+ * (`cache-clave.ts:85`) es un `switch` EXHAUSTIVO sin `default`, y su cabecera avisa de
+ * que una clave que no distingue el alcance «NO da una cifra equivocada: FILTRA DATOS
+ * ENTRE ROLES». Una variante nueva obligaria a tocar esa funcion, `recortarFiltro`,
+ * `alcance-columnas.ts` y su guardia, todo para expresar el MISMO recorte que
+ * `tipo: "tienda"`. Dos formas de decir lo mismo en una frontera multi-tenant es una de
+ * mas.
+ *
+ * PARTICION TERNARIA de los seis `RolValue`, y ninguno en dos listas (267/R4):
+ *   `ROLES_ANALITICA` (5, en `types.ts`) + `ROLES_ANALITICA_INTEGRACION` + `ROLES_SIN_ANALITICA`.
+ */
+type SinRolesLectores<T extends readonly string[]> = {
+  readonly [K in keyof T]: T[K] extends RolAnalitica ? never : T[K];
+};
+
+/**
+ * 267/R5 — la RESTRICCION DE TIPO de las dos listas del complemento. No es decoracion:
+ * escribir aqui un rol que SI es lector (`"maestro"`) no compila, asi que la disyuncion
+ * con `ROLES_ANALITICA` la sostiene el compilador y no la disciplina. La disyuncion entre
+ * estas dos listas entre si la sostiene el guardia (`alcance-fuente-unica.guardia.test.ts`),
+ * porque el compilador no puede saber cual de las dos se escribio antes.
+ */
+function declararRolesNoLectores<T extends readonly string[]>(roles: T & SinRolesLectores<T>): T {
+  return roles;
+}
+
+export const ROLES_ANALITICA_INTEGRACION = declararRolesNoLectores(["apiKey"] as const);
+
+/**
+ * Los `RolValue` del esquema a los que se les niega la analitica por ROL, en cualquier
+ * canal. Hoy esta VACIA, y eso es deliberado (267/R5): la constante, su restriccion de
+ * tipo y su consulta dentro de `resolverAlcance` se CONSERVAN para que el proximo rol
+ * denegado tenga donde declararse sin volver a inventar el mecanismo. Mismo patron que
+ * la 268 aplico a `ORIGENES_SIN_EVENTO_PUBLICO`.
+ *
+ * NO es una segunda tabla de alcance (R8 de la 122): no dice QUE ve nadie, solo quien no
+ * entra. El guardia (`alcance-fuente-unica.guardia.test.ts`) exige que la union de las
+ * TRES listas sea EXACTAMENTE los seis `RolValue` y que sean disjuntas dos a dos, de modo
  * que un rol nuevo en el esquema deje el guardia rojo en vez de caer en un limbo.
  */
-export const ROLES_SIN_ANALITICA = ["apiKey"] as const;
+export const ROLES_SIN_ANALITICA = declararRolesNoLectores([] as const);
+
+/**
+ * 267/R6 — POR QUE EXISTE EL PARAMETRO `canal`, y por que no bastaba conceder por rol.
+ *
+ * `resolverAlcance` es la MISMA funcion para el canal de sesion (cookie,
+ * `lib/actions/analitica-operativa.ts:110`) y para el canal por API key. Si la concesion
+ * dependiera solo del rol, un actor `apiKey` que llegase por sesion recibiria `ok`, y
+ * R6 exige justo lo contrario. Podria argumentarse que hoy no existe flujo de login por
+ * cookie para `rol: "apiKey"`, pero eso es una CIRCUNSTANCIA externa a `lib/analytics/`,
+ * no un invariante: R6 pide que el resolutor sea la segunda capa que no depende de esa
+ * promesa. Por eso el canal entra por parametro, con default `"interno"` que reproduce
+ * byte a byte el comportamiento del unico llamador que existia (267/R43).
+ */
+export type CanalAnalitica = "interno" | "api_key";
+
+/** Predicado de pertenencia a los roles de INTEGRACION (cuentas de maquina, sin UI). */
+export function esRolAnaliticaIntegracion(rol: string): boolean {
+  return (ROLES_ANALITICA_INTEGRACION as readonly string[]).includes(rol);
+}
 
 /** Predicado de pertenencia a los cinco roles lectores (`lib/analytics/types.ts`). */
 export function esRolAnalitica(rol: string): rol is RolAnalitica {
@@ -149,6 +221,7 @@ function idUtil(valor: unknown): valor is string {
 export function resolverAlcance(
   actor: ActorAnalitica | null | undefined,
   metricaId: string,
+  canal: CanalAnalitica = "interno",
 ): ResolucionAlcance {
   // R10 — sin actor no hay nada que resolver. Se exige `usuarioId` util porque un actor
   // sin id no puede recortarse por tienda ni por mensajero: seria un alcance sin sujeto.
@@ -159,9 +232,28 @@ export function resolverAlcance(
   // R12 (forma) — un rol que ni siquiera es una cadena no puede compararse con nada.
   if (typeof rol !== "string") return denegado("rol_desconocido");
 
-  // R11 / D9 — `apiKey` NUNCA consume analitica.
+  // R11 de la 122 — el mecanismo de denegacion POR ROL se conserva aunque la lista este
+  // hoy vacia (267/R5): el proximo rol denegado se declara ahi y no en una rama nueva.
   if ((ROLES_SIN_ANALITICA as readonly string[]).includes(rol)) {
     return denegado("rol_sin_analitica");
+  }
+
+  // 267/R1, R6 — LOS ROLES DE INTEGRACION. La guarda del canal va ANTES que la de la
+  // metrica a proposito: conceder-por-metrica-primero dejaria una rendija por la que una
+  // metrica publicable colaria por el canal de sesion. El orden es actor -> rol -> canal
+  // -> metrica -> alcance, y no se invierte.
+  if (esRolAnaliticaIntegracion(rol)) {
+    if (canal !== "api_key") return denegado("rol_sin_analitica");
+    // La metrica tiene que EXISTIR y estar publicada. Los dos motivos son internos y el
+    // borde los traduce al MISMO 403 mudo, asi que desde fuera son indistinguibles (R16).
+    if (typeof metricaId !== "string" || !getMetrica(metricaId)) {
+      return denegado("metrica_desconocida");
+    }
+    if (!esMetricaPublicableApiKey(metricaId)) return denegado("metrica_prohibida");
+    // R1 / 267/R2 — MISMA variante que el `adminTienda`, otro sujeto: el `usuarioId` de la
+    // cuenta dedicada de la key, que es a quien apunta `orden.tienda_id` de sus ordenes.
+    // `usuarioId` ya se comprobo util arriba (R11): no se duplica la guarda.
+    return concedido({ tipo: "tienda", tiendaId: usuarioId });
   }
 
   // R12 — cualquier otra cosa (un rol inventado, el label `"Admin Tienda"` de la DB, un
