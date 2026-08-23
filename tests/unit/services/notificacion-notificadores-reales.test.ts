@@ -353,6 +353,11 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     // Es el que mas avisos va a emitir, y ademas corre en un CRON sin nadie mirando: su default
     // no-op no es comodidad, es lo que impide que una suite escriba en la base compartida.
     "CorteDiarioService.ts", // feature 271 / §9.4
+    // FEATURE 271 (T6.6, R42): el RECHAZO de un cierre pasa a avisar al mensajero, asi que
+    // `CierresAdminService` entra en el censo. Su default no-op es el que impide que las TRECE
+    // suites que lo instancian escriban avisos contra la base local, que en este repo es
+    // compartida.
+    "CierresAdminService.ts", // feature 271 / R42
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {
@@ -367,7 +372,17 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
-  it("los defaults de los CINCO services son el no-op, no el notificador real", () => {
+  it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {
+    // FEATURE 271 (T6.6, R42): el aviso del RECHAZO. Sin esta linea el service se construye con
+    // su default NO-OP y el rechazo sigue siendo mudo en produccion con toda la suite en verde —
+    // exactamente el fallo que este bloque de guardias existe para nombrar.
+    expect(leer("lib", "actions", "cierres-admin.ts")).toContain("notificarMensajeroBloqueadoReal");
+  });
+
+  // El titulo NO lleva el numero a proposito: decia «los TRES» cuando eran cinco y «los CINCO»
+  // cuando ya eran seis. La lista de arriba es la fuente, y el test de debajo la contrasta contra
+  // el arbol; un nombre con cuenta atrasada solo hace que el censo parezca mas pequeno de lo que es.
+  it("los defaults de TODOS los services del censo son el no-op, no el notificador real", () => {
     for (const servicio of SERVICES_CON_NOTIFICADOR) {
       const fuente = leer("lib", "services", servicio);
       expect(fuente).toMatch(/Notificador = notificadorNoOp/);
@@ -376,9 +391,9 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
   });
 
   it("el censo esta COMPLETO: no hay ningun otro service con notificador por constructor", () => {
-    // Contra el ARBOL, no contra la propia lista: es lo unico que convierte «son estos cinco» en
-    // una afirmacion que se puede romper. Si manana entra un sexto service con notificador y
-    // nadie lo apunta arriba, este test lo nombra.
+    // Contra el ARBOL, no contra la propia lista: es lo unico que convierte «son estos» en una
+    // afirmacion que se puede romper. Si manana entra otro service con notificador y nadie lo
+    // apunta arriba, este test lo nombra.
     const dir = path.join(ROOT, "lib", "services");
     const conNotificador = fs
       .readdirSync(dir)
