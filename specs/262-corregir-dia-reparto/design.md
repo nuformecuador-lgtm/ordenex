@@ -180,6 +180,31 @@ respondiera otra pregunta deja el censo diciendo una cosa por otra.
 **Lo que NO se hace:** ofrecerla con la selección **mixta**. Igual que el resto de acciones de lote
 de los dos listados, si lo seleccionado no es todo del mismo estado no se ofrece ninguna acción.
 
+> ⏳ **2026-08-22 — AQUÍ DECÍA ESO, y es FALSO para `/ordenes`.** Lo corrige el leader tras
+> verificarlo en el código, no el implementador por su cuenta.
+>
+> El párrafo de arriba **generaliza a las dos superficies el comportamiento de UNA**. Medido en
+> `app/(app)/ordenes/_components/OrdenesListado.tsx:681-700`: `accionesPara` **no es una
+> intersección**, es una **unión** —recorre cada orden seleccionada, acumula por `accion.key` y
+> devuelve cada acción marcada con `parcial` y su **conteo** (`` `${accion.label} (${ordenes.length})` ``)
+> cuando sólo aplica a parte de lo elegido—. O sea que ese listado **sí** ofrece acciones sobre
+> selección mixta, acotadas al subconjunto elegible.
+>
+> **Lo que vale, superficie por superficie:**
+>
+> | | `/ordenes` | `/recepcion-satelite` |
+> | --- | --- | --- |
+> | forma | `accionesPara`, **unión con conteo** | botonera con `disabled` por estado mixto |
+> | selección mixta | **sí** se ofrece, acotada al subconjunto | **no** se ofrece |
+>
+> Así que la implementación **sigue el patrón real de cada listado**, que es lo que R13 quería
+> decir: la corrupción sería inventar en `/ordenes` un `disabled` que ninguna otra acción suya
+> tiene. **R16 no se toca** y sigue siendo lo que impide corregir a ciegas un lote mixto: el
+> subconjunto se muestra contado antes de confirmar.
+>
+> Lo que este spec describía era el comportamiento **anterior** de `accionesPara`. La línea de
+> arriba se conserva —es la foto de lo que se creyó al diseñar— y esta nota la supersede.
+
 ### 4.3 · D3 — **¿Se puede mover a un día PASADO?**
 
 > **Decisión: NO, y no por un `if`: por el vocabulario.** La corrección manda el **mismo token**
