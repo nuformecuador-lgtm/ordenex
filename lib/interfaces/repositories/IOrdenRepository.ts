@@ -387,15 +387,19 @@ export interface TransicionAyudaInput {
  * Feature 266 (T3.1, design §4.2) — la lectura MINIMA que el service de habilitacion por API key
  * necesita de UNA orden para decidir su rama.
  *
- * Son EXACTAMENTE los cuatro datos del discriminador (R12) y ni uno mas: `estatusValue` para la
- * guarda de estado, `mensajeroAsignadoId` para separar la rama A de la B, `estatusId` para pasarlo
- * como origen guardado de la transicion e `id` para escribir. La rama NO se deriva de ninguna otra
- * columna, bandera ni historial, y este `select` acotado es lo que lo hace cierto: lo que no llega
- * no se puede consultar por descuido.
+ * Son EXACTAMENTE los TRES datos del discriminador (R12) y ni uno mas: `estatusValue` para la
+ * guarda de estado, `mensajeroAsignadoId` para separar la rama A de la B e `id` para escribir. La
+ * rama NO se deriva de ninguna otra columna, bandera ni historial, y este `select` acotado es lo
+ * que lo hace cierto: lo que no llega no se puede consultar por descuido.
+ *
+ * NO trae `estatus_id`, y la ausencia es deliberada: NADIE lo consume. El `estatusOrigenId` del
+ * `WHERE` guardado de la rama A no sale de aqui — el service resuelve el catalogo POR VALUE, con
+ * `findEstatusIdByValue("ayuda_tienda")` y fallo CERRADO si no resuelve
+ * (`ApiHabilitacionService.ramaA`, R19). Una columna que llega y nadie lee es exactamente lo que
+ * este `select` acotado dice no tener; devolverla contradiria el parrafo de arriba.
  */
 export interface OrdenParaHabilitacionApi {
   id: string;
-  estatusId: string;
   estatusValue: string;
   /**
    * `null` = el paquete ya volvio a bodega. No es una heuristica: los cuatro caminos que devuelven

@@ -50,17 +50,18 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
     await expect(repoCon(prisma).findParaHabilitacionApi(999999, OWNER)).resolves.toBeNull();
   });
 
-  it("aplana la fila a los CUATRO campos del discriminador (R12), con el estatus.value resuelto", async () => {
+  it("aplana la fila a los TRES campos del discriminador (R12), con el estatus.value resuelto", async () => {
     const prisma = buildPrisma({
       id: "orden-1",
-      estatusId: "st-ayuda",
       mensajeroAsignadoId: "mensajero-7",
       estatus: { value: "ayuda_tienda" },
     });
     const res = await repoCon(prisma).findParaHabilitacionApi(NUM_GUIA, OWNER);
+    // `toEqual` y no `objectContaining`: la AUSENCIA de `estatusId` es parte del contrato. El
+    // origen del `WHERE` guardado lo resuelve el service por value (R19), asi que devolverlo aqui
+    // seria un dato que nadie lee.
     expect(res).toEqual({
       id: "orden-1",
-      estatusId: "st-ayuda",
       estatusValue: "ayuda_tienda",
       mensajeroAsignadoId: "mensajero-7",
     });
@@ -69,7 +70,6 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
   it("propaga `mensajeroAsignadoId: null` — es el discriminador de la rama B, no un dato opcional", async () => {
     const prisma = buildPrisma({
       id: "orden-2",
-      estatusId: "st-devuelta",
       mensajeroAsignadoId: null,
       estatus: { value: "devuelta" },
     });
@@ -84,10 +84,10 @@ describe("Feature 266 · T3.1 — OrdenRepository.findParaHabilitacionApi", () =
     const select = prisma.orden.findFirst.mock.calls[0][0].select;
     expect(select).toEqual({
       id: true,
-      estatusId: true,
       mensajeroAsignadoId: true,
       estatus: { select: { value: true } },
     });
+    expect(select).not.toHaveProperty("estatusId");
     expect(select).not.toHaveProperty("montoCobrar");
   });
 

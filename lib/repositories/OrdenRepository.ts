@@ -3451,8 +3451,10 @@ export class OrdenRepository implements IOrdenRepository {
    * ventana entre leer y comprobar. Un `null` no distingue «no existe» de «es de otra tienda»: el
    * borde responde `no_encontrada` en los dos casos (R4).
    *
-   * `select` acotado a los CUATRO campos del discriminador (R12): nada de montos, nada de fila
-   * entera. El `estatus.value` se resuelve por JOIN en la misma consulta y se aplana al salir.
+   * `select` acotado a los TRES campos del discriminador (R12): nada de montos, nada de fila
+   * entera, y tampoco `estatusId` —el service resuelve el catalogo por value (R19), asi que aqui
+   * seria un dato que nadie lee—. El `estatus.value` se resuelve por JOIN en la misma consulta y
+   * se aplana al salir.
    */
   async findParaHabilitacionApi(
     numGuia: number,
@@ -3462,7 +3464,6 @@ export class OrdenRepository implements IOrdenRepository {
       where: { numGuia, tiendaId: ownerId, deletedAt: null },
       select: {
         id: true,
-        estatusId: true,
         mensajeroAsignadoId: true,
         estatus: { select: { value: true } },
       },
@@ -3470,7 +3471,6 @@ export class OrdenRepository implements IOrdenRepository {
     if (!orden) return null;
     return {
       id: orden.id,
-      estatusId: orden.estatusId,
       estatusValue: orden.estatus.value,
       mensajeroAsignadoId: orden.mensajeroAsignadoId,
     };

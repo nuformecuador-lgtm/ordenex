@@ -25,13 +25,13 @@ const ACTOR: Actor = { usuarioId: "store-1", rol: "apiKey" };
 const ID_AYUDA = "os-ayuda_tienda";
 const ID_EN_REPARTO = "os-en_reparto";
 
-/** Una orden tal como la devuelve `findParaHabilitacionApi` (los cuatro campos del discriminador). */
+/** Una orden tal como la devuelve `findParaHabilitacionApi` (los TRES campos del discriminador). */
 function orden(
   estatusValue: string,
   mensajeroAsignadoId: string | null,
   id = "o1",
 ): OrdenParaHabilitacionApi {
-  return { id, estatusId: `os-${estatusValue}`, estatusValue, mensajeroAsignadoId };
+  return { id, estatusValue, mensajeroAsignadoId };
 }
 
 function fila(num_guia: unknown, nota: unknown = "el cliente pidio reintento"): FilaHabilitacionInput {
@@ -98,6 +98,41 @@ describe("266/R3-R4 — el owner sale del actor y una guia ajena es opaca", () =
     });
     expect(transicionarAyuda).not.toHaveBeenCalled(); // R4: cero escrituras
     expect(registrar).not.toHaveBeenCalled();
+  });
+
+  it("R4: MISMA GUIA, OTRA TIENDA — responde `no_encontrada`, igual que si la guia no existiera", async () => {
+    // EL CASO QUE EL RESTO DEL ARCHIVO DABA POR SUPUESTO. La guia 100234 EXISTE y esta en un
+    // estado perfectamente habilitable (`ayuda_tienda` con mensajero asignado: seria rama A), pero
+    // pertenece a OTRA tienda. El scope va en el `where` del repo (`tienda_id = ownerId`), asi que
+    // la orden ajena NUNCA llega al service: `findParaHabilitacionApi` devuelve `null`. Lo que
+    // este caso fija es que ese `null` produce EXACTAMENTE la misma respuesta que una guia que no
+    // existe.
+    //
+    // La OPACIDAD es deliberada, no un descuido de mensajes: si «no existe» y «es de otra tienda»
+    // se distinguieran, el endpoint seria un oraculo con el que cualquier integrador podria barrer
+    // el rango de guias y averiguar cuales son de la competencia. Mismo criterio que
+    // `cancelarViaApi`. Por eso se afirma la IGUALDAD de las dos respuestas —codigo y mensaje— y no
+    // solo que ambas fallen.
+    const ajena = build([null]); // el repo, scoped por owner, no la ve
+    const inexistente = build([null]);
+    const resAjena = await ajena.service.habilitarLote(ACTOR, [fila(100234)]);
+    const resInexistente = await inexistente.service.habilitarLote(ACTOR, [fila(999999)]);
+
+    expect(ajena.findParaHabilitacionApi).toHaveBeenCalledWith(100234, "store-1");
+    expect(resAjena.resultados[0]).toEqual({
+      numGuia: 100234,
+      resultado: "error",
+      estado: null,
+      error: { codigo: "no_encontrada", mensaje: expect.any(String) },
+    });
+    // Identico a lo que recibe quien pregunta por una guia inventada, salvo la guia que el
+    // integrador ya conocia porque la mando el.
+    expect(resAjena.resultados[0].error).toEqual(resInexistente.resultados[0].error);
+    // Y el mensaje no filtra por la puerta de atras que la orden existe en algun sitio.
+    expect(resAjena.resultados[0].error?.mensaje).not.toMatch(/tienda|otro|ajen|permiso|autoriz/i);
+    // Cero efectos sobre una orden que no es del owner.
+    expect(ajena.transicionarAyuda).not.toHaveBeenCalled();
+    expect(ajena.registrar).not.toHaveBeenCalled();
   });
 });
 
