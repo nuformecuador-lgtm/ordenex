@@ -9,7 +9,77 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ PUERTA HUMANA PASADA (262 y 265) — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+## 🌙 CIERRE DE TANDA — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+
+`prod` = `465c5234` (release #458, desplegada y verificada, sin errores de runtime).
+`dev` = `651aef2a`, gate **completo** en verde: 1319 archivos, **17.793 tests**, `INIT_EXIT=0`.
+
+La suite pasó de **17.502 a 17.793** en el día — **291 tests nuevos**, y **ni uno borrado ni
+encogido**: verificado archivo por archivo en las cuatro ramas antes de mergear.
+
+### Dónde está cada ficha, de verdad
+
+| ficha | en `dev` | lo que falta |
+| --- | --- | --- |
+| **265** · el optimizador lee al proveedor | backend + frontend + cierre de bloqueantes | **11 menores** de la revisión, y la mitad de `F6` que sólo se puede ver en **preview** |
+| **262** · corregir el día de reparto | backend + los dos modales + cierre de B14 | 🔴 **el BLOQUE HISTORIAL: `R37`-`R45` sin un solo test**, `F6`, y **la revisión entera** |
+
+**La 262 está más lejos de cerrar de lo que su estado sugiere.** Su bloque historial —el alcance que
+la puerta humana añadió— no se ha empezado, y necesita backend y UI en la **misma** tanda porque su
+primera tarea rompe el build a propósito en un componente.
+
+### La revisión de la 265 rechazó, y encontró lo de siempre
+
+**B1 — un requisito que el mapa daba por probado y no lo estaba.** El test de `R8` montaba el
+escenario correcto pero **sólo afirmaba `status: ok`**. Cerrado y **medido en las dos direcciones**:
+con el test nuevo la mutación muere; con el test que había en `dev`, **sobrevive**. Eso es un hecho,
+no una promesa.
+
+**B2 — 43 tareas y ninguna marcada**, con la feature ya mergeada. Ahora **38 `[x]` · 5 `[ ]`**, cada
+viva con su motivo. Y al hacerlo apareció **C5**: H1 no tiene ficha, así que se dejó abierta en vez
+de marcarla — marcarla habría sido justo el fallo mudo que B2 persigue.
+
+### Pendiente de decisión humana
+
+1. **¿Se lanza el bloque historial de la 262?** Es la última tanda grande de esa ficha.
+2. **Ficha para H1** (`geocode_precision` se escribe y no lo lee nadie): **propuesta, no registrada**.
+   Sin ella, `C5` de la 265 no se puede cerrar.
+3. **`vercel env ls production`** para saber si la **251** ya está resuelta. Medido: el error de
+   credencial **no aparece desde el 2026-07-29** y hay 57 jobs `done` sin error, el último de hoy —
+   pero eso no distingue «la variable está» de «el código dejó de mirarla».
+4. **Ver el cierre `8F88DCD5` en pantalla** (264): los datos están verificados —4 órdenes, ₡14.900,
+   ₡2.000— pero **nadie ha mirado los píxeles**, y era una ficha visual.
+
+### Deuda barata que alguien debería tomar
+
+- **`lib/clients/google-route-optimization.ts:208` miente**: dice «se apaga con `RUTA_DEBUG_LOG=0`»,
+  caducado desde que el default se invirtió.
+- **`design.md` §10.2 de la 265** llama «el único sitio donde el `WHERE` real se mira» a un archivo
+  con Prisma **mockeado**.
+- Tres tests ajenos usan `getByRole("alert")` **en singular** (`RepartoModule.test.tsx:839, :1152,
+  :1463`): un caso futuro con «bloqueado + orden local» dará un *multiple elements* que no dice lo
+  que parece. **No es deuda de esta tanda**, ya se rompe hoy con «bloqueado + desactualizada».
+
+### Lo que el paralelismo enseñó, y hay que recordar
+
+Seis agentes en worktrees aislados **funcionaron**. Pero los worktrees **no aíslan la base local ni
+`node_modules`**, y eso mordió dos veces:
+
+1. **La migración de la 262 puso rojo el gate de la 265 — y el de `dev` limpio.** Un test que compara
+   los valores de un enum **en la base** contra una lista literal empieza a fallar en todas partes.
+   Se reprodujo en `dev` sin código de ninguna rama antes de culpar a nadie, y se resolvió mergeando
+   primero la rama que traía los censos actualizados.
+2. **`prisma generate` se pisa entre worktrees**: el cliente vive en el `node_modules` compartido, así
+   que el último gana y al otro le desaparecen sus tipos **a mitad de su propio gate**. Hay que
+   regenerar justo antes de cada corrida.
+
+⚠️ **Y un agente corrió `scripts/seed-usuarios-qa.ts` contra la base local** (el hash no cuadraba con
+el `QA_PASSWORD` del `.env`). Eso **rota las cuatro cuentas QA a la vez**. Si un login local deja de
+funcionar, es esto y no el código.
+
+---
+
+## ✅ PUERTA HUMANA PASADA (262 y 265) — 2026-08-22 (tanda anterior, cerrada)
 
 Las dos fichas pasan a **`spec_ready`**. **Las dos crecieron en la puerta**, y la 265 además cambió
 de zona.
