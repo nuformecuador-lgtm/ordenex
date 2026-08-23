@@ -605,3 +605,109 @@ Autocomprobación: las cuatro corridas imprimieron ids/fechas **de la base** (UU
 **Veredicto:** el dato existe, es el más viejo de los re-solicitables, comparte derivador de jornada,
 está probado contra Postgres sembrado y sobrevivió a cuatro mutaciones que lo mataron; la pantalla
 sigue sin cablearse, a propósito.
+
+---
+
+# impl 271 — FRONTEND (pasada corta): el botón sale de `aReenviarPrimero`, y el CTA neutro se va
+
+**Encargo:** cablear el campo que el backend acaba de añadir (sección anterior, «Lo que le queda al
+FRONTEND», puntos 1-3). **Sólo la capa de presentación: ni `lib/`, ni `tests/fixtures/`.**
+
+## Qué se cerró
+
+**1 · El CTA se deriva del campo correcto.** `CierreDiaModule.tsx` calculaba
+
+    const reenviable =
+      bloqueo.aResolverPrimero?.resuelve === "mensajero" ? bloqueo.aResolverPrimero : null;
+
+y ahora es `bloqueo.aReenviarPrimero` a secas; `tieneVencido`/`tieneRechazado` salen de **su**
+`estado`. Sin ramificar por caso: el campo ya es `null` con `V = 0` y apunta al mismo cierre que
+`aResolverPrimero` en los casos 5 y 7. Como `estado` es siempre `vencido` o `rechazado`, las dos
+ramas son excluyentes **y exhaustivas**: no queda un re-solicitable sin botón.
+
+**2 · El CTA neutro se retiró entero** —`tienePorReenviarSinNombrar`, su `<section>`, el estado
+`confirmarReenvio`, su `<Modal>` y sus cuatro literales (`REENVIAR_AVISO`, `REENVIAR_CTA_LABEL`,
+`REENVIAR_CONFIRM_TITULO`, `REENVIAR_CONFIRM_DETALLE`)—. Existía sólo porque el dato no viajaba.
+Con `aReenviarPrimero` el caso 6 enciende el CTA del `vencido` (o el del `rechazado`) **con nombre
+propio**; dejar además el neutro sería un segundo botón para el mismo envío.
+**`REENVIAR_OK` sobrevive y no es residuo:** es el toast de «Solicitar cierre» cuando el servidor
+responde `resolicitado` en vez de `creado` (ese botón genérico no sabe qué acabó de mover, R18).
+
+**3 · El aviso del caso 6 ya dice las dos cosas — y no hizo falta tocar su texto.** El literal
+aprobado (§10.2, caso 3) ya nombra las dos: «**Envía el que falta** y espera a que la bodega apruebe
+el más antiguo, el del 21 de agosto». La mitad que faltaba no era la frase sino **el sitio donde
+enviarlo**, y eso es el botón del punto 1. La fecha ya salía de donde debe: `aposicionDeJornada` lee
+`aResolverPrimero.jornadaCR`, que es a quien cuelga la aposición («el más antiguo» = el de la
+bodega). Leerla del re-solicitable nombraría el cierre equivocado, y ahora hay un test que lo mata.
+
+**⚠️ NINGÚN LITERAL APROBADO SE TOCÓ.** `lib/constants/bloqueo-mensajero.ts` no aparece en el diff.
+
+## Archivos modificados
+
+| Archivo | Qué |
+|---|---|
+| `app/(app)/cierre-dia/_components/CierreDiaModule.tsx` | `reenviable` ← `aReenviarPrimero`; fuera el CTA neutro (estado, sección, modal y 4 literales); prosa de la prop `bloqueo` y de los dos CTA puesta al día |
+| `tests/components/CierreDiaModule.test.tsx` | bloque del caso 6 reescrito y ampliado a los casos 1, 2/3, 4, 5, 6 y 7 (**+8 tests**, 65 → 73) |
+
+**`tests/fixtures/bloqueo-cierre.ts` NO se tocó** (lo acaba de tocar el backend y hay otro agente en
+`tests/`). El **caso 7** —`N=2, V=2`, dos `rechazado`— se compone **dentro del propio test**: pedirle
+`{ n: 2, v: 2 }` a `bloqueoDe` produciría **dos `vencido`**, que **R17 declara imposible**, y un test
+verde contra un imposible no dice nada. Su `bloqueado` no se escribe a mano: sale de
+`estaBloqueadoPorCierres`, igual que en la fábrica compartida. **Si alguien lo sube al fixture, que
+sea con esa restricción encima.**
+
+## Mapa `R<n>` → test (`tests/components/CierreDiaModule.test.tsx`)
+
+| R | Caso | Test |
+|---|---|---|
+| R16/R18 | **6** (`N=2, V=1`) | «el CTA sale del RE-SOLICITABLE, no del más viejo de la cola» — **el test de la regresión** |
+| R43 | **6** | «el aviso dice LAS DOS COSAS y el botón está debajo, en la misma pantalla» (literal §10.2 **a mano y completo**) |
+| R43/R57 | **6** | «la fecha del aviso es la del cierre que espera a la BODEGA, no la del suyo» — dos jornadas distintas (21 vs 22) |
+| R13/R18 | **5** (`N=1, V=1`) | «con un único cierre vencido, su CTA y ningún otro» |
+| R31/R18 | **7** (`N=2, V=2`) | «aparece el CTA del rechazado, que es SU clase» |
+| R6/R18 | **4** (`N=2, V=0`) | «bloqueado por ACUMULAR NO ofrece ningún botón de reenvío» (`aReenviarPrimero` es `null`) |
+| R5 | **2/3** (`N=1, V=0`) | «un solo cierre YA enviado tampoco ofrece reenvío» |
+| R4 | **1** (`N=0`) | «sin ningún cierre abierto no hay ni aviso ni botón» |
+| R18 | **6** | «al confirmar, el CTA nombrado invoca la MISMA action y da SU toast» |
+
+Los cuatro últimos son la mitad negativa que pedía el encargo: **el botón NO aparece cuando
+`aReenviarPrimero` es `null`**. Y las tres menciones del CTA retirado son guardia: que no vuelva.
+
+## Las mutaciones — cinco, aplicadas de una en una y revertidas
+
+| # | Mutación | Resultado |
+|---|---|---|
+| A | `reenviable` vuelve al `aResolverPrimero?.resuelve === "mensajero" ? … : null` (**el defecto original**) | ROJO, **3 tests** (los tres del caso 6) |
+| B | `reenviable = bloqueo.aResolverPrimero` | ROJO, **3 tests** (los tres del caso 6) |
+| C | `tieneRechazado = reenviable !== null` (el rechazado se enciende con cualquier reenviable) | ROJO, **3 tests** (casos 5 y 6 + «sin cierre rechazado NO aparece su CTA») |
+| D | `tieneVencido = reenviable !== null` | ROJO, **1 test** — **sólo el caso 7**, que es justo el que se añadió para eso |
+| E | `aposicionDeJornada` lee `aReenviarPrimero` antes que `aResolverPrimero` (en `lib/`, revertida) | ROJO, **1 test** (la fecha del aviso) |
+
+Autocomprobación: la corrida limpia posterior a cada revert vuelve a **73/73**, y `git diff --stat`
+tras la última confirma que sólo quedan tocados los dos archivos de la tabla de arriba.
+
+## Gate de esta pasada — parcial y DECLARADO
+
+⚠️ **NO se corrió `./init.sh`** (lo lanza el leader).
+
+    pnpm run typecheck                                        -> sin una sola linea de salida
+    pnpm run lint                                             -> 99 problems (0 errors, 99 warnings)  [las 99 son previas]
+    vitest run tests/components/CierreDiaModule.test.tsx      -> Test Files 1 passed | Tests 73 passed  (antes 65)
+    vitest run <los 8 componentes del bloqueo por cierre>     -> Test Files 8 passed | Tests 283 passed
+    pnpm exec vitest run guard   (las guardias completas)     -> Test Files 138 passed | Tests 2054 passed
+    pnpm run test:cambiados                                   -> Test Files 401 passed | Tests 6036 passed | 26 skipped
+
+## Lo que NO se hizo
+
+1. **Sigue sin hacerse «ver la app» (T11.5).** Ni `aReenviarPrimero` ni el CTA del caso 6 se han
+   visto renderizados en un navegador. En este repo eso ya encontró 7 textos rotos que 12.000 tests
+   daban por buenos: **no está cubierto por lo de arriba**.
+2. **Los otros tres portales** (`RepartoModule`, `RecogerModule`, `RecoleccionModule`) siguen sin
+   botón, **a propósito**: su aviso lleva `conCta: true` y remite a «Cierre del día», que es donde
+   está el botón. Ninguno lee `aReenviarPrimero` y ninguno lo necesita.
+3. **Ningún texto aprobado se cambió, y ninguno pidió cambiarse.** No hay consulta pendiente con el
+   humano por esta pasada.
+
+**Veredicto:** el caso 6 ya ofrece el botón que el servidor siempre le permitió, con el nombre y la
+clase reales; el CTA neutro y su deuda se fueron con él; cinco mutaciones —incluida la del defecto
+original— murieron; falta ver la app.

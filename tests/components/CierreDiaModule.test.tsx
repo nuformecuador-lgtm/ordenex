@@ -22,7 +22,8 @@ import type {
   CierrePasadoDTO,
   CierreResultado,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+import { SIN_BLOQUEO, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 import {
   bloqueoConRechazado,
   bloqueoConVencido,
@@ -801,38 +802,145 @@ describe("CierreDiaModule", () => {
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  // ---------- FEATURE 271 — EL CASO 6 DE LA TABLA DE VERDAD, QUE ANTES NO EXISTÍA ----------
+  // =============================================================================================
+  // FEATURE 271 — QUÉ PUEDE REENVIAR **ÉL**: LOS CASOS 5, 6 Y 7 DE LA TABLA DE VERDAD
+  // =============================================================================================
   //
-  // «Solicitó el primero y dejó vencer el segundo»: N=2, V=1, y el que toca resolver PRIMERO es el
-  // más antiguo, que es el `solicitado` y lo resuelve la BODEGA. El detalle no dice de qué clase
-  // es el que él sí puede reenviar —sólo que hay uno—, así que ni el CTA del vencido ni el del
-  // rechazado aplican. Sin un tercer botón, un mensajero con algo que hacer se quedaría sin dónde
-  // hacerlo: esto NO es simetría, es un agujero tapado.
+  // EL BOTÓN NO CONTESTA LA PREGUNTA DE LA COLA. `aResolverPrimero` dice qué se resuelve PRIMERO
+  // (el abierto más viejo, R11); `aReenviarPrimero` dice qué puede tocar ÉL (el RE-SOLICITABLE más
+  // viejo, R18). En los casos 5 y 7 son el mismo cierre y da igual de cuál se lea; en el CASO 6
+  // —«solicitó el primero y dejó vencer el segundo», N=2 V=1— son DOS cierres distintos, y ahí es
+  // donde la pantalla se equivocaba: derivaba el botón del primero, veía un `solicitado` —que
+  // resuelve la BODEGA— y no pintaba nada, aunque `solicitarCierre` sí le dejaba reenviar el otro
+  // (R16/R18). Un mensajero con algo que hacer y sin dónde hacerlo.
+  //
+  // ⚠️ AQUÍ VIVIÓ UN TERCER CTA «NEUTRO» («Enviar el cierre a aprobación») y estos tests vigilan
+  // que NO vuelva. Existía sólo porque el dato no viajaba: decía que había algo que enviar sin
+  // poder decir qué. Ahora el caso 6 enciende el CTA del `vencido` o el del `rechazado`, con
+  // nombre propio, así que un botón sin nombre sería un segundo botón para el MISMO envío.
+  const CTA_NEUTRO_RETIRADO = "Enviar el cierre a aprobación";
 
-  it("271/caso 6: con algo que reenviar y el más viejo en manos de la bodega, aparece el CTA neutro", () => {
+  /**
+   * El CASO 7 —«dos cierres rechazados», N=2 V=2— se compone AQUÍ y no se pide a `bloqueoDe`:
+   * esa fábrica sólo sabe producir `vencido`, y **dos `vencido` a la vez son IMPOSIBLES** (R17,
+   * corregido por el humano el 2026-08-23). Pedirle `{ n: 2, v: 2 }` daría un doble que la base no
+   * puede producir, y un test verde contra un imposible no dice nada. El caso real de dos
+   * re-solicitables incluye siempre un `rechazado`.
+   *
+   * `bloqueado` NO se escribe a mano —sale de `estaBloqueadoPorCierres`, igual que en la fábrica
+   * compartida—: un doble no debe poder afirmar un estado que la regla no produce.
+   */
+  function bloqueoCaso7(): BloqueoDetalle {
+    const rechazadoMasViejo = {
+      cierreId: "c-rechazado-viejo",
+      estado: "rechazado" as const,
+      solicitadoAt: "2026-08-20T18:00:00.000Z",
+      jornadaCR: "2026-08-20",
+      resuelve: "mensajero" as const,
+    };
+    return {
+      bloqueado: estaBloqueadoPorCierres({ n: 2, v: 2 }),
+      cierresAbiertos: 2,
+      cierresPorReenviar: 2,
+      // Con los DOS abiertos re-solicitables, el más viejo de la cola y el más viejo de los
+      // re-solicitables son el MISMO cierre: los dos campos apuntan ahí (R18).
+      aResolverPrimero: rechazadoMasViejo,
+      aReenviarPrimero: rechazadoMasViejo,
+    };
+  }
+
+  it("271/caso 5 (N=1, V=1): con un único cierre vencido, su CTA y ningún otro", () => {
+    // Los dos campos nombran el mismo cierre. Es el caso que ya funcionaba, y está aquí para que se
+    // vea que la lectura nueva no lo rompe: no hace falta ramificar por caso.
+    renderModule({ bloqueo: bloqueoConVencido("2026-08-21"), puedesSolicitar: false });
+
+    expect(
+      screen.getByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
+  });
+
+  it("271/caso 6 (N=2, V=1): el CTA sale del RE-SOLICITABLE, no del más viejo de la cola", () => {
+    // ⚠️ ÉSTE ES EL TEST DE LA REGRESIÓN. El más viejo es el `solicitado` que espera a la bodega;
+    // el suyo es el `vencido`. Derivar el botón del primero deja la pantalla SIN botón —el fallo
+    // que este cambio cierra—, así que este aserto muere si alguien vuelve a leer aquel campo.
     renderModule({
       bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
       puedesSolicitar: false,
     });
 
-    const cta = screen.getByRole("button", { name: "Enviar el cierre a aprobación" });
+    const cta = screen.getByRole("button", {
+      name: "Solicitar aprobación del cierre vencido",
+    });
     expect(cta).toBeEnabled();
-    // Y NO se ofrecen los otros dos: nombrarían un estado que nadie ha comprobado.
-    expect(
-      screen.queryByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
-    ).toBeNull();
+    // Y con nombre propio: el CTA neutro se retiró junto con la deuda que lo justificaba.
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
     ).toBeNull();
+  });
+
+  it("271/caso 6: el aviso dice LAS DOS COSAS y el botón está debajo, en la misma pantalla", () => {
+    // R43 — qué espera de la bodega (`aResolverPrimero`, con SU fecha) y qué puede hacer él ya
+    // mismo (`aReenviarPrimero`, que es el botón). Antes decía sólo la primera mitad y la segunda
+    // no tenía dónde ocurrir.
+    //
+    // ⚠️ LITERAL A MANO Y COMPLETO (§10.2, aprobado por el humano el 2026-08-23), nunca comparado
+    // contra `avisoBloqueo`: un texto medido contra la función que lo genera está siempre verde.
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      puedesSolicitar: false,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
+    ).toBeEnabled();
+  });
+
+  it("271/caso 6: la fecha del aviso es la del cierre que espera a la BODEGA, no la del suyo", () => {
+    // Las dos jornadas son distintas a propósito (21 el `solicitado`, 22 el `vencido`). La
+    // aposición cuelga de «el más antiguo», que es el de la bodega: leerla del re-solicitable
+    // nombraría el 22 y mandaría al mensajero a esperar por un cierre que ya es suyo.
+    renderModule({
+      bloqueo: bloqueoDe({
+        n: 2,
+        v: 1,
+        jornadaCR: "2026-08-21",
+        jornadaCRReenviable: "2026-08-22",
+      }),
+    });
+
+    const aviso = screen.getByRole("alert");
+    expect(aviso).toHaveTextContent("el más antiguo, el del 21 de agosto");
+    expect(aviso).not.toHaveTextContent("22 de agosto");
+  });
+
+  it("271/caso 7 (N=2, V=2, dos rechazados): aparece el CTA del rechazado, que es SU clase", () => {
+    renderModule({ bloqueo: bloqueoCaso7(), puedesSolicitar: false });
+
+    expect(
+      screen.getByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
+    ).toBeEnabled();
+    // Ni el del vencido —ese cierre no lo está— ni el neutro, que ya no existe.
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
   });
 
   it("271/caso 4: bloqueado por ACUMULAR (V=0) NO ofrece ningún botón de reenvío", () => {
-    // Sus dos cierres están enviados: no tiene nada que hacer, y ofrecerle un botón sería mandarlo
-    // a buscar una acción que el servidor no tiene. Es la misma razón por la que este caso es el
-    // único de los tres cuyo aviso no lleva llamado a la acción en ningún portal.
+    // `aReenviarPrimero` es `null`: sus dos cierres están enviados y no tiene nada que hacer.
+    // Ofrecerle un botón sería mandarlo a buscar una acción que el servidor no tiene, y es la misma
+    // razón por la que este caso es el único cuyo aviso no lleva llamado a la acción.
     renderModule({ bloqueo: bloqueoPorAcumular("2026-08-21"), puedesSolicitar: false });
 
-    expect(screen.queryByRole("button", { name: "Enviar el cierre a aprobación" })).toBeNull();
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
     ).toBeNull();
@@ -841,7 +949,33 @@ describe("CierreDiaModule", () => {
     ).toBeNull();
   });
 
-  it("271/caso 6: al confirmar el CTA neutro invoca la MISMA action y avisa sin inventar la clase", async () => {
+  it("271/casos 2 y 3: un solo cierre YA enviado (N=1, V=0) tampoco ofrece reenvío", () => {
+    // Ni bloqueo ni botón: ese mensajero ya hizo lo suyo y espera al administrador.
+    renderModule({ bloqueo: bloqueoDe({ n: 1, v: 0 }) });
+
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
+    ).toBeNull();
+  });
+
+  it("271/caso 1: sin ningún cierre abierto no hay ni aviso ni botón de reenvío", () => {
+    renderModule({ bloqueo: SIN_BLOQUEO });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: CTA_NEUTRO_RETIRADO })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre vencido" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
+    ).toBeNull();
+  });
+
+  it("271/caso 6: al confirmar, el CTA nombrado invoca la MISMA action y da SU toast", async () => {
     const user = userEvent.setup();
     solicitarMock.mockResolvedValue({ status: "ok", via: "resolicitado" });
     renderModule({
@@ -849,16 +983,25 @@ describe("CierreDiaModule", () => {
       puedesSolicitar: false,
     });
 
-    await user.click(screen.getByRole("button", { name: "Enviar el cierre a aprobación" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Solicitar aprobación del cierre vencido",
+      }),
+    );
     const dialog = await screen.findByRole("dialog", {
-      name: "Enviar el cierre a aprobación",
+      name: "Solicitar aprobación del cierre vencido",
     });
-    await user.click(within(dialog).getByRole("button", { name: "Enviar a aprobación" }));
+    await user.click(
+      within(dialog).getByRole("button", { name: "Solicitar aprobación" }),
+    );
 
     await vi.waitFor(() => expect(solicitarMock).toHaveBeenCalledTimes(1));
+    // El servidor devuelve `resolicitado` sin decir de qué clase (mueve el más viejo por EDAD,
+    // R18); quien sabe qué acaba de pasar es el botón que se pulsó, y aquí ya sabe nombrarlo.
     await vi.waitFor(() =>
-      expect(successMock).toHaveBeenCalledWith("Cierre enviado a aprobación."),
+      expect(successMock).toHaveBeenCalledWith("Cierre vencido enviado a aprobación."),
     );
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 });
 

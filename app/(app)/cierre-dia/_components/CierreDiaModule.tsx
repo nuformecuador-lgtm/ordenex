@@ -130,10 +130,13 @@ export interface CierreDiaModuleProps {
    * cierres las otras dos— y dos fuentes para la misma pregunta es cómo se desincronizan.
    *
    * Trae el veredicto de la regla N/V (libre si arrastra un cierre a lo sumo y ninguno espera a
-   * que él lo reenvíe), cuántos cierres arrastra, cuántos espera que él reenvíe y CUÁL toca
-   * resolver primero —con la fecha de su JORNADA, no la de su creación, que en un cierre vencido
-   * va un día por delante—. Todo derivado server-side por el MISMO predicado que aplica el
-   * servidor al rechazar (R10): la pantalla no re-deriva nada.
+   * que él lo reenvíe), cuántos cierres arrastra, cuántos espera que él reenvíe y DOS cierres, no
+   * uno: `aResolverPrimero` (el abierto más viejo, el orden de la cola, R11) y `aReenviarPrimero`
+   * (el RE-SOLICITABLE más viejo, lo que él puede tocar, R18). Los dos con la fecha de su JORNADA,
+   * no la de su creación, que en un cierre vencido va un día por delante. Todo derivado
+   * server-side por el MISMO predicado que aplica el servidor al rechazar (R10): la pantalla no
+   * re-deriva nada, y en particular no intenta adivinar el segundo a partir del primero —en el
+   * caso 6 de la tabla de verdad son cierres DISTINTOS—.
    */
   bloqueo: BloqueoDetalle;
 }
@@ -192,23 +195,21 @@ const RECHAZADO_CONFIRM_DETALLE =
   "Se enviará de nuevo tu cierre rechazado a tu bodega para aprobación. No se recalculan los montos ya registrados.";
 const RECHAZADO_OK = "Cierre rechazado enviado a aprobación.";
 
-// ⚠️ FEATURE 271 — EL TERCER CTA, Y EXISTE POR UN CASO DE LA TABLA DE VERDAD, NO POR SIMETRÍA.
+// ⚠️ FEATURE 271 — AQUÍ VIVIÓ UN TERCER CTA «NEUTRO», Y HOY SE BORRA POR LA RAZÓN POR LA QUE NACIÓ.
 //
-// Es el caso 6 del spec, alcanzable y medido: el mensajero solicitó su cierre del día 1 y dejó
-// vencer el del día 2. El que toca resolver PRIMERO es el más antiguo —el `solicitado`, que
-// resuelve la bodega—, así que el detalle no dice de qué clase es el que él sí puede reenviar:
-// sólo dice que hay uno. Sin este CTA, un mensajero con algo que reenviar se quedaría sin botón
-// para hacerlo y sin forma de descubrir por qué.
+// Existió media jornada, para el caso 6 de la tabla de verdad: el mensajero solicitó el cierre del
+// día 1 y dejó vencer el del día 2. El abierto más viejo era el `solicitado` —que resuelve la
+// bodega—, y el detalle sólo llevaba ESE, así que la pantalla sabía que había algo que reenviar
+// pero no de qué clase. Un botón que no puede nombrar lo que envía es mejor que ninguno, y por eso
+// se puso; era deuda declarada, no diseño.
 //
-// ⏳ DEUDA DECLARADA, NO OLVIDO: el dato que falta es «el estado del cierre RE-SOLICITABLE más
-// viejo». `aResolverPrimero` es el cierre ABIERTO más viejo, que no siempre es el mismo. Mientras
-// no viaje, el texto es neutro: menos específico, nunca falso.
-const REENVIAR_AVISO =
-  "Tienes un cierre sin enviar a aprobación. Envíalo con el botón de abajo.";
-const REENVIAR_CTA_LABEL = "Enviar el cierre a aprobación";
-const REENVIAR_CONFIRM_TITULO = "Enviar el cierre a aprobación";
-const REENVIAR_CONFIRM_DETALLE =
-  "Se enviará tu cierre pendiente a tu bodega para aprobación. No se recalculan los montos ya registrados.";
+// El backend ya manda `aReenviarPrimero` —el re-solicitable más viejo, con su estado y la jornada
+// que ese cierre cierra—, así que el caso 6 enciende el CTA del `vencido` o el del `rechazado`, con
+// nombre propio. Mantener además el neutro sería ofrecer DOS botones para el mismo envío, o dejar
+// vivo uno inalcanzable: las dos ramas de arriba ya cubren todo re-solicitable.
+//
+// `REENVIAR_OK` SOBREVIVE y no es residuo: es el toast de «Solicitar cierre» cuando el servidor
+// responde `resolicitado` en vez de `creado` (el botón genérico no sabe qué acaba de mover, R18).
 const REENVIAR_OK = "Cierre enviado a aprobación.";
 
 // Pedido humano: "ver" el detalle de un cierre YA solicitado (textos separados, i18n-ready).
@@ -400,17 +401,20 @@ export function CierreDiaModule({
   // desincronizarse consigo misma.
   const bloqueado = bloqueo.bloqueado;
 
-  // El cierre que el MENSAJERO puede reenviar por su cuenta, si resulta ser el más viejo. Cuando
-  // el más viejo lo resuelve la administración —un `solicitado`—, esto es `null` aunque él tenga
-  // otro que reenviar: por eso existe el CTA neutro de más abajo.
-  const reenviable =
-    bloqueo.aResolverPrimero?.resuelve === "mensajero" ? bloqueo.aResolverPrimero : null;
+  // EL CIERRE QUE EL MENSAJERO PUEDE REENVIAR POR SU CUENTA — y es un campo propio, no una lectura
+  // más lista de `aResolverPrimero`. Son DOS preguntas distintas y en el caso 6 de la tabla de
+  // verdad («solicitó el primero y dejó vencer el segundo», N=2 V=1) tienen respuestas distintas:
+  // el abierto más viejo es el `solicitado` —lo resuelve LA BODEGA— y el que él puede reenviar es
+  // el otro. Derivar el botón de `aResolverPrimero` le decía «espera a la administración» y le
+  // ESCONDÍA el reenvío que `solicitarCierre` sí le permite (R16/R18).
+  //
+  // Por eso aquí no se ramifica por caso: `aReenviarPrimero` ya es `null` cuando no hay nada que
+  // reenviar (V=0) y apunta al MISMO cierre que `aResolverPrimero` cuando el más viejo ya es
+  // re-solicitable (casos 5 y 7). Su `estado` es siempre `vencido` o `rechazado`, así que las dos
+  // ramas de abajo son excluyentes y EXHAUSTIVAS: no queda un reenviable sin botón.
+  const reenviable = bloqueo.aReenviarPrimero;
   const tieneVencido = reenviable?.estado === "vencido";
   const tieneRechazado = reenviable?.estado === "rechazado";
-  // Hay algo que reenviar pero no se sabe de qué clase (caso 6 de la tabla de verdad). El conteo
-  // es la fuente: `cierresPorReenviar` cuenta EXACTAMENTE los que el servidor deja re-solicitar.
-  const tienePorReenviarSinNombrar =
-    bloqueo.cierresPorReenviar >= 1 && reenviable === null;
 
   // Confirmación de "Solicitar cierre"; true = modal abierto.
   const [confirmar, setConfirmar] = useState(false);
@@ -418,8 +422,6 @@ export function CierreDiaModule({
   const [confirmarVencido, setConfirmarVencido] = useState(false);
   // Feature 109/R31: confirmación del CTA del cierre `rechazado`; true = modal abierto.
   const [confirmarRechazado, setConfirmarRechazado] = useState(false);
-  // FEATURE 271: confirmación del CTA neutro de reenvío (caso 6); true = modal abierto.
-  const [confirmarReenvio, setConfirmarReenvio] = useState(false);
   // Evidencia (URL firmada, R5) en el visor; null = cerrado.
   const [evidencia, setEvidencia] = useState<string | null>(null);
   // Feature 67/R36: fila pendiente de confirmar el deshacer; null = modal cerrado.
@@ -536,12 +538,11 @@ export function CierreDiaModule({
     cerrarConfirmaciones();
   }
 
-  /** Cierra los cuatro modales de solicitud/reenvío pase lo que pase. */
+  /** Cierra los tres modales de solicitud/reenvío pase lo que pase. */
   function cerrarConfirmaciones() {
     setConfirmar(false);
     setConfirmarVencido(false);
     setConfirmarRechazado(false);
-    setConfirmarReenvio(false);
   }
 
   /**
@@ -596,11 +597,15 @@ export function CierreDiaModule({
         </p>
       ) : null}
 
-      {/* ---------- CTA del cierre vencido (feature 111/R13) ----------
-          Se ofrece SIEMPRE que el más viejo sea un `vencido`, con INDEPENDENCIA del gate de
-          creación (`puedesSolicitar`): enviarlo es lo único que depende de él. Llama a la MISMA
-          action `solicitarCierre()`; el backend transiciona el re-solicitable más viejo (R18),
-          que en esta rama es exactamente éste. */}
+      {/* ---------- CTA del cierre vencido (feature 111/R13 -> FEATURE 271) ----------
+          Se ofrece SIEMPRE que el RE-SOLICITABLE más viejo sea un `vencido` —no que lo sea el
+          abierto más viejo—, con INDEPENDENCIA del gate de creación (`puedesSolicitar`): enviarlo
+          es lo único que depende de él. Llama a la MISMA action `solicitarCierre()`; el backend
+          transiciona el re-solicitable más viejo (R18), que es EXACTAMENTE el que nombra este
+          botón: los dos salen del mismo `ORDER BY`, así que no pueden apuntar a cierres distintos.
+
+          Desde la 271 esta rama cubre también el CASO 6 (el `solicitado` del día 1 sigue esperando
+          a la bodega y el del día 2 venció): antes ahí no salía este botón. */}
       {tieneVencido ? (
         <section
           aria-label="Cierre vencido"
@@ -618,9 +623,10 @@ export function CierreDiaModule({
         </section>
       ) : null}
 
-      {/* ---------- CTA del cierre rechazado (feature 109/R31) ----------
-          Mismo patrón que el `vencido` y la misma action. El copy comunica que un `rechazado` NO
-          es terminal, que es lo que el badge de estado no dice. */}
+      {/* ---------- CTA del cierre rechazado (feature 109/R31 -> FEATURE 271) ----------
+          Mismo patrón que el `vencido`, la misma action y el mismo origen (`aReenviarPrimero`). El
+          copy comunica que un `rechazado` NO es terminal, que es lo que el badge de estado no dice.
+          Es EXCLUYENTE con el de arriba: un cierre no es `vencido` y `rechazado` a la vez. */}
       {tieneRechazado ? (
         <section
           aria-label="Cierre rechazado"
@@ -634,28 +640,6 @@ export function CierreDiaModule({
             onClick={() => setConfirmarRechazado(true)}
           >
             {RECHAZADO_CTA_LABEL}
-          </Button>
-        </section>
-      ) : null}
-
-      {/* ---------- CTA neutro de reenvío (FEATURE 271, caso 6 de la tabla de verdad) ----------
-          El mensajero tiene un cierre que puede reenviar, pero el que toca resolver PRIMERO es
-          otro —uno que resuelve la bodega—, así que el detalle no dice de qué clase es el suyo.
-          Sin este botón se quedaría con algo que hacer y sin dónde hacerlo. Las tres ramas son
-          EXCLUYENTES por construcción: ésta sólo se enciende cuando las otras dos están apagadas. */}
-      {tienePorReenviarSinNombrar ? (
-        <section
-          aria-label="Cierre por enviar a aprobación"
-          className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
-        >
-          <p className="text-sm text-destructive">{REENVIAR_AVISO}</p>
-          <Button
-            type="button"
-            variant="destructive"
-            className="w-fit"
-            onClick={() => setConfirmarReenvio(true)}
-          >
-            {REENVIAR_CTA_LABEL}
           </Button>
         </section>
       ) : null}
@@ -866,18 +850,6 @@ export function CierreDiaModule({
         description={RECHAZADO_CONFIRM_DETALLE}
         confirmLabel="Solicitar aprobación"
         onConfirm={() => confirmarSolicitud(RECHAZADO_OK)}
-        closeOnConfirm={false}
-      />
-
-      {/* FEATURE 271: confirmación del CTA neutro (caso 6). Misma action que los otros dos; el
-          backend transiciona el cierre re-solicitable MÁS VIEJO, sea cual sea su estado (R18). */}
-      <Modal
-        open={confirmarReenvio}
-        onOpenChange={setConfirmarReenvio}
-        title={REENVIAR_CONFIRM_TITULO}
-        description={REENVIAR_CONFIRM_DETALLE}
-        confirmLabel="Enviar a aprobación"
-        onConfirm={() => confirmarSolicitud(REENVIAR_OK)}
         closeOnConfirm={false}
       />
 
