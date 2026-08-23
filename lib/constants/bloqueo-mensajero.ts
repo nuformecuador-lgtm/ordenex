@@ -51,6 +51,20 @@ const NO_PUEDES = "Mientras tanto no puedes entregar, cobrar ni recibir trabajo 
 /** El puntero de los portales que NO son «Cierre del día»: la unica diferencia admitida (R52). */
 const IR_A_CIERRE = "Ve a «Cierre del día» para enviarlo a aprobación.";
 
+/**
+ * EL MISMO PUNTERO, SIN OBJETO, para los avisos en los que hay MAS DE UN CIERRE EN JUEGO.
+ *
+ * ⚠️ POR QUE EXISTE, y salio de mirar la app en el navegador el 2026-08-23 (aprobado por el humano
+ * ese mismo dia): con dos cierres, «...para enviarLO a aprobación» colgaba del sintagma mas
+ * cercano, que en ese aviso es **«el más antiguo»** —justo el que el mensajero NO puede enviar,
+ * porque lo aprueba la bodega—. El pronombre nombraba el cierre equivocado.
+ *
+ * No se sustituye por otro objeto («envía el que falta») porque **la frase anterior ya dice QUE
+ * enviar**: al puntero solo le queda decir DONDE. Repetirlo aqui volveria a poner dos referencias
+ * seguidas a cierres distintos, que es de donde nacio la ambigüedad.
+ */
+const IR_A_CIERRE_SIN_OBJETO = "Ve a «Cierre del día».";
+
 export interface OpcionesAvisoBloqueo {
   /**
    * `true` en los portales «Entregas» y «Recolección»: el mensajero esta en otra pantalla y hay que
@@ -81,9 +95,42 @@ export function avisoBloqueo(d: BloqueoDetalle, opciones: OpcionesAvisoBloqueo):
 
   // CASO 3 — las dos cosas a la vez (N >= 2 y V >= 1). Va primero porque es el mas especifico.
   if (n >= 2 && v >= 1) {
+    // El puntero de este caso NO lleva objeto: ver `IR_A_CIERRE_SIN_OBJETO`.
+    const cta = opciones.conCta ? IR_A_CIERRE_SIN_OBJETO : null;
+
+    // 3-a — TODOS los pendientes estan en SU tejado (V = N; V es subconjunto de N, asi que `v === n`
+    // es el tope). Alcanzable con dos `rechazado`, o con `vencido` + `rechazado`.
+    //
+    // ⚠️ HASTA EL 2026-08-23 ESTE ESTADO CAIA EN EL TEXTO DE ABAJO Y DECIA DOS COSAS FALSAS
+    // —encontradas mirando la app, no por un test—: «Envía **el que falta**» en singular con DOS
+    // por enviar, y «espera a que **la bodega** apruebe el más antiguo» cuando el mas antiguo es
+    // SUYO y la bodega no lo va a aprobar sola: le mandaba a esperar algo que no llega. El texto de
+    // abajo solo es cierto MIENTRAS quede algun `solicitado`, y aqui no queda ninguno.
+    //
+    // La fecha sale de `aResolverPrimero` como en todos los demas y aqui no puede mentir: con
+    // `V = N` el abierto mas viejo ES el re-solicitable mas viejo (lo garantiza el repositorio y
+    // lo afirma `cierre-bloqueo-nv-sql-real.test.ts`), asi que «el más antiguo» es el mismo cierre
+    // por los dos caminos.
+    if (v === n) {
+      const cuantos = `Tienes ${n} cierres sin resolver y ninguno se ha enviado a aprobación.`;
+      const salida = `Envíalos a aprobación, empezando por el más antiguo${aposicion}.`;
+      return unir(cuantos, NO_PUEDES, salida, cta);
+    }
+
+    // 3-b — MIXTO: quedan `solicitado` (los resuelve la bodega) y algo suyo por enviar.
+    //
+    // ⚠️ DEUDA DECLARADA, NO OLVIDO (2026-08-23): «espera a que la bodega apruebe el más antiguo»
+    // solo es cierto si el abierto MAS VIEJO no es re-solicitable, y ese estado —el mas viejo
+    // `rechazado` con un `solicitado` mas nuevo, `N=2, V=1`— SI ES ALCANZABLE: `rechazarCierre`
+    // recibe un `cierreId` cualquiera y no exige que sea el mas viejo, asi que un admin que
+    // rechace el primero de dos `solicitado` lo produce. Ahi la frase manda a esperar por un
+    // cierre que ya es suyo. Se detecta sin dato nuevo —`d.aResolverPrimero.resuelve ===
+    // "mensajero"` con `v < n`—, pero el texto de ese caso NO ESTA APROBADO y aqui no se inventa
+    // ninguno: queda consultado con el humano. Lo unico que se corrigio es el plural.
     const cuantos = `Tienes ${n} cierres sin resolver y ${v} de ${v === 1 ? "ellos no se ha" : "ellos no se han"} enviado a aprobación.`;
-    const salida = `Envía el que falta y espera a que la bodega apruebe el más antiguo${aposicion}.`;
-    return unir(cuantos, NO_PUEDES, salida, opciones.conCta ? IR_A_CIERRE : null);
+    const envia = v === 1 ? "Envía el que falta" : "Envía los que faltan";
+    const salida = `${envia} y espera a que la bodega apruebe el más antiguo${aposicion}.`;
+    return unir(cuantos, NO_PUEDES, salida, cta);
   }
 
   // CASO 2 — algo que reenviar y nada mas (V >= 1, N = 1).

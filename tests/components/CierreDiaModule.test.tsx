@@ -29,6 +29,7 @@ import {
   bloqueoConVencido,
   bloqueoDe,
   bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
 } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 37 (T15) — módulo cliente del "Cierre del día". Se mockea la Server
@@ -615,6 +616,21 @@ describe("CierreDiaModule", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto.",
     );
+    // Aquí NUNCA hay puntero (R52): el mensajero ya está en esta pantalla. El cambio del
+    // 2026-08-23 —el puntero de este caso pierde el objeto— sólo afecta a los otros tres portales.
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/Ve a «Cierre del día»/);
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Estado alcanzable (dos `rechazado`, o `vencido` + `rechazado`). Hasta el 2026-08-23 leía el
+    // texto de arriba, que aquí dice dos cosas falsas: singular con DOS por enviar, y esperar a la
+    // bodega cuando el más antiguo es suyo. Y sigue sin puntero, que es lo propio de esta pantalla.
+    renderModule({ bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21") });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/Ve a «Cierre del día»/);
   });
 
   it("271/R51 · el aviso NO promete recibir asignaciones ni recoger en tiendas", () => {

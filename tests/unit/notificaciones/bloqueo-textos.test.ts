@@ -6,7 +6,7 @@ import {
   textoCierreVencidoMensajero,
   textoMensajeroBloqueadoBodega,
 } from "@/lib/notificaciones/emitir";
-import { bloqueoDe } from "@/tests/fixtures/bloqueo-cierre";
+import { bloqueoDe, bloqueoTodosPorEnviar } from "@/tests/fixtures/bloqueo-cierre";
 
 /**
  * FEATURE 271 (§10.2, Q6 CERRADA POR EL HUMANO EL 2026-08-23) — LOS CINCO LITERALES, QUE SON
@@ -29,6 +29,13 @@ import { bloqueoDe } from "@/tests/fixtures/bloqueo-cierre";
  */
 
 const JORNADA = "2026-08-21";
+
+/**
+ * `V = N` — TODOS los pendientes en el tejado del mensajero, con DOS `rechazado`. Vive en el
+ * fixture compartido (`bloqueoTodosPorEnviar`) y NO se compone con `bloqueoDe({ n, v: n })`: esa
+ * fabrica pondria dos `vencido`, que R17 declara imposible.
+ */
+const bloqueoTodosSuyos = bloqueoTodosPorEnviar;
 
 describe("271/§10.2 · los tres avisos al MENSAJERO (contrato Q6)", () => {
   it("1 · bloqueado por ACUMULAR (N>=2, V=0), con jornada fiable", () => {
@@ -71,11 +78,33 @@ describe("271/§10.2 · los tres avisos al MENSAJERO (contrato Q6)", () => {
     );
   });
 
-  it("3-ter · con DOS por reenviar el plural concuerda («2 de ellos no se han enviado»)", () => {
-    const texto = avisoBloqueo(bloqueoDe({ n: 2, v: 2, jornadaCR: null }), { conCta: false });
+  it("3-ter · con TODOS los pendientes en SU tejado (V = N) el aviso cambia entero", () => {
+    // ⚠️ ESTE CASO DECIA DOS COSAS FALSAS hasta el 2026-08-23, y las encontro el navegador, no la
+    // suite: «Envía **el que falta**» en singular con dos por enviar, y «espera a que **la bodega**
+    // apruebe el más antiguo» cuando el mas antiguo es SUYO —la bodega no lo va a aprobar sola—.
+    // Texto aprobado por el humano ese dia. Sigue escrito A MANO y completo.
+    const texto = avisoBloqueo(bloqueoTodosSuyos(2, JORNADA), { conCta: false });
 
     expect(texto).toBe(
-      "Tienes 2 cierres sin resolver y 2 de ellos no se han enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo.",
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto.",
+    );
+  });
+
+  it("3-ter-bis · el MISMO caso (V = N) SIN jornada fiable: la fecha desaparece entera", () => {
+    const texto = avisoBloqueo(bloqueoTodosSuyos(2, null), { conCta: false });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo.",
+    );
+  });
+
+  it("3-quater · MIXTO con DOS por enviar (N=3, V=2): «Envía LOS QUE FALTAN»", () => {
+    // El plural que faltaba: la rama mixta decia «el que falta» tambien con dos. Aqui SI queda un
+    // `solicitado` (el mas viejo), asi que la espera a la bodega es cierta y la frase se conserva.
+    const texto = avisoBloqueo(bloqueoDe({ n: 3, v: 2, jornadaCR: JORNADA }), { conCta: false });
+
+    expect(texto).toBe(
+      "Tienes 3 cierres sin resolver y 2 de ellos no se han enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía los que faltan y espera a que la bodega apruebe el más antiguo, el del 21 de agosto.",
     );
   });
 
@@ -94,12 +123,32 @@ describe("271/R52 · la ÚNICA diferencia entre portales es el llamado a la acci
     );
   });
 
-  it("caso 3 · el puntero se AÑADE al final; las dos primeras frases no cambian", () => {
+  it("caso 3 · el puntero se AÑADE al final y va SIN objeto; lo demás no cambia", () => {
+    // ⚠️ AQUI EL PUNTERO NO DICE «para enviarLO»: con dos cierres en juego, ese «lo» colgaba de «el
+    // más antiguo» —el que resuelve la bodega— y nombraba justo el que el mensajero NO puede
+    // enviar. Encontrado en el navegador el 2026-08-23 y corregido con aprobacion del humano; la
+    // frase anterior ya dice QUE enviar. El caso 2 (un solo cierre) conserva su «para enviarlo».
     const texto = avisoBloqueo(bloqueoDe({ n: 2, v: 1, jornadaCR: JORNADA }), { conCta: true });
 
     expect(texto).toBe(
-      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día» para enviarlo a aprobación.",
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
     );
+  });
+
+  it("caso 3 con V = N · mismo puntero sin objeto, sobre el texto nuevo", () => {
+    const texto = avisoBloqueo(bloqueoTodosSuyos(2, JORNADA), { conCta: true });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("caso 2 · el puntero de UN SOLO cierre CONSERVA su objeto: ahí no hay ambigüedad", () => {
+    // La contraprueba del cambio de arriba: con un unico cierre el «lo» solo puede ser ese, y el
+    // texto aprobado no se toca. Si alguien «unifica» los dos punteros, este caso lo dice.
+    const texto = avisoBloqueo(bloqueoDe({ n: 1, v: 1 }), { conCta: true });
+
+    expect(texto).toContain("Ve a «Cierre del día» para enviarlo a aprobación.");
   });
 
   it("caso 1 · SIN llamado a la acción en ningún portal: el mensajero no tiene nada que hacer", () => {
@@ -150,6 +199,7 @@ describe("271/R45/R46 · lo que los cinco NO dicen", () => {
     avisoBloqueo(bloqueoDe({ n: 2, v: 0, jornadaCR: JORNADA }), { conCta: true }),
     avisoBloqueo(bloqueoDe({ n: 1, v: 1, jornadaCR: JORNADA }), { conCta: true }),
     avisoBloqueo(bloqueoDe({ n: 2, v: 1, jornadaCR: JORNADA }), { conCta: true }),
+    avisoBloqueo(bloqueoTodosSuyos(2, JORNADA), { conCta: true }),
     textoCierreVencidoMensajero(JORNADA),
     TEXTO_CIERRE_VENCIDO_BODEGA,
     textoMensajeroBloqueadoBodega(JORNADA),

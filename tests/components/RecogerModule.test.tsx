@@ -11,6 +11,7 @@ import {
   bloqueoConVencido,
   bloqueoDe,
   bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
 } from "@/tests/fixtures/bloqueo-cierre";
 
 // 2026-07-31 (decisión del humano) — pantalla POR RECOGER del mensajero. Es la mitad que
@@ -409,13 +410,29 @@ describe("RecogerModule — bloqueo del mensajero (feature 111 -> 271)", () => {
   });
 
   it("271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1)", () => {
+    // ⚠️ EL PUNTERO VA SIN OBJETO desde el 2026-08-23 (corrección aprobada por el humano tras
+    // mirar la app): «...para enviarLO» colgaba de «el más antiguo», el cierre que resuelve la
+    // BODEGA. La frase anterior ya dice qué enviar; el caso 2 conserva su «para enviarlo».
     renderModule({
       bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
       porRecoger: [makeAsignacion({ id: "r1" })],
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día» para enviarlo a aprobación.",
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Dos `rechazado`: no queda ningún `solicitado`, así que la bodega no tiene nada que aprobar
+    // y el plural del envío es real. Hasta el 2026-08-23 este estado leía el texto de arriba.
+    renderModule({
+      bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21"),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
     );
   });
 

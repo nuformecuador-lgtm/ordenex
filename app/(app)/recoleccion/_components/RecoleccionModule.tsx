@@ -68,8 +68,23 @@ import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
 const TITULO = "Por recolectar en tienda";
 
 /** R8: el vacío se EXPLICA y el escáner se queda — es la causa raíz que la 167 vino a arreglar. */
-const VACIO =
-  "No tienes órdenes por recolectar en tienda ahora mismo. Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.";
+const VACIO = "No tienes órdenes por recolectar en tienda ahora mismo.";
+
+/**
+ * La segunda mitad del vacío: la promesa de que escanear SIGUE valiendo. Sólo es cierta cuando el
+ * escáner está en pantalla.
+ *
+ * ⚠️ SE PINTABA SIEMPRE, Y BLOQUEADO ERA FALSA POR PARTIDA DOBLE (encontrado mirando la app el
+ * 2026-08-23, aprobado por el humano): bloqueado no hay ni disparador de escaneo —lo apaga el
+ * mismo `bloqueado` de abajo— y, aunque lo hubiera, el servidor rechaza la recolección (R25/R31,
+ * Q1). Le prometía un camino inexistente justo cuando el aviso de arriba le dice que no puede
+ * recibir trabajo nuevo: dos frases seguidas que se contradicen.
+ *
+ * NO se sustituye por otro texto: el aviso de bloqueo YA dice qué pasa y qué hacer. Aquí basta con
+ * no prometer.
+ */
+const VACIO_PUEDES_ESCANEAR =
+  "Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.";
 
 /** Conteo del banner. En singular/plural, sin jerga: el mensajero lee "3 paquetes". */
 function textoConteo(n: number): string {
@@ -252,9 +267,13 @@ export function RecoleccionModule({
         </EscanerModal>
       )}
 
-      {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner. */}
+      {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner.
+          La promesa de escanear se AÑADE sólo si el escáner está —bloqueado no lo está—: ver
+          `VACIO_PUEDES_ESCANEAR`. */}
       {porRecolectar.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{VACIO}</p>
+        <p className="text-sm text-muted-foreground">
+          {bloqueado ? VACIO : `${VACIO} ${VACIO_PUEDES_ESCANEAR}`}
+        </p>
       ) : vistaCards === "mosaico" ? (
         /* 2026-08-11 (decisión del humano): las cards van SUELTAS, en un carrusel único, igual
            que en «Por recoger». Antes iban dentro de una caja por tienda (la agrupación de

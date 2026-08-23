@@ -78,6 +78,39 @@ export function bloqueoDe(opciones: {
   };
 }
 
+/**
+ * `V = N` con N >= 2: TODOS los cierres abiertos estan en el tejado del mensajero, ninguno esta
+ * enviado. Es el estado que el aviso describia mal hasta el 2026-08-23.
+ *
+ * ⚠️ NO SE COMPONE CON `bloqueoDe({ n, v: n })`: esa fabrica pondria N `vencido`, y **dos `vencido`
+ * a la vez es un estado IMPOSIBLE** (R17) —el corte crea como mucho uno por mensajero y corrida—.
+ * Un test verde contra un imposible no dice nada. Lo alcanzable son dos `rechazado`, o
+ * `vencido` + `rechazado`; aqui se usa el primero, que es el que el humano nombro.
+ *
+ * Con `V = N` el abierto mas viejo ES el re-solicitable mas viejo, asi que los dos campos apuntan
+ * al MISMO cierre (R18, garantizado por el repositorio y afirmado contra Postgres). `bloqueado` no
+ * se escribe a mano: sale de la regla.
+ */
+export function bloqueoTodosPorEnviar(
+  n: number,
+  jornadaCR: string | null = null,
+): BloqueoDetalle {
+  const rechazadoMasViejo = {
+    cierreId: "c-rechazado-viejo",
+    estado: "rechazado" as const,
+    solicitadoAt: "2026-08-21T18:00:00.000Z",
+    jornadaCR,
+    resuelve: "mensajero" as const,
+  };
+  return {
+    bloqueado: estaBloqueadoPorCierres({ n, v: n }),
+    cierresAbiertos: n,
+    cierresPorReenviar: n,
+    aResolverPrimero: rechazadoMasViejo,
+    aReenviarPrimero: rechazadoMasViejo,
+  };
+}
+
 /** El caso 5 de la tabla de verdad: un solo cierre y esta `vencido` (N=1, V=1). */
 export function bloqueoConVencido(jornadaCR: string | null = null): BloqueoDetalle {
   return bloqueoDe({ n: 1, v: 1, jornadaCR });

@@ -15,6 +15,7 @@ import {
   bloqueoConVencido,
   bloqueoDe,
   bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
 } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 157 (R13-R24) + 167 — apartado propio del mensajero para lo que recoge EN LA
@@ -654,13 +655,30 @@ describe("RecoleccionModule — bloqueado por cierres sin resolver (R9/R23 -> 27
   });
 
   it("271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1)", () => {
+    // ⚠️ EL PUNTERO VA SIN OBJETO desde el 2026-08-23 (corrección aprobada por el humano tras
+    // mirar la app): «...para enviarLO» colgaba de «el más antiguo», el cierre que resuelve la
+    // BODEGA. La frase anterior ya dice qué enviar; el caso 2 conserva su «para enviarlo».
     renderModule({
       porRecolectar: [makeOrden()],
       bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día» para enviarlo a aprobación.",
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Dos `rechazado`: no queda ningún `solicitado` que la bodega pueda aprobar, y los dos por
+    // enviar son suyos. Hasta el 2026-08-23 este estado leía el texto de arriba, en singular y
+    // mandándole a esperar por un cierre que ya era suyo.
+    renderModule({
+      porRecolectar: [makeOrden()],
+      bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21"),
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
     );
   });
 
@@ -707,6 +725,32 @@ describe("RecoleccionModule — bloqueado por cierres sin resolver (R9/R23 -> 27
     expect(escaner()).toBeNull();
     expect(
       screen.getByText(/no tienes órdenes por recolectar en tienda ahora mismo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("271: bloqueado, el vacío YA NO promete que escanear sirva — no hay escáner ni permiso", () => {
+    // ⚠️ LA CONTRADICCIÓN QUE ENCONTRÓ EL NAVEGADOR el 2026-08-23 (corrección aprobada por el
+    // humano): el texto del vacío se pintaba entero, sin mirar `bloqueado`, así que debajo del
+    // aviso «no puedes ... recibir trabajo nuevo» venía «Puedes escanear igual: si el maestro
+    // acaba de asignarte una, se confirmará aquí». Falso por partida doble: no hay disparador de
+    // escaneo en pantalla, y el servidor rechaza la recolección de un mensajero bloqueado
+    // (R25/R31). Era previa a la 271; la 271 la volvió falsa.
+    renderModule({ porRecolectar: [], bloqueo: bloqueoConVencido() });
+
+    expect(screen.queryByText(/puedes escanear igual/i)).toBeNull();
+    expect(screen.queryByText(/se confirmará aquí/i)).toBeNull();
+  });
+
+  it("271: LIBRE y sin nada asignado, la promesa SIGUE — ahí sí es cierta (R7/R8)", () => {
+    // La otra mitad, que es la que impide «arreglarlo» quitando la frase para todos: sin bloqueo
+    // el escáner está en pantalla y escanear funciona. Es la causa raíz que la 167 vino a cerrar.
+    renderModule({ porRecolectar: [] });
+
+    expect(disparador()).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No tienes órdenes por recolectar en tienda ahora mismo. Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.",
+      ),
     ).toBeInTheDocument();
   });
 });

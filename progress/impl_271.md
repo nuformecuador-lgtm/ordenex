@@ -711,3 +711,152 @@ tras la última confirma que sólo quedan tocados los dos archivos de la tabla d
 **Veredicto:** el caso 6 ya ofrece el botón que el servidor siempre le permitió, con el nombre y la
 clase reales; el CTA neutro y su deuda se fueron con él; cinco mutaciones —incluida la del defecto
 original— murieron; falta ver la app.
+
+---
+
+# impl 271 — FRONTEND (pasada de textos): las tres correcciones que encontró el navegador
+
+**Encargo:** tres correcciones de texto **aprobadas por el humano** el 2026-08-23, salidas de mirar
+la app en el navegador. Sólo capa de presentación: `lib/constants/bloqueo-mensajero.ts` (TS puro,
+autorizado explícitamente), `RecoleccionModule.tsx` y los tests de los dos.
+
+## FIX 1 — el «lo» del caso 6 nombraba el cierre que él NO puede enviar
+
+El aviso del caso 6 (`N ≥ 2`, `V ≥ 1`) terminaba, en los tres portales con `conCta: true`:
+
+> … espera a que la bodega apruebe el más antiguo, el del 21 de agosto. **Ve a «Cierre del día»
+> para enviarlo a aprobación.**
+
+El sintagma más cercano a ese «lo» es *el más antiguo*, que es justo el que resuelve la bodega. El
+puntero de ESE caso —y sólo de ése— pasa a ser `Ve a «Cierre del día».`: la frase anterior ya dice
+qué enviar, así que al puntero le queda decir dónde. Vive en `IR_A_CIERRE_SIN_OBJETO`, separado de
+`IR_A_CIERRE`, que **no cambia** y sigue sirviendo al caso de un solo cierre (`V ≥ 1`, `N = 1`),
+donde el «lo» no puede ambiguarse. Hay test de las dos mitades: el nuevo sin objeto y el viejo
+**con** él («caso 2 · el puntero de UN SOLO cierre CONSERVA su objeto»), para que nadie los
+«unifique».
+
+## FIX 2 — con TODOS los pendientes en su tejado el aviso decía dos cosas falsas
+
+Estado alcanzable (dos `rechazado`, o `vencido` + `rechazado`): `V = N`. Caía en el texto mixto y
+decía **«Envía el que falta»** en singular con dos por enviar, y **«espera a que la bodega apruebe
+el más antiguo»** cuando el más antiguo es suyo y la bodega no lo va a aprobar sola. Rama propia,
+con el texto aprobado:
+
+> Tienes 2 cierres sin resolver y **ninguno se ha enviado** a aprobación. Mientras tanto no puedes
+> entregar, cobrar ni recibir trabajo nuevo. **Envíalos a aprobación, empezando por el más
+> antiguo**, el del 21 de agosto.
+
+La fecha sigue saliendo de `aResolverPrimero` y aquí no puede mentir: con `V = N` el abierto más
+viejo **es** el re-solicitable más viejo (garantizado por el repositorio y afirmado contra
+Postgres), así que «el más antiguo» es el mismo cierre por los dos caminos.
+
+**En los tres portales con `conCta: true` se le añade el puntero nuevo** (`Ve a «Cierre del día».`).
+No es texto inventado: es el literal aprobado en el FIX 1 y este estado vive dentro de esa misma
+rama. Sin él, «Envíalos a aprobación» quedaría sin decir dónde en las pantallas donde el botón no
+está.
+
+**Y el plural de la rama MIXTA** (`V ≥ 1`, `V < N`): `Envía el que falta` → `Envía los que faltan`
+cuando `V > 1` (alcanzable con `N = 3, V = 2`). Nada más de esa rama se tocó.
+
+### ⚠️ LO QUE SE ENCONTRÓ EN LA RAMA MIXTA — ALCANZABLE, y NO se le inventó texto
+
+La frase «espera a que la bodega apruebe el más antiguo» de la rama mixta **sólo es cierta si el
+abierto más viejo no es re-solicitable**. Ese supuesto **NO se cumple siempre**:
+
+- **Estado exacto:** `N = 2, V = 1` con el **más viejo `rechazado`** (o `vencido`) y el más nuevo
+  `solicitado`. Es decir, `aResolverPrimero.resuelve === "mensajero"` con `v < n`.
+- **Cómo se llega:** el mensajero acumula dos `solicitado` (permitido: el 2.º se crea con
+  `N=1, V=0`) y **el administrador rechaza el PRIMERO**. `CierresAdminService.rechazarCierre`
+  recibe un `cierreId` cualquiera y **no exige que sea el más viejo**: no hay guarda de orden.
+- **Medido en el navegador**, sembrando ese estado (jornada 20 el `rechazado`, 21 el `solicitado`):
+
+  > «Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. … Envía el que falta
+  > y espera a que la bodega apruebe **el más antiguo, el del 20 de agosto**. Ve a «Cierre del
+  > día».»
+
+  y justo debajo, en la misma pantalla, el botón **«Solicitar aprobación del cierre rechazado»**:
+  le manda a esperar por el mismo cierre que le ofrece reenviar. La fecha nombra el suyo.
+- **Se detecta sin dato nuevo** (`aResolverPrimero.resuelve === "mensajero"` con `v < n`), pero
+  **el texto de ese caso no está aprobado y aquí no se ha inventado ninguno**: queda escrito como
+  deuda declarada en el código, en la rama 3-b, y **consultado con el humano**.
+
+## FIX 3 — la contradicción del vacío de Recolección
+
+`VACIO` se pintaba entero sin mirar `bloqueado`, así que debajo del aviso «no puedes … recibir
+trabajo nuevo» venía «Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará
+aquí». Falso por partida doble: bloqueado **no hay disparador de escaneo en pantalla** (lo apaga el
+mismo `bloqueado`) y el servidor rechaza la recolección (R25/R31). Era **previo a la 271**; la 271
+lo volvió falso.
+
+No se inventó texto: la constante se parte y **la mitad que promete sólo se pinta si no está
+bloqueado**. Con la mitad negativa Y la positiva en test — quitar la promesa para todos también
+tiene que poner rojo, y lo pone.
+
+## Archivos modificados
+
+| Archivo | Qué |
+|---|---|
+| `lib/constants/bloqueo-mensajero.ts` | `IR_A_CIERRE_SIN_OBJETO`; rama `v === n` con su texto; plural de la mixta; la deuda de la rama mixta escrita donde vive |
+| `app/(app)/recoleccion/_components/RecoleccionModule.tsx` | `VACIO` partido en dos; la promesa sólo si NO está bloqueado |
+| `tests/fixtures/bloqueo-cierre.ts` | `+ bloqueoTodosPorEnviar(n, jornadaCR)` — `V = N` con dos `rechazado`, **nunca** `bloqueoDe({n, v:n})`, que fabricaría dos `vencido` (R17: imposible) |
+| `tests/unit/notificaciones/bloqueo-textos.test.ts` | literales a mano: caso 3 con el puntero nuevo, `V = N` (con y sin jornada), mixta con `V = 2`, y el caso 2 conservando su objeto |
+| `tests/components/{Reparto,Recoger,Recoleccion,CierreDia}Module.test.tsx` | el literal del caso 6 puesto al día + un caso `V = N` por portal |
+| `tests/components/RecoleccionModule.test.tsx` | las **dos** mitades del vacío: bloqueado sin promesa, libre con promesa |
+
+**Ningún otro literal aprobado se tocó.** El caso 1 (acumular, sin CTA), el caso 2 (un solo cierre,
+con su «para enviarlo») y las variantes sin jornada quedan byte a byte como estaban, y hay test de
+cada uno.
+
+## Las mutaciones — siete, aplicadas de una en una, con autocomprobación
+
+El arnés corre la suite SIN mutar primero y exige verde, aplica cada mutación, **ejecuta vitest de
+verdad**, imprime el caso que murió, revierte, y al final compara el **sha256** de los dos archivos
+con la copia original. **Ninguna sobrevivió.**
+
+| # | Mutación | Resultado |
+|---|---|---|
+| M1 | el puntero del caso 6 vuelve a llevar objeto (**el defecto original**) | ROJO, **8 tests** (los 4 portales × caso 6 y `V=N`, + los 2 del contrato) |
+| M1-bis | los DOS punteros se unifican (se pierde el objeto también en el caso de un solo cierre) | ROJO, **5 tests** |
+| M2 | la rama `V = N` desaparece: ese estado vuelve al texto mixto | ROJO, **7 tests** |
+| M3 | el plural de la mixta vuelve al singular fijo | ROJO, **1 test** («3-quater · MIXTO con DOS por enviar») |
+| M4 | «ninguno» vuelve a contar en número («2 de ellos no se han enviado») | ROJO, **7 tests** |
+| M5 | el vacío de Recolección vuelve a prometer el escaneo SIEMPRE | ROJO, **1 test** |
+| M5-bis | la promesa se quita también estando LIBRE (sobre-corrección) | ROJO, **1 test** |
+
+Autocomprobación: base 277/277 verde antes, 277/277 verde después, y los dos sha256 idénticos.
+
+## Ver la app (T11.5, por fin) — los cuatro portales, con `innerText`
+
+`pnpm dev` a un **archivo**, Playwright vía `createRequire`, login `mensajero.qa@ordenex.test`
+(**hash bcrypt comprobado antes de empezar; `seed-usuarios-qa.ts` NO se corrió**), submit tras
+`networkidle` + espera, y **lectura del `innerText`**. Estados sembrados en `cierre_dia` y base
+**restaurada al terminar**: 6 `aprobado`, 0 abiertos, verificado con una lectura posterior.
+
+- **Caso 6** (`solicitado` viejo + `vencido` nuevo) — Entregas / Por recoger / Recolección:
+  «… Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. **Ve
+  a «Cierre del día».**» · Cierre del día: el mismo sin puntero, y el botón «Solicitar aprobación
+  del cierre vencido».
+- **`V = N`** (dos `rechazado`) — los tres portales: «Tienes 2 cierres sin resolver y **ninguno se
+  ha enviado** a aprobación. … **Envíalos a aprobación, empezando por el más antiguo**, el del 21
+  de agosto. Ve a «Cierre del día».» · Cierre del día: el mismo sin puntero + «Solicitar aprobación
+  del cierre rechazado».
+- **Un solo cierre** (`vencido`, `N=1 V=1`) — **sin cambios**: «… **Ve a «Cierre del día» para
+  enviarlo a aprobación.**» y, en Cierre del día, «Envíalo a aprobación con el botón de abajo.»
+- **Acumular** (`N=2, V=0`) — **sin cambios** y **sin puntero** en ninguno de los cuatro.
+- **Recolección bloqueada y sin lista**: «No tienes órdenes por recolectar en tienda ahora mismo.»
+  y **0 disparadores de escaneo**. LIBRE: la frase completa vuelve y el disparador es 1.
+
+## Gate de esta pasada — parcial y DECLARADO
+
+⚠️ **NO se corrió `./init.sh`**: lo lanza el leader.
+
+    pnpm run typecheck                                     -> sin una sola linea de salida
+    pnpm run lint                                          -> 99 problems (0 errors, 99 warnings)  [las 99 son previas]
+    vitest run tests/components tests/unit/notificaciones tests/unit/guards
+                                                           -> Test Files 300 passed | Tests 4207 passed | 26 skipped
+    pnpm run test:cambiados                                -> Test Files 404 passed | Tests 6049 passed | 26 skipped
+
+**Veredicto:** las tres correcciones aprobadas, cerradas y vistas en pantalla en los cuatro
+portales; siete mutaciones muertas; un cuarto defecto de la misma familia —la rama mixta con el más
+viejo re-solicitable— **encontrado, medido en el navegador y NO parcheado a ojo**: espera decisión
+del humano.
