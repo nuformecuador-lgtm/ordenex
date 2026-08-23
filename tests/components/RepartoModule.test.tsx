@@ -2571,3 +2571,153 @@ describe("RepartoModule — el botón de gestionar de una reservada (feature 261
     expect(await screen.findByRole("button", { name: "Entregar" })).toBeInTheDocument();
   });
 });
+
+// Feature 265 (FE3) — EL MENSAJERO SE ENTERA DE QUE SU ORDEN ES APROXIMADO.
+//
+// Lo que esta pantalla mostraba hasta hoy era la MISMA lista, con el mismo aspecto, viniera el
+// orden del servicio de rutas o lo hubiera calculado la app por cercanía en línea recta. La
+// degradación era invisible: ni un aviso, ni una marca, nada. Y ocurre por más de un camino
+// —falta de credencial, paradas que el servicio no pudo servir—, así que no es un caso de
+// laboratorio.
+//
+// Las tres reglas que gobiernan estos casos:
+//   · `"local"`     → se avisa, SIEMPRE, desde el primer render y sin abrir el mapa (R38);
+//   · `"proveedor"` → no se avisa (sería ruido sobre una ruta que sí está bien calculada);
+//   · `null`        → NO CONSTA, y no consta es no consta: ni aviso ni afirmación contraria (R45).
+//
+// ⚠️ Los textos van escritos A MANO en este archivo, nunca importados del componente. Un texto
+// comparado contra la función que lo genera está siempre verde y no prueba nada.
+describe("RepartoModule — el orden de las paradas es aproximado (feature 265)", () => {
+  const TITULO_ORDEN = "El orden de las paradas es aproximado";
+  const CUERPO_ORDEN =
+    "Lo calculamos en la app, por cercanía en línea recta: no toma en cuenta calles ni tráfico. Revísalo antes de salir.";
+  // El aviso del PUNTO DE PARTIDA, que ya existía (feature 92/R24) y que este bloque no toca.
+  const TEXTO_ORIGEN =
+    "El punto de partida es aproximado (no se usó tu ubicación GPS reciente).";
+
+  /** El `Alert` del orden aproximado entero, o `null` si no está en pantalla. */
+  function avisoOrden(): HTMLElement | null {
+    const titulo = screen.queryByText(TITULO_ORDEN);
+    return titulo ? (titulo.closest('[data-slot="alert"]') as HTMLElement) : null;
+  }
+
+  const UNA_PARADA = [
+    makeAsignacion({ id: "g1", numRemision: "REM-G1", secuenciaRuta: 1 }),
+  ];
+
+  it("R38/R40: con el orden calculado en la app, el aviso está desde el PRIMER render — sin pulsar nada", () => {
+    renderModule({
+      porGestionar: UNA_PARADA,
+      ruta: { ...RUTA_VIGENTE, secuenciaFuente: "local" },
+    });
+
+    // Ni un click, ni abrir el mapa, ni esperar a nada: se afirma sobre el render inicial.
+    const aviso = avisoOrden();
+    expect(aviso).not.toBeNull();
+    // R40: dice QUÉ pasa (el título) y QUÉ HACER (el cuerpo). Un aviso que no dice qué hacer
+    // es ruido, y el mensajero está a punto de salir.
+    expect(
+      within(aviso as HTMLElement).getByText(CUERPO_ORDEN),
+    ).toBeInTheDocument();
+    // Es un aviso, no un error: el rojo está reservado a «El orden mostrado no está actualizado»,
+    // que sí describe una ruta que NO se puede seguir. Ésta se puede seguir; solo hay que mirarla.
+    expect(aviso).toHaveAttribute("role", "alert");
+    expect(screen.queryByText("El orden mostrado no está actualizado")).toBeNull();
+  });
+
+  it.each([
+    ["proveedor", "el orden lo calculó el servicio de rutas: no hay nada que revisar"],
+    [null, "no consta quién lo calculó (ruta anterior a esta feature, o 0/1 parada)"],
+  ] as const)(
+    "R38/R45: con `secuenciaFuente` = %s NO hay aviso — %s",
+    (fuente, porque) => {
+      renderModule({
+        porGestionar: UNA_PARADA,
+        ruta: { ...RUTA_VIGENTE, secuenciaFuente: fuente },
+      });
+
+      // La mitad negativa, y es la que mata «mostrarlo siempre».
+      expect(screen.queryByText(TITULO_ORDEN), porque).toBeNull();
+      expect(screen.queryByText(CUERPO_ORDEN), porque).toBeNull();
+      // Y se afirma que la pantalla se pintó de verdad: un `toBeNull` sobre un render vacío
+      // estaría verde igual, y este caso no probaría nada.
+      expect(cardDe("REM-G1")).toBeInTheDocument();
+    },
+  );
+
+  it("R44: avisa sin nombrar la causa — el mensajero no puede hacer nada con ella", () => {
+    renderModule({
+      porGestionar: UNA_PARADA,
+      ruta: { ...RUTA_VIGENTE, secuenciaFuente: "local" },
+    });
+
+    // La pantalla NO recibe la causa (falta de credencial, paradas no servidas, …) y no debe
+    // inventarla ni pedirla: el aviso es el mismo por los dos caminos. Lo que se comprueba aquí
+    // es que no se cuele por el texto una explicación que al mensajero no le sirve.
+    const texto = (avisoOrden() as HTMLElement).textContent ?? "";
+    expect(texto).not.toMatch(
+      /credencial|clave|licencia|cuota|servidor|fall[oó]|error/i,
+    );
+  });
+
+  it("R41/R42: el texto del aviso no lleva jerga interna, ni siglas, ni datos de nadie", () => {
+    renderModule({
+      porGestionar: UNA_PARADA,
+      ruta: { ...RUTA_VIGENTE, secuenciaFuente: "local" },
+    });
+
+    // Sobre el DOM RENDERIZADO, no sobre una constante del componente. Y acotado al aviso: el
+    // resto de la pantalla lleva direcciones y guías de verdad, que ahí son legítimas.
+    const texto = (avisoOrden() as HTMLElement).textContent ?? "";
+    // R41 — jerga de dentro de casa. Ninguna de estas palabras significa nada para quien
+    // reparte, y este repo ya arrastra deuda por meter una sigla en una pantalla.
+    expect(texto).not.toMatch(
+      /degrad|fallback|haversine|proveedor|optimizador|API|GPS/i,
+    );
+    // R42 — coordenadas (dos decimales o más), direcciones, guías e ids.
+    expect(texto).not.toMatch(/-?\d+[.,]\d{2,}/);
+    expect(texto).not.toMatch(/REM-|Calle|casa \d|Ana Pérez|\bg1\b/);
+  });
+
+  it("R43: las TRES señales conviven y siguen siendo tres cosas distintas", () => {
+    renderModule({
+      porGestionar: UNA_PARADA,
+      ruta: {
+        ...RUTA_VIGENTE,
+        // 1 · desde dónde se calculó (feature 92/R24)
+        origenFuente: "centroide",
+        // 2 · el dibujo no sigue calles (feature 92): el mapa lo pinta punteado
+        trazado: {
+          encodedPolyline: "abc",
+          distanciaM: null,
+          duracionS: null,
+          fuente: "local",
+        },
+        // 3 · quién decidió el ORDEN (esta feature)
+        secuenciaFuente: "local",
+      },
+    });
+
+    const aviso = avisoOrden();
+    expect(aviso).not.toBeNull();
+    const origen = screen.getByText(TEXTO_ORIGEN);
+
+    // Los dos textos, a la vez y por separado. Fundirlos en un «todo esto es aproximado» sería
+    // más corto y más falso: un orden calculado en la app con dibujo por calles es un caso real,
+    // y un punto de partida aproximado con el orden bien calculado también.
+    expect(aviso).toBeInTheDocument();
+    expect(origen).toBeInTheDocument();
+    expect((aviso as HTMLElement).contains(origen)).toBe(false);
+    // Y cada uno habla de LO SUYO: ninguno absorbe el hecho del otro.
+    expect((aviso as HTMLElement).textContent).not.toMatch(/punto de partida/i);
+    expect(origen.textContent).not.toMatch(/orden de las paradas/i);
+
+    // La tercera señal no es un texto sino una línea punteada, así que se afirma donde de
+    // verdad se decide: la geometría local que llega al mapa (`RutaMapaInner` la pinta con
+    // `dashArray` cuando `fuente !== "routes"`).
+    const props = rutaMapaMock.mock.calls.at(-1)?.[0] as {
+      trazado: { fuente: string } | null;
+    };
+    expect(props.trazado?.fuente).toBe("local");
+  });
+});

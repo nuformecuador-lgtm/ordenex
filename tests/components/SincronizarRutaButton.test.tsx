@@ -159,4 +159,91 @@ describe("SincronizarRutaButton", () => {
     );
     expect(refreshMock).not.toHaveBeenCalled();
   });
+
+  // ---------------- Feature 265 (FE2/FE3, R39-R42) ----------------
+  //
+  // «Ruta sincronizada.» pase lo que pase era una MEDIA VERDAD dicha en el peor momento: el
+  // mensajero acaba de pulsar, va a guardar el teléfono y a salir. Si el orden lo calculó la
+  // app por cercanía en línea recta, ése es justo el segundo en el que hay que decírselo.
+  //
+  // ⚠️ Los literales van escritos A MANO. Importar el texto del componente para compararlo
+  // consigo mismo dejaría este bloque siempre verde.
+  const TOAST_APROXIMADO =
+    "Ruta ordenada de forma aproximada: revisa el orden de las paradas.";
+
+  it("R39: con el orden calculado en la app el toast lo DICE, y no dice «Ruta sincronizada.»", async () => {
+    const user = userEvent.setup();
+    setGeolocation(null);
+    sincronizarMock.mockResolvedValue({
+      status: "ok",
+      omitida: false,
+      secuenciaFuente: "local",
+    });
+    render(<SincronizarRutaButton />);
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    await vi.waitFor(() =>
+      expect(warningMock).toHaveBeenCalledWith(TOAST_APROXIMADO),
+    );
+    // Las dos mitades. Sin la segunda, decir las dos cosas a la vez pasaría el caso: el
+    // mensajero vería «Ruta sincronizada.» y se quedaría con ésa, que es la tranquilizadora.
+    expect(successMock).not.toHaveBeenCalled();
+    // Y sigue refrescando: la ruta SÍ se recalculó, el orden nuevo tiene que llegar a la lista.
+    await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R41/R42: ese aviso no lleva jerga interna ni datos de nadie", () => {
+    // El texto es una constante de este archivo, así que se mide aquí mismo lo que el
+    // componente va a mostrar. R41: nada de dentro de casa. R42: ni coordenadas ni guías.
+    expect(TOAST_APROXIMADO).not.toMatch(
+      /degrad|fallback|haversine|proveedor|optimizador|API|GPS/i,
+    );
+    expect(TOAST_APROXIMADO).not.toMatch(/-?\d+[.,]\d{2,}/);
+  });
+
+  it.each(["proveedor", null] as const)(
+    "R39/R45: con `secuenciaFuente` = %s el toast sigue siendo «Ruta sincronizada.»",
+    async (fuente) => {
+      const user = userEvent.setup();
+      setGeolocation(null);
+      sincronizarMock.mockResolvedValue({
+        status: "ok",
+        omitida: false,
+        secuenciaFuente: fuente,
+      });
+      render(<SincronizarRutaButton />);
+
+      await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+      // La mitad negativa: avisar SIEMPRE convertiría el aviso en ruido y dejaría de leerse.
+      // `null` (no consta) entra aquí a propósito: sin dato no se afirma nada de más, pero
+      // tampoco se alarma sobre una ruta de la que no sabemos nada malo (R45).
+      await vi.waitFor(() =>
+        expect(successMock).toHaveBeenCalledWith("Ruta sincronizada."),
+      );
+      expect(warningMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("R39: `omitida` conserva su propio mensaje — no se recalculó nada que contar", async () => {
+    const user = userEvent.setup();
+    setGeolocation(null);
+    sincronizarMock.mockResolvedValue({
+      status: "ok",
+      omitida: true,
+      secuenciaFuente: null,
+    });
+    render(<SincronizarRutaButton />);
+
+    await user.click(screen.getByRole("button", { name: "Sincronizar ruta" }));
+
+    // Los tres desenlaces de `ok` son tres, no dos: éste es el que no debe caer ni en el
+    // aviso nuevo ni en «Ruta sincronizada.». El aviso PERSISTENTE de la pantalla ya cubre
+    // el orden aproximado de una ruta que no se ha vuelto a calcular.
+    await vi.waitFor(() =>
+      expect(successMock).toHaveBeenCalledWith("La ruta ya estaba al día."),
+    );
+    expect(warningMock).not.toHaveBeenCalled();
+  });
 });

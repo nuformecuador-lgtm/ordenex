@@ -293,6 +293,14 @@ export function RepartoModule({
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
   const origenAproximado =
     ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+  // Feature 265 (R38/R43/R44/R45) — el ORDEN de las paradas lo calculó la app, no el servicio
+  // de rutas. Es una señal DISTINTA de `origenAproximado`: aquélla dice DESDE DÓNDE se calculó
+  // la ruta y ésta dice QUIÉN decidió el orden. Pueden darse a la vez y NO se funden (R43).
+  //
+  // Se compara contra `"local"` y no contra `!== "proveedor"` a propósito: `null` significa NO
+  // CONSTA (ruta calculada antes de esta feature, o 0/1 parada) y ahí la pantalla se calla —ni
+  // avisa ni afirma que el orden vino de fuera (R45).
+  const ordenAproximado = ruta.secuenciaFuente === "local";
 
   // Feature 92 (seguimiento): posición EN VIVO. No cuesta ninguna llamada facturada —la da el
   // navegador— y solo arranca si el permiso ya consta concedido (R25: nunca se fuerza).
@@ -671,6 +679,29 @@ export function RepartoModule({
                 <AlertDescription>
                   La ruta cambió desde el último cálculo. Pulsa «Sincronizar
                   ruta» para recalcular el orden de entrega.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {/* Feature 265 (R38/R40/R41/R42/R44): el orden de las paradas lo calculó la app.
+                `variant="default"` y NO `destructive`: esto no es un error, es una ruta
+                utilizable que conviene revisar — el rojo está reservado al aviso de arriba.
+
+                Va AQUÍ, fuera del acordeón del mapa, y no es un detalle de maquetación: el
+                orden manda en la LISTA de abajo, que se ve siempre, mientras que el mapa se
+                pliega. Un aviso sobre el orden escondido dentro de un mapa cerrado es un aviso
+                que no existe.
+
+                El texto dice QUÉ pasa y QUÉ hacer, y NO dice por qué (R44): al mensajero no le
+                sirve saber si faltó una credencial o si el servicio de rutas no pudo con las
+                paradas, le sirve saber que debe revisar el orden antes de salir. Sin jerga
+                interna (R41) y sin coordenadas, direcciones, guías ni ids (R42). */}
+            {ordenAproximado ? (
+              <Alert variant="default">
+                <AlertTitle>El orden de las paradas es aproximado</AlertTitle>
+                <AlertDescription>
+                  Lo calculamos en la app, por cercanía en línea recta: no toma
+                  en cuenta calles ni tráfico. Revísalo antes de salir.
                 </AlertDescription>
               </Alert>
             ) : null}
