@@ -478,11 +478,11 @@ ya existe y debe seguir verde o actualizarse con la decisión escrita.
 | R5 | `alcance-fuente-unica.guardia.test.ts` › «ROLES_SIN_ANALITICA sigue exportada, tipada y consultada, aunque esté vacía» |
 | R6 | `tests/unit/analytics/alcance-api-key.test.ts` › «`resolverAlcance(actor apiKey, metrica publicable, canal "interno")` ⇒ denegado» + `tests/unit/actions/analitica-operativa-api-key-denegado.test.ts` › «un actor apiKey forzado por `deps.getActor` en `consultarAnaliticaOperativa`/`consultarAgregadoOperativo` sigue recibiendo forbidden, sin motivo» |
 | R7 | `tests/unit/auth/menu-visibility.test.ts` (existente) + caso «apiKey no está en ROLES_ACCESO_ANALITICA» |
-| R8 | `tests/unit/api/analitica-api-key-alcance.test.ts` › «el filtro que llega al servicio lleva tienda_id = usuarioId del actor» |
+| R8 | `tests/unit/api/analitica-integrador-borde.test.ts` › «y con el recorte a SU propia tienda: la politica no sustituye al alcance» + `tests/unit/api/analitica-api-key-route.test.ts` › «el filtro que LLEGA AL SERVICIO es el mismo, recortado a la tienda del actor» |
 | R9 | `tests/unit/api/analitica-api-key-route.test.ts` › «tienda_id/zona_id/mensajero_id en la query no alteran la consulta» |
-| R10 | `analitica-api-key-alcance.test.ts` › «pedir otra tienda es 403, no 200 vacío» |
+| R10 | `analitica-integrador-borde.test.ts` › «pedir la tienda de otro es forbidden auditado, nunca 200 con serie vacía (267/R10)» + `analitica-api-key-route.test.ts` › «si alguien la colara en el filtro interno, la intersección vacía es 403 y NO 200 vacío» |
 | R11 | `alcance-api-key.test.ts` › «actor sin usuarioId útil ⇒ denegado y cero llamadas al repositorio» |
-| R12 | `tests/unit/analytics/cache-clave.test.ts` › «dos integradores distintos ⇒ claves distintas» |
+| R12 | `tests/unit/analytics/cache-clave.test.ts` › «267/R12 · mismo rango, misma métrica, mismo filtro: la clave DIFIERE por el sujeto del alcance» (escrito en la revisión del 2026-08-23) + `cache-clave-alcance.guardia.test.ts` › «cada variante produce una clave DISTINTA, y el id entra en ella» |
 | R13 | `tests/unit/analytics/alcance-obligatorio.guardia.test.ts` (existente, **sin excepciones nuevas**) |
 | R14 | `tests/unit/api/analitica-integrador-borde.test.ts` › «una sola llamada a prepararConsultaAnalitica» (espía) |
 | R15 | `tests/unit/analytics/publicacion-api-key.test.ts` › «sólo los ids de la lista se conceden» |
@@ -515,3 +515,18 @@ ya existe y debe seguir verde o actualizarse con la decisión escrita.
 | R42 | `tablero-operativo-frontera.guardia.test.ts` › «un segundo handler sintético de analítica en app/api sigue cayendo» |
 | R43 | suites existentes de 122/126/128/131/176 verdes sin editar sus asertos de comportamiento |
 | R44 | `tests/unit/guards/schema-drift…` (existente) + ausencia de `db/migrations/**` en el diff, verificada por el reviewer |
+
+### 10.1 Corrección de la revisión del 2026-08-23
+
+El reviewer bloqueó la feature por un agujero REAL y reproducido: la guarda de canal vivía
+**solo dentro** de la rama del rol de integración, así que un actor con `canal: "api_key"` y
+cualquiera de los cinco roles lectores caía a la rama del catálogo (`resolverAlcance(
+{rol:"maestro"}, "cod_recaudado", "api_key")` ⇒ `{tipo:"global"}`: métrica **financiera**,
+**todos los inquilinos**). Como **R15/R17/R18/R19/R34 están escritos sobre el CANAL y no sobre
+el rol**, esos cinco requisitos NO estaban cubiertos para un actor no-integrador. Se añade la
+guarda simétrica —`canal === "api_key"` ⇔ rol de integración— en el punto único de decisión:
+
+| R | Test |
+| --- | --- |
+| R15/R17/R18/R19/R34 (sobre el canal, no sobre el rol) | `alcance-api-key.test.ts` › «los CINCO roles lectores por canal api_key se deniegan, contra las tres métricas» (15 casos **derivados de `ROLES_ANALITICA`**: publicable / no publicable / financiera) + «el bicondicional en las dos direcciones» + el espejo positivo «el rol de INTEGRACIÓN por api_key con métrica publicable sigue concediendo su tienda» |
+| Defensa en profundidad del canal (267, capa de autenticación) | `tests/unit/services/api-key-auth-service.test.ts` › «una fila cuyo usuario dedicado tiene rol X → forbidden» (`ApiKeyAuthService` deja de castear `encontrada.rol` sin comprobarlo) |

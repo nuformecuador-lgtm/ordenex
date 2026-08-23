@@ -13,7 +13,7 @@ Leyenda: `[P]` = paralelizable con las demás `[P]` de su bloque.
 
 ---
 
-## T0 — Cerrar las preguntas abiertas y fijar el punto de partida (BLOQUEA TODO)
+## [x] T0 — Cerrar las preguntas abiertas y fijar el punto de partida (BLOQUEA TODO)
 
 1. Pegar en `progress/impl_267.md` la respuesta del humano a **P1–P8**, una línea por pregunta,
    con fecha. En particular: la **lista blanca de métricas** (P1), si el mensajero se prohíbe
@@ -30,7 +30,7 @@ la firma el implementer, la revisa el reviewer.
 
 ---
 
-## T1 — La lista blanca de métricas (depende de T0; **es la primera pieza de código**)
+## [x] T1 — La lista blanca de métricas (depende de T0; **es la primera pieza de código**)
 
 Crear `lib/analytics/publicacion-api-key.ts`: módulo puro, `METRICAS_API_KEY` con los ids que
 firmó P1 y `esMetricaPublicableApiKey(id)`. Sólo ids: **nada de una tabla `{ maestro: …, apiKey: … }`**
@@ -49,7 +49,7 @@ estos asertos derivados del catálogo (no listas copiadas a mano):
 
 ---
 
-## T2 — La reversión en `lib/analytics/alcance.ts` y `consulta.ts` (depende de T1)
+## [x] T2 — La reversión en `lib/analytics/alcance.ts` y `consulta.ts` (depende de T1)
 
 ⚠ **Corrección de diseño (2026-08-22) sobre la primera redacción de esta task:** una rama que
 conceda solo por pertenencia a `ROLES_ANALITICA_INTEGRACION` es incompatible con R6 —
@@ -86,7 +86,7 @@ reviewer: no se acepta ningún `grep` sobre el comentario.
 
 ---
 
-## T3 — Actualizar las guardias de rol que se ponen rojas a propósito (depende de T2)
+## [x] T3 — Actualizar las guardias de rol que se ponen rojas a propósito (depende de T2)
 
 - `tests/unit/analytics/alcance-fuente-unica.guardia.test.ts`: el invariante pasa a **tres listas**
   — unión == los seis `RolValue` y **disjuntas dos a dos** (R4) —, más un caso que falla si un rol
@@ -101,7 +101,7 @@ copias locales) un rol duplicado en dos listas.
 
 ---
 
-## T4 [P] — Política de identidad: fallo cerrado (depende de T2)
+## [x] T4 [P] — Política de identidad: fallo cerrado (depende de T2)
 
 En `lib/analytics/consulta.ts:181-184`: rol de integración ⇒ `"seudonima"`, y el fallback final
 pasa de `"real"` a `"seudonima"` (R38).
@@ -113,7 +113,7 @@ tampoco obtiene `"real"`; y las suites de los cinco roles siguen verdes sin edit
 
 ---
 
-## T5 [P] — El borde del canal integrador (depende de T2; se escribe junto con T6)
+## [x] T5 [P] — El borde del canal integrador (depende de T2; se escribe junto con T6)
 
 `lib/api/analitica-integrador.ts`: los cuatro pasos de la 126 con el actor de la key —
 `prepararConsultaAnalitica(raw, actor, metricaId, now, "api_key")` (una sola llamada, **con el
@@ -132,7 +132,7 @@ auditado (R37); y **cero** llamadas al repositorio en todos los caminos denegado
 
 ---
 
-## T6 [P] — El DTO público y su proyección (depende de T2)
+## [x] T6 [P] — El DTO público y su proyección (depende de T2)
 
 `lib/api/analitica-api-key-dto.ts` — **fuera de `lib/types/`** a propósito: tocar `lib/types/` niega
 el gate rápido (`design.md §2`). Proyección campo a campo desde `SerieOperativa`, con `rango` en
@@ -145,7 +145,7 @@ cadena serializada no contiene ningún uuid (R36).
 
 ---
 
-## T7 — El route handler (depende de T5 y T6)
+## [x] T7 — El route handler (depende de T5 y T6)
 
 `app/api/ordenes/api-key/analitica/route.ts`: `runtime = "nodejs"`, bearer con
 `extraerBearer`/`buildAutenticar` de `lib/api/api-key-request.ts` (no se reescribe la extracción),
@@ -163,7 +163,7 @@ header aparecen en el logger ni en el cuerpo (R33).
 
 ---
 
-## T8 — Estrechar las dos guardias de frontera (depende de T7; **no antes**)
+## [x] T8 — Estrechar las dos guardias de frontera (depende de T7; **no antes**)
 
 Se hace **después** de que el handler exista, para que el cambio de guardia se vea junto a lo que
 autoriza y no como una relajación suelta.
@@ -180,7 +180,7 @@ handler inventado (`app/api/reportes/analitica/route.ts`) y ante un handler que 
 
 ---
 
-## T9 — Publicar el contrato (depende de T7)
+## [x] T9 — Publicar el contrato (depende de T7)
 
 `lib/api/openapi-spec.ts` gana el noveno path y el schema `AnaliticaSerie`;
 `docs/api/api-key-openapi.yaml` se actualiza como espejo textual **en el mismo commit**, mismo
@@ -194,7 +194,7 @@ pregunta).
 
 ---
 
-## T10 [P] — No-regresión del canal de sesión y del tablero (depende de T2, T4)
+## [x] T10 [P] — No-regresión del canal de sesión y del tablero (depende de T2, T4)
 
 **Hecho cuando** están verdes, **sin editar sus asertos de comportamiento**: las suites de 122
 (`alcance*`, `consulta`, `identidad`), 126 (`operativa*`), 128 (`cache-clave*`), 131/133
@@ -208,7 +208,7 @@ habría fallado.
 
 ---
 
-## T11 — Gate y PR (depende de todo)
+## [ ] T11 — Gate y PR (depende de todo)
 
 1. `git diff --stat origin/dev` y comprobar con el diff REAL que no aparecen `db/`, migraciones,
    `lib/types/`, `middleware.ts` ni configuración de build (R41/R44). Si aparece alguno, el modo
