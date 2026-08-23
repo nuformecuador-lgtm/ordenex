@@ -41,6 +41,7 @@ function buildOrdenRepo(): Pick<
   IOrdenRepository,
   | "findMensajerosByZona"
   | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
+  | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -59,6 +60,7 @@ export interface ListarMensajerosDeps {
     IOrdenRepository,
     | "findMensajerosByZona"
     | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
+    | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
@@ -180,16 +182,20 @@ export async function listarMensajerosParaAsignacion(
     const repo = deps.ordenRepo ?? buildOrdenRepo();
     const mensajeros = await repo.findMensajerosByZona(centralZonaId);
     const ids = mensajeros.map((m) => m.id);
-    // FEATURE 241 (2026-08-20) — AQUI SE CONSULTABA QUIEN TENIA UN CIERRE ABIERTO, para marcarlo
-    // en el selector del maestro. Se va, y no es solo ahorro: era una consulta a `cierre_dia` en
-    // CADA carga del listado cuyo resultado la pantalla tiraba a propósito desde el 2026-08-18
-    // (`OrdenesListado.tsx`). Un dato que nadie usa y que nadie DEBE usar —asignar no se bloquea
-    // por cierres (regla 2)— es una trampa esperando a que alguien lo «aproveche» para
-    // deshabilitar un mensajero que el servidor acepta.
+    // FEATURE 271 (T4.4, R32) — `bloqueadosIds` VUELVE A VIAJAR, y se aplica a los DOS modales.
     //
-    // `bloqueadosIds` deja de viajar en la respuesta. El campo sigue declarado como opcional en
-    // `ListarMensajerosParaAsignacionResult` para no romper a la pantalla, que ya lo lee con
-    // `?? []`; retirarlo del tipo es limpieza de la capa de UI, no de esta.
+    // Entre el 2026-08-18 y el 2026-08-23 no se calculaba: la regla 2 de la 241 decia que asignar no
+    // se bloquea por cierres, y un dato que nadie debe usar es una trampa. Resuelta Q1, el dato
+    // vuelve a ser exactamente lo que el servidor va a rechazar en `asignarDesdeBodega` (T4.1) y en
+    // `asignarRecoleccion` (T4.3) — ni uno mas, ni uno menos.
+    //
+    // SE LLAMA `bloqueadosIds` Y NO `bloqueadosParaRepartoIds`: ya no hay dos respuestas. Un nombre
+    // que califica el alcance invita a preguntarse cual es el otro alcance, y aqui no lo hay.
+    //
+    // ⚠️ Y ESTA MISMA ACCION ALIMENTA UN TERCER CONSUMIDOR QUE **NO** DEBE USARLO:
+    // `FiltrosEntregas.tsx` la llama como FILTRO del listado (R33). Filtrar no es asignar — un
+    // mensajero bloqueado sigue teniendo ordenes en la mano que alguien necesita buscar, y
+    // esconderlo del filtro las volveria inalcanzables.
     // Feature 157 (regla de dedicación): repartir y recolectar son viajes incompatibles.
     // Se marcan las DOS caras para que cada modal deshabilite la suya y el maestro vea el
     // motivo en vez de toparse con un rechazo del servidor al confirmar.
@@ -199,15 +205,17 @@ export async function listarMensajerosParaAsignacion(
     // mensajero al que el servidor va a rechazar — que es el «rechazo al confirmar» que este
     // marcador existe para evitar. `ayuda_tienda` entra en las dos: el paquete sigue con él (R1).
     // La guardia `carga-del-mensajero.guardia.test.ts` cruza las dos y falla si divergen.
-    const [conReparto, conRecoleccion] = await Promise.all([
+    const [conReparto, conRecoleccion, bloqueados] = await Promise.all([
       repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto", "ayuda_tienda"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
+      repo.findMensajerosBloqueadosPorCierres(ids), // feature 271/R32
     ]);
     return {
       status: "ok" as const,
       mensajeros,
       conRepartoIds: [...conReparto],
       conRecoleccionIds: [...conRecoleccion],
+      bloqueadosIds: [...bloqueados],
     };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el

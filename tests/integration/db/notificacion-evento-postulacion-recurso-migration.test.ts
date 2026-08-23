@@ -181,6 +181,9 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       ...EVENTOS_146,
       "postulacion_recurso_pendiente", // feature 253 / D6
       "dia_reparto_corregido", // feature 262 / D7 (2026-08-22)
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
     ]);
   });
 
@@ -240,6 +243,9 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
       ...EVENTOS_146,
       "postulacion_recurso_pendiente", // feature 253 / D6
       "dia_reparto_corregido", // feature 262 / D7
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
     ]);
   });
 

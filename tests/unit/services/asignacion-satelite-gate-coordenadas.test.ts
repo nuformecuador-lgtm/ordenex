@@ -41,7 +41,7 @@ function fakeRepo(over: Record<string, unknown> = {}) {
       porMensajeros: false,
       porCierreBodega: false,
     })),
-    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
     findParaAsignabilidad: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, direccion: "x", latitud: null, longitud: null, geocodeStatus: null })),
     ),

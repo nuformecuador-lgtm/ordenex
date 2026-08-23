@@ -147,44 +147,60 @@ describe("feature 172 — los no objetivos, verificados sobre el código", () =>
     expect(schema).not.toMatch(/model\s+\w*(Periodo|Ciclo)\w*Tienda\w*\s*\{/);
   });
 
-  it("R67: los estados que bloquean al mensajero son EXACTAMENTE `vencido` y `rechazado`", () => {
-    // La lista vive en un solo sitio y la 172 no la toca. Se lee del código, no del diff:
-    // así el día que alguien le añada (o le quite) un estado, este test lo dirá aunque la
-    // rama de la 172 haga años que se mergeó.
+  it("R67: `aprobado` NO cuenta para el bloqueo del mensajero, y la 172 no toca esa regla", () => {
+    // La regla vive en un solo sitio y la 172 no la toca. Se lee del código, no del diff: así el
+    // día que alguien la cambie, este test lo dirá aunque la rama de la 172 haga años que se mergeó.
     //
-    // ⚠️ ACTUALIZADO POR LA FEATURE 241 (2026-08-20), Y ESTE TRIPWIRE HIZO SU TRABAJO: se puso rojo
-    // en el commit que cambió la lista, que es exactamente para lo que existe. Hasta hoy exigía
-    // `["solicitado","vencido","rechazado"]` y la constante se llamaba `ESTADOS_CIERRE_BLOQUEANTES`.
-    // El humano firmó que `solicitado` NO bloquea —es espera del admin, no del mensajero— y la
-    // constante pasó a decir para qué bloquea: `ESTADOS_CIERRE_BLOQUEAN_GESTION`.
+    // ⚠️ ACTUALIZADO DOS VECES, Y LAS DOS ESTE TRIPWIRE HIZO SU TRABAJO —se puso rojo en el commit
+    // que cambió la regla, que es exactamente para lo que existe—:
     //
-    // Lo que R67 protege NO cambia: la 172 (pagar a las tiendas) no toca ni lee esta lista. El
-    // literal se REEXPRESA con la regla nueva en vez de relajarse a un `toContain`, porque un
-    // tripwire que acepta cualquier lista no vigila nada.
-    const repo = codigo("lib/repositories/OrdenRepository.ts");
-    const declaracion = repo.match(
-      /ESTADOS_CIERRE_BLOQUEAN_GESTION\s*:\s*CierreEstado\[\]\s*=\s*\[([^\]]*)\]/,
-    );
-    expect(declaracion, "no se encontró ESTADOS_CIERRE_BLOQUEAN_GESTION").not.toBeNull();
+    //   · FEATURE 241 (2026-08-20): exigía `["solicitado","vencido","rechazado"]` sobre
+    //     `ESTADOS_CIERRE_BLOQUEANTES`. El humano firmó que `solicitado` NO bloquea y la constante
+    //     pasó a `ESTADOS_CIERRE_BLOQUEAN_GESTION = ["vencido","rechazado"]`.
+    //   · FEATURE 271 (2026-08-23): la regla DEJA DE SER UNA LISTA DE ESTADOS Y PASA A SER UN
+    //     CONTEO. Con N = cierres sin aprobar y V = cuántos son re-solicitables: LIBRE si `N <= 1`
+    //     y `V = 0`. `ESTADOS_CIERRE_BLOQUEAN_GESTION` desapareció con ella, y la regla se mudó al
+    //     módulo puro `lib/utils/bloqueo-cierre.ts`.
+    //
+    // Lo que R67 protege NO cambia: la 172 (pagar a las tiendas) no toca ni lee esta regla, y en
+    // particular `aprobado` sigue sin bloquear — es la mitad que hace posible pagar DESPUÉS de
+    // aprobar (R18), y la que un descuido convertiría en un mensajero bloqueado por un pago
+    // pendiente. El literal se REEXPRESA con la regla nueva en vez de relajarse a un `toContain`,
+    // porque un tripwire que acepta cualquier regla no vigila nada.
+    const regla = codigo("lib/utils/bloqueo-cierre.ts");
 
-    const estados = [...declaracion![1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
-    expect(estados).toEqual(["vencido", "rechazado"]);
-    // `aprobado` NO bloquea: es la mitad que hace que pagar después de aprobar sea posible
-    // (R18) y la que un descuido convertiría en un mensajero bloqueado por un pago pendiente.
-    expect(estados).not.toContain("aprobado");
-    // `solicitado` tampoco, y desde la 241 es una decisión firmada, no una omisión.
-    expect(estados).not.toContain("solicitado");
+    const abiertos = regla.match(/CIERRE_ESTADOS_ABIERTOS\s*=\s*\[([^\]]*)\]/);
+    expect(abiertos, "no se encontró CIERRE_ESTADOS_ABIERTOS").not.toBeNull();
+    expect([...abiertos![1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1])).toEqual([
+      "solicitado",
+      "vencido",
+      "rechazado",
+    ]);
 
-    // Ningún archivo de la 172 nombra esa constante: no la lee, no la extiende, no la copia.
-    // (Ni la vieja ni la nueva: el rename no puede ser la vía por la que la 172 se cuele.)
+    const resolicitables = regla.match(/CIERRE_ESTADOS_RESOLICITABLES\s*=\s*\[([^\]]*)\]/);
+    expect(resolicitables, "no se encontró CIERRE_ESTADOS_RESOLICITABLES").not.toBeNull();
+    expect([...resolicitables![1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1])).toEqual([
+      "vencido",
+      "rechazado",
+    ]);
+
+    // Lo que R67 vigila de verdad: `aprobado` no entra en ninguna de las dos listas.
+    expect(regla).not.toMatch(/"aprobado"/);
+
+    // Ningún archivo de la 172 nombra la regla: no la lee, no la extiende, no la copia.
+    // (Ni las viejas ni las nuevas: un rename no puede ser la vía por la que la 172 se cuele.)
+    const PROHIBIDOS = [
+      "ESTADOS_CIERRE_BLOQUEAN_GESTION",
+      "ESTADOS_CIERRE_BLOQUEANTES",
+      "estaBloqueadoPorCierres",
+      "CIERRE_ESTADOS_ABIERTOS",
+      "CIERRE_ESTADOS_RESOLICITABLES",
+    ];
     for (const ruta of CODIGO_DE_LA_FEATURE) {
       const fuente = codigo(ruta);
-      expect(fuente, `${ruta} nombra ESTADOS_CIERRE_BLOQUEAN_GESTION`).not.toContain(
-        "ESTADOS_CIERRE_BLOQUEAN_GESTION",
-      );
-      expect(fuente, `${ruta} nombra ESTADOS_CIERRE_BLOQUEANTES`).not.toContain(
-        "ESTADOS_CIERRE_BLOQUEANTES",
-      );
+      for (const nombre of PROHIBIDOS) {
+        expect(fuente, `${ruta} nombra ${nombre}`).not.toContain(nombre);
+      }
     }
   });
 

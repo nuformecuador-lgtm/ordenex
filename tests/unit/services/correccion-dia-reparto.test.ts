@@ -514,16 +514,16 @@ describe("262/R14 — un cierre de dia sin resolver NO bloquea la correccion", (
       "corregirDiaRepartoLote",
     ];
     expect(claves).toHaveLength(4);
-    // @ts-expect-error `findMensajerosBloqueadosParaGestion` NO pertenece a este `Pick` (R14). Si
+    // @ts-expect-error `findMensajerosBloqueadosPorCierres` NO pertenece a este `Pick` (R14). Si
     // alguien lo anadiera, este `@ts-expect-error` se quedaria sin error que suprimir y
     // `pnpm typecheck` se pondria ROJO.
-    const prohibido: keyof CorreccionDiaRepartoRepo = "findMensajerosBloqueadosParaGestion";
-    expect(prohibido).toBe("findMensajerosBloqueadosParaGestion");
+    const prohibido: keyof CorreccionDiaRepartoRepo = "findMensajerosBloqueadosPorCierres";
+    expect(prohibido).toBe("findMensajerosBloqueadosPorCierres");
   });
 
   it("y en comportamiento: con un repo que NI SIQUIERA tiene ese metodo, la correccion procede", async () => {
     const repo = fakeRepo();
-    expect((repo as unknown as Record<string, unknown>).findMensajerosBloqueadosParaGestion).toBeUndefined();
+    expect((repo as unknown as Record<string, unknown>).findMensajerosBloqueadosPorCierres).toBeUndefined();
     const r = await new CorreccionDiaRepartoService(repo).corregir(
       { ordenIds: ["o1"], dia: "hoy", motivo: MOTIVO },
       MAESTRO,

@@ -10,6 +10,12 @@ import type {
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { computeTotales, derivarPagos, derivarIngresoBodega } from "@/lib/utils/cierre-totales";
 import { startOfDayCR } from "@/lib/utils/fecha-cr";
+// Feature 271 (T6.4, R38/R39/R47/R61): el aviso del `vencido` y la conversion de su jornada.
+import {
+  notificadorNoOp,
+  type CierreVencidoNotificador,
+} from "@/lib/notificaciones/notificadores";
+import { jornadaDelCorte } from "@/lib/utils/jornada-cierre";
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -27,6 +33,31 @@ const ESTADO_AYUDA = "ayuda_tienda";
 // Reusa la 37: gestiones pendientes del mensajero + creacion transaccional del cierre
 // (parametrizada con estado='vencido', feature 41/C1).
 type CierreRepo = Pick<ICierreDiaRepository, "findGestionesPendientes" | "crearCierre">;
+
+/**
+ * ⚠️ FEATURE 271 (R17) — INVARIANTE DERIVADO, ESCRITO DONDE SE LEE: **DOS `vencido` A LA VEZ ES
+ * IMPOSIBLE**, y NO por una guarda. Sale de la propia regla, en tres pasos verificados contra el
+ * codigo:
+ *
+ *   1. En cuanto un mensajero tiene UN `vencido`, `V >= 1` y queda BLOQUEADO para gestionar Y para
+ *      recibir trabajo nuevo. No genera actividad nueva: ni gestiones, ni ordenes en la mano.
+ *   2. El corte que creo ese `vencido` ya barrio, EN LA MISMA TRANSACCION, sus ordenes de
+ *      `en_reparto` y `ayuda_tienda` a `sin_gestionar`, y vinculo sus gestiones sueltas
+ *      (`CierreDiaRepository.crearCierre`).
+ *   3. Por tanto la noche siguiente NO LE QUEDA NADA QUE CERRAR: el corte lo evalua, `crearCierre`
+ *      encuentra 0 gestiones y 0 ordenes que barrer, y devuelve `null` por su guarda «algo paso».
+ *      Sin segundo `vencido`, y `vencidosCreados` no sube (R22).
+ *
+ * POR ESO EL CORTE DEJA DE EXCLUIR A QUIEN TIENE UN CIERRE ABIERTO **SIN NINGUNA CONDICION NUEVA**
+ * (S3, confirmado por el humano). Y por eso NO SE ESCRIBE CODIGO DEFENSIVO PARA «DOS `vencido`»:
+ * seria programar para un estado inalcanzable, y un test de un estado imposible no puede fallar por
+ * la razon correcta.
+ *
+ * DONDE SI SE ACUMULAN DOS CIERRES RE-SOLICITABLES: EN EL RECHAZO, que es RETROACTIVO —cae sobre un
+ * cierre que el mensajero solicito cuando NO estaba bloqueado y por tanto pudo solicitar otro—. Ese
+ * caso SI es alcanzable, SI tiene test (M2, `transicionarASolicitado`) y siempre incluye al menos un
+ * `rechazado`.
+ */
 
 // Log de aviso inyectable (P2): omitir mensajero sin zona. Por defecto console.warn.
 // NUNCA registra PII/secretos (R24): solo el conteo agregado al final.
@@ -81,6 +112,19 @@ export class CorteDiarioService implements ICorteDiarioService {
     private readonly ordenRepo: OrdenRepo,
     private readonly tarifaZonaRepo: ITarifaZonaMensajeroRepository,
     private readonly logger: CorteDiarioLogger = defaultLogger,
+    /**
+     * FEATURE 271 (T6.4, R38/R39/R47) — notificador de «tu cierre del dia vencio», INYECTABLE y con
+     * DEFAULT NO-OP (mismo patron que `CorteDiarioLogger`).
+     *
+     * Hasta hoy el corte NO emitia NINGUNA notificacion —verificado contra produccion: 0 filas en
+     * `notificacion` a las 00:03 del 22/08— y ni siquiera recibia un notificador. El mensajero se
+     * enteraba de su bloqueo al toparse con el rechazo.
+     *
+     * El default no-op no es comodidad: este servicio lo construye un CRON y la base de este repo es
+     * compartida. Una suite que lo instancie sin inyectar no puede escribir avisos POR
+     * CONSTRUCCION; el composition root (`app/api/cron/corte-diario`) inyecta el real.
+     */
+    private readonly notificarVencido: CierreVencidoNotificador = notificadorNoOp,
   ) {}
 
   async ejecutarCorte(now: Date = new Date()): Promise<CorteDiarioResult> {
@@ -158,7 +202,33 @@ export class CorteDiarioService implements ICorteDiarioService {
         ingresoByGestionId,
         totalIngresoBodegaRechazos,
       });
-      if (cierreId !== null) vencidosCreados += 1;
+      if (cierreId !== null) {
+        vencidosCreados += 1;
+        // FEATURE 271 (T6.4, R38/R39): UNA emision POR CIERRE CREADO, dentro del bucle y DESPUES de
+        // que `crearCierre` devuelva un id. NUNCA por un `null`: un `null` significa que no se creo
+        // nada, y avisar de un cierre que no existe seria peor que no avisar.
+        //
+        // LA JORNADA: `diaCerrado`, el ANCLA que esta misma corrida ya calculo y con el que
+        // selecciono y escribio. El corte es el UNICO sitio del arbol que sabe su jornada sin
+        // derivarla, y usar aqui otro valor seria abrir la tercera version del mismo dato.
+        // La conversion a `YYYY-MM-DD` vive en el derivador (`jornadaDelCorte`, R61) y NO aqui,
+        // porque tiene delante la trampa de las dos convenciones de fecha de este repo.
+        //
+        // ⚠️ ESTE ES EL AVISO QUE MAS SE EMITE Y EL QUE PEOR SALIA: `created_at` de un `vencido` va
+        // SIEMPRE un dia por delante de la jornada, porque este cron corre a las 00:0x de la
+        // madrugada SIGUIENTE al dia que cierra. Medido: `79cb2c0f` nacio el 22 y su jornada es el
+        // 21. Decirle «tu cierre del 22» a quien trabajo el 21 —y lee el aviso el 22— era mandarlo
+        // a buscar un cierre que no reconoce.
+        //
+        // BEST-EFFORT (R47): `notificarVencido` absorbe su propio fallo, asi que la corrida termina
+        // y devuelve su resumen aunque la campana este caida. El corte es money-critical.
+        await this.notificarVencido({
+          cierreId,
+          zonaId: m.zonaId,
+          mensajeroUsuarioId: m.mensajeroId,
+          jornadaCR: jornadaDelCorte(diaCerrado),
+        });
+      }
     }
 
     // P2: aviso agregado sin PII (R24).

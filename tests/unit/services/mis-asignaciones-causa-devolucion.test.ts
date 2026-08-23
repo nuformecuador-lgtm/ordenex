@@ -13,6 +13,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 73 (R11/R12/R13) — el SERVICE propaga la causa a los datos de la gestion, en su
 // campo propio y SIN tocar el texto libre. Dobles del repo/storage (nada de DB real): lo que
@@ -72,10 +73,10 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 function newService(repo: IGestionOrdenRepository) {
   const ordenRepo: Pick<
     IOrdenRepository,
-    "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+    "findEstatusIdByValue" | "findBloqueoDetalle"
   > = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111
   };
   const storage: IFileStorage = {
     upload: vi.fn(async (input: { path: string }) => input.path),

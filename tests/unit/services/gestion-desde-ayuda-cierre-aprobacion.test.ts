@@ -9,6 +9,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { RESULTADOS_DESDE_AYUDA } from "@/lib/types/gestion-desde-ayuda";
 import { RESULTADOS_QUE_VUELVEN, vuelveABodega } from "@/lib/types/gestion-retorno";
 import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // 💰 Feature 237 (T6.3-T6.8, R32/R33/R34/R35/R37/R44) — LO QUE PASA ALREDEDOR DEL CIERRE.
 //
@@ -34,13 +35,17 @@ function repoParaSolicitar(over: {
   vencido?: boolean;
   rechazado?: boolean;
 }): ICierreDiaRepository {
+  // FEATURE 271 (R18): la re-solicitud ya no elige por ESTADO sino por EDAD, asi que el doble
+  // devuelve EL cierre re-solicitable mas viejo en vez de dos booleanos.
+  const resolicitable = over.vencido
+    ? { id: "c-viejo", estado: "vencido" as const }
+    : over.rechazado
+      ? { id: "c-viejo", estado: "rechazado" as const }
+      : null;
   return {
-    existeCierreVencido: vi.fn(async () => over.vencido ?? false),
-    existeCierreRechazado: vi.fn(async () => over.rechazado ?? false),
-    transicionarVencidoASolicitado: vi.fn(async () => true),
-    transicionarRechazadoASolicitado: vi.fn(async () => true),
+    findCierreResolicitableMasViejo: vi.fn(async () => resolicitable),
+    transicionarASolicitado: vi.fn(async () => true),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
-    existeCierreSolicitado: vi.fn(async () => false),
     findGestionesPendientes: vi.fn(async () => []),
     crearCierre: vi.fn(async () => "c-nuevo"),
   } as unknown as ICierreDiaRepository;
@@ -51,7 +56,7 @@ function servicioSolicitar(repo: ICierreDiaRepository) {
     findUsuarioZonaId: vi.fn(async () => "z1"),
     findEstatusIdByValue: vi.fn(async () => "os-x"),
     findCentralZonaId: vi.fn(async () => "z1"),
-    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   };
   const service = new CierreDiaService(
     repo,
@@ -68,14 +73,14 @@ describe("💰 R32/D1 — la gestion de la tienda posterior a una RE-SOLICITUD c
     {
       ruta: "vencido -> solicitado",
       repo: () => repoParaSolicitar({ vencido: true }),
-      via: "vencido_solicitado",
-      metodo: "transicionarVencidoASolicitado" as const,
+      via: "resolicitado",
+      metodo: "transicionarASolicitado" as const,
     },
     {
       ruta: "rechazado -> solicitado",
       repo: () => repoParaSolicitar({ rechazado: true }),
-      via: "rechazado_solicitado",
-      metodo: "transicionarRechazadoASolicitado" as const,
+      via: "resolicitado",
+      metodo: "transicionarASolicitado" as const,
     },
   ])(
     "la ruta EXENTA `$ruta` NO consulta pendientes, asi que una orden en ayuda no la bloquea",
@@ -107,36 +112,33 @@ describe("💰 R32/D1 — la gestion de la tienda posterior a una RE-SOLICITUD c
     // argumento por su causa: si estas dos escrituras re-vincularan gestiones o re-snapshotearan
     // totales, la gestion de la tienda entraria en un cierre ya congelado — que es exactamente lo
     // que 111/R8 y 109/R28 declaran money-safe con esas palabras.
+    // FEATURE 271 (R18): los DOS metodos gemelos se unificaron en `transicionarASolicitado`, que
+    // ademas lleva el `id` en el `where` (cierra M2). La propiedad money-safe que este caso vigila
+    // NO cambia y por eso el caso sobrevive: la escritura sigue tocando UNICAMENTE `estado`.
     const repoSrc = quitarComentarios(fuente("lib/repositories/CierreDiaRepository.ts"));
-    for (const metodo of [
-      "transicionarVencidoASolicitado",
-      "transicionarRechazadoASolicitado",
-    ]) {
-      const i = repoSrc.indexOf(`async ${metodo}(`);
-      expect(i, `no se encontro ${metodo}`).toBeGreaterThan(-1);
-      const cuerpo = repoSrc.slice(i, i + 700);
-      expect(cuerpo).toMatch(/data:\s*\{\s*estado:/);
-      // Ni una sola escritura sobre gestiones ni sobre totales dentro de esas dos rutas.
-      expect(cuerpo).not.toContain("gestionOrden");
-      expect(cuerpo).not.toContain("cierreDetail");
-      expect(cuerpo).not.toContain("totalGeneral");
-    }
+    const i = repoSrc.indexOf("async transicionarASolicitado(");
+    expect(i, "no se encontro transicionarASolicitado").toBeGreaterThan(-1);
+    const cuerpo = repoSrc.slice(i, i + 700);
+    expect(cuerpo).toMatch(/data:\s*\{\s*estado:/);
+    // Ni una sola escritura sobre gestiones ni sobre totales dentro de esa ruta.
+    expect(cuerpo).not.toContain("gestionOrden");
+    expect(cuerpo).not.toContain("cierreDetail");
+    expect(cuerpo).not.toContain("totalGeneral");
   });
 
-  it("R32: la ruta de CREACION si consulta pendientes — la exencion es de las otras dos", () => {
+  it("R32: la ruta de CREACION si consulta pendientes — la exencion es de la RE-SOLICITUD", () => {
     // El contraste obligatorio. Si esta afirmacion cayera, la exencion dejaria de ser una
     // excepcion y pasaria a ser la regla, y D1 se habria firmado sobre un hecho falso.
+    //
+    // FEATURE 271 (R16/R18): las dos rutas exentas son ahora UNA —elige por edad—, asi que el orden
+    // que se afirma es «la re-solicitud RETORNA antes de llegar a la precondicion».
     const servicioSrc = quitarComentarios(fuente("lib/services/CierreDiaService.ts"));
     const i = servicioSrc.indexOf("async solicitarCierre(");
     const cuerpo = servicioSrc.slice(i, servicioSrc.indexOf("async deshacerGestion(", i));
-    // El orden importa: las dos rutas exentas RETORNAN antes de llegar a la precondicion.
-    const iVencido = cuerpo.indexOf("transicionarVencidoASolicitado");
-    const iRechazado = cuerpo.indexOf("transicionarRechazadoASolicitado");
+    const iResolicitud = cuerpo.indexOf("transicionarASolicitado");
     const iPendientes = cuerpo.indexOf("contarOrdenesPendientesGestion");
-    expect(iVencido).toBeGreaterThan(-1);
-    expect(iRechazado).toBeGreaterThan(-1);
-    expect(iPendientes).toBeGreaterThan(iRechazado);
-    expect(iRechazado).toBeGreaterThan(iVencido);
+    expect(iResolicitud).toBeGreaterThan(-1);
+    expect(iPendientes).toBeGreaterThan(iResolicitud);
   });
 });
 

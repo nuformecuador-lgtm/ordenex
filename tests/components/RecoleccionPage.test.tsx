@@ -7,6 +7,7 @@ import RecoleccionPage from "@/app/(app)/recoleccion/page";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarRecoleccion } from "@/lib/actions/recoleccion-tienda";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 167 (R1/R2/R3/R6) — la página del apartado propio de recolección. Lo que este
 // archivo protege es el BORDE: quién puede abrirla (rol resuelto SOLO server-side, R3) y que
@@ -70,7 +71,7 @@ const escaner = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO, bloqueado: false });
   listarMock.mockResolvedValue({
     status: "ok",
     porRecolectar: [],
@@ -223,7 +224,24 @@ describe("RecoleccionPage — el apartado del mensajero (R1/R2/R6)", () => {
 
   it("R9: el bloqueo por cierre pendiente lo deriva el SERVIDOR y apaga el escáner", async () => {
     resolveActorMock.mockResolvedValue({ usuarioId: "u1", rol: "mensajero" });
-    bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: true });
+    bloqueoMock.mockResolvedValue({
+      status: "ok",
+      // Feature 271: el detalle es la fuente; `bloqueado` es el campo puente que la pantalla
+      // todavia consume (T9.3 lo retira).
+      bloqueo: {
+        bloqueado: true,
+        cierresAbiertos: 1,
+        cierresPorReenviar: 1,
+        aResolverPrimero: {
+          cierreId: "c1",
+          estado: "vencido" as const,
+          solicitadoAt: "2026-08-22T06:03:00.000Z",
+          jornadaCR: "2026-08-21",
+          resuelve: "mensajero" as const,
+        },
+      },
+      bloqueado: true,
+    });
 
     render(await RecoleccionPage());
 

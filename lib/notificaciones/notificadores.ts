@@ -24,12 +24,16 @@ import { NotificacionRepository } from "@/lib/repositories/NotificacionRepositor
 import {
   emitirCargaMasivaTerminada,
   emitirCierreDiaPorAprobar,
+  emitirCierreDiaVencido,
   emitirDiaRepartoCorregido,
+  emitirMensajeroBloqueado,
   emitirPostulacionPendiente,
   emitirPostulacionRecursoPendiente,
   type CargaMasivaContexto,
   type CierrePorAprobarContexto,
+  type CierreVencidoContexto,
   type DiaRepartoCorregidoContexto,
+  type MensajeroBloqueadoContexto,
   type PostulacionContexto,
   type PostulacionRecursoContexto,
 } from "@/lib/notificaciones/emitir";
@@ -61,6 +65,10 @@ export type CargaMasivaNotificador = (ctx: CargaMasivaContexto) => Promise<void>
 export type PostulacionRecursoNotificador = (ctx: PostulacionRecursoContexto) => Promise<void>;
 /** Feature 262 (D7, R46/R49). Firma del notificador de «te corrigieron el dia de una orden». */
 export type DiaRepartoCorregidoNotificador = (ctx: DiaRepartoCorregidoContexto) => Promise<void>;
+/** Feature 271 (R38/R39). Firma del notificador de «tu cierre del dia vencio». Lo usa el CORTE. */
+export type CierreVencidoNotificador = (ctx: CierreVencidoContexto) => Promise<void>;
+/** Feature 271 (R40/R41/R42). Firma del notificador de «quedaste bloqueado por cierres». */
+export type MensajeroBloqueadoNotificador = (ctx: MensajeroBloqueadoContexto) => Promise<void>;
 
 /**
  * DEFAULT de los tres services: no hace nada. Un service construido sin cablear su notificador
@@ -71,7 +79,9 @@ export const notificadorNoOp: PostulacionNotificador &
   CierreNotificador &
   CargaMasivaNotificador &
   PostulacionRecursoNotificador &
-  DiaRepartoCorregidoNotificador = async () => {};
+  DiaRepartoCorregidoNotificador &
+  CierreVencidoNotificador &
+  MensajeroBloqueadoNotificador = async () => {};
 
 /**
  * Construye el repositorio real. Aislado en una funcion para que los tests del camino REAL
@@ -175,6 +185,37 @@ export function notificarDiaRepartoCorregidoCon(
   };
 }
 
+/**
+ * FEATURE 271 (R38/R39/R47) — emite «tu cierre del dia vencio» contra `repo`, absorbiendo su fallo.
+ *
+ * BEST-EFFORT Y NO NEGOCIABLE: lo llama el CRON del corte diario, que es money-critical y corre sin
+ * nadie mirando. Un aviso caido no puede tumbar la corrida ni dejar un cierre a medias — el corte ya
+ * escribio su transaccion cuando esto se ejecuta. La direccion segura del error es esa: EL CORTE
+ * MANDA, EL AVISO ES CORTESIA.
+ */
+export function notificarCierreDiaVencidoCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): CierreVencidoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort("cierre_dia_vencido", () => emitirCierreDiaVencido(repo, ctx), logger);
+  };
+}
+
+/** FEATURE 271 (R40/R41/R42/R47): emite «quedaste bloqueado» contra `repo`, absorbiendo su fallo. */
+export function notificarMensajeroBloqueadoCon(
+  repo: INotificacionRepository,
+  logger?: ErrorLogger,
+): MensajeroBloqueadoNotificador {
+  return async (ctx) => {
+    await emitirBestEffort(
+      "mensajero_bloqueado_por_cierres",
+      () => emitirMensajeroBloqueado(repo, ctx),
+      logger,
+    );
+  };
+}
+
 // Bindings de PRODUCCION. Solo el composition root los importa. Resuelven el repositorio en el
 // momento de la emision (no al importar el modulo), para no abrir una conexion por el hecho de
 // que alguien importe este archivo.
@@ -192,3 +233,9 @@ export const notificarPostulacionRecursoPendienteReal: PostulacionRecursoNotific
 
 export const notificarDiaRepartoCorregidoReal: DiaRepartoCorregidoNotificador = async (ctx) =>
   notificarDiaRepartoCorregidoCon(repoReal())(ctx);
+
+export const notificarCierreDiaVencidoReal: CierreVencidoNotificador = async (ctx) =>
+  notificarCierreDiaVencidoCon(repoReal())(ctx);
+
+export const notificarMensajeroBloqueadoReal: MensajeroBloqueadoNotificador = async (ctx) =>
+  notificarMensajeroBloqueadoCon(repoReal())(ctx);

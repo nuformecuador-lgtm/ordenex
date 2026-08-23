@@ -286,17 +286,21 @@ describe("el DEFAULT de un service con notificador es inocuo POR CONSTRUCCION", 
   }
 
   it("CierreDiaService sin cablear tampoco emite", async () => {
+    // FEATURE 271 (R18): la re-solicitud elige por EDAD. `findCierreParaAviso` recibe el id del
+    // cierre que se acaba de tocar (R56, cierra M9).
     const repo = {
-      existeCierreVencido: vi.fn().mockResolvedValue(true),
-      transicionarVencidoASolicitado: vi.fn().mockResolvedValue(true),
-      findCierreSolicitado: vi
+      findCierreResolicitableMasViejo: vi
+        .fn()
+        .mockResolvedValue({ id: "c-1", estado: "vencido" }),
+      transicionarASolicitado: vi.fn().mockResolvedValue(true),
+      findCierreParaAviso: vi
         .fn()
         .mockResolvedValue({ id: "c-1", destinoZonaId: null, mensajeroNombre: null }),
     };
     const service = new CierreDiaService(
       repo as never,
       { findCentralZonaId: vi.fn() } as never,
-      { findUsuarioZonaId: vi.fn(), findMensajerosBloqueadosParaGestion: vi.fn() } as never,
+      { findUsuarioZonaId: vi.fn(), findBloqueoDetalle: vi.fn() } as never,
       { createSignedUrls: vi.fn() } as never,
       { resolvePagoTarifa: vi.fn() } as never,
     );
@@ -307,7 +311,7 @@ describe("el DEFAULT de un service con notificador es inocuo POR CONSTRUCCION", 
       zonaId: "z-1",
     });
 
-    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
+    expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
   });
 });
 
@@ -344,6 +348,11 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     "BulkOrdenService.ts",
     "PostulacionRecursoService.ts", // feature 253 / D6
     "CorreccionDiaRepartoService.ts", // feature 262 / D7
+    // FEATURE 271 (T6.4, R38/R39): el CORTE DIARIO pasa a tener notificador, y hasta hoy NO tenia
+    // ninguno —verificado contra produccion: 0 filas en `notificacion` a las 00:03 del 22/08—.
+    // Es el que mas avisos va a emitir, y ademas corre en un CRON sin nadie mirando: su default
+    // no-op no es comodidad, es lo que impide que una suite escriba en la base compartida.
+    "CorteDiarioService.ts", // feature 271 / §9.4
   ] as const;
 
   it("lib/actions/postulacion-recurso.ts inyecta el notificador real", () => {

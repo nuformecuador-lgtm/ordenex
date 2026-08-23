@@ -349,11 +349,20 @@ export type ListarCierresPasadosCompletoServiceResult =
 export type SolicitarCierreServiceResult =
   | {
       status: "ok";
-      // Feature 111/R6/P2 + feature 109/R28: distingue el toast del cliente. `creado` = cierre nuevo
-      // (flujo 37); `vencido_solicitado` = transición vencido→solicitado (R6/R8);
-      // `rechazado_solicitado` = transición rechazado→solicitado (109/R28), ambas SIN cierre nuevo
-      // ni snapshot. El service SIEMPRE lo puebla; opcional en el tipo por retrocompat.
-      via?: "creado" | "vencido_solicitado" | "rechazado_solicitado";
+      // Feature 111/R6/P2 + feature 109/R28 -> FEATURE 271: distingue el toast del cliente.
+      // `creado` = cierre nuevo (flujo 37); `resolicitado` = transición de un cierre re-solicitable
+      // a `solicitado`, SIN cierre nuevo ni snapshot. El service SIEMPRE lo puebla.
+      //
+      // ⚠️ `resolicitado` UNIFICA a `vencido_solicitado` y `rechazado_solicitado`, y no es un
+      // renombrado cosmético: desde la 271 la re-solicitud NO se decide por ESTADO sino por EDAD
+      // —transiciona el cierre re-solicitable más viejo, sea `vencido` o `rechazado` (R18)—, así que
+      // un discriminador por estado ya no describe lo que pasó.
+      //
+      // ⏳ LOS DOS VALORES VIEJOS SIGUEN DECLARADOS Y **NADIE LOS EMITE**. Se conservan sólo para
+      // que `CierreDiaModule.tsx` (que ramifica el toast sobre ellos) siga compilando hasta la pasada
+      // de frontend (T9.1/T9.3), que es quien debe borrarlos junto con sus dos ramas. Mientras tanto
+      // una re-solicitud cae en el toast genérico: menos específico, nunca falso.
+      via?: "creado" | "resolicitado" | "vencido_solicitado" | "rechazado_solicitado";
       // Presentes SOLO en la rama de creación (`via: "creado"`); ausentes al transicionar un
       // vencido (R8: no se re-lee ni recalcula el snapshot money-critical del cierre).
       cierreId?: string;

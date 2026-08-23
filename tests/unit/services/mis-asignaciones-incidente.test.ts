@@ -13,6 +13,8 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { CAUSA_INCIDENTE_SEED } from "@/lib/types/causa-incidente";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 158 (R6/R7/R8/R10/R11) — el SERVICE del reporte de incidente del mensajero. Dobles
 // del repo/storage (nada de DB real): lo que se afirma es el `GestionOrdenData` EMITIDO hacia
@@ -73,10 +75,10 @@ function newService(
   repo: IGestionOrdenRepository,
   opts: { bloqueados?: string[]; storage?: IFileStorage } = {},
 ) {
-  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
+  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueadosParaGestion: vi.fn(
-      async (): Promise<Set<string>> => new Set(opts.bloqueados ?? []),
+    findBloqueoDetalle: vi.fn(async () =>
+      (opts.bloqueados ?? []).length > 0 ? bloqueoConVencido() : SIN_BLOQUEO,
     ),
   };
   const storage: IFileStorage = opts.storage ?? {
@@ -157,9 +159,9 @@ describe("Feature 158 · R6 — la gestion y la transicion viajan en UNA sola tr
 
   it("R6: el catalogo sin el value `incidente` (seed pendiente) -> validation_error sin escribir", async () => {
     const repo = fakeRepo();
-    const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
+    const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> = {
       findEstatusIdByValue: vi.fn(async (v: string) => (v === "incidente" ? null : "os-x")),
-      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+      findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     };
     const storage: IFileStorage = { upload: vi.fn(), remove: vi.fn(async () => {}) };
     const service = new MisAsignacionesService(
@@ -388,7 +390,7 @@ describe("Feature 158 · R7 — el reporte se rechaza SIN efectos si la guardia 
 
     expect(r.status).toBe("conflict");
     if (r.status !== "conflict") throw new Error("esperaba conflict");
-    expect(r.motivo).toMatch(/cierre pendiente/i);
+    expect(r.motivo).toMatch(/no puedes entregar, cobrar ni recibir trabajo nuevo/i);
     expect(storage.upload).not.toHaveBeenCalled();
     expect(repo.findByIdsParaGestion).not.toHaveBeenCalled();
   });

@@ -1,24 +1,136 @@
 /**
- * Feature 111/R12 + 167/R9 — aviso accionable del bloqueo del mensajero por un cierre sin
- * resolver. Texto separado del componente (i18n-ready).
+ * Feature 111/R12 + 167/R9 -> FEATURE 271 (2026-08-23) — el aviso accionable del bloqueo del
+ * mensajero por cierres sin resolver. Texto separado del componente (i18n-ready).
  *
- * ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO CAMBIO PORQUE DECIA ALGO FALSO. Decia «No puedes
- * gestionar NI RECIBIR NUEVAS ASIGNACIONES»: desde el 2026-08-18 recibir asignaciones no se
- * bloquea, y la regla firmada lo ratifica. Un aviso que prohibe mas de lo que el servidor rechaza
- * es peor que no avisar — el mensajero deja de intentar cosas que si puede hacer.
+ * ⚠️ LA REGLA VIGENTE ES LA DE LA FICHA 271, DICTADA POR EL HUMANO EL 2026-08-23, y REVIERTE EN
+ * PARTE la regla firmada el 2026-08-20 (feature 241). Con N = cierres sin aprobar
+ * (`solicitado` + `vencido` + `rechazado`) y V = cuantos son re-solicitables (`vencido`/`rechazado`):
  *
- * Y se enciende SOLO con `vencido` o `rechazado`, nunca con `solicitado`: quien ya pidio su cierre
- * esta esperando al admin y no tiene nada que resolver, asi que mandarlo a «Cierre del día» seria
- * mandarlo a mirar. Ver `findMensajerosBloqueadosParaGestion` en `OrdenRepository`.
+ *      LIBRE si N <= 1 Y V = 0. En cualquier otro caso BLOQUEADO —para gestionar y cobrar
+ *      Y TAMBIEN para recibir trabajo nuevo, sea REPARTO O RECOLECCION—.
  *
- * Vive aquí, y no dentro de un módulo de página, porque desde la feature 167 lo necesitan DOS
- * portales del mensajero: "Entregas" (`RepartoModule` / `RecogerModule`) y "Recolección"
- * (`RecoleccionModule`). Duplicarlo dejaría que divergieran en el mensaje que el humano ya
- * declaró como preciso —decir la causa REAL del rechazo y qué hacer para resolverlo (commit
- * `8428498a`)—, que es justo la clase de deriva silenciosa que un texto compartido impide.
+ *   · QUE SOBREVIVE de la 241: un cierre `solicitado` a secas NO bloquea. Ese mensajero ya hizo lo
+ *     suyo y espera al admin (mediana 8,2 h, p90 22,1 h medidas contra produccion el 2026-08-18);
+ *     castigarlo por una demora ajena era la mitad correcta de aquella regla.
+ *   · QUE SE REVIERTE: la regla 2 de la 241, que declaraba la asignacion exenta de todo bloqueo.
+ *     Desde la 271 acumular dos cierres
+ *     —o arrastrar uno re-solicitable— bloquea TAMBIEN recibir trabajo nuevo, y sin distinguir
+ *     reparto de recoleccion (Q1, palabras del humano: «un mensajero no puede hacer las dos
+ *     gestiones, solo una a la vez»).
  *
- * NO lo usa `CierreDiaModule`: allí el mensajero YA está en "Cierre del día" y remitirlo a la
- * pantalla en la que está sería ruido. Ese módulo conserva su propia variante sin el CTA.
+ * ⚠️ POR ESO ESTE ARCHIVO YA NO ES UNA CONSTANTE. Prometia al mensajero que la asignacion le
+ * seguia llegando,
+ * que es FALSO desde la 271, y ademas el aviso tiene que CONTAR cosas (cuantos cierres arrastra y
+ * cual toca resolver primero, R43). Un texto que cuenta no puede ser fijo, y mantener dos copias de
+ * uno que cuenta es garantizar que divergiran: la copia sin CTA que vivia en `CierreDiaModule.tsx`
+ * desaparece y pasa a ser el parametro `conCta` (R52).
+ *
+ * Consumidores: «Entregas» (`RepartoModule` / `RecogerModule`), «Recolección» (`RecoleccionModule`)
+ * —los tres con `conCta: true`— y «Cierre del día» (`CierreDiaModule`, `conCta: false`, porque el
+ * mensajero YA esta alli y remitirlo a la pantalla en la que esta seria ruido).
+ *
+ * NO IMPORTA PRISMA NI EL BORDE: es un modulo puro sobre `BloqueoDetalle` (`lib/utils/bloqueo-cierre.ts`).
+ */
+
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
+
+/**
+ * La frase del medio, IDENTICA en los tres avisos y en los tres portales (R52). Es la lista de lo
+ * que el servidor va a rechazar, y no promete NADA que el servidor acepte a medias: «trabajo nuevo»
+ * cubre las dos clases —reparto y recoleccion— sin obligar al mensajero a saber como las llama el
+ * sistema.
+ *
+ * ⚠️ AQUI VIVIAN DOS PROMESAS: que la asignacion seguia llegando, y antes que la recoleccion en
+ * tienda seguia permitida. Las dos las RECHAZA el servidor desde la 271. Un aviso que
+ * permite mas de lo que el servidor acepta manda al mensajero al mostrador de la tienda a que le
+ * digan que no — es el fallo que la 241 documento al reves (alli prohibia de mas).
+ */
+const NO_PUEDES = "Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo.";
+
+/** El puntero de los portales que NO son «Cierre del día»: la unica diferencia admitida (R52). */
+const IR_A_CIERRE = "Ve a «Cierre del día» para enviarlo a aprobación.";
+
+export interface OpcionesAvisoBloqueo {
+  /**
+   * `true` en los portales «Entregas» y «Recolección»: el mensajero esta en otra pantalla y hay que
+   * decirle a donde ir. `false` en «Cierre del día»: el boton lo tiene debajo.
+   */
+  conCta: boolean;
+}
+
+/**
+ * R15/R43/R46/R52 — el aviso de bloqueo, compuesto a partir del detalle. Devuelve `""` si el
+ * mensajero NO esta bloqueado (no hay nada que avisar).
+ *
+ * Dice las TRES cosas que R43 exige: (a) que NO puede hacer, (b) CUANTOS cierres arrastra y
+ * (c) CUAL toca resolver primero y QUIEN lo resuelve. Sin siglas, sin monto, sin datos de nadie
+ * (R45/R46).
+ *
+ * ⚠️ LA FECHA ES LA DE LA JORNADA, NO LA DEL NACIMIENTO DEL CIERRE (R43 + R57-R60). Va SIEMPRE en
+ * aposicion al final —«el más antiguo, el del 21 de agosto»— justamente para que, cuando
+ * `jornadaCR` sea `null`, la oracion desaparezca entera y el resto del aviso se lea igual de bien.
+ * Nunca en mitad de una frase que la necesite para tener sentido.
+ */
+export function avisoBloqueo(d: BloqueoDetalle, opciones: OpcionesAvisoBloqueo): string {
+  if (!d.bloqueado) return "";
+
+  const n = d.cierresAbiertos;
+  const v = d.cierresPorReenviar;
+  const aposicion = aposicionDeJornada(d);
+
+  // CASO 3 — las dos cosas a la vez (N >= 2 y V >= 1). Va primero porque es el mas especifico.
+  if (n >= 2 && v >= 1) {
+    const cuantos = `Tienes ${n} cierres sin resolver y ${v} de ${v === 1 ? "ellos no se ha" : "ellos no se han"} enviado a aprobación.`;
+    const salida = `Envía el que falta y espera a que la bodega apruebe el más antiguo${aposicion}.`;
+    return unir(cuantos, NO_PUEDES, salida, opciones.conCta ? IR_A_CIERRE : null);
+  }
+
+  // CASO 2 — algo que reenviar y nada mas (V >= 1, N = 1).
+  if (v >= 1) {
+    const cta = opciones.conCta ? IR_A_CIERRE : "Envíalo a aprobación con el botón de abajo.";
+    return unir("Tienes un cierre sin enviar a aprobación.", NO_PUEDES, cta);
+  }
+
+  // CASO 1 — bloqueado por ACUMULAR (N >= 2, V = 0). El mensajero no tiene NADA que hacer, y por
+  // eso este es el unico de los tres que no lleva llamado a la accion en ninguno de los portales:
+  // inventarle uno seria mandarlo a buscar un boton que no existe (R43).
+  return unir(
+    `Tienes ${n} cierres esperando aprobación.`,
+    NO_PUEDES,
+    `Se desbloquea cuando la bodega apruebe el más antiguo${aposicion}.`,
+  );
+}
+
+/**
+ * `, el del 21 de agosto` — o cadena VACIA si no hay jornada fiable (R60). Nunca se inventa una
+ * fecha: se omite, y la frase sigue siendo correcta y accionable sin ella.
+ */
+function aposicionDeJornada(d: BloqueoDetalle): string {
+  const jornada = d.aResolverPrimero?.jornadaCR ?? null;
+  if (jornada === null) return "";
+  const legible = fechaLegible(jornada);
+  // `fechaLegible` devuelve la entrada tal cual si no la reconoce: en ese caso tampoco se nombra.
+  return legible === jornada ? "" : `, el del ${legible}`;
+}
+
+function unir(...partes: (string | null)[]): string {
+  return partes.filter((p): p is string => p !== null && p !== "").join(" ");
+}
+
+/**
+ * @deprecated FEATURE 271 — TEXTO PUENTE, no la fuente. Usa `avisoBloqueo(detalle, { conCta })`.
+ *
+ * Sobrevive SOLO mientras los tres portales del mensajero (`RepartoModule`, `RecogerModule`,
+ * `RecoleccionModule`) sigan recibiendo un `bloqueado: boolean` en vez del `BloqueoDetalle`. La
+ * tarea **T9.1** los cambia y esta constante se va con ellos.
+ *
+ * QUE SE LE QUITO HOY, y por que no se dejo: prometia que la asignacion seguia llegando, y eso
+ * es FALSO desde la 271 —recibir trabajo nuevo, reparto y recolección, SI se bloquea—. Un aviso que
+ * permite mas de lo que el servidor acepta es el fallo que la 241 documento al reves.
+ *
+ * QUE NO PUEDE DECIR, y por eso es puente y no solucion: no CUENTA (cuantos cierres arrastra ni
+ * cual toca primero, R43). Para eso hace falta el detalle, que estos tres portales todavia no bajan.
  */
 export const BLOQUEO_AVISO =
-  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Sí puedes seguir recibiendo asignaciones. Ve a «Cierre del día» para resolverlo.";
+  "No puedes gestionar entregas ni cobrar hasta resolver tu cierre. Tampoco puedes recibir trabajo nuevo. Ve a «Cierre del día» para resolverlo.";

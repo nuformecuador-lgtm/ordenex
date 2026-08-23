@@ -37,18 +37,27 @@ import { toLineasPago } from "@/lib/utils/lineas-pago";
 //
 // Lo unico que este archivo hace con ese dia es SERIALIZARLO para el SQL crudo:
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 271 — la lista de estados RE-SOLICITABLES vive en el modulo puro de la regla, no aqui.
+import { CIERRE_ESTADOS_RESOLICITABLES } from "@/lib/utils/bloqueo-cierre";
+import type { CierreEstado } from "@/lib/types/cierre";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
 
-// Feature 111/R6/R7: estado del cierre que el corte diario deja "vencido" (mensajero que
-// debia cerrar y no solicito). `solicitarCierre` lo transiciona a `solicitado`.
-const ESTADO_VENCIDO = "vencido";
-
-// Feature 109/R28 (modelo GLOBAL): estado del cierre RECHAZADO por el admin. Ya NO es terminal:
-// BLOQUEA (R29) y es RE-SOLICITABLE (`rechazado -> solicitado`), espejo EXACTO del `vencido`.
-const ESTADO_RECHAZADO = "rechazado";
+// FEATURE 271 — LOS DOS ESTADOS RE-SOLICITABLES (`vencido` del corte y `rechazado` del admin) ya
+// no se nombran por separado aqui: la re-solicitud elige por EDAD, no por estado, asi que la lista
+// entra entera en un solo `where`. La lista vive en el modulo puro de la regla.
+//
+// ⚠️ INVARIANTE DERIVADO (271/R17), escrito donde se lee para que nadie programe el caso que no
+// existe: DOS `vencido` A LA VEZ ES IMPOSIBLE, y no por una guarda. En cuanto un mensajero tiene un
+// `vencido`, V >= 1 y queda BLOQUEADO para gestionar Y para recibir trabajo nuevo, asi que no
+// genera actividad nueva; y el corte que creo ese `vencido` ya barrio, EN LA MISMA TRANSACCION, sus
+// ordenes a `sin_gestionar` y vinculo sus gestiones sueltas. La noche siguiente no le queda nada
+// que cerrar: `crearCierre` encuentra 0 gestiones y 0 ordenes y devuelve `null` por su guarda «algo
+// paso». NO SE AÑADE NINGUNA GUARDA para imponerlo, y no se escribe codigo defensivo para «dos
+// vencido»: seria programar para un estado inalcanzable. Donde SI se acumulan dos re-solicitables
+// es en el RECHAZO, que es retroactivo — y ese caso SI tiene test (M2).
 
 // Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
@@ -411,23 +420,24 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     });
   }
 
-  /** R12: existe un cierre `solicitado` del mensajero. */
-  async existeCierreSolicitado(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_SOLICITADO },
-    });
-    return count > 0;
-  }
-
   /**
-   * Feature 146/R24: proyeccion minima del cierre `solicitado` vigente (id + zona destino +
-   * nombre del mensajero) para componer su aviso. Los dos caminos de transicion solo devuelven
-   * un booleano, asi que el id del cierre se lee aqui, despues del exito.
+   * Feature 146/R24 -> FEATURE 271 (T6.8, R56) — proyeccion minima de UN cierre CONCRETO (zona
+   * destino + nombre del mensajero) para componer su aviso.
+   *
+   * ⚠️ ANTES ERA `findCierreSolicitado(mensajeroId)`, UN `findFirst … orderBy createdAt DESC`, Y ESO
+   * ES EL FALLO MUDO **M9**. Con el invariante 109/R30 vivo —un solo cierre abierto— daba igual cual
+   * devolviera. La ficha 271 DEROGA ese invariante (R9), asi que con DOS `solicitado` aquel orden
+   * devolvia SIEMPRE el mas nuevo: al re-solicitar el MAS VIEJO (R18), el aviso apuntaba al otro
+   * cierre y la clave de dedupe se calculaba sobre la entidad equivocada — silencio o aviso falso,
+   * sin que nada se pusiera rojo.
+   *
+   * La correccion no es cambiar el `orderBy`: es que el llamador YA TIENE el id del cierre sobre el
+   * que acaba de actuar y lo pasa. Un cierre buscado por mensajero no puede ser «el que se acaba de
+   * tocar» mas que por casualidad.
    */
-  async findCierreSolicitado(mensajeroId: string): Promise<CierreSolicitadoInfo | null> {
-    const fila = await this.prisma.cierreDia.findFirst({
-      where: { mensajeroId, estado: ESTADO_SOLICITADO },
-      orderBy: { createdAt: "desc" },
+  async findCierreParaAviso(cierreId: string): Promise<CierreSolicitadoInfo | null> {
+    const fila = await this.prisma.cierreDia.findUnique({
+      where: { id: cierreId },
       select: { id: true, destinoZonaId: true, mensajero: { select: { nombre: true } } },
     });
     if (fila === null) return null;
@@ -438,53 +448,58 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     };
   }
 
-  /** Feature 111/R6: existe un cierre `vencido` del mensajero (gemelo del anterior). */
-  async existeCierreVencido(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_VENCIDO },
+  /**
+   * FEATURE 271 (T2.3, R18) — el cierre RE-SOLICITABLE (`vencido` o `rechazado`) MAS VIEJO del
+   * mensajero, o `null`.
+   *
+   * ⚠️ SUSTITUYE A `existeCierreVencido` + `existeCierreRechazado`, QUE ELEGIAN POR ESTADO Y NO POR
+   * EDAD. `solicitarCierre` miraba primero el `vencido` y solo despues el `rechazado`: con un
+   * `rechazado` VIEJO y un `vencido` NUEVO resolvia el nuevo primero, que contradice «del mas viejo
+   * al mas nuevo». Con un solo cierre abierto daba igual; con dos, no.
+   *
+   * Orden `solicitado_at` ASC con desempate ESTABLE por `id` ASC, el mismo que `findBloqueoDetalle`
+   * (R11): dos criterios distintos para «el mas viejo» harian que el aviso y la escritura hablaran
+   * de cierres distintos.
+   */
+  async findCierreResolicitableMasViejo(
+    mensajeroId: string,
+  ): Promise<{ id: string; estado: CierreEstado } | null> {
+    const fila = await this.prisma.cierreDia.findFirst({
+      where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_RESOLICITABLES] } },
+      orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+      select: { id: true, estado: true },
     });
-    return count > 0;
+    return fila ?? null;
   }
 
   /**
-   * Feature 111/R6/R7/R8/R21 — transiciona `vencido -> solicitado` con escritura guardada por
-   * estado. SOLO reescribe `estado`; NO recalcula ni re-snapshotea los totales money-critical
-   * ni re-vincula gestiones (money-safe). 0 filas -> `false` (carrera: ya resuelto/transicionado).
+   * FEATURE 271 (T2.3, R19/R20) — transiciona ESE cierre a `solicitado`. UNA fila o ninguna.
+   *
+   * ⚠️ AQUI SE CIERRA EL FALLO MUDO **M2**, Y MUERDE POR EL `rechazado`. Los dos metodos que este
+   * sustituye (`transicionarVencidoASolicitado` / `transicionarRechazadoASolicitado`) eran
+   * `updateMany` por `(mensajeroId, estado)` **sin `id`**, y devolvian `count === 1`. Con DOS
+   * `rechazado` —secuencia alcanzable en cuatro pasos: solicita el dia 1, solicita el dia 2, el
+   * admin rechaza los dos— transicionaban **LOS DOS**, `count` valia 2 y el `=== 1` devolvia
+   * **false**: el servicio respondia `conflict` y el mensajero leia «no se pudo» con sus dos cierres
+   * YA movidos. Escribia y reportaba fallo.
+   *
+   * Con `id` (clave primaria) en el `where`, `count` solo puede ser 0 o 1 y `count === 1` vuelve a
+   * significar lo que dice (R19). El anti-TOCTOU por estado se CONSERVA intacto: `estadoEsperado`
+   * sigue en el `where`, asi que una carrera que ya lo movio devuelve `false` sin escribir.
+   *
+   * Los dos metodos viejos DESAPARECEN, no se parchean: dejar uno «por si acaso» conserva el
+   * `updateMany` sin `id`, que es el fallo.
+   *
+   * MONEY-SAFE (R20): el `data` cambia UNICAMENTE `estado`. Totales, pago al mensajero, ingreso de
+   * bodega, `cierre_id` de las gestiones, `resuelto_por`/`resuelto_at`, `motivo_rechazo` y
+   * `solicitado_at` quedan INTACTOS — no es una resolucion.
    */
-  async transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean> {
+  async transicionarASolicitado(cierreId: string, estadoEsperado: CierreEstado): Promise<boolean> {
     const { count } = await this.prisma.cierreDia.updateMany({
-      // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido` (guardia por estado).
-      where: { mensajeroId, estado: ESTADO_VENCIDO },
-      // R8: money-safe — cambia UNICAMENTE `estado`. Los totales, pago, ingreso, cierre_id de
-      // gestiones, resuelto_por/at y solicitado_at quedan INTACTOS (no es una resolución).
+      where: { id: cierreId, estado: estadoEsperado },
       data: { estado: ESTADO_SOLICITADO },
     });
-    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict (R7)
-  }
-
-  /** Feature 109/R28 — existe un cierre `rechazado` del mensajero (gemelo de `existeCierreVencido`). */
-  async existeCierreRechazado(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_RECHAZADO },
-    });
-    return count > 0;
-  }
-
-  /**
-   * Feature 109/R28 — transiciona `rechazado -> solicitado` con escritura guardada por estado
-   * (espejo EXACTO de `transicionarVencidoASolicitado`). SOLO reescribe `estado`; NO recalcula ni
-   * re-snapshotea los totales money-critical ni re-vincula gestiones (money-safe). 0 filas ->
-   * `false` (carrera: ya re-solicitado/resuelto).
-   */
-  async transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean> {
-    const { count } = await this.prisma.cierreDia.updateMany({
-      // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
-      where: { mensajeroId, estado: ESTADO_RECHAZADO },
-      // Money-safe: cambia UNICAMENTE `estado`. Totales, pago, ingreso, cierre_id de gestiones,
-      // resuelto_por/at, motivo_rechazo y solicitado_at quedan INTACTOS (no es una resolucion).
-      data: { estado: ESTADO_SOLICITADO },
-    });
-    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict
+    return count === 1; // con `id` en el where solo hay 0 o 1: `false` = carrera, sin efectos
   }
 
   /**

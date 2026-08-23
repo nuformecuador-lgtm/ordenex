@@ -120,7 +120,7 @@ export interface CierreDiaModuleProps {
   cierresPasados: CierresPasadosPagina;
   /**
    * Feature 41/R21: `true` si el mensajero está BLOQUEADO para GESTIONAR Y COBRAR.
-   * Derivado server-side (`estadoBloqueoMensajero` → `findMensajerosBloqueadosParaGestion`)
+   * Derivado server-side (`estadoBloqueoMensajero` → `findMensajerosBloqueadosPorCierres`)
    * y pasado por props; el módulo solo muestra el aviso, nunca re-deriva el estado del
    * cierre en el cliente.
    *

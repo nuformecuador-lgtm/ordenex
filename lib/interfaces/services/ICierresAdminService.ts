@@ -27,10 +27,39 @@ import type {
 
 // Cabecera de un cierre dentro del alcance del admin (cola + historico, R2-R5/R8).
 // Nombres ya resueltos (no IDs crudos). `totales` = snapshot money-safe (R8/R9).
+/**
+ * FEATURE 271 (T7.1, R48) — LO QUE LA ADMINISTRACION VE EN LA FILA DE UN CIERRE: que ese mensajero
+ * esta BLOQUEADO y POR QUE (cuantos cierres arrastra y cual toca resolver primero).
+ *
+ * ⚠️ Y POR QUE ESTO Y NO METER `rechazado` EN LA COLA, que era la via barata. Q2, resuelta por el
+ * humano el 2026-08-23: **NO**. Sobre un `rechazado` LA BODEGA YA DECIDIO, y la cola significa
+ * «pendiente de MI decision»; meterlo ahi cambia lo que la cola significa, y de paso tocaria un
+ * modulo que leen TRES pantallas para arreglar un problema de UNA. `ESTADOS_COLA_CIERRE_DIA` NO SE
+ * TOCA.
+ *
+ * ⚠️ Y QUE NADIE SAQUE LA CONCLUSION CONTRARIA: que un `rechazado` no este en la cola NO deja al
+ * mensajero sin rescate. `forzarSolicitudVencido` acepta `vencido` **y** `rechazado`
+ * (`ESTADOS_REABRIBLES`), asi que la administracion conserva la salida (R49).
+ */
+export interface BloqueoMensajeroEnFila {
+  /** El veredicto de la regla N/V sobre el DUEÑO de este cierre. */
+  bloqueado: boolean;
+  /** N — cuantos cierres sin aprobar arrastra ese mensajero (este incluido). */
+  cierresAbiertos: number;
+  /** V — cuantos de esos esperan a que el MENSAJERO los reenvie. */
+  cierresPorReenviar: number;
+}
+
 export interface CierreAdminResumen {
   cierreId: string;
   mensajeroId: string;
   mensajeroNombre: string;
+  /**
+   * FEATURE 271 (R48): el estado de bloqueo del mensajero DUEÑO de este cierre. Viaja CON la fila
+   * —no en una cola nueva ni en una pantalla nueva— porque es un dato DE la fila. Opcional
+   * (aditivo): los consumidores que no lo pinten siguen compilando.
+   */
+  bloqueoMensajero?: BloqueoMensajeroEnFila;
   estado: CierreEstado; // solicitado | aprobado | rechazado
   destinoTipo: CierreDestinoTipo;
   destinoZonaId: string;

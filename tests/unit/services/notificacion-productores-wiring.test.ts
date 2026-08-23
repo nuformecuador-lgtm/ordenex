@@ -10,6 +10,7 @@ import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { PostularMensajeroCommand } from "@/lib/interfaces/services/IPostulacionMensajeroService";
 import { DOCUMENTO_TIPOS } from "@/lib/types/postulacion-mensajero";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 import type {
   CargaMasivaNotificador,
   CierreNotificador,
@@ -154,15 +155,14 @@ const GESTION_PENDIENTE = {
 
 function cierreRepo(overrides: Record<string, unknown> = {}) {
   return {
-    existeCierreVencido: vi.fn().mockResolvedValue(false),
-    existeCierreRechazado: vi.fn().mockResolvedValue(false),
-    existeCierreSolicitado: vi.fn().mockResolvedValue(false),
+    // FEATURE 271 (R18): la re-solicitud elige por EDAD, no por estado: UN metodo, no cuatro.
+    findCierreResolicitableMasViejo: vi.fn().mockResolvedValue(null),
+    transicionarASolicitado: vi.fn().mockResolvedValue(true),
     contarOrdenesPendientesGestion: vi.fn().mockResolvedValue(0),
     findGestionesPendientes: vi.fn().mockResolvedValue([GESTION_PENDIENTE]),
-    transicionarVencidoASolicitado: vi.fn().mockResolvedValue(true),
-    transicionarRechazadoASolicitado: vi.fn().mockResolvedValue(true),
     crearCierre: vi.fn().mockResolvedValue("c-1"),
-    findCierreSolicitado: vi
+    // FEATURE 271 (R56, cierra M9): el aviso se compone con el id del cierre que se acaba de tocar.
+    findCierreParaAviso: vi
       .fn()
       .mockResolvedValue({ id: "c-1", destinoZonaId: "zona-1", mensajeroNombre: "Luis" }),
     findCierresByMensajero: vi.fn().mockResolvedValue([]),
@@ -181,7 +181,7 @@ function cierreService(repo: ReturnType<typeof cierreRepo>, notificar: CierreNot
       findUsuarioZonaId: vi.fn().mockResolvedValue("zona-1"),
       findUsuarioVehiculoId: vi.fn().mockResolvedValue("veh-1"),
       findEstatusIdByValue: vi.fn(),
-      findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue([]),
+      findBloqueoDetalle: vi.fn().mockResolvedValue(SIN_BLOQUEO),
     } as never,
     { createSignedUrls: vi.fn().mockResolvedValue({}) } as never,
     { resolvePagoTarifa: vi.fn().mockResolvedValue(null) } as never,
@@ -189,7 +189,10 @@ function cierreService(repo: ReturnType<typeof cierreRepo>, notificar: CierreNot
   );
 }
 
-describe("R24 — los TRES caminos de exito de solicitar cierre avisan", () => {
+// FEATURE 271 (R18): los TRES caminos pasaron a ser DOS —creacion y re-solicitud—, porque las dos
+// ramas de transicion se unificaron en una que elige por EDAD. El aviso sigue saliendo por un unico
+// sitio, que es lo que este bloque mide.
+describe("R24 — los DOS caminos de exito de solicitar cierre avisan", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("camino de creacion (crearCierre)", async () => {
@@ -204,30 +207,27 @@ describe("R24 — los TRES caminos de exito de solicitar cierre avisan", () => {
     });
   });
 
-  it("camino vencido -> solicitado", async () => {
-    const notificar = vi.fn().mockResolvedValue(undefined);
-    const repo = cierreRepo({ existeCierreVencido: vi.fn().mockResolvedValue(true) });
+  it.each([["vencido"], ["rechazado"]] as const)(
+    "camino de RE-SOLICITUD (el mas viejo es un `%s`)",
+    async (estado) => {
+      const notificar = vi.fn().mockResolvedValue(undefined);
+      const repo = cierreRepo({
+        findCierreResolicitableMasViejo: vi.fn().mockResolvedValue({ id: "c-1", estado }),
+      });
 
-    const r = await cierreService(repo, notificar).solicitarCierre(MENSAJERO);
+      const r = await cierreService(repo, notificar).solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
-    expect(notificar).toHaveBeenCalledTimes(1);
-  });
-
-  it("camino rechazado -> solicitado", async () => {
-    const notificar = vi.fn().mockResolvedValue(undefined);
-    const repo = cierreRepo({ existeCierreRechazado: vi.fn().mockResolvedValue(true) });
-
-    const r = await cierreService(repo, notificar).solicitarCierre(MENSAJERO);
-
-    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
-    expect(notificar).toHaveBeenCalledTimes(1);
-  });
+      expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
+      expect(notificar).toHaveBeenCalledTimes(1);
+      // R56 (M9): el aviso se compone con el id del cierre QUE SE ACABA DE TOCAR.
+      expect(repo.findCierreParaAviso).toHaveBeenCalledWith("c-1");
+    },
+  );
 
   it("propaga la zona destino del cierre como alcance del aviso", async () => {
     const notificar = vi.fn().mockResolvedValue(undefined);
     const repo = cierreRepo({
-      findCierreSolicitado: vi
+      findCierreParaAviso: vi
         .fn()
         .mockResolvedValue({ id: "c-9", destinoZonaId: "zona-7", mensajeroNombre: null }),
     });
@@ -238,8 +238,10 @@ describe("R24 — los TRES caminos de exito de solicitar cierre avisan", () => {
   });
 
   it("NO avisa cuando la solicitud termina en conflicto", async () => {
+    // FEATURE 271: el conflicto ya no es «ya tienes un cierre solicitado» (el segundo se permite,
+    // R13). El unico que queda por esta via es la precondicion de ordenes sin gestionar.
     const notificar = vi.fn();
-    const repo = cierreRepo({ existeCierreSolicitado: vi.fn().mockResolvedValue(true) });
+    const repo = cierreRepo({ contarOrdenesPendientesGestion: vi.fn().mockResolvedValue(3) });
 
     const r = await cierreService(repo, notificar).solicitarCierre(MENSAJERO);
 
@@ -249,7 +251,7 @@ describe("R24 — los TRES caminos de exito de solicitar cierre avisan", () => {
 
   it("no inventa un aviso si el cierre solicitado no se puede resolver", async () => {
     const notificar = vi.fn();
-    const repo = cierreRepo({ findCierreSolicitado: vi.fn().mockResolvedValue(null) });
+    const repo = cierreRepo({ findCierreParaAviso: vi.fn().mockResolvedValue(null) });
 
     const r = await cierreService(repo, notificar).solicitarCierre(MENSAJERO);
 
@@ -407,6 +409,15 @@ describe("R26 — la feature no introduce ningun trabajo programado", () => {
       "cierre_dia_por_aprobar",
       "postulacion_recurso_pendiente", // feature 253 / D6
       "dia_reparto_corregido", // feature 262 / D7
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) — DOS valores mas, y este test rojo fue otra
+      // vez LA PRUEBA de que el inventario sigue cerrado. Pago el mismo precio: un `ALTER TYPE`, su
+      // `down.sql` de recreacion con los SEIS previos y esta lista actualizada a mano.
+      //
+      // POR QUE DOS Y NO UNO: el evento es lo que la campana usa para AGRUPAR y para DEDUPLICAR, y
+      // las dos causas piden acciones OPUESTAS —con un `vencido` la pelota esta en el tejado del
+      // mensajero; con `N >= 2`, en el de la administracion—.
+      "cierre_dia_vencido", // feature 271 / §9.2
+      "mensajero_bloqueado_por_cierres", // feature 271 / §9.2
     ]);
   });
 });

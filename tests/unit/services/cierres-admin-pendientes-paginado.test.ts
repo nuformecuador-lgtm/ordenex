@@ -175,6 +175,8 @@ function servicio(repo: ICierresAdminRepository, contarZona?: { n: number }) {
     findCentralZonaId: vi.fn(async () => "z-central"),
   } as unknown as IZonaRepository;
   const ordenRepo = {
+    // Feature 271 (T7.1, R48): el estado de bloqueo del mensajero viaja en la fila del cierre.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
     findUsuarioZonaId: vi.fn(async (usuarioId: string) => {
       if (contarZona) contarZona.n += 1;
       return ZONA_POR_USUARIO[usuarioId] ?? null;

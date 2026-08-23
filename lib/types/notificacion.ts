@@ -21,7 +21,17 @@ export type NotificacionEvento =
   // Feature 262 (D7, P2 cerrada SI el 2026-08-22): a una orden asignada le corrigieron el dia de
   // reparto. Unico destinatario: el MENSAJERO asignado (R46/R51). Los admins no se avisan — son
   // quienes corrigen.
-  | "dia_reparto_corregido";
+  | "dia_reparto_corregido"
+  // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) — los DOS avisos del bloqueo por cierres.
+  //
+  // `cierre_dia_vencido`: el corte creo un cierre `vencido`. Destinatarios: el MENSAJERO dueño
+  // (primera notificacion de cierre que le llega, nunca la habia tenido) y su bodega responsable.
+  | "cierre_dia_vencido"
+  // `mensajero_bloqueado_por_cierres`: el mensajero quedo BLOQUEADO — por acumular (`N >= 2`) o
+  // porque le rechazaron un cierre. Mismo evento para las dos causas porque piden la MISMA accion
+  // («resuelve el mas antiguo»); son dos eventos y no uno frente a `cierre_dia_vencido` porque ahi
+  // la pelota esta en tejados opuestos, y el evento es lo que la campana usa para agrupar.
+  | "mensajero_bloqueado_por_cierres";
 
 /** Entidad de origen referenciada (referencia polimorfica, sin FK — design §1.2). */
 export type NotificacionEntidadTipo =

@@ -77,43 +77,43 @@ describe("CorteDiarioRepository.findMensajerosConActividadSinCierre (R7/R10)", (
     expect(rows.filter((r) => r.mensajeroId === "m1")).toHaveLength(1);
   });
 
-  it("R10/R29: excluye al mensajero que ya tiene un cierre ABIERTO (solicitado/vencido/rechazado)", async () => {
+  // ⚠️ ESTOS DOS CASOS SE DIERON LA VUELTA EL 2026-08-23 (FEATURE 271, T3.1/R21). Afirmaban que el
+  // corte EXCLUIA al mensajero con un cierre ABIERTO —el invariante 109/R30— y ese invariante queda
+  // DEROGADO (R9). Es exactamente lo que rompio el caso medido en produccion: el cierre `79cb2c0f`
+  // paso a `solicitado` el 22/08 a las 16:39 y las 2 gestiones de las 16:56 se quedaron con
+  // `cierre_id` NULL, porque el corte del 23/08 —que NO fallo— lo resto de su lista.
+  //
+  // No se borran: se invierten. Perderlos dejaria sin vigilar la propiedad en su direccion nueva,
+  // que es la que la ficha existe para conseguir.
+  it("271/R21: el mensajero con un cierre ABIERTO YA NO se excluye — entra y recibe el segundo", async () => {
     const prisma = buildPrisma();
     prisma.gestionOrden.findMany.mockResolvedValue([
       { mensajeroId: "m1", mensajero: { zonaId: "z1" } },
       { mensajeroId: "m2", mensajero: { zonaId: "z2" } },
     ]);
-    // m2 ya tiene un cierre abierto -> no se le crea otro.
-    prisma.cierreDia.findMany.mockResolvedValue([{ mensajeroId: "m2" }]);
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
-    expect(rows).toEqual([{ mensajeroId: "m1", zonaId: "z1" }]);
-    // R10/R29: la consulta de excluidos filtra por los 3 estados ABIERTOS sobre los ids candidatos.
-    const cierreArg = prisma.cierreDia.findMany.mock.calls[0][0];
-    expect(cierreArg.where.estado).toEqual({ in: ["solicitado", "vencido", "rechazado"] });
-    expect(cierreArg.where.mensajeroId.in.sort()).toEqual(["m1", "m2"]);
+    expect(rows.map((r) => r.mensajeroId).sort()).toEqual(["m1", "m2"]);
+    // Y la TERCERA consulta —la que restaba— se fue entera: no es que devuelva vacio, es que ya no
+    // se hace. Quien descarta a quien no tiene nada que cerrar es la guarda «algo paso» de
+    // `crearCierre`, que ya existia y esta ficha no toca (R22).
+    expect(prisma.cierreDia.findMany).not.toHaveBeenCalled();
   });
 
-  // Feature 109/R29: `rechazado` es AHORA bloqueante -> un mensajero con `rechazado` no recibe un 2.º.
-  it("R29: un mensajero con un cierre `rechazado` NO recibe un 2.º cierre del corte", async () => {
+  it("271/R21: el caso `79cb2c0f` — un `solicitado` de ayer y gestiones de hoy SI entran", async () => {
     const prisma = buildPrisma();
-    prisma.orden.findMany.mockResolvedValue([
-      { mensajeroAsignadoId: "m1", mensajeroAsignado: { zonaId: "z1" } },
+    // El mensajero tiene 2 gestiones sin vincular (las de hoy). Su cierre de ayer sigue
+    // `solicitado`, y eso ya no lo saca de la lista.
+    prisma.gestionOrden.findMany.mockResolvedValue([
+      { mensajeroId: "m-jose", mensajero: { zonaId: "z1" } },
     ]);
-    // Simula el filtro por estado: m1 esta en `rechazado` -> devuelto por la query de excluidos.
-    prisma.cierreDia.findMany.mockImplementation(
-      async (args: { where: { estado: { in: string[] } } }) => {
-        expect(args.where.estado.in).toContain("rechazado");
-        return [{ mensajeroId: "m1" }];
-      },
-    );
     const repo = new CorteDiarioRepository(prisma as unknown as PrismaClient);
 
     const rows = await repo.findMensajerosConActividadSinCierre(DIA_CERRADO);
 
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([{ mensajeroId: "m-jose", zonaId: "z1" }]);
   });
 
   it("sin actividad (ni gestiones ni en_reparto) -> lista vacia, sin consultar cierres", async () => {

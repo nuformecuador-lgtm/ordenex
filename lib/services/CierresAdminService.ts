@@ -52,6 +52,8 @@ import {
 } from "@/lib/utils/ingreso-ordenex";
 import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-sla";
 import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
+// FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
+import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -132,7 +134,14 @@ const ESTADO_DEVUELTA = "devuelta";
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 109 (T3.1): + `findEstatusIdByValue` para resolver los estatus destino de la liberacion.
-type OrdenRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findEstatusIdByValue">;
+type OrdenRepo = Pick<
+  IOrdenRepository,
+  | "findUsuarioZonaId"
+  | "findEstatusIdByValue"
+  // FEATURE 271 (T7.1, R48): el estado de bloqueo del mensajero viaja en la fila del cierre.
+  // Se pide el CONTADOR en lote y no el detalle por fila: son decenas de filas por pagina.
+  | "contarCierresAbiertosPorMensajero"
+>;
 /**
  * Feature 172 (T C.2) — de todo el repositorio de la liquidacion, este servicio consume DOS
  * metodos, y los dos son de LECTURA. El `Pick` no es cosmetico: deja escrito —y hace que el
@@ -737,18 +746,38 @@ export class CierresAdminService implements ICierresAdminService {
     // este listado sea el mismo se pinte lo que se pinte.
     const pagados = await this.liquidacionRepo.sumarVigentesPorCierre(idsAprobados);
 
-    return resumenes.map((r) =>
-      r.estado === "aprobado"
+    // FEATURE 271 (T7.1, R48) — EL ESTADO DE BLOQUEO DEL MENSAJERO, EN LA FILA.
+    //
+    // UNA sola consulta para TODO el listado (`groupBy` en lote), no una por fila: son decenas de
+    // filas por pagina y un N+1 aqui es una pagina que tarda segundos. Y se pide el CONTEO, no el
+    // detalle: la fila necesita decir CUANTOS arrastra y si esta bloqueado, no releer el mas viejo
+    // de cada uno.
+    //
+    // Se consulta el MISMO predicado que aplica el servidor, no se re-deriva: la administracion ve
+    // exactamente el estado con el que el mensajero se va a topar (R10).
+    const conteo = await this.ordenRepo.contarCierresAbiertosPorMensajero([
+      ...new Set(resumenes.map((r) => r.mensajeroId)),
+    ]);
+
+    return resumenes.map((r) => {
+      const c = conteo.get(r.mensajeroId) ?? SIN_CIERRES_ABIERTOS;
+      const bloqueoMensajero = {
+        bloqueado: estaBloqueadoPorCierres(c),
+        cierresAbiertos: c.n,
+        cierresPorReenviar: c.v,
+      };
+      return r.estado === "aprobado"
         ? {
             ...r,
+            bloqueoMensajero,
             pendientePagoMensajero: derivarPendienteCierre(
               r.totalPagoMensajero, // P — snapshot de la 39
               r.totales.efectivo, // E — snapshot de la 37
               pagados[r.cierreId] ?? "0.00", // Σ pagos VIGENTES del cierre (R80)
             ),
           }
-        : r, // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
-    );
+        : { ...r, bloqueoMensajero }; // R28: no aprobado -> `null` (lo que ya puso `toResumen`)
+    });
   }
 
   /**
