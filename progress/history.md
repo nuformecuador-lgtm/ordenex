@@ -3807,7 +3807,7 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
   instructivo por el camino: la primera tanda dijo «se niega» en la landing y era **el instrumento**
   —había añadido texto inválido a un `.tsx` y lo que fallaba era el typecheck—.
 
-## 2026-08-21 · Cotizar un lote por API key, sin crear la orden para saber
+## 2026-08-21 — 255 · Cotizar un lote por API key, sin crear la orden para saber
 
 **PR #432** · `POST /api/ordenes/api-key/cotizacion`
 
@@ -3832,6 +3832,56 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
 - **Reemplaza al cotizador del PR #418**, cerrado por decision del responsable de producto: cotizaba
   una sola por distrito, emitia crudo y devolvia ceros sin tarifa. Su rama no se borro. **Aviso de
   registro: el id 248 esta usado dos veces** y hay que renumerar conservando el slug.
+
+**Cerrada el 2026-08-22.** Revisión **APROBADA**: 56/56 requisitos con trazabilidad completa y 0 en
+duda, con el orden tarifa-antes-que-geografía y la aritmética en `Decimal` verificados **por
+comportamiento** y no por lectura del fuente; delta del gate de **0 rojos**. La ficha figuró
+`in_progress` durante un día con el PR #432 ya mergeado: lo único que faltaba era el papeleo.
+
+Sigue vivo, y no es de esta feature: **pedir al humano los dos renglones de qué está mal exactamente**
+en el cotizador de la 248 —a hoy sólo constan las tres diferencias medidas por el leader, no dichas
+por él— y **renumerar el id 248**, que sigue usado dos veces.
+
+> ⚠️ El encabezado de esta entrada **no llevaba el número** hasta el 2026-08-22, y por eso una
+> auditoría que busca `255` en `history.md` la daba por ausente y estuvo a punto de duplicarla.
+> Añadido el `255` para que se encuentre.
+
+## 2026-08-21 — 257 · el listado por API key filtra por fecha, guía y remisión
+- `GET /api/ordenes/api-key` aceptaba `limit`, `offset` y `estado`, y nada más. Gana cuatro filtros
+  opcionales —`desde`, `hasta`, `num_guia` y `num_remision`—, combinables entre sí y siempre
+  ACOTANDO dentro del dueño de la key, nunca ampliando el alcance.
+- Requisitos cubiertos: R1..R26 (revisión **APROBADA**, 26/26 abiertos aserto por aserto; cinco
+  menores, ninguno bloqueante).
+- **Lo delicado no era el filtro, era el huso.** `orden.created_at` es `timestamp`, no `@db.Date`,
+  y el repo exporta dos convenciones de medianoche: `startOfDayCR` es la buena para columnas de
+  fecha, pero contra un `timestamp` produce en realidad la ventana 18:00–18:00 hora de CR. Se usan
+  `inicioDelDiaCREnUtc` / `inicioDelDiaSiguienteCREnUtc` —los dos bordes en `T06:00:00.000Z`— con
+  la cota superior en `lt` y jamás `lte`, para que `desde=hasta` sea el día entero y no una franja
+  vacía.
+- **Un filtro por número es un oráculo de existencia ajena si se implementa a la ligera.**
+  `num_guia` y `num_remision` son UNIQUE **globales**: preguntar por el de otra tienda tiene que
+  devolver página vacía, indistinguible de un número que no existe. Se resuelve en un solo `where`
+  junto al `tiendaId` del dueño; **no** hay `findUnique` y comprobar el dueño después, que es el
+  patrón que se trae la fila ajena a memoria y deja una diferencia de latencia que medir.
+- 🔴 **La retractación de la ficha, y es de proceso:** el criterio de «hecho» de T4 y T5 estaba
+  escrito como un `grep` sobre un identificador, **y así se satisfizo** — los greps salieron
+  limpios porque se reformularon **dos comentarios** que citaban el identificador prohibido, no
+  porque cambiara una línea de código. Lo levantó el propio implementer y lo commiteó
+  (`76dc60b7`). Lo que sostiene la ventana son los asertos: los instantes `T06:00:00.000Z`
+  escritos **a mano**, no recalculados con el helper bajo prueba, y un `not.toHaveProperty("lte")`.
+  Acción recomendada, en ficha aparte: que `docs/specs.md` prohíba el grep como criterio de
+  «hecho» cuando el identificador puede vivir en un comentario.
+- **El `lte` del comentario del repositorio se dejó a propósito**, y queda dicho para que nadie lo
+  «limpie» creyéndolo un descuido: ahí el aviso al que lea vale más que un grep limpio, y el `lte`
+  prohibido ya está congelado por aserto.
+- **El test de seguridad es tautológico en su propia capa, y lo escribió el reviewer:** T9 compara
+  los dos cuerpos con un service falso que devuelve la misma página vacía en los dos escenarios,
+  así que demuestra que **el borde** no distingue, no que **la consulta** no distinga — eso lo
+  demuestra T7, con el `tiendaId` junto al número en la misma consulta. Hueco residual anotado:
+  nada se pondría rojo si mañana alguien colara un `findUnique` extra antes de `listByOwner`.
+- El índice compuesto `(tienda_id, created_at)` **lo descartó el humano** («aprobado, sin el índice
+  compuesto»): sin migración, y por tanto gate `--rapido`. Baseline medido antes de tocar nada —20
+  archivos, 197 tests, 0 rojos— y delta declarado: 25 archivos, 258 tests, 0 rojos.
 
 ## 2026-08-21 — 258 · monitoreo: el tablero del día sobre las primitivas
 - Rediseño de `/monitoreo` sobre la dirección A aprobada: los ocho contadores pasan a la
@@ -3959,3 +4009,92 @@ dinero** de la pila, y con ella **la pila de ayuda queda cerrada** salvo la 240.
   puramente visual. Y no podía tenerla en local: no existe ni una orden `sin_gestionar` ni un cierre
   vencido en esa base. **La verificación con datos naturales sólo es posible en producción**, y
   queda como paso posterior a la release.
+
+## 2026-08-22 — 256 · el webhook de una devolución dice por fin por qué
+- El webhook ya avisaba la novedad —llegaba `estado: "devuelta"`, firmado y con reintentos— pero
+  **no decía la causa**, que es justo por lo que pregunta el integrador. `data` gana `motivo` con
+  los tres values de `gestion_causa_devolucion` (`not_found`, `wrong_number`, `wrong_address`),
+  crudos y **en inglés**: ese inglés es decisión firmada en la puerta F1.4 de la 73, no deuda que
+  castellanizar.
+- Requisitos cubiertos: R1..R24 (revisión **APROBADA**, 24/24 verificados abriendo cada aserto;
+  cinco menores, todos de spec y de bookkeeping).
+- **El campo admite `null`, y no por descuido:** el histórico anterior a la 73 no se backfilleó
+  (73/R16), así que existen devoluciones vivas sin causa. Prometer siempre un string sería una
+  mentira comprobable contra producción. Y viaja **siempre presente**, `null` incluso fuera de
+  `devuelta`, para que el consumidor no tenga que ramificar por estado.
+- **La causa se resuelve AL ENTREGAR, no viaja en el job**, que sigue siendo el payload mínimo y
+  sin datos del destinatario. La consecuencia se afirma en un test en vez de esconderse: si la
+  gestión se anula entre dos intentos, el segundo cuerpo lleva `null` **con el mismo `eventoId`**,
+  sin error y sin evento de más. El contrato publica que el motivo es el vigente al entregar.
+- **Dos `motivo` que no son el mismo, y no se unificaron.** El de cable es el enum de tres values;
+  `gestion_orden.motivo` es el texto libre del mensajero y **no se emite jamás** (R22). Y no es un
+  filtro de salida: el `select` de la relación pide sólo la causa, así que el texto libre ni entra
+  al proceso.
+- **El congelador del cuerpo se reforzó, no se relajó.** Al ganar `data` una clave, el `toEqual` de
+  tres claves se **actualizó** —no se borró— a `Object.keys(...)` exacto y ordenado más el
+  `toEqual` de las cuatro con sus valores: afirma estrictamente más que antes. Y las mutaciones
+  muerden porque el doble de Prisma del reader **aplica de verdad** el `where`, el `orderBy`, el
+  `take` y el `select` sobre filas crudas; uno que devolviera la fila buena habría dado verde con
+  el código roto.
+- **Un rojo ajeno resuelto sin tocar la guardia ajena:** `intentos-no-alcance` (160/R31) prohíbe la
+  subcadena «intentos» en todo el OpenAPI serializado, y la prosa nueva del webhook la traía. Se
+  reescribió la frase en singular; la guardia quedó intacta y verde.
+- **Lo incómodo lo puso el reviewer:** dos `it` del service son tautológicos —buscan cadenas que el
+  DTO no tiene dónde alojar, así que no pueden ponerse rojos nunca— y lo que muerde de verdad para
+  R3 y R22 vive en el test del reader. Y ningún `orderBy` de este camino desempata dos gestiones
+  con el mismo `created_at`: son cuatro sitios del repo con la misma ambigüedad, y se cierra en los
+  cuatro a la vez o en ninguno.
+- ⚠️ **El aviso a integradores NO era de esta ficha, por decisión (g) del 2026-08-21**: el cambio es
+  aditivo —ningún consumidor se rompe y ningún evento deja de emitirse—, así que no bloquea el
+  despliegue.
+
+## 2026-08-22 — 268 · el webhook deja de callar el ciclo de ayuda y el incidente
+- Del cuestionario de integración de Dropi: el integrador **no ve** `ayuda_tienda` ni `incidente`.
+  La orden se le queda muda en `en_reparto` y reaparece resuelta, sin que nada explique el hueco.
+  `EVENTOS_PUBLICOS` pasa de 10 a 12 y `ORIGENES_SIN_EVENTO_PUBLICO` se queda **vacía**.
+- Requisitos cubiertos: R1..R31 (revisión **APROBADA**, 31/31 con aserto real; siete menores,
+  ninguno del código de producción). Gate **completo**, porque el diff toca `lib/types/` y ahí el
+  modo rápido se niega solo.
+- **Revierte 235/P4 sin borrar su razonamiento.** La prosa vieja se cita entre comillas con un
+  «AQUÍ DECÍA, y ya no es cierto» fechado, y el mecanismo sobrevive con la lista vacía: el emisor
+  sigue preguntando a la política y no re-deriva. Una lista vacía no es una función que sobre.
+- **Y revierte también una decisión de la 256, por medición.** La 256 dejó `data.estado` sin `enum`
+  temiendo un quinto catálogo de estados; el predicado de esa guardia exige `entregada` **y**
+  `por_recoger`, y el enum derivado de `EVENTOS_PUBLICOS` no lleva el segundo. La bitácora contó
+  6 rojos al mutarlo y el reviewer midió **11** en los dos archivos de guardia: misma dirección y
+  misma conclusión, pero un número citado como prueba debería ser el número real. El enum se
+  **deriva** (`[...EVENTOS_PUBLICOS].sort()`), no se copia.
+- **`evidenciasUrl` nunca es una URL firmada:** es el origin de configuración más la ruta del
+  detalle y el id, sin bucket, sin token y sin TTL. Si el origin no resuelve, el campo **se omite**
+  —nunca un `https://undefined/...`—, y el firmado sigue viviendo donde debe, detrás de la API key.
+- **El incidente tiene dos procedencias y cubrir una no basta:** la causa sale de la gestión del
+  mensajero y de `orden_incidente` del admin, en el mismo `findUnique`; las fotos, del `in` de
+  gestiones más la relación del admin. Las mutaciones lo demuestran: quedarse con la primera deja
+  rojos que ampliar el `where` no evita. Por eso el `take: 1` se retiró del bloque compartido —un
+  `take: 1` común descartaría la devolución vigente cuando hay un incidente posterior, rompiendo
+  256/R10—, y es el único punto donde la lectura deja de estar acotada a una fila. `orden_incidente`
+  tampoco se filtra por su `estado`: ése es el trámite de indemnización, no si el incidente ocurrió.
+- 📏 **T8 —el aviso a integradores— se descargó MIDIENDO a quién había que avisar, no
+  ejecutándolo.** Dos consultas de sólo lectura contra producción: **0 suscripciones de webhook**
+  —ni activas ni de baja— y **una sola API key**, la de Dropi, creada el 2026-08-20 y **con 0
+  órdenes**. No hay a quién romperle nada, y los cuatro cambios son aditivos. Deja de ser puerta de
+  despliegue y pasa a ser material de onboarding.
+- **Estrena `docs/api/CHANGELOG.md`**, archivo y convención nuevos: el aviso de un cambio de
+  contrato se escribe ahí antes de la release, versionado junto al contrato que describe, y su
+  ejemplo JSON es el del contrato publicado copiado literal para que aviso y contrato no puedan
+  derivar. Eso cierra de paso un agujero heredado: **239/T0.3 pedía este mismo aviso y nunca se
+  marcó** —la feature salió a producción con la casilla abierta— porque no había dónde escribirlo.
+- **Sobre a quién y cuándo se entrega, las dos fuentes no coinciden**, y queda dicho: la bitácora da
+  la pregunta por cerrada con el «el changelog a Dropi no es necesario, estamos solo haciendo
+  pruebas» del humano; la ficha la deja viva, con el aviso pendiente de entregar a Dropi **antes**
+  de que conecte.
+- ⚠️ **Deuda declarada, no disimulada (M5): el `where` de `gestiones` del detalle no filtra
+  `anuladaAt`**, así que un incidente **anulado** puede seguir exponiendo su foto por API key. Es
+  la misma regla que ya rige a `entregada` y a `rechazada`, y cambiarla aquí habría tocado lo que
+  hoy funciona: merece ficha propia, no un parche dentro de ésta.
+- **La retractación de la 257 vuelve a asomar:** varios asertos del contrato nuevo son `grep` sobre
+  la prosa. Se aceptan porque **acompañan** a asertos estructurales que sí muerden, pero son
+  frágiles: un reescrito legítimo de la prosa los pone rojos sin que nada esté mal.
+- **La ficha se dio de alta y se cerró a la vez**, el mismo día: se implementó, se revisó y se
+  mergeó sin que nadie la registrase — otra sesión la numeró 268 cuando el id más alto del registro
+  era 265, y la 266 y la 267 no existían en él.
