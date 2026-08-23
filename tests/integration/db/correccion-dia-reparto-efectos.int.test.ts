@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
+import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
+import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
 import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
@@ -25,7 +28,8 @@ import {
 } from "./_postgres-real";
 
 /**
- * ⭑ FEATURE 262 (B13, R25/R26/R30/R31) — LAS AUSENCIAS Y LAS CONSECUENCIAS, contra Postgres real.
+ * ⭑ FEATURE 262 (B13, R25/R26/R30/R31/R32) — LAS AUSENCIAS Y LAS CONSECUENCIAS, contra Postgres
+ * real.
  *
  * POR QUE AQUI Y NO CON DOBLES:
  *
@@ -38,6 +42,10 @@ import {
  *  · **R31** usa el servicio de la 261 alimentado con el valor QUE LA BASE DEVOLVIÓ tras corregir.
  *    Así no se compara la regla contra sí misma: el dato viaja de la escritura real al predicado
  *    real.
+ *  · **R32 es OTRA AUSENCIA, y es la que faltaba.** «La corrección no altera la ruta optimizada del
+ *    mensajero ni los indicadores de su portal» sólo se puede afirmar con ruta SEMBRADA que perder:
+ *    con la tabla vacía, cualquier conteo da cero y sigue dando cero aunque la corrección borre
+ *    todo. Ver el bloque R32 al final del archivo.
  *
  * ⚠️ NADA DE `if (!fks) return;`: con base y sin catálogo esto REVIENTA. Sin base, `describe.skip`
  * visible. Todo dentro de una transacción que siempre se revierte.
@@ -68,6 +76,9 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
     cantonId: string;
   };
   let ACTOR: string;
+  /** Catálogos para fabricar un mensajero PROPIO en el bloque R32 (ver `conOrdenEnRuta`). */
+  let TIPO_IDENTIFICACION_ID: string;
+  let ROL_MENSAJERO_ID: string;
 
   beforeAll(async () => {
     prisma = crearPrismaDeTest();
@@ -93,6 +104,22 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
         `el catalogo \`order_status\` no tiene ${faltan.join(", ")}. Corre el seed del catalogo.`,
       );
     }
+
+    // R32 siembra un mensajero PROPIO (el porqué está en `conOrdenEnRuta`). Fallo CERRADO y
+    // ruidoso si faltan los catálogos: sin ellos el bloque R32 no puede sembrar nada, y un test
+    // que no siembra nada mide cero y se pone verde.
+    const [tipoIdentificacion, rolMensajero] = await Promise.all([
+      prisma.tipoIdentificacion.findFirst({ select: { id: true } }),
+      prisma.rol.findFirst({ where: { value: "mensajero" }, select: { id: true } }),
+    ]);
+    if (tipoIdentificacion === null || rolMensajero === null) {
+      throw new Error(
+        "la base local no tiene los catalogos `tipo_identificacion` / `rol` (valor `mensajero`): " +
+          "sin ellos no se puede sembrar el mensajero con ruta que R32 necesita. Corre el seed.",
+      );
+    }
+    TIPO_IDENTIFICACION_ID = tipoIdentificacion.id;
+    ROL_MENSAJERO_ID = rolMensajero.id;
   });
 
   afterAll(async () => {
@@ -295,7 +322,14 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
           select: { fechaReparto: true },
         });
         // «Sin que se escriba nada más» (R31): el ÚNICO rastro de esta operación es la fila del
-        // cambio; ni gestión, ni historial, ni ruta.
+        // cambio; ni gestión ni historial.
+        //
+        // ⚠️ LA RUTA NO SE CUENTA AQUI, Y ES A PROPOSITO. Esta orden no tiene ruta sembrada, así
+        // que un `rutaOptimizadaParada.count()` daría 0 antes y 0 después PASE LO QUE PASE —
+        // incluso si la corrección borrara la ruta entera. Sería una aserción vacua vestida de
+        // comprobación, que es peor que no tenerla. La ruta se comprueba en el bloque **R32** del
+        // final de este archivo, donde SÍ hay ruta que perder. (Hasta el 2026-08-23 este
+        // comentario prometía «ni ruta» y el código de abajo no la contaba.)
         const escrituras = {
           rastro: await ctx.tx.ordenDiaRepartoCambio.count({ where: { ordenId: ctx.ordenId } }),
           historial: await ctx.tx.ordenHistorialEstado.count({ where: { ordenId: ctx.ordenId } }),
@@ -385,5 +419,300 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
       fakeIntentosEnLote(),
     );
     return service.escogerParaGestion("o1", MENSAJERO_ACTOR, NOCHE_DEL_21);
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* R32 — LA RUTA OPTIMIZADA Y LOS INDICADORES DEL PORTAL, INTACTOS           */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * ⭑⭑ POR QUE ESTE BLOQUE EXISTE, ESCRITO EL 2026-08-23.
+   *
+   * Hasta hoy **R32 no tenía ningún test que mordiera**, y no es una sospecha: la revisión
+   * (`progress/review_262.md`, bloqueante 1) inyectó dentro de `corregirDiaRepartoLote`, en su
+   * MISMA transacción, exactamente el defecto que R32 prohíbe —
+   *
+   *     await tx.rutaOptimizadaParada.deleteMany({
+   *       where: { ordenId: { in: movidas.map((m) => m.id) } },
+   *     });
+   *
+   * — y `vitest related lib/repositories/OrdenRepository.ts` devolvió **245 archivos, 3.302 tests,
+   * CERO rojos**. La corrección podía empezar a borrar la ruta del mensajero y nadie se enteraba.
+   * El mapa lo asignaba a `B15` («correr las suites de ruta sin tocarlas») y a `F6` («ver la app»),
+   * y ninguna de las dos es una aserción.
+   *
+   * POR QUE HACE FALTA SEMBRAR RUTA, Y NO BASTA CONTAR. Con la tabla vacía, `count()` da 0 antes y
+   * 0 después haga lo que haga la corrección: la aserción parece una comprobación y no lo es. Aquí
+   * hay **cabecera + una parada posicionada con su tramo** que perder, y las tres pruebas fallan si
+   * se pierden.
+   *
+   * POR QUE UN MENSAJERO PROPIO. `ruta_optimizada.mensajero_id` es **UNIQUE**: reusar el usuario
+   * semilla haría que el `create` reventara con `P2002` en cualquier máquina donde ese usuario ya
+   * tuviera ruta. Y un mensajero recién creado no tiene NINGUNA otra orden asignada, así que el
+   * listado del portal que se compara antes/después describe exactamente lo que este test sembró y
+   * nada más. La base local es COMPARTIDA: la única forma de que el corpus sea el mismo en todas
+   * las máquinas es fabricarlo dentro de la transacción que se revierte.
+   */
+
+  /** Corpus de R32: mensajero propio + orden `en_reparto` + ruta vigente con su parada. */
+  interface CorpusConRuta {
+    repo: OrdenRepository;
+    tx: PrismaClient;
+    ordenId: string;
+    mensajeroId: string;
+    rutaId: string;
+  }
+
+  const CALCULADA_AT = new Date("2026-08-20T13:00:00.000Z");
+  const ORIGEN_AT = new Date("2026-08-20T12:58:00.000Z");
+  const TRAMO_VIVO_AT = new Date("2026-08-20T13:05:00.000Z");
+
+  async function conOrdenEnRuta<T>(
+    fechaReparto: Date,
+    fn: (ctx: CorpusConRuta) => Promise<T>,
+  ): Promise<T> {
+    return enTransaccionRevertida(prisma, async (txRaw) => {
+      await serializarEscriturasReales(txRaw);
+      const tx = txRaw as unknown as PrismaClient;
+      const marca = `${SUFIJO}-${Math.random().toString(36).slice(2, 10)}`;
+
+      const mensajero = await tx.usuario.create({
+        data: {
+          nombre: `mensajero-${marca}`,
+          email: `${marca}@262-r32.local`,
+          telefono: "88880000",
+          passwordHash: "no-es-una-credencial",
+          cedula: marca,
+          tipoIdentificacionId: TIPO_IDENTIFICACION_ID,
+          rolId: ROL_MENSAJERO_ID,
+          zonaId: FKS.zonaId,
+        },
+        select: { id: true },
+      });
+
+      const orden = await tx.orden.create({
+        data: {
+          numGuia: GUIA_BASE + Math.floor(Math.random() * 1_000_000),
+          numRemision: `R-${marca}`,
+          destinatario: "Corpus 262 R32",
+          telefonoDest: "88880000",
+          producto: "caja",
+          // `en_reparto`: el paquete YA está en la moto, que es cuando la orden ES parada de la
+          // ruta optimizada (92/R28). Una `por_recoger` no lo es y el corpus no probaría nada.
+          estatusId: ESTATUS.en_reparto,
+          tiendaId: FKS.tiendaId,
+          zonaId: FKS.zonaId,
+          provinciaId: FKS.provinciaId,
+          cantonId: FKS.cantonId,
+          mensajeroAsignadoId: mensajero.id,
+          asignadoAt: ASIGNADO_AT,
+          fechaReparto,
+          intentosContacto: 2,
+          montoCobrar: 12_345, // valor DISTINGUIBLE: alimenta `porCobrar`/`totalACobrar`
+        },
+        select: { id: true },
+      });
+
+      // Cabecera CON TODAS SUS COLUMNAS LLENAS. Las nueve que se rellenan aquí son las que el
+      // portal sirve en `RutaResumenDTO` (estado, calculadaAt, origenFuente, secuenciaFuente,
+      // trazado) más las que sólo viven en la fila: si una escritura descuidada tocara cualquiera
+      // de ellas, la comparación de fila entera de más abajo lo vería.
+      const ruta = await tx.rutaOptimizada.create({
+        data: {
+          mensajeroId: mensajero.id,
+          estado: "vigente",
+          calculadaAt: CALCULADA_AT,
+          origenLat: 9.9333296,
+          origenLng: -84.0833282,
+          origenAt: ORIGEN_AT,
+          origenFuente: "gps",
+          huellaSet: `huella-${marca}`,
+          secuenciaFuente: "proveedor",
+          trazadoPolilinea: "yzocFzynhVq}@n}@o}@nzD",
+          trazadoDistanciaM: 4_210,
+          trazadoDuracionS: 640,
+          trazadoFuente: "routes",
+          tramoVivoAt: TRAMO_VIVO_AT,
+        },
+        select: { id: true },
+      });
+
+      await tx.rutaOptimizadaParada.create({
+        data: {
+          rutaId: ruta.id,
+          ordenId: orden.id,
+          secuencia: 1,
+          tramoPolilinea: "cxocFvxnhVoJnG",
+          tramoDistanciaM: 1_180,
+          tramoDuracionS: 210,
+        },
+      });
+
+      const repo = new OrdenRepository(tx);
+      return fn({ repo, tx, ordenId: orden.id, mensajeroId: mensajero.id, rutaId: ruta.id });
+    });
+  }
+
+  it("⭑⭑ R32: la correccion NO TOCA NI UNA FILA de la ruta optimizada del mensajero", async () => {
+    // La mitad literal de R32: «no debe alterar la RUTA OPTIMIZADA del mensajero». Se comparan las
+    // FILAS ENTERAS —cabecera y paradas— leídas de la base antes y después, no un puñado de
+    // columnas elegidas: `updated_at` de la cabecera lleva `@updatedAt`, así que cualquier
+    // escritura sobre ella, aunque no cambiara ningún valor de negocio, movería la fila y esto se
+    // pondría rojo.
+    const r = await conOrdenEnRuta(MANANA, async (ctx) => {
+      const cabeceraAntes = await ctx.tx.rutaOptimizada.findUniqueOrThrow({
+        where: { id: ctx.rutaId },
+      });
+      const paradasAntes = await ctx.tx.rutaOptimizadaParada.findMany({
+        where: { rutaId: ctx.rutaId },
+        orderBy: { secuencia: "asc" },
+      });
+
+      await ctx.repo.corregirDiaRepartoLote([ctx.ordenId], HOY, estatusIdsAdmitidos(), null, {
+        actorUsuarioId: ACTOR,
+        motivo: MOTIVO,
+      });
+
+      const cabeceraDespues = await ctx.tx.rutaOptimizada.findUniqueOrThrow({
+        where: { id: ctx.rutaId },
+      });
+      const paradasDespues = await ctx.tx.rutaOptimizadaParada.findMany({
+        where: { rutaId: ctx.rutaId },
+        orderBy: { secuencia: "asc" },
+      });
+      const fila = await ctx.tx.orden.findUniqueOrThrow({
+        where: { id: ctx.ordenId },
+        select: { fechaReparto: true },
+      });
+      return { cabeceraAntes, cabeceraDespues, paradasAntes, paradasDespues, fila, ctx: ctx.ordenId };
+    });
+
+    // ANTI-VACUIDAD (1): la corrección OCURRIÓ. Sin esto, un repo que no hiciera nada pasaría.
+    expect(r.fila.fechaReparto?.toISOString()).toBe(HOY.toISOString());
+    // ANTI-VACUIDAD (2): HABÍA una parada de esta orden que perder. Sin esto, el `toEqual` de dos
+    // listas vacías sería verde aunque la corrección borrara la ruta entera.
+    expect(r.paradasAntes).toHaveLength(1);
+    expect(r.paradasAntes[0].ordenId).toBe(r.ctx);
+    expect(r.paradasAntes[0].secuencia).toBe(1);
+
+    // R32: ni la parada ni la cabecera se movieron. `toEqual` de la fila COMPLETA.
+    expect(r.paradasDespues).toEqual(r.paradasAntes);
+    expect(r.cabeceraDespues).toEqual(r.cabeceraAntes);
+  });
+
+  it("⭑⭑ R32: los INDICADORES DEL PORTAL del mensajero no se mueven al corregir", async () => {
+    // La otra mitad de R32: «ni los indicadores de su portal». Se compara el resultado REAL de
+    // `MisAsignacionesService.listarMisAsignaciones` antes y después, con los repositorios REALES
+    // sobre la transacción: la secuencia de la ruta y los KPIs salen de la base, no de un doble
+    // que devolvería lo mismo pase lo que pase.
+    const r = await conOrdenEnRuta(MANANA, async (ctx) => {
+      const antes = await listarPortal(ctx.tx, ctx.mensajeroId);
+      await ctx.repo.corregirDiaRepartoLote([ctx.ordenId], HOY, estatusIdsAdmitidos(), null, {
+        actorUsuarioId: ACTOR,
+        motivo: MOTIVO,
+      });
+      const despues = await listarPortal(ctx.tx, ctx.mensajeroId);
+      return { antes, despues, ordenId: ctx.ordenId };
+    });
+
+    if (r.antes.status !== "ok" || r.despues.status !== "ok") {
+      throw new Error(`el portal del mensajero devolvio ${r.antes.status}/${r.despues.status}`);
+    }
+
+    // ANTI-VACUIDAD (1): el portal veía la orden como parada POSICIONADA de la ruta.
+    expect(r.antes.porGestionar.map((o) => [o.id, o.secuenciaRuta])).toEqual([[r.ordenId, 1]]);
+    expect(r.antes.ruta.paradasSinOptimizar).toBe(0);
+    expect(r.antes.ruta.trazado?.encodedPolyline).toBe("yzocFzynhVq}@n}@o}@nzD");
+    // ANTI-VACUIDAD (2): la corrección SÍ se nota donde TIENE que notarse — el día de la orden.
+    // Sin este par, «nada cambió» podría significar «no pasó nada» en vez de «pasó lo que debía».
+    expect([
+      r.antes.porGestionar[0].fechaRepartoISO,
+      r.despues.porGestionar[0].fechaRepartoISO,
+    ]).toEqual(["2026-08-22", "2026-08-21"]);
+    expect([r.antes.porGestionar[0].esParaManana, r.despues.porGestionar[0].esParaManana]).toEqual([
+      true,
+      false,
+    ]);
+
+    // R32: y NO se nota en ningún indicador del portal.
+    expect(r.despues.kpis).toEqual(r.antes.kpis);
+    expect(r.despues.ruta).toEqual(r.antes.ruta);
+    expect(r.despues.porGestionar.map((o) => [o.id, o.secuenciaRuta])).toEqual(
+      r.antes.porGestionar.map((o) => [o.id, o.secuenciaRuta]),
+    );
+    expect(r.despues.porRecoger.map((o) => o.id)).toEqual(r.antes.porRecoger.map((o) => o.id));
+    expect(r.despues.conAyuda.map((o) => o.id)).toEqual(r.antes.conAyuda.map((o) => o.id));
+    // Los KPIs no son cero: el `montoCobrar` distinguible del corpus llega hasta aquí.
+    expect(r.antes.kpis).toEqual({
+      pendientes: 1,
+      entregadas: 0,
+      porCobrar: 12_345,
+      totalACobrar: 12_345,
+    });
+  });
+
+  it("⭑ R32: la correccion no ENCOLA ninguna reoptimizacion de ruta", async () => {
+    // El otro camino por el que la ruta se alteraría sin tocar sus tablas: encolar el job
+    // `optimizacion_ruta` (92/R16) desde la corrección, como hace `GestionOrdenRepository`. Se
+    // cuenta el delta DENTRO de la transacción, así que las filas que ya hubiera en la base
+    // compartida son las mismas antes y después y no contaminan la medida.
+    const r = await conOrdenEnRuta(MANANA, async (ctx) => {
+      const reoptimizacionesAntes = await ctx.tx.job.count({
+        where: { tipo: "optimizacion_ruta" },
+      });
+      const totalAntes = await ctx.tx.job.count();
+      await ctx.repo.corregirDiaRepartoLote([ctx.ordenId], HOY, estatusIdsAdmitidos(), null, {
+        actorUsuarioId: ACTOR,
+        motivo: MOTIVO,
+      });
+      const reoptimizacionesDespues = await ctx.tx.job.count({
+        where: { tipo: "optimizacion_ruta" },
+      });
+      const totalDespues = await ctx.tx.job.count();
+      const rastro = await ctx.tx.ordenDiaRepartoCambio.count({ where: { ordenId: ctx.ordenId } });
+      return { reoptimizacionesAntes, reoptimizacionesDespues, totalAntes, totalDespues, rastro };
+    });
+
+    // ANTI-VACUIDAD: la corrección ocurrió (dejó su fila de rastro).
+    expect(r.rastro).toBe(1);
+    expect(r.reoptimizacionesDespues).toBe(r.reoptimizacionesAntes);
+    expect(r.totalDespues).toBe(r.totalAntes);
+  });
+
+  /**
+   * El portal del mensajero, con los repositorios REALES sobre la transacción. Lo único con doble
+   * es lo que R32 no mira: `ordenRepo` y el almacenamiento no los usa `listarMisAsignaciones`, y el
+   * derivador de intentos va con el fake compartido porque su fuente —`orden_historial_estado`— ya
+   * está probada intacta por el test de R25 de este mismo archivo.
+   */
+  async function listarPortal(tx: PrismaClient, mensajeroId: string) {
+    const ordenRepo = {
+      findEstatusIdByValue: vi.fn(async (v: string) => `os-${v}`),
+      findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    } as unknown as Pick<
+      IOrdenRepository,
+      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+    >;
+    const storage = {
+      upload: vi.fn(async (input: { path: string }) => input.path),
+      remove: vi.fn(async () => {}),
+    } as unknown as IFileStorage;
+    const signed = {
+      createSignedUrl: vi.fn(async (p: string) => `https://signed/${p}`),
+      createSignedUrls: vi.fn(async (ps: string[]) =>
+        Object.fromEntries(ps.map((p) => [p, `https://signed/${p}`])),
+      ),
+    } as unknown as ISignedUrlProvider;
+
+    const service = new MisAsignacionesService(
+      new GestionOrdenRepository(tx),
+      ordenRepo,
+      storage,
+      signed,
+      new RutaOptimizadaRepository(tx),
+      new OrdenMensajeroMetaRepository(tx),
+      fakeIntentosEnLote(),
+    );
+    return service.listarMisAsignaciones({ usuarioId: mensajeroId, rol: "mensajero" }, NOCHE_DEL_21);
   }
 });
