@@ -324,8 +324,21 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
-  it("lib/actions/cierre-dia.ts inyecta el notificador real", () => {
-    expect(leer("lib", "actions", "cierre-dia.ts")).toContain("notificarCierreDiaPorAprobarReal");
+  it("lib/actions/cierre-dia.ts inyecta LOS DOS notificadores reales que cablea", () => {
+    // ⚠️ AQUI FALTABA EL SEGUNDO. Este fichero cablea DOS avisos —«cierre por aprobar» (146) y
+    // «quedaste bloqueado por acumular» (271/R40/R41)— y esta guardia solo miraba el primero. Era
+    // el UNICO punto de cableado del arbol sin proteger, y la guardia derivada del final NO lo
+    // cubre: aquella pregunta si el SIMBOLO esta vivo en algun sitio, y
+    // `notificarMensajeroBloqueadoReal` seguiria vivo por `lib/actions/cierres-admin.ts` aunque
+    // esta linea desapareciera. Los SITIOS los fija esta guardia; el SIMBOLO, la derivada.
+    //
+    // Y se afirma sobre el USO EFECTIVO (sin imports ni comentarios), no sobre el fichero entero.
+    // Medido: con un `toContain` a secas, borrar la linea del cableado deja el test EN VERDE,
+    // porque el import de arriba sigue conteniendo el nombre. Es exactamente el fallo del cron,
+    // reproducido dentro de su propia guardia.
+    const uso = fuenteSinImportsNiComentarios(leer("lib", "actions", "cierre-dia.ts"));
+    expect(uso).toContain("notificarCierreDiaPorAprobarReal");
+    expect(uso).toContain("notificarMensajeroBloqueadoReal");
   });
 
   it("app/api/ordenes/api-key/carga/route.ts inyecta el notificador real", () => {
@@ -437,5 +450,116 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     recorrer(path.join(ROOT, "lib"));
     recorrer(path.join(ROOT, "app"));
     expect(sospechosos).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LA GUARDIA DERIVADA DEL ARBOL — la que habria cazado los dos muertos del 2026-08-23
+// ---------------------------------------------------------------------------
+//
+// Las guardias de arriba son UNA POR ARCHIVO Y ESCRITAS A MANO, y ese es su defecto: solo protegen
+// lo que alguien se acordo de apuntar. El 2026-08-23 se midio el tamano real del agujero: de SIETE
+// notificadores reales, DOS no los pasaba nadie —`notificarCierreDiaVencidoReal`, el aviso nocturno
+// del corte y el que mas se emite, y `notificarMensajeroBloqueadoReal`—, y los dos tenian su
+// entrada del censo en verde, porque el censo comprueba que el DEFAULT del service sea el no-op y
+// eso seguia siendo cierto. Un notificador sin composition root esta MUERTO: se despliega, no emite
+// nada, y ninguna prueba se pone roja.
+//
+// Esta guardia no pregunta por una lista: pregunta AL ARBOL. Por cada `notificar*Real` exportado
+// exige al menos un fichero de produccion que lo PASE de verdad.
+//
+// ⚠️ «PASARLO» NO ES «IMPORTARLO», Y ESA DISTINCION ES TODO EL TEST. El fallo del cron se
+// reprodujo con una mutacion que dejaba el import intacto y quitaba solo el argumento: una guardia
+// que se conforme con el import lo da por vivo. Por eso el simbolo se busca en el fuente CON LAS
+// SENTENCIAS DE IMPORT Y LOS COMENTARIOS RETIRADOS — un comentario que lo nombre tampoco cuenta,
+// que es como se acaba cableando un aviso en la prosa y no en el codigo.
+
+/** Quita de un fuente TS lo que NO es uso: las sentencias `import` (incluidas las multilinea) y los comentarios. */
+function fuenteSinImportsNiComentarios(fuente: string): string {
+  const salida: string[] = [];
+  let dentroDeImport = false;
+  let dentroDeBloque = false;
+  for (const linea of fuente.split("\n")) {
+    const t = linea.trim();
+    if (dentroDeBloque) {
+      if (t.includes("*/")) dentroDeBloque = false;
+      continue;
+    }
+    if (t.startsWith("/*")) {
+      if (!t.includes("*/")) dentroDeBloque = true;
+      continue;
+    }
+    if (t.startsWith("//") || t.startsWith("*")) continue;
+    if (dentroDeImport) {
+      // El bloque de import termina en la linea que trae el `from "..."`.
+      if (/from\s+["']/.test(t)) dentroDeImport = false;
+      continue;
+    }
+    if (t.startsWith("import ")) {
+      if (!/from\s+["']/.test(t)) dentroDeImport = true;
+      continue;
+    }
+    salida.push(linea);
+  }
+  return salida.join("\n");
+}
+
+describe("guardia derivada: ningun notificador REAL puede quedarse sin composition root", () => {
+  // Ficheros de PRODUCCION: `lib/` y `app/`, menos el modulo que los define (alli aparecen todos
+  // por su propia declaracion). Los tests quedan fuera a proposito: un notificador cableado solo
+  // en una suite esta igual de muerto en produccion.
+  const ficherosDeProduccion = (): string[] => {
+    const encontrados: string[] = [];
+    const recorrer = (dir: string) => {
+      for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+        const completo = path.join(dir, entrada.name);
+        if (entrada.isDirectory()) {
+          recorrer(completo);
+          continue;
+        }
+        if (!/\.tsx?$/.test(entrada.name)) continue;
+        if (completo.endsWith(path.join("lib", "notificaciones", "notificadores.ts"))) continue;
+        encontrados.push(completo);
+      }
+    };
+    recorrer(path.join(ROOT, "lib"));
+    recorrer(path.join(ROOT, "app"));
+    return encontrados;
+  };
+
+  const relativo = (p: string) => path.relative(ROOT, p).split(path.sep).join("/");
+
+  it("cada `notificar*Real` exportado lo PASA algun fichero de lib/ o app/, no solo lo importa", () => {
+    const definicion = fs.readFileSync(
+      path.join(ROOT, "lib", "notificaciones", "notificadores.ts"),
+      "utf8",
+    );
+    const reales = [...definicion.matchAll(/^export const (notificar\w+Real)\b/gm)].map((m) => m[1]);
+
+    // AUTOCOMPROBACION: si la extraccion se rompe, `reales` queda vacio y el `toEqual([])` de abajo
+    // pasaria en verde sin haber comprobado NADA. Este repo ya midio lo que cuesta un test que
+    // reporta `passed` sin ejercitar nada. El canario es el notificador que ESTUVO muerto.
+    expect(reales.length).toBeGreaterThan(0);
+    expect(reales).toContain("notificarCierreDiaVencidoReal");
+
+    const fuentes = ficherosDeProduccion().map((f) => {
+      const crudo = fs.readFileSync(f, "utf8");
+      return { fichero: relativo(f), crudo, uso: fuenteSinImportsNiComentarios(crudo) };
+    });
+    expect(fuentes.length).toBeGreaterThan(0); // el recorrido tiene que haber encontrado arbol
+
+    // El diagnostico nombra las DOS cosas que hacen falta para arreglarlo: QUE notificador y, si
+    // alguien lo importo sin pasarlo, EN QUE FICHERO quedo a medias.
+    const muertos = reales
+      .map((notificador) => ({
+        notificador,
+        cableadoEn: fuentes.filter((f) => f.uso.includes(notificador)).map((f) => f.fichero),
+        soloImportadoEn: fuentes
+          .filter((f) => f.crudo.includes(notificador) && !f.uso.includes(notificador))
+          .map((f) => f.fichero),
+      }))
+      .filter((d) => d.cableadoEn.length === 0);
+
+    expect(muertos).toEqual([]);
   });
 });
