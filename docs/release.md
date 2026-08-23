@@ -52,6 +52,31 @@
 
 ---
 
+## Release del 2026-08-23 — recorrida
+
+**`prod` = `6bc566b8`** · desplegado y **READY** · 55 commits.
+
+Primera release hecha siguiendo esta lista. Lo verificado, con su evidencia:
+
+| paso | resultado |
+| --- | --- |
+| Gate **completo** sobre el SHA desplegado | `6090fda2` — 1324 archivos, **17.884 tests**, `INIT_EXIT=0` leído dentro del log |
+| `dev` no se movió entre gate y release | SHA medido y `origin/dev` idénticos |
+| Mediciones re-tomadas (03:14 CR) | `M1 = 0` · `M2 = 35` · **6** jobs `failed` de la familia de la 265, como línea base |
+| Fichas `in_progress` | **ninguna** |
+| Variables por entorno | `GOOGLE_CLOUD_PROJECT_ID` en Production y Preview por separado; `RUTA_DEBUG_LOG` en **ninguno** |
+| Errores de runtime tras desplegar | **cero** |
+| Migraciones aplicadas | las dos: el value del enum presente, y `secuencia_fuente` creada **sin tocar ninguna fila existente** (0 con valor) |
+| **C7** | **cero** líneas `optimizer***:` con el cron corriendo — ver arriba |
+
+⚠️ **`C3` no se pudo cerrar**: `ruta_optimizada_parada` sigue **vacía** en producción, así que el
+umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
+
+⚠️ **`C8` no es concluyente todavía**: cero jobs `failed` de esa familia desde el despliegue, pero
+**no ha pasado tiempo suficiente** para que sea evidencia. Se re-mira con un día de tráfico real.
+
+---
+
 ## Pendiente para la PRÓXIMA release
 
 > Se rellena cuando una ficha deja una comprobación que **sólo** se puede hacer desplegando. Se
@@ -92,10 +117,13 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
 - [ ] **C3 · Re-medir M1** con `ruta_optimizada_parada` ya poblada, para saber si el umbral
       `RUTA_ORIGEN_MAX_KM = 200` —hoy **declarado sin calibrar**— se sostiene. El 2026-08-22 la tabla
       estaba **vacía** y por eso el número se fijó a ojo.
-- [ ] **C7 · Cero líneas `optimizer***:`** en los logs de runtime tras el despliegue. La variable
-      `RUTA_DEBUG_LOG` **no está puesta en ningún entorno** (comprobado el 2026-08-23) y el default
-      del código ya nace apagado, así que lo esperado es cero. **No la pongas a `1`** en ningún
-      entorno sin un diagnóstico abierto que lo justifique: vuelca coordenadas de destinatarios.
+- [x] **C7 · Cero líneas `optimizer***:`** — ✅ **VERIFICADO el 2026-08-23 tras la release**, y con
+      un cero que significa algo: el cron `procesar-jobs` corrió **cuatro veces** (09:20, 09:21,
+      09:22 y 09:23) sobre el despliegue nuevo y **no imprimió ni una** línea `optimizer***:`.
+      Con el build anterior, **cada una de esas corridas volcaba un bloque de configuración entero**
+      —`projectId`, claves, timeouts—. Un cero sólo vale si lo que lo produciría llegó a correr, y
+      corrió. **No pongas `RUTA_DEBUG_LOG=1`** en ningún entorno sin un diagnóstico abierto que lo
+      justifique: vuelca coordenadas de destinatarios.
 - [ ] **C8 · Cero jobs `optimizacion_ruta` en `failed`** con «respuesta del proveedor con forma
       inesperada» **posteriores al despliegue**. Antes había **6**, todos del 2026-08-22. Es la
       única comprobación de que el arreglo funcionó **donde ocurrió el incidente**: ninguna de las
