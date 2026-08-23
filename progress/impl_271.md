@@ -984,3 +984,75 @@ Con esta pasada, de la tabla de verdad se han visto renderizados los casos **1**
 seis mutaciones muertas —incluido el defecto original— y la única que la conducta no puede matar,
 dicha como tal y fijada por guardia de árbol; vista en los cuatro portales con el estado real y con
 contraprueba del caso 6; deuda cerrada.
+
+---
+
+# impl 271 — verificación en pantalla del estado NORMAL (`N=1, V=0`) y de los plurales
+
+**Pasada de sólo MIRAR: no se cambió una línea de código.** Cierra el hueco que la pasada anterior
+declaró: el estado en el que está cada mensajero cada tarde nunca se había visto renderizado, y «que
+no salga un aviso» es una afirmación tan fuerte como que salga.
+
+## `N = 1, V = 0` — un `solicitado` a secas: LIBRE, y se ve
+
+Sembrado un único `solicitado` (nacido el 22 → jornada 21). Conteos leídos del DOM, no impresiones:
+
+| Portal | avisos de bloqueo | controles |
+| --- | --- | --- |
+| Entregas (reparto) | **0** (3 alertas en la página, ninguna de bloqueo: las de la ruta) | «Gestionar la orden» ×9, **8 habilitados** |
+| Por recoger | **0** | escáner «Recoger paquete» presente y **habilitado** |
+| Recolección | **0** | disparador de escaneo **1, habilitado** |
+| Cierre del día | **0** | «Solicitar cierre» presente |
+
+Y el vacío de Recolección vuelve **entero**, que es lo que sólo se le quita al bloqueado:
+
+> "No tienes órdenes por recolectar en tienda ahora mismo. Puedes escanear igual: si el maestro
+> acaba de asignarte una, se confirmará aquí."
+
+**Contraste directo con el bloqueado** (mismo mensajero, mismas órdenes, sólo cambia `cierre_dia`):
+con bloqueo los 9 botones «Gestionar la orden» siguen en pantalla pero con **0 habilitados**, y el
+escáner de Recolección y el de «Por recoger» bajan a **0**. La diferencia es del bloqueo y de nada
+más.
+
+### Dos apagados que NO son el bloqueo, comprobados uno a uno
+
+1. **`Gestionar la orden QA-R-0015` sale deshabilitado también estando LIBRE** (8 de 9). Es la
+   PRIMERA card, la que el panel de detalle abre por defecto: su botón llevaría al panel donde el
+   mensajero ya está. Comportamiento previo y afirmado en `RepartoModule.test.tsx`.
+2. **«Solicitar cierre» sale deshabilitado estando LIBRE**, y su `title` dice por qué:
+   `Tenes ordenes sin gestionar; gestionalas antes de cerrar.` Es el gate de siempre
+   (`CierreDiaService.MSG_PENDIENTES`, R10) con 9 órdenes por gestionar; no tiene nada que ver con
+   la 271. Con bloqueo, además, aparece el CTA de reenvío y ése sí está habilitado.
+
+## Los plurales (`N = 3, V = 2`), las dos ramas mixtas
+
+Mismo `N` y `V` en las dos; lo único que cambia es **quién tiene el cierre más viejo**. Los dos
+`innerText`, en los tres portales con CTA (en «Cierre del día», idénticos sin el puntero):
+
+- **El más viejo es de la BODEGA** (`solicitado` jornada 19 + `rechazado` 21 + `vencido` 22):
+  > "Tienes 3 cierres sin resolver y 2 de ellos no se han enviado a aprobación. Mientras tanto no
+  > puedes entregar, cobrar ni recibir trabajo nuevo. **Envía los que faltan** y espera a que la
+  > bodega apruebe el más antiguo, **el del 19 de agosto**. Ve a «Cierre del día»."
+- **El más viejo es SUYO** (`rechazado` jornada 19 + `solicitado` 21 + `vencido` 22):
+  > "Tienes 3 cierres sin resolver y 2 de ellos no se han enviado a aprobación. Mientras tanto no
+  > puedes entregar, cobrar ni recibir trabajo nuevo. **Envía los que faltan, empezando por el del
+  > 19 de agosto**, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día»."
+
+El plural concuerda en las dos, y la fecha nombra el cierre correcto en cada una: en la primera el
+que espera a la bodega, en la segunda el que él tiene que enviar. En «Cierre del día», el botón de
+la segunda dice **«Solicitar aprobación del cierre rechazado»** — el mismo cierre del 19 que la
+frase nombra.
+
+## Lo único que no cuadra, y NO se tocó
+
+El `title` del botón apagado dice **`Tenes ordenes sin gestionar; gestionalas antes de cerrar.`**:
+sin tildes en «Tenés», «órdenes» y «gestionálas». Es texto que lee el mensajero, vive en
+`lib/services/CierreDiaService.ts:71` (`MSG_PENDIENTES`), es **previo a la 271** y no lo toca ninguna
+de sus reglas. Queda **reportado y sin cambiar**: esta pasada era de mirar.
+
+## Qué queda sin ver en pantalla (y por qué se da por bueno)
+
+Sólo las variantes **sin jornada fiable (R60)** —que exigen sembrar gestiones repartidas en dos días
+de Costa Rica, no sólo cierres— y los **dos avisos a la bodega**, que son notificaciones y no
+pantalla. Los siete estados de la tabla de verdad, sus dos ramas mixtas y sus plurales **ya se han
+visto renderizados**.
