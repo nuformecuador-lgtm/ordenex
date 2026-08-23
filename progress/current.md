@@ -9,7 +9,46 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ LAS DOS FICHAS CERRADAS — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+## 🚀 RELEASE DESPLEGADA — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+
+**`prod` = `6bc566b8`**, desplegado y **READY**. 55 commits. `dev` y `prod` igualados.
+Salen la **262** (corregir el día de reparto) y la **265** (el optimizador lee al proveedor).
+
+**Primera release hecha siguiendo `docs/release.md`**, que se creó ayer justamente para esto. Su
+recorrido, con la evidencia de cada paso, queda escrito en ese mismo archivo.
+
+### Verificado después de desplegar
+
+- **Cero errores de runtime.**
+- **Las dos migraciones aplicadas**, y `secuencia_fuente` se creó **sin tocar ninguna fila
+  existente** (0 filas con valor).
+- **`C7`: cero líneas `optimizer***:`**, y es un cero que significa algo — el cron corrió **cuatro
+  veces** (09:20–09:23) sobre el despliegue nuevo sin imprimir ninguna, cuando con el build anterior
+  **cada corrida volcaba un bloque de configuración entero**. La traza nace apagada en producción,
+  comprobado en el comportamiento.
+
+⚠️ **Una lectura que casi se hace mal:** los primeros logs que miré **sí** traían líneas
+`optimizer***:`, pero eran del despliegue **anterior** (`dep=dpl_CUyTSnK…`). Concluir «C7 falla» ahí
+habría sido culpar al código nuevo por el log del viejo.
+
+### Lo que NO se cerró, y por qué
+
+- **`C3`** — `ruta_optimizada_parada` sigue **vacía** en producción, así que
+  `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
+- **`C8`** — cero jobs `failed` de esa familia desde el despliegue, pero **no ha pasado tiempo
+  suficiente** para que sea evidencia. Se re-mira con un día de tráfico real.
+- **Los píxeles del cierre `8F88DCD5`** (264) y **`F6` en preview**: siguen necesitando entrar a la
+  app como usuario.
+- **El texto «Del 23 al 24 de agosto»**: decisión de producto, sin tocar.
+
+### Lo que queda para mañana, en una línea
+
+Re-mirar **`C8`** con tráfico del día, decidir el **texto**, y las dos comprobaciones que exigen
+mirar la app. Todo lo demás de estas dos features está cerrado.
+
+---
+
+## ✅ LAS DOS FICHAS CERRADAS — 2026-08-23 (tanda anterior, cerrada)
 
 **Ninguna ficha `in_progress`.** `dev` con las dos features completas, revisadas y con sus
 bloqueantes cerrados.
