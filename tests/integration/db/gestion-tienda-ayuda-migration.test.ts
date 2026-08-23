@@ -144,7 +144,9 @@ describe("Feature 237 · el DOWN deja la base legible por el codigo anterior (R4
     // `down.sql` —seria una foto historica— sino nombrar el valor nuevo aqui». Eso es exactamente
     // lo que se hace: `rechazo_tienda` (240) entra en la lista de POSTERIORES y el `down.sql` de
     // la 237 no se toca ni una linea.
-    const POSTERIORES = ["rechazo_tienda"]; // feature 240 (2026-08-20)
+    // ⏳ 2026-08-23 (feature 266) — segunda vez que pasa lo mismo, y se resuelve igual:
+    // `habilitacion_api` entra en POSTERIORES y el `down.sql` de la 237 sigue sin tocarse.
+    const POSTERIORES = ["rechazo_tienda", "habilitacion_api"]; // 240 (2026-08-20) · 266 (2026-08-23)
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(

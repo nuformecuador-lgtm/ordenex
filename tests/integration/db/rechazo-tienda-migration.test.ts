@@ -131,8 +131,19 @@ describe("Feature 240 · el DOWN deja la base legible por el codigo anterior (R4
     // que otra ficha anada un valor mas, este caso se pone rojo y lo que hay que hacer NO es
     // editar este `down.sql` —seria una foto historica— sino nombrar el valor nuevo en una lista
     // de POSTERIORES aqui, como esta ficha hizo con el test de la 237.
+    //
+    // ⏳ 2026-08-23 (feature 266) — EL DIA LLEGO. Este caso decia arriba: «el dia que otra ficha
+    // anada un valor mas, este caso se pone rojo y lo que hay que hacer NO es editar este
+    // `down.sql` sino nombrar el valor nuevo en una lista de POSTERIORES aqui». Eso es
+    // exactamente lo que se hace: `habilitacion_api` (266) entra en POSTERIORES y la foto
+    // historica de la 240 no se toca ni una linea.
+    const POSTERIORES = ["habilitacion_api"]; // feature 266 (2026-08-23)
     expect(new Set(valores)).toEqual(
-      new Set((ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter((v) => v !== FAMILIA)),
+      new Set(
+        (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
+          (v) => v !== FAMILIA && !POSTERIORES.includes(v),
+        ),
+      ),
     );
   });
 

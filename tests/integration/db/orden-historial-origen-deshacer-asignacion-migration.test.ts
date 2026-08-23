@@ -51,6 +51,9 @@ const AÑADIDOS_EN_O_DESPUES_DEL_149 = new Set<string>([
       // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
       // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
       "rechazo_tienda",
+      // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
+      // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
+      "habilitacion_api",
 ]);
 const schemaPrisma = fs.readFileSync(
   path.join(__dirname, "..", "..", "..", "db", "schema.prisma"),

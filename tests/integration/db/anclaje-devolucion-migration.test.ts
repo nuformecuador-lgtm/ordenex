@@ -110,6 +110,9 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
       // la devolucion anclada. Cuarta ficha seguida que pasa por aqui sin tocar este `down.sql`, y
       // eso es exactamente lo que el patron busca: la foto historica no se retoca nunca.
       "rechazo_tienda",
+      // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
+      // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
+      "habilitacion_api",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),

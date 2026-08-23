@@ -105,6 +105,9 @@ describe("Feature 138 · DOWN — reversible (OBLIGATORIO, docs/architecture.md)
       // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
       // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
       "rechazo_tienda",
+      // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
+      // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
+      "habilitacion_api",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_138.has(v))),

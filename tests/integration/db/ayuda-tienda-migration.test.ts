@@ -195,6 +195,9 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
       // toca: aplicarlo despues de la 240 deja el enum sin este valor, y ese es el comportamiento
       // ESPERADO de una cadena de rollbacks — cada down devuelve la base al estado de SU momento.
       "rechazo_tienda",
+      // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
+      // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
+      "habilitacion_api",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(
