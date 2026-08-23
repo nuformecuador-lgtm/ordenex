@@ -186,3 +186,37 @@ valores y la corrección manda un token, no una fecha. Es lo que hace que mover 
    antes de cerrar). Aquí la confirmación va por toast y el modal cierra: no hay nada que
    descargar, y `design.md` §7.2 pide una frase, no una pantalla. Se dice porque **son dos modales
    hermanos con dos comportamientos de cierre distintos**, y eso se nota al leerlos seguidos.
+
+---
+
+## 7 · El gate (C1) y el pre-vuelo (C2)
+
+`./init.sh` **COMPLETO**. Esta ficha no admite el rápido: el diff toca `lib/types/**` por la vía
+del backend ya mergeado, y aunque el diff de ESTA rama no toque migraciones, el criterio de la
+ficha es el completo. Corrido con `INIT_EXIT` **escrito dentro del log** —en este repo un `echo`
+posterior ya tapó un gate rojo haciéndolo pasar por «exit code 0»—:
+
+```
+✓ typecheck paso
+✓ lint paso            (99 warnings PREEXISTENTES, 0 errores)
+ Test Files  1319 passed (1319)
+      Tests  17782 passed | 26 skipped (17808)
+   Duration  374.80s
+✓ test paso
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+**Verde a la primera, sin un solo rojo que interpretar.** El aviso de «migraciones sin down.sql»
+es **preexistente** (tres migraciones de la feature 92) y esta rama no añade ninguna migración.
+
+Los 99 warnings de lint son los mismos que ya había (`_input`, `_origenes`… en tests ajenos):
+**0 errores**.
+
+**C2 — pre-vuelo:** `origin/dev` sigue en **`c9e0e056`**, el mismo SHA sobre el que se ramificó.
+El pre-vuelo caduca —otra sesión puede empujar en paralelo—, así que **se vuelve a comparar justo
+antes de abrir el PR**.
+
+⚠️ **`gate.log` NO está en el repo**: se escribió en el scratchpad de la sesión, fuera del árbol.
