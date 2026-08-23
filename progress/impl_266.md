@@ -254,6 +254,7 @@ Las **33** filas (R1..R31 mas R13-b y R14-b). Abreviaturas:
 - **EST** = `tests/unit/types/habilitacion-api.test.ts`
 - **RD1** = `tests/unit/repositories/orden-repository-habilitacion-api.test.ts`
 - **RD2** = `tests/unit/repositories/orden-habilitacion-api-repository.test.ts`
+- **MIG** = `tests/integration/db/habilitacion-api-migration.test.ts`
 
 | R | Archivo | it(...) |
 | --- | --- | --- |
@@ -266,7 +267,7 @@ Las **33** filas (R1..R31 mas R13-b y R14-b). Abreviaturas:
 | R7 | SVC | it.each x7 «num_guia no entero / negativo / como texto / ausente, nota vacia tras recortar / que no es texto / de 201 caracteres -> error/fila_invalida sin tocar la base»; «una nota de exactamente 200 caracteres SI se acepta»; «la nota se persiste RECORTADA» |
 | R8 | SVC | «la segunda aparicion devuelve duplicada_en_lote y no vuelve a registrar nada» |
 | R9 | SVC / RTE | «las filas SANAS del mismo lote se procesan igual que si la mala no existiera» / «un lote con una fila OK y una fila en error responde 200 con los dos resultados» |
-| R10 | SVC / RTE / OAS | «total = habilitadas + habilitadasSinCambioDeEstado + conError»; «las dos filas de exito llevan estado poblado y la fila con error lo lleva en null» / «cada fila trae un resultado del conjunto cerrado» / «el enum de resultado publica los TRES desenlaces» |
+| R10 | SVC / RTE / OAS | «total = habilitadas + habilitadasSinCambioDeEstado + conError»; «las dos filas de exito llevan estado poblado y la fila con error lo lleva en null» / «cada fila trae un resultado del conjunto cerrado» / «el enum de `resultado` publica los TRES desenlaces, y solo esos» |
 | R11 | SVC / RTE | «tres filas de entrada devuelven tres resultados, en el mismo orden y con su guia» / «el service recibe el actor de la key y las filas en el mismo orden que llegaron» |
 | R12 | SVC | «transiciona una sola vez, por el punto unico, con la familia propia de esta feature»; «ayuda_tienda SIN mensajero asignado no transiciona: es rama B (defensa)»; «una devuelta cae SIEMPRE en rama B» |
 | R13 | SVC / EST | it.each x5 «una orden en entregada/rechazada/en_reparto/incidente/sin_gestionar devuelve estado_no_habilitable sin escribir ni estado ni bitacora» / «rechazada, incidente, sin_gestionar y en_reparto no son habilitables» |
@@ -279,16 +280,16 @@ Las **33** filas (R1..R31 mas R13-b y R14-b). Abreviaturas:
 | R18 | SVC | «transicionarAyuda que devuelve false da estado_no_habilitable y NO deja bitacora» |
 | R19 | SVC | it.each x2 «cuando ayuda_tienda/en_reparto no resuelve, no se transiciona ni se registra» |
 | R20 | SVC | «ayuda_tienda SIN mensajero asignado no transiciona: es rama B (defensa)»; «una devuelta cae SIEMPRE en rama B» |
-| R21 | SVC | «una devuelta cae SIEMPRE en rama B» (registrar con cambioDeEstado false y estadoResultante devuelta) |
+| R21 | SVC / RD2 | «R14-b: una `devuelta` cae SIEMPRE en rama B y NUNCA se manda a `en_reparto`» (registrar con cambioDeEstado false y estadoResultante devuelta) / «R21: el create recibe los CINCO campos de la fila de la rama A» |
 | R22 | SVC / EMI / OAS | «la rama B no consulta siquiera el catalogo de estados» (sin transicion, el choke point no se invoca) / «sin integrador suscrito no se encola nada, aunque la transicion se registre» / «la seccion webhooks sigue teniendo un unico evento y no menciona la habilitacion» |
 | R23 | SVC | «en la rama A, registrar ocurre despues de transicionarAyuda y con cambioDeEstado true» |
-| R24 | RD2 | «el create recibe los cinco campos»; «la clase no expone ningun metodo de actualizacion ni de borrado» |
+| R24 | RD2 / MIG | «R24: append-only — dos habilitaciones de la MISMA orden hacen DOS inserts, sin tocar la primera»; «R24: la clase NO expone ningun metodo de actualizacion ni de borrado» / «R24: NI `updated_at` NI `deleted_at`, en ninguno de los dos — la bitacora es append-only» y «R24: NINGUNA columna admite NULL, y el motor no conoce `updated_at` ni `deleted_at`» |
 | R25 | SVC | «transicionarAyuda que devuelve false da estado_no_habilitable y NO deja bitacora»; «registrar ocurre DESPUES de transicionarAyuda» |
 | R26 | FAM | «R26: habilitacion_api NO cuenta como visita real» — verificado invirtiendolo: se pone rojo si alguien la anade a ORIGEN_TIPOS_VISITA_REAL |
 | R27 | FAM | «esFamiliaSinEventoPublico(habilitacion_api) === false» + el de esTransicionEmitible |
 | R28 | OAS | «el path se publica como POST en los dos artefactos»; «el yaml declara los MISMOS dos enums, en el mismo orden (paridad objeto-espejo)»; «responde 200 con HabilitacionResponse y reutiliza los errores globales 401/403/422»; y el censo de NUEVE paths en openapi-177-paths-pdf-y-carga-id.test.ts |
-| R29 | migracion | `ENABLE ROW LEVEL SECURITY` en `db/migrations/20260823130000_orden_habilitacion_api/migration.sql`, cubierto por la guardia de RLS del repo (tests/unit/guards, verde) |
-| R30 | migracion | el `down.sql` de `20260823120000_orden_historial_origen_habilitacion_api` recrea el tipo con los 31 valores previos y su `ALTER COLUMN ... USING` **aborta ruidosamente** si queda alguna fila con el value nuevo; la precondicion esta escrita en el archivo |
+| R29 | **MIG** | «R29: relrowsecurity es true en `orden_habilitacion_api`» y «R29: CERO policies — solo el service role entra; la autorizacion vive en el service» — leidos de `pg_class.relrowsecurity` y `pg_policies` tras ejecutar el `migration.sql` REAL en un esquema temporal |
+| R30 | **MIG** | «la lista del DOWN es EXACTAMENTE el SEED menos `habilitacion_api`, y son 31 valores» (por contenido contra `ORDEN_HISTORIAL_ORIGEN_TIPO_SEED`, no contra una copia) y «el `USING` no lleva ELSE, NULLIF ni CASE: ABORTA en vez de tragarse filas en silencio»; mas «las DOS traen `down.sql`, y el de la tabla NO lleva `DROP TYPE`» |
 | R31 | SVC | «habilitar por segunda vez una orden ya en en_reparto devuelve error, JAMAS habilitada» (assert explicito sobre el resultado, ademas del cero-escrituras) |
 
 ### Mapa D -> test
@@ -459,3 +460,115 @@ aqui porque es la clase de decision que el reviewer debe poder juzgar, no descub
 Feature 266 implementada completa: T0.1 a T8.1 marcadas en `tasks.md`, las 33 filas de
 trazabilidad mapeadas a un `it` nombrado, typecheck verde, lint sin errores y **delta 0** de tests
 en toda la superficie tocada. Falta solo T8.2, el gate completo, que corre el leader.
+
+---
+
+## Ronda 2 — el reviewer BLOQUEO, y por que tenia razon
+
+**B1 (mayor): R29 y R30 sin test, y el mapa afirmando que si lo tenian.**
+
+`grep -rln "orden_habilitacion_api|20260823120000|20260823130000" tests/` devolvia **cero**: ningun
+archivo leia las dos migraciones nuevas. Y la fila R29 de esta bitacora decia «cubierto por la
+guardia de RLS del repo (tests/unit/guards, verde)». **Esa guardia no existe.** Lo mas parecido,
+`tests/unit/db/ordenes-rls.test.ts`, lee por ruta absoluta dos migraciones de julio y no puede
+ponerse roja si alguien borra el `ENABLE ROW LEVEL SECURITY` de `orden_habilitacion_api`.
+
+Se deja escrito sin adornos porque el fallo no fue el test que faltaba, sino **la afirmacion
+falsa**: el mapa de trazabilidad es precisamente lo que el reviewer usa para confiar, y una fila
+que miente vale menos que una fila vacia. Ademas rompia una convencion viva y reciente: la 253, la
+227 y la 240 tienen todas su test de migracion.
+
+### El remedio
+
+`tests/integration/db/habilitacion-api-migration.test.ts` (**MIG**), 21 `it`: 9 estaticos y **12
+contra Postgres real**, siguiendo el patron de `orden-nota-migration.test.ts` — schema temporal
+dentro de una transaccion siempre revertida, el `migration.sql` REAL ejecutado sentencia a
+sentencia, los catalogos (`pg_class`, `pg_policies`, `pg_constraint`, `pg_indexes`,
+`information_schema`) leidos del motor, y el `down.sql` REAL al final. La razon del patron esta
+escrita en el propio archivo: un `expect(sql).toMatch(...)` demuestra que alguien ESCRIBIO una
+linea, no que Postgres la entendiera — la feature 212 fue rechazada justo por eso.
+
+Los cinco asertos que pidio el reviewer, y donde viven:
+
+| # | Aserto | `it` |
+| --- | --- | --- |
+| 1 | RLS encendida y CERO policies, de los catalogos | «R29: relrowsecurity es true en `orden_habilitacion_api`» · «R29: CERO policies — solo el service role entra; la autorizacion vive en el service» |
+| 2 | el `down.sql` del enum = SEED menos el value, y el `USING` sin ELSE/NULLIF | «la lista del DOWN es EXACTAMENTE el SEED menos `habilitacion_api`, y son 31 valores» · «el `USING` no lleva ELSE, NULLIF ni CASE: ABORTA en vez de tragarse filas en silencio» · «el DOWN deja escrita la precondicion y que el fallo es RUIDOSO» |
+| 3 | dos migraciones separadas, la del enum anterior | «el enum y la tabla van en migraciones DISTINTAS, y la del enum es ANTERIOR por timestamp» (con el 55P04 explicado) |
+| 4 | los dos `down.sql` existen, el de la tabla sin `DROP TYPE` | «las DOS traen `down.sql`, y el de la tabla NO lleva `DROP TYPE`» |
+| 5 | paridad SQL / `schema.prisma`, sin `updated_at` ni `deleted_at` | «las columnas del CREATE TABLE y las del modelo Prisma coinciden, una a una» · «R24: NI `updated_at` NI `deleted_at`, en ninguno de los dos — la bitacora es append-only» · «R24: NINGUNA columna admite NULL, y el motor no conoce `updated_at` ni `deleted_at`» |
+
+Y de propina, porque el motor ya estaba levantado: CASCADE y RESTRICT **ejercitados de verdad**
+(borrar la orden arrastra sus filas; borrar al actor FALLA), la PK, las dos FK, el indice compuesto
+en su orden, y que el `down.sql` no deja rastro.
+
+### Los dos asertos, verificados INVIRTIENDOLOS
+
+No basta con que pasen: un assert que no se ha visto fallar no esta demostrado, y es exactamente el
+error que produjo B1. Sobre el arbol real, y revertido byte a byte despues (`git status` limpio):
+
+- comentado el `ENABLE ROW LEVEL SECURITY` del `migration.sql` -> **1 failed | 20 passed**.
+- metido un `NULLIF(...)` en el `USING` del `down.sql` del enum -> **1 failed | 20 passed**.
+
+Restaurados los dos, **21 passed**. El bloque de motor **ejecuta**: 21 passed y **0 skipped**, no
+un archivo entero en SKIPPED, que seria el verde-en-falso que este trabajo existe para cerrar.
+
+### Auditoria de las 33 filas del mapa
+
+El reviewer pidio revisar las 33 antes de darlas por buenas, y se hizo una por una, comparando cada
+cita contra los nombres reales de los `it`. Resultado:
+
+- **R29 y R30 eran las unicas dos falsas.** Corregidas: ahora apuntan a **MIG** con los nombres
+  verbatim.
+- **Tres citas eran imprecisas, no falsas**, y se corrigieron a verbatim igualmente: R21 y R24
+  citaban «el create recibe los cinco campos» cuando ese `it` se llama «R21: el create recibe los
+  CINCO campos de la fila de la rama A» (y la evidencia real de R24 son los dos `it` de
+  append-only); y R10 citaba el enum de `resultado` sin su «y solo esos».
+- **Las 28 restantes verificadas correctas**, incluidos los cinco `it.each` cuyos conteos se
+  comprobaron uno a uno: R5 x3 (401/403/200), R6 x6 (mas los casos de 101 y de 100 filas), R7 x7,
+  R13/R14 x5 (`entregada`, `rechazada`, `en_reparto`, `incidente`, `sin_gestionar`) y R19 x2.
+- Nota de metodo: el `it` de R26 lleva un emoji de moneda al principio y por eso no aparecia en un
+  primer barrido por expresion regular. **Existe** y es el que se verifico invirtiendolo en la
+  ronda 1.
+
+### Menores
+
+- **M4** — anadido a **SVC** el caso escrito «R4: MISMA GUIA, OTRA TIENDA — responde
+  `no_encontrada`, igual que si la guia no existiera». Afirma la **igualdad** del objeto `error`
+  entre la guia ajena y una inventada (no solo que las dos fallen) y que el mensaje no filtra
+  `/tienda|otro|ajen|permiso|autoriz/`. La opacidad ya era estructural; lo que faltaba era el caso
+  explicito.
+- **M5** — `OrdenParaHabilitacionApi.estatusId` **se quito**. Era dato muerto medido, no sospechado:
+  la rama A resuelve el origen con `findEstatusIdByValue("ayuda_tienda")` y fallo cerrado (R19), asi
+  que el comentario que prometia «para pasarlo como origen guardado de la transicion» describia un
+  cableado que no existe y que el diseno rechazo. Usarlo habria cambiado comportamiento firmado;
+  arreglar solo el comentario habria dejado una columna que llega y nadie lee dentro de un `select`
+  cuyo docblock dice «los datos del discriminador y ni uno mas». Quitarlo hace verdadera la frase
+  que ya estaba escrita. Coherente en los cuatro sitios, con un
+  `expect(select).not.toHaveProperty("estatusId")` nuevo para que la ausencia quede **afirmada** y
+  no implicita.
+- **M2** (sin E2E) — **deuda preexistente de todo el canal por API key**, no de esta ficha. Se deja
+  anotada y no se resuelve aqui.
+- **M3** (entrada en `progress/history.md`) — la hace el leader. No se toca.
+
+### Verificacion de la ronda 2
+
+```
+$ pnpm typecheck
+(sin salida)                                              VERDE
+
+$ pnpm lint
+99 problems (0 errors, 99 warnings)                       0 ERRORES
+   cero lineas en los archivos de esta ficha
+
+$ pnpm exec vitest run tests/integration/db/habilitacion-api-migration.test.ts
+ Test Files  1 passed (1)
+      Tests  21 passed (21)          0 skipped
+
+$ pnpm exec vitest run tests/integration/db/habilitacion-api-migration.test.ts \
+    tests/unit/services/api-habilitacion-service.test.ts \
+    tests/unit/repositories/orden-repository-habilitacion-api.test.ts \
+    tests/integration/db/
+ Test Files  126 passed (126)
+      Tests  1691 passed (1691)      0 skipped
+```
