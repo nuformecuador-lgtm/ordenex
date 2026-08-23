@@ -451,8 +451,13 @@ en estado de cliente — exactamente lo que ya le pasa al `trazado`, declarado �
 `lib/types/ruta-mensajero.ts:50-52`.
 
 **Conclusión:** sin un dato persistido, un orden calculado en local por el cron sería **invisible**,
-y con `RUTA_DEBUG_LOG=0` (P4) lo sería también para el operador (límite declarado 5). Por eso hay
+y con la traza apagada (P4/P7) lo sería también para el operador (límite declarado 5). Por eso hay
 columna.
+
+> ⏳ **2026-08-23 — aquí decía «con `RUTA_DEBUG_LOG=0`».** Caducado: P7 se cerró **invirtiendo el
+> default en el código**, así que la traza nace apagada y `RUTA_DEBUG_LOG=1` es lo que la enciende.
+> El argumento no cambia —de hecho se refuerza: ahora el estado apagado es el **normal**, no el que
+> alguien tiene que acordarse de configurar—. Copia superviviente del barrido de `m5`.
 
 ### 13.2 · La columna
 

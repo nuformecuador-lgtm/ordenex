@@ -63,4 +63,5 @@ Cuando abres Claude Code en la raíz de este repo, actúas como **leader**. El l
 - Estilo, nombres, manejo de errores → `docs/conventions.md`
 - Proceso SDD (EARS, 3 archivos, aprobación) → `docs/specs.md`
 - Cómo demostrar que funciona → `docs/verification.md`
+- Qué se comprueba al desplegar a `prod` → `docs/release.md`
 - Criterios de estado final correcto → `CHECKPOINTS.md`

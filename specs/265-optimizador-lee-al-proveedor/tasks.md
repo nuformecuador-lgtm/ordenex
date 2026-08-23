@@ -41,7 +41,10 @@
 > | **C8** | **Post-despliegue.** Contar los `optimizacion_ruta` en `failed` **posteriores** al despliegue con el motivo de esta familia. Cero es la prueba de que el arreglo funcionó; cualquier otro número se investiga antes de cerrar la ficha. | leader / release |
 >
 > ⚠️ **Tres `[x]` llevan una divergencia declarada al lado** (marcada con ⏳ en su task): **B0.4**
-> (M1 volvió «no medible» — de ahí sale C3), **B16** (las 30 mutaciones se corrieron **repartidas**
+> (M1 volvió «no medible» — de ahí sale C3), **B16** (⏳ **2026-08-23: ya no son 30 ni 31, son 37**
+> — `M-ae` la añadió el cierre de B1, y `M-af`/`M-ag` (m3) y `M-ah`…`M-ak` (m7) el de los menores;
+> el número de esta línea caducaba cada vez que alguien añadía una, así que **manda `design.md`
+> §10.4**, no este renglón. Se corrieron **repartidas**
 > entre los dos bloques, y la revisión añadió una **31.ª**, `M-ae`) y **F6** (se hizo en **local**,
 > no en preview, y la mitad «no se llama al proveedor con ese origen» no se distingue sin
 > credencial). Un `[x]` con letra pequeña sigue siendo un `[x]`; lo que no puede pasar es que la
@@ -391,8 +394,11 @@
   (km), su default y la nota de que es provisional; y **`RUTA_DEBUG_LOG`**, con lo que enciende y la
   advertencia de que vuelca coordenadas de entrega al log — molde de `WHATSAPP_DEBUG_LOG` (`:13-15`).
   ⚠️ Tocar `.env.example` niega el gate rápido; ya está asumido.
-  **Hecho:** las dos entradas escritas, sin ningún valor, y `RUTA_DEBUG_LOG` deja claro que se apaga
-  con `0`.
+  **Hecho:** las dos entradas escritas, sin ningún valor.
+  ⏳ **2026-08-23 — la frase «`RUTA_DEBUG_LOG` deja claro que se apaga con `0`» está CADUCADA.**
+  P7 cerró invirtiendo el default en el código: hoy la traza **nace apagada** y la variable sirve
+  para **encenderla** (`RUTA_DEBUG_LOG=1`). Lo que `.env.example` debe dejar claro es eso.
+  Es la misma frase que el barrido de `m5` corrigió en el cliente; aquí quedaba una copia.
 
 - [x] **B26 — Nada depende de la traza.** (dep. B4, B7, B8, B9, B21)
   Test explícito de que el **motivo** de la degradación y la **procedencia** persistida se producen
@@ -523,7 +529,7 @@
   **Siguen ABIERTAS y no se rellenan con un supuesto:** **P1** y **P5** (se quedaron sin vía al
   apagar la traza; el schema es defensivo y R7 es tolerante), **P7** (¿la traza también apagada en
   preview?) y **P8** (¿los avisos agregados deben llegar a algún canal?).
-- [ ] **C5 — Los hallazgos aparte, registrados.** **H1** (calidad de la geocodificación: nadie lee
+- [x] **C5 — Los hallazgos aparte, registrados.** ✅ **CERRADA el 2026-08-23: H1 ya tiene ficha, es la 270** (`geocode_precision` se escribe y no lo lee nadie), registrada por el leader con la medición de la 265 que le da urgencia —cinco de las seis paradas de una ruta compartían coordenada exacta—. La mitad de H2 ya estaba resuelta. Lo de abajo es la foto de cuando **no** existía, y se conserva. **H1** (calidad de la geocodificación: nadie lee
   `geocode_precision`) merece su ficha. **H2** (token en el log) es un **hotfix**, no una ficha, y
   puede estar ya en marcha (B0.3). Los registra el leader; aquí sólo se comprueba que **existen**.
   ⛔ **SIGUE EN `[ ]`, y aquí está la mitad medida (2026-08-22):**
