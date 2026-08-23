@@ -36,7 +36,7 @@
 | **origen** | Punto de partida del vehículo. Se resuelve en tres escalones (92/R24): `gps` vigente → `ultima_conocida` → `centroide` de las paradas. La fuente se persiste y se muestra. |
 | **saltar una parada** | Que el proveedor devuelva la parada en `skippedShipments` en vez de como visita de una ruta. Es una respuesta **válida** del proveedor, no un fallo suyo. |
 | **degradar** | Ordenar con el cálculo local y gratis (`HaversineRouteOptimizationClient`, vecino más cercano sobre distancia de círculo máximo) en vez de con el proveedor. |
-| **la traza** | `lib/logging/optimizer-log.ts`, prefijo `optimizer***:`. Es un **override consciente de la regla de PII**, pedido por el humano para diagnosticar, y se apaga con `RUTA_DEBUG_LOG=0`. |
+| **la traza** | `lib/logging/optimizer-log.ts`, prefijo `optimizer***:`. Es un **override consciente de la regla de PII**, pedido por el humano para diagnosticar. ⏳ **ANEXO 2026-08-23 (m5 de la revisión):** cuando se escribió esta fila la traza estaba **encendida por defecto** y se apagaba con `RUTA_DEBUG_LOG=0`. **P7 invirtió el default** en esta misma ficha: hoy **nace apagada** y la variable sirve para **encenderla** (`RUTA_DEBUG_LOG=1`). |
 | **el motivo** | El texto que viaja en `OptimizarOutcome.detalle` / en el mensaje del error / en `ruta_optimizada.ultimo_error`. Está sujeto a la regla de la casa: cita **campos y conteos**, nunca valores. |
 
 ---

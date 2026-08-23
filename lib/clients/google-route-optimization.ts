@@ -205,7 +205,10 @@ export class GoogleRouteOptimizationClient implements IRouteOptimizationClient {
     const { origen, paradas } = input;
 
     // ⚠️ AQUI SE IMPRIMEN COORDENADAS DE ENTREGA (dato personal). Es el override consciente
-    // de R14 documentado en `lib/logging/optimizer-log.ts`; se apaga con RUTA_DEBUG_LOG=0.
+    // de R14 documentado en `lib/logging/optimizer-log.ts`.
+    // ⏳ FEATURE 265 (2026-08-22, P7): esta linea NACE APAGADA. Hasta la 265 este comentario
+    // decia «se apaga con RUTA_DEBUG_LOG=0» y esa frase caduco con la inversion del default:
+    // hoy la traza solo se ENCIENDE, a proposito, con `RUTA_DEBUG_LOG=1`. Ver `activo()`.
     optlog("client/google — ENTRADA", {
       projectId: this.projectId,
       origen,
