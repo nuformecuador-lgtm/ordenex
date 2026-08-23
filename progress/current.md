@@ -9,7 +9,64 @@
 > `git show <rev>:progress/current.md`.
 
 
-## ✅ RELEASE DESPLEGADA — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+## ✅ PUERTA HUMANA PASADA (262 y 265) — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+
+Las dos fichas pasan a **`spec_ready`**. **Las dos crecieron en la puerta**, y la 265 además cambió
+de zona.
+
+### 262 · corregir el día de reparto — las tres respondidas EN CONTRA del spec
+
+| | decisión | lo que arrastra |
+| --- | --- | --- |
+| **P1** | **Sí**, el rastro se ve en «Ver historial» | Una corrección de día **no tiene «estado destino»**: hay que decidir cómo se pinta una entrada sin transición en un DTO que hoy sólo sabe de transiciones |
+| **P2** | **Sí**, se avisa al mensajero | `NotificacionEvento` es un inventario cerrado (146/D1): **migración de enum**, y por tanto **gate `./init.sh` COMPLETO** |
+| **P3** | **«hoy / mañana»**, como al asignar | Lo único recomendado que se aceptó, y lo que mantiene que mover al pasado sea **imposible por construcción** |
+
+### 265 · el optimizador lee al proveedor — `backend` → **`fullstack`**
+
+- **P3 = sí** (el mensajero sabe que su ruta se ordenó en local) → **eso mete UI** y cambia la zona.
+- **P2**: `RUTA_ORIGEN_MAX_KM = 200`, **declarado sin base documental** como la 92 con
+  `RUTA_MAX_PARADAS = 100`, porque **M1 no se pudo medir**.
+- **P4**: apagar `RUTA_DEBUG_LOG` **ya**. ⚠️ **Se lleva por delante P1 y P5**: esa traza era la única
+  vía a la respuesta cruda del proveedor —los logs de Vercel expiran la consulta— así que el schema
+  se queda **defensivo** y **R7 se implementa tolerando que no haya códigos de motivo**.
+- **P6**: no hay que re-encolar nada. Son **6** jobs, todos de hoy.
+
+⚠️ **Y una tensión que se deja escrita:** el humano confirmó que **el origen de Medellín es una
+prueba suya**. Los ~1.040 km que motivan **R21** son un **artefacto de pruebas**, no evidencia de
+campo. R21 se implementa igual —deja de pagar una llamada condenada y da orden local en vez de error
+duro— pero **su umbral no está calibrado con producción**.
+
+### Lo que se midió, y las dos trampas que salieron
+
+| # | resultado |
+| --- | --- |
+| **265/M1** | **No medible hoy**: `ruta_optimizada_parada` **vacía** y **0** órdenes en `en_reparto` |
+| **265/M2** | **6** jobs `failed` de «forma inesperada», todos de hoy (04:07–05:26). **0** rutas `desactualizada` |
+| **265/M3** | 1 de 2 rutas con origen en Medellín, `origen_at` de hoy 22:56 — y es de un **mensajero real con 38 órdenes**, no de la cuenta QA |
+| **262/M1-M2** | 0 y 35, ya medidas a las 04:27 CR. Caducan antes de desplegar |
+
+1. **M3, como el spec la define, no habría visto nada**: filtra `origen_fuente = 'gps'` y las dos
+   rutas son `ultima_conocida`.
+2. **Un primer M1 devolvió «20.015,1 km» y era basura**: `LEAST`/`GREATEST` **ignoran los NULL**, así
+   que `acos(-1)` da la antípoda. Habría fijado el umbral de R21 sobre un fantasma.
+
+### Hallazgo suelto: la 251 parece resuelta y nadie la cerró
+
+«La optimización de ruta NO corre en producción: falta `GOOGLE_ROUTE_OPT_PROJECT_ID`». Ese error
+**no aparece desde el 2026-07-29**, y hay **57** jobs en `done` sin error, el último **hoy a las
+22:56**. No la cierro: falta comprobar que la variable existe de verdad en producción y no que el
+código dejó de mirarla.
+
+### Decidido aparte: no hay aviso que entregarle a Dropi
+
+El humano lo dijo el 2026-08-22: **están sólo haciendo pruebas**. Eso **cierra la pregunta abierta 5
+de la 268** (canal y plazo del aviso). La entrada de `docs/api/CHANGELOG.md` se queda como material
+de onboarding para cuando la integración sea real.
+
+---
+
+## ✅ RELEASE DESPLEGADA — 2026-08-22 (tanda anterior, cerrada)
 
 **`prod` = `465c5234`, desplegado y verificado READY**, sin errores de runtime. Salió por el PR
 **#458** y lleva la **256** (el evento de `devuelta` con su motivo tipificado), la **268** (el
