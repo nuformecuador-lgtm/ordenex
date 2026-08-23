@@ -21,6 +21,29 @@ const ESTADO_ACTIVO = "activo";
 /** R7: unico estado PROPIO de la key que autoriza la carga; `inactiva` -> forbidden. */
 const ESTADO_API_KEY_ACTIVA = "activa";
 
+/**
+ * Feature 267 (2026-08-23) — DEFENSA EN PROFUNDIDAD SOBRE EL ROL DEL ACTOR.
+ *
+ * Unico `RolValue` que puede actuar por este canal. Hasta hoy el actor se construia con un
+ * `as RolValue` sobre `encontrada.rol`, un CAST de la fila: nada comprobaba lo que
+ * `IApiKeyRepository.ApiKeyAutenticada.rol` ya prometia por escrito («el service revalida
+ * (defensa en profundidad)»). Esa promesa existia sin codigo detras.
+ *
+ * Por que aniadirla es seguro, verificado el 2026-08-23: la UNICA alta de una key crea su
+ * usuario dedicado en la misma transaccion y le fija el rol por LOOKUP de `"apiKey"`
+ * (`ApiKeyRepository.createConUsuario`, `rolId: rol.id`, R12/[D1]); no hay camino de alta
+ * que produzca una cuenta de key con otro rol. Cambiarlo despues por
+ * `UsuarioService.actualizar` seria una MISCONFIGURACION, no un flujo soportado, y en una
+ * frontera multi-tenant una misconfiguracion debe cerrar el canal, no ampliarlo.
+ *
+ * Que protege: TODAS las superficies del canal por API key —presentes (carga, cotizacion,
+ * cancelacion, PDF, analitica) y futuras— quedan cubiertas aqui arriba, no una a una en cada
+ * borde. La guarda gemela vive en `resolverAlcance` (`lib/analytics/alcance.ts`), que
+ * deniega el canal `api_key` a cualquier rol que no sea de integracion: dos capas
+ * independientes para el mismo invariante, que es justo el punto.
+ */
+const ROL_API_KEY = "apiKey";
+
 export class ApiKeyAuthService implements IApiKeyAuthService {
   constructor(private readonly repo: IApiKeyRepository) {}
 
@@ -42,6 +65,11 @@ export class ApiKeyAuthService implements IApiKeyAuthService {
     // R7: la key esta desactivada (`api_key.estado !== 'activa'`) -> forbidden. Palanca de
     // revocacion PROPIA de la key, independiente del estado del usuario dedicado.
     if (encontrada.apiKeyEstado !== ESTADO_API_KEY_ACTIVA) return { status: "forbidden" };
+
+    // 267: el usuario dedicado tiene que SER una cuenta de integracion. Mismo desenlace que
+    // una key revocada (`forbidden`): desde fuera, una cuenta mal configurada y una key
+    // desactivada son indistinguibles, y ninguna de las dos revela por que.
+    if (encontrada.rol !== ROL_API_KEY) return { status: "forbidden" };
 
     // ok: el actor es el usuario dedicado de la key (D4: dueño de las ordenes que cree).
     return {

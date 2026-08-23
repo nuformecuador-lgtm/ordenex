@@ -15,6 +15,7 @@ import {
 import type { ActorAnalitica, AlcanceDatos, CanalAnalitica } from "@/lib/analytics/alcance";
 import { METRICAS } from "@/lib/analytics/metrics";
 import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
+import { ROLES_ANALITICA } from "@/lib/analytics/types";
 
 // Feature 267 / T2 — la reversion de 122/R11-D9, con su limite (R1, R2, R6, R11, R15).
 //
@@ -189,5 +190,88 @@ describe("R2/R5 · la forma del modulo no cambia con la reversion", () => {
   it("ROLES_SIN_ANALITICA sigue exportada y vacia; el rol de integracion vive en su propia lista", () => {
     expect(ROLES_SIN_ANALITICA).toEqual([]);
     expect([...ROLES_ANALITICA_INTEGRACION]).toEqual(["apiKey"]);
+  });
+});
+
+describe("267 (2026-08-23) · el canal api_key NO lo hereda ningun rol lector", () => {
+  // El agujero que cierra este bloque, reproducido antes del arreglo: la guarda del canal
+  // vivia SOLO dentro de la rama del rol de integracion, asi que un actor con `canal:
+  // "api_key"` y cualquiera de los cinco roles lectores caia a la rama del catalogo. Un
+  // `maestro` por api_key obtenia `{tipo:"global"}` para `cod_recaudado` —metrica financiera,
+  // todos los inquilinos—, y un `adminTienda` obtenia `ok` para una metrica NO publicable.
+  //
+  // El recorrido es DERIVADO de `ROLES_ANALITICA`: si manana entra un sexto rol lector, queda
+  // cubierto solo, sin tocar este archivo.
+  const NO_PUBLICABLE_OPERATIVA = METRICAS.find(
+    (m) => m.dominio !== "financiera" && !(METRICAS_API_KEY as readonly string[]).includes(m.id),
+  );
+  const FINANCIERA = METRICAS.find((m) => m.dominio === "financiera");
+
+  it("el catalogo ofrece las tres clases de metrica que este bloque necesita", () => {
+    expect(PUBLICABLE).toBeTruthy();
+    expect(NO_PUBLICABLE_OPERATIVA, "una operativa fuera de la lista blanca").toBeTruthy();
+    expect(FINANCIERA, "una financiera").toBeTruthy();
+    expect(ROLES_ANALITICA.length).toBe(5);
+  });
+
+  it("los CINCO roles lectores por canal api_key se deniegan, contra las tres metricas", () => {
+    const metricas = [PUBLICABLE, NO_PUBLICABLE_OPERATIVA?.id, FINANCIERA?.id].filter(
+      (id): id is string => typeof id === "string",
+    );
+    expect(metricas.length).toBe(3);
+
+    // Se RECORREN LOS QUINCE y se acumula el resultado en vez de cortar en el primero: si
+    // la guarda desaparece, el fallo enumera TODAS las combinaciones concedidas y no solo
+    // la primera, que es lo que hace util este test como red de seguridad.
+    const obtenido: string[] = [];
+    for (const rol of ROLES_ANALITICA) {
+      // Actor COMPLETO (con zona): que la denegacion no dependa de un dato que falta.
+      const actor: ActorAnalitica = { usuarioId: "u-intruso", rol, zonaId: "z1" };
+      for (const metricaId of metricas) {
+        const r = resolverAlcance(actor, metricaId, "api_key");
+        obtenido.push(`${rol} + ${metricaId} => ${JSON.stringify(r)}`);
+      }
+    }
+    const esperado = ROLES_ANALITICA.flatMap((rol) =>
+      metricas.map(
+        (metricaId) =>
+          `${rol} + ${metricaId} => ` +
+          JSON.stringify({ estado: "denegado", motivo: "rol_sin_analitica" }),
+      ),
+    );
+    expect(esperado.length).toBe(15);
+    expect(obtenido).toEqual(esperado);
+  });
+
+  it("y los MISMOS actores por el canal interno siguen funcionando: el arreglo no deniega todo", () => {
+    // Espejo negativo del anterior: si el arreglo se hubiese "cumplido" cerrando el resolutor
+    // entero, este caso caeria.
+    const maestro: ActorAnalitica = { usuarioId: "u-maestro", rol: "maestro" };
+    expect(resolverAlcance(maestro, PUBLICABLE, "interno")).toEqual({
+      estado: "ok",
+      alcance: { tipo: "global" },
+    });
+  });
+
+  it("y el rol de INTEGRACION por api_key con metrica publicable sigue concediendo su tienda", () => {
+    expect(resolverAlcance(INTEGRADOR, PUBLICABLE, "api_key")).toEqual({
+      estado: "ok",
+      alcance: { tipo: "tienda", tiendaId: INTEGRADOR.usuarioId },
+    });
+  });
+
+  it("el bicondicional en las dos direcciones: canal api_key <=> rol de integracion", () => {
+    for (const rol of [...ROLES_ANALITICA, "rol_inventado", ""]) {
+      const actor: ActorAnalitica = { usuarioId: "u-x", rol, zonaId: "z1" };
+      expect(resolverAlcance(actor, PUBLICABLE, "api_key").estado, `api_key + ${rol}`).toBe(
+        "denegado",
+      );
+    }
+    for (const rol of ROLES_ANALITICA_INTEGRACION) {
+      const actor: ActorAnalitica = { usuarioId: "u-y", rol };
+      expect(resolverAlcance(actor, PUBLICABLE, "interno").estado, `interno + ${rol}`).toBe(
+        "denegado",
+      );
+    }
   });
 });

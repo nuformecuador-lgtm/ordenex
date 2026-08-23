@@ -256,6 +256,25 @@ export function resolverAlcance(
     return concedido({ tipo: "tienda", tiendaId: usuarioId });
   }
 
+  // 267 (2026-08-23) — LA OTRA MITAD DEL BICONDICIONAL `canal === "api_key"` <=> rol de
+  // integracion. Sin esta guarda, la rama de arriba comprobaba el canal SOLO para el rol de
+  // integracion, y un actor que llegase por `canal: "api_key"` con cualquiera de los cinco
+  // roles lectores caia aqui abajo: su alcance salia del CATALOGO, sin pasar por
+  // `esMetricaPublicableApiKey` y sin recorte a una tienda. Reproducido: un actor
+  // `rol: "maestro"` por `api_key` obtenia `{tipo:"global"}` para `cod_recaudado` —una
+  // metrica FINANCIERA, TODOS los inquilinos—, incumpliendo R15/R17/R18/R19/R34, que estan
+  // escritos sobre el CANAL y no sobre el rol.
+  //
+  // Va AQUI, en el punto unico de decision, y ANTES de mirar la metrica: el borde es donde
+  // se olvida. Es la simetria EXACTA del argumento que justifico el parametro `canal` (ver
+  // §3, `CanalAnalitica`): alli se dijo que «hoy no existe flujo de login por cookie para
+  // `rol: "apiKey"`, pero eso es una CIRCUNSTANCIA externa, no un invariante». Lo mismo vale
+  // en este sentido: hoy `ApiKeyAuthService` construye el actor con el rol de la fila
+  // (`lib/services/ApiKeyAuthService.ts:50`, un cast de `encontrada.rol`) y nada dentro de
+  // `lib/analytics/` garantiza que ese rol sea `apiKey`. Con las dos guardas, las dos ramas
+  // quedan EXHAUSTIVAS sobre `canal` y ningun rol nuevo hereda el canal publico por defecto.
+  if (canal === "api_key") return denegado("rol_sin_analitica");
+
   // R12 — cualquier otra cosa (un rol inventado, el label `"Admin Tienda"` de la DB, un
   // rol futuro que nadie mapeo) se deniega. NO hay rama `default` que conceda.
   if (!esRolAnalitica(rol)) return denegado("rol_desconocido");
