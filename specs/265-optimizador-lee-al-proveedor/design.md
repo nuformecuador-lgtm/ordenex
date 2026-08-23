@@ -902,6 +902,14 @@ llevarse por delante su test.
 | M-ab | Borrar la declaración de «no calibrado» del comentario del umbral | guardia del límite (R47) |
 | M-ac | Hacer que el motivo o el aviso se emitan **sólo** por `optlog` | los tests, que corren con `RUTA_DEBUG_LOG=0` (R48) |
 | M-ad | Imprimir `códigos: undefined` cuando la respuesta no trae ninguno | test del cliente sin códigos (R49) |
+| **M-ae** | Mover el `optlog` de «informa saltos» **dentro de la rama de `sin_solucion`** (avisar sólo cuando ya es tarde) | test del cliente «R8: una respuesta UTILIZABLE … Y QUEDA ESCRITA» |
+
+⏳ **`M-ae` la añade la revisión del 2026-08-22** (`progress/review_265.md`, bloqueante **B1**): la
+tabla salió con **treinta** mutaciones y **ninguna para R8**, así que el arnés no tapaba ese hueco.
+Medido por el reviewer y confirmado al aplicarla: el test que se llamaba de R8 afirmaba **sólo**
+`status: ok`, y el único que afirmaba la línea de traza (el de **R1**) usa una respuesta
+`sin_solucion` — o sea **no utilizable**—, así que **sobrevive** a esta mutación. Con eso, mover el
+`optlog` dejaba la suite entera en verde. Son **treinta y una**.
 
 ⚠️ **El arnés de mutaciones debe autocomprobarse.** En este repo ya reportó «9/9 supervivientes» dos
 veces **sin haber ejecutado un solo test**. Cada mutación se pega con **su salida real** en
