@@ -266,3 +266,129 @@ comentario apunta a una constante que ya no dice lo que dice.
 - `feature_list.json` y `progress/current.md`.
 - Entrada en `progress/history.md` (checkpoint de verificacion final).
 - Aviso a integradores coordinado con la 266 y la 256/#434, en una sola tanda.
+
+---
+---
+
+# SEGUNDA RONDA — re-revision del arreglo, 2026-08-23
+
+> Reviewer, misma rama, ahora **9 commits** sobre `origin/dev`. Los cuatro nuevos:
+> `65eaf21d` (fix), `e50703c2` (test + menores), `cb64f0d9` y `245a6b1e` (docs).
+> La primera ronda de arriba **no se toca**: el hallazgo queda en el historial.
+> Todo lo que toque para reproducir se restauro; `git status --porcelain` vacio al cerrar.
+
+## VEREDICTO DE LA SEGUNDA RONDA: **APROBADO**
+
+El BLOQUEANTE esta cerrado en el punto correcto y con mordida comprobada por mi. Los cinco
+menores, atendidos. Ningun hallazgo nuevo.
+
+## 1. Los quince casos, reproducidos por mi — y el agujero era MAS ANCHO de lo que escribi
+
+Con el arreglo puesto: **0 de 15 conceden**. Los cinco roles lectores (`maestro`, `admin`,
+`adminSatelite`, `adminTienda`, `mensajero`) x tres metricas (`ordenes_creadas` publicable,
+`incidentes` operativa NO publicable, `cod_recaudado` financiera) devuelven los quince
+`{estado:"denegado", motivo:"rol_sin_analitica"}`.
+
+Desactive la linea del arreglo (`alcance.ts:276`) y volvi a medir. **Concedian 12 de 15**, y la
+confirmacion importa porque mi enunciado original se quedaba corto:
+
+    maestro       + ordenes_creadas / incidentes / cod_recaudado => ok, {tipo:"global"}    (3/3)
+    admin         + ordenes_creadas / incidentes / cod_recaudado => ok, {tipo:"global"}    (3/3)
+    adminSatelite + ordenes_creadas / incidentes                 => ok, {tipo:"zona"}      (2/3)
+    adminTienda   + ordenes_creadas / incidentes                 => ok, {tipo:"tienda"}    (2/3)
+    mensajero     + ordenes_creadas / incidentes                 => ok, {tipo:"mensajero"} (2/3)
+
+`maestro` y `admin` concedian **GLOBAL las tres, incluida la financiera**: el peor caso no era
+«otra tienda», era el recaudo de TODOS los inquilinos por un endpoint publico. Las tres unicas
+denegaciones (`adminSatelite`/`adminTienda`/`mensajero` + `cod_recaudado`) salian con motivo
+`metrica_prohibida`, es decir **por la columna de alcance de esa metrica en el catalogo, no por
+el canal**: casualidad del catalogo, exactamente como reporto el implementer. Si manana una
+financiera dejara de estar prohibida para `adminTienda`, esas tres tambien habrian concedido.
+Confirmado: el agujero era mas ancho que mi redaccion de la primera ronda.
+
+**El test ACUMULA, no corta.** `alcance-api-key.test.ts` construye el array de los quince y lo
+compara con `toEqual` contra el esperado, en vez de asertar dentro del bucle. Lo comprobe con la
+linea desactivada: el fallo enumera **las doce** concesiones en el diff, no la primera. Si
+cortara, la mordida habria vuelto a subestimar el agujero. Ademas el recorrido se DERIVA de
+`ROLES_ANALITICA`, asi que un sexto rol lector futuro entra solo en la red.
+
+Arbol restaurado: `lib/analytics/alcance.ts` con su contenido original y el probe borrado.
+
+## 2. La denegacion vive en el punto UNICO — si
+
+`if (canal === "api_key") return denegado("rol_sin_analitica");` esta en
+`lib/analytics/alcance.ts:276`, dentro de `resolverAlcance`, **despues** de la rama de
+integracion y **antes** de `esRolAnalitica` y de mirar el catalogo. No esta en el borde: grep de
+`rol` sobre `lib/api/analitica-integrador.ts` y `app/api/ordenes/api-key/analitica/route.ts` no
+devuelve **ninguna** comprobacion de rol. El unico cambio de `cb64f0d9` en el borde es prosa (la
+nota de deuda tecnica). Es el arreglo correcto y no la repeticion del error de origen.
+
+Con las dos guardas, las ramas quedan exhaustivas sobre el canal en los dos sentidos, y el test
+del bicondicional lo afirma en ambas direcciones (canal `api_key` + cualquier rol no-integracion
+=> denegado; canal interno + rol de integracion => denegado), incluidos `"rol_inventado"` y `""`.
+
+Nota sin consecuencia: con la guarda nueva, un rol DESCONOCIDO por el canal `api_key` cambia de
+motivo (`rol_desconocido` -> `rol_sin_analitica`). Es un literal interno; el borde traduce los
+dos al mismo 403 mudo, asi que desde fuera no se distingue nada. No es hallazgo.
+
+## 3. La defensa en profundidad de `ApiKeyAuthService` — correcta, indistinguible y sin romper el alta
+
+- La guarda `if (encontrada.rol !== ROL_API_KEY) return { status: "forbidden" };` devuelve **el
+  mismo literal exacto** que la rama de key revocada: no hay dos mensajes, ni codigo distinto, ni
+  campo extra. El test lo afirma comparando los dos resultados con `toEqual`, no leyendo el
+  codigo. La indistinguibilidad es real.
+- La comparacion es estricta: `"APIKEY"` tambien cae (esta en el `it.each`).
+- **No rompe el alta legitima**, y lo verifique por los dos extremos que importan:
+  (a) `ApiKeyRepository.createConUsuario` fija el rol por LOOKUP de `apiKey` (`rolId: rol.id`),
+  unica alta del canal; (b) `findByKeyHash` **si selecciona el rol** —
+  `usuario: { select: { estado: true, rol: { select: { value: true } } } }`, devuelto como
+  `rol: row.usuario.rol.value`—, que era el riesgo real: si el `select` no lo trajera, la guarda
+  habria dejado fuera a TODAS las keys vivas mientras los tests con dobles pasaban en verde.
+  No es el caso.
+- Corri el canal entero: `tests/integration/api` + cotizacion + carga-etiquetas + el unit del
+  auth service + acciones de api-keys => **21 archivos / 263 tests verdes**.
+
+## 4. Los cinco menores — atendidos, comprobados uno a uno
+
+- **menor 1 (`tasks.md`)**: 11 casillas `[x]`; T0–T10 marcadas y **T11 (gate y PR) abierta a
+  proposito**, que es lo correcto: es del leader, no del implementer.
+- **menor 2 (tabla de trazabilidad)**: las tres afirmaciones del implementer son ciertas.
+  R8 y R10 **ya estaban cubiertos** por tests reales (los verifique en la ronda 1) y lo que
+  fallaba era la cita; ahora apuntan a `analitica-integrador-borde.test.ts` y
+  `analitica-api-key-route.test.ts` con los nombres de caso EXACTOS que existen en esos archivos.
+  R12 **no** estaba cubierto y ahora tiene test propio, citado.
+- **menor 3 (dos integradores, dos claves)**: escrito en `cache-clave.test.ts`, y bien escrito:
+  no forja la consulta, la construye por el camino real
+  (`prepararConsultaAnalitica(..., "api_key")`), asi que compara la clave que produce el canal de
+  verdad. Cubre las cuatro caras (difiere por sujeto, estable consigo mismo, el `usuarioId` entra
+  en la clave, y el caso mismo-id/otro-rol dejado escrito como no-laguna).
+- **menor 4 (`construirServicio`)**: anotado como DEUDA TECNICA ACEPTADA en el propio archivo y
+  en `impl_267.md`. Era lo pedido; no bloqueaba.
+- **menor 5 (comentario caduco)**: `entregas-conteo.ts` actualizado, solo prosa.
+
+## 5. El arreglo no cerro de mas — comprobado, que es la otra mitad
+
+Una denegacion total tambien habria pasado los quince casos y estaria igual de rota. No es el
+caso:
+
+- El **integrador legitimo** con metrica publicable **sigue concediendo** su tienda:
+  `resolverAlcance(INTEGRADOR, publicable, "api_key")` => `{ok, {tipo:"tienda", tiendaId: su
+  usuarioId}}`, afirmado en test y ejercitado ademas de rebote por el test de caches (que lanza
+  si la preparacion no concede).
+- El **canal de sesion sigue intacto** para los cinco lectores: hay caso espejo explicito
+  (`maestro` por canal interno => `{tipo:"global"}`), y las suites de 122/126/128/131/176 pasan
+  sin editar sus asertos de comportamiento.
+- El **auth service** sigue concediendo con el rol correcto (caso propio).
+- Suites corridas por mi tras el arreglo: `tests/unit/analytics` + `tests/unit/api` + acciones +
+  auth service + `intentos-no-alcance` + `menu-visibility` => **164 archivos / 1969 tests / 0
+  rojos**. Los rojos del gate completo son los preexistentes y los flakes que el leader ya midio;
+  no los re-investigo por instruccion.
+
+## Estado final
+
+- BLOQUEANTE 1: **CERRADO**.
+- menores 1–5: **CERRADOS** (T11 abierta a proposito, es del leader).
+- Sin hallazgos nuevos.
+- **Veredicto: APROBADO.** Queda solo el bookkeeping del leader: `feature_list.json`,
+  `progress/current.md`, entrada en `progress/history.md` y el aviso a integradores coordinado
+  con la 266 y la 256/#434 en una sola tanda.
