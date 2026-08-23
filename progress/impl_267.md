@@ -245,3 +245,39 @@ Anotado tambien en la cabecera del propio archivo. Si se quiere unificar, es fic
 `pnpm typecheck` verde · `pnpm lint` 0 errores ·
 `vitest run tests/unit/analytics tests/unit/api tests/unit/services/api-key-auth-service.test.ts`:
 **161 archivos / 1917 tests / 0 rojos**.
+
+### Verificacion REAL de esta sesion (2026-08-23, 12:2x)
+
+Corridas medidas, no citadas:
+
+- `pnpm typecheck` -> `tsc --noEmit`, **sin salida: verde**.
+- `pnpm lint` -> **99 problems (0 errors, 99 warnings)**; los 99 avisos son `no-unused-vars` de
+  `_param` en tests preexistentes, ninguno en los archivos de esta correccion.
+- `pnpm exec vitest run tests/unit/analytics tests/unit/api tests/unit/actions tests/unit/services/api-key-auth-service.test.ts`
+  -> **218 archivos / 2652 tests / 0 rojos**.
+- `pnpm exec vitest run tests/unit/auth/menu-visibility.test.ts tests/unit/types/intentos-no-alcance.test.ts tests/unit/guards`
+  -> **72 archivos / 1079 tests / 0 rojos**.
+- Los **once** `tests/integration/api/ordenes-api-key-*.route.test.ts` (los que atraviesan
+  `ApiKeyAuthService`, por la guarda de rol nueva) -> **11 archivos / 141 tests / 0 rojos**.
+
+**Mordida, con su salida:** desactivada SOLO la linea `if (canal === "api_key") return
+denegado("rol_sin_analitica");`, el caso derivado enumera las quince combinaciones y falla; doce
+de las quince pasaban a **conceder**: `maestro`/`admin` obtenian `{tipo:"global"}` para las TRES
+metricas —incluida la financiera `cod_recaudado`—, `adminSatelite` `{tipo:"zona"}`, `adminTienda`
+`{tipo:"tienda"}` y `mensajero` `{tipo:"mensajero"}` para la publicable y la no publicable. Las
+tres restantes solo denegaban por casualidad del catalogo (`metrica_prohibida` de `cod_recaudado`
+para esos tres roles), no por el canal. Restaurada la linea: 19/19 verdes.
+
+### Nota sobre la «otra sesion» que aparecio en la mordida
+
+El backend_dev que hizo este arreglo aviso de que este archivo se escribio «desde otra sesion» a
+las 12:28:27, con conteos que no salian de sus corridas. **Falsa alarma, y comprobada:** esa
+escritura fue del propio implementer, redactando y commiteando esta misma seccion (`cb64f0d9`)
+mientras el agente aun verificaba. No hay dos sesiones sobre la 267. Los conteos que el agente no
+reconocia (161 archivos / 1917 tests) son de la corrida del implementer sobre un subconjunto
+distinto de suites; los suyos (218/2652) son de un conjunto mas ancho. Ambos verdes, ninguno
+contradice al otro.
+
+Queda anotado porque el aviso era razonable: el agente vio un archivo cambiar bajo sus pies y
+PARO a decirlo en vez de sobrescribirlo, que es exactamente lo que debe hacer en un repo con
+treinta worktrees vivos.
