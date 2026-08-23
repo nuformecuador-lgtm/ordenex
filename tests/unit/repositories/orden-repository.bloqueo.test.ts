@@ -224,6 +224,7 @@ describe("OrdenRepository.findBloqueoDetalle (feature 271/R11/R57)", () => {
       cierresAbiertos: 0,
       cierresPorReenviar: 0,
       aResolverPrimero: null,
+      aReenviarPrimero: null,
     });
     expect(prisma.cierreDia.findFirst).not.toHaveBeenCalled();
   });

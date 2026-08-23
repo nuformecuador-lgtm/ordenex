@@ -92,6 +92,34 @@ export interface BloqueoDetalle {
   cierresPorReenviar: number;
   /** El cierre MAS VIEJO (R11), o `null` si `N = 0`. */
   aResolverPrimero: CierreAResolver | null;
+  /**
+   * El cierre RE-SOLICITABLE (`vencido` o `rechazado`) MAS VIEJO, o `null` si `V = 0`.
+   *
+   * POR QUE NO BASTA `aResolverPrimero`, con el caso delante. Es el CASO 6 de la tabla de verdad
+   * —«solicito el primero y dejo vencer el segundo», `N=2, V=1`—, que el humano dicto el
+   * 2026-08-23. Ahi el abierto mas viejo es el `solicitado`, y ese lo resuelve LA BODEGA: derivar
+   * de el lo que el mensajero puede hacer le dice «espera a la administracion» y le esconde el
+   * boton de reenviar el otro, AUNQUE `solicitarCierre` si se lo permite (R16/R18). El dato de
+   * «que debe hacer para solucionar su bloqueo» es ESTE campo, no aquel.
+   *
+   * ES OTRA PREGUNTA, y por eso es otro campo y no un `aResolverPrimero` mas listo:
+   *   · `aResolverPrimero` responde QUE SE RESUELVE PRIMERO (el orden de la cola, R11).
+   *   · `aReenviarPrimero` responde QUE PUEDE TOCAR EL, y cual de los suyos toca antes.
+   * Fundirlas mentiria en el caso 6 por un lado o por el otro.
+   *
+   * ES EL MAS VIEJO **DE LOS RE-SOLICITABLES** (R18), no el mas nuevo: el humano fijo que se
+   * resuelve siempre del mas viejo al mas nuevo, y ademas ES EL QUE `solicitarCierre` MUEVE de
+   * verdad (`CierreDiaRepository.findCierreResolicitableMasViejo`, mismo `ORDER BY`). Nombrar uno
+   * y mover otro seria el aviso desincronizado que la 271 viene a cerrar.
+   *
+   * CUANDO EL MAS VIEJO YA ES RE-SOLICITABLE (casos 5 y 7), los dos campos apuntan AL MISMO cierre.
+   * No es redundancia accidental: es lo que permite que la pantalla lea SIEMPRE este campo para el
+   * boton, sin ramificar por caso.
+   *
+   * Su `resuelve` es SIEMPRE `"mensajero"` por construccion —re-solicitable implica que la pelota
+   * es suya (`quienResuelve`)—, y eso se afirma en test.
+   */
+  aReenviarPrimero: CierreAResolver | null;
 }
 
 export interface CierreAResolver {
@@ -124,4 +152,5 @@ export const SIN_BLOQUEO: BloqueoDetalle = {
   cierresAbiertos: 0,
   cierresPorReenviar: 0,
   aResolverPrimero: null,
+  aReenviarPrimero: null,
 };

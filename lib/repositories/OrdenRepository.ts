@@ -4,12 +4,14 @@ import type { CierreEstado } from "@/lib/types/cierre";
 // predicado leido por el servidor y por la pantalla (R10).
 import {
   CIERRE_ESTADOS_ABIERTOS,
+  CIERRE_ESTADOS_RESOLICITABLES,
   SIN_BLOQUEO,
   SIN_CIERRES_ABIERTOS,
   esCierreResolicitable,
   estaBloqueadoPorCierres,
   quienResuelve,
   type BloqueoDetalle,
+  type CierreAResolver,
   type ConteoCierresAbiertos,
 } from "@/lib/utils/bloqueo-cierre";
 // Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
@@ -346,6 +348,19 @@ type OrdenPrismaClient = Pick<
  * el servidor y por la pantalla, para que ninguna superficie lo re-derive (R10).
  */
 const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
+
+/**
+ * FEATURE 271 (R11/R18/R57) — las CUATRO columnas con las que se arma un `CierreAResolver`. Una
+ * sola definicion para las DOS lecturas de `findBloqueoDetalle` (el abierto mas viejo y el
+ * re-solicitable mas viejo): si una seleccionara `created_at` y la otra no, la jornada de ese campo
+ * se derivaria con menos datos y saldria distinta para el mismo cierre.
+ */
+const SELECT_CIERRE_A_RESOLVER = {
+  id: true,
+  estado: true,
+  solicitadoAt: true,
+  createdAt: true,
+} as const;
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
 // usuario en el SQL crudo).
@@ -3279,6 +3294,13 @@ export class OrdenRepository implements IOrdenRepository {
    * VINCULADAS y no anuladas; si no hay ninguna gestion, `created_at` en CR MENOS UN DIA. Todo eso
    * lo decide `derivarJornada` (`lib/utils/jornada-cierre.ts`), que es el UNICO derivador (R61);
    * aqui solo se leen las fechas y se convierten a dia de Costa Rica.
+   *
+   * ⚠️ Y SALEN **DOS** CIERRES, NO UNO (2026-08-23, hueco que encontro la pasada de frontend). El
+   * mas viejo (`aResolverPrimero`) responde «que se resuelve primero»; el RE-SOLICITABLE mas viejo
+   * (`aReenviarPrimero`) responde «que puede tocar EL». En el caso 6 de la tabla de verdad —el
+   * caso 5 que dicto el humano: solicito el primero y dejo vencer el segundo, `N=2, V=1`— NO SON
+   * EL MISMO, y con solo el primero la pantalla le dice «espera a la bodega» y le esconde el boton
+   * de reenviar el segundo, que `solicitarCierre` SI le permite (R16/R18). Ver `BloqueoDetalle`.
    */
   async findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle> {
     const conteo =
@@ -3290,31 +3312,76 @@ export class OrdenRepository implements IOrdenRepository {
       where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_ABIERTOS] } },
       // R11: el MAS VIEJO, con desempate ESTABLE.
       orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
-      select: { id: true, estado: true, solicitadoAt: true, createdAt: true },
+      select: SELECT_CIERRE_A_RESOLVER,
     });
     if (masViejo === null) return SIN_BLOQUEO; // carrera: se resolvieron entre las dos consultas
 
-    // R57: las gestiones VINCULADAS y NO anuladas de ESE cierre. `anulada_at IS NULL` no es
-    // cosmetica: una gestion deshecha no es jornada trabajada que nombrar.
-    const gestiones = await this.prisma.gestionOrden.findMany({
-      where: { cierreId: masViejo.id, anuladaAt: null },
-      select: { createdAt: true },
-    });
+    // R18 — EL RE-SOLICITABLE MAS VIEJO. Tres ramas, y ninguna es de adorno:
+    //   · `V = 0`: no hay ninguno que el pueda tocar. `null`, y SIN segunda consulta (este metodo
+    //     corre en cada carga de las pantallas del mensajero; el caso normal es `N=1, V=0`).
+    //   · el mas viejo YA es re-solicitable (casos 5 y 7): entonces ES el re-solicitable mas
+    //     viejo —los re-solicitables son un SUBCONJUNTO de los abiertos y el orden es el mismo—,
+    //     asi que se reusa la fila y tampoco hay segunda consulta.
+    //   · el mas viejo es un `solicitado` y ademas hay re-solicitables (CASO 6): SOLO aqui se
+    //     vuelve a la base, con el MISMO `ORDER BY` que `findCierreResolicitableMasViejo`
+    //     (`CierreDiaRepository`), que es el que la re-solicitud mueve de verdad. Que los dos
+    //     elijan la MISMA fila no se supone: se afirma sobre Postgres sembrado en
+    //     `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`.
+    const reenviable =
+      conteo.v === 0
+        ? null
+        : esCierreResolicitable(masViejo.estado)
+          ? masViejo
+          : await this.prisma.cierreDia.findFirst({
+              where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_RESOLICITABLES] } },
+              orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+              select: SELECT_CIERRE_A_RESOLVER,
+            });
+
+    const aResolverPrimero = await this.aCierreAResolver(masViejo);
 
     return {
       bloqueado: estaBloqueadoPorCierres(conteo),
       cierresAbiertos: conteo.n,
       cierresPorReenviar: conteo.v,
-      aResolverPrimero: {
-        cierreId: masViejo.id,
-        estado: masViejo.estado,
-        solicitadoAt: masViejo.solicitadoAt.toISOString(),
-        jornadaCR: derivarJornada({
-          diasCRDeGestiones: gestiones.map((g) => fechaCalendarioCR(g.createdAt)),
-          diaCRDeCreacion: fechaCalendarioCR(masViejo.createdAt),
-        }),
-        resuelve: quienResuelve(masViejo.estado),
-      },
+      aResolverPrimero,
+      aReenviarPrimero:
+        reenviable === null
+          ? null
+          : reenviable.id === masViejo.id
+            ? // Mismo cierre: se reusa el objeto YA derivado. Volver a derivarlo abriria la puerta
+              // a que los dos campos nombraran jornadas distintas del MISMO cierre.
+              aResolverPrimero
+            : await this.aCierreAResolver(reenviable),
+    };
+  }
+
+  /**
+   * FEATURE 271 (R57/R61) — de una fila de `cierre_dia` al `CierreAResolver` que viaja a la
+   * pantalla, con su JORNADA derivada. Existe para que `aResolverPrimero` y `aReenviarPrimero`
+   * salgan del MISMO codigo: dos derivaciones de la misma jornada es como se desincronizan.
+   */
+  private async aCierreAResolver(fila: {
+    id: string;
+    estado: CierreEstado;
+    solicitadoAt: Date;
+    createdAt: Date;
+  }): Promise<CierreAResolver> {
+    // R57: las gestiones VINCULADAS y NO anuladas de ESE cierre. `anulada_at IS NULL` no es
+    // cosmetica: una gestion deshecha no es jornada trabajada que nombrar.
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: { cierreId: fila.id, anuladaAt: null },
+      select: { createdAt: true },
+    });
+    return {
+      cierreId: fila.id,
+      estado: fila.estado,
+      solicitadoAt: fila.solicitadoAt.toISOString(),
+      jornadaCR: derivarJornada({
+        diasCRDeGestiones: gestiones.map((g) => fechaCalendarioCR(g.createdAt)),
+        diaCRDeCreacion: fechaCalendarioCR(fila.createdAt),
+      }),
+      resuelve: quienResuelve(fila.estado),
     };
   }
 

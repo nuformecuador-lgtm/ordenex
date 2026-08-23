@@ -1523,6 +1523,12 @@ export interface IOrdenRepository {
    * resolver primero (el MAS VIEJO por `solicitado_at` ASC con desempate estable por `id` ASC),
    * con la fecha de su JORNADA derivada —no la de su creacion, que en un `vencido` va un dia por
    * delante—. Alimenta el aviso, el motivo del `conflict` y la pantalla con UNA sola forma.
+   *
+   * ⚠️ TRAE **DOS** CIERRES (R18, 2026-08-23): ademas del abierto mas viejo (`aResolverPrimero`,
+   * el orden de la cola) trae el RE-SOLICITABLE mas viejo (`aReenviarPrimero`, lo que EL puede
+   * tocar). En el caso 6 —`solicitado` viejo + `vencido` nuevo, `N=2 V=1`— NO son el mismo, y de
+   * solo el primero se deduce «espera a la administracion» cuando `solicitarCierre` si le deja
+   * reenviar el segundo.
    */
   findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle>;
   /**

@@ -24,26 +24,57 @@ export function bloqueoDe(opciones: {
   /** Jornada del mas viejo (`YYYY-MM-DD`), o `null` si no es fiable (R60). */
   jornadaCR?: string | null;
   cierreId?: string;
+  /** Jornada del RE-SOLICITABLE mas viejo cuando NO es el mismo cierre (caso 6). */
+  jornadaCRReenviable?: string | null;
 }): BloqueoDetalle {
-  const { n, v, jornadaCR = null, cierreId = "c-viejo" } = opciones;
+  const {
+    n,
+    v,
+    jornadaCR = null,
+    cierreId = "c-viejo",
+    jornadaCRReenviable = null,
+  } = opciones;
   const bloqueado = estaBloqueadoPorCierres({ n, v });
   if (n === 0) {
-    return { bloqueado, cierresAbiertos: 0, cierresPorReenviar: 0, aResolverPrimero: null };
+    return {
+      bloqueado,
+      cierresAbiertos: 0,
+      cierresPorReenviar: 0,
+      aResolverPrimero: null,
+      aReenviarPrimero: null,
+    };
   }
   // El mas viejo es re-solicitable solo si TODOS los abiertos lo son; con la mezcla habitual
   // (`solicitado` viejo + `vencido` nuevo) el que toca primero lo resuelve la administracion.
   const estado = v >= n ? ("vencido" as const) : ("solicitado" as const);
+  const aResolverPrimero = {
+    cierreId,
+    estado,
+    solicitadoAt: "2026-08-21T18:00:00.000Z",
+    jornadaCR,
+    resuelve: estado === "vencido" ? ("mensajero" as const) : ("administracion" as const),
+  };
   return {
     bloqueado,
     cierresAbiertos: n,
     cierresPorReenviar: v,
-    aResolverPrimero: {
-      cierreId,
-      estado,
-      solicitadoAt: "2026-08-21T18:00:00.000Z",
-      jornadaCR,
-      resuelve: estado === "vencido" ? "mensajero" : "administracion",
-    },
+    aResolverPrimero,
+    // El RE-SOLICITABLE mas viejo, que NO siempre es el mas viejo a secas: con `V = 0` no hay
+    // ninguno; si el mas viejo YA es re-solicitable son EL MISMO cierre; y en el CASO 6 (`N=2,
+    // V=1`: `solicitado` viejo + `vencido` nuevo) son DOS cierres distintos, que es justo el caso
+    // que este campo existe para poder nombrar.
+    aReenviarPrimero:
+      v === 0
+        ? null
+        : v >= n
+          ? aResolverPrimero
+          : {
+              cierreId: `${cierreId}-reenviable`,
+              estado: "vencido" as const,
+              solicitadoAt: "2026-08-22T18:00:00.000Z",
+              jornadaCR: jornadaCRReenviable,
+              resuelve: "mensajero" as const,
+            },
   };
 }
 
@@ -67,11 +98,12 @@ export function bloqueoPorAcumular(jornadaCR: string | null = null): BloqueoDeta
  */
 export function bloqueoConRechazado(jornadaCR: string | null = null): BloqueoDetalle {
   const base = bloqueoDe({ n: 1, v: 1, jornadaCR });
-  return {
-    ...base,
-    aResolverPrimero:
-      base.aResolverPrimero === null
-        ? null
-        : { ...base.aResolverPrimero, estado: "rechazado" },
-  };
+  const rechazado =
+    base.aResolverPrimero === null
+      ? null
+      : { ...base.aResolverPrimero, estado: "rechazado" as const };
+  // Con `n = v = 1` hay UN solo cierre: los dos campos tienen que nombrarlo con el MISMO estado.
+  // Cambiar solo `aResolverPrimero` dejaria un doble imposible —el mismo cierre `rechazado` para
+  // la cola y `vencido` para el boton— y un test que pase con el no diria nada.
+  return { ...base, aResolverPrimero: rechazado, aReenviarPrimero: rechazado };
 }

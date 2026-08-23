@@ -486,3 +486,122 @@ el resto de `tests/unit/services`.
 **Veredicto de la pasada de frontend:** T9.1–T9.6, R48 y la limpieza, cerradas y verdes; el hueco
 del caso 6 encontrado y tapado con su razón escrita; una ausencia de dato anotada y no inventada; y
 el gate completo pendiente del leader.
+
+---
+
+# impl 271 — BACKEND (pasada de datos): el re-solicitable más viejo, en el `BloqueoDetalle`
+
+**Encargo:** cerrar el hueco de datos que encontró la pasada de frontend (ver «Lo que NO se hizo»,
+punto 2, justo arriba). **Sólo el dato: ni un `.tsx` tocado.**
+
+## El hueco, con el caso delante
+
+`BloqueoDetalle` sólo llevaba `aResolverPrimero` = el cierre **abierto** más viejo. Ese no siempre es
+el que el mensajero puede tocar. En el **caso 6** de la tabla de verdad —el caso 5 que dictó el
+humano: «solicitó el primero y dejó vencer el segundo», `N=2, V=1`— el abierto más viejo es el
+`solicitado`, y ése lo resuelve **la bodega**. El que él puede reenviar es el otro. Una pantalla que
+derive el botón de `aResolverPrimero` le dice «espera a la administración» y **le esconde el botón de
+reenviar el segundo, que `solicitarCierre` sí le permite** (R16/R18). El frontend lo tapó con un CTA
+neutro; ahora el dato existe y la imprecisión se puede quitar.
+
+## El campo
+
+`lib/utils/bloqueo-cierre.ts` — `BloqueoDetalle` gana **un campo propio, separado**:
+
+    /** El cierre RE-SOLICITABLE (`vencido` o `rechazado`) MAS VIEJO, o `null` si `V = 0`. */
+    aReenviarPrimero: CierreAResolver | null;
+
+Mismo tipo que `aResolverPrimero` (`CierreAResolver`: `cierreId`, `estado`, `solicitadoAt` en ISO
+string, `jornadaCR`, `resuelve`), a propósito: la pantalla puede tratar los dos igual y no ramificar.
+
+Cuatro propiedades que **no** son opcionales y están afirmadas en test:
+
+1. **Es el más viejo DE LOS RE-SOLICITABLES**, no el más nuevo (R18: se resuelve siempre del más
+   viejo al más nuevo). Mismo `ORDER BY` que `CierreDiaRepository.findCierreResolicitableMasViejo`,
+   que es **el que la re-solicitud mueve de verdad**: nombrar uno y mover otro sería el aviso
+   desincronizado que la 271 viene a cerrar.
+2. **Su jornada la deriva `derivarJornada`** (`lib/utils/jornada-cierre.ts`), el único derivador
+   (R61). No se escribió otro: los dos campos salen del **mismo** método privado
+   `OrdenRepository.aCierreAResolver`.
+3. **`V = 0` → `null`.** Y sin segunda consulta: el caso normal (`N=1, V=0`) no paga nada.
+4. **`resuelve` es siempre `"mensajero"`** por construcción, y si el más viejo abierto ya es
+   re-solicitable (casos 5 y 7) los dos campos apuntan **al mismo cierre**.
+
+`aResolverPrimero` **no cambia**: sigue siendo el orden de la cola (R11). Son dos preguntas
+distintas y por eso son dos campos; fundirlas mentiría en el caso 6 por un lado o por el otro.
+
+## Archivos modificados
+
+| Archivo | Qué |
+|---|---|
+| `lib/utils/bloqueo-cierre.ts` | `+ aReenviarPrimero` en `BloqueoDetalle` (con su porqué) y en `SIN_BLOQUEO` |
+| `lib/repositories/OrdenRepository.ts` | `findBloqueoDetalle` lo puebla; `+ SELECT_CIERRE_A_RESOLVER`; `+ aCierreAResolver` privado (el único sitio que deriva jornada) |
+| `lib/interfaces/repositories/IOrdenRepository.ts` | doc del contrato: trae DOS cierres, no uno |
+| `tests/fixtures/bloqueo-cierre.ts` | `bloqueoDe` produce el campo coherente con N/V (y `bloqueoDe({n:2,v:1})` es ya el **caso 6** completo, con dos cierres distintos); `bloqueoConRechazado` lo sobreescribe a la vez para no fabricar un doble imposible |
+| `tests/unit/repositories/orden-repository.bloqueo.test.ts` | **una línea**: el `toEqual` exhaustivo del caso `N=0` lista el campo nuevo |
+| `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts` | **+6 casos** contra Postgres sembrado |
+
+⚠️ **Dos ficheros bajo `tests/` tocados fuera del acordado, y por qué:** el encargo pedía quedarse en
+`lib/` + el `.test.ts` de integración, pero `BloqueoDetalle` se construye **literalmente** en esos
+dos sitios y el campo es requerido: dejarlos sin tocar deja el **typecheck rojo**. Los cambios son
+mecánicos (una línea en el test; el fixture deriva el campo de `n`/`v`, sin decisión nueva).
+
+## Mapa `R<n>` → test (lo que aporta ESTA pasada)
+
+Todo en `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`, **contra Postgres real y con datos
+sembrados**: qué fila es «la más vieja re-solicitable» sale de un `WHERE` + `ORDER BY`, y los dobles
+no ven el SQL.
+
+| R | Test |
+|---|---|
+| R18 / R16 | «R18/R16 (CASO 6): `aReenviarPrimero` es el `vencido`, no el `solicitado` más viejo» |
+| R18 (orden) | «R18: el re-solicitable expuesto es el MÁS VIEJO de los re-solicitables, no el más nuevo» — 3 cierres, insertados del más nuevo al más viejo; **y** cruza con `findCierreResolicitableMasViejo` (lo que la re-solicitud mueve) |
+| R18 (V=0) | «R18: con V=0 (dos `solicitado`) NO hay nada que reenviar → `aReenviarPrimero` es null» |
+| R18 (casos 5 y 7) | «si el más viejo YA es re-solicitable, los dos campos son el MISMO cierre» |
+| R57 / R61 | «(CASO 6): la jornada de `aReenviarPrimero` sale de SUS gestiones, no de las del otro» — dos cierres con jornadas distintas (19 y 21) |
+| R58 / R61 | «(CASO 6): el re-solicitable SIN gestiones cae al mismo fallback (`created_at` CR −1)» |
+
+## Las mutaciones — el campo se mató antes de creérselo
+
+Cuatro mutaciones sobre `lib/repositories/OrdenRepository.ts`, cada una aplicada sola y revertida
+después. **Ninguna sobrevivió:**
+
+| # | Mutación | Resultado |
+|---|---|---|
+| A | `orderBy` del re-solicitable `asc` → `desc` | ROJO, **1 test** («el MÁS VIEJO de los re-solicitables»: devolvió el `vencido` del 22 en vez del `rechazado` del 20) |
+| B | `CIERRE_ESTADOS_RESOLICITABLES` → `CIERRE_ESTADOS_ABIERTOS` en su `WHERE` | ROJO, **4 tests** |
+| C | `reenviable.id === masViejo.id` → `true` (el campo copia siempre al otro) | ROJO, **4 tests** |
+| D | `esCierreResolicitable(masViejo.estado)` → `true` (**el defecto original**: tomar el abierto más viejo como si fuera reenviable) | ROJO, **4 tests** |
+
+Autocomprobación: las cuatro corridas imprimieron ids/fechas **de la base** (UUID de Postgres,
+`f6408126-…` frente a `11f982a7-…`), no de un doble; y la corrida limpia posterior vuelve a 18/18.
+
+## Gate de esta pasada — parcial y DECLARADO
+
+⚠️ **NO se corrió `./init.sh`** (lo lanza el leader; hay otro agente en `tests/` en paralelo).
+
+    pnpm run typecheck                                        -> sin una sola línea de salida
+    pnpm run lint                                             -> 99 problems (0 errors, 99 warnings)   [las 99 son previas]
+    vitest run tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts
+                                                              -> Test Files 1 passed | Tests 18 passed  (antes 12)
+    vitest run <los 12 consumidores del fixture> + orden-repository.bloqueo + utils/bloqueo-cierre
+                                                              -> Test Files 14 passed | Tests 618 passed
+    pnpm exec vitest run guard   (las guardias completas)     -> Test Files 138 passed | Tests 2054 passed
+    pnpm run test:cambiados                                   -> Test Files 401 passed | Tests 6030 passed | 26 skipped
+
+## Lo que le queda al FRONTEND (una pasada, no tocada aquí)
+
+1. **Derivar el CTA de `bloqueo.aReenviarPrimero`, no de `aResolverPrimero`.**
+   `CierreDiaModule.tsx` (~línea 404) calcula hoy
+   `reenviable = bloqueo.aResolverPrimero?.resuelve === "mensajero" ? … : null`. Con el campo nuevo
+   eso es `bloqueo.aReenviarPrimero` a secas, y `tieneVencido`/`tieneRechazado` salen de su `estado`.
+2. **El CTA neutro (`tienePorReenviarSinNombrar`) y su `confirmarReenvio` sobran**: existían sólo
+   porque el dato no estaba. Con `aReenviarPrimero` el caso 6 ya se puede nombrar con precisión —el
+   estado real y **la fecha de su jornada**—, que es lo que pidió el humano.
+3. **El aviso del caso 6 puede decir las dos cosas a la vez**: qué espera de la bodega
+   (`aResolverPrimero`) y qué puede hacer él ya mismo (`aReenviarPrimero`). Hoy sólo dice la primera.
+4. **Sigue sin hacerse «ver la app»** (T11.5). Este campo no se ha visto renderizado nunca.
+
+**Veredicto:** el dato existe, es el más viejo de los re-solicitables, comparte derivador de jornada,
+está probado contra Postgres sembrado y sobrevivió a cuatro mutaciones que lo mataron; la pantalla
+sigue sin cablearse, a propósito.
