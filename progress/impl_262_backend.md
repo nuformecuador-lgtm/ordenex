@@ -138,7 +138,7 @@ test ajenos (fixtures que ganan el campo obligatorio; **ninguna aserción cambia
 | R29 | `fecha-reparto-acompana-asignado-at.guardia` · cláusulas (d1)-(d4) **con autocomprobación sobre el SQL final** |
 | R30 | `correccion-dia-reparto-efectos.int` · el predicado del corte, en los DOS sentidos |
 | R31 | `correccion-dia-reparto-efectos.int` · la guarda de la 261 con el valor **que la base devolvió** |
-| R32 | B15 (suites de ruta y corte en verde, sin tocarlas) |
+| R32 | `correccion-dia-reparto-efectos.int` · **tres tests con ruta SEMBRADA** (2026-08-23): las filas enteras de `ruta_optimizada`/`ruta_optimizada_parada` antes y despues · los indicadores del portal por `listarMisAsignaciones` con repos REALES · el delta de `jobs` `optimizacion_ruta`. ⛔ **Hasta el 2026-08-23 esta fila decia «B15», que NO es un test**: la mutacion `rutaOptimizadaParada.deleteMany` sobrevivia a 3.302 tests |
 | R33 | La guardia (d1)+(d3): el censo del día tiene cota y **exactamente una** excepción |
 | R34-R36 | ⏳ **B14, no hecha** (depende de F3/F4). Ver «Lo que quedó a deber» |
 | R37-R45 | ⏳ **BLOQUE HISTORIAL, no hecho.** Ver «Lo que quedó a deber» |

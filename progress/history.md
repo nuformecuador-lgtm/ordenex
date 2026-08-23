@@ -4098,3 +4098,81 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
 - **La ficha se dio de alta y se cerró a la vez**, el mismo día: se implementó, se revisó y se
   mergeó sin que nadie la registrase — otra sesión la numeró 268 cuando el id más alto del registro
   era 265, y la 266 y la 267 no existían en él.
+
+## 2026-08-23 — 262 · corregir el día de reparto de una orden ya asignada
+- **Es la contrapartida explícita de la 261, no una mejora suelta.** Al cerrar la 261 la puerta por
+  la que un error de día se absorbía solo —el mensajero recogía igual—, un lote marcado para el día
+  equivocado quedó **inalcanzable para todo el mundo** hasta que llegara ese día: ni bodega, ni
+  maestro, ni admin, ni mensajero, ni la tienda. El riesgo se aceptó por escrito (261/P4, 261/R33) y
+  el daño ya había ocurrido: la guía **17496963**, el 2026-08-21, se reparó con un `UPDATE` a mano
+  contra producción **que no dejó rastro en la aplicación** — desde dentro del producto nadie sabe
+  hoy que esa fila se tocó. Esta ficha cierra la puerta y **hace visible** lo que antes se hacía por
+  fuera.
+- Requisitos cubiertos: R1..R56, en cuatro tandas (PR #463 backend, #465 modales, #472 backend del
+  historial, #474 la pantalla). Gate **completo** obligatorio y no elegible: la ficha se niega al
+  modo rápido por **cinco** vías independientes (dos migraciones, `db/schema.prisma`, y tres
+  archivos de `lib/types/`). Basta una; hay cinco.
+- **La puerta humana ensanchó la ficha a mitad de camino**, en contra de la recomendación del spec:
+  P1 («que el rastro se vea en Ver historial») y P2 («que al mensajero se le avise») se respondieron
+  **sí**, y entraron dos bloques enteros y una migración más. Queda dicho porque explica por qué una
+  ficha de una columna acabó tocando el DTO del historial y el enum de la campana.
+- **El rastro tiene tabla propia, y no es preferencia de estilo.** Meter la corrección en
+  `orden_historial_estado` habría escrito una transición falsa `por_recoger → por_recoger`: rompería
+  «Deshacer asignación» por `findOrigenesReversion`, la rechazaría el choke point por transición
+  ilegal, y **emitiría un webhook duplicado a los integradores**. La tabla nueva es append-only —el
+  modelo no tiene `updated_at` ni `deleted_at`, y se comprueba leyendo `information_schema`, no el
+  `.sql`— con RLS activa verificada en `pg_class.relrowsecurity` de la base.
+- 🔇 **El aviso se habría perdido en silencio la segunda vez, y ese es el hallazgo que decidió el
+  diseño del bloque P2.** `notificacion_dedupe_key` es UNIQUE sobre
+  `(evento, entidad_id, destinatario_rol, destinatario_usuario_id)` **con `NULLS NOT DISTINCT`**, y
+  `NotificacionRepository.crear` absorbe el `P2002` devolviendo `false`. Con la **orden** como
+  entidad, la segunda corrección de la misma orden para el mismo mensajero no produce aviso **jamás**
+  —ni siquiera después de leerse el primero—: silencio absoluto, sin error y sin fila. Y el caso que
+  la puerta humana nombró («mañana → hoy» sobre una orden que el mensajero ya lleva encima) es
+  **exactamente** el que llega segundo. La entidad del aviso pasa a ser **la fila del cambio**, así
+  que «dos correcciones, dos avisos» deja de ser una esperanza y es una propiedad estructural. El
+  doble del test **aplica la dedupe de verdad** sobre la terna del índice y tiene contraprueba: con
+  el `ordenId`, el segundo se pierde.
+- **El rastro en «Ver historial» obligó a pintar una entrada SIN transición**, y el DTO sólo sabía
+  de transiciones. `OrdenHistorialEntradaDTO` pasó a ser una **unión discriminada** que conserva el
+  nombre, y eso rompió el build a propósito en todos sus consumidores a la vez: es el mecanismo, no
+  el accidente. Quien trate una corrección como si tuviera estado de origen y destino no escribe un
+  bug, no compila. La fusión de las dos fuentes y el desempate del empate exacto viven en el
+  **servicio**; el componente no ordena nada, y hay guardia que lo afirma.
+- 👁️ **Mirar la pantalla encontró lo que ningún test podía ver: el hueco del anillo era un disco más
+  oscuro.** jsdom guarda las clases de Tailwind como cadenas y no calcula un solo color, así que los
+  ~17.900 tests del repo no pueden decir si un anillo parece un anillo. Medido en Chromium sobre la
+  superficie real del drawer y en tema oscuro: hueco `rgb(10, 21, 36)` contra panel `rgb(16, 32, 58)`
+  — o sea, lo contrario de lo que un anillo quiere decir. `bg-background` → `bg-popover`, y el
+  hallazgo se commiteó **aparte** para que no se perdiera dentro de la tanda grande.
+- ⛔ **La revisión RECHAZÓ la ficha, y el bloqueante de fondo era un fallo mudo de manual:** `R32`
+  —«la corrección no altera la ruta optimizada del mensajero ni los indicadores de su portal»— **no
+  tenía ningún test que mordiera**. Medido, no supuesto: con el borrado de las paradas de la ruta
+  inyectado dentro de la propia transacción de la corrección, `vitest related` sobre
+  `OrdenRepository` devolvió **245 archivos y 3.302 tests, cero rojos**. El escenario estaba montado
+  y nadie afirmaba la propiedad. Peor: el test de R31 llevaba escrito en su comentario «ni gestión,
+  ni historial, **ni ruta**» y contaba las dos primeras — un comentario que promete la aserción que
+  falta miente con autoridad, y justo donde alguien va a ir a buscarla.
+- **Y la causa raíz es de contabilidad: `B15` no es un test.** El mapa colgaba `R32` de «correr las
+  suites de ruta y de corte sin tocarlas» más «ver la app». Correr suites ajenas demuestra que lo
+  que ya se afirmaba **sigue** afirmándose; no puede demostrar una propiedad que **nadie** afirma.
+  Se cerró el 2026-08-23 con tres tests contra Postgres real y con **ruta sembrada que perder** —con
+  la tabla vacía todo conteo da cero y sigue dando cero—: las filas enteras de `ruta_optimizada` y
+  `ruta_optimizada_parada`, los indicadores del portal por `listarMisAsignaciones` con los
+  repositorios reales, y el delta de `jobs` de reoptimización. Las dos mutaciones matan con nombre.
+  `B15` conserva su valor de no-regresión (27 archivos, 549 tests, escritos por fin uno a uno) y
+  **deja de figurar como el test de `R32`** en las tres fuentes que lo decían.
+- 📋 **`tasks.md` estaba en 1 de 46 marcadas**, que es el estado en el que «casi todo hecho» y «casi
+  nada hecho» se leen igual — y dentro había trabajo real pendiente, no sólo casillas. Hoy está en
+  **42 de 46**, marcado leyendo las cuatro bitácoras, y las cuatro vivas llevan su motivo escrito en
+  una línea. Ninguna de las cuatro es de implementación.
+- ⚠️ **Deuda viva, dicha y no disimulada: `F6` («ver la app») NO se ha ejecutado.** Necesita un
+  preview desplegado y cuentas de los tres roles, que ningún subagente puede montar. Lo que se miró
+  con el navegador fue una página de fixtures en local: acota el estilo y **no la sustituye** — no
+  demuestra que la Server Action autorice, ni que el aviso llegue a la campana, ni que la entrada
+  salga en su sitio cronológico con datos reales. En este repo mirar la app encontró **siete textos
+  rotos** que doce mil tests daban por buenos. La deuda está anotada junto al código
+  (`@pendiente-262-f6`) y **bajo guardia**: retirar la anotación pone roja una comprobación. Que esté
+  vigilada está bien hecho; **no es haberla hecho**. Con ella siguen vivas `B0.2`/`C3` (re-medir `M1`
+  contra producción: la foto del 2026-08-22 04:27 CR caducó) y `C7` (`P4` y `P5` sin llevar a la
+  puerta humana).
