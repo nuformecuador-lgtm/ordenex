@@ -372,6 +372,21 @@ describe("el camino real esta CABLEADO en el composition root, no en el default"
     );
   });
 
+  it("app/api/cron/corte-diario/route.ts inyecta el notificador real", () => {
+    // ⚠️ ESTA GUARDIA NACE DE UN FALLO REAL, no de la simetria. `buildService()` de esa ruta
+    // pasaba CINCO argumentos y el notificador es el SEPTIMO (detras del logger), asi que el
+    // corte corria con su no-op: el aviso de «tu cierre del dia vencio» —el que mas se emite y el
+    // unico que se dispara solo cada noche— no se habria emitido JAMAS en produccion, y ninguna
+    // de las 18.000 pruebas se habria puesto roja. El censo de abajo no lo veia: comprueba que el
+    // DEFAULT del service sea el no-op, y eso seguia siendo cierto.
+    //
+    // Se afirma la LINEA DEL CABLEADO y no solo el import, porque importar sin pasar es
+    // exactamente el estado que produjo el fallo.
+    const fuente = leer("app", "api", "cron", "corte-diario", "route.ts");
+    expect(fuente).toContain("notificarCierreDiaVencidoReal");
+    expect(fuente).toMatch(/new CorteDiarioService\([\s\S]*notificarCierreDiaVencidoReal,[\s\S]*\)/);
+  });
+
   it("lib/actions/cierres-admin.ts inyecta el notificador real", () => {
     // FEATURE 271 (T6.6, R42): el aviso del RECHAZO. Sin esta linea el service se construye con
     // su default NO-OP y el rechazo sigue siendo mudo en produccion con toda la suite en verde —
