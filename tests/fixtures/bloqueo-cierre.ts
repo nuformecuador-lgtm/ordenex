@@ -111,6 +111,51 @@ export function bloqueoTodosPorEnviar(
   };
 }
 
+/**
+ * MIXTO CON EL ABIERTO MAS VIEJO EN EL TEJADO DEL MENSAJERO (`V >= 1`, `V < N`, y el mas viejo es
+ * `rechazado`). Es el estado que se midio en el navegador el 2026-08-23: el mensajero acumula dos
+ * `solicitado` y **el admin rechaza el PRIMERO**, que `rechazarCierre` permite porque no exige que
+ * sea el mas viejo.
+ *
+ * ⚠️ LOS DOS CAMPOS SON EL MISMO OBJETO, Y ESO NO ES UN ATAJO DEL FIXTURE: si el abierto mas viejo
+ * es re-solicitable, ES tambien el re-solicitable mas viejo —subconjunto, mismo orden— y
+ * `OrdenRepository.findBloqueoDetalle` **reusa literalmente la fila** en vez de volver a la base.
+ * Darles dos cierres distintos aqui fabricaria un estado que la base no produce.
+ *
+ * `bloqueado` sale de la regla, nunca a mano; y `v < n` se EXIGE: con `v === n` este no es el
+ * fixture (ese es `bloqueoTodosPorEnviar`).
+ */
+export function bloqueoMixtoElMasViejoEsSuyo(opciones?: {
+  /** N — cierres abiertos. Por defecto 2. */
+  n?: number;
+  /** V — re-solicitables. Por defecto 1. DEBE ser `>= 1` y `< n`. */
+  v?: number;
+  /** Jornada del mas viejo (que aqui es el SUYO), o `null` si no es fiable (R60). */
+  jornadaCR?: string | null;
+}): BloqueoDetalle {
+  const { n = 2, v = 1, jornadaCR = null } = opciones ?? {};
+  if (v < 1 || v >= n) {
+    throw new Error(
+      `bloqueoMixtoElMasViejoEsSuyo exige 1 <= v < n (recibido n=${n}, v=${v}): con v === n el ` +
+        "mas viejo lo es de TODOS y el estado es otro (bloqueoTodosPorEnviar).",
+    );
+  }
+  const rechazadoMasViejo = {
+    cierreId: "c-rechazado-el-mas-viejo",
+    estado: "rechazado" as const,
+    solicitadoAt: "2026-08-20T18:00:00.000Z",
+    jornadaCR,
+    resuelve: "mensajero" as const,
+  };
+  return {
+    bloqueado: estaBloqueadoPorCierres({ n, v }),
+    cierresAbiertos: n,
+    cierresPorReenviar: v,
+    aResolverPrimero: rechazadoMasViejo,
+    aReenviarPrimero: rechazadoMasViejo,
+  };
+}
+
 /** El caso 5 de la tabla de verdad: un solo cierre y esta `vencido` (N=1, V=1). */
 export function bloqueoConVencido(jornadaCR: string | null = null): BloqueoDetalle {
   return bloqueoDe({ n: 1, v: 1, jornadaCR });

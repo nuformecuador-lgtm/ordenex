@@ -777,8 +777,10 @@ abierto más viejo no es re-solicitable**. Ese supuesto **NO se cumple siempre**
   y justo debajo, en la misma pantalla, el botón **«Solicitar aprobación del cierre rechazado»**:
   le manda a esperar por el mismo cierre que le ofrece reenviar. La fecha nombra el suyo.
 - **Se detecta sin dato nuevo** (`aResolverPrimero.resuelve === "mensajero"` con `v < n`), pero
-  **el texto de ese caso no está aprobado y aquí no se ha inventado ninguno**: queda escrito como
-  deuda declarada en el código, en la rama 3-b, y **consultado con el humano**.
+  **el texto de ese caso no estaba aprobado y no se inventó ninguno**: se consultó con el humano.
+
+> ✅ **DEUDA CERRADA el 2026-08-23**, con el texto que el humano aprobó después de leer esto. La
+> implementa la pasada siguiente («la cuarta rama»), al final de este archivo.
 
 ## FIX 3 — la contradicción del vacío de Recolección
 
@@ -857,6 +859,128 @@ Autocomprobación: base 277/277 verde antes, 277/277 verde después, y los dos s
     pnpm run test:cambiados                                -> Test Files 404 passed | Tests 6049 passed | 26 skipped
 
 **Veredicto:** las tres correcciones aprobadas, cerradas y vistas en pantalla en los cuatro
-portales; siete mutaciones muertas; un cuarto defecto de la misma familia —la rama mixta con el más
-viejo re-solicitable— **encontrado, medido en el navegador y NO parcheado a ojo**: espera decisión
-del humano.
+portales; siete mutaciones muertas; y un cuarto defecto de la misma familia —la rama mixta con el
+más viejo re-solicitable— **encontrado, medido en el navegador y NO parcheado a ojo**. El humano
+aprobó su texto y lo cierra la pasada siguiente.
+
+---
+
+# impl 271 — FRONTEND (la cuarta rama): cuando el cierre más viejo es SUYO
+
+**Encargo:** implementar el texto que el humano aprobó para el defecto que la pasada anterior dejó
+**declarado y sin parchear**, y cerrar esa deuda. Misma capa: el formateador puro y sus tests.
+
+## El caso, y por qué es una rama y no un retoque
+
+Rama mixta (`n >= 2 && v >= 1 && v < n`) **con el abierto más viejo re-solicitable**, o sea
+`aResolverPrimero.resuelve === "mensajero"`. Se llega acumulando dos `solicitado` y **rechazando el
+primero**: `CierresAdminService.rechazarCierre` recibe un `cierreId` cualquiera y no exige que sea
+el más viejo. Ahí las dos mitades del texto anterior eran falsas a la vez: fechaba con el cierre del
+propio mensajero y le mandaba a esperar por él.
+
+**Texto aprobado, implementado tal cual:**
+
+> Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes
+> entregar, cobrar ni recibir trabajo nuevo. **Envía el que falta, el del 20 de agosto, y después
+> espera a que la bodega apruebe el resto.**
+
+Con sus tres variantes, todas afirmadas con literal a mano:
+
+| Estado | Frase de salida |
+|---|---|
+| `V = 1`, jornada fiable | `Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto.` |
+| `V > 1` (`N=3, V=2`) | `Envía los que faltan, empezando por el del 20 de agosto, y después espera a que la bodega apruebe el resto.` |
+| sin jornada fiable (R60) | `Envía el que falta y después espera a que la bodega apruebe el resto.` — la aposición desaparece **entera, sin coma huérfana** |
+
+El puntero de los tres portales con CTA se comporta igual que en el caso 6: `Ve a «Cierre del día».`
+Y la **otra** rama mixta —el más viejo es de la bodega— **no se tocó**: la bifurcación es por
+`aResolverPrimero.resuelve` y hay un caso que afirma su literal antiguo, byte a byte, para que
+colapsar las dos ramas ponga rojo.
+
+## De dónde sale la fecha, y por qué eso NO se puede afirmar por la salida
+
+La fecha sale de **`aReenviarPrimero`** (el que él tiene que enviar), no de la cola. Pero en esta
+rama **los dos campos son el MISMO cierre**, y no por casualidad: si el abierto más viejo es
+re-solicitable, es también el re-solicitable más viejo —subconjunto, mismo orden— y
+`OrdenRepository.findBloqueoDetalle` **reusa literalmente la fila** en vez de volver a la base
+(`reenviable = masViejo`).
+
+Consecuencia, dicha sin adornos: **leer uno u otro produce hoy exactamente el mismo texto**, así que
+ninguna aserción de salida puede distinguirlos y la mutación «lee la cola» es, en la conducta, un
+**mutante equivalente**. Fabricar un doble con dos cierres distintos para poder matarla sería un
+test verde contra un estado que la base no produce, que aquí no vale nada.
+
+Lo que sí se puede fijar es la FUENTE, y eso hace una **guardia de árbol** en
+`bloqueo-textos.test.ts` (con su anti-vacuidad: el archivo se leyó de verdad y contiene la rama).
+Importa porque la frase responde «qué envío yo», no «qué va primero en la cola»: si el repositorio
+dejara de reusar la fila, o alguien copiara esta rama a otro sitio donde los dos campos difieren,
+leer la cola volvería a fechar el cierre equivocado.
+
+## Archivos modificados
+
+| Archivo | Qué |
+|---|---|
+| `lib/constants/bloqueo-mensajero.ts` | rama **3-b** (más viejo suyo) con su texto y su plural; `aposicionDeJornada` se parte en `fechaDeJornada(cierre)` + la aposición de la cola, para que las dos fechas salgan de **una sola** función; la deuda declarada **se va** y en su sitio queda el porqué |
+| `tests/fixtures/bloqueo-cierre.ts` | `+ bloqueoMixtoElMasViejoEsSuyo({ n, v, jornadaCR })` — los dos campos apuntan al MISMO objeto (es lo que hace el repositorio) y **exige `1 <= v < n`**: con `v === n` el fixture es otro |
+| `tests/unit/notificaciones/bloqueo-textos.test.ts` | 3-quinquies (singular, sin jornada, plural), el portal con CTA, la contraprueba de la otra rama mixta y la **guardia de árbol** de la fuente de la fecha |
+| `tests/components/{Reparto,Recoger,Recoleccion,CierreDia}Module.test.tsx` | el caso nuevo en los cuatro portales; en «Cierre del día», además, que el botón del rechazado está debajo |
+
+## Las mutaciones — seis, de una en una, ninguna sobrevivió
+
+Base 289/289 verde antes y después; sha256 del formateador idéntico al original.
+
+| # | Mutación | Resultado |
+|---|---|---|
+| A | la rama nueva **desaparece** y el estado cae en el texto mixto viejo (**el defecto original**) | ROJO, **9 tests** (los 4 portales + los 4 del contrato + la guardia) |
+| B | la fecha se lee de `aResolverPrimero` (la cola) en vez de `aReenviarPrimero` | ROJO, **1 test** — y **sólo** la guardia de árbol: por la salida es un mutante equivalente, ver arriba |
+| C | la aposición se emite siempre, también sin jornada fiable (rompe **R60**) | ROJO, **1 test** |
+| D | el plural de la rama nueva vuelve al singular fijo | ROJO, **1 test** |
+| E | la espera vuelve a nombrar «el más antiguo» en vez de «el resto» | ROJO, **8 tests** |
+| F | la rama nueva se traga **también** el caso 6 (condición siempre cierta) | ROJO, **12 tests** — incluidos los dos del caso 6 que vigilan la fecha de la bodega |
+
+## Ver la app — el mismo estado que se midió, en los cuatro portales
+
+Sembrado en `cierre_dia`: `rechazado` (jornada **20**, el más viejo) + `solicitado` (jornada 21).
+Hash bcrypt comprobado antes; `seed-usuarios-qa.ts` **no** se corrió; dev a fichero; `innerText`.
+
+- **Entregas / Por recoger / Recolección** (idéntico en los tres):
+  «Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no
+  puedes entregar, cobrar ni recibir trabajo nuevo. **Envía el que falta, el del 20 de agosto, y
+  después espera a que la bodega apruebe el resto.** Ve a «Cierre del día».»
+- **Cierre del día**: el mismo sin puntero, con el botón «Solicitar aprobación del cierre
+  rechazado» debajo — el mismo cierre que la frase nombra, que antes era la contradicción.
+- **Contraprueba en el navegador**: resembrado el caso 6 (más viejo `solicitado`), los cuatro
+  portales vuelven a decir «… y espera a que la bodega apruebe el más antiguo, el del 21 de
+  agosto», sin un byte de diferencia.
+
+Base restaurada y releída al terminar: **6 `aprobado`, 0 abiertos**.
+
+## Lo que TODAVÍA no se ha visto en pantalla
+
+Con esta pasada, de la tabla de verdad se han visto renderizados los casos **1** (sin aviso), **4**,
+**5**, **6**, **6 con el más viejo suyo** y **7**. Queda **sin ver**:
+
+1. **Casos 2 y 3** (`N=1, V=0`, un `solicitado` a secas). Es un estado **LIBRE**: lo que habría que
+   comprobar es que **no** sale aviso. Se vio el vacío absoluto (`N=0`), no éste.
+2. **Todas las variantes «sin jornada fiable» (R60).** En local un cierre sin gestiones siempre
+   deriva jornada de `created_at − 1 día`, así que `jornadaCR = null` exige gestiones repartidas en
+   dos días CR distintos: hay que sembrar órdenes y gestiones, no sólo cierres. Están cubiertas por
+   test, no por pantalla.
+3. **Los plurales** (`V ≥ 2` con `V < N`, es decir `N = 3`), en las dos ramas mixtas. Alcanzables,
+   probados con literal a mano, **no vistos**.
+4. Los **dos avisos a la bodega** (§10.2, 4 y 5) no son pantalla: son notificaciones.
+
+## Gate de esta pasada — parcial y DECLARADO
+
+⚠️ **NO se corrió `./init.sh`**: lo lanza el leader.
+
+    pnpm run typecheck                                     -> sin una sola linea de salida
+    pnpm run lint                                          -> 99 problems (0 errors, 99 warnings)  [las 99 son previas]
+    vitest run tests/components tests/unit/notificaciones tests/unit/guards
+                                                           -> Test Files 300 passed | Tests 4219 passed | 26 skipped
+    pnpm run test:cambiados                                -> Test Files 404 passed | Tests 6061 passed | 26 skipped
+
+**Veredicto:** la cuarta rama implementada con el texto aprobado, sus tres variantes y su plural;
+seis mutaciones muertas —incluido el defecto original— y la única que la conducta no puede matar,
+dicha como tal y fijada por guardia de árbol; vista en los cuatro portales con el estado real y con
+contraprueba del caso 6; deuda cerrada.

@@ -14,6 +14,7 @@ import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 import {
   bloqueoConVencido,
   bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
   bloqueoPorAcumular,
   bloqueoTodosPorEnviar,
 } from "@/tests/fixtures/bloqueo-cierre";
@@ -665,6 +666,22 @@ describe("RecoleccionModule — bloqueado por cierres sin resolver (R9/R23 -> 27
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía", () => {
+    // ⚠️ LA CUARTA RAMA (aprobada el 2026-08-23, y el estado se midió en el navegador): el admin
+    // rechazó el PRIMERO de sus dos `solicitado`, así que el cierre más viejo es SUYO. Antes decía
+    // «espera a que la bodega apruebe el más antiguo» fechando su propio cierre — le mandaba a
+    // esperar por el mismo que el botón le ofrece reenviar. Ahora la fecha nombra el que ÉL envía y
+    // la espera se corre al RESTO.
+    renderModule({
+      porRecolectar: [makeOrden()],
+      bloqueo: bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: "2026-08-20" }),
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día».",
     );
   });
 

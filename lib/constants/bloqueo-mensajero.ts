@@ -32,7 +32,7 @@
  * NO IMPORTA PRISMA NI EL BORDE: es un modulo puro sobre `BloqueoDetalle` (`lib/utils/bloqueo-cierre.ts`).
  */
 
-import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+import type { BloqueoDetalle, CierreAResolver } from "@/lib/utils/bloqueo-cierre";
 import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
 
 /**
@@ -117,17 +117,52 @@ export function avisoBloqueo(d: BloqueoDetalle, opciones: OpcionesAvisoBloqueo):
       return unir(cuantos, NO_PUEDES, salida, cta);
     }
 
-    // 3-b — MIXTO: quedan `solicitado` (los resuelve la bodega) y algo suyo por enviar.
-    //
-    // ⚠️ DEUDA DECLARADA, NO OLVIDO (2026-08-23): «espera a que la bodega apruebe el más antiguo»
-    // solo es cierto si el abierto MAS VIEJO no es re-solicitable, y ese estado —el mas viejo
-    // `rechazado` con un `solicitado` mas nuevo, `N=2, V=1`— SI ES ALCANZABLE: `rechazarCierre`
-    // recibe un `cierreId` cualquiera y no exige que sea el mas viejo, asi que un admin que
-    // rechace el primero de dos `solicitado` lo produce. Ahi la frase manda a esperar por un
-    // cierre que ya es suyo. Se detecta sin dato nuevo —`d.aResolverPrimero.resuelve ===
-    // "mensajero"` con `v < n`—, pero el texto de ese caso NO ESTA APROBADO y aqui no se inventa
-    // ninguno: queda consultado con el humano. Lo unico que se corrigio es el plural.
+    // La primera frase es la MISMA en las dos ramas mixtas: cuantos arrastra y cuantos son suyos.
     const cuantos = `Tienes ${n} cierres sin resolver y ${v} de ${v === 1 ? "ellos no se ha" : "ellos no se han"} enviado a aprobación.`;
+
+    // 3-b — MIXTO **CON EL ABIERTO MAS VIEJO EN SU TEJADO** (`aResolverPrimero.resuelve ===
+    // "mensajero"`). Texto aprobado por el humano el 2026-08-23, despues de medir el estado.
+    //
+    // ⚠️ EL ESTADO Y COMO SE LLEGA: el mensajero acumula dos `solicitado` (el 2.º se crea
+    // legitimamente con `N=1, V=0`) y **el admin rechaza EL PRIMERO**. `rechazarCierre` recibe un
+    // `cierreId` cualquiera y NO exige que sea el mas viejo, asi que no hay nada que lo impida.
+    // Medido en el navegador el 2026-08-23.
+    //
+    // POR QUE NO VALE EL TEXTO DE ABAJO AQUI: decia «espera a que la bodega apruebe el más
+    // antiguo» y el mas antiguo es SUYO —la bodega no lo va a aprobar sola—, ademas de fechar con
+    // el cierre equivocado. Los dos cambios de esta rama:
+    //   1. la fecha nombra **el que EL tiene que enviar** (`aReenviarPrimero`), que es la accion
+    //      que le toca, y no la cola;
+    //   2. la espera se corre al RESTO, que es lo unico que la bodega tiene pendiente.
+    //
+    // ⚠️ AQUI LOS DOS CAMPOS SON EL MISMO CIERRE, y por eso la fuente de la fecha se lee de
+    // `aReenviarPrimero` **a proposito y no por casualidad**: si el abierto mas viejo es
+    // re-solicitable, ES el re-solicitable mas viejo (los re-solicitables son un SUBCONJUNTO de
+    // los abiertos y el orden es el mismo; `OrdenRepository.findBloqueoDetalle` reusa literalmente
+    // la fila). Leer `aResolverPrimero` daria HOY el mismo texto, asi que ninguna asercion de
+    // salida puede distinguirlos: lo que fija la fuente es la guardia de arbol de
+    // `bloqueo-textos.test.ts`. Se escribe asi porque la pregunta que responde la frase es «que
+    // envio yo», no «que va primero en la cola».
+    if (d.aResolverPrimero?.resuelve === "mensajero") {
+      const dia = fechaDeJornada(d.aReenviarPrimero);
+      const enviaSinFecha = v === 1 ? "Envía el que falta" : "Envía los que faltan";
+      // R60: sin jornada fiable la aposicion desaparece ENTERA, sin coma huerfana, y la frase se
+      // lee igual de bien («Envía el que falta y después espera ...»).
+      const envia =
+        dia === null
+          ? enviaSinFecha
+          : `${enviaSinFecha}, ${v === 1 ? "el del" : "empezando por el del"} ${dia},`;
+      return unir(
+        cuantos,
+        NO_PUEDES,
+        `${envia} y después espera a que la bodega apruebe el resto.`,
+        cta,
+      );
+    }
+
+    // 3-c — MIXTO con el abierto mas viejo EN LA BODEGA (un `solicitado`): el CASO 6 de la tabla
+    // de verdad. Aqui «espera a que la bodega apruebe el más antiguo» SI es cierto y la aposicion
+    // cuelga de el, que es el cierre que la bodega tiene. Texto verificado byte a byte: no se toca.
     const envia = v === 1 ? "Envía el que falta" : "Envía los que faltan";
     const salida = `${envia} y espera a que la bodega apruebe el más antiguo${aposicion}.`;
     return unir(cuantos, NO_PUEDES, salida, cta);
@@ -154,11 +189,21 @@ export function avisoBloqueo(d: BloqueoDetalle, opciones: OpcionesAvisoBloqueo):
  * fecha: se omite, y la frase sigue siendo correcta y accionable sin ella.
  */
 function aposicionDeJornada(d: BloqueoDetalle): string {
-  const jornada = d.aResolverPrimero?.jornadaCR ?? null;
-  if (jornada === null) return "";
+  const dia = fechaDeJornada(d.aResolverPrimero);
+  return dia === null ? "" : `, el del ${dia}`;
+}
+
+/**
+ * `21 de agosto`, o `null` si ESE cierre no tiene jornada fiable (R60). UNA sola funcion para los
+ * DOS cierres del detalle: la cola (`aResolverPrimero`) y el que el mensajero reenvia
+ * (`aReenviarPrimero`). Dos lecturas distintas de la misma fecha es como se desincronizan.
+ */
+function fechaDeJornada(cierre: CierreAResolver | null): string | null {
+  const jornada = cierre?.jornadaCR ?? null;
+  if (jornada === null) return null;
   const legible = fechaLegible(jornada);
   // `fechaLegible` devuelve la entrada tal cual si no la reconoce: en ese caso tampoco se nombra.
-  return legible === jornada ? "" : `, el del ${legible}`;
+  return legible === jornada ? null : legible;
 }
 
 function unir(...partes: (string | null)[]): string {

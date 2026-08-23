@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, it, expect } from "vitest";
 
 import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
@@ -6,7 +9,11 @@ import {
   textoCierreVencidoMensajero,
   textoMensajeroBloqueadoBodega,
 } from "@/lib/notificaciones/emitir";
-import { bloqueoDe, bloqueoTodosPorEnviar } from "@/tests/fixtures/bloqueo-cierre";
+import {
+  bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
+  bloqueoTodosPorEnviar,
+} from "@/tests/fixtures/bloqueo-cierre";
 
 /**
  * FEATURE 271 (§10.2, Q6 CERRADA POR EL HUMANO EL 2026-08-23) — LOS CINCO LITERALES, QUE SON
@@ -29,6 +36,8 @@ import { bloqueoDe, bloqueoTodosPorEnviar } from "@/tests/fixtures/bloqueo-cierr
  */
 
 const JORNADA = "2026-08-21";
+/** La jornada del cierre RE-SOLICITABLE del estado medido: el mas viejo, y es suyo. */
+const JORNADA_SUYA = "2026-08-20";
 
 /**
  * `V = N` — TODOS los pendientes en el tejado del mensajero, con DOS `rechazado`. Vive en el
@@ -108,6 +117,59 @@ describe("271/§10.2 · los tres avisos al MENSAJERO (contrato Q6)", () => {
     );
   });
 
+  // ===============================================================================================
+  // 3-quinquies — LA CUARTA RAMA: MIXTO CON EL ABIERTO MAS VIEJO EN SU TEJADO.
+  // ===============================================================================================
+  //
+  // El estado: el mensajero acumula dos `solicitado` y el ADMIN RECHAZA EL PRIMERO (`rechazarCierre`
+  // no exige que sea el mas viejo). Medido en el navegador el 2026-08-23; el texto lo aprobo el
+  // humano ese mismo dia. Hasta entonces caia en el texto de 3-quater y decia «espera a que la
+  // bodega apruebe el más antiguo» **fechando el cierre del propio mensajero**: le mandaba a
+  // esperar por el mismo cierre que el boton de abajo le ofrecia reenviar.
+
+  it("3-quinquies · el más viejo es SUYO (N=2, V=1): la fecha es la del que ÉL envía", () => {
+    const texto = avisoBloqueo(bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: JORNADA_SUYA }), {
+      conCta: false,
+    });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto.",
+    );
+  });
+
+  it("3-quinquies-bis · SIN jornada fiable: la aposición desaparece ENTERA, sin coma huérfana", () => {
+    const texto = avisoBloqueo(bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: null }), {
+      conCta: false,
+    });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y después espera a que la bodega apruebe el resto.",
+    );
+    // R60 en su forma mas barata de romper: una coma suelta donde estaba la fecha.
+    expect(texto).not.toContain("falta,");
+  });
+
+  it("3-quinquies-ter · con DOS suyos (N=3, V=2): «los que faltan, empezando por el del …»", () => {
+    const texto = avisoBloqueo(
+      bloqueoMixtoElMasViejoEsSuyo({ n: 3, v: 2, jornadaCR: JORNADA_SUYA }),
+      { conCta: false },
+    );
+
+    expect(texto).toBe(
+      "Tienes 3 cierres sin resolver y 2 de ellos no se han enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía los que faltan, empezando por el del 20 de agosto, y después espera a que la bodega apruebe el resto.",
+    );
+  });
+
+  it("3-quinquies · la OTRA rama mixta (el más viejo es de la bodega) NO cambió", () => {
+    // La contraprueba de la bifurcación: mismo N y V, y el texto sigue siendo el aprobado antes.
+    // Si alguien colapsa las dos ramas en una, este caso o el de arriba se cae.
+    const texto = avisoBloqueo(bloqueoDe({ n: 2, v: 1, jornadaCR: JORNADA }), { conCta: false });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto.",
+    );
+  });
+
   it("un mensajero LIBRE no tiene aviso: cadena vacía, no un texto tranquilizador", () => {
     expect(avisoBloqueo(bloqueoDe({ n: 1, v: 0 }), { conCta: false })).toBe("");
     expect(avisoBloqueo(bloqueoDe({ n: 0, v: 0 }), { conCta: true })).toBe("");
@@ -140,6 +202,16 @@ describe("271/R52 · la ÚNICA diferencia entre portales es el llamado a la acci
 
     expect(texto).toBe(
       "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("caso 3 con el más viejo SUYO · el mismo puntero sin objeto, sobre el texto nuevo", () => {
+    const texto = avisoBloqueo(bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: JORNADA_SUYA }), {
+      conCta: true,
+    });
+
+    expect(texto).toBe(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día».",
     );
   });
 
@@ -200,6 +272,7 @@ describe("271/R45/R46 · lo que los cinco NO dicen", () => {
     avisoBloqueo(bloqueoDe({ n: 1, v: 1, jornadaCR: JORNADA }), { conCta: true }),
     avisoBloqueo(bloqueoDe({ n: 2, v: 1, jornadaCR: JORNADA }), { conCta: true }),
     avisoBloqueo(bloqueoTodosSuyos(2, JORNADA), { conCta: true }),
+    avisoBloqueo(bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: JORNADA_SUYA }), { conCta: true }),
     textoCierreVencidoMensajero(JORNADA),
     TEXTO_CIERRE_VENCIDO_BODEGA,
     textoMensajeroBloqueadoBodega(JORNADA),
@@ -227,5 +300,43 @@ describe("271/R45/R46 · lo que los cinco NO dicen", () => {
     for (const t of todos) {
       expect(t).not.toMatch(/\bSLA\b|\bN\/V\b|cierre_dia|solicitado|vencido|rechazado/);
     }
+  });
+});
+
+describe("271 · guardia de árbol: de DÓNDE sale la fecha de la rama nueva", () => {
+  /**
+   * ⚠️ POR QUE UNA GUARDIA DE ARBOL Y NO UNA ASERCION DE SALIDA, que es lo que este repo prefiere.
+   *
+   * En la rama «el abierto mas viejo es SUYO», `aResolverPrimero` y `aReenviarPrimero` son EL MISMO
+   * CIERRE, y no por casualidad: si el mas viejo de los abiertos es re-solicitable, es tambien el
+   * mas viejo de los re-solicitables —subconjunto, mismo orden— y `findBloqueoDetalle` reusa
+   * literalmente la fila (afirmado contra Postgres en `cierre-bloqueo-nv-sql-real.test.ts`: «si el
+   * más viejo YA es re-solicitable, los dos campos son el MISMO cierre»).
+   *
+   * Consecuencia medible: leer uno u otro produce HOY el mismo texto, asi que **ninguna asercion
+   * sobre la salida puede distinguirlos** —una mutacion que cambie la fuente sobrevive en verde—.
+   * Fabricar un doble con dos cierres distintos para «poder» matarla seria un test verde contra un
+   * estado que la base no produce, que en este repo no vale nada.
+   *
+   * Lo que SI se puede fijar es la FUENTE, y eso hace esta guardia. Importa porque la frase
+   * responde «que envio yo», no «que va primero en la cola»: si mañana el repositorio dejara de
+   * reusar la fila —o alguien copiara esta rama a otra donde los dos campos difieren—, leer la cola
+   * volveria a fechar el cierre equivocado, que es el defecto que esta rama vino a cerrar.
+   */
+  const RUTA = join(process.cwd(), "lib/constants/bloqueo-mensajero.ts");
+  const FUENTE = readFileSync(RUTA, "utf8");
+
+  it("anti-vacuidad: el archivo se leyó de verdad y trae la rama que se está vigilando", () => {
+    expect(FUENTE.length).toBeGreaterThan(2000);
+    expect(FUENTE).toContain('d.aResolverPrimero?.resuelve === "mensajero"');
+  });
+
+  it("la fecha de esa rama sale de `aReenviarPrimero`, NO de la cola", () => {
+    expect(FUENTE).toContain("const dia = fechaDeJornada(d.aReenviarPrimero);");
+  });
+
+  it("y la rama de la BODEGA sigue colgando su aposición de `aResolverPrimero`", () => {
+    // La otra mitad: las dos fuentes conviven a propósito, una por rama.
+    expect(FUENTE).toContain("const dia = fechaDeJornada(d.aResolverPrimero);");
   });
 });

@@ -28,6 +28,7 @@ import {
   bloqueoConRechazado,
   bloqueoConVencido,
   bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
   bloqueoPorAcumular,
   bloqueoTodosPorEnviar,
 } from "@/tests/fixtures/bloqueo-cierre";
@@ -619,6 +620,24 @@ describe("CierreDiaModule", () => {
     // Aquí NUNCA hay puntero (R52): el mensajero ya está en esta pantalla. El cambio del
     // 2026-08-23 —el puntero de este caso pierde el objeto— sólo afecta a los otros tres portales.
     expect(screen.getByRole("alert")).not.toHaveTextContent(/Ve a «Cierre del día»/);
+  });
+
+  it("271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía", () => {
+    // ⚠️ LA CUARTA RAMA (aprobada el 2026-08-23, y el estado se midió en el navegador): el admin
+    // rechazó el PRIMERO de sus dos `solicitado`, así que el cierre más viejo es SUYO. Antes decía
+    // «espera a que la bodega apruebe el más antiguo» fechando su propio cierre — le mandaba a
+    // esperar por el mismo que el botón le ofrece reenviar. Ahora la fecha nombra el que ÉL envía y
+    // la espera se corre al RESTO.
+    renderModule({ bloqueo: bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: "2026-08-20" }) });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto.",
+    );
+    // Aquí nunca hay puntero (R52) y el botón del rechazado está debajo, en la misma pantalla.
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/Ve a «Cierre del día»/);
+    expect(
+      screen.getByRole("button", { name: "Solicitar aprobación del cierre rechazado" }),
+    ).toBeInTheDocument();
   });
 
   it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
