@@ -54,6 +54,13 @@ import { desglosarIngresoBodegaPorOrigen } from "@/lib/utils/desglose-rechazos-s
 import { ESTATUS_DEVOLUCION_POR_CONFIRMAR } from "@/lib/types/gestion-destino";
 // FEATURE 271 (R48/R10): la regla del bloqueo se CONSULTA, no se re-deriva aqui.
 import { SIN_CIERRES_ABIERTOS, estaBloqueadoPorCierres } from "@/lib/utils/bloqueo-cierre";
+// FEATURE 271 (T6.6, R42/R47): el aviso de «quedaste BLOQUEADO» que emite el RECHAZO. Mismo
+// mecanismo que sus hermanos de la 146: notificador INYECTADO con default no-op + best-effort.
+import {
+  emitirBestEffort,
+  notificadorNoOp,
+  type MensajeroBloqueadoNotificador,
+} from "@/lib/notificaciones/notificadores";
 
 // Roles autorizados en el modulo (R1): acceso total (maestro/admin -> bodega central) y el
 // adminSatelite (su bodega). Cualquier otro -> forbidden.
@@ -141,6 +148,10 @@ type OrdenRepo = Pick<
   // FEATURE 271 (T7.1, R48): el estado de bloqueo del mensajero viaja en la fila del cierre.
   // Se pide el CONTADOR en lote y no el detalle por fila: son decenas de filas por pagina.
   | "contarCierresAbiertosPorMensajero"
+  // FEATURE 271 (T6.6, R42/R43): el DETALLE de UN mensajero —N, V y cual toca primero— para el
+  // aviso del RECHAZO. Es el detalle y no el contador porque el texto tiene que CONTAR: un
+  // «estas bloqueado» a secas no cumple R43. Se pide UNA vez, por rechazo, fuera de toda tx.
+  | "findBloqueoDetalle"
 >;
 /**
  * Feature 172 (T C.2) — de todo el repositorio de la liquidacion, este servicio consume DOS
@@ -176,7 +187,70 @@ export class CierresAdminService implements ICierresAdminService {
     // fuera opcional, olvidar cablearla dejaria todos los pendientes en silencio a `null` —una
     // deuda invisible— en vez de romper el build.
     private readonly liquidacionRepo: LiquidacionLecturaRepo,
+    /**
+     * FEATURE 271 (T6.6, R42/R47) — notificador de «quedaste BLOQUEADO», con DEFAULT NO-OP. Lo
+     * dispara el RECHAZO, que es la UNICA via por la que un mensajero llega a tener DOS cierres
+     * re-solicitables (solicita el dia 1, solicita el dia 2, el admin rechaza los dos): sin este
+     * aviso, el caso mas confuso de todos es justo el que llega mudo y el mensajero se entera de
+     * que le rechazaron el cierre al toparse con el bloqueo.
+     *
+     * OPCIONAL Y CON DEFAULT NO-OP, a diferencia de `liquidacionRepo`, que es obligatorio: alli
+     * un olvido de cableado dejaria todos los pendientes en `null` en silencio, aqui el riesgo va
+     * en la direccion CONTRARIA. Este servicio lo instancian trece suites y una base de datos
+     * LOCAL COMPARTIDA esta al otro lado; con el real por defecto, cualquiera de ellas escribiria
+     * avisos de verdad. El composition root (`lib/actions/cierres-admin.ts`) inyecta el real, y
+     * hay una guardia que lo comprueba (`notificacion-notificadores-reales.test.ts`).
+     */
+    private readonly notificarBloqueo: MensajeroBloqueadoNotificador = notificadorNoOp,
   ) {}
+
+  /**
+   * FEATURE 271 (T6.6, R42/R43/R47) — el aviso de «quedaste BLOQUEADO» que sigue a un RECHAZO.
+   *
+   * Tres propiedades, y las tres son deliberadas:
+   *
+   *  1. **FUERA de la transaccion del rechazo, y despues de que haya confirmado.** No se pasa
+   *     ningun notificador a `resolverCierre`: ese metodo abre la tx que mueve el estado del
+   *     cierre y el aviso no entra ahi. En Postgres un error de sentencia aborta la transaccion
+   *     ENTERA, asi que un aviso caido REVERTIRIA un rechazo legitimo — la misma leccion que la
+   *     262 dejo escrita en `notificarDiaRepartoCorregidoCon`.
+   *  2. **BEST-EFFORT.** `emitirBestEffort` absorbe el fallo y lo deja registrado con su causa.
+   *     EL RECHAZO MANDA, EL AVISO ES CORTESIA: si la campana esta caida, el rechazo sigue
+   *     siendo valido y el admin no ve un error por algo que ya ocurrio (R47).
+   *  3. **Relee el detalle DESPUES de escribir.** El `N`/`V` que el texto cuenta es el de AHORA,
+   *     con el `rechazado` recien creado ya dentro; calcularlo antes diria uno menos.
+   *
+   * LA ENTIDAD DE LA NOTIFICACION ES EL CIERRE RECHAZADO, no el mensajero: dos rechazos son dos
+   * `entidad_id`, luego la clave `notificacion_dedupe_key` no colisiona y el segundo rechazo SI
+   * avisa aunque el primero siga sin leerse (R44). Elegir mal la entidad convierte «avisar dos
+   * veces» en un silencio estructural.
+   *
+   * POR QUE SE RELEE EL CIERRE: `rechazarCierre` recibe un `cierreId` y un actor que es el ADMIN;
+   * el mensajero y la zona destino —los dos destinatarios del aviso— viven en la fila. Se relee
+   * con `findCierreByIdEnAlcance` y con EL MISMO `alcance` que acaba de autorizar la escritura,
+   * asi que el aviso no puede alcanzar un cierre que este admin no podia tocar. Es una lectura de
+   * mas en un camino que un humano ejecuta a mano y raras veces —la pantalla acaba de correr esa
+   * misma consulta para pintarle el detalle—, y evita abrir una consulta nueva en el repositorio.
+   */
+  private async avisarBloqueoPorRechazo(cierreId: string, alcance: Alcance): Promise<void> {
+    await emitirBestEffort("mensajero_bloqueado_por_cierres", async () => {
+      const detalle = await this.repo.findCierreByIdEnAlcance(cierreId, alcance);
+      if (detalle === null) return; // sin cierre resoluble no se inventa un aviso
+      const { mensajeroId, destinoZonaId } = detalle.cierre;
+      const bloqueo = await this.ordenRepo.findBloqueoDetalle(mensajeroId);
+      // Tras un rechazo `V >= 1` y el mensajero esta bloqueado, asi que esto casi siempre pasa.
+      // Casi: entre la escritura y esta lectura el mensajero pudo re-solicitar el cierre (R16 lo
+      // permite SIEMPRE, es el anti-deadlock). Avisar entonces seria mandarle un aviso que dice
+      // lo que el servidor ya no hace, que es el fallo que R43 prohibe por su nombre.
+      if (!bloqueo.bloqueado) return;
+      await this.notificarBloqueo({
+        cierreId,
+        zonaId: destinoZonaId,
+        mensajeroUsuarioId: mensajeroId,
+        bloqueo,
+      });
+    });
+  }
 
   // R1/R2/R3: resuelve el alcance server-side por rol+zona. Acceso total (maestro/admin) ve
   // todos los `bodega_central` (sin filtro de zona); el adminSatelite solo su zona satelite.
@@ -1063,7 +1137,14 @@ export class CierresAdminService implements ICierresAdminService {
       resueltoPor: actor.usuarioId, // R14
       motivoRechazo: motivoLimpio,
     });
-    if (res === "updated") return { status: "ok", cierreId, estado: "rechazado" };
+    if (res === "updated") {
+      // FEATURE 271 (T6.6, R42): el aviso va AQUI —despues de que el rechazo haya confirmado y
+      // fuera de su transaccion— y NUNCA altera lo que se devuelve. Ver `avisarBloqueoPorRechazo`.
+      await this.avisarBloqueoPorRechazo(cierreId, scope.alcance);
+      return { status: "ok", cierreId, estado: "rechazado" };
+    }
+    // `conflict` y `no_encontrada` NO avisan, y esa es media R42: un aviso por un rechazo que no
+    // ocurrio le diria al mensajero que esta bloqueado por un cierre que sigue esperando decision.
     if (res === "conflict") return { status: "conflict" }; // R12
     return { status: "no_encontrada" }; // fuera_de_alcance (R13)
   }

@@ -14,6 +14,7 @@ import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService"
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
 import { WalletIndemnizacionFeedService } from "@/lib/services/WalletIndemnizacionFeedService";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
+import { notificarMensajeroBloqueadoReal } from "@/lib/notificaciones/notificadores";
 import { gestionConfig } from "@/lib/config/gestion";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -123,6 +124,10 @@ function buildService(): ICierresAdminService {
     // necesita (`Pick`), asi que esta pantalla no puede registrar ni anular un pago: aprobar y
     // pagar son dos escrituras distintas (design §8).
     new LiquidacionPagoRepository(prisma),
+    // FEATURE 271 (T6.6, R42): COMPOSITION ROOT del aviso «quedaste bloqueado». Se cablea aqui y
+    // no como default del service (ver `lib/notificaciones/notificadores.ts`): el default es el
+    // no-op, para que ninguna suite que instancie el service escriba avisos en la base.
+    notificarMensajeroBloqueadoReal,
   );
 }
 
