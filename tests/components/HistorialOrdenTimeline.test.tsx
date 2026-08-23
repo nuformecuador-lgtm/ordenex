@@ -5,6 +5,10 @@ import { render, screen, within, cleanup } from "@testing-library/react";
 import { HistorialOrdenTimeline } from "@/app/(app)/ordenes/_components/HistorialOrdenTimeline";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { OrdenHistorialEntradaDTO } from "@/lib/types/orden-historial";
+import {
+  ETIQUETA_CORRECCION_DIA,
+  textoCorreccionDiaReparto,
+} from "@/lib/utils/dia-reparto-textos";
 
 // R30: lo verificado es "se presenta la ETIQUETA legible del estado, nunca el value
 // crudo". Se aserta contra el mapa de presentación (fuente de verdad) en vez de
@@ -26,6 +30,7 @@ afterEach(() => {
 //  3) liberacion del cron con actor null (-> "Sistema") y sin motivo
 const ENTRADAS: OrdenHistorialEntradaDTO[] = [
   {
+    clase: "transicion" as const,
     estatusOrigenValue: null,
     estatusDestinoValue: "en_preparacion",
     origenTipo: "carga_masiva",
@@ -34,6 +39,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
     createdAt: new Date("2026-01-01T10:00:00Z"),
   },
   {
+    clase: "transicion" as const,
     estatusOrigenValue: "en_reparto",
     estatusDestinoValue: "reprogramada",
     origenTipo: "gestion",
@@ -42,6 +48,7 @@ const ENTRADAS: OrdenHistorialEntradaDTO[] = [
     createdAt: new Date("2026-01-02T15:30:00Z"),
   },
   {
+    clase: "transicion" as const,
     estatusOrigenValue: "reprogramada",
     estatusDestinoValue: "en_bodega_central",
     origenTipo: "liberacion_reprogramada",
@@ -112,6 +119,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
   it("R15: incluye la transición 'rechazada → devolviendo_a_tienda' como una entrada más, con su actor y timestamp", () => {
     const entradas: OrdenHistorialEntradaDTO[] = [
       {
+        clase: "transicion" as const,
         estatusOrigenValue: "en_reparto",
         estatusDestinoValue: "rechazada",
         origenTipo: "gestion",
@@ -120,6 +128,7 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
         createdAt: new Date("2026-01-04T09:00:00Z"),
       },
       {
+        clase: "transicion" as const,
         estatusOrigenValue: "rechazada",
         estatusDestinoValue: "devolviendo_a_tienda",
         origenTipo: "ajuste_estado",
@@ -144,5 +153,84 @@ describe("HistorialOrdenTimeline (feature 49, R29/R30)", () => {
     expect(
       within(retorno).getByText((_, el) => el?.tagName.toLowerCase() === "time"),
     ).toBeInTheDocument();
+  });
+
+  /* ---------- FEATURE 262 (F7, R38/R39) — la entrada SIN transición ---------- */
+
+  /**
+   * ⚠️ ALCANCE DE ESTAS DOS: cubren R38 (las dos fechas en palabras, quién, cuándo y el motivo)
+   * y R39 (ninguna etiqueta de estado, ninguna flecha). Lo que **F8** todavía debe es el resto
+   * de la pantalla: la mezcla de las dos clases en una lista larga, el «se distingue por texto y
+   * no sólo por color» sobre el render, y **F6** (ver la app).
+   */
+
+  const CORRECCION: OrdenHistorialEntradaDTO = {
+    clase: "correccion_dia",
+    fechaAnteriorISO: "2026-08-21",
+    fechaNuevaISO: "2026-08-22",
+    actorNombre: "Ana Pérez",
+    motivo: "la bodega marcó el lote para el día siguiente por error",
+    createdAt: new Date("2026-08-22T15:14:00Z"),
+  };
+
+  it("R38: la corrección se lee con las dos fechas EN PALABRAS, su actor, su sello y su motivo", () => {
+    render(<HistorialOrdenTimeline entradas={[CORRECCION]} />);
+
+    const item = screen.getByRole("listitem");
+    // La primera línea la nombra con palabras (design §14.4), no sólo con un punto de color.
+    expect(within(item).getByText(ETIQUETA_CORRECCION_DIA)).toBeInTheDocument();
+    // Las dos fechas, en palabras. El literal se escribe A MANO: comparar contra
+    // `textoCorreccionDiaReparto(...)` sería comparar la pantalla con la función que la llena.
+    expect(within(item).getByText("Del 21 de agosto al 22 de agosto")).toBeInTheDocument();
+    expect(within(item).getByText(/Ana Pérez/)).toBeInTheDocument();
+    expect(
+      within(item).getByText(/Motivo: la bodega marcó el lote para el día siguiente por error/),
+    ).toBeInTheDocument();
+    // El sello de hora sigue siendo un `<time>`, como en cualquier otra entrada.
+    expect(
+      within(item).getByText((_, el) => el?.tagName.toLowerCase() === "time"),
+    ).toBeInTheDocument();
+    // Y NINGUNA fecha en `YYYY-MM-DD` a la vista (R38).
+    expect(item.textContent ?? "").not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("R39: la corrección NO se pinta como una transición: ni etiqueta de estado ni flecha", () => {
+    render(<HistorialOrdenTimeline entradas={[CORRECCION]} />);
+
+    const item = screen.getByRole("listitem");
+    // Ninguna de las etiquetas del catálogo aparece en esa entrada. M-ac (pintarla con
+    // `estatusLabel`) muere aquí.
+    for (const etiqueta of Object.values(L)) {
+      expect(within(item).queryByText(etiqueta)).toBeNull();
+    }
+    // Ni la flecha de estados, ni la palabra «Creación» de la rama de transición.
+    expect(item.textContent ?? "").not.toContain("→");
+    expect(within(item).queryByText("Creación")).toBeNull();
+
+    // CONTRAPRUEBA, sin la cual lo de arriba podría estar verde por mirar un render vacío: la
+    // MISMA búsqueda sobre una transición SÍ encuentra etiqueta y flecha.
+    cleanup();
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[1]]} />);
+    const transicion = screen.getByRole("listitem");
+    expect(within(transicion).getByText(L.reprogramada)).toBeInTheDocument();
+    expect(transicion.textContent ?? "").toContain("→");
+  });
+
+  it("R37/R41: mezclada con transiciones, se pinta en la posición que el servidor le dio", () => {
+    // El componente NO ordena (R41): pinta el array tal cual llega. Aquí llega en el orden que
+    // `fusionarLineaDeTiempo` produce y la corrección va en medio.
+    render(<HistorialOrdenTimeline entradas={[ENTRADAS[0], CORRECCION, ENTRADAS[2]]} />);
+
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    expect(within(items[0]).getByText("Creación")).toBeInTheDocument();
+    expect(within(items[1]).getByText(ETIQUETA_CORRECCION_DIA)).toBeInTheDocument();
+    expect(within(items[2]).getByText(L.en_bodega_central)).toBeInTheDocument();
+    // Y la función de textos es la que llena la línea: si el componente copiara el literal, este
+    // `toContain` seguiría verde, pero el censo de `dia-reparto-textos.test.ts` (2) y la guardia
+    // `historial-correccion-dia.guardia` lo cazarían.
+    expect(items[1].textContent ?? "").toContain(
+      textoCorreccionDiaReparto("2026-08-21", "2026-08-22"),
+    );
   });
 });

@@ -259,11 +259,16 @@ type _EnsureExhaustive = Exclude<
 const _exhaustive: _EnsureExhaustive = true;
 void _exhaustive;
 
-// Feature 49 (design §4.4) — DTO de UNA entrada de la linea de tiempo, ya resuelta a
+// Feature 49 (design §4.4) — DTO de UNA TRANSICION de la linea de tiempo, ya resuelta a
 // valores legibles (no UUIDs internos): `estatusOrigenValue` NULL = creacion (R1/R20);
 // `actorNombre` NULL = sistema/cron (R21); `motivo` NULL cuando la transicion no viene de
 // una gestion con motivo (R22). Ordenadas cronologicamente por el service (R26).
-export interface OrdenHistorialEntradaDTO {
+//
+// FEATURE 262 (B24, design §14.1): gana el discriminante `clase: "transicion"`. Los seis campos
+// de siempre NO cambian, y `estatusDestinoValue` SIGUE SIENDO `string` NOT NULL: una transicion
+// siempre tiene destino.
+export interface OrdenHistorialTransicionDTO {
+  clase: "transicion";
   estatusOrigenValue: string | null;
   estatusDestinoValue: string;
   origenTipo: OrdenHistorialOrigenTipo;
@@ -271,3 +276,48 @@ export interface OrdenHistorialEntradaDTO {
   motivo: string | null;
   createdAt: Date;
 }
+
+/**
+ * FEATURE 262 (B24, design §14.1) — una CORRECCION DEL DIA DE REPARTO
+ * (`orden_dia_reparto_cambio`). NO TIENE ESTADO DE ORIGEN NI DE DESTINO, porque no es una
+ * transicion: la corrección tiene PROHIBIDO escribir en `orden_historial_estado` (R25) y el choke
+ * point de estados ni siquiera aceptaria un `por_recoger -> por_recoger`.
+ *
+ * LAS DOS FECHAS VIAJAN COMO `YYYY-MM-DD` YA SERIALIZADO, JAMAS COMO `Date`. Precedente literal:
+ * `MisAsignacionesService.ts` hace `fechaRepartoComoTexto(row.fechaReparto)` por esto mismo
+ * (261/R14). Un `@db.Date` leido por Prisma es la medianoche UTC de esa fecha; formatearlo en el
+ * navegador con la hora local devuelve el dia ANTERIOR en media America.
+ *
+ * `actorNombre` y `motivo` son NOT NULL, al reves que en la transicion: aqui nunca escribe un cron
+ * (§5.1: la columna `actor_usuario_id` es NOT NULL) y el motivo es obligatorio (R21).
+ *
+ * NO TIENE `origenTipo` A PROPOSITO: `OrdenHistorialOrigenTipo` es el censo cerrado de las familias
+ * de ESCRITURA DE `orden.estatus_id`, respaldado por un enum de Postgres. Añadirle un valor para
+ * algo que no escribe ningun estado seria una migracion mas y una mentira sobre la maquina de
+ * estados. La `clase` ya dice lo que hace falta saber.
+ */
+export interface OrdenHistorialCorreccionDiaDTO {
+  clase: "correccion_dia";
+  /** `YYYY-MM-DD` — el dia que la orden TENIA. */
+  fechaAnteriorISO: string;
+  /** `YYYY-MM-DD` — el dia con el que QUEDO. */
+  fechaNuevaISO: string;
+  actorNombre: string;
+  motivo: string;
+  createdAt: Date;
+}
+
+/**
+ * UNA entrada de la linea de tiempo: o una transicion de estado, o una correccion del dia de
+ * reparto. UNION DISCRIMINADA por `clase`, y el discriminante es EXPLICITO y no derivado por
+ * presencia de campo: con `clase` el `switch` es exhaustivo y TypeScript lo demuestra; con
+ * `"fechaNuevaISO" in entrada` una tercera clase futura caeria en el `else` en silencio.
+ *
+ * EL NOMBRE SE CONSERVA a proposito (design §14.1, punto 1): `ObtenerHistorialServiceResult` lo
+ * nombra y `tests/unit/guards/rastreo-frontera.guardia.test.ts` lo tiene en su lista de simbolos
+ * PROHIBIDOS en el borde publico. Renombrarlo dejaria esa guardia vigilando un simbolo muerto —
+ * verde para siempre y sin decir nada.
+ */
+export type OrdenHistorialEntradaDTO =
+  | OrdenHistorialTransicionDTO
+  | OrdenHistorialCorreccionDiaDTO;

@@ -193,3 +193,36 @@ export function avisoDiaActualDeLaOrden(fechaISO: string | null | undefined): st
   const fecha = fechaISO ? fechaLegible(fechaISO) : "";
   return fecha ? `hoy está para el ${fecha}` : "hoy no tiene día de reparto";
 }
+
+/**
+ * FEATURE 262 (F7, R18/R38) — LA PRIMERA LINEA de una entrada de corrección en «Ver historial».
+ *
+ * ES TEXTO Y NO COLOR, y ésa es la decisión (design §14.4): este repo tiene guardia de contraste
+ * y una lección escrita sobre medir color en el navegador. Un punto de otro tono no dice QUÉ es
+ * la entrada; la palabra sí. Y hace la entrada distinguible para quien no ve el color.
+ */
+export const ETIQUETA_CORRECCION_DIA = "Día de reparto";
+
+/**
+ * FEATURE 262 (F7, R18/R38) — las DOS fechas de una corrección, en palabras: «Del 21 de agosto al
+ * 22 de agosto».
+ *
+ * SIN SIGLAS, SIN NOMBRES DE COLUMNA Y SIN `YYYY-MM-DD` A LA VISTA (R38), la misma regla con la
+ * que este repo retiró «SLA» del frontend. Y SIN RELOJ (R41): se compone con `fechaLegible`, que
+ * es puro — este módulo sigue sin importar `Date` ni `Intl`. Las dos fechas llegan YA resueltas
+ * por el servidor (`fechaAnteriorISO` / `fechaNuevaISO` del DTO, serializadas en el repositorio).
+ *
+ * Sin fecha que mostrar la frase pierde precisión pero no deja de ser cierta, mismo criterio que
+ * `confirmacionDiaReparto` y `avisoReservaParaOtroDia`.
+ */
+export function textoCorreccionDiaReparto(
+  anteriorISO: string | null | undefined,
+  nuevaISO: string | null | undefined,
+): string {
+  const anterior = anteriorISO ? fechaLegible(anteriorISO) : "";
+  const nueva = nuevaISO ? fechaLegible(nuevaISO) : "";
+  if (anterior && nueva) return `Del ${anterior} al ${nueva}`;
+  if (nueva) return `Pasó al ${nueva}`;
+  if (anterior) return `Salió del ${anterior}`;
+  return "Se corrigió el día de reparto";
+}

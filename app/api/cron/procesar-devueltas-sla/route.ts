@@ -10,6 +10,7 @@ import { DevolucionSlaService } from "@/lib/services/DevolucionSlaService";
 import { DevolucionSlaRepository } from "@/lib/repositories/DevolucionSlaRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -30,7 +31,11 @@ function buildService(): IDevolucionSlaService {
     new DevolucionSlaRepository(prisma),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
-    new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      new OrdenRepository(prisma),
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

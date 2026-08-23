@@ -9,6 +9,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { ITableroDiaService } from "@/lib/interfaces/services/ITableroDiaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TableroDiaRepository } from "@/lib/repositories/TableroDiaRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -63,7 +64,11 @@ function construirServicio(): ITableroDiaService {
   return new TableroDiaService(
     new TableroDiaRepository(prisma),
     ordenes,
-    new OrdenHistorialService(ordenes, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenes,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
     crearTableroDiaCacheDeNext(),
   );
 }

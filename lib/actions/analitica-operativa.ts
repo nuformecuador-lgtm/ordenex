@@ -13,6 +13,7 @@ import { decorarRollupConCache } from "@/lib/repositories/CachedAnaliticaOperati
 import { crearAnaliticaCacheDeNext } from "@/lib/cache/next-analitica-cache";
 import { AnaliticaOperativaService } from "@/lib/services/AnaliticaOperativaService";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import type { IAnaliticaOperativaService } from "@/lib/interfaces/services/IAnaliticaOperativaService";
@@ -89,7 +90,11 @@ function construirServicio(now: () => Date): IAnaliticaOperativaService {
     ),
     new AnaliticaOperativaVivaRepository(prisma),
     // Punto UNICO de «intentos» del repo (feature 160). No se reimplementa el criterio.
-    new OrdenHistorialService(new OrdenRepository(prisma), new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      new OrdenRepository(prisma),
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
     { now },
   );
 }

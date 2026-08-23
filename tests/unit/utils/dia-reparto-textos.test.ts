@@ -7,6 +7,8 @@ import {
   avisoDiaActualDeLaOrden,
   avisoReservaParaOtroDia,
   fechaLegible,
+  textoCorreccionDiaReparto,
+  ETIQUETA_CORRECCION_DIA,
   ETIQUETA_PARA_MANANA,
   RESERVA_MOTIVO_SERVIDOR,
   SELECTOR_DIA_AYUDA,
@@ -290,5 +292,67 @@ describe("262/§7.2 — el selector en modo corrección se lee distinto que al a
     // No es adorno: la mitad de las correcciones son «hoy → mañana» y la otra mitad «mañana →
     // hoy». Quien abre el modal esperando un valor por defecto tiene que leer que no lo hay.
     expect(SELECTOR_DIA_AYUDA_CORRECCION).toMatch(/no hay ninguna opción marcada/i);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (5) 262/R38 — las DOS fechas de una corrección, en «Ver historial»           */
+/* -------------------------------------------------------------------------- */
+/**
+ * FEATURE 262 (F7/B26, R18/R38) — el texto que la entrada de corrección pinta en el drawer.
+ *
+ * Vive en ESTE módulo y no en el componente por lo mismo que el resto: es la fuente única, es
+ * pura, y la comprobación (2) de arriba —que cubre el módulo ENTERO— ya garantiza que no entra
+ * ningún reloj por aquí (**R41**). Un literal dentro del `.tsx` se habría quedado fuera de esa
+ * red.
+ *
+ * Los literales van escritos A MANO, letra por letra: compararlos contra
+ * `textoCorreccionDiaReparto(...)` sería compararlos contra la función que los genera, y ese
+ * test está verde pase lo que pase.
+ */
+describe("262/R38 — «del día X al día Y», en palabras", () => {
+  it("con las dos fechas dice de dónde a dónde, sin siglas y sin `YYYY-MM-DD` a la vista", () => {
+    expect(textoCorreccionDiaReparto("2026-08-21", "2026-08-22")).toBe(
+      "Del 21 de agosto al 22 de agosto",
+    );
+  });
+
+  it("el sentido CONTRARIO también se lee, y no es el mismo texto", () => {
+    // La mitad de las correcciones son «mañana → hoy». Si la frase fuera simétrica, el drawer
+    // no distinguiría una de otra y el rastro dejaría de servir para lo que existe.
+    const haciaAdelante = textoCorreccionDiaReparto("2026-08-21", "2026-08-22");
+    const haciaAtras = textoCorreccionDiaReparto("2026-08-22", "2026-08-21");
+    expect(haciaAtras).toBe("Del 22 de agosto al 21 de agosto");
+    expect(haciaAtras).not.toBe(haciaAdelante);
+  });
+
+  it("cruza el cambio de mes y de año sin construir ninguna fecha", () => {
+    expect(textoCorreccionDiaReparto("2026-12-31", "2027-01-01")).toBe(
+      "Del 31 de diciembre al 1 de enero",
+    );
+  });
+
+  it("no dice `fecha_reparto`, ni «reserva», ni «corte», ni una fecha en `YYYY-MM-DD`", () => {
+    const texto = textoCorreccionDiaReparto("2026-08-21", "2026-08-22");
+    expect(texto).not.toMatch(/fecha_reparto|reserva|corte|SLA/i);
+    expect(texto).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("sin alguna de las dos fechas la frase sigue siendo CIERTA, sólo pierde precisión", () => {
+    // El DTO las trae siempre (las dos columnas son NOT NULL), pero la función es pura y
+    // pública: dejar el hueco en blanco sería la peor salida de las tres.
+    expect(textoCorreccionDiaReparto(null, "2026-08-22")).toBe("Pasó al 22 de agosto");
+    expect(textoCorreccionDiaReparto("2026-08-21", null)).toBe("Salió del 21 de agosto");
+    expect(textoCorreccionDiaReparto(null, null)).toBe("Se corrigió el día de reparto");
+    expect(textoCorreccionDiaReparto("", "")).toBe("Se corrigió el día de reparto");
+  });
+
+  it("la entrada se nombra con PALABRAS y no sólo con un punto de otro color", () => {
+    // design §14.4: este repo tiene guardia de contraste y una lección escrita sobre medir
+    // color en el navegador. Un tono distinto no dice QUÉ es la entrada; la palabra sí.
+    expect(ETIQUETA_CORRECCION_DIA).toBe("Día de reparto");
+    // Y no es una etiqueta de ESTADO (R39): no coincide con ninguna de las que pinta el
+    // catálogo, ni nombra la columna.
+    expect(ETIQUETA_CORRECCION_DIA).not.toMatch(/fecha_reparto|estatus|estado/i);
   });
 });

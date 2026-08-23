@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { GestionResultado, PrismaClient } from "@prisma/client";
 
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TableroDiaRepository } from "@/lib/repositories/TableroDiaRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -308,7 +309,11 @@ export function servicioReal(tx: TxDeTest): TableroDiaService {
   return new TableroDiaService(
     repositorio(tx),
     ordenes,
-    new OrdenHistorialService(ordenes, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenes,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 
