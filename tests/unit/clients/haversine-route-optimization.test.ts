@@ -22,7 +22,13 @@ describe("nearest-neighbor sobre Haversine", () => {
       ],
     };
     const r = await client().optimizar(input);
-    expect(r).toEqual({ status: "ok", secuencia: ["orden-A", "orden-B", "orden-C"] });
+    expect(r).toEqual({
+      status: "ok",
+      secuencia: ["orden-A", "orden-B", "orden-C"],
+      // Feature 265 (R35): este cliente SIEMPRE declara `local`. No habla con nadie, asi que
+      // no hay ningun camino por el que su orden pueda venir del proveedor.
+      fuente: "local",
+    });
   });
 
   it("encadena saltos: tras llegar a una parada, mide desde ELLA, no desde el origen", async () => {
@@ -37,7 +43,7 @@ describe("nearest-neighbor sobre Haversine", () => {
       ],
     };
     const r = await client().optimizar(input);
-    expect(r).toEqual({ status: "ok", secuencia: ["orden-X", "orden-Z", "orden-Y"] });
+    expect(r).toEqual({ status: "ok", secuencia: ["orden-X", "orden-Z", "orden-Y"], fuente: "local" });
   });
 
   it("es DETERMINISTA: ante empate de distancia gana el indice menor", async () => {
@@ -52,7 +58,7 @@ describe("nearest-neighbor sobre Haversine", () => {
     };
     const r1 = await client().optimizar(input);
     const r2 = await client().optimizar(input);
-    expect(r1).toEqual({ status: "ok", secuencia: ["orden-1", "orden-2"] });
+    expect(r1).toEqual({ status: "ok", secuencia: ["orden-1", "orden-2"], fuente: "local" });
     expect(r2).toEqual(r1);
   });
 
@@ -75,11 +81,11 @@ describe("nearest-neighbor sobre Haversine", () => {
       origen: { lat: 0, lng: 0 },
       paradas: [{ ordenId: "orden-unica", lat: 1, lng: 1 }],
     });
-    expect(r).toEqual({ status: "ok", secuencia: ["orden-unica"] });
+    expect(r).toEqual({ status: "ok", secuencia: ["orden-unica"], fuente: "local" });
   });
 
   it("sin paradas -> secuencia vacia, nunca lanza", async () => {
     const r = await client().optimizar({ origen: { lat: 0, lng: 0 }, paradas: [] });
-    expect(r).toEqual({ status: "ok", secuencia: [] });
+    expect(r).toEqual({ status: "ok", secuencia: [], fuente: "local" });
   });
 });

@@ -37,6 +37,9 @@ const CONFIG: RouteOptimizationConfig = {
   RUTA_ORIGEN_TTL_MIN: 120,
   RUTA_SYNC_MIN_INTERVALO_S: 10,
   RUTA_MAX_PARADAS: 100,
+  // Feature 265: umbral de coherencia del origen. 200 km es el default del codigo; los tests
+  // que ejercitan la guarda lo bajan por `config` para no depender de el.
+  RUTA_ORIGEN_MAX_KM: 200,
   ROUTES_ROUTING_PREFERENCE: "TRAFFIC_UNAWARE",
 };
 
@@ -56,6 +59,9 @@ function ruta(over: Partial<RutaOptimizadaDTO> = {}): RutaOptimizadaDTO {
     origenFuente: null,
     huellaSet: null,
     ultimoError: null,
+    // Feature 265 (R35): sin marca de procedencia por defecto; los tests que la necesitan la
+    // pasan por `over`. `null` = no consta, que es el estado de toda ruta anterior a la 265.
+    secuenciaFuente: null,
     trazado: null,
     tramoVivoAt: null,
     tramoPorOrden: new Map(),
@@ -68,6 +74,8 @@ function build(opts: {
   ruta?: RutaOptimizadaDTO | null;
   paradas?: ParadaRutaRow[];
   outcome?: Awaited<ReturnType<IRouteOptimizationClient["optimizar"]>>;
+  /** Feature 265 (R24): el cliente LANZA en vez de devolver un desenlace. */
+  lanza?: unknown;
   config?: Partial<RouteOptimizationConfig>;
   now?: Date;
 }) {
@@ -85,12 +93,17 @@ function build(opts: {
   };
 
   const client = {
-    optimizar: vi.fn(async (input: { paradas: { ordenId: string }[] }) =>
-      opts.outcome ?? {
-        status: "ok" as const,
-        secuencia: [...input.paradas].reverse().map((p) => p.ordenId),
-      },
-    ),
+    optimizar: vi.fn(async (input: { paradas: { ordenId: string }[] }) => {
+      if (opts.lanza !== undefined) throw opts.lanza;
+      return (
+        opts.outcome ?? {
+          status: "ok" as const,
+          secuencia: [...input.paradas].reverse().map((p) => p.ordenId),
+          // Feature 265: el doble hace de PROVEEDOR salvo que el caso diga otra cosa.
+          fuente: "proveedor" as const,
+        }
+      );
+    }),
   } as unknown as IRouteOptimizationClient & { optimizar: ReturnType<typeof vi.fn> };
 
   const service = new OptimizacionRutaService(
@@ -109,6 +122,20 @@ interface MetaPersistida {
   calculadaAt: Date;
   origen: { lat: number; lng: number; fuente: string } | null;
   huellaSet: string;
+  /** Feature 265 (R35): quien ordeno ESTA secuencia. `null` = no hubo ordenacion. */
+  secuenciaFuente: "proveedor" | "local" | null;
+}
+
+/**
+ * Feature 265: un error de UNA DE NUESTRAS CLASES. Se construye por `name` porque eso es
+ * exactamente lo que el servicio mira para decidir si el mensaje esta saneado — importar la
+ * clase concreta del cliente de Google aqui seria darle al servicio el conocimiento del
+ * proveedor que la interfaz aisla.
+ */
+function nuestroError(name: string, message: string): Error {
+  const e = new Error(message);
+  e.name = name;
+  return e;
 }
 function metaDe(rutas: { reemplazarSecuencia: { mock: { calls: unknown[][] } } }): MetaPersistida {
   return rutas.reemplazarSecuencia.mock.calls[0][2] as MetaPersistida;
@@ -474,6 +501,19 @@ describe("R12 — credencial ausente corta ANTES de cualquier red", () => {
     await expect(getToken()).rejects.toThrow(RutaNoConfiguradoError);
   });
 
+  // ⚠️ ESTE TEST CAMBIO DE SENTIDO EN LA FEATURE 265, con su razon escrita.
+  //
+  // Afirmaba que, ante una excepcion del cliente, NI se reemplazaba la secuencia NI se marcaba
+  // desactualizada, y que la excepcion salia CRUDA («una credencial ausente no es un fallo del
+  // proveedor sobre la ruta»). La primera mitad sigue viva y es la que importa —el ultimo orden
+  // valido no se toca—; la segunda era EL DEFECTO: esa excepcion atravesaba el servicio sin
+  // pasar por `marcarDesactualizada` y llegaba al borde como «AppErrorCode inesperado
+  // INTERNAL», rompiendo la pantalla del mensajero (medido: 6 veces sobre 2 usuarios).
+  //
+  // R24 no hace excepciones por clase de error: CUALQUIER excepcion del cliente conserva el
+  // orden previo, marca la ruta desactualizada y propaga el fallo TIPADO. En produccion este
+  // caso concreto (credencial ausente) ni siquiera llega aqui: lo intercepta el compuesto y
+  // ordena en local.
   it("si el cliente lanza (credencial), la secuencia previa tampoco se toca", async () => {
     const rutas = {
       findByMensajero: vi.fn(async () => null),
@@ -497,12 +537,151 @@ describe("R12 — credencial ausente corta ANTES de cualquier red", () => {
     );
 
     await expect(service.ejecutar(MENSAJERO, { motivo: "debounce" })).rejects.toThrow(
-      RutaNoConfiguradoError,
+      RutaIntentoFallidoError,
     );
-    // Ni se reemplaza la secuencia ni se marca desactualizada: una credencial ausente no
-    // es un fallo del PROVEEDOR sobre la ruta, es un fallo de configuracion del sistema.
+    // LO QUE NO CAMBIA: la secuencia previa sigue INTACTA. Es la mitad de este test que
+    // protegia una invariante viva, y sigue protegiendola.
     expect(rutas.reemplazarSecuencia).not.toHaveBeenCalled();
-    expect(rutas.marcarDesactualizada).not.toHaveBeenCalled();
+    // LO QUE CAMBIA (265/R24): ahora SI se marca desactualizada, con un motivo saneado. Es lo
+    // que alimenta el aviso de la UI; antes, con una excepcion, no pasaba ni eso.
+    expect(rutas.marcarDesactualizada).toHaveBeenCalledTimes(1);
+    const motivo = (rutas.marcarDesactualizada.mock.calls[0] as unknown[])[1] as string;
+    expect(motivo).toContain("credencial incompleta");
+    expect(motivo).toContain("GOOGLE_ROUTE_OPT_SA_EMAIL");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Feature 265 (R10, R24-R26, R35-R37) — EL FALLO SE TIPA Y LA PROCEDENCIA VIAJA
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+describe("265/R24, R26 — una EXCEPCION del cliente se conserva, se marca y se TIPA", () => {
+  it.each([
+    ["nuestra (mensaje saneado por contrato)", nuestroError("RutaRespuestaInvalidaError", "optimizar ruta: respuesta del proveedor con forma inesperada (sin routes)")],
+    ["de libreria (mensaje NO fiable)", new TypeError("fetch failed: Bearer ya29.token url=https://x")],
+  ])("excepcion %s -> orden previo intacto + desactualizada + RutaIntentoFallidoError", async (_c, error) => {
+    const { service, rutas } = build({
+      paradas: [parada("o1"), parada("o2")],
+      ruta: ruta({ secuenciaPorOrden: new Map([["o1", 1], ["o2", 2]]) }),
+      lanza: error,
+    });
+
+    await expect(service.ejecutar(MENSAJERO, { motivo: "debounce" })).rejects.toThrow(
+      RutaIntentoFallidoError,
+    );
+
+    expect(rutas.reemplazarSecuencia).not.toHaveBeenCalled();
+    expect(rutas.marcarDesactualizada).toHaveBeenCalledTimes(1);
+  });
+
+  it("R32: el motivo de un error de LIBRERIA es fijo — nunca reenvia su mensaje", async () => {
+    // `error.message` de `google-auth-library` o de `fetch` puede traer la peticion completa
+    // colgada, y ahi es donde viven las cabeceras con el Bearer.
+    const { service, rutas } = build({
+      paradas: [parada("o1"), parada("o2")],
+      lanza: new TypeError("fetch failed: authorization: Bearer ya29.SECRETO url=https://x"),
+    });
+
+    const error = await service.ejecutar(MENSAJERO, { motivo: "debounce" }).catch((e: Error) => e);
+
+    const motivo = (rutas.marcarDesactualizada.mock.calls[0] as unknown[])[1] as string;
+    for (const texto of [motivo, (error as Error).message]) {
+      expect(texto).not.toContain("ya29.SECRETO");
+      expect(texto).not.toContain("Bearer");
+      expect(texto).not.toContain("https://");
+    }
+    expect(motivo).toBe("optimizar ruta: el proveedor no respondio correctamente");
+  });
+
+  it("R26: la cola sigue viendo una EXCEPCION (no un resultado silencioso)", async () => {
+    const { service } = build({
+      paradas: [parada("o1"), parada("o2")],
+      lanza: new Error("lo que sea"),
+    });
+    await expect(service.ejecutar(MENSAJERO, { motivo: "debounce" })).rejects.toBeInstanceOf(
+      RutaIntentoFallidoError,
+    );
+  });
+});
+
+describe("265/R10, §5.3 — `sin_solucion` SIN compuesto: nunca una secuencia parcial", () => {
+  it("no persiste nada, marca desactualizada y lanza el tipado", async () => {
+    // Defensa en profundidad: en produccion el compuesto lo intercepta y ordena en local. Si
+    // alguien cablea el cliente de Google a pelo, el peor desenlace posible debe seguir siendo
+    // «no se recalculo», nunca «se persistio media ruta».
+    const { service, rutas } = build({
+      paradas: [parada("o1"), parada("o2"), parada("o3")],
+      ruta: ruta({ secuenciaPorOrden: new Map([["o1", 1], ["o2", 2], ["o3", 3]]) }),
+      outcome: {
+        status: "sin_solucion",
+        detalle: "optimizar ruta: paradas saltadas por el proveedor (servidas 1 de 3)",
+        servidas: 1,
+        enviadas: 3,
+      },
+    });
+
+    await expect(service.ejecutar(MENSAJERO, { motivo: "debounce" })).rejects.toThrow(
+      RutaIntentoFallidoError,
+    );
+
+    expect(rutas.reemplazarSecuencia).not.toHaveBeenCalled();
+    expect(rutas.marcarDesactualizada).toHaveBeenCalledWith(
+      MENSAJERO,
+      "optimizar ruta: paradas saltadas por el proveedor (servidas 1 de 3)",
+    );
+  });
+});
+
+describe("265/R35, R36, R37 — la procedencia llega a `reemplazarSecuencia`", () => {
+  it.each(["proveedor", "local"] as const)(
+    "un orden %s se persiste CON esa marca (se afirma el argumento, no el resultado)",
+    async (fuente) => {
+      const { service, rutas } = build({
+        paradas: [parada("o1"), parada("o2")],
+        outcome: { status: "ok", secuencia: ["o2", "o1"], fuente },
+      });
+
+      const r = await service.ejecutar(MENSAJERO, { motivo: "manual" });
+
+      expect(metaDe(rutas).secuenciaFuente).toBe(fuente);
+      // Y sube al resultado, que es lo que el toast del mensajero lee.
+      expect(r).toMatchObject({ status: "ok", secuenciaFuente: fuente });
+    },
+  );
+
+  it("R37: en la rama trivial de 0 o 1 parada NO se afirma ninguna procedencia", async () => {
+    for (const paradas of [[parada("o1")], []]) {
+      const { service, rutas } = build({ paradas });
+      await service.ejecutar(MENSAJERO, { motivo: "manual" });
+      expect(rutas.reemplazarSecuencia).toHaveBeenCalledTimes(1);
+      expect(metaDe(rutas).secuenciaFuente).toBeNull();
+    }
+  });
+
+  it("§5.4 — la degradacion se persiste VIGENTE, y por eso la siguiente llamada NO se paga", async () => {
+    // Es la decision que corta la sangria de facturacion: la guarda de «mismo conjunto y mismo
+    // origen» exige `estado === "vigente"`. Marcarla `desactualizada` seria lo intuitivo y
+    // haria que volvieramos a pagar cada minuto por el mismo modelo imposible.
+    const paradas = [parada("o1"), parada("o2")];
+    const primera = build({
+      paradas,
+      ruta: null,
+      outcome: { status: "ok", secuencia: ["o2", "o1"], fuente: "local" },
+    });
+    await primera.service.ejecutar(MENSAJERO, { motivo: "manual" });
+    const meta = metaDe(primera.rutas);
+    expect(meta.secuenciaFuente).toBe("local");
+    expect(primera.rutas.marcarDesactualizada).not.toHaveBeenCalled();
+
+    // Segundo disparo con el mismo conjunto y el mismo origen, y la ruta ya `vigente`.
+    const segunda = build({
+      paradas,
+      ruta: ruta({ huellaSet: meta.huellaSet, estado: "vigente" }),
+    });
+    const r = await segunda.service.ejecutar(MENSAJERO, { motivo: "inmediato" });
+
+    expect(r).toEqual({ status: "omitida", razon: "sin_cambios" });
+    expect(segunda.client.optimizar).not.toHaveBeenCalled();
   });
 });
 

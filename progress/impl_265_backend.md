@@ -1,0 +1,322 @@
+# Feature 265 — Bitácora del bloque BACKEND
+
+> Rama `feature/265-optimizador-lee-al-proveedor`, desde `origin/dev` en `241f1842`.
+> Alcance: **todo menos el bloque frontend `FE1`-`FE4`**, que va después y en otra sesión.
+> Lo que quedó a deber está en la última sección, dicho y no disimulado.
+
+---
+
+## 1 · Qué se implementó, en una frase por pieza
+
+| Bloque | Qué hace ahora |
+| --- | --- |
+| **§A — leer** | El schema de respuesta parsea `skippedShipments`, `validationErrors` y `metrics.skippedMandatoryShipmentCount`, **todos opcionales**. Antes zod los tiraba en el *strip* y una respuesta que explicaba el problema con precisión llegaba como «forma inesperada». |
+| **§B — degradar** | Desenlace nuevo `sin_solucion` (el proveedor contestó **bien** y no las sirvió todas) → el compuesto ordena **todas** las paradas en local. Nunca una secuencia parcial. El job **completa**. |
+| **§C — cortar antes de pagar** | Guarda de coherencia del origen: si el origen resuelto está a más de `RUTA_ORIGEN_MAX_KM` del centroide de las paradas, se **descarta** y se usa el centroide. Se sigue optimizando; no se corta el trabajo. |
+| **§D — el fallo deja de llegar crudo** | `try/catch` alrededor de `client.optimizar`: conserva el orden previo, marca `desactualizada` y lanza `RutaIntentoFallidoError`. La pantalla recibe `conflict`, no «AppErrorCode inesperado INTERNAL». |
+| **§E — la premisa** | El razonamiento vivo se conserva **verbatim**; la premisa caducada se **anexa** fechada, con motivo medido y puntero. Guardia en las dos direcciones. |
+| **§G — el mensajero (mitad de datos)** | Columna `ruta_optimizada.secuencia_fuente` con su migración y su `down.sql`, más el campo recorriendo repo → servicio → action → `RutaResumenDTO`. La UI la pinta **FE1-FE4**. |
+| **§H — el umbral** | `RUTA_ORIGEN_MAX_KM = 200` en un solo sitio, declarado 🧭 **sin calibrar**, con guardia. |
+| **§I — la traza** | `RUTA_DEBUG_LOG` **invierte su default**: la traza nace apagada y se enciende con `1`. Nada depende de ella. |
+
+---
+
+## 2 · Archivos
+
+### Creados
+
+- `db/migrations/20260822140000_ruta_secuencia_fuente/migration.sql`
+- `db/migrations/20260822140000_ruta_secuencia_fuente/down.sql`
+- `tests/integration/db/ruta-secuencia-fuente-migracion.test.ts`
+- `tests/unit/guards/premisa-saltos-caducada.guardia.test.ts`
+- `tests/unit/guards/umbral-origen-declarado.guardia.test.ts`
+- `tests/unit/services/optimizacion-ruta-degradacion.test.ts`
+
+### Modificados — producción
+
+| Archivo | Cambio |
+| --- | --- |
+| `lib/interfaces/external/IRouteOptimizationClient.ts` | `SecuenciaFuente`; `ok` gana `fuente` **requerido**; desenlace `sin_solucion` |
+| `lib/clients/google-route-optimization.ts` | schema defensivo, `extraerCodigosDeSalto`, `motivoSinSolucion`, `traducirSecuencia` devuelve en vez de lanzar en **un** caso, traza de R8, premisa anexada |
+| `lib/clients/haversine-route-optimization.ts` | declara `fuente: "local"` siempre |
+| `lib/clients/fallback-route-optimization.ts` | `sin_solucion` → Haversine, con su aviso agregado; propaga la `fuente` |
+| `lib/services/OptimizacionRutaService.ts` | `centroide()` extraído, `origenCoherente()`, `try/catch`, `motivoDeExcepcion()`, rama `sin_solucion`, transporta `secuenciaFuente` |
+| `lib/config/route-optimization.ts` | `RUTA_ORIGEN_MAX_KM` con su declaración de 4 piezas |
+| `lib/logging/optimizer-log.ts` | default invertido (P7) |
+| `lib/interfaces/repositories/IRutaOptimizadaRepository.ts` · `lib/repositories/RutaOptimizadaRepository.ts` | `secuenciaFuente` en el DTO y en la meta; se escribe en la **misma transacción**; `marcarDesactualizada` **no** la toca |
+| `lib/interfaces/services/IOptimizacionRutaService.ts` · `lib/types/ruta-mensajero.ts` · `lib/actions/ruta-mensajero.ts` | el campo sube hasta el borde |
+| `lib/interfaces/services/IMisAsignacionesService.ts` · `lib/services/MisAsignacionesService.ts` | `RutaResumenDTO.secuenciaFuente` |
+| `db/schema.prisma` | `secuenciaFuente String? @map("secuencia_fuente")` |
+| `.env.example` | `RUTA_ORIGEN_MAX_KM` y `RUTA_DEBUG_LOG`, solo nombres |
+| `tests/setup/jest-dom.ts` | la línea 28 se conserva **con su nota**: hoy es redundante y por qué se deja |
+
+### Modificados — tests ajenos, con su razón
+
+Once archivos de test cambiaron **solo para que el tipo compile** (el campo nuevo es requerido,
+y que salieran señalados era el objetivo): los 5 fixtures `RutaResumenDTO` que el diseño
+nombraba, más `MisAsignacionesPage`, `SincronizarRutaButton` y tres tests de action. En todos
+el valor añadido es `null` o `"proveedor"`, que es el comportamiento de hoy.
+
+**Tres cambiaron de aserción, y eso no puede pasar en silencio:**
+
+| Test | Qué decía | Qué dice ahora, y por qué |
+| --- | --- | --- |
+| `google-route-optimization.test.ts:113` — «no cubre todas → **lanza**» | protegía «nunca se persiste parcial» | afirma el desenlace `sin_solucion`, con el **nombre actualizado**. La invariante que el nombre prometía queda cubierta en el mismo PR por dos tests nuevos (abajo) |
+| `optimizacion-ruta-service.test.ts` — «si el cliente lanza (credencial), la secuencia previa tampoco se toca» | además afirmaba que **no** se marcaba desactualizada y que la excepción salía cruda | la primera mitad sigue igual; la segunda **era el defecto** (R24). Ahora afirma `marcarDesactualizada` llamada y `RutaIntentoFallidoError` |
+| `mis-asignaciones-orden-ruta.test.ts` y `optimizacion-ruta-trazado.test.ts` — dos `toEqual` literales | el contrato sin `secuenciaFuente` | el literal **es** el contrato: crece con él. No se cambió por su propia fuente, que lo dejaría siempre verde |
+
+**Dónde vive ahora la red que protegía el test reescrito** (esto es lo que impide que el
+arreglo se lleve por delante una invariante):
+
+1. `fallback-route-optimization.test.ts` → «R10: la secuencia devuelta cubre TODAS las paradas
+   de entrada, ni una menos», con el calculador local **real**, no un doble.
+2. `optimizacion-ruta-service.test.ts` → «`sin_solucion` sin compuesto: no persiste nada,
+   marca desactualizada y lanza el tipado».
+
+---
+
+## 3 · Decisiones que tomé y no estaban escritas letra por letra
+
+**1 · `R7` reconoce CLAVES, no una forma.** El spec pide citar «códigos de motivo en un campo
+que el contrato reconozca», pero la forma interna de `skippedShipments` **no se conoce** (P1 se
+quedó sin vía). Declarar `reasons[].code` como si se supiera habría sido inventar. Lo que hace
+`extraerCodigosDeSalto` es reconocer **una clave llamada `code` cuyo valor tiene forma de
+código** (`^[A-Z][A-Z0-9_]{2,49}$`), a cualquier profundidad ≤ 3. Ese filtro deja fuera **por
+construcción** las tres cosas que no pueden salir: coordenadas (son números), identificadores
+(minúsculas y guiones) y texto libre (espacios). Si la forma real no trae nada reconocible —el
+caso que hoy se espera— el motivo se compone igual, sin hueco (**R49**).
+
+**2 · El motivo saneado se decide por `error.name`, no por `instanceof`.** Un `instanceof`
+obligaría al servicio a importar `lib/clients/google-route-optimization`, es decir a conocer el
+proveedor concreto, que es justo lo que `IRouteOptimizationClient` aísla. Las cuatro clases
+nuestras fijan su `this.name` explícitamente. Ante cualquier otra cosa, texto fijo.
+
+**3 · El default de `RUTA_DEBUG_LOG` se invierte con lista blanca**, no con `!== "0"` al revés:
+solo `1` y `true` encienden. Un typo deja la traza apagada, que es el lado seguro cuando lo que
+está en juego es volcar coordenadas de entrega a un log de terceros.
+
+**4 · `RutaNoConfiguradoError` también pasa por la puerta de R24.** El spec no hace excepciones
+por clase de error, y hacerlas habría dejado abierto justo el camino que rompía la pantalla. En
+producción ese caso ni llega al servicio: lo intercepta el compuesto y ordena en local.
+
+**5 · La migración SÍ se aplicó a la base local**, con `prisma migrate deploy` (aditivo, nunca
+resetea), no con `migrate dev` (que ante *drift* propone **borrar la base** — y la base local
+está compartida con la 262). `prisma migrate status` quedó en «Database schema is up to date!».
+
+---
+
+## 4 · Mapa `R<n> → test`
+
+| R | Qué exige | Test que lo defiende |
+| --- | --- | --- |
+| R1 | Se leen los tres campos | `google-route-optimization.test.ts` → «R1: los TRES campos se leen de verdad» |
+| R2 | Su ausencia no rompe nada | ídem → «una respuesta SANA sin … sigue siendo ok» |
+| R3 | La decisión no depende de la forma interna | ídem → «R3: la decision NO depende de la forma interna» y «R3 bis: `skippedShipments` VACIO …» |
+| R4 | El motivo nombra las paradas saltadas | ídem → «lee los tres campos y devuelve el desenlace con sus conteos» |
+| R5 | El motivo lleva conteos | ídem (misma aserción, `servidas 0 de 6`) |
+| R6 | El motivo no filtra nada | ídem → «ni coordenadas, ni ordenId, ni indices …» |
+| R7 | Códigos de motivo, si existen | ídem → «R7: con codigos reconocibles, se citan LOS CODIGOS» + autocomprobación del extractor |
+| R8 | La traza lo dice aunque la respuesta sirva | ídem → «R1: los TRES campos …» (la línea es la de R8) y «R8: una respuesta UTILIZABLE …» |
+| R9 | «No cubre todas» → orden local | `fallback-route-optimization.test.ts` → «265/R9-R11 …» (3 casos) |
+| R10 | Nunca una secuencia parcial persistida | ídem → «R10: la secuencia devuelta cubre TODAS …» · `optimizacion-ruta-service.test.ts` → «no persiste nada, marca desactualizada …» |
+| R11 | «Algunas» = «ninguna» | `fallback-…` → los tres casos parametrizados (0, 4, 5 de 6) · cliente → «R11: servir ALGUNAS (4 de 6)» |
+| R12 | Aviso agregado al degradar | `fallback-…` → «R12: avisa con CONTEOS y sin PII» |
+| R13 | El job completa, sin reintento | `optimizacion-ruta-degradacion.test.ts` → «`crearOptimizacionRutaHandler` NO lanza» (+ su mitad negativa) |
+| R14 | Los otros desenlaces no degradan | `fallback-…` → «R14 (mitad negativa)» |
+| R15 | La secuencia previa no se toca hasta tener una completa | `optimizacion-ruta-degradacion.test.ts` → «la secuencia persistida cubre las TRES …» (`marcarDesactualizada` no llamada) · `optimizacion-ruta-service.test.ts` → R24 |
+| R16 | Se comprueba la coherencia antes de llamar | `optimizacion-ruta-origen.test.ts` → «se llama al proveedor con el CENTROIDE …» |
+| R17 | Se sustituye por el centroide | ídem (se afirma el **argumento** de la llamada) |
+| R18 | Aplica a cualquier fuente, salvo `centroide` | ídem → «R18: aplica tambien a `ultima_conocida`» y «R18 bis: si el origen YA es el centroide» |
+| R19 | Aviso agregado, sin coordenadas | ídem → «R19: avisa con la distancia redondeada …» |
+| R20 | La huella usa el origen final | ídem → «R20: la HUELLA se calcula con el origen FINAL» |
+| R21 | Configurable, sin lanzar | `route-optimization-config.test.ts` → «265/R21 …» (ausente/vacía/`abc`/`0`/`-1`/`NaN`/`200km`) |
+| R22 | Sin llamadas ni lecturas de más | `optimizacion-ruta-origen.test.ts` → «R22: la guarda no anade NI UNA llamada …» |
+| R23 | Descartar el origen no cancela el trabajo | ídem → «se llama al proveedor con el CENTROIDE …» (afirma `status: ok`) |
+| R24 | Excepción → conserva, marca y tipa | `optimizacion-ruta-service.test.ts` → «265/R24, R26 …» (2 casos) |
+| R25 | La pantalla recibe `conflict`, no una excepción | `sincronizar-ruta.test.ts` → «265/R25 …» (2 casos) |
+| R26 | La cola sigue viendo una excepción | `optimizacion-ruta-service.test.ts` → «R26: la cola sigue viendo una EXCEPCION» |
+| R27 | El razonamiento original, verbatim | `premisa-saltos-caducada.guardia.test.ts` cláusula (a) |
+| R28 | La nota anexada, con sus cinco piezas | ídem cláusula (b) |
+| R29 | La guardia existe y no es vacía | ídem, bloque «autocomprobacion» (6 casos) + cláusula (c) |
+| R30 | La degradación por credencial ausente sigue igual | `fallback-…` → los tests de la 92 intactos + «los DOS caminos de degradacion marcan `local`» |
+| R31 | No se envía `ordenId` | `google-…` → «R31: tampoco en este camino viaja el `ordenId`» |
+| R32 | Nada de token, URL ni coordenadas en errores | `google-…` → «265/R6, R32 …» · `optimizacion-ruta-service.test.ts` → «R32: el motivo de un error de LIBRERIA es fijo» |
+| R33 | Las cinco guardas de coste, intactas | `optimizacion-ruta-service.test.ts` (R20/R34/R35/R36/R38, sin tocar) — ver §6 |
+| R34 | (lo que queda vivo) sin tabla, sin RLS, **sin backfill** | `ruta-secuencia-fuente-migracion.test.ts` → «R34 (lo que queda vivo) …» |
+| R35 | La procedencia se persiste y se consulta | `ruta-optimizada-repo.test.ts` → «265/R35 …» · `optimizacion-ruta-service.test.ts` → «un orden %s se persiste CON esa marca» · `…-degradacion.test.ts` |
+| R36 | La marca es la de ESA secuencia | `ruta-optimizada-repo.test.ts` → «R36: recalcular de `local` a `proveedor` CAMBIA la marca» |
+| R37 | Sin secuencia que ordenar, no se afirma procedencia | `optimizacion-ruta-service.test.ts` → «R37: en la rama trivial …» |
+| R38-R45 | La pantalla y sus textos | **FE3** (bloque frontend). Lo que el backend aporta: R39 → `sincronizar-ruta.test.ts` «265/R39 …»; R44 → `fallback-…` «los DOS caminos … marcan `local`»; R45 → `ruta-optimizada-repo.test.ts` «al LEER, `null` significa no consta» |
+| R46 | El umbral vive en un solo sitio | `umbral-origen-declarado.guardia.test.ts` → «265/R46 …» + árbol simulado |
+| R47 | Declarado sin calibrar, con guardia | ídem → «la declaracion esta completa, y el fallo dice CUAL pieza falta» |
+| R48 | Nada depende de la traza | `optimizacion-ruta-degradacion.test.ts` → «265/R48 …» (2 tests) + toda la suite con `RUTA_DEBUG_LOG=0` |
+| R49 | Sin códigos, el motivo sigue completo | `google-…` → «R49: SIN ningun codigo …» · `…-degradacion.test.ts` → «el aviso agregado nombra la causa …» |
+
+---
+
+## 5 · Mutaciones — 25 de las 30, con su salida real
+
+Arnés: `scratchpad/mutar.py`, que aplica **una** mutación, corre los tests que deben cazarla y
+**revierte siempre** (`finally`). No hay veredicto agregado: abajo va el nombre del test que se
+puso rojo en cada corrida, copiado de la salida de vitest.
+
+| # | Mutación | Veredicto | Test rojo (uno de los que cayeron) |
+| --- | --- | --- | --- |
+| M-a | Quitar `skippedShipments` del schema | **muere** | `R1: los TRES campos se leen de verdad` (+ `R7: con codigos reconocibles…`) — 2 rojos |
+| M-b | Declararlo obligatorio | **muere** | `una respuesta SANA sin skippedShipments … sigue siendo ok` — 8 rojos |
+| M-c | Decidir por `skippedShipments.length` | **muere** | `R3 bis: skippedShipments VACIO con la secuencia incompleta degrada igual` — 2 rojos |
+| M-d | Motivo genérico «forma inesperada» | **muere** | `lee los tres campos y devuelve el desenlace con sus conteos` — 5 rojos |
+| M-e | Meter un índice de parada en el motivo | **muere** | `ni coordenadas, ni ordenId, ni indices de parada…` — 2 rojos |
+| M-f | Re-lanzar `sin_solucion` en vez de degradar | **muere** | `NINGUNA parada servida … -> se delega en el calculo local` — 10 rojos |
+| M-g | Degradar solo si `servidas === 0` | **muere** | `ALGUNAS servidas: 4 de 6 -> se delega en el calculo local` — 3 rojos |
+| M-h | Degradar también ante `transitorio` | **muere** | `R14 (mitad negativa): transitorio y config_invalida NO degradan` — 2 rojos |
+| M-i | Persistir la parcial en vez de la local | **muere** | `no persiste nada, marca desactualizada y lanza el tipado` |
+| M-j | Borrar la guarda del origen | **muere** | `se llama al proveedor con el CENTROIDE, no con el origen lejano` — 5 rojos |
+| M-k | `>` por `>=` en el umbral | **muere** | `> y no >=: una distancia EXACTAMENTE igual al limite NO sustituye` |
+| M-l | Guarda solo para `gps` | **muere** | `R18: aplica tambien a ultima_conocida, no solo a gps` |
+| M-m | Huella con el origen **viejo** | **muere** | `R20: la HUELLA se calcula con el origen FINAL` |
+| M-n | Cortar el job en vez de sustituir | **muere** | `se llama al proveedor con el CENTROIDE…` — 6 rojos |
+| M-o | Quitar el `try/catch` | **muere** | `excepcion nuestra … -> orden previo intacto + desactualizada + RutaIntentoFallidoError` — 5 rojos |
+| M-p | Marcar la degradada `desactualizada` | **muere** | `§5.4 — la degradacion se persiste VIGENTE, y por eso la siguiente llamada NO se paga` |
+| M-q | Reescribir el razonamiento | **muere** | `(a) el razonamiento que sigue vivo esta VERBATIM` — 2 rojos |
+| M-r | Borrar el puntero de la nota | **muere** | `(b) la nota anexada esta completa, y el fallo dice CUAL pieza falta` |
+| M-s | Escribir siempre `"proveedor"` | **muere** | `un orden local se persiste CON esa marca` — 4 rojos |
+| M-t | No escribir la columna al reemplazar | **muere** | `R36: recalcular de local a proveedor CAMBIA la marca` — 4 rojos |
+| M-u | Procedencia en la rama trivial | **muere** | `R37: en la rama trivial de 0 o 1 parada NO se afirma ninguna procedencia` |
+| M-aa | Repetir el umbral en otro módulo | **muere** | `ningun otro modulo de lib/, app/ o components/ lo define ni lo repite` |
+| M-ab | Borrar la declaración «no calibrado» | **muere** | `la declaracion esta completa, y el fallo dice CUAL pieza falta` — 2 rojos |
+| M-ac | Emitir el aviso **solo** por `optlog` | **muere** | `apagada y encendida producen la MISMA secuencia, la misma marca y el mismo aviso` — 2 rojos |
+| M-ad | Imprimir `motivos: undefined` sin códigos | **muere** | `R49: SIN ningun codigo, el motivo nombra causa y conteos, sin huecos ni undefined` — 3 rojos |
+
+**Las cinco que NO corrí y por qué:** `M-v`, `M-w`, `M-x`, `M-y` y `M-z` mutan la **pantalla**
+(el aviso persistente, las tres señales, el toast y el saneo del texto). Sus tests son los de
+**FE3**, que todavía no existen. **Las corre el agente de frontend**, no yo: mutar código que
+aún no está escrito daría «sobrevive» por una razón falsa.
+
+⚠️ **Dos avisos honestos sobre este arnés:**
+
+1. **M-a mató un test que no era el que el diseño anunciaba.** La primera corrida solo puso
+   rojo `R7`, no un test de R1 — porque **ningún test afirmaba que los tres campos se leyeran**
+   (todos los demás se apoyan en la cobertura de la secuencia, que es independiente **a
+   propósito**, R3). Se añadió el test que faltaba (`R1: los TRES campos se leen de verdad`) y
+   se volvió a correr la mutación. Sin el arnés, ese agujero se habría quedado.
+2. **M-o no mató ningún test de la action**, y el diseño decía que debía («test del servicio y
+   test de la action»). Es correcto que no: la action se prueba con un **doble del servicio**,
+   así que no puede ver si el servicio tiene o no `try/catch`. R25 sigue cubierto —su test
+   afirma el contrato de la action— pero la mutación que lo defiende es otra. Queda escrito
+   para que nadie lea «M-o → action» como si estuviera comprobado.
+
+---
+
+## 6 · El gate: `./init.sh` COMPLETO
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=0)
+✓ specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+✓ typecheck paso
+-> pnpm run lint
+✖ 99 problems (0 errors, 99 warnings)      ← warnings preexistentes, ninguno de esta rama
+✓ lint paso
+-> pnpm run test
+ Test Files  1 failed | 1310 passed (1311)
+      Tests  2 failed | 17597 passed | 26 skipped (17625)
+   Duration  379.26s
+✗ 'pnpm run test' fallo
+INIT_EXIT=1
+```
+
+**`INIT_EXIT=1`, y los DOS rojos NO son de esta rama.** Los dos están en
+`tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts`, que lee los
+valores de dos **enums de la base local** y los compara con una lista literal. En la base
+sobra `orden_dia_reparto_cambio`, que llegó con las migraciones de la **feature 262**, que se
+está implementando en paralelo **contra la misma base local**:
+
+```
+$ pnpm exec prisma migrate status
+The migrations from the database are not found locally in prisma/migrations:
+20260822130000_orden_dia_reparto_cambio
+20260822140000_notificacion_evento_dia_reparto_corregido
+```
+
+Tres comprobaciones de que no es mío, hechas y no supuestas:
+
+1. `git diff origin/dev -- <ese test>` → **vacío**: no lo he tocado.
+2. `grep -rn orden_dia_reparto_cambio db/ lib/ tests/` → **cero coincidencias** en mi árbol.
+3. Ese rojo ya estaba **antes** de que yo aplicara nada a la base (primera corrida de
+   `tests/integration/db/` a las 20:36; mi `migrate deploy` fue a las ~20:47).
+
+**No es un timeout bajo carga** —lo comprobé aislado, y falla igual en 696 ms— y **no se
+arregla desde esta rama**: se cura cuando la 262 mergee su migración, o en cualquier entorno
+que no comparta esta base local.
+
+**Los 4 rojos de la primera corrida se redujeron a 2**: los otros dos (`mis-asignaciones-orden-ruta`
+y `optimizacion-ruta-trazado`) **sí eran míos** —dos `toEqual` literales del contrato— y están
+arreglados haciendo crecer el literal, no ablandándolo.
+
+**Paso 6 (migraciones sin `down.sql`), corrido aparte** porque `init.sh` corta en el primer rojo
+y no llegó a imprimirlo:
+
+```
+migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+```
+
+**La lista NO crece**: son las tres `ruta_*` del 2026-08-14 que ya venían así, y la migración
+nueva **no aparece**. No se tocan las tres viejas: editar una migración ya aplicada es *drift*.
+
+---
+
+## 7 · Lo que quedó a deber
+
+1. **⚠️ El gate no está verde, y su rojo no es reparable desde aquí.** Los 2 rojos son de la
+   262 sobre la base local compartida (§6). **El leader tiene que decidir**: o se acepta con
+   esta explicación, o se re-corre el gate cuando la 262 haya mergeado. Lo que **no** se puede
+   hacer es tocar ese test para que pase: mide la base de verdad y ahora mismo dice la verdad.
+
+2. **⚠️ El cliente Prisma se genera en `node_modules` COMPARTIDO, y la 262 me lo pisó dos
+   veces.** `pnpm exec prisma generate` escribe en el `node_modules` del repo principal, que
+   está montado por *junction* en los dos worktrees. Cuando la otra sesión regenera desde **su**
+   schema, mi columna desaparece del cliente y el typecheck se pone rojo con
+   `Property 'secuenciaFuente' does not exist` — pasó **dos veces**, la segunda **dentro del
+   gate**. Se arregla con un `prisma generate` y a correr otra vez. **Quien vuelva a correr el
+   gate aquí debe regenerar justo antes.** Y al revés: mi `generate` le quita a la 262 sus
+   valores de enum del cliente. Es simétrico y no tiene arreglo desde una sola rama.
+
+3. **Dos migraciones con el MISMO prefijo de timestamp.** La mía es
+   `20260822140000_ruta_secuencia_fuente` y la de la 262 es
+   `20260822140000_notificacion_evento_dia_reparto_corregido`. No colisionan (directorios
+   distintos, tablas distintas) y el orden lexicográfico las resuelve, pero **está dicho** por
+   si al leader le importa renombrar una antes de mergear.
+
+4. **La migración se aplicó a la base LOCAL** (`migrate deploy`), no a preview ni a producción.
+   El despliegue de Vercel la aplica en el build.
+
+5. **P1 y P5 siguen abiertas y esta ficha las cierra sin resolver.** La forma interna de
+   `skippedShipments` no se vio y **ya no se verá**: la traza que era la única vía queda apagada
+   por defecto en esta misma release. El schema es defensivo y el extractor de códigos
+   reconoce claves, no una forma (§3.1). Si algún día alguien captura la respuesta cruda, lo
+   que hay que apretar es `extraerCodigosDeSalto` y su test, nada más.
+
+6. **El umbral `RUTA_ORIGEN_MAX_KM = 200` NO está calibrado**, y su guardia solo garantiza que
+   eso siga **escrito**, no que el número sea bueno. **C3 sigue viva**: re-medir M1 antes de
+   desplegar a producción, con `ruta_optimizada_parada` ya con filas. Si el máximo legítimo se
+   acerca a 200 km, se para y se pregunta.
+
+7. **Los avisos agregados (`logger.warn`) siguen sin llegar a nadie en producción.** Es el
+   límite declarado 5 del spec y **P8 lo cerró así a propósito**: la operación se entera
+   **consultando `ruta_optimizada.secuencia_fuente`**. Escribí los `warn` porque los tests son
+   la única superficie que hoy los observa —y porque enchufar un logger real es una decisión de
+   plataforma que este repo no ha tomado—, pero que nadie crea que se están viendo.
+
+8. **`tests/integration/repositories/` NO levanta Postgres.** Ese archivo se llama «integración»
+   pero usa un Prisma mockeado (es el patrón del repo, no algo que yo haya introducido). Mis
+   tests ahí afirman **los argumentos** del `upsert`, no el `UPDATE` real. Lo que sí mira el
+   SQL de verdad es el test estático de la migración. El único sitio donde la columna se
+   ejercita contra Postgres de verdad será **F6**, en preview.
+
+9. **No corrí F6** (ver la app): depende del bloque frontend, que no es mío.
+
+10. **`feature_list.json` y `progress/current.md` no se tocaron**, como se me indicó.

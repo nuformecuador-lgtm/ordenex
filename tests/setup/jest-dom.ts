@@ -25,6 +25,14 @@ if (typeof window !== "undefined") {
 // cambie de comportamiento al detectar el entorno de test. Este archivo SI es codigo de
 // test, asi que puede saberlo. Sin esto, la traza escupiria coordenadas y cuerpos HTTP en
 // cada corrida del gate.
+//
+// ⏳ FEATURE 265 (2026-08-22, P7): esta linea es hoy REDUNDANTE y se conserva a proposito.
+// El default del codigo se invirtio —la traza nace apagada y solo se enciende con
+// `RUTA_DEBUG_LOG=1`—, asi que la suite ya saldria silenciosa sin ella. Se deja porque fija
+// la propiedad de forma EXPLICITA: si alguien vuelve a invertir el default, el gate seguiria
+// corriendo en silencio y ninguna corrida escupiria coordenadas por accidente. Y porque los
+// tests de la 265 (R48) afirman que nada depende de la traza, lo que exige que la suite entera
+// corra con ella apagada aunque el entorno del que la corre diga otra cosa.
 process.env.RUTA_DEBUG_LOG = "0";
 
 // `react-countup` anima el valor DESDE 0 (`start={0}` explícito en `KpiValorAnimado`), asi

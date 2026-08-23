@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 
 import { SincronizarRutaButton } from "@/app/(app)/mis-asignaciones/_components/SincronizarRutaButton";
 import { sincronizarRuta } from "@/lib/actions/ruta-mensajero";
+import type { SincronizarRutaResult } from "@/lib/types/ruta-mensajero";
 
 // Feature 97 (R25/R32/R34) — botón de sincronización manual de la ruta. Se mockea la Server
 // Action (`"use server"` con Prisma/servicios detrás), el toast, el router y
@@ -51,7 +52,9 @@ function setGeolocation(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sincronizarMock.mockResolvedValue({ status: "ok", omitida: false });
+  // Feature 265 (R39): la rama `ok` lleva la procedencia del orden recien calculado.
+  // `proveedor` es el caso normal, el que NO cambia el mensaje del toast.
+  sincronizarMock.mockResolvedValue({ status: "ok", omitida: false, secuenciaFuente: "proveedor" });
 });
 
 afterEach(() => {
@@ -120,7 +123,7 @@ describe("SincronizarRutaButton", () => {
       } as GeolocationPosition),
     );
     // La action queda EN VUELO (promesa pendiente) para mantener el cerrojo cerrado.
-    let resolver: (v: { status: "ok"; omitida: boolean }) => void = () => {};
+    let resolver: (v: SincronizarRutaResult) => void = () => {};
     sincronizarMock.mockReturnValue(
       new Promise((resolve) => {
         resolver = resolve;
@@ -135,7 +138,7 @@ describe("SincronizarRutaButton", () => {
     expect(sincronizarMock).toHaveBeenCalledTimes(1);
 
     // Cierra la promesa para no dejar trabajo colgado.
-    resolver({ status: "ok", omitida: false });
+    resolver({ status: "ok", omitida: false, secuenciaFuente: "proveedor" });
   });
 
   it("R34: un 'conflict' (intervalo mínimo) se avisa con warning y NO refresca", async () => {

@@ -40,6 +40,9 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
       estado: "vigente" as const,
       calculadaAt: null,
       origenFuente: null,
+      // Feature 265 (R45): `null` = no consta quien ordeno las paradas. Es lo que exige el tipo,
+      // no un test que fallara: sin marca, la pantalla no dice nada del orden.
+      secuenciaFuente: null,
       paradasSinOptimizar: 0,
       trazado: null,
       tramoSiguiente: null,

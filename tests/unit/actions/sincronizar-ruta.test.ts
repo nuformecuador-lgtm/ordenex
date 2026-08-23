@@ -17,7 +17,15 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const MENSAJERO: Actor = { usuarioId: "m-1", rol: "mensajero" };
 
-function build(resultado: EjecutarOptimizacionResult | Error = { status: "ok", paradas: 3 }) {
+function build(
+  resultado: EjecutarOptimizacionResult | Error = {
+    status: "ok",
+    paradas: 3,
+    // Feature 265 (R39): el desenlace `ok` del servicio dice quien ordeno. El caso normal es
+    // el proveedor; los tests de orden local lo pasan explicito.
+    secuenciaFuente: "proveedor",
+  },
+) {
   const ejecutar = vi.fn<
     (mensajeroId: string, opts: EjecutarOptimizacionOpts) => Promise<EjecutarOptimizacionResult>
   >(async () => {
@@ -68,7 +76,7 @@ describe("R32 — la sincronizacion es SINCRONA y usa el motivo `manual`", () =>
 
     const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
 
-    expect(r).toEqual({ status: "ok", omitida: false });
+    expect(r).toEqual({ status: "ok", omitida: false, secuenciaFuente: "proveedor" });
     expect(ejecutar).toHaveBeenCalledTimes(1);
     expect(ejecutar.mock.calls[0]).toEqual(["m-1", { motivo: "manual", ubicacion: undefined }]);
   });
@@ -76,7 +84,8 @@ describe("R32 — la sincronizacion es SINCRONA y usa el motivo `manual`", () =>
   it("una guarda de coste que omite la optimizacion sigue siendo `ok`, con omitida=true", async () => {
     const { service } = build({ status: "omitida", razon: "sin_cambios" });
     const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
-    expect(r).toEqual({ status: "ok", omitida: true });
+    // Feature 265: `omitida` no recalculo nada, asi que no hay procedencia nueva que contar.
+    expect(r).toEqual({ status: "ok", omitida: true, secuenciaFuente: null });
   });
 
   it("sin argumentos (input por defecto) funciona igual", async () => {
@@ -170,4 +179,51 @@ describe("R27 — fallo del proveedor: conflict accionable, sin filtrar el detal
     const { service } = build(new Error("caida de DB"));
     await expect(sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) })).rejects.toThrow();
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Feature 265 (R25, R39) — LA PANTALLA DEJA DE ROMPERSE, Y EL TOAST DEJA DE MENTIR
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+describe("265/R25 — un fallo del proveedor llega como DOMINIO, no como excepcion sin tipar", () => {
+  it("el error tipado del servicio se traduce a `conflict` y la action NO lanza", async () => {
+    // ⚠️ ESTA ES LA ASERCION CONTRARIA a los `rejects.toThrow(/AppErrorCode inesperado/)` que
+    // existen en otros bordes: aqui ese `throw` ERA EL DEFECTO. Medido en produccion: una
+    // excepcion del cliente atravesaba el servicio, caia en el `default:` de
+    // `toRutaActionError` y salia como «ruta-mensajero: AppErrorCode inesperado INTERNAL»
+    // —pantalla rota, 6 veces sobre 2 usuarios—. Con la 265, el servicio la tipa antes.
+    const { service } = build(
+      new RutaIntentoFallidoError("optimizar ruta: respuesta del proveedor con forma inesperada"),
+    );
+
+    const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
+
+    expect(r.status).toBe("conflict");
+    expect(r.status === "conflict" && r.motivo).toMatch(/se conserva el ultimo orden/);
+  });
+
+  it("y el detalle interno del proveedor NO viaja al cliente", async () => {
+    const { service } = build(
+      new RutaIntentoFallidoError("optimizar ruta: paradas saltadas por el proveedor (servidas 0 de 6)"),
+    );
+    const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
+    expect(r.status === "conflict" && r.motivo).not.toMatch(/servidas|proveedor/);
+  });
+});
+
+describe("265/R39 — la action devuelve QUIEN ordeno la secuencia", () => {
+  it.each(["proveedor", "local"] as const)("orden %s -> se reenvia tal cual", async (fuente) => {
+    const { service } = build({ status: "ok", paradas: 3, secuenciaFuente: fuente });
+    const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
+    expect(r).toEqual({ status: "ok", omitida: false, secuenciaFuente: fuente });
+  });
+
+  it.each(["obsoleta", "sin_cambios", "sin_paradas"] as const)(
+    "omitida por %s -> `null`: no se recalculo nada que contar",
+    async (razon) => {
+      const { service } = build({ status: "omitida", razon });
+      const r = await sincronizarRuta({}, { service, getActor: actorDe(MENSAJERO) });
+      expect(r).toEqual({ status: "ok", omitida: true, secuenciaFuente: null });
+    },
+  );
 });
