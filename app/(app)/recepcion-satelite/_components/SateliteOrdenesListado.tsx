@@ -32,6 +32,9 @@ import {
 // vive en la bodega satélite. Se IMPORTA el mismo disparador y el mismo modal de `/ordenes`;
 // esta superficie sólo aporta SU regla de disponibilidad (alcance por zona, R48).
 import { ReportarIncidenteAccion } from "@/app/(app)/ordenes/_components/ReportarIncidenteAccion";
+// Feature 262 (F4, R13/R18): la etiqueta del botón se IMPORTA del modal que abre, para que las
+// dos superficies —ésta y `/ordenes`— no puedan llamar a la misma acción de dos maneras.
+import { CAMBIAR_DIA_ACCION } from "@/app/(app)/ordenes/_components/CambiarDiaRepartoModal";
 import { puedeReportarIncidenteSatelite } from "./incidente-satelite";
 import { recibidasColumns } from "./recibidas-columns";
 import { COLUMNAS_DESCARGA_SATELITE } from "./satelite-descarga-columnas";
@@ -148,6 +151,14 @@ export interface SateliteOrdenesListadoProps {
    * mensajero bloquea asignar, pero no revertir (Q1 CERRADA, R19).
    */
   onDeshacerAsignacion: (ordenes: RecepcionSateliteDTO[]) => void;
+  /**
+   * Feature 262 (F4, R13/R14): abre el modal de «Cambiar día de reparto» con las seleccionadas
+   * (`por_recoger`). Como «Deshacer asignación», NO depende de `puedeAsignar`: un cierre de día
+   * pendiente bloquea asignar, pero no corregir el día — es la regla 2 de la 241 y el mismo
+   * criterio con el que la 149 cerró su Q1. La corrección no mueve dinero, no crea una gestión y
+   * no cambia de estado.
+   */
+  onCambiarDiaReparto: (ordenes: RecepcionSateliteDTO[]) => void;
   /** `true` mientras el envío a central está en vuelo (deshabilita el botón). */
   enviandoACentral?: boolean;
   /** `true` mientras la recuperación está en vuelo. */
@@ -177,6 +188,7 @@ export function SateliteOrdenesListado({
   onEnviarACentral,
   onRecuperar,
   onDeshacerAsignacion,
+  onCambiarDiaReparto,
   enviandoACentral = false,
   recuperando = false,
   sinZona = false,
@@ -535,6 +547,29 @@ export function SateliteOrdenesListado({
               disabled={estadoUnico !== ESTADO_POR_RECOGER}
             >
               Deshacer asignación
+            </Button>
+          ) : null}
+          {/* Feature 262 (F4, R13, design §4.1) — el adminSatelite llega a la corrección SIN
+              pasar por `/ordenes`, que le hace `notFound()`. Es la razón de que esta ficha
+              tenga DOS superficies y no una: quien elige el día al asignar tiene que poder
+              arreglarlo, y esa exclusión no está en ninguna regla de rol —está en un
+              `notFound()` de una página, donde ningún test de rol la vería.
+
+              Sólo `por_recoger`: los otros dos estados donde el día sigue vivo (`en_reparto`,
+              `ayuda_tienda`) no están entre los cinco que este listado ofrece. Ésa es la
+              escalera de dos peldaños del límite declarado 5, y el de arriba —maestro/admin
+              desde `/ordenes`, cualquier zona— llega a todo.
+
+              Mismo `disabled` por estado mixto que las demás acciones de esta barra: son
+              transiciones distintas y no se mezclan en un mismo lote. */}
+          {hayEstado(ESTADO_POR_RECOGER) ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onCambiarDiaReparto(seleccionadas)}
+              disabled={estadoUnico !== ESTADO_POR_RECOGER}
+            >
+              {CAMBIAR_DIA_ACCION}
             </Button>
           ) : null}
           {hayEstado(ESTADO_POR_DEVOLVER) ? (

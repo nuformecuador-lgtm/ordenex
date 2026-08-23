@@ -95,13 +95,20 @@ function toCorregirDiaActionError(shape: AppErrorShape): BorderError {
  * desconocido, motivo fuera de rango) se resuelven en el BORDE, sin construir el service ni tocar
  * dato alguno; `forbidden` / `sin_zona` / `conflict` los devuelve el service.
  *
- * @sin-superficie los dos modales que la disparan (`CambiarDiaRepartoModal` y su hermano del
- * listado satelite, tareas F1-F4 de `specs/262-corregir-dia-reparto/tasks.md`) llegan DESPUES: la
- * ficha es de zona `fullstack` y su `tasks.md` secuencia backend -> frontend a proposito, con el
- * bloque de UI arrancando cuando los contratos ya estan en la rama. Esta anotacion es TEMPORAL y
- * CADUCA SOLA: la otra mitad de esta misma guardia («ninguna anotacion sobrevive a su motivo») se
- * pone roja en cuanto la accion recupere superficie, asi que quien monte los modales esta obligado
- * a borrarla. Si el bloque de UI se cancelara, entonces lo que sobra es la accion entera.
+ * SUPERFICIE (F1-F4, R13). La disparan los DOS modales de las dos superficies donde hoy se elige
+ * el dia al asignar: `CambiarDiaRepartoModal` desde `OrdenesListado` (`/ordenes`, maestro/admin,
+ * cualquier zona) y `CambiarDiaRepartoSateliteModal` desde `RecepcionSateliteModule`
+ * (`/recepcion-satelite`, adminSatelite, su zona). Son DOS y no una porque `/ordenes` no recorta
+ * por rol sino por PUERTA -`notFound()` para `mensajero` y `adminSatelite`-, asi que con una sola
+ * superficie el adminSatelite se quedaria sin poder corregir lo que el mismo eligio (design 4.1).
+ *
+ * Aqui vivio, mientras el bloque backend de esta ficha iba por delante de su UI, una anotacion
+ * `@sin-superficie`: la accion existia y no la importaba ningun modulo alcanzable. Se retira al
+ * montar los modales, que es exactamente lo que aquella anotacion exigia -CADUCA SOLA-: la otra
+ * mitad de `superficie-de-uso.guardia` (ninguna anotacion sobrevive a su motivo) se pone ROJA si
+ * una excepcion sigue escrita despues de que su motivo desaparezca. Se deja dicho el episodio en
+ * vez de borrarlo a secas, porque el orden backend -> frontend de una ficha `fullstack` lo va a
+ * volver a producir.
  */
 export async function corregirDiaReparto(
   input: unknown,

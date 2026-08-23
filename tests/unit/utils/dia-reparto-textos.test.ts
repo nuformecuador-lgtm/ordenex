@@ -4,10 +4,15 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 
 import {
+  avisoDiaActualDeLaOrden,
   avisoReservaParaOtroDia,
   fechaLegible,
   ETIQUETA_PARA_MANANA,
   RESERVA_MOTIVO_SERVIDOR,
+  SELECTOR_DIA_AYUDA,
+  SELECTOR_DIA_AYUDA_CORRECCION,
+  SELECTOR_DIA_TITULO,
+  SELECTOR_DIA_TITULO_CORRECCION,
 } from "@/lib/utils/dia-reparto-textos";
 
 // FEATURE 261 (F5, R11/R14/R15) — EL TEXTO DEL BLOQUEO POR RESERVA: SU CONTENIDO, SU RELOJ
@@ -217,5 +222,73 @@ describe("261/R15 — el aviso se importa; ninguna superficie lo escribe", () =>
     expect(
       trozosCopiados('import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";'),
     ).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* (4) FEATURE 262 (B2/F5, R16/R17/R18) — el texto de la CORRECCIÓN del día    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ⬛ AÑADIDO POR LA FEATURE 262. Este archivo ya vigilaba el módulo entero por (2) —el reloj
+ * ausente— y por (3) —la fuente única—; lo que faltaba era QUÉ DICEN las piezas nuevas, que la
+ * pantalla de la corrección pinta y hasta hoy no tenían ni una aserción.
+ *
+ * Se añade aquí y no en un archivo aparte porque las dos comprobaciones estructurales de arriba
+ * cubren TODO el módulo: partirlo dejaría el contenido nuevo en un sitio y su guardia en otro.
+ *
+ * Los literales van escritos A MANO, letra por letra, por la misma razón que los de (1).
+ */
+describe("262/R16 — el día para el que UNA orden está marcada hoy", () => {
+  it("con fecha lo dice en palabras, sin siglas y sin `YYYY-MM-DD` a la vista", () => {
+    expect(avisoDiaActualDeLaOrden("2026-08-22")).toBe("hoy está para el 22 de agosto");
+  });
+
+  it("es una frase de MEDIA LÍNEA: se lee pegada al nº de remisión, no como oración suelta", () => {
+    // La lista del lote pinta «REM-1 · <esto>». Si algún día empezara por mayúscula o cerrara
+    // con punto, la línea se leería como dos frases pegadas.
+    const frase = avisoDiaActualDeLaOrden("2026-01-01");
+    expect(frase).toBe("hoy está para el 1 de enero");
+    expect(frase.endsWith(".")).toBe(false);
+  });
+
+  it("sin día NO deja el hueco en blanco: lo NOMBRA (R5 lo rechaza, pero se ve)", () => {
+    // Los tres «no hay fecha» posibles del DTO, y los tres dicen lo mismo: una orden sin día
+    // existe, la corrección la rechaza, y la pantalla tiene que poder nombrarla.
+    expect(avisoDiaActualDeLaOrden(null)).toBe("hoy no tiene día de reparto");
+    expect(avisoDiaActualDeLaOrden(undefined)).toBe("hoy no tiene día de reparto");
+    expect(avisoDiaActualDeLaOrden("")).toBe("hoy no tiene día de reparto");
+  });
+
+  it("no dice `fecha_reparto`, ni «reserva», ni «corte» en ninguna de sus dos formas", () => {
+    // La misma regla con la que este repo retiró «SLA» del frontend.
+    for (const texto of [avisoDiaActualDeLaOrden("2026-08-22"), avisoDiaActualDeLaOrden(null)]) {
+      expect(texto).not.toMatch(/fecha_reparto|reserva|corte|SLA/i);
+      expect(texto).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    }
+  });
+});
+
+describe("262/§7.2 — el selector en modo corrección se lee distinto que al asignar", () => {
+  it("el título dice que el día es NUEVO, y no repite el de la asignación", () => {
+    expect(SELECTOR_DIA_TITULO_CORRECCION).toBe("Nuevo día de reparto");
+    // La pareja: si los dos títulos fueran el mismo, uno de los dos sobraría y nadie lo notaría.
+    expect(SELECTOR_DIA_TITULO_CORRECCION).not.toBe(SELECTOR_DIA_TITULO);
+  });
+
+  it("la ayuda NO dice «antes de asignar», que aquí sería falsa: ya está asignado", () => {
+    expect(SELECTOR_DIA_AYUDA_CORRECCION).toBe(
+      "Elige el día al que pasa todo el lote. No hay ninguna opción marcada de salida.",
+    );
+    // Y la contraprueba de que la de asignar SÍ lo decía: sin ella, este caso no probaría que
+    // hacía falta un texto propio.
+    expect(SELECTOR_DIA_AYUDA).toContain("antes de asignar");
+    expect(SELECTOR_DIA_AYUDA_CORRECCION).not.toContain("antes de asignar");
+  });
+
+  it("la ayuda AVISA de que no hay opción marcada de salida (design §7.2)", () => {
+    // No es adorno: la mitad de las correcciones son «hoy → mañana» y la otra mitad «mañana →
+    // hoy». Quien abre el modal esperando un valor por defecto tiene que leer que no lo hay.
+    expect(SELECTOR_DIA_AYUDA_CORRECCION).toMatch(/no hay ninguna opción marcada/i);
   });
 });

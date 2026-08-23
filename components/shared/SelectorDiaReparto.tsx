@@ -11,6 +11,16 @@ import {
 } from "@/lib/utils/dia-reparto-textos";
 
 /**
+ * FEATURE 262 (F1, design §7.2) — «todavía no se ha elegido».
+ *
+ * Se declara como constante con nombre en vez de escribir `""` suelto en tres sitios porque la
+ * primitiva `RadioGroup` ya usa la cadena vacía con ese significado exacto
+ * (`components/ui/radio-group.tsx:19`): un nombre hace que el estado sin elegir se lea igual en
+ * el selector, en el modal que lo monta y en el test que lo afirma.
+ */
+export const DIA_REPARTO_SIN_ELEGIR = "";
+
+/**
  * Feature 246 (T4.1, R1/R2/R27/R29) — elegir si el lote es para el reparto de HOY o el del DÍA
  * SIGUIENTE, al asignar.
  *
@@ -42,9 +52,21 @@ import {
  * aquí para que sea decisión y no descubrimiento: si esa masa aparece, el escape está en §4.4.
  */
 export interface SelectorDiaRepartoProps {
-  /** Opción elegida. El padre es la fuente de verdad (mismo contrato que `Select`). */
-  valor: DiaReparto;
-  /** Emite la nueva opción. */
+  /**
+   * Opción elegida. El padre es la fuente de verdad (mismo contrato que `Select`).
+   *
+   * FEATURE 262 (F1, design §7.2): admite además `DIA_REPARTO_SIN_ELEGIR` — ninguna opción
+   * marcada. Al ASIGNAR nunca se usa: allí «Hoy» viene preseleccionado a propósito (246/R27,
+   * el defecto lo pone el padre). Al CORREGIR sí, y no es un detalle de estilo: la mitad de las
+   * correcciones son «hoy → mañana» y la otra mitad «mañana → hoy», así que una preselección
+   * convertiría un despiste en una corrección equivocada.
+   */
+  valor: DiaReparto | typeof DIA_REPARTO_SIN_ELEGIR;
+  /**
+   * Emite la nueva opción. NUNCA emite `DIA_REPARTO_SIN_ELEGIR`: desde el selector sólo se
+   * puede pasar de «sin elegir» a una de las dos opciones, nunca al revés. Quien arranca sin
+   * elegir es el padre, y el confirmar depende de que eso cambie.
+   */
   onValorChange: (valor: DiaReparto) => void;
   /**
    * Fechas calendario de las dos opciones, `YYYY-MM-DD`, RESUELTAS EN EL SERVIDOR (R29). Son
@@ -53,6 +75,18 @@ export interface SelectorDiaRepartoProps {
    * opción se lee sólo con su nombre. Lo que nunca ocurre es que aparezca una fecha inventada.
    */
   fechas: FechasDiaReparto;
+  /**
+   * FEATURE 262 (B2/F1, R18): título del grupo —y su nombre accesible—, por si la superficie
+   * que lo monta necesita otro. El defecto es el de la asignación.
+   *
+   * ES UNA PROP Y NO UN `modo="correccion"` porque lo que cambia es TEXTO, y el texto de esta
+   * app viaja por props/children para que un día se pueda traducir sin tocar el componente
+   * (`docs/conventions.md`). Los dos valores que se le pasan hoy viven en
+   * `lib/utils/dia-reparto-textos.ts`, que es la fuente única: aquí no se escribe ninguno.
+   */
+  titulo?: string;
+  /** FEATURE 262 (B2/F1, R18): la ayuda bajo el título. Mismo criterio que `titulo`. */
+  ayuda?: string;
 }
 
 // SIN prop `disabled`, aunque la primitiva la tenga: hoy no hay ninguna superficie que quiera
@@ -62,6 +96,8 @@ export function SelectorDiaReparto({
   valor,
   onValorChange,
   fechas,
+  titulo = SELECTOR_DIA_TITULO,
+  ayuda = SELECTOR_DIA_AYUDA,
 }: Readonly<SelectorDiaRepartoProps>) {
   const options = DIA_REPARTO.map((dia) => ({
     value: dia,
@@ -73,10 +109,10 @@ export function SelectorDiaReparto({
       {/* El título es prosa visible y el grupo lleva el MISMO texto como nombre accesible: la
           primitiva `RadioGroup` sólo expone `aria-label`, y hacer que coincidan es lo que evita
           que quien oye el control y quien lo lee estén oyendo dos nombres distintos. */}
-      <p className="text-sm font-medium">{SELECTOR_DIA_TITULO}</p>
-      <p className="text-sm text-muted-foreground">{SELECTOR_DIA_AYUDA}</p>
+      <p className="text-sm font-medium">{titulo}</p>
+      <p className="text-sm text-muted-foreground">{ayuda}</p>
       <RadioGroup
-        aria-label={SELECTOR_DIA_TITULO}
+        aria-label={titulo}
         value={valor}
         // El valor sólo puede ser una de las dos opciones del grupo, que son las del enum: el
         // `RadioGroup` emite `""` únicamente al LIMPIAR la selección, y aquí no hay forma de
