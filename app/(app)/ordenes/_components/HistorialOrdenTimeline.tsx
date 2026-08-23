@@ -137,7 +137,7 @@ export function HistorialOrdenTimeline({ entradas }: HistorialOrdenTimelineProps
             // §14.4). Encima de eso, y solo encima, hay dos marcas VISUALES que sobreviven a una
             // captura en escala de grises y a cualquier daltonismo, porque no son de color:
             //
-            //   · el punto es un ANILLO HUECO (`border-2` + `bg-background`) y no un disco lleno;
+            //   · el punto es un ANILLO HUECO (`border-2` + `bg-popover`) y no un disco lleno;
             //   · el filo de la entrada es DISCONTINUO (`border-dashed`) y no continuo.
             //
             // Los TOKENS DE COLOR son EXACTAMENTE los mismos que usa la transicion
