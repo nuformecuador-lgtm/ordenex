@@ -636,6 +636,93 @@ paths:
                 message: "la tienda no tiene una tarifa vigente asociada: no se puede cotizar"
         "422":
           $ref: "#/components/responses/ValidationError"
+  # Feature 266 (T7.1, R28) — HABILITACIÓN POR LOTE de pedidos con novedad. Espejo textual de
+  # `openApiSpec.paths["/api/ordenes/api-key/habilitar"]`.
+  "/api/ordenes/api-key/habilitar":
+    post:
+      tags:
+        - Órdenes
+      summary: "Habilitar pedidos con novedad (lote)"
+      operationId: habilitarOrdenes
+      description: |-
+        Habilita, en lote, pedidos que quedaron con una novedad: por cada fila se registra la
+        habilitación con su nota y, cuando corresponde, la orden vuelve a `en_reparto`.
+
+        **Solo DOS estados son habilitables: `ayuda_tienda` y `devuelta`.** Ningún otro lo es.
+        En particular `reprogramada` **NO** es habilitable por este endpoint y devuelve
+        `estado_no_habilitable`, igual que `rechazada`, `incidente` y `sin_gestionar`.
+
+        **Una orden `devuelta` NUNCA cambia de estado**: siempre responde
+        `habilitada_sin_cambio_de_estado`. No es una degradación ni un fallo — su paquete ya
+        volvió a la bodega, así que no hay nadie en la calle a quien devolvérselo. De los dos
+        estados habilitables, **solo `ayuda_tienda` (y solo si conserva mensajero asignado)**
+        puede producir `habilitada` con estado `en_reparto`.
+
+        **El lote acepta entre 1 y 100 filas.** Un lote vacío, sin la clave
+        `ordenes`, con un cuerpo que no es JSON o con más filas que el tope responde **422** y
+        no procesa ninguna fila: es el único 4xx que tira el lote entero, junto con 401 y 403.
+
+        **Éxito parcial:** una fila mal formada, duplicada dentro del mismo lote, inexistente o
+        en un estado no habilitable se marca `resultado: "error"` con su `error.codigo`, y las
+        demás se procesan igual. La respuesta sigue siendo **200 aunque TODAS las filas fallen**.
+        `resultados` conserva el orden y la cantidad de las filas enviadas: podés casar por
+        índice.
+
+        **Repetir la llamada:** habilitar dos veces la misma orden devuelve `estado_no_habilitable`
+        en la segunda llamada —ya está en `en_reparto`, que no es habilitable— y no escribe nada.
+        No se devuelve un acuse `habilitada` falso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HabilitacionRequest"
+            examples:
+              dosFilas:
+                summary: "Dos filas: una en ayuda con mensajero y una devuelta"
+                value:
+                  ordenes:
+                    - num_guia: 100234
+                      nota: "el cliente pidió reintento mañana"
+                    - num_guia: 100235
+                      nota: "dirección corregida por el call center"
+      responses:
+        "200":
+          description: "Lote procesado (puede incluir filas con error)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HabilitacionResponse"
+              examples:
+                resumen:
+                  summary: "Una habilitada, una sin cambio de estado y una con error"
+                  value:
+                    resumen:
+                      total: 3
+                      habilitadas: 1
+                      habilitadasSinCambioDeEstado: 1
+                      conError: 1
+                    resultados:
+                      - numGuia: 100234
+                        resultado: habilitada
+                        estado: en_reparto
+                        error: null
+                      - numGuia: 100235
+                        resultado: habilitada_sin_cambio_de_estado
+                        estado: devuelta
+                        error: null
+                      - numGuia: 999999
+                        resultado: error
+                        estado: null
+                        error:
+                          codigo: no_encontrada
+                          mensaje: "no existe una orden viva con esa guia"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 # Feature 256/R24 — WEBHOOKS SALIENTES. Sección de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
 # `paths:`): lo que Ordenex ENVÍA al callback del integrador, no lo que el integrador pide.
 # Espejo textual de `openApiSpec.webhooks` (lib/api/openapi-spec.ts).
@@ -1411,6 +1498,108 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CotizacionRowResult"
+    # Feature 266 (T7.1) — cuerpo y respuesta de la habilitación por lote.
+    HabilitacionRequest:
+      type: object
+      required:
+        - ordenes
+      properties:
+        ordenes:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: "Entre 1 y 100 filas. Fuera de ese rango: 422 y ninguna fila procesada."
+          items:
+            $ref: "#/components/schemas/HabilitacionRow"
+    HabilitacionRow:
+      type: object
+      description: "Una fila del lote. Si `num_guia` o `nota` no cumplen, la fila responde `error`/`fila_invalida` y el resto del lote se procesa igual: NO es un 422 del lote."
+      required:
+        - num_guia
+        - nota
+      properties:
+        num_guia:
+          type: integer
+          minimum: 1
+          description: "Número de guía de una orden propia. No se acepta como texto."
+        nota:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Motivo de la habilitación, OBLIGATORIO. Se recorta y se guarda en la bitácora de la orden; no viaja en el historial de estados."
+    HabilitacionResponse:
+      type: object
+      required:
+        - resumen
+        - resultados
+      properties:
+        resumen:
+          $ref: "#/components/schemas/HabilitacionResumen"
+        resultados:
+          type: array
+          description: "MISMO orden y MISMA cantidad que las filas enviadas: se puede casar por índice."
+          items:
+            $ref: "#/components/schemas/HabilitacionRowResult"
+    HabilitacionResumen:
+      type: object
+      description: "`total` = `habilitadas` + `habilitadasSinCambioDeEstado` + `conError`."
+      required:
+        - total
+        - habilitadas
+        - habilitadasSinCambioDeEstado
+        - conError
+      properties:
+        total:
+          type: integer
+          description: Filas recibidas.
+        habilitadas:
+          type: integer
+          description: "Volvieron a `en_reparto`."
+        habilitadasSinCambioDeEstado:
+          type: integer
+          description: "Se registró la habilitación y el estado NO cambió."
+        conError:
+          type: integer
+    HabilitacionRowResult:
+      type: object
+      required:
+        - numGuia
+        - resultado
+        - estado
+        - error
+      properties:
+        numGuia:
+          description: "La guía tal como se envió (si la fila era inválida, puede no ser entero)."
+        resultado:
+          type: string
+          enum:
+            - habilitada
+            - habilitada_sin_cambio_de_estado
+            - error
+          description: "`habilitada`: la orden volvió a `en_reparto`. `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó."
+        estado:
+          type:
+            - string
+            - "null"
+          description: "Estado en el que la orden quedó; `null` cuando la fila falló."
+        error:
+          type:
+            - object
+            - "null"
+          required:
+            - codigo
+            - mensaje
+          properties:
+            codigo:
+              type: string
+              enum:
+                - fila_invalida
+                - duplicada_en_lote
+                - no_encontrada
+                - estado_no_habilitable
+              description: "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: el estado actual no es `ayuda_tienda` ni `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden ya en `en_reparto`—."
+            mensaje:
+              type: string
   responses:
     Unauthorized:
       description: "API key ausente, mal formada o desconocida."

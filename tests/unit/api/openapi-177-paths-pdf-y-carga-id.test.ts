@@ -77,7 +77,16 @@ const PATH_PDF_CARGA = "/api/ordenes/api-key/carga/{cargaId}/generate";
 // publicado es un precio sin contrato: por eso el alta va aquí y en el `.yaml` a la vez.
 const PATH_COTIZACION = "/api/ordenes/api-key/cotizacion";
 
-/** Los 8 endpoints que el canal por API key publica tras la 177 y la 255. */
+// ALTA de la feature 266 (R28) — el NOVENO endpoint del canal, y el alta se hace con la misma
+// regla que la de la 255: la lista estaba firmada en OCHO, publicar la habilitación la puso ROJA,
+// y sube a NUEVE A PROPÓSITO en el MISMO commit que publica el endpoint. Qué se añadió y por qué:
+// `POST /api/ordenes/api-key/habilitar` habilita en lote pedidos con novedad —el integrador manda
+// `{ num_guia, nota }` y recibe, fila por fila, si la orden volvió a `en_reparto` o si solo quedó
+// registrada la habilitación—. Es un borde de ESCRITURA del mismo canal, con la misma key, así
+// que un integrador que no lo encuentre en el contrato publicado no puede usarlo.
+const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
+
+/** Los 9 endpoints que el canal por API key publica tras la 177, la 255 y la 266. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
@@ -87,13 +96,14 @@ const PATHS_ESPERADOS = [
   PATH_PDF_ORDEN,
   PATH_PDF_CARGA,
   PATH_COTIZACION,
+  PATH_HABILITAR,
 ];
 
-describe("177/R41 + 255/R47 — el OpenAPI publica los ocho endpoints del canal por API key", () => {
+describe("177/R41 + 255/R47 + 266/R28 — el OpenAPI publica los nueve endpoints del canal", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente ocho paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(8);
+  it("el objeto TS declara exactamente nueve paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(9);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -103,7 +113,7 @@ describe("177/R41 + 255/R47 — el OpenAPI publica los ocho endpoints del canal 
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos ocho paths, en el mismo orden", () => {
+  it("el .yaml publicado declara los mismos nueve paths, en el mismo orden", () => {
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
@@ -225,14 +235,16 @@ describe("177/R45 — CargaResponse publica el cargaId que exige el endpoint de 
 // del octavo declara el supuesto de comisión (R29). El resto del contrato de la cotización lo
 // cubren sus propias suites; aquí vive lo que esta guardia ya congelaba: la lista de paths.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe("255/R47 — el canal por API key publica OCHO endpoints, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran ocho paths, el mismo octavo y en la misma posición", () => {
+describe("255/R47 + 266/R28 — el canal publica NUEVE endpoints, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran nueve paths, el mismo octavo y el mismo noveno, en su posición", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs).toHaveLength(8);
-    expect(clavesYaml).toHaveLength(8);
+    expect(clavesTs).toHaveLength(9);
+    expect(clavesYaml).toHaveLength(9);
     expect(clavesTs[7]).toBe(PATH_COTIZACION);
     expect(clavesYaml[7]).toBe(PATH_COTIZACION);
+    expect(clavesTs[8]).toBe(PATH_HABILITAR);
+    expect(clavesYaml[8]).toBe(PATH_HABILITAR);
     // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
     expect(clavesYaml).toEqual(clavesTs);
   });
