@@ -264,9 +264,44 @@ sustituirla.
 ⏳ **Caducan.** Son fotos: se re-miden **justo antes de desplegar**. Sus resultados se pegan en
 `progress/impl_262_*.md`, con la consulta al lado y la hora CR de la corrida.
 
+### ✅ Tomadas el 2026-08-22 a las 04:27 CR (producción, sólo lectura)
+
+**M1 = 0 filas.** Ninguna orden con `fecha_reparto` posterior al día CR en curso, **en ningún
+estado** —ni siquiera `por_recoger`, que era el caso que la medición de la 261 no cubría—. Las dos
+órdenes que aquella contó el 21 (guías 17496963 y 57998428) llegaron a su día.
+
+**M2 = 35**, pero **ninguna** en `por_recoger` ni `en_reparto`: todas en estados que R6 excluye. La
+decisión **D3'** de `design.md` §4.4 **no se re-abre**.
+
+Detalle y consultas en `progress/impl_262_backend.md`. ⏳ Siguen caducando: se re-miden antes de
+desplegar.
+
 ---
 
 ## Preguntas abiertas (para la puerta humana)
+
+> ## ✅ PUERTA HUMANA PASADA — 2026-08-22
+>
+> Las tres preguntas de abajo se conservan tal cual: son el razonamiento con el que se decidió.
+> **Las tres se respondieron en contra de la recomendación del spec**, y eso ensancha la ficha.
+>
+> **P1 — CERRADA: SÍ, el rastro tiene que verse en «Ver historial».** Entra alcance nuevo y el
+> diseño de §5 cambia. Lo que el spec ya dejó dicho y sigue siendo el trabajo duro: una corrección
+> de día **no tiene «estado destino»**, así que hay que decidir cómo se pinta una entrada sin
+> transición y cómo se fusionan dos fuentes en un DTO (`OrdenHistorialEntradaDTO`) que hoy sólo
+> sabe de transiciones de estado.
+>
+> **P2 — CERRADA: SÍ, hay que avisar al mensajero cuando le cambian el día.** Consecuencia que el
+> propio spec anticipa: `NotificacionEvento` es un **inventario cerrado a propósito** (146/D1, cinco
+> valores) y ampliarlo **exige migración de enum**. ⚠️ Eso arrastra dos cosas no negociables: el
+> `down.sql` de ese enum (mirar si el de ESE enum recrea-con-lista o sólo dropea, sin tocar los
+> `down.sql` previos, que son fotos históricas) y que **el gate de esta ficha pasa a ser
+> `./init.sh` COMPLETO**: tocar `db/migrations` hace que el modo rápido se niegue solo.
+>
+> **P3 — CERRADA: basta «hoy / mañana»**, el mismo vocabulario que al asignar (246/D2). Es la
+> recomendación del spec y la que **mantiene la propiedad fuerte**: con un token, mover al pasado es
+> **imposible por construcción**, no prohibido por un `if` que alguien puede relajar más adelante.
+
 
 > Las **cuatro decisiones** que la ficha exigía cerrar están **cerradas** y no figuran aquí: quién
 > (**R11**), desde dónde (**R13**), el pasado (**R3**) y el rastro (**R20-R26**). Su razonamiento

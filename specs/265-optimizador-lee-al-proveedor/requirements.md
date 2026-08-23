@@ -283,6 +283,23 @@ paradas y mismo conjunto+origen) DEBEN seguir cortando exactamente igual y en el
 ⏳ **Caducan.** Son fotos: se re-miden justo antes de desplegar. Sus resultados se pegan en
 `progress/impl_265_*.md`, con la consulta al lado.
 
+### ✅ Tomadas el 2026-08-22 por el leader (producción, sólo lectura)
+
+| # | Resultado |
+| --- | --- |
+| **M1** | **NO SE PUDO MEDIR.** `ruta_optimizada_parada` está **vacía** (0 filas) y hay **0 órdenes en `en_reparto`**: sin paradas no hay centroide contra el que medir el origen. Por eso el umbral de **P2** se fija declarado y no derivado. |
+| **M2** | **6** jobs `optimizacion_ruta` en `failed` de esta familia —«respuesta del proveedor con forma inesperada (la secuencia no cubre todas las paradas)»—, todos de **hoy**, entre las 04:07 y las 05:26. **0** rutas en `desactualizada` y **0** con `ultimo_error`. |
+| **M3** | De **2** rutas con origen persistido, **1 está en Medellín** (6,3 / −75,5) con `origen_at` de hoy 22:56, y la otra en Costa Rica (9,9 / −84,1). El humano confirmó que la primera **es una prueba suya**. |
+
+⚠️ **DOS TRAMPAS DE MEDICIÓN, escritas para que no vuelvan a morder:**
+
+1. **M3, tal como este spec la define, no habría visto nada.** Filtra por `origen_fuente = 'gps'` y
+   **las dos rutas son `ultima_conocida`**. Habría devuelto 0 y concluido «no hay patrón».
+2. **Un primer intento de M1 devolvió «20.015,1 km» y era basura.** `LEAST`/`GREATEST` en Postgres
+   **ignoran los NULL**, así que con centroide nulo `greatest(-1, NULL)` da `-1`, `acos(-1)` da π y
+   sale la antípoda: un número plausible que no mide nada y que habría fijado el umbral de R21
+   sobre un fantasma. Cualquier haversine en SQL sobre columnas nullable tiene esta mina.
+
 ---
 
 ## Hallazgos fuera de alcance (para que se abran sus propias fichas)
@@ -334,6 +351,42 @@ de un árbol viejo; si sigue estando, es un hotfix, no una ficha.
 ---
 
 ## Preguntas abiertas
+
+> ## ✅ PUERTA HUMANA PASADA — 2026-08-22
+>
+> Las respuestas del humano y las mediciones que las acompañan. **Las preguntas de abajo se
+> conservan tal cual**: son el razonamiento con el que se decidió, no ruido a borrar.
+>
+> **P1 y P5 — SIGUEN ABIERTAS, y ahora con un bloqueo nuevo.** No se pudo obtener la respuesta
+> cruda: la consulta de logs de Vercel expira aunque se acote a un deployment y a 90 minutos. Y la
+> decisión de **apagar `RUTA_DEBUG_LOG` ya** (P4) retira la traza que era la única vía a esa
+> respuesta. **Consecuencia asumida:** el schema se queda **defensivo** (todo opcional,
+> `design.md` §3) y no se verá la forma real antes de implementar. Es admisible porque **R3** ya
+> dice que la decisión de degradar NO depende de esa forma — pero **R7** (citar códigos de motivo)
+> se queda sin insumo y debe implementarse tolerando que no haya ninguno.
+>
+> **P2 — CERRADA: `RUTA_ORIGEN_MAX_KM = 200`, declarado SIN base documental**, igual que la 92 hizo
+> con `RUTA_MAX_PARADAS = 100`. Se escribe el número, se declara que no tiene base y se revisa con
+> datos reales.
+>
+> ⚠️ **TENSIÓN QUE HAY QUE DECIR, no disimular.** El humano también respondió (ver M3) que el
+> origen de Medellín **es una prueba suya**. O sea: el caso de ≈1.040 km que motiva R21 es un
+> **artefacto de pruebas**, no una incoherencia de la operación real. R21 se implementa igual —deja
+> de pagar una llamada condenada y le da al mensajero un orden local en vez de un error duro— pero
+> su umbral **no está calibrado sobre datos de producción**, y su urgencia es menor de lo que este
+> spec suponía cuando se escribió. Que nadie lea después los 1.040 km como evidencia de campo.
+>
+> **P3 — CERRADA: SÍ, entra.** El mensajero debe saber que su ruta se ordenó en local. Esto mete
+> **UI** en una ficha que nació de backend: la `zone` de la 265 pasa de `backend` a `fullstack` y el
+> límite declarado 1 deja de aplicar.
+>
+> **P4 — CERRADA: apagar `RUTA_DEBUG_LOG` YA**, antes de verificar el arreglo desplegado y en
+> contra de la recomendación de este spec. Es decisión del humano, que es quien lo encendió. Ver
+> arriba el coste: se lleva por delante P1.
+>
+> **P6 — CERRADA por la medición: no hace falta re-encolar nada a mano.** Son **6** jobs, todos de
+> hoy; el flujo normal (recoger, gestionar, sincronizar) los vuelve a encolar.
+
 
 **P1 — ¿Qué campos trae de verdad `skippedShipments`, y qué trae `validationErrors`?** El log de
 producción los truncó a `[Object]` y en el repo hay **cero** referencias a esos nombres, así que la
