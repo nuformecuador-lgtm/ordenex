@@ -65,6 +65,28 @@
       mensajero. Los datos ya están verificados contra la base (2026-08-22); **lo que falta es que
       alguien mire los píxeles**, y era una ficha visual sin tarea de «ver la app».
 
+### De la 262 — corregir el día de reparto
+
+Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí existe:
+
+- [ ] **Corregir el día desde `/recepcion-satelite`** con cuenta `adminSatelite`. En local no hay
+      ninguna orden de su zona en un estado que esa pantalla ofrezca, y **no hay camino por la UI**:
+      el botón exige `por_recoger`, que exige asignar, que exige coordenadas — y sólo 4 órdenes de
+      ~70 las tenían.
+- [ ] **«Una orden de otra zona no aparece», sobre un listado CON contenido.** En local se comprobó
+      sobre un listado **vacío**, así que no discrimina entre «el acotado funciona» y «no había nada
+      que mostrar». Es la comprobación de aislamiento entre zonas: merece datos de verdad.
+- [ ] **Un caso de `ayuda_tienda`**: en local no hay ninguna orden en ese estado.
+
+### De la 262 — una pregunta de producto, no una comprobación
+
+- [ ] **Decidir si «Del 23 al 24 de agosto» se cambia.** Medido mirando la pantalla: se lee como un
+      **rango de dos días** en la mitad de los casos —«del 24 al 23» es inequívoco porque ningún
+      rango corre hacia atrás; «del 23 al 24» no—. Lo agrava que la entrada de corrección es **la
+      única sin la flecha `A → B`** que llevan las demás, así que toda la carga de indicar el cambio
+      cae en la preposición: **falta el verbo**. Es contrato en `design.md` §14.4. Si se cambia, lo
+      barato es el encabezado (`ETIQUETA_CORRECCION_DIA`), no el cuerpo que está bajo test.
+
 ### De la 265 — el optimizador
 
 - [ ] **C3 · Re-medir M1** con `ruta_optimizada_parada` ya poblada, para saber si el umbral

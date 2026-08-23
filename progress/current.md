@@ -9,7 +9,63 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🌙 CIERRE DE TANDA — 2026-08-22. **EMPIEZA A LEER POR AQUÍ**
+## ✅ LAS DOS FICHAS CERRADAS — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+
+**Ninguna ficha `in_progress`.** `dev` con las dos features completas, revisadas y con sus
+bloqueantes cerrados.
+
+| | |
+| --- | --- |
+| **262** · corregir el día de reparto | `done` · 4 tandas · revisión RECHAZADA → **4 bloqueantes cerrados** · `F6` ejecutada |
+| **265** · el optimizador lee al proveedor | `done` · revisión RECHAZADA → cerrada → **re-revisión OK, 0 bloqueantes** |
+
+**Lo que queda vivo NO es código: son pasos de release**, y por eso existe `docs/release.md`. Si su
+sección «pendiente para la próxima release» tiene entradas, **la release no está terminada aunque el
+despliegue esté verde**.
+
+### El hallazgo de la 262, que es el patrón del día entero
+
+**`R32` no tenía ningún test que mordiera**, y el comentario de su test de integración prometía
+comprobar «ni gestión, ni historial, **ni ruta**» contando sólo las tres primeras. No se vio
+leyendo: se vio **inyectando el defecto exacto** y midiendo que **3.302 tests seguían verdes**.
+
+Es la misma familia que apareció cuatro veces más hoy: la puerta T8 protegiendo a **cero**
+integradores; el aviso de la 262 que se perdía la segunda vez por un `dedupe_key` que traga el
+conflicto; los `logger.warn` del optimizador **descartados en las dos capas**; y un requisito de la
+265 cuyo test montaba el escenario correcto y sólo afirmaba `status: ok`.
+
+**La prosa de este repo miente más que su código, y nada la vigila.** Tres comentarios corregidos hoy
+decían lo contrario de lo que hace el código, incluido uno que afirmaba que un `warn` servía «para
+que un operador note» algo — siendo un `{ warn: () => {} }`.
+
+### `F6` de la 262: ejecutada, con lo que no cubrió dicho
+
+Se hizo **en local, no en preview** (declarado: la base de preview es distinta desde julio y no
+sabemos si tiene cuentas). Pasó el caso central de punta a punta —el mensajero **intenta** recoger y
+no puede, se corrige, **se desbloquea solo**—, «Ver historial» entrada por entrada, la campana en
+**38,5 s** sin recargar, y `R32` con KPIs y mapa idénticos.
+
+**No cubrió**, y está en la lista de release: corregir desde `/recepcion-satelite`, el aislamiento
+entre zonas **sobre un listado con contenido** (se midió sobre uno vacío), y ningún caso de
+`ayuda_tienda`.
+
+### Pendiente de decisión humana
+
+- **El texto «Del 23 al 24 de agosto»** se lee como **rango de dos días** en la mitad de los casos.
+  Lo agrava que la entrada de corrección es **la única sin la flecha `A → B`**: toda la carga cae en
+  la preposición, y **falta el verbo**. Es contrato en `design.md` §14.4; no se tocó.
+- **Los píxeles del cierre `8F88DCD5`** (264): requiere entrar a producción como usuario.
+
+### Lo que el paralelismo enseñó hoy
+
+Nueve agentes en worktrees aislados. Funcionan, **pero no aíslan la base local ni `node_modules`**:
+la migración de una feature pone rojo el gate de las demás y el de `dev` limpio, y `prisma generate`
+se pisa —el último gana y al otro le desaparecen sus tipos a mitad de su gate—. Y **tres informes de
+revisión se quedaron sin commitear** en el árbol principal: ninguna herramienta lo señala.
+
+---
+
+## 🌙 CIERRE DE TANDA — 2026-08-22 (tanda anterior, cerrada)
 
 `prod` = `465c5234` (release #458, desplegada y verificada, sin errores de runtime).
 `dev` = `651aef2a`, gate **completo** en verde: 1319 archivos, **17.793 tests**, `INIT_EXIT=0`.
