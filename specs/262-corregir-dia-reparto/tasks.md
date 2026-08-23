@@ -7,6 +7,12 @@
 > nunca a la vez). El **FRONTEND** arranca cuando `B2` (textos) y `B3` (contratos) estén en la rama;
 > el resto del backend puede seguir en paralelo a partir de ahí.
 >
+> ⬛ **Los dos bloques nuevos.** El **BLOQUE AVISO** (P2) es **independiente** de todo lo demás salvo
+> del orden de las migraciones y puede ir en paralelo desde el principio. El **BLOQUE HISTORIAL**
+> (P1) depende de `B1` (la tabla) y su `B24` es un **contrato**: `F7`/`F8` no arrancan hasta que
+> `B24` y `B26` estén en la rama. `B24` **rompe el build a propósito** en varios archivos a la vez;
+> se hace de una sentada, no a medias.
+>
 > ⚠️ **El gate lo corre el leader, no el subagente.** `backend_dev` / `frontend_dev` corren
 > `pnpm typecheck`, `pnpm lint` y `pnpm exec vitest related --run <sus archivos>`. Nada más. Y el
 > gate **no se corre en paralelo** con un subagente que esté mutando el árbol: leería el árbol a
@@ -15,6 +21,21 @@
 > ⚠️ **`./init.sh --rapido` SE NIEGA en esta ficha, por dos vías independientes:** el diff toca
 > `db/migrations/**` + `db/schema.prisma` y además `lib/types/**` (`orden.ts`,
 > `recepcion-satelite.ts`). El gate **COMPLETO** es obligatorio antes del PR. No es una elección.
+>
+> ⬛ **2026-08-22 — LA PUERTA HUMANA ENSANCHÓ LA FICHA, y ahora las vías son CINCO.** P1 y P2 se
+> respondieron **SÍ**, en contra de la recomendación del spec. Entran dos bloques nuevos —**BLOQUE
+> HISTORIAL (P1)** y **BLOQUE AVISO (P2)**— y una migración más. Las cinco vías por las que el modo
+> rápido se niega: (1) migración del rastro; (2) migración de los **dos enums** de la campana; (3)
+> `db/schema.prisma`; (4) `lib/types/orden.ts` + `lib/types/recepcion-satelite.ts`; (5)
+> `lib/types/notificacion.ts` + `lib/types/orden-historial.ts`. **Basta una; hay cinco.**
+>
+> ⬛ **El criterio de «hecho» de esta ficha incluye el gate COMPLETO en verde** (**C1**), con
+> `INIT_EXIT=$?` **escrito dentro del log**: en este repo un `echo` posterior ya tapó un gate rojo
+> haciéndolo pasar por «exit code 0». Ninguna task se marca `[x]` a cuenta de que «el rápido pasó».
+>
+> ⬛ **P3 no genera ninguna task**: la respuesta fue «basta hoy/mañana», o sea **no cambia nada**.
+> Su verificación es la **ausencia** de `lib/types/dia-reparto.ts` y `lib/utils/dia-reparto.ts` en el
+> diff, y está en **C6**.
 
 ---
 
@@ -195,7 +216,167 @@
     corrección (**R32**).
   **Hecho:** los cuatro puntos verificados y escritos, con la lista de archivos corridos.
 
-- [ ] **B16 — Matar todo con mutaciones.** (dep. B9, B10, B11, B12, B13, B14)
+---
+
+## ⬛ BLOQUE HISTORIAL — P1: el rastro se ve en «Ver historial»
+
+> **B24 no depende de nada y es el contrato**: mientras no esté, ni el servicio ni el frontend pueden
+> avanzar. **B25** y **B28** sí necesitan **B1** (la tabla del rastro) en la rama. Detalle completo en
+> `design.md` **§14**.
+
+- [ ] **B24 — ⚠️ El DTO se vuelve UNIÓN DISCRIMINADA, y el build rompe a propósito.** (dep. ninguna)
+  `lib/types/orden-historial.ts`: `OrdenHistorialTransicionDTO` (`clase: "transicion"` + los seis
+  campos de siempre, **sin volver nullable `estatusDestinoValue`**) y
+  `OrdenHistorialCorreccionDiaDTO` (`clase: "correccion_dia"`, `fechaAnteriorISO`, `fechaNuevaISO`,
+  `actorNombre: string`, `motivo: string`, `createdAt`). `OrdenHistorialEntradaDTO` pasa a ser la
+  **unión**, y **conserva el nombre** (`design.md` §14.1, punto 1).
+  **Hecho, tres cosas:** (1) `pnpm typecheck` enumera **todos** los consumidores rotos y la lista
+  coincide con el inventario de `design.md` §14.5 —si aparece uno que no está ahí, se añade al spec,
+  no se arregla a ciegas—; (2) la corrección **no** gana ningún valor en `OrdenHistorialOrigenTipo`
+  (el `_EnsureExhaustive` de ese archivo sigue intacto); (3) `rastreo-frontera.guardia` sigue en
+  verde **sin tocarla** (el símbolo prohibido sigue existiendo con el mismo nombre).
+
+- [ ] **B25 `[P]` — El repositorio del rastro: lectura por orden.** (dep. B1, B24)
+  `lib/interfaces/repositories/IOrdenDiaRepartoCambioRepository.ts` +
+  `lib/repositories/OrdenDiaRepartoCambioRepository.ts`:
+  `findCorreccionesByOrden(ordenId)` → `OrdenHistorialCorreccionDiaDTO[]`, `ORDER BY created_at ASC,
+  id ASC`, con el `nombre` del actor por `include` y las dos fechas serializadas con
+  `fechaRepartoComoTexto` (patrón `MisAsignacionesService.ts:266-267`).
+  **Hecho:** el DTO que sale **no lleva ningún `Date` de fecha calendario** (sólo `createdAt`, que es
+  un instante), y el `ORDER BY` lleva el desempate por `id` — sin él, dos filas del mismo instante
+  salen en orden indefinido.
+
+- [ ] **B26 — La fusión y el orden, en el SERVICIO.** (dep. B24, B25)
+  `lib/services/OrdenHistorialService.ts`: tercer repo por constructor, las dos lecturas y una
+  función **pura y exportada** `fusionarLineaDeTiempo(transiciones, correcciones)` con la regla de
+  `design.md` §14.3 (ascendente por `createdAt`; empate exacto → **transición primero**; dentro de
+  cada fuente se preserva su orden). Cablear el tercer repo en `lib/actions/orden-historial.ts`
+  (`buildService`).
+  **Hecho:** la fusión es una función pura testeable sin DB; **el componente no ordena nada**
+  (**R41**); y la autorización **no se toca** (**R44**: la lectura nueva va DESPUÉS de
+  `decision === "ok"`, no antes).
+
+- [ ] **B27 — Tests del historial fusionado, con dobles.** (dep. B26)
+  `tests/unit/services/orden-historial-fusion.test.ts`: entradas de las dos fuentes intercaladas →
+  orden correcto (**R37**, **R40**); **empate exacto de instante** → transición primero, y el
+  resultado **no cambia** si se invierte el orden en que se pasan las listas (**R40**); orden **sin
+  correcciones** → resultado **byte a byte** el de antes (**R45**); los cuatro roles con visibilidad
+  ven las correcciones y los dos sin visibilidad no llegan a leerlas (**R44**).
+  **Hecho:** verde, y M-y, M-z y M-aa producen rojo **con nombre**.
+
+- [ ] **B28 `[P]` — Postgres real: la lectura del rastro resuelve por el índice que ya existe.**
+  (dep. B1, B25)
+  `tests/integration/db/correccion-dia-reparto-historial.int.test.ts`: sembradas N correcciones de
+  una orden, `findCorreccionesByOrden` las devuelve **todas, en orden**, con el nombre del actor y el
+  motivo; y el plan usa `orden_dia_reparto_cambio`'s `(orden_id, created_at)` — el índice que
+  `design.md` §5.1 declaró «la única consulta prevista» **antes** de que existiera este consumidor.
+  **Hecho:** verde con base; `describe.skip` **visible** sin base; **nada de `if (!fks) return;`**.
+
+- [ ] **B29 `[P]` — La ausencia: el rastreo público no la ve.** (dep. B24, B26)
+  `tests/unit/guards/rastreo-frontera.guardia.test.ts` sigue **intacto y verde** (**R43**), y se
+  añade la comprobación positiva en el test del rastreo público: una orden **con** corrección
+  devuelve **exactamente** las mismas transiciones que sin ella.
+  **Hecho:** verificado que `RastreoPublicoRepository` sigue leyendo `orden_historial_estado` con su
+  `select` de dos campos y **no** consume el DTO (`design.md` §14.0).
+
+---
+
+## ⬛ BLOQUE AVISO — P2: al mensajero se le avisa
+
+> Independiente del BLOQUE HISTORIAL: puede ir en paralelo. Detalle en `design.md` **§15**.
+> ⚠️ Toca `db/migrations/**` y `lib/types/notificacion.ts`: dos vías más del gate COMPLETO.
+
+- [ ] **B17 — ⚠️ Los DOS enums de la campana ganan su valor.** (dep. B1 por el orden de timestamps)
+  `db/schema.prisma`: `NotificacionEvento += dia_reparto_corregido` y
+  `NotificacionEntidadTipo += orden_dia_reparto_cambio`, con su comentario de feature.
+  `lib/types/notificacion.ts`: los dos tipos de dominio, igual.
+  Migración **propia y separada** de la del rastro, con timestamp **posterior**:
+  `db/migrations/<ts>_notificacion_evento_dia_reparto_corregido/` con `migration.sql` (**sólo** los
+  dos `ALTER TYPE ... ADD VALUE IF NOT EXISTS`, nada más: Postgres prohíbe **usar** un valor recién
+  añadido en la misma transacción, 55P04) y `down.sql` que **recrea los dos tipos con la lista
+  previa** — **CINCO** valores en cada uno, no cuatro. Molde literal:
+  `db/migrations/20260820210000_notificacion_evento_postulacion_recurso/`.
+  **Hecho, CINCO cosas:** (1) el `down.sql` lista los **cinco** valores previos de cada enum
+  (incluido `postulacion_recurso_pendiente` / `postulacion_recurso`); (2) **no se toca ningún
+  `down.sql` anterior** — verificado que el de la 146 **sólo dropea** y el de la 253 recrea con
+  **sus** cuatro: los dos son fotos históricas (`design.md` §15.2); (3) el `down.sql` **no** lleva
+  `DELETE` ni `UPDATE` para «hacer sitio» (**R54**); (4) el nombre de la carpeta **no termina** en
+  `_notificacion` ni en `_notificacion_evento_postulacion_recurso` —el helper `carpetaQueTerminaEn`
+  de la 253 hace `find` sobre nombres ordenados y leería otro archivo—; (5) `db:migrate` aplica y
+  `db:rollback` revierte sin residuos.
+  ⚠️ La migración **no se edita después de aplicarse**: si hay que cambiar algo, migración nueva.
+
+- [ ] **B18 — ⚠️ Los DOS censos AJENOS que se ponen rojos.** (dep. B17)
+  Se **actualizan**, no se relajan — que se pongan rojos ES el precio que 146/D1 puso a añadir un
+  evento, y funciona:
+  1. `tests/unit/services/notificacion-productores-wiring.test.ts:381-404`: la lista literal gana
+     `"dia_reparto_corregido"` y el título dice **seis**. **Sigue siendo literal** (derivarla del
+     esquema la dejaría siempre verde).
+  2. `tests/integration/db/notificacion-evento-postulacion-recurso-migration.test.ts:162-185`:
+     **sólo** las dos aserciones sobre el **esquema vivo**. ⛔ El resto de ese archivo —el UP de la
+     253, su DOWN con cuatro valores y «el down de la 146 no se toca»— **no se toca**.
+  **Hecho:** los dos en verde, y el `git diff` de esos dos archivos **no borra ninguna aserción**,
+  sólo amplía listas (**R52**).
+
+- [ ] **B19 `[P]` — El emisor y su notificador best-effort.** (dep. B17)
+  `lib/notificaciones/emitir.ts`: `DiaRepartoCorregidoContexto`, `textoDiaRepartoCorregido(fechaISO)`
+  (compone con `fechaLegible`, **R18**) y `emitirDiaRepartoCorregido` — **una** fila, `tipo: "box"`,
+  `destinatario: { tipo: "usuario", usuarioId: mensajero }`, `entidadTipo:
+  "orden_dia_reparto_cambio"`, `entidadId: cambioId`. `lib/notificaciones/notificadores.ts`:
+  `DiaRepartoCorregidoNotificador`, `notificar…Con(repo)` sobre `emitirBestEffort` y su binding real;
+  el `notificadorNoOp` gana la firma.
+  **Hecho, tres cosas:** (1) el texto **nombra la fecha**, no «hoy» ni «mañana» (**R47**); (2) el
+  aviso **no** lleva motivo, dirección, teléfono, destinatario ni monto (**R48**, **A24**); (3)
+  `entidadId` es el **id del cambio** y no el de la orden — con el de la orden, la segunda corrección
+  no avisaría **nunca** (`design.md` §15.2, **A20**).
+
+- [ ] **B20 — La escritura devuelve lo que el aviso necesita.** (dep. B4, B5)
+  `RETURNING "id", "mensajero_asignado_id", "num_guia", "num_remision"` en el `UPDATE` de §6.1 y
+  `corregirDiaRepartoLote` → `Promise<CorreccionDiaAplicada[]>` (antes `Promise<number>`).
+  `registrarCambioDiaReparto` **genera los `id` con `randomUUID()`** y los devuelve en orden
+  (`createMany` de Postgres no devuelve ids).
+  **Hecho, dos cosas:** (1) el `SET` **no cambia** —sigue siendo `{fecha_reparto, updated_at}`, la
+  huella que vigila B9—; (2) **la autocomprobación de B9 se actualiza a la forma FINAL del SQL**,
+  con el `RETURNING` ancho: validar el detector contra un texto que ya no existe en el árbol es una
+  guardia que se cree verificada (`design.md` §15.5).
+
+- [ ] **B21 — El servicio emite FUERA de la transacción.** (dep. B6, B19, B20)
+  `CorreccionDiaRepartoService`: tras confirmar la `$transaction`, un aviso por cada
+  `CorreccionDiaAplicada`, vía el notificador inyectado (**default no-op**, real inyectado en la
+  Server Action, patrón `notificadores.ts:11-19`).
+  **Hecho, tres cosas:** (1) si el notificador **lanza**, `corregir` sigue devolviendo `ok` y la
+  corrección **sigue escrita** (**R49**); (2) el fallo queda **loggeado con contexto** —nada de
+  `catch` vacío (`docs/conventions.md`)—; (3) con la transacción revertida **no se emite ni un
+  aviso**.
+
+- [ ] **B22 — ⚠️ Postgres real: la migración del enum y su DOWN ejercitado.** (dep. B17)
+  `tests/integration/db/notificacion-evento-dia-reparto-corregido-migration.test.ts`, molde literal
+  del de la 253: el UP **sólo** añade (dos sentencias, las dos `ALTER TYPE`, ni un `CREATE TABLE` ni
+  un `ALTER TABLE`); el DOWN recrea los dos tipos con los **cinco** previos, con su `RENAME`, su
+  `ALTER COLUMN ... USING` y su `DROP TYPE *_old`; y **contra Postgres de verdad**: aplicar el down
+  y comprobar que `notificacion_dedupe_key` **sobrevive con su `NULLS NOT DISTINCT` y su `WHERE`
+  parcial** y que `notificacion_entidad_idx` sigue ahí.
+  **Hecho, tres cosas:** (1) se afirma que el down de la 146 **sólo dropea** y que el de la 253 sigue
+  listando **cuatro** —si alguien los convirtiera en otra cosa, este test avisa—; (2) el nombre de la
+  carpeta nueva no rompe el `carpetaQueTerminaEn` de la 253 (§15.4); (3) `describe.skip` **visible**
+  sin base.
+
+- [ ] **B23 — Tests del aviso.** (dep. B19, B21)
+  `tests/unit/services/notificacion-dia-reparto-corregido.test.ts`, molde de
+  `notificacion-productores.test.ts`: **una** fila y sólo una (**R51**: ni maestro, ni admin, ni
+  tienda); destinatario = el **mensajero asignado** (**R46**); la descripción lleva la **fecha en
+  palabras** y **no** lleva «hoy» ni «mañana» (**R47**); el anexo es la guía, y la remisión cuando no
+  hay guía; **ningún** campo del aviso contiene dirección, teléfono, destinatario, monto **ni el
+  motivo escrito por quien corrigió** (**R48**, **A24**);
+  **dos correcciones seguidas sobre la misma orden y el mismo mensajero → DOS filas** (**R50**, el
+  test que mata **A20**); un emisor que lanza no cambia el resultado (**R49**); los dos sentidos
+  —«mañana → hoy» y «hoy → mañana»— emiten igual (**R55**).
+  **Hecho:** verde, y M-ab, M-ad y M-ae producen rojo **con nombre**.
+
+---
+
+- [ ] **B16 — Matar todo con mutaciones.** (dep. B9, B10, B11, B12, B13, B14, B18, B22, B23, B27,
+  B28, B29, F5, F8)
   Las del **bloque de mutaciones** de más abajo, una a una.
   **Hecho:** por cada una, el comando y la **salida real** (nombre del test que se puso rojo) pegados
   en `progress/impl_262_backend.md`. ⚠️ Si el arnés de mutaciones dice «todas mueren» sin mostrar una
@@ -245,13 +426,49 @@
     (**R17**).
   **Hecho:** verde; M-u, M-v y M-x las matan.
 
-- [ ] **F6 — Ver la app.** (dep. F5, y con el backend mergeado en la rama)
+- [ ] **⬛ F7 — El timeline pinta la entrada SIN transición.** (dep. B24, B26)
+  `app/(app)/ordenes/_components/HistorialOrdenTimeline.tsx`: `switch (entrada.clase)` con
+  **exhaustividad demostrada** (`const _exhaustivo: never = entrada;` en el `default`). La rama
+  `"correccion_dia"` pinta «Día de reparto» + `textoCorreccionDiaReparto(anteriorISO, nuevaISO)` +
+  el sello de hora + «Por {actor}» + «Motivo: …», y **NO llama a `estatusLabel`** ni pinta la flecha
+  de estados (**R39**). `lib/utils/dia-reparto-textos.ts` gana
+  `textoCorreccionDiaReparto` y `ETIQUETA_CORRECCION_DIA` (**R18**). La `key` de la lista antepone
+  `entrada.clase` (`design.md` §14.4).
+  **Hecho, tres cosas:** (1) `dia-reparto-textos.ts` **sigue sin importar `Date` ni `Intl`**
+  (**R41**); (2) el componente **no lleva ni un literal de fecha**: todos importados; (3) la rama de
+  transición queda **idéntica** —el `git diff` de esa rama es sólo el `case`— (**R45**).
+
+- [ ] **⬛ F8 — Tests de componente del timeline y del tipo.** (dep. F7)
+  - `tests/components/HistorialOrdenTimeline.test.tsx`: una entrada de corrección se lee con **las
+    dos fechas en palabras**, su actor y su motivo (**R38**); **no** aparece ninguna etiqueta de
+    estado ni la flecha en esa entrada (**R39**); mezcladas, salen en orden y la de corrección se
+    distingue **por texto y no sólo por color**.
+  - Los fixtures existentes ganan `clase: "transicion"` y **ninguna aserción cambia** (**R45**).
+  - `tests/unit/types/orden-historial-union.test.ts` (nuevo): `@ts-expect-error` al leer
+    `estatusDestinoValue` sobre la unión sin estrechar (**R42**). Si alguien deshiciera la unión, el
+    `@ts-expect-error` se quedaría **sin error que suprimir** y `pnpm typecheck` se pondría rojo.
+  **Hecho:** verde, y M-aa y M-ac las matan.
+
+- [ ] **F6 — Ver la app.** (dep. F5, F8, y con el backend mergeado en la rama)
   Playwright manual en preview. **Con cuenta maestro/admin:** marcar un lote de `por_recoger` para
   mañana desde la asignación, comprobar que el mensajero **no** puede recogerlo (la 261), corregirlo
   a hoy desde `/ordenes` y comprobar que **se desbloquea solo**. Repetir en sentido contrario (hoy →
   mañana). **Con cuenta `adminSatelite`:** lo mismo desde `/recepcion-satelite`, y comprobar que una
   orden **de otra zona** no aparece. **Con cuenta de mensajero:** que la acción **no existe** y que
   KPIs y mapa **no cambiaron** (**R32**).
+  ⬛ **Y lo que abre la puerta humana, en la misma pasada:**
+  - **«Ver historial» de la orden corregida** (cuenta maestro/admin, y luego `adminTienda` sobre una
+    orden **suya**): la entrada de corrección aparece **en su sitio cronológico**, con las dos fechas
+    en palabras, el actor y el motivo, y **sin** ninguna etiqueta de estado (**R37**-**R39**).
+    Corregir **dos veces** la misma orden → **dos** entradas.
+  - **La campana del mensajero** (`/mis-asignaciones/reparto`): tras la corrección, el aviso aparece
+    **sin recargar** en ≤ 60 s, dice **la fecha** (no «hoy»), trae la guía en el anexo y **no** trae
+    motivo ni datos del destinatario (**R46**-**R48**). Corregir **dos veces** → **dos** avisos
+    (**R50**). Comprobar que **maestro, admin y la tienda NO reciben nada** (**R51**).
+  - **El caso que nombró la puerta humana**: «mañana → hoy» sobre una orden **ya en `en_reparto`**
+    —el paquete en la mano— y comprobar que el mensajero recibe el aviso **y** puede gestionarla
+    (**R55**, **R31**).
+  - **El rastreo público** de esa misma guía: **no** muestra la corrección (**R43**).
   **Hecho:** capturas o transcripción en `progress/impl_262_frontend.md`, y el **rastro leído en la
   base** después de la prueba (una fila por corrección, con su motivo). En este repo mirar la app
   encontró **siete textos rotos** que doce mil tests daban por buenos.
@@ -287,6 +504,24 @@
 | **M-w** | Añadir una **segunda** escritura del día sin `asignado_at` en `OrdenRepository` | **B9** cláusula (d3) (**R29**) |
 | **M-x** | Devolver el literal del texto al componente en vez de importarlo | F5 (**R18**) |
 
+### ⬛ Mutaciones del alcance añadido (P1 y P2)
+
+| # | Mutación | Debe morir en |
+| --- | --- | --- |
+| **M-y** | Devolver sólo las transiciones y descartar las correcciones en la fusión | **B27** (**R37**) |
+| **M-z** | Concatenar las dos listas **sin ordenar** (o invertir el desempate del empate exacto) | **B27** (**R40**) |
+| **M-aa** | Ordenar en el componente en vez de en el servicio | **B27** + **F8** (**R41**) |
+| **M-ab** | Cambiar `entidadId` del aviso por el `ordenId` | **B23** — el caso «dos correcciones, dos avisos» (**R50**, **A20**) |
+| **M-ac** | Pintar la corrección con `estatusLabel` como si fuera una transición | **F8** (**R39**) |
+| **M-ad** | Sustituir la fecha del texto del aviso por la palabra «hoy» | **B23** (**R47**) |
+| **M-ae** | Añadir `maestro`/`admin` a los destinatarios del aviso | **B23** (**R51**) |
+| **M-af** | Mover el aviso **dentro** de la `$transaction` | **B21** (**R49**: el notificador que lanza deja de devolver `ok`) |
+| **M-ag** | Quitar `postulacion_recurso_pendiente` de la lista del `down.sql` nuevo (dejar cuatro) | **B22** (**R53**) |
+| **M-ah** | Añadir un `DELETE FROM "notificacion"` al `down.sql` para «hacer sitio» | **B22** (**R54**) |
+| **M-ai** | Relajar la lista literal de eventos a una derivación del propio esquema | **B18** (**R52**) |
+| **M-aj** | Volver `estatusDestinoValue` opcional en vez de usar la unión | **F8** (`@ts-expect-error` sin error → `pnpm typecheck` rojo, **R42**) |
+| **M-ak** | Añadir a la línea de tiempo una corrección **de otra orden** | **B27**/**B28** (**R37**: el `WHERE` por `orden_id`) |
+
 ---
 
 ## CIERRE
@@ -301,7 +536,17 @@
 - [ ] **C4 — `progress/impl_262_backend.md` y `progress/impl_262_frontend.md`** con el mapa
   `R<n> → test` completo (abajo), las mediciones y las mutaciones con su salida real.
 - [ ] **C5 — Migrar la base local tras mergear** (`prisma migrate deploy`): un error «sólo de un rol»
-  después del merge suele ser la tabla de migración faltante, no HMR.
+  después del merge suele ser la tabla de migración faltante, no HMR. ⬛ Ahora son **DOS**
+  migraciones (la del rastro y la de los enums) y el orden entre ellas importa.
+- [ ] **⬛ C6 — P3: la verificación de que NO cambia nada.** `git diff origin/dev...HEAD --stat` **no
+  lista** `lib/types/dia-reparto.ts` ni `lib/utils/dia-reparto.ts`, y el enum sigue teniendo **dos**
+  valores. Es cómo se prueba una decisión de «no tocar»: por la ausencia, escrita (**R56**,
+  `design.md` §16).
+- [ ] **⬛ C7 — Las dos preguntas abiertas nuevas, llevadas a la puerta humana.** **P4** (¿la tienda
+  lee la corrección y su motivo?) y **P5** (¿el `adminSatelite` necesita leer el rastro que escribe?)
+  tienen decisión por defecto tomada, así que **no bloquean**; pero se preguntan **antes** de
+  desplegar, no después de que una tienda lea el primer motivo.
+  **Hecho:** la respuesta —o el «se queda como está»— escrita y fechada en `requirements.md`.
 
 ---
 
@@ -345,3 +590,28 @@
 | R34 | El riesgo de la 261 se cierra escrito, sin borrar el porqué | **B14** · M-r |
 | R35 | La guardia de esa nota se actualiza, no se borra | **B14** (mitad (e) viva con las piezas del cierre) |
 | R36 | Apéndice fechado en el spec de la 261, texto original intacto | **B14** (`git diff` sólo adiciones) |
+
+### ⬛ Alcance añadido por la puerta humana del 2026-08-22
+
+| R | Qué exige | Test |
+| --- | --- | --- |
+| R37 | La corrección aparece en «Ver historial», una entrada por corrección | **B27** (fusión) · **B28** (la lectura contra Postgres real) · F6 |
+| R38 | Día anterior, día nuevo, quién, cuándo y motivo, en palabras | **F8** · **B25** (el DTO sale con las dos fechas ya serializadas) |
+| R39 | Sin estado de origen ni destino; no es una transición | **F8** (M-ac: ninguna etiqueta de estado en esa entrada) |
+| R40 | Orden cronológico sobre las dos fuentes, y determinista en el empate | **B27** (empate exacto, y el resultado no cambia al invertir las listas — M-z) |
+| R41 | La fusión y el orden, en el servidor | **B27** · **F8** (el componente no ordena; los textos no importan `Date`/`Intl`) — M-aa |
+| R42 | El build rompe si alguien la trata como transición | **F8** (`@ts-expect-error`) + `pnpm typecheck` del gate — M-aj |
+| R43 | El rastreo público no la ve | **B29** (`rastreo-frontera.guardia` intacta + control positivo) · F6 |
+| R44 | Misma autorización, sin regla nueva | **B27** (los cuatro roles con visibilidad y los dos sin ella) |
+| R45 | Sin correcciones, la línea de tiempo es la de antes | **B27** (byte a byte) · **F8** (ninguna aserción vieja cambia) |
+| R46 | Se avisa al mensajero asignado | **B23** · **B21** (el servicio emite tras confirmar) · F6 |
+| R47 | El aviso nombra la FECHA, no «hoy»/«mañana», e identifica la orden | **B23** — M-ad |
+| R48 | Sin dirección, teléfono, destinatario ni monto | **B23** |
+| R49 | Un aviso caído no revierte la corrección, y queda registrado | **B21** — M-af |
+| R50 | Un aviso por corrección: dos correcciones, dos avisos | **B23** — M-ab (es el test que mata **A20**) |
+| R51 | Nadie más que el mensajero | **B23** — M-ae · F6 |
+| R52 | El inventario de eventos sigue cerrado y literal | **B18** — M-ai |
+| R53 | Migración aditiva + `down.sql` con la lista previa exacta; ningún `down` anterior tocado | **B17** (criterio 2) · **B22** — M-ag |
+| R54 | El `down` falla ruidosamente en vez de borrar filas | **B22** — M-ah |
+| R55 | Los dos sentidos avisan; el desbloqueo no depende del aviso | **B23** · **B13** (**R31** sigue probándose sin aviso) · F6 |
+| R56 | El vocabulario del día no cambia | **C6** (ausencia en el diff) · B7 (el borde sigue **sin** `.default`, M-t) |
