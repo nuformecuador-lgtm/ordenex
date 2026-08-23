@@ -592,3 +592,359 @@ rama**. Aquí ya no aparecen: las migraciones de la 262 están en el árbol desd
 4. **`feature_list.json` y `progress/current.md` no se han tocado.** Son del leader. Con ellos se
    quedan **C5** (registrar la ficha de H1) y **m8** (la entrada en `progress/history.md`).
 5. **No se abrió PR ni se mergeó nada.**
+
+---
+
+## 9 · ANEXO 2026-08-23 — los MENORES de la revisión (`m2`-`m11`)
+
+> Rama `fix/265-menores-revision`, desde `origin/dev` en **`bc574d00`** (el merge del PR #469, que
+> es el que trajo `progress/review_265.md`). Encargo: cerrar los once menores; **`m1` ya venía
+> cerrado** por el anexo §8.3 de más arriba, así que los de esta tanda son diez.
+>
+> **Ni una línea de lógica cambia.** El diff de `lib/` son **comentarios**; lo que sí cambia de
+> verdad son **dos tests nuevos** que ponen rojas dos propiedades que hasta hoy sólo estaban
+> escritas. `progress/review_265.md` **no se ha tocado** (es el informe del reviewer),
+> `feature_list.json` y `progress/current.md` **tampoco** (son del leader).
+
+### 9.1 · Resumen: qué se cerró y qué no
+
+| # | Qué era | Estado |
+| --- | --- | --- |
+| **m2** | `F6` a medias: la mitad «y **no** se llama al proveedor con ese origen» | 🔴 **ABIERTO**, y no se puede cerrar aquí (§9.2) |
+| **m3** | La 3.ª señal de R43 (`dashArray`) sin ningún test en todo el repo | ✅ **CERRADO** con test + 2 mutaciones (§9.3) |
+| **m4** | `design.md` §10.2 llamaba «el único sitio donde el `WHERE` real se mira» a un archivo con Prisma mockeado | ✅ **CERRADO** (prosa, §9.4) |
+| **m5** | Comentario caducado: «se apaga con `RUTA_DEBUG_LOG=0`» | ✅ **CERRADO**, más el barrido del repo (§9.5) |
+| **m6** | Deriva spec ↔ código sobre P7 en `design.md` §1 y §16.1 | ✅ **CERRADO** (prosa, §9.6) |
+| **m7** | `R33` pide «en el mismo orden» y ningún test fijaba el orden | ✅ **CERRADO** con 4 tests + 4 mutaciones (§9.7) |
+| **m8** | Falta la entrada en `progress/history.md` | 🔴 **ABIERTO: es del leader** (§9.8) |
+| **m9** | Dos migraciones comparten prefijo de timestamp | ✅ **VERIFICADO, sin acción** (§9.9) |
+| **m10** | Mina heredada: `getByRole("alert")` en singular en 3 tests ajenos | 🟡 **ABIERTO a propósito** (§9.10) |
+| **m11** | Los `warn` agregados no llegan a nadie en producción | ✅ **CERRADO** documentándolo **en el código** (§9.11) |
+
+**Siete cerrados, tres abiertos**, y los tres abiertos **con su motivo**, no maquillados.
+
+### 9.2 · m2 — `F6` sigue a medias, y NO se puede cerrar en esta rama
+
+**Queda ABIERTO. El motivo, exacto:** el punto 3 de `F6` tiene dos mitades. «La ruta sale ordenada
+igual» está cerrada con evidencia (`impl_265_frontend.md` §6). La otra mitad —«y **no** se llama al
+proveedor con ese origen»— **exige distinguir una llamada que se hizo de una que no**, y en local
+**no hay credencial**: sin credencial no se llama al proveedor **nunca**, así que el escenario
+«origen incoherente» y el escenario «todo bien» producen la misma observación. No es que nadie lo
+haya intentado: **es que en local ese experimento no tiene poder de resolución**.
+
+Lo que haría falta es **preview**, y **esta rama no tiene despliegue**. Tampoco puedo fabricarlo:
+en este repo el MCP de Supabase está fijado al proyecto de **producción** y el ref de preview ya se
+buscó por cuatro vías distintas sin encontrarlo. Pinchar producción para verificar un menor sería
+desproporcionado y no está autorizado.
+
+**Lo que sí se puede decir de esa mitad, medido:** está cubierta por unitario. `optimizacion-ruta-
+origen.test.ts` afirma el **argumento** con el que se llamó a `client.optimizar` —o sea, con qué
+origen se habría llamado al proveedor—, y esta misma rama le añade un caso más fuerte en el mismo
+sentido (el 4.º test de §9.7: el origen que viaja es el centroide de **las paradas que se envían**).
+Eso no sustituye a ver la app, y no se pretende que lo haga.
+
+**Queda pendiente para quien despliegue**, tal como ya dice la letra pequeña de `F6` en `tasks.md`:
+repetir el punto 3 en preview antes de la release. **No lo marco `[x]`.**
+
+### 9.3 · m3 — la tercera señal de R43, cerrada aquí (y por qué aquí y no en ficha propia)
+
+**La decisión, razonada.** El reviewer la clasifica como «deuda anterior a esta ficha», y lo es: el
+`dashArray` lo introdujo la 97. Dos cosas la traen a esta ficha de todos modos:
+
+1. **R43 es un requisito de la 265**, y dice que las **tres** señales conviven y siguen distintas.
+   Dos de las tres tenían test. La tercera se afirmaba **hasta las props del mapa** y ahí se paraba,
+   así que R43 estaba cubierto a dos tercios. Un requisito de esta ficha a medio probar no es deuda
+   de otra ficha: es deuda de ésta.
+2. **El coste medido es una hora, no una ficha.** El repo ya tiene el molde resuelto
+   (`tests/components/UbicacionMapa.test.tsx` monta un componente de react-leaflet en jsdom con
+   `leaflet` y `react-leaflet` mockeados). Abrir una ficha para copiar un molde que ya existe cuesta
+   más ceremonia que trabajo. **Por eso se cierra aquí y no hay borrador de ficha nueva.**
+
+**Lo que estaba roto, dicho sin adornos:** `dashArray` aparecía en **un solo sitio** de todo el repo
+(`RutaMapaInner.tsx:158`) y **ningún test lo tocaba**. Borrarlo dejaba la suite entera en verde y al
+mensajero mirando una línea continua —que le dice «esto es un recorrido navegable»— sobre una
+geometría que sólo une paradas en recto. No rompe nada, sólo miente: la familia de fallos que esta
+casa lleva persiguiendo.
+
+**Qué se añadió:** `tests/components/RutaMapaInner.test.tsx`, tres casos —`local` → punteada,
+`routes` → continua, sin trazado → punteada—. La polilínea del fixture se **codifica con
+`codificarPolilinea` del repo** en vez de pegar una cadena mágica: el componente la **decodifica**, y
+una cadena inventada caería por la rama de «polilínea corrupta» sin que el test se enterara.
+
+**Mutaciones, con su salida real** (cada una aplicada, corrida y restaurada; `git diff` vacío tras
+restaurar):
+
+```
+=== BASE ===                            Tests  3 passed (3)
+=== M-af: se borra el dashArray ===     Tests  2 failed | 1 passed (3)
+=== M-ag: la condicion se invierte ===  Tests  3 failed (3)
+```
+
+`M-af` deja vivo el caso `routes` —correcto: ese caso afirma la **ausencia** de `dashArray`— y `M-ag`
+mata los tres. Las dos entran en la tabla de `design.md` §10.4.
+
+**Y se corrige el diseño de paso:** §10.2 decía «los **tres textos** presentes» y en el DOM hay
+**dos**. Ahora dice qué se prueba en cada sitio y por qué son dos tests.
+
+### 9.4 · m4 — `design.md` §10.2 decía que ahí se mira el `WHERE` real, y no
+
+**Verificado en el árbol antes de tocar la frase**, no aceptado del informe:
+`tests/integration/repositories/ruta-optimizada-repo.test.ts:1-50` construye un `prisma` de `vi.fn()`
+—incluido un `$transaction` falso— y su propia cabecera lo dice: «*Prisma mockeado (patron del resto
+de `tests/integration/repositories`: la suite NO levanta Postgres)*». Las aserciones de la 265 en ese
+archivo (`:259-320`) leen `args.update.secuenciaFuente` y `args.create.secuenciaFuente`: **argumentos
+que se le pasan a Prisma**, no SQL ejecutado.
+
+**No se borra la frase, se dice qué es en realidad** (que era lo pedido): el archivo afirma los
+**argumentos** con los que el repositorio llama a Prisma y que la escritura va **dentro de la misma
+transacción**; y se nombra quién **sí** mira el SQL —el test estático de la migración por regex sobre
+el `.sql`, el `@map` de `db/schema.prisma` y `F6` contra el Postgres local—. Se deja escrito, con
+todas sus letras, lo que la creencia vieja escondía: **un `WHERE` mutado que Prisma acepte pasa ese
+test en verde**. En este repo eso ya se midió cuatro veces seguidas.
+
+**Es prosa: no lleva test, y no se finge que lo lleve.** Se verificó **leyendo el código que
+describe**, que es la otra forma de comprobarla.
+
+### 9.5 · m5 — el comentario caducado, y el barrido que el encargo pedía
+
+`lib/clients/google-route-optimization.ts:208` decía «*se apaga con `RUTA_DEBUG_LOG=0`*». **Miente
+hoy**: `activo()` (`lib/logging/optimizer-log.ts`) devuelve `true` **sólo** con `1` o `true`, así que
+la traza **nace apagada** y esa variable sirve para **encenderla**. Corregido, y se deja escrito **qué
+decía antes y por qué caducó**, para que el siguiente no lo lea como un cambio arbitrario.
+
+**El barrido, que era la parte que no se arregla sola.** `grep -rn RUTA_DEBUG_LOG` sobre todo el repo
+(sin `node_modules`, `.git` ni `.next`) → **7 archivos de código/spec vivos** con la frase o su idea.
+Uno por uno:
+
+| Dónde | Veredicto |
+| --- | --- |
+| `lib/clients/google-route-optimization.ts:208` | ❌ **mentía → corregido** |
+| `specs/…/requirements.md:39` (glosario, fila «la traza») | ❌ **mentía → anotado** con ⏳: describía el estado de antes de P7, y hoy el código hace lo contrario. Es la fila de **Vocabulario**, no un EARS: se **anota**, no se reescribe un requisito aprobado |
+| `lib/logging/optimizer-log.ts:14` | ✅ **se deja**: la instrucción vieja lleva su corrección **en el renglón siguiente** (⏳ FEATURE 265). Es registro histórico con su enmienda pegada, no una frase suelta que engañe |
+| `lib/logging/optimizer-log.ts:31` | ✅ **se deja**: está **entre comillas** («…») como cita de lo que la función decía antes, dentro del párrafo que explica la inversión |
+| `tests/setup/jest-dom.ts:31-36` | ✅ correcto: ya dice que la línea es **hoy redundante** y por qué se conserva igual |
+| `.env.example:80` | ✅ correcto: «**enciende** la traza» |
+| `specs/…/design.md` §1, §16.1, §16.3 | ❌ **eran m6 y quedan corregidos** (§9.6) |
+
+También se corrigieron **dos referencias de línea podridas** que aparecieron en el mismo barrido:
+`design.md` apuntaba a `optimizer-log.ts:37-39` y a `jest-dom.ts:28`, y hoy ninguna de las dos es la
+línea que dice. Se sustituyen por **el nombre de la función y el de la línea de código**, que no rota.
+
+### 9.6 · m6 — la deriva sobre P7, cerrada en el diseño (la task ya la llevaba)
+
+**Primero se comprobó si seguía vivo, como pedía el encargo.** En `tasks.md`, **`C7` sí lo llevaba
+anotado** (⛔ con dos correcciones, puesto por el anexo §8.2). En `design.md`, **no**: §1 seguía
+diciendo que invertir el default **NO entra** en la ficha, y §16.1 seguía diciendo «**Cero líneas de
+código**». Las dos frases dicen lo contrario de lo que hace el código.
+
+Lo correcto es el código, y **está autorizado**: la segunda puerta de `requirements.md` cerró **P7**
+como «se **INVIERTE EL DEFAULT EN EL CÓDIGO**». Corregidas las dos, con el texto viejo citado dentro
+de la corrección. Y el párrafo de §16.1 sobre «en qué entornos lo decide el humano» lleva ahora su
+anexo: **con el default invertido, poner la variable ya no hace falta para apagar nada**; lo único
+que sobrevive de ese párrafo es no ponerla en Production y Preview a la vez el día que alguien la use
+para **encender** la traza. `C7` apunta de vuelta a que el diseño ya está corregido.
+
+**Es prosa: sin test, verificada leyendo `activo()`.**
+
+### 9.7 · m7 — `R33` pide «en el mismo orden», y eso ahora se pone rojo
+
+R33 pide dos cosas: que las guardas de coste corten **igual** y **en el mismo orden**. La primera
+mitad tenía cinco tests (cada guarda con su `expect(client.optimizar).not.toHaveBeenCalled()`). La
+segunda **descansaba en el comentario normativo de la cabecera del servicio**, y un comentario no se
+pone rojo.
+
+**Por qué el orden no es cosmética.** Está elegido para que **lo barato corte antes que lo caro**.
+Reordenarlo no cambia el resultado cuando sólo hay un motivo —por eso los tests de cada guarda
+seguirían verdes— pero cambia **cuánto se paga y cuánto se lee** cuando coinciden dos, que es el caso
+real. Y en un punto no es coste sino corrección: `centroide()` devuelve `NaN` con cero paradas, así
+que la guarda de 0 ó 1 parada **tiene** que ir antes de que alguien resuelva un origen.
+
+**La técnica:** montar escenarios donde **dos** guardas cortarían a la vez y afirmar **cuál ganó**.
+Cada guarda devuelve su propia `razon`, así que el ganador es observable sin espiar nada interno.
+Cuatro casos, en `optimizacion-ruta-service.test.ts`, describe «265/R33 — las guardas cortan EN ESTE
+ORDEN»:
+
+| Caso | Escenario | Se afirma |
+| --- | --- | --- |
+| R20 < R34 | job obsoleto **y** dentro del intervalo | `razon: "obsoleta"`, y que **no se leen las paradas** |
+| R34 < R35 | cero paradas **y** dentro del intervalo | `razon: "intervalo_minimo"` **y `findParadasEnReparto` sin llamar** — el doble clic no cuesta ni una lectura de base |
+| R35 < R36 | una parada **y** la misma huella que la última vez | `razon: "sin_paradas"` y que la secuencia trivial **sí** se reescribe con `secuenciaFuente: null` |
+| R38 < 265/R16 | 3 paradas con tope 2 y origen incoherente | el origen que viaja es el centroide de **las 2 que se envían** (9,94 / −84,10), no el de las tres (13,29 / −89,4) |
+
+Detalle del tercero, porque importa cómo está hecho: la huella es un hash privado, así que **no se
+reimplementa aquí** —eso sería compararla contra sí misma—. Se hace una primera corrida, se **lee la
+huella que el servicio persistió** y se le devuelve al escenario de la segunda.
+
+**Mutaciones, con su salida real.** Arnés con autocomprobación: imprime el **conteo de cada corrida**,
+no sólo el exit code (en este repo un arnés de mutaciones ya reportó «9/9 supervivientes» dos veces
+**sin haber ejecutado un test**). Corrido **dos veces** —la segunda después de un ajuste de tipos—,
+con el mismo resultado:
+
+```
+=== BASE (sin mutar) ===                                          Tests  40 passed (40)
+=== M-ah: el intervalo minimo por delante de la obsolescencia === Tests  1 failed | 39 passed (40)
+    FAIL … 265/R33 … > R20 antes que R34: job obsoleto Y dentro del intervalo -> gana `obsoleta`
+=== M-ai: el intervalo minimo por detras de leer las paradas ===  Tests  1 failed | 39 passed (40)
+    FAIL … 265/R33 … > R34 antes que R35: … y NO se lee la base
+=== M-aj: la guarda de 0/1 parada deja de cubrir el caso de UNA = Tests  5 failed | 35 passed (40)
+    FAIL … 265/R33 … > R35 antes que R36: UNA parada Y la misma huella … -> gana `sin_paradas`
+=== M-ak: la coherencia del origen sobre las paradas SIN recortar Tests  1 failed | 39 passed (40)
+    FAIL … 265/R33 … > el recorte R38 va ANTES de la guarda del origen
+--- restaurando ---  diff tras restaurar: ''   (las cuatro veces)
+=== BASE otra vez ===                                             Tests  40 passed (40)
+```
+
+⚠️ **Lean el número, que es la medida del agujero:** `M-ah` y `M-ai` matan **UN test de 40**. O sea
+que **39 tests sobreviven a reordenar las guardas de coste**, incluidos los cinco que las prueban una
+a una. Eso es exactamente lo que m7 decía, ahora medido en vez de supuesto.
+
+Las cuatro entran en `design.md` §10.4 y la fila de R33 en §10.2 deja de decir «los tests que ya
+existen» a secas. La **cabecera del servicio** apunta ahora al describe nuevo, y de paso se corrige
+que decía «LAS **CUATRO** GUARDAS» mientras listaba **cinco**.
+
+⚠️ **Lección re-aprendida, y esta vez me costó a mí.** El arnés restaura con `git checkout -- <file>`,
+y eso se lleva por delante **cualquier cambio sin commitear de ese archivo**. Mi comentario de m11
+en `OptimizacionRutaService.ts` estaba sin commitear cuando corrí las mutaciones: **se borró en
+silencio**. Se detectó y se repuso. La regla que ya estaba escrita en §8.1 y que se confirma: **commit
+ANTES de mutar**, y comprobar el **blob**, no el árbol.
+
+### 9.8 · m8 — la entrada en `progress/history.md`: es del leader
+
+**Queda ABIERTO, y no por olvido.** `history.md` es el registro de cierre de la ficha y lo escribe el
+leader cuando la feature se da por terminada; esta ficha sigue `in_progress` y **tiene pendientes
+reales** (`C3`, `C7`, `C8`, la mitad de `F6`). Escribir su entrada de cierre desde aquí sería
+anunciar un final que no ha ocurrido. Igual que `feature_list.json` y `current.md`: **no se tocan**.
+
+### 9.9 · m9 — el prefijo compartido: verificado, sin daño, y sin tocar nada
+
+Los dos directorios existen y son **distintos**:
+
+```
+db/migrations/20260822140000_notificacion_evento_dia_reparto_corregido/   (262: dos enums)
+db/migrations/20260822140000_ruta_secuencia_fuente/                       (265: una columna)
+```
+
+Prisma indexa por **nombre de directorio**, no por prefijo, así que compartir el timestamp no las
+enfrenta: tocan tablas distintas y ninguna depende de la otra. Comprobado contra la base local, en
+solo lectura y sin exponer credencial:
+
+```
+$ pnpm exec prisma migrate status --schema db/schema.prisma
+Datasource "db": PostgreSQL database "ordenex", schema "public" at "localhost:5432"
+143 migrations found in prisma/migrations
+Database schema is up to date!
+```
+
+**No se renombra ni se toca ninguna de las dos.** Editar o renumerar una migración **ya aplicada** es
+*drift*, y deja una fila fantasma que `migrate status` no ve. Se anota y se deja quieto, que es lo
+que el reviewer pedía.
+
+### 9.10 · m10 — la mina de `getByRole("alert")`: abierta a propósito
+
+**Queda ABIERTA, y es una decisión, no un descuido.** Los tres usos
+(`RepartoModule.test.tsx:839`, `:1152`, `:1463`) están **verdes hoy** y son correctos: en sus
+escenarios hay **una** alerta. La mina sólo muerde a quien escriba un caso con **dos** a la vez.
+
+Arreglarla de verdad significa hacer esas tres consultas específicas (a qué alerta apuntan), y eso es
+**editar tests ajenos y verdes** en un archivo de 2.700 líneas que otras ramas están tocando ahora
+mismo. El encargo dice **no relajar ni tocar tests ajenos**, y aquí el riesgo (conflicto, o peor:
+debilitar una aserción sin querer) supera al beneficio de un cambio que **no arregla nada roto**.
+
+Queda declarada donde ya estaba —`impl_265_frontend.md` §5.1 y §8.4— y ahora también aquí. Si alguien
+tropieza con el `multiple elements`, esta entrada le dice qué es en un renglón.
+
+### 9.11 · m11 — los `warn` que no lee nadie, escrito donde se lee
+
+**Verificado en el árbol, no leído del informe.** Hay **dos** `defaultLogger` no-op y **una** sola
+construcción real que los deja a los dos por defecto:
+
+- `lib/services/OptimizacionRutaService.ts` → `const defaultLogger: RutaLogger = { warn: () => {} }`
+- `lib/clients/fallback-route-optimization.ts` → `const defaultLogger: FallbackLogger = { warn: () => {} }`
+- `lib/services/jobs/optimizacion-ruta-handler.ts:120-128` pasa **`undefined`** en la posición del
+  logger del servicio y **no le pasa logger** al compuesto. Los dos únicos puntos de entrada
+  (`app/api/cron/procesar-jobs/route.ts:75` y `lib/actions/ruta-mensajero.ts:66`) llaman a esa misma
+  función. **No hay ninguna otra construcción.**
+
+**No es un defecto y no se arregla: es el límite declarado 5**, cerrado a propósito por **P8** —la
+operación se entera consultando `ruta_optimizada.secuencia_fuente`, un dato persistido, no un log que
+expira—. Lo que sí era un defecto es **dónde estaba escrito**: sólo en `design.md` §14.3, y el código
+decía lo contrario. En `fallback-route-optimization.ts` el comentario junto al `warn` decía
+literalmente que servía «*para que un operador note que se está ordenando en local*». **Nadie lo
+nota.**
+
+Se escribe el límite **en los dos `defaultLogger`** y se corrige ese comentario, con la consecuencia
+práctica delante: **no cuelgues nada de estos `warn`**, y si un día hacen falta, se inyecta un logger
+real en `buildOptimizacionRutaService` —el hueco ya está en el constructor—.
+
+**Es prosa: sin test.** Lo verificable es el cableado, y está medido arriba.
+
+### 9.12 · El gate — `./init.sh` COMPLETO, en verde
+
+`pnpm exec prisma generate --schema db/schema.prisma` **justo antes** (el cliente vive en un
+`node_modules` compartido por *junction*), y el `echo` **dentro** del redirect:
+`{ ./init.sh; echo "INIT_EXIT=$?"; } > gate.log 2>&1`.
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=2)
+✓ specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+✓ typecheck paso
+-> pnpm run lint
+✖ 99 problems (0 errors, 99 warnings)
+✓ lint paso
+-> pnpm run test
+ Test Files  1320 passed (1320)
+      Tests  17800 passed | 26 skipped (17826)
+   Duration  353.61s
+✓ test paso
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
+```
+
+Cuatro comprobaciones, no cuatro afirmaciones:
+
+1. **`INIT_EXIT=0` está DENTRO del log.** No hubo rojo, así que no hizo falta distinguir «timeout bajo
+   carga» de «base compartida»; se deja dicho el criterio por si alguien lo repite mientras otro
+   agente trabaja.
+2. **Los números crecen EXACTAMENTE lo que se añadió**, y eso es la comprobación: `1319 → 1320`
+   archivos (+1, `RutaMapaInner.test.tsx`) y `17.793 → 17.800` verdes (**+7** = 3 de m3 + 4 de m7).
+   `26` saltados, igual. **Ningún test ajeno se movió, ni se relajó, ni desapareció.**
+3. **99 *warnings*, 0 errores**: los mismos 99 del bloque backend, del frontend y del reviewer.
+   **Ninguno sale de esta rama.**
+4. **La lista de «migraciones sin `down.sql`» NO crece**: las mismas tres `ruta_*` del 2026-08-14.
+   Esta rama **no toca `db/`**.
+
+`gate.log` **no se commitea** (se borra al terminar), y el `.env` copiado del repo principal
+**tampoco**: está en `.gitignore` y se borra al cerrar el worktree.
+
+### 9.13 · Lo que este anexo NO hizo
+
+1. **Cero cambios de lógica.** En `lib/` el diff son **sólo comentarios** (`git diff` lo confirma
+   línea a línea). Lo que cambia de comportamiento observable es **cero**; lo que cambia es qué se
+   pone rojo.
+2. **No se tocó `progress/review_265.md`.** Es el informe del reviewer y se queda con su veredicto
+   RECHAZADO: quien revise después compara ese informe contra este anexo.
+3. **No se tocó `feature_list.json` ni `progress/current.md`.** Son del leader. Con ellos siguen
+   `C5` (la ficha de H1) y **m8**.
+4. **No se relajó ni se borró un solo test ajeno.** Los tres `getByRole("alert")` de m10 siguen
+   exactamente como estaban (§9.10).
+5. **No hay borrador de ficha nueva**, porque **m3 se cerró aquí** en vez de derivarse; el porqué
+   está razonado en §9.3.
+6. **No se abrió PR ni se mergeó nada.**
+
+### 9.14 · Lo que cambia en el mapa `R<n> → test`
+
+Dos filas de los mapas de §4 (aquí) y §4 (`impl_265_frontend.md`) se quedan cortas y se corrigen
+**aquí**, sin reescribir las secciones de los bloques anteriores:
+
+| R | Decía | Dice ahora |
+| --- | --- | --- |
+| **R33** | `optimizacion-ruta-service.test.ts` (R20/R34/R35/R36/R38, **sin tocar**) | lo mismo **+** `optimizacion-ruta-service.test.ts` → describe «**265/R33 — las guardas cortan EN ESTE ORDEN**» (4 tests). Los de antes cubrían «cortan igual»; éstos cubren «**y en el mismo orden**», que es la mitad que R33 pide y que no tenía test |
+| **R43** | `RepartoModule.test.tsx` → «R43: las TRES señales conviven…» (1 test) | lo mismo **+** `RutaMapaInner.test.tsx` → «**265/R43 — la tercera señal: el trazado LOCAL se dibuja PUNTEADO**» (3 tests). El primero llega a las **props** del mapa; el segundo, a la **línea punteada** |
+
+**Ningún otro `R<n>` cambia de test**, y ninguno pierde el que tenía.
