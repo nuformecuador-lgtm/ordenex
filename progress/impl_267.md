@@ -169,3 +169,79 @@ queda ningun requisito sin mapear** (comprobado recorriendo R1..R44 contra el de
 - **Aviso a integradores**: coordinar con la 266 y con la 256/#434 — las tres son del bloque de
   integracion de Dropi y el aviso sale JUNTO, no en tres tandas.
 - **`feature_list.json` y `progress/current.md`**: bookkeeping del leader, por instruccion expresa.
+
+## Ronda de revision — BLOQUEANTE arreglado (2026-08-23)
+
+El reviewer bloqueo la feature con un hallazgo mayor **reproducido**, y tenia razon.
+
+### El agujero
+
+`resolverAlcance` comprobaba el canal **solo dentro de la rama de los roles de integracion**. Un
+actor que llegase por `canal: "api_key"` con cualquiera de los **cinco roles lectores** caia a la
+rama de abajo y su alcance salia del **catalogo**, sin pasar por `esMetricaPublicableApiKey` y sin
+recorte a una tienda:
+
+- `rol: "maestro"` + `cod_recaudado` por `api_key` ⇒ `{tipo:"global"}`. Metrica **financiera**,
+  **todos los inquilinos**.
+- `rol: "adminTienda"` + `sin_gestionar` ⇒ concedido para una metrica **no publicable**.
+
+Incumplia R15/R17/R18/R19/R34, que estan escritos sobre el **canal**, no sobre el rol.
+
+### Por que se nos paso, dicho sin adornos
+
+Es la **simetria exacta** del argumento con el que se justifico el parametro `canal`: «hoy no
+existe login por cookie para `apiKey`, pero eso es una CIRCUNSTANCIA externa, no un invariante».
+Ese razonamiento valia igual en el otro sentido —hoy `ApiKeyAuthService` construye el actor con el
+rol de la fila y nada garantiza que sea `apiKey`— y no se aplico. Se cerro media puerta y se dio
+por cerrada entera. Queda escrito en el comentario del propio guardia para que la proxima vez se
+compruebe en los dos sentidos.
+
+### El arreglo
+
+`canal === "api_key"` <=> rol de integracion, con las dos ramas **exhaustivas sobre el canal**. La
+denegacion va en el punto **unico** de decision y **antes** de mirar la metrica; no en el borde,
+que es donde se olvida.
+
+**Los quince casos** (cinco roles lectores x metrica publicable / no publicable / financiera)
+deniegan, y el test es **derivado** de `ROLES_ANALITICA`: un sexto rol lector queda cubierto solo.
+Con el caso positivo espejo, para que el arreglo no se pueda «cumplir» denegando todo.
+
+**Mordida comprobada:** revertido solo el arreglo, los quince casos se ponen rojos; restaurado.
+
+### Punto 3 — defensa en profundidad: SE HIZO, y por que
+
+`ApiKeyAuthService` construia el actor con `encontrada.rol as RolValue`, un **cast** de la fila.
+`IApiKeyRepository` ya prometia por escrito que «el service revalida (defensa en profundidad)»:
+la promesa estaba, el codigo no.
+
+Se anade la comprobacion porque la evidencia lo permite: la **unica** alta de una key crea su
+usuario dedicado en la misma transaccion y le fija el rol por **lookup** de `"apiKey"`
+(`ApiKeyRepository.createConUsuario`, R12/[D1]). No hay camino soportado que produzca una cuenta
+de key con otro rol, asi que el riesgo de romper keys existentes es nulo. Si alguien cambiara el
+rol despues, seria una **misconfiguracion**, y en una frontera multi-tenant una misconfiguracion
+debe **cerrar** el canal, no ampliarlo. Cubre de una vez todas las superficies del canal,
+presentes y futuras, en vez de una a una.
+
+### Los cinco menores
+
+| menor | que se hizo |
+| --- | --- |
+| `tasks.md` sin casillas | T0-T10 marcadas; **T11 abierta a proposito** (gate y PR son del leader) |
+| trazabilidad citaba tests inexistentes | corregida a los tests REALES. Una tabla que cita archivos que no existen da por cubierto lo que nadie comprueba |
+| faltaba el aserto de dos claves de cache | anadido, con sus cuatro caras (difiere por sujeto, estable consigo mismo, entra el `usuarioId` y no un comodin, y el caso del mismo id con distinto rol) |
+| comentario caduco en `entregas-conteo.ts:159` | actualizado, solo prosa |
+| `construirServicio` duplicado | aceptado por el reviewer y anotado como deuda, ver abajo |
+
+## Deuda tecnica aceptada
+
+**`construirServicio` esta duplicado** entre `lib/api/analitica-integrador.ts` y
+`lib/actions/analitica-operativa.ts`. No es descuido: aquel archivo lleva `"use server"`, que
+obliga a que **todo** export suyo sea `async`, asi que su factory no se puede exportar. Extraer un
+modulo comun habria cambiado el cableado del canal de sesion, que **R43 exige dejar intacto**.
+Anotado tambien en la cabecera del propio archivo. Si se quiere unificar, es ficha aparte.
+
+## Verificacion tras el arreglo
+
+`pnpm typecheck` verde · `pnpm lint` 0 errores ·
+`vitest run tests/unit/analytics tests/unit/api tests/unit/services/api-key-auth-service.test.ts`:
+**161 archivos / 1917 tests / 0 rojos**.

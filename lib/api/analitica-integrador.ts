@@ -84,7 +84,9 @@ export interface AnaliticaIntegradorDeps {
 /**
  * El composition root del canal integrador.
  *
- * Es un CALCO del `construirServicio` de `lib/actions/analitica-operativa.ts`, y la
+ * DEUDA TECNICA ACEPTADA (267, reviewer del 2026-08-23; anotada tambien en
+ * `progress/impl_267.md` > Deuda). Es un CALCO del `construirServicio` de
+ * `lib/actions/analitica-operativa.ts`, y la
  * duplicacion es forzada, no un descuido: aquel archivo lleva `"use server"`, que obliga a que
  * TODO export suyo sea una funcion `async`, asi que su factory no se puede exportar ni
  * reutilizar desde aqui. Extraer un modulo comun es una mejora legitima, pero tocaria un
