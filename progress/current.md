@@ -17,7 +17,7 @@ desaparece** (hoy ya se descartaba sin persistirlo, así que no se pierde dato).
 
 | # | Zona | Estado | Qué |
 | --- | --- | --- | --- |
-| **276** | fullstack | **`in_progress`** · rama `feature/276-plantilla-carga-masiva-v3` (nace de `dev`, worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
+| **276** | fullstack | **PR [#487](https://github.com/nuformecuador-lgtm/ordenex/pull/487)** · rama `feature/276-plantilla-carga-masiva-v3` (worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
 
 ### Decisiones cerradas con el humano (no reabrir)
 
