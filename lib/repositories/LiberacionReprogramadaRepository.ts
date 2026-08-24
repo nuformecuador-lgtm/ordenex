@@ -7,6 +7,10 @@ import type {
   OrdenLiberableRow,
 } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+// FEATURE 273 (T6.1, R12): la MISMA lista de familias de visita real que usa el predicado unico de
+// intentos (`whereIntentosVigentes`). Se IMPORTA, no se copia: dos listas que se desincronizaran
+// harian que la puerta del cron y el contador dijeran cosas distintas sobre la misma gestion.
+import { ORIGEN_TIPOS_VISITA_REAL } from "@/lib/types/orden-historial";
 
 // Estatus de ORIGEN de la liberacion (una orden reprogramada) y `resultado` de la
 // gestion que fija la fecha de reprogramacion (feature 36). Valores de catalogo ya
@@ -51,17 +55,52 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
           where: { resultado: RESULTADO_REPROGRAMADA, anuladaAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { fechaReprogramacion: true },
+          select: {
+            fechaReprogramacion: true,
+            // FEATURE 273 (T6.1, R12/R14/R15) — LOS TRES HECHOS NUEVOS, todos de ESTA MISMA
+            // gestion: la vigente mas reciente, la que el `take: 1` ya elegia. El repositorio NO
+            // decide nada con ellos; la regla vive en `ejecutarLiberacion`.
+            cierreId: true,
+            cierre: { select: { estado: true } },
+            // LA SONDA DE VISITA REAL. Array vacio = gestion SINTETICA (p. ej. la
+            // `reprogramacion_tienda` de la 100, que NO cuenta como intento); con un elemento =
+            // nacio de una visita del mensajero y por tanto SI puede subir el contador.
+            //
+            // ⚠️ RENDIMIENTO — DESVIACION DEL DESIGN §10, MEDIDA Y DECLARADA. Aquel decia repetir
+            // el filtro por `orden_id` dentro de la sonda «como hace `whereIntentosVigentes`»,
+            // para entrar por `@@index([ordenId, createdAt])`, porque `gestion_orden_id` no tiene
+            // indice propio (215/D7 prohibe anadir uno). **Eso no se puede escribir aqui**: es un
+            // `select` ANIDADO y Prisma no deja referenciar un campo de la fila padre en el `where`
+            // de una relacion. Lo que SI se sostiene es el motivo por el que daba igual: Prisma
+            // carga las relaciones con consultas SEPARADAS Y AGRUPADAS
+            // (`... WHERE gestion_orden_id IN ($1..$n)`), asi que esta sonda cuesta **UNA consulta
+            // por corrida del cron**, no una por orden. No hay N+1 que evitar.
+            historialEstados: {
+              where: { origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } },
+              take: 1,
+              select: { id: true },
+            },
+          },
         },
       },
     });
 
     const liberables: OrdenLiberableRow[] = [];
     for (const r of rows) {
-      const fecha = r.gestiones[0]?.fechaReprogramacion ?? null;
+      const gestion = r.gestiones[0];
+      const fecha = gestion?.fechaReprogramacion ?? null;
       // R11: sin fecha vigente o fecha futura -> permanece bloqueada.
       if (fecha === null || fecha.getTime() > hoyCR.getTime()) continue;
-      liberables.push({ id: r.id, zonaId: r.zonaId, fechaReprogramacion: fecha });
+      liberables.push({
+        id: r.id,
+        zonaId: r.zonaId,
+        fechaReprogramacion: fecha,
+        // FEATURE 273: los tres hechos viajan CRUDOS. El `?? null` y el `.length > 0` son
+        // traduccion de FORMA, no decision: quien decide es `ejecutarLiberacion`.
+        gestionCierreId: gestion?.cierreId ?? null,
+        gestionCierreEstado: gestion?.cierre?.estado ?? null,
+        gestionEsVisitaReal: (gestion?.historialEstados?.length ?? 0) > 0,
+      });
     }
     return liberables;
   }

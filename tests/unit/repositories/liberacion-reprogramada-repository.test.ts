@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { LiberacionReprogramadaRepository } from "@/lib/repositories/LiberacionReprogramadaRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { ORIGEN_TIPOS_VISITA_REAL } from "@/lib/types/orden-historial";
 
 // Feature 140: la guardia del choke point es de FALLO CERRADO. Los ids de estatus son los del
 // catalogo (`idEstado`) y el catalogo se siembra antes de cada test, asi el append valida de
@@ -41,7 +42,19 @@ describe("findOrdenesLiberables (R10/R11)", () => {
   it("R10: filtra por estatus reprogramada + no borrada, gestion reprogramada mas reciente", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
-      { id: "o1", zonaId: "z1", gestiones: [{ fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z") }] },
+      {
+        id: "o1",
+        zonaId: "z1",
+        gestiones: [
+          {
+            fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+            // FEATURE 273 (T6.1): los tres hechos que ahora proyecta el `select`.
+            cierreId: "c1",
+            cierre: { estado: "aprobado" },
+            historialEstados: [{ id: "h1" }],
+          },
+        ],
+      },
     ]);
     const rows = await repoWith(prisma).findOrdenesLiberables(HOY);
 
@@ -53,9 +66,57 @@ describe("findOrdenesLiberables (R10/R11)", () => {
       orderBy: { createdAt: "desc" },
       take: 1,
     });
+    // FEATURE 273 (T6.1, R12/R14): el `select` PIDE los tres hechos. Sin este bloque, borrar
+    // `cierre` o la sonda del repositorio dejaria la fila con `null`/`false` y el servicio
+    // liberaria SIEMPRE — verde, y con la regla desactivada.
+    expect(arg.select.gestiones.select).toMatchObject({
+      fechaReprogramacion: true,
+      cierreId: true,
+      cierre: { select: { estado: true } },
+      historialEstados: {
+        where: { origenTipo: { in: [...ORIGEN_TIPOS_VISITA_REAL] } },
+        take: 1,
+      },
+    });
+    // La fila que sale, ENTERA y literal: es el contrato de `OrdenLiberableRow`.
     expect(rows).toEqual([
-      { id: "o1", zonaId: "z1", fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z") },
+      {
+        id: "o1",
+        zonaId: "z1",
+        fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+        gestionCierreId: "c1",
+        gestionCierreEstado: "aprobado",
+        gestionEsVisitaReal: true,
+      },
     ]);
+  });
+
+  it("FEATURE 273: sin fila de visita real y sin cierre, los tres hechos salen en su forma vacia", async () => {
+    // La gestion SINTETICA de la reprogramacion de escritorio (100) es exactamente esta forma:
+    // sonda vacia, `cierre` ausente. El repositorio la traduce sin decidir nada.
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      {
+        id: "o1",
+        zonaId: "z1",
+        gestiones: [
+          {
+            fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+            cierreId: null,
+            cierre: null,
+            historialEstados: [],
+          },
+        ],
+      },
+    ]);
+
+    const rows = await repoWith(prisma).findOrdenesLiberables(HOY);
+
+    expect(rows[0]).toMatchObject({
+      gestionCierreId: null,
+      gestionCierreEstado: null,
+      gestionEsVisitaReal: false,
+    });
   });
 
   it("selecciona la de fecha == hoy y la de fecha < hoy; EXCLUYE la futura (R11)", async () => {

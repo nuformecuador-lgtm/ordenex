@@ -7,6 +7,7 @@ import type { GestionDesdeAyudaInput } from "@/lib/interfaces/services/IGestionD
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { GestionDesdeAyudaService } from "@/lib/services/GestionDesdeAyudaService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -177,6 +178,9 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       },
       gestionRepo: new GestionOrdenRepository(ctx.tx, colaFake() as never),
       storage,
+    // FEATURE 273 (T5): la dependencia del tope es OBLIGATORIA. Con el doble a 0 intentos, la
+    // puerta del paso 5-ter no se cierra y estos casos siguen midiendo lo que median.
+      historial: fakeIntentosEnLote(),
     });
     const actor: Actor = { usuarioId: ctx.tiendaId, rol: "adminTienda" };
     return { service, storage, actor };

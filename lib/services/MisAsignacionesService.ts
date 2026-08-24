@@ -32,6 +32,12 @@ import {
   type EvidenciaSubida,
 } from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
+// FEATURE 273 (T4/T11, R1/R3/R7): la regla del tope vive en UN modulo puro, importable tambien
+// desde el navegador, para que la guarda del servidor y el filtro de botones de la pantalla no
+// puedan divergir. El umbral NO viaja con el: sale de `reintentosConfig`, aqui, en el servidor.
+import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";
+import { reintentosConfig } from "@/lib/config/reintentos";
+import { MSG_TOPE_INTENTOS_GESTION } from "@/lib/services/mensajes-bloqueo";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
@@ -138,7 +144,13 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // opcional dejaria que el wiring se la olvidara y el dato desapareciera en silencio de las
     // superficies del mensajero). `import type` + `Pick`: sin ciclo de modulos y testeable con
     // dobles.
-    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+    // FEATURE 273 (T4/T11, R1/R7/R8): el `Pick` se ENSANCHA con `contarIntentos` — el conteo de UNA
+    // orden, para la puerta del tope en `gestionar`. No hay dependencia nueva ni riesgo de cableado
+    // olvidado: es el MISMO servicio que ya estaba, con un metodo mas del mismo criterio unico.
+    private readonly historial: Pick<
+      IOrdenHistorialService,
+      "contarIntentosEnLote" | "contarIntentos"
+    >,
   ) {}
 
   /**
@@ -263,6 +275,14 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         intentosEntrega: intentos.get(row.id) ?? 0,
+        // FEATURE 273 (T11, R8/R10): la DECISION, ya tomada aqui. El umbral se resuelve en el
+        // servidor y NO viaja: al navegador solo baja este booleano. Se deriva del MISMO numero
+        // que la card ya pinta (`intentosEntrega`), asi que la pantalla no puede ensenar «intento
+        // 2 de 3» y a la vez ofrecer un desenlace que el servidor va a rechazar.
+        enElTope: alcanzaElTope(
+          intentos.get(row.id) ?? 0,
+          reintentosConfig.MIN_INTENTOS_ENTREGA,
+        ),
         // Feature 246 (T5.1, R22/R25/R26): «para mañana» = reservada para un dia ESTRICTAMENTE
         // posterior al de Costa Rica en curso. `>` y no `>=`: una orden reservada para HOY no es
         // «para mañana», es de hoy. Y por eso la etiqueta caduca sola (R25): al llegar el dia
@@ -537,6 +557,40 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // ficha).
     if (estaReservadaParaOtroDia(orden.fechaReparto, startOfDayCR(now))) {
       return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
+    }
+
+    // 💰 FEATURE 273 (T4, R1/R2/R5/R6/R7/R11) — LA PUERTA DEL TOPE DE INTENTOS.
+    //
+    // MIENTRAS los intentos vigentes de la orden sean `>= umbral - 1`, la gestion que se registre
+    // AHORA es la que alcanza el umbral: `reprogramada` y `devuelta` dejan de admitirse, porque las
+    // dos devuelven la orden a circulacion (`reprogramada` -> el cron la libera a bodega;
+    // `devuelta` -> la rama `not_found` del cron SLA la libera a bodega). `entregada`, `rechazada`
+    // e `incidente` siguen pasando SIN NINGUNA CONDICION NUEVA (R2).
+    //
+    // POR QUE VA AQUI, junto a las otras dos guardas «previsibles» —el bloqueo por cierres y la
+    // reserva para otro dia— y NO mas abajo: R5 exige que el rechazo no produzca NINGUN efecto, y
+    // el unico sitio donde eso es cierto es ANTES de `subirEvidenciasCompensadas` y ANTES de abrir
+    // la transaccion. Una foto huerfana en el bucket ya seria un efecto.
+    //
+    // R11: no depende de que la interfaz haya ocultado el boton. El filtro de la UI (R8) es
+    // cortesia; esta linea es la seguridad. Una peticion que pida un resultado prohibido se rechaza
+    // igual, venga de donde venga.
+    //
+    // R7: el umbral sale de `reintentosConfig`, JAMAS de un `3` escrito aqui. La lista de
+    // permitidos sale del modulo puro `lib/types/tope-intentos.ts` —el MISMO que filtra los botones
+    // en el navegador— para que la pantalla y la guarda no puedan divergir.
+    //
+    // CARRERA CONOCIDA Y ACEPTADA (design §9.1): una aprobacion de cierre concurrente puede subir
+    // el contador justo despues de esta lectura. Direccion del error: la puerta DEJA PASAR una
+    // gestion que un instante despues estaria prohibida — un intento de mas, que es exactamente el
+    // comportamiento de hoy y no cobra nada de mas.
+    if (!permitidoEnElTope(input.resultado)) {
+      const intentos = await this.historial.contarIntentos(input.ordenId);
+      if (alcanzaElTope(intentos, reintentosConfig.MIN_INTENTOS_ENTREGA)) {
+        // `conflict` y no `validation_error`: no es un campo mal escrito, es el estado del mundo.
+        // Mismo molde que `RESERVA_MOTIVO_SERVIDOR`. Motivo SIN PII y sin el valor del umbral.
+        return { status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION };
+      }
     }
 
     // R21: no gestionar una orden distinta de la activa (si hay una activa).

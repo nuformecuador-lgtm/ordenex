@@ -88,6 +88,9 @@ function makeDb() {
       prioridad: false, // parte no prioritaria; la liberacion del cron 46 la enciende (feature 110/R1)
     },
   ];
+  // FEATURE 273: los cierres del emulador. Vacio a proposito: la gestion sintetica de la 100 nace
+  // con `cierre_id NULL`, que es la forma que este archivo mide.
+  const cierres: { id: string; estado: string }[] = [];
   const gestiones: GestionRow[] = [
     {
       id: "g-devuelta",
@@ -143,6 +146,28 @@ function makeDb() {
     return cands.map((h) => (sel ? pick(h, sel) : h));
   }
 
+  /**
+   * FEATURE 273 (T6.1) — el emulador tiene que resolver la SONDA DE VISITA REAL y el `cierre` de la
+   * gestion, porque el cron 46 ahora los proyecta. Un emulador que los ignorase devolveria
+   * `undefined` para los dos, el repositorio los traduciria a `null`/`false` y este archivo pasaria
+   * en verde afirmando «se libera» POR OMISION — cuando lo que tiene que demostrar es que se libera
+   * porque la gestion de la 100 es SINTETICA (`reprogramacion_tienda` NO esta en
+   * `ORIGEN_TIPOS_VISITA_REAL`) y por tanto no puede subir ningun contador.
+   */
+  function resolveSondaVisitaReal(gestionId: string, sub: Record<string, unknown>) {
+    const where = (sub.where ?? {}) as { origenTipo?: { in?: string[] } };
+    const familias = where.origenTipo?.in;
+    let cands = historial.filter(
+      (h) =>
+        h.gestionOrdenId === gestionId &&
+        (familias === undefined || familias.includes(h.origenTipo as string)),
+    );
+    const take = sub.take as number | undefined;
+    if (take !== undefined) cands = cands.slice(0, take);
+    const sel = sub.select as Record<string, unknown> | undefined;
+    return cands.map((h) => (sel ? pick(h, sel) : h));
+  }
+
   function resolveGestiones(ordenId: string, sub: Record<string, unknown>) {
     const where = (sub.where ?? {}) as { resultado?: string; anuladaAt?: null };
     let cands = gestiones.filter(
@@ -158,7 +183,23 @@ function makeDb() {
     const take = sub.take as number | undefined;
     if (take !== undefined) cands = cands.slice(0, take);
     const sel = sub.select as Record<string, unknown> | undefined;
-    return cands.map((g) => (sel ? pick(g as unknown as Record<string, unknown>, sel) : g));
+    if (!sel) return cands;
+    return cands.map((g) => {
+      const fila = g as unknown as Record<string, unknown>;
+      const out = pick(fila, sel);
+      // FEATURE 273: las dos proyecciones de RELACION del `select` de la gestion.
+      if (sel.cierre !== undefined) {
+        const cierre = cierres.find((c) => c.id === g.cierreId);
+        out.cierre = cierre ? { estado: cierre.estado } : null;
+      }
+      if (sel.historialEstados !== undefined) {
+        out.historialEstados = resolveSondaVisitaReal(
+          g.id,
+          sel.historialEstados as Record<string, unknown>,
+        );
+      }
+      return out;
+    });
   }
 
   const client = {

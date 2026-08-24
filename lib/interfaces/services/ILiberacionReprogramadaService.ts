@@ -10,6 +10,20 @@ export interface LiberacionResult {
   liberadas: number;
   // Ordenes omitidas: fallo por orden (R14) o guarda de estado ya no vigente (R17).
   omitidas: number;
+  /**
+   * FEATURE 273 (T6.2, R12/R13) — candidatas que NO se liberan porque su gestion `reprogramada`
+   * vigente TODAVIA PUEDE SUBIR EL CONTADOR: nace de una visita real y su cierre no esta aprobado.
+   *
+   * Es un CONTADOR AGREGADO y sin PII (R38), y no es decorativo: es lo unico que hace OBSERVABLE
+   * la poblacion congelada del «Riesgo declarado» de requirements — ordenes que se quedan quietas
+   * en `reprogramada` esperando a que alguien apruebe un cierre. La vigilancia continua sobre esa
+   * poblacion sigue siendo ficha aparte (M3 del §7bis de la 215); esto es el minimo para poder
+   * verla crecer.
+   *
+   * Opcional (`?`) por el patron aditivo del repo: no rompe los dobles ni los fixtures que
+   * construyen un `LiberacionResult` sin el. El servicio SIEMPRE lo emite, el `0` incluido.
+   */
+  esperandoCierre?: number;
 }
 
 export interface ILiberacionReprogramadaService {

@@ -156,7 +156,12 @@ describe("271 · familia A — GESTIONAR y COBRAR", () => {
       { createSignedUrl: vi.fn(), createSignedUrls: vi.fn() } as never,
       { findByMensajero: vi.fn(async () => null), upsertOrigen: vi.fn() },
       { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) },
-      { contarIntentosEnLote: vi.fn(async () => new Map<string, number>()) },
+      // FEATURE 273 (T4): el `Pick` del servicio gana `contarIntentos` (la puerta del tope).
+      // Con 0 intentos la puerta no se cierra y estos casos siguen midiendo el bloqueo por cierres.
+      {
+        contarIntentosEnLote: vi.fn(async () => new Map<string, number>()),
+        contarIntentos: vi.fn(async () => 0),
+      },
     );
     return { service, repoGestion };
   }
