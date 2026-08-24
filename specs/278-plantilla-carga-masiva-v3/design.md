@@ -1,4 +1,4 @@
-# Feature 276 — Diseño
+# Feature 278 — Diseño
 
 Referencia de requisitos: `requirements.md` (R1–R34).
 

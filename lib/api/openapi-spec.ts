@@ -1,3 +1,4 @@
+import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
 
@@ -104,8 +105,22 @@ export const openApiSpec = {
         description: [
           "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
           "`por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,",
-          "por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;",
-          "`\"0.00\"` si la tienda no tiene tarifa vigente).",
+          "por cada orden creada, su `costoEnvio`: flete + IVA de la tarifa vigente que resuelve",
+          "el par (tienda, zona del distrito de esa orden).",
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08): una fila sin tarifa ya no crea orden.** La tarifa se",
+          "resuelve ANTES de persistir. Una fila cuyo par (tienda, zona) no resuelve ninguna",
+          "tarifa vigente vuelve como `resultado: \"error\"` con la clave `tarifa` en `errores`",
+          `(\`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\`), NO se crea y NO trae ningún`,
+          "`costoEnvio`. Las demás filas del mismo lote se crean con normalidad.",
+          "",
+          "**Si NINGUNA de las filas que llegan a la resolución de tarifa la resuelve, la",
+          "respuesta es 409** y no se persiste nada: ni órdenes, ni la fila de `carga`, ni la",
+          "notificación de carga terminada. Atención a la distinción, porque es la que evita un",
+          "diagnóstico falso: si NINGUNA fila llega siquiera a la resolución de tarifa (todas",
+          "fallan antes por validación, duplicidad o cobertura geográfica), la respuesta sigue",
+          "siendo `200` con esas filas en su error de siempre, NO `409`: la tarifa no es el",
+          "motivo del fallo.",
           "",
           "**CAMBIO INCOMPATIBLE (2026-07): el estado inicial cambió.** Antes las órdenes nacían",
           "en `en_ruta_bodega_central`, que afirmaba que el paquete ya viajaba hacia la bodega",
@@ -119,7 +134,8 @@ export const openApiSpec = {
           "aparece en el enum `estado` y no puede llegar en ninguna respuesta.",
           "",
           "Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya",
-          "existente) o `error` (validación/geografía). Una respuesta 200 puede contener filas con",
+          "existente) o `error` (validación, geografía o falta de tarifa). Una respuesta 200",
+          "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
         ].join("\n"),
         requestBody: {
@@ -195,12 +211,53 @@ export const openApiSpec = {
                       ],
                     },
                   },
+                  filaSinTarifa: {
+                    summary: "Una creada y una degradada por falta de tarifa",
+                    value: {
+                      cargaId: "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3",
+                      total: 2,
+                      creadas: 1,
+                      duplicadas: 0,
+                      conError: 1,
+                      filas: [
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                        { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
+                      ],
+                      ordenes: [
+                        {
+                          id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+                          numRemision: "REM-0001",
+                          numGuia: 100234,
+                          estado: "por_recolectar_en_tienda",
+                          costoEnvio: "3.39",
+                        },
+                      ],
+                    },
+                  },
                 },
               },
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
+          // Feature 274 (R29/R31) — el 409 NUEVO de la carga. No es `$ref: Conflict` a secas
+          // porque el ejemplo publicado tiene que ser LA CONSTANTE que el service emite: dos
+          // cadenas (una aqui y otra en `lib/services/mensajes-tarifa.ts`) divergen a la primera
+          // errata, y R38 pide exactamente lo contrario.
+          "409": {
+            description:
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se creó ninguna orden ni fila de carga.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                example: {
+                  status: "error",
+                  code: "CONFLICT",
+                  message: MSG_CARGA_SIN_TARIFA,
+                },
+              },
+            },
+          },
           "422": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -628,18 +685,32 @@ export const openApiSpec = {
           "depende de la zona de CADA fila, así que el bloque suma únicamente las filas con",
           "resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y",
           "`filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó",
-          "fuera se leería como «esto cuesta el lote» cuando no lo es. El bloque se emite SIEMPRE:",
+          "fuera se leería como «esto cuesta el lote» cuando no lo es. Una fila queda excluida por",
+          "DOS motivos distintos, no uno: porque su geografía no tiene cobertura (o no valida), o",
+          "porque el par (tienda, zona de esa fila) no resuelve tarifa vigente. Quien sume",
+          "`totales` sin mirar `filasExcluidas` obtiene un número que NO es el precio del lote.",
+          "El bloque se emite SIEMPRE:",
           "si ninguna fila resulta cotizable, llega con todos sus importes en cero,",
           "`filasSumadas: 0` y `filasExcluidas` igual a `total`.",
           "",
           "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
           "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
           "sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.",
+          "Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada por ESE MISMO",
+          `camino: \`resultado: "error"\` con \`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\` y sin`,
+          "bloque `costos` —nunca un importe en cero—.",
           "",
-          "Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es **409** y no se",
-          "cotiza ninguna fila. Es la asimetría deliberada con `/carga`, que sí tolera la falta de",
-          "tarifa con `costoEnvio: \"0.00\"`: en una cotización, un cero sería una mentira sobre",
-          "dinero servida como precio.",
+          "El **409** existe sólo para el caso extremo: cuando NINGUNA de las filas que llegan a la",
+          "resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no",
+          "trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta",
+          "sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a",
+          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `totales`",
+          "en cero, NO `409`.",
+          "",
+          "**`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este",
+          "contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo",
+          "de envío en cero— dejó de existir: allí una fila sin tarifa tampoco se crea, y un lote",
+          "en el que ninguna resuelve también responde 409.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -741,7 +812,7 @@ export const openApiSpec = {
           "403": { $ref: "#/components/responses/Forbidden" },
           "409": {
             description:
-              "La tienda dueña de la key no tiene una tarifa vigente: no se cotiza ninguna fila.",
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se cotiza ninguna fila.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/Error" },
@@ -1316,7 +1387,8 @@ export const openApiSpec = {
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1333,7 +1405,7 @@ export const openApiSpec = {
           costoEnvio: {
             type: "string",
             description:
-              "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD.",
+              "Costo del envío (flete + IVA de la tarifa vigente del par (tienda, zona)), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD.",
           },
         },
       },
@@ -1503,7 +1575,8 @@ export const openApiSpec = {
           costos: { $ref: "#/components/schemas/CotizacionCostos" },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },

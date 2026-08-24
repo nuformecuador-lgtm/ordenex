@@ -1,9 +1,8 @@
-import type { EstadoTarifa } from "@prisma/client";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 
 // Datos listos para persistir una tarifa (numbers; el repo convierte a
 // Prisma.Decimal). Las 8 columnas numericas son obligatorias (R5).
-// `status` no viaja aqui: nace `activo` por default de DB.
+// 274/R9: `status` no viaja aqui porque la columna ya no existe.
 export interface CreateTarifaData {
   /** Tienda a la que se acota la tarifa; `null`/ausente = no acotada. */
   tiendaId?: string | null;
@@ -26,7 +25,6 @@ export interface CreateTarifaData {
 // Campos actualizables a nivel de datos; todos opcionales (R20/R22).
 export interface UpdateTarifaData {
   tiendaId?: string | null; // reasignar el duenno; `null` desacota la tarifa de toda tienda
-  status?: EstadoTarifa; // activo | inactivo
   valorFlete?: number;
   valorFleteDevuelto?: number;
   valorFleteGam?: number;
@@ -73,9 +71,12 @@ export interface ITarifaRepository {
   esTiendaAsignable(tiendaId: string): Promise<boolean>;
   /** true si `zonaId` corresponde a una zona existente. */
   existeZona(zonaId: string): Promise<boolean>;
-  /**
-   * Pasa a `inactivo` todas las tarifas de la tienda dada. Se usa
-   * cuando el usuario deja de tener un rol tarifable. Devuelve cuantas se actualizaron.
-   */
-  inactivarPorTienda(tiendaId: string): Promise<number>;
+  // 274/R13: aqui vivia `inactivarPorTienda(tiendaId)`, que pasaba a `inactivo`
+  // todas las tarifas de una tienda cuando el usuario dejaba de tener un rol
+  // tarifable. Se fue con la columna `tarifas.status`.
+  // HUECO ACEPTADO Y DECLARADO (design 274 §2.2, decision del humano 2026-08-24):
+  // el caso «la tienda deja de ser adminTienda» queda SIN cobertura —como ya
+  // estaba de hecho, porque ningun llamador invocaba este metodo— y NO se abre
+  // ficha. Si lo echas de menos, lee esto antes de reintroducirlo: el sustituto
+  // no es un `status`, es borrar la tarifa o dejarla sin resolver por la cascada.
 }

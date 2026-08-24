@@ -55,7 +55,7 @@ import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepos
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -152,7 +152,7 @@ function buildBulkService(): IBulkOrdenService {
   // `cargarViaApi` devuelva el `costoEnvio` (flete + IVA) por orden creada.
   return new BulkOrdenService(
     new OrdenRepository(prisma),
-    new TarifaVigentePorTiendaRepository(prisma),
+    new TarifaVigenteRepository(prisma),
     // Feature 146/R22: COMPOSITION ROOT del aviso "carga masiva terminada". Esta via SI tiene
     // fin de lote real (una peticion = un lote), asi que es la unica que lo cablea server-side.
     notificarCargaMasivaTerminadaReal,

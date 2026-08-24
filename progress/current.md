@@ -8,7 +8,7 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
-## 📦 Plantilla de carga masiva v3 (276) — 2026-08-24
+## 📦 Plantilla de carga masiva v3 (278) — 2026-08-24
 
 Pedido del humano: «en el cargue masivo la estructura cambia: ahora viene **provincia**,
 **canton_distrito** (`nombreCanton (distrito)`), **direccion**». Sucede a la 142, que había
@@ -17,7 +17,7 @@ desaparece** (hoy ya se descartaba sin persistirlo, así que no se pierde dato).
 
 | # | Zona | Estado | Qué |
 | --- | --- | --- | --- |
-| **276** | fullstack | **PR [#487](https://github.com/nuformecuador-lgtm/ordenex/pull/487)** · rama `feature/276-plantilla-carga-masiva-v3` (worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
+| **278** | fullstack | **PR [#487](https://github.com/nuformecuador-lgtm/ordenex/pull/487)** · rama `feature/276-plantilla-carga-masiva-v3` (worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
 
 ### Decisiones cerradas con el humano (no reabrir)
 
@@ -122,32 +122,160 @@ Las dos salen del cuestionario de integración de **Dropi**. La 256 la especific
 
 ---
 
-## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día). **EMPIEZA A LEER POR AQUÍ**
+## 🔵 SESIÓN ACTIVA — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
+
+Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spec**. `prod` sigue en
+`37b5944b`; el estado de la release del 23 y del cron de anoche está en la sección siguiente.
+
+| ficha | zona | estado | qué es |
+| --- | --- | --- | --- |
+| **276** | fullstack | **completa y APROBADA** (3 rondas, 0 bloqueantes) · en release | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | **completa y APROBADA** (0 bloqueantes) · **mergeada en `dev`** (PR #489) | «Por recoger» separa en pestañas las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 276** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
+
+### 276 — dónde está exactamente (2026-08-24)
+
+Rama **`feature/276-tope-de-intentos`**, con `dev` ya mergeado dentro. Bitácora en
+`progress/impl_276.md`, informe con las **tres rondas** en `progress/review_276.md`.
+
+- **Completa**: las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
+  gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
+  tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql`, la guardia del
+  invariante y la UI de las dos superficies (T11/T12).
+- **Gate COMPLETO** `./init.sh` → **`INIT_EXIT=0`**. Corrido **cinco veces** entre implementers y
+  reviewer sobre 1358 archivos / 18.302 tests, siempre el mismo número, y de nuevo tras mergear
+  `dev`.
+- **Aprobada con 0 bloqueantes tras tres rondas.** Las rondas 1 y 2 rechazaron, y **ninguno de esos
+  cuatro bloqueantes era del código de la ficha**: los cuatro salieron del `sed` de la renumeración
+  273→276 (ver más abajo). El reviewer volvió a inyectar el defecto decisivo sobre el commit final
+  —sonda de visita real fuera del `select`— y salieron **los mismos 2 rojos en Postgres y 13 verdes
+  en los dobles** que en la ronda 1: la auditoría del tope está en pie entera.
+
+### ✅ T0 CERRADA — las dos medidas de despliegue, ejecutadas el día de la release
+
+Eran lo único que bloqueaba desplegar la 276, y se midieron **hoy**, no se citó la foto de ayer.
+
+1. **R37 re-ejecutada, limpia.** La única orden viva con `intentos >= 3` sigue siendo la guía
+   **`28098171`**, en **`devuelta`**, y **cero** fuera de ese estado. **La condición de parada de Q6
+   no se cumple**: no hay ninguna orden a la que R18 vaya a dejar inasignable sin que nadie lo haya
+   decidido.
+2. **El segundo número de T0, medido POR PRIMERA VEZ: T6 congela CERO órdenes el primer día.** Era
+   el número sobre el que se había aceptado el riesgo a ciegas, y es el tamaño de la mercadería que
+   esta ficha para. Hay **2** órdenes vivas en `reprogramada` (`31005512`, `47145018`), **0
+   liberables hoy**, y las dos cuelgan de un cierre **ya aprobado**.
+
+### Lo que se midió antes de registrarlas, y es la razón de que existan
+
+- **La guía `28098171` llevaba 3 intentos vigentes y seguía en `devuelta`.** No es que el cron esté
+  roto —corrió a las 09:01 CR y responde 200 cada hora—: su última causa es `wrong_address`, y esa
+  rama **escala solo por tiempo (5 días) e ignora el contador**. Llevaba 89,1 h de 120.
+- **La raíz del 4.º intento: de los cinco resultados de gestión, solo `devuelta` espera al cierre.**
+  `reprogramada` cambia el estado en el acto y `findReprogramadasVencidas` libera la orden por
+  `fecha_reprogramacion <= hoy` **sin mirar el cierre**, así que vuelve a circulación con el
+  contador en el valor viejo.
+- **El contador cuenta cierres aprobados, no visitas** (215/R29). Medido en la guía `53521827`:
+  **4 gestiones contables no anuladas y el sistema le cuenta 2** —dos cuelgan del mismo cierre y
+  una `reprogramada` no tiene visita real enlazada—.
+- **`GuiaAsignacionService` no mira el contador en ningún punto**: hoy se puede asignar una orden
+  que ya agotó sus intentos.
+- **El contador de «Por recoger» miente**: la cabecera dice «N Órdenes nuevas asignadas» contando
+  las que el servidor no deja recoger. Decía **2 con 1 sola recogible**.
+
+### Las decisiones del humano, para no re-abrirlas
+
+1. **Solo se difiere `reprogramada`.** Los terminales se siguen viendo en el acto: diferirlos
+   dejaría a la tienda y al rastreo sin ver una entrega hasta **22,1 h** (p90 medido).
+2. **La no gestión del corte con el umbral alcanzado termina en `rechazada`** al aprobarse ese
+   cierre. Es la 218, y por eso la supersede.
+3. **`incidente` sigue disponible** en el intento del umbral: no es un desenlace de entrega, y
+   forzar `rechazada` grabaría un hecho falso y cobraría un rechazo que no ocurrió.
+4. **En «Por recoger» no se oculta nada**: R23 de la 246 sigue vigente, cambia el sitio.
+
+⚠️ **La 276 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
+hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
+conteo cobra de más.
+
+### ✅ Colisión de ids con `origin/dev` — RESUELTA renumerando a 276 y 277
+
+> Este párrafo estuvo **falso** unas horas, y conviene saber por qué: el `sed` del propio renumerado
+> reemplazó `273`→`276` y `274`→`277` **también dentro del texto que describía la colisión**, con lo
+> que acabó afirmando que `origin/dev` usaba 276 y 277 para tarifas —lo contrario de lo ocurrido— y
+> contradiciéndose solo. Lo cazó el reviewer, en dos rondas: la copia de la bitácora en la primera y
+> **ésta, la segunda copia, en la segunda**.
+
+Medido el 2026-08-24: `origin/dev` pasó de `e93c19e6` a **`821a6afe`** y en ese avance otra sesión
+registró **273 = tarifas ligadas a la zona (ya MERGEADA)**, **274 = cobro por zona + tienda** y
+**275 = configuración de tarifas**. Los ids que esta sesión había registrado para «el tope de
+intentos» (273) y «Por recoger» (274) quedaron ocupados por features distintas.
+
+**Resuelto: 273 → 276 y 274 → 277**, porque `dev` manda y la ficha mergeada es la suya. Precedente
+explícito del repo: la 218 se renumeró desde 216 por esto mismo. En `821a6afe` los ids 276 y 277
+estaban libres, comprobado.
+
+El merge a `dev` dará conflicto en `feature_list.json` igualmente, pero **por divergencia normal de
+ramas, no por la colisión**: `dev` local no es ancestro de `origin/dev`. Se resuelve quedándose con
+las entradas de `dev` y añadiendo la 276 y la 277.
+
+### La puerta que viene
+
+⏳ La puerta del spec **ya pasó** (2026-08-24) y las dos fichas están terminadas y aprobadas. Las que
+quedan son dos, y **ninguna es de código**:
+
+1. **El remoto.** Nada está empujado. `dev` local **no es ancestro de `origin/dev`** (`821a6afe`):
+   el merge dará conflicto en `feature_list.json` por divergencia normal de ramas —no por la
+   colisión— y se resuelve quedándose con las entradas de `dev` y añadiendo la 276 y la 277.
+2. **El despliegue de la 276**: R37 re-ejecutado contra producción, y el número de `reprogramada`
+   congeladas el primer día, que nunca se ha medido.
+
+---
+
+## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día)
 
 **`prod` = `37b5944b`**, READY. Sale la **271**: el segundo cierre se puede solicitar, y acumular dos
 bloquea. Ficha cerrada, **cero `in_progress`**. El recorrido con su evidencia está en
 `docs/release.md`; la narrativa, en `progress/history.md`.
 
-### ⚠️ LO ÚNICO QUE QUEDA VIVO, y hay que mirarlo la mañana del 24
+### ✅ EL CRON DE LA NOCHE, MEDIDO LA MAÑANA DEL 24 — corrió, y no tenía nada que cerrar
 
-**El primer efecto real de esta ficha lo produce el cron de esta noche.** A las 00:00 CR el corte
-deja de excluir a quien ya tiene un cierre abierto, y ahí es donde empieza a crear segundos cierres.
-Nada de lo verificado en el despliegue lo cubre — se midió que **0 mensajeros quedaban bloqueados en
-ese instante**, que es otra cosa.
+**Corrió**: `GET /api/cron/corte-diario` → **200** a las **00:00:22 CR del 24**, sobre
+`dpl_46j8ENJp6qrLbEoizNdxbKcR8yz1`, que es `target: production` y commit **`37b5944b`** — el build
+de la 271. No es «no se sabe si corrió»: está en los logs de runtime con su despliegue.
 
-Qué mirar, con su número:
+**Creó 0 cierres, y es lo correcto: no tenía candidatos por NINGUNA de las dos ramas** de
+`findMensajerosConActividadSinCierre`.
 
-1. **Los `cierre_dia` creados por la corrida** (`created_at` ~00:0x CR del 24): que sean los que
-   deben, y que su jornada derivada sea la del día trabajado y **no la del nacimiento** — el
-   off-by-one que originó media ficha.
-2. **Que salieron los avisos**, que es lo primero que este cron emite en toda su vida: filas nuevas
-   en `notificacion` con `evento = 'cierre_dia_vencido'`. Antes de esta release el corte emitía
-   **cero**, medido.
-3. **Los mensajeros bloqueados después de la corrida**, contra los 0 de antes de desplegar.
+| lo medido contra producción | número |
+| --- | --- |
+| (a) `gestion_orden` con `cierre_id IS NULL AND anulada_at IS NULL` | **0** |
+| gestiones registradas en la jornada del **23** (la que ese corte cerraba) | **0** — la última es del **22** |
+| (b) órdenes vivas en `en_reparto` / `ayuda_tienda` con mensajero asignado | **0 filas** |
+| `cierre_dia` creados por la corrida | **0** |
+| `notificacion` con `evento = 'cierre_dia_vencido'` | **0**, y **0 en toda la historia de la tabla** |
+| mensajeros bloqueados por la regla N/V después de la corrida | **0** (uno con `N=1, V=0` → libre) |
 
-Si (2) sale en cero y (1) creó cierres, el aviso volvió a quedarse mudo — que es el fallo que esta
-ficha persiguió cuatro veces en un día, cada vez una capa más arriba.
+El único mensajero con actividad **solicitó su cierre él mismo** a las **20:40 CR del 23**
+(`55fa66b7`, 2 gestiones, `solicitado`), así que a medianoche ya no le quedaba nada pendiente.
 
+### ⚠️ LO QUE ESTO **NO** VERIFICA, y sigue vivo
+
+**El aviso `cierre_dia_vencido` sigue sin emitirse ni una vez en producción.** El cero de hoy es
+consistente, pero **no es evidencia**: es exactamente la trampa que se documentó con `C7` — un cero
+solo vale si lo que lo produciría llegó a correr, y aquí la precondición del emisor (que el corte
+cree un `vencido`) **nunca se dio**. El cableado del notificador se verificó en test y en revisión;
+**en producción no lo ha ejercido nadie todavía**.
+
+Queda igual que ayer, y hay que volver a mirarlo **la primera noche en que un mensajero deje trabajo
+sin cerrar**. Los tres números a repetir son los mismos: cierres creados, su jornada derivada, y
+filas nuevas en `notificacion`.
+
+### Lo que además salió al mirar
+
+- **El cierre `…8F88DCD5` (79cb2c0f) se aprobó esta mañana a las 08:16 CR.** Sus **4 filas de
+  `cierre_sin_gestion` siguen ahí**, así que la comprobación de píxeles de la 264 que está en la
+  lista de release **todavía se puede hacer**.
+- **`C8` no se puede cerrar, y hoy se sabe por qué**: **cero jobs `optimizacion_ruta` de cualquier
+  estado desde el 2026-08-22 16:56 CR**, o sea **ninguno después del despliegue**. «Cero `failed`»
+  vuelve a ser un cero sin significado — el mismo error de lectura que `C7`. Se queda en la lista.
 ---
 
 ## 🚀 RELEASE DESPLEGADA — 2026-08-23 (contexto previo)

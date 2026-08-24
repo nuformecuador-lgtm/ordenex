@@ -161,7 +161,7 @@ model Usuario {
 }
 
 // Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
-// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
 // Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
 // los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
 enum PlantillaEstado {
@@ -1146,9 +1146,13 @@ model CierreBodega {
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). zona_id NOT NULL: cada tarifa pertenece a una
-// zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
-// vacia. Borrado logico via deleted_at.
+// distinguirlas (feature 18, D1). Cada fila se acota por el par (tienda, zona) y
+// las DOS dimensiones son opcionales (feature 273); ver el @@unique de mas abajo.
+// Borrado FISICO: `deleted_at` la retiro la migracion tarifa_zona_is_default.
+// Sin columna de estado: la migracion drop_tarifa_status (feature 274) solto
+// `status` y su enum al cerrar la deuda (g) de la feature 69, porque nunca entro
+// en el WHERE del camino de liquidacion y la cascada (tienda, zona) la sustituye.
+// Una tarifa que no debe aplicarse se BORRA; no hay fila presente-pero-ignorada.
 model Tarifa {
   id                    String       @id @default(uuid())
   valorFlete            Decimal      @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
@@ -1167,13 +1171,16 @@ model Tarifa {
   // trae valor es FK -> usuario (la cuenta duena; el service exige un rol tarifable:
   // adminTienda o apiKey).
   tiendaId              String?      @map("tienda_id")
-  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera). La
-  // tarifa sigue siendo por-TIENDA; esto solo permite acotarla ademas por zona.
+  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera).
+  // Desde la feature 274 la resolucion es una CASCADA sobre el par (tienda, zona):
+  // 1) tienda+zona, 2) tienda con zona NULL, 3) zona con tienda NULL. La tienda ya
+  // no es la unica dimension: una fila con `tienda_id` NULL y `zona_id` con valor
+  // cobra a cualquier tienda de esa zona. El par (NULL, NULL) NO es un cuarto
+  // nivel y el service lo rechaza al crear/actualizar.
   zonaId                String?      @map("zona_id")
   // Tarifa a la que se cae cuando ninguna acotada por zona aplica. Nace en false:
   // marcarla es un acto explicito. Las filas historicas se backfillearon a true.
   isDefault             Boolean      @default(false) @map("is_default")
-  status                EstadoTarifa @default(activo) // activo/inactivo; pasa a inactivo si la tienda deja de ser adminTienda
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
@@ -1195,13 +1202,6 @@ model Tarifa {
   @@index([tiendaId])
   @@index([zonaId])
   @@map("tarifas")
-}
-
-enum EstadoTarifa {
-  activo
-  inactivo
-
-  @@map("estado_tarifa")
 }
 
 // TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero
@@ -1691,6 +1691,7 @@ enum OrdenHistorialOrigenTipo {
   rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
   gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
   rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
+  rechazo_tope_intentos // feature 276 (R22, Q5): EL TOPE DE INTENTOS — al APROBAR el cierre, sin_gestionar -> rechazada sobre una orden que ya agoto sus intentos (actor admin). Enlaza gestion sintetica. NO es visita real: contarla subiria su propio contador y cobraria de mas
 
   @@map("orden_historial_origen_tipo")
 }

@@ -1,4 +1,4 @@
-# Feature 276 — Plantilla de carga masiva v3 (provincia + cantón(distrito) + dirección)
+# Feature 278 — Plantilla de carga masiva v3 (provincia + cantón(distrito) + dirección)
 
 Requisitos en notación EARS. Sin detalles de implementación (esos van en `design.md`).
 

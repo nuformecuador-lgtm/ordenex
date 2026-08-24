@@ -44,7 +44,7 @@ import { CotizacionOrdenService } from "@/lib/services/CotizacionOrdenService";
 import { MSG_COTIZACION_SIN_TARIFA } from "@/lib/services/mensajes-cotizacion";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { cotizacionBodySchema } from "@/lib/types/cotizacion";
@@ -74,7 +74,7 @@ function buildCotizacionService(): ICotizacionOrdenService {
   const prisma = getPrismaClient();
   return new CotizacionOrdenService(
     new OrdenRepository(prisma),
-    new TarifaVigentePorTiendaRepository(prisma),
+    new TarifaVigenteRepository(prisma),
   );
 }
 

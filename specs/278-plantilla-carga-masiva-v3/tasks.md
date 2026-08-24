@@ -1,4 +1,4 @@
-# Feature 276 — Tasks
+# Feature 278 — Tasks
 
 Convenciones: `[P]` = paralelizable con las demás `[P]` del mismo bloque.
 **B\*** = backend (`lib/`, tests de servicio/tipos), **F\*** = frontend
