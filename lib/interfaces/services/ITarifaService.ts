@@ -39,7 +39,10 @@ export type ActualizarTarifaServiceResult =
 export type BorrarTarifaServiceResult =
   | { status: "ok" }
   | { status: "forbidden" }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  // La tarifa esta congelada en algun cierre (`cierre_detail.tarifa_id`, FK
+  // RESTRICT): el borrado es fisico y esa fila no se puede sacar.
+  | { status: "conflict" };
 
 export interface ITarifaService {
   crear(input: CrearTarifaInput, actor: Actor): Promise<CrearTarifaServiceResult>;

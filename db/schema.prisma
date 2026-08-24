@@ -418,6 +418,7 @@ model Zona {
 
   ordenes              Orden[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
+  tarifas              Tarifa[]              @relation("TarifaZona") // tarifas ACOTADAS a esta zona (zona_id nullable)
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
   usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
@@ -455,9 +456,14 @@ model Canton {
 }
 
 model Distrito {
-  id       String @id @default(uuid())
-  nombre   String
-  cantonId String @map("canton_id")
+  id           String   @id @default(uuid())
+  nombre       String
+  cantonId     String   @map("canton_id")
+  // Distrito que no se cobra/despacha como el resto de su zona. OPCIONAL a proposito: `false` =
+  // se decidio que no es especial (lo que recibe toda fila que no diga nada, por el default);
+  // `null` = nadie lo decidio todavia. Al leerla NO vale `NOT zonaEspecial`: con null eso no es
+  // false. Ver la migracion 20260824180000_distrito_zona_especial.
+  zonaEspecial Boolean? @default(false) @map("zona_especial")
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
@@ -1153,17 +1159,41 @@ model Tarifa {
   comisionCod           Decimal      @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete              Decimal      @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod        Decimal      @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  tiendaId              String       @map("tienda_id") // FK -> usuario (tienda duena; el service exige rol adminTienda)
+  // Cobro pactado aparte, fuera de la tabla de precios normal. NULLABLE a proposito:
+  // NULL = "sin tarifa especial pactada" (que NO es lo mismo que 0, un cobro especial
+  // de cero). Unica columna opcional de la tabla; ver la migracion tarifa_especial.
+  tarifaEspecial        Decimal?     @map("tarifa_especial") @db.Decimal(12, 2)
+  // OPCIONAL: NULL = tarifa NO acotada a una tienda (aplica a cualquiera). Cuando
+  // trae valor es FK -> usuario (la cuenta duena; el service exige un rol tarifable:
+  // adminTienda o apiKey).
+  tiendaId              String?      @map("tienda_id")
+  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera). La
+  // tarifa sigue siendo por-TIENDA; esto solo permite acotarla ademas por zona.
+  zonaId                String?      @map("zona_id")
+  // Tarifa a la que se cae cuando ninguna acotada por zona aplica. Nace en false:
+  // marcarla es un acto explicito. Las filas historicas se backfillearon a true.
+  isDefault             Boolean      @default(false) @map("is_default")
   status                EstadoTarifa @default(activo) // activo/inactivo; pasa a inactivo si la tienda deja de ser adminTienda
-  deletedAt             DateTime?    @map("deleted_at") // soft delete (R19/R24)
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  tienda         Usuario        @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id])
   cierreDetalles CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
 
+  // Una sola tarifa por par (zona, tienda), con las dos dimensiones opcionales. El indice
+  // en SQL usa NULLS NOT DISTINCT (PG15+) para que dos NULL cuenten como el MISMO par:
+  // sin eso no habria como impedir dos «tarifas generales de la tienda X» ni dos globales,
+  // que son justo los casos que el NULL habilita. Prisma no expresa NULLS NOT DISTINCT: se
+  // declara aqui por el nombre del indice y el `where` compuesto, y se CREA a mano en la
+  // migracion tarifa_zona_is_default. Mismo caso que TarifaZonaMensajero.
+  //
+  // El unico es TOTAL, y puede serlo porque esta tabla BORRA EN FISICO (esa misma migracion
+  // retiro `deleted_at`): una tarifa borrada no ocupa su par.
+  @@unique([zonaId, tiendaId])
   @@index([createdAt])
   @@index([tiendaId])
+  @@index([zonaId])
   @@map("tarifas")
 }
 
@@ -1203,8 +1233,12 @@ model TarifaZonaMensajero {
 // El id (uuid PK) queda listo para el FK usuario.vehiculo_id de la feature 21
 // (NO se implementa ese FK aqui). Solo-lectura sembrado (P1=A), sin escritura.
 model Vehiculo {
-  id   String        @id @default(uuid())
-  name VehiculoValue @unique // seed (3): moto, carro, camion
+  id   String @id @default(uuid())
+  // TEXT desde `20260824160000_vehiculo_name_texto`: el catalogo dejo de ser
+  // solo-lectura y un enum seria un techo duro (una migracion por cada tipo nuevo).
+  // El @unique impide dos tipos con el mismo nombre; el plegado/recorte lo hace el
+  // servicio, NO la base (ver la migracion).
+  name String @unique
 
   usuarios             Usuario[] // feature 21: mensajeros que declararon este vehiculo
   tarifaZonaMensajeros TarifaZonaMensajero[] // feature 24

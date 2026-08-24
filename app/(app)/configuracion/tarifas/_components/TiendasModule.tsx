@@ -12,9 +12,10 @@ import {
   obtenerTarifa,
   borrarTarifa,
 } from "@/lib/actions/tarifas";
-import { listarAdminTiendas } from "@/lib/actions/usuarios-por-rol";
-import type { TarifaDTO } from "@/lib/types/tarifa";
+import { listarAdminTiendas, listarUsuariosPorRol } from "@/lib/actions/usuarios-por-rol";
+import { GRUPO_TARIFABLE, type TarifaDTO } from "@/lib/types/tarifa";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
+import type { ZonaDTO } from "@/lib/types/zona";
 
 import {
   CrearTiendaForm,
@@ -45,11 +46,14 @@ function valoresDesde(row: TiendaRow): TiendaValores {
  * (formulario oculto, se muestra al pulsar) y eliminación lógica (pasa a
  * inactivo). Reusa el CRUD de `tarifas`. Mismo patrón que el módulo de zonas.
  */
-export function TiendasModule() {
+export function TiendasModule({ zonas = [] }: { zonas?: ZonaDTO[] }) {
   const toast = useToast();
 
   const [tiendas, setTiendas] = useState<TiendaRow[]>([]);
   const [adminTiendas, setAdminTiendas] = useState<UsuarioPorRolDTO[]>([]);
+  // Cuentas dedicadas de API key: tarifables igual que una tienda (misma FK
+  // `tarifas.tienda_id` -> `usuario`), por eso pueblan el mismo select.
+  const [apiKeys, setApiKeys] = useState<UsuarioPorRolDTO[]>([]);
   const [cargaError, setCargaError] = useState(false);
 
   const [view, setView] = useState<"list" | "form">("list");
@@ -64,9 +68,10 @@ export function TiendasModule() {
   }, []);
 
   async function refetch() {
-    const [tarifasRes, adminRes] = await Promise.all([
+    const [tarifasRes, adminRes, apiKeysRes] = await Promise.all([
       listarTarifas({ page: 1, pageSize: PAGE_SIZE }),
       listarAdminTiendas(),
+      listarUsuariosPorRol("apiKey"),
     ]);
     if (tarifasRes.status === "ok") {
       setTiendas(tarifasRes.items as TiendaRow[]);
@@ -75,12 +80,20 @@ export function TiendasModule() {
       setCargaError(true);
     }
     if (adminRes.status === "ok") setAdminTiendas(adminRes.usuarios);
+    if (apiKeysRes.status === "ok") setApiKeys(apiKeysRes.usuarios);
   }
 
-  /** Nombre del administrador de tienda asociado a una fila. */
+  /**
+   * Nombre del dueño de una fila. Busca en los dos orígenes tarifables; si la
+   * fila apunta a una API key, se etiqueta como tal para que el listado
+   * conserve el mismo diferenciador que el select del formulario.
+   */
   function nombreTienda(row: TiendaRow): string {
-    const found = adminTiendas.find((u) => u.id === row.tiendaId);
-    return found?.nombre ?? "(sin asignar)";
+    const admin = adminTiendas.find((u) => u.id === row.tiendaId);
+    if (admin) return admin.nombre;
+    const key = apiKeys.find((u) => u.id === row.tiendaId);
+    if (key) return `${key.nombre} (${GRUPO_TARIFABLE.apiKey})`;
+    return "(sin asignar)";
   }
 
   function abrirCrear() {
@@ -118,7 +131,7 @@ export function TiendasModule() {
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-semibold">Asignar Tarifas</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Tarifas por tienda (flete, fulfillment, comisiones e IVA).
+            Tarifas por tienda o API key (flete, fulfillment, comisiones e IVA).
           </p>
         </div>
         {view === "list" ? (
@@ -141,6 +154,9 @@ export function TiendasModule() {
           key={formKey}
           mode={formMode}
           adminTiendas={adminTiendas}
+          apiKeys={apiKeys}
+          zonas={zonas}
+          tarifas={tiendas}
           initial={formInitial}
           onSaved={onSaved}
           onCancel={() => setView("list")}
@@ -159,10 +175,10 @@ export function TiendasModule() {
         onOpenChange={(o) => {
           if (!o) setDeleteTarget(null);
         }}
-        title="Desactivar tienda"
+        title="Eliminar tarifa"
         description={
           deleteTarget
-            ? `¿Marcar como inactiva la tienda "${nombreTienda(deleteTarget)}"? Dejará de estar disponible.`
+            ? `¿Eliminar la tarifa de "${nombreTienda(deleteTarget)}"? Se borra de forma permanente y no se puede deshacer.`
             : ""
         }
         confirmLabel="Aceptar"
@@ -172,11 +188,19 @@ export function TiendasModule() {
           if (!deleteTarget) return;
           const res = await borrarTarifa(deleteTarget.id);
           if (res.status !== "ok") throw res;
-          toast.success("Tienda desactivada");
+          toast.success("Tarifa eliminada");
           await refetch();
         }}
-        onError={() => {
-          toast.error("No se pudo desactivar la tienda.");
+        onError={(error) => {
+          // `conflict` tiene causa propia y accionable: la tarifa quedó congelada en
+          // un cierre y la FK no deja sacarla. Un "no se pudo" genérico dejaría al
+          // maestro reintentando sobre algo que nunca va a funcionar.
+          const status = (error as { status?: string } | null)?.status;
+          toast.error(
+            status === "conflict"
+              ? "No se puede eliminar: esta tarifa ya liquidó un cierre."
+              : "No se pudo eliminar la tarifa.",
+          );
         }}
       />
     </section>

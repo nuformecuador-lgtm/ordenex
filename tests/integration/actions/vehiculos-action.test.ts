@@ -18,11 +18,14 @@ const SEED: VehiculoDTO[] = [
   { id: "veh-3", name: "moto" },
 ];
 
-// `IVehiculoService` quedo con una sola operacion: `obtener` se retiro el 2026-08-07 junto
-// con su Server Action, que nacio sin pantalla.
+// `IVehiculoService` volvio a tener CRUD completo: la migracion `vehiculo_name_texto`
+// convirtio `vehiculos.name` de enum a TEXT y el catalogo paso a ser administrable.
 function fakeService(overrides: Partial<IVehiculoService> = {}): IVehiculoService {
   return {
     listar: vi.fn().mockResolvedValue({ status: "ok", items: SEED }),
+    crear: vi.fn().mockResolvedValue({ status: "ok", vehiculo: SEED[0] }),
+    actualizar: vi.fn().mockResolvedValue({ status: "ok", vehiculo: SEED[0] }),
+    borrar: vi.fn().mockResolvedValue({ status: "ok" }),
     ...overrides,
   };
 }

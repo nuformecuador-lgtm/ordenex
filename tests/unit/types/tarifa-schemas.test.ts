@@ -28,21 +28,45 @@ describe("crearTarifaSchema — validacion de creacion (R2/R3/R5/R14/R15)", () =
     if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
   });
 
-  it("rechaza tiendaId ausente (R5/R15)", () => {
+  // `tiendaId` DEJO de ser obligatoria (migracion tarifa_zona_is_default): ausente =
+  // la tarifa no se acota a ninguna tienda. Lo que NO se relajo es la cadena vacia: "" no
+  // es "sin tienda", es un id invalido, y aceptarlo escribiria basura en una FK. Los dos
+  // tests juntos son el contrato; el de arriba es el que impide que esto se vaya de mas.
+  it("acepta tiendaId ausente = tarifa no acotada a ninguna tienda", () => {
     const { tiendaId, ...rest } = baseCrear();
     void tiendaId;
     const r = crearTarifaSchema.safeParse(rest);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.tiendaId ?? null).toBeNull();
   });
 
-  // La tarifa ya no pertenece a una zona ni se identifica por nombre: es de una
-  // tienda. Los campos del modelo viejo deben quedar rechazados por strict.
-  it("rechaza nombre/zonaId del modelo viejo (strict)", () => {
+  it("acepta tiendaId null explicito", () => {
+    const r = crearTarifaSchema.safeParse({ ...baseCrear(), tiendaId: null });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.tiendaId).toBeNull();
+  });
+
+  // La tarifa se identifica por su TIENDA, no por un nombre: `nombre` sigue siendo
+  // del modelo viejo y strict lo rechaza.
+  it("rechaza `nombre` del modelo viejo (strict)", () => {
     expect(crearTarifaSchema.safeParse({ ...baseCrear(), nombre: "Tarifa GAM" }).success).toBe(
       false,
     );
-    expect(crearTarifaSchema.safeParse({ ...baseCrear(), zonaId: "zona-1" }).success).toBe(false);
+  });
+
+  // ⚠️ CAMBIO DE DECISION (migracion `20260824140000_tarifa_zona_is_default`): `zonaId`
+  // volvio a la tabla, ahora OPCIONAL. Este test afirmaba lo contrario -que zonaId era
+  // del modelo viejo y strict lo rechazaba- y se invierte a proposito, no se borra: la
+  // tarifa SIGUE siendo por-tienda, y la zona solo la ACOTA ademas.
+  it("acepta `zonaId` (opcional) y tambien su ausencia", () => {
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), zonaId: "zona-1" }).success).toBe(true);
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), zonaId: null }).success).toBe(true);
+    expect(crearTarifaSchema.safeParse(baseCrear()).success).toBe(true);
+  });
+
+  it("acepta `isDefault` (opcional, booleano) y rechaza un no-booleano", () => {
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), isDefault: true }).success).toBe(true);
+    expect(crearTarifaSchema.safeParse({ ...baseCrear(), isDefault: "si" }).success).toBe(false);
   });
 
   it("rechaza una columna numerica ausente (R5/R15)", () => {
@@ -131,9 +155,16 @@ describe("actualizarTarifaSchema — todos opcionales, strict (R20/R23)", () => 
     expect(actualizarTarifaSchema.safeParse({ id: "x" }).success).toBe(false);
     expect(actualizarTarifaSchema.safeParse({ deletedAt: null }).success).toBe(false);
     expect(actualizarTarifaSchema.safeParse({ createdAt: new Date() }).success).toBe(false);
-    // campos del modelo viejo: ya no existen.
+    // campo del modelo viejo: ya no existe.
     expect(actualizarTarifaSchema.safeParse({ nombre: "Nueva" }).success).toBe(false);
-    expect(actualizarTarifaSchema.safeParse({ zonaId: "zona-1" }).success).toBe(false);
+  });
+
+  // Mismo cambio de decision que en creacion: `zonaId` vuelve, opcional, y `null`
+  // es un valor CON significado (desacotar la tarifa de su zona).
+  it("acepta zonaId (incluido null para desacotar) e isDefault", () => {
+    expect(actualizarTarifaSchema.safeParse({ zonaId: "zona-1" }).success).toBe(true);
+    expect(actualizarTarifaSchema.safeParse({ zonaId: null }).success).toBe(true);
+    expect(actualizarTarifaSchema.safeParse({ isDefault: true }).success).toBe(true);
   });
 });
 

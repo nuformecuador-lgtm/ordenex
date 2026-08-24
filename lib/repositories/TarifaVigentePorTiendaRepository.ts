@@ -42,8 +42,8 @@ function toTarifaVigente(t: TarifaDecimales): TarifaVigente {
 /**
  * Feature 42 / feature 69 (R20/R22) — resolver de la TARIFA VIGENTE por TIENDA
  * (tabla `tarifas`, remodelada a "por tienda" por el PR #64). SOLO query Prisma.
- * Excluye soft-delete (`deletedAt IS NULL`). Si la tienda tiene varias tarifas no borradas,
- * se elige la MAS RECIENTE (`orderBy createdAt desc`, first) como resolucion determinista;
+ * `tarifas` borra en FISICO (ya no hay soft-delete que excluir). Si la tienda tiene
+ * varias tarifas, se elige la MAS RECIENTE (`orderBy createdAt desc`, first) como resolucion determinista;
  * `null` si la tienda no tiene ninguna (gap R9: conceptos 0.00, no bloquea).
  * Money-safe: montos/porcentajes -> STRING escala 2 (el util los reconvierte a Decimal).
  *
@@ -66,9 +66,9 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
 
   async resolveTarifaPorTienda(tiendaId: string): Promise<TarifaVigente | null> {
     const t = await this.prisma.tarifa.findFirst({
-      // R20: por TIENDA (el PR #64 dropeo `tarifas.zona_id`). `deletedAt: null` excluye
-      // soft-delete (R9). Ver el TODO: `status` NO entra aqui (decision (g), feature 69).
-      where: { tiendaId, deletedAt: null },
+      // R20: por TIENDA (el PR #64 dropeo `tarifas.zona_id`). Ya no hay soft-delete que
+      // excluir. Ver el TODO: `status` NO entra aqui (decision (g), feature 69).
+      where: { tiendaId },
       orderBy: { createdAt: "desc" }, // R22: la mas reciente = la vigente
       select: TARIFA_SELECT,
     });
@@ -77,8 +77,8 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
   }
 
   /**
-   * Feature 255 (design.md §4, decision D6) — TARIFA COTIZABLE de una tienda: no borrada
-   * (`deletedAt IS NULL`) Y en estado `activo`; entre varias candidatas, la MAS RECIENTE
+   * Feature 255 (design.md §4, decision D6) — TARIFA COTIZABLE de una tienda: en estado
+   * `activo`; entre varias candidatas, la MAS RECIENTE
    * (`orderBy createdAt desc`, first). `null` si no hay ninguna.
    *
    * POR QUE ESTE METODO FILTRA `status` Y `resolveTarifaPorTienda` NO. No es una
@@ -103,8 +103,8 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
    */
   async resolveTarifaCotizablePorTienda(tiendaId: string): Promise<TarifaVigente | null> {
     const t = await this.prisma.tarifa.findFirst({
-      // El WHERE de la cotizacion: `status: "activo"` ADEMAS del soft-delete.
-      where: { tiendaId, deletedAt: null, status: "activo" },
+      // El WHERE de la cotizacion: `status: "activo"`, lo unico que lo separa del otro.
+      where: { tiendaId, status: "activo" },
       orderBy: { createdAt: "desc" }, // la mas reciente entre las candidatas
       select: TARIFA_SELECT,
     });
@@ -122,9 +122,9 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
     if (unicas.length === 0) return out;
 
     // Feature 69/design §3.1: UNA sola query para N tiendas (sin N+1). Misma regla que
-    // `resolveTarifaPorTienda` (deletedAt: null + la mas reciente); `status` NO entra (g).
+    // `resolveTarifaPorTienda` (la mas reciente); `status` NO entra (g).
     const filas = await tx.tarifa.findMany({
-      where: { tiendaId: { in: unicas }, deletedAt: null },
+      where: { tiendaId: { in: unicas } },
       orderBy: { createdAt: "desc" },
         // `fulfillment` va SOLO en el camino del snapshot (2026-08-19): `cierre_detail` lo
       // congela para mostrarlo, pero no es una entrada de la formula y por eso no esta en
@@ -133,6 +133,10 @@ export class TarifaVigentePorTiendaRepository implements ITarifaVigentePorTienda
     });
     // `orderBy createdAt desc` + primera aparicion por tienda = la mas reciente (R22).
     for (const f of filas) {
+      // `tiendaId` es nullable desde que existen tarifas no acotadas a una tienda; el
+      // `where` de arriba ya las excluye (`in: unicas`), asi que esto no puede darse.
+      // Se comprueba igual porque el tipo lo admite y `out` esta indexado por tienda.
+      if (f.tiendaId === null) continue;
       if (out.get(f.tiendaId) !== null) continue;
       out.set(f.tiendaId, {
         tarifaId: f.id,

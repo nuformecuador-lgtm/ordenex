@@ -406,10 +406,10 @@ const WITH_ESTATUS = {
 // de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
 // provincia, canton, distrito y mensajeroAsignado. La relacion
 // `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
-// tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
-// `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
+// tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, `take: 1`).
+// NO requiere migracion: son includes sobre relaciones ya existentes.
 // Seleccion explicita de campos: NUNCA se traen columnas sensibles del usuario
-// (passwordHash, etc.) ni `deletedAt` de las tarifas.
+// (passwordHash, etc.).
 const TARIFA_SELECT = {
   id: true,
   tiendaId: true,
@@ -422,6 +422,9 @@ const TARIFA_SELECT = {
   comisionCod: true,
   ivaFlete: true,
   ivaComisionCod: true,
+  tarifaEspecial: true, // columna opcional: `null` = sin pacto especial
+  zonaId: true, // opcional: `null` = tarifa no acotada a una zona
+  isDefault: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -475,10 +478,10 @@ const WITH_ESTATUS_Y_TIENDA = {
         nombre: true,
         email: true,
         telefono: true,
-        // Tarifa ACTIVA de la tienda (a lo sumo una, `take: 1`), excluyendo
-        // borradas e inactivas.
+        // Tarifa ACTIVA de la tienda (a lo sumo una, `take: 1`), excluyendo las
+        // inactivas. Ya no se filtran borradas: `tarifas` borra en fisico.
         tarifasTienda: {
-          where: { status: "activo", deletedAt: null },
+          where: { status: "activo" },
           select: TARIFA_SELECT,
           take: 1,
         },
@@ -534,12 +537,11 @@ function toDTO(row: OrdenRow): OrdenDTO {
 }
 
 // Serializa una tarifa anidada de la tienda: Decimal -> number en las 8 columnas
-// numericas (patron TarifaRepository). No expone `deletedAt` (ya filtrado en el
-// include).
+// numericas (patron TarifaRepository).
 function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaDTO {
   return {
     id: t.id,
-    tiendaId: t.tiendaId,
+    tiendaId: t.tiendaId ?? null,
     status: t.status,
     valorFlete: t.valorFlete.toNumber(),
     valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
@@ -549,6 +551,10 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
     comisionCod: t.comisionCod.toNumber(),
     ivaFlete: t.ivaFlete.toNumber(),
     ivaComisionCod: t.ivaComisionCod.toNumber(),
+    // Nullable: se conserva la ausencia; `null` no es 0 (patron TarifaRepository).
+    tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toNumber(),
+    zonaId: t.zonaId ?? null,
+    isDefault: t.isDefault,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };

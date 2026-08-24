@@ -1,0 +1,19 @@
+-- DOWN — suelta la columna `tarifa_especial` de `tarifas`.
+--
+-- PERDIDA DE DATO DECLARADA: se pierden todos los cobros especiales pactados. La columna nace en
+-- esta migracion, asi que revertirla es soltarla; no hay copia en ninguna otra tabla. Quien haga
+-- rollback tiene que saber que esos pactos vuelven a no existir en el sistema.
+--
+-- LA REVERSION ES INOCUA PARA EL RESTO DEL COMPORTAMIENTO, y aqui esta el motivo concreto: la
+-- tarifa especial se REGISTRA y se LEE, pero NO entra en la aritmetica de dinero (el serializador
+-- `TarifaVigente` de `OrdenRepository`, que prepara la tarifa para los calculos de cobro y cierres,
+-- no la mira). Ningun cobro, ningun cierre y ninguna liquidacion cambian de numero al soltarla.
+-- ⚠️ Si una feature posterior la conecta a esa aritmetica, ESTE COMENTARIO DEJA DE SER CIERTO y
+-- este `down` pasa a ser una reversion con efecto sobre el dinero: reescribirlo entonces.
+--
+-- POR QUE SE CUMPLE «la reversion deja la base en un estado que el codigo anterior puede leer sin
+-- cambios»: ese codigo nunca leyo esta columna —nace aqui—, no se toco ningun indice, ninguna FK,
+-- ningun enum ni ninguna otra columna. No hay nada que reponer, solo que soltar.
+--
+-- `IF EXISTS` para que el rollback sea IDEMPOTENTE (se puede correr dos veces sin fallar).
+ALTER TABLE "tarifas" DROP COLUMN IF EXISTS "tarifa_especial";
