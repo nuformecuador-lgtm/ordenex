@@ -71,17 +71,26 @@ Rama **`feature/276-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** 
 hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
 conteo cobra de más.
 
-### ⚠️ Colisión de ids: `origin/dev` avanzó y ya usa 276/277/275 para OTRAS features
+### ✅ Colisión de ids con `origin/dev` — RESUELTA renumerando a 276 y 277
 
-Medido al cerrar el backend de la 276 (2026-08-24): `origin/dev` pasó de `e93c19e6` a **`821a6afe`**
-y otra sesión registró **276 = tarifas ligadas a la zona**, **277 = cobro por zona + tienda** y
-**275 = configuración de tarifas**. Los ids que esta sesión usa para «el tope de intentos» y «Por
-recoger» están **ocupados en `dev`**.
+> Este párrafo estuvo **falso** unas horas, y conviene saber por qué: el `sed` del propio renumerado
+> reemplazó `273`→`276` y `274`→`277` **también dentro del texto que describía la colisión**, con lo
+> que acabó afirmando que `origin/dev` usaba 276 y 277 para tarifas —lo contrario de lo ocurrido— y
+> contradiciéndose solo. Lo cazó el reviewer, en dos rondas: la copia de la bitácora en la primera y
+> **ésta, la segunda copia, en la segunda**.
 
-El merge dará conflicto en `feature_list.json` de todas formas, y resolverlo «a favor de los dos»
-dejaría dos features con el mismo id. **Decisión del leader**, no del implementer: renumerar arrastra
-la carpeta del spec, el nombre de la rama y los mensajes de commit. Precedente del repo: la ficha
-218 se renumeró desde 216 por esto mismo, y su nota dice que **`dev` manda**.
+Medido el 2026-08-24: `origin/dev` pasó de `e93c19e6` a **`821a6afe`** y en ese avance otra sesión
+registró **273 = tarifas ligadas a la zona (ya MERGEADA)**, **274 = cobro por zona + tienda** y
+**275 = configuración de tarifas**. Los ids que esta sesión había registrado para «el tope de
+intentos» (273) y «Por recoger» (274) quedaron ocupados por features distintas.
+
+**Resuelto: 273 → 276 y 274 → 277**, porque `dev` manda y la ficha mergeada es la suya. Precedente
+explícito del repo: la 218 se renumeró desde 216 por esto mismo. En `821a6afe` los ids 276 y 277
+estaban libres, comprobado.
+
+El merge a `dev` dará conflicto en `feature_list.json` igualmente, pero **por divergencia normal de
+ramas, no por la colisión**: `dev` local no es ancestro de `origin/dev`. Se resuelve quedándose con
+las entradas de `dev` y añadiendo la 276 y la 277.
 
 ### La puerta que viene
 
