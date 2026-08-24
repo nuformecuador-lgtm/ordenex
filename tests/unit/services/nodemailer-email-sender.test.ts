@@ -19,7 +19,7 @@ const { NodemailerEmailSender, EmailEnvioError } = await import(
 const PASSWORD = "s3cr3t0-que-no-debe-salir";
 
 const config: EmailConfig = {
-  host: "smtp.example.com",
+  host: "smtp.gmail.com",
   port: 587,
   secure: false,
   user: "bot@ordenex.co",
@@ -60,10 +60,15 @@ describe("NodemailerEmailSender", () => {
     expect(sendMail).toHaveBeenCalledTimes(2);
   });
 
-  it("omite la autenticacion cuando no hay usuario ni contrasena", async () => {
-    await new NodemailerEmailSender({ ...config, user: null, password: null }).enviar(mensaje);
+  it("autentica con la cuenta y la contrasena de aplicacion de Google", async () => {
+    await new NodemailerEmailSender(config).enviar(mensaje);
     expect(createTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ auth: undefined }),
+      expect.objectContaining({
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        auth: { user: "bot@ordenex.co", pass: PASSWORD },
+      }),
     );
   });
 

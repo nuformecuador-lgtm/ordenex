@@ -36,10 +36,7 @@ export class NodemailerEmailSender implements IEmailSender {
       host: config.host,
       port: config.port,
       secure: config.secure,
-      auth:
-        config.user !== null && config.password !== null
-          ? { user: config.user, pass: config.password }
-          : undefined,
+      auth: { user: config.user, pass: config.password },
       connectionTimeout: config.timeoutMs,
       greetingTimeout: config.timeoutMs,
       socketTimeout: config.timeoutMs,

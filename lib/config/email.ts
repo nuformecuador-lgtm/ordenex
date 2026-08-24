@@ -7,7 +7,16 @@
 // INVARIANTE DE SEGURIDAD: si falta una pieza se cita el NOMBRE de la variable,
 // jamas su valor. La contrasena SMTP no aparece nunca en un error ni en un log.
 
-/** Puerto SMTP por defecto: submission con STARTTLS, el mas portable. */
+// Valores que los pone el PROVEEDOR, no el negocio: el canal es Gmail /
+// Google Workspace, asi que host, puerto y modo TLS son constantes conocidas y
+// no piezas de configuracion que alguien deba averiguar. Se dejan igualmente
+// sobreescribibles por env para no clavar el proveedor en el codigo (mudarse a
+// SES o a `smtp-relay.gmail.com` es cambiar SMTP_HOST, nada mas).
+
+/** Host SMTP de Google. Workspace con relay propio usa smtp-relay.gmail.com. */
+const DEFAULT_SMTP_HOST = "smtp.gmail.com";
+
+/** Puerto SMTP por defecto: submission con STARTTLS, el que Google recomienda. */
 const DEFAULT_SMTP_PORT = 587;
 
 /** Nombre visible del remitente cuando no se configura uno. */
@@ -34,11 +43,19 @@ export interface EmailConfig {
   port: number;
   /** TLS implicito desde el saludo. Derivado del puerto salvo override explicito. */
   secure: boolean;
-  /** Usuario SMTP. Opcional: hay relays internos que autentican por IP. */
-  user: string | null;
-  /** Contrasena SMTP. Solo se pasa a nodemailer; nunca se loguea ni se serializa. */
-  password: string | null;
-  /** Direccion remitente (From). Debe pertenecer al dominio autorizado del relay. */
+  /** Cuenta de Google que autentica el envio. Es tambien el From efectivo. */
+  user: string;
+  /**
+   * Contrasena de aplicacion de Google (16 caracteres). NO es la contrasena de
+   * la cuenta: Google rechaza esa desde 2022. Solo se pasa a nodemailer; nunca
+   * se loguea ni se serializa.
+   */
+  password: string;
+  /**
+   * Direccion remitente (From). Por defecto la propia cuenta autenticada: Google
+   * REESCRIBE el From a la cuenta salvo que la direccion este dada de alta como
+   * alias verificado ("Enviar como") en Gmail.
+   */
   from: string;
   /** Nombre visible del remitente. */
   fromName: string;
@@ -77,12 +94,23 @@ function leerEnteroPositivo(name: string, fallback: number): number {
 }
 
 /**
+ * Normaliza la contrasena de aplicacion de Google. La consola la muestra en
+ * cuatro grupos de cuatro ("abcd efgh ijkl mnop") y se copia con los espacios
+ * dentro; el servidor la espera sin ellos. Sin esto el fallo es un 535 opaco.
+ */
+function normalizarPassword(valor: string): string {
+  return valor.replace(/\s+/g, "");
+}
+
+/**
  * Hay SMTP utilizable. Es la condicion que decide, en el borde, si se instancia
- * el emisor real o el de consola: sin host o sin remitente no hay envio posible,
- * y el flujo debe degradar en vez de reventar en dev y en los tests.
+ * el emisor real o el de consola. Se mira la CREDENCIAL y no el host, porque el
+ * host ya trae default de proveedor: sin cuenta ni contrasena de aplicacion no
+ * hay envio posible, y el flujo debe degradar en vez de reventar en dev y en
+ * los tests.
  */
 export function emailSmtpConfigurado(): boolean {
-  return leerTexto("SMTP_HOST") !== null && leerTexto("SMTP_FROM") !== null;
+  return leerTexto("SMTP_USER") !== null && leerTexto("SMTP_PASSWORD") !== null;
 }
 
 /**
@@ -92,13 +120,14 @@ export function emailSmtpConfigurado(): boolean {
  */
 export function loadEmailConfig(): EmailConfig {
   const port = leerEnteroPositivo("SMTP_PORT", DEFAULT_SMTP_PORT);
+  const user = leerRequerido("SMTP_USER");
   return {
-    host: leerRequerido("SMTP_HOST"),
+    host: leerTexto("SMTP_HOST") ?? DEFAULT_SMTP_HOST,
     port,
     secure: leerBooleano("SMTP_SECURE", port === 465),
-    user: leerTexto("SMTP_USER"),
-    password: leerTexto("SMTP_PASSWORD"),
-    from: leerRequerido("SMTP_FROM"),
+    user,
+    password: normalizarPassword(leerRequerido("SMTP_PASSWORD")),
+    from: leerTexto("SMTP_FROM") ?? user,
     fromName: leerTexto("SMTP_FROM_NAME") ?? DEFAULT_FROM_NAME,
     timeoutMs: leerEnteroPositivo("SMTP_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
     rejectUnauthorized: leerBooleano("SMTP_TLS_REJECT_UNAUTHORIZED", true),

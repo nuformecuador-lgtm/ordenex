@@ -127,23 +127,23 @@ describe("ConsoleEmailSender", () => {
 });
 
 describe("crearEmailSender", () => {
-  const ORIG = { host: process.env.SMTP_HOST, from: process.env.SMTP_FROM };
+  const ORIG = { user: process.env.SMTP_USER, password: process.env.SMTP_PASSWORD };
   afterEach(() => {
-    if (ORIG.host === undefined) delete process.env.SMTP_HOST;
-    else process.env.SMTP_HOST = ORIG.host;
-    if (ORIG.from === undefined) delete process.env.SMTP_FROM;
-    else process.env.SMTP_FROM = ORIG.from;
+    if (ORIG.user === undefined) delete process.env.SMTP_USER;
+    else process.env.SMTP_USER = ORIG.user;
+    if (ORIG.password === undefined) delete process.env.SMTP_PASSWORD;
+    else process.env.SMTP_PASSWORD = ORIG.password;
   });
 
-  it("sin SMTP configurado devuelve el emisor de consola", () => {
-    delete process.env.SMTP_HOST;
-    delete process.env.SMTP_FROM;
+  it("sin credencial de Google devuelve el emisor de consola", () => {
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASSWORD;
     expect(crearEmailSender()).toBeInstanceOf(ConsoleEmailSender);
   });
 
-  it("con SMTP configurado devuelve el emisor de nodemailer", () => {
-    process.env.SMTP_HOST = "smtp.example.com";
-    process.env.SMTP_FROM = "no-reply@ordenex.co";
+  it("con credencial de Google devuelve el emisor de nodemailer", () => {
+    process.env.SMTP_USER = "no-reply@ordenex.co";
+    process.env.SMTP_PASSWORD = "abcdefghijklmnop";
     expect(crearEmailSender()).toBeInstanceOf(NodemailerEmailSender);
   });
 });
