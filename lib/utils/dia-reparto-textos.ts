@@ -136,7 +136,7 @@ export function confirmacionDiaReparto(dia: DiaReparto, fechas: FechasDiaReparto
 export const ETIQUETA_PARA_MANANA = "Para mañana";
 
 /**
- * FEATURE 274 (B1, R25/R26) — LOS NOMBRES DE LAS DOS PESTAÑAS de «Por recoger». Firmados por el
+ * FEATURE 277 (B1, R25/R26) — LOS NOMBRES DE LAS DOS PESTAÑAS de «Por recoger». Firmados por el
  * humano el 2026-08-24.
  *
  * VIVEN AQUÍ, y no en la pantalla, por lo mismo que `ETIQUETA_PARA_MANANA`: éste es el vocabulario

@@ -17,7 +17,7 @@ import {
   PESTANA_PARA_RECOGER_HOY,
 } from "@/lib/utils/dia-reparto-textos";
 
-// FEATURE 274 (B1) — tests de la pieza PURA que parte «Por recoger» en dos grupos y de los textos
+// FEATURE 277 (B1) — tests de la pieza PURA que parte «Por recoger» en dos grupos y de los textos
 // que esa partición obliga a decir. Sin DOM y sin jsdom: la composición de la pantalla se prueba
 // en `tests/components/RecogerModule.test.tsx`.
 //
@@ -55,7 +55,7 @@ function makeAsignacion(
   };
 }
 
-describe("separarPorDia — los dos grupos de «Por recoger» (274/R2-R5)", () => {
+describe("separarPorDia — los dos grupos de «Por recoger» (277/R2-R5)", () => {
   it("R2: separa marcadas y no marcadas, sin perder ni duplicar ninguna", () => {
     const ordenes = [
       makeAsignacion({ id: "a", esParaManana: false }),
@@ -150,7 +150,7 @@ describe("separarPorDia — los dos grupos de «Por recoger» (274/R2-R5)", () =
   });
 });
 
-describe("Los textos de la partición (274/R10/R11/R25/R26/R29)", () => {
+describe("Los textos de la partición (277/R10/R11/R25/R26/R29)", () => {
   it("los vacíos, literales a mano, y distintos entre sí", () => {
     expect(VACIO_GRUPO_HOY).toBe("No hay órdenes por recoger hoy.");
     expect(VACIO_GRUPO_OTRO_DIA).toBe("No hay órdenes para otro día.");

@@ -61,7 +61,7 @@ import { CLASE_FASE, useTransicionVista } from "./useTransicionVista";
 // solo en Reparto. Tampoco el chat flotante: conversa sobre gestiones en curso, y aquí no
 // hay ninguna.
 //
-// ⚠️ FEATURE 274 (2026-08-24, firmada por el humano) — DOS PESTAÑAS, Y EL CONTADOR DENTRO DE LA
+// ⚠️ FEATURE 277 (2026-08-24, firmada por el humano) — DOS PESTAÑAS, Y EL CONTADOR DENTRO DE LA
 // QUE CUENTA.
 //
 // Hasta hoy esta pantalla mezclaba en UNA sola lista lo que el mensajero puede recoger ahora con
@@ -108,7 +108,7 @@ const BUSCADOR_LABEL = "Buscar guías";
 const BUSCADOR_PLACEHOLDER =
   "Filtra por número de guía, remisión, teléfono o nombre";
 
-// Feature 274 (R28): los nombres accesibles de esta pantalla son los TRES distintos —la región
+// Feature 277 (R28): los nombres accesibles de esta pantalla son los TRES distintos —la región
 // sigue siendo «Por recoger», el buscador conserva el suyo y el grupo de pestañas estrena el de
 // abajo—. Si coincidieran, el nombre accesible de uno chocaría con el de otro.
 const TABLIST_LABEL = "Grupos de órdenes por recoger";
@@ -146,7 +146,7 @@ export function RecogerModule({
   const buscarId = useId();
   const buscando = query.trim() !== "";
 
-  // Feature 274 (R12/R13): la pestaña activa, tercer estado EFÍMERO de esta pantalla, con el
+  // Feature 277 (R12/R13): la pestaña activa, tercer estado EFÍMERO de esta pantalla, con el
   // mismo criterio que los otros dos (no sube a la URL: nadie enlaza una pestaña, y un `?tab=`
   // obligaría a decidir qué pasa con un valor inválido). Arranca SIEMPRE en el grupo de hoy,
   // tenga o no órdenes: una pantalla que cambia de puerta según el día es una pantalla que no se
@@ -154,11 +154,11 @@ export function RecogerModule({
   // sin coincidencias ni un grupo que se quede vacío tras recoger.
   const [grupoActivo, setGrupoActivo] = useState<Grupo>("hoy");
 
-  // Feature 274 (R2-R5): la partición sale del booleano que YA viaja en el DTO, derivado en el
+  // Feature 277 (R2-R5): la partición sale del booleano que YA viaja en el DTO, derivado en el
   // servidor (246/R26). Aquí no se lee ningún reloj ni se compara ninguna fecha.
   const grupos = useMemo(() => separarPorDia(porRecoger), [porRecoger]);
 
-  // Feature 114/R2/R7 + 274/R18: el buscador filtra por guía, remisión, teléfono o nombre del
+  // Feature 114/R2/R7 + 277/R18: el buscador filtra por guía, remisión, teléfono o nombre del
   // destinatario (parcial, insensible a mayúsculas/acentos) y se aplica a LOS DOS grupos, no sólo
   // al que esté a la vista. Si mirara sólo el activo, teclear la guía de una orden de otro día
   // respondería «ninguna coincide» — que es falso, y el mensajero la tiene en la mano.
@@ -292,7 +292,7 @@ export function RecogerModule({
           que resolver, así que el input y el escáner solo estorbarían. Se mira
           `porRecoger` COMPLETO, no el filtrado: el buscador no debe quitarle al mensajero
           la forma de recoger lo que sigue pendiente.
-          Feature 274 (R22): COMPLETO también quiere decir LAS DOS PESTAÑAS. Con sólo órdenes de
+          Feature 277 (R22): COMPLETO también quiere decir LAS DOS PESTAÑAS. Con sólo órdenes de
           otro día la tarjeta se queda, y el rechazo dice el motivo real con su fecha (261/R13);
           retirarla ahí sería repetir el fallo que abrió la 167 con otro disfraz. */}
       {bloqueado || porRecoger.length === 0 ? null : (
@@ -312,7 +312,7 @@ export function RecogerModule({
             estruje; desde `sm` van en la MISMA línea, el input ocupando el espacio libre
             y el conmutador alineado a su base. Es un filtro puro de cliente, así que
             permanece visible aunque el mensajero esté bloqueado. Y va ARRIBA de las pestañas
-            porque es UNO SOLO para los dos grupos (274/R18/R19). */}
+            porque es UNO SOLO para los dos grupos (277/R18/R19). */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
           <section
             aria-label={BUSCADOR_REGION}
@@ -336,7 +336,7 @@ export function RecogerModule({
           />
         </div>
 
-        {/* ---------- Los dos grupos, feature 274 ---------- */}
+        {/* ---------- Los dos grupos, feature 277 ---------- */}
         {/* SIN `keepMounted` a propósito: no hay nada dentro de un panel que valga la pena
             conservar —la búsqueda, la vista y los conteos viven fuera— y mantener los dos
             montados dejaría DOS listados a la vez en el DOM, que es la puerta de los nombres
@@ -359,7 +359,7 @@ export function RecogerModule({
           </TabsList>
 
           <TabsContent value="hoy" className="flex flex-col gap-3">
-            {/* Banner con el contador de nuevas, DENTRO del panel que cuenta (274/R15/R17). El
+            {/* Banner con el contador de nuevas, DENTRO del panel que cuenta (277/R15/R17). El
                 sitio importa tanto como el número: estaba fuera del grupo que decía contar, y por
                 eso pudo contar de más sin que chirriara. Cuenta el grupo COMPLETO de hoy, no lo
                 que el buscador deja a la vista (R16). Con el grupo vacío no hay banner: el vacío

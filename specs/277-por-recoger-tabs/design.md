@@ -1,4 +1,4 @@
-# Feature 274 — Diseño
+# Feature 277 — Diseño
 
 > Frontend puro. **Cero backend, cero base de datos, cero migraciones, cero rutas nuevas.** El dato
 > que separa los dos grupos ya viaja en el DTO desde la feature 246.
@@ -32,7 +32,7 @@ argumento de que «la deshabilitación resuelve con el patrón que el usuario ya
 sobre **cómo** presentar la restricción, no sobre **si** la orden debía seguir mezclada con el
 trabajo del día. Esa segunda pregunta nunca se hizo: `R23` de la 246 («no ocultar») se firmó pegada a
 `R24` («y se puede trabajar»), `R24` murió el 2026-08-21, y `R23` sobrevivió por inercia. La ficha
-274 es el humano decidiendo la visibilidad **con el candado ya puesto**, mirando la pantalla real el
+277 es el humano decidiendo la visibilidad **con el candado ya puesto**, mirando la pantalla real el
 2026-08-24 y con el defecto del contador medido delante.
 
 **`R23` no se toca y no se reescribe.** Lo que esta ficha hace es *operacionalizarlo* para una

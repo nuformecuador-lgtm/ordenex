@@ -1,7 +1,7 @@
-# impl_274 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
+# impl_277 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
 
-> Rama `feature/274-por-recoger-tabs`, sobre `dev` (94c824f6). Zona `frontend`. Implementación
-> completa de las 17 tareas de `specs/274-por-recoger-tabs/tasks.md`.
+> Rama `feature/277-por-recoger-tabs`, sobre `dev` (94c824f6). Zona `frontend`. Implementación
+> completa de las 17 tareas de `specs/277-por-recoger-tabs/tasks.md`.
 > **Gate:** `./init.sh --rapido` → **verde, `INIT_EXIT=0`** (detalle en §7).
 
 ---
@@ -88,8 +88,8 @@ conserva la referencia a su ficha de origen con la fecha del cambio.
 
 | Antes | Ahora |
 | --- | --- |
-| 246/R23 · «la orden reservada APARECE en su grupo de siempre — no se oculta ni se mueve»: estaba en la región y el banner decía `1 Órdenes nuevas asignadas` | **«R23 (246, en su forma nueva desde la 274): la orden reservada NO se esconde — está contada, a una pulsación, con su marca y con por dónde recogerla»**: (1) pestaña `Para otro día (1)` legible **sin interactuar** y la de hoy seleccionada; (2) **una** pulsación, sin buscarla; (3) marca «Para mañana» + aviso con su fecha; (4) los controles de recogida montados con el grupo de hoy **a cero** |
-| 261/R9 · «y la reservada SIGUE en su grupo, contada y visible» | **«R9 (261, en su forma nueva desde la 274): bloquear no es esconder — contada sin interactuar, a una pulsación, con su aviso y con por dónde recoger»** |
+| 246/R23 · «la orden reservada APARECE en su grupo de siempre — no se oculta ni se mueve»: estaba en la región y el banner decía `1 Órdenes nuevas asignadas` | **«R23 (246, en su forma nueva desde la 277): la orden reservada NO se esconde — está contada, a una pulsación, con su marca y con por dónde recogerla»**: (1) pestaña `Para otro día (1)` legible **sin interactuar** y la de hoy seleccionada; (2) **una** pulsación, sin buscarla; (3) marca «Para mañana» + aviso con su fecha; (4) los controles de recogida montados con el grupo de hoy **a cero** |
+| 261/R9 · «y la reservada SIGUE en su grupo, contada y visible» | **«R9 (261, en su forma nueva desde la 277): bloquear no es esconder — contada sin interactuar, a una pulsación, con su aviso y con por dónde recoger»** |
 
 La aserción de «no se esconde» queda **más fuerte**: antes bastaba con que la remisión estuviera en
 el DOM; ahora hay que probar además que el conteo se lee sin tocar nada y que llegar cuesta una sola
@@ -223,7 +223,7 @@ Nombres **exactos**, citables. `RM` = `tests/components/RecogerModule.test.tsx`;
 | R29 | RG | `R29: el contador concuerda — «1 orden nueva asignada» / «2 órdenes nuevas asignadas»` · los dos del puntero (R11) |
 | R30 | `tests/unit/guards/d5-revertida.guardia.test.ts` | la guardia entera, **verde sin tocarla** + la lista de archivos de §6 |
 | R31 | `tests/components/PosCardParaManana.test.tsx` · RM | archivo entero **verde sin tocar** · `R22: la card de la orden reservada dice «Para mañana» CON PALABRAS, y la de hoy no` · `R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras` |
-| R32 | RP | `274/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado` |
+| R32 | RP | `277/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado` |
 | R33 | `tests/components/MisAsignacionesPage.test.tsx` | `R9: el rol mensajero ve el listado por recoger, sin las superficies de reparto` · `R12: cualquier rol distinto de mensajero NO ve el módulo (notFound)` · `R12: sin actor autenticado NO ve el módulo (notFound)` · `R12: si el listado responde forbidden, tampoco renderiza el módulo` *(verdes sin tocar)* |
 | R34 | — | evidencia sobre el diff, §6: ninguna clase de foco nueva |
 

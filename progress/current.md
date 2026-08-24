@@ -16,9 +16,9 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **273** | fullstack | `pending` · spec en curso | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **274** | frontend | `pending` · spec en curso | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
-| **218** | backend | **`superseded` por la 273** | el corte sin sumar reintento: su decisión se toma dentro de la 273 |
+| **276** | fullstack | `pending` · spec en curso | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | `pending` · spec en curso | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 276** | el corte sin sumar reintento: su decisión se toma dentro de la 276 |
 
 ### Lo que se midió antes de registrarlas, y es la razón de que existan
 
@@ -47,7 +47,7 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
    forzar `rechazada` grabaría un hecho falso y cobraría un rechazo que no ocurrió.
 4. **En «Por recoger» no se oculta nada**: R23 de la 246 sigue vigente, cambia el sitio.
 
-⚠️ **La 273 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
+⚠️ **La 276 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
 hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
 conteo cobra de más.
 

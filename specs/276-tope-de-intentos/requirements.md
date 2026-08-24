@@ -1,4 +1,4 @@
-# Feature 273 — El tope de intentos se cierra: al alcanzarlo la orden no vuelve a circulación
+# Feature 276 — El tope de intentos se cierra: al alcanzarlo la orden no vuelve a circulación
 
 > **Esto no es una feature nueva: es cerrar una regla que el sistema ya dice tener y no cumple.**
 >
@@ -228,7 +228,7 @@ personales, números de guía, identificadores de cliente ni secretos.
   esperando (ver «Riesgo declarado»).
 - Un backfill de las órdenes que hoy ya están en el umbral: **decisión del humano del 2026-08-24,
   sin backfill**. La única orden viva medida escala sola por el cron de SLA.
-- La pestaña «Por recoger» y su contador (ficha 274).
+- La pestaña «Por recoger» y su contador (ficha 277).
 
 ---
 

@@ -2556,11 +2556,11 @@ describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
     ).toBeInTheDocument();
   });
 
-  // FEATURE 274 (R32, 2026-08-24) — NO-REGRESIÓN: la ficha que partió «Por recoger» en dos
+  // FEATURE 277 (R32, 2026-08-24) — NO-REGRESIÓN: la ficha que partió «Por recoger» en dos
   // pestañas NO tocó Reparto. Se afirma aquí, en la pantalla que no debía cambiar, porque un
-  // «ya que estamos» que replicara las pestañas aquí abriría las cuatro decisiones que la 274 se
+  // «ya que estamos» que replicara las pestañas aquí abriría las cuatro decisiones que la 277 se
   // pudo saltar por no tener KPIs, ni mapa, ni paradas, ni chat — y Reparto tiene las cuatro.
-  it("274/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado", () => {
+  it("277/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado", () => {
     renderModule({
       porGestionar: [
         makeAsignacion({

@@ -135,7 +135,7 @@ async function cambiarVista(
 }
 
 // ---------------------------------------------------------------------------
-// FEATURE 274 (2026-08-24) — LAS DOS PESTAÑAS.
+// FEATURE 277 (2026-08-24) — LAS DOS PESTAÑAS.
 // ---------------------------------------------------------------------------
 // Los nombres van ESCRITOS A MANO en todos los ayudantes y en todas las aserciones, nunca
 // importando `PESTANA_PARA_RECOGER_HOY`/`PESTANA_PARA_OTRO_DIA`: una aserción contra su propia
@@ -191,7 +191,7 @@ describe("RecogerModule — listado de solo-visualización", () => {
     ).toBeNull();
   });
 
-  // FEATURE 274 (Q1, firmada por el humano el 2026-08-24): el literal concuerda en plural. Decía
+  // FEATURE 277 (Q1, firmada por el humano el 2026-08-24): el literal concuerda en plural. Decía
   // «2 Órdenes nuevas asignadas», con la N pegada a un plural fijo; con una sola orden se leía «1
   // Órdenes nuevas asignadas». El defecto ya existía, pero contar sólo el grupo de hoy (R15) lo
   // vuelve frecuente y se decidió no dejarlo a la vista.
@@ -387,7 +387,7 @@ describe("RecogerModule — las dos vías de recogida (feature 96)", () => {
         name: "Recoger por número de guía o escaneo",
       }),
     ).toBeNull();
-    // FEATURE 274 (R10): el vacío es ahora el de la pestaña de entrada, que nombra su grupo. La
+    // FEATURE 277 (R10): el vacío es ahora el de la pestaña de entrada, que nombra su grupo. La
     // pantalla sigue explicando el vacío; lo que cambió es que hay dos grupos que explicar.
     expect(
       screen.getByText("No hay órdenes por recoger hoy."),
@@ -609,7 +609,7 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
         "Ninguna guía por recoger coincide con la búsqueda.",
       ),
     ).toBeInTheDocument();
-    // DISTINGUIBLE del vacío sin búsqueda (274/R10: el de la pestaña de hoy).
+    // DISTINGUIBLE del vacío sin búsqueda (277/R10: el de la pestaña de hoy).
     expect(screen.queryByText("No hay órdenes por recoger hoy.")).toBeNull();
   });
 
@@ -624,8 +624,8 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
 
     await user.type(buscador(), "ana");
 
-    // Sigue diciendo 2: lo pendiente de recoger no cambia porque se filtre la vista. (274/R16: el
-    // banner cuenta el grupo COMPLETO de hoy; el literal concuerda desde la Q1 de la 274.)
+    // Sigue diciendo 2: lo pendiente de recoger no cambia porque se filtre la vista. (277/R16: el
+    // banner cuenta el grupo COMPLETO de hoy; el literal concuerda desde la Q1 de la 277.)
     expect(
       within(listado()).getByText("2 órdenes nuevas asignadas"),
     ).toBeInTheDocument();
@@ -704,7 +704,7 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     expect(
       screen.queryByRole("region", { name: "Órdenes por recoger" }),
     ).toBeNull();
-    // 274/R10: el vacío de la pestaña de entrada.
+    // 277/R10: el vacío de la pestaña de entrada.
     expect(
       screen.getByText("No hay órdenes por recoger hoy."),
     ).toBeInTheDocument();
@@ -726,7 +726,7 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     });
   }
 
-  // ⚠️ FEATURE 274 (2026-08-24): estos casos NO cambian lo que afirman —la marca sigue siendo la
+  // ⚠️ FEATURE 277 (2026-08-24): estos casos NO cambian lo que afirman —la marca sigue siendo la
   // misma, con las mismas palabras (R31)—, cambian dónde hay que ir a mirarla: desde esta ficha la
   // orden marcada vive en la pestaña «Para otro día», a UNA pulsación. El `await irAOtroDia(user)`
   // es exactamente esa pulsación, y no un rodeo para que el test pase.
@@ -781,17 +781,17 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     expect(within(cardDe("REM-VIEJA")).queryByText("Para mañana")).toBeNull();
   });
 
-  // ⚠️ ESTE TEST VIENE DE LA FEATURE 246 (R23) Y CAMBIÓ DE FORMA CON LA 274 (2026-08-24).
+  // ⚠️ ESTE TEST VIENE DE LA FEATURE 246 (R23) Y CAMBIÓ DE FORMA CON LA 277 (2026-08-24).
   //
   // Lo que afirmaba: con UNA sola orden reservada, la orden estaba en la región del listado y el
   // banner decía «1 Órdenes nuevas asignadas». El banner ya no existe en ese caso —cuenta sólo el
-  // grupo de hoy (274/R15/R17), y ahí no hay ninguna— y la orden vive en la otra pestaña.
+  // grupo de hoy (277/R15/R17), y ahí no hay ninguna— y la orden vive en la otra pestaña.
   //
   // Lo que NO se pierde, y por eso el test se reescribe en vez de borrarse: 246/R23 dice que el
   // sistema NO puede ocultarle al mensajero una orden que tiene asignada por estar reservada, y
-  // ESO SIGUE VIGENTE E INTOCADO. La 274 lo hace más fuerte y más explícito: la propiedad pasa de
+  // ESO SIGUE VIGENTE E INTOCADO. La 277 lo hace más fuerte y más explícito: la propiedad pasa de
   // «está en la lista» a las CUATRO de abajo. Cambia el SITIO, no la VISIBILIDAD.
-  it("R23 (246, en su forma nueva desde la 274): la orden reservada NO se esconde — está contada, a una pulsación, con su marca y con por dónde recogerla", async () => {
+  it("R23 (246, en su forma nueva desde la 277): la orden reservada NO se esconde — está contada, a una pulsación, con su marca y con por dónde recogerla", async () => {
     const user = userEvent.setup();
     renderModule({
       porRecoger: [
@@ -1034,17 +1034,17 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  // ⚠️ ESTE TEST VIENE DE LA FEATURE 261 (R9) Y CAMBIÓ DE FORMA CON LA 274 (2026-08-24).
+  // ⚠️ ESTE TEST VIENE DE LA FEATURE 261 (R9) Y CAMBIÓ DE FORMA CON LA 277 (2026-08-24).
   //
   // Lo que afirmaba: con UNA sola orden reservada, estaba en la región del listado, el banner
   // decía «1 Órdenes nuevas asignadas» y quedaba por dónde recoger. Las dos primeras mitades
-  // cambian de sitio —el banner cuenta ahora sólo el grupo de hoy (274/R15/R17) y la orden vive en
+  // cambian de sitio —el banner cuenta ahora sólo el grupo de hoy (277/R15/R17) y la orden vive en
   // la pestaña «Para otro día»—; la propiedad que probaban, no.
   //
   // BLOQUEAR NO ES ESCONDER: eso es lo que 261/R9 dice y lo que aquí se sigue afirmando, ahora con
   // las cuatro señales explícitas. La alternativa A7 que el humano descartó al firmar P3 era
-  // ESCONDER; esto es lo contrario, y por eso la 274 lo pudo decidir sin tocar R23.
-  it("R9 (261, en su forma nueva desde la 274): bloquear no es esconder — contada sin interactuar, a una pulsación, con su aviso y con por dónde recoger", async () => {
+  // ESCONDER; esto es lo contrario, y por eso la 277 lo pudo decidir sin tocar R23.
+  it("R9 (261, en su forma nueva desde la 277): bloquear no es esconder — contada sin interactuar, a una pulsación, con su aviso y con por dónde recoger", async () => {
     const user = userEvent.setup();
     renderModule({
       porRecoger: [
@@ -1078,7 +1078,7 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
 });
 
 // =================================================================================================
-// FEATURE 274 (2026-08-24) — «POR RECOGER» SEPARA EN PESTAÑAS LO DE HOY DE LO RESERVADO.
+// FEATURE 277 (2026-08-24) — «POR RECOGER» SEPARA EN PESTAÑAS LO DE HOY DE LO RESERVADO.
 // =================================================================================================
 //
 // EL CASO QUE ABRIÓ LA FICHA, MEDIDO EN PRODUCCIÓN EL 2026-08-24: 2 órdenes en `por_recoger`, 1 de
@@ -1093,7 +1093,7 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
 // ⚠️ LOS DOS NOMBRES DE PESTAÑA VAN ESCRITOS A MANO, con su conteo, y nunca importados: son la
 // decisión más cara de deshacer de la ficha y una aserción contra su propia fuente está siempre
 // verde.
-describe("RecogerModule — los dos grupos en pestañas (feature 274)", () => {
+describe("RecogerModule — los dos grupos en pestañas (feature 277)", () => {
   /** La card de una remisión, sea cual sea la vista montada. */
   function cardDe(numRemision: string): HTMLElement {
     return screen.getByRole("article", {

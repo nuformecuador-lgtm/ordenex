@@ -1,6 +1,6 @@
-# review_274 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
+# review_277 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
 
-> Revisión de `feature/274-por-recoger-tabs` (3 commits: `337f6234`, `504c0f72`, `2894f5d4`)
+> Revisión de `feature/277-por-recoger-tabs` (3 commits: `337f6234`, `504c0f72`, `2894f5d4`)
 > sobre `dev` @ `94c824f6`. Fecha: **2026-08-24**.
 >
 > **VEREDICTO: APROBADO CON RESERVAS.** **0 bloqueantes de producto o de verificación.**
@@ -48,7 +48,7 @@ Y aparte del gate, corridos por mí:
 ## 2 · CHECKPOINTS.md, punto por punto
 
 ### Especificación
-- [x] `specs/274-por-recoger-tabs/requirements.md` con 34 requisitos EARS numerados `R1`…`R34`.
+- [x] `specs/277-por-recoger-tabs/requirements.md` con 34 requisitos EARS numerados `R1`…`R34`.
 - [x] `design.md` con alternativas descartadas y su porqué (**once**: A1-A11, más la tabla que
       rebate objeción por objeción la A7 de la 261).
 - [ ] **`tasks.md` con todas las tasks marcadas `[x]` → NO.** 18 casillas, **0 marcadas**.
@@ -57,7 +57,7 @@ Y aparte del gate, corridos por mí:
 ### Trazabilidad
 - [x] Cada `R<n>` mapea a al menos un test concreto. Los 34, verificados abriendo el archivo y
       leyendo la aserción (§3).
-- [x] `progress/impl_274.md` contiene el mapa `R<n> -> test` (su §9, 34 filas, con el nombre exacto).
+- [x] `progress/impl_277.md` contiene el mapa `R<n> -> test` (su §9, 34 filas, con el nombre exacto).
 
 ### Calidad de código
 - [x] `pnpm run typecheck` sin errores (dentro del gate).
@@ -69,7 +69,7 @@ Y aparte del gate, corridos por mí:
       suite. Además la ficha no toca ninguno de los flujos que el checkpoint enumera (auth, pagos,
       recaudo, ingesta de órdenes, webhooks): es presentación pura, sin backend. El riesgo queda
       cubierto por otra vía: la tarea **T17** (ver la app) está ejecutada y documentada en
-      `impl_274.md` §8, con el escenario medido (1 de hoy + 3 de otro día), a 390 px, y con la base
+      `impl_277.md` §8, con el escenario medido (1 de hoy + 3 de otro día), a 390 px, y con la base
       local restaurada al terminar.
 
 ### Datos y seguridad (Supabase)
@@ -98,7 +98,7 @@ Y aparte del gate, corridos por mí:
 
 ### Verificación final
 - [x] `./init.sh --rapido` en verde, con `INIT_EXIT=0` (§1).
-- [x] `progress/review_274.md` — este archivo.
+- [x] `progress/review_277.md` — este archivo.
 - [ ] Entrada en `progress/history.md` — **pendiente**, y es del leader al cerrar. No es
       responsabilidad del implementer ni bloquea el merge; sí bloquea el `done`.
 
@@ -173,7 +173,7 @@ verde por vacío). Los revisé uno a uno contra su forma anterior:
 | `R9 (261)` reescrito | ídem | **Más fuerte**, por lo mismo. |
 
 Los dos reescritos **conservan la referencia a su ficha de origen** («ESTE TEST VIENE DE LA FEATURE
-246 (R23) Y CAMBIÓ DE FORMA CON LA 274 (2026-08-24)», e igual para 261/R9) y explican por qué
+246 (R23) Y CAMBIÓ DE FORMA CON LA 277 (2026-08-24)», e igual para 261/R9) y explican por qué
 cambió de forma, que es lo que `design.md` §10 exigía. Ninguno se borró y ninguno se relajó a un
 `queryByText` que pase por vacío.
 
@@ -227,7 +227,7 @@ Conclusión: **no es bloqueante**. Queda como hallazgo **H2** (`menor`) con la m
   monta `tablist` ni `tab`, y la orden reservada **sigue en el mismo listado**, sin separar.
 - **No se tocó ningún componente de Reparto.** El diff completo de la rama son **7 archivos**:
   `RecogerModule.tsx`, `recoger-grupos.ts` (nuevo), `dia-reparto-textos.ts`, tres archivos de test
-  y `progress/impl_274.md`. `RepartoModule.tsx` **no está**.
+  y `progress/impl_277.md`. `RepartoModule.tsx` **no está**.
 
 ---
 
@@ -269,7 +269,7 @@ Línea base de los dos archivos de la ficha: **82 passed (82)**. Cada mutación 
 
 ### H1 · `tasks.md` con las 18 casillas sin marcar — **checkpoint incumplido**
 
-`specs/274-por-recoger-tabs/tasks.md` tiene **0** líneas `- [x]` y **18** líneas `- [ ]`.
+`specs/277-por-recoger-tabs/tasks.md` tiene **0** líneas `- [x]` y **18** líneas `- [ ]`.
 `CHECKPOINTS.md > Especificación` lo exige literalmente («todas las tasks estan marcadas `[x]`») y
 el propio `tasks.md` lo dice de sí mismo en su cabecera: «sin él la tarea no está hecha, está
 escrita».
@@ -277,10 +277,10 @@ escrita».
 **Matiz importante, y por eso esto no manda la ficha de vuelta al implementer:** la evidencia de
 T0-T17 **existe y la verifiqué yo**, tarea por tarea — T1-T4 en `recoger-grupos.ts` y su test,
 T5-T9 en `RecogerModule.tsx`, T10-T12 en los tres archivos de test, T13 reproducido en §5/M1, T14
-sobre el diff en §6, T15 con mi propio gate en §1, T16 en `impl_274.md` §9, T17 en `impl_274.md` §8.
+sobre el diff en §6, T15 con mi propio gate en §1, T16 en `impl_277.md` §9, T17 en `impl_277.md` §8.
 Lo que falta es **marcarlo**. Es una edición de casillas, no trabajo.
 
-**Qué falta para cumplirlo:** marcar las 18 casillas `[x]` en `specs/274-por-recoger-tabs/tasks.md`
+**Qué falta para cumplirlo:** marcar las 18 casillas `[x]` en `specs/277-por-recoger-tabs/tasks.md`
 y commitearlo. **Antes de pasar la ficha a `done`.**
 
 ### H2 · `menor` — R15 no muerde ante la mutación de la partición, por simetría del fixture
@@ -293,7 +293,7 @@ no discrimina *cuál* de las dos órdenes cuenta.
 **Mejora concreta, barata:** cambiar el fixture a **2 de hoy + 1 reservada** y afirmar
 «2 órdenes nuevas asignadas» con la mitad negativa en «3 órdenes…». Con eso M1 también lo mata y el
 test pasa a afirmar «cuenta **estas**», no solo «cuenta una». Está bien anotado por el implementer
-en `impl_274.md` §5; no se ocultó.
+en `impl_277.md` §5; no se ocultó.
 
 ### H3 · `menor` — R21 sobrevive a la mutación del buscador; el margen lo sostiene R18
 
@@ -310,8 +310,8 @@ cubierto —R18 es su test y muerde—, pero R21 es el que explica *por qué* ex
 **R9** exige que toda orden quede alcanzable «con una sola interacción». En vista **mosaico** el
 listado va en `CarruselCards`, de 1 a 3 por página según el ancho: una orden en la página 3 exige
 pulsar el carrusel además de la pestaña. **No es regresión de esta ficha** —el carrusel es anterior,
-y la ficha declara no tocarlo— y el test de R9 afirma correctamente la parte que la 274 decide (la
-pestaña, sin buscar). Se deja escrito para que nadie lo lea después como si la 274 lo hubiera
+y la ficha declara no tocarlo— y el test de R9 afirma correctamente la parte que la 277 decide (la
+pestaña, sin buscar). Se deja escrito para que nadie lo lea después como si la 277 lo hubiera
 cerrado.
 
 ### H5 · `menor` — el banner sigue a la vista con el filtro vaciando la lista
@@ -319,10 +319,10 @@ cerrado.
 Con 1 orden de hoy y una búsqueda sin coincidencias, la pantalla dice «1 orden nueva asignada»
 encima de «Ninguna guía por recoger coincide con la búsqueda». **Es correcto por R16/R20** (los
 contadores cuentan lo que el mensajero tiene) y **es el comportamiento anterior**, no algo que esta
-ficha estrene. El implementer lo declaró en `impl_274.md` §5 por si chirriaba: chirría un poco, y
+ficha estrene. El implementer lo declaró en `impl_277.md` §5 por si chirriaba: chirría un poco, y
 cambiarlo sería tocar R16, o sea otra ficha. **No se cambia aquí.**
 
-### H6 · `menor` — `progress/history.md` sin entrada para la 274
+### H6 · `menor` — `progress/history.md` sin entrada para la 277
 
 Es tarea del leader al cerrar, no del implementer. Bloquea el `done`, no el merge.
 

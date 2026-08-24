@@ -1,8 +1,8 @@
-# Feature 273 — design
+# Feature 276 — design
 
 > Cómo se cierra el tope de intentos sin rediseñar el modelo. Todo lo que aquí se afirma sobre el
 > código vigente está leído de `dev` el 2026-08-24; lo medido contra producción viene de
-> `feature_list.json#273` y de `progress/current.md`, y **no se re-deriva**.
+> `feature_list.json#276` y de `progress/current.md`, y **no se re-deriva**.
 
 ---
 

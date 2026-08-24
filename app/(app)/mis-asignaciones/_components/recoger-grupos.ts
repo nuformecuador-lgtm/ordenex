@@ -1,4 +1,4 @@
-// Feature 274 (B1, R2-R5/R10/R11/R15/R29) — LA PARTICIÓN de «Por recoger» en dos grupos, y los
+// Feature 277 (B1, R2-R5/R10/R11/R15/R29) — LA PARTICIÓN de «Por recoger» en dos grupos, y los
 // textos que esa partición hace falta decir. Función PURA: sin JSX, sin DOM, sin negocio de
 // dominio, sobre las asignaciones que ya llegan por props al módulo. Es importable sin arrastrar
 // jsdom y se prueba aparte en `tests/unit/components`, el mismo molde que
@@ -8,7 +8,7 @@
 // marcada para un día posterior no se puede recoger: la reserva protege del corte de la noche **y
 // también del mensajero**. Lo que esta ficha cambia es **dónde** vive la orden, no si se ve — las
 // dos pestañas están siempre montadas, cada una dice cuántas tiene sin que nadie interactúe y
-// ninguna orden queda a más de una pulsación (274/R7-R9). Nada sale de la pantalla.
+// ninguna orden queda a más de una pulsación (277/R7-R9). Nada sale de la pantalla.
 //
 // AQUÍ NO SE LEE NINGÚN RELOJ (R4), igual que en `lib/utils/dia-reparto-textos.ts`: este módulo no
 // importa el objeto de fecha del navegador ni el de internacionalización, y no compara fechas. La

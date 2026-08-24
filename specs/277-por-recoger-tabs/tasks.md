@@ -1,4 +1,4 @@
-# Feature 274 — Tareas
+# Feature 277 — Tareas
 
 > Frontend puro, zona `frontend`. **Ningún archivo de `lib/services/**`, `lib/actions/**`,
 > `lib/repositories/**`, `lib/types/**`, `lib/interfaces/**`, `db/**` ni `app/api/**` se toca.**
@@ -18,7 +18,7 @@
       Respuesta a **Q2** (nombres de las pestañas) y **Q3** (pestaña de entrada) como mínimo; **Q1**
       (el singular del contador) y **Q4** (controles de recogida con el grupo de hoy vacío) pueden
       responderse como «se deja como está», pero **respondidas**.
-      **Hecho:** las cuatro respuestas anotadas en `progress/impl_274.md`, con fecha. Si alguna
+      **Hecho:** las cuatro respuestas anotadas en `progress/impl_277.md`, con fecha. Si alguna
       cambia una decisión del spec, se actualiza `requirements.md`/`design.md` **antes** de T1.
       *Depende de: nada. Bloquea: todo.*
 
@@ -138,7 +138,7 @@
 
 - [x] **T13 · Comprobación de que los tests no están verdes por vacíos (mutación).**
       Mutar `esParaManana === true` → `!== true` en `separarPorDia` y **correr la suite**.
-      **Hecho:** se anota en `progress/impl_274.md` **qué tests concretos caen** y con qué mensaje,
+      **Hecho:** se anota en `progress/impl_277.md` **qué tests concretos caen** y con qué mensaje,
       y se revierte la mutación. Si la suite sobrevive, la tarea **no está hecha**: faltan casos.
       *Depende de: T10, T11.*
 
@@ -150,7 +150,7 @@
       `git diff --name-only origin/dev...` no contiene `lib/services/`, `lib/actions/`,
       `lib/repositories/`, `lib/types/`, `lib/interfaces/`, `db/`, `app/api/`, ni
       `middleware.ts`; y no aparece ninguna clase de foco nueva.
-      **Hecho:** la lista de archivos tocados, pegada en `progress/impl_274.md`, coincide **exactamente**
+      **Hecho:** la lista de archivos tocados, pegada en `progress/impl_277.md`, coincide **exactamente**
       con la tabla de `design.md` §2.
       *Depende de: T1-T13.*
 
@@ -162,7 +162,7 @@
       se corre `./init.sh` completo: es un `fail`, no un aviso.
       *Depende de: T14.*
 
-- [x] **T16 · Mapa de trazabilidad en `progress/impl_274.md`.**
+- [x] **T16 · Mapa de trazabilidad en `progress/impl_277.md`.**
       Los **34** requisitos, cada uno con el archivo y el **nombre exacto** del test que lo cierra.
       Un requisito sin test es un fallo de la feature (`docs/specs.md`), y el reviewer rechaza.
       **Hecho:** 34 filas, ninguna con «pendiente», ninguna citando un test que no exista (hay
@@ -174,7 +174,7 @@
       medido— y comprobar con los ojos: los dos nombres de pestaña, los dos conteos, el contador
       diciendo **1**, el vacío de una pestaña con su puntero, y que teclear la guía de la reservada
       en los controles de recogida sigue diciendo el motivo real con su fecha.
-      **Hecho:** anotado en `progress/impl_274.md` qué se vio, con la fecha. Este repo tiene medido
+      **Hecho:** anotado en `progress/impl_277.md` qué se vio, con la fecha. Este repo tiene medido
       que mirar la app encuentra en minutos lo que 12.000 tests dan por bueno.
       *Depende de: T15.*
 
@@ -214,7 +214,7 @@ T0
 
 ## Marcado de las casillas — 2026-08-24
 
-Las 18 casillas se marcan **sobre la verificación del reviewer**, no a ojo. `progress/review_274.md`
+Las 18 casillas se marcan **sobre la verificación del reviewer**, no a ojo. `progress/review_277.md`
 recorrió la evidencia de las 17 tareas **una a una** y su conclusión literal fue que faltaba
 *marcarla, no hacerla*. El gate que respalda el marcado es el que corrió **el propio reviewer**, no
 el del implementer: `./init.sh --rapido` con `INIT_EXIT=0` escrito dentro del log, 390 archivos /
