@@ -15,26 +15,47 @@
 bloquea. Ficha cerrada, **cero `in_progress`**. El recorrido con su evidencia está en
 `docs/release.md`; la narrativa, en `progress/history.md`.
 
-### ⚠️ LO ÚNICO QUE QUEDA VIVO, y hay que mirarlo la mañana del 24
+### ✅ EL CRON DE LA NOCHE, MEDIDO LA MAÑANA DEL 24 — corrió, y no tenía nada que cerrar
 
-**El primer efecto real de esta ficha lo produce el cron de esta noche.** A las 00:00 CR el corte
-deja de excluir a quien ya tiene un cierre abierto, y ahí es donde empieza a crear segundos cierres.
-Nada de lo verificado en el despliegue lo cubre — se midió que **0 mensajeros quedaban bloqueados en
-ese instante**, que es otra cosa.
+**Corrió**: `GET /api/cron/corte-diario` → **200** a las **00:00:22 CR del 24**, sobre
+`dpl_46j8ENJp6qrLbEoizNdxbKcR8yz1`, que es `target: production` y commit **`37b5944b`** — el build
+de la 271. No es «no se sabe si corrió»: está en los logs de runtime con su despliegue.
 
-Qué mirar, con su número:
+**Creó 0 cierres, y es lo correcto: no tenía candidatos por NINGUNA de las dos ramas** de
+`findMensajerosConActividadSinCierre`.
 
-1. **Los `cierre_dia` creados por la corrida** (`created_at` ~00:0x CR del 24): que sean los que
-   deben, y que su jornada derivada sea la del día trabajado y **no la del nacimiento** — el
-   off-by-one que originó media ficha.
-2. **Que salieron los avisos**, que es lo primero que este cron emite en toda su vida: filas nuevas
-   en `notificacion` con `evento = 'cierre_dia_vencido'`. Antes de esta release el corte emitía
-   **cero**, medido.
-3. **Los mensajeros bloqueados después de la corrida**, contra los 0 de antes de desplegar.
+| lo medido contra producción | número |
+| --- | --- |
+| (a) `gestion_orden` con `cierre_id IS NULL AND anulada_at IS NULL` | **0** |
+| gestiones registradas en la jornada del **23** (la que ese corte cerraba) | **0** — la última es del **22** |
+| (b) órdenes vivas en `en_reparto` / `ayuda_tienda` con mensajero asignado | **0 filas** |
+| `cierre_dia` creados por la corrida | **0** |
+| `notificacion` con `evento = 'cierre_dia_vencido'` | **0**, y **0 en toda la historia de la tabla** |
+| mensajeros bloqueados por la regla N/V después de la corrida | **0** (uno con `N=1, V=0` → libre) |
 
-Si (2) sale en cero y (1) creó cierres, el aviso volvió a quedarse mudo — que es el fallo que esta
-ficha persiguió cuatro veces en un día, cada vez una capa más arriba.
+El único mensajero con actividad **solicitó su cierre él mismo** a las **20:40 CR del 23**
+(`55fa66b7`, 2 gestiones, `solicitado`), así que a medianoche ya no le quedaba nada pendiente.
 
+### ⚠️ LO QUE ESTO **NO** VERIFICA, y sigue vivo
+
+**El aviso `cierre_dia_vencido` sigue sin emitirse ni una vez en producción.** El cero de hoy es
+consistente, pero **no es evidencia**: es exactamente la trampa que se documentó con `C7` — un cero
+solo vale si lo que lo produciría llegó a correr, y aquí la precondición del emisor (que el corte
+cree un `vencido`) **nunca se dio**. El cableado del notificador se verificó en test y en revisión;
+**en producción no lo ha ejercido nadie todavía**.
+
+Queda igual que ayer, y hay que volver a mirarlo **la primera noche en que un mensajero deje trabajo
+sin cerrar**. Los tres números a repetir son los mismos: cierres creados, su jornada derivada, y
+filas nuevas en `notificacion`.
+
+### Lo que además salió al mirar
+
+- **El cierre `…8F88DCD5` (79cb2c0f) se aprobó esta mañana a las 08:16 CR.** Sus **4 filas de
+  `cierre_sin_gestion` siguen ahí**, así que la comprobación de píxeles de la 264 que está en la
+  lista de release **todavía se puede hacer**.
+- **`C8` no se puede cerrar, y hoy se sabe por qué**: **cero jobs `optimizacion_ruta` de cualquier
+  estado desde el 2026-08-22 16:56 CR**, o sea **ninguno después del despliegue**. «Cero `failed`»
+  vuelve a ser un cero sin significado — el mismo error de lectura que `C7`. Se queda en la lista.
 ---
 
 ## 🚀 RELEASE DESPLEGADA — 2026-08-23 (contexto previo)
