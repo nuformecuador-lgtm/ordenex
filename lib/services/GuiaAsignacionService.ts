@@ -41,8 +41,13 @@ import type {
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
+  // FEATURE 273 (T7, R20): el motivo del tope, en su punto UNICO y compartido con el satelite.
+  MSG_TOPE_INTENTOS_ASIGNACION,
 } from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+// FEATURE 273 (T7, R7): el umbral sale de la configuracion, nunca de un `3` escrito a mano.
+import { reintentosConfig } from "@/lib/config/reintentos";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
 import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
@@ -134,6 +139,17 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // una fabrica nueva desactivaria el gate en silencio y volveria a entrar a la ruta una
     // orden sin coordenadas, que es exactamente lo que esta feature existe para impedir.
     private readonly asignabilidad: IAsignabilidadCoordenadasService,
+    /**
+     * 💰 FEATURE 273 (T7, R18): el derivador de intentos EN LOTE, para la puerta del tope de
+     * `asignarDesdeBodega`.
+     *
+     * REQUERIDA a proposito —mismo motivo que `asignabilidad`, escrito arriba—: si fuera opcional,
+     * olvidarla en una fabrica nueva desactivaria la puerta EN SILENCIO y volveria a salir a
+     * reparto una orden que ya agoto sus intentos, que es exactamente lo que esta feature existe
+     * para impedir. Va por `import type` + `Pick`: sin ciclo de modulos y testeable con dobles
+     * (patron `MisAsignacionesService`).
+     */
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
   ) {}
 
   /**
@@ -384,9 +400,46 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // --- 💰 FEATURE 273 (T7/T8, R18/R19/R20) — LA ULTIMA PUERTA: NO SE ASIGNA UNA ORDEN AGOTADA ---
+    //
+    // MIENTRAS los intentos vigentes de una orden sean `>= umbral`, no se le puede dar a un
+    // mensajero. Es la quinta via hacia la circulacion del design §1 y hasta esta ficha NO estaba
+    // cerrada: este servicio no consultaba el contador en ningun punto.
+    //
+    // ⚠️ Y NO BASTA POR SI SOLA, que es lo que la hace facil de mal-entender. Cerrar SOLO esta
+    // puerta seria poner un guardia que mira un reloj parado: la orden llega a bodega ANTES de que
+    // su intento se cuente —el cierre todavia no se aprobo— y en ese instante el contador dice el
+    // valor viejo y la deja pasar. Por eso la ficha 273 cierra ADEMAS la liberacion diferida
+    // (`LiberacionReprogramadaService`), que es la raiz.
+    //
+    // UNA SOLA CONSULTA para todo el lote (`contarIntentosEnLote`, el metodo que la 215 creo
+    // exactamente para esto): nada de N+1. R7: el umbral sale de `reintentosConfig`.
+    //
+    // TODO-O-NADA (R19): una sola orden en el umbral aborta el lote ENTERO, y el `detalle` lleva
+    // UNA entrada POR ORDEN —tambien por las que si podian asignarse—, igual que las guardas
+    // vecinas. Ninguna orden cambia de estado.
+    const intentosPorOrden = await this.historial.contarIntentosEnLote(ordenIds);
+    const umbralIntentos = reintentosConfig.MIN_INTENTOS_ENTREGA;
+    if (ordenIds.some((id) => (intentosPorOrden.get(id) ?? 0) >= umbralIntentos)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          // R20: el MISMO simbolo que emite la bodega satelite. Dos literales gemelos es como se
+          // desincronizan dos pantallas que cuentan la misma regla.
+          motivo: MSG_TOPE_INTENTOS_ASIGNACION,
+        })),
+      };
+    }
+
     // --- Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de persistir ---
     // Aqui TODAS las ordenes del lote reciben mensajero (es la accion "asignar desde
     // bodega"), asi que se evalua el lote entero.
+    //
+    // FEATURE 273: la puerta del tope va JUSTO ANTES de este gate y no despues. El rechazo por
+    // tope es DEFINITIVO y el de coordenadas es CORREGIBLE: ensenar primero el que no tiene
+    // arreglo evita que alguien salga a capturar coordenadas de una orden que no se va a asignar
+    // igual.
     const detalleCoords = await this.gateCoordenadas(ordenIds);
     if (detalleCoords.length > 0) return { status: "conflict", detalle: detalleCoords };
 

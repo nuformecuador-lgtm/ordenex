@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { RecoleccionTiendaService } from "@/lib/services/RecoleccionTiendaService";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
@@ -311,6 +312,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       repo,
       { findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) } as unknown as IZonaRepository,
       gateTodoAsignable,
+      fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */,
     );
   }
 
@@ -383,7 +385,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       })),
       asignarSateliteLote,
     });
-    return new AsignacionSateliteService(repo, gateTodoAsignable);
+    return new AsignacionSateliteService(repo, gateTodoAsignable, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
   }
 
   it.each(LIBRES.map((c) => [c.nombre, c.cierres] as const))(

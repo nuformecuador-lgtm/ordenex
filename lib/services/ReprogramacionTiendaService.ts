@@ -1,6 +1,11 @@
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IGestionOrdenRepository } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+// FEATURE 273 (Q2, FIRMADA el 2026-08-24) — la TERCERA via hacia la circulacion se bloquea aqui,
+// con el MISMO motivo unico de R20 y el MISMO umbral de configuracion.
+import { MSG_TOPE_INTENTOS_ASIGNACION } from "@/lib/services/mensajes-bloqueo";
+import { reintentosConfig } from "@/lib/config/reintentos";
 import type {
   IReprogramacionTiendaService,
   ReprogramarNovedadResult,
@@ -15,6 +20,11 @@ const ESTADO_DESTINO = "reprogramada";
 // dobles de test sin DB/HTTP (patron DevolucionOrigenService).
 type ReprogramacionOrdenRepo = Pick<IOrdenRepository, "findById" | "findEstatusIdByValue">;
 type ReprogramacionGestionRepo = Pick<IGestionOrdenRepository, "reprogramarDesdeDevuelta">;
+/**
+ * 💰 FEATURE 273 (Q2) — el derivador de intentos. REQUERIDO: opcional, un composition root que se
+ * lo olvidara dejaria abierta la tercera via en silencio.
+ */
+type ReprogramacionHistorialSvc = Pick<IOrdenHistorialService, "contarIntentos">;
 
 /**
  * Feature 100 — logica de negocio de la REPROGRAMACION por la tienda. Impone la AUTZ por tienda
@@ -27,6 +37,7 @@ export class ReprogramacionTiendaService implements IReprogramacionTiendaService
   constructor(
     private readonly ordenRepo: ReprogramacionOrdenRepo,
     private readonly gestionRepo: ReprogramacionGestionRepo,
+    private readonly historial: ReprogramacionHistorialSvc,
   ) {}
 
   async reprogramar(
@@ -53,6 +64,31 @@ export class ReprogramacionTiendaService implements IReprogramacionTiendaService
         status: "conflict",
         motivo: `la orden no esta en ${ESTADO_ORIGEN} (estado actual: ${orden.estatusValue ?? "desconocido"})`,
       };
+    }
+
+    // 💰 3-bis. FEATURE 273 (Q2, FIRMADA el 2026-08-24) — LA TERCERA VIA HACIA LA CIRCULACION.
+    //
+    //    `devuelta -> reprogramada` es la puerta de la tienda, y el encargo original de la 273 no
+    //    la enumeraba. Sin esta guarda la REGLA se cumpliria igual —la orden acabaria en bodega y
+    //    R18 le negaria la asignacion—, pero el paquete quedaria en un CALLEJON SIN SALIDA y la
+    //    tienda no se enteraria hasta TRES PASOS DESPUES. Se bloquea en el momento en que lo
+    //    intenta, que es cuando la persona todavia puede decidir otra cosa.
+    //
+    //    `>= umbral` (no `umbral - 1`): aqui no se registra un intento nuevo —la gestion sintetica
+    //    de la 100 NO es visita real y no cuenta—, asi que la pregunta es la MISMA que la de la
+    //    asignacion: ¿esta orden ya agoto sus intentos? Por eso comparte el motivo (R20) y el
+    //    umbral, y por eso NO usa `alcanzaElTope`, que responde otra pregunta (¿la gestion que se
+    //    registre AHORA es la que alcanza el umbral?).
+    //
+    //    VA DESPUES de la guardia de estado y ANTES de resolver el catalogo y de escribir: sin
+    //    gestion sintetica, sin transicion y sin fila de historial.
+    //
+    //    Lo que NO se bloquea (Q3, firmada): la RECUPERACION MANUAL a bodega. Es un movimiento
+    //    FISICO que la bodega necesita registrar aunque la orden ya no se pueda repartir, y R18
+    //    impide igualmente que salga.
+    const intentos = await this.historial.contarIntentos(ordenId);
+    if (intentos >= reintentosConfig.MIN_INTENTOS_ENTREGA) {
+      return { status: "conflict", motivo: MSG_TOPE_INTENTOS_ASIGNACION };
     }
 
     // 4. Resolver los estatus del catalogo (destino + guarda). Falta de seed -> config_error.

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
 import type {
   IOrdenRepository,
@@ -104,7 +105,7 @@ function newService(
   repo: RepoMethods = fakeRepo(),
   gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
 ) {
-  return new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate);
+  return new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
 }
 
 describe("AsignacionSateliteService.asignar", () => {

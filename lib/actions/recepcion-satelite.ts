@@ -81,10 +81,20 @@ function buildService(): IRecepcionSateliteService {
 
 function buildAsignacionService(): IAsignacionSateliteService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   // Feature 92/R8: + el gate de asignabilidad por coordenadas, que lee la cola de jobs.
   return new AsignacionSateliteService(
-    new OrdenRepository(prisma),
+    ordenRepo,
     new AsignabilidadCoordenadasService(new JobRepository(prisma)),
+    // 💰 FEATURE 273 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
+    // —y por tanto el MISMO criterio unico de la 215— que consultan el panel del mensajero, la
+    // pestaña de ayuda y los dos crons. La dependencia es OBLIGATORIA en el constructor: borrar
+    // esta linea rompe el typecheck, no deja la puerta abierta en silencio.
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

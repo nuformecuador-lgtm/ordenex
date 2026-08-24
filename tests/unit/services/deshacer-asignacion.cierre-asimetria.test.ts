@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { DeshacerAsignacionService } from "@/lib/services/DeshacerAsignacionService";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import type { IOrdenRepository, OrdenTransicionRow } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type {
@@ -135,7 +136,7 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero SI se bloquea (feature 271, 
       evaluar: async (ordenes: OrdenAsignabilidadRow[]) =>
         new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, "asignable"])),
     };
-    const service = new GuiaAsignacionService(repo, zonaRepo, gate);
+    const service = new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignarDesdeBodega(
       { ordenIds: ["o1"], mensajeroId: MENSAJERO_CON_CIERRE },
