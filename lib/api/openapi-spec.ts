@@ -792,17 +792,31 @@ export const openApiSpec = {
           "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
           "ventana no puede superar 366 días contando ambos extremos.",
           "",
-          "**`cobertura` viene SIEMPRE y hay que leerla.** `fechasNoComparables` son días del rango",
-          "que caen por debajo del horizonte de nuestro histórico: en esos días la cifra no es",
-          "comparable con el resto de la serie, y tratarlos como un cero es leer una caída que no",
-          "ocurrió. `penumbra` declara una limitación permanente y conocida del histórico.",
+          "**`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango",
+          "puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en",
+          "curso**, que todavía no está cerrado y siempre se vería más bajo que un día completo; o",
+          "(b) cae **por debajo del horizonte de nuestro histórico**, donde la cifra sería cero por",
+          "falta de datos y no por falta de operación. En los dos casos publicar el número sería",
+          "enseñarte una caída de tu operación que no ocurrió, así que el día **no aparece**. La",
+          "ausencia es el dato: **no rellenes los huecos con ceros**.",
           "",
-          "**El día en curso llega marcado `parcial: true`,** con el instante de corte usado",
-          "(`corteAt`, ISO 8601). Sin ese marcador, el día de hoy se leería como un día cerrado.",
-          "Los dos campos son opcionales y aditivos: quien los ignore no se rompe.",
+          "**`data` puede venir vacío, y eso es una respuesta `200` correcta** — por ejemplo si",
+          "pides `desde=hoy&hasta=hoy`, porque hoy todavía no está cerrado. No es un error.",
+          "",
+          "**`rango` es el eco EXACTO de lo que pediste, sin recortar,** aunque `data` no llegue",
+          "hasta `hasta`. Lo pedido y lo servible son dos cosas distintas y se leen por separado.",
           "",
           "**`valor` puede ser `null`, y `null` NO es `0`:** significa «no se sabe» (por ejemplo,",
-          "una tasa cuyo denominador fue cero ese día).",
+          "una tasa cuyo denominador fue cero ese día). Un día con `valor: null` SÍ aparece en",
+          "`data`: es un día cerrado cuyo resultado es indefinido, no un día que falte.",
+          "",
+          "**Qué cuenta cada métrica, porque no todas cuentan lo mismo.** `entregas`,",
+          "`devoluciones`, `rechazos`, `reprogramaciones`, `tasa_entrega`, `tasa_devolucion` y",
+          "`tasa_rechazo` cuentan **gestiones, no órdenes**: una orden reprogramada y entregada",
+          "después aporta **dos** gestiones. `ordenes_creadas` y `ordenes_por_estado` cuentan",
+          "**órdenes**. `tiempo_ciclo` no cuenta nada: mide una **duración**. Consecuencia",
+          "práctica: **dos métricas que no cuentan lo mismo no son sumables entre sí** — sumar",
+          "gestiones con órdenes da un total que no significa nada.",
           "",
           "Este canal no publica importes ni identifica a los mensajeros de la operación.",
         ].join("\n"),
@@ -850,47 +864,26 @@ export const openApiSpec = {
                 schema: { $ref: "#/components/schemas/AnaliticaRespuesta" },
                 examples: {
                   serie: {
-                    summary: "Dos métricas, tres días, el último en curso",
+                    summary:
+                      "Dos métricas; se pidieron tres días y el tercero (hoy) no viene: no está cerrado",
                     value: {
                       rango: { desde: "2026-08-19", hasta: "2026-08-21" },
                       metricas: [
                         {
                           metrica: "entregas",
                           unidad: "conteo",
-                          unidadDeConteo: "gestion",
-                          puntos: [
+                          data: [
                             { fecha: "2026-08-19", valor: 41 },
                             { fecha: "2026-08-20", valor: 37 },
-                            {
-                              fecha: "2026-08-21",
-                              valor: 12,
-                              parcial: true,
-                              corteAt: "2026-08-21T18:40:00.000Z",
-                            },
                           ],
-                          cobertura: {
-                            fechasNoComparables: [],
-                            penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
-                          },
                         },
                         {
                           metrica: "tasa_entrega",
                           unidad: "porcentaje",
-                          unidadDeConteo: "gestion",
-                          puntos: [
+                          data: [
                             { fecha: "2026-08-19", valor: 0.93 },
                             { fecha: "2026-08-20", valor: null },
-                            {
-                              fecha: "2026-08-21",
-                              valor: 0.9,
-                              parcial: true,
-                              corteAt: "2026-08-21T18:40:00.000Z",
-                            },
                           ],
-                          cobertura: {
-                            fechasNoComparables: [],
-                            penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
-                          },
                         },
                       ],
                     },
@@ -1577,57 +1570,31 @@ export const openApiSpec = {
           },
         },
       },
+      // 2026-08-24 — la serie publica TRES campos. `unidadDeConteo` salió del payload (es un
+      // hecho del catálogo, y va en la descripción del endpoint) y `cobertura` salió entera: su
+      // información la lleva ahora la OMISIÓN de puntos en `data`.
       AnaliticaSerie: {
         type: "object",
-        required: ["metrica", "unidad", "unidadDeConteo", "puntos", "cobertura"],
+        required: ["metrica", "unidad", "data"],
         properties: {
           metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
           unidad: {
             type: "string",
             description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
           },
-          unidadDeConteo: {
-            type: "string",
-            description: "Qué se cuenta: gestiones u órdenes. Va explícito para que la cifra no se lea al revés.",
-          },
-          puntos: {
+          data: {
             type: "array",
-            description: "Un punto por día calendario CR del rango.",
+            description:
+              "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros.",
             items: {
               type: "object",
               required: ["fecha", "valor"],
               properties: {
-                fecha: { type: "string", format: "date", example: "2026-08-21" },
+                fecha: { type: "string", format: "date", example: "2026-08-20" },
                 valor: {
                   type: ["number", "null"],
-                  description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0.",
+                  description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido.",
                 },
-                parcial: {
-                  type: "boolean",
-                  description: "Presente y `true` solo en el día en curso, que aún no está cerrado.",
-                },
-                corteAt: {
-                  type: "string",
-                  format: "date-time",
-                  description: "Instante (ISO 8601) usado como cota superior del punto parcial.",
-                },
-              },
-            },
-          },
-          cobertura: {
-            type: "object",
-            description: "Qué sabe la respuesta sobre sus propios límites. Se emite SIEMPRE.",
-            required: ["fechasNoComparables", "penumbra"],
-            properties: {
-              fechasNoComparables: {
-                type: "array",
-                description: "Días del rango por debajo del horizonte del histórico: no comparables con el resto de la serie.",
-                items: { type: "string", format: "date" },
-              },
-              penumbra: {
-                type: "string",
-                description: "Limitación permanente y declarada del histórico, nunca estimada.",
-                example: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
               },
             },
           },

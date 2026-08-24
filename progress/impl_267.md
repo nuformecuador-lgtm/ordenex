@@ -347,3 +347,24 @@ peticion. La decision se mantiene —sin rate limit en esta ficha— con dos mit
 lote esta acotado POR CONSTRUCCION (mas ids que publicables = 422; cualquier id fuera de la lista
 blanca = 403 del lote) y las consultas van **en serie**, no con `Promise.all`, para no multiplicar
 por diez la concurrencia contra la base desde un canal publico.
+
+---
+
+## Addendum del 2026-08-24 — el contrato publico se simplifico ANTES del merge
+
+Nada de lo de arriba se borra; parte ya no describe lo que se sirve. Cambio pedido por el humano
+sobre la feature ya revisada, hecho a proposito antes de mergear el PR #481:
+
+- `puntos` -> **`data`** (solo el nombre publico; `SerieOperativa.puntos` de la 126 intacto).
+- Fuera del payload: **`unidadDeConteo`**, **`cobertura`** entera (`fechasNoComparables` +
+  `penumbra`), **`parcial`** y **`corteAt`**. El punto publico queda en `fecha` + `valor`.
+- En su lugar, **`data` OMITE** los puntos con `parcial === true` y los que caen en
+  `cobertura.fechasNoComparables`: la ausencia sustituye a las marcas, para que un «no se sabe»
+  no se lea como un cero. `data: []` es un `200` valido; el `throw` de «cero SERIES» sigue.
+- `rango` sigue siendo el **eco de lo pedido, sin recortar** (si no, `desde=hoy&hasta=hoy` daria
+  un rango invertido o un 422).
+- La informacion de `unidadDeConteo` se documenta una vez en la descripcion del endpoint, en los
+  dos artefactos del contrato.
+
+Requisitos, motivos y mapa `E<n> -> test`: `specs/267-analitica-api-key/requirements.md` ›
+«Enmienda del 2026-08-24». Forma final del JSON: `design.md` › misma enmienda.

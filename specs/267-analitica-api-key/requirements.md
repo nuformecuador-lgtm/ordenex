@@ -409,3 +409,75 @@ son «para webhooks y **API pública**», y este canal ES la API pública: la gu
 impedir una segunda superficie **interna**, no para cerrar el canal por API key. Por eso se
 ESTRECHA a un camino nominal y no se deroga. Si esta lectura no se comparte, la feature entera
 cambia de forma y hay que parar antes de T7.
+
+---
+
+## Enmienda del 2026-08-24 — el contrato público se SIMPLIFICA antes del merge
+
+> Esta enmienda **añade, no borra**. Los requisitos R28, R29, R30, R31, R45 y R48 de arriba
+> quedan como historia de lo que se decidió el 2026-08-23; lo que se sirve de verdad es lo que
+> dice esta sección. Se escribe ANTES del merge a `dev` a propósito: el canal por API key es un
+> contrato público y este es el único momento en el que cambiarlo no le cuesta nada a nadie de
+> fuera.
+
+**Qué pidió el humano, con sus palabras:** «esas props estan de sobra, el usuario solo necesita
+las estadisticas», y después «cambia puntos a data».
+
+### Los cuatro cambios de forma
+
+| # | cambio | requisito de arriba que enmienda |
+| --- | --- | --- |
+| **E1** | El array de la serie se llama **`data`**, no `puntos`. Solo el nombre PÚBLICO: el contrato interno `SerieOperativa.puntos` (126) no se toca. | R28 |
+| **E2** | **`unidadDeConteo` sale del payload.** Sigue en el catálogo y en el contrato interno; deja de viajar en cada respuesta. Su información se publica UNA vez, en la descripción del endpoint (OpenAPI + `.yaml`): `entregas`, `devoluciones`, `rechazos`, `reprogramaciones` y las tres tasas cuentan **gestiones**, no órdenes —una orden reprogramada y luego entregada aporta dos gestiones—; `ordenes_creadas` y `ordenes_por_estado` cuentan órdenes; `tiempo_ciclo` mide una duración. Dos métricas que no cuentan lo mismo **no son sumables**. | R28 |
+| **E3** | **`cobertura` sale entera** (`fechasNoComparables` + `penumbra`). | R28, R29 |
+| **E4** | **`parcial` y `corteAt` salen del punto.** El punto público tiene EXACTAMENTE `fecha` y `valor`. | R28, P5 |
+
+Lo que **NO** cambia: `valor: number | null` (y `null` sigue siendo «indefinido / denominador 0»,
+**nunca** un `0`), `unidad`, `metrica`, el sobre `{ rango, metricas[] }` (R45), el orden pedido
+(R47), el rango común al lote (R48) y la proyección campo a campo (R31).
+
+### E5 — LA REGLA QUE SUSTITUYE A LO QUE SE QUITÓ (es el corazón de la enmienda)
+
+Quitar `cobertura` y `parcial` a secas convertiría dos «no se sabe» en ceros silenciosos: los días
+bajo el horizonte del historial valen cero porque **no hay datos**, no porque no hubiera operación;
+y el día en curso no está cerrado en el rollup, así que siempre se ve más bajo que el anterior. Sin
+las marcas, el integrador leería una caída de la operación que no existe.
+
+**Por eso `data` NO INCLUYE esos días: se OMITEN los puntos, no se ponen en cero.** Al proyectar
+una serie se descarta todo punto que cumpla cualquiera de las dos condiciones:
+
+- `punto.parcial === true`, o
+- `punto.fecha ∈ serie.cobertura.fechasNoComparables`.
+
+La ausencia es el único signo honesto que queda cuando no hay marcas: un día sin dato no aparece, y
+el integrador nunca ve un cero que no ocurrió. Es la misma negativa de **126/R34** —«cero» y «no se
+sabe» no son el mismo número—, expresada con la FORMA en vez de con un campo aparte; R29 no se
+abandona, cambia de mecanismo.
+
+### E6 — el `rango` sigue siendo el ECO de lo que se pidió, SIN recortar
+
+Es deliberado y hay que dejarlo escrito, porque la tentación de «arreglarlo» es evidente: recortar
+`hasta` al último día servible le devolvería un **rango invertido —o un 422—** a quien pida
+`desde=hoy&hasta=hoy`, que es exactamente el patrón de un integrador que consulta a diario. Con el
+eco intacto, ese caso responde **`200` con `data: []`** en cada métrica, que es la verdad:
+«pediste hoy, hoy todavía no está cerrado».
+
+### E7 — `data: []` es un `200` legítimo
+
+No es un error y no es un estado imposible. El `throw` que ya existía en `proyectarRespuestaApiKey`
+para «respuesta sin ninguna SERIE» **sigue en pie** —una respuesta sin series sí es un bug
+nuestro—, pero una serie con `data: []` es perfectamente válida. Son dos casos distintos y no debe
+añadirse un throw nuevo.
+
+### Trazabilidad de la enmienda
+
+| # | test |
+| --- | --- |
+| E1 | `analitica-api-key-contrato.test.ts` › «proyecta exactamente las TRES claves de nivel superior de una serie» + «la cadena serializada no contiene NINGUNA de las claves retiradas el 2026-08-24» (incluye `puntos`) |
+| E2 | `analitica-api-key-contrato.test.ts` › «copia metrica y unidad …, y NO copia `unidadDeConteo`» + `openapi-177-paths-pdf-y-carga-id.test.ts` › «la descripción del endpoint documenta la UNIDAD DE CONTEO que dejó de viajar en el payload» (los ids se DERIVAN del catálogo) |
+| E3 | `analitica-api-key-contrato.test.ts` › «un campo extra inyectado en `cobertura` no cruza: `cobertura` entera se queda dentro» + `openapi-177…` › «el schema AnaliticaSerie publica TRES campos» |
+| E4 | `analitica-api-key-contrato.test.ts` › «un punto publicado tiene EXACTAMENTE `fecha` y `valor`» + «un `Date` colado como `corteAt` no se convierte ni se publica» |
+| E5 | `analitica-api-key-contrato.test.ts` › «un punto con `parcial: true` NO aparece en `data`», «un punto cuya fecha esta en `fechasNoComparables` NO aparece en `data`», «un punto normal SI aparece, y el orden de los que quedan se conserva», «los dias omitidos no se rellenan con `0` ni con `null`», «cada serie del lote se omite SEGUN SU PROPIA cobertura» + `analitica-api-key-route.test.ts` › «el dia en curso y el no comparable no viajan» |
+| E6 | `analitica-api-key-contrato.test.ts` › «el `rango` es el ECO DE LO PEDIDO y NO se recorta al ultimo dia servible» + `analitica-api-key-route.test.ts` › «si TODOS los dias se omiten, es 200 con `data: []` y el rango pedido intacto» |
+| E7 | `analitica-api-key-contrato.test.ts` › «una serie en la que TODOS los puntos se omiten produce `data: []`, sin lanzar» + «una lista de SERIES vacia lanza» (los dos casos, separados a propósito) |
+| `valor: null` intacto | `analitica-api-key-contrato.test.ts` › «`valor: null` sobrevive como null» + `analitica-api-key-route.test.ts` › «`valor: null` viaja como null por el cable» |

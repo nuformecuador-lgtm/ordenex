@@ -273,3 +273,14 @@ humana del reviewer para los puntos 3 y 4.
 `all`) y la 200 es el sobre `{ rango, metricas[] }`. Es contrato público que cambia de forma respecto
 a lo que el PR anunciaba antes; se cambia AHORA porque `metrica=<id>` nunca llegó a `dev` y no hay
 nadie a quien romperle nada.
+
+---
+
+## Nota del 2026-08-24 — T6 cambió de contenido después de la revisión
+
+Las tasks de arriba se ejecutaron tal como están escritas y quedaron hechas. Después, y **antes de
+mergear**, el humano simplificó el contrato público: donde T6/T7 dicen «`cobertura` obligatoria»,
+«`puntos`» y «`parcial`/`corteAt` publicados», hoy se sirve `data` (sin esos tres) y los días no
+legibles **se omiten** en vez de marcarse. No se reabre ninguna task: el cambio, su motivo y su
+mapa de tests están en `requirements.md` › «Enmienda del 2026-08-24» (E1–E7) y en `design.md` ›
+misma enmienda.

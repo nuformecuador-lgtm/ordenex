@@ -589,3 +589,61 @@ guarda simétrica —`canal === "api_key"` ⇔ rol de integración— en el punt
 | --- | --- |
 | R15/R17/R18/R19/R34 (sobre el canal, no sobre el rol) | `alcance-api-key.test.ts` › «los CINCO roles lectores por canal api_key se deniegan, contra las tres métricas» (15 casos **derivados de `ROLES_ANALITICA`**: publicable / no publicable / financiera) + «el bicondicional en las dos direcciones» + el espejo positivo «el rol de INTEGRACIÓN por api_key con métrica publicable sigue concediendo su tienda» |
 | Defensa en profundidad del canal (267, capa de autenticación) | `tests/unit/services/api-key-auth-service.test.ts` › «una fila cuyo usuario dedicado tiene rol X → forbidden» (`ApiKeyAuthService` deja de castear `encontrada.rol` sin comprobarlo) |
+
+---
+
+## Enmienda del 2026-08-24 — la forma servida, después de simplificar el contrato
+
+> Se **añade** a §4.3 y a §10; no se borra nada de arriba. Lo de arriba es lo que se diseñó el
+> 2026-08-23; esto es lo que el endpoint sirve. Los requisitos y su motivo están en
+> `requirements.md › Enmienda del 2026-08-24` (E1–E7).
+
+### La forma final del `200`
+
+```jsonc
+{
+  "rango": { "desde": "2026-08-19", "hasta": "2026-08-21" },   // eco de lo pedido, SIN recortar
+  "metricas": [
+    {
+      "metrica": "entregas",
+      "unidad": "conteo",
+      "data": [                        // solo los dias SERVIBLES; puede venir vacio (200 valido)
+        { "fecha": "2026-08-19", "valor": 41 },
+        { "fecha": "2026-08-20", "valor": 37 }
+        // 2026-08-21 NO aparece: es el dia en curso y no esta cerrado
+      ]
+    }
+  ]
+}
+```
+
+Fuera del payload, respecto de lo diseñado el 2026-08-23: `unidadDeConteo`, `cobertura`
+(`fechasNoComparables` + `penumbra`), `parcial` y `corteAt`. Y `puntos` pasa a llamarse `data`.
+
+### Dónde vive cada decisión
+
+- **La omisión (E5)** se aplica en `proyectarSerieApiKey`
+  (`lib/api/analitica-api-key-dto.ts`), y NO en el servicio ni en el repositorio: el contrato
+  interno de la 126 debe seguir entregando la serie completa con sus marcas —el tablero interno
+  las usa—, y es la FRONTERA PÚBLICA la que decide qué es publicable. Moverla hacia dentro
+  cambiaría lo que ve el canal de sesión, que no es de esta ficha.
+- **`cobertura` y `parcial` se siguen LEYENDO** allí, aunque no se publiquen. Si mañana alguien
+  «limpia» esas dos lecturas por no aparecer en la salida, los días no legibles vuelven a salir
+  como ceros y el integrador ve una caída inventada. Los tests de E5 muerden exactamente ahí.
+- **El eco sin recortar (E6)** se afirma en `proyectarRespuestaApiKey`, con el comentario que
+  explica el caso `desde=hoy&hasta=hoy`. No hay ninguna rama que compare el rango con el último
+  día servible, y no debe haberla.
+- **La información de `unidadDeConteo` (E2)** se publica en la descripción del endpoint, en los
+  DOS artefactos (`lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml`). El test que lo
+  guarda DERIVA los ids del catálogo (`METRICAS` × `METRICAS_API_KEY`), así que un alta o un
+  cambio de unidad de conteo pone roja la prosa hasta que se actualice.
+- **§10 (trazabilidad)**: R28/R29 y P5 se leen ahora a través de E1–E5; su tabla de tests está en
+  `requirements.md › Trazabilidad de la enmienda`.
+
+### Lo que esta enmienda NO tocó, y conviene decirlo
+
+El handler (`app/api/ordenes/api-key/analitica/route.ts`) no cambió ni una línea de lógica: sigue
+haciendo bearer → query → borde → `proyectarRespuestaApiKey`. El borde
+(`lib/api/analitica-integrador.ts`), el resolutor de métricas, el alcance y el servicio operativo
+tampoco. Es un cambio de FRONTERA, y se nota en que cabe entero en el DTO, sus tests y los dos
+espejos del contrato.

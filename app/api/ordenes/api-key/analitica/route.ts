@@ -163,6 +163,12 @@ export async function handleAnaliticaApiKey(
         // tal cual: un campo nuevo del contrato de la 126 no se publica solo. El sobre publica
         // el rango UNA vez y las series en el orden pedido (R45/R47/R48).
         //
+        // ⚠ ENMIENDA 2026-08-24 — la proyeccion tambien DECIDE QUE DIAS SE PUBLICAN: el dia en
+        // curso y los que caen bajo el horizonte del historial se OMITEN de `data`. Por eso un
+        // `200` con `data: []` es una respuesta correcta y NO hay que tratarla aqui como un caso
+        // raro: el rango que se devuelve sigue siendo el eco de lo que se pidio, sin recortar
+        // (ver la cabecera de `lib/api/analitica-api-key-dto.ts`).
+        //
         // El `switch` es exhaustivo a proposito: un estado nuevo del resultado de dominio debe
         // romper la compilacion, no caer en un `default` que responda 200.
         return proyectarRespuestaApiKey(salida.series);

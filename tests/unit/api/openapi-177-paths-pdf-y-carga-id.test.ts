@@ -4,6 +4,7 @@ import path from "path";
 
 import { openApiSpec } from "@/lib/api/openapi-spec";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
+import { METRICAS } from "@/lib/analytics/metrics";
 
 // Feature 177 (R41, R45) — contrato publicado del canal por API key tras la alta de los tres
 // endpoints nuevos (consulta por guía/remisión y PDF de etiqueta por orden y por lote) y la
@@ -373,6 +374,21 @@ function parametrosDeAnalitica(): readonly ParametroOpenApi[] {
   return openApiSpec.paths[PATH_ANALITICA].get.parameters as readonly ParametroOpenApi[];
 }
 
+/**
+ * La prosa del endpoint de analítica TAL COMO SE PUBLICA en el `.yaml` (bloque `description: |-`
+ * hasta `parameters:`). Se extrae del texto, no del objeto TS: el `.yaml` es un archivo aparte y
+ * nada más que este tipo de aserto lo mantiene diciendo lo mismo.
+ */
+function descripcionDeAnaliticaEnYaml(): string {
+  const inicio = lineasYaml.findIndex((l) => l === `  "${PATH_ANALITICA}":`);
+  if (inicio < 0) throw new Error("el .yaml no publica el path de analitica");
+  const desc = lineasYaml.findIndex((l, i) => i > inicio && l.trim() === "description: |-");
+  if (desc < 0) throw new Error("el path de analitica no tiene bloque `description` en el .yaml");
+  const fin = lineasYaml.findIndex((l, i) => i > desc && l === "      parameters:");
+  if (fin < 0) throw new Error("no se encontro el final de la descripcion de analitica");
+  return lineasYaml.slice(desc + 1, fin).join("\n");
+}
+
 /** Lanza si el parámetro no existe: un `undefined` silencioso volvería verde este guard. */
 function parametroDeAnalitica(nombre: string): ParametroOpenApi {
   const p = parametrosDeAnalitica().find((x) => x.name === nombre);
@@ -456,15 +472,19 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
   });
 
-  it("el schema AnaliticaSerie exige `cobertura`, en el objeto TS y en el .yaml", () => {
-    // R29 — «cero» y «no se sabe» no pueden ser el mismo número para el integrador. Si
-    // `cobertura` fuera opcional, un consumidor podría ignorarla por omisión, que es justo lo
-    // que el contrato interno de la 126 se negó a permitir.
+  it("el schema AnaliticaSerie publica TRES campos —metrica, unidad, data— en el TS y en el .yaml", () => {
+    // ENMIENDA 2026-08-24. Aquí se exigía `unidadDeConteo`, `puntos` y `cobertura`, y ya no:
+    //  - `puntos` se llama `data`;
+    //  - `unidadDeConteo` es un hecho del CATÁLOGO, no de cada respuesta: viaja una vez en la
+    //    descripción del endpoint (ver el test de abajo), no en cada payload;
+    //  - `cobertura` salió entera porque su información la lleva ahora la OMISIÓN de puntos en
+    //    `data`. La negativa de 126/R34 —«cero» y «no se sabe» no son el mismo número— sigue en
+    //    pie: se expresa con la forma (el día no aparece) en vez de con un campo aparte.
     const schema = openApiSpec.components.schemas.AnaliticaSerie;
     const requeridas = [...schema.required];
     // P4-bis: sin `rango`. Es del sobre, porque las N series de un lote lo comparten por
     // construcción (mismo `raw`, mismo instante).
-    expect(requeridas).toEqual(["metrica", "unidad", "unidadDeConteo", "puntos", "cobertura"]);
+    expect(requeridas).toEqual(["metrica", "unidad", "data"]);
 
     const bloque = bloqueDeSchema("AnaliticaSerie");
     const requeridasYaml = subBloque(bloque, "required", 6)
@@ -475,6 +495,52 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
       .filter((l) => indent(l) === 8)
       .map((l) => l.trim().replace(/:$/, ""));
     expect(propiedades).toEqual(requeridas);
+
+    // Y el PUNTO tiene exactamente dos campos: nada de `parcial` ni `corteAt`, que dejaron de
+    // publicarse el 2026-08-24.
+    const punto = schema.properties.data.items;
+    expect([...punto.required]).toEqual(["fecha", "valor"]);
+    expect(Object.keys(punto.properties)).toEqual(["fecha", "valor"]);
+    // Ni el TS ni el `.yaml` mencionan ya ninguno de los cinco campos retirados.
+    const serializadoTs = JSON.stringify(openApiSpec.paths[PATH_ANALITICA]) + JSON.stringify(schema);
+    const bloqueYaml = bloque.join("\n");
+    for (const retirado of [
+      "unidadDeConteo",
+      "cobertura",
+      "fechasNoComparables",
+      "penumbra",
+      "corteAt",
+    ]) {
+      expect(serializadoTs).not.toContain(retirado);
+      expect(bloqueYaml).not.toContain(retirado);
+    }
+  });
+
+  it("la descripción del endpoint documenta la UNIDAD DE CONTEO que dejó de viajar en el payload", () => {
+    // `unidadDeConteo` salió de la respuesta el 2026-08-24, pero su información NO se perdió:
+    // tiene que estar en la prosa del endpoint, o el integrador suma gestiones con órdenes y
+    // obtiene un total que no significa nada. Los ids se DERIVAN del catálogo: si mañana una
+    // métrica publicable cambia de unidad de conteo o entra una nueva que cuenta gestiones,
+    // este test se pone rojo hasta que la prosa lo diga.
+    const descripcionTs = openApiSpec.paths[PATH_ANALITICA].get.description;
+    const descripcionYaml = descripcionDeAnaliticaEnYaml();
+
+    const porGestion = METRICAS_API_KEY.filter(
+      (id) => METRICAS.find((m) => m.id === id)?.unidadDeConteo === "gestion",
+    );
+    expect(porGestion.length).toBeGreaterThan(0);
+    for (const id of porGestion) {
+      expect(descripcionTs).toContain(`\`${id}\``);
+      expect(descripcionYaml).toContain(`\`${id}\``);
+    }
+    for (const texto of [descripcionTs, descripcionYaml]) {
+      expect(texto).toMatch(/gestiones, no órdenes/i);
+      expect(texto).toMatch(/no son sumables/i);
+      // Y las dos reglas que sustituyen a lo que se quitó del payload.
+      expect(texto).toMatch(/no rellenes los huecos con ceros/i);
+      expect(texto).toMatch(/eco EXACTO de lo que pediste, sin recortar/i);
+      expect(texto).toMatch(/`null` NO es `0`/);
+    }
   });
 
   it("P4-bis — el sobre `AnaliticaRespuesta` declara rango + metricas[], en el TS y en el .yaml", () => {

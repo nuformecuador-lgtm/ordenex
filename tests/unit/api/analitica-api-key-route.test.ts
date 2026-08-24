@@ -84,6 +84,28 @@ function montar(auth: ApiKeyAuthResult = OK) {
   return { deps, consultar, logError };
 }
 
+/**
+ * Como `montar`, pero la serie que devuelve el servicio la escribe el test. Se usa para los casos
+ * de la enmienda del 2026-08-24 (puntos que se OMITEN de `data`), donde lo que importa es que
+ * llega al integrador POR HTTP, no lo que devuelve la proyeccion en aislado.
+ */
+function montarConSerie(fabricar: (consulta: ConsultaAnalitica) => SerieOperativa) {
+  const logError = vi.fn();
+  const logger: ErrorLogger = { logError };
+  const consultar = vi.fn(async (consulta: ConsultaAnalitica) => fabricar(consulta));
+  const service: IAnaliticaOperativaService = {
+    consultar,
+    async consultarAgregado(): Promise<never> {
+      throw new Error("este canal sirve la SERIE, no el agregado");
+    },
+  };
+  const deps: AnaliticaApiKeyDeps = {
+    autenticar: async () => OK,
+    analitica: { service, logger, now: () => AHORA },
+  };
+  return { deps, consultar, logError };
+}
+
 const BASE = "http://localhost/api/ordenes/api-key/analitica";
 
 /** Peticion con la key en el header, como la manda un integrador de verdad. */
@@ -602,5 +624,107 @@ describe("267/R16 + R45 · un lote con UNA metrica no publicable no sirve NADA",
 
     expect(a.status).toBe(403);
     expect(await b.text()).toBe(await a.text());
+  });
+});
+
+/* -------------------------------------------------------------------------------------------- */
+/* ENMIENDA 2026-08-24 — la forma servida POR HTTP: `data`, y los dias que no se pueden leer      */
+/* no viajan. La proyeccion en aislado es de `analitica-api-key-contrato.test.ts`; aqui se        */
+/* comprueba que eso es lo que sale por el cable, con su status.                                  */
+/* -------------------------------------------------------------------------------------------- */
+
+describe("2026-08-24 · el cuerpo servido omite los dias no legibles y nunca los pone en cero", () => {
+  it("el dia en curso y el no comparable no viajan; el resto si, y el array se llama `data`", async () => {
+    const { deps } = montarConSerie((consulta) => ({
+      metricaId: consulta.metrica.id,
+      unidad: consulta.metrica.unidad,
+      unidadDeConteo: consulta.metrica.unidadDeConteo,
+      rango: consulta.rango,
+      puntos: [
+        { fecha: "2026-08-01", valor: 5 },
+        { fecha: "2026-08-02", valor: 7 },
+        { fecha: "2026-08-03", valor: 2, parcial: true, corteAt: AHORA.toISOString() },
+      ],
+      cobertura: {
+        fechasNoComparables: ["2026-08-01"],
+        penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+      },
+    }));
+
+    const res = await handleAnaliticaApiKey(pedir(QUERY_OK), deps);
+
+    expect(res.status).toBe(200);
+    const texto = await res.text();
+    expect(JSON.parse(texto).metricas[0].data).toEqual([{ fecha: "2026-08-02", valor: 7 }]);
+    // Ni rastro de lo retirado.
+    for (const retirada of [
+      "cobertura",
+      "penumbra",
+      "fechasNoComparables",
+      "unidadDeConteo",
+      "parcial",
+      "corteAt",
+      '"puntos"',
+    ]) {
+      expect(texto).not.toContain(retirada);
+    }
+    // Y ningun cero de relleno: los dos dias caidos no estan en `data` con otro valor. (Las dos
+    // fechas SI aparecen en el cuerpo, pero solo dentro de `rango`, que es el eco de lo pedido y
+    // no se recorta: por eso se mira `data` y no la cadena entera.)
+    const dias: string[] = JSON.parse(texto).metricas[0].data.map(
+      (p: { fecha: string }) => p.fecha,
+    );
+    expect(dias).not.toContain("2026-08-01");
+    expect(dias).not.toContain("2026-08-03");
+    // El eco, en cambio, sigue siendo lo que se pidio.
+    expect(JSON.parse(texto).rango).toEqual({ desde: "2026-08-01", hasta: "2026-08-03" });
+  });
+
+  it("si TODOS los dias se omiten, es 200 con `data: []` y el rango pedido intacto, no un 500", async () => {
+    // `desde=hoy&hasta=hoy`: el unico dia pedido es el que esta en curso. Recortar el rango
+    // devolveria un rango invertido o un 422 a un integrador que pregunto algo legitimo.
+    const { deps } = montarConSerie((consulta) => ({
+      metricaId: consulta.metrica.id,
+      unidad: consulta.metrica.unidad,
+      unidadDeConteo: consulta.metrica.unidadDeConteo,
+      rango: consulta.rango,
+      puntos: [{ fecha: "2026-08-03", valor: 4, parcial: true }],
+      cobertura: {
+        fechasNoComparables: [],
+        penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+      },
+    }));
+
+    const res = await handleAnaliticaApiKey(
+      pedir(`?metricas=${PUBLICABLE}&desde=2026-08-03&hasta=2026-08-03`),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo.rango).toEqual({ desde: "2026-08-03", hasta: "2026-08-03" });
+    expect(cuerpo.metricas).toHaveLength(1);
+    expect(cuerpo.metricas[0].data).toEqual([]);
+  });
+
+  it("`valor: null` viaja como null por el cable: no se convierte en 0 al serializar", async () => {
+    const { deps } = montarConSerie((consulta) => ({
+      metricaId: consulta.metrica.id,
+      unidad: consulta.metrica.unidad,
+      unidadDeConteo: consulta.metrica.unidadDeConteo,
+      rango: consulta.rango,
+      puntos: [{ fecha: "2026-08-02", valor: null }],
+      cobertura: {
+        fechasNoComparables: [],
+        penumbra: "ordenes_vivas_al_horizonte_sin_transicion_posterior",
+      },
+    }));
+
+    const res = await handleAnaliticaApiKey(pedir(QUERY_OK), deps);
+
+    expect(res.status).toBe(200);
+    const texto = await res.text();
+    expect(texto).toContain('"valor":null');
+    expect(JSON.parse(texto).metricas[0].data).toEqual([{ fecha: "2026-08-02", valor: null }]);
   });
 });
