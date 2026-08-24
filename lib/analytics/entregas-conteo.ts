@@ -156,7 +156,14 @@ function idUtil(valor: unknown): valor is string {
  *   mensajero        -> DENEGADO. «El mensajero no tiene seccion de analitica, no debe ver
  *                       nada relacionado con analitica.» No es `acotado` a lo suyo: es
  *                       prohibido, que es una respuesta distinta y no un cero.
- *   apiKey           -> DENEGADO por el mismo criterio que `ROLES_SIN_ANALITICA`.
+ *   apiKey           -> DENEGADO. Feature 267 (2026-08-23): la 267 abrio la analitica al
+ *                       integrador, pero SOLO dentro de `resolverAlcance` y SOLO por el
+ *                       canal `api_key` (lista `ROLES_ANALITICA_INTEGRACION`, que sustituye
+ *                       aqui a la referencia ya caduca a `ROLES_SIN_ANALITICA`, hoy VACIA).
+ *                       Este contador es del canal de SESION y no recibe `canal` por
+ *                       parametro, asi que el `apiKey` sigue fuera por no ser lector: no
+ *                       esta en `ROLES_ANALITICA` y lo para el `esRolAnalitica` de abajo,
+ *                       igual que un rol inventado.
  *
  * TOTAL y FALLA CERRADO, igual que `resolverAlcance`: no lanza con entrada basura, no tiene
  * rama `default` que conceda, y todo camino que no sepa decir QUE ve el actor deniega. Sin
