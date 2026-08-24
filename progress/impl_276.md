@@ -191,9 +191,9 @@ Fixtures (`intentos-entrega`, `inventario-transiciones-140`), la guardia de tran
 | R5 | `mis-asignaciones-tope-intentos` 5, 5.bis · `gestion-desde-ayuda-tope-intentos` 2, 2.bis |
 | R6 | `mis-asignaciones-tope-intentos` 1 · `tope-intentos-pii.guardia` («los DOS motivos son distintos», y el de gestión enumera los tres desenlaces) |
 | R7 | `mis-asignaciones-tope-intentos` 6a/6b · `guia-asignacion-tope-intentos` 4a/4b · `asignacion-satelite-tope-intentos` 4a/4b · `cierres-admin-tope-sin-gestion` (3 casos) · `tope-intentos-dto-derivado` (umbral 5) · `tope-intentos.test.ts` 4b |
-| R8 | **servidor:** `tope-intentos-dto-derivado` (los dos DTO). **UI: pendiente de `frontend_dev`** |
-| R9 | **pendiente de `frontend_dev`** (el texto explicativo del panel) |
-| R10 | `tope-intentos-dto-derivado` («el UMBRAL no viaja en el DTO») · `tope-intentos.test.ts` 5 · `tope-intentos-pii.guardia` |
+| R8 | **servidor:** `tope-intentos-dto-derivado` (los dos DTO). **UI:** `GestionarOrdenPanelTope` (5 casos de presencia/ausencia + 2 contra la lista compartida) · `GestionarDesdeAyudaModalTope` (4 del modo que no abre + 1 de que «Rechazar» sí + la tabla derivada) |
+| R9 | `GestionarOrdenPanelTope` → «el hueco se explica con palabras» (3) · `GestionarDesdeAyudaModalTope` → «la ventana explica el porqué» (2) |
+| R10 | `tope-intentos-dto-derivado` («el UMBRAL no viaja en el DTO») · `tope-intentos.test.ts` 5 · `tope-intentos-pii.guardia` · **UI:** `intentos-entrega.test.tsx` → «276/R10» (las dos superficies, leídas sin comentarios) · `GestionarOrdenPanelTope` → «ninguna cifra» · `GestionarDesdeAyudaModalTope` → «ninguna cifra» |
 | R11 | `mis-asignaciones-tope-intentos` 7, 7.bis · `gestion-desde-ayuda-tope-intentos` 3, 3.bis |
 | R12 | `liberacion-reprogramada-tope` 1, 3 · 🔴 `liberacion-reprogramada-cierre-real` (los 4 casos) |
 | R13 | `liberacion-reprogramada-tope` 1 (`liberarOrden` **ni se llama**) |
@@ -426,3 +426,156 @@ que la aplicó. Un comentario con el número viejo es barato; un checksum roto n
 carpeta no lleva número de ficha, así que no hay nada más que tocar ahí.
 
 Los mensajes de los commits anteriores siguen diciendo `273`: son historia y no se reescriben.
+
+---
+---
+
+# Feature 276 — bitácora de implementación (FRONTEND: T11 y T12)
+
+> Misma rama `feature/276-tope-de-intentos`. **Alcance: la capa de presentación y nada más.** No se
+> tocó ningún servicio, ningún repositorio, ninguna Server Action, ninguna migración ni ningún tipo
+> de `lib/`. Lo que el servidor entregaba —`enElTope` en los dos DTO y el módulo puro
+> `lib/types/tope-intentos.ts`— se consumió tal cual: **no se derivó nada nuevo ni se añadió
+> contrato**.
+
+## T11 · El panel del mensajero
+
+`app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx`:
+
+- el juego de desenlaces sale ahora de `botonesDeResultado(enElTope)`, que filtra
+  `RESULTADO_BOTONES` **completo** con `permitidoEnElTope` y sólo después lo parte en los dos
+  bloques visuales (la grilla y el incidente aparte de la 158/R33). Se filtra antes de partir a
+  propósito: el día que un desenlace cambie de bloque, la regla del tope lo sigue alcanzando;
+- aparece `TOPE_INTENTOS_NOTA` encima de la grilla, con `role="note"` (R9). No es `alert`: no es la
+  consecuencia de un error del mensajero, es la condición de esa orden;
+- **«Reportar incidente» sigue visible.** Es la decisión 3 del humano y tiene su propio caso rojo
+  (mutación 4, más abajo): si alguien lo filtrara, tres asertos caen.
+
+Las dos constantes de módulo `RESULTADO_BOTONES_NORMALES` / `_APARTE` desaparecen —las sustituye la
+función— y el bloque del incidente pasa a colgar de que **quede algo que ofrecer**: hoy esa
+condición no se cumple nunca, y está para que no quede un separador con un aviso y ningún botón.
+
+## T12 · La ventana de la tienda
+
+`app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx`: con `orden.enElTope` y un
+`resultado` que la lista de inclusión no admite, **el modo no se abre**. No es un confirmar apagado:
+no se monta el campo de fecha, ni el motivo, ni el selector de fotos, ni el botón de confirmar. Lo
+único que queda es la nota (`GESTION_AYUDA_TOPE_NOTA`) y la salida («Entendido»).
+
+Por qué así y no con un confirmar deshabilitado: en esta ventana **la evidencia es obligatoria
+también al reprogramar** (237/D2). Dejarla abrir significaría que la tienda busca la captura de la
+conversación con el cliente, la adjunta, escribe el motivo, elige fecha… y **entonces** recibe el
+`conflict`. La guarda del servidor (T5) sigue estando y sigue siendo la de verdad; lo que esto
+ahorra es el trabajo tirado.
+
+## Archivos
+
+**Producción (2, los dos de presentación):**
+`app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx` ·
+`app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx`
+
+**Tests nuevos (2):** `tests/components/GestionarOrdenPanelTope.test.tsx` (12 casos) ·
+`tests/components/GestionarDesdeAyudaModalTope.test.tsx` (12 casos)
+
+**Test ampliado (1):** `tests/unit/components/intentos-entrega.test.tsx` (+3 casos, «276/R10»)
+
+## Los defectos que se inyectaron, y qué se puso rojo
+
+Cada mutación se aplicó al árbol, se corrió la suite afectada y se revirtió con `git checkout`.
+Ninguna línea de esta tabla es una lectura del código.
+
+| # | Defecto inyectado | Resultado |
+| --- | --- | --- |
+| 1 | El panel ignora `enElTope`: `const visibles = RESULTADO_BOTONES` | 🔴 **3 rojos** en `GestionarOrdenPanelTope` (el caso literal y los dos que comparan contra la lista compartida) |
+| 2 | Se borra la nota de R9 del paso de resultados | 🔴 **3 rojos** (los dos del texto y el de «ninguna cifra», que ya no encuentra el nodo) |
+| 3 | La nota dice «llevas 2 de 3 intentos» (R10 roto) | 🔴 **2 rojos**: el literal y el de «ninguna cifra» |
+| 4 | El filtro del tope se lleva también «Reportar incidente» | 🔴 **3 rojos**, uno de ellos el que nombra la decisión 3 del humano. `GestionarOrdenPanelIncidente` sigue **verde** (su fixture no está en el tope): sin el archivo nuevo, esa regresión pasaba entera |
+| 5 | `orden.enElTope === true` → `!== false` (el campo ausente se lee como tope) | 🔴 **3 rojos**: el de no-regresión del fixture viejo **y dos de `GestionarOrdenPanelIncidente`**, que es exactamente la flota que se quedaría sin poder reprogramar |
+| 6 | El modal deja de bloquear (`bloqueadoPorTope = false`) | 🔴 **8 rojos** en `GestionarDesdeAyudaModalTope`; `GestionarDesdeAyudaModal` (el de la 237) sigue verde, como debe |
+| 7 | El modal bloquea **los dos** modos en el tope | 🔴 **2 rojos**: «Rechazar sigue abriéndose» y la tabla derivada de la lista compartida |
+| 8 | El modal re-deriva la regla importando `reintentosConfig` y comparando intentos | 🔴 **1 rojo** en `intentos-entrega` → «276/R10» |
+
+Las mutaciones 4, 5 y 7 son las que importan de verdad: las tres dejan la pantalla **plausible**
+—no rompen ningún flujo, no lanzan nada— y las tres cambian lo que el mensajero o la tienda pueden
+registrar sobre una orden que ya no admite otro intento.
+
+## Verificación
+
+```
+pnpm run typecheck   → 0 errores
+pnpm run lint        → 0 errores (los warnings son los preexistentes)
+./init.sh (COMPLETO) → INIT_EXIT=0 · 1358 archivos · 18.302 tests · 26 skipped · 566 s
+```
+
+- El `INIT_EXIT=` se escribe **dentro** del log: `$?` se captura en la línea siguiente a `init.sh`,
+  antes de cualquier `echo`. Y el log **no** se canaliza por `tail`, que trunca en origen.
+- **El rápido no se intentó**: el diff de la rama toca `db/migrations/`, `db/schema.prisma` y
+  `lib/types/`, así que `--rapido` se niega solo.
+- **Baseline:** la corrida final del backend fue **1356 archivos · 18.275 · 26 skipped**; ésta,
+  **1358 · 18.302 · 26 skipped**. La diferencia son exactamente **+2 archivos y +27 casos**, que son
+  los que esta tanda añade (12 + 12 + 3). **Cero fallos**, así que el delta contra cualquier
+  baseline es 0 por construcción.
+- **Primera corrida: `INIT_EXIT=1`**, y conviene dejar escrito por qué. El mock del test nuevo del
+  modal traía una clave (`estado`) que `GestionarDesdeAyudaResult` no tiene: `vitest run` sobre el
+  archivo suelto pasa en verde **porque no type-checkea**, y sólo el gate lo cazó. Corregido en su
+  propio commit.
+- `pnpm run db:generate` se corrió **antes** de las dos corridas: el cliente de Prisma se comparte
+  entre ramas en esta máquina.
+
+## Lo que me encontré y el spec no preveía
+
+1. **Un `next` con barra y asterisco dentro de un comentario de LÍNEA trunca el archivo para las
+   guardias.** El quitador único del repo (`quitarComentarios`, feature 209) hace **primero** la
+   pasada de bloque: un `/*` escrito dentro de un `//` abre un comentario que se come **todo** hasta
+   el siguiente `*/`, decenas de líneas más abajo. Lo escribí en los dos componentes al explicar que
+   el módulo es puro, y el efecto medido fue que el `import` de `tope-intentos` **desaparecía** del
+   texto que ve cualquier guardia que escanee ese archivo. No falla ruidosamente: el censo ve menos
+   y su verde se lee igual que el bueno. Lo cazó el caso positivo
+   (`expect(codigo).toContain("@/lib/types/tope-intentos")`), que estaba ahí como anti-vacuidad —y
+   sin él, los tres `not.toContain` de al lado habrían pasado sobre un archivo mutilado—. Los dos
+   comentarios se reescribieron sin abrir bloque. **`lib/types/tope-intentos.ts` no tiene el
+   problema**: allí la misma frase vive dentro de un bloque `/** … */`, así que es texto y no abre
+   nada (medido: su código sobrevive entero a la pasada).
+2. **`role="note"` es el selector de los tests, y eso pide vigilancia.** Los dos componentes ya
+   usaban ese rol para otros avisos (el precio de la 237, la lista de lo que falta). En las ramas
+   que estos tests ejercen no coinciden dos, pero un `getByRole("note")` se rompería el día que se
+   añada otro en el mismo paso: queda dicho para que ese rojo se lea como lo que sería —ambigüedad
+   del selector, no regresión de la regla—.
+
+## Lo que NO hice, y hay que decidirlo con esto delante
+
+**La fila de `/novedades` sigue ofreciendo el botón «Reprogramar» sobre una orden en el tope**; lo
+que para es la ventana al abrirse. El spec (T12) pide exactamente eso —«`GestionarDesdeAyudaModal`
+deja de ofrecer «Reprogramar» en el tope», y su «hecho cuando» son casos de ese modal—, así que no
+amplié el alcance por mi cuenta. Lo que costaría hacerlo también en la fila, y por qué no es gratis:
+
+- el juego de botones sale de `ACCIONES_POR_GRUPO`, **una tabla indexada por grupo** que la 236 creó
+  justamente para que no volviera a haber condiciones sueltas dentro de `NovedadAcciones` (su
+  defecto medido: «Habilitar» apareciendo donde no debía). Filtrar por `enElTope` ahí es una
+  decisión **por fila**, que la tabla no modela;
+- el coste de no hacerlo es **un clic y una ventana que se cierra**. No se sube ninguna evidencia,
+  no nace ninguna gestión y no se mueve un céntimo: la ventana no monta el formulario.
+
+Si el humano prefiere que el botón tampoco aparezca, es una ficha corta y con dueño claro (el
+catálogo de acciones), no un parche dentro del componente.
+
+## Lo que el reviewer debe mirar
+
+1. **Que la UI no reimplanta la regla**: los dos componentes llaman a `permitidoEnElTope` y ninguno
+   compara números. Medido por las mutaciones 1, 6 y 8.
+2. **Cada ausencia con su presencia.** Todos los casos negativos de los dos archivos nuevos
+   comprueban en el mismo caso que el render ocurrió; sin eso, un `queryBy…` pasa sobre un árbol
+   vacío. La mutación 4 lo enseña al revés: `GestionarOrdenPanelIncidente` se queda **verde** con el
+   incidente borrado del tope.
+3. **`enElTope === true`, no `!== false`.** El DTO lo declara opcional por el patrón aditivo; leer la
+   ausencia como «en el tope» dejaría sin reprogramar a media flota (mutación 5).
+4. **Los textos de R9 se escriben a mano en los tests**, nunca contra la constante importada. Lo que
+   sí se importa es la lista compartida, y sólo donde el punto del caso es denunciar una divergencia.
+5. **El botón de la fila de `/novedades`** (sección de arriba): es lo único de la superficie de la
+   tienda que queda sin cerrar, y es una decisión declarada, no un olvido.
+
+## Estado
+
+**T11 y T12: completos y verdes.** Con esto, la 276 tiene su UI cerrada; lo único que sigue
+pendiente de la ficha es lo que ya decía el backend: **R37 se vuelve a ejecutar contra producción
+inmediatamente antes de desplegar**.
