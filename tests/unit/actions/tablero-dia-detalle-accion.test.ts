@@ -4,7 +4,9 @@ import { leerDetalleMensajeroDia } from "@/lib/actions/tablero-dia";
 import { TableroDiaService } from "@/lib/services/TableroDiaService";
 import type { ResultadoDetalleDia } from "@/lib/types/tablero-dia";
 
-import { RepositorioDoble } from "../services/_doble-tablero-dia";
+import { ordenDeListado } from "@/tests/fixtures/orden-detalle-dia";
+
+import { HistorialDoble, OrdenesDoble, RepositorioDoble } from "../services/_doble-tablero-dia";
 
 // Feature 192 (B7.7) — R42, R62, R63.
 //
@@ -42,22 +44,18 @@ function montar(): { repo: RepositorioDoble; service: TableroDiaService } {
     (filtro, mensajeroId) =>
       mensajeroId === DE_OTRA_ZONA && filtro.tipo === "zona" && filtro.zonaId === ZONA_Y
         ? {
-            ordenes: [
-              {
-                ordenId: "o1",
-                numGuia: "1",
-                estatus: "en_reparto",
-                resultadoDelDia: null,
-                cliente: "Ana",
-                destino: "X",
-                asignadoAt: AHORA.toISOString(),
-              },
+            filas: [
+              { ordenId: "o1", resultadoDelDia: null, asignadoAt: AHORA.toISOString() },
             ],
             total: 1,
           }
-        : { ordenes: [], total: 0 },
+        : { filas: [], total: 0 },
   );
-  return { repo, service: new TableroDiaService(repo) };
+  // FEATURE 260 (B7) — el detalle ahora HIDRATA. El hidratador sabe resolver esa unica orden,
+  // asi que el caso "el mensajero de otra zona SI existe" sigue devolviendo una fila de verdad
+  // y no un vacio que pareceria confirmar lo contrario.
+  const ordenes = new OrdenesDoble(new Map([["o1", ordenDeListado({ id: "o1" })]]));
+  return { repo, service: new TableroDiaService(repo, ordenes, new HistorialDoble()) };
 }
 
 /** La respuesta con el id pedido normalizado: lo unico que legitimamente varia es el eco. */
@@ -90,12 +88,47 @@ describe("leerDetalleMensajeroDia — los tres casos malos", () => {
         total: 0,
         pagina: 1,
         pageSize: 25,
+        // FEATURE 260 (R12) — el alcance viaja tambien en el vacio, y es el MISMO en los tres:
+        // es el del ACTOR, no el del mensajero pedido, asi que no puede delatar nada.
+        alcance: "zona",
       },
     };
 
     expect(normalizar(inexistente)).toEqual(esperado);
     expect(normalizar(otraZona)).toEqual(esperado);
     expect(normalizar(sinOrdenes)).toEqual(esperado);
+  });
+
+  it("FEATURE 260 (B7) — las tres respuestas son BYTE A BYTE la misma, ya serializadas", async () => {
+    // `toEqual` compara valores; esto compara el JSON que de verdad cruza la frontera. Un campo
+    // nuevo que solo apareciera en uno de los tres casos —o un `undefined` frente a una clave
+    // ausente— se ve aqui y no arriba.
+    const { service } = montar();
+    const textos = await Promise.all(
+      [INEXISTENTE, DE_OTRA_ZONA, SIN_ORDENES_HOY].map(async (id) =>
+        JSON.stringify(normalizar(await pedir(id, service))),
+      ),
+    );
+
+    expect(new Set(textos).size, `las tres respuestas no son identicas: ${textos.join(" | ")}`).toBe(
+      1,
+    );
+  });
+
+  it("FEATURE 260 (B7) — ningun caso malo llega a la hidratacion: no hay camino nuevo que delate", async () => {
+    const repo = new RepositorioDoble(
+      () => [],
+      () => ({ filas: [], total: 0 }),
+    );
+    const ordenes = new OrdenesDoble();
+    const historial = new HistorialDoble();
+    const service = new TableroDiaService(repo, ordenes, historial);
+
+    for (const id of [INEXISTENTE, DE_OTRA_ZONA, SIN_ORDENES_HOY]) await pedir(id, service);
+
+    expect(repo.detalles).toHaveLength(3);
+    expect(ordenes.llamadas).toEqual([]);
+    expect(historial.llamadas).toEqual([]);
   });
 
   it("los tres hacen el mismo trabajo: una consulta con los mismos parametros (R42, tiempo)", async () => {

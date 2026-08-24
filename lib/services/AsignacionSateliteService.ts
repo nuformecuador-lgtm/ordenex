@@ -5,7 +5,10 @@ import type {
   AsignarSateliteServiceResult,
   IAsignacionSateliteService,
 } from "@/lib/interfaces/services/IAsignacionSateliteService";
-import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
+import {
+  MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
+} from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
@@ -23,9 +26,10 @@ const ESTATUS_REPROGRAMADA = "reprogramada";
 // a su propia zona (R2), resuelta server-side por `findUsuarioZonaId`.
 const ROL_AUTORIZADO = "adminSatelite";
 
-// Feature 41/R14 RETIRADA (pedido humano 2026-08-18): aqui vivia `mensajero_bloqueado_por_cierre`,
-// el motivo con que se rechazaba al mensajero con un cierre abierto o vencido. La guarda se fue y
-// el motivo con ella: ya no hay camino por el que este servicio pueda emitirlo.
+// FEATURE 271 (2026-08-23): el motivo del rechazo por mensajero bloqueado VUELVE a tener camino, y
+// vive COMPARTIDO en `lib/services/mensajes-bloqueo.ts` — el mismo texto que emiten las otras dos
+// escrituras de asignacion, porque son la misma regla. Entre el 2026-08-18 y hoy no habia ninguno:
+// la guarda se habia retirado y el motivo con ella.
 
 // Metodos de repo que consume el service (inyeccion por constructor). Se declara
 // como Pick para dobles de test sin DB/HTTP (patron RecepcionSateliteService).
@@ -37,10 +41,18 @@ type AsignacionSateliteRepo = Pick<
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
   | "existeBodegaSateliteBloqueada" // feature 41/R18 (hoy: solo la causa (ii), el cierre de la bodega)
-  // ⚠️ FEATURE 241: `findMensajerosBloqueadosParaGestion` YA NO FIGURA AQUI, y su ausencia es el
-  // mecanismo. Asignar es RECIBIR TRABAJO y eso no se bloquea nunca (regla 2, firmada el
-  // 2026-08-20). Mientras el metodo no este en este `Pick`, este service no puede consultarlo
-  // aunque el doble de test lo ofrezca: la regla deja de depender de que nadie escriba la llamada.
+  // ⚠️ FEATURE 271 (2026-08-23): EL PREDICADO **VUELVE** A ESTE `Pick`, Y ESO ES EL CAMBIO DE REGLA.
+  //
+  // La 241 protegia su asimetria con la AUSENCIA: mientras el metodo no estuviera aqui, este service
+  // no podia consultarlo aunque el doble de test lo ofreciera, y la regla dejaba de depender de que
+  // nadie escribiera la llamada. Resuelta Q1 —el bloqueo alcanza TODO, reparto y recoleccion—, esa
+  // ausencia deja de proteger nada y pasa a ser el agujero.
+  //
+  // El nombre cambio con el alcance: el viejo (`…ParaGestion`) decia PARA QUE bloqueaba; el nuevo
+  // dice POR QUE. Si alguien quiere volver a exceptuar esta
+  // superficie, tendra que SACARLO de este `Pick` **y** escribir por que — que es exactamente la
+  // friccion que se busca.
+  | "findMensajerosBloqueadosPorCierres" // feature 271/R29: recibir trabajo nuevo SI se bloquea
   | "findParaAsignabilidad" // feature 92/R8: gate de coordenadas
 >;
 
@@ -103,21 +115,39 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       };
     }
 
-    // 3b. Feature 41/R14 RETIRADA (2026-08-18) y FEATURE 241 (2026-08-20): AQUI ESTABA EL FALLO
-    //     VIVO, no solo una guarda ausente.
+    // 3b. FEATURE 271 (T4.2, R29/R30) — LA GUARDA DE «MENSAJERO BLOQUEADO POR CIERRES» VUELVE, Y
+    //     ESTA ES LA SUPERFICIE DONDE OCURRIO EL INCIDENTE DEL 18/08. Merece releerse entero:
     //
-    //     Aqui se rechazaba al mensajero con un cierre abierto. La guarda se retiro... y el
-    //     `NOT EXISTS` que `asignarSateliteLote` llevaba dentro del UPDATE crudo NO, con el
-    //     criterio de antes. Resultado en produccion: esta pantalla dejaba elegir al mensajero,
-    //     el UPDATE tocaba 0 filas y el adminSatelite recibia «Actualiza la lista y vuelve a
+    //     Aqui se rechazaba al mensajero con un cierre abierto. El 2026-08-18 la guarda se retiro...
+    //     y el `NOT EXISTS` que `asignarSateliteLote` llevaba dentro del UPDATE crudo NO, con el
+    //     criterio de antes. Resultado en produccion: esta pantalla dejaba elegir al mensajero, el
+    //     UPDATE tocaba 0 filas y el adminSatelite recibia «Actualiza la lista y vuelve a
     //     intentarlo» — falso, porque las ordenes estaban bien y reintentar no lo arreglaba nunca.
-    //     Lectura y escritura afirmando lo contrario sobre la misma accion.
+    //     Lectura y escritura afirmando lo contrario sobre la MISMA accion.
     //
-    //     La 241 lo cierra por el lado de la regla: se quito el `NOT EXISTS` del repositorio. Las
-    //     DOS comprobaciones dicen ahora lo mismo —asignar no mira cierres— y ese motivo ya no
-    //     tiene camino por el que emitirse. El predicado sigue vivo en el repo, pero renombrado a
-    //     `findMensajerosBloqueadosParaGestion` y fuera de este `Pick`: es de gestionar y cobrar,
-    //     no de asignar.
+    //     La 241 lo cerro quitando el `NOT EXISTS` del repositorio y dejando la regla en «asignar no
+    //     mira cierres». El 2026-08-23 el humano revirtio esa regla: acumular dos cierres —o
+    //     arrastrar uno re-solicitable— TAMBIEN bloquea recibir trabajo nuevo (Q1). Lo que SOBREVIVE
+    //     de la 241 es que un `solicitado` a secas (N=1, V=0) NO bloquea.
+    //
+    //     ⚠️ EL `NOT EXISTS` **NO** SE REPONE (design §12/A5). La guarda vive AQUI, en el service,
+    //     UNA sola vez, y el repositorio sigue sin mirar cierres. Dos escrituras del mismo criterio
+    //     en dos capas es LITERALMENTE lo que produjo el incidente: si alguien quiere defensa en
+    //     profundidad en el SQL, tendra que reponer el MISMO criterio —que ahora es un CONTEO, no
+    //     una lista de estados— y probarlo contra Postgres. Este spec dice que no lo haga.
+    //
+    //     Todo-o-nada con `detalle` por orden, igual que las demas guardas de este metodo: ninguna
+    //     orden cambia de estado (R30).
+    const bloqueados = await this.repo.findMensajerosBloqueadosPorCierres([input.mensajeroId]);
+    if (bloqueados.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: input.ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+        })),
+      };
+    }
 
     const ordenIds = input.ordenIds;
 

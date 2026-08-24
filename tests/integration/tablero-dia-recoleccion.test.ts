@@ -2,12 +2,14 @@ import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { FilaTableroDia } from "@/lib/types/tablero-dia";
+import { ventanaDelDiaEnCursoCR } from "@/lib/utils/ventana-dia-cr";
 
 import {
   FECHA_CR,
   VENTANA,
   crearGestion,
   crearOrden,
+  diaReparto,
   instanteCR,
   repositorio,
   sembrarBase,
@@ -33,6 +35,17 @@ import {
 // El riesgo del segundo camino no es que no encuentre nada: es que encuentre lo mismo DOS
 // VECES. Por eso la union es de CONJUNTOS (`UNION`, no `UNION ALL`) y por eso cada caso de
 // aqui vuelve a assertar la identidad de ocho sumandos de R25.
+
+// ── FEATURE 259 (T3.3) — R10 y R11 ────────────────────────────────────────────────────────────
+//
+// La premisa «esas ordenes no tienen dia de reparto» solo es cierta EN EL INSTANTE de la
+// transicion. La secuencia que lo desmonta, y que C9 siembra tal cual: 08:00 mandan a ANA a
+// recoger; 14:00 la orden ya esta en bodega y se asigna a BETO PARA MAÑANA, con lo que
+// `mensajero_asignado_id` SE SOBRESCRIBE. Sin la clausula de la rama, el tablero de hoy la pesca
+// por el historial y la agrupa por el mensajero ACTUAL: aparece hoy en la tarjeta de BETO, en
+// `sinRecoger`. La acusacion de «trabajo parado» sobre quien ni fue a recoger.
+const MANANA_CR = "2001-06-16";
+const VENTANA_MANANA = ventanaDelDiaEnCursoCR(instanteCR(MANANA_CR, "19:00"));
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
@@ -240,6 +253,76 @@ describeSiHayBase("tablero del dia — el camino de recoleccion (Postgres real)"
     // posterior es obligatorio, y es el que aplica el recorte una sola vez.
     expect(resultado.deA).toEqual([]);
     expect(resultado.deB).toHaveLength(1);
+  });
+
+  it("C9 · recoleccion de HOY pero RESERVADA para mañana: no cuenta hoy, y sí mañana (259/R11)", async () => {
+    // ⚠️ SE SIEMBRA CON EL MENSAJERO CAMBIADO A PROPOSITO. Con un solo mensajero, el caso
+    // probaria la mitad: lo que hace daño no es solo que la orden aparezca un dia que no le
+    // toca, sino que aparezca en la tarjeta de BETO, que ni fue a recoger ni tiene que
+    // repartirla hoy.
+    const resultado = await enTransaccionRevertida(prisma, async (tx) => {
+      const base = await sembrarBase(tx);
+
+      // 08:00 — mandan a ANA a recoger. `asignado_at` y `fecha_reparto` siguen nulos: la 157 no
+      // estampa ninguna de las dos (192/R59).
+      const orden = await crearOrden(tx, base, {
+        clave: "c9-ana-recoge-beto-reparte",
+        estatus: "recolectando",
+        mensajeroId: base.mensajero1,
+        asignadoAt: null,
+      });
+      await transicionDeRecoleccion(tx, base, orden, instanteCR(FECHA_CR, "08:00"));
+
+      // 14:00 — la orden ya esta en bodega y se asigna a BETO PARA MAÑANA. Esta escritura ES el
+      // punto del caso: `mensajero_asignado_id` se SOBRESCRIBE, y la fila de historial de Ana
+      // sigue ahi, con fecha de hoy.
+      await tx.orden.update({
+        where: { id: orden },
+        data: {
+          mensajeroAsignadoId: base.mensajero2,
+          asignadoAt: instanteCR(FECHA_CR, "14:00"),
+          fechaReparto: diaReparto(MANANA_CR),
+          estatusId: base.estatus.get("por_recoger") as string,
+        },
+      });
+
+      const repo = repositorio(tx);
+      const mias = (filas: readonly FilaTableroDia[]) =>
+        filas.filter((f) => f.mensajeroNombre.endsWith("Prueba"));
+      return {
+        ordenId: orden,
+        hoy: mias(await repo.contarPorMensajero(VENTANA, { tipo: "global" })),
+        manana: mias(await repo.contarPorMensajero(VENTANA_MANANA, { tipo: "global" })),
+      };
+    });
+
+    // Hoy: en NINGUNA tarjeta. Ni en la de Beto (no es trabajo suyo hoy) ni en la de Ana.
+    expect(resultado.hoy).toEqual([]);
+
+    // Mañana: en la de Beto, que es de quien es el trabajo.
+    expect(resultado.manana).toHaveLength(1);
+    expect(resultado.manana[0].mensajeroNombre).toContain("Beto");
+    expect(resultado.manana[0]).toMatchObject({ asignadas: 1, sinRecoger: 1 });
+    identidad(resultado.manana);
+  });
+
+  it("C10 · recoleccion de HOY y reservada para HOY: cuenta UNA sola vez (259/R10, R12)", async () => {
+    // La union es de CONJUNTOS: alcanzable por la rama de reparto (a) y por la de recoleccion,
+    // sigue aportando exactamente 1. Con `UNION ALL` valdria 2 y la identidad se rompería.
+    const filas = await conteo(async (tx, base) => {
+      const orden = await crearOrden(tx, base, {
+        clave: "c10-recoleccion-para-hoy",
+        estatus: "recolectando",
+        mensajeroId: base.mensajero1,
+        asignadoAt: instanteCR(FECHA_CR, "07:30"),
+        fechaReparto: diaReparto(FECHA_CR),
+      });
+      await transicionDeRecoleccion(tx, base, orden, instanteCR(FECHA_CR, "08:00"));
+    });
+
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ asignadas: 1, sinRecoger: 1 });
+    identidad(filas);
   });
 
   it("una recoleccion sin mensajero asignado no aparece en ninguna tarjeta (R60)", async () => {

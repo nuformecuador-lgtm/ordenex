@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { RecepcionSateliteService } from "@/lib/services/RecepcionSateliteService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
@@ -70,7 +71,11 @@ function buildService(): IRecepcionSateliteService {
   return new RecepcionSateliteService(
     ordenRepo,
     // Feature 160 (R11/R25): derivador de intentos EN LOTE (un solo lote para los 5 grupos).
-    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 
@@ -86,7 +91,9 @@ function buildAsignacionService(): IAsignacionSateliteService {
 // Feature 34/T6: repo minimo del loader de mensajeros de la zona (solo lectura).
 function buildOrdenRepoParaMensajeros(): Pick<
   IOrdenRepository,
-  "findUsuarioZonaId" | "findMensajerosByZona"
+  | "findUsuarioZonaId"
+  | "findMensajerosByZona"
+  | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -104,7 +111,12 @@ export interface AsignacionSateliteDeps {
 
 // Feature 34/T6: deps del loader de mensajeros (inyecta el repo en tests).
 export interface ListarMensajerosSateliteDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findUsuarioZonaId" | "findMensajerosByZona">;
+  ordenRepo?: Pick<
+    IOrdenRepository,
+    | "findUsuarioZonaId"
+    | "findMensajerosByZona"
+    | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
+  >;
   getActor?: () => Promise<Actor | null>;
 }
 
@@ -281,6 +293,13 @@ export async function asignarDesdeSatelite(
  * modal de asignacion. Rol != adminSatelite -> forbidden; sin zona -> lista vacia
  * (R6). Scoped a la zona del actor (server-side), NUNCA a un parametro del cliente.
  * Espejo de `listarMensajerosParaAsignacion` (17) pero por la zona del actor.
+ *
+ * FEATURE 271 (T4.5, R32) — + `bloqueadosIds`, Y ES LA MITAD QUE FALTABA. Este selector NO
+ * devolvia NADA de esto, ni antes ni despues de la 241: el del maestro al menos habia tenido el
+ * dato, este nunca. Y esta es la superficie DONDE OCURRIO EL INCIDENTE DEL 18/08 —la pantalla
+ * dejaba elegir a un mensajero que el servidor rechazaba, con un mensaje falso—, asi que el
+ * conjunto que viaja aqui tiene que ser EXACTAMENTE el que `AsignacionSateliteService.asignar`
+ * rechaza (T4.2). Ni uno mas, ni uno menos.
  */
 export async function listarMensajerosSatelite(
   deps: ListarMensajerosSateliteDeps = {},
@@ -293,7 +312,9 @@ export async function listarMensajerosSatelite(
     const zonaId = await repo.findUsuarioZonaId(actor.usuarioId); // R2
     if (zonaId === null) return { status: "ok" as const, mensajeros: [] }; // R6
     const mensajeros = await repo.findMensajerosByZona(zonaId); // R5
-    return { status: "ok" as const, mensajeros };
+    // R32: el MISMO predicado que aplica el servidor al escribir. No se re-deriva aqui.
+    const bloqueados = await repo.findMensajerosBloqueadosPorCierres(mensajeros.map((m) => m.id));
+    return { status: "ok" as const, mensajeros, bloqueadosIds: [...bloqueados] };
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;

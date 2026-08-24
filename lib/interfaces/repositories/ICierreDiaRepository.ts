@@ -1,6 +1,7 @@
 import type { GestionResultado, MetodoPagoValue } from "@prisma/client";
 import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
 import type { CausaIncidente } from "@/lib/types/causa-incidente";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 import type {
   CierrePasadoDTO,
   CierreTotales,
@@ -17,6 +18,33 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 // orden ya resuelto (R3/R4). `montoRecibido` en STRING (money-safe, R9), null salvo
 // entregada. `evidenciaStoragePath` es el path CRUDO del bucket privado; el service
 // lo FIRMA antes de exponerlo (R5).
+/**
+ * Feature 264 (R9/R10) — UNA ORDEN QUE EL CORTE DIARIO BARRIO A `sin_gestionar` al crear el
+ * cierre, leida de `cierre_sin_gestion`.
+ *
+ * NO es un resultado de gestion: es la AUSENCIA de uno. Por eso NO lleva —ni puede llevar— monto
+ * cobrado, monto recibido, metodo de pago, pago al mensajero, ingreso de Ordenex, ingreso de
+ * bodega, indemnizacion, evidencia ni resultado (R10). Si algun dia aparece uno de esos campos
+ * aqui, es un bug de diseño y no una mejora: la garantia de que esta lista no mueve un total
+ * (R19/R20/R22) es que no hay nada que sumar.
+ *
+ * Todos los descriptivos son los CONGELADOS al barrer (R11), no los que la orden tenga hoy.
+ * Vive en este archivo —y no en el del admin— porque lo devuelven los DOS repositorios: el
+ * detalle del admin y el detalle propio del mensajero comparten componente de pantalla, asi que
+ * tienen que compartir tambien la forma del dato.
+ */
+export interface CierreSinGestionRow {
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  producto: string;
+  tiendaNombre: string;
+  zonaNombre: string;
+  /** `en_reparto` | `ayuda_tienda`; `null` SOLO si no consta (R4/R32/R33). */
+  estatusOrigen: OrderStatusValue | null;
+}
+
 export interface CierreGestionPendienteRow {
   gestionId: string;
   ordenId: string;
@@ -221,6 +249,24 @@ export interface AnularGestionInput {
   actorUsuarioId: string; // R11/R20: quien deshace (rastro + actor del historial)
   estatusEsperadoId: string; // R5: estado en el que la orden DEBE seguir estando
   estatusEnRepartoId: string; // R18: destino
+  /**
+   * FEATURE 261 (B6/B7, R16/R19) — el INSTANTE de la reasignacion, resuelto por el SERVICIO.
+   *
+   * Va como parametro y NO como `NOW()` del motor a proposito: si el instante saliera del reloj
+   * de Postgres y el dia (`diaEnCurso`) del reloj de la aplicacion, las dos columnas podrian
+   * caer a distinto lado de la medianoche de Costa Rica — la clase exacta de
+   * segunda-definicion-del-dia que este repo persigue. Los dos salen del MISMO `now`.
+   */
+  asignadoAt: Date;
+  /**
+   * FEATURE 261 (B6/B7, R17/R18/R19) — el DIA DE COSTA RICA EN CURSO (convencion `@db.Date`:
+   * medianoche UTC de la fecha calendario CR), resuelto por el SERVICIO con `startOfDayCR(now)`.
+   *
+   * NO se calcula dentro del repositorio —que es lo que hacia hasta la 261, leyendo el reloj del
+   * proceso— ni se deriva del reloj del motor. Es el reloj inyectable de R19: sin el, «deshacer a
+   * las 23:59 del 21» no se puede probar sin falsear el reloj global.
+   */
+  diaEnCurso: Date;
 }
 
 /** Feature 146 (R24): proyeccion minima del cierre `solicitado` para componer su aviso. */
@@ -241,61 +287,53 @@ export interface ICierreDiaRepository {
    * en `estados` (por_recoger/en_reparto = pendientes de gestion).
    */
   contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number>;
-  /** R12: `true` si el mensajero ya tiene un cierre en estado `solicitado`. */
-  existeCierreSolicitado(mensajeroId: string): Promise<boolean>;
   /**
-   * Feature 111/R6 — `true` si el mensajero tiene un cierre en estado `vencido` (gemelo de
-   * `existeCierreSolicitado`, `count WHERE estado='vencido'`). Lo consume `solicitarCierre`
-   * para enrutar al camino de transición en vez de crear un cierre nuevo. Usa el indice
-   * `(mensajero_id, estado)`.
-   */
-  existeCierreVencido(mensajeroId: string): Promise<boolean>;
-  /**
-   * Feature 111/R6/R7/R8 — transiciona el `vencido` del mensajero a `solicitado` con una
-   * escritura GUARDADA por estado (`updateMany WHERE mensajero_id = actor AND estado =
-   * 'vencido' SET estado = 'solicitado'`). SOLO cambia `estado`: NO toca los totales snapshot,
-   * `total_pago_mensajero`, `total_ingreso_bodega_rechazos`, los `cierre_id` de las gestiones,
-   * ni `resuelto_por`/`resuelto_at`/`solicitado_at` (money-safe, R8/R21). Devuelve `true` si
-   * afectó 1 fila; `false` si 0 (el `vencido` ya fue resuelto/transicionado entre la lectura y
-   * la escritura -> el service lo traduce a `conflict`, R7). Anti-TOCTOU sin locks.
-   */
-  transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean>;
-  /**
-   * Feature 146 (R24) — datos MINIMOS del cierre `solicitado` vigente del mensajero: su id
-   * (entidad de origen de la notificacion), la zona DESTINO (alcance del `adminSatelite`) y el
-   * nombre del mensajero (anexo, §4.6). Se lee DESPUES de cualquiera de los tres caminos de
-   * exito de `solicitarCierre`, para que los tres notifiquen por el mismo sitio: los dos de
-   * transicion (`vencido`/`rechazado` -> `solicitado`) devuelven solo un booleano y no traen el
-   * id del cierre. `null` si no hay cierre solicitado (el aviso simplemente no se emite).
+   * Feature 146 (R24) -> FEATURE 271 (R56) — datos MINIMOS de UN cierre CONCRETO: su id (entidad de
+   * origen de la notificacion), la zona DESTINO (alcance del `adminSatelite`) y el nombre del
+   * mensajero (anexo, §4.6). `null` si el cierre no existe (el aviso simplemente no se emite).
+   *
+   * ⚠️ RECIBE EL `cierreId`, NO EL `mensajeroId`, Y ESO CIERRA **M9**. Antes era
+   * `findCierreSolicitado(mensajeroId)` con `orderBy createdAt DESC`: derogado el invariante de
+   * «un solo cierre abierto» (R9), con dos `solicitado` devolvia siempre el mas nuevo y el aviso
+   * nombraba el cierre equivocado. El llamador ya tiene el id del cierre que acaba de tocar.
    *
    * OPCIONAL a proposito: declararlo obligatorio romperia los dobles de test de las features
-   * 37/38/109/111 que implementan esta interfaz a mano, y esta feature no puede editarlos. El
-   * repositorio REAL si lo implementa; un doble que no lo traiga simplemente no notifica.
+   * 37/38/109/111 que implementan esta interfaz a mano. El repositorio REAL si lo implementa; un
+   * doble que no lo traiga simplemente no notifica.
    */
-  findCierreSolicitado?(mensajeroId: string): Promise<CierreSolicitadoInfo | null>;
+  findCierreParaAviso?(cierreId: string): Promise<CierreSolicitadoInfo | null>;
   /**
-   * Feature 109/R28 — `true` si el mensajero tiene un cierre en estado `rechazado` (gemelo EXACTO
-   * de `existeCierreVencido`, `count WHERE estado='rechazado'`). Lo consume `solicitarCierre` para
-   * enrutar un `rechazado` (que en el modelo GLOBAL de la 109 BLOQUEA y es RE-SOLICITABLE) al
-   * camino de transicion en vez de crear un cierre nuevo. Usa el indice `(mensajero_id, estado)`.
-   */
-  existeCierreRechazado(mensajeroId: string): Promise<boolean>;
-  /**
-   * Feature 109/R28 — transiciona el `rechazado` del mensajero a `solicitado` con una escritura
-   * GUARDADA por estado (`updateMany WHERE mensajero_id = actor AND estado = 'rechazado' SET estado
-   * = 'solicitado'`), espejo EXACTO de `transicionarVencidoASolicitado`. SOLO cambia `estado`: NO
-   * toca totales snapshot, pago/ingreso, `cierre_id` de gestiones, ni `resuelto_por`/`resuelto_at`/
-   * `motivo_rechazo`/`solicitado_at` (money-safe). Devuelve `true` si afecto 1 fila; `false` si 0
-   * (el `rechazado` ya fue re-solicitado/resuelto entre la lectura y la escritura -> el service lo
-   * traduce a `conflict`). Anti-TOCTOU sin locks.
+   * FEATURE 271 (R18) — el cierre RE-SOLICITABLE (`vencido` o `rechazado`) MAS VIEJO del mensajero,
+   * o `null` si no tiene ninguno. Orden `solicitado_at` ASC con desempate estable por `id` ASC.
    *
-   * ⚠️ FEATURE 241 (2026-08-20): esta linea decia «el desbloqueo definitivo + la liberacion de
-   * `sin_gestionar` ocurren SOLO al APROBAR (R16)». La segunda mitad sigue siendo cierta; la
-   * primera NO. El bloqueo para GESTIONAR se levanta con esta misma escritura, porque `solicitado`
-   * dejo de bloquear (`ESTADOS_CIERRE_BLOQUEAN_GESTION`). La liberacion de `sin_gestionar` si es
-   * del admin al aprobar (109/R16), por otro camino.
+   * ⚠️ SUSTITUYE A `existeCierreVencido` + `existeCierreRechazado`, que hacian elegir por ESTADO y
+   * no por EDAD: con un `rechazado` viejo y un `vencido` nuevo, el servicio resolvia el nuevo
+   * primero, contradiciendo «del mas viejo al mas nuevo». Con un solo cierre abierto daba igual;
+   * con dos, no.
    */
-  transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean>;
+  findCierreResolicitableMasViejo(
+    mensajeroId: string,
+  ): Promise<{ id: string; estado: CierreEstado } | null>;
+  /**
+   * FEATURE 271 (R19/R20) — transiciona ESE cierre a `solicitado`, con el `id` EN EL `where` y la
+   * guarda anti-TOCTOU por `estadoEsperado`. `true` si afecto exactamente 1 fila; `false` si 0
+   * (carrera: ya lo movieron) -> el service lo traduce a `conflict` SIN haber escrito nada.
+   *
+   * ⚠️ EL `id` EN EL `where` ES LA CORRECCION DE **M2**. Sus dos predecesores filtraban por
+   * `(mensajeroId, estado)`: con dos `rechazado` movian LOS DOS, `count` valia 2 y el `=== 1`
+   * devolvia `false` — escribian y reportaban fallo. Con la clave primaria en el `where`, `count`
+   * solo puede ser 0 o 1.
+   *
+   * MONEY-SAFE: SOLO cambia `estado`. NO toca totales snapshot, `total_pago_mensajero`,
+   * `total_ingreso_bodega_rechazos`, los `cierre_id` de las gestiones, ni
+   * `resuelto_por`/`resuelto_at`/`motivo_rechazo`/`solicitado_at`.
+   *
+   * El BLOQUEO del mensajero se levanta con esta misma escritura solo si con ella queda en
+   * `N <= 1, V = 0` (271/R8): con dos cierres abiertos sigue bloqueado, y la salida es que la
+   * bodega apruebe el mas viejo. La liberacion de `sin_gestionar` sigue siendo del admin al
+   * aprobar (109/R16), por otro camino.
+   */
+  transicionarASolicitado(cierreId: string, estadoEsperado: CierreEstado): Promise<boolean>;
   /**
    * R13/R14: bajo prisma.$transaction (todo-o-nada): (a) INSERT cierre_dia con el
    * destino derivado + los totales snapshot (estado `solicitado` por defecto, o
@@ -321,7 +359,18 @@ export interface ICierreDiaRepository {
   findCierrePropioConGestiones(
     cierreId: string,
     mensajeroId: string,
-  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null>;
+  ): Promise<{
+    cierre: CierrePasadoDTO;
+    gestiones: CierreGestionPendienteRow[];
+    /**
+     * Feature 264 (B9/R7/R30) — las ordenes que el corte barrio al crear ESTE cierre. Cuelgan de
+     * `cierre_id`, que el `findFirst` de arriba ya acoto por `mensajero_id` en el WHERE: heredan
+     * ese alcance y NO necesitan guardia propia ni un filtro en memoria.
+     */
+    sinGestion: CierreSinGestionRow[];
+    /** R27/R28: `false` = cierre ANTERIOR al registro; `[]` con `false` NO es «no hubo ninguna». */
+    sinGestionRegistrado: boolean;
+  } | null>;
   /**
    * Feature 170 — FASE 2 (T I.1, R40/R41/R44/R51/R54): UNA PAGINA de los cierres del
    * mensajero + el TOTAL del conjunto.
@@ -359,6 +408,11 @@ export interface ICierreDiaRepository {
    * Ambas escrituras van GUARDADAS en su WHERE (concurrencia-segura): si la gestion dejo de ser
    * deshacible o la orden se movio entre la lectura y la escritura, afecta 0 filas -> rollback
    * -> `false` SIN efectos parciales (el service lo traduce a `conflict`). `true` = deshecha.
+   *
+   * FEATURE 261 (B7, R16/R17/R18) — el paso (2) escribe `fecha_reparto` EN LA MISMA sentencia
+   * que `asignado_at` (la invariante 246/R10 se conserva entera), pero ya no la baja siempre a
+   * hoy: **una reserva a FUTURO se conserva**. La regla vive en un `CASE` dentro del `SET`, asi
+   * que decide sobre la fila y no sobre una lectura previa.
    */
   anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean>;
 }

@@ -177,6 +177,20 @@ export const CENSO_DATATABLE: ArchivoCensado[] = [
     tablas: [{ nombre: "Desglose de pagos del mensajero", estado: "con_descarga" }],
   },
   {
+    // FEATURE 258 (F3.1) — ALTA. El detalle de un mensajero del tablero del día pasó de una
+    // `<Table>` cruda a `<DataTable>` (design.md §8, R23/R35). NO es una tabla nueva para el
+    // usuario: es la misma que ya existía desde la feature 192, que ahora se pinta con la
+    // primitiva. Por eso sube el censo aunque no haya nacido ninguna pantalla.
+    ruta: "app/(app)/monitoreo/_components/DetalleMensajeroPanel.tsx",
+    tablas: [
+      {
+        nombre: "Órdenes del día de un mensajero (detalle del tablero)",
+        estado: "fuera",
+        nota: "vista de LECTURA dentro de un modal de monitoreo, no un libro: R34 de la feature 258 le prohíbe ofrecer acciones, y el diseño le prohíbe expresamente `descarga` y `filtros` en su DataTable. La descarga de estas mismas órdenes vive en `/ordenes`, que sí la ofrece con el alcance completo",
+      },
+    ],
+  },
+  {
     ruta: "app/(app)/ordenes/_components/GenerarGuiaModal.tsx",
     tablas: [
       {

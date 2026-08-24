@@ -79,9 +79,27 @@ export function SincronizarRutaButton({
               fuente: result.trazado.fuente,
             });
           }
-          toast.success(
-            result.omitida ? "La ruta ya estaba al día." : "Ruta sincronizada.",
-          );
+          // Feature 265 (R39/R40/R41/R42) — «Ruta sincronizada.» a secas, con un orden que
+          // calculó la app, es una MEDIA VERDAD dicha en el peor momento: justo cuando el
+          // mensajero está a punto de salir y ya no va a volver a mirar.
+          //
+          // Los tres desenlaces son distintos y se dicen distintos:
+          //   · `omitida`      → no se recalculó nada, y así se dice;
+          //   · orden local    → warning, porque hay algo que revisar antes de salir;
+          //   · lo demás       → el mensaje de siempre. `null` (no consta) entra aquí: sin
+          //                      dato no se afirma nada de más, pero tampoco se alarma (R45).
+          //
+          // El aviso PERSISTENTE de la pantalla cubre el mismo hecho y sobrevive al F5; éste
+          // es el feedback inmediato, no su sustituto.
+          if (result.omitida) {
+            toast.success("La ruta ya estaba al día.");
+          } else if (result.secuenciaFuente === "local") {
+            toast.warning(
+              "Ruta ordenada de forma aproximada: revisa el orden de las paradas.",
+            );
+          } else {
+            toast.success("Ruta sincronizada.");
+          }
           router.refresh(); // R32: refleja el orden nuevo (módulo server-driven, sin SWR)
           break;
         case "conflict":

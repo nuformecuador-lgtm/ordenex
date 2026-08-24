@@ -11,6 +11,7 @@ import type { IFileStorage } from "@/lib/interfaces/external/IFileStorage";
 import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlProvider";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 115 — T6: reflejo de `marcarLuego` en el listado (R17) y privacidad por actor (R20).
 
@@ -64,8 +65,8 @@ function fakeRepo(rows: MiAsignacionRow[]): IGestionOrdenRepository {
 
 const fakeOrdenRepo = {
   findEstatusIdByValue: vi.fn(async () => "x"),
-  findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
-} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion">;
+  findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
+} as unknown as Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle">;
 
 const fakeRutaRepo = {
   findByMensajero: vi.fn(async () => null),

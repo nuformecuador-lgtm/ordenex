@@ -2,17 +2,19 @@ import { describe, it, expect, vi } from "vitest";
 import type { RolValue } from "@prisma/client";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 98: la via sesion (`cargarMasiva`) NO usa el resolver de tarifa (R9). Stub neutro
 // para el 2do parametro requerido del constructor; estos tests no lo ejercitan.
-const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
-  resolveTarifaPorTienda: vi.fn(async () => null),
-  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
-  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
-  resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+// Feature 274/R37: la interfaz colapso a DOS metodos (`resolveTarifa` + `resolveTarifas`); el
+// stub los expone vacios porque la via sesion sigue sin consultarlos (R39: su comportamiento
+// ante la falta de tarifa no cambia).
+const tarifaRepoStub: ITarifaVigenteRepository = {
+  resolveTarifa: vi.fn(async () => null),
+  resolveTarifas: vi.fn(async () => new Map()),
 };
 
 const TIENDA: Actor = { usuarioId: "store1", rol: "adminTienda" };
@@ -25,6 +27,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
   return {
     findById: vi.fn(),
     list: vi.fn(),
+    // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
+    findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-preparacion"),
     // Feature 27: por defecto la tienda NO tiene fulfillment -> en_preparacion (R17/R22).
@@ -120,8 +124,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
     deshacerAsignacionLote: vi.fn(async () => 0),
+    // Feature 262: writer de la correccion del dia de reparto, exigido por IOrdenRepository.
+    corregirDiaRepartoLote: vi.fn(async () => []),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
+    // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,
@@ -959,15 +968,16 @@ describe("BulkOrdenService.cargarMasiva — la ruta la decide la rama, no el can
 describe("BulkOrdenService.cargarMasiva — sin resolución de flete (feature 98/R9)", () => {
   it("no invoca el resolver de tarifa y el BulkSummary no expone costoEnvio", async () => {
     const repo = buildRepo();
-    const tarifaSpy: ITarifaVigentePorTiendaRepository = {
-      resolveTarifaPorTienda: vi.fn(async () => null),
-      resolveTarifaCotizablePorTienda: vi.fn(async () => null), // feature 255, no usado aqui
-      resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+    // Feature 274/R37: los DOS metodos que quedan en la interfaz (el resolver colapso). La
+    // asercion no se debilita al renombrar: se espia lo que hoy EXISTE, y son ambos.
+    const tarifaSpy: ITarifaVigenteRepository = {
+      resolveTarifa: vi.fn(async () => null),
+      resolveTarifas: vi.fn(async () => new Map()),
     };
     const r = await new BulkOrdenService(repo, tarifaSpy).cargarMasiva([row()], TIENDA);
 
-    expect(tarifaSpy.resolveTarifaPorTienda).not.toHaveBeenCalled();
-    expect(tarifaSpy.resolveTarifasPorTiendas).not.toHaveBeenCalled();
+    expect(tarifaSpy.resolveTarifa).not.toHaveBeenCalled();
+    expect(tarifaSpy.resolveTarifas).not.toHaveBeenCalled();
     if (r.status === "ok") {
       // El BulkSummary de la vía sesión no tiene bloque `ordenes` ni costoEnvio en sus filas.
       expect(r.summary).not.toHaveProperty("ordenes");

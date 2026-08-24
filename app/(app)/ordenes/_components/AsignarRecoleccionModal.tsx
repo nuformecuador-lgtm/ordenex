@@ -10,7 +10,7 @@ import type { AsignarRecoleccionResult } from "@/lib/types/orden-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
-import { toMensajeroOptions } from "./mensajero-options";
+import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarRecoleccionModalProps {
@@ -25,6 +25,16 @@ export interface AsignarRecoleccionModalProps {
    * deshabilitan con el motivo a la vista; el service lo revalida igual.
    */
   mensajerosConRepartoIds?: string[];
+  /**
+   * FEATURE 271 (T9.4, R32): ids que el servidor va a RECHAZAR por su cierre. Se deshabilitan con
+   * el motivo a la vista, y el conjunto es EXACTAMENTE el que rechaza `asignarRecoleccion`.
+   *
+   * ⚠️ ESTA MITAD ES LA QUE SE DIO LA VUELTA EL 2026-08-23. La recolección estuvo EXENTA del
+   * bloqueo —«una cosa es repartir y otra recoger»— hasta que el humano lo revirtió con sus
+   * palabras: «un mensajero no puede hacer las dos gestiones, solo una a la vez». Recolectar en
+   * tienda es cobrar, y el dinero que cobre no tendría cierre al que ir.
+   */
+  mensajerosBloqueadosIds?: string[];
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -48,6 +58,7 @@ export function AsignarRecoleccionModal({
   ordenes,
   mensajeros,
   mensajerosConRepartoIds = [],
+  mensajerosBloqueadosIds = [],
   onOpenChange,
   onSuccess,
 }: AsignarRecoleccionModalProps) {
@@ -61,9 +72,14 @@ export function AsignarRecoleccionModal({
     if (open) setMensajeroId("");
   }
 
+  // Los dos motivos, en un solo mapa. El del CIERRE va DESPUÉS: si concurren, gana el que el
+  // mensajero puede resolver por su cuenta.
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
-    new Map(mensajerosConRepartoIds.map((id) => [id, "tiene reparto pendiente"])),
+    new Map([
+      ...mensajerosConRepartoIds.map((id) => [id, "tiene reparto pendiente"] as const),
+      ...mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE] as const),
+    ]),
   );
 
   async function handleConfirm() {

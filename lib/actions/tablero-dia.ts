@@ -8,7 +8,11 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import type { ITableroDiaService } from "@/lib/interfaces/services/ITableroDiaService";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TableroDiaRepository } from "@/lib/repositories/TableroDiaRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { TableroDiaService } from "@/lib/services/TableroDiaService";
 import type { ResultadoDetalleDia, ResultadoTableroDia } from "@/lib/types/tablero-dia";
 
@@ -48,9 +52,23 @@ const entradaDetalleSchema = z.object({
 
 export type EntradaDetalleMensajeroDia = z.infer<typeof entradaDetalleSchema>;
 
+/**
+ * FEATURE 260 (B6) — el cableado de produccion. El servicio recibe TRES colaboradores y una
+ * cache: la consulta del dia decide quien entra, `OrdenRepository` hidrata lo que se pinta con
+ * el mismo camino que el listado de ordenes, y `OrdenHistorialService` aporta los intentos con
+ * el criterio unico del repo. Los tres comparten el MISMO cliente Prisma.
+ */
 function construirServicio(): ITableroDiaService {
+  const prisma = getPrismaClient();
+  const ordenes = new OrdenRepository(prisma);
   return new TableroDiaService(
-    new TableroDiaRepository(getPrismaClient()),
+    new TableroDiaRepository(prisma),
+    ordenes,
+    new OrdenHistorialService(
+      ordenes,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
     crearTableroDiaCacheDeNext(),
   );
 }

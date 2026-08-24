@@ -161,8 +161,15 @@ describe("findHistorialByOrden (R26/R5)", () => {
       actor: { select: { nombre: true } },
     });
 
+    // Feature 262 (B24): el literal CRECE con `clase: "transicion"` y no se relaja a un
+    // `objectContaining`. Este literal ES EL CONTRATO de la fila que sale de este repositorio
+    // —lo que el drawer recibe, campo por campo—, y cambiarlo por una comparacion parcial lo
+    // dejaria verde para siempre. Que este archivo se pusiera rojo al convertir el DTO en union
+    // es la señal buena: `toEqual` compara la forma ENTERA, y por eso vio el campo nuevo aunque
+    // el typecheck no pudiera (el literal va inline, sin anotacion de tipo).
     expect(r).toEqual([
       {
+        clase: "transicion",
         estatusOrigenValue: null, // creacion (R1/R20)
         estatusDestinoValue: "en_preparacion",
         origenTipo: "carga_masiva",
@@ -171,6 +178,7 @@ describe("findHistorialByOrden (R26/R5)", () => {
         createdAt: new Date("2026-07-13T10:00:00.000Z"),
       },
       {
+        clase: "transicion",
         estatusOrigenValue: "en_reparto",
         estatusDestinoValue: "devuelta",
         origenTipo: "gestion",

@@ -159,6 +159,17 @@ describe("253 / D6 — el down de la 146 NO se toca, y esto es la comprobacion d
   });
 });
 
+// ⚠️ ACTUALIZADO EL 2026-08-22 POR LA FEATURE 262 (D7), Y SOLO ESTAS DOS ASERCIONES.
+//
+// Las dos de abajo son sobre el ESQUEMA VIVO —«que tiene `db/schema.prisma` HOY»—, asi que crecen
+// con cada valor que se anada. La 262 anade `dia_reparto_corregido` y `orden_dia_reparto_cambio`
+// con su propia migracion (`*_notificacion_evento_dia_reparto_corregido`) y su propio `down.sql` de
+// recreacion, y tiene su propio archivo de test para ellas.
+//
+// ⛔ TODO LO DEMAS DE ESTE ARCHIVO NO SE TOCA, y esto se escribe para que quede dicho: el UP de la
+// 253, su DOWN con los CUATRO valores de la 146 y la afirmacion de que «el down de la 146 solo
+// dropea» son FOTOS HISTORICAS y siguen siendo ciertas palabra por palabra. Editarlas para
+// «ponerlas al dia» seria borrar la evidencia de lo que aquella migracion hizo.
 describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la deriva", () => {
   it("`NotificacionEvento` del schema gana el valor, y sigue siendo un inventario CERRADO", () => {
     const bloque = /enum NotificacionEvento \{([\s\S]*?)\n\}/.exec(schemaPrisma)![1];
@@ -166,7 +177,14 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       .split("\n")
       .map((l) => l.trim().split(/\s+\/\//)[0].trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"));
-    expect(valores).toEqual([...EVENTOS_146, "postulacion_recurso_pendiente"]);
+    expect(valores).toEqual([
+      ...EVENTOS_146,
+      "postulacion_recurso_pendiente", // feature 253 / D6
+      "dia_reparto_corregido", // feature 262 / D7 (2026-08-22)
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
+    ]);
   });
 
   it("`NotificacionEntidadTipo` del schema, igual", () => {
@@ -175,7 +193,11 @@ describe("253 / D6 — el enum Prisma y el tipo de TypeScript no quedan a la der
       .split("\n")
       .map((l) => l.trim().split(/\s+\/\//)[0].trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"));
-    expect(valores).toEqual([...ENTIDADES_146, "postulacion_recurso"]);
+    expect(valores).toEqual([
+      ...ENTIDADES_146,
+      "postulacion_recurso", // feature 253 / D6
+      "orden_dia_reparto_cambio", // feature 262 / D7 (2026-08-22)
+    ]);
   });
 
   it("`lib/types/notificacion.ts` refleja los dos, sin drift con Prisma", () => {
@@ -211,17 +233,27 @@ describeSiHayBase("253 / D6 — la base aplicada, y el down ejercitado de verdad
     return (filas[0]?.valores ?? "").split(",").filter((v) => v.length > 0);
   }
 
-  it("la base tiene los CINCO eventos, con el nuevo al final", async () => {
+  // ⚠️ ACTUALIZADAS EL 2026-08-22 POR LA 262, y por la misma razon que las dos del schema: estas
+  // dos leen la BASE APLICADA, o sea el estado de HOY, no una foto historica. Con la migracion
+  // `*_notificacion_evento_dia_reparto_corregido` la base tiene SEIS de cada uno. Lo que se
+  // conserva intacto es el orden —`enumsortorder`—, que es lo que demuestra que el valor se ANADIO
+  // al final y no se recreo el tipo.
+  it("la base tiene los SEIS eventos, con los nuevos al final y en orden de adicion", async () => {
     expect(await valoresDe("notificacion_evento")).toEqual([
       ...EVENTOS_146,
-      "postulacion_recurso_pendiente",
+      "postulacion_recurso_pendiente", // feature 253 / D6
+      "dia_reparto_corregido", // feature 262 / D7
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
     ]);
   });
 
-  it("y los CINCO tipos de entidad", async () => {
+  it("y los SEIS tipos de entidad", async () => {
     expect(await valoresDe("notificacion_entidad_tipo")).toEqual([
       ...ENTIDADES_146,
-      "postulacion_recurso",
+      "postulacion_recurso", // feature 253 / D6
+      "orden_dia_reparto_cambio", // feature 262 / D7
     ]);
   });
 

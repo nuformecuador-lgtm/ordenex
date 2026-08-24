@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { NovedadesService } from "@/lib/services/NovedadesService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -82,7 +83,11 @@ function buildService(): INovedadesService {
   return new NovedadesService(
     ordenRepo,
     // Feature 160 (R11/R26): derivador de intentos EN LOTE de la pagina de novedades.
-    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

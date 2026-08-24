@@ -38,6 +38,13 @@ function readSecret(name: string): string | null {
  * nombre canonico del codigo es `GOOGLE_WIF_*`. Se aceptan LOS DOS para no obligar a
  * renombrar variables ya configuradas en Vercel; el canonico gana si ambos estan presentes.
  * Si algun dia el entorno queda unificado, borrar el alias es un cambio de una linea.
+ *
+ * EL PROJECT ID LO USA POR OTRO MOTIVO (ficha 251): ahi el alias no evita un renombrado,
+ * corrige una TRAMPA. `RutaNoConfiguradoError` se lanza citando `GOOGLE_ROUTE_OPT_PROJECT_ID`
+ * (`google-sa-token.ts`), pero durante meses el UNICO nombre que se leia era
+ * `GOOGLE_CLOUD_PROJECT_ID`: quien seguia el mensaje al pie de la letra creaba en Vercel una
+ * variable que el codigo jamas miraba, y el log seguia diciendo exactamente lo mismo. Aceptar
+ * los dos hace que el error y la lectura no puedan volver a divergir.
  */
 function readSecretConAlias(canonico: string, alias: string): string | null {
   return readSecret(canonico) ?? readSecret(alias);
@@ -85,7 +92,10 @@ function readRoutingPreference(name: string): RoutingPreference {
 }
 
 export interface RouteOptimizationConfig {
-  /** Proyecto GCP donde esta habilitado el SKU de Route Optimization. `null` si falta. */
+  /**
+   * Proyecto GCP donde esta habilitado el SKU de Route Optimization. `null` si falta.
+   * Alias aceptado: `GOOGLE_CLOUD_PROJECT_ID` (el nombre con el que ya vive en `.env`).
+   */
   GOOGLE_ROUTE_OPT_PROJECT_ID: string | null;
   /** Email de la service account (claim `iss` del JWT). `null` si falta. */
   GOOGLE_ROUTE_OPT_SA_EMAIL: string | null;
@@ -123,6 +133,27 @@ export interface RouteOptimizationConfig {
   /** R38: tope de paradas enviadas al proveedor en una optimizacion. */
   RUTA_MAX_PARADAS: number;
   /**
+   * Feature 265 (R16-R21, design §6.4 y §15) — distancia MAXIMA, en km, entre el origen
+   * resuelto y el centroide de las paradas. Por encima, el origen se DESCARTA y se usa el
+   * centroide: la llamada facturada deja de ser imposible y el mensajero recibe un orden en
+   * vez de un error duro.
+   *
+   * ═══ 🧭 VALOR PROPUESTO, NO CALIBRADO CON DATOS DE PRODUCCION ═══
+   * Fecha: 2026-08-22. Motivo: M1 NO SE PUDO MEDIR —`ruta_optimizada_parada` estaba vacia y
+   * habia 0 ordenes en `en_reparto`, asi que no habia centroide contra el que medir ningun
+   * origen—. Y el caso de ~1.040 km que inspiro esta guarda resulto ser UNA PRUEBA DEL PROPIO
+   * HUMANO, no evidencia de campo: que nadie lo cite despues como una medicion de la
+   * operacion real.
+   * Lo unico medido que acota el numero: dos paradas legitimas de la MISMA llamada distaban
+   * ~58 km, asi que el umbral tiene que quedar comodamente por encima de eso.
+   * Se declara sin base documental —igual que la 92 hizo con `RUTA_MAX_PARADAS = 100`— y se
+   * revisa con datos reales. Puntero: `specs/265-optimizador-lee-al-proveedor`.
+   *
+   * ⚠️ ESTE ES EL UNICO SITIO donde vive el numero (R46). Ningun otro modulo de produccion
+   * puede repetir el literal; lo vigila `tests/unit/guards/umbral-origen-declarado.guardia.test.ts`.
+   */
+  RUTA_ORIGEN_MAX_KM: number;
+  /**
    * Preferencia de trafico del TRAZADO. Default `TRAFFIC_UNAWARE` (SKU basico): subirlo
    * cuesta dinero por llamada, asi que es una decision explicita, nunca implicita.
    */
@@ -132,7 +163,10 @@ export interface RouteOptimizationConfig {
 export function loadRouteOptimizationConfig(): RouteOptimizationConfig {
   const pem = readSecret("GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY");
   return {
-    GOOGLE_ROUTE_OPT_PROJECT_ID: readSecret("GOOGLE_CLOUD_PROJECT_ID"),
+    GOOGLE_ROUTE_OPT_PROJECT_ID: readSecretConAlias(
+      "GOOGLE_ROUTE_OPT_PROJECT_ID",
+      "GOOGLE_CLOUD_PROJECT_ID",
+    ),
     GOOGLE_ROUTE_OPT_SA_EMAIL: readSecret("GOOGLE_ROUTE_OPT_SA_EMAIL"),
     GOOGLE_ROUTE_OPT_SA_PRIVATE_KEY: pem === null ? null : pem.replace(/\\n/g, "\n"),
     GOOGLE_WIF_PROJECT_NUMBER: readSecretConAlias(
@@ -153,6 +187,8 @@ export function loadRouteOptimizationConfig(): RouteOptimizationConfig {
     RUTA_ORIGEN_TTL_MIN: readPositiveInt("RUTA_ORIGEN_TTL_MIN", 120),
     RUTA_SYNC_MIN_INTERVALO_S: readPositiveInt("RUTA_SYNC_MIN_INTERVALO_S", 10),
     RUTA_MAX_PARADAS: readPositiveInt("RUTA_MAX_PARADAS", 100),
+    // 🧭 200 km: ver la declaracion completa —y por que NO esta calibrado— en el contrato.
+    RUTA_ORIGEN_MAX_KM: readPositiveInt("RUTA_ORIGEN_MAX_KM", 200),
     ROUTES_ROUTING_PREFERENCE: readRoutingPreference("ROUTES_ROUTING_PREFERENCE"),
   };
 }

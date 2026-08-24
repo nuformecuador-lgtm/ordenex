@@ -176,6 +176,8 @@ function zeroIngreso(): TotalesIngresoOrdenex {
 /** Deja listo el detalle que devolverá `verCierreDetalle` con los incidentes indicados. */
 function conIncidentes(incidente: CierreDetalleGestion[]) {
   verDetalleMock.mockResolvedValue({
+    ordenesSinGestion: [],
+    sinGestionRegistrado: true,
     status: "ok",
     desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
     cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),

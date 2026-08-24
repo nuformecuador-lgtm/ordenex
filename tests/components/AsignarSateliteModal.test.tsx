@@ -68,12 +68,16 @@ function renderModal(
   mensajeros = MENSAJEROS,
   onSuccess = vi.fn(),
   onOpenChange = vi.fn(),
+  // FEATURE 271 (T9.5, R32): los que el servidor va a rechazar por su cierre. Por defecto ninguno,
+  // para que el resto del archivo siga midiendo lo suyo.
+  mensajerosBloqueadosIds: string[] = [],
 ) {
   const { rerender } = render(
     <AsignarSateliteModal
       open
       ordenes={ordenes}
       mensajeros={mensajeros}
+      mensajerosBloqueadosIds={mensajerosBloqueadosIds}
       fechasDiaReparto={FECHAS_DIA_REPARTO}
       onOpenChange={onOpenChange}
       onSuccess={onSuccess}
@@ -467,5 +471,67 @@ describe("AsignarSateliteModal — día de reparto (feature 246)", () => {
       /no hay mensajeros en tu zona/i,
     );
     expect(screen.queryByRole("radiogroup", { name: "Día de reparto" })).toBeNull();
+  });
+});
+
+// =================================================================================================
+// FEATURE 271 (T9.5, R29/R32) — EL SELECTOR DE LA BODEGA SATELITE DESHABILITA A LOS BLOQUEADOS.
+// =================================================================================================
+//
+// ⚠️ ESTA ES LA PANTALLA DEL INCIDENTE DEL 18/08. Dejaba elegir a un mensajero que el servidor
+// rechazaba, y el mensaje que devolvia no lo explicaba. Este selector NUNCA habia tenido el dato
+// —ni antes ni despues de la regla firmada el 20/08—: el de la bodega central al menos lo tuvo y
+// se le retiro a proposito. Aqui era la mitad que faltaba.
+//
+// LO QUE ESTOS CASOS AFIRMAN Y LO QUE NO. Afirman que la PANTALLA marca exactamente a quien el
+// servidor va a rechazar. NO afirman que el servidor lo rechace: eso vive en
+// `tests/unit/services/cierre-bloqueo-superficies.test.ts` (familia B2) y en
+// `asignacion-satelite-service.test.ts`, contra el predicado real. Las dos mitades tienen que
+// existir: una pantalla que marca de mas prohibe lo que el servidor acepta, y una que marca de
+// menos ofrece lo que va a negar.
+describe("AsignarSateliteModal — bloqueados por cierres (271/T9.5)", () => {
+  it("R32: el mensajero bloqueado sale DESHABILITADO y con el motivo a la vista", async () => {
+    const user = userEvent.setup();
+    renderModal([makeOrden({ id: "o1" })], MENSAJEROS, vi.fn(), vi.fn(), ["m2"]);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para el lote" }),
+    );
+    const listbox = await screen.findByRole("listbox");
+
+    // El motivo va EN la etiqueta, no solo en el atributo: un `aria-disabled` a secas deja al
+    // adminSatelite preguntandose por que ese nombre esta gris.
+    const bloqueado = within(listbox).getByRole("option", {
+      name: "Beto Mensajero (tiene cierres sin resolver)",
+    });
+    expect(bloqueado).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("R34: y su companera SIN cierres sigue elegible — el bloqueo es del mensajero, no de la bodega", async () => {
+    const user = userEvent.setup();
+    renderModal([makeOrden({ id: "o1" })], MENSAJEROS, vi.fn(), vi.fn(), ["m2"]);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para el lote" }),
+    );
+    const listbox = await screen.findByRole("listbox");
+
+    const libre = within(listbox).getByRole("option", { name: "Ana Mensajera" });
+    expect(libre).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("R32: sin bloqueados, ningun nombre lleva motivo (no se marca de mas)", async () => {
+    const user = userEvent.setup();
+    renderModal([makeOrden({ id: "o1" })]);
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Mensajero para el lote" }),
+    );
+    const listbox = await screen.findByRole("listbox");
+
+    expect(
+      within(listbox).getByRole("option", { name: "Beto Mensajero" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    expect(within(listbox).queryByText(/cierres sin resolver/i)).toBeNull();
   });
 });

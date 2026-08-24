@@ -34,6 +34,12 @@ import {
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
 import type { MetodoPago } from "@/lib/types/metodo-pago";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 261 (B2/B4, R15): el vocabulario del bloqueo por reserva vive en UN solo sitio, y el
+// servidor usa esa MISMA fuente en el motivo que devuelve. No se reescribe el literal aqui.
+import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
+// Feature 271: el motivo del bloqueo lo compone el MISMO formateador que la pantalla y la campana.
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
@@ -44,14 +50,31 @@ import {
   startOfDayCR,
 } from "@/lib/utils/fecha-cr";
 
-// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo sobre las guías (texto fijo i18n-ready,
-// SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre `vencido` o `rechazado` sin
-// resolver no puede gestionar NI recoger/escoger.
+// ⚠️ FEATURE 271 — AQUI VIVIA `MSG_BLOQUEADO`, UN TEXTO FIJO. Se va, y no es limpieza: el motivo
+// del rechazo tiene que CONTAR (cuantos cierres arrastra y cual toca resolver primero, R27/R43) y un
+// texto fijo no puede. Lo compone `avisoBloqueo` a partir del `BloqueoDetalle`, que es el MISMO
+// formateador que usa la pantalla y el aviso de la campana: tres versiones del mismo texto es como
+// se desincronizan.
 //
-// Feature 241 (2026-08-20): `solicitado` SALIO de esa lista. Quien ya pidio su cierre no tiene
-// nada que resolver —espera al admin— y sigue trabajando con normalidad.
-const MSG_BLOQUEADO =
-  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
+// Lo que NO cambia: con un cierre `solicitado` a secas (N=1, V=0) el mensajero SIGUE gestionando y
+// cobrando con normalidad. Esa es la mitad de la regla firmada el 2026-08-20 que la 271 conserva.
+
+/**
+ * FEATURE 261 (B4, R1/R2/R3) — ¿esta orden esta RESERVADA para un dia posterior al de Costa Rica
+ * en curso? Es el MISMO criterio que produce la etiqueta `esParaManana` del listado (246/R26) y
+ * el MISMO que aplica la via de la tienda (`GestionDesdeAyudaService`, R31): una sola pregunta,
+ * un solo sitio donde puede equivocarse.
+ *
+ * `>` y NO `>=`, y es la diferencia entre bloquear lo que toca y bloquear todo: una orden
+ * reservada para HOY no esta reservada para «otro dia», es de hoy y se trabaja. Y por eso el
+ * bloqueo CADUCA SOLO (R7): al llegar el dia reservado, la MISMA fila deja de cumplir esto sin
+ * que nadie ejecute ninguna accion ni se escriba nada en la base.
+ *
+ * `null` (orden anterior a la 246, o «hoy» explicito) -> `false` (R8): nada cambia para ellas.
+ */
+function estaReservadaParaOtroDia(fechaReparto: Date | null, diaEnCurso: Date): boolean {
+  return fechaReparto !== null && fechaReparto.getTime() > diaEnCurso.getTime();
+}
 
 // Estado de origen de "Recoger" (feature 17) y destino tras recoger (feature 36).
 const ORIGEN_RECOGER = "por_recoger";
@@ -84,13 +107,14 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    // Feature 111/R1-R4 -> 241: + `findMensajerosBloqueadosParaGestion`. Lo consume la guarda de
-    // gestionar/recoger/escoger, que es EXACTAMENTE lo que ese predicado bloquea: este service ES
-    // «gestionar y cobrar». Ya no es «el mismo predicado que la asignación» — la asignación no
-    // consulta ninguno.
+    // Feature 111/R1-R4 -> 241 -> FEATURE 271: + `findBloqueoDetalle`. Lo consume la guarda de
+    // gestionar/recoger/escoger. Se pide el DETALLE y no el `Set` porque el motivo del rechazo tiene
+    // que decir POR QUE esta bloqueado y QUE hacer para salir (R27), y eso exige contar cuantos
+    // cierres arrastra y cual toca primero. VUELVE a ser el MISMO predicado que consulta la
+    // asignacion —la 271 revierte esa mitad de la 241—, solo que alli basta el booleano.
     private readonly ordenRepo: Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+      "findEstatusIdByValue" | "findBloqueoDetalle"
     >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
@@ -142,17 +166,23 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 
   /**
-   * Feature 111/R1-R4/R2 — predicado de bloqueo: `true` si el mensajero tiene un cierre `vencido`
-   * o `rechazado`. NO duplica la derivación ni introduce un flag persistido: la lista de estados
-   * vive entera en `OrdenRepository`, con el porqué de la asimetría escrito al lado.
+   * Feature 111/R1-R4 -> FEATURE 271 (R25/R27) — el bloqueo del mensajero, con su MOTIVO ya
+   * compuesto. `null` = LIBRE.
    *
-   * Feature 241: lo que este `true` impide es GESTIONAR Y COBRAR. Ese mismo mensajero sigue
-   * recibiendo asignaciones nuevas —esa puerta no la cierra nadie— y sigue pudiendo solicitar su
-   * cierre, que es la salida (111/R9, 109/R28).
+   * NO duplica la derivacion ni introduce un flag persistido: la regla N/V vive entera en
+   * `lib/utils/bloqueo-cierre.ts` y la resuelve el repositorio (R10/R12).
+   *
+   * ⚠️ LO QUE ESTE MOTIVO IMPIDE YA NO ES SOLO GESTIONAR Y COBRAR. Desde el 2026-08-23 el mismo
+   * mensajero TAMPOCO recibe trabajo nuevo —ni reparto ni recoleccion—, asi que el aviso puede
+   * decirlo sin mentir. Antes no podia: la 241 tenia escrito aqui «ese mismo mensajero sigue
+   * recibiendo asignaciones nuevas», que hoy seria falso.
+   *
+   * Lo que SI sigue pudiendo, y por eso no es un callejon sin salida: SOLICITAR o RE-SOLICITAR su
+   * cierre, que es la unica via de escape (111/R9, 109/R28, 271/R16).
    */
-  private async estaBloqueado(usuarioId: string): Promise<boolean> {
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([usuarioId]);
-    return bloqueados.has(usuarioId);
+  private async motivoBloqueo(usuarioId: string): Promise<string | null> {
+    const bloqueo = await this.ordenRepo.findBloqueoDetalle(usuarioId);
+    return bloqueo.bloqueado ? avisoBloqueo(bloqueo, { conCta: true }) : null;
   }
 
   /**
@@ -238,8 +268,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         // «para mañana», es de hoy. Y por eso la etiqueta caduca sola (R25): al llegar el dia
         // reservado, `fechaReparto > hoyComoFecha` deja de cumplirse sin que nadie escriba nada.
         // `null` (orden anterior a la feature, o «hoy» explicito) -> `false`.
-        esParaManana:
-          row.fechaReparto != null && row.fechaReparto.getTime() > hoyComoFecha.getTime(),
+        esParaManana: estaReservadaParaOtroDia(row.fechaReparto ?? null, hoyComoFecha),
+        // Feature 261 (B4, R11/R14): la fecha calendario, RESUELTA AQUI. La card la pone en
+        // palabras sin construir ningun `Date`: leer `YYYY-MM-DD` con el reloj del navegador es
+        // exactamente la puerta que R14 cierra. `null` = la orden no tiene dia de reparto.
+        fechaRepartoISO:
+          row.fechaReparto != null ? fechaRepartoComoTexto(row.fechaReparto) : null,
       };
       if (row.estatusValue === ORIGEN_RECOGER) {
         // R29: "Por recoger" no se toca. Sus ordenes no son paradas de ninguna ruta.
@@ -322,6 +356,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         estado: ruta?.estado ?? "vigente",
         calculadaAt: ruta?.calculadaAt ?? null,
         origenFuente: ruta?.origenFuente ?? null,
+        // Feature 265 (R35/R45): se sirve TAL CUAL lo tenga la fila. Sin ruta, o con la marca
+        // ausente, va `null` — que la pantalla lee como «no consta», nunca como «del proveedor».
+        secuenciaFuente: ruta?.secuenciaFuente ?? null,
         paradasSinOptimizar,
         // El trazado se sirve TAL CUAL lo tenga la fila. No se recalcula ni se pide nada
         // aqui: esta es una lectura de listado y no puede quedar colgada de una llamada
@@ -338,7 +375,15 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     }; // R10
   }
 
-  async recogerAsignaciones(input: RecogerInput, actor: Actor): Promise<RecogerServiceResult> {
+  /**
+   * Feature 261 (B4, R1/R6): `now` inyectable. Se resuelve el dia de Costa Rica UNA vez por
+   * llamada, para que dos ordenes del mismo lote no puedan caer a distinto lado de la medianoche.
+   */
+  async recogerAsignaciones(
+    input: RecogerInput,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<RecogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     const ordenIds = distinct(input.ordenIds);
@@ -347,10 +392,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // Feature 111/R4 (Q3): bloqueo total — un mensajero con un cierre pendiente
     // (`solicitado`/`vencido`) no puede RECOGER. Guarda al inicio (ANTES de cualquier efecto:
     // la transición vive en `recogerLote`), MISMO predicado que gestionar. Sin PII (R20).
-    if (await this.estaBloqueado(actor.usuarioId)) {
+    const motivoLote = await this.motivoBloqueo(actor.usuarioId);
+    if (motivoLote !== null) {
       return {
         status: "conflict",
-        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_BLOQUEADO })),
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: motivoLote })),
       };
     }
 
@@ -364,6 +410,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         return { status: "forbidden" };
       }
     }
+    // Feature 261 (B4, R6): EL DIA DE COSTA RICA EN CURSO, en la convencion `@db.Date` de
+    // `fecha_reparto`. Se resuelve UNA vez, aqui, y viaja resuelto hasta el `WHERE` de la
+    // escritura. `startOfDayCR` y no `inicioDelDiaCREnUtc`: aquella es la cota de las columnas
+    // `timestamp` y desplazaria el dia seis horas (la trampa que cerro la ficha 166).
+    const diaEnCurso = startOfDayCR(now);
+
     // R17: origen invalido / borrada -> conflict (aborta sin efectos).
     const detalle: DetalleConflicto[] = [];
     for (const id of ordenIds) {
@@ -372,6 +424,20 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         detalle.push({ ordenId: id, motivo: "orden borrada" });
       } else if (row.estatusValue !== ORIGEN_RECOGER) {
         detalle.push({ ordenId: id, motivo: `estado de origen no permitido: ${row.estatusValue}` });
+      } else if (estaReservadaParaOtroDia(row.fechaReparto, diaEnCurso)) {
+        // FEATURE 261 (R1/R4) — LA RESERVA BLOQUEA TAMBIEN AL MENSAJERO. Revierte la decision D5
+        // de la 246 —la que dejaba la reserva como defensa SOLO frente al corte—, refutada en
+        // 2026-08-21. Va en el MISMO bucle que sus hermanas y ANTES de cualquier efecto: como
+        // ellas, un solo detalle aborta el lote entero sin transicion, sin historial y sin tocar
+        // el puntero de gestion.
+        //
+        // `conflict` y no `forbidden`: la orden SI es suya; lo que falla es el momento. Esa
+        // distincion ya la usa este servicio (`forbidden` = ajena o inexistente).
+        detalle.push({
+          ordenId: id,
+          motivo: RESERVA_MOTIVO_SERVIDOR, // R15: la MISMA fuente que lee la pantalla
+          codigo: "reservada_para_otro_dia", // para que la UI no tenga que leer prosa
+        });
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle };
@@ -387,24 +453,40 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       };
     }
 
-    await this.repo.recogerLote(ordenIds, actor.usuarioId, origenId, destinoId); // R15/R16
+    // Feature 261 (B5, R5): el dia viaja YA RESUELTO al `WHERE` de la escritura. La guarda de
+    // arriba es la que RESPONDE (con un motivo en palabras); esta es la que GANA LAS CARRERAS y
+    // la que rechaza una peticion que no venga del portal.
+    await this.repo.recogerLote(ordenIds, actor.usuarioId, origenId, destinoId, diaEnCurso); // R15/R16
     // Feature 92 (R23): el origen se persiste DESPUES de la transicion, y su fallo no la
     // revierte: el mensajero ya recogio, eso es lo que importa.
     await this.registrarUbicacion(actor.usuarioId, input.ubicacion);
     return { status: "ok", recogidas: ordenIds };
   }
 
-  async escogerParaGestion(ordenId: string, actor: Actor): Promise<EscogerServiceResult> {
+  /** Feature 261 (B4, R3/R6): `now` inyectable, del que sale el dia de Costa Rica en curso. */
+  async escogerParaGestion(
+    ordenId: string,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<EscogerServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Feature 111/R4 (Q3): bloqueo total — mensajero con cierre pendiente no puede ESCOGER una
     // orden para gestión. Guarda al inicio, ANTES de fijar el puntero (sin efectos parciales).
-    if (await this.estaBloqueado(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    const motivo = await this.motivoBloqueo(actor.usuarioId);
+    if (motivo !== null) {
+      return { status: "conflict", motivo };
     }
 
     const guardia = await this.cargarOrdenGestionable(ordenId, actor);
     if (guardia.status !== "ok") return guardia;
+
+    // FEATURE 261 (R3/R4) — una orden reservada para un dia posterior NO SE ESCOGE. Va aqui,
+    // junto a sus hermanas y ANTES de fijar el puntero 1-a-1: rechazar despues dejaria al
+    // mensajero con el puntero puesto sobre una orden que no puede trabajar (efecto parcial).
+    if (estaReservadaParaOtroDia(guardia.orden.fechaReparto, startOfDayCR(now))) {
+      return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
+    }
 
     // R19-R21: fija el puntero de forma idempotente; si ya hay OTRA activa -> conflict.
     const fijada = await this.repo.setOrdenEnGestion(actor.usuarioId, ordenId);
@@ -414,7 +496,12 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     return { status: "ok", ordenId };
   }
 
-  async gestionar(input: GestionarInput, actor: Actor): Promise<GestionarServiceResult> {
+  /** Feature 261 (B4, R2/R6): `now` inyectable, del que sale el dia de Costa Rica en curso. */
+  async gestionar(
+    input: GestionarInput,
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<GestionarServiceResult> {
     if (actor.rol !== "mensajero") return { status: "forbidden" }; // R12
 
     // Feature 111/R1/R2/R3 (obligatorio) -> 241: un mensajero con un cierre `vencido` o
@@ -426,13 +513,31 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // pudiera seguir cobrando con un cierre sin resolver, el dinero del día nuevo se acumularía
     // sin cierre al que ir y el admin estaría cuadrando una caja que ya no es todo lo que él
     // tiene en la mano. Que ASIGNARLE órdenes no se bloquee es otra cosa: recibirlas no cobra.
-    if (await this.estaBloqueado(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    const motivo = await this.motivoBloqueo(actor.usuarioId);
+    if (motivo !== null) {
+      return { status: "conflict", motivo };
     }
 
     const guardia = await this.cargarOrdenGestionable(input.ordenId, actor);
     if (guardia.status !== "ok") return guardia;
     const orden = guardia.orden;
+
+    // FEATURE 261 (R2/R4) — NO SE REGISTRA UN RESULTADO EN UN DIA QUE NO ES. Va JUNTO a la guarda
+    // del cierre pendiente —o sea, ANTES de subir la evidencia a Storage, antes de la transicion
+    // y antes de la fila `gestion_orden`—: ese orden es lo que garantiza R4, «sin efectos».
+    //
+    // ⚠️ DEUDA DECLARADA, no escondida (design §3 «puerta ausente»): esta guarda vive SOLO en el
+    // servicio. `GestionOrdenRepository.crearGestionYTransicionar` hace `orden.update` por PK sin
+    // re-comprobar NADA —ni el estatus de origen— y esta ficha no le inventa una puerta SQL solo
+    // para el dia: seria la unica de siete condiciones re-comprobada en la escritura, y quien
+    // leyera ese `WHERE` concluiria que las otras seis tambien estan ahi. La carrera no existe
+    // por construccion: para gestionar hay que estar en `en_reparto`, y ninguna de las tres
+    // entradas a ese estado baja un dia futuro (`recogerLote` lleva el dia en su `WHERE`, el
+    // rescate desde ayuda no lo toca, y el deshacer conserva la reserva futura desde esta misma
+    // ficha).
+    if (estaReservadaParaOtroDia(orden.fechaReparto, startOfDayCR(now))) {
+      return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
+    }
 
     // R21: no gestionar una orden distinta de la activa (si hay una activa).
     const activa = await this.repo.getOrdenEnGestion(actor.usuarioId);

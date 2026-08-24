@@ -171,7 +171,7 @@ describe("UP — backfill de los cierres existentes (R26/R27)", () => {
 
   it("(g)/R22: el LATERAL replica el WHERE del resolver y NO filtra tarifas.status", () => {
     // El WHERE del LATERAL debe coincidir AL CARACTER con el del resolver
-    // (`TarifaVigentePorTiendaRepository`: tiendaId + deletedAt: null). Si alguien anade
+    // (`TarifaVigenteRepository`: tiendaId + deletedAt: null). Si alguien anade
     // `status = 'activo'` aqui sin anadirlo alla (o al reves), un cierre backfilleado y uno
     // nuevo liquidarian DISTINTO para los mismos datos. Testear la ausencia es deliberado
     // (decision (g), override del humano; design §6.1).

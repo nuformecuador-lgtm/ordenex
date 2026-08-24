@@ -8,34 +8,513 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🔀 Merge de `dev` en `ux` — 2026-08-24
 
-## 🛠️ Features en curso — 2026-08-21
+`dev` traía las features **256, 257 y 268** ya cerradas, implementadas por una sesión paralela
+mientras `ux` tenía su propio trabajo a medias sobre los mismos archivos. En los conflictos de
+código, doc y test **manda `dev`**: su versión es un superconjunto (la 268 mete `ayuda_tienda` **e**
+`incidente` en `EVENTOS_PUBLICOS`, donde `ux` solo metía `ayuda_tienda`; la 257 trae los parámetros
+`desde`/`hasta`/`num_guia`/`num_remision` del OpenAPI, que en `ux` estaban documentados en prosa
+pero sin declarar).
 
-| # | Zona | Estado | Qué |
-| --- | --- | --- | --- |
-| **257** | backend | **`in_progress`** — aprobada en la puerta; worktree `C:/w257` | `GET /api/ordenes/api-key` gana filtros por **rango de fechas**, `num_guia` y `num_remision`. Spec en `specs/257-api-key-filtros-listado/`. |
-| **256** | backend | **`spec_ready`** — puerta humana PASADA, fase 2 EN ESPERA | el webhook de `devuelta` viaja con el motivo tipificado. Spec en `specs/256-webhook-motivo-devolucion/`. Rama `feature/256-webhook-motivo-devolucion` + worktree `C:/w256` ya creados desde `origin/dev` (8070b508). |
-
-**⛔ POR QUE LA 256 NO ABRE FASE 2 TODAVIA.** Dos razones, y la segunda es la que manda:
-1. **Cupo.** `backend` ya tiene DOS `in_progress` — la 255 (PR #432 abierto) y la 257 (implementandose en `C:/w257`). Una tercera rompe la regla 1 y `./init.sh` la valida.
-2. **Conflicto de archivos real, no teorico.** La 257 tiene ahora mismo modificados `lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml` — y la 256, por la decision (f) de su puerta, tiene que tocar **esos mismos dos archivos** para publicar el evento en una seccion `webhooks:`. Correrlas en paralelo es un conflicto garantizado en el borde del contrato publico, que es justo donde peor se resuelve a mano.
-
-**Se desbloquea** cuando la 257 aterrice (o cuando el humano decida el orden). La spec de la 256 esta completa y firmada: la fase 2 arranca sin re-preguntar nada.
-
-Las dos nacen del cuestionario de integración de **Dropi** revisado hoy.
-
-**Corrección de una afirmación anterior de esta bitácora:** aquí se dio por hecho que «no hay
-conflicto de archivos entre ellas». Es **falso** desde que la puerta de la 256 decidió publicar el
-evento en el OpenAPI: las dos escriben `lib/api/openapi-spec.ts` y `docs/api/api-key-openapi.yaml`.
-Ver el bloque ⛔ de arriba. La rama y el worktree de la 257 ya existen; el párrafo sobre su
-«desviación deliberada de F1.0» quedó obsoleto y se retira.
+**Renumeración:** el id **258** estaba usado dos veces — «coleccion de Postman no guarda numGuia»
+(alta local en `ux`) y «monitoreo: el tablero del dia sobre las primitivas» (PR #436, ya en `dev`).
+La local pasa a **276** conservando el slug; la de `dev` se queda con el 258.
 
 ---
 
-## ✅ AL DÍA — 2026-08-21. **EMPIEZA A LEER POR AQUÍ**
+## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
+
+Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad
+tienda+zona → default de la tienda → tarifa de la zona → nada». Se midió el impacto, se dieron de
+alta tres fichas y se **aterrizó el trabajo suelto** que ya existía sin registro.
+
+| # | Zona | Estado | Qué |
+| --- | --- | --- | --- |
+| **273** | fullstack | **`in_progress`** · rama `feature/273-tarifas-por-zona-catalogo-vehiculos` | el **modelo**: `tarifas.zona_id`, `tienda_id` nullable, `is_default`, `tarifa_especial`, borrado físico, `UNIQUE (zona_id, tienda_id) NULLS NOT DISTINCT`, `distrito.zona_especial`, catálogo de vehículos administrable y la UI que ya captura las tres combinaciones. **`sdd: false`**: la ficha se escribió después del código (ver abajo). |
+| **274** | backend | `pending` · `depends_on: [273]` | la **cascada de resolución** + drop de `tarifas.status`. Es lo que hace que el modelo de la 273 cobre de verdad. |
+| **275** | frontend | `pending` · `depends_on: [274]` | la UI sin `status` y con el nivel de la cascada visible por zona. |
+
+### El hueco que queda abierto tras la 273 (deliberado, no es un olvido)
+
+El modelo y la UI ya soportan tarifas por zona, pero **el resolver no**:
+`TarifaVigentePorTiendaRepository.ts` sigue haciendo `where: { tiendaId }`. Consecuencias vivas
+mientras la 274 no cierre:
+
+- las tarifas con `tienda_id` NULL **se pueden capturar pero no se cobran nunca**;
+- entre las tarifas de una tienda gana **la más reciente, no la más específica**;
+- `is_default` no lo lee ninguna aritmética;
+- el listado usa **otra regla** que la liquidación (`OrdenRepository`: `status: activo` + `take: 1`)
+  → puede **mostrar una fila y facturar otra**.
+
+⚠️ **La 273 no se despliega a `prod` sin la 274 detrás**, o la pantalla promete un cobro por zona
+que el motor no aplica.
+
+### Decisiones cerradas con el humano (no reabrir en el spec de la 274)
+
+1. La fila global `(tienda NULL, zona NULL)` se **prohíbe** en el service (`validation_error`).
+   No es un cuarto nivel.
+2. `tarifas.status` se **dropea entero**, con migración. Eso cierra la deuda **(g)** de la 69,
+   colapsa `resolveTarifaCotizablePorTienda` en el resolver único y **absorbe la feature 70**.
+3. Sin tarifa: **409 solo donde el 409 ya existía** (cotización y carga masiva por API); pantalla
+   y cierre siguen liquidando **0.00**, para no bloquear la operación.
+
+### Dos cosas que esta sesión aprendió por las malas
+
+- **La 273 nació sin ficha, sin spec y sobre `fix/251-alias-project-id`**, una rama de otra cosa.
+  Se registró en diferido y con `sdd: false` para que el historial diga lo que pasó y no una
+  versión ordenada de lo que pasó. No es un precedente que se conceda a futuro.
+- **Los ids 269-272 se los llevó otra sesión** mientras se medía el impacto (la 271 ya está
+  mergeada en `dev`). El borrador usaba 269/270/271; se renumeró a 273/274/275 conservando los
+  slugs. Antes de reservar un id, mirar `origin/dev`, no el árbol local.
+
+---
+
+
+## 🔌 Sesión API-key (256 · 257 · 266-268) — 2026-08-22
+
+| # | Estado | Qué |
+| --- | --- | --- |
+| **257** | **`done`** · PR [#433](https://github.com/nuformecuador-lgtm/ordenex/pull/433) mergeado 18:39 | el listado por API key filtra por **rango de fechas**, `num_guia` y `num_remision`. Gate verde, reviewer APROBADO. |
+| **256** | **`done`** · PR [#434](https://github.com/nuformecuador-lgtm/ordenex/pull/434) mergeado 15:46 | el webhook de `devuelta` viaja con el **motivo tipificado**. |
+| **268** |  **`in_progress`** · PR [#456](https://github.com/nuformecuador-lgtm/ordenex/pull/456) | el webhook notifica **`ayuda_tienda` e `incidente`**, con causa y con enlace estable a las evidencias. Gate completo corrido (delta 0), reviewer APROBADO, PR abierto. **Falta el aviso a integradores antes de la release a prod.** |
+| **266** | `pending` | habilitar pedidos con novedad por API key. Decisiones cerradas: no reusa el camino del botón de la tienda, y la rama sin mensajero deja solo log (sin webhook) mientras se define ese flujo. **Depende de la 268** para que su rama con cambio de estado notifique de verdad. |
+| **267** | `pending` | analítica de la propia tienda por API key. Revierte una denegación de diseño: hoy el rol `apiKey` está en `ROLES_SIN_ANALITICA`. |
+
+Las dos salen del cuestionario de integración de **Dropi**. La 256 la especificó otra sesión
+(su puerta humana está registrada en el propio spec); esta sesión hizo su fase 2.
+
+**Dos avisos que sobreviven a esta sesión:**
+
+1. ⚠️ **`pnpm db:migrate` dropea la base local.** Es `prisma migrate dev` y la tabla
+   `_prisma_migrations` tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+   que no existe en `db/migrations` de ninguna rama. Con ese historial divergente, `migrate dev`
+   considera la base corrupta y su salida natural es resetearla. Para aplicar pendientes:
+   **`pnpm exec prisma migrate deploy`** (usado hoy para las 4 de la 253, sin pérdida). El drift
+   sigue sin resolver: o falta el archivo en el repo, o sobra la fila. **Merece ficha propia.**
+2. Las guardias que **censan el árbol** (`ayuda-columna-retirada`, `columnas-asercion-de-orden`)
+   se caen por **timeout** —no por assert— cuando la máquina está cargada: 27–30 s contra un
+   límite de 20 s. Aisladas dan 17/17 verdes. Antes de tratarlas como regresión, re-corré con la
+   máquina libre.
+
+---
+
+## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día). **EMPIEZA A LEER POR AQUÍ**
+
+**`prod` = `37b5944b`**, READY. Sale la **271**: el segundo cierre se puede solicitar, y acumular dos
+bloquea. Ficha cerrada, **cero `in_progress`**. El recorrido con su evidencia está en
+`docs/release.md`; la narrativa, en `progress/history.md`.
+
+### ⚠️ LO ÚNICO QUE QUEDA VIVO, y hay que mirarlo la mañana del 24
+
+**El primer efecto real de esta ficha lo produce el cron de esta noche.** A las 00:00 CR el corte
+deja de excluir a quien ya tiene un cierre abierto, y ahí es donde empieza a crear segundos cierres.
+Nada de lo verificado en el despliegue lo cubre — se midió que **0 mensajeros quedaban bloqueados en
+ese instante**, que es otra cosa.
+
+Qué mirar, con su número:
+
+1. **Los `cierre_dia` creados por la corrida** (`created_at` ~00:0x CR del 24): que sean los que
+   deben, y que su jornada derivada sea la del día trabajado y **no la del nacimiento** — el
+   off-by-one que originó media ficha.
+2. **Que salieron los avisos**, que es lo primero que este cron emite en toda su vida: filas nuevas
+   en `notificacion` con `evento = 'cierre_dia_vencido'`. Antes de esta release el corte emitía
+   **cero**, medido.
+3. **Los mensajeros bloqueados después de la corrida**, contra los 0 de antes de desplegar.
+
+Si (2) sale en cero y (1) creó cierres, el aviso volvió a quedarse mudo — que es el fallo que esta
+ficha persiguió cuatro veces en un día, cada vez una capa más arriba.
+
+---
+
+## 🚀 RELEASE DESPLEGADA — 2026-08-23 (contexto previo)
+
+**`prod` = `6bc566b8`**, desplegado y **READY**. 55 commits. `dev` y `prod` igualados.
+Salen la **262** (corregir el día de reparto) y la **265** (el optimizador lee al proveedor).
+
+**Primera release hecha siguiendo `docs/release.md`**, que se creó ayer justamente para esto. Su
+recorrido, con la evidencia de cada paso, queda escrito en ese mismo archivo.
+
+### Verificado después de desplegar
+
+- **Cero errores de runtime.**
+- **Las dos migraciones aplicadas**, y `secuencia_fuente` se creó **sin tocar ninguna fila
+  existente** (0 filas con valor).
+- **`C7`: cero líneas `optimizer***:`**, y es un cero que significa algo — el cron corrió **cuatro
+  veces** (09:20–09:23) sobre el despliegue nuevo sin imprimir ninguna, cuando con el build anterior
+  **cada corrida volcaba un bloque de configuración entero**. La traza nace apagada en producción,
+  comprobado en el comportamiento.
+
+⚠️ **Una lectura que casi se hace mal:** los primeros logs que miré **sí** traían líneas
+`optimizer***:`, pero eran del despliegue **anterior** (`dep=dpl_CUyTSnK…`). Concluir «C7 falla» ahí
+habría sido culpar al código nuevo por el log del viejo.
+
+### Lo que NO se cerró, y por qué
+
+- **`C3`** — `ruta_optimizada_parada` sigue **vacía** en producción, así que
+  `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
+- **`C8`** — cero jobs `failed` de esa familia desde el despliegue, pero **no ha pasado tiempo
+  suficiente** para que sea evidencia. Se re-mira con un día de tráfico real.
+- **Los píxeles del cierre `8F88DCD5`** (264) y **`F6` en preview**: siguen necesitando entrar a la
+  app como usuario.
+- **El texto «Del 23 al 24 de agosto»**: decisión de producto, sin tocar.
+
+### Lo que queda para mañana, en una línea
+
+Re-mirar **`C8`** con tráfico del día, decidir el **texto**, y las dos comprobaciones que exigen
+mirar la app. Todo lo demás de estas dos features está cerrado.
+
+---
+
+## ✅ LAS DOS FICHAS CERRADAS — 2026-08-23 (tanda anterior, cerrada)
+
+**Ninguna ficha `in_progress`.** `dev` con las dos features completas, revisadas y con sus
+bloqueantes cerrados.
+
+| | |
+| --- | --- |
+| **262** · corregir el día de reparto | `done` · 4 tandas · revisión RECHAZADA → **4 bloqueantes cerrados** · `F6` ejecutada |
+| **265** · el optimizador lee al proveedor | `done` · revisión RECHAZADA → cerrada → **re-revisión OK, 0 bloqueantes** |
+
+**Lo que queda vivo NO es código: son pasos de release**, y por eso existe `docs/release.md`. Si su
+sección «pendiente para la próxima release» tiene entradas, **la release no está terminada aunque el
+despliegue esté verde**.
+
+### El hallazgo de la 262, que es el patrón del día entero
+
+**`R32` no tenía ningún test que mordiera**, y el comentario de su test de integración prometía
+comprobar «ni gestión, ni historial, **ni ruta**» contando sólo las tres primeras. No se vio
+leyendo: se vio **inyectando el defecto exacto** y midiendo que **3.302 tests seguían verdes**.
+
+Es la misma familia que apareció cuatro veces más hoy: la puerta T8 protegiendo a **cero**
+integradores; el aviso de la 262 que se perdía la segunda vez por un `dedupe_key` que traga el
+conflicto; los `logger.warn` del optimizador **descartados en las dos capas**; y un requisito de la
+265 cuyo test montaba el escenario correcto y sólo afirmaba `status: ok`.
+
+**La prosa de este repo miente más que su código, y nada la vigila.** Tres comentarios corregidos hoy
+decían lo contrario de lo que hace el código, incluido uno que afirmaba que un `warn` servía «para
+que un operador note» algo — siendo un `{ warn: () => {} }`.
+
+### `F6` de la 262: ejecutada, con lo que no cubrió dicho
+
+Se hizo **en local, no en preview** (declarado: la base de preview es distinta desde julio y no
+sabemos si tiene cuentas). Pasó el caso central de punta a punta —el mensajero **intenta** recoger y
+no puede, se corrige, **se desbloquea solo**—, «Ver historial» entrada por entrada, la campana en
+**38,5 s** sin recargar, y `R32` con KPIs y mapa idénticos.
+
+**No cubrió**, y está en la lista de release: corregir desde `/recepcion-satelite`, el aislamiento
+entre zonas **sobre un listado con contenido** (se midió sobre uno vacío), y ningún caso de
+`ayuda_tienda`.
+
+### Pendiente de decisión humana
+
+- **El texto «Del 23 al 24 de agosto»** se lee como **rango de dos días** en la mitad de los casos.
+  Lo agrava que la entrada de corrección es **la única sin la flecha `A → B`**: toda la carga cae en
+  la preposición, y **falta el verbo**. Es contrato en `design.md` §14.4; no se tocó.
+- **Los píxeles del cierre `8F88DCD5`** (264): requiere entrar a producción como usuario.
+
+### Lo que el paralelismo enseñó hoy
+
+Nueve agentes en worktrees aislados. Funcionan, **pero no aíslan la base local ni `node_modules`**:
+la migración de una feature pone rojo el gate de las demás y el de `dev` limpio, y `prisma generate`
+se pisa —el último gana y al otro le desaparecen sus tipos a mitad de su gate—. Y **tres informes de
+revisión se quedaron sin commitear** en el árbol principal: ninguna herramienta lo señala.
+
+---
+
+## 🌙 CIERRE DE TANDA — 2026-08-22 (tanda anterior, cerrada)
+
+`prod` = `465c5234` (release #458, desplegada y verificada, sin errores de runtime).
+`dev` = `651aef2a`, gate **completo** en verde: 1319 archivos, **17.793 tests**, `INIT_EXIT=0`.
+
+La suite pasó de **17.502 a 17.793** en el día — **291 tests nuevos**, y **ni uno borrado ni
+encogido**: verificado archivo por archivo en las cuatro ramas antes de mergear.
+
+### Dónde está cada ficha, de verdad
+
+| ficha | en `dev` | lo que falta |
+| --- | --- | --- |
+| **265** · el optimizador lee al proveedor | backend + frontend + cierre de bloqueantes | **11 menores** de la revisión, y la mitad de `F6` que sólo se puede ver en **preview** |
+| **262** · corregir el día de reparto | backend + los dos modales + cierre de B14 | 🔴 **el BLOQUE HISTORIAL: `R37`-`R45` sin un solo test**, `F6`, y **la revisión entera** |
+
+**La 262 está más lejos de cerrar de lo que su estado sugiere.** Su bloque historial —el alcance que
+la puerta humana añadió— no se ha empezado, y necesita backend y UI en la **misma** tanda porque su
+primera tarea rompe el build a propósito en un componente.
+
+### La revisión de la 265 rechazó, y encontró lo de siempre
+
+**B1 — un requisito que el mapa daba por probado y no lo estaba.** El test de `R8` montaba el
+escenario correcto pero **sólo afirmaba `status: ok`**. Cerrado y **medido en las dos direcciones**:
+con el test nuevo la mutación muere; con el test que había en `dev`, **sobrevive**. Eso es un hecho,
+no una promesa.
+
+**B2 — 43 tareas y ninguna marcada**, con la feature ya mergeada. Ahora **38 `[x]` · 5 `[ ]`**, cada
+viva con su motivo. Y al hacerlo apareció **C5**: H1 no tiene ficha, así que se dejó abierta en vez
+de marcarla — marcarla habría sido justo el fallo mudo que B2 persigue.
+
+### Pendiente de decisión humana
+
+1. **¿Se lanza el bloque historial de la 262?** Es la última tanda grande de esa ficha.
+2. **Ficha para H1** (`geocode_precision` se escribe y no lo lee nadie): **propuesta, no registrada**.
+   Sin ella, `C5` de la 265 no se puede cerrar.
+3. **`vercel env ls production`** para saber si la **251** ya está resuelta. Medido: el error de
+   credencial **no aparece desde el 2026-07-29** y hay 57 jobs `done` sin error, el último de hoy —
+   pero eso no distingue «la variable está» de «el código dejó de mirarla».
+4. **Ver el cierre `8F88DCD5` en pantalla** (264): los datos están verificados —4 órdenes, ₡14.900,
+   ₡2.000— pero **nadie ha mirado los píxeles**, y era una ficha visual.
+
+### Deuda barata que alguien debería tomar
+
+- **`lib/clients/google-route-optimization.ts:208` miente**: dice «se apaga con `RUTA_DEBUG_LOG=0`»,
+  caducado desde que el default se invirtió.
+- **`design.md` §10.2 de la 265** llama «el único sitio donde el `WHERE` real se mira» a un archivo
+  con Prisma **mockeado**.
+- Tres tests ajenos usan `getByRole("alert")` **en singular** (`RepartoModule.test.tsx:839, :1152,
+  :1463`): un caso futuro con «bloqueado + orden local» dará un *multiple elements* que no dice lo
+  que parece. **No es deuda de esta tanda**, ya se rompe hoy con «bloqueado + desactualizada».
+
+### Lo que el paralelismo enseñó, y hay que recordar
+
+Seis agentes en worktrees aislados **funcionaron**. Pero los worktrees **no aíslan la base local ni
+`node_modules`**, y eso mordió dos veces:
+
+1. **La migración de la 262 puso rojo el gate de la 265 — y el de `dev` limpio.** Un test que compara
+   los valores de un enum **en la base** contra una lista literal empieza a fallar en todas partes.
+   Se reprodujo en `dev` sin código de ninguna rama antes de culpar a nadie, y se resolvió mergeando
+   primero la rama que traía los censos actualizados.
+2. **`prisma generate` se pisa entre worktrees**: el cliente vive en el `node_modules` compartido, así
+   que el último gana y al otro le desaparecen sus tipos **a mitad de su propio gate**. Hay que
+   regenerar justo antes de cada corrida.
+
+⚠️ **Y un agente corrió `scripts/seed-usuarios-qa.ts` contra la base local** (el hash no cuadraba con
+el `QA_PASSWORD` del `.env`). Eso **rota las cuatro cuentas QA a la vez**. Si un login local deja de
+funcionar, es esto y no el código.
+
+---
+
+## ✅ PUERTA HUMANA PASADA (262 y 265) — 2026-08-22 (tanda anterior, cerrada)
+
+Las dos fichas pasan a **`spec_ready`**. **Las dos crecieron en la puerta**, y la 265 además cambió
+de zona.
+
+### 262 · corregir el día de reparto — las tres respondidas EN CONTRA del spec
+
+| | decisión | lo que arrastra |
+| --- | --- | --- |
+| **P1** | **Sí**, el rastro se ve en «Ver historial» | Una corrección de día **no tiene «estado destino»**: hay que decidir cómo se pinta una entrada sin transición en un DTO que hoy sólo sabe de transiciones |
+| **P2** | **Sí**, se avisa al mensajero | `NotificacionEvento` es un inventario cerrado (146/D1): **migración de enum**, y por tanto **gate `./init.sh` COMPLETO** |
+| **P3** | **«hoy / mañana»**, como al asignar | Lo único recomendado que se aceptó, y lo que mantiene que mover al pasado sea **imposible por construcción** |
+
+### 265 · el optimizador lee al proveedor — `backend` → **`fullstack`**
+
+- **P3 = sí** (el mensajero sabe que su ruta se ordenó en local) → **eso mete UI** y cambia la zona.
+- **P2**: `RUTA_ORIGEN_MAX_KM = 200`, **declarado sin base documental** como la 92 con
+  `RUTA_MAX_PARADAS = 100`, porque **M1 no se pudo medir**.
+- **P4**: apagar `RUTA_DEBUG_LOG` **ya**. ⚠️ **Se lleva por delante P1 y P5**: esa traza era la única
+  vía a la respuesta cruda del proveedor —los logs de Vercel expiran la consulta— así que el schema
+  se queda **defensivo** y **R7 se implementa tolerando que no haya códigos de motivo**.
+- **P6**: no hay que re-encolar nada. Son **6** jobs, todos de hoy.
+
+⚠️ **Y una tensión que se deja escrita:** el humano confirmó que **el origen de Medellín es una
+prueba suya**. Los ~1.040 km que motivan **R21** son un **artefacto de pruebas**, no evidencia de
+campo. R21 se implementa igual —deja de pagar una llamada condenada y da orden local en vez de error
+duro— pero **su umbral no está calibrado con producción**.
+
+### Lo que se midió, y las dos trampas que salieron
+
+| # | resultado |
+| --- | --- |
+| **265/M1** | **No medible hoy**: `ruta_optimizada_parada` **vacía** y **0** órdenes en `en_reparto` |
+| **265/M2** | **6** jobs `failed` de «forma inesperada», todos de hoy (04:07–05:26). **0** rutas `desactualizada` |
+| **265/M3** | 1 de 2 rutas con origen en Medellín, `origen_at` de hoy 22:56 — y es de un **mensajero real con 38 órdenes**, no de la cuenta QA |
+| **262/M1-M2** | 0 y 35, ya medidas a las 04:27 CR. Caducan antes de desplegar |
+
+1. **M3, como el spec la define, no habría visto nada**: filtra `origen_fuente = 'gps'` y las dos
+   rutas son `ultima_conocida`.
+2. **Un primer M1 devolvió «20.015,1 km» y era basura**: `LEAST`/`GREATEST` **ignoran los NULL**, así
+   que `acos(-1)` da la antípoda. Habría fijado el umbral de R21 sobre un fantasma.
+
+### Hallazgo suelto: la 251 parece resuelta y nadie la cerró
+
+«La optimización de ruta NO corre en producción: falta `GOOGLE_ROUTE_OPT_PROJECT_ID`». Ese error
+**no aparece desde el 2026-07-29**, y hay **57** jobs en `done` sin error, el último **hoy a las
+22:56**. No la cierro: falta comprobar que la variable existe de verdad en producción y no que el
+código dejó de mirarla.
+
+### Decidido aparte: no hay aviso que entregarle a Dropi
+
+El humano lo dijo el 2026-08-22: **están sólo haciendo pruebas**. Eso **cierra la pregunta abierta 5
+de la 268** (canal y plazo del aviso). La entrada de `docs/api/CHANGELOG.md` se queda como material
+de onboarding para cuando la integración sea real.
+
+---
+
+## ✅ RELEASE DESPLEGADA — 2026-08-22 (tanda anterior, cerrada)
+
+**`prod` = `465c5234`, desplegado y verificado READY**, sin errores de runtime. Salió por el PR
+**#458** y lleva la **256** (el evento de `devuelta` con su motivo tipificado), la **268** (el
+webhook del ciclo de ayuda y del incidente) y el papeleo de cierre de la **264**.
+
+Gate **completo** sobre `969c611c` antes de abrir la release: **1307 archivos, 17.502 tests, 26
+saltados, `INIT_EXIT=0`** leído dentro del log. Y se comprobó que `dev` no se había movido entre la
+medición y la release.
+
+### La puerta que la bloqueaba, y cómo se descargó
+
+**T8 de la 268 —aviso a integradores— bloqueaba el despliegue, no el código.** Antes de redactar
+nada se midió **a quién** hay que avisar, contra producción y en sólo lectura:
+
+| medición | resultado |
+| --- | --- |
+| `webhook_suscripcion` (suscripciones de webhook) | **0 filas.** Nadie recibe un solo evento hoy |
+| `api_key` activas | **1** — `Dropi` (`ordx_H6-YSbM`), creada el 2026-08-20 |
+| órdenes creadas por esa key | **0**, `max(created_at) = null` |
+
+No hay a quién romperle nada, y los cuatro cambios son además aditivos. **Decisión humana del
+2026-08-22: cerrar T8 por medición y desplegar.** El aviso no se tira: pasa de puerta de despliegue
+a **material de onboarding de Dropi**, que debe tenerlo *antes* de conectar.
+
+### Convención nueva: `docs/api/CHANGELOG.md`
+
+El aviso vive ahí, versionado junto al contrato que describe. Existe porque esta misma task
+**heredó el agujero de 239/T0.3**: pedía este mismo aviso, nunca se marcó y la feature salió igual —
+no había dónde escribirlo ni a qué canal mandarlo. A partir de ahora, todo cambio observable del
+canal entra como entrada fechada **antes de la release**.
+
+### Pendiente de decisión humana
+
+1. **Canal y contacto del aviso** (pregunta abierta 5 de la 268, sigue sin respuesta). Alguien tiene
+   que entregarle a Dropi la entrada del changelog antes de que conecte.
+2. **Puerta humana de la 262 y la 265** — los dos specs escritos y mergeados, sin una línea de
+   implementación. La 265 deja 6 preguntas abiertas (las duras: la forma real de `skippedShipments`
+   y el umbral en km); la 262 trae su B0.1 medida: **M1 = 0 filas**.
+3. **Apagar `RUTA_DEBUG_LOG`** — hoy encendida por defecto, vuelca coordenadas de destinatarios a
+   los logs de Vercel. Era un override consciente para diagnosticar justo lo que cierra la 265.
+4. **`docs/release.md`** — sigue sin existir. Es la razón de que mediciones que caducan acaben
+   siendo casillas de un solo uso.
+5. **255** — pedir los dos renglones de qué está mal exactamente en el cotizador de la 248, y
+   renumerar el **id 248 duplicado** conservando el slug.
+
+### Verificación pendiente EN PRODUCCIÓN (no se puede en local)
+
+La sección «Órdenes sin gestionar» de la **264**, ya desplegada: cierre `8F88DCD5`, debe listar las
+**4 guías** y el pie seguir en **₡14.900 general y ₡2.000 de pago al mensajero**. En local no existe
+ni una orden `sin_gestionar` ni un cierre vencido, y por eso la ficha declaró la deuda en vez de
+disimularla.
+
+### Deuda declarada sin ficha propia
+
+- **268/M5** — el `where` de `gestiones` del detalle no filtra `anuladaAt`: un `incidente` **anulado**
+  puede seguir exponiendo su foto por API key. Merece ficha propia, no un parche.
+- **261/R19** — el mapa de `tasks.md` prometía una cláusula de guardia que no existe. El mapa quedó
+  corregido; la cláusula sigue debiéndose.
+
+### El registro mentía, y se corrigió
+
+`feature_list.json` daba la **255** y la **257** como `in_progress` con sus PRs mergeados y sus
+revisiones aprobadas, la **256** y la **263** como `pending` estando una en `dev` y la otra **en
+producción**, y **no tenía ficha de la 268** —otra sesión la numeró así cuando el id más alto aquí
+era 265; los 266 y 267 no existen—. Las cinco quedan al día. **Ninguna ficha `in_progress`.**
+
+Sigue pendiente, y es escritura de verdad: **`progress/history.md` no tiene entrada de la 255, la
+256, la 257 ni la 268.**
+
+### Y había tres fichas más, varadas fuera de `dev`
+
+El commit **`63dc081a`** —«chore(268): registra las fichas 266, 267 y 268 en la rama»— se empujó a
+`feature/268-webhook-ayuda-incidente` **después** de que el PR #456 ya estuviera mergeado, así que
+**nunca llegó a `dev`**. Apareció mirando los deployments de Vercel, no el repo.
+
+- **266** · habilitar un pedido con novedad por API key — pedido literal del humano, del bloque
+  NOVEDADES del **cuestionario de integración de Dropi**.
+- **267** · analítica de la propia tienda por API key — también de Dropi. Revierte a propósito una
+  decisión de diseño firmada (`ROLES_SIN_ANALITICA = ['apiKey']`).
+- **268** · su versión de la ficha, que chocaba con la registrada aquí.
+
+Las dos primeras se rescataron **tal cual**, sin reescribir el análisis ni el pedido del humano, y
+de la 268 varada se injertó lo único que la de aquí no tenía: el pedido que la originó. **Y dos
+avisos suyos ya no valen, porque la release de hoy los resolvió:** la dependencia de la 266 con la
+268 está satisfecha —`ORIGENES_SIN_EVENTO_PUBLICO` está **vacía** en `dev`, así que la familia del
+rescate ya emite— y el «coordinar con la rama `ux`» quedó sin objeto. Queda en pie afirmarlo con un
+test de emisión, no asumirlo.
+
+**Dropi no es un integrador dormido: está a mitad de integrarse.** Key creada el 2026-08-20, cero
+órdenes, y dos features suyas en la cola. Por eso el changelog tiene que llegarle antes de que
+conecte.
+
+---
+
+## 2026-08-22, 04:30 CR — tanda anterior (cerrada)
+
+`dev` está en `d6dd96b4` y **no se ha movido**: hay **seis PRs abiertos** y nada mergeado. Ese es
+el único bloqueo real de esta tanda.
+
+### Orden de merge, y por qué ese orden
+
+| # | PR | qué lleva | por qué ahí |
+| --- | --- | --- | --- |
+| 1 | **#446** | 🔴 el `access_token` OAuth2 fuera de los logs de producción + guardia de carpeta | independiente |
+| 2 | **#448** | 263 · el comprobante del cierre y la guía que pisaba al destinatario | **desbloquea el frontend de la 264** |
+| 3 | **#450** | 264 · bloque backend (tabla nueva + migración) | no se solapa |
+| 4 | **#447** | spec de la 265 + su ficha | **añade** al final de `feature_list.json` |
+| 5 | **#451** | spec de la 262, con B0.1 ya medida | añade `specs/` nuevo |
+| 6 | **#449** | cierre de la 261 (papeleo + F6 + M1') | **modifica** la ficha 261: va después de los que añaden |
+
+Hay además un **#434** de otra sesión (feature 256) que GitHub no sabe si mergea. No es de esta
+tanda y no se ha tocado.
+
+### Bloqueado, y por qué
+
+- **Frontend de la 264** — espera a que **#448** entre: los dos escriben en `cierre-factura.tsx`.
+- **Implementación de la 262 y de la 265** — las dos están en **puerta humana**. La 265 deja 6
+  preguntas abiertas (las duras: la forma real de `skippedShipments` y el umbral en km); la 262
+  deja 3.
+- **Release a `prod`** — decidida por el humano: **el hotfix del token sale con ella**, no suelto.
+  Cuando los PRs entren, toca gate **completo** sobre el SHA final —el que corrió el reviewer ya no
+  vale, `dev` se habrá movido— y abrir la release.
+
+### Decisiones pendientes del humano
+
+1. Mergear los seis PRs.
+2. **`docs/release.md`**: el repo no tiene lista de release, y por eso mediciones que caducan
+   (R27 de la 261) acaban siendo casillas de un solo uso. Propuesto, no creado: es convención nueva.
+3. **Apagar `RUTA_DEBUG_LOG`** cuando aterrice la 265. Hoy vuelca coordenadas de destinatarios a
+   los logs de Vercel; era un override consciente «para diagnosticar un problema abierto», y ese
+   problema es justo el que la 265 cierra.
+
+### Lo que esta tanda encontró y no estaba buscando
+
+- 🔴 **Un `access_token` OAuth2 imprimiéndose en claro** en los logs de producción desde el
+  2026-08-14, dos líneas debajo del `describirToken()` que existe para no revelarlo. Entró en `dev`
+  y llegó a `prod` sin que nada lo cazara: no rompía ningún test y `eslint` no lo ve.
+- **El optimizador de ruta no leía lo que el proveedor le decía.** Google contestaba en
+  `skippedShipments` / `validationErrors` que no podía servir las paradas, y el código lo traducía a
+  «forma inesperada»: error duro, mensajero sin ruta, cron reintentando y facturando. Causa medida:
+  el origen GPS estaba en Medellín y las paradas en Costa Rica, a ~1.040 km. → ficha **265**.
+- **`geocode_precision` se escribe y no lo lee nadie.** La feature 91 dejó dicho que «el umbral de
+  calidad lo decidirá el primer consumidor»; el primer consumidor llegó y no decidió nada, así que
+  un centroide de distrito entra en la ruta indistinguible de un `ROOFTOP`. → hallazgo H1, sin ficha.
+- **Dos guardias que no podían fallar**, encontradas midiendo y no leyendo: la de la 263 comparaba
+  cajas en vez de tinta (la caja se queda en su track mientras el texto se desborda), y la de la
+  invariante `fecha_reparto`/`asignado_at` **ni siquiera vería** una escritura que sólo toque el día.
+- **Una decisión de diseño del spec de la 264 era inimplementable**: habría metido el cliente de
+  Prisma en el bundle del navegador del mensajero. La cazó una guardia ajena.
+- **Tres sondas mías equivocadas** antes de medir bien el F6 de la 261. Ninguna medía lo que decía
+  medir, y las tres habrían pasado por verificación.
+
+### Verificado contra producción (sólo lectura, MCP)
+
+- **R7 y R20 de la 261, en la realidad**: las dos órdenes reservadas (guías 17496963 y 57998428)
+  llegaron a su día con el mismo estado y el mismo mensajero. La marca caducó sola, sin escrituras.
+- **M1' = 0** y **M1 de la 262 = 0** (esta sin acotar estado). **M2 = 35**, pero ninguna en
+  `por_recoger` ni `en_reparto`: todas en estados que R6 excluye. `D3'` no se re-abre.
+
+---
+
+## 2026-08-21 — tanda anterior (cerrada)
 
 **Cuatro releases a producción en esta sesión, todas verificadas contra la base después de
-desplegar.** Ninguna ficha `in_progress`.
+desplegar.** Ninguna ficha `in_progress` al cerrar esa tanda; la **258** entró después (bloque de abajo).
 
 | # | Qué | Release |
 | --- | --- | --- |
@@ -76,6 +555,111 @@ las guardias, ~33 s**. Ahora:
 
 Probado en los dos sentidos, que es donde mueren estos filtros. Y ya se ejerció de verdad: **se
 negó ante el backend de la 253** (toca `db/migrations` y `lib/types`).
+
+### 🟡 EN VUELO — 258 · el tablero del día de `/monitoreo`
+
+Alta el 2026-08-21: el humano eligió la **dirección A** del lienzo de diseño de la ruta
+([lienzo](https://claude.ai/code/artifact/fcc00a76-16ee-449e-b6c4-cb700bf3289a), cuatro direcciones comparadas).
+
+`fullstack`, `sdd: true`. **Frontend:** los ocho contadores pasan a la primitiva `Badge` —así el
+modo oscuro deja de depender de esta feature—, cada estado lleva icono (`EmptyState` / `Alert`), el
+detalle deja el `Sheet` y pasa a `Modal` + `DataTable` + `Pagination`, y entran filtro por nombre
+(`Input`) y densidad (`SegmentedToggle`). Pedido explícito del humano: **no crear primitivas
+nuevas**. **Backend:** la línea de «entregas acumuladas por hora» **no tiene dato** —el servicio
+devuelve conteos del día, no una serie— y el humano pidió construirla en esta misma ficha. Eso es
+lo que la vuelve `fullstack` y `sdd`.
+
+**Decisiones humanas ya tomadas** (2026-08-21): el detalle **sigue paginado** —el SQL es
+`LIMIT/OFFSET` y la guardia de frontera prohíbe traer el día a memoria—, y la línea por hora entra
+aquí en vez de en ficha aparte.
+
+**Lo que ya se sabe que va a doler:** toca `lib/types/tablero-dia.ts`, así que **`./init.sh
+--rapido` se negará solo** y la corrida completa es obligatoria; y
+`tests/unit/tablero-dia/frontera.guardia.test.ts` censa **todo** `app/(app)/monitoreo` (prohíbe
+`findMany`, SQL sin `LIMIT`, leer el rol, nombrar `badgeVariants` y declarar etiquetas o colores
+por estatus).
+
+**Estado (2026-08-21):** spec escrita y aprobada por el humano (78 requisitos, R1–R78), backend y
+frontend implementados, **`./init.sh` completo en verde** (1.269 archivos · 16.803 tests) y
+**revisión APROBADA sin bloqueantes** — el reviewer verificó los 78 uno a uno y corrió por su
+cuenta 10.028 tests de las suites afectadas más 1.910 de las 127 guardias.
+
+**Lo que encontró VER LA APP y la suite no podía ver.** Con 16.790 tests en verde, la cifra del
+contador «Reprogramadas» quedaba **fuera de la caja visible** en la tarjeta: el número estaba en el
+DOM —así que `toHaveTextContent` pasaba— pero no se leía. Medido en el navegador
+(`scrollWidth > clientWidth`), era el único de los ocho, porque es la etiqueta más larga y la
+columna mide 109 px. Y la gráfica medía **371 px**, más alta que cualquier otra cosa de la página,
+con las ocho primeras horas planas en cero. Ambos corregidos y **remedidos**: cero recortes y la
+gráfica en 209 px. El test que lo fija NO mira `textContent` —ése pasaba con el defecto puesto—,
+sino el reparto del espacio.
+
+**Decisiones humanas de la ficha:** detalle paginado (25, lo dice la configuración); la línea por
+hora entra en esta ficha y **cuadra con el contador `entregadas` aunque un punto pueda bajar**; la
+barra apilada y el avatar entran; el filtro NO va a la URL; y la línea **reusa `GraficaLineas`** de
+analítica sin abrir su confinamiento de `recharts` — dos de los tres costes que el leader le
+atribuyó a esa reutilización resultaron FALSOS al medirlos, y está escrito en el design para que
+nadie rehaga el razonamiento al revés.
+
+**Deuda que deja, dicha y no escondida:** `components/ui/table.tsx` se quedó **sin un solo
+consumidor** al migrar el detalle a `DataTable`. Va anotada `@sin-superficie`, y esa anotación es
+**la primera excepción de la capa R-B** de `superficie-de-uso.guardia.test.ts`, cuyo propio código
+dice que su mensaje vale más precisamente por no tener ninguna. Recomendación del leader: **chore
+aparte que haga a `DataTable` apoyarse en la primitiva** — así la primitiva recupera su único
+consumidor correcto, `DESIGN.md` («la única tabla de listas») pasa a ser cierto por construcción y
+la excepción desaparece. La alternativa honesta es borrarla; lo que no conviene es quedarse con la
+excepción.
+
+**Cierre (2026-08-21).** Cuatro defectos encontrados MIRANDO LA PANTALLA, ninguno detectable por la
+suite: la cifra de «Reprogramadas» fuera de la caja visible; la gráfica en 371 px con ocho horas
+planas; la etiqueta partiéndose dentro de la palabra (pasa el test de recorte, porque no desborda); y
+la cabecera de la tarjeta **recortándose en silencio** entre 768 y 830 px —«13» se leía «1»— porque
+`SidebarInset` usa `overflow-x-clip` y lo que no cabe no scrollea: desaparece.
+
+**La causa del cuarto no era la aparente.** El `scrollWidth` de la cabecera estaba clavado en 259 px
+a cualquier ancho: `CardHeader` es `grid-cols-[1fr_auto]` y ese `1fr` toma como mínimo el min-content
+de su hijo, así que con el avatar de ancho fijo y el nombre en `nowrap` **el `truncate` nunca llegaba
+a activarse**. Faltaba `min-w-0`.
+
+**La lección, que es la parte reutilizable:** tres mediciones seguidas dieron verde sobre una pantalla
+con un número recortado. El criterio era el correcto; fallaba **dónde se aplicaba** — siempre sobre la
+pieza recién tocada, nunca sobre la caja que la contiene. La matriz final (2.352 comprobaciones) se
+demostró capaz de ponerse **roja** quitando el arreglo, y ahí salió un caso que nadie había listado:
+1280 px en densidad compacta.
+
+**Gate final:** `./init.sh` completo, `INIT_EXIT=0`, 1.269 archivos · 16.815 tests · 26 skipped.
+**Sin commit, sin push y sin PR**: el árbol de `feat/258-monitoreo-backend` está sucio a propósito,
+a la espera de decisión humana.
+
+### 🟡 EN VUELO — 259 y 260 · lo que salió de USAR la pantalla
+
+Las dos nacen del humano usando `/monitoreo` ya desplegada, y las dos **revierten una decisión
+anterior con fecha y motivo**.
+
+**259 · el tablero cuenta por día de reparto** (`fullstack`, 26 requisitos, revisión APROBADA sin
+bloqueantes). Una orden asignada hoy **para mañana** aparecía hoy y caía en el cubo `sinRecoger`,
+cuya ayuda dice «el mensajero todavía no arrancó con ellas»: la pantalla **acusaba a alguien de ir
+retrasado por trabajo que aún no era suyo**. Revierte **D10** (firmada el 2026-08-20) con un
+apéndice fechado en el spec de la 246, cuya guardia comprueba **las dos direcciones** — que el
+puntero está y que el texto original sigue verbatim.
+
+El predicado no se inventó: se copió el de `RankingRepository`. **Y el spec me corrigió en lo
+principal:** yo afirmé que la rama de recolección «se queda como está», y sólo vale en el instante
+de la transición — si a las 08:00 mandan a Ana a recoger y a las 14:00 la orden se reasigna a Beto
+para mañana, reaparece hoy en la tarjeta de **Beto**. La acusación volvía por la otra puerta.
+
+⛔ **T8.1 bloquea la release, no el PR:** quien asigne para mañana verá esas órdenes desaparecer
+del tablero de hoy. Sin aviso previo se lee como «se perdieron» — la misma familia de fallos mudos
+que esta sesión lleva persiguiendo.
+
+**260 · la orden completa en el modal** (`fullstack`, 46 requisitos, spec aprobado, **sin
+empezar**). Reusa `ordenesColumns` con el `DataTable` propio, nunca `OrdenesListado`. **El hallazgo
+que la cambió:** yo dije «copiamos la regla por rol de `/ordenes`»; **no existe esa regla** — ese
+listado no recorta dinero por rol, recorta por PUERTA, y esa puerta le cierra el paso al
+`adminSatelite`, que **sí** entra a `/monitoreo`. Había un rol que vería dinero que la app le niega.
+
+**Van en serie, y no por intuición:** la intersección de sus `tasks.md` da tres archivos de código
+comunes, uno de ellos el test que afirma que el total del detalle cuadra con el `asignadas` de la
+tarjeta — la costura entre las dos, y cada ficha mueve un lado de esa igualdad.
 
 ### ▶️ Qué queda, y una que necesita decisión HUMANA
 

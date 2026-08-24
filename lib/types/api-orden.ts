@@ -31,9 +31,15 @@ export interface ApiOrdenListadoDTO {
   pagination: ApiOrdenPagination;
 }
 
-/** UNA evidencia de entrega/rechazo, ya resuelta a URL firmada de corta duracion (R15/R17). */
+/**
+ * UNA evidencia de entrega/rechazo/incidente, ya resuelta a URL firmada de corta duracion
+ * (R15/R17). FEATURE 268/R27 (2026-08-22): `incidente` entra en el union para que el DTO publico
+ * pueda llevar las fotos del incidente por sus dos procedencias (gestion del mensajero y
+ * `orden_incidente` del admin). Espejo EXACTO de `ApiOrdenEvidenciaRow`: si uno crece y el otro
+ * no, `ApiOrdenLecturaService.toDetalleDTO` deja de compilar, que es la idea.
+ */
 export interface ApiOrdenEvidenciaDTO {
-  resultado: "entregada" | "rechazada";
+  resultado: "entregada" | "rechazada" | "incidente";
   contentType: string | null;
   url: string; // URL firmada (5 min); NUNCA el storage_path crudo ni el bucket (R16)
   expiraEnSegundos: number;

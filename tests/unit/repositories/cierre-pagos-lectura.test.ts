@@ -11,7 +11,7 @@ import {
   toPendienteRowDesdeSnapshot,
 } from "@/lib/repositories/CierresAdminRepository";
 import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAdminRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 212 (T10, R21/R22/R23) — el DESGLOSE del recaudo llega por los TRES caminos de
@@ -124,7 +124,7 @@ const DESGLOSE_ESPERADO = [
 
 const tarifaRepoStub = {
   findVigentePorTiendas: vi.fn(),
-} as unknown as ITarifaVigentePorTiendaRepository;
+} as unknown as ITarifaVigenteRepository;
 
 // --- R23: las proyecciones PIDEN el desglose ---------------------------------------------
 
@@ -246,10 +246,14 @@ describe("R21 — camino 2 (admin): `CierresAdminRepository.findCierreByIdEnAlca
           motivoRechazo: null,
           mensajero: { nombre: "Ana" },
           destinoZona: { nombre: "Cartago" },
+          sinGestionRegistrado: true, // feature 264 (R27): la marca por cierre
         }),
       },
       gestionOrden: { findMany: vi.fn().mockResolvedValue([filaAdmin()]) },
       cierreDetail: { findMany: vi.fn().mockResolvedValue([filaSnapshot()]) },
+      // Feature 264 (B4): la tercera consulta del detalle. Vacia: este cierre no barrio nada, y
+      // esta suite mide el DESGLOSE de pagos, no la lista.
+      cierreSinGestion: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: vi.fn(),
     };
   }

@@ -2,37 +2,76 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   AnularGestionInput,
   CierreGestionPendienteRow,
+  CierreSinGestionRow,
   CierreSolicitadoInfo,
   CrearCierreInput,
   GestionDeshacerRow,
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigenteResuelta,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// Feature 274 (design §4.2, R21/R22): la clave del Map del resolver batch la define el modulo
+// puro de la cascada, no este repositorio. Indexar aqui con una clave propia seria la segunda
+// declaracion de la regla que R21 existe para impedir.
+import { clavePar } from "@/lib/utils/cascada-tarifa";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
+// Feature 264 (B9): la MISMA proyeccion y el MISMO orden que usa el detalle del admin.
+import {
+  ORDEN_SIN_GESTION,
+  SIN_GESTION_SELECT,
+  toSinGestionRow,
+} from "@/lib/utils/cierre-sin-gestion";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 // Feature 246 (T3.4, R8): las vias que reasignan SIN ofrecer la eleccion de dia estampan el dia de
-// Costa Rica EN CURSO. `startOfDayCR` es el helper de la convencion `@db.Date`, la misma que usa
-// `fecha_reparto`; `inicioDelDiaCREnUtc` (06:00Z) es la de las columnas `timestamp` y aqui
-// desplazaria el dia seis horas — la trampa que cerro la ficha 166.
-import { startOfDayCR } from "@/lib/utils/fecha-cr";
+// Costa Rica EN CURSO, en la convencion `@db.Date` de `fecha_reparto`.
+//
+// ⚠️ FEATURE 261 (B7, R19) — AQUI VIVIA `import { startOfDayCR }`, y se RETIRO A PROPOSITO. Este
+// repositorio llamaba `startOfDayCR()` SIN ARGUMENTO, o sea LEIA EL RELOJ DEL PROCESO para decidir
+// un dia de reparto. Eso choca de frente con la doctrina que la propia 246 escribio tres archivos
+// mas alla («`now` es un PARAMETRO con default: el reloj se inyecta en los tests y jamas se lee
+// dentro del calculo») y hacia imposible probar «deshacer a las 23:59 del 21» sin falsear el reloj
+// global del proceso. Desde la 261 el DIA lo resuelve el SERVICIO (`CierreDiaService
+// .deshacerGestion`, con su `now` inyectable) y llega ya resuelto en `AnularGestionInput`. Ningun
+// repositorio vuelve a leer el reloj para decidir un dia de reparto. NO lo vuelvas a importar.
+//
+// Lo unico que este archivo hace con ese dia es SERIALIZARLO para el SQL crudo:
+import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
+// Feature 271 — la lista de estados RE-SOLICITABLES vive en el modulo puro de la regla, no aqui.
+import { CIERRE_ESTADOS_RESOLICITABLES } from "@/lib/utils/bloqueo-cierre";
+import type { CierreEstado } from "@/lib/types/cierre";
 
 // El estado que representa una solicitud viva de cierre (R12) y el que crea la 37 por
 // defecto (R13). Feature 41/C1: `crearCierre` acepta ademas `vencido` (corte diario).
 const ESTADO_SOLICITADO = "solicitado";
 
-// Feature 111/R6/R7: estado del cierre que el corte diario deja "vencido" (mensajero que
-// debia cerrar y no solicito). `solicitarCierre` lo transiciona a `solicitado`.
-const ESTADO_VENCIDO = "vencido";
-
-// Feature 109/R28 (modelo GLOBAL): estado del cierre RECHAZADO por el admin. Ya NO es terminal:
-// BLOQUEA (R29) y es RE-SOLICITABLE (`rechazado -> solicitado`), espejo EXACTO del `vencido`.
-const ESTADO_RECHAZADO = "rechazado";
+// FEATURE 271 — LOS DOS ESTADOS RE-SOLICITABLES (`vencido` del corte y `rechazado` del admin) ya
+// no se nombran por separado aqui: la re-solicitud elige por EDAD, no por estado, asi que la lista
+// entra entera en un solo `where`. La lista vive en el modulo puro de la regla.
+//
+// ⚠️ 271/R17 — AQUI DECIA «DOS `vencido` A LA VEZ ES IMPOSIBLE». **NO LO ES**, y por eso este
+// comentario se reescribio el 2026-08-23, el mismo dia que se midio.
+//
+// LO ALCANZABLE, medido en `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`: el
+// argumento decia «el corte que creo el `vencido` ya barrio sus ordenes en la misma transaccion», y
+// eso tiene una EXCEPCION desde la feature 246 — una orden reservada para un dia posterior NO se
+// barre (246/R11) y su proteccion CADUCA SOLA (246/R13). La noche siguiente esa orden vence, el
+// bloqueado vuelve a entrar por la rama (b) de la seleccion del corte, se barre, y nace el SEGUNDO
+// `vencido`. Via de produccion: `CorreccionDiaRepartoService` (262) mueve el dia de una orden que YA
+// esta en `en_reparto`. Y LO INTRODUCE LA PROPIA 271: antes, la exclusion por cierre abierto sacaba
+// al bloqueado de la corrida siguiente.
+//
+// SIGUE SIN AÑADIRSE NINGUNA GUARDA, y ahora por la razon correcta: no porque el estado no exista,
+// sino porque YA ESTA CUBIERTO. Es la fila 7 de la tabla de verdad (`N=2, V=2`) con dos `vencido` en
+// vez de dos `rechazado`; la regla general cuenta N y V sin mirar el estado; el `id` que este mismo
+// archivo lleva en el `WHERE` de `transicionarASolicitado` (el arreglo de M2, puesto «por si acaso»
+// para el gemelo del `vencido`) mueve UNO, el mas viejo (R18); y la rama `v === n` del aviso ya dice
+// lo correcto. Donde tambien se acumulan dos re-solicitables es en el RECHAZO, que es retroactivo —
+// y ese caso tiene test desde el principio (M2, los cuatro pasos).
 
 // Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`
@@ -53,6 +92,9 @@ type CierrePrismaClient = Pick<
   | "orden"
   | "cierreDia"
   | "cierreDetail"
+  // Feature 264 (B3/B9): el VINCULO cierre <-> orden barrida. Se ESCRIBE en la tx del corte
+  // (`crearCierre`) y se LEE en el detalle propio del mensajero (`findCierrePropioConGestiones`).
+  | "cierreSinGestion"
   | "tarifa"
   // Feature 237 (T5.5, D3): + `ordenHistorialEstado` para LEER —solo leer— de que familia nacio
   // una gestion candidata a deshacerse. Este repositorio no escribe historial: eso pasa siempre
@@ -255,6 +297,10 @@ const CIERRE_PASADO_SELECT = {
   // rechazó, por qué (sin el motivo no sabe qué corregir).
   resueltoAt: true,
   motivoRechazo: true,
+  // Feature 264 (R27/R28): la marca viaja con la cabecera. NO entra en `CierrePasadoDTO` —el
+  // DTO del historico no la necesita— sino que el detalle propio la lee de esta misma fila,
+  // sin una segunda consulta.
+  sinGestionRegistrado: true,
 } as const;
 
 type CierrePasadoSelectRow = Prisma.CierreDiaGetPayload<{
@@ -318,7 +364,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     // tx para congelar la tarifa (R8). Es el UNICO consumidor del resolver tras la 69: los
     // feeds de wallet dejan de depender de el (leen el snapshot), y ese es justo el cambio
     // que mata el vector "cambio la tarifa entre solicitar y aprobar" (R18).
-    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    //
+    // Feature 274: el resolver ya NO resuelve "por tienda" sino por el PAR (tienda, zona) con
+    // la cascada de R1. Este repositorio no lo sabe: pide `resolveTarifas(pares, tx)` y la
+    // regla vive entera en `lib/utils/cascada-tarifa.ts` (R8/R21).
+    private readonly tarifaRepo: ITarifaVigenteRepository,
   ) {}
 
   /**
@@ -388,23 +438,24 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     });
   }
 
-  /** R12: existe un cierre `solicitado` del mensajero. */
-  async existeCierreSolicitado(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_SOLICITADO },
-    });
-    return count > 0;
-  }
-
   /**
-   * Feature 146/R24: proyeccion minima del cierre `solicitado` vigente (id + zona destino +
-   * nombre del mensajero) para componer su aviso. Los dos caminos de transicion solo devuelven
-   * un booleano, asi que el id del cierre se lee aqui, despues del exito.
+   * Feature 146/R24 -> FEATURE 271 (T6.8, R56) — proyeccion minima de UN cierre CONCRETO (zona
+   * destino + nombre del mensajero) para componer su aviso.
+   *
+   * ⚠️ ANTES ERA `findCierreSolicitado(mensajeroId)`, UN `findFirst … orderBy createdAt DESC`, Y ESO
+   * ES EL FALLO MUDO **M9**. Con el invariante 109/R30 vivo —un solo cierre abierto— daba igual cual
+   * devolviera. La ficha 271 DEROGA ese invariante (R9), asi que con DOS `solicitado` aquel orden
+   * devolvia SIEMPRE el mas nuevo: al re-solicitar el MAS VIEJO (R18), el aviso apuntaba al otro
+   * cierre y la clave de dedupe se calculaba sobre la entidad equivocada — silencio o aviso falso,
+   * sin que nada se pusiera rojo.
+   *
+   * La correccion no es cambiar el `orderBy`: es que el llamador YA TIENE el id del cierre sobre el
+   * que acaba de actuar y lo pasa. Un cierre buscado por mensajero no puede ser «el que se acaba de
+   * tocar» mas que por casualidad.
    */
-  async findCierreSolicitado(mensajeroId: string): Promise<CierreSolicitadoInfo | null> {
-    const fila = await this.prisma.cierreDia.findFirst({
-      where: { mensajeroId, estado: ESTADO_SOLICITADO },
-      orderBy: { createdAt: "desc" },
+  async findCierreParaAviso(cierreId: string): Promise<CierreSolicitadoInfo | null> {
+    const fila = await this.prisma.cierreDia.findUnique({
+      where: { id: cierreId },
       select: { id: true, destinoZonaId: true, mensajero: { select: { nombre: true } } },
     });
     if (fila === null) return null;
@@ -415,53 +466,58 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     };
   }
 
-  /** Feature 111/R6: existe un cierre `vencido` del mensajero (gemelo del anterior). */
-  async existeCierreVencido(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_VENCIDO },
+  /**
+   * FEATURE 271 (T2.3, R18) — el cierre RE-SOLICITABLE (`vencido` o `rechazado`) MAS VIEJO del
+   * mensajero, o `null`.
+   *
+   * ⚠️ SUSTITUYE A `existeCierreVencido` + `existeCierreRechazado`, QUE ELEGIAN POR ESTADO Y NO POR
+   * EDAD. `solicitarCierre` miraba primero el `vencido` y solo despues el `rechazado`: con un
+   * `rechazado` VIEJO y un `vencido` NUEVO resolvia el nuevo primero, que contradice «del mas viejo
+   * al mas nuevo». Con un solo cierre abierto daba igual; con dos, no.
+   *
+   * Orden `solicitado_at` ASC con desempate ESTABLE por `id` ASC, el mismo que `findBloqueoDetalle`
+   * (R11): dos criterios distintos para «el mas viejo» harian que el aviso y la escritura hablaran
+   * de cierres distintos.
+   */
+  async findCierreResolicitableMasViejo(
+    mensajeroId: string,
+  ): Promise<{ id: string; estado: CierreEstado } | null> {
+    const fila = await this.prisma.cierreDia.findFirst({
+      where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_RESOLICITABLES] } },
+      orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+      select: { id: true, estado: true },
     });
-    return count > 0;
+    return fila ?? null;
   }
 
   /**
-   * Feature 111/R6/R7/R8/R21 — transiciona `vencido -> solicitado` con escritura guardada por
-   * estado. SOLO reescribe `estado`; NO recalcula ni re-snapshotea los totales money-critical
-   * ni re-vincula gestiones (money-safe). 0 filas -> `false` (carrera: ya resuelto/transicionado).
+   * FEATURE 271 (T2.3, R19/R20) — transiciona ESE cierre a `solicitado`. UNA fila o ninguna.
+   *
+   * ⚠️ AQUI SE CIERRA EL FALLO MUDO **M2**, Y MUERDE POR EL `rechazado`. Los dos metodos que este
+   * sustituye (`transicionarVencidoASolicitado` / `transicionarRechazadoASolicitado`) eran
+   * `updateMany` por `(mensajeroId, estado)` **sin `id`**, y devolvian `count === 1`. Con DOS
+   * `rechazado` —secuencia alcanzable en cuatro pasos: solicita el dia 1, solicita el dia 2, el
+   * admin rechaza los dos— transicionaban **LOS DOS**, `count` valia 2 y el `=== 1` devolvia
+   * **false**: el servicio respondia `conflict` y el mensajero leia «no se pudo» con sus dos cierres
+   * YA movidos. Escribia y reportaba fallo.
+   *
+   * Con `id` (clave primaria) en el `where`, `count` solo puede ser 0 o 1 y `count === 1` vuelve a
+   * significar lo que dice (R19). El anti-TOCTOU por estado se CONSERVA intacto: `estadoEsperado`
+   * sigue en el `where`, asi que una carrera que ya lo movio devuelve `false` sin escribir.
+   *
+   * Los dos metodos viejos DESAPARECEN, no se parchean: dejar uno «por si acaso» conserva el
+   * `updateMany` sin `id`, que es el fallo.
+   *
+   * MONEY-SAFE (R20): el `data` cambia UNICAMENTE `estado`. Totales, pago al mensajero, ingreso de
+   * bodega, `cierre_id` de las gestiones, `resuelto_por`/`resuelto_at`, `motivo_rechazo` y
+   * `solicitado_at` quedan INTACTOS — no es una resolucion.
    */
-  async transicionarVencidoASolicitado(mensajeroId: string): Promise<boolean> {
+  async transicionarASolicitado(cierreId: string, estadoEsperado: CierreEstado): Promise<boolean> {
     const { count } = await this.prisma.cierreDia.updateMany({
-      // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido` (guardia por estado).
-      where: { mensajeroId, estado: ESTADO_VENCIDO },
-      // R8: money-safe — cambia UNICAMENTE `estado`. Los totales, pago, ingreso, cierre_id de
-      // gestiones, resuelto_por/at y solicitado_at quedan INTACTOS (no es una resolución).
+      where: { id: cierreId, estado: estadoEsperado },
       data: { estado: ESTADO_SOLICITADO },
     });
-    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict (R7)
-  }
-
-  /** Feature 109/R28 — existe un cierre `rechazado` del mensajero (gemelo de `existeCierreVencido`). */
-  async existeCierreRechazado(mensajeroId: string): Promise<boolean> {
-    const count = await this.prisma.cierreDia.count({
-      where: { mensajeroId, estado: ESTADO_RECHAZADO },
-    });
-    return count > 0;
-  }
-
-  /**
-   * Feature 109/R28 — transiciona `rechazado -> solicitado` con escritura guardada por estado
-   * (espejo EXACTO de `transicionarVencidoASolicitado`). SOLO reescribe `estado`; NO recalcula ni
-   * re-snapshotea los totales money-critical ni re-vincula gestiones (money-safe). 0 filas ->
-   * `false` (carrera: ya re-solicitado/resuelto).
-   */
-  async transicionarRechazadoASolicitado(mensajeroId: string): Promise<boolean> {
-    const { count } = await this.prisma.cierreDia.updateMany({
-      // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
-      where: { mensajeroId, estado: ESTADO_RECHAZADO },
-      // Money-safe: cambia UNICAMENTE `estado`. Totales, pago, ingreso, cierre_id de gestiones,
-      // resuelto_por/at, motivo_rechazo y solicitado_at quedan INTACTOS (no es una resolucion).
-      data: { estado: ESTADO_SOLICITADO },
-    });
-    return count === 1; // 0 = raced/resuelto -> el service devuelve conflict
+    return count === 1; // con `id` en el where solo hay 0 o 1: `false` = carrera, sin efectos
   }
 
   /**
@@ -563,7 +619,20 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                 deletedAt: null,
                 OR: noReservadaParaDespues, // feature 246/R11
               },
-              select: { id: true },
+              // FEATURE 264 (B3, R1/R9/R11): el pre-SELECT proyecta ADEMAS los descriptivos que la
+              // fila del vinculo congela. Es una sola consulta —la que ya se hacia—, no una
+              // segunda: cuando llegue el `createMany` la orden YA estara en `sin_gestionar` y
+              // releerla devolveria lo mismo, pero costaria otra ida a la base dentro de la
+              // transaccion del cron.
+              select: {
+                id: true,
+                numGuia: true,
+                numRemision: true,
+                destinatario: true,
+                producto: true,
+                tienda: { select: { nombre: true } },
+                zona: { select: { nombre: true } },
+              },
             });
             if (pendientes.length === 0) continue; // no-op: ni update, ni append, ni ruido
             const ids = pendientes.map((o) => o.id);
@@ -592,6 +661,45 @@ export class CierreDiaRepository implements ICierreDiaRepository {
                   origenTipo: "corte_sin_gestionar", // R6
                 })),
               );
+              // FEATURE 264 (B3, R1/R2/R4/R11) — EL VINCULO PERSISTIDO, EN ESTA MISMA TRANSACCION.
+              //
+              // POR QUE AQUI Y NO EN UNA LECTURA POSTERIOR. Hasta hoy la relacion cierre <-> orden
+              // barrida era un predicado VIVO (`orden.mensajero_asignado_id = cierre.mensajero_id
+              // AND estatus = sin_gestionar`), y la APROBACION lo destruye: libera la orden a
+              // bodega y le borra `mensajero_asignado_id`. Un cierre `aprobado` —el que se audita,
+              // porque es el que ya movio dinero— mostraba CERO ordenes, indistinguible de uno que
+              // de verdad no barrio ninguna. Escribirlo aqui es lo unico que sobrevive a eso (R5).
+              //
+              // R2/R3 SE CUMPLEN POR LA TRANSACCION: si algo revienta despues, ni el barrido ni
+              // este vinculo quedan. R6 tambien, y sin una linea: `crearCierre` sin
+              // `corteSinGestionar` (flujo 37) no entra a este bloque.
+              //
+              // R4 — `estatusOrigenId: origenEstatusId` es el origen de SU vuelta. Es literalmente
+              // la razon por la que este bucle tiene dos vueltas guardadas (feature 235/R27): con
+              // dos origenes en un solo `updateMany` habria que INVENTARSE de cual salio cada
+              // fila.
+              //
+              // MONEY-NEUTRAL: `cierre_sin_gestion` no tiene ni una columna de dinero, asi que
+              // esta escritura no puede mover un total ni aunque quisiera. No es disciplina: es
+              // que no hay donde guardar un importe.
+              //
+              // `skipDuplicates`: el `@@unique([cierreId, ordenId])` es la red por si una segunda
+              // corrida del corte entrara por el mismo cierre. Mismo criterio que el
+              // `ON CONFLICT DO NOTHING` del backfill de la migracion.
+              await tx.cierreSinGestion.createMany({
+                data: pendientes.map((o) => ({
+                  cierreId: cierre.id,
+                  ordenId: o.id,
+                  numGuia: o.numGuia,
+                  numRemision: o.numRemision,
+                  destinatario: o.destinatario,
+                  producto: o.producto,
+                  tiendaNombre: o.tienda.nombre,
+                  zonaNombre: o.zona.nombre,
+                  estatusOrigenId: origenEstatusId, // R4: el origen REAL de esta vuelta
+                })),
+                skipDuplicates: true,
+              });
             }
           }
         }
@@ -676,13 +784,19 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         const filas = [...porOrden.values()];
 
         if (filas.length > 0) {
-          // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
-          // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
-          const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
-            tx,
-            filas.map((f) => f.orden.tiendaId),
-          );
+          // Feature 69/R8 + feature 274/R22 — la tarifa vigente de cada PAR (tienda, zona)
+          // distinto, EN LA MISMA tx y en UNA query (sin N+1, R7). Hasta la 273 esto se
+          // resolvia por TIENDA sola (`resolveTarifasPorTiendas`), asi que dos ordenes de la
+          // misma tienda en zonas distintas congelaban la MISMA fila; desde la 274 la fila la
+          // elige la cascada sobre el par (design §4.2), la misma que usa el listado (R21).
+          // `null` para un par sin tarifa = gap R9/R23: las 9 columnas quedan NULL y el cierre
+          // se crea igual (decision (c) + R39: el gap NO bloquea, y el 409 de las APIs por key
+          // NO llega hasta aqui).
+          const pares = filas.map((f) => ({
+            tiendaId: f.orden.tiendaId,
+            zonaId: f.orden.zonaId,
+          }));
+          const tarifas = await this.tarifaRepo.resolveTarifas(pares, tx);
           await tx.cierreDetail.createMany({
             data: filas.map((f) => ({
               cierreId: cierre.id,
@@ -694,7 +808,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               zonaId: f.orden.zonaId,
               tiendaId: f.orden.tiendaId,
               esCentral: f.orden.zona.esCentral,
-              ...tarifaColumnas(tarifas.get(f.orden.tiendaId) ?? null),
+              ...tarifaColumnas(
+                tarifas.get(
+                  clavePar({ tiendaId: f.orden.tiendaId, zonaId: f.orden.zonaId }),
+                ) ?? null,
+              ),
               // descriptivos (R7).
               numGuia: f.orden.numGuia,
               numRemision: f.orden.numRemision,
@@ -750,24 +868,54 @@ export class CierreDiaRepository implements ICierreDiaRepository {
   async findCierrePropioConGestiones(
     cierreId: string,
     mensajeroId: string,
-  ): Promise<{ cierre: CierrePasadoDTO; gestiones: CierreGestionPendienteRow[] } | null> {
+  ): Promise<{
+    cierre: CierrePasadoDTO;
+    gestiones: CierreGestionPendienteRow[];
+    sinGestion: CierreSinGestionRow[];
+    sinGestionRegistrado: boolean;
+  } | null> {
     const cierre = await this.prisma.cierreDia.findFirst({
       where: { id: cierreId, mensajeroId }, // scope propio en el WHERE
       select: CIERRE_PASADO_SELECT,
     });
     if (cierre === null) return null;
 
-    const rows = await this.prisma.gestionOrden.findMany({
-      // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
-      // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
-      where: { cierreId, anuladaAt: null },
-      orderBy: { createdAt: "desc" },
-      ...WITH_DETALLE,
-    });
+    const [rows, sinGestion] = await Promise.all([
+      this.prisma.gestionOrden.findMany({
+        // `anuladaAt: null` por coherencia con el resto del módulo: una gestión anulada no
+        // llega a vincularse a un cierre, pero el filtro deja la intención escrita.
+        where: { cierreId, anuladaAt: null },
+        orderBy: { createdAt: "desc" },
+        ...WITH_DETALLE,
+      }),
+      // FEATURE 264 (B9/Q1, R7/R12/R30) — LA MISMA LISTA, PARA LA MISMA PANTALLA.
+      //
+      // `CierreFacturaDetalle` lo renderizan DOS modulos: el del admin y el del propio mensajero.
+      // Siendo el mismo componente, la seccion aparece en los dos (R30) — que pintara en uno y
+      // callara en otro es el arreglo a medias que se corrigio en la 263. Asi que el camino del
+      // mensajero tiene que TRAER el dato, no solo saber pintarlo.
+      //
+      // Consulta GEMELA a la del admin: mismo `select` y mismo `orderBy`, importados del mismo
+      // sitio, para que el mismo cierre no se lea distinto segun quien lo abra.
+      //
+      // SIN GUARDIA NUEVA: cuelga de `cierreId`, y el `findFirst` de arriba ya acoto ese id por
+      // `mensajeroId` en el WHERE. Un cierre ajeno devolvio `null` y esta consulta ni se ejecuta.
+      //
+      // Nada de dinero cruza por aqui, asi que la regla de audiencia de la 38/40 (§7.2, «el
+      // mensajero no ve la plata de la empresa») no aplica: son SUS ordenes, las que le
+      // bloquearon el cierre.
+      this.prisma.cierreSinGestion.findMany({
+        where: { cierreId },
+        orderBy: ORDEN_SIN_GESTION,
+        select: SIN_GESTION_SELECT,
+      }),
+    ]);
     const deLaTienda = await this.marcarDesdeAyudaTienda(rows);
     return {
       cierre: toCierrePasadoDTO(cierre),
       gestiones: rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id))),
+      sinGestion: sinGestion.map(toSinGestionRow),
+      sinGestionRegistrado: cierre.sinGestionRegistrado, // R27/R28
     };
   }
 
@@ -873,8 +1021,21 @@ export class CierreDiaRepository implements ICierreDiaRepository {
    * si alguna afecta 0 filas, el sentinela fuerza el rollback -> `false` sin efectos parciales.
    */
   async anularGestionYDevolverAGestion(input: AnularGestionInput): Promise<boolean> {
-    const { gestionId, ordenId, mensajeroId, actorUsuarioId, estatusEsperadoId, estatusEnRepartoId } =
-      input;
+    const {
+      gestionId,
+      ordenId,
+      mensajeroId,
+      actorUsuarioId,
+      estatusEsperadoId,
+      estatusEnRepartoId,
+      asignadoAt,
+      diaEnCurso,
+    } = input;
+    // Feature 261 (B7): el dia entra al SQL como TEXTO `YYYY-MM-DD` con `::date` explicito. El
+    // porque esta en `dia-reparto.ts` y no es teorico: el driver `pg` serializa un `Date` de JS
+    // como `timestamptz` y Postgres lo convierte a `date` con el `TimeZone` DE LA SESION, asi que
+    // el dia dependeria de la configuracion del servidor de base de datos.
+    const diaTexto = fechaRepartoComoTexto(diaEnCurso);
     try {
       return await this.prisma.$transaction(async (tx) => {
         // 1) R11: ANULA con rastro (quien la deshizo + cuando). Guardias: sigue siendo del
@@ -888,31 +1049,62 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         if (anulada.count === 0) throw new NoAnulable();
 
         // 2) R18/R19: devuelve la orden a `en_reparto` (unico estado desde el que se puede
-        // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajeroAsignadoId`
+        // volver a gestionar) y REPONE la asignacion al mensajero autor. `mensajero_asignado_id`
         // incondicional: es idempotente cuando la asignacion ya era ese mensajero
         // (entregada/reprogramada/rechazada) y repone la que el seguimiento de un reintento
         // limpio (47/R6, `limpiaMensajero: true`). No puede pisar a otro mensajero: una
         // reasignacion habria cambiado el estado y esta misma guardia fallaria.
         // Guardias: la orden sigue EXACTAMENTE en el estado leido (R5) y no esta borrada (R6).
-        const movida = await tx.orden.updateMany({
-          where: { id: ordenId, estatusId: estatusEsperadoId, deletedAt: null },
-          // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero
-          // autor (reasignacion efectiva) -> estampa `asignado_at = now`.
-          //
-          // FEATURE 246 (T3.4, R8/R10): esta via NO ofrece la eleccion de dia —nadie esta
-          // asignando un lote, se esta deshaciendo una gestion—, asi que el dia de reparto es el
-          // DIA DE COSTA RICA EN CURSO. La razon de estamparlo aqui y no dejarlo como estaba: las
-          // dos columnas no pueden contar historias distintas. Si `asignado_at` dijera «te la
-          // acabo de reasignar» y `fecha_reparto` conservara la reserva de ayer, el corte de esta
-          // misma noche la protegeria o la barreria segun un dato que ya no describe nada.
-          data: {
-            estatusId: estatusEnRepartoId,
-            mensajeroAsignadoId: mensajeroId,
-            asignadoAt: new Date(),
-            fechaReparto: startOfDayCR(),
-          },
-        });
-        if (movida.count === 0) throw new NoAnulable();
+        //
+        // Feature 76/R23 (W4): al deshacer una gestion se REPONE la asignacion al mensajero autor
+        // (reasignacion efectiva) -> estampa `asignado_at`.
+        //
+        // FEATURE 246 (T3.4, R8/R10) — EL MOTIVO ORIGINAL, QUE SIGUE SIENDO CIERTO Y NO SE TIRA:
+        // esta via NO ofrece la eleccion de dia —nadie esta asignando un lote, se esta
+        // deshaciendo una gestion—, asi que el dia de reparto se estampa AQUI, en la misma
+        // escritura que `asignado_at`, porque LAS DOS COLUMNAS NO PUEDEN CONTAR HISTORIAS
+        // DISTINTAS. Si `asignado_at` dijera «te la acabo de reasignar» y `fecha_reparto`
+        // conservara la reserva de AYER, el corte de esta misma noche la protegeria o la barreria
+        // segun un dato que ya no describe nada.
+        //
+        // ⚠️ FEATURE 261 (B7, R16/R17/R18) — LO QUE AQUEL RAZONAMIENTO NO CONTEMPLO: LA RESERVA A
+        // FUTURO. Ahi la combinacion «reasignada ahora, para un dia que aun no llega» NO es una
+        // incoherencia: es exactamente lo que produce la via de asignacion cuando bodega elige
+        // «mañana» (`asignado_at = NOW()`, `fecha_reparto = mañana`). Bajarla a hoy no repara
+        // nada: CANCELA UNA DECISION QUE ALGUIEN TOMO A PROPOSITO, sin avisar, y entrega la orden
+        // al corte de esa misma noche. Medido en produccion el 2026-08-21 con la guia 17496963:
+        // gestionada 22:10, anulada 22:18, y en ese mismo instante `fecha_reparto` paso de
+        // 2026-08-22 a 2026-08-21.
+        //
+        // LA REGLA NUEVA, con su excepcion nombrada: el dia de reparto se escribe SIEMPRE en la
+        // misma escritura que `asignado_at`; al deshacer, ese dia es el de Costa Rica EN CURSO,
+        // SALVO que la orden ya este reservada para un dia POSTERIOR — una reserva futura no se
+        // cancela por reponer una asignacion.
+        //
+        // POR QUE UN `CASE` EN LA SENTENCIA Y NO UNA LECTURA PREVIA EN TypeScript: el `WHERE` de
+        // este `UPDATE` solo protege `estatus_id`, asi que una fecha leida antes y escrita
+        // despues podria pisarse con una decision rancia — el mismo genero de defecto que esta
+        // ficha arregla. El `CASE` decide SOBRE LA FILA: no hay ventana entre leer y escribir.
+        // Y no `GREATEST(...)`, que tambien funcionaria en Postgres (ignora los NULL) pero cuya
+        // semantica es especifica del motor y contraria a lo que la mayoria espera.
+        //
+        // El `NULL` cae por el `ELSE` sin caso especial: `NULL > x` es `NULL`, que no es `TRUE`,
+        // asi que una orden sin dia queda con el dia de hoy — que es R18 y lo que ya hacia.
+        const movidas = await tx.$queryRaw<{ id: string }[]>`
+          UPDATE "orden"
+          SET "estatus_id" = ${estatusEnRepartoId},
+              "mensajero_asignado_id" = ${mensajeroId},
+              "asignado_at" = ${asignadoAt},
+              "fecha_reparto" = CASE
+                WHEN "fecha_reparto" > ${diaTexto}::date THEN "fecha_reparto"
+                ELSE ${diaTexto}::date
+              END,
+              "updated_at" = NOW()
+          WHERE "id" = ${ordenId}
+            AND "estatus_id" = ${estatusEsperadoId}
+            AND "deleted_at" IS NULL
+          RETURNING "id"`;
+        if (movidas.length === 0) throw new NoAnulable();
 
         // 3) R20/R21/R23: CHOKE POINT del historial (49) en la MISMA tx que el cambio de estado.
         // Origen = estado real previo, destino = `en_reparto`, actor = quien deshizo,

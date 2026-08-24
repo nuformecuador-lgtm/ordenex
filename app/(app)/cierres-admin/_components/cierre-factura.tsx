@@ -21,14 +21,22 @@ import type {
   CierreBodegaResumen,
   CierreBodegaResumenLite,
 } from "@/lib/interfaces/services/ICierreBodegaService";
+// Feature 264 — `CierreOrdenSinGestion` se importa de AQUÍ y no de `ICierresAdminService`, que
+// es donde lo sitúa `design.md §6`. No es una preferencia: el DTO se DECLARA en este archivo y
+// el contrato del admin lo RE-EXPORTA, porque la dirección contraria mete
+// `lib/types/{cierres-admin,wallet}.ts` —que importan `Prisma` como VALOR— en el grafo del
+// navegador y `tests/unit/guards/pagos-captura.guardia.test.ts` se pone roja. Está escrito en
+// los dos contratos y en `progress/impl_264_backend.md §3`; no se "arregle" de vuelta.
 import type {
   CierrePasadoDTO,
   CierreDetalleGestion,
   CierreGrupos,
+  CierreOrdenSinGestion,
   CierreResultado,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
-import type { CierreDestinoTipo } from "@/lib/types/cierre";
+import type { CierreDestinoTipo, CierreEstado } from "@/lib/types/cierre";
+import type { OrderStatusValue } from "@/lib/types/order-status";
 
 import {
   money,
@@ -60,6 +68,7 @@ import {
   FLETE_DEV_CON_IVA_LABEL,
   INGRESO_TOTAL_LABEL,
   INGRESO_PANEL_LABEL,
+  MensajeroBloqueadoBadge,
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
@@ -138,6 +147,18 @@ import { desglosePantalla } from "./desglose-pago";
 // --- Etiquetas propias de la factura (texto separado, i18n-ready) ---
 const FACTURA_TITULO = "Cierre del día";
 const FACTURA_FOLIO_LABEL = "Comprobante";
+// Feature 263 (R1/R2): el sustantivo que precede al folio lo decide el ESTADO, no el azar.
+// Un cierre sin resolver no es un comprobante —no se ha emitido nada— y llamarlo así junto a
+// un «Resuelto —» es la contradicción que reportó el humano. `Solicitud` no inventa
+// vocabulario: reusa el «Solicitado <fecha>» que ya está en la misma cabecera desde la 38.
+// El `Record` es exhaustivo a propósito: un quinto valor en `CierreEstado` pone el typecheck
+// rojo y obliga a decidir su rótulo en vez de heredar el que había en silencio.
+const FACTURA_FOLIO_LABEL_POR_ESTADO: Record<CierreEstado, string> = {
+  aprobado: FACTURA_FOLIO_LABEL,
+  rechazado: FACTURA_FOLIO_LABEL,
+  solicitado: "Solicitud",
+  vencido: "Solicitud",
+};
 const FACTURA_MENSAJERO_LABEL = "Mensajero";
 const FACTURA_SOLICITADO_LABEL = "Solicitado";
 const FACTURA_RESUELTO_LABEL = "Resuelto";
@@ -147,7 +168,19 @@ const FACTURA_LIQUIDACION_TITULO = "Liquidación";
 const FACTURA_ORDENES_TITULO = "Órdenes del cierre";
 const FACTURA_TOTAL_GENERAL_LABEL = "Total general";
 const FACTURA_MOTIVO_RECHAZO_LABEL = "Motivo de rechazo";
-const FACTURA_ORDENES_KPI_LABEL = "Órdenes";
+/**
+ * Feature 264 (Q4/R21) — ESTE KPI CUENTA GESTIONES, Y AHORA LO DICE.
+ *
+ * Se llamaba `FACTURA_ORDENES_KPI_LABEL` y valía «Órdenes»; el número no ha cambiado ni una
+ * unidad (sigue sumando `ORDEN_RESULTADOS`, ver `gestiones` en `CierreFacturaDetalle`). Lo que
+ * estaba mal era el nombre, y se volvió insostenible al añadir debajo la sección de órdenes SIN
+ * gestionar: con doce filas de órdenes a la vista, un KPI rotulado «Órdenes: 3» son dos números
+ * que se desmienten en la misma pantalla, que es exactamente lo que R21 prohíbe.
+ *
+ * Se renombra también la CONSTANTE, no solo su valor: un identificador que dice «Órdenes» y
+ * pinta «Gestiones» es la próxima confusión ya escrita.
+ */
+const FACTURA_GESTIONES_KPI_LABEL = "Gestiones";
 // --- Rótulos de la tarjeta compacta del resumen ---
 const RESUMEN_TOTAL_LABEL = "Total";
 const RESUMEN_VER_DETALLES = "Ver detalles";
@@ -452,6 +485,14 @@ export function CierreFacturaResumen({
   acciones,
   rotulo,
 }: Readonly<CierreFacturaResumenProps>) {
+  // FEATURE 271 (R48): el bloqueo del DUEÑO de este cierre, junto al estado. Se pinta AQUÍ y no en
+  // cada listado porque las dos listas —la cola y el histórico— usan este mismo comprobante, y el
+  // caso que R48 viene a resolver aparece justo cuando la fila que falta está en la otra: un
+  // mensajero con dos cierres puede tener uno en cada lista.
+  //
+  // El dato es OPCIONAL en el tipo (aditivo): un consumidor que no lo traiga no pinta nada, en vez
+  // de afirmar «no bloqueado», que sería inventarse un veredicto.
+  const bloqueo = cierre.bloqueoMensajero;
   return (
     <HojaResumen
       titulo={FACTURA_TITULO}
@@ -459,7 +500,17 @@ export function CierreFacturaResumen({
       toggleSufijo={`del cierre de ${cierre.mensajeroNombre}`}
       folio={folio(cierre.cierreId)}
       estado={cierre.estado}
-      rotulo={rotulo}
+      rotulo={
+        <>
+          {rotulo}
+          {bloqueo?.bloqueado ? (
+            <MensajeroBloqueadoBadge
+              cierresAbiertos={bloqueo.cierresAbiertos}
+              cierresPorReenviar={bloqueo.cierresPorReenviar}
+            />
+          ) : null}
+        </>
+      }
       acciones={acciones}
       partes={[
         { icon: <User size={14} aria-hidden="true" />, texto: cierre.mensajeroNombre },
@@ -688,15 +739,22 @@ function HojaResumen({
             {solicitadoAt === undefined ? null : (
               <section aria-label={RESUMEN_FECHAS_TITULO}>
                 <TituloColumna>{RESUMEN_FECHAS_TITULO}</TituloColumna>
+                {/* Feature 263 (R13): sin fecha de resolución la línea NO se pinta. Era el
+                    MISMO guion de la cabecera, en la MISMA pantalla, nueve líneas más arriba;
+                    arreglar sólo uno se leería como dos comportamientos deliberados. Sin
+                    ella, «Solicitado» pasa a ser la última y pierde su borde punteado. */}
                 <LineaFecha
                   label={FACTURA_SOLICITADO_LABEL}
                   value={fecha(solicitadoAt)}
+                  ultima={!resueltoAt}
                 />
-                <LineaFecha
-                  label={FACTURA_RESUELTO_LABEL}
-                  value={fecha(resueltoAt ?? null)}
-                  ultima
-                />
+                {resueltoAt ? (
+                  <LineaFecha
+                    label={FACTURA_RESUELTO_LABEL}
+                    value={fecha(resueltoAt)}
+                    ultima
+                  />
+                ) : null}
               </section>
             )}
           </div>
@@ -895,6 +953,22 @@ export interface CierreFacturaDetalleProps {
    * para el rol que no corrige y en la vista del mensajero.
    */
   onCorregirPagos?: (g: CierreDetalleGestion) => void;
+  /**
+   * Feature 264 (R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear ESTE
+   * cierre. Ni una lleva monto: no tienen gestión, así que no hay nada que sumar (R10).
+   */
+  ordenesSinGestion?: CierreOrdenSinGestion[];
+  /**
+   * Feature 264 (R27/R28) — `false` ⇒ el cierre es ANTERIOR al registro y su lista es
+   * irrecuperable: la sección pinta el AVISO en vez de la lista. `[]` con `true` es «no hubo
+   * ninguna»; `[]` con `false` es «no lo sabemos», y son dos pantallas distintas.
+   *
+   * Las dos props son OPCIONALES por los dobles de test que ya montaban la hoja, pero las DOS
+   * superficies que la renderizan las pasan (R30) y eso lo vigila
+   * `tests/unit/guards/cierre-detalle-superficies.guardia.test.ts`: «opcional en el tipo» es
+   * justo por donde se cuela un arreglo a medias, y el typecheck no caza un prop ausente.
+   */
+  sinGestionRegistrado?: boolean;
 }
 
 /**
@@ -903,6 +977,68 @@ export interface CierreFacturaDetalleProps {
  * calle, no una preferencia—, y nombra los MÉTODOS porque el total no se toca.
  */
 const FILA_CORREGIR_METODOS = "Corregir métodos de pago";
+
+/**
+ * Feature 263 (R7–R10, R14) — la plantilla de la rejilla de órdenes, en UN solo sitio.
+ *
+ * POR QUÉ ES UNA CONSTANTE Y NO UN LITERAL REPETIDO. La cabecera de columnas y cada fila son
+ * rejillas INDEPENDIENTES —cada fila es su propio contenedor `grid`—; hoy quedan alineadas
+ * sólo porque los cinco tracks resuelven al mismo número. El literal
+ * `grid-cols-[40px_1.4fr_1fr_1fr_24px]` vivía duplicado en los dos sitios, así que tocar uno
+ * descuadraba la cabecera de sus filas. Con una constante, esa trampa no puede activarse por
+ * descuido.
+ *
+ * QUÉ CAMBIÓ Y POR QUÉ:
+ * - Guía: de `40px` FIJOS a `auto` + un piso en px (`FILA_GUIA_CELDA`). 40 px no caben ni una
+ *   guía de 8 dígitos (~60 px): el número no podía encoger ni recortarse, y se pintaba encima
+ *   del destinatario. No es `max-content` a secas porque un track dependiente del contenido se
+ *   resuelve POR SEPARADO en cada rejilla: una fila con guía corta y otra con guía larga
+ *   dejarían las columnas de dinero desplazadas entre sí y respecto de la cabecera (rompe
+ *   R10). Con `auto` + piso, en el caso normal el piso gana en todas y TODAS resuelven al
+ *   mismo número. Si algún día llega una guía más larga que el piso, esa fila CRECE —un par de
+ *   píxeles desalineada, feo pero legible— en vez de mentir tapando al vecino.
+ * - Destinatario y dinero: `minmax(0, …)`. `1.4fr` es `minmax(auto, 1.4fr)`, y ese `auto` es el
+ *   min-content del texto: por eso hoy el destinatario TAMPOCO puede ceder. Con el mínimo en 0
+ *   sí cede, que es lo que R8 decide — quien pierde texto es el nombre, con elipsis, nunca la
+ *   guía (precedente de la 258, `MensajeroCard.tsx`: el nombre propio se trunca, la cifra no).
+ */
+const FILA_GRID_COLS =
+  "grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_24px]";
+
+/**
+ * La celda de la guía, en la fila Y en la cabecera de columnas: el mismo piso servido por la
+ * misma constante, o las dos rejillas resolverían distinto.
+ *
+ * EL PISO ESTÁ DIMENSIONADO A 9 DÍGITOS, y el dato que hay detrás CADUCÓ EL DÍA QUE SE MIDIÓ:
+ * el 2026-08-21 producción tenía 163 órdenes con guía, todas de 8 dígitos (`10187406` …
+ * `99619074`). Eso es una foto, no una ley — en ningún sitio del repo (schema, tipos,
+ * validación, importador) se declara que la guía tenga 8 dígitos para siempre—, así que el
+ * ancho no se aprieta contra ella. Un dígito de holgura cuesta ~12 px de cabecera; quedarse
+ * justo cuesta exactamente este mismo defecto otra vez.
+ *
+ * PROHIBIDO aquí: `truncate`, `overflow-hidden`, `break-words`, `break-all`. Es literalmente
+ * el primer defecto de la 258 (`overflow-x-clip` se comía la cifra en silencio y 16.800 tests
+ * pasaban): un número a medias es un número FALSO, peor que uno que se sale.
+ */
+const FILA_GUIA_CELDA = "min-w-[80px] whitespace-nowrap tabular-nums";
+
+/**
+ * Feature 264 (R18) — la plantilla de la rejilla de la sección de órdenes SIN GESTIONAR.
+ *
+ * NO ES UNA TERCERA COPIA DE `FILA_GRID_COLS`, y la diferencia no es cosmética: esta sección
+ * tiene TRES columnas —guía, destinatario, tienda— y las otras dos de `FILA_GRID_COLS` son
+ * **Cobrado** e **Ingreso total**, que para estas órdenes NO EXISTEN (R10/R18: no hay gestión,
+ * luego no hay monto), más la celda del chevron, que tampoco existe porque la fila no se
+ * despliega (R31). Reusar la plantilla de cinco tracks pintaría dos columnas de dinero vacías,
+ * que es justo lo que R18 prohíbe: una columna con «—» en el 100 % de las filas se lee como
+ * «este dato falta» cuando lo cierto es «este dato no existe».
+ *
+ * Los DOS primeros tracks son, carácter a carácter, los dos primeros de `FILA_GRID_COLS`, y el
+ * piso de la guía es la MISMA constante (`FILA_GUIA_CELDA`): la guía se lee igual en las dos
+ * secciones y hereda su prohibición de recortarse. Las dos rejillas de esta sección —cabecera
+ * de columnas y filas— la comparten, que es lo único que las mantiene alineadas entre sí.
+ */
+const SIN_GESTION_GRID_COLS = "grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)]";
 
 // --- Rótulos de la tabla compacta del detalle (texto separado, i18n-ready) ---
 const FILA_GUIA_COL = "Guía";
@@ -915,6 +1051,43 @@ const FILA_NUEVA_FECHA_LABEL = "Nueva fecha";
 const FILA_VER_EVIDENCIA = "Ver evidencia";
 const FOOTER_RECAUDADO_LABEL = "Total recaudado";
 const FOOTER_ENTREGAS_LABEL = "entregas";
+
+// --- Feature 264: rótulos de la sección de órdenes SIN GESTIONAR (i18n-ready) ---
+const SIN_GESTION_TITULO = "Órdenes sin gestionar";
+/**
+ * R17 — la nota fija. Dice las dos cosas que hacen falta para leer la sección sin equivocarse:
+ * de dónde salieron estas órdenes (el corte del día) y por qué no tienen ni una columna de
+ * dinero (no tienen gestión, así que no hay nada que cobrar ni que pagar).
+ */
+const SIN_GESTION_NOTA =
+  "El corte del día las cerró sin gestión. No tienen dinero asociado.";
+/**
+ * R28 — «no lo sabemos» NO es «no hubo ninguna». Un cierre anterior al registro no tiene lista
+ * que enseñar, y callarse comunica «no barrió ninguna»: tranquilizador y falso. Este aviso es
+ * la razón de existir de `sinGestionRegistrado`.
+ */
+const SIN_GESTION_NO_REGISTRADO =
+  "Este cierre es anterior al registro de órdenes sin gestionar: no se conserva la lista.";
+/** Nombre accesible de la lista, para que su recuento no dependa de una clase. */
+const SIN_GESTION_LISTA_LABEL = "Lista de órdenes sin gestionar";
+
+/**
+ * [Q6/R32] El estado del que la orden SALIÓ, traducido. Distingue el paquete que se quedó en la
+ * mano del mensajero del que esperaba respuesta de la tienda, y eso cambia qué se hace con él.
+ *
+ * `Partial` y no `Record` exhaustivo A PROPÓSITO: el corte solo barre desde `ESTADOS_A_BARRER`
+ * (`en_reparto`, `ayuda_tienda`), así que sólo esos dos pueden llegar. Cualquier otro valor —o
+ * `null`, que es lo que viaja cuando NO CONSTA— hace que la pieza se OMITA (R32). Nada de un
+ * «—» permanente: un marcador de ausencia fijo es el mismo silencio ambiguo de R28 en pequeño.
+ *
+ * Las etiquetas son las CORTAS del `design.md §4` y no las de `ORDER_STATUS_LABELS`
+ * («Ayuda solicitada a la tienda», 28 caracteres): esto va incrustado en la línea del producto,
+ * no en un chip de una tabla de estados.
+ */
+const SIN_GESTION_ORIGEN_LABEL: Partial<Record<OrderStatusValue, string>> = {
+  en_reparto: "En reparto",
+  ayuda_tienda: "Ayuda de la tienda",
+};
 
 /** Tono de la píldora de conteo de cada pestaña, por resultado. */
 const TAB_TONO: Record<CierreResultado, "success" | "warning" | "neutral"> = {
@@ -1102,14 +1275,28 @@ function FilaGestion({
             : `Detalle de la orden ${g.numRemision} · ${g.destinatario}`
         }
         onClick={() => setOpen((v) => !v)}
-        className="grid w-full grid-cols-[40px_1.4fr_1fr_1fr_24px] items-center gap-2 px-2 py-2.5 text-left transition-colors hover:bg-muted/50"
+        className={cn(
+          "grid w-full items-center gap-2 px-2 py-2.5 text-left transition-colors hover:bg-muted/50",
+          FILA_GRID_COLS,
+        )}
       >
-        <span className="text-[13px] font-medium text-foreground">
+        <span
+          className={cn(
+            "text-[13px] font-medium text-foreground",
+            FILA_GUIA_CELDA,
+          )}
+        >
           {g.numGuia ?? "—"}
         </span>
-        <span className="flex flex-col">
-          <span className="text-[13px] text-foreground">{g.destinatario}</span>
-          <span className="text-[11px] text-muted-foreground">
+        {/* `min-w-0` no es adorno: sin él el mínimo automático de este flex-item vuelve a ser
+            el min-content del texto y `truncate` NO llega a activarse nunca (lección literal
+            de la 258). El texto sigue COMPLETO en el DOM y en el `aria-label` del botón (R12):
+            lo que se recorta es la pintura, no el dato. */}
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-[13px] text-foreground">
+            {g.destinatario}
+          </span>
+          <span className="truncate text-[11px] text-muted-foreground">
             {g.numRemision} · {g.producto}
           </span>
         </span>
@@ -1253,6 +1440,142 @@ function FilaGestion({
 }
 
 /**
+ * Feature 264 (R18, R31, R32) — fila de una orden que el corte cerró SIN GESTIÓN.
+ *
+ * Es un `<div>`, no un `<button aria-expanded>`, y eso es el requisito y no una simplificación:
+ * no hay segundo nivel que desplegar —ni desglose de ingreso, ni evidencia, ni pagos— porque no
+ * hay gestión de la que colgarlo. La sección es de CONSULTA (R31).
+ *
+ * Tres columnas y ninguna de dinero (R18). El estado de origen viaja pegado a la línea del
+ * producto y **desaparece** cuando no consta (R32): no se pinta un guion en su lugar.
+ */
+function FilaSinGestion({ o }: Readonly<{ o: CierreOrdenSinGestion }>) {
+  const origen = o.estatusOrigen
+    ? SIN_GESTION_ORIGEN_LABEL[o.estatusOrigen]
+    : undefined;
+  return (
+    // `break-inside-avoid` (feature 223): mismo criterio que `FilaGestion` — la fila se repite N
+    // veces y es la que decide dónde caen los cortes. Partida, deja la guía en una página y el
+    // destinatario en la siguiente.
+    <div
+      role="listitem"
+      className={cn(
+        "mb-2 grid break-inside-avoid items-center gap-2 rounded-[10px] border border-border px-2 py-2.5",
+        SIN_GESTION_GRID_COLS,
+      )}
+    >
+      <span
+        className={cn("text-[13px] font-medium text-foreground", FILA_GUIA_CELDA)}
+      >
+        {/* La orden puede no tener guía todavía; ahí el «—» SÍ corresponde: el dato existe y
+            está vacío. Es el caso contrario al del estado de origen (R32). */}
+        {o.numGuia ?? "—"}
+      </span>
+      {/* `min-w-0`: sin él el mínimo automático del flex-item es el min-content del texto y
+          `truncate` no llega a activarse nunca (lección literal de la 258). */}
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-[13px] text-foreground">
+          {o.destinatario}
+        </span>
+        <span className="truncate text-[11px] text-muted-foreground">
+          {o.numRemision} · {o.producto}
+          {origen ? ` · ${origen}` : null}
+        </span>
+      </span>
+      <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+        {o.tiendaNombre}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Feature 264 (R13–R18, R28, R34) — LA SECCIÓN DE ÓRDENES SIN GESTIONAR.
+ *
+ * ── POR QUÉ ES UNA SECCIÓN HERMANA Y NO UNA SEXTA PESTAÑA (`design.md §3`)
+ * `TAB_TONO`, `RESULTADO_LABEL`, `RESULTADO_VACIO` y `ORDEN_RESULTADOS` son
+ * `Record<CierreResultado, …>`, y `CierreResultado` es el enum `gestion_resultado` de Postgres.
+ * Una sexta clave obligaría a ensanchar ese tipo con un valor que el enum NO tiene, y la mentira
+ * se propagaría a todo lo que consume `CierreGrupos` (descargas, retornables de la 238,
+ * incidentes de la 158). Una orden sin gestionar **no es un resultado: es la ausencia de uno**.
+ * El `tablist` sigue emitiendo exactamente cinco pestañas (R14).
+ *
+ * ── LOS TRES ESTADOS, Y POR QUÉ SON TRES (`design.md §3.1`, R15/R28)
+ *   registrado + ≥1 orden → la sección con su lista y su conteo
+ *   registrado + 0 órdenes → NADA. Es la lectura correcta: no hubo ninguna
+ *   NO registrado        → la sección con el AVISO y SIN lista, aunque llegaran órdenes
+ * La tercera fila es la feature entera de Q3. Sin ella, un cierre anterior al registro se
+ * pintaría como la segunda y diría «no hubo ninguna», que es tranquilizador y falso.
+ *
+ * ── SIN RECORTE (R34). Ni un `slice`, ni un tope: se listan todas. Una lista truncada en
+ * silencio se lee como una lista completa, y aquí el número es justamente el que motivó el
+ * cierre. Si algún día se añadiera un tope, la regla ya está escrita: habría que decir cuántas
+ * no se muestran, junto al conteo del encabezado.
+ */
+function SeccionSinGestion({
+  ordenes,
+  registrado,
+}: Readonly<{ ordenes: readonly CierreOrdenSinGestion[]; registrado: boolean }>) {
+  // R15 — la ÚNICA combinación que no pinta nada. Se pide `registrado` explícitamente: con la
+  // marca en `false` la sección aparece igual, porque no tener lista y no haber tenido órdenes
+  // son cosas distintas (R28).
+  if (registrado && ordenes.length === 0) return null;
+
+  return (
+    <section aria-label={SIN_GESTION_TITULO} className="flex flex-col">
+      {/* `break-inside-avoid` (feature 223): el encabezado lleva el título, el conteo y la nota
+          que explica que estas órdenes no tienen dinero. Partido, la primera página deja una
+          lista de órdenes sin decir qué son. La SECCIÓN entera no lo lleva —puede tener sesenta
+          filas y superar el alto de una página—, igual que la de las pestañas. */}
+      <div className="flex break-inside-avoid flex-col gap-1 border-b border-border pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
+            {SIN_GESTION_TITULO}
+          </h4>
+          {registrado ? (
+            // R16 — cuántas son. Tono `warning` y no neutro: es una anomalía operativa, no una
+            // salida rutinaria del reparto (mismo criterio con el que la 158 puso `incidente`
+            // en `warning`). Sin lista que contar no se pinta ningún número: un «0» aquí sería
+            // exactamente el «no hubo ninguna» que R28 prohíbe.
+            <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[0.6875rem] text-warning-strong">
+              {ordenes.length}
+            </span>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {registrado ? SIN_GESTION_NOTA : SIN_GESTION_NO_REGISTRADO}
+        </p>
+      </div>
+
+      {registrado ? (
+        <>
+          {/* Misma plantilla que la fila, servida por la MISMA constante: son dos rejillas
+              independientes y es lo único que las mantiene alineadas. */}
+          <div
+            className={cn(
+              "grid gap-2 px-2 py-1 text-[11px] text-muted-foreground",
+              SIN_GESTION_GRID_COLS,
+            )}
+          >
+            <span className={FILA_GUIA_CELDA}>{FILA_GUIA_COL}</span>
+            <span className="min-w-0 truncate">{FILA_DESTINATARIO_COL}</span>
+            <span className="min-w-0 truncate">{FILA_TIENDA_LABEL}</span>
+          </div>
+          {/* `list`/`listitem` y no una tabla: son filas de consulta sin cabecera semántica de
+              columna, y el rol de lista le da a quien usa lector de pantalla el recuento sin
+              tener que fiarse de la píldora. */}
+          <div role="list" aria-label={SIN_GESTION_LISTA_LABEL}>
+            {ordenes.map((o) => (
+              <FilaSinGestion key={o.ordenId} o={o} />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * El detalle del cierre leído como documento: los dos totales de cabecera (pago a
  * tienda e ingreso por rechazos), la liquidación completa (bruto − pago = ganancia /
  * deuda) y las órdenes en pestañas por resultado, cada una desplegable. Todos los
@@ -1268,11 +1591,19 @@ export function CierreFacturaDetalle({
   audiencia = "admin",
   onVerEvidencia,
   onCorregirPagos,
+  ordenesSinGestion = [],
+  // Feature 264 (R28): el default es `true` —«registrado»— porque es lo que vale para todo
+  // cierre nacido después de la migración, y porque el estado que MIENTE es el otro: presentar
+  // un cierre como «no lo sabemos» sin serlo escondería una lista que sí existe.
+  sinGestionRegistrado = true,
 }: Readonly<CierreFacturaDetalleProps>) {
   // Vista del MENSAJERO: la misma hoja, sin la plata de la empresa (design §7.2).
   const esMensajero = audiencia === "mensajero";
   const gananciaNegativa = ganancia !== undefined && esMontoNegativo(ganancia);
-  const ordenes = ORDEN_RESULTADOS.reduce(
+  // Feature 264 (Q4/R21): se llamaba `ordenes` y cuenta GESTIONES —suma los cinco resultados—.
+  // El número no cambia; el nombre sí, porque debajo hay ahora una sección de órdenes que este
+  // KPI no cuenta y no debe contar (R19/R20: son lecturas de dinero y de entregas).
+  const gestiones = ORDEN_RESULTADOS.reduce(
     (total, resultado) => total + (grupos[resultado]?.length ?? 0),
     0,
   );
@@ -1311,12 +1642,20 @@ export function CierreFacturaDetalle({
           </span>
         </div>
         <div className="flex flex-col items-end gap-0.5 text-[11px] text-muted-foreground">
+          {/* Feature 263 (R1–R5): el sustantivo sale del ESTADO y la pieza «Resuelto» del
+              DATO. Son dos criterios distintos a propósito: así el guion no puede reaparecer
+              por ninguna combinación, y una incoherencia (`aprobado` sin fecha) se lee rara y
+              VERDADERA en vez de rara y falsa. Precedente del propio archivo (`:685-688`):
+              rellenar con guiones diría «no tiene fecha» donde lo cierto es otra cosa. */}
           <span className="font-mono">
-            {FACTURA_FOLIO_LABEL} #{folio(cierre.cierreId)}
+            {FACTURA_FOLIO_LABEL_POR_ESTADO[cierre.estado]} #
+            {folio(cierre.cierreId)}
           </span>
           <span>
-            {FACTURA_SOLICITADO_LABEL} {fecha(cierre.solicitadoAt)} ·{" "}
-            {FACTURA_RESUELTO_LABEL} {fecha(cierre.resueltoAt)}
+            {FACTURA_SOLICITADO_LABEL} {fecha(cierre.solicitadoAt)}
+            {cierre.resueltoAt
+              ? ` · ${FACTURA_RESUELTO_LABEL} ${fecha(cierre.resueltoAt)}`
+              : null}
           </span>
         </div>
       </div>
@@ -1382,7 +1721,7 @@ export function CierreFacturaDetalle({
           value={cierre.totalPagoMensajero}
           moneda
         />
-        <KpiFactura label={FACTURA_ORDENES_KPI_LABEL} value={ordenes} />
+        <KpiFactura label={FACTURA_GESTIONES_KPI_LABEL} value={gestiones} />
       </div>
 
       <BloqueRenglones
@@ -1487,9 +1826,16 @@ export function CierreFacturaDetalle({
         {/* La sección activa conserva el nombre accesible que tenía su tabla
             ("Entregadas", "Rechazadas"…): es como la localizan los tests y el E2E. */}
         <section aria-label={RESULTADO_LABEL[tab]} className="pt-2">
-          <div className="grid grid-cols-[40px_1.4fr_1fr_1fr_24px] gap-2 px-2 py-1 text-[11px] text-muted-foreground">
-            <span>{FILA_GUIA_COL}</span>
-            <span>{FILA_DESTINATARIO_COL}</span>
+          {/* Misma plantilla que la fila, servida por la MISMA constante: son dos rejillas
+              independientes y es lo único que las mantiene alineadas (R10). */}
+          <div
+            className={cn(
+              "grid gap-2 px-2 py-1 text-[11px] text-muted-foreground",
+              FILA_GRID_COLS,
+            )}
+          >
+            <span className={FILA_GUIA_CELDA}>{FILA_GUIA_COL}</span>
+            <span className="min-w-0 truncate">{FILA_DESTINATARIO_COL}</span>
             <span className="text-right">
               {esMensajero ? FILA_RECIBIDO_LABEL : FILA_COBRADO_COL}
             </span>
@@ -1515,6 +1861,15 @@ export function CierreFacturaDetalle({
           )}
         </section>
       </section>
+
+      {/* Feature 264 (R13) — las órdenes que el corte cerró SIN gestión: sección HERMANA de la
+          de pestañas, después de ella y ANTES del pie. No entra en ningún total: el pie y los
+          KPI siguen contando gestiones y dinero, y estas órdenes no tienen ni una cosa ni la
+          otra (R19/R20). */}
+      <SeccionSinGestion
+        ordenes={ordenesSinGestion}
+        registrado={sinGestionRegistrado}
+      />
 
       {/* Pie: lo recaudado del cierre y cuántas entregas lo produjeron.
           `break-inside-avoid` (feature 223, pieza 5 de 5): franja corta y con el total; no

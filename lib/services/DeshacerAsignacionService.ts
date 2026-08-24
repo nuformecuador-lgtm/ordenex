@@ -64,9 +64,15 @@ const ROL_SATELITE = "adminSatelite";
 
 /**
  * Metodos de repo que consume el service (inyeccion por constructor, `Pick` para dobles de test
- * sin DB). `findMensajerosBloqueadosParaGestion` NO figura A PROPOSITO (Q1 CERRADA, R19): el cierre
- * pendiente del mensajero no bloquea el deshacer, y dejarlo fuera del tipo hace imposible
+ * sin DB). `findMensajerosBloqueadosPorCierres` NO figura A PROPOSITO (Q1 CERRADA, R19): QUITARLE
+ * trabajo a un mensajero no es DARSELO ni gestionarlo, asi que su bloqueo por cierres no aplica —la
+ * orden nunca se recogio y no hay dinero asociado—. Dejarlo fuera del tipo hace imposible
  * consultarlo por descuido.
+ *
+ * ⚠️ FEATURE 271 (2026-08-23): la exclusion NO cambia, pero su vecina SI. La ASIGNACION volvio a
+ * consultar el predicado —recibir trabajo nuevo se bloquea otra vez, reparto Y recoleccion—, asi que
+ * la asimetria que aqui se afirma ya no es «asignar tampoco mira cierres»: es «desasignar no, y
+ * asignar si».
  */
 export type DeshacerAsignacionRepo = Pick<
   IOrdenRepository,
@@ -210,10 +216,13 @@ export class DeshacerAsignacionService implements IDeshacerAsignacionService {
       }
     }
 
-    // 8. R19 (Q1 CERRADA): NO se consulta `findMensajerosBloqueadosParaGestion`. El cierre pendiente del
-    // mensajero NO bloquea el deshacer (la orden nunca se recogio, no hay dinero asociado y el
-    // gate de asignacion existe justamente para lo contrario). La ASIGNACION lo sigue
-    // aplicando: la asimetria es deliberada (design §8-Q1) y esta fijada por un test.
+    // 8. R19 (Q1 CERRADA): NO se consulta `findMensajerosBloqueadosPorCierres`. El cierre pendiente
+    // del mensajero NO bloquea el DESHACER: la orden nunca se recogio, no hay dinero asociado, y
+    // quitarle trabajo a quien esta atascado es lo contrario de darselo.
+    //
+    // ⚠️ FEATURE 271 (2026-08-23): la ASIGNACION volvio a aplicar el predicado —y ahora tambien la
+    // recoleccion—, asi que la asimetria deliberada de esta linea es «desasignar no, asignar si», y
+    // sigue fijada por un test.
 
     // 9. Escritura transaccional todo-o-nada (R20/R21). `zonaActor` no-null => guarda de zona
     // repetida en el WHERE del UPDATE (defensa en profundidad anti-TOCTOU).

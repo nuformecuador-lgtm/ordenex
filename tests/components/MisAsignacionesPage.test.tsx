@@ -9,6 +9,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 import type { RolValue } from "@prisma/client";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 36 (T14) — las páginas del portal del mensajero resuelven el rol SOLO
 // server-side; rol ≠ mensajero (o sin sesión) → `notFound`. Se mockean el resolver, la
@@ -82,7 +83,7 @@ const OTROS_ROLES: RolValue[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO });
   listarMock.mockResolvedValue({
     status: "ok",
     porRecoger: [],
@@ -91,7 +92,7 @@ beforeEach(() => {
     ordenEnGestionId: null,
     kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
     // Feature 92/R27/R30: bloque de estado de la ruta que acompana al listado.
-    ruta: { estado: "vigente", calculadaAt: null, origenFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
+    ruta: { estado: "vigente", calculadaAt: null, origenFuente: null, secuenciaFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
   });
 });
 
@@ -145,7 +146,7 @@ describe("RepartoPage — control de acceso por rol (R9/R12)", () => {
     conAyuda: [], // feature 235 (R18): el tercer grupo, separado en el servidor
       ordenEnGestionId: null,
       kpis: { pendientes: 3, entregadas: 7, porCobrar: 350, totalACobrar: 750 },
-      ruta: { estado: "vigente", calculadaAt: null, origenFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
+      ruta: { estado: "vigente", calculadaAt: null, origenFuente: null, secuenciaFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
     });
 
     render(await RepartoPage());

@@ -272,10 +272,14 @@ describe("R41 (T4.14b) — ancla TODO(146) para la campana de notificaciones", (
    * el `expect(hasta).toBeGreaterThan(desde)` de cada caso, que es lo que hace ruidoso el fallo.
    *
    * Feature 241 (2026-08-20): la valla cambio de texto. Decia «Feature 41: bloqueo derivado en
-   * asignacion» y ese «en asignacion» era justo lo que dejo de ser cierto — el predicado bloquea
-   * la GESTION, no la asignacion. Se actualiza aqui y la guardia sigue midiendo lo mismo.
+   * asignacion» y ese «en asignacion» era justo lo que dejo de ser cierto — el predicado bloqueaba
+   * la GESTION, no la asignacion.
+   *
+   * FEATURE 271 (2026-08-23): vuelve a cambiar, y por el motivo contrario. El predicado dejo de ser
+   * una lista de estados y paso a ser un CONTEO (N/V), y su alcance volvio a incluir la asignacion.
+   * Se actualiza aqui y la guardia sigue midiendo lo mismo: que el ancla no se escape del metodo.
    */
-  const FIN_DEL_METODO = "// --- Feature 41 -> 241: bloqueo derivado para GESTIONAR";
+  const FIN_DEL_METODO = "// --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO";
 
   it("el ancla literal `TODO(146)` vive dentro de deshacerAsignacionLote", () => {
     const desde = fuente.indexOf("async deshacerAsignacionLote(");

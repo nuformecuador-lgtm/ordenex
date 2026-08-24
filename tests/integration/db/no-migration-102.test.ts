@@ -47,9 +47,19 @@ const MIGRACION_NOTIFICACIONES_146 = "_notificacion";
  * 2026-08-20 por la feature 253 (D6), que suma UN valor a `notificacion_evento` y otro a
  * `notificacion_entidad_tipo` — sin tablas, sin columnas y sin modelos nuevos, que es lo que el
  * resto de este archivo sigue comprobando.
+ *
+ * Segunda entrada anadida el 2026-08-22 por la feature 262 (D7, P2 respondida SI por la puerta
+ * humana): suma `dia_reparto_corregido` a `notificacion_evento` y `orden_dia_reparto_cambio` a
+ * `notificacion_entidad_tipo` para avisar al mensajero cuando le corrigen el dia de reparto. Igual
+ * que la de la 253: DOS `ALTER TYPE` y nada mas — sin tablas de notificacion nuevas, sin columnas y
+ * sin modelos nuevos, asi que el resto de este archivo sigue afirmando lo mismo y sigue siendo
+ * cierto. (La tabla que SI crea la 262, `orden_dia_reparto_cambio`, vive en OTRA migracion que no
+ * lleva la palabra «notificacion» y no es infra de campana: es el rastro de la correccion.)
  */
 const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   "_notificacion_evento_postulacion_recurso", // feature 253 / D6
+  "_notificacion_evento_dia_reparto_corregido", // feature 262 / D7
+  "_notificacion_evento_bloqueo_cierre", // feature 271 / §9.2 (Q4, 2026-08-23)
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

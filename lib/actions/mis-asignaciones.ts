@@ -5,6 +5,7 @@ import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepositor
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenMensajeroMetaRepository } from "@/lib/repositories/OrdenMensajeroMetaRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { RutaOptimizadaRepository } from "@/lib/repositories/RutaOptimizadaRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
@@ -85,7 +86,11 @@ function buildService(): IMisAsignacionesService {
     new OrdenMensajeroMetaRepository(prisma),
     // Feature 160 (R11/R24): derivador de intentos EN LOTE de las dos listas del mensajero.
     // Mismo servicio (y por tanto mismo criterio) que el cron SLA y el drawer de historial.
-    new OrdenHistorialService(ordenRepo, new OrdenHistorialRepository(prisma)),
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

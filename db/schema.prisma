@@ -150,6 +150,7 @@ model Usuario {
   rankingSnapshotFilas                RankingSnapshotFila[]     @relation("RankingSnapshotFilaMensajero") // feature 196/R17: filas del ranking CONGELADO de este mensajero; la FK es RESTRICT (borrar el usuario con historia falla)
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
+  diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -160,7 +161,7 @@ model Usuario {
 }
 
 // Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
-// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
 // Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
 // los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
 enum PlantillaEstado {
@@ -396,6 +397,8 @@ model OrderStatus {
 
   analyticsDaily AnalyticsDaily[] // feature 123/R33/R36: filas del rollup diario congeladas en este estatus al corte del dia
 
+  cierresSinGestionOrigen CierreSinGestion[] // feature 264/R4: barridos del corte que SALIERON de este estatus
+
   @@map("order_status")
 }
 
@@ -415,6 +418,7 @@ model Zona {
 
   ordenes              Orden[]
   tarifaZonaMensajeros TarifaZonaMensajero[]
+  tarifas              Tarifa[]              @relation("TarifaZona") // tarifas ACOTADAS a esta zona (zona_id nullable)
   distritos            ZonaDistrito[] // feature 24: relacion N:M con distrito
   usuarios             Usuario[] // feature 54: lado opuesto de Usuario.zona (mensajero/adminSatelite)
   cierresDestino       CierreDia[] // feature 37: cierres cuyo destino_zona_id apunta a esta zona
@@ -452,9 +456,14 @@ model Canton {
 }
 
 model Distrito {
-  id       String @id @default(uuid())
-  nombre   String
-  cantonId String @map("canton_id")
+  id           String   @id @default(uuid())
+  nombre       String
+  cantonId     String   @map("canton_id")
+  // Distrito que no se cobra/despacha como el resto de su zona. OPCIONAL a proposito: `false` =
+  // se decidio que no es especial (lo que recibe toda fila que no diga nada, por el default);
+  // `null` = nadie lo decidio todavia. Al leerla NO vale `NOT zonaEspecial`: con null eso no es
+  // false. Ver la migracion 20260824180000_distrito_zona_especial.
+  zonaEspecial Boolean? @default(false) @map("zona_especial")
 
   canton  Canton         @relation(fields: [cantonId], references: [id])
   ordenes Orden[]
@@ -575,6 +584,7 @@ model Orden {
   mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
+  cierresSinGestion     CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
   mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
@@ -582,6 +592,7 @@ model Orden {
   // NO se llama `notas`: ese nombre ya lo ocupa la nota de la TIENDA (`orden.notas`, R14a),
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
   notasHilo             OrdenNota[]            @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
+  diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
 
   @@index([tiendaId])
   @@index([estatusId])
@@ -1070,12 +1081,23 @@ model CierreDia {
 
   cierreBodegaId String? @map("cierre_bodega_id") // feature 40: nullable; NULL = cierre_dia aun no consolidado en bodega
 
-  mensajero          Usuario           @relation("CierreMensajero", fields: [mensajeroId], references: [id])
-  destinoZona        Zona              @relation(fields: [destinoZonaId], references: [id])
-  resueltoPorUsuario Usuario?          @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
-  cierreBodega       CierreBodega?     @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
+  // Feature 264 (R27/R28/R29) — «NINGUNA» Y «NO LO SABEMOS» SON COSAS DISTINTAS.
+  // `true` = las ordenes sin gestionar de este cierre SI se registraron, sea cuantas sea
+  // (incluido cero: «registrado y ninguna» es una lectura correcta). `false` = este cierre es
+  // ANTERIOR al registro y su lista es IRRECUPERABLE — la aprobacion ya borro el unico rastro
+  // que habia. Sin esta columna, un cierre viejo se pintaria sin seccion y diria «no hubo
+  // ninguna», que es tranquilizador y FALSO. El `DEFAULT true` marca a los cierres nuevos sin
+  // escribir una linea en el camino caliente del corte (lo pone Postgres); la migracion baja a
+  // `false` exactamente los que no se pueden reconstruir (`estado` fuera de los tres abiertos).
+  sinGestionRegistrado Boolean @default(true) @map("sin_gestion_registrado")
+
+  mensajero          Usuario            @relation("CierreMensajero", fields: [mensajeroId], references: [id])
+  destinoZona        Zona               @relation(fields: [destinoZonaId], references: [id])
+  resueltoPorUsuario Usuario?           @relation("CierreResueltoPor", fields: [resueltoPor], references: [id]) // feature 38/R14
+  cierreBodega       CierreBodega?      @relation(fields: [cierreBodegaId], references: [id], onDelete: SetNull) // feature 40
   gestiones          GestionOrden[] // gestiones incluidas en este cierre (cierre_id)
   detalle            CierreDetail[] // feature 69/R1: snapshot congelado por orden de este cierre
+  sinGestion         CierreSinGestion[] // feature 264/R1: las ordenes que el corte barrio a `sin_gestionar` al crear este cierre
   liquidacionPagos   LiquidacionPago[] // feature 172/R21/R22: pagos al mensajero registrados CONTRA este cierre
 
   @@index([mensajeroId])
@@ -1124,9 +1146,13 @@ model CierreBodega {
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). zona_id NOT NULL: cada tarifa pertenece a una
-// zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
-// vacia. Borrado logico via deleted_at.
+// distinguirlas (feature 18, D1). Cada fila se acota por el par (tienda, zona) y
+// las DOS dimensiones son opcionales (feature 273); ver el @@unique de mas abajo.
+// Borrado FISICO: `deleted_at` la retiro la migracion tarifa_zona_is_default.
+// Sin columna de estado: la migracion drop_tarifa_status (feature 274) solto
+// `status` y su enum al cerrar la deuda (g) de la feature 69, porque nunca entro
+// en el WHERE del camino de liquidacion y la cascada (tienda, zona) la sustituye.
+// Una tarifa que no debe aplicarse se BORRA; no hay fila presente-pero-ignorada.
 model Tarifa {
   id                    String       @id @default(uuid())
   valorFlete            Decimal      @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
@@ -1137,25 +1163,45 @@ model Tarifa {
   comisionCod           Decimal      @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete              Decimal      @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod        Decimal      @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  tiendaId              String       @map("tienda_id") // FK -> usuario (tienda duena; el service exige rol adminTienda)
-  status                EstadoTarifa @default(activo) // activo/inactivo; pasa a inactivo si la tienda deja de ser adminTienda
-  deletedAt             DateTime?    @map("deleted_at") // soft delete (R19/R24)
+  // Cobro pactado aparte, fuera de la tabla de precios normal. NULLABLE a proposito:
+  // NULL = "sin tarifa especial pactada" (que NO es lo mismo que 0, un cobro especial
+  // de cero). Unica columna opcional de la tabla; ver la migracion tarifa_especial.
+  tarifaEspecial        Decimal?     @map("tarifa_especial") @db.Decimal(12, 2)
+  // OPCIONAL: NULL = tarifa NO acotada a una tienda (aplica a cualquiera). Cuando
+  // trae valor es FK -> usuario (la cuenta duena; el service exige un rol tarifable:
+  // adminTienda o apiKey).
+  tiendaId              String?      @map("tienda_id")
+  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera).
+  // Desde la feature 274 la resolucion es una CASCADA sobre el par (tienda, zona):
+  // 1) tienda+zona, 2) tienda con zona NULL, 3) zona con tienda NULL. La tienda ya
+  // no es la unica dimension: una fila con `tienda_id` NULL y `zona_id` con valor
+  // cobra a cualquier tienda de esa zona. El par (NULL, NULL) NO es un cuarto
+  // nivel y el service lo rechaza al crear/actualizar.
+  zonaId                String?      @map("zona_id")
+  // Tarifa a la que se cae cuando ninguna acotada por zona aplica. Nace en false:
+  // marcarla es un acto explicito. Las filas historicas se backfillearon a true.
+  isDefault             Boolean      @default(false) @map("is_default")
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  tienda         Usuario        @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id])
+  zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id])
   cierreDetalles CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
 
+  // Una sola tarifa por par (zona, tienda), con las dos dimensiones opcionales. El indice
+  // en SQL usa NULLS NOT DISTINCT (PG15+) para que dos NULL cuenten como el MISMO par:
+  // sin eso no habria como impedir dos «tarifas generales de la tienda X» ni dos globales,
+  // que son justo los casos que el NULL habilita. Prisma no expresa NULLS NOT DISTINCT: se
+  // declara aqui por el nombre del indice y el `where` compuesto, y se CREA a mano en la
+  // migracion tarifa_zona_is_default. Mismo caso que TarifaZonaMensajero.
+  //
+  // El unico es TOTAL, y puede serlo porque esta tabla BORRA EN FISICO (esa misma migracion
+  // retiro `deleted_at`): una tarifa borrada no ocupa su par.
+  @@unique([zonaId, tiendaId])
   @@index([createdAt])
   @@index([tiendaId])
+  @@index([zonaId])
   @@map("tarifas")
-}
-
-enum EstadoTarifa {
-  activo
-  inactivo
-
-  @@map("estado_tarifa")
 }
 
 // TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero
@@ -1187,8 +1233,12 @@ model TarifaZonaMensajero {
 // El id (uuid PK) queda listo para el FK usuario.vehiculo_id de la feature 21
 // (NO se implementa ese FK aqui). Solo-lectura sembrado (P1=A), sin escritura.
 model Vehiculo {
-  id   String        @id @default(uuid())
-  name VehiculoValue @unique // seed (3): moto, carro, camion
+  id   String @id @default(uuid())
+  // TEXT desde `20260824160000_vehiculo_name_texto`: el catalogo dejo de ser
+  // solo-lectura y un enum seria un techo duro (una migracion por cada tipo nuevo).
+  // El @unique impide dos tipos con el mismo nombre; el plegado/recorte lo hace el
+  // servicio, NO la base (ver la migracion).
+  name String @unique
 
   usuarios             Usuario[] // feature 21: mensajeros que declararon este vehiculo
   tarifaZonaMensajeros TarifaZonaMensajero[] // feature 24
@@ -1772,6 +1822,62 @@ model CierreDetail {
   @@map("cierre_detail")
 }
 
+// Feature 264 (R1/R2/R4/R5/R7/R9/R10/R11): el VINCULO PERSISTIDO entre un cierre y cada orden
+// que el corte diario barrio a `sin_gestionar` al crearlo.
+//
+// EL PORQUE (structural, no cosmetico): el detalle de un cierre se construye ENTERO sobre las
+// gestiones (`gestion_orden.cierre_id` + `cierre_detail`), y una orden barrida por el corte NO
+// TIENE GESTION. Hasta hoy la unica relacion cierre <-> orden barrida era un predicado VIVO
+// (`orden.mensajero_asignado_id = cierre.mensajero_id AND estatus = sin_gestionar`) que la
+// APROBACION destruye: libera la orden a bodega y le borra `mensajero_asignado_id`. Es decir, el
+// cierre que se audita —el aprobado, el que ya movio dinero— mostraba CERO ordenes barridas y lo
+// mostraba igual que un cierre que de verdad no barrio ninguna.
+//
+// NI UNA COLUMNA DE DINERO, y no es una promesa de la capa de arriba: es que no hay nada que
+// sumar. Estas ordenes no tienen gestion, luego no tienen `pago_mensajero`, ni recaudo, ni
+// tarifa. Si algun dia aparece aqui un `Decimal`, es un bug de diseño (lo vigila
+// `tests/unit/guards/cierre-sin-gestion-sin-dinero.guardia.test.ts`).
+//
+// Grano `(cierre_id, orden_id)` y NO una columna en `orden`: una orden puede ser barrida,
+// liberada, reasignada y barrida otra vez en OTRO cierre; una columna sobrescribiria el vinculo
+// anterior. Misma razon por la que `cierre_detail` es tabla y no columnas.
+model CierreSinGestion {
+  id       String @id @default(uuid())
+  cierreId String @map("cierre_id")
+  ordenId  String @map("orden_id")
+
+  // --- descriptivos CONGELADOS al barrer (R11). Copia, no identidad. ---
+  // Precedente exacto de la feature 69/T18: el detalle de un cierre ya creado se leia navegando
+  // `gestion_orden.orden.*` y el admin veia los valores de HOY, no los del cierre que revisa. No
+  // hay motivo para repetir ese error en la mitad NUEVA de la misma pantalla.
+  numGuia      Int?   @map("num_guia") // SIN @unique: es copia, no identidad
+  numRemision  String @map("num_remision")
+  destinatario String
+  producto     String
+  tiendaNombre String @map("tienda_nombre")
+  zonaNombre   String @map("zona_nombre") // contexto de auditoria del barrido; hoy no se pinta
+
+  // R4: el estatus REAL del que salio esta orden (`en_reparto` | `ayuda_tienda`), tomado de la
+  // vuelta del bucle que la barrio y NUNCA supuesto — es literalmente la razon por la que ese
+  // bucle tiene dos vueltas (feature 235/R27). NULL = no consta (R32/R33): la fila OMITE la pieza
+  // en pantalla, no pinta un guion.
+  estatusOrigenId String? @map("estatus_origen_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  // SIN updated_at / deleted_at: fila INMUTABLE, como `cierre_detail` (69/R10).
+
+  cierre        CierreDia    @relation(fields: [cierreId], references: [id])
+  orden         Orden        @relation(fields: [ordenId], references: [id])
+  // `onDelete: Restrict` NO es el default de Prisma para una relacion OPCIONAL (seria SetNull):
+  // se declara porque la migracion crea la FK con ON DELETE RESTRICT, igual que sus dos hermanas.
+  // Sin esta linea, todo `migrate dev` propondria drop+add de la FK.
+  estatusOrigen OrderStatus? @relation(fields: [estatusOrigenId], references: [id], onDelete: Restrict)
+
+  @@unique([cierreId, ordenId]) // el grano, y el indice de la ruta caliente (se filtra por cierre_id)
+  @@index([ordenId]) // trazar en que cierres se barrio una orden
+  @@map("cierre_sin_gestion")
+}
+
 // Feature 81 (design §2): una API key emitida por un maestro. La key en claro NUNCA
 // se persiste: solo su hash SHA-256 [D7] (R16) y un `key_prefix` no secreto (R17)
 // para poder identificarla visualmente sin revelarla. 1:1 con su usuario dedicado
@@ -1934,6 +2040,11 @@ model RutaOptimizada {
   origenFuente      String?    @map("origen_fuente")
   huellaSet         String?    @map("huella_set")
   ultimoError       String?    @map("ultimo_error")
+  // Feature 265 (20260822140000_ruta_secuencia_fuente): QUIEN ordeno la secuencia que hay en
+  // `ruta_optimizada_parada` — 'proveedor' o 'local'. NULL = no consta (ruta anterior a la
+  // feature, o el caso trivial de 0/1 parada). TEXT y no enum, mismo criterio que
+  // `origen_fuente` y `trazado_fuente`. Sin backfill: ver la migracion.
+  secuenciaFuente   String?    @map("secuencia_fuente")
   // Trazado persistido (20260814120000_ruta_optimizada_trazado). Las cuatro se escriben y se
   // limpian SIEMPRE juntas: valen para la huella_set de esta misma fila y para ninguna otra.
   // Solo se cachea `trazado_fuente = 'routes'` — ver la migracion.
@@ -2000,6 +2111,9 @@ enum NotificacionEvento {
   postulacion_mensajero_pendiente
   cierre_dia_por_aprobar
   postulacion_recurso_pendiente // feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica
+  dia_reparto_corregido // feature 262 (D7): a una orden asignada le corrigieron el dia de reparto; se avisa AL MENSAJERO asignado y a nadie mas (R46/R51)
+  cierre_dia_vencido // feature 271 (§9.2, R38/R39): el corte creo un cierre `vencido`; se avisa al MENSAJERO dueño y a su bodega responsable
+  mensajero_bloqueado_por_cierres // feature 271 (§9.2, R40/R41/R42): el mensajero quedo BLOQUEADO por acumular cierres, o por un rechazo; mismo evento para las tres causas porque la accion que pide es la misma
 
   @@map("notificacion_evento")
 }
@@ -2012,6 +2126,7 @@ enum NotificacionEntidadTipo {
   cierre_dia
   carga
   postulacion_recurso // feature 253 (D6): la entidad es una fila de `postulacion_recurso`, que NO es un `usuario` (no crea cuenta)
+  orden_dia_reparto_cambio // feature 262 (D7): la entidad es la fila del RASTRO, no la orden. Con `orden` la clave unica `notificacion_dedupe_key` solo admitiria UN aviso por (evento, orden, mensajero) PARA SIEMPRE, y la segunda correccion de esa orden no avisaria nunca (design §15.2, A20)
 
   @@map("notificacion_entidad_tipo")
 }
@@ -2298,4 +2413,56 @@ model PostulacionRecurso {
   @@index([atendidaAt, createdAt]) // R26: el listado del panel (`atendida_at IS NULL ORDER BY created_at DESC`) y el barrido del cron de purga
   @@index([atendidaPorId]) // segunda FK indexada (patron `orden_nota`): sin el, el RESTRICT recorre la tabla al borrar un usuario
   @@map("postulacion_recurso")
+}
+
+/// Feature 262 (D4, design §5.1) — RASTRO de las correcciones del dia de reparto de una orden ya
+/// asignada. Fila INMUTABLE (patron `orden_historial_estado`): sin `updated_at`, sin `deleted_at`,
+/// sin soft delete. Una correccion posterior ANADE una fila; ninguna operacion reescribe una
+/// anterior (R23).
+///
+/// POR QUE UNA TABLA PROPIA Y NO `orden_historial_estado` (design §4.5, A1), y son TRES
+/// consecuencias MEDIDAS, no tres opiniones:
+///   1. Una fila falsa `por_recoger -> por_recoger` rompe «Deshacer asignacion»:
+///      `findOrigenesReversion` elige con `DISTINCT ON` la mas reciente cuyo destino es el estado
+///      ACTUAL y devolveria `por_recoger`, que NO esta en `NORMALIZACION_DESTINO` -> `conflict`
+///      con «sin historial», que ademas es falso.
+///   2. Ni siquiera se podria escribir: `appendCambioEstado` valida contra `TRANSICIONES` y
+///      `por_recoger -> por_recoger` no existe en ese grafo (ni debe: un bucle sobre si mismo es
+///      una mentira sobre la maquina de estados).
+///   3. Emitiria un webhook de estado DUPLICADO a cada integrador suscrito (99/R10-R11) sobre una
+///      orden que no se movio.
+/// Y una razon de FORMA encima de las tres: una fila del historial no tiene DONDE guardar «de que
+/// dia a que dia»; habria que esconder un dato estructurado dentro de `motivo`.
+model OrdenDiaRepartoCambio {
+  id String @id @default(uuid())
+
+  ordenId String @map("orden_id")
+
+  /// NOT NULL a proposito: la operacion EXIGE dia previo (R5), asi que una fila que dijera «no
+  /// tenia dia» no la puede escribir ningun productor. Nullable admitiria un estado irrepresentable.
+  fechaAnterior DateTime @map("fecha_anterior") @db.Date
+
+  /// `@db.Date` en las dos: son FECHAS, no instantes. Misma convencion que `orden.fecha_reparto`
+  /// (46/246). Un `timestamp` reabriria la trampa de las seis horas que cerro la 166.
+  fechaNueva DateTime @map("fecha_nueva") @db.Date
+
+  /// NOT NULL, al reves que `orden_historial_estado.actor_usuario_id` (donde NULL = cron): AQUI
+  /// SIEMPRE HAY UNA PERSONA, y quien corrigio es la evidencia. La FK es `Restrict` por el mismo
+  /// criterio que `orden_nota.autor_id` y `postulacion_recurso.atendida_por_id`.
+  actorUsuarioId String @map("actor_usuario_id")
+
+  /// R21: obligatorio, ya recortado en el borde (`trim().min(10).max(300)`).
+  motivo String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orden Orden   @relation("OrdenDiaRepartoCambioOrden", fields: [ordenId], references: [id])
+  actor Usuario @relation("OrdenDiaRepartoCambioActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  /// EL CHECK `orden_dia_reparto_cambio_dia_distinto` (`fecha_nueva <> fecha_anterior`) VIVE SOLO
+  /// EN LA MIGRACION: Prisma no expresa CHECK (mismo caso que `notificacion_destinatario_xor`).
+  /// Es R7 puesto en la base: una «correccion» que no corrige nada no es escribible ni por error.
+  @@index([ordenId, createdAt]) // la UNICA consulta prevista: «el rastro de esta orden», en orden. Cubre ademas la FK a `orden` por prefijo
+  @@index([actorUsuarioId]) // la FK RESTRICT, indexada (patron `orden_nota`): sin el, borrar un usuario recorre la tabla
+  @@map("orden_dia_reparto_cambio")
 }

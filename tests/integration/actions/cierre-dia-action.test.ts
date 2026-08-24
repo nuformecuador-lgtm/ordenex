@@ -15,6 +15,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 37 — tests de integracion de las Server Actions del cierre (patron
 // asignacion-satelite-action.test.ts). Cubre `unauthenticated` sin sesion,
@@ -61,13 +62,10 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
   return {
     findGestionesPendientes: vi.fn(async () => [...pendientes]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
-    existeCierreSolicitado: vi.fn(async () => false),
-    // Feature 111: sin vencido por defecto -> `solicitarCierre` crea (flujo 37).
-    existeCierreVencido: vi.fn(async () => false),
-    transicionarVencidoASolicitado: vi.fn(async () => true),
-    // Feature 109: sin rechazado por defecto (gemelo del vencido).
-    existeCierreRechazado: vi.fn(async () => false),
-    transicionarRechazadoASolicitado: vi.fn(async () => true),
+    // FEATURE 271 (R18): sin ningun cierre re-solicitable por defecto -> `solicitarCierre` cae al
+    // flujo de creacion de la 37. La eleccion es por EDAD, no por estado, asi que es UN metodo.
+    findCierreResolicitableMasViejo: vi.fn(async () => null),
+    transicionarASolicitado: vi.fn(async () => true),
     // Feature 67: el deshacer sobre el repo en memoria (caso feliz).
     findGestionParaDeshacer: vi.fn(async () => GESTION_DESHACIBLE),
     findUltimaGestionNoAnuladaId: vi.fn(async () => GESTION_DESHACIBLE.gestionId),
@@ -94,7 +92,14 @@ function inMemoryRepo(seed: CierreGestionPendienteRow[]): ICierreDiaRepository {
     findCierrePropioConGestiones: vi.fn(async (cierreId: string) => {
       const cierre = cierres.find((c) => c.cierreId === cierreId);
       if (!cierre) return null;
-      return { cierre, gestiones: gestionesPorCierre.get(cierreId) ?? [] };
+      // Feature 264: el detalle propio devuelve tambien el par (lista, marca) — aqui vacio y
+      // registrado, que es el cierre sin barridas de siempre.
+      return {
+        cierre,
+        gestiones: gestionesPorCierre.get(cierreId) ?? [],
+        sinGestion: [],
+        sinGestionRegistrado: true,
+      };
     }),
     // Feature 170 (T I.1): version paginada del mismo listado (no la ejercita esta suite).
     findCierresByMensajeroPaginado: vi.fn(async () => ({ items: [...cierres], total: cierres.length })),
@@ -107,7 +112,7 @@ function realService(repo: ICierreDiaRepository): ICierreDiaService {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findUsuarioVehiculoId: vi.fn(async () => null), // feature 39
     findEstatusIdByValue: vi.fn(async () => "s-reparto"), // feature 67/R18
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111/R5
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111/R5
   } as unknown as IOrdenRepository;
   // Feature 39: tarifa por defecto (cobroEntregado 5.00); resuelve el pago en vivo/snapshot.
   const tarifaZonaRepo = {

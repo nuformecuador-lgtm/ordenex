@@ -10,7 +10,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { IntentosDato, valorIntentos } from "@/components/shared/intentos-entrega";
-import { ETIQUETA_PARA_MANANA } from "@/lib/utils/dia-reparto-textos";
+import {
+  avisoReservaParaOtroDia,
+  ETIQUETA_PARA_MANANA,
+} from "@/lib/utils/dia-reparto-textos";
 
 import { AsignacionDetalle } from "../AsignacionDetalle";
 import { UbicacionTrigger } from "../UbicacionTrigger";
@@ -184,9 +187,14 @@ export function PosOrderCardMosaico({
               PALABRAS y no sólo con un color, porque un chip de otro tono no explica qué es.
               `esParaManana` lo decide el SERVIDOR (R26) y caduca solo al llegar el día (R25):
               aquí no se compara ninguna fecha ni se lee ningún reloj.
-              R23/R24 — la marca no oculta ni bloquea nada: la card sigue entera y la orden se
-              puede recoger y gestionar igual. La reserva protege del corte de la noche, no del
-              mensajero (decisión D5). */}
+              ⏳ FEATURE 261 (2026-08-21) — LA REGLA CAMBIÓ, y este comentario con ella. La
+              decisión D5 de la 246 —la que dejaba la reserva como defensa sólo frente al corte
+              nocturno— quedó REVERTIDA: hasta ese día esta marca era sólo una ETIQUETA, y la guía
+              17496963 se gestionó `entregada` a las 22:10 CR del 21 estando reservada para el 22.
+              Ahora la orden reservada NO se puede recoger ni gestionar hasta su día, y el bloqueo
+              real vive en el servidor. Lo que sigue igual es R23: la marca **no oculta** nada y la
+              card sigue entera — lo que se restringe es la acción, no la visibilidad. Ver
+              `specs/261-dia-reparto-protege`. */}
           {orden.esParaManana ? (
             <Badge variant="info" className="w-fit">
               {ETIQUETA_PARA_MANANA}
@@ -198,6 +206,18 @@ export function PosOrderCardMosaico({
             </Badge>
           ) : null}
         </div>
+      ) : null}
+
+      {/* Feature 261 (F2, R11): el badge dice QUÉ es la orden; esta línea dice POR QUÉ todavía no
+          se puede trabajar y DESDE QUÉ DÍA se podrá. En mosaico se prioriza el barrido, pero esta
+          frase no es adorno: es la que evita que el botón gris del pie sea un misterio. El literal
+          NO se escribe aquí — sale de la fuente única (`avisoReservaParaOtroDia`, R15), la misma
+          que devuelve el servidor al rechazar y la misma que lee la tienda. La fecha llega YA
+          RESUELTA en `fechaRepartoISO` (R14): aquí no se construye ningún `Date`. */}
+      {orden.esParaManana ? (
+        <p role="note" className="text-[11px] font-semibold text-muted-foreground">
+          {avisoReservaParaOtroDia(orden.fechaRepartoISO)}
+        </p>
       ) : null}
 
       {verCobro ? (

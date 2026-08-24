@@ -1,3 +1,7 @@
+import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
+import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
+import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
+
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
 // en `/api-docs`. El archivo `docs/api/api-key-openapi.yaml` es un espejo textual de este objeto:
@@ -38,13 +42,22 @@ const ORDER_STATUS_ENUM = [
   "rechazada",
   "en_bodega_satelite",
   "devuelta_a_tienda",
-  // Decision humana 2026-08-21 (REVIERTE la 235/P4): `ayuda_tienda` pasa a ser evento publico
-  // (`EVENTOS_PUBLICOS`), asi que el integrador lo va a RECIBIR por webhook y a leer en las
-  // respuestas del canal. Documentarlo deja de ser opcional: entregar un value que el contrato
-  // no declara es lo mismo que no tener contrato. Alta ADITIVA — ningun value existente se
-  // renombra, se reordena ni se retira.
-  "ayuda_tienda",
+  "ayuda_tienda", // feature 268/R15: la IDA del ciclo de ayuda, ya emitida como evento publico
+  "incidente", // feature 268/R15: desenlace terminal de la gestion, ya emitido como evento publico
 ];
+
+// ⚠️ 2026-08-22 (feature 268) — la DEUDA de arriba SIGUE ABIERTA a proposito: `sin_gestionar` y los
+// tres values del flujo de devolucion de la 139 continuan alcanzables y sin documentar. La 268
+// añade SOLO los dos values que su propia politica de eventos publicos incorpora
+// (`ayuda_tienda`, `incidente`); bajar el resto de la deuda «de contrabando» dentro de esta ficha
+// esta descartado en su `design.md` §2.2. No es un olvido: es alcance declarado.
+
+// Enum de estados del CUERPO DEL WEBHOOK (feature 268/R29). Se DERIVA de `EVENTOS_PUBLICOS`
+// (`lib/types/webhook-eventos.ts`), la fuente unica de la POLITICA de eventos publicos, con un
+// orden determinista (alfabetico) para que el espejo `.yaml` sea comparable posicionalmente.
+// NUNCA se copia como lista literal: si la politica cambia, este enum cambia solo y
+// `tests/unit/api/openapi-webhook-contrato.test.ts` se pone rojo si alguien lo desengancha.
+const WEBHOOK_ESTADO_ENUM = [...EVENTOS_PUBLICOS].sort();
 
 // Tope duro de filas por lote de carga (cargaMasivaConfig.MAX_CHUNK_ROWS, default 5000).
 const MAX_CARGA_ROWS = 5000;
@@ -92,8 +105,22 @@ export const openApiSpec = {
         description: [
           "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
           "`por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,",
-          "por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;",
-          "`\"0.00\"` si la tienda no tiene tarifa vigente).",
+          "por cada orden creada, su `costoEnvio`: flete + IVA de la tarifa vigente que resuelve",
+          "el par (tienda, zona del distrito de esa orden).",
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08): una fila sin tarifa ya no crea orden.** La tarifa se",
+          "resuelve ANTES de persistir. Una fila cuyo par (tienda, zona) no resuelve ninguna",
+          "tarifa vigente vuelve como `resultado: \"error\"` con la clave `tarifa` en `errores`",
+          `(\`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\`), NO se crea y NO trae ningún`,
+          "`costoEnvio`. Las demás filas del mismo lote se crean con normalidad.",
+          "",
+          "**Si NINGUNA de las filas que llegan a la resolución de tarifa la resuelve, la",
+          "respuesta es 409** y no se persiste nada: ni órdenes, ni la fila de `carga`, ni la",
+          "notificación de carga terminada. Atención a la distinción, porque es la que evita un",
+          "diagnóstico falso: si NINGUNA fila llega siquiera a la resolución de tarifa (todas",
+          "fallan antes por validación, duplicidad o cobertura geográfica), la respuesta sigue",
+          "siendo `200` con esas filas en su error de siempre, NO `409`: la tarifa no es el",
+          "motivo del fallo.",
           "",
           "**CAMBIO INCOMPATIBLE (2026-07): el estado inicial cambió.** Antes las órdenes nacían",
           "en `en_ruta_bodega_central`, que afirmaba que el paquete ya viajaba hacia la bodega",
@@ -107,7 +134,8 @@ export const openApiSpec = {
           "aparece en el enum `estado` y no puede llegar en ninguna respuesta.",
           "",
           "Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya",
-          "existente) o `error` (validación/geografía). Una respuesta 200 puede contener filas con",
+          "existente) o `error` (validación, geografía o falta de tarifa). Una respuesta 200",
+          "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
         ].join("\n"),
         requestBody: {
@@ -183,12 +211,53 @@ export const openApiSpec = {
                       ],
                     },
                   },
+                  filaSinTarifa: {
+                    summary: "Una creada y una degradada por falta de tarifa",
+                    value: {
+                      cargaId: "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3",
+                      total: 2,
+                      creadas: 1,
+                      duplicadas: 0,
+                      conError: 1,
+                      filas: [
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                        { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
+                      ],
+                      ordenes: [
+                        {
+                          id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+                          numRemision: "REM-0001",
+                          numGuia: 100234,
+                          estado: "por_recolectar_en_tienda",
+                          costoEnvio: "3.39",
+                        },
+                      ],
+                    },
+                  },
                 },
               },
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
+          // Feature 274 (R29/R31) — el 409 NUEVO de la carga. No es `$ref: Conflict` a secas
+          // porque el ejemplo publicado tiene que ser LA CONSTANTE que el service emite: dos
+          // cadenas (una aqui y otra en `lib/services/mensajes-tarifa.ts`) divergen a la primera
+          // errata, y R38 pide exactamente lo contrario.
+          "409": {
+            description:
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se creó ninguna orden ni fila de carga.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                example: {
+                  status: "error",
+                  code: "CONFLICT",
+                  message: MSG_CARGA_SIN_TARIFA,
+                },
+              },
+            },
+          },
           "422": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -202,6 +271,10 @@ export const openApiSpec = {
           "Devuelve las órdenes del dueño de la key, paginadas por `offset`/`limit`, con `total`",
           "para recorrer páginas. El filtro opcional `estado` solo acota; nunca amplía el alcance.",
           "Parámetros desconocidos (p. ej. `tiendaId`) se ignoran.",
+          "",
+          "Los filtros `desde`/`hasta`, `num_guia` y `num_remision` son opcionales, se combinan",
+          "en AND y solo ACOTAN dentro de tus órdenes: un número de guía o de remisión que",
+          "pertenece a otra tienda devuelve una página vacía (`items: []`, `total: 0`), nunca 404.",
         ].join("\n"),
         parameters: [
           {
@@ -224,6 +297,38 @@ export const openApiSpec = {
             required: false,
             description: "Filtra por estado exacto del catálogo.",
             schema: { type: "string", enum: ORDER_STATUS_ENUM },
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario mínima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6).",
+            schema: { type: "string", format: "date", example: "2026-08-01" },
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: false,
+            description:
+              "Fecha calendario máxima de creación (`YYYY-MM-DD`), inclusiva; el día se mide en hora de Costa Rica (UTC-6), así que cubre las 24 horas completas de ese día.",
+            schema: { type: "string", format: "date", example: "2026-08-21" },
+          },
+          {
+            name: "num_guia",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de guía exacto. Excluye las órdenes que aún no tienen guía asignada.",
+            schema: { type: "integer", minimum: 1, example: 100234 },
+          },
+          {
+            name: "num_remision",
+            in: "query",
+            required: false,
+            description:
+              "Filtra por número de remisión exacto (sin prefijo, sin subcadena, distingue mayúsculas).",
+            schema: { type: "string", minLength: 1, example: "REM-0001" },
           },
         ],
         responses: {
@@ -580,18 +685,32 @@ export const openApiSpec = {
           "depende de la zona de CADA fila, así que el bloque suma únicamente las filas con",
           "resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y",
           "`filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó",
-          "fuera se leería como «esto cuesta el lote» cuando no lo es. El bloque se emite SIEMPRE:",
+          "fuera se leería como «esto cuesta el lote» cuando no lo es. Una fila queda excluida por",
+          "DOS motivos distintos, no uno: porque su geografía no tiene cobertura (o no valida), o",
+          "porque el par (tienda, zona de esa fila) no resuelve tarifa vigente. Quien sume",
+          "`totales` sin mirar `filasExcluidas` obtiene un número que NO es el precio del lote.",
+          "El bloque se emite SIEMPRE:",
           "si ninguna fila resulta cotizable, llega con todos sus importes en cero,",
           "`filasSumadas: 0` y `filasExcluidas` igual a `total`.",
           "",
           "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
           "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
           "sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.",
+          "Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada por ESE MISMO",
+          `camino: \`resultado: "error"\` con \`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\` y sin`,
+          "bloque `costos` —nunca un importe en cero—.",
           "",
-          "Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es **409** y no se",
-          "cotiza ninguna fila. Es la asimetría deliberada con `/carga`, que sí tolera la falta de",
-          "tarifa con `costoEnvio: \"0.00\"`: en una cotización, un cero sería una mentira sobre",
-          "dinero servida como precio.",
+          "El **409** existe sólo para el caso extremo: cuando NINGUNA de las filas que llegan a la",
+          "resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no",
+          "trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta",
+          "sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a",
+          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `totales`",
+          "en cero, NO `409`.",
+          "",
+          "**`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este",
+          "contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo",
+          "de envío en cero— dejó de existir: allí una fila sin tarifa tampoco se crea, y un lote",
+          "en el que ninguna resuelve también responde 409.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -693,7 +812,7 @@ export const openApiSpec = {
           "403": { $ref: "#/components/responses/Forbidden" },
           "409": {
             description:
-              "La tienda dueña de la key no tiene una tarifa vigente: no se cotiza ninguna fila.",
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se cotiza ninguna fila.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/Error" },
@@ -706,6 +825,405 @@ export const openApiSpec = {
             },
           },
           "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
+    // Feature 267 (R39) — NOVENO endpoint del canal: la analitica de las propias ordenes.
+    //
+    // La lista de paths estaba firmada en OCHO desde la 255 y publicar esto la puso ROJA: ESE es
+    // su trabajo. Sube a NUEVE A PROPOSITO, en el mismo commit que publica el endpoint y en los
+    // DOS artefactos (aqui y en `docs/api/api-key-openapi.yaml`), no de contrabando.
+    "/api/ordenes/api-key/analitica": {
+      get: {
+        tags: ["Órdenes"],
+        summary: "Series diarias de tus métricas sobre tus órdenes",
+        operationId: "consultarAnalitica",
+        description: [
+          "Devuelve una **serie diaria por métrica**, calculada exclusivamente sobre las órdenes",
+          "de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar: sale de",
+          "la propia key, así que no hay ningún parámetro para pedir datos de otra tienda (y si se",
+          "envía uno, se ignora).",
+          "",
+          "**Varias métricas por llamada.** `metricas` acepta una lista separada por comas",
+          "(`metricas=entregas,devoluciones`) o el valor especial **`all`**, que trae todas las",
+          "publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve",
+          "una sola vez, conservando su primera posición.",
+          "",
+          "**La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una",
+          "vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se",
+          "pidió `all`).",
+          "",
+          "**El lote es todo o nada.** Si UNA de las métricas pedidas no está en el `enum` de",
+          "abajo, la llamada entera responde **403** y no se sirve ninguna — exactamente el mismo",
+          "403 que una métrica que no existe: las dos respuestas son idénticas a propósito.",
+          "",
+          "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
+          "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
+          "(UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo",
+          "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
+          "ventana no puede superar 366 días contando ambos extremos.",
+          "",
+          "**`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango",
+          "puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en",
+          "curso**, que todavía no está cerrado y siempre se vería más bajo que un día completo; o",
+          "(b) cae **por debajo del horizonte de nuestro histórico**, donde la cifra sería cero por",
+          "falta de datos y no por falta de operación. En los dos casos publicar el número sería",
+          "enseñarte una caída de tu operación que no ocurrió, así que el día **no aparece**. La",
+          "ausencia es el dato: **no rellenes los huecos con ceros**.",
+          "",
+          "**`data` puede venir vacío, y eso es una respuesta `200` correcta** — por ejemplo si",
+          "pides `desde=hoy&hasta=hoy`, porque hoy todavía no está cerrado. No es un error.",
+          "",
+          "**`rango` es el eco EXACTO de lo que pediste, sin recortar,** aunque `data` no llegue",
+          "hasta `hasta`. Lo pedido y lo servible son dos cosas distintas y se leen por separado.",
+          "",
+          "**`valor` puede ser `null`, y `null` NO es `0`:** significa «no se sabe» (por ejemplo,",
+          "una tasa cuyo denominador fue cero ese día). Un día con `valor: null` SÍ aparece en",
+          "`data`: es un día cerrado cuyo resultado es indefinido, no un día que falte.",
+          "",
+          "**Qué cuenta cada métrica, porque no todas cuentan lo mismo.** `entregas`,",
+          "`devoluciones`, `rechazos`, `reprogramaciones`, `tasa_entrega`, `tasa_devolucion` y",
+          "`tasa_rechazo` cuentan **gestiones, no órdenes**: una orden reprogramada y entregada",
+          "después aporta **dos** gestiones. `ordenes_creadas` y `ordenes_por_estado` cuentan",
+          "**órdenes**. `tiempo_ciclo` no cuenta nada: mide una **duración**. Consecuencia",
+          "práctica: **dos métricas que no cuentan lo mismo no son sumables entre sí** — sumar",
+          "gestiones con órdenes da un total que no significa nada.",
+          "",
+          "Este canal no publica importes ni identifica a los mensajeros de la operación.",
+        ].join("\n"),
+        parameters: [
+          {
+            name: "metricas",
+            in: "query",
+            required: true,
+            description:
+              "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
+            // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
+            // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
+            // diverja de lo que el endpoint concede de verdad. El centinela viaja en el MISMO
+            // enum y desde la MISMA fuente, por el mismo motivo.
+            schema: {
+              type: "string",
+              enum: [...METRICAS_API_KEY, METRICAS_TODAS],
+            },
+            example: "entregas,devoluciones",
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-01",
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-21",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Series diarias de las métricas pedidas, sobre tus órdenes.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AnaliticaRespuesta" },
+                examples: {
+                  serie: {
+                    summary:
+                      "Dos métricas; se pidieron tres días y el tercero (hoy) no viene: no está cerrado",
+                    value: {
+                      rango: { desde: "2026-08-19", hasta: "2026-08-21" },
+                      metricas: [
+                        {
+                          metrica: "entregas",
+                          unidad: "conteo",
+                          data: [
+                            { fecha: "2026-08-19", valor: 41 },
+                            { fecha: "2026-08-20", valor: 37 },
+                          ],
+                        },
+                        {
+                          metrica: "tasa_entrega",
+                          unidad: "porcentaje",
+                          data: [
+                            { fecha: "2026-08-19", valor: 0.93 },
+                            { fecha: "2026-08-20", valor: null },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
+  },
+  // ---------------------------------------------------------------------------------------------
+  // Feature 256/R24 — WEBHOOKS SALIENTES. Seccion de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
+  // `paths:`): describe lo que Ordenex ENVIA al callback del integrador, no lo que el integrador
+  // pide. Va aqui y NO dentro de `paths` a proposito: la lista de endpoints del canal por API key
+  // esta congelada en `tests/unit/api/openapi-177-paths-pdf-y-carga-id.test.ts` y publicar un
+  // webhook no es dar de alta un endpoint.
+  //
+  // ⏳ 2026-08-22 (FEATURE 268/R28/R29) — AQUI DECIA, y ya no es cierto:
+  // «⚠️ `data.estado` se documenta como `type: string` con PROSA que remite al catalogo de
+  // `OrdenListItem`, SIN `enum` literal de estados: enumerarlo aqui añadiria un 5.º catalogo de
+  // estados al contrato y pondria ROJA `tests/unit/api/openapi-contrato-en-reparto.test.ts`
+  // (design 256 §5.2)».
+  //
+  // AHORA `data.estado` SI LLEVA `enum`, y por tres razones:
+  //
+  // (a) POR QUE AHORA SI SE ENUMERA. Sin enum, el integrador no tiene forma de saber que values
+  //     puede recibir por este canal: la prosa lo mandaba al catalogo de `OrdenListItem`, que es
+  //     el catalogo de las RESPUESTAS REST y es MAS GRANDE que lo que el webhook emite. La 268
+  //     amplia el vocabulario emitido (`ayuda_tienda`, `incidente`) y publicar la lista exacta
+  //     pasa a ser parte del aviso a integradores, no un adorno.
+  //
+  // (b) POR QUE ES SEMANTICAMENTE CORRECTO. El enum NO es el catalogo entero: se DERIVA de
+  //     `EVENTOS_PUBLICOS` (`WEBHOOK_ESTADO_ENUM`, R29), que son los 12 values que este webhook
+  //     puede emitir de verdad. Los 16 de `OrdenListItem.estado` son un SUPERCONJUNTO: incluyen
+  //     estados internos (`en_preparacion`, `por_recoger`, `en_bodega_satelite`,
+  //     `en_ruta_bodega_satelite`) que nunca viajan en un evento. Documentar el superconjunto era
+  //     lo incorrecto; no documentar nada, tambien.
+  //
+  // (c) POR QUE EL GUARD SIGUE EN 4 (el miedo de la 256 era infundado; design 268 §7.5).
+  //     `openapi-contrato-en-reparto.test.ts` no cuenta «enums», cuenta enums DE ESTADO con el
+  //     predicado `esEnumDeEstado`, que exige `entregada` **Y** `por_recoger`. El enum derivado de
+  //     la politica contiene `entregada` pero NO `por_recoger` (es uno de los internos que el
+  //     webhook no emite), asi que no entra en el recuento: los bloques siguen siendo CUATRO.
+  //     Esto no se cree por fe: lo afirma `tests/unit/api/openapi-webhook-contrato.test.ts`.
+  //
+  // El `enum` de los valores de `motivo` SI se escribia ya: no es un catalogo de estados y no
+  // afecta al recuento. La 268 lo AMPLIA con las tres causas de incidente.
+  //
+  // ⚠️ Ojo tambien con la PROSA: `tests/unit/types/intentos-no-alcance.test.ts` (160/R31) prohibe
+  // la subcadena «intentos» en TODO el spec serializado. Por eso aqui se habla de «reintento», en
+  // singular: no lo «corrijas» al plural.
+  webhooks: {
+    "orden.estado_actualizado": {
+      post: {
+        tags: ["Órdenes"],
+        summary: "Cambio de estado de una orden (evento saliente)",
+        operationId: "webhookOrdenEstadoActualizado",
+        // La entrega no lleva `Authorization`: se autentica con la firma HMAC de las cabeceras.
+        security: [],
+        description: [
+          "Ordenex **envía** este evento al callback configurado por el dueño de la tienda cada vez",
+          "que una orden suya cambia a un estado publicable. Es una petición SALIENTE de Ordenex",
+          "hacia el integrador: no es un endpoint que el integrador llame.",
+          "",
+          "El destino se deriva SIEMPRE del dueño de la orden: un evento nunca se entrega al callback",
+          "de otro dueño.",
+          "",
+          "**Firma.** Cada entrega lleva `X-Ordenex-Timestamp` (instante unix en segundos) y",
+          "`X-Ordenex-Signature` (`sha256=<hex>`, HMAC-SHA256 sobre la cadena",
+          "`${timestamp}.${cuerpo}` con el secreto de la suscripción). El `cuerpo` es el JSON EXACTO",
+          "recibido, byte a byte: verificá la firma sobre el texto crudo ANTES de parsearlo, y",
+          "descartá las entregas cuyo timestamp quede fuera de tu ventana anti-replay.",
+          "",
+          "**Idempotencia.** Una misma entrega puede repetirse (reintento tras un fallo transitorio,",
+          "o duplicado): deduplicá por `eventoId`, que es determinista para un mismo cambio de estado.",
+          "",
+          "Respondé 2xx para confirmar la recepción; cualquier otra respuesta se trata como fallo",
+          "transitorio y la entrega se reintenta.",
+        ].join("\n"),
+        parameters: [
+          {
+            name: "X-Ordenex-Signature",
+            in: "header",
+            required: true,
+            description:
+              "Firma de la entrega: `sha256=<hex>`, HMAC-SHA256 de `${timestamp}.${cuerpo}` con el secreto de la suscripción.",
+            schema: { type: "string", pattern: "^sha256=[0-9a-f]{64}$" },
+          },
+          {
+            name: "X-Ordenex-Timestamp",
+            in: "header",
+            required: true,
+            description:
+              "Instante unix en SEGUNDOS en que se firmó la entrega. Entra en el mensaje firmado y es el insumo de tu ventana anti-replay.",
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["evento", "eventoId", "ocurridoAt", "data"],
+                properties: {
+                  evento: {
+                    type: "string",
+                    const: "orden.estado_actualizado",
+                    description: "Nombre del evento. Estable.",
+                  },
+                  eventoId: {
+                    type: "string",
+                    description:
+                      "Identificador determinista del evento (`webhook_estado:<ordenId>:<estatusDestinoId>:<ocurridoAt>`). Dos entregas del MISMO cambio de estado lo repiten: deduplicá por este valor.",
+                  },
+                  ocurridoAt: {
+                    type: "string",
+                    format: "date-time",
+                    description: "Instante del cambio de estado (ISO 8601, UTC).",
+                  },
+                  data: {
+                    type: "object",
+                    // ⏳ 2026-08-22 (feature 268/R28) — la frase de la 256 decia «las cuatro claves
+                    // están SIEMPRE presentes» a secas. Sigue siendo verdad para esas cuatro, pero
+                    // ya no describe el objeto entero: hay una QUINTA clave, `evidenciasUrl`, que
+                    // es OPCIONAL y se OMITE salvo en `incidente`. Se dice cual es cual para que el
+                    // consumidor no tenga que deducirlo.
+                    description:
+                      "Las cuatro claves `numGuia`, `numRemision`, `estado` y `motivo` están SIEMPRE presentes, sea cual sea el estado: el consumidor no ramifica por estado para saber si existen (`motivo` viaja como `null` cuando no aplica, nunca omitido). A ellas se suma UNA clave OPCIONAL, `evidenciasUrl`, que SÍ se omite salvo en los eventos con `estado: \"incidente\"`.",
+                    required: ["numGuia", "numRemision", "estado", "motivo"],
+                    properties: {
+                      numGuia: {
+                        type: ["integer", "null"],
+                        description: "Número de guía de la orden (null si aún no está asignado).",
+                      },
+                      numRemision: {
+                        type: "string",
+                        description: "Remisión de la orden (la que envió el integrador).",
+                      },
+                      estado: {
+                        type: "string",
+                        // feature 268/R29: DERIVADO de `EVENTOS_PUBLICOS`, nunca copiado a mano.
+                        enum: WEBHOOK_ESTADO_ENUM,
+                        description:
+                          "Estado destino de la orden, con el MISMO value crudo del catálogo que publica `OrdenListItem.estado` (y, por herencia, `OrdenDetalle`). El `enum` de arriba es la POLÍTICA de eventos públicos: la lista EXACTA y COMPLETA de values que este webhook puede entregar, y un SUBCONJUNTO del catálogo de `OrdenListItem.estado`. Los estados internos de preparación y ruteo satélite que ese catálogo documenta (`en_preparacion`, `por_recoger`, `en_bodega_satelite`, `en_ruta_bodega_satelite`) NO viajan nunca en un evento. La lista puede CRECER de forma aditiva en el futuro, siempre con aviso previo: tratá un value desconocido como «ignorar», no como error.",
+                      },
+                      motivo: {
+                        type: ["string", "null"],
+                        enum: [
+                          "not_found",
+                          "wrong_number",
+                          "wrong_address",
+                          "danado", // feature 268/R20: causa de INCIDENTE, en español (158/Q-B)
+                          "perdido",
+                          "robado",
+                          null,
+                        ],
+                        description: [
+                          "Causa TIPIFICADA del cambio de estado, con el value crudo del enum y sin traducir. El",
+                          "campo transporta DOS enums distintos y cuál aplica lo decide `estado`:",
+                          "",
+                          "- **`estado: \"devuelta\"`** → causa de la devolución: `not_found` (destinatario no",
+                          "  encontrado), `wrong_number` (teléfono equivocado), `wrong_address` (dirección",
+                          "  equivocada). Estos tres NO aparecen nunca con otro estado.",
+                          "- **`estado: \"incidente\"`** → causa del incidente: `danado`, `perdido`, `robado`. Estos",
+                          "  tres NO aparecen nunca con otro estado.",
+                          "- **cualquier otro `estado`** → siempre `null`.",
+                          "",
+                          "⚠️ **La asimetría de idioma es DELIBERADA, no un error que corregir.** Las causas de",
+                          "devolución van en INGLÉS y las de incidente en ESPAÑOL (`danado` sin eñe, `perdido`,",
+                          "`robado`) porque cada enum se publicó con el value crudo de su catálogo interno y",
+                          "renombrar cualquiera de los dos rompería a los integradores que ya lo consumen.",
+                          "Decisión consciente y firmada (73/F1.4-g y 158/Q-B): no se «armoniza» en el futuro.",
+                          "",
+                          "Es `null` en todo evento cuyo `estado` NO sea `devuelta` ni `incidente`, y es `null`",
+                          "**también** en una `devuelta` (o un `incidente`) sin causa registrada — órdenes cerradas",
+                          "antes de que la causa se pidiera; ese histórico no se rellenó. El contrato no distingue",
+                          "«no hubo causa» de «no se registró»:",
+                          "en los dos casos viaja `null`, el campo NUNCA se omite y la entrega es normal.",
+                          "",
+                          "**Es el motivo VIGENTE EN EL MOMENTO DE LA ENTREGA**, no una foto del instante del",
+                          "cambio de estado: el webhook dice exactamente lo mismo que dice la aplicación en ese",
+                          "instante. Si la devolución se re-gestiona entre dos entregas del mismo `eventoId`, la",
+                          "segunda lleva la causa vigente entonces; deduplicá por `eventoId` y quedate con la",
+                          "última entrega.",
+                          "",
+                          "⚠️ Transporta EXCLUSIVAMENTE la causa tipificada. NO es el texto libre que el mensajero",
+                          "escribe al gestionar la orden —que comparte el nombre `motivo` en la base de datos y NO",
+                          "se emite NUNCA en este webhook—, ni ningún otro dato del destinatario.",
+                        ].join("\n"),
+                      },
+                      // feature 268/R24/R30 — la QUINTA clave, y la unica OPCIONAL del objeto:
+                      // deliberadamente FUERA de `required`.
+                      evidenciasUrl: {
+                        type: "string",
+                        format: "uri",
+                        description: [
+                          "Enlace al detalle de esta orden en el canal por API key",
+                          "(`GET /api/ordenes/api-key/orden/{id}`), cuyo array `evidencias[]` incluye las",
+                          "evidencias del incidente con `resultado: \"incidente\"`.",
+                          "",
+                          "**Es el único campo OPCIONAL de `data`.** Viaja SOLO en los eventos con",
+                          "`estado: \"incidente\"`, y se OMITE —no viaja como `null`— tanto en cualquier otro",
+                          "estado como en un `incidente` para el que no se pueda resolver el enlace. Ramificá",
+                          "por «la clave existe», no por su valor.",
+                          "",
+                          "⚠️ **NO es una URL firmada y NO lleva credencial.** Es un enlace ESTABLE y",
+                          "determinista: sin token, sin expiración, no caduca, y las dos entregas de un mismo",
+                          "`eventoId` (por ejemplo tras un reintento) llevan exactamente el mismo valor. Por eso",
+                          "**no podés abrirlo sin autenticarte**: invocalo con tu propio",
+                          "`Authorization: Bearer ordx_...`, igual que cualquier otra llamada al canal, y el",
+                          "detalle te devolverá las URLs firmadas frescas de las fotos, con su TTL corto. La",
+                          "credencial la ponés vos; el cuerpo del webhook nunca la transporta.",
+                        ].join("\n"),
+                      },
+                    },
+                  },
+                },
+              },
+              // feature 268/R30 — el ejemplo de la 256 (`devuelta`/`not_found`) NO se pierde: pasa a
+              // ser el primero de un mapa `examples`, y se le suma el caso de `incidente`, que es el
+              // unico que muestra la clave opcional `evidenciasUrl` y la causa en español.
+              examples: {
+                devuelta: {
+                  summary: "Devolución con causa tipificada (sin `evidenciasUrl`)",
+                  value: {
+                    evento: "orden.estado_actualizado",
+                    eventoId:
+                      "webhook_estado:018f2c31-0000-4000-8000-000000000001:7:2026-08-21T10:00:00.000Z",
+                    ocurridoAt: "2026-08-21T10:00:00.000Z",
+                    data: {
+                      numGuia: 100234,
+                      numRemision: "REM-0001",
+                      estado: "devuelta",
+                      motivo: "not_found",
+                    },
+                  },
+                },
+                incidente: {
+                  summary: "Incidente: causa en español y enlace estable a las evidencias",
+                  value: {
+                    evento: "orden.estado_actualizado",
+                    eventoId:
+                      "webhook_estado:018f2c31-0000-4000-8000-000000000002:21:2026-08-22T14:30:00.000Z",
+                    ocurridoAt: "2026-08-22T14:30:00.000Z",
+                    data: {
+                      numGuia: 100235,
+                      numRemision: "REM-0002",
+                      estado: "incidente",
+                      motivo: "robado",
+                      evidenciasUrl:
+                        "https://app.ordenex.co/api/ordenes/api-key/orden/018f2c31-0000-4000-8000-000000000002",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Recepción confirmada. Cualquier 2xx vale; cualquier otra respuesta se trata como fallo transitorio y la entrega se reintenta.",
+          },
         },
       },
     },
@@ -784,10 +1302,14 @@ export const openApiSpec = {
       },
       Evidencia: {
         type: "object",
-        description: "Evidencia de entrega/rechazo con URL firmada de corta duración.",
+        // feature 268/R31: el detalle por API key deja de mostrar solo entrega y rechazo — las
+        // evidencias del INCIDENTE (por las dos procedencias: gestión del mensajero y reporte del
+        // admin) se exponen con la MISMA forma, y por eso `resultado` gana un tercer value.
+        description:
+          "Evidencia de entrega, rechazo o incidente, con URL firmada de corta duración. Las de incidente llegan con `resultado: \"incidente\"` y son las que enlaza el campo `evidenciasUrl` del webhook.",
         required: ["resultado", "contentType", "url", "expiraEnSegundos"],
         properties: {
-          resultado: { type: "string", enum: ["entregada", "rechazada"] },
+          resultado: { type: "string", enum: ["entregada", "rechazada", "incidente"] },
           contentType: { type: ["string", "null"], description: "MIME del archivo (p. ej. image/jpeg)." },
           url: { type: "string", format: "uri", description: "URL firmada (vence a los 5 min)." },
           expiraEnSegundos: { type: "integer", description: "TTL de la URL firmada en segundos (300)." },
@@ -865,7 +1387,8 @@ export const openApiSpec = {
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -882,7 +1405,7 @@ export const openApiSpec = {
           costoEnvio: {
             type: "string",
             description:
-              "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD.",
+              "Costo del envío (flete + IVA de la tarifa vigente del par (tienda, zona)), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD.",
           },
         },
       },
@@ -1052,7 +1575,8 @@ export const openApiSpec = {
           costos: { $ref: "#/components/schemas/CotizacionCostos" },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1084,6 +1608,69 @@ export const openApiSpec = {
           conError: { type: "integer" },
           totales: { $ref: "#/components/schemas/CotizacionTotales" },
           filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
+        },
+      },
+      // Feature 267 (R39) — el contrato de `GET /api/ordenes/api-key/analitica`. Es el espejo
+      // publicado de `AnaliticaSerieApiKeyDTO` (`lib/api/analitica-api-key-dto.ts`): si el DTO
+      // gana o pierde un campo, este schema y el `.yaml` cambian con el, en el mismo commit.
+      // P4-bis (2026-08-23) — EL SOBRE. El endpoint sirve un LOTE, asi que la unidad publicada
+      // es esta y no la serie suelta: el `rango` UNA vez —lo comparten todas por construccion— y
+      // las series en `metricas[]`, en el orden pedido. La forma no cambia con el numero de
+      // metricas pedidas: un contrato que cambiara de forma obligaria a escribir dos parsers.
+      AnaliticaRespuesta: {
+        type: "object",
+        required: ["rango", "metricas"],
+        properties: {
+          rango: {
+            type: "object",
+            description:
+              "Eco del rango efectivo, común a todas las series y en el mismo formato que la petición.",
+            required: ["desde", "hasta"],
+            properties: {
+              desde: { type: "string", format: "date", example: "2026-08-19" },
+              hasta: {
+                type: "string",
+                format: "date",
+                description: "Inclusivo, hora de Costa Rica.",
+                example: "2026-08-21",
+              },
+            },
+          },
+          metricas: {
+            type: "array",
+            description: "Una entrada por métrica pedida, en el orden pedido. Nunca vacío.",
+            items: { $ref: "#/components/schemas/AnaliticaSerie" },
+          },
+        },
+      },
+      // 2026-08-24 — la serie publica TRES campos. `unidadDeConteo` salió del payload (es un
+      // hecho del catálogo, y va en la descripción del endpoint) y `cobertura` salió entera: su
+      // información la lleva ahora la OMISIÓN de puntos en `data`.
+      AnaliticaSerie: {
+        type: "object",
+        required: ["metrica", "unidad", "data"],
+        properties: {
+          metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
+          unidad: {
+            type: "string",
+            description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
+          },
+          data: {
+            type: "array",
+            description:
+              "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros.",
+            items: {
+              type: "object",
+              required: ["fecha", "valor"],
+              properties: {
+                fecha: { type: "string", format: "date", example: "2026-08-20" },
+                valor: {
+                  type: ["number", "null"],
+                  description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido.",
+                },
+              },
+            },
+          },
         },
       },
     },

@@ -6,6 +6,14 @@ import userEvent from "@testing-library/user-event";
 import { RecogerModule } from "@/app/(app)/mis-asignaciones/_components/RecogerModule";
 import { recogerAsignaciones } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import {
+  bloqueoConVencido,
+  bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
+  bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
+} from "@/tests/fixtures/bloqueo-cierre";
 
 // 2026-07-31 (decisión del humano) — pantalla POR RECOGER del mensajero. Es la mitad que
 // salió de `MisAsignacionesModule` (hoy `RepartoModule`), donde el escáner quedaba
@@ -89,7 +97,7 @@ function renderModule(props?: Partial<Parameters<typeof RecogerModule>[0]>) {
   return render(
     <RecogerModule
       porRecoger={props?.porRecoger ?? []}
-      bloqueado={props?.bloqueado ?? false}
+      bloqueo={props?.bloqueo ?? SIN_BLOQUEO}
     />,
   );
 }
@@ -364,23 +372,126 @@ describe("RecogerModule — las dos vías de recogida (feature 96)", () => {
   });
 });
 
-describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
-  it("R12: bloqueado muestra el aviso de bloqueo total", () => {
+// =================================================================================================
+// Feature 111 -> FEATURE 271 (T9.2, R43/R46/R51/R52) — EL AVISO DEL BLOQUEO, PALABRA POR PALABRA.
+// =================================================================================================
+//
+// ⚠️ LOS LITERALES VAN ESCRITOS A MANO Y COMPLETOS. NUNCA `toHaveTextContent(avisoBloqueo(d))`:
+// un texto comparado contra la función que lo genera está SIEMPRE VERDE —pasa aunque la función
+// devuelva basura— y este repo ya lo ha pagado. Son los que el humano aprobó el 2026-08-23
+// (§10.2), en su variante de PORTAL: la única diferencia con «Cierre del día» es el puntero final.
+//
+// ⚠️ Y LO QUE YA NO DICEN: «Sí puedes seguir recibiendo asignaciones» y «Sí puedes seguir
+// recogiendo en tiendas». Las dos eran ciertas hasta el 2026-08-22 y son FALSAS desde el 23 —un
+// mensajero bloqueado tampoco recibe trabajo nuevo, ni reparto ni recolección—. La aserción
+// negativa del final es lo que impide reponerlas «para suavizar el mensaje».
+describe("RecogerModule — bloqueo del mensajero (feature 111 -> 271)", () => {
+  it("271/§10.2 caso 2 · un cierre esperando a que él lo reenvíe (N=1, V=1)", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porRecoger: [makeAsignacion({ id: "r1" })],
     });
 
-    expect(
-      screen.getByText(
-        /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes un cierre sin enviar a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Ve a «Cierre del día» para enviarlo a aprobación.",
+    );
+  });
+
+  it("271/§10.2 caso 1 · bloqueado por ACUMULAR (N=2, V=0), con la fecha de la JORNADA", () => {
+    renderModule({
+      bloqueo: bloqueoPorAcumular("2026-08-21"),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    // La fecha es la de la jornada que el mensajero trabajó (21), no la del nacimiento del
+    // cierre (22): un cierre vencido nace fechado un día por delante.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo, el del 21 de agosto.",
+    );
+  });
+
+  it("271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1)", () => {
+    // ⚠️ EL PUNTERO VA SIN OBJETO desde el 2026-08-23 (corrección aprobada por el humano tras
+    // mirar la app): «...para enviarLO» colgaba de «el más antiguo», el cierre que resuelve la
+    // BODEGA. La frase anterior ya dice qué enviar; el caso 2 conserva su «para enviarlo».
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía", () => {
+    // ⚠️ LA CUARTA RAMA (aprobada el 2026-08-23, y el estado se midió en el navegador): el admin
+    // rechazó el PRIMERO de sus dos `solicitado`, así que el cierre más viejo es SUYO. Antes decía
+    // «espera a que la bodega apruebe el más antiguo» fechando su propio cierre — le mandaba a
+    // esperar por el mismo que el botón le ofrece reenviar. Ahora la fecha nombra el que ÉL envía y
+    // la espera se corre al RESTO.
+    renderModule({
+      bloqueo: bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: "2026-08-20" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Dos `rechazado`: no queda ningún `solicitado`, así que la bodega no tiene nada que aprobar
+    // y el plural del envío es real. Hasta el 2026-08-23 este estado leía el texto de arriba.
+    renderModule({
+      bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21"),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/R60 · sin jornada fiable la fecha DESAPARECE entera y el resto se lee igual", () => {
+    renderModule({
+      bloqueo: bloqueoPorAcumular(null),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo.",
+    );
+  });
+
+  it("271/R51 · el aviso NO promete recibir asignaciones ni recoger en tiendas", () => {
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    const aviso = screen.getByRole("alert");
+    expect(aviso).not.toHaveTextContent(/seguir recibiendo asignaciones/i);
+    expect(aviso).not.toHaveTextContent(/seguir recogiendo en tiendas/i);
+    expect(aviso).not.toHaveTextContent(/sí puedes/i);
+  });
+
+  it("271/R5 · un solo cierre YA enviado (N=1, V=0) NO bloquea: ni aviso ni controles apagados", () => {
+    // La mitad de la regla del 2026-08-20 que la 271 CONSERVA: ese mensajero ya hizo lo suyo y
+    // espera al administrador (mediana 8,2 h medida contra producción). Castigarlo por una
+    // demora ajena era la mitad equivocada.
+    renderModule({
+      bloqueo: bloqueoDe({ n: 1, v: 0 }),
+      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(accesoRecogida()).toBeInTheDocument();
   });
 
   it("R14: bloqueado oculta los controles de recoger (input + escáner) y deja el listado", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
@@ -397,7 +508,7 @@ describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1" })] });
 
     expect(
-      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
+      screen.queryByText(/no puedes entregar, cobrar ni recibir trabajo nuevo/i),
     ).not.toBeInTheDocument();
   });
 });
@@ -634,9 +745,47 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     expect(accesoRecogida()).toBeInTheDocument();
   });
 
-  it("R24: la orden reservada SE PUEDE RECOGER — la Server Action se llama con su id", async () => {
+  it("R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    // 261/R11: el badge dice QUÉ es la orden; esta línea dice por qué no se puede trabajar y
+    // desde cuándo. La fecha la resolvió el SERVIDOR (R14): aquí no se lee ningún reloj.
+    expect(
+      within(cardDe("REM-MAN")).getByText(
+        "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+// =================================================================================================
+// FEATURE 261 (F1/F5, R13) — ESCANEAR O TECLEAR UNA GUÍA RESERVADA PARA OTRO DÍA.
+// =================================================================================================
+//
+// ⏳ ESTO REVIERTE LA DECISIÓN D5 DE LA 246, que decía que la reserva protegía del corte nocturno
+// y no del mensajero. La refutó una prueba humana en producción: la guía 17496963 se gestionó
+// `entregada` a las 22:10 CR del 21 estando reservada para el 22. Desde el 2026-08-21 una orden
+// reservada NO se recoge hasta su día — y el rechazo se dice con el motivo REAL, no como un error
+// de la orden ni como un código inválido, que es exactamente lo que R13 prohíbe.
+//
+// Las dos ramas van en este archivo porque son la misma frase por dos caminos: la SUAVE (el
+// cliente lo sabe por el DTO y no llega a llamar) y la del SERVIDOR (la lista venía de antes y el
+// servidor rechaza con su código). Los literales, escritos a mano.
+describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", () => {
+  const AVISO_22 =
+    "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.";
+
+  it("R13: teclear una guía reservada muestra el MOTIVO REAL y NO llama a la action", async () => {
     const user = userEvent.setup();
-    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
     renderModule({
       porRecoger: [
         makeAsignacion({
@@ -644,6 +793,7 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
           numRemision: "REM-MAN",
           numGuia: 1001,
           esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
         }),
       ],
     });
@@ -655,13 +805,166 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     await user.type(within(region).getByLabelText("Número de guía"), "1001");
     await user.click(within(region).getByRole("button", { name: "Recoger" }));
 
-    // ES LA MITAD DE D5 QUE UN TEST PUEDE SOSTENER: la reserva protege del corte de la noche,
-    // NO es un candado contra el mensajero. Que la acción SE LLAME es la afirmación; que no
-    // aparezca un error no lo sería (también estaría en verde si no pasara nada).
-    await vi.waitFor(() =>
-      expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r1"] }),
+    // Que el AVISO se diga es la mitad; que la action NO se llame es la otra, y sin ella el caso
+    // pasaría igual con una defensa que avisa y recoge de todos modos.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalledWith(AVISO_22));
+    expect(recogerMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("R13: el rechazo NO se disfraza de guía desconocida ni de código inválido", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          numGuia: 1001,
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1001");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    // El par del caso anterior. Con el mensaje de «no está entre tus órdenes» el mensajero
+    // buscaría un problema que no existe —la orden SÍ es suya— y acabaría llamando a bodega.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalled());
+    const dicho = errorMock.mock.calls[0][0] as string;
+    expect(dicho).not.toMatch(/no está entre tus órdenes/i);
+    expect(dicho).not.toMatch(/inválido/i);
+  });
+
+  it("R13: el `conflict` del servidor con su código pinta EL MISMO texto, no el genérico", async () => {
+    const user = userEvent.setup();
+    // LA CARRERA PERDIDA: el cliente cree que se puede (su lista es de antes de la reserva) y
+    // llama; el servidor rechaza y dice por qué con un CÓDIGO DE MÁQUINA, para que la pantalla no
+    // tenga que comparar prosa. Sin esta rama el mensajero leería «la orden ya no está por
+    // recoger», que es falso, y actualizaría para siempre.
+    recogerMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [
+        {
+          ordenId: "r1",
+          motivo:
+            "Esta orden es para un día de reparto posterior. Podrás recogerla y gestionarla ese día.",
+          codigo: "reservada_para_otro_dia",
+        },
+      ],
+    });
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          numGuia: 1001,
+          esParaManana: false,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1001");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r1"] }));
+    // Y con EL DÍA que la orden trae consigo: una regla, dos sitios, un texto.
+    await vi.waitFor(() => expect(errorMock).toHaveBeenCalledWith(AVISO_22));
+    expect(errorMock).not.toHaveBeenCalledWith(
+      "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
     );
+  });
+
+  it("un `conflict` SIN código sigue diciendo el mensaje de siempre", async () => {
+    const user = userEvent.setup();
+    // El par negativo: la rama nueva no puede tragarse los conflictos que ya existían («la orden
+    // dejó de estar por recoger»), o convertiría un mensaje correcto en uno falso.
+    recogerMock.mockResolvedValue({
+      status: "conflict",
+      detalle: [{ ordenId: "r1", motivo: "estado de origen no permitido: en_reparto" }],
+    });
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 })],
+    });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1001");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "La orden ya no está por recoger. Actualiza y vuelve a intentar.",
+      ),
+    );
+  });
+
+  it("R8: la orden de HOY se recoge igual — el bloqueo no se come a las demás", async () => {
+    const user = userEvent.setup();
+    recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r2"] });
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          numGuia: 1001,
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+        makeAsignacion({
+          id: "r2",
+          numRemision: "REM-HOY",
+          numGuia: 1002,
+          esParaManana: false,
+          fechaRepartoISO: "2026-08-21",
+        }),
+      ],
+    });
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "1002");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    // La mitad POSITIVA de la regla, en la misma pantalla que la negativa: sin ella, un bloqueo
+    // que rechazara TODO también pasaría los casos de arriba.
+    await vi.waitFor(() => expect(recogerMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }));
     expect(errorMock).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it("R9: y la reservada SIGUE en su grupo, contada y visible", () => {
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    // Bloquear no es esconder. La orden se queda donde el mensajero la busca, con su marca y con
+    // su explicación: sacarla de la lista sería empezar a ocultarla (R9, y la alternativa A7 que
+    // el humano descartó al firmar P3).
+    const region = listado();
+    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
+    expect(within(region).getByText("1 Órdenes nuevas asignadas")).toBeInTheDocument();
+    expect(accesoRecogida()).toBeInTheDocument();
   });
 });

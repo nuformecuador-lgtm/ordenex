@@ -44,22 +44,29 @@ import { LLAMADAS_PROHIBIDAS_EN_DINERO, quitarComentarios } from "../../fixtures
 const RAIZ = path.resolve(__dirname, "../../..");
 
 /**
- * Las dos tablas que muestran dinero de una orden. Censo explícito: si un archivo se mueve o
+ * Las tablas que muestran dinero de una orden. Censo explícito: si un archivo se mueve o
  * se renombra, el primer test cae en vez de salirse del alcance en silencio.
+ *
+ * FEATURE 260 (F7) — ALTA: el detalle del tablero del día. Nace una TERCERA superficie con
+ * importes de orden —monta el mismo `ordenesColumns` en el modal de `/monitoreo`— y hasta hoy
+ * esta guardia no llegaba hasta allí: estaba verde por omisión, que no es lo mismo que estar
+ * verde. Entra en el censo por R41.
  */
 const TABLAS_DE_ORDENES: readonly string[] = [
   "app/(app)/ordenes/_components/ordenes-columns.tsx",
   "app/(app)/recepcion-satelite/_components/recibidas-columns.tsx",
+  "app/(app)/monitoreo/_components/detalle-columnas.ts",
 ];
 
 /**
  * Los árboles COMPLETOS de los que salen esas tablas. La regla de abajo se aplica a todos sus
- * archivos, no solo a los dos censados: así no envejece. Un módulo nuevo que derive dinero en
+ * archivos, no solo a los censados: así no envejece. Un módulo nuevo que derive dinero en
  * el navegador cae aunque nadie se acuerde de añadirlo a ninguna lista.
  */
 const ARBOLES = [
   "app/(app)/ordenes/_components",
   "app/(app)/recepcion-satelite/_components",
+  "app/(app)/monitoreo/_components",
 ];
 
 /**
@@ -151,12 +158,20 @@ describe("guardia 204 — las tablas de órdenes pintan el dinero, no lo derivan
 
   it("los árboles barridos existen y NO están vacíos", () => {
     // Sin esto, un `readdirSync` sobre una ruta que ya no existe dejaría el test anterior
-    // pasando por no mirar nada. Son ~50 archivos entre los dos.
+    // pasando por no mirar nada. Son ~60 archivos entre los tres.
     const total = ARBOLES.reduce(
       (acc, dir) => acc + listarArchivos(path.join(RAIZ, dir)).length,
       0,
     );
     expect(total).toBeGreaterThan(20);
+    // Y CADA árbol aporta lo suyo: si uno se quedara vacío o mal escrito, el total seguiría
+    // por encima del umbral gracias a los otros dos y nadie se enteraría.
+    for (const dir of ARBOLES) {
+      expect(
+        listarArchivos(path.join(RAIZ, dir)).length,
+        `el árbol \`${dir}\` no aporta ni un archivo al barrido`,
+      ).toBeGreaterThan(0);
+    }
   });
 
   it("las dos columnas derivadas leen el campo del DTO y no la tarifa", () => {

@@ -12,6 +12,16 @@ import type {
 import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import { NotificacionRepository } from "@/lib/repositories/NotificacionRepository";
 import type { OrderStatusValue } from "@/lib/types/order-status";
+// Feature 262 (B19, R18/R47): la fecha del aviso se pone en palabras con la MISMA funcion que la
+// asignacion y el portal del mensajero. Lo que se importa es la CONVERSION de fecha, no otro
+// literal: las cadenas de notificacion siguen viviendo solo en este archivo (146 §4.6). Y
+// `fechaLegible` es pura — no importa `Date` ni `Intl`.
+import { fechaLegible } from "@/lib/utils/dia-reparto-textos";
+// Feature 271 (§9.2/§10.1): el aviso de bloqueo al mensajero se COMPONE con el mismo formateador
+// que la pantalla. No es una cadena importada de fuera: es la regla que CUENTA (N, V y cual toca
+// primero) escrita una sola vez, para que campana y pantalla no puedan divergir (R43/R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 
 /**
  * Cliente transaccional que el emisor del rechazo necesita: las dos tablas de la feature +
@@ -47,6 +57,28 @@ export const TEXTO_POSTULACION_RECURSO_PENDIENTE =
   "Alguien ofreció un vehículo o una bodega desde la web.";
 export function textoCargaMasivaTerminada(creadas: number): string {
   return `Carga masiva terminada: ${creadas} ${creadas === 1 ? "orden cargada" : "órdenes cargadas"}.`;
+}
+/**
+ * Feature 262 (D7, R47) — el aviso al mensajero cuando le corrigen el día de una orden suya.
+ *
+ * ⚠️ NOMBRA LA FECHA, NUNCA «hoy» NI «mañana», y es la mitad del requisito. Un aviso que dijera
+ * «pasó a hoy» y se leyera a la mañana siguiente sería FALSO — y la campana guarda 30 días
+ * (`VENTANA_DIAS`). Es el mismo argumento con el que la 261 puso la fecha en
+ * `avisoReservaParaOtroDia`: «si el texto dijera mañana, la app mentiría».
+ *
+ * UN SOLO TEXTO PARA LOS DOS SENTIDOS (R55). «Pasó al reparto del X» es cierto tanto si el día se
+ * adelantó como si se retrasó, y evita que el emisor tenga que decidir cuál es cuál. El mensajero
+ * compara con lo que ya sabe; la app no le explica su propia agenda.
+ *
+ * SIN el motivo escrito por quien corrigió (R48/A24): es texto libre de 10 a 300 caracteres escrito
+ * por un humano y puede contener cualquier cosa, incluido un teléfono o un nombre. El motivo se lee
+ * en el historial de la orden, que sí autoriza por orden.
+ */
+export function textoDiaRepartoCorregido(fechaNuevaISO: string): string {
+  const fecha = fechaLegible(fechaNuevaISO);
+  return fecha
+    ? `Una orden tuya pasó al reparto del ${fecha}.`
+    : "Una orden tuya cambió de día de reparto.";
 }
 
 /** Roles que aprueban postulaciones y cierres (espejo de ROLES_APROBADORES, F1.4-2). */
@@ -332,6 +364,67 @@ export async function emitirPostulacionRecursoPendiente(
 }
 
 // ---------------------------------------------------------------------------
+// Feature 262 (D7) — Al mensajero le corrigieron el dia de una orden suya. BEST-EFFORT.
+// ---------------------------------------------------------------------------
+
+/** Lo MINIMO que el aviso necesita. Ni direccion, ni telefono, ni destinatario, ni monto (R48). */
+export interface DiaRepartoCorregidoContexto {
+  /**
+   * Id de la fila de `orden_dia_reparto_cambio`: LA ENTIDAD del aviso.
+   *
+   * ⚠️ NO ES EL `ordenId`, Y ES EL HALLAZGO QUE DECIDE ESTE DISENO (design §15.2/§15.3, A20).
+   * `notificacion_dedupe_key` es UNIQUE sobre `(evento, entidad_id, destinatario_rol,
+   * destinatario_usuario_id)` con `NULLS NOT DISTINCT`. Con el id de la ORDEN, esa clave admitiria
+   * UNA sola fila por (evento, orden, mensajero) PARA SIEMPRE —ni siquiera despues de que el primer
+   * aviso se lea— y `NotificacionRepository.crear` ABSORBE el `P2002` devolviendo `false`: la
+   * SEGUNDA correccion de esa orden no avisaria nunca, en silencio absoluto. Y «mañana -> hoy sobre
+   * una orden que el mensajero ya lleva encima» —el caso por el que existe esta feature— es
+   * precisamente el que llega en segundo lugar. Con el id del CAMBIO, cada correccion es una
+   * entidad distinta: la clave nunca colisiona y R50 es una propiedad ESTRUCTURAL.
+   */
+  cambioId: string;
+  /** El destinatario, y el UNICO (R51): el mensajero asignado de esa orden. */
+  mensajeroUsuarioId: string;
+  /** `YYYY-MM-DD` ya resuelto por el servidor. El aviso nombra la FECHA, no «hoy»/«mañana» (R47). */
+  fechaNuevaISO: string;
+  /** La guia si existe; si no, el numero de remision. Copia exacta de `emitirOrdenRechazada`. */
+  anexo: string;
+}
+
+/**
+ * R46/R50/R51 — UNA fila `box` dirigida al mensajero asignado, y a nadie mas.
+ *
+ * `tipo: "box"` (icono de paquete) y no `alert` ni `warning`: esto es un PAQUETE QUE CAMBIO DE DIA,
+ * no una alarma ni algo pendiente de aprobacion. `alert` teñiria de rojo una correccion legitima de
+ * planificacion (`NotificationsBell.tsx:55-63`).
+ *
+ * LOS ADMINS NO SE AVISAN (R51): ellos son quienes corrigen. La tienda tampoco. Es —junto con el de
+ * carga masiva— la unica notificacion de este repo dirigida a UNA persona; el precedente del
+ * destinatario por usuario es `emitirCargaMasivaTerminada`.
+ */
+export async function emitirDiaRepartoCorregido(
+  repo: INotificacionRepository,
+  ctx: DiaRepartoCorregidoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  return emitirFilas(
+    repo,
+    [
+      {
+        tipo: "box",
+        evento: "dia_reparto_corregido",
+        descripcion: textoDiaRepartoCorregido(ctx.fechaNuevaISO),
+        anexo: ctx.anexo,
+        entidadTipo: "orden_dia_reparto_cambio",
+        entidadId: ctx.cambioId,
+        destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+      },
+    ],
+    tx,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // §4.4 — Cierre de dia por aprobar (R24). BEST-EFFORT.
 // ---------------------------------------------------------------------------
 
@@ -371,4 +464,171 @@ export async function emitirCierreDiaPorAprobar(
     })),
     tx,
   );
+}
+
+// ---------------------------------------------------------------------------
+// FEATURE 271 §9.2 — los DOS avisos del bloqueo por cierres (R38-R42). BEST-EFFORT.
+//
+// POR QUE DOS EVENTOS Y NO UNO: las dos causas piden acciones OPUESTAS. Con un `vencido` la pelota
+// esta en el tejado del MENSAJERO («reenvíalo»); con `N >= 2` esta en el de la ADMINISTRACION
+// («aprueben el más antiguo»). El tipo de evento es lo que la campana usa para agrupar y para
+// deduplicar, asi que meter la diferencia en la descripcion la vuelve invisible para todo lo que no
+// sea leer la frase.
+//
+// POR QUE DOS Y NO CUATRO (uno por destinatario): el emisor de este repo produce N filas por
+// evento, una por destinatario, con el mismo `evento` y `entidad_id` (patron `emitirOrdenRechazada`).
+//
+// LA ENTIDAD ES SIEMPRE EL CIERRE, y esa eleccion es estructural, no estetica: dos bloqueos
+// distintos son dos cierres distintos -> dos `entidad_id` -> la clave unica `notificacion_dedupe_key`
+// no colisiona y el segundo bloqueo SI avisa aunque el primero siga sin leerse (R44). Elegir el
+// MENSAJERO como entidad convertiria «avisar dos veces» en un silencio estructural — es exactamente
+// la leccion que la 262 aprendio con `orden_dia_reparto_cambio`.
+//
+// SIN ANEXO en los dos (R45): ni nombre, ni guia, ni monto. Lo que el mensajero necesita para
+// identificar su cierre es la FECHA DE SU JORNADA, y esa va dentro del texto.
+// ---------------------------------------------------------------------------
+
+/**
+ * R38/R39 — el aviso de «tu cierre venció». Es EL QUE MAS SE EMITE Y EL QUE PEOR SALIA: nace del
+ * corte, o sea del caso en que `created_at` va desfasado SIEMPRE (el corte corre a las 00:0x de la
+ * madrugada siguiente a la jornada que cierra). Decirle «tu cierre del 22» a quien trabajó el 21
+ * —y que además lee el aviso el día 22— era mandarlo a buscar un cierre que no reconoce.
+ *
+ * `jornadaCR` llega YA DERIVADA por `lib/utils/jornada-cierre.ts` (R61). `null` = no hay jornada
+ * fiable -> el texto dice «tu cierre del día» y NO inventa ninguna fecha (R60).
+ */
+export function textoCierreVencidoMensajero(jornadaCR: string | null): string {
+  const fecha = jornadaCR === null ? null : fechaLegible(jornadaCR);
+  const cual = fecha === null || fecha === jornadaCR ? "Tu cierre del día" : `Tu cierre del ${fecha}`;
+  return `${cual} venció sin enviarse a aprobación. No puedes entregar, cobrar ni recibir trabajo nuevo hasta que lo envíes.`;
+}
+
+/**
+ * R39 — la mitad que ve la bodega. NO nombra al mensajero (R45): quién es se lee en la cola, que es
+ * donde la autorización por rol vive. El aviso solo dice que hay algo que atender.
+ */
+export const TEXTO_CIERRE_VENCIDO_BODEGA =
+  "El cierre de un mensajero venció sin enviarse a aprobación.";
+
+/**
+ * R41 — la mitad que ve la bodega cuando un mensajero se queda bloqueado por ACUMULAR. Es
+ * ACCIONABLE a propósito y por decisión humana registrada: en ese caso el mensajero está bloqueado
+ * por una demora que NO depende de él («aunque esto no depende de él no importa igual queda
+ * bloqueado»), así que el único remedio previsto es que la administración apruebe el más antiguo.
+ */
+export function textoMensajeroBloqueadoBodega(jornadaCR: string | null): string {
+  const fecha = jornadaCR === null ? null : fechaLegible(jornadaCR);
+  const cual =
+    fecha === null || fecha === jornadaCR ? "el más antiguo" : `el más antiguo, el del ${fecha},`;
+  return `Un mensajero quedó bloqueado por acumular cierres sin aprobar. Aprueba ${cual} para que pueda volver a trabajar.`;
+}
+
+export interface CierreVencidoContexto {
+  /** El cierre `vencido` recién creado. Es la ENTIDAD del aviso. */
+  cierreId: string;
+  /** Zona DESTINO del cierre (alcance del `adminSatelite`). */
+  zonaId: string | null;
+  /** El dueño del cierre: es el ÚNICO destinatario `usuario` de este evento (R38). */
+  mensajeroUsuarioId: string;
+  /** La JORNADA del cierre, ya derivada (R57-R60). `null` -> el texto omite la fecha. */
+  jornadaCR: string | null;
+}
+
+/**
+ * R38/R39 — una fila `alert` para el MENSAJERO dueño del cierre y una por cada destinatario de la
+ * bodega responsable (`maestro`, `admin` y el `adminSatelite` de la zona destino).
+ *
+ * ⚠️ ES LA PRIMERA NOTIFICACIÓN DE CIERRE QUE LLEGA AL MENSAJERO. Hasta hoy
+ * `emitirCierreDiaPorAprobar` sólo emitía a roles de administración, y el corte no emitía NADA
+ * —verificado contra producción: 0 filas en `notificacion` a las 00:03 del 22/08—, así que el
+ * mensajero se enteraba de su bloqueo al toparse con el rechazo. El soporte para dirigir a un
+ * usuario ya existía (`destinatarioUsuarioId`, XOR con `destinatarioRol`).
+ */
+export async function emitirCierreDiaVencido(
+  repo: INotificacionRepository,
+  ctx: CierreVencidoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const bodega: NotificacionDestinatario[] = [...ROLES_ADMINISTRACION];
+  if (ctx.zonaId !== null) {
+    bodega.push({ tipo: "rol", rol: "adminSatelite", zonaId: ctx.zonaId });
+  }
+  const filas: CrearNotificacionInput[] = [
+    {
+      tipo: "alert",
+      evento: "cierre_dia_vencido",
+      descripcion: textoCierreVencidoMensajero(ctx.jornadaCR),
+      anexo: null,
+      entidadTipo: "cierre_dia",
+      entidadId: ctx.cierreId,
+      destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+    },
+    ...bodega.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "cierre_dia_vencido" as const,
+      descripcion: TEXTO_CIERRE_VENCIDO_BODEGA,
+      anexo: null,
+      entidadTipo: "cierre_dia" as const,
+      entidadId: ctx.cierreId,
+      destinatario,
+    })),
+  ];
+  return emitirFilas(repo, filas, tx);
+}
+
+export interface MensajeroBloqueadoContexto {
+  /** El cierre que lo dejó bloqueado (el recién creado, o el que acaban de rechazarle). */
+  cierreId: string;
+  /** Zona DESTINO del cierre (alcance del `adminSatelite`). */
+  zonaId: string | null;
+  /** El mensajero bloqueado. */
+  mensajeroUsuarioId: string;
+  /** N, V y cuál toca resolver primero: lo que el texto al mensajero necesita CONTAR (R43). */
+  bloqueo: BloqueoDetalle;
+}
+
+/**
+ * R40/R41/R42 — el aviso de «quedaste BLOQUEADO». Lo emiten TRES productores y por eso es un solo
+ * evento: la solicitud que deja al mensajero en `N >= 2`, y el RECHAZO de un cierre (Q3 resuelta el
+ * 2026-08-23: sí entra en alcance, y además es la única vía por la que se acumulan dos cierres
+ * re-solicitables).
+ *
+ * EL TEXTO AL MENSAJERO SALE DEL MISMO FORMATEADOR QUE LA PANTALLA (`avisoBloqueo`), y eso no
+ * contradice la regla de la 146 §4.6 —«los textos de notificación viven sólo en este archivo»—: lo
+ * que se comparte es el COMPOSITOR de una regla que cuenta cosas, no una cadena copiada. Dos
+ * versiones del mismo aviso —una en la campana y otra en la pantalla— divergirían en cuanto una de
+ * las dos cambie, y este aviso tiene que decir exactamente lo que el servidor va a rechazar (R43).
+ * Se compone con `conCta: true` porque la campana no es «Cierre del día»: hay que decirle dónde ir.
+ */
+export async function emitirMensajeroBloqueado(
+  repo: INotificacionRepository,
+  ctx: MensajeroBloqueadoContexto,
+  tx?: NotificacionTxClient,
+): Promise<number> {
+  const bodega: NotificacionDestinatario[] = [...ROLES_ADMINISTRACION];
+  if (ctx.zonaId !== null) {
+    bodega.push({ tipo: "rol", rol: "adminSatelite", zonaId: ctx.zonaId });
+  }
+  const jornadaCR = ctx.bloqueo.aResolverPrimero?.jornadaCR ?? null;
+  const filas: CrearNotificacionInput[] = [
+    {
+      tipo: "alert",
+      evento: "mensajero_bloqueado_por_cierres",
+      descripcion: avisoBloqueo(ctx.bloqueo, { conCta: true }),
+      anexo: null,
+      entidadTipo: "cierre_dia",
+      entidadId: ctx.cierreId,
+      destinatario: { tipo: "usuario", usuarioId: ctx.mensajeroUsuarioId },
+    },
+    ...bodega.map((destinatario) => ({
+      tipo: "warning" as const,
+      evento: "mensajero_bloqueado_por_cierres" as const,
+      descripcion: textoMensajeroBloqueadoBodega(jornadaCR),
+      anexo: null,
+      entidadTipo: "cierre_dia" as const,
+      entidadId: ctx.cierreId,
+      destinatario,
+    })),
+  ];
+  return emitirFilas(repo, filas, tx);
 }

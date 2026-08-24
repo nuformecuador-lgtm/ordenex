@@ -239,6 +239,7 @@ import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaMod
 import { IncidentesAdminModule } from "@/app/(app)/incidentes/_components/IncidentesAdminModule";
 import { SaldosTiendasTable } from "@/app/(app)/wallet/tiendas/_components/SaldosTiendasTable";
 import { GastosFijosPlantillasPanel } from "@/app/(app)/wallet/_components/GastosFijosPlantillasPanel";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -589,9 +590,7 @@ const LISTADOS: Listado[] = [
           puedesSolicitar={false}
           motivoBloqueo={null}
           cierresPasados={pagina1(todos)}
-          bloqueado={false}
-          tieneVencido={false}
-          tieneRechazado={false}
+          bloqueo={SIN_BLOQUEO}
         />,
       );
     },

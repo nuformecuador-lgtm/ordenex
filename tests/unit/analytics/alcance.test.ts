@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { RolValue } from "@prisma/client";
-import { resolverAlcance, ROLES_SIN_ANALITICA } from "@/lib/analytics/alcance";
+import {
+  resolverAlcance,
+  ROLES_ANALITICA_INTEGRACION,
+  ROLES_SIN_ANALITICA,
+} from "@/lib/analytics/alcance";
+import { METRICAS_API_KEY } from "@/lib/analytics/publicacion-api-key";
 import type { ActorAnalitica, MotivoDenegacion } from "@/lib/analytics/alcance";
 import { METRICAS } from "@/lib/analytics/metrics";
 import { ROLES_ANALITICA } from "@/lib/analytics/types";
@@ -191,11 +196,27 @@ describe("R10 · sin sesion => denegado/sin_sesion", () => {
   });
 });
 
-describe("R11 · apiKey NUNCA consume analitica (D9)", () => {
-  it("rol apiKey da rol_sin_analitica en las 25 metricas", () => {
+// FEATURE 267 (2026-08-23) — este bloque se REEXPRESA, no se relaja. Hasta hoy afirmaba
+// «apiKey NUNCA consume analitica (122/R11-D9)». La 267 revierte esa decision SOLO para el
+// canal por API key: el rol sigue denegado por el canal de sesion, que es lo que este
+// archivo comprueba con la aridad de siempre (sin tercer argumento). La concesion por
+// `canal: "api_key"` tiene su propio archivo, `alcance-api-key.test.ts`.
+describe("R11 (122) / R6 (267) · apiKey no consume analitica POR EL CANAL DE SESION", () => {
+  it("rol apiKey da rol_sin_analitica en las 25 metricas, con el canal por defecto", () => {
     const integrador: ActorAnalitica = { usuarioId: "u-api", rol: "apiKey" };
     for (const metrica of METRICAS) {
       expect(resolverAlcance(integrador, metrica.id), metrica.id).toEqual({
+        estado: "denegado",
+        motivo: "rol_sin_analitica",
+      });
+    }
+  });
+
+  it("tampoco por el canal interno explicito, ni para una metrica publicable por API key", () => {
+    const integrador: ActorAnalitica = { usuarioId: "u-api", rol: "apiKey" };
+    expect(METRICAS_API_KEY.length).toBeGreaterThan(0);
+    for (const id of METRICAS_API_KEY) {
+      expect(resolverAlcance(integrador, id, "interno"), id).toEqual({
         estado: "denegado",
         motivo: "rol_sin_analitica",
       });
@@ -219,7 +240,13 @@ describe("R12 · rol fuera de RolValue => denegado/rol_desconocido, sin rama def
     for (const rol of roles) {
       const actor: ActorAnalitica = { usuarioId: "u1", rol, zonaId: "z1" };
       const r = resolverAlcance(actor, "entregas");
-      if ((ROLES_SIN_ANALITICA as readonly string[]).includes(rol)) {
+      // 267: la particion es ternaria. Por el canal de sesion (aridad de siempre) los DOS
+      // complementos de `ROLES_ANALITICA` se deniegan igual; lo que cambia es DONDE se
+      // declara el rol, no el veredicto.
+      const denegadoPorRol =
+        (ROLES_SIN_ANALITICA as readonly string[]).includes(rol) ||
+        (ROLES_ANALITICA_INTEGRACION as readonly string[]).includes(rol);
+      if (denegadoPorRol) {
         expect(r, rol).toEqual({ estado: "denegado", motivo: "rol_sin_analitica" });
       } else {
         expect(r.estado, rol).toBe("ok");

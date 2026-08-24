@@ -12,7 +12,7 @@ import {
 import {
   ORIGEN_TIPOS_VISITA_REAL,
   RESULTADOS_QUE_CUENTAN_COMO_INTENTO,
-  type OrdenHistorialEntradaDTO,
+  type OrdenHistorialTransicionDTO,
 } from "@/lib/types/orden-historial";
 
 // Cliente Prisma acotado a lo que este repo necesita para las LECTURAS (patron
@@ -76,8 +76,14 @@ type RecoleccionRow = Prisma.OrdenHistorialEstadoGetPayload<typeof WITH_RECOLECC
 
 // R26/R28: serializa una fila a DTO legible. `estatusOrigenValue` NULL = creacion (R1/R20);
 // `actorNombre` NULL = sistema/cron (R21); `motivo` NULL cuando no viene de una gestion (R22).
-function toEntradaDTO(row: HistorialRow): OrdenHistorialEntradaDTO {
+//
+// Feature 262 (B24): el DTO gana `clase: "transicion"`. Este repo lee `orden_historial_estado` y
+// SOLO esa tabla, asi que todo lo que sale de aqui es una transicion — el tipo ESTRECHO
+// (`OrdenHistorialTransicionDTO`, no la union) lo deja dicho y evita que alguien crea que esta
+// funcion ya fusiona las dos fuentes. Fusionar es del servicio (design §14.3).
+function toEntradaDTO(row: HistorialRow): OrdenHistorialTransicionDTO {
   return {
+    clase: "transicion",
     estatusOrigenValue: row.estatusOrigen?.value ?? null,
     estatusDestinoValue: row.estatusDestino.value,
     origenTipo: row.origenTipo,
@@ -227,7 +233,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
   }
 
   /** R26/R5: linea de tiempo de la orden, orden cronologico (created_at asc), con labels. */
-  async findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]> {
+  async findHistorialByOrden(ordenId: string): Promise<OrdenHistorialTransicionDTO[]> {
     const rows = await this.prisma.ordenHistorialEstado.findMany({
       where: { ordenId },
       orderBy: { createdAt: "asc" },
@@ -273,7 +279,7 @@ export class OrdenHistorialRepository implements IOrdenHistorialRepository {
    *
    * Las ordenes sin filas que cumplan el criterio NO aparecen en el Map (Postgres no emite
    * grupos vacios); el llamador aplica `?? 0` (R8). Guarda temprana con `ids` vacio: Map vacio
-   * SIN query (R7), patron `OrdenRepository.findMensajerosBloqueadosParaGestion`.
+   * SIN query (R7), patron `OrdenRepository.findMensajerosBloqueadosPorCierres`.
    */
   async contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>> {
     if (ordenIds.length === 0) return new Map(); // R7: ni una consulta

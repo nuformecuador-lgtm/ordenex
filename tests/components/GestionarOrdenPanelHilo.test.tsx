@@ -15,6 +15,7 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 227 (T3.5, design §5.2) — montaje del hilo del lado MENSAJERO, en el panel que YA
 // existe (P6: sin pantalla nueva) y justo donde estaba el editor de la nota privada retirada.
@@ -96,6 +97,9 @@ const RUTA: RutaResumenDTO = {
   estado: "vigente",
   calculadaAt: null,
   origenFuente: "gps",
+  // Feature 265 (R45): `null` = no consta quien ordeno las paradas. Es lo que exige el tipo,
+  // no un test que fallara: sin marca, la pantalla no dice nada del orden.
+  secuenciaFuente: null,
   paradasSinOptimizar: 0,
   // Los dos campos de la feature 92 (trazado persistido y tramo vivo) nacieron en `ux`
   // mientras este archivo nacia en `dev`, asi que el merge lo dejo corto: textualmente no
@@ -182,7 +186,7 @@ describe("GestionarOrdenPanel — hilo de notas", () => {
         conAyuda={[]}
         ordenEnGestionId={null}
         ruta={RUTA}
-        bloqueado={false}
+        bloqueo={SIN_BLOQUEO}
       />,
     );
 

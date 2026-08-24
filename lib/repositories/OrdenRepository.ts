@@ -1,5 +1,27 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
+// Feature 271 — LA REGLA del bloqueo por cierres vive en un modulo PURO, no aqui: un solo
+// predicado leido por el servidor y por la pantalla (R10).
+import {
+  CIERRE_ESTADOS_ABIERTOS,
+  CIERRE_ESTADOS_RESOLICITABLES,
+  SIN_BLOQUEO,
+  SIN_CIERRES_ABIERTOS,
+  esCierreResolicitable,
+  estaBloqueadoPorCierres,
+  quienResuelve,
+  type BloqueoDetalle,
+  type CierreAResolver,
+  type ConteoCierresAbiertos,
+} from "@/lib/utils/bloqueo-cierre";
+// Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
+// de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
+import { derivarJornada } from "@/lib/utils/jornada-cierre";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+// Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
+// resolver del cierre de dia: el listado no puede tener una regla propia (R18/R21).
+import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
+import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
@@ -12,7 +34,9 @@ import type { IJobRepository, JobTxClient } from "@/lib/interfaces/repositories/
 import { JobRepository } from "@/lib/repositories/JobRepository";
 import { encolarGeocodificacion } from "@/lib/services/jobs/geocodificacion-encolado";
 import {
+  CorreccionDiaConflictoError,
   DeshacerAsignacionConflictoError,
+  type CorreccionDiaAplicada,
   type DeshacerAsignacionItem,
   type CantonRow,
   type CreateOrdenData,
@@ -44,7 +68,11 @@ import {
   type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+// Feature 262 (B4/B5): el CHOKE POINT del rastro de las correcciones del dia de reparto. Toda
+// escritura de `fecha_reparto` que no sea una asignacion ni una limpieza pasa por ahi, en su misma
+// transaccion y solo con las ordenes que efectivamente cambiaron.
+import { registrarCambioDiaReparto } from "@/lib/repositories/registrar-cambio-dia-reparto";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
@@ -61,6 +89,10 @@ import type {
   ParadaRutaRow,
   TransicionAyudaInput,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
+// Feature 260 (B3): el recorte de alcance del tablero del dia, como TIPO. La union de dos
+// variantes viaja hasta el `WHERE` sin pasar por un `string | undefined` que convertiria
+// «no se» en «sin recorte».
+import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 
 /**
  * Feature 141 (R28/R35) — ¿queda alguna fila del batch por insertar? Se compara contra el
@@ -115,11 +147,47 @@ const API_ORDEN_SELECT = {
 // `evidencia_storage_path` no nulo). Se extrae a una constante para que la variante por
 // `num_guia` (106) y la variante por `id` (177) NO puedan divergir en su proyeccion (R16/R17):
 // `findDetalleByNumGuiaForOwner` sigue devolviendo exactamente lo mismo que antes.
+//
+// FEATURE 268 (T6c, 2026-08-22) — LAS EVIDENCIAS DEL `incidente`, POR SUS **DOS** PROCEDENCIAS.
+// Hasta aqui un incidente no aparecia por NINGUN endpoint del canal, y son 6 las aristas de
+// entrada a `incidente` que se quedaban sin fotos. Hay dos caminos y hacen falta los dos:
+//
+//   1. MENSAJERO (arista #44, familia `gestion`) -> fila en `gestion_orden` con
+//      `resultado = incidente` y la portada denormalizada en `evidencia_storage_path` (119/R12).
+//      Basta con anadir `incidente` al `in` de abajo.
+//   2. ADMIN (aristas #48-#52, familia `incidente`) -> **no crea gestion ninguna**: crea
+//      `orden_incidente` (relacion `incidentesAdmin`) con sus evidencias 1..N en
+//      `orden_incidente_evidencia`. Por eso se suma esa segunda relacion a ESTE MISMO select.
+//
+// Cubrir solo (1) fallaria EN SILENCIO en 5 de las 6 aristas —justo las del paquete danado en
+// bodega—; es la opcion (a) que `design.md` §7.3 descarta por su nombre.
+//
+// REGLA DE CONTENIDO (design §7.3, pregunta abierta 4): se expone **LA PORTADA (indice 0)** de
+// cada registro, no las 1..N, igual que hoy se expone UNA foto por gestion. Es deliberado: la
+// deuda 1..N de la 119 no se reabre dentro de esta ficha.
+//
+// DOS DECISIONES que el spec dejaba abiertas y que se cierran AQUI (2026-08-22, feature 268):
+//
+//   a. NO se filtra `orden_incidente.estado` (`solicitado`/`aprobado`/`rechazado`). Ese estado es
+//      el del tramite de INDEMNIZACION, no el de si el incidente OCURRIO: la orden esta en estado
+//      `incidente` sea cual sea, y el integrador pregunta por las fotos del incidente, no por el
+//      desenlace economico. Filtrar por `aprobado` esconderia las fotos justo MIENTRAS el tramite
+//      se decide, que es cuando se miran.
+//   b. El `where` de `gestiones` CONSERVA su forma actual, incluido que hoy NO filtra `anuladaAt`.
+//      Anadir `incidente` sigue exactamente la misma regla que ya rige a `entregada`/`rechazada`;
+//      "arreglar" lo de `anuladaAt` aqui seria un cambio de comportamiento fuera de alcance que
+//      ademas moveria lo que ven las evidencias de entrega/rechazo, que hoy ya funcionan.
+//
+// Alcance de lectura: `OrdenIncidente` NO tiene owner propio —cuelga de `orden` por FK—, asi que
+// el scope sigue siendo el mismo `where` de la orden (`tienda_id = ownerId AND deleted_at IS
+// NULL`) de los dos `findDetalleBy*ForOwner`. No hay regla de alcance nueva que escribir, y por
+// eso la valvula declarada en design §7.3 no se dispara.
 const API_ORDEN_DETALLE_SELECT = {
   ...API_ORDEN_SELECT,
   gestiones: {
     where: {
-      resultado: { in: ["entregada", "rechazada"] }, // R15: solo entrega/rechazo
+      // R15 + 268/R27: entrega/rechazo y ademas el incidente del MENSAJERO.
+      resultado: { in: ["entregada", "rechazada", "incidente"] },
       evidenciaStoragePath: { not: null }, // R15: con evidencia adjunta
     },
     select: {
@@ -127,6 +195,18 @@ const API_ORDEN_DETALLE_SELECT = {
       evidenciaStoragePath: true,
       evidenciaContentType: true,
       createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+  // 268/R27: el incidente del ADMIN. Solo la PORTADA de cada registro (`indice: 0`, a lo sumo una
+  // fila por `@@unique([incidenteId, indice])`), y ni un campo mas: ni `causa`, ni `motivo`, ni
+  // `indemnizacion`, ni quien lo reporto. El detalle publico no crece con datos internos.
+  incidentesAdmin: {
+    select: {
+      evidencias: {
+        where: { indice: 0 },
+        select: { storagePath: true, contentType: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   },
@@ -151,6 +231,11 @@ type ApiOrdenDetalleSelectRow = ApiOrdenSelectRow & {
     evidenciaContentType: string | null;
     createdAt: Date;
   }[];
+  // 268/R27: el camino del ADMIN. `evidencias` viene acotado a la portada por el `where` del
+  // select, asi que es `[]` o un unico elemento.
+  incidentesAdmin: {
+    evidencias: { storagePath: string; contentType: string }[];
+  }[];
 };
 
 function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
@@ -167,17 +252,42 @@ function toApiOrdenRow(r: ApiOrdenSelectRow): ApiOrdenRow {
   };
 }
 
-/** Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes. */
+/**
+ * Feature 106/R15/R18 + 177/R16: fila -> DTO de detalle. Compartido por ambas variantes.
+ *
+ * FEATURE 268/R27 (2026-08-22): las DOS procedencias del incidente caen en el MISMO array
+ * `evidencias[]`, con la misma forma que las de entrega/rechazo. El consumidor no distingue —ni
+ * debe— si la foto la subio el mensajero o el admin: para el es "la evidencia del incidente".
+ * Primero las gestiones (por `createdAt`), luego los incidentes del admin (por `createdAt`).
+ */
 function toApiOrdenDetalleRow(row: ApiOrdenDetalleSelectRow): ApiOrdenDetalleRow {
+  const deGestiones = row.gestiones.map((g) => ({
+    // `resultado` esta acotado por el WHERE a estos tres valores.
+    resultado: g.resultado as "entregada" | "rechazada" | "incidente",
+    // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
+    storagePath: g.evidenciaStoragePath!,
+    contentType: g.evidenciaContentType,
+  }));
+
+  // 268/R27: un incidente del admin SIN evidencias se OMITE. Emitir una entrada con
+  // `storagePath` vacio o `undefined` mandaria al service a firmar un path que no existe y el
+  // integrador recibiria un item con `url: undefined`: peor que la ausencia, porque parece un
+  // fallo del canal. Sin foto no hay evidencia que exponer.
+  const deIncidentesAdmin = row.incidentesAdmin.flatMap((i) => {
+    const portada = i.evidencias[0]; // `where: { indice: 0 }` -> 0 o 1 elementos
+    if (!portada) return [];
+    return [
+      {
+        resultado: "incidente" as const,
+        storagePath: portada.storagePath,
+        contentType: portada.contentType,
+      },
+    ];
+  });
+
   return {
     ...toApiOrdenRow(row),
-    evidencias: row.gestiones.map((g) => ({
-      // `resultado` esta acotado por el WHERE a estos dos valores.
-      resultado: g.resultado as "entregada" | "rechazada",
-      // El WHERE exige `evidencia_storage_path` no nulo; el `!` es seguro.
-      storagePath: g.evidenciaStoragePath!,
-      contentType: g.evidenciaContentType,
-    })),
+    evidencias: [...deGestiones, ...deIncidentesAdmin],
   };
 }
 
@@ -195,50 +305,67 @@ type OrdenPrismaClient = Pick<
   | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
   | "ordenHistorialEstado" // feature 236: fecha de la solicitud de ayuda, que ordena su pestaña (D7/R17)
   | "carga" // feature 141: lote de carga masiva asegurado en la tx de la insercion batch
+  | "tarifa" // feature 274: la tarifa del listado, resuelta por cascada en UNA query (R18/R19)
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
-// Feature 41 (R12/R16/R17) + feature 109 (R29, modelo GLOBAL): un cierre esta ABIERTO mientras no
-// sea `aprobado`, que es el unico TERMINAL (dinero conciliado). `rechazado` dejo de ser terminal
-// por LOGICA (109): sigue abierto y es RE-SOLICITABLE (`rechazado -> solicitado`), igual que
-// `vencido`. Fuente de verdad en lib/types/cierre.ts.
-//
-// ⚠️ FEATURE 241 (2026-08-20) — «ABIERTO» YA NO ES «BLOQUEANTE». Esta lista quedo siendo lo que
-// siempre dijo su nombre: un dato INFORMATIVO (cuantos cierres arrastra una bodega). NO decide
-// ningun bloqueo; para eso esta `ESTADOS_CIERRE_BLOQUEAN_GESTION`, que es un subconjunto.
-const ESTADOS_CIERRE_ABIERTO: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
+/**
+ * FEATURE 271 — LA REGLA VIGENTE, dictada por el humano el 2026-08-23. Sustituye a
+ * `ESTADOS_CIERRE_BLOQUEAN_GESTION`, que era una LISTA DE ESTADOS y ahora es un CONTEO.
+ *
+ * Con N = cierres del mensajero sin aprobar (`solicitado` + `vencido` + `rechazado`) y V = cuantos
+ * de esos son re-solicitables (`vencido` o `rechazado`):
+ *
+ *      LIBRE si N <= 1 Y V = 0. En cualquier otro caso BLOQUEADO.
+ *
+ * Son TRES cosas distintas, y ahora DOS de las tres pasan por aqui:
+ *
+ *  1. SOLICITAR CIERRE — ya NO es «nunca dos pendientes». El invariante 109/R30 queda DEROGADO
+ *     (271/R9): un mensajero LIBRE con un `solicitado` puede crear el segundo cierre. El gate de
+ *     `CierreDiaService.solicitarCierre` pasa a ser esta misma regla (271/R15), asi que SI
+ *     depende de este predicado — al contrario de lo que decia la 241.
+ *  2. RECIBIR TRABAJO NUEVO — SE BLOQUEA. ⚠️ ESTO REVIERTE la regla 2 de la feature 241
+ *     (la regla 2, que declaraba la asignacion exenta de todo bloqueo, firmada el 2026-08-20).
+ *     Y alcanza a las TRES
+ *     escrituras que ponen trabajo en la mano de un mensajero: reparto central
+ *     (`GuiaAsignacionService.asignarDesdeBodega`), reparto satelite
+ *     (`AsignacionSateliteService.asignar`) y RECOLECCION en tienda
+ *     (`GuiaAsignacionService.asignarRecoleccion`). Sin excepcion y sin asimetria — palabras del
+ *     humano el 2026-08-23: «un mensajero no puede hacer las dos gestiones, solo una a la vez».
+ *  3. GESTIONAR Y COBRAR (entregar, recoger, escoger, `deshacerGestion`, recoleccion en tienda) —
+ *     SE BLOQUEA, igual que antes pero con este predicado.
+ *
+ * QUE PARTE DE LA 241 SOBREVIVE, y no es un detalle: **un cierre `solicitado` a secas NO bloquea**
+ * (N=1, V=0 -> LIBRE). `solicitado` es ESPERA DEL ADMIN; el mensajero ya hizo lo suyo. Medido
+ * contra produccion el 2026-08-18, el retraso gestion->aprobacion tiene MEDIANA 8,2 h y P90 22,1 h:
+ * bloquearlo ahi lo castiga por una demora ajena. Lo que SI bloquea es acumular DOS (N>=2) o
+ * arrastrar uno re-solicitable (V>=1), que es la pelota en SU tejado.
+ *
+ * QUE PARTE SE REVIERTE: la de recibir. La 241 protegia la asimetria con el nombre del metodo
+ * («ParaGestion») y con su ausencia en los `Pick<IOrdenRepository, …>` de la asignacion. Resuelta
+ * Q1, la distincion desaparece: el predicado se llama `findMensajerosBloqueadosPorCierres` —dice
+ * POR QUE bloquea, no PARA QUE— y vuelve al `Pick` de los dos services de asignacion. Si alguien
+ * quiere volver a exceptuar una superficie, tendra que sacarlo de ese `Pick` **y** escribir por que.
+ *
+ * La regla en si vive en `lib/utils/bloqueo-cierre.ts` (modulo PURO): un solo predicado, leido por
+ * el servidor y por la pantalla, para que ninguna superficie lo re-derive (R10).
+ */
+const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 /**
- * FEATURE 241 — LA REGLA, firmada por el humano el 2026-08-20. Lo unico que bloquea a un
- * mensajero, y solo para GESTIONAR Y COBRAR.
- *
- * Son TRES cosas distintas y solo dos se tocan aqui:
- *
- *  1. SOLICITAR CIERRE — nunca dos pendientes. Vive en `CierreDiaService.solicitarCierre` (R12) y
- *     NO pasa por este predicado. Sin relacion con esta lista.
- *  2. RECIBIR ASIGNACIONES — NUNCA se bloquea, sea cual sea el estado del cierre (pedido humano
- *     2026-08-18). Por eso ninguna superficie de asignacion consulta este predicado: no es que
- *     devuelva vacio, es que no se llama. Ver `GuiaAsignacionService`, `AsignacionSateliteService`
- *     y `lib/actions/ordenes-guia.ts`.
- *  3. GESTIONAR Y COBRAR (entregar, recoger, escoger, `deshacerGestion`, recoleccion en tienda) —
- *     SE BLOQUEA, y solo con estos dos estados.
- *
- * POR QUE `solicitado` NO ESTA, que es la mitad que se «arregla» sola por simetria: `solicitado`
- * es ESPERA DEL ADMIN. El mensajero ya hizo lo suyo —pidio el cierre— y la pelota esta en el otro
- * tejado. Medido contra produccion el 2026-08-18, el retraso gestion->aprobacion tiene MEDIANA
- * 8,2 h y P90 22,1 h: bloquearlo ahi lo castiga por una demora ajena y le impide trabajar hasta
- * media manana siguiente. `vencido` y `rechazado`, en cambio, son la pelota en SU tejado: hay algo
- * que solo el puede hacer (solicitar el vencido, re-solicitar el rechazado) y hasta que no lo haga
- * el dinero que cobre no tiene cierre al que ir.
- *
- * ASI QUE LA ASIMETRIA ES DELIBERADA: recibir si, gestionar no, y `solicitado` nunca. Quien lea
- * esto y sienta la tentacion de «completar» la lista con `solicitado` esta deshaciendo la decision
- * firmada, no arreglando un olvido.
+ * FEATURE 271 (R11/R18/R57) — las CUATRO columnas con las que se arma un `CierreAResolver`. Una
+ * sola definicion para las DOS lecturas de `findBloqueoDetalle` (el abierto mas viejo y el
+ * re-solicitable mas viejo): si una seleccionara `created_at` y la otra no, la jornada de ese campo
+ * se derivaria con menos datos y saldria distinta para el mismo cierre.
  */
-const ESTADOS_CIERRE_BLOQUEAN_GESTION: CierreEstado[] = ["vencido", "rechazado"];
-const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
+const SELECT_CIERRE_A_RESOLVER = {
+  id: true,
+  estado: true,
+  solicitadoAt: true,
+  createdAt: true,
+} as const;
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
 // usuario en el SQL crudo).
@@ -282,16 +409,21 @@ const WITH_ESTATUS = {
 
 // El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
 // de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
-// provincia, canton, distrito y mensajeroAsignado. La relacion
-// `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
-// tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
-// `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
+// provincia, canton, distrito y mensajeroAsignado.
+// NO requiere migracion: son includes sobre relaciones ya existentes.
 // Seleccion explicita de campos: NUNCA se traen columnas sensibles del usuario
-// (passwordHash, etc.) ni `deletedAt` de las tarifas.
+// (passwordHash, etc.).
+//
+// FEATURE 274 (T8.1, design §4.1) — LA TARIFA YA NO VIENE EN ESE INCLUDE. Hasta ahora
+// `tienda` traia `tarifasTienda { where: { status: "activo" }, take: 1 }`, y eso se cayo por
+// DOS motivos a la vez: la columna `status` desaparecio de `tarifas`, y —lo importante— esa
+// era una regla DISTINTA de la que usa la liquidacion del cierre, asi que el listado podia
+// MOSTRAR una fila y el cierre FACTURAR otra (R8/R21). La tarifa de la pagina se resuelve
+// ahora con la cascada (tienda, zona) de `lib/utils/cascada-tarifa.ts`, en UNA query
+// adicional por pagina (`resolverTarifasDePagina`, R19).
 const TARIFA_SELECT = {
   id: true,
   tiendaId: true,
-  status: true,
   valorFlete: true,
   valorFleteDevuelto: true,
   valorFleteGam: true,
@@ -300,6 +432,9 @@ const TARIFA_SELECT = {
   comisionCod: true,
   ivaFlete: true,
   ivaComisionCod: true,
+  tarifaEspecial: true, // columna opcional: `null` = sin pacto especial
+  zonaId: true, // opcional: `null` = tarifa no acotada a una zona
+  isDefault: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -353,13 +488,7 @@ const WITH_ESTATUS_Y_TIENDA = {
         nombre: true,
         email: true,
         telefono: true,
-        // Tarifa ACTIVA de la tienda (a lo sumo una, `take: 1`), excluyendo
-        // borradas e inactivas.
-        tarifasTienda: {
-          where: { status: "activo", deletedAt: null },
-          select: TARIFA_SELECT,
-          take: 1,
-        },
+        // Feature 274: aqui NO hay tarifas. Ver el comentario de `TARIFA_SELECT`.
       },
     },
     zona: { select: { id: true, nombre: true, esCentral: true } },
@@ -384,6 +513,22 @@ const WITH_ESTATUS_Y_TIENDA = {
 
 // Fila de orden del listado con todas las relaciones directas resueltas.
 type OrdenListRow = Prisma.OrdenGetPayload<typeof WITH_ESTATUS_Y_TIENDA>;
+
+/**
+ * FEATURE 274 (T8.1, design §4.1) — fila de `tarifas` tal como la trae la query de la pagina.
+ *
+ * POR QUE EL LISTADO HACE SU PROPIA QUERY Y NO LLAMA A `ITarifaVigenteRepository.resolveTarifas`
+ * (y por que no hay que "simplificarlo" luego): `relaciones.tienda.tarifa` es `TarifaDTO | null`,
+ * y `TarifaDTO` lleva campos que `TarifaVigenteResuelta` NO tiene —`isDefault`,
+ * `tarifaEspecial`, `createdAt`, `updatedAt` y los montos como `number`—. Ensanchar el tipo del
+ * resolver con todo eso meteria `tarifaEspecial` y los `number` dentro del alcance de la ruta
+ * que decide DINERO, que es exactamente lo que protege el comentario de
+ * `ITarifaVigenteRepository`. La decision del design es la (ii): **la misma REGLA (el mismo
+ * modulo puro `cascada-tarifa`), un tipo de salida propio del listado**. Sigue siendo UNA sola
+ * query extra por pagina (R19) y sigue siendo imposible que el listado y el cierre elijan filas
+ * distintas (R21), porque la regla es literalmente la misma funcion.
+ */
+type TarifaListRow = Prisma.TarifaGetPayload<{ select: typeof TARIFA_SELECT }>;
 
 // Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number (o null,
 // feature 15/R4), nunca expone deletedAt (R42/N3).
@@ -412,13 +557,11 @@ function toDTO(row: OrdenRow): OrdenDTO {
 }
 
 // Serializa una tarifa anidada de la tienda: Decimal -> number en las 8 columnas
-// numericas (patron TarifaRepository). No expone `deletedAt` (ya filtrado en el
-// include).
-function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaDTO {
+// numericas (patron TarifaRepository).
+function toTarifaDTO(t: TarifaListRow): TarifaDTO {
   return {
     id: t.id,
-    tiendaId: t.tiendaId,
-    status: t.status,
+    tiendaId: t.tiendaId ?? null,
     valorFlete: t.valorFlete.toNumber(),
     valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
     valorFleteGam: t.valorFleteGam.toNumber(),
@@ -427,6 +570,10 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
     comisionCod: t.comisionCod.toNumber(),
     ivaFlete: t.ivaFlete.toNumber(),
     ivaComisionCod: t.ivaComisionCod.toNumber(),
+    // Nullable: se conserva la ausencia; `null` no es 0 (patron TarifaRepository).
+    tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toNumber(),
+    zonaId: t.zonaId ?? null,
+    isDefault: t.isDefault,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -441,7 +588,7 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
  * para OPERAR con ella en `Prisma.Decimal`. Son dos usos distintos del mismo dato y el
  * segundo no admite `number`: ahi es donde se pierde el centimo.
  */
-function toTarifaVigente(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaVigente {
+function toTarifaVigente(t: TarifaListRow): TarifaVigente {
   return {
     valorFlete: t.valorFlete.toFixed(2),
     valorFleteGam: t.valorFleteGam.toFixed(2),
@@ -453,9 +600,19 @@ function toTarifaVigente(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Ta
   };
 }
 
+// Feature 274: la tarifa que le toca a una fila, buscada por la clave de su par (tienda, zona).
+// `?? null` cubre el caso imposible de un par que no se pidio; nunca se inventa una tarifa.
+function tarifaDe(
+  tarifas: ReadonlyMap<string, TarifaListRow | null>,
+  row: OrdenListRow,
+): TarifaListRow | null {
+  return tarifas.get(clavePar({ tiendaId: row.tiendaId, zonaId: row.zonaId })) ?? null;
+}
+
 // Arma el bloque `relaciones` con los datos de las relaciones directas (FK) de la
-// orden, resueltas por el include del listado. `tienda` incluye su tarifa activa.
-function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
+// orden, resueltas por el include del listado. La `tarifa` de `tienda` NO sale del include:
+// llega ya resuelta por la cascada (tienda, zona) de la pagina (feature 274, R18).
+function toRelaciones(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenListItemRelaciones {
   return {
     estatus: row.estatus ? { id: row.estatus.id, value: row.estatus.value } : null,
     tienda: row.tienda
@@ -464,8 +621,9 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
           nombre: row.tienda.nombre,
           email: row.tienda.email,
           telefono: row.tienda.telefono,
-          // A lo sumo una tarifa activa por tienda (o null).
-          tarifa: row.tienda.tarifasTienda[0] ? toTarifaDTO(row.tienda.tarifasTienda[0]) : null,
+          // La fila que gano la cascada para el par (tienda, zona) de ESTA orden, o `null`
+          // si ningun nivel tiene fila (R20: gap de datos, no error).
+          tarifa: tarifa === null ? null : toTarifaDTO(tarifa),
         }
       : null,
     zona: row.zona
@@ -486,13 +644,15 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
 // WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 // Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
 // con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
-function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
+function toListItemDTO(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenListItemDTO {
   // Feature 204: las dos columnas de dinero DERIVADO ("Flete + IVA" y "Comisión + IVA") se
   // resuelven AQUI, con Decimal, y viajan como STRING ya derivado. Antes las calculaba el
   // navegador multiplicando los `number` de la tarifa, y no daba lo mismo: sobre las órdenes
   // reales de la base, 14 de 66 se veían un céntimo desviadas de lo que factura el cierre.
-  const tarifaActiva = row.tienda.tarifasTienda[0];
-  const costos = costosListadoOrden(tarifaActiva ? toTarifaVigente(tarifaActiva) : null, {
+  // Feature 274 (R18/R20): la tarifa ya viene resuelta por la cascada; `null` = ningun nivel
+  // tiene fila y los importes salen en "0.00" (R39: el listado NO bloquea, a diferencia de los
+  // dos bordes de API por key, que devuelven 409 — la asimetria es deliberada).
+  const costos = costosListadoOrden(tarifa === null ? null : toTarifaVigente(tarifa), {
     esCentral: row.zona.esCentral,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
     cobraComision: row.cobraComision,
@@ -520,7 +680,12 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // correcto (aqui NO aplica el off-by-one de `fecha-cr`, que solo afecta a
     // derivar "hoy" desde un instante real). Sin gestion vigente -> null.
     fechaReprogramacion: toFechaISO(row.gestiones[0]?.fechaReprogramacion),
-    relaciones: toRelaciones(row),
+    // Feature 262 (B8, R16/R17): el dia de reparto de la orden, ya serializado a `YYYY-MM-DD`. Sale
+    // de la columna `fecha_reparto` (`@db.Date`, medianoche UTC de la fecha calendario CR), asi que
+    // `toFechaISO` da el dia correcto sin tocar ninguna zona horaria. El navegador NO construye
+    // ninguna fecha: recibe el texto y lo pone en palabras con `fechaLegible`.
+    fechaRepartoISO: toFechaISO(row.fechaReparto),
+    relaciones: toRelaciones(row, tarifa),
   };
 }
 
@@ -675,6 +840,7 @@ const WITH_RECEPCION_SATELITE = {
     producto: true,
     montoCobrar: true,
     prioridad: true, // feature 101/R9: se pide explicito (es un `select`) para el sort R7 + resalte R8
+    fechaReparto: true, // feature 262/B8 (R16): el dia por orden que la pantalla de correccion muestra antes de confirmar
     estatus: { select: { value: true } },
     tienda: { select: { nombre: true } },
     zona: { select: { nombre: true } },
@@ -840,6 +1006,9 @@ function toRecepcionSateliteRow(row: OrdenRecepcionSateliteRow): RecepcionSateli
     cantonNombre: row.canton.nombre,
     distritoNombre: row.distrito?.nombre ?? null,
     prioridad: row.prioridad, // feature 101/R9: propaga el flag para el sort R7 + resalte R8
+    // Feature 262/B8 (R16/R17): el dia de reparto ya serializado a `YYYY-MM-DD`. El navegador no
+    // construye ninguna fecha; recibe el texto y lo pone en palabras con `fechaLegible`.
+    fechaRepartoISO: toFechaISO(row.fechaReparto),
   };
 }
 
@@ -1027,7 +1196,97 @@ export class OrdenRepository implements IOrdenRepository {
       this.prisma.orden.count({ where }),
     ]);
 
-    return { items: items.map(toListItemDTO), total };
+    // Feature 274 (R18/R19): UNA query adicional por PAGINA —no por fila— resuelve la tarifa
+    // de todos los pares (tienda, zona) presentes. Con el `count` de arriba, una pagina son
+    // tres consultas y solo DOS de datos, sea la pagina de 1 fila o de 50.
+    const tarifas = await this.resolverTarifasDePagina(items);
+
+    return {
+      items: items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      total,
+    };
+  }
+
+  /**
+   * FEATURE 274 (T8.1, design §4.1, R18/R19) — resuelve en UNA sola query la tarifa de todas
+   * las filas de una pagina, con la MISMA regla que la liquidacion del cierre de dia.
+   *
+   * `whereCascada` + `elegirPorCascada` son el modulo PURO `lib/utils/cascada-tarifa.ts`, el
+   * mismo que usa `TarifaVigenteRepository`. Esa es la razon de ser de la feature: mientras el
+   * listado tenga su propia REGLA puede mostrar una fila y el cierre facturar otra (R8/R21).
+   * Lo que aqui difiere del resolver del dinero no es la regla sino la PROYECCION —ver el
+   * comentario de `TarifaListRow`—: si alguien viene a "simplificar" esto llamando a
+   * `resolveTarifas`, lea antes ese comentario.
+   *
+   * Los pares se DEDUPLICAN (`clavePar`): una pagina de 50 ordenes de tres tiendas en dos zonas
+   * consulta seis pares, no cincuenta. `elegirPorCascada` devuelve una entrada por cada par
+   * pedido, con `null` cuando ningun nivel de la cascada tiene fila (R20).
+   */
+  private async resolverTarifasDePagina(
+    rows: readonly OrdenListRow[],
+  ): Promise<Map<string, TarifaListRow | null>> {
+    // Cero filas, cero consultas (el `where` seria `{ OR: [] }`, que en Prisma no filtra nada
+    // y traeria la tabla entera).
+    if (rows.length === 0) return new Map<string, TarifaListRow | null>();
+
+    const pares: ParTarifa[] = [];
+    const vistos = new Set<string>();
+    for (const row of rows) {
+      // En `orden`, `tienda_id` y `zona_id` son NOT NULL: el par siempre alcanza los 3 niveles.
+      const par: ParTarifa = { tiendaId: row.tiendaId, zonaId: row.zonaId };
+      const clave = clavePar(par);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      pares.push(par);
+    }
+
+    const filas = await this.prisma.tarifa.findMany({
+      where: whereCascada(pares),
+      select: TARIFA_SELECT,
+    });
+
+    return elegirPorCascada(filas, pares);
+  }
+
+  /**
+   * FEATURE 260 (B3, R2/R11/R19/R40) — los elementos de listado de una lista ACOTADA de ids.
+   *
+   * Patron identico a `findEtiquetasByIds` / `findManifiestoByIds` y, sobre todo, a
+   * `findRecepcionSateliteByIds`, que ya combina ids + zona + `deletedAt: null`. Lo que este
+   * metodo NO hace es tan importante como lo que hace: no filtra por fecha, no ordena, no
+   * pagina y **no proyecta a mano**. Recibe una lista de ids —como mucho el tamaño de pagina
+   * del detalle— y devuelve el DTO con el MISMO `include` y el MISMO mapeo que `list()`.
+   *
+   * ⚠️ EL `findMany` DE AQUI QUEDA FUERA DEL CENSO DE `frontera.guardia`, y se dice claro en
+   * vez de rodearse: ese guardia prohibe `findMany` sobre el arbol de la feature del tablero, y
+   * este archivo no esta en ese arbol (tiene medio centenar de `findMany` legitimos, asi que
+   * meterlo no es opcion). Esta verde porque el guardia NO LLEGA, no porque la regla se cumpla
+   * sola. Lo que si se cumple es el FONDO de la regla —«no traer el dia a memoria»—: la
+   * consulta va por `id IN (<= pageSize)`, y lo cubren dos tests, uno de servicio (que la lista
+   * de ids es EXACTAMENTE la de la pagina) y uno de integracion contra Postgres (que el `WHERE`
+   * recorta de verdad la borrada y la de otra zona).
+   */
+  async findListItemsByIds(
+    ids: readonly string[],
+    filtro: FiltroAlcanceTablero,
+  ): Promise<OrdenListItemDTO[]> {
+    if (ids.length === 0) return []; // R5: cero ids, cero consultas
+    const rows = await this.prisma.orden.findMany({
+      where: {
+        id: { in: [...ids] },
+        deletedAt: null, // R19: una orden borrada no vuelve nunca
+        // R11 — el recorte multi-tenant, otra vez. No se fia de que los ids llegaran ya
+        // recortados por la consulta anterior: dos puertas a las mismas filas son dos sitios
+        // donde hay que aplicar la frontera.
+        ...(filtro.tipo === "zona" ? { zonaId: filtro.zonaId } : {}),
+      },
+      ...WITH_ESTATUS_Y_TIENDA, // R2: el MISMO include que `list()`
+    });
+    // Feature 274 (T8.1): la MISMA resolucion de tarifa que `list()`, y por el mismo motivo por
+    // el que comparte include y mapeo — si no, el detalle del tablero diverge del listado.
+    const tarifas = await this.resolverTarifasDePagina(rows);
+    // R2: el MISMO mapeo que `list()`.
+    return rows.map((row) => toListItemDTO(row, tarifaDe(tarifas, row)));
   }
 
   async update(
@@ -1512,6 +1771,12 @@ export class OrdenRepository implements IOrdenRepository {
         zona: { select: { esCentral: true } },
         // Tienda dueña: acota por tienda sin consulta extra (recepcion en origen).
         tiendaId: true,
+        // Feature 262 (B3/B6): el mensajero y el dia son INSUMO DE GUARDA de la correccion del dia
+        // de reparto (R5 «sin dia o sin mensajero, se rechaza nombrando el motivo»; R7 «ya es de
+        // ese dia»). Sin ellos el service no puede distinguir esos motivos y tendria que devolver
+        // un `conflict` generico — el mensaje falso que origino la ficha 241.
+        mensajeroAsignadoId: true,
+        fechaReparto: true,
       },
     });
     return rows.map((r) => ({
@@ -1522,6 +1787,8 @@ export class OrdenRepository implements IOrdenRepository {
       zonaId: r.zonaId,
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
+      mensajeroAsignadoId: r.mensajeroAsignadoId,
+      fechaReparto: r.fechaReparto,
     }));
   }
 
@@ -1598,6 +1865,9 @@ export class OrdenRepository implements IOrdenRepository {
         tiendaId: true,
         // Feature 157 (R30): dueño de la recoleccion, para la guardia de propiedad.
         mensajeroAsignadoId: true,
+        // Feature 262 (B3): `OrdenTransicionRow.fechaReparto` es OBLIGATORIO —sin `?`— porque es
+        // insumo de una guarda; las dos vias que construyen la fila lo emiten.
+        fechaReparto: true,
       },
     });
     if (!r) return null;
@@ -1610,6 +1880,7 @@ export class OrdenRepository implements IOrdenRepository {
       zonaEsGam: r.zona.esCentral,
       tiendaId: r.tiendaId,
       mensajeroAsignadoId: r.mensajeroAsignadoId,
+      fechaReparto: r.fechaReparto,
     };
   }
 
@@ -1620,17 +1891,41 @@ export class OrdenRepository implements IOrdenRepository {
    * (`tienda_id = ownerId` no opcional) + `deleted_at IS NULL`; ningun parametro externo
    * puede ampliarlo. `estatusId` opcional acota por estado. `total` con el MISMO where para
    * paginar de forma determinista.
+   *
+   * Feature 257 (R18/R20/R23/R25): los filtros nuevos llegan como ESCALARES TIPADOS (`Date`,
+   * `number`, `string`), jamas como un fragmento de `WhereInput`; si se aceptara un fragmento,
+   * un integrador podria inyectar su propio `tiendaId`. La ventana de `createdAt` es
+   * SEMIABIERTA (`gte` / `lt`, NUNCA `lte`): el service ya movio la cota superior al comienzo
+   * del dia siguiente en CR para que `hasta` sea inclusivo.
    */
   async listByOwner(params: {
     ownerId: string;
     estatusId?: string;
+    createdAtDesde?: Date;
+    createdAtHasta?: Date;
+    numGuia?: number;
+    numRemision?: string;
     skip: number;
     take: number;
   }): Promise<ApiOrdenListResult> {
+    // R20/R23: `tiendaId` y `deletedAt` se escriben PRIMERO y de forma INCONDICIONAL. No es
+    // estilo: en un object literal, un spread POSTERIOR que repitiera `tiendaId` lo pisaria (gana
+    // el ultimo valor escrito) y el listado devolveria ordenes ajenas sin fallar ruidosamente.
     const where: Prisma.OrdenWhereInput = {
-      tiendaId: params.ownerId, // R6/R7: owner FORZADO
-      deletedAt: null, // R11
+      tiendaId: params.ownerId, // R6/R7 (106) + R20 (257): owner FORZADO
+      deletedAt: null, // R11 (106) + R23 (257)
       ...(params.estatusId ? { estatusId: params.estatusId } : {}),
+      // R15: igualdad estricta sobre columna nullable -> `num_guia = $1` no casa con NULL en SQL.
+      ...(params.numGuia !== undefined ? { numGuia: params.numGuia } : {}),
+      ...(params.numRemision !== undefined ? { numRemision: params.numRemision } : {}),
+      ...(params.createdAtDesde || params.createdAtHasta
+        ? {
+            createdAt: {
+              ...(params.createdAtDesde ? { gte: params.createdAtDesde } : {}),
+              ...(params.createdAtHasta ? { lt: params.createdAtHasta } : {}),
+            },
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.orden.findMany({
@@ -2877,57 +3172,308 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17) ---
+  // --- Feature 262: corregir el dia de reparto de un lote YA asignado ---
 
   /**
-   * R12/R16 + feature 241 (regla firmada 2026-08-20): de `ids`, los mensajeros que NO pueden
-   * gestionar ni cobrar porque arrastran AL MENOS UN cierre en `vencido` o `rechazado`.
+   * Feature 262 (design §6.1/§15.5) — LA UNICA escritura del arbol que toca `fecha_reparto` sin
+   * tocar `asignado_at`, y esa excepcion esta DECLARADA y VIGILADA
+   * (`tests/unit/guards/fecha-reparto-acompana-asignado-at.guardia.test.ts`, clausulas d1-d4).
    *
-   * EL NOMBRE LLEVA «PARA GESTION» A PROPOSITO. Este predicado se llamaba `findMensajerosBloqueadosParaGestion`
-   * y esa ambiguedad —bloqueado, ¿para que?— es la causa directa de la ficha 241: el 2026-08-18 se
-   * cambio «el bloqueo» creyendo que se tocaba solo la asignacion, y con el mismo gesto se apagaron
-   * `gestionar`/`recoger`/`escoger`, `deshacerGestion` y la recoleccion en tienda, que leian este
-   * mismo dato. Hoy la respuesta esta en el nombre, en cada uno de sus call sites: LO UNICO que este
-   * predicado bloquea es GESTIONAR Y COBRAR. RECIBIR ASIGNACIONES NO SE BLOQUEA NUNCA — y por eso
-   * ninguna superficie de asignacion lo llama (ni figura en sus `Pick<IOrdenRepository, ...>`).
+   * ⚠️ EL `SET` ES EXACTAMENTE `{fecha_reparto, updated_at}`, Y ESA HUELLA ES EL CONTRATO CON LA
+   * GUARDIA. Si alguien le suma `"asignado_at" =`, `"mensajero_asignado_id" =` o `"estatus_id" =`,
+   * el conjunto de columnas deja de coincidir con la excepcion declarada y la guardia se pone
+   * ROJA. Es justo lo que debe pasar: eso ya no seria una correccion de dia.
    *
-   * Vuelve a ser «tiene ALGUNO», sin tope: entre el 2026-08-18 y hoy el corte era «mas de 1 cierre
-   * abierto» y el invariante 109/R30 —un mensajero NUNCA tiene 2 cierres abiertos a la vez— lo hacia
-   * INALCANZABLE. No era un umbral, era el predicado apagado. Con la regla nueva el tope sobra: lo
-   * que decide es QUE estados bloquean, no cuantos hay.
+   * POR QUE NO SE TOCA `asignado_at` (design §6.2, A8). El esquema lo define como «instante de la
+   * ULTIMA (RE)ASIGNACION de mensajero»: corregir un dia no reasigna a nadie, asi que escribirlo
+   * FALSEARIA el dato. La invariante 246/R10 sobrevive entera por el `WHERE`, no por pisar una
+   * columna — esta escritura EXIGE mensajero y dia previos, asi que no puede crear un dia huerfano
+   * ni dejar un mensajero sin dia (R28).
    *
-   * `distinct` sobre `mensajeroId` (interesa QUIEN, no cuantos) contra el indice `(mensajero_id,
-   * estado)`.
+   * DOS SENTENCIAS Y NO UNA (A11). Un `UPDATE ... FROM (SELECT … FOR UPDATE) RETURNING id,
+   * prev.anterior` es correcto y mas corto, pero deja de tener un `SET` plano: el censo de la
+   * guardia corta al PRIMER `WHERE`, asi que absorberia el `WHERE` de la subconsulta y la huella de
+   * columnas se volveria delicada justo en la comprobacion que protege la excepcion.
    */
-  async findMensajerosBloqueadosParaGestion(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.cierreDia.findMany({
-      where: { mensajeroId: { in: ids }, estado: { in: ESTADOS_CIERRE_BLOQUEAN_GESTION } },
-      select: { mensajeroId: true },
-      distinct: ["mensajeroId"], // usa el indice (mensajero_id, estado)
+  async corregirDiaRepartoLote(
+    ordenIds: readonly string[],
+    fecha: Date,
+    estatusIds: readonly string[],
+    zonaId: string | null,
+    ctx: { actorUsuarioId: string; motivo: string },
+  ): Promise<CorreccionDiaAplicada[]> {
+    if (ordenIds.length === 0) return [];
+    // Fallo CERRADO: sin catalogo de estados admitidos no hay guarda de estado que aplicar, y un
+    // `IN ()` vacio no es SQL valido. El service resuelve los ids ANTES y rechaza si falta alguno;
+    // esto es la red por si alguien llama al repo directamente.
+    if (estatusIds.length === 0) throw new CorreccionDiaConflictoError([...ordenIds]);
+
+    // El dia entra como TEXTO `YYYY-MM-DD` con `::date` explicito. `fechaRepartoComoTexto` explica
+    // por que pasar el `Date` dejaria el dia a merced del `TimeZone` de la sesion de Postgres.
+    const diaTexto = fechaRepartoComoTexto(fecha);
+    const ids = [...ordenIds];
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. FOTO + BLOQUEO del dia anterior (R24). El `FOR UPDATE` es lo que impide que esta foto
+      //    quede rancia entre el SELECT y el UPDATE de abajo: sin el, el `fecha_anterior` del
+      //    rastro podria ser un valor que ya no era el de la fila, y un rastro que miente es peor
+      //    que no tenerlo (A12). `ORDER BY "id"` da un orden de bloqueo determinista entre dos
+      //    lotes concurrentes que se solapen.
+      const previas = await tx.$queryRaw<{ id: string; fecha_reparto: Date | null }[]>`
+        SELECT "id", "fecha_reparto"
+        FROM "orden"
+        WHERE "id" IN (${Prisma.join(ids)})
+        ORDER BY "id"
+        FOR UPDATE`;
+      const anteriorPorOrden = new Map(previas.map((p) => [p.id, p.fecha_reparto] as const));
+
+      // 2. LA CORRECCION, GUARDADA. El `RETURNING` trae lo que el AVISO necesita (§15.5): la fila
+      //    del `SET` no cambia por ello, y el censo de la guardia corta al primer `WHERE` —que va
+      //    antes—, asi que la huella de columnas sigue siendo `{fecha_reparto, updated_at}`.
+      //    `updated_at` a mano: el SQL crudo no dispara el `@updatedAt` de Prisma.
+      //
+      // ⚠️ SOBRE LAS CINCO GUARDAS DEL `WHERE`, Y UNA QUE ES REDUNDANTE A PROPOSITO.
+      // `"fecha_reparto" IS NOT NULL` no cambia el comportamiento: en la logica ternaria de SQL,
+      // `NULL <> '2026-08-21'` vale NULL —no TRUE—, asi que la fila sin dia tampoco entraria por el
+      // `<>` de la linea siguiente. Esta MEDIDO (mutacion M-h, 2026-08-22): quitarla sola no pone
+      // rojo ningun test. Se conserva por dos motivos y se dice en voz alta en vez de disimularlo:
+      // (a) ESCRIBE la regla R5 —«sin dia no hay correccion»— donde se aplica, en vez de dejarla
+      // colgando de una sutileza del motor que nadie recuerda al leer; y (b) el dia que alguien
+      // toque el `<>`, esta linea vuelve a ser la unica que impide ponerle dia a una orden que no
+      // lo tenia. Quitar LAS DOS si mata tests (pareja M-h+M-j en el bloque de mutaciones).
+      //
+      // El porque va AQUI ARRIBA y no como comentario `--` dentro del SQL: un backtick dentro de
+      // un template literal lo TERMINA, y este repo ya tiene escrito lo que cuesta escribir prosa
+      // con formato dentro de una sentencia (ver `deshacerAsignacionLote`).
+      const movidas = await tx.$queryRaw<
+        {
+          id: string;
+          mensajero_asignado_id: string;
+          num_guia: number | null;
+          num_remision: string;
+        }[]
+      >`
+        UPDATE "orden"
+        SET "fecha_reparto" = ${diaTexto}::date,
+            "updated_at" = NOW()
+        WHERE "id" IN (${Prisma.join(ids)})
+          AND "estatus_id" IN (${Prisma.join([...estatusIds])})
+          AND "mensajero_asignado_id" IS NOT NULL
+          AND "fecha_reparto" IS NOT NULL
+          AND "fecha_reparto" <> ${diaTexto}::date
+          AND "deleted_at" IS NULL
+          ${zonaId === null ? Prisma.empty : Prisma.sql`AND "zona_id" = ${zonaId}`}
+        RETURNING "id", "mensajero_asignado_id", "num_guia", "num_remision"`;
+
+      // 3. TODO-O-NADA (R8/R9): una sola perdedora aborta el lote COMPLETO. El `throw` va ANTES del
+      //    rastro, asi que un lote abortado no deja NI UNA fila en `orden_dia_reparto_cambio`.
+      if (movidas.length !== ids.length) {
+        const ganadoras = new Set(movidas.map((m) => m.id));
+        throw new CorreccionDiaConflictoError(ids.filter((id) => !ganadoras.has(id)));
+      }
+
+      const entradas = movidas.map((m) => {
+        const anterior = anteriorPorOrden.get(m.id);
+        // El `WHERE` exige `fecha_reparto IS NOT NULL`, y el `FOR UPDATE` de arriba bloqueo la
+        // misma fila: si aqui faltara, la foto y la escritura estarian describiendo filas
+        // distintas. Fallo CERRADO antes que un rastro con una fecha inventada.
+        if (!anterior) throw new CorreccionDiaConflictoError([m.id]);
+        return {
+          ordenId: m.id,
+          fechaAnterior: anterior,
+          fechaNueva: fecha,
+          actorUsuarioId: ctx.actorUsuarioId,
+          motivo: ctx.motivo,
+        };
+      });
+
+      // 4. EL RASTRO, en la MISMA tx y sobre EXACTAMENTE las que ganaron (R22).
+      const registradas = await registrarCambioDiaReparto(tx, entradas);
+      const cambioPorOrden = new Map(registradas.map((r) => [r.ordenId, r.cambioId] as const));
+
+      return movidas.map((m) => ({
+        ordenId: m.id,
+        cambioId: cambioPorOrden.get(m.id) as string,
+        mensajeroAsignadoId: m.mensajero_asignado_id,
+        numGuia: m.num_guia,
+        numRemision: m.num_remision,
+        fechaAnterior: anteriorPorOrden.get(m.id) as Date,
+        fechaNueva: fecha,
+      }));
     });
-    return new Set(rows.map((r) => r.mensajeroId));
+  }
+
+  // --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO (R1-R12) ---
+
+  /**
+   * FEATURE 271 (T1.2, R1) — EL CONTADOR. De `ids`, cuantos cierres abiertos (N) tiene cada
+   * mensajero y cuantos de esos son re-solicitables (V).
+   *
+   * ES LA TRANSFORMACION de `findMensajerosConCierreAbierto`, que era `private` y devolvia un
+   * `Set<string>`, NO un predicado nuevo puesto a su lado. Hacerlo nuevo habria dejado dos formas
+   * de preguntar lo mismo, que es exactamente como el aviso de la UI y el servidor acabaron
+   * diciendo cosas distintas en el incidente del 2026-08-18.
+   *
+   * UNA SOLA CONSULTA para el lote entero: `groupBy(["mensajeroId","estado"])` contra el indice
+   * `(mensajero_id, estado)` que existe desde la 41 (`schema.prisma`). De un grupo por estado salen
+   * N y V sin segunda ida a la base.
+   *
+   * Un mensajero SIN filas no aparece en el `Map`; el llamador lo lee como `{ n: 0, v: 0 }`
+   * (`SIN_CIERRES_ABIERTOS`). Eso es LIBRE, y es el caso 1 de la tabla de verdad.
+   */
+  async contarCierresAbiertosPorMensajero(
+    ids: string[],
+  ): Promise<Map<string, ConteoCierresAbiertos>> {
+    if (ids.length === 0) return new Map();
+    const grupos = await this.prisma.cierreDia.groupBy({
+      by: ["mensajeroId", "estado"],
+      where: {
+        mensajeroId: { in: ids },
+        // Los TRES abiertos. `aprobado` es el UNICO terminal y NO cuenta: meterlo aqui bloquearia
+        // para siempre a quien ya cerro bien (mutacion (a) de T10.1).
+        estado: { in: [...CIERRE_ESTADOS_ABIERTOS] },
+      },
+      _count: { _all: true },
+    });
+    const conteo = new Map<string, ConteoCierresAbiertos>();
+    for (const g of grupos) {
+      const previo = conteo.get(g.mensajeroId) ?? { n: 0, v: 0 };
+      const cuantos = g._count._all;
+      conteo.set(g.mensajeroId, {
+        n: previo.n + cuantos,
+        // V es un SUBCONJUNTO de N: `vencido` y `rechazado` suman a los dos.
+        v: previo.v + (esCierreResolicitable(g.estado) ? cuantos : 0),
+      });
+    }
+    return conteo;
   }
 
   /**
-   * Feature 241 — de `ids`, los mensajeros con AL MENOS UN cierre ABIERTO (los tres estados que no
-   * son `aprobado`). Es un dato INFORMATIVO y no bloquea nada: alimenta el aviso «tienes N cierres
-   * abiertos de tus mensajeros» de la bodega satelite, que sigue siendo cierto y util para quien
-   * cuadra caja.
+   * FEATURE 271 (T1.3, R3/R10) — de `ids`, los BLOQUEADOS. Es el RENOMBRADO de
+   * `findMensajerosBloqueadosPorCierres`, y el renombrado NO es cosmetico.
    *
-   * Va SEPARADO de `findMensajerosBloqueadosParaGestion` porque son dos preguntas distintas y desde
-   * la 241 tienen dos respuestas distintas. Compartirlas fue lo que dejo el aviso de la UI diciendo
-   * una cosa y el servidor haciendo otra. Privado: nadie fuera del repositorio necesita esta
-   * distincion, y exponerla invitaria a usarla como bloqueo.
+   * El nombre viejo decia PARA QUE bloqueaba, y esa era su virtud en la feature 241: un service de
+   * asignacion no podia llamarlo sin escribir «ParaGestion» en una accion que no gestiona. Ese
+   * alcance CAMBIO el 2026-08-23 (Q1): ahora bloquea TODO —gestionar, cobrar y recibir trabajo
+   * nuevo, reparto Y recoleccion—, asi que el nombre nuevo dice POR QUE bloquea. Dejar el viejo
+   * mientras la asignacion lo consulta seria exactamente la incoherencia que la 241 persiguio.
+   *
+   * La regla vive en `estaBloqueadoPorCierres` (modulo puro) y NO se re-escribe aqui: un solo
+   * predicado, todas las superficies (R10).
    */
-  private async findMensajerosConCierreAbierto(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.cierreDia.findMany({
-      where: { mensajeroId: { in: ids }, estado: { in: ESTADOS_CIERRE_ABIERTO } },
-      select: { mensajeroId: true },
-      distinct: ["mensajeroId"],
+  async findMensajerosBloqueadosPorCierres(ids: string[]): Promise<Set<string>> {
+    const conteo = await this.contarCierresAbiertosPorMensajero(ids);
+    const bloqueados = new Set<string>();
+    for (const [mensajeroId, c] of conteo) {
+      if (estaBloqueadoPorCierres(c)) bloqueados.add(mensajeroId);
+    }
+    return bloqueados;
+  }
+
+  /**
+   * FEATURE 271 (T1.4, R11/R43/R57) — el DETALLE de UN mensajero: cuantos cierres arrastra, cuantos
+   * puede reenviar el mismo, y CUAL toca resolver primero (con la fecha de su JORNADA, no la de su
+   * nacimiento). Alimenta el aviso de la campana, el motivo del `conflict` y la pantalla, para que
+   * los tres digan lo mismo.
+   *
+   * «EL QUE TOCA RESOLVER» ES EL MAS VIEJO (R11): `solicitado_at` ASC, y el desempate por `id` ASC
+   * NO es paranoia. El corte crea cierres en bucle dentro del mismo segundo y `solicitado_at` tiene
+   * `@default(now())` por fila, pero la resolucion puede repetirse; un orden inestable haria que
+   * «el que toca resolver» cambiara entre dos cargas de la misma pantalla.
+   *
+   * LA JORNADA SE DERIVA, no se lee de una columna (no existe): fecha CR de las gestiones
+   * VINCULADAS y no anuladas; si no hay ninguna gestion, `created_at` en CR MENOS UN DIA. Todo eso
+   * lo decide `derivarJornada` (`lib/utils/jornada-cierre.ts`), que es el UNICO derivador (R61);
+   * aqui solo se leen las fechas y se convierten a dia de Costa Rica.
+   *
+   * ⚠️ Y SALEN **DOS** CIERRES, NO UNO (2026-08-23, hueco que encontro la pasada de frontend). El
+   * mas viejo (`aResolverPrimero`) responde «que se resuelve primero»; el RE-SOLICITABLE mas viejo
+   * (`aReenviarPrimero`) responde «que puede tocar EL». En el caso 6 de la tabla de verdad —el
+   * caso 5 que dicto el humano: solicito el primero y dejo vencer el segundo, `N=2, V=1`— NO SON
+   * EL MISMO, y con solo el primero la pantalla le dice «espera a la bodega» y le esconde el boton
+   * de reenviar el segundo, que `solicitarCierre` SI le permite (R16/R18). Ver `BloqueoDetalle`.
+   */
+  async findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle> {
+    const conteo =
+      (await this.contarCierresAbiertosPorMensajero([mensajeroId])).get(mensajeroId) ??
+      SIN_CIERRES_ABIERTOS;
+    if (conteo.n === 0) return SIN_BLOQUEO;
+
+    const masViejo = await this.prisma.cierreDia.findFirst({
+      where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_ABIERTOS] } },
+      // R11: el MAS VIEJO, con desempate ESTABLE.
+      orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+      select: SELECT_CIERRE_A_RESOLVER,
     });
-    return new Set(rows.map((r) => r.mensajeroId));
+    if (masViejo === null) return SIN_BLOQUEO; // carrera: se resolvieron entre las dos consultas
+
+    // R18 — EL RE-SOLICITABLE MAS VIEJO. Tres ramas, y ninguna es de adorno:
+    //   · `V = 0`: no hay ninguno que el pueda tocar. `null`, y SIN segunda consulta (este metodo
+    //     corre en cada carga de las pantallas del mensajero; el caso normal es `N=1, V=0`).
+    //   · el mas viejo YA es re-solicitable (casos 5 y 7): entonces ES el re-solicitable mas
+    //     viejo —los re-solicitables son un SUBCONJUNTO de los abiertos y el orden es el mismo—,
+    //     asi que se reusa la fila y tampoco hay segunda consulta.
+    //   · el mas viejo es un `solicitado` y ademas hay re-solicitables (CASO 6): SOLO aqui se
+    //     vuelve a la base, con el MISMO `ORDER BY` que `findCierreResolicitableMasViejo`
+    //     (`CierreDiaRepository`), que es el que la re-solicitud mueve de verdad. Que los dos
+    //     elijan la MISMA fila no se supone: se afirma sobre Postgres sembrado en
+    //     `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`.
+    const reenviable =
+      conteo.v === 0
+        ? null
+        : esCierreResolicitable(masViejo.estado)
+          ? masViejo
+          : await this.prisma.cierreDia.findFirst({
+              where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_RESOLICITABLES] } },
+              orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+              select: SELECT_CIERRE_A_RESOLVER,
+            });
+
+    const aResolverPrimero = await this.aCierreAResolver(masViejo);
+
+    return {
+      bloqueado: estaBloqueadoPorCierres(conteo),
+      cierresAbiertos: conteo.n,
+      cierresPorReenviar: conteo.v,
+      aResolverPrimero,
+      aReenviarPrimero:
+        reenviable === null
+          ? null
+          : reenviable.id === masViejo.id
+            ? // Mismo cierre: se reusa el objeto YA derivado. Volver a derivarlo abriria la puerta
+              // a que los dos campos nombraran jornadas distintas del MISMO cierre.
+              aResolverPrimero
+            : await this.aCierreAResolver(reenviable),
+    };
+  }
+
+  /**
+   * FEATURE 271 (R57/R61) — de una fila de `cierre_dia` al `CierreAResolver` que viaja a la
+   * pantalla, con su JORNADA derivada. Existe para que `aResolverPrimero` y `aReenviarPrimero`
+   * salgan del MISMO codigo: dos derivaciones de la misma jornada es como se desincronizan.
+   */
+  private async aCierreAResolver(fila: {
+    id: string;
+    estado: CierreEstado;
+    solicitadoAt: Date;
+    createdAt: Date;
+  }): Promise<CierreAResolver> {
+    // R57: las gestiones VINCULADAS y NO anuladas de ESE cierre. `anulada_at IS NULL` no es
+    // cosmetica: una gestion deshecha no es jornada trabajada que nombrar.
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: { cierreId: fila.id, anuladaAt: null },
+      select: { createdAt: true },
+    });
+    return {
+      cierreId: fila.id,
+      estado: fila.estado,
+      solicitadoAt: fila.solicitadoAt.toISOString(),
+      jornadaCR: derivarJornada({
+        diasCRDeGestiones: gestiones.map((g) => fechaCalendarioCR(g.createdAt)),
+        diaCRDeCreacion: fechaCalendarioCR(fila.createdAt),
+      }),
+      resuelve: quienResuelve(fila.estado),
+    };
   }
 
   /**
@@ -2960,12 +3506,13 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Zonas (central y satelite) con AL MENOS 1 mensajero BLOQUEADO PARA GESTIONAR — mismo criterio
-   * que `findMensajerosBloqueadosParaGestion`, escrito como un `some` sobre la relacion.
+   * Zonas (central y satelite) con AL MENOS 1 mensajero BLOQUEADO — mismo criterio que
+   * `findMensajerosBloqueadosPorCierres`.
    *
-   * Feature 241: vuelve a UNA consulta. Entre el 2026-08-18 y hoy delegaba en el predicado tras un
-   * pre-filtro porque el criterio («mas de N cierres abiertos») no era expresable como un `some`;
-   * quitado el tope, «tiene alguno de los que bloquean» SI lo es, y la segunda consulta sobraba.
+   * ⚠️ FEATURE 271: DEJA DE SER UNA CONSULTA. Con la regla de la 241 («tiene alguno de estos dos
+   * estados») el criterio era expresable como un `some` sobre la relacion; con la regla nueva es un
+   * CONTEO (`N >= 2 o V >= 1`) y `some` no sabe contar. Vuelve al patron de pre-filtro + predicado,
+   * que es lo que ya hubo entre el 2026-08-18 y el 2026-08-20 por esta misma razon.
    *
    * ⚠️ SIN CONSUMIDOR DE PRODUCCION desde el 2026-08-18, cuando el commit `6a0e6d36` borro la
    * server action `listarZonasBloqueadasPorCierre` que era su unica llamadora (investigacion 241
@@ -2976,16 +3523,23 @@ export class OrdenRepository implements IOrdenRepository {
    * `cierre_dia.destino_zona_id`, que es un snapshot del momento de la solicitud.
    */
   async findZonasConMensajeroBloqueado(): Promise<Set<string>> {
-    const rows = await this.prisma.usuario.findMany({
+    const mensajeros = await this.prisma.usuario.findMany({
       where: {
         rol: { value: "mensajero" },
         zonaId: { not: null },
-        cierresRealizados: { some: { estado: { in: ESTADOS_CIERRE_BLOQUEAN_GESTION } } },
+        // Pre-filtro barato: quien no tiene NI UN cierre abierto no puede estar bloqueado.
+        cierresRealizados: { some: { estado: { in: [...CIERRE_ESTADOS_ABIERTOS] } } },
       },
-      select: { zonaId: true },
-      distinct: ["zonaId"],
+      select: { id: true, zonaId: true },
     });
-    return new Set(rows.map((r) => r.zonaId).filter((id): id is string => id !== null));
+    if (mensajeros.length === 0) return new Set();
+    const bloqueados = await this.findMensajerosBloqueadosPorCierres(mensajeros.map((m) => m.id));
+    return new Set(
+      mensajeros
+        .filter((m) => bloqueados.has(m.id))
+        .map((m) => m.zonaId)
+        .filter((id): id is string => id !== null),
+    );
   }
 
   /**
@@ -2993,22 +3547,21 @@ export class OrdenRepository implements IOrdenRepository {
    * el cierre de la BODEGA, no el de un mensajero, y nadie lo ha tocado.
    *
    * La causa (i) —«algun mensajero de la zona tiene un cierre abierto»— SIGUE RETIRADA, y la
-   * feature 241 la deja retirada A PROPOSITO, no por inercia: es la regla 2 (recibir asignaciones
-   * no se bloquea nunca) y ademas era la mas desproporcionada de todas, porque congelaba la bodega
-   * ENTERA —companeros sin ningun cierre incluidos— por el cierre de una sola persona
-   * (investigacion 241 §5).
+   * FEATURE 271 la deja retirada A PROPOSITO aunque revierta lo de recibir trabajo nuevo (R34):
+   * esta ficha bloquea AL MENSAJERO, no a la bodega. Congelar la bodega entera —companeros sin
+   * ningun cierre incluidos— por el cierre de una sola persona era la parte desproporcionada
+   * (investigacion 241 §5), y sigue sin volver. Lo que ahora viaja es la LISTA de quienes estan
+   * bloqueados, para que el selector deshabilite exactamente a esos y a nadie mas (R32).
    *
-   * Los campos informativos (`porMensajeros`/`cierresAbiertos`/`totalMensajeros`/
-   * `mensajerosConCierreIds`) se calculan con `findMensajerosConCierreAbierto` — los TRES estados
-   * abiertos, `solicitado` incluido— y NO con el predicado de bloqueo. Son dos preguntas distintas:
-   * el aviso de la UI dice «tienes N cierres abiertos de tus mensajeros» y eso debe seguir contando
-   * los `solicitado`, que son abiertos aunque no bloqueen nada.
+   * `cierresAbiertos` CONSERVA SU SIGNIFICADO (mensajeros con `N >= 1`, `solicitado` incluido):
+   * es el aviso «tienes N cierres abiertos de tus mensajeros», que sigue siendo cierto y util para
+   * quien cuadra caja, y es OTRA pregunta distinta de «quien esta bloqueado».
    *
    * OJO al nombre heredado: `cierresAbiertos` NO cuenta cierres, cuenta MENSAJEROS con alguno.
    */
   async existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult> {
     const [mensajerosZona, countCierreBodega] = await Promise.all([
-      // Mensajeros de la zona (universo del que basta 1 bloqueado para bloquear).
+      // Mensajeros de la zona (universo del que sale el aviso y la lista de bloqueados).
       this.prisma.usuario.findMany({
         where: { rol: { value: "mensajero" }, zonaId },
         select: { id: true },
@@ -3020,20 +3573,27 @@ export class OrdenRepository implements IOrdenRepository {
       }),
     ]);
     const idsZona = mensajerosZona.map((m) => m.id);
-    const conCierreAbierto = await this.findMensajerosConCierreAbierto(idsZona);
+    // FEATURE 271 (T1.5): UNA sola consulta da las dos respuestas. `conCierreAbierto` = N >= 1
+    // (informativo, nombre heredado); `bloqueados` = la regla N/V (R34/R32).
+    const conteo = await this.contarCierresAbiertosPorMensajero(idsZona);
+    const conCierreAbierto = [...conteo.keys()];
+    const mensajerosBloqueadosIds = [...conteo]
+      .filter(([, c]) => estaBloqueadoPorCierres(c))
+      .map(([id]) => id);
     const totalMensajeros = idsZona.length;
-    const cierresAbiertos = conCierreAbierto.size;
+    const cierresAbiertos = conCierreAbierto.length;
     const porCierreBodega = countCierreBodega > 0;
     const porMensajeros = cierresAbiertos > 0;
     return {
-      // Feature 241: la causa (i) NO entra. `porMensajeros` viaja al borde como AVISO, no como
-      // veto: la pantalla puede decir cuantos cierres hay abiertos y seguir dejando asignar.
+      // La causa (i) NO entra (R34). `porMensajeros` viaja al borde como AVISO, no como veto: la
+      // bodega sigue asignando a sus companeros libres.
       bloqueada: porCierreBodega,
       porMensajeros,
       porCierreBodega,
       cierresAbiertos,
       totalMensajeros,
-      mensajerosConCierreIds: [...conCierreAbierto],
+      mensajerosConCierreIds: conCierreAbierto,
+      mensajerosBloqueadosIds,
     };
   }
 

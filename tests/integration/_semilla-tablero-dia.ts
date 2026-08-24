@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { GestionResultado, PrismaClient } from "@prisma/client";
 
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { TableroDiaRepository } from "@/lib/repositories/TableroDiaRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
+import { TableroDiaService } from "@/lib/services/TableroDiaService";
 import type { FilaTableroDia } from "@/lib/types/tablero-dia";
 import { ventanaDelDiaEnCursoCR } from "@/lib/utils/ventana-dia-cr";
 
@@ -38,6 +43,20 @@ export function instanteCR(fecha: string, horaCR: string): Date {
   const [y, m, d] = fecha.split("-").map((n) => Number.parseInt(n, 10));
   const [hh, mm, ss] = horaCR.split(":").map((n) => Number.parseInt(n, 10));
   return new Date(Date.UTC(y, m - 1, d, hh + 6, mm, ss ?? 0));
+}
+
+/**
+ * FEATURE 259 (T3.1) — el valor de `orden.fecha_reparto` para una fecha calendario CR.
+ *
+ * ⚠️ ES LA **MEDIANOCHE UTC** DE ESA FECHA, NO LAS 06:00Z, y la diferencia no es cosmética: la
+ * columna es `@db.Date` y ésa es la convención del repo para ese tipo (feature 46, y lo que
+ * devuelve `resolverFechaReparto`). Las cotas `…T06:00:00.000Z` de `instanteCR` son para las
+ * columnas `timestamp` (`asignado_at`, `gestion_orden.created_at`). Mezclarlas es el off-by-one
+ * de seis horas que cerró la ficha 166, y aquí sembraría el día equivocado sin que nada avise.
+ */
+export function diaReparto(fecha: string): Date {
+  const [y, m, d] = fecha.split("-").map((n) => Number.parseInt(n, 10));
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 /** Las 19:00 hora de Costa Rica: el caso de R13, con la ventana ya bien entrada. */
@@ -143,6 +162,22 @@ export interface SemillaOrden {
    * el camino de RECOLECCION (R57): la 157 no estampa esta columna a proposito.
    */
   readonly asignadoAt?: Date | null;
+  /**
+   * FEATURE 259 — `orden.fecha_reparto` (`@db.Date`), el DIA PARA EL QUE bodega hizo la
+   * asignacion. Se construye con `diaReparto("2001-06-15")`, nunca con `instanteCR`.
+   *
+   * `undefined` = NULL, y eso NO es un descuido: es la rama (b), el respaldo por `asignado_at`
+   * para las ordenes anteriores a la 246 (no hay backfill y no lo habra). Ningun test escrito
+   * antes de la 259 fija este campo, asi que **todos ellos ejercitan la rama (b)** y siguen
+   * siendo evidencia valida de que ese respaldo funciona.
+   */
+  readonly fechaReparto?: Date | null;
+  /**
+   * FEATURE 260 — `orden.monto_cobrar` (`Decimal`), como CADENA para no perder centimos por el
+   * camino. `undefined` = NULL. R17 exige que este importe sobreviva a los dos alcances, y sin
+   * un valor sembrado esa asercion seria verde por vacio.
+   */
+  readonly montoCobrar?: string | null;
 }
 
 export async function crearOrden(
@@ -164,6 +199,8 @@ export async function crearOrden(
       cantonId: base.cantonId,
       mensajeroAsignadoId: semilla.mensajeroId ?? null,
       asignadoAt: semilla.asignadoAt ?? null,
+      fechaReparto: semilla.fechaReparto ?? null,
+      montoCobrar: semilla.montoCobrar ?? null,
       createdAt: instanteCR(FECHA_CR, "07:00"),
     },
     select: { id: true },
@@ -224,6 +261,63 @@ export async function transicionDeRecoleccion(
 /** El repositorio REAL, atado a la transaccion del test. */
 export function repositorio(tx: TxDeTest): TableroDiaRepository {
   return new TableroDiaRepository(tx as unknown as Pick<PrismaClient, "$queryRaw">);
+}
+
+/**
+ * FEATURE 260 (B8) — LA TARIFA DE LA TIENDA SEMBRADA.
+ *
+ * FEATURE 274: la fila se siembra SIN zona, es decir en el nivel 2 de la cascada
+ * (tienda, zona IS NULL), que es el que aplica a cualquier zona de esa tienda. Ya no lleva
+ * `status`: esa columna —y con ella la idea de "tarifa activa"— dejo de existir.
+ *
+ * Sin ella, `relaciones.tienda.tarifa` sale `null` **por falta de datos** y el test que afirma
+ * «en alcance zona la tarifa no viaja» estaria verde sin haber retirado nada: el detector
+ * vacio de siempre. Con ella, el `null` del alcance `zona` solo puede venir del recorte.
+ *
+ * Los importes son irrepetibles a proposito (`9999999.99`): sirven de CENTINELA dentro del
+ * payload serializado.
+ */
+export const IMPORTE_CENTINELA_TARIFA = "9999999.99";
+
+export async function crearTarifaActiva(tx: TxDeTest, base: BaseSembrada): Promise<string> {
+  const fila = await tx.tarifa.create({
+    data: {
+      tiendaId: base.tienda,
+      valorFlete: IMPORTE_CENTINELA_TARIFA,
+      valorFleteDevuelto: IMPORTE_CENTINELA_TARIFA,
+      valorFleteGam: IMPORTE_CENTINELA_TARIFA,
+      valorFleteDevueltoGam: IMPORTE_CENTINELA_TARIFA,
+      fulfillment: IMPORTE_CENTINELA_TARIFA,
+      // Los tres porcentajes son `Decimal(5,2)`: no admiten el centinela de arriba.
+      comisionCod: "10.00",
+      ivaFlete: "13.00",
+      ivaComisionCod: "13.00",
+    },
+    select: { id: true },
+  });
+  return fila.id;
+}
+
+/**
+ * FEATURE 260 (B8) — EL SERVICIO REAL, entero, atado a la transaccion del test.
+ *
+ * Es lo que convierte a estos casos en pruebas de EXTREMO A EXTREMO: la consulta del dia, la
+ * hidratacion por el camino del listado de ordenes, el derivador de intentos y el recorte por
+ * alcance, todo contra Postgres. Un doble no ve el SQL, y el recorte multi-tenant de esta
+ * feature vive precisamente en dos `WHERE`.
+ */
+export function servicioReal(tx: TxDeTest): TableroDiaService {
+  const prisma = tx as unknown as PrismaClient;
+  const ordenes = new OrdenRepository(prisma);
+  return new TableroDiaService(
+    repositorio(tx),
+    ordenes,
+    new OrdenHistorialService(
+      ordenes,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
+  );
 }
 
 /**

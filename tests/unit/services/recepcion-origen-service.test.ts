@@ -41,6 +41,9 @@ function transicionRow(
     zonaId: "z-limon",
     zonaEsGam: false,
     tiendaId: "store-1", // la tienda de TIENDA
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. Ninguna
+    // asercion de este archivo cambia.
+    fechaReparto: null,
     ...overrides,
   };
 }

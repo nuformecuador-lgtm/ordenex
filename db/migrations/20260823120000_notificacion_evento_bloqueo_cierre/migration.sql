@@ -1,0 +1,32 @@
+-- Feature 271 (§3.2/§9.2, Q4 resuelta por el humano el 2026-08-23) — los DOS avisos del bloqueo por
+-- cierres. Es LO UNICO que esta ficha toca de la base: no hay tabla nueva, no hay columna nueva y no
+-- hay migracion de datos.
+--
+-- QUE ANADE, y son DOS valores en UN SOLO enum:
+--
+--   `notificacion_evento` += 'cierre_dia_vencido'
+--   `notificacion_evento` += 'mensajero_bloqueado_por_cierres'
+--
+-- `notificacion_entidad_tipo` NO SE TOCA, y conviene decirlo porque es la mitad que se olvida (la
+-- 262 tuvo que anadir los dos). Aqui la entidad de los dos eventos es una fila de `cierre_dia`, y
+-- `cierre_dia` YA esta en el inventario desde la 146. Anadir un valor que no hace falta ampliaria un
+-- inventario CERRADO a cambio de nada.
+--
+-- POR QUE DOS EVENTOS Y NO UNO (A6, descartada): el evento es lo que la campana usa para agrupar y
+-- para DEDUPLICAR, y las dos causas piden acciones OPUESTAS —con un `vencido` la pelota esta en el
+-- tejado del mensajero («reenvíalo»); con `N >= 2` esta en el de la administracion («aprueben el mas
+-- antiguo»)—. Meter la diferencia en la descripcion la vuelve invisible para todo lo que no sea leer
+-- la frase.
+--
+-- POR QUE VA SOLA Y CON TIMESTAMP PROPIO. Postgres NO permite USAR un valor de enum recien anadido
+-- en la misma transaccion que lo anadio (55P04), y Prisma Migrate corre cada `migration.sql` en una.
+-- Aqui SOLO se anaden los valores; su primer uso ocurre en runtime (`emitirCierreDiaVencido` y
+-- `emitirMensajeroBloqueado`), en transacciones posteriores. Mismo precedente que la 262, la 253, la
+-- 240, la 239 y la 237.
+--
+-- ADITIVA Y SIN BACKFILL (R55): no altera ninguna tabla, no crea columnas, no toca RLS
+-- (`notificacion` conserva la suya de la 146) y NO cambia ni una fila existente de `notificacion`,
+-- `cierre_dia`, `gestion_orden` ni `orden`. El despliegue de esta ficha no reescribe nada: la regla
+-- N/V es DERIVADA, sin bandera persistida (271/R12).
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'cierre_dia_vencido';
+ALTER TYPE "notificacion_evento" ADD VALUE IF NOT EXISTS 'mensajero_bloqueado_por_cierres';

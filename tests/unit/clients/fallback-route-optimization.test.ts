@@ -5,6 +5,7 @@ import {
   RutaTokenError,
 } from "@/lib/auth/google-token-shared";
 import { RutaPeticionRechazadaError } from "@/lib/clients/google-route-optimization";
+import { HaversineRouteOptimizationClient } from "@/lib/clients/haversine-route-optimization";
 import { construirTokenProvider } from "@/lib/auth/google-sa-token";
 import { construirTokenProviderWif } from "@/lib/auth/google-wif-token";
 import type {
@@ -34,8 +35,18 @@ function stub(
   return { optimizar } as IRouteOptimizationClient & { optimizar: ReturnType<typeof vi.fn> };
 }
 
-const OK_PRIMARY: OptimizarOutcome = { status: "ok", secuencia: ["orden-B", "orden-A"] };
-const OK_FALLBACK: OptimizarOutcome = { status: "ok", secuencia: ["orden-A", "orden-B"] };
+// Feature 265: el desenlace `ok` DICE quien ordeno. El primario es el proveedor; el fallback,
+// siempre local. El compuesto propaga lo que reciba, no lo supone.
+const OK_PRIMARY: OptimizarOutcome = {
+  status: "ok",
+  secuencia: ["orden-B", "orden-A"],
+  fuente: "proveedor",
+};
+const OK_FALLBACK: OptimizarOutcome = {
+  status: "ok",
+  secuencia: ["orden-A", "orden-B"],
+  fuente: "local",
+};
 
 describe("FallbackRouteOptimizationClient", () => {
   it("con credencial: devuelve el resultado del primario y NO toca el fallback", async () => {
@@ -141,5 +152,108 @@ describe("FallbackRouteOptimizationClient", () => {
 
     expect(r).toEqual({ status: "transitorio", detalle: "x" });
     expect(fallback.optimizar).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Feature 265 (R9-R14, R30, R44) — LA SEGUNDA REGLA DE DEGRADACION
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+/** El desenlace que el proveedor produce cuando contesta bien y no las sirve todas. */
+function sinSolucion(servidas: number, enviadas: number): OptimizarOutcome {
+  return {
+    status: "sin_solucion",
+    detalle: `optimizar ruta: paradas saltadas por el proveedor (servidas ${servidas} de ${enviadas})`,
+    servidas,
+    enviadas,
+  };
+}
+
+describe("265/R9-R11 — `sin_solucion` se ordena en local, cubra lo que cubra la respuesta", () => {
+  it.each([
+    ["NINGUNA parada servida (el caso medido en produccion)", 0, 6],
+    ["ALGUNAS servidas: 4 de 6", 4, 6],
+    ["todas menos una", 5, 6],
+  ])("%s -> se delega en el calculo local", async (_caso, servidas, enviadas) => {
+    // R11: el criterio es «la secuencia no las cubre todas», NO «no cubre ninguna». Degradar
+    // solo cuando `servidas === 0` dejaria el caso intermedio persistiendo una parcial.
+    const primary = stub({ outcome: sinSolucion(servidas, enviadas) });
+    const fallback = stub({ outcome: OK_FALLBACK });
+
+    const r = await new FallbackRouteOptimizationClient(primary, fallback).optimizar(INPUT);
+
+    expect(r).toEqual(OK_FALLBACK);
+    expect(fallback.optimizar).toHaveBeenCalledWith(INPUT);
+  });
+
+  it("R10: la secuencia devuelta cubre TODAS las paradas de entrada, ni una menos", async () => {
+    // ⚠️ ESTA ES LA RED DE REPUESTO de la asercion que se movio en
+    // `google-route-optimization.test.ts` («no cubre todas -> lanza»). La invariante que aquel
+    // nombre prometia —nunca una secuencia parcial— se protege ahora AQUI, con el calculador
+    // local REAL (no un doble): si el compuesto devolviera lo del proveedor, faltarian paradas.
+    const primary = stub({ outcome: sinSolucion(0, 2) });
+    const local = new HaversineRouteOptimizationClient();
+
+    const r = await new FallbackRouteOptimizationClient(primary, local).optimizar(INPUT);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect([...r.secuencia].sort()).toEqual(INPUT.paradas.map((p) => p.ordenId).sort());
+    expect(r.secuencia).toHaveLength(INPUT.paradas.length);
+  });
+
+  it("R12: avisa con CONTEOS y sin PII de que se esta ordenando en local", async () => {
+    const warn = vi.fn();
+    const primary = stub({ outcome: sinSolucion(2, 6) });
+    const fallback = stub({ outcome: OK_FALLBACK });
+
+    await new FallbackRouteOptimizationClient(primary, fallback, { warn }).optimizar(INPUT);
+
+    expect(warn).toHaveBeenCalledOnce();
+    const mensaje = warn.mock.calls[0][0] as string;
+    expect(mensaje).toContain("2 de 6");
+    expect(mensaje).not.toContain("orden-A");
+    expect(mensaje).not.toContain("84.0");
+  });
+
+  it("R14 (mitad negativa): `transitorio` y `config_invalida` NO degradan", async () => {
+    // Sin esta mitad, un `catch`/`if` demasiado ancho pasaria desapercibido: taparia una
+    // credencial rota o una cuota agotada con un orden aproximado, que es justo lo que el
+    // dead-letter debe hacer VISIBLE.
+    for (const status of ["transitorio", "config_invalida"] as const) {
+      const primary = stub({ outcome: { status, detalle: "d" } });
+      const fallback = stub({ outcome: OK_FALLBACK });
+      const r = await new FallbackRouteOptimizationClient(primary, fallback).optimizar(INPUT);
+      expect(r).toEqual({ status, detalle: "d" });
+      expect(fallback.optimizar).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("265/R35, R44 — la procedencia la pone quien ordena, y el compuesto la PROPAGA", () => {
+  it("con credencial y respuesta completa, la fuente es `proveedor`", async () => {
+    const primary = stub({ outcome: OK_PRIMARY });
+    const r = await new FallbackRouteOptimizationClient(
+      primary,
+      new HaversineRouteOptimizationClient(),
+    ).optimizar(INPUT);
+    expect(r).toMatchObject({ status: "ok", fuente: "proveedor" });
+  });
+
+  it.each([
+    [
+      "por credencial AUSENTE (R44: hoy se degrada en silencio)",
+      { throws: new RutaNoConfiguradoError("GOOGLE_ROUTE_OPT_SA_EMAIL") } as const,
+    ],
+    ["por `sin_solucion`", { outcome: sinSolucion(0, 2) } as const],
+  ])("los DOS caminos de degradacion marcan `local`: %s", async (_caso, comportamiento) => {
+    // Es la misma marca por las dos causas, y es deliberado: al mensajero no se le nombra la
+    // causa (R44), solo se le dice que el orden es aproximado.
+    const primary = stub(comportamiento);
+    const r = await new FallbackRouteOptimizationClient(
+      primary,
+      new HaversineRouteOptimizationClient(),
+    ).optimizar(INPUT);
+    expect(r).toMatchObject({ status: "ok", fuente: "local" });
   });
 });

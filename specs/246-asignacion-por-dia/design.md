@@ -477,6 +477,17 @@ esParaManana: boolean;   // derivado EN EL SERVIDOR: fechaReparto > startOfDayCR
   pasa a `false` **por el mero paso del tiempo** (R25): no hay nada que apagar, que es la misma
   propiedad que hace segura a la columna (D2).
 
+> **APÉNDICE — 2026-08-21: la mitad «y no se bloquea nada» de D5 fue SUPERSEDIDA por la feature
+> 261.** El
+> texto de arriba se conserva **intacto** y **no se reescribe**: describe lo que esta ficha decidió,
+> y por qué. Lo que ya no vale es **R24** (la decisión **D5**): la medición **M3** que la sostenía
+> quedó refutada en producción —la guía **17496963**, gestionada `entregada` a las 22:10 CR del 21
+> estando reservada para el 22—, así que desde el 2026-08-21 la reserva **sí bloquea** al mensajero
+> (y a la tienda). La otra mitad, **«no se oculta nada» (R23), sigue vigente y no se toca**: la orden
+> permanece visible en su grupo, con su marca; lo que se restringe es la acción. Y `esParaManana`
+> **deja de ser sólo una etiqueta** y pasa a ser también insumo de una puerta del servidor. Ver
+> `specs/261-dia-reparto-protege`.
+
 ---
 
 ## 6.bis El denominador del ranking *(D7, firmada el 2026-08-20 EN CONTRA de la recomendación)*

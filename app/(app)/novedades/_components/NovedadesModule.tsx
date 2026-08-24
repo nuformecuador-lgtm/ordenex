@@ -411,6 +411,21 @@ export function NovedadesModule({
    *
    * `forbidden` es OPACO a propósito (hereda el del hilo): el borde no dice si la orden existe, en
    * qué estado está ni de quién es, así que adivinar un motivo concreto aquí sería inventarlo.
+   *
+   * ⚠️ FEATURE 261 (F7, R32) — POR ESTE MISMO CABLE VIAJA UN SEGUNDO RECHAZO, y conviene saberlo
+   * antes de «simplificar» esta rama: la orden reservada para un día de reparto posterior. El
+   * servidor la rechaza en dos capas (261/R28-R31) y devuelve `conflict` con la MISMA frase que
+   * lee el mensajero en su portal, nombrando el día desde el que se podrá. Aquí no hay nada que
+   * añadir: se pinta tal cual, como el resto.
+   *
+   * ⚠️ Y EL BOTÓN NO SE DESHABILITA — es una decisión firmada, no un olvido (261/design §5.4,
+   * alternativa A13). La asimetría con el mensajero tiene un motivo concreto: él está en la calle
+   * con el paquete en la mano y enterarse al intentarlo le cuesta un viaje, así que su control va
+   * apagado de antemano; la tienda está en un escritorio y el rechazo es instantáneo y explicado.
+   * Deshabilitarlo aquí exigiría meter el día en `NovedadDTO` y derivar el booleano con un reloj
+   * en el servicio de novedades —tipo compartido, consulta, derivación y tests— para una
+   * población que se midió en 2 órdenes. Si alguien siente la tentación de «ya que estamos», es
+   * alcance nuevo y se pregunta.
    */
   async function resolverDesdeAyuda(res: DesenlaceGestionDesdeAyuda) {
     const pendiente = ordenAGestionarDesdeAyuda;

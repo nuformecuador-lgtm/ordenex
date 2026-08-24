@@ -91,8 +91,14 @@ const ARBOLES_UI = ["app", "components"] as const;
 // otra tabla, la de gestiones del día — por eso caen siete instancias pero sólo seis archivos).
 // Ninguna descarga se pierde —se mudó al nuevo envoltorio— y por eso esto NO es una baja de
 // alcance: el detalle, con los siete nombres, está en `censo-tablas.ts`.
-const TOTAL_ARCHIVOS_CON_DATATABLE = 25;
-const TOTAL_INSTANCIAS_DATATABLE = 25;
+// FEATURE 258 (F3.1): 25 → 26 archivos y 25 → 26 instancias. La de más es el detalle de un
+// mensajero del tablero del día (`monitoreo/_components/DetalleMensajeroPanel.tsx`), que pasó
+// de una `<Table>` cruda a `<DataTable>`. **No es una tabla nueva para el usuario**: es la
+// misma que la feature 192 ya pintaba, ahora sobre la primitiva. Nace `fuera` con su motivo
+// escrito en `censo-tablas.ts` (es una vista de lectura dentro de un modal, y R34 de esa
+// ficha le prohíbe ofrecer acciones).
+const TOTAL_ARCHIVOS_CON_DATATABLE = 26;
+const TOTAL_INSTANCIAS_DATATABLE = 26;
 
 function listarTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
@@ -223,7 +229,9 @@ describe("guardia de cobertura del censo de tablas", () => {
     const excluidas = instancias.filter(
       (inst) => registro.get(inst.ruta)?.tablas[inst.indice]?.estado === "fuera",
     );
-    expect(excluidas.length).toBe(5);
+    // FEATURE 258 (F3.1): 5 -> 6 exclusiones. La de mas es el detalle del tablero del dia,
+    // que pasa de `<Table>` cruda a `<DataTable>` sin cambiar de alcance.
+    expect(excluidas.length).toBe(6);
     for (const inst of excluidas) {
       const tabla = registro.get(inst.ruta)!.tablas[inst.indice];
       expect(inst.declaraDescarga, `${inst.ruta} :: ${tabla.nombre}`).toBe(false);
@@ -249,7 +257,7 @@ describe("guardia de cobertura del censo de tablas", () => {
     const totalCensado =
       CENSO_DATATABLE.reduce((n, e) => n + e.tablas.length, 0) +
       CENSO_TABLAS_CRUDAS.reduce((n, e) => n + e.tablas.length, 0);
-    expect(totalCensado).toBe(26);
+    expect(totalCensado).toBe(27);
   });
 
   it("la FASE 1 del export queda cerrada: ninguna tabla del censo sigue pendiente", () => {
@@ -296,8 +304,13 @@ describe("guardia de cobertura del censo de tablas", () => {
     // Feature 196 (T5.2): 26 → 27 dentro de alcance y las 6 exclusiones NO se mueven. La de
     // más es el ranking congelado del histórico, que nace descargando: ninguna decisión de
     // alcance previa cambia.
+    //
+    // FEATURE 258 (F3.1): 6 -> 7 fuera de alcance, y las 20 dentro de alcance NO se mueven.
+    // La de mas es el detalle del tablero del dia, que pasa de `<Table>` cruda a
+    // `<DataTable>`: cambia la primitiva con la que se pinta, no lo que el usuario puede
+    // hacer con ella. Ninguna descarga se gana ni se pierde.
     expect(censadas.filter((t) => t.estado === "con_descarga")).toHaveLength(20);
-    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(6);
+    expect(censadas.filter((t) => t.estado === "fuera")).toHaveLength(7);
   });
 
   it("una tabla compartida declara TODAS las pantallas que la montan", () => {

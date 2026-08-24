@@ -3,6 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -33,6 +34,9 @@ function buildService(): IOrdenHistorialService {
   return new OrdenHistorialService(
     new OrdenRepository(prisma),
     new OrdenHistorialRepository(prisma),
+    // Feature 262 (B26): la SEGUNDA fuente del drawer. Sin este repo la linea de tiempo no
+    // tendria las correcciones del dia de reparto (R37) — y por eso el constructor lo EXIGE.
+    new OrdenDiaRepartoCambioRepository(prisma),
   );
 }
 

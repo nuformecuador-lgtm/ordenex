@@ -71,6 +71,8 @@ function servicioReal(estatusValue = "devuelta") {
             // del estatus (R36), que es lo que estos casos ya median.
             estatusValue,
             deletedAt: null,
+            // Feature 261 (B15): obligatorio en `OrdenParaHilo`. El hilo de notas no lo consume.
+            fechaReparto: null,
           }
         : null,
     ),

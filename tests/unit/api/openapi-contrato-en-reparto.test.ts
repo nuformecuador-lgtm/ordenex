@@ -160,15 +160,27 @@ describe("155/R42 — el contrato del canal por API key tras el retiro", () => {
 });
 
 describe("153/R13 — eventos publicos de webhook", () => {
-  // Feature 155/R43: paso de 9 a 10 con `por_recolectar_en_tienda`. Decision humana del
-  // 2026-08-21 (revierte 235/P4): de 10 a 11 con `ayuda_tienda`. Las dos ampliaciones son
-  // ADITIVAS: el conteo sube y ningun estado sale (lo verifica el test siguiente, contra la
-  // foto de la 153).
-  it("EVENTOS_PUBLICOS tiene 11 elementos (9 de la 153 + la 155 + `ayuda_tienda`)", () => {
-    expect(EVENTOS_PUBLICOS.size).toBe(11);
+  // Feature 155/R43: pasa de 9 a 10 con `por_recolectar_en_tienda`. La ampliacion es ADITIVA:
+  // el conteo sube y ningun estado sale (lo verifica el test siguiente, contra la foto de la 153).
+  //
+  // ⏳ 2026-08-22 (FEATURE 268/R1/R2/R18) — este aserto se puso ROJO A PROPOSITO y se actualiza CON
+  // LA DECISION ESCRITA AL LADO, que es su funcion (alternativa A6 del design 268, descartada:
+  // NUNCA se relaja a un `size` suelto ni se borra). Pasa de 10 a 12 porque la 268 REVIERTE
+  // DELIBERADAMENTE la decision 235/P4 (firmada el 2026-08-19) y mete en la politica las dos
+  // mitades del ciclo que hoy el integrador no ve: `ayuda_tienda` (la IDA) e `incidente` (el
+  // desenlace). Las dos mitades van juntas o no van: emitir la ida sin la vuelta —el rescate, que
+  // vuelve a emitir al vaciarse `ORIGENES_SIN_EVENTO_PUBLICO`— dejaria al integrador viendo entrar
+  // la orden en ayuda y no verla salir nunca, que es peor que el silencio de hoy.
+  //
+  // El conteo va ACOMPAÑADO, nunca solo: el `it` de abajo afirma value a value que los DOCE estan,
+  // asi que un intercambio (uno entra, otro sale) no puede colarse con el tamaño intacto.
+  it("EVENTOS_PUBLICOS tiene 12 elementos (10 previos + los dos que revierten 235/P4)", () => {
+    expect(EVENTOS_PUBLICOS.size).toBe(12);
   });
 
-  it("155/R43: los 9 eventos previos siguen TODOS en la politica (nadie deja de recibir)", () => {
+  it("155/R43 + 268/R3: los 10 eventos previos siguen TODOS en la politica, y los 2 nuevos entran", () => {
+    // R3: el cambio de la 268 es estrictamente ADITIVO — ningun integrador deja de recibir un
+    // evento que hoy recibe. Los diez primeros son la foto previa a la 268 y NO PUEDEN SALIR.
     for (const previo of [
       "en_ruta_bodega_central",
       "en_bodega_central",
@@ -179,9 +191,17 @@ describe("153/R13 — eventos publicos de webhook", () => {
       "rechazada",
       "devolviendo_a_tienda",
       "devuelta_a_tienda",
+      "por_recolectar_en_tienda",
     ] as const) {
       expect(EVENTOS_PUBLICOS.has(previo), `dejo de ser evento publico: ${previo}`).toBe(true);
     }
+    // 268/R1 y 268/R2: las dos altas, junto a los previos y no en un test aparte, para que la
+    // lista completa se lea de un vistazo.
+    for (const nuevo of ["ayuda_tienda", "incidente"] as const) {
+      expect(EVENTOS_PUBLICOS.has(nuevo), `no entro en la politica: ${nuevo}`).toBe(true);
+    }
+    // 268/R4: `devolucion_por_confirmar` SIGUE FUERA (239/P2, firmada). No entra «por simetria».
+    expect(EVENTOS_PUBLICOS.has("devolucion_por_confirmar")).toBe(false);
   });
 
   it("155/R43: el estado de nacimiento de la rama (b) ES evento publico", () => {
@@ -200,5 +220,69 @@ describe("153/R13 — eventos publicos de webhook", () => {
   it("todo evento publico existe en el catalogo (no hay estado desconocido, R14)", () => {
     const catalogo = new Set<string>(ORDER_STATUS_SEED);
     for (const evento of EVENTOS_PUBLICOS) expect(catalogo.has(evento)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Feature 268 — el VOCABULARIO PUBLICADO acompaña a la politica (R15/R16) y las evidencias de
+// incidente pasan a ser una forma legitima de `Evidencia.resultado` (R31).
+//
+// Por que aqui y no en `openapi-webhook-contrato.test.ts`: estos dos casos son sobre el catalogo
+// de estados de las RESPUESTAS REST y sobre un schema de `components`, que es exactamente lo que
+// este archivo custodia (los 4 bloques y su espejo). El archivo nuevo custodia la seccion
+// `webhooks:`, que es otra cosa.
+// ---------------------------------------------------------------------------------------------
+describe("268/R15/R16 — los dos values nuevos estan publicados en los 4 enums y en el .yaml", () => {
+  const enumsTs = enumsDeEstado(openApiSpec);
+
+  it("los 4 enums del objeto TS documentan `ayuda_tienda` e `incidente`", () => {
+    expect(enumsTs).toHaveLength(4);
+    for (const lista of enumsTs) {
+      expect(lista).toContain("ayuda_tienda");
+      expect(lista).toContain("incidente");
+      // Van AL FINAL, tras `devuelta_a_tienda`: el espejo del .yaml se compara posicionalmente,
+      // asi que la posicion es parte del contrato, no un detalle de estilo.
+      expect(lista.slice(-2)).toEqual(["ayuda_tienda", "incidente"]);
+    }
+  });
+
+  it("los 4 bloques del .yaml los documentan en la MISMA posicion (espejo posicional)", () => {
+    const enumsYaml = enumsDelYaml(yaml);
+    expect(enumsYaml).toHaveLength(4);
+    for (let i = 0; i < enumsYaml.length; i++) {
+      expect(enumsYaml[i].slice(-2)).toEqual(["ayuda_tienda", "incidente"]);
+      expect(enumsYaml[i]).toEqual(enumsTs[i]);
+    }
+  });
+
+  it("268/R17: los dos values nuevos existen en ORDER_STATUS_SEED (sin estados fantasma)", () => {
+    const catalogo = new Set<string>(ORDER_STATUS_SEED);
+    expect(catalogo.has("ayuda_tienda")).toBe(true);
+    expect(catalogo.has("incidente")).toBe(true);
+  });
+});
+
+describe("268/R31 — `Evidencia.resultado` admite `incidente`, en el TS y en el .yaml", () => {
+  // El detalle por API key deja de exponer solo entrega y rechazo: las evidencias del incidente
+  // (por las DOS procedencias, mensajero y admin) viajan con el mismo shape y `resultado:
+  // "incidente"`. Sin este value publicado, el enlace `evidenciasUrl` del webhook apuntaria a un
+  // campo cuyo contrato niega lo que devuelve.
+  const resultadoTs = openApiSpec.components.schemas.Evidencia.properties.resultado;
+
+  it("el enum del objeto TS son exactamente los tres resultados, con `incidente` al final", () => {
+    expect(resultadoTs.enum).toEqual(["entregada", "rechazada", "incidente"]);
+    // Y NO es el catalogo de estados: no contiene `por_recoger`, asi que `esEnumDeEstado` no lo
+    // cuenta y los cuatro bloques del guard de arriba siguen siendo cuatro.
+    expect(esEnumDeEstado(resultadoTs.enum)).toBe(false);
+  });
+
+  it("el .yaml publica el MISMO enum de tres values", () => {
+    const bloque = /\n {8}resultado:\n {10}type: string\n {10}enum:\n((?: {12}- \w+\n)+)/.exec(yaml);
+    expect(bloque, "no se encontro el enum de `Evidencia.resultado` en el .yaml").not.toBeNull();
+    const values = bloque![1]
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => l.trim().replace(/^-\s+/, ""));
+    expect(values).toEqual(["entregada", "rechazada", "incidente"]);
   });
 });

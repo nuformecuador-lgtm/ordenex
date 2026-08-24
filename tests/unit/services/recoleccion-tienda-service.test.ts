@@ -10,6 +10,8 @@ import type {
   OrdenTransicionRow,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 157 — RECOLECCION EN TIENDA por el mensajero (`por_recolectar_en_tienda` ->
 // `en_ruta_bodega_central`, arista #43). Espejo de `recepcion-bodega-central-service.test.ts`
@@ -35,7 +37,7 @@ type RepoMethods = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recolectarEnTienda"
-  | "findMensajerosBloqueadosParaGestion"
+  | "findBloqueoDetalle"
 >;
 
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
@@ -48,6 +50,9 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
     zonaEsGam: false,
     tiendaId: "store-9",
     mensajeroAsignadoId: MENSAJERO.usuarioId,
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. Ninguna
+    // asercion de este archivo cambia.
+    fechaReparto: null,
     ...overrides,
   };
 }
@@ -58,7 +63,7 @@ function makeRepo(overrides: Partial<RepoMethods> = {}) {
     findByNumGuiaForTransicion: vi.fn().mockResolvedValue(transicionRow()),
     findEstatusIdByValue: vi.fn().mockResolvedValue(DESTINO_ID),
     recolectarEnTienda: vi.fn().mockResolvedValue(true),
-    findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue(new Set<string>()),
+    findBloqueoDetalle: vi.fn().mockResolvedValue(SIN_BLOQUEO),
     ...overrides,
   };
   // Feature 167: los dos repos de LECTURA son dependencias REQUERIDAS del constructor (una
@@ -91,13 +96,13 @@ describe("RecoleccionTiendaService — autorizacion y bloqueo (R29/R31)", () => 
 
   it("R31: con un cierre pendiente NO recolecta, y ni siquiera llega a leer la orden", async () => {
     const { repo, service } = makeRepo({
-      findMensajerosBloqueadosParaGestion: vi.fn().mockResolvedValue(new Set([MENSAJERO.usuarioId])),
+      findBloqueoDetalle: vi.fn().mockResolvedValue(bloqueoConVencido()),
     });
 
     const res = await service.recolectarEnTienda(NUM_GUIA, MENSAJERO);
 
     expect(res).toMatchObject({ status: "conflict" });
-    expect(res).toHaveProperty("motivo", expect.stringMatching(/cierre pendiente/i));
+    expect(res).toHaveProperty("motivo", expect.stringMatching(/no puedes entregar, cobrar ni recibir trabajo nuevo/i));
     // El bloqueo va ANTES de leer: un mensajero bloqueado no averigua si la guia existe.
     expect(repo.findByNumGuiaForTransicion).not.toHaveBeenCalled();
     expect(repo.recolectarEnTienda).not.toHaveBeenCalled();
@@ -368,7 +373,7 @@ function makeLectura(opts: LecturaOpts = {}) {
     findByNumGuiaForTransicion: vi.fn(),
     findEstatusIdByValue: vi.fn(),
     recolectarEnTienda: vi.fn(),
-    findMensajerosBloqueadosParaGestion: vi.fn(),
+    findBloqueoDetalle: vi.fn(),
   };
   const repoGestion = {
     findMisAsignaciones: vi.fn().mockResolvedValue(opts.pendientes ?? []),
@@ -433,7 +438,7 @@ describe("listarRecoleccion — «Por recolectar» (R21/R38)", () => {
         findByNumGuiaForTransicion: vi.fn(),
         findEstatusIdByValue: vi.fn(),
         recolectarEnTienda: vi.fn(),
-        findMensajerosBloqueadosParaGestion: vi.fn(),
+        findBloqueoDetalle: vi.fn(),
       },
       repoGestion,
       historialFijo(),
@@ -741,7 +746,7 @@ describe("listarRecoleccion — la ventana de HOY es el dia natural de Costa Ric
         findByNumGuiaForTransicion: vi.fn(),
         findEstatusIdByValue: vi.fn(),
         recolectarEnTienda: vi.fn(),
-        findMensajerosBloqueadosParaGestion: vi.fn(),
+        findBloqueoDetalle: vi.fn(),
       },
       {
         findMisAsignaciones: vi.fn().mockResolvedValue([]),

@@ -328,6 +328,25 @@ export type OrdenListItemDTO = OrdenDTO & {
   // reprogramacion vigente; en las tabs que no son "reprogramada" lo normal es null.
   fechaReprogramacion?: string | null;
   /**
+   * FEATURE 262 (B8, design §7.2) — dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO por el
+   * repositorio. `null` = la orden no esta reservada para un dia que aun no ha llegado.
+   *
+   * PARA QUE: R16 exige que la pantalla de correccion muestre, POR ORDEN, el dia para el que esta
+   * marcada hoy («17496963 · hoy está para el 22 de agosto»). Es lo que impide corregir a ciegas un
+   * lote mixto.
+   *
+   * STRING Y NUNCA `Date`, por las dos razones que el propio tipo ya documenta en
+   * `fechaReprogramacion`: el `DataTable` de este repo descarta objetos al renderizar, y un
+   * `@db.Date` leido por Prisma es la medianoche UTC de esa fecha — formatearlo en el navegador con
+   * la hora local devuelve el dia ANTERIOR en media America (R17: ni una fecha se calcula en el
+   * cliente). Opcional (`?`) por el patron aditivo del resto del DTO: no rompe los fixtures de UI;
+   * el repositorio SIEMPRE lo envia.
+   *
+   * NO es una columna nueva del listado (limite declarado 2, A7): el dia se ve por orden DENTRO de
+   * la pantalla de correccion, que es donde se decide.
+   */
+  fechaRepartoISO?: string | null;
+  /**
    * Feature 160 (R11/R14/R16) + 215 (R6/R20): intentos de entrega de la orden, resueltos EN EL
    * MISMO LOTE de la lectura con el criterio UNICO de `OrdenHistorialService`. Desde la 215 ese
    * criterio es el numero de CIERRES APROBADOS distintos en los que la orden tuvo un resultado
@@ -343,10 +362,10 @@ export type OrdenListItemDTO = OrdenDTO & {
   intentosEntrega?: number;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
-  // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
-  // trae ademas su tarifa activa (relacion Usuario.tarifasTienda, 1:N por-tienda,
-  // el include se acota a la activa/no borrada). Cada relacion es nullable porque
-  // el `include` puede no resolver (FK opcional o dato ausente).
+  // que solo usa los escalares/`*Nombre` sigue funcionando. La `tarifa` anidada en
+  // `tienda` NO sale de ese join (feature 274): la resuelve la cascada (tienda, zona)
+  // en una query adicional por pagina. Cada relacion es nullable porque el `include`
+  // puede no resolver (FK opcional o dato ausente).
   relaciones?: OrdenListItemRelaciones;
 };
 
@@ -356,15 +375,37 @@ export interface RefNombre {
   nombre: string;
 }
 
-// Tienda de la orden (Usuario con rol adminTienda) con su tarifa activa anidada
-// (relacion Usuario.tarifasTienda, 1:N por-tienda). `tarifa` es la ACTIVA (o
-// `null` si la tienda aun no tiene tarifa activa). NUNCA expone campos sensibles
-// del usuario (passwordHash, etc.): solo datos de contacto e identidad legibles.
+// Tienda de la orden (Usuario con rol adminTienda) con la tarifa de la orden anidada.
+// FEATURE 274: `tarifa` ya no es "la tarifa activa de la tienda" —eso dejo de existir con la
+// columna `status`—: es la fila que gana la CASCADA (tienda, zona) para el par de ESTA orden,
+// la MISMA que factura el cierre de dia (R18/R21). `null` = ningun nivel de la cascada tiene
+// fila para ese par; el listado lo muestra con importes en "0.00" y no bloquea (R20/R39).
+// NUNCA expone campos sensibles del usuario (passwordHash, etc.): solo datos de contacto e
+// identidad legibles.
 export interface OrdenTiendaRef {
   id: string;
   nombre: string;
-  email: string;
-  telefono: string;
+  /**
+   * Feature 260 (T0.1, R13/R43) — CONTACTO DE LA TIENDA, AHORA OPCIONAL. `OrdenRepository`
+   * SIEMPRE los envia (`toRelaciones`, sobre el `select` de `WITH_ESTATUS_Y_TIENDA`), asi que
+   * `/ordenes` los sigue recibiendo exactamente igual que antes (R46: en alcance `global` no
+   * se recorta nada). El `?` no dice "puede que no existan": dice que **se pueden retirar**.
+   *
+   * POR QUE, y por que aqui y no en un tipo derivado: el detalle del tablero del dia
+   * (`OrdenDetalleDia`) es este mismo elemento, y en alcance `zona` —el `adminSatelite`, que
+   * tiene PROHIBIDO `/ordenes` (`app/(app)/ordenes/page.tsx`: `notFound()`)— el contacto de la
+   * tienda NO puede viajar al cliente. Con `string` obligatorio, "no viajar" no era
+   * representable. Derivar el tipo del detalle con `Omit`/`Partial<Pick<…>>` en vez de aflojar
+   * este dejaria de hacerlo asignable a `OrdenListItemDTO` y montar las columnas del listado
+   * exigiria un **cast** — la costura por la que las dos pantallas divergen sin que el
+   * compilador diga nada (`specs/260-detalle-columnas-listado/design.md` §3.1 y §13/A8).
+   *
+   * Medido antes de tocarlo (design.md §1.10): estos dos campos se ESCRIBEN en
+   * `OrdenRepository.toRelaciones` y NO LOS LEE NADIE por este tipo. El `tienda.telefono` de
+   * `GestionOrdenRepository` sale de un `select` propio y alimenta otro DTO.
+   */
+  email?: string;
+  telefono?: string;
   tarifa: TarifaDTO | null;
 }
 

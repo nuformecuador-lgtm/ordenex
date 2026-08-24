@@ -5,8 +5,22 @@ import type { HistorialContexto } from "@/lib/interfaces/repositories/IOrdenHist
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// FEATURE 260 (B3) — el recorte de alcance del tablero, importado como TIPO en vez de declarado
+// otra vez aqui: una segunda union de las mismas dos variantes es una segunda definicion que
+// puede quedarse atras (design.md §4.2 y §13/A7).
+//
+// ⚠️ SE IMPORTA DEL MODULO SIN DEPENDENCIAS, NO DE `ITableroDiaRepository`. El design daba por
+// gratis esa segunda arista entre puertos y NO lo es: abria un camino de imports desde este
+// puerto hasta `lib/analytics/alcance` y `lib/auth/acceso-total`, que un panel de CLIENTE ya
+// alcanza. Lo puso rojo `tests/unit/guards/pagos-captura.guardia.test.ts`, y el camino entero
+// esta escrito en `lib/types/alcance-tablero.ts`.
+import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
+// Feature 271 — el conteo N/V y el detalle del bloqueo viven en un modulo PURO
+// (`lib/utils/bloqueo-cierre.ts`), no en este puerto: los importan a la vez la capa de datos y el
+// formateador de textos que la UI consume, y este puerto arrastra `@prisma/client`.
+import type { BloqueoDetalle, ConteoCierresAbiertos } from "@/lib/utils/bloqueo-cierre";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -275,6 +289,63 @@ export interface OrdenTransicionRow {
    * de test de las features 138/139, y el repo SIEMPRE lo emite.
    */
   mensajeroAsignadoId?: string | null;
+  /**
+   * FEATURE 262 (B3, design §8) — dia de reparto de la orden. `null` = no esta reservada para un
+   * dia que aun no ha llegado (orden anterior a la 246, o sin mensajero).
+   *
+   * ⚠️ OBLIGATORIO, SIN `?`, Y ES DELIBERADO. El patron aditivo `?` de los campos de arriba existe
+   * para no romper fixtures; aqui romperlos es lo que se BUSCA. Este campo es insumo de una GUARDA
+   * (R5: «sin dia no hay correccion», R7: «ya es de ese dia»), y un fixture que se olvidara de
+   * emitirlo dejaria la guarda evaluando `undefined` — es decir, apagada, en silencio y en verde.
+   * Que el build senale uno a uno a todos los que lo construyen es el mecanismo, no un accidente.
+   * Mismo criterio que 261/B1.
+   */
+  fechaReparto: Date | null;
+}
+
+// --- Feature 262: correccion del dia de reparto de un lote ya asignado ---
+
+/**
+ * Feature 262 (design §15.5) — UNA orden efectivamente corregida, con lo que el AVISO al mensajero
+ * necesita para poder emitirse fuera de la transaccion (D7).
+ *
+ * Sale del `RETURNING` del `UPDATE` guardado, asi que describe EXACTAMENTE las filas que ganaron la
+ * guarda: ni una de mas —porque el lote se aborta entero si alguna pierde— ni una de menos (R22).
+ */
+export interface CorreccionDiaAplicada {
+  ordenId: string;
+  /** Fila de `orden_dia_reparto_cambio`: LA ENTIDAD del aviso (design §15.3, mata A20). */
+  cambioId: string;
+  /** NOT NULL por el `WHERE` (`mensajero_asignado_id IS NOT NULL`): sin mensajero no se corrige. */
+  mensajeroAsignadoId: string;
+  /** Para el anexo del aviso: la guia si existe, y si no la remision (patron del rechazo). */
+  numGuia: number | null;
+  numRemision: string;
+  /** El dia que la fila tenia EN EL INSTANTE DE LA ESCRITURA (R24), no el que se leyo al abrir. */
+  fechaAnterior: Date;
+  fechaNueva: Date;
+}
+
+/**
+ * Feature 262 (design §6.1, R8/R9) — al menos una orden del lote NO gano la guarda de escritura
+ * (estado / mensajero / dia presente / dia distinto / no borrada / zona). Se LANZA dentro de la
+ * `$transaction` para revertirla ENTERA: todo-o-nada REAL, mismo criterio que la 149 y por el mismo
+ * motivo — quien selecciona 20 ordenes y lee «se corrigieron 17» no sabe cuales tres faltan ni por
+ * que (A13).
+ *
+ * El `throw` va ANTES de escribir el rastro, asi que un lote abortado no deja NI UNA fila en
+ * `orden_dia_reparto_cambio` (R22).
+ *
+ * `ordenIdsNoCorregidas` NO se pinta como texto en la UI: sirve para que el service re-lea esas
+ * ordenes y componga el `detalle` por orden con motivos tipados (patron `detalleCarrera` de la 149).
+ */
+export class CorreccionDiaConflictoError extends Error {
+  constructor(public readonly ordenIdsNoCorregidas: readonly string[]) {
+    super(
+      `correccion de dia de reparto: ${ordenIdsNoCorregidas.length} orden(es) del lote no se corrigieron`,
+    );
+    this.name = "CorreccionDiaConflictoError";
+  }
 }
 
 /**
@@ -479,6 +550,14 @@ export interface RecepcionSateliteRow {
   // service, siempre presente: el `select` de WITH_RECEPCION_SATELITE lo pide explicito).
   // Alimenta el sort prioridad-first del grupo "Recibidas" (R7) y el resalte (R8).
   prioridad: boolean;
+  /**
+   * Feature 262 (B8, R16): dia de reparto de la orden, `YYYY-MM-DD` YA SERIALIZADO. `null` = sin
+   * dia. Lo consume la pantalla de correccion del listado satelite, que necesita el MISMO dato que
+   * la de `/ordenes` — el `adminSatelite` es una de las dos bodegas que ELIGEN el dia al asignar
+   * (D1), asi que tiene que poder ver cual eligio antes de corregirlo. Nunca un `Date`: el
+   * navegador no construye fechas (R17).
+   */
+  fechaRepartoISO: string | null;
 }
 
 /**
@@ -553,6 +632,13 @@ export interface BodegaBloqueoResult {
   cierresAbiertos?: number;
   totalMensajeros?: number;
   mensajerosConCierreIds?: string[];
+  /**
+   * Feature 271 (R32/R34) — los mensajeros de la zona que la REGLA N/V declara BLOQUEADOS. Es un
+   * subconjunto de `mensajerosConCierreIds` y NO lo mismo: un mensajero con UN solo `solicitado`
+   * esta en la lista informativa y NO en esta. El selector deshabilita EXACTAMENTE a estos, que
+   * son los que el servidor va a rechazar.
+   */
+  mensajerosBloqueadosIds?: string[];
 }
 
 // Feature 87 (T2, design §2.1) — fila de una orden en `devuelta` para la lista de NOVEDADES.
@@ -641,10 +727,15 @@ export interface ApiOrdenListResult {
 }
 
 // Feature 106 — UNA evidencia de la orden en el detalle. El repo devuelve el `storagePath`
-// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los dos que llevan
-// evidencia (entregada/rechazada), garantizado por el WHERE de la query.
+// CRUDO (el service lo firma y NUNCA lo expone). `resultado` acotado a los que llevan
+// evidencia, garantizado por el WHERE / el mapeo de la query.
+//
+// FEATURE 268/R27 (2026-08-22): `incidente` es el TERCER value, y cubre las DOS procedencias del
+// incidente —la gestion del mensajero y el registro `orden_incidente` del admin—, que se mapean a
+// este mismo tipo. No hay campo que diga de cual viene: es deliberado (el integrador pregunta por
+// las fotos del incidente, no por quien las subio) y anadirlo seria exponer estructura interna.
 export interface ApiOrdenEvidenciaRow {
-  resultado: "entregada" | "rechazada";
+  resultado: "entregada" | "rechazada" | "incidente";
   storagePath: string;
   contentType: string | null;
 }
@@ -681,10 +772,18 @@ export interface IOrdenRepository {
    * Feature 106/R6/R7/R11: pagina de ordenes cuyo `tienda_id` = `ownerId` (owner FORZADO en
    * el WHERE, no ampliable desde el input) y no borradas (`deleted_at IS NULL`). Opcional
    * `estatusId` acota por estado. Devuelve `{ items, total }` para la paginacion offset/limit.
+   *
+   * Feature 257 (R18/R20): los filtros opcionales llegan como ESCALARES TIPADOS, nunca como un
+   * fragmento de `WhereInput`; asi ningun llamador puede colar un `tiendaId` propio. La ventana
+   * de `createdAt` es SEMIABIERTA: `createdAtDesde` inclusiva, `createdAtHasta` EXCLUSIVA.
    */
   listByOwner(params: {
     ownerId: string;
     estatusId?: string;
+    createdAtDesde?: Date;
+    createdAtHasta?: Date;
+    numGuia?: number;
+    numRemision?: string;
     skip: number;
     take: number;
   }): Promise<ApiOrdenListResult>;
@@ -773,6 +872,27 @@ export interface IOrdenRepository {
   /** Excluye borradas (deleted_at IS NOT NULL); null si no existe o esta borrada (R34). */
   findById(id: string): Promise<OrdenDTO | null>;
   list(params: ListOrdenesParams): Promise<ListOrdenesResult>;
+  /**
+   * FEATURE 260 (B3, R2/R11/R19/R40) — LOS ELEMENTOS DE LISTADO DE UNA LISTA **ACOTADA** DE IDS.
+   *
+   * Reusa el `include` `WITH_ESTATUS_Y_TIENDA` y el mapeo `toListItemDTO`, los MISMOS que
+   * `list()`: misma proyeccion, mismo derivador de dinero (`costosListadoOrden`, feature 204) y
+   * ninguna segunda forma que pueda desviarse. Si el listado gana un campo, quien consuma esto
+   * lo gana solo.
+   *
+   * El `filtro` es la MISMA frontera multi-tenant que ya aplico quien produjo los ids, y se
+   * aplica DOS VECES a proposito (R11): esta consulta no se fia de que la lista llegara ya
+   * recortada. Es una union de dos variantes y no un `zonaId?: string` suelto porque un
+   * `string | undefined` convierte «no se» en «sin recorte», que es la forma fail-open que la
+   * feature 192 se nego a escribir.
+   *
+   * `deletedAt: null` (R19) y `ids` vacio -> `[]` SIN consultar (R5). No ordena: quien pide los
+   * ids ya decidio el orden y lo reimpone al hidratar (R4).
+   */
+  findListItemsByIds(
+    ids: readonly string[],
+    filtro: FiltroAlcanceTablero,
+  ): Promise<OrdenListItemDTO[]>;
   /**
    * Aplica cambios solo si la orden existe y no esta borrada; null si no (R36).
    * Feature 49/#11 (R19/R20): SI el update cambia `estatus_id`, registra la transicion en
@@ -1322,39 +1442,115 @@ export interface IOrdenRepository {
     zonaId: string | null,
   ): Promise<number>;
 
-  // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17/R23) ---
+  // --- Feature 262: corregir el dia de reparto de un lote YA asignado (R1/R8/R9/R20-R24) ---
 
   /**
-   * R12/R16 + feature 241 (regla firmada 2026-08-20): de `ids`, los mensajeros BLOQUEADOS
-   * PARA GESTIONAR Y COBRAR = tienen al menos un `cierre_dia` en `vencido` o `rechazado`.
+   * Feature 262 (design §6.1) — CORRIGE el dia de reparto de un lote de ordenes ya asignadas, en
+   * UNA transaccion y sin tocar NADA MAS: ni el estado, ni el mensajero, ni la guia, ni
+   * `asignado_at` (R1/R27).
    *
-   * `solicitado` NO bloquea (es espera del admin, no del mensajero) y `aprobado` tampoco
-   * (es terminal). Y el bloqueo es SOLO de gestion: RECIBIR ASIGNACIONES no se bloquea
-   * nunca, por lo que ninguna superficie de asignacion debe pedir este metodo en su
-   * `Pick<IOrdenRepository, ...>`. El porque completo, en `OrdenRepository`.
+   * Tres pasos dentro de la misma `$transaction`:
    *
-   * Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
+   *  1. `SELECT "id","fecha_reparto" ... ORDER BY "id" FOR UPDATE` — foto Y BLOQUEO del dia
+   *     anterior. El `FOR UPDATE` es lo que impide que esa foto quede rancia entre el SELECT y el
+   *     UPDATE (R24): un rastro que afirma un `fecha_anterior` que ya no era es peor que no tener
+   *     rastro. El `ORDER BY "id"` da un orden de bloqueo determinista entre dos lotes que se
+   *     solapen.
+   *  2. `UPDATE` GUARDADO con las cinco guardas (estado admitido / mensajero presente / dia
+   *     presente / dia DISTINTO del elegido / no borrada) + `zona_id` cuando `zonaId` no es null
+   *     (adminSatelite: defensa en profundidad anti-TOCTOU, patron `deshacerAsignacionLote`), y
+   *     `RETURNING` de lo que el aviso necesita. El `SET` es EXACTAMENTE
+   *     `{fecha_reparto, updated_at}` — esa huella es la que vigila la guardia de la invariante
+   *     (`fecha-reparto-acompana-asignado-at.guardia.test.ts`, clausula d2): si alguien le suma
+   *     `mensajero_asignado_id` o `estatus_id`, la guardia se pone ROJA, que es justo lo que debe
+   *     pasar porque eso ya no seria una correccion de dia.
+   *  3. TODO-O-NADA (R8): si el numero de filas devueltas no es `ordenIds.length`, LANZA
+   *     `CorreccionDiaConflictoError` y la tx revierte ENTERA. El `throw` va ANTES del rastro.
+   *  4. El RASTRO, en la MISMA tx y sobre EXACTAMENTE las que ganaron (R22), via el choke point
+   *     `registrarCambioDiaReparto`.
+   *
+   * `fecha` llega YA RESUELTA por el service (`resolverFechaReparto(dia, now)`): un solo sitio que
+   * sabe traducir «hoy/mañana» (doctrina de `lib/utils/dia-reparto.ts`). El repo NO lee ningun
+   * reloj. Y entra al SQL como TEXTO `YYYY-MM-DD` con `::date` explicito (`fechaRepartoComoTexto`),
+   * nunca como `Date`: con un `Date`, el driver `pg` lo serializa como `timestamptz` y Postgres lo
+   * convierte a `date` con el `TimeZone` DE LA SESION — el dia dependeria de la configuracion del
+   * servidor de base de datos.
+   *
+   * Devuelve una `CorreccionDiaAplicada` por orden corregida (siempre `ordenIds.length`, por el
+   * todo-o-nada). El AVISO al mensajero NO se emite aqui: se emite FUERA de la transaccion y
+   * best-effort (design §15.5, A22) — dentro, un error de sentencia abortaria la tx y un aviso
+   * caido REVERTIRIA una correccion legitima, devolviendo la orden al estado inalcanzable del que
+   * esta ficha existe para sacarla.
    */
-  findMensajerosBloqueadosParaGestion(ids: string[]): Promise<Set<string>>;
+  corregirDiaRepartoLote(
+    ordenIds: readonly string[],
+    fecha: Date,
+    estatusIds: readonly string[],
+    zonaId: string | null,
+    ctx: { actorUsuarioId: string; motivo: string },
+  ): Promise<CorreccionDiaAplicada[]>;
+
+  // --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO (R1-R12) ---
+
   /**
-   * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado para gestionar: mismo
-   * criterio que `findMensajerosBloqueadosParaGestion`, agregado por zona. Una zona sin
-   * mensajeros nunca aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot
+   * FEATURE 271 (R1) — de `ids`, cuantos cierres ABIERTOS tiene cada mensajero (N) y cuantos de
+   * esos son RE-SOLICITABLES (V). UNA sola consulta (`groupBy`) para el lote entero, contra el
+   * indice `(mensajero_id, estado)`.
+   *
+   * Un mensajero SIN cierres abiertos NO aparece en el `Map`: el llamador lo lee como
+   * `SIN_CIERRES_ABIERTOS` (`{ n: 0, v: 0 }`), que es LIBRE. Vacio si `ids` esta vacio.
+   *
+   * Es la TRANSFORMACION del antiguo `findMensajerosConCierreAbierto` (privado, `Set<string>`), no
+   * un metodo nuevo a su lado: dos formas de preguntar lo mismo es como el aviso de la UI y el
+   * servidor acabaron diciendo cosas distintas el 2026-08-18.
+   */
+  contarCierresAbiertosPorMensajero(ids: string[]): Promise<Map<string, ConteoCierresAbiertos>>;
+  /**
+   * FEATURE 271 (R3/R10) — de `ids`, los mensajeros BLOQUEADOS por la regla N/V:
+   * `N >= 2` **o** `V >= 1`. Renombrado de `findMensajerosBloqueadosPorCierres`.
+   *
+   * ⚠️ EL ALCANCE CAMBIO EL 2026-08-23 y por eso cambio el nombre. Ya no bloquea «solo gestionar»:
+   * bloquea gestionar, cobrar Y RECIBIR TRABAJO NUEVO —reparto Y recoleccion, sin excepcion—. Las
+   * superficies de asignacion SI deben pedirlo en su `Pick<IOrdenRepository, ...>`; que estuviera
+   * fuera era el mecanismo de la asimetria de la 241, que esta ficha revierte. Lo que SOBREVIVE de
+   * aquella regla: un `solicitado` a secas (N=1, V=0) NO bloquea.
+   *
+   * Vacio si `ids` esta vacio.
+   */
+  findMensajerosBloqueadosPorCierres(ids: string[]): Promise<Set<string>>;
+  /**
+   * FEATURE 271 (R11/R43/R57-R61) — el DETALLE del bloqueo de UN mensajero: N, V y CUAL cierre toca
+   * resolver primero (el MAS VIEJO por `solicitado_at` ASC con desempate estable por `id` ASC),
+   * con la fecha de su JORNADA derivada —no la de su creacion, que en un `vencido` va un dia por
+   * delante—. Alimenta el aviso, el motivo del `conflict` y la pantalla con UNA sola forma.
+   *
+   * ⚠️ TRAE **DOS** CIERRES (R18, 2026-08-23): ademas del abierto mas viejo (`aResolverPrimero`,
+   * el orden de la cola) trae el RE-SOLICITABLE mas viejo (`aReenviarPrimero`, lo que EL puede
+   * tocar). En el caso 6 —`solicitado` viejo + `vencido` nuevo, `N=2 V=1`— NO son el mismo, y de
+   * solo el primero se deduce «espera a la administracion» cuando `solicitarCierre` si le deja
+   * reenviar el segundo.
+   */
+  findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle>;
+  /**
+   * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado: mismo criterio que
+   * `findMensajerosBloqueadosPorCierres`, agregado por zona. Una zona sin mensajeros nunca
+   * aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot
    * `cierre_dia.destino_zona_id`.
    *
    * ⚠️ Sin consumidor de produccion desde el 2026-08-18 (feature 241 §2.6).
    */
   findZonasConMensajeroBloqueado(): Promise<Set<string>>;
   /**
-   * R17 (regla estricta F1.4-Q4) + feature 241: la bodega satelite de `zonaId` esta
+   * R17 (regla estricta F1.4-Q4) + feature 241 -> 271: la bodega satelite de `zonaId` esta
    * BLOQUEADA si tiene un `cierre_bodega` propio `zona_id=zonaId`, `estado='solicitado'`
    * —su cierre hacia la central, causa (ii), mismo criterio que la guardia de unicidad de
-   * la feature 40—. La causa (i) («algun mensajero suyo tiene un cierre abierto») NO
-   * bloquea: congelaba la bodega entera por una persona y recibir ordenes no se bloquea.
+   * la feature 40—. La causa (i) («algun mensajero suyo tiene un cierre abierto») SIGUE SIN
+   * bloquear (271/R34): esta ficha bloquea al MENSAJERO, no a su bodega entera.
    *
    * Los flags viajan igual para que el borde distinga el motivo: `porCierreBodega` es el
-   * veto y `porMensajeros` (+ `cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`,
-   * los TRES estados abiertos) es un AVISO informativo.
+   * veto; `porMensajeros` (+ `cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`,
+   * los TRES estados abiertos) es un AVISO informativo; y `mensajerosBloqueadosIds` es la
+   * lista con la REGLA N/V, la que el selector debe deshabilitar (271/R32).
    */
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 

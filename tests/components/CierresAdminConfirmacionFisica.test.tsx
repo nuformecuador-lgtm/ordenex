@@ -226,6 +226,8 @@ const INC_1 = makeGestion({
 /** Programa el detalle que devolverá `verCierreDetalle` con los grupos indicados. */
 function conGrupos(grupos: Partial<CierreGrupos>) {
   verDetalleMock.mockResolvedValue({
+    ordenesSinGestion: [],
+    sinGestionRegistrado: true,
     status: "ok",
     desgloseIngresoBodegaRechazos: { sla: "0.00", manual: "0.00", total: "0.00" },
     cierre: makeResumen({ cierreId: "c1", estado: "solicitado" }),

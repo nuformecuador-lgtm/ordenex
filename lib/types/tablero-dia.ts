@@ -10,6 +10,11 @@
 import type { GestionResultado } from "@prisma/client";
 
 import type { MotivoDenegacion } from "@/lib/analytics/alcance";
+// FEATURE 260 — importacion de TIPO: se borra al compilar y no arrastra un byte al navegador,
+// asi que la cabecera de este modulo («no importa `repositories/`, `services/`, `@/lib/db` ni
+// `next/headers`») sigue siendo cierta. Es lo que permite que la fila del detalle SEA la del
+// listado sin declarar un tipo paralelo (design.md §3.2).
+import type { OrdenListItemDTO, OrdenTiendaRef } from "@/lib/types/orden";
 import { ORDER_STATUS_SEED, type OrderStatusValue } from "@/lib/types/order-status";
 
 /* -------------------------------------------------------------------------- */
@@ -135,6 +140,34 @@ export interface FilaTableroDia {
 /** R30 — los totales tienen la forma de una fila menos su identidad. */
 export type TotalesTableroDia = Omit<FilaTableroDia, "mensajeroId" | "mensajeroNombre">;
 
+/**
+ * FEATURE 258 (B2.1, R50/R52) — un punto de la serie de entregas ACUMULADAS del dia.
+ *
+ * `hora` es la hora de PARED de Costa Rica (0..23) del dia representado; `acumulado` es el
+ * numero de ordenes entregadas desde el inicio del dia CR hasta el FIN de esa hora.
+ *
+ * ⚠️ EL ACUMULADO DE UNA HORA PUEDE BAJAR ENTRE DOS LECTURAS, Y ESO ES CORRECTO (R72).
+ * La serie NO es un registro historico de lo que se vio a cada hora: se RECONSTRUYE entera en
+ * cada lectura contando, igual que el contador `entregadas`, la ULTIMA gestion vigente del dia
+ * de cada orden. Si una orden entregada a las 10:00 se reprograma a las 15:00, su ultima
+ * gestion ya no es `entregada` y el punto de las 10:00 baja en uno — exactamente igual que baja
+ * el contador `entregadas` que se pinta a dos centimetros de la linea.
+ *
+ * Se decidio asi el 2026-08-21 (decision humana, `design.md` §3 y §12.6) despues de ver este
+ * caso concreto: se prefiere una curva que retrocede y CUADRA a una curva bonita que miente.
+ * La alternativa —contar cualquier gestion `entregada` del dia— da una curva que nunca baja
+ * pero infla (una orden con dos gestiones aportaria dos) y contradice al contador de al lado.
+ *
+ * **Si estas leyendo esto porque viste el grafico retroceder: no es un bug, no lo "arregles".**
+ * `tests/integration/tablero-dia-ritmo.test.ts` lo fija como comportamiento ESPERADO.
+ */
+export interface PuntoRitmoEntregas {
+  /** Hora de pared de Costa Rica, 0..23. */
+  readonly hora: number;
+  /** Ordenes entregadas desde el inicio del dia CR hasta el FIN de `hora`. */
+  readonly acumulado: number;
+}
+
 export interface TableroDia {
   /** `YYYY-MM-DD` calendario de Costa Rica del dia representado (R34). */
   readonly fecha: string;
@@ -148,23 +181,99 @@ export interface TableroDia {
   readonly alcance: "global" | "zona";
   readonly filas: readonly FilaTableroDia[];
   readonly totales: TotalesTableroDia;
+  /**
+   * FEATURE 258 (R50/R52/R54) — entregas ACUMULADAS por hora de pared de CR, sin huecos desde
+   * la hora 0 hasta la hora de pared del instante de lectura. Su ULTIMO punto es
+   * `totales.entregadas`: la serie es una particion por hora del MISMO conjunto de ordenes que
+   * produce ese contador, asi que el cuadre es cierto por construccion y no a posteriori.
+   *
+   * Campo OBLIGATORIO a proposito, no opcional: opcional dejaria que una implementacion lo
+   * olvidara y la pantalla se quedara sin linea sin que nada se pusiera rojo.
+   *
+   * Nunca esta vacia mientras haya dia: si el dia no registra ninguna entrega, trae los puntos
+   * `0..H` con `acumulado` 0. Es la CAPA DE PRESENTACION la que decide no dibujar una linea
+   * plana a cero (R59), no el contrato.
+   */
+  readonly ritmoEntregas: readonly PuntoRitmoEntregas[];
+}
+
+/**
+ * FEATURE 258 (B2.1c, R43/R65) — LA UNICA SUMA DE LOS OCHO CONTADORES DEL ARBOL.
+ *
+ * Vivia dentro de `TableroDiaService` (feature 192, R30) y se MUEVE aqui sin cambiar una
+ * linea de su cuerpo. El motivo no es cosmetico: con filtro por nombre activo, el bloque de
+ * totales se recalcula sobre las tarjetas VISIBLES (R43), y ese recalculo lo hace un Client
+ * Component que NO puede importar el servicio sin arrastrarse `lib/analytics/alcance` y el
+ * adaptador de cache al navegador. Este modulo es exactamente el sitio: su cabecera ya declara
+ * que no importa `repositories/`, `services/`, `@/lib/db` ni `next/headers`.
+ *
+ * ⛔ NO se duplica (R65). Dos implementaciones de esta suma son dos identidades de ocho
+ * sumandos distintas, y pueden divergir sin que ningun test lo note: es justo la falla que R3
+ * persigue. Los dos consumidores —el servicio, para los totales del dia; el modulo de cliente,
+ * para los de lo filtrado— llaman a ESTA.
+ *
+ * Los totales los suma quien pinta y no la base, para que sean por construccion la suma de lo
+ * que el usuario ve y para que la identidad de R3 se herede de cada fila al bloque de totales.
+ */
+export function sumarTotalesTablero(filas: readonly FilaTableroDia[]): TotalesTableroDia {
+  return filas.reduce<TotalesTableroDia>(
+    (acc, f) => ({
+      asignadas: acc.asignadas + f.asignadas,
+      entregadas: acc.entregadas + f.entregadas,
+      reprogramadas: acc.reprogramadas + f.reprogramadas,
+      devueltas: acc.devueltas + f.devueltas,
+      rechazadas: acc.rechazadas + f.rechazadas,
+      incidentes: acc.incidentes + f.incidentes,
+      sinRecoger: acc.sinRecoger + f.sinRecoger,
+      enReparto: acc.enReparto + f.enReparto,
+      otros: acc.otros + f.otros,
+    }),
+    {
+      asignadas: 0,
+      entregadas: 0,
+      reprogramadas: 0,
+      devueltas: 0,
+      rechazadas: 0,
+      incidentes: 0,
+      sinRecoger: 0,
+      enReparto: 0,
+      otros: 0,
+    },
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* 3. El detalle de un mensajero (design.md §6, R47-R51)                       */
 /* -------------------------------------------------------------------------- */
 
-export interface OrdenDetalleDia {
-  readonly ordenId: string;
-  readonly numGuia: string | null;
-  /** Value crudo de `order_status`; la etiqueta y el color los pone `EstatusBadge` (R48). */
-  readonly estatus: string;
+/**
+ * FEATURE 260 (T0.2, R1/R18) — LA FILA DEL DETALLE **ES** LA DEL LISTADO DE ORDENES.
+ *
+ * Sustituye a los siete campos propios de la feature 192 (R47-R51) y REVIERTE su R49 —el
+ * alcance cerrado en cuatro columnas—, con fecha y motivo escritos en
+ * `specs/192-tablero-dia-mensajeros/requirements.md`. La decision no se borra: se anota.
+ *
+ * Es una INTERSECCION con `OrdenListItemDTO`, no un tipo paralelo, y eso es lo que hace que
+ * `ordenesColumns` se monte sobre estas filas **sin un solo cast** (`Column<T>` es
+ * contravariante en el parametro de `render` bajo `strictFunctionTypes`, asi que un subtipo
+ * estricto encaja). Un tipo paralelo seria una segunda declaracion que puede divergir del
+ * listado sin que nada se ponga rojo — justo lo que esta feature viene a cerrar (R2/R26).
+ *
+ * Solo añade DOS campos, y ninguno de los dos existe en el listado porque ninguno es de la
+ * orden: son del DIA. Nada mas se añade nunca aqui (R18: subconjunto, jamas superconjunto).
+ */
+export type OrdenDetalleDia = OrdenListItemDTO & {
+  /** Ultima gestion VIGENTE del dia de esa orden; `null` si hoy no se gestiono. */
   readonly resultadoDelDia: GestionResultado | null;
-  readonly cliente: string;
-  readonly destino: string;
-  /** ISO-8601 UTC. */
+  /**
+   * ISO-8601 UTC. ORDENA la pagina del dia y NO se pinta en ninguna columna: se conserva
+   * porque es el campo contra el que los tests de integracion afirman ese orden.
+   */
   readonly asignadoAt: string;
-}
+};
+
+/** El alcance con el que se resolvio una lectura del tablero. Lista blanca, no el rol. */
+export type AlcanceTableroDia = "global" | "zona";
 
 export interface DetalleMensajeroDia {
   readonly mensajeroId: string;
@@ -174,6 +283,97 @@ export interface DetalleMensajeroDia {
   readonly total: number;
   readonly pagina: number;
   readonly pageSize: number;
+  /**
+   * FEATURE 260 (R12) — CON QUE ALCANCE SE RESOLVIO. Decide que columnas monta la pantalla
+   * (R14). Viaja en la respuesta y NO se deduce en el cliente: un componente de cliente no
+   * puede leer el rol —lo prohibe la clausula (c) del guardia de frontera— y tampoco debe,
+   * porque el alcance ya lo resolvio el servidor y aqui solo se consume su respuesta.
+   */
+  readonly alcance: AlcanceTableroDia;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3.bis El recorte por alcance (design.md §5, R13/R43/R46)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * FEATURE 260 (T0.3, R13/R43) — LO QUE **NO SALE** DEL ALCANCE GLOBAL. Una sola declaracion.
+ *
+ * POR QUE EXISTE, y no es cosmetica: `/ordenes` no admite al satelite de zona
+ * (`app/(app)/ordenes/page.tsx` le hace `notFound()`), asi que estas cifras y estos datos de
+ * contacto son cosas que ese alcance NUNCA ha podido ver. `/monitoreo` si lo admite, y no
+ * puede ser la puerta de atras. El monto a cobrar SI se conserva en los dos alcances (R17):
+ * ya lo ve en su propia pantalla de recepcion.
+ *
+ * El recorte es COLUMNA **y** DATO. Las dos mitades, o el cero miente: sin la mitad servidor
+ * el dato viaja al navegador aunque no se pinte y se lee con un `View source`; sin la mitad
+ * pantalla, `PriceLabel` convierte el hueco en `₡0`, que se lee como «esta orden no paga
+ * flete» — una afirmacion falsa, peor que enseñar la cifra (R15).
+ *
+ * El `satisfies` ata cada nombre a su tipo: un rename en `lib/types/orden.ts` deja de
+ * COMPILAR aqui, en vez de filtrar el campo en silencio.
+ */
+export const CAMPOS_SOLO_ALCANCE_GLOBAL = {
+  orden: ["fleteConIva", "comisionConIva"],
+  tienda: ["email", "telefono", "tarifa"],
+} as const satisfies {
+  orden: readonly (keyof OrdenListItemDTO)[];
+  tienda: readonly (keyof OrdenTiendaRef)[];
+};
+
+/**
+ * R13/R46 — PURA. Con `global` devuelve la orden intacta (R46: no se recorta nada por debajo
+ * del techo de R18); con `zona`, sin los campos de `CAMPOS_SOLO_ALCANCE_GLOBAL`.
+ *
+ * Como se retira cada uno: los cuatro opcionales (`fleteConIva`, `comisionConIva`,
+ * `tienda.email`, `tienda.telefono`) SE BORRAN —la clave deja de existir, asi que no viaja ni
+ * como `undefined` en el JSON—; `tienda.tarifa` se pone a `null`, que es un valor legitimo del
+ * tipo y el que ya tiene una tienda sin tarifa activa. Ninguna columna montada en `zona` los
+ * lee, asi que ese `null` no puede leerse como una afirmacion falsa.
+ */
+export function recortarPorAlcance(
+  orden: OrdenDetalleDia,
+  alcance: AlcanceTableroDia,
+): OrdenDetalleDia {
+  if (alcance === "global") return orden;
+
+  const recortada = sinClaves(orden, CAMPOS_SOLO_ALCANCE_GLOBAL.orden);
+  const relaciones = orden.relaciones;
+  if (relaciones === undefined) return recortada;
+
+  return {
+    ...recortada,
+    relaciones: {
+      ...relaciones,
+      tienda: relaciones.tienda === null ? null : recortarTienda(relaciones.tienda),
+    },
+  };
+}
+
+/**
+ * Los tres campos de tienda de la lista, retirados DERIVANDOLOS de ella y no reescribiendo sus
+ * nombres aqui: una segunda lista es lo que R43 prohibe.
+ */
+function recortarTienda(tienda: OrdenTiendaRef): OrdenTiendaRef {
+  const recortada = sinClaves(tienda, CAMPOS_SOLO_ALCANCE_GLOBAL.tienda);
+  // `tarifa` es OBLIGATORIA en el tipo, asi que no puede desaparecer: se repone a `null`, el
+  // mismo valor que ya tiene una tienda sin tarifa activa. `email` y `telefono` si desaparecen.
+  return { ...recortada, tarifa: null };
+}
+
+/**
+ * Copia sin las claves dadas. `K extends keyof T` acepta solo nombres que EXISTEN en el tipo,
+ * asi que un rename en `lib/types/orden.ts` rompe la llamada en vez de filtrar en silencio; y
+ * `Partial<T>` en la copia es lo que hace representable el `delete`.
+ *
+ * El `as T` de la salida es deliberado y esta acotado: quien retira una clave OBLIGATORIA
+ * (`tarifa`) la repone inmediatamente, y quien retira opcionales no rompe nada. Sin el, cada
+ * llamador tendria que volver a enumerar los campos — la segunda lista que R43 prohibe.
+ */
+function sinClaves<T extends object, K extends keyof T>(objeto: T, claves: readonly K[]): T {
+  const copia: Partial<T> = { ...objeto };
+  for (const clave of claves) delete copia[clave];
+  return copia as T;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -8,7 +8,9 @@
 // supervisor y en el monitor de la bodega.
 
 import type { FilaTableroDia } from "@/lib/types/tablero-dia";
+import { cn } from "@/lib/utils";
 
+import { DENSIDAD_INICIAL, type DensidadTablero } from "./densidad";
 import { MensajeroCard } from "./MensajeroCard";
 
 /**
@@ -33,17 +35,29 @@ export function TableroDiaRejilla({
   filas,
   onSeleccionar,
   mensajeroSeleccionadoId = null,
+  densidad = DENSIDAD_INICIAL,
 }: Readonly<{
   filas: readonly FilaTableroDia[];
   onSeleccionar: (mensajeroId: string) => void;
   mensajeroSeleccionadoId?: string | null;
+  /**
+   * R45 — Feature 258. La densidad SOLO cambia cuantas columnas y cuanto `gap`; el ORDEN se
+   * sigue calculando aqui sobre el array y no depende de ella ni del ancho (R6).
+   */
+  densidad?: DensidadTablero;
 }>) {
   const ordenadas = ordenarFilasTablero(filas);
 
   return (
     <ul
       data-slot="tablero-dia-rejilla"
-      className="grid list-none grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+      data-densidad={densidad}
+      className={cn(
+        "grid list-none grid-cols-1",
+        densidad === "compacta"
+          ? "gap-2 sm:grid-cols-2 xl:grid-cols-4"
+          : "gap-3 sm:grid-cols-2 xl:grid-cols-3",
+      )}
     >
       {ordenadas.map((fila) => (
         <li key={fila.mensajeroId}>
@@ -51,6 +65,7 @@ export function TableroDiaRejilla({
             fila={fila}
             onSeleccionar={onSeleccionar}
             seleccionado={fila.mensajeroId === mensajeroSeleccionadoId}
+            densidad={densidad}
           />
         </li>
       ))}

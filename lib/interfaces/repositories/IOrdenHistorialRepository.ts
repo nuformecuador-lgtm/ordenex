@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type {
-  OrdenHistorialEntradaDTO,
+  OrdenHistorialTransicionDTO,
   OrdenHistorialOrigenTipo,
 } from "@/lib/types/orden-historial";
 import type { JobTxClient } from "@/lib/interfaces/repositories/IJobRepository";
@@ -85,8 +85,13 @@ export interface IOrdenHistorialRepository {
    * R26: linea de tiempo de UNA orden, ordenada cronologicamente (created_at asc), con los
    * `value` de estado origen/destino y el `nombre` del actor ya resueltos a DTO legible.
    * Usa el indice (orden_id, created_at) (R5).
+   *
+   * Feature 262 (B24/B25, design §14.5): devuelve el tipo ESTRECHO
+   * `OrdenHistorialTransicionDTO[]` y NO la union `OrdenHistorialEntradaDTO[]`. Este metodo lee
+   * `orden_historial_estado` y solo esa tabla: decirlo en la firma evita que alguien crea que ya
+   * trae las correcciones del dia de reparto. La FUSION de las dos fuentes es del servicio (R41).
    */
-  findHistorialByOrden(ordenId: string): Promise<OrdenHistorialEntradaDTO[]>;
+  findHistorialByOrden(ordenId: string): Promise<OrdenHistorialTransicionDTO[]>;
   /**
    * Feature 215 (R1/R3/R5/R8/R29/R30/R31/R32) — cuenta los INTENTOS DE ENTREGA de `ordenId`.
    *
@@ -121,7 +126,7 @@ export interface IOrdenHistorialRepository {
    *   - Las ordenes SIN filas que cumplan el criterio NO aparecen en el Map: el llamador
    *     resuelve el default con `?? 0` (R8).
    *   - `ordenIds` vacio -> Map vacio SIN emitir consulta alguna (R7), patron
-   *     `OrdenRepository.findMensajerosBloqueadosParaGestion`.
+   *     `OrdenRepository.findMensajerosBloqueadosPorCierres`.
    */
   contarIntentosVigentesEnLote(ordenIds: string[]): Promise<Map<string, number>>;
   /**
@@ -172,7 +177,7 @@ export interface IOrdenHistorialRepository {
    * (actor_usuario_id, origen_tipo, created_at), R32.
    *
    * `limite <= 0` -> lista vacia SIN emitir consulta (patron
-   * `contarIntentosVigentesEnLote` / `OrdenRepository.findMensajerosBloqueadosParaGestion`).
+   * `contarIntentosVigentesEnLote` / `OrdenRepository.findMensajerosBloqueadosPorCierres`).
    */
   findRecoleccionesDeActor(
     actorUsuarioId: string,

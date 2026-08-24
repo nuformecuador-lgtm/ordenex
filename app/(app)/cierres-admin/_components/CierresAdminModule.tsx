@@ -37,6 +37,7 @@ import {
 import type {
   CierreDetalleGestion,
   CierreGrupos,
+  CierreOrdenSinGestion,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import { montoValido } from "@/app/(app)/wallet/_components/wallet-labels";
@@ -308,6 +309,16 @@ interface DetalleAbierto {
   ganancia: string;
   /** Total general menos flete + IVA y comisión + IVA, derivado server-side (puede ser negativo). */
   pagoTienda: string;
+  /**
+   * Feature 264 (R7/R13) — las órdenes que el corte del día barrió a `sin_gestionar` al crear
+   * ESTE cierre. Sin un solo campo de dinero: no tienen gestión, así que no hay nada que sumar.
+   */
+  ordenesSinGestion: CierreOrdenSinGestion[];
+  /**
+   * Feature 264 (R27/R28) — viaja SIEMPRE junto a la lista. `[]` con `true` es «no hubo
+   * ninguna»; `[]` con `false` es «este cierre es anterior al registro y no lo sabemos».
+   */
+  sinGestionRegistrado: boolean;
 }
 
 /**
@@ -577,6 +588,11 @@ export function CierresAdminModule({
         desgloseIngresoBodegaRechazos: result.desgloseIngresoBodegaRechazos,
         ganancia: result.ganancia,
         pagoTienda: result.pagoTienda,
+        // Feature 264 (R30): los dos campos viajan JUNTOS desde el servicio hasta la hoja. No
+        // se derivan ni se rellenan aquí: `[]` y `false` significan cosas distintas y sólo el
+        // servidor sabe cuál es cuál.
+        ordenesSinGestion: result.ordenesSinGestion,
+        sinGestionRegistrado: result.sinGestionRegistrado,
       });
       return;
     }
@@ -1122,6 +1138,11 @@ export function CierresAdminModule({
               }
               ganancia={detalle.ganancia}
               pagoTienda={detalle.pagoTienda}
+              // Feature 264 (R30): las MISMAS dos props que pasa el módulo del mensajero. El
+              // componente es uno; que pintara la sección en una superficie y la callara en la
+              // otra es el arreglo a medias que se corrigió en la 263.
+              ordenesSinGestion={detalle.ordenesSinGestion}
+              sinGestionRegistrado={detalle.sinGestionRegistrado}
               onVerEvidencia={setEvidencia}
               // Ausente cuando no se puede corregir: la hoja vuelve a ser de solo lectura sin
               // que la fila tenga que saber nada de roles ni de estados.

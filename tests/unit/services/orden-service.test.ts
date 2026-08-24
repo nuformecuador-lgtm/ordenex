@@ -4,6 +4,7 @@ import { OrdenService } from "@/lib/services/OrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 import {
   fakeIntentosEnLote,
   llamadasIntentos,
@@ -49,6 +50,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
   return {
     findById: vi.fn().mockResolvedValue(dto()),
     list: vi.fn().mockResolvedValue({ items: [listItem()], total: 1 }),
+    // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
+    findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn().mockResolvedValue(dto()),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
@@ -79,7 +82,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
+    // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,
@@ -146,6 +152,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findRechazadasSlaByTienda: vi.fn().mockResolvedValue([]),
     // Feature 149: writer de la reversion de asignacion, exigido por IOrdenRepository.
     deshacerAsignacionLote: vi.fn(async () => 0),
+    // Feature 262: writer de la correccion del dia de reparto, exigido por IOrdenRepository.
+    corregirDiaRepartoLote: vi.fn(async () => []),
     ...overrides,
   };
 }

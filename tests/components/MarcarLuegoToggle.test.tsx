@@ -10,6 +10,7 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 115 (T8) — control de "gestionar más tarde" en la card del mensajero. Se mockea la
 // Server Action (`"use server"` con Prisma detrás), el toast y el router para probar el envío
@@ -88,6 +89,9 @@ const RUTA_VIGENTE: RutaResumenDTO = {
   estado: "vigente",
   calculadaAt: null,
   origenFuente: "gps",
+  // Feature 265 (R45): `null` = no consta quien ordeno las paradas. Es lo que exige el tipo,
+  // no un test que fallara: sin marca, la pantalla no dice nada del orden.
+  secuenciaFuente: null,
   paradasSinOptimizar: 0,
   trazado: null,
   tramoSiguiente: null,
@@ -100,7 +104,7 @@ function renderModule(porGestionar: MiAsignacionDTO[]) {
       conAyuda={[]}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
-      bloqueado={false}
+      bloqueo={SIN_BLOQUEO}
     />,
   );
 }

@@ -43,7 +43,7 @@ type RepoMethods = Pick<
   // `AsignacionSateliteRepo`. Esa diferencia es deliberada y es lo que hace que el
   // `not.toHaveBeenCalled()` de mas abajo afirme una decision de diseño y no solo la
   // implementacion de hoy: el espia esta ahi, disponible, y aun asi no se toca.
-  | "findMensajerosBloqueadosParaGestion"
+  | "findMensajerosBloqueadosPorCierres"
   | "findParaAsignabilidad" // feature 92/R8
 >;
 
@@ -56,6 +56,10 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
     zonaId: ZONA,
     zonaEsGam: false,
     tiendaId: "store-1",
+    // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion (es insumo
+    // de una guarda de la correccion del dia). `null` = la orden aun no esta asignada, que es el
+    // estado de partida de estos casos. Ninguna asercion de este archivo cambia.
+    fechaReparto: null,
     ...overrides,
   };
 }
@@ -74,7 +78,7 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
       porMensajeros: false,
       porCierreBodega: false,
     })),
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 92 (R8): filas que consume el gate de coordenadas.
     findParaAsignabilidad: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, direccion: "x", latitud: 9.9, longitud: -84.1, geocodeStatus: "OK" })),
@@ -363,9 +367,28 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
   // llevaba dentro su propio `NOT EXISTS` sobre `cierre_dia` y devolvia 0 filas, y este mismo test
   // estaba verde mientras la accion fallaba en produccion. Quien mide el WHERE es
   // `orden-repository.asignacion-satelite.test.ts`, y ahi esta la otra mitad de la propiedad.
-  it("mensajero con cierre pendiente -> se asigna igual (R14 retirada)", async () => {
+  // ⚠️ ESTE CASO SE DIO LA VUELTA EL 2026-08-23 (FEATURE 271, R29/R30), Y ESTA ES LA SUPERFICIE DEL
+  // INCIDENTE DEL 18/08. Decia «se asigna igual (R14 retirada)» y afirmaba que el predicado ni
+  // siquiera estaba en el `Pick` del service. El humano revirtio esa mitad: acumular dos cierres —o
+  // arrastrar uno re-solicitable— bloquea TAMBIEN recibir trabajo nuevo. El predicado VUELVE al
+  // `Pick`, y su presencia alli es ahora el mecanismo (antes lo era su ausencia).
+  it("mensajero BLOQUEADO -> conflict, y NINGUNA orden cambia (feature 271/R29/R30)", async () => {
     const repo = fakeRepo({
-      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
+      findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set([MENSAJERO])),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res.status).toBe("conflict");
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled(); // R30: todo-o-nada
+    expect(repo.findMensajerosBloqueadosPorCierres).toHaveBeenCalledWith([MENSAJERO]);
+  });
+
+  it("mensajero LIBRE -> se asigna: la guarda no bloquea de mas", async () => {
+    // El contraste obligatorio: sin el, el `conflict` de arriba podria venir de otra guarda.
+    const repo = fakeRepo({
+      findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const res = await newService(repo).asignar(
       { ordenIds: ["o1"], mensajeroId: MENSAJERO },
@@ -373,9 +396,6 @@ describe("AsignacionSateliteService.asignar — bloqueo (feature 41/R14/R18)", (
     );
     expect(res.status).toBe("ok");
     expect(repo.asignarSateliteLote).toHaveBeenCalled();
-    // Y no se consulta siquiera: el doble lo ofrece y declara BLOQUEADO a este mensajero, pero el
-    // service no puede llamarlo — el metodo no esta en su `Pick`. Recibir no se bloquea nunca.
-    expect(repo.findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
   });
 
   it("camino feliz sin bloqueo -> ok (los dobles por defecto no bloquean)", async () => {

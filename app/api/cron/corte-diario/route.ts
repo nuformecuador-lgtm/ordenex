@@ -10,10 +10,11 @@ import { CorteDiarioRepository } from "@/lib/repositories/CorteDiarioRepository"
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadCronConfig } from "@/lib/config/cron";
+import { notificarCierreDiaVencidoReal } from "@/lib/notificaciones/notificadores";
 
 export interface CorteDiarioDeps {
   // Secreto esperado (inyectable en tests). Por defecto, `CRON_SECRET` del entorno.
@@ -27,10 +28,28 @@ function buildService(): ICorteDiarioService {
     new CorteDiarioRepository(prisma),
     // Feature 69/T10 + decision (f): el corte diario usa el MISMO `crearCierre`, asi que
     // congela `cierre_detail` por construccion. Necesita el mismo resolver de tarifa.
-    new CierreDiaRepository(prisma, new TarifaVigentePorTiendaRepository(prisma)),
+    new CierreDiaRepository(prisma, new TarifaVigenteRepository(prisma)),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
     new TarifaZonaMensajeroRepository(prisma),
+    // ⚠️ FEATURE 271 (R38/R39) — EL LOGGER VA EXPLICITO, Y ESA ES LA CORRECCION.
+    //
+    // `CorteDiarioService` recibe el logger en la posicion 6 y el notificador en la 7. Esta
+    // llamada pasaba CINCO argumentos, asi que el notificador se quedaba con su default NO-OP y
+    // el aviso de «tu cierre del dia vencio» —el que mas se emite de toda la ficha, y el unico que
+    // se dispara solo, cada noche y sin nadie mirando— NO SE EMITIA NUNCA. Con la suite entera en
+    // verde: el censo de `notificacion-notificadores-reales.test.ts` comprobaba que el DEFAULT del
+    // service fuera el no-op, que es justo lo que seguia siendo verdad.
+    //
+    // Para llegar al septimo hay que nombrar al sexto. Se repite el default del service en vez de
+    // exportarlo porque este es el composition root: decidir a donde va el aviso agregado de los
+    // mensajeros sin zona (P2/R24, un conteo sin PII) es exactamente su trabajo.
+    { warn: (m: string) => console.warn(m) },
+    // FEATURE 271 (T6.4, R38/R39): COMPOSITION ROOT del aviso «tu cierre del dia vencio». Se
+    // cablea AQUI y no como default del service (ver `lib/notificaciones/notificadores.ts`): el
+    // default es el no-op para que ninguna suite escriba avisos en la base, que es COMPARTIDA.
+    // Hay guardia que lo comprueba (`notificacion-notificadores-reales.test.ts`).
+    notificarCierreDiaVencidoReal,
   );
 }
 

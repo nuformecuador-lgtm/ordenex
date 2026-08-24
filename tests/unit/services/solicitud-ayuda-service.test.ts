@@ -52,6 +52,9 @@ function ordenParaHilo(over: Partial<OrdenParaHilo> = {}): OrdenParaHilo {
     // 235 es una LISTA por rol; `[0]` es `en_reparto`, el estado desde el que se pide ayuda.
     estatusValue: VENTANA_ESCRITURA.mensajero[0],
     deletedAt: null,
+    // Feature 261 (B15): `fechaReparto` es OBLIGATORIO en `OrdenParaHilo` (insumo de la puerta
+    // A de la via de la tienda). `null` = sin reserva, el caso por defecto.
+    fechaReparto: null,
     ...over,
   };
 }

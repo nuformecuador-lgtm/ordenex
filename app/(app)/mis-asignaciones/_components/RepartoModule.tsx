@@ -11,14 +11,23 @@ import {
   escogerParaGestion,
   liberarGestion,
 } from "@/lib/actions/mis-asignaciones";
-// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready). Desde la
-// 167 lo COMPARTEN los dos portales del mensajero (Entregas y Recolección), así que vive en
-// `lib/constants/` para que no puedan divergir en un mensaje que el humano declaró preciso.
-import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
+// Feature 111/R12 -> FEATURE 271 (T9.1/T9.2): el aviso del bloqueo dejó de ser una constante y
+// pasó a ser un FORMATEADOR (texto separado, i18n-ready). Lo COMPARTEN los cuatro portales del
+// mensajero —Entregas, Por recoger, Recolección y Cierre del día— y vive en `lib/constants/`
+// para que no puedan divergir en un mensaje que el humano declaró preciso.
+//
+// ⚠️ POR QUÉ YA NO PUEDE SER FIJO: el aviso tiene que CONTAR cuántos cierres arrastra el
+// mensajero y cuál toca resolver primero (R43), y eso no cabe en una cadena constante. `conCta:
+// true` porque este portal NO es «Cierre del día»: hay que decirle a dónde ir (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+// Feature 261 (F3, R15): el motivo del bloqueo por reserva sale de la fuente ÚNICA — la misma
+// frase que pinta la card, la que devuelve el servidor y la que lee la tienda.
+import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
 import { normalizeName } from "@/lib/utils/normalize";
 
 import { coincideBusqueda } from "./mis-asignaciones-buscador";
@@ -85,11 +94,17 @@ export interface RepartoModuleProps {
   /** Feature 97 (R27/R28/R30): estado de la ruta optimizada que produjo el orden. */
   ruta: RutaResumenDTO;
   /**
-   * Feature 111/R12/R14: `true` si el mensajero está BLOQUEADO (cierre pendiente).
-   * El bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los controles de
-   * escoger y gestionar. Defensa SUAVE; el backend (R1/R4) es la defensa real.
+   * Feature 111/R12/R14 -> FEATURE 271 (T9.1): el DETALLE del bloqueo, no un booleano.
+   *
+   * Trae el veredicto (`bloqueado`) y con qué se ha llegado a él: cuántos cierres arrastra el
+   * mensajero, cuántos espera que él reenvíe y cuál toca resolver primero. La pantalla no
+   * re-deriva nada (R10): lo calcula el MISMO predicado que aplica el servidor al rechazar, así
+   * que el aviso no puede prometer lo que el servidor va a negar.
+   *
+   * Con `bloqueado` el bloqueo es TOTAL: se muestra el aviso y se desactivan/guardan los
+   * controles de escoger y gestionar. Defensa SUAVE; el backend (R25) es la defensa real.
    */
-  bloqueado: boolean;
+  bloqueo: BloqueoDetalle;
 }
 
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
@@ -139,10 +154,19 @@ export function RepartoModule({
   conAyuda,
   ordenEnGestionId,
   ruta,
-  bloqueado,
+  bloqueo,
 }: RepartoModuleProps) {
   const router = useRouter();
   const toast = useToast();
+
+  // FEATURE 271 (T9.1): el veredicto sale del detalle, no se re-deriva. Todo lo que este módulo
+  // apaga (foco, escoger, gestionar) cuelga de este booleano, exactamente como antes; lo que
+  // cambia es de dónde viene y que ahora el aviso puede CONTAR.
+  const bloqueado = bloqueo.bloqueado;
+  // El texto del aviso, compuesto UNA vez: lo pinta el panel y lo dice el toast de la guarda
+  // suave. Dos llamadas darían dos cadenas idénticas, pero también dos sitios donde cambiar
+  // `conCta` a medias.
+  const avisoDeBloqueo = avisoBloqueo(bloqueo, { conCta: true });
 
   // Feature 97: última ubicación GPS capturada por el botón de sincronización. Se usa como
   // punto de partida del mapa. Sobrevive a `router.refresh()` (estado de cliente), así que el
@@ -290,6 +314,14 @@ export function RepartoModule({
   // R24: aviso de que el punto de partida usado es aproximado (no GPS reciente).
   const origenAproximado =
     ruta.origenFuente === "centroide" || ruta.origenFuente === "ultima_conocida";
+  // Feature 265 (R38/R43/R44/R45) — el ORDEN de las paradas lo calculó la app, no el servicio
+  // de rutas. Es una señal DISTINTA de `origenAproximado`: aquélla dice DESDE DÓNDE se calculó
+  // la ruta y ésta dice QUIÉN decidió el orden. Pueden darse a la vez y NO se funden (R43).
+  //
+  // Se compara contra `"local"` y no contra `!== "proveedor"` a propósito: `null` significa NO
+  // CONSTA (ruta calculada antes de esta feature, o 0/1 parada) y ahí la pantalla se calla —ni
+  // avisa ni afirma que el orden vino de fuera (R45).
+  const ordenAproximado = ruta.secuenciaFuente === "local";
 
   // Feature 92 (seguimiento): posición EN VIVO. No cuesta ninguna llamada facturada —la da el
   // navegador— y solo arranca si el permiso ya consta concedido (R25: nunca se fuerza).
@@ -361,6 +393,11 @@ export function RepartoModule({
   // 111/R14: si el mensajero está BLOQUEADO no se puede escoger (defensa suave).
   function seleccionar(orden: MiAsignacionDTO) {
     if (bloqueado) return;
+    // Feature 261 (F3, R12): la orden RESERVADA para un día posterior no se lleva al panel de
+    // gestión. Misma defensa suave que la de arriba —silenciosa, porque a esta función sólo se
+    // llega desde un control que ya está deshabilitado— y con la misma defensa real detrás: el
+    // servidor rechaza igual (R3/R5).
+    if (orden.esParaManana) return;
     if (ordenEnGestionId !== null && ordenEnGestionId !== orden.id) return;
     setSeleccionId(orden.id);
   }
@@ -373,7 +410,16 @@ export function RepartoModule({
     // Feature 111/R14: guarda suave. El mensajero bloqueado no puede escoger para
     // gestión; se le remite a resolver su cierre. El backend (R1/R4) rechaza igual.
     if (bloqueado) {
-      toast.error(BLOQUEO_AVISO);
+      toast.error(avisoDeBloqueo);
+      return false;
+    }
+    // Feature 261 (F3, R12/R13) — Y LA MISMA GUARDA AQUÍ, que no es redundante: el panel arranca
+    // en la PRIMERA orden del grupo, así que una reservada puede estar delante sin haber pulsado
+    // ningún botón de card. Sin esto, el `conflict` del servidor se traduciría a «ya tienes otra
+    // orden activa en gestión», que es falso y manda a buscar un problema que no existe. El texto
+    // sale de la fuente única, con el día que la orden trae consigo (R15).
+    if (detalleOrden.esParaManana) {
+      toast.error(avisoReservaParaOtroDia(detalleOrden.fechaRepartoISO));
       return false;
     }
     const result = await escogerParaGestion({ ordenId: detalleOrden.id });
@@ -451,11 +497,19 @@ export function RepartoModule({
                 (feature 111/R14) y mientras HAYA una gestión activa (R19/R20): ni las otras
                 órdenes —el puntero 1-a-1 no deja cambiar de orden— ni la que se está
                 gestionando, que ya está abierta en el panel y no hay nada que "gestionar"
-                de nuevo desde su card. */}
+                de nuevo desde su card.
+                Feature 261 (F3, R12): y con la orden RESERVADA para un día posterior, que es
+                una cuarta condición de la MISMA familia y por eso vive en la misma expresión.
+                El mensajero está en la calle con el paquete en la mano: enterarse ANTES de
+                intentarlo le ahorra sacar la caja de la furgoneta. El porqué no lo dice el
+                botón gris —eso sería un misterio— sino el aviso en palabras que la card pinta
+                encima (F2). Y la card sigue montada ENTERA: se restringe la ACCIÓN, no la
+                visibilidad (R9), igual que con el cierre pendiente. */}
             <GestionarOrdenCardButton
               numRemision={orden.numRemision}
               disabled={
                 bloqueado ||
+                Boolean(orden.esParaManana) ||
                 ordenEnGestionId !== null ||
                 // La que YA está en el panel: es la que se está gestionando ahora mismo, así
                 // que su botón no ofrece nada (llevaría al panel donde ya está) y confirmar
@@ -564,7 +618,7 @@ export function RepartoModule({
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoDeBloqueo}
         </p>
       ) : null}
 
@@ -646,6 +700,29 @@ export function RepartoModule({
                 <AlertDescription>
                   La ruta cambió desde el último cálculo. Pulsa «Sincronizar
                   ruta» para recalcular el orden de entrega.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {/* Feature 265 (R38/R40/R41/R42/R44): el orden de las paradas lo calculó la app.
+                `variant="default"` y NO `destructive`: esto no es un error, es una ruta
+                utilizable que conviene revisar — el rojo está reservado al aviso de arriba.
+
+                Va AQUÍ, fuera del acordeón del mapa, y no es un detalle de maquetación: el
+                orden manda en la LISTA de abajo, que se ve siempre, mientras que el mapa se
+                pliega. Un aviso sobre el orden escondido dentro de un mapa cerrado es un aviso
+                que no existe.
+
+                El texto dice QUÉ pasa y QUÉ hacer, y NO dice por qué (R44): al mensajero no le
+                sirve saber si faltó una credencial o si el servicio de rutas no pudo con las
+                paradas, le sirve saber que debe revisar el orden antes de salir. Sin jerga
+                interna (R41) y sin coordenadas, direcciones, guías ni ids (R42). */}
+            {ordenAproximado ? (
+              <Alert variant="default">
+                <AlertTitle>El orden de las paradas es aproximado</AlertTitle>
+                <AlertDescription>
+                  Lo calculamos en la app, por cercanía en línea recta: no toma
+                  en cuenta calles ni tráfico. Revísalo antes de salir.
                 </AlertDescription>
               </Alert>
             ) : null}

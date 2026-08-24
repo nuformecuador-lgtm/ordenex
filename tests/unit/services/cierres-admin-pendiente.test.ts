@@ -96,6 +96,8 @@ function newService(repo: ICierresAdminRepository, liquidacion = fakeLiquidacion
     findCentralZonaId: vi.fn(async () => "z-central"),
   } as unknown as IZonaRepository;
   const ordenRepo = {
+    // Feature 271 (T7.1, R48): el estado de bloqueo del mensajero viaja en la fila del cierre.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
     findUsuarioZonaId: vi.fn(async () => "z-sat"),
     // Feature 239 (T2.1, R9): los DOS ids del ANCLAJE son obligatorios al aprobar — sin ellos la
     // aprobacion no ocurre. Los demas estados (la config OPCIONAL de la 109/139) siguen
@@ -343,6 +345,8 @@ describe("R26 — el detalle de un cierre tambien trae su pendiente", () => {
   function repoConDetalle(estado: CierreAdminResumenRow["estado"]): ICierresAdminRepository {
     return fakeRepo({
       findCierreByIdEnAlcance: vi.fn(async () => ({
+        sinGestion: [],
+        sinGestionRegistrado: true,
         cierre: row({ cierreId: "c1", estado }),
         gestiones: [],
       })),

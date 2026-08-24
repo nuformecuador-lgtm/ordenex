@@ -106,12 +106,19 @@ describe("asignarDesdeSatelite — borde (R1/R15/R19)", () => {
 
 // --- listarMensajerosSatelite (R2/R5/R6) ---
 
-type MensajerosRepo = Pick<IOrdenRepository, "findUsuarioZonaId" | "findMensajerosByZona">;
+type MensajerosRepo = Pick<
+  IOrdenRepository,
+  | "findUsuarioZonaId"
+  | "findMensajerosByZona"
+  | "findMensajerosBloqueadosPorCierres" // feature 271/R32
+>;
 
 function buildRepo(overrides: Partial<MensajerosRepo> = {}): MensajerosRepo {
   return {
     findUsuarioZonaId: vi.fn(async () => "z-satelite"),
     findMensajerosByZona: vi.fn(async () => [{ id: MENSAJERO, nombre: "Ana" }]),
+    // Feature 271 (R32): el selector marca a los que el servidor va a rechazar al asignar.
+    findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
     ...overrides,
   };
 }
@@ -134,7 +141,11 @@ describe("listarMensajerosSatelite — scoped a la zona del actor (R2/R5/R6)", (
   it("R2/R5: solo mensajeros de la zona del actor (findMensajerosByZona con esa zona)", async () => {
     const ordenRepo = buildRepo();
     const r = await listarMensajerosSatelite({ ordenRepo, getActor: actorAdmin });
-    expect(r).toEqual({ status: "ok", mensajeros: [{ id: MENSAJERO, nombre: "Ana" }] });
+    expect(r).toEqual({
+      status: "ok",
+      mensajeros: [{ id: MENSAJERO, nombre: "Ana" }],
+      bloqueadosIds: [], // feature 271/R32
+    });
     // R2: la zona se resuelve server-side por el usuarioId del actor.
     expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("as1");
     expect(ordenRepo.findMensajerosByZona).toHaveBeenCalledWith("z-satelite");

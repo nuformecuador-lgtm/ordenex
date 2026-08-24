@@ -7,6 +7,7 @@ import type {
   OrigenUbicacion,
   ReemplazarSecuenciaMeta,
   RutaOptimizadaDTO,
+  SecuenciaFuentePersistida,
   TrazadoPersistido,
   TramoPersistido,
 } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
@@ -49,6 +50,17 @@ function toTrazado(row: TrazadoColumnas): TrazadoPersistido | null {
   };
 }
 
+/**
+ * Feature 265 (R35/R45) — estrecha la columna TEXT al vocabulario del dominio. Cualquier otro
+ * valor —incluida una fila vieja sin marca— cae a `null`, que significa NO CONSTA. El default
+ * defensivo NO es `"proveedor"` a proposito: dar por bueno que un orden vino del proveedor
+ * cuando no consta es justo la afirmacion que R45 prohibe.
+ */
+function toSecuenciaFuente(valor: string | null): SecuenciaFuentePersistida | null {
+  if (valor === "proveedor" || valor === "local") return valor;
+  return null;
+}
+
 export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
   constructor(private readonly prisma: RutaPrismaClient) {}
 
@@ -81,6 +93,7 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
       origenFuente: row.origenFuente as OrigenFuente | null,
       huellaSet: row.huellaSet,
       ultimoError: row.ultimoError,
+      secuenciaFuente: toSecuenciaFuente(row.secuenciaFuente),
       trazado: toTrazado(row),
       tramoVivoAt: row.tramoVivoAt,
       secuenciaPorOrden: new Map(row.paradas.map((p) => [p.ordenId, p.secuencia])),
@@ -140,6 +153,10 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
         origenLng: meta.origen !== null ? new Prisma.Decimal(meta.origen.lng) : null,
         origenFuente: meta.origen?.fuente ?? null,
         huellaSet: meta.huellaSet,
+        // Feature 265 (R35/R36): la procedencia va en la MISMA escritura que la secuencia que
+        // describe. Se escribe siempre, tambien cuando es `null`: si se omitiera, la marca de
+        // la secuencia ANTERIOR quedaria pegada a un orden nuevo que no ordeno quien dice.
+        secuenciaFuente: meta.secuenciaFuente,
         // R27 a la inversa: una optimizacion exitosa LIMPIA el error anterior; si no, un
         // fallo viejo seguiria alimentando el aviso de la UI para siempre.
         ultimoError: null,
@@ -240,6 +257,11 @@ export class RutaOptimizadaRepository implements IRutaOptimizadaRepository {
   /**
    * R27: SOLO la cabecera. Las paradas NO se tocan — el ultimo orden optimizado valido se
    * conserva intacto y el sistema jamas cae en silencio a `createdAt desc`.
+   *
+   * ⚠️ Feature 265: NO TOCA `secuencia_fuente`, y es deliberado. Esa marca describe LA
+   * SECUENCIA PERSISTIDA, que en este caso es la vieja y sigue siendo tan buena o tan mala
+   * como era. Un intento fallido no cambia de donde salio el orden que el mensajero esta
+   * viendo; borrarla aqui apagaria el aviso de una ruta que sigue estando ordenada en local.
    */
   async marcarDesactualizada(mensajeroId: string, ultimoError: string): Promise<void> {
     await this.prisma.rutaOptimizada.upsert({

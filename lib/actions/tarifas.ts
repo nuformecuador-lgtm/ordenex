@@ -29,16 +29,13 @@ import type { ActionError } from "@/lib/types/tarifa";
 
 const idSchema = z.string().min(1);
 
-// design.md: no hay estado `conflict` para tarifas (id uuid, nombre no unico).
-// `toActionError` (compartido con ordenes) es superset con `conflict`; aqui se
-// angosta al `ActionError` propio de tarifas sin modificar el adaptador comun.
+// El diseno original decia que tarifas nunca produce `conflict` y esta funcion lo
+// hacia cumplir lanzando. YA NO ES CIERTO y por eso se abre: la tabla tiene un unico
+// `(zona_id, tienda_id)` (crear/actualizar pueden chocar) y el borrado es fisico
+// contra una FK RESTRICT desde `cierre_detail`. `ActionError` de tarifas ahora
+// incluye `conflict`, asi que el adaptador comun se usa tal cual.
 function toTarifaActionError(shape: AppErrorShape): ActionError {
-  const err = toActionError(shape);
-  if (err.status === "conflict") {
-    // El dominio de tarifas nunca produce un conflicto de unicidad (R26).
-    throw new Error(`unexpected conflict status in tarifas action: ${shape.code}`);
-  }
-  return err;
+  return toActionError(shape);
 }
 
 function buildTarifaService(): ITarifaService {
@@ -121,7 +118,7 @@ export async function actualizarTarifa(
   return isAppErrorShape(r) ? toTarifaActionError(r) : r;
 }
 
-/** R8/R24/R25: borrado logico de tarifa por id. */
+/** R8: borrado FISICO de tarifa por id. `conflict` si algun cierre la congelo. */
 export async function borrarTarifa(
   id: unknown,
   deps: TarifaActionDeps = {},

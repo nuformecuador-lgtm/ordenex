@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigenteResuelta,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { clavePar, elegirPorCascada, type ParTarifa } from "@/lib/utils/cascada-tarifa";
 
 // Feature 37 — tests unit del repositorio del cierre (mockea Prisma, sin DB real,
 // patron orden-repository.asignacion.test.ts). Cubre R3 (solo cierre_id IS NULL),
@@ -61,9 +62,20 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       // ninguna: el caso de siempre es que las registro el mensajero.
       findMany: vi.fn(async () => [] as { gestionOrdenId: string | null }[]),
     },
-    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    cierreDia: {
+      count: vi.fn(),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      // Feature 271: `findCierreParaAviso` lee UN cierre por su clave primaria (cierra M9).
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
     // Feature 69/T10: el snapshot y el resolver batch viven en la tx de `crearCierre`.
     cierreDetail: { createMany: vi.fn() },
+    // Feature 264 (B3/B9): el vinculo cierre <-> orden barrida. Se escribe DENTRO de la tx del
+    // corte y se lee en el detalle propio.
+    cierreSinGestion: { createMany: vi.fn(), findMany: vi.fn(async () => []) },
     tarifa: { findMany: vi.fn(), findFirst: vi.fn() },
     $transaction: vi.fn(),
     ...overrides,
@@ -71,19 +83,44 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 }
 
 // Feature 69/T10 (design §3.1) — doble del resolver de tarifa que `crearCierre` recibe por
-// constructor. Por defecto resuelve `null` para toda tienda (gap R9): los casos que no
+// constructor. Por defecto no hay NINGUNA fila de tarifa (gap R9/R23): los casos que no
 // afirman nada del snapshot no necesitan configurarlo.
-function buildTarifaRepo(
-  tarifas: Record<string, TarifaVigenteResuelta | null> = {},
-): ITarifaVigentePorTiendaRepository {
+//
+// Feature 274 (T5.3): el doble ya no es un diccionario por TIENDA. Recibe FILAS de `tarifas`
+// —con sus dos dimensiones nullables— y elige con `elegirPorCascada`, la MISMA funcion pura que
+// usa el repositorio real. Se hace asi a proposito: un doble que devolviera lo que se le pide
+// por tienda no podria distinguir "el cierre pasa la zona" de "el cierre no la pasa", que es
+// justo la regresion que R22 fija. Con este doble, un `crearCierre` que olvidara la zona
+// resolveria nivel 2 y el test de R22 se pondria rojo.
+type FilaTarifaDoble = TarifaVigenteResuelta & { tiendaId: string | null; zonaId: string | null };
+
+function buildTarifaRepo(filas: readonly FilaTarifaDoble[] = []): ITarifaVigenteRepository {
   return {
-    resolveTarifaPorTienda: vi.fn(async (tiendaId: string) => tarifas[tiendaId] ?? null),
-    resolveTarifasPorTiendas: vi.fn(async (_tx: unknown, tiendaIds: string[]) => {
-      const out = new Map<string, TarifaVigenteResuelta | null>();
-      for (const id of tiendaIds) out.set(id, tarifas[id] ?? null);
-      return out;
+    resolveTarifa: vi.fn(async (tiendaId: string, zonaId: string | null) => {
+      const par = { tiendaId, zonaId };
+      return elegirPorCascada(filas, [par]).get(clavePar(par)) ?? null;
     }),
-  } as unknown as ITarifaVigentePorTiendaRepository;
+    resolveTarifas: vi.fn(async (pares: readonly ParTarifa[]) => elegirPorCascada(filas, pares)),
+  } as unknown as ITarifaVigenteRepository;
+}
+
+/**
+ * Feature 264 (B3) — la fila TAL COMO LA PROYECTA el pre-SELECT del corte.
+ *
+ * Desde la 264 ese `select` trae ademas los seis descriptivos que el vinculo congela (R11). Los
+ * dobles que devolvian `{ id }` a secas describian una consulta que ya no existe, y un doble que
+ * miente sobre la forma del dato es justo como se cuela un `undefined` hasta la base.
+ */
+function ordenBarridaProyectada(o: { id: string }) {
+  return {
+    numGuia: 100 + Number(o.id.replace(/\D/g, "") || 0),
+    numRemision: `REM-${o.id}`,
+    destinatario: `Dest ${o.id}`,
+    producto: "Caja",
+    tienda: { nombre: "Tienda X" },
+    zona: { nombre: "Cartago" },
+    ...o,
+  };
 }
 
 beforeEach(async () => {
@@ -317,155 +354,90 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
   });
 });
 
-describe("CierreDiaRepository.existeCierreSolicitado (R12)", () => {
-  it("true si hay un cierre solicitado del mensajero", async () => {
+// ============================================================================
+// FEATURE 271 (T2.3, R18/R19/R20) — LA RE-SOLICITUD, UNIFICADA EN UN SOLO PAR DE METODOS.
+//
+// Aqui vivian SEIS describes: `existeCierreSolicitado`, `existeCierreVencido`,
+// `transicionarVencidoASolicitado`, `existeCierreRechazado`, `transicionarRechazadoASolicitado` y
+// sus money-safe. Los seis metodos DESAPARECIERON:
+//
+//   · `existeCierreSolicitado` lo sustituye el gate LIBRE/BLOQUEADO (`findBloqueoDetalle`), porque
+//     la pregunta dejo de ser «¿tienes uno?» y paso a ser «¿estas bloqueado?» (R13/R15).
+//   · Los otros cuatro los sustituyen `findCierreResolicitableMasViejo` +
+//     `transicionarASolicitado`, porque la re-solicitud ya NO elige por ESTADO sino por EDAD (R18)
+//     y porque el `updateMany` sin `id` era el fallo mudo M2 (R19).
+//
+// Lo que SI se conserva de aquellos tests, literalmente: las aserciones MONEY-SAFE (que el `data`
+// no toca ni un total, ni `resuelto_*`, ni `motivo_rechazo`, ni `solicitado_at`). Ese contrato no
+// cambia con la ficha, y perderlo al reescribir el archivo habria sido perder la red de la 111/R8.
+// ============================================================================
+
+describe("CierreDiaRepository.findCierreResolicitableMasViejo (feature 271/R18)", () => {
+  it("R18: pide los DOS estados re-solicitables y ordena por solicitado_at ASC con desempate por id", async () => {
     const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
+    prisma.cierreDia.findFirst.mockResolvedValue({ id: "c-viejo", estado: "rechazado" });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const r = await repo.existeCierreSolicitado("m1");
+    const r = await repo.findCierreResolicitableMasViejo("m1");
 
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "solicitado" });
+    expect(r).toEqual({ id: "c-viejo", estado: "rechazado" });
+    const arg = prisma.cierreDia.findFirst.mock.calls[0][0];
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: { in: ["vencido", "rechazado"] } });
+    // El desempate por `id` NO es paranoia: el corte crea cierres en bucle dentro del mismo
+    // segundo y un orden inestable cambiaria «el que toca» entre dos cargas de la misma pantalla.
+    expect(arg.orderBy).toEqual([{ solicitadoAt: "asc" }, { id: "asc" }]);
   });
 
-  it("false si no hay ninguno", async () => {
+  it("sin ninguno re-solicitable -> null (el servicio se va al flujo de creacion)", async () => {
     const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
+    prisma.cierreDia.findFirst.mockResolvedValue(null);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    expect(await repo.existeCierreSolicitado("m1")).toBe(false);
+    expect(await repo.findCierreResolicitableMasViejo("m1")).toBeNull();
   });
 });
 
-// ============================================================================
-// Feature 111 — existeCierreVencido (A1, R6) + transicionarVencidoASolicitado (A2, R7/R8/R21).
-// ============================================================================
-
-describe("CierreDiaRepository.existeCierreVencido (feature 111/R6)", () => {
-  it("R6: true si hay un cierre vencido del mensajero; WHERE guarda estado='vencido'", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const r = await repo.existeCierreVencido("m1");
-
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "vencido" });
-  });
-
-  it("R6: false si no hay ninguno", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.existeCierreVencido("m1")).toBe(false);
-  });
-});
-
-describe("CierreDiaRepository.transicionarVencidoASolicitado (feature 111/R7/R8/R21)", () => {
-  it("R7: updateMany guardado por estado='vencido'+mensajero; count=1 -> true", async () => {
+describe("CierreDiaRepository.transicionarASolicitado (feature 271/R19/R20 — cierra M2)", () => {
+  it("R19: el WHERE lleva el `id` (clave primaria) Y el estado esperado; count=1 -> true", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const ok = await repo.transicionarVencidoASolicitado("m1");
+    const ok = await repo.transicionarASolicitado("c-viejo", "rechazado");
 
     expect(ok).toBe(true);
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido`.
-    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "vencido" });
-    // R8/R21: money-safe — data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at.
+    // ⚠️ EL `id` ES LA CORRECCION DE M2. Sin el, con dos `rechazado` este updateMany movia LOS DOS,
+    // `count` valia 2 y el `=== 1` devolvia `false`: escribia y reportaba fallo.
+    expect(arg.where).toEqual({ id: "c-viejo", estado: "rechazado" });
+    // El anti-TOCTOU por estado se CONSERVA: una carrera que ya lo movio no escribe.
     expect(arg.data).toEqual({ estado: "solicitado" });
   });
 
-  it("R8/R21: la escritura NO toca snapshot money-critical ni resuelto_por/at ni solicitado_at", async () => {
+  it("R19: sirve igual para un `vencido` — el estado esperado es un parametro, no una rama", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    await repo.transicionarVencidoASolicitado("m1");
+    expect(await repo.transicionarASolicitado("c-1", "vencido")).toBe(true);
+    expect(prisma.cierreDia.updateMany.mock.calls[0][0].where).toEqual({
+      id: "c-1",
+      estado: "vencido",
+    });
+  });
+
+  it("R20: money-safe — el `data` NO toca snapshot, resuelto_por/at, motivo_rechazo ni solicitado_at", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.transicionarASolicitado("c-viejo", "vencido");
 
     const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
     for (const prohibido of [
       "totalEfectivo",
       "totalSimpe",
       "totalTransferencia",
-      "totalGeneral",
-      "totalPagoMensajero",
-      "totalIngresoBodegaRechazos",
-      "resueltoPor",
-      "resueltoAt",
-      "solicitadoAt",
-    ]) {
-      expect(data).not.toHaveProperty(prohibido);
-    }
-  });
-
-  it("R7: count=0 (raced / ya resuelto entre lectura y escritura) -> false, sin efectos", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.transicionarVencidoASolicitado("m1")).toBe(false);
-  });
-});
-
-// ============================================================================
-// Feature 109 — existeCierreRechazado + transicionarRechazadoASolicitado (R28, modelo GLOBAL).
-// Gemelos EXACTOS del `vencido`: `rechazado` ya NO es terminal (bloquea + re-solicitable).
-// ============================================================================
-
-describe("CierreDiaRepository.existeCierreRechazado (feature 109/R28)", () => {
-  it("R28: true si hay un cierre rechazado del mensajero; WHERE guarda estado='rechazado'", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const r = await repo.existeCierreRechazado("m1");
-
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "rechazado" });
-  });
-
-  it("R28: false si no hay ninguno", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.existeCierreRechazado("m1")).toBe(false);
-  });
-});
-
-describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)", () => {
-  it("R28: updateMany guardado por estado='rechazado'+mensajero; count=1 -> true; data SOLO estado", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const ok = await repo.transicionarRechazadoASolicitado("m1");
-
-    expect(ok).toBe(true);
-    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
-    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "rechazado" });
-    // Money-safe: data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at, motivo.
-    expect(arg.data).toEqual({ estado: "solicitado" });
-  });
-
-  it("R28: money-safe — NO toca snapshot, resuelto_por/at, motivo_rechazo ni solicitado_at", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    await repo.transicionarRechazadoASolicitado("m1");
-
-    const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
-    for (const prohibido of [
-      "totalEfectivo",
       "totalGeneral",
       "totalPagoMensajero",
       "totalIngresoBodegaRechazos",
@@ -478,12 +450,41 @@ describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)
     }
   });
 
-  it("R28: count=0 (raced / ya re-solicitado) -> false, sin efectos", async () => {
+  it("R19: count=0 (carrera: ya lo movieron) -> false, SIN haber escrito", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    expect(await repo.transicionarRechazadoASolicitado("m1")).toBe(false);
+    expect(await repo.transicionarASolicitado("c-viejo", "rechazado")).toBe(false);
+  });
+});
+
+describe("CierreDiaRepository.findCierreParaAviso (feature 271/R56 — cierra M9)", () => {
+  it("R56: busca por el `id` DEL CIERRE, no por mensajero, y sin ningun `orderBy`", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue({
+      id: "c-viejo",
+      destinoZonaId: "z1",
+      mensajero: { nombre: "Ana" },
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierreParaAviso("c-viejo");
+
+    expect(r).toEqual({ id: "c-viejo", destinoZonaId: "z1", mensajeroNombre: "Ana" });
+    const arg = prisma.cierreDia.findUnique.mock.calls[0][0];
+    // ⚠️ El metodo anterior era `findFirst … orderBy createdAt DESC` por mensajero: con DOS
+    // `solicitado` devolvia siempre el mas nuevo y el aviso nombraba el cierre equivocado (M9).
+    expect(arg.where).toEqual({ id: "c-viejo" });
+    expect(arg).not.toHaveProperty("orderBy");
+  });
+
+  it("cierre inexistente -> null (no se inventa un aviso)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(null);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.findCierreParaAviso("c-x")).toBeNull();
   });
 });
 
@@ -513,12 +514,15 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
       orden: { findMany: vi.fn(), updateMany: vi.fn() },
       gestionOrden: { updateMany: vi.fn(), findMany: vi.fn() },
       cierreDetail: { createMany: vi.fn() },
+      // Feature 264 (B3): el vinculo se escribe en ESTA tx, en la misma vuelta del bucle.
+      cierreSinGestion: { createMany: vi.fn() },
       ordenHistorialEstado: { createMany: vi.fn() },
     };
     tx.cierreDia.create.mockResolvedValue({ id: "cv1" });
-    tx.orden.findMany.mockImplementation(
-      async (args: { where: { estatusId: string } }) =>
-        args.where.estatusId === idEstado("ayuda_tienda") ? conAyuda : enReparto,
+    tx.orden.findMany.mockImplementation(async (args: { where: { estatusId: string } }) =>
+      (args.where.estatusId === idEstado("ayuda_tienda") ? conAyuda : enReparto).map(
+        ordenBarridaProyectada,
+      ),
     );
     // `movidas` fuerza un conteo distinto del real (para el caso money-neutral); por defecto cada
     // `updateMany` mueve exactamente lo que su pre-SELECT trajo.
@@ -528,6 +532,7 @@ describe("CierreDiaRepository.crearCierre — corteSinGestionar (feature 109/R4/
     tx.gestionOrden.updateMany.mockResolvedValue({ count: opts.vinculadas ?? 0 });
     tx.gestionOrden.findMany.mockResolvedValue([]);
     tx.cierreDetail.createMany.mockResolvedValue({ count: 0 });
+    tx.cierreSinGestion.createMany.mockResolvedValue({ count: 0 });
     tx.ordenHistorialEstado.createMany.mockResolvedValue({ count: 0 });
     return tx;
   }
@@ -1178,6 +1183,29 @@ describe("Feature 67 — findGestionParaDeshacer / findUltimaGestionNoAnuladaId 
   });
 });
 
+/**
+ * FEATURE 261 (B6/B7) — el reloj del deshacer, INYECTADO. Hasta esta ficha el repositorio hacia
+ * `new Date()` y `startOfDayCR()` SIN argumento dentro de la transaccion; ahora los dos valores
+ * llegan del servicio, que es donde se puede mover el reloj en un test.
+ *
+ * 22:30 CR del 21 de agosto = 04:30Z del 22: la hora esta elegida a proposito para que el dia
+ * UTC y el dia CR NO coincidan. Si alguien cambiara el helper por `inicioDelDiaCREnUtc` o
+ * derivara el dia del `asignadoAt` en UTC, saldria el 22 y no el 21.
+ */
+const ASIGNADO_AT = new Date("2026-08-22T04:30:00.000Z");
+const DIA_CR = new Date("2026-08-21T00:00:00.000Z");
+
+/**
+ * Las sentencias `$queryRaw` que ACTUALIZAN `orden`. Hace falta filtrar porque el choke point
+ * del historial (`appendCambioEstado`) usa el MISMO canal para su guardia de catalogo de fallo
+ * cerrado: contar todas las llamadas a `$queryRaw` mediria dos cosas distintas a la vez.
+ */
+function updatesDeOrden(tx: { $queryRaw: ReturnType<typeof vi.fn> }): unknown[][] {
+  return (tx.$queryRaw.mock.calls as unknown[][]).filter((c) =>
+    Array.isArray(c[0]) ? (c[0] as string[]).join(" ").includes('UPDATE "orden"') : false,
+  );
+}
+
 describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", () => {
   const INPUT = {
     gestionId: "g1",
@@ -1186,11 +1214,21 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     actorUsuarioId: "m1",
     estatusEsperadoId: idEstado("en_bodega_central"),
     estatusEnRepartoId: idEstado("en_reparto"),
+    // FEATURE 261 (B6/B7): el instante y el dia los resuelve el SERVICIO y llegan aqui ya
+    // resueltos. El repositorio ya NO lee ningun reloj.
+    asignadoAt: ASIGNADO_AT,
+    diaEnCurso: DIA_CR,
   };
 
   function buildTx(counts: { anula?: number; mueve?: number } = {}) {
     return {
       gestionOrden: { updateMany: vi.fn(async () => ({ count: counts.anula ?? 1 })) },
+      // FEATURE 261 (B7): el paso 2 pasa de `orden.updateMany` a `$queryRaw ... RETURNING "id"`,
+      // porque la regla del dia vive DENTRO de la sentencia (un `CASE`). `orden.updateMany`
+      // sigue declarado para poder AFIRMAR que ya no se usa.
+      $queryRaw: vi.fn(async () =>
+        Array.from({ length: counts.mueve ?? 1 }, () => ({ id: "o1" })),
+      ),
       orden: { updateMany: vi.fn(async () => ({ count: counts.mueve ?? 1 })) },
       ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
       usuario: { update: vi.fn(), updateMany: vi.fn() }, // R29: no debe tocarse
@@ -1210,7 +1248,11 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     // Los 3 pasos van al `tx` del callback, no al prisma del constructor (atomicidad real).
     expect(tx.gestionOrden.updateMany).toHaveBeenCalledTimes(1);
-    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    // Feature 261 (B7): el paso 2 es ahora `$queryRaw`, no `orden.updateMany`. Se cuentan las
+    // sentencias que ACTUALIZAN la orden y no todas las de `$queryRaw`, porque el choke point
+    // del historial usa el mismo canal para su guardia de fallo cerrado.
+    expect(updatesDeOrden(tx)).toHaveLength(1);
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     expect(prisma.gestionOrden.updateMany).not.toHaveBeenCalled();
   });
@@ -1272,15 +1314,28 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
-    const arg = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // FEATURE 261 (B7/B14): el paso 2 es SQL crudo, asi que lo que se puede afirmar aqui es la
+    // FORMA de la sentencia y los PARAMETROS que se le pasan — no que Postgres escriba lo que
+    // decimos. Eso vive en `tests/integration/db/deshacer-gestion-conserva-reserva.int.test.ts`,
+    // contra la base real, y es ese archivo el que mata las mutaciones M-g y M-h.
+    const call = (tx.$queryRaw as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    const sql = (call[0] as string[]).join(" ");
+    const valores = call.slice(1);
     // R5/R6: guardias — la orden sigue en el estado leido y no esta borrada.
-    expect(arg.where).toEqual({ id: "o1", estatusId: idEstado("en_bodega_central"), deletedAt: null });
+    expect(sql).toMatch(/WHERE "id" =/);
+    expect(sql).toMatch(/AND "estatus_id" =/);
+    expect(sql).toMatch(/AND "deleted_at" IS NULL/);
+    expect(sql).toMatch(/RETURNING "id"/);
+    expect(valores).toContain("o1");
+    expect(valores).toContain(idEstado("en_bodega_central")); // estado esperado (guardia)
     // R18: `en_reparto` (unico estado desde el que se puede volver a gestionar).
-    expect(arg.data.estatusId).toBe(idEstado("en_reparto"));
+    expect(valores).toContain(idEstado("en_reparto"));
     // R19: repone la asignacion que el SEGUIMIENTO del reintento (47/R6) habia limpiado.
-    expect(arg.data.mensajeroAsignadoId).toBe("m1");
-    // Feature 76/R23 (W4): la reposicion es una reasignacion efectiva -> estampa asignado_at.
-    expect(arg.data.asignadoAt).toBeInstanceOf(Date);
+    expect(valores).toContain("m1");
+    // Feature 76/R23 (W4) + 261/R19: la reposicion estampa `asignado_at`, y el instante es el
+    // que INYECTO el servicio — no un `new Date()` leido aqui dentro ni el `NOW()` del motor.
+    expect(sql).toMatch(/"asignado_at" =/);
+    expect(valores).toContain(ASIGNADO_AT);
   });
 
   it("R20: appendCambioEstado con origen real, destino en_reparto, actor, enlace y `deshacer_gestion`", async () => {
@@ -1315,8 +1370,9 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
 
     await repo.anularGestionYDevolverAGestion(INPUT);
 
-    // R21: el cambio de estado (tx.orden.updateMany) viene acompañado del append en la MISMA tx.
-    expect(tx.orden.updateMany).toHaveBeenCalledTimes(1);
+    // R21: el cambio de estado (el `$queryRaw` del paso 2) viene acompañado del append en la
+    // MISMA tx. Feature 261 (B7): antes era `tx.orden.updateMany`.
+    expect(updatesDeOrden(tx)).toHaveLength(1);
     expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
     // R23: append-only. El tx del historial solo expone createMany en este flujo: ninguna fila
     // preexistente se modifica ni se borra.
@@ -1347,11 +1403,20 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
 
     // El dinero solo se asienta al APROBAR el cierre, y los feeds leen por `cierreId`: una
     // gestion con cierre_id = NULL nunca los alcanza. La tx del deshacer solo toca 3 modelos.
+    // Feature 261 (B7): el paso 2 dejo de ser `tx.orden.updateMany` y pasa a `tx.$queryRaw`, que
+    // NO es un modelo sino una funcion del cliente; por eso se filtra aparte y `orden` ya no
+    // aparece entre los modelos tocados. Lo que se afirma no cambia: ni wallet, ni tienda, ni
+    // pago — el repo ni los conoce.
     const tocados = Object.entries(tx)
-      .filter(([, m]) => Object.values(m).some((f) => (f as ReturnType<typeof vi.fn>).mock?.calls.length))
+      .filter(([, m]) => typeof m === "object" && m !== null)
+      .filter(([, m]) =>
+        Object.values(m as Record<string, unknown>).some(
+          (f) => (f as ReturnType<typeof vi.fn>).mock?.calls.length,
+        ),
+      )
       .map(([k]) => k)
       .sort();
-    expect(tocados).toEqual(["gestionOrden", "orden", "ordenHistorialEstado"]);
+    expect(tocados).toEqual(["gestionOrden", "ordenHistorialEstado"]);
   });
 
   it("R2/R3/R22: si la ANULACION afecta 0 filas (carrera con solicitarCierre) -> false, sin mover la orden", async () => {
@@ -1365,6 +1430,7 @@ describe("Feature 67 — anularGestionYDevolverAGestion (R11/R12/R18-R23/R29)", 
 
     expect(ok).toBe(false);
     // Sin efectos parciales: ni la orden se movio ni se escribio historial (rollback).
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
     expect(tx.orden.updateMany).not.toHaveBeenCalled();
     expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
   });
@@ -1455,6 +1521,27 @@ const TARIFA_T1: TarifaVigenteResuelta = {
   ivaComisionCod: "13.00",
 };
 
+// Feature 274 — las filas de `tarifas` con las que se alimenta el doble del resolver.
+// `FILA_T1_Z1` es la de NIVEL 1 del par (t1, z1); `FILA_T1_SIN_ZONA` es la de NIVEL 2 de la
+// misma tienda, con OTRO `tarifaId` y otro flete, para poder distinguirlas en el snapshot.
+const FILA_T1_Z1: FilaTarifaDoble = { ...TARIFA_T1, tiendaId: "t1", zonaId: "z1" };
+const FILA_T1_SIN_ZONA: FilaTarifaDoble = {
+  ...TARIFA_T1,
+  tarifaId: "ta-nivel2",
+  valorFlete: "9999.00",
+  tiendaId: "t1",
+  zonaId: null,
+};
+// Nivel 1 de OTRA zona de la MISMA tienda: es lo que hace que "por tienda" y "por par" den
+// resultados distintos (R25 en la carga; aqui, R22 en el cierre).
+const FILA_T1_Z2: FilaTarifaDoble = {
+  ...TARIFA_T1,
+  tarifaId: "ta-z2",
+  valorFlete: "2000.00",
+  tiendaId: "t1",
+  zonaId: "z2",
+};
+
 // Gestion vinculada, tal como la lee `SNAPSHOT_SELECT` DENTRO de la tx.
 function snapshotRow(overrides: { ordenId?: string; orden?: Record<string, unknown> } = {}) {
   return {
@@ -1513,7 +1600,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     const id = await repo.crearCierre(INPUT_CIERRE);
@@ -1535,7 +1622,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1558,7 +1645,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     // NO se traga como el sentinela de 0-gestiones: un fallo real del snapshot debe
@@ -1576,7 +1663,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1592,7 +1679,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1617,7 +1704,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1645,7 +1732,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1660,17 +1747,17 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const tarifaRepo = buildTarifaRepo([FILA_T1_Z1]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
 
     await repo.crearCierre(INPUT_CIERRE);
 
     // El resolver se invoca con el cliente de la TX (no con `prisma`): si se resolviera
-    // fuera, la tarifa congelada podria no ser la que la tx vio.
-    const [txArg, tiendaIds] = (tarifaRepo.resolveTarifasPorTiendas as ReturnType<typeof vi.fn>)
-      .mock.calls[0];
+    // fuera, la tarifa congelada podria no ser la que la tx vio. Feature 274: `tx` va SEGUNDO
+    // y lo primero son los PARES (tienda, zona), no una lista de tiendas.
+    const [pares, txArg] = (tarifaRepo.resolveTarifas as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(txArg).toBe(tx);
-    expect(tiendaIds).toEqual(["t1"]);
+    expect(pares).toEqual([{ tiendaId: "t1", zonaId: "z1" }]);
 
     const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
       .data;
@@ -1691,22 +1778,24 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     }
   });
 
-  it("R9: tienda SIN tarifa => fila con las 8 columnas NULL y el cierre se crea igual", async () => {
+  it("R9/R23: par SIN tarifa => las 9 columnas NULL y el cierre se crea igual", async () => {
     const tx = buildSnapshotTx([snapshotRow()]);
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    // Sin tarifa para `t1`: el resolver devuelve null (gap de datos).
+    // Ninguna fila de `tarifas`: la cascada no resuelve nada para (t1, z1) (gap de datos).
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre(INPUT_CIERRE);
 
-    // Decision (c): el gap NO bloquea. El cierre lo solicita el MENSAJERO; la tarifa es
-    // configuracion de la TIENDA: bloquear le impediria cerrar su dia por un dato que no
-    // controla (y tumbaria el corte diario masivo de la 41).
+    // Decision (c) + feature 274/R23/R39: el gap NO bloquea, y el `409` de las dos APIs por
+    // key NO llega hasta aqui. El cierre lo solicita el MENSAJERO; la tarifa es configuracion
+    // de la TIENDA: bloquear le impediria cerrar su dia por un dato que no controla (y
+    // tumbaria el corte diario masivo de la 41).
     expect(id).toBe("c1");
     const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
       .data;
+    // Las NUEVE, todas o ninguna (`tarifaFulfillment` incluido).
     expect(data[0]).toMatchObject({
       tarifaId: null,
       tarifaValorFlete: null,
@@ -1716,7 +1805,126 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
       tarifaComisionCod: null,
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
+      tarifaFulfillment: null,
     });
+  });
+
+  // ==========================================================================
+  // Feature 274 (R21-R24) — la fila congelada la elige la CASCADA sobre el par (tienda, zona).
+  // ==========================================================================
+
+  it("R22: congela la fila de NIVEL 1 (tienda+zona) aunque exista una de nivel 2 mas reciente", async () => {
+    // Estado de `tarifas`: la de nivel 2 (tienda sola) se creo DESPUES que la de nivel 1. La
+    // cascada es por especificidad, no por fecha (R3/R5): gana `ta1`, la del par exacto.
+    // Antes de la 274 el cierre resolvia por TIENDA y habria congelado `ta-nivel2`.
+    const tx = buildSnapshotTx([snapshotRow()]); // orden en (t1, z1)
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_SIN_ZONA, FILA_T1_Z1]), // la de nivel 2, primero y "mas nueva"
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].tarifaId).toBe("ta1");
+    expect((data[0].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+  });
+
+  it("R22: dos ordenes de la MISMA tienda en zonas distintas congelan tarifas DISTINTAS", async () => {
+    // La regresion en una sola linea: resolver por tienda daba la misma fila a las dos.
+    const tx = buildSnapshotTx([
+      snapshotRow({ ordenId: "o1" }), // (t1, z1)
+      snapshotRow({ ordenId: "o2", orden: { zonaId: "z2" } }), // (t1, z2)
+    ]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1, FILA_T1_Z2]),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data.map((d) => d.tarifaId)).toEqual(["ta1", "ta-z2"]);
+    expect((data[0].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+    expect((data[1].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("2000.00");
+  });
+
+  it("R23: una orden sin tarifa NO impide que las demas congelen la suya ni bloquea el cierre", async () => {
+    const tx = buildSnapshotTx([
+      snapshotRow({ ordenId: "o1" }), // (t1, z1) -> resuelve
+      snapshotRow({ ordenId: "o2", orden: { tiendaId: "t9", zonaId: "z9" } }), // sin fila
+    ]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1]),
+    );
+
+    expect(await repo.crearCierre(INPUT_CIERRE)).toBe("c1");
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].tarifaId).toBe("ta1");
+    expect(data[1].tarifaId).toBeNull();
+    expect(data[1].tarifaFulfillment).toBeNull();
+  });
+
+  it("R24: el shape del snapshot no cambia — la lista EXACTA de columnas escritas", async () => {
+    // Lista congelada tal cual la escribia `dev` antes de la 274 (feature 69 + el
+    // `tarifaFulfillment` de 2026-08-19). La 274 cambia QUE FILA se elige, no QUE se escribe:
+    // si alguien anadiera o quitara una columna aqui, la aritmetica de `ingreso-ordenex.ts` y
+    // los feeds de wallet que leen el snapshot dejarian de cuadrar en silencio.
+    const COLUMNAS_DEV = [
+      "cierreId",
+      "ordenId",
+      "montoCobrar",
+      "cobraComision",
+      "zonaId",
+      "tiendaId",
+      "esCentral",
+      "tarifaId",
+      "tarifaValorFlete",
+      "tarifaValorFleteGam",
+      "tarifaValorFleteDevuelto",
+      "tarifaValorFleteDevueltoGam",
+      "tarifaComisionCod",
+      "tarifaIvaFlete",
+      "tarifaIvaComisionCod",
+      "tarifaFulfillment",
+      "numGuia",
+      "numRemision",
+      "destinatario",
+      "direccion",
+      "producto",
+      "tiendaNombre",
+      "zonaNombre",
+      "provinciaNombre",
+      "cantonNombre",
+      "distritoNombre",
+    ];
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1]),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(Object.keys(data[0]).sort()).toEqual([...COLUMNAS_DEV].sort());
   });
 
   it("R2 (EL GRANO): 2 gestiones vigentes de la MISMA orden => UNA sola fila", async () => {
@@ -1729,7 +1937,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1747,7 +1955,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1765,7 +1973,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1775,23 +1983,35 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     expect(data[0].montoCobrar).toBeNull();
   });
 
-  it("una tienda con varias ordenes se resuelve UNA vez (sin N+1)", async () => {
+  // Feature 274/R7: el mismo invariante, pero contando PARES en vez de tiendas. NO se relaja:
+  // N ordenes de M pares distintos siguen costando UNA sola consulta de tarifas, y la consulta
+  // real de `tarifa.findMany` corre DENTRO de la tx (el doble cuenta la llamada al resolver;
+  // la equivalencia resolver->una `findMany` la fija el test del propio resolver, T3).
+  it("R7: N ordenes de M pares distintos => UNA sola llamada al resolver batch (sin N+1)", async () => {
     const tx = buildSnapshotTx([
-      snapshotRow({ ordenId: "o1" }),
-      snapshotRow({ ordenId: "o2" }),
-      snapshotRow({ ordenId: "o3", orden: { tiendaId: "t2" } }),
+      snapshotRow({ ordenId: "o1" }), // (t1, z1)
+      snapshotRow({ ordenId: "o2" }), // (t1, z1) repetido
+      snapshotRow({ ordenId: "o3", orden: { zonaId: "z2" } }), // (t1, z2)
+      snapshotRow({ ordenId: "o4", orden: { tiendaId: "t2" } }), // (t2, z1)
     ]);
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const tarifaRepo = buildTarifaRepo([FILA_T1_Z1, FILA_T1_Z2]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
 
     await repo.crearCierre(INPUT_CIERRE);
 
-    // UNA sola llamada batch para todas las tiendas del cierre.
-    expect(tarifaRepo.resolveTarifasPorTiendas).toHaveBeenCalledTimes(1);
-    expect(tarifaRepo.resolveTarifaPorTienda).not.toHaveBeenCalled();
+    // UNA sola llamada batch para TODOS los pares del cierre (4 ordenes, 3 pares distintos).
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifa).not.toHaveBeenCalled();
+    const [pares] = (tarifaRepo.resolveTarifas as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(pares).toEqual([
+      { tiendaId: "t1", zonaId: "z1" },
+      { tiendaId: "t1", zonaId: "z1" },
+      { tiendaId: "t1", zonaId: "z2" },
+      { tiendaId: "t2", zonaId: "z1" },
+    ]);
   });
 
   it("R9/C1: si no se vincula ninguna gestion (rollback) el snapshot NO se toca", async () => {
@@ -1806,7 +2026,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     expect(await repo.crearCierre(INPUT_CIERRE)).toBeNull();
@@ -1880,7 +2100,7 @@ describe("Feature 158/R16 — crearCierre vincula tambien las gestiones `inciden
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre({
@@ -1979,7 +2199,7 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
           async (args: { where: { estatusId: string; OR?: RamaFecha[] } }) =>
             filas
               .filter((f) => f.estatusId === args.where.estatusId && casaFecha(f, args.where.OR))
-              .map((f) => ({ id: f.id })),
+              .map((f) => ordenBarridaProyectada({ id: f.id })),
         ),
         updateMany: vi.fn(
           async (args: {
@@ -2001,6 +2221,8 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
         findMany: vi.fn(async () => []),
       },
       cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+      // Feature 264 (B3): el vinculo se escribe en la misma vuelta del bucle que barre.
+      cierreSinGestion: { createMany: vi.fn(async () => ({ count: 0 })) },
       ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
     };
     return { tx, escritas };
@@ -2128,9 +2350,26 @@ describe("246/R11-R15 — el corte NO barre lo reservado para un dia que aun no 
 });
 
 // =================================================================================================
-// FEATURE 246 (T3.4, R8/R10) — DESHACER UNA GESTION ESTAMPA EL DIA DE HOY.
+// FEATURE 246 (T3.4, R8/R10) -> FEATURE 261 (B7/B14) — DESHACER Y EL DIA DE REPARTO.
+//
+// ⚠️ QUE PASO CON ESTE BLOQUE, porque es una LECCION y no un refactor cosmetico. Hasta la 261 el
+// paso 2 del deshacer era un `orden.updateMany` de Prisma, asi que estos dos casos podian leer
+// `data.fechaReparto` del doble y AFIRMAR SU VALOR. Desde la 261 la regla del dia vive DENTRO de
+// la sentencia (un `CASE` en el `SET`) y ningun doble puede ejecutarla: afirmar aqui el valor
+// persistido seria una asercion contra su propia fuente — siempre verde, y con el defecto
+// suelto.
+//
+// LO QUE SE MOVIO, y a donde: la afirmacion sobre EL VALOR de `fecha_reparto` tras deshacer vive
+// ahora en `tests/integration/db/deshacer-gestion-conserva-reserva.int.test.ts`, contra Postgres
+// real, con sus tres casos (reserva futura -> se CONSERVA; reserva pasada -> hoy; `NULL` -> hoy).
+// Es ese archivo el que mata las mutaciones M-g y M-h.
+//
+// LO QUE SE QUEDA AQUI, que es lo unico que un doble puede demostrar honestamente: que el `SET`
+// escribe las DOS columnas en la MISMA sentencia (invariante 246/R10), que la regla del dia es un
+// `CASE` y no un estampado a secas, y que el dia entra como PARAMETRO en vez de calcularse dentro
+// del SQL con el reloj del motor (261/R19).
 // =================================================================================================
-describe("246/R8 — deshacer gestion re-estampa asignacion Y dia de reparto", () => {
+describe("261/B7 — la sentencia del deshacer: las dos columnas, un CASE y un dia inyectado", () => {
   const INPUT_DESHACER = {
     gestionId: "g1",
     ordenId: "o1",
@@ -2138,60 +2377,473 @@ describe("246/R8 — deshacer gestion re-estampa asignacion Y dia de reparto", (
     actorUsuarioId: "m1",
     estatusEsperadoId: idEstado("en_bodega_central"),
     estatusEnRepartoId: idEstado("en_reparto"),
+    asignadoAt: ASIGNADO_AT,
+    diaEnCurso: DIA_CR,
   };
 
   function txDeshacer() {
     return {
       gestionOrden: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      $queryRaw: vi.fn(async () => [{ id: "o1" }]),
       orden: { updateMany: vi.fn(async () => ({ count: 1 })) },
       ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 1 })) },
       usuario: { update: vi.fn(), updateMany: vi.fn() },
     };
   }
 
-  it("R8/R10: estampa `fechaReparto` en la MISMA escritura que `asignadoAt`", async () => {
-    // POR QUE: esta via no ofrece la eleccion de dia (nadie esta asignando un lote), asi que el
-    // dia es el de Costa Rica en curso. Y va JUNTO a `asignadoAt` porque las dos columnas no
-    // pueden contar historias distintas: si `asignado_at` dijera «te la acabo de reasignar» y
-    // `fecha_reparto` conservara la reserva de ayer, el corte de esta noche decidiria con un dato
-    // que ya no describe nada.
+  /** El `SET` de la sentencia emitida: de `SET` al primer `WHERE`. */
+  function setEmitido(tx: ReturnType<typeof txDeshacer>): string {
+    const call = (tx.$queryRaw as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[];
+    const sql = (call[0] as string[]).join("?");
+    const desde = sql.indexOf("SET");
+    const hasta = sql.indexOf("WHERE");
+    expect(desde, "la sentencia emitida no tiene `SET`").toBeGreaterThanOrEqual(0);
+    expect(hasta, "la sentencia emitida no tiene `WHERE`").toBeGreaterThan(desde);
+    return sql.slice(desde, hasta);
+  }
+
+  async function correr() {
     const tx = txDeshacer();
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
     await repo.anularGestionYDevolverAGestion(INPUT_DESHACER);
+    return tx;
+  }
 
-    const data = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].data as {
-      asignadoAt: Date;
-      fechaReparto: Date;
-    };
-    expect(data.asignadoAt).toBeInstanceOf(Date);
-    expect(data.fechaReparto).toBeInstanceOf(Date);
-    // Es la convencion `@db.Date`: medianoche UTC de la fecha calendario CR. Si alguien usara
-    // `inicioDelDiaCREnUtc` (06:00Z) el dia se desplazaria seis horas — la trampa de la 166.
-    expect(data.fechaReparto.getUTCHours()).toBe(0);
-    expect(data.fechaReparto.getUTCMinutes()).toBe(0);
-    expect(data.fechaReparto.getUTCSeconds()).toBe(0);
-    expect(data.fechaReparto.getUTCMilliseconds()).toBe(0);
+  it("246/R10: `fecha_reparto` y `asignado_at` se escriben en la MISMA sentencia", async () => {
+    // LA INVARIANTE QUE NO SE TOCA, y su motivo original SIGUE EN PIE: las dos columnas no pueden
+    // contar historias distintas. Si `asignado_at` dijera «te la acabo de reasignar» y
+    // `fecha_reparto` conservara la reserva de AYER, el corte de esta misma noche decidiria con
+    // un dato que ya no describe nada. La guardia `fecha-reparto-acompana-asignado-at` vigila
+    // esto mismo sobre TODO `lib/`; aqui se afirma sobre la sentencia concreta.
+    const set = setEmitido(await correr());
+    expect(set).toMatch(/"asignado_at" =/);
+    expect(set).toMatch(/"fecha_reparto" =/);
   });
 
-  it("R8: el dia estampado es el DIA CR del instante de la escritura, no uno futuro", async () => {
-    const tx = txDeshacer();
+  it("261/R17: el dia NO se estampa a secas — hay un `CASE` que conserva la reserva futura", async () => {
+    // Lo que la 246 no contemplo: con una reserva a FUTURO, bajar el dia a hoy no repara una
+    // incoherencia, CANCELA UNA DECISION que alguien tomo a proposito. Medido en produccion el
+    // 2026-08-21 con la guia 17496963.
+    //
+    // Este caso afirma que la EXCEPCION esta escrita en la sentencia; que Postgres la ejecute
+    // como decimos lo prueba el test contra la base real.
+    const set = setEmitido(await correr());
+    expect(set).toMatch(/"fecha_reparto" = CASE/);
+    expect(set).toMatch(/WHEN "fecha_reparto" >/);
+    expect(set).toMatch(/THEN "fecha_reparto"/);
+    expect(set).toMatch(/ELSE/);
+    expect(set).toMatch(/END/);
+  });
+
+  it("261/R19: el dia entra como PARAMETRO `YYYY-MM-DD::date`, sin reloj dentro del SQL", async () => {
+    const tx = await correr();
+    const set = setEmitido(tx);
+    const valores = ((tx.$queryRaw as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]).slice(1);
+
+    // El dia viaja como TEXTO con `::date` explicito: un `Date` lo serializa el driver `pg` como
+    // `timestamptz` y Postgres lo convierte a `date` con el `TimeZone` DE LA SESION.
+    expect(valores).toContain("2026-08-21");
+    expect(set).toMatch(/::date/);
+
+    // Y es el dia CR del `now` INYECTADO, no el dia UTC: el instante es 04:30Z del 22, que en
+    // Costa Rica son las 22:30 del 21. Si alguien derivara el dia en UTC saldria "2026-08-22".
+    expect(valores).not.toContain("2026-08-22");
+
+    // Ninguna aritmetica de zona horaria en el `SET`: la unica definicion del dia vive en
+    // `lib/utils/fecha-cr.ts` y entra como parametro (misma regla que vigila la guardia).
+    expect(set).not.toMatch(/NOW\(\)\s*::\s*date/i);
+    expect(set).not.toMatch(/CURRENT_DATE/i);
+    expect(set).not.toMatch(/AT TIME ZONE/i);
+    expect(set).not.toMatch(/interval\s+'/i);
+  });
+
+  it("261/R19: `asignado_at` tambien es el instante INYECTADO, no el `NOW()` del motor", async () => {
+    const tx = await correr();
+    const valores = ((tx.$queryRaw as ReturnType<typeof vi.fn>).mock.calls[0] as unknown[]).slice(1);
+    // Si el instante saliera del reloj de Postgres y el dia del de la aplicacion, las dos
+    // columnas podrian caer a distinto lado de la medianoche de CR.
+    expect(valores).toContain(ASIGNADO_AT);
+    // `updated_at` SI se queda en `NOW()`: es auditoria y sigue la convencion del archivo.
+    expect(setEmitido(tx)).toMatch(/"updated_at" = NOW\(\)/);
+  });
+
+  it("el repositorio ya NO usa `orden.updateMany` para mover la orden (261/B7)", async () => {
+    const tx = await correr();
+    expect(tx.orden.updateMany).not.toHaveBeenCalled();
+    expect(updatesDeOrden(tx)).toHaveLength(1);
+  });
+});
+
+// ==============================================================================================
+// FEATURE 264 (B3/B9) — EL VINCULO CIERRE <-> ORDEN BARRIDA, ESCRITO EN LA TX DEL CORTE.
+//
+// POR QUE EXISTE ESTE BLOQUE. Hasta hoy la relacion entre un cierre y las ordenes que su corte
+// barrio a `sin_gestionar` era un predicado VIVO (`orden.mensajero_asignado_id = cierre.
+// mensajero_id AND estatus = sin_gestionar`), y la APROBACION lo destruye: libera las ordenes a
+// bodega y les borra `mensajero_asignado_id`. Un cierre `aprobado` —el que se audita, porque es
+// el que ya movio dinero— mostraba CERO ordenes barridas, exactamente igual que un cierre que de
+// verdad no barrio ninguna.
+//
+// EL DOBLE DE ESTE BLOQUE EMULA COMMIT Y ROLLBACK, y no es adorno: sin eso, «se escribe dentro de
+// la transaccion» (R2/R3) seria una afirmacion que ningun test podria desmentir —mover el
+// `createMany` fuera de la tx dejaria todos los casos en verde—. Aqui hay dos almacenes: lo que
+// se escribe por `tx` solo se COMPROMETE si el callback resuelve; lo que se escribiera por el
+// cliente de fuera sobrevive al rollback, y por eso el caso de R3 se pondria rojo.
+// ==============================================================================================
+
+interface FilaVinculo {
+  cierreId: string;
+  ordenId: string;
+  numGuia: number | null;
+  numRemision: string;
+  destinatario: string;
+  producto: string;
+  tiendaNombre: string;
+  zonaNombre: string;
+  estatusOrigenId: string | null;
+}
+
+describe("264/B3 — crearCierre PERSISTE el vinculo de las ordenes barridas", () => {
+  const DIA_CERRADO = new Date("2026-08-20T00:00:00.000Z");
+  const CORTE_264 = {
+    enRepartoEstatusId: idEstado("en_reparto"),
+    ayudaEstatusId: idEstado("ayuda_tienda"),
+    sinGestionarEstatusId: idEstado("sin_gestionar"),
+    diaCerrado: DIA_CERRADO,
+  };
+
+  /**
+   * tx con almacen transaccional REAL (buffer + commit/rollback) para `cierre_sin_gestion`.
+   * `fallaAlVincular` fuerza un error DESPUES del bloque del corte: es la unica forma de tener
+   * filas escritas Y una transaccion que se revierte.
+   */
+  function corteConAlmacen(
+    opts: {
+      enReparto?: { id: string }[];
+      conAyuda?: { id: string }[];
+      vinculadas?: number;
+      fallaAlVincular?: Error;
+    } = {},
+  ) {
+    const enReparto = opts.enReparto ?? [{ id: "o1" }, { id: "o2" }];
+    const conAyuda = opts.conAyuda ?? [];
+    /** Lo que sobrevive al final: solo lo comprometido. */
+    const comprometidas: FilaVinculo[] = [];
+    /** Lo escrito dentro de la tx en curso. */
+    let buffer: FilaVinculo[] = [];
+
+    const tx = {
+      cierreDia: { create: vi.fn(async () => ({ id: "cv1" })) },
+      orden: {
+        findMany: vi.fn(async (args: { where: { estatusId: string } }) =>
+          (args.where.estatusId === idEstado("ayuda_tienda") ? conAyuda : enReparto).map(
+            ordenBarridaProyectada,
+          ),
+        ),
+        updateMany: vi.fn(async (args: { where: { id: { in: string[] } } }) => ({
+          count: args.where.id.in.length,
+        })),
+      },
+      gestionOrden: {
+        updateMany: vi.fn(async () => {
+          if (opts.fallaAlVincular) throw opts.fallaAlVincular;
+          return { count: opts.vinculadas ?? 0 };
+        }),
+        findMany: vi.fn(async () => []),
+      },
+      cierreDetail: { createMany: vi.fn(async () => ({ count: 0 })) },
+      cierreSinGestion: {
+        createMany: vi.fn(async (args: { data: FilaVinculo[] }) => {
+          buffer.push(...args.data);
+          return { count: args.data.length };
+        }),
+      },
+      ordenHistorialEstado: { createMany: vi.fn(async () => ({ count: 0 })) },
+    };
+
+    const $transaction = vi.fn(async (cb: (t: typeof tx) => unknown) => {
+      buffer = [];
+      try {
+        const r = await cb(tx);
+        comprometidas.push(...buffer); // COMMIT
+        return r;
+      } catch (e) {
+        buffer = []; // ROLLBACK: no queda ni una fila
+        throw e;
+      }
+    });
+
     const prisma = buildPrisma({
-      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+      $transaction,
+      // El cliente de FUERA de la transaccion. Si el `createMany` se moviera aqui, sus filas
+      // sobrevivirian al rollback y el caso de R3 se pondria rojo. Ese es todo el punto.
+      cierreSinGestion: {
+        createMany: vi.fn(async (args: { data: FilaVinculo[] }) => {
+          comprometidas.push(...args.data);
+          return { count: args.data.length };
+        }),
+        findMany: vi.fn(async () => []),
+      },
     });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+    return { repo, tx, prisma, comprometidas };
+  }
 
-    await repo.anularGestionYDevolverAGestion(INPUT_DESHACER);
-
-    const data = (tx.orden.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0].data as {
-      asignadoAt: Date;
-      fechaReparto: Date;
+  function inputCorte(overrides: Record<string, unknown> = {}) {
+    return {
+      mensajeroId: "m1",
+      estado: "vencido" as const,
+      destinoTipo: "bodega_satelite" as const,
+      destinoZonaId: "z1",
+      corteSinGestionar: CORTE_264,
+      totales: { efectivo: "0.00", simpe: "0.00", transferencia: "0.00", general: "0.00" },
+      pagoByGestionId: {},
+      totalPagoMensajero: "0.00",
+      ingresoByGestionId: {},
+      totalIngresoBodegaRechazos: "0.00",
+      ...overrides,
     };
-    // El dia de reparto NUNCA puede ser posterior al instante en que se asigno: si lo fuera, el
-    // corte de esta noche lo tomaria por una reserva y no barreria nunca esa orden.
-    expect(data.fechaReparto.getTime()).toBeLessThanOrEqual(data.asignadoAt.getTime());
+  }
+
+  it("R2: escribe el vinculo DENTRO de la misma tx, con las MISMAS ordenes que el updateMany movio", async () => {
+    const { repo, tx, prisma, comprometidas } = corteConAlmacen();
+
+    const id = await repo.crearCierre(inputCorte());
+
+    expect(id).toBe("cv1");
+    // UNA sola transaccion: el vinculo no puede quedar fuera del todo-o-nada del corte.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // Las ordenes del vinculo son EXACTAMENTE las que el `updateMany` guardado barrio.
+    const barridas = (tx.orden.updateMany.mock.calls[0][0] as { where: { id: { in: string[] } } })
+      .where.id.in;
+    expect(comprometidas.map((f) => f.ordenId)).toEqual(barridas);
+    expect(comprometidas.every((f) => f.cierreId === "cv1")).toBe(true);
+    // Y NADA se escribio por el cliente de fuera de la transaccion.
+    expect(
+      (prisma.cierreSinGestion as { createMany: ReturnType<typeof vi.fn> }).createMany,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("R11: congela los descriptivos que el pre-SELECT trajo, no ids sueltos", async () => {
+    const { repo, comprometidas } = corteConAlmacen({ enReparto: [{ id: "o7" }] });
+
+    await repo.crearCierre(inputCorte());
+
+    // Igualdad campo a campo contra lo que la consulta proyecto: si alguien recortara el
+    // `select`, aqui aparecerian `undefined` en vez de un fallo lejano al insertar.
+    expect(comprometidas).toEqual([
+      {
+        cierreId: "cv1",
+        ordenId: "o7",
+        numGuia: 107,
+        numRemision: "REM-o7",
+        destinatario: "Dest o7",
+        producto: "Caja",
+        tiendaNombre: "Tienda X",
+        zonaNombre: "Cartago",
+        estatusOrigenId: idEstado("en_reparto"),
+      },
+    ]);
+  });
+
+  it("R10: la fila del vinculo NO lleva ni un campo de dinero", async () => {
+    const { repo, comprometidas } = corteConAlmacen({ enReparto: [{ id: "o1" }] });
+
+    await repo.crearCierre(inputCorte());
+
+    const claves = Object.keys(comprometidas[0]).join(" ").toLowerCase();
+    for (const palabra of ["monto", "pago", "cobro", "ingreso", "tarifa", "comision", "total"]) {
+      expect(claves).not.toContain(palabra);
+    }
+  });
+
+  it("R3: si la transaccion se revierte, NO queda ni un vinculo registrado", async () => {
+    // ⭑ EL CASO QUE MATA «lo escribo despues de la tx». El corte SI barrio (hay filas escritas en
+    // el buffer) y la vinculacion de gestiones revienta a continuacion: la tx entera se revierte.
+    const boom = new Error("la vinculacion de gestiones fallo");
+    const { repo, tx, comprometidas } = corteConAlmacen({ fallaAlVincular: boom });
+
+    await expect(repo.crearCierre(inputCorte())).rejects.toThrow(boom);
+
+    // Se INTENTO escribir (si no, este caso pasaria por no haber llegado nunca al createMany)…
+    expect(tx.cierreSinGestion.createMany).toHaveBeenCalledTimes(1);
+    // …y aun asi no sobrevivio ni una fila.
+    expect(comprometidas).toEqual([]);
+  });
+
+  it("R4: cada fila lleva el estatus de origen de SU vuelta, nunca uno supuesto", async () => {
+    // Es literalmente la razon por la que el bucle del corte tiene dos vueltas guardadas
+    // (feature 235/R27): con dos origenes en un solo `updateMany` habria que INVENTARSE de cual
+    // salio cada fila, y eso es un dato de auditoria falso.
+    const { repo, comprometidas } = corteConAlmacen({
+      enReparto: [{ id: "o1" }],
+      conAyuda: [{ id: "a1" }, { id: "a2" }],
+    });
+
+    await repo.crearCierre(inputCorte());
+
+    expect(comprometidas.map((f) => `${f.ordenId}:${f.estatusOrigenId}`)).toEqual([
+      `o1:${idEstado("en_reparto")}`,
+      `a1:${idEstado("ayuda_tienda")}`,
+      `a2:${idEstado("ayuda_tienda")}`,
+    ]);
+    // Contrapunto: los dos origenes son DISTINTOS. Si el bucle se unificara, este par seria uno.
+    expect(new Set(comprometidas.map((f) => f.estatusOrigenId)).size).toBe(2);
+  });
+
+  it("R6: solicitar el cierre por el flujo normal (37, sin corte) NO registra ningun vinculo", async () => {
+    const { repo, tx, comprometidas } = corteConAlmacen({ vinculadas: 3 });
+
+    await repo.crearCierre(
+      inputCorte({ estado: "solicitado" as const, corteSinGestionar: undefined }),
+    );
+
+    expect(tx.cierreSinGestion.createMany).not.toHaveBeenCalled();
+    expect(comprometidas).toEqual([]);
+  });
+
+  it("una vuelta que no movio nada no escribe filas de esa vuelta", async () => {
+    // El `continue` del bucle. Sin el, un mensajero sin ordenes en ayuda produciria cada noche un
+    // `createMany` con `data: []`.
+    const { repo, tx } = corteConAlmacen({ enReparto: [{ id: "o1" }], conAyuda: [] });
+
+    await repo.crearCierre(inputCorte());
+
+    expect(tx.cierreSinGestion.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("usa `skipDuplicates`: una segunda corrida del corte no duplica el vinculo", async () => {
+    const { repo, tx } = corteConAlmacen({ enReparto: [{ id: "o1" }] });
+
+    await repo.crearCierre(inputCorte());
+
+    const arg = tx.cierreSinGestion.createMany.mock.calls[0][0] as { skipDuplicates?: boolean };
+    expect(arg.skipDuplicates).toBe(true);
+  });
+});
+
+// ==============================================================================================
+// FEATURE 264 (B9/Q1, R7/R12/R30) — EL DETALLE PROPIO DEL MENSAJERO TRAE LA MISMA LISTA.
+//
+// `CierreFacturaDetalle` lo renderizan DOS modulos (el del admin y el del mensajero). Siendo el
+// MISMO componente, la seccion aparece en los dos: que pintara en uno y callara en otro es el
+// arreglo a medias que se corrigio en la 263. Aqui se comprueba el lado de los DATOS.
+// ==============================================================================================
+
+describe("264/B9 — findCierrePropioConGestiones trae las ordenes sin gestionar del cierre", () => {
+  function prismaConDetallePropio(
+    cierre: Record<string, unknown> | null,
+    sinGestion: Record<string, unknown>[] = [],
+  ) {
+    const prisma = buildPrisma();
+    (prisma.cierreDia.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(cierre);
+    (prisma.gestionOrden.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    (
+      prisma.cierreSinGestion as { findMany: ReturnType<typeof vi.fn> }
+    ).findMany.mockResolvedValue(sinGestion);
+    return prisma;
+  }
+
+  const CABECERA = {
+    id: "c1",
+    estado: "vencido" as const,
+    destinoTipo: "bodega_satelite" as const,
+    destinoZonaId: "z1",
+    totalEfectivo: new Prisma.Decimal("0"),
+    totalSimpe: new Prisma.Decimal("0"),
+    totalTransferencia: new Prisma.Decimal("0"),
+    totalGeneral: new Prisma.Decimal("0"),
+    totalPagoMensajero: new Prisma.Decimal("0"),
+    totalIngresoBodegaRechazos: new Prisma.Decimal("0"),
+    solicitadoAt: new Date("2026-08-20T06:00:00.000Z"),
+    resueltoAt: null,
+    motivoRechazo: null,
+    sinGestionRegistrado: true,
+  };
+
+  const FILA_CRUDA = {
+    ordenId: "o1",
+    numGuia: 55,
+    numRemision: "REM-1",
+    destinatario: "Ana",
+    producto: "Caja",
+    tiendaNombre: "Tienda X",
+    zonaNombre: "Cartago",
+    estatusOrigen: { value: "en_reparto" },
+  };
+
+  it("R7: la lista cuelga del `cierre_id` en el WHERE, no de un filtro en memoria", async () => {
+    const prisma = prismaConDetallePropio(CABECERA, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.findCierrePropioConGestiones("c1", "m1");
+
+    const arg = (prisma.cierreSinGestion as { findMany: ReturnType<typeof vi.fn> }).findMany.mock
+      .calls[0][0] as { where: unknown; orderBy: unknown };
+    expect(arg.where).toEqual({ cierreId: "c1" });
+    // R12: el orden es EXPLICITO. Sin el, Postgres devuelve las filas como le conviene y la lista
+    // baila entre dos recargas de la misma pantalla.
+    expect(arg.orderBy).toEqual([{ numGuia: "asc" }, { numRemision: "asc" }]);
+  });
+
+  it("R9/R30: devuelve los ocho campos, con el estatus de origen ya traducido a su `value`", async () => {
+    const prisma = prismaConDetallePropio(CABECERA, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    expect(r?.sinGestion).toEqual([
+      {
+        ordenId: "o1",
+        numGuia: 55,
+        numRemision: "REM-1",
+        destinatario: "Ana",
+        producto: "Caja",
+        tiendaNombre: "Tienda X",
+        zonaNombre: "Cartago",
+        estatusOrigen: "en_reparto",
+      },
+    ]);
+    expect(r?.sinGestionRegistrado).toBe(true);
+  });
+
+  it("R32: sin estatus de origen viaja `null`, no una cadena inventada", async () => {
+    const prisma = prismaConDetallePropio(CABECERA, [{ ...FILA_CRUDA, estatusOrigen: null }]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    expect(r?.sinGestion[0].estatusOrigen).toBeNull();
+  });
+
+  it("R27/R28: un cierre marcado como NO registrado emite `false` con la lista vacia", async () => {
+    const prisma = prismaConDetallePropio({ ...CABECERA, sinGestionRegistrado: false }, []);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c1", "m1");
+
+    // `[]` + `false` NO es «no hubo ninguna»: es «no lo sabemos». Los dos campos viajan juntos.
+    expect(r?.sinGestion).toEqual([]);
+    expect(r?.sinGestionRegistrado).toBe(false);
+  });
+
+  it("R30/R8: un cierre AJENO cae en `null` antes de consultar la lista (no se distingue)", async () => {
+    const prisma = prismaConDetallePropio(null, [FILA_CRUDA]);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierrePropioConGestiones("c-ajeno", "m1");
+
+    expect(r).toBeNull();
+    // La guardia esta en el `findFirst` (scope `id` + `mensajeroId` en el WHERE) y CORTA antes:
+    // la consulta de la lista ni siquiera se lanza.
+    expect(
+      (prisma.cierreSinGestion as { findMany: ReturnType<typeof vi.fn> }).findMany,
+    ).not.toHaveBeenCalled();
+    const where = (prisma.cierreDia.findFirst as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .where as unknown;
+    expect(where).toEqual({ id: "c-ajeno", mensajeroId: "m1" });
   });
 });

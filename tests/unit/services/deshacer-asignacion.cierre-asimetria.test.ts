@@ -56,13 +56,16 @@ const ORDEN: OrdenTransicionRow = {
   zonaId: ZONA_CENTRAL,
   zonaEsGam: true,
   tiendaId: "store-1",
+  // Feature 262 (B3): `fechaReparto` pasa a ser OBLIGATORIO en la fila de transicion. Ninguna
+  // asercion de este archivo cambia: lo que aqui se mide es que un cierre pendiente no bloquea.
+  fechaReparto: null,
 };
 
 describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", () => {
-  it("revierte la orden y NO consulta findMensajerosBloqueadosParaGestion (el gate no aplica)", async () => {
+  it("revierte la orden y NO consulta findMensajerosBloqueadosPorCierres (el gate no aplica)", async () => {
     // El espia esta DISPONIBLE en el doble; el service no puede invocarlo porque su `Pick` no
     // lo incluye. El aserto fija esa decision de diseño, no solo la implementacion actual.
-    const findMensajerosBloqueadosParaGestion = vi.fn(
+    const findMensajerosBloqueadosPorCierres = vi.fn(
       async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
     );
     const deshacerAsignacionLote = vi.fn(async () => 1);
@@ -71,7 +74,7 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
       findByIdsForTransicion: vi.fn(async () => [ORDEN]),
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID[v] ?? null),
       deshacerAsignacionLote,
-      findMensajerosBloqueadosParaGestion,
+      findMensajerosBloqueadosPorCierres,
     };
     const service = new DeshacerAsignacionService(
       repo,
@@ -86,14 +89,19 @@ describe("T4.9(a)/R19 — DESHACER con el mensajero en cierre pendiente: `ok`", 
 
     expect(r.status).toBe("ok"); // el cierre pendiente NO es causa de rechazo (R19)
     expect(deshacerAsignacionLote).toHaveBeenCalledTimes(1);
-    expect(findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
+    expect(findMensajerosBloqueadosPorCierres).not.toHaveBeenCalled();
   });
 });
 
-describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18)", () => {
-  it("GuiaAsignacionService.asignarDesdeBodega -> ok, sin consultar el gate de cierres", async () => {
+// ⚠️ ESTE BLOQUE SE DIO LA VUELTA EL 2026-08-23 (FEATURE 271, R28). Se llamaba «ASIGNAR a ese MISMO
+// mensajero YA NO se bloquea (2026-08-18)» y era la otra mitad de la asimetria que la 241 firmo. El
+// humano revirtio esa mitad: asignar SI se bloquea. La asimetria que este archivo mide sigue
+// existiendo, pero es la CONTRARIA: DESASIGNAR (quitarle trabajo a quien esta atascado) no se
+// bloquea; ASIGNAR (darselo) si.
+describe("T4.9(b) — ASIGNAR a ese MISMO mensajero SI se bloquea (feature 271, 2026-08-23)", () => {
+  it("GuiaAsignacionService.asignarDesdeBodega -> conflict, consultando el gate de cierres", async () => {
     const asignarBodegaLote = vi.fn(async (ids: string[]) => ids.length);
-    const findMensajerosBloqueadosParaGestion = vi.fn(
+    const findMensajerosBloqueadosPorCierres = vi.fn(
       async (): Promise<Set<string>> => new Set([MENSAJERO_CON_CIERRE]),
     );
     const repo = {
@@ -116,7 +124,7 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18
       ),
       // El doble sigue diciendo que este mensajero esta bloqueado: el punto es que ya nadie
       // pregunta.
-      findMensajerosBloqueadosParaGestion,
+      findMensajerosBloqueadosPorCierres,
       findMensajerosConOrdenesEn: vi.fn(async (): Promise<Set<string>> => new Set()),
       asignarBodegaLote,
     } as unknown as IOrdenRepository;
@@ -134,9 +142,11 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero YA NO se bloquea (2026-08-18
       MAESTRO,
     );
 
-    expect(r.status).toBe("ok");
-    expect(asignarBodegaLote).toHaveBeenCalledTimes(1);
-    // La simetria con `deshacer`: ninguno de los dos consulta ya el gate de cierres.
-    expect(findMensajerosBloqueadosParaGestion).not.toHaveBeenCalled();
+    expect(r.status).toBe("conflict");
+    // R30: todo-o-nada. La guarda va ANTES de cualquier escritura.
+    expect(asignarBodegaLote).not.toHaveBeenCalled();
+    // LA ASIMETRIA, con el signo nuevo: `deshacer` NO consulta el gate (quitar trabajo no bloquea)
+    // y `asignar` SI lo consulta (darlo si). Antes los dos lo ignoraban.
+    expect(findMensajerosBloqueadosPorCierres).toHaveBeenCalledWith([MENSAJERO_CON_CIERRE]);
   });
 });

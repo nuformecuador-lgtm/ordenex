@@ -24,7 +24,7 @@ function buildService(overrides: Partial<IMisAsignacionesService> = {}): IMisAsi
     conAyuda: [], // feature 235 (R18): el tercer grupo, separado en el servidor
       ordenEnGestionId: null,
       kpis: { pendientes: 0, entregadas: 0, porCobrar: 0, totalACobrar: 0 },
-      ruta: { estado: "vigente" as const, calculadaAt: null, origenFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
+      ruta: { estado: "vigente" as const, calculadaAt: null, origenFuente: null, secuenciaFuente: null, paradasSinOptimizar: 0, trazado: null, tramoSiguiente: null },
     })),
     recogerAsignaciones: vi.fn(async () => ({ status: "ok" as const, recogidas: ["o1"] })),
     escogerParaGestion: vi.fn(async () => ({ status: "ok" as const, ordenId: "o1" })),

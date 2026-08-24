@@ -3,7 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
@@ -13,6 +13,8 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { ICierreDiaService } from "@/lib/interfaces/services/ICierreDiaService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+// Feature 271: el detalle del bloqueo (N, V y cual toca primero) viaja entero al borde.
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 import {
   deshacerGestionSchema,
   listarCierresPasadosCompletoSchema,
@@ -25,7 +27,10 @@ import {
   type SolicitarCierreResult,
   type VerCierrePasadoResult,
 } from "@/lib/types/cierre";
-import { notificarCierreDiaPorAprobarReal } from "@/lib/notificaciones/notificadores";
+import {
+  notificarCierreDiaPorAprobarReal,
+  notificarMensajeroBloqueadoReal,
+} from "@/lib/notificaciones/notificadores";
 import { withErrorHandler, isAppErrorShape, UnauthenticatedError } from "@/lib/errors";
 import type { AppErrorShape } from "@/lib/errors";
 
@@ -42,8 +47,9 @@ function buildService(): ICierreDiaService {
   const prisma = getPrismaClient();
   return new CierreDiaService(
     // Feature 69/T10: el repo del cierre congela `cierre_detail` en la tx de `crearCierre`
-    // (R3/R8) y para eso necesita el resolver de la tarifa vigente por tienda.
-    new CierreDiaRepository(prisma, new TarifaVigentePorTiendaRepository(prisma)),
+    // (R3/R8) y para eso necesita el resolver de la tarifa vigente. Feature 274: ese resolver
+    // resuelve por el PAR (tienda, zona) con la cascada de R1, ya no por tienda sola.
+    new CierreDiaRepository(prisma, new TarifaVigenteRepository(prisma)),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
     // Las evidencias son las de gestion_orden (feature 36): mismo bucket privado.
@@ -53,6 +59,8 @@ function buildService(): ICierreDiaService {
     // Feature 146/R24: COMPOSITION ROOT del aviso "cierre por aprobar". Se cablea aqui y no
     // como default del service (ver `lib/notificaciones/notificadores.ts`).
     notificarCierreDiaPorAprobarReal,
+    // FEATURE 271 (T6.5, R40/R41): COMPOSITION ROOT del aviso «quedaste bloqueado por acumular».
+    notificarMensajeroBloqueadoReal,
   );
 }
 
@@ -61,30 +69,41 @@ export interface CierreDiaDeps {
   getActor?: () => Promise<Actor | null>;
 }
 
-// Feature 41 (R21): deps del flag de bloqueo derivado del mensajero. Inyecta el repo
-// (solo el metodo de bloqueo) y el actor en tests, sin tocar el service backend.
+// Feature 41 (R21): deps del bloqueo derivado del mensajero. Inyecta el repo (solo el metodo de
+// bloqueo) y el actor en tests, sin tocar el service backend.
 export interface EstadoBloqueoMensajeroDeps {
-  ordenRepo?: Pick<IOrdenRepository, "findMensajerosBloqueadosParaGestion">;
+  ordenRepo?: Pick<IOrdenRepository, "findBloqueoDetalle">;
   getActor?: () => Promise<Actor | null>;
 }
 
-/** Resultado del flag de bloqueo del mensajero (R21). `unauthenticated` = sin sesion. */
+/**
+ * Resultado del bloqueo del mensajero (R21). `unauthenticated` = sin sesion.
+ *
+ * ⚠️ FEATURE 271: ya NO es un booleano. La pantalla tiene que decir CUANTOS cierres arrastra y
+ * CUAL toca resolver primero (R43), y eso no cabe en un `bloqueado: boolean`. `bloqueado` sigue
+ * DENTRO del detalle (`bloqueo.bloqueado`), que es donde la regla lo calcula — y NO se duplica
+ * fuera: el campo puente que existio durante la pasada de backend se retiro con T9.3, en cuanto
+ * las cuatro pantallas pasaron a bajar el detalle entero.
+ */
 export type EstadoBloqueoMensajeroResult =
-  | { status: "ok"; bloqueado: boolean }
+  | { status: "ok"; bloqueo: BloqueoDetalle }
   | { status: "unauthenticated" };
 
 /**
- * Feature 41 (R21) — deriva SERVER-SIDE si el mensajero (el actor) esta BLOQUEADO, reutilizando
- * `findMensajerosBloqueadosParaGestion` del backend (sin flag persistido).
+ * Feature 41 (R21) -> FEATURE 271 — deriva SERVER-SIDE el BLOQUEO del mensajero (el actor)
+ * reutilizando `findBloqueoDetalle` del backend, sin flag persistido (R12).
  *
- * FEATURE 241 (2026-08-20) — QUE DICE ESTE AVISO AHORA. Se enciende exactamente cuando el
- * mensajero NO PUEDE GESTIONAR NI COBRAR, que desde la regla firmada es tener un cierre `vencido`
- * o `rechazado`. Y NO se enciende con `solicitado`: ese mensajero ya hizo lo suyo y esta esperando
- * al admin (mediana 8,2 h, p90 22,1 h), asi que sigue trabajando con normalidad.
+ * QUE DICE ESTE AVISO AHORA. Se enciende exactamente cuando el mensajero esta BLOQUEADO por la
+ * regla N/V: `N >= 2` (acumula cierres) o `V >= 1` (arrastra uno sin enviar a aprobacion). Y NO se
+ * enciende con `N = 1, V = 0` —un solo cierre `solicitado`—: ese mensajero ya hizo lo suyo y
+ * espera al admin (mediana 8,2 h, p90 22,1 h medidas contra produccion), asi que sigue trabajando
+ * con normalidad. Esa es la mitad de la regla del 2026-08-20 que la 271 conserva.
  *
- * El aviso NO habla de asignaciones, y ese cambio es el punto: recibir ordenes nuevas no se
- * bloquea nunca. El texto vive en `lib/constants/bloqueo-mensajero.ts`, compartido por los dos
- * portales.
+ * ⚠️ Y EL AVISO YA SI HABLA DE ASIGNACIONES, en sentido contrario al de la 241: desde el
+ * 2026-08-23 un mensajero bloqueado TAMPOCO recibe trabajo nuevo —ni reparto ni recoleccion—, asi
+ * que decirlo dejo de ser una promesa falsa y paso a ser lo que el servidor hace. El texto vive en
+ * `lib/constants/bloqueo-mensajero.ts` (`avisoBloqueo`), compartido por los tres portales y por la
+ * campana.
  *
  * Se CONSULTA el mismo predicado que aplica el servidor, no se re-deriva, para que el aviso diga
  * exactamente lo que el servidor va a rechazar — que es la propiedad que la incoherencia del
@@ -97,8 +116,8 @@ export async function estadoBloqueoMensajero(
     const actor = await (deps.getActor ?? resolveActorFromSession)();
     if (!actor) throw new UnauthenticatedError(); // R1: antes de tocar el repo
     const repo = deps.ordenRepo ?? new OrdenRepository(getPrismaClient());
-    const bloqueados = await repo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
-    return { status: "ok" as const, bloqueado: bloqueados.has(actor.usuarioId) };
+    const bloqueo = await repo.findBloqueoDetalle(actor.usuarioId);
+    return { status: "ok" as const, bloqueo };
   });
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;
 }
