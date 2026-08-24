@@ -70,15 +70,24 @@ function fakeOrdenRepo(
   return { findEstatusIdByValue: vi.fn(async (v: string) => map[v] ?? null) };
 }
 
+/**
+ * FEATURE 273 (T10, R30): el doble pasa a `contarIntentosEnLote`, porque el servicio dejo de
+ * contar de a una dentro del bucle. `intentos` se devuelve para TODAS las candidatas de la corrida,
+ * que es lo que estos casos necesitan (cada uno trae una o dos ordenes con el mismo perfil).
+ */
 function fakeHistorial(
   intentos = 0,
-): Pick<IOrdenHistorialService, "contarIntentos"> {
-  return { contarIntentos: vi.fn(async () => intentos) };
+): Pick<IOrdenHistorialService, "contarIntentosEnLote"> {
+  return {
+    contarIntentosEnLote: vi.fn(
+      async (ids: string[]) => new Map(ids.map((id) => [id, intentos])),
+    ),
+  };
 }
 
 function newService(
   repo: IDevolucionSlaRepository = fakeRepo(),
-  historial: Pick<IOrdenHistorialService, "contarIntentos"> = fakeHistorial(),
+  historial: Pick<IOrdenHistorialService, "contarIntentosEnLote"> = fakeHistorial(),
   zonaRepo = fakeZonaRepo(),
   ordenRepo = fakeOrdenRepo(),
 ) {
@@ -164,8 +173,14 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
       const res = await newService(repo, historial).ejecutar(NOW);
       expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
       expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
-      // R17: no consulta el conteo de intentos para las causas de rechazo directo.
-      expect(historial.contarIntentos).not.toHaveBeenCalled();
+      // ⏳ 2026-08-24 (FEATURE 273, T10) — AQUI DECIA «no consulta el conteo de intentos para las
+      // causas de rechazo directo», y eso DEJA DE SER CIERTO a proposito: desde la 273 la rama
+      // `wrong_*` SI mira el contador, para poder escalar sin esperar los cinco dias cuando la
+      // orden ya agoto sus intentos (R28). El aserto no se relaja ni se borra: se sustituye por
+      // el que sigue siendo verdad y sigue teniendo contenido —el conteo es UNO POR CORRIDA, no
+      // uno por orden (R30)— y el DESENLACE de este caso (escala con la ventana vencida) no
+      // cambia ni un apice.
+      expect(historial.contarIntentosEnLote).toHaveBeenCalledTimes(1);
     },
   );
 });
@@ -222,7 +237,10 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
       findDevueltasSla: vi.fn(async () => [row({ ordenId: ORDEN, causa: "not_found" })]),
     });
     const { service, prisma } = historialReal(filas);
-    const svc = newService(repo, service as unknown as Pick<IOrdenHistorialService, "contarIntentos">);
+    const svc = newService(
+      repo,
+      service as unknown as Pick<IOrdenHistorialService, "contarIntentosEnLote">,
+    );
     return { repo, svc, prisma, service };
   }
 
@@ -349,9 +367,14 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // R16: el resto del cron no cambia. `wrong_number`/`wrong_address` escalan DIRECTO sin mirar
-  // el conteo — el criterio nuevo NO puede haber alterado esta rama.
-  it("R16: `wrong_number`/`wrong_address` siguen escalando DIRECTO, sin consultar el conteo", async () => {
+  // ⏳ 2026-08-24 (FEATURE 273, T10) — LA MITAD QUE SIGUE VIVA Y LA QUE CAMBIA, separadas.
+  //
+  // Decia: «`wrong_number`/`wrong_address` escalan DIRECTO SIN MIRAR EL CONTEO — el criterio nuevo
+  // de la 215 NO puede haber alterado esta rama». La segunda mitad de esa frase caduca con la 273,
+  // que hace que esa rama SI mire el contador (R28). La primera mitad —con la ventana vencida,
+  // escala, y el conteo no cambia ese desenlace— sigue siendo cierta y es lo que este caso
+  // conserva: `intentos = 0` es el conteo mas bajo posible y aun asi escala.
+  it("R16/R28: `wrong_address` con la ventana VENCIDA escala aunque el conteo sea 0", async () => {
     const historial = fakeHistorial(0);
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [
@@ -361,10 +384,19 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     const res = await newService(repo, historial).ejecutar(NOW);
 
     expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
-    expect(historial.contarIntentos).not.toHaveBeenCalled();
+    // El conteo se consulta (una vez, por lote) pero NO decide este desenlace: la ventana ya vencio.
+    expect(historial.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  it("R16: el conteo se consulta UNA vez por orden y con SU id (contrato intacto)", async () => {
+  // ⏳ 2026-08-24 (FEATURE 273, T10, R30) — ESTE CASO CAMBIA DE FORMA, CON SU DECISION ESCRITA.
+  //
+  // Decia «el conteo se consulta UNA vez POR ORDEN y con SU id». Desde la 273 se consulta UNA vez
+  // POR CORRIDA y con TODOS los ids, porque las DOS ramas del cron necesitan el numero y contar
+  // por separado en cada una crearia dos formas de obtener el mismo dato en el mismo servicio —la
+  // divergencia que 215/R4 existe para impedir—. Lo que el caso protege no se relaja: sigue
+  // afirmando que se consulta, cuantas veces y CON QUE IDS. De paso desaparece el N+1.
+  it("R30: el conteo se consulta UNA vez por CORRIDA y con TODOS los ids del lote", async () => {
     const historial = fakeHistorial(0);
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [
@@ -374,9 +406,8 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     });
     await newService(repo, historial).ejecutar(NOW);
 
-    expect(historial.contarIntentos).toHaveBeenCalledTimes(2);
-    expect(historial.contarIntentos).toHaveBeenNthCalledWith(1, "o-a");
-    expect(historial.contarIntentos).toHaveBeenNthCalledWith(2, "o-b");
+    expect(historial.contarIntentosEnLote).toHaveBeenCalledTimes(1);
+    expect(historial.contarIntentosEnLote).toHaveBeenCalledWith(["o-a", "o-b"]);
   });
 });
 
