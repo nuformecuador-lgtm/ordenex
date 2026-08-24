@@ -1238,3 +1238,306 @@ git show 544be904:lib/repositories/CierresAdminRepository.ts:80
 3. **M2, M3, M4, M5, M7 y M8** (menores de la revisión) **no se tocaron**: no eran el encargo. El
    más caro de los seis sigue siendo **M3** —nada impide que una superficie nueva re-derive la
    regla—, y ahora está dicho en la fila R10 del mapa en vez de vendido como cubierto.
+
+---
+
+# impl 271 — LAS TRES CASILLAS ABIERTAS (T3.5 · T8.3 · T10.3)
+
+> Pasada del **2026-08-23**, sobre `feature/271-segundo-cierre-y-bloqueo` (HEAD `56f4e7ba`).
+> Cierra las tres tareas que el marcado de `tasks.md` dejó a propósito en `[ ]`.
+> **Ni una línea de `lib/` ni de `app/` tocada** — comprobado con `git status`.
+
+## Archivos
+
+| Archivo | Qué |
+|---|---|
+| `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts` | **NUEVO.** T10.3: la corrida del corte, sembrada contra Postgres. 4 casos |
+| `specs/246-asignacion-por-dia/requirements.md` | T8.3: nota de caducidad (+17 líneas, **0 borradas**) |
+| `specs/262-corregir-dia-reparto/design.md` | T8.3: nota de caducidad (+10 líneas, **0 borradas**) |
+| `specs/262-corregir-dia-reparto/tasks.md` | T8.3: nota de caducidad (+8 líneas, **0 borradas**) |
+| `specs/271-segundo-cierre-y-bloqueo/tasks.md` | Las tres filas + el bloque de cierre del marcado. **58 `[x]` · 0 `[ ]`** |
+| `progress/impl_271.md` | Esta sección |
+
+---
+
+## T10.3 — la corrida del corte, contra Postgres
+
+### Por qué hacía falta, en una línea
+
+El cambio central de la ficha es **una línea que se fue** —la exclusión `ESTADOS_CIERRE_ABIERTOS` de
+`CorteDiarioRepository.findMensajerosConActividadSinCierre`— y **eso es un `WHERE`**. Lo único que
+lo cubría era `corte-diario-repository.test.ts`, que afirma que `prisma.cierreDia.findMany` **no se
+llama**: una afirmación sobre la FORMA de la consulta, no sobre las filas que Postgres devuelve. En
+este repo está medido **cuatro veces** que una mutación de un `WHERE` sobrevive en verde con dobles.
+
+### Cómo está construido
+
+Repositorios **REALES** (`CorteDiarioRepository`, `CierreDiaRepository`, `OrdenRepository`,
+`ZonaRepository`, `TarifaZonaMensajeroRepository`) sobre una transacción **siempre revertida**. El
+notificador es un espía —nunca el real, que escribiría fuera de la transacción con su propio
+cliente—. Dos decisiones que no son cosméticas:
+
+1. **Los mensajeros los crea el test.** El corte lee **toda** la base, y la de desarrollo es
+   compartida: con usuarios prestados, «recibió su segundo cierre» dejaría de ser consecuencia del
+   corpus sembrado. Creados dentro de la transacción, su estado de partida es **cero** y está
+   escrito.
+2. **Cuarentena de lo previo**, dentro de la misma transacción y **antes** de sembrar: las gestiones
+   sueltas que ya había pasan a un cierre de descarte y las órdenes previas en
+   `en_reparto`/`ayuda_tienda` pierden su mensajero. Sin eso, `mensajerosEvaluados` mediría lo que
+   otro dejó, y una corrida podría reventar dentro del `crearCierre` de un mensajero ajeno.
+
+### Los cuatro casos
+
+| Caso | Qué mide |
+|---|---|
+| **1 · R21/R23 — el caso `79cb2c0f`** | Mensajero con un `solicitado` de ayer (2 gestiones ya vinculadas a él) + 2 gestiones sueltas de hoy + 1 guía en `en_reparto`. El corte **SÍ** le crea el segundo cierre (`vencido`), le vincula **exactamente** las 2 sueltas, **no toca** ninguna de las de ayer, deja el `solicitado` en `solicitado`, barre la guía a `sin_gestionar` conservando el mensajero asignado y la registra en `cierre_sin_gestion` **del cierre nuevo** con su `estatus_origen_id` real. Y el aviso sale **una** vez, con `jornadaCR = 2026-08-21` (no el 22, que es cuando corre el cron) |
+| **2 · R22/R17 — el ya bloqueado no acumula** | Mensajero con un `vencido`, sus gestiones ya vinculadas a él y su guía ya en `sin_gestionar`. Tras la corrida sigue con **exactamente un** `vencido`. Con un mensajero **TESTIGO** al lado que sí tiene una gestión suelta y sí recibe su cierre: sin él, «no se creó nada» también sería cierto si la corrida no hubiera hecho nada en absoluto |
+| **3 · R23/R24 — el barrido y la idempotencia** | `en_reparto` **y** `ayuda_tienda` van a `sin_gestionar`, cada una registrada con **su** origen real; la orden **reservada para mañana** no se barre (246/R11); la gestión **ANULADA** no se vincula (67/R16); el otro mensajero recibe **su** cierre, distinto (R23). Y la **segunda corrida de la misma noche** —el reintento del cron, que es real— evalúa **0** mensajeros, crea **0** cierres, **no re-vincula** y **no re-registra** |
+| **4 · ⚠️ R17 — el contraejemplo** | Ver el hallazgo, abajo |
+
+### Las dos mutaciones, ejecutadas
+
+**(a) — reponer la exclusión por cierre abierto** en `CorteDiarioRepository`
+(`cierreDia.findMany` + `filter` por `["solicitado","vencido","rechazado"]`):
+
+```
+ × R21/R23 · el caso `79cb2c0f`: ... el corte SI le crea el segundo cierre
+   -> AssertionError: expected [] to include '9a3f9cbf-b459-4f24-b7a0-928e2d2295ce'
+ ✓ R22/R17 · el mensajero YA bloqueado ... NO recibe un segundo
+ ✓ R23/R24 · el barrido a `sin_gestionar`, la vinculacion y la idempotencia de la 2.ª corrida
+ × ⚠️ R17 · contraejemplo: la orden reservada (246) ... trae un SEGUNDO `vencido`
+   -> AssertionError: expected [] to include 'd9b86b10-27fa-484b-81c4-31b77c1bf7d7'
+ Test Files  1 failed (1)      Tests  2 failed | 2 passed (4)
+```
+
+**MURIERON: el caso 1 y el caso 4.** Y no sólo por la lectura directa de la lista: silenciada esa
+aserción, el caso 1 **muere igual** una línea más abajo —
+
+```
+AssertionError: expected 0 to be greater than or equal to 1
+  -> expect(medido.resultado.mensajerosEvaluados).toBeGreaterThanOrEqual(1)
+```
+
+— es decir, el desenlace de comportamiento también se pone rojo, no sólo el testigo del `WHERE`.
+Mutación revertida; los 4 casos vuelven a verde.
+
+**(b) — romper la guarda «algo pasó»** de `CierreDiaRepository.crearCierre`
+(`if (false && vinculadas.count === 0 && sinGestionarTransicionadas === 0)`):
+
+```
+ ✓ R21/R23 · el caso `79cb2c0f` ...
+ ✓ R22/R17 · el mensajero YA bloqueado ... NO recibe un segundo
+ ✓ R23/R24 · el barrido ... y la idempotencia de la 2.ª corrida
+ ✓ ⚠️ R17 · contraejemplo ...
+ Test Files  1 passed (1)      Tests  4 passed (4)
+```
+
+**SOBREVIVE. Y eso NO es un hueco del test: es un hallazgo.**
+
+> ⚠️ **EL MECANISMO QUE SOSTIENE R17 NO ES LA GUARDA QUE EL SPEC NOMBRA.**
+> `tasks.md` (T3.3), `design.md` y el comentario de cabecera de `CorteDiarioRepository` sostienen
+> R17 diciendo que el bloqueado **«entra en el bucle»** y que `crearCierre` lo descarta con su
+> guarda «algo pasó». **Postgres dice que no llega a entrar en el bucle**: las dos ramas de la
+> selección —gestiones con `cierre_id IS NULL` y órdenes en `en_reparto`/`ayuda_tienda`— ya vienen
+> **vacías** para él, porque el corte que lo bloqueó barrió y vinculó todo en la misma transacción.
+> El caso 2 lo afirma explícitamente (`expect(evaluados).not.toContain(bloqueado)`).
+> La conclusión —ningún segundo `vencido` por esa vía— es la misma y es **más fuerte**; lo que no es
+> cierto es la **razón escrita**, y esa razón es la que justificó quitar la exclusión «sin ninguna
+> condición nueva» (S3).
+>
+> **La guarda sí tiene red, pero en otro sitio.** Con la mutación (b) puesta:
+> `tests/unit/repositories/cierre-dia-repository.test.ts` → **4 tests rojos** (entre ellos
+> «246/R11: la orden reservada para MAÑANA no se barre — y sin nada más que barrer, no hay cierre»).
+> Y **`tests/integration/db` entero** —133 archivos / 1794 tests— **pasa en verde con ella puesta**:
+> ningún test de integración cubría esa guarda, y sigue sin cubrirla, porque por el camino del corte
+> el estado «seleccionado y sin nada que cerrar» **no es alcanzable con datos estáticos**.
+
+### La anti-vacuidad, demostrada (no prometida)
+
+Este repo ya tuvo un test de integración que reportaba `passed` **sin ejecutar una sola aserción**
+por un `return` temprano. Las cuatro defensas de este archivo, y la prueba de cada una:
+
+1. **`describe.skip` sin base.** Mismo patrón que `cierre-sin-gestion-sql-real.test.ts`: un `skip` se
+   ve en la salida; un `passed` sin base, no.
+2. **Cinco fallos RUIDOSOS en el `beforeAll`** (`throw new Error`), uno por cada cosa sin la que el
+   corpus no se puede sembrar: FKs de `orden`, los tres estatus del catálogo, la zona central, el
+   rol `mensajero` y el tipo de identificación.
+3. **Cero `return` de salida temprana.** `grep "return"` sobre el archivo deja sólo el `return` del
+   objeto medido y los de las fábricas de siembra; las tres apariciones restantes están en
+   comentarios.
+4. **`afirmarCorpusSembrado`**, que cuenta el corpus **EN LA BASE** antes de medir nada y revienta
+   con el número que encontró.
+
+Y las dos contrapruebas, ejecutadas:
+
+```
+DEMO 1 — se vacía el corpus del caso 1 (fuera las 2 gestiones sueltas):
+  Error: el corpus NO quedo sembrado como dice el caso, asi que lo que se mida despues no vale.
+         Esperado {"gestionesSueltas":2,...}; encontrado {"gestionesSueltas":0,...}
+  Tests  1 failed | 3 skipped (4)
+
+DEMO 2 — corpus vacío Y ADEMÁS con el propio `afirmarCorpusSembrado` desactivado:
+  AssertionError: expected undefined to be 'f29f4ef3-7931-4f6a-9e83-c52574b8d372'
+  Tests  1 failed | 3 skipped (4)
+```
+
+**Dos redes independientes**: sin datos el caso muere por el contador, y si alguien quitara el
+contador moriría igual en la aserción de comportamiento. En ningún camino pasa en verde.
+
+> Nota metodológica, porque vale para el próximo: el contador **ya mordió durante el desarrollo**,
+> antes de ninguna contraprueba. La primera corrida del caso 2 murió con
+> `Esperado {"cierresPrevios":3}; encontrado {"cierresPrevios":2}` — un error de cuenta mío, no del
+> código. Un test que no puede pasar sin datos también protege del test mal escrito.
+
+---
+
+## 🔴 HALLAZGO — **R17 es falso: dos `vencido` a la vez SÍ es alcanzable**
+
+**Medido, no razonado.** Caso 4 del archivo nuevo.
+
+### El argumento de R17 y dónde se rompe
+
+R17 dice, en tres pasos: (1) con un `vencido` el mensajero queda bloqueado y no genera actividad
+nueva; (2) el corte que lo creó ya barrió sus órdenes **en la misma transacción**; (3) por tanto la
+noche siguiente no le queda nada que cerrar.
+
+**El paso (2) dejó de ser cierto el día que entró la feature 246.** Una orden **reservada para un
+día posterior sobrevive al barrido** (246/R11) y **su protección caduca sola** (246/R13). Así que un
+mensajero puede quedar bloqueado **con una guía todavía en la mano**. La noche siguiente esa reserva
+vence, vuelve a entrar por la rama (b) de la selección, `crearCierre` la barre,
+`sinGestionarTransicionadas` vale 1, la guarda «algo pasó» **pasa** — y nace el **segundo
+`vencido`**.
+
+### Es alcanzable en producción, no fabricado
+
+Para que la guía esté en `en_reparto` **con** una fecha futura hace falta que alguien la ponga ahí, y
+hay un camino que lo hace por diseño: **`CorreccionDiaRepartoService`, feature 262**. Su constante
+`ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["por_recoger", "en_reparto", "ayuda_tienda"]` y su propio
+comentario lo dicen — *«`en_reparto`: la población que la 261 dejó ATRAPADA: el paquete ya está en
+la mano del mensajero»*. Es decir: bodega pasa a mañana una guía que el mensajero ya lleva encima, y
+esa guía atraviesa el corte que lo bloquea.
+
+Secuencia completa, con las fichas que la habilitan:
+
+1. Día D — el mensajero recoge una guía → `en_reparto`, `fecha_reparto = D`.
+2. Día D — bodega la corrige a «mañana» (**262**) → `en_reparto`, `fecha_reparto = D+1`.
+3. Corte de la noche D→D+1 (`diaCerrado = D`) — sus gestiones sueltas lo arrastran al bucle; la guía
+   está **protegida** (**246/R11**) y no se barre → **`vencido` #1**. Bloqueado.
+4. Día D+1 — bloqueado, no gestiona. La guía sigue donde estaba.
+5. Corte de la noche D+1→D+2 (`diaCerrado = D+1`) — la reserva **caducó sola** (**246/R13**), entra
+   por la rama (b), se barre → **`vencido` #2**.
+
+**Antes de la 271 el paso 5 no ocurría**: la exclusión por cierre abierto lo sacaba de la corrida.
+**Es decir: lo introduce esta ficha.**
+
+### Qué NO se hizo, y por qué
+
+**No se tocó una línea de `lib/`.** Tres razones, por orden de peso:
+
+1. **El desenlace medido es el razonable.** La orden necesitaba barrido y necesitaba un cierre al
+   que ir; el `vencido` #2 no pierde dinero ni deja una guía huérfana. Lo contrario —volver a
+   excluirlo— es exactamente el bug de producción que la ficha vino a arreglar.
+2. **El estado resultante ya está cubierto por la regla general.** `N=2, V=2` es la **fila 7** de la
+   tabla de verdad con dos `vencido` en vez de dos `rechazado`; la re-solicitud lo trata igual
+   (**R18**: el más viejo primero, con el `id` en el `WHERE`), y `aReenviarPrimero` también.
+3. **Lo que hay que corregir es la prosa**, y esa decisión es humana: **R17** de `requirements.md`,
+   el comentario de **T2.5** en `CorteDiarioService` y `CierreDiaRepository`, la justificación de
+   **T2.4** para no escribir el caso de dos `vencido`, y la tercera viñeta del bloque de cabecera de
+   `CorteDiarioRepository`.
+
+El caso 4 **queda en el árbol** con esa advertencia escrita encima: es el único registro
+**ejecutable** del hallazgo, y si alguien decide cambiar el comportamiento se pondrá rojo y leerá
+por qué.
+
+---
+
+## T8.3 — los tres specs ajenos
+
+Nota de caducidad **fechada** en los tres, **sin reescribir una línea**: son la foto de su momento y
+sus decisiones se tomaron a conciencia. `git diff --numstat specs/` → **35 adiciones, 0 borrados**.
+
+| Spec | Qué decía | Qué dice la nota |
+|---|---|---|
+| `246-asignacion-por-dia/requirements.md` | «desde la ficha 241 … un `vencido` bloquea al mensajero para gestionar y cobrar» | **Se queda corto, no es falso.** Desde la 271 bloquea también para **recibir trabajo nuevo** (reparto central, satélite **y** recolección) y **acumular dos sin aprobar bloquea sin `vencido`**. Y en la otra dirección: lo que la 246 decidió pesa **más** hoy. La nota añade el cruce que esta medición encontró — esa misma reserva es lo que vuelve alcanzable el estado que la 271 declara imposible |
+| `262-corregir-dia-reparto/design.md` §4.1 | «Es la regla 2 de la feature 241 … "recibir asignaciones no se bloquea nunca"» | **Cae la justificación, no la decisión.** R14 sigue en pie por su **otra** razón —corregir el día de una orden que el mensajero ya tiene en la mano no es darle trabajo nuevo—, que ya está escrita en el `Pick` de `CorreccionDiaRepartoService.ts` |
+| `262-corregir-dia-reparto/tasks.md` B6 | Ídem, más el nombre viejo del método | Ídem, más el renombrado a `findMensajerosBloqueadosPorCierres` |
+
+---
+
+## T3.5 — **declarada SIN MEDIR, por decisión humana**
+
+No hay número de consultas ni de tiempo, ni antes ni después, y **no se construye el banco de
+medida**. La razón, escrita aquí y en `tasks.md` para que no se vuelva a abrir sola:
+
+- El cambio **quita** una consulta por corrida (la que restaba a quien tenía cierre abierto).
+- **Añade** una emisión por cierre creado.
+- Lo único que crece es el **universo de mensajeros evaluados**, y ese universo sigue siendo **«los
+  que tienen actividad»**, no todos. En producción son **dos o tres por noche**.
+
+Un banco de ~50 mensajeros mediría un escenario que no existe. **Si algún día el corte evalúa
+decenas por noche, la tarea se reabre; hoy no.**
+
+---
+
+## Mapa `R<n>` → test — lo que aporta esta pasada
+
+Todo en `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`, **contra Postgres real
+y con datos sembrados**.
+
+| R | Test | Qué aporta sobre lo que ya había |
+|---|---|---|
+| **R21** | «R21/R23 · el caso `79cb2c0f`…» | Antes: unitario que afirma que `cierreDia.findMany` **no se llama**. Ahora: el mensajero con un `solicitado` **aparece en la lista que Postgres devuelve**, y **recibe** su segundo cierre. **Mata la mutación (a)** |
+| **R22** | «R22/R17 · el mensajero YA bloqueado…» | Antes: unitario con doble (`crearCierre → null`). Ahora: sembrado, con testigo, y con el mecanismo real afirmado |
+| **R23** | «R23/R24 · el barrido…» | Dos mensajeros, dos cierres distintos, un cierre por mensajero y corrida, **medido** |
+| **R24** | «R23/R24 · el barrido…» | Antes: la mitad «no re-vincula» por el test de R14 y la mitad «no re-registra» apoyada en un test **previo** a la ficha. Ahora: **una segunda corrida real** que no re-vincula, no re-registra y no crea nada |
+| **R17** | «⚠️ R17 · contraejemplo…» | Antes: **sin test, a propósito**, por inalcanzable. Ahora: **medido alcanzable**. Ver el hallazgo |
+
+---
+
+## Verificación de esta pasada
+
+```
+pnpm run typecheck
+  > tsc --noEmit
+  (sin una sola linea de salida)
+
+pnpm run lint
+  ✖ 99 problems (0 errors, 99 warnings)      [las 99 son PREVIAS: mismo numero que
+                                              las dos pasadas anteriores. El archivo
+                                              nuevo no anade ninguna]
+
+pnpm exec vitest run tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts
+   Test Files  1 passed (1)
+        Tests  4 passed (4)
+
+pnpm exec vitest run tests/integration/db          [la carpeta entera: el archivo nuevo vive ahi]
+   Test Files  130 passed (130)
+        Tests  1670 passed (1670)                  [antes de esta pasada: 126 / 1657]
+
+pnpm exec vitest run guard                          [138 guardias, por si alguna censa specs/]
+   Test Files  138 passed (138)
+        Tests  2054 passed (2054)
+
+pnpm exec vitest run tests/unit/repositories/corte-diario-repository.test.ts
+                     tests/unit/repositories/cierre-dia-repository.test.ts
+                     tests/unit/services/corte-diario-{service,seleccion,aviso-vencido}.test.ts
+   Test Files  5 passed (5)
+        Tests  150 passed (150)                     [las dos mutaciones quedaron revertidas]
+```
+
+**`lib/` y `app/` intactos**, comprobado y no prometido — las dos mutaciones se aplicaron sobre
+copias respaldadas y se revirtieron:
+
+```
+git status --short lib/ app/     ->  (sin salida)
+```
+
+⚠️ **NO se corrió `./init.sh`** — por encargo explícito: lo lanza el leader, y ya está dicho que hay
+que repetirlo **entero** sobre este árbol.
+
+## Veredicto
+
+Las tres casillas cerradas: **T10.3** con la corrida del corte sembrada contra Postgres y sus dos
+mutaciones ejecutadas, **T8.3** con nota de caducidad en los tres specs ajenos sin tocar una línea
+original, y **T3.5** declarada sin medir con su razón escrita — y de propina, **R17 medido FALSO**,
+con el camino de producción nombrado y sin haber tocado el código.

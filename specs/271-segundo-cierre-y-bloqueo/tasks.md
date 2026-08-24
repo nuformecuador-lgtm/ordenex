@@ -19,6 +19,21 @@
 > y **T10.3** (los casos del corte, sin sembrar contra Postgres)— se quedan en `[ ]` **a propósito**:
 > marcarlas sería exactamente el fallo mudo que esta ficha vino a cerrar. **T3.5** consta declarada
 > en la bitácora; **T8.3** y **T10.3** no constaban en ninguna y se midieron hoy.
+>
+> ---
+>
+> ## CIERRE DE LAS TRES — 2026-08-23, misma tarde
+>
+> **58 hechas · 0 abiertas.** **T8.3** y **T10.3** se **hicieron**: nota de caducidad en los tres
+> specs ajenos (sin tocar una línea original) y la corrida del corte sembrada contra Postgres, con
+> sus dos mutaciones ejecutadas. **T3.5** se cierra **DECLARADA SIN MEDIR por decisión humana**, con
+> la razón escrita en su fila: el universo del corte sigue siendo «los que tienen actividad» —dos o
+> tres por noche— y un banco de ~50 mediría un escenario que no existe.
+>
+> ⚠️ **T10.3 destapó un hallazgo que no estaba en ninguna parte: R17 es FALSO.** Dos `vencido` a la
+> vez **sí** es alcanzable, por la reserva de día de la feature 246 y la corrección de día de la 262.
+> Está medido en el caso 4 del archivo nuevo y detallado en la fila de T10.3. **No se corrigió
+> código: la decisión es del humano.**
 
 ---
 
@@ -189,8 +204,8 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   a registrar en `cierre_sin_gestion` ni cambia su `cierre_id`. → **R24**
   **Depende de:** T3.1.
 
-- [ ] **T3.5 [P] — Medir el coste de la corrida.**
-  **Desenlace: NO HECHA.** El coste de la corrida del corte **no se midio**: no hay numero de consultas ni de tiempo, ni antes ni despues. Consta en `progress/impl_271.md` §«Lo que NO se cubrio», punto 5, con lo que se sabe sin medir (se quita una consulta por corrida y se anade una emision por cierre creado; el universo de mensajeros evaluados crece hasta incluir a los que tienen cierre abierto). **Sigue abierta.**
+- [x] **T3.5 [P] — Medir el coste de la corrida.**
+  **Desenlace: DECLARADA SIN MEDIR, por decision humana del 2026-08-23.** No hay numero, y **no se construye el banco de medida**. La razon, escrita para que el proximo lector no la vuelva a abrir: el cambio **quita** una consulta por corrida (la que restaba a quien tenia cierre abierto) y **anade** una emision por cierre creado; lo unico que crece es el universo de mensajeros evaluados, y **ese universo sigue siendo «los que tienen actividad»**, no todos — en produccion son **dos o tres por noche**. Un banco de ~50 mensajeros mediria un escenario que no existe. Consta igual en `progress/impl_271.md`. **Si algun dia el corte evalua decenas de mensajeros por noche, esta tarea se reabre; hoy no.**
   Corrida sembrada con ~50 mensajeros, mitad con cierre abierto: consultas y tiempo **antes y
   después** del cambio.
   **Hecho cuando:** el número está escrito en `progress/impl_271.md`. Si sube más de 2×, se abre una
@@ -404,8 +419,11 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   frases (comprobado a mano, y anotado). → **R51**
   **Depende de:** T8.1.
 
-- [ ] **T8.3 [P] — Actualizar los specs que citan la regla vieja.**
-  **Desenlace: NO HECHA.** Los tres specs ajenos siguen afirmando la regla del 20/08 **sin nota de caducidad**: `specs/246-asignacion-por-dia/requirements.md` («desde la ficha 241 … un `vencido` bloquea para gestionar y cobrar»), `specs/262-corregir-dia-reparto/design.md:128` («recibir asignaciones no se bloquea nunca») y `specs/262-corregir-dia-reparto/tasks.md:150`. **No consta en ninguna bitacora**: medido con `grep` el 2026-08-23, durante la correccion de la revision. **Sigue abierta.**
+- [x] **T8.3 [P] — Actualizar los specs que citan la regla vieja.**
+  **Desenlace: HECHA el 2026-08-23.** Los tres llevan ya su **nota de caducidad** fechada, y **ni una linea original se toco** (`git diff --numstat` sobre `specs/`: **35 adiciones, 0 borrados**). Son documentos historicos de fichas cerradas: se anotan, no se reescriben.
+  · `specs/246-asignacion-por-dia/requirements.md` — lo que dice de la 241 («un `vencido` bloquea para gestionar y cobrar») **se queda corto**, no es falso: desde la 271 bloquea tambien para RECIBIR TRABAJO NUEVO, y dos cierres sin aprobar bloquean sin `vencido`. La nota anade el cruce que la medida encontro: la reserva de la 246 es lo que vuelve **alcanzable** el estado que la 271 declara imposible (ver T10.3).
+  · `specs/262-corregir-dia-reparto/design.md` — cae la **justificacion** («recibir asignaciones no se bloquea nunca»), **no la decision**: R14 sigue en pie por su OTRA razon, que ya esta escrita en `CorreccionDiaRepartoService.ts`.
+  · `specs/262-corregir-dia-reparto/tasks.md` — idem, mas el renombrado del metodo.
   `specs/246-asignacion-por-dia/requirements.md:11`, `specs/262-corregir-dia-reparto/design.md:132` y
   `tasks.md:150` afirman la regla del 20/08.
   **Hecho cuando:** llevan una nota de caducidad que apunta a esta ficha. **No se reescribe el spec
@@ -477,10 +495,39 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   **Hecho cuando:** con tres cierres y `solicitado_at` no correlacionado con el orden de inserción, el
   elegido es el más viejo; invertir el `orderBy` mata el test. → **R11, R18**
 
-- [ ] **T10.3 [P] — El corte, sembrado.**
-  **Desenlace: NO HECHA.** No hay ningun test en `tests/integration/db/` que siembre los casos del CORTE contra Postgres: `cierre-bloqueo-nv-sql-real.test.ts` cubre el conteo, el mas viejo, la re-solicitud y la jornada, pero **ninguna corrida del corte**. Los tres casos de la tanda 3 viven en tests unitarios con doble de Prisma (T3.2, T3.3) o en un test previo a la ficha (T3.4). **No consta en ninguna bitacora**: medido el 2026-08-23. **Sigue abierta.**
-  Los tres casos de la tanda 3 (79cb2c0f, ya-bloqueado-no-acumula, no-re-vincula) contra Postgres.
+- [x] **T10.3 [P] — El corte, sembrado.**
+  **Desenlace: HECHA el 2026-08-23** — `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`, **4 casos**, con la corrida COMPLETA del corte sobre repositorios REALES y datos sembrados. Los mensajeros los **crea el test**: el corte lee toda la base, y con usuarios prestados «recibio su segundo cierre» dejaria de ser consecuencia del corpus.
+  · **Caso 1 (R21/R23)** — el caso `79cb2c0f`: con un `solicitado` de ayer, el corte **SI** le crea el segundo cierre, le vincula **exactamente** las 2 gestiones sueltas, no toca ni una de las de ayer, y barre su guia a `sin_gestionar` registrandola en el cierre NUEVO.
+  · **Caso 2 (R22/R17)** — el ya bloqueado con un `vencido` y nada que cerrar **no** recibe un segundo, con un mensajero TESTIGO al lado que **si** lo recibe (sin el, «no se creo nada» tambien seria cierto si la corrida no hubiera hecho nada).
+  · **Caso 3 (R23/R24)** — el barrido de `en_reparto` **y** `ayuda_tienda` con su origen REAL en `cierre_sin_gestion`, la orden reservada que **no** se barre (246/R11), la gestion ANULADA que **no** se vincula, y la 2.ª corrida de la misma noche que **no** re-vincula, **no** re-registra y **no** crea nada.
+  · **Caso 4 (⚠️ R17)** — el contraejemplo; ver el hallazgo de abajo.
+  **Las dos mutaciones, EJECUTADAS** (salida en `progress/impl_271.md` §T10.3):
+  · **(a) reponer la exclusion por cierre abierto** en `CorteDiarioRepository` → **ROJO, 2 casos** (el 1 y el 4). Y no solo por la lectura directa de la lista: silenciada esa asercion, el caso 1 muere igual en `mensajerosEvaluados = 0`.
+  · **(b) romper la guarda «algo paso»** de `crearCierre` → **SOBREVIVE: los 4 casos en verde.** Y eso **no es un hueco del test, es un hallazgo.**
+  ⚠️ **EL MECANISMO QUE SOSTIENE R17 NO ES LA GUARDA QUE EL SPEC NOMBRA.** T3.3, `design.md` y el comentario de cabecera de `CorteDiarioRepository` dicen que el bloqueado «entra en el bucle y `crearCierre` devuelve `null` por su guarda». **Postgres dice que no llega a entrar en el bucle**: las dos ramas de la seleccion ya vienen vacias para el (el caso 2 lo afirma). La conclusion es la misma y **mas fuerte**; la razon escrita no es la que corre. La guarda **si** tiene red, pero en otro sitio: la mutacion (b) mata **4 casos** de `tests/unit/repositories/cierre-dia-repository.test.ts`, y **ninguno** de `tests/integration/db` (133 archivos / 1794 tests, todos verdes con ella puesta).
+  **Anti-vacuidad, demostrada y no prometida:** `describe.skip` sin base, **cinco** fallos RUIDOSOS en el `beforeAll`, **cero** `return` de salida temprana, y un `afirmarCorpusSembrado` que cuenta el corpus EN LA BASE antes de medir nada. Comprobado a mano: vaciando el corpus el caso muere con el mensaje del contador; y **desactivando ademas ese contador, muere igual** en la asercion de comportamiento. Dos redes independientes.
   → **R21–R24**
+
+  🔴 **HALLAZGO QUE ESTA TAREA DESTAPO — R17 ES FALSO: DOS `vencido` A LA VEZ ES ALCANZABLE.**
+  Medido, no razonado (caso 4 del archivo nuevo). El argumento de R17 dice: «el corte que lo bloqueo
+  ya barrio sus ordenes en la MISMA transaccion, asi que la noche siguiente no le queda nada que
+  cerrar». **La feature 246 abrio una excepcion a ese barrido**: una orden reservada para un dia
+  posterior **sobrevive** al corte (246/R11) y **su proteccion caduca sola** (246/R13). La noche
+  siguiente esa orden vence, el mensajero —ya bloqueado— vuelve a entrar por la rama (b) de la
+  seleccion, se barre, `sinGestionarTransicionadas` vale 1, la guarda «algo paso» **pasa**, y nace
+  el **segundo `vencido`**. Y es alcanzable en produccion, no fabricado:
+  `CorreccionDiaRepartoService` (feature 262) permite cambiar el dia de reparto de una orden que
+  **YA esta en `en_reparto`** — su `ESTADOS_CON_DIA_DE_REPARTO_VIVO` lo dice y su comentario llama a
+  esa poblacion «la que la 261 dejo atrapada: el paquete ya esta en la mano del mensajero».
+  **Antes de la 271 no podia pasar**: la exclusion por cierre abierto lo sacaba de la corrida
+  siguiente. Es decir, **lo introduce esta ficha**.
+  **NO se ha tocado ni una linea de `lib/`.** El desenlace medido es ademas el razonable —la orden
+  necesitaba barrido y necesitaba un cierre al que ir— y el estado `N=2, V=2` lo cubre la regla
+  general: es la **fila 7** de la tabla de verdad con dos `vencido` en vez de dos `rechazado`, y la
+  re-solicitud lo trata igual (R18: el mas viejo primero). Lo que hay que corregir es **la prosa que
+  lo declara imposible**: **R17**, **T2.5** (el comentario en `CorteDiarioService` y
+  `CierreDiaRepository`) y la justificacion de **T2.4** para no escribir ese caso. **Decision
+  pendiente del humano.**
 
 - [x] **T10.4 [P] — La migración de enum contra Postgres real.**
   Que el `NULLS NOT DISTINCT` y el `WHERE` parcial de `notificacion_dedupe_key` **sobrevivan** a la
