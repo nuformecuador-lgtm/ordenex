@@ -71,10 +71,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "rescate_ayuda_tienda", // feature 235 (2026-08-19): rescatarOrdenAyuda (ayuda_tienda -> en_reparto). UN productor, DOS puertas: «Recuperar» del mensajero y «Habilitar» de la tienda
     "gestion_tienda_ayuda", // feature 237 (2026-08-20): GestionOrdenRepository.crearGestionDesdeAyuda (ayuda_tienda -> reprogramada|rechazada, actor = el adminTienda dueño). La UNICA de las tres de la ayuda que SI es visita real
     "rechazo_tienda", // feature 240 (2026-08-20): GestionOrdenRepository.rechazarDesdeDevuelta (devuelta -> rechazada, actor = el adminTienda dueño). NO es visita real: la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
+    "rechazo_tope_intentos", // feature 273 (2026-08-24): CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> rechazada sobre una orden que ya agoto sus intentos). Enlaza gestion sintetica. NO es visita real: contarla subiria su propio contador y cobraria de mas
   ];
 
-  it("contiene exactamente los 31 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(31); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda
+  it("contiene exactamente los 32 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(32); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-24 (273): +rechazo_tope_intentos
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

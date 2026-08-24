@@ -97,6 +97,25 @@ const ESCRITURAS_DE_LA_APROBACION = [
     que: "el historial de las tres transiciones de arriba, por el punto unico de escritura",
     cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
   },
+  {
+    // 💰 FEATURE 273 (T9, R23 · Q1 firmada el 2026-08-24) — LA GESTION SINTETICA DEL RECHAZO POR
+    // AGOTAMIENTO DE INTENTOS. Es una escritura NUEVA de la transaccion de aprobacion y por eso
+    // entra en el censo con su suite delante, que es exactamente lo que esta guardia existe para
+    // exigir.
+    //
+    // QUE ESCRIBE: una fila de `gestion_orden` con `resultado = rechazada`, `cierre_id NULL` y el
+    // `mensajero_id` del cierre, por cada orden barrida que ya agoto sus intentos. `cierre_id`
+    // NULO es lo que hace que el `cobroRechazado` (56) caiga en el SIGUIENTE cierre de ese
+    // mensajero y NO en el que se esta aprobando —cuyo snapshot ya se congelo al solicitar—.
+    escritura: "tx.gestionOrden.create",
+    que:
+      "la gestion SINTETICA `rechazada` del rechazo por tope de intentos (273/R23): `cierre_id " +
+      "NULL`, mensajero del cierre y motivo fijo sin PII. Una por orden barrida en el umbral.",
+    cubiertaPor: [
+      "tests/integration/db/cierre-sin-gestion-tope-sql-real.test.ts",
+      "tests/unit/services/cierres-admin-service.aprobar.sin-gestion.test.ts",
+    ],
+  },
 ] as const;
 
 /**
