@@ -1201,6 +1201,32 @@ pnpm exec vitest run tests/unit/services tests/unit/notificaciones tests/unit/gu
 —`INIT_EXIT=0`, 1331 archivos / 18.009 tests— es de `5ed808e8` y **hay que repetirlo** sobre este
 árbol: **T11.3** queda anotada con eso.
 
+## T11.4 — el blob commiteado, verificado (no el árbol de trabajo)
+
+Sobre `544be904`, que es el commit de esta pasada. El árbol de trabajo **no** distingue «lo
+commiteé» de «alguien lo revirtió», y en este repo ya pasó que otra sesión reseteara una rama.
+
+```
+git show 544be904:specs/271-segundo-cierre-y-bloqueo/tasks.md            -> 564 líneas
+git show 544be904:tests/unit/services/corte-diario-aviso-vencido.test.ts -> 241 líneas
+git show 544be904:tests/unit/services/cierre-dia-aviso-bloqueo.test.ts   -> 238 líneas
+git show 544be904:tests/unit/notificaciones/cierre-vencido-destinatarios.test.ts -> 190 líneas
+git show 544be904:progress/impl_271.md                                   -> 1214 líneas
+git show 544be904:tests/unit/repositories/cierres-admin-repository.test.ts -> 1464 líneas
+
+casillas EN EL BLOB:            55 `[x]` · 3 `[ ]`
+```
+
+Y lo que de verdad importa después de tres mutaciones: **el código de producción quedó como
+estaba**, comprobado leyendo el blob y no el disco.
+
+```
+git show 544be904:lib/services/CorteDiarioService.ts   | grep -c "await this.notificarVencido"        -> 1
+git show 544be904:lib/services/CierreDiaService.ts     | grep -c "await this.avisarBloqueoPorAcumular" -> 1
+git show 544be904:lib/repositories/CierresAdminRepository.ts:80
+    const ESTADOS_REABRIBLES: CierreEstado[] = ["vencido", "rechazado"];
+```
+
 ## Lo que esta pasada NO hizo, y por qué
 
 1. **Las tres tareas abiertas** (T3.5, T8.3, T10.3) **no se cerraron**: el encargo era cerrar los
