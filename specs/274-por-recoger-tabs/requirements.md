@@ -295,3 +295,25 @@ los deja montados cuando el mensajero **sólo** tiene órdenes de otro día — 
 hoy, y el rechazo dice el motivo real (261/R13). La alternativa sería retirarlos, y sería repetir el
 fallo de la 167 en otro disfraz. Se deja escrito como **no-cambio**; se confirma por si el humano lo
 lee distinto ahora que la pestaña de hoy puede quedar vacía.
+
+---
+
+## PUERTA HUMANA PASADA — 2026-08-24
+
+Las tres preguntas que pedían decisión quedaron firmadas por el humano el 2026-08-24, con la
+recomendación del spec en las tres. Se anotan aquí para que el implementer no las re-abra.
+
+- **Q2 · Nombres de las pestañas → FIRMADO: «Para recoger hoy» y «Para otro día».** Tal cual la
+  propuesta de `design.md` §4, con su razón: `fecha_reparto` admite +2 —ya ocurrió con la guía
+  17496963— así que «mañana» mentiría, y el repo retiró «reserva» y «corte» del texto visible a
+  propósito.
+- **Q1 · El literal del contador → FIRMADO: SÍ se corrige la concordancia** («1 orden nueva
+  asignada» / «2 órdenes nuevas asignadas»). El defecto ya existía, pero R15 lo vuelve frecuente y
+  se decidió no dejarlo a la vista. **R29 deja de estar acotado a los textos nuevos**: alcanza a
+  este literal, y los dos tests existentes que afirman la forma vieja se reescriben conservando las
+  cuatro propiedades de `design.md` §10.
+- **Q3 · Pestaña de entrada → FIRMADO: siempre «Para recoger hoy», aunque esté vacía.** R12 queda
+  como está. Una pantalla que cambia de puerta según el día es una pantalla que no se puede
+  aprender; la pestaña vacía lo explica y señala cuántas hay en la otra (R10/R11).
+- **Q4 · Controles de recogida con el grupo de hoy vacío → se confirma el NO-CAMBIO** (R22): siguen
+  montados, y el rechazo dice el motivo real (261/R13). Retirarlos sería repetir el fallo de la 167.

@@ -302,3 +302,22 @@ La decisión «sin backfill» se tomó sobre la foto de una sola orden (`2809817
 escala sola). Si el SELECT de R37 devuelve órdenes en `reprogramada`, `en_bodega_*` o `por_recoger`
 con intentos `>= umbral`, esa foto ya no vale: se para y se lleva al humano **antes** de desplegar,
 porque R18 las dejaría inasignables sin que nadie lo haya decidido.
+
+---
+
+## MEDICIÓN DE R37, EJECUTADA — 2026-08-24
+
+Q6 preguntaba qué hacer si la medición previa encontraba órdenes vivas en el umbral **fuera de**
+`devuelta`, porque eso invalidaría la decisión «sin backfill». **Se ejecutó contra producción el
+2026-08-24 y no las hay.**
+
+Reproduciendo `contarIntentosVigentes` en SQL —cierres `aprobado` distintos, gestión contable
+vigente, visita real enlazada a ESA gestión— y cruzando con el estado actual sobre órdenes no
+borradas, la **única** orden viva con `intentos >= 3` es la guía **`28098171`**, y está en
+`devuelta`. **Cero** en `reprogramada`, `en_bodega_central`, `en_bodega_satelite` o `por_recoger`.
+
+Consecuencia: **la decisión «sin backfill» se sostiene**, y no por supuesto. La única orden en el
+umbral escala sola por el cron SLA (su ventana `wrong_address` vence ~16:16 CR del 2026-08-25).
+R37 sigue siendo requisito: **se vuelve a ejecutar inmediatamente antes de desplegar**, porque esta
+foto caduca —cualquier cierre que la bodega apruebe entre hoy y el despliegue puede subir un
+contador y crear una orden en el umbral que R18 dejaría inasignable sin que nadie lo decidiera.
