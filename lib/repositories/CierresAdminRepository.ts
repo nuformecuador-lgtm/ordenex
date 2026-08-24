@@ -55,13 +55,13 @@ import {
   ORIGENES_GESTION_DE_LA_TIENDA,
 } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
-// 💰 FEATURE 273 (T9, R21/R33): el PREDICADO UNICO del conteo de intentos, IMPORTADO y no
+// 💰 FEATURE 276 (T9, R21/R33): el PREDICADO UNICO del conteo de intentos, IMPORTADO y no
 // reescrito. R33 prohibe que esta ficha toque el criterio; importarlo es lo que hace imposible
 // tener aqui una segunda definicion que divergiera del numero que ven las demas superficies.
 import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialRepository";
 
 /**
- * 💰 FEATURE 273 (T9, R23/R38) — el `motivo` de la gestion SINTETICA del rechazo por agotamiento.
+ * 💰 FEATURE 276 (T9, R23/R38) — el `motivo` de la gestion SINTETICA del rechazo por agotamiento.
  *
  * Texto FIJO. No lleva guia, ni destinatario, ni direccion, ni id de orden, ni id de usuario: esta
  * fila la va a leer un admin en el detalle de un cierre y va a sostener un cobro
@@ -1430,7 +1430,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               enBodegaEstatusId,
               enBodegaSateliteEstatusId,
               centralZonaId,
-              // FEATURE 273 (T9, R7/R21): el destino del rechazo y el umbral, los dos INYECTADOS.
+              // FEATURE 276 (T9, R7/R21): el destino del rechazo y el umbral, los dos INYECTADOS.
               rechazadaEstatusId,
               umbralIntentos,
             } = liberacionSinGestionar;
@@ -1479,7 +1479,7 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               },
               select: { id: true, zonaId: true },
             });
-            // ─── 💰 FEATURE 273 (T9, R21-R27) — EL CORTE SE PARTE EN DOS DESTINOS ────────────
+            // ─── 💰 FEATURE 276 (T9, R21-R27) — EL CORTE SE PARTE EN DOS DESTINOS ────────────
             //
             // Absorbe la ficha 218. Una orden barrida a `sin_gestionar` que YA AGOTO sus intentos
             // de entrega NO vuelve a bodega: se termina en `rechazada`, dentro de ESTA MISMA

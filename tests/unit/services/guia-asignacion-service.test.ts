@@ -154,7 +154,7 @@ function newService(
   zonaRepo: IZonaRepository = fakeZonaRepo(),
   gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
 ) {
-  return new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+  return new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 }
 
 /** Atajo: las decisiones con las que el service llamo a `generarGuiaLote`. */

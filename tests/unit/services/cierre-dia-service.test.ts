@@ -2370,16 +2370,16 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
 });
 
 // ============================================================================================
-// FEATURE 273 (T14, R17) — EL DESHACER SIGUE VIVO SOBRE UNA `reprogramada`.
+// FEATURE 276 (T14, R17) — EL DESHACER SIGUE VIVO SOBRE UNA `reprogramada`.
 //
 // No hay codigo que escribir para esto, y por eso hay que escribir la PRUEBA DE QUE SIGUE SIENDO
-// CIERTO. La ficha 273 difiere la LIBERACION de una orden `reprogramada` (el cron ya no la manda a
+// CIERTO. La ficha 276 difiere la LIBERACION de una orden `reprogramada` (el cron ya no la manda a
 // bodega hasta que su cierre se apruebe), asi que la orden pasa MAS TIEMPO en `reprogramada` — y la
 // pregunta obvia es si el mensajero conserva su ventana de deshacer durante esa espera.
 //
 // La respuesta es que si, y la razon es estructural: la ventana depende de `gestion.cierre_id`, NO
 // del estado de la orden. Mientras la gestion no entre en un cierre, se deshace; en cuanto entra,
-// no — igual que antes de esta ficha. Lo que la 273 alarga es justamente el tramo en que
+// no — igual que antes de esta ficha. Lo que la 276 alarga es justamente el tramo en que
 // `cierre_id` sigue nulo.
 //
 // ⚠️ Y AQUI ESTA LA REGRESION QUE ESTA FICHA EVITO NO TENIENDO: si se hubiera elegido la opcion A
@@ -2389,7 +2389,7 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
 // centinela de esa decision.
 // ============================================================================================
 
-describe("273/R17 — la ventana de deshacer no cambia con la liberacion diferida", () => {
+describe("276/R17 — la ventana de deshacer no cambia con la liberacion diferida", () => {
   it("1. `reprogramada` con `cierre_id NULL` sobre una orden en `reprogramada` -> SE DESHACE", async () => {
     const repo = fakeRepo({
       findGestionParaDeshacer: vi.fn(async () =>

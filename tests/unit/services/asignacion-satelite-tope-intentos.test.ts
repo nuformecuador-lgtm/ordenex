@@ -13,7 +13,7 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 /**
- * FEATURE 273 (T8) — LA MISMA PUERTA EN LA BODEGA SATELITE. R18, R19, R20, R7.
+ * FEATURE 276 (T8) — LA MISMA PUERTA EN LA BODEGA SATELITE. R18, R19, R20, R7.
  *
  * 💰 ESPEJO EXACTO de T7. Y no es duplicacion por gusto: la 246/D4 ya tuvo que corregir en ESTE
  * MISMO PAR de servicios una regla que valia distinto segun desde que bodega te asignaran. Aqui lo
@@ -103,7 +103,7 @@ const LOTE = { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" };
 /* 1 · R18/R19 — todo-o-nada                                                   */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T8 · R18/R19 — el satelite tampoco asigna una orden agotada", () => {
+describe("276/T8 · R18/R19 — el satelite tampoco asigna una orden agotada", () => {
   it("1. lote de 3 con UNA en el umbral -> conflict, detalle de las TRES, cero escrituras", async () => {
     const { service, repo } = montar({ o1: 0, o2: UMBRAL, o3: 1 });
 
@@ -146,7 +146,7 @@ describe("273/T8 · R18/R19 — el satelite tampoco asigna una orden agotada", (
 /* 3 · R20 — el motivo es EL MISMO en las dos superficies                      */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T8 · R20 — un solo motivo, un solo punto", () => {
+describe("276/T8 · R20 — un solo motivo, un solo punto", () => {
   it("3. el motivo que emite el satelite es IDENTICO al de la bodega central", async () => {
     // Los dos servicios se ejercitan de verdad y sus dos motivos se comparan CONTRA LA CONSTANTE
     // COMPARTIDA y ENTRE SI. Si alguien escribiera el texto a mano en uno de los dos —aunque
@@ -192,7 +192,7 @@ describe("273/T8 · R20 — un solo motivo, un solo punto", () => {
 /* 4 · R7 — el umbral sale de la configuracion                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T8 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` la puerta se mueve", () => {
+describe("276/T8 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` la puerta se mueve", () => {
   const ANTES = process.env.REINTENTOS_MIN_INTENTOS;
 
   afterEach(() => {

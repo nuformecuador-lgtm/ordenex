@@ -41,12 +41,12 @@ import type {
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
-  // FEATURE 273 (T7, R20): el motivo del tope, en su punto UNICO y compartido con el satelite.
+  // FEATURE 276 (T7, R20): el motivo del tope, en su punto UNICO y compartido con el satelite.
   MSG_TOPE_INTENTOS_ASIGNACION,
 } from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
-// FEATURE 273 (T7, R7): el umbral sale de la configuracion, nunca de un `3` escrito a mano.
+// FEATURE 276 (T7, R7): el umbral sale de la configuracion, nunca de un `3` escrito a mano.
 import { reintentosConfig } from "@/lib/config/reintentos";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
@@ -140,7 +140,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // orden sin coordenadas, que es exactamente lo que esta feature existe para impedir.
     private readonly asignabilidad: IAsignabilidadCoordenadasService,
     /**
-     * 💰 FEATURE 273 (T7, R18): el derivador de intentos EN LOTE, para la puerta del tope de
+     * 💰 FEATURE 276 (T7, R18): el derivador de intentos EN LOTE, para la puerta del tope de
      * `asignarDesdeBodega`.
      *
      * REQUERIDA a proposito —mismo motivo que `asignabilidad`, escrito arriba—: si fuera opcional,
@@ -400,7 +400,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- 💰 FEATURE 273 (T7/T8, R18/R19/R20) — LA ULTIMA PUERTA: NO SE ASIGNA UNA ORDEN AGOTADA ---
+    // --- 💰 FEATURE 276 (T7/T8, R18/R19/R20) — LA ULTIMA PUERTA: NO SE ASIGNA UNA ORDEN AGOTADA ---
     //
     // MIENTRAS los intentos vigentes de una orden sean `>= umbral`, no se le puede dar a un
     // mensajero. Es la quinta via hacia la circulacion del design §1 y hasta esta ficha NO estaba
@@ -409,7 +409,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // ⚠️ Y NO BASTA POR SI SOLA, que es lo que la hace facil de mal-entender. Cerrar SOLO esta
     // puerta seria poner un guardia que mira un reloj parado: la orden llega a bodega ANTES de que
     // su intento se cuente —el cierre todavia no se aprobo— y en ese instante el contador dice el
-    // valor viejo y la deja pasar. Por eso la ficha 273 cierra ADEMAS la liberacion diferida
+    // valor viejo y la deja pasar. Por eso la ficha 276 cierra ADEMAS la liberacion diferida
     // (`LiberacionReprogramadaService`), que es la raiz.
     //
     // UNA SOLA CONSULTA para todo el lote (`contarIntentosEnLote`, el metodo que la 215 creo
@@ -436,7 +436,7 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     // Aqui TODAS las ordenes del lote reciben mensajero (es la accion "asignar desde
     // bodega"), asi que se evalua el lote entero.
     //
-    // FEATURE 273: la puerta del tope va JUSTO ANTES de este gate y no despues. El rechazo por
+    // FEATURE 276: la puerta del tope va JUSTO ANTES de este gate y no despues. El rechazo por
     // tope es DEFINITIVO y el de coordenadas es CORREGIBLE: ensenar primero el que no tiene
     // arreglo evita que alguien salga a capturar coordenadas de una orden que no se va a asignar
     // igual.

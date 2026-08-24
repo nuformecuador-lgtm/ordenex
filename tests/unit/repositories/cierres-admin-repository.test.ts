@@ -136,7 +136,7 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // TypeError. Vacio por defecto; la suite que MIDE el anclaje lo monta con datos.
     gestionOrden: {
       findMany: vi.fn().mockResolvedValue([]),
-      // FEATURE 273 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
       // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
       // rama del rechazo por tope se mide contra Postgres en
       // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.
@@ -1159,7 +1159,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     enBodegaEstatusId: idEstado("en_bodega_central"),
     enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
     centralZonaId: "z-central",
-    // FEATURE 273 (T9): destino del rechazo por tope + umbral inyectado. Con el corpus de esta
+    // FEATURE 276 (T9): destino del rechazo por tope + umbral inyectado. Con el corpus de esta
     // suite ninguna barrida llega al umbral, asi que la rama nueva es un no-op aqui.
     rechazadaEstatusId: idEstado("rechazada"),
     umbralIntentos: 3,
@@ -1181,7 +1181,7 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
       },
       gestionOrden: {
         findMany: vi.fn().mockResolvedValue([]), // feature 239: sin devoluciones -> anclaje no-op
-      // FEATURE 273 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
       // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
       // rama del rechazo por tope se mide contra Postgres en
       // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.

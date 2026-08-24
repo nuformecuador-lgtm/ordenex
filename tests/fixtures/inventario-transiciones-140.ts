@@ -91,11 +91,11 @@ export const INVENTARIO_FLUJO: readonly AristaInventario[] = [
   { n: "16", origen: "en_reparto", destino: "sin_gestionar", via: "corte_sin_gestionar", callSite: "CorteDiarioService -> CierreDiaRepository.crearCierre" },
   { n: "17", origen: "sin_gestionar", destino: "en_bodega_central", via: "liberacion_sin_gestionar", callSite: "CierresAdminService.aprobarCierre -> resolverCierre" },
   { n: "18", origen: "sin_gestionar", destino: "en_bodega_satelite", via: "liberacion_sin_gestionar", callSite: "resolverCierre" },
-  // Feature 273 (T3/T9): la TERCERA salida de `sin_gestionar`, y la unica que NO vuelve a bodega.
+  // Feature 276 (T3/T9): la TERCERA salida de `sin_gestionar`, y la unica que NO vuelve a bodega.
   // Misma transaccion, mismo actor y mismo bloque que #17/#18; lo que cambia es el destino cuando
   // la orden ya agoto sus intentos de entrega. Par NUEVO: `sin_gestionar -> rechazada` no estaba
   // declarado por nadie.
-  { n: "68", origen: "sin_gestionar", destino: "rechazada", via: "rechazo_tope_intentos", callSite: "CierresAdminService.aprobarCierre -> resolverCierre, bloque liberacionSinGestionar (273)" },
+  { n: "68", origen: "sin_gestionar", destino: "rechazada", via: "rechazo_tope_intentos", callSite: "CierresAdminService.aprobarCierre -> resolverCierre, bloque liberacionSinGestionar (276)" },
   { n: "19", origen: "devuelta", destino: "en_bodega_central", via: "liberacion_devuelta_sla", callSite: "DevolucionSlaRepository.liberarDevueltaSla" },
   { n: "20", origen: "devuelta", destino: "en_bodega_satelite", via: "liberacion_devuelta_sla", callSite: "liberarDevueltaSla" },
   { n: "21", origen: "devuelta", destino: "rechazada", via: "escalado_devuelta_sla", callSite: "escalarDevueltaSla" },
@@ -261,8 +261,8 @@ export const RECUENTO_INVENTARIO = {
   // 2026-08-19 (feature 235): 56 -> 59. Suma TRES (#62/#63/#64) y NO retira NINGUNA.
   // 2026-08-20 (feature 237): 59 -> 61. Suma DOS (#65/#66) y NO retira NINGUNA.
   // 2026-08-20 (feature 240): 61 -> 62. Suma UNA (#67) y NO retira NINGUNA.
-  // 2026-08-24 (feature 273): 62 -> 63. Suma UNA (#68) y NO retira ninguna.
-  aristasFlujo: 63, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (273)
+  // 2026-08-24 (feature 276): 62 -> 63. Suma UNA (#68) y NO retira ninguna.
+  aristasFlujo: 63, // +2 (157); +3 -1 (239); +3 (235); +2 (237); +1 (240); +1 (276)
   // 52 -> 54 (239) -> 57 (235) -> 59 (237): las dos altas de la 237 son pares NUEVOS
   // (`ayuda_tienda -> reprogramada` y `ayuda_tienda -> rechazada`; ninguno estaba declarado, y
   // hasta la 237 de `ayuda_tienda` solo se salia rescatando o por el corte), igual que las tres de
@@ -278,7 +278,7 @@ export const RECUENTO_INVENTARIO = {
   // estado producido por dos actores distintos, el sistema y una persona— y en los tres lo que los
   // separa es la FAMILIA, que es justo lo que hace falta para poder responder despues «¿quien
   // decidio esto?» sin adivinarlo por el par de estatus.
-  // 2026-08-24 (feature 273): 59 -> 60. La arista #68 (`sin_gestionar -> rechazada`) es un par
+  // 2026-08-24 (feature 276): 59 -> 60. La arista #68 (`sin_gestionar -> rechazada`) es un par
   // NUEVO —de `sin_gestionar` solo se salia a las dos bodegas—, asi que la aritmetica de pares
   // vuelve a seguir a la de aristas y la diferencia `aristas - pares` se queda en 3 (los
   // duplicados #19/#23, #20/#24 y #21/#67).

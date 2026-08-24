@@ -210,7 +210,7 @@ correspondencia seudónimo → id real.
 | mismo archivo, R16 «Analítica va justo tras Inicio» | 373-383 | **VERDE.** No se mueve el ítem (D7). |
 | `tests/components/AnaliticaPage.test.tsx` 129-R3 «el resto recibe notFound» | 160-171 | **ROJO POR DISEÑO.** Se reexpresa: `apiKey` y sin sesión siguen con `notFound`; los tres roles ahora **entran**. |
 | ídem, 129-R6 «el gate corre antes de renderizar» (usa `adminTienda`) | 201-209 | **ROJO POR DISEÑO.** Se reexpresa con `apiKey`, que sigue denegado. |
-| ídem, 132-R1/R8 «los otros cuatro siguen con notFound» | 273-300 | **ROJO POR DISEÑO.** Se parte: `apiKey` → `notFound`; los tres → entran **y no ven nada financiero**. |
+| ídem, 132-R1/R8 «los otros cuatro siguen con notFound» | 276-300 | **ROJO POR DISEÑO.** Se parte: `apiKey` → `notFound`; los tres → entran **y no ven nada financiero**. |
 | ídem, **132-R2 «ni rastro de la región financiera»** | 302-331 | **ROJO POR DISEÑO, y el más importante de reexpresar BIEN.** Hoy pasa *porque la página lanza*. Tras la 133 debe pasar **con la página renderizada**: es literalmente R6/R7 de esta feature. Se conserva la aserción sobre `document.body` entera, con las mismas cifras reconocibles. |
 | ídem, 132-R3 «quién la ve se deriva de `esAccesoTotal`» | 333-360 | **VERDE.** Y ahora muerde de verdad: antes tres roles ni llegaban. |
 | ídem, 132-R5 «`ROLES_ACCESO_ANALITICA` sigue siendo maestro y admin» + «acceso ⊊ dominio» | 362-387 | **ROJO POR DISEÑO.** Su propio título dice «la 133 es quien lo ensancha». Se reexpresa afirmando la derivación de D1. |

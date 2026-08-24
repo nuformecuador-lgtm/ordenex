@@ -12,7 +12,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 /**
- * FEATURE 273 (T9) — EL UMBRAL VIAJA INYECTADO DESDE EL SERVICIO. R7, R21.
+ * FEATURE 276 (T9) — EL UMBRAL VIAJA INYECTADO DESDE EL SERVICIO. R7, R21.
  *
  * ⚠️ QUE PRUEBA ESTE ARCHIVO Y QUE NO. Prueba EL CABLEADO: que `CierresAdminService.aprobarCierre`
  * resuelva el umbral de `reintentosConfig` y lo meta en `liberacionSinGestionar`, y que el
@@ -87,7 +87,7 @@ function configDeLaUltimaAprobacion(repo: ICierresAdminRepository) {
     | undefined;
 }
 
-describe("273/T9 · R7 — el umbral lo resuelve el SERVICIO, no el repositorio", () => {
+describe("276/T9 · R7 — el umbral lo resuelve el SERVICIO, no el repositorio", () => {
   it("al aprobar, la config de la liberacion lleva el umbral y el destino del rechazo", async () => {
     const { service, repo } = newService();
 
@@ -130,7 +130,7 @@ describe("273/T9 · R7 — el umbral lo resuelve el SERVICIO, no el repositorio"
   });
 });
 
-describe("273/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () => {
+describe("276/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () => {
   it("sin `rechazada` en el catalogo, la config NO se cablea (y con ella se cae la rama vieja)", async () => {
     // Es fallo cerrado deliberado y hay que leerlo entero: sin destino de rechazo, el bloque de
     // liberacion NO se cablea, asi que tampoco se libera a bodega. La alternativa —cablearlo sin
@@ -158,7 +158,7 @@ describe("273/T9 · el bloque falla CERRADO cuando el catalogo no resuelve", () 
   });
 });
 
-describe("273/T9 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` viaja un 5", () => {
+describe("276/T9 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` viaja un 5", () => {
   const ANTES = process.env.REINTENTOS_MIN_INTENTOS;
 
   afterEach(() => {

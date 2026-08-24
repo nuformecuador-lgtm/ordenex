@@ -13,7 +13,7 @@ import { reintentosConfig } from "@/lib/config/reintentos";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 /**
- * FEATURE 273 (T5) — LA PUERTA DEL TOPE EN LA PESTAÑA DE AYUDA DE LA TIENDA. R1, R4, R5, R6, R11.
+ * FEATURE 276 (T5) — LA PUERTA DEL TOPE EN LA PESTAÑA DE AYUDA DE LA TIENDA. R1, R4, R5, R6, R11.
  *
  * 💰 Es la operacion mas delicada en dinero de la pila de la ayuda: un `rechazada` dispara el
  * `cobroRechazado` (56) y el flete de devolucion. Lo que esta puerta añade es que una orden que ya
@@ -92,7 +92,7 @@ const RECHAZO: GestionDesdeAyudaInput = {
 /* 1 · La regla, y que es LA MISMA que la del mensajero                        */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
+describe("276/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
   it("1a. `reprogramada` con `intentos = umbral - 1` -> conflict con el MISMO motivo", async () => {
     const { service, gestionRepo } = montar(UMBRAL - 1);
 
@@ -136,7 +136,7 @@ describe("273/T5 · R1/R4 — la tienda tampoco reprograma en el tope", () => {
 /* 2 · R5 — el caso de NO-EFECTO                                               */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T5 · R5 — el rechazo no deja fotos huerfanas ni fila de gestion", () => {
+describe("276/T5 · R5 — el rechazo no deja fotos huerfanas ni fila de gestion", () => {
   it("2. cero subidas y cero llamadas a `crearGestionDesdeAyuda`", async () => {
     // La reprogramacion desde ayuda SI sube evidencia. Si la guarda viviera por debajo del paso 7,
     // este doble habria recibido la foto: quedaria en el bucket apuntando a una gestion inexistente.
@@ -176,7 +176,7 @@ describe("273/T5 · R5 — el rechazo no deja fotos huerfanas ni fila de gestion
 /* 3 · R11 — el servidor decide, no el cliente                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T5 · R11 — no hay campo del input que abra la puerta", () => {
+describe("276/T5 · R11 — no hay campo del input que abra la puerta", () => {
   it("3. el input llega completo, como lo mandaria un cliente que ignore la ventana", async () => {
     const { service, gestionRepo, storage } = montar(UMBRAL - 1);
 

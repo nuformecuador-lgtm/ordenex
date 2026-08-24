@@ -34,7 +34,7 @@
 //
 // LO QUE ESTE CENSO NO CUBRE, declarado y no tapado:
 //
-//  - las esperas ancladas a un MOCK (`toHaveBeenCalledTimes`) — 273 en el arbol al escribir
+//  - las esperas ancladas a un MOCK (`toHaveBeenCalledTimes`) — 276 en el arbol al escribir
 //    esto. Que la consulta SALGA no es que la pantalla LLEGUE, y es la misma familia; pero
 //    ahi el arreglo no es mecanico (hay esperas cuyo sujeto legitimo ES la llamada, no la
 //    pantalla) y meterlas aqui convertiria el guardia en ruido. Queda como deuda medida.

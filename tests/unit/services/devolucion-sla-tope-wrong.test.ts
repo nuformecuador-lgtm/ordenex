@@ -12,7 +12,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 
 /**
- * FEATURE 273 (T10) — EL CRON DE SLA MIRA EL CONTADOR EN LA RAMA `wrong_*`. R28, R29, R30.
+ * FEATURE 276 (T10) — EL CRON DE SLA MIRA EL CONTADOR EN LA RAMA `wrong_*`. R28, R29, R30.
  *
  * 💰 Es la PRIMERA vez que este sistema ADELANTA un cobro. Lo que lo hace aceptable, y lo que este
  * archivo fija caso a caso:
@@ -91,7 +91,7 @@ function newService(
 /* 1 · R28 — en el umbral, escala sin esperar la ventana                       */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T10 · R28 — `wrong_*` en el umbral escala en la PRIMERA corrida", () => {
+describe("276/T10 · R28 — `wrong_*` en el umbral escala en la PRIMERA corrida", () => {
   it.each(["wrong_number", "wrong_address"] as const)(
     "1. %s con `intentos = umbral` y 2 h desde el anclaje -> ESCALA",
     async (causa) => {
@@ -133,7 +133,7 @@ describe("273/T10 · R28 — `wrong_*` en el umbral escala en la PRIMERA corrida
 /* 2 · R29 — por debajo del umbral, la ventana INTACTA                         */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T10 · R29 — por debajo del umbral, los cinco dias siguen valiendo", () => {
+describe("276/T10 · R29 — por debajo del umbral, los cinco dias siguen valiendo", () => {
   it("2a. `wrong_address` con `intentos = umbral - 1` y 2 h -> NO escala, solo se evalua", async () => {
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [
@@ -150,7 +150,7 @@ describe("273/T10 · R29 — por debajo del umbral, los cinco dias siguen valien
 
   it("2b. la MISMA orden a los 5 dias SI escala: la ventana no se toco", async () => {
     // El par 2a/2b es lo que hace que R29 no sea una frase: lo unico que cambia entre los dos es
-    // el tiempo transcurrido. Si la 273 hubiera roto la ventana, 2b escalaria por otra razon o 2a
+    // el tiempo transcurrido. Si la 276 hubiera roto la ventana, 2b escalaria por otra razon o 2a
     // escalaria de mas.
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [
@@ -181,7 +181,7 @@ describe("273/T10 · R29 — por debajo del umbral, los cinco dias siguen valien
 /* 3 · `not_found` conserva EXACTAMENTE su comportamiento (no-regresion)       */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T10 · `not_found` no cambia en ninguno de los dos lados del umbral", () => {
+describe("276/T10 · `not_found` no cambia en ninguno de los dos lados del umbral", () => {
   it("3a. `not_found` vencida (>=24 h) con `intentos = umbral` -> ESCALA (como siempre)", async () => {
     const repo = fakeRepo({
       findDevueltasSla: vi.fn(async () => [
@@ -229,7 +229,7 @@ describe("273/T10 · `not_found` no cambia en ninguno de los dos lados del umbra
 /* 4 · R30 — un conteo por corrida, no uno por orden                           */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T10 · R30 — el conteo es UNO por corrida", () => {
+describe("276/T10 · R30 — el conteo es UNO por corrida", () => {
   it("4. con CINCO candidatas, `contarIntentosEnLote` se llama UNA vez con las cinco", async () => {
     const ids = ["o1", "o2", "o3", "o4", "o5"];
     const repo = fakeRepo({
@@ -296,7 +296,7 @@ describe("273/T10 · R30 — el conteo es UNO por corrida", () => {
 /* 5 · R30 — idempotencia y resiliencia, intactas                              */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T10 · R30 — no se emite dos veces el ingreso por rechazo", () => {
+describe("276/T10 · R30 — no se emite dos veces el ingreso por rechazo", () => {
   it("5. una orden que ya salio de `devuelta` entre la lectura y la escritura NO se cuenta como escalada", async () => {
     // `escalarDevueltaSla` devuelve `false` cuando su `updateMany` guardado por
     // `estatus_id = devuelta` afecta 0 filas. Es la guarda que impide el DOBLE COBRO, y esta

@@ -79,7 +79,7 @@
       **Hecho:** `tablero-financiero.guardia.test.ts` verde (sigue habiendo `esAccesoTotal(` y
       ningún array con dos o más nombres de rol). → **R6, R9**
 - [x] **T3.2** Reexpresar en `tests/components/AnaliticaPage.test.tsx` los bloques 129-R3 (160),
-      129-R6 (201), 132-R1/R8 (273), 132-R5 (362), 132-R9 (389) y 131-R26 (440): `apiKey` y sesión
+      129-R6 (201), 132-R1/R8 (276), 132-R5 (362), 132-R9 (389) y 131-R26 (440): `apiKey` y sesión
       nula siguen con `notFound`; los tres roles **entran**.
       **Hecho:** los seis bloques verdes y ninguno pasa por vacío. → **R1, R8, R29**
 - [x] **T3.3** Reexpresar el bloque **132-R2** (302-331) para que corra **con la página

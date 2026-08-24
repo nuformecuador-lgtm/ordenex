@@ -11,7 +11,7 @@ export interface LiberacionResult {
   // Ordenes omitidas: fallo por orden (R14) o guarda de estado ya no vigente (R17).
   omitidas: number;
   /**
-   * FEATURE 273 (T6.2, R12/R13) — candidatas que NO se liberan porque su gestion `reprogramada`
+   * FEATURE 276 (T6.2, R12/R13) — candidatas que NO se liberan porque su gestion `reprogramada`
    * vigente TODAVIA PUEDE SUBIR EL CONTADOR: nace de una visita real y su cierre no esta aprobado.
    *
    * Es un CONTADOR AGREGADO y sin PII (R38), y no es decorativo: es lo unico que hace OBSERVABLE

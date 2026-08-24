@@ -94,7 +94,7 @@ export interface LiberacionSinGestionarConfig {
   enBodegaSateliteEstatusId: string; // destino satelite
   centralZonaId: string | null; // null = ningun mensajero clasifica central (fallback satelite)
   /**
-   * 💰 FEATURE 273 (T9, R21) — el estatus `rechazada`, DESTINO de las barridas que ya agotaron sus
+   * 💰 FEATURE 276 (T9, R21) — el estatus `rechazada`, DESTINO de las barridas que ya agotaron sus
    * intentos de entrega. Absorbe la ficha 218.
    *
    * Es el MISMO value que resuelve `devolucionRechazadas.rechazadaId`, pero viaja tambien aqui a
@@ -103,12 +103,12 @@ export interface LiberacionSinGestionarConfig {
    */
   rechazadaEstatusId: string;
   /**
-   * 💰 FEATURE 273 (T9, R7/R21) — el UMBRAL de intentos, INYECTADO DESDE EL SERVICIO.
+   * 💰 FEATURE 276 (T9, R7/R21) — el UMBRAL de intentos, INYECTADO DESDE EL SERVICIO.
    *
    * La configuracion NO se lee en el repositorio: la regla de negocio y la config viven en
    * `CierresAdminService`, que es quien resuelve `reintentosConfig.MIN_INTENTOS_ENTREGA`. Aqui
    * llega como un numero y nada mas — un `import { reintentosConfig }` en este repositorio seria
-   * la segunda fuente del umbral, y la ficha 273 tiene un requisito entero (R7) para impedir eso.
+   * la segunda fuente del umbral, y la ficha 276 tiene un requisito entero (R7) para impedir eso.
    */
   umbralIntentos: number;
 }

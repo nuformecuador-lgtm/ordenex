@@ -86,7 +86,7 @@ function buildAsignacionService(): IAsignacionSateliteService {
   return new AsignacionSateliteService(
     ordenRepo,
     new AsignabilidadCoordenadasService(new JobRepository(prisma)),
-    // 💰 FEATURE 273 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
+    // 💰 FEATURE 276 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
     // —y por tanto el MISMO criterio unico de la 215— que consultan el panel del mensajero, la
     // pestaña de ayuda y los dos crons. La dependencia es OBLIGATORIA en el constructor: borrar
     // esta linea rompe el typecheck, no deja la puerta abierta en silencio.

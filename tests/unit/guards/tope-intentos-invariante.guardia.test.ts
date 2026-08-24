@@ -13,7 +13,7 @@ import { RESULTADOS_PERMITIDOS_EN_EL_TOPE } from "@/lib/types/tope-intentos";
 import { quitarComentarios } from "@/tests/fixtures/sin-comentarios";
 
 /**
- * GUARDIA DE LA FEATURE 273 (T13) — EL INVARIANTE DEL TOPE. R31, R32, R33.
+ * GUARDIA DE LA FEATURE 276 (T13) — EL INVARIANTE DEL TOPE. R31, R32, R33.
  *
  * QUE PROTEGE, y por que hace falta ADEMAS de los tests de cada puerta.
  *
@@ -37,10 +37,10 @@ const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 /* 1 · R33 — EL CRITERIO DE CONTEO NO SE MOVIO                                */
 /* ========================================================================== */
 
-describe("273/R33 — esta feature NO toca el criterio de conteo de intentos", () => {
+describe("276/R33 — esta feature NO toca el criterio de conteo de intentos", () => {
   it("`RESULTADOS_QUE_CUENTAN_COMO_INTENTO` sigue siendo EXACTAMENTE los tres de la 215", () => {
     // ⚠️ LITERAL A PROPOSITO: esto es el CONTRATO, no una copia de su propia fuente. Ensanchar
-    // esta lista desde la 273 —o desde cualquier ficha que no sea la que decida cambiar el
+    // esta lista desde la 276 —o desde cualquier ficha que no sea la que decida cambiar el
     // criterio— sube el numero de casi toda orden, cierra puertas antes de tiempo y COBRA DE MAS.
     expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).toEqual([
       "rechazada",
@@ -137,7 +137,7 @@ const DESTINOS_DE_CIRCULACION = [
  * decision explicita y no un descuido.
  */
 const CENSO_DE_CIRCULACION: Record<string, string> = {
-  // ── Las que la ficha 273 CIERRA ────────────────────────────────────────────────────────────
+  // ── Las que la ficha 276 CIERRA ────────────────────────────────────────────────────────────
   "reprogramada -> en_bodega_central via liberacion_reprogramada":
     "T6 · `LiberacionReprogramadaService.puedeLiberarse` — no libera mientras la gestion vigente pueda subir el contador",
   "reprogramada -> en_bodega_satelite via liberacion_reprogramada":
@@ -175,7 +175,7 @@ const CENSO_DE_CIRCULACION: Record<string, string> = {
 
   // ── El flujo del incidente ─────────────────────────────────────────────────────────────────
   "incidente -> en_bodega_central via incidente":
-    "resolucion de un incidente (158): decision del admin sobre un paquete dañado/perdido, fuera del alcance de la 273",
+    "resolucion de un incidente (158): decision del admin sobre un paquete dañado/perdido, fuera del alcance de la 276",
   "incidente -> en_bodega_satelite via incidente": "resolucion de un incidente (158)",
   "incidente -> por_recoger via incidente":
     "resolucion de un incidente (158). ⚠️ ES LA UNICA de esta lista que SI pone la orden en la mano de un mensajero sin pasar por la puerta del tope. Queda declarada como limite conocido de esta ficha: la decide un admin caso a caso sobre un paquete con incidente, no un flujo automatico",
@@ -194,7 +194,7 @@ function aristasDeCirculacion(): string[] {
   return salida.sort();
 }
 
-describe("273/R31/R32 — todas las vias hacia la circulacion estan enumeradas", () => {
+describe("276/R31/R32 — todas las vias hacia la circulacion estan enumeradas", () => {
   it("el censo cubre EXACTAMENTE las aristas que el grafo declara hoy", () => {
     // La lista de la izquierda se DERIVA de `TRANSICIONES`; la de la derecha esta escrita a mano.
     // Si alguien anade una arista nueva hacia una bodega o hacia `por_recoger` y no la clasifica,
@@ -207,7 +207,7 @@ describe("273/R31/R32 — todas las vias hacia la circulacion estan enumeradas",
     expect(
       sinCensar,
       "aparecio una via hacia la circulacion que nadie clasifico. Antes de anadirla al censo, " +
-        "decide si necesita la puerta del tope: si la necesita y no la tiene, la ficha 273 acaba " +
+        "decide si necesita la puerta del tope: si la necesita y no la tiene, la ficha 276 acaba " +
         "de quedar incompleta y una orden agotada puede volver a salir a reparto.",
     ).toEqual([]);
 
@@ -246,7 +246,7 @@ describe("273/R31/R32 — todas las vias hacia la circulacion estan enumeradas",
   });
 
   it("R31 — `rechazada` NO tiene ninguna salida hacia la circulacion", () => {
-    // Es el destino terminal de las tres rutas que la 273 usa (la gestion, el corte y el cron
+    // Es el destino terminal de las tres rutas que la 276 usa (la gestion, el corte y el cron
     // SLA). Si `rechazada` ganara una arista hacia una bodega o hacia `por_recoger`, la orden que
     // la ficha acaba de terminar podria volver a repartirse.
     const salidas = (TRANSICIONES.rechazada ?? []) as readonly { to: string }[];

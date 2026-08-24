@@ -100,7 +100,7 @@ describe("156/R12 — generarGuia YA NO pasa por el gate (dejo de asignar mensaj
   it.each(NO_ASIGNABLES)("motivo %s -> ok igualmente, la orden se numera", async (estado) => {
     const repo = fakeRepo();
     const g = gate({ o1: estado });
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
 
@@ -122,7 +122,7 @@ describe("156/R12 — generarGuia YA NO pasa por el gate (dejo de asignar mensaj
       ]),
     });
     const g = gate({ o2: "geocodificacion_agotada" });
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.generarGuia({ ordenIds: ["o1", "o2", "o3"] }, MAESTRO);
 
@@ -134,7 +134,7 @@ describe("156/R12 — generarGuia YA NO pasa por el gate (dejo de asignar mensaj
 
   it("156/R2: ninguna decision del lote lleva mensajero (por eso el gate sobra)", async () => {
     const repo = fakeRepo();
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     await service.generarGuia({ ordenIds: ["o1"] }, MAESTRO);
 
@@ -160,7 +160,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
 
   it.each(NO_ASIGNABLES)("motivo %s -> conflict SIN persistir", async (estado) => {
     const repo = repoBodega();
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate({ o1: estado }), fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate({ o1: estado }), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
 
@@ -174,7 +174,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
   it("el gate evalua el LOTE ENTERO (aqui todas reciben mensajero)", async () => {
     const repo = repoBodega();
     const g = gate();
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), g, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
 
@@ -183,7 +183,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
 
   it("todas asignables -> persiste con normalidad", async () => {
     const repo = repoBodega();
-    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
 
@@ -213,7 +213,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
       repo,
       fakeZonaRepo(),
       gate({ o1: "direccion_no_geocodificable" }),
-      fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */,
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
     );
 
     await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
-// FEATURE 273 (T9, R7): el umbral de intentos se resuelve AQUI, en el servicio, y viaja al
+// FEATURE 276 (T9, R7): el umbral de intentos se resuelve AQUI, en el servicio, y viaja al
 // repositorio como un numero dentro de `liberacionSinGestionar`. La capa de datos no lee
 // configuracion: si lo hiciera, habria dos fuentes del mismo umbral.
 import { reintentosConfig } from "@/lib/config/reintentos";
@@ -734,7 +734,7 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
     ]);
-    // 💰 FEATURE 273 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
+    // 💰 FEATURE 276 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
     // resuelve AQUI, en el servicio, y viaja como numero: el repositorio no lee configuracion.
     //
     // ⚠️ `rechazadaId !== null` entra en la MISMA condicion, y eso es FALLO CERRADO deliberado: si

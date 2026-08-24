@@ -48,7 +48,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
         gestiones: [
           {
             fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
-            // FEATURE 273 (T6.1): los tres hechos que ahora proyecta el `select`.
+            // FEATURE 276 (T6.1): los tres hechos que ahora proyecta el `select`.
             cierreId: "c1",
             cierre: { estado: "aprobado" },
             historialEstados: [{ id: "h1" }],
@@ -66,7 +66,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
       orderBy: { createdAt: "desc" },
       take: 1,
     });
-    // FEATURE 273 (T6.1, R12/R14): el `select` PIDE los tres hechos. Sin este bloque, borrar
+    // FEATURE 276 (T6.1, R12/R14): el `select` PIDE los tres hechos. Sin este bloque, borrar
     // `cierre` o la sonda del repositorio dejaria la fila con `null`/`false` y el servicio
     // liberaria SIEMPRE — verde, y con la regla desactivada.
     expect(arg.select.gestiones.select).toMatchObject({
@@ -91,7 +91,7 @@ describe("findOrdenesLiberables (R10/R11)", () => {
     ]);
   });
 
-  it("FEATURE 273: sin fila de visita real y sin cierre, los tres hechos salen en su forma vacia", async () => {
+  it("FEATURE 276: sin fila de visita real y sin cierre, los tres hechos salen en su forma vacia", async () => {
     // La gestion SINTETICA de la reprogramacion de escritorio (100) es exactamente esta forma:
     // sonda vacia, `cierre` ausente. El repositorio la traduce sin decidir nada.
     const prisma = buildPrisma();

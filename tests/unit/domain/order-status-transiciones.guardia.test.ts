@@ -465,11 +465,11 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // la tienda) y NO retira ninguna. ⚠️ Es la PRIMERA alta desde la 158 que NO sube los pares: ese
     // par YA lo tenia #21 (el cron de plazo vencido), asi que #21/#67 son el TERCER duplicado
     // historico del inventario y la diferencia `aristas - pares` pasa de 2 a 3.
-    // Feature 273 (2026-08-24): 62 -> 63 y 59 -> 60. Suma #68 (`sin_gestionar -> rechazada`, el
+    // Feature 276 (2026-08-24): 62 -> 63 y 59 -> 60. Suma #68 (`sin_gestionar -> rechazada`, el
     // rechazo por agotamiento de intentos al aprobar el cierre) y NO retira ninguna. Es par NUEVO:
     // de `sin_gestionar` solo se salia a las dos bodegas.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(63); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 273
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(60); // ... +1: 273 (par nuevo)
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(63); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(60); // ... +1: 276 (par nuevo)
   });
 });
 
@@ -669,21 +669,21 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
   it("los recuentos del inventario son 63 flujo / 60 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 63, // feature 273 (2026-08-24): 62 -> 63, una alta y ninguna baja
-      paresUnicos: 60, // feature 273: la alta es un par NUEVO, asi que los pares suben con ella
+      aristasFlujo: 63, // feature 276 (2026-08-24): 62 -> 63, una alta y ninguna baja
+      paresUnicos: 60, // feature 276: la alta es un par NUEVO, asi que los pares suben con ella
       aristasCreacion: 2,
     });
   });
 });
 
 // ---------------------------------------------------------------------------------------------
-// FEATURE 273 (T3/T9, R21/R22) — LA TERCERA SALIDA DE `sin_gestionar`.
+// FEATURE 276 (T3/T9, R21/R22) — LA TERCERA SALIDA DE `sin_gestionar`.
 //
 // La arista y su productor van en el MISMO commit. Sin la arista, el choke point (140) rechaza la
 // escritura del bloque de la aprobacion y REVIERTE LA APROBACION ENTERA del cierre — con su
 // dinero. Sin el productor, seria una arista muerta (el error de la 154).
 // ---------------------------------------------------------------------------------------------
-describe("273/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su familia propia", () => {
+describe("276/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su familia propia", () => {
   it("el par es LEGAL y no lanza", () => {
     expect(() => assertTransicionValida("sin_gestionar", "rechazada")).not.toThrow();
   });

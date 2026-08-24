@@ -66,7 +66,7 @@ export async function handleLiberarReprogramadas(
       evaluadas: resumen.evaluadas,
       liberadas: resumen.liberadas,
       omitidas: resumen.omitidas,
-      // FEATURE 273 (T6.2, R12/R13): el contador de las congeladas. Es un AGREGADO sin PII y es lo
+      // FEATURE 276 (T6.2, R12/R13): el contador de las congeladas. Es un AGREGADO sin PII y es lo
       // unico que hace observable, desde fuera, la poblacion que espera una aprobacion de cierre.
       // `?? 0` por el patron aditivo del `LiberacionResult`.
       esperandoCierre: resumen.esperandoCierre ?? 0,

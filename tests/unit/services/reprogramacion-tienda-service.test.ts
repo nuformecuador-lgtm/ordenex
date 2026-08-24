@@ -70,7 +70,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
   it("delega en el repo y devuelve ok cuando el adminTienda es dueño de la orden", async () => {
     const ordenRepo = buildOrdenRepo();
     const gestionRepo = buildGestionRepo();
-    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("o1", FECHA, "motivo x", TIENDA);
 
@@ -89,7 +89,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
 
   it("R6: adminTienda de OTRA tienda -> forbidden, sin escribir", async () => {
     const gestionRepo = buildGestionRepo();
-    const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("o1", FECHA, null, OTRA_TIENDA);
 
@@ -100,7 +100,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
   it("R6: roles no-adminTienda (maestro/mensajero/adminSatelite) -> forbidden, sin escribir", async () => {
     for (const actor of [MAESTRO, MENSAJERO, SATELITE]) {
       const gestionRepo = buildGestionRepo();
-      const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+      const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
       const r = await service.reprogramar("o1", FECHA, null, actor);
       expect(r.status).toBe("forbidden");
       expect(gestionRepo.reprogramarDesdeDevuelta).not.toHaveBeenCalled();
@@ -111,7 +111,7 @@ describe("ReprogramacionTiendaService · autz por tienda (R6)", () => {
     const ordenRepo = buildOrdenRepo({
       findById: vi.fn(async () => ordenDTO({ estatusValue: "en_reparto" })),
     });
-    const service = new ReprogramacionTiendaService(ordenRepo, buildGestionRepo(), fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(ordenRepo, buildGestionRepo(), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
     const r = await service.reprogramar("o1", FECHA, null, OTRA_TIENDA);
     expect(r.status).toBe("forbidden");
   });
@@ -123,7 +123,7 @@ describe("ReprogramacionTiendaService · guardia de estado (R7)", () => {
       findById: vi.fn(async () => ordenDTO({ estatusValue: "en_reparto" })),
     });
     const gestionRepo = buildGestionRepo();
-    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("o1", FECHA, null, TIENDA);
 
@@ -135,7 +135,7 @@ describe("ReprogramacionTiendaService · guardia de estado (R7)", () => {
 
   it("R7: carrera con el cron SLA (repo count 0 -> false) -> conflict idempotente", async () => {
     const gestionRepo = buildGestionRepo({ reprogramarDesdeDevuelta: vi.fn(async () => false) });
-    const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(buildOrdenRepo(), gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("o1", FECHA, null, TIENDA);
 
@@ -148,7 +148,7 @@ describe("ReprogramacionTiendaService · bordes de dominio", () => {
   it("orden inexistente o borrada -> not_found, sin escribir", async () => {
     const ordenRepo = buildOrdenRepo({ findById: vi.fn(async () => null) });
     const gestionRepo = buildGestionRepo();
-    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("x", FECHA, null, TIENDA);
 
@@ -161,7 +161,7 @@ describe("ReprogramacionTiendaService · bordes de dominio", () => {
       findEstatusIdByValue: vi.fn(async (v: string) => (v === "devuelta" ? "os-devuelta" : null)),
     });
     const gestionRepo = buildGestionRepo();
-    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new ReprogramacionTiendaService(ordenRepo, gestionRepo, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.reprogramar("o1", FECHA, null, TIENDA);
 
@@ -171,11 +171,11 @@ describe("ReprogramacionTiendaService · bordes de dominio", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* FEATURE 273 · Q2 (FIRMADA el 2026-08-24) — la TERCERA via hacia la          */
+/* FEATURE 276 · Q2 (FIRMADA el 2026-08-24) — la TERCERA via hacia la          */
 /* circulacion tambien se bloquea, y con el motivo unico de R20.               */
 /* -------------------------------------------------------------------------- */
 
-describe("273/Q2 — la tienda no reprograma una orden que ya agoto sus intentos", () => {
+describe("276/Q2 — la tienda no reprograma una orden que ya agoto sus intentos", () => {
   const UMBRAL = reintentosConfig.MIN_INTENTOS_ENTREGA;
 
   /** Monta el servicio con el conteo de intentos que se le quiera dar a `o1`. */

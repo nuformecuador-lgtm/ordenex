@@ -12,7 +12,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 
 /**
- * GUARDIA DE LA FEATURE 273 (T15, R38) — NADA DE LO QUE ESTA FICHA PRODUCE LLEVA PII.
+ * GUARDIA DE LA FEATURE 276 (T15, R38) — NADA DE LO QUE ESTA FICHA PRODUCE LLEVA PII.
  *
  * Los CUATRO textos nuevos, uno por uno:
  *   1. el motivo del rechazo de una gestion en el tope (las dos superficies que crean gestion);
@@ -55,7 +55,7 @@ const TEXTOS_FIJOS: { nombre: string; texto: string }[] = [
   { nombre: "MOTIVO_RECHAZO_TOPE_INTENTOS", texto: MOTIVO_RECHAZO_TOPE_INTENTOS },
 ];
 
-describe("273/R38 — los textos fijos de la ficha no llevan PII", () => {
+describe("276/R38 — los textos fijos de la ficha no llevan PII", () => {
   for (const { nombre, texto } of TEXTOS_FIJOS) {
     it(`${nombre} no contiene datos personales, ids ni nombres de columna`, () => {
       // Contrapunto: el texto EXISTE y dice algo. Un `""` pasaria todos los asertos de abajo.
@@ -81,7 +81,7 @@ describe("273/R38 — los textos fijos de la ficha no llevan PII", () => {
   });
 });
 
-describe("273/R38 — el aviso agregado del cron de liberacion no lleva PII", () => {
+describe("276/R38 — el aviso agregado del cron de liberacion no lleva PII", () => {
   it("cuenta ordenes y no nombra ninguna", async () => {
     const avisos: string[] = [];
     const repo: ILiberacionReprogramadaRepository = {

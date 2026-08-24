@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 
 /**
- * FEATURE 273 (T5, caso 3) — EL COMPOSITION ROOT **PASA** LA DEPENDENCIA DEL TOPE.
+ * FEATURE 276 (T5, caso 3) — EL COMPOSITION ROOT **PASA** LA DEPENDENCIA DEL TOPE.
  *
  * ⚠️ POR QUE ESTE ARCHIVO EXISTE, y por que NO vale un `expect(fuente).toContain("historial")`.
  * En este repo ya pasó: dos notificadores quedaron MUERTOS con la suite entera en verde porque el
@@ -54,7 +54,7 @@ function formData(): FormData {
   return fd;
 }
 
-describe("273/T5 · el composition root de `gestionarDesdeAyuda` cablea el tope", () => {
+describe("276/T5 · el composition root de `gestionarDesdeAyuda` cablea el tope", () => {
   it("ejecutada SIN inyectar servicio, el objeto construido trae `historial` cableado", async () => {
     const { gestionarDesdeAyuda } = await import("@/lib/actions/gestion-desde-ayuda");
 

@@ -31,7 +31,7 @@ const VENTANA_WRONG_MS = 5 * DIA_MS;
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 type OrdenRepo = Pick<IOrdenRepository, "findEstatusIdByValue">;
 /**
- * FEATURE 273 (T10, R30) — el `Pick` pasa de `contarIntentos` a `contarIntentosEnLote`, y es un
+ * FEATURE 276 (T10, R30) — el `Pick` pasa de `contarIntentos` a `contarIntentosEnLote`, y es un
  * cambio de FORMA con dos motivos, no una optimizacion suelta:
  *
  *  (a) la rama `wrong_*` ahora TAMBIEN necesita el numero (R28). Si cada rama contara por su
@@ -96,7 +96,7 @@ export class DevolucionSlaService implements IDevolucionSlaService {
 
     const candidatas = await this.repo.findDevueltasSla();
 
-    // FEATURE 273 (T10, R28/R30) — UN SOLO CONTEO POR CORRIDA, para LAS DOS RAMAS.
+    // FEATURE 276 (T10, R28/R30) — UN SOLO CONTEO POR CORRIDA, para LAS DOS RAMAS.
     //
     // Las dos leen de este mismo `Map`, asi que por construccion no pueden discrepar sobre cuantos
     // intentos tiene una orden. Con `ids` vacio el servicio no emite ni una consulta (el propio
@@ -129,7 +129,7 @@ export class DevolucionSlaService implements IDevolucionSlaService {
         }
         const intentos = intentosPorOrden.get(orden.ordenId) ?? 0; // R30: del Map, no de una consulta
 
-        // 💰 FEATURE 273 (T10, R28) — LA RAMA `wrong_*` DEJA DE ESPERAR CUANDO YA NO HAY INTENTOS.
+        // 💰 FEATURE 276 (T10, R28) — LA RAMA `wrong_*` DEJA DE ESPERAR CUANDO YA NO HAY INTENTOS.
         //
         // MIENTRAS una orden repose en `devuelta` con causa `wrong_number`/`wrong_address` y sus
         // intentos vigentes alcancen el umbral, escala en la PRIMERA corrida posterior a su

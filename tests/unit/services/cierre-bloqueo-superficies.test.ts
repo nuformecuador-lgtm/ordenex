@@ -157,7 +157,7 @@ describe("271 · familia A — GESTIONAR y COBRAR", () => {
       { createSignedUrl: vi.fn(), createSignedUrls: vi.fn() } as never,
       { findByMensajero: vi.fn(async () => null), upsertOrigen: vi.fn() },
       { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) },
-      // FEATURE 273 (T4): el `Pick` del servicio gana `contarIntentos` (la puerta del tope).
+      // FEATURE 276 (T4): el `Pick` del servicio gana `contarIntentos` (la puerta del tope).
       // Con 0 intentos la puerta no se cierra y estos casos siguen midiendo el bloqueo por cierres.
       {
         contarIntentosEnLote: vi.fn(async () => new Map<string, number>()),
@@ -312,7 +312,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       repo,
       { findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) } as unknown as IZonaRepository,
       gateTodoAsignable,
-      fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */,
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
     );
   }
 
@@ -385,7 +385,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       })),
       asignarSateliteLote,
     });
-    return new AsignacionSateliteService(repo, gateTodoAsignable, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    return new AsignacionSateliteService(repo, gateTodoAsignable, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
   }
 
   it.each(LIBRES.map((c) => [c.nombre, c.cierres] as const))(

@@ -134,7 +134,7 @@ describe("Feature 240 · el DOWN deja la base legible por el codigo anterior (R4
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
-          // Feature 273 (2026-08-24): la PRIMERA que pasa por aqui despues de la 240, asi que el
+          // Feature 276 (2026-08-24): la PRIMERA que pasa por aqui despues de la 240, asi que el
           // `!== FAMILIA` a secas deja de bastar y aparece la lista de POSTERIORES que el propio
           // comentario de arriba anticipaba. El `down.sql` de la 240 sigue intacto.
           (v) => v !== FAMILIA && v !== "rechazo_tope_intentos",

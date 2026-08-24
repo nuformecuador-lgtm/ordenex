@@ -327,7 +327,7 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "rechazarDesdeDevuelta",
     origenTipo: "rechazo_tienda",
   },
-  // FEATURE 273 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
+  // FEATURE 276 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
   //
   // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
   // barrio y que ya alcanzo el umbral. Absorbe la ficha 218.
@@ -421,7 +421,7 @@ describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
   it("son EXACTAMENTE 31 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
     // 30 - 1: el #2 se retiro el 2026-08-07. Feature 235 (2026-08-19): +2 (#29/#30, las dos
     // familias del viaje de la ayuda, con UN solo simbolo — el punto unico que R8 exige).
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(32); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-24 (273): +#33
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(32); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-24 (276): +#33
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.

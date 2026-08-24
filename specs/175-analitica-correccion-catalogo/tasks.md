@@ -17,7 +17,7 @@ el artefacto fechado que `metrics.ts:5-7` exige para tocar el catálogo.
       `analytics_daily` y es el 4.º término de `DENOMINADOR_GESTIONES`.
 - [x] **T0.2 (BLOQUEANTE, Q2) RATIFICADA: `sin_gestionar` → `producida` también.** Es el mismo
       defecto: la 126 la sirve derivándola del embudo. Consecuencia **aceptada y medida antes de
-      decidir**: el catálogo se queda sin ninguna `declarada` y `metrics.test.ts:273` se pone rojo.
+      decidir**: el catálogo se queda sin ninguna `declarada` y `metrics.test.ts:276` se pone rojo.
       **No se relaja ese guard** — se reexpresa sobre catálogo sintético (R4), porque lo que protege
       es que el filtro PARTICIONE, no que existan métricas sin productor.
 - [x] **T0.3 [P] (Q3) SÍ**: se añaden los dos campos **opcionales** a `DefinicionMetrica`. Es aditivo

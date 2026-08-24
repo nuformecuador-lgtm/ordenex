@@ -14,7 +14,7 @@ No queda ninguna pregunta abierta. Las siete se cerraron así y **ya están en e
 
 | Q | Cierre | Efecto en estas tareas |
 | --- | --- | --- |
-| Q1 | **Sin botón «Imprimir»** (D1) | No hay tanda de botón; `factura-contraste.guardia.test.ts:265-273` **no se toca** y debe seguir verde |
+| Q1 | **Sin botón «Imprimir»** (D1) | No hay tanda de botón; `factura-contraste.guardia.test.ts:265-276` **no se toca** y debe seguir verde |
 | Q2 | **`size: portrait` sin nombre de papel** (D2) | **T8** escribe el literal; **T10** lo congela y la mutación 10 lo muerde |
 | Q3 | **12 mm**, en un solo sitio y con su porqué (D3) | **T8** + **T10** |
 | Q4 | **Límite de las pestañas declarado** (D4) | **T9** lo escribe junto a la regla; la feature se queda en CSS |
@@ -254,7 +254,7 @@ defiende nada.
 | R24 | **T5** (anclajes por contenido, vistos rojos) + §6.4 (dos `@media print`, los dos antes de `.dark`); mutación 13 |
 | R25 | §6.4 — cero `--…` en el bloque; mutación 12 |
 | R26 | §6.4 — ancestros sin `@layer`; mutación 11 |
-| R27 | `factura-contraste.guardia.test.ts:265-273`, verde sin ser tocada |
+| R27 | `factura-contraste.guardia.test.ts:265-276`, verde sin ser tocada |
 | R28 | T18 (guardia reexpresada) + §6.5 (prosa del `.tsx`) + T19 |
 | R29 | §6.5 — el límite está escrito junto a `KpiFactura` |
 | R30 | Todos los censos usan `codigoSinComentarios`; mutaciones 6 y 8 (declaración escrita en un comentario → roja) |

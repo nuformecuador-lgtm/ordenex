@@ -14,7 +14,7 @@ import {
   subirEvidenciasCompensadas,
 } from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
-// FEATURE 273 (T5, R1/R3/R4/R7): la MISMA regla y el MISMO motivo que el panel del mensajero. El
+// FEATURE 276 (T5, R1/R3/R4/R7): la MISMA regla y el MISMO motivo que el panel del mensajero. El
 // modulo del tope es puro y el motivo vive en `mensajes-bloqueo`: dos superficies, un solo texto.
 import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";
 import { reintentosConfig } from "@/lib/config/reintentos";
@@ -66,7 +66,7 @@ export interface GestionDesdeAyudaDeps {
   gestionRepo: Pick<IGestionOrdenRepository, "crearGestionDesdeAyuda">;
   storage: IFileStorage;
   /**
-   * 💰 FEATURE 273 (T5, R1/R4) — el derivador de intentos, para la PUERTA DEL TOPE del paso 5-ter.
+   * 💰 FEATURE 276 (T5, R1/R4) — el derivador de intentos, para la PUERTA DEL TOPE del paso 5-ter.
    *
    * OBLIGATORIA A PROPOSITO, no opcional: un composition root que se la olvidara desactivaria la
    * puerta EN SILENCIO sobre la operacion mas delicada en dinero de la pila de la ayuda. Con la
@@ -185,7 +185,7 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
       };
     }
 
-    // 💰 5-ter) FEATURE 273 (T5, R1/R4/R5/R6/R11) — LA PUERTA DEL TOPE DE INTENTOS, la MISMA que
+    // 💰 5-ter) FEATURE 276 (T5, R1/R4/R5/R6/R11) — LA PUERTA DEL TOPE DE INTENTOS, la MISMA que
     //    el panel del mensajero y con el MISMO motivo (R4: la regla vale igual en las dos
     //    superficies que crean gestion; un simbolo compartido, no dos literales gemelos).
     //

@@ -9,12 +9,12 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import { LiberacionReprogramadaService } from "@/lib/services/LiberacionReprogramadaService";
 
 /**
- * FEATURE 273 (T6.2) — LA LIBERACION DE REPROGRAMADAS ESPERA A LA APROBACION DEL CIERRE.
+ * FEATURE 276 (T6.2) — LA LIBERACION DE REPROGRAMADAS ESPERA A LA APROBACION DEL CIERRE.
  * R12, R13, R14, R15, R16.
  *
  * ⚠️ ESTE ES EL CAMBIO DE LA RAIZ. Hasta hoy `findOrdenesLiberables` devolvia la orden a bodega por
  * `fecha_reprogramacion <= hoyCR` SIN MIRAR EL CIERRE en ningun punto, con el contador de intentos
- * todavia en el valor viejo. Ahi nacia el 4.º intento que la ficha 273 cierra.
+ * todavia en el valor viejo. Ahi nacia el 4.º intento que la ficha 276 cierra.
  *
  * ⚠️ Y ESTE ARCHIVO NO BASTA, POR CONSTRUCCION. Usa DOBLES: no ve el SQL, asi que no puede afirmar
  * que el repositorio traiga de verdad el `cierre.estado` ni la sonda de visita real DE LA GESTION
@@ -69,7 +69,7 @@ function montar(filas: OrdenLiberableRow[], over: Partial<ILiberacionReprogramad
 /* 1 · Visita real + cierre SIN aprobar -> NO se libera, y NADA se toca        */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R12/R13 — la visita real espera a que su cierre se apruebe", () => {
+describe("276/T6 · R12/R13 — la visita real espera a que su cierre se apruebe", () => {
   it("1. cierre `solicitado` -> no se libera, `esperandoCierre = 1`, y `liberarOrden` NI SE LLAMA", async () => {
     const { service, repo } = montar([
       fila({ gestionCierreId: "c1", gestionCierreEstado: "solicitado" }),
@@ -108,7 +108,7 @@ describe("273/T6 · R12/R13 — la visita real espera a que su cierre se apruebe
 /* 2 · Visita real + cierre APROBADO -> se libera (R15)                        */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R15 — al aprobarse el cierre, la corrida siguiente la libera", () => {
+describe("276/T6 · R15 — al aprobarse el cierre, la corrida siguiente la libera", () => {
   it("2. cierre `aprobado` -> se libera", async () => {
     const { service, repo } = montar([fila({ gestionCierreEstado: "aprobado" })]);
 
@@ -137,7 +137,7 @@ describe("273/T6 · R15 — al aprobarse el cierre, la corrida siguiente la libe
 /* 3 · Visita real SIN cierre todavia -> NO se libera                          */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R12/R32 — sin cierre asignado tampoco se libera", () => {
+describe("276/T6 · R12/R32 — sin cierre asignado tampoco se libera", () => {
   it("3. `cierreId = null` con visita real -> no se libera", async () => {
     // Es el caso mas facil de olvidar y el mas peligroso: la gestion del dia que el mensajero aun
     // no ha cerrado TODAVIA PUEDE entrar en un cierre y sumar +1. Liberar aqui es exactamente
@@ -157,7 +157,7 @@ describe("273/T6 · R12/R32 — sin cierre asignado tampoco se libera", () => {
 /* 4 · La gestion SINTETICA no espera a nadie (R14)                            */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R14 — la reprogramacion de escritorio de la tienda no pierde latencia", () => {
+describe("276/T6 · R14 — la reprogramacion de escritorio de la tienda no pierde latencia", () => {
   it("4. NO visita real + `cierreId = null` -> SI se libera, con el criterio de fecha de siempre", async () => {
     // `reprogramacion_tienda` (feature 100) crea una gestion SINTETICA que NO esta en
     // `ORIGEN_TIPOS_VISITA_REAL` y por tanto NUNCA va a contar como intento. Hacerla esperar la
@@ -192,7 +192,7 @@ describe("273/T6 · R14 — la reprogramacion de escritorio de la tienda no pier
 /* 5 · Los otros dos estados de cierre                                         */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R12 — `rechazado` y `vencido` tampoco liberan", () => {
+describe("276/T6 · R12 — `rechazado` y `vencido` tampoco liberan", () => {
   it("5. ninguno de los dos se libera, y la valvula que lo hace aceptable esta declarada", async () => {
     // `forzarSolicitudVencido` (`ESTADOS_REABRIBLES = ["vencido","rechazado"]`) devuelve esos dos
     // a `solicitado`, asi que NINGUN cierre queda fuera del alcance de una aprobacion posterior.
@@ -212,7 +212,7 @@ describe("273/T6 · R12 — `rechazado` y `vencido` tampoco liberan", () => {
 /* 6 · R16 — idempotencia y resiliencia por orden                              */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T6 · R16 — la corrida sigue siendo resiliente e idempotente", () => {
+describe("276/T6 · R16 — la corrida sigue siendo resiliente e idempotente", () => {
   it("6. una orden que falla no aborta la corrida: la siguiente se libera igual", async () => {
     const liberarOrden = vi
       .fn<ILiberacionReprogramadaRepository["liberarOrden"]>()

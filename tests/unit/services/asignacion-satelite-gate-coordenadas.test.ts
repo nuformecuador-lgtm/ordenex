@@ -74,7 +74,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
     const service = new AsignacionSateliteService(
       repo as unknown as IOrdenRepository,
       gate({ o1: estado }),
-      fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */,
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
     );
 
     const r = await service.asignar({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, ADMIN_SATELITE);
@@ -91,7 +91,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
     const service = new AsignacionSateliteService(
       repo as unknown as IOrdenRepository,
       gate({ o1: "geocodificacion_agotada", o2: "direccion_no_geocodificable" }),
-      fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */,
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
     );
 
     const r = await service.asignar({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, ADMIN_SATELITE);
@@ -108,7 +108,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
 
   it("todas asignables -> asigna con normalidad", async () => {
     const repo = fakeRepo();
-    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate(), fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate(), fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignar({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, ADMIN_SATELITE);
 
@@ -123,7 +123,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", zonaId: "z-otra" })]),
     });
     const g = gate({ o1: "geocodificacion_agotada" });
-    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, g, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, g, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignar({ ordenIds: ["o1"], mensajeroId: "m1" }, ADMIN_SATELITE);
 
@@ -137,7 +137,7 @@ describe("R8 — AsignacionSateliteService.asignar", () => {
   it("rol no autorizado -> forbidden sin llegar al gate", async () => {
     const repo = fakeRepo();
     const g = gate();
-    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, g, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new AsignacionSateliteService(repo as unknown as IOrdenRepository, g, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignar(
       { ordenIds: ["o1"], mensajeroId: "m1" },

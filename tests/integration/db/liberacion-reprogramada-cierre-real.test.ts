@@ -13,7 +13,7 @@ import {
 } from "./_postgres-real";
 
 /**
- * FEATURE 273 (T6, bloque 🔴 OBLIGATORIO) — EL `select` DE LA LIBERACION, EJECUTADO CONTRA POSTGRES.
+ * FEATURE 276 (T6, bloque 🔴 OBLIGATORIO) — EL `select` DE LA LIBERACION, EJECUTADO CONTRA POSTGRES.
  *
  * ⚠️ POR QUE ESTE ARCHIVO ES OBLIGATORIO Y NO UN EXTRA. `liberacion-reprogramada-tope.test.ts`
  * prueba la REGLA con dobles: le entrega al servicio una fila ya construida y comprueba que decide
@@ -33,7 +33,7 @@ import {
 
 const describeSiHayBase = HAY_BASE_DE_DATOS ? describe : describe.skip;
 
-const SUFIJO = `273-${Date.now().toString(36)}`;
+const SUFIJO = `276-${Date.now().toString(36)}`;
 const GUIA_BASE = 930_000_000 + (Date.now() % 40_000_000);
 
 /** `fecha_reprogramacion` es `@db.Date`: medianoche UTC, misma convencion que `startOfDayCR`. */
@@ -81,7 +81,7 @@ const SEMILLAS: Semilla[] = [
 
 const CANDIDATAS = SEMILLAS.filter((s) => s.fecha.getTime() <= HOY.getTime()).map((s) => s.clave);
 
-describeSiHayBase("273/T6 — `findOrdenesLiberables` contra Postgres real", () => {
+describeSiHayBase("276/T6 — `findOrdenesLiberables` contra Postgres real", () => {
   let prisma: PrismaClient;
 
   let conCorpus: <T>(

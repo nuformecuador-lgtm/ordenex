@@ -24,11 +24,11 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
 };
 
 /**
- * FEATURE 273 (T6.2): la fila gana tres hechos, y el DEFAULT es «visita real de un cierre YA
+ * FEATURE 276 (T6.2): la fila gana tres hechos, y el DEFAULT es «visita real de un cierre YA
  * APROBADO».
  *
  * La eleccion del default no es neutra y por eso se explica: es el caso REAL de una orden que se
- * libera despues de la 273 —el mensajero la reprogramo en la calle y su cierre ya se aprobo—, asi
+ * libera despues de la 276 —el mensajero la reprogramo en la calle y su cierre ya se aprobo—, asi
  * que los casos preexistentes de este archivo siguen midiendo lo que median (destino por zona,
  * idempotencia, resiliencia) sobre una orden que de verdad puede liberarse. Un default
  * `gestionEsVisitaReal: false` habria sido mas comodo y habria dejado todos esos casos entrando

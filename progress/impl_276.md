@@ -1,7 +1,7 @@
-# Feature 273 — bitácora de implementación (BACKEND)
+# Feature 276 — bitácora de implementación (BACKEND)
 
-> Rama `feature/273-tope-de-intentos`, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
-> (`e93c19e6`): los tres commits del spec de la 273 todavía **no estaban empujados**, así que
+> Rama `feature/276-tope-de-intentos`, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
+> (`e93c19e6`): los tres commits del spec de la 276 todavía **no estaban empujados**, así que
 > ramificar de `origin/dev` habría dejado la rama sin la ficha que implementa.
 >
 > **Alcance: servidor.** Los componentes de `app/**` y `components/**` no se tocaron. Lo que queda
@@ -200,14 +200,14 @@ Fixtures (`intentos-entrega`, `inventario-transiciones-140`), la guardia de tran
 | R14 | `liberacion-reprogramada-tope` 4, 4.bis · 🔴 `liberacion-reprogramada-cierre-real` («la SONDA distingue la familia») |
 | R15 | `liberacion-reprogramada-tope` 2, 2.bis |
 | R16 | `liberacion-reprogramada-tope` 6, 6.bis, 6.ter · `liberacion-reprogramada-service` (casos vigentes de la 46) |
-| R17 | `cierre-dia-service` → «273/R17» 1, 2, 3 |
+| R17 | `cierre-dia-service` → «276/R17» 1, 2, 3 |
 | R18 | `guia-asignacion-tope-intentos` 1, 1.bis, 1.ter, 2 · `asignacion-satelite-tope-intentos` 1, 2 |
 | R19 | `guia-asignacion-tope-intentos` 1 (detalle de las TRES) · `asignacion-satelite-tope-intentos` 1 |
-| R20 | `asignacion-satelite-tope-intentos` 3 (ejercita **los dos** servicios y compara contra la constante) · `reprogramacion-tienda-service` → «273/Q2» |
+| R20 | `asignacion-satelite-tope-intentos` 3 (ejercita **los dos** servicios y compara contra la constante) · `reprogramacion-tienda-service` → «276/Q2» |
 | R21 | 🔴 `cierre-sin-gestion-tope-sql-real` 1, 3 |
-| R22 | 🔴 `cierre-sin-gestion-tope-sql-real` 1b, 1c · `order-status-transiciones.guardia` → «273/R21/R22» |
+| R22 | 🔴 `cierre-sin-gestion-tope-sql-real` 1b, 1c · `order-status-transiciones.guardia` → «276/R21/R22» |
 | R23 | 🔴 `cierre-sin-gestion-tope-sql-real` 1d · `cierres-admin-service.aprobar.sin-gestion` → «la gestión sintética nace SIN cierre» |
-| R24 | `cierres-admin-service.aprobar.sin-gestion` → «273/R24» (caso **emparejado**, feeds reales) · `cierres-admin-caja-cod` sigue verde sin tocar sus asertos de orden |
+| R24 | `cierres-admin-service.aprobar.sin-gestion` → «276/R24» (caso **emparejado**, feeds reales) · `cierres-admin-caja-cod` sigue verde sin tocar sus asertos de orden |
 | R25 | 🔴 `cierre-sin-gestion-tope-sql-real` 2, 2b · `cierres-admin-service.aprobar.sin-gestion` → «la orden que NO llegó al umbral sigue yendo a bodega» |
 | R26 | 🔴 `cierre-sin-gestion-tope-sql-real` 4 |
 | R27 | 🔴 `cierre-sin-gestion-tope-sql-real` 5 · `cierres-admin-tope-sin-gestion` («al RECHAZAR no se pasa config») |
@@ -217,7 +217,7 @@ Fixtures (`intentos-entrega`, `inventario-transiciones-140`), la guardia de tran
 | R31 | `tope-intentos-invariante.guardia` bloque 2 («el censo cubre EXACTAMENTE», «`rechazada` no tiene salida») |
 | R32 | `tope-intentos-invariante.guardia` bloque 2 («la salida de `reprogramada` sigue siendo la ÚNICA») · `liberacion-reprogramada-tope` 3 |
 | R33 | `tope-intentos-invariante.guardia` bloque 1 (5 casos) |
-| R34 | `anclaje-vs-intentos.guardia` → «273/R34» (3 casos) |
+| R34 | `anclaje-vs-intentos.guardia` → «276/R34» (3 casos) |
 | R35 | `rechazo-tope-intentos-migration` («el UP es ADITIVO», «el DOWN tampoco mueve órdenes», y contra Postgres: «aplicar y revertir NO cambia el `estatus_id`») |
 | R36 | `rechazo-tope-intentos-migration` («el DOWN RECREA con los 31 previos», «el DOWN EJECUTA y deja el enum como estaba», «la base sigue legible») |
 | R37 | **T0 de arriba — VERIFICACIÓN HUMANA, y está a medias:** el SQL existe y corre; la ejecución contra producción es del spec (2026-08-24) y **debe repetirse antes de desplegar**. |
@@ -237,7 +237,7 @@ suite y se revirtió.
 | 3 | Desactivar la puerta del tope en `MisAsignacionesService.gestionar` | 🔴 **7 rojos** |
 | 4 | Desactivar la puerta del tope en `GestionDesdeAyudaService.gestionar` | 🔴 **5 rojos** |
 | 5 | Desactivar las **tres** puertas de la circulación (2 bodegas + Q2) a la vez | 🔴 **11 rojos** en 3 archivos |
-| 6 | Desactivar el reparto en dos destinos de `resolverCierre` (todo a bodega, como antes de la 273) | 🔴 **5 rojos** en `cierre-sin-gestion-tope-sql-real` |
+| 6 | Desactivar el reparto en dos destinos de `resolverCierre` (todo a bodega, como antes de la 276) | 🔴 **5 rojos** en `cierre-sin-gestion-tope-sql-real` |
 | 7 | La gestión sintética entra en **ESTE** cierre (`cierreId` en vez de `null`) | 🔴 **2 rojos** |
 | 8 | La rama `wrong_*` deja de mirar el contador | 🔴 **6 rojos** en `devolucion-sla-tope-wrong` |
 | 9 | Añadir a mano una arista de prueba `sin_gestionar -> en_bodega_central` | 🔴 **1 rojo** en `tope-intentos-invariante.guardia`, con el mensaje que nombra la vía sin clasificar |
@@ -378,7 +378,7 @@ rechaza igual (R11, con sus cuatro casos).
 
 ## Estado
 
-**Backend de la 273: completo y verde.** Frontend pendiente (T11/T12). R37 pendiente de
+**Backend de la 276: completo y verde.** Frontend pendiente (T11/T12). R37 pendiente de
 re-ejecución contra producción **antes de desplegar**.
 
 ---
@@ -386,26 +386,43 @@ re-ejecución contra producción **antes de desplegar**.
 ## ⚠️ COLISIÓN DE IDS DETECTADA AL CERRAR — no la resuelvo yo
 
 Al hacer el `git fetch` final (2026-08-24, después del gate), `origin/dev` había pasado de
-`e93c19e6` a **`821a6afe`**, y en ese avance **otra sesión registró los ids 273, 274 y 275 para
+`e93c19e6` a **`821a6afe`**, y en ese avance **otra sesión registró los ids 276, 277 y 275 para
 features distintas**:
 
 | id | en `origin/dev` (821a6afe) | en esta rama |
 | --- | --- | --- |
-| **273** | tarifas ligadas a la zona: modelo, borrado físico y catálogo de vehículos · `in_progress` | **el tope de intentos** · `in_progress` |
-| **274** | cobro por zona + tienda: cascada de resolución de tarifa · `pending` | «Por recoger» separa en tabs · `in_progress` |
+| **276** | tarifas ligadas a la zona: modelo, borrado físico y catálogo de vehículos · `in_progress` | **el tope de intentos** · `in_progress` |
+| **277** | cobro por zona + tienda: cascada de resolución de tarifa · `pending` | «Por recoger» separa en tabs · `in_progress` |
 | **275** | configuración de tarifas · `pending` | — |
 
-Existe además la rama remota `origin/feature/273-tarifas-por-zona-catalogo-vehiculos` (el nombre de
-rama **no** choca con `feature/273-tope-de-intentos`; lo que choca son los **ids**). En `origin/dev`
-todavía **no** hay carpeta `specs/273-*`.
+Existe además la rama remota `origin/feature/276-tarifas-por-zona-catalogo-vehiculos` (el nombre de
+rama **no** choca con `feature/276-tope-de-intentos`; lo que choca son los **ids**). En `origin/dev`
+todavía **no** hay carpeta `specs/276-*`.
 
 **Por qué no lo toco:** renumerar arrastra la carpeta del spec, el nombre de la rama, los nueve
-mensajes de commit y decenas de comentarios que citan «273» dentro del código y de los tests. Es una
+mensajes de commit y decenas de comentarios que citan «276» dentro del código y de los tests. Es una
 decisión del leader —y el precedente de este repo es explícito: la propia ficha 218 lleva escrito
 que la renumeraron «porque otra sesión tomó ese id en `dev` mientras esta ficha se escribía, y `dev`
 manda»—.
 
 **Lo que sí hay que saber para decidir:** el merge a `dev` va a dar conflicto en
 `feature_list.json` sí o sí, y resolverlo «a favor de los dos» dejaría **dos features distintas con
-el id 273**. La implementación de esta rama es coherente consigo misma; lo único que hay que
+el id 276**. La implementación de esta rama es coherente consigo misma; lo único que hay que
 reasignar es la etiqueta.
+
+---
+
+## Renumerado 273 → 276 (2026-08-24), y lo único que NO se renumeró
+
+Otra sesión registró 273/274/275 para las fichas de tarifas mientras ésta se escribía, y **mergeó su
+273 en `dev`**. `dev` manda —mismo precedente que la 218, renumerada desde 216 por esto— así que se
+movió ésta. Se renumeraron los **96 archivos** que citaban la ficha: código, tests, specs, la ficha
+en `feature_list.json` y esta bitácora.
+
+**Los comentarios de `db/migrations/20260824120000_orden_historial_origen_rechazo_tope_intentos/`
+siguen diciendo «feature 273», y es deliberado.** Editar el SQL de una migración **ya aplicada**
+cambia su checksum, y en este repo eso ya produjo drift: lo añadido después no llega nunca a la base
+que la aplicó. Un comentario con el número viejo es barato; un checksum roto no. El nombre de la
+carpeta no lleva número de ficha, así que no hay nada más que tocar ahí.
+
+Los mensajes de los commits anteriores siguen diciendo `273`: son historia y no se reescriben.

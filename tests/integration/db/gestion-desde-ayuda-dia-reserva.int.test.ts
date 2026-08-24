@@ -178,7 +178,7 @@ describeSiHayBase("261/B18 — el `where` del `updateMany` de la tienda, contra 
       },
       gestionRepo: new GestionOrdenRepository(ctx.tx, colaFake() as never),
       storage,
-    // FEATURE 273 (T5): la dependencia del tope es OBLIGATORIA. Con el doble a 0 intentos, la
+    // FEATURE 276 (T5): la dependencia del tope es OBLIGATORIA. Con el doble a 0 intentos, la
     // puerta del paso 5-ter no se cierra y estos casos siguen midiendo lo que median.
       historial: fakeIntentosEnLote(),
     });

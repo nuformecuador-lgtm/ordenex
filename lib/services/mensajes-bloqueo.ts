@@ -30,7 +30,7 @@ export const MSG_MENSAJERO_BLOQUEADO_POR_CIERRES =
   "el mensajero tiene cierres sin resolver: no puede recibir trabajo nuevo hasta que se aprueben";
 
 /**
- * FEATURE 273 (R6/R20/R38, 2026-08-24) — LOS DOS MOTIVOS DEL TOPE DE INTENTOS, en su punto UNICO.
+ * FEATURE 276 (R6/R20/R38, 2026-08-24) — LOS DOS MOTIVOS DEL TOPE DE INTENTOS, en su punto UNICO.
  *
  * Son DOS textos y no uno porque son dos preguntas distintas del usuario: al mensajero (y a la
  * tienda desde la pestaña de ayuda) hay que decirle QUE SI PUEDE registrar; a quien asigna hay que

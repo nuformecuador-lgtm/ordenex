@@ -1,6 +1,6 @@
 import type { GestionResultado } from "@prisma/client";
 
-// Feature 273 (design §4, R3/R7) — EL PUNTO UNICO DE LA REGLA DEL TOPE DE INTENTOS.
+// Feature 276 (design §4, R3/R7) — EL PUNTO UNICO DE LA REGLA DEL TOPE DE INTENTOS.
 //
 // La regla entera es una frase: **al alcanzar el umbral, la orden no vuelve a circulacion.** Este
 // modulo contiene esa frase y NADA MAS: ni el umbral, ni la configuracion, ni una consulta.

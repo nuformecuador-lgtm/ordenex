@@ -101,7 +101,7 @@ const ORDENES_BARRIDAS = [
 function buildTx(
   sinGestion: ReturnType<typeof vinculo>[],
   /**
-   * FEATURE 273 (T9, R24): ids de ordenes barridas que YA ALCANZARON el umbral. Se traducen a los
+   * FEATURE 276 (T9, R24): ids de ordenes barridas que YA ALCANZARON el umbral. Se traducen a los
    * grupos que devolveria `gestionOrden.groupBy` con el predicado unico de intentos: tres cierres
    * aprobados distintos por orden.
    */
@@ -122,7 +122,7 @@ function buildTx(
     gestionOrden: {
       findMany: vi.fn(async () => GESTIONES),
       updateMany: vi.fn(async () => ({ count: 0 })),
-      // FEATURE 273 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
       // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
       // rama del rechazo por tope se mide contra Postgres en
       // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.
@@ -235,7 +235,7 @@ async function aprobarCon(
       enBodegaEstatusId: idEstado("en_bodega_central"),
       enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
       centralZonaId: "z-264",
-      // FEATURE 273 (T9): la config gana el destino del rechazo por tope y el UMBRAL inyectado.
+      // FEATURE 276 (T9): la config gana el destino del rechazo por tope y el UMBRAL inyectado.
       // Con el corpus de esta suite ninguna orden llega al umbral, asi que la rama nueva es un
       // no-op y estos casos siguen midiendo lo que median (la liberacion a bodega, R25).
       rechazadaEstatusId: idEstado("rechazada"),
@@ -348,10 +348,10 @@ describe("264/B8 — aprobar un cierre CON ordenes sin gestionar mueve el mismo 
 });
 
 /* ------------------------------------------------------------------------------------------ */
-/* FEATURE 273 (T9, R24) — EL RECHAZO POR TOPE NO TOCA UN SOLO IMPORTE                         */
+/* FEATURE 276 (T9, R24) — EL RECHAZO POR TOPE NO TOCA UN SOLO IMPORTE                         */
 /* ------------------------------------------------------------------------------------------ */
 
-describe("273/R24 — la rama nueva es MONEY-NEUTRAL sobre el cierre que se aprueba", () => {
+describe("276/R24 — la rama nueva es MONEY-NEUTRAL sobre el cierre que se aprueba", () => {
   it("los movimientos de los CINCO feeds son IGUALES campo a campo, con y sin una orden en el umbral", async () => {
     // ⭑ EL CASO EMPAREJADO, y por la MISMA razon que el de la 264 de arriba: el test obvio —«sin
     // ordenes en el umbral nada cambia»— es verde por construccion y no dice nada.

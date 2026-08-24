@@ -127,7 +127,7 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R44): el integrador recibe `rechazada` igual que
   // hoy. La unica excepcion por familia sigue siendo el rescate de la 235.
   "rechazo_tienda",
-  // Feature 273 (T2/T9, R22 · Q5 firmada el 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS:
+  // Feature 276 (T2/T9, R22 · Q5 firmada el 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS:
   // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
   // barrio y que ya alcanzo el umbral de intentos de entrega. Actor = el admin que aprueba.
   // Productor UNICO: `CierresAdminRepository.resolverCierre`, dentro del bloque

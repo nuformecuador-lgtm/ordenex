@@ -16,15 +16,15 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **273** | fullstack | `in_progress` · **backend hecho y verde**, falta frontend | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **274** | frontend | `in_progress` | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
-| **218** | backend | **`superseded` por la 273** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
+| **276** | fullstack | `in_progress` · **backend hecho y verde**, falta frontend | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | `in_progress` | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 276** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
 
-### 273 — dónde está exactamente (2026-08-24)
+### 276 — dónde está exactamente (2026-08-24)
 
-Rama **`feature/273-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
+Rama **`feature/276-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
 (`e93c19e6`): los commits del spec todavía no estaban empujados. Bitácora completa en
-`progress/impl_273.md`.
+`progress/impl_276.md`.
 
 - **Hecho:** las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
   gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
@@ -67,14 +67,14 @@ Rama **`feature/273-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** 
    forzar `rechazada` grabaría un hecho falso y cobraría un rechazo que no ocurrió.
 4. **En «Por recoger» no se oculta nada**: R23 de la 246 sigue vigente, cambia el sitio.
 
-⚠️ **La 273 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
+⚠️ **La 276 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
 hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
 conteo cobra de más.
 
-### ⚠️ Colisión de ids: `origin/dev` avanzó y ya usa 273/274/275 para OTRAS features
+### ⚠️ Colisión de ids: `origin/dev` avanzó y ya usa 276/277/275 para OTRAS features
 
-Medido al cerrar el backend de la 273 (2026-08-24): `origin/dev` pasó de `e93c19e6` a **`821a6afe`**
-y otra sesión registró **273 = tarifas ligadas a la zona**, **274 = cobro por zona + tienda** y
+Medido al cerrar el backend de la 276 (2026-08-24): `origin/dev` pasó de `e93c19e6` a **`821a6afe`**
+y otra sesión registró **276 = tarifas ligadas a la zona**, **277 = cobro por zona + tienda** y
 **275 = configuración de tarifas**. Los ids que esta sesión usa para «el tope de intentos» y «Por
 recoger» están **ocupados en `dev`**.
 
@@ -85,9 +85,9 @@ la carpeta del spec, el nombre de la rama y los mensajes de commit. Precedente d
 
 ### La puerta que viene
 
-⏳ **Ya pasó** (2026-08-24): los dos specs están, el humano firmó las dos preguntas de la 273 y las
+⏳ **Ya pasó** (2026-08-24): los dos specs están, el humano firmó las dos preguntas de la 276 y las
 dos fichas están en implementación. La puerta que queda ahora es otra y es de **despliegue**: R37
-(arriba) se re-ejecuta contra producción antes de sacar la 273 a `prod`.
+(arriba) se re-ejecuta contra producción antes de sacar la 276 a `prod`.
 
 ---
 

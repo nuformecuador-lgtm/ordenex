@@ -195,7 +195,7 @@ describe("Feature 235 · enum — las DOS familias del viaje (R10/P2)", () => {
       // toca: aplicarlo despues de la 240 deja el enum sin este valor, y ese es el comportamiento
       // ESPERADO de una cadena de rollbacks — cada down devuelve la base al estado de SU momento.
       "rechazo_tienda",
-      // Feature 273 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
       // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
       // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
       "rechazo_tope_intentos",

@@ -18,7 +18,7 @@ import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { SIN_BLOQUEO, type BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 
 /**
- * FEATURE 273 (T4) — LA PUERTA DEL TOPE EN EL PANEL DEL MENSAJERO. R1, R2, R5, R6, R7, R11.
+ * FEATURE 276 (T4) — LA PUERTA DEL TOPE EN EL PANEL DEL MENSAJERO. R1, R2, R5, R6, R7, R11.
  *
  * 💰 Esta ruta acaba en `cobroRechazado` (56, dinero real). Lo que este archivo prueba con dobles
  * es la DECISION del servicio; lo que NO puede probar es ningun `WHERE` —los dobles no ven el
@@ -175,7 +175,7 @@ const ENTRADA = {
 /* 1 y 2 · Los DOS desenlaces prohibidos en el tope                            */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`", () => {
+describe("276/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`", () => {
   it("1. `reprogramada` con `intentos = umbral - 1` -> conflict con el motivo compartido", async () => {
     const { service, repo } = montar(UMBRAL - 1);
 
@@ -203,7 +203,7 @@ describe("273/T4 · R1 — en el tope no se acepta `reprogramada` ni `devuelta`"
 /* 3 · Los TRES permitidos siguen pasando, sin condicion nueva                 */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R2 — en el tope, los tres permitidos llegan al repositorio", () => {
+describe("276/T4 · R2 — en el tope, los tres permitidos llegan al repositorio", () => {
   // El de `incidente` es el que blinda la DECISION 3 DEL HUMANO (2026-08-24): reportar un
   // incidente NO es un desenlace de entrega, asi que el tope no lo toca. Si alguien "limpiara" la
   // lista de permitidos dejando solo `entregada` y `rechazada`, este caso cae.
@@ -236,7 +236,7 @@ describe("273/T4 · R2 — en el tope, los tres permitidos llegan al repositorio
 /* 4 · La puerta no se cierra antes de tiempo                                  */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R1 — por debajo del tope nada cambia", () => {
+describe("276/T4 · R1 — por debajo del tope nada cambia", () => {
   it("4. `reprogramada` con `intentos = umbral - 2` pasa", async () => {
     const { service, repo } = montar(UMBRAL - 2);
 
@@ -262,7 +262,7 @@ describe("273/T4 · R1 — por debajo del tope nada cambia", () => {
 /* 5 · R5 — EL RECHAZO NO DEJA NADA. El caso que fija DONDE va la guarda.      */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => {
+describe("276/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => {
   it("5. cero subidas a Storage y cero escrituras en el repositorio", async () => {
     // `devuelta` es de los resultados que SI suben evidencia (feature 75), asi que si la guarda
     // viviera por debajo de `subirEvidenciasCompensadas` este doble habria recibido la foto y se
@@ -303,7 +303,7 @@ describe("273/T4 · R5 — el rechazo por tope no produce NINGUN efecto", () => 
 /* 6 · R7 — el umbral sale de la configuracion, no de un `3` a mano            */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R7 — el umbral es configurable de verdad", () => {
+describe("276/T4 · R7 — el umbral es configurable de verdad", () => {
   const ANTES = process.env.REINTENTOS_MIN_INTENTOS;
 
   afterEach(() => {
@@ -362,7 +362,7 @@ describe("273/T4 · R7 — el umbral es configurable de verdad", () => {
 /* 7 · R11 — el servidor rechaza aunque la interfaz no haya ocultado nada      */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T4 · R11 — la decision no depende de lo que mande el cliente", () => {
+describe("276/T4 · R11 — la decision no depende de lo que mande el cliente", () => {
   it("7. el input llega tal cual lo mandaria un cliente que ignore la UI, y se rechaza igual", async () => {
     // No hay ningun campo del input que diga «estoy en el tope»: el servicio lo DERIVA de la base.
     // Este caso manda el `GestionarInput` completo, con su fecha de reprogramacion y sus fotos,

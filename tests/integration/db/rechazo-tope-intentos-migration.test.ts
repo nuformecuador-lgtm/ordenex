@@ -13,7 +13,7 @@ import {
 import { HAY_BASE_DE_DATOS, crearPrismaDeTest, enTransaccionRevertida } from "./_postgres-real";
 
 /**
- * Feature 273 (T2/T16, R22/R35/R36) — LA MIGRACION DEL VALOR DE ENUM `rechazo_tope_intentos`.
+ * Feature 276 (T2/T16, R22/R35/R36) — LA MIGRACION DEL VALOR DE ENUM `rechazo_tope_intentos`.
  *
  * Molde: `anclaje-devolucion-migration.test.ts` para el bloque estatico, y
  * `gestion-orden-pago-migration.test.ts` para el bloque que EJECUTA el DDL real en un esquema
@@ -70,7 +70,7 @@ function sentenciasDe(ddl: string): string[] {
 /* 1. La FORMA del up y del down (estatico, sin base)                          */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () => {
+describe("276/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () => {
   it("el UP anade el valor con `IF NOT EXISTS` (aplicarlo dos veces no duplica)", () => {
     expect(enumUp).toMatch(
       new RegExp(`ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS '${FAMILIA}';`),
@@ -190,7 +190,7 @@ describe("273/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () 
 /* 2. El codigo y la base dicen lo mismo (sin drift)                           */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T2 · sin drift entre el codigo y la migracion", () => {
+describe("276/T2 · sin drift entre el codigo y la migracion", () => {
   it("el enum Prisma tiene `rechazo_tope_intentos` y el SEED de TS tambien", () => {
     expect(schemaPrisma).toMatch(/enum OrdenHistorialOrigenTipo[\s\S]*?rechazo_tope_intentos/);
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED]).toContain(FAMILIA);
@@ -233,7 +233,7 @@ interface MedicionDdl {
   ordenesDespues: { id: string; estatus_id: string }[];
 }
 
-describeSiHayBase("273/T2 · el DDL corre de verdad (Postgres real)", () => {
+describeSiHayBase("276/T2 · el DDL corre de verdad (Postgres real)", () => {
   let prisma: PrismaClient;
   let medicion: MedicionDdl;
   let enumDePublic: string[];
@@ -360,7 +360,7 @@ describeSiHayBase("273/T2 · el DDL corre de verdad (Postgres real)", () => {
 
   it("R22 — el valor EXISTE en el enum de la base a la que apunta esta suite", () => {
     // No es una lectura del fichero: es `pg_enum`. Si la migracion no se hubiera aplicado a esta
-    // base, este caso cae — y entonces el resto de la suite de la 273 estaria midiendo un esquema
+    // base, este caso cae — y entonces el resto de la suite de la 276 estaria midiendo un esquema
     // que no es el que el codigo espera.
     expect(enumDePublic).toContain(FAMILIA);
     // Y el enum de la base coincide EXACTAMENTE con el SEED de TypeScript (sin drift en ninguna

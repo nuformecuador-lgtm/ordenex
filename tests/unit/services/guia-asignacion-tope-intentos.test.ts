@@ -14,7 +14,7 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 /**
- * FEATURE 273 (T7) — LA PUERTA DEL TOPE EN LA ASIGNACION DESDE LA BODEGA CENTRAL.
+ * FEATURE 276 (T7) — LA PUERTA DEL TOPE EN LA ASIGNACION DESDE LA BODEGA CENTRAL.
  * R18, R19, R20, R7.
  *
  * 💰 Es la QUINTA via hacia la circulacion del design §1, y hasta esta ficha estaba abierta:
@@ -114,7 +114,7 @@ const LOTE = { ordenIds: ["o1", "o2", "o3"], mensajeroId: "m1" };
 /* 1 · R18/R19/R20 — una sola en el umbral aborta el lote entero               */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T7 · R18/R19 — todo-o-nada con detalle por orden", () => {
+describe("276/T7 · R18/R19 — todo-o-nada con detalle por orden", () => {
   it("1. lote de 3 con UNA en el umbral -> conflict, detalle de las TRES, y cero escrituras", async () => {
     const { service, repo } = montar({ o1: 0, o2: UMBRAL, o3: 1 });
 
@@ -158,7 +158,7 @@ describe("273/T7 · R18/R19 — todo-o-nada con detalle por orden", () => {
 /* 2 · R18 sin N+1                                                             */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T7 · R18 — por debajo del umbral se asigna, con UNA sola consulta", () => {
+describe("276/T7 · R18 — por debajo del umbral se asigna, con UNA sola consulta", () => {
   it("2. las tres por debajo -> ok, y `contarIntentosEnLote` se llama UNA vez con las tres", async () => {
     const { service, repo, historial } = montar({ o1: UMBRAL - 1, o2: 0, o3: 1 });
 
@@ -178,7 +178,7 @@ describe("273/T7 · R18 — por debajo del umbral se asigna, con UNA sola consul
 /* 3 · El orden de guardas no se invierte                                      */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T7 · el orden de guardas se conserva", () => {
+describe("276/T7 · el orden de guardas se conserva", () => {
   it("3. una orden `reprogramada` sigue rechazandose con SU motivo, no con el del tope", async () => {
     // La validacion por orden (existencia/estado/zona) va ANTES: es mas especifica y mas
     // informativa. Si el tope se colara delante, quien asigna leeria un motivo que no es el suyo.
@@ -218,7 +218,7 @@ describe("273/T7 · el orden de guardas se conserva", () => {
 /* 4 · R7 — el umbral sale de la configuracion                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T7 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` la puerta se mueve", () => {
+describe("276/T7 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` la puerta se mueve", () => {
   const ANTES = process.env.REINTENTOS_MIN_INTENTOS;
 
   afterEach(() => {
@@ -268,7 +268,7 @@ describe("273/T7 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` la puerta se mueve"
 /* 5 · `asignarRecoleccion` queda FUERA, y se mide                             */
 /* -------------------------------------------------------------------------- */
 
-describe("273/T7 · la recoleccion en tienda NO consulta el contador", () => {
+describe("276/T7 · la recoleccion en tienda NO consulta el contador", () => {
   it("5. `asignarRecoleccion` no llama a `contarIntentosEnLote` ni una vez", async () => {
     // Recolectar en tienda NO es un intento de entrega, y una orden en
     // `por_recolectar_en_tienda` tiene CERO intentos por construccion. Meterle la puerta seria

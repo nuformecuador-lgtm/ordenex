@@ -17,7 +17,7 @@ const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // satelite
 const ESTATUS_REPROGRAMADA = "reprogramada"; // origen (guarda de idempotencia)
 
 /**
- * FEATURE 273 (T6.2, R12/R15) — el UNICO estado de cierre que cierra la puerta del contador.
+ * FEATURE 276 (T6.2, R12/R15) — el UNICO estado de cierre que cierra la puerta del contador.
  *
  * Los otros tres NO valen, y no por omision: `solicitado` puede aprobarse en cualquier momento;
  * `vencido` y `rechazado` tambien, porque `forzarSolicitudVencido` los devuelve a `solicitado`
@@ -32,7 +32,7 @@ const ESTATUS_REPROGRAMADA = "reprogramada"; // origen (guarda de idempotencia)
 const CIERRE_APROBADO = "aprobado";
 
 /**
- * FEATURE 273 (T6.2, R12/R14) — LA REGLA, en una funcion pura y con nombre.
+ * FEATURE 276 (T6.2, R12/R14) — LA REGLA, en una funcion pura y con nombre.
  *
  * Una orden se libera cuando su gestion `reprogramada` vigente **ya no puede subir el contador**.
  * Y «puede subir el contador» no es una definicion nueva: son DOS de las seis condiciones del
@@ -48,7 +48,7 @@ const CIERRE_APROBADO = "aprobado";
  *
  * El caso que NO libera y que es la RAIZ de la ficha: visita real + cierre sin aprobar (incluido
  * `cierreId = null`, la gestion del dia que aun no se ha cerrado). Ahi el contador va por detras, y
- * liberar seria devolver la orden a bodega con el numero viejo — el 4.º intento que la 273 cierra.
+ * liberar seria devolver la orden a bodega con el numero viejo — el 4.º intento que la 276 cierra.
  */
 export function puedeLiberarse(orden: OrdenLiberableRow): boolean {
   if (!orden.gestionEsVisitaReal) return true; // (a) R14
@@ -113,12 +113,12 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
 
     let liberadas = 0;
     let omitidas = 0;
-    // FEATURE 273 (R12/R13): las que se quedan quietas esperando la aprobacion de un cierre.
+    // FEATURE 276 (R12/R13): las que se quedan quietas esperando la aprobacion de un cierre.
     let esperandoCierre = 0;
 
     for (const orden of ordenes) {
       try {
-        // 💰 FEATURE 273 (T6.2, R12/R13/R14/R15) — LA PUERTA DE LA RAIZ.
+        // 💰 FEATURE 276 (T6.2, R12/R13/R14/R15) — LA PUERTA DE LA RAIZ.
         //
         // Aqui nacia el 4.º intento: `findOrdenesLiberables` devolvia la orden por fecha SIN MIRAR
         // EL CIERRE, asi que volvia a bodega con el contador todavia en el valor viejo y la puerta

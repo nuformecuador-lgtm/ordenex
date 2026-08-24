@@ -588,7 +588,7 @@ rutas y medirlas. Su precio conocido ya está declarado
 | `tema-encendido.guardia.test.ts:331-339` | **REEXPRESADO** (C2, R28) | Dice «nada de `@page`… el formato de impresión es otra ficha, no ésta». **Ésta es esa ficha.** Se reescribe para seguir defendiendo lo que sigue siendo cierto: que el formato no se mezcla con el bloque de tokens de la 217 y que no aparece en un tercer sitio. **No se borra ni se relaja.** |
 | `tema-encendido.guardia.test.ts:205,213,222` | **Sin cambios, y verdes** | R23: el bloque nuevo no reusa `.papel-al-imprimir`. |
 | `impresion-sin-dark.guardia.test.ts:184` | **REEXPRESADO** (R24) | Compara posiciones de «cualquier at-rule con `print`» y «la regla `@media print` de la 217». Con tres at-rules que nombran `print`, su punto se refuerza — pero debe localizar el bloque de la 217 **por contenido**, no por ser el primero. |
-| `factura-contraste.guardia.test.ts:251-273` | **Sin cambios, y verdes** | Las dos hojas siguen llevando `papel-al-imprimir`, y siguen sin botón ni `window.print` (D1, R27). |
+| `factura-contraste.guardia.test.ts:251-276` | **Sin cambios, y verdes** | Las dos hojas siguen llevando `papel-al-imprimir`, y siguen sin botón ni `window.print` (D1, R27). |
 | `CierreFacturaPapel.test.tsx:135-151` | **Sin cambios**; se le añaden casos | R23. |
 | Inventario de pares de la 217 | **Sin cambios esperados** | Esta ficha no toca una sola utilidad de color. Si alguna se moviera, ese inventario se pondría rojo, y sería correcto. |
 

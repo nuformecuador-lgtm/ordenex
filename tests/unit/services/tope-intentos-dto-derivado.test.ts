@@ -17,7 +17,7 @@ import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 /**
- * FEATURE 273 (T11/T12, mitad de SERVIDOR) — `enElTope` VIAJA YA DECIDIDO. R8, R10.
+ * FEATURE 276 (T11/T12, mitad de SERVIDOR) — `enElTope` VIAJA YA DECIDIDO. R8, R10.
  *
  * ⚠️ QUE CUBRE ESTE ARCHIVO Y QUE NO. Cubre la mitad que vive en el servidor: que los DOS DTO que
  * alimentan las dos superficies emitan la DECISION —un booleano— y que el UMBRAL no cruce al
@@ -104,7 +104,7 @@ function panel(rows: MiAsignacionRow[], intentos: Record<string, number>) {
   return service;
 }
 
-describe("273/R8/R10 — `MiAsignacionDTO.enElTope` sale ya decidido del servidor", () => {
+describe("276/R8/R10 — `MiAsignacionDTO.enElTope` sale ya decidido del servidor", () => {
   it("`true` en el ultimo intento, `false` por debajo, en la MISMA respuesta", async () => {
     // Las dos ordenes viajan juntas: si el servicio emitiera un valor constante —o se olvidara del
     // campo— este par lo delata, porque tienen que salir DISTINTAS.
@@ -219,7 +219,7 @@ function filaNovedad(over: Partial<NovedadOrdenRow> & { id: string }): NovedadOr
   } as NovedadOrdenRow;
 }
 
-describe("273/R8/R10 — `NovedadDTO.enElTope` sale ya decidido del servidor", () => {
+describe("276/R8/R10 — `NovedadDTO.enElTope` sale ya decidido del servidor", () => {
   it("`true` en el ultimo intento y `false` por debajo, en la misma pagina", async () => {
     const rows = [filaNovedad({ id: "n-tope" }), filaNovedad({ id: "n-lejos" })];
     const ordenRepo = {

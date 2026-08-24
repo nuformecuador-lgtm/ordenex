@@ -32,7 +32,7 @@ import {
   type EvidenciaSubida,
 } from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
-// FEATURE 273 (T4/T11, R1/R3/R7): la regla del tope vive en UN modulo puro, importable tambien
+// FEATURE 276 (T4/T11, R1/R3/R7): la regla del tope vive en UN modulo puro, importable tambien
 // desde el navegador, para que la guarda del servidor y el filtro de botones de la pantalla no
 // puedan divergir. El umbral NO viaja con el: sale de `reintentosConfig`, aqui, en el servidor.
 import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";
@@ -144,7 +144,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // opcional dejaria que el wiring se la olvidara y el dato desapareciera en silencio de las
     // superficies del mensajero). `import type` + `Pick`: sin ciclo de modulos y testeable con
     // dobles.
-    // FEATURE 273 (T4/T11, R1/R7/R8): el `Pick` se ENSANCHA con `contarIntentos` — el conteo de UNA
+    // FEATURE 276 (T4/T11, R1/R7/R8): el `Pick` se ENSANCHA con `contarIntentos` — el conteo de UNA
     // orden, para la puerta del tope en `gestionar`. No hay dependencia nueva ni riesgo de cableado
     // olvidado: es el MISMO servicio que ya estaba, con un metodo mas del mismo criterio unico.
     private readonly historial: Pick<
@@ -275,7 +275,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
         ...toDTO(row),
         marcarLuego: marcadasLuego.has(row.id),
         intentosEntrega: intentos.get(row.id) ?? 0,
-        // FEATURE 273 (T11, R8/R10): la DECISION, ya tomada aqui. El umbral se resuelve en el
+        // FEATURE 276 (T11, R8/R10): la DECISION, ya tomada aqui. El umbral se resuelve en el
         // servidor y NO viaja: al navegador solo baja este booleano. Se deriva del MISMO numero
         // que la card ya pinta (`intentosEntrega`), asi que la pantalla no puede ensenar «intento
         // 2 de 3» y a la vez ofrecer un desenlace que el servidor va a rechazar.
@@ -559,7 +559,7 @@ export class MisAsignacionesService implements IMisAsignacionesService {
       return { status: "conflict", motivo: RESERVA_MOTIVO_SERVIDOR };
     }
 
-    // 💰 FEATURE 273 (T4, R1/R2/R5/R6/R7/R11) — LA PUERTA DEL TOPE DE INTENTOS.
+    // 💰 FEATURE 276 (T4, R1/R2/R5/R6/R7/R11) — LA PUERTA DEL TOPE DE INTENTOS.
     //
     // MIENTRAS los intentos vigentes de la orden sean `>= umbral - 1`, la gestion que se registre
     // AHORA es la que alcanza el umbral: `reprogramada` y `devuelta` dejan de admitirse, porque las

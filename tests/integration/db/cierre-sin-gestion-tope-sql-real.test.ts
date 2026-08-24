@@ -19,7 +19,7 @@ import {
 } from "./_postgres-real";
 
 /**
- * FEATURE 273 (T9, bloque 🔴 OBLIGATORIO) — EL RECHAZO DE LA NO GESTION, EJECUTADO CONTRA POSTGRES.
+ * FEATURE 276 (T9, bloque 🔴 OBLIGATORIO) — EL RECHAZO DE LA NO GESTION, EJECUTADO CONTRA POSTGRES.
  * R21, R22, R23, R25, R26, R27. Absorbe la ficha 218.
  *
  * ⚠️ POR QUE CONTRA POSTGRES Y NO CON DOBLES. Lo que este bloque hace es un `groupBy` con el
@@ -119,7 +119,7 @@ const SEMILLAS: Semilla[] = [
   { clave: "sin-intentos", intentosContables: 0 },
 ];
 
-describeSiHayBase("273/T9 — el rechazo por tope al aprobar el cierre (Postgres real)", () => {
+describeSiHayBase("276/T9 — el rechazo por tope al aprobar el cierre (Postgres real)", () => {
   let prisma: PrismaClient;
 
   let conCorpus: <T>(
@@ -414,7 +414,7 @@ describeSiHayBase("273/T9 — el rechazo por tope al aprobar el cierre (Postgres
     });
 
     // `leerHistorial` filtra por `gestionOrdenId: null`, asi que aqui SOLO sale la fila del bloque
-    // de la 139 —la de la 273 SI enlaza su gestion sintetica y se comprueba en el caso 1c—. Que
+    // de la 139 —la de la 276 SI enlaza su gestion sintetica y se comprueba en el caso 1c—. Que
     // exista demuestra que la orden paso por `rechazada`: sin ese paso intermedio, el bloque de la
     // 139 no la habria visto y no habria nada que leer.
     expect(historial.map((h) => h.origenTipo)).toEqual(["devolucion_rechazada"]);

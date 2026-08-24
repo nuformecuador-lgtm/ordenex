@@ -69,7 +69,7 @@ describeSiHayBase("271/T5.3 · M7 — aprobar libera SOLO las ordenes de su cier
     }
     fks = encontradas;
     const catalogo = await prisma.orderStatus.findMany({
-      // FEATURE 273 (T9): `rechazada` entra en el catalogo que esta suite resuelve, porque la
+      // FEATURE 276 (T9): `rechazada` entra en el catalogo que esta suite resuelve, porque la
       // config de la liberacion ahora lleva el destino del rechazo por tope.
       where: {
         value: { in: ["sin_gestionar", "en_bodega_central", "en_bodega_satelite", "rechazada"] },
@@ -193,7 +193,7 @@ describeSiHayBase("271/T5.3 · M7 — aprobar libera SOLO las ordenes de su cier
           enBodegaEstatusId: estatus.get("en_bodega_central") as string,
           enBodegaSateliteEstatusId: estatus.get("en_bodega_satelite") as string,
           centralZonaId: fks.zonaId,
-          // ⚠️ FEATURE 273 (T9): los DOS campos nuevos de la config. Y el `as never` de tres lineas
+          // ⚠️ FEATURE 276 (T9): los DOS campos nuevos de la config. Y el `as never` de tres lineas
           // mas abajo es la razon por la que hay que ponerlos A MANO: ese cast desactiva el
           // typecheck de este objeto, asi que olvidarlos NO rompe la compilacion — lo que rompe es
           // el comportamiento, en silencio. Sin `umbralIntentos`, el reparto en dos destinos

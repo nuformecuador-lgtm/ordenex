@@ -69,7 +69,7 @@ export interface MiAsignacionDTO {
    */
   intentosEntrega?: number;
   /**
-   * FEATURE 273 (T11, R8/R10) — `true` si a esta orden le queda EL ULTIMO intento: la gestion que
+   * FEATURE 276 (T11, R8/R10) — `true` si a esta orden le queda EL ULTIMO intento: la gestion que
    * se registre ahora es la que alcanza el umbral (o ya lo paso).
    *
    * ⚠️ ES UNA DECISION YA TOMADA EN EL SERVIDOR, y ese es el requisito (R10): el UMBRAL NO CRUZA

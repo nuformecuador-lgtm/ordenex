@@ -73,7 +73,7 @@ describe("Feature 154 · SEED del enum — las dos familias del flujo v2 (R7/R8/
     );
   // 27: la 149 apendio `deshacer_asignacion`, la 157 `asignacion_recoleccion` y la 239
     // `anclaje_devolucion` (2026-08-19), las tres DESPUES de estos dos valores.
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(32); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-24 (273): +rechazo_tope_intentos
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(32); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-24 (276): +rechazo_tope_intentos
   });
 
   it("R12: NINGUNA de las dos entra en ORIGEN_TIPOS_CON_GESTION (no alteran los intentos)", () => {
@@ -141,7 +141,7 @@ describe("Feature 154 · DOWN — recrea el tipo con las 22 familias previas (R1
       // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
       // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
       "rechazo_tienda",
-      // Feature 273 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
       // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
       // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
       "rechazo_tope_intentos",

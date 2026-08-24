@@ -1,4 +1,4 @@
-# Feature 273 — tasks
+# Feature 276 — tasks
 
 > **Regla de «hecho» en esta ficha:** el criterio es **un aserto que se pone rojo si el código está
 > mal**, nunca un `grep` ni «se leyó y está bien». Donde la comprobación solo pueda ser humana, se
@@ -30,7 +30,7 @@ Qué hacer con lo que salga:
 Además, en la misma corrida: contar las órdenes en `reprogramada` cuya gestión vigente está en un
 cierre **no aprobado**. Es la población que T6 va a congelar el primer día.
 
-**Hecho cuando:** `progress/impl_273.md` abre con la fecha, el SHA de `origin/dev` usado, el SQL
+**Hecho cuando:** `progress/impl_276.md` abre con la fecha, el SHA de `origin/dev` usado, el SQL
 exacto y su salida pegada, y una línea de decisión por cada uno de los dos números. Verificación
 humana: la firma el implementer, la revisa el reviewer.
 
@@ -174,7 +174,7 @@ devuelve.
 
 **Hecho cuando (mutación, se ejecuta y se anota):** quitar del `select` la sonda de visita real deja
 rojo el test de integración; cambiar `aprobado` por otro estado en el servicio deja rojo el caso 2.
-Los dos se comprueban a mano una vez y el resultado se pega en `progress/impl_273.md`.
+Los dos se comprueban a mano una vez y el resultado se pega en `progress/impl_276.md`.
 
 ---
 
@@ -342,7 +342,7 @@ la opción B no cambia el estado. Lo que hay que escribir es **la prueba de que 
 casos que afirman: (1) una gestión `reprogramada` con `cierre_id NULL` sobre una orden en
 `reprogramada` **se puede deshacer** y la orden vuelve a `en_reparto`; (2) con `cierre_id` poblado,
 `conflict` como hoy; (3) `ESTADOS_ESPERADOS.reprogramada` sigue siendo `["reprogramada"]` — con un
-comentario que explique que la 273 eligió **no** crear pre-estado y que por eso esta entrada no
+comentario que explique que la 276 eligió **no** crear pre-estado y que por eso esta entrada no
 cambia.
 
 ---
@@ -378,20 +378,20 @@ Además, en el mismo paso:
   migración de otra rama pone rojo un gate ajeno.
 
 **Hecho cuando:** `./init.sh` termina en verde, o con delta 0 contra un baseline medido, pegado en
-`progress/impl_273.md` con su fecha y su SHA.
+`progress/impl_276.md` con su fecha y su SHA.
 
 ---
 
 ## T18 — Bookkeeping (depende de T17)
 
-- `progress/impl_273.md` con el mapa **R → test** completo (R1–R38), la salida de T0, las dos
+- `progress/impl_276.md` con el mapa **R → test** completo (R1–R38), la salida de T0, las dos
   mutaciones comprobadas de T6 y la de T13, y qué se hizo con **Q1** (con firma y fecha) y con
   **Q2/Q3/Q4/Q6**.
-- `feature_list.json`: ficha **273** actualizada, y ficha **218** con la nota de que su decisión se
+- `feature_list.json`: ficha **276** actualizada, y ficha **218** con la nota de que su decisión se
   tomó aquí. El diff debe tocar **solo** esas dos fichas (otras sesiones dejan altas sin commitear
   en ese archivo y un `git checkout` las borra).
 - `progress/current.md` al día.
-- ⚠️ Comprobar el **blob commiteado**, no el árbol de trabajo: `git show HEAD:specs/273-tope-de-intentos/tasks.md | head`.
+- ⚠️ Comprobar el **blob commiteado**, no el árbol de trabajo: `git show HEAD:specs/276-tope-de-intentos/tasks.md | head`.
 
 **Hecho cuando:** el reviewer encuentra los 38 requisitos con un test nombrado y ejecutable, y
 `git diff feature_list.json` no toca ninguna ficha ajena.

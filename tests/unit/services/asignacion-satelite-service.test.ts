@@ -105,7 +105,7 @@ function newService(
   repo: RepoMethods = fakeRepo(),
   gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
 ) {
-  return new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+  return new AsignacionSateliteService(repo as unknown as IOrdenRepository, gate, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 }
 
 describe("AsignacionSateliteService.asignar", () => {

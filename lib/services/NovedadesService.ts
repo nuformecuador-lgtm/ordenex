@@ -13,7 +13,7 @@ import type {
   ListarNovedadesServiceResult,
 } from "@/lib/interfaces/services/INovedadesService";
 import { descargaConfig } from "@/lib/config/descarga";
-// FEATURE 273 (T12, R8/R10): la decision del tope se deriva AQUI, en el servidor. El umbral no
+// FEATURE 276 (T12, R8/R10): la decision del tope se deriva AQUI, en el servidor. El umbral no
 // viaja al cliente; el booleano si.
 import { reintentosConfig } from "@/lib/config/reintentos";
 import { alcanzaElTope } from "@/lib/types/tope-intentos";
@@ -211,7 +211,7 @@ export class NovedadesService implements INovedadesService {
       causa: causas.get(row.id)?.causa ?? null,
       // Feature 160 (R14/R19): `?? 0` — el `0` SIEMPRE se expone.
       intentosEntrega: intentos.get(row.id) ?? 0,
-      // FEATURE 273 (T12, R8/R10): la DECISION, ya derivada en el servidor. El umbral NO cruza al
+      // FEATURE 276 (T12, R8/R10): la DECISION, ya derivada en el servidor. El umbral NO cruza al
       // navegador: la ventana de la ayuda lee este booleano y filtra los desenlaces con
       // `permitidoEnElTope`, el MISMO modulo puro que usa la guarda del paso 5-ter de
       // `GestionDesdeAyudaService`. Se deriva del MISMO `intentosEntrega` que ya viaja, asi que la

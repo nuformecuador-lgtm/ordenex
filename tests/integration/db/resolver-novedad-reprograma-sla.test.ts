@@ -88,7 +88,7 @@ function makeDb() {
       prioridad: false, // parte no prioritaria; la liberacion del cron 46 la enciende (feature 110/R1)
     },
   ];
-  // FEATURE 273: los cierres del emulador. Vacio a proposito: la gestion sintetica de la 100 nace
+  // FEATURE 276: los cierres del emulador. Vacio a proposito: la gestion sintetica de la 100 nace
   // con `cierre_id NULL`, que es la forma que este archivo mide.
   const cierres: { id: string; estado: string }[] = [];
   const gestiones: GestionRow[] = [
@@ -147,7 +147,7 @@ function makeDb() {
   }
 
   /**
-   * FEATURE 273 (T6.1) — el emulador tiene que resolver la SONDA DE VISITA REAL y el `cierre` de la
+   * FEATURE 276 (T6.1) — el emulador tiene que resolver la SONDA DE VISITA REAL y el `cierre` de la
    * gestion, porque el cron 46 ahora los proyecta. Un emulador que los ignorase devolveria
    * `undefined` para los dos, el repositorio los traduciria a `null`/`false` y este archivo pasaria
    * en verde afirmando «se libera» POR OMISION — cuando lo que tiene que demostrar es que se libera
@@ -187,7 +187,7 @@ function makeDb() {
     return cands.map((g) => {
       const fila = g as unknown as Record<string, unknown>;
       const out = pick(fila, sel);
-      // FEATURE 273: las dos proyecciones de RELACION del `select` de la gestion.
+      // FEATURE 276: las dos proyecciones de RELACION del `select` de la gestion.
       if (sel.cierre !== undefined) {
         const cierre = cierres.find((c) => c.id === g.cierreId);
         out.cierre = cierre ? { estado: cierre.estado } : null;

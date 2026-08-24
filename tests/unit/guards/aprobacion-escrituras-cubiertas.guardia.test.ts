@@ -98,7 +98,7 @@ const ESCRITURAS_DE_LA_APROBACION = [
     cubiertaPor: ["tests/unit/repositories/cierres-admin-anclaje-devolucion.test.ts"],
   },
   {
-    // 💰 FEATURE 273 (T9, R23 · Q1 firmada el 2026-08-24) — LA GESTION SINTETICA DEL RECHAZO POR
+    // 💰 FEATURE 276 (T9, R23 · Q1 firmada el 2026-08-24) — LA GESTION SINTETICA DEL RECHAZO POR
     // AGOTAMIENTO DE INTENTOS. Es una escritura NUEVA de la transaccion de aprobacion y por eso
     // entra en el censo con su suite delante, que es exactamente lo que esta guardia existe para
     // exigir.
@@ -109,7 +109,7 @@ const ESCRITURAS_DE_LA_APROBACION = [
     // mensajero y NO en el que se esta aprobando —cuyo snapshot ya se congelo al solicitar—.
     escritura: "tx.gestionOrden.create",
     que:
-      "la gestion SINTETICA `rechazada` del rechazo por tope de intentos (273/R23): `cierre_id " +
+      "la gestion SINTETICA `rechazada` del rechazo por tope de intentos (276/R23): `cierre_id " +
       "NULL`, mensajero del cierre y motivo fijo sin PII. Una por orden barrida en el umbral.",
     cubiertaPor: [
       "tests/integration/db/cierre-sin-gestion-tope-sql-real.test.ts",

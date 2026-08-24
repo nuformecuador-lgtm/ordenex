@@ -71,7 +71,7 @@ function fakeOrdenRepo(
 }
 
 /**
- * FEATURE 273 (T10, R30): el doble pasa a `contarIntentosEnLote`, porque el servicio dejo de
+ * FEATURE 276 (T10, R30): el doble pasa a `contarIntentosEnLote`, porque el servicio dejo de
  * contar de a una dentro del bucle. `intentos` se devuelve para TODAS las candidatas de la corrida,
  * que es lo que estos casos necesitan (cada uno trae una o dos ordenes con el mismo perfil).
  */
@@ -173,8 +173,8 @@ describe("ejecutar — wrong_number / wrong_address: 5 dias -> rechazo directo (
       const res = await newService(repo, historial).ejecutar(NOW);
       expect(res).toEqual({ evaluadas: 0, liberadas: 0, escaladas: 1, omitidas: 0, legadas: 0 });
       expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
-      // ⏳ 2026-08-24 (FEATURE 273, T10) — AQUI DECIA «no consulta el conteo de intentos para las
-      // causas de rechazo directo», y eso DEJA DE SER CIERTO a proposito: desde la 273 la rama
+      // ⏳ 2026-08-24 (FEATURE 276, T10) — AQUI DECIA «no consulta el conteo de intentos para las
+      // causas de rechazo directo», y eso DEJA DE SER CIERTO a proposito: desde la 276 la rama
       // `wrong_*` SI mira el contador, para poder escalar sin esperar los cinco dias cuando la
       // orden ya agoto sus intentos (R28). El aserto no se relaja ni se borra: se sustituye por
       // el que sigue siendo verdad y sigue teniendo contenido —el conteo es UNO POR CORRIDA, no
@@ -367,10 +367,10 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(repo.escalarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // ⏳ 2026-08-24 (FEATURE 273, T10) — LA MITAD QUE SIGUE VIVA Y LA QUE CAMBIA, separadas.
+  // ⏳ 2026-08-24 (FEATURE 276, T10) — LA MITAD QUE SIGUE VIVA Y LA QUE CAMBIA, separadas.
   //
   // Decia: «`wrong_number`/`wrong_address` escalan DIRECTO SIN MIRAR EL CONTEO — el criterio nuevo
-  // de la 215 NO puede haber alterado esta rama». La segunda mitad de esa frase caduca con la 273,
+  // de la 215 NO puede haber alterado esta rama». La segunda mitad de esa frase caduca con la 276,
   // que hace que esa rama SI mire el contador (R28). La primera mitad —con la ventana vencida,
   // escala, y el conteo no cambia ese desenlace— sigue siendo cierta y es lo que este caso
   // conserva: `intentos = 0` es el conteo mas bajo posible y aun asi escala.
@@ -389,9 +389,9 @@ describe("ejecutar — el criterio de intentos por CIERRE APROBADO y el escalado
     expect(repo.liberarDevueltaSla).not.toHaveBeenCalled();
   });
 
-  // ⏳ 2026-08-24 (FEATURE 273, T10, R30) — ESTE CASO CAMBIA DE FORMA, CON SU DECISION ESCRITA.
+  // ⏳ 2026-08-24 (FEATURE 276, T10, R30) — ESTE CASO CAMBIA DE FORMA, CON SU DECISION ESCRITA.
   //
-  // Decia «el conteo se consulta UNA vez POR ORDEN y con SU id». Desde la 273 se consulta UNA vez
+  // Decia «el conteo se consulta UNA vez POR ORDEN y con SU id». Desde la 276 se consulta UNA vez
   // POR CORRIDA y con TODOS los ids, porque las DOS ramas del cron necesitan el numero y contar
   // por separado en cada una crearia dos formas de obtener el mismo dato en el mismo servicio —la
   // divergencia que 215/R4 existe para impedir—. Lo que el caso protege no se relaja: sigue

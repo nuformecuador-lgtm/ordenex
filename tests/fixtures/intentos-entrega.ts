@@ -9,7 +9,7 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 /**
  * Lo que consumen los servicios de lectura.
  *
- * ⚠️ FEATURE 273 (T4): el tipo GANA `contarIntentos` (el conteo de UNA orden), porque
+ * ⚠️ FEATURE 276 (T4): el tipo GANA `contarIntentos` (el conteo de UNA orden), porque
  * `MisAsignacionesService` lo necesita para la puerta del tope. Los servicios que solo piden
  * `contarIntentosEnLote` siguen aceptando este doble sin cambios (un objeto con un metodo de mas
  * es asignable a un `Pick` mas estrecho): por eso el doble se ENSANCHA aqui, una vez, en vez de
@@ -25,7 +25,7 @@ export type IntentosSvcDoble = Pick<
  * tiene intentos" y ejerce el default `?? 0` de los servicios (R14: el `0` se expone, no se
  * omite). Con `porOrden` devuelve exactamente esos conteos.
  *
- * FEATURE 273: `contarIntentos` sale del MISMO `porOrden`, no de un segundo argumento. Eso es
+ * FEATURE 276: `contarIntentos` sale del MISMO `porOrden`, no de un segundo argumento. Eso es
  * deliberado: en produccion los dos metodos son el mismo criterio (215/R4/R6), asi que un doble
  * que pudiera devolver numeros distintos por las dos vias permitiria escribir tests que en la
  * realidad no pueden ocurrir.

@@ -2,7 +2,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IGestionOrdenRepository } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
-// FEATURE 273 (Q2, FIRMADA el 2026-08-24) — la TERCERA via hacia la circulacion se bloquea aqui,
+// FEATURE 276 (Q2, FIRMADA el 2026-08-24) — la TERCERA via hacia la circulacion se bloquea aqui,
 // con el MISMO motivo unico de R20 y el MISMO umbral de configuracion.
 import { MSG_TOPE_INTENTOS_ASIGNACION } from "@/lib/services/mensajes-bloqueo";
 import { reintentosConfig } from "@/lib/config/reintentos";
@@ -21,7 +21,7 @@ const ESTADO_DESTINO = "reprogramada";
 type ReprogramacionOrdenRepo = Pick<IOrdenRepository, "findById" | "findEstatusIdByValue">;
 type ReprogramacionGestionRepo = Pick<IGestionOrdenRepository, "reprogramarDesdeDevuelta">;
 /**
- * 💰 FEATURE 273 (Q2) — el derivador de intentos. REQUERIDO: opcional, un composition root que se
+ * 💰 FEATURE 276 (Q2) — el derivador de intentos. REQUERIDO: opcional, un composition root que se
  * lo olvidara dejaria abierta la tercera via en silencio.
  */
 type ReprogramacionHistorialSvc = Pick<IOrdenHistorialService, "contarIntentos">;
@@ -66,9 +66,9 @@ export class ReprogramacionTiendaService implements IReprogramacionTiendaService
       };
     }
 
-    // 💰 3-bis. FEATURE 273 (Q2, FIRMADA el 2026-08-24) — LA TERCERA VIA HACIA LA CIRCULACION.
+    // 💰 3-bis. FEATURE 276 (Q2, FIRMADA el 2026-08-24) — LA TERCERA VIA HACIA LA CIRCULACION.
     //
-    //    `devuelta -> reprogramada` es la puerta de la tienda, y el encargo original de la 273 no
+    //    `devuelta -> reprogramada` es la puerta de la tienda, y el encargo original de la 276 no
     //    la enumeraba. Sin esta guarda la REGLA se cumpliria igual —la orden acabaria en bodega y
     //    R18 le negaria la asignacion—, pero el paquete quedaria en un CALLEJON SIN SALIDA y la
     //    tienda no se enteraria hasta TRES PASOS DESPUES. Se bloquea en el momento en que lo

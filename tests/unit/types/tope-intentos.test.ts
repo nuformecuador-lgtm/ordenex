@@ -10,7 +10,7 @@ import {
   permitidoEnElTope,
 } from "@/lib/types/tope-intentos";
 
-// Feature 273 (T1, R3/R7) — EL PUNTO UNICO DE LA REGLA, probado como lo que es: una lista de
+// Feature 276 (T1, R3/R7) — EL PUNTO UNICO DE LA REGLA, probado como lo que es: una lista de
 // INCLUSION y una comparacion con `>=`.
 //
 // Lo que este archivo protege, y por que cada caso existe:
@@ -39,11 +39,11 @@ const TODOS_LOS_RESULTADOS: GestionResultado[] = [
   "incidente",
 ];
 
-describe("273/T1 · `RESULTADOS_PERMITIDOS_EN_EL_TOPE` (R3)", () => {
+describe("276/T1 · `RESULTADOS_PERMITIDOS_EN_EL_TOPE` (R3)", () => {
   it("1. es EXACTAMENTE los tres values, por igualdad de contenido", () => {
     // ⚠️ LITERAL A PROPOSITO, y no derivado de su propia fuente: ESTE es el contrato. Ensanchar la
     // lista —añadir `reprogramada` o `devuelta`— vuelve a abrir la vuelta a circulacion que la
-    // ficha 273 existe para cerrar, y tiene que costar un rojo aqui antes de costar dinero alla.
+    // ficha 276 existe para cerrar, y tiene que costar un rojo aqui antes de costar dinero alla.
     expect([...RESULTADOS_PERMITIDOS_EN_EL_TOPE]).toEqual(["entregada", "rechazada", "incidente"]);
   });
 
@@ -70,7 +70,7 @@ describe("273/T1 · `RESULTADOS_PERMITIDOS_EN_EL_TOPE` (R3)", () => {
   });
 });
 
-describe("273/T1 · `alcanzaElTope` (R1/R7)", () => {
+describe("276/T1 · `alcanzaElTope` (R1/R7)", () => {
   it("4a. con umbral 3: 1 -> false, 2 -> true, 3 -> true, 4 -> true", () => {
     // El `3 -> true` y el `4 -> true` son los que exigen `>=` en vez de `===`: los datos heredados
     // pueden estar POR ENCIMA del umbral (la ficha nace de una orden con 3 intentos que seguia
@@ -90,7 +90,7 @@ describe("273/T1 · `alcanzaElTope` (R1/R7)", () => {
   });
 });
 
-describe("273/T1 · el modulo NO se lleva la configuracion al cliente (R10)", () => {
+describe("276/T1 · el modulo NO se lleva la configuracion al cliente (R10)", () => {
   it("5. el fichero no nombra `MIN_INTENTOS_ENTREGA` ni `reintentosConfig`", () => {
     // Molde: `tests/unit/components/intentos-entrega.test.tsx:171`. Este modulo es importable desde
     // un Client Component (la UI filtra los botones con `permitidoEnElTope`); si importara la

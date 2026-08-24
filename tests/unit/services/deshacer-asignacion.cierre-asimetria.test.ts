@@ -136,7 +136,7 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero SI se bloquea (feature 271, 
       evaluar: async (ordenes: OrdenAsignabilidadRow[]) =>
         new Map<string, EstadoAsignabilidad>(ordenes.map((o) => [o.id, "asignable"])),
     };
-    const service = new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 273: la puerta del tope; 0 intentos = no interfiere */);
+    const service = new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 
     const r = await service.asignarDesdeBodega(
       { ordenIds: ["o1"], mensajeroId: MENSAJERO_CON_CIERRE },

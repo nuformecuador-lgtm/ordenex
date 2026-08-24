@@ -6,7 +6,7 @@
 // Fila candidata a liberar: id + zona (para derivar la bodega responsable) + la
 // `fecha_reprogramacion` vigente (la de la gestion `reprogramada` mas reciente).
 //
-// FEATURE 273 (T6.1, R12/R14): la fila crece con TRES HECHOS de esa MISMA gestion vigente. Son
+// FEATURE 276 (T6.1, R12/R14): la fila crece con TRES HECHOS de esa MISMA gestion vigente. Son
 // HECHOS, no decisiones: el repositorio los trae y el SERVICIO decide con ellos
 // (`docs/architecture.md`). Los tres son dos de las seis condiciones del predicado de intentos
 // (`whereIntentosVigentes`) aplicadas a UNA sola gestion, y su combinacion responde la unica
@@ -16,19 +16,19 @@ export interface OrdenLiberableRow {
   zonaId: string;
   fechaReprogramacion: Date;
   /**
-   * FEATURE 273 (R12) — el cierre al que pertenece la gestion `reprogramada` vigente. `null` = la
+   * FEATURE 276 (R12) — el cierre al que pertenece la gestion `reprogramada` vigente. `null` = la
    * gestion todavia no entro en ningun cierre (el mensajero no ha cerrado el dia), asi que AUN
    * puede entrar en uno y sumar +1 cuando ese cierre se apruebe.
    */
   gestionCierreId: string | null;
   /**
-   * FEATURE 273 (R12/R15) — estado de ese cierre. Solo `"aprobado"` cierra la puerta del contador:
+   * FEATURE 276 (R12/R15) — estado de ese cierre. Solo `"aprobado"` cierra la puerta del contador:
    * `solicitado`, `vencido` y `rechazado` siguen pudiendo llegar a `aprobado` (los dos ultimos por
    * `forzarSolicitudVencido`, que reabre `vencido` y `rechazado`). `null` cuando no hay cierre.
    */
   gestionCierreEstado: string | null;
   /**
-   * FEATURE 273 (R12/R14) — la gestion nace de una VISITA REAL? Es decir: alguna de sus filas de
+   * FEATURE 276 (R12/R14) — la gestion nace de una VISITA REAL? Es decir: alguna de sus filas de
    * `orden_historial_estado` pertenece a `ORIGEN_TIPOS_VISITA_REAL`?
    *
    * `false` para las gestiones SINTETICAS —en particular la `reprogramacion_tienda` de la feature
@@ -83,7 +83,7 @@ export interface ILiberacionReprogramadaRepository {
    * `reprogramada` MAS RECIENTE tiene `fecha_reprogramacion <= hoyCR` (CR). Excluye las
    * de fecha futura (permanecen bloqueadas).
    *
-   * FEATURE 273 (T6.1): devuelve ADEMAS los tres hechos de esa misma gestion (cierre, estado del
+   * FEATURE 276 (T6.1): devuelve ADEMAS los tres hechos de esa misma gestion (cierre, estado del
    * cierre y si nace de una visita real). NO decide nada con ellos: el filtro por fecha, el
    * `orderBy` y el `take: 1` se conservan intactos, y quien aplica la regla es el servicio.
    */

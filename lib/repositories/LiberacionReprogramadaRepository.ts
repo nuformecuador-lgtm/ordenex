@@ -7,7 +7,7 @@ import type {
   OrdenLiberableRow,
 } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
-// FEATURE 273 (T6.1, R12): la MISMA lista de familias de visita real que usa el predicado unico de
+// FEATURE 276 (T6.1, R12): la MISMA lista de familias de visita real que usa el predicado unico de
 // intentos (`whereIntentosVigentes`). Se IMPORTA, no se copia: dos listas que se desincronizaran
 // harian que la puerta del cron y el contador dijeran cosas distintas sobre la misma gestion.
 import { ORIGEN_TIPOS_VISITA_REAL } from "@/lib/types/orden-historial";
@@ -57,7 +57,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
           take: 1,
           select: {
             fechaReprogramacion: true,
-            // FEATURE 273 (T6.1, R12/R14/R15) — LOS TRES HECHOS NUEVOS, todos de ESTA MISMA
+            // FEATURE 276 (T6.1, R12/R14/R15) — LOS TRES HECHOS NUEVOS, todos de ESTA MISMA
             // gestion: la vigente mas reciente, la que el `take: 1` ya elegia. El repositorio NO
             // decide nada con ellos; la regla vive en `ejecutarLiberacion`.
             cierreId: true,
@@ -95,7 +95,7 @@ export class LiberacionReprogramadaRepository implements ILiberacionReprogramada
         id: r.id,
         zonaId: r.zonaId,
         fechaReprogramacion: fecha,
-        // FEATURE 273: los tres hechos viajan CRUDOS. El `?? null` y el `.length > 0` son
+        // FEATURE 276: los tres hechos viajan CRUDOS. El `?? null` y el `.length > 0` son
         // traduccion de FORMA, no decision: quien decide es `ejecutarLiberacion`.
         gestionCierreId: gestion?.cierreId ?? null,
         gestionCierreEstado: gestion?.cierre?.estado ?? null,
