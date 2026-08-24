@@ -3,7 +3,7 @@
 > Rama `feature/276-tope-de-intentos` @ **`5e723daa`** · 21 commits sobre `origin/dev` (`821a6afe`),
 > 15 sobre `dev` local (`94c824f6`). Revisión del **2026-08-24**.
 >
-> **Veredicto: RECHAZADO · 2 bloqueantes.** Los dos son la MISMA causa —el barrido `sed` de la
+> **Veredicto ronda 1: RECHAZADO · 2 bloqueantes.** (ronda 2 al final del archivo) Los dos son la MISMA causa —el barrido `sed` de la
 > renumeración 273→276— y **ninguno está en la lógica de la ficha**. La implementación del tope la
 > he medido inyectando ocho defectos y los ocho se pusieron rojos. Lo que hay que revertir son 17
 > líneas en 13 archivos ajenos y reescribir una sección de la bitácora que hoy miente sobre
@@ -374,3 +374,246 @@ más**, eso es lo que había que medir, y está medido.
 
 **Antes de desplegar, y esto no lo cierra el merge:** re-ejecutar la consulta (A) de R37 contra
 producción, y medir por primera vez la consulta (B) —cuántas órdenes congela T6 el primer día—.
+
+---
+---
+
+# RONDA 2 — 2026-08-24 · commit `87b78270`
+
+> La ronda 1 se conserva entera arriba: es el historial y no se reescribe.
+>
+> **Veredicto de la ronda 2: RECHAZADO — 2 bloqueantes RESIDUALES.** Son los mismos dos, cerrados a
+> medias: de los 13 archivos corrompidos se restauraron **12**, y de los **dos** sitios donde vivía
+> el párrafo falso de la colisión se arregló **uno**. Lo que falta es una línea y un párrafo. **Nada
+> de lo que audité del tope ha cambiado**, y lo digo explícitamente en §R2.5.
+
+## R2.0 · Mi gate sobre `87b78270`
+
+```
+=== SHA: 87b78270f1193cb7299044d01564093aab07fd26 ===
+DB_GENERATE_EXIT=0
+Test Files  1358 passed (1358)
+     Tests  18302 passed | 26 skipped (18328)
+INIT_EXIT=0
+```
+
+Idéntico al de la ronda 1 y al reportado por el coordinador. **Restaurar los archivos no movió
+nada**, que es lo esperado: los 13 cambios son comentarios y prosa.
+
+---
+
+## R2.1 · Bloqueante 1 — cerrado en 12 de 13. Queda uno.
+
+Lo que **sí** quedó bien, verificado:
+
+- **(a) El importe volvió y ya no se contradice.** `tests/components/AnaliticaPage.test.tsx` tiene
+  otra vez `₡918 273,45` en las líneas 547 y 582, y arriba sigue `CIFRA_BRUTA = "918273.45"` (línea
+  118). El comentario del guard de dinero vuelve a describir su propia constante.
+- **(b) Los 12 son byte-idénticos a `dev`.** `git diff dev...HEAD` sobre ellos no devuelve nada.
+  Ninguno perdió una cita legítima de esta ficha, porque ninguno tenía: los únicos `27x` que quedan
+  en los doce son dos `PR **#277**` en `specs/175-…/tasks.md`, que son un número de **pull request de
+  GitHub** del 2026-08-03 y ya estaban así en `dev` — el `sed` no los tocó porque iba con límite de
+  palabra, la misma razón por la que `918273.45` (pegado) sobrevivió y `918 273,45` (con espacio) no.
+- **Los `/* 276: la puerta del tope */` de los cinco tests de asignación SON citas de esta ficha y
+  quedan bien en 276.** Confirmado leyéndolos: cada uno anota el argumento nuevo
+  `fakeIntentosEnLote()` que esta ficha añade al constructor —`/* 276: la puerta del tope; 0 intentos
+  = no bloquea */`—. No hay nada que revertir ahí.
+
+### 🔴 RESIDUAL — `specs/133-analitica-recortes-por-rol/tasks.md` sigue corrompido
+
+```diff
+- 129-R6 (201), 132-R1/R8 (273), 132-R5 (362), 132-R9 (389) y 131-R26 (440)
++ 129-R6 (201), 132-R1/R8 (276), 132-R5 (362), 132-R9 (389) y 131-R26 (440)
+```
+
+Es un **número de línea**, sin ambigüedad posible: sus cinco vecinos en la misma frase —`(160)`,
+`(201)`, `(362)`, `(389)`, `(440)`— también lo son, y la frase entera dice «Reexpresar en
+`tests/components/AnaliticaPage.test.tsx` los bloques …».
+
+Se restauró `specs/133-analitica-recortes-por-rol/**design.md**` y se dejó fuera su **`tasks.md`**
+hermano. De ahí la diferencia entre mi conteo (**13 archivos, 17 citas**) y el suyo (**12**): no
+contamos distinto, faltaba uno.
+
+**Qué falta:** `git checkout 8f4e1cca^ -- specs/133-analitica-recortes-por-rol/tasks.md`.
+
+---
+
+## R2.2 · Bloqueante 2 — RECTIFICO mi diagnóstico, y el arreglo está a medias
+
+### Primero, la rectificación: la colisión ERA real, y el coordinador tiene razón
+
+Lo medí de los dos lados:
+
+```
+dev LOCAL (94c824f6), antes del renumerado:
+  273  spec_ready   el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve...
+  274  in_progress  Por recoger separa en tabs las de hoy de las reservadas para otro dia
+
+origin/dev (821a6afe):
+  273  in_progress  tarifas ligadas a la zona: modelo, borrado fisico y catalogo de vehiculos
+  274  pending      cobro por zona + tienda: cascada de resolucion de tarifa
+  275  pending      configuracion de tarifas: sin `status` y con la prioridad visible
+```
+
+**Los mismos dos ids, dos pares de features distintas.** La colisión era real, `dev` mandaba, y mover
+las de esta sesión a **276/277** —libres en `origin/dev`, comprobado sobre ese mismo `821a6afe`— era
+la resolución correcta.
+
+**Mi frase de la ronda 1 —«no hay ninguna colisión viva que resolver»— era cierta del estado
+POSTERIOR al renumerado, pero está mal puesta.** Pegada a «276 y 277 están LIBRES en `origin/dev`»,
+se lee como si estuviera negando que el hecho hubiera ocurrido, y no es eso lo que quise decir ni lo
+que el bloqueante afirmaba. **El bloqueante era —y sigue siendo— que el TEXTO que contaba la colisión
+es falso**, no que la colisión no existiera. Queda corregido aquí, que es donde tiene que quedar.
+
+### El arreglo, y lo que le falta
+
+`progress/impl_276.md` está **bien reescrito**: la tabla lleva ahora 273/274/275 con sus fichas de
+tarifas, dice que la 273 ya estaba mergeada, declara la resolución (273→276, 274→277), explica que
+276 y 277 estaban libres, y añade el aviso de por qué la versión anterior era falsa. Además corrige
+el motivo del conflicto de merge: **divergencia normal de ramas** (`dev` local no es ancestro de
+`origin/dev`), no la colisión. Todo eso coincide con lo que medí. ✔
+
+### 🔴 RESIDUAL — `progress/current.md` conserva el MISMO párrafo falso
+
+Solo se arregló una de las dos copias. `progress/current.md:74-84` sigue diciendo, palabra por
+palabra:
+
+```
+### ⚠️ Colisión de ids: `origin/dev` avanzó y ya usa 276/277/275 para OTRAS features
+
+Medido al cerrar el backend de la 276 (2026-08-24): `origin/dev` pasó de `e93c19e6` a `821a6afe`
+y otra sesión registró **276 = tarifas ligadas a la zona**, **277 = cobro por zona + tienda** y
+**275 = configuración de tarifas**. Los ids que esta sesión usa para «el tope de intentos» y «Por
+recoger» están **ocupados en `dev`**.
+
+El merge dará conflicto en `feature_list.json` de todas formas, y resolverlo «a favor de los dos»
+dejaría dos features con el mismo id. **Decisión del leader**, no del implementer: renumerar arrastra
+la carpeta del spec, el nombre de la rama y los mensajes de commit.
+```
+
+Las cuatro afirmaciones son falsas contra `821a6afe`: `origin/dev` usa 273/274/275, no 276/277/275;
+276 no es tarifas y 277 no es cobro por zona; los ids de esta sesión **no** están ocupados; y la
+«Decisión del leader» que pide **ya se tomó** (es el commit `8f4e1cca`).
+
+**Y este sitio es peor que el otro.** `CLAUDE.md` § «Arranque de sesión» manda leer `progress/
+current.md` en el paso 2, antes que ninguna bitácora: es lo primero que ve el leader al abrir el
+repo. La bitácora se lee cuando ya sabes qué buscas; `current.md` se lee para saberlo.
+
+**Qué falta:** reescribir esas líneas con los números medidos, igual que se hizo en `impl_276.md`, y
+cambiar el título —la colisión está **resuelta**, no pendiente—. Cuatro líneas.
+
+**Y esto es un fallo mío de la ronda 1 que también digo:** yo cité `impl_276.md:386-411` y no busqué
+la segunda copia. A `current.md` lo marqué como menor 2 por otra cosa (estar en la foto del backend)
+y no leí ese párrafo con el mismo cuidado. La ronda 2 lo caza porque cambié de método (§R2.3), no
+porque mirara con más ganas.
+
+---
+
+## R2.3 · «¿Queda algún otro archivo corrompido que ni tú ni yo hayamos visto?»
+
+Era la pregunta que más interesaba, así que la ronda 1 no me valía: allí clasifiqué **a ojo** los
+archivos que me parecían ajenos dentro de `git diff --name-only dev...HEAD`, y además **solo miré la
+dirección `273→276`. Nunca comprobé `274→277`.**
+
+Método de la ronda 2, exhaustivo sobre la rama: volqué el diff del commit del renumerado
+(`git show 8f4e1cca --unified=0`), emparejé cada línea `-` con su `+`, localicé **cada** posición
+donde un `273` se volvió `276` o un `274` se volvió `277`, y saqué el contexto (14 caracteres antes,
+8 después) de cada una. Luego las agrupé por forma para poder leerlas todas.
+
+```
+TOTAL PARES DE LÍNEA CAMBIADOS:                                319
+TOTAL SUSTITUCIONES 273->276 / 274->277 LOCALIZADAS:           305
+```
+
+De las **305**, son citas legítimas de la ficha —y por tanto correctas— todas las que tienen alguna
+de estas formas: `FEATURE 276 (…)`, `Feature 276`, `describe("276/T…`, `la ficha 276`, `la 276`,
+`specs/276-tope-de-intentos`, `feature/276-tope-de-intentos`, `progress/impl_276.md`,
+`"id": 276` en `feature_list.json`, `#68 (276)` y los `/* 276: la puerta del tope */`.
+
+**Las NO-citas son exactamente 21, y no hay más:**
+
+| Dónde | Cuántas | Qué era | Estado |
+| --- | --- | --- | --- |
+| Los 12 archivos ajenos restaurados | 16 | rangos de línea, un conteo medido, el importe | **cerrado** ✔ |
+| `specs/133-analitica-recortes-por-rol/tasks.md` | 1 | un número de línea | 🔴 **abierto** |
+| `progress/current.md` (párrafo de la colisión) | 4 | `273/274/275` → `276/277/275`, `276 = tarifas`, `277 = cobro por zona` | 🔴 **abierto** |
+
+Y comprobé además que **los números derivados que sí importan no se tocaron**, que era el otro sitio
+donde un `sed` podía haber hecho daño invisible:
+
+- `tests/fixtures/inventario-transiciones-140.ts`: `aristasFlujo: 63`, `paresUnicos: 60`, `n: "68"` y
+  los «62 -> 63» / «59 -> 60» intactos; el `(276)` de al lado es la cita de quién suma la arista.
+- `tests/unit/domain/order-status-transiciones.guardia.test.ts`: `toBe(63)` y `toBe(60)` intactos.
+- `tests/components/AnaliticaPage.test.tsx`: `CIFRA_BRUTA = "918273.45"` nunca se tocó (límite de
+  palabra), que es justo lo que dejó el comentario contradiciendo a su constante.
+
+**Conclusión: el conteo correcto es 13 archivos ajenos / 17 citas (el mío), más 4 sustituciones en
+`progress/current.md` que ninguno de los dos había listado** porque ese archivo no es «ajeno» —es de
+la ficha— pero lleva la misma falsificación de texto que el bloqueante 2. Total de daño del `sed`:
+**21 sustituciones en 14 archivos**, de las que **16 están cerradas y 5 siguen abiertas**.
+
+---
+
+## R2.4 · Sobre el «MI ERROR» del mensaje de commit
+
+Lo anoto porque es la parte que evita el siguiente: el commit del arreglo dice que el barrido se
+verificó a mano **solo fuera de `lib/`, `tests/`, `app/` y `specs/`**, y que los de dentro se dieron
+por buenos por estar en esas carpetas. Eso explica exactamente el patrón del daño —los 13 archivos
+corrompidos están todos dentro de `specs/` y `tests/`— y explica por qué la rama hermana, donde los
+archivos se eligieron a mano, no sufrió nada. El diagnóstico es correcto y está bien escrito.
+
+Lo que le falta a esa lección para ser completa, y lo dejo dicho: **el filtro no era el problema, era
+la ausencia de una comprobación posterior**. Un barrido sobre 96 archivos es verificable en un minuto
+con lo que hice en §R2.3 —clasificar cada sustitución por su contexto—, y eso no depende de acertar
+con la lista de exclusión.
+
+---
+
+## R2.5 · Lo que NO ha cambiado: la auditoría del tope sigue en pie, entera
+
+`git diff --name-only cd8bd92e..87b78270` son 13 archivos: la bitácora y 12 documentos/comentarios
+ajenos. Restringido a `lib/`, `app/`, `db/`, `specs/276-tope-de-intentos/` y a los tests de la ficha,
+el diff está **vacío**. El único archivo bajo `tests/` que cambia es
+`ancla-de-carga.guardia.test.ts`, y es la restauración de un comentario en un guard que no pertenece
+a esta feature.
+
+Por tanto, y lo digo explícitamente porque se me pidió:
+
+**Todo lo verificado en la ronda 1 sobre la ficha sigue siendo válido sin reservas.** Las ocho
+mutaciones y sus ocho rojos, la trazabilidad R1–R38 abierta test por test, los 30 casos contra
+Postgres corriendo de verdad, los cuatro composition roots que pasan la dependencia, el
+`cierre_id NULL` que tiene test y muere si se cambia, el mensajero que el `updateMany` conserva a
+propósito, y la UI que no compara números. **El tope está bien cerrado.** No he vuelto a correr las
+mutaciones porque el código es byte a byte el mismo, y el gate lo confirma: mismo número de archivos
+y mismo número de casos que en la ronda 1.
+
+Los **13 menores** de la ronda 1 siguen todos abiertos tal cual (ninguno se tocó en este commit),
+incluidos los tres de bookkeeping —`tasks.md` sin `[x]`, `current.md`/`status_note` en la foto del
+backend, y la entrada que falta en `progress/history.md`— y la excepción de R31
+(`incidente -> por_recoger`) que debe subir de un comentario de test al spec.
+
+---
+
+## R2.6 · Veredicto de la ronda 2
+
+**RECHAZADO — 2 bloqueantes residuales.** Los dos son el cierre parcial de los dos anteriores:
+
+1. **`specs/133-analitica-recortes-por-rol/tasks.md`** sigue con `132-R1/R8 (276)` donde el original
+   decía `(273)`, que es un número de línea. Se restauraron 12 de los 13 archivos; falta el
+   `tasks.md` hermano del `design.md` que sí se restauró.
+   -> `git checkout 8f4e1cca^ -- specs/133-analitica-recortes-por-rol/tasks.md`
+2. **`progress/current.md:74-84`** conserva el párrafo falso de la colisión de ids, idéntico al que
+   se corrigió en `impl_276.md`. Es el archivo que `CLAUDE.md` manda leer **primero** al abrir el
+   repo, y afirma que 276 y 277 están ocupados en `dev` y que hace falta una decisión del leader que
+   ya se tomó.
+   -> reescribir esas cuatro líneas con 273/274/275 y cambiar el título a «resuelta».
+
+**Nada más.** El bloqueante 1 está cerrado en su parte cara —el importe del guard de dinero, los
+rangos de línea de siete fichas, el conteo medido— y el bloqueante 2 está bien resuelto en la
+bitácora. Los dos residuales son una línea y un párrafo, no requieren tocar código, y con el barrido
+de §R2.3 ya está medido que **no hay un tercero escondido**: las 305 sustituciones están clasificadas
+una a una y las no-citas son 21, ni una más.
+
+Con esos dos cerrados y el gate en verde, esta ficha pasa a **OK** por mi parte, con los 13 menores
+como deuda declarada y con lo de §6 (R37 y el número de la población congelada) como puerta de
+despliegue, no de merge.
