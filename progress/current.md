@@ -71,6 +71,18 @@ Rama **`feature/273-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** 
 hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
 conteo cobra de más.
 
+### ⚠️ Colisión de ids: `origin/dev` avanzó y ya usa 273/274/275 para OTRAS features
+
+Medido al cerrar el backend de la 273 (2026-08-24): `origin/dev` pasó de `e93c19e6` a **`821a6afe`**
+y otra sesión registró **273 = tarifas ligadas a la zona**, **274 = cobro por zona + tienda** y
+**275 = configuración de tarifas**. Los ids que esta sesión usa para «el tope de intentos» y «Por
+recoger» están **ocupados en `dev`**.
+
+El merge dará conflicto en `feature_list.json` de todas formas, y resolverlo «a favor de los dos»
+dejaría dos features con el mismo id. **Decisión del leader**, no del implementer: renumerar arrastra
+la carpeta del spec, el nombre de la rama y los mensajes de commit. Precedente del repo: la ficha
+218 se renumeró desde 216 por esto mismo, y su nota dice que **`dev` manda**.
+
 ### La puerta que viene
 
 ⏳ **Ya pasó** (2026-08-24): los dos specs están, el humano firmó las dos preguntas de la 273 y las

@@ -380,3 +380,32 @@ rechaza igual (R11, con sus cuatro casos).
 
 **Backend de la 273: completo y verde.** Frontend pendiente (T11/T12). R37 pendiente de
 re-ejecución contra producción **antes de desplegar**.
+
+---
+
+## ⚠️ COLISIÓN DE IDS DETECTADA AL CERRAR — no la resuelvo yo
+
+Al hacer el `git fetch` final (2026-08-24, después del gate), `origin/dev` había pasado de
+`e93c19e6` a **`821a6afe`**, y en ese avance **otra sesión registró los ids 273, 274 y 275 para
+features distintas**:
+
+| id | en `origin/dev` (821a6afe) | en esta rama |
+| --- | --- | --- |
+| **273** | tarifas ligadas a la zona: modelo, borrado físico y catálogo de vehículos · `in_progress` | **el tope de intentos** · `in_progress` |
+| **274** | cobro por zona + tienda: cascada de resolución de tarifa · `pending` | «Por recoger» separa en tabs · `in_progress` |
+| **275** | configuración de tarifas · `pending` | — |
+
+Existe además la rama remota `origin/feature/273-tarifas-por-zona-catalogo-vehiculos` (el nombre de
+rama **no** choca con `feature/273-tope-de-intentos`; lo que choca son los **ids**). En `origin/dev`
+todavía **no** hay carpeta `specs/273-*`.
+
+**Por qué no lo toco:** renumerar arrastra la carpeta del spec, el nombre de la rama, los nueve
+mensajes de commit y decenas de comentarios que citan «273» dentro del código y de los tests. Es una
+decisión del leader —y el precedente de este repo es explícito: la propia ficha 218 lleva escrito
+que la renumeraron «porque otra sesión tomó ese id en `dev` mientras esta ficha se escribía, y `dev`
+manda»—.
+
+**Lo que sí hay que saber para decidir:** el merge a `dev` va a dar conflicto en
+`feature_list.json` sí o sí, y resolverlo «a favor de los dos» dejaría **dos features distintas con
+el id 273**. La implementación de esta rama es coherente consigo misma; lo único que hay que
+reasignar es la etiqueta.
