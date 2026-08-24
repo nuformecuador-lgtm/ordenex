@@ -466,3 +466,30 @@ Notas de dependencia que no son decorativas:
   un mundo que todavía no existe.
 - **T6 antes que T14**: el deshacer se prueba contra el comportamiento nuevo del cron, no contra el
   viejo.
+
+---
+
+## ESTADO DE CIERRE — 2026-08-24
+
+Esta ficha no usa casillas: el criterio de «hecho» es el que abre el archivo —**un aserto que se
+pone rojo si el código está mal**—. Se deja aquí el estado por tarea, y de dónde sale.
+
+**T1–T17: HECHAS.** Evidencia: gate **COMPLETO** `./init.sh` con `INIT_EXIT=0`, **1358 archivos /
+18.302 tests**, corrido cinco veces —dos por los implementers, tres por el reviewer— siempre con el
+mismo número. La revisión (`progress/review_276.md`, tres rondas) verificó la trazabilidad R1–R38
+abriendo cada test citado, y **volvió a inyectar el defecto decisivo sobre el commit final**: sacar
+la sonda de visita real del `select` de `findOrdenesLiberables` da **2 rojos en el test de Postgres
+y 13 verdes en los dobles**, que es exactamente lo que T6 existe para que no pase inadvertido.
+
+**T0: A MEDIAS, y es lo único abierto de la ficha.** Su primera mitad se ejecutó contra producción
+el 2026-08-24 y está en `requirements.md`: la única orden viva en el umbral es la guía `28098171`,
+en `devuelta`, y **cero** fuera de ese estado, así que «sin backfill» se sostiene. Faltan **dos**
+cosas, las dos **condición de despliegue y no de merge**:
+
+1. **Re-ejecutar ese SELECT justo antes de desplegar.** La foto caduca: cualquier cierre que la
+   bodega apruebe entre hoy y el despliegue puede subir un contador y crear una orden en el umbral
+   que **R18 dejaría inasignable sin que nadie lo haya decidido** (es la pregunta Q6).
+2. **Medir cuántas `reprogramada` congela T6 el primer día.** Nunca se ha medido. Ese número **es**
+   el tamaño de la mercadería que esta ficha para, y el riesgo se aceptó sin conocerlo.
+
+Marcar esto a ojo sería repetir lo que ya pasó aquí: un `tasks.md` que decía 1/46 con 42 hechas.

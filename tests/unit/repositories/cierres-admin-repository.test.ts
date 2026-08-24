@@ -134,7 +134,15 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // leyendo las gestiones `devuelta` de ESTE cierre. Sin devoluciones el bloque es no-op —que
     // es lo que estas suites quieren— pero el doble tiene que RESPONDER, o la tx muere con un
     // TypeError. Vacio por defecto; la suite que MIDE el anclaje lo monta con datos.
-    gestionOrden: { findMany: vi.fn().mockResolvedValue([]) },
+    gestionOrden: {
+      findMany: vi.fn().mockResolvedValue([]),
+      // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
+      // rama del rechazo por tope se mide contra Postgres en
+      // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.
+      groupBy: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: "g-sintetica" }),
+    },
     // Feature 69/T18 (R15): el detalle de un cierre YA CREADO sale del SNAPSHOT.
     cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
     // Feature 264 (B4): la TERCERA consulta del detalle — las ordenes que el corte barrio al
@@ -1151,6 +1159,10 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
     enBodegaEstatusId: idEstado("en_bodega_central"),
     enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
     centralZonaId: "z-central",
+    // FEATURE 276 (T9): destino del rechazo por tope + umbral inyectado. Con el corpus de esta
+    // suite ninguna barrida llega al umbral, asi que la rama nueva es un no-op aqui.
+    rechazadaEstatusId: idEstado("rechazada"),
+    umbralIntentos: 3,
   };
 
   // Prisma con lo que la liberacion + los wallets necesitan. SIN $queryRaw -> el emisor de
@@ -1167,7 +1179,15 @@ describe("CierresAdminRepository.resolverCierre — liberación de `sin_gestiona
         count: vi.fn(),
         findUnique: vi.fn(),
       },
-      gestionOrden: { findMany: vi.fn().mockResolvedValue([]) }, // feature 239: sin devoluciones -> anclaje no-op
+      gestionOrden: {
+        findMany: vi.fn().mockResolvedValue([]), // feature 239: sin devoluciones -> anclaje no-op
+      // FEATURE 276 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
+      // rama del rechazo por tope se mide contra Postgres en
+      // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.
+        groupBy: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue({ id: "g-sintetica" }),
+      },
       cierreDetail: { findMany: vi.fn().mockResolvedValue([]) },
       orden: { findMany: vi.fn(), updateMany: vi.fn() },
       ordenHistorialEstado: { createMany: vi.fn() },

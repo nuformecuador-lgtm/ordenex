@@ -110,6 +110,10 @@ describe("Feature 239 · enum — `anclaje_devolucion` (R7/P8)", () => {
       // la devolucion anclada. Cuarta ficha seguida que pasa por aqui sin tocar este `down.sql`, y
       // eso es exactamente lo que el patron busca: la foto historica no se retoca nunca.
       "rechazo_tienda",
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
+      // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
+      "rechazo_tope_intentos",
     ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !POSTERIORES.has(v))),

@@ -91,9 +91,40 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **276** | fullstack | `pending` · spec en curso | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **277** | frontend | `pending` · spec en curso | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
-| **218** | backend | **`superseded` por la 276** | el corte sin sumar reintento: su decisión se toma dentro de la 276 |
+| **276** | fullstack | **completa y APROBADA** (3 rondas, 0 bloqueantes) · en release | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | **completa y APROBADA** (0 bloqueantes) · **mergeada en `dev`** (PR #489) | «Por recoger» separa en pestañas las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 276** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
+
+### 276 — dónde está exactamente (2026-08-24)
+
+Rama **`feature/276-tope-de-intentos`**, con `dev` ya mergeado dentro. Bitácora en
+`progress/impl_276.md`, informe con las **tres rondas** en `progress/review_276.md`.
+
+- **Completa**: las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
+  gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
+  tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql`, la guardia del
+  invariante y la UI de las dos superficies (T11/T12).
+- **Gate COMPLETO** `./init.sh` → **`INIT_EXIT=0`**. Corrido **cinco veces** entre implementers y
+  reviewer sobre 1358 archivos / 18.302 tests, siempre el mismo número, y de nuevo tras mergear
+  `dev`.
+- **Aprobada con 0 bloqueantes tras tres rondas.** Las rondas 1 y 2 rechazaron, y **ninguno de esos
+  cuatro bloqueantes era del código de la ficha**: los cuatro salieron del `sed` de la renumeración
+  273→276 (ver más abajo). El reviewer volvió a inyectar el defecto decisivo sobre el commit final
+  —sonda de visita real fuera del `select`— y salieron **los mismos 2 rojos en Postgres y 13 verdes
+  en los dobles** que en la ronda 1: la auditoría del tope está en pie entera.
+
+### ✅ T0 CERRADA — las dos medidas de despliegue, ejecutadas el día de la release
+
+Eran lo único que bloqueaba desplegar la 276, y se midieron **hoy**, no se citó la foto de ayer.
+
+1. **R37 re-ejecutada, limpia.** La única orden viva con `intentos >= 3` sigue siendo la guía
+   **`28098171`**, en **`devuelta`**, y **cero** fuera de ese estado. **La condición de parada de Q6
+   no se cumple**: no hay ninguna orden a la que R18 vaya a dejar inasignable sin que nadie lo haya
+   decidido.
+2. **El segundo número de T0, medido POR PRIMERA VEZ: T6 congela CERO órdenes el primer día.** Era
+   el número sobre el que se había aceptado el riesgo a ciegas, y es el tamaño de la mercadería que
+   esta ficha para. Hay **2** órdenes vivas en `reprogramada` (`31005512`, `47145018`), **0
+   liberables hoy**, y las dos cuelgan de un cierre **ya aprobado**.
 
 ### Lo que se midió antes de registrarlas, y es la razón de que existan
 
@@ -126,10 +157,37 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
 conteo cobra de más.
 
+### ✅ Colisión de ids con `origin/dev` — RESUELTA renumerando a 276 y 277
+
+> Este párrafo estuvo **falso** unas horas, y conviene saber por qué: el `sed` del propio renumerado
+> reemplazó `273`→`276` y `274`→`277` **también dentro del texto que describía la colisión**, con lo
+> que acabó afirmando que `origin/dev` usaba 276 y 277 para tarifas —lo contrario de lo ocurrido— y
+> contradiciéndose solo. Lo cazó el reviewer, en dos rondas: la copia de la bitácora en la primera y
+> **ésta, la segunda copia, en la segunda**.
+
+Medido el 2026-08-24: `origin/dev` pasó de `e93c19e6` a **`821a6afe`** y en ese avance otra sesión
+registró **273 = tarifas ligadas a la zona (ya MERGEADA)**, **274 = cobro por zona + tienda** y
+**275 = configuración de tarifas**. Los ids que esta sesión había registrado para «el tope de
+intentos» (273) y «Por recoger» (274) quedaron ocupados por features distintas.
+
+**Resuelto: 273 → 276 y 274 → 277**, porque `dev` manda y la ficha mergeada es la suya. Precedente
+explícito del repo: la 218 se renumeró desde 216 por esto mismo. En `821a6afe` los ids 276 y 277
+estaban libres, comprobado.
+
+El merge a `dev` dará conflicto en `feature_list.json` igualmente, pero **por divergencia normal de
+ramas, no por la colisión**: `dev` local no es ancestro de `origin/dev`. Se resuelve quedándose con
+las entradas de `dev` y añadiendo la 276 y la 277.
+
 ### La puerta que viene
 
-Cuando los dos specs estén, **hay puerta humana antes de tocar código**. Nada de `app/` ni de
-`lib/` hasta que el humano apruebe.
+⏳ La puerta del spec **ya pasó** (2026-08-24) y las dos fichas están terminadas y aprobadas. Las que
+quedan son dos, y **ninguna es de código**:
+
+1. **El remoto.** Nada está empujado. `dev` local **no es ancestro de `origin/dev`** (`821a6afe`):
+   el merge dará conflicto en `feature_list.json` por divergencia normal de ramas —no por la
+   colisión— y se resuelve quedándose con las entradas de `dev` y añadiendo la 276 y la 277.
+2. **El despliegue de la 276**: R37 re-ejecutado contra producción, y el número de `reprogramada`
+   congeladas el primer día, que nunca se ha medido.
 
 ---
 

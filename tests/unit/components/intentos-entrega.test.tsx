@@ -6,6 +6,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 
 import { DataTable } from "@/components/shared/DataTable";
+// Feature 276 (T11/T12): el quitador de comentarios unico del repo (feature 209).
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 import {
   INTENTOS_COLUMN_ID,
   INTENTOS_LABEL,
@@ -171,6 +173,48 @@ describe("R20 — el umbral NO viaja al cliente en ninguna de las dos formas", (
     expect(fuente).not.toContain("reintentosConfig");
     expect(fuente).not.toContain("MIN_INTENTOS_ENTREGA");
     expect(fuente).not.toContain("lib/config/reintentos");
+  });
+});
+
+// =================================================================================================
+// FEATURE 276 (T11/T12, R10) — LAS DOS SUPERFICIES QUE CREAN GESTION TAMPOCO SE LLEVAN EL UMBRAL.
+// =================================================================================================
+//
+// La 160/R20 (arriba) fijo este contrato para la pieza compartida de intentos. La 276 añade dos
+// consumidores que SI toman una decision con el umbral —que botones ofrecer— y por eso el contrato
+// hay que repetirlo sobre ellos: la tentacion natural al escribir esa pantalla es importar
+// `reintentosConfig` y comparar, y eso mandaria la configuracion al navegador.
+//
+// Lo que hacen en su lugar: leer el booleano `enElTope`, que el SERVIDOR ya decidio, y filtrar los
+// desenlaces con `permitidoEnElTope`, un modulo puro que tampoco trae el umbral dentro.
+describe("276/R10 — el umbral no cruza por el panel del mensajero ni por la ventana de la tienda", () => {
+  const SUPERFICIES = [
+    "app/(app)/mis-asignaciones/_components/GestionarOrdenPanel.tsx",
+    "app/(app)/novedades/_components/GestionarDesdeAyudaModal.tsx",
+  ];
+
+  it.each(SUPERFICIES)("%s no importa ni nombra la configuracion del umbral", (ruta) => {
+    // Se mira el CODIGO, no la prosa: los comentarios de estos dos archivos nombran el umbral a
+    // proposito —explican por que NO se importa— y un barrido sobre el texto crudo obligaria a
+    // borrar justo la explicacion. Es el quitador unico del repo (feature 209).
+    const codigo = codigoSinComentarios(ruta);
+    // Anti-vacuidad: si la ruta cambiara de sitio, `readFileSync` lanza; si quedara vacia, esto lo
+    // dice antes de que tres `not.toContain` pasen en verde sobre la nada.
+    expect(codigo.length).toBeGreaterThan(1000);
+    expect(codigo).not.toContain("reintentosConfig");
+    expect(codigo).not.toContain("MIN_INTENTOS_ENTREGA");
+    expect(codigo).not.toContain("lib/config/reintentos");
+  });
+
+  it("lo que SI leen es el modulo puro de la regla, que tampoco trae el umbral dentro", () => {
+    for (const ruta of SUPERFICIES) {
+      expect(codigoSinComentarios(ruta)).toContain("@/lib/types/tope-intentos");
+    }
+    // El eslabon que cierra la cadena: importarlo no arrastra la configuracion (el modulo tiene su
+    // propio caso literal en `tests/unit/types/tope-intentos.test.ts`).
+    const modulo = codigoSinComentarios("lib/types/tope-intentos.ts");
+    expect(modulo).not.toContain("reintentosConfig");
+    expect(modulo).not.toContain("MIN_INTENTOS_ENTREGA");
   });
 });
 

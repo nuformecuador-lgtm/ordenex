@@ -23,11 +23,25 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
   en_bodega_satelite: "os-en-bodega-satelite",
 };
 
+/**
+ * FEATURE 276 (T6.2): la fila gana tres hechos, y el DEFAULT es «visita real de un cierre YA
+ * APROBADO».
+ *
+ * La eleccion del default no es neutra y por eso se explica: es el caso REAL de una orden que se
+ * libera despues de la 276 —el mensajero la reprogramo en la calle y su cierre ya se aprobo—, asi
+ * que los casos preexistentes de este archivo siguen midiendo lo que median (destino por zona,
+ * idempotencia, resiliencia) sobre una orden que de verdad puede liberarse. Un default
+ * `gestionEsVisitaReal: false` habria sido mas comodo y habria dejado todos esos casos entrando
+ * por la rama (a) de `puedeLiberarse`, que no es la que ejercitan.
+ */
 function liberableRow(overrides: Partial<OrdenLiberableRow> = {}): OrdenLiberableRow {
   return {
     id: "o1",
     zonaId: CENTRAL,
     fechaReprogramacion: new Date("2026-07-14T00:00:00.000Z"),
+    gestionCierreId: "c-aprobado",
+    gestionCierreEstado: "aprobado",
+    gestionEsVisitaReal: true,
     ...overrides,
   };
 }
@@ -136,13 +150,13 @@ describe("ejecutarLiberacion — resumen de conteos", () => {
     });
     const res = await newService(repo).ejecutarLiberacion(HOY);
 
-    expect(res).toEqual({ evaluadas: 3, liberadas: 2, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 3, liberadas: 2, omitidas: 1, esperandoCierre: 0 });
   });
 
   it("nada que liberar -> resumen en cero", async () => {
     const repo = fakeRepo({ findOrdenesLiberables: vi.fn(async () => []) });
     const res = await newService(repo).ejecutarLiberacion(HOY);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 });
   });
 });
 
@@ -162,7 +176,7 @@ describe("ejecutarLiberacion — resiliencia por orden (R14)", () => {
     const res = await newService(repo).ejecutarLiberacion(HOY);
 
     // o1 y o3 se liberan; o2 se contabiliza como omitida sin abortar.
-    expect(res).toEqual({ evaluadas: 3, liberadas: 2, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 3, liberadas: 2, omitidas: 1, esperandoCierre: 0 });
   });
 });
 
@@ -180,14 +194,14 @@ describe("ejecutarLiberacion — idempotencia (R17/T8)", () => {
     const r1 = await service.ejecutarLiberacion(HOY);
     const r2 = await service.ejecutarLiberacion(HOY);
 
-    expect(r1).toEqual({ evaluadas: 1, liberadas: 1, omitidas: 0 });
-    expect(r2).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0 });
+    expect(r1).toEqual({ evaluadas: 1, liberadas: 1, omitidas: 0, esperandoCierre: 0 });
+    expect(r2).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 });
   });
 
   it("R17: la guarda de estado (liberarOrden -> false) cuenta como omitida, no re-libera", async () => {
     const repo = fakeRepo({ liberarOrden: vi.fn(async () => false) });
     const res = await newService(repo).ejecutarLiberacion(HOY);
-    expect(res).toEqual({ evaluadas: 1, liberadas: 0, omitidas: 1 });
+    expect(res).toEqual({ evaluadas: 1, liberadas: 0, omitidas: 1, esperandoCierre: 0 });
   });
 });
 
@@ -195,7 +209,7 @@ describe("ejecutarLiberacion — seed incompleto", () => {
   it("catalogo de estados incompleto -> no libera, resumen en cero, no consulta candidatas", async () => {
     const repo = fakeRepo();
     const res = await newService(repo, fakeZonaRepo(), fakeOrdenRepo({})).ejecutarLiberacion(HOY);
-    expect(res).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0 });
+    expect(res).toEqual({ evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 });
     expect(repo.findOrdenesLiberables).not.toHaveBeenCalled();
     expect(repo.liberarOrden).not.toHaveBeenCalled();
   });

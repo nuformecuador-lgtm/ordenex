@@ -6,6 +6,9 @@ import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
 import { RecuperacionBodegaRepository } from "@/lib/repositories/RecuperacionBodegaRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { ReprogramacionTiendaService } from "@/lib/services/ReprogramacionTiendaService";
 import { RechazoTiendaService } from "@/lib/services/RechazoTiendaService";
 import { RecuperacionBodegaService } from "@/lib/services/RecuperacionBodegaService";
@@ -90,9 +93,19 @@ export interface RecuperarABodegaDeps {
 
 function buildReprogramacionService(): IReprogramacionTiendaService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   return new ReprogramacionTiendaService(
-    new OrdenRepository(prisma),
+    ordenRepo,
     new GestionOrdenRepository(prisma),
+    // 💰 FEATURE 276 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
+    // —y por tanto el MISMO criterio unico de la 215— que consultan el panel del mensajero, la
+    // pestaña de ayuda y los dos crons. La dependencia es OBLIGATORIA en el constructor: borrar
+    // esta linea rompe el typecheck, no deja la puerta abierta en silencio.
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

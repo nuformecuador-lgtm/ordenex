@@ -1,0 +1,49 @@
+-- Feature 273 (T2, R22/R35/R36 · Q5 firmada el 2026-08-24) — anade el valor
+-- `rechazo_tope_intentos` al enum `orden_historial_origen_tipo`. Es la familia PROPIA de la
+-- transicion
+--
+--   sin_gestionar -> rechazada     (actor = el admin que APRUEBA el cierre)
+--
+-- Su PRODUCTOR UNICO es el bloque de la aprobacion del cierre
+-- (`CierresAdminRepository.resolverCierre`, rama `liberacionSinGestionar`), y llega EN ESTE MISMO
+-- COMMIT: la convencion que la 154 rompio —declarar un valor de enum antes que su productor— costo
+-- el tren 154+155+156 y aqui no se repite.
+--
+-- QUE HACE ESA TRANSICION: una orden que el corte de la noche barrio a `sin_gestionar` y que ya
+-- agoto sus intentos de entrega NO vuelve a bodega al aprobarse el cierre. Se termina en
+-- `rechazada`. Absorbe la ficha 218.
+--
+-- POR QUE FAMILIA PROPIA, y las dos alternativas baratas que se descartan (Q5):
+--   (a) `escalado_devuelta_sla` (99) es el mismo destino y por eso es la tentacion. Pero ESE valor
+--       ES el predicado de la pestaña «Rechazadas por plazo vencido» (102, `OrdenRepository`) y de
+--       `esRechazoSla`: reusarlo listaria ahi rechazos que no vencieron ningun plazo y etiquetaria
+--       como vencimiento del reloj lo que es agotamiento de intentos.
+--   (b) `liberacion_sin_gestionar` (109) es la OTRA rama del mismo bloque, la que si libera. Su
+--       nombre diria «liberacion» sobre una orden que precisamente no se libera, y haria
+--       indistinguibles las dos poblaciones justo en la fila que es su unica evidencia.
+--
+-- ⚠️ NO ENTRA en `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`), y esto es DINERO:
+-- si entrara, cada rechazo por tope subiria el contador de intentos de su propia orden, adelantaria
+-- el escalado del cron de SLA (99) y cobraria el `cobroRechazado` (56) antes de tiempo. No es una
+-- visita: es una decision administrativa sobre una orden que nadie visito ese dia. Mismo argumento
+-- —y misma ausencia— que `anclaje_devolucion` (239) y `rechazo_tienda` (240).
+--
+-- NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado (la
+-- gestion sintetica `rechazada` de R23): esa lista solo desambigua la NULIDAD del enlace
+-- (67/R25-R26). Mismo caso que `escalado_devuelta_sla`, `anclaje_devolucion` y `rechazo_tienda`.
+--
+-- NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: el integrador recibe `rechazada` como siempre. No hay
+-- cambio de contrato publico y por tanto ningun aviso a integradores bloquea la release.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR un
+-- valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma Migrate corre
+-- cada migration.sql en una. Aqui SOLO se anade el valor; su primer uso ocurre en runtime
+-- (`CierresAdminRepository.resolverCierre`), en transacciones posteriores. Mismo precedente que
+-- `rechazo_tienda` (240), `gestion_tienda_ayuda` (237), `anclaje_devolucion` (239) y
+-- `devolucion_rechazada` (139).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva su
+-- RLS de la feature 49). No crea tablas ni columnas. NO MUEVE NINGUNA ORDEN DE ESTADO (R35): no hay
+-- backfill —decision del humano del 2026-08-24, medida— y toda transicion pasa por el punto unico
+-- de escritura del historial, nunca por SQL de migracion.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'rechazo_tope_intentos';

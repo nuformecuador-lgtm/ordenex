@@ -347,3 +347,26 @@ recomendación del spec. Las otras cuatro se dan por tomadas con su recomendaci�
 - **Q5 · Familia de origen → `rechazo_tope_intentos`**, y **fuera de `ORIGEN_TIPOS_VISITA_REAL`**:
   si entrara, subiría el contador y cobraría de más.
 - **Q6 · Backfill → medido y resuelto**, ver la sección anterior.
+
+---
+
+## T0 CERRADA — las dos medidas de despliegue, ejecutadas el 2026-08-24 antes de la release
+
+Las dos condiciones que bloqueaban el **despliegue** (no el merge) están medidas contra producción
+**el mismo día de la release**, no citadas del día anterior.
+
+**1 · R37 re-ejecutada. Limpia.** La única orden viva con `intentos >= 3` sigue siendo la guía
+**`28098171`**, y está en **`devuelta`**. **Cero** en `reprogramada`, `en_bodega_central`,
+`en_bodega_satelite` o `por_recoger`. **La condición de parada de Q6 NO se cumple**: no hay ninguna
+orden a la que R18 vaya a dejar inasignable sin que nadie lo haya decidido. «Sin backfill» se
+sostiene, y por segunda vez con la misma respuesta.
+
+**2 · El segundo número de T0, medido POR PRIMERA VEZ: T6 congela CERO órdenes el primer día.**
+Era el número que el riesgo se había aceptado sin conocer, y es el tamaño de la mercadería que esta
+ficha para. Medido: hay **2** órdenes vivas en `reprogramada` (`31005512` y `47145018`),
+**0 liberables hoy** —ninguna tiene `fecha_reprogramacion <= hoy`— y las **2** cuelgan de un cierre
+**ya `aprobado`**, así que ni siquiera entrarían en el caso que T6 difiere.
+
+Consecuencia: el día 1 de esta ficha la liberación diferida **no retiene nada**. El efecto empieza
+cuando un mensajero reprograme y su cierre tarde en aprobarse, que es exactamente el caso que la
+ficha viene a cerrar.

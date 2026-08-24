@@ -94,6 +94,10 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
       // Feature 240 (2026-08-20): idem con `rechazo_tienda`, el rechazo manual de la tienda
       // sobre una devolucion anclada. La foto historica de ESTA migracion sigue intacta.
       "rechazo_tienda",
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
+      // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
+      "rechazo_tope_intentos",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_106.has(v))),

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
@@ -153,7 +154,7 @@ function newService(
   zonaRepo: IZonaRepository = fakeZonaRepo(),
   gate: IAsignabilidadCoordenadasService = gateTodoAsignable(),
 ) {
-  return new GuiaAsignacionService(repo, zonaRepo, gate);
+  return new GuiaAsignacionService(repo, zonaRepo, gate, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
 }
 
 /** Atajo: las decisiones con las que el service llamo a `generarGuiaLote`. */
