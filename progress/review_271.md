@@ -1,5 +1,16 @@
 # review 271 — el segundo cierre se puede solicitar, y acumular dos bloquea
 
+> ## ⚠️ VEREDICTO ACTUALIZADO — 2026-08-23, segunda revisión (`8634c285`)
+>
+> **APROBADO CON RESERVAS.** Los cuatro bloqueantes (**B1**–**B4**) están **cerrados y verificados
+> por mí**, no dados por buenos. Queda **una reserva** —una frase de `feature_list.json` que sigue
+> afirmando la imposibilidad que la medida desmintió— y **una corrección a mi propio informe**: mi
+> hallazgo **M6** era **falso**. Todo el detalle al final del documento, en «SEGUNDA REVISIÓN».
+>
+> Lo que sigue debajo es el informe original, **conservado sin tocar**: sirve para ver qué se creyó y
+> cuándo dejó de creerse, que es la misma razón por la que las bitácoras de esta ficha conservan sus
+> párrafos desmentidos en vez de borrarlos.
+
 > **Veredicto: RECHAZADO.** Cuatro hallazgos bloqueantes, tres de ellos de la misma familia: **un
 > requisito dado por cubierto cuyo test afirma algo adyacente**. El código, en lo que he podido
 > comprobar, hace lo que la regla dice; lo que falla es la RED que lo sostiene, y una puerta del
@@ -421,3 +432,281 @@ No es cortesía: son los patrones que el próximo revisor debería exigir.
 
 Los menores no bloquean, pero **M1** —corregir las filas falsas del mapa— debería ir en el mismo
 diff: una bitácora que afirma cobertura que no existe es el mecanismo por el que llegamos aquí.
+
+---
+---
+
+# SEGUNDA REVISIÓN — 2026-08-23, tras los cinco commits de cierre
+
+> Árbol revisado: `8634c285`. Commits nuevos desde el informe de arriba (`b198314e`): `9f790b2b`,
+> `544be904`, `56f4e7ba`, `47fbafe4`, `8634c285`.
+>
+> ## **VEREDICTO: APROBADO CON RESERVAS**
+>
+> **B1, B2, B3 y B4: CERRADOS.** Los cuatro se re-verificaron uno a uno, ejecutando los tests y
+> leyendo lo que afirman — no aceptando el resumen. **Una reserva** (**RS1**, abajo), que es
+> documental y de una línea, y **un hallazgo mío que retiro** porque era falso (**M6**).
+>
+> No pido otra ronda de revisión: la reserva es verificable con un `grep` y no toca código ni tests.
+
+## Cómo se verificó esta segunda vuelta
+
+    pnpm exec vitest run tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts
+                         tests/unit/services/corte-diario-aviso-vencido.test.ts
+                         tests/unit/notificaciones/cierre-vencido-destinatarios.test.ts
+                         tests/unit/services/cierre-dia-aviso-bloqueo.test.ts
+                         tests/unit/repositories/cierres-admin-repository.test.ts
+      -> Test Files 5 passed | Tests 70 passed     (el de integración, ejecutado: 4 casos, cero skip)
+
+    pnpm exec vitest run tests/unit/guards tests/unit/notificaciones
+                         tests/unit/utils/bloqueo-cierre.test.ts
+                         tests/unit/services/notificacion-notificadores-reales.test.ts
+      -> Test Files 75 passed | Tests 1111 passed  (la prosa reescrita en `lib/` no rompió ninguna guardia)
+
+Y, sobre el diff, dos comprobaciones que no son de test:
+
+- **`git diff` de los tres archivos de `lib/` tocados por la corrección de R17** (`CorteDiarioService`,
+  `CorteDiarioRepository`, `CierreDiaRepository`): **cae entero dentro de bloques de comentario**. No
+  hay una sola línea ejecutable cambiada. La promesa «se corrige la prosa, no el comportamiento» es
+  cierta y la verifiqué línea a línea, no de palabra.
+- **`grep` del predicado del barrido**: `CierreDiaRepository` filtra con
+  `OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }]` (246/R11), y
+  `CorreccionDiaRepartoService` declara `ESTADOS_CON_DIA_DE_REPARTO_VIVO = ["por_recoger",
+  "en_reparto", "ayuda_tienda"]` (262). **El mecanismo del hallazgo de R17 es real en el árbol**, no
+  un artefacto del sembrado del test.
+
+## B1 — `tasks.md`: **CERRADO**
+
+**58 marcadas, 0 abiertas** (`grep -c` sobre el archivo). Y lo que importa no es el número, que es
+trivial de falsear, sino **si alguna está marcada por simetría**. Revisadas una a una las que la
+bitácora declaraba problemáticas:
+
+| Tarea | Lo que dice su `Desenlace` | ¿Es cierto? |
+|---|---|---|
+| **T3.2** | «HECHA **por otra vía, y menos de lo que pedía**»: el caso `79cb2c0f` era unitario con doble; sembrado contra Postgres era T10.3 | **Sí.** Y desde `47fbafe4` el sembrado existe: lo ejecuté |
+| **T3.3** | «HECHA con tests preexistentes», y encima **se corrige a sí misma**: el motivo que daba —la guarda «algo pasó»— **es el equivocado**; el bloqueado no llega a entrar en el bucle | **Sí, y es la anotación más honesta del archivo**: rectifica el *porqué* de una tarea que podría haber dejado marcada sin más |
+| **T3.4** | «HECHA A MEDIAS», y **cita mi propio hallazgo** (review 271, R24) como lo que quedó sin concluir | **Sí** — y desde `47fbafe4` esa mitad **ya tiene test** (ver R24, abajo) |
+| **T3.5** | «**DECLARADA SIN MEDIR** por decisión humana», con la razón: el universo del corte sigue siendo «los que tienen actividad», dos o tres por noche, y un banco de ~50 mediría un escenario que no existe. **Con condición de reapertura escrita** | **Aceptable.** Una casilla marcada que dice «no lo medí y por qué» no es un fallo mudo: es lo contrario. La condición de reapertura es lo que la salva de ser una excusa |
+| **T8.3 / T10.3** | Se **hicieron** después de mi informe | **Sí**: los tres specs ajenos llevan su nota de caducidad y T10.3 es el archivo de integración que ejecuté |
+
+**Ninguna casilla está marcada por simetría.** El encabezado conserva los **dos** bloques fechados
+—el de «3 abiertas a propósito» y el del cierre— en vez de reescribir el primero, que es la forma
+correcta de que se lea qué pasó y en qué orden.
+
+## B2 — el aviso del corte (R38/R39): **CERRADO**
+
+Dos archivos nuevos, y **afirman el requisito, no algo adyacente**. Lo comprobé leyendo qué muere
+con cada cambio plausible, que es el criterio que pedí:
+
+**`corte-diario-aviso-vencido.test.ts` — el productor.** Es el primer test del árbol que construye
+`CorteDiarioService` con **el séptimo argumento**.
+- «TRES cierres creados → TRES emisiones» afirma el **contexto entero con `toEqual`**: cruzar el
+  `cierreId` con el del mensajero de al lado, perder la zona o mover la emisión fuera del bucle deja
+  el caso rojo.
+- **`jornadaCR` va escrita a mano (`"2026-08-21"`), no derivada con `jornadaDelCorte`.** Es la
+  diferencia entre afirmar algo y afirmarlo contra su propia fuente: así el off-by-one que esta
+  ficha vino a arreglar **muere aquí**, y con la derivada habría pasado en verde.
+- «uno que NO crea y otro que SÍ» distingue **«emite por cierre creado»** de «emite por mensajero
+  evaluado», que era la mutación fácil. Y `null` → no emite; sin zona → no emite.
+- **R47 con el notificador REAL** (`notificarCierreDiaVencidoCon`) contra un repositorio que
+  revienta: la corrida termina, devuelve su resumen y el fallo **queda registrado con su causa**.
+
+**`cierre-vencido-destinatarios.test.ts` — el emisor, que es literalmente lo que R38/R39 dicen.**
+Las cuatro filas escritas a mano (dueño + maestro + admin + adminSatelite **de la zona destino**);
+la fila del mensajero es **la única a un usuario**, es `alert` frente a los tres `warning`, su
+entidad es **el cierre** y va **sin anexo** (R45); con `zonaId: null` quedan **tres** y no se
+inventa un satélite; y la dedupe se consulta con el cierre como entidad. Cambiar el destinatario
+usuario por un rol, o borrar las filas de bodega, **ya no pasa en verde**.
+
+**Conteo de la prueba por borrado** (declarado por el implementador, y coherente con lo que leí):
+quitar la emisión deja **3 rojos** — los dos casos que afirman emisiones y el de R47. Los otros dos
+(«null no emite», «sin zona no emite») siguen verdes **por diseño**, que es lo correcto: son la
+mitad negativa.
+
+## B3 — el aviso de «bloqueado por acumular» (R40/R41): **CERRADO**
+
+`cierre-dia-aviso-bloqueo.test.ts` es el primer archivo que inyecta **el séptimo argumento** de
+`CierreDiaService`. Afirma las tres cosas que pedí, y una cuarta que no se me había ocurrido:
+
+- **Emite una vez, con el contexto exhaustivo** y —explícitamente— `ctx.cierreId` **≠**
+  `aResolverPrimero.cierreId`. Es la mutación que nombré en B3, muerta por su nombre: con el cierre
+  viejo como entidad, dos bloqueos compartirían `entidad_id` y la dedupe se comería el segundo.
+- **`N = 1` → no emite**, y el caso no pasa por vacuidad: comprueba que el **otro** aviso («cierre
+  por aprobar») **sí** se emitió, así que la ruta no se cortó antes.
+- **Gate ya bloqueado → ni cierre ni avisos.**
+- **La cuarta:** el orden lectura-escritura-lectura se afirma con `invocationCallOrder` —el detalle
+  del aviso se relee **después** de escribir—, en vez de decirlo en un comentario. Eso convierte «el
+  N que cuenta el aviso incluye el cierre nuevo» en algo medido.
+
+R41 (la bodega) queda cubierto entre este archivo —que afirma que viaja la **zona destino**— y
+`notificacion-bloqueo-otro-cierre-avisa.test.ts`, que cuenta las cuatro filas **en la tabla de
+Postgres**. Las dos mitades existen y se tocan.
+
+## B4 — la prosa de la ficha: **CERRADO, con una reserva**
+
+`progress/current.md:45-46` ya dice lo contrario de lo que decía, **y deja la historia escrita**
+—«se decidió “solo reparto” y el humano lo revirtió el mismo día»—, que es mejor que un borrado
+limpio: impide que alguien reponga la regla vieja creyendo que corrige un olvido. La `status_note`
+de `feature_list.json` dice ahora «**SIN distinguir reparto de recolección**» con la cita del humano,
+y la descripción de **M2** está corregida (era «dos `vencido`», ahora «dos re-solicitables… muerde
+por el RECHAZO»). Verificado con `grep`: **no queda ni un «solo reparto» vivo** en `lib/`, `app/`,
+`specs/271`, `progress/` ni `feature_list.json` — sólo las dos menciones que lo citan **para
+declararlo revertido**.
+
+### RS1 *(la reserva, y es el único punto abierto)* — la ficha sigue afirmando la imposibilidad que la medida desmintió
+
+`feature_list.json`, `status_note` de la 271, **en la misma frase que se acaba de reescribir para
+B4**:
+
+> «Muerde por el RECHAZO, no por el vencido: **dos `vencido` a la vez es IMPOSIBLE (R17)**, porque el
+> primero ya bloquea.»
+
+Eso es exactamente lo que `47fbafe4` midió y desmintió. Y no es sólo una frase rancia: **incumple
+el R17 reescrito**, que ahora dice —literalmente— *«El sistema NO DEBE afirmar, en código ni en
+prosa, que ese estado sea imposible»*. La barrida de los diez sitios cubrió `lib/`, los specs, las
+bitácoras y los fixtures; **`feature_list.json` se quedó fuera**, que es el mismo hueco de B4 y en el
+mismo archivo.
+
+**Por qué importa y no es cosmética:** la nota usa la imposibilidad **como argumento** («muerde por
+el rechazo *porque* el otro caso no existe»), que es justo la forma en que esa creencia se propagó a
+cinco sitios la primera vez — uno de ellos citándola como precedente para **S9** (no poner tope a N).
+
+**Qué falta:** una frase. Sustituir esa cláusula por «muerde por el RECHAZO, que es el camino
+frecuente; dos `vencido` a la vez es raro pero **alcanzable** (medido el 2026-08-23)», o remitir al
+R17 reescrito. Y, ya que la barrida demostró que estos dos archivos son los que se olvidan,
+**valorar que la guardia de prosa cense también `feature_list.json` y `progress/current.md`** — que
+es lo que convierte «acordarse» en una pregunta al árbol.
+
+## Corrección a mi propio informe: **M6 era FALSO. Lo retiro.**
+
+Escribí que «nadie vigila `ESTADOS_REABRIBLES`» y que si alguien quitara `rechazado` ningún test se
+pondría rojo. **Es mentira, y el error fue mío:** grepeé el nombre de la constante en `tests/` y, al
+no encontrarlo, me quedé con los tests de servicio que la fila (falsa) del mapa citaba —que doblan el
+método—. No miré `tests/unit/repositories/cierres-admin-repository.test.ts`, donde el repositorio
+**real** afirma `expect(arg.where.estado).toEqual({ in: ["vencido", "rechazado"] })` **con la lista
+escrita a mano**. Quitar `rechazado` de la constante mata ese caso y otros dos del mismo bloque.
+
+Lo que **sí** era cierto de M6 —y sigue siéndolo como aviso— es que **la fila del mapa era falsa**:
+citaba unos tests que no cubren el requisito e ignoraba el que sí. Está corregida, y con la medida
+de la mutación escrita al lado del caso para que no vuelva a perderse. **R49 pasa a ✅.**
+
+## El hallazgo de R17 — mi juicio, que es lo que se me pidió
+
+### ¿La prosa nueva dice la verdad medida? **Sí, y es comprobable sin creerse el test**
+
+El argumento viejo se rompía en su paso 2 —«el corte que creó el `vencido` ya barrió sus órdenes en
+la misma transacción»—, y eso lo verifiqué **en el árbol, no en la bitácora**: el barrido lleva
+`OR: [{ fechaReparto: null }, { fechaReparto: { lte: diaCerrado } }]` desde la 246, así que una
+orden reservada para mañana **sobrevive al corte que bloquea**; su protección caduca sola; y la
+noche siguiente el mensajero vuelve a entrar por la rama (b). La vía de producción también existe:
+`CorreccionDiaRepartoService` (262) declara `ESTADOS_CON_DIA_DE_REPARTO_VIVO` **con `en_reparto`
+dentro**, o sea que bodega puede pasar a mañana una guía que el mensajero ya lleva encima.
+
+Y **lo introduce esta ficha**, como dice la prosa: antes, la exclusión por cierre abierto sacaba al
+bloqueado de la corrida siguiente. Que se diga así —en vez de «esto ya pasaba»— es lo correcto.
+
+El caso 4 del archivo de integración **lo ejecuté**: siembra la reserva, corre el corte del 22 y el
+del 23 con el repositorio y el servicio reales, y afirma **dos `vencido` vivos**, que el primero
+sigue intacto, que el mensajero **aparece en la lista evaluada** de la segunda noche y que la orden
+acaba barrida. Tiene además `afirmarCorpusSembrado`, que **revienta con el número que encontró** si
+el corpus no está: no puede reportar `passed` sin haber medido nada.
+
+### ¿Queda algún sitio afirmando la imposibilidad? **Uno: la ficha.** Es **RS1**
+
+Barrí el árbol. `lib/` (los tres comentarios), `specs/271` (R17 reescrito con su versión original
+conservada y su porqué; §5 y §6 del design; T2.5 y T3.3 de `tasks.md`), los fixtures, los tests de
+componentes y de textos, y `progress/impl_271.md` (el párrafo viejo **en pie y tachado por una nota
+inmediata**, que es la forma correcta de una bitácora): **todos corregidos**. Las dos menciones que
+quedan en `requirements.md` y en `impl_271.md` son **históricas y llevan su desmentido pegado**, una
+de ellas **antes** del párrafo que corrige, para que no se pueda leer la premisa sin leer que se
+cayó.
+
+El único sitio que la afirma **como verdad presente y sin corrección** es `feature_list.json`. Ver
+**RS1**.
+
+### ¿Es correcto no tocar comportamiento? **Sí, y lo verifiqué caso por caso, no de palabra**
+
+Recorrí lo que dos `vencido` reales tocan, buscando dónde se rompería algo:
+
+| Pieza | Con DOS `vencido` |
+|---|---|
+| La regla N/V | Cuenta estados, **no los discrimina**: `N=2, V=2` = fila 7. Bloqueado. Sin cambio |
+| La re-solicitud | `findCierreResolicitableMasViejo` + `transicionarASolicitado(id, estado)` mueve **uno, el más viejo**. Es el arreglo de M2, que se pidió aplicar **también** al gemelo del `vencido` «aunque fuera imposible»: ese cinturón es hoy la pieza que sujeta el caso. Sin él, aquí habría un escribe-y-reporta-fallo |
+| El aviso | Rama `v === n` («Envíalos a aprobación, empezando por el más antiguo…»): no mira el estado, cuenta. Vale igual para dos `vencido` |
+| La pantalla | `aReenviarPrimero` es el re-solicitable más viejo → CTA «Solicitar aprobación del cierre vencido». Correcto |
+| **Aprobar (M7)** | La liberación va acotada por `cierre_sin_gestion` **de ese cierre**: la orden que barrió el SEGUNDO `vencido` no se libera al aprobar el primero. **Justo el caso que sin el arreglo de M7 habría vaciado la mano del otro** |
+| El dinero | Cada cierre lleva su propio snapshot; el segundo nace money-neutral (0 gestiones) y no recalcula nada del primero |
+| La jornada | Cada uno deriva la suya; el segundo cae al fallback `created_at` CR − 1, coherente con el día de la orden reservada |
+| La cola del admin | `vencido` **sí** está en `ESTADOS_COLA_CIERRE_DIA`: los dos se ven, y `forzarSolicitudVencido` destraba por `id`, uno a uno |
+
+**No veo nada que se rompa**, y la alternativa —volver a excluir al bloqueado del corte— repondría
+el bug de producción (`79cb2c0f`) a cambio de evitar un estado que el sistema ya trata bien. El
+desenlace medido es además el que uno querría: esa orden **necesitaba** barrido y **necesitaba** un
+cierre al que ir. **Corregir la prosa y no el comportamiento es la decisión correcta.**
+
+Lo que sí dejo dicho, porque es la lección y no el caso: **R17 se afirmó en mayúsculas, se razonó en
+tres pasos “verificados contra el código”, se copió a cinco sitios y pasó mi propia revisión** —yo lo
+di por conforme leyendo los comentarios y comprobando que nadie hubiera colado código defensivo,
+que era la pregunta equivocada—. **Lo único que faltaba era ejecutarlo.** Que lo destapara el test
+que cerraba otro hueco (T10.3) no es suerte: es lo que pasa cuando se siembra de verdad.
+
+### La mutación que sobrevive: **me vale, y prefiero que esté dicha**
+
+En el test de integración del corte, romper la guarda «algo pasó» **no pone rojo nada**, porque el
+bloqueado sin nada suelto **no llega a entrar en el bucle**: las dos ramas de la selección vienen
+vacías para él. Es decir, la guarda no es lo que sostiene ese caso —lo sostiene el `WHERE` de la
+selección, que es una garantía **más fuerte**—, y su red vive en los cuatro casos de
+`cierre-dia-repository.test.ts`. Dejarlo escrito, con el número (133 archivos de integración en
+verde con la guarda rota), vale más que inventar un test para dejar el marcador a cero: **un
+superviviente explicado es información; un superviviente tapado es una mentira con formato de
+métrica.** Y de paso corrige el «Hecho cuando» de T3.3, que atribuía el mérito a la guarda.
+
+## Cómo queda el recuento de requisitos
+
+Cambios respecto de la tabla de arriba, todos verificados en esta vuelta:
+
+| R | Antes | Ahora | Por qué |
+|---|---|---|---|
+| **R38** | ❌ bloqueante | **✅** | Productor (contexto exhaustivo, jornada a mano) + emisor (los cuatro destinatarios) |
+| **R39** | ❌ bloqueante | **✅** | Las tres filas de bodega, el `warning`, la entidad, y el caso sin zona |
+| **R40** | ❌ bloqueante | **✅** | Productor con el 7.º argumento, entidad ≠ `aResolverPrimero`, orden lectura/escritura medido |
+| **R41** | ❌ bloqueante | **✅** | Zona destino en el productor + las cuatro filas contra Postgres en el emisor |
+| **R49** | ⚠️ *(no verificable)* | **✅** | **Error mío**: sí estaba cubierto, en el test del repositorio real. Ver la retractación de M6 |
+| **R24** | ⚠️ *(no verificable)* | **✅** | La segunda mitad —«no re-registra»— ya tiene test: la **segunda corrida real** del caso 3 del archivo nuevo |
+| **R47** | ⚠️ *(no verificable)* | **✅** | El notificador REAL del corte contra un repositorio que revienta: la corrida termina y el fallo queda registrado |
+| **R17** | ➖ conforme | **✅** | Reescrito tras medirlo, y **con test**: «dos `vencido` a la vez es ALCANZABLE» |
+| **R51** | ❌ bloqueante | **✅** *(con **RS1** al lado)* | La regla revertida ya no se afirma en ningún sitio; lo que queda vivo es la **otra** frase, la de R17 |
+| **R22 · R21 · R23** | ✅ *(con dobles)* | **✅ más fuerte** | Ahora sembrados contra Postgres, con testigo |
+
+**Recuento nuevo: 59 ✅ · 2 ⚠️ · 0 ❌ · 0 «no verificable leyendo».**
+
+Los dos ⚠️ que **no** se cerraron, y que ya eran menores en el informe original:
+
+- **R10** — sigue verificado por lectura (las doce superficies consultan el mismo predicado) y sin
+  guardia que impida a una superficie **nueva** re-derivar la regla. La fila del mapa ya lo dice
+  así, en vez de citar la guardia de pureza como si lo cubriera. **M3** sigue en pie.
+- **R50** — la prosa exigida está escrita y la leí; el test que la acompaña sigue afirmando sobre un
+  tercer archivo. La fila del mapa también lo dice ahora. La dirección peligrosa la cubre la guardia
+  de frases caducadas.
+
+Y de los menores del informe original: **M6 retirado por falso**; **M1** cerrado (14 filas del mapa
+corregidas, incluidas las tres que nombré); **M2, M3, M4, M5, M7, M8** siguen abiertos como estaban
+—ninguno bloquea— salvo que **M5 queda a medias cerrado**: la propiedad de R47 en el corte ya está
+medida con el notificador real; lo que no cubre ningún test es el `repoReal()` evaluado fuera del
+`try`, que es patrón heredado de la 146 y no de esta ficha.
+
+## Condición de cierre
+
+**Una sola**, y no exige otra ronda de revisión:
+
+> **RS1** — quitar de la `status_note` de la 271 en `feature_list.json` la afirmación «dos `vencido`
+> a la vez es IMPOSIBLE (R17)», que el R17 reescrito prohíbe por su nombre. Una frase.
+
+Lo demás que quedaría bien en el mismo diff, sin bloquear: extender la guardia de prosa a
+`feature_list.json` y `progress/current.md` (**M3** de esta vuelta), y la entrada de
+`progress/history.md`, que es cierre del leader al mergear.
+
+**Con RS1 corregida, esta ficha cumple `CHECKPOINTS.md` entero.** Y deja algo que vale más que la
+ficha: la demostración medida de que **un invariante razonado en tres pasos, escrito en mayúsculas y
+copiado a cinco sitios, puede ser falso hasta que alguien lo ejecuta** — incluido cuando ya pasó por
+una revisión, la mía.
