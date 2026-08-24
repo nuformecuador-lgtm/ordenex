@@ -356,7 +356,7 @@ el DTO, que es exactamente el mecanismo por el que se filtra un campo sensible (
 **A2 — Un `DescargaService` genérico server-side con un registro «tabla → consulta».**
 Descartada. Cada listado impone su acotamiento por rol dentro de SU servicio, y en órdenes
 ese acotamiento se escribe deliberadamente AL FINAL del `where` para pisar cualquier filtro
-inyectado (`OrdenService.ts:276-280`). Un servicio genérico tendría que reimplementar ese
+inyectado (`OrdenService.ts:273-280`). Un servicio genérico tendría que reimplementar ese
 acotamiento siete veces o parametrizarlo; la primera opción reabre la fuga que ese código
 cerró y la segunda es el mismo código con una capa de indirección encima. La 151 ya lo
 descartó (su A4) y aquí, con 7 servicios, el argumento es más fuerte, no menos.

@@ -383,32 +383,31 @@ re-ejecución contra producción **antes de desplegar**.
 
 ---
 
-## ⚠️ COLISIÓN DE IDS DETECTADA AL CERRAR — no la resuelvo yo
+## ⚠️ COLISIÓN DE IDS — detectada al cerrar el backend, RESUELTA por el leader
+
+> **Esta sección se reescribió el 2026-08-24.** La versión anterior quedó FALSA por culpa del
+> `sed` del propio renumerado: reemplazó `273`→`276` y `274`→`277` **también dentro del párrafo que
+> describía la colisión**, con lo que el texto acabó afirmando que `origin/dev` usaba 276 y 277 para
+> tarifas —que es justo lo contrario de lo ocurrido— y contradiciéndose a sí mismo. El reviewer lo
+> cazó y lo marcó bloqueante. Los números correctos son los de abajo.
 
 Al hacer el `git fetch` final (2026-08-24, después del gate), `origin/dev` había pasado de
-`e93c19e6` a **`821a6afe`**, y en ese avance **otra sesión registró los ids 276, 277 y 275 para
-features distintas**:
+`e93c19e6` a **`821a6afe`**, y en ese avance **otra sesión registró los ids 273, 274 y 275** para
+las fichas de tarifas, **con su 273 ya mergeada**:
 
-| id | en `origin/dev` (821a6afe) | en esta rama |
+| id | en `origin/dev` (821a6afe) | lo que esta sesión tenía registrado |
 | --- | --- | --- |
-| **276** | tarifas ligadas a la zona: modelo, borrado físico y catálogo de vehículos · `in_progress` | **el tope de intentos** · `in_progress` |
-| **277** | cobro por zona + tienda: cascada de resolución de tarifa · `pending` | «Por recoger» separa en tabs · `in_progress` |
-| **275** | configuración de tarifas · `pending` | — |
+| **273** | tarifas ligadas a la zona: modelo, borrado físico y catálogo de vehículos — **MERGEADA** | el tope de intentos |
+| **274** | cobro por zona + tienda: cascada de resolución de tarifa | «Por recoger» separa en tabs |
+| **275** | configuración de tarifas | — |
 
-Existe además la rama remota `origin/feature/276-tarifas-por-zona-catalogo-vehiculos` (el nombre de
-rama **no** choca con `feature/276-tope-de-intentos`; lo que choca son los **ids**). En `origin/dev`
-todavía **no** hay carpeta `specs/276-*`.
+**Resolución:** `dev` manda —precedente explícito de la propia 218, renumerada desde 216 por esto
+mismo— y se movieron las de esta sesión: **273 → 276** y **274 → 277**. En `origin/dev` los ids 276
+y 277 estaban libres, comprobado sobre ese mismo `821a6afe`.
 
-**Por qué no lo toco:** renumerar arrastra la carpeta del spec, el nombre de la rama, los nueve
-mensajes de commit y decenas de comentarios que citan «276» dentro del código y de los tests. Es una
-decisión del leader —y el precedente de este repo es explícito: la propia ficha 218 lleva escrito
-que la renumeraron «porque otra sesión tomó ese id en `dev` mientras esta ficha se escribía, y `dev`
-manda»—.
-
-**Lo que sí hay que saber para decidir:** el merge a `dev` va a dar conflicto en
-`feature_list.json` sí o sí, y resolverlo «a favor de los dos» dejaría **dos features distintas con
-el id 276**. La implementación de esta rama es coherente consigo misma; lo único que hay que
-reasignar es la etiqueta.
+El merge a `dev` seguirá dando conflicto en `feature_list.json`, pero **por divergencia normal de
+ramas, no por la colisión**: `dev` local no es ancestro de `origin/dev`. Resolverlo es quedarse con
+las entradas de `dev` y añadir la 276 y la 277.
 
 ---
 

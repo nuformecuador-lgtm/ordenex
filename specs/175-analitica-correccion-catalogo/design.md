@@ -150,11 +150,11 @@ censa el árbol (no imports) para que siga siendo verdad.
 | Archivo:línea | Qué afirma | Efecto de la 175 |
 | --- | --- | --- |
 | `tests/unit/analytics/tablero-catalogo-paneles.test.ts:43-44` | `incidentes` y `sin_gestionar` son `"declarada"` | **ROJO POR DISEÑO.** Se reexpresa: el caso debe seguir matando la mutación `filter(estadoProduccion === "producida")` **sin afirmar el valor** del campo (R21 de la 131 quiere independencia del campo, no un valor concreto). Q4 |
-| `tests/unit/analytics/metrics.test.ts:276` | `listarMetricas({estadoProduccion:"declarada"}).length > 0` | **ROJO POR DISEÑO si Q2 = sí** (el catálogo se quedaría sin ninguna `declarada`). Se reexpresa como partición + caso sintético (R4) |
+| `tests/unit/analytics/metrics.test.ts:273` | `listarMetricas({estadoProduccion:"declarada"}).length > 0` | **ROJO POR DISEÑO si Q2 = sí** (el catálogo se quedaría sin ninguna `declarada`). Se reexpresa como partición + caso sintético (R4) |
 | `tests/unit/analytics/metrics.test.ts:344-350` | Toda `descripcion` cita `gestion anulada|anulada_at` | **Restricción de redacción**: las descripciones reescritas de `ordenes_por_estado` y `sin_gestionar` deben seguir citándolo |
 | `tests/unit/analytics/definiciones-catalogo.guardia.test.ts:87-91` | El embudo enumera exactamente `ORDER_STATUS_SEED` | **Verde** (D4). Solo se corrige el título de `:60-62` («diecinueve» → veinte), Q7 |
 | `tests/unit/analytics/metrics.test.ts:61-65` | 12 claves exactas por métrica | **Verde**: los campos nuevos van dentro de `definicion` |
-| `tests/unit/analytics/metrics.test.ts:266-300` (R33) | Dominio cerrado del campo | **Verde** salvo `:276` |
+| `tests/unit/analytics/metrics.test.ts:266-300` (R33) | Dominio cerrado del campo | **Verde** salvo `:273` |
 | `tests/unit/analytics/metrics-dinero.guardia.test.ts:98,155` | Fixtures sintéticas | **Verde** |
 | `tests/unit/analytics/financiera-produccion.guardia.test.ts:45,95-98` | Declaradas del dominio financiero | **Verde** |
 | `tests/unit/analytics/analytics-daily-contrato.test.ts:77-140,191-215` | Deriva del catálogo las dimensiones y los términos de las razones contra las columnas reales | **Verde** (no cambian `granos`, `fuente` ni `razon`); además ya exige que `incidentes` exista como medida (`:202`) |

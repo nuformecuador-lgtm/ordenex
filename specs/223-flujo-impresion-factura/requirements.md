@@ -22,7 +22,7 @@ complejidad **medium**, `depends_on: [217]`.
 
 | # | Decisión | Cierra | Dónde vive ahora |
 | --- | --- | --- | --- |
-| **D1** | **NO se añade botón «Imprimir».** Se confirma la D8 de la 217: CSS puro y `Ctrl+P`. No hay que reexpresar `factura-contraste.guardia.test.ts:265-276`. | Q1 | **R27** |
+| **D1** | **NO se añade botón «Imprimir».** Se confirma la D8 de la 217: CSS puro y `Ctrl+P`. No hay que reexpresar `factura-contraste.guardia.test.ts:265-273`. | Q1 | **R27** |
 | **D2** | **`size: portrait` sin nombre de papel.** Se respeta lo que el usuario tenga configurado; forzar A4 o Carta provocaría reescalado. | Q2 | **R15**, `design.md §4.2` |
 | **D3** | **Márgenes de 12 mm**, con el razonamiento de `design.md §4.3`, y el número **en un solo sitio** para que cambiarlo mañana sea una línea. | Q3 | **R16** |
 | **D4** | **El límite de las pestañas se DECLARA.** Se imprime lo que está en el DOM; las pestañas no visitadas y las filas sin desplegar **no salen**, y eso va escrito como límite, no como olvido. La feature se queda en CSS. | Q4 | **R22** |
@@ -320,7 +320,7 @@ trabajo** (H8).
 
 **R27 — Sigue sin haber botón ni llamada a la API de impresión *(D1)*.** El sistema NO DEBE
 añadir un botón «Imprimir» ni `window.print()`. Los dos censos que hoy lo defienden
-(`factura-contraste.guardia.test.ts:265-276`) DEBEN seguir verdes **sin ser tocados**.
+(`factura-contraste.guardia.test.ts:265-273`) DEBEN seguir verdes **sin ser tocados**.
 
 ---
 

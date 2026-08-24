@@ -544,7 +544,7 @@ describe("Feature 132 (R1, R8) / 133 (R6) — `apiKey` sigue con notFound; los t
 
 /**
  * Feature 133 (T3.3) — el símbolo de moneda. R7 nombra explícitamente «ninguna cifra de
- * dinero»; un total puede pintarse formateado (`₡918 276,45`) y entonces ni la cifra
+ * dinero»; un total puede pintarse formateado (`₡918 273,45`) y entonces ni la cifra
  * cruda ni el entero aparecen, pero el símbolo sí. Se censa aparte.
  */
 const SIMBOLOS_MONEDA = ["₡", "$", "€", "CRC", "USD"];
@@ -579,7 +579,7 @@ describe("Feature 132 (R2) / 133 (R6, R7) — para un rol sin acceso no queda RA
     expect(cuerpo).not.toContain("financiera");
     expect(cuerpo).not.toContain(ETIQUETA_METRICA);
     // Las cifras, tanto crudas como con separador de miles: `918273.45` y
-    // `918 276,45` son el mismo dinero escrito de dos formas.
+    // `918 273,45` son el mismo dinero escrito de dos formas.
     for (const cifra of [CIFRA_BRUTA, CIFRA_NETA]) {
       const [entero, decimales] = cifra.split(".");
       expect(cuerpo).not.toContain(cifra);

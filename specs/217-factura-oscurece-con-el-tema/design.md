@@ -84,7 +84,7 @@ borde) toma el mismo token en su forma de borde.
 
 **(a) `text-foreground` y no `text-card-foreground`.** Los dos tokens valen **lo
 mismo** en los tres bloques: `#12233f` en claro (`globals.css:153,155`) y `#e6ecf8` en
-oscuro (`:213,215` y `:276,275`). La elección es de **consistencia**, no de contraste:
+oscuro (`:213,215` y `:273,275`). La elección es de **consistencia**, no de contraste:
 el archivo ya usa `text-foreground` para su realce en `:576`, `:882`, `:928`, y el
 propio comentario de cabecera lo recomendaba (`:127`). Lo que se mide es **el par
 real** (`foreground` sobre `card`), así que si algún día los dos tokens divergen, la

@@ -880,7 +880,7 @@ Todo lo que sigue se leyó en el árbol. Cinco piezas y una ausencia:
 
 | Pieza | Dónde | Qué dice hoy |
 | --- | --- | --- |
-| **El DTO** | `lib/types/orden-historial.ts:266-276` | Seis campos y ninguno opcional: `estatusOrigenValue: string \| null`, `estatusDestinoValue: **string**` (NO nullable), `origenTipo`, `actorNombre`, `motivo`, `createdAt`. **Es un DTO de transiciones y sólo de transiciones.** |
+| **El DTO** | `lib/types/orden-historial.ts:266-273` | Seis campos y ninguno opcional: `estatusOrigenValue: string \| null`, `estatusDestinoValue: **string**` (NO nullable), `origenTipo`, `actorNombre`, `motivo`, `createdAt`. **Es un DTO de transiciones y sólo de transiciones.** |
 | **Quién lo construye** | `OrdenHistorialRepository.toEntradaDTO:79-88`, alimentado por `findHistorialByOrden:230-237` | `findMany` sobre `orden_historial_estado` con `orderBy: { createdAt: "asc" }` y el `include` de etiquetas (`WITH_LABELS:42-48`). **Una sola fuente, una sola tabla.** |
 | **Quién lo sirve** | `OrdenHistorialService.obtenerHistorial:34-55` | Autoriza **primero** (`autorizar:86-110`), lee después, y suma `intentos` + `umbral`. El orden cronológico es responsabilidad **del servicio** (49/R26). |
 | **El borde** | `lib/actions/orden-historial.ts:44-56` (`buildService:31-37`) | Server Action; resuelve actor y arma el servicio con **dos** repos. |
