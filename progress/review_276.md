@@ -3,7 +3,9 @@
 > Rama `feature/276-tope-de-intentos` @ **`5e723daa`** · 21 commits sobre `origin/dev` (`821a6afe`),
 > 15 sobre `dev` local (`94c824f6`). Revisión del **2026-08-24**.
 >
-> **Veredicto ronda 1: RECHAZADO · 2 bloqueantes.** (ronda 2 al final del archivo) Los dos son la MISMA causa —el barrido `sed` de la
+> **VEREDICTO FINAL (ronda 3, commit `873d71d6`): OK — 0 bloqueantes.** Ver «RONDA 3» al final.
+>
+> **Veredicto ronda 1: RECHAZADO · 2 bloqueantes.** Los dos son la MISMA causa —el barrido `sed` de la
 > renumeración 273→276— y **ninguno está en la lógica de la ficha**. La implementación del tope la
 > he medido inyectando ocho defectos y los ocho se pusieron rojos. Lo que hay que revertir son 17
 > líneas en 13 archivos ajenos y reescribir una sección de la bitácora que hoy miente sobre
@@ -617,3 +619,240 @@ una a una y las no-citas son 21, ni una más.
 Con esos dos cerrados y el gate en verde, esta ficha pasa a **OK** por mi parte, con los 13 menores
 como deuda declarada y con lo de §6 (R37 y el número de la población congelada) como puerta de
 despliegue, no de merge.
+
+---
+---
+
+# RONDA 3 — 2026-08-24 · commit `873d71d6`
+
+> Las rondas 1 y 2 se conservan enteras arriba. Son el historial y no se reescriben.
+>
+> **VEREDICTO FINAL: OK — 0 bloqueantes.** Los dos residuales de la ronda 2 están cerrados y lo he
+> comprobado sobre el commit real, no sobre el mensaje. Queda deuda declarada (13 menores) y **dos
+> condiciones de DESPLIEGUE** escritas en §R3.5, que no bloquean el merge.
+
+## R3.0 · Mi gate sobre `873d71d6`
+
+```
+=== SHA: 873d71d6d63d415cd4633d7898435d74036fef82 ===
+DB_GENERATE_EXIT=0
+Test Files  1358 passed (1358)
+     Tests  18302 passed | 26 skipped (18328)
+INIT_EXIT=0
+```
+
+**Tercera corrida idéntica** (rondas 1, 2 y 3): mismos 1358 archivos, mismos 18.302 casos, mismos 26
+`skipped`. Coincide con la del coordinador. `INIT_EXIT=$?` dentro del log, sin `echo` de por medio y
+sin `tail`.
+
+---
+
+## R3.1 · Residual 1 — CERRADO
+
+`specs/133-analitica-recortes-por-rol/tasks.md` vuelve a decir lo que decía:
+
+```
+- [x] **T3.2** Reexpresar en `tests/components/AnaliticaPage.test.tsx` los bloques 129-R3 (160),
+      129-R6 (201), 132-R1/R8 (273), 132-R5 (362), 132-R9 (389) y 131-R26 (440)
+```
+
+`(273)` recuperado, en su sitio, junto a sus cinco vecinos de línea. Y la comprobación que vale más
+que leer la línea: **`git diff dev...HEAD` sobre los trece archivos ajenos no devuelve absolutamente
+nada.** Los trece son byte a byte los de `dev`. No es «parecen bien», es que no difieren.
+
+---
+
+## R3.2 · Residual 2 — CERRADO
+
+`progress/current.md:74-93` está reescrito, y lo he contrastado línea por línea contra lo que yo
+mismo medí en la ronda 2:
+
+| Lo que dice ahora | Lo que yo medí |
+| --- | --- |
+| «273 = tarifas ligadas a la zona (ya MERGEADA), 274 = cobro por zona + tienda, 275 = configuración de tarifas» | `origin/dev` @ `821a6afe`: exactamente eso ✔ |
+| «Los ids que esta sesión había registrado para el tope (273) y Por recoger (274) quedaron ocupados» | `dev` local @ `94c824f6`: 273 = el tope (`spec_ready`), 274 = Por recoger (`in_progress`) ✔ |
+| «Resuelto: 273 → 276 y 274 → 277 … en `821a6afe` los ids 276 y 277 estaban libres» | max id en `origin/dev` = 275 ✔ |
+| «El merge dará conflicto en `feature_list.json` **por divergencia normal de ramas, no por la colisión**» | `dev` local no es ancestro de `origin/dev` ✔ |
+
+El título pasa de «⚠️ Colisión de ids: `origin/dev` … ya usa 276/277/275» a «✅ Colisión de ids con
+`origin/dev` — RESUELTA renumerando a 276 y 277», y el párrafo lleva el aviso de por qué estuvo
+falso. **Es correcto y está completo.**
+
+Que la corrección quedara escrita **en las dos copias** —bitácora y `current.md`— importa más de lo
+que parece: `CLAUDE.md` § «Arranque de sesión» manda leer `current.md` en el paso 2, y ese es el
+texto sobre el que el leader va a decidir el merge.
+
+---
+
+## R3.3 · «Ningún tercero»: contrastado, y me cuadra
+
+El coordinador verificó por su cuenta comparando el estado vivo contra `8f4e1cca^` en todos los
+archivos que tocó el `sed`. Lo repetí con mi método, que es el de la ronda 2 pero apuntado al árbol
+de ahora en vez de al commit del renumerado: emparejar cada línea `-`/`+` del diff
+`8f4e1cca^..HEAD` restringido a los **100** archivos del barrido, localizar cada `273→276` y
+`274→277` **que siga vivo**, y clasificarlo por su contexto.
+
+```
+SUSTITUCIONES 273->276 / 274->277 QUE SIGUEN VIVAS EN EL ARBOL:  252
+```
+
+Las revisé todas por forma, y **las 252 son citas legítimas de la ficha**, de estas familias y de
+ninguna otra:
+
+- `FEATURE 276 (Tn, Rn)` / `Feature 276` / `la ficha 276` / `la 276` / `LA 276` — la inmensa mayoría;
+- `describe("276/Tn · …` y `describeSiHayBase("276/Tn …` — títulos de suite;
+- `/* 276: la puerta del tope; 0 intentos = no bloquea */` — las 25 de los tests de asignación;
+- `"id": 276` y `"spec_path": "specs/276-tope-de-intentos"` en `feature_list.json`;
+- `feature/276-tope-de-intentos`, `progress/impl_276.md`;
+- `#68 (276)`, `+1 (276)`, `+1: 276`, `(276): +rechazo_tope_intentos`, `(276): +#33` — atribuciones de
+  quién suma qué en los inventarios;
+- `const SUFIJO = \`276-${Date.now()…}\`` — prefijo de datos de prueba;
+- las nueve de `current.md` que son la ficha hablando de sí misma.
+
+**Cero números de línea. Cero conteos. Cero importes.** Las tres familias que constituían el daño han
+desaparecido del árbol.
+
+**Y digo el límite de mi propio método, porque lo tiene:** de 305 sustituciones pasamos a 252, y esa
+resta no son solo las 21 revertidas. Unas 32 se «pierden» porque el emparejamiento línea a línea deja
+de casar cuando un commit posterior reescribió esa línea entera —es lo que pasó con las secciones
+reescritas de `impl_276.md` y `current.md`—. O sea: la clasificación sola no puede certificar esos
+32. Lo que sí lo certifica, y es más fuerte que cualquier clasificación, es lo de §R3.1: **los trece
+archivos ajenos son byte a byte idénticos a `dev`**, y los dos párrafos reescritos los he leído
+enteros y contrastado contra mis propias medidas (§R3.2).
+
+**Conclusión: la verificación del coordinador me cuadra. No hay un tercero.** Las 21 no-citas están
+las 21 cerradas, y verifiqué otra vez que los números derivados siguen intactos —`aristasFlujo: 63`,
+`paresUnicos: 60`, `n: "68"`, `62 -> 63`, `59 -> 60`, y `CIFRA_BRUTA = "918273.45"` con su comentario
+`₡918 273,45` volviendo a decir lo mismo que la constante—.
+
+---
+
+## R3.4 · La auditoría del tope: intacta, y esta vez medida otra vez
+
+Se me pidió confirmar que los commits de arreglo no tocaron código sin querer. Lo comprobé de las dos
+formas que se pueden comprobar:
+
+**(1) Por el diff, que es una garantía a nivel de byte.** Sobre los tres commits posteriores a la
+implementación (`87b78270`, la revisión `d7b81f53` y `873d71d6`):
+
+```
+git diff --stat 5e723daa..HEAD -- lib/ app/ db/ specs/276-tope-de-intentos/
+   -> VACIO
+```
+
+Ni una línea de `lib/`, ni de `app/`, ni de `db/`, ni del spec de la ficha. Los únicos archivos bajo
+`tests/` que aparecen en todo el rango son `tests/components/AnaliticaPage.test.tsx` y
+`tests/unit/guards/ancla-de-carga.guardia.test.ts` — los dos **ajenos** a la 276, los dos
+restauraciones de comentario, y los dos byte a byte idénticos a `dev`. **No tocaste nada del código.**
+
+**(2) Por medida, porque un diff vacío es un argumento y yo prefiero un rojo.** Volví a inyectar
+sobre el árbol de `873d71d6` el defecto decisivo —quitar la sonda de visita real del `select` de
+`findOrdenesLiberables`—:
+
+```
+Test Files  1 failed | 1 passed (2)
+     Tests  2 failed | 13 passed (15)
+```
+
+**Idéntico a la ronda 1**: 2 rojos en `liberacion-reprogramada-cierre-real` (Postgres) y 13 verdes en
+la suite de dobles. Revertido, árbol limpio.
+
+Por tanto: **las ocho mutaciones de la ronda 1 y sus ocho rojos siguen valiendo enteros**, igual que
+la trazabilidad R1–R38 abierta test por test, los 30 casos contra Postgres, los cuatro composition
+roots que pasan la dependencia, el `cierre_id NULL`, el mensajero que el `updateMany` conserva y la
+UI que no compara números. **El tope está bien cerrado.**
+
+---
+
+## R3.5 · ⚠️ CONDICIONES DE DESPLIEGUE — no bloquean el merge, bloquean `prod`
+
+Las dos se escriben aquí porque es donde se van a buscar el día de la release, y ninguna de las dos
+la puede cerrar el merge.
+
+### D1 · R37 no se ha vuelto a ejecutar contra producción
+
+El SQL de solo lectura existe, corre y devuelve la forma esperada (`progress/impl_276.md` §T0,
+consulta **(A)**). La única ejecución contra producción que vale es la del spec —`requirements.md`
+§«MEDICIÓN DE R37, EJECUTADA», 2026-08-24, firmada—, y **esa foto caduca**: cualquier cierre que la
+bodega apruebe entre esa medida y el despliegue puede subir un contador y crear una orden en el
+umbral.
+
+Ni el implementer ni yo hemos podido re-medirla: ninguno de los dos tiene el MCP de Supabase en su
+juego de herramientas (en mi caso, la llamada devuelve «No such tool available»).
+
+**Qué hacer, y cuándo:** ejecutar la consulta (A) **inmediatamente antes** de desplegar. Si aparece
+**cualquier** orden viva en el umbral fuera de `devuelta` —en `reprogramada`, `en_bodega_central`,
+`en_bodega_satelite`, `por_recoger` o `en_reparto`—, **se para y se lleva al humano (Q6)**: la
+decisión «sin backfill» se tomó sobre una foto de UNA orden, y R18 dejaría a esas otras
+**inasignables** sin que nadie lo haya decidido.
+
+### D2 · El segundo número de T0 nunca se ha medido: cuántas `reprogramada` congela T6 el primer día
+
+`tasks.md` §T0 pedía **dos** números «en la misma corrida». El segundo —consulta **(B)**: órdenes en
+`reprogramada` cuya gestión vigente nace de visita real y cuyo cierre **no** está aprobado— **no se ha
+medido nunca contra producción**. Lo que hay en la bitácora es su ejecución contra la base local, que
+devolvió 0 y que el propio implementer declara que «no dice nada de producción». Tiene razón en no
+inventárselo; lo que falta es medirlo.
+
+**Por qué importa y no es un trámite:** ese número **es** el tamaño de la población que R12/T6
+congela el primer día. La ficha acepta por escrito el riesgo —«el daño pasa de dinero mal cobrado a
+mercadería parada»— pero lo acepta **sin saber sobre cuántos paquetes**. Si son dos, es una nota al
+pie; si son cuarenta, es una conversación con el humano antes de desplegar, no después. Y nada avisa
+hoy de una orden congelada: la vigilancia continua sigue siendo la ficha M3 (§7bis de la 215).
+
+Las dos consultas están escritas y listas para pegar en `progress/impl_276.md` §T0. Son de **solo
+lectura**.
+
+---
+
+## R3.6 · Deuda que sigue abierta (13 menores de la ronda 1, ninguno tocado)
+
+Comprobados uno a uno sobre `873d71d6`: **los trece siguen igual**. Ninguno bloquea, pero tres de
+ellos son criterios de `CHECKPOINTS.md` y por tanto **la ficha no puede marcarse `done` hasta que se
+cierren**:
+
+- **`specs/276-tope-de-intentos/tasks.md` sigue con cero `[x]`** (checkpoint explícito).
+- **`progress/current.md` sigue diciendo «backend hecho y verde, falta frontend»** y el `status_note`
+  de la 276 también, además de citar `progress/impl_273.md`, que no existe. El frontend está completo
+  desde `5e723daa`. (Ojo: el párrafo de la colisión de ese mismo archivo **sí** se corrigió; lo que
+  queda es la línea de estado, que es otra cosa.)
+- **`progress/history.md` sigue sin entrada de la 276** (checkpoint explícito).
+
+Y los otros diez, tal cual quedaron descritos en §4 de la ronda 1, de los que destaco los dos que un
+humano querría no perder de vista:
+
+- **La excepción de R31 vive solo en un comentario de test.** `incidente -> por_recoger` es una sexta
+  vía hacia la circulación que no pasa por la puerta del tope. Es defendible —es una reversión, misma
+  familia que `deshacer_asignacion`— pero R31 está redactado en absoluto y el design dice que las vías
+  son cinco. **Debe subir al spec.**
+- **El agujero de `quitarComentarios`** (§5 de la ronda 1): 131 archivos, 3.847 líneas de código
+  invisibles para las guardias, 159 suites leyendo por ahí. Preexiste a esta ficha, que fue quien lo
+  cazó, y **no hay ficha que lo recoja**. Debería haberla, con su propio gate completo.
+
+---
+
+## R3.7 · VEREDICTO FINAL
+
+# ✅ OK — 0 bloqueantes.
+
+Los dos bloqueantes de la ronda 1 y los dos residuales de la ronda 2 están cerrados, comprobados
+sobre los commits reales y no sobre sus mensajes: los trece archivos ajenos son byte a byte los de
+`dev`, las dos copias del párrafo falso están reescritas con los números que yo mismo medí, y las 252
+sustituciones que siguen vivas en el árbol son citas legítimas sin una sola excepción.
+
+**Ninguno de los tres commits de arreglo tocó una línea de `lib/`, `app/`, `db/` ni del spec de la
+ficha**, y lo confirmé además volviendo a inyectar la mutación decisiva sobre el árbol de ahora: los
+mismos 2 rojos en el test de Postgres y los mismos 13 verdes en los dobles que en la ronda 1.
+
+Sobre lo que de verdad se estaba jugando aquí: esta ficha **invierte la asimetría que la 215/D14
+había elegido a propósito** —hasta ahora un error de conteo retrasaba el cobro; desde aquí cobra de
+más—. Eso obligaba a exigir medida en vez de argumento, y la medida está: ocho defectos inyectados y
+ocho rojos, el `select` que es la raíz cubierto por el único test que puede cubrirlo, el
+`cierre_id NULL` que decide de qué cierre sale el dinero con test que muere si se cambia, la
+neutralidad en dinero probada con un caso emparejado y dos contrapuntos, y la 218 absorbida en código
+y no solo declarada. **El tope está bien cerrado.**
+
+Queda, y no es negociable: **§R3.5 antes de `prod`** —re-ejecutar R37 y medir por primera vez cuántas
+órdenes congela T6—, y los tres checkpoints de bookkeeping de §R3.6 antes de marcar la ficha `done`.
+
+*Gate final: `873d71d6` · `INIT_EXIT=0` · 1358 archivos · 18.302 pasados · 26 skipped.*
