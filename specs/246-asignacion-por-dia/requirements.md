@@ -12,6 +12,23 @@
 > una asignación tardía de la bodega **no es ruido: le corta el trabajo del día siguiente a quien no
 > hizo nada mal**. Esta ficha es lo que impide que la regla de la 241 castigue a quien no debe.
 >
+> ---
+>
+> ⚠️ **NOTA DE CADUCIDAD — 2026-08-23 (feature 271).** El párrafo de arriba describe la regla de la
+> **241** y **se queda corto desde hoy**: la ficha **271** la revirtió en parte. Un `vencido` sigue
+> bloqueando para gestionar y cobrar, pero **ahora bloquea también para RECIBIR TRABAJO NUEVO**
+> —reparto central, reparto satélite **y recolección en tienda**—, y además **acumular dos cierres
+> sin aprobar bloquea aunque ninguno sea `vencido`**. La regla vigente es: LIBRE si `N ≤ 1` y
+> `V = 0`; BLOQUEADO en cualquier otro caso. **No se reescribe nada de este spec**: es la foto de su
+> momento. Lo que dice de la 241 era cierto el 2026-08-20. Regla vigente en
+> `specs/271-segundo-cierre-y-bloqueo/requirements.md`.
+>
+> **Y en la otra dirección, lo que esta ficha decidió sigue vivo y ahora pesa más:** proteger del
+> corte la orden reservada para mañana (**R11**) evita un `vencido` cuyo castigo hoy es mayor que
+> cuando se firmó. Ver también, medido el 2026-08-23,
+> `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts` → «⚠️ R17 · contraejemplo»:
+> esa misma reserva es lo que hace **alcanzable** un estado que la 271 declara imposible.
+>
 > **Alcance del producto: HOY o MAÑANA, no una fecha futura cualquiera.** Una fecha arbitraria es
 > planificación de ruta y es otra feature. Ver **D2**: el alcance del producto no cambia, pero el
 > diseño recomienda que lo **almacenado** sea una fecha absoluta y no una marca de «para mañana»,

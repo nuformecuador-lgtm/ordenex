@@ -17,6 +17,10 @@ import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { FiltroAlcanceTablero } from "@/lib/types/alcance-tablero";
 // Feature 236 (T2.2, R5): el grupo de novedad viaja en la firma de los dos metodos del listado.
 import type { GrupoNovedad } from "@/lib/types/novedad-grupo";
+// Feature 271 — el conteo N/V y el detalle del bloqueo viven en un modulo PURO
+// (`lib/utils/bloqueo-cierre.ts`), no en este puerto: los importan a la vez la capa de datos y el
+// formateador de textos que la UI consume, y este puerto arrastra `@prisma/client`.
+import type { BloqueoDetalle, ConteoCierresAbiertos } from "@/lib/utils/bloqueo-cierre";
 
 // Datos listos para persistir una orden. `estatusId` y `tiendaId` ya resueltos
 // por el servicio (default de estatus, alcance de tienda). `numGuia` lo asigna
@@ -667,6 +671,13 @@ export interface BodegaBloqueoResult {
   cierresAbiertos?: number;
   totalMensajeros?: number;
   mensajerosConCierreIds?: string[];
+  /**
+   * Feature 271 (R32/R34) — los mensajeros de la zona que la REGLA N/V declara BLOQUEADOS. Es un
+   * subconjunto de `mensajerosConCierreIds` y NO lo mismo: un mensajero con UN solo `solicitado`
+   * esta en la lista informativa y NO en esta. El selector deshabilita EXACTAMENTE a estos, que
+   * son los que el servidor va a rechazar.
+   */
+  mensajerosBloqueadosIds?: string[];
 }
 
 // Feature 87 (T2, design §2.1) — fila de una orden en `devuelta` para la lista de NOVEDADES.
@@ -1518,39 +1529,67 @@ export interface IOrdenRepository {
     ctx: { actorUsuarioId: string; motivo: string },
   ): Promise<CorreccionDiaAplicada[]>;
 
-  // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17/R23) ---
+  // --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO (R1-R12) ---
 
   /**
-   * R12/R16 + feature 241 (regla firmada 2026-08-20): de `ids`, los mensajeros BLOQUEADOS
-   * PARA GESTIONAR Y COBRAR = tienen al menos un `cierre_dia` en `vencido` o `rechazado`.
+   * FEATURE 271 (R1) — de `ids`, cuantos cierres ABIERTOS tiene cada mensajero (N) y cuantos de
+   * esos son RE-SOLICITABLES (V). UNA sola consulta (`groupBy`) para el lote entero, contra el
+   * indice `(mensajero_id, estado)`.
    *
-   * `solicitado` NO bloquea (es espera del admin, no del mensajero) y `aprobado` tampoco
-   * (es terminal). Y el bloqueo es SOLO de gestion: RECIBIR ASIGNACIONES no se bloquea
-   * nunca, por lo que ninguna superficie de asignacion debe pedir este metodo en su
-   * `Pick<IOrdenRepository, ...>`. El porque completo, en `OrdenRepository`.
+   * Un mensajero SIN cierres abiertos NO aparece en el `Map`: el llamador lo lee como
+   * `SIN_CIERRES_ABIERTOS` (`{ n: 0, v: 0 }`), que es LIBRE. Vacio si `ids` esta vacio.
    *
-   * Usa el indice (mensajero_id, estado). Vacio si `ids` esta vacio.
+   * Es la TRANSFORMACION del antiguo `findMensajerosConCierreAbierto` (privado, `Set<string>`), no
+   * un metodo nuevo a su lado: dos formas de preguntar lo mismo es como el aviso de la UI y el
+   * servidor acabaron diciendo cosas distintas el 2026-08-18.
    */
-  findMensajerosBloqueadosParaGestion(ids: string[]): Promise<Set<string>>;
+  contarCierresAbiertosPorMensajero(ids: string[]): Promise<Map<string, ConteoCierresAbiertos>>;
   /**
-   * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado para gestionar: mismo
-   * criterio que `findMensajerosBloqueadosParaGestion`, agregado por zona. Una zona sin
-   * mensajeros nunca aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot
+   * FEATURE 271 (R3/R10) — de `ids`, los mensajeros BLOQUEADOS por la regla N/V:
+   * `N >= 2` **o** `V >= 1`. Renombrado de `findMensajerosBloqueadosPorCierres`.
+   *
+   * ⚠️ EL ALCANCE CAMBIO EL 2026-08-23 y por eso cambio el nombre. Ya no bloquea «solo gestionar»:
+   * bloquea gestionar, cobrar Y RECIBIR TRABAJO NUEVO —reparto Y recoleccion, sin excepcion—. Las
+   * superficies de asignacion SI deben pedirlo en su `Pick<IOrdenRepository, ...>`; que estuviera
+   * fuera era el mecanismo de la asimetria de la 241, que esta ficha revierte. Lo que SOBREVIVE de
+   * aquella regla: un `solicitado` a secas (N=1, V=0) NO bloquea.
+   *
+   * Vacio si `ids` esta vacio.
+   */
+  findMensajerosBloqueadosPorCierres(ids: string[]): Promise<Set<string>>;
+  /**
+   * FEATURE 271 (R11/R43/R57-R61) — el DETALLE del bloqueo de UN mensajero: N, V y CUAL cierre toca
+   * resolver primero (el MAS VIEJO por `solicitado_at` ASC con desempate estable por `id` ASC),
+   * con la fecha de su JORNADA derivada —no la de su creacion, que en un `vencido` va un dia por
+   * delante—. Alimenta el aviso, el motivo del `conflict` y la pantalla con UNA sola forma.
+   *
+   * ⚠️ TRAE **DOS** CIERRES (R18, 2026-08-23): ademas del abierto mas viejo (`aResolverPrimero`,
+   * el orden de la cola) trae el RE-SOLICITABLE mas viejo (`aReenviarPrimero`, lo que EL puede
+   * tocar). En el caso 6 —`solicitado` viejo + `vencido` nuevo, `N=2 V=1`— NO son el mismo, y de
+   * solo el primero se deduce «espera a la administracion» cuando `solicitarCierre` si le deja
+   * reenviar el segundo.
+   */
+  findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle>;
+  /**
+   * Zonas (central y satelite) con AL MENOS 1 mensajero bloqueado: mismo criterio que
+   * `findMensajerosBloqueadosPorCierres`, agregado por zona. Una zona sin mensajeros nunca
+   * aparece. La pertenencia se lee de `usuario.zonaId`, no del snapshot
    * `cierre_dia.destino_zona_id`.
    *
    * ⚠️ Sin consumidor de produccion desde el 2026-08-18 (feature 241 §2.6).
    */
   findZonasConMensajeroBloqueado(): Promise<Set<string>>;
   /**
-   * R17 (regla estricta F1.4-Q4) + feature 241: la bodega satelite de `zonaId` esta
+   * R17 (regla estricta F1.4-Q4) + feature 241 -> 271: la bodega satelite de `zonaId` esta
    * BLOQUEADA si tiene un `cierre_bodega` propio `zona_id=zonaId`, `estado='solicitado'`
    * —su cierre hacia la central, causa (ii), mismo criterio que la guardia de unicidad de
-   * la feature 40—. La causa (i) («algun mensajero suyo tiene un cierre abierto») NO
-   * bloquea: congelaba la bodega entera por una persona y recibir ordenes no se bloquea.
+   * la feature 40—. La causa (i) («algun mensajero suyo tiene un cierre abierto») SIGUE SIN
+   * bloquear (271/R34): esta ficha bloquea al MENSAJERO, no a su bodega entera.
    *
    * Los flags viajan igual para que el borde distinga el motivo: `porCierreBodega` es el
-   * veto y `porMensajeros` (+ `cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`,
-   * los TRES estados abiertos) es un AVISO informativo.
+   * veto; `porMensajeros` (+ `cierresAbiertos`/`totalMensajeros`/`mensajerosConCierreIds`,
+   * los TRES estados abiertos) es un AVISO informativo; y `mensajerosBloqueadosIds` es la
+   * lista con la REGLA N/V, la que el selector debe deshabilitar (271/R32).
    */
   existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult>;
 

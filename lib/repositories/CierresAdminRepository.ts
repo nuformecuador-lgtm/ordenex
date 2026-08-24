@@ -120,7 +120,9 @@ type CierresAdminPrismaClient = Pick<
   | "gestionOrden"
   | "cierreDetail"
   // Feature 264 (B4): SOLO LECTURA. La escritura del vinculo vive en la tx del corte
-  // (`CierreDiaRepository.crearCierre`); aqui unicamente se lee para pintar el detalle.
+  // (`CierreDiaRepository.crearCierre`); aqui se lee para pintar el detalle y —desde la FEATURE 271
+  // (T5.1, R35)— para ACOTAR A ESTE CIERRE la liberacion de `sin_gestionar` al aprobar. Sigue
+  // siendo lectura: la fila del vinculo no se toca ni se borra al aprobar.
   | "cierreSinGestion"
   | "zona"
   | "usuario"
@@ -1404,7 +1406,9 @@ export class CierresAdminRepository implements ICierresAdminRepository {
         if (liberacionSinGestionar) {
           const cierre = await tx.cierreDia.findUnique({
             where: { id: cierreId },
-            select: { mensajeroId: true },
+            // FEATURE 271 (T5.2): + la bandera de la 264. Decide si este cierre SABE que ordenes
+            // barrio o si su lista es irrecuperable (ver mas abajo).
+            select: { mensajeroId: true, sinGestionRegistrado: true },
           });
           if (cierre !== null) {
             const {
@@ -1413,10 +1417,46 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               enBodegaSateliteEstatusId,
               centralZonaId,
             } = liberacionSinGestionar;
-            // R16/R19: ordenes `sin_gestionar` del mensajero (guarda por estatus + propiedad).
+            // ─── FEATURE 271 (T5.1, R35/R37) — LA LIBERACION SE ACOTA A **ESTE** CIERRE ──────────
+            //
+            // ⚠️ AQUI VIVIA EL FALLO MUDO **M7**. El `where` era `{ mensajeroAsignadoId, estatusId:
+            // sin_gestionar }` — por MENSAJERO, no por CIERRE—. Con el invariante 109/R30 vivo (un
+            // solo cierre abierto) daba lo mismo: todas las `sin_gestionar` del mensajero eran de
+            // ese cierre. La ficha 271 DEROGA ese invariante (R9), y desde entonces aprobar el 1.º
+            // VACIA TAMBIEN LA MANO DEL 2.º: sus ordenes vuelven a bodega, pierden mensajero y se
+            // marcan prioritarias, mientras su cierre sigue abierto y ya no tiene nada que liberar.
+            // Nada se pone rojo: el `updateMany` reporta filas movidas y todas sus guardas se
+            // cumplen.
+            //
+            // LA FUENTE CORRECTA YA EXISTE: `cierre_sin_gestion` (feature 264) guarda, POR CIERRE,
+            // que ordenes barrio. Se AÑADE `id: { in: ... }` y se CONSERVAN todas las guardas
+            // actuales (`estatusId = sin_gestionar`, `deletedAt: null`, el `updateMany` guardado y
+            // el choke point del historial). `mensajeroAsignadoId` se CONSERVA tambien: ahi deja de
+            // ser el criterio de SELECCION y pasa a ser una guarda de PROPIEDAD.
+            //
+            // ⚠️ EL CASO DE LOS CIERRES VIEJOS, QUE ES EL QUE SE OLVIDA. `sin_gestion_registrado`
+            // marca con `false` los cierres ANTERIORES al registro de la 264, cuya lista es
+            // IRRECUPERABLE (la aprobacion ya borro el unico rastro). La migracion de la 264 puso
+            // `false` exactamente a los que NO estaban en los tres estados abiertos, asi que todo
+            // cierre aprobable hoy lo tiene en `true`. Aun asi la bandera se comprueba: con `false`
+            // se CONSERVA el comportamiento de siempre (por mensajero) en vez de liberar CERO
+            // ordenes en silencio. Un `[]` implicito ahi seria un fallo mudo NUEVO, y esta ficha
+            // existe para cerrar tres, no para abrir el cuarto.
+            const barridasDeEsteCierre = cierre.sinGestionRegistrado
+              ? (
+                  await tx.cierreSinGestion.findMany({
+                    where: { cierreId },
+                    select: { ordenId: true },
+                  })
+                ).map((f) => f.ordenId)
+              : null; // `null` = lista irrecuperable -> se libera por mensajero, como antes
+            // R16/R19: ordenes `sin_gestionar` de ESTE cierre (guarda por estatus + propiedad).
             const ordenes = await tx.orden.findMany({
               where: {
-                mensajeroAsignadoId: cierre.mensajeroId,
+                // R35: el acotado. `undefined` cuando la lista es irrecuperable, y entonces Prisma
+                // omite la condicion — que es EXACTAMENTE el comportamiento anterior.
+                ...(barridasDeEsteCierre === null ? {} : { id: { in: barridasDeEsteCierre } }),
+                mensajeroAsignadoId: cierre.mensajeroId, // se CONSERVA: propiedad, no seleccion
                 estatusId: sinGestionarEstatusId,
                 deletedAt: null,
               },

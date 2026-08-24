@@ -17,6 +17,8 @@ import { conPagos } from "@/tests/fixtures/cierre-pagos";
 // Feature 240 (T4.2): el predicado REAL, para derivar `desdeAyudaTienda` desde la FAMILIA en vez
 // de escribir el booleano a mano. Es lo que ata la guardia del service con la lista de familias.
 import { esGestionDeLaTienda } from "@/lib/utils/gestion-de-la-tienda-flag";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido, bloqueoPorAcumular } from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 37 — tests unit del CierreDiaService (mocks de repos + dobles de
 // ISignedUrlProvider/findCentralZonaId, sin DB/red). Cubre R1,R2,R3,R4,R5,R6,R7,R8,
@@ -80,13 +82,16 @@ function fakeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     findGestionesPendientes: vi.fn(async () => [] as CierreGestionPendienteRow[]),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
-    existeCierreSolicitado: vi.fn(async () => false),
-    // Feature 111: por defecto NO hay vencido -> `solicitarCierre` toma el flujo de creación (37).
-    existeCierreVencido: vi.fn(async () => false),
-    transicionarVencidoASolicitado: vi.fn(async () => true),
-    // Feature 109: por defecto NO hay rechazado (mismo criterio que el vencido).
-    existeCierreRechazado: vi.fn(async () => false),
-    transicionarRechazadoASolicitado: vi.fn(async () => true),
+    // FEATURE 271 (R18): por defecto NO hay nada re-solicitable -> `solicitarCierre` toma el flujo
+    // de creación (37). La elección es por EDAD y no por estado, así que es UN método, no cuatro.
+    findCierreResolicitableMasViejo: vi.fn(async () => null),
+    transicionarASolicitado: vi.fn(async () => true),
+    // FEATURE 271 (R56, cierra M9): el aviso se compone con el id del cierre que se acaba de tocar.
+    findCierreParaAviso: vi.fn(async (cierreId: string) => ({
+      id: cierreId,
+      destinoZonaId: "z-mensajero",
+      mensajeroNombre: "Ana",
+    })),
     crearCierre: vi.fn(async () => "c1"),
     findCierresByMensajero: vi.fn(async () => []),
     // Detalle de un cierre pasado: por defecto NINGUNO es del actor (-> no_encontrada);
@@ -139,8 +144,11 @@ function newService(opts: {
   signedUrls?: ISignedUrlProvider;
   // Feature 67: id de `en_reparto` en el catalogo (null = seed pendiente -> validation_error).
   estatusEnRepartoId?: string | null;
-  // Feature 111/R5: ids de mensajeros bloqueados que devuelve `findMensajerosBloqueadosParaGestion`.
+  // FEATURE 271: el detalle del bloqueo que devuelve `findBloqueoDetalle`. Un mensajero en
+  // `bloqueados` se modela con el caso 5 de la tabla de verdad (un `vencido`: N=1, V=1).
   bloqueados?: string[];
+  /** FEATURE 271 (R15): el caso 4 de la tabla de verdad - dos cierres `solicitado` (N=2, V=0). */
+  bloqueadoPorAcumular?: boolean;
 } = {}) {
   const repo = opts.repo ?? fakeRepo();
   const zonaRepo = {
@@ -153,15 +161,18 @@ function newService(opts: {
     findEstatusIdByValue: vi.fn(async () =>
       opts.estatusEnRepartoId === undefined ? "s-reparto" : opts.estatusEnRepartoId,
     ),
-    // Feature 111/R5: predicado de bloqueo (default = NO bloqueado). Los tests de bloqueo lo
-    // sobreescriben (Set con el mensajero) via `bloqueados`.
-    findMensajerosBloqueadosParaGestion: vi.fn(
-      async (): Promise<Set<string>> =>
-        opts.bloqueados ? new Set(opts.bloqueados) : new Set<string>(),
+    // FEATURE 271: detalle del bloqueo (default = NO bloqueado). Los tests de bloqueo lo
+    // sobreescriben via `bloqueados`.
+    findBloqueoDetalle: vi.fn(async () =>
+      opts.bloqueadoPorAcumular
+        ? bloqueoPorAcumular()
+        : opts.bloqueados && opts.bloqueados.length > 0
+          ? bloqueoConVencido()
+          : SIN_BLOQUEO,
     ),
   } as unknown as Pick<
     IOrdenRepository,
-    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+    "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findBloqueoDetalle"
   >;
   const tarifa = opts.tarifa === undefined ? TARIFA_DEFECTO : opts.tarifa;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
@@ -483,21 +494,43 @@ describe("solicitarCierre — precondiciones (R1/R10/R11/R12)", () => {
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 
-  it("R12: ya existe un cierre solicitado -> conflict, no crea", async () => {
+  // FEATURE 271 (R13) - ESTE CASO SE DIO LA VUELTA, Y ES EL CORAZON DE LA FICHA. Decia «R12: ya
+  // existe un cierre solicitado -> conflict, no crea», que es el invariante 109/R30 DEROGADO por
+  // R9. Un mensajero LIBRE (N=1, V=0) con gestiones sin vincular DEBE poder crear el segundo
+  // cierre: es el caso del cierre 79cb2c0f medido en produccion, donde el dinero cobrado el dia
+  // siguiente se quedaba sin cierre al que ir.
+  it("271/R13: con un cierre `solicitado` (N=1, V=0) el mensajero SI crea el segundo", async () => {
     const repo = fakeRepo({
       contarOrdenesPendientesGestion: vi.fn(async () => 0),
-      existeCierreSolicitado: vi.fn(async () => true),
+      findGestionesPendientes: vi.fn(async () => [pendiente()]),
     });
-    const { service } = newService({ repo });
+    // LIBRE: `findBloqueoDetalle` devuelve `SIN_BLOQUEO` por defecto, que es lo que produce la
+    // regla con N=1 y V=0.
+    const { service } = newService({ repo, centralZonaId: ZONA_CENTRAL });
+    const r = await service.solicitarCierre(MENSAJERO);
+    expect(r).toMatchObject({ status: "ok", via: "creado" });
+    expect(repo.crearCierre).toHaveBeenCalledTimes(1);
+  });
+
+  it("271/R15: BLOQUEADO por acumular (N=2, V=0) -> conflict con motivo que CUENTA, y no crea", async () => {
+    const repo = fakeRepo({
+      contarOrdenesPendientesGestion: vi.fn(async () => 0),
+      findGestionesPendientes: vi.fn(async () => [pendiente()]),
+    });
+    const { service } = newService({ repo, bloqueadoPorAcumular: true });
     const r = await service.solicitarCierre(MENSAJERO);
     expect(r).toMatchObject({ status: "conflict" });
+    // R15/R43: el motivo dice CUANTOS arrastra y CUAL toca resolver primero, no «ya tienes uno».
+    if (r.status === "conflict") {
+      expect(r.motivo).toContain("2 cierres esperando aprobación");
+      expect(r.motivo).toContain("la bodega apruebe el más antiguo");
+    }
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 
   it("R11: sin gestiones pendientes -> conflict, no crea (no se cierra un dia vacio)", async () => {
     const repo = fakeRepo({
       contarOrdenesPendientesGestion: vi.fn(async () => 0),
-      existeCierreSolicitado: vi.fn(async () => false),
       findGestionesPendientes: vi.fn(async () => []),
     });
     const { service } = newService({ repo });
@@ -1457,29 +1490,29 @@ describe("Feature 67 · gestion anulada ausente de la vista y los totales (R13/R
 // ============================================================================
 
 describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)", () => {
-  it("R6: con un vencido -> transiciona (via vencido_solicitado), NO crea un cierre nuevo", async () => {
+  it("R6 + 271/R18: con un vencido -> transiciona ESE cierre (via resolicitado), NO crea uno nuevo", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => true),
-      transicionarVencidoASolicitado: vi.fn(async () => true),
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-viejo", estado: "vencido" as const })),
+      transicionarASolicitado: vi.fn(async () => true),
     });
     const { service } = newService({ repo });
 
     const r = await service.solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
-    expect(repo.transicionarVencidoASolicitado).toHaveBeenCalledWith("m1");
+    expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
+    // 271/R18/R19: la escritura va guardada por (id, estadoEsperado), no por (mensajero, estado).
+    expect(repo.transicionarASolicitado).toHaveBeenCalledWith("c-viejo", "vencido");
     // R6/R10: no se inserta una segunda fila cierre_dia (no pasa por el flujo de creación).
     expect(repo.crearCierre).not.toHaveBeenCalled();
-    expect(repo.existeCierreSolicitado).not.toHaveBeenCalled();
-    expect(repo.findGestionesPendientes).not.toHaveBeenCalled(); // R8: sin snapshot nuevo
+    expect(repo.findGestionesPendientes).not.toHaveBeenCalled(); // R8/R20: sin snapshot nuevo
   });
 
   it("R9 (anti-deadlock): con un vencido + órdenes pendientes -> transiciona igual, sin conflict por pendientes", async () => {
     // El mensajero está bloqueado para gestionar (R1) — si además la precondición de pendientes
     // aplicara, quedaría atrapado. La rama del vencido NO consulta `contarOrdenesPendientesGestion`.
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => true),
-      transicionarVencidoASolicitado: vi.fn(async () => true),
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-viejo", estado: "vencido" as const })),
+      transicionarASolicitado: vi.fn(async () => true),
       contarOrdenesPendientesGestion: vi.fn(async () => 3), // hay órdenes en_reparto
     });
     const { service } = newService({ repo });
@@ -1493,8 +1526,8 @@ describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)
 
   it("R7: el vencido ya fue transicionado (updateMany 0 filas) -> conflict, sin crear", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => true),
-      transicionarVencidoASolicitado: vi.fn(async () => false), // carrera
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-viejo", estado: "vencido" as const })),
+      transicionarASolicitado: vi.fn(async () => false), // carrera
     });
     const { service } = newService({ repo });
 
@@ -1504,9 +1537,9 @@ describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 
-  it("R11: SIN vencido -> flujo de creación de la 37 SIN cambios (crea, via creado)", async () => {
+  it("R11: SIN nada re-solicitable -> flujo de creación de la 37 SIN cambios (crea, via creado)", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => false),
+      findCierreResolicitableMasViejo: vi.fn(async () => null),
       findGestionesPendientes: vi.fn(async () => [pendiente({ metodoPago: "efectivo", montoRecibido: "10.00" })]),
     });
     const { service } = newService({ repo, centralZonaId: ZONA_CENTRAL });
@@ -1514,7 +1547,7 @@ describe("Feature 111 · solicitarCierre — transición del vencido (R6/R9/R10)
     const r = await service.solicitarCierre(MENSAJERO);
 
     expect(r).toMatchObject({ status: "ok", via: "creado" });
-    expect(repo.transicionarVencidoASolicitado).not.toHaveBeenCalled();
+    expect(repo.transicionarASolicitado).not.toHaveBeenCalled();
     expect(repo.crearCierre).toHaveBeenCalledTimes(1); // flujo 37 intacto
   });
 });
@@ -1558,41 +1591,38 @@ describe("Feature 111 · listarCierreDia — tieneVencido derivado (R13-datos)",
 // ============================================================================
 
 describe("Feature 109 · solicitarCierre — re-solicitar un `rechazado` (R28)", () => {
-  it("R28: con un rechazado -> transiciona (via rechazado_solicitado), NO crea un cierre nuevo", async () => {
+  it("R28 + 271/R18: con un rechazado -> transiciona ESE cierre (via resolicitado), NO crea uno nuevo", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => false),
-      existeCierreRechazado: vi.fn(async () => true),
-      transicionarRechazadoASolicitado: vi.fn(async () => true),
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-rech", estado: "rechazado" as const })),
+      transicionarASolicitado: vi.fn(async () => true),
     });
     const { service } = newService({ repo });
 
     const r = await service.solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
-    expect(repo.transicionarRechazadoASolicitado).toHaveBeenCalledWith("m1");
+    expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
+    expect(repo.transicionarASolicitado).toHaveBeenCalledWith("c-rech", "rechazado");
     // R28: NO pasa por el flujo de creación (no crea un cierre nuevo).
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 
   it("R28: EXENTO de la precondición de pendientes (anti-deadlock): re-solicita aunque haya pendientes", async () => {
     const repo = fakeRepo({
-      contarOrdenesPendientesGestion: vi.fn(async () => 3), // pendientes: el vencido/rechazado los ignora
-      existeCierreVencido: vi.fn(async () => false),
-      existeCierreRechazado: vi.fn(async () => true),
-      transicionarRechazadoASolicitado: vi.fn(async () => true),
+      contarOrdenesPendientesGestion: vi.fn(async () => 3), // pendientes: la re-solicitud los ignora
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-rech", estado: "rechazado" as const })),
+      transicionarASolicitado: vi.fn(async () => true),
     });
     const { service } = newService({ repo });
 
     const r = await service.solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
+    expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
   });
 
   it("R28: carrera (transición afecta 0 filas) -> conflict, sin crear", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => false),
-      existeCierreRechazado: vi.fn(async () => true),
-      transicionarRechazadoASolicitado: vi.fn(async () => false), // ya re-solicitado/resuelto
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-rech", estado: "rechazado" as const })),
+      transicionarASolicitado: vi.fn(async () => false), // ya re-solicitado/resuelto
     });
     const { service } = newService({ repo });
 
@@ -1602,26 +1632,27 @@ describe("Feature 109 · solicitarCierre — re-solicitar un `rechazado` (R28)",
     expect(repo.crearCierre).not.toHaveBeenCalled();
   });
 
-  it("R28: el `vencido` tiene prioridad sobre el `rechazado` (a lo sumo uno abierto, R30)", async () => {
+  // FEATURE 271 (R18) - ESTE CASO SE DIO LA VUELTA. Decia «el vencido tiene prioridad sobre el
+  // rechazado», que era elegir POR ESTADO, y con dos cierres abiertos contradice «del mas viejo al
+  // mas nuevo»: con un rechazado VIEJO y un vencido NUEVO resolvia el nuevo primero. Ahora el
+  // repositorio devuelve EL MAS VIEJO y el servicio transiciona ese, sea cual sea su estado.
+  it("271/R18: se transiciona EL MAS VIEJO, aunque sea el `rechazado` y haya un `vencido` mas nuevo", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => true),
-      transicionarVencidoASolicitado: vi.fn(async () => true),
-      existeCierreRechazado: vi.fn(async () => true),
-      transicionarRechazadoASolicitado: vi.fn(async () => true),
+      findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-rech-viejo", estado: "rechazado" as const })),
+      transicionarASolicitado: vi.fn(async () => true),
     });
     const { service } = newService({ repo });
 
     const r = await service.solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
-    // R30: nunca coexisten; se toma el vencido y no se toca el rechazado.
-    expect(repo.transicionarRechazadoASolicitado).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
+    expect(repo.transicionarASolicitado).toHaveBeenCalledTimes(1);
+    expect(repo.transicionarASolicitado).toHaveBeenCalledWith("c-rech-viejo", "rechazado");
   });
 
-  it("R11: sin vencido ni rechazado -> flujo de creación normal (regresión 37/111 verde)", async () => {
+  it("R11: sin nada re-solicitable -> flujo de creación normal (regresión 37/111 verde)", async () => {
     const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => false),
-      existeCierreRechazado: vi.fn(async () => false),
+      findCierreResolicitableMasViejo: vi.fn(async () => null),
       findGestionesPendientes: vi.fn(async () => [pendiente()]),
     });
     const { service } = newService({ repo, zonaMensajero: ZONA_MENSAJERO, centralZonaId: ZONA_CENTRAL });
@@ -1629,7 +1660,7 @@ describe("Feature 109 · solicitarCierre — re-solicitar un `rechazado` (R28)",
     const r = await service.solicitarCierre(MENSAJERO);
 
     expect(r).toMatchObject({ status: "ok", via: "creado" });
-    expect(repo.transicionarRechazadoASolicitado).not.toHaveBeenCalled();
+    expect(repo.transicionarASolicitado).not.toHaveBeenCalled();
   });
 });
 
@@ -1677,7 +1708,7 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
 
     expect(r.status).toBe("conflict");
     // R5 (Q2, belt-and-suspenders): usa el MISMO predicado derivado, ANTES de cualquier lectura.
-    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findBloqueoDetalle).toHaveBeenCalledWith("m1");
     expect(repo.findGestionParaDeshacer).not.toHaveBeenCalled();
     expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled(); // sin devolver a en_reparto
   });
@@ -1689,7 +1720,7 @@ describe("Feature 111 · deshacerGestion — bloqueo total del mensajero (R5/R20
     const r = await service.deshacerGestion("g1", MENSAJERO);
 
     if (r.status !== "conflict") throw new Error("esperaba conflict");
-    expect(r.motivo).toMatch(/cierre pendiente/i);
+    expect(r.motivo).toMatch(/no puedes entregar, cobrar ni recibir trabajo nuevo/i);
     expect(r.motivo).not.toMatch(/m1|g1|c1/); // sin ids del actor/gestión/cierre
   });
 
@@ -2200,37 +2231,29 @@ describe("235 · el bloqueo del cierre (T4.1, R22/R23)", () => {
 // existe con sus gestiones vinculadas, asi que una gestion posterior nace con `cierre_id = NULL` y
 // cae en el cierre SIGUIENTE. No rompe dinero, pero la 237 tiene que probarlo.
 // =================================================================================================
-describe("235 · las dos rutas exentas de la precondicion (T4.2, R24)", () => {
-  it("R24: con un cierre `vencido` y una orden en `ayuda_tienda`, transiciona a `solicitado`", async () => {
-    const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => true),
-      transicionarVencidoASolicitado: vi.fn(async () => true),
-      // Hay una orden en ayuda: el conteo la incluye porque el estatus esta en la lista.
-      contarOrdenesPendientesGestion: vi.fn(async () => 1),
-    });
-    const { service } = newService({ repo });
+describe("235 · la ruta exenta de la precondicion (T4.2, R24)", () => {
+  // FEATURE 271 (R16): las DOS rutas exentas se unificaron en UNA (eligen por edad, no por
+  // estado), asi que este bloque pasa de dos casos gemelos a uno parametrizado. La exencion NO
+  // cambia, y sigue siendo lo que impide el deadlock: un mensajero BLOQUEADO —que desde la 271
+  // tampoco recibe trabajo nuevo— quedaria atrapado si ademas no pudiera enviar su cierre.
+  it.each([["vencido"], ["rechazado"]] as const)(
+    "R24 + 271/R16: con un cierre `%s` y una orden en `ayuda_tienda`, re-solicita igual",
+    async (estado) => {
+      const repo = fakeRepo({
+        findCierreResolicitableMasViejo: vi.fn(async () => ({ id: "c-viejo", estado })),
+        transicionarASolicitado: vi.fn(async () => true),
+        // Hay una orden en ayuda: el conteo la incluye porque el estatus esta en la lista.
+        contarOrdenesPendientesGestion: vi.fn(async () => 1),
+      });
+      const { service } = newService({ repo });
 
-    const r = await service.solicitarCierre(MENSAJERO);
+      const r = await service.solicitarCierre(MENSAJERO);
 
-    expect(r).toMatchObject({ status: "ok", via: "vencido_solicitado" });
-    // Y la exencion, dicha como lo que es: esta rama ni siquiera CONSULTA los pendientes.
-    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
-  });
-
-  it("R24: el gemelo para `rechazado` — misma exencion, mismo motivo", async () => {
-    const repo = fakeRepo({
-      existeCierreVencido: vi.fn(async () => false),
-      existeCierreRechazado: vi.fn(async () => true),
-      transicionarRechazadoASolicitado: vi.fn(async () => true),
-      contarOrdenesPendientesGestion: vi.fn(async () => 1),
-    });
-    const { service } = newService({ repo });
-
-    const r = await service.solicitarCierre(MENSAJERO);
-
-    expect(r).toMatchObject({ status: "ok", via: "rechazado_solicitado" });
-    expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
-  });
+      expect(r).toMatchObject({ status: "ok", via: "resolicitado" });
+      // Y la exencion, dicha como lo que es: esta rama ni siquiera CONSULTA los pendientes.
+      expect(repo.contarOrdenesPendientesGestion).not.toHaveBeenCalled();
+    },
+  );
 });
 
 // ==============================================================================================

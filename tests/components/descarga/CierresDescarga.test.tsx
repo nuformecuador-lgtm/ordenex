@@ -162,6 +162,7 @@ import { CierresBodegaAdminModule } from "@/app/(app)/cierres-admin/_components/
 import { ConsolidacionBodegaModule } from "@/app/(app)/cierres-admin/_components/ConsolidacionBodegaModule";
 import { DetalleSecciones } from "@/app/(app)/cierres-admin/_components/cierre-detalle-shared";
 import { CierreDiaModule } from "@/app/(app)/cierre-dia/_components/CierreDiaModule";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // --- Datos ---------------------------------------------------------------
 
@@ -540,9 +541,7 @@ function renderCierreDia() {
       puedesSolicitar
       motivoBloqueo={null}
       cierresPasados={paginaInicial(CIERRES_PASADOS)}
-      bloqueado={false}
-      tieneVencido={false}
-      tieneRechazado={false}
+      bloqueo={SIN_BLOQUEO}
     />,
   );
 }

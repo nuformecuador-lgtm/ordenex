@@ -9,7 +9,35 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 RELEASE DESPLEGADA — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día). **EMPIEZA A LEER POR AQUÍ**
+
+**`prod` = `37b5944b`**, READY. Sale la **271**: el segundo cierre se puede solicitar, y acumular dos
+bloquea. Ficha cerrada, **cero `in_progress`**. El recorrido con su evidencia está en
+`docs/release.md`; la narrativa, en `progress/history.md`.
+
+### ⚠️ LO ÚNICO QUE QUEDA VIVO, y hay que mirarlo la mañana del 24
+
+**El primer efecto real de esta ficha lo produce el cron de esta noche.** A las 00:00 CR el corte
+deja de excluir a quien ya tiene un cierre abierto, y ahí es donde empieza a crear segundos cierres.
+Nada de lo verificado en el despliegue lo cubre — se midió que **0 mensajeros quedaban bloqueados en
+ese instante**, que es otra cosa.
+
+Qué mirar, con su número:
+
+1. **Los `cierre_dia` creados por la corrida** (`created_at` ~00:0x CR del 24): que sean los que
+   deben, y que su jornada derivada sea la del día trabajado y **no la del nacimiento** — el
+   off-by-one que originó media ficha.
+2. **Que salieron los avisos**, que es lo primero que este cron emite en toda su vida: filas nuevas
+   en `notificacion` con `evento = 'cierre_dia_vencido'`. Antes de esta release el corte emitía
+   **cero**, medido.
+3. **Los mensajeros bloqueados después de la corrida**, contra los 0 de antes de desplegar.
+
+Si (2) sale en cero y (1) creó cierres, el aviso volvió a quedarse mudo — que es el fallo que esta
+ficha persiguió cuatro veces en un día, cada vez una capa más arriba.
+
+---
+
+## 🚀 RELEASE DESPLEGADA — 2026-08-23 (contexto previo)
 
 **`prod` = `6bc566b8`**, desplegado y **READY**. 55 commits. `dev` y `prod` igualados.
 Salen la **262** (corregir el día de reparto) y la **265** (el optimizador lee al proveedor).

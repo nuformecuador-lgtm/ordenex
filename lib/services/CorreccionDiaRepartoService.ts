@@ -61,12 +61,16 @@ const ROL_SATELITE = "adminSatelite";
  * Metodos de repo que consume el service (inyeccion por constructor, `Pick` para dobles de test sin
  * DB).
  *
- * ⚠️ `findMensajerosBloqueadosParaGestion` NO FIGURA, Y ES A PROPOSITO (R14). Un cierre de dia
- * pendiente NO bloquea la correccion —es la regla 2 de la 241, firmada el 2026-08-20 («recibir
- * asignaciones no se bloquea nunca»), y el mismo criterio con el que la 149 cerro su Q1—: la
- * correccion no mueve dinero, no crea una gestion y no cambia de estado. Dejar el metodo fuera del
- * TIPO hace imposible consultarlo por descuido; escribir «ParaGestion» en una accion que no
- * gestiona nada seria, ademas, mentir sobre lo que se pregunta. Patron `DeshacerAsignacionRepo`.
+ * ⚠️ `findMensajerosBloqueadosPorCierres` NO FIGURA, Y SIGUE SIENDO A PROPOSITO (R14) — pero el
+ * MOTIVO cambio el 2026-08-23 y conviene que quede escrito. Antes se apoyaba en la regla 2 de la
+ * 241 («la asignacion esta exenta»), que la FEATURE 271 REVIRTIO: recibir trabajo nuevo SI se
+ * bloquea. La exclusion se conserva por su OTRA razon, que no depende de aquella regla: CORREGIR EL
+ * DIA DE UNA ORDEN QUE EL MENSAJERO YA TIENE EN LA MANO NO ES DARLE TRABAJO NUEVO NI GESTIONAR — no
+ * mueve dinero, no crea una gestion y no cambia de estado. Bloquearla dejaria una orden mal fechada
+ * sin forma de arreglarse justo cuando su dueño esta atascado.
+ *
+ * Dejar el metodo fuera del TIPO hace imposible consultarlo por descuido. Patron
+ * `DeshacerAsignacionRepo`.
  */
 export type CorreccionDiaRepartoRepo = Pick<
   IOrdenRepository,

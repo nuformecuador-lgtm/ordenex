@@ -61,7 +61,15 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       // ninguna: el caso de siempre es que las registro el mensajero.
       findMany: vi.fn(async () => [] as { gestionOrdenId: string | null }[]),
     },
-    cierreDia: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    cierreDia: {
+      count: vi.fn(),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      // Feature 271: `findCierreParaAviso` lee UN cierre por su clave primaria (cierra M9).
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
     // Feature 69/T10: el snapshot y el resolver batch viven en la tx de `crearCierre`.
     cierreDetail: { createMany: vi.fn() },
     // Feature 264 (B3/B9): el vinculo cierre <-> orden barrida. Se escribe DENTRO de la tx del
@@ -339,155 +347,90 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
   });
 });
 
-describe("CierreDiaRepository.existeCierreSolicitado (R12)", () => {
-  it("true si hay un cierre solicitado del mensajero", async () => {
+// ============================================================================
+// FEATURE 271 (T2.3, R18/R19/R20) — LA RE-SOLICITUD, UNIFICADA EN UN SOLO PAR DE METODOS.
+//
+// Aqui vivian SEIS describes: `existeCierreSolicitado`, `existeCierreVencido`,
+// `transicionarVencidoASolicitado`, `existeCierreRechazado`, `transicionarRechazadoASolicitado` y
+// sus money-safe. Los seis metodos DESAPARECIERON:
+//
+//   · `existeCierreSolicitado` lo sustituye el gate LIBRE/BLOQUEADO (`findBloqueoDetalle`), porque
+//     la pregunta dejo de ser «¿tienes uno?» y paso a ser «¿estas bloqueado?» (R13/R15).
+//   · Los otros cuatro los sustituyen `findCierreResolicitableMasViejo` +
+//     `transicionarASolicitado`, porque la re-solicitud ya NO elige por ESTADO sino por EDAD (R18)
+//     y porque el `updateMany` sin `id` era el fallo mudo M2 (R19).
+//
+// Lo que SI se conserva de aquellos tests, literalmente: las aserciones MONEY-SAFE (que el `data`
+// no toca ni un total, ni `resuelto_*`, ni `motivo_rechazo`, ni `solicitado_at`). Ese contrato no
+// cambia con la ficha, y perderlo al reescribir el archivo habria sido perder la red de la 111/R8.
+// ============================================================================
+
+describe("CierreDiaRepository.findCierreResolicitableMasViejo (feature 271/R18)", () => {
+  it("R18: pide los DOS estados re-solicitables y ordena por solicitado_at ASC con desempate por id", async () => {
     const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
+    prisma.cierreDia.findFirst.mockResolvedValue({ id: "c-viejo", estado: "rechazado" });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const r = await repo.existeCierreSolicitado("m1");
+    const r = await repo.findCierreResolicitableMasViejo("m1");
 
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "solicitado" });
+    expect(r).toEqual({ id: "c-viejo", estado: "rechazado" });
+    const arg = prisma.cierreDia.findFirst.mock.calls[0][0];
+    expect(arg.where).toEqual({ mensajeroId: "m1", estado: { in: ["vencido", "rechazado"] } });
+    // El desempate por `id` NO es paranoia: el corte crea cierres en bucle dentro del mismo
+    // segundo y un orden inestable cambiaria «el que toca» entre dos cargas de la misma pantalla.
+    expect(arg.orderBy).toEqual([{ solicitadoAt: "asc" }, { id: "asc" }]);
   });
 
-  it("false si no hay ninguno", async () => {
+  it("sin ninguno re-solicitable -> null (el servicio se va al flujo de creacion)", async () => {
     const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
+    prisma.cierreDia.findFirst.mockResolvedValue(null);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    expect(await repo.existeCierreSolicitado("m1")).toBe(false);
+    expect(await repo.findCierreResolicitableMasViejo("m1")).toBeNull();
   });
 });
 
-// ============================================================================
-// Feature 111 — existeCierreVencido (A1, R6) + transicionarVencidoASolicitado (A2, R7/R8/R21).
-// ============================================================================
-
-describe("CierreDiaRepository.existeCierreVencido (feature 111/R6)", () => {
-  it("R6: true si hay un cierre vencido del mensajero; WHERE guarda estado='vencido'", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const r = await repo.existeCierreVencido("m1");
-
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "vencido" });
-  });
-
-  it("R6: false si no hay ninguno", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.existeCierreVencido("m1")).toBe(false);
-  });
-});
-
-describe("CierreDiaRepository.transicionarVencidoASolicitado (feature 111/R7/R8/R21)", () => {
-  it("R7: updateMany guardado por estado='vencido'+mensajero; count=1 -> true", async () => {
+describe("CierreDiaRepository.transicionarASolicitado (feature 271/R19/R20 — cierra M2)", () => {
+  it("R19: el WHERE lleva el `id` (clave primaria) Y el estado esperado; count=1 -> true", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const ok = await repo.transicionarVencidoASolicitado("m1");
+    const ok = await repo.transicionarASolicitado("c-viejo", "rechazado");
 
     expect(ok).toBe(true);
     const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // R7: anti-TOCTOU — solo transiciona si SIGUE en `vencido`.
-    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "vencido" });
-    // R8/R21: money-safe — data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at.
+    // ⚠️ EL `id` ES LA CORRECCION DE M2. Sin el, con dos `rechazado` este updateMany movia LOS DOS,
+    // `count` valia 2 y el `=== 1` devolvia `false`: escribia y reportaba fallo.
+    expect(arg.where).toEqual({ id: "c-viejo", estado: "rechazado" });
+    // El anti-TOCTOU por estado se CONSERVA: una carrera que ya lo movio no escribe.
     expect(arg.data).toEqual({ estado: "solicitado" });
   });
 
-  it("R8/R21: la escritura NO toca snapshot money-critical ni resuelto_por/at ni solicitado_at", async () => {
+  it("R19: sirve igual para un `vencido` — el estado esperado es un parametro, no una rama", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    await repo.transicionarVencidoASolicitado("m1");
+    expect(await repo.transicionarASolicitado("c-1", "vencido")).toBe(true);
+    expect(prisma.cierreDia.updateMany.mock.calls[0][0].where).toEqual({
+      id: "c-1",
+      estado: "vencido",
+    });
+  });
+
+  it("R20: money-safe — el `data` NO toca snapshot, resuelto_por/at, motivo_rechazo ni solicitado_at", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.transicionarASolicitado("c-viejo", "vencido");
 
     const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
     for (const prohibido of [
       "totalEfectivo",
       "totalSimpe",
       "totalTransferencia",
-      "totalGeneral",
-      "totalPagoMensajero",
-      "totalIngresoBodegaRechazos",
-      "resueltoPor",
-      "resueltoAt",
-      "solicitadoAt",
-    ]) {
-      expect(data).not.toHaveProperty(prohibido);
-    }
-  });
-
-  it("R7: count=0 (raced / ya resuelto entre lectura y escritura) -> false, sin efectos", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.transicionarVencidoASolicitado("m1")).toBe(false);
-  });
-});
-
-// ============================================================================
-// Feature 109 — existeCierreRechazado + transicionarRechazadoASolicitado (R28, modelo GLOBAL).
-// Gemelos EXACTOS del `vencido`: `rechazado` ya NO es terminal (bloquea + re-solicitable).
-// ============================================================================
-
-describe("CierreDiaRepository.existeCierreRechazado (feature 109/R28)", () => {
-  it("R28: true si hay un cierre rechazado del mensajero; WHERE guarda estado='rechazado'", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(1);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const r = await repo.existeCierreRechazado("m1");
-
-    expect(r).toBe(true);
-    const arg = prisma.cierreDia.count.mock.calls[0][0];
-    expect(arg.where).toMatchObject({ mensajeroId: "m1", estado: "rechazado" });
-  });
-
-  it("R28: false si no hay ninguno", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.count.mockResolvedValue(0);
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    expect(await repo.existeCierreRechazado("m1")).toBe(false);
-  });
-});
-
-describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)", () => {
-  it("R28: updateMany guardado por estado='rechazado'+mensajero; count=1 -> true; data SOLO estado", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    const ok = await repo.transicionarRechazadoASolicitado("m1");
-
-    expect(ok).toBe(true);
-    const arg = prisma.cierreDia.updateMany.mock.calls[0][0];
-    // Anti-TOCTOU: solo transiciona si SIGUE en `rechazado`.
-    expect(arg.where).toEqual({ mensajeroId: "m1", estado: "rechazado" });
-    // Money-safe: data SOLO `estado`. Nada de totales, pago, ingreso, resuelto_por/at, motivo.
-    expect(arg.data).toEqual({ estado: "solicitado" });
-  });
-
-  it("R28: money-safe — NO toca snapshot, resuelto_por/at, motivo_rechazo ni solicitado_at", async () => {
-    const prisma = buildPrisma();
-    prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });
-    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
-
-    await repo.transicionarRechazadoASolicitado("m1");
-
-    const data = prisma.cierreDia.updateMany.mock.calls[0][0].data;
-    for (const prohibido of [
-      "totalEfectivo",
       "totalGeneral",
       "totalPagoMensajero",
       "totalIngresoBodegaRechazos",
@@ -500,12 +443,41 @@ describe("CierreDiaRepository.transicionarRechazadoASolicitado (feature 109/R28)
     }
   });
 
-  it("R28: count=0 (raced / ya re-solicitado) -> false, sin efectos", async () => {
+  it("R19: count=0 (carrera: ya lo movieron) -> false, SIN haber escrito", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 0 });
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    expect(await repo.transicionarRechazadoASolicitado("m1")).toBe(false);
+    expect(await repo.transicionarASolicitado("c-viejo", "rechazado")).toBe(false);
+  });
+});
+
+describe("CierreDiaRepository.findCierreParaAviso (feature 271/R56 — cierra M9)", () => {
+  it("R56: busca por el `id` DEL CIERRE, no por mensajero, y sin ningun `orderBy`", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue({
+      id: "c-viejo",
+      destinoZonaId: "z1",
+      mensajero: { nombre: "Ana" },
+    });
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    const r = await repo.findCierreParaAviso("c-viejo");
+
+    expect(r).toEqual({ id: "c-viejo", destinoZonaId: "z1", mensajeroNombre: "Ana" });
+    const arg = prisma.cierreDia.findUnique.mock.calls[0][0];
+    // ⚠️ El metodo anterior era `findFirst … orderBy createdAt DESC` por mensajero: con DOS
+    // `solicitado` devolvia siempre el mas nuevo y el aviso nombraba el cierre equivocado (M9).
+    expect(arg.where).toEqual({ id: "c-viejo" });
+    expect(arg).not.toHaveProperty("orderBy");
+  });
+
+  it("cierre inexistente -> null (no se inventa un aviso)", async () => {
+    const prisma = buildPrisma();
+    prisma.cierreDia.findUnique.mockResolvedValue(null);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    expect(await repo.findCierreParaAviso("c-x")).toBeNull();
   });
 });
 

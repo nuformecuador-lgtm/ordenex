@@ -52,6 +52,42 @@
 
 ---
 
+## Release del 2026-08-23 (2.ª) — la 271, recorrida
+
+**`prod` = `37b5944b`** · desplegado y **READY** · PR #484.
+
+Lo verificado, con su evidencia:
+
+- **Gate completo sobre el SHA desplegado** (`82b45e26`, `dev` ya mergeado): `INIT_EXIT=0` leído
+  **dentro** del log, 1341 archivos / 18.129 tests.
+- **`dev` no se movió** entre el gate y la release: medido y `origin/dev` coincidían al abrir el PR.
+- **Re-medido lo que caduca, y aquí no era un trámite:** esta ficha **bloquea gente**, así que se
+  contó cuántos mensajeros quedaban bloqueados en el instante del despliegue. **Cero**, los cinco
+  libres — incluido el del caso que originó la ficha, que sale libre correctamente por tener un solo
+  cierre y estar solicitado.
+- **Una sola ficha `in_progress`** (la 271), que es la que se desplegaba: sin deuda escondida.
+- **Variables de entorno**: no aplica, la release no añade ninguna.
+- **Migración `20260823120000_notificacion_evento_bloqueo_cierre`**, con foto **antes** y **después**:
+
+  | | Antes | Después |
+  |---|---|---|
+  | Valores en `notificacion_evento` | 6 | **8** |
+  | Filas en `notificacion` | 91 | **91** |
+
+  Los 6 previos coincidían exactamente con la lista que el `down.sql` declara como «el enum antes de
+  esta migración», así que la cadena estaba donde debía.
+- **Errores de runtime: cero** en la ventana que cubre el despliegue.
+
+### Lo que NO se cierra aquí, y por qué
+
+- **El primer efecto real lo produce el cron de esta noche.** A las 00:00 el corte deja de excluir a
+  quien ya tiene un cierre abierto. Nada de lo verificado hoy lo cubre: se mira la mañana del 24 que
+  los `vencido` creados son los que deben y que **salieron sus avisos** — que es lo primero que este
+  cron emite en toda su vida.
+- **T3.5** (coste de la corrida del corte) queda declarada sin medir, con su condición de reapertura.
+
+---
+
 ## Release del 2026-08-23 — recorrida
 
 **`prod` = `6bc566b8`** · desplegado y **READY** · 55 commits.

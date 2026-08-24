@@ -1,4 +1,5 @@
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
+import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
 import { TOPE_FILAS_HABILITAR } from "@/lib/config/habilitacion-api";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
@@ -757,6 +758,147 @@ export const openApiSpec = {
         },
       },
     },
+    // Feature 267 (R39) — NOVENO endpoint del canal: la analitica de las propias ordenes.
+    //
+    // La lista de paths estaba firmada en OCHO desde la 255 y publicar esto la puso ROJA: ESE es
+    // su trabajo. Sube a NUEVE A PROPOSITO, en el mismo commit que publica el endpoint y en los
+    // DOS artefactos (aqui y en `docs/api/api-key-openapi.yaml`), no de contrabando.
+    "/api/ordenes/api-key/analitica": {
+      get: {
+        tags: ["Órdenes"],
+        summary: "Series diarias de tus métricas sobre tus órdenes",
+        operationId: "consultarAnalitica",
+        description: [
+          "Devuelve una **serie diaria por métrica**, calculada exclusivamente sobre las órdenes",
+          "de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar: sale de",
+          "la propia key, así que no hay ningún parámetro para pedir datos de otra tienda (y si se",
+          "envía uno, se ignora).",
+          "",
+          "**Varias métricas por llamada.** `metricas` acepta una lista separada por comas",
+          "(`metricas=entregas,devoluciones`) o el valor especial **`all`**, que trae todas las",
+          "publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve",
+          "una sola vez, conservando su primera posición.",
+          "",
+          "**La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una",
+          "vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se",
+          "pidió `all`).",
+          "",
+          "**El lote es todo o nada.** Si UNA de las métricas pedidas no está en el `enum` de",
+          "abajo, la llamada entera responde **403** y no se sirve ninguna — exactamente el mismo",
+          "403 que una métrica que no existe: las dos respuestas son idénticas a propósito.",
+          "",
+          "**La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,",
+          "mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica",
+          "(UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo",
+          "«últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La",
+          "ventana no puede superar 366 días contando ambos extremos.",
+          "",
+          "**`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango",
+          "puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en",
+          "curso**, que todavía no está cerrado y siempre se vería más bajo que un día completo; o",
+          "(b) cae **por debajo del horizonte de nuestro histórico**, donde la cifra sería cero por",
+          "falta de datos y no por falta de operación. En los dos casos publicar el número sería",
+          "enseñarte una caída de tu operación que no ocurrió, así que el día **no aparece**. La",
+          "ausencia es el dato: **no rellenes los huecos con ceros**.",
+          "",
+          "**`data` puede venir vacío, y eso es una respuesta `200` correcta** — por ejemplo si",
+          "pides `desde=hoy&hasta=hoy`, porque hoy todavía no está cerrado. No es un error.",
+          "",
+          "**`rango` es el eco EXACTO de lo que pediste, sin recortar,** aunque `data` no llegue",
+          "hasta `hasta`. Lo pedido y lo servible son dos cosas distintas y se leen por separado.",
+          "",
+          "**`valor` puede ser `null`, y `null` NO es `0`:** significa «no se sabe» (por ejemplo,",
+          "una tasa cuyo denominador fue cero ese día). Un día con `valor: null` SÍ aparece en",
+          "`data`: es un día cerrado cuyo resultado es indefinido, no un día que falte.",
+          "",
+          "**Qué cuenta cada métrica, porque no todas cuentan lo mismo.** `entregas`,",
+          "`devoluciones`, `rechazos`, `reprogramaciones`, `tasa_entrega`, `tasa_devolucion` y",
+          "`tasa_rechazo` cuentan **gestiones, no órdenes**: una orden reprogramada y entregada",
+          "después aporta **dos** gestiones. `ordenes_creadas` y `ordenes_por_estado` cuentan",
+          "**órdenes**. `tiempo_ciclo` no cuenta nada: mide una **duración**. Consecuencia",
+          "práctica: **dos métricas que no cuentan lo mismo no son sumables entre sí** — sumar",
+          "gestiones con órdenes da un total que no significa nada.",
+          "",
+          "Este canal no publica importes ni identifica a los mensajeros de la operación.",
+        ].join("\n"),
+        parameters: [
+          {
+            name: "metricas",
+            in: "query",
+            required: true,
+            description:
+              "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids.",
+            // El enum se DERIVA de la lista blanca (`lib/analytics/publicacion-api-key.ts`), la
+            // fuente unica de que se publica. Copiarlo como literal aqui garantizaria que un dia
+            // diverja de lo que el endpoint concede de verdad. El centinela viaja en el MISMO
+            // enum y desde la MISMA fuente, por el mismo motivo.
+            schema: {
+              type: "string",
+              enum: [...METRICAS_API_KEY, METRICAS_TODAS],
+            },
+            example: "entregas,devoluciones",
+          },
+          {
+            name: "desde",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-01",
+          },
+          {
+            name: "hasta",
+            in: "query",
+            required: true,
+            description:
+              "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos.",
+            schema: { type: "string", format: "date" },
+            example: "2026-08-21",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Series diarias de las métricas pedidas, sobre tus órdenes.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AnaliticaRespuesta" },
+                examples: {
+                  serie: {
+                    summary:
+                      "Dos métricas; se pidieron tres días y el tercero (hoy) no viene: no está cerrado",
+                    value: {
+                      rango: { desde: "2026-08-19", hasta: "2026-08-21" },
+                      metricas: [
+                        {
+                          metrica: "entregas",
+                          unidad: "conteo",
+                          data: [
+                            { fecha: "2026-08-19", valor: 41 },
+                            { fecha: "2026-08-20", valor: 37 },
+                          ],
+                        },
+                        {
+                          metrica: "tasa_entrega",
+                          unidad: "porcentaje",
+                          data: [
+                            { fecha: "2026-08-19", valor: 0.93 },
+                            { fecha: "2026-08-20", valor: null },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
     // Feature 266 (T7.1, R28) — HABILITACION POR LOTE de pedidos con novedad. El NOVENO endpoint
     // del canal. La `description` dice las tres cosas que el integrador NO puede adivinar leyendo
     // el schema: que solo dos estados son habilitables, que una `devuelta` nunca cambia de estado
@@ -1501,6 +1643,69 @@ export const openApiSpec = {
           conError: { type: "integer" },
           totales: { $ref: "#/components/schemas/CotizacionTotales" },
           filas: { type: "array", items: { $ref: "#/components/schemas/CotizacionRowResult" } },
+        },
+      },
+      // Feature 267 (R39) — el contrato de `GET /api/ordenes/api-key/analitica`. Es el espejo
+      // publicado de `AnaliticaSerieApiKeyDTO` (`lib/api/analitica-api-key-dto.ts`): si el DTO
+      // gana o pierde un campo, este schema y el `.yaml` cambian con el, en el mismo commit.
+      // P4-bis (2026-08-23) — EL SOBRE. El endpoint sirve un LOTE, asi que la unidad publicada
+      // es esta y no la serie suelta: el `rango` UNA vez —lo comparten todas por construccion— y
+      // las series en `metricas[]`, en el orden pedido. La forma no cambia con el numero de
+      // metricas pedidas: un contrato que cambiara de forma obligaria a escribir dos parsers.
+      AnaliticaRespuesta: {
+        type: "object",
+        required: ["rango", "metricas"],
+        properties: {
+          rango: {
+            type: "object",
+            description:
+              "Eco del rango efectivo, común a todas las series y en el mismo formato que la petición.",
+            required: ["desde", "hasta"],
+            properties: {
+              desde: { type: "string", format: "date", example: "2026-08-19" },
+              hasta: {
+                type: "string",
+                format: "date",
+                description: "Inclusivo, hora de Costa Rica.",
+                example: "2026-08-21",
+              },
+            },
+          },
+          metricas: {
+            type: "array",
+            description: "Una entrada por métrica pedida, en el orden pedido. Nunca vacío.",
+            items: { $ref: "#/components/schemas/AnaliticaSerie" },
+          },
+        },
+      },
+      // 2026-08-24 — la serie publica TRES campos. `unidadDeConteo` salió del payload (es un
+      // hecho del catálogo, y va en la descripción del endpoint) y `cobertura` salió entera: su
+      // información la lleva ahora la OMISIÓN de puntos en `data`.
+      AnaliticaSerie: {
+        type: "object",
+        required: ["metrica", "unidad", "data"],
+        properties: {
+          metrica: { type: "string", description: "Id de la métrica pedida.", example: "entregas" },
+          unidad: {
+            type: "string",
+            description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`).",
+          },
+          data: {
+            type: "array",
+            description:
+              "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros.",
+            items: {
+              type: "object",
+              required: ["fecha", "valor"],
+              properties: {
+                fecha: { type: "string", format: "date", example: "2026-08-20" },
+                valor: {
+                  type: ["number", "null"],
+                  description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido.",
+                },
+              },
+            },
+          },
         },
       },
       // Feature 266 (T7.1) — cuerpo y respuesta de la habilitacion por lote.

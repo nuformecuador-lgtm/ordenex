@@ -38,7 +38,10 @@ import type {
   RutearSateliteResultadoItem,
   RutearSateliteServiceResult,
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
-import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
+import {
+  MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
+} from "@/lib/services/mensajes-bloqueo";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
@@ -329,22 +332,40 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R29/R17: aborta sin efectos
 
-    // --- Feature 41/R13/R23 RETIRADA (pedido humano 2026-08-18, RATIFICADA el 2026-08-20) ---
-    // Aqui vivia la guarda de "mensajero bloqueado por cierre", que impedia asignarle guias a
-    // quien arrastrara un cierre sin resolver. SE QUEDA RETIRADA: asignar a un mensajero se puede
-    // hacer tenga o no cierres pendientes, y da igual en que estado esten. Es la REGLA 2 de la
-    // feature 241, firmada por el humano: recibir asignaciones NO SE BLOQUEA NUNCA.
+    // --- FEATURE 271 (T4.1, R28/R30) — LA GUARDA DE «MENSAJERO BLOQUEADO POR CIERRES» VUELVE ---
     //
-    // ⚠️ LA VERSION ANTERIOR DE ESTE COMENTARIO DECIA UNA COSA FALSA, y conviene que quede escrito
-    // porque es el origen de la ficha 241: afirmaba que `deshacerGestion`, la recoleccion en tienda
-    // y el aviso del panel «no estaban en el alcance de este cambio». Si lo estaban — leian el
-    // MISMO predicado que ese commit acababa de apagar con un tope inalcanzable, y se apagaron con
-    // el sin que nadie lo pidiera. Un mensajero podia gestionar y COBRAR todo el dia con un cierre
-    // sin resolver al que ese dinero no podia ir.
+    // ⚠️ ESTO REVIERTE UNA REGLA FIRMADA. Entre el 2026-08-18 y el 2026-08-23 aqui no habia guarda:
+    // la feature 241 la dejo retirada a proposito con la regla 2 —«RECIBIR ASIGNACIONES NUNCA se
+    // bloquea»—, firmada por el humano el 2026-08-20. El 2026-08-23 el humano revirtio esa mitad:
+    // acumular dos cierres, o arrastrar uno re-solicitable, TAMBIEN bloquea recibir trabajo nuevo.
+    // Palabras suyas sobre por que alcanza tambien a la recoleccion: «un mensajero no puede hacer
+    // las dos gestiones, solo una a la vez».
     //
-    // Hoy no puede volver a pasar por accidente: el predicado se llama
-    // `findMensajerosBloqueadosParaGestion` y este service no lo consulta. Bloquear la ASIGNACION
-    // aqui exigiria escribir el nombre "ParaGestion" en una accion que no gestiona nada.
+    // QUE SOBREVIVE DE LA 241, y es la mitad que hace que esta guarda no repita el incidente del
+    // 18/08: un cierre `solicitado` A SECAS (N=1, V=0) **NO** bloquea. El mensajero que ya pidio su
+    // cierre y espera al admin sigue recibiendo trabajo con normalidad. Lo que bloquea es N>=2 o
+    // V>=1 — la regla completa vive en `lib/utils/bloqueo-cierre.ts` y NO se re-escribe aqui.
+    //
+    // VA ANTES DE CUALQUIER ESCRITURA y aborta el LOTE COMPLETO con `detalle` por orden (R30):
+    // mismo contrato todo-o-nada que las demas guardas de este metodo. Ninguna orden cambia de
+    // estado.
+    //
+    // ⚠️ Y NO SE REPONE EL `NOT EXISTS` DEL UPDATE CRUDO (design §12/A5). La guarda vive en el
+    // service, UNA sola vez. Dos escrituras del mismo criterio en dos capas es literalmente lo que
+    // produjo el incidente del 18/08: la lectura decia «pasa», el UPDATE tocaba 0 filas y el usuario
+    // recibia «Actualiza la lista y vuelve a intentarlo», que era falso y no se arreglaba nunca.
+    const bloqueadosReparto = await this.repo.findMensajerosBloqueadosPorCierres([
+      input.mensajeroId,
+    ]);
+    if (bloqueadosReparto.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+        })),
+      };
+    }
 
     // --- Feature 157: simetrica de la anterior. Un mensajero con una recoleccion sin
     //     confirmar tiene un viaje a la tienda comprometido; darle reparto ahora lo obliga
@@ -459,11 +480,37 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
-    // --- 5. R7 RETIRADA (pedido humano 2026-08-18, ratificada el 2026-08-20 por la regla 2 de la
-    //     feature 241): ver `asignarDesdeBodega`. Ningun estado de cierre impide mandar a un
-    //     mensajero a recolectar — recibir trabajo no se bloquea. Lo que SI sigue bloqueado para
-    //     el es GESTIONAR lo que ya tiene, y eso se decide en otro sitio (`MisAsignacionesService`,
-    //     `RecoleccionTiendaService`), con otro predicado y con solo dos estados. ---
+    // --- 5. FEATURE 271 (T4.3, R31) — LA GUARDA DE BLOQUEO POR CIERRES, TAMBIEN AQUI ---
+    //
+    // ⚠️ ESTA GUARDA SE DIO LA VUELTA DOS VECES, y por eso conviene que su historia quede escrita.
+    // La feature 41/R7 la puso; el 2026-08-18 se retiro; el 2026-08-20 la 241 ratifico la retirada
+    // (declarando la asignacion exenta); y el 2026-08-23 el humano la repuso, esta vez SIN
+    // excepcion de recoleccion. Sus palabras: «Error mío, en realidad no puede recibir recolecciones
+    // porque son dos tareas diferentes, una cosa es ir a repartir y otra diferente es recoger en
+    // tienda, un mensajero no puede hacer las dos gestiones, solo una a la vez.»
+    //
+    // NO NACE EN EL VACIO, y esto es lo que hace que no sea una politica inventada aqui: dos lineas
+    // mas abajo esta MISMA accion ya consulta `findMensajerosConOrdenesEn` para aplicar la REGLA DE
+    // DEDICACION (feature 157) — quien lleva reparto no recibe recoleccion, porque son la misma
+    // jornada de trabajo. Esa regla es SEPARADA de este bloqueo y esta ficha NO la toca; se nombra
+    // porque explica por que la excepcion no protegia nada: dejar entrar la recoleccion a un
+    // mensajero bloqueado le daba exactamente el trabajo que el servidor le iba a rechazar en el
+    // mostrador de la tienda (`RecoleccionTiendaService` YA bloquea el ACTO de recolectar).
+    //
+    // Mismo predicado, mismo motivo y mismo todo-o-nada que `asignarDesdeBodega`: un solo predicado,
+    // todas las superficies (R10/R31).
+    const bloqueadosRecoleccion = await this.repo.findMensajerosBloqueadosPorCierres([
+      input.mensajeroId,
+    ]);
+    if (bloqueadosRecoleccion.has(input.mensajeroId)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          motivo: MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+        })),
+      };
+    }
 
     // --- 5b. Regla de dedicacion: quien recolecta va sin carga de reparto ---
     const conReparto = await this.repo.findMensajerosConOrdenesEn(

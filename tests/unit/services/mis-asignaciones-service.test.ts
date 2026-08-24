@@ -14,6 +14,8 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { CAUSA_DEVOLUCION_SEED } from "@/lib/types/causa-devolucion";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 import {
   fakeIntentosEnLote,
   llamadasIntentos,
@@ -104,11 +106,14 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 
 function fakeOrdenRepo(
   bloqueados: string[] = [],
-): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> {
+): Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    // Feature 111/R1-R4: predicado de bloqueo total (default = NO bloqueado).
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set(bloqueados)),
+    // Feature 111/R1-R4 -> 271: detalle del bloqueo (default = NO bloqueado). Un mensajero en
+    // `bloqueados` se modela con el caso 5 de la tabla de verdad: un cierre `vencido` (N=1, V=1).
+    findBloqueoDetalle: vi.fn(async () =>
+      bloqueados.length > 0 ? bloqueoConVencido() : SIN_BLOQUEO,
+    ),
   };
 }
 
@@ -947,7 +952,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       });
       const ordenRepo = {
         findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-        findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+        findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111
       };
       const service = new MisAsignacionesService(
         repo,
@@ -982,7 +987,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
     const repo = fakeRepo();
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -1005,7 +1010,7 @@ describe("gestionar — DEVUELTA queda en el PRE-ESTADO, sin seguimiento (featur
       findEstatusIdByValue: vi.fn(async (v: string) =>
         v === "devolucion_por_confirmar" ? null : (ESTATUS_ID_BY_VALUE[v] ?? null),
       ),
-      findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()), // feature 111
+      findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO), // feature 111
     };
     const service = new MisAsignacionesService(
       repo,
@@ -1135,10 +1140,11 @@ describe("liberarGestion (R35)", () => {
 // cierre `vencido` o `rechazado` no puede gestionar NI recoger/escoger; con `solicitado` SÍ puede.
 // Guarda ANTES de cualquier efecto (sin efectos parciales).
 //
-// ⚠️ QUÉ MIDE ESTE BLOQUE Y QUÉ NO. Aquí `findMensajerosBloqueadosParaGestion` es un DOBLE que
-// devuelve el Set que se le pide, así que estos casos prueban la GUARDA (que corta antes de
-// cualquier efecto), no la LISTA DE ESTADOS — el doble no sabe qué estado tiene el cierre. Los tres
-// casos por estado, con el repositorio real detrás, están en `cierre-bloqueo-asimetria.test.ts`.
+// ⚠️ QUÉ MIDE ESTE BLOQUE Y QUÉ NO. Aquí `findBloqueoDetalle` es un DOBLE que
+// devuelve el detalle que se le pide, así que estos casos prueban la GUARDA (que corta antes de
+// cualquier efecto), no la REGLA N/V — el doble no cuenta cierres. La regla vive en
+// `tests/unit/utils/bloqueo-cierre.test.ts` y su `WHERE` contra Postgres en
+// `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`.
 // ============================================================================
 
 describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
@@ -1172,9 +1178,9 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     const r = await service.gestionar(entrega(), MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
+    if (r.status === "conflict") expect(r.motivo).toMatch(/no puedes entregar, cobrar ni recibir trabajo nuevo/i);
     // R2: reusa el MISMO predicado derivado (doble espía).
-    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
+    expect(ordenRepo.findBloqueoDetalle).toHaveBeenCalledWith("m1");
     // R3: sin efectos parciales (la guarda está ANTES de la subida y de la tx).
     expect(storage.upload).not.toHaveBeenCalled();
     expect(repo.crearGestionYTransicionar).not.toHaveBeenCalled();
@@ -1198,8 +1204,8 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     const r = await service.recogerAsignaciones({ ordenIds: ["o1"] }, MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.detalle[0].motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
+    if (r.status === "conflict") expect(r.detalle[0].motivo).toMatch(/no puedes entregar, cobrar ni recibir trabajo nuevo/i);
+    expect(ordenRepo.findBloqueoDetalle).toHaveBeenCalledWith("m1");
     expect(repo.recogerLote).not.toHaveBeenCalled();
   });
 
@@ -1209,8 +1215,8 @@ describe("Feature 111 · bloqueo total (R1/R2/R3/R4/R20)", () => {
     const r = await service.escogerParaGestion("o1", MENSAJERO);
 
     expect(r.status).toBe("conflict");
-    if (r.status === "conflict") expect(r.motivo).toMatch(/cierre pendiente/i);
-    expect(ordenRepo.findMensajerosBloqueadosParaGestion).toHaveBeenCalledWith(["m1"]);
+    if (r.status === "conflict") expect(r.motivo).toMatch(/no puedes entregar, cobrar ni recibir trabajo nuevo/i);
+    expect(ordenRepo.findBloqueoDetalle).toHaveBeenCalledWith("m1");
     expect(repo.setOrdenEnGestion).not.toHaveBeenCalled();
   });
 

@@ -12,6 +12,7 @@ import type {
 } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 98 — tarifa vigente por defecto del lote (no-central: valorFlete; central:
 // valorFleteGam). `ivaFlete` 12% no trivial para verificar la suma del IVA (D2/R7).
@@ -148,7 +149,10 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     recolectarEnTienda: vi.fn().mockResolvedValue(false),
     recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
+    // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,

@@ -258,6 +258,18 @@ export type AsignarSateliteResult =
 // R2/R5/R6: resultado del loader de mensajeros de la zona del actor para el modal.
 // `forbidden` si el rol no es adminSatelite; sin zona -> lista vacia (R6).
 export type ListarMensajerosSateliteResult =
-  | { status: "ok"; mensajeros: MensajeroLiteRow[] }
+  | {
+      status: "ok";
+      mensajeros: MensajeroLiteRow[];
+      /**
+       * FEATURE 271 (R32) — ids de los mensajeros de la zona que el servidor va a RECHAZAR al
+       * asignar (regla N/V: `N >= 2` o `V >= 1`). El selector los deshabilita con su motivo, en vez
+       * de dejar elegir y toparse con un rechazo al confirmar.
+       *
+       * ⚠️ ES LA MITAD QUE FALTABA, y esta es la superficie del incidente del 18/08. Opcional
+       * (aditivo) para no romper a los consumidores actuales, pero la accion lo emite SIEMPRE.
+       */
+      bloqueadosIds?: string[];
+    }
   | { status: "forbidden" }
   | { status: "unauthenticated" };

@@ -120,6 +120,38 @@ describe("ApiKeyAuthService.autenticar — estado PROPIO de la key (R7)", () => 
   });
 });
 
+describe("ApiKeyAuthService.autenticar — rol del usuario dedicado (267, defensa en profundidad)", () => {
+  // El actor se construia con un CAST del rol de la fila (`encontrada.rol as RolValue`), sin
+  // comprobar nada, pese a que `ApiKeyAutenticada.rol` documenta que «el service revalida».
+  // El alta de una key SIEMPRE fija el rol `apiKey` por lookup
+  // (`ApiKeyRepository.createConUsuario`), asi que una fila con otro rol es una cuenta mal
+  // configurada: en una frontera multi-tenant eso CIERRA el canal, no lo amplia.
+  it.each(["maestro", "admin", "adminTienda", "adminSatelite", "mensajero", "", "APIKEY"])(
+    "una fila cuyo usuario dedicado tiene rol %s -> forbidden, aunque todo lo demas este activo",
+    async (rol) => {
+      const repo = makeRepo(activa({ estado: "activo", apiKeyEstado: "activa", rol }));
+      const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+      expect(r).toEqual({ status: "forbidden" });
+    },
+  );
+
+  it("y el rol correcto sigue concediendo: la guarda no cierra el canal entero", async () => {
+    const repo = makeRepo(activa({ estado: "activo", apiKeyEstado: "activa", rol: "apiKey" }));
+    const r = await new ApiKeyAuthService(repo).autenticar(RAW_KEY);
+    expect(r.status).toBe("ok");
+  });
+
+  it("el forbidden por rol es INDISTINGUIBLE del de una key revocada", async () => {
+    const porRol = await new ApiKeyAuthService(makeRepo(activa({ rol: "maestro" }))).autenticar(
+      RAW_KEY,
+    );
+    const porRevocacion = await new ApiKeyAuthService(
+      makeRepo(activa({ apiKeyEstado: "inactiva" })),
+    ).autenticar(RAW_KEY);
+    expect(porRol).toEqual(porRevocacion);
+  });
+});
+
 describe("ApiKeyAuthService.autenticar — seguridad (R6)", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errSpy: ReturnType<typeof vi.spyOn>;

@@ -59,6 +59,7 @@ const MIGRACION_NOTIFICACIONES_146 = "_notificacion";
 const MIGRACIONES_NOTIFICACIONES_POSTERIORES = [
   "_notificacion_evento_postulacion_recurso", // feature 253 / D6
   "_notificacion_evento_dia_reparto_corregido", // feature 262 / D7
+  "_notificacion_evento_bloqueo_cierre", // feature 271 / §9.2 (Q4, 2026-08-23)
 ] as const;
 
 describe("Feature 102 · SIN migracion nueva (R3)", () => {

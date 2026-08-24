@@ -9,6 +9,7 @@ import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaServ
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
 const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
@@ -94,7 +95,10 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 41: bloqueo derivado (por defecto nadie bloqueado / bodega libre).
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
+    // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
+    contarCierresAbiertosPorMensajero: vi.fn(async () => new Map()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     findZonasConMensajeroBloqueado: vi.fn(async (): Promise<Set<string>> => new Set()),
     existeBodegaSateliteBloqueada: vi.fn(async () => ({
       bloqueada: false,

@@ -4,11 +4,14 @@ import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/ui/input";
-// Feature 111/R12: aviso accionable de BLOQUEO TOTAL (texto separado, i18n-ready). El
-// MISMO de Reparto y Recolección: vive en `lib/constants/` para que las tres pantallas no
-// puedan divergir en un mensaje que el humano declaró preciso.
-import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
+// Feature 111/R12 -> FEATURE 271 (T9.1/T9.2): el aviso del bloqueo dejó de ser una constante y
+// pasó a ser un FORMATEADOR (texto separado, i18n-ready). El MISMO de Reparto, Recolección y
+// Cierre del día: vive en `lib/constants/` para que las cuatro pantallas no puedan divergir en un
+// mensaje que el humano declaró preciso, y ahora además CUENTA (cuántos cierres arrastra y cuál
+// toca primero, R43). `conCta: true` porque desde aquí hay que decirle a dónde ir (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import type { BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 import { CarruselCards } from "@/components/shared/CarruselCards";
 
 import { filtrarAsignaciones } from "./mis-asignaciones-buscador";
@@ -44,11 +47,14 @@ export interface RecogerModuleProps {
   /** Órdenes en `por_recoger`. */
   porRecoger: MiAsignacionDTO[];
   /**
-   * Feature 111/R12/R14: `true` si el mensajero está BLOQUEADO (cierre pendiente). Se
-   * muestra el aviso y se ocultan los controles de recogida. Defensa SUAVE; el backend
-   * (R1/R4) es la defensa real.
+   * Feature 111/R12/R14 -> FEATURE 271 (T9.1): el DETALLE del bloqueo, no un booleano. Trae el
+   * veredicto y con qué se llega a él (cuántos cierres arrastra, cuántos espera que él reenvíe y
+   * cuál toca primero), calculado por el MISMO predicado que aplica el servidor (R10).
+   *
+   * Con `bloqueado` se muestra el aviso y se ocultan los controles de recogida. Defensa SUAVE;
+   * el backend (R25) es la defensa real.
    */
-  bloqueado: boolean;
+  bloqueo: BloqueoDetalle;
 }
 
 // Feature 114: textos del buscador (separados para i18n futura, lenguaje claro). La
@@ -66,9 +72,12 @@ const VACIO_RECOGER = "No hay órdenes por recoger.";
 
 export function RecogerModule({
   porRecoger,
-  bloqueado,
+  bloqueo,
 }: Readonly<RecogerModuleProps>) {
   const router = useRouter();
+
+  // FEATURE 271 (T9.1): el veredicto sale del detalle, no se re-deriva aquí.
+  const bloqueado = bloqueo.bloqueado;
 
   // Presentación de las cards. Estado de UI EFÍMERO de un solo consumidor (no sube a URL
   // ni a contexto) y puramente visual: NO filtra ni reordena nada. Arranca en "mosaico"
@@ -125,7 +134,7 @@ export function RecogerModule({
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoBloqueo(bloqueo, { conCta: true })}
         </p>
       ) : null}
 

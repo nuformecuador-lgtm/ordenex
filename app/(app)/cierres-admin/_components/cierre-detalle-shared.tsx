@@ -168,6 +168,70 @@ export function RechazadoBloqueanteBadge() {
   );
 }
 
+// =================================================================================================
+// FEATURE 271 (R48) — QUE EL MENSAJERO DE ESTE CIERRE ESTA BLOQUEADO, Y POR QUE.
+// =================================================================================================
+//
+// EL PROBLEMA MEDIDO: un `rechazado` no entra en la cola de «pendientes de decisión» —y no va a
+// entrar, lo decidió el humano el 2026-08-23: sobre ese cierre la bodega YA decidió—, así que un
+// mensajero podía arrastrar dos cierres sin aprobar y la administración ver una sola fila. Y
+// aprobar el más antiguo es justamente lo que lo desbloquea: quien decide necesitaba saberlo.
+//
+// POR QUE VA EN LA FILA Y NO EN UNA COLA NUEVA: es un dato DE la fila —del dueño de ese cierre—,
+// llega con ella en la misma lectura y no cuesta ninguna consulta más. Una cola nueva habría
+// cambiado lo que la cola existente significa, y la leen tres pantallas.
+//
+// QUE DICE Y QUE NO. Dice CUÁNTOS cierres arrastra ese mensajero y cuántos esperan a que él los
+// reenvíe; y dice qué hacer: aprobar el más antiguo. NO dice cuál es el más antiguo por su fecha
+// —la fila no lo trae, y una fecha derivada aquí sería la de creación, que en un cierre vencido va
+// un día por delante de la jornada que cierra—. Lenguaje claro, sin nombres de estado.
+export const MENSAJERO_BLOQUEADO_LABEL = "Mensajero bloqueado";
+
+/** El detalle del bloqueo tal como viaja en la fila del cierre. */
+export interface BloqueoMensajeroBadgeProps {
+  cierresAbiertos: number;
+  cierresPorReenviar: number;
+}
+
+/**
+ * El texto largo del marcador: va en `title` y en el nombre accesible, como el de «bloqueante»
+ * de aquí arriba. Se compone —no es fijo— porque CUENTA, y un texto que cuenta no puede ser una
+ * constante sin volverse mentira en cuanto cambie el número.
+ */
+export function notaMensajeroBloqueado({
+  cierresAbiertos,
+  cierresPorReenviar,
+}: BloqueoMensajeroBadgeProps): string {
+  const cuantos =
+    cierresAbiertos === 1
+      ? "Este mensajero arrastra 1 cierre sin aprobar"
+      : `Este mensajero arrastra ${cierresAbiertos} cierres sin aprobar`;
+  const suyos =
+    cierresPorReenviar === 0
+      ? ""
+      : cierresPorReenviar === 1
+        ? ", y 1 de ellos espera a que él lo vuelva a enviar"
+        : `, y ${cierresPorReenviar} de ellos esperan a que él los vuelva a enviar`;
+  // No puede entregar, cobrar ni recibir trabajo nuevo: es lo que hace que esto importe a quien
+  // decide, y lo que convierte «aprobar el más antiguo» en una acción y no en un trámite.
+  return `${cuantos}${suyos}. Mientras tanto no puede entregar, cobrar ni recibir trabajo nuevo. Aprueba el más antiguo para desbloquearlo.`;
+}
+
+/** El marcador de la fila. Se pinta SOLO si el mensajero está bloqueado. */
+export function MensajeroBloqueadoBadge({
+  cierresAbiertos,
+  cierresPorReenviar,
+}: Readonly<BloqueoMensajeroBadgeProps>) {
+  const nota = notaMensajeroBloqueado({ cierresAbiertos, cierresPorReenviar });
+  return (
+    <Badge variant="destructive" title={nota} aria-label={nota}>
+      {/* El número va EN el marcador, visible sin apuntar con el ratón: es el dato que decide si
+          esta fila es urgente, y un `title` no se lee en un móvil ni con el teclado. */}
+      {MENSAJERO_BLOQUEADO_LABEL} · {cierresAbiertos}
+    </Badge>
+  );
+}
+
 // --- Feature 39: etiquetas del pago al mensajero (texto separado, i18n-ready) ---
 export const PAGO_MENSAJERO_LABEL = "Pago al mensajero";
 // --- Feature 56: etiquetas del ingreso de bodega por rechazos (texto separado, i18n-ready) ---

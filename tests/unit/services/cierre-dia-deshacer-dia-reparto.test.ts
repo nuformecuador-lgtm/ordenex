@@ -11,6 +11,7 @@ import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaReposit
 import type { ITarifaZonaMensajeroRepository } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 /**
  * FEATURE 261 (B10) — EL RELOJ DEL DESHACER, INYECTADO. R16, R19.
@@ -73,7 +74,7 @@ function montar(repo: Repo = fakeRepo()) {
     findUsuarioZonaId: vi.fn(async () => "z1"),
     findUsuarioVehiculoId: vi.fn(async () => null),
     findEstatusIdByValue: vi.fn(async () => "s-reparto"),
-    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   } as unknown as IOrdenRepository;
   const signedUrls: ISignedUrlProvider = {
     createSignedUrl: vi.fn(async (p: string) => `https://signed/${p}`),

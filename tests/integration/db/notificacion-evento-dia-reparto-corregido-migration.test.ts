@@ -220,7 +220,13 @@ describe("262 / D7 — el enum Prisma y el tipo de TypeScript no quedan a la der
     // LITERAL a proposito: el contrato de 146/D1 no es «hay N eventos», es «los eventos son ESTOS y
     // cada uno tiene un productor identificado». Derivarlo del propio schema dejaria el test siempre
     // verde y no diria nada (M-ai).
-    expect(valores).toEqual([...EVENTOS_PREVIOS, "dia_reparto_corregido"]);
+    expect(valores).toEqual([
+      ...EVENTOS_PREVIOS,
+      "dia_reparto_corregido",
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
+    ]);
   });
 
   it("`NotificacionEntidadTipo` del schema, igual", () => {
@@ -271,6 +277,9 @@ describeSiHayBase("262 / D7 — la base aplicada, y el DOWN ejercitado de verdad
     expect(await valoresDe("notificacion_evento")).toEqual([
       ...EVENTOS_PREVIOS,
       "dia_reparto_corregido",
+      // FEATURE 271 (§9.2, Q4 resuelta el 2026-08-23) - los DOS avisos del bloqueo por cierres.
+      "cierre_dia_vencido",
+      "mensajero_bloqueado_por_cierres",
     ]);
   });
 
