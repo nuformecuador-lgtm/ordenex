@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { ConflictError } from "@/lib/errors";
 import {
   crearTarifa,
   obtenerTarifa,
@@ -21,7 +22,6 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
     tiendaId: "tienda-1",
-    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -30,6 +30,9 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     comisionCod: 2.5,
     ivaFlete: 15,
     ivaComisionCod: 15,
+    tarifaEspecial: null,
+    zonaId: null,
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -151,8 +154,81 @@ describe("R15/R23: validation_error con fieldErrors sin llamar al service", () =
   });
 });
 
+// La columna `tarifas.status` se retiro en la 274 y con ella la idea de tarifa
+// "inactiva". El borde no necesito una regla nueva: `actualizarTarifaSchema` es
+// `.strict()`, asi que `status` entra por la misma puerta que cualquier campo
+// desconocido y el service ni se entera.
+describe("274/R11: `status` en una actualizacion -> validation_error sin tocar el service", () => {
+  for (const valor of ["activo", "inactivo"]) {
+    it(`actualizarTarifa con { status: "${valor}" }`, async () => {
+      const service = fakeService();
+      const r = await actualizarTarifa(
+        "cob-1",
+        { status: valor },
+        { tarifaService: service, getActor: getActor(MAESTRO) },
+      );
+      expect(r.status).toBe("validation_error");
+      expect(service.actualizar).not.toHaveBeenCalled();
+    });
+  }
+
+  it("crearTarifa con `status` tambien se rechaza en el borde", async () => {
+    const service = fakeService();
+    const r = await crearTarifa(
+      { ...validCrear, status: "activo" },
+      { tarifaService: service, getActor: getActor(MAESTRO) },
+    );
+    expect(r.status).toBe("validation_error");
+    expect(service.crear).not.toHaveBeenCalled();
+  });
+});
+
+// R14/R15 se deciden en el service (el par efectivo de un `actualizar` depende de
+// la fila existente). Lo que la accion debe garantizar es que ese `validation_error`
+// llega intacto al llamador, con sus dos claves y sin envolverlo en un 500.
+describe("274/R14-R15: la accion propaga el validation_error de alcance del service", () => {
+  const SIN_ALCANCE = {
+    status: "validation_error" as const,
+    fieldErrors: {
+      tiendaId: ["una tarifa debe acotarse por tienda, por zona o por ambas"],
+      zonaId: ["una tarifa debe acotarse por tienda, por zona o por ambas"],
+    },
+  };
+
+  it("crear sin tienda y sin zona", async () => {
+    const service = fakeService({ crear: vi.fn().mockResolvedValue(SIN_ALCANCE) });
+    const { tiendaId, ...sinTienda } = validCrear;
+    void tiendaId;
+
+    const r = await crearTarifa(sinTienda, {
+      tarifaService: service,
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(Object.keys(r.fieldErrors).sort()).toEqual(["tiendaId", "zonaId"]);
+    }
+  });
+
+  it("actualizar dejando el par en (null, null)", async () => {
+    const service = fakeService({ actualizar: vi.fn().mockResolvedValue(SIN_ALCANCE) });
+
+    const r = await actualizarTarifa(
+      "cob-1",
+      { zonaId: null },
+      { tarifaService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("validation_error");
+    // el schema dejo pasar el input (es valido a nivel de forma); la decision fue
+    // del service, que si conoce la fila existente.
+    expect(service.actualizar).toHaveBeenCalledWith("cob-1", { zonaId: null }, MAESTRO);
+  });
+});
+
 describe("R16: crear valido (maestro) -> ok con TarifaDTO", () => {
-  it("devuelve la tarifa con tiendaId/status y sin deletedAt", async () => {
+  it("devuelve la tarifa con tiendaId, sin deletedAt y sin status (274/R12)", async () => {
     const service = fakeService();
     const r = await crearTarifa(validCrear, {
       tarifaService: service,
@@ -161,8 +237,9 @@ describe("R16: crear valido (maestro) -> ok con TarifaDTO", () => {
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.tarifa.tiendaId).toBe("tienda-1");
-      expect(r.tarifa.status).toBe("activo");
       expect(r.tarifa).not.toHaveProperty("deletedAt");
+      // 274/R12: ausencia de CLAVE, no de valor.
+      expect(Object.keys(r.tarifa)).not.toContain("status");
     }
     expect(service.crear).toHaveBeenCalledWith(validCrear, MAESTRO);
   });
@@ -234,12 +311,33 @@ describe("R18/R19: listar", () => {
   });
 });
 
-describe("R24: borrar -> ok (soft)", () => {
+describe("borrar (FISICO) -> ok", () => {
   it("propaga ok", async () => {
     const service = fakeService();
     const r = await borrarTarifa("cob-1", { tarifaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("ok");
     expect(service.borrar).toHaveBeenCalledWith("cob-1", MAESTRO);
+  });
+
+  // ANTES esta accion LANZABA ante un `conflict` ("el dominio de tarifas nunca produce
+  // un conflicto de unicidad"), lo que hoy seria un 500 en la cara del maestro: con el
+  // unico (zona_id, tienda_id) y la FK RESTRICT de `cierre_detail`, el conflicto es un
+  // resultado legitimo. El test fija que SALE como estado, no como excepcion.
+  it("propaga conflict en vez de lanzar", async () => {
+    const service = fakeService({ borrar: vi.fn().mockResolvedValue({ status: "conflict" }) });
+    const r = await borrarTarifa("cob-1", { tarifaService: service, getActor: getActor(MAESTRO) });
+    expect(r.status).toBe("conflict");
+  });
+
+  it("crear traduce el ConflictError del repositorio a status conflict", async () => {
+    const service = fakeService({
+      crear: vi.fn().mockRejectedValue(new ConflictError("par duplicado")),
+    });
+    const r = await crearTarifa(validCrear, {
+      tarifaService: service,
+      getActor: getActor(MAESTRO),
+    });
+    expect(r.status).toBe("conflict");
   });
 });
 

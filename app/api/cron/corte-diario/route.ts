@@ -10,7 +10,7 @@ import { CorteDiarioRepository } from "@/lib/repositories/CorteDiarioRepository"
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { loadCronConfig } from "@/lib/config/cron";
@@ -28,7 +28,7 @@ function buildService(): ICorteDiarioService {
     new CorteDiarioRepository(prisma),
     // Feature 69/T10 + decision (f): el corte diario usa el MISMO `crearCierre`, asi que
     // congela `cierre_detail` por construccion. Necesita el mismo resolver de tarifa.
-    new CierreDiaRepository(prisma, new TarifaVigentePorTiendaRepository(prisma)),
+    new CierreDiaRepository(prisma, new TarifaVigenteRepository(prisma)),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
     new TarifaZonaMensajeroRepository(prisma),

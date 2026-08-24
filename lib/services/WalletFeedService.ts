@@ -9,7 +9,7 @@ import {
   agregarIngresosPorConcepto,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 42 (design §2.2) — construye los movimientos de INGRESO de un cierre aprobado.

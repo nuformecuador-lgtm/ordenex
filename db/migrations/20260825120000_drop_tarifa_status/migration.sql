@@ -1,0 +1,34 @@
+-- `tarifas`: se va la columna `status` y con ella el tipo `estado_tarifa`.
+--
+-- QUE SE ESTA CERRANDO. Esta es la DEUDA (g) de la feature 69 (override del humano,
+-- 2026-07-15), que vivio como un `TODO:` en el resolver de tarifa vigente desde el PR #64.
+-- La deuda decia: la columna `status` (activo/inactivo) existe, marca a la tienda que dejo
+-- de ser `adminTienda`, y NO se filtra en el camino de liquidacion. Lo pendiente nunca fue
+-- «congelar el dato» -eso ya lo hace `cierre_detail`- sino DECIDIR LA REGLA DE SELECCION DE
+-- LA FILA VIGENTE. La feature 274 la decide, y la decision es que `status` no forma parte de
+-- ella: la cascada `(tienda, zona)` -nivel 1 tienda+zona, nivel 2 tienda sin zona, nivel 3
+-- zona sin tienda, sobre el unico `(zona_id, tienda_id) NULLS NOT DISTINCT` de la 273- ya
+-- determina UNA sola candidata por par. No queda un empate que `status` pudiera desempatar.
+--
+-- POR QUE SE BORRA EN VEZ DE EMPEZAR A FILTRARLA. Una columna que nunca entro en el `WHERE`
+-- del camino que mueve dinero es, hoy, un dato que nadie escribe con intencion y que todo el
+-- mundo lee como si significara algo. Meterla ahora en el `WHERE` convertiria un cobro
+-- equivocado (tarifa `inactivo` que liquida) en un cobro CERO y callado -que es peor, y es
+-- literalmente el argumento por el que la deuda se dejo abierta en su momento-. La unica
+-- lectura que si la filtraba era la de cotizacion (feature 255, D6), y esa asimetria
+-- desaparece con esta feature: los cuatro bordes resuelven con la misma regla (R8/R37).
+--
+-- «DESACTIVAR UNA TARIFA» NO SE PIERDE COMO CAPACIDAD: pasa a expresarse borrandola. La
+-- tabla borra en FISICO desde la `20260824140000_tarifa_zona_is_default`, y el unico es
+-- TOTAL, asi que borrar libera el par y volver a crearla es posible. Lo que se pierde es la
+-- forma de tener una fila presente-pero-ignorada, que es justamente la que no funcionaba.
+--
+-- QUE NO SE PIERDE: la auditoria. `cierre_detail` congela los montos y el `tarifa_id` con
+-- que se liquido (feature 69, R8), asi que el historico no depende de esta columna.
+--
+-- `IF EXISTS` en las dos sentencias: la base de desarrollo tiene drift y esta migracion debe
+-- poder aplicarse sobre un esquema al que ya le falte la columna sin abortar el despliegue.
+-- El `DROP TYPE` va DESPUES del `DROP COLUMN` a proposito: mientras la columna exista, el
+-- tipo esta en uso y Postgres rechaza soltarlo.
+ALTER TABLE "tarifas" DROP COLUMN IF EXISTS "status";
+DROP TYPE IF EXISTS "estado_tarifa";

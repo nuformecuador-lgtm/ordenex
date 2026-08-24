@@ -11,7 +11,7 @@ import {
   toPendienteRowDesdeSnapshot,
 } from "@/lib/repositories/CierresAdminRepository";
 import { CierresBodegaAdminRepository } from "@/lib/repositories/CierresBodegaAdminRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 212 (T10, R21/R22/R23) — el DESGLOSE del recaudo llega por los TRES caminos de
@@ -124,7 +124,7 @@ const DESGLOSE_ESPERADO = [
 
 const tarifaRepoStub = {
   findVigentePorTiendas: vi.fn(),
-} as unknown as ITarifaVigentePorTiendaRepository;
+} as unknown as ITarifaVigenteRepository;
 
 // --- R23: las proyecciones PIDEN el desglose ---------------------------------------------
 

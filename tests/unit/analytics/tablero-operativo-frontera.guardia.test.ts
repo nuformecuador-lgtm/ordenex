@@ -124,6 +124,30 @@ function infractores(dir: string, patrones: readonly RegExp[]): string[] {
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* ALLOWLIST NOMINAL — 2026-08-23, feature 267 (decision P6 de su puerta)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * EL UNICO handler de `app/api` con `analitica` en su ruta que este guardia admite.
+ *
+ * Es una lista de UN camino, escrito con su nombre completo, y no un patron: un patron
+ * (`app/api/ordenes/api-key/**`) autorizaria de golpe a los que todavia no existen. La
+ * justificacion de la excepcion —y por que es un estrechamiento y no una derogacion— esta
+ * escrita entera en el caso que la usa, mas abajo.
+ */
+const HANDLER_ANALITICA_AUTORIZADO = "app/api/ordenes/api-key/analitica/route.ts";
+
+/**
+ * El predicado del guardia, aislado para que el caso REAL (sobre el arbol) y la
+ * AUTOCOMPROBACION SINTETICA (sobre rutas inventadas) usen exactamente la misma logica. Si se
+ * afloja aqui, se afloja tambien el caso negativo y este deja de pasar: es lo que impide que
+ * «estrechar» se convierta en «relajar» de tapadillo.
+ */
+function handlersDeAnaliticaNoAutorizados(rutas: readonly string[]): string[] {
+  return rutas.filter((rel) => /analitica/i.test(rel) && rel !== HANDLER_ANALITICA_AUTORIZADO);
+}
+
 /* ========================================================================== */
 /* PARTE PERMANENTE — censa el arbol                                          */
 /* ========================================================================== */
@@ -191,12 +215,55 @@ describe("Feature 131 (R1) — la ruta de analitica consulta SOLO por la Server 
     ).toEqual([]);
   });
 
-  it("y la ruta no define ningun handler de `app/api` para analitica", () => {
+  it("y la ruta no define ningun handler de `app/api` para analitica, salvo el UNICO autorizado", () => {
     // `docs/architecture.md`: las lecturas internas van por Server Action; los route
     // handlers son para webhooks y API publica. Una ruta de analitica seria una segunda
     // superficie con su propio gating y su propia forma de olvidarse de auditar.
-    const handlers = archivos("app/api").filter((rel) => /analitica/i.test(rel));
-    expect(handlers).toEqual([]);
+    //
+    // 2026-08-23 · FEATURE 267 · decision P6 de la puerta, firmada por el humano.
+    // ESTE CASO SE ESTRECHA, NO SE DEROGA: pasa de «ninguno» a «exactamente UNO, con su
+    // nombre escrito». El motivo del guardia se conserva entero, y por eso cabe la
+    // excepcion: la frase de arriba dice que los route handlers existen «para webhooks y
+    // API PUBLICA», y `GET /api/ordenes/api-key/analitica` ES la API publica —el canal por
+    // API key, autenticado con `Authorization: Bearer ordx_...`, contrato publicado en
+    // `docs/api/api-key-openapi.yaml`—. Lo que este guardia se escribio para impedir es una
+    // segunda superficie INTERNA que se saltara el borde; eso sigue prohibido igual.
+    //
+    // LO QUE QUEDO EXPRESAMENTE DESCARTADO, para que no se reabra: llamar a la ruta de otra
+    // forma para esquivar este regex. Habria pasado el guardia sin pasar su motivo, y el
+    // proximo lector no habria encontrado ni la analitica ni la decision.
+    //
+    // Que sigue prohibido, sin un caracter de diferencia: cualquier OTRO archivo de `app/api`
+    // con `analitica` en su ruta (lo comprueba el caso sintetico de abajo) y —esto lo cubre el
+    // guardia hermano `operativa-frontera.guardia.test.ts`, cuya prohibicion NO se toca— que
+    // cualquier archivo de `app/api`, INCLUIDO el autorizado, mencione el servicio, el
+    // repositorio o la Server Action. El handler autorizado cumple esa segunda regla porque
+    // delega en `lib/api/analitica-integrador.ts` y no nombra ni el servicio ni el repositorio.
+    expect(handlersDeAnaliticaNoAutorizados(archivos("app/api"))).toEqual([]);
+  });
+
+  it("la allowlist es NOMINAL: el camino autorizado existe de verdad en el arbol", () => {
+    // Sin este caso, un `HANDLER_ANALITICA_AUTORIZADO` que apuntara a un archivo borrado
+    // dejaria una excepcion viva para un nombre que nadie ocupa: el sitio perfecto para que
+    // manana aparezca otra cosa con ese nombre y entre gratis.
+    expect(fs.existsSync(path.join(REPO_ROOT, HANDLER_ANALITICA_AUTORIZADO))).toBe(true);
+    expect(archivos("app/api")).toContain(HANDLER_ANALITICA_AUTORIZADO);
+  });
+
+  it("y NO es una relajacion: un SEGUNDO handler de analitica en `app/api` seguiria cayendo", () => {
+    // AUTOCOMPROBACION SINTETICA (267/R42). Nada se escribe en el arbol: se pasa por el MISMO
+    // predicado que usa el caso de arriba una lista de rutas inventadas. Sin este caso,
+    // «estrechar» y «relajar» serian indistinguibles desde fuera.
+    const inventados = [
+      "app/api/reportes/analitica/route.ts",
+      "app/api/analitica/route.ts",
+      "app/api/ordenes/api-key/analitica/v2/route.ts",
+      // Y tampoco vale disfrazar el nombre: el regex es `/analitica/i` sobre la RUTA entera.
+      "app/api/interno/Analitica-Operativa/route.ts",
+    ];
+    expect(handlersDeAnaliticaNoAutorizados([...archivos("app/api"), ...inventados])).toEqual(
+      inventados,
+    );
   });
 
   it("el censo mira archivos de verdad (si no, seria verde por vacio)", () => {

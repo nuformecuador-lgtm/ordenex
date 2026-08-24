@@ -5,15 +5,19 @@ import {
   handleCotizacionApi,
   type CotizacionApiDeps,
 } from "@/app/api/ordenes/api-key/cotizacion/route";
+import { ConflictError } from "@/lib/errors";
 import { CotizacionOrdenService } from "@/lib/services/CotizacionOrdenService";
 import { MSG_COTIZACION_SIN_TARIFA } from "@/lib/services/mensajes-cotizacion";
+import { MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import type { ApiKeyAuthResult } from "@/lib/interfaces/services/IApiKeyAuthService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigente,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { ICotizacionOrdenService } from "@/lib/interfaces/services/ICotizacionOrdenService";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 import { monedaConfig } from "@/lib/config/moneda";
@@ -54,9 +58,26 @@ const TARIFA: TarifaVigente = {
 
 const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
 const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
+/**
+ * Feature 274 — la tarifa de OTRA zona, en la MISMA columna que la de `z1` (las dos filas son
+ * no-centrales). Es lo que hace visible por el borde que el precio depende del par
+ * (tienda, zona) y no de la tienda sola (R32).
+ */
+const TARIFA_Z3: TarifaVigente = {
+  valorFlete: "4000.00",
+  valorFleteGam: "4500.00",
+  valorFleteDevuelto: "2000.00",
+  valorFleteDevueltoGam: "2200.00",
+  comisionCod: "3.50",
+  ivaFlete: "13.00",
+  ivaComisionCod: "13.00",
+};
+
 const DISTRITOS = [
   { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
   { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true },
+  // Feature 274: un distrito NO-CENTRAL en una zona distinta de `z1`.
+  { id: "d3", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false },
 ];
 
 /** Fila cubierta, con la geografia en columnas SEPARADas (contrato publico de la 88). */
@@ -158,11 +179,40 @@ function buildRepoDoble(): RepoDoble {
   return { repo, invocados };
 }
 
-function buildTarifaRepo(tarifa: TarifaVigente | null = TARIFA): ITarifaVigentePorTiendaRepository {
+/**
+ * Feature 274/R37 — el resolver es UNO SOLO (`resolveTarifa`/`resolveTarifas`), el mismo que
+ * liquida el cierre de dia. Acepta una tarifa unica para todas las zonas o un mapa
+ * `zonaId -> tarifa | null`, que es lo que permite montar un lote mixto por el borde.
+ */
+type TarifaPorZona = Record<string, TarifaVigente | null>;
+
+function esTarifaUnica(v: TarifaVigente | TarifaPorZona): v is TarifaVigente {
+  return "valorFlete" in v;
+}
+
+function buildTarifaRepo(
+  tarifas: TarifaVigente | TarifaPorZona | null = TARIFA,
+): ITarifaVigenteRepository {
+  const paraZona = (zonaId: string | null): TarifaVigenteResuelta | null => {
+    const base =
+      tarifas === null
+        ? null
+        : esTarifaUnica(tarifas)
+          ? tarifas
+          : zonaId === null
+            ? null
+            : (tarifas[zonaId] ?? null);
+    if (base === null) return null;
+    return { ...base, tarifaId: `tarifa-${zonaId ?? "sin-zona"}`, fulfillment: "0.00" };
+  };
+
   return {
-    resolveTarifaPorTienda: vi.fn(async () => tarifa),
-    resolveTarifaCotizablePorTienda: vi.fn(async () => tarifa),
-    resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+    resolveTarifa: vi.fn(async (_tiendaId: string, zonaId: string | null) => paraZona(zonaId)),
+    resolveTarifas: vi.fn(async (pares: readonly ParTarifa[]) => {
+      const mapa = new Map<string, TarifaVigenteResuelta | null>();
+      for (const par of pares) mapa.set(clavePar(par), paraZona(par.zonaId));
+      return mapa;
+    }),
   };
 }
 
@@ -187,8 +237,8 @@ function deps(
 
 /** Cablea el service REAL con dobles de repositorio y devuelve tambien las sondas. */
 function depsReales(
-  opciones: { tarifa?: TarifaVigente | null } = {},
-): CotizacionApiDeps & { sondas: RepoDoble; tarifaRepo: ITarifaVigentePorTiendaRepository } {
+  opciones: { tarifa?: TarifaVigente | TarifaPorZona | null } = {},
+): CotizacionApiDeps & { sondas: RepoDoble; tarifaRepo: ITarifaVigenteRepository } {
   const sondas = buildRepoDoble();
   const tarifaRepo = buildTarifaRepo(opciones.tarifa === undefined ? TARIFA : opciones.tarifa);
   return {
@@ -261,7 +311,7 @@ describe("cotizacion por API key — autenticacion (R1/R2/R3/R4)", () => {
     expect(spyAuth).toHaveBeenCalledWith(null);
     // Y lo que R1 exige de verdad: NI tarifa NI geografia. El 401 se decide antes de que
     // exista una tienda de la que resolver nada.
-    expect(tarifaRepo.resolveTarifaCotizablePorTienda).not.toHaveBeenCalled();
+    expect(tarifaRepo.resolveTarifas).not.toHaveBeenCalled();
     expect(sondas.invocados).toEqual([]);
   });
 
@@ -315,9 +365,16 @@ describe("cotizacion por API key — autenticacion (R1/R2/R3/R4)", () => {
     );
 
     expect(res.status).toBe(200);
-    // La tarifa se resuelve SIEMPRE contra el actor de la key, nunca contra el cuerpo.
-    expect(tarifaRepo.resolveTarifaCotizablePorTienda).toHaveBeenCalledWith(KEY_ACTOR.usuarioId);
-    expect(tarifaRepo.resolveTarifaCotizablePorTienda).not.toHaveBeenCalledWith("tienda-ajena");
+    // La tarifa se resuelve SIEMPRE contra el actor de la key, nunca contra el cuerpo. Desde la
+    // 274 lo que viaja es el PAR (tienda, zona), y la mitad `tienda` sigue saliendo del actor.
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledWith([
+      { tiendaId: KEY_ACTOR.usuarioId, zonaId: "z1" },
+    ]);
+    const paresPedidos = vi.mocked(tarifaRepo.resolveTarifas).mock.calls.flatMap(([pares]) => [
+      ...pares,
+    ]);
+    expect(paresPedidos.every((par) => par.tiendaId === KEY_ACTOR.usuarioId)).toBe(true);
+    expect(paresPedidos.some((par) => par.tiendaId === "tienda-ajena")).toBe(false);
   });
 });
 
@@ -421,8 +478,8 @@ describe("cotizacion por API key — entrada (R6/R7/R8)", () => {
 // 3. Tarifa ausente (R13/R16)
 // ---------------------------------------------------------------------------------------
 
-describe("cotizacion por API key — tarifa ausente (R13/R16)", () => {
-  it("409 con mensaje explicito cuando la tienda no tiene tarifa cotizable, sin filas (R13)", async () => {
+describe("cotizacion por API key — tarifa ausente (R13/R16, feature 274/R35)", () => {
+  it("409 con mensaje explicito cuando NINGUNA fila del lote resuelve tarifa, sin filas (R35)", async () => {
     const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({ tarifa: null });
     void tarifaRepo;
 
@@ -433,15 +490,19 @@ describe("cotizacion por API key — tarifa ausente (R13/R16)", () => {
 
     expect(res.status).toBe(409);
     const body = (await res.json()) as Record<string, unknown>;
+    // R35: el MISMO body que hoy. No se re-describe aqui: se compara contra el shape que el
+    // propio serializador de errores de la app produce para ese conflicto.
+    expect(body).toEqual(new ConflictError(MSG_COTIZACION_SIN_TARIFA).toShape());
     expect(body.code).toBe("CONFLICT");
     expect(body.message).toBe(MSG_COTIZACION_SIN_TARIFA);
-    expect(body.message).toBe("la tienda no tiene una tarifa vigente asociada: no se puede cotizar");
     // Sin filas y sin NI UN importe: el 409 es la inversion deliberada del gap D1/R8 de la 98.
     expect(body).not.toHaveProperty("filas");
     expect(body).not.toHaveProperty("totales");
     expect(JSON.stringify(body)).not.toContain(monedaConfig.simbolo);
-    // R14: la tarifa se comprueba ANTES de resolver la geografia de ninguna fila.
-    expect(sondas.invocados).toEqual([]);
+    // Feature 274: el orden se INVIRTIO. La geografia se resuelve PRIMERO (sin zona no hay par
+    // que consultar), asi que las tres lecturas geograficas SI ocurren antes del 409. Lo que
+    // sigue sin ocurrir es lo unico que importaba: emitir un importe.
+    expect(new Set(sondas.invocados)).toEqual(new Set(LECTURAS_PERMITIDAS));
   });
 
   it("el mensaje del 409 no contiene key, hash ni datos de la fila (R16)", async () => {
@@ -786,5 +847,168 @@ describe("cotizacion por API key — el borde no calcula ni consulta (T8)", () =
   it("declara el runtime nodejs y el presupuesto de 60 s", () => {
     expect(FUENTE_RUTA).toMatch(/export const runtime = "nodejs";/);
     expect(FUENTE_RUTA).toMatch(/export const maxDuration = 60;/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// 7. Feature 274 (T7.3) — tarifa por par (tienda, zona) y criterio de lote (design §3.6)
+// ---------------------------------------------------------------------------------------
+
+/** Fila cubierta de OTRA zona (`z3`), tambien no-central. */
+function filaOtraZona(overrides: Record<string, string> = {}): Record<string, string> {
+  return filaOk({ distrito: "Santa Ana", num_remision: "REM-0009", ...overrides });
+}
+
+describe("cotizacion por API key — tarifa por zona (feature 274, R32-R36)", () => {
+  it("R32 dos filas en zonas distintas devuelven importes distintos, con UNA sola consulta", async () => {
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({
+      tarifa: { z1: TARIFA, z3: TARIFA_Z3 },
+    });
+    void sondas;
+
+    const res = await handleCotizacionApi(
+      reqConBearer({ ordenes: [filaOk(), filaOtraZona()] }, SECRETO),
+      cotizacionDeps,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      filas: { resultado: string; costos?: { entregado: Record<string, string> } }[];
+    };
+    expect(body.filas.map((f) => f.resultado)).toEqual(["cotizada", "cotizada"]);
+    // Las dos filas son no-centrales: leen la misma columna. Lo unico que las separa es la
+    // ZONA, asi que dos importes iguales aqui significarian que la tarifa volvio a resolverse
+    // por la tienda sola.
+    expect(body.filas[0].costos?.entregado.flete).not.toBe(body.filas[1].costos?.entregado.flete);
+    expect(body.filas[0].costos?.entregado.flete).toBe("₡2.500,00");
+    expect(body.filas[1].costos?.entregado.flete).toBe("₡4.000,00");
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
+  });
+
+  it("R33 si todas las filas resuelven: 200, todas cotizadas, conError 0 y filasExcluidas 0", async () => {
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({
+      tarifa: { z1: TARIFA, z3: TARIFA_Z3 },
+    });
+    void sondas;
+    void tarifaRepo;
+
+    const res = await handleCotizacionApi(
+      reqConBearer({ ordenes: [filaOk(), filaOtraZona(), filaOk({ num_remision: "REM-0003" })] }, SECRETO),
+      cotizacionDeps,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      cotizadas: number;
+      conError: number;
+      filas: { resultado: string; errores?: Record<string, string[]> }[];
+      totales: { filasSumadas: number; filasExcluidas: number };
+    };
+    expect(body.filas.map((f) => f.resultado)).toEqual(["cotizada", "cotizada", "cotizada"]);
+    expect(body.cotizadas).toBe(3);
+    expect(body.conError).toBe(0);
+    expect(body.totales.filasExcluidas).toBe(0);
+    expect(body.totales.filasSumadas).toBe(3);
+    expect(body.filas.some((f) => f.errores !== undefined)).toBe(false);
+  });
+
+  it("R34 lote mixto: 200, la fila sin tarifa en error y sin clave costos, y los totales son los de la otra", async () => {
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({
+      // `z1` resuelve; `z3` no tiene ninguna tarifa en ningun nivel de la cascada.
+      tarifa: { z1: TARIFA, z3: null },
+    });
+    void sondas;
+    void tarifaRepo;
+
+    const res = await handleCotizacionApi(
+      reqConBearer({ ordenes: [filaOk(), filaOtraZona()] }, SECRETO),
+      cotizacionDeps,
+    );
+
+    // 200, no 409: una fila del lote SI resolvio (design §3.6).
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      total: number;
+      cotizadas: number;
+      conError: number;
+      filas: {
+        fila: number;
+        numRemision: string | null;
+        resultado: string;
+        costos?: Record<string, unknown>;
+        errores?: Record<string, string[]>;
+      }[];
+      totales: {
+        filasSumadas: number;
+        filasExcluidas: number;
+        entregado: Record<string, string>;
+        devuelto: Record<string, string>;
+      };
+    };
+
+    expect(body.filas[0].resultado).toBe("cotizada");
+    // R38: el canal de error POR FILA que ya existia, con la clave `tarifa` y el literal unico.
+    expect(body.filas[1]).toEqual({
+      fila: 2,
+      numRemision: "REM-0009",
+      resultado: "error",
+      errores: { tarifa: [MSG_FILA_SIN_TARIFA] },
+    });
+    // AUSENCIA de la clave `costos`, no un `costos` en cero: el JSON serializado no la trae.
+    expect("costos" in body.filas[1]).toBe(false);
+
+    expect(body.conError).toBe(1);
+    expect(body.cotizadas).toBe(1);
+    expect(body.totales.filasSumadas).toBe(1);
+    expect(body.totales.filasExcluidas).toBe(1);
+    expect(body.totales.filasSumadas + body.totales.filasExcluidas).toBe(body.total);
+
+    // Los importes del lote son EXACTAMENTE los de la fila cotizada: la degradada no aporta.
+    expect(body.totales.entregado).toEqual(body.filas[0].costos?.entregado);
+    expect(body.totales.devuelto).toEqual(body.filas[0].costos?.devuelto);
+  });
+
+  it("R36 un lote entero sin cobertura responde 200 con totales en cero, aunque NO haya tarifa alguna", async () => {
+    // El caso que decide bien o mal la implementacion ingenua: aqui no hay ni una tarifa, pero
+    // tampoco hay una sola fila que llegue a pedirla. Un 409 le diria al integrador que su
+    // cuenta no puede cotizar cuando lo que fallaron fueron sus direcciones.
+    const { sondas, tarifaRepo, ...cotizacionDeps } = depsReales({ tarifa: null });
+    void sondas;
+
+    const res = await handleCotizacionApi(
+      reqConBearer({ ordenes: [filaSinCobertura(), filaSinCobertura()] }, SECRETO),
+      cotizacionDeps,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      total: number;
+      cotizadas: number;
+      conError: number;
+      filas: { errores?: Record<string, string[]> }[];
+      totales: {
+        filasSumadas: number;
+        filasExcluidas: number;
+        entregado: Record<string, string>;
+        devuelto: Record<string, string>;
+      };
+    };
+    expect(body.cotizadas).toBe(0);
+    expect(body.conError).toBe(2);
+    expect(body.totales.filasSumadas).toBe(0);
+    expect(body.totales.filasExcluidas).toBe(2);
+    for (const importe of [
+      ...Object.values(body.totales.entregado),
+      ...Object.values(body.totales.devuelto),
+    ]) {
+      expect(importe).toBe(`${monedaConfig.simbolo}0${monedaConfig.separadorDecimal}00`);
+    }
+    // Y el diagnostico que recibe el integrador es el CORRECTO: geografia, no tarifa.
+    for (const f of body.filas) {
+      expect(f.errores?.tarifa).toBeUndefined();
+      expect(f.errores?.distrito).toBeDefined();
+    }
+    // Ni se consulta la tarifa: no hay un solo par que pedir.
+    expect(tarifaRepo.resolveTarifas).not.toHaveBeenCalled();
   });
 });

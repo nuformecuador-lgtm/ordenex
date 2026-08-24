@@ -35,13 +35,14 @@ function ordenRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// Tarifa anidada de la tienda (Decimal en las 8 columnas numericas, patron real
-// de Prisma). El helper permite overrides para variar montos por caso.
+// Fila de `tarifas` tal como la devuelve la query de la pagina (Decimal en las columnas
+// numericas, patron real de Prisma). Feature 274: ya NO viene anidada en `tienda` ni lleva
+// `status` —esa columna murio con el enum—; llega de `prisma.tarifa.findMany` y la elige la
+// cascada (tienda, zona). El helper permite overrides para variar montos y par por caso.
 function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "tar-1",
     tiendaId: "t1",
-    status: "activo",
     valorFlete: new Prisma.Decimal("3.50"),
     valorFleteDevuelto: new Prisma.Decimal("2.00"),
     valorFleteGam: new Prisma.Decimal("4.00"),
@@ -50,6 +51,9 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
     comisionCod: new Prisma.Decimal("5.00"),
     ivaFlete: new Prisma.Decimal("13.00"),
     ivaComisionCod: new Prisma.Decimal("13.00"),
+    tarifaEspecial: null, // columna opcional: null = sin pacto especial
+    zonaId: null, // opcional: null = no acotada a una zona
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -57,7 +61,7 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
 }
 
 // Fila del LISTADO: ademas del estatus trae los datos de TODAS las relaciones
-// directas (FK) de la orden, y la tienda incluye sus tarifas (Usuario.tarifasTienda).
+// directas (FK) de la orden. Feature 274: la tienda YA NO trae tarifas anidadas.
 function ordenListRow(overrides: Record<string, unknown> = {}) {
   return {
     ...ordenRow(),
@@ -67,7 +71,6 @@ function ordenListRow(overrides: Record<string, unknown> = {}) {
       nombre: "Tienda Uno",
       email: "tienda1@ordenex.co",
       telefono: "0990000001",
-      tarifasTienda: [tarifaRow()],
     },
     // Feature 30/R14: el listado incluye la zona (nombre + flag GAM).
     zona: { id: "z1", nombre: "GAM", esCentral: true },
@@ -95,6 +98,9 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
       count: vi.fn(),
       updateMany: vi.fn(),
     },
+    // Feature 274 (T8.1): la tarifa de la pagina sale de SU PROPIA query. Por defecto no
+    // resuelve ninguna (R20); cada test que quiera tarifa la siembra aqui.
+    tarifa: { findMany: vi.fn().mockResolvedValue([]) },
     orderStatus: { findUnique: vi.fn() },
     zona: { findUnique: vi.fn() },
     provincia: { findUnique: vi.fn() },
@@ -261,7 +267,6 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
           nombre: "Tienda Dos",
           email: "tienda2@ordenex.co",
           telefono: "0990000002",
-          tarifasTienda: [],
         },
       }),
     ]);
@@ -340,7 +345,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
 
   // El listado trae los datos de TODAS las relaciones directas (FK) via joins, y
   // la tienda incluye sus tarifas (Decimal -> number) sin exponer deletedAt.
-  it("expone `relaciones` con las relaciones directas y las tarifas de la tienda", async () => {
+  it("expone `relaciones` con las relaciones directas y la tarifa de la orden", async () => {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow({
@@ -348,6 +353,7 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
         mensajeroAsignado: { id: "msj-1", nombre: "Luis" },
       }),
     ]);
+    prisma.tarifa.findMany.mockResolvedValue([tarifaRow()]);
     prisma.orden.count.mockResolvedValue(1);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
@@ -380,13 +386,16 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[0].fleteConIva).toBe("4.52"); // GAM 4.00 + 13%
     expect(res.items[0].comisionConIva).toBe("0.00"); // este fixture no lleva montoCobrar
 
-    // El include filtra las tarifas borradas/inactivas (solo la ACTIVA) y
-    // selecciona la relacion tienda.tarifasTienda.
+    // Feature 274: el include de `tienda` YA NO trae tarifas. La tarifa llega de su propia
+    // query, con la cascada, y por eso este `toEqual` deja constancia de lo que se fue.
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.include.tienda.select.tarifasTienda.where).toEqual({
-      status: "activo",
-      deletedAt: null,
+    expect(arg.include.tienda.select).toEqual({
+      id: true,
+      nombre: true,
+      email: true,
+      telefono: true,
     });
+    expect(arg.include.tienda.select).not.toHaveProperty("tarifasTienda");
   });
 
   // Filtro MULTI-ESTADO (selector de seleccion multiple del listado de /ordenes): una
@@ -517,23 +526,22 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     ivaComisionCod: new Prisma.Decimal("13.00"),
   };
 
-  async function derivadosDe(overrides: Record<string, unknown>) {
+  async function derivadosDe(
+    overrides: Record<string, unknown>,
+    // Feature 274: las candidatas que la query de tarifas devuelve para la pagina. `[]` = el
+    // par (tienda, zona) de la orden no resuelve ninguna (R20).
+    tarifas: Array<Record<string, unknown>> = [tarifaRow(TARIFA_REAL)],
+  ) {
     const prisma = buildPrisma();
     prisma.orden.findMany.mockResolvedValue([
       ordenListRow({
         // no-central: usa `valorFlete`, no la variante GAM.
         zona: { id: "z1", nombre: "Limón", esCentral: false },
-        tienda: {
-          id: "t1",
-          nombre: "Tienda Uno",
-          email: "tienda1@ordenex.co",
-          telefono: "0990000001",
-          tarifasTienda: [tarifaRow(TARIFA_REAL)],
-        },
         cobraComision: true,
         ...overrides,
       }),
     ]);
+    prisma.tarifa.findMany.mockResolvedValue(tarifas);
     prisma.orden.count.mockResolvedValue(1);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
     const res = await repo.list({
@@ -567,17 +575,11 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(central.fleteConIva).toBe("2260.00"); // 2000 (GAM) + 13%
   });
 
-  it("204: sin tarifa activa los dos importes son '0.00' (R9), no null", async () => {
-    const item = await derivadosDe({
-      montoCobrar: new Prisma.Decimal("14900.00"),
-      tienda: {
-        id: "t1",
-        nombre: "Tienda Uno",
-        email: "tienda1@ordenex.co",
-        telefono: "0990000001",
-        tarifasTienda: [], // el include no resolvió ninguna tarifa activa
-      },
-    });
+  it("204: sin tarifa resuelta los dos importes son '0.00' (R9), no null", async () => {
+    const item = await derivadosDe(
+      { montoCobrar: new Prisma.Decimal("14900.00") },
+      [], // la cascada no encontró fila para el par (tienda, zona)
+    );
     expect(item.fleteConIva).toBe("0.00");
     expect(item.comisionConIva).toBe("0.00");
     expect(item.relaciones!.tienda!.tarifa).toBeNull();
@@ -908,5 +910,261 @@ describe("235/R14/R17 — la orden en ayuda no es parada de ruta ni se ofrece pa
     ] as const) {
       expect(() => assertTransicionValida(AYUDA, destino)).toThrow(TransicionIlegalError);
     }
+  });
+});
+
+// =====================================================================================
+// FEATURE 274 (T8.3) — LA TARIFA DEL LISTADO SALE DE LA CASCADA (tienda, zona).
+//
+// Hasta esta feature el listado traia `tienda.tarifasTienda { where: { status: "activo" },
+// take: 1 }`: una regla PROPIA, distinta de la que liquida el cierre de dia. Con la misma
+// base de datos, la pantalla podia MOSTRAR una fila y el cierre FACTURAR otra. Aqui se
+// afirma que la fila la elige ahora la cascada del modulo puro, por el par (tienda, zona)
+// de CADA orden, en UNA sola query adicional por pagina.
+//
+// El doble de Prisma es el del resto del archivo: `prisma.tarifa.findMany` devuelve las
+// candidatas y las aserciones son sobre el `where`/`select` EXACTOS que recibe.
+// =====================================================================================
+describe("OrdenRepository.list — tarifa por cascada (R18/R19/R20)", () => {
+  const paramsPagina = {
+    where: {},
+    sortBy: "created_at",
+    sortDir: "desc",
+    skip: 0,
+    take: 50,
+  } as const;
+
+  // Tienda unica en DOS zonas, con una tarifa por zona (nivel 1 de la cascada) y ademas una
+  // generica de la tienda (nivel 2) que NO debe ganarle a ninguna de las dos.
+  function tarifasDeDosZonas() {
+    return [
+      tarifaRow({ id: "tar-z1", zonaId: "z1", valorFlete: new Prisma.Decimal("1000.00") }),
+      tarifaRow({ id: "tar-z2", zonaId: "z2", valorFlete: new Prisma.Decimal("2000.00") }),
+      // nivel 2: la de la tienda entera, la que NO debe ganar.
+      tarifaRow({ id: "tar-generica", zonaId: null, valorFlete: new Prisma.Decimal("9999.00") }),
+    ];
+  }
+
+  function dosOrdenesEnZonasDistintas() {
+    return [
+      ordenListRow({
+        id: "ord-z1",
+        zonaId: "z1",
+        zona: { id: "z1", nombre: "Limón", esCentral: false },
+      }),
+      ordenListRow({
+        id: "ord-z2",
+        zonaId: "z2",
+        zona: { id: "z2", nombre: "Puntarenas", esCentral: false },
+      }),
+    ];
+  }
+
+  it("R18: dos ordenes de la MISMA tienda en zonas distintas muestran importes distintos", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue(dosOrdenesEnZonasDistintas());
+    prisma.tarifa.findMany.mockResolvedValue(tarifasDeDosZonas());
+    prisma.orden.count.mockResolvedValue(2);
+
+    const res = await new OrdenRepository(prisma as unknown as PrismaClient).list(paramsPagina);
+
+    // Cada fila cobra la tarifa de SU zona (nivel 1), no la generica de la tienda.
+    expect(res.items[0].relaciones!.tienda!.tarifa!.id).toBe("tar-z1");
+    expect(res.items[1].relaciones!.tienda!.tarifa!.id).toBe("tar-z2");
+    expect(res.items[0].fleteConIva).toBe("1130.00"); // 1000 + 13%
+    expect(res.items[1].fleteConIva).toBe("2260.00"); // 2000 + 13%
+    // Lo que la feature viene a arreglar, dicho como asercion: los dos importes DIFIEREN.
+    expect(res.items[0].fleteConIva).not.toBe(res.items[1].fleteConIva);
+  });
+
+  it("R18: la cascada es la del modulo puro — `where` y `select` exactos de la query", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue(dosOrdenesEnZonasDistintas());
+    prisma.tarifa.findMany.mockResolvedValue(tarifasDeDosZonas());
+    prisma.orden.count.mockResolvedValue(2);
+
+    await new OrdenRepository(prisma as unknown as PrismaClient).list(paramsPagina);
+
+    const arg = prisma.tarifa.findMany.mock.calls[0][0];
+    // Las TRES ramas de `whereCascada`, en el mismo orden: nivel 1 (tienda × zona), nivel 2
+    // (tienda, zona NULL) y nivel 3 (zona, tienda NULL). Si alguien reescribe la regla aqui
+    // dentro en vez de reusar el modulo puro, esta comparacion se pone roja.
+    expect(arg.where).toEqual({
+      OR: [
+        { tiendaId: { in: ["t1"] }, zonaId: { in: ["z1", "z2"] } },
+        { tiendaId: { in: ["t1"] }, zonaId: null },
+        { tiendaId: null, zonaId: { in: ["z1", "z2"] } },
+      ],
+    });
+    // Proyeccion del LISTADO: la de `TarifaDTO` (con `isDefault`, `tarifaEspecial` y las
+    // fechas), no la de la ruta del dinero. Sin columnas de mas.
+    expect(Object.keys(arg.select).sort()).toEqual([
+      "comisionCod",
+      "createdAt",
+      "fulfillment",
+      "id",
+      "isDefault",
+      "ivaComisionCod",
+      "ivaFlete",
+      "tarifaEspecial",
+      "tiendaId",
+      "updatedAt",
+      "valorFlete",
+      "valorFleteDevuelto",
+      "valorFleteDevueltoGam",
+      "valorFleteGam",
+      "zonaId",
+    ]);
+  });
+
+  // R19 — el numero de consultas de DATOS de una pagina no depende del numero de filas.
+  // Se cuentan las dos que traen filas (ordenes + tarifas); el `count` de la paginacion es
+  // una agregacion que ya existia, no una tercera lectura.
+  for (const n of [1, 50]) {
+    it("R19: una pagina de " + n + " fila(s) hace 2 consultas de datos, no N + 1", async () => {
+      const prisma = buildPrisma();
+      prisma.orden.findMany.mockResolvedValue(
+        Array.from({ length: n }, (_, i) =>
+          ordenListRow({
+            id: "ord-" + i,
+            // Mitad y mitad en dos zonas: los pares se DEDUPLICAN, asi que sigue siendo una
+            // sola query por mas filas que traiga la pagina.
+            zonaId: i % 2 === 0 ? "z1" : "z2",
+            zona:
+              i % 2 === 0
+                ? { id: "z1", nombre: "Limón", esCentral: false }
+                : { id: "z2", nombre: "Puntarenas", esCentral: false },
+          }),
+        ),
+      );
+      prisma.tarifa.findMany.mockResolvedValue(tarifasDeDosZonas());
+      prisma.orden.count.mockResolvedValue(n);
+
+      const res = await new OrdenRepository(prisma as unknown as PrismaClient).list(paramsPagina);
+
+      expect(res.items).toHaveLength(n);
+      expect(prisma.orden.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.tarifa.findMany).toHaveBeenCalledTimes(1);
+      // La suma, dicha aparte: DOS consultas de datos, sea la pagina de 1 o de 50.
+      expect(
+        prisma.orden.findMany.mock.calls.length + prisma.tarifa.findMany.mock.calls.length,
+      ).toBe(2);
+      // Y los pares van DEDUPLICADOS: la unica tienda una vez y las zonas presentes una vez
+      // cada una (con n = 50, dos entradas, no cincuenta).
+      const arg = prisma.tarifa.findMany.mock.calls[0][0];
+      expect(arg.where.OR[0]).toEqual({
+        tiendaId: { in: ["t1"] },
+        zonaId: { in: n === 1 ? ["z1"] : ["z1", "z2"] },
+      });
+    });
+  }
+
+  it("R20: una orden sin tarifa sale con `tarifa: null` y '0.00', sin romper la pagina", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({
+        id: "ord-con",
+        zonaId: "z1",
+        zona: { id: "z1", nombre: "Limón", esCentral: false },
+      }),
+      // Otra tienda: ningun nivel de la cascada tiene fila para su par.
+      ordenListRow({
+        id: "ord-sin",
+        tiendaId: "t9",
+        zonaId: "z9",
+        zona: { id: "z9", nombre: "Sin cobertura", esCentral: false },
+        montoCobrar: new Prisma.Decimal("14900.00"),
+        cobraComision: true,
+      }),
+    ]);
+    prisma.tarifa.findMany.mockResolvedValue([
+      tarifaRow({ id: "tar-z1", zonaId: "z1", valorFlete: new Prisma.Decimal("1000.00") }),
+    ]);
+    prisma.orden.count.mockResolvedValue(2);
+
+    const res = await new OrdenRepository(prisma as unknown as PrismaClient).list(paramsPagina);
+
+    // R39: el gap NO bloquea el listado —a diferencia de los dos bordes de API por key, que
+    // devuelven 409—. La pagina llega entera y la fila que si resuelve conserva su importe.
+    expect(res.items).toHaveLength(2);
+    expect(res.items[0].relaciones!.tienda!.tarifa!.id).toBe("tar-z1");
+    expect(res.items[0].fleteConIva).toBe("1130.00");
+
+    expect(res.items[1].relaciones!.tienda!.tarifa).toBeNull();
+    expect(res.items[1].fleteConIva).toBe("0.00");
+    expect(res.items[1].comisionConIva).toBe("0.00");
+  });
+
+  it("R20: una pagina VACIA no consulta tarifas (el `where` seria `{ OR: [] }`)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([]);
+    prisma.orden.count.mockResolvedValue(0);
+
+    const res = await new OrdenRepository(prisma as unknown as PrismaClient).list(paramsPagina);
+
+    expect(res.items).toEqual([]);
+    expect(prisma.tarifa.findMany).not.toHaveBeenCalled();
+  });
+});
+
+// El detalle del tablero del dia se hidrata por `findListItemsByIds`, que comparte include y
+// mapeo con `list()`. Si la tarifa NO recibiera el mismo tratamiento, las dos pantallas
+// volverian a divergir por la puerta de atras.
+describe("OrdenRepository.findListItemsByIds — la MISMA tarifa que el listado (R18-R20)", () => {
+  it("resuelve por cascada y con UNA sola query adicional", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([
+      ordenListRow({
+        id: "ord-z1",
+        zonaId: "z1",
+        zona: { id: "z1", nombre: "Limón", esCentral: false },
+      }),
+      ordenListRow({
+        id: "ord-z2",
+        zonaId: "z2",
+        zona: { id: "z2", nombre: "Puntarenas", esCentral: false },
+      }),
+    ]);
+    prisma.tarifa.findMany.mockResolvedValue([
+      tarifaRow({ id: "tar-z1", zonaId: "z1", valorFlete: new Prisma.Decimal("1000.00") }),
+      tarifaRow({ id: "tar-z2", zonaId: "z2", valorFlete: new Prisma.Decimal("2000.00") }),
+    ]);
+
+    const items = await new OrdenRepository(prisma as unknown as PrismaClient).findListItemsByIds(
+      ["ord-z1", "ord-z2"],
+      { tipo: "global" },
+    );
+
+    expect(items[0].relaciones!.tienda!.tarifa!.id).toBe("tar-z1");
+    expect(items[1].relaciones!.tienda!.tarifa!.id).toBe("tar-z2");
+    expect(items[0].fleteConIva).toBe("1130.00");
+    expect(items[1].fleteConIva).toBe("2260.00");
+    expect(prisma.tarifa.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin tarifa para el par: `tarifa: null` y '0.00', igual que el listado (R20/R39)", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.findMany.mockResolvedValue([ordenListRow({ id: "ord-sin" })]);
+    prisma.tarifa.findMany.mockResolvedValue([]);
+
+    const items = await new OrdenRepository(prisma as unknown as PrismaClient).findListItemsByIds(
+      ["ord-sin"],
+      { tipo: "global" },
+    );
+
+    expect(items[0].relaciones!.tienda!.tarifa).toBeNull();
+    expect(items[0].fleteConIva).toBe("0.00");
+  });
+
+  it("con la lista vacia no consulta tarifas (R5: cero ids, cero consultas)", async () => {
+    const prisma = buildPrisma();
+    const items = await new OrdenRepository(prisma as unknown as PrismaClient).findListItemsByIds(
+      [],
+      { tipo: "global" },
+    );
+
+    expect(items).toEqual([]);
+    expect(prisma.orden.findMany).not.toHaveBeenCalled();
+    expect(prisma.tarifa.findMany).not.toHaveBeenCalled();
   });
 });

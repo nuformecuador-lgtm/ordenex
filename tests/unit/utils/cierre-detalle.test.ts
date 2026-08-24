@@ -52,7 +52,7 @@ describe("tarifaDe (R11)", () => {
   });
 
   it("R11: mismo formato que el resolver vivo para el MISMO valor (no divergen)", () => {
-    // El resolver (`TarifaVigentePorTiendaRepository`) emite `toFixed(2)`. Si el snapshot
+    // El resolver (`TarifaVigenteRepository`) emite `toFixed(2)`. Si el snapshot
     // emitiera otro texto para el mismo Decimal, un cierre backfilleado y uno nuevo
     // liquidarian "igual" pero con entradas distintas al ojo: eso es lo que se prohibe.
     const valor = new Prisma.Decimal("1000.00");
