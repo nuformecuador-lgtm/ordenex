@@ -55,6 +55,20 @@ import {
   ORIGENES_GESTION_DE_LA_TIENDA,
 } from "@/lib/utils/gestion-de-la-tienda-flag";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
+// 💰 FEATURE 273 (T9, R21/R33): el PREDICADO UNICO del conteo de intentos, IMPORTADO y no
+// reescrito. R33 prohibe que esta ficha toque el criterio; importarlo es lo que hace imposible
+// tener aqui una segunda definicion que divergiera del numero que ven las demas superficies.
+import { whereIntentosVigentes } from "@/lib/repositories/OrdenHistorialRepository";
+
+/**
+ * 💰 FEATURE 273 (T9, R23/R38) — el `motivo` de la gestion SINTETICA del rechazo por agotamiento.
+ *
+ * Texto FIJO. No lleva guia, ni destinatario, ni direccion, ni id de orden, ni id de usuario: esta
+ * fila la va a leer un admin en el detalle de un cierre y va a sostener un cobro
+ * (`cobroRechazado`, 56). `tests/unit/guards/tope-intentos-pii.guardia.test.ts` lo comprueba.
+ */
+export const MOTIVO_RECHAZO_TOPE_INTENTOS =
+  "rechazada al aprobar el cierre: sin gestionar y sin intentos de entrega disponibles";
 import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 import { toLineasPago } from "@/lib/utils/lineas-pago";
 import { computeTotales } from "@/lib/utils/cierre-totales";
@@ -1416,6 +1430,9 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               enBodegaEstatusId,
               enBodegaSateliteEstatusId,
               centralZonaId,
+              // FEATURE 273 (T9, R7/R21): el destino del rechazo y el umbral, los dos INYECTADOS.
+              rechazadaEstatusId,
+              umbralIntentos,
             } = liberacionSinGestionar;
             // ─── FEATURE 271 (T5.1, R35/R37) — LA LIBERACION SE ACOTA A **ESTE** CIERRE ──────────
             //
@@ -1462,10 +1479,115 @@ export class CierresAdminRepository implements ICierresAdminRepository {
               },
               select: { id: true, zonaId: true },
             });
-            if (ordenes.length > 0) {
+            // ─── 💰 FEATURE 273 (T9, R21-R27) — EL CORTE SE PARTE EN DOS DESTINOS ────────────
+            //
+            // Absorbe la ficha 218. Una orden barrida a `sin_gestionar` que YA AGOTO sus intentos
+            // de entrega NO vuelve a bodega: se termina en `rechazada`, dentro de ESTA MISMA
+            // transaccion (R21).
+            //
+            // EL CONTEO SE HACE **DENTRO DE LA TRANSACCION**, y no antes de abrirla: entre la
+            // lectura y la escritura otra aprobacion puede subir el contador, y el numero que
+            // decide tiene que ser el que ve la propia transaccion.
+            //
+            // El predicado se IMPORTA (`whereIntentosVigentes`), no se reescribe: es el punto UNICO
+            // del criterio (215/R4/R6) y R33 prohibe tocarlo desde esta ficha. `groupBy` por el par
+            // `(ordenId, cierreId)` porque el GRANO es el cierre, no la gestion (215/R29): dos
+            // gestiones contables de la misma orden en el mismo cierre aprobado suman UNA.
+            //
+            // *Nota que se COMPRUEBA, no se confia* (design §5.5): el `updateMany` del propio
+            // cierre ya corrio, asi que dentro de esta tx ESTE cierre ya esta `aprobado`. Una orden
+            // barrida a `sin_gestionar` no puede tener una gestion vigente en el cierre que la
+            // barrio —para ser barrida tuvo que estar en `en_reparto`/`ayuda_tienda`, es decir sin
+            // desenlace registrado, y una gestion deshecha lleva `anulada_at` y no cuenta—. El caso
+            // 3 de `cierre-sin-gestion-tope-sql-real.test.ts` lo MIDE contra Postgres.
+            const idsBarridas = ordenes.map((o) => o.id);
+            const gruposIntentos =
+              idsBarridas.length > 0
+                ? await tx.gestionOrden.groupBy({
+                    by: ["ordenId", "cierreId"],
+                    where: whereIntentosVigentes({ in: idsBarridas }),
+                  })
+                : [];
+            const intentosPorOrden = new Map<string, number>();
+            for (const g of gruposIntentos) {
+              intentosPorOrden.set(g.ordenId, (intentosPorOrden.get(g.ordenId) ?? 0) + 1);
+            }
+            const enElTope = ordenes.filter(
+              (o) => (intentosPorOrden.get(o.id) ?? 0) >= umbralIntentos,
+            );
+            // R25: por debajo del umbral, la rama de siempre, INTACTA.
+            const aBodega = ordenes.filter(
+              (o) => (intentosPorOrden.get(o.id) ?? 0) < umbralIntentos,
+            );
+
+            if (enElTope.length > 0) {
+              const ids = enElTope.map((o) => o.id);
+              // R21 — `updateMany` GUARDADO por `estatusId = sin_gestionar`, y `data` con UNA SOLA
+              // CLAVE. Diferencia DELIBERADA con la liberacion de al lado, que si limpia mensajero,
+              // `asignado_at` y `fecha_reparto` y enciende `prioridad`: aquella orden va a
+              // RE-REPARTO y esta no vuelve a repartirse nunca.
+              //
+              // ⚠️ Y CONSERVAR EL MENSAJERO NO ES UN OLVIDO: es lo que hace que el bloque de la
+              // feature 139, que corre inmediatamente despues en esta misma transaccion y
+              // selecciona por `{ mensajeroAsignadoId = cierre.mensajeroId, estatusId = rechazada }`,
+              // recoja estas ordenes y las lleve a `por_devolver` / `por_devolver_a_tienda`. Si se
+              // limpiara el mensajero, la orden se quedaria en `rechazada` sin nadie que la moviera
+              // de ahi y el paquete no volveria nunca a la tienda.
+              const movidas = await tx.orden.updateMany({
+                where: { id: { in: ids }, estatusId: sinGestionarEstatusId, deletedAt: null },
+                data: { estatusId: rechazadaEstatusId },
+              });
+              if (movidas.count > 0) {
+                for (const ordenId of ids) {
+                  // 💰 R23 (Q1, FIRMADA el 2026-08-24: SI COBRA) — LA GESTION SINTETICA.
+                  //
+                  // `resultado = rechazada`, `cierre_id NULL` y `mensajero_id` del cierre: es la
+                  // via de siempre (Option A de la 99, ratificada por la 240/D1). Con `cierre_id`
+                  // nulo, `CierreDiaRepository.crearCierre` la vincula al SIGUIENTE cierre de ese
+                  // mensajero, y al aprobarse ese cierre el `cobroRechazado` (56) entra como
+                  // ingreso de bodega.
+                  //
+                  // La razon que se firmo es la de la 240: *sin la gestion, rechazar saldria gratis
+                  // y esperar al plazo costaria, sobre el mismo paquete*. Un rechazo por
+                  // agotamiento que no cobrara haria que NO GESTIONAR SALGA MAS BARATO QUE
+                  // GESTIONAR.
+                  //
+                  // ⚠️ NO se le pone `cierreId: cierreId`. Meterla en ESTE cierre cambiaria sus
+                  // totales DESPUES de que el snapshot se congelara al solicitar, y eso mueve
+                  // dinero de un cierre que ya se esta aprobando (R24).
+                  //
+                  // El `motivo` es un texto FIJO y sin PII (R38): ni guia, ni destinatario, ni ids.
+                  const gestion = await tx.gestionOrden.create({
+                    data: {
+                      ordenId,
+                      mensajeroId: cierre.mensajeroId,
+                      resultado: "rechazada",
+                      cierreId: null,
+                      motivo: MOTIVO_RECHAZO_TOPE_INTENTOS,
+                    },
+                    select: { id: true },
+                  });
+                  // R22 — por el punto UNICO de escritura del historial, con el ADMIN que aprobo
+                  // como actor y con la familia PROPIA `rechazo_tope_intentos`. Enlaza la gestion:
+                  // es lo que permite auditar QUE cobro nacio de QUE aprobacion sin re-derivarlo.
+                  await appendCambioEstado(tx, [
+                    {
+                      ordenId,
+                      estatusOrigenId: sinGestionarEstatusId,
+                      estatusDestinoId: rechazadaEstatusId,
+                      actorUsuarioId: resueltoPor,
+                      origenTipo: "rechazo_tope_intentos",
+                      gestionOrdenId: gestion.id,
+                    },
+                  ]);
+                }
+              }
+            }
+
+            if (aBodega.length > 0) {
               // R16: destino por ZONA de la ORDEN (resolverDestinoCierre, misma regla 99/100).
               const idsByDestino = new Map<string, string[]>();
-              for (const o of ordenes) {
+              for (const o of aBodega) {
                 const { destinoTipo } = resolverDestinoCierre(o.zonaId, centralZonaId);
                 const destinoEstatusId =
                   destinoTipo === "bodega_central" ? enBodegaEstatusId : enBodegaSateliteEstatusId;

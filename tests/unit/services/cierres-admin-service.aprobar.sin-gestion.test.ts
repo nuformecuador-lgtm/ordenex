@@ -98,7 +98,18 @@ const ORDENES_BARRIDAS = [
  * cuatro escrituras posibles: si la aprobacion tocara esa tabla —borrando el vinculo al liberar,
  * por ejemplo— quedaria registrado y el caso de R5 lo caza.
  */
-function buildTx(sinGestion: ReturnType<typeof vinculo>[]) {
+function buildTx(
+  sinGestion: ReturnType<typeof vinculo>[],
+  /**
+   * FEATURE 273 (T9, R24): ids de ordenes barridas que YA ALCANZARON el umbral. Se traducen a los
+   * grupos que devolveria `gestionOrden.groupBy` con el predicado unico de intentos: tres cierres
+   * aprobados distintos por orden.
+   */
+  enElUmbral: string[] = [],
+) {
+  const gruposIntentos = enElUmbral.flatMap((ordenId) =>
+    [0, 1, 2].map((i) => ({ ordenId, cierreId: `c-viejo-${ordenId}-${i}` })),
+  );
   const tx = {
     cierreDia: {
       updateMany: vi.fn(async () => ({ count: 1 })),
@@ -111,6 +122,12 @@ function buildTx(sinGestion: ReturnType<typeof vinculo>[]) {
     gestionOrden: {
       findMany: vi.fn(async () => GESTIONES),
       updateMany: vi.fn(async () => ({ count: 0 })),
+      // FEATURE 273 (T9): el bloque del corte cuenta los intentos DENTRO de la tx con un
+      // `groupBy`. Vacio = ninguna barrida llega al umbral, que es el corpus de esta suite; la
+      // rama del rechazo por tope se mide contra Postgres en
+      // `cierre-sin-gestion-tope-sql-real.test.ts`, no aqui.
+      groupBy: vi.fn(async () => gruposIntentos),
+      create: vi.fn(async () => ({ id: "g-sintetica" })),
     },
     cierreDetail: { findMany: vi.fn(async () => DETALLES) },
     cierreSinGestion: {
@@ -184,8 +201,11 @@ function buildCaptores() {
 }
 
 /** Aprueba el cierre semilla con los feeds REALES y devuelve todo lo emitido. */
-async function aprobarCon(sinGestion: ReturnType<typeof vinculo>[]) {
-  const tx = buildTx(sinGestion);
+async function aprobarCon(
+  sinGestion: ReturnType<typeof vinculo>[],
+  enElUmbral: string[] = [],
+) {
+  const tx = buildTx(sinGestion, enElUmbral);
   const captores = buildCaptores();
   const prisma = {
     $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
@@ -215,6 +235,11 @@ async function aprobarCon(sinGestion: ReturnType<typeof vinculo>[]) {
       enBodegaEstatusId: idEstado("en_bodega_central"),
       enBodegaSateliteEstatusId: idEstado("en_bodega_satelite"),
       centralZonaId: "z-264",
+      // FEATURE 273 (T9): la config gana el destino del rechazo por tope y el UMBRAL inyectado.
+      // Con el corpus de esta suite ninguna orden llega al umbral, asi que la rama nueva es un
+      // no-op y estos casos siguen midiendo lo que median (la liberacion a bodega, R25).
+      rechazadaEstatusId: idEstado("rechazada"),
+      umbralIntentos: 3,
     },
     confirmacionFisica: [],
     // Feature 239: obligatorio en la rama `aprobado`. Esta suite no mide el anclaje —el bloque
@@ -319,5 +344,89 @@ describe("264/B8 — aprobar un cierre CON ordenes sin gestionar mueve el mismo 
       fechaReparto: null,
       prioridad: true,
     });
+  });
+});
+
+/* ------------------------------------------------------------------------------------------ */
+/* FEATURE 273 (T9, R24) — EL RECHAZO POR TOPE NO TOCA UN SOLO IMPORTE                         */
+/* ------------------------------------------------------------------------------------------ */
+
+describe("273/R24 — la rama nueva es MONEY-NEUTRAL sobre el cierre que se aprueba", () => {
+  it("los movimientos de los CINCO feeds son IGUALES campo a campo, con y sin una orden en el umbral", async () => {
+    // ⭑ EL CASO EMPAREJADO, y por la MISMA razon que el de la 264 de arriba: el test obvio —«sin
+    // ordenes en el umbral nada cambia»— es verde por construccion y no dice nada.
+    //
+    // Aqui las dos corridas son el MISMO cierre semilla con la MISMA lista de barridas. Lo unico
+    // que cambia es que en una de ellas `o-barrida-1` ya alcanzo el umbral, asi que la rama NUEVA
+    // se ejecuta entera: `updateMany` a `rechazada`, gestion sintetica y fila de historial. Si esa
+    // rama tocara un importe —o si la gestion sintetica entrara en ESTE cierre y sus feeds la
+    // leyeran— las dos corridas divergirian aqui.
+    const lista = [vinculo("o-b1", 11), vinculo("o-b2", 12)];
+    const conTope = await aprobarCon(lista, ["o-barrida-1"]);
+    const sinTope = await aprobarCon(lista, []);
+
+    expect(conTope.resultado).toBe(sinTope.resultado);
+    expect(conTope.caja).toEqual(sinTope.caja);
+    expect(conTope.tienda).toEqual(sinTope.tienda);
+    expect(conTope.mensajero).toEqual(sinTope.mensajero);
+
+    // Contrapunto OBLIGATORIO 1: si las tres listas estuvieran vacias, las tres igualdades de
+    // arriba pasarian sin comprobar nada. El cierre semilla SI mueve dinero.
+    expect(conTope.caja.flat().length).toBeGreaterThan(0);
+    expect(conTope.tienda.flat().length).toBeGreaterThan(0);
+    expect(conTope.mensajero.flat().length).toBeGreaterThan(0);
+
+    // Contrapunto OBLIGATORIO 2, y es el que hace que este caso no sea una tautologia: la rama
+    // NUEVA se ejecuto DE VERDAD en la corrida `conTope` y NO en la otra. Sin esto, un bug que
+    // dejara la rama muerta pasaria las igualdades de arriba con las manos en los bolsillos.
+    expect(conTope.tx.gestionOrden.create).toHaveBeenCalledTimes(1);
+    expect(sinTope.tx.gestionOrden.create).not.toHaveBeenCalled();
+  });
+
+  it("la gestion sintetica nace SIN cierre: no puede entrar en los totales del que se aprueba", async () => {
+    const { tx } = await aprobarCon([vinculo("o-b1", 11)], ["o-barrida-1"]);
+
+    const llamadas = tx.gestionOrden.create.mock.calls as unknown as {
+      data: { cierreId: string | null; resultado: string; mensajeroId: string; motivo: string };
+    }[][];
+    expect(llamadas, "la gestion sintetica no se creo").toHaveLength(1);
+    const creada = llamadas[0][0];
+    // `cierre_id NULL` es LO QUE HACE que el cobro caiga en el SIGUIENTE cierre del mensajero
+    // (Option A de la 99). Con el id de ESTE cierre, los importes cambiarian DESPUES de que el
+    // snapshot se congelara al solicitar — que es exactamente lo que R24 prohibe.
+    expect(creada.data.cierreId).toBeNull();
+    expect(creada.data.resultado).toBe("rechazada");
+    expect(creada.data.mensajeroId).toBe(MENSAJERO_ID);
+  });
+
+  it("el `updateMany` del rechazo lleva UNA sola clave y conserva el mensajero", async () => {
+    const { tx } = await aprobarCon([vinculo("o-b1", 11)], ["o-barrida-1"]);
+
+    const upd = tx.orden.updateMany.mock.calls
+      .map(([a]) => a as { where: { estatusId?: string; id: { in: string[] } }; data: unknown })
+      .filter((a) => a.where.estatusId === idEstado("sin_gestionar"))
+      .find((a) => (a.data as { estatusId?: string }).estatusId === idEstado("rechazada"));
+    expect(upd, "el rechazo por tope no ocurrio").toBeDefined();
+    expect(upd?.where).toEqual({
+      id: { in: ["o-barrida-1"] },
+      estatusId: idEstado("sin_gestionar"),
+      deletedAt: null,
+    });
+    // ⭑ UNA SOLA CLAVE, literal. Diferencia DELIBERADA con la liberacion de al lado, que si limpia
+    // mensajero/`asignado_at`/`fecha_reparto` y enciende `prioridad`. Conservar el mensajero es lo
+    // que hace que el bloque de la 139 recoja la orden y la lleve a `por_devolver*`; limpiarlo la
+    // dejaria en `rechazada` sin nadie que la moviera.
+    expect(upd?.data).toEqual({ estatusId: idEstado("rechazada") });
+  });
+
+  it("la orden que NO llego al umbral sigue yendo a bodega en la MISMA corrida (R25)", async () => {
+    const { tx } = await aprobarCon([vinculo("o-b1", 11)], ["o-barrida-1"]);
+
+    const aBodega = tx.orden.updateMany.mock.calls
+      .map(([a]) => a as { where: { estatusId?: string; id: { in: string[] } }; data: unknown })
+      .find((a) => (a.data as { estatusId?: string }).estatusId === idEstado("en_bodega_central"));
+    expect(aBodega, "la liberacion a bodega no ocurrio").toBeDefined();
+    // Las dos ramas conviven: la del umbral se lleva `o-barrida-1` y la vieja `o-barrida-2`.
+    expect(aBodega?.where.id.in).toEqual(["o-barrida-2"]);
   });
 });
