@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
@@ -178,9 +181,6 @@ describe("273/T9 · R7 — con `REINTENTOS_MIN_INTENTOS = 5` viaja un 5", () => 
 
 /** El texto del repositorio, leido del disco. Se aisla para no repetir la ruta en dos casos. */
 function fuenteDelRepositorio(): string {
-  // `require` sincrono a proposito: el caso que lo usa no es `async` y la lectura es de fichero.
-  const fs = require("fs") as typeof import("fs");
-  const path = require("path") as typeof import("path");
   return fs.readFileSync(
     path.join(__dirname, "..", "..", "..", "lib", "repositories", "CierresAdminRepository.ts"),
     "utf8",

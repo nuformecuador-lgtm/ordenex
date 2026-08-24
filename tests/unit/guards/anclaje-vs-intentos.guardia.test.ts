@@ -313,3 +313,52 @@ function ficherosDeProduccion(): string[] {
   walk(path.join(REPO_ROOT, "app"));
   return out;
 }
+
+// ---------------------------------------------------------------------------------------------
+// AMPLIACION DE LA FEATURE 273 (T13.3, R34) — la ficha del TOPE no fusiona las dos derivaciones.
+//
+// Se AMPLIA esta guardia en vez de escribir una segunda: R34 es literalmente el invariante que ya
+// vive aqui («el anclaje de la devolucion y el conteo de intentos siguen siendo dos derivaciones
+// separadas»), y dos guardias del mismo invariante se desincronizan.
+//
+// POR QUE LA 273 LO PONE EN RIESGO, que es lo que justifica ampliar: esta ficha le da al conteo de
+// intentos DOS lectores nuevos —el bloque de la aprobacion del cierre (`CierresAdminRepository`) y
+// el cron de SLA por la rama `wrong_*`—, y los dos viven al lado de codigo que habla de anclaje.
+// La tentacion de «unificar lo que mira el cierre aprobado» sube, no baja.
+// ---------------------------------------------------------------------------------------------
+describe("273/R34 — el tope de intentos no acerca las dos derivaciones", () => {
+  it("la familia del rechazo por tope NO entra en el criterio de intentos", () => {
+    // `rechazo_tope_intentos` nace de la aprobacion de un cierre, igual que `anclaje_devolucion`, y
+    // por el MISMO motivo queda fuera de la lista de visita real: contarla haria que el propio
+    // rechazo sumara un intento a su orden y adelantaria el cobro de OTRAS.
+    expect([...ORIGEN_TIPOS_VISITA_REAL]).not.toContain("rechazo_tope_intentos");
+    expect([...RESULTADOS_QUE_CUENTAN_COMO_INTENTO]).not.toContain("sin_gestionar");
+  });
+
+  it("el repositorio del cron SLA sigue SIN nombrar el vocabulario del conteo", () => {
+    // La 273 hace que el SERVICIO del cron mire el contador en la rama `wrong_*` (R28). Eso es
+    // legitimo: el servicio CONSUME el numero por la interfaz. Lo que no puede pasar es que el
+    // REPOSITORIO —el que deriva el instante del ancla— empiece a hablar de intentos.
+    const presentes = simbolosPresentes(codigo(RUTA_ANCLAJE), SIMBOLOS_DE_INTENTOS);
+    expect(
+      presentes,
+      "el repositorio del anclaje empezo a nombrar el criterio de intentos. Con la 273 el cron " +
+        "necesita el numero, pero lo recibe por la interfaz del servicio: derivarlo aqui fundiria " +
+        "las dos derivaciones.",
+    ).toEqual([]);
+  });
+
+  it("el bloque de la aprobacion IMPORTA el predicado, no lo reescribe", () => {
+    // La 273 anade un lector del conteo dentro de `CierresAdminRepository`. Que lo IMPORTE es la
+    // forma correcta —hay un solo punto de definicion, 215/R4—; reescribirlo ahi habria creado la
+    // segunda copia que esta guardia existe para impedir.
+    const fuente = codigo("lib/repositories/CierresAdminRepository.ts");
+    expect(fuente).toMatch(/import\s*\{[^}]*whereIntentosVigentes[^}]*\}\s*from/);
+    // Y NO declara una copia con ese nombre (el censo del caso de arriba ya lo cubre para todo el
+    // arbol; esto lo dice sobre el fichero concreto que la 273 toco).
+    expect(fuente).not.toMatch(/\b(function|const)\s+whereIntentosVigentes\b/);
+    // Ni menciona la familia del anclaje en un `where` propio: la lectura del ancla sigue viviendo
+    // en un solo modulo.
+    expect(consultaPorFamiliaDelAnclaje(fuente)).toBe(false);
+  });
+});

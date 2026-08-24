@@ -2368,3 +2368,95 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
     expect(sinLista.ordenesSinGestion).toHaveLength(0);
   });
 });
+
+// ============================================================================================
+// FEATURE 273 (T14, R17) — EL DESHACER SIGUE VIVO SOBRE UNA `reprogramada`.
+//
+// No hay codigo que escribir para esto, y por eso hay que escribir la PRUEBA DE QUE SIGUE SIENDO
+// CIERTO. La ficha 273 difiere la LIBERACION de una orden `reprogramada` (el cron ya no la manda a
+// bodega hasta que su cierre se apruebe), asi que la orden pasa MAS TIEMPO en `reprogramada` — y la
+// pregunta obvia es si el mensajero conserva su ventana de deshacer durante esa espera.
+//
+// La respuesta es que si, y la razon es estructural: la ventana depende de `gestion.cierre_id`, NO
+// del estado de la orden. Mientras la gestion no entre en un cierre, se deshace; en cuanto entra,
+// no — igual que antes de esta ficha. Lo que la 273 alarga es justamente el tramo en que
+// `cierre_id` sigue nulo.
+//
+// ⚠️ Y AQUI ESTA LA REGRESION QUE ESTA FICHA EVITO NO TENIENDO: si se hubiera elegido la opcion A
+// del design (§2.2, un pre-estado `reprogramacion_por_confirmar`), `ESTADOS_ESPERADOS.reprogramada`
+// habria dejado de casar y el mensajero habria perdido el deshacer EN SILENCIO. Le paso a la 239
+// con `devuelta` (ver su T1.5 y el comentario de `ESTADOS_ESPERADOS`). El caso 3 de abajo es el
+// centinela de esa decision.
+// ============================================================================================
+
+describe("273/R17 — la ventana de deshacer no cambia con la liberacion diferida", () => {
+  it("1. `reprogramada` con `cierre_id NULL` sobre una orden en `reprogramada` -> SE DESHACE", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: null, // la gestion del dia, aun sin cierre: la ventana esta viva
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    // Y la orden vuelve a `en_reparto`, que es el destino unico del deshacer.
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+    const arg = (repo.anularGestionYDevolverAGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as { estatusEnRepartoId: string };
+    expect(arg.estatusEnRepartoId).toBe("s-reparto");
+  });
+
+  it("2. la MISMA gestion con `cierre_id` poblado -> conflict, como siempre", async () => {
+    // El contrapunto que hace que el caso 1 signifique algo: lo unico que cambia entre los dos es
+    // `cierre_id`. Si el deshacer dependiera del ESTADO en vez del cierre, los dos darian igual.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: "c1",
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/cierre/i);
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("3. la entrada `reprogramada` de la tabla de estados esperados NO cambio", async () => {
+    // Se comprueba por CONDUCTA, no leyendo la constante: la orden en `reprogramada` pasa la
+    // guarda (caso 1) y una orden que se movio a bodega NO la pasa. Si alguien anadiera un
+    // pre-estado a esa entrada —o la sustituyera— este par dejaria de discriminar.
+    const enBodega = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: null,
+          // La orden ya se libero a bodega: el deshacer NO puede arrancarla de ahi.
+          orden: {
+            deletedAt: null,
+            estatusId: "s-en-bodega",
+            estatusValue: "en_bodega_central",
+          },
+        }),
+      ),
+    });
+    const { service } = newService({ repo: enBodega });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(enBodega.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+});
