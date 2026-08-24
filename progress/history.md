@@ -4176,3 +4176,35 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
   vigilada está bien hecho; **no es haberla hecho**. Con ella siguen vivas `B0.2`/`C3` (re-medir `M1`
   contra producción: la foto del 2026-08-22 04:27 CR caducó) y `C7` (`P4` y `P5` sin llevar a la
   puerta humana).
+
+## 2026-08-23 — 271 (el segundo cierre se puede solicitar, y acumular dos bloquea)
+- Un mensajero con el cierre de ayer pendiente de aprobación ya puede solicitar el de hoy; antes no
+  podía y su jornada entera quedaba sin cierre al que ir. A cambio, acumular cierres sin resolver
+  bloquea gestionar **y** recibir trabajo nuevo (reparto y recolección), hasta ponerse al día del más
+  viejo al más nuevo. Regla: libre si `N <= 1` y `V = 0`, con N = cierres sin aprobar y V = los que
+  dependen de él. Y por primera vez hay avisos: el mensajero no recibía **ninguna** notificación de
+  cierre en toda la app, y el corte nocturno no emitía **ni una**.
+- Requisitos cubiertos: R1–R61. Reviewer aprobado (59 verificados, 0 sin cubrir). Desplegada a
+  producción el mismo día: `prod` = `37b5944b`.
+- **El modelo se rehízo entero a mitad de camino.** El primer intento fue «un cierre por jornada con
+  `fecha_jornada` fija»; se escribieron dos specs (39 + 36 requisitos) y se descartaron. Lo tumbó un
+  contraejemplo del humano: una orden reprogramada se libera con `fecha_reparto = null` y se reasigna
+  a otro día, así que derivar la jornada del cierre desde la orden dejaba la gestión de hoy —que
+  lleva dinero— colgando de una fecha ya movida. La regla que acabó rigiendo **no necesita ninguna
+  columna**: si el segundo cierre se puede crear, `cierre_id IS NULL` reparte el trabajo solo.
+- **Cuatro fallos mudos cerrados**, ninguno rompía un test: `transicionarRechazadoASolicitado` movía
+  dos cierres y devolvía «no se pudo»; aprobar uno vaciaba las órdenes `sin_gestionar` de todos;
+  el aviso a bodega nombraba siempre el más nuevo; y **el cron no inyectaba el notificador**, así que
+  el aviso de «tu cierre venció» no habría salido nunca. El último destapó que **2 de los 7
+  notificadores del repo estaban muertos**, y de ahí salió la guardia derivada del árbol.
+- **Una imposibilidad razonada que la medida desmintió.** El spec declaraba que dos `vencido` a la
+  vez era imposible y sobre eso se apoyaba para no escribir nada; un test de integración sembrado lo
+  desmintió (el paso prestado de la 246 había cambiado). No hizo falta tocar comportamiento, pero la
+  creencia se había propagado a **diez sitios**, uno citándola como precedente de otra decisión.
+- **Cuatro defectos de texto los encontró el navegador, cero los encontró la suite** — con 18.000
+  tests en verde. Entre ellos, un aviso que decía «espera a que la bodega apruebe el más antiguo»
+  con el botón de reenviar ese mismo cierre justo debajo.
+- Deuda dejada: T3.5 (coste de la corrida del corte) declarada sin medir; cinco guardias de
+  composition root siguen con `toContain`; las variantes «sin jornada fiable» cubiertas por test pero
+  no vistas en pantalla; y cinco textos previos en `lib/services/` en voseo sin tildes, pendientes de
+  ficha propia porque el registro lo decide el humano.
