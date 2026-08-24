@@ -9,7 +9,56 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día). **EMPIEZA A LEER POR AQUÍ**
+## 🔵 SESIÓN ACTIVA — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
+
+Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spec**. `prod` sigue en
+`37b5944b`; el estado de la release del 23 y del cron de anoche está en la sección siguiente.
+
+| ficha | zona | estado | qué es |
+| --- | --- | --- | --- |
+| **273** | fullstack | `pending` · spec en curso | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **274** | frontend | `pending` · spec en curso | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 273** | el corte sin sumar reintento: su decisión se toma dentro de la 273 |
+
+### Lo que se midió antes de registrarlas, y es la razón de que existan
+
+- **La guía `28098171` llevaba 3 intentos vigentes y seguía en `devuelta`.** No es que el cron esté
+  roto —corrió a las 09:01 CR y responde 200 cada hora—: su última causa es `wrong_address`, y esa
+  rama **escala solo por tiempo (5 días) e ignora el contador**. Llevaba 89,1 h de 120.
+- **La raíz del 4.º intento: de los cinco resultados de gestión, solo `devuelta` espera al cierre.**
+  `reprogramada` cambia el estado en el acto y `findReprogramadasVencidas` libera la orden por
+  `fecha_reprogramacion <= hoy` **sin mirar el cierre**, así que vuelve a circulación con el
+  contador en el valor viejo.
+- **El contador cuenta cierres aprobados, no visitas** (215/R29). Medido en la guía `53521827`:
+  **4 gestiones contables no anuladas y el sistema le cuenta 2** —dos cuelgan del mismo cierre y
+  una `reprogramada` no tiene visita real enlazada—.
+- **`GuiaAsignacionService` no mira el contador en ningún punto**: hoy se puede asignar una orden
+  que ya agotó sus intentos.
+- **El contador de «Por recoger» miente**: la cabecera dice «N Órdenes nuevas asignadas» contando
+  las que el servidor no deja recoger. Decía **2 con 1 sola recogible**.
+
+### Las decisiones del humano, para no re-abrirlas
+
+1. **Solo se difiere `reprogramada`.** Los terminales se siguen viendo en el acto: diferirlos
+   dejaría a la tienda y al rastreo sin ver una entrega hasta **22,1 h** (p90 medido).
+2. **La no gestión del corte con el umbral alcanzado termina en `rechazada`** al aprobarse ese
+   cierre. Es la 218, y por eso la supersede.
+3. **`incidente` sigue disponible** en el intento del umbral: no es un desenlace de entrega, y
+   forzar `rechazada` grabaría un hecho falso y cobraría un rechazo que no ocurrió.
+4. **En «Por recoger» no se oculta nada**: R23 de la 246 sigue vigente, cambia el sitio.
+
+⚠️ **La 273 acelera dinero y el spec lo lleva escrito**: `rechazada` emite `cobroRechazado` (56), y
+hasta hoy el sistema erraba **a propósito** hacia no cobrar (215/Q5). Desde esta ficha, un error de
+conteo cobra de más.
+
+### La puerta que viene
+
+Cuando los dos specs estén, **hay puerta humana antes de tocar código**. Nada de `app/` ni de
+`lib/` hasta que el humano apruebe.
+
+---
+
+## 🚀 DESPLEGADA — 2026-08-23 (2.ª release del día)
 
 **`prod` = `37b5944b`**, READY. Sale la **271**: el segundo cierre se puede solicitar, y acumular dos
 bloquea. Ficha cerrada, **cero `in_progress`**. El recorrido con su evidencia está en
