@@ -50,6 +50,9 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
     comisionCod: new Prisma.Decimal("5.00"),
     ivaFlete: new Prisma.Decimal("13.00"),
     ivaComisionCod: new Prisma.Decimal("13.00"),
+    tarifaEspecial: null, // columna opcional: null = sin pacto especial
+    zonaId: null, // opcional: null = no acotada a una zona
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -380,13 +383,11 @@ describe("OrdenRepository.list (R30/R31/R34)", () => {
     expect(res.items[0].fleteConIva).toBe("4.52"); // GAM 4.00 + 13%
     expect(res.items[0].comisionConIva).toBe("0.00"); // este fixture no lleva montoCobrar
 
-    // El include filtra las tarifas borradas/inactivas (solo la ACTIVA) y
-    // selecciona la relacion tienda.tarifasTienda.
+    // El include filtra las tarifas inactivas (solo la ACTIVA) y selecciona la
+    // relacion tienda.tarifasTienda. Ya no filtra borradas: `tarifas` borra en
+    // fisico, y el `toEqual` deja constancia de que el filtro se fue a proposito.
     const arg = prisma.orden.findMany.mock.calls[0][0];
-    expect(arg.include.tienda.select.tarifasTienda.where).toEqual({
-      status: "activo",
-      deletedAt: null,
-    });
+    expect(arg.include.tienda.select.tarifasTienda.where).toEqual({ status: "activo" });
   });
 
   // Filtro MULTI-ESTADO (selector de seleccion multiple del listado de /ordenes): una

@@ -1,7 +1,6 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
 import type { SelectOption } from "@/components/ui/select";
-import type { VehiculoValue } from "@prisma/client";
 import { Logo } from "@/components/shared/Logo";
 import { VolverAlInicioLink } from "@/components/shared/VolverAlInicioLink";
 import { PostulacionForm } from "./_components/PostulacionForm";
@@ -19,9 +18,11 @@ export const dynamic = "force-dynamic";
 // poblar los selects; los datos NO son sensibles.
 
 // Etiquetas de presentacion de los catalogos. Se mantienen aqui (capa de
-// presentacion) y no en el enum/DB, listas para i18n futura. Con fallback a
-// capitalizar el valor crudo por si el catalogo crece.
-const VEHICULO_LABELS: Partial<Record<VehiculoValue, string>> = {
+// presentacion) y no en la DB, listas para i18n futura. El fallback a capitalizar
+// el valor crudo dejo de ser una precaucion: desde que `vehiculos.name` es TEXT y
+// el catalogo se administra por CRUD, un tipo nuevo NO tiene etiqueta aqui y sale
+// capitalizado. Por eso la clave es `string` y no el enum.
+const VEHICULO_LABELS: Record<string, string> = {
   moto: "Moto",
   carro: "Carro",
   camion: "Camión",

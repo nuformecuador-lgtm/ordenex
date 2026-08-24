@@ -185,6 +185,9 @@ function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     comisionCod: 2.5,
     ivaFlete: 15,
     ivaComisionCod: 15,
+    tarifaEspecial: null,
+    zonaId: null,
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -197,10 +200,11 @@ function buildTarifaRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRep
     findById: vi.fn().mockResolvedValue(tarifaDto()),
     list: vi.fn().mockResolvedValue({ items: [tarifaDto()], total: 1 }),
     update: vi.fn().mockResolvedValue(tarifaDto()),
-    softDelete: vi.fn().mockResolvedValue(true),
+    hardDelete: vi.fn().mockResolvedValue("ok" as const),
     // La tienda referenciada debe ser adminTienda: por default valida (true), para
     // que el camino feliz del maestro dependa solo de su rol, no de este invariante.
-    esTiendaAdminTienda: vi.fn().mockResolvedValue(true),
+    esTiendaAsignable: vi.fn().mockResolvedValue(true),
+    existeZona: vi.fn().mockResolvedValue(true),
     inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
@@ -258,7 +262,7 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
     expect(repo.create).not.toHaveBeenCalled();
     // La puerta de rol corta ANTES de cualquier acceso al repo: un adminSatelite no
     // debe poder sondear que tiendas son adminTienda via esta ruta.
-    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
+    expect(repo.esTiendaAsignable).not.toHaveBeenCalled();
   });
 
   it("no-regresion: maestro conserva su resultado exitoso en lectura y escritura (R11)", async () => {

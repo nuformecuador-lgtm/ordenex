@@ -51,19 +51,22 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifaPorTienda (R20/R22/R23)"
 
     const args = prisma.tarifa.findFirst.mock.calls[0]![0];
     // El argumento EXACTO: si alguien vuelve a `zonaId` (la 68) este test cae, no solo el typecheck.
-    expect(args.where).toEqual({ tiendaId: "t1", deletedAt: null });
+    expect(args.where).toEqual({ tiendaId: "t1" });
     expect(Object.keys(args.where)).toContain("tiendaId");
     expect(Object.keys(args.where)).not.toContain("zonaId");
   });
 
-  it("R22: excluye las borradas logicamente (`deletedAt: null`) y elige la MAS RECIENTE", async () => {
+  // `tarifas` borra en FISICO desde la migracion tarifa_zona_is_default: no hay
+  // borradas que excluir, y filtrar por una columna inexistente seria un error de
+  // Prisma en runtime. Se afirma la AUSENCIA del filtro, no solo la eleccion.
+  it("R22: NO filtra por deletedAt (borrado fisico) y elige la MAS RECIENTE", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
 
     await buildRepo(prisma).resolveTarifaPorTienda("t1");
 
     const args = prisma.tarifa.findFirst.mock.calls[0]![0];
-    expect(args.where.deletedAt).toBeNull();
+    expect(Object.keys(args.where)).not.toContain("deletedAt");
     expect(args.orderBy).toEqual({ createdAt: "desc" });
   });
 
@@ -123,17 +126,19 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifaPorTienda (R20/R22/R23)"
 // camino de LIQUIDACION y no se tocan; este describe fija el contrato del camino de COTIZACION,
 // donde `null` no degrada a 0.00 sino que dispara un 409 (design 255 §4).
 describe("TarifaVigentePorTiendaRepository.resolveTarifaCotizablePorTienda (feature 255, R12)", () => {
-  it("R12: resolveTarifaCotizablePorTienda filtra deletedAt null Y status activo, la mas reciente", async () => {
+  it("R12: resolveTarifaCotizablePorTienda filtra status activo, la mas reciente", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.findFirst.mockResolvedValue(tarifaRow());
 
     await buildRepo(prisma).resolveTarifaCotizablePorTienda("t1");
 
     const args = prisma.tarifa.findFirst.mock.calls[0]![0];
-    // El WHERE EXACTO: los tres filtros, ni uno mas.
-    expect(args.where).toEqual({ tiendaId: "t1", deletedAt: null, status: "activo" });
+    // El WHERE EXACTO: los dos filtros, ni uno mas. `status` es lo UNICO que separa
+    // este metodo de `resolveTarifaPorTienda` (decision D6); si se le cuela otro
+    // filtro, la diferencia entre los dos caminos deja de ser la que dice el doc.
+    expect(args.where).toEqual({ tiendaId: "t1", status: "activo" });
     expect(Object.keys(args.where)).toContain("status");
-    expect(args.where.deletedAt).toBeNull();
+    expect(Object.keys(args.where)).not.toContain("deletedAt");
     // Entre varias candidatas, la MAS RECIENTE.
     expect(args.orderBy).toEqual({ createdAt: "desc" });
   });
@@ -210,7 +215,7 @@ describe("TarifaVigentePorTiendaRepository.resolveTarifasPorTiendas (R20/R22/R23
 
     expect(prisma.tarifa.findMany).toHaveBeenCalledTimes(1); // sin N+1
     const args = prisma.tarifa.findMany.mock.calls[0]![0];
-    expect(args.where).toEqual({ tiendaId: { in: ["t1", "t2"] }, deletedAt: null }); // dedupe
+    expect(args.where).toEqual({ tiendaId: { in: ["t1", "t2"] } }); // dedupe
     expect(args.orderBy).toEqual({ createdAt: "desc" });
     expect(out.get("t1")?.tarifaId).toBe("tarA");
     expect(out.get("t2")?.tarifaId).toBe("tarB");

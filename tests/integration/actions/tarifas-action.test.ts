@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { ConflictError } from "@/lib/errors";
 import {
   crearTarifa,
   obtenerTarifa,
@@ -30,6 +31,9 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     comisionCod: 2.5,
     ivaFlete: 15,
     ivaComisionCod: 15,
+    tarifaEspecial: null,
+    zonaId: null,
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -234,12 +238,33 @@ describe("R18/R19: listar", () => {
   });
 });
 
-describe("R24: borrar -> ok (soft)", () => {
+describe("borrar (FISICO) -> ok", () => {
   it("propaga ok", async () => {
     const service = fakeService();
     const r = await borrarTarifa("cob-1", { tarifaService: service, getActor: getActor(MAESTRO) });
     expect(r.status).toBe("ok");
     expect(service.borrar).toHaveBeenCalledWith("cob-1", MAESTRO);
+  });
+
+  // ANTES esta accion LANZABA ante un `conflict` ("el dominio de tarifas nunca produce
+  // un conflicto de unicidad"), lo que hoy seria un 500 en la cara del maestro: con el
+  // unico (zona_id, tienda_id) y la FK RESTRICT de `cierre_detail`, el conflicto es un
+  // resultado legitimo. El test fija que SALE como estado, no como excepcion.
+  it("propaga conflict en vez de lanzar", async () => {
+    const service = fakeService({ borrar: vi.fn().mockResolvedValue({ status: "conflict" }) });
+    const r = await borrarTarifa("cob-1", { tarifaService: service, getActor: getActor(MAESTRO) });
+    expect(r.status).toBe("conflict");
+  });
+
+  it("crear traduce el ConflictError del repositorio a status conflict", async () => {
+    const service = fakeService({
+      crear: vi.fn().mockRejectedValue(new ConflictError("par duplicado")),
+    });
+    const r = await crearTarifa(validCrear, {
+      tarifaService: service,
+      getActor: getActor(MAESTRO),
+    });
+    expect(r.status).toBe("conflict");
   });
 });
 

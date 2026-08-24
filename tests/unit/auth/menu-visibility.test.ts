@@ -288,6 +288,9 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
       "/configuracion/tarifas",
       "/configuracion/api",
       "/configuracion/plantillas",
+      // Ficha 273: el catalogo de tipos de vehiculo pasa a administrarse por CRUD y
+      // hereda la visibilidad maestro-only del item padre.
+      "/configuracion/vehiculos",
     ]);
   });
 
