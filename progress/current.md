@@ -42,8 +42,9 @@ Con **N** = cierres sin aprobar y **V** = cuántos de esos están en `vencido`/`
 | Dejó vencer el único | 1 | 1 | bloqueado al instante; re-solicitar lo libera |
 | Solicitó el 1.º, venció el 2.º | 2 | 1 | re-solicitar el 2.º no basta; hace falta aprobar el 1.º |
 
-Se resuelve **siempre del más viejo al más nuevo**. El bloqueo de asignaciones es **solo reparto**,
-no la recolección en tienda.
+Se resuelve **siempre del más viejo al más nuevo**. El bloqueo de recibir trabajo nuevo alcanza
+**reparto y recolección**, sin distinguir: se decidió «solo reparto» y el humano lo revirtió el mismo
+día — *«son dos tareas diferentes, un mensajero no puede hacer las dos gestiones, solo una a la vez»*.
 
 ⚠️ Esto **revierte en parte la regla firmada el 20/08** (feature 241). Hay que reescribir el
 comentario de `OrdenRepository.ts:3187` y `lib/constants/bloqueo-mensajero.ts`, o el próximo lector
