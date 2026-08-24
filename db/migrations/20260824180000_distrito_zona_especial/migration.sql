@@ -1,0 +1,32 @@
+-- `distrito`: nace `zona_especial`, BOOLEAN OPCIONAL con DEFAULT false.
+--
+-- QUE MARCA. Un distrito que, por lo que sea (acceso, distancia, riesgo), no se cobra ni se
+-- despacha como el resto de su zona. Es una marca del DISTRITO, no de la zona: dos distritos de la
+-- misma zona pueden diferir, y por eso la columna vive aqui y no en `zona`.
+--
+-- POR QUE VIVE EN `distrito` Y NO EN `zona_distrito`. La relacion zona<->distrito es N:M (feature
+-- 24: un distrito puede pertenecer a varias zonas). Poner la marca en la tabla puente permitiria
+-- que el MISMO distrito fuera especial en una zona y no en otra, que es un dato que nadie pidio y
+-- que habria que resolver en cada lectura. En `distrito` la respuesta es unica por distrito.
+--
+-- POR QUE ES NULLABLE **Y ADEMAS** TIENE DEFAULT false, que suena contradictorio y no lo es:
+--   - El DEFAULT es lo que recibe toda fila que no diga nada: `false`, es decir «no es especial».
+--     Marcar un distrito como especial es un acto explicito, nunca un accidente de insercion.
+--   - `NULL` queda disponible para «todavia nadie lo decidio», distinto de «se decidio que no».
+--     Hoy nadie lo escribe; la columna se deja opcional para no obligar a que cada alta futura
+--     tome partido, tal como se pidio.
+-- La consecuencia practica hay que decirla en voz alta: el codigo que lea esta columna NO puede
+-- tratarla como un booleano de dos valores. `zona_especial IS TRUE` (o `COALESCE(...,false)`) es
+-- la unica lectura correcta; `NOT zona_especial` devuelve NULL —ni true ni false— para esas filas.
+--
+-- BACKFILL: NINGUNO EXPLICITO, PERO LAS FILAS EXISTENTES **NO** QUEDAN EN NULL. `ADD COLUMN ...
+-- DEFAULT false` rellena las filas ya existentes con `false` (Postgres 11+ lo hace sin reescribir
+-- la tabla, guardando el default en el catalogo). Eso es lo que se quiere: hoy ningun distrito es
+-- especial, asi que `false` es el dato verdadero para todos ellos —no un relleno de conveniencia—
+-- y `NULL` no aparece hasta que alguien lo escriba a proposito.
+--
+-- SIN INDICE. Un booleano casi siempre `false` tiene selectividad pesima: el planificador
+-- preferiria el recorrido de tabla igual. Cuando exista una consulta real que filtre por
+-- `zona_especial IS TRUE` y duela, el indice que la sirve es uno PARCIAL sobre esa condicion, y se
+-- agrega entonces con la medicion delante. Crearlo hoy seria adivinar.
+ALTER TABLE "distrito" ADD COLUMN "zona_especial" BOOLEAN DEFAULT false;

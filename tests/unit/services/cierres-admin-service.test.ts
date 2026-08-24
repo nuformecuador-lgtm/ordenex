@@ -9,7 +9,7 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   Alcance,

@@ -48,7 +48,12 @@ export function tarifaConCentinela(): TarifaDTO {
   return {
     id: "tarifa-1",
     tiendaId: "tienda-1",
-    status: "activo",
+    // La tarifa de esta fixture es la del par (tienda, sin zona): la general de la
+    // tienda. `tarifaEspecial` va en null a proposito — null es "sin pacto", que no
+    // es lo mismo que 0, y por eso NO lleva centinela.
+    zonaId: null,
+    isDefault: true,
+    tarifaEspecial: null,
     valorFlete: CENTINELAS.tarifa,
     valorFleteDevuelto: CENTINELAS.tarifa,
     valorFleteGam: CENTINELAS.tarifa,

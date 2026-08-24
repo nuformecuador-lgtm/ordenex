@@ -28,7 +28,13 @@ import type {
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type {
+  ITarifaVigenteRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
+import { ConflictError } from "@/lib/errors/app-error";
 import {
   distinct,
   geoInputDesdeColumnasSeparadas,
@@ -75,7 +81,7 @@ export class BulkOrdenService implements IBulkOrdenService {
   // que una omision del wiring sea un error de compilacion (money-safe: nunca costoEnvio mudo).
   constructor(
     private readonly repo: IOrdenRepository,
-    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    private readonly tarifaRepo: ITarifaVigenteRepository,
     /**
      * Feature 146 (R22/R25): notificador de "carga masiva terminada". El DEFAULT es NO-OP: el
      * composition root (`app/api/ordenes/api-key/carga/route.ts`) inyecta el real. Solo lo usa
@@ -247,6 +253,15 @@ export class BulkOrdenService implements IBulkOrdenService {
     // Feature 98/R2: `esCentral` de cada fila creada, cruzado luego por `numRemision` (igual que
     // `numGuia`) para tarifar SIN N+1. Solo las creadas se tarifan (R4).
     const esCentralPorRemision = new Map<string, boolean>();
+    // Feature 274/R25 (design §4.3): la ZONA de cada fila candidata, por el mismo camino y con
+    // el mismo cruce que `esCentralPorRemision`. Es lo que convierte "una tarifa por lote" en
+    // "una tarifa por par (tienda, zona)". `geo.zonaId` no es nulo: una fila cuyo distrito no
+    // tiene zona ya salio antes como error de cobertura (`geo-resolucion.ts`).
+    const zonaPorRemision = new Map<string, string>();
+    // Feature 274/R25: indice remision -> posicion en `filas`, para degradar en el sitio la
+    // fila de una orden que no resuelve tarifa (R28) sin recorrer el array por cada una y sin
+    // contarla dos veces en el summary.
+    const indicePorRemision = new Map<string, number>();
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
@@ -263,6 +278,8 @@ export class BulkOrdenService implements IBulkOrdenService {
       }
       toCreate.push({ ...result.createData, estatusId, tiendaId });
       esCentralPorRemision.set(result.createData.numRemision, result.esCentral); // R2
+      zonaPorRemision.set(result.createData.numRemision, result.createData.zonaId); // 274/R25
+      indicePorRemision.set(result.createData.numRemision, filas.length);
       filas.push({
         fila,
         numRemision: result.createData.numRemision,
@@ -271,11 +288,68 @@ export class BulkOrdenService implements IBulkOrdenService {
       });
     });
 
-    // Feature 98/R1/R3: tarifa vigente de la tienda resuelta UNA sola vez por lote (todo el lote
-    // es de una tienda, `actor.usuarioId`), sin N+1. `null` si la tienda no tiene tarifa (gap
-    // D1/R8 -> costoEnvio "0.00"). No se consulta si no hay ninguna orden creada (nada que tarifar).
-    const tarifaLote =
-      toCreate.length > 0 ? await this.tarifaRepo.resolveTarifaPorTienda(tiendaId) : null;
+    // Feature 274 (R25-R30, design §3.6/§4.3) — LA TARIFA SE RESUELVE ANTES DE PERSISTIR.
+    //
+    // Hasta la 273 el orden era `toCreate -> createManyOrdenesConGuia -> tarifaLote ->
+    // costoEnvio`: la tarifa entraba cuando las ordenes YA existian, y por eso una tienda sin
+    // tarifa creaba paquetes con `costoEnvio: "0.00"` (un precio inventado que ya se estaba
+    // moviendo). Ahora la falta de tarifa decide ANTES: una fila sin tarifa no llega a
+    // insertarse (R28) y un lote donde NINGUNA fila resuelve no deja ni una orden ni una fila
+    // de `carga` (R29). Ademas cada orden se tarifa con SU par (tienda, zona), no con una
+    // unica tarifa de lote (R25), en UNA sola consulta (R26).
+    const tarifaPorRemision = new Map<string, TarifaVigenteResuelta>();
+    const conTarifa: CreateOrdenData[] = [];
+    if (toCreate.length > 0) {
+      // El par de una fila: la tienda de la key (todo el lote es suyo, D4) y la zona de SU
+      // distrito, cruzada por `numRemision` igual que `esCentral`.
+      const parDe = (orden: CreateOrdenData): ParTarifa => ({
+        tiendaId,
+        zonaId: zonaPorRemision.get(orden.numRemision) ?? null,
+      });
+      // Pares DISTINTOS (design §4.3): dos filas de la misma zona son un solo par a resolver.
+      const paresPorClave = new Map<string, ParTarifa>();
+      for (const orden of toCreate) {
+        const par = parDe(orden);
+        if (!paresPorClave.has(clavePar(par))) paresPorClave.set(clavePar(par), par);
+      }
+      const resueltas = await this.tarifaRepo.resolveTarifas([...paresPorClave.values()]); // R26
+
+      const sinTarifa: CreateOrdenData[] = [];
+      for (const orden of toCreate) {
+        const tarifa = resueltas.get(clavePar(parDe(orden))) ?? null;
+        if (tarifa === null) {
+          sinTarifa.push(orden);
+          continue;
+        }
+        tarifaPorRemision.set(orden.numRemision, tarifa);
+        conTarifa.push(orden);
+      }
+
+      // R29: ninguna de las filas que LLEGARON a resolver resolvio -> 409 y CERO persistencia.
+      // Se lanza aqui, antes de tocar la base: sin ordenes, sin fila de `carga`, sin historial
+      // y sin la notificacion de fin de lote (no hubo carga que terminar). El borde ya traduce
+      // `ConflictError` con `appErrorToResponse`, asi que no hace falta un `status` nuevo.
+      //
+      // El denominador importa (design §3.6): esto solo se evalua con `toCreate` NO vacio. Un
+      // lote entero caido por validacion, duplicidad o cobertura geografica no llega hasta aqui
+      // y sale 200 con sus errores de siempre (R30) — la tarifa no es el motivo de su fallo.
+      if (conTarifa.length === 0) throw new ConflictError(MSG_CARGA_SIN_TARIFA);
+
+      // R28/R38: fila sin tarifa en un lote donde OTRA si resuelve -> se degrada EN EL SITIO a
+      // `error` por el canal de errores por fila que ya existe, y queda fuera de la
+      // persistencia. No se le emite ningun `costoEnvio` (tampoco "0.00", R31) porque ese
+      // bloque solo lleva ordenes efectivamente creadas.
+      for (const orden of sinTarifa) {
+        const idx = indicePorRemision.get(orden.numRemision);
+        if (idx === undefined) continue; // defensivo: no deberia ocurrir
+        filas[idx] = {
+          fila: filas[idx].fila,
+          numRemision: orden.numRemision,
+          resultado: "error",
+          errores: { tarifa: [MSG_FILA_SIN_TARIFA] },
+        };
+      }
+    }
 
     // R9/R10: persistencia con `num_guia` inmediato (misma tx que la creación). El actor del
     // historial es el usuario dedicado de la key; origenTipo `carga_api` (D7).
@@ -292,10 +366,13 @@ export class BulkOrdenService implements IBulkOrdenService {
     // (`rows.length`, incluyendo duplicadas y filas con error), NUNCA el tamaño de los batches
     // internos. El id lo genera SIEMPRE el servidor dentro de la tx (`cargaId: null`, R15) y
     // se reutiliza entre batches. `name` es el nombre opcional del lote (R20/R21/R22).
+    //
+    // Feature 274/R28: lo que se persiste es `conTarifa`, NO `toCreate`: las filas sin tarifa
+    // ya salieron del lote unas lineas mas arriba.
     const persistido =
-      toCreate.length > 0
+      conTarifa.length > 0
         ? await this.repo.createManyOrdenesConGuia(
-            toCreate,
+            conTarifa,
             cargaMasivaConfig.BATCH_SIZE,
             { actorUsuarioId: tiendaId, origenTipo: "carga_api" },
             {
@@ -323,9 +400,17 @@ export class BulkOrdenService implements IBulkOrdenService {
         numRemision: creada.numRemision,
         numGuia: creada.numGuia,
         estado: creada.estatusValue,
-        // Feature 98/R5/R7: FLETE + IVA del flete de la tarifa del lote, segun `esCentral` de la
-        // zona de esta orden (cruzado por numRemision). Gap de tarifa -> "0.00" (D1/R8).
-        costoEnvio: costoEnvioDeTarifa(tarifaLote, esCentralPorRemision.get(creada.numRemision) ?? false),
+        // Feature 98/R5/R7 + 274/R25: FLETE + IVA del flete de LA TARIFA DE ESTA ORDEN —la del
+        // par (tienda, zona del distrito), no una unica del lote—, segun `esCentral` de su zona.
+        // Las dos cosas se cruzan por `numRemision`, igual que el `numGuia`.
+        //
+        // 274/R31: aqui ya no puede salir "0.00" por falta de tarifa. Solo llegan ordenes
+        // efectivamente creadas, y una orden solo se crea si su par resolvio (R28); el `?? null`
+        // es una guarda de tipos, no un camino vivo.
+        costoEnvio: costoEnvioDeTarifa(
+          tarifaPorRemision.get(creada.numRemision) ?? null,
+          esCentralPorRemision.get(creada.numRemision) ?? false,
+        ),
       });
     }
 

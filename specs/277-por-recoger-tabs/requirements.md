@@ -1,4 +1,4 @@
-# Feature 274 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
+# Feature 277 — «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
 
 > **La pantalla «Por recoger» del mensajero deja de mezclar en una sola lista lo que puede recoger
 > ahora con lo que el servidor le va a rechazar. Dos pestañas dentro de la MISMA pantalla, y el
@@ -25,7 +25,7 @@
 > migración, ni un segundo origen de verdad.
 >
 > Fuentes leídas para escribir esto: `CLAUDE.md`, `docs/specs.md`, `docs/architecture.md`,
-> `docs/conventions.md`, `feature_list.json` (entrada 274),
+> `docs/conventions.md`, `feature_list.json` (entrada 277),
 > `app/(app)/mis-asignaciones/recoger/page.tsx`,
 > `app/(app)/mis-asignaciones/_components/RecogerModule.tsx`,
 > `app/(app)/mis-asignaciones/_components/RecogerPaqueteCard.tsx`,

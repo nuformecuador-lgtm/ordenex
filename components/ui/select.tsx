@@ -12,6 +12,13 @@ export interface SelectOption {
   label: string;
   /** Si `true`, la opción se muestra pero no es seleccionable (p. ej. mensajero con cierre abierto). */
   disabled?: boolean;
+  /**
+   * Etiqueta del grupo al que pertenece la opción. Cuando alguna opción la trae,
+   * la lista se renderiza agrupada con un encabezado por grupo (`Select.Group` +
+   * `Select.GroupLabel`), que es lo que diferencia opciones homónimas de
+   * distinta procedencia (p. ej. administradores de tienda vs API keys).
+   */
+  group?: string;
 }
 
 export interface SelectProps {
@@ -86,25 +93,58 @@ export function Select({
         <SelectPrimitive.Positioner sideOffset={4} className="z-50">
           <SelectPrimitive.Popup className="max-h-64 min-w-[var(--anchor-width)] overflow-auto rounded-lg border border-border bg-background p-1 shadow-lg outline-none">
             <SelectPrimitive.List>
-              {options.map((option) => (
-                <SelectPrimitive.Item
-                  key={option.value}
-                  value={option.value}
-                  disabled={option.disabled}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
-                >
-                  <SelectPrimitive.ItemText>
-                    {option.label}
-                  </SelectPrimitive.ItemText>
-                  <SelectPrimitive.ItemIndicator>
-                    <Check className="size-4" aria-hidden="true" />
-                  </SelectPrimitive.ItemIndicator>
-                </SelectPrimitive.Item>
-              ))}
+              {agrupar(options).map(({ group, items }, i) =>
+                group === undefined ? (
+                  <React.Fragment key={`plain:${i}`}>
+                    {items.map((option) => renderItem(option))}
+                  </React.Fragment>
+                ) : (
+                  <SelectPrimitive.Group key={`group:${group}`}>
+                    <SelectPrimitive.GroupLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                      {group}
+                    </SelectPrimitive.GroupLabel>
+                    {items.map((option) => renderItem(option))}
+                  </SelectPrimitive.Group>
+                ),
+              )}
             </SelectPrimitive.List>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
   );
+}
+
+/** Una opción ya renderizada como `Select.Item` (compartido por lista plana y agrupada). */
+function renderItem(option: SelectOption) {
+  return (
+    <SelectPrimitive.Item
+      key={option.value}
+      value={option.value}
+      disabled={option.disabled}
+      className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+    >
+      <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemIndicator>
+        <Check className="size-4" aria-hidden="true" />
+      </SelectPrimitive.ItemIndicator>
+    </SelectPrimitive.Item>
+  );
+}
+
+/**
+ * Parte las opciones en tramos consecutivos por `group`, conservando el orden de
+ * entrada. Las opciones sin `group` salen en un tramo sin encabezado, de modo que
+ * un `Select` que nunca usa grupos renderiza exactamente la lista plana de antes.
+ */
+export function agrupar(
+  options: SelectOption[],
+): Array<{ group: string | undefined; items: SelectOption[] }> {
+  const tramos: Array<{ group: string | undefined; items: SelectOption[] }> = [];
+  for (const option of options) {
+    const ultimo = tramos[tramos.length - 1];
+    if (ultimo && ultimo.group === option.group) ultimo.items.push(option);
+    else tramos.push({ group: option.group, items: [option] });
+  }
+  return tramos;
 }

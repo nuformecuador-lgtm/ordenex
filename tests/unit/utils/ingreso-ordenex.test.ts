@@ -8,7 +8,7 @@ import {
   costoEnvioDeTarifa,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 // Feature 42 — tests del util PURO de ingreso de Ordenex (R8/R9/R26). Money-safe: la
 // salida agregada es STRING escala 2; cero number/parseFloat.

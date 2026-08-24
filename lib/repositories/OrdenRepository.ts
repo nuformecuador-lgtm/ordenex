@@ -18,6 +18,10 @@ import {
 // de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
 import { derivarJornada } from "@/lib/utils/jornada-cierre";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
+// Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
+// resolver del cierre de dia: el listado no puede tener una regla propia (R18/R21).
+import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
+import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
@@ -68,7 +72,7 @@ import { ensureCargaEnTx } from "@/lib/repositories/carga-lote";
 // escritura de `fecha_reparto` que no sea una asignacion ni una limpieza pasa por ahi, en su misma
 // transaccion y solo con las ordenes que efectivamente cambiaron.
 import { registrarCambioDiaReparto } from "@/lib/repositories/registrar-cambio-dia-reparto";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { costosListadoOrden } from "@/lib/utils/ingreso-ordenex";
 import { ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 // Feature 236 (T2.1, R3/R5): la DECLARACION UNICA de los grupos de `/novedades`. El predicado de
@@ -301,6 +305,7 @@ type OrdenPrismaClient = Pick<
   | "gestionOrden" // feature 87: causa de devolucion vigente de la lista de novedades (R6/R8)
   | "ordenHistorialEstado" // feature 236: fecha de la solicitud de ayuda, que ordena su pestaña (D7/R17)
   | "carga" // feature 141: lote de carga masiva asegurado en la tx de la insercion batch
+  | "tarifa" // feature 274: la tarifa del listado, resuelta por cascada en UNA query (R18/R19)
   | "$transaction" // feature 17: generarGuiaLote necesita transaccion (R25)
   | "$executeRaw" // feature 41/R23: anti-TOCTOU (NOT EXISTS cierre bloqueante en el lote)
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
@@ -404,16 +409,21 @@ const WITH_ESTATUS = {
 
 // El LISTADO trae, en el MISMO query (via joins de Prisma `include`), los datos
 // de TODAS las relaciones DIRECTAS (FK) de la orden: estatus, tienda, zona,
-// provincia, canton, distrito y mensajeroAsignado. La relacion
-// `tienda` (Orden.tienda -> Usuario) trae ademas su tarifa ACTIVA (Usuario.
-// tarifasTienda, 1:N por-tienda; se acota a `status: 'activo'`, no borrada,
-// `take: 1`). NO requiere migracion: son includes sobre relaciones ya existentes.
+// provincia, canton, distrito y mensajeroAsignado.
+// NO requiere migracion: son includes sobre relaciones ya existentes.
 // Seleccion explicita de campos: NUNCA se traen columnas sensibles del usuario
-// (passwordHash, etc.) ni `deletedAt` de las tarifas.
+// (passwordHash, etc.).
+//
+// FEATURE 274 (T8.1, design §4.1) — LA TARIFA YA NO VIENE EN ESE INCLUDE. Hasta ahora
+// `tienda` traia `tarifasTienda { where: { status: "activo" }, take: 1 }`, y eso se cayo por
+// DOS motivos a la vez: la columna `status` desaparecio de `tarifas`, y —lo importante— esa
+// era una regla DISTINTA de la que usa la liquidacion del cierre, asi que el listado podia
+// MOSTRAR una fila y el cierre FACTURAR otra (R8/R21). La tarifa de la pagina se resuelve
+// ahora con la cascada (tienda, zona) de `lib/utils/cascada-tarifa.ts`, en UNA query
+// adicional por pagina (`resolverTarifasDePagina`, R19).
 const TARIFA_SELECT = {
   id: true,
   tiendaId: true,
-  status: true,
   valorFlete: true,
   valorFleteDevuelto: true,
   valorFleteGam: true,
@@ -422,6 +432,9 @@ const TARIFA_SELECT = {
   comisionCod: true,
   ivaFlete: true,
   ivaComisionCod: true,
+  tarifaEspecial: true, // columna opcional: `null` = sin pacto especial
+  zonaId: true, // opcional: `null` = tarifa no acotada a una zona
+  isDefault: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -475,13 +488,7 @@ const WITH_ESTATUS_Y_TIENDA = {
         nombre: true,
         email: true,
         telefono: true,
-        // Tarifa ACTIVA de la tienda (a lo sumo una, `take: 1`), excluyendo
-        // borradas e inactivas.
-        tarifasTienda: {
-          where: { status: "activo", deletedAt: null },
-          select: TARIFA_SELECT,
-          take: 1,
-        },
+        // Feature 274: aqui NO hay tarifas. Ver el comentario de `TARIFA_SELECT`.
       },
     },
     zona: { select: { id: true, nombre: true, esCentral: true } },
@@ -506,6 +513,22 @@ const WITH_ESTATUS_Y_TIENDA = {
 
 // Fila de orden del listado con todas las relaciones directas resueltas.
 type OrdenListRow = Prisma.OrdenGetPayload<typeof WITH_ESTATUS_Y_TIENDA>;
+
+/**
+ * FEATURE 274 (T8.1, design §4.1) — fila de `tarifas` tal como la trae la query de la pagina.
+ *
+ * POR QUE EL LISTADO HACE SU PROPIA QUERY Y NO LLAMA A `ITarifaVigenteRepository.resolveTarifas`
+ * (y por que no hay que "simplificarlo" luego): `relaciones.tienda.tarifa` es `TarifaDTO | null`,
+ * y `TarifaDTO` lleva campos que `TarifaVigenteResuelta` NO tiene —`isDefault`,
+ * `tarifaEspecial`, `createdAt`, `updatedAt` y los montos como `number`—. Ensanchar el tipo del
+ * resolver con todo eso meteria `tarifaEspecial` y los `number` dentro del alcance de la ruta
+ * que decide DINERO, que es exactamente lo que protege el comentario de
+ * `ITarifaVigenteRepository`. La decision del design es la (ii): **la misma REGLA (el mismo
+ * modulo puro `cascada-tarifa`), un tipo de salida propio del listado**. Sigue siendo UNA sola
+ * query extra por pagina (R19) y sigue siendo imposible que el listado y el cierre elijan filas
+ * distintas (R21), porque la regla es literalmente la misma funcion.
+ */
+type TarifaListRow = Prisma.TarifaGetPayload<{ select: typeof TARIFA_SELECT }>;
 
 // Serializa la fila de Prisma a OrdenDTO: peso Decimal -> number (o null,
 // feature 15/R4), nunca expone deletedAt (R42/N3).
@@ -534,13 +557,11 @@ function toDTO(row: OrdenRow): OrdenDTO {
 }
 
 // Serializa una tarifa anidada de la tienda: Decimal -> number en las 8 columnas
-// numericas (patron TarifaRepository). No expone `deletedAt` (ya filtrado en el
-// include).
-function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaDTO {
+// numericas (patron TarifaRepository).
+function toTarifaDTO(t: TarifaListRow): TarifaDTO {
   return {
     id: t.id,
-    tiendaId: t.tiendaId,
-    status: t.status,
+    tiendaId: t.tiendaId ?? null,
     valorFlete: t.valorFlete.toNumber(),
     valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
     valorFleteGam: t.valorFleteGam.toNumber(),
@@ -549,6 +570,10 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
     comisionCod: t.comisionCod.toNumber(),
     ivaFlete: t.ivaFlete.toNumber(),
     ivaComisionCod: t.ivaComisionCod.toNumber(),
+    // Nullable: se conserva la ausencia; `null` no es 0 (patron TarifaRepository).
+    tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toNumber(),
+    zonaId: t.zonaId ?? null,
+    isDefault: t.isDefault,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -563,7 +588,7 @@ function toTarifaDTO(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Tarifa
  * para OPERAR con ella en `Prisma.Decimal`. Son dos usos distintos del mismo dato y el
  * segundo no admite `number`: ahi es donde se pierde el centimo.
  */
-function toTarifaVigente(t: OrdenListRow["tienda"]["tarifasTienda"][number]): TarifaVigente {
+function toTarifaVigente(t: TarifaListRow): TarifaVigente {
   return {
     valorFlete: t.valorFlete.toFixed(2),
     valorFleteGam: t.valorFleteGam.toFixed(2),
@@ -575,9 +600,19 @@ function toTarifaVigente(t: OrdenListRow["tienda"]["tarifasTienda"][number]): Ta
   };
 }
 
+// Feature 274: la tarifa que le toca a una fila, buscada por la clave de su par (tienda, zona).
+// `?? null` cubre el caso imposible de un par que no se pidio; nunca se inventa una tarifa.
+function tarifaDe(
+  tarifas: ReadonlyMap<string, TarifaListRow | null>,
+  row: OrdenListRow,
+): TarifaListRow | null {
+  return tarifas.get(clavePar({ tiendaId: row.tiendaId, zonaId: row.zonaId })) ?? null;
+}
+
 // Arma el bloque `relaciones` con los datos de las relaciones directas (FK) de la
-// orden, resueltas por el include del listado. `tienda` incluye su tarifa activa.
-function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
+// orden, resueltas por el include del listado. La `tarifa` de `tienda` NO sale del include:
+// llega ya resuelta por la cascada (tienda, zona) de la pagina (feature 274, R18).
+function toRelaciones(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenListItemRelaciones {
   return {
     estatus: row.estatus ? { id: row.estatus.id, value: row.estatus.value } : null,
     tienda: row.tienda
@@ -586,8 +621,9 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
           nombre: row.tienda.nombre,
           email: row.tienda.email,
           telefono: row.tienda.telefono,
-          // A lo sumo una tarifa activa por tienda (o null).
-          tarifa: row.tienda.tarifasTienda[0] ? toTarifaDTO(row.tienda.tarifasTienda[0]) : null,
+          // La fila que gano la cascada para el par (tienda, zona) de ESTA orden, o `null`
+          // si ningun nivel tiene fila (R20: gap de datos, no error).
+          tarifa: tarifa === null ? null : toTarifaDTO(tarifa),
         }
       : null,
     zona: row.zona
@@ -608,13 +644,15 @@ function toRelaciones(row: OrdenListRow): OrdenListItemRelaciones {
 // WITH_ESTATUS_Y_TIENDA: `include` no restringe los escalares del modelo).
 // Ademas expone en `relaciones` los datos de TODAS las relaciones directas (FK),
 // con la tarifa activa anidada dentro de `tienda` (resueltas via joins en el listado).
-function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
+function toListItemDTO(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenListItemDTO {
   // Feature 204: las dos columnas de dinero DERIVADO ("Flete + IVA" y "Comisión + IVA") se
   // resuelven AQUI, con Decimal, y viajan como STRING ya derivado. Antes las calculaba el
   // navegador multiplicando los `number` de la tarifa, y no daba lo mismo: sobre las órdenes
   // reales de la base, 14 de 66 se veían un céntimo desviadas de lo que factura el cierre.
-  const tarifaActiva = row.tienda.tarifasTienda[0];
-  const costos = costosListadoOrden(tarifaActiva ? toTarifaVigente(tarifaActiva) : null, {
+  // Feature 274 (R18/R20): la tarifa ya viene resuelta por la cascada; `null` = ningun nivel
+  // tiene fila y los importes salen en "0.00" (R39: el listado NO bloquea, a diferencia de los
+  // dos bordes de API por key, que devuelven 409 — la asimetria es deliberada).
+  const costos = costosListadoOrden(tarifa === null ? null : toTarifaVigente(tarifa), {
     esCentral: row.zona.esCentral,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
     cobraComision: row.cobraComision,
@@ -647,7 +685,7 @@ function toListItemDTO(row: OrdenListRow): OrdenListItemDTO {
     // `toFechaISO` da el dia correcto sin tocar ninguna zona horaria. El navegador NO construye
     // ninguna fecha: recibe el texto y lo pone en palabras con `fechaLegible`.
     fechaRepartoISO: toFechaISO(row.fechaReparto),
-    relaciones: toRelaciones(row),
+    relaciones: toRelaciones(row, tarifa),
   };
 }
 
@@ -1158,7 +1196,56 @@ export class OrdenRepository implements IOrdenRepository {
       this.prisma.orden.count({ where }),
     ]);
 
-    return { items: items.map(toListItemDTO), total };
+    // Feature 274 (R18/R19): UNA query adicional por PAGINA —no por fila— resuelve la tarifa
+    // de todos los pares (tienda, zona) presentes. Con el `count` de arriba, una pagina son
+    // tres consultas y solo DOS de datos, sea la pagina de 1 fila o de 50.
+    const tarifas = await this.resolverTarifasDePagina(items);
+
+    return {
+      items: items.map((row) => toListItemDTO(row, tarifaDe(tarifas, row))),
+      total,
+    };
+  }
+
+  /**
+   * FEATURE 274 (T8.1, design §4.1, R18/R19) — resuelve en UNA sola query la tarifa de todas
+   * las filas de una pagina, con la MISMA regla que la liquidacion del cierre de dia.
+   *
+   * `whereCascada` + `elegirPorCascada` son el modulo PURO `lib/utils/cascada-tarifa.ts`, el
+   * mismo que usa `TarifaVigenteRepository`. Esa es la razon de ser de la feature: mientras el
+   * listado tenga su propia REGLA puede mostrar una fila y el cierre facturar otra (R8/R21).
+   * Lo que aqui difiere del resolver del dinero no es la regla sino la PROYECCION —ver el
+   * comentario de `TarifaListRow`—: si alguien viene a "simplificar" esto llamando a
+   * `resolveTarifas`, lea antes ese comentario.
+   *
+   * Los pares se DEDUPLICAN (`clavePar`): una pagina de 50 ordenes de tres tiendas en dos zonas
+   * consulta seis pares, no cincuenta. `elegirPorCascada` devuelve una entrada por cada par
+   * pedido, con `null` cuando ningun nivel de la cascada tiene fila (R20).
+   */
+  private async resolverTarifasDePagina(
+    rows: readonly OrdenListRow[],
+  ): Promise<Map<string, TarifaListRow | null>> {
+    // Cero filas, cero consultas (el `where` seria `{ OR: [] }`, que en Prisma no filtra nada
+    // y traeria la tabla entera).
+    if (rows.length === 0) return new Map<string, TarifaListRow | null>();
+
+    const pares: ParTarifa[] = [];
+    const vistos = new Set<string>();
+    for (const row of rows) {
+      // En `orden`, `tienda_id` y `zona_id` son NOT NULL: el par siempre alcanza los 3 niveles.
+      const par: ParTarifa = { tiendaId: row.tiendaId, zonaId: row.zonaId };
+      const clave = clavePar(par);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      pares.push(par);
+    }
+
+    const filas = await this.prisma.tarifa.findMany({
+      where: whereCascada(pares),
+      select: TARIFA_SELECT,
+    });
+
+    return elegirPorCascada(filas, pares);
   }
 
   /**
@@ -1195,7 +1282,11 @@ export class OrdenRepository implements IOrdenRepository {
       },
       ...WITH_ESTATUS_Y_TIENDA, // R2: el MISMO include que `list()`
     });
-    return rows.map(toListItemDTO); // R2: el MISMO mapeo que `list()`
+    // Feature 274 (T8.1): la MISMA resolucion de tarifa que `list()`, y por el mismo motivo por
+    // el que comparte include y mapeo — si no, el detalle del tablero diverge del listado.
+    const tarifas = await this.resolverTarifasDePagina(rows);
+    // R2: el MISMO mapeo que `list()`.
+    return rows.map((row) => toListItemDTO(row, tarifaDe(tarifas, row)));
   }
 
   async update(

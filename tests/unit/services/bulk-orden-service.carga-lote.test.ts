@@ -7,7 +7,11 @@ import {
   type IOrdenRepository,
   type LoteContexto,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type {
+  ITarifaVigenteRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 
@@ -42,11 +46,30 @@ const UUID_SESION = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** Id que el REPO acuna cuando la peticion entra sin token (R15/R16: server-side). */
 const UUID_NUEVO = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
-const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
-  resolveTarifaPorTienda: vi.fn(async () => null),
-  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
-  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
-  resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+// Feature 274/R37: la interfaz colapso a DOS metodos. El stub RESUELVE para todo par pedido:
+// estos tests miden la propagacion del LOTE, y desde la 274 una carga por API en la que ninguna
+// fila resuelve tarifa ya no persiste nada (R29) — un stub que devolviera `null` no probaria
+// nada del lote, probaria el 409.
+const TARIFA_STUB: TarifaVigenteResuelta = {
+  tarifaId: "t-stub",
+  fulfillment: "0.00",
+  valorFlete: "3.50",
+  valorFleteGam: "5.00",
+  valorFleteDevuelto: "1.00",
+  valorFleteDevueltoGam: "2.00",
+  comisionCod: "5.00",
+  ivaFlete: "12.00",
+  ivaComisionCod: "12.00",
+};
+
+const tarifaRepoStub: ITarifaVigenteRepository = {
+  resolveTarifa: vi.fn(async () => TARIFA_STUB),
+  resolveTarifas: vi.fn(
+    async (pares: readonly ParTarifa[]) =>
+      new Map<string, TarifaVigenteResuelta | null>(
+        pares.map((p) => [clavePar(p), TARIFA_STUB]),
+      ),
+  ),
 };
 
 /**

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { claveDeConsulta } from "@/lib/analytics/cache-clave";
+import { prepararConsultaAnalitica } from "@/lib/analytics/consulta";
 import { consultaDe, MAESTRO } from "./_fake-operativa";
 import type { DimensionAnalitica } from "@/lib/analytics/types";
 
@@ -112,5 +113,57 @@ describe("la clave es determinista", () => {
   it("dos llamadas con la misma consulta dan la misma cadena", () => {
     const c = consultaDe("entregas", MAESTRO, { rango: "mes" });
     expect(claveDeConsulta(c, ["zona"])).toBe(claveDeConsulta(c, ["zona"]));
+  });
+});
+
+// Feature 267 / R12 — DOS INTEGRADORES DISTINTOS, DOS ENTRADAS DE CACHE DISTINTAS.
+//
+// Es EL invariante que impide servirle a un integrador el agregado de otro. La clave no se
+// forja: cada consulta se construye por el camino real (`prepararConsultaAnalitica` con el
+// canal `api_key`), asi que lo que se compara es la clave que produciria el canal de verdad.
+describe("267/R12 · la clave de cache separa a dos integradores", () => {
+  const AHORA_267 = new Date("2026-08-03T15:00:00.000Z");
+
+  function consultaIntegrador(usuarioId: string, metricaId = "entregas") {
+    const r = prepararConsultaAnalitica(
+      { rango: "dia" },
+      { usuarioId, rol: "apiKey" },
+      metricaId,
+      AHORA_267,
+      "api_key",
+    );
+    if (r.status !== "ok") throw new Error(`no concedio: ${JSON.stringify(r)}`);
+    return r.consulta;
+  }
+
+  it("mismo rango, misma metrica, mismo filtro: la clave DIFIERE por el sujeto del alcance", () => {
+    const a = consultaIntegrador("u-api-key-1");
+    const b = consultaIntegrador("u-api-key-2");
+    expect(claveDeConsulta(a, SIN_GRANO)).not.toBe(claveDeConsulta(b, SIN_GRANO));
+  });
+
+  it("y el mismo integrador SI comparte entrada consigo mismo (la clave es estable)", () => {
+    expect(claveDeConsulta(consultaIntegrador("u-api-key-1"), SIN_GRANO)).toBe(
+      claveDeConsulta(consultaIntegrador("u-api-key-1"), SIN_GRANO),
+    );
+  });
+
+  it("el usuarioId del integrador entra en la clave, no un literal comodin del canal", () => {
+    expect(claveDeConsulta(consultaIntegrador("u-api-key-1"), SIN_GRANO)).toContain(
+      "u-api-key-1",
+    );
+  });
+
+  it("un integrador y un adminTienda con el MISMO id caerian en la misma entrada, y por eso el id es unico por usuario", () => {
+    // No es una laguna: `orden.tienda_id` apunta a `usuario`, y un usuario tiene UN rol. El
+    // caso se deja escrito para que quede claro que la separacion la da el ID, no el rol.
+    const integrador = consultaIntegrador("u-mismo-id");
+    const tienda = consultaDe(
+      "entregas",
+      { usuarioId: "u-mismo-id", rol: "adminTienda" },
+      { rango: "dia" },
+      AHORA_267,
+    );
+    expect(claveDeConsulta(integrador, SIN_GRANO)).toBe(claveDeConsulta(tienda, SIN_GRANO));
   });
 });

@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { GestionResultado } from "@prisma/client";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type {
   IngresoOrdenexDTO,
   TotalesIngresoOrdenex,

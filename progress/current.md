@@ -8,6 +8,81 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
+
+Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad
+tienda+zona → default de la tienda → tarifa de la zona → nada». Se midió el impacto, se dieron de
+alta tres fichas y se **aterrizó el trabajo suelto** que ya existía sin registro.
+
+| # | Zona | Estado | Qué |
+| --- | --- | --- | --- |
+| **273** | fullstack | **`in_progress`** · rama `feature/273-tarifas-por-zona-catalogo-vehiculos` | el **modelo**: `tarifas.zona_id`, `tienda_id` nullable, `is_default`, `tarifa_especial`, borrado físico, `UNIQUE (zona_id, tienda_id) NULLS NOT DISTINCT`, `distrito.zona_especial`, catálogo de vehículos administrable y la UI que ya captura las tres combinaciones. **`sdd: false`**: la ficha se escribió después del código (ver abajo). |
+| **274** | backend | `pending` · `depends_on: [273]` | la **cascada de resolución** + drop de `tarifas.status`. Es lo que hace que el modelo de la 273 cobre de verdad. |
+| **275** | frontend | `pending` · `depends_on: [274]` | la UI sin `status` y con el nivel de la cascada visible por zona. |
+
+### El hueco que queda abierto tras la 273 (deliberado, no es un olvido)
+
+El modelo y la UI ya soportan tarifas por zona, pero **el resolver no**:
+`TarifaVigentePorTiendaRepository.ts` sigue haciendo `where: { tiendaId }`. Consecuencias vivas
+mientras la 274 no cierre:
+
+- las tarifas con `tienda_id` NULL **se pueden capturar pero no se cobran nunca**;
+- entre las tarifas de una tienda gana **la más reciente, no la más específica**;
+- `is_default` no lo lee ninguna aritmética;
+- el listado usa **otra regla** que la liquidación (`OrdenRepository`: `status: activo` + `take: 1`)
+  → puede **mostrar una fila y facturar otra**.
+
+⚠️ **La 273 no se despliega a `prod` sin la 274 detrás**, o la pantalla promete un cobro por zona
+que el motor no aplica.
+
+### Decisiones cerradas con el humano (no reabrir en el spec de la 274)
+
+1. La fila global `(tienda NULL, zona NULL)` se **prohíbe** en el service (`validation_error`).
+   No es un cuarto nivel.
+2. `tarifas.status` se **dropea entero**, con migración. Eso cierra la deuda **(g)** de la 69,
+   colapsa `resolveTarifaCotizablePorTienda` en el resolver único y **absorbe la feature 70**.
+3. Sin tarifa: **409 solo donde el 409 ya existía** (cotización y carga masiva por API); pantalla
+   y cierre siguen liquidando **0.00**, para no bloquear la operación.
+
+### Dos cosas que esta sesión aprendió por las malas
+
+- **La 273 nació sin ficha, sin spec y sobre `fix/251-alias-project-id`**, una rama de otra cosa.
+  Se registró en diferido y con `sdd: false` para que el historial diga lo que pasó y no una
+  versión ordenada de lo que pasó. No es un precedente que se conceda a futuro.
+- **Los ids 269-272 se los llevó otra sesión** mientras se medía el impacto (la 271 ya está
+  mergeada en `dev`). El borrador usaba 269/270/271; se renumeró a 273/274/275 conservando los
+  slugs. Antes de reservar un id, mirar `origin/dev`, no el árbol local.
+
+---
+
+
+## 🔌 Sesión API-key (256 · 257 · 266-268) — 2026-08-22
+
+| # | Estado | Qué |
+| --- | --- | --- |
+| **257** | **`done`** · PR [#433](https://github.com/nuformecuador-lgtm/ordenex/pull/433) mergeado 18:39 | el listado por API key filtra por **rango de fechas**, `num_guia` y `num_remision`. Gate verde, reviewer APROBADO. |
+| **256** | **`done`** · PR [#434](https://github.com/nuformecuador-lgtm/ordenex/pull/434) mergeado 15:46 | el webhook de `devuelta` viaja con el **motivo tipificado**. |
+| **268** |  **`in_progress`** · PR [#456](https://github.com/nuformecuador-lgtm/ordenex/pull/456) | el webhook notifica **`ayuda_tienda` e `incidente`**, con causa y con enlace estable a las evidencias. Gate completo corrido (delta 0), reviewer APROBADO, PR abierto. **Falta el aviso a integradores antes de la release a prod.** |
+| **266** | `pending` | habilitar pedidos con novedad por API key. Decisiones cerradas: no reusa el camino del botón de la tienda, y la rama sin mensajero deja solo log (sin webhook) mientras se define ese flujo. **Depende de la 268** para que su rama con cambio de estado notifique de verdad. |
+| **267** | `pending` | analítica de la propia tienda por API key. Revierte una denegación de diseño: hoy el rol `apiKey` está en `ROLES_SIN_ANALITICA`. |
+
+Las dos salen del cuestionario de integración de **Dropi**. La 256 la especificó otra sesión
+(su puerta humana está registrada en el propio spec); esta sesión hizo su fase 2.
+
+**Dos avisos que sobreviven a esta sesión:**
+
+1. ⚠️ **`pnpm db:migrate` dropea la base local.** Es `prisma migrate dev` y la tabla
+   `_prisma_migrations` tiene aplicada `20260728120000_orden_historial_origen_deshacer_asignacion`,
+   que no existe en `db/migrations` de ninguna rama. Con ese historial divergente, `migrate dev`
+   considera la base corrupta y su salida natural es resetearla. Para aplicar pendientes:
+   **`pnpm exec prisma migrate deploy`** (usado hoy para las 4 de la 253, sin pérdida). El drift
+   sigue sin resolver: o falta el archivo en el repo, o sobra la fila. **Merece ficha propia.**
+2. Las guardias que **censan el árbol** (`ayuda-columna-retirada`, `columnas-asercion-de-orden`)
+   se caen por **timeout** —no por assert— cuando la máquina está cargada: 27–30 s contra un
+   límite de 20 s. Aisladas dan 17/17 verdes. Antes de tratarlas como regresión, re-corré con la
+   máquina libre.
+
+---
 
 ## 🔵 SESIÓN ACTIVA — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
 
@@ -16,34 +91,40 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **276** | fullstack | **completa y APROBADA** (revisión en 3 rondas, 0 bloqueantes) · sin mergear | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **277** | frontend | **completa y APROBADA** (0 bloqueantes) · sin mergear | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **276** | fullstack | **completa y APROBADA** (3 rondas, 0 bloqueantes) · en release | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | **completa y APROBADA** (0 bloqueantes) · **mergeada en `dev`** (PR #489) | «Por recoger» separa en pestañas las de hoy de las reservadas para otro día |
 | **218** | backend | **`superseded` por la 276** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
 
 ### 276 — dónde está exactamente (2026-08-24)
 
-Rama **`feature/276-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
-(`e93c19e6`): los commits del spec todavía no estaban empujados. Bitácora en `progress/impl_276.md`,
-informe con las **tres rondas** en `progress/review_276.md`.
+Rama **`feature/276-tope-de-intentos`**, con `dev` ya mergeado dentro. Bitácora en
+`progress/impl_276.md`, informe con las **tres rondas** en `progress/review_276.md`.
 
 - **Completa**: las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
   gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
   tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql`, la guardia del
   invariante y la UI de las dos superficies (T11/T12).
-- **Gate COMPLETO** `./init.sh` → **`INIT_EXIT=0`, 1358 archivos / 18.302 tests**. Corrido **cinco
-  veces** entre implementers y reviewer, siempre el mismo número.
+- **Gate COMPLETO** `./init.sh` → **`INIT_EXIT=0`**. Corrido **cinco veces** entre implementers y
+  reviewer sobre 1358 archivos / 18.302 tests, siempre el mismo número, y de nuevo tras mergear
+  `dev`.
 - **Aprobada con 0 bloqueantes tras tres rondas.** Las rondas 1 y 2 rechazaron, y **ninguno de esos
   cuatro bloqueantes era del código de la ficha**: los cuatro salieron del `sed` de la renumeración
   273→276 (ver más abajo). El reviewer volvió a inyectar el defecto decisivo sobre el commit final
   —sonda de visita real fuera del `select`— y salieron **los mismos 2 rojos en Postgres y 13 verdes
   en los dobles** que en la ronda 1: la auditoría del tope está en pie entera.
-- ⚠️ **R37 sigue a medias y bloquea el DESPLIEGUE, no el merge.** El SQL de solo lectura está
-  escrito y corre. Se ejecutó contra producción el 2026-08-24 —una sola orden en el umbral, la
-  `28098171`, en `devuelta`— y **hay que repetirlo justo antes de desplegar, porque esa foto
-  caduca**: cualquier cierre que la bodega apruebe puede crear otra, y R18 la dejaría inasignable
-  sin que nadie lo haya decidido. Y **falta medir por primera vez cuántas `reprogramada` congela la
-  liberación diferida el primer día** — ese número *es* el tamaño de la mercadería que la ficha
-  para, y el riesgo se aceptó sin conocerlo.
+
+### ✅ T0 CERRADA — las dos medidas de despliegue, ejecutadas el día de la release
+
+Eran lo único que bloqueaba desplegar la 276, y se midieron **hoy**, no se citó la foto de ayer.
+
+1. **R37 re-ejecutada, limpia.** La única orden viva con `intentos >= 3` sigue siendo la guía
+   **`28098171`**, en **`devuelta`**, y **cero** fuera de ese estado. **La condición de parada de Q6
+   no se cumple**: no hay ninguna orden a la que R18 vaya a dejar inasignable sin que nadie lo haya
+   decidido.
+2. **El segundo número de T0, medido POR PRIMERA VEZ: T6 congela CERO órdenes el primer día.** Era
+   el número sobre el que se había aceptado el riesgo a ciegas, y es el tamaño de la mercadería que
+   esta ficha para. Hay **2** órdenes vivas en `reprogramada` (`31005512`, `47145018`), **0
+   liberables hoy**, y las dos cuelgan de un cierre **ya aprobado**.
 
 ### Lo que se midió antes de registrarlas, y es la razón de que existan
 

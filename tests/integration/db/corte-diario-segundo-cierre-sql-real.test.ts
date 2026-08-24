@@ -7,7 +7,7 @@ import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import type { CierreVencidoContexto } from "@/lib/notificaciones/emitir";
 
 import {
@@ -290,7 +290,7 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     const avisos: CierreVencidoContexto[] = [];
     const servicio = new CorteDiarioService(
       corteRepo,
-      new CierreDiaRepository(cliente, new TarifaVigentePorTiendaRepository(cliente)),
+      new CierreDiaRepository(cliente, new TarifaVigenteRepository(cliente)),
       new ZonaRepository(cliente),
       new OrdenRepository(cliente),
       new TarifaZonaMensajeroRepository(cliente),
