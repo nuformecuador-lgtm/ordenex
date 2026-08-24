@@ -3325,6 +3325,7 @@
       "status": "in_progress",
       "sdd": false,
       "complexity": "alta",
+      "pr": 485,
       "depends_on": null,
       "branch": "feature/273-tarifas-por-zona-catalogo-vehiculos",
       "spec_path": null,
