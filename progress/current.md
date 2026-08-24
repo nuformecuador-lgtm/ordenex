@@ -8,6 +8,49 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 🟢 EN `dev`, SIN RELEASE — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
+
+**`dev` = `7c211f2f`**, gate COMPLETO en verde tras el merge (`INIT_EXIT=0`, **1375 archivos /
+18.707 tests**). **`prod` sigue en `37b5944b`.** Cero fichas de esta sesión sin cerrar.
+
+| ficha | estado |
+| --- | --- |
+| **276** · el tope de 3 intentos se cierra | mergeada en `dev` (**PR #490**) · aprobada tras 3 rondas, 0 bloqueantes |
+| **277** · «Por recoger» separa en pestañas | mergeada en `dev` (**PR #489**) · aprobada, 0 bloqueantes |
+| **218** | `superseded` por la 276 — su decisión ya está EN CÓDIGO |
+
+### ⛔ LA RELEASE NO SE ABRIÓ, y la razón es de producto, no técnica
+
+Decisión del humano, 2026-08-24. **`dev` no lleva solo lo de esta sesión**: lleva también el cambio
+de tarifas de otra, y dentro va **`20260825120000_drop_tarifa_status`, un `DROP COLUMN` sobre una
+tabla de dinero que no se deshace**. Su mitad frontend —la ficha **275**— sigue `pending`.
+
+Lo que sí se comprobó antes de decidir, para que nadie lo repita:
+
+- Su revisión **existe y aprobó**: «APROBADO CON RESERVAS», **0 bloqueantes de código**, 40/40
+  requisitos. Los dos bloqueantes eran de bookkeeping.
+- **No queda código vivo usando `tarifas.status`**: los únicos aciertos son comentarios que explican
+  su retirada.
+- El gate está **verde** sobre ese mismo árbol, tests de componentes incluidos.
+
+**No se puede separar**: `dev` es un solo árbol y aislar lo de esta sesión exigiría cherry-picks, que
+es peor. Así que **la release espera a que la otra sesión cierre su 275** —o confirme que su parte
+puede salir—. Nada irreversible ha ocurrido.
+
+### ✅ Lo que YA está medido y no hay que repetir cuando se abra la release
+
+Las dos condiciones de despliegue de la 276 se ejecutaron contra producción el **2026-08-24**:
+
+1. **R37 limpia** — la única orden viva con `intentos >= 3` es la guía **`28098171`**, en `devuelta`,
+   y **cero** fuera de ese estado. La condición de parada de Q6 no se cumple.
+2. **T6 congela CERO órdenes el primer día** — medido por primera vez. Hay 2 `reprogramada` vivas
+   (`31005512`, `47145018`), **0 liberables hoy**, las dos con su cierre ya aprobado.
+
+⚠️ **Las dos son fotos y caducan.** `docs/release.md` exige re-medirlas **el día que se abra la
+release**, no citar éstas.
+
+---
+
 ## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
 
 Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad
@@ -84,7 +127,7 @@ Las dos salen del cuestionario de integración de **Dropi**. La 256 la especific
 
 ---
 
-## 🔵 SESIÓN ACTIVA — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
+## 🔵 La sesión del 2026-08-24 (276 y 277), en detalle
 
 Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spec**. `prod` sigue en
 `37b5944b`; el estado de la release del 23 y del cron de anoche está en la sección siguiente.
