@@ -578,3 +578,22 @@ catálogo de acciones), no un parche dentro del componente.
 **T11 y T12: completos y verdes.** Con esto, la 276 tiene su UI cerrada; lo único que sigue
 pendiente de la ficha es lo que ya decía el backend: **R37 se vuelve a ejecutar contra producción
 inmediatamente antes de desplegar**.
+
+---
+
+## Un rojo del gate que NO era una regresión — 2026-08-24
+
+La corrida del gate posterior al commit de bookkeeping salió **`INIT_EXIT=1` con 1 test fallado de
+18.328**: `tests/components/LoginForm.test.tsx > R17: otp_invalid`, en **1808 ms**. Se descartó como
+flake bajo carga **con tres medidas, no con una corazonada**:
+
+1. **Aislado pasa: 26/26.**
+2. **El diff desde la corrida verde anterior (`873d71d6`) es solo documentación** — `progress/`,
+   `specs/276-tope-de-intentos/tasks.md` y `feature_list.json`. Ni una línea de código.
+3. **La rama entera no toca `login`, `auth` ni `otp`** en ningún archivo.
+
+Y aun así se volvió a correr el gate **completo**: `INIT_EXIT=0`, **1358 archivos / 18.302 tests**.
+Un argumento sólido no es una medida.
+
+`LoginForm` ya estaba fichado en este repo como rojo móvil junto a `ControlDescargaTransversal`.
+Queda anotado aquí para que la próxima vez no cueste una investigación entera.
