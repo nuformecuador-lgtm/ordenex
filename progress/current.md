@@ -16,29 +16,34 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **276** | fullstack | `in_progress` · **backend hecho y verde**, falta frontend | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **277** | frontend | `in_progress` | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **276** | fullstack | **completa y APROBADA** (revisión en 3 rondas, 0 bloqueantes) · sin mergear | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **277** | frontend | **completa y APROBADA** (0 bloqueantes) · sin mergear | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
 | **218** | backend | **`superseded` por la 276** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
 
 ### 276 — dónde está exactamente (2026-08-24)
 
 Rama **`feature/276-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
-(`e93c19e6`): los commits del spec todavía no estaban empujados. Bitácora completa en
-`progress/impl_276.md`.
+(`e93c19e6`): los commits del spec todavía no estaban empujados. Bitácora en `progress/impl_276.md`,
+informe con las **tres rondas** en `progress/review_276.md`.
 
-- **Hecho:** las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
+- **Completa**: las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
   gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
-  tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql` y la guardia del
-  invariante. Gate **COMPLETO** `./init.sh` → `INIT_EXIT=0`, 1356 archivos / 18.275 tests.
-- **Falta (frontend_dev):** T11 y T12 — filtrar los desenlaces de `GestionarOrdenPanel` y de
-  `GestionarDesdeAyudaModal` con `permitidoEnElTope` cuando `orden.enElTope`, y el texto que
-  explica por qué. El servidor ya emite `enElTope` en los dos DTO; **el umbral no cruza al
-  cliente**.
+  tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql`, la guardia del
+  invariante y la UI de las dos superficies (T11/T12).
+- **Gate COMPLETO** `./init.sh` → **`INIT_EXIT=0`, 1358 archivos / 18.302 tests**. Corrido **cinco
+  veces** entre implementers y reviewer, siempre el mismo número.
+- **Aprobada con 0 bloqueantes tras tres rondas.** Las rondas 1 y 2 rechazaron, y **ninguno de esos
+  cuatro bloqueantes era del código de la ficha**: los cuatro salieron del `sed` de la renumeración
+  273→276 (ver más abajo). El reviewer volvió a inyectar el defecto decisivo sobre el commit final
+  —sonda de visita real fuera del `select`— y salieron **los mismos 2 rojos en Postgres y 13 verdes
+  en los dobles** que en la ronda 1: la auditoría del tope está en pie entera.
 - ⚠️ **R37 sigue a medias y bloquea el DESPLIEGUE, no el merge.** El SQL de solo lectura está
-  escrito y corre (pegado en la bitácora), pero **no se re-ejecutó contra producción**: el
-  implementer no tenía el MCP de Supabase. Vale la foto del spec —una orden, en `devuelta`— y hay
-  que repetirla antes de desplegar porque caduca. Y falta medir por primera vez **cuántas
-  `reprogramada` congela la liberación diferida el primer día**.
+  escrito y corre. Se ejecutó contra producción el 2026-08-24 —una sola orden en el umbral, la
+  `28098171`, en `devuelta`— y **hay que repetirlo justo antes de desplegar, porque esa foto
+  caduca**: cualquier cierre que la bodega apruebe puede crear otra, y R18 la dejaría inasignable
+  sin que nadie lo haya decidido. Y **falta medir por primera vez cuántas `reprogramada` congela la
+  liberación diferida el primer día** — ese número *es* el tamaño de la mercadería que la ficha
+  para, y el riesgo se aceptó sin conocerlo.
 
 ### Lo que se midió antes de registrarlas, y es la razón de que existan
 
@@ -94,9 +99,14 @@ las entradas de `dev` y añadiendo la 276 y la 277.
 
 ### La puerta que viene
 
-⏳ **Ya pasó** (2026-08-24): los dos specs están, el humano firmó las dos preguntas de la 276 y las
-dos fichas están en implementación. La puerta que queda ahora es otra y es de **despliegue**: R37
-(arriba) se re-ejecuta contra producción antes de sacar la 276 a `prod`.
+⏳ La puerta del spec **ya pasó** (2026-08-24) y las dos fichas están terminadas y aprobadas. Las que
+quedan son dos, y **ninguna es de código**:
+
+1. **El remoto.** Nada está empujado. `dev` local **no es ancestro de `origin/dev`** (`821a6afe`):
+   el merge dará conflicto en `feature_list.json` por divergencia normal de ramas —no por la
+   colisión— y se resuelve quedándose con las entradas de `dev` y añadiendo la 276 y la 277.
+2. **El despliegue de la 276**: R37 re-ejecutado contra producción, y el número de `reprogramada`
+   congeladas el primer día, que nunca se ha medido.
 
 ---
 
