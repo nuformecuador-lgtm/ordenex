@@ -183,9 +183,16 @@ describe("266 / enum — el DOWN recrea el tipo SIN la familia y aborta si algui
     // No se compara contra una lista copiada a mano —eso solo probaria que dos ficheros dicen lo
     // mismo— sino CONTRA EL SEED que el codigo usa en runtime. Si el enum de la base y el de TS se
     // separasen, aqui se veria.
+    //
+    // ⏳ 2026-08-24 (merge de la 276) — EL DIA LLEGO, y se resuelve como dice la nota del final de
+    // este caso: `rechazo_tope_intentos` (0824, POSTERIOR a esta migracion) entra en POSTERIORES y
+    // la foto historica de la 266 no se toca ni una linea.
+    const POSTERIORES = ["rechazo_tope_intentos"]; // feature 276 (2026-08-24)
     expect(new Set(valores)).toEqual(
       new Set(
-        (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter((v) => v !== FAMILIA),
+        (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(
+          (v) => v !== FAMILIA && !POSTERIORES.includes(v),
+        ),
       ),
     );
     // Sin duplicados: `CREATE TYPE` con un valor repetido no llega ni a aplicarse.

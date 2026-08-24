@@ -8,7 +8,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/hooks/useToast";
 import { listarZonas, obtenerZona, borrarZona } from "@/lib/actions/zonas";
+import { listarTarifas } from "@/lib/actions/tarifas";
 import { listarArbolGeografico } from "@/lib/actions/geografia";
+import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ZonaDTO } from "@/lib/types/zona";
 import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
 import type { VehiculoDTO } from "@/lib/types/vehiculos";
@@ -20,8 +22,23 @@ import {
 } from "./CrearZonaForm";
 import { TiendasModule } from "./TiendasModule";
 import type { CobroVehiculoValue } from "./CobroVehiculoTarifas";
+import {
+  TARIFA_CAMPOS,
+  tarifaValoresVacios,
+  type TarifaValores,
+} from "./TarifaCampos";
 
 const PAGE_SIZE = 100;
+
+/** Valores del formulario (strings) a partir de una fila de `tarifas`. */
+function tarifaValoresDesde(row: TarifaDTO): TarifaValores {
+  const valores = tarifaValoresVacios();
+  for (const campo of TARIFA_CAMPOS) {
+    const v = row[campo.key];
+    valores[campo.key] = v == null ? "" : String(v);
+  }
+  return valores;
+}
 
 /**
  * Módulo cliente de "Costos por zona": texto introductorio + botón Crear zona,
@@ -68,12 +85,23 @@ export function ZonasTarifasModule({
   }
 
   async function abrirEditar(zona: ZonaDTO) {
-    // Zona completa (incluye tarifas) + distritos derivados del árbol geográfico.
-    const res = await obtenerZona(zona.id);
+    // Zona completa (incluye tarifas) + distritos derivados del árbol geográfico
+    // + la tarifa de cobro acotada a la zona (la de `tienda_id` NULL), que es la
+    // que edita la sección "Tarifas de zona" del formulario.
+    const [res, tarifasRes] = await Promise.all([
+      obtenerZona(zona.id),
+      listarTarifas({ page: 1, pageSize: PAGE_SIZE }),
+    ]);
     if (res.status !== "ok") {
       toast.error("No se pudo cargar la zona.");
       return;
     }
+    const tarifaZona =
+      tarifasRes.status === "ok"
+        ? tarifasRes.items.find(
+            (t) => t.zonaId === zona.id && t.tiendaId == null,
+          )
+        : undefined;
     const full = res.zona;
     const distritoIds: string[] = [];
     for (const p of provincias)
@@ -100,6 +128,12 @@ export function ZonasTarifasModule({
       distritoIds,
       cobro,
       esCentral: full.esCentral,
+      ...(tarifaZona
+        ? {
+            tarifaZonaId: tarifaZona.id,
+            tarifaValores: tarifaValoresDesde(tarifaZona),
+          }
+        : {}),
     });
     setFormKey((k) => k + 1);
     setView("form");
@@ -112,16 +146,14 @@ export function ZonasTarifasModule({
 
   return (
     <section className="flex flex-col gap-4 border-t border-border pt-6">
-      <TiendasModule />
+      <TiendasModule zonas={zonas} />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold">
-            Costos por zona (pago a mensajeros)
-          </h2>
+          <h2 className="text-base font-semibold">Costos por zona</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Lo que Ordenex le paga al mensajero por entrega y por no entrega,
-            según la zona donde reparte.
+            Costos que dependen de la zona donde se reparte. Se capturan al
+            crear o editar la zona.
           </p>
         </div>
         {view === "list" ? (
@@ -208,7 +240,7 @@ function ZonasList({
         <EmptyState
           icon={MapPin}
           title="No hay zonas"
-          description="Crea la primera zona para definir los costos de pago al mensajero."
+          description="Crea la primera zona para definir sus costos."
           action={
             <Button type="button" onClick={onCrear}>
               Crear zona

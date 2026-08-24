@@ -334,6 +334,9 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       // Feature 107: CRUD de plantillas de mensaje. Hereda la visibilidad
       // maestro-only del ítem padre (R1/R2).
       { label: "Plantillas", href: "/configuracion/plantillas" },
+      // CRUD del catálogo de tipos de vehículo. Misma visibilidad maestro-only
+      // del ítem padre: quien ve el catálogo es quien lo administra.
+      { label: "Vehículos", href: "/configuracion/vehiculos" },
     ],
   },
   {

@@ -4208,3 +4208,72 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
   composition root siguen con `toContain`; las variantes «sin jornada fiable» cubiertas por test pero
   no vistas en pantalla; y cinco textos previos en `lib/services/` en voseo sin tildes, pendientes de
   ficha propia porque el registro lo decide el humano.
+
+---
+
+## 2026-08-24 — 276 · el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación
+
+- Una orden podía llegar a un **4.º intento de entrega**. Desde esta ficha, al alcanzar el umbral
+  (`REINTENTOS_MIN_INTENTOS`, hoy 3) la gestión solo puede acabar `entregada`, `rechazada` o
+  `incidente`; ninguna vía la devuelve a circulación; y no se puede asignar. Requisitos R1–R38.
+  Reviewer **OK en la 3.ª ronda, 0 bloqueantes**. Gate completo `INIT_EXIT=0`, 1358 archivos /
+  18.302 tests. **No desplegada.**
+- **La ficha nació de mirar producción, no el código.** La guía `28098171` llevaba 3 intentos y
+  seguía en `devuelta`. El cron no estaba roto: su última causa era `wrong_address`, y **esa rama
+  escala solo por tiempo (5 días) e ignora el contador**. El «3 de 3» que muestra la pantalla no
+  disparaba nada.
+- **La raíz, medida:** de los cinco resultados de gestión **solo `devuelta` esperaba la aprobación
+  del cierre** (239). `reprogramada` cambiaba el estado en el acto y `findReprogramadasVencidas`
+  liberaba la orden por `fecha_reprogramacion <= hoy` **sin mirar el cierre en ningún punto**, así
+  que volvía a circulación con el contador en el valor viejo. El humano lo dio por implementado para
+  todos los estados; solo lo estaba para uno.
+- **Decisión de alcance con su precio delante:** se difiere **solo** `reprogramada`. Diferir también
+  los terminales dejaría a la tienda y al rastreo sin ver una entrega hasta **22,1 h** (p90 medido).
+- **Esta ficha invierte la asimetría de dinero de la 215/D14.** Hasta ahora un error de conteo
+  *retrasaba* el cobro; desde aquí **cobra de más**, porque `rechazada` emite `cobroRechazado` (56).
+  Está firmado por el humano y escrito en el spec para que nadie lo revierta por sorpresa.
+- **Absorbe la 218**, que quedó `superseded`: la no gestión del corte con el umbral alcanzado termina
+  `rechazada` al aprobarse el cierre. Era la decisión que aquella ficha existía para tomar.
+- **El test que no se puede sustituir por dobles.** Sacar la sonda de visita real del `select` de
+  `findOrdenesLiberables` deja **13 casos verdes en los dobles** y solo caen **2 en el test contra
+  Postgres**. Medido dos veces, en la ronda 1 y sobre el commit final. Es la raíz de la ficha, y es
+  un `select`: los tests de servicio no ven el SQL.
+- **Los cuatro bloqueantes de las rondas 1 y 2 no eran del código de la ficha: eran del `sed` de la
+  renumeración 273→276**, que corrompió **21 citas ajenas en 14 archivos** —números de línea, un
+  conteo y el importe `₡918 273,45` en el comentario de un guard de dinero, que pasó a contradecir
+  su propia constante— y dejó **falso, en dos copias**, el párrafo que contaba la colisión. La
+  lección: el renumerado se hizo con una lista amplia y un filtro tosco, y **arreglarlo por archivo
+  en vez de por causa dejó escapar un hermano y una segunda copia**. En la otra rama, donde los
+  archivos se eligieron a mano, no hubo ningún daño.
+- **Y una afirmación más fuerte que su comprobación**, que es la patología que este repo persigue: el
+  commit del renumerado decía haber descartado los falsos positivos «uno a uno» cuando solo se
+  verificaron cuatro archivos a mano y el resto se dio por bueno por estar en `lib/tests/app/specs`.
+- **Colisión de ids, la tercera del repo.** Al registrar, local y `origin/dev` daban 272 como máximo;
+  mientras se trabajaba, otra sesión empujó 273/274/275 para tarifas y **mergeó su 273**. `dev`
+  manda: se renumeraron las de esta sesión a 276 y 277.
+- **Pendiente y bloqueante de DESPLIEGUE, no de merge:** re-ejecutar el SELECT de R37 contra
+  producción (la foto caduca) y medir **cuántas `reprogramada` congela la liberación diferida el
+  primer día** — nunca se ha medido, y ese número *es* el tamaño de la mercadería que la ficha para.
+
+---
+
+## 2026-08-24 — 277 · «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
+
+- En la pantalla «Por recoger» del mensajero convivían las órdenes de hoy con las reservadas para
+  otro día, que el servidor **ya rechaza recoger** desde la 261: tarjetas visibles pero intocables
+  mezcladas con el trabajo real. Ahora van en dos pestañas, «Para recoger hoy» y «Para otro día».
+  Requisitos R1–R34, reviewer aprobado con 0 bloqueantes. **No desplegada.**
+- **No se oculta nada**: R23 de la 246 sigue vigente. Cambia el sitio, no la visibilidad.
+- **Por qué se podía tocar, y es el hallazgo:** R23 se decidió pegada a R24 («y se puede trabajar»)
+  —la orden se mostraba *porque* el mensajero podía recogerla—. **R24 murió el 2026-08-21** con la
+  261, cuando la guía 17496963 se gestionó a las 22:10 estando reservada para el día siguiente.
+  R23 sobrevivió por inercia: nadie volvió a decidir la visibilidad con el candado ya puesto.
+- **El contador mentía y entró en la ficha**: la cabecera decía «N Órdenes nuevas asignadas»
+  contando las que el servidor no deja recoger. Medido en producción: decía **2 con 1 sola
+  recogible**. Se corrigió además la concordancia en singular.
+- **Los tests existentes que afirmaban lo contrario no se borraron**, se reescribieron conservando
+  las cuatro propiedades que fija el diseño. Eran **diez**, no dos: seis es solo el subconjunto que
+  caía. Uno de ellos —un `queryByText` sobre el literal viejo del vacío— **habría quedado verde por
+  vacío**, y tras el cambio muere cuando se rompe la distinción de vacíos.
+- **Reserva menor aceptada:** el test de R15 sobrevive a la mutación `!== true` por simetría del
+  fixture (1-1), aunque sí muere ante el defecto que R15 prohíbe. Mejora anotada (fixture 2+1).

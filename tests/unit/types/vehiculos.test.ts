@@ -65,8 +65,13 @@ describe("db/schema.prisma declara el modelo Vehiculo con columna name (R2, R13)
     expect(schema).toMatch(/@@map\("vehiculos"\)/);
   });
 
-  it("la columna de valor se llama name VehiculoValue @unique (NO value) (R2)", () => {
-    expect(schema).toMatch(/name\s+VehiculoValue\s+@unique/);
+  // La columna sigue llamandose `name` y sigue siendo @unique; lo que cambio es su TIPO. La
+  // migracion 20260824160000_vehiculo_name_texto retiro el enum `VehiculoValue` para que el
+  // catalogo se administre por CRUD y no por una migracion por cada tipo nuevo. Lo que este
+  // test protege NO era el enum: era que la columna no volviera a llamarse `value` (R2).
+  it("la columna de valor se llama name String @unique (NO value) (R2)", () => {
+    expect(schema).toMatch(/name\s+String\s+@unique/);
+    expect(schema).not.toMatch(/name\s+VehiculoValue/);
     const match = schema.match(/model\s+Vehiculo\s*\{([\s\S]*?)\}/);
     const body = match ? match[1] : "";
     expect(body).not.toMatch(/\bvalue\b/);

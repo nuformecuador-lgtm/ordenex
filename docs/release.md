@@ -164,6 +164,12 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       inesperada» **posteriores al despliegue**. Antes había **6**, todos del 2026-08-22. Es la
       única comprobación de que el arreglo funcionó **donde ocurrió el incidente**: ninguna de las
       17.000 pruebas verdes la sustituye.
+      ⚠️ **Re-medido el 2026-08-24 y SIGUE SIN PODER CERRARSE, ahora con el motivo dicho:** no hay
+      **ningún** job `optimizacion_ruta` —de ningún estado— posterior al **2026-08-22 16:56 CR**, o
+      sea **ninguno después del despliegue**. El último `failed` es del **2026-08-21 23:43 CR**.
+      «Cero `failed`» vuelve a ser un cero que no significa nada, exactamente como el de `C7` antes
+      de comprobar que el cron sí había corrido. Hace falta **una optimización real** después del
+      despliegue para que este cero valga.
 - [ ] **`F6` en preview** (265 y 262): la mitad que en local **no tiene poder de resolución** —sin
       llamada al proveedor no se puede distinguir «no se llamó» de «no había credencial»—. Preview
       **sí** tiene la credencial (comprobado el 2026-08-23); lo que hace falta es un despliegue y una

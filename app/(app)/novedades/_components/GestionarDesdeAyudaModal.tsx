@@ -14,6 +14,10 @@ import {
   type GestionarDesdeAyudaResult,
   type ResultadoDesdeAyuda,
 } from "@/lib/types/gestion-desde-ayuda";
+// Feature 276 (T12, R8): la MISMA lista de inclusión que usa la guarda del servidor. Módulo puro
+// —sin Prisma en runtime, sin servicios, sin nada de `next`— y sin el UMBRAL dentro (R10): a esta
+// ventana solo le llega el booleano ya decidido en `orden.enElTope`.
+import { permitidoEnElTope } from "@/lib/types/tope-intentos";
 import type { NovedadDTO } from "@/lib/types/novedad";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import { mananaCalendarioCR } from "@/lib/utils/fecha-cr";
@@ -120,6 +124,28 @@ export const GESTION_AYUDA_FALTA_PREFIJO = "Falta completar:";
 export const GESTION_AYUDA_FALTA_MOTIVO = "el motivo";
 export const GESTION_AYUDA_FALTA_EVIDENCIA = "al menos una foto";
 export const GESTION_AYUDA_FALTA_FECHA = "la nueva fecha";
+
+/**
+ * ⚠️ FEATURE 276 (T12, R8/R9) — EN EL TOPE DE INTENTOS ESTA VENTANA NO ABRE EL MODO REPROGRAMAR.
+ *
+ * Cuando a la orden le queda el último intento (`orden.enElTope`), el servidor ya no acepta una
+ * gestión `reprogramada`: reprogramar la devuelve a circulación y es justo lo que el tope cierra.
+ * La ventana deja de ofrecer el desenlace en vez de dejar que la tienda lo intente y descubra el
+ * límite con un `conflict` —después de haber elegido fecha, escrito el motivo y subido la foto—.
+ *
+ * R9: se dice CON PALABRAS y no apagando el botón, que diría QUE no se puede pero no POR QUÉ.
+ *
+ * ⚠️ NO NOMBRA EL NÚMERO (R10): el umbral es configuración del servidor y no cruza al navegador.
+ * `tests/components/GestionarDesdeAyudaModalTope.test.tsx` se pone rojo si aparece una cifra aquí.
+ *
+ * Y NO ES LA DEFENSA (R11): `GestionDesdeAyudaService.gestionar` rechaza igual una petición que
+ * pida `reprogramada` en el tope, antes de subir ninguna evidencia.
+ */
+export const GESTION_AYUDA_TOPE_NOTA =
+  "A esta orden le queda el último intento de entrega, así que ya no se puede reprogramar: volver a mandarla a la calle sería un intento de más. Lo que sí podés registrar desde acá es el rechazo, y el mensajero todavía puede entregarla.";
+
+/** El rótulo del único botón que queda cuando el desenlace no está disponible: cerrar y volver. */
+export const GESTION_AYUDA_TOPE_CERRAR = "Entendido";
 
 /** Los tres desenlaces que NO son ni `ok` ni `conflict`, dichos de forma accionable. */
 export const GESTION_AYUDA_ERROR_FORBIDDEN =
@@ -294,6 +320,35 @@ export function GestionarDesdeAyudaModal({
   const estatusError = firstError(fieldErrors, "estatus");
 
   const guia = orden.numGuia !== null ? `guía ${orden.numGuia}` : "sin guía asignada";
+
+  // Feature 276 (T12, R8): el desenlace de este modo, contra la lista de inclusión compartida.
+  // `enElTope` llega ya decidido del servidor y su ausencia (fixture viejo; el DTO lo declara
+  // opcional por el patrón aditivo) se lee como `false`, el comportamiento de siempre.
+  const bloqueadoPorTope = orden.enElTope === true && !permitidoEnElTope(resultado);
+
+  // El modo prohibido NO SE ABRE: sin campo de fecha, sin motivo, sin selector de fotos y sin
+  // confirmar. Lo único que se ofrece es el porqué y la salida. Que no haya confirmar es lo que
+  // hace imposible llamar a la Server Action desde esta rama.
+  if (bloqueadoPorTope) {
+    return (
+      <Modal
+        open
+        onOpenChange={onOpenChange}
+        title={GESTION_AYUDA_TITULO}
+        description={`${orden.destinatario} — ${guia}`}
+        hideConfirm
+        cancelLabel={GESTION_AYUDA_TOPE_CERRAR}
+        size="md"
+      >
+        <p
+          role="note"
+          className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-strong"
+        >
+          {GESTION_AYUDA_TOPE_NOTA}
+        </p>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

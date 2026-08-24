@@ -352,6 +352,21 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "transicionarAyuda",
     origenTipo: "habilitacion_api",
   },
+  // #34: FEATURE 276 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
+  //
+  // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
+  // barrio y que ya alcanzo el umbral. Absorbe la ficha 218.
+  //
+  // MISMO metodo que el punto #21 (`liberacion_sin_gestionar`), y eso es correcto: son las DOS
+  // ramas del MISMO bloque de `resolverCierre`. Lo que las separa es la familia, que es lo unico
+  // que permite despues distinguir «volvio a bodega» de «se termino y se cobro» sobre una fila de
+  // historial que es su unica evidencia.
+  {
+    n: 34,
+    repo: "CierresAdminRepository",
+    simbolo: "resolverCierre",
+    origenTipo: "rechazo_tope_intentos",
+  },
 ] as const;
 
 // Feature 158/PR2 — familias con MAS DE UN punto de escritura, declaradas UNA A UNA con su
@@ -428,16 +443,16 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 32 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+  it("son EXACTAMENTE 33 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
     // 30 - 1: el #2 se retiro el 2026-08-07. Feature 235 (2026-08-19): +2 (#29/#30, las dos
     // familias del viaje de la ayuda, con UN solo simbolo — el punto unico que R8 exige).
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(32); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-23 (266): +#33
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(33); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-23 (266): +#33 · 2026-08-24 (276): +#34
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26, 27, 28, 29, 30, 31, 32, 33,
+      26, 27, 28, 29, 30, 31, 32, 33, 34,
     ]);
   });
 

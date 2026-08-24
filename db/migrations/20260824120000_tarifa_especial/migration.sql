@@ -1,0 +1,24 @@
+-- TARIFA ESPECIAL de una tienda (o de la cuenta dedicada de una API key).
+--
+-- QUE ES. Un cobro pactado aparte, fuera de la tabla de precios normal: el monto que se le cobra a
+-- ESA tienda cuando el acuerdo comercial no es el flete estandar. Hoy no hay donde anotarlo, asi
+-- que ese pacto vive fuera del sistema (en un correo, en una hoja aparte) y la tarifa que la app
+-- muestra no es la que se factura.
+--
+-- NULLABLE Y SIN DEFAULT ⇒ CERO BACKFILL. `NULL` significa UNA sola cosa: «esta tienda no tiene
+-- tarifa especial pactada», que es la situacion de TODAS las filas anteriores a esta migracion.
+-- Rellenarlas con `0` seria inventar un dato que nadie eligio, y ademas mentiria: `0` es un cobro
+-- especial de cero colones, que NO es lo mismo que no tener pacto especial. Por eso la columna
+-- admite `NULL` y el resto de columnas de la tabla —que si son obligatorias— se quedan como estan.
+--
+-- NUMERIC(12,2), igual que `valor_flete` y `fulfillment`: es un MONTO, no un porcentaje, y el
+-- dinero en este repo nunca es punto flotante. Mismo ancho y misma escala que sus hermanas para
+-- que el `Decimal -> number` del repositorio no tenga un caso aparte.
+--
+-- SIN `CHECK` de no-negatividad: el rango («>= 0») se valida en el borde con zod y en el service,
+-- que es donde vive el resto de las cotas de esta tabla. Duplicarla aqui seria una segunda
+-- definicion de la misma regla.
+--
+-- ADITIVA: no crea tablas ni enums, no renombra, no reordena, no borra, no toca filas, no toca
+-- indices y no toca RLS. `tarifas` ya tiene su regimen.
+ALTER TABLE "tarifas" ADD COLUMN "tarifa_especial" DECIMAL(12,2);

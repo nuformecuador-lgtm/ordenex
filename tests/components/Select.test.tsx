@@ -125,3 +125,52 @@ describe("Select — valor controlado", () => {
     expect(screen.getByText("Beto Mensajero")).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Agrupación: el `group` de cada opción se renderiza como encabezado, que es lo
+// que diferencia opciones de distinta procedencia (adminTienda vs API key).
+// ---------------------------------------------------------------------------
+describe("Select — grupos", () => {
+  const AGRUPADAS: SelectOption[] = [
+    { value: "t1", label: "Tienda Uno", group: "Administradores de tienda" },
+    { value: "k1", label: "Integración Shopify", group: "API keys" },
+  ];
+
+  it("muestra un encabezado por grupo junto a sus opciones", async () => {
+    const user = userEvent.setup();
+    renderSelect({ options: AGRUPADAS });
+
+    await user.click(screen.getByRole("combobox", { name: "Mensajero" }));
+    const lista = await screen.findByRole("listbox");
+
+    // Los dos encabezados están presentes...
+    expect(within(lista).getByText("Administradores de tienda")).toBeInTheDocument();
+    expect(within(lista).getByText("API keys")).toBeInTheDocument();
+    // ...y cada grupo contiene su propia opción, no la del otro.
+    const grupos = within(lista).getAllByRole("group");
+    expect(grupos).toHaveLength(2);
+    expect(within(grupos[0]).getByText("Tienda Uno")).toBeInTheDocument();
+    expect(within(grupos[1]).getByText("Integración Shopify")).toBeInTheDocument();
+  });
+
+  it("seleccionar dentro de un grupo emite el value de esa opción", async () => {
+    const user = userEvent.setup();
+    const { onValueChange } = renderSelect({ options: AGRUPADAS });
+
+    await user.click(screen.getByRole("combobox", { name: "Mensajero" }));
+    await user.click(await screen.findByRole("option", { name: /Integración Shopify/ }));
+
+    expect(onValueChange).toHaveBeenCalledWith("k1");
+  });
+
+  it("sin `group` no se renderiza ningún encabezado (lista plana de siempre)", async () => {
+    const user = userEvent.setup();
+    renderSelect();
+
+    await user.click(screen.getByRole("combobox", { name: "Mensajero" }));
+    const lista = await screen.findByRole("listbox");
+
+    expect(within(lista).queryAllByRole("group")).toHaveLength(0);
+    expect(within(lista).getAllByRole("option")).toHaveLength(2);
+  });
+});

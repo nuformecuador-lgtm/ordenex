@@ -72,10 +72,11 @@ describe("ORDEN_HISTORIAL_ORIGEN_TIPO_SEED (R23)", () => {
     "gestion_tienda_ayuda", // feature 237 (2026-08-20): GestionOrdenRepository.crearGestionDesdeAyuda (ayuda_tienda -> reprogramada|rechazada, actor = el adminTienda dueño). La UNICA de las tres de la ayuda que SI es visita real
     "rechazo_tienda", // feature 240 (2026-08-20): GestionOrdenRepository.rechazarDesdeDevuelta (devuelta -> rechazada, actor = el adminTienda dueño). NO es visita real: la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
     "habilitacion_api", // feature 266 (2026-08-23): ApiHabilitacionService -> OrdenRepository.transicionarAyuda (ayuda_tienda -> en_reparto, actor = el usuario dedicado de la API key). Familia propia y NO `rescate_ayuda_tienda`: el actor no distingue las vias, porque el usuario de la key ES la tienda. NO es visita real (R26): nadie fue a ninguna puerta
+    "rechazo_tope_intentos", // feature 276 (2026-08-24): CierresAdminRepository.resolverCierre (aprobar, sin_gestionar -> rechazada sobre una orden que ya agoto sus intentos). Enlaza gestion sintetica. NO es visita real: contarla subiria su propio contador y cobraria de mas
   ];
 
-  it("contiene exactamente los 32 tipos de origen esperados (conjunto cerrado)", () => {
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(32); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-23 (266): +habilitacion_api
+  it("contiene exactamente los 33 tipos de origen esperados (conjunto cerrado)", () => {
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(33); // 2026-08-19 (235): +solicitud_ayuda_tienda, +rescate_ayuda_tienda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-23 (266): +habilitacion_api · 2026-08-24 (276): +rechazo_tope_intentos
     expect([...ORDEN_HISTORIAL_ORIGEN_TIPO_SEED].sort()).toEqual([...ESPERADOS].sort());
   });
 

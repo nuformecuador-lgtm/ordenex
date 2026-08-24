@@ -3,7 +3,7 @@ import { TarifaService } from "@/lib/services/TarifaService";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { ITarifaRepository } from "@/lib/interfaces/repositories/ITarifaRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { Actor as OrdenActor } from "@/lib/interfaces/services/IOrdenService";
 import type { Actor as TarifaActor } from "@/lib/interfaces/services/ITarifaService";
 import type { OrdenDTO, OrdenListItemDTO } from "@/lib/types/orden";
@@ -12,11 +12,11 @@ import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 98: la via sesion no tarifa; stub neutro para el 2do parametro del constructor.
-const tarifaRepoStub: ITarifaVigentePorTiendaRepository = {
-  resolveTarifaPorTienda: vi.fn(async () => null),
-  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). Esta via no lo invoca.
-  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
-  resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+const tarifaRepoStub: ITarifaVigenteRepository = {
+  // Feature 274: la interfaz quedo en DOS metodos (el filtro `status` que justificaba el
+  // resolver "cotizable" murio con la columna). Ninguno se invoca por esta via.
+  resolveTarifa: vi.fn(async () => null),
+  resolveTarifas: vi.fn(async () => new Map()),
 };
 
 // Feature 19 (rol-adminsatelite): R9, R10, R11. `adminSatelite` es un rol SIN
@@ -174,10 +174,9 @@ function buildOrdenRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenReposi
 function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
-    // El modelo de tarifa cuelga de la tienda (adminTienda) + status; ya no hay
-    // nombre/zonaId.
+    // El modelo de tarifa cuelga de la tienda (adminTienda) y/o de la zona; ya no
+    // hay nombre, ni `status` (274: columna retirada).
     tiendaId: "store1",
-    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -186,6 +185,9 @@ function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     comisionCod: 2.5,
     ivaFlete: 15,
     ivaComisionCod: 15,
+    tarifaEspecial: null,
+    zonaId: null,
+    isDefault: false,
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
     ...overrides,
@@ -198,11 +200,11 @@ function buildTarifaRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRep
     findById: vi.fn().mockResolvedValue(tarifaDto()),
     list: vi.fn().mockResolvedValue({ items: [tarifaDto()], total: 1 }),
     update: vi.fn().mockResolvedValue(tarifaDto()),
-    softDelete: vi.fn().mockResolvedValue(true),
+    hardDelete: vi.fn().mockResolvedValue("ok" as const),
     // La tienda referenciada debe ser adminTienda: por default valida (true), para
     // que el camino feliz del maestro dependa solo de su rol, no de este invariante.
-    esTiendaAdminTienda: vi.fn().mockResolvedValue(true),
-    inactivarPorTienda: vi.fn().mockResolvedValue(0),
+    esTiendaAsignable: vi.fn().mockResolvedValue(true),
+    existeZona: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -259,7 +261,7 @@ describe("TarifaService — adminSatelite sin permisos nuevos (R9, R11)", () => 
     expect(repo.create).not.toHaveBeenCalled();
     // La puerta de rol corta ANTES de cualquier acceso al repo: un adminSatelite no
     // debe poder sondear que tiendas son adminTienda via esta ruta.
-    expect(repo.esTiendaAdminTienda).not.toHaveBeenCalled();
+    expect(repo.esTiendaAsignable).not.toHaveBeenCalled();
   });
 
   it("no-regresion: maestro conserva su resultado exitoso en lectura y escritura (R11)", async () => {

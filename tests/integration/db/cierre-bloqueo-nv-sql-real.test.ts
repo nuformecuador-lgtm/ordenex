@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -305,7 +305,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
 
       const repo = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
       const elegido = await repo.findCierreResolicitableMasViejo(m.id);
 
@@ -405,7 +405,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
       // pantalla y mover otro al pulsar es exactamente el aviso desincronizado que la 271 cierra.
       const cierres = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
       const queSeMueve = await cierres.findCierreResolicitableMasViejo(m.id);
       expect(d.aReenviarPrimero?.cierreId).toBe(queSeMueve?.id);
@@ -542,7 +542,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
 
       const repo = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
 
       // 5. el mensajero re-solicita.
@@ -580,7 +580,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
       const c = await sembrarCierre(tx, m.id, "solicitado");
       const repo = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
 
       // Se pide transicionar creyendo que esta `vencido`, pero ya esta `solicitado` (carrera).
@@ -632,7 +632,7 @@ describeSiHayBase("271 · la regla N/V contra Postgres real", () => {
 
       const repo = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
       expect(await repo.transicionarASolicitado(c.id, "rechazado")).toBe(true);
 

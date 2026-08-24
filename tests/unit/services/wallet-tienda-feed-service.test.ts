@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import type { WalletTiendaFeedTxClient } from "@/lib/interfaces/services/IWalletTiendaFeedService";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { agregarIngresosPorConcepto, type OrdenIngresoInput } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 43/T9 — tests unit del WalletTiendaFeedService (CORAZON). Cubre R8/R9/R10/R11/R14/

@@ -6,6 +6,7 @@ import type {
   GestionDesdeAyudaInput,
   IGestionDesdeAyudaService,
 } from "@/lib/interfaces/services/IGestionDesdeAyudaService";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { autorizarSobreHilo } from "@/lib/services/OrdenNotaService";
 import {
@@ -13,6 +14,11 @@ import {
   subirEvidenciasCompensadas,
 } from "@/lib/services/evidencias-compensadas";
 import { estatusDestinoDeResultado } from "@/lib/types/gestion-destino";
+// FEATURE 276 (T5, R1/R3/R4/R7): la MISMA regla y el MISMO motivo que el panel del mensajero. El
+// modulo del tope es puro y el motivo vive en `mensajes-bloqueo`: dos superficies, un solo texto.
+import { alcanzaElTope, permitidoEnElTope } from "@/lib/types/tope-intentos";
+import { reintentosConfig } from "@/lib/config/reintentos";
+import { MSG_TOPE_INTENTOS_GESTION } from "@/lib/services/mensajes-bloqueo";
 import type { GestionarDesdeAyudaResult } from "@/lib/types/gestion-desde-ayuda";
 import { estaEnVentanaDeEscritura } from "@/lib/types/ventana-hilo-notas";
 import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
@@ -59,6 +65,19 @@ export interface GestionDesdeAyudaDeps {
   ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue">;
   gestionRepo: Pick<IGestionOrdenRepository, "crearGestionDesdeAyuda">;
   storage: IFileStorage;
+  /**
+   * 💰 FEATURE 276 (T5, R1/R4) — el derivador de intentos, para la PUERTA DEL TOPE del paso 5-ter.
+   *
+   * OBLIGATORIA A PROPOSITO, no opcional: un composition root que se la olvidara desactivaria la
+   * puerta EN SILENCIO sobre la operacion mas delicada en dinero de la pila de la ayuda. Con la
+   * dependencia obligatoria, olvidarla es un rojo de `pnpm typecheck`, que es donde tiene que
+   * romper. Precedente literal en este repo: dos notificadores muertos con la suite entera en
+   * verde porque su default era un no-op.
+   *
+   * Es el MISMO servicio —y por tanto el MISMO criterio unico de la 215— que consultan el panel
+   * del mensajero, el cron de SLA y el drawer del historial.
+   */
+  historial: Pick<IOrdenHistorialService, "contarIntentos">;
 }
 
 /** El estatus del que se resuelve. Uno solo, y por eso la comprobacion es una igualdad. */
@@ -164,6 +183,28 @@ export class GestionDesdeAyudaService implements IGestionDesdeAyudaService {
           fechaRepartoComoTexto(fechaReparto),
         ),
       };
+    }
+
+    // 💰 5-ter) FEATURE 276 (T5, R1/R4/R5/R6/R11) — LA PUERTA DEL TOPE DE INTENTOS, la MISMA que
+    //    el panel del mensajero y con el MISMO motivo (R4: la regla vale igual en las dos
+    //    superficies que crean gestion; un simbolo compartido, no dos literales gemelos).
+    //
+    //    POR QUE AQUI Y NO MAS ABAJO: exactamente el motivo que ya escribieron el paso 3 y el
+    //    5-bis — «un rechazo previsible pertenece ANTES del upload». Es literalmente R5: sin
+    //    evidencia en Storage, sin fila de gestion, sin transicion y sin fila de historial.
+    //
+    //    CONSECUENCIA PARA LA TIENDA, y es coherente: desde la ayuda solo hay DOS desenlaces
+    //    (`reprogramada` y `rechazada`), asi que en el tope le queda SOLO `rechazada`. `incidente`
+    //    no tiene productor desde `ayuda_tienda` y el diseno firmado de la 237 no se lo concede.
+    //
+    //    R11: no depende de que la ventana haya ocultado el modo «Reprogramar». Una peticion que
+    //    pida el resultado prohibido se rechaza igual.
+    if (!permitidoEnElTope(input.resultado)) {
+      const intentos = await this.deps.historial.contarIntentos(input.ordenId);
+      if (alcanzaElTope(intentos, reintentosConfig.MIN_INTENTOS_ENTREGA)) {
+        // `conflict` y no `forbidden`: la orden SI es suya; lo que falla es el estado del mundo.
+        return { status: "conflict", motivo: MSG_TOPE_INTENTOS_GESTION };
+      }
     }
 
     // 6) FALLO CERRADO al resolver el catalogo. Si el seed no tiene alguno de los dos values, la

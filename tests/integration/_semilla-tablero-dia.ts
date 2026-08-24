@@ -264,7 +264,11 @@ export function repositorio(tx: TxDeTest): TableroDiaRepository {
 }
 
 /**
- * FEATURE 260 (B8) — LA TARIFA ACTIVA DE LA TIENDA SEMBRADA.
+ * FEATURE 260 (B8) — LA TARIFA DE LA TIENDA SEMBRADA.
+ *
+ * FEATURE 274: la fila se siembra SIN zona, es decir en el nivel 2 de la cascada
+ * (tienda, zona IS NULL), que es el que aplica a cualquier zona de esa tienda. Ya no lleva
+ * `status`: esa columna —y con ella la idea de "tarifa activa"— dejo de existir.
  *
  * Sin ella, `relaciones.tienda.tarifa` sale `null` **por falta de datos** y el test que afirma
  * «en alcance zona la tarifa no viaja» estaria verde sin haber retirado nada: el detector
@@ -279,7 +283,6 @@ export async function crearTarifaActiva(tx: TxDeTest, base: BaseSembrada): Promi
   const fila = await tx.tarifa.create({
     data: {
       tiendaId: base.tienda,
-      status: "activo",
       valorFlete: IMPORTE_CENTINELA_TARIFA,
       valorFleteDevuelto: IMPORTE_CENTINELA_TARIFA,
       valorFleteGam: IMPORTE_CENTINELA_TARIFA,

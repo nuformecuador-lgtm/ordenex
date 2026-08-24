@@ -9,6 +9,7 @@ import {
   MENSAJES_GESTION_DESDE_AYUDA,
 } from "@/lib/services/GestionDesdeAyudaService";
 import { ESTATUS_POR_RESULTADO } from "@/lib/types/gestion-destino";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { VENTANA_ESCRITURA } from "@/lib/types/ventana-hilo-notas";
 
 // Feature 237 (T5.3, design §6) — LAS OCHO COMPROBACIONES del servicio, una por caso.
@@ -79,6 +80,9 @@ function montar(
     ordenRepo,
     gestionRepo,
     storage,
+    // FEATURE 276 (T5): la dependencia del tope es OBLIGATORIA. Con el doble a 0 intentos, la
+    // puerta del paso 5-ter no se cierra y estos casos siguen midiendo lo que median.
+    historial: fakeIntentosEnLote(),
   });
   return { service, notaRepo, ordenRepo, gestionRepo, storage };
 }

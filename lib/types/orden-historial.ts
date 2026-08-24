@@ -160,6 +160,31 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // Y la nota del integrador NO viaja en el `motivo` de esta fila (D6, firmada): vive SOLO en
   // `orden_habilitacion_api`, para que «todas las habilitaciones de una orden» sea UNA consulta.
   "habilitacion_api",
+  // Feature 276 (T2/T9, R22 · Q5 firmada el 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS:
+  // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
+  // barrio y que ya alcanzo el umbral de intentos de entrega. Actor = el admin que aprueba.
+  // Productor UNICO: `CierresAdminRepository.resolverCierre`, dentro del bloque
+  // `liberacionSinGestionar`, en el MISMO commit que este valor. Absorbe la ficha 218.
+  //
+  // FAMILIA PROPIA, y las dos alternativas mas baratas se descartan por lo que ROMPEN:
+  //   - `escalado_devuelta_sla` (99) es el mismo destino, pero ES el predicado de la pestaña
+  //     «Rechazadas por plazo vencido» (102) y de `esRechazoSla`: reusarlo etiquetaria como
+  //     vencimiento del reloj algo que es agotamiento de intentos, y lo listaria en esa pantalla.
+  //   - `liberacion_sin_gestionar` (109) es la OTRA rama del MISMO bloque —la que si libera— y su
+  //     nombre diria «liberacion» sobre la unica orden que precisamente no se libera.
+  //
+  // ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL`, y esa ausencia es DINERO. Si entrara, cada rechazo
+  // por tope sumaria un intento a su propia orden, adelantaria el escalado del cron SLA (99) sobre
+  // otras y cobraria el `cobroRechazado` (56) antes de tiempo. No es una visita: es una decision
+  // administrativa sobre una orden que ese dia no visito nadie —ese es justo el hecho que la lleva
+  // a `sin_gestionar`—. Mismo argumento que `anclaje_devolucion` (239) y `rechazo_tienda` (240).
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado (la
+  // gestion sintetica de R23): esa lista solo desambigua la NULIDAD del enlace (67/R25-R26), mismo
+  // caso que `escalado_devuelta_sla`, `anclaje_devolucion` y `rechazo_tienda`.
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: el integrador recibe `rechazada` igual que hoy.
+  "rechazo_tope_intentos",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

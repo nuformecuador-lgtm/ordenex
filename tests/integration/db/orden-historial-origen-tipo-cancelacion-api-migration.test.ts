@@ -97,6 +97,10 @@ describe("Feature 106 · DOWN — reversible con irreversibilidad parcial docume
       // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
       // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
       "habilitacion_api",
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
+      // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
+      "rechazo_tope_intentos",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_106.has(v))),

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
@@ -42,9 +42,14 @@ interface OrdenRow {
   direccion: string | null;
   producto: string;
 }
+// Feature 274: la fila de `tarifas` tiene ya sus DOS dimensiones nullables (feature 273) y ya
+// NO tiene `deleted_at` (borra en fisico) ni `status` (la migracion `drop_tarifa_status` los
+// retiro). El doble modela eso: un doble que conservara las columnas muertas estaria midiendo
+// una tabla que no existe.
 interface TarifaRow {
   id: string;
-  tiendaId: string;
+  tiendaId: string | null;
+  zonaId: string | null;
   valorFlete: Prisma.Decimal;
   valorFleteGam: Prisma.Decimal;
   valorFleteDevuelto: Prisma.Decimal;
@@ -56,9 +61,7 @@ interface TarifaRow {
   comisionCod: Prisma.Decimal;
   ivaFlete: Prisma.Decimal;
   ivaComisionCod: Prisma.Decimal;
-  deletedAt: Date | null;
   createdAt: Date;
-  status: string;
 }
 interface GestionRow {
   id: string;
@@ -72,6 +75,19 @@ interface GestionRow {
 
 function dec(v: string) {
   return new Prisma.Decimal(v);
+}
+
+// Semantica de UNA dimension del `where` de la cascada, como la aplicaria Postgres:
+// ausente = no filtra · `null` = IS NULL · string = igualdad · `{ in }` = IN (...).
+type CondDimension = string | { in: string[] } | null | undefined;
+interface WhereCascadaDoble {
+  OR: Array<{ tiendaId?: CondDimension; zonaId?: CondDimension }>;
+}
+function casaDimension(valor: string | null, cond: CondDimension): boolean {
+  if (cond === undefined) return true;
+  if (cond === null) return valor === null;
+  if (typeof cond === "string") return valor === cond;
+  return valor !== null && cond.in.includes(valor);
 }
 
 function makeDb() {
@@ -100,6 +116,9 @@ function makeDb() {
     {
       id: "ta1",
       tiendaId: "t1",
+      // Tarifa de NIVEL 2 (la tienda entera, sin zona): es la que resuelve el par (t1, z1)
+      // mientras no exista una de nivel 1 para esa zona.
+      zonaId: null,
       valorFlete: dec("1000.00"),
       valorFleteGam: dec("1500.00"),
       valorFleteDevuelto: dec("400.00"),
@@ -108,9 +127,7 @@ function makeDb() {
       comisionCod: dec("5.00"),
       ivaFlete: dec("13.00"),
       ivaComisionCod: dec("13.00"),
-      deletedAt: null,
       createdAt: new Date("2026-07-01"),
-      status: "activo",
     },
   ];
   const gestiones: GestionRow[] = [
@@ -244,17 +261,20 @@ function makeDb() {
         detalle.filter((d) => d.cierreId === where.cierreId),
       ),
     },
+    // Feature 274: el resolver hace UNA sola `findMany` con el `where` de tres ramas que
+    // produce `whereCascada` (`{ OR: [...] }`, cada rama con `tiendaId`/`zonaId` en forma de
+    // valor, `{ in }` o `null`). El doble honra esa semantica en vez de mirar solo `tiendaId`:
+    // si la aplanara, no podria distinguir un nivel 1 de un nivel 2 y este archivo dejaria de
+    // medir la cascada. `findFirst` se retiro: ya no hay ningun camino que lo use.
+    //
+    // El orden de salida es el de insercion, A PROPOSITO y sin `orderBy`: la cascada es
+    // determinista por especificidad (R5), asi que devolverlas en cualquier orden no puede
+    // cambiar el ganador. Si alguien reintrodujera un desempate por fecha, R22 se pondria rojo.
     tarifa: {
-      findFirst: vi.fn(async ({ where }: { where: { tiendaId: string; deletedAt: null } }) => {
-        const cands = tarifas
-          .filter((t) => t.tiendaId === where.tiendaId && t.deletedAt === null)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        return cands[0] ?? null;
-      }),
-      findMany: vi.fn(async ({ where }: { where: { tiendaId: { in: string[] }; deletedAt: null } }) =>
-        tarifas
-          .filter((t) => where.tiendaId.in.includes(t.tiendaId) && t.deletedAt === null)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      findMany: vi.fn(async ({ where }: { where: WhereCascadaDoble }) =>
+        tarifas.filter((t) =>
+          where.OR.some((r) => casaDimension(t.tiendaId, r.tiendaId) && casaDimension(t.zonaId, r.zonaId)),
+        ),
       ),
     },
     walletMovimiento: {
@@ -298,7 +318,7 @@ type Db = ReturnType<typeof makeDb>;
 function solicitar(db: Db) {
   const repo = new CierreDiaRepository(
     db.prisma as unknown as PrismaClient,
-    new TarifaVigentePorTiendaRepository(db.prisma as unknown as PrismaClient),
+    new TarifaVigenteRepository(db.prisma as unknown as PrismaClient),
   );
   return repo.crearCierre({
     mensajeroId: "m1",
@@ -418,13 +438,15 @@ describe("Feature 69/R18 — cambiar la tarifa entre SOLICITAR y APROBAR no muev
     const cierreId = await solicitar(db);
     expect(cierreId).not.toBeNull();
 
-    // 2) La tienda cambia su tarifa: borra la vieja (soft delete) y da de alta otra MUY
+    // 2) La tienda cambia su tarifa: borra la vieja —EN FISICO desde la 274: `tarifas` ya no
+    //    tiene `deleted_at`, y por eso el UNIQUE del par puede ser total— y da de alta otra MUY
     //    distinta. Sin snapshot, el resolver del feed elegiria esta al aprobar — cambiar una
     //    tarifa no toca `orden`, asi que ninguna guarda al UPDATE (decision (e)) lo veria.
-    db.tarifas[0].deletedAt = new Date();
+    db.tarifas.splice(0, 1);
     db.tarifas.push({
       id: "ta2",
       tiendaId: "t1",
+      zonaId: null,
       valorFlete: dec("7777.00"),
       valorFleteGam: dec("8888.00"),
       valorFleteDevuelto: dec("9999.00"),
@@ -433,9 +455,7 @@ describe("Feature 69/R18 — cambiar la tarifa entre SOLICITAR y APROBAR no muev
       comisionCod: dec("50.00"),
       ivaFlete: dec("99.00"),
       ivaComisionCod: dec("99.00"),
-      deletedAt: null,
       createdAt: new Date("2026-07-14"),
-      status: "activo",
     });
 
     // 3) APROBAR.
@@ -457,7 +477,7 @@ describe("Feature 69/R18 — cambiar la tarifa entre SOLICITAR y APROBAR no muev
     const cierreId = await solicitar(db);
 
     // La tienda borra su unica tarifa despues de solicitar: al aprobar NO hay ninguna vigente.
-    db.tarifas[0].deletedAt = new Date();
+    db.tarifas.splice(0, 1);
 
     expect(await aprobar(db, cierreId!)).toBe("updated");
 
@@ -465,5 +485,125 @@ describe("Feature 69/R18 — cambiar la tarifa entre SOLICITAR y APROBAR no muev
     // en cero. Con el snapshot, la tarifa congelada sigue ahi.
     expect(montoDe(db.movs, "ingreso_flete")).toBe("1000.00");
     expect(montoDe(db.movs, "ingreso_comision_cod")).toBe("500.00");
+  });
+});
+
+// --- Feature 274 (R22/R23/R24) ------------------------------------------------------------
+//
+// Estos tres casos recorren el camino REAL de punta a punta: `CierreDiaRepository.crearCierre`
+// -> `TarifaVigenteRepository.resolveTarifas` -> `whereCascada`/`elegirPorCascada` -> la
+// `findMany` del doble. Nada de la cascada esta mockeado; lo unico simulado es Postgres.
+
+describe("Feature 274/R22 — el snapshot congela la fila que elige la CASCADA (tienda, zona)", () => {
+  it("congela la de NIVEL 1 (t1, z1) aunque la de nivel 2 sea MAS RECIENTE", async () => {
+    const db = makeDb();
+    // `ta1` es la de nivel 2 (tienda sola) y se hace la MAS NUEVA de las dos.
+    db.tarifas[0].createdAt = new Date("2026-08-01");
+    db.tarifas.push({
+      id: "ta-z1",
+      tiendaId: "t1",
+      zonaId: "z1", // nivel 1: el par exacto de la orden `o1`
+      valorFlete: dec("2500.00"),
+      valorFleteGam: dec("2600.00"),
+      valorFleteDevuelto: dec("700.00"),
+      valorFleteDevueltoGam: dec("800.00"),
+      fulfillment: dec("450.00"),
+      comisionCod: dec("7.00"),
+      ivaFlete: dec("13.00"),
+      ivaComisionCod: dec("13.00"),
+      createdAt: new Date("2026-07-01"), // MAS VIEJA, y aun asi gana
+    });
+
+    const cierreId = await solicitar(db);
+    expect(cierreId).not.toBeNull();
+
+    // R22: gana la especificidad, no la fecha. Antes de la 274 el cierre resolvia por TIENDA
+    // y habria congelado `ta1` (1000.00), la generica.
+    const fila = db.detalle[0] as Record<string, unknown>;
+    expect(fila.tarifaId).toBe("ta-z1");
+    expect((fila.tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("2500.00");
+    expect((fila.tarifaFulfillment as Prisma.Decimal).toFixed(2)).toBe("450.00");
+
+    // Y el dinero liquidado sale de esa misma fila: 2500 de flete + 13% de IVA.
+    expect(await aprobar(db, cierreId!)).toBe("updated");
+    expect(montoDe(db.movs, "ingreso_flete")).toBe("2500.00");
+    expect(montoDe(db.movs, "ingreso_iva_flete")).toBe("325.00");
+  });
+
+  it("R7: N ordenes del cierre => UNA sola `tarifa.findMany`, dentro de la tx", async () => {
+    const db = makeDb();
+    const cierreId = await solicitar(db);
+    expect(cierreId).not.toBeNull();
+    expect(db.prisma.tarifa.findMany).toHaveBeenCalledTimes(1);
+    // El `where` es el de la cascada (tres ramas), no un `tiendaId` pelado.
+    const [{ where }] = (db.prisma.tarifa.findMany as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect((where as WhereCascadaDoble).OR).toHaveLength(3);
+  });
+});
+
+describe("Feature 274/R23/R39 — sin tarifa el cierre se crea igual, con las 9 columnas NULL", () => {
+  it("no hay ninguna fila que resuelva el par => snapshot en NULL y cierre creado", async () => {
+    const db = makeDb();
+    db.tarifas.length = 0; // ni nivel 1, ni nivel 2, ni nivel 3
+
+    const cierreId = await solicitar(db);
+
+    // El `409` de las dos APIs por key NO llega hasta aqui (R39): el mensajero cierra su dia.
+    expect(cierreId).not.toBeNull();
+    expect(db.detalle).toHaveLength(1);
+    const fila = db.detalle[0] as Record<string, unknown>;
+    for (const col of [
+      "tarifaId",
+      "tarifaValorFlete",
+      "tarifaValorFleteGam",
+      "tarifaValorFleteDevuelto",
+      "tarifaValorFleteDevueltoGam",
+      "tarifaComisionCod",
+      "tarifaIvaFlete",
+      "tarifaIvaComisionCod",
+      "tarifaFulfillment",
+    ]) {
+      expect(fila[col]).toBeNull();
+    }
+  });
+});
+
+describe("Feature 274/R24 — el shape del snapshot no cambia", () => {
+  it("la fila persistida trae las MISMAS columnas que en dev (26, `tarifa_id` y `fulfillment` incluidos)", async () => {
+    const db = makeDb();
+    await solicitar(db);
+
+    // Lista congelada tal cual la escribia `dev` antes de la 274. `id` lo pone el doble al
+    // insertar (lo pondria el default de Postgres), asi que se excluye de la comparacion.
+    const COLUMNAS_DEV = [
+      "cierreId",
+      "ordenId",
+      "montoCobrar",
+      "cobraComision",
+      "zonaId",
+      "tiendaId",
+      "esCentral",
+      "tarifaId",
+      "tarifaValorFlete",
+      "tarifaValorFleteGam",
+      "tarifaValorFleteDevuelto",
+      "tarifaValorFleteDevueltoGam",
+      "tarifaComisionCod",
+      "tarifaIvaFlete",
+      "tarifaIvaComisionCod",
+      "tarifaFulfillment",
+      "numGuia",
+      "numRemision",
+      "destinatario",
+      "direccion",
+      "producto",
+      "tiendaNombre",
+      "zonaNombre",
+      "provinciaNombre",
+      "cantonNombre",
+      "distritoNombre",
+    ];
+    const escritas = Object.keys(db.detalle[0]).filter((k) => k !== "id");
+    expect(escritas.sort()).toEqual([...COLUMNAS_DEV].sort());
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type { PagoTarifa } from "@/lib/interfaces/repositories/ITarifaZonaMensajeroRepository";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { derivarPagos, derivarIngresoBodega, computeTotales } from "@/lib/utils/cierre-totales";
 import { ingresoBodegaPorResultado } from "@/lib/utils/ingreso-bodega";
 import { pagoPorResultado } from "@/lib/utils/pago-mensajero";

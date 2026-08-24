@@ -73,7 +73,7 @@ describe("Feature 154 · SEED del enum — las dos familias del flujo v2 (R7/R8/
     );
   // 27: la 149 apendio `deshacer_asignacion`, la 157 `asignacion_recoleccion` y la 239
     // `anclaje_devolucion` (2026-08-19), las tres DESPUES de estos dos valores.
-    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(32); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-23 (266): +habilitacion_api
+    expect(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED).toHaveLength(33); // 2026-08-19 (235): +2 familias de la ayuda · 2026-08-20 (237): +gestion_tienda_ayuda · 2026-08-20 (240): +rechazo_tienda · 2026-08-23 (266): +habilitacion_api · 2026-08-24 (276): +rechazo_tope_intentos
   });
 
   it("R12: NINGUNA de las dos entra en ORIGEN_TIPOS_CON_GESTION (no alteran los intentos)", () => {
@@ -144,6 +144,10 @@ describe("Feature 154 · DOWN — recrea el tipo con las 22 familias previas (R1
       // Feature 266 (2026-08-23): idem con `habilitacion_api`, la habilitacion pedida por el
       // integrador desde el canal por API key. La foto historica de ESTA migracion sigue intacta.
       "habilitacion_api",
+      // Feature 276 (2026-08-24): idem con `rechazo_tope_intentos`, el rechazo por
+      // agotamiento de intentos al aprobar el cierre. La foto historica de ESTE `down.sql`
+      // sigue SIN TOCARSE; lo que crece es el conjunto que se le descuenta al SEED vigente.
+      "rechazo_tope_intentos",
 ]);
     expect(new Set(valores)).toEqual(
       new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED.filter((v) => !AÑADIDOS_EN_O_DESPUES_DEL_154.has(v))),

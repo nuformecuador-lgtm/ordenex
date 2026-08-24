@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -146,7 +146,7 @@ describeSiHayBase("271/T2.2 · R14 — el 2.º cierre vincula SOLO las gestiones
 
       const repo = new CierreDiaRepository(
         tx as unknown as PrismaClient,
-        new TarifaVigentePorTiendaRepository(tx as unknown as PrismaClient),
+        new TarifaVigenteRepository(tx as unknown as PrismaClient),
       );
 
       // El pago snapshot se pasa para las DOS sueltas y ADEMAS para una de las de A: la guardia

@@ -8,7 +8,13 @@ import type {
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
+  // FEATURE 276 (T8, R20): EL MISMO SIMBOLO que emite la bodega central. No un literal gemelo:
+  // `asignacion-satelite-tope-intentos.test.ts` compara los dos contra esta constante.
+  MSG_TOPE_INTENTOS_ASIGNACION,
 } from "@/lib/services/mensajes-bloqueo";
+import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHistorialService";
+// FEATURE 276 (T8, R7): el umbral sale de la configuracion, nunca de un `3` escrito a mano.
+import { reintentosConfig } from "@/lib/config/reintentos";
 import type { IAsignabilidadCoordenadasService } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import { esAsignable, motivoAsignabilidad } from "@/lib/services/AsignabilidadCoordenadasService";
 import { resolverFechaReparto } from "@/lib/utils/dia-reparto";
@@ -69,6 +75,14 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
     // Feature 92 (R8): gate de asignabilidad por coordenadas. REQUERIDA a proposito (mismo
     // motivo que en `GuiaAsignacionService`): opcional se desactivaria en silencio.
     private readonly asignabilidad: IAsignabilidadCoordenadasService,
+    /**
+     * 💰 FEATURE 276 (T8, R18): el derivador de intentos EN LOTE. ESPEJO EXACTO de la dep que gana
+     * `GuiaAsignacionService`, y REQUERIDA por el mismo motivo: opcional, olvidarla en una fabrica
+     * nueva desactivaria la puerta en silencio sobre la OTRA bodega, y la regla dejaria de valer
+     * segun desde donde te asignen — que es la clase de asimetria que la 246/D4 ya corrigio una vez
+     * en este mismo par de servicios.
+     */
+    private readonly historial: Pick<IOrdenHistorialService, "contarIntentosEnLote">,
   ) {}
 
   /**
@@ -176,6 +190,38 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       }
     }
     if (detalle.length > 0) return { status: "conflict", detalle }; // R10
+
+    // --- 💰 FEATURE 276 (T7/T8, R18/R19/R20) — LA ULTIMA PUERTA: NO SE ASIGNA UNA ORDEN AGOTADA ---
+    //
+    // MIENTRAS los intentos vigentes de una orden sean `>= umbral`, no se le puede dar a un
+    // mensajero. Es la quinta via hacia la circulacion del design §1 y hasta esta ficha NO estaba
+    // cerrada: este servicio no consultaba el contador en ningun punto.
+    //
+    // ⚠️ Y NO BASTA POR SI SOLA, que es lo que la hace facil de mal-entender. Cerrar SOLO esta
+    // puerta seria poner un guardia que mira un reloj parado: la orden llega a bodega ANTES de que
+    // su intento se cuente —el cierre todavia no se aprobo— y en ese instante el contador dice el
+    // valor viejo y la deja pasar. Por eso la ficha 276 cierra ADEMAS la liberacion diferida
+    // (`LiberacionReprogramadaService`), que es la raiz.
+    //
+    // UNA SOLA CONSULTA para todo el lote (`contarIntentosEnLote`, el metodo que la 215 creo
+    // exactamente para esto): nada de N+1. R7: el umbral sale de `reintentosConfig`.
+    //
+    // TODO-O-NADA (R19): una sola orden en el umbral aborta el lote ENTERO, y el `detalle` lleva
+    // UNA entrada POR ORDEN —tambien por las que si podian asignarse—, igual que las guardas
+    // vecinas. Ninguna orden cambia de estado.
+    const intentosPorOrden = await this.historial.contarIntentosEnLote(ordenIds);
+    const umbralIntentos = reintentosConfig.MIN_INTENTOS_ENTREGA;
+    if (ordenIds.some((id) => (intentosPorOrden.get(id) ?? 0) >= umbralIntentos)) {
+      return {
+        status: "conflict",
+        detalle: ordenIds.map((ordenId) => ({
+          ordenId,
+          // R20: el MISMO simbolo que emite la bodega satelite. Dos literales gemelos es como se
+          // desincronizan dos pantallas que cuentan la misma regla.
+          motivo: MSG_TOPE_INTENTOS_ASIGNACION,
+        })),
+      };
+    }
 
     // 4b. Feature 92/R8: gate de asignabilidad por coordenadas, ANTES de cualquier
     // escritura. Este writer SI asigna mensajero a todo el lote, asi que se evalua entero.
