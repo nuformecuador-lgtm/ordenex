@@ -321,3 +321,29 @@ umbral escala sola por el cron SLA (su ventana `wrong_address` vence ~16:16 CR d
 R37 sigue siendo requisito: **se vuelve a ejecutar inmediatamente antes de desplegar**, porque esta
 foto caduca —cualquier cierre que la bodega apruebe entre hoy y el despliegue puede subir un
 contador y crear una orden en el umbral que R18 dejaría inasignable sin que nadie lo decidiera.
+
+---
+
+## PUERTA HUMANA PASADA — 2026-08-24
+
+Las dos preguntas con `[FIRMA]` quedaron firmadas por el humano el 2026-08-24, las dos con la
+recomendación del spec. Las otras cuatro se dan por tomadas con su recomendación. **No se re-abren.**
+
+- **Q1 · El rechazo por no gestión (R21) → FIRMADO: SÍ cobra `cobroRechazado`.** Por la vía de
+  siempre: gestión sintética con `resultado = rechazada` y `cierre_id NULL`, que el siguiente cierre
+  del mensajero recoge (Option A de la 99, precedente 240/D1). La razón que se firmó es la de la
+  240: *sin la gestión, rechazar saldría gratis y esperar al plazo costaría, sobre el mismo
+  paquete*. Un rechazo por agotamiento que no cobrara haría que **no gestionar salga más barato que
+  gestionar**.
+- **Q2 · `reprogramarDesdeDevuelta` de la tienda (feature 100) → FIRMADO: SÍ se bloquea también.**
+  Es la tercera vía hacia la circulación y el encargo original no la enumeraba. Se bloquea **en el
+  momento en que la tienda lo intenta**, con el mismo motivo único de R20. Sin esto la regla se
+  cumpliría igual —R18 le negaría la asignación— pero el paquete quedaría en un callejón sin salida
+  y la tienda no se enteraría hasta tres pasos después.
+- **Q3 · Recuperación manual a bodega → se conserva intacta.** Es un movimiento físico que la bodega
+  necesita registrar; R18 impide que salga a repartir, que es lo que se pide.
+- **Q4 · Pérdida de la causa tipificada en el último intento → sin cambio**, anotada como pérdida de
+  información conocida. Añadir un enum nuevo sería rediseño, no arreglo.
+- **Q5 · Familia de origen → `rechazo_tope_intentos`**, y **fuera de `ORIGEN_TIPOS_VISITA_REAL`**:
+  si entrara, subiría el contador y cobraría de más.
+- **Q6 · Backfill → medido y resuelto**, ver la sección anterior.
