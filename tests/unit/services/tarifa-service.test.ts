@@ -15,7 +15,6 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
   return {
     id: "cob-1",
     tiendaId: "tienda-1",
-    status: "activo",
     valorFlete: 10,
     valorFleteDevuelto: 5,
     valorFleteGam: 8,
@@ -42,7 +41,6 @@ function buildRepo(overrides: Partial<ITarifaRepository> = {}): ITarifaRepositor
     hardDelete: vi.fn().mockResolvedValue("ok" as const),
     esTiendaAsignable: vi.fn().mockResolvedValue(true),
     existeZona: vi.fn().mockResolvedValue(true),
-    inactivarPorTienda: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
@@ -330,17 +328,23 @@ describe("actualizar (R9-R13/R20-R23)", () => {
     expect(repo.update).not.toHaveBeenCalled();
   });
 
-  it("R23: reactivar (status activo) revalida la tienda actual -> validation_error si dejo de ser adminTienda", async () => {
+  // ⚠️ CADUCIDAD DECLARADA (feature 274): este test disparaba la revalidacion con
+  // `{ status: "activo" }` («reactivar una tarifa revalida su tienda»). `status` ya
+  // no existe, asi que ese segundo motivo de la rama se retira. Lo que SI sobrevive
+  // -y es lo que este test conserva- es que, cuando `tiendaId` viaja en `null`, la
+  // tienda efectiva sigue siendo la de la fila existente y se revalida.
+  it("R23: desacotar la tienda revalida la tienda actual -> validation_error si dejo de ser adminTienda", async () => {
     repo = buildRepo({
-      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "degradada", status: "inactivo" })),
+      // con zona: si no, la guarda de R15 saltaria antes por par (null, null).
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "degradada", zonaId: "zona-1" })),
       esTiendaAsignable: vi.fn().mockResolvedValue(false),
     });
     service = new TarifaService(repo);
 
-    const r = await service.actualizar("cob-1", { status: "activo" }, MAESTRO);
+    const r = await service.actualizar("cob-1", { tiendaId: null }, MAESTRO);
 
     expect(r.status).toBe("validation_error");
-    // sin tiendaId en el input, la tienda efectiva es la del registro existente.
+    // sin tiendaId util en el input, la tienda efectiva es la del registro existente.
     expect(repo.esTiendaAsignable).toHaveBeenCalledWith("degradada");
     expect(repo.update).not.toHaveBeenCalled();
   });
@@ -376,19 +380,154 @@ describe("actualizar (R9-R13/R20-R23)", () => {
     expect(data).toHaveProperty("tarifaEspecial", null);
   });
 
-  it("R23: solo revalida la tienda si se reasigna o se reactiva", async () => {
+  // ⚠️ Mismo cambio: los dos tramos de `status` (inactivar no revalida, reactivar
+  // si) se van con la columna. La rama queda con su primera mitad: solo se revalida
+  // cuando `tiendaId` viaja en el input.
+  it("R23: solo revalida la tienda si se reasigna", async () => {
     // cambio numerico puro: no hay motivo para revalidar la tienda.
     await service.actualizar("cob-1", { fulfillment: 9 }, MAESTRO);
     expect(repo.esTiendaAsignable).not.toHaveBeenCalled();
     expect(repo.update).toHaveBeenCalled();
 
-    // desactivar tampoco revalida (siempre se puede inactivar).
-    await service.actualizar("cob-1", { status: "inactivo" }, MAESTRO);
+    // cambiar la zona tampoco revalida la tienda.
+    await service.actualizar("cob-1", { zonaId: "zona-1" }, MAESTRO);
     expect(repo.esTiendaAsignable).not.toHaveBeenCalled();
 
-    // reactivar si.
-    await service.actualizar("cob-1", { status: "activo" }, MAESTRO);
-    expect(repo.esTiendaAsignable).toHaveBeenCalledWith("tienda-1");
+    // reasignar el duenno si.
+    await service.actualizar("cob-1", { tiendaId: "tienda-2" }, MAESTRO);
+    expect(repo.esTiendaAsignable).toHaveBeenCalledWith("tienda-2");
+  });
+});
+
+// La cascada de resolucion (R1-R6) NO considera la fila `(tienda NULL, zona NULL)`
+// como un nivel: una tarifa asi no se le cobra a nadie y ademas ocupa el unico
+// `(zona_id, tienda_id)`. Se prohibe en el service porque en `actualizar` el par
+// que queda depende de la fila existente y zod no la ve (design 274 §3.3).
+describe("274/R14-R16 — la tarifa debe acotar por tienda, por zona o por ambas", () => {
+  it("R14: crear sin tienda y sin zona -> validation_error y CERO llamadas al repo", async () => {
+    const { tiendaId, ...sinTienda } = crearInput();
+    void tiendaId;
+
+    const r = await service.crear(sinTienda, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors).toHaveProperty("tiendaId");
+      expect(r.fieldErrors).toHaveProperty("zonaId");
+    }
+    // No se gasta un viaje a la base en algo ya invalido: ni la comprobacion de
+    // tienda, ni la de zona, ni el insert.
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(repo.esTiendaAsignable).not.toHaveBeenCalled();
+    expect(repo.existeZona).not.toHaveBeenCalled();
+  });
+
+  it("R14: crear con tiendaId null y zonaId null explicitos -> validation_error", async () => {
+    const r = await service.crear(crearInput({ tiendaId: null, zonaId: null }), MAESTRO);
+    expect(r.status).toBe("validation_error");
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it("R16: crear con tienda y sin zona -> ok", async () => {
+    const r = await service.crear(crearInput({ tiendaId: "tienda-1" }), MAESTRO);
+    expect(r.status).toBe("ok");
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ zonaId: null }));
+  });
+
+  it("R16: crear con zona y sin tienda -> ok", async () => {
+    const { tiendaId, ...sinTienda } = crearInput();
+    void tiendaId;
+
+    const r = await service.crear({ ...sinTienda, zonaId: "zona-1" }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ tiendaId: null, zonaId: "zona-1" }),
+    );
+  });
+
+  // El caso que la decision del humano nombro explicitamente: desacotar la zona de
+  // una tarifa que YA no tenia tienda deja la fila global.
+  it("R15: actualizar { zonaId: null } sobre una fila sin tienda -> validation_error sin update", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: null, zonaId: "zona-1" })),
+    });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { zonaId: null }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") {
+      expect(r.fieldErrors).toHaveProperty("tiendaId");
+      expect(r.fieldErrors).toHaveProperty("zonaId");
+    }
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it("R15: actualizar { tiendaId: null } sobre una fila sin zona -> validation_error sin update", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "tienda-1", zonaId: null })),
+    });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { tiendaId: null }, MAESTRO);
+
+    expect(r.status).toBe("validation_error");
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  // El par efectivo se calcula sobre la fila EXISTENTE: el mismo input que arriba
+  // es valido aqui porque la fila conserva su zona. Es lo que zod no podria ver.
+  it("R16: { tiendaId: null } sobre una fila CON zona -> ok (el par sigue acotado)", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "tienda-1", zonaId: "zona-1" })),
+    });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { tiendaId: null }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.update).toHaveBeenCalledWith("cob-1", { tiendaId: null });
+  });
+
+  it("R16: { zonaId: null } sobre una fila CON tienda -> ok", async () => {
+    repo = buildRepo({
+      findById: vi.fn().mockResolvedValue(dto({ tiendaId: "tienda-1", zonaId: "zona-1" })),
+    });
+    service = new TarifaService(repo);
+
+    const r = await service.actualizar("cob-1", { zonaId: null }, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    expect(repo.update).toHaveBeenCalledWith("cob-1", { zonaId: null });
+  });
+
+  it("R16: un cambio numerico sobre una fila ya acotada no dispara la guarda", async () => {
+    const r = await service.actualizar("cob-1", { fulfillment: 9 }, MAESTRO);
+    expect(r.status).toBe("ok");
+    expect(repo.update).toHaveBeenCalled();
+  });
+});
+
+describe("274/R12 — el DTO que devuelve el service no lleva `status`", () => {
+  it("crear ok: el TarifaDTO no tiene la clave `status`", async () => {
+    const r = await service.crear(crearInput(), MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") {
+      // assert de AUSENCIA DE CLAVE, no de valor: `undefined` no basta.
+      expect(Object.keys(r.tarifa)).not.toContain("status");
+      expect(r.tarifa).not.toHaveProperty("status");
+    }
+  });
+
+  it("obtener/listar tampoco la exponen", async () => {
+    const uno = await service.obtener("cob-1", MAESTRO);
+    if (uno.status === "ok") expect(uno.tarifa).not.toHaveProperty("status");
+
+    const varias = await service.listar({ page: 1, pageSize: 20 }, MAESTRO);
+    if (varias.status === "ok") {
+      for (const item of varias.items) expect(item).not.toHaveProperty("status");
+    }
   });
 });
 

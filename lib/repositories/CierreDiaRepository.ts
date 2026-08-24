@@ -9,11 +9,15 @@ import type {
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigenteResuelta,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// Feature 274 (design §4.2, R21/R22): la clave del Map del resolver batch la define el modulo
+// puro de la cascada, no este repositorio. Indexar aqui con una clave propia seria la segunda
+// declaracion de la regla que R21 existe para impedir.
+import { clavePar } from "@/lib/utils/cascada-tarifa";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 // Feature 264 (B9): la MISMA proyeccion y el MISMO orden que usa el detalle del admin.
@@ -360,7 +364,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     // tx para congelar la tarifa (R8). Es el UNICO consumidor del resolver tras la 69: los
     // feeds de wallet dejan de depender de el (leen el snapshot), y ese es justo el cambio
     // que mata el vector "cambio la tarifa entre solicitar y aprobar" (R18).
-    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    //
+    // Feature 274: el resolver ya NO resuelve "por tienda" sino por el PAR (tienda, zona) con
+    // la cascada de R1. Este repositorio no lo sabe: pide `resolveTarifas(pares, tx)` y la
+    // regla vive entera en `lib/utils/cascada-tarifa.ts` (R8/R21).
+    private readonly tarifaRepo: ITarifaVigenteRepository,
   ) {}
 
   /**
@@ -776,13 +784,19 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         const filas = [...porOrden.values()];
 
         if (filas.length > 0) {
-          // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
-          // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
-          const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
-            tx,
-            filas.map((f) => f.orden.tiendaId),
-          );
+          // Feature 69/R8 + feature 274/R22 — la tarifa vigente de cada PAR (tienda, zona)
+          // distinto, EN LA MISMA tx y en UNA query (sin N+1, R7). Hasta la 273 esto se
+          // resolvia por TIENDA sola (`resolveTarifasPorTiendas`), asi que dos ordenes de la
+          // misma tienda en zonas distintas congelaban la MISMA fila; desde la 274 la fila la
+          // elige la cascada sobre el par (design §4.2), la misma que usa el listado (R21).
+          // `null` para un par sin tarifa = gap R9/R23: las 9 columnas quedan NULL y el cierre
+          // se crea igual (decision (c) + R39: el gap NO bloquea, y el 409 de las APIs por key
+          // NO llega hasta aqui).
+          const pares = filas.map((f) => ({
+            tiendaId: f.orden.tiendaId,
+            zonaId: f.orden.zonaId,
+          }));
+          const tarifas = await this.tarifaRepo.resolveTarifas(pares, tx);
           await tx.cierreDetail.createMany({
             data: filas.map((f) => ({
               cierreId: cierre.id,
@@ -794,7 +808,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               zonaId: f.orden.zonaId,
               tiendaId: f.orden.tiendaId,
               esCentral: f.orden.zona.esCentral,
-              ...tarifaColumnas(tarifas.get(f.orden.tiendaId) ?? null),
+              ...tarifaColumnas(
+                tarifas.get(
+                  clavePar({ tiendaId: f.orden.tiendaId, zonaId: f.orden.zonaId }),
+                ) ?? null,
+              ),
               // descriptivos (R7).
               numGuia: f.orden.numGuia,
               numRemision: f.orden.numRemision,

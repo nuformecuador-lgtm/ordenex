@@ -21,7 +21,7 @@ a `requirements.md` y `design.md`. No queda nada bloqueado por una respuesta pen
 
 ## T0 — Preparación (bloqueante)
 
-- [ ] **T0.1** Verificar que la base local tiene aplicadas las migraciones de la 273.
+- [x] **T0.1** Verificar que la base local tiene aplicadas las migraciones de la 273.
       *Hecho:* `prisma migrate deploy` (nunca `db:migrate`, que puede resetear) sale sin
       pendientes y `SELECT status FROM tarifas LIMIT 1` todavía existe (punto de partida).
 
@@ -29,9 +29,9 @@ a `requirements.md` y `design.md`. No queda nada bloqueado por una respuesta pen
 
 ## T1 — La regla, en un módulo puro `[P]` (depende de: T0.1)
 
-- [ ] **T1.1** Crear `lib/utils/cascada-tarifa.ts` con `ParTarifa`, `clavePar`,
+- [x] **T1.1** Crear `lib/utils/cascada-tarifa.ts` con `ParTarifa`, `clavePar`,
       `nivelDeCascada`, `elegirPorCascada`, `whereCascada` (design §2.1). Sin imports de Prisma.
-- [ ] **T1.2** Tests `tests/unit/utils/cascada-tarifa.test.ts`:
+- [x] **T1.2** Tests `tests/unit/utils/cascada-tarifa.test.ts`:
       un caso por nivel (1, 2, 3), el caso «ninguno → null», el caso `(NULL, NULL)` que **no**
       es nivel, el par con `zonaId: null` que solo alcanza el nivel 2, el caso en que el nivel 2
       es **más reciente** y aun así gana el nivel 1, y el mismo conjunto de filas en orden
@@ -43,11 +43,11 @@ a `requirements.md` y `design.md`. No queda nada bloqueado por una respuesta pen
 
 ## T2 — Migración: drop de `tarifas.status` (depende de: T0.1)
 
-- [ ] **T2.1** `pnpm run db:migrate:create` → `db/migrations/20260825120000_drop_tarifa_status/`
+- [x] **T2.1** `pnpm run db:migrate:create` → `db/migrations/20260825120000_drop_tarifa_status/`
       con el UP de design §1.2. Escribir `down.sql` **a mano**, con el comentario que declara la
       pérdida de dato.
-- [ ] **T2.2** Quitar `status` y `enum EstadoTarifa` de `db/schema.prisma`; `pnpm db:generate`.
-- [ ] **T2.3** Test `tests/integration/db/drop-tarifa-status-migration.test.ts`, calcado del
+- [x] **T2.2** Quitar `status` y `enum EstadoTarifa` de `db/schema.prisma`; `pnpm db:generate`.
+- [x] **T2.3** Test `tests/integration/db/drop-tarifa-status-migration.test.ts`, calcado del
       patrón de `tests/integration/db/tarifa-zona-is-default-migration.test.ts`: Postgres real,
       **esquema desechable**, aplicando el SQL **de disco** sentencia a sentencia.
       *Hecho (R9/R10):* tras el UP, insertar una tarifa **sin** `status` funciona y
@@ -63,13 +63,13 @@ Se hace **antes** de T3 y en un commit aparte para que el diff del dinero se lea
 Regla del commit: **ni una línea de comportamiento**. Si el implementer siente la tentación de
 "aprovechar y arreglar", va a T3.
 
-- [ ] **T2bis.1** `git mv` de los dos archivos y renombrado de los dos identificadores:
+- [x] **T2bis.1** `git mv` de los dos archivos y renombrado de los dos identificadores:
       - `lib/repositories/TarifaVigentePorTiendaRepository.ts` → `TarifaVigenteRepository.ts`
         (clase `TarifaVigentePorTiendaRepository` → `TarifaVigenteRepository`).
       - `lib/interfaces/repositories/ITarifaVigentePorTiendaRepository.ts` →
         `ITarifaVigenteRepository.ts` (interfaz `ITarifaVigentePorTiendaRepository` →
         `ITarifaVigenteRepository`).
-- [ ] **T2bis.2** Actualizar los **importadores**. Producción (10):
+- [x] **T2bis.2** Actualizar los **importadores**. Producción (10):
       `lib/repositories/OrdenRepository.ts`, `lib/repositories/CierreDiaRepository.ts`,
       `lib/services/BulkOrdenService.ts`, `lib/services/CotizacionOrdenService.ts`,
       `lib/utils/ingreso-ordenex.ts`, `lib/actions/cierre-dia.ts`,
@@ -96,7 +96,7 @@ Regla del commit: **ni una línea de comportamiento**. Si el implementer siente 
       `resolver-novedad-reprograma-dinero`— se comprueban uno a uno: si solo lo nombran en un
       comentario, se actualiza el comentario.)*
       *Hecho:* `rg "TarifaVigentePorTienda" lib app tests db` no devuelve nada.
-- [ ] **T2bis.3** *Hecho (criterio duro del renombrado puro):* `git diff <base>..HEAD -- lib app`
+- [x] **T2bis.3** *Hecho (criterio duro del renombrado puro):* `git diff <base>..HEAD -- lib app`
       filtrado por las líneas que **no** contienen el identificador viejo ni el nuevo está
       **vacío**, y `pnpm test` da el **mismo** conteo de verdes/rojos que el baseline de T0
       (delta 0, pegado en `progress/impl_274.md`). Un renombrado que cambia un test no es un
@@ -109,14 +109,14 @@ Regla del commit: **ni una línea de comportamiento**. Si el implementer siente 
 
 ## T3 — Contrato y resolver (depende de: T1, T2.2, T2bis)
 
-- [ ] **T3.1** Reescribir `lib/interfaces/repositories/ITarifaVigenteRepository.ts`:
+- [x] **T3.1** Reescribir `lib/interfaces/repositories/ITarifaVigenteRepository.ts`:
       `resolveTarifa(tiendaId, zonaId)` + `resolveTarifas(pares, tx?)`. Fuera
       `resolveTarifaPorTienda`, `resolveTarifaCotizablePorTienda`, `resolveTarifasPorTiendas`.
       Actualizar el comentario de cabecera: hoy afirma que la tarifa **no** se resuelve por zona.
-- [ ] **T3.2** Reescribir `lib/repositories/TarifaVigenteRepository.ts` sobre
+- [x] **T3.2** Reescribir `lib/repositories/TarifaVigenteRepository.ts` sobre
       `whereCascada` + `elegirPorCascada`. **Borrar el bloque `TODO:` de la deuda (g)**
       y el `orderBy: { createdAt: "desc" }` de los tres métodos.
-- [ ] **T3.3** Reescribir `tests/unit/repositories/tarifa-vigente-repository.test.ts`
+- [x] **T3.3** Reescribir `tests/unit/repositories/tarifa-vigente-repository.test.ts`
       con el patrón vigente del repo (doble de Prisma a mano, asserts sobre `where`/`select`
       **exactos**).
       *Hecho (R7):* un test cuenta **una** llamada a `tarifa.findMany` para N pares y compara el
@@ -139,7 +139,7 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
    `UNIQUE (zona_id, tienda_id) NULLS NOT DISTINCT` vuelve innecesario (R5). Se sustituyen por
    el test de orden invertido de T1.2.
 
-- [ ] **T3.4** Guardia `tests/guards/tarifa-status-retirado.guard.test.ts`, con **dos dientes**:
+- [x] **T3.4** Guardia `tests/guards/tarifa-status-retirado.guard.test.ts`, con **dos dientes**:
       (a) recorre `lib/`, `app/`, `db/schema.prisma` y falla si reaparece `EstadoTarifa`,
       `estado_tarifa` o una referencia a `tarifa.status`;
       (b) recorre `lib/`, `app/` y `tests/` y falla si reaparece `TarifaVigentePorTienda`.
@@ -150,14 +150,14 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 ## T4 — Tipos, service y actions de tarifa `[P]` (depende de: T2.2)
 
-- [ ] **T4.1** `lib/types/tarifa.ts`: fuera `estadoTarifaSchema`, el `.extend({ status })` de
+- [x] **T4.1** `lib/types/tarifa.ts`: fuera `estadoTarifaSchema`, el `.extend({ status })` de
       `actualizarTarifaSchema`, `TarifaDTO.status` y el import de `EstadoTarifa`.
-- [ ] **T4.2** `lib/interfaces/repositories/ITarifaRepository.ts` + `TarifaRepository.ts`:
+- [x] **T4.2** `lib/interfaces/repositories/ITarifaRepository.ts` + `TarifaRepository.ts`:
       fuera `UpdateTarifaData.status`, la línea `out.status` y **`inactivarPorTienda`** entero
       (hueco aceptado y declarado en design §2.2: no se abre ficha).
-- [ ] **T4.3** `TarifaService`: constante `TARIFA_SIN_ALCANCE` y las dos guardas de design §3.4
+- [x] **T4.3** `TarifaService`: constante `TARIFA_SIN_ALCANCE` y las dos guardas de design §3.4
       (`crear` y **par efectivo** en `actualizar`); simplificar la rama `:112`.
-- [ ] **T4.4** Tests:
+- [x] **T4.4** Tests:
       *Hecho (R11):* `actualizar` con `{ status: "activo" }` → `validation_error` (strict).
       *Hecho (R12):* el DTO devuelto por `crear` no tiene la clave `status`.
       *Hecho (R14):* `crear` sin tienda y sin zona → `validation_error` **y** el repo no recibe
@@ -174,10 +174,10 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 ## T5 — Cierre de día (depende de: T3)
 
-- [ ] **T5.1** `CierreDiaRepository.crearCierre`: `resolveTarifas(pares, tx)` indexado por
+- [x] **T5.1** `CierreDiaRepository.crearCierre`: `resolveTarifas(pares, tx)` indexado por
       `clavePar` (design §4.2). `SNAPSHOT_SELECT` ya trae `orden.zonaId`: no se toca.
-- [ ] **T5.2** `lib/actions/cierre-dia.ts`: sólo inyección.
-- [ ] **T5.3** Tests `tests/unit/repositories/cierre-dia-repository.test.ts` +
+- [x] **T5.2** `lib/actions/cierre-dia.ts`: sólo inyección.
+- [x] **T5.3** Tests `tests/unit/repositories/cierre-dia-repository.test.ts` +
       `tests/integration/db/cierre-detail-congelado.test.ts`.
       *Hecho (R22):* el snapshot congela el `tarifa_id` de la fila **de nivel 1** cuando existe,
       aunque la de nivel 2 sea más reciente.
@@ -194,16 +194,16 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 **Cambio de contrato de una API pública.** Ver T10 (aviso a integradores).
 
-- [ ] **T6.0** `lib/services/mensajes-tarifa.ts` con `MSG_FILA_SIN_TARIFA` y
+- [x] **T6.0** `lib/services/mensajes-tarifa.ts` con `MSG_FILA_SIN_TARIFA` y
       `MSG_CARGA_SIN_TARIFA` (design §3.5). `MSG_COTIZACION_SIN_TARIFA` **no se toca**.
       *Hecho (R38):* un test afirma que la carga y la cotización emiten en `errores.tarifa`
       **la misma constante importada** (comparación contra `MSG_FILA_SIN_TARIFA`, no contra un
       literal re-escrito en el test).
-- [ ] **T6.1** `BulkOrdenService`: fuera `tarifaLote`; añadir `zonaPorRemision`, mover la
+- [x] **T6.1** `BulkOrdenService`: fuera `tarifaLote`; añadir `zonaPorRemision`, mover la
       resolución **antes** de `createManyOrdenesConGuia`, partir `toCreate` en
       `conTarifa`/`sinTarifa` y aplicar el criterio de lote de design §3.6 (§4.3).
-- [ ] **T6.2** `app/api/ordenes/carga-masiva/chunk/route.ts`: sólo inyección.
-- [ ] **T6.3** Tests `tests/unit/services/bulk-orden-service.carga-api.test.ts` +
+- [x] **T6.2** `app/api/ordenes/carga-masiva/chunk/route.ts`: sólo inyección.
+- [x] **T6.3** Tests `tests/unit/services/bulk-orden-service.carga-api.test.ts` +
       `tests/integration/carga-api-key-sin-tarifa.test.ts`.
       *Hecho (R25):* dos órdenes del mismo lote en zonas distintas con tarifas distintas
       devuelven `costoEnvio` **distinto** (hoy devuelven el mismo: es la regresión que fija el
@@ -222,7 +222,7 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
       consulta.
       *Hecho:* `total` del summary sigue siendo `rows.length` y `creadas + duplicadas +
       conError === total` con filas degradadas de por medio (ninguna contada dos veces).
-- [ ] **T6.4** Contrato publicado (R31): `lib/api/openapi-spec.ts` (descripción de `/carga`
+- [x] **T6.4** Contrato publicado (R31): `lib/api/openapi-spec.ts` (descripción de `/carga`
       `:104-108` + respuesta `409` en `:202-204`) y su espejo `docs/api/api-key-openapi.yaml`.
       *Hecho:* `tests/unit/api/openapi-carga-409-sin-tarifa.test.ts` afirma que el path de
       `/carga` declara `409`, que su ejemplo es **la constante** `MSG_CARGA_SIN_TARIFA`, y que
@@ -233,14 +233,14 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 ## T7 — Cotización por API key (depende de: T3, T6.0)
 
-- [ ] **T7.1** `CotizacionOrdenService`: invertir el orden (geo → pares → una resolución) y
+- [x] **T7.1** `CotizacionOrdenService`: invertir el orden (geo → pares → una resolución) y
       calcular por fila con la zona del distrito (design §4.4).
-- [ ] **T7.2** Aplicar el criterio de lote de design §3.6: fila sin tarifa → `resultado:
+- [x] **T7.2** Aplicar el criterio de lote de design §3.6: fila sin tarifa → `resultado:
       "error"` con `errores.tarifa`; `409` sólo si **ninguna** fila que llegó a resolver
       resolvió. `status: "sin_tarifa"` se conserva con su significado estrechado y
       `app/api/ordenes/api-key/cotizacion/route.ts` **no cambia**.
       *Hecho:* un assert de que `route.ts` no aparece en el diff de esta task.
-- [ ] **T7.3** Tests `tests/unit/services/cotizacion-orden-service.test.ts` +
+- [x] **T7.3** Tests `tests/unit/services/cotizacion-orden-service.test.ts` +
       `tests/integration/cotizacion-api-key.test.ts`.
       *Hecho (R32):* dos filas en zonas distintas cotizan importes distintos, con **una** sola
       llamada al repo de tarifas.
@@ -257,7 +257,7 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
       en cero y `filasSumadas: 0`; **no** `409`.
       *Hecho (R37):* el service ya no puede llamar a `resolveTarifaCotizablePorTienda` (no
       existe) y resuelve con el mismo método que el cierre.
-- [ ] **T7.4** Contrato publicado (R31): reescribir en `openapi-spec.ts` el párrafo `:639-642`
+- [x] **T7.4** Contrato publicado (R31): reescribir en `openapi-spec.ts` el párrafo `:639-642`
       (el `409` ya no es «la tienda no tiene tarifa» y la asimetría con `/carga` que describe
       dejó de existir) y añadir al párrafo de `totales` `:627-633` el segundo motivo de
       exclusión; espejar en el `.yaml`.
@@ -268,25 +268,25 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 ## T8 — Listado de órdenes (depende de: T3)
 
-- [ ] **T8.1** `OrdenRepository`: quitar `tarifasTienda` del include y de `TARIFA_SELECT`;
+- [x] **T8.1** `OrdenRepository`: quitar `tarifasTienda` del include y de `TARIFA_SELECT`;
       resolver la página con `whereCascada`/`elegirPorCascada` en **una** query adicional;
       `toListItemDTO(row, tarifa)`; aplicar lo mismo a `findListItemsByIds` (design §4.1).
-- [ ] **T8.2** Ajustar `lib/types/orden.ts` (comentarios que describen «la tarifa activa de la
+- [x] **T8.2** Ajustar `lib/types/orden.ts` (comentarios que describen «la tarifa activa de la
       tienda») y `tests/unit/components/ordenes-columns.test.tsx` / fixtures que construyen un
       `TarifaDTO` con `status`.
-- [ ] **T8.3** Tests `tests/unit/repositories/orden-repository.test.ts`.
+- [x] **T8.3** Tests `tests/unit/repositories/orden-repository.test.ts`.
       *Hecho (R18):* dos órdenes de la misma tienda en zonas distintas muestran importes
       distintos.
       *Hecho (R19):* una página de N filas produce **2** consultas de datos (órdenes + tarifas),
       contadas en el doble de Prisma, sea N = 1 o N = 50.
       *Hecho (R20):* orden sin tarifa → `relaciones.tienda.tarifa === null` y
       `fleteConIva === "0.00"`.
-- [ ] **T8.4** **Test de convergencia (R8/R21), el que justifica la feature.** Un test que, con
+- [x] **T8.4** **Test de convergencia (R8/R21), el que justifica la feature.** Un test que, con
       el MISMO conjunto de filas de `tarifas` y la MISMA orden, obtiene la tarifa por el camino
       del listado y por el del cierre y **compara el `tarifa_id`**; el caso elegido es
       precisamente uno donde hoy divergen (una tarifa `inactivo` más reciente frente a una de
       zona). *Hecho:* falla si alguien vuelve a introducir una regla propia en el listado.
-- [ ] **T8.5** **Test de la asimetría (R39), el que impide que alguien "unifique" los cuatro
+- [x] **T8.5** **Test de la asimetría (R39), el que impide que alguien "unifique" los cuatro
       bordes.** Con el MISMO estado de `tarifas` (par sin tarifa): el listado devuelve `"0.00"`
       y `tarifa: null`; el cierre se crea con las 9 columnas en NULL; la carga por API y la
       cotización devuelven `409`. *Hecho:* las cuatro afirmaciones en un solo archivo de test,
@@ -297,9 +297,9 @@ Cada retirada va con una línea de justificación en el commit y en `progress/im
 
 ## T9 — Cierre (depende de: T1–T8)
 
-- [ ] **T9.1** Mapa `R<n> → test` completo en `progress/impl_274.md` (los **40** requisitos).
+- [x] **T9.1** Mapa `R<n> → test` completo en `progress/impl_274.md` (los **40** requisitos).
       *Hecho:* ningún `R<n>` sin fila; el reviewer rechaza si falta uno.
-- [ ] **T9.2** Correr **`./init.sh` COMPLETO** y pegar la salida real en `progress/impl_274.md`,
+- [x] **T9.2** Correr **`./init.sh` COMPLETO** y pegar la salida real en `progress/impl_274.md`,
       con el delta contra el baseline de T0. Nada de "debería pasar".
 - [ ] **T9.3** Actualizar la ficha 274 en `feature_list.json` (`spec_path`, `status`) escribiendo
       en **LF** y verificando que el diff son **sólo** los campos de la 274 (otras sesiones
