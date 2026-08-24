@@ -20,6 +20,14 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import {
+  bloqueoConVencido,
+  bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
+  bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
+} from "@/tests/fixtures/bloqueo-cierre";
 
 // Feature 36 (T15-T17) / rediseño 63 (pedido humano) — pantalla de REPARTO del mensajero.
 // Se mockean las Server Actions (escoger / gestionar / liberar), el toast y el router
@@ -202,7 +210,7 @@ function renderModule(props?: Partial<Parameters<typeof RepartoModule>[0]>) {
       conAyuda={props?.conAyuda ?? []}
       ordenEnGestionId={props?.ordenEnGestionId ?? null}
       ruta={props?.ruta ?? RUTA_VIGENTE}
-      bloqueado={props?.bloqueado ?? false}
+      bloqueo={props?.bloqueo ?? SIN_BLOQUEO}
     />,
   );
 }
@@ -836,7 +844,13 @@ describe("RepartoModule", () => {
     await user.click(screen.getByRole("button", { name: "Guardar gestión" }));
 
     expect(gestionarMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent("causa requerida");
+    // FEATURE 271 (T9.6) — `getAllByRole` y no `getByRole`. El singular LANZA en cuanto hay más de
+    // un `role="alert"` en la pantalla, y aquí ya convivían dos escenarios que lo producen
+    // (mensajero bloqueado + ruta desactualizada). Con el aviso de bloqueo nuevo el caso se vuelve
+    // más frecuente, así que se busca EL QUE INTERESA en vez de exigir que sea el único.
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain("causa requerida");
     expect(
       screen.getByRole("radiogroup", { name: "Causa de la devolución" }),
     ).toHaveAttribute("aria-invalid", "true");
@@ -1132,25 +1146,147 @@ describe("RepartoModule", () => {
     expect(props.paradas.map((p) => p.id)).toEqual(["g1"]);
   });
 
-  // ---------------- Feature 111 (R12/R14): bloqueo del mensajero ----------------
+  // ---------------- Feature 111 (R12/R14) -> FEATURE 271 (T9.2): bloqueo del mensajero ---------
   //
-  // ⚠️ FEATURE 241 (2026-08-20) — EL TEXTO DEL AVISO CAMBIO Y LOS LITERALES DE ESTE ARCHIVO CON EL.
-  // Decia «No puedes gestionar NI RECIBIR NUEVAS ASIGNACIONES…», y eso dejo de ser cierto: recibir
-  // asignaciones no se bloquea (regla 2, firmada). Un aviso que prohibe mas de lo que el servidor
-  // rechaza hace que el mensajero deje de intentar cosas que si puede hacer.
+  // ⚠️ EL AVISO CAMBIÓ DOS VECES EN TRES DÍAS, Y LA SEGUNDA DESHACE MEDIA PRIMERA.
+  //   · Hasta el 2026-08-19 decía «No puedes gestionar NI RECIBIR NUEVAS ASIGNACIONES…».
+  //   · El 20/08 (feature 241) se le quitó lo de recibir: la regla firmada declaraba la asignación
+  //     exenta de todo bloqueo, y prohibir de más hace que el mensajero deje de intentar cosas que
+  //     sí puede hacer.
+  //   · El 23/08 (esta ficha, palabra del humano) se REVIRTIÓ esa mitad: acumular dos cierres —o
+  //     arrastrar uno que espera a que él lo reenvíe— bloquea TAMBIÉN recibir trabajo nuevo, y sin
+  //     distinguir reparto de recolección.
+  // La dirección del error importa más que el error: ahora el aviso prohíbe exactamente lo que el
+  // servidor rechaza, ni una cosa más ni una menos.
   //
-  // Los literales se conservan como LITERALES —no se sustituyen por `BLOQUEO_AVISO` importado—
-  // a proposito: comparar el texto contra la constante que lo genera esta siempre verde y no
-  // afirmaria nada. La fuente unica es `lib/constants/bloqueo-mensajero.ts`.
+  // ⚠️ LOS LITERALES SIGUEN SIENDO LITERALES —nunca `toHaveTextContent(avisoBloqueo(d))`—: un texto
+  // comparado contra la función que lo genera está SIEMPRE VERDE y no afirma nada. La fuente única
+  // del texto es `lib/constants/bloqueo-mensajero.ts`; la de este archivo, la mano.
 
-  it("R12: bloqueado muestra el aviso accionable de BLOQUEO", () => {
+  it("271/§10.2 caso 1 · bloqueado por ACUMULAR (N=2, V=0), con la fecha de la JORNADA", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoPorAcumular("2026-08-21"),
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
+    // La fecha es la de la JORNADA que el mensajero trabajó (21), no la del nacimiento del cierre
+    // (22): el corte corre en la madrugada siguiente, así que todo vencido nace un día por delante.
+    // Y este caso NO lleva puntero a «Cierre del día»: sus dos cierres están enviados y el
+    // mensajero no tiene nada que hacer; mandarlo allí sería mandarlo a buscar un botón que no
+    // existe.
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo, el del 21 de agosto.",
+    );
+  });
+
+  it("271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1), con el puntero al final", () => {
+    // ⚠️ EL PUNTERO DE ESTE CASO VA SIN OBJETO desde el 2026-08-23 (corrección aprobada por el
+    // humano tras mirar la app): «...para enviarLO» colgaba de «el más antiguo», que es el cierre
+    // que resuelve la BODEGA — nombraba justo el que el mensajero no puede enviar. La frase
+    // anterior ya dice qué enviar. El caso 2, con un solo cierre, conserva su «para enviarlo».
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía", () => {
+    // ⚠️ LA CUARTA RAMA (aprobada el 2026-08-23, y el estado se midió en el navegador): el admin
+    // rechazó el PRIMERO de sus dos `solicitado`, así que el cierre más viejo es SUYO. Antes decía
+    // «espera a que la bodega apruebe el más antiguo» fechando su propio cierre — le mandaba a
+    // esperar por el mismo que el botón le ofrece reenviar. Ahora la fecha nombra el que ÉL envía y
+    // la espera se corre al RESTO.
+    renderModule({
+      bloqueo: bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: "2026-08-20" }),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Estado alcanzable (dos `rechazado`, o `vencido` + `rechazado`). Hasta el 2026-08-23 caía en
+    // el texto de arriba y decía dos cosas falsas: «Envía el que falta» con DOS por enviar, y
+    // «espera a que la bodega apruebe el más antiguo» cuando el más antiguo es SUYO.
+    renderModule({
+      bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21"),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/R60 · sin jornada fiable la fecha DESAPARECE entera y el resto se lee igual", () => {
+    renderModule({
+      bloqueo: bloqueoPorAcumular(null),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo.",
+    );
+  });
+
+  it("271/R51 · el aviso NO promete recibir asignaciones ni recoger en tiendas", () => {
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    const textos = screen.getAllByRole("alert").map((a) => a.textContent).join(" | ");
+    expect(textos).not.toMatch(/seguir recibiendo asignaciones/i);
+    expect(textos).not.toMatch(/seguir recogiendo en tiendas/i);
+    expect(textos).not.toMatch(/sí puedes/i);
+  });
+
+  it("271/R5 · un solo cierre YA enviado (N=1, V=0) NO bloquea nada", () => {
+    // La mitad de la regla del 2026-08-20 que esta ficha CONSERVA: ese mensajero ya hizo lo suyo y
+    // espera al administrador. Sin aviso, y las cards siguen siendo gestionables.
+    renderModule({
+      bloqueo: bloqueoDe({ n: 1, v: 0 }),
+      porGestionar: [
+        makeAsignacion({ id: "g1", numRemision: "REM-G1" }),
+        makeAsignacion({ id: "g2", numRemision: "REM-G2" }),
+      ],
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Se mira la SEGUNDA: la primera es la que el panel abre por defecto y su botón está
+    // apagado por eso —llevaría al panel donde ya está—, no por ningún bloqueo.
+    expect(
+      screen.getByRole("button", { name: /Gestionar la orden REM-G2/ }),
+    ).toBeEnabled();
+  });
+
+  it("R12: bloqueado muestra el aviso accionable de BLOQUEO", () => {
+    renderModule({
+      bloqueo: bloqueoConVencido(),
+      porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G1" })],
+    });
+
+    // FEATURE 271 (T9.6): en plural, y se afirma sobre el que interesa.
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain(
+      "Tienes un cierre sin enviar a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Ve a «Cierre del día» para enviarlo a aprobación.",
     );
   });
 
@@ -1160,7 +1296,7 @@ describe("RepartoModule", () => {
     });
 
     expect(
-      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
+      screen.queryByText(/no puedes entregar, cobrar ni recibir trabajo nuevo/i),
     ).not.toBeInTheDocument();
   });
 
@@ -1169,7 +1305,7 @@ describe("RepartoModule", () => {
 
   it("R14: bloqueado deshabilita las cards de 'En reparto' y NO renderiza el panel de gestión (escoger/gestionar)", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
         makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
@@ -1272,7 +1408,7 @@ describe("RepartoModule", () => {
 
   it("R3: bloqueado sin gestión — las cards están deshabilitadas y AÚN muestran el detalle completo", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porGestionar: [
         makeAsignacion({
           id: "g1",
@@ -1404,7 +1540,7 @@ describe("RepartoModule", () => {
         conAyuda={[]}
         ordenEnGestionId="g2"
         ruta={RUTA_VIGENTE}
-        bloqueado={false}
+        bloqueo={SIN_BLOQUEO}
       />,
     );
 
@@ -1421,7 +1557,7 @@ describe("RepartoModule", () => {
         conAyuda={[]}
         ordenEnGestionId={null}
         ruta={RUTA_VIGENTE}
-        bloqueado={false}
+        bloqueo={SIN_BLOQUEO}
       />,
     );
 
@@ -1451,7 +1587,7 @@ describe("RepartoModule", () => {
 
   it("R12: bloqueado con puntero fijado NO entra en foco (precede el aviso de bloqueo total, sin panel)", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porGestionar: [
         makeAsignacion({ id: "g1", numRemision: "REM-G1", destinatario: "Uno" }),
         makeAsignacion({ id: "g2", numRemision: "REM-G2", destinatario: "Dos" }),
@@ -1459,10 +1595,10 @@ describe("RepartoModule", () => {
       ordenEnGestionId: "g2",
     });
 
-    // El aviso de bloqueo total tiene precedencia.
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /no puedes gestionar entregas ni cobrar/i,
-    );
+    // El aviso de bloqueo total tiene precedencia. FEATURE 271 (T9.6): en plural.
+    expect(
+      screen.getAllByRole("alert").map((a) => a.textContent).join(" | "),
+    ).toContain("no puedes entregar, cobrar ni recibir trabajo nuevo");
     // NO hay foco: las cards siguen en la grilla (deshabilitadas) y NO se monta el panel.
     expect(
       screen.getByRole("article", { name: /Orden REM-G1/ }),
@@ -1622,10 +1758,10 @@ describe("RepartoModule", () => {
 
   it("114/R9: la orden EN GESTIÓN permanece en la lista y en el mapa aunque no coincida", async () => {
     const user = userEvent.setup();
-    // `bloqueado` mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
+    // El bloqueo mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
     // colapsar a modo foco: es el escenario donde la salvaguarda R9 es observable.
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       ordenEnGestionId: "g2",
       porGestionar: [
         makeAsignacion({
@@ -1992,10 +2128,10 @@ describe("RepartoModule", () => {
 
   it("117/R10: la orden EN GESTIÓN sigue visible (lista y mapa) aunque el filtro no la incluya", async () => {
     const user = userEvent.setup();
-    // `bloqueado` mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
+    // El bloqueo mantiene la VISTA COMPLETA (grilla + mapa) con el puntero fijado, sin
     // colapsar a foco: es el escenario donde la salvaguarda R10 es observable.
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       ordenEnGestionId: "g2",
       porGestionar: [
         makeAsignacion({
@@ -2331,14 +2467,12 @@ describe("RepartoModule — Entregas no monta ninguna superficie de recolección
   it("R33: tampoco con el mensajero BLOQUEADO (donde el aviso podría colarse)", () => {
     renderModule({
       porGestionar: [makeAsignacion({ id: "g1", numRemision: "REM-G" })],
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
     });
 
     // El aviso de bloqueo de Entregas sí está…
     expect(
-      screen.getByText(
-        /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
-      ),
+      screen.getByText(/no puedes entregar, cobrar ni recibir trabajo nuevo/i),
     ).toBeInTheDocument();
     // …y no arrastra ninguna mención de la recolección con él.
     expect(screen.queryByText(/recolect/i)).toBeNull();

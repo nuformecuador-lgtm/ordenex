@@ -38,6 +38,11 @@ export default async function RecepcionSatelitePage() {
   const mensajerosResult = await listarMensajerosSatelite();
   const mensajeros =
     mensajerosResult.status === "ok" ? mensajerosResult.mensajeros : [];
+  // FEATURE 271 (T9.5, R32): de esos mensajeros, los que la asignación va a rechazar por su
+  // cierre. Viene de la MISMA lectura que la lista, así que las dos no pueden discrepar. Con la
+  // acción degradada la lista ya viene vacía y no hay a quién marcar.
+  const mensajerosBloqueadosIds =
+    mensajerosResult.status === "ok" ? (mensajerosResult.bloqueadosIds ?? []) : [];
 
   // Feature 41 (R22): flag DERIVADO server-side del bloqueo de la bodega satélite
   // (regla estricta R17). Si la acción degrada (forbidden/unauthenticated), se pasa
@@ -120,6 +125,7 @@ export default async function RecepcionSatelitePage() {
         zonaNombre={result.zonaNombre}
         sinZona={result.sinZona}
         mensajeros={mensajeros}
+        mensajerosBloqueadosIds={mensajerosBloqueadosIds}
         bloqueoBodega={bloqueoBodega}
         liberadasHoy={liberadasHoy}
         fechasDiaReparto={fechasDiaReparto}

@@ -16,6 +16,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { calcularSplitPago } from "@/lib/utils/cuenta-por-pagar";
 import { derivarPendienteCierre } from "@/lib/utils/pendiente-cierre";
 import { conPagos } from "@/tests/fixtures/cierre-pagos";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 /**
  * Feature 212 (T12, R29) — la `E` del `min(P, E)` con un cierre MIXTO.
@@ -82,11 +83,9 @@ function fakeRepo(gestiones: CierreGestionPendienteRow[]) {
   const repo: ICierreDiaRepository = {
     findGestionesPendientes: vi.fn(async () => gestiones),
     contarOrdenesPendientesGestion: vi.fn(async () => 0),
-    existeCierreSolicitado: vi.fn(async () => false),
-    existeCierreVencido: vi.fn(async () => false),
-    transicionarVencidoASolicitado: vi.fn(async () => true),
-    existeCierreRechazado: vi.fn(async () => false),
-    transicionarRechazadoASolicitado: vi.fn(async () => true),
+    // FEATURE 271 (R18): un solo metodo, y elige por EDAD. `null` = nada que re-solicitar.
+    findCierreResolicitableMasViejo: vi.fn(async () => null),
+    transicionarASolicitado: vi.fn(async () => true),
     crearCierre,
     findCierresByMensajero: vi.fn(async () => []),
     findCierrePropioConGestiones: vi.fn(async () => null),
@@ -106,7 +105,7 @@ function newService(repo: ICierreDiaRepository) {
     findUsuarioZonaId: vi.fn(async () => "z-cartago"),
     findUsuarioVehiculoId: vi.fn(async () => null),
     findEstatusIdByValue: vi.fn(async () => "s-reparto"),
-    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   } as unknown as IOrdenRepository;
   const tarifaZonaRepo: ITarifaZonaMensajeroRepository = {
     resolvePagoTarifa: vi.fn(async () => TARIFA),

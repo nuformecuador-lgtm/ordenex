@@ -50,7 +50,8 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
   it("listarMensajerosParaAsignacion", async () => {
     const ordenRepo = {
       findMensajerosByZona: vi.fn(),
-      findMensajerosConOrdenesEn: vi.fn(), // feature 157
+      findMensajerosConOrdenesEn: vi.fn(),
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32 // feature 157
 
     };
     const zonaRepo = { findCentralZonaId: vi.fn() };
@@ -240,21 +241,22 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosByZona,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
     });
 
-    // ⚠️ FEATURE 241 (2026-08-20) — ESTE `toEqual` LLEVABA `bloqueadosIds: ["m2"]`, y era el
-    // CONTRATO: afirmaba que la accion marcaba en el selector a quien arrastrara un cierre. Se
-    // quita a proposito, no por conveniencia. Asignar no se bloquea por cierres (regla 2 firmada),
-    // la pantalla ya ignoraba el dato desde el 2026-08-18, y seguir calculandolo era una consulta
-    // a `cierre_dia` por cada carga del listado cuyo unico destino posible era volver a bloquear.
+    // ⚠️ ESTE `toEqual` SE DIO LA VUELTA DOS VECES, Y LAS DOS ERA EL CONTRATO.
     //
-    // Sigue siendo un LITERAL exhaustivo a proposito: si alguien vuelve a emitir `bloqueadosIds`,
-    // este `toEqual` se pone rojo. Y no puede hacerlo por descuido — el predicado ya no figura en
-    // el `Pick<IOrdenRepository, ...>` de `ListarMensajerosDeps`, asi que la accion NO PUEDE
-    // llamarlo sin que alguien lo vuelva a declarar con su nombre "ParaGestion" delante.
+    //   · Hasta el 2026-08-20 llevaba `bloqueadosIds: ["m2"]`: la accion marcaba en el selector a
+    //     quien arrastrara un cierre. La 241 lo quito con la regla 2 firmada (asignar exento).
+    //   · FEATURE 271 (2026-08-23, R32): VUELVE. El humano revirtio esa mitad —recibir trabajo
+    //     nuevo se bloquea, reparto Y recoleccion—, asi que el selector tiene que marcar
+    //     EXACTAMENTE a quien el servidor va a rechazar. Ni uno mas, ni uno menos.
+    //
+    // Sigue siendo un LITERAL exhaustivo a proposito: si el campo dejara de emitirse, o apareciera
+    // uno nuevo sin declarar, este `toEqual` se pone rojo.
     expect(r).toEqual({
       status: "ok",
       mensajeros: [
@@ -266,8 +268,38 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       // carga de trabajo, no de cierres.
       conRepartoIds: [],
       conRecoleccionIds: [],
+      // Feature 271/R32: el doble no bloquea a nadie, asi que la lista viaja vacia — pero VIAJA.
+      bloqueadosIds: [],
     });
     expect(findMensajerosByZona).toHaveBeenCalledWith("z-gam"); // R5: filtrado por zona GAM
+  });
+
+  it("271/R32: el selector marca a los BLOQUEADOS, que son los que el servidor va a rechazar", async () => {
+    // La propiedad que R32 exige es de IGUALDAD: el conjunto que viaja aqui tiene que ser el mismo
+    // que rechazan `asignarDesdeBodega` y `asignarRecoleccion`. Aqui se mide que el dato VIAJA y
+    // que sale del MISMO predicado; el cruce con las dos escrituras vive en
+    // `tests/unit/services/cierre-bloqueo-superficies.test.ts`, con el repositorio real detras.
+    const findCentralZonaId = vi.fn().mockResolvedValue("z-gam");
+    const findMensajerosByZona = vi.fn().mockResolvedValue([
+      { id: "m1", nombre: "Ana" },
+      { id: "m2", nombre: "Beto" },
+    ]);
+    const findMensajerosBloqueadosPorCierres = vi.fn(async () => new Set(["m2"]));
+
+    const r = await listarMensajerosParaAsignacion({
+      ordenRepo: {
+        findMensajerosByZona,
+        findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+        findMensajerosBloqueadosPorCierres,
+      },
+      zonaRepo: { findCentralZonaId },
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r).toMatchObject({ status: "ok", bloqueadosIds: ["m2"] });
+    // Se pregunta por TODOS los de la zona, en UNA sola llamada (sin N+1 por mensajero).
+    expect(findMensajerosBloqueadosPorCierres).toHaveBeenCalledTimes(1);
+    expect(findMensajerosBloqueadosPorCierres).toHaveBeenCalledWith(["m1", "m2"]);
   });
 
   // ===============================================================================================
@@ -294,6 +326,8 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       ordenRepo: {
         findMensajerosByZona,
         findMensajerosConOrdenesEn,
+        // Feature 271/R32: el selector marca a los que el servidor va a rechazar.
+        findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -322,6 +356,8 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       ordenRepo: {
         findMensajerosByZona,
         findMensajerosConOrdenesEn,
+        // Feature 271/R32: el selector marca a los que el servidor va a rechazar.
+        findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -338,6 +374,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosByZona,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -355,6 +392,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosByZona,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(ADMIN),
@@ -371,6 +409,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosByZona,
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
+      findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),

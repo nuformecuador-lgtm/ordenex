@@ -4,6 +4,7 @@ import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import { RecogerModule } from "../_components/RecogerModule";
 
@@ -24,18 +25,20 @@ export default async function RecogerPage() {
   const result = await listarMisAsignaciones();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
 
-  // Feature 111/R12/R14: con el mensajero BLOQUEADO el módulo muestra el aviso y oculta
-  // los controles de recogida (defensa suave; el backend R1/R4 rechaza igual). El listado
-  // sigue visible en solo-visualización.
-  const bloqueo = await estadoBloqueoMensajero();
-  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
+  // Feature 111/R12/R14 -> FEATURE 271: el DETALLE del bloqueo, derivado server-side por la
+  // regla N/V. Con el mensajero BLOQUEADO el módulo muestra el aviso —que dice cuántos cierres
+  // arrastra y cuál toca primero— y oculta los controles de recogida (defensa suave; el backend
+  // R25 rechaza igual). El listado sigue visible en solo-visualización. Si la acción degrada,
+  // baja `SIN_BLOQUEO`: un fallo de lectura no deja al mensajero sin trabajar.
+  const estado = await estadoBloqueoMensajero();
+  const bloqueo = estado.status === "ok" ? estado.bloqueo : SIN_BLOQUEO;
 
   return (
     <AppPage
       title="Por recoger"
       description="Órdenes asignadas pendientes de recoger"
     >
-      <RecogerModule porRecoger={result.porRecoger} bloqueado={bloqueado} />
+      <RecogerModule porRecoger={result.porRecoger} bloqueo={bloqueo} />
     </AppPage>
   );
 }

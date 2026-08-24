@@ -163,6 +163,7 @@ import {
   CuentasPorPagarTable,
   PAGINACION_CUENTAS_LABEL,
 } from "@/app/(app)/wallet/mensajeros/_components/CuentasPorPagarTable";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // ---------------------------------------------------------------------------
 // EL CENSO: los 13 del Anexo III y los 3 del Anexo IV
@@ -825,9 +826,7 @@ describe("T M.1 · R53 — los 3 listados del Anexo IV siguen completos, sin con
         puedesSolicitar
         motivoBloqueo={null}
         cierresPasados={paginaInicial([])}
-        bloqueado={false}
-        tieneVencido={false}
-        tieneRechazado={false}
+        bloqueo={SIN_BLOQUEO}
       />,
     );
 

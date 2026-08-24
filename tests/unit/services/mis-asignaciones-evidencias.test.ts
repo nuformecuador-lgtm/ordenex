@@ -12,6 +12,7 @@ import type { ISignedUrlProvider } from "@/lib/interfaces/external/ISignedUrlPro
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 119 (R9/R10/R11/R13) — atomicidad Storage <-> DB de la evidencia MULTIPLE. La subida
 // es SECUENCIAL y acumula los paths en `uploaded`; ante cualquier fallo se compensa con
@@ -58,7 +59,7 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
   };
 }
 
-function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> {
+function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> {
   const ids: Record<string, string> = {
     en_reparto: "os-reparto",
     entregada: "os-entregada",
@@ -68,7 +69,7 @@ function fakeOrdenRepo(): Pick<IOrdenRepository, "findEstatusIdByValue" | "findM
   };
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ids[v] ?? null),
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   };
 }
 

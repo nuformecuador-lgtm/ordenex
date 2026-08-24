@@ -7,6 +7,7 @@ import CierreDiaPage from "@/app/(app)/cierre-dia/page";
 import type { CierreDetalleGestion } from "@/lib/interfaces/services/ICierreDiaService";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarCierreDia, estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 37 (T14, R1) — la página resuelve el rol SOLO server-side; rol ≠
 // mensajero (o sin sesión) → `notFound`. Se mockea el resolver, la action de
@@ -114,7 +115,7 @@ function gestionEntregada(): CierreDetalleGestion {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO });
   listarMock.mockResolvedValue(resultadoBase());
 });
 

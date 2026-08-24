@@ -1,5 +1,23 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { CierreEstado } from "@/lib/types/cierre";
+// Feature 271 — LA REGLA del bloqueo por cierres vive en un modulo PURO, no aqui: un solo
+// predicado leido por el servidor y por la pantalla (R10).
+import {
+  CIERRE_ESTADOS_ABIERTOS,
+  CIERRE_ESTADOS_RESOLICITABLES,
+  SIN_BLOQUEO,
+  SIN_CIERRES_ABIERTOS,
+  esCierreResolicitable,
+  estaBloqueadoPorCierres,
+  quienResuelve,
+  type BloqueoDetalle,
+  type CierreAResolver,
+  type ConteoCierresAbiertos,
+} from "@/lib/utils/bloqueo-cierre";
+// Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
+// de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
+import { derivarJornada } from "@/lib/utils/jornada-cierre";
+import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 import type { OrdenDTO, OrdenListItemDTO, OrdenListItemRelaciones } from "@/lib/types/orden";
 import type { TarifaDTO } from "@/lib/types/tarifa";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
@@ -288,45 +306,61 @@ type OrdenPrismaClient = Pick<
   | "$queryRaw" // feature 91: lo exige `JobRepository` (encolado outbox de geocodificacion)
 >;
 
-// Feature 41 (R12/R16/R17) + feature 109 (R29, modelo GLOBAL): un cierre esta ABIERTO mientras no
-// sea `aprobado`, que es el unico TERMINAL (dinero conciliado). `rechazado` dejo de ser terminal
-// por LOGICA (109): sigue abierto y es RE-SOLICITABLE (`rechazado -> solicitado`), igual que
-// `vencido`. Fuente de verdad en lib/types/cierre.ts.
-//
-// ⚠️ FEATURE 241 (2026-08-20) — «ABIERTO» YA NO ES «BLOQUEANTE». Esta lista quedo siendo lo que
-// siempre dijo su nombre: un dato INFORMATIVO (cuantos cierres arrastra una bodega). NO decide
-// ningun bloqueo; para eso esta `ESTADOS_CIERRE_BLOQUEAN_GESTION`, que es un subconjunto.
-const ESTADOS_CIERRE_ABIERTO: CierreEstado[] = ["solicitado", "vencido", "rechazado"];
+/**
+ * FEATURE 271 — LA REGLA VIGENTE, dictada por el humano el 2026-08-23. Sustituye a
+ * `ESTADOS_CIERRE_BLOQUEAN_GESTION`, que era una LISTA DE ESTADOS y ahora es un CONTEO.
+ *
+ * Con N = cierres del mensajero sin aprobar (`solicitado` + `vencido` + `rechazado`) y V = cuantos
+ * de esos son re-solicitables (`vencido` o `rechazado`):
+ *
+ *      LIBRE si N <= 1 Y V = 0. En cualquier otro caso BLOQUEADO.
+ *
+ * Son TRES cosas distintas, y ahora DOS de las tres pasan por aqui:
+ *
+ *  1. SOLICITAR CIERRE — ya NO es «nunca dos pendientes». El invariante 109/R30 queda DEROGADO
+ *     (271/R9): un mensajero LIBRE con un `solicitado` puede crear el segundo cierre. El gate de
+ *     `CierreDiaService.solicitarCierre` pasa a ser esta misma regla (271/R15), asi que SI
+ *     depende de este predicado — al contrario de lo que decia la 241.
+ *  2. RECIBIR TRABAJO NUEVO — SE BLOQUEA. ⚠️ ESTO REVIERTE la regla 2 de la feature 241
+ *     (la regla 2, que declaraba la asignacion exenta de todo bloqueo, firmada el 2026-08-20).
+ *     Y alcanza a las TRES
+ *     escrituras que ponen trabajo en la mano de un mensajero: reparto central
+ *     (`GuiaAsignacionService.asignarDesdeBodega`), reparto satelite
+ *     (`AsignacionSateliteService.asignar`) y RECOLECCION en tienda
+ *     (`GuiaAsignacionService.asignarRecoleccion`). Sin excepcion y sin asimetria — palabras del
+ *     humano el 2026-08-23: «un mensajero no puede hacer las dos gestiones, solo una a la vez».
+ *  3. GESTIONAR Y COBRAR (entregar, recoger, escoger, `deshacerGestion`, recoleccion en tienda) —
+ *     SE BLOQUEA, igual que antes pero con este predicado.
+ *
+ * QUE PARTE DE LA 241 SOBREVIVE, y no es un detalle: **un cierre `solicitado` a secas NO bloquea**
+ * (N=1, V=0 -> LIBRE). `solicitado` es ESPERA DEL ADMIN; el mensajero ya hizo lo suyo. Medido
+ * contra produccion el 2026-08-18, el retraso gestion->aprobacion tiene MEDIANA 8,2 h y P90 22,1 h:
+ * bloquearlo ahi lo castiga por una demora ajena. Lo que SI bloquea es acumular DOS (N>=2) o
+ * arrastrar uno re-solicitable (V>=1), que es la pelota en SU tejado.
+ *
+ * QUE PARTE SE REVIERTE: la de recibir. La 241 protegia la asimetria con el nombre del metodo
+ * («ParaGestion») y con su ausencia en los `Pick<IOrdenRepository, …>` de la asignacion. Resuelta
+ * Q1, la distincion desaparece: el predicado se llama `findMensajerosBloqueadosPorCierres` —dice
+ * POR QUE bloquea, no PARA QUE— y vuelve al `Pick` de los dos services de asignacion. Si alguien
+ * quiere volver a exceptuar una superficie, tendra que sacarlo de ese `Pick` **y** escribir por que.
+ *
+ * La regla en si vive en `lib/utils/bloqueo-cierre.ts` (modulo PURO): un solo predicado, leido por
+ * el servidor y por la pantalla, para que ninguna superficie lo re-derive (R10).
+ */
+const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
 
 /**
- * FEATURE 241 — LA REGLA, firmada por el humano el 2026-08-20. Lo unico que bloquea a un
- * mensajero, y solo para GESTIONAR Y COBRAR.
- *
- * Son TRES cosas distintas y solo dos se tocan aqui:
- *
- *  1. SOLICITAR CIERRE — nunca dos pendientes. Vive en `CierreDiaService.solicitarCierre` (R12) y
- *     NO pasa por este predicado. Sin relacion con esta lista.
- *  2. RECIBIR ASIGNACIONES — NUNCA se bloquea, sea cual sea el estado del cierre (pedido humano
- *     2026-08-18). Por eso ninguna superficie de asignacion consulta este predicado: no es que
- *     devuelva vacio, es que no se llama. Ver `GuiaAsignacionService`, `AsignacionSateliteService`
- *     y `lib/actions/ordenes-guia.ts`.
- *  3. GESTIONAR Y COBRAR (entregar, recoger, escoger, `deshacerGestion`, recoleccion en tienda) —
- *     SE BLOQUEA, y solo con estos dos estados.
- *
- * POR QUE `solicitado` NO ESTA, que es la mitad que se «arregla» sola por simetria: `solicitado`
- * es ESPERA DEL ADMIN. El mensajero ya hizo lo suyo —pidio el cierre— y la pelota esta en el otro
- * tejado. Medido contra produccion el 2026-08-18, el retraso gestion->aprobacion tiene MEDIANA
- * 8,2 h y P90 22,1 h: bloquearlo ahi lo castiga por una demora ajena y le impide trabajar hasta
- * media manana siguiente. `vencido` y `rechazado`, en cambio, son la pelota en SU tejado: hay algo
- * que solo el puede hacer (solicitar el vencido, re-solicitar el rechazado) y hasta que no lo haga
- * el dinero que cobre no tiene cierre al que ir.
- *
- * ASI QUE LA ASIMETRIA ES DELIBERADA: recibir si, gestionar no, y `solicitado` nunca. Quien lea
- * esto y sienta la tentacion de «completar» la lista con `solicitado` esta deshaciendo la decision
- * firmada, no arreglando un olvido.
+ * FEATURE 271 (R11/R18/R57) — las CUATRO columnas con las que se arma un `CierreAResolver`. Una
+ * sola definicion para las DOS lecturas de `findBloqueoDetalle` (el abierto mas viejo y el
+ * re-solicitable mas viejo): si una seleccionara `created_at` y la otra no, la jornada de ese campo
+ * se derivaria con menos datos y saldria distinta para el mismo cierre.
  */
-const ESTADOS_CIERRE_BLOQUEAN_GESTION: CierreEstado[] = ["vencido", "rechazado"];
-const ESTADO_CIERRE_BODEGA_PENDIENTE: CierreEstado = "solicitado";
+const SELECT_CIERRE_A_RESOLVER = {
+  id: true,
+  estado: true,
+  solicitadoAt: true,
+  createdAt: true,
+} as const;
 
 // Feature 17/R3: nombre CONSTANTE del generador (nunca interpolar entrada de
 // usuario en el SQL crudo).
@@ -3178,57 +3212,177 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  // --- Feature 41 -> 241: bloqueo derivado para GESTIONAR (R12/R16/R17) ---
+  // --- Feature 41 -> 241 -> 271: el bloqueo derivado, que ahora es un CONTEO (R1-R12) ---
 
   /**
-   * R12/R16 + feature 241 (regla firmada 2026-08-20): de `ids`, los mensajeros que NO pueden
-   * gestionar ni cobrar porque arrastran AL MENOS UN cierre en `vencido` o `rechazado`.
+   * FEATURE 271 (T1.2, R1) — EL CONTADOR. De `ids`, cuantos cierres abiertos (N) tiene cada
+   * mensajero y cuantos de esos son re-solicitables (V).
    *
-   * EL NOMBRE LLEVA «PARA GESTION» A PROPOSITO. Este predicado se llamaba `findMensajerosBloqueadosParaGestion`
-   * y esa ambiguedad —bloqueado, ¿para que?— es la causa directa de la ficha 241: el 2026-08-18 se
-   * cambio «el bloqueo» creyendo que se tocaba solo la asignacion, y con el mismo gesto se apagaron
-   * `gestionar`/`recoger`/`escoger`, `deshacerGestion` y la recoleccion en tienda, que leian este
-   * mismo dato. Hoy la respuesta esta en el nombre, en cada uno de sus call sites: LO UNICO que este
-   * predicado bloquea es GESTIONAR Y COBRAR. RECIBIR ASIGNACIONES NO SE BLOQUEA NUNCA — y por eso
-   * ninguna superficie de asignacion lo llama (ni figura en sus `Pick<IOrdenRepository, ...>`).
+   * ES LA TRANSFORMACION de `findMensajerosConCierreAbierto`, que era `private` y devolvia un
+   * `Set<string>`, NO un predicado nuevo puesto a su lado. Hacerlo nuevo habria dejado dos formas
+   * de preguntar lo mismo, que es exactamente como el aviso de la UI y el servidor acabaron
+   * diciendo cosas distintas en el incidente del 2026-08-18.
    *
-   * Vuelve a ser «tiene ALGUNO», sin tope: entre el 2026-08-18 y hoy el corte era «mas de 1 cierre
-   * abierto» y el invariante 109/R30 —un mensajero NUNCA tiene 2 cierres abiertos a la vez— lo hacia
-   * INALCANZABLE. No era un umbral, era el predicado apagado. Con la regla nueva el tope sobra: lo
-   * que decide es QUE estados bloquean, no cuantos hay.
+   * UNA SOLA CONSULTA para el lote entero: `groupBy(["mensajeroId","estado"])` contra el indice
+   * `(mensajero_id, estado)` que existe desde la 41 (`schema.prisma`). De un grupo por estado salen
+   * N y V sin segunda ida a la base.
    *
-   * `distinct` sobre `mensajeroId` (interesa QUIEN, no cuantos) contra el indice `(mensajero_id,
-   * estado)`.
+   * Un mensajero SIN filas no aparece en el `Map`; el llamador lo lee como `{ n: 0, v: 0 }`
+   * (`SIN_CIERRES_ABIERTOS`). Eso es LIBRE, y es el caso 1 de la tabla de verdad.
    */
-  async findMensajerosBloqueadosParaGestion(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.cierreDia.findMany({
-      where: { mensajeroId: { in: ids }, estado: { in: ESTADOS_CIERRE_BLOQUEAN_GESTION } },
-      select: { mensajeroId: true },
-      distinct: ["mensajeroId"], // usa el indice (mensajero_id, estado)
+  async contarCierresAbiertosPorMensajero(
+    ids: string[],
+  ): Promise<Map<string, ConteoCierresAbiertos>> {
+    if (ids.length === 0) return new Map();
+    const grupos = await this.prisma.cierreDia.groupBy({
+      by: ["mensajeroId", "estado"],
+      where: {
+        mensajeroId: { in: ids },
+        // Los TRES abiertos. `aprobado` es el UNICO terminal y NO cuenta: meterlo aqui bloquearia
+        // para siempre a quien ya cerro bien (mutacion (a) de T10.1).
+        estado: { in: [...CIERRE_ESTADOS_ABIERTOS] },
+      },
+      _count: { _all: true },
     });
-    return new Set(rows.map((r) => r.mensajeroId));
+    const conteo = new Map<string, ConteoCierresAbiertos>();
+    for (const g of grupos) {
+      const previo = conteo.get(g.mensajeroId) ?? { n: 0, v: 0 };
+      const cuantos = g._count._all;
+      conteo.set(g.mensajeroId, {
+        n: previo.n + cuantos,
+        // V es un SUBCONJUNTO de N: `vencido` y `rechazado` suman a los dos.
+        v: previo.v + (esCierreResolicitable(g.estado) ? cuantos : 0),
+      });
+    }
+    return conteo;
   }
 
   /**
-   * Feature 241 — de `ids`, los mensajeros con AL MENOS UN cierre ABIERTO (los tres estados que no
-   * son `aprobado`). Es un dato INFORMATIVO y no bloquea nada: alimenta el aviso «tienes N cierres
-   * abiertos de tus mensajeros» de la bodega satelite, que sigue siendo cierto y util para quien
-   * cuadra caja.
+   * FEATURE 271 (T1.3, R3/R10) — de `ids`, los BLOQUEADOS. Es el RENOMBRADO de
+   * `findMensajerosBloqueadosPorCierres`, y el renombrado NO es cosmetico.
    *
-   * Va SEPARADO de `findMensajerosBloqueadosParaGestion` porque son dos preguntas distintas y desde
-   * la 241 tienen dos respuestas distintas. Compartirlas fue lo que dejo el aviso de la UI diciendo
-   * una cosa y el servidor haciendo otra. Privado: nadie fuera del repositorio necesita esta
-   * distincion, y exponerla invitaria a usarla como bloqueo.
+   * El nombre viejo decia PARA QUE bloqueaba, y esa era su virtud en la feature 241: un service de
+   * asignacion no podia llamarlo sin escribir «ParaGestion» en una accion que no gestiona. Ese
+   * alcance CAMBIO el 2026-08-23 (Q1): ahora bloquea TODO —gestionar, cobrar y recibir trabajo
+   * nuevo, reparto Y recoleccion—, asi que el nombre nuevo dice POR QUE bloquea. Dejar el viejo
+   * mientras la asignacion lo consulta seria exactamente la incoherencia que la 241 persiguio.
+   *
+   * La regla vive en `estaBloqueadoPorCierres` (modulo puro) y NO se re-escribe aqui: un solo
+   * predicado, todas las superficies (R10).
    */
-  private async findMensajerosConCierreAbierto(ids: string[]): Promise<Set<string>> {
-    if (ids.length === 0) return new Set();
-    const rows = await this.prisma.cierreDia.findMany({
-      where: { mensajeroId: { in: ids }, estado: { in: ESTADOS_CIERRE_ABIERTO } },
-      select: { mensajeroId: true },
-      distinct: ["mensajeroId"],
+  async findMensajerosBloqueadosPorCierres(ids: string[]): Promise<Set<string>> {
+    const conteo = await this.contarCierresAbiertosPorMensajero(ids);
+    const bloqueados = new Set<string>();
+    for (const [mensajeroId, c] of conteo) {
+      if (estaBloqueadoPorCierres(c)) bloqueados.add(mensajeroId);
+    }
+    return bloqueados;
+  }
+
+  /**
+   * FEATURE 271 (T1.4, R11/R43/R57) — el DETALLE de UN mensajero: cuantos cierres arrastra, cuantos
+   * puede reenviar el mismo, y CUAL toca resolver primero (con la fecha de su JORNADA, no la de su
+   * nacimiento). Alimenta el aviso de la campana, el motivo del `conflict` y la pantalla, para que
+   * los tres digan lo mismo.
+   *
+   * «EL QUE TOCA RESOLVER» ES EL MAS VIEJO (R11): `solicitado_at` ASC, y el desempate por `id` ASC
+   * NO es paranoia. El corte crea cierres en bucle dentro del mismo segundo y `solicitado_at` tiene
+   * `@default(now())` por fila, pero la resolucion puede repetirse; un orden inestable haria que
+   * «el que toca resolver» cambiara entre dos cargas de la misma pantalla.
+   *
+   * LA JORNADA SE DERIVA, no se lee de una columna (no existe): fecha CR de las gestiones
+   * VINCULADAS y no anuladas; si no hay ninguna gestion, `created_at` en CR MENOS UN DIA. Todo eso
+   * lo decide `derivarJornada` (`lib/utils/jornada-cierre.ts`), que es el UNICO derivador (R61);
+   * aqui solo se leen las fechas y se convierten a dia de Costa Rica.
+   *
+   * ⚠️ Y SALEN **DOS** CIERRES, NO UNO (2026-08-23, hueco que encontro la pasada de frontend). El
+   * mas viejo (`aResolverPrimero`) responde «que se resuelve primero»; el RE-SOLICITABLE mas viejo
+   * (`aReenviarPrimero`) responde «que puede tocar EL». En el caso 6 de la tabla de verdad —el
+   * caso 5 que dicto el humano: solicito el primero y dejo vencer el segundo, `N=2, V=1`— NO SON
+   * EL MISMO, y con solo el primero la pantalla le dice «espera a la bodega» y le esconde el boton
+   * de reenviar el segundo, que `solicitarCierre` SI le permite (R16/R18). Ver `BloqueoDetalle`.
+   */
+  async findBloqueoDetalle(mensajeroId: string): Promise<BloqueoDetalle> {
+    const conteo =
+      (await this.contarCierresAbiertosPorMensajero([mensajeroId])).get(mensajeroId) ??
+      SIN_CIERRES_ABIERTOS;
+    if (conteo.n === 0) return SIN_BLOQUEO;
+
+    const masViejo = await this.prisma.cierreDia.findFirst({
+      where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_ABIERTOS] } },
+      // R11: el MAS VIEJO, con desempate ESTABLE.
+      orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+      select: SELECT_CIERRE_A_RESOLVER,
     });
-    return new Set(rows.map((r) => r.mensajeroId));
+    if (masViejo === null) return SIN_BLOQUEO; // carrera: se resolvieron entre las dos consultas
+
+    // R18 — EL RE-SOLICITABLE MAS VIEJO. Tres ramas, y ninguna es de adorno:
+    //   · `V = 0`: no hay ninguno que el pueda tocar. `null`, y SIN segunda consulta (este metodo
+    //     corre en cada carga de las pantallas del mensajero; el caso normal es `N=1, V=0`).
+    //   · el mas viejo YA es re-solicitable (casos 5 y 7): entonces ES el re-solicitable mas
+    //     viejo —los re-solicitables son un SUBCONJUNTO de los abiertos y el orden es el mismo—,
+    //     asi que se reusa la fila y tampoco hay segunda consulta.
+    //   · el mas viejo es un `solicitado` y ademas hay re-solicitables (CASO 6): SOLO aqui se
+    //     vuelve a la base, con el MISMO `ORDER BY` que `findCierreResolicitableMasViejo`
+    //     (`CierreDiaRepository`), que es el que la re-solicitud mueve de verdad. Que los dos
+    //     elijan la MISMA fila no se supone: se afirma sobre Postgres sembrado en
+    //     `tests/integration/db/cierre-bloqueo-nv-sql-real.test.ts`.
+    const reenviable =
+      conteo.v === 0
+        ? null
+        : esCierreResolicitable(masViejo.estado)
+          ? masViejo
+          : await this.prisma.cierreDia.findFirst({
+              where: { mensajeroId, estado: { in: [...CIERRE_ESTADOS_RESOLICITABLES] } },
+              orderBy: [{ solicitadoAt: "asc" }, { id: "asc" }],
+              select: SELECT_CIERRE_A_RESOLVER,
+            });
+
+    const aResolverPrimero = await this.aCierreAResolver(masViejo);
+
+    return {
+      bloqueado: estaBloqueadoPorCierres(conteo),
+      cierresAbiertos: conteo.n,
+      cierresPorReenviar: conteo.v,
+      aResolverPrimero,
+      aReenviarPrimero:
+        reenviable === null
+          ? null
+          : reenviable.id === masViejo.id
+            ? // Mismo cierre: se reusa el objeto YA derivado. Volver a derivarlo abriria la puerta
+              // a que los dos campos nombraran jornadas distintas del MISMO cierre.
+              aResolverPrimero
+            : await this.aCierreAResolver(reenviable),
+    };
+  }
+
+  /**
+   * FEATURE 271 (R57/R61) — de una fila de `cierre_dia` al `CierreAResolver` que viaja a la
+   * pantalla, con su JORNADA derivada. Existe para que `aResolverPrimero` y `aReenviarPrimero`
+   * salgan del MISMO codigo: dos derivaciones de la misma jornada es como se desincronizan.
+   */
+  private async aCierreAResolver(fila: {
+    id: string;
+    estado: CierreEstado;
+    solicitadoAt: Date;
+    createdAt: Date;
+  }): Promise<CierreAResolver> {
+    // R57: las gestiones VINCULADAS y NO anuladas de ESE cierre. `anulada_at IS NULL` no es
+    // cosmetica: una gestion deshecha no es jornada trabajada que nombrar.
+    const gestiones = await this.prisma.gestionOrden.findMany({
+      where: { cierreId: fila.id, anuladaAt: null },
+      select: { createdAt: true },
+    });
+    return {
+      cierreId: fila.id,
+      estado: fila.estado,
+      solicitadoAt: fila.solicitadoAt.toISOString(),
+      jornadaCR: derivarJornada({
+        diasCRDeGestiones: gestiones.map((g) => fechaCalendarioCR(g.createdAt)),
+        diaCRDeCreacion: fechaCalendarioCR(fila.createdAt),
+      }),
+      resuelve: quienResuelve(fila.estado),
+    };
   }
 
   /**
@@ -3261,12 +3415,13 @@ export class OrdenRepository implements IOrdenRepository {
   }
 
   /**
-   * Zonas (central y satelite) con AL MENOS 1 mensajero BLOQUEADO PARA GESTIONAR — mismo criterio
-   * que `findMensajerosBloqueadosParaGestion`, escrito como un `some` sobre la relacion.
+   * Zonas (central y satelite) con AL MENOS 1 mensajero BLOQUEADO — mismo criterio que
+   * `findMensajerosBloqueadosPorCierres`.
    *
-   * Feature 241: vuelve a UNA consulta. Entre el 2026-08-18 y hoy delegaba en el predicado tras un
-   * pre-filtro porque el criterio («mas de N cierres abiertos») no era expresable como un `some`;
-   * quitado el tope, «tiene alguno de los que bloquean» SI lo es, y la segunda consulta sobraba.
+   * ⚠️ FEATURE 271: DEJA DE SER UNA CONSULTA. Con la regla de la 241 («tiene alguno de estos dos
+   * estados») el criterio era expresable como un `some` sobre la relacion; con la regla nueva es un
+   * CONTEO (`N >= 2 o V >= 1`) y `some` no sabe contar. Vuelve al patron de pre-filtro + predicado,
+   * que es lo que ya hubo entre el 2026-08-18 y el 2026-08-20 por esta misma razon.
    *
    * ⚠️ SIN CONSUMIDOR DE PRODUCCION desde el 2026-08-18, cuando el commit `6a0e6d36` borro la
    * server action `listarZonasBloqueadasPorCierre` que era su unica llamadora (investigacion 241
@@ -3277,16 +3432,23 @@ export class OrdenRepository implements IOrdenRepository {
    * `cierre_dia.destino_zona_id`, que es un snapshot del momento de la solicitud.
    */
   async findZonasConMensajeroBloqueado(): Promise<Set<string>> {
-    const rows = await this.prisma.usuario.findMany({
+    const mensajeros = await this.prisma.usuario.findMany({
       where: {
         rol: { value: "mensajero" },
         zonaId: { not: null },
-        cierresRealizados: { some: { estado: { in: ESTADOS_CIERRE_BLOQUEAN_GESTION } } },
+        // Pre-filtro barato: quien no tiene NI UN cierre abierto no puede estar bloqueado.
+        cierresRealizados: { some: { estado: { in: [...CIERRE_ESTADOS_ABIERTOS] } } },
       },
-      select: { zonaId: true },
-      distinct: ["zonaId"],
+      select: { id: true, zonaId: true },
     });
-    return new Set(rows.map((r) => r.zonaId).filter((id): id is string => id !== null));
+    if (mensajeros.length === 0) return new Set();
+    const bloqueados = await this.findMensajerosBloqueadosPorCierres(mensajeros.map((m) => m.id));
+    return new Set(
+      mensajeros
+        .filter((m) => bloqueados.has(m.id))
+        .map((m) => m.zonaId)
+        .filter((id): id is string => id !== null),
+    );
   }
 
   /**
@@ -3294,22 +3456,21 @@ export class OrdenRepository implements IOrdenRepository {
    * el cierre de la BODEGA, no el de un mensajero, y nadie lo ha tocado.
    *
    * La causa (i) —«algun mensajero de la zona tiene un cierre abierto»— SIGUE RETIRADA, y la
-   * feature 241 la deja retirada A PROPOSITO, no por inercia: es la regla 2 (recibir asignaciones
-   * no se bloquea nunca) y ademas era la mas desproporcionada de todas, porque congelaba la bodega
-   * ENTERA —companeros sin ningun cierre incluidos— por el cierre de una sola persona
-   * (investigacion 241 §5).
+   * FEATURE 271 la deja retirada A PROPOSITO aunque revierta lo de recibir trabajo nuevo (R34):
+   * esta ficha bloquea AL MENSAJERO, no a la bodega. Congelar la bodega entera —companeros sin
+   * ningun cierre incluidos— por el cierre de una sola persona era la parte desproporcionada
+   * (investigacion 241 §5), y sigue sin volver. Lo que ahora viaja es la LISTA de quienes estan
+   * bloqueados, para que el selector deshabilite exactamente a esos y a nadie mas (R32).
    *
-   * Los campos informativos (`porMensajeros`/`cierresAbiertos`/`totalMensajeros`/
-   * `mensajerosConCierreIds`) se calculan con `findMensajerosConCierreAbierto` — los TRES estados
-   * abiertos, `solicitado` incluido— y NO con el predicado de bloqueo. Son dos preguntas distintas:
-   * el aviso de la UI dice «tienes N cierres abiertos de tus mensajeros» y eso debe seguir contando
-   * los `solicitado`, que son abiertos aunque no bloqueen nada.
+   * `cierresAbiertos` CONSERVA SU SIGNIFICADO (mensajeros con `N >= 1`, `solicitado` incluido):
+   * es el aviso «tienes N cierres abiertos de tus mensajeros», que sigue siendo cierto y util para
+   * quien cuadra caja, y es OTRA pregunta distinta de «quien esta bloqueado».
    *
    * OJO al nombre heredado: `cierresAbiertos` NO cuenta cierres, cuenta MENSAJEROS con alguno.
    */
   async existeBodegaSateliteBloqueada(zonaId: string): Promise<BodegaBloqueoResult> {
     const [mensajerosZona, countCierreBodega] = await Promise.all([
-      // Mensajeros de la zona (universo del que basta 1 bloqueado para bloquear).
+      // Mensajeros de la zona (universo del que sale el aviso y la lista de bloqueados).
       this.prisma.usuario.findMany({
         where: { rol: { value: "mensajero" }, zonaId },
         select: { id: true },
@@ -3321,20 +3482,27 @@ export class OrdenRepository implements IOrdenRepository {
       }),
     ]);
     const idsZona = mensajerosZona.map((m) => m.id);
-    const conCierreAbierto = await this.findMensajerosConCierreAbierto(idsZona);
+    // FEATURE 271 (T1.5): UNA sola consulta da las dos respuestas. `conCierreAbierto` = N >= 1
+    // (informativo, nombre heredado); `bloqueados` = la regla N/V (R34/R32).
+    const conteo = await this.contarCierresAbiertosPorMensajero(idsZona);
+    const conCierreAbierto = [...conteo.keys()];
+    const mensajerosBloqueadosIds = [...conteo]
+      .filter(([, c]) => estaBloqueadoPorCierres(c))
+      .map(([id]) => id);
     const totalMensajeros = idsZona.length;
-    const cierresAbiertos = conCierreAbierto.size;
+    const cierresAbiertos = conCierreAbierto.length;
     const porCierreBodega = countCierreBodega > 0;
     const porMensajeros = cierresAbiertos > 0;
     return {
-      // Feature 241: la causa (i) NO entra. `porMensajeros` viaja al borde como AVISO, no como
-      // veto: la pantalla puede decir cuantos cierres hay abiertos y seguir dejando asignar.
+      // La causa (i) NO entra (R34). `porMensajeros` viaja al borde como AVISO, no como veto: la
+      // bodega sigue asignando a sus companeros libres.
       bloqueada: porCierreBodega,
       porMensajeros,
       porCierreBodega,
       cierresAbiertos,
       totalMensajeros,
-      mensajerosConCierreIds: [...conCierreAbierto],
+      mensajerosConCierreIds: conCierreAbierto,
+      mensajerosBloqueadosIds,
     };
   }
 

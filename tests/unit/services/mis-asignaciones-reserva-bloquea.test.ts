@@ -15,6 +15,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
 import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 /**
  * FEATURE 261 (B10) — LA RESERVA BLOQUEA TAMBIEN AL MENSAJERO. R1-R10, R15, R27.
@@ -132,11 +133,11 @@ function fakeSignedUrls(): ISignedUrlProvider {
 
 function fakeOrdenRepo(): Pick<
   IOrdenRepository,
-  "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+  "findEstatusIdByValue" | "findBloqueoDetalle"
 > {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   };
 }
 

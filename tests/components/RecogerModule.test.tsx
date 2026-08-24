@@ -6,6 +6,14 @@ import userEvent from "@testing-library/user-event";
 import { RecogerModule } from "@/app/(app)/mis-asignaciones/_components/RecogerModule";
 import { recogerAsignaciones } from "@/lib/actions/mis-asignaciones";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
+import {
+  bloqueoConVencido,
+  bloqueoDe,
+  bloqueoMixtoElMasViejoEsSuyo,
+  bloqueoPorAcumular,
+  bloqueoTodosPorEnviar,
+} from "@/tests/fixtures/bloqueo-cierre";
 
 // 2026-07-31 (decisión del humano) — pantalla POR RECOGER del mensajero. Es la mitad que
 // salió de `MisAsignacionesModule` (hoy `RepartoModule`), donde el escáner quedaba
@@ -89,7 +97,7 @@ function renderModule(props?: Partial<Parameters<typeof RecogerModule>[0]>) {
   return render(
     <RecogerModule
       porRecoger={props?.porRecoger ?? []}
-      bloqueado={props?.bloqueado ?? false}
+      bloqueo={props?.bloqueo ?? SIN_BLOQUEO}
     />,
   );
 }
@@ -364,23 +372,126 @@ describe("RecogerModule — las dos vías de recogida (feature 96)", () => {
   });
 });
 
-describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
-  it("R12: bloqueado muestra el aviso de bloqueo total", () => {
+// =================================================================================================
+// Feature 111 -> FEATURE 271 (T9.2, R43/R46/R51/R52) — EL AVISO DEL BLOQUEO, PALABRA POR PALABRA.
+// =================================================================================================
+//
+// ⚠️ LOS LITERALES VAN ESCRITOS A MANO Y COMPLETOS. NUNCA `toHaveTextContent(avisoBloqueo(d))`:
+// un texto comparado contra la función que lo genera está SIEMPRE VERDE —pasa aunque la función
+// devuelva basura— y este repo ya lo ha pagado. Son los que el humano aprobó el 2026-08-23
+// (§10.2), en su variante de PORTAL: la única diferencia con «Cierre del día» es el puntero final.
+//
+// ⚠️ Y LO QUE YA NO DICEN: «Sí puedes seguir recibiendo asignaciones» y «Sí puedes seguir
+// recogiendo en tiendas». Las dos eran ciertas hasta el 2026-08-22 y son FALSAS desde el 23 —un
+// mensajero bloqueado tampoco recibe trabajo nuevo, ni reparto ni recolección—. La aserción
+// negativa del final es lo que impide reponerlas «para suavizar el mensaje».
+describe("RecogerModule — bloqueo del mensajero (feature 111 -> 271)", () => {
+  it("271/§10.2 caso 2 · un cierre esperando a que él lo reenvíe (N=1, V=1)", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porRecoger: [makeAsignacion({ id: "r1" })],
     });
 
-    expect(
-      screen.getByText(
-        /no puedes gestionar entregas ni cobrar hasta resolver tu cierre/i,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes un cierre sin enviar a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Ve a «Cierre del día» para enviarlo a aprobación.",
+    );
+  });
+
+  it("271/§10.2 caso 1 · bloqueado por ACUMULAR (N=2, V=0), con la fecha de la JORNADA", () => {
+    renderModule({
+      bloqueo: bloqueoPorAcumular("2026-08-21"),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    // La fecha es la de la jornada que el mensajero trabajó (21), no la del nacimiento del
+    // cierre (22): un cierre vencido nace fechado un día por delante.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo, el del 21 de agosto.",
+    );
+  });
+
+  it("271/§10.2 caso 3 · las DOS cosas a la vez (N=2, V=1)", () => {
+    // ⚠️ EL PUNTERO VA SIN OBJETO desde el 2026-08-23 (corrección aprobada por el humano tras
+    // mirar la app): «...para enviarLO» colgaba de «el más antiguo», el cierre que resuelve la
+    // BODEGA. La frase anterior ya dice qué enviar; el caso 2 conserva su «para enviarlo».
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta y espera a que la bodega apruebe el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con el MÁS VIEJO SUYO · la fecha es la del que él envía", () => {
+    // ⚠️ LA CUARTA RAMA (aprobada el 2026-08-23, y el estado se midió en el navegador): el admin
+    // rechazó el PRIMERO de sus dos `solicitado`, así que el cierre más viejo es SUYO. Antes decía
+    // «espera a que la bodega apruebe el más antiguo» fechando su propio cierre — le mandaba a
+    // esperar por el mismo que el botón le ofrece reenviar. Ahora la fecha nombra el que ÉL envía y
+    // la espera se corre al RESTO.
+    renderModule({
+      bloqueo: bloqueoMixtoElMasViejoEsSuyo({ jornadaCR: "2026-08-20" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y 1 de ellos no se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envía el que falta, el del 20 de agosto, y después espera a que la bodega apruebe el resto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/§10.2 caso 3 con V = N · TODO en su tejado: ni singular ni esperar a la bodega", () => {
+    // Dos `rechazado`: no queda ningún `solicitado`, así que la bodega no tiene nada que aprobar
+    // y el plural del envío es real. Hasta el 2026-08-23 este estado leía el texto de arriba.
+    renderModule({
+      bloqueo: bloqueoTodosPorEnviar(2, "2026-08-21"),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres sin resolver y ninguno se ha enviado a aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Envíalos a aprobación, empezando por el más antiguo, el del 21 de agosto. Ve a «Cierre del día».",
+    );
+  });
+
+  it("271/R60 · sin jornada fiable la fecha DESAPARECE entera y el resto se lee igual", () => {
+    renderModule({
+      bloqueo: bloqueoPorAcumular(null),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tienes 2 cierres esperando aprobación. Mientras tanto no puedes entregar, cobrar ni recibir trabajo nuevo. Se desbloquea cuando la bodega apruebe el más antiguo.",
+    );
+  });
+
+  it("271/R51 · el aviso NO promete recibir asignaciones ni recoger en tiendas", () => {
+    renderModule({
+      bloqueo: bloqueoDe({ n: 2, v: 1, jornadaCR: "2026-08-21" }),
+      porRecoger: [makeAsignacion({ id: "r1" })],
+    });
+
+    const aviso = screen.getByRole("alert");
+    expect(aviso).not.toHaveTextContent(/seguir recibiendo asignaciones/i);
+    expect(aviso).not.toHaveTextContent(/seguir recogiendo en tiendas/i);
+    expect(aviso).not.toHaveTextContent(/sí puedes/i);
+  });
+
+  it("271/R5 · un solo cierre YA enviado (N=1, V=0) NO bloquea: ni aviso ni controles apagados", () => {
+    // La mitad de la regla del 2026-08-20 que la 271 CONSERVA: ese mensajero ya hizo lo suyo y
+    // espera al administrador (mediana 8,2 h medida contra producción). Castigarlo por una
+    // demora ajena era la mitad equivocada.
+    renderModule({
+      bloqueo: bloqueoDe({ n: 1, v: 0 }),
+      porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(accesoRecogida()).toBeInTheDocument();
   });
 
   it("R14: bloqueado oculta los controles de recoger (input + escáner) y deja el listado", () => {
     renderModule({
-      bloqueado: true,
+      bloqueo: bloqueoConVencido(),
       porRecoger: [makeAsignacion({ id: "r1", numGuia: 1001 })],
     });
 
@@ -397,7 +508,7 @@ describe("RecogerModule — bloqueo del mensajero (feature 111)", () => {
     renderModule({ porRecoger: [makeAsignacion({ id: "r1" })] });
 
     expect(
-      screen.queryByText(/no puedes gestionar entregas ni cobrar/i),
+      screen.queryByText(/no puedes entregar, cobrar ni recibir trabajo nuevo/i),
     ).not.toBeInTheDocument();
   });
 });

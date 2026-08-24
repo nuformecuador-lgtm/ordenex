@@ -13,6 +13,7 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { GestionarInput } from "@/lib/interfaces/services/IMisAsignacionesService";
 import type { LineaPago } from "@/lib/utils/pagos-recaudo";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 212 (T7 · R18/R19) — el SERVICE es la SEGUNDA barrera del desglose, independiente del
 // borde zod y con aritmetica `Prisma.Decimal`. Dobles del repo/storage (nada de DB): lo que se
@@ -65,9 +66,9 @@ function fakeRepo(overrides: Partial<IGestionOrdenRepository> = {}): IGestionOrd
 }
 
 function newService(repo: IGestionOrdenRepository) {
-  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"> = {
+  const ordenRepo: Pick<IOrdenRepository, "findEstatusIdByValue" | "findBloqueoDetalle"> = {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
-    findMensajerosBloqueadosParaGestion: vi.fn(async (): Promise<Set<string>> => new Set()),
+    findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
   };
   const storage: IFileStorage = {
     upload: vi.fn(async (input: { path: string }) => input.path),

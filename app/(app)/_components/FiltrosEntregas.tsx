@@ -67,6 +67,15 @@ async function catalogoFetcher(): Promise<CatalogoFiltrosOrdenesDTO | null> {
  * Los mensajeros que ofrece el filtro. Misma accion y misma clave SWR que usan los
  * modales de asignacion de ordenes, para no montar una segunda lista que pueda
  * discrepar de aquella (y para reaprovechar su cache si ya esta pedida).
+ *
+ * ⚠️ FEATURE 271 (T9.4, R33) — LA MISMA ACCION TRAE `bloqueadosIds` Y AQUI NO SE LEE. ES
+ * DELIBERADO, NO UN OLVIDO, y queda escrito porque es exactamente lo que el proximo lector va a
+ * «arreglar» al ver que los dos modales de asignacion si lo aplican.
+ *
+ * FILTRAR NO ES ASIGNAR. Deshabilitar aqui a un mensajero bloqueado volveria INALCANZABLES las
+ * ordenes que ya tiene en la mano: son las suyas, alguien tiene que poder buscarlas, y son
+ * justamente las que hay que mirar cuando esta bloqueado. El bloqueo prohibe DARLE trabajo nuevo,
+ * no VER el que lleva.
  */
 async function mensajerosFetcher(): Promise<MensajeroLiteDTO[]> {
   const res = await listarMensajerosParaAsignacion();

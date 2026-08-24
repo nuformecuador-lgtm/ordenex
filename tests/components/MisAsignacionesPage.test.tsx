@@ -9,6 +9,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarMisAsignaciones } from "@/lib/actions/mis-asignaciones";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
 import type { RolValue } from "@prisma/client";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 36 (T14) — las páginas del portal del mensajero resuelven el rol SOLO
 // server-side; rol ≠ mensajero (o sin sesión) → `notFound`. Se mockean el resolver, la
@@ -82,7 +83,7 @@ const OTROS_ROLES: RolValue[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  bloqueoMock.mockResolvedValue({ status: "ok", bloqueado: false });
+  bloqueoMock.mockResolvedValue({ status: "ok", bloqueo: SIN_BLOQUEO });
   listarMock.mockResolvedValue({
     status: "ok",
     porRecoger: [],

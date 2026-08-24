@@ -131,15 +131,22 @@ export type ListarMensajerosParaAsignacionResult =
       status: "ok";
       mensajeros: MensajeroLiteDTO[];
       /**
-       * ⚠️ FEATURE 241 (2026-08-20) — YA NO SE EMITE NUNCA. Traía los ids de mensajeros GAM con
-       * un cierre abierto para que el selector los deshabilitara; el 2026-08-18 la pantalla dejó
-       * de mirarlos y ahora la acción deja de calcularlos, porque asignar no se bloquea por
-       * cierres (regla 2) y un dato así solo invita a volver a bloquear.
+       * FEATURE 271 (R32, 2026-08-23) — VUELVE A EMITIRSE, y se aplica a los DOS modales.
        *
-       * Se conserva DECLARADO y opcional para no romper a `OrdenesListado.tsx`, que lo lee con
-       * `?? []`. Quitarlo del tipo toca la capa de UI y es de otra ficha. Nadie debe empezar a
-       * rellenarlo: si hace falta marcar a alguien en el selector, el motivo será otro
-       * (`conRepartoIds` / `conRecoleccionIds`, la regla de dedicación, que sí sigue viva).
+       * Son los ids de mensajeros que el servidor va a RECHAZAR al asignar, por la regla N/V
+       * (`N >= 2` o `V >= 1`). Entre el 2026-08-18 y el 2026-08-23 no viajaba: la regla 2 de la 241
+       * decía que asignar no se bloquea por cierres. El humano revirtió esa mitad, y el conjunto
+       * que viaja aquí tiene que ser EXACTAMENTE el que rechazan `asignarDesdeBodega` y
+       * `asignarRecoleccion` — ni uno más, ni uno menos.
+       *
+       * SE LLAMA `bloqueadosIds` Y NO `bloqueadosParaRepartoIds` a propósito: ya no hay dos
+       * respuestas, y un nombre que califica el alcance invita a preguntar cuál es el otro.
+       *
+       * ⚠️ EL **FILTRO** DEL LISTADO (`FiltrosEntregas.tsx`) NO DEBE LEERLO (R33): filtrar no es
+       * asignar, y esconder a un bloqueado del filtro volvería inalcanzables las órdenes que ya
+       * tiene en la mano.
+       *
+       * Opcional (aditivo) para no romper a los consumidores actuales; la acción lo emite SIEMPRE.
        */
       bloqueadosIds?: string[];
       /**
