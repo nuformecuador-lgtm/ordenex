@@ -2555,6 +2555,41 @@ describe("RepartoModule — orden reservada para mañana (feature 246)", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  // FEATURE 274 (R32, 2026-08-24) — NO-REGRESIÓN: la ficha que partió «Por recoger» en dos
+  // pestañas NO tocó Reparto. Se afirma aquí, en la pantalla que no debía cambiar, porque un
+  // «ya que estamos» que replicara las pestañas aquí abriría las cuatro decisiones que la 274 se
+  // pudo saltar por no tener KPIs, ni mapa, ni paradas, ni chat — y Reparto tiene las cuatro.
+  it("274/R32: Reparto no monta ningún grupo de pestañas y la orden reservada sigue en su listado", () => {
+    renderModule({
+      porGestionar: [
+        makeAsignacion({
+          id: "g1",
+          numRemision: "REM-MAN",
+          estatusValue: "en_reparto",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+        makeAsignacion({
+          id: "g2",
+          numRemision: "REM-HOY",
+          estatusValue: "en_reparto",
+          esParaManana: false,
+        }),
+      ],
+    });
+
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryByRole("tab", { name: /Para otro día/ })).toBeNull();
+
+    // Y las dos siguen en el MISMO listado, sin separar: aquí la reservada es una parada más.
+    const region = screen.getByRole("region", {
+      name: "En reparto / por gestionar",
+    });
+    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
+    expect(within(region).getByText(/REM-HOY/)).toBeInTheDocument();
+  });
 });
 
 // =================================================================================================

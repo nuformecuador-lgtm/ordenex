@@ -134,6 +134,35 @@ async function cambiarVista(
   await user.click(within(grupo).getByRole("button", { name: etiqueta }));
 }
 
+// ---------------------------------------------------------------------------
+// FEATURE 274 (2026-08-24) — LAS DOS PESTAÑAS.
+// ---------------------------------------------------------------------------
+// Los nombres van ESCRITOS A MANO en todos los ayudantes y en todas las aserciones, nunca
+// importando `PESTANA_PARA_RECOGER_HOY`/`PESTANA_PARA_OTRO_DIA`: una aserción contra su propia
+// fuente está siempre verde, y estos dos literales son la decisión más cara de deshacer de la
+// ficha (los firmó el humano el 2026-08-24). El prefijo con `^` es porque el conteo viaja en el
+// mismo nombre; los conteos exactos se afirman en sus tests propios.
+
+/** La pestaña del grupo de hoy, con el conteo que lleve. */
+function pestanaHoy(): HTMLElement {
+  return screen.getByRole("tab", { name: /^Para recoger hoy/ });
+}
+
+/** La pestaña del grupo de otro día, con el conteo que lleve. */
+function pestanaOtroDia(): HTMLElement {
+  return screen.getByRole("tab", { name: /^Para otro día/ });
+}
+
+/** El panel visible (sólo hay uno: los paneles no se mantienen montados). */
+function panelActivo(): HTMLElement {
+  return screen.getByRole("tabpanel");
+}
+
+/** UNA sola pulsación para llegar al otro grupo: no hace falta buscar nada. */
+async function irAOtroDia(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(pestanaOtroDia());
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   recogerMock.mockResolvedValue({ status: "ok", recogidas: ["r1"] });
@@ -162,6 +191,10 @@ describe("RecogerModule — listado de solo-visualización", () => {
     ).toBeNull();
   });
 
+  // FEATURE 274 (Q1, firmada por el humano el 2026-08-24): el literal concuerda en plural. Decía
+  // «2 Órdenes nuevas asignadas», con la N pegada a un plural fijo; con una sola orden se leía «1
+  // Órdenes nuevas asignadas». El defecto ya existía, pero contar sólo el grupo de hoy (R15) lo
+  // vuelve frecuente y se decidió no dejarlo a la vista.
   it("Feature 63: muestra el banner con el contador de órdenes nuevas asignadas", () => {
     renderModule({
       porRecoger: [
@@ -171,7 +204,7 @@ describe("RecogerModule — listado de solo-visualización", () => {
     });
 
     expect(
-      within(listado()).getByText("2 Órdenes nuevas asignadas"),
+      within(listado()).getByText("2 órdenes nuevas asignadas"),
     ).toBeInTheDocument();
   });
 
@@ -354,7 +387,11 @@ describe("RecogerModule — las dos vías de recogida (feature 96)", () => {
         name: "Recoger por número de guía o escaneo",
       }),
     ).toBeNull();
-    expect(screen.getByText("No hay órdenes por recoger.")).toBeInTheDocument();
+    // FEATURE 274 (R10): el vacío es ahora el de la pestaña de entrada, que nombra su grupo. La
+    // pantalla sigue explicando el vacío; lo que cambió es que hay dos grupos que explicar.
+    expect(
+      screen.getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
   });
 
   it("el buscador NO puede esconder la forma de recoger lo que sigue pendiente", async () => {
@@ -572,8 +609,8 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
         "Ninguna guía por recoger coincide con la búsqueda.",
       ),
     ).toBeInTheDocument();
-    // DISTINGUIBLE del vacío sin búsqueda.
-    expect(screen.queryByText("No hay órdenes por recoger.")).toBeNull();
+    // DISTINGUIBLE del vacío sin búsqueda (274/R10: el de la pestaña de hoy).
+    expect(screen.queryByText("No hay órdenes por recoger hoy.")).toBeNull();
   });
 
   it("el banner de contador cuenta el grupo COMPLETO, no lo que el buscador deja ver", async () => {
@@ -587,9 +624,10 @@ describe("RecogerModule — buscador de guías (feature 114)", () => {
 
     await user.type(buscador(), "ana");
 
-    // Sigue diciendo 2: lo pendiente de recoger no cambia porque se filtre la vista.
+    // Sigue diciendo 2: lo pendiente de recoger no cambia porque se filtre la vista. (274/R16: el
+    // banner cuenta el grupo COMPLETO de hoy; el literal concuerda desde la Q1 de la 274.)
     expect(
-      within(listado()).getByText("2 Órdenes nuevas asignadas"),
+      within(listado()).getByText("2 órdenes nuevas asignadas"),
     ).toBeInTheDocument();
   });
 });
@@ -666,7 +704,10 @@ describe("RecogerModule — conmutador mosaico/detalle y carrusel (pedido humano
     expect(
       screen.queryByRole("region", { name: "Órdenes por recoger" }),
     ).toBeNull();
-    expect(screen.getByText("No hay órdenes por recoger.")).toBeInTheDocument();
+    // 274/R10: el vacío de la pestaña de entrada.
+    expect(
+      screen.getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
   });
 });
 
@@ -685,7 +726,12 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     });
   }
 
-  it("R22: la card de la orden reservada dice «Para mañana» CON PALABRAS, y la de hoy no", () => {
+  // ⚠️ FEATURE 274 (2026-08-24): estos casos NO cambian lo que afirman —la marca sigue siendo la
+  // misma, con las mismas palabras (R31)—, cambian dónde hay que ir a mirarla: desde esta ficha la
+  // orden marcada vive en la pestaña «Para otro día», a UNA pulsación. El `await irAOtroDia(user)`
+  // es exactamente esa pulsación, y no un rodeo para que el test pase.
+  it("R22: la card de la orden reservada dice «Para mañana» CON PALABRAS, y la de hoy no", async () => {
+    const user = userEvent.setup();
     renderModule({
       porRecoger: [
         makeAsignacion({ id: "r1", numRemision: "REM-MAN", esParaManana: true }),
@@ -694,9 +740,16 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     });
 
     // La presencia y la ausencia, EMPAREJADAS y en la misma pantalla: sola, la ausencia
-    // pasaría en verde también si la segunda card no se hubiera renderizado.
-    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+    // pasaría en verde también si la segunda card no se hubiera renderizado. Con las dos
+    // pestañas la pareja sigue entera, una a cada lado.
     expect(within(cardDe("REM-HOY")).queryByText("Para mañana")).toBeNull();
+
+    await irAOtroDia(user);
+
+    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+    // Y la de hoy ya no está en el DOM: los paneles no se mantienen montados, así que no hay dos
+    // listados a la vez ni nombres accesibles duplicados.
+    expect(screen.queryByText(/REM-HOY/)).toBeNull();
   });
 
   it("R22: también lo dice en la vista DETALLE — la marca no depende de cómo se mire", async () => {
@@ -707,11 +760,12 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
       ],
     });
 
+    await irAOtroDia(user);
     await cambiarVista(user, "Detalle");
 
     await vi.waitFor(() =>
       expect(
-        screen.queryByRole("region", { name: "Órdenes por recoger" }),
+        screen.queryByRole("region", { name: "Órdenes para otro día" }),
       ).toBeNull(),
     );
     expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
@@ -727,25 +781,18 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
     expect(within(cardDe("REM-VIEJA")).queryByText("Para mañana")).toBeNull();
   });
 
-  it("R23: la orden reservada APARECE en su grupo de siempre — no se oculta ni se mueve", () => {
-    renderModule({
-      porRecoger: [
-        makeAsignacion({ id: "r1", numRemision: "REM-MAN", esParaManana: true }),
-      ],
-    });
-
-    const region = listado();
-    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
-    // Y cuenta en el contador del grupo: reservar no la saca de lo que el mensajero tiene
-    // pendiente de recoger.
-    expect(
-      within(region).getByText("1 Órdenes nuevas asignadas"),
-    ).toBeInTheDocument();
-    // Sigue habiendo por donde recogerla (la tarjeta de recogida se monta con el grupo lleno).
-    expect(accesoRecogida()).toBeInTheDocument();
-  });
-
-  it("R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras", () => {
+  // ⚠️ ESTE TEST VIENE DE LA FEATURE 246 (R23) Y CAMBIÓ DE FORMA CON LA 274 (2026-08-24).
+  //
+  // Lo que afirmaba: con UNA sola orden reservada, la orden estaba en la región del listado y el
+  // banner decía «1 Órdenes nuevas asignadas». El banner ya no existe en ese caso —cuenta sólo el
+  // grupo de hoy (274/R15/R17), y ahí no hay ninguna— y la orden vive en la otra pestaña.
+  //
+  // Lo que NO se pierde, y por eso el test se reescribe en vez de borrarse: 246/R23 dice que el
+  // sistema NO puede ocultarle al mensajero una orden que tiene asignada por estar reservada, y
+  // ESO SIGUE VIGENTE E INTOCADO. La 274 lo hace más fuerte y más explícito: la propiedad pasa de
+  // «está en la lista» a las CUATRO de abajo. Cambia el SITIO, no la VISIBILIDAD.
+  it("R23 (246, en su forma nueva desde la 274): la orden reservada NO se esconde — está contada, a una pulsación, con su marca y con por dónde recogerla", async () => {
+    const user = userEvent.setup();
     renderModule({
       porRecoger: [
         makeAsignacion({
@@ -756,6 +803,46 @@ describe("RecogerModule — orden reservada para mañana (feature 246)", () => {
         }),
       ],
     });
+
+    // (1) ESTÁ EN LA PANTALLA, y se sabe SIN INTERACTUAR: la pestaña dice cuántas tiene.
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (1)" }),
+    ).toBeInTheDocument();
+    // Y sin haber tocado nada, se entra por la de hoy: la orden no está oculta, está al lado.
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
+
+    // (4) SIGUE HABIENDO POR DÓNDE RECOGERLA — era el `accesoRecogida()` del test original, y es
+    // lo que impide repetir el fallo de la 167 (el bloque de escaneo que desaparecía justo cuando
+    // iban a buscarlo). No depende del tamaño del grupo de hoy, que aquí es CERO.
+    expect(accesoRecogida()).toBeInTheDocument();
+
+    // (2) A UNA SOLA PULSACIÓN, sin buscarla, sin desplegables y sin salir de la pantalla.
+    await irAOtroDia(user);
+    expect(within(panelActivo()).getByText(/REM-MAN/)).toBeInTheDocument();
+
+    // (3) CON SU MARCA Y SU AVISO, los de siempre (246/R22, 261/R11), palabra por palabra.
+    expect(within(cardDe("REM-MAN")).getByText("Para mañana")).toBeInTheDocument();
+    expect(
+      within(cardDe("REM-MAN")).getByText(
+        "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("R11: la card de la reservada dice desde QUÉ DÍA se podrá, con la fecha en palabras", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        makeAsignacion({
+          id: "r1",
+          numRemision: "REM-MAN",
+          esParaManana: true,
+          fechaRepartoISO: "2026-08-22",
+        }),
+      ],
+    });
+
+    await irAOtroDia(user);
 
     // 261/R11: el badge dice QUÉ es la orden; esta línea dice por qué no se puede trabajar y
     // desde cuándo. La fecha la resolvió el SERVIDOR (R14): aquí no se lee ningún reloj.
@@ -947,7 +1034,18 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
     await vi.waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
-  it("R9: y la reservada SIGUE en su grupo, contada y visible", () => {
+  // ⚠️ ESTE TEST VIENE DE LA FEATURE 261 (R9) Y CAMBIÓ DE FORMA CON LA 274 (2026-08-24).
+  //
+  // Lo que afirmaba: con UNA sola orden reservada, estaba en la región del listado, el banner
+  // decía «1 Órdenes nuevas asignadas» y quedaba por dónde recoger. Las dos primeras mitades
+  // cambian de sitio —el banner cuenta ahora sólo el grupo de hoy (274/R15/R17) y la orden vive en
+  // la pestaña «Para otro día»—; la propiedad que probaban, no.
+  //
+  // BLOQUEAR NO ES ESCONDER: eso es lo que 261/R9 dice y lo que aquí se sigue afirmando, ahora con
+  // las cuatro señales explícitas. La alternativa A7 que el humano descartó al firmar P3 era
+  // ESCONDER; esto es lo contrario, y por eso la 274 lo pudo decidir sin tocar R23.
+  it("R9 (261, en su forma nueva desde la 274): bloquear no es esconder — contada sin interactuar, a una pulsación, con su aviso y con por dónde recoger", async () => {
+    const user = userEvent.setup();
     renderModule({
       porRecoger: [
         makeAsignacion({
@@ -959,12 +1057,687 @@ describe("RecogerModule — la guía reservada no se recoge (feature 261/R13)", 
       ],
     });
 
-    // Bloquear no es esconder. La orden se queda donde el mensajero la busca, con su marca y con
-    // su explicación: sacarla de la lista sería empezar a ocultarla (R9, y la alternativa A7 que
-    // el humano descartó al firmar P3).
-    const region = listado();
-    expect(within(region).getByText(/REM-MAN/)).toBeInTheDocument();
-    expect(within(region).getByText("1 Órdenes nuevas asignadas")).toBeInTheDocument();
+    // Contada SIN INTERACTUAR, y el conteo se lee del TEXTO de la pestaña (no de un color).
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (1)" }),
+    ).toBeInTheDocument();
+    // Y sigue habiendo por dónde recogerla, aunque el grupo de hoy esté vacío: el rechazo dirá el
+    // motivo real con su fecha (R13, arriba), que es justo lo que exige que el control esté.
     expect(accesoRecogida()).toBeInTheDocument();
+
+    await irAOtroDia(user);
+
+    const panel = panelActivo();
+    expect(within(panel).getByText(/REM-MAN/)).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        "Esta orden es para el reparto del 22 de agosto. Ese día podrás recogerla y gestionarla.",
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+// =================================================================================================
+// FEATURE 274 (2026-08-24) — «POR RECOGER» SEPARA EN PESTAÑAS LO DE HOY DE LO RESERVADO.
+// =================================================================================================
+//
+// EL CASO QUE ABRIÓ LA FICHA, MEDIDO EN PRODUCCIÓN EL 2026-08-24: 2 órdenes en `por_recoger`, 1 de
+// hoy y 1 reservada para después, y la cabecera decía «2 Órdenes nuevas asignadas» con 1 sola
+// recogible. Desde el 2026-08-21 (feature 261) el servidor RECHAZA recoger una orden reservada, así
+// que la lista mezclaba el trabajo del día con lo que iba a ser rechazado.
+//
+// LO QUE ESTA FICHA NO HACE, Y HAY QUE SEGUIR VIENDO EN VERDE: ocultar. 246/R23 sigue vigente e
+// intocado. Cambia el SITIO, no la VISIBILIDAD — las dos pestañas están siempre montadas, cada una
+// dice cuántas tiene sin que nadie interactúe y ninguna orden queda a más de una pulsación.
+//
+// ⚠️ LOS DOS NOMBRES DE PESTAÑA VAN ESCRITOS A MANO, con su conteo, y nunca importados: son la
+// decisión más cara de deshacer de la ficha y una aserción contra su propia fuente está siempre
+// verde.
+describe("RecogerModule — los dos grupos en pestañas (feature 274)", () => {
+  /** La card de una remisión, sea cual sea la vista montada. */
+  function cardDe(numRemision: string): HTMLElement {
+    return screen.getByRole("article", {
+      name: new RegExp(`Orden ${numRemision}`),
+    });
+  }
+
+  const HOY = (over: Partial<MiAsignacionDTO> & { id: string }) =>
+    makeAsignacion({ esParaManana: false, ...over });
+  const OTRO_DIA = (over: Partial<MiAsignacionDTO> & { id: string }) =>
+    makeAsignacion({
+      esParaManana: true,
+      fechaRepartoISO: "2026-08-25",
+      ...over,
+    });
+
+  it("R1: monta exactamente dos pestañas, y ninguna ruta ni entrada de menú nuevas", () => {
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    expect(screen.getAllByRole("tablist")).toHaveLength(1);
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    // Los paneles no se mantienen montados: sólo el activo está en el DOM (así no hay dos
+    // listados a la vez ni nombres accesibles duplicados).
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+    // Y las pestañas son BOTONES, no enlaces: no hay ruta nueva que enlazar ni entrada de menú
+    // que mantener. Si un día alguien las convirtiera en `<a href>`, este test lo diría.
+    expect(pestanaHoy().tagName).toBe("BUTTON");
+    expect(pestanaOtroDia().tagName).toBe("BUTTON");
+    expect(
+      within(listado()).queryByRole("link", { name: /Para otro día/i }),
+    ).toBeNull();
+  });
+
+  it("R25/R26: los nombres de las pestañas, literales a mano — y ninguno dice «mañana» ni «reserva»", () => {
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-M1" }),
+        OTRO_DIA({ id: "r3", numRemision: "REM-M2" }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (2)" }),
+    ).toBeInTheDocument();
+    // R26: el día de reparto admite +2 (pasó en producción el 2026-08-21 con la guía 17496963),
+    // así que un grupo llamado «Para mañana» mentiría en cuanto contuviera una de pasado mañana.
+    // Y «reserva» es jerga que este repo retiró del texto visible a propósito.
+    expect(screen.queryByRole("tab", { name: /mañana/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /reserv/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /\d{4}-\d{2}-\d{2}/ })).toBeNull();
+  });
+
+  it("R8: cada pestaña dice cuántas tiene, incluido el cero, sin interactuar", () => {
+    // SIN NINGÚN `user.click`: el conteo tiene que estar a la vista de entrada. Es lo que sostiene
+    // que aquí no se esconde nada — un interruptor apagado no dice cuántas hay al otro lado.
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-H1" }),
+        HOY({ id: "r2", numRemision: "REM-H2" }),
+      ],
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (2)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (0)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R7: con un grupo vacío la pestaña sigue montada, habilitada y a una pulsación", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [HOY({ id: "r1", numRemision: "REM-H1" })],
+    });
+
+    const vacia = pestanaOtroDia();
+    expect(vacia).toBeInTheDocument();
+    // Ni deshabilitada ni fuera del recorrido: la feature 167 nació de un panel que hacía
+    // `if (length === 0) return null` y desaparecía justo cuando iban a buscarlo.
+    expect(vacia).not.toBeDisabled();
+    expect(vacia).not.toHaveAttribute("aria-disabled", "true");
+
+    await user.click(vacia);
+
+    expect(vacia).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(panelActivo()).getByText("No hay órdenes para otro día."),
+    ).toBeInTheDocument();
+  });
+
+  it("R7: con los DOS grupos vacíos siguen las dos pestañas, con su cero", () => {
+    renderModule({ porRecoger: [] });
+
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (0)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (0)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R7: el recorrido de teclado llega a las dos — la flecha mueve entre pestañas", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    pestanaHoy().focus();
+    await user.keyboard("{ArrowRight}");
+
+    // Patrón ARIA de tabs (foco itinerante): la flecha lleva el foco a la siguiente pestaña. Sin
+    // esto, el grupo de otro día sólo sería alcanzable con el ratón.
+    expect(document.activeElement).toBe(pestanaOtroDia());
+  });
+
+  it("R12: entra por la pestaña de hoy aunque esté VACÍA y la otra tenga órdenes", () => {
+    // Q3, firmada por el humano el 2026-08-24: entrada fija. Una pantalla que cambia de puerta
+    // según el día es una pantalla que no se puede aprender; el vacío se explica y se señala.
+    renderModule({
+      porRecoger: [OTRO_DIA({ id: "r1", numRemision: "REM-MAN" })],
+    });
+
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
+    expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "false");
+    expect(
+      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
+  });
+
+  it("R9: la orden reservada está a UNA pulsación — no hace falta buscarla", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    await user.click(pestanaOtroDia());
+
+    expect(within(panelActivo()).getByText(/REM-MAN/)).toBeInTheDocument();
+    // Y sin haber escrito nada: el buscador sigue vacío. Si llegar a ella exigiera buscarla, la
+    // orden estaría escondida con otro nombre.
+    expect(buscador()).toHaveValue("");
+  });
+
+  it("R6: cuando el servidor deja de marcarla, pasa a la pestaña de hoy sin ninguna acción", () => {
+    // 246/R25: la marca CADUCA SOLA al llegar el día, sin que nadie ejecute nada y sin escribir en
+    // la base. El `rerender` con el MISMO id es el refresco del listado, no una interacción.
+    const { rerender } = renderModule({
+      porRecoger: [OTRO_DIA({ id: "r1", numRemision: "REM-MAN" })],
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (0)" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <RecogerModule
+        porRecoger={[
+          makeAsignacion({
+            id: "r1",
+            numRemision: "REM-MAN",
+            esParaManana: false,
+            fechaRepartoISO: "2026-08-25",
+          }),
+        ]}
+        bloqueo={SIN_BLOQUEO}
+      />,
+    );
+
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (0)" }),
+    ).toBeInTheDocument();
+    // Y se ve, sin tocar nada: la pestaña activa sigue siendo la de hoy.
+    expect(within(panelActivo()).getByText(/REM-MAN/)).toBeInTheDocument();
+  });
+
+  it("R3: el DTO viejo (sin el campo) no inventa la marca ni cambia de pestaña", () => {
+    renderModule({
+      porRecoger: [makeAsignacion({ id: "r1", numRemision: "REM-VIEJA" })],
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (0)" }),
+    ).toBeInTheDocument();
+    expect(within(panelActivo()).getByText(/REM-VIEJA/)).toBeInTheDocument();
+    expect(within(cardDe("REM-VIEJA")).queryByText("Para mañana")).toBeNull();
+  });
+
+  it("R15: el contador dice 1 con 1 de hoy y 1 reservada (el caso medido en producción)", () => {
+    // EL CORAZÓN DE LA FICHA. Antes del 2026-08-24 esta misma pantalla decía «2 Órdenes nuevas
+    // asignadas» con 1 sola recogible.
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    expect(
+      within(panelActivo()).getByText("1 orden nueva asignada"),
+    ).toBeInTheDocument();
+    // La mitad negativa, sin la cual un contador que contara todo pasaría igual.
+    expect(screen.queryByText("2 órdenes nuevas asignadas")).toBeNull();
+    expect(screen.queryByText(/2 Órdenes nuevas asignadas/)).toBeNull();
+  });
+
+  it("R17: sin órdenes de hoy NO hay contador (el vacío lo explica su mensaje)", () => {
+    renderModule({
+      porRecoger: [OTRO_DIA({ id: "r1", numRemision: "REM-MAN" })],
+    });
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText(/orden(es)? nueva(s)? asignada(s)?/)).toBeNull();
+    expect(
+      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
+  });
+
+  it("R17: el contador NO se ve desde la otra pestaña — está junto al listado que cuenta", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 orden nueva asignada",
+    );
+
+    await user.click(pestanaOtroDia());
+
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("R10: el vacío de cada pestaña nombra SU grupo, y el de la búsqueda dice otra cosa", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderModule({ porRecoger: [] });
+
+    expect(
+      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
+    await user.click(pestanaOtroDia());
+    expect(
+      within(panelActivo()).getByText("No hay órdenes para otro día."),
+    ).toBeInTheDocument();
+
+    // Y el vacío POR BÚSQUEDA es otro texto: sin la distinción, el mensajero no sabría si le falta
+    // trabajo o le sobra filtro.
+    unmount();
+    renderModule({
+      porRecoger: [HOY({ id: "r1", numRemision: "REM-HOY" })],
+    });
+    await user.type(buscador(), "zzzinexistente");
+
+    expect(
+      within(panelActivo()).getByText(
+        "Ninguna guía por recoger coincide con la búsqueda.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No hay órdenes por recoger hoy.")).toBeNull();
+  });
+
+  it("R11: la pestaña vacía nombra la otra y cuántas hay allí", () => {
+    renderModule({
+      porRecoger: [
+        OTRO_DIA({ id: "r1", numRemision: "REM-M1" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-M2" }),
+      ],
+    });
+
+    expect(
+      within(panelActivo()).getByText("Hay 2 órdenes en «Para otro día»."),
+    ).toBeInTheDocument();
+  });
+
+  it("R11: con UNA sola al otro lado el puntero concuerda en singular", () => {
+    renderModule({
+      porRecoger: [OTRO_DIA({ id: "r1", numRemision: "REM-M1" })],
+    });
+
+    expect(
+      within(panelActivo()).getByText("Hay 1 orden en «Para otro día»."),
+    ).toBeInTheDocument();
+  });
+
+  it("R21: buscar la guía de una orden de otro día dice DÓNDE está, no que no existe", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    await user.type(buscador(), "2002");
+
+    // «Ninguna coincide» a secas sería FALSO: la guía está, en la otra pestaña, y el mensajero la
+    // tiene en la mano. Ésta es la familia de fallos que este repo tiene escrita: el sistema no
+    // falla, aparenta.
+    const panel = panelActivo();
+    expect(
+      within(panel).getByText(
+        "Ninguna guía por recoger coincide con la búsqueda.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText("Hay 1 coincidencia en «Para otro día»."),
+    ).toBeInTheDocument();
+    // Y el número dice COINCIDENCIAS, no órdenes: con filtro, «1 orden» sería un número que no
+    // corresponde a nada que el mensajero pueda ver.
+    expect(screen.queryByText("Hay 1 orden en «Para otro día».")).toBeNull();
+  });
+
+  it("R13: una búsqueda sin coincidencias NO cambia de pestaña", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    await user.type(buscador(), "2002");
+
+    // Al teclear progresivamente, una pestaña que saltara sola se movería bajo el pulgar con cada
+    // carácter. Se le dice dónde está y la pulsa él.
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
+    expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("R13: recoger la última de hoy tampoco cambia de pestaña", () => {
+    // El otro camino por el que la pantalla podría saltar sola: el grupo activo se queda vacío
+    // tras un refresco. La pestaña la elige el mensajero, siempre.
+    const { rerender } = renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    rerender(
+      <RecogerModule
+        porRecoger={[
+          makeAsignacion({
+            id: "r2",
+            numRemision: "REM-MAN",
+            esParaManana: true,
+            fechaRepartoISO: "2026-08-25",
+          }),
+        ]}
+        bloqueo={SIN_BLOQUEO}
+      />,
+    );
+
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(panelActivo()).getByText("No hay órdenes por recoger hoy."),
+    ).toBeInTheDocument();
+  });
+
+  it("R18: un SOLO campo de búsqueda, y filtra los dos grupos", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-H1", destinatario: "Ana Solís" }),
+        HOY({ id: "r2", numRemision: "REM-H2", destinatario: "Beto Ruiz" }),
+        OTRO_DIA({ id: "r3", numRemision: "REM-M1", destinatario: "Ana Mora" }),
+        OTRO_DIA({ id: "r4", numRemision: "REM-M2", destinatario: "Beto Paz" }),
+      ],
+    });
+
+    expect(screen.getAllByRole("searchbox")).toHaveLength(1);
+    await user.type(buscador(), "ana");
+
+    expect(within(panelActivo()).getByText(/REM-H1/)).toBeInTheDocument();
+    expect(within(panelActivo()).queryByText(/REM-H2/)).toBeNull();
+
+    await user.click(pestanaOtroDia());
+
+    // El MISMO texto aplicado al otro grupo: si sólo mirara la pestaña activa, cambiar de pestaña
+    // devolvería la lista entera y el filtro sería una ilusión.
+    expect(within(panelActivo()).getByText(/REM-M1/)).toBeInTheDocument();
+    expect(within(panelActivo()).queryByText(/REM-M2/)).toBeNull();
+  });
+
+  it("R19: el texto de la búsqueda sobrevive al cambio de pestaña", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-H1", destinatario: "Ana Solís" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-M1", destinatario: "Ana Mora" }),
+      ],
+    });
+
+    await user.type(buscador(), "ana");
+    await user.click(pestanaOtroDia());
+
+    expect(buscador()).toHaveValue("ana");
+    await user.click(pestanaHoy());
+    expect(buscador()).toHaveValue("ana");
+  });
+
+  it("R20: buscar no mueve NINGÚN contador — ni el de la cabecera ni los de las pestañas", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-H1", destinatario: "Ana Solís" }),
+        HOY({ id: "r2", numRemision: "REM-H2", destinatario: "Beto Ruiz" }),
+        OTRO_DIA({ id: "r3", numRemision: "REM-M1", destinatario: "Ana Mora" }),
+      ],
+    });
+
+    await user.type(buscador(), "ana");
+
+    // Una sola regla para toda la pantalla: los contadores cuentan lo que el mensajero TIENE; el
+    // buscador sólo cambia lo que se VE.
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (2)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "2 órdenes nuevas asignadas",
+    );
+  });
+
+  it("R22: los controles de recogida no dependen de la pestaña activa", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    expect(accesoRecogida()).toBeInTheDocument();
+    await user.click(pestanaOtroDia());
+    expect(accesoRecogida()).toBeInTheDocument();
+    await user.click(pestanaHoy());
+    expect(accesoRecogida()).toBeInTheDocument();
+  });
+
+  it("R22: con SÓLO órdenes de otro día los controles siguen montados", async () => {
+    const user = userEvent.setup();
+    recogerMock.mockResolvedValue({ status: "ok", recogidas: [] });
+    renderModule({
+      porRecoger: [
+        OTRO_DIA({ id: "r1", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    // Q4, confirmada como NO-CAMBIO el 2026-08-24: retirarlos sería repetir el fallo de la 167. Y
+    // no es un adorno: al teclear la guía, el rechazo dice el MOTIVO REAL con su fecha (261/R13).
+    expect(accesoRecogida()).toBeInTheDocument();
+
+    await abrirRecogida(user);
+    const region = screen.getByRole("region", {
+      name: "Recoger por número de guía o escaneo",
+    });
+    await user.type(within(region).getByLabelText("Número de guía"), "2002");
+    await user.click(within(region).getByRole("button", { name: "Recoger" }));
+
+    await vi.waitFor(() =>
+      expect(errorMock).toHaveBeenCalledWith(
+        "Esta orden es para el reparto del 25 de agosto. Ese día podrás recogerla y gestionarla.",
+      ),
+    );
+    expect(recogerMock).not.toHaveBeenCalled();
+  });
+
+  it("R14: tras recoger y refrescar se conservan pestaña, búsqueda y vista", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-H1", destinatario: "Ana Solís" }),
+        HOY({ id: "r2", numRemision: "REM-H2", destinatario: "Ana Ruiz" }),
+        OTRO_DIA({ id: "r3", numRemision: "REM-M1", destinatario: "Ana Mora" }),
+      ],
+    });
+
+    await user.click(pestanaOtroDia());
+    await user.type(buscador(), "ana");
+    await cambiarVista(user, "Detalle");
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("region", { name: "Órdenes para otro día" }),
+      ).toBeNull(),
+    );
+
+    // `router.refresh()` re-renderiza con datos nuevos SIN desmontar el árbol cliente: es esto.
+    rerender(
+      <RecogerModule
+        porRecoger={[
+          makeAsignacion({
+            id: "r2",
+            numRemision: "REM-H2",
+            destinatario: "Ana Ruiz",
+            esParaManana: false,
+          }),
+          makeAsignacion({
+            id: "r3",
+            numRemision: "REM-M1",
+            destinatario: "Ana Mora",
+            esParaManana: true,
+            fechaRepartoISO: "2026-08-25",
+          }),
+        ]}
+        bloqueo={SIN_BLOQUEO}
+      />,
+    );
+
+    expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "true");
+    expect(buscador()).toHaveValue("ana");
+    const grupoVista = screen.getByRole("group", {
+      name: "Vista de las órdenes",
+    });
+    expect(
+      within(grupoVista).getByRole("button", { name: "Detalle" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("R24: bloqueado — sin controles, con aviso, y las dos pestañas con sus listados visibles", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      bloqueo: bloqueoConVencido(),
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY", numGuia: 1001 }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN", numGuia: 2002 }),
+      ],
+    });
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(accesoRecogida()).toBeNull();
+    // Solo-visualización: los dos grupos siguen a la vista, con sus conteos y a una pulsación.
+    expect(
+      screen.getByRole("tab", { name: "Para recoger hoy (1)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Para otro día (1)" }),
+    ).toBeInTheDocument();
+    expect(within(panelActivo()).getByText(/REM-HOY/)).toBeInTheDocument();
+
+    await user.click(pestanaOtroDia());
+
+    expect(within(panelActivo()).getByText(/REM-MAN/)).toBeInTheDocument();
+  });
+
+  it("R27: la pestaña activa y los conteos se leen del texto y de `aria-selected`, no del color", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    // (a) Cuál está activa: atributo, no tono.
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "true");
+    expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "false");
+    await user.click(pestanaOtroDia());
+    expect(pestanaHoy()).toHaveAttribute("aria-selected", "false");
+    expect(pestanaOtroDia()).toHaveAttribute("aria-selected", "true");
+
+    // (b) Cuántas tiene cada una: EN EL TEXTO de la pestaña, no en un punto de otro tono.
+    expect(pestanaHoy()).toHaveTextContent("Para recoger hoy (1)");
+    expect(pestanaOtroDia()).toHaveTextContent("Para otro día (1)");
+
+    // (c) Y la primitiva distingue la activa por PESO y SOMBRA además del relleno, así que la
+    // diferencia se percibe sin depender del color. (R34: el anillo de foco no se toca aquí; tiene
+    // ficha propia, la 226.)
+    expect(pestanaHoy().className).toMatch(/aria-selected:font-semibold/);
+    expect(pestanaHoy().className).toMatch(/aria-selected:shadow-sm/);
+  });
+
+  it("R28: el grupo de pestañas tiene nombre, cada panel cuelga de su pestaña y los listados se llaman distinto", async () => {
+    const user = userEvent.setup();
+    renderModule({
+      porRecoger: [
+        HOY({ id: "r1", numRemision: "REM-HOY" }),
+        OTRO_DIA({ id: "r2", numRemision: "REM-MAN" }),
+      ],
+    });
+
+    // Los tres nombres accesibles de la pantalla son DISTINTOS a propósito: si coincidieran, el de
+    // uno chocaría con el de otro.
+    expect(
+      screen.getByRole("tablist", { name: "Grupos de órdenes por recoger" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Buscar guías por recoger" }),
+    ).toBeInTheDocument();
+    expect(listado()).toBeInTheDocument();
+
+    // El panel cuelga de SU pestaña. Se afirma sobre el DOM renderizado y no se da por hecho que
+    // la primitiva lo cablee.
+    expect(panelActivo()).toHaveAttribute(
+      "aria-labelledby",
+      pestanaHoy().getAttribute("id"),
+    );
+    // Y el listado del grupo de hoy conserva su nombre de siempre.
+    expect(
+      screen.getByRole("region", { name: "Órdenes por recoger" }),
+    ).toBeInTheDocument();
+
+    await user.click(pestanaOtroDia());
+
+    expect(panelActivo()).toHaveAttribute(
+      "aria-labelledby",
+      pestanaOtroDia().getAttribute("id"),
+    );
+    // El otro listado se llama DISTINTO: sin esto, saber en qué grupo estás dependería de mirar
+    // cuál pestaña se ve resaltada.
+    expect(
+      screen.getByRole("region", { name: "Órdenes para otro día" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Órdenes por recoger" }),
+    ).toBeNull();
   });
 });
