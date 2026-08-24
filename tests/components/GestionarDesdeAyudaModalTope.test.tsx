@@ -108,7 +108,6 @@ beforeEach(() => {
     status: "ok",
     ordenId: "o1",
     resultado: "rechazada",
-    estado: "rechazada",
   });
 });
 
