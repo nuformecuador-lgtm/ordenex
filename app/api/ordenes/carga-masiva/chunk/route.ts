@@ -23,7 +23,7 @@ import {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import { BulkOrdenService } from "@/lib/services/BulkOrdenService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
@@ -40,7 +40,7 @@ function buildBulkService(): IBulkOrdenService {
   // para satisfacer el contrato del constructor (dependencia requerida, compartida con la via API).
   return new BulkOrdenService(
     new OrdenRepository(prisma),
-    new TarifaVigentePorTiendaRepository(prisma),
+    new TarifaVigenteRepository(prisma),
   );
 }
 

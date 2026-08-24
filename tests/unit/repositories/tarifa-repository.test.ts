@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { TarifaRepository } from "@/lib/repositories/TarifaRepository";
@@ -8,7 +10,6 @@ function tarifaRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "cob-1",
     tiendaId: "tienda-1",
-    status: "activo",
     valorFlete: new Prisma.Decimal("10.00"),
     valorFleteDevuelto: new Prisma.Decimal("5.00"),
     valorFleteGam: new Prisma.Decimal("8.00"),
@@ -69,11 +70,12 @@ describe("TarifaRepository.create (R16/R27)", () => {
     expect(arg.data.valorFlete).toBeInstanceOf(Prisma.Decimal);
     expect(arg.data.valorFlete.toString()).toBe("10");
     expect(arg.data.tiendaId).toBe("tienda-1"); // FK obligatoria a usuario (adminTienda)
-    // `status` no viaja en create: nace `activo` por default de DB.
+    // 274/R9: `status` no viaja en create porque la columna ya no existe.
     expect(arg.data).not.toHaveProperty("status");
 
     expect(dto.tiendaId).toBe("tienda-1");
-    expect(dto.status).toBe("activo");
+    // 274/R12: la proyeccion al DTO tampoco la trae (ausencia de CLAVE).
+    expect(dto).not.toHaveProperty("status");
     expect(dto.valorFlete).toBe(10);
     expect(dto.ivaComisionCod).toBe(15);
     expect(dto).not.toHaveProperty("deletedAt");
@@ -115,7 +117,7 @@ describe("TarifaRepository.list (R18/R27)", () => {
     expect(res.total).toBe(2);
     expect(res.items).toHaveLength(2);
     expect(res.items[0].tiendaId).toBe("tienda-1");
-    expect(res.items[0].status).toBe("activo");
+    expect(res.items[0]).not.toHaveProperty("status"); // 274/R12
     expect(res.items[0]).not.toHaveProperty("deletedAt");
 
     const arg = prisma.tarifa.findMany.mock.calls[0][0];
@@ -134,19 +136,19 @@ describe("TarifaRepository.update (R21/R22)", () => {
   it("aplica cambios por id y devuelve el DTO", async () => {
     const prisma = buildPrisma();
     prisma.tarifa.updateMany.mockResolvedValue({ count: 1 });
-    prisma.tarifa.findFirst.mockResolvedValue(
-      tarifaRow({ tiendaId: "tienda-2", status: "inactivo" }),
-    );
+    prisma.tarifa.findFirst.mockResolvedValue(tarifaRow({ tiendaId: "tienda-2" }));
     const repo = new TarifaRepository(prisma as unknown as PrismaClient);
 
-    const dto = await repo.update("cob-1", { tiendaId: "tienda-2", status: "inactivo" });
+    const dto = await repo.update("cob-1", { tiendaId: "tienda-2", zonaId: "zona-2" });
 
     const arg = prisma.tarifa.updateMany.mock.calls[0][0];
     expect(arg.where).toEqual({ id: "cob-1" });
     expect(arg.data.tiendaId).toBe("tienda-2");
-    expect(arg.data.status).toBe("inactivo"); // enum: pasa tal cual, no Decimal
+    expect(arg.data.zonaId).toBe("zona-2"); // id: pasa tal cual, no Decimal
+    // 274/R9: `status` ya no es un campo actualizable ni sale en el DTO.
+    expect(arg.data).not.toHaveProperty("status");
     expect(dto?.tiendaId).toBe("tienda-2");
-    expect(dto?.status).toBe("inactivo");
+    expect(dto).not.toHaveProperty("status");
   });
 
   it("convierte montos/porcentajes provistos a Prisma.Decimal", async () => {
@@ -273,6 +275,48 @@ describe("TarifaRepository: tienda opcional", () => {
 
     expect(prisma.tarifa.create.mock.calls[0][0].data.tiendaId).toBeNull();
     expect(dto.tiendaId).toBeNull();
+  });
+});
+
+// 274/R13: `inactivarPorTienda` dependia de `tarifas.status` y se retira con la
+// columna. La interfaz no existe en runtime, asi que el assert se hace por dos vias
+// que SI existen: el prototipo de la implementacion y el fuente de la interfaz con
+// los comentarios quitados (para que el comentario que documenta la retirada no
+// ponga el test rojo, ni pueda satisfacerlo).
+describe("274/R13 — `inactivarPorTienda` retirado", () => {
+  function fuenteSinComentarios(rutaRelativa: string): string {
+    const texto = readFileSync(resolve(process.cwd(), rutaRelativa), "utf8");
+    return texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  }
+
+  it("la implementacion no expone el metodo", () => {
+    const prisma = buildPrisma();
+    const repo = new TarifaRepository(prisma as unknown as PrismaClient);
+
+    expect(repo).not.toHaveProperty("inactivarPorTienda");
+    expect(Object.getOwnPropertyNames(TarifaRepository.prototype)).not.toContain(
+      "inactivarPorTienda",
+    );
+    // el listado se leyo de verdad (guardia contra un assert sobre una lista vacia)
+    expect(Object.getOwnPropertyNames(TarifaRepository.prototype)).toContain("hardDelete");
+  });
+
+  it("`ITarifaRepository` no declara el metodo", () => {
+    const fuente = fuenteSinComentarios("lib/interfaces/repositories/ITarifaRepository.ts");
+    const bloque = /export interface ITarifaRepository \{([\s\S]*?)\n\}/.exec(fuente);
+    expect(bloque).not.toBeNull();
+    const cuerpo = bloque![1];
+    expect(cuerpo).toMatch(/\bhardDelete\b/); // el bloque correcto
+    expect(cuerpo).not.toMatch(/\binactivarPorTienda\b/);
+  });
+
+  it("`UpdateTarifaData` ya no declara `status`", () => {
+    const fuente = fuenteSinComentarios("lib/interfaces/repositories/ITarifaRepository.ts");
+    const bloque = /export interface UpdateTarifaData \{([\s\S]*?)\n\}/.exec(fuente);
+    expect(bloque).not.toBeNull();
+    const cuerpo = bloque![1];
+    expect(cuerpo).toMatch(/\btiendaId\b/);
+    expect(cuerpo).not.toMatch(/\bstatus\b/);
   });
 });
 

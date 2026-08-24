@@ -1,5 +1,4 @@
 import { z } from "zod";
-import type { EstadoTarifa } from "@prisma/client";
 import { tarifasConfig } from "@/lib/config/tarifas";
 
 // R2/R5: montos >= 0, precision fija (nunca punto flotante ni texto en DB).
@@ -8,8 +7,6 @@ const montoSchema = z.number().nonnegative();
 const porcentajeSchema = z.number().min(0).max(100);
 // id de la tienda (usuario) duena de la tarifa. FK OPCIONAL: ver `crearTarifaSchema`.
 const idSchema = z.string().min(1);
-// Estado de la tarifa: solo activo|inactivo.
-export const estadoTarifaSchema = z.enum(["activo", "inactivo"]);
 
 // Roles de usuario a los que se les puede asignar una tarifa. `adminTienda` es
 // la tienda humana; `apiKey` es la cuenta dedicada de una API key (feature 81:
@@ -55,12 +52,16 @@ export const crearTarifaSchema = z
   .strict();
 export type CrearTarifaInput = z.infer<typeof crearTarifaSchema>;
 
-// R20/R23: actualizacion; todos los campos opcionales + `status` (activo/inactivo);
-// mismas reglas de rango que en creacion; strict rechaza campos desconocidos.
-export const actualizarTarifaSchema = crearTarifaSchema
-  .partial()
-  .extend({ status: estadoTarifaSchema.optional() })
-  .strict();
+// R20/R23: actualizacion; todos los campos opcionales; mismas reglas de rango que
+// en creacion; strict rechaza campos desconocidos.
+// 274/R11: `status` YA NO es un campo de entrada (la columna `tarifas.status` y el
+// tipo `estado_tarifa` se fueron con `20260825120000_drop_tarifa_status`). No hace
+// falta ninguna validacion nueva para rechazarlo: como el schema es `.strict()`,
+// mandar `status` cae solo en `validation_error`.
+// 274/R14-R15: la prohibicion de la tarifa global `(tiendaId null, zonaId null)` NO
+// vive aqui: el par efectivo de un `actualizar` depende de la fila existente en la
+// base, y zod no la ve. La guarda esta en `TarifaService` (design 274 §3.3).
+export const actualizarTarifaSchema = crearTarifaSchema.partial().strict();
 export type ActualizarTarifaInput = z.infer<typeof actualizarTarifaSchema>;
 
 // R18: parametros del listado. page/pageSize enteros positivos; pageSize se
@@ -79,10 +80,11 @@ export type ListarTarifasInput = z.infer<typeof listarTarifasSchema>;
 // R27: DTO expuesto por las Server Actions. Decimal -> number en las 8
 // columnas numericas. La tabla ya no tiene `deleted_at`: borrar una tarifa es
 // sacarla de la tabla (ver la migracion tarifa_zona_is_default).
+// 274/R12: tampoco tiene `status`. Una tarifa ya no se activa ni se inactiva: se
+// aplica o no segun la cascada `(tienda, zona)`, y la que no aplica se borra.
 export interface TarifaDTO {
   id: string;
   tiendaId: string | null; // null = no acotada a una tienda (aplica a cualquiera)
-  status: EstadoTarifa; // activo | inactivo
   valorFlete: number;
   valorFleteDevuelto: number;
   valorFleteGam: number;

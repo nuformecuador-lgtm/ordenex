@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -54,7 +54,7 @@ const AYER = new Date("2026-08-20T00:00:00.000Z");
 /** El resolver de tarifa NO se toca en este camino: `anular...` no lo invoca. */
 const tarifaRepoInerte = {
   resolveTarifaPorTienda: async () => null,
-} as unknown as ITarifaVigentePorTiendaRepository;
+} as unknown as ITarifaVigenteRepository;
 
 describeSiHayBase("261/B12 — deshacer y el dia de reparto, contra Postgres real", () => {
   let prisma: PrismaClient;

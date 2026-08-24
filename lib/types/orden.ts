@@ -362,10 +362,10 @@ export type OrdenListItemDTO = OrdenDTO & {
   intentosEntrega?: number;
   // Datos de las relaciones DIRECTAS (FK) de la orden, resueltas via joins
   // (Prisma `include`) en el mismo query del listado. Aditivo: la UI existente
-  // que solo usa los escalares/`*Nombre` sigue funcionando. La relacion `tienda`
-  // trae ademas su tarifa activa (relacion Usuario.tarifasTienda, 1:N por-tienda,
-  // el include se acota a la activa/no borrada). Cada relacion es nullable porque
-  // el `include` puede no resolver (FK opcional o dato ausente).
+  // que solo usa los escalares/`*Nombre` sigue funcionando. La `tarifa` anidada en
+  // `tienda` NO sale de ese join (feature 274): la resuelve la cascada (tienda, zona)
+  // en una query adicional por pagina. Cada relacion es nullable porque el `include`
+  // puede no resolver (FK opcional o dato ausente).
   relaciones?: OrdenListItemRelaciones;
 };
 
@@ -375,10 +375,13 @@ export interface RefNombre {
   nombre: string;
 }
 
-// Tienda de la orden (Usuario con rol adminTienda) con su tarifa activa anidada
-// (relacion Usuario.tarifasTienda, 1:N por-tienda). `tarifa` es la ACTIVA (o
-// `null` si la tienda aun no tiene tarifa activa). NUNCA expone campos sensibles
-// del usuario (passwordHash, etc.): solo datos de contacto e identidad legibles.
+// Tienda de la orden (Usuario con rol adminTienda) con la tarifa de la orden anidada.
+// FEATURE 274: `tarifa` ya no es "la tarifa activa de la tienda" —eso dejo de existir con la
+// columna `status`—: es la fila que gana la CASCADA (tienda, zona) para el par de ESTA orden,
+// la MISMA que factura el cierre de dia (R18/R21). `null` = ningun nivel de la cascada tiene
+// fila para ese par; el listado lo muestra con importes en "0.00" y no bloquea (R20/R39).
+// NUNCA expone campos sensibles del usuario (passwordHash, etc.): solo datos de contacto e
+// identidad legibles.
 export interface OrdenTiendaRef {
   id: string;
   nombre: string;
