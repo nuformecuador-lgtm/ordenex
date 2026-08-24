@@ -16,9 +16,29 @@ Dos fichas nuevas registradas por decisión del humano, **las dos en fase de spe
 
 | ficha | zona | estado | qué es |
 | --- | --- | --- | --- |
-| **273** | fullstack | `pending` · spec en curso | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
-| **274** | frontend | `pending` · spec en curso | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
-| **218** | backend | **`superseded` por la 273** | el corte sin sumar reintento: su decisión se toma dentro de la 273 |
+| **273** | fullstack | `in_progress` · **backend hecho y verde**, falta frontend | el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación |
+| **274** | frontend | `in_progress` | «Por recoger» separa en tabs las de hoy de las reservadas para otro día |
+| **218** | backend | **`superseded` por la 273** · su decisión ya está EN CÓDIGO | el corte sin sumar reintento |
+
+### 273 — dónde está exactamente (2026-08-24)
+
+Rama **`feature/273-tope-de-intentos`**, sacada de **`dev` local (`94c824f6`)** y no de `origin/dev`
+(`e93c19e6`): los commits del spec todavía no estaban empujados. Bitácora completa en
+`progress/impl_273.md`.
+
+- **Hecho:** las **cinco** vías hacia la circulación cerradas (las dos superficies que crean
+  gestión, la liberación diferida —la raíz—, las dos bodegas y el corte), más la tercera vía de la
+  tienda (**Q2**), el cron de SLA, la migración del enum con su `down.sql` y la guardia del
+  invariante. Gate **COMPLETO** `./init.sh` → `INIT_EXIT=0`, 1356 archivos / 18.275 tests.
+- **Falta (frontend_dev):** T11 y T12 — filtrar los desenlaces de `GestionarOrdenPanel` y de
+  `GestionarDesdeAyudaModal` con `permitidoEnElTope` cuando `orden.enElTope`, y el texto que
+  explica por qué. El servidor ya emite `enElTope` en los dos DTO; **el umbral no cruza al
+  cliente**.
+- ⚠️ **R37 sigue a medias y bloquea el DESPLIEGUE, no el merge.** El SQL de solo lectura está
+  escrito y corre (pegado en la bitácora), pero **no se re-ejecutó contra producción**: el
+  implementer no tenía el MCP de Supabase. Vale la foto del spec —una orden, en `devuelta`— y hay
+  que repetirla antes de desplegar porque caduca. Y falta medir por primera vez **cuántas
+  `reprogramada` congela la liberación diferida el primer día**.
 
 ### Lo que se midió antes de registrarlas, y es la razón de que existan
 
@@ -53,8 +73,9 @@ conteo cobra de más.
 
 ### La puerta que viene
 
-Cuando los dos specs estén, **hay puerta humana antes de tocar código**. Nada de `app/` ni de
-`lib/` hasta que el humano apruebe.
+⏳ **Ya pasó** (2026-08-24): los dos specs están, el humano firmó las dos preguntas de la 273 y las
+dos fichas están en implementación. La puerta que queda ahora es otra y es de **despliegue**: R37
+(arriba) se re-ejecuta contra producción antes de sacar la 273 a `prod`.
 
 ---
 
