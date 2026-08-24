@@ -8,6 +8,44 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+## 📦 Plantilla de carga masiva v3 (276) — 2026-08-24
+
+Pedido del humano: «en el cargue masivo la estructura cambia: ahora viene **provincia**,
+**canton_distrito** (`nombreCanton (distrito)`), **direccion**». Sucede a la 142, que había
+unificado esas columnas en `direccion_destinatario`; ahora se vuelven a separar y el **país
+desaparece** (hoy ya se descartaba sin persistirlo, así que no se pierde dato).
+
+| # | Zona | Estado | Qué |
+| --- | --- | --- | --- |
+| **276** | fullstack | **`in_progress`** · rama `feature/276-plantilla-carga-masiva-v3` (nace de `dev`, worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
+
+### Decisiones cerradas con el humano (no reabrir)
+
+1. **Reemplazo total**: la plantilla v2 deja de aceptarse. Un archivo v2 → rechazo en la
+   validación de cabecera con el mensaje de «la plantilla cambió», igual que la 142 rechazó a la v1.
+2. **La vía API key no cambia**: `/api/ordenes/api-key/carga` sigue con
+   `provincia`/`canton`/`distrito`/`direccion` separados (contrato público de la feature 88).
+3. **No se parte en backend + frontend** pese a evaluar como `fullstack`: cabecera y plantilla son
+   un solo contrato y la carga quedaría ROTA entre los dos merges. Mismo criterio que la 142.
+4. **`canton_distrito` sin paréntesis ⇒ distrito = cantón** (pedido durante la implementación,
+   R14/R16). `Cartago` ≡ `Cartago (Cartago)`, y unos paréntesis vacíos dicen lo mismo. El atajo
+   **no inventa geografía**: `resolveGeo` sigue buscando ese distrito en el catálogo y, si no
+   existe, la fila muere con el mensaje de siempre (R27b, con test).
+
+### Por qué salió barata
+
+La 142 dejó la geografía **inyectada por vía**: cada camino aporta su extractor y `resolveGeo` es
+común. Se sustituyó **un extractor**, no la resolución. Y el parser no se reescribió:
+`separarCantonDistrito` ya existía como privado de `lib/utils/direccion-destinatario.ts` con sus
+ramas de error; se promovió a público en `lib/utils/canton-distrito.ts` y el módulo viejo se borró.
+
+### Estado
+
+Implementada (B1–B6, F1–F4). Typecheck limpio. El gate rápido **se negó solo** —
+`lib/types/carga-masiva.ts` es cimiento— y mandó al completo, como preveía T1.
+
+---
+
 ## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
 
 Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad

@@ -26,9 +26,9 @@ import type { RawRow } from "@/lib/parsers/spreadsheet";
 //
 // RECONCILIACION CON dev (features 142 y 155). Dos cosas cambiaron BAJO esta feature mientras
 // esperaba en la cola, y ninguna toca lo que la 141 prueba:
-//   - Feature 142: la via SESION recibe la geografia en la columna unica
-//     `direccion_destinatario`; la via API key conserva las columnas separadas (R38 de la 142).
-//     De ahi que haya DOS constructores de fila.
+//   - Features 142 y 276: la via SESION recibe la geografia en `provincia` +
+//     `canton_distrito` + `direccion`; la via API key conserva `canton` y `distrito`
+//     sueltos (contrato publico de la 88). De ahi que haya DOS constructores de fila.
 //   - Feature 155: la via sesion persiste por UNA de DOS rutas segun el flag `fulfillment` de la
 //     tienda dueña — `createManyOrdenesConGuia` (rama b, el default) o `createManyOrdenes`
 //     (rama a). El contexto del LOTE es IDENTICO en las dos (el lote es del canal de carga, no
@@ -98,20 +98,22 @@ function buildService(repo: IOrdenRepository): BulkOrdenService {
   return new BulkOrdenService(repo, tarifaRepoStub);
 }
 
-/** Feature 142: fila de la via SESION (plantilla v2, geografia en una sola columna). */
+/** Feature 276: fila de la via SESION (plantilla v3, geografia en tres columnas). */
 function row(numRemision: string): RawRow {
   return {
     num_remision: numRemision,
     destinatario: "Ana",
     telefono: "0991234567",
-    direccion_destinatario: "Ecuador / Pichincha / Quito (La Mariscal) / ",
+    provincia: "Pichincha",
+    canton_distrito: "Quito (La Mariscal)",
+    direccion: "",
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
   };
 }
 
-/** Feature 142/R38: fila de la via API KEY (contrato publico de la 88, columnas separadas). */
+/** Feature 142/R38 (276/R28): fila de la via API KEY (contrato publico de la 88, columnas separadas). */
 function rowApi(numRemision: string): RawRow {
   return {
     num_remision: numRemision,

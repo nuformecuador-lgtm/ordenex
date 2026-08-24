@@ -23,7 +23,6 @@ const FILA_DE_CARGA: Record<string, string> = {
   canton: "Escazú",
   distrito: "San Rafael",
   direccion: "Multiplaza, local 12",
-  direccion_destinatario: "Multiplaza, local 12",
   notas: "llamar antes",
   monto_cobrar: "25900",
 };

@@ -537,11 +537,12 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
   });
 });
 
-// Feature 142 (B6/R38) — la plantilla v2 de la via sesion (columna unica
-// `direccion_destinatario`) NO toca el contrato publico de la 88: el integrador
-// sigue enviando provincia/canton/distrito/direccion como campos separados.
-describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v2 (feature 142/R38)", () => {
-  it("R38: fila con provincia/canton/distrito separados y SIN direccion_destinatario se crea igual", async () => {
+// Feature 142 (B6/R38) y 276 (B6/R28, R29) — las plantillas de la via sesion han
+// cambiado DOS veces (v2: columna unica `direccion_destinatario`; v3: `provincia` +
+// `canton_distrito` + `direccion`) y el contrato publico de la 88 NO se ha movido:
+// el integrador sigue enviando provincia/canton/distrito/direccion por separado.
+describe("cargarViaApi — no-regresión del contrato 88 frente a las plantillas v2 y v3 (142/R38, 276/R28)", () => {
+  it("R28: fila con provincia/canton/distrito separados se crea igual", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi(
       [
@@ -575,10 +576,16 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v
     });
   });
 
-  it("R38: una columna direccion_destinatario presente en el payload API es ignorada (manda la geografia separada)", async () => {
+  it("R28: una columna de otra plantilla presente en el payload API es ignorada (manda la geografia separada)", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi(
-      [row({ direccion_destinatario: "basura sin formato", direccion: "Av. Amazonas" })],
+      [
+        row({
+          direccion_destinatario: "basura sin formato", // v2
+          canton_distrito: "basura sin parentesis", // v3
+          direccion: "Av. Amazonas",
+        }),
+      ],
       APIKEY,
     );
 
@@ -587,6 +594,30 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v
       expect(r.summary.conError).toBe(0);
     }
     expect(conGuiaArg(repo)[0].direccion).toBe("Av. Amazonas");
+  });
+
+  it("R29: la via API key NO acepta canton_distrito como sustituto de canton/distrito", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi(
+      [
+        {
+          num_remision: "REM-V3",
+          destinatario: "Ana",
+          telefono: "0991234567",
+          provincia: "Pichincha",
+          canton_distrito: "Quito (La Mariscal)",
+          direccion: "Av. Amazonas",
+          producto: "Caja",
+        },
+      ],
+      APIKEY,
+    );
+
+    // Sin `canton` propio, la fila muere donde siempre: en resolveGeo, bajo `canton`.
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(0);
+      expect(r.summary.filas[0].errores).toHaveProperty("canton");
+    }
   });
 });
 

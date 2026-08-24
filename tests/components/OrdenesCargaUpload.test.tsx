@@ -28,19 +28,23 @@ vi.mock("@/app/(app)/ordenes/_components/carga-masiva-chunks", async (importOrig
   return { ...actual, procesarEnChunks: procesarEnChunksMock };
 });
 
-// Feature 142: la cabecera obligatoria es la de la plantilla v2 (columna única
-// `direccion_destinatario`, sin provincia/cantón/distrito/dirección).
-const HEADERS_OK = ["num_remision", "destinatario", "telefono", "direccion_destinatario"];
-
-/** Cabecera de la plantilla ANTERIOR: 4 columnas geográficas, sin la nueva. */
-const HEADERS_PLANTILLA_VIEJA = [
+// Feature 276: la cabecera obligatoria es la de la plantilla v3 (`provincia`,
+// `canton_distrito` y `direccion`, sin la columna única de la v2).
+const HEADERS_OK = [
   "num_remision",
   "destinatario",
   "telefono",
   "provincia",
-  "canton",
-  "distrito",
+  "canton_distrito",
   "direccion",
+];
+
+/** Cabecera de la plantilla ANTERIOR (v2): la geografía entera en una columna. */
+const HEADERS_PLANTILLA_VIEJA = [
+  "num_remision",
+  "destinatario",
+  "telefono",
+  "direccion_destinatario",
 ];
 
 function archivo(numRemisiones: string[], headers = HEADERS_OK): ArchivoParseado {
@@ -176,7 +180,7 @@ describe("OrdenesCargaUpload — validaciones de borde", () => {
     ).toBeNull();
   });
 
-  it("R7/R8: archivo con la plantilla VIEJA → corte duro con el copy de plantilla nueva, sin request", async () => {
+  it("R9: archivo con la plantilla VIEJA (v2) → corte duro con el copy de plantilla nueva, sin request", async () => {
     const user = userEvent.setup();
     parseArchivoMock.mockResolvedValue(archivo(["REM-1"], HEADERS_PLANTILLA_VIEJA));
     const onValidated = vi.fn();
@@ -186,17 +190,17 @@ describe("OrdenesCargaUpload — validaciones de borde", () => {
 
     // Copy literal decidido en la puerta de aprobación (design.md > Preguntas abiertas #3).
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Faltan columnas obligatorias: direccion_destinatario. La plantilla cambió: descarga la plantilla nueva y vuelve a cargar tus datos.",
+      "Faltan columnas obligatorias: provincia, canton_distrito, direccion. La plantilla cambió: descarga la plantilla nueva y vuelve a cargar tus datos.",
     );
     // R7: ninguna fila viaja al servidor.
     expect(procesarEnChunksMock).not.toHaveBeenCalled();
     expect(onValidated).not.toHaveBeenCalled();
   });
 
-  it("R8: si falta otra obligatoria (no la dirección) NO se menciona la plantilla nueva", async () => {
+  it("R8: a un archivo v3 al que solo le falta una columna NO se le menciona la plantilla nueva", async () => {
     const user = userEvent.setup();
     parseArchivoMock.mockResolvedValue(
-      archivo(["REM-1"], ["destinatario", "telefono", "direccion_destinatario"]),
+      archivo(["REM-1"], ["destinatario", "telefono", "provincia", "canton_distrito", "direccion"]),
     );
     const onValidated = vi.fn();
 

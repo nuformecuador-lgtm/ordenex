@@ -36,7 +36,9 @@ function rowValues(worksheet: ExcelJS.Worksheet, rowNumber: number, count: numbe
 const CLAVES_PLANTILLA = [
   "destinatario",
   "telefono",
-  "direccion_destinatario",
+  "provincia",
+  "canton_distrito",
+  "direccion",
   "monto_cobrar",
   "producto",
   "num_remision",

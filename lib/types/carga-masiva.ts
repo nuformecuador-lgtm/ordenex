@@ -30,14 +30,18 @@ export interface BulkSummary {
 
 // R16: columnas obligatorias de CABECERA (estructura del archivo). Distinto de
 // los campos obligatorios POR FILA (R18), que son un subconjunto.
-// Feature 142/R6/R9 (corte duro D1): la geografia viaja en la columna unica
-// `direccion_destinatario`; `provincia`/`canton` ya NO son columnas de la
-// plantilla, asi que un archivo con el formato viejo falla aqui (R7/R8).
+// Feature 276/R7/R9/R10 (corte duro, igual que el de la 142): la geografia vuelve
+// a viajar en columnas separadas, pero el canton y el distrito comparten una:
+// `canton_distrito` con formato `nombreCanton (Distrito)`. La columna unica de la
+// plantilla v2 (`direccion_destinatario`) ya NO existe, asi que un archivo v2 falla
+// aqui — que es justo el efecto buscado: no hay modo de compatibilidad.
 export const REQUIRED_HEADERS = [
   "num_remision",
   "destinatario",
   "telefono",
-  "direccion_destinatario",
+  "provincia",
+  "canton_distrito",
+  "direccion",
 ] as const;
 
 /**
@@ -63,12 +67,13 @@ function requiredNonEmpty(label: string) {
 // tal como los emite el parser). La geografia NO se valida aqui: su resolucion
 // (existencia/ambiguedad, R19/R20) vive en el service.
 //
-// Feature 142 (design.md §4): este schema lo comparten la via sesion
-// (`cargarMasiva`) y la via API key (`cargarViaApi`, feature 88 = contrato
-// publico con `provincia`/`canton`/`distrito`/`direccion` separados). Por eso NO
-// declara ningun campo geografico ni parsea `direccion_destinatario`: cada via
-// extrae su geografia con su propio extractor en `BulkOrdenService`.
-// `direccion_destinatario` queda como paso-a-traves tipado.
+// Feature 142/276 (design.md §5): este schema lo comparten la via sesion
+// (`cargarMasiva`, plantilla v3 con `provincia` + `canton_distrito` + `direccion`)
+// y la via API key (`cargarViaApi`, feature 88 = contrato publico con
+// `provincia`/`canton`/`distrito`/`direccion` separados). Por eso NO valida el
+// CONTENIDO de ningun campo geografico: cada via extrae y valida su geografia con
+// su propio extractor en `BulkOrdenService` (R26/R30). Los campos geograficos que
+// aparecen aqui son paso-a-traves tipado, y `direccion` la usan las DOS vias.
 //
 // ANCLA feature 143 (R16) — NO convertir este `z.object` en `.strict()`.
 // El export de filas con error (`carga-masiva-export-errores.ts`) descarga un
@@ -82,7 +87,9 @@ export const filaCargaSchema = z.object({
   destinatario: requiredNonEmpty("destinatario"),
   telefono: requiredNonEmpty("telefono"),
   producto: requiredNonEmpty("producto"),
-  direccion_destinatario: z.string().trim().optional().default(""),
+  provincia: z.string().trim().optional().default(""),
+  canton_distrito: z.string().trim().optional().default(""),
+  direccion: z.string().trim().optional().default(""),
   notas: z.string().trim().optional().default(""),
   // R23: numerico >= 0, o vacio -> null.
   monto_cobrar: z

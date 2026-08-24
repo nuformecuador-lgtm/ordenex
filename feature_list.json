@@ -3356,6 +3356,19 @@
       "branch": null,
       "spec_path": null,
       "status_note": "DADA DE ALTA el 2026-08-24 junto con la 274, como la mitad frontend de la particion fullstack (AGENTS.md F1.0). No arranca hasta que la 274 este `done`: hasta entonces `status` sigue en el DTO y el helper de cascada no existe. IDS: nacio como 270 en el borrador y se RENUMERO a 275."
+    },
+    {
+      "id": 276,
+      "title": "plantilla de carga masiva v3: provincia + canton_distrito + direccion",
+      "description": "Fullstack (misma forma que la 142, su antecesora). La plantilla de carga masiva de ordenes deja de empaquetar la geografia en la columna unica `direccion_destinatario` (`Pais / Provincia / Canton (Distrito) / Direccion`) y pasa a TRES columnas separadas: `provincia`, `canton_distrito` (formato `nombreCanton (Distrito)`) y `direccion`. El pais DESAPARECE: hoy ya se descarta sin validarlo ni persistirlo, asi que no se pierde ningun dato. Es un CORTE DURO, sin modo de compatibilidad: un archivo v2 se rechaza en la validacion de cabecera con el mensaje de plantilla cambiada, igual que la 142 rechazo a la v1. Barato porque la 142 dejo la geografia INYECTADA POR VIA: se sustituye un extractor (`geoInputDesdeDireccionUnificada` -> `geoInputDesdeCantonDistrito`) y `resolveGeo` no se toca. El parser tampoco se reescribe: `separarCantonDistrito`, hoy privado de `lib/utils/direccion-destinatario.ts`, se PROMUEVE a publico en `lib/utils/canton-distrito.ts` con sus cinco ramas de error intactas, y el modulo viejo se borra. Toca: carga-masiva-fields (8 -> 10 columnas), OrdenesCargaUpload (cabecera + texto de ayuda), lib/types/carga-masiva (REQUIRED_HEADERS + filaCargaSchema), BulkOrdenService (extractor de la via sesion) y ~8 suites. NO toca: la via API key ni su OpenAPI, CotizacionOrdenService, resolveGeo, la aritmetica de tarifas ni el troceo por chunks.",
+      "zone": "fullstack",
+      "status": "in_progress",
+      "sdd": true,
+      "complexity": "media",
+      "depends_on": null,
+      "branch": "feature/276-plantilla-carga-masiva-v3",
+      "spec_path": "specs/276-plantilla-carga-masiva-v3",
+      "status_note": "DADA DE ALTA el 2026-08-24 a pedido del humano ('en el cargue masivo la estructura cambia: ahora viene provincia, canton_distrito (nombreCanton (distrito)), direccion'). DECISIONES YA CERRADAS en la conversacion de alta, no reabrir en el spec: (a) REEMPLAZO TOTAL de la v2, sin modo de compatibilidad; (b) la via API key (`/api/ordenes/api-key/carga`, contrato publico de la feature 88) NO cambia y sigue con provincia/canton/distrito/direccion separados. NO SE PARTE en backend+frontend pese a evaluar como fullstack (AGENTS.md F1.0): es el mismo criterio que se aplico a la 142, su antecesora, porque cabecera y plantilla son UN SOLO contrato — si el backend cambia REQUIRED_HEADERS y el frontend sigue generando la plantilla vieja, la carga queda ROTA entre los dos merges. El spec ya organiza el trabajo en bloques B*/F* delegables a backend_dev y frontend_dev por separado. CADUCIDADES declaradas en design.md §8: mueren `tests/unit/utils/direccion-destinatario.test.ts` y todo caso que arme una fila con `direccion_destinatario`; son contrato de la v2, se retiran, no se adaptan. AVISO DE BASE: el spec se escribio con el arbol de trabajo sucio por la feature 274 (rama feature/274-cascada-tarifa-zona-tienda); ninguna de las lineas citadas pertenece a ese diff (274 toca tarifas, no geografia), pero la rama de esta ficha debe nacer de `dev`, no de la 274."
     }
   ]
 }
