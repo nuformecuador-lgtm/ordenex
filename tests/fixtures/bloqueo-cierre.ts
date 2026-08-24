@@ -82,10 +82,16 @@ export function bloqueoDe(opciones: {
  * `V = N` con N >= 2: TODOS los cierres abiertos estan en el tejado del mensajero, ninguno esta
  * enviado. Es el estado que el aviso describia mal hasta el 2026-08-23.
  *
- * ⚠️ NO SE COMPONE CON `bloqueoDe({ n, v: n })`: esa fabrica pondria N `vencido`, y **dos `vencido`
- * a la vez es un estado IMPOSIBLE** (R17) —el corte crea como mucho uno por mensajero y corrida—.
- * Un test verde contra un imposible no dice nada. Lo alcanzable son dos `rechazado`, o
- * `vencido` + `rechazado`; aqui se usa el primero, que es el que el humano nombro.
+ * ⚠️ NO SE COMPONE CON `bloqueoDe({ n, v: n })`: esa fabrica pondria N `vencido`, y ese doble seria
+ * el caso RARO, no el representativo. Lo normal —y lo que el humano nombro— son dos `rechazado`, o
+ * `vencido` + `rechazado`; aqui se usa el primero.
+ *
+ * ⚠️ CORREGIDO EL 2026-08-23: aqui decia que dos `vencido` a la vez es un estado **IMPOSIBLE**
+ * (R17) y que «un test verde contra un imposible no dice nada». **La premisa era falsa**: es raro
+ * pero ALCANZABLE —la orden reservada de la 246 sobrevive al corte y su proteccion caduca sola—, y
+ * esta medido en `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`. **La decision
+ * de esta fabrica no cambia** (sigue siendo mejor un doble del caso normal), solo su motivo: se
+ * elige el representativo, no se esquiva un imposible.
  *
  * Con `V = N` el abierto mas viejo ES el re-solicitable mas viejo, asi que los dos campos apuntan
  * al MISMO cierre (R18, garantizado por el repositorio y afirmado contra Postgres). `bloqueado` no

@@ -40,8 +40,12 @@ import {
  *   (a) **reponer la exclusion por cierre abierto** en `CorteDiarioRepository` -> muere el caso 1
  *       («el caso `79cb2c0f`»): el mensajero con un `solicitado` vuelve a quedarse fuera del corte y
  *       su segundo cierre no se crea.
- *   (b) **romper la guarda «algo paso»** de `CierreDiaRepository.crearCierre` -> ver la nota de
- *       ⚠️ MECANISMO MEDIDO en el caso 2: lo que sostiene R17 **no es esa guarda**, es la SELECCION.
+ *   (b) **romper la guarda «algo paso»** de `CierreDiaRepository.crearCierre` -> **SOBREVIVE, y se
+ *       deja escrito tal cual**. No se maquilla ni se le fabrica un caso que la mate solo para tener
+ *       el marcador a cero: por el camino del corte, «seleccionado y sin nada que cerrar» no es un
+ *       estado alcanzable con datos estaticos. Lo que sostiene el caso 2 **no es esa guarda, es la
+ *       SELECCION** (ver la nota de ⚠️ MECANISMO MEDIDO alli). La red de la guarda vive en
+ *       `tests/unit/repositories/cierre-dia-repository.test.ts`, donde la mutacion mata **4 casos**.
  *
  * SIN BASE ALCANZABLE se **SALTA** (`describe.skip`), nunca pasa en verde: un `skip` se ve en la
  * salida; un `return` silencioso dentro del caso se leeria como `passed` sin haber comprobado nada,
@@ -566,15 +570,15 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     // Y no se le vuelve a registrar la orden que su cierre ya barrio (R24).
     expect(medido.registros).toBe(1);
 
-    // ⚠️⚠️ **MECANISMO MEDIDO, Y NO ES EL QUE EL SPEC AFIRMA.** `design.md`/`tasks.md` (T3.3) y el
-    // comentario de cabecera de `CorteDiarioRepository` sostienen R17 diciendo que el bloqueado
-    // «entra en el bucle pero NO TIENE NADA QUE CERRAR», y que quien lo descarta es la guarda
-    // «algo paso» de `crearCierre`. **Postgres dice otra cosa:** no llega a entrar en el bucle,
-    // porque las DOS ramas de la seleccion (gestiones con `cierre_id IS NULL` y ordenes en
-    // `en_reparto`/`ayuda_tienda`) ya vienen vacias para el. La conclusion —ningun segundo
-    // `vencido`— es la misma y es MAS fuerte; pero la razon escrita no es la que corre, y por eso
-    // la mutacion «romper la guarda algo paso» NO mata este caso. Anotado en
-    // `progress/impl_271.md`.
+    // ⚠️⚠️ **MECANISMO MEDIDO.** Hasta el 2026-08-23, `design.md`, `tasks.md` (T3.3) y el comentario
+    // de cabecera de `CorteDiarioRepository` decian que el bloqueado «entra en el bucle pero NO
+    // TIENE NADA QUE CERRAR», y que quien lo descarta es la guarda «algo paso» de `crearCierre`.
+    // **Postgres dice otra cosa:** no llega a entrar en el bucle, porque las DOS ramas de la
+    // seleccion (gestiones con `cierre_id IS NULL` y ordenes en `en_reparto`/`ayuda_tienda`) ya
+    // vienen vacias para el. La garantia es la misma y es MAS fuerte. **Los tres sitios se
+    // corrigieron ese dia**; esta linea es la que lo afirma, y por eso la mutacion «romper la guarda
+    // algo paso» NO mata este caso — la guarda es la SEGUNDA red, y su prueba esta en
+    // `tests/unit/repositories/cierre-dia-repository.test.ts` (4 casos).
     expect(medido.evaluados).not.toContain(medido.bloqueado);
   });
 
@@ -748,25 +752,27 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
   });
 
   // ===============================================================================================
-  // CASO 4 — ⚠️ CONTRAEJEMPLO MEDIDO DE R17. **DOS `vencido` A LA VEZ NO ES IMPOSIBLE.**
+  // CASO 4 — R17: **DOS `vencido` A LA VEZ ES UN ESTADO ALCANZABLE**, y este caso es su unica prueba.
   // ===============================================================================================
 
   /**
-   * ⚠️⚠️ **ESTE CASO FIJA COMPORTAMIENTO MEDIDO, NO COMPORTAMIENTO APROBADO.** Lo que afirma
-   * CONTRADICE **R17** de `requirements.md`, el invariante derivado que la ficha 271 declara
-   * inalcanzable y sobre el que apoya tres decisiones: (1) quitar la exclusion del corte «sin
-   * ninguna condicion nueva» (S3), (2) NO escribir codigo defensivo para dos `vencido` (T2.5) y
-   * (3) NO escribir test de ese caso porque «un test de un estado imposible no puede fallar por la
-   * razon correcta» (T2.4).
+   * ⚠️⚠️ **ESTE CASO DOCUMENTA UN ESTADO ALCANZABLE, NO UN CONTRAEJEMPLO TEORICO. NO SE BORRA.**
    *
-   * **EL ARGUMENTO DE R17 TIENE UN AGUJERO, Y ES LA FEATURE 246.** R17 dice: «el corte que creo el
-   * `vencido` ya barrio sus ordenes en la MISMA transaccion, asi que la noche siguiente no le queda
-   * nada que cerrar». Eso dejo de ser cierto el dia que la 246 introdujo la **reserva para un dia
-   * posterior**: una orden con `fecha_reparto` en el futuro **sobrevive al barrido** (246/R11), se
-   * queda en `en_reparto` en la mano de un mensajero que acaba de quedar bloqueado, y **la
-   * proteccion caduca sola** (246/R13). La noche siguiente esa orden ya vence, el mensajero vuelve
-   * a entrar por la rama (b) de la seleccion, `crearCierre` la barre —`sinGestionarTransicionadas`
-   * vale 1— y la guarda «algo paso» **pasa**: segundo `vencido`.
+   * Hasta el 2026-08-23 el spec de la 271 afirmaba en mayusculas que **dos `vencido` a la vez es
+   * IMPOSIBLE** (**R17**), y de esa frase colgaban tres decisiones: quitar la exclusion del corte
+   * «sin ninguna condicion nueva» (S3), no escribir codigo defensivo (T2.5) y no escribir test del
+   * caso (T2.4). Estaba razonado en tres pasos, «verificado contra el codigo», copiado a cinco
+   * sitios y aceptado por una revision. **Lo unico que faltaba era ejecutarlo.** Este caso lo
+   * ejecuto, y el spec se corrigio el mismo dia (`requirements.md` -> R17; `design.md` §5 y §6;
+   * `progress/impl_271.md`). **El comportamiento NO se toco: es el correcto.**
+   *
+   * **DONDE SE ROMPIA EL ARGUMENTO: LA FEATURE 246.** El paso 2 decia «el corte que creo el
+   * `vencido` ya barrio sus ordenes en la MISMA transaccion». Eso tiene una **excepcion** desde la
+   * 246: una orden reservada para un dia posterior **NO se barre** (246/R11), se queda en
+   * `en_reparto` en la mano de un mensajero que acaba de quedar bloqueado, y **su proteccion caduca
+   * sola** (246/R13). La noche siguiente vence, el mensajero vuelve a entrar por la rama (b) de la
+   * seleccion, `crearCierre` la barre —`sinGestionarTransicionadas` vale 1—, la guarda «algo paso»
+   * **pasa**, y nace el **segundo `vencido`**.
    *
    * **Y ES ALCANZABLE EN PRODUCCION**, no un estado fabricado: `CorreccionDiaRepartoService`
    * (feature 262) permite cambiar el dia de reparto de una orden que YA esta en `en_reparto` o
@@ -778,13 +784,18 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
    * **ANTES DE LA 271 ESTO NO PODIA PASAR**, y por eso lo introduce esta ficha: la exclusion por
    * cierre abierto sacaba al mensajero de la corrida siguiente.
    *
-   * **QUE HACER CON ESTO NO SE DECIDE AQUI.** El desenlace medido es, ademas, el razonable —la
-   * orden necesitaba barrido y necesitaba un cierre al que ir—, y el estado `N=2, V=2` lo cubre la
-   * regla general (es la fila 7 de la tabla de verdad, con dos `vencido` en vez de dos
-   * `rechazado`). Lo que hay que corregir es **la prosa que lo declara imposible**. Reportado en
-   * `progress/impl_271.md`; NO se ha tocado ni una linea de `lib/`.
+   * **POR QUE NO SE PROGRAMO NADA, decidido por el humano el 2026-08-23:** porque el estado **ya
+   * esta cubierto**, que es una razon distinta de «no existe». Es la **fila 7** de la tabla de
+   * verdad (`N=2, V=2`) con dos `vencido` en vez de dos `rechazado`; la regla general cuenta N y V
+   * sin mirar el estado; el `id` en el `WHERE` de `transicionarASolicitado` —el arreglo de M2,
+   * puesto «por si acaso» para el gemelo del `vencido`— mueve UNO, el mas viejo (R18), sin
+   * escribir-y-reportar-fallo; y la rama `v === n` del aviso ya dice lo correcto para los dos. El
+   * desenlace medido es ademas el razonable: la orden necesitaba barrido y un cierre al que ir.
+   *
+   * **SI ALGUIEN CAMBIA EL COMPORTAMIENTO, ESTE CASO SE PONDRA ROJO Y LEERA ESTO.** Es su unica
+   * razon de ser, y es suficiente.
    */
-  it("⚠️ R17 · contraejemplo: la orden reservada (246) sobrevive al corte que bloquea y la noche siguiente trae un SEGUNDO `vencido`", async () => {
+  it("R17 · dos `vencido` a la vez es ALCANZABLE: la orden reservada (246) sobrevive al corte que bloquea y la noche siguiente trae el SEGUNDO", async () => {
     const medido = await enTransaccionRevertida(prisma, async (tx) => {
       await serializarEscriturasReales(tx);
 
@@ -852,7 +863,8 @@ describeSiHayBase("271/T10.3 — el corte diario, sembrado contra Postgres", () 
     // seleccion —por la orden cuya reserva acaba de caducar— y recibe un SEGUNDO `vencido`.
     expect(medido.evaluadosLa23).toContain(medido.m);
     expect(medido.noche23.vencidosCreados).toBe(1);
-    expect(medido.trasLa23).toHaveLength(2); // ⚠️ DOS `vencido` VIVOS A LA VEZ — R17 dice imposible
+    // ⚠️ DOS `vencido` VIVOS A LA VEZ. Esta linea es la que desmintio la version original de R17.
+    expect(medido.trasLa23).toHaveLength(2);
     expect(medido.trasLa23[0].id).toBe(medido.trasLa22[0].id); // el primero sigue ahi, intacto
     expect(medido.trasLa23[1].id).not.toBe(medido.trasLa22[0].id);
 

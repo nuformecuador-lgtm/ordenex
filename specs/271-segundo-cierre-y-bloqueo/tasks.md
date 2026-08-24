@@ -30,10 +30,18 @@
 > la razón escrita en su fila: el universo del corte sigue siendo «los que tienen actividad» —dos o
 > tres por noche— y un banco de ~50 mediría un escenario que no existe.
 >
-> ⚠️ **T10.3 destapó un hallazgo que no estaba en ninguna parte: R17 es FALSO.** Dos `vencido` a la
+> ⚠️ **T10.3 destapó un hallazgo que no estaba en ninguna parte: R17 era FALSO.** Dos `vencido` a la
 > vez **sí** es alcanzable, por la reserva de día de la feature 246 y la corrección de día de la 262.
-> Está medido en el caso 4 del archivo nuevo y detallado en la fila de T10.3. **No se corrigió
-> código: la decisión es del humano.**
+> Está medido en el caso 4 del archivo nuevo y detallado en la fila de T10.3.
+>
+> **RESUELTO el mismo día por el humano: se corrige la PROSA, no el comportamiento.** El
+> comportamiento es correcto —la orden necesitaba barrido y un cierre al que ir— y el estado ya está
+> cubierto por la regla general, por el `id` del `WHERE` de M2 (el cinturón que se pidió poner «aunque
+> dos `vencido` sea imposible», y que resulta ser la pieza que lo sujeta) y por la rama `v === n` del
+> aviso. Se reescribieron **diez sitios** —`requirements.md` (R17, el apartado del invariante, M2,
+> S2, S9), `design.md` (§5 y §6), este `tasks.md` (T2.4, T2.5, T3.3), tres bloques de comentario en
+> `lib/` y tres en `tests/`—, y el diff de `lib/` es **sólo comentarios**. La tabla de los diez está
+> en `progress/impl_271.md`.
 
 ---
 
@@ -155,11 +163,23 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   **Hecho cuando:** se afirma que (a) transiciona **UNO**, el más viejo, (b) el otro sigue
   `rechazado`, (c) el resultado es **éxito**, no `conflict`. Y con contraprueba: quitar el `id` del
   `where` deja el test **rojo** (transiciona los dos y devuelve `false`). → **R19**
-  ⚠️ **NO se escribe ningún caso de «dos `vencido`»:** es inalcanzable (**R17**) y un test de un
-  estado imposible no puede fallar por la razón correcta.
+  ⚠️ **NO se escribe ningún caso de re-solicitud con «dos `vencido`»:** el `WHERE` que transiciona es
+  **el mismo** que miden estos cuatro pasos, con el `id` dentro. Es la misma línea, medida una vez.
+  > ⚠️ **CORREGIDO EL 2026-08-23:** la razón escrita aquí era otra —«es inalcanzable (**R17**) y un
+  > test de un estado imposible no puede fallar por la razón correcta»— y **la premisa resultó
+  > falsa**: dos `vencido` a la vez es alcanzable (ver **T10.3**). La tarea no cambia; su
+  > justificación sí.
   **Depende de:** T2.3.
 
 - [x] **T2.5 — Invariante derivado R17, escrito donde se lee.**
+  **Desenlace: HECHA, y luego CORREGIDA el 2026-08-23.** El comentario se escribió en
+  `CorteDiarioService` y `CierreDiaRepository` como pedía la tarea. **Lo que decía era falso**: la
+  medida de **T10.3** desmintió la imposibilidad ese mismo día, y los dos comentarios se
+  **reescribieron** para decir lo medido —que es raro pero alcanzable, por qué (246 + 262), qué lo
+  cubre (fila 7 de la tabla, el `id` del `WHERE` de M2, la rama `v === n` del aviso) y cuál es el
+  mecanismo REAL del caso normal (no entra en el bucle; la guarda es la segunda red)—. **Sigue sin
+  añadirse ninguna guarda**, y ahora por la razón correcta: no porque el estado no exista, sino
+  porque **ya está cubierto**.
   Comentario en `CorteDiarioService`/`CierreDiaRepository` con las tres razones de por qué dos
   `vencido` es imposible, y la advertencia de no escribir código defensivo para ese caso.
   **Hecho cuando:** el comentario existe, nombra la ficha y la fecha, y **no** se ha añadido ninguna
@@ -193,6 +213,13 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
 
 - [x] **T3.3 — Un mensajero ya bloqueado no acumula.**
   **Desenlace:** HECHA **con tests preexistentes**, que es lo que la tarea admite («el motivo es la guarda “algo paso” existente, no una guarda nueva»): `corte-diario-service.test.ts` -> `crearCierre` null -> `vencidosCreados` 0, y `cierre-dia-repository.test.ts` -> la guarda «algo paso». **No se escribio test nuevo.**
+  > ⚠️ **AMPLIADA Y CORREGIDA EL 2026-08-23 por T10.3.** Ahora sí hay test sembrado contra Postgres
+  > (`corte-diario-segundo-cierre-sql-real.test.ts` → «R22/R17 · el mensajero YA bloqueado…», con un
+  > mensajero TESTIGO al lado). Y el **motivo que esta tarea da es el equivocado**: no es la guarda
+  > «algo pasó» —el bloqueado **no llega a entrar en el bucle**, las dos ramas de la selección vienen
+  > vacías para él—. La guarda es la **segunda red**, y su prueba vive en
+  > `tests/unit/repositories/cierre-dia-repository.test.ts` (4 casos): con ella rota, **los 133
+  > archivos de `tests/integration/db` pasan en verde**. Medido, no supuesto.
   Con un `vencido` y **nada** que cerrar, la corrida no crea nada y `vencidosCreados` no sube.
   **Hecho cuando:** el test lo afirma y el motivo es la guarda «algo pasó» existente, **no una guarda
   nueva**. → **R22, R54**
@@ -508,7 +535,8 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   **Anti-vacuidad, demostrada y no prometida:** `describe.skip` sin base, **cinco** fallos RUIDOSOS en el `beforeAll`, **cero** `return` de salida temprana, y un `afirmarCorpusSembrado` que cuenta el corpus EN LA BASE antes de medir nada. Comprobado a mano: vaciando el corpus el caso muere con el mensaje del contador; y **desactivando ademas ese contador, muere igual** en la asercion de comportamiento. Dos redes independientes.
   → **R21–R24**
 
-  🔴 **HALLAZGO QUE ESTA TAREA DESTAPO — R17 ES FALSO: DOS `vencido` A LA VEZ ES ALCANZABLE.**
+  🔴 **HALLAZGO QUE ESTA TAREA DESTAPO — R17 ERA FALSO: DOS `vencido` A LA VEZ ES ALCANZABLE.**
+  *(Resuelto el 2026-08-23: se corrigio la prosa en diez sitios; el comportamiento no se toco.)*
   Medido, no razonado (caso 4 del archivo nuevo). El argumento de R17 dice: «el corte que lo bloqueo
   ya barrio sus ordenes en la MISMA transaccion, asi que la noche siguiente no le queda nada que
   cerrar». **La feature 246 abrio una excepcion a ese barrido**: una orden reservada para un dia
@@ -526,8 +554,9 @@ basura. Ya se hace a propósito en `tests/components/CierreDiaModule.test.tsx:56
   general: es la **fila 7** de la tabla de verdad con dos `vencido` en vez de dos `rechazado`, y la
   re-solicitud lo trata igual (R18: el mas viejo primero). Lo que hay que corregir es **la prosa que
   lo declara imposible**: **R17**, **T2.5** (el comentario en `CorteDiarioService` y
-  `CierreDiaRepository`) y la justificacion de **T2.4** para no escribir ese caso. **Decision
-  pendiente del humano.**
+  `CierreDiaRepository`) y la justificacion de **T2.4** para no escribir ese caso. **RESUELTO el 2026-08-23 por el humano: se corrige la
+  PROSA, no el comportamiento.** Los diez sitios reescritos estan tabulados en
+  `progress/impl_271.md`; el diff de `lib/` es **solo comentarios**.
 
 - [x] **T10.4 [P] — La migración de enum contra Postgres real.**
   Que el `NULLS NOT DISTINCT` y el `WHERE` parcial de `notificacion_dedupe_key` **sobrevivan** a la

@@ -857,10 +857,16 @@ describe("CierreDiaModule", () => {
 
   /**
    * El CASO 7 —«dos cierres rechazados», N=2 V=2— se compone AQUÍ y no se pide a `bloqueoDe`:
-   * esa fábrica sólo sabe producir `vencido`, y **dos `vencido` a la vez son IMPOSIBLES** (R17,
-   * corregido por el humano el 2026-08-23). Pedirle `{ n: 2, v: 2 }` daría un doble que la base no
-   * puede producir, y un test verde contra un imposible no dice nada. El caso real de dos
-   * re-solicitables incluye siempre un `rechazado`.
+   * esa fábrica sólo sabe producir `vencido`, y lo que esta pantalla tiene que saber pintar en el
+   * caso 7 es el desenlace **normal** de dos re-solicitables, que llega por el RECHAZO.
+   *
+   * ⚠️ CORREGIDO EL 2026-08-23: aquí decía que **dos `vencido` a la vez son IMPOSIBLES** (R17) y que
+   * pedirle `{ n: 2, v: 2 }` daría «un doble que la base no puede producir». **La base sí puede
+   * producirlo** —raro, pero alcanzable: la orden reservada de la 246 sobrevive al corte y su
+   * protección caduca sola; medido en
+   * `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`—. El caso 7 se sigue
+   * componiendo con dos `rechazado` porque es el camino frecuente, no porque el otro no exista. Y la
+   * pantalla no necesita distinguirlos: la rama `v === n` del aviso dice lo mismo para los dos.
    *
    * `bloqueado` NO se escribe a mano —sale de `estaBloqueadoPorCierres`, igual que en la fábrica
    * compartida—: un doble no debe poder afirmar un estado que la regla no produce.

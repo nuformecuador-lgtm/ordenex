@@ -236,10 +236,16 @@ estado se conserva intacto.
   `findCierreSolicitado` deja de usarse para componer avisos, porque su `orderBy createdAt desc`
   devuelve el cierre equivocado en cuanto hay dos `solicitado`.
 
-**Sobre el caso «dos `vencido`»:** no se escribe ningún caso de test para él. Es **inalcanzable** por
-el invariante derivado (**R17**), y un test de un estado imposible es un test que nunca puede fallar
-por la razón correcta. El caso que **sí** se prueba, con los cuatro pasos, es **dos `rechazado`**
-(tarea **T3.4**).
+**Sobre el caso «dos `vencido`»:** no se escribe ningún caso de test **de re-solicitud** para él. El
+caso que se prueba con los cuatro pasos es **dos `rechazado`** (tarea **T3.4**).
+
+> ⚠️ **CORREGIDO EL 2026-08-23.** Aquí decía que el motivo era que «dos `vencido`» es **inalcanzable**
+> por R17. **Medido ese día: es alcanzable** —la orden reservada de la 246 sobrevive al corte y su
+> protección caduca sola; ver el apartado de R17 en `requirements.md`—, y el caso **sí tiene test**:
+> `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts` → «⚠️ R17 · dos `vencido` a la
+> vez es ALCANZABLE…». Lo que **no** hace falta es un caso de re-solicitud aparte: el `WHERE` que
+> transiciona es **el mismo** que ya miden los cuatro pasos del rechazo (**R19**), con el `id` dentro.
+> La razón para no escribirlo ya no es «el estado no existe», es «la línea ya está medida».
 
 ---
 
@@ -254,10 +260,19 @@ por la razón correcta. El caso que **sí** se prueba, con los cuatro pasos, es 
 
 - Un mensajero **que aún no estaba bloqueado** y que no cerró su día recibe su `vencido`. Es como
   aparecen los casos 5 y 6.
-- Un mensajero **ya bloqueado** entra en el bucle, pero **no tiene nada que cerrar**: el corte que lo
-  bloqueó ya barrió sus órdenes a `sin_gestionar` en la misma transacción y vinculó sus gestiones. La
-  guarda «algo pasó» de `crearCierre` (`CierreDiaRepository.ts:695`) hace `rollback → null` y
-  `vencidosCreados` no sube (**R22**). **Esto es lo que hace que R17 se sostenga solo.**
+- Un mensajero **ya bloqueado** y **sin nada suelto** **NO llega a entrar en el bucle**: el corte que
+  lo bloqueó ya barrió sus órdenes a `sin_gestionar` en la misma transacción y vinculó sus gestiones,
+  así que las **dos** ramas de la selección vienen **vacías** para él. `vencidosCreados` no sube
+  (**R22**). La guarda «algo pasó» de `crearCierre` (`CierreDiaRepository.ts:695`) es la **segunda
+  red**, no la primera.
+  > ⚠️ **CORREGIDO EL 2026-08-23, con la medida delante.** Esta viñeta decía «entra en el bucle, pero
+  > no tiene nada que cerrar» y atribuía el desenlace a la guarda. Medido en
+  > `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts` («R22/R17 …», que afirma
+  > `expect(evaluados).not.toContain(bloqueado)`): **no entra**. La garantía real es **más fuerte**
+  > que la que estaba escrita. Y la frase que seguía —«esto es lo que hace que R17 se sostenga
+  > solo»— **se retira**: R17 **no** se sostiene (ver `requirements.md`). Dónde SÍ está probada la
+  > guarda: `tests/unit/repositories/cierre-dia-repository.test.ts`, 4 casos; en
+  > `tests/integration/db` **no la cubre nada**, y está medido.
 - Un mensajero con un `solicitado` de ayer que **trabajó hoy** y no cerró: entra, tiene gestiones con
   `cierre_id` nulo, y **recibe su segundo cierre**. Es exactamente el caso del cierre `79cb2c0f`.
 

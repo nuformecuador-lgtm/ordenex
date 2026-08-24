@@ -156,20 +156,90 @@ dinero cobrado que no tiene cierre al que ir.
     Con un `rechazado` viejo y un `vencido` nuevo, hoy resolvería **el nuevo primero**, que contradice
     «del más viejo al más nuevo». Con un solo cierre abierto daba igual; con dos, no. Ver **R18**.
 
-## El invariante derivado que hay que escribir, o alguien programará para un caso que no existe
+## El caso «dos `vencido`»: se afirmó imposible, se razonó, y la MEDIDA lo desmintió
 
-> **DOS `vencido` A LA VEZ ES IMPOSIBLE.** Y no por una guarda: sale de la propia regla.
+> ⚠️ **CORREGIDO EL 2026-08-23, DESPUÉS DE MEDIRLO.** Este apartado decía, en mayúsculas, **«DOS
+> `vencido` A LA VEZ ES IMPOSIBLE»**, y de esa frase colgaban tres decisiones. El test de integración
+> de **T10.3** —la corrida del corte sembrada contra Postgres— lo **desmintió el mismo día**: es
+> **raro, pero alcanzable**, y **lo introduce esta ficha**.
+>
+> **Se deja escrita la historia entera, no sólo el resultado.** La creencia estaba razonada en tres
+> pasos, verificada contra el código, copiada a cinco sitios y aceptada por una revisión. Lo único
+> que faltaba era ejecutarla. Es exactamente el tipo de afirmación que se copia de un spec a otro sin
+> volver a comprobarla, y por eso el razonamiento de abajo se conserva **tal cual, tachado por la
+> medida**, en vez de borrarse.
 
-Razonamiento, verificado contra el código:
+### Lo que se afirmó (razonamiento original, **conservado — y FALSO en su paso 2**)
 
 1. En cuanto un mensajero tiene **un** `vencido`, `V ≥ 1` y queda **BLOQUEADO para gestionar y para
    recibir reparto** (R3). No genera trabajo nuevo: ni gestiones, ni órdenes en la mano.
+   → **Sigue siendo cierto.**
 2. El corte que creó ese `vencido` ya barrió, **en la misma transacción**, sus órdenes de
    `en_reparto` y `ayuda_tienda` a `sin_gestionar` (`CierreDiaRepository.ts:572-672`), y vinculó sus
    gestiones sueltas (`:686`).
+   → 🔴 **AQUÍ SE ROMPE.** El barrido **tiene una excepción desde la feature 246**: una orden
+   **reservada para un día posterior NO se barre** (246/R11). El mensajero puede quedar bloqueado
+   **con una guía todavía en la mano**.
 3. Por tanto, la noche siguiente **no le queda nada que cerrar**: el corte lo evalúa, `crearCierre`
    encuentra 0 gestiones y 0 órdenes que barrer, y devuelve `null` por su guarda «algo pasó» (`:695`).
-   Sin segundo `vencido`.
+   → **Falso en el caso de arriba**, y **mal descrito incluso en el caso normal**: ver «el mecanismo
+   real» más abajo.
+
+### Lo que se midió (2026-08-23, `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`)
+
+**La protección de la 246 caduca sola** (246/R13): `diaCerrado` avanza una noche y alcanza a la orden
+reservada. Entonces el mensajero —**ya bloqueado**— vuelve a entrar por la rama (b) de la selección,
+`crearCierre` barre esa orden, `sinGestionarTransicionadas` vale 1, la guarda «algo pasó» **pasa**, y
+nace el **segundo `vencido`**.
+
+**Y es alcanzable en producción, no fabricado.** Para que una guía esté en `en_reparto` **con** fecha
+futura hay un camino puesto por diseño: **`CorreccionDiaRepartoService`, feature 262**, permite mover
+el día de reparto de una orden que **ya está en `en_reparto`** —su `ESTADOS_CON_DIA_DE_REPARTO_VIVO`
+lo dice y su comentario llama a esa población *«la que la 261 dejó atrapada: el paquete ya está en la
+mano del mensajero»*—. Secuencia completa:
+
+| Paso | Qué pasa | Quién lo habilita |
+| --- | --- | --- |
+| 1 | Día D: el mensajero recoge una guía → `en_reparto`, `fecha_reparto = D` | — |
+| 2 | Día D: bodega la corrige a «mañana» → `fecha_reparto = D+1`, **sigue en `en_reparto`** | **262** |
+| 3 | Corte de la noche D→D+1: sus gestiones sueltas lo arrastran al bucle; la guía está **protegida** y no se barre → **`vencido` #1**, bloqueado | **246/R11** |
+| 4 | Día D+1: bloqueado, no gestiona. La guía sigue donde estaba | R3 |
+| 5 | Corte de la noche D+1→D+2: la reserva **caducó sola**, entra por la rama (b), se barre → **`vencido` #2** | **246/R13** + **271/R21** |
+
+**El paso 5 no ocurría antes de esta ficha**: la exclusión por cierre abierto lo sacaba de la corrida
+siguiente. **Es decir: `N=2, V=2` con dos `vencido` lo introduce la 271.**
+
+### Y aun así NO se escribe código defensivo — pero por OTRA razón, y la diferencia importa
+
+Antes se decía «no se programa porque el estado **no existe**». Eso era falso. Se sigue sin programar
+nada nuevo porque **el estado ya está cubierto**, que es una razón distinta y verificable:
+
+1. **Es la fila 7 de la tabla de verdad** (`N=2, V=2`) con dos `vencido` en vez de dos `rechazado`.
+   La regla general no distingue el estado: cuenta N y V.
+2. **La re-solicitud ya lo trata bien, y por el cinturón que se puso «por si acaso».** Cuando se
+   arregló **M2** se pidió arreglar **también** su gemelo del `vencido` «aunque dos `vencido` sea
+   imposible». Ese cinturón resulta ser **la pieza que sujeta esto**: `transicionarASolicitado` lleva
+   el **`id` en el `WHERE`**, así que con dos `vencido` mueve **uno**, el más viejo (**R18**), y no
+   escribe-y-reporta-fallo. Si aquella petición no se hubiera hecho, hoy habría un fallo mudo aquí.
+3. **El aviso ya lo dice bien.** La rama `v === n` —«Envíalos a aprobación, empezando por el más
+   antiguo…», aprobada por el humano— cubre dos `vencido` igual que dos `rechazado`.
+4. **El desenlace medido es el correcto.** La orden necesitaba barrido y necesitaba un cierre al que
+   ir. Volver a excluir al bloqueado sería reponer el bug de producción (`79cb2c0f`) que esta ficha
+   existe para arreglar.
+
+### El mecanismo real del caso normal (también estaba mal escrito)
+
+El paso 3 decía «el corte **lo evalúa** y `crearCierre` devuelve `null` por su guarda». **Medido: no
+llega a evaluarlo.** Con el mensajero bloqueado y **nada** suelto, las **dos** ramas de la selección
+—gestiones con `cierre_id IS NULL` y órdenes en `en_reparto`/`ayuda_tienda`— vienen **vacías** para
+él: no entra en la lista y no entra en el bucle. Es una garantía **más fuerte** que la guarda, y es la
+que de verdad corre.
+
+**La guarda «algo pasó» se conserva como la segunda red que es**, y conviene saber dónde está su
+prueba: la mata **`tests/unit/repositories/cierre-dia-repository.test.ts`** (4 casos), y **no la cubre
+nada en `tests/integration/db`** —medido: con la guarda rota, los 133 archivos de esa carpeta pasan en
+verde—, porque por el camino del corte el estado «seleccionado y sin nada que cerrar» no es alcanzable
+con datos estáticos.
 
 **Dónde SÍ se acumulan dos cierres re-solicitables: el RECHAZO.** El rechazo es **retroactivo** —cae
 sobre un cierre que el mensajero solicitó cuando **no** estaba bloqueado y por tanto pudo solicitar
@@ -185,9 +255,16 @@ otro—. Secuencia alcanzable, cuatro pasos:
 Y también es alcanzable la mezcla `{vencido, rechazado}`: `solicitado`#1 → el día 2 no cierra → el
 corte crea `vencido`#2 (N=2, V=1) → el administrador rechaza #1 (N=2, V=2).
 
-**Conclusión que va al código:** el caso «dos re-solicitables» existe y **siempre incluye al menos un
-`rechazado`**. Escribir código defensivo para «dos `vencido`» es programar para un estado inalcanzable;
-escribirlo para «dos re-solicitables» es obligatorio.
+**Conclusión que va al código:** el caso «dos re-solicitables» existe, y hay que escribirle código
+—unificar la re-solicitud sobre la lista entera, eligiendo por **edad** y con el `id` en el `WHERE`—
+**sin ramificar por estado**. Es lo que hace **R18/R19**.
+
+> ⚠️ **CORREGIDO EL 2026-08-23.** Aquí decía que el caso «siempre incluye al menos un `rechazado`» y
+> que programar para «dos `vencido`» sería programar para un estado inalcanzable. **Lo primero es
+> falso** (hay una vía con dos `vencido`: 246 + 262, ver arriba) y **lo segundo sobra**: la solución
+> que ya se eligió —elegir por edad sobre la lista de re-solicitables, sin mirar el estado— cubre las
+> tres combinaciones sin una sola rama nueva. Es el mejor argumento a favor de haberla elegido, y
+> conviene que quede dicho: **la regla general acertó donde el razonamiento falló.**
 
 ## Los tres fallos mudos que esta ficha DESPIERTA
 
@@ -201,9 +278,15 @@ son alcanzables el primer día.
   transiciona **LOS DOS**, `count` vale `2`, y su `return count === 1` devuelve **`false`**: el
   servicio responde `conflict` y el mensajero lee «no se pudo» **mientras sus dos cierres ya se
   movieron a `solicitado`**. Escribe y reporta fallo.
-  `transicionarVencidoASolicitado` (`:454`) tiene la **forma idéntica**, pero su caso de dos es
-  inalcanzable por el invariante derivado de arriba. Se corrige igual —misma unificación— **sin
-  escribirle un caso de test de «dos vencido»**, que sería un test de un estado imposible.
+  `transicionarVencidoASolicitado` (`:454`) tiene la **forma idéntica**. Se corrige igual —misma
+  unificación— y **sin escribirle un caso de test propio**.
+  > ⚠️ **CORREGIDO EL 2026-08-23:** aquí decía que su caso de dos era «inalcanzable por el invariante
+  > derivado de arriba», y **eso resultó ser falso** (ver el apartado corregido). Lo importante es que
+  > **la decisión fue la correcta por accidente**: se pidió arreglar el gemelo «aunque dos `vencido`
+  > sea imposible», y ese cinturón —el `id` en el `WHERE`— es hoy **la única pieza que impide un fallo
+  > mudo real** en un caso que sí ocurre. La razón para no escribirle test propio ya no es «es un
+  > estado imposible», sino que **el `WHERE` es exactamente el mismo** que el que ya prueban los
+  > cuatro pasos del rechazo (**R19**): es la misma línea, medida una vez.
 - **M7 — aprobar uno vacía la mano del otro.** Al aprobar, la liberación de `sin_gestionar`
   (`CierresAdminRepository.ts:1417`) filtra por `mensajeroAsignadoId` **y no por cierre**: con dos
   cierres, aprobar el 1.º libera también las órdenes del 2.º.
@@ -279,11 +362,26 @@ primero. *(Derivado — ver supuesto **S4**.)*
 DEBE permitirle **re-solicitarlo**, sea cual sea N. *(Anti-deadlock: conserva 111/R9 y 109/R28; sin
 esto, el caso 5 no tiene salida.)*
 
-**R17.** El sistema NO DEBE permitir que un mensajero tenga **dos cierres en `vencido` a la vez**.
-Esta propiedad DEBE sostenerse **como consecuencia de la regla** —un mensajero con un `vencido` está
-bloqueado, no genera trabajo nuevo, y su corte ya barrió lo que tenía—, **sin ninguna guarda
-específica añadida** para imponerla. Un mensajero SÍ puede tener dos cierres re-solicitables cuando
-al menos uno de ellos sea `rechazado`.
+**R17.** *(REESCRITO el 2026-08-23 tras medirlo. Ver más abajo la versión original y por qué se
+cayó.)* El sistema DEBE tratar **dos cierres en `vencido` a la vez** como un estado **raro pero
+ALCANZABLE**, cubierto por la regla general (`N=2, V=2`, fila 7 de la tabla de verdad) y por la
+re-solicitud del más viejo (**R18**), **sin ninguna guarda específica añadida** para impedirlo ni
+para detectarlo. El sistema NO DEBE afirmar, en código ni en prosa, que ese estado sea imposible.
+
+> **Versión original, conservada porque la historia importa más que el resultado:**
+> *«El sistema NO DEBE permitir que un mensajero tenga dos cierres en `vencido` a la vez. Esta
+> propiedad DEBE sostenerse como consecuencia de la regla —un mensajero con un `vencido` está
+> bloqueado, no genera trabajo nuevo, y su corte ya barrió lo que tenía—, sin ninguna guarda
+> específica añadida para imponerla.»*
+>
+> **Por qué se cayó:** «su corte ya barrió lo que tenía» dejó de ser cierto con la feature **246**
+> —una orden reservada para un día posterior sobrevive al barrido y su protección caduca sola—, y la
+> feature **262** deja mover el día de una orden que ya está en `en_reparto`. Medido el 2026-08-23 en
+> `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`. **Lo introduce esta ficha**:
+> antes, la exclusión por cierre abierto sacaba al bloqueado de la corrida siguiente.
+>
+> **Lo que NO cambia:** no se añade guarda, y **no se necesita**. Un mensajero sigue pudiendo tener
+> dos cierres re-solicitables, y ahora se sabe que no siempre incluyen un `rechazado`.
 
 **R18.** CUANDO un mensajero con **dos o más** cierres re-solicitables re-solicite, el sistema DEBE
 transicionar **exactamente uno —el más viejo—**, con independencia de si ese más viejo está en
@@ -521,6 +619,13 @@ Coincide con lo que ya hace el código (`ESTADOS_CIERRE_BLOQUEAN_GESTION = ["ven
 `OrdenRepository.ts:328`, y `ESTADOS_REABRIBLES` incluye los dos).
 → Fija **R1, R7, R16, R17, R18, R42, R48**.
 
+> ⚠️ **NOTA SOBRE S2 — 2026-08-23, por la tarde.** La **decisión** de S2 sigue en pie y fue acertada:
+> el requisito de «uno, el más viejo» se reformula sobre **cierres re-solicitables** y M2 muerde por
+> el `rechazado`. Lo que **no** se sostiene es la **premisa** con la que se argumentó —que dos
+> `vencido` a la vez fuera imposible—: medida y desmentida ese mismo día (ver el apartado de R17). La
+> reformulación sobre «re-solicitables» resulta ser, además, **lo que salva el caso**: por eso no hay
+> que reabrir S2, sólo dejar de citarla como prueba de una imposibilidad.
+
 **S2 — CORREGIDO el 2026-08-23 por el humano. No es «de uno en uno entre dos `vencido`»: dos
 `vencido` a la vez es IMPOSIBLE.** La propiedad se escribe como **invariante derivado** (**R17**), con
 su razón, y el requisito de «uno, el más viejo» se reformula sobre **cierres re-solicitables**
@@ -553,7 +658,11 @@ donde ya mira. **La cola sigue siendo la vista de trabajo, no el canal de aviso.
 
 **S9 — Q7 RESUELTA: SIN tope de N.** Con el bloqueo puesto, N sólo puede crecer por rechazos del
 administrador, así que está **acotado por construcción**. Un tope sería código defensivo para un caso
-que la regla ya impide — y este spec ya tiene ese precedente exacto en **R17** (los dos `vencido`).
+que la regla ya impide.
+> ⚠️ **2026-08-23:** aquí se citaba **R17** («los dos `vencido`») como precedente exacto, y ese
+> precedente **se cayó**: R17 resultó alcanzable. **La conclusión de S9 no cambia** —se sostiene por
+> su propia razón, que N sólo crece por rechazos del administrador—, pero **ya no se apoya en R17**.
+> Es el ejemplo de por qué una imposibilidad afirmada y no medida es cara: se cita como prueba.
 
 **S3 — CONFIRMADO. El corte sigue creando cierre para el trabajo sin cerrar aunque el mensajero ya
 esté bloqueado, y NO hace falta excluirlo.** Es lo que produce el

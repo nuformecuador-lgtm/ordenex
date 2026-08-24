@@ -18,16 +18,23 @@ import type {
 // POR QUE NO HACE FALTA NINGUNA CONDICION NUEVA, que es la pregunta que esto invita a hacerse:
 //   · un mensajero que AUN NO estaba bloqueado y no cerro su dia recibe su `vencido` — es como
 //     aparecen los casos 5 y 6 de la tabla de verdad;
-//   · un mensajero YA bloqueado entra en el bucle pero NO TIENE NADA QUE CERRAR: el corte que lo
+//   · un mensajero YA bloqueado y SIN NADA SUELTO **no llega a entrar en el bucle**: el corte que lo
 //     bloqueo ya barrio sus ordenes a `sin_gestionar` en la misma transaccion y vinculo sus
-//     gestiones, asi que `crearCierre` encuentra 0 y 0 y devuelve `null` por su guarda «algo paso»
-//     (271/R22). Eso es lo que hace que el invariante derivado R17 —dos `vencido` a la vez es
-//     IMPOSIBLE— se sostenga SOLO, sin una guarda que lo imponga;
+//     gestiones, asi que las DOS ramas de arriba vienen VACIAS para el y no aparece en la lista
+//     (271/R22). La guarda «algo paso» de `crearCierre` es la SEGUNDA red, no la primera.
+//     ⚠️ CORREGIDO EL 2026-08-23: esta viñeta decia «entra en el bucle … y devuelve null por su
+//     guarda», y de ahi concluia que el invariante R17 —dos `vencido` a la vez es IMPOSIBLE— «se
+//     sostenia solo». Las DOS cosas eran falsas. Lo primero lo desmintio la medida
+//     (`corte-diario-segundo-cierre-sql-real.test.ts` -> «R22/R17 …» afirma que NO esta en la
+//     lista); lo segundo, el caso «⚠️ R17 · dos `vencido` a la vez es ALCANZABLE» del mismo archivo.
+//     La garantia real de esta viñeta es MAS fuerte que la que estaba escrita; la de R17 no existe;
 //   · un mensajero con un `solicitado` de ayer que trabajo hoy y no cerro recibe su SEGUNDO cierre.
 //     Es exactamente el caso de `79cb2c0f`, y es el objetivo de esta ficha.
 //
 // COSTE: el corte evalua mas mensajeros que antes. El universo sigue siendo «los que tienen
-// actividad», no todos; la medida esta en `progress/impl_271.md`.
+// actividad», no todos —en produccion, dos o tres por noche—, asi que se DECLARO SIN MEDIR por
+// decision humana (T3.5). La razon esta en `progress/impl_271.md`; si algun dia son decenas, se
+// reabre.
 
 // Feature 109 (R4) + feature 235 (R26): estados de una orden que el corte transiciona a
 // `sin_gestionar` — el mensajero no la gestiono ni la recogio de vuelta antes del corte del dia.
@@ -70,9 +77,11 @@ export class CorteDiarioRepository implements ICorteDiarioRepository {
    *
    * ⚠️ YA NO SE RESTA A NADIE. Hasta la 271 se excluia a quien tuviera un cierre ABIERTO, para
    * sostener el invariante 109/R30 que esta ficha DEROGA (R9). Un mensajero con un `solicitado` de
-   * ayer que trabaja hoy DEBE entrar y recibir su segundo cierre; el que no tenga nada que cerrar lo
-   * descarta `crearCierre` con su guarda «algo paso», que ya existia (R22). Ver el bloque del
-   * principio del archivo con las tres razones.
+   * ayer que trabaja hoy DEBE entrar y recibir su segundo cierre; el que no tenga nada que cerrar
+   * **ni siquiera sale de estas dos consultas** (R22) — medido el 2026-08-23 en
+   * `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`. La guarda «algo paso» de
+   * `crearCierre` sigue ahi como segunda red, pero no es lo que decide aqui. Ver el bloque del
+   * principio del archivo.
    *
    * Devuelve `zonaId` (usuario.zona_id) para derivar el destino (R1). Solo queries (sin logica de
    * negocio).

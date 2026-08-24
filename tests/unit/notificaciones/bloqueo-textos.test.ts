@@ -42,7 +42,13 @@ const JORNADA_SUYA = "2026-08-20";
 /**
  * `V = N` — TODOS los pendientes en el tejado del mensajero, con DOS `rechazado`. Vive en el
  * fixture compartido (`bloqueoTodosPorEnviar`) y NO se compone con `bloqueoDe({ n, v: n })`: esa
- * fabrica pondria dos `vencido`, que R17 declara imposible.
+ * fabrica pondria dos `vencido`, que es el camino RARO, no el representativo.
+ *
+ * ⚠️ CORREGIDO EL 2026-08-23: aqui decia «que R17 declara imposible». **No lo es** — raro pero
+ * alcanzable, por la orden reservada de la 246 que sobrevive al corte; medido en
+ * `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`. **El texto que este archivo
+ * afirma vale igual para los dos**: la rama `v === n` no mira el estado, solo cuenta. Que sea
+ * indiferente es justo lo que hace que el estado raro no necesite codigo nuevo.
  */
 const bloqueoTodosSuyos = bloqueoTodosPorEnviar;
 

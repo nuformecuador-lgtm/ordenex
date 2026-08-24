@@ -49,15 +49,25 @@ const ESTADO_SOLICITADO = "solicitado";
 // no se nombran por separado aqui: la re-solicitud elige por EDAD, no por estado, asi que la lista
 // entra entera en un solo `where`. La lista vive en el modulo puro de la regla.
 //
-// ⚠️ INVARIANTE DERIVADO (271/R17), escrito donde se lee para que nadie programe el caso que no
-// existe: DOS `vencido` A LA VEZ ES IMPOSIBLE, y no por una guarda. En cuanto un mensajero tiene un
-// `vencido`, V >= 1 y queda BLOQUEADO para gestionar Y para recibir trabajo nuevo, asi que no
-// genera actividad nueva; y el corte que creo ese `vencido` ya barrio, EN LA MISMA TRANSACCION, sus
-// ordenes a `sin_gestionar` y vinculo sus gestiones sueltas. La noche siguiente no le queda nada
-// que cerrar: `crearCierre` encuentra 0 gestiones y 0 ordenes y devuelve `null` por su guarda «algo
-// paso». NO SE AÑADE NINGUNA GUARDA para imponerlo, y no se escribe codigo defensivo para «dos
-// vencido»: seria programar para un estado inalcanzable. Donde SI se acumulan dos re-solicitables
-// es en el RECHAZO, que es retroactivo — y ese caso SI tiene test (M2).
+// ⚠️ 271/R17 — AQUI DECIA «DOS `vencido` A LA VEZ ES IMPOSIBLE». **NO LO ES**, y por eso este
+// comentario se reescribio el 2026-08-23, el mismo dia que se midio.
+//
+// LO ALCANZABLE, medido en `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts`: el
+// argumento decia «el corte que creo el `vencido` ya barrio sus ordenes en la misma transaccion», y
+// eso tiene una EXCEPCION desde la feature 246 — una orden reservada para un dia posterior NO se
+// barre (246/R11) y su proteccion CADUCA SOLA (246/R13). La noche siguiente esa orden vence, el
+// bloqueado vuelve a entrar por la rama (b) de la seleccion del corte, se barre, y nace el SEGUNDO
+// `vencido`. Via de produccion: `CorreccionDiaRepartoService` (262) mueve el dia de una orden que YA
+// esta en `en_reparto`. Y LO INTRODUCE LA PROPIA 271: antes, la exclusion por cierre abierto sacaba
+// al bloqueado de la corrida siguiente.
+//
+// SIGUE SIN AÑADIRSE NINGUNA GUARDA, y ahora por la razon correcta: no porque el estado no exista,
+// sino porque YA ESTA CUBIERTO. Es la fila 7 de la tabla de verdad (`N=2, V=2`) con dos `vencido` en
+// vez de dos `rechazado`; la regla general cuenta N y V sin mirar el estado; el `id` que este mismo
+// archivo lleva en el `WHERE` de `transicionarASolicitado` (el arreglo de M2, puesto «por si acaso»
+// para el gemelo del `vencido`) mueve UNO, el mas viejo (R18); y la rama `v === n` del aviso ya dice
+// lo correcto. Donde tambien se acumulan dos re-solicitables es en el RECHAZO, que es retroactivo —
+// y ese caso tiene test desde el principio (M2, los cuatro pasos).
 
 // Feature 41/C1: sentinela interno para forzar el rollback de la tx cuando el UPDATE
 // guardado vincula 0 gestiones (carrera). Se captura fuera de la tx -> `crearCierre`

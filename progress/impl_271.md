@@ -109,7 +109,7 @@ más — el diff es una línea de comentario. Ninguna línea ejecutable de `app/
 | R14 | Vincula exactamente las de `cierre_id` nulo | `cierre-segundo-vincula-solo-lo-suyo.test.ts` → «el cierre B se lleva EXACTAMENTE las 2 sueltas y NO toca ni una del cierre A», **contra Postgres sembrado** con dos señuelos y dos mutaciones muertas (cerrado en la pasada de cobertura) |
 | R15 | Bloqueado → conflict con motivo que cuenta | `cierre-dia-service.test.ts` → «271/R15: BLOQUEADO por acumular (N=2, V=0) -> conflict con motivo que CUENTA» |
 | R16 | Re-solicitar SIEMPRE permitido (anti-deadlock) | `cierre-dia-service.test.ts` → «R24 + 271/R16: con un cierre `%s` y una orden en `ayuda_tienda`…» |
-| R17 | Dos `vencido` imposible (invariante derivado) | Comentario en `CorteDiarioService` + `CierreDiaRepository`; **sin test, a propósito** (estado inalcanzable) |
+| R17 | Dos `vencido` a la vez: **raro pero ALCANZABLE** | ⚠️ **REESCRITO el 2026-08-23.** Decía «imposible (invariante derivado)» y **sin test a propósito**. La medida de T10.3 lo desmintió: `corte-diario-segundo-cierre-sql-real.test.ts` → «R17 · dos `vencido` a la vez es ALCANZABLE…». Los comentarios de `CorteDiarioService` y `CierreDiaRepository` **se reescribieron**; **no se añadió ninguna guarda**, y ahora por la razón correcta (ya está cubierto, no es que no exista) |
 | R18 | Transiciona UNO, el más viejo | `cierre-bloqueo-nv-sql-real.test.ts` → «T10.2/R18: elige por EDAD, no por estado»; `cierre-dia-service.test.ts` → «271/R18: se transiciona EL MAS VIEJO…» |
 | R19 | Éxito ⟺ transicionó esa fila (M2) | `cierre-bloqueo-nv-sql-real.test.ts` → «T2.4/R19 (M2)…» + «…anti-TOCTOU…»; `cierre-dia-repository.test.ts` → «R19: el WHERE lleva el `id`…» |
 | R20 | Money-safe de la re-solicitud | `cierre-bloqueo-nv-sql-real.test.ts` → «T2.6/R20: la re-solicitud NO toca ni un total…»; `cierre-dia-repository.test.ts` → «R20: money-safe…» |
@@ -158,6 +158,13 @@ más — el diff es una línea de comentario. Ninguna línea ejecutable de `app/
 **Sin test propio, y por qué:** **R17** (dos `vencido` a la vez) es un estado **inalcanzable** por la
 propia regla; el spec pide explícitamente NO escribirle test ni guarda. Queda como comentario en
 `CorteDiarioService` y `CierreDiaRepository` con sus tres razones.
+
+> 🔴 **ESTO ERA FALSO, y se corrigió el 2026-08-23.** El estado **es alcanzable** (feature 246 + 262)
+> y **sí tiene test**: `tests/integration/db/corte-diario-segundo-cierre-sql-real.test.ts` → «R17 ·
+> dos `vencido` a la vez es ALCANZABLE…». Las «tres razones» del comentario tenían el **paso 2**
+> equivocado. Se deja el párrafo en pie, tachado por esta nota, porque el valor de la bitácora está
+> en que se vea **qué se creyó y cuándo dejó de creerse** — no en parecer que siempre se supo. Ver la
+> sección del hallazgo al final del archivo.
 
 ---
 
@@ -664,8 +671,10 @@ bodega). Leerla del re-solicitable nombraría el cierre equivocado, y ahora hay 
 
 **`tests/fixtures/bloqueo-cierre.ts` NO se tocó** (lo acaba de tocar el backend y hay otro agente en
 `tests/`). El **caso 7** —`N=2, V=2`, dos `rechazado`— se compone **dentro del propio test**: pedirle
-`{ n: 2, v: 2 }` a `bloqueoDe` produciría **dos `vencido`**, que **R17 declara imposible**, y un test
-verde contra un imposible no dice nada. Su `bloqueado` no se escribe a mano: sale de
+`{ n: 2, v: 2 }` a `bloqueoDe` produciría **dos `vencido`**, que **R17 declara imposible** *(⚠️ y no
+lo es: medido alcanzable el 2026-08-23; la decisión del fixture no cambia, sólo su motivo — se elige
+el doble del caso **frecuente**, no se esquiva un imposible)*, y un test verde contra un imposible no
+dice nada. Su `bloqueado` no se escribe a mano: sale de
 `estaBloqueadoPorCierres`, igual que en la fábrica compartida. **Si alguien lo sube al fixture, que
 sea con esa restricción encima.**
 
@@ -813,7 +822,7 @@ tiene que poner rojo, y lo pone.
 |---|---|
 | `lib/constants/bloqueo-mensajero.ts` | `IR_A_CIERRE_SIN_OBJETO`; rama `v === n` con su texto; plural de la mixta; la deuda de la rama mixta escrita donde vive |
 | `app/(app)/recoleccion/_components/RecoleccionModule.tsx` | `VACIO` partido en dos; la promesa sólo si NO está bloqueado |
-| `tests/fixtures/bloqueo-cierre.ts` | `+ bloqueoTodosPorEnviar(n, jornadaCR)` — `V = N` con dos `rechazado`, **nunca** `bloqueoDe({n, v:n})`, que fabricaría dos `vencido` (R17: imposible) |
+| `tests/fixtures/bloqueo-cierre.ts` | `+ bloqueoTodosPorEnviar(n, jornadaCR)` — `V = N` con dos `rechazado`, **nunca** `bloqueoDe({n, v:n})`, que fabricaría dos `vencido` (~~R17: imposible~~ → **corregido el 2026-08-23: es alcanzable, pero raro**; el doble sigue siendo el del caso frecuente) |
 | `tests/unit/notificaciones/bloqueo-textos.test.ts` | literales a mano: caso 3 con el puntero nuevo, `V = N` (con y sin jornada), mixta con `V = 2`, y el caso 2 conservando su objeto |
 | `tests/components/{Reparto,Recoger,Recoleccion,CierreDia}Module.test.tsx` | el literal del caso 6 puesto al día + un caso `V = N` por portal |
 | `tests/components/RecoleccionModule.test.tsx` | las **dos** mitades del vacío: bloqueado sin promesa, libre con promesa |
@@ -1430,9 +1439,24 @@ Secuencia completa, con las fichas que la habilitan:
 **Antes de la 271 el paso 5 no ocurría**: la exclusión por cierre abierto lo sacaba de la corrida.
 **Es decir: lo introduce esta ficha.**
 
-### Qué NO se hizo, y por qué
+### Qué se decidió — 2026-08-23, por el humano: **corregir la prosa, no el comportamiento**
 
-**No se tocó una línea de `lib/`.** Tres razones, por orden de peso:
+**El comportamiento es correcto y no se toca.** La decisión llegó con dos datos que la medición no
+tenía delante, y los dos refuerzan la conclusión:
+
+- **El arreglo de M2 ya cubre el caso, y no por casualidad.** Cuando se mandó arreglar
+  `transicionarRechazadoASolicitado` se pidió **explícitamente** arreglar también su gemelo
+  `transicionarVencidoASolicitado` *«aunque dos `vencido` sea imposible»*. Ese cinturón —el `id` en
+  el `WHERE`— resulta ser **la pieza que sujeta esto**: con dos `vencido`, re-solicitar mueve **uno**,
+  el más viejo, y **no escribe-y-reporta-fallo**. Sin aquella petición, hoy habría aquí un fallo mudo
+  real. Es el argumento más fuerte que hay en este repo a favor de arreglar el gemelo aunque su caso
+  «no exista».
+- **El aviso ya lo dice bien.** La rama `v === n` —«Envíalos a aprobación, empezando por el más
+  antiguo…», aprobada por el humano— cubre dos `vencido` igual que dos `rechazado`.
+
+**Ni una línea de `lib/` cambió de comportamiento.** Comprobado: el diff de `lib/` de esta corrección
+es **sólo comentarios** (`git diff -U0 lib/` filtrado por líneas no-comentario: **vacío**). Tres
+razones, por orden de peso:
 
 1. **El desenlace medido es el razonable.** La orden necesitaba barrido y necesitaba un cierre al
    que ir; el `vencido` #2 no pierde dinero ni deja una guía huérfana. Lo contrario —volver a
@@ -1440,14 +1464,34 @@ Secuencia completa, con las fichas que la habilitan:
 2. **El estado resultante ya está cubierto por la regla general.** `N=2, V=2` es la **fila 7** de la
    tabla de verdad con dos `vencido` en vez de dos `rechazado`; la re-solicitud lo trata igual
    (**R18**: el más viejo primero, con el `id` en el `WHERE`), y `aReenviarPrimero` también.
-3. **Lo que hay que corregir es la prosa**, y esa decisión es humana: **R17** de `requirements.md`,
-   el comentario de **T2.5** en `CorteDiarioService` y `CierreDiaRepository`, la justificación de
-   **T2.4** para no escribir el caso de dos `vencido`, y la tercera viñeta del bloque de cabecera de
-   `CorteDiarioRepository`.
+3. **Lo que había que corregir era la prosa**, y así se hizo. **Diez sitios**, todos el
+   2026-08-23:
 
-El caso 4 **queda en el árbol** con esa advertencia escrita encima: es el único registro
-**ejecutable** del hallazgo, y si alguien decide cambiar el comportamiento se pondrá rojo y leerá
-por qué.
+| # | Sitio | Qué afirmaba | Qué dice ahora |
+|---|---|---|---|
+| 1 | `specs/271/requirements.md` → **R17** (el EARS) | «El sistema NO DEBE permitir dos `vencido` a la vez… sostenido como consecuencia de la regla» | Estado **raro pero alcanzable**, cubierto por la regla general y R18, sin guarda; y **prohíbe afirmar que sea imposible**. La versión original queda **citada**, con por qué se cayó |
+| 2 | `specs/271/requirements.md` → el apartado del invariante | «DOS `vencido` A LA VEZ ES IMPOSIBLE» + los tres pasos | El razonamiento **se conserva entero** con el paso 2 marcado en rojo, la medida, la tabla de la secuencia de producción, las **cuatro** razones por las que sigue sin hacer falta código defensivo, y el mecanismo real del caso normal |
+| 3 | `specs/271/requirements.md` → M2, el gemelo del `vencido` | «su caso de dos es inalcanzable por el invariante derivado» | La decisión fue **correcta por accidente**; la razón para no darle test propio ya no es «estado imposible», es «es el mismo `WHERE`, ya medido» |
+| 4 | `specs/271/requirements.md` → **S2** y **S9** | S2 argumentaba desde la imposibilidad; S9 la citaba como **precedente** | Nota fechada: las dos **decisiones siguen en pie**, pero por sus propias razones. S9 deja de apoyarse en R17 |
+| 5 | `specs/271/design.md` §5 | «no se escribe test: es inalcanzable» | Es alcanzable y **sí tiene test**; lo que no hace falta es un caso de re-solicitud aparte |
+| 6 | `specs/271/design.md` §6 | «entra en el bucle… **esto es lo que hace que R17 se sostenga solo**» | **No entra en el bucle**; la guarda es la segunda red; y la frase sobre R17 **se retira** |
+| 7 | `specs/271/tasks.md` → **T2.4**, **T2.5**, **T3.3** | Las tres justificaban desde la imposibilidad o desde la guarda | Las tres tareas **no cambian**; sus justificaciones sí, con la fecha y el test que lo midió |
+| 8 | `lib/services/CorteDiarioService.ts` · `lib/repositories/CierreDiaRepository.ts` · `lib/repositories/CorteDiarioRepository.ts` (×3 bloques) | El invariante en mayúsculas y el mecanismo equivocado | Reescritos: qué se creyó, dónde se rompe, la vía de producción, por qué **sigue sin haber guarda** (ya está cubierto) y cuál es el mecanismo real. **Sólo comentarios** |
+| 9 | `tests/fixtures/bloqueo-cierre.ts` · `tests/components/CierreDiaModule.test.tsx` · `tests/unit/notificaciones/bloqueo-textos.test.ts` | «dos `vencido` a la vez son IMPOSIBLES», usado para justificar cómo se compone un doble | Los dobles **no cambian** —siguen componiendo el caso frecuente—; cambia el motivo: se elige el representativo, no se esquiva un imposible |
+
+El **caso 4 queda en el árbol** y su nombre lo dice ahora sin ambigüedad —«R17 · dos `vencido` a la
+vez es **ALCANZABLE**…»—, no «contraejemplo»: documenta un estado que ocurre, no una hipótesis. Es el
+único registro **ejecutable** del hallazgo, y si alguien cambia el comportamiento se pondrá rojo y
+leerá por qué.
+
+### Y la mutación (b) se queda escrita como lo que es
+
+**No se maquilla.** La guarda «algo pasó» **no** es lo que sostiene el caso 2 en integración, y **no
+se le fabrica un test que la mate en esa capa** sólo para dejar el marcador a cero: por el camino del
+corte, «seleccionado y sin nada que cerrar» no es un estado alcanzable con datos estáticos, y un caso
+que lo forzara estaría midiendo un montaje. Su red vive donde puede vivir —
+`tests/unit/repositories/cierre-dia-repository.test.ts`, **4 casos** que la mutación mata— y eso está
+dicho en la cabecera del archivo nuevo, en el caso 2 y en los tres comentarios de `lib/`.
 
 ---
 
@@ -1490,7 +1534,7 @@ y con datos sembrados**.
 | **R22** | «R22/R17 · el mensajero YA bloqueado…» | Antes: unitario con doble (`crearCierre → null`). Ahora: sembrado, con testigo, y con el mecanismo real afirmado |
 | **R23** | «R23/R24 · el barrido…» | Dos mensajeros, dos cierres distintos, un cierre por mensajero y corrida, **medido** |
 | **R24** | «R23/R24 · el barrido…» | Antes: la mitad «no re-vincula» por el test de R14 y la mitad «no re-registra» apoyada en un test **previo** a la ficha. Ahora: **una segunda corrida real** que no re-vincula, no re-registra y no crea nada |
-| **R17** | «⚠️ R17 · contraejemplo…» | Antes: **sin test, a propósito**, por inalcanzable. Ahora: **medido alcanzable**. Ver el hallazgo |
+| **R17** | «R17 · dos `vencido` a la vez es ALCANZABLE…» | Antes: **sin test, a propósito**, por inalcanzable. Ahora: **medido alcanzable**, y el requisito reescrito. Ver el hallazgo |
 
 ---
 
