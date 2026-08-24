@@ -68,10 +68,17 @@ type ModalAbierto =
 async function mensajerosFetcher() {
   const res = await listarMensajerosParaAsignacion();
   if (res.status !== "ok") throw new Error(res.status);
-  // Pedido humano 2026-08-18: los cierres abiertos DEJARON DE BLOQUEAR la asignación — ni el
-  // checkbox por zona ni el selector de mensajero. `bloqueadosIds` sigue viniendo en la
-  // respuesta de la action y se ignora aquí a propósito: el dato es cierto, pero ya no manda
-  // sobre nada de esta pantalla.
+  // ⚠️ FEATURE 271 (T9.4, R32) — `bloqueadosIds` VUELVE A MANDAR, sobre los DOS modales.
+  //
+  // El 2026-08-18 los cierres abiertos dejaron de bloquear la asignación y este campo se ignoraba
+  // aquí a propósito. El 2026-08-23 el humano revirtió esa mitad de la regla: acumular dos cierres
+  // —o arrastrar uno que espera a que el mensajero lo reenvíe— bloquea también recibir trabajo
+  // nuevo, SIN distinguir reparto de recolección. Así que el conjunto vuelve a viajar a los dos
+  // selectores, y es el MISMO que el servidor rechaza: no se re-deriva ni se recorta aquí.
+  //
+  // LO QUE SIGUE SIN VOLVER, y no es un olvido: el gate por ZONA del checkbox de la tabla. Aquel
+  // bloqueaba órdenes por la zona de entrega, no mensajeros por su cierre; el servidor no lo
+  // aplica y su sitio no es éste.
   //
   // La key SWR "ordenes:mensajeros" la compartía con la vista legacy
   // `OrdenesRevisionMaestro`, borrada el 2026-07-31: hoy este es el ÚNICO fetcher de esa
@@ -274,6 +281,10 @@ export function OrdenesListado({
   // mezclan". Cada modal deshabilita la suya, con el motivo a la vista.
   const mensajerosConRepartoIds = mensajerosData?.conRepartoIds ?? [];
   const mensajerosConRecoleccionIds = mensajerosData?.conRecoleccionIds ?? [];
+  // FEATURE 271 (T9.4, R32): los bloqueados por cierres. UNA sola lista para los DOS modales —el
+  // campo no se llama `bloqueadosParaRepartoIds` por eso—: desde el 2026-08-23 no hay asimetría
+  // entre reparto y recolección, y el servidor aplica el mismo predicado en las dos escrituras.
+  const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -870,17 +881,18 @@ export function OrdenesListado({
             onOpenChange={cerrarModal}
             onSuccess={encadenarEtiquetas}
           />
-          {/* Feature 157: NO se le aplica el bloqueo por zona con cierre abierto que sí
-              guarda a `AsignarBodegaModal`. Esa regla protege la asignación de reparto,
-              atada a la zona de ENTREGA de la orden; una recolección la puede hacer
-              cualquier mensajero (decisión del humano), así que su zona no dice nada. El
-              cierre del mensajero ELEGIDO sí se respeta: lo revalida el service, y aquí
-              se le deshabilita en el selector. */}
+          {/* Feature 157: NO se le aplica ningún filtro por ZONA —una recolección la puede
+              hacer cualquier mensajero, así que la zona de la orden no dice nada—.
+              FEATURE 271 (T9.4, R31/R32): el CIERRE del mensajero elegido sí manda, y desde el
+              2026-08-23 igual que en reparto: recolectar en tienda es cobrar, y el dinero que
+              cobre no tendría cierre al que ir. Misma lista `bloqueadosIds` que el modal de
+              reparto; el service lo revalida igual. */}
           <AsignarRecoleccionModal
             open={modalAbierto === "asignar-recoleccion"}
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             mensajerosConRepartoIds={mensajerosConRepartoIds}
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
@@ -895,6 +907,9 @@ export function OrdenesListado({
             ordenes={ordenesSeleccionadas}
             mensajeros={mensajeros ?? []}
             mensajerosConRecoleccionIds={mensajerosConRecoleccionIds}
+            // FEATURE 271 (T9.4, R28/R32): los bloqueados por cierres, la MISMA lista que el
+            // modal de recolección.
+            mensajerosBloqueadosIds={mensajerosBloqueadosIds}
             // Feature 246 (T4.2, R29): las fechas bajan de la página, que las resolvió en el
             // servidor. Este componente sólo las transporta: no las calcula ni las corrige.
             fechasDiaReparto={fechasDiaReparto}

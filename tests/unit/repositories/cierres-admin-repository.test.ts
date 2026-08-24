@@ -712,6 +712,15 @@ describe("CierresAdminRepository.forzarSolicitudVencido (feature 111/R16)", () =
   });
 
   // Feature 109/R28: la valvula generalizada tambien destraba un `rechazado` ABANDONADO.
+  //
+  // ⚠️ FEATURE 271 (R49) — NO BORRES ESTE CASO NI SU LITERAL: ES LA UNICA RED DE `ESTADOS_REABRIBLES`.
+  // La 271 saco al `rechazado` de la cola de «pendientes de decision» (R48), asi que la UNICA salida
+  // de un mensajero atrapado con un `rechazado` es esta valvula. La lista `["vencido","rechazado"]`
+  // esta escrita A MANO en los tres `expect` de este bloque —no derivada de la constante—, que es lo
+  // que los hace discriminar. Medido el 2026-08-23: quitando `rechazado` de
+  // `CierresAdminRepository.ESTADOS_REABRIBLES` mueren **3 tests** de este archivo (este y los dos
+  // que afirman el `where` entero). Los `cierres-admin-*.test.ts` de servicio DOBLAN el metodo y
+  // nunca llegan a la constante: no cubren R49.
   it("R28: destraba un `rechazado` de su alcance -> updated (guarda estado IN vencido/rechazado)", async () => {
     const prisma = buildPrisma();
     prisma.cierreDia.updateMany.mockResolvedValue({ count: 1 });

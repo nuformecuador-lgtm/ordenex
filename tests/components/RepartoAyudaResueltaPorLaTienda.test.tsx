@@ -31,6 +31,7 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 vi.mock("@/lib/actions/mis-asignaciones", () => ({
   recogerAsignaciones: vi.fn(),
@@ -148,7 +149,7 @@ function renderPortal(conAyuda: MiAsignacionDTO[]) {
       conAyuda={conAyuda}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
-      bloqueado={false}
+      bloqueo={SIN_BLOQUEO}
     />,
   );
 }

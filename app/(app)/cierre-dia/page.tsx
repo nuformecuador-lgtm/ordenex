@@ -7,6 +7,7 @@ import {
   listarCierresPasadosPaginado,
   estadoBloqueoMensajero,
 } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import { CierreDiaModule } from "./_components/CierreDiaModule";
 
@@ -31,12 +32,15 @@ export default async function CierreDiaPage() {
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin módulo
   if (pasadosResult.status !== "ok") notFound(); // defensa en profundidad
 
-  // Feature 41 (R21): flag DERIVADO server-side de si el mensajero está bloqueado
-  // (cierre `solicitado`/`vencido` pendiente) para recibir nuevas asignaciones. Se
-  // pasa por props al componente cliente, que muestra el aviso accionable. Si la
-  // acción degrada (unauthenticated), no se muestra el aviso (defensa suave).
-  const bloqueo = await estadoBloqueoMensajero();
-  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
+  // Feature 41 (R21) -> FEATURE 271 (T9.3): el DETALLE del bloqueo, derivado server-side por la
+  // regla N/V. SUSTITUYE a tres props del módulo: el flag `bloqueado` y los dos `tieneVencido` /
+  // `tieneRechazado` que salían de `listarCierreDia` — la misma pregunta por dos caminos, que es
+  // como se desincronizan. Ahora la pantalla lo deriva todo de este objeto.
+  //
+  // Si la acción degrada (sin sesión), baja `SIN_BLOQUEO`: no se pinta aviso ni CTA, y la
+  // escritura la sigue gateando el servidor (defensa suave arriba, defensa real abajo).
+  const estado = await estadoBloqueoMensajero();
+  const bloqueo = estado.status === "ok" ? estado.bloqueo : SIN_BLOQUEO;
 
   return (
     <AppPage
@@ -54,13 +58,7 @@ export default async function CierreDiaPage() {
           total: pasadosResult.total,
           pageSize: pasadosResult.pageSize,
         }}
-        bloqueado={bloqueado}
-        // Feature 111/R13: habilita el CTA diferenciado del cierre vencido (derivado
-        // server-side de `cierresPasados`; `undefined` en cierres pre-migración → false).
-        tieneVencido={result.tieneVencido ?? false}
-        // Feature 109/R31: habilita el MISMO CTA de re-solicitud para un cierre `rechazado`
-        // (modelo GLOBAL: `rechazado` NO es terminal, bloquea hasta re-solicitar + aprobar).
-        tieneRechazado={result.tieneRechazado ?? false}
+        bloqueo={bloqueo}
       />
     </AppPage>
   );

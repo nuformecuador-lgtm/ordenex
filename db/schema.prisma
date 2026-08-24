@@ -2078,6 +2078,8 @@ enum NotificacionEvento {
   cierre_dia_por_aprobar
   postulacion_recurso_pendiente // feature 253 (D6): alguien ofrecio un vehiculo o una bodega desde la landing publica
   dia_reparto_corregido // feature 262 (D7): a una orden asignada le corrigieron el dia de reparto; se avisa AL MENSAJERO asignado y a nadie mas (R46/R51)
+  cierre_dia_vencido // feature 271 (§9.2, R38/R39): el corte creo un cierre `vencido`; se avisa al MENSAJERO dueño y a su bodega responsable
+  mensajero_bloqueado_por_cierres // feature 271 (§9.2, R40/R41/R42): el mensajero quedo BLOQUEADO por acumular cierres, o por un rechazo; mismo evento para las tres causas porque la accion que pide es la misma
 
   @@map("notificacion_evento")
 }

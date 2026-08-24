@@ -9,7 +9,69 @@
 > `git show <rev>:progress/current.md`.
 
 
-## 🚀 RELEASE DESPLEGADA — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+## 🧭 EN CURSO — 2026-08-23. **EMPIEZA A LEER POR AQUÍ**
+
+**Ficha 271** (`fullstack`, alta) — *el segundo cierre se puede solicitar, y acumular dos bloquea*.
+La **272 quedó `cancelled`** el mismo día: sus hallazgos viven dentro de la 271.
+
+### Cómo llegó aquí, porque el primer intento fue por el camino equivocado
+
+Se dieron de alta dos fichas sobre el modelo «un cierre por jornada con `fecha_jornada` fija», se
+escribieron los dos specs (39 y 36 requisitos) y **el humano descartó el modelo entero**. Los specs
+se borraron. Dos razones, y las dos valen para el que venga:
+
+1. **La reprogramación lo rompía.** Una orden reprogramada se libera con `fecha_reparto = null`
+   (`LiberacionReprogramadaRepository.ts:95`) y luego se reasigna a otro día. Derivar la jornada del
+   cierre desde `orden.fecha_reparto` dejaba la gestión de hoy —que lleva dinero— colgando de una
+   fecha que ya se había movido. **Lo detectó el humano, no el análisis.**
+2. **Sobraba.** Con la regla de abajo, `cierre_id IS NULL` reparte el trabajo solo: el cierre de ayer
+   ya se llevó lo de ayer. La acumulación existía **porque** el segundo cierre no se podía crear.
+
+### LA REGLA (dictada por el humano el 2026-08-23)
+
+Con **N** = cierres sin aprobar y **V** = cuántos de esos están en `vencido`/`rechazado`:
+
+> **Libre si `N ≤ 1` y `V = 0`.** En cualquier otro caso, bloqueado para gestionar **y** para recibir.
+
+| Caso | N | V | Resultado |
+|---|---|---|---|
+| Sin cierres | 0 | 0 | libre |
+| Solicitó el de hoy | 1 | 0 | libre |
+| Trabaja hoy, el de ayer sin aprobar | 1 | 0 | libre, y **puede solicitar el segundo** |
+| Ya solicitó el segundo | 2 | 0 | bloqueado hasta que aprueben el más viejo |
+| Dejó vencer el único | 1 | 1 | bloqueado al instante; re-solicitar lo libera |
+| Solicitó el 1.º, venció el 2.º | 2 | 1 | re-solicitar el 2.º no basta; hace falta aprobar el 1.º |
+
+Se resuelve **siempre del más viejo al más nuevo**. El bloqueo de recibir trabajo nuevo alcanza
+**reparto y recolección**, sin distinguir: se decidió «solo reparto» y el humano lo revirtió el mismo
+día — *«son dos tareas diferentes, un mensajero no puede hacer las dos gestiones, solo una a la vez»*.
+
+⚠️ Esto **revierte en parte la regla firmada el 20/08** (feature 241). Hay que reescribir el
+comentario de `OrdenRepository.ts:3187` y `lib/constants/bloqueo-mensajero.ts`, o el próximo lector
+la creerá vigente.
+
+### Dos fallos mudos que esta ficha despierta
+
+Hoy son inalcanzables porque el invariante R30 impide dos cierres abiertos. En cuanto se rompa:
+
+- **M2** — `transicionarVencidoASolicitado` (`CierreDiaRepository.ts:454`) es un `updateMany` por
+  `(mensajero, estado)` sin `id`: con dos `vencido` transiciona **los dos** y devuelve `false`.
+  Escribe y reporta conflicto.
+- **M7** — al aprobar, la liberación de `sin_gestionar` (`CierresAdminRepository.ts:1417`) filtra por
+  `mensajeroAsignadoId`, no por cierre: aprobar el 1.º vacía también la mano del 2.º.
+
+### El caso que la origina, medido en producción
+
+Cierre `79cb2c0f` (Jose): nació `vencido` el **22/08 00:03:15 CR**, pasó a `solicitado` a las
+**16:39:05**, y sus **2 gestiones de las 16:56 siguen con `cierre_id` NULL** porque el corte del
+23/08 (200 a las 06:00:27 UTC, **no falló**) no pudo crearle el segundo cierre.
+
+Verificado además: **el corte diario no emite ninguna notificación** (0 filas en `notificacion` a las
+00:03 del 22/08) y **el mensajero no recibe ninguna notificación de cierre, nunca**.
+
+---
+
+## 🚀 RELEASE DESPLEGADA — 2026-08-23 (contexto previo)
 
 **`prod` = `6bc566b8`**, desplegado y **READY**. 55 commits. `dev` y `prod` igualados.
 Salen la **262** (corregir el día de reparto) y la **265** (el optimizador lee al proveedor).

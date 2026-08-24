@@ -150,6 +150,14 @@ demostrar una propiedad que nadie afirma.
   `findMensajerosBloqueadosParaGestion` — que un cierre pendiente no bloquee (**R14**) es imposible
   de romper por descuido si el método no está en el tipo (patrón `DeshacerAsignacionRepo`).
 
+  > ⚠️ **NOTA DE CADUCIDAD — 2026-08-23 (feature 271).** El método ya no se llama
+  > `findMensajerosBloqueadosParaGestion` (es `findMensajerosBloqueadosPorCierres`) y la regla que
+  > sostenía dejarlo fuera —«recibir asignaciones no se bloquea nunca», feature 241— **está
+  > revertida**. **Lo hecho sigue siendo correcto** y el `Pick` sigue sin el método, pero por su
+  > otra razón: corregir el día de una orden que el mensajero ya lleva encima no es trabajo nuevo.
+  > **No se reescribe esta tarea**: es la foto de su momento. Regla vigente en
+  > `specs/271-segundo-cierre-y-bloqueo/requirements.md`.
+
 - [x] **B7 — La Server Action.** (dep. B6)
   `lib/actions/corregir-dia-reparto.ts`, molde literal de `lib/actions/deshacer-asignacion.ts`:
   `withErrorHandler` + `resolveActorFromSession` + zod (`ordenIds` uuid `.min(1)`, `dia`

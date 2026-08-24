@@ -12,6 +12,8 @@ import type {
   MiAsignacionDTO,
   RutaResumenDTO,
 } from "@/lib/interfaces/services/IMisAsignacionesService";
+import { SIN_BLOQUEO, type BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
+import { bloqueoConVencido } from "@/tests/fixtures/bloqueo-cierre";
 
 // Pedido humano 2026-08-18 — SOLICITUD DE AYUDA en la pantalla de reparto del mensajero, en sus
 // dos mitades: el cuarto botón del panel («Ayuda») y la SECCIÓN de abajo, que es donde van a
@@ -136,9 +138,12 @@ function renderModule(
   // Feature 235 (R18): la SEGUNDA lista, ya separada por el servidor. Que sea un parámetro y no
   // una derivación es el cambio: el módulo no vuelve a decidir el corte.
   conAyuda: MiAsignacionDTO[] = [],
-  // Feature 235 (R25): el bloqueo por cierre sin resolver. Parametrizado porque el rescate es la
-  // ÚNICA acción de esta pantalla que debe sobrevivirle, y sin poder encenderlo no se puede afirmar.
-  bloqueado = false,
+  // Feature 235 (R25) -> FEATURE 271: el bloqueo por cierres sin resolver. Parametrizado porque el
+  // rescate es la ÚNICA acción de esta pantalla que debe sobrevivirle, y sin poder encenderlo no se
+  // puede afirmar. Ya no es un booleano: es el DETALLE, y el caso encendido usa el 5 de la tabla de
+  // verdad —un solo cierre y esperando a que el mensajero lo reenvíe—, que es exactamente el que
+  // crea el deadlock que este archivo documenta.
+  bloqueo: BloqueoDetalle = SIN_BLOQUEO,
 ) {
   return render(
     <RepartoModule
@@ -146,7 +151,7 @@ function renderModule(
       conAyuda={conAyuda}
       ordenEnGestionId={null}
       ruta={RUTA_VIGENTE}
-      bloqueado={bloqueado}
+      bloqueo={bloqueo}
     />,
   );
 }
@@ -343,11 +348,12 @@ describe("Reparto · las órdenes con ayuda se van abajo, a su propia sección",
     // `RepartoModule`—. El `alert` de abajo es lo que prueba que el bloqueo llegó al módulo.
     const user = userEvent.setup();
     recuperarMock.mockResolvedValue({ status: "ok" });
-    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })], true);
+    renderModule([], [enAyuda({ id: "g2", numRemision: "REM-002" })], bloqueoConVencido());
 
     // Antes de nada: que el bloqueo REALMENTE llegó al módulo. Sin esto el caso quedaría verde
-    // aunque la prop se ignorara, y no probaría nada del bloqueo.
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    // aunque la prop se ignorara, y no probaría nada del bloqueo. `getAllByRole` porque el aviso
+    // de bloqueo puede convivir con otras alertas de la pantalla (ruta desactualizada, p. ej.).
+    expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
 
     const recuperar = screen.getByRole("button", {
       name: "Retirar la solicitud de ayuda de la orden REM-002",

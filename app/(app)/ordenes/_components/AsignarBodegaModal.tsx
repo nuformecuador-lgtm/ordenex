@@ -18,7 +18,7 @@ import type { AsignarBodegaResult } from "@/lib/types/orden-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
-import { toMensajeroOptions } from "./mensajero-options";
+import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarBodegaModalProps {
@@ -38,6 +38,16 @@ export interface AsignarBodegaModalProps {
    * Tienen un viaje comprometido, así que no reciben reparto hasta cerrarlo.
    */
   mensajerosConRecoleccionIds?: string[];
+  /**
+   * FEATURE 271 (T9.4, R32): ids que el servidor va a RECHAZAR por su cierre —acumula dos sin
+   * aprobar, o arrastra uno que espera a que él lo reenvíe—. Se deshabilitan con el motivo a la
+   * vista, y el conjunto es EXACTAMENTE el que rechaza `asignarDesdeBodega`: no se re-deriva aquí.
+   *
+   * ⚠️ Esto se había RETIRADO el 2026-08-18, cuando recibir trabajo dejó de bloquearse. La 271
+   * revierte esa mitad de la regla (decisión del humano del 2026-08-23) y con ella vuelve el
+   * marcado: sin él, la pantalla ofrece un mensajero que la acción va a negar.
+   */
+  mensajerosBloqueadosIds?: string[];
   /**
    * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» resueltas EN EL SERVIDOR y
    * bajadas por props desde la página. Obligatorias: montar el modal sin decidir de dónde salen
@@ -60,6 +70,7 @@ export function AsignarBodegaModal({
   ordenes,
   mensajeros,
   mensajerosConRecoleccionIds = [],
+  mensajerosBloqueadosIds = [],
   fechasDiaReparto,
   onOpenChange,
   onSuccess,
@@ -94,11 +105,17 @@ export function AsignarBodegaModal({
     }
   }
 
+  // Los dos motivos por los que hoy NO se puede elegir a un mensajero, en un solo mapa. El del
+  // CIERRE va DESPUÉS a propósito: si concurren, gana el que el mensajero tiene que resolver él
+  // (mandarlo a cerrar es accionable; decirle que espere a que termine su recolección, no).
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
-    new Map(
-      mensajerosConRecoleccionIds.map((id) => [id, "tiene recolección pendiente"]),
-    ),
+    new Map([
+      ...mensajerosConRecoleccionIds.map(
+        (id) => [id, "tiene recolección pendiente"] as const,
+      ),
+      ...mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE] as const),
+    ]),
   );
 
   // El filtro por zona del padre puede dejar el lote vacío (selección solo de zonas

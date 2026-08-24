@@ -8,7 +8,12 @@ import { ContactoButtons } from "@/components/shared/ContactoButtons";
 import { EscanerModal } from "@/components/shared/EscanerModal";
 import { EscanerGuiaCard } from "@/components/shared/EscanerGuiaCard";
 import { useToast } from "@/hooks/useToast";
-import { BLOQUEO_AVISO } from "@/lib/constants/bloqueo-mensajero";
+// Feature 111/R12 + 167/R9 -> FEATURE 271 (T9.1/T9.2): el aviso del bloqueo dejó de ser una
+// constante y pasó a ser un FORMATEADOR que CUENTA (cuántos cierres arrastra el mensajero y cuál
+// toca resolver primero, R43). El MISMO de los otros tres portales; `conCta: true` porque desde
+// aquí hay que decirle a dónde ir (R52).
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
+import { SIN_BLOQUEO, type BloqueoDetalle } from "@/lib/utils/bloqueo-cierre";
 import { extractNumGuiaFromScan } from "@/lib/utils/paquete-url";
 import type {
   RecolectadaHoyDTO,
@@ -63,8 +68,23 @@ import { useRecolectarPorGuia } from "./useRecolectarPorGuia";
 const TITULO = "Por recolectar en tienda";
 
 /** R8: el vacío se EXPLICA y el escáner se queda — es la causa raíz que la 167 vino a arreglar. */
-const VACIO =
-  "No tienes órdenes por recolectar en tienda ahora mismo. Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.";
+const VACIO = "No tienes órdenes por recolectar en tienda ahora mismo.";
+
+/**
+ * La segunda mitad del vacío: la promesa de que escanear SIGUE valiendo. Sólo es cierta cuando el
+ * escáner está en pantalla.
+ *
+ * ⚠️ SE PINTABA SIEMPRE, Y BLOQUEADO ERA FALSA POR PARTIDA DOBLE (encontrado mirando la app el
+ * 2026-08-23, aprobado por el humano): bloqueado no hay ni disparador de escaneo —lo apaga el
+ * mismo `bloqueado` de abajo— y, aunque lo hubiera, el servidor rechaza la recolección (R25/R31,
+ * Q1). Le prometía un camino inexistente justo cuando el aviso de arriba le dice que no puede
+ * recibir trabajo nuevo: dos frases seguidas que se contradicen.
+ *
+ * NO se sustituye por otro texto: el aviso de bloqueo YA dice qué pasa y qué hacer. Aquí basta con
+ * no prometer.
+ */
+const VACIO_PUEDES_ESCANEAR =
+  "Puedes escanear igual: si el maestro acaba de asignarte una, se confirmará aquí.";
 
 /** Conteo del banner. En singular/plural, sin jerga: el mensajero lee "3 paquetes". */
 function textoConteo(n: number): string {
@@ -82,19 +102,25 @@ export interface RecoleccionModuleProps {
   /** R31: hoy hay más recolecciones de las que trae `recolectadasHoy`. */
   recolectadasHoyRecortada?: boolean;
   /**
-   * Feature 111/R14 + 167/R9: con un cierre pendiente el mensajero NO mueve guías. Las dos
-   * listas siguen visibles (solo-visualización, R23) pero el bloque de acción no se renderiza
-   * y en su lugar va el aviso que dice por qué y qué hacer.
+   * Feature 111/R14 + 167/R9 -> FEATURE 271 (T9.1): el DETALLE del bloqueo, no un booleano.
+   * Bloqueado, el mensajero NO mueve guías: las dos listas siguen visibles
+   * (solo-visualización, R23) pero el bloque de acción no se renderiza y en su lugar va el aviso,
+   * que ahora dice además CUÁNTOS cierres arrastra y CUÁL toca primero (R43).
+   *
+   * ⚠️ Y RECOLECTAR EN TIENDA ES COBRAR: desde el 2026-08-23 (Q1) esta superficie se bloquea
+   * igual que las de reparto, sin excepción — el servidor la rechaza (R25/R31).
    */
-  bloqueado?: boolean;
+  bloqueo?: BloqueoDetalle;
 }
 
 export function RecoleccionModule({
   porRecolectar,
   recolectadasHoy,
   recolectadasHoyRecortada = false,
-  bloqueado = false,
+  bloqueo = SIN_BLOQUEO,
 }: Readonly<RecoleccionModuleProps>) {
+  // FEATURE 271 (T9.1): el veredicto sale del detalle, no se re-deriva aquí.
+  const bloqueado = bloqueo.bloqueado;
   const router = useRouter();
   const toast = useToast();
   const { recolectar, procesando } = useRecolectarPorGuia();
@@ -210,7 +236,7 @@ export function RecoleccionModule({
           role="alert"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {BLOQUEO_AVISO}
+          {avisoBloqueo(bloqueo, { conCta: true })}
         </p>
       ) : (
         /* R7 en su forma vigente (decisión del humano del 2026-07-31): el acceso al
@@ -241,9 +267,13 @@ export function RecoleccionModule({
         </EscanerModal>
       )}
 
-      {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner. */}
+      {/* R8: sin nada asignado se DICE, en vez de dejar una pantalla muda bajo el escáner.
+          La promesa de escanear se AÑADE sólo si el escáner está —bloqueado no lo está—: ver
+          `VACIO_PUEDES_ESCANEAR`. */}
       {porRecolectar.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{VACIO}</p>
+        <p className="text-sm text-muted-foreground">
+          {bloqueado ? VACIO : `${VACIO} ${VACIO_PUEDES_ESCANEAR}`}
+        </p>
       ) : vistaCards === "mosaico" ? (
         /* 2026-08-11 (decisión del humano): las cards van SUELTAS, en un carrusel único, igual
            que en «Por recoger». Antes iban dentro de una caja por tienda (la agrupación de

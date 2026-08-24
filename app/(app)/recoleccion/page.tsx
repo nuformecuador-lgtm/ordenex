@@ -4,6 +4,7 @@ import { AppPage } from "@/components/shared/AppPage";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { listarRecoleccion } from "@/lib/actions/recoleccion-tienda";
 import { estadoBloqueoMensajero } from "@/lib/actions/cierre-dia";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import { RecoleccionModule } from "./_components/RecoleccionModule";
 
@@ -28,13 +29,14 @@ export default async function RecoleccionPage() {
   const result = await listarRecoleccion();
   if (result.status !== "ok") notFound(); // forbidden/unauthenticated → sin apartado
 
-  // Feature 111/R12/R14 + 167/R9: flag DERIVADO server-side de si el mensajero está BLOQUEADO
-  // por un cierre pendiente. Se obtiene AQUÍ y no en el service de recolección para que haya
-  // una sola derivación del bloqueo en todo el portal (la misma que usa `/mis-asignaciones`).
-  // Con el mensajero bloqueado el módulo muestra el aviso y no monta el escáner (defensa
-  // suave; el backend de la 157/R31 es la defensa real). Si la acción degrada, no se bloquea.
-  const bloqueo = await estadoBloqueoMensajero();
-  const bloqueado = bloqueo.status === "ok" && bloqueo.bloqueado;
+  // Feature 111/R12/R14 + 167/R9 -> FEATURE 271: el DETALLE del bloqueo, derivado server-side
+  // por la regla N/V. Se obtiene AQUÍ y no en el service de recolección para que haya una sola
+  // derivación del bloqueo en todo el portal (la misma que usa `/mis-asignaciones`). Con el
+  // mensajero bloqueado el módulo muestra el aviso —cuántos cierres arrastra y cuál toca
+  // primero— y no monta el escáner (defensa suave; el backend de la 157/R31 es la defensa real).
+  // Si la acción degrada, baja `SIN_BLOQUEO` y no se bloquea nada.
+  const estado = await estadoBloqueoMensajero();
+  const bloqueo = estado.status === "ok" ? estado.bloqueo : SIN_BLOQUEO;
 
   return (
     <AppPage
@@ -45,7 +47,7 @@ export default async function RecoleccionPage() {
         porRecolectar={result.porRecolectar}
         recolectadasHoy={result.recolectadasHoy}
         recolectadasHoyRecortada={result.recolectadasHoyRecortada}
-        bloqueado={bloqueado}
+        bloqueo={bloqueo}
       />
     </AppPage>
   );

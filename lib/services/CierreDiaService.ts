@@ -36,7 +36,12 @@ import {
   emitirBestEffort,
   notificadorNoOp,
   type CierreNotificador,
+  type MensajeroBloqueadoNotificador,
 } from "@/lib/notificaciones/notificadores";
+// FEATURE 271 — el motivo del `conflict` lo compone el MISMO formateador que el aviso de la
+// pantalla y el de la campana (§10.1): un motivo que dijera menos que el aviso seria una tercera
+// version de la misma regla.
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 // Feature 261 (B6, R19): el dia de reparto que escribe el DESHACER se resuelve AQUI, en el
 // servicio, a partir del `now` inyectable — ya no dentro del repositorio. `startOfDayCR` es el
 // helper de la convencion `@db.Date` de `fecha_reparto`; `inicioDelDiaCREnUtc` es la de las
@@ -65,14 +70,17 @@ const ESTADOS_PENDIENTES = ["por_recoger", "en_reparto", "ayuda_tienda"];
 // Mensajes accionables del gate/precondicion (R10/R11) y del ruteo (R12/R16).
 const MSG_PENDIENTES = "Tenes ordenes sin gestionar; gestionalas antes de cerrar."; // R10
 const MSG_VACIO = "No tenes gestiones pendientes de cierre."; // R11
-const MSG_DUPLICADO = "Ya tenes un cierre solicitado pendiente de aprobacion."; // R12
+// FEATURE 271: este motivo YA NO ES «ya tienes un cierre» (el segundo cierre se permite, R13).
+// Queda para la UNICA carrera que sigue existiendo: la re-solicitud encontro el cierre movido entre
+// la lectura y la escritura, asi que no escribio nada y hay que reintentar.
+const MSG_DUPLICADO = "Ese cierre ya se envio a aprobacion; actualiza la pagina."; // R19
 const MSG_SIN_ZONA = "No tenes una zona asignada; contacta a tu administrador."; // R16
 
-// Feature 111/R5/R20: motivo ACCIONABLE del bloqueo total sobre las guías (texto fijo
-// i18n-ready, SIN PII ni datos del cierre). Un mensajero con un cierre `solicitado`/`vencido`
-// no puede hacer NADA con las guías (gestionar/recoger/escoger/deshacer) hasta resolverlo.
-const MSG_BLOQUEADO =
-  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R5/R20
+// ⚠️ FEATURE 271 — AQUI VIVIA `MSG_BLOQUEADO`, un texto FIJO. Se va, y no es limpieza: el motivo
+// del bloqueo tiene que CONTAR (cuantos cierres arrastra y cual toca resolver primero, R27/R43) y
+// un texto fijo no puede. Lo compone `avisoBloqueo` a partir del `BloqueoDetalle`, que es el MISMO
+// formateador que usa la pantalla y el aviso de la campana: tres versiones del mismo texto es como
+// se desincronizan.
 
 // Feature 67 — mensajes ACCIONABLES del deshacer (constantes i18n-ready, patron MSG_* de la 37).
 const MSG_YA_EN_CIERRE = "Esta gestion ya esta incluida en un cierre solicitado; no se puede deshacer."; // R2
@@ -138,13 +146,17 @@ const ESTADOS_ESPERADOS: Record<GestionResultado, readonly string[]> = {
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 // Feature 39: ademas de la zona (37), el service resuelve el vehiculo del mensajero
 // para el resolver de tarifa. Feature 67: + `findEstatusIdByValue` (resuelve `en_reparto`).
-// Feature 111/R5 -> 241: + `findMensajerosBloqueadosParaGestion` (guarda EXPLICITA de
-// `deshacerGestion`; sin duplicar la derivacion ni flag persistido). Deshacer una gestion ES
-// gestionar —mueve la guia y descuadra el cobro—, asi que le toca la politica de gestion:
-// `vencido`/`rechazado` bloquean, `solicitado` no.
+// Feature 111/R5 -> 241 -> FEATURE 271: + `findBloqueoDetalle`, que sustituye a
+// `findMensajerosBloqueadosPorCierres` en los DOS sitios donde este service pregunta por el
+// bloqueo:
+//   · la guarda EXPLICITA de `deshacerGestion` — deshacer ES gestionar (mueve la guia y descuadra
+//     el cobro), asi que le toca la regla N/V como a las demas gestiones;
+//   · el GATE de creacion de `solicitarCierre` (271/R15), que antes era `existeCierreSolicitado`.
+// Se pide el DETALLE y no el `Set` porque los dos sitios componen un motivo que CUENTA cuantos
+// cierres arrastra y cual toca primero (R27/R43), no un «estas bloqueado» a secas.
 type OrdenRepo = Pick<
   IOrdenRepository,
-  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+  "findUsuarioZonaId" | "findUsuarioVehiculoId" | "findEstatusIdByValue" | "findBloqueoDetalle"
 >;
 
 /**
@@ -167,24 +179,66 @@ export class CierreDiaService implements ICierreDiaService {
      * despues de la escritura ya guardada del cierre y nunca altera su resultado.
      */
     private readonly notificarCierre: CierreNotificador = notificadorNoOp,
+    /**
+     * FEATURE 271 (T6.5, R40/R41/R42): notificador de «el mensajero quedo BLOQUEADO por acumular».
+     * Mismo patron que el anterior — DEFAULT no-op, el real se inyecta en el composition root
+     * (`lib/actions/cierre-dia.ts`), nunca al reves: una suite que construya el service sin
+     * inyectar no puede escribir en la base, que en este repo es compartida.
+     */
+    private readonly notificarBloqueo: MensajeroBloqueadoNotificador = notificadorNoOp,
   ) {}
 
   /**
-   * Feature 146/R24 — punto UNICO de emision del aviso "cierre por aprobar", compartido por
-   * los TRES caminos de exito de `solicitarCierre` (`vencido -> solicitado`,
-   * `rechazado -> solicitado` y creacion). Los dos de transicion solo devuelven un booleano, de
-   * modo que el id del cierre, su zona destino y el nombre del mensajero se leen aqui, despues
-   * del exito. La dedupe del emisor evita el segundo aviso cuando el MISMO cierre se
-   * re-solicita sin que nadie haya leido el primero (R27).
+   * Feature 146/R24 -> FEATURE 271 (T6.8, R56) — punto UNICO de emision del aviso «cierre por
+   * aprobar», compartido por los DOS caminos de exito de `solicitarCierre` (re-solicitud y
+   * creacion). La dedupe del emisor evita el segundo aviso cuando el MISMO cierre se re-solicita
+   * sin que nadie haya leido el primero (146/R27).
+   *
+   * ⚠️ RECIBE EL `cierreId`, NO EL `mensajeroId`, Y ESO CIERRA **M9**. Antes releia el cierre con
+   * `findCierreSolicitado(mensajeroId)` —un `orderBy createdAt DESC`— porque los dos caminos de
+   * transicion solo devolvian un booleano. Derogado el invariante de «un solo cierre abierto»
+   * (271/R9), con DOS `solicitado` esa relectura devolvia SIEMPRE el mas nuevo: al re-solicitar el
+   * MAS VIEJO (R18) el aviso nombraba el otro cierre y la clave de dedupe se calculaba sobre la
+   * entidad equivocada. Ahora el id viaja desde quien lo escribio.
    */
-  private async avisarCierrePorAprobar(mensajeroId: string): Promise<void> {
+  private async avisarCierrePorAprobar(cierreId: string): Promise<void> {
     await emitirBestEffort("cierre_dia_por_aprobar", async () => {
-      const info = await this.repo.findCierreSolicitado?.(mensajeroId);
+      const info = await this.repo.findCierreParaAviso?.(cierreId);
       if (!info) return; // sin cierre resoluble no se inventa un aviso
       await this.notificarCierre({
         cierreId: info.id,
         zonaId: info.destinoZonaId,
         mensajeroNombre: info.mensajeroNombre,
+      });
+    });
+  }
+
+  /**
+   * FEATURE 271 (T6.5, R40/R41/R47) — el aviso de «te has quedado BLOQUEADO por acumular», al
+   * mensajero Y a su bodega responsable, cuando una solicitud lo deja en `N >= 2`.
+   *
+   * SE EMITE DESPUES de la escritura ya guardada y en BEST-EFFORT: un aviso caido NO puede
+   * invalidar un cierre que el mensajero ya dio por enviado (R47). Mismo criterio que sus hermanos
+   * de la 146.
+   *
+   * LA ENTIDAD ES EL CIERRE QUE ACABA DE CREARSE —el que lo dejo en `N>=2`— y no el mensajero: dos
+   * bloqueos distintos son dos cierres distintos, luego dos `entidad_id`, luego la clave unica
+   * `notificacion_dedupe_key` no colisiona y el segundo bloqueo SI avisa (R44). Elegir mal la
+   * entidad convierte «avisar dos veces» en un silencio estructural — la leccion de la 262.
+   */
+  private async avisarBloqueoPorAcumular(cierreId: string, mensajeroId: string): Promise<void> {
+    await emitirBestEffort("mensajero_bloqueado_por_cierres", async () => {
+      // El detalle se relee DESPUES de la escritura: el N que interesa es el de ahora, con el
+      // cierre nuevo ya dentro. Calcularlo antes diria uno menos.
+      const bloqueo = await this.ordenRepo.findBloqueoDetalle(mensajeroId);
+      if (!bloqueo.bloqueado) return; // no quedo bloqueado: no hay nada que avisar (R40)
+      const info = await this.repo.findCierreParaAviso?.(cierreId);
+      if (!info) return;
+      await this.notificarBloqueo({
+        cierreId: info.id,
+        zonaId: info.destinoZonaId,
+        mensajeroUsuarioId: mensajeroId,
+        bloqueo,
       });
     });
   }
@@ -444,57 +498,42 @@ export class CierreDiaService implements ICierreDiaService {
   async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
 
-    // Feature 111/R6/R9/R10: si el mensajero tiene un cierre `vencido`, "Solicitar cierre"
-    // NO crea un cierre nuevo: transiciona ese `vencido -> solicitado` (escritura guardada por
-    // estado). Va ANTES del flujo de creación y EXENTO de la precondición de "sin pendientes"
-    // (R9, anti-deadlock: el mensajero está bloqueado para gestionar —R1— y quedaría atrapado
-    // si además no pudiera enviar su vencido a aprobación). NO recalcula ni re-snapshotea (R8:
-    // el repo solo cambia `estado`). Invariante R10: el corte no crea `vencido` con `solicitado`
-    // presente (41 R10) y aquí se transiciona en vez de crear una segunda fila.
+    // ─── FEATURE 271 (§4) — CUATRO RAMAS, Y EL ORDEN IMPORTA ────────────────────────────────────
+    //
+    //   1. rol != mensajero                              -> forbidden        (arriba)
+    //   2. hay cierre RE-SOLICITABLE (vencido/rechazado) -> RE-SOLICITUD, EXENTA del gate
+    //   3. BLOQUEADO (N >= 2, V = 0)                     -> conflict con motivo explicado (R15)
+    //   4. flujo de creacion de la 37, intacto           -> crea el 2.º `solicitado` (R13/R14)
+    //
+    // LA RAMA 2 VA PRIMERO Y SIGUE EXENTA de la precondicion de «sin pendientes» y del gate nuevo:
+    // es el anti-deadlock de 111/R9 y 109/R28. Si no fuera primero, un mensajero con `N=2, V=1` no
+    // tendria salida (R16) — esta bloqueado para gestionar y para recibir trabajo, y si ademas no
+    // pudiera enviar su vencido a aprobacion quedaria atrapado para siempre.
     //
     // FEATURE 235 (R24): con `ayuda_tienda` en `ESTADOS_PENDIENTES`, esta ruta se comporta
-    // EXACTAMENTE igual que con `en_reparto` - es decir, una orden en ayuda NO la bloquea, porque
-    // esta rama no consulta pendientes. Es deliberado y se afirma en test para que nadie lo
-    // «arregle»: quitarle la exencion reabre el deadlock que la 111/R9 cerro.
-    if (await this.repo.existeCierreVencido(actor.usuarioId)) {
-      const ok = await this.repo.transicionarVencidoASolicitado(actor.usuarioId);
-      // R7: 0 filas = el vencido ya fue resuelto/transicionado entre la lectura y la escritura.
+    // EXACTAMENTE igual que con `en_reparto` — una orden en ayuda NO la bloquea, porque esta rama
+    // no consulta pendientes. Es deliberado y se afirma en test para que nadie lo «arregle».
+    //
+    // ⚠️ UNA SOLA RAMA PARA LOS DOS ESTADOS RE-SOLICITABLES, y elige por EDAD (R18). Antes habia
+    // dos ramas gemelas que elegian por ESTADO —primero `vencido`, luego `rechazado`—: con un
+    // `rechazado` viejo y un `vencido` nuevo resolvia el nuevo primero, contradiciendo «del mas
+    // viejo al mas nuevo». Con un solo cierre abierto daba igual; derogado ese invariante (R9), no.
+    const resolicitable = await this.repo.findCierreResolicitableMasViejo(actor.usuarioId);
+    if (resolicitable !== null) {
+      const ok = await this.repo.transicionarASolicitado(
+        resolicitable.id,
+        resolicitable.estado, // anti-TOCTOU: solo si SIGUE en el estado que leimos
+      );
+      // R19: con el `id` en el `where`, `false` significa 0 filas — carrera, SIN efectos. Ya no
+      // puede significar «movi dos y te digo que no» (M2).
       if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
-      await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
-      return { status: "ok", via: "vencido_solicitado" }; // R8: sin snapshot nuevo
+      // R56 (M9): el aviso recibe el id del cierre QUE SE ACABA DE TOCAR, no uno releido por
+      // mensajero. Con dos `solicitado`, releer devolvia siempre el mas nuevo.
+      await this.avisarCierrePorAprobar(resolicitable.id); // feature 146/R24
+      return { status: "ok", via: "resolicitado" }; // R20: sin snapshot nuevo
     }
 
-    // Feature 109/R28 (modelo GLOBAL): un cierre `rechazado` ya NO es terminal — BLOQUEA (R29) y es
-    // RE-SOLICITABLE (`rechazado -> solicitado`, espejo EXACTO del `vencido`). Misma rama, mismo gate
-    // (EXENTO de la precondicion de "sin pendientes", anti-deadlock: el mensajero esta bloqueado y
-    // quedaria atrapado). Money-safe (R28: el repo solo cambia `estado`).
-    //
-    // ⚠️ FEATURE 241 (2026-08-20) — AQUI DECIA «el desbloqueo definitivo y la liberacion de
-    // `sin_gestionar` ocurren SOLO al APROBAR (R16)», Y LA PRIMERA MITAD YA NO ES CIERTA. Son DOS
-    // cosas distintas y confundirlas fue justo lo que se propago a la pantalla:
-    //
-    //   - EL BLOQUEO DEL MENSAJERO SE LEVANTA AQUI, AL RE-SOLICITAR. `solicitado` NO esta en
-    //     `ESTADOS_CIERRE_BLOQUEAN_GESTION` (`OrdenRepository`), asi que en cuanto esta rama
-    //     escribe `rechazado -> solicitado` el mensajero vuelve a gestionar y cobrar. No espera a
-    //     nadie: la pelota pasa al admin y el ya hizo lo suyo.
-    //   - LA LIBERACION DE `sin_gestionar` SI OCURRE SOLO AL APROBAR (109/R16). La emite el admin,
-    //     en otro camino y otra transaccion (`CierresAdminRepository`, origen
-    //     `liberacion_sin_gestionar`). Esa mitad no la toco la 241.
-    //
-    // Prometerle al mensajero un bloqueo mas largo del real lo deja esperando de brazos cruzados
-    // una aprobacion que ya no necesita. El aviso de la pantalla decia eso y se corrigio; esta
-    // frase era su fuente, asi que se corrige tambien o el proximo que lea el servicio la copia.
-    //
-    // FEATURE 235 (R24): mismo caso que el `vencido` de arriba, y misma razon. Ninguna de las dos
-    // rutas de RE-solicitud comprueba pendientes.
-    if (await this.repo.existeCierreRechazado(actor.usuarioId)) {
-      const ok = await this.repo.transicionarRechazadoASolicitado(actor.usuarioId);
-      if (!ok) return { status: "conflict", motivo: MSG_DUPLICADO };
-      await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
-      return { status: "ok", via: "rechazado_solicitado" }; // R28: sin snapshot nuevo
-    }
-
-    // R11: sin `vencido` -> flujo de creación de la 37 SIN CAMBIOS (precondiciones + snapshot).
+    // R11: flujo de creación de la 37 SIN CAMBIOS (precondiciones + snapshot).
     // R10: precondicion — sin ordenes pendientes de gestion.
     const pendientes = await this.repo.contarOrdenesPendientesGestion(
       actor.usuarioId,
@@ -502,9 +541,20 @@ export class CierreDiaService implements ICierreDiaService {
     );
     if (pendientes > 0) return { status: "conflict", motivo: MSG_PENDIENTES };
 
-    // R12: a lo sumo un cierre `solicitado` por mensajero a la vez.
-    if (await this.repo.existeCierreSolicitado(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_DUPLICADO };
+    // ─── RAMA 3 — EL GATE (271/R15). SUSTITUYE A `existeCierreSolicitado` ───────────────────────
+    //
+    // Ya no se pregunta «¿tienes uno?» sino «¿estas BLOQUEADO?». Con `N=1, V=0` la respuesta es no,
+    // y por eso el SEGUNDO cierre se crea (R13): es el caso del cierre `79cb2c0f` medido en
+    // produccion, donde el mensajero trabajo un dia mas con el cierre anterior aun sin aprobar y su
+    // dinero se quedo sin cierre al que ir.
+    //
+    // Aqui no puede haber ningun re-solicitable (la rama 2 se lo habria llevado), asi que estar
+    // bloqueado significa exactamente `N >= 2` con todos en `solicitado`. El motivo es COMPUESTO
+    // por el mismo formateador que el aviso, a partir del detalle: dice cuantos arrastra y cual
+    // toca resolver primero (R15/R43), no un «ya tienes un cierre» a secas.
+    const bloqueo = await this.ordenRepo.findBloqueoDetalle(actor.usuarioId);
+    if (bloqueo.bloqueado) {
+      return { status: "conflict", motivo: avisoBloqueo(bloqueo, { conCta: false }) };
     }
 
     // R11: no se cierra un dia vacio.
@@ -560,10 +610,15 @@ export class CierreDiaService implements ICierreDiaService {
     });
     if (cierreId === null) return { status: "conflict", motivo: MSG_VACIO };
 
-    await this.avisarCierrePorAprobar(actor.usuarioId); // feature 146/R24
+    await this.avisarCierrePorAprobar(cierreId); // feature 146/R24 (+ 271/R56: el id, no el actor)
+    // FEATURE 271 (R40/R41): si ESTA solicitud lo dejo en `N >= 2`, avisar al mensajero y a su
+    // bodega. Va DESPUES del cierre ya escrito y en best-effort (R47): un aviso caido no invalida
+    // un cierre que el mensajero ya dio por enviado. Con `N = 0 -> 1` no emite nada (el propio
+    // metodo comprueba el veredicto antes de emitir).
+    await this.avisarBloqueoPorAcumular(cierreId, actor.usuarioId);
 
     // Feature 111/P2: `via: "creado"` distingue el toast del camino de creación (37) del de
-    // transición del vencido; los consumidores previos ignoran el campo.
+    // re-solicitud; los consumidores previos ignoran el campo.
     return { status: "ok", via: "creado", cierreId, totales, destinoTipo };
   }
 
@@ -581,16 +636,22 @@ export class CierreDiaService implements ICierreDiaService {
     // para deshacer (la ventana muere al solicitar el cierre, que es cuando el admin lo ve).
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" };
 
-    // Feature 111/R5 (Q2, guarda EXPLICITA belt-and-suspenders) + 241: un mensajero con un cierre
-    // `vencido` o `rechazado` no puede tocar sus guías, y DESHACER es tocarlas. MISMO predicado
-    // que `gestionar` (`findMensajerosBloqueadosParaGestion`), ANTES de cualquier lectura o
+    // Feature 111/R5 (Q2, guarda EXPLICITA belt-and-suspenders) + 241 -> FEATURE 271 (R25/R27): un
+    // mensajero BLOQUEADO no puede tocar sus guías, y DESHACER es tocarlas. MISMA regla N/V que
+    // `gestionar`, `escoger`, `recoger` y la recolección en tienda, ANTES de cualquier lectura o
     // escritura de la gestión. No se apoya en el no-op natural.
     //
-    // Con `solicitado` NO bloquea (regla firmada 2026-08-20): ese mensajero está esperando al
-    // admin, y su ventana de deshacer muere igual sola en cuanto la gestión quede atada al cierre
-    // (guarda 4, `gestion.cierreId !== null`), que es la protección de verdad del dinero.
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
-    if (bloqueados.has(actor.usuarioId)) return { status: "conflict", motivo: MSG_BLOQUEADO };
+    // Con `N = 1, V = 0` —un cierre `solicitado` a secas— SIGUE SIN bloquear, y esa es la parte de
+    // la regla firmada el 2026-08-20 que la 271 NO revierte: ese mensajero está esperando al admin,
+    // y su ventana de deshacer muere igual sola en cuanto la gestión quede atada al cierre (guarda
+    // 4, `gestion.cierreId !== null`), que es la protección de verdad del dinero.
+    //
+    // R27: el motivo lo compone el formateador, así que dice POR QUÉ está bloqueado y QUÉ tiene que
+    // hacer para salir — no un «no se puede» a secas. Y sin efectos: la guarda va la primera.
+    const bloqueo = await this.ordenRepo.findBloqueoDetalle(actor.usuarioId);
+    if (bloqueo.bloqueado) {
+      return { status: "conflict", motivo: avisoBloqueo(bloqueo, { conCta: true }) };
+    }
 
     // 2) R9: inexistente -> forbidden (NO se distingue de ajena, patron 36/R31: no revela que
     // la gestion existe).

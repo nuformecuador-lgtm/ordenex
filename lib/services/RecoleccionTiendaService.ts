@@ -5,6 +5,8 @@ import type {
 } from "@/lib/interfaces/repositories/IGestionOrdenRepository";
 import type { IOrdenHistorialRepository } from "@/lib/interfaces/repositories/IOrdenHistorialRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
+// Feature 271: el motivo del bloqueo lo compone el MISMO formateador que la pantalla y la campana.
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type {
   IRecoleccionTiendaService,
@@ -36,11 +38,17 @@ import {
 const ORIGEN_RECOLECCION = "recolectando";
 const DESTINO_RECOLECCION = "en_ruta_bodega_central";
 
-// Feature 111/R1 -> 241: mismo texto que usa `MisAsignacionesService`. Mientras el mensajero tenga
-// un cierre `vencido` o `rechazado` sin resolver no mueve ninguna guia, y recolectar es mover una.
-// Con `solicitado` SI recolecta: la pelota esta en el tejado del admin, no en el suyo.
-const MSG_BLOQUEADO =
-  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias.";
+// ⚠️ FEATURE 271 — AQUI VIVIA `MSG_BLOQUEADO`, Y SE QUEDABA CORTO DE UNA FORMA MEDIBLE. Decia
+// «Tenés un cierre pendiente sin resolver», y con la regla nueva hay un caso —ACUMULACION, N>=2 y
+// V=0— en el que el mensajero NO TIENE NADA QUE RESOLVER: sus dos cierres estan enviados y esperando
+// al administrador. Un mensaje que le atribuye una tarea que no tiene lo manda a buscar un boton que
+// no existe (R51).
+//
+// Pasa a componerse con el MISMO formateador que la pantalla y la campana (`avisoBloqueo`), que
+// distingue los tres casos y dice en cada uno quien tiene la pelota.
+//
+// Lo que NO cambia: con un cierre `solicitado` a secas (N=1, V=0) SI recolecta —la pelota esta en el
+// tejado del admin, no en el suyo—. Esa es la mitad de la regla del 2026-08-20 que sobrevive.
 
 // Motivo del `conflict` cuando la escritura guardada no afecto ninguna fila (R34).
 const MSG_CARRERA = "la orden cambio de estado durante la recoleccion";
@@ -57,7 +65,7 @@ type RecoleccionTiendaRepo = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recolectarEnTienda"
-  | "findMensajerosBloqueadosParaGestion"
+  | "findBloqueoDetalle" // feature 271: la regla N/V + el motivo que CUENTA (R25/R27)
 >;
 
 // Feature 167 — la LECTURA del apartado consume otros dos repos, tambien por `Pick` para poder
@@ -94,13 +102,13 @@ export class RecoleccionTiendaService implements IRecoleccionTiendaService {
     // 1. Rol: solo el mensajero recolecta (R29). Maestro/admin NO tienen camino aqui.
     if (actor.rol !== "mensajero") return { status: "forbidden" };
 
-    // 2. Bloqueo por cierre `vencido`/`rechazado`, ANTES de leer la orden (R31): mismo orden que
-    //    `gestionar`, de modo que un mensajero bloqueado no llega siquiera a saber si la guia
-    //    existe. Feature 241: recolectar en tienda es COBRAR, asi que le toca la politica de
-    //    gestion — no la de asignacion, que no bloquea nunca.
-    const bloqueados = await this.repo.findMensajerosBloqueadosParaGestion([actor.usuarioId]);
-    if (bloqueados.has(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    // 2. FEATURE 271 (R25/R27): bloqueo por la regla N/V, ANTES de leer la orden (R31). Mismo orden
+    //    que `gestionar`, de modo que un mensajero bloqueado no llega siquiera a saber si la guia
+    //    existe. Recolectar en tienda es COBRAR, asi que le toca la MISMA regla que gestionar — y
+    //    desde el 2026-08-23 tambien la misma que RECIBIR trabajo nuevo: ya no hay dos politicas.
+    const bloqueo = await this.repo.findBloqueoDetalle(actor.usuarioId);
+    if (bloqueo.bloqueado) {
+      return { status: "conflict", motivo: avisoBloqueo(bloqueo, { conCta: true }) };
     }
 
     // 3. Cargar por num_guia. `findByNumGuiaForTransicion` NO filtra borradas: aqui se

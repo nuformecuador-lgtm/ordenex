@@ -132,6 +132,16 @@ dinero, no crea una gestión y no cambia de estado. Consultar
 `findMensajerosBloqueadosParaGestion` desde aquí sería escribir «ParaGestion» en una acción que no
 gestiona nada.
 
+> ⚠️ **NOTA DE CADUCIDAD — 2026-08-23 (feature 271).** La **justificación** de arriba ya no rige: la
+> regla 2 de la 241 —«recibir asignaciones no se bloquea nunca»— **la revirtió la ficha 271**.
+> Recibir trabajo nuevo **sí** se bloquea, y en las tres escrituras (reparto central, reparto
+> satélite y recolección). **La decisión de esta ficha —R14, que un cierre pendiente NO bloquea la
+> corrección— sigue en pie**, pero por su OTRA razón, que no dependía de aquella regla: corregir el
+> día de una orden que el mensajero **ya tiene en la mano** no es darle trabajo nuevo ni gestionar.
+> Está escrito así en el código (`lib/services/CorreccionDiaRepartoService.ts`, cabecera del
+> `Pick`). **Este spec no se reescribe**: es la foto de su momento. Regla vigente en
+> `specs/271-segundo-cierre-y-bloqueo/requirements.md`.
+
 ### 4.2 · D2 — **Desde dónde se hace**
 
 > **Decisión: una acción de LOTE en los dos listados que ya existen**, no una pantalla nueva.

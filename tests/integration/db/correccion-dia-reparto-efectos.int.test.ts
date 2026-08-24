@@ -18,6 +18,7 @@ import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepos
 import type { IRutaOptimizadaRepository } from "@/lib/interfaces/repositories/IRutaOptimizadaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
+import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 import {
   HAY_BASE_DE_DATOS,
@@ -386,10 +387,10 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
     } as unknown as IGestionOrdenRepository;
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => `os-${v}`),
-      findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+      findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     } as unknown as Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+      "findEstatusIdByValue" | "findBloqueoDetalle"
     >;
     const storage = {
       upload: vi.fn(async (input: { path: string }) => input.path),
@@ -688,10 +689,10 @@ describeSiHayBase("262/B13 — las ausencias y las consecuencias, contra Postgre
   async function listarPortal(tx: PrismaClient, mensajeroId: string) {
     const ordenRepo = {
       findEstatusIdByValue: vi.fn(async (v: string) => `os-${v}`),
-      findMensajerosBloqueadosParaGestion: vi.fn(async () => new Set<string>()),
+      findBloqueoDetalle: vi.fn(async () => SIN_BLOQUEO),
     } as unknown as Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+      "findEstatusIdByValue" | "findBloqueoDetalle"
     >;
     const storage = {
       upload: vi.fn(async (input: { path: string }) => input.path),

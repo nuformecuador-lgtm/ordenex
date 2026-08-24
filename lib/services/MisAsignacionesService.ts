@@ -38,6 +38,8 @@ import { fechaRepartoComoTexto } from "@/lib/utils/dia-reparto";
 // Feature 261 (B2/B4, R15): el vocabulario del bloqueo por reserva vive en UN solo sitio, y el
 // servidor usa esa MISMA fuente en el motivo que devuelve. No se reescribe el literal aqui.
 import { RESERVA_MOTIVO_SERVIDOR } from "@/lib/utils/dia-reparto-textos";
+// Feature 271: el motivo del bloqueo lo compone el MISMO formateador que la pantalla y la campana.
+import { avisoBloqueo } from "@/lib/constants/bloqueo-mensajero";
 import {
   fechaCalendarioCR,
   inicioDelDiaCREnUtc,
@@ -48,14 +50,14 @@ import {
   startOfDayCR,
 } from "@/lib/utils/fecha-cr";
 
-// Feature 111/R1/R4/R20: motivo ACCIONABLE del bloqueo sobre las guías (texto fijo i18n-ready,
-// SIN PII ni datos del cierre). Mientras el mensajero tenga un cierre `vencido` o `rechazado` sin
-// resolver no puede gestionar NI recoger/escoger.
+// ⚠️ FEATURE 271 — AQUI VIVIA `MSG_BLOQUEADO`, UN TEXTO FIJO. Se va, y no es limpieza: el motivo
+// del rechazo tiene que CONTAR (cuantos cierres arrastra y cual toca resolver primero, R27/R43) y un
+// texto fijo no puede. Lo compone `avisoBloqueo` a partir del `BloqueoDetalle`, que es el MISMO
+// formateador que usa la pantalla y el aviso de la campana: tres versiones del mismo texto es como
+// se desincronizan.
 //
-// Feature 241 (2026-08-20): `solicitado` SALIO de esa lista. Quien ya pidio su cierre no tiene
-// nada que resolver —espera al admin— y sigue trabajando con normalidad.
-const MSG_BLOQUEADO =
-  "Tenes un cierre pendiente sin resolver; resolvelo antes de gestionar tus guias."; // R1/R4/R20
+// Lo que NO cambia: con un cierre `solicitado` a secas (N=1, V=0) el mensajero SIGUE gestionando y
+// cobrando con normalidad. Esa es la mitad de la regla firmada el 2026-08-20 que la 271 conserva.
 
 /**
  * FEATURE 261 (B4, R1/R2/R3) — ¿esta orden esta RESERVADA para un dia posterior al de Costa Rica
@@ -105,13 +107,14 @@ function distinct(values: string[]): string[] {
 export class MisAsignacionesService implements IMisAsignacionesService {
   constructor(
     private readonly repo: IGestionOrdenRepository,
-    // Feature 111/R1-R4 -> 241: + `findMensajerosBloqueadosParaGestion`. Lo consume la guarda de
-    // gestionar/recoger/escoger, que es EXACTAMENTE lo que ese predicado bloquea: este service ES
-    // «gestionar y cobrar». Ya no es «el mismo predicado que la asignación» — la asignación no
-    // consulta ninguno.
+    // Feature 111/R1-R4 -> 241 -> FEATURE 271: + `findBloqueoDetalle`. Lo consume la guarda de
+    // gestionar/recoger/escoger. Se pide el DETALLE y no el `Set` porque el motivo del rechazo tiene
+    // que decir POR QUE esta bloqueado y QUE hacer para salir (R27), y eso exige contar cuantos
+    // cierres arrastra y cual toca primero. VUELVE a ser el MISMO predicado que consulta la
+    // asignacion —la 271 revierte esa mitad de la 241—, solo que alli basta el booleano.
     private readonly ordenRepo: Pick<
       IOrdenRepository,
-      "findEstatusIdByValue" | "findMensajerosBloqueadosParaGestion"
+      "findEstatusIdByValue" | "findBloqueoDetalle"
     >,
     private readonly storage: IFileStorage,
     private readonly signedUrls: ISignedUrlProvider,
@@ -163,17 +166,23 @@ export class MisAsignacionesService implements IMisAsignacionesService {
   }
 
   /**
-   * Feature 111/R1-R4/R2 — predicado de bloqueo: `true` si el mensajero tiene un cierre `vencido`
-   * o `rechazado`. NO duplica la derivación ni introduce un flag persistido: la lista de estados
-   * vive entera en `OrdenRepository`, con el porqué de la asimetría escrito al lado.
+   * Feature 111/R1-R4 -> FEATURE 271 (R25/R27) — el bloqueo del mensajero, con su MOTIVO ya
+   * compuesto. `null` = LIBRE.
    *
-   * Feature 241: lo que este `true` impide es GESTIONAR Y COBRAR. Ese mismo mensajero sigue
-   * recibiendo asignaciones nuevas —esa puerta no la cierra nadie— y sigue pudiendo solicitar su
-   * cierre, que es la salida (111/R9, 109/R28).
+   * NO duplica la derivacion ni introduce un flag persistido: la regla N/V vive entera en
+   * `lib/utils/bloqueo-cierre.ts` y la resuelve el repositorio (R10/R12).
+   *
+   * ⚠️ LO QUE ESTE MOTIVO IMPIDE YA NO ES SOLO GESTIONAR Y COBRAR. Desde el 2026-08-23 el mismo
+   * mensajero TAMPOCO recibe trabajo nuevo —ni reparto ni recoleccion—, asi que el aviso puede
+   * decirlo sin mentir. Antes no podia: la 241 tenia escrito aqui «ese mismo mensajero sigue
+   * recibiendo asignaciones nuevas», que hoy seria falso.
+   *
+   * Lo que SI sigue pudiendo, y por eso no es un callejon sin salida: SOLICITAR o RE-SOLICITAR su
+   * cierre, que es la unica via de escape (111/R9, 109/R28, 271/R16).
    */
-  private async estaBloqueado(usuarioId: string): Promise<boolean> {
-    const bloqueados = await this.ordenRepo.findMensajerosBloqueadosParaGestion([usuarioId]);
-    return bloqueados.has(usuarioId);
+  private async motivoBloqueo(usuarioId: string): Promise<string | null> {
+    const bloqueo = await this.ordenRepo.findBloqueoDetalle(usuarioId);
+    return bloqueo.bloqueado ? avisoBloqueo(bloqueo, { conCta: true }) : null;
   }
 
   /**
@@ -383,10 +392,11 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // Feature 111/R4 (Q3): bloqueo total — un mensajero con un cierre pendiente
     // (`solicitado`/`vencido`) no puede RECOGER. Guarda al inicio (ANTES de cualquier efecto:
     // la transición vive en `recogerLote`), MISMO predicado que gestionar. Sin PII (R20).
-    if (await this.estaBloqueado(actor.usuarioId)) {
+    const motivoLote = await this.motivoBloqueo(actor.usuarioId);
+    if (motivoLote !== null) {
       return {
         status: "conflict",
-        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: MSG_BLOQUEADO })),
+        detalle: ordenIds.map((ordenId) => ({ ordenId, motivo: motivoLote })),
       };
     }
 
@@ -463,8 +473,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
 
     // Feature 111/R4 (Q3): bloqueo total — mensajero con cierre pendiente no puede ESCOGER una
     // orden para gestión. Guarda al inicio, ANTES de fijar el puntero (sin efectos parciales).
-    if (await this.estaBloqueado(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    const motivo = await this.motivoBloqueo(actor.usuarioId);
+    if (motivo !== null) {
+      return { status: "conflict", motivo };
     }
 
     const guardia = await this.cargarOrdenGestionable(ordenId, actor);
@@ -502,8 +513,9 @@ export class MisAsignacionesService implements IMisAsignacionesService {
     // pudiera seguir cobrando con un cierre sin resolver, el dinero del día nuevo se acumularía
     // sin cierre al que ir y el admin estaría cuadrando una caja que ya no es todo lo que él
     // tiene en la mano. Que ASIGNARLE órdenes no se bloquee es otra cosa: recibirlas no cobra.
-    if (await this.estaBloqueado(actor.usuarioId)) {
-      return { status: "conflict", motivo: MSG_BLOQUEADO };
+    const motivo = await this.motivoBloqueo(actor.usuarioId);
+    if (motivo !== null) {
+      return { status: "conflict", motivo };
     }
 
     const guardia = await this.cargarOrdenGestionable(input.ordenId, actor);
