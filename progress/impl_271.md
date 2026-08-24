@@ -102,11 +102,11 @@ más — el diff es una línea de comentario. Ninguna línea ejecutable de `app/
 | R7 | Caso 5, bloqueado **al instante** | `bloqueo-cierre.test.ts` → «caso 5 (R7)»; SQL real → fila «5 · un vencido» |
 | R8 | Caso 6: re-solicitar no basta | `bloqueo-cierre.test.ts` → «caso 6 (R8)»; SQL real → última aserción de «T2.4/R19 (M2)» |
 | R9 | Dos cierres abiertos ADMITIDOS | `cierre-dia-service.test.ts` → «271/R13: con un cierre `solicitado` (N=1, V=0) el mensajero SI crea el segundo»; `corte-diario-repository.test.ts` → «271/R21: el mensajero con un cierre ABIERTO YA NO se excluye» |
-| R10 | UN único predicado | `bloqueo-cierre.test.ts` → «guardia — el modulo de la regla es PURO»; `regla-241-caducada.guardia.test.ts` |
+| R10 | UN único predicado | **Verificado por LECTURA** (las 12 superficies consultan el mismo predicado) + `bloqueo-cierre.test.ts` → «guardia — el modulo de la regla es PURO». ⚠️ **Esa guardia afirma que el módulo no importa Prisma, NO que ninguna superficie re-derive**: nada impide que una superficie NUEVA monte su propia versión de la regla (review 271, **M3**) |
 | R11 | El MÁS VIEJO, desempate estable | `cierre-bloqueo-nv-sql-real.test.ts` → «T10.2/R11: elige el MAS VIEJO…» y «…desempate por `id` es ESTABLE» |
 | R12 | Sin bandera persistida | `cierre-bloqueo-nv-sql-real.test.ts` → «T10.1/R1-R8» (el veredicto cambia con cada siembra, sin escritura extra); `cierre-dia-action.test.ts` |
 | R13 | Crear el SEGUNDO cierre | `cierre-dia-service.test.ts` → «271/R13…» |
-| R14 | Vincula exactamente las de `cierre_id` nulo | **NO cubierto por un test nuevo** — ver «lo que no se cubrió» |
+| R14 | Vincula exactamente las de `cierre_id` nulo | `cierre-segundo-vincula-solo-lo-suyo.test.ts` → «el cierre B se lleva EXACTAMENTE las 2 sueltas y NO toca ni una del cierre A», **contra Postgres sembrado** con dos señuelos y dos mutaciones muertas (cerrado en la pasada de cobertura) |
 | R15 | Bloqueado → conflict con motivo que cuenta | `cierre-dia-service.test.ts` → «271/R15: BLOQUEADO por acumular (N=2, V=0) -> conflict con motivo que CUENTA» |
 | R16 | Re-solicitar SIEMPRE permitido (anti-deadlock) | `cierre-dia-service.test.ts` → «R24 + 271/R16: con un cierre `%s` y una orden en `ayuda_tienda`…» |
 | R17 | Dos `vencido` imposible (invariante derivado) | Comentario en `CorteDiarioService` + `CierreDiaRepository`; **sin test, a propósito** (estado inalcanzable) |
@@ -128,22 +128,22 @@ más — el diff es una línea de comentario. Ninguna línea ejecutable de `app/
 | R33 | El FILTRO no bloquea | **Backend: el dato viaja y está documentado como «el filtro no lo lee».** La aserción de pantalla es **T9.4 (frontend)** |
 | R34 | No bloquea a la bodega entera | `cierre-bloqueo-superficies.test.ts` → «271/R34»; `orden-repository.bloqueo.test.ts` → los casos de `existeBodegaSateliteBloqueada`; SQL real → «T10.1/R34» |
 | R35 | Aprobar libera SOLO lo de ese cierre (M7) | `cierre-aprobacion-libera-solo-lo-suyo.test.ts` → los DOS casos |
-| R36 | Aprobar el más viejo devuelve a LIBRE | `cierre-bloqueo-nv-sql-real.test.ts` → «T10.1/R1-R8» (el veredicto se recalcula por consulta, sin escritura) |
+| R36 | Aprobar el más viejo devuelve a LIBRE | `cierre-aprobar-el-mas-viejo-desbloquea.test.ts` → «con N=2 está BLOQUEADO; aprobado el más viejo, la consulta siguiente lo da LIBRE», por el camino real y con la consulta del veredicto contra un cliente que **lanza** si alguien escribe (pasada de cobertura) |
 | R37 | No toca gestiones de otro cierre | `cierre-aprobacion-libera-solo-lo-suyo.test.ts` → «R35/R37…» |
-| R38 | Aviso al mensajero por `vencido` | `bloqueo-textos.test.ts` → «4 · el corte creó un vencido — al MENSAJERO…» ; emisor: `emitirCierreDiaVencido` |
-| R39 | Aviso a la bodega por `vencido` | `bloqueo-textos.test.ts` → «4-ter · … a la BODEGA» |
-| R40 | Aviso al mensajero al quedar en `N≥2` | `bloqueo-textos.test.ts` → literales 1 y 3; wiring: `avisarBloqueoPorAcumular` |
-| R41 | Aviso a la bodega al quedar en `N≥2` | `bloqueo-textos.test.ts` → «5 · un mensajero quedó bloqueado por acumular — a la BODEGA» |
-| R42 | Aviso al RECHAZAR | **PARCIAL** — el emisor existe (`emitirMensajeroBloqueado`) y su texto está probado, pero **el productor del rechazo no está cableado**. Ver «lo que no se cubrió» |
+| R38 | Aviso al mensajero por `vencido` | **Productor:** `corte-diario-aviso-vencido.test.ts` → «TRES cierres creados -> TRES emisiones…» y «con un mensajero que NO crea y otro que SI…». **Emisor (quién recibe):** `cierre-vencido-destinatarios.test.ts` → «la fila del MENSAJERO es la unica dirigida a un usuario…». **Texto:** `bloqueo-textos.test.ts` → «4 · … al MENSAJERO». Los tres, y **el primero es el que faltaba** (review 271, **B2**) |
+| R39 | Aviso a la bodega por `vencido` | **Emisor:** `cierre-vencido-destinatarios.test.ts` → «CUATRO filas — el mensajero dueño, maestro, admin y el adminSatelite de la zona DESTINO» + «sin zona destino NO se inventa un `adminSatelite`». **Productor:** el mismo caso del corte que R38. **Texto:** `bloqueo-textos.test.ts` → «4-ter · … a la BODEGA» |
+| R40 | Aviso al mensajero al quedar en `N≥2` | **Productor:** `cierre-dia-aviso-bloqueo.test.ts` → «emite UNA vez, con el cierre RECIEN CREADO como entidad…», «el detalle se relee DESPUES de escribir…» y los **dos** casos que NO emiten (`N = 1` y el gate ya bloqueado). **Emisor:** `notificacion-bloqueo-otro-cierre-avisa.test.ts` (4 filas contra Postgres). **Texto:** `bloqueo-textos.test.ts` → literales 1 y 3 |
+| R41 | Aviso a la bodega al quedar en `N≥2` | **Emisor:** `notificacion-bloqueo-otro-cierre-avisa.test.ts` → los tres roles de bodega contados en la tabla, por cierre. **Productor:** el mismo caso de `cierre-dia-aviso-bloqueo.test.ts` que R40. **Texto:** `bloqueo-textos.test.ts` → «5 · … a la BODEGA» |
+| R42 | Aviso al RECHAZAR | **CERRADO** en `impl_271_r42.md`: `cierres-admin-aviso-rechazo.test.ts` → 18 casos (emite una vez, al mensajero de la fila y a la zona destino; los **cinco** desenlaces que no escriben no avisan; dos rechazos → dos entidades) + guardia de composition root. 7 mutaciones muertas |
 | R43 | El aviso dice las tres cosas | `bloqueo-textos.test.ts` → los seis literales completos |
-| R44 | Dedupe: mismo hecho no, hecho nuevo sí | `notificacion` (146) `emitirFilas` + la entidad es el CIERRE. **Sin test nuevo dedicado** — ver «lo que no se cubrió» |
+| R44 | Dedupe: mismo hecho no, hecho nuevo sí | `notificacion-bloqueo-otro-cierre-avisa.test.ts` → «el MISMO cierre dos veces deja UNA fila; OTRO cierre del mismo mensajero deja DOS», contra el índice real `notificacion_dedupe_key` (pasada de cobertura); + `cierre-vencido-destinatarios.test.ts` → «la dedupe se pregunta por (evento, EL CIERRE, destinatario)» para el otro evento |
 | R45 | Sin monto ni datos de nadie | `bloqueo-textos.test.ts` → «R45: ni monto, ni colón, ni identificadores…» |
 | R46 | Lenguaje claro sin siglas | `bloqueo-textos.test.ts` → «R46: lenguaje claro, sin siglas ni jerga del sistema» |
-| R47 | Un aviso que falla no tumba la operación | `notificacion-productores-wiring.test.ts` → «R25 — un aviso que falla no tumba el cierre»; `emitirBestEffort` en el corte |
+| R47 | Un aviso que falla no tumba la operación | **El corte:** `corte-diario-aviso-vencido.test.ts` → «con el notificador REAL sobre un repositorio que revienta, el corte termina y devuelve su resumen». **La solicitud:** `cierre-dia-aviso-bloqueo.test.ts` → «un aviso que revienta NO invalida el cierre ya escrito, y queda registrado». **El rechazo:** `cierres-admin-aviso-rechazo.test.ts` (por partida doble). **Los de la 146:** `notificacion-productores-wiring.test.ts`. ⚠️ Lo que **no** cubre ninguno: `repoReal()` se evalúa FUERA del `emitirBestEffort` en los siete notificadores reales (review 271, **M5**) — patrón heredado de la 146, **no lo introduce esta ficha** |
 | R48 | La administración ve el bloqueo en la fila | `cierres-admin-service.test.ts` (los 36 casos siguen verdes con `bloqueoMensajero` en el resumen). **La pantalla es T9 (frontend)** |
-| R49 | Se puede destrabar un `rechazado` | `cierres-admin-*.test.ts` (existentes) sobre `ESTADOS_REABRIBLES`; `git diff lib/utils/colas-cierre.ts` **vacío** |
-| R50 | La prosa reescrita | `regla-241-caducada.guardia.test.ts` → «y la regla NUEVA sí está escrita donde vive el predicado» |
-| R51 | Ninguna línea afirma la regla vieja | `regla-241-caducada.guardia.test.ts` (5 frases × `lib/`) + `bloqueo-textos.test.ts` → «R51: NINGUNO promete recibir asignaciones ni recoger en tiendas». **`app/` queda fuera hasta T9.1** |
+| R49 | Se puede destrabar un `rechazado` | `cierres-admin-repository.test.ts` → «R28: destraba un `rechazado` de su alcance -> updated» + los dos casos que afirman el `where` entero. Es el repositorio **REAL** sobre un Prisma doble, y la lista `["vencido","rechazado"]` va **escrita a mano**. **Medido el 2026-08-23:** quitar `rechazado` de `ESTADOS_REABRIBLES` deja **3 tests rojos** ahí. ⚠️ **La fila anterior era FALSA** (review 271, **M6**): los `cierres-admin-*.test.ts` de SERVICIO **doblan** `forzarSolicitudVencido` y nunca llegan a la constante |
+| R50 | La prosa reescrita | **Verificado por LECTURA y cumplido**: `OrdenRepository.ts:309-349` y la cabecera de `lib/constants/bloqueo-mensajero.ts` declaran la regla nueva, nombran ficha y fecha, y dicen qué sobrevive y qué se revierte. ⚠️ El test citado —`regla-241-caducada.guardia.test.ts` → «y la regla NUEVA sí está escrita…»— lee **un tercer archivo** (`lib/utils/bloqueo-cierre.ts`), así que **no vigila esos dos** (review 271, **M1**). La dirección peligrosa —que vuelva la frase vieja— sí la cubre la guardia de frases caducadas |
+| R51 | Ninguna línea afirma la regla vieja | `regla-241-caducada.guardia.test.ts` (5 frases × `lib/` **y** `app/`, con anti-vacuidad por raíz y contraprueba ejecutada) + `bloqueo-textos.test.ts` → «R51: NINGUNO promete recibir asignaciones ni recoger en tiendas». ⚠️ El árbol la incumplía **fuera de esas dos raíces** (`feature_list.json` y `progress/current.md`); corregido el 2026-08-23 (review 271, **B4**) |
 | R52 | Los tres portales dicen lo mismo salvo el CTA | `bloqueo-textos.test.ts` → «271/R52 · la ÚNICA diferencia entre portales es el llamado a la acción» |
 | R53 | Ningún total alterado | `cierre-bloqueo-nv-sql-real.test.ts` → «T2.6/R20…» (comparación antes/después de la fila entera) |
 | R54 | `crearCierre` sigue devolviendo «nada creado» | `cierre-dia-repository.test.ts` (existente) → guarda «algo pasó» |
@@ -205,11 +205,17 @@ Casos que murieron, uno por mutación:
    cablear el productor en `CierresAdminService.resolverCierre` (rama `rechazado`)**. Se dejó fuera
    a propósito: ese servicio no recibe notificador hoy y meterle uno toca la transacción del dinero,
    que merece su propio diff. **Es deuda declarada, no un olvido.**
+   > ✅ **CERRADO el 2026-08-23** en `progress/impl_271_r42.md`: productor cableado, 18 casos y 7
+   > mutaciones muertas.
 3. **R14 (el 2.º cierre se lleva sólo lo de hoy) no tiene test nuevo.** El `where: { mensajeroId,
    cierreId: null, anuladaAt: null }` de `crearCierre` **no se tocó** y sus tests existentes siguen
    verdes. T2.2 pedía un caso sembrado con contraprueba; **no se escribió**.
+   > ✅ **CERRADO** en `progress/impl_271_cobertura.md`: `cierre-segundo-vincula-solo-lo-suyo.test.ts`,
+   > contra Postgres y con dos mutaciones muertas.
 4. **R44 (las dos mitades de la dedupe) no tiene test nuevo.** La propiedad se apoya en `emitirFilas`
    (146) y en que la entidad sea el CIERRE; **no se escribió el caso «otro cierre → 2 filas»**.
+   > ✅ **CERRADO** en `progress/impl_271_cobertura.md`: `notificacion-bloqueo-otro-cierre-avisa.test.ts`,
+   > contra el índice real `notificacion_dedupe_key`.
 5. **T3.5 — el coste de la corrida del corte NO se midió.** El cambio quita una consulta por corrida
    (la que restaba) y añade una emisión por cierre creado; el universo de mensajeros evaluados crece
    hasta incluir a los que tienen cierre abierto. **Sin número medido.**
@@ -219,6 +225,13 @@ Casos que murieron, uno por mutación:
    `RAICES` en la guardia — está escrito ahí mismo.
 8. **T6.7 (guardia de PII en los emisores) no se escribió como guardia de árbol**; su contenido está
    cubierto por las aserciones negativas de `bloqueo-textos.test.ts` (`R45`).
+   > ⏸️ **SUSTITUIDA a propósito**, y así queda marcada en `tasks.md`.
+
+> ⚠️ **Los puntos 5 (T3.5) y 6 (T11.5) tuvieron desenlaces distintos:** **T11.5 SÍ se hizo** después,
+> en dos pasadas (ver «Ver la app» más abajo); **T3.5 sigue SIN medir**. Y la revisión del 2026-08-23
+> encontró **dos ausencias más que no constaban aquí**: **T8.3** (los tres specs ajenos siguen sin
+> nota de caducidad) y **T10.3** (los casos del corte nunca se sembraron contra Postgres). Las tres
+> abiertas están en `tasks.md` con su casilla **sin marcar**.
 
 ## Deuda deliberada que la UI hereda
 
@@ -1056,3 +1069,146 @@ Sólo las variantes **sin jornada fiable (R60)** —que exigen sembrar gestiones
 de Costa Rica, no sólo cierres— y los **dos avisos a la bodega**, que son notificaciones y no
 pantalla. Los siete estados de la tabla de verdad, sus dos ramas mixtas y sus plurales **ya se han
 visto renderizados**.
+
+---
+
+# impl 271 — BACKEND (pasada de la REVISIÓN): los avisos que nadie afirmaba, y las 58 casillas
+
+**Encargo:** cerrar los tres bloqueantes que quedaban de `progress/review_271.md` —**B2**, **B3** y
+**B1**— más la fila falsa de **R49**. (**B4** lo cerró el leader en `9f790b2b`.)
+**Alcance: sólo `tests/`, `specs/` y `progress/`. Ni una línea de `lib/` ni de `app/` cambia** —
+`git diff` sobre las dos está vacío, salvo por las mutaciones que se aplicaron y se revirtieron.
+
+## B2 y B3 eran el MISMO defecto, y es el que ya mordió dos veces hoy
+
+El aviso se construye, se prueba su texto, se cablea… **y nada comprueba que llegue a emitirse.**
+El 22/08 el corte corría mudo en producción con 18.000 tests en verde; `b6dea0cf` arregló el
+composition root del cron; y la capa de encima —**el productor**— seguía sin red:
+
+- **`CorteDiarioService`**: el notificador es el **7.º** parámetro y los dos tests que lo
+  instanciaban pasaban **seis**. Borrar entero el bloque `await this.notificarVencido({…})` **no
+  ponía rojo nada**.
+- **`CierreDiaService`**: idéntico. `notificarBloqueo` es el **7.º** y las **diez** suites que
+  construyen ese service pasaban cinco o seis. Borrar
+  `await this.avisarBloqueoPorAcumular(cierreId, actor.usuarioId);` **no ponía rojo nada**.
+- **Nadie importaba `emitirCierreDiaVencido`**, así que **quién recibe** cada fila —«al mensajero
+  dueño» (R38) y «a la bodega responsable» (R39), que es *literalmente* el requisito— no estaba
+  afirmado en ninguna parte.
+
+## Archivos creados
+
+| Archivo | Qué afirma |
+| --- | --- |
+| `tests/unit/services/corte-diario-aviso-vencido.test.ts` | **El productor del corte** (B2): 3 cierres creados → 3 emisiones con el `toEqual` exhaustivo del contexto (cierre, zona, mensajero y jornada **de esa fila**); `crearCierre → null` → **0**; mixto (uno crea, otro no) → **una** y por el que creó; sin zona → nada; y R47 con el notificador **REAL** sobre un repositorio que revienta |
+| `tests/unit/notificaciones/cierre-vencido-destinatarios.test.ts` | **El emisor** (B2): las **CUATRO** filas escritas a mano —mensajero dueño + maestro + admin + `adminSatelite` **de la zona destino**—; que la del mensajero es la única `usuario`, es `alert` y su entidad es el CIERRE; que sin zona quedan **tres** y no se inventa un satélite; la dedupe preguntada por `(evento, EL CIERRE, destinatario)`; y el camino real `notificarCierreDiaVencidoCon(repoDoble)` |
+| `tests/unit/services/cierre-dia-aviso-bloqueo.test.ts` | **El productor del bloqueo** (B3): la solicitud que deja `N ≥ 2` emite **una vez**, con el cierre **recién creado** como entidad y la zona **destino**; el detalle se relee **DESPUÉS** de escribir (afirmado por `invocationCallOrder`); `N = 1` **no** emite; el gate ya bloqueado no crea **ni avisa**; y R47 |
+
+## Archivos modificados
+
+| Archivo | Qué |
+| --- | --- |
+| `specs/271-segundo-cierre-y-bloqueo/tasks.md` | **B1**: las 58 casillas marcadas con su desenlace REAL (**55 hechas · 3 NO hechas**) |
+| `progress/impl_271.md` | el mapa `R → test` corregido (13 filas) y los huecos ya cerrados, anotados donde se declararon |
+| `tests/unit/repositories/cierres-admin-repository.test.ts` | **sólo un comentario**: «no borres esto, es la única red de R49», con la medición |
+
+## La prueba de que sirven: se borró la emisión y se puso ROJO
+
+Cada mutación se aplicó **sola**, se corrió `vitest` de verdad sobre
+`tests/unit/services` + `tests/unit/notificaciones` + `tests/unit/guards`, y se revirtió con
+`git checkout --`. **Base sin mutar: `Test Files 273 passed · Tests 4617 passed`.**
+
+```
+[1] borrar `await this.notificarVencido({...})`   (CorteDiarioService.ts:225-230)
+    -> Test Files  1 failed | 272 passed (273)
+       Tests       3 failed | 4614 passed (4617)
+    murieron: «TRES cierres creados -> TRES emisiones…»
+              «con un mensajero que NO crea y otro que SI…»
+              «con el notificador REAL sobre un repositorio que revienta…»
+    revertida -> 273 passed / 4617 passed
+
+[2] borrar `await this.avisarBloqueoPorAcumular(cierreId, actor.usuarioId);` (CierreDiaService.ts:618)
+    -> Test Files  1 failed | 272 passed (273)
+       Tests       3 failed | 4614 passed (4617)
+    murieron: «emite UNA vez, con el cierre RECIEN CREADO como entidad y la zona DESTINO»
+              «el detalle del aviso se relee DESPUES de escribir el cierre…»
+              «un aviso que revienta NO invalida el cierre ya escrito, y queda registrado»
+    revertida -> 273 passed / 4617 passed
+
+[3] `ESTADOS_REABRIBLES = ["vencido"]`            (CierresAdminRepository.ts:80)
+    -> Test Files  1 failed | Tests 3 failed | 47 passed (50)   [cierres-admin-repository.test.ts]
+    murieron: «R16: count=1 -> updated; WHERE guarda estado='vencido' + alcance…»
+              «R16/R21/R17: la válvula NO recalcula totales ni registra auditoría»
+              «R28: destraba un `rechazado` de su alcance -> updated»
+    revertida
+```
+
+**Los 4.614 que quedan verdes con [1] y con [2] son el hallazgo, no el ruido:** sin los archivos
+nuevos, borrar la emisión de los dos avisos no rompía **nada** en las tres carpetas donde vive todo
+lo que podría verlo.
+
+## R49 — la fila del mapa era falsa; el requisito **sí** está cubierto, por otro test
+
+La revisión (**M6**) decía que nadie vigila `ESTADOS_REABRIBLES`. **Medido: sí lo vigila**, pero no
+los tests que el mapa citaba:
+
+- Los `cierres-admin-*.test.ts` de **servicio** —los que el mapa nombraba— **doblan**
+  `forzarSolicitudVencido` (`vi.fn(async () => "updated")`) y nunca llegan a la constante. La fila
+  era falsa.
+- Quien la vigila es **`tests/unit/repositories/cierres-admin-repository.test.ts`**, que construye
+  el repositorio **REAL** sobre un Prisma doble y afirma `estado: { in: ["vencido","rechazado"] }`
+  **escrito a mano** en tres casos. La mutación **[3]** lo demuestra: **3 tests rojos**.
+
+**Decisión:** se corrige la fila del mapa —una fila falsa es peor que una vacía— en vez de escribir
+un cuarto test que afirme lo mismo; y se deja **en el propio test** la nota de por qué no se puede
+borrar (R48 sacó al `rechazado` de la cola, así que esa válvula es su única salida). `tasks.md`
+marca **T7.2** como *cubierta por un test previo, medida hoy; el test nuevo con su nombre no se
+escribió*.
+
+## B1 — las 58 casillas, leídas de las tres bitácoras
+
+**55 hechas · 3 NO hechas.** Cada tarea cuyo desenlace no es el literal de su «Hecho cuando» lleva
+una línea **Desenlace** en `tasks.md`. Las que no se cerraron:
+
+| Tarea | Desenlace | Dónde consta |
+| --- | --- | --- |
+| **T3.5** — medir el coste de la corrida | **NO medida.** Sin número de consultas ni de tiempo | `impl_271.md` §«Lo que NO se cubrió», punto 5 |
+| **T8.3** — anotar los specs ajenos que citan la regla vieja | **NO hecha.** Los tres siguen sin nota de caducidad | **No constaba en ninguna bitácora**: medido hoy con `grep` |
+| **T10.3** — los casos del corte, sembrados contra Postgres | **NO hecha.** No hay ni un test de `tests/integration/db/` que corra el corte; los tres casos viven en unitarios con doble de Prisma (T3.2, T3.3) o en un test previo a la ficha (T3.4) | **No constaba en ninguna bitácora**: medido hoy |
+
+Y las tres que el encargo señalaba: **T11.5 SÍ se hizo** (dos pasadas, con lo no visto escrito),
+**T6.7 quedó SUSTITUIDA** (las aserciones negativas de `bloqueo-textos.test.ts` en vez de la guardia
+de árbol) y **T3.5 no se midió**. Ninguna se marcó por simetría: **T3.2** quedó como *hecha por otra
+vía y menos de lo que pedía* (unitario con doble, sin sembrar ni mutar) y **T3.4** como *hecha a
+medias*.
+
+## Mapa `R<n> → test` — las 13 filas corregidas
+
+`R10`, `R14`, `R36`, `R38`, `R39`, `R40`, `R41`, `R42`, `R44`, `R47`, `R49`, `R50` y `R51`. Las que
+la revisión llamó **falsas** (R49, R50, R10) ahora dicen **qué afirma el test de verdad** y qué
+**no**; las que se cerraron en pasadas posteriores (R14, R36, R42, R44) apuntan a su test; y R38-R41
+y R47 apuntan a los archivos nuevos.
+
+## Verificación ejecutada
+
+```
+pnpm run typecheck                         -> sin una sola línea de salida
+pnpm run lint                              -> 99 problems (0 errors, 99 warnings)   [las 99 son previas]
+pnpm exec vitest run tests/unit/services tests/unit/notificaciones tests/unit/guards tests/unit/repositories
+                                           -> Test Files 383 passed | Tests 6254 passed
+```
+
+⚠️ **NO se corrió `./init.sh`**: lo lanza el leader (encargo explícito). El gate completo de la ficha
+—`INIT_EXIT=0`, 1331 archivos / 18.009 tests— es de `5ed808e8` y **hay que repetirlo** sobre este
+árbol: **T11.3** queda anotada con eso.
+
+## Lo que esta pasada NO hizo, y por qué
+
+1. **Las tres tareas abiertas** (T3.5, T8.3, T10.3) **no se cerraron**: el encargo era cerrar los
+   bloqueantes de la revisión, y marcarlas habría sido el fallo mudo que la ficha entera vino a
+   evitar. Quedan en `[ ]` con su medición.
+2. **R10, R24 y R47 se dejaron como la revisión los dejó** («no verificable leyendo»), por encargo
+   explícito. Sólo se corrigió lo que el mapa **afirmaba de más** sobre R10 y R47; no se escribió
+   test nuevo para ninguno.
+3. **M2, M3, M4, M5, M7 y M8** (menores de la revisión) **no se tocaron**: no eran el encargo. El
+   más caro de los seis sigue siendo **M3** —nada impide que una superficie nueva re-derive la
+   regla—, y ahora está dicho en la fila R10 del mapa en vez de vendido como cubierto.
