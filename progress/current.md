@@ -51,6 +51,57 @@ release**, no citar éstas.
 
 ---
 
+## 📦 Plantilla de carga masiva v3 (278) — 2026-08-24
+
+Pedido del humano: «en el cargue masivo la estructura cambia: ahora viene **provincia**,
+**canton_distrito** (`nombreCanton (distrito)`), **direccion**». Sucede a la 142, que había
+unificado esas columnas en `direccion_destinatario`; ahora se vuelven a separar y el **país
+desaparece** (hoy ya se descartaba sin persistirlo, así que no se pierde dato).
+
+| # | Zona | Estado | Qué |
+| --- | --- | --- | --- |
+| **278** | fullstack | **PR [#487](https://github.com/nuformecuador-lgtm/ordenex/pull/487)** · rama `feature/276-plantilla-carga-masiva-v3` (worktree `C:/w276`) | 8 → 10 columnas, parser de `canton_distrito`, extractor de la vía sesión, corte duro sin compatibilidad |
+
+### Decisiones cerradas con el humano (no reabrir)
+
+1. **Reemplazo total**: la plantilla v2 deja de aceptarse. Un archivo v2 → rechazo en la
+   validación de cabecera con el mensaje de «la plantilla cambió», igual que la 142 rechazó a la v1.
+2. **La vía API key no cambia**: `/api/ordenes/api-key/carga` sigue con
+   `provincia`/`canton`/`distrito`/`direccion` separados (contrato público de la feature 88).
+3. **No se parte en backend + frontend** pese a evaluar como `fullstack`: cabecera y plantilla son
+   un solo contrato y la carga quedaría ROTA entre los dos merges. Mismo criterio que la 142.
+4. **`canton_distrito` sin paréntesis ⇒ distrito = cantón** (pedido durante la implementación,
+   R14/R16). `Cartago` ≡ `Cartago (Cartago)`, y unos paréntesis vacíos dicen lo mismo. El atajo
+   **no inventa geografía**: `resolveGeo` sigue buscando ese distrito en el catálogo y, si no
+   existe, la fila muere con el mensaje de siempre (R27b, con test).
+
+### Por qué salió barata
+
+La 142 dejó la geografía **inyectada por vía**: cada camino aporta su extractor y `resolveGeo` es
+común. Se sustituyó **un extractor**, no la resolución. Y el parser no se reescribió:
+`separarCantonDistrito` ya existía como privado de `lib/utils/direccion-destinatario.ts` con sus
+ramas de error; se promovió a público en `lib/utils/canton-distrito.ts` y el módulo viejo se borró.
+
+### Estado
+
+Implementada (B1-B6, F1-F4) y **rebasada sobre `dev`** (merge, no rebase: la historia no se
+reescribe). Renumerada **276 -> 278** al mergear: otra sesion tomo 276 y 277 y las dos ya estaban
+en `dev`. El bookkeeping se resolvio partiendo de la copia de `dev`, **+13/-0**: no revierte una
+sola linea ajena.
+
+Gate **completo** tras el merge: typecheck limpio, lint 0 errores, **1375 archivos / 18.726 tests**,
+**2 rojos, los dos ajenos y medidos**:
+
+- `tests/components/TableroOperativo.test.tsx` -> **pasa en aislado**: flake por saturacion.
+- `tests/integration/db/rechazo-tope-intentos-migration.test.ts` -> la Postgres local tiene
+  `habilitacion_api` en el enum, un valor que **solo existe en la rama de la 266 (PR 482, abierto)**;
+  alguien aplico esa migracion a la base compartida. El test, las migraciones y el seed del enum
+  son **byte a byte los de `dev`** en esta rama, y este diff no toca ninguna migracion.
+
+**Delta de la rama: 0.**
+
+---
+
 ## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
 
 Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad

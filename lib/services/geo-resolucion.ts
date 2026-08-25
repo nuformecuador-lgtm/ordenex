@@ -164,8 +164,8 @@ export function resolveGeo(
 
 // Feature 142 (design.md §4) — extractor de geografia INYECTADO POR VIA.
 //
-// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v2 con la
-// columna unica `direccion_destinatario`) y `cargarViaApi` (via API key, feature
+// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v3 con
+// `provincia` + `canton_distrito`, feature 276) y `cargarViaApi` (via API key, feature
 // 88: contrato PUBLICO con `provincia`/`canton`/`distrito`/`direccion` como campos
 // separados). Cada via aporta su propio extractor; `resolveGeo` sigue recibiendo
 // los mismos 3 nombres y no cambia (R33-R38).

@@ -17,7 +17,7 @@ export const COLUMNA_MOTIVO_ERROR = "motivo_error";
  * Columnas del archivo exportado (R1): las 8 de la plantilla vigente, en el
  * orden de `ORDENES_BULK_FIELDS`, y `motivo_error` como ÚLTIMA columna.
  *
- * Las 8 primeras se copian SIN `example` y SIN `label`: la cabecera debe ser la
+ * Las 10 primeras se copian SIN `example` y SIN `label`: la cabecera debe ser la
  * clave máquina exacta (R2) para que el archivo descargado se pueda volver a
  * subir (R14). Añadir aquí una etiqueta o un sufijo es exactamente el bug de la
  * feature 58.
@@ -27,7 +27,7 @@ export const ERRORES_EXPORT_FIELDS: XlsxTemplateField[] = [
   { key: COLUMNA_MOTIVO_ERROR },
 ];
 
-/** Claves de las 8 columnas de la plantilla, en orden (R1, R4). */
+/** Claves de las 10 columnas de la plantilla, en orden (R1, R4; feature 276). */
 const CLAVES_PLANTILLA = ORDENES_BULK_FIELDS.map((field) => field.key);
 
 /** Separador entre el número de fila y el detalle del motivo (decisión G-2). */

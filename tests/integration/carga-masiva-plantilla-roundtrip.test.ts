@@ -5,7 +5,7 @@ import { buildXlsxTemplate } from "@/lib/utils/xlsx-template";
 import { buildCsvTemplate } from "@/lib/utils/csv-template";
 import { parseSpreadsheet } from "@/lib/parsers/spreadsheet";
 import { findMissingHeaders, REQUIRED_HEADERS, filaCargaSchema } from "@/lib/types/carga-masiva";
-import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
+import { parseCantonDistrito } from "@/lib/utils/canton-distrito";
 
 /**
  * Regresión: la plantilla que descarga la app DEBE poder volver a subirse tal
@@ -17,21 +17,22 @@ import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
  *     de modo que al re-parsear el header ya no casaba con la clave: el VALOR
  *     obligatorio quedaba huérfano y la fila se rechazaba.
  *
- * Feature 142 — la plantilla v2 tiene 8 columnas en orden fijo (R1) y la
- * geografía viaja en la columna única `direccion_destinatario` (R5). El caso del
- * valor obligatorio ya no mira `distrito`: mira que el valor de ejemplo de
- * `direccion_destinatario` llegue VERBATIM bajo su clave y que el parser real lo
- * resuelva a sus cuatro partes.
+ * Feature 276 — la plantilla v3 tiene 10 columnas en orden fijo (R1) y la
+ * geografía viaja en `provincia` + `canton_distrito` + `direccion` (R5). El caso
+ * del valor obligatorio mira que el ejemplo de `canton_distrito` llegue VERBATIM
+ * bajo su clave y que el parser real lo resuelva a cantón y distrito.
  *
  * Estos tests construyen la plantilla desde la definición REAL de columnas
  * (`ORDENES_BULK_FIELDS`) y la re-parsean con el parser del endpoint.
  */
 
-/** R1: orden y claves exactos de la plantilla v2. */
+/** R1: orden y claves exactos de la plantilla v3. */
 const COLUMNAS_ESPERADAS = [
   "destinatario",
   "telefono",
-  "direccion_destinatario",
+  "provincia",
+  "canton_distrito",
+  "direccion",
   "monto_cobrar",
   "producto",
   "num_remision",
@@ -40,20 +41,20 @@ const COLUMNAS_ESPERADAS = [
 ];
 
 describe("Carga masiva — round-trip de la plantilla de órdenes", () => {
-  it("R1: la plantilla tiene exactamente las 8 columnas en el orden del spec", () => {
+  it("R1: la plantilla tiene exactamente las 10 columnas en el orden del spec", () => {
     expect(ORDENES_BULK_FIELDS.map((f) => f.key)).toEqual(COLUMNAS_ESPERADAS);
   });
 
-  it("R5: la plantilla NO incluye provincia, canton, distrito ni direccion", () => {
+  it("R5: la plantilla NO incluye la columna única de la v2 ni canton/distrito sueltos", () => {
     const keys = new Set(ORDENES_BULK_FIELDS.map((f) => f.key));
-    for (const vieja of ["provincia", "canton", "distrito", "direccion"]) {
-      expect(keys.has(vieja), `La columna vieja '${vieja}' sigue en la plantilla`).toBe(
+    for (const muerta of ["direccion_destinatario", "canton", "distrito", "pais"]) {
+      expect(keys.has(muerta), `La columna '${muerta}' no debería estar en la plantilla`).toBe(
         false,
       );
     }
   });
 
-  it("R3: cada una de las 8 columnas define un valor de ejemplo", () => {
+  it("R3: cada una de las 10 columnas define un valor de ejemplo", () => {
     for (const field of ORDENES_BULK_FIELDS) {
       expect(field.example, `La columna '${field.key}' no define ejemplo`).toBeTruthy();
     }
@@ -96,27 +97,30 @@ describe("Carga masiva — round-trip de la plantilla de órdenes", () => {
     expect(headers).toEqual(COLUMNAS_ESPERADAS);
   });
 
-  it("R3: XLSX — el ejemplo de direccion_destinatario llega verbatim y se parsea a 4 partes", async () => {
-    // Cierra el bug de raíz: no basta con que la fila exista; el valor obligatorio
-    // debe reparsearse bajo su clave y sobrevivir a la validación de fila y al parser.
-    const field = ORDENES_BULK_FIELDS.find((f) => f.key === "direccion_destinatario");
+  it("R3/R4: XLSX — los ejemplos geográficos llegan verbatim y el parser los resuelve", async () => {
+    // Cierra el bug de raíz: no basta con que la fila exista; los valores
+    // obligatorios deben reparsearse bajo su clave y sobrevivir a la validación
+    // de fila y al parser.
+    const ejemploDe = (key: string) => ORDENES_BULK_FIELDS.find((f) => f.key === key)?.example;
     const buffer = await buildXlsxTemplate(ORDENES_BULK_FIELDS);
     const { rows } = await parseSpreadsheet(Buffer.from(buffer), "xlsx");
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.["direccion_destinatario"]).toBe(field?.example);
+    for (const key of ["provincia", "canton_distrito", "direccion"]) {
+      expect(rows[0]?.[key]).toBe(ejemploDe(key));
+    }
 
-    // La fila de ejemplo pasa el schema por-fila con su dirección intacta.
+    // La fila de ejemplo pasa el schema por-fila con su geografía intacta.
     const parsed = filaCargaSchema.parse(rows[0]);
-    expect(parsed.direccion_destinatario).toBe(field?.example);
+    expect(parsed.provincia).toBe(ejemploDe("provincia"));
+    expect(parsed.canton_distrito).toBe(ejemploDe("canton_distrito"));
+    expect(parsed.direccion).toBe(ejemploDe("direccion"));
 
-    // Y el parser real la resuelve a provincia/cantón/distrito + dirección literal.
-    const partes = parseDireccionDestinatario(parsed.direccion_destinatario);
+    // Y el parser real lo resuelve a cantón + distrito.
+    const partes = parseCantonDistrito(parsed.canton_distrito);
     expect(partes.ok).toBe(true);
     if (!partes.ok) return;
-    expect(partes.partes.provincia).not.toBe("");
     expect(partes.partes.canton).not.toBe("");
     expect(partes.partes.distrito).not.toBe("");
-    expect(partes.partes.direccion).not.toBe("");
   });
 
   it("R2: CSV — la plantilla descargada se re-parsea sin cabeceras obligatorias ausentes", async () => {
@@ -136,20 +140,23 @@ describe("Carga masiva — round-trip de la plantilla de órdenes", () => {
     }
   });
 
-  it("R1: CSV — los headers re-parseados conservan el orden de las 8 columnas", async () => {
+  it("R1: CSV — los headers re-parseados conservan el orden de las 10 columnas", async () => {
     const csv = buildCsvTemplate(ORDENES_BULK_FIELDS);
     const { headers } = await parseSpreadsheet(Buffer.from(csv, "utf-8"), "csv");
     expect(headers).toEqual(COLUMNAS_ESPERADAS);
   });
 
-  it("R3: CSV — el ejemplo de direccion_destinatario sobrevive a las comas del CSV", async () => {
+  it("R3: CSV — el ejemplo de direccion sobrevive a las comas del CSV", async () => {
     // El ejemplo lleva comas ("…, 200m sur"): si el generador no lo entrecomilla,
     // la columna se parte y la geografía se rompe. Guard explícito.
-    const field = ORDENES_BULK_FIELDS.find((f) => f.key === "direccion_destinatario");
+    const direccion = ORDENES_BULK_FIELDS.find((f) => f.key === "direccion");
+    const cantonDistrito = ORDENES_BULK_FIELDS.find((f) => f.key === "canton_distrito");
     const csv = buildCsvTemplate(ORDENES_BULK_FIELDS);
     const { rows } = await parseSpreadsheet(Buffer.from(csv, "utf-8"), "csv");
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.["direccion_destinatario"]).toBe(field?.example);
-    expect(parseDireccionDestinatario(field!.example!).ok).toBe(true);
+    expect(rows[0]?.["direccion"]).toBe(direccion?.example);
+    // Y los paréntesis del cantón/distrito tampoco se pierden por el camino.
+    expect(rows[0]?.["canton_distrito"]).toBe(cantonDistrito?.example);
+    expect(parseCantonDistrito(cantonDistrito!.example!).ok).toBe(true);
   });
 });
