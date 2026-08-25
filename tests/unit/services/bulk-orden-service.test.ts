@@ -98,6 +98,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
     transicionarAyuda: vi.fn().mockResolvedValue(true),
+    findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),
@@ -141,19 +142,19 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
   };
 }
 
-// Feature 142 — la via sesion recibe la geografia en la columna unica
-// `direccion_destinatario` (`Pais / Provincia / Canton (Distrito) / Direccion`).
-// Este helper la arma para que cada test exprese que parte quiere alterar.
-function dir(
+// Feature 276 — la via sesion recibe la geografia en TRES columnas: `provincia`,
+// `canton_distrito` (`nombreCanton (Distrito)`) y `direccion`. Este helper las arma
+// para que cada test exprese que parte quiere alterar.
+function geo(
   partes: { provincia?: string; canton?: string; distrito?: string; direccion?: string } = {},
-): string {
+): Pick<RawRow, "provincia" | "canton_distrito" | "direccion"> {
   const {
     provincia = "Pichincha",
     canton = "Quito",
     distrito = "La Mariscal",
     direccion = "",
   } = partes;
-  return `Ecuador / ${provincia} / ${canton} (${distrito}) / ${direccion}`;
+  return { provincia, canton_distrito: `${canton} (${distrito})`, direccion };
 }
 
 function row(overrides: Partial<RawRow> = {}): RawRow {
@@ -161,7 +162,7 @@ function row(overrides: Partial<RawRow> = {}): RawRow {
     num_remision: "REM-1",
     destinatario: "Ana",
     telefono: "0991234567",
-    direccion_destinatario: dir(),
+    ...geo(),
     producto: "Caja",
     notas: "",
     monto_cobrar: "",
@@ -289,7 +290,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     const repo = buildRepo({ findCantonesByProvinciaIds: vi.fn().mockResolvedValue([]) });
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    const r = await service.cargarMasiva([row({ direccion_destinatario: dir({ canton: "Otro" }) })], TIENDA);
+    const r = await service.cargarMasiva([row({ ...geo({ canton: "Otro" }) })], TIENDA);
 
     if (r.status === "ok") {
       expect(r.summary.filas[0].errores).toHaveProperty("canton");
@@ -309,24 +310,45 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     expect(arg[0].distritoId).toBe("d1");
   });
 
-  // Feature 142/R19 (D2): en la via sesion "sin distrito" ya no llega a resolveGeo:
-  // el parser rechaza el valor antes, con la clave `direccion_destinatario`. La
-  // rama "distrito requerido" de resolveGeo sigue viva para la via API key.
-  it("R19: sin parentesis de distrito -> error de fila en direccion_destinatario (la zona se deriva del distrito)", async () => {
-    const repo = buildRepo();
+  // Feature 276/R14 + R27b: un `canton_distrito` SIN parentesis no es un error de
+  // formato — se asume distrito homonimo del canton. Pero la asuncion no inventa
+  // geografia: si ese distrito no existe en el catalogo del canton, la fila muere
+  // con el mensaje NORMAL de resolveGeo, bajo la clave `distrito`.
+  it("R14/R27b: sin parentesis asume distrito = canton, y si no existe muere en resolveGeo (clave distrito)", async () => {
+    const repo = buildRepo(); // el canton c1 solo tiene el distrito "La Mariscal"
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva(
-      [row({ direccion_destinatario: "Ecuador / Pichincha / Quito / Av. Amazonas" })],
+      [row({ provincia: "Pichincha", canton_distrito: "Quito", direccion: "Av. Amazonas" })],
       TIENDA,
     );
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.summary.filas[0].resultado).toBe("error");
-      expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
+      expect(r.summary.filas[0].errores).toHaveProperty("distrito");
+      // NO es un error de formato: la clave de la columna queda limpia.
+      expect(r.summary.filas[0].errores).not.toHaveProperty("canton_distrito");
     }
     expectSinPersistir(repo);
+  });
+
+  it("R14: sin parentesis, con distrito homonimo en el catalogo, la fila se CREA", async () => {
+    const repo = buildRepo({
+      findDistritosByCantonIds: vi
+        .fn()
+        .mockResolvedValue([{ id: "d1", nombre: "Quito", cantonId: "c1", zonaId: "z1" }]),
+    });
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva(
+      [row({ provincia: "Pichincha", canton_distrito: "Quito", direccion: "Av. Amazonas" })],
+      TIENDA,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.summary.filas[0].resultado).toBe("creada");
+    expect(createManyArg(repo)[0].distritoId).toBe("d1");
   });
 
   it("distrito sin zona asignada -> error de fila", async () => {
@@ -355,7 +377,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     const r = await service.cargarMasiva(
-      [row({ direccion_destinatario: dir({ distrito: "La Mariscal" }) })],
+      [row({ ...geo({ distrito: "La Mariscal" }) })],
       TIENDA,
     );
 
@@ -371,7 +393,7 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva(
-      [row({ direccion_destinatario: "ecuador / PICHINCHA / quito (la  mariscál) / X" })],
+      [row({ provincia: "PICHINCHA", canton_distrito: "quito (la  mariscál)", direccion: "X" })],
       TIENDA,
     );
 
@@ -380,20 +402,20 @@ describe("BulkOrdenService.cargarMasiva — geografia (R19/R20/R21)", () => {
   });
 });
 
-// Feature 142 — parseo de la columna unica `direccion_destinatario` en la via sesion.
-describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30, R31, R32, R37)", () => {
-  it("R29: fila imparseable -> resultado error con la clave direccion_destinatario y mensaje accionable", async () => {
+// Feature 276 — parseo de `canton_distrito` y validacion de `provincia` en la via sesion.
+describe("BulkOrdenService.cargarMasiva — canton_distrito y provincia (R22-R26, R30, R31, R32)", () => {
+  it("R26: canton_distrito imparseable -> error con SU clave y mensaje accionable", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    const r = await service.cargarMasiva([row({ direccion_destinatario: "Pichincha Quito" })], TIENDA);
+    const r = await service.cargarMasiva([row({ canton_distrito: "Quito (La Mariscal" })], TIENDA);
 
     expect(r.status).toBe("ok");
     if (r.status === "ok") {
       expect(r.summary.filas[0].resultado).toBe("error");
       const errores = r.summary.filas[0].errores as Record<string, string[]>;
-      expect(errores).toHaveProperty("direccion_destinatario");
-      expect(errores.direccion_destinatario.join(" ")).toContain("Formato esperado");
+      expect(errores).toHaveProperty("canton_distrito");
+      expect(errores.canton_distrito.join(" ")).toContain("Formato esperado");
     }
     expectSinPersistir(repo);
   });
@@ -402,20 +424,37 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
     ["ausente", undefined],
     ["vacia", ""],
     ["solo espacios", "   "],
-    ["parentesis vacio", "Ecuador / Pichincha / Quito () / X"],
-    ["parentesis sin cerrar", "Ecuador / Pichincha / Quito (La Mariscal / X"],
-    ["texto tras el parentesis", "Ecuador / Pichincha / Quito (La Mariscal) extra / X"],
-    ["provincia vacia", "Ecuador /  / Quito (La Mariscal) / X"],
-    ["canton vacio", "Ecuador / Pichincha / (La Mariscal) / X"],
-  ])("R29: %s -> error de fila bajo direccion_destinatario, sin crear la orden", async (_caso, valor) => {
+    ["parentesis sin cerrar", "Quito (La Mariscal"],
+    ["texto tras el parentesis", "Quito (La Mariscal) extra"],
+    ["canton vacio", "(La Mariscal)"],
+  ])("R26: canton_distrito %s -> error de fila bajo canton_distrito, sin crear la orden", async (_caso, valor) => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    const r = await service.cargarMasiva([row({ direccion_destinatario: valor })], TIENDA);
+    const r = await service.cargarMasiva([row({ canton_distrito: valor })], TIENDA);
 
     if (r.status === "ok") {
       expect(r.summary.filas[0].resultado).toBe("error");
-      expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
+      expect(r.summary.filas[0].errores).toHaveProperty("canton_distrito");
+    }
+    expectSinPersistir(repo);
+  });
+
+  it.each([
+    ["ausente", undefined],
+    ["vacia", ""],
+    ["solo espacios", "   "],
+  ])("R23: provincia %s -> error de fila bajo provincia, sin llegar a canton_distrito", async (_caso, valor) => {
+    const repo = buildRepo();
+    const service = new BulkOrdenService(repo, tarifaRepoStub);
+
+    const r = await service.cargarMasiva([row({ provincia: valor })], TIENDA);
+
+    if (r.status === "ok") {
+      expect(r.summary.filas[0].resultado).toBe("error");
+      expect(r.summary.filas[0].errores).toHaveProperty("provincia");
+      // La provincia se comprueba ANTES: la columna del canton no se acusa de nada.
+      expect(r.summary.filas[0].errores).not.toHaveProperty("canton_distrito");
     }
     expectSinPersistir(repo);
   });
@@ -427,9 +466,9 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
     const r = await service.cargarMasiva(
       [
         row({ num_remision: "REM-A" }),
-        row({ num_remision: "REM-B", direccion_destinatario: "sin barras" }),
+        row({ num_remision: "REM-B", canton_distrito: "Quito (La Mariscal" }),
         row({ num_remision: "REM-C" }),
-        row({ num_remision: "REM-D", direccion_destinatario: "Ecuador / Pichincha / Quito / X" }),
+        row({ num_remision: "REM-D", canton_distrito: "(La Mariscal)" }),
       ],
       TIENDA,
     );
@@ -441,7 +480,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
       const claves = r.summary.filas
         .filter((f) => f.resultado === "error")
         .map((f) => Object.keys(f.errores ?? {}));
-      expect(claves).toEqual([["direccion_destinatario"], ["direccion_destinatario"]]);
+      expect(claves).toEqual([["canton_distrito"], ["canton_distrito"]]);
     }
     const arg = createManyArg(repo);
     expect(arg.map((d: { numRemision: string }) => d.numRemision)).toEqual(["REM-A", "REM-C"]);
@@ -450,7 +489,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
   it("R31: dryRun y carga en firme clasifican igual las filas imparseables", async () => {
     const rows = [
       row({ num_remision: "REM-A" }),
-      row({ num_remision: "REM-B", direccion_destinatario: "Ecuador / Pichincha / Quito / X" }),
+      row({ num_remision: "REM-B", canton_distrito: "Quito (La Mariscal" }),
       row({ num_remision: "REM-A" }),
     ];
 
@@ -468,7 +507,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
   it("R31: el mismo archivo troceado en dos lotes clasifica igual que en uno solo", async () => {
     const rows = [
       row({ num_remision: "REM-A" }),
-      row({ num_remision: "REM-B", direccion_destinatario: "Ecuador / Pichincha / Quito / X" }),
+      row({ num_remision: "REM-B", canton_distrito: "Quito (La Mariscal" }),
     ];
 
     const unico = await new BulkOrdenService(buildRepo(), tarifaRepoStub).cargarMasiva(rows, TIENDA);
@@ -488,7 +527,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva(
-      [row({ direccion_destinatario: dir({ direccion: "Av. Amazonas / N33-12, casa  verde" }) })],
+      [row({ ...geo({ direccion: "Av. Amazonas / N33-12, casa  verde" }) })],
       TIENDA,
     );
 
@@ -499,7 +538,7 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    const r = await service.cargarMasiva([row({ direccion_destinatario: dir({ direccion: "  " }) })], TIENDA);
+    const r = await service.cargarMasiva([row({ ...geo({ direccion: "  " }) })], TIENDA);
 
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(1);
@@ -508,20 +547,19 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
     expect(createManyArg(repo)[0].direccion).toBeNull();
   });
 
-  it("R9: las columnas viejas presentes en el archivo se ignoran (no hay modo compatibilidad)", async () => {
+  it("R10: la columna unica de la v2 presente en el archivo se IGNORA (no hay modo compatibilidad)", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
-    // Fila con la geografia VIEJA correcta pero sin direccion_destinatario: no hay
-    // camino de codigo que la use en la via sesion -> error, no orden creada.
+    // Fila de la plantilla v2: su geografia esta completa DENTRO de
+    // `direccion_destinatario`, pero ningun camino de codigo la lee ya -> error.
     const r = await service.cargarMasiva(
       [
         row({
-          direccion_destinatario: "",
-          provincia: "Pichincha",
-          canton: "Quito",
-          distrito: "La Mariscal",
-          direccion: "Av. Amazonas",
+          provincia: "",
+          canton_distrito: "",
+          direccion: "",
+          direccion_destinatario: "Ecuador / Pichincha / Quito (La Mariscal) / Av. Amazonas",
         }),
       ],
       TIENDA,
@@ -529,21 +567,21 @@ describe("BulkOrdenService.cargarMasiva — direccion_destinatario (R9, R29, R30
 
     if (r.status === "ok") {
       expect(r.summary.creadas).toBe(0);
-      expect(r.summary.filas[0].errores).toHaveProperty("direccion_destinatario");
+      expect(r.summary.filas[0].errores).toHaveProperty("provincia");
     }
     expectSinPersistir(repo);
   });
 
-  it("R9/R39: la columna direccion vieja NO se usa como direccion literal", async () => {
+  it("R24: la columna direccion se persiste como direccion literal, tal cual", async () => {
     const repo = buildRepo();
     const service = new BulkOrdenService(repo, tarifaRepoStub);
 
     await service.cargarMasiva(
-      [row({ direccion_destinatario: dir({ direccion: "Nueva" }), direccion: "Vieja" })],
+      [row({ ...geo({ direccion: "Av. Amazonas / N33-12 (casa verde)" }) })],
       TIENDA,
     );
 
-    expect(createManyArg(repo)[0].direccion).toBe("Nueva");
+    expect(createManyArg(repo)[0].direccion).toBe("Av. Amazonas / N33-12 (casa verde)");
   });
 });
 
@@ -892,7 +930,7 @@ describe("BulkOrdenService.cargarMasiva — dry-run (validación previa)", () =>
   it("dryRun devuelve el MISMO summary que la carga real (misma clasificación)", async () => {
     const rows = [
       row({ num_remision: "REM-A" }),
-      row({ num_remision: "REM-B", direccion_destinatario: dir({ provincia: "Inexistente" }) }),
+      row({ num_remision: "REM-B", ...geo({ provincia: "Inexistente" }) }),
     ];
 
     const repoReal = buildRepo({

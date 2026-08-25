@@ -136,6 +136,31 @@ export function confirmacionDiaReparto(dia: DiaReparto, fechas: FechasDiaReparto
 export const ETIQUETA_PARA_MANANA = "Para mañana";
 
 /**
+ * FEATURE 277 (B1, R25/R26) — LOS NOMBRES DE LAS DOS PESTAÑAS de «Por recoger». Firmados por el
+ * humano el 2026-08-24.
+ *
+ * VIVEN AQUÍ, y no en la pantalla, por lo mismo que `ETIQUETA_PARA_MANANA`: éste es el vocabulario
+ * visible del día de reparto, y existe para que un día una pantalla no diga «Mañana» y otra «Día
+ * siguiente». Los textos de vacío y del puntero, en cambio, son de ESA pantalla y viven colocados
+ * con ella (`app/(app)/mis-asignaciones/_components/recoger-grupos.ts`).
+ *
+ * POR QUÉ EL SEGUNDO NO DICE «mañana», que sería más corto: `fecha_reparto` es un `DATE` libre y un
+ * `UPDATE` a mano puede dejarlo en **+2**. No es hipotético — ocurrió en producción el 2026-08-21
+ * con la guía 17496963—, así que un grupo llamado «Para mañana» mentiría en cuanto contuviera una
+ * orden de pasado mañana, y un grupo mixto no tiene otro nombre honesto. Es el mismo razonamiento
+ * con el que `avisoReservaParaOtroDia` lleva la fecha y no la palabra.
+ *
+ * Y NINGUNO DICE «reserva», la misma regla con la que este repo retiró «SLA» del frontend: por eso
+ * «Reservadas para otro día» quedó descartada aun siendo más precisa.
+ *
+ * SON PARALELOS («Para … / Para …») y dicen qué se puede HACER, no sólo cuándo: el mensajero abre
+ * esa pantalla con una pregunta —«¿qué recojo ahora?»— y las dos etiquetas la responden por
+ * oposición. El conteo lo compone la pantalla («Para recoger hoy (1)»).
+ */
+export const PESTANA_PARA_RECOGER_HOY = "Para recoger hoy";
+export const PESTANA_PARA_OTRO_DIA = "Para otro día";
+
+/**
  * FEATURE 261 (B2, R11/R13/R15/R32) — LA FRASE ÚNICA del bloqueo por reserva. La leen la card
  * del mensajero, el rechazo del escáner, el botón deshabilitado de «Reparto» y el modal de la
  * tienda; y el SERVIDOR devuelve esta misma frase en el `motivo` de sus `conflict`.

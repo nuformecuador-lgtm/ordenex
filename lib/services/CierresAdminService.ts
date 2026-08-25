@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { esAccesoTotal } from "@/lib/auth/acceso-total";
+// FEATURE 276 (T9, R7): el umbral de intentos se resuelve AQUI, en el servicio, y viaja al
+// repositorio como un numero dentro de `liberacionSinGestionar`. La capa de datos no lee
+// configuracion: si lo hiciera, habria dos fuentes del mismo umbral.
+import { reintentosConfig } from "@/lib/config/reintentos";
 import type {
   CatalogoFiltrosCierresDTO,
   FiltrosCierres,
@@ -730,11 +734,27 @@ export class CierresAdminService implements ICierresAdminService {
       this.ordenRepo.findEstatusIdByValue(ESTATUS_DEVOLUCION_POR_CONFIRMAR),
       this.ordenRepo.findEstatusIdByValue(ESTADO_DEVUELTA),
     ]);
+    // 💰 FEATURE 276 (T9, R7/R21): la config gana el destino `rechazada` y el UMBRAL. El umbral se
+    // resuelve AQUI, en el servicio, y viaja como numero: el repositorio no lee configuracion.
+    //
+    // ⚠️ `rechazadaId !== null` entra en la MISMA condicion, y eso es FALLO CERRADO deliberado: si
+    // el catalogo no resuelve `rechazada`, este bloque NO se cablea y la liberacion `sin_gestionar`
+    // entera no ocurre —igual que hoy cuando falta cualquiera de los otros tres ids—. La
+    // alternativa (cablear el bloque sin destino de rechazo) mandaria a bodega ordenes que ya
+    // agotaron sus intentos, en silencio, que es exactamente lo que esta ficha cierra.
     const liberacionSinGestionar =
       sinGestionarEstatusId !== null &&
       enBodegaEstatusId !== null &&
-      enBodegaSateliteEstatusId !== null
-        ? { sinGestionarEstatusId, enBodegaEstatusId, enBodegaSateliteEstatusId, centralZonaId }
+      enBodegaSateliteEstatusId !== null &&
+      rechazadaId !== null
+        ? {
+            sinGestionarEstatusId,
+            enBodegaEstatusId,
+            enBodegaSateliteEstatusId,
+            centralZonaId,
+            rechazadaEstatusId: rechazadaId,
+            umbralIntentos: reintentosConfig.MIN_INTENTOS_ENTREGA,
+          }
         : undefined;
     const devolucionRechazadas =
       rechazadaId !== null && porDevolverId !== null && porDevolverATiendaId !== null

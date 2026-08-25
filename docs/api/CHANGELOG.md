@@ -21,6 +21,62 @@
 
 ---
 
+## 2026-08-23 — endpoint nuevo: habilitar pedidos con novedad, por lote
+
+Cambio **aditivo**: nada de lo que hoy funciona deja de funcionar. Aparece un endpoint nuevo en el
+canal, y ninguno de los ocho anteriores cambia de forma.
+
+### `POST /api/ordenes/api-key/habilitar`
+
+Habilita, en lote, pedidos que quedaron con una novedad. Cuerpo:
+
+```json
+{
+  "ordenes": [
+    { "num_guia": 100234, "nota": "el cliente pidió reintento mañana" },
+    { "num_guia": 100235, "nota": "dirección corregida por el call center" }
+  ]
+}
+```
+
+`nota` es **obligatoria** (1 a 200 caracteres, se recorta). El lote acepta **entre 1 y 100 filas**.
+
+Respuesta **200** con un resultado por fila —en el mismo orden y la misma cantidad que enviaste, así
+que podés casar por índice— y un `resumen`. Cada fila trae uno de estos tres `resultado`:
+
+- `habilitada` — la orden volvió a `en_reparto`.
+- `habilitada_sin_cambio_de_estado` — se registró la habilitación y el estado **no** cambió.
+- `error` — la fila no se procesó; el porqué va en `error.codigo`, que es un conjunto cerrado de
+  cuatro: `fila_invalida`, `duplicada_en_lote`, `no_encontrada`, `estado_no_habilitable`.
+
+### Tres cosas que conviene leer antes de integrar
+
+1. **Solo dos estados son habilitables: `ayuda_tienda` y `devuelta`.** Ningún otro. En particular
+   `reprogramada` **no** lo es y devuelve `estado_no_habilitable`, igual que `rechazada`,
+   `incidente` y `sin_gestionar`.
+2. **Una orden `devuelta` nunca cambia de estado.** Siempre responde
+   `habilitada_sin_cambio_de_estado`, y no es una degradación: su paquete ya volvió a la bodega, así
+   que no hay nadie en la calle a quien devolvérselo. En la práctica, de los dos estados
+   habilitables **solo `ayuda_tienda`** (y solo si conserva mensajero asignado) puede producir
+   `habilitada`.
+3. **200 aunque todas las filas fallen.** Los únicos 4xx globales son 401, 403 y el 422 del
+   envoltorio (cuerpo que no es JSON, sin `ordenes`, lote vacío o de más de 100 filas). Una fila mal
+   formada **no** tira el lote: se marca `fila_invalida` y las demás siguen.
+
+### Webhook
+
+La fila que vuelve a `en_reparto` emite el evento de siempre, `orden.estado_actualizado` con
+`data.estado = "en_reparto"`. **La habilitación sin cambio de estado no emite ningún evento** y no
+existe ningún evento nuevo: si necesitás enterarte de esas, hoy la única fuente es la respuesta
+síncrona de esta llamada.
+
+### Repetir la llamada
+
+Habilitar dos veces la misma orden devuelve `estado_no_habilitable` en la segunda —ya está en
+`en_reparto`, que no es habilitable— y no escribe nada. No devolvemos un acuse `habilitada` falso.
+
+---
+
 ## 2026-08-22 — el webhook avisa del ciclo de AYUDA y del INCIDENTE
 
 

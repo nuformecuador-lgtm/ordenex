@@ -34,6 +34,11 @@ import {
   publicarNotaOrden,
 } from "@/lib/actions/orden-notas";
 import { gestionarSchema } from "@/lib/types/gestion-orden";
+// Feature 276 (T11, R8): el MISMO módulo puro que usa la guarda del servidor. No trae Prisma en
+// runtime, ni servicios, ni nada de `next`, así que se puede importar desde este Client Component;
+// y el UMBRAL no viaja con él (R10) — entra por parámetro donde hace falta, que aquí no hace falta
+// porque la decisión llega ya tomada en `orden.enElTope`.
+import { permitidoEnElTope } from "@/lib/types/tope-intentos";
 import { GESTION_ALLOWED_MIME, gestionConfig } from "@/lib/config/gestion";
 import { comprimirImagen } from "@/lib/utils/comprimir-imagen";
 import {
@@ -232,10 +237,55 @@ const RESULTADO_BOTONES: {
   },
 ];
 
-/** Los cuatro desenlaces normales de la entrega (grilla principal del paso 2). */
-const RESULTADO_BOTONES_NORMALES = RESULTADO_BOTONES.filter((b) => !b.aparte);
-/** Resultados que se ofrecen APARTE, bajo el separador (feature 158/R33). */
-const RESULTADO_BOTONES_APARTE = RESULTADO_BOTONES.filter((b) => b.aparte);
+// =================================================================================================
+// FEATURE 276 (T11, R8/R9/R10) — LA ORDEN A LA QUE LE QUEDA EL ÚLTIMO INTENTO.
+// =================================================================================================
+//
+// Con `orden.enElTope` en `true`, la gestión que se registre AHORA es la que alcanza el tope de
+// intentos, y el servidor ya NO acepta `reprogramada` ni `devuelta`: las dos devuelven la orden a
+// circulación, que es exactamente lo que el tope cierra.
+//
+// **La regla no se reescribe aquí**: se consume de `permitidoEnElTope`, el mismo módulo puro que
+// usa la guarda del servidor. Si divergieran, la pantalla ofrecería un botón que el envío rechaza.
+//
+// **Y esto NO es la defensa** (R11): si llegara una petición con un resultado prohibido —un cliente
+// que ignore la interfaz—, `MisAsignacionesService.gestionar` la rechaza igual, antes de subir
+// ninguna foto. Ocultar el botón es cortesía con el mensajero, no seguridad.
+
+/**
+ * R9 — POR QUÉ FALTAN DOS BOTONES, DICHO CON PALABRAS. Un hueco donde antes había cuatro opciones
+ * se lee como un fallo de la aplicación; y el aviso no puede depender del color ni de un tooltip,
+ * porque quien lo necesita está en la calle, con sol y con una mano ocupada.
+ *
+ * ⚠️ NO NOMBRA EL NÚMERO (R10). El umbral es configuración del servidor y no cruza al navegador: a
+ * esta pantalla solo le llega el booleano ya decidido. Decir «llevas 2 de 3» obligaría a mandarlo.
+ * `tests/components/GestionarOrdenPanelTope.test.tsx` falla si aparece una cifra en esta frase.
+ */
+const TOPE_INTENTOS_NOTA =
+  "A esta orden le queda el último intento de entrega: ya no se puede reprogramar ni devolver. Registra cómo terminó ahora — entregada o rechazada. Si el paquete se dañó, se perdió o te lo robaron, repórtalo como incidente.";
+
+/**
+ * Los desenlaces que se ofrecen, ya partidos en los dos bloques del paso 2 (la grilla de los
+ * normales y el incidente aparte, feature 158/R33).
+ *
+ * En el tope se filtra el juego COMPLETO con `permitidoEnElTope` antes de partirlo, y no cada
+ * bloque por su lado: así el día que un desenlace cambie de bloque —o entre uno nuevo— la regla del
+ * tope lo alcanza igual. Hoy «Reportar incidente» sobrevive al filtro, y es la decisión 3 del
+ * humano (2026-08-24): un paquete dañado, perdido o robado NO es un desenlace de entrega, así que
+ * el tope no lo toca. Forzar `rechazada` en su lugar grabaría un hecho falso y cobraría un rechazo
+ * que no ocurrió.
+ */
+function botonesDeResultado(enElTope: boolean) {
+  const visibles = enElTope
+    ? RESULTADO_BOTONES.filter((b) => permitidoEnElTope(b.value))
+    : RESULTADO_BOTONES;
+  return {
+    /** Los desenlaces normales de la entrega (grilla principal del paso 2). */
+    normales: visibles.filter((b) => !b.aparte),
+    /** Los que se ofrecen APARTE, bajo el separador (feature 158/R33). */
+    aparte: visibles.filter((b) => b.aparte),
+  };
+}
 
 export interface GestionarOrdenPanelProps {
   /** Orden a mostrar/gestionar (la del panel de detalle). */
@@ -712,6 +762,13 @@ export function GestionarOrdenPanel({
   const resultadoLabel =
     RESULTADO_BOTONES.find((b) => b.value === resultado)?.label ?? "";
 
+  // Feature 276 (T11, R8/R10): el juego de desenlaces que esta orden admite. `enElTope` llega YA
+  // DECIDIDO del servidor —la pantalla no compara intentos con ningún umbral—, y su ausencia (un
+  // fixture viejo; el DTO lo declara opcional por el patrón aditivo) se lee como `false`, que es
+  // el comportamiento de siempre.
+  const enElTope = orden.enElTope === true;
+  const botonesResultado = useMemo(() => botonesDeResultado(enElTope), [enElTope]);
+
   return (
     <section
       aria-label="Detalle de la orden"
@@ -897,8 +954,20 @@ export function GestionarOrdenPanel({
           <p className="text-sm font-medium text-muted-foreground">
             ¿Cómo terminó la gestión?
           </p>
+          {/* Feature 276 (R9): POR QUÉ faltan «Reprogramar» y «Devolver». Va ARRIBA de la grilla,
+              antes de que el mensajero busque el botón que ya no está, y con `role="note"` y no
+              `alert`: no es la consecuencia de un error suyo, es la condición de esta orden. */}
+          {enElTope ? (
+            <p
+              role="note"
+              className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-strong"
+            >
+              {TOPE_INTENTOS_NOTA}
+            </p>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {RESULTADO_BOTONES_NORMALES.map(({ value, label, Icon, className }) => (
+            {botonesResultado.normales.map(({ value, label, Icon, className }) => (
               <Button
                 key={value}
                 type="button"
@@ -913,26 +982,33 @@ export function GestionarOrdenPanel({
 
           {/* Feature 158 (R33): el incidente NO es un desenlace más de la entrega, así que se
               ofrece en su propio bloque, bajo un separador y con el aviso que explica cuándo
-              aplica. Diferenciado visualmente Y con texto (no solo por color). */}
-          <div
-            aria-label="Reportar un incidente con el paquete"
-            role="group"
-            className="flex flex-col gap-2 border-t border-border pt-3"
-          >
-            <p className="text-sm text-muted-foreground">{INCIDENTE_APARTE_NOTA}</p>
-            {RESULTADO_BOTONES_APARTE.map(({ value, label, Icon, className }) => (
-              <Button
-                key={value}
-                type="button"
-                variant="outline"
-                onClick={() => elegirResultado(value)}
-                className={`h-14 w-full gap-2 text-base font-semibold ${className}`}
-              >
-                <Icon className="size-5" aria-hidden="true" />
-                {label}
-              </Button>
-            ))}
-          </div>
+              aplica. Diferenciado visualmente Y con texto (no solo por color).
+
+              Feature 276: el bloque entero cuelga de que quede algo que ofrecer. Hoy el incidente
+              sobrevive siempre al filtro del tope (decisión 3 del humano), así que la condición no
+              se cumple nunca; está para que el día que deje de sobrevivir no quede un separador con
+              un aviso y ningún botón debajo. */}
+          {botonesResultado.aparte.length > 0 ? (
+            <div
+              aria-label="Reportar un incidente con el paquete"
+              role="group"
+              className="flex flex-col gap-2 border-t border-border pt-3"
+            >
+              <p className="text-sm text-muted-foreground">{INCIDENTE_APARTE_NOTA}</p>
+              {botonesResultado.aparte.map(({ value, label, Icon, className }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant="outline"
+                  onClick={() => elegirResultado(value)}
+                  className={`h-14 w-full gap-2 text-base font-semibold ${className}`}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                  {label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
 
           <Button
             type="button"

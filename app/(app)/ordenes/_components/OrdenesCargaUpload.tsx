@@ -25,7 +25,7 @@ import {
   ChunkRequestError,
 } from "@/app/(app)/ordenes/_components/carga-masiva-chunks";
 import { findMissingHeaders } from "@/lib/types/carga-masiva";
-import { FORMATO_DIRECCION_DESTINATARIO } from "@/lib/utils/direccion-destinatario";
+import { FORMATO_CANTON_DISTRITO } from "@/lib/utils/canton-distrito";
 import { cargaMasivaConfig } from "@/lib/config/carga-masiva";
 
 export interface OrdenesCargaUploadResult {
@@ -42,18 +42,27 @@ export interface OrdenesCargaUploadProps {
 
 type Status = "idle" | "validando" | "error";
 
-/** Columna única de la plantilla v2 (feature 142). Su ausencia = plantilla vieja. */
-const COLUMNA_DIRECCION = "direccion_destinatario";
+/**
+ * Columna única de la plantilla v2 (feature 142). Su PRESENCIA en la cabecera
+ * delata un archivo de la plantilla anterior: en la v3 esa columna ya no existe
+ * (feature 276).
+ */
+const COLUMNA_V2 = "direccion_destinatario";
 
 /**
- * Mensaje de cabecera incompleta. Si lo que falta es `direccion_destinatario`, el
- * archivo es (casi siempre) de la plantilla ANTERIOR, que traía provincia/cantón/
- * distrito/dirección en columnas separadas: no hay modo de compatibilidad (D1),
- * así que se le dice explícitamente que descargue la plantilla nueva (R8).
+ * Mensaje de cabecera incompleta. Si al archivo le faltan obligatorias Y trae la
+ * columna única de la v2, es (casi siempre) la plantilla ANTERIOR: no hay modo de
+ * compatibilidad, así que se le dice explícitamente que descargue la nueva (R9).
+ *
+ * Ojo al cambio de señal respecto a la 142: allí el delator era la AUSENCIA de
+ * `direccion_destinatario`; aquí es su PRESENCIA. Con la v3, un archivo al que
+ * solo le falta (p. ej.) `direccion` es un archivo v3 mal editado, no uno viejo,
+ * y merece el mensaje genérico (R8).
  */
-function mensajeCabeceraFaltante(faltantes: string[]): string {
+function mensajeCabeceraFaltante(faltantes: string[], headers: string[]): string {
   const base = `Faltan columnas obligatorias: ${faltantes.join(", ")}.`;
-  return faltantes.includes(COLUMNA_DIRECCION)
+  const traeColumnaV2 = headers.some((h) => h.trim().toLowerCase() === COLUMNA_V2);
+  return traeColumnaV2
     ? `${base} La plantilla cambió: descarga la plantilla nueva y vuelve a cargar tus datos.`
     : base;
 }
@@ -109,7 +118,7 @@ export function OrdenesCargaUpload({ onValidated }: OrdenesCargaUploadProps) {
       const faltantes = findMissingHeaders(headers);
       if (faltantes.length > 0) {
         setStatus("error");
-        setMessage(mensajeCabeceraFaltante(faltantes));
+        setMessage(mensajeCabeceraFaltante(faltantes, headers));
         return;
       }
       if (filas.length === 0) {
@@ -159,13 +168,15 @@ export function OrdenesCargaUpload({ onValidated }: OrdenesCargaUploadProps) {
       onClear={handleQuitar}
       hint={
         <>
-          La dirección va en una sola columna{" "}
+          La geografía va en tres columnas:{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">provincia</code>,{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">
-            {COLUMNA_DIRECCION}
-          </code>
-          , con el formato {FORMATO_DIRECCION_DESTINATARIO}. Se valida en tu
-          navegador (geografía y números de remisión duplicados) apenas lo
-          cargues y se procesa por lotes. Máximo{" "}
+            canton_distrito
+          </code>{" "}
+          (formato {FORMATO_CANTON_DISTRITO}) y{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">direccion</code>.
+          Se valida en tu navegador (geografía y números de remisión duplicados)
+          apenas lo cargues y se procesa por lotes. Máximo{" "}
           {cargaMasivaConfig.MAX_ROWS.toLocaleString()} filas.
         </>
       }

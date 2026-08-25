@@ -126,6 +126,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 235: los tres metodos de la bandera (`marcarAyuda`/`desmarcarAyuda`/
     // `habilitarNovedad`) colapsaron en UN punto de escritura guardado por estado.
     transicionarAyuda: vi.fn().mockResolvedValue(true),
+    findParaHabilitacionApi: vi.fn().mockResolvedValue(null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     incrementarIntentoContacto: vi.fn().mockResolvedValue(0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn().mockResolvedValue(0),

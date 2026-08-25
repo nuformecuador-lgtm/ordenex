@@ -6,13 +6,29 @@ import type { IOrdenHistorialService } from "@/lib/interfaces/services/IOrdenHis
 // deuda "fakes de repositorio a mano y duplicados" de `progress/current.md`): si mañana cambia
 // la firma de `contarIntentosEnLote`, se arregla AQUI y no en siete archivos.
 
-/** Lo que consumen los servicios de lectura: solo el conteo en lote. */
-export type IntentosSvcDoble = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
+/**
+ * Lo que consumen los servicios de lectura.
+ *
+ * ⚠️ FEATURE 276 (T4): el tipo GANA `contarIntentos` (el conteo de UNA orden), porque
+ * `MisAsignacionesService` lo necesita para la puerta del tope. Los servicios que solo piden
+ * `contarIntentosEnLote` siguen aceptando este doble sin cambios (un objeto con un metodo de mas
+ * es asignable a un `Pick` mas estrecho): por eso el doble se ENSANCHA aqui, una vez, en vez de
+ * escribir un segundo doble en cada suite.
+ */
+export type IntentosSvcDoble = Pick<
+  IOrdenHistorialService,
+  "contarIntentosEnLote" | "contarIntentos"
+>;
 
 /**
  * Doble del derivador. Sin argumento devuelve el Map VACIO, que es el caso "ninguna orden
  * tiene intentos" y ejerce el default `?? 0` de los servicios (R14: el `0` se expone, no se
  * omite). Con `porOrden` devuelve exactamente esos conteos.
+ *
+ * FEATURE 276: `contarIntentos` sale del MISMO `porOrden`, no de un segundo argumento. Eso es
+ * deliberado: en produccion los dos metodos son el mismo criterio (215/R4/R6), asi que un doble
+ * que pudiera devolver numeros distintos por las dos vias permitiria escribir tests que en la
+ * realidad no pueden ocurrir.
  *
  * El `vi.fn` queda expuesto para asertar R12 (exactamente 1 llamada por listado) y R13
  * (0 llamadas con lote vacio).
@@ -22,6 +38,7 @@ export function fakeIntentosEnLote(
 ): IntentosSvcDoble {
   return {
     contarIntentosEnLote: vi.fn(async () => new Map(Object.entries(porOrden))),
+    contarIntentos: vi.fn(async (ordenId: string) => porOrden[ordenId] ?? 0),
   };
 }
 

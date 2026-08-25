@@ -465,8 +465,11 @@ describe("156 — BAJAS EJECUTADAS: generar guia ya no asigna mensajero ni rutea
     // la tienda) y NO retira ninguna. ⚠️ Es la PRIMERA alta desde la 158 que NO sube los pares: ese
     // par YA lo tenia #21 (el cron de plazo vencido), asi que #21/#67 son el TERCER duplicado
     // historico del inventario y la diferencia `aristas - pares` pasa de 2 a 3.
-    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(62); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240
-    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(59); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +0: 240 (par repetido)
+    // Feature 276 (2026-08-24): 62 -> 63 y 59 -> 60. Suma #68 (`sin_gestionar -> rechazada`, el
+    // rechazo por agotamiento de intentos al aprobar el cierre) y NO retira ninguna. Es par NUEVO:
+    // de `sin_gestionar` solo se salia a las dos bodegas.
+    expect(RECUENTO_INVENTARIO.aristasFlujo).toBe(63); // +2: 157; +3 -1: 239; +3: 235; +2: 237; +1: 240; +1: 276
+    expect(RECUENTO_INVENTARIO.paresUnicos).toBe(60); // ... +1: 276 (par nuevo)
   });
 });
 
@@ -664,12 +667,50 @@ describe("154/R27 — el inventario auditable sigue sincronizado con el mapa", (
   // Feature 237 (2026-08-20): 59/57/2 -> 61/59/2 con #65/#66 (pares nuevos), sin bajas.
   // Feature 240 (2026-08-20): 61/59/2 -> 62/59/2 con #67, que REPITE el par de #21 (`devuelta ->
   // rechazada`): sube la arista y NO sube el par. Es el tercer duplicado historico del inventario.
-  it("los recuentos del inventario son 62 flujo / 59 pares / 2 creacion", () => {
+  it("los recuentos del inventario son 63 flujo / 60 pares / 2 creacion", () => {
     expect(RECUENTO_INVENTARIO).toEqual({
-      aristasFlujo: 62, // feature 240 (2026-08-20): 61 -> 62, una alta y ninguna baja
-      paresUnicos: 59, // feature 240: la alta REPITE el par de #21, asi que los pares no se mueven
+      aristasFlujo: 63, // feature 276 (2026-08-24): 62 -> 63, una alta y ninguna baja
+      paresUnicos: 60, // feature 276: la alta es un par NUEVO, asi que los pares suben con ella
       aristasCreacion: 2,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// FEATURE 276 (T3/T9, R21/R22) — LA TERCERA SALIDA DE `sin_gestionar`.
+//
+// La arista y su productor van en el MISMO commit. Sin la arista, el choke point (140) rechaza la
+// escritura del bloque de la aprobacion y REVIERTE LA APROBACION ENTERA del cierre — con su
+// dinero. Sin el productor, seria una arista muerta (el error de la 154).
+// ---------------------------------------------------------------------------------------------
+describe("276/R21/R22 — `sin_gestionar -> rechazada` es legal, y por su familia propia", () => {
+  it("el par es LEGAL y no lanza", () => {
+    expect(() => assertTransicionValida("sin_gestionar", "rechazada")).not.toThrow();
+  });
+
+  it("`sin_gestionar -> entregada` SIGUE siendo ilegal", () => {
+    // El contrapunto obligatorio: si la arista se hubiera declarado con un comodin, o si el mapa
+    // hubiera dejado de validar `sin_gestionar`, este caso lo delata. Una orden que nadie gestiono
+    // no puede acabar entregada por la aprobacion de un cierre.
+    expect(() => assertTransicionValida("sin_gestionar", "entregada")).toThrow(
+      TransicionIlegalError,
+    );
+  });
+
+  it("la arista viaja con la familia `rechazo_tope_intentos`, no con `liberacion_sin_gestionar`", () => {
+    const salidas = INVENTARIO_FLUJO.filter((a) => a.origen === "sin_gestionar");
+    // Las TRES salidas, y solo tres.
+    expect(salidas.map((a) => a.destino).sort()).toEqual([
+      "en_bodega_central",
+      "en_bodega_satelite",
+      "rechazada",
+    ]);
+    const aRechazada = salidas.find((a) => a.destino === "rechazada");
+    expect(aRechazada?.via).toBe("rechazo_tope_intentos");
+    // Y NO reusa la familia de la liberacion: si lo hiciera, las dos poblaciones —la que vuelve a
+    // bodega y la que se termina— serian indistinguibles en el historial, que es su unica
+    // evidencia. Y esta cobra dinero.
+    expect(aRechazada?.via).not.toBe("liberacion_sin_gestionar");
   });
 });
 

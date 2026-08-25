@@ -572,6 +572,42 @@
           }
         }
       ]
+    },
+    {
+      "name": "9 · Habilitar pedidos con novedad (lote)",
+      "description": "`POST /api/ordenes/api-key/habilitar` — habilita en lote pedidos con novedad. Solo son habilitables `ayuda_tienda` y `devuelta`; `reprogramada` NO lo es. Una orden `devuelta` NUNCA cambia de estado: responde `habilitada_sin_cambio_de_estado`, porque su paquete ya está en bodega. Tope de 100 filas por lote. La respuesta es 200 aunque TODAS las filas fallen, con un resultado por fila y en el mismo orden.",
+      "item": [
+        {
+          "name": "lote válido (2 filas)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/habilitar", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "habilitar"] },
+            "description": "`nota` es OBLIGATORIA (1..200 caracteres, se recorta). Una orden en `ayuda_tienda` con mensajero asignado responde `habilitada` con `estado: \"en_reparto\"`; una `devuelta` responde `habilitada_sin_cambio_de_estado`.",
+            "body": { "mode": "raw", "raw": "{\n  \"ordenes\": [\n    { \"num_guia\": 100234, \"nota\": \"el cliente pidió reintento mañana\" },\n    { \"num_guia\": 100235, \"nota\": \"dirección corregida por el call center\" }\n  ]\n}" }
+          }
+        },
+        {
+          "name": "éxito parcial: una fila mal formada y una guía ajena (200 con filas en error)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/habilitar", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "habilitar"] },
+            "description": "Los campos de cada fila NO se validan en el borde: una fila mala se marca `fila_invalida` y las demás se procesan. Una guía inexistente o de otro integrador devuelve el mismo `no_encontrada`.",
+            "body": { "mode": "raw", "raw": "{\n  \"ordenes\": [\n    { \"num_guia\": \"100234\", \"nota\": \"la guía va como texto: fila_invalida\" },\n    { \"num_guia\": 999999, \"nota\": \"guía que no existe para esta key\" }\n  ]\n}" }
+          }
+        },
+        {
+          "name": "422: lote vacío",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/ordenes/api-key/habilitar", "host": ["{{baseUrl}}"], "path": ["api", "ordenes", "api-key", "habilitar"] },
+            "description": "`ordenes` exige entre 1 y 100 filas. Fuera de ese rango es `422 VALIDATION_ERROR` y no se procesa ninguna fila: es el único 4xx que tira el lote entero, junto con 401 y 403.",
+            "body": { "mode": "raw", "raw": "{\n  \"ordenes\": []\n}" }
+          }
+        }
+      ]
     }
   ]
 }

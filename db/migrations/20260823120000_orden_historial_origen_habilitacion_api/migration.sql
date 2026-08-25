@@ -1,0 +1,47 @@
+-- Feature 266 (T1.1, D5, R16/R26/R27/R30) — anade la familia de la HABILITACION POR API KEY al
+-- enum `orden_historial_origen_tipo`:
+--
+--   `habilitacion_api`   ayuda_tienda -> en_reparto   (actor = el usuario dedicado de la API key)
+--
+-- QUE ES. El canal por API key gana un endpoint de LOTE
+-- (`POST /api/ordenes/api-key/habilitar`) con el que el integrador habilita pedidos que estan en
+-- novedad. Cuando la orden esta en `ayuda_tienda` y conserva mensajero asignado —el paquete sigue
+-- en la calle—, la orden vuelve a `en_reparto` por el PUNTO UNICO de escritura de esa arista
+-- (`OrdenRepository.transicionarAyuda`, 235/R8) y esta es la familia que queda escrita.
+--
+-- POR QUE UNA FAMILIA PROPIA Y NO REUSAR `rescate_ayuda_tienda` (design §7, A3 — era la opcion
+-- barata: la arista es la misma y ya existe una familia para ella):
+--   - borraria la unica distincion entre «el mensajero pulso Recuperar / la tienda pulso
+--     Habilitar» y «el integrador habilito por API». El historial es la UNICA evidencia de QUIEN
+--     decidio.
+--   - y `actor_usuario_id` NO la recupera: el usuario dedicado de la key ES la tienda
+--     (`tienda_id = ownerId`), el MISMO sujeto que el `adminTienda` del boton. Con la familia
+--     reusada, las dos vias serian indistinguibles fila a fila.
+--   - precedente literal en este repo: `rechazo_tienda` (240) nacio como familia propia frente a
+--     `escalado_devuelta_sla` por este mismo argumento, y su `migration.sql` lo deja escrito.
+--
+-- ⚠️ ESTA FAMILIA **NO** ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (`lib/types/orden-historial.ts`,
+-- R26). Esa lista es de INCLUSION a proposito y una familia nueva por defecto NO cuenta como
+-- visita real, que es la direccion segura del error. Habilitar NO es una visita: nadie fue a
+-- ninguna puerta — el integrador pulso un endpoint desde su servidor. Quien la meta ahi «por
+-- simetria» sube el conteo de intentos, adelanta el escalado del cron SLA (99) y dispara el
+-- `cobroRechazado` (56) —DINERO REAL cobrado a la tienda— antes de tiempo y en silencio.
+--
+-- NO entra en `ORIGEN_TIPOS_CON_GESTION`: su fila nace con `gestion_orden_id` NULO, porque esta
+-- transicion no viene de ninguna gestion.
+--
+-- NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R17/R27): esa lista esta VACIA desde la 268 y asi se
+-- queda. Consecuencia buscada: la rama que transiciona SI emite el evento publico de
+-- `en_reparto`, igual que hoy lo emite el rescate.
+--
+-- POR QUE VA SOLA (sin ningun uso del valor en la misma transaccion): Postgres NO permite USAR un
+-- valor de enum recien anadido en la misma transaccion que lo anadio (55P04) y Prisma Migrate
+-- corre cada `migration.sql` en una. Aqui SOLO se anade el valor; la tabla de la feature va en su
+-- PROPIA migracion (`20260823130000_orden_habilitacion_api`) y el primer uso del valor ocurre en
+-- runtime. Mismo precedente que `rechazo_tienda` (240), `gestion_tienda_ayuda` (237),
+-- `solicitud_ayuda_tienda`/`rescate_ayuda_tienda` (235) y `anclaje_devolucion` (239).
+--
+-- ADITIVA: no altera ninguna tabla existente (sin RLS nueva; `orden_historial_estado` conserva su
+-- RLS de la feature 49). No crea tablas ni columnas. No hay BACKFILL: esta ficha no reinterpreta
+-- ninguna fila existente, y ninguna orden cambia de estado aqui.
+ALTER TYPE "orden_historial_origen_tipo" ADD VALUE IF NOT EXISTS 'habilitacion_api';
