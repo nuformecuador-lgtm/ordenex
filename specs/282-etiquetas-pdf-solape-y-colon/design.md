@@ -6,12 +6,17 @@
 
 ## 0. Alcance
 
+> **§0 REVISADO el 2026-08-25 (Q1): entran los dos generadores.** La tabla de
+> abajo ya refleja el alcance nuevo; el detalle de qué se comparte y qué no está
+> en **§10**. La ficha pasa de `frontend` a `fullstack` (backend → frontend).
+
 | Dentro | Fuera |
 |---|---|
-| `app/(app)/ordenes/_components/etiquetas-pdf.ts` | `lib/pdf/etiquetas-pdf-lote.ts` (feature 136, D3 y **Q1**) |
-| `app/(app)/ordenes/_components/etiquetas-layout.ts` | `lib/pdf/etiquetas-ajuste.ts` (compartido con el lote: **no se toca**) |
-| `app/(app)/ordenes/_components/EtiquetasGuiaModal.tsx` (borde de error, R16) | `lib/config/moneda.ts` (el formateador es correcto; el que no imprime es el PDF) |
-| Artefacto de fuente + su carga diferida (nuevos) | `EtiquetaGuia.tsx` (vista previa DOM: es HTML, el `₡` se pinta con la fuente del sistema y no sufre el defecto) |
+| `app/(app)/ordenes/_components/etiquetas-pdf.ts` (generador de cliente) | `lib/config/moneda.ts` (el formateador es correcto; el que no imprime es el PDF) |
+| `lib/pdf/etiquetas-pdf-lote.ts` (generador server-side, feature 136) | `lib/pdf/etiquetas-ajuste.ts` (reparto de líneas: correcto, **no se toca**) |
+| `app/(app)/ordenes/_components/etiquetas-layout.ts` → se muda a `lib/pdf/` (§10) | `EtiquetaGuia.tsx` (vista previa DOM: es HTML, el `₡` se pinta con la fuente del sistema y no sufre el defecto — **Q10**) |
+| `app/(app)/ordenes/_components/EtiquetasGuiaModal.tsx` (borde de error, R16) | `EtiquetasLotePdfService`, `ApiPdfEtiquetaService` y las rutas de API: **no cambian** (llaman al builder, no a la maqueta) |
+| Módulos compartidos nuevos de `lib/pdf/` + artefacto de fuente (§10) | La factura de cierre (es HTML, no jsPDF) |
 
 El nombre del archivo `etiquetas-pdf.ts` **no cambia**: hay una guardia ajena que
 lo lista por ruta (`tests/unit/components/intentos-no-alcance-ui.test.ts:25`) y
@@ -348,3 +353,253 @@ config de build ni archivos con nombre de dinero, así que `./init.sh --rapido`
 es el gate válido para el PR. El artefacto se llama `etiquetas-fuente.ts` —y no
 `…-monto…`/`…-cobro…`— también para no arrastrar el diff a la lista de nombres
 de dinero sin necesidad.
+
+---
+
+# Ampliación del 2026-08-25 — cierre de Q1…Q6
+
+## 9. El defecto está en los dos generadores
+
+Medido sobre `lib/pdf/etiquetas-pdf-lote.ts` (188 líneas, runtime Node):
+
+| Defecto | Dónde, en el generador del servidor |
+|---|---|
+| `CAMPOS_Y_INICIO = 18` | línea 53 |
+| guía en `MARGIN + 10` con cuerpo 22 | líneas 128-131 |
+| `formatMonto` (símbolo `₡`) sobre Helvetica | línea 152 |
+| Misma banda de códigos fija (`qrY = 100 - 6 - 26`) | línea 141 |
+
+Sus consumidores, que **no cambian** (llaman al builder, no a la maqueta):
+`EtiquetasLotePdfService.generarYAlmacenar` (PDF consolidado) y
+`generarYAlmacenarPorOrden` (**un PDF por orden**, feature 141),
+`ApiPdfEtiquetaService`, y las rutas `app/api/ordenes/api-key/carga/route.ts`,
+`…/carga/[cargaId]/generate/route.ts` y `…/orden/[id]/generate/route.ts`.
+
+## 10. Compartir o duplicar: se COMPARTE
+
+**Decisión: una sola maqueta, en `lib/pdf/`.** No se arregla dos veces.
+
+### 10.1 Por qué, con el hecho que lo decide
+
+La cabecera del generador del servidor declara ser «espejo EXACTO» del de
+cliente. **Ya no lo es, y se puede medir**: la feature 150 llevó el de cliente a
+constantes escaladas (`layout.fontRotulo`, `layout.fontGuia`, `layout.fontValor`)
+mientras el del servidor conserva `8`, `22`, `10` escritos a mano en
+`drawEtiqueta` (líneas 128-137) y su propio juego de constantes (líneas 24-57).
+Un espejo que se mantiene a mano diverge en cuanto alguien toca un lado, y esta
+ficha existe porque **el mismo defecto vive por duplicado**. Duplicar el arreglo
+sería duplicar también la próxima corrección.
+
+El repo ya resolvió esto una vez y de la manera correcta:
+`lib/pdf/etiquetas-ajuste.ts` se extrajo precisamente para que «las dos maquetas
+no vuelvan a divergir en este punto» (su propia cabecera). Se extiende ese
+precedente al resto de la geometría. Y `docs/architecture.md` lo respalda: un
+módulo se promueve a compartido **cuando dos consumidores lo necesitan con la
+misma API**, que es exactamente el caso.
+
+### 10.2 Qué se comparte y qué no
+
+| Módulo | Qué contiene | Estado |
+|---|---|---|
+| `lib/pdf/etiquetas-maqueta.ts` | `LIENZO_BASE_MM`, `MAQUETA_BASE` (incluido `guiaY`), `PT_A_MM`, `camposYInicio()`, `GAP_TEXTO_CODIGOS`, `GAP_ROTULO_VALOR`, `qrTopBase()` | NUEVO, puro |
+| `lib/pdf/etiquetas-layout.ts` | `crearLayout` y `EtiquetaLayout` | **MUDADO** desde `app/(app)/ordenes/_components/` |
+| `lib/pdf/etiquetas-dibujo.ts` | cabecera (GUÍA / REMISIÓN), `drawCampos`, `geografiaLegible` y la colocación de las dos imágenes que recibe ya rasterizadas | NUEVO |
+| `lib/pdf/etiquetas-fuente.ts` | artefacto generado: `base64`, `nombre`, `archivoVfs`, `estilo`, `COBERTURA`, `PESO_DECLARADO_BYTES` | NUEVO (**corrige §3.4**: ya no vive bajo `app/`, porque el servidor no puede importar de ahí) |
+| `lib/pdf/etiquetas-fuente-registro.ts` | `registrarFuente(doc, fuente)` y `cubreTexto(fuente, texto)` | NUEVO |
+| `app/(app)/ordenes/_components/etiquetas-fuente-carga.ts` | el **único** `import()` dinámico, sólo para el navegador | NUEVO |
+| `lib/pdf/etiquetas-ajuste.ts` | reparto de líneas y elipsis | SIN TOCAR |
+
+**Lo que NO se comparte, y por qué:** el rasterizado. El cliente saca el QR del
+`<canvas>` de la vista previa y dibuja el código de barras con `jsbarcode` sobre
+un canvas del DOM; el servidor usa `qrcode` y `bwip-js` porque corre en Node sin
+DOM. Es la razón por la que la feature 136 no reusó el generador de cliente y
+sigue siendo válida. Cada generador rasteriza lo suyo y **pasa los data URL** al
+módulo de dibujo compartido.
+
+El escalado deja de ser exclusivo del cliente: el servidor usa el mismo
+`crearLayout` con la hoja `100x100`, donde `s = 1` y `offX = offY = 0`, así que
+**el resultado numérico es idéntico** al de sus literales actuales. Eso es
+demostrable, no opinable: los `Td` del PDF del servidor sólo deben moverse en lo
+que R19 exige.
+
+`app/(app)/ordenes/_components/etiquetas-layout.ts` desaparece y sus dos tests
+actualizan el import. No se deja un archivo-puente re-exportando: un puente es
+otro sitio donde volver a divergir.
+
+### 10.3 Qué impide que vuelvan a divergir
+
+Tres cosas, en orden de fuerza:
+
+1. **R22, un test que compara los dos PDF.** Para el mismo `EtiquetaGuiaDTO` y la
+   hoja de 100 × 100, se extraen los `x y Td` y el texto de los dos documentos y
+   se exige que **coincidan**. Si alguien mueve una línea base en un generador y
+   no en el otro, sale rojo, aunque ninguno de los dos tests propios lo note.
+2. **R21 + guardia de fuente.** Ninguno de los dos archivos puede declarar por su
+   cuenta las constantes de la maqueta: la guardia lee su texto y falla si
+   reaparece un `CAMPOS_Y_INICIO`, un `FONT_ROTULO`, un `LINE_HEIGHT`, un
+   `MARGIN` o un `SIZE_MM` propio.
+3. **El compilador.** Al no existir ya las constantes locales, escribir un número
+   a mano exige *añadir* código nuevo, no *olvidar* actualizarlo. Es la
+   diferencia entre un error por comisión y uno por omisión.
+
+## 11. La fuente en el servidor: otro mecanismo, otro presupuesto
+
+### 11.1 Cómo se carga
+
+**Import estático del mismo artefacto** (`lib/pdf/etiquetas-fuente.ts`) desde
+`lib/pdf/etiquetas-pdf-lote.ts`. Sin `fs`, sin rutas, sin `await`.
+
+Por qué no `readFileSync` de un `.ttf`: `next.config.ts` **no declara ningún
+`outputFileTracingIncludes`** (medido), así que un archivo suelto leído por ruta
+en tiempo de ejecución depende del trazado automático, que no sigue rutas
+construidas. El fallo aparecería **sólo en producción**, como un 500 en la carga
+por API, que es el peor sitio: el PDF es best-effort y el integrador vería
+`etiquetasPdf: { error }` sin que ningún test lo hubiera visto antes (R23).
+
+En el navegador el mecanismo sigue siendo el de §3.5 (import dinámico): el
+servidor no tiene bundle que engordar, el navegador sí.
+
+### 11.2 Arranque en frío
+
+Lo que la función gana al arrancar es el módulo con la cadena base64 (~50 KB de
+JS, frente al límite de 250 MB de la function: irrelevante) y su parseo, que es
+el de un literal de cadena. **El coste real no está en el arranque**: está en
+`addFont`, y se paga **por documento**.
+
+Medido en la propia librería (`jspdf.node.js:26783-26797`): en cada `addFont`
+jsPDF hace `atob(base64)` → `Uint8Array` → `TTFFont.open(...)`, es decir
+descodifica y **parsea la fuente entera** una vez por cada `jsPDF` creado. Un
+lote consolidado crea **un** documento; el modo individual de la feature 141
+crea **N**.
+
+### 11.3 Presupuesto de tiempo, con los números del repo
+
+Datos ya medidos y escritos en `lib/config/etiquetas.ts`: ~18 ms de render por
+etiqueta, tope por defecto **300** (~5,6 s), techo duro **1000** (~18 s), y
+`maxDuration = 60` en la ruta, que además paga la inserción del lote.
+
+Reservando el 40 % del presupuesto para esa inserción (36 s para el PDF):
+
+```
+(18 ms + f) × N ≤ 36 000 ms
+N = 300  (default)    →  f ≤ 102 ms por documento
+N = 1000 (techo duro) →  f ≤  18 ms por documento
+```
+
+`f` = lo que cuesta `addFont` con el subconjunto elegido. **Hay que medirlo**
+(T18), en los dos modos:
+
+| Modo | Documentos | Veces que se paga `f` |
+|---|---|---|
+| Consolidado (`generarYAlmacenar`) | 1 | 1 — irrelevante frente a los 5,6 s de render |
+| **Individual** (`generarYAlmacenarPorOrden`) | N | **N — es el peor caso y el que manda** |
+
+Si `f` no cabe (Q8), las salidas declaradas son: estrechar el subconjunto
+(debilita R11), bajar `ETIQUETAS_MAX_POR_PDF` por entorno, o excluir el modo
+individual. **No** se elige ninguna sin preguntar.
+
+### 11.4 Presupuesto de bytes en esa ruta
+
+Cada documento embebe su propio `/FontFile2`. La feature 136 midió ~3,3 KB de PDF
+por etiqueta con `compress: true`; el subconjunto embebido (~2-5 KB, ya
+deflatado) es **por documento**:
+
+| Modo | Antes | Después (estimado, a medir) |
+|---|---|---|
+| Consolidado, 300 etiquetas | ~1 MB | ~1 MB + 12 KB máx. (**+1 %**) |
+| Individual, 300 PDFs | ~1 MB | **~4 MB** (×3-4) |
+
+El consolidado no se entera; el individual sí, y va a Storage. Es **Q9**.
+
+## 12. La verificación vale para las dos salidas
+
+La cadena de tres eslabones del §4 no depende del runtime: opera sobre los bytes
+del PDF. Se aplica igual a `buildEtiquetasLotePdf`, con dos ajustes:
+
+- ese builder usa `compress: true`, así que los content streams van deflatados y
+  hay que inflarlos — el test del lote (`tests/unit/pdf/etiquetas-pdf-lote.test.ts`)
+  **ya lo hace**, y el helper de inflado del test de cliente también;
+- es `async` y mockea `qrcode` / `bwip-js`, que es como ya está montado.
+
+El mismo `tests/unit/pdf/ttf-lector.ts` sirve para los dos. R20 exige el
+resultado sobre el PDF del servidor; R9/R10 sobre el del navegador.
+
+## 13. El cupo, y cómo se pone rojo (Q3)
+
+Firmado: se cede la línea (11 → 10). No se toca el cuerpo del número de guía ni
+la banda de códigos (R27): ahí leen las pistolas, y `qrSize`, `barcodeHeight` y
+`gapQrBarcode` se quedan exactamente como están.
+
+Lo que se añade es que **el recorte deje de ser silencioso**: un corpus declarado
+de casos, en `tests/fixtures/etiquetas-282.ts`, y un test que falla si **alguno**
+sale con marca de recorte (R26). El corpus arranca con:
+
+| Caso | De dónde sale |
+|---|---|
+| Evidencia: guía `19887906`, dirección de 2 líneas, `₡18.000`, `GAM / San José / Mora / Colón` | etiqueta real de producción |
+| Dirección de 3 líneas | el peor caso que el propio código declara justo (`etiquetas-layout.ts:31-35`) |
+| Ubicación con los cuatro niveles + destinatario y producto largos | forma, no dato real |
+
+Honestidad sobre el corpus: sólo el primero es un caso **real**; los demás son
+**formas**. Ver **Q7**.
+
+## 14. Cobertura declarada y fallo visible (Q5)
+
+`lib/pdf/etiquetas-fuente.ts` exporta, **generado desde el propio archivo de
+fuente** (nunca escrito a mano), el conjunto de code points que el subconjunto
+cubre, y `cubreTexto(fuente, texto)` responde en O(longitud del texto).
+
+Antes de dibujar con la fuente embebida, cada generador comprueba el texto
+completo del campo —no sólo el símbolo, porque
+`formatMontoString` tiene una rama que pinta **verbatim** lo que no tenga forma
+de decimal— y si algo no está cubierto **lanza** un error con contexto
+(`el símbolo «X» (U+XXXX) no está en el subconjunto embebido`).
+
+| Canal | Qué ve el usuario |
+|---|---|
+| Navegador | el mensaje de R16 en el modal y **ninguna descarga** |
+| API de carga | HTTP 200 con `etiquetasPdf: { error }`, la carga **no** revertida y los `num_guia` intactos — el camino best-effort que ya existe (`app/api/ordenes/api-key/carga/route.ts:90-96`) |
+
+Es decir: el fallo usa los canales de fallo que el sistema ya tiene, y ninguno de
+los dos imprime una etiqueta con el importe roto. Que es lo que hoy pasa en la
+calle sin que nadie se entere.
+
+Un test de R29 comprueba que la cobertura **declarada** coincide con la del
+archivo embebido (leída con `ttf-lector`): una declaración que mienta sería peor
+que no tenerla.
+
+## 15. Alternativas descartadas (ampliación)
+
+- **A8 — Arreglarlo dos veces, una en cada generador.** Es lo más pequeño en
+  diff. Descartada: el «espejo EXACTO» que declara la cabecera del generador del
+  servidor **ya está roto** (§10.1), lo que demuestra que el mantenimiento manual
+  no sostiene la copia. Si aun así se eligiera duplicar, lo único que impediría
+  la divergencia sería el test comparativo de R22 — es decir, habría que escribir
+  igualmente la parte cara, y quedarse con dos copias que corregir cada vez.
+- **A9 — Unificar también el rasterizado en un solo módulo.** Descartada: las
+  librerías son distintas **por runtime** (DOM vs Node), que es la razón
+  documentada de que existan dos generadores. Unificarlo obligaría a inyectar un
+  rasterizador y a arrastrar `jsbarcode` al servidor o `bwip-js` al navegador.
+- **A10 — Leer el `.ttf` con `fs` en el servidor.** Descartada por §11.1: sin
+  `outputFileTracingIncludes` el archivo puede no llegar a la función y el fallo
+  sólo aparece en producción.
+- **A11 — Un artefacto de fuente distinto (o más pequeño) para el servidor.**
+  Descartada: dos artefactos son dos coberturas, dos pesos y dos verdades; R22
+  dejaría de poder comparar los dos PDF.
+- **A12 — Dejar el modo individual sin fuente embebida** para ahorrar `f × N`.
+  Descartada de entrada: sería exactamente el defecto que la ficha cierra, vivo
+  «según qué botón se pulse». Si el presupuesto no da, se decide en Q8, no en
+  silencio.
+
+## 16. Orden de trabajo
+
+La ficha es `fullstack`: **primero backend** (módulos compartidos de `lib/pdf/`,
+artefacto, generador del servidor y su verificación), **después frontend**
+(generador de cliente, carga diferida, modal). El bloque compartido es la
+dependencia de los dos, así que va antes que ambos.
+
+El gate sigue siendo `./init.sh --rapido`: el diff no toca migraciones,
+`db/schema.prisma`, `lib/types/`, configuración de build ni archivos con nombre
+de dinero. Sí toca `lib/pdf/` y `app/api/…` sólo de rebote (nada de las rutas
+cambia), así que conviene correr además los tests de integración de la carga por
+API antes del PR.

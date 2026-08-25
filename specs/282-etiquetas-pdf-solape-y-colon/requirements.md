@@ -33,12 +33,16 @@ problema porque es HTML, no jsPDF.
   papel**, no que el código lo intenta.
 - **D2** — **Se arregla lo evidenciado, no se rediseña la etiqueta.** No cambian
   qué campos se imprimen, ni su orden, ni su redacción.
-- **D3** — **Alcance: sólo el generador de cliente.** El generador server-side
-  del lote (feature 136, `lib/pdf/etiquetas-pdf-lote.ts`) queda **fuera**.
-  Comprobado en esta sesión: es un módulo distinto, no importa el de cliente y
-  no comparte con él más que `lib/pdf/etiquetas-ajuste.ts` (aritmética pura) y
-  `formatMonto`. Ver la pregunta abierta **Q1**: ese módulo tiene hoy los dos
-  mismos defectos.
+- **D3** — ~~Alcance: sólo el generador de cliente.~~ **REVISADO el 2026-08-25
+  al cerrarse Q1: ENTRAN LOS DOS GENERADORES.** El de cliente
+  (`app/(app)/ordenes/_components/etiquetas-pdf.ts`) y el server-side del lote
+  (`lib/pdf/etiquetas-pdf-lote.ts`, feature 136, consumido por
+  `EtiquetasLotePdfService` y por `app/api/ordenes/api-key/carga/route.ts`).
+  Medido: el segundo tiene **el mismo `CAMPOS_Y_INICIO = 18`** (línea 53), el
+  mismo número de guía en `MARGIN + 10` a 22 pt (líneas 128-131) y el mismo
+  `formatMonto` con `₡` (línea 152). Arreglar uno solo deja el defecto vivo
+  según qué botón se pulse. **La ficha pasa de `frontend` a `fullstack`** y se
+  secuencia backend → frontend.
 - **D4** — El arreglo del solape debe valer para **los cuatro tamaños** del
   catálogo (feature 150: `100x100`, `4x6in`, `a4`, `carta`), y debe **derivarse**
   del cuerpo tipográfico, no fijarse a ojo.
@@ -122,11 +126,15 @@ rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**
   de la pantalla de órdenes: DONDE el usuario abra la pantalla y no genere el
   PDF, el navegador NO DEBE descargar esos bytes.
 
-- **R14** — El artefacto de fuente que viaja al navegador NO DEBE superar
-  **80 KB** (81 920 caracteres del texto que se sirve). El objetivo es ≤ 45 KB.
-  La cifra realmente medida DEBE quedar registrada en `progress/impl_282.md`
-  junto con el peso del chunk diferido y el «First Load JS» de la ruta antes y
-  después del cambio.
+- **R14** *(REVISADO el 2026-08-25 al cerrarse Q6: manda la cobertura, el peso se
+  reporta)* — El artefacto de fuente DEBE declarar en el repositorio su peso
+  exacto en bytes, y el sistema de verificación DEBE ponerse en rojo si el peso
+  real deja de coincidir con el declarado. El objetivo es **≤ 45 KB** y el aviso
+  está en **80 KB**, pero SI cumplir la cobertura de R11 obliga a superarlos,
+  ENTONCES el sistema DEBE conservar la cobertura, actualizar el peso declarado y
+  **reportar la cifra**; el peso NO es una puerta que bloquee la feature. La
+  cifra medida DEBE quedar registrada en `progress/impl_282.md` junto con el peso
+  del chunk diferido y el «First Load JS» de la ruta antes y después.
 
 - **R15** — El programa de fuente embebido **dentro de cada PDF** DEBE ser un
   subconjunto de glifos: NO DEBE superar **12 KB por documento**, sea cual sea el
@@ -143,57 +151,125 @@ rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**
   su licencia, su procedencia (nombre, versión, origen y huella del archivo) y el
   procedimiento con el que se regenera el subconjunto.
 
-- **R18** — El generador server-side del lote (feature 136) DEBE seguir
-  produciendo exactamente lo que produce hoy: NO DEBE importar la fuente
-  embebida, NO DEBE cambiar su maqueta y NO DEBE cambiar su firma pública.
+- **R18** *(REVISADO el 2026-08-25 al cerrarse Q1: el lote ahora SÍ cambia)* —
+  Del generador server-side del lote DEBE conservarse todo lo que esta feature no
+  arregla: su firma pública, su página de 100 × 100 mm, su tope de etiquetas por
+  PDF, su política best-effort de fallo visible (HTTP 200 con
+  `etiquetasPdf: { error }` y la carga nunca revertida) y el contenido de los
+  nueve datos. NO DEBE cambiar nada más que lo que exigen R19-R20.
+
+### E. Los dos generadores (Q1)
+
+- **R19** — El generador server-side del lote DEBE cumplir R1 y R2 (separación
+  derivada del cuerpo del número de guía) en su página de 100 × 100 mm, medido
+  sobre el PDF que produce.
+
+- **R20** — CUANDO el generador server-side dibuje el valor de «Monto a cobrar»
+  con el símbolo de moneda configurado, DEBE cumplir R8, R9 y R10 —fuente
+  embebida, texto recuperable por el `/ToUnicode` del propio documento y glifo de
+  contorno no vacío— verificado sobre los bytes de **su** PDF, no sobre los del
+  navegador.
+
+- **R21** — Los dos generadores DEBEN tomar de **una única fuente de verdad** la
+  geometría de la maqueta: línea base del número de guía, línea base de inicio de
+  los campos, cuerpos tipográficos, interlineado, separación entre campos,
+  separación entre rótulo y valor, lado del QR y límite superior de la banda de
+  códigos. Ninguno de los dos DEBE declarar por su cuenta un valor que el otro
+  también declara.
+
+- **R22** — Para una misma etiqueta y en la hoja de 100 × 100 mm, los dos
+  generadores DEBEN producir **las mismas líneas base de texto y el mismo texto**.
+  SI uno de los dos cambia su maqueta sin el otro, ENTONCES la verificación DEBE
+  ponerse en rojo.
+
+- **R23** — El generador server-side DEBE obtener la fuente **sin leer del
+  sistema de archivos en tiempo de ejecución**: no DEBE depender de que el
+  despliegue arrastre un archivo suelto hasta la función.
+
+- **R24** — El coste que la fuente añade en la ruta del servidor DEBE ser de
+  **un solo documento**: constante por PDF y **cero por página adicional**. El
+  coste por PDF DEBE medirse y DEBE cumplirse que
+  `(coste_de_render_por_etiqueta + coste_de_fuente_por_PDF) × tope_de_etiquetas`
+  siga cabiendo en el presupuesto de tiempo de la ruta, tanto en el modo
+  consolidado (un PDF) como en el modo individual (un PDF por orden, que es el
+  peor caso: paga la fuente N veces).
+
+### F. El cupo, que ya no se recorta en silencio (Q3)
+
+- **R25** — El sistema DEBE conservar un cupo de al menos **9 líneas** para los
+  siete campos, en los dos generadores y en las cuatro hojas del catálogo.
+
+- **R26** — CUANDO cualquier caso del corpus de referencia declarado obligue a
+  recortar un valor, la verificación DEBE fallar. Ningún caso del corpus DEBE
+  imprimirse con marca de recorte.
+
+- **R27** — El sistema NO DEBE resolver la falta de sitio encogiendo el número de
+  guía ni comprimiendo la banda del QR y del código de barras: sus dimensiones
+  DEBEN quedar exactamente como hoy.
+
+### G. El símbolo configurado, cubierto o fallo visible (Q5)
+
+- **R28** — SI un texto que se va a dibujar con la fuente embebida contiene algún
+  carácter que el subconjunto embebido no cubre, ENTONCES el sistema DEBE fallar
+  de forma **visible** —en el navegador, con mensaje y **sin** descargar nada; en
+  el servidor, con el fallo visible de la respuesta y sin revertir la carga— y
+  NUNCA DEBE imprimir la etiqueta con ese carácter perdido o sustituido.
+
+- **R29** — El artefacto de fuente DEBE declarar la cobertura de caracteres que
+  realmente tiene, **derivada del propio archivo** y no escrita a mano; la
+  cobertura declarada DEBE coincidir con la del archivo embebido, y la
+  comprobación de R28 DEBE usar esa declaración.
+
+- **R30** — El archivo de fuente elegido DEBE verificarse **antes** de darse por
+  bueno: DEBE comprobarse que contiene U+20A1 con contorno no vacío. SI no lo
+  contiene, ENTONCES DEBE elegirse otro archivo; NO DEBE continuarse con él. La
+  licencia del archivo elegido DEBE quedar citada por su nombre en el
+  repositorio.
 
 ---
 
+## Preguntas cerradas (2026-08-25)
+
+| # | Cómo quedó |
+|---|---|
+| Q1 | **Entran los dos generadores.** La ficha pasa a `fullstack`. R19-R24. |
+| Q2 | La fuente **se mide, no se afirma**: R30 es la puerta. |
+| Q3 | **Se cede la línea de cupo** (11 → 10, peor caso conocido 9). Sin encoger la guía ni la banda de códigos. R25-R27. |
+| Q4 | **Sin dependencia nueva**: la comprobación de contorno no vacío basta. |
+| Q5 | Símbolo no cubierto = **fallo visible**, no nota al pie. R28-R29. |
+| Q6 | Si no cabe en 80 KB, **manda la cobertura** y se reporta el número. R14 revisado. |
+
 ## Preguntas abiertas
 
-- **Q1 — El generador del lote tiene los DOS mismos defectos, y queda fuera por
-  encargo.** Medido en esta sesión sobre `lib/pdf/etiquetas-pdf-lote.ts`: el
-  número de guía se dibuja en `MARGIN + 10 = 16` con cuerpo 22 y
-  `CAMPOS_Y_INICIO = 18` (líneas 53 y 128-131), y el monto pasa por el mismo
-  `formatMonto` sobre Helvetica (línea 152). Es decir: el PDF que sale por la
-  API de carga masiva seguirá con el número de guía encima de «DESTINATARIO» y
-  con `¡` en lugar de `₡` después de esta feature. **¿Se abre ficha hermana o se
-  acepta conscientemente?** No lo doy por decidido.
+- **Q7 — El corpus de casos reales de R26.** Tengo **una** etiqueta real (la de
+  la evidencia). El corpus que propongo lo completo con **formas**, no con datos
+  reales: dirección de una, dos y tres líneas, ubicación con los cuatro niveles,
+  destinatario y producto largos. Para que R26 se ponga rojo ante un caso real
+  de verdad haría falta un export de N etiquetas de producción (sin PII o
+  anonimizado). **¿Se puede sacar ese export, o el corpus de formas es
+  suficiente?** No lo relleno con datos inventados haciéndolos pasar por reales.
 
-- **Q2 — Fuente concreta y licencia.** Propongo **Liberation Sans Regular**
-  (SIL OFL 1.1, TrueType, métricas compatibles con Arial/Helvetica, que es la
-  familia con la que está maquetada la etiqueta). **No he verificado que
-  contenga U+20A1**: eso lo decide la medición de la tarea T1, no mi palabra. Si
-  no lo trae, la alternativa es DejaVu Sans (Bitstream Vera / Public Domain,
-  cobertura de moneda notoriamente amplia) o Noto Sans (OFL). ¿Hay alguna
-  familia o licencia vetada por el negocio, o alguna preferencia de marca?
+- **Q8 — Si el coste de la fuente por PDF no cabe en el peor caso del servidor.**
+  Medido en el repo: el render cuesta ~18 ms por etiqueta y el tope duro es 1000
+  PDFs en modo individual, con `maxDuration = 60`. Dejando 40 % del presupuesto
+  para la inserción del lote, la fuente sólo puede costar **≤ 102 ms por PDF con
+  el tope por defecto (300)** y **≤ 18 ms con el techo duro (1000)**
+  (`design.md` §11.3). Ese coste se paga **por documento** porque jsPDF
+  descodifica y parsea el TTF en cada `addFont`
+  (`jspdf.node.js:26783-26797`). SI la medición se pasa de ahí, ¿qué prefieres:
+  estrechar el subconjunto (debilita R11), bajar el techo duro por variable de
+  entorno, o excluir el modo individual del arreglo?
 
-- **Q3 — Qué cede el cupo vertical.** Bajar la primera fila a 23,76 mm reduce el
-  cupo de **11 a 10 líneas** para siete campos (aritmética en `design.md` §2.3).
-  El caso de la evidencia necesita 8 y una dirección de tres líneas necesita 9:
-  las dos siguen entrando. La alternativa para no ceder nada sería subir también
-  la línea base del número de guía ~1,5 mm, lo que toca la cabecera (más cambio
-  del que la evidencia pide). **¿Se acepta ceder esa línea?**
+- **Q9 — El PDF individual engorda.** Cada documento embebe su propio
+  `/FontFile2`, así que un PDF de **una** etiqueta pasa de ~3,3 KB (cifra medida
+  en la feature 136) a del orden de 8-15 KB: **×3-4**. En modo individual con el
+  tope por defecto son ~300 PDFs por carga, es decir del orden de **1 MB → 4 MB**
+  en el bucket privado por lote. Es coste de almacenamiento, no de tiempo.
+  **¿Se acepta?**
 
-- **Q4 — Cota de tinta.** Adopto **1 em** como separación mínima (R1) porque es
-  derivable del cuerpo y no depende de métricas internas de la fuente. Las
-  métricas reales de Helvetica (ascendente/descendente) **no están en el repo**:
-  jsPDF sólo expone el bbox de fuentes embebidas, no de las 14 estándar, así que
-  no las afirmo. La verificación automática afirma la separación de líneas base;
-  la ausencia de tinta solapada se comprueba **a ojo** una vez (T15). ¿Se acepta,
-  o se exige medir la tinta rasterizando el PDF (implica dependencia de
-  desarrollo nueva: `pdfjs-dist` + un canvas en Node)?
-
-- **Q5 — Símbolo configurable.** `MONEDA_SIMBOLO` es una variable de entorno:
-  si alguien la cambia a un carácter fuera de la cobertura del subconjunto, el
-  símbolo volvería a perderse. La guardia de R11 lee el símbolo **de la
-  configuración** (no lo escribe a mano), así que un cambio del default pone la
-  guardia en rojo; pero un cambio sólo en el entorno de producción **no lo ve
-  nadie**. ¿Se acepta esa limitación documentada, o se quiere una comprobación en
-  tiempo de ejecución?
-
-- **Q6 — Los topes de peso.** 80 KB de artefacto (R14) y 12 KB de subconjunto
-  embebido por PDF (R15) son topes que propongo yo a partir del tamaño esperado
-  de un subconjunto cp1252 (~230 glifos). Si la fuente elegida no cabe, la salida
-  es estrechar la cobertura a ASCII + acentos del español + `₡` (~120 glifos), lo
-  que **debilita R11**. ¿Prefieres el tope o la cobertura, si hubiera que elegir?
+- **Q10 — La vista previa del modal no cambia.** `EtiquetaGuia.tsx` es DOM/HTML y
+  pinta el `₡` con la fuente del sistema, así que no sufre el defecto y queda
+  fuera. Consecuencia: el importe de la vista previa y el del PDF se verán con
+  tipografías ligeramente distintas. **¿Se acepta, o se quiere paridad
+  tipográfica?** (Paridad implicaría cargar la fuente también en la vista previa,
+  es decir el coste de bundle que R13 evita.)
