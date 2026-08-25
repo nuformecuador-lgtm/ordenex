@@ -65,7 +65,10 @@ describe("handleLiberarReprogramadas — autorizacion (R6)", () => {
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledTimes(1);
     const body = await res.json();
-    expect(body).toEqual({ evaluadas: 5, liberadas: 3, omitidas: 2 });
+    // FEATURE 276 (T6.2, R12/R13): el cuerpo gana `esperandoCierre`, el conteo AGREGADO de las
+    // ordenes que se quedan quietas esperando que alguien apruebe su cierre. Es lo unico que hace
+    // observable esa poblacion desde fuera, y sigue siendo un numero: sin PII (R38).
+    expect(body).toEqual({ evaluadas: 5, liberadas: 3, omitidas: 2, esperandoCierre: 0 });
     // R19: el cuerpo NO filtra el secreto.
     expect(JSON.stringify(body)).not.toContain(SECRET);
   });

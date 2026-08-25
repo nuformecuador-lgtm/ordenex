@@ -11,9 +11,12 @@ import type {
 } from "@/lib/interfaces/services/IGestionDesdeAyudaService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
 import { OrdenNotaRepository } from "@/lib/repositories/OrdenNotaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { GestionDesdeAyudaService } from "@/lib/services/GestionDesdeAyudaService";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import {
   gestionarDesdeAyudaSchema,
@@ -55,12 +58,23 @@ function toGestionDesdeAyudaActionError(
 
 function buildService(): IGestionDesdeAyudaService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   return new GestionDesdeAyudaService({
     // El MISMO repositorio del hilo: la autorizacion sale de la misma lectura que gobierna quien
     // puede escribir en la conversacion de la orden (R21), no de una tabla de permisos aparte.
     notaRepo: new OrdenNotaRepository(prisma),
-    ordenRepo: new OrdenRepository(prisma),
+    ordenRepo,
     gestionRepo: new GestionOrdenRepository(prisma),
+    // 💰 FEATURE 276 (T5, R1/R4): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de
+    // historial que inyectan el panel del mensajero y el cron de SLA, asi que el numero que
+    // decide aqui es el mismo numero que ven las otras superficies (215/R4/R6). La dependencia
+    // es OBLIGATORIA en `GestionDesdeAyudaDeps`: borrar esta linea rompe el typecheck, no deja
+    // la puerta abierta en silencio.
+    historial: new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
     // MISMO bucket privado y MISMOS limites que las evidencias de gestion (36/119) y de incidente
     // (158). Lo que distingue las fotos de esta via es el prefijo del path, no el bucket.
     storage: new SupabaseFileStorage(undefined, gestionConfig.EVIDENCIA_BUCKET),

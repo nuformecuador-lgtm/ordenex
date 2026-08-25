@@ -19,7 +19,6 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import {
   recibirSchema,
-  recibirLoteSchema,
   asignarSateliteSchema,
   listarOrdenesBodegaPaginadoSchema,
   listarOrdenesBodegaCompletoSchema,
@@ -29,7 +28,6 @@ import {
   type ListarOrdenesBodegaCompletoResult,
   type ListarIdsVigentesBodegaResult,
   type RecibirResult,
-  type RecibirLoteResult,
   type AsignarSateliteResult,
   type ListarMensajerosSateliteResult,
 } from "@/lib/types/recepcion-satelite";
@@ -81,10 +79,20 @@ function buildService(): IRecepcionSateliteService {
 
 function buildAsignacionService(): IAsignacionSateliteService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   // Feature 92/R8: + el gate de asignabilidad por coordenadas, que lee la cola de jobs.
   return new AsignacionSateliteService(
-    new OrdenRepository(prisma),
+    ordenRepo,
     new AsignabilidadCoordenadasService(new JobRepository(prisma)),
+    // 💰 FEATURE 276 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
+    // —y por tanto el MISMO criterio unico de la 215— que consultan el panel del mensajero, la
+    // pestaña de ayuda y los dos crons. La dependencia es OBLIGATORIA en el constructor: borrar
+    // esta linea rompe el typecheck, no deja la puerta abierta en silencio.
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 
@@ -241,28 +249,6 @@ export async function recibirPorQr(
     const data = recibirSchema.parse(input); // R16: ZodError -> VALIDATION_ERROR
     const service = deps.service ?? buildService();
     return service.recibir(data.numGuia, actor);
-  });
-  return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
-}
-
-/**
- * Feature 63 — recibe EN LOTE ("Aceptar/Recibir todas") las ordenes indicadas del
- * adminSatelite logueado que sigan en `en_ruta_bodega_satelite` de SU zona, pasandolas
- * a `en_bodega_satelite` (paridad con `recogerAsignaciones` del mensajero). ADITIVO: NO
- * altera el flujo por-QR `recibirPorQr`. `unauthenticated` (borde) y `validation_error`
- * de zod se resuelven aqui; `forbidden`/`sin_zona`/`validation_error` de dominio los
- * devuelve el service. El alcance por zona + estado de origen se impone server-side.
- */
-export async function recibirLote(
-  input: unknown,
-  deps: RecepcionSateliteDeps = {},
-): Promise<RecibirLoteResult> {
-  const r = await withErrorHandler(async () => {
-    const actor = await (deps.getActor ?? resolveActorFromSession)();
-    if (!actor) throw new UnauthenticatedError();
-    const data = recibirLoteSchema.parse(input); // ZodError -> VALIDATION_ERROR
-    const service = deps.service ?? buildService();
-    return service.recibirLote({ ordenIds: data.ordenIds }, actor);
   });
   return isAppErrorShape(r) ? toRecepcionSateliteActionError(r) : r;
 }

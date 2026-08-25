@@ -27,6 +27,9 @@ import path from "path";
 // Bloque 1 (R1/R19) — el subarbol de export no importa servicio, repositorio, Prisma ni
 //                     el catalogo de servidor: el dataset entra por la Server Action.
 // Bloque 2 (R3)     — ninguna ruta de `app/api` sirve el export de analitica.
+//                     (2026-08-23, feature 267: su via POR RUTA se estrecho a una allowlist
+//                     nominal de UN camino —la API publica por API key—; la via POR CODIGO
+//                     quedo INTACTA sobre `app/api` entero. Motivo y descartes, en el caso.)
 // Bloque 3 (R4)     — ningun modulo `"use server"` invoca el generador de descargas.
 // Bloque 4 (R19)    — no hay generador CSV/XLSX propio dentro de `app/(app)/analitica/**`.
 //
@@ -158,6 +161,37 @@ describe("Feature 134 (R1/R19) — el subarbol de export no tiene puerta trasera
  * Se mira el PATH y el CODIGO: una ruta llamada `app/api/reportes/route.ts` que consultara
  * analitica seria igual de infractora que una llamada `analitica`.
  */
+
+/* -------------------------------------------------------------------------- */
+/* ALLOWLIST NOMINAL — 2026-08-23, feature 267 (decision P6 de su puerta)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * EL UNICO handler de `app/api` que este bloque admite que se LLAME `analitica`.
+ *
+ * Es una lista de UN camino escrito entero, no un patron: un patron
+ * (`app/api/ordenes/api-key/**`) autorizaria de golpe a los que todavia no existen. Es la
+ * misma constante, con el mismo nombre y el mismo valor, que ya usan los otros dos guardias
+ * estrechados por la 267 (`tablero-operativo-frontera.guardia.test.ts` y
+ * `operativa-frontera.guardia.test.ts`): TRES guardias, una sola excepcion nominal.
+ */
+const HANDLER_ANALITICA_AUTORIZADO = "app/api/ordenes/api-key/analitica/route.ts";
+
+/**
+ * El filtro POR NOMBRE DE ARCHIVO, aislado para que el caso REAL (sobre el arbol) y la
+ * AUTOCOMPROBACION SINTETICA (sobre rutas inventadas) usen exactamente la misma logica. Si se
+ * afloja aqui, se afloja tambien el caso negativo y este deja de pasar: es lo que impide que
+ * «estrechar» se convierta en «relajar» de tapadillo.
+ *
+ * OJO CON LO QUE ESTE PREDICADO **NO** HACE: no exime a nadie del censo POR CODIGO
+ * (`EXPORT_DE_ANALITICA`), que sigue barriendo `app/api` ENTERO, camino autorizado incluido.
+ */
+function rutasDeAnaliticaNoAutorizadas(rutas: readonly string[]): string[] {
+  return rutas.filter(
+    (rel) => /analitica|analytics/i.test(rel) && rel !== HANDLER_ANALITICA_AUTORIZADO,
+  );
+}
+
 const EXPORT_DE_ANALITICA: readonly RegExp[] = [
   /consultarAnaliticaOperativa/,
   /consultarAgregadoOperativo/,
@@ -175,8 +209,38 @@ const EXPORT_DE_ANALITICA: readonly RegExp[] = [
 ];
 
 describe("Feature 134 (R3) — el export no se sirve desde `app/api`", () => {
-  it("ninguna ruta de app/api sirve el export de analitica", () => {
-    const porRuta = archivos(DIR_API).filter((rel) => /analitica|analytics/i.test(rel));
+  it("ninguna ruta de app/api sirve el export de analitica, salvo el UNICO camino autorizado", () => {
+    // 2026-08-23 · FEATURE 267 · decision P6 de la puerta, extendida a ESTE guardia y firmada
+    // por el humano ese mismo dia. La 267 la habia aplicado a los otros dos guardias de
+    // frontera; este tercero no se habia detectado en su spec. Con este, son TRES los guardias
+    // estrechados por la feature —ni uno mas—, y los tres comparten la misma unica excepcion
+    // nominal.
+    //
+    // SE ESTRECHA, NO SE DEROGA, y solo la via POR RUTA: pasa de «ningun archivo de `app/api`
+    // puede llamarse analitica» a «exactamente UNO, con su nombre completo escrito». Cabe
+    // dentro del motivo del guardia, no a pesar de el: el parrafo de arriba —el de la 134, que
+    // se conserva palabra por palabra— reserva los route handlers para «webhooks, API PUBLICA
+    // y crons», y `GET /api/ordenes/api-key/analitica` ES la API publica: el canal por API key,
+    // autenticado con `Authorization: Bearer ordx_...` y con contrato publicado en
+    // `docs/api/api-key-openapi.yaml`. Lo que la 134 escribio este bloque para impedir es una
+    // SEGUNDA superficie INTERNA de export que duplicara el gating; eso sigue prohibido igual.
+    //
+    // Y EL HANDLER CAIA SOLO POR EL NOMBRE DEL ARCHIVO: se midio antes de tocar nada. De los
+    // diez patrones de `EXPORT_DE_ANALITICA` no dispara NINGUNO —no genera CSV, no nombra los
+    // modulos del export, no importa nada de `lib/analytics/`; delega en
+    // `lib/api/analitica-integrador.ts`—. Era un falso positivo de nomenclatura, no una
+    // infraccion del motivo de este bloque.
+    //
+    // LO QUE QUEDO EXPRESAMENTE DESCARTADO, para que no se reabra: renombrar la ruta para
+    // esquivar el regex. Habria pasado el guardia sin pasar su motivo, y el proximo lector no
+    // habria encontrado ni la analitica ni la decision.
+    //
+    // QUE SIGUE PROHIBIDO, SIN UN CARACTER DE DIFERENCIA: el censo POR CODIGO se aplica a
+    // `app/api` ENTERO, camino autorizado INCLUIDO. Si alguien hace que ese handler exporte un
+    // CSV o importe de `lib/analytics/`, este caso se pone rojo igual que el primer dia — lo
+    // comprueba el caso negativo (b) de mas abajo. La excepcion es para el NOMBRE, no para la
+    // conducta.
+    const porRuta = rutasDeAnaliticaNoAutorizadas(archivos(DIR_API));
     const porCodigo = infractores(DIR_API, EXPORT_DE_ANALITICA);
     const malos = [...new Set([...porRuta, ...porCodigo])].sort();
     expect(
@@ -185,6 +249,46 @@ describe("Feature 134 (R3) — el export no se sirve desde `app/api`", () => {
         "handler seria una segunda puerta a la analitica, con su propio gating y su propia " +
         "forma de olvidarse de auditar. Archivos: " +
         malos.join(", "),
+    ).toEqual([]);
+  });
+
+  it("la allowlist es NOMINAL: el camino autorizado existe de verdad en el arbol", () => {
+    // Sin este caso, un `HANDLER_ANALITICA_AUTORIZADO` que apuntara a un archivo borrado
+    // dejaria una excepcion viva para un nombre que nadie ocupa: el sitio perfecto para que
+    // manana aparezca otra cosa con ese nombre y entre gratis.
+    expect(fs.existsSync(path.join(REPO_ROOT, HANDLER_ANALITICA_AUTORIZADO))).toBe(true);
+    expect(archivos(DIR_API)).toContain(HANDLER_ANALITICA_AUTORIZADO);
+  });
+
+  it("y NO es una relajacion (a): un SEGUNDO handler de analitica en `app/api` seguiria cayendo", () => {
+    // AUTOCOMPROBACION SINTETICA. Nada se escribe en el arbol: se pasa por el MISMO predicado
+    // del caso real una lista de rutas inventadas. Sin este caso, «estrechar» y «relajar»
+    // serian indistinguibles desde fuera.
+    const inventados = [
+      "app/api/reportes/analitica/route.ts",
+      "app/api/analitica/export/route.ts",
+      "app/api/ordenes/api-key/analitica/v2/route.ts",
+      "app/api/interno/analytics/csv/route.ts",
+      // Y tampoco vale disfrazar el nombre: el regex mira la RUTA entera, sin caso.
+      "app/api/interno/Analitica-Operativa/route.ts",
+    ];
+    expect(rutasDeAnaliticaNoAutorizadas([...archivos(DIR_API), ...inventados])).toEqual(inventados);
+  });
+
+  it("y NO es una relajacion (b): el censo POR CODIGO sigue vivo SOBRE EL PROPIO camino autorizado", () => {
+    // La otra mitad de la decision, afirmada en vez de contada. La excepcion es para el NOMBRE
+    // del archivo; la conducta se sigue juzgando igual que en cualquier otra ruta de `app/api`.
+    for (const infractor of [
+      'import { COLUMNAS_DESCARGA_ANALITICA_OPERATIVA } from "@/lib/analytics/descarga";',
+      'import { filasDeSerie } from "@/lib/analytics/serie";',
+      "const filas = await consultarAnaliticaOperativa(filtro);",
+      "export { filaDescargaAnaliticaOperativa };",
+    ]) {
+      expect(EXPORT_DE_ANALITICA.some((p) => p.test(soloCodigo(infractor))), infractor).toBe(true);
+    }
+    // Y el handler REAL, leido del disco, no cae por codigo: pasa por conducta, no por permiso.
+    expect(
+      EXPORT_DE_ANALITICA.filter((p) => p.test(codigoDe(HANDLER_ANALITICA_AUTORIZADO))),
     ).toEqual([]);
   });
 

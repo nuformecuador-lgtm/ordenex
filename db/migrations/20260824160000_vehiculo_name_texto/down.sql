@@ -1,0 +1,19 @@
+-- DOWN — devuelve `vehiculos.name` al enum `vehiculo_value`.
+--
+-- ⚠️ ESTA REVERSION PUEDE FALLAR, Y ESO ES CORRECTO. Si mientras la columna fue TEXT alguien dio
+-- de alta un tipo que NO es 'moto', 'carro' ni 'camion', el `USING "name"::"vehiculo_value"`
+-- abortara con un error de Postgres y la migracion NO se aplicara. Es el comportamiento deseado:
+-- la alternativa -borrar en silencio las filas que no encajan- destruiria datos que alguien creo
+-- a proposito, y ademas dejaria a los mensajeros y a las tarifas de zona que las referencian
+-- apuntando a un tipo inexistente.
+--
+-- QUE HACER SI FALLA: decidir explicitamente que pasa con esos tipos (renombrarlos a uno de los
+-- tres, o borrar las filas junto con lo que las usa) ANTES de correr este `down`. Esa decision es
+-- de negocio y no se puede tomar dentro de una migracion.
+--
+-- El tipo `vehiculo_value` no se crea aqui porque el `up` no lo borro: sigue existiendo con su
+-- identidad original y sus tres etiquetas.
+--
+-- El UNIQUE `vehiculos_name_key` se conserva igual que en el `up`: Postgres reconstruye el indice
+-- al cambiar el tipo de la columna.
+ALTER TABLE "vehiculos" ALTER COLUMN "name" TYPE "vehiculo_value" USING "name"::"vehiculo_value";

@@ -4176,3 +4176,164 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
   vigilada está bien hecho; **no es haberla hecho**. Con ella siguen vivas `B0.2`/`C3` (re-medir `M1`
   contra producción: la foto del 2026-08-22 04:27 CR caducó) y `C7` (`P4` y `P5` sin llevar a la
   puerta humana).
+
+## 2026-08-23 — 271 (el segundo cierre se puede solicitar, y acumular dos bloquea)
+- Un mensajero con el cierre de ayer pendiente de aprobación ya puede solicitar el de hoy; antes no
+  podía y su jornada entera quedaba sin cierre al que ir. A cambio, acumular cierres sin resolver
+  bloquea gestionar **y** recibir trabajo nuevo (reparto y recolección), hasta ponerse al día del más
+  viejo al más nuevo. Regla: libre si `N <= 1` y `V = 0`, con N = cierres sin aprobar y V = los que
+  dependen de él. Y por primera vez hay avisos: el mensajero no recibía **ninguna** notificación de
+  cierre en toda la app, y el corte nocturno no emitía **ni una**.
+- Requisitos cubiertos: R1–R61. Reviewer aprobado (59 verificados, 0 sin cubrir). Desplegada a
+  producción el mismo día: `prod` = `37b5944b`.
+- **El modelo se rehízo entero a mitad de camino.** El primer intento fue «un cierre por jornada con
+  `fecha_jornada` fija»; se escribieron dos specs (39 + 36 requisitos) y se descartaron. Lo tumbó un
+  contraejemplo del humano: una orden reprogramada se libera con `fecha_reparto = null` y se reasigna
+  a otro día, así que derivar la jornada del cierre desde la orden dejaba la gestión de hoy —que
+  lleva dinero— colgando de una fecha ya movida. La regla que acabó rigiendo **no necesita ninguna
+  columna**: si el segundo cierre se puede crear, `cierre_id IS NULL` reparte el trabajo solo.
+- **Cuatro fallos mudos cerrados**, ninguno rompía un test: `transicionarRechazadoASolicitado` movía
+  dos cierres y devolvía «no se pudo»; aprobar uno vaciaba las órdenes `sin_gestionar` de todos;
+  el aviso a bodega nombraba siempre el más nuevo; y **el cron no inyectaba el notificador**, así que
+  el aviso de «tu cierre venció» no habría salido nunca. El último destapó que **2 de los 7
+  notificadores del repo estaban muertos**, y de ahí salió la guardia derivada del árbol.
+- **Una imposibilidad razonada que la medida desmintió.** El spec declaraba que dos `vencido` a la
+  vez era imposible y sobre eso se apoyaba para no escribir nada; un test de integración sembrado lo
+  desmintió (el paso prestado de la 246 había cambiado). No hizo falta tocar comportamiento, pero la
+  creencia se había propagado a **diez sitios**, uno citándola como precedente de otra decisión.
+- **Cuatro defectos de texto los encontró el navegador, cero los encontró la suite** — con 18.000
+  tests en verde. Entre ellos, un aviso que decía «espera a que la bodega apruebe el más antiguo»
+  con el botón de reenviar ese mismo cierre justo debajo.
+- Deuda dejada: T3.5 (coste de la corrida del corte) declarada sin medir; cinco guardias de
+  composition root siguen con `toContain`; las variantes «sin jornada fiable» cubiertas por test pero
+  no vistas en pantalla; y cinco textos previos en `lib/services/` en voseo sin tildes, pendientes de
+  ficha propia porque el registro lo decide el humano.
+
+---
+
+## 2026-08-24 — 276 · el tope de 3 intentos se cierra: al alcanzarlo la orden no vuelve a circulación
+
+- Una orden podía llegar a un **4.º intento de entrega**. Desde esta ficha, al alcanzar el umbral
+  (`REINTENTOS_MIN_INTENTOS`, hoy 3) la gestión solo puede acabar `entregada`, `rechazada` o
+  `incidente`; ninguna vía la devuelve a circulación; y no se puede asignar. Requisitos R1–R38.
+  Reviewer **OK en la 3.ª ronda, 0 bloqueantes**. Gate completo `INIT_EXIT=0`, 1358 archivos /
+  18.302 tests. **No desplegada.**
+- **La ficha nació de mirar producción, no el código.** La guía `28098171` llevaba 3 intentos y
+  seguía en `devuelta`. El cron no estaba roto: su última causa era `wrong_address`, y **esa rama
+  escala solo por tiempo (5 días) e ignora el contador**. El «3 de 3» que muestra la pantalla no
+  disparaba nada.
+- **La raíz, medida:** de los cinco resultados de gestión **solo `devuelta` esperaba la aprobación
+  del cierre** (239). `reprogramada` cambiaba el estado en el acto y `findReprogramadasVencidas`
+  liberaba la orden por `fecha_reprogramacion <= hoy` **sin mirar el cierre en ningún punto**, así
+  que volvía a circulación con el contador en el valor viejo. El humano lo dio por implementado para
+  todos los estados; solo lo estaba para uno.
+- **Decisión de alcance con su precio delante:** se difiere **solo** `reprogramada`. Diferir también
+  los terminales dejaría a la tienda y al rastreo sin ver una entrega hasta **22,1 h** (p90 medido).
+- **Esta ficha invierte la asimetría de dinero de la 215/D14.** Hasta ahora un error de conteo
+  *retrasaba* el cobro; desde aquí **cobra de más**, porque `rechazada` emite `cobroRechazado` (56).
+  Está firmado por el humano y escrito en el spec para que nadie lo revierta por sorpresa.
+- **Absorbe la 218**, que quedó `superseded`: la no gestión del corte con el umbral alcanzado termina
+  `rechazada` al aprobarse el cierre. Era la decisión que aquella ficha existía para tomar.
+- **El test que no se puede sustituir por dobles.** Sacar la sonda de visita real del `select` de
+  `findOrdenesLiberables` deja **13 casos verdes en los dobles** y solo caen **2 en el test contra
+  Postgres**. Medido dos veces, en la ronda 1 y sobre el commit final. Es la raíz de la ficha, y es
+  un `select`: los tests de servicio no ven el SQL.
+- **Los cuatro bloqueantes de las rondas 1 y 2 no eran del código de la ficha: eran del `sed` de la
+  renumeración 273→276**, que corrompió **21 citas ajenas en 14 archivos** —números de línea, un
+  conteo y el importe `₡918 273,45` en el comentario de un guard de dinero, que pasó a contradecir
+  su propia constante— y dejó **falso, en dos copias**, el párrafo que contaba la colisión. La
+  lección: el renumerado se hizo con una lista amplia y un filtro tosco, y **arreglarlo por archivo
+  en vez de por causa dejó escapar un hermano y una segunda copia**. En la otra rama, donde los
+  archivos se eligieron a mano, no hubo ningún daño.
+- **Y una afirmación más fuerte que su comprobación**, que es la patología que este repo persigue: el
+  commit del renumerado decía haber descartado los falsos positivos «uno a uno» cuando solo se
+  verificaron cuatro archivos a mano y el resto se dio por bueno por estar en `lib/tests/app/specs`.
+- **Colisión de ids, la tercera del repo.** Al registrar, local y `origin/dev` daban 272 como máximo;
+  mientras se trabajaba, otra sesión empujó 273/274/275 para tarifas y **mergeó su 273**. `dev`
+  manda: se renumeraron las de esta sesión a 276 y 277.
+- **Pendiente y bloqueante de DESPLIEGUE, no de merge:** re-ejecutar el SELECT de R37 contra
+  producción (la foto caduca) y medir **cuántas `reprogramada` congela la liberación diferida el
+  primer día** — nunca se ha medido, y ese número *es* el tamaño de la mercadería que la ficha para.
+
+---
+
+## 2026-08-24 — 277 · «Por recoger» separa en pestañas las de hoy de las reservadas para otro día
+
+- En la pantalla «Por recoger» del mensajero convivían las órdenes de hoy con las reservadas para
+  otro día, que el servidor **ya rechaza recoger** desde la 261: tarjetas visibles pero intocables
+  mezcladas con el trabajo real. Ahora van en dos pestañas, «Para recoger hoy» y «Para otro día».
+  Requisitos R1–R34, reviewer aprobado con 0 bloqueantes. **No desplegada.**
+- **No se oculta nada**: R23 de la 246 sigue vigente. Cambia el sitio, no la visibilidad.
+- **Por qué se podía tocar, y es el hallazgo:** R23 se decidió pegada a R24 («y se puede trabajar»)
+  —la orden se mostraba *porque* el mensajero podía recogerla—. **R24 murió el 2026-08-21** con la
+  261, cuando la guía 17496963 se gestionó a las 22:10 estando reservada para el día siguiente.
+  R23 sobrevivió por inercia: nadie volvió a decidir la visibilidad con el candado ya puesto.
+- **El contador mentía y entró en la ficha**: la cabecera decía «N Órdenes nuevas asignadas»
+  contando las que el servidor no deja recoger. Medido en producción: decía **2 con 1 sola
+  recogible**. Se corrigió además la concordancia en singular.
+- **Los tests existentes que afirmaban lo contrario no se borraron**, se reescribieron conservando
+  las cuatro propiedades que fija el diseño. Eran **diez**, no dos: seis es solo el subconjunto que
+  caía. Uno de ellos —un `queryByText` sobre el literal viejo del vacío— **habría quedado verde por
+  vacío**, y tras el cambio muere cuando se rompe la distinción de vacíos.
+- **Reserva menor aceptada:** el test de R15 sobrevive a la mutación `!== true` por simetría del
+  fixture (1-1), aunque sí muere ante el defecto que R15 prohíbe. Mejora anotada (fixture 2+1).
+
+---
+
+## 2026-08-24 — 279 · el portal del adminSatélite se parte en dos, y la recepción queda solo por QR
+
+- Pedido del humano: **el botón «Aceptar» de las cards de «Por recibir» desaparece** —recibir solo
+  por QR— y el apartado **se parte en dos subítems de acordeón** («Órdenes › Por recibir / En
+  bodega»), cada uno con su escáner. Requisitos R1–R47, reviewer **OK en la ronda 2, 0 bloqueantes**.
+  Gate completo `INIT_EXIT=0`, 1377 archivos / 18.754 tests. **No desplegada.**
+- **Una sola ficha y no dos** porque las dos mitades tocaban los mismos archivos, y el arnés prohíbe
+  dos fichas en vuelo con conflicto de archivos.
+- **El botón estaba DUPLICADO en el mismo render** —una vez como prop de la sección y otra dentro del
+  `renderItem`—, así que quitar uno dejaba el otro vivo. Se vio midiendo, no leyendo.
+- **`recibirLote` se retiró entera**, de la Server Action al repositorio: al quitar el botón se
+  quedaba **sin ningún llamador**. Decisión del humano, y convirtió la ficha de `frontend` a
+  `fullstack`. Antes de borrar se comprobó que **el QR no comparte camino** (`recibirEnSatelite`
+  singular vs `recibirLoteEnSatelite` lote): si lo hubieran compartido, la ficha habría roto justo
+  lo que venía a dejar como única vía.
+- **20 casos de test retirados, 20 destinos escritos.** Ninguno desapareció en silencio.
+- **Un censo que no censaba**: `cotizacion-api-key.test.ts` usaba un `Proxy` que acepta cualquier
+  nombre de método, así que el nombre ya muerto **atravesó un typecheck completo sin una queja**.
+  Atado con un `satisfies`, reintroducirlo ahora no compila.
+
+### El agujero de las guardias, medido y cerrado
+
+Un comodín de ruta escrito dentro de un comentario de línea (`lib/auth/menu-visibility.ts:228`)
+**abría bloque** para el quitador del repo y cerraba 150 líneas más abajo. Resultado: **151 líneas
+invisibles para cualquier guardia que lea ese fuente** — Entregas, Recolección, el portal del
+satélite, Novedades, Ranking, Wallet, Configuración, los dos cierres e Incidentes.
+
+**Medido con el propio quitador, y por tres partes con SHAs explícitos: 76 → 160 líneas visibles.**
+El primer número que circuló, «79», **era falso**: lo escribió el leader heredándolo de un informe y
+repitiéndolo sin medir. **Ninguna violación se destapó**: 141 archivos / 2.096 casos de guardias en
+verde corridos **antes** de añadir los subítems, para que cualquier rojo fuera atribuible solo al
+arreglo. El quitador **no se tocó**: arreglarlo es otra ficha.
+
+### El hallazgo del reviewer, que es la lección de la ficha
+
+**Un test verde que no cubría nada.** El caso de R22 leía un contador para afirmar «la lectura se
+repitió», y ese `+1` **no lo producía el `mutate()` que el requisito protege**: lo producía la
+revalidación de montaje de SWR. En la suite completa esa revalidación ya había ocurrido, así que
+**el caso pasaba igual con el código borrado** — verde 38/38 en tres corridas de tres. Solo caía
+aislado con `-t`.
+
+Y de ahí sale la regla que esta ficha deja escrita: **«pasa aislado» y «pasa en la suite» no son la
+misma medida**, y la que vale para un gate es la de la suite. La primera remedición del implementer
+era la foto de `-t` y no reproducía.
+
+**El arreglo no fue esperar más**, que es el parche que lo habría tapado: el servidor responde
+primero una **fila sentinela ausente del `fallbackData`**, así que verla en el DOM prueba que la
+revalidación aterrizó. El punto de partida deja de ser un supuesto. Re-medido en corrida completa:
+sin `mutate()`, la suite pasa de **18.754 verdes a 4 fallos**.
+
+### Lo que queda vivo, y no es de esta ficha
+
+El reviewer barrió **todo** `tests/` buscando esa misma forma —foto de un contador + aserción de
+crecimiento contra ella— y encontró **cinco** sitios, no dos. Dos son de esta entrega y están
+resueltos o medidos como sanos. **Los otros tres son ajenos y siguen vivos**:
+`ActualizarAnalitica.test.tsx`, `NotificationsBell.test.tsx` y `TableroOperativo.test.tsx`, los tres
+con SWR, o sea con los dos ingredientes. No se tocan aquí; merecen ficha propia.

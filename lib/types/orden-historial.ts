@@ -127,6 +127,64 @@ export const ORDEN_HISTORIAL_ORIGEN_TIPO_SEED = [
   // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R44): el integrador recibe `rechazada` igual que
   // hoy. La unica excepcion por familia sigue siendo el rescate de la 235.
   "rechazo_tienda",
+  // Feature 266 (T1.1, D5/R16) — LA HABILITACION POR API KEY: `ayuda_tienda -> en_reparto`, pedida
+  // por el INTEGRADOR en un lote del canal por API key
+  // (`POST /api/ordenes/api-key/habilitar` -> `ApiHabilitacionService` ->
+  // `OrdenRepository.transicionarAyuda`, el punto UNICO de escritura de esa arista que 235/R8
+  // exige). Solo la produce la RAMA A del endpoint: cuando la orden esta en `ayuda_tienda` y
+  // conserva mensajero asignado, o sea cuando el paquete sigue en la calle. La rama B no
+  // transiciona y por tanto no deja fila de historial (deja fila en `orden_habilitacion_api`).
+  //
+  // FAMILIA PROPIA Y NO REUSO DE `rescate_ayuda_tienda` (design §7, A3, y era la opcion barata: la
+  // arista es la MISMA y ya hay una familia para ella). Reusarla borraria la unica distincion
+  // entre «el mensajero pulso Recuperar / la tienda pulso Habilitar» y «el integrador habilito por
+  // API». Y `actor_usuario_id` NO la recupera: el usuario dedicado de la key ES la tienda
+  // (`tienda_id = ownerId`), el MISMO sujeto que el `adminTienda` del boton, asi que las dos vias
+  // quedarian indistinguibles fila a fila. Precedente literal: `rechazo_tienda` (240) nacio como
+  // familia propia frente a `escalado_devuelta_sla` por este mismo argumento.
+  //
+  // 💰 ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL` (R26), y esto NO se «corrige por simetria» con
+  // `gestion_tienda_ayuda`, que si esta: habilitar NO es una visita — nadie fue a ninguna puerta,
+  // el integrador pulso un endpoint desde su servidor. Esa lista es de INCLUSION justamente para
+  // que una familia nueva no empiece a contar sola. Quien meta esta ahi sube el conteo de
+  // intentos, adelanta el escalado del cron SLA (99) y dispara el `cobroRechazado` (56) —DINERO
+  // REAL cobrado a la tienda— antes de tiempo y en silencio.
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION`: su fila nace con `gestion_orden_id` NULO (esta
+  // transicion no viene de ninguna gestion), igual que las dos familias de la 235.
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO` (R17/R27): esa lista esta VACIA desde la 268 y asi
+  // se queda. Consecuencia buscada, afirmada con un test y no asumida: la rama A emite el evento
+  // publico de `en_reparto`.
+  //
+  // Y la nota del integrador NO viaja en el `motivo` de esta fila (D6, firmada): vive SOLO en
+  // `orden_habilitacion_api`, para que «todas las habilitaciones de una orden» sea UNA consulta.
+  "habilitacion_api",
+  // Feature 276 (T2/T9, R22 · Q5 firmada el 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS:
+  // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
+  // barrio y que ya alcanzo el umbral de intentos de entrega. Actor = el admin que aprueba.
+  // Productor UNICO: `CierresAdminRepository.resolverCierre`, dentro del bloque
+  // `liberacionSinGestionar`, en el MISMO commit que este valor. Absorbe la ficha 218.
+  //
+  // FAMILIA PROPIA, y las dos alternativas mas baratas se descartan por lo que ROMPEN:
+  //   - `escalado_devuelta_sla` (99) es el mismo destino, pero ES el predicado de la pestaña
+  //     «Rechazadas por plazo vencido» (102) y de `esRechazoSla`: reusarlo etiquetaria como
+  //     vencimiento del reloj algo que es agotamiento de intentos, y lo listaria en esa pantalla.
+  //   - `liberacion_sin_gestionar` (109) es la OTRA rama del MISMO bloque —la que si libera— y su
+  //     nombre diria «liberacion» sobre la unica orden que precisamente no se libera.
+  //
+  // ⚠️ NO ENTRA EN `ORIGEN_TIPOS_VISITA_REAL`, y esa ausencia es DINERO. Si entrara, cada rechazo
+  // por tope sumaria un intento a su propia orden, adelantaria el escalado del cron SLA (99) sobre
+  // otras y cobraria el `cobroRechazado` (56) antes de tiempo. No es una visita: es una decision
+  // administrativa sobre una orden que ese dia no visito nadie —ese es justo el hecho que la lleva
+  // a `sin_gestionar`—. Mismo argumento que `anclaje_devolucion` (239) y `rechazo_tienda` (240).
+  //
+  // NO entra en `ORIGEN_TIPOS_CON_GESTION` aunque su fila nazca CON `gestion_orden_id` poblado (la
+  // gestion sintetica de R23): esa lista solo desambigua la NULIDAD del enlace (67/R25-R26), mismo
+  // caso que `escalado_devuelta_sla`, `anclaje_devolucion` y `rechazo_tienda`.
+  //
+  // NO entra en `ORIGENES_SIN_EVENTO_PUBLICO`: el integrador recibe `rechazada` igual que hoy.
+  "rechazo_tope_intentos",
 ] as const satisfies readonly PrismaOrdenHistorialOrigenTipo[];
 
 export type OrdenHistorialOrigenTipo = (typeof ORDEN_HISTORIAL_ORIGEN_TIPO_SEED)[number];

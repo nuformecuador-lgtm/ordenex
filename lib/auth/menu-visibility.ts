@@ -225,7 +225,18 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
   {
     // Feature 61: portal del mensajero (KPIs + asignaciones por recoger/gestionar).
     // Exclusivo del rol `mensajero`; la defensa real es el `notFound` de las páginas
-    // `/mis-asignaciones/*` (resuelven el rol server-side).
+    // `/mis-asignaciones/reparto` y `/mis-asignaciones/recoger` (resuelven el rol
+    // server-side).
+    //
+    // Feature 279 (R45/R46): aquí las dos rutas se escribían con un comodín. La barra y el
+    // asterisco de ese comodín ABREN un bloque de comentario, y el quitador del repo
+    // (`tests/fixtures/sin-comentarios.ts`) lo cerraba en el siguiente cierre de bloque del
+    // archivo —el JSDoc de `puedeVer`—, así que 151 líneas (228→378) desaparecían del texto
+    // que lee CUALQUIER guardia que escanee este fuente: "Entregas", "Recolección", el
+    // portal del `adminSatelite`, "Novedades", "Ranking", "Wallet", "Configuración", los dos
+    // cierres e "Incidentes". Medido con el propio quitador: 76 líneas no vacías visibles
+    // antes, 156 después. Nombrar las dos rutas reales es además más preciso que el patrón.
+    // **No se escriben comodines de ruta en los comentarios de este archivo** (R33/R45).
     //
     // 2026-07-31 (decisión del humano): el portal se PARTE en dos pantallas hermanas, cada
     // una con su ruta y su subítem, porque son dos trabajos distintos del mismo turno:
@@ -264,11 +275,32 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // Portal del adminSatelite (paridad con "Entregas" del mensajero): recepción de
     // órdenes ruteadas a su bodega (por recibir/recibidas) + asignación a mensajeros
     // de su zona. Exclusivo de `adminSatelite`; la defensa real es el `notFound` de
-    // la página `/recepcion-satelite` (resuelve el rol server-side).
+    // cada página del portal (resuelven el rol server-side).
+    //
+    // Feature 279 (R8/R9, decisión del humano del 2026-08-24): el portal se PARTE en dos
+    // pantallas hermanas, exactamente como la 61 partió "Entregas" del mensajero, porque
+    // son dos trabajos distintos del mismo turno: RECIBIR lo que llega (escáner + tarjetas
+    // en camino) y GESTIONAR lo que ya está en bodega (listado, filtros, asignación, envío
+    // a central). Antes convivían apiladas en una sola pantalla, con el escáner enterrado
+    // encima de un listado paginado.
+    //
+    // "Por recibir" va PRIMERO y no es un detalle de orden: `primerDestino` devuelve el
+    // `href` del primer subítem, así que ES el aterrizaje post-login del rol (R12), y la
+    // ruta vieja `/recepcion-satelite` redirige a esa misma pantalla (R13/R14). El rol
+    // tiene UNA sola puerta de entrada.
+    //
+    // La etiqueta del padre se conserva ("Órdenes") y su `href` también: un ítem con
+    // `children` NO navega —se renderiza como disparador del desplegable, ver
+    // `Sidebar.tsx`—, pero el `href` identifica al ítem (clave de React y posición
+    // relativa). Es el patrón literal de "Entregas".
     label: "Órdenes",
     href: "/recepcion-satelite",
     iconKey: "package",
     roles: ["adminSatelite"],
+    children: [
+      { label: "Por recibir", href: "/recepcion-satelite/por-recibir" },
+      { label: "En bodega", href: "/recepcion-satelite/en-bodega" },
+    ],
   },
   {
     // Feature 87 (R20): lista de ordenes en devolucion de la tienda, con su causa y
@@ -334,6 +366,9 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
       // Feature 107: CRUD de plantillas de mensaje. Hereda la visibilidad
       // maestro-only del ítem padre (R1/R2).
       { label: "Plantillas", href: "/configuracion/plantillas" },
+      // CRUD del catálogo de tipos de vehículo. Misma visibilidad maestro-only
+      // del ítem padre: quien ve el catálogo es quien lo administra.
+      { label: "Vehículos", href: "/configuracion/vehiculos" },
     ],
   },
   {

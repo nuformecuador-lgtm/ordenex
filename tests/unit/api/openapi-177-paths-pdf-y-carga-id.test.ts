@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 
 import { openApiSpec } from "@/lib/api/openapi-spec";
+import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
+import { METRICAS } from "@/lib/analytics/metrics";
 
 // Feature 177 (R41, R45) — contrato publicado del canal por API key tras la alta de los tres
 // endpoints nuevos (consulta por guía/remisión y PDF de etiqueta por orden y por lote) y la
@@ -77,7 +79,27 @@ const PATH_PDF_CARGA = "/api/ordenes/api-key/carga/{cargaId}/generate";
 // publicado es un precio sin contrato: por eso el alta va aquí y en el `.yaml` a la vez.
 const PATH_COTIZACION = "/api/ordenes/api-key/cotizacion";
 
-/** Los 8 endpoints que el canal por API key publica tras la 177 y la 255. */
+// ALTA de la feature 267 (R39) — el NOVENO endpoint del canal. La lista estaba firmada en OCHO
+// desde la 255 y publicar la analítica la puso ROJA: ESE es su trabajo, y por eso sube aquí, en
+// el mismo commit que publica el endpoint y en los dos artefactos. Qué se añadió:
+// `GET /api/ordenes/api-key/analitica` sirve una serie diaria de UNA métrica sobre las órdenes de
+// la tienda dueña de la key. Es el primer endpoint del canal que no habla de órdenes concretas
+// sino de cifras agregadas, y publicarlo obligó a revertir una decisión firmada (122/R11–D9,
+// «`apiKey` denegado POR DISEÑO») y a estrechar dos guardias de frontera a una allowlist nominal.
+// Un endpoint que sirve cifras y no está en el contrato publicado es una cifra sin contrato.
+const PATH_ANALITICA = "/api/ordenes/api-key/analitica";
+
+// ALTA de la feature 266 (R28) — el DECIMO endpoint del canal, y el alta se hace con la misma
+// regla que la de la 255 y la 267: la lista estaba firmada en NUEVE, publicar la habilitación la
+// puso ROJA, y sube a DIEZ A PROPÓSITO en el MISMO commit que publica el endpoint. Qué se añadió
+// y por qué: `POST /api/ordenes/api-key/habilitar` habilita en lote pedidos con novedad —el
+// integrador manda `{ num_guia, nota }` y recibe, fila por fila, si la orden volvió a
+// `en_reparto` o si solo quedó registrada la habilitación—. Es un borde de ESCRITURA del mismo
+// canal, con la misma key, así que un integrador que no lo encuentre en el contrato publicado no
+// puede usarlo.
+const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
+
+/** Los 10 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
@@ -87,13 +109,15 @@ const PATHS_ESPERADOS = [
   PATH_PDF_ORDEN,
   PATH_PDF_CARGA,
   PATH_COTIZACION,
+  PATH_ANALITICA,
+  PATH_HABILITAR,
 ];
 
-describe("177/R41 + 255/R47 — el OpenAPI publica los ocho endpoints del canal por API key", () => {
+describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez endpoints del canal", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente ocho paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(8);
+  it("el objeto TS declara exactamente diez paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(10);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -103,7 +127,7 @@ describe("177/R41 + 255/R47 — el OpenAPI publica los ocho endpoints del canal 
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos ocho paths, en el mismo orden", () => {
+  it("el .yaml publicado declara los mismos diez paths, en el mismo orden", () => {
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
@@ -225,12 +249,10 @@ describe("177/R45 — CargaResponse publica el cargaId que exige el endpoint de 
 // del octavo declara el supuesto de comisión (R29). El resto del contrato de la cotización lo
 // cubren sus propias suites; aquí vive lo que esta guardia ya congelaba: la lista de paths.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-describe("255/R47 — el canal por API key publica OCHO endpoints, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran ocho paths, el mismo octavo y en la misma posición", () => {
+describe("255/R47 — el octavo endpoint del canal sigue en su sitio, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran el mismo octavo path, en la misma posición", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs).toHaveLength(8);
-    expect(clavesYaml).toHaveLength(8);
     expect(clavesTs[7]).toBe(PATH_COTIZACION);
     expect(clavesYaml[7]).toBe(PATH_COTIZACION);
     // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
@@ -340,5 +362,239 @@ describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta n
       "totales",
       "filas",
     ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Feature 267 (R39) — la analítica por API key, publicada. El canal pasa de OCHO a NUEVE
+// endpoints, y la afirmación se hace sobre los DOS artefactos: el objeto TS y el `.yaml`, en el
+// mismo orden y en la misma posición. El `.yaml` es un archivo de texto y nada más lo mantiene
+// sincronizado; un endpoint que existe y no está publicado es un contrato que solo conoce quien
+// leyó el código.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+/** Forma de un `parameter` de OpenAPI, lo justo para asertar sobre el sin castear en cada línea. */
+interface ParametroOpenApi {
+  readonly name: string;
+  readonly in: string;
+  readonly required: boolean;
+  readonly description: string;
+  readonly schema: Record<string, unknown>;
+}
+
+function parametrosDeAnalitica(): readonly ParametroOpenApi[] {
+  return openApiSpec.paths[PATH_ANALITICA].get.parameters as readonly ParametroOpenApi[];
+}
+
+/**
+ * La prosa del endpoint de analítica TAL COMO SE PUBLICA en el `.yaml` (bloque `description: |-`
+ * hasta `parameters:`). Se extrae del texto, no del objeto TS: el `.yaml` es un archivo aparte y
+ * nada más que este tipo de aserto lo mantiene diciendo lo mismo.
+ */
+function descripcionDeAnaliticaEnYaml(): string {
+  const inicio = lineasYaml.findIndex((l) => l === `  "${PATH_ANALITICA}":`);
+  if (inicio < 0) throw new Error("el .yaml no publica el path de analitica");
+  const desc = lineasYaml.findIndex((l, i) => i > inicio && l.trim() === "description: |-");
+  if (desc < 0) throw new Error("el path de analitica no tiene bloque `description` en el .yaml");
+  const fin = lineasYaml.findIndex((l, i) => i > desc && l === "      parameters:");
+  if (fin < 0) throw new Error("no se encontro el final de la descripcion de analitica");
+  return lineasYaml.slice(desc + 1, fin).join("\n");
+}
+
+/** Lanza si el parámetro no existe: un `undefined` silencioso volvería verde este guard. */
+function parametroDeAnalitica(nombre: string): ParametroOpenApi {
+  const p = parametrosDeAnalitica().find((x) => x.name === nombre);
+  if (!p) throw new Error(`el path de analitica no declara el parametro ${nombre}`);
+  return p;
+}
+
+describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran el mismo noveno path, en la misma posición", () => {
+    const clavesTs = Object.keys(openApiSpec.paths);
+    const clavesYaml = pathsDelYaml();
+    expect(clavesTs[8]).toBe(PATH_ANALITICA);
+    expect(clavesYaml[8]).toBe(PATH_ANALITICA);
+    expect(clavesYaml).toEqual(clavesTs);
+  });
+
+  it("el noveno endpoint es GET y devuelve AnaliticaRespuesta (el SOBRE del lote)", () => {
+    const operacion = openApiSpec.paths[PATH_ANALITICA];
+    expect(Object.keys(operacion)).toEqual(["get"]);
+    // P4-bis: la unidad publicada es el sobre, no la serie suelta. Si esto volviera a apuntar a
+    // `AnaliticaSerie`, el contrato prometeria una forma que el endpoint ya no devuelve.
+    expect(operacion.get.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/AnaliticaRespuesta",
+    });
+    // 401/403/422 por `$ref` a las responses que el canal ya declara: una shape de error propia
+    // para este endpoint sería una segunda forma de decir «no» en el mismo contrato.
+    expect(Object.keys(operacion.get.responses)).toEqual(["200", "401", "403", "422"]);
+    for (const [codigo, nombre] of [
+      ["401", "Unauthorized"],
+      ["403", "Forbidden"],
+      ["422", "ValidationError"],
+    ] as const) {
+      expect(operacion.get.responses[codigo]).toEqual({
+        $ref: `#/components/responses/${nombre}`,
+      });
+    }
+  });
+
+  it("el enum de `metricas` SE DERIVA de la lista blanca más el centinela `all`", () => {
+    // Si el enum se hubiera copiado a mano, un alta o una baja en `METRICAS_API_KEY` dejaría el
+    // contrato publicado prometiendo métricas que el endpoint no concede (o callando las que
+    // sí). Se compara contra la fuente, no contra una lista repetida en este test. `all` va al
+    // final y desde la MISMA fuente (P4-bis): el centinela y la lista que expande se declaran
+    // juntos o acaban divergiendo.
+    const metricas = parametroDeAnalitica("metricas");
+    expect(metricas.required).toBe(true);
+    expect([...((metricas.schema as { enum?: readonly string[] }).enum ?? [])]).toEqual([
+      ...METRICAS_API_KEY,
+      METRICAS_TODAS,
+    ]);
+
+    // Y el `.yaml` publica los MISMOS ids, en el MISMO orden: si uno cambia, el otro miente.
+    const inicio = lineasYaml.findIndex((l) => l === "        - name: metricas");
+    expect(inicio).toBeGreaterThan(-1);
+    const idsYaml: string[] = [];
+    for (let i = inicio; i < lineasYaml.length; i++) {
+      const m = /^ {14}- ([a-z_]+)$/.exec(lineasYaml[i]);
+      if (m) idsYaml.push(m[1]);
+      else if (idsYaml.length > 0) break;
+    }
+    expect(idsYaml).toEqual([...METRICAS_API_KEY, METRICAS_TODAS]);
+  });
+
+  it("`desde` y `hasta` son OBLIGATORIOS y se publican como fecha calendario inclusiva", () => {
+    // Decisión P3 de la puerta (2026-08-23): los mismos nombres y la misma semántica que publicó
+    // la 257 en el listado. Un canal con dos convenciones de fecha es una trampa para el
+    // integrador, y un rango con default haría que dos llamadas idénticas devolvieran conjuntos
+    // distintos según cuándo se llamó.
+    for (const nombre of ["desde", "hasta"] as const) {
+      const p = parametroDeAnalitica(nombre);
+      expect(p.required).toBe(true);
+      expect(p.in).toBe("query");
+      expect(p.schema).toEqual({ type: "string", format: "date" });
+    }
+    const hasta = parametroDeAnalitica("hasta");
+    expect(hasta.description).toContain("INCLUSIVA");
+    expect(hasta.description).toContain("366");
+    // Y no se publican presets: el vocabulario interno de rangos no cruza al contrato público.
+    expect(parametrosDeAnalitica().map((p) => p.name)).toEqual(["metricas", "desde", "hasta"]);
+  });
+
+  it("el schema AnaliticaSerie publica TRES campos —metrica, unidad, data— en el TS y en el .yaml", () => {
+    // ENMIENDA 2026-08-24. Aquí se exigía `unidadDeConteo`, `puntos` y `cobertura`, y ya no:
+    //  - `puntos` se llama `data`;
+    //  - `unidadDeConteo` es un hecho del CATÁLOGO, no de cada respuesta: viaja una vez en la
+    //    descripción del endpoint (ver el test de abajo), no en cada payload;
+    //  - `cobertura` salió entera porque su información la lleva ahora la OMISIÓN de puntos en
+    //    `data`. La negativa de 126/R34 —«cero» y «no se sabe» no son el mismo número— sigue en
+    //    pie: se expresa con la forma (el día no aparece) en vez de con un campo aparte.
+    const schema = openApiSpec.components.schemas.AnaliticaSerie;
+    const requeridas = [...schema.required];
+    // P4-bis: sin `rango`. Es del sobre, porque las N series de un lote lo comparten por
+    // construcción (mismo `raw`, mismo instante).
+    expect(requeridas).toEqual(["metrica", "unidad", "data"]);
+
+    const bloque = bloqueDeSchema("AnaliticaSerie");
+    const requeridasYaml = subBloque(bloque, "required", 6)
+      .filter((l) => /^\s*-\s+/.test(l))
+      .map((l) => l.replace(/^\s*-\s+/, "").trim());
+    expect(requeridasYaml).toEqual(requeridas);
+    const propiedades = subBloque(bloque, "properties", 6)
+      .filter((l) => indent(l) === 8)
+      .map((l) => l.trim().replace(/:$/, ""));
+    expect(propiedades).toEqual(requeridas);
+
+    // Y el PUNTO tiene exactamente dos campos: nada de `parcial` ni `corteAt`, que dejaron de
+    // publicarse el 2026-08-24.
+    const punto = schema.properties.data.items;
+    expect([...punto.required]).toEqual(["fecha", "valor"]);
+    expect(Object.keys(punto.properties)).toEqual(["fecha", "valor"]);
+    // Ni el TS ni el `.yaml` mencionan ya ninguno de los cinco campos retirados.
+    const serializadoTs = JSON.stringify(openApiSpec.paths[PATH_ANALITICA]) + JSON.stringify(schema);
+    const bloqueYaml = bloque.join("\n");
+    for (const retirado of [
+      "unidadDeConteo",
+      "cobertura",
+      "fechasNoComparables",
+      "penumbra",
+      "corteAt",
+    ]) {
+      expect(serializadoTs).not.toContain(retirado);
+      expect(bloqueYaml).not.toContain(retirado);
+    }
+  });
+
+  it("la descripción del endpoint documenta la UNIDAD DE CONTEO que dejó de viajar en el payload", () => {
+    // `unidadDeConteo` salió de la respuesta el 2026-08-24, pero su información NO se perdió:
+    // tiene que estar en la prosa del endpoint, o el integrador suma gestiones con órdenes y
+    // obtiene un total que no significa nada. Los ids se DERIVAN del catálogo: si mañana una
+    // métrica publicable cambia de unidad de conteo o entra una nueva que cuenta gestiones,
+    // este test se pone rojo hasta que la prosa lo diga.
+    const descripcionTs = openApiSpec.paths[PATH_ANALITICA].get.description;
+    const descripcionYaml = descripcionDeAnaliticaEnYaml();
+
+    const porGestion = METRICAS_API_KEY.filter(
+      (id) => METRICAS.find((m) => m.id === id)?.unidadDeConteo === "gestion",
+    );
+    expect(porGestion.length).toBeGreaterThan(0);
+    for (const id of porGestion) {
+      expect(descripcionTs).toContain(`\`${id}\``);
+      expect(descripcionYaml).toContain(`\`${id}\``);
+    }
+    for (const texto of [descripcionTs, descripcionYaml]) {
+      expect(texto).toMatch(/gestiones, no órdenes/i);
+      expect(texto).toMatch(/no son sumables/i);
+      // Y las dos reglas que sustituyen a lo que se quitó del payload.
+      expect(texto).toMatch(/no rellenes los huecos con ceros/i);
+      expect(texto).toMatch(/eco EXACTO de lo que pediste, sin recortar/i);
+      expect(texto).toMatch(/`null` NO es `0`/);
+    }
+  });
+
+  it("P4-bis — el sobre `AnaliticaRespuesta` declara rango + metricas[], en el TS y en el .yaml", () => {
+    // El sobre es lo que un integrador parsea de verdad. Si el array de series dejara de
+    // apuntar a `AnaliticaSerie`, el contrato publicaría dos formas para la misma cosa.
+    const schema = openApiSpec.components.schemas.AnaliticaRespuesta;
+    expect([...schema.required]).toEqual(["rango", "metricas"]);
+    expect(schema.properties.metricas.items).toEqual({
+      $ref: "#/components/schemas/AnaliticaSerie",
+    });
+
+    const bloque = bloqueDeSchema("AnaliticaRespuesta");
+    const requeridasYaml = subBloque(bloque, "required", 6)
+      .filter((l) => /^\s*-\s+/.test(l))
+      .map((l) => l.replace(/^\s*-\s+/, "").trim());
+    expect(requeridasYaml).toEqual(["rango", "metricas"]);
+    expect(bloque.some((l) => l.includes('$ref: "#/components/schemas/AnaliticaSerie"'))).toBe(
+      true,
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Feature 266 (R28) — la habilitación por lote, publicada. El canal pasa de NUEVE a DIEZ
+// endpoints, y la afirmación se hace sobre los DOS artefactos: el objeto TS y el `.yaml`, en el
+// mismo orden y en la misma posición. Mismo criterio que la 255 y la 267: un endpoint de
+// ESCRITURA que existe y no está publicado es un contrato que solo conoce quien leyó el código.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("266/R28 — el canal por API key publica DIEZ endpoints, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran diez paths, el mismo décimo y en la misma posición", () => {
+    const clavesTs = Object.keys(openApiSpec.paths);
+    const clavesYaml = pathsDelYaml();
+    expect(clavesTs).toHaveLength(10);
+    expect(clavesYaml).toHaveLength(10);
+    expect(clavesTs[9]).toBe(PATH_HABILITAR);
+    expect(clavesYaml[9]).toBe(PATH_HABILITAR);
+    // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
+    expect(clavesYaml).toEqual(clavesTs);
+  });
+
+  it("el décimo endpoint es POST y devuelve HabilitacionResponse", () => {
+    const operacion = openApiSpec.paths[PATH_HABILITAR];
+    expect(Object.keys(operacion)).toEqual(["post"]);
+    expect(operacion.post.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/HabilitacionResponse",
+    });
   });
 });

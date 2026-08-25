@@ -1,21 +1,36 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, within, cleanup } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 import {
   PorAceptarSection,
   type PorAceptarOrdenBase,
 } from "@/app/(app)/_components/PorAceptarSection";
 
-// Feature 63 — sección REUTILIZABLE "por aceptar" (extraída de "Por recoger" del
-// mensajero): banner con contador de nuevas + acción por-orden + render de detalle
-// opcional. Componente puro; se afirma la composición y los callbacks sin Server
-// Actions ni router.
+// Feature 63 — sección "por aceptar": banner con contador de nuevas + lista de órdenes +
+// render de detalle opcional. Componente puro; se afirma la composición sin Server Actions
+// ni router.
 //
-// Pedido humano del 2026-08-19: la sección YA NO ofrece acción en lote. Se afirma la
-// AUSENCIA del botón, no sólo la presencia del de cada fila: sin esa afirmación,
-// devolverlo no pondría nada rojo.
+// QUÉ SE RETIRÓ DE ESTE ARCHIVO Y POR QUÉ (ficha 279, T4.2, R3/R29 — 2026-08-24)
+// -----------------------------------------------------------------------------
+// La sección tenía DOS vías de acción y las dos están muertas:
+//
+// - la acción EN LOTE («aceptar todas») se retiró el 2026-08-19 por pedido humano —aceptar
+//   de golpe todo lo que hay en pantalla se firma sin mirar—;
+// - la acción POR-ORDEN (el botón «Aceptar») la retira la ficha 279: la recepción del
+//   satélite pasa a ser SOLO por QR. Con ella se fueron del contrato `onAceptarUna`,
+//   `textoBotonUna` y `mostrarAcciones`, esta última una prop cuya única función era
+//   ocultar ese mismo botón.
+//
+// Tres casos de este archivo tenían al botón por SUJETO —«'aceptar' por-orden invoca
+// onAceptarUna», «NO ofrece acción en lote» y «con mostrarAcciones=false lista sin
+// botones»— y se FUNDEN en uno solo, abajo: «no pinta NINGÚN botón». No se borran sin
+// sustituto: lo que afirmaban (que la acción por-orden estaba cableada al id correcto)
+// muere con el código, porque no hay acción equivalente que reponer — la recepción vive
+// ahora en `tests/components/EscanerRecepcion.test.tsx`.
+//
+// Cada ausencia va con su POSITIVO en el mismo caso (R29): un `queryByRole` que deja de
+// encontrar un botón pasa igual de verde si el render entero se rompió.
 
 interface Orden extends PorAceptarOrdenBase {
   extra?: string;
@@ -26,20 +41,17 @@ function make(id: string, numRemision = `REM-${id}`): Orden {
 }
 
 function renderSection(props?: Partial<Parameters<typeof PorAceptarSection<Orden>>[0]>) {
-  const onAceptarUna = props?.onAceptarUna ?? vi.fn();
   render(
     <PorAceptarSection<Orden>
       titulo={props?.titulo ?? "Por recibir"}
       nuevasLabel={props?.nuevasLabel ?? ((n) => `${n} nuevas`)}
       ordenes={props?.ordenes ?? []}
-      onAceptarUna={onAceptarUna}
-      textoBotonUna={props?.textoBotonUna ?? "Aceptar"}
       vacio={props?.vacio ?? "No hay órdenes."}
       renderDetalle={props?.renderDetalle}
-      mostrarAcciones={props?.mostrarAcciones}
+      renderItem={props?.renderItem}
+      listClassName={props?.listClassName}
     />,
   );
-  return { onAceptarUna };
 }
 
 afterEach(() => cleanup());
@@ -69,20 +81,48 @@ describe("PorAceptarSection", () => {
     );
   });
 
-  it("NO ofrece acción en lote: los únicos botones son los de cada orden", () => {
-    renderSection({ ordenes: [make("a"), make("b")] });
+  // R3/R29 — la fusión de los tres casos del botón, con la tarjeta POR DEFECTO.
+  it("no pinta NINGÚN botón con la tarjeta por defecto: ni por-orden ni en lote (y sí el título, el banner y cada orden)", () => {
+    renderSection({
+      titulo: "Por recibir",
+      ordenes: [make("a"), make("b")],
+      nuevasLabel: (n) => `${n} Órdenes nuevas por recibir`,
+    });
     const region = screen.getByRole("region", { name: "Por recibir" });
+
+    // POSITIVO primero: el render ocurrió de verdad. Si esto no estuviera, las tres
+    // ausencias de abajo pasarían igual con la región vacía.
+    expect(
+      within(region).getByRole("heading", { name: "Por recibir" }),
+    ).toBeInTheDocument();
+    expect(within(region).getByRole("status")).toHaveTextContent(
+      "2 Órdenes nuevas por recibir",
+    );
+    expect(within(region).getByText(/REM-a/)).toBeInTheDocument();
+    expect(within(region).getByText(/REM-b/)).toBeInTheDocument();
+    expect(within(region).getAllByRole("listitem")).toHaveLength(2);
+
+    // AUSENCIA: ni un botón. Ni el «Aceptar» por-orden, ni un «aceptar todas».
+    expect(within(region).queryAllByRole("button")).toHaveLength(0);
+    expect(within(region).queryByRole("button", { name: /aceptar/i })).toBeNull();
     expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
-    expect(within(region).getAllByRole("button", { name: "Aceptar" })).toHaveLength(2);
   });
 
-  it("'aceptar' por-orden invoca onAceptarUna con ese id", async () => {
-    const user = userEvent.setup();
-    const { onAceptarUna } = renderSection({
+  // La otra mitad de R3: el consumidor real de esta sección pinta su propia tarjeta con
+  // `renderItem`, así que la ausencia hay que afirmarla también por ese camino.
+  it("tampoco pinta ningún botón con renderItem (y sí lo que el consumidor le da)", () => {
+    renderSection({
       ordenes: [make("a"), make("b")],
+      renderItem: (orden) => <article>tarjeta-{orden.numRemision}</article>,
     });
-    await user.click(screen.getAllByRole("button", { name: "Aceptar" })[1]);
-    expect(onAceptarUna).toHaveBeenCalledWith("b");
+    const region = screen.getByRole("region", { name: "Por recibir" });
+
+    // POSITIVO: la sección montó las dos tarjetas del consumidor.
+    expect(within(region).getByText("tarjeta-REM-a")).toBeInTheDocument();
+    expect(within(region).getByText("tarjeta-REM-b")).toBeInTheDocument();
+
+    // AUSENCIA: la sección no añade ningún botón propio encima de lo del consumidor.
+    expect(within(region).queryAllByRole("button")).toHaveLength(0);
   });
 
   it("renderiza el detalle de cada orden con renderDetalle", () => {
@@ -91,13 +131,5 @@ describe("PorAceptarSection", () => {
       renderDetalle: (orden) => <span>detalle-{orden.extra}</span>,
     });
     expect(screen.getByText("detalle-X-a")).toBeInTheDocument();
-  });
-
-  it("con mostrarAcciones=false lista sin botones (p. ej. sin zona)", () => {
-    renderSection({ ordenes: [make("a")], mostrarAcciones: false });
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    expect(within(region).queryByRole("button")).toBeNull();
-    // Sigue mostrando la orden.
-    expect(within(region).getByText(/REM-a/)).toBeInTheDocument();
   });
 });

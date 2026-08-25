@@ -1,4 +1,7 @@
-import type { ILiberacionReprogramadaRepository } from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
+import type {
+  ILiberacionReprogramadaRepository,
+  OrdenLiberableRow,
+} from "@/lib/interfaces/repositories/ILiberacionReprogramadaRepository";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type {
@@ -12,6 +15,45 @@ import { resolverDestinoCierre } from "@/lib/utils/bodega-responsable";
 const ESTATUS_EN_BODEGA = "en_bodega_central"; // central
 const ESTATUS_EN_BODEGA_SATELITE = "en_bodega_satelite"; // satelite
 const ESTATUS_REPROGRAMADA = "reprogramada"; // origen (guarda de idempotencia)
+
+/**
+ * FEATURE 276 (T6.2, R12/R15) — el UNICO estado de cierre que cierra la puerta del contador.
+ *
+ * Los otros tres NO valen, y no por omision: `solicitado` puede aprobarse en cualquier momento;
+ * `vencido` y `rechazado` tambien, porque `forzarSolicitudVencido` los devuelve a `solicitado`
+ * (`ESTADOS_REABRIBLES = ["vencido","rechazado"]`). Es decir: NINGUN cierre queda fuera del alcance
+ * de una aprobacion posterior, asi que mientras no este `aprobado` esa gestion todavia puede sumar
+ * +1 y la orden no puede volver a circulacion (R31/R32).
+ *
+ * Se compara contra este literal y no contra `CierreEstado` importado de Prisma a proposito: el
+ * repositorio devuelve el estado como `string` crudo (es un HECHO, no una decision), y aqui es
+ * donde ese hecho se interpreta.
+ */
+const CIERRE_APROBADO = "aprobado";
+
+/**
+ * FEATURE 276 (T6.2, R12/R14) — LA REGLA, en una funcion pura y con nombre.
+ *
+ * Una orden se libera cuando su gestion `reprogramada` vigente **ya no puede subir el contador**.
+ * Y «puede subir el contador» no es una definicion nueva: son DOS de las seis condiciones del
+ * predicado unico de intentos (`whereIntentosVigentes`) aplicadas a UNA sola gestion —nacer de una
+ * visita real, y pertenecer a un cierre aprobado—.
+ *
+ * Los dos casos que liberan:
+ *   (a) la gestion NO es visita real (p. ej. `reprogramacion_tienda`, la reprogramacion de
+ *       escritorio de la 100): nunca va a contar, asi que esperar no ganaria nada y costaria
+ *       latencia (R14);
+ *   (b) es visita real PERO su cierre ya esta `aprobado`: el +1 ya ocurrio y el contador que
+ *       leen las puertas de asignacion (R18) ya esta al dia (R15).
+ *
+ * El caso que NO libera y que es la RAIZ de la ficha: visita real + cierre sin aprobar (incluido
+ * `cierreId = null`, la gestion del dia que aun no se ha cerrado). Ahi el contador va por detras, y
+ * liberar seria devolver la orden a bodega con el numero viejo — el 4.º intento que la 276 cierra.
+ */
+export function puedeLiberarse(orden: OrdenLiberableRow): boolean {
+  if (!orden.gestionEsVisitaReal) return true; // (a) R14
+  return orden.gestionCierreEstado === CIERRE_APROBADO; // (b) R15
+}
 
 // Metodos de repo consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
@@ -61,7 +103,7 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
       this.logger.warn(
         "[liberar-reprogramadas] catalogo de estados incompleto (seed pendiente); no se libera",
       );
-      return { evaluadas: 0, liberadas: 0, omitidas: 0 };
+      return { evaluadas: 0, liberadas: 0, omitidas: 0, esperandoCierre: 0 };
     }
 
     // R10: candidatas (reprogramadas, no borradas, fecha <= hoy CR).
@@ -71,9 +113,25 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
 
     let liberadas = 0;
     let omitidas = 0;
+    // FEATURE 276 (R12/R13): las que se quedan quietas esperando la aprobacion de un cierre.
+    let esperandoCierre = 0;
 
     for (const orden of ordenes) {
       try {
+        // 💰 FEATURE 276 (T6.2, R12/R13/R14/R15) — LA PUERTA DE LA RAIZ.
+        //
+        // Aqui nacia el 4.º intento: `findOrdenesLiberables` devolvia la orden por fecha SIN MIRAR
+        // EL CIERRE, asi que volvia a bodega con el contador todavia en el valor viejo y la puerta
+        // de la asignacion (R18) la dejaba pasar leyendo un reloj parado.
+        //
+        // R13: cuando NO se libera, no se toca NADA — ni estado, ni mensajero, ni dia de reparto,
+        // ni prioridad—. El `continue` va ANTES de `liberarOrden`, que es la unica escritura de
+        // este bucle. Y NO cuenta como `omitida`: omitir es un fallo o una carrera perdida; esto
+        // es la regla funcionando.
+        if (!puedeLiberarse(orden)) {
+          esperandoCierre += 1;
+          continue;
+        }
         // R12: bodega responsable derivada de la zona (misma regla que el corte 41).
         const { destinoTipo } = resolverDestinoCierre(orden.zonaId, centralZonaId);
         const destinoEstatusId =
@@ -98,7 +156,15 @@ export class LiberacionReprogramadaService implements ILiberacionReprogramadaSer
     if (omitidas > 0) {
       this.logger.warn(`[liberar-reprogramadas] ${omitidas} orden(es) no liberada(s) en esta corrida`);
     }
+    if (esperandoCierre > 0) {
+      // R38: SOLO un conteo agregado. Ni ids, ni guias, ni tiendas, ni mensajeros. Es lo unico que
+      // hace visible la poblacion congelada del «Riesgo declarado»; la alerta operativa sobre ella
+      // sigue siendo ficha aparte (M3 del §7bis de la 215).
+      this.logger.warn(
+        `[liberar-reprogramadas] ${esperandoCierre} orden(es) esperan la aprobacion de su cierre`,
+      );
+    }
 
-    return { evaluadas: ordenes.length, liberadas, omitidas };
+    return { evaluadas: ordenes.length, liberadas, omitidas, esperandoCierre };
   }
 }

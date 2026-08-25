@@ -1,0 +1,29 @@
+-- `vehiculos.name` deja de ser el enum `vehiculo_value` y pasa a ser TEXT.
+--
+-- POR QUE. El catalogo nacio (feature 50) como tres valores sembrados y de SOLO LECTURA, y por
+-- eso su columna era un enum. Al abrirle un CRUD, ese enum se vuelve un techo duro: dar de alta
+-- un tipo nuevo -una bicicleta, un furgon- exigiria `ALTER TYPE ... ADD VALUE`, es decir UNA
+-- MIGRACION POR CADA TIPO. Un catalogo que el usuario administra no puede vivir en un enum.
+--
+-- POR QUE NO SE BORRA EL TIPO `vehiculo_value`. Se deja creado aunque ninguna columna lo use.
+-- Soltarlo haria que el `down` no pudiera reconstruirlo con la MISMA identidad (un tipo recreado
+-- es otro tipo para cualquier objeto que lo referenciara), y no cuesta nada conservarlo. Si con el
+-- tiempo se confirma que nadie lo necesita, retirarlo es una migracion aparte y trivial.
+--
+-- CONVERSION SIN PERDIDA. `USING "name"::text` conserva la etiqueta exacta de cada fila viva
+-- ('moto', 'carro', 'camion'). No hay renombres, no hay mapeo, no hay filas que queden en NULL.
+--
+-- EL UNIQUE SE CONSERVA. `vehiculos_name_key` existia sobre la columna enum y se mantiene sobre la
+-- columna de texto: sigue siendo imposible dar de alta dos tipos con el mismo nombre. Postgres
+-- reconstruye el indice al cambiar el tipo, asi que no hay que recrearlo a mano.
+--
+-- LO QUE ESTA MIGRACION **NO** GARANTIZA, Y HAY QUE SABERLO: con un enum, 'Moto' y 'moto' eran el
+-- mismo valor imposible de teclear mal; con TEXT, son DOS filas distintas y el UNIQUE no las
+-- distingue. La normalizacion del nombre (recorte y plegado) pasa a ser responsabilidad del
+-- SERVICIO, no de la base. Se decide asi -y no con un indice unico sobre `lower(name)`- para no
+-- cerrar la puerta a nombres que legitimamente lleven mayusculas.
+--
+-- LAS FKs NO SE TOCAN. `usuario.vehiculo_id` y `tarifa_zona_mensajero.vehiculo_id` apuntan al `id`
+-- (uuid), no al nombre: cambiar el tipo de `name` no las afecta. Son ellas, con su RESTRICT, las
+-- que impiden borrar un tipo que algun mensajero o alguna tarifa de zona esten usando.
+ALTER TABLE "vehiculos" ALTER COLUMN "name" TYPE TEXT USING "name"::text;

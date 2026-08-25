@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { reintentosConfig } from "@/lib/config/reintentos";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
@@ -8,7 +9,7 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   Alcance,
@@ -142,6 +143,9 @@ const ESTATUS_IDS: Record<string, string | null> = {
   // el catalogo no los tiene, la aprobacion NO ocurre (R9, fallo cerrado).
   devolucion_por_confirmar: "s-devolucion-por-confirmar",
   devuelta: "s-devuelta",
+  // FEATURE 276 (T9, R21): el DESTINO del rechazo por agotamiento de intentos. Entra en la MISMA
+  // condicion que los tres de la 109, asi que sin el la config de liberacion no se cablea.
+  rechazada: "s-rechazada",
 };
 
 function newService(
@@ -773,6 +777,10 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
       enBodegaEstatusId: "s-en-bodega",
       enBodegaSateliteEstatusId: "s-en-bodega-sat",
       centralZonaId: "z-central",
+      // FEATURE 276 (T9, R7/R21): la config gana el destino del rechazo por tope y el UMBRAL,
+      // resuelto AQUI, en el servicio. El repositorio no lee configuracion.
+      rechazadaEstatusId: "s-rechazada",
+      umbralIntentos: reintentosConfig.MIN_INTENTOS_ENTREGA,
     });
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("sin_gestionar");
   });

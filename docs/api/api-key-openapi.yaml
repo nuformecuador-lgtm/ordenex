@@ -42,8 +42,22 @@ paths:
       description: |-
         Crea una o más órdenes en firme. Cada orden nueva arranca en estado
         `por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,
-        por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;
-        `"0.00"` si la tienda no tiene tarifa vigente).
+        por cada orden creada, su `costoEnvio`: flete + IVA de la tarifa vigente que resuelve
+        el par (tienda, zona del distrito de esa orden).
+
+        **CAMBIO INCOMPATIBLE (2026-08): una fila sin tarifa ya no crea orden.** La tarifa se
+        resuelve ANTES de persistir. Una fila cuyo par (tienda, zona) no resuelve ninguna
+        tarifa vigente vuelve como `resultado: "error"` con la clave `tarifa` en `errores`
+        (`{ "tarifa": ["no hay tarifa vigente para la zona de esta fila"] }`), NO se crea y NO trae ningún
+        `costoEnvio`. Las demás filas del mismo lote se crean con normalidad.
+
+        **Si NINGUNA de las filas que llegan a la resolución de tarifa la resuelve, la
+        respuesta es 409** y no se persiste nada: ni órdenes, ni la fila de `carga`, ni la
+        notificación de carga terminada. Atención a la distinción, porque es la que evita un
+        diagnóstico falso: si NINGUNA fila llega siquiera a la resolución de tarifa (todas
+        fallan antes por validación, duplicidad o cobertura geográfica), la respuesta sigue
+        siendo `200` con esas filas en su error de siempre, NO `409`: la tarifa no es el
+        motivo del fallo.
 
         **CAMBIO INCOMPATIBLE (2026-07): el estado inicial cambió.** Antes las órdenes nacían
         en `en_ruta_bodega_central`, que afirmaba que el paquete ya viajaba hacia la bodega
@@ -57,7 +71,8 @@ paths:
         aparece en el enum `estado` y no puede llegar en ninguna respuesta.
 
         Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya
-        existente) o `error` (validación/geografía). Una respuesta 200 puede contener filas con
+        existente) o `error` (validación, geografía o falta de tarifa). Una respuesta 200
+        puede contener filas con
         error. El lote acepta entre 1 y 5000 filas.
       requestBody:
         required: true
@@ -126,10 +141,49 @@ paths:
                         numGuia: 100234
                         estado: por_recolectar_en_tienda
                         costoEnvio: "3.39"
+                filaSinTarifa:
+                  summary: "Una creada y una degradada por falta de tarifa"
+                  value:
+                    cargaId: "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3"
+                    total: 2
+                    creadas: 1
+                    duplicadas: 0
+                    conError: 1
+                    filas:
+                      - fila: 1
+                        numRemision: "REM-0001"
+                        resultado: creada
+                        estatus: por_recolectar_en_tienda
+                        numGuia: 100234
+                      - fila: 2
+                        numRemision: "REM-0002"
+                        resultado: error
+                        errores:
+                          tarifa:
+                            - "no hay tarifa vigente para la zona de esta fila"
+                    ordenes:
+                      - id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f"
+                        numRemision: "REM-0001"
+                        numGuia: 100234
+                        estado: por_recolectar_en_tienda
+                        costoEnvio: "3.39"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        # Feature 274 (R29/R31) — el 409 NUEVO de la carga. No es `$ref: Conflict` a secas
+        # porque el ejemplo publicado tiene que ser la MISMA cadena que el service emite
+        # (`lib/services/mensajes-tarifa.ts`, `MSG_CARGA_SIN_TARIFA`).
+        "409":
+          description: "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se creó ninguna orden ni fila de carga."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                status: error
+                code: CONFLICT
+                message: "la tienda no tiene una tarifa vigente asociada: no se pueden crear órdenes"
         "422":
           $ref: "#/components/responses/ValidationError"
   "/api/ordenes/api-key":
@@ -536,18 +590,32 @@ paths:
         depende de la zona de CADA fila, así que el bloque suma únicamente las filas con
         resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y
         `filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó
-        fuera se leería como «esto cuesta el lote» cuando no lo es. El bloque se emite SIEMPRE:
+        fuera se leería como «esto cuesta el lote» cuando no lo es. Una fila queda excluida por
+        DOS motivos distintos, no uno: porque su geografía no tiene cobertura (o no valida), o
+        porque el par (tienda, zona de esa fila) no resuelve tarifa vigente. Quien sume
+        `totales` sin mirar `filasExcluidas` obtiene un número que NO es el precio del lote.
+        El bloque se emite SIEMPRE:
         si ninguna fila resulta cotizable, llega con todos sus importes en cero,
         `filasSumadas: 0` y `filasExcluidas` igual a `total`.
 
         Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: "error"`
         con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta
         sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.
+        Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada por ESE MISMO
+        camino: `resultado: "error"` con `{ "tarifa": ["no hay tarifa vigente para la zona de esta fila"] }` y sin
+        bloque `costos` —nunca un importe en cero—.
 
-        Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es **409** y no se
-        cotiza ninguna fila. Es la asimetría deliberada con `/carga`, que sí tolera la falta de
-        tarifa con `costoEnvio: "0.00"`: en una cotización, un cero sería una mentira sobre
-        dinero servida como precio.
+        El **409** existe sólo para el caso extremo: cuando NINGUNA de las filas que llegan a la
+        resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no
+        trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta
+        sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a
+        resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `totales`
+        en cero, NO `409`.
+
+        **`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este
+        contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo
+        de envío en cero— dejó de existir: allí una fila sin tarifa tampoco se crea, y un lote
+        en el que ninguna resuelve también responde 409.
       requestBody:
         required: true
         content:
@@ -625,7 +693,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          description: "La tienda dueña de la key no tiene una tarifa vigente: no se cotiza ninguna fila."
+          description: "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se cotiza ninguna fila."
           content:
             application/json:
               schema:
@@ -634,6 +702,226 @@ paths:
                 status: error
                 code: CONFLICT
                 message: "la tienda no tiene una tarifa vigente asociada: no se puede cotizar"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  # Feature 267 (R39) — NOVENO endpoint del canal: la analítica de las propias órdenes.
+  # Espejo textual de `openApiSpec.paths["/api/ordenes/api-key/analitica"]`, misma posición
+  # (novena) y mismo contenido: el `.yaml` es un archivo de texto y nada más lo mantiene
+  # sincronizado con el objeto TS.
+  "/api/ordenes/api-key/analitica":
+    get:
+      tags:
+        - Órdenes
+      summary: Series diarias de tus métricas sobre tus órdenes
+      operationId: consultarAnalitica
+      description: |-
+        Devuelve una **serie diaria por métrica**, calculada exclusivamente sobre las órdenes
+        de la tienda dueña de la key. El recorte no es un filtro que se pueda ampliar: sale de
+        la propia key, así que no hay ningún parámetro para pedir datos de otra tienda (y si se
+        envía uno, se ignora).
+
+        **Varias métricas por llamada.** `metricas` acepta una lista separada por comas
+        (`metricas=entregas,devoluciones`) o el valor especial **`all`**, que trae todas las
+        publicables. `all` no se combina con ids: o `all`, o la lista. Un id repetido se sirve
+        una sola vez, conservando su primera posición.
+
+        **La respuesta tiene SIEMPRE la misma forma,** se pida una métrica o diez: el rango una
+        vez en la raíz y las series en `metricas[]`, en el orden pedido (el del `enum` cuando se
+        pidió `all`).
+
+        **El lote es todo o nada.** Si UNA de las métricas pedidas no está en el `enum` de
+        abajo, la llamada entera responde **403** y no se sirve ninguna — exactamente el mismo
+        403 que una métrica que no existe: las dos respuestas son idénticas a propósito.
+
+        **La ventana se pide con `desde` y `hasta`, igual que en el listado.** Mismos nombres,
+        mismo formato `YYYY-MM-DD` y misma semántica: el día se mide en hora de Costa Rica
+        (UTC-6) y `hasta` es **inclusivo**. Los dos son obligatorios y no hay atajos tipo
+        «últimos 7 días»: así el rango de una respuesta nunca depende de cuándo se llamó. La
+        ventana no puede superar 366 días contando ambos extremos.
+
+        **`data` trae solo los días que se pueden leer, y OMITE los que no.** Un día del rango
+        puede faltar en `data`, y falta a propósito, por una de dos razones: (a) es **el día en
+        curso**, que todavía no está cerrado y siempre se vería más bajo que un día completo; o
+        (b) cae **por debajo del horizonte de nuestro histórico**, donde la cifra sería cero por
+        falta de datos y no por falta de operación. En los dos casos publicar el número sería
+        enseñarte una caída de tu operación que no ocurrió, así que el día **no aparece**. La
+        ausencia es el dato: **no rellenes los huecos con ceros**.
+
+        **`data` puede venir vacío, y eso es una respuesta `200` correcta** — por ejemplo si
+        pides `desde=hoy&hasta=hoy`, porque hoy todavía no está cerrado. No es un error.
+
+        **`rango` es el eco EXACTO de lo que pediste, sin recortar,** aunque `data` no llegue
+        hasta `hasta`. Lo pedido y lo servible son dos cosas distintas y se leen por separado.
+
+        **`valor` puede ser `null`, y `null` NO es `0`:** significa «no se sabe» (por ejemplo,
+        una tasa cuyo denominador fue cero ese día). Un día con `valor: null` SÍ aparece en
+        `data`: es un día cerrado cuyo resultado es indefinido, no un día que falte.
+
+        **Qué cuenta cada métrica, porque no todas cuentan lo mismo.** `entregas`,
+        `devoluciones`, `rechazos`, `reprogramaciones`, `tasa_entrega`, `tasa_devolucion` y
+        `tasa_rechazo` cuentan **gestiones, no órdenes**: una orden reprogramada y entregada
+        después aporta **dos** gestiones. `ordenes_creadas` y `ordenes_por_estado` cuentan
+        **órdenes**. `tiempo_ciclo` no cuenta nada: mide una **duración**. Consecuencia
+        práctica: **dos métricas que no cuentan lo mismo no son sumables entre sí** — sumar
+        gestiones con órdenes da un total que no significa nada.
+
+        Este canal no publica importes ni identifica a los mensajeros de la operación.
+      parameters:
+        - name: metricas
+          in: query
+          required: true
+          description: "Ids separados por comas, o `all` para todas las publicables. Solo los valores del enum se publican por este canal; `all` no se combina con ids."
+          schema:
+            type: string
+            enum:
+              - ordenes_creadas
+              - ordenes_por_estado
+              - entregas
+              - devoluciones
+              - rechazos
+              - reprogramaciones
+              - tasa_entrega
+              - tasa_devolucion
+              - tasa_rechazo
+              - tiempo_ciclo
+              - all
+          example: entregas,devoluciones
+        - name: desde
+          in: query
+          required: true
+          description: "Fecha calendario de Costa Rica (UTC-6), inclusiva. Formato `YYYY-MM-DD`."
+          schema:
+            type: string
+            format: date
+          example: "2026-08-01"
+        - name: hasta
+          in: query
+          required: true
+          description: "Fecha calendario de Costa Rica (UTC-6), INCLUSIVA. Formato `YYYY-MM-DD`. La ventana no puede superar 366 días contando ambos extremos."
+          schema:
+            type: string
+            format: date
+          example: "2026-08-21"
+      responses:
+        "200":
+          description: "Series diarias de las métricas pedidas, sobre tus órdenes."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnaliticaRespuesta"
+              examples:
+                serie:
+                  summary: "Dos métricas; se pidieron tres días y el tercero (hoy) no viene: no está cerrado"
+                  value:
+                    rango:
+                      desde: "2026-08-19"
+                      hasta: "2026-08-21"
+                    metricas:
+                      - metrica: entregas
+                        unidad: conteo
+                        data:
+                          - fecha: "2026-08-19"
+                            valor: 41
+                          - fecha: "2026-08-20"
+                            valor: 37
+                      - metrica: tasa_entrega
+                        unidad: porcentaje
+                        data:
+                          - fecha: "2026-08-19"
+                            valor: 0.93
+                          - fecha: "2026-08-20"
+                            valor: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  # Feature 266 (T7.1, R28) — HABILITACIÓN POR LOTE de pedidos con novedad. Espejo textual de
+  # `openApiSpec.paths["/api/ordenes/api-key/habilitar"]`.
+  "/api/ordenes/api-key/habilitar":
+    post:
+      tags:
+        - Órdenes
+      summary: "Habilitar pedidos con novedad (lote)"
+      operationId: habilitarOrdenes
+      description: |-
+        Habilita, en lote, pedidos que quedaron con una novedad: por cada fila se registra la
+        habilitación con su nota y, cuando corresponde, la orden vuelve a `en_reparto`.
+
+        **Solo DOS estados son habilitables: `ayuda_tienda` y `devuelta`.** Ningún otro lo es.
+        En particular `reprogramada` **NO** es habilitable por este endpoint y devuelve
+        `estado_no_habilitable`, igual que `rechazada`, `incidente` y `sin_gestionar`.
+
+        **Una orden `devuelta` NUNCA cambia de estado**: siempre responde
+        `habilitada_sin_cambio_de_estado`. No es una degradación ni un fallo — su paquete ya
+        volvió a la bodega, así que no hay nadie en la calle a quien devolvérselo. De los dos
+        estados habilitables, **solo `ayuda_tienda` (y solo si conserva mensajero asignado)**
+        puede producir `habilitada` con estado `en_reparto`.
+
+        **El lote acepta entre 1 y 100 filas.** Un lote vacío, sin la clave
+        `ordenes`, con un cuerpo que no es JSON o con más filas que el tope responde **422** y
+        no procesa ninguna fila: es el único 4xx que tira el lote entero, junto con 401 y 403.
+
+        **Éxito parcial:** una fila mal formada, duplicada dentro del mismo lote, inexistente o
+        en un estado no habilitable se marca `resultado: "error"` con su `error.codigo`, y las
+        demás se procesan igual. La respuesta sigue siendo **200 aunque TODAS las filas fallen**.
+        `resultados` conserva el orden y la cantidad de las filas enviadas: podés casar por
+        índice.
+
+        **Repetir la llamada:** habilitar dos veces la misma orden devuelve `estado_no_habilitable`
+        en la segunda llamada —ya está en `en_reparto`, que no es habilitable— y no escribe nada.
+        No se devuelve un acuse `habilitada` falso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HabilitacionRequest"
+            examples:
+              dosFilas:
+                summary: "Dos filas: una en ayuda con mensajero y una devuelta"
+                value:
+                  ordenes:
+                    - num_guia: 100234
+                      nota: "el cliente pidió reintento mañana"
+                    - num_guia: 100235
+                      nota: "dirección corregida por el call center"
+      responses:
+        "200":
+          description: "Lote procesado (puede incluir filas con error)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HabilitacionResponse"
+              examples:
+                resumen:
+                  summary: "Una habilitada, una sin cambio de estado y una con error"
+                  value:
+                    resumen:
+                      total: 3
+                      habilitadas: 1
+                      habilitadasSinCambioDeEstado: 1
+                      conError: 1
+                    resultados:
+                      - numGuia: 100234
+                        resultado: habilitada
+                        estado: en_reparto
+                        error: null
+                      - numGuia: 100235
+                        resultado: habilitada_sin_cambio_de_estado
+                        estado: devuelta
+                        error: null
+                      - numGuia: 999999
+                        resultado: error
+                        estado: null
+                        error:
+                          codigo: no_encontrada
+                          mensaje: "no existe una orden viva con esa guia"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 # Feature 256/R24 — WEBHOOKS SALIENTES. Sección de NIVEL SUPERIOR de OpenAPI 3.1 (fuera de
@@ -1101,7 +1389,7 @@ components:
           description: "Número de guía asignado (solo en `creada`)."
         errores:
           type: object
-          description: "Errores por campo (solo en `error`)."
+          description: "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó."
           additionalProperties:
             type: array
             items:
@@ -1145,7 +1433,7 @@ components:
             - incidente
         costoEnvio:
           type: string
-          description: "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD."
+          description: "Costo del envío (flete + IVA de la tarifa vigente del par (tienda, zona)), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD."
     CargaResponse:
       type: object
       required:
@@ -1365,7 +1653,7 @@ components:
           $ref: "#/components/schemas/CotizacionCostos"
         errores:
           type: object
-          description: "Errores por campo (solo en `error`)."
+          description: "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó."
           additionalProperties:
             type: array
             items:
@@ -1411,6 +1699,179 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CotizacionRowResult"
+    # Feature 267 (R39) — contrato de `GET /api/ordenes/api-key/analitica`. Espejo publicado de
+    # `analitica-api-key-dto.ts`: si el DTO gana o pierde un campo, este schema y el objeto TS
+    # cambian con él, en el mismo commit.
+    #
+    # P4-bis (2026-08-23) — EL SOBRE. El endpoint sirve un LOTE, así que la unidad publicada es
+    # `AnaliticaRespuesta` y no la serie suelta: el `rango` UNA vez —lo comparten todas por
+    # construcción— y las series en `metricas[]`, en el orden pedido. La forma no cambia con el
+    # número de métricas pedidas: un contrato que cambiara de forma obligaría a escribir dos
+    # parsers para el mismo endpoint.
+    AnaliticaRespuesta:
+      type: object
+      required:
+        - rango
+        - metricas
+      properties:
+        rango:
+          type: object
+          description: "Eco del rango efectivo, común a todas las series y en el mismo formato que la petición."
+          required:
+            - desde
+            - hasta
+          properties:
+            desde:
+              type: string
+              format: date
+              example: "2026-08-19"
+            hasta:
+              type: string
+              format: date
+              description: "Inclusivo, hora de Costa Rica."
+              example: "2026-08-21"
+        metricas:
+          type: array
+          description: "Una entrada por métrica pedida, en el orden pedido. Nunca vacío."
+          items:
+            $ref: "#/components/schemas/AnaliticaSerie"
+    # 2026-08-24 — la serie publica TRES campos. `unidadDeConteo` salió del payload (es un hecho
+    # del catálogo, y va en la descripción del endpoint) y `cobertura` salió entera: su
+    # información la lleva ahora la OMISIÓN de puntos en `data`.
+    AnaliticaSerie:
+      type: object
+      required:
+        - metrica
+        - unidad
+        - data
+      properties:
+        metrica:
+          type: string
+          description: Id de la métrica pedida.
+          example: entregas
+        unidad:
+          type: string
+          description: "Unidad de la cifra (p. ej. `conteo`, `porcentaje`, `dias`)."
+        data:
+          type: array
+          description: "Los días SERVIBLES del rango, en orden. NO trae un punto por cada día pedido: se omiten el día en curso (aún no cerrado) y los días por debajo del horizonte del histórico, porque ahí un cero sería falta de datos y no falta de operación. Puede venir vacío, y eso es un 200 correcto. No rellenes los huecos con ceros."
+          items:
+            type: object
+            required:
+              - fecha
+              - valor
+            properties:
+              fecha:
+                type: string
+                format: date
+                example: "2026-08-20"
+              valor:
+                type:
+                  - number
+                  - "null"
+                description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido."
+    # Feature 266 (T7.1) — cuerpo y respuesta de la habilitación por lote.
+    HabilitacionRequest:
+      type: object
+      required:
+        - ordenes
+      properties:
+        ordenes:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: "Entre 1 y 100 filas. Fuera de ese rango: 422 y ninguna fila procesada."
+          items:
+            $ref: "#/components/schemas/HabilitacionRow"
+    HabilitacionRow:
+      type: object
+      description: "Una fila del lote. Si `num_guia` o `nota` no cumplen, la fila responde `error`/`fila_invalida` y el resto del lote se procesa igual: NO es un 422 del lote."
+      required:
+        - num_guia
+        - nota
+      properties:
+        num_guia:
+          type: integer
+          minimum: 1
+          description: "Número de guía de una orden propia. No se acepta como texto."
+        nota:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Motivo de la habilitación, OBLIGATORIO. Se recorta y se guarda en la bitácora de la orden; no viaja en el historial de estados."
+    HabilitacionResponse:
+      type: object
+      required:
+        - resumen
+        - resultados
+      properties:
+        resumen:
+          $ref: "#/components/schemas/HabilitacionResumen"
+        resultados:
+          type: array
+          description: "MISMO orden y MISMA cantidad que las filas enviadas: se puede casar por índice."
+          items:
+            $ref: "#/components/schemas/HabilitacionRowResult"
+    HabilitacionResumen:
+      type: object
+      description: "`total` = `habilitadas` + `habilitadasSinCambioDeEstado` + `conError`."
+      required:
+        - total
+        - habilitadas
+        - habilitadasSinCambioDeEstado
+        - conError
+      properties:
+        total:
+          type: integer
+          description: Filas recibidas.
+        habilitadas:
+          type: integer
+          description: "Volvieron a `en_reparto`."
+        habilitadasSinCambioDeEstado:
+          type: integer
+          description: "Se registró la habilitación y el estado NO cambió."
+        conError:
+          type: integer
+    HabilitacionRowResult:
+      type: object
+      required:
+        - numGuia
+        - resultado
+        - estado
+        - error
+      properties:
+        numGuia:
+          description: "La guía tal como se envió (si la fila era inválida, puede no ser entero)."
+        resultado:
+          type: string
+          enum:
+            - habilitada
+            - habilitada_sin_cambio_de_estado
+            - error
+          description: "`habilitada`: la orden volvió a `en_reparto`. `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó."
+        estado:
+          type:
+            - string
+            - "null"
+          description: "Estado en el que la orden quedó; `null` cuando la fila falló."
+        error:
+          type:
+            - object
+            - "null"
+          required:
+            - codigo
+            - mensaje
+          properties:
+            codigo:
+              type: string
+              enum:
+                - fila_invalida
+                - duplicada_en_lote
+                - no_encontrada
+                - estado_no_habilitable
+              description: "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: el estado actual no es `ayuda_tienda` ni `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden ya en `en_reparto`—."
+            mensaje:
+              type: string
   responses:
     Unauthorized:
       description: "API key ausente, mal formada o desconocida."

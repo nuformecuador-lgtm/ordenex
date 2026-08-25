@@ -52,6 +52,42 @@
 
 ---
 
+## Release del 2026-08-23 (2.ª) — la 271, recorrida
+
+**`prod` = `37b5944b`** · desplegado y **READY** · PR #484.
+
+Lo verificado, con su evidencia:
+
+- **Gate completo sobre el SHA desplegado** (`82b45e26`, `dev` ya mergeado): `INIT_EXIT=0` leído
+  **dentro** del log, 1341 archivos / 18.129 tests.
+- **`dev` no se movió** entre el gate y la release: medido y `origin/dev` coincidían al abrir el PR.
+- **Re-medido lo que caduca, y aquí no era un trámite:** esta ficha **bloquea gente**, así que se
+  contó cuántos mensajeros quedaban bloqueados en el instante del despliegue. **Cero**, los cinco
+  libres — incluido el del caso que originó la ficha, que sale libre correctamente por tener un solo
+  cierre y estar solicitado.
+- **Una sola ficha `in_progress`** (la 271), que es la que se desplegaba: sin deuda escondida.
+- **Variables de entorno**: no aplica, la release no añade ninguna.
+- **Migración `20260823120000_notificacion_evento_bloqueo_cierre`**, con foto **antes** y **después**:
+
+  | | Antes | Después |
+  |---|---|---|
+  | Valores en `notificacion_evento` | 6 | **8** |
+  | Filas en `notificacion` | 91 | **91** |
+
+  Los 6 previos coincidían exactamente con la lista que el `down.sql` declara como «el enum antes de
+  esta migración», así que la cadena estaba donde debía.
+- **Errores de runtime: cero** en la ventana que cubre el despliegue.
+
+### Lo que NO se cierra aquí, y por qué
+
+- **El primer efecto real lo produce el cron de esta noche.** A las 00:00 el corte deja de excluir a
+  quien ya tiene un cierre abierto. Nada de lo verificado hoy lo cubre: se mira la mañana del 24 que
+  los `vencido` creados son los que deben y que **salieron sus avisos** — que es lo primero que este
+  cron emite en toda su vida.
+- **T3.5** (coste de la corrida del corte) queda declarada sin medir, con su condición de reapertura.
+
+---
+
 ## Release del 2026-08-23 — recorrida
 
 **`prod` = `6bc566b8`** · desplegado y **READY** · 55 commits.
@@ -94,7 +130,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 
 Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí existe:
 
-- [ ] **Corregir el día desde `/recepcion-satelite`** con cuenta `adminSatelite`. En local no hay
+- [ ] **Corregir el día desde `/recepcion-satelite/en-bodega`** con cuenta `adminSatelite`. En local no hay
       ninguna orden de su zona en un estado que esa pantalla ofrezca, y **no hay camino por la UI**:
       el botón exige `por_recoger`, que exige asignar, que exige coordenadas — y sólo 4 órdenes de
       ~70 las tenían.
@@ -128,7 +164,49 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       inesperada» **posteriores al despliegue**. Antes había **6**, todos del 2026-08-22. Es la
       única comprobación de que el arreglo funcionó **donde ocurrió el incidente**: ninguna de las
       17.000 pruebas verdes la sustituye.
+      ⚠️ **Re-medido el 2026-08-24 y SIGUE SIN PODER CERRARSE, ahora con el motivo dicho:** no hay
+      **ningún** job `optimizacion_ruta` —de ningún estado— posterior al **2026-08-22 16:56 CR**, o
+      sea **ninguno después del despliegue**. El último `failed` es del **2026-08-21 23:43 CR**.
+      «Cero `failed`» vuelve a ser un cero que no significa nada, exactamente como el de `C7` antes
+      de comprobar que el cron sí había corrido. Hace falta **una optimización real** después del
+      despliegue para que este cero valga.
 - [ ] **`F6` en preview** (265 y 262): la mitad que en local **no tiene poder de resolución** —sin
       llamada al proveedor no se puede distinguir «no se llamó» de «no había credencial»—. Preview
       **sí** tiene la credencial (comprobado el 2026-08-23); lo que hace falta es un despliegue y una
       cuenta que exista en **su** base, que es distinta de la de producción desde julio.
+
+---
+
+## Release NO abierta — 2026-08-24
+
+`dev` = **`7c211f2f`**, gate COMPLETO en verde (`INIT_EXIT=0`, 1375 archivos / 18.707 tests).
+`prod` sigue en **`37b5944b`**. Se recorrió el §1 de esta lista y **se paró en el cuarto punto**,
+que es justo el que existe para esto: *repasar las fichas `in_progress` que entran*.
+
+**Qué lo paró:** `dev` lleva, además de la 276 y la 277, el cambio de tarifas de otra sesión, y
+dentro va **`20260825120000_drop_tarifa_status`** — un **`DROP COLUMN` sobre una tabla de dinero**,
+irreversible. Su mitad frontend (**ficha 275**) sigue `pending`.
+
+**Lo que se comprobó antes de decidir**, para que no haya que repetirlo:
+
+- La revisión de esa ficha **existe y aprobó**: «APROBADO CON RESERVAS», **0 bloqueantes de
+  código**, 40/40 requisitos. Sus dos bloqueantes eran de bookkeeping.
+- **No queda código vivo usando `tarifas.status`**: los únicos aciertos del grep son comentarios que
+  explican su retirada.
+- El gate está verde sobre ese mismo árbol, con los tests de componentes dentro.
+
+**Decisión del humano:** esperar a que la otra sesión cierre su 275 —o confirme que su parte puede
+salir— en vez de arrastrar un borrado irreversible ajeno en una release que no es suya. Separar no
+era opción: `dev` es un solo árbol y aislar lo de esta sesión exigiría cherry-picks.
+
+### Cuando se abra, esto ya está medido — pero CADUCA
+
+Las dos condiciones de despliegue de la 276 se ejecutaron el 2026-08-24:
+
+- **R37 limpia**: única orden en el umbral, la guía `28098171`, en `devuelta`; **cero** fuera. La
+  condición de parada de Q6 no se cumple.
+- **T6 congela CERO órdenes el primer día** (medido por primera vez): 2 `reprogramada` vivas,
+  0 liberables hoy, las dos con su cierre ya aprobado.
+
+⚠️ **Son fotos. Se re-miden el día que se abra la release**, no se citan éstas. Cualquier cierre que
+la bodega apruebe entre medias puede crear una orden en el umbral que R18 dejaría inasignable.

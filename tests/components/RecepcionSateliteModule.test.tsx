@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, within, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 
 import { RecepcionSateliteModule } from "@/app/(app)/recepcion-satelite/_components/RecepcionSateliteModule";
+import { AVISO_SIN_ZONA_SATELITE } from "@/app/(app)/recepcion-satelite/_components/AvisoSinZonaSatelite";
 import {
   PAGE_SIZE_SATELITE,
   catalogoSatelite,
@@ -12,24 +13,47 @@ import {
 } from "@/tests/fixtures/satelite-bodega";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
-import { recibirLote } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
-// Feature 63: se mockea también `recibirLote` (la recepción "Aceptar" por-orden, que
-// viaja por el mismo camino en lote con UN id) que consume la sección compartida
-// "Por recibir". Pedido humano del 2026-08-19: ya no hay "Aceptar todas".
+//
+// FEATURE 279 (T4.1, 2026-08-24) — ESTE ARCHIVO JUZGA «EN BODEGA», NO EL PORTAL ENTERO.
+// El portal del `adminSatelite` se partió en dos pantallas. Este módulo se quedó con el
+// listado de la bodega y PERDIÓ el bloque «Por recibir» (escáner + tarjetas), que vive
+// ahora en `PorRecibirModule`. Lo que eso mueve, caso por caso:
+//
+// - Cuatro casos cuyo SUJETO eran las tarjetas por recibir —el banner del contador, los
+//   dos de intentos de entrega en las cards y el «sin zona no se ofrece nada de
+//   recepción»— se MUDAN a `tests/components/PorRecibirModule.test.tsx`, donde vive su
+//   sujeto. No se pierden: cada uno tiene su heredero nombrado en el sitio donde estaba.
+// - Los que afirmaban que «Por recibir» no ofrecía tal o cual cosa se REEXPRESAN aquí como
+//   AUSENCIA DE LA REGIÓN: en esta pantalla no hay dónde ofrecer nada (R16/R18). Cada
+//   ausencia lleva su POSITIVO en el mismo caso (R29) — un `queryByRole` que no encuentra
+//   nada pasa igual de verde si el render entero se rompió.
+// - El escáner SIGUE aquí y ya no depende de ninguna lista (R42): la condición es tener
+//   zona, y nada más. El caso que afirmaba lo contrario cambia de sentido, con la decisión
+//   firmada escrita dentro.
+// Feature 279 (T3B.1, R34): `recibirLote` YA NO SE DOBLA porque ya no existe. La recepción
+// en lote se retiro entera —Server Action, schema, servicio y repositorio— y con ella el
+// boton "Aceptar" por-orden, su unico consumidor. Recibir es SOLO por QR (`recibirPorQr`).
 // Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
 // devuelve las órdenes que el caso monta, sin recortar: aquí no se pagina nada (eso lo mide
 // `tests/components/paginacion/SatelitePaginacion.test.tsx`).
-const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
+const { paginadoBodegaMock, recibirPorQrMock } = vi.hoisted(() => ({
+  paginadoBodegaMock: vi.fn(),
+  /**
+   * Feature 279 (T4.1b, R22): la ÚNICA vía de recepción que queda. El caso de R22 la
+   * dobla a `ok` para comprobar que recibir por guía desde «En bodega» mete la orden en
+   * este listado sin recargar la página.
+   */
+  recibirPorQrMock: vi.fn(),
+}));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
-  recibirPorQr: vi.fn(),
+  recibirPorQr: (...a: unknown[]) => recibirPorQrMock(...a),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
   // Feature 184 — Tanda A (T A.4/T A.5): el modulo importa las DOS acciones nuevas —el
   // conjunto de la descarga y la vigencia con la que poda la seleccion—, asi que el doble
@@ -38,8 +62,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarOrdenesBodegaCompleto: vi.fn(async () => ({ status: "ok", items: [], total: 0 })),
   listarIdsVigentesBodega: vi.fn(async () => ({ status: "ok", ids: [] })),
 }));
-
-const recibirLoteMock = vi.mocked(recibirLote);
 
 // Feature 139 (T3.3): la sección "Por devolver" envía POR LOTE a la bodega central vía
 // esta Server Action; se mockea para verificar la invocación por selección.
@@ -117,7 +139,6 @@ function makeOrden(
  */
 type GruposBodega = Partial<
   Record<
-    | "porRecibir"
     | "recibidas"
     | "asignadas"
     | "porDevolver"
@@ -128,10 +149,24 @@ type GruposBodega = Partial<
 >;
 type PropsModulo = Omit<
   Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
-  "porRecibir" | "ordenesBodega" | "catalogoFiltros"
+  "ordenesBodega" | "catalogoFiltros"
 >;
 
-function renderModule(props?: GruposBodega & PropsModulo) {
+/**
+ * Escotilla del caso de R22 (T4.1b) — qué responde el SERVIDOR en CADA lectura paginada,
+ * resuelto EN EL MOMENTO de la llamada y no congelado antes del `render`.
+ *
+ * Existe por un defecto medido: con `mockResolvedValue` el valor de retorno queda fijado
+ * ANTES de montar, y la revalidación que SWR dispara al montar se lo lleva. Un caso que
+ * quiera distinguir «la lectura del montaje» de «la que provocó `mutate()`» necesita poder
+ * cambiar la respuesta ENTRE las dos, y para eso hace falta una implementación, no un valor.
+ * Los otros casos del archivo no lo necesitan y siguen con `mockResolvedValue`.
+ */
+interface ServidorPaginado {
+  servidor?: () => RecepcionSateliteDTO[];
+}
+
+function renderModule(props?: GruposBodega & PropsModulo & ServidorPaginado) {
   const conjunto = [
     ...(props?.recibidas ?? []),
     ...(props?.asignadas ?? []),
@@ -139,20 +174,33 @@ function renderModule(props?: GruposBodega & PropsModulo) {
     ...(props?.enTransitoACentral ?? []),
     ...(props?.devueltas ?? []),
   ];
-  paginadoBodegaMock.mockResolvedValue({
-    status: "ok",
-    items: conjunto,
-    page: 1,
-    pageSize: PAGE_SIZE_SATELITE,
-    total: conjunto.length,
-  });
+  const servidor = props?.servidor;
+  if (servidor) {
+    paginadoBodegaMock.mockImplementation(async () => {
+      const items = servidor();
+      return {
+        status: "ok",
+        items,
+        page: 1,
+        pageSize: PAGE_SIZE_SATELITE,
+        total: items.length,
+      };
+    });
+  } else {
+    paginadoBodegaMock.mockResolvedValue({
+      status: "ok",
+      items: conjunto,
+      page: 1,
+      pageSize: PAGE_SIZE_SATELITE,
+      total: conjunto.length,
+    });
+  }
   // Caché de SWR NUEVA por montaje: la clave de la página 1 es la misma en todos los casos
   // del archivo, así que sin esto el dato del caso anterior ganaría sobre el `fallbackData`
   // del siguiente y la tabla pintaría las órdenes de otro test (medido en T I.2).
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={props?.porRecibir ?? []}
         ordenesBodega={paginaBodega(conjunto)}
         catalogoFiltros={catalogoSatelite(conjunto)}
         zonaNombre={props?.zonaNombre ?? "Limón"}
@@ -196,9 +244,11 @@ afterEach(() => {
 const LISTADO = "Órdenes de la bodega";
 
 describe("RecepcionSateliteModule", () => {
-  it("R6/R8: muestra DOS secciones separadas 'Por recibir' y 'Recibidas'", () => {
+  // Feature 279 (T4.1a, R16/R18) — REEXPRESADO. Este caso afirmaba que la pantalla montaba
+  // LAS DOS regiones. Con el portal partido, «En bodega» monta UNA: la suya. La región
+  // «Por recibir» ya no existe aquí y su contenido se afirma en `PorRecibirModule.test.tsx`.
+  it("R18: 'En bodega' monta SU listado y NO la región 'Por recibir'", () => {
     renderModule({
-      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
       recibidas: [
         makeOrden({
           id: "b1",
@@ -208,31 +258,43 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    expect(
-      screen.getByRole("region", { name: "Por recibir" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: LISTADO })).toBeInTheDocument();
+    // POSITIVO: el render ocurrió y el listado está con su fila.
+    const listado = screen.getByRole("region", { name: LISTADO });
+    expect(listado).toBeInTheDocument();
+    expect(within(listado).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
+
+    // AUSENCIA: ni la región ni su encabezado.
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Por recibir" })).toBeNull();
   });
 
-  it("Feature 63: la sección 'Por recibir' expone 'Aceptar' por-orden (sin lote) y NO asignar/gestionar", () => {
+  // Feature 279 (T3B.1/T4.1a, R1/R34) — este caso afirmaba lo CONTRARIO: que cada tarjeta
+  // de «Por recibir» traía su botón "Aceptar" por-orden. Cambió de sentido con la decisión
+  // firmada (recibir es SOLO por QR), y ahora además cambia de ámbito: la sección se mudó,
+  // así que lo que aquí se afirma es que el botón no está EN NINGUNA PARTE de esta
+  // pantalla — ni de lote, ni por-orden, ni reintroducido por otra vía.
+  it("Feature 279 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'", () => {
     renderModule({
-      porRecibir: [
-        makeOrden({ id: "r1", numRemision: "REM-R1" }),
-        makeOrden({ id: "r2", numRemision: "REM-R2" }),
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
       ],
     });
 
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    // Pedido humano del 2026-08-19: NO hay acción en lote…
-    expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
-    // …sólo una acción por-orden por cada tarjeta.
-    expect(
-      within(region).getAllByRole("button", { name: "Aceptar" }),
-    ).toHaveLength(2);
-    // Sigue SIN exponer asignar/gestionar en esta sección.
-    expect(
-      within(region).queryByRole("button", { name: /asignar|gestionar/i }),
-    ).toBeNull();
+    // POSITIVO: la pantalla se pintó entera — el listado con su fila y el acceso al
+    // escáner, que es la única vía de recepción que queda.
+    const listado = screen.getByRole("region", { name: LISTADO });
+    expect(within(listado).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
+    expect(accesoReceptor()).not.toBeNull();
+
+    // AUSENCIA, en TODA la pantalla: ni "Aceptar todas" (retirada el 2026-08-19) ni el
+    // "Aceptar" por-orden (esta ficha).
+    expect(screen.queryByRole("button", { name: /todas/i })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: "Aceptar" })).toHaveLength(0);
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
   });
 
   it("R9: 'Recibidas' renderiza el estado legible '<etiqueta del estado> de <zona>'", () => {
@@ -272,12 +334,30 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getAllByText(/Beto Ruiz/).length).toBeGreaterThan(0);
   });
 
-  it("R5: si sinZona, muestra aviso accionable y NO ofrece el escáner", () => {
-    renderModule({ sinZona: true, zonaNombre: null });
+  // Feature 279 (T4.1c, R25/R27) — sin zona, en ESTA pantalla, el listado SIGUE (a
+  // diferencia de «Por recibir», donde no queda más que el aviso). El texto del aviso se
+  // afirma contra el literal que exporta `AvisoSinZonaSatelite`, no contra una copia a
+  // mano: si el aviso cambia de redacción, este caso sigue midiendo la pantalla y no su
+  // propia transcripción.
+  it("R25/R27: sin zona muestra el aviso y NO ofrece el escáner, pero el listado sigue", () => {
+    renderModule({
+      sinZona: true,
+      zonaNombre: null,
+      recibidas: [
+        makeOrden({
+          id: "b1",
+          numRemision: "REM-B1",
+          estatusValue: "en_bodega_satelite",
+        }),
+      ],
+    });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /no tienes una zona asignada/i,
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent(AVISO_SIN_ZONA_SATELITE);
+
+    // POSITIVO (R27): el listado de la bodega sigue montado y con su fila.
+    const listado = screen.getByRole("region", { name: LISTADO });
+    expect(within(listado).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
+
     // Sin zona → sin recepción posible: no se monta la sección de escaneo, ni siquiera su
     // acceso (el disparador del desplegable).
     expect(accesoReceptor()).toBeNull();
@@ -292,13 +372,13 @@ describe("RecepcionSateliteModule", () => {
   // El camino del lector físico (input keyboard-wedge, R10) se retiró por decisión
   // humana: la cámara es la ÚNICA entrada de recepción por escaneo.
   // Pedido humano (rama ux): la recepción se opera igual que la recogida del mensajero
-  // (cámara O número tecleado, misma tarjeta) y solo se ofrece si hay algo por recibir.
-  it("con zona y órdenes por recibir, ofrece cámara y número de guía tecleado", async () => {
+  // (cámara O número tecleado, misma tarjeta).
+  // Feature 279 (R42): «y sólo se ofrece si hay algo por recibir» DEJA DE SER CIERTO —y el
+  // montaje lo demuestra: esta pantalla ya no recibe ninguna lista de órdenes por recibir
+  // y el escáner se ofrece igual.
+  it("R42: con zona ofrece cámara y número de guía tecleado", async () => {
     const user = userEvent.setup();
-    renderModule({
-      sinZona: false,
-      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
-    });
+    renderModule({ sinZona: false });
 
     // La tarjeta arranca plegada (la cámara no se enciende sola): el acceso está y al
     // abrirlo aparecen los dos caminos.
@@ -312,16 +392,118 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getByRole("textbox")).toBeInTheDocument();
   });
 
-  it("sin órdenes por recibir no se muestra la tarjeta de recepción ni la sección", () => {
-    renderModule({ sinZona: false, porRecibir: [] });
+  // Feature 279 (T4.1d, R42/R43) — ESTE CASO AFIRMABA LO CONTRARIO, y cambia de sentido
+  // con la decisión firmada del 2026-08-24. Decía que sin órdenes por recibir NO se
+  // mostraba la tarjeta de recepción: exactamente el fallo que la feature 167 ya había
+  // documentado con la recolección del mensajero — la herramienta se escondía justo cuando
+  // el actor tenía el paquete en la mano y la orden todavía no figuraba en la última
+  // lectura. Ahora la única condición es la zona. No se borra: se reexpresa, y así queda
+  // escrito de dónde viene el cambio.
+  it("R42/R43: el escáner NO depende de la lista de por-recibir — se ofrece con la bodega vacía", () => {
+    renderModule({ sinZona: false });
 
-    expect(accesoReceptor()).toBeNull();
-    expect(
-      screen.queryByRole("region", {
-        name: "Recibir por número de guía o escaneo",
-      }),
-    ).toBeNull();
+    // POSITIVO: la pantalla montó su listado (aunque sin filas) y el acceso al escáner.
+    expect(screen.getByRole("region", { name: LISTADO })).toBeInTheDocument();
+    expect(accesoReceptor()).not.toBeNull();
+
+    // Y sigue sin montar la región «Por recibir», que es de la otra pantalla.
     expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
+  });
+
+  // Feature 279 (T4.1b, R22) — LA RELECTURA QUE SE PIERDE EN SILENCIO SI ALGUIEN LA
+  // "SIMPLIFICA". El escáner sigue montado en «En bodega» (decisión firmada), y una
+  // recepción por QR mete una fila NUEVA en ESTE listado. Sus filas las tiene SWR, así que
+  // `router.refresh()` NO basta: sin `mutate()` la orden recién recibida no aparecería
+  // hasta recargar la página.
+  //
+  // ⚠️ POR QUÉ ESTE CASO ESTÁ ESCRITO ASÍ, Y NO DE LA FORMA OBVIA (2026-08-24, review
+  // RECHAZADA). La primera versión hacía lo evidente: fotografiar el contador de lecturas,
+  // cambiar lo que responde el servidor, escanear y comprobar que el contador había subido.
+  // **Pasaba en verde con el `mutate()` borrado**, 38/38 en tres corridas de tres, y sólo
+  // caía al ejecutarla aislada con `-t`. La causa, medida: SWR dispara UNA revalidación
+  // PROPIA al montar, y en la corrida completa esa revalidación todavía no había aterrizado
+  // cuando se tomaba la foto — el contador valía 0 en la suite y 1 aislado—. O sea que:
+  //   · el «+1» que el caso leía como «la relectura ocurrió» lo producía el MONTAJE, y
+  //   · la fila nueva la traía esa MISMA lectura de montaje, porque la respuesta del
+  //     servidor ya se había cambiado antes de que llegara.
+  // Las dos mitades pasaban por la razón equivocada.
+  //
+  // La corrección no es esperar más, es tener un PUNTO DE PARTIDA PROBADO: el servidor
+  // responde primero una fila SENTINELA que NO viene en el `fallbackData` de la página, así
+  // que verla en la tabla demuestra —en el DOM, no en un contador— que la revalidación de
+  // montaje ya aterrizó. Sólo entonces se cambia la respuesta. A partir de ahí, cualquier
+  // lectura posterior sólo puede venir del `mutate()`.
+  //
+  // Se siguen afirmando las DOS cosas, que es lo que hace que recortar una devuelva el
+  // `mutate()` a ser un no-op silencioso: que hubo una lectura NUEVA después del punto de
+  // partida, y que lo que trajo SE PINTÓ (entra la recibida y SALE la sentinela).
+  it("R22: recibir por guía mete la orden en el listado sin recargar la página", async () => {
+    const user = userEvent.setup();
+    const yaEnBodega = makeOrden({
+      id: "b1",
+      numRemision: "REM-B1",
+      estatusValue: "en_bodega_satelite",
+    });
+    // La sentinela: sólo puede llegar a la tabla por una lectura al servidor, porque el
+    // `fallbackData` que baja la página son las `recibidas` y no la incluye.
+    const marcaDeMontaje = makeOrden({
+      id: "b0",
+      numRemision: "REM-MONTAJE",
+      estatusValue: "en_bodega_satelite",
+    });
+    const recienRecibida = makeOrden({
+      id: "b2",
+      numRemision: "REM-NUEVA",
+      numGuia: 1001,
+      estatusValue: "en_bodega_satelite",
+    });
+    let filasDelServidor = [yaEnBodega, marcaDeMontaje];
+    recibirPorQrMock.mockResolvedValue({ status: "ok", ordenId: "b2" });
+
+    renderModule({ recibidas: [yaEnBodega], servidor: () => filasDelServidor });
+    const listado = () => screen.getByRole("region", { name: LISTADO });
+
+    // PUNTO DE PARTIDA PROBADO: la revalidación de montaje aterrizó Y se pintó. Anclado al
+    // CONTENIDO y no a un conteo: durante la carga la tabla ya tiene cabecera y su fila
+    // `role="status"`, así que un `.length > 0` se cumple a media carga
+    // (`ancla-de-carga.guardia.test.ts`).
+    await waitFor(() => expect(listado()).toHaveTextContent("REM-MONTAJE"));
+    expect(within(listado()).queryByText(/REM-NUEVA/)).toBeNull();
+
+    const lecturasAntes = paginadoBodegaMock.mock.calls.length;
+    // Y el punto de partida se AFIRMA, no se supone. Un `0` aquí significaría que la foto
+    // se está tomando otra vez antes de que SWR lea, que es exactamente el defecto que
+    // dejó este caso verde con el `mutate()` fuera.
+    expect(lecturasAntes).toBeGreaterThan(0);
+
+    // A partir de aquí el servidor responde OTRA cosa: la sentinela se va y entra la
+    // orden recién recibida. Nada de esto llega solo a la pantalla.
+    filasDelServidor = [yaEnBodega, recienRecibida];
+
+    // El camino MANUAL (número tecleado), que no necesita cámara.
+    await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
+    const modal = await screen.findByRole("dialog");
+    await user.type(within(modal).getByRole("textbox"), "1001");
+    await user.click(within(modal).getByRole("button", { name: "Recibir" }));
+    await waitFor(() => expect(recibirPorQrMock).toHaveBeenCalled());
+    // El escáner vive en un modal y mientras está abierto el resto queda `aria-hidden`:
+    // sin cerrarlo, la tabla que este caso juzga no existe para las queries.
+    await user.click(within(modal).getByRole("button", { name: /Cerrar/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // (1) hubo una lectura NUEVA después del punto de partida probado: `mutate()` no es
+    // un no-op. Ya no puede ser la del montaje — esa está contada en `lecturasAntes`.
+    await waitFor(() =>
+      expect(paginadoBodegaMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
+    );
+    // (2) y lo que esa lectura trajo SE PINTÓ, sin recargar la página: entra la recibida
+    // y sale la sentinela. Las dos mitades, porque la tabla podría repintar la respuesta
+    // vieja y el conteo de arriba no se enteraría.
+    await waitFor(() => expect(listado()).toHaveTextContent("REM-NUEVA"));
+    expect(listado()).not.toHaveTextContent("REM-MONTAJE");
+    // (3) el Server Component también se vuelve a resolver (bloqueo, liberadas, total).
+    // Compañía, no discriminante: `router.refresh()` sigue llamándose sin `mutate()`.
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   // ---------- Feature 34 (T8) ----------
@@ -517,9 +699,12 @@ describe("RecepcionSateliteModule", () => {
     expect(within(dialog).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
   });
 
-  it("R7 (33, no regresión): 'Por recibir' NO ofrece seleccionar ni asignar", () => {
+  // Feature 279 (T4.1a, R16/R18) — REEXPRESADO. Afirmaba que la sección «Por recibir» no
+  // ofrecía seleccionar ni asignar. Con la partición, esa sección no está en esta
+  // pantalla: la afirmación se refuerza —no hay región donde ofrecerlo— y su heredera, que
+  // las tarjetas no traen NINGÚN control, vive en `PorRecibirModule.test.tsx`.
+  it("R7/R18 (no regresión): la selección y 'Asignar' viven SOLO en el listado, no en una sección de por-recibir", () => {
     renderModule({
-      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
       recibidas: [
         makeOrden({
           id: "b1",
@@ -529,12 +714,12 @@ describe("RecepcionSateliteModule", () => {
       ],
     });
 
-    const porRecibir = screen.getByRole("region", { name: "Por recibir" });
-    // Ni checkbox de selección ni botón de asignar en "Por recibir".
-    expect(within(porRecibir).queryByRole("checkbox")).toBeNull();
-    expect(
-      within(porRecibir).queryByRole("button", { name: /asignar/i }),
-    ).toBeNull();
+    // POSITIVO: la selección existe donde debe existir — en el listado de la bodega.
+    const listado = screen.getByRole("region", { name: LISTADO });
+    expect(within(listado).getAllByRole("checkbox").length).toBeGreaterThan(0);
+
+    // AUSENCIA: no hay ninguna otra región de la que hablar.
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
   });
 
   // ---------- Feature 41 (F3, R22) ----------
@@ -888,68 +1073,26 @@ describe("RecepcionSateliteModule", () => {
     ).toBeNull();
   });
 
-  // ---------- Feature 63 — recepción en lote (reuse "Por recoger" del mensajero) ----------
-
-  it("Feature 63: 'Por recibir' muestra el banner con el contador de nuevas por recibir", () => {
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "r1", numRemision: "REM-R1" }),
-        makeOrden({ id: "r2", numRemision: "REM-R2" }),
-        makeOrden({ id: "r3", numRemision: "REM-R3" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    expect(
-      within(region).getByText("3 Órdenes nuevas por recibir"),
-    ).toBeInTheDocument();
-  });
-
-  it("Pedido humano 2026-08-19: NO hay 'Aceptar todas' ni forma de recibir varias de golpe", () => {
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "r1", numRemision: "REM-R1" }),
-        makeOrden({ id: "r2", numRemision: "REM-R2" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
-    // Aceptar sigue existiendo, pero SOLO dentro de cada tarjeta: una por orden.
-    expect(within(region).getAllByRole("button", { name: "Aceptar" })).toHaveLength(2);
-  });
-
-  it("Feature 63: 'Aceptar' de una fila envía solo ese ordenId", async () => {
-    const user = userEvent.setup();
-    recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 1 });
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "r1", numRemision: "REM-R1" }),
-        makeOrden({ id: "r2", numRemision: "REM-R2" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    await user.click(within(region).getAllByRole("button", { name: "Aceptar" })[1]);
-
-    await vi.waitFor(() =>
-      expect(recibirLoteMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }),
-    );
-  });
-
-  it("Feature 63 + pedido humano: sin zona no se ofrece nada de recepción", () => {
-    renderModule({
-      sinZona: true,
-      zonaNombre: null,
-      porRecibir: [makeOrden({ id: "r1", numRemision: "REM-R1" })],
-    });
-
-    // Sin zona no hay recepción posible: ni la tarjeta ni la lista se muestran; el
-    // aviso accionable de arriba explica el porqué.
-    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Aceptar todas" })).toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent(/zona asignada/i);
-  });
+  // ---------- Feature 279: dónde fue a parar lo que juzgaba las tarjetas por recibir ------
+  //
+  // Aquí vivían tres casos con SUJETO en la sección «Por recibir». Los tres se MUDAN a
+  // `tests/components/PorRecibirModule.test.tsx`, que es donde vive ahora ese sujeto, y
+  // ninguno se pierde:
+  //
+  // - `"Feature 63: 'Por recibir' muestra el banner con el contador de nuevas por recibir"`
+  //   → `"R2: el banner cuenta las órdenes por recibir"`.
+  // - `"Feature 279 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive"` →
+  //   se afirma en las DOS pantallas: aquí arriba (ausencia en «En bodega») y allí como
+  //   `"R1: las tarjetas no ofrecen NINGÚN botón"`.
+  // - `"Feature 63 + pedido humano: sin zona no se ofrece nada de recepción"` →
+  //   `"R26: sin zona sólo el aviso — ni escáner ni tarjetas"`. Su mitad de ESTA pantalla
+  //   es otra regla (R27: el listado sigue) y la afirma el caso `"R25/R27"` de arriba.
+  //
+  // Y uno MURIÓ con el código, en la mitad de servidor (T3B.6, R40): `"Feature 63:
+  // 'Aceptar' de una fila envia solo ese ordenId"`. Era la única prueba del cableado botón
+  // → `recibirLote`, y ese cableado ya no existe. No se repone con un equivalente porque
+  // no hay acción equivalente: la recepción pasa por el escáner, y ESE camino está
+  // afirmado en `tests/components/EscanerRecepcion.test.tsx`, que esta ficha no toca.
 
   // ---------- Feature 101 (R8/R10) — resalte de prioridad ----------
   it("R8: una orden PRIORITARIA en 'Recibidas' muestra el badge 'Prioritaria' y resalta su fila", () => {
@@ -1089,30 +1232,11 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
     expect(celdaIntentos(tabla, "REM-T0", true)).toHaveTextContent(/^0$/);
   });
 
-  it("R18/R25: 'Por recibir' (cards) muestra el dato etiquetado como un campo más", () => {
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "p1", numRemision: "REM-P1", intentosEntrega: 2 }),
-      ],
-    });
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    const etiqueta = within(region).getByText("Intentos");
-    expect(etiqueta.tagName).toBe("DT");
-    expect(etiqueta.parentElement?.querySelector("dd")?.textContent).toBe("2");
-  });
-
-  it("R19: 'Por recibir' con 0 intentos LO MUESTRA igual", () => {
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "p1", numRemision: "REM-P0", intentosEntrega: 0 }),
-      ],
-    });
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    expect(
-      within(region).getByText("Intentos").parentElement?.querySelector("dd")
-        ?.textContent,
-    ).toBe("0");
-  });
+  // Feature 279 (T4.1): los dos casos de intentos sobre las CARDS de «Por recibir» —el
+  // etiquetado como un campo más y el `0` que se muestra igual— se MUDAN a
+  // `tests/components/PorRecibirModule.test.tsx` («R18/R25» y «R19»), porque esas cards ya
+  // no las monta esta pantalla. La columna «Intentos» del LISTADO, que sí es de aquí,
+  // sigue afirmada en los tres casos de arriba.
 
   it("R18/R25: 'Devueltas' (cards) muestra el dato, y `0` cuando no hay intentos", () => {
     renderModule({

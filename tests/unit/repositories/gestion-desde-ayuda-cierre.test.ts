@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { GestionOrdenRepository } from "@/lib/repositories/GestionOrdenRepository";
-import type { ITarifaVigentePorTiendaRepository } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { ITarifaVigenteRepository } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
 import type { CierreGestionPendienteRow } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import {
   computeTotales,
@@ -221,13 +222,14 @@ function buildStore(filas: FilaGestion[]) {
   return { prisma, filas, cierres, detalles, ordenes };
 }
 
-const TARIFA_REPO: ITarifaVigentePorTiendaRepository = {
-  resolveTarifaPorTienda: vi.fn(async () => null),
-  // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). Este camino no lo usa.
-  resolveTarifaCotizablePorTienda: vi.fn(async () => null),
-  resolveTarifasPorTiendas: vi.fn(async (_tx: unknown, ids: string[]) => {
+// Feature 274: la interfaz quedo en DOS metodos —`resolveTarifa` y `resolveTarifas`— y el
+// batch pasa PARES (tienda, zona) con `tx` opcional y segundo. Este camino no mide tarifas:
+// el stub resuelve `null` para todo par (gap R23), que es lo que dejaba antes para toda tienda.
+const TARIFA_REPO: ITarifaVigenteRepository = {
+  resolveTarifa: vi.fn(async () => null),
+  resolveTarifas: vi.fn(async (pares: readonly ParTarifa[]) => {
     const m = new Map<string, null>();
-    for (const id of ids) m.set(id, null);
+    for (const par of pares) m.set(clavePar(par), null);
     return m;
   }),
 };

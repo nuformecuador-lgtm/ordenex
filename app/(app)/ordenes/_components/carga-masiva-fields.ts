@@ -3,25 +3,24 @@
 // circulares entre el botón orquestador y el componente de subida.
 import type { TemplateField, UploadFileType } from "@/components/shared/BulkUpload";
 
-// Feature 142 — Plantilla v2: las 4 columnas geográficas separadas (provincia,
-// canton, distrito, direccion) se sustituyen por la columna única
-// `direccion_destinatario` con el formato
-// `País / Provincia / Cantón (Distrito) / Dirección literal` (R1, R5).
+// Feature 276 — Plantilla v3: la columna unica `direccion_destinatario` de la v2
+// (`Pais / Provincia / Canton (Distrito) / Direccion`) se sustituye por TRES columnas
+// separadas: `provincia`, `canton_distrito` (formato `nombreCanton (Distrito)`) y
+// `direccion`. El pais desaparece: la v2 ya lo descartaba sin validarlo ni persistirlo,
+// asi que no se pierde ningun dato (R1, R5, R6).
 // El orden de esta lista ES el orden de las columnas de la plantilla (R1) y las
 // claves son las cabeceras verbatim que el backend valida (R2): no añadir
 // `label` ni sufijos, o se rompe el round-trip descargar → subir.
 export const ORDENES_BULK_FIELDS: TemplateField[] = [
   { key: "destinatario", example: "Juan Pérez" },
   { key: "telefono", example: "88887777" },
-  {
-    key: "direccion_destinatario",
-    // R4: la terna del ejemplo debe existir en el catálogo del seed y su distrito
-    // tener zona; lo blinda `tests/unit/scripts/carga-masiva-ejemplos-geo.test.ts`.
-    // El ejemplo propuesto en design.md (`Jimenez (Juan Vinas)`) EXISTE en el
-    // catálogo pero NO recibe zona en el cruce del seed, así que se sustituyó por
-    // `Cartago (Occidental)` (zona GAM), según `design.md > Preguntas abiertas #4`.
-    example: "Costa Rica / Cartago / Cartago (Occidental) / Frente gasolinera JSM, 200m sur",
-  },
+  // R4: la terna del ejemplo debe existir en el catálogo del seed y su distrito
+  // tener zona; lo blinda `tests/unit/scripts/carga-masiva-ejemplos-geo.test.ts`.
+  // Se conserva la de la v2 (`Cartago` + `Cartago (Occidental)`, zona GAM), que ya
+  // estaba verificada contra el cruce del seed.
+  { key: "provincia", example: "Cartago" },
+  { key: "canton_distrito", example: "Cartago (Occidental)" },
+  { key: "direccion", example: "Frente gasolinera JSM, 200m sur" },
   { key: "monto_cobrar", example: "25.90" },
   { key: "producto", example: "Camiseta talla M" },
   { key: "num_remision", example: "REM-0001" },

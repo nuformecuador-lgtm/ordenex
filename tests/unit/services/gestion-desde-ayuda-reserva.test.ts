@@ -9,6 +9,7 @@ import {
   MENSAJES_GESTION_DESDE_AYUDA,
 } from "@/lib/services/GestionDesdeAyudaService";
 import { avisoReservaParaOtroDia } from "@/lib/utils/dia-reparto-textos";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 
 /**
  * FEATURE 261 (B18, seccion G) — LA TIENDA TAMPOCO RESUELVE EL DIA QUE NO ES. R28-R32.
@@ -71,7 +72,15 @@ function montar(opts: { orden?: OrdenParaHilo; crearDevuelve?: string | null } =
       opts.crearDevuelve === undefined ? "g-ayuda" : opts.crearDevuelve,
     ),
   };
-  const service = new GestionDesdeAyudaService({ notaRepo, ordenRepo, gestionRepo, storage });
+  const service = new GestionDesdeAyudaService({
+    notaRepo,
+    ordenRepo,
+    gestionRepo,
+    storage,
+    // FEATURE 276 (T5): la dependencia del tope es OBLIGATORIA. Con el doble a 0 intentos, la
+    // puerta del paso 5-ter no se cierra y estos casos siguen midiendo lo que median.
+    historial: fakeIntentosEnLote(),
+  });
   return { service, notaRepo, ordenRepo, gestionRepo, storage };
 }
 

@@ -7,16 +7,28 @@ import type {
   IOrdenRepository,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
-  TarifaVigente,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+  ITarifaVigenteRepository,
+  TarifaVigenteResuelta,
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
+import { clavePar, type ParTarifa } from "@/lib/utils/cascada-tarifa";
+import {
+  MSG_CARGA_SIN_TARIFA,
+  MSG_FILA_SIN_TARIFA,
+} from "@/lib/services/mensajes-tarifa";
+import { ConflictError } from "@/lib/errors/app-error";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import { SIN_BLOQUEO } from "@/lib/utils/bloqueo-cierre";
 
 // Feature 98 — tarifa vigente por defecto del lote (no-central: valorFlete; central:
 // valorFleteGam). `ivaFlete` 12% no trivial para verificar la suma del IVA (D2/R7).
-const TARIFA: TarifaVigente = {
+//
+// Feature 274: pasa a ser la tarifa de la ZONA `z1` (la del distrito por defecto del doble de
+// repositorio). El tipo es `TarifaVigenteResuelta` porque el resolver de la 274 devuelve
+// tambien `tarifaId`/`fulfillment`; los 7 campos de la formula no cambian (R24).
+const TARIFA: TarifaVigenteResuelta = {
+  tarifaId: "t-z1",
+  fulfillment: "0.00",
   valorFlete: "3.50", // -> costoEnvio no-central = 3.50 + 12% = "3.92"
   valorFleteGam: "5.00", // -> costoEnvio central = 5.00 + 12% = "5.60"
   valorFleteDevuelto: "1.00",
@@ -26,20 +38,52 @@ const TARIFA: TarifaVigente = {
   ivaComisionCod: "12.00",
 };
 
-// Fake del resolver de tarifa por tienda. `tarifa=null` simula el gap (D1 -> "0.00").
-function buildTarifaRepo(tarifa: TarifaVigente | null = TARIFA): ITarifaVigentePorTiendaRepository {
+// Feature 274/R25 — tarifa DISTINTA para la zona `z2`: es lo que permite comprobar que dos
+// ordenes del MISMO lote en zonas distintas cobran distinto (hasta la 273 cobraban lo mismo:
+// habia una unica tarifa por lote).
+const TARIFA_Z2: TarifaVigenteResuelta = {
+  ...TARIFA,
+  tarifaId: "t-z2",
+  valorFlete: "10.00", // -> costoEnvio no-central = 10.00 + 12% = "11.20"
+  valorFleteGam: "20.00",
+};
+
+/**
+ * Fake del resolver de la CASCADA (R1-R7). Se le da un mapa `zonaId -> tarifa`; todo par cuya
+ * zona no este en el mapa resuelve `null`, que es el hueco de tarifa (R2).
+ *
+ * `resolveTarifas` devuelve UNA entrada por CADA par pedido, indexada por `clavePar`, igual
+ * que el repositorio real: si el service consultara con un par mal construido, el fake
+ * devolveria `undefined` y la fila caeria como "sin tarifa" — el fake no perdona.
+ */
+function buildTarifaRepoPorZona(
+  porZona: Record<string, TarifaVigenteResuelta>,
+): ITarifaVigenteRepository {
   return {
-    resolveTarifaPorTienda: vi.fn(async () => tarifa),
-    // Feature 255: metodo nuevo de la interfaz (tarifa COTIZABLE). La carga no lo invoca.
-    resolveTarifaCotizablePorTienda: vi.fn(async () => tarifa),
-    resolveTarifasPorTiendas: vi.fn(async () => new Map()),
+    resolveTarifa: vi.fn(async (_tiendaId: string, zonaId: string | null) =>
+      zonaId === null ? null : porZona[zonaId] ?? null,
+    ),
+    resolveTarifas: vi.fn(
+      async (pares: readonly ParTarifa[]) =>
+        new Map<string, TarifaVigenteResuelta | null>(
+          pares.map((p) => [clavePar(p), p.zonaId === null ? null : porZona[p.zonaId] ?? null]),
+        ),
+    ),
   };
+}
+
+// Atajo compatible con los casos de la 98: `tarifa` para TODA zona; `null` = ninguna zona
+// resuelve (el hueco de tarifa, que desde la 274 es un 409 de lote, R29).
+function buildTarifaRepo(
+  tarifa: TarifaVigenteResuelta | null = TARIFA,
+): ITarifaVigenteRepository {
+  return buildTarifaRepoPorZona(tarifa === null ? {} : { z1: tarifa, z2: tarifa });
 }
 
 // Servicio con las dos dependencias (repo + tarifa). Por defecto usa la TARIFA de arriba.
 function buildService(
   repo: IOrdenRepository,
-  tarifaRepo: ITarifaVigentePorTiendaRepository = buildTarifaRepo(),
+  tarifaRepo: ITarifaVigenteRepository = buildTarifaRepo(),
 ): BulkOrdenService {
   return new BulkOrdenService(repo, tarifaRepo);
 }
@@ -147,7 +191,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // feature 157: regla de dedicacion (reparto y recoleccion no se mezclan)
     findMensajerosConOrdenesEn: vi.fn().mockResolvedValue(new Set()),
     recolectarEnTienda: vi.fn().mockResolvedValue(false),
-    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.
@@ -164,6 +207,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
     // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
     transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
+    findParaHabilitacionApi: vi.fn(async () => null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     incrementarIntentoContacto: vi.fn(async (): Promise<number> => 0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),
@@ -432,7 +476,9 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
     }
   });
 
-  it("R3: la tarifa del lote se resuelve UNA sola vez para N ordenes (sin N+1)", async () => {
+  // Feature 274/R26: el caso de la 98 no se borra, se ACTUALIZA al resolver nuevo. Lo que se
+  // resuelve una sola vez ya no es "la tarifa de la tienda" sino los PARES del lote.
+  it("R3 + 274/R26: las tarifas del lote se resuelven en UNA sola llamada (sin N+1)", async () => {
     const repo = buildRepo();
     const tarifaRepo = buildTarifaRepo(TARIFA);
     const r = await buildService(repo, tarifaRepo).cargarViaApi(
@@ -440,9 +486,13 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
       APIKEY,
     );
     if (r.status === "ok") expect(r.summary.creadas).toBe(3);
-    expect(tarifaRepo.resolveTarifaPorTienda).toHaveBeenCalledTimes(1);
-    // Resuelta por la tienda dueña (el usuario dedicado de la key, D4).
-    expect(tarifaRepo.resolveTarifaPorTienda).toHaveBeenCalledWith("key-user-1");
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
+    // Los pares se piden con la tienda dueña (el usuario dedicado de la key, D4) y la zona del
+    // distrito de cada fila.
+    // Y se piden los pares DISTINTOS: tres filas de la misma zona son UN par.
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledWith([
+      { tiendaId: "key-user-1", zonaId: "z1" },
+    ]);
   });
 
   it("R4/R6: filas duplicada y error NO llevan costoEnvio y conservan su shape", async () => {
@@ -472,17 +522,19 @@ describe("cargarViaApi — costoEnvio flete + IVA (feature 98)", () => {
     }
   });
 
-  it("R8/D1: tienda SIN tarifa (resolver -> null) -> todas las creadas con costoEnvio '0.00', ninguna a error", async () => {
+  // Feature 274/R29/R31 — el caso R8/D1 de la 98 se INVIERTE, no se borra: era el que decia
+  // que un lote entero sin tarifa se creaba con `costoEnvio: "0.00"`. Eso es exactamente lo
+  // que esta feature retira (un precio inventado que ya movia paquetes): ahora es un 409 y
+  // cero persistencia. La asercion se conserva aqui para que la inversion quede escrita.
+  it("274/R29 (era 98/R8/D1): ninguna fila resuelve -> 409, y NUNCA un costoEnvio '0.00'", async () => {
     const repo = buildRepo();
-    const r = await buildService(repo, buildTarifaRepo(null)).cargarViaApi(
-      [row({ num_remision: "REM-1" }), row({ num_remision: "REM-2" })],
-      APIKEY,
-    );
-    if (r.status === "ok") {
-      expect(r.summary.creadas).toBe(2);
-      expect(r.summary.conError).toBe(0);
-      expect(r.summary.ordenes.map((o) => o.costoEnvio)).toEqual(["0.00", "0.00"]);
-    }
+    await expect(
+      buildService(repo, buildTarifaRepo(null)).cargarViaApi(
+        [row({ num_remision: "REM-1" }), row({ num_remision: "REM-2" })],
+        APIKEY,
+      ),
+    ).rejects.toThrow(MSG_CARGA_SIN_TARIFA);
+    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
   });
 
   it("R7: costoEnvio es STRING escala 2 (money-safe, nunca number)", async () => {
@@ -537,11 +589,12 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
   });
 });
 
-// Feature 142 (B6/R38) — la plantilla v2 de la via sesion (columna unica
-// `direccion_destinatario`) NO toca el contrato publico de la 88: el integrador
-// sigue enviando provincia/canton/distrito/direccion como campos separados.
-describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v2 (feature 142/R38)", () => {
-  it("R38: fila con provincia/canton/distrito separados y SIN direccion_destinatario se crea igual", async () => {
+// Feature 142 (B6/R38) y 276 (B6/R28, R29) — las plantillas de la via sesion han
+// cambiado DOS veces (v2: columna unica `direccion_destinatario`; v3: `provincia` +
+// `canton_distrito` + `direccion`) y el contrato publico de la 88 NO se ha movido:
+// el integrador sigue enviando provincia/canton/distrito/direccion por separado.
+describe("cargarViaApi — no-regresión del contrato 88 frente a las plantillas v2 y v3 (142/R38, 276/R28)", () => {
+  it("R28: fila con provincia/canton/distrito separados se crea igual", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi(
       [
@@ -575,10 +628,16 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v
     });
   });
 
-  it("R38: una columna direccion_destinatario presente en el payload API es ignorada (manda la geografia separada)", async () => {
+  it("R28: una columna de otra plantilla presente en el payload API es ignorada (manda la geografia separada)", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi(
-      [row({ direccion_destinatario: "basura sin formato", direccion: "Av. Amazonas" })],
+      [
+        row({
+          direccion_destinatario: "basura sin formato", // v2
+          canton_distrito: "basura sin parentesis", // v3
+          direccion: "Av. Amazonas",
+        }),
+      ],
       APIKEY,
     );
 
@@ -587,6 +646,30 @@ describe("cargarViaApi — no-regresión del contrato 88 frente a la plantilla v
       expect(r.summary.conError).toBe(0);
     }
     expect(conGuiaArg(repo)[0].direccion).toBe("Av. Amazonas");
+  });
+
+  it("R29: la via API key NO acepta canton_distrito como sustituto de canton/distrito", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo).cargarViaApi(
+      [
+        {
+          num_remision: "REM-V3",
+          destinatario: "Ana",
+          telefono: "0991234567",
+          provincia: "Pichincha",
+          canton_distrito: "Quito (La Mariscal)",
+          direccion: "Av. Amazonas",
+          producto: "Caja",
+        },
+      ],
+      APIKEY,
+    );
+
+    // Sin `canton` propio, la fila muere donde siempre: en resolveGeo, bajo `canton`.
+    if (r.status === "ok") {
+      expect(r.summary.creadas).toBe(0);
+      expect(r.summary.filas[0].errores).toHaveProperty("canton");
+    }
   });
 });
 
@@ -631,5 +714,198 @@ describe("cargarViaApi — mensajero sugerido retirado (159/R9, R7)", () => {
     expect(repo.findMensajeroIdsValidos).not.toHaveBeenCalled();
     expect(repo.findMensajerosByZona).not.toHaveBeenCalled();
     expect(repo.findMensajeroIdsValidosByZona).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 274 (T6.3) — la carga por API tarifa POR PAR (tienda, zona) y la falta de tarifa
+// deja de ser un "0.00": es un error de fila (R28) o un 409 de lote (R29).
+// ---------------------------------------------------------------------------
+
+// Dos distritos en ZONAS distintas dentro del mismo canton: es lo minimo para que un lote
+// tenga dos pares (tienda, zona) y, por tanto, dos precios.
+const DOS_ZONAS = {
+  findDistritosByCantonIds: vi
+    .fn()
+    .mockResolvedValue([
+      { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1", esCentral: false },
+      { id: "d2", nombre: "Cumbaya", cantonId: "c1", zonaId: "z2", esCentral: false },
+    ]),
+};
+
+/** Fila en la zona `z1` (distrito por defecto del doble de repositorio). */
+const filaZ1 = (numRemision: string) => row({ num_remision: numRemision });
+/** Fila en la zona `z2`. */
+const filaZ2 = (numRemision: string) => row({ num_remision: numRemision, distrito: "Cumbaya" });
+
+describe("cargarViaApi — cascada por par (tienda, zona) (274/R25/R26)", () => {
+  it("R25: dos ordenes del MISMO lote en zonas distintas con tarifas distintas cobran distinto", async () => {
+    const repo = buildRepo(DOS_ZONAS);
+    const tarifaRepo = buildTarifaRepoPorZona({ z1: TARIFA, z2: TARIFA_Z2 });
+
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-Z1"), filaZ2("REM-Z2")],
+      APIKEY,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    const porRemision = new Map(r.summary.ordenes.map((o) => [o.numRemision, o.costoEnvio]));
+    // 3.50 + 12% vs 10.00 + 12%: hasta la 273 las DOS devolvian "3.92" (una tarifa por lote).
+    expect(porRemision.get("REM-Z1")).toBe("3.92");
+    expect(porRemision.get("REM-Z2")).toBe("11.20");
+    expect(porRemision.get("REM-Z1")).not.toBe(porRemision.get("REM-Z2"));
+  });
+
+  it("R26: UNA sola llamada al resolver por lote, con los dos pares distintos", async () => {
+    const repo = buildRepo(DOS_ZONAS);
+    const tarifaRepo = buildTarifaRepoPorZona({ z1: TARIFA, z2: TARIFA_Z2 });
+
+    await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-1"), filaZ2("REM-2"), filaZ1("REM-3"), filaZ2("REM-4")],
+      APIKEY,
+    );
+
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledWith([
+      { tiendaId: "key-user-1", zonaId: "z1" },
+      { tiendaId: "key-user-1", zonaId: "z2" },
+    ]);
+  });
+});
+
+describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R31/R38)", () => {
+  // z1 tiene tarifa, z2 NO: es el unico caso en el que el hueco de tarifa es un error de fila
+  // y no un 409 de lote (design §3.6).
+  const mixto = () => ({
+    repo: buildRepo(DOS_ZONAS),
+    tarifaRepo: buildTarifaRepoPorZona({ z1: TARIFA }),
+  });
+
+  it("R27/R28: 200; la fila con tarifa se crea y la fila sin tarifa va a `error` con `errores.tarifa`", async () => {
+    const { repo, tarifaRepo } = mixto();
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-OK"), filaZ2("REM-SIN")],
+      APIKEY,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+
+    const ok = r.summary.filas.find((f) => f.numRemision === "REM-OK")!;
+    const sin = r.summary.filas.find((f) => f.numRemision === "REM-SIN")!;
+    expect(ok).toMatchObject({ resultado: "creada", numGuia: 1000 });
+    expect(sin).toMatchObject({ fila: 2, resultado: "error" });
+    // R38: se compara contra la CONSTANTE importada, no contra un literal re-escrito.
+    expect(sin.errores).toEqual({ tarifa: [MSG_FILA_SIN_TARIFA] });
+    // La fila degradada no conserva el `estatus` de "creada" que llego a tener.
+    expect(sin.estatus).toBeUndefined();
+
+    // El bloque `ordenes` solo trae la creada, con su costo real.
+    expect(r.summary.ordenes).toHaveLength(1);
+    expect(r.summary.ordenes[0]).toMatchObject({ numRemision: "REM-OK", costoEnvio: "3.92" });
+  });
+
+  it("R28: `createManyOrdenesConGuia` recibe UNA sola fila (la que resolvio), no dos", async () => {
+    const { repo, tarifaRepo } = mixto();
+    await buildService(repo, tarifaRepo).cargarViaApi([filaZ1("REM-OK"), filaZ2("REM-SIN")], APIKEY);
+
+    // Asercion sobre el ARGUMENTO: el summary podria cuadrar y aun asi haberse insertado la
+    // fila sin tarifa (que es justo el bug que R28 prohibe).
+    const arg = conGuiaArg(repo);
+    expect(arg).toHaveLength(1);
+    expect(arg[0].numRemision).toBe("REM-OK");
+  });
+
+  it("R31: la respuesta de un lote mixto no contiene NINGUN costoEnvio '0.00'", async () => {
+    const { repo, tarifaRepo } = mixto();
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-OK"), filaZ2("REM-SIN"), filaZ2("REM-SIN-2")],
+      APIKEY,
+    );
+
+    if (r.status !== "ok") return;
+    expect(r.summary.ordenes.map((o) => o.costoEnvio)).not.toContain("0.00");
+    expect(JSON.stringify(r.summary)).not.toContain("0.00");
+  });
+
+  it("summary: `total` = filas recibidas y creadas + duplicadas + conError = total (la degradada no se cuenta dos veces)", async () => {
+    const repo = buildRepo({
+      ...DOS_ZONAS,
+      findExistingRemisiones: vi.fn().mockResolvedValue(new Map([["REM-DUP", "entregada"]])),
+    });
+    const tarifaRepo = buildTarifaRepoPorZona({ z1: TARIFA });
+    const rows = [
+      filaZ1("REM-OK"), // creada
+      filaZ2("REM-SIN"), // degradada a error por falta de tarifa
+      filaZ1("REM-DUP"), // duplicada contra DB
+      row({ num_remision: "REM-GEO", provincia: "Inexistente" }), // error de cobertura
+    ];
+
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(rows, APIKEY);
+
+    if (r.status !== "ok") return;
+    const { total, creadas, duplicadas, conError, filas } = r.summary;
+    expect(total).toBe(rows.length); // lo RECIBIDO, no lo creado (141/R30-R33)
+    expect(creadas + duplicadas + conError).toBe(total);
+    expect({ creadas, duplicadas, conError }).toEqual({ creadas: 1, duplicadas: 1, conError: 2 });
+    expect(filas).toHaveLength(rows.length); // la degradada sigue siendo UNA fila
+  });
+});
+
+describe("cargarViaApi — ninguna fila resuelve: 409 y cero escrituras (274/R29)", () => {
+  it("R29: lanza ConflictError con MSG_CARGA_SIN_TARIFA", async () => {
+    const repo = buildRepo(DOS_ZONAS);
+    const tarifaRepo = buildTarifaRepoPorZona({}); // ninguna zona con tarifa
+
+    await expect(
+      buildService(repo, tarifaRepo).cargarViaApi([filaZ1("REM-1"), filaZ2("REM-2")], APIKEY),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("R29: ni una orden, ni fila de `carga`, ni notificacion de fin de lote (spies en cero)", async () => {
+    const repo = buildRepo(DOS_ZONAS);
+    const tarifaRepo = buildTarifaRepoPorZona({});
+    const notificar = vi.fn(async () => {});
+
+    await expect(
+      new BulkOrdenService(repo, tarifaRepo, notificar).cargarViaApi(
+        [filaZ1("REM-1"), filaZ2("REM-2")],
+        APIKEY,
+      ),
+    ).rejects.toThrow(MSG_CARGA_SIN_TARIFA);
+
+    // El unico writer del lote (crea las ordenes Y la fila de `carga` en la misma tx) no se
+    // llamo: no hay nada que revertir porque no se empezo.
+    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
+    expect(repo.createManyOrdenes).not.toHaveBeenCalled();
+    expect(notificar).not.toHaveBeenCalled();
+  });
+});
+
+describe("cargarViaApi — nadie llega a resolver: 200, no 409 (274/R30)", () => {
+  it("R30: lote entero con distritos inexistentes -> 200 con errores de geografia y sin consultar tarifas", async () => {
+    const repo = buildRepo();
+    const tarifaRepo = buildTarifaRepoPorZona({}); // ni siquiera importa: no se consulta
+
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [
+        row({ num_remision: "REM-1", distrito: "No existe" }),
+        row({ num_remision: "REM-2", distrito: "Tampoco" }),
+      ],
+      APIKEY,
+    );
+
+    expect(r.status).toBe("ok"); // NO 409: la tarifa no es el motivo del fallo (design §3.6)
+    if (r.status !== "ok") return;
+    expect(r.summary.conError).toBe(2);
+    expect(r.summary.creadas).toBe(0);
+    for (const f of r.summary.filas) {
+      expect(f.errores).toHaveProperty("distrito");
+      expect(f.errores).not.toHaveProperty("tarifa");
+    }
+    // R30: el repo de tarifas no se consulta cuando no hay ninguna fila candidata.
+    expect(tarifaRepo.resolveTarifas).not.toHaveBeenCalled();
+    expect(repo.createManyOrdenesConGuia).not.toHaveBeenCalled();
   });
 });

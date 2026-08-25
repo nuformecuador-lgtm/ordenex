@@ -27,8 +27,17 @@ import type { AnaliticaFiltroInput } from "@/lib/analytics/filters";
 import { resolverRango } from "@/lib/analytics/ranges";
 import { getMetrica } from "@/lib/analytics/metrics";
 import type { MetricaCatalogo } from "@/lib/analytics/metrics";
-import { esRolAnalitica, resolverAlcance } from "@/lib/analytics/alcance";
-import type { ActorAnalitica, AlcanceDatos, MotivoDenegacion } from "@/lib/analytics/alcance";
+import {
+  esRolAnalitica,
+  esRolAnaliticaIntegracion,
+  resolverAlcance,
+} from "@/lib/analytics/alcance";
+import type {
+  ActorAnalitica,
+  AlcanceDatos,
+  CanalAnalitica,
+  MotivoDenegacion,
+} from "@/lib/analytics/alcance";
 import { politicaIdentidadMensajero } from "@/lib/analytics/identidad";
 import type { PoliticaIdentidad } from "@/lib/analytics/identidad";
 import type { EntradaRango, RangoResuelto } from "@/lib/analytics/types";
@@ -81,6 +90,7 @@ export function prepararConsultaAnalitica(
   actor: ActorAnalitica | null,
   metricaId: string,
   now?: Date,
+  canal: CanalAnalitica = "interno",
 ): PreparacionAnalitica {
   // (1) PARSEAR. R19: si falla, se devuelve `validation_error` y NO se resuelve alcance;
   // el motivo de denegacion no se revela, porque una entrada malformada no puede servir
@@ -93,8 +103,11 @@ export function prepararConsultaAnalitica(
   // (2) RANGO.
   const rango = resolverRango(entradaDeRango(parseado.filtro), now);
 
-  // (3) ALCANCE.
-  const resolucion = resolverAlcance(actor, metricaId);
+  // (3) ALCANCE. Feature 267 — `canal` se REENVIA tal cual, sin interpretarlo aqui: el
+  // unico sitio que decide que puede ver un canal es `resolverAlcance`. Su default
+  // `"interno"` deja intacto al unico llamador que existia (`lib/actions/analitica-operativa.ts`,
+  // `lib/actions/analitica-financiera.ts`), que sigue llamando con la aridad de siempre (267/R43).
+  const resolucion = resolverAlcance(actor, metricaId, canal);
   if (resolucion.estado === "denegado") {
     return { status: "forbidden", motivo: resolucion.motivo };
   }
@@ -174,11 +187,33 @@ function interseca(pedidos: readonly string[] | undefined, permitido: string): b
 }
 
 /**
- * R38 — la politica sale del rol del actor. Si el rol no fuera de analitica no habria
- * llegado hasta aqui (`resolverAlcance` lo denego antes); el `real` de este fallback es
- * inalcanzable y, en todo caso, no concede acceso a nada: solo dice como se etiqueta.
+ * R38 (122) — la politica sale del rol del actor: los CINCO roles lectores la resuelven en
+ * `politicaIdentidadMensajero`, que es un `switch` exhaustivo, y por eso su comportamiento no
+ * cambia aqui (267/R43).
+ *
+ * Feature 267 (2026-08-23) — EL FALLBACK SE INVIERTE: de `"real"` a `"seudonima"` (267/R38).
+ *
+ * Lo que decia el comentario anterior, y por que ya no vale: «si el rol no fuera de analitica
+ * no habria llegado hasta aqui (`resolverAlcance` lo denego antes); el `real` de este fallback
+ * es inalcanzable». Eso era cierto MIENTRAS el unico camino hasta aqui fuese el de los cinco
+ * roles lectores. Desde esta feature `resolverAlcance` CONCEDE al rol de integracion (`apiKey`)
+ * por el canal `"api_key"`, asi que el fallback deja de ser inalcanzable y pasa a decidir la
+ * politica de un canal EXTERNO.
+ *
+ * Un fallback en `"real"` falla ABIERTO: el camino que no sabe decir que politica corresponde
+ * acaba concediendo la identidad real del mensajero. Para un tercero al que ni siquiera
+ * conocemos como empleador, ese es exactamente el error que no se puede permitir — el mismo
+ * argumento de D5 de la 122 («un adminTienda no es empleador de esos mensajeros»), con mas
+ * fuerza todavia. Se invierte a fallar CERRADO: quien no se sepa clasificar, se seudonimiza.
+ *
+ * Es estrictamente MAS restrictivo: nadie que hoy vea identidades reales deja de verlas,
+ * porque los cinco roles se resuelven ANTES de llegar al fallback (267/R43).
  */
 function politicaIdentidadDe(actor: ActorAnalitica | null): PoliticaIdentidad {
   if (actor && esRolAnalitica(actor.rol)) return politicaIdentidadMensajero(actor.rol);
-  return "real";
+  // 267/R35 — el rol de integracion, escrito EXPLICITO y no dejado al fallback: que se lea
+  // como una decision y no como un efecto colateral de la inversion de abajo.
+  if (actor && esRolAnaliticaIntegracion(actor.rol)) return "seudonima";
+  // 267/R38 — fallo CERRADO. Ver la cabecera de esta funcion.
+  return "seudonima";
 }

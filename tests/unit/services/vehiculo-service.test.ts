@@ -27,6 +27,13 @@ const SEED_ROWS: VehiculoDTO[] = [
 function buildRepo(overrides: Partial<IVehiculoRepository> = {}): IVehiculoRepository {
   return {
     findMany: vi.fn().mockResolvedValue(SEED_ROWS),
+    // El catalogo dejo de ser solo-lectura: el contrato gana el resto del CRUD.
+    findById: vi.fn().mockResolvedValue(SEED_ROWS[0]),
+    findByName: vi.fn().mockResolvedValue(null),
+    create: vi.fn(async (name: string) => ({ id: "veh-nuevo", name })),
+    update: vi.fn(async (id: string, name: string) => ({ id, name })),
+    delete: vi.fn().mockResolvedValue(true),
+    contarUsos: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

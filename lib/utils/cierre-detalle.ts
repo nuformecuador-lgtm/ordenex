@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 69 (design §4.1/§4.2) — lectura COMPARTIDA del snapshot `cierre_detail` por los dos
@@ -89,7 +89,7 @@ export function tarifaDe(d: TarifaCongeladaRow): TarifaVigente | null {
   // presente el resto no puede ser null. El `"0.00"` de `dec2` no es una politica: es el
   // estrechamiento del tipo (Decimal | null) sin introducir un fallback silencioso.
   // `toFixed(2)`, no `toString()`: R11 pide escala 2 FIJA al cruzar la frontera y el resolver
-  // de al lado (`TarifaVigentePorTiendaRepository`) ya la emite asi. Con `toString()` un
+  // de al lado (`TarifaVigenteRepository`) ya la emite asi. Con `toString()` un
   // Decimal("1000.00") salia "1000": mismo valor, distinto texto que el resolver para la misma
   // tarifa. No movia dinero (`derivarIngresoOrden` re-envuelve en Prisma.Decimal), pero dos
   // procedencias del MISMO dato con formato distinto es exactamente lo que esta feature existe

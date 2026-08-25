@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ComponentProps, ReactNode } from "react";
 import AppLayout from "@/app/(app)/layout";
 
@@ -102,13 +103,29 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
     expect(
       screen.queryByRole("button", { name: /configuración/i }),
     ).toBeNull();
-    // Hay DOS ítems con label "Órdenes": el del maestro/admin/adminTienda
-    // (`/ordenes`) y el portal del adminSatelite (`/recepcion-satelite`). El
-    // adminSatelite NO ve el listado maestro (`/ordenes`) pero SÍ su portal.
-    const ordenesLinks = screen.getAllByRole("link", { name: "Órdenes" });
-    const hrefs = ordenesLinks.map((a) => a.getAttribute("href"));
-    expect(hrefs).toContain("/recepcion-satelite");
-    expect(hrefs).not.toContain("/ordenes");
+
+    // Feature 279 (R9), 2026-08-24: el portal del `adminSatelite` DEJÓ de ser un enlace.
+    // Al ganar dos subítems, el Sidebar lo renderiza como disparador de desplegable —el
+    // mismo patrón que "Entregas" del mensajero—, así que este caso pasa de buscar un
+    // `link` con `href="/recepcion-satelite"` a buscar el `button` y sus dos subenlaces.
+    // El caso se puso ROJO con el `children` nuevo y se reexpresó a mano; su intención
+    // (este rol ve SU portal y no el listado maestro) no cambia.
+    const user = userEvent.setup();
+    const disparador = screen.getByRole("button", { name: /órdenes/i });
+    expect(disparador).toBeInTheDocument();
+    await user.click(disparador);
+
+    const subenlaces = screen
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(subenlaces).toContain("/recepcion-satelite/por-recibir");
+    expect(subenlaces).toContain("/recepcion-satelite/en-bodega");
+
+    // La mitad NEGATIVA, intacta: no ve el listado maestro, ni como enlace del padre
+    // (que ya no navega) ni por ninguna otra vía.
+    expect(subenlaces).not.toContain("/ordenes");
+    expect(subenlaces).not.toContain("/recepcion-satelite");
+    expect(screen.queryByRole("link", { name: "Órdenes" })).toBeNull();
   });
 
   it("expone el control de alternado del sidebar para móvil (off-canvas)", async () => {

@@ -4,28 +4,34 @@ import type { ReactNode } from "react";
 
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
-// Feature 63 (reuse mensajero -> adminSatelite): sección REUTILIZABLE "por aceptar"
-// extraída de "Por recoger" del mensajero. Un banner con el contador de nuevas
-// arriba de la lista + tarjetas con botón "aceptar" por-orden. Componente de
-// presentación puro: NO conoce Server Actions ni estado de negocio; el consumidor
-// cablea `onAceptarUna` y el render del detalle. Textos entran por props
-// (i18n-ready), sin hardcodear en la UI.
+// Sección «por aceptar»: encabezado, banner con el contador de nuevas y la lista de
+// órdenes. Componente de presentación PURO: no conoce Server Actions ni estado de
+// negocio, y todos sus textos entran por props (i18n-ready).
 //
-// Pedido humano del 2026-08-19 — SIN acción en lote. El botón "aceptar todas" se
-// retira: aceptar de golpe todo lo que hay en pantalla se firma sin mirar, y era
-// justo lo que la feature 96 ya había quitado del "Por recoger" del mensajero. La
-// recepción queda orden por orden (o por guía, con el escáner), que es donde el
-// paquete se comprueba de verdad. El camino en lote del servidor (`recibirLote`)
-// sigue existiendo y se usa con UN id.
+// QUIÉN LA USA, medido en el árbol el 2026-08-24 (ficha 279, R4): **un solo consumidor
+// real**, el portal del `adminSatelite` («Por recibir»), más su propio test. La cabecera
+// que había aquí decía otra cosa: que el mensajero la compartía. Eso dejó de ser verdad
+// hace tiempo —el mensajero ya no la monta— y se corrige, porque una documentación que
+// nombra consumidores inexistentes invita a «no tocar por si acaso» justo lo que sí se
+// puede tocar. Si mañana vuelve a compartirse, se dice aquí y con fecha.
+//
+// QUÉ NO OFRECE, y por qué está escrito en negativo:
+// - **Ninguna acción en lote.** El «aceptar todas» se retiró el 2026-08-19 (pedido humano):
+//   aceptar de golpe todo lo que hay en pantalla se firma sin mirar.
+// - **Ninguna acción por-orden.** El botón «Aceptar» se retiró en la ficha 279 (R1/R3): la
+//   recepción del satélite es SOLO por QR, con el escáner. Con él se fueron las props
+//   `onAceptarUna`, `textoBotonUna` y `mostrarAcciones` —esta última existía únicamente
+//   para ocultar ese botón— y el `CardAction` + `<Button>` de la tarjeta por defecto.
+//
+// Las dos ausencias las vigila `tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts`,
+// porque una ausencia se rompe sin que nadie se entere.
 
-/** Forma mínima que cada orden debe cumplir para renderizar título y acciones. */
+/** Forma mínima que cada orden debe cumplir para renderizar su título. */
 export interface PorAceptarOrdenBase {
   id: string;
   numRemision: string;
@@ -42,49 +48,33 @@ export interface PorAceptarSectionProps<T extends PorAceptarOrdenBase> {
   nuevasLabel: (cantidad: number) => ReactNode;
   /** Órdenes a listar en este apartado. */
   ordenes: T[];
-  /**
-   * Una: acepta la orden indicada por su id. Opcional: solo se usa con
-   * `mostrarAcciones` (una lista de solo-visualización no lo necesita).
-   */
-  onAceptarUna?: (id: string) => void;
-  /** Texto del botón por-orden ("Recoger" / "Aceptar"). Opcional. */
-  textoBotonUna?: string;
   /** Texto cuando no hay órdenes. */
   vacio: string;
   /** Render opcional del detalle de cada orden (evita acoplar el detalle). */
   renderDetalle?: (orden: T) => ReactNode;
   /**
    * Render opcional de la TARJETA COMPLETA de cada orden. Si se pasa, reemplaza la
-   * `Card` por defecto (título + acción + `renderDetalle`): el consumidor pinta su
-   * propia card — p. ej. el mensajero reutiliza la card POS de "En reparto" para que
-   * "Por recoger" tenga el mismo estilo. La sección sigue aportando el encabezado,
-   * el banner del contador y el estado vacío.
+   * `Card` por defecto (título + `renderDetalle`): el consumidor pinta su propia card.
+   * La sección sigue aportando el encabezado, el banner del contador y el estado vacío.
    */
   renderItem?: (orden: T) => ReactNode;
   /** Clases de la `<ul>` (p. ej. una grilla). Default: columna con separación. */
   listClassName?: string;
-  /**
-   * Si es `false`, oculta los botones por-orden (p. ej. el adminSatelite sin zona:
-   * se listan, pero no se puede aceptar). Default `true`.
-   */
-  mostrarAcciones?: boolean;
 }
 
 /**
- * Sección "por aceptar" compartida (mensajero "Por recoger" / adminSatelite "Por
- * recibir"). Banner de contador + acción en lote + tarjetas con acción por-orden.
+ * Sección «por aceptar» del portal del `adminSatelite` («Por recibir»): encabezado,
+ * banner del contador de nuevas y lista de órdenes. **Sin ninguna acción**: ni por-orden
+ * ni en lote (ver la cabecera del archivo).
  */
 export function PorAceptarSection<T extends PorAceptarOrdenBase>({
   titulo,
   nuevasLabel,
   ordenes,
-  onAceptarUna,
-  textoBotonUna,
   vacio,
   renderDetalle,
   renderItem,
   listClassName = "flex flex-col gap-3",
-  mostrarAcciones = true,
 }: PorAceptarSectionProps<T>) {
   return (
     <section aria-label={titulo} className="flex flex-col gap-3">
@@ -109,27 +99,16 @@ export function PorAceptarSection<T extends PorAceptarOrdenBase>({
               {renderItem ? (
                 renderItem(orden)
               ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    {orden.numRemision} · {orden.destinatario}
-                  </CardTitle>
-                  {mostrarAcciones ? (
-                    <CardAction>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => onAceptarUna?.(orden.id)}
-                      >
-                        {textoBotonUna}
-                      </Button>
-                    </CardAction>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {orden.numRemision} · {orden.destinatario}
+                    </CardTitle>
+                  </CardHeader>
+                  {renderDetalle ? (
+                    <CardContent>{renderDetalle(orden)}</CardContent>
                   ) : null}
-                </CardHeader>
-                {renderDetalle ? (
-                  <CardContent>{renderDetalle(orden)}</CardContent>
-                ) : null}
-              </Card>
+                </Card>
               )}
             </li>
           ))}

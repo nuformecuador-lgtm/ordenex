@@ -20,6 +20,9 @@ import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { JobRepository } from "@/lib/repositories/JobRepository";
+import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepository";
+import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
+import { OrdenHistorialService } from "@/lib/services/OrdenHistorialService";
 import { AsignabilidadCoordenadasService } from "@/lib/services/AsignabilidadCoordenadasService";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -28,12 +31,22 @@ import type { AppErrorShape } from "@/lib/errors";
 
 function buildGuiaService(): IGuiaAsignacionService {
   const prisma = getPrismaClient();
+  const ordenRepo = new OrdenRepository(prisma);
   // Feature 30/R18: inyecta ademas ZonaRepository (guardia GAM); firmas estables.
   // Feature 92/R8: + el gate de asignabilidad por coordenadas, que lee la cola de jobs.
   return new GuiaAsignacionService(
-    new OrdenRepository(prisma),
+    ordenRepo,
     new ZonaRepository(prisma),
     new AsignabilidadCoordenadasService(new JobRepository(prisma)),
+    // 💰 FEATURE 276 (R18): EL CABLEADO DE LA PUERTA DEL TOPE. Es el MISMO servicio de historial
+    // —y por tanto el MISMO criterio unico de la 215— que consultan el panel del mensajero, la
+    // pestaña de ayuda y los dos crons. La dependencia es OBLIGATORIA en el constructor: borrar
+    // esta linea rompe el typecheck, no deja la puerta abierta en silencio.
+    new OrdenHistorialService(
+      ordenRepo,
+      new OrdenHistorialRepository(prisma),
+      new OrdenDiaRepartoCambioRepository(prisma),
+    ),
   );
 }
 

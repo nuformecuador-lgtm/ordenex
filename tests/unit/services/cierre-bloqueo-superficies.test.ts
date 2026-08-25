@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
 import { MisAsignacionesService } from "@/lib/services/MisAsignacionesService";
+import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { RecoleccionTiendaService } from "@/lib/services/RecoleccionTiendaService";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
@@ -156,7 +157,12 @@ describe("271 · familia A — GESTIONAR y COBRAR", () => {
       { createSignedUrl: vi.fn(), createSignedUrls: vi.fn() } as never,
       { findByMensajero: vi.fn(async () => null), upsertOrigen: vi.fn() },
       { findMarcarLuegoByMensajero: vi.fn(async () => new Set<string>()) },
-      { contarIntentosEnLote: vi.fn(async () => new Map<string, number>()) },
+      // FEATURE 276 (T4): el `Pick` del servicio gana `contarIntentos` (la puerta del tope).
+      // Con 0 intentos la puerta no se cierra y estos casos siguen midiendo el bloqueo por cierres.
+      {
+        contarIntentosEnLote: vi.fn(async () => new Map<string, number>()),
+        contarIntentos: vi.fn(async () => 0),
+      },
     );
     return { service, repoGestion };
   }
@@ -306,6 +312,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       repo,
       { findCentralZonaId: vi.fn(async () => ZONA_CENTRAL) } as unknown as IZonaRepository,
       gateTodoAsignable,
+      fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */,
     );
   }
 
@@ -378,7 +385,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
       })),
       asignarSateliteLote,
     });
-    return new AsignacionSateliteService(repo, gateTodoAsignable);
+    return new AsignacionSateliteService(repo, gateTodoAsignable, fakeIntentosEnLote() /* 276: la puerta del tope; 0 intentos = no interfiere */);
   }
 
   it.each(LIBRES.map((c) => [c.nombre, c.cierres] as const))(

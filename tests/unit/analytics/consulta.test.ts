@@ -56,9 +56,17 @@ describe("R15 · un unico punto de entrada con orden fijo: parsear -> rango -> a
     expect(orden2).toBeLessThan(orden3);
   });
 
-  it("el resolutor recibe el actor y el id de metrica, nunca el filtro crudo", () => {
+  it("el resolutor recibe el actor, el id de metrica y el canal, nunca el filtro crudo", () => {
     prepararConsultaAnalitica({ rango: "dia" }, MAESTRO, "entregas", AHORA);
-    expect(alcanceEspia).toHaveBeenCalledWith(MAESTRO, "entregas");
+    // Feature 267: el quinto parametro `canal` se REENVIA tal cual y su default es
+    // `"interno"`, de modo que el canal de sesion llama exactamente como antes (267/R43).
+    // Lo que este caso protege sigue siendo lo mismo: el filtro crudo NO viaja al resolutor.
+    expect(alcanceEspia).toHaveBeenCalledWith(MAESTRO, "entregas", "interno");
+  });
+
+  it("el canal que se le pasa a prepararConsultaAnalitica llega intacto al resolutor (267/R6)", () => {
+    prepararConsultaAnalitica({ rango: "dia" }, MAESTRO, "entregas", AHORA, "api_key");
+    expect(alcanceEspia).toHaveBeenCalledWith(MAESTRO, "entregas", "api_key");
   });
 
   it("no existe funcion publica que devuelva un filtro parseado sin alcance resuelto", async () => {
@@ -269,5 +277,78 @@ describe("R16/R17 · el valor consultable no se puede fabricar ni sustituir (tes
     expect(consulta.alcance).toEqual({ tipo: "tienda", tiendaId: "tienda-propia" });
     expect(consulta.metrica.id).toBe("entregas");
     expect(consulta.rango.preset).toBe("dia");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 267 (T4) — LA POLITICA DE IDENTIDAD FALLA CERRADO.
+//
+// Hasta hoy el fallback de `politicaIdentidadDe` devolvia `"real"` y se documentaba como
+// inalcanzable, porque el unico camino hasta ahi eran los cinco roles lectores. Con la
+// concesion al canal por API key ese camino deja de ser hipotetico: un rol que el modulo no
+// sepa clasificar acabaria repartiendo identidades reales de mensajero por un canal EXTERNO.
+// Estos dos casos son los que se pondrian rojos si alguien devolviera el fallback a `"real"`.
+// ---------------------------------------------------------------------------
+
+describe("267/R35 · el canal por API key consulta siempre con politica seudonima", () => {
+  const INTEGRADOR: ActorAnalitica = { usuarioId: "u-integrador", rol: "apiKey" };
+
+  it("una consulta preparada para un actor apiKey lleva politicaIdentidad seudonima", () => {
+    const r = prepararConsultaAnalitica({ rango: "dia" }, INTEGRADOR, "entregas", AHORA, "api_key");
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.consulta.politicaIdentidad).toBe("seudonima");
+    // Y su recorte sigue siendo el de SU propia tienda: la politica no sustituye al alcance.
+    expect(r.consulta.alcance).toEqual({ tipo: "tienda", tiendaId: "u-integrador" });
+  });
+
+  it("el mismo actor por el canal interno ni siquiera produce consulta (267/R6)", () => {
+    const r = prepararConsultaAnalitica({ rango: "dia" }, INTEGRADOR, "entregas", AHORA);
+    expect(r.status).toBe("forbidden");
+  });
+});
+
+describe("267/R38 · el fallback de politica de identidad es seudonima, no real", () => {
+  it("un actor con rol basura al que se le concediera alcance NO obtiene politica real", () => {
+    // El rol basura lo deniega `resolverAlcance` antes de llegar al fallback, asi que se
+    // fuerza la concesion sobre el espia que este archivo ya monta: lo que se prueba es
+    // EXACTAMENTE la rama que quedaria expuesta si esa denegacion cambiara o se saltara.
+    alcanceEspia.mockReturnValueOnce({ estado: "ok", alcance: { tipo: "global" } });
+    const basura: ActorAnalitica = { usuarioId: "u-x", rol: "rol-que-nadie-mapeo" };
+
+    const r = prepararConsultaAnalitica({ rango: "dia" }, basura, "entregas", AHORA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.consulta.politicaIdentidad).not.toBe("real");
+    expect(r.consulta.politicaIdentidad).toBe("seudonima");
+  });
+
+  it("sin actor, tampoco: la ausencia de actor es el caso menos clasificable de todos", () => {
+    alcanceEspia.mockReturnValueOnce({ estado: "ok", alcance: { tipo: "global" } });
+
+    const r = prepararConsultaAnalitica({ rango: "dia" }, null, "entregas", AHORA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.consulta.politicaIdentidad).toBe("seudonima");
+  });
+
+  it("los cinco roles lectores conservan su politica de siempre (267/R43)", () => {
+    const casos: ReadonlyArray<readonly [ActorAnalitica, string]> = [
+      [MAESTRO, "real"],
+      [SATELITE, "real"],
+      [MENSAJERO, "real"],
+      [TIENDA, "seudonima"],
+      [{ usuarioId: "u-admin", rol: "admin" }, "real"],
+    ];
+
+    for (const [actor, esperada] of casos) {
+      const r = prepararConsultaAnalitica({ rango: "dia" }, actor, "entregas", AHORA);
+      expect(r.status).toBe("ok");
+      if (r.status !== "ok") continue;
+      expect(r.consulta.politicaIdentidad).toBe(esperada);
+    }
   });
 });
