@@ -20,6 +20,7 @@ import type {
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { CierreEstado } from "@/lib/types/cierre";
+import type { OrigenFlete } from "@/lib/utils/ingreso-ordenex";
 // Feature 158 (T2.3): las etiquetas visibles de la causa del incidente viven donde nacieron
 // (junto al panel que las captura), no se duplican aquí. Importar un módulo de etiquetas de
 // otra ruta tiene precedente EXACTO en este repo: `GestionarOrdenPanel` (mis-asignaciones)
@@ -277,6 +278,29 @@ export const TARIFA_TITULO = "Tarifa aplicada";
 export const TARIFA_NOTA = "Congelada al solicitar el cierre";
 export const APLICADA_HINT = "← se aplicó";
 export const SIN_COMISION_NOTA = "Esta orden no cobra comisión COD.";
+// --- Tarifa especial por distrito (texto separado, i18n-ready) ---
+/**
+ * El flete SALIÓ del monto pactado para el distrito especial. Se resalta porque ese importe
+ * no se puede reconciliar contra la tabla de precios normal: quien audita la fila necesita
+ * saber que la columna GAM / no GAM no es de donde salió el número.
+ */
+export const ESPECIAL_BADGE_LABEL = "Especial";
+export const ESPECIAL_BADGE_NOTA =
+  "El flete salió de la tarifa especial pactada para el distrito, no de la tabla de precios normal.";
+/**
+ * El distrito ESTÁ marcado como zona especial pero la tarifa congelada no traía monto pactado,
+ * así que se cobró la tarifa normal. El importe es idéntico al de una orden corriente: sin esta
+ * marca el hueco de configuración sería invisible justo donde se audita el dinero. Misma señal
+ * que en el listado de órdenes.
+ */
+export const ESPECIAL_SIN_PACTO_BADGE_LABEL = "Especial sin pacto";
+export const ESPECIAL_SIN_PACTO_BADGE_NOTA =
+  "Distrito marcado como zona especial, pero la tarifa congelada no tenía tarifa especial pactada: se cobró la tarifa normal.";
+/** Etiquetas de las dos filas del pacto dentro de la tarifa congelada. */
+export const TARIFA_ESPECIAL_LABEL = "Tarifa especial";
+export const TARIFA_ESPECIAL_DEV_LABEL = "Tarifa especial devuelta";
+/** Origen del flete, en el `hint` de la fila del desglose. */
+export const HINT_TARIFA_ESPECIAL = "tarifa especial pactada";
 export const SIN_TARIFA_CONGELADA_NOTA =
   "La tienda no tenía tarifa vigente al solicitar el cierre: no se derivó ningún ingreso para esta orden.";
 // --- Feature 158 (R34/R9/R19): columnas propias del grupo `incidente` (texto i18n-ready) ---
@@ -679,6 +703,36 @@ export function renderRechazoOrigen(g: CierreDetalleGestion): ReactNode {
 }
 
 /**
+ * Marca del ORIGEN de un flete cuando NO es el normal. Devuelve `null` para `"normal"`: la
+ * inmensa mayoría de las filas lo son y un badge en todas no señalaría nada.
+ *
+ * Los dos casos que sí se pintan dicen cosas distintas y por eso no comparten variante:
+ * `especial` es informativo (el sistema cobró el pacto, como se le pidió) y `especial_sin_pacto`
+ * es una advertencia (falta configuración y el cobro se fue a la tarifa normal sin avisar).
+ */
+export function renderFleteOrigen(origen: OrigenFlete): ReactNode {
+  if (origen === "especial") {
+    return (
+      <Badge variant="info" title={ESPECIAL_BADGE_NOTA} aria-label={ESPECIAL_BADGE_NOTA}>
+        {ESPECIAL_BADGE_LABEL}
+      </Badge>
+    );
+  }
+  if (origen === "especial_sin_pacto") {
+    return (
+      <Badge
+        variant="warning"
+        title={ESPECIAL_SIN_PACTO_BADGE_NOTA}
+        aria-label={ESPECIAL_SIN_PACTO_BADGE_NOTA}
+      >
+        {ESPECIAL_SIN_PACTO_BADGE_LABEL}
+      </Badge>
+    );
+  }
+  return null;
+}
+
+/**
  * Feature 102 (R9): columna del origen del rechazo. Solo aplica a la sección `rechazada`.
  * Marca cada fila como SLA o manual, sin exponer ningún subtotal (el desglose vive en el panel).
  */
@@ -750,21 +804,53 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
   const t = ing.tarifa;
   // La zona elige la COLUMNA de tarifa, no la fórmula (feature 69/R21): mostrar cuál se
   // aplicó y cuál no es la mitad de la auditoría.
-  const fleteAplicado = ing.esCentral ? t.valorFleteGam : t.valorFlete;
-  const fleteDevAplicado = ing.esCentral ? t.valorFleteDevueltoGam : t.valorFleteDevuelto;
   const variante = ing.esCentral ? "GAM" : "no GAM";
+  // …salvo cuando el distrito es especial Y la tarifa traía el pacto: ahí el flete NO sale de
+  // ninguna de las dos columnas GAM, sino del monto pactado. Decir "tarifa GAM" en ese caso
+  // sería una auditoría que no cuadra con la tabla de precios: el número no está ahí.
+  //
+  // `especial_sin_pacto` cae al `else`, y es correcto: en ese caso sí se cobró la columna
+  // normal. Lo que falta ahí es la advertencia, y esa la pone la nota de abajo.
+  const fleteEspecial = ing.fleteOrigen === "especial" && t.tarifaEspecial !== null;
+  const fleteDevEspecial =
+    ing.fleteDevolucionOrigen === "especial" && t.tarifaEspecialDevuelta !== null;
+  const fleteAplicado = fleteEspecial
+    ? (t.tarifaEspecial as string)
+    : ing.esCentral
+      ? t.valorFleteGam
+      : t.valorFlete;
+  const fleteDevAplicado = fleteDevEspecial
+    ? (t.tarifaEspecialDevuelta as string)
+    : ing.esCentral
+      ? t.valorFleteDevueltoGam
+      : t.valorFleteDevuelto;
+  const origenFleteHint = fleteEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
+  const origenFleteDevHint = fleteDevEspecial ? HINT_TARIFA_ESPECIAL : `tarifa ${variante}`;
+  // La marca del distrito estaba puesta pero el pacto faltaba en la tarifa congelada: se cobró
+  // la tabla normal. Se avisa una sola vez por orden, aunque afecte a los dos fletes.
+  const faltaPacto =
+    ing.fleteOrigen === "especial_sin_pacto" ||
+    ing.fleteDevolucionOrigen === "especial_sin_pacto";
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       {/* --- Lo que se derivó, con su fórmula --- */}
       <div className="flex flex-col">
-        <h4 className="mb-1 text-sm font-semibold">{DESGLOSE_TITULO}</h4>
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-semibold">{DESGLOSE_TITULO}</h4>
+          {/* La marca del flete de ENTREGA encabeza el desglose; la de devolución va en su
+              propia fila más abajo. Si ninguna aplica, no se pinta nada. */}
+          {renderFleteOrigen(ing.fleteOrigen)}
+          {ing.fleteDevolucionOrigen === ing.fleteOrigen
+            ? null
+            : renderFleteOrigen(ing.fleteDevolucionOrigen)}
+        </div>
         <DesgloseFila label={MONTO_COBRAR_LABEL} value={money(ing.montoCobrar)} />
         {ing.flete === null ? null : (
           <DesgloseFila
             label="Flete"
             value={money(ing.flete)}
-            hint={`tarifa ${variante}: ${money(fleteAplicado)}`}
+            hint={`${origenFleteHint}: ${money(fleteAplicado)}`}
           />
         )}
         {ing.ivaFlete === null ? null : (
@@ -778,7 +864,7 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
           <DesgloseFila
             label="Flete devolución"
             value={money(ing.fleteDevolucion)}
-            hint={`tarifa ${variante}: ${money(fleteDevAplicado)}`}
+            hint={`${origenFleteDevHint}: ${money(fleteDevAplicado)}`}
           />
         )}
         {ing.ivaFleteDevolucion === null ? null : (
@@ -807,6 +893,13 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
         {ing.cobraComision ? null : (
           <p className="pt-1 text-xs text-muted-foreground">{SIN_COMISION_NOTA}</p>
         )}
+        {/* `role="note"`, como el aviso de tarifa faltante: no es un error del cierre, es un
+            dato que el admin tiene que poder leer con un lector de pantalla. */}
+        {faltaPacto ? (
+          <p role="note" className="pt-1 text-xs text-warning-strong">
+            {ESPECIAL_SIN_PACTO_BADGE_NOTA}
+          </p>
+        ) : null}
         <div className="mt-1 border-t pt-1">
           <DesgloseFila label={INGRESO_TOTAL_LABEL} value={money(ing.total)} emphasis />
         </div>
@@ -818,26 +911,46 @@ export function DesgloseIngresoOrdenex({ g }: { g: CierreDetalleGestion }) {
         <p className="pb-1 text-xs text-muted-foreground">
           {TARIFA_NOTA} · <span className="font-mono">{t.tarifaId}</span>
         </p>
+        {/* El "← se aplicó" de las columnas normales se APAGA cuando ganó el pacto: si no, el
+            desglose marcaría dos orígenes distintos para el mismo flete y el admin no sabría
+            cuál leer. Con `especial_sin_pacto` sigue encendido, que es la verdad: ahí el flete
+            salió de la columna normal. */}
         <DesgloseFila
           label="Valor flete"
           value={money(t.valorFlete)}
-          hint={ing.esCentral ? undefined : APLICADA_HINT}
+          hint={!fleteEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Valor flete GAM"
           value={money(t.valorFleteGam)}
-          hint={ing.esCentral ? APLICADA_HINT : undefined}
+          hint={!fleteEspecial && ing.esCentral ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Flete devuelto"
           value={money(t.valorFleteDevuelto)}
-          hint={ing.esCentral ? undefined : APLICADA_HINT}
+          hint={!fleteDevEspecial && !ing.esCentral ? APLICADA_HINT : undefined}
         />
         <DesgloseFila
           label="Flete devuelto GAM"
           value={money(t.valorFleteDevueltoGam)}
-          hint={ing.esCentral ? APLICADA_HINT : undefined}
+          hint={!fleteDevEspecial && ing.esCentral ? APLICADA_HINT : undefined}
         />
+        {/* El pacto sólo se lista si existe: `null` significa "esta tarifa no pactaba nada",
+            y una fila con "—" se leería como un pacto de cero, que es otro dato. */}
+        {t.tarifaEspecial === null ? null : (
+          <DesgloseFila
+            label={TARIFA_ESPECIAL_LABEL}
+            value={money(t.tarifaEspecial)}
+            hint={fleteEspecial ? APLICADA_HINT : undefined}
+          />
+        )}
+        {t.tarifaEspecialDevuelta === null ? null : (
+          <DesgloseFila
+            label={TARIFA_ESPECIAL_DEV_LABEL}
+            value={money(t.tarifaEspecialDevuelta)}
+            hint={fleteDevEspecial ? APLICADA_HINT : undefined}
+          />
+        )}
         <DesgloseFila label="Comisión COD" value={pct(t.comisionCod)} />
         <DesgloseFila label="IVA flete" value={pct(t.ivaFlete)} />
         <DesgloseFila label="IVA comisión" value={pct(t.ivaComisionCod)} />
@@ -891,6 +1004,40 @@ const COLUMNA_FULFILLMENT: Column<CierreDetalleGestion> = {
   value: FULFILLMENT_COL,
   render: (g) => money(g.ingresoOrdenex?.tarifa?.fulfillment ?? null),
 };
+
+/**
+ * Columna de un flete (entrega o devolución) CON la marca de su origen al lado. Es la misma
+ * celda de siempre —el monto formateado con `money()`, `null` → "—"— más el badge de
+ * `renderFleteOrigen`, que sólo aparece cuando el flete no salió de la tabla normal.
+ *
+ * Va aparte de `columnaConcepto` porque el badge depende de un campo del DTO que el `pick` de
+ * aquélla no ve: cada flete tiene SU origen (`fleteOrigen` / `fleteDevolucionOrigen`) y
+ * mezclarlos pintaría la marca en la fila equivocada.
+ */
+function columnaFlete(
+  id: string,
+  value: string,
+  monto: (i: IngresoOrdenexDTO) => string | null,
+  origen: (i: IngresoOrdenexDTO) => OrigenFlete,
+): Column<CierreDetalleGestion> {
+  return {
+    id,
+    value,
+    render: (g) => {
+      const ing = g.ingresoOrdenex;
+      if (!ing) return money(null);
+      const marca = renderFleteOrigen(origen(ing));
+      return marca === null ? (
+        money(monto(ing))
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          {money(monto(ing))}
+          {marca}
+        </span>
+      );
+    },
+  };
+}
 
 /** Columna de un concepto derivado; `null` (no aplica a este resultado) → "—" vía `money`. */
 function columnaConcepto(
@@ -1030,7 +1177,12 @@ export function columnasPara(
       // Conceptos que aplican a una ENTREGA, cada uno CON su IVA (los de devolución no se
       // listan acá: serían una columna de "—" en todas las filas). El split flete/IVA vive
       // en la fila desplegable.
-      columnaConcepto("fleteConIva", FLETE_CON_IVA_LABEL, (i) => i.fleteConIva),
+      columnaFlete(
+        "fleteConIva",
+        FLETE_CON_IVA_LABEL,
+        (i) => i.fleteConIva,
+        (i) => i.fleteOrigen,
+      ),
       columnaConcepto("comisionConIva", COMISION_CON_IVA_LABEL, (i) => i.comisionConIva),
       COLUMNA_INGRESO_TOTAL,
       // Feature 39/R16: pago al mensajero snapshot por orden (separado del dinero recibido).
@@ -1063,10 +1215,11 @@ export function columnasPara(
       // sección de rechazadas. El par partido (flete / IVA por separado) se retiró: son dos
       // columnas para un importe que siempre se lee sumado, y el split sigue disponible en la
       // fila desplegable del desglose.
-      columnaConcepto(
+      columnaFlete(
         "fleteDevolucionConIva",
         FLETE_DEV_CON_IVA_LABEL,
         (i) => i.fleteDevolucionConIva,
+        (i) => i.fleteDevolucionOrigen,
       ),
       COLUMNA_INGRESO_TOTAL,
       COLUMNA_PAGO_MENSAJERO,
@@ -1081,10 +1234,11 @@ export function columnasPara(
     COLUMNA_FULFILLMENT,
     { id: "motivo", value: "Motivo", render: (g) => g.motivo ?? "—" },
     COLUMNA_EVIDENCIA(verEvidencia),
-    columnaConcepto(
+    columnaFlete(
       "fleteDevolucionConIva",
       FLETE_DEV_CON_IVA_LABEL,
       (i) => i.fleteDevolucionConIva,
+      (i) => i.fleteDevolucionOrigen,
     ),
     COLUMNA_INGRESO_TOTAL,
     COLUMNA_PAGO_MENSAJERO,

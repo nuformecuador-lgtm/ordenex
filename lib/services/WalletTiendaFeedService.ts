@@ -113,6 +113,7 @@ export class WalletTiendaFeedService implements IWalletTiendaFeedService {
         {
           resultado: g.resultado,
           esCentral: d.esCentral,
+          esZonaEspecial: d.esZonaEspecial, // congelado como `esCentral`; elige el pacto especial
           // La comision sigue basada en montoCobrar (decision de la 42, la 43 NO la altera).
           montoCobrar: d.montoCobrar === null ? null : d.montoCobrar.toFixed(2),
           cobraComision: d.cobraComision,

@@ -91,21 +91,30 @@ export const cotizacionBodySchema = z.object({
 export type CotizacionBody = z.infer<typeof cotizacionBodySchema>;
 
 /**
- * Los cinco importes del escenario ENTREGADO (R26). Todos STRING y todos YA
+ * Los SEIS importes del escenario ENTREGADO (R26). Todos STRING y todos YA
  * FORMATEADOS: no existe un campo crudo de escala 2 en paralelo (R34, decision
  * firmada A3).
+ *
+ * FULFILLMENT (2026-08-25): el sexto concepto. Es el monto FIJO por orden de la
+ * tarifa que resuelve, y solo aparece con valor cuando la tienda hace
+ * fulfillment (`tarifas.fulfillment > 0`, ver `tieneFulfillment` en
+ * `lib/utils/ingreso-ordenex.ts`). Cuando no lo hace vale CERO y no falta: es la
+ * misma decision que ya tomo `comision` en el escenario devuelto (R28) — un cero
+ * afirmado se lee, un campo ausente se adivina.
  */
 export interface CostosEntregado {
   flete: string;
   iva: string;
   comision: string;
   ivaComision: string;
-  /** R30/D1: lo que RECIBE la tienda = monto a cobrar − los cuatro conceptos. */
+  /** Monto fijo de bodega por orden; cero explicito si la tienda no hace fulfillment. */
+  fulfillment: string;
+  /** R30/D1: lo que RECIBE la tienda = monto a cobrar − los CINCO conceptos. */
   total: string;
 }
 
 /**
- * Los cuatro importes del escenario DEVUELTO (R27). SIN `ivaComision`: una
+ * Los CINCO importes del escenario DEVUELTO (R27). SIN `ivaComision`: una
  * devolucion no cobra comision COD, asi que su IVA no existe. `comision` es el
  * cero EXPLICITO de R28 — nunca falta y nunca es `null`.
  */
@@ -113,7 +122,14 @@ export interface CostosDevuelto {
   flete: string;
   iva: string;
   comision: string;
-  /** R31/D1: la DEUDA de la tienda = −(flete + iva), negativo. */
+  /**
+   * FULFILLMENT (2026-08-25) — se cobra IGUAL que en el escenario entregado, y por eso
+   * aparece tambien aqui. El servicio de bodega ya se presto cuando el paquete se preparo y
+   * salio: que el destinatario no lo reciba no lo devuelve a la estanteria sin haber costado
+   * nada. Cero explicito cuando la tienda no hace fulfillment.
+   */
+  fulfillment: string;
+  /** R31/D1: la DEUDA de la tienda = −(flete + iva + fulfillment), negativo. */
   total: string;
 }
 
@@ -141,8 +157,8 @@ export interface FilaCotizacionResultado {
 
 /**
  * Los totales del LOTE (decision D2, R51–R56). Espeja EXACTAMENTE la forma de
- * los costos de una fila —`entregado` con cinco conceptos, `devuelto` con
- * cuatro— porque una suma de devoluciones tampoco lleva IVA de comision.
+ * los costos de una fila —`entregado` con seis conceptos, `devuelto` con
+ * cinco— porque una suma de devoluciones tampoco lleva IVA de comision.
  *
  * Los dos contadores son parte del contrato, no un extra de cortesia (R54): un
  * total que calla las filas que dejo fuera se lee como "esto cuesta el lote"

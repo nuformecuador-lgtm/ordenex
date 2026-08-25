@@ -6,6 +6,9 @@ import {
   costosListadoOrden,
   pagoTiendaOrdenex,
   costoEnvioDeTarifa,
+  desgloseCargaApi,
+  montoFulfillmentDeTarifa,
+  tieneFulfillment,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
 import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
@@ -21,12 +24,17 @@ const TARIFA: TarifaVigente = {
   comisionCod: "5.00", // 5%
   ivaFlete: "13.00", // 13%
   ivaComisionCod: "13.00", // 13%
+  // Sin pacto especial: estos tests cubren la tarifa NORMAL. El pacto por distrito especial
+  // tiene los suyos en `tarifa-especial-por-distrito.test.ts`.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 function input(overrides: Partial<OrdenIngresoInput> = {}): OrdenIngresoInput {
   return {
     resultado: "entregada",
     esCentral: false,
+    esZonaEspecial: false,
     montoCobrar: "10000.00",
     cobraComision: true,
     ...overrides,
@@ -188,32 +196,32 @@ describe("pagoTiendaOrdenex", () => {
 // (R7), gap -> "0.00" (R8/D1). Mapea R2, R7, R8.
 describe("costoEnvioDeTarifa (feature 98)", () => {
   it("R2/R7: no-central -> valorFlete + IVA del flete (1000 + 13% = 1130.00)", () => {
-    expect(costoEnvioDeTarifa(TARIFA, false)).toBe("1130.00");
+    expect(costoEnvioDeTarifa(TARIFA, false, false)).toBe("1130.00");
   });
 
   it("R2/R7: central (esCentral) -> valorFleteGam + IVA del flete (1500 + 13% = 1695.00)", () => {
-    expect(costoEnvioDeTarifa(TARIFA, true)).toBe("1695.00");
+    expect(costoEnvioDeTarifa(TARIFA, true, false)).toBe("1695.00");
   });
 
   it("R8/D1: tarifa null (tienda sin tarifa vigente) -> '0.00', no lanza", () => {
-    expect(costoEnvioDeTarifa(null, false)).toBe("0.00");
-    expect(costoEnvioDeTarifa(null, true)).toBe("0.00");
+    expect(costoEnvioDeTarifa(null, false, false)).toBe("0.00");
+    expect(costoEnvioDeTarifa(null, true, false)).toBe("0.00");
   });
 
   it("R7: ivaFlete = 0 -> costoEnvio == flete base (sin IVA)", () => {
     const sinIva: TarifaVigente = { ...TARIFA, ivaFlete: "0.00" };
-    expect(costoEnvioDeTarifa(sinIva, false)).toBe("1000.00");
-    expect(costoEnvioDeTarifa(sinIva, true)).toBe("1500.00");
+    expect(costoEnvioDeTarifa(sinIva, false, false)).toBe("1000.00");
+    expect(costoEnvioDeTarifa(sinIva, true, false)).toBe("1500.00");
   });
 
   it("R7: IVA no trivial (15%) con redondeo ROUND_HALF_UP money-safe", () => {
     // flete 3.50 * 15% = 0.525 -> HALF_UP 0.53 -> total 4.03 (no 4.02 de truncar).
     const t: TarifaVigente = { ...TARIFA, valorFlete: "3.50", ivaFlete: "15.00" };
-    expect(costoEnvioDeTarifa(t, false)).toBe("4.03");
+    expect(costoEnvioDeTarifa(t, false, false)).toBe("4.03");
   });
 
   it("R7: salida SIEMPRE STRING escala 2 (nunca number)", () => {
-    const c = costoEnvioDeTarifa(TARIFA, false);
+    const c = costoEnvioDeTarifa(TARIFA, false, false);
     expect(typeof c).toBe("string");
     expect(c).toMatch(/^\d+\.\d{2}$/);
   });
@@ -240,10 +248,12 @@ const TARIFA_REAL: TarifaVigente = {
   comisionCod: "3.50",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 function orden(montoCobrar: string | null, extra: { esCentral?: boolean; cobraComision?: boolean } = {}) {
-  return { esCentral: false, montoCobrar, cobraComision: true, ...extra };
+  return { esCentral: false, esZonaEspecial: false, montoCobrar, cobraComision: true, ...extra };
 }
 
 describe("costosListadoOrden (feature 204) — comisión + IVA, con los montos reales", () => {
@@ -284,7 +294,7 @@ describe("costosListadoOrden (feature 204) — comisión + IVA, con los montos r
     // sale de la misma función.
     for (const monto of ["14900.00", "16618.40", "6500.00", "0.00", "33.33"]) {
       const d = derivarIngresoOrden(
-        { resultado: "entregada", esCentral: false, montoCobrar: monto, cobraComision: true },
+        { resultado: "entregada", esCentral: false, esZonaEspecial: false, montoCobrar: monto, cobraComision: true },
         TARIFA_REAL,
       );
       const esperado = d.ingreso_comision_cod!.plus(d.ingreso_iva_comision_cod!).toFixed(2);
@@ -314,7 +324,7 @@ describe("costosListadoOrden (feature 204) — flete + IVA", () => {
   it("coincide con costoEnvioDeTarifa, que ya derivaba esta misma cifra en el servidor", () => {
     for (const flete of ["3000.00", "2500.50", "0.10", "1.00"]) {
       const t: TarifaVigente = { ...TARIFA_REAL, valorFlete: flete };
-      expect(costosListadoOrden(t, orden("0.00")).fleteConIva).toBe(costoEnvioDeTarifa(t, false));
+      expect(costosListadoOrden(t, orden("0.00")).fleteConIva).toBe(costoEnvioDeTarifa(t, false, false));
     }
   });
 });
@@ -324,6 +334,8 @@ describe("costosListadoOrden (feature 204) — degradación y contrato de salida
     expect(costosListadoOrden(null, orden("14900.00"))).toEqual({
       fleteConIva: "0.00",
       comisionConIva: "0.00",
+      // Sin tarifa NINGUNA no hay pacto que faltar: el origen es `normal`, no un aviso.
+      fleteOrigen: "normal",
     });
   });
 
@@ -392,5 +404,63 @@ describe("costosListadoOrden (feature 204) — CONTRAPRUEBA: la fórmula del nav
         comisionEnElNavegador(montoNum, 3.5, 13),
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FULFILLMENT (2026-08-25) — el monto fijo de bodega: predicado y desglose.
+//
+// Vive FUERA de `derivarIngresoOrden` a proposito: la liquidacion (cierre y wallets) no lo
+// factura, y estos tests fijan esa frontera tanto como la aritmetica.
+// ---------------------------------------------------------------------------
+describe("fulfillment (2026-08-25)", () => {
+  const conMonto = (fulfillment: string) => ({ ...TARIFA, fulfillment });
+
+  it("tieneFulfillment: el predicado es `> 0`, no la presencia del campo", () => {
+    expect(tieneFulfillment(conMonto("2.00"))).toBe(true);
+    expect(tieneFulfillment(conMonto("0.01"))).toBe(true);
+    expect(tieneFulfillment(conMonto("0.00"))).toBe(false);
+    // Sin tarifa no hay servicio de bodega que cobrar (mismo gap seguro que R9).
+    expect(tieneFulfillment(null)).toBe(false);
+  });
+
+  it("montoFulfillmentDeTarifa: el monto exacto, y cero sin tarifa", () => {
+    expect(montoFulfillmentDeTarifa(conMonto("2.50")).toFixed(2)).toBe("2.50");
+    expect(montoFulfillmentDeTarifa(null).toFixed(2)).toBe("0.00");
+  });
+
+  it("desgloseCargaApi: `costoEnvio` suma el fulfillment y el desglose lo aisla", () => {
+    // 1000 + 13% = 1130.00, mas 250.00 de bodega.
+    expect(desgloseCargaApi(conMonto("250.00"), false, false)).toEqual({
+      costoEnvio: "1380.00",
+      fulfillment: "250.00",
+    });
+    // La variante GAM elige la otra columna del flete y el monto de bodega no cambia.
+    expect(desgloseCargaApi(conMonto("250.00"), true, false)).toEqual({
+      costoEnvio: "1945.00",
+      fulfillment: "250.00",
+    });
+  });
+
+  it("sin fulfillment, `costoEnvio` es EXACTAMENTE el de antes de la fecha", () => {
+    const sin = desgloseCargaApi(conMonto("0.00"), false, false);
+    expect(sin.costoEnvio).toBe(costoEnvioDeTarifa(TARIFA, false, false));
+    expect(sin.fulfillment).toBe("0.00");
+  });
+
+  it("sin tarifa el desglose degrada a cero por los dos lados, sin lanzar", () => {
+    expect(desgloseCargaApi(null, false, false)).toEqual({
+      costoEnvio: "0.00",
+      fulfillment: "0.00",
+    });
+  });
+
+  it("NO entra en la liquidacion: `derivarIngresoOrden` ignora el monto por completo", () => {
+    const sin = derivarIngresoOrden(input(), conMonto("0.00"));
+    const con = derivarIngresoOrden(input(), conMonto("999.00"));
+    // Los seis conceptos que alimentan cierre y wallets son identicos. Si un dia el
+    // fulfillment tiene que liquidarse, se decide ahi dentro y con su propia migracion de
+    // `cierre_detail` — no colandose por el objeto tarifa.
+    expect(JSON.stringify(con)).toBe(JSON.stringify(sin));
   });
 });

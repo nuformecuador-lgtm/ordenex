@@ -434,6 +434,7 @@ const TARIFA_SELECT = {
   ivaFlete: true,
   ivaComisionCod: true,
   tarifaEspecial: true, // columna opcional: `null` = sin pacto especial
+  tarifaEspecialDevuelta: true, // idem, para la devolucion
   zonaId: true, // opcional: `null` = tarifa no acotada a una zona
   isDefault: true,
   createdAt: true,
@@ -495,7 +496,9 @@ const WITH_ESTATUS_Y_TIENDA = {
     zona: { select: { id: true, nombre: true, esCentral: true } },
     provincia: { select: { id: true, nombre: true } },
     canton: { select: { id: true, nombre: true } },
-    distrito: { select: { id: true, nombre: true } },
+    // `zonaEspecial` (2026-08-25) viaja con el distrito porque decide el MONTO del flete que
+    // muestran las dos columnas de dinero de la fila, no solo su etiqueta.
+    distrito: { select: { id: true, nombre: true, zonaEspecial: true } },
     mensajeroAsignado: { select: { id: true, nombre: true } },
     // Gestion de reprogramacion VIGENTE (a lo sumo una, `take: 1`): alimenta la
     // columna "Liberada el" de la tab `reprogramada`. `orden -> gestiones` es 1:N
@@ -573,6 +576,8 @@ function toTarifaDTO(t: TarifaListRow): TarifaDTO {
     ivaComisionCod: t.ivaComisionCod.toNumber(),
     // Nullable: se conserva la ausencia; `null` no es 0 (patron TarifaRepository).
     tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toNumber(),
+    tarifaEspecialDevuelta:
+      t.tarifaEspecialDevuelta == null ? null : t.tarifaEspecialDevuelta.toNumber(),
     zonaId: t.zonaId ?? null,
     isDefault: t.isDefault,
     createdAt: t.createdAt,
@@ -598,6 +603,9 @@ function toTarifaVigente(t: TarifaListRow): TarifaVigente {
     comisionCod: t.comisionCod.toFixed(2),
     ivaFlete: t.ivaFlete.toFixed(2),
     ivaComisionCod: t.ivaComisionCod.toFixed(2),
+    tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toFixed(2),
+    tarifaEspecialDevuelta:
+      t.tarifaEspecialDevuelta == null ? null : t.tarifaEspecialDevuelta.toFixed(2),
   };
 }
 
@@ -655,6 +663,9 @@ function toListItemDTO(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenLi
   // dos bordes de API por key, que devuelven 409 — la asimetria es deliberada).
   const costos = costosListadoOrden(tarifa === null ? null : toTarifaVigente(tarifa), {
     esCentral: row.zona.esCentral,
+    // `=== true`: la columna es tri-valuada y `null` ("nadie lo decidio") no es especial. Una
+    // orden sin distrito entra como `false`: sin distrito no hay marca que aplicar.
+    esZonaEspecial: row.distrito?.zonaEspecial === true,
     montoCobrar: row.montoCobrar ? row.montoCobrar.toFixed(2) : null,
     cobraComision: row.cobraComision,
   });
@@ -675,6 +686,9 @@ function toListItemDTO(row: OrdenListRow, tarifa: TarifaListRow | null): OrdenLi
     // los pinta; no vuelve a operar con ellos.
     fleteConIva: costos.fleteConIva,
     comisionConIva: costos.comisionConIva,
+    // De donde salio ese flete. La fila lo pinta para senalar `especial_sin_pacto`: mismo
+    // importe que una orden normal, pero por un hueco de configuracion.
+    fleteOrigen: costos.fleteOrigen,
     // Fecha de la gestion de reprogramacion vigente -> `YYYY-MM-DD` (patron
     // CierreDiaRepository). `fecha_reprogramacion` es `@db.Date` guardada a
     // medianoche UTC, asi que `toISOString().slice(0, 10)` da el dia calendario
@@ -1418,11 +1432,18 @@ export class OrdenRepository implements IOrdenRepository {
 
   // --- Feature 15: carga masiva (metodos batch) ---
 
-  /** R25: remision -> estatus.value de la orden existente (no borrada). */
-  async findExistingRemisiones(nums: string[]): Promise<Map<string, string>> {
+  /**
+   * R25: remision -> estatus.value de la orden existente (no borrada) DE ESA TIENDA.
+   *
+   * `tiendaId` es OBLIGATORIO desde que `num_remision` es unico POR TIENDA y no global
+   * (migracion 20260825160000). Sin el, esta consulta seguiria diciendo "duplicada" por una
+   * orden de OTRA tienda: un falso duplicado que ademas le confirma al cargador que alguien
+   * mas uso ese numero. El scope no es una optimizacion, es la correccion.
+   */
+  async findExistingRemisiones(nums: string[], tiendaId: string): Promise<Map<string, string>> {
     if (nums.length === 0) return new Map();
     const rows = await this.prisma.orden.findMany({
-      where: { numRemision: { in: nums }, deletedAt: null },
+      where: { numRemision: { in: nums }, tiendaId, deletedAt: null },
       select: { numRemision: true, estatus: { select: { value: true } } },
     });
     return new Map(rows.map((r) => [r.numRemision, r.estatus.value]));
@@ -1465,6 +1486,7 @@ export class OrdenRepository implements IOrdenRepository {
         id: true,
         nombre: true,
         cantonId: true,
+        zonaEspecial: true,
         zonas: { select: { zonaId: true, zona: { select: { esCentral: true } } } },
       },
     });
@@ -1479,6 +1501,9 @@ export class OrdenRepository implements IOrdenRepository {
       // Feature 98/R2: `esCentral` de la unica zona; `false` si el distrito no resuelve UNA
       // zona (0 o >1 -> `zonaId` null -> la fila no llega a tarifarse).
       esCentral: d.zonas.length === 1 ? d.zonas[0].zona.esCentral : false,
+      // A diferencia de `esCentral`, esta NO depende de que el distrito resuelva UNA zona: la
+      // marca es del distrito, no de su zona. `=== true` porque la columna es tri-valuada.
+      esZonaEspecial: d.zonaEspecial === true,
     }));
   }
 
@@ -1496,13 +1521,21 @@ export class OrdenRepository implements IOrdenRepository {
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
       const chunkNums = chunk.map((d) => d.numRemision);
+      // Las dueñas del chunk. En la practica es SIEMPRE una sola (el llamador fija `tiendaId`
+      // con el actor), pero se deriva del dato en vez de asumirlo: si un dia entrara un lote
+      // mixto, el diff before/after seguiria siendo correcto en lugar de silenciosamente malo.
+      const chunkTiendas = [...new Set(chunk.map((d) => d.tiendaId))];
       // Feature 49/#1 (R7): cada chunk hace su createMany + append en la MISMA tx.
       const chunkResult = await this.prisma.$transaction(async (tx) => {
         // R8/R9: para registrar SOLO las EFECTIVAMENTE insertadas (skipDuplicates puede
         // saltar duplicadas), se comparan las filas con esos num_remision antes/despues:
         // las nuevas son las que no existian antes del insert.
         const before = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
+          // `tiendaId` en el where desde que la unicidad de `num_remision` es POR TIENDA
+          // (migracion 20260825160000): sin el, una orden homonima de OTRA tienda entraria en
+          // `beforeIds` y la fila recien insertada NO se contaria como nueva (sin historial,
+          // sin geocodificacion, fuera del resultado).
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
           // Feature 141: `numRemision` se anade al select (aditivo sobre una query que YA se
           // ejecutaba) para saber si queda algo por insertar ANTES de asegurar el lote (R24).
           select: { id: true, numRemision: true },
@@ -1530,7 +1563,7 @@ export class OrdenRepository implements IOrdenRepository {
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
           // Feature 91 (design §0/C3): `direccion` se anade al select para decidir POR
           // FILA si encolar geocodificacion (R8/R9). Es aditivo sobre una query que YA se
           // ejecutaba: no anade round-trip.
@@ -1591,11 +1624,19 @@ export class OrdenRepository implements IOrdenRepository {
     for (let i = 0; i < data.length; i += batchSize) {
       const chunk = data.slice(i, i + batchSize);
       const chunkNums = chunk.map((d) => d.numRemision);
+      // Las dueñas del chunk. En la practica es SIEMPRE una sola (el llamador fija `tiendaId`
+      // con el actor), pero se deriva del dato en vez de asumirlo: si un dia entrara un lote
+      // mixto, el diff before/after seguiria siendo correcto en lugar de silenciosamente malo.
+      const chunkTiendas = [...new Set(chunk.map((d) => d.tiendaId))];
       const chunkResult = await this.prisma.$transaction(async (tx) => {
         // Diff before/after: las nuevas son las que no existian antes del insert (respeta
         // duplicados por carrera, igual que createManyOrdenes).
         const before = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
+          // `tiendaId` en el where desde que la unicidad de `num_remision` es POR TIENDA
+          // (migracion 20260825160000): sin el, una orden homonima de OTRA tienda entraria en
+          // `beforeIds` y la fila recien insertada NO se contaria como nueva (sin historial,
+          // sin geocodificacion, fuera del resultado).
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
           // Feature 141: `numRemision` para decidir si queda algo por insertar (R24).
           select: { id: true, numRemision: true },
         });
@@ -1617,7 +1658,7 @@ export class OrdenRepository implements IOrdenRepository {
           skipDuplicates: true,
         });
         const after = await tx.orden.findMany({
-          where: { numRemision: { in: chunkNums } },
+          where: { numRemision: { in: chunkNums }, tiendaId: { in: chunkTiendas } },
           // Feature 155/R11: `direccion` se anade al select para decidir POR FILA si encolar
           // geocodificacion, exactamente como ya hacia `createManyOrdenes`. Es aditivo sobre
           // una query que YA se ejecutaba: no anade round-trip.
@@ -1965,8 +2006,9 @@ export class OrdenRepository implements IOrdenRepository {
   /**
    * Feature 177/R6-R12 (design §4.2): hasta DOS filas que casan por IGUALDAD EXACTA con el
    * identificador dentro del scope del owner. `take: 2` no es una optimizacion caprichosa:
-   * `num_guia` y `num_remision` son `@unique` GLOBALES por separado (schema.prisma:480-481),
-   * asi que el maximo teorico es una fila por columna. Con `numGuia = null` (el `{id}` no era
+   * `num_guia` es `@unique` GLOBAL y `num_remision` es `@unique` POR TIENDA (migracion
+   * 20260825160000), y este `where` FUERZA `tiendaId: ownerId` — asi que dentro de este scope
+   * el maximo teorico sigue siendo una fila por columna. Con `numGuia = null` (el `{id}` no era
    * entero positivo) la condicion sobre `num_guia` NO se emite: el `OR` queda con una sola
    * rama y la guia nunca casa (R8). Comparacion de igualdad, jamas `contains`/`mode` (R10).
    * NO desempata: la precedencia de R14 vive en el service.

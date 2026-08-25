@@ -48,41 +48,40 @@ function reqConHeader(authorization: string): Request {
 }
 
 describe("POST /api/ordenes/api-key/carga/[cargaId]/generate — exito (R28/R30/R31)", () => {
-  it("R28/R30: 200 con url, expiraEnSegundos y generado:true cuando se genera el consolidado", async () => {
+  it("R28/R30: 200 con url y expiraEnSegundos cuando se genera el consolidado", async () => {
     const service = fakePdfService({
       status: "ok",
       url: "https://proyecto.supabase.co/storage/v1/object/sign/etiquetas-guia/lote.pdf",
       expiraEnSegundos: 300,
-      generado: true,
     });
     const res = await handleCargaGenerateApi(req(SECRETO), CARGA_PROPIA, deps(AUTH_OK, service));
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    // R28: la forma es EXACTAMENTE la del endpoint por orden: 3 claves, ni una mas.
-    expect(Object.keys(json).sort()).toEqual(["expiraEnSegundos", "generado", "url"]);
+    // R28: la forma es EXACTAMENTE la del endpoint por orden: 2 claves, ni una mas.
+    // `generado` se retiro del contrato el 2026-08-25 y esta asercion es la que impide que
+    // vuelva a colarse por una rama sola, dejando los dos endpoints con formas distintas.
+    expect(Object.keys(json).sort()).toEqual(["expiraEnSegundos", "url"]);
     expect(json).toEqual({
       url: "https://proyecto.supabase.co/storage/v1/object/sign/etiquetas-guia/lote.pdf",
       expiraEnSegundos: 300,
-      generado: true,
     });
     // R29/R4: el owner sale del actor autenticado, nunca de la peticion.
     expect(service.porCarga).toHaveBeenCalledWith(ACTOR, CARGA_PROPIA);
   });
 
-  it("R28/R31: 200 con generado:false cuando el consolidado ya existia y solo se re-firma", async () => {
+  it("R28/R31: 200 con la MISMA forma cuando el consolidado ya existia y solo se re-firma", async () => {
     const service = fakePdfService({
       status: "ok",
       url: "https://proyecto.supabase.co/storage/v1/object/sign/etiquetas-guia/lote.pdf?v=2",
       expiraEnSegundos: 300,
-      generado: false,
     });
     const res = await handleCargaGenerateApi(req(SECRETO), CARGA_PROPIA, deps(AUTH_OK, service));
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(Object.keys(json).sort()).toEqual(["expiraEnSegundos", "generado", "url"]);
-    expect(json.generado).toBe(false);
+    // Reuso y generacion son ya INDISTINGUIBLES desde fuera: misma forma, mismas claves.
+    expect(Object.keys(json).sort()).toEqual(["expiraEnSegundos", "url"]);
     expect(json.expiraEnSegundos).toBe(300);
     expect(json.url).toContain("sign/");
   });
@@ -149,7 +148,6 @@ describe("POST /api/ordenes/api-key/carga/[cargaId]/generate — 422 (R42)", () 
       status: "ok",
       url: "https://x",
       expiraEnSegundos: 300,
-      generado: true,
     });
     const res = await handleCargaGenerateApi(
       req(SECRETO, "no-es-uuid"),
@@ -167,7 +165,6 @@ describe("POST /api/ordenes/api-key/carga/[cargaId]/generate — 422 (R42)", () 
       status: "ok",
       url: "https://x",
       expiraEnSegundos: 300,
-      generado: true,
     });
     // "LOTE-2026-07-22" es el `name` de la carga: identificador plausible para un integrador
     // despistado, pero NO es el uuid publicado como `cargaId`. Debe cortarse en el borde.

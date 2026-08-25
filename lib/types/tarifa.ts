@@ -1,6 +1,22 @@
 import { z } from "zod";
 import { tarifasConfig } from "@/lib/config/tarifas";
 
+/**
+ * De donde salio el monto del flete de una orden (tarifa especial por distrito, 2026-08-25).
+ *
+ * - `normal`             -> el distrito no es especial; columna estandar (o GAM).
+ * - `especial`           -> el distrito es especial y habia pacto; se cobro el pacto.
+ * - `especial_sin_pacto` -> el distrito es especial pero la tarifa resuelta no tiene monto
+ *                           pactado. Se cobra la tarifa NORMAL (no se bloquea ni se cobra 0),
+ *                           pero queda dicho: es un hueco de configuracion, no una decision.
+ *
+ * VIVE AQUI Y NO JUNTO A `resolverFlete` a proposito: `lib/types/orden.ts` lo necesita para el
+ * DTO del listado, y ese modulo lo consumen componentes de CLIENTE. `ingreso-ordenex.ts`
+ * importa `Prisma` como valor, asi que colgar el tipo de alli metia el cliente de Prisma en el
+ * grafo del navegador. Este archivo no importa nada de `@prisma/client`.
+ */
+export type OrigenFlete = "normal" | "especial" | "especial_sin_pacto";
+
 // R2/R5: montos >= 0, precision fija (nunca punto flotante ni texto en DB).
 const montoSchema = z.number().nonnegative();
 // R3/R5/D2/D3: porcentaje 0..100.
@@ -42,6 +58,10 @@ export const crearTarifaSchema = z
     // Cobro pactado aparte. UNICO campo opcional: `null` (o ausente) = "sin
     // tarifa especial", que no es lo mismo que 0 (un cobro especial de cero).
     tarifaEspecial: montoSchema.nullable().optional(),
+    // Hermana de la anterior para la DEVOLUCION, e independiente de ella: se puede
+    // pactar el flete de entrega y dejar la devolucion en la tarifa normal. Mismo
+    // significado del `null`: sin pacto, que no es 0.
+    tarifaEspecialDevuelta: montoSchema.nullable().optional(),
     // Acotado por zona. `null`/ausente = la tarifa NO se acota a ninguna zona
     // (aplica a la tienda entera), que es el estado de todas las filas historicas.
     zonaId: idSchema.nullable().optional(),
@@ -94,6 +114,7 @@ export interface TarifaDTO {
   ivaFlete: number;
   ivaComisionCod: number;
   tarifaEspecial: number | null; // null = sin tarifa especial pactada
+  tarifaEspecialDevuelta: number | null; // null = sin pacto especial para la DEVOLUCION
   zonaId: string | null; // null = no acotada a una zona (aplica a la tienda entera)
   isDefault: boolean; // la tarifa a la que se cae si ninguna zona aplica
   createdAt: Date;

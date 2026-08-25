@@ -8,11 +8,16 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 export type PdfEtiquetaResult =
   /**
-   * R22: URL firmada EN ESTA llamada (nunca leida de la persistencia, R23), su TTL y el
-   * testigo del reuso: `generado: false` = se reuso el objeto ya existente y solo se
-   * re-firmo (R21/R31); `true` = se construyo, subio y se persistio su referencia (R20/R30).
+   * R22: URL firmada EN ESTA llamada (nunca leida de la persistencia, R23) y su TTL.
+   *
+   * YA NO LLEVA `generado`. Aqui vivia el testigo del reuso (`false` = se re-firmo el objeto
+   * existente, `true` = se construyo y subio). Se retiro del contrato el 2026-08-25: para el
+   * integrador el resultado util es IDENTICO en los dos casos —una URL firmada del mismo PDF—,
+   * asi que el campo no habilitaba ninguna decision suya y si describia nuestro estado interno
+   * de almacenamiento (si el objeto ya estaba en el bucket). El reuso sigue existiendo tal cual
+   * (R21/R31): lo que se retira es contarlo, no hacerlo.
    */
-  | { status: "ok"; url: string; expiraEnSegundos: number; generado: boolean }
+  | { status: "ok"; url: string; expiraEnSegundos: number }
   /** R12/R29: recurso inexistente, borrado o de otro owner. El borde -> 404 identico. */
   | { status: "not_found" }
   /** R25/R33: sin etiqueta imprimible (orden sin guia / lote sin ninguna). -> 409. */

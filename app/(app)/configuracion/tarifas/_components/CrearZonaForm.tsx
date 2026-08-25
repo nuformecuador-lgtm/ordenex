@@ -17,7 +17,10 @@ import {
 } from "@/lib/types/zona";
 import { crearZona, actualizarZona } from "@/lib/actions/zonas";
 import { crearTarifa, actualizarTarifa } from "@/lib/actions/tarifas";
-import type { ProvinciaArbolDTO } from "@/lib/actions/geografia";
+import {
+  actualizarDistritosEspeciales,
+  type ProvinciaArbolDTO,
+} from "@/lib/actions/geografia";
 import type { VehiculoDTO } from "@/lib/types/vehiculos";
 
 import { GeografiaSelector } from "./GeografiaSelector";
@@ -90,10 +93,23 @@ export function CrearZonaForm({
   const toast = useToast();
   const esEditar = mode === "editar";
 
+  // Marca de especial que traía el árbol al montar. El guardado envía el DELTA
+  // contra esto: sólo los distritos que el usuario tocó, ni uno más.
+  const [especialesIniciales] = useState<Set<string>>(() => {
+    const ids = new Set<string>();
+    for (const p of provincias)
+      for (const c of p.cantones)
+        for (const d of c.distritos) if (d.zonaEspecial) ids.add(d.id);
+    return ids;
+  });
+
   const [nombre, setNombre] = useState(initial?.nombre ?? "");
   const [distritoIds, setDistritoIds] = useState<string[]>(
     initial?.distritoIds ?? [],
   );
+  // Marca de zona especial tal como la reporta el selector. Arranca en `null`
+  // (el selector aún no habló) para no confundirlo con "ninguno es especial".
+  const [especiales, setEspeciales] = useState<string[] | null>(null);
   const [cobro, setCobro] = useState<CobroVehiculoValue>(
     initial?.cobro ?? cobroVacio(),
   );
@@ -184,6 +200,29 @@ export function CrearZonaForm({
     return false;
   }
 
+  /**
+   * Persiste la marca `distrito.zona_especial` de los distritos que cambiaron.
+   * Como la marca vive en el distrito y no en la zona, al refrescar queda
+   * resaltada en TODAS las zonas que contengan ese distrito.
+   *
+   * Devuelve `true` si no había nada que guardar o si se guardó bien. Un fallo
+   * aquí NO tumba el guardado de la zona: avisa y sigue.
+   */
+  async function guardarEspeciales(): Promise<boolean> {
+    if (especiales === null) return true; // el selector no reportó nada aún
+    const actuales = new Set(especiales);
+    const marcar = [...actuales].filter((id) => !especialesIniciales.has(id));
+    const desmarcar = [...especialesIniciales].filter(
+      (id) => !actuales.has(id),
+    );
+    if (marcar.length === 0 && desmarcar.length === 0) return true;
+
+    const res = await actualizarDistritosEspeciales({ marcar, desmarcar });
+    if (res.status === "ok") return true;
+    toast.error("No se pudo guardar la marca de zona especial.");
+    return false;
+  }
+
   /** Envía el payload (crear/actualizar) y maneja resultado/errores. */
   async function enviar() {
     const parsed = validar();
@@ -206,6 +245,9 @@ export function CrearZonaForm({
       if (res.status === "ok") {
         setZonaIdGuardada(res.zona.id);
         if (!(await guardarTarifaZona(res.zona.id, tarifa.numericos))) return;
+        // La marca de especial se guarda con la zona ya persistida: si falla,
+        // la zona sigue guardada y sólo se avisa de lo que no entró.
+        await guardarEspeciales();
         toast.success(esEditar ? "Zona actualizada" : "Zona creada");
         onSaved();
         return;
@@ -275,6 +317,7 @@ export function CrearZonaForm({
         provincias={provincias}
         initialSelected={initial?.distritoIds}
         onSelectedChange={setDistritoIds}
+        onEspecialesChange={setEspeciales}
       />
       {/* Error del GRUPO de distritos (selector geográfico): FieldError suelto. */}
       <FieldError messages={errors.distritoIds} />

@@ -1,0 +1,543 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style>
+    body {
+      margin: 0;
+      background: #f7f8fc;
+      color: #12233f;
+      font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #1d5fd4; text-decoration: none; }
+    a:hover { color: #0b3880; text-decoration: underline; }
+    button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      background: #ffffff;
+      border: 1px solid #e3e8f2;
+      border-radius: 10px;
+      margin: 20px;
+      overflow: hidden;
+    }
+
+    /* ── cabecera ─────────────────────────────────────────── */
+    .head { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid #e3e8f2; }
+    .head-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .sub { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: #4a5368; max-width: 52ch; }
+    .counts { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px;
+      border-radius: 999px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+    }
+    .pill-neutral { background: #f1f4fb; color: #4a5368; }
+
+    .toolbar { display: flex; align-items: center; gap: 10px; }
+    .search { position: relative; flex-grow: 1; display: flex; align-items: center; }
+    .search svg { position: absolute; left: 10px; color: #8a94ad; pointer-events: none; }
+    .inp {
+      width: 100%; height: 34px; padding: 0 12px 0 32px; box-sizing: border-box;
+      border: 1px solid #e3e8f2; border-radius: 8px; background: #ffffff;
+      font: inherit; font-size: 13px; color: #12233f; outline: none;
+    }
+    .inp::placeholder { color: #8a94ad; }
+    .inp:focus { border-color: #f26419; box-shadow: 0 0 0 3px rgba(242, 100, 25, 0.18); }
+
+    .seg { display: flex; gap: 2px; padding: 2px; background: #f1f4fb; border-radius: 8px; }
+    .seg-btn { height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #4a5368; white-space: nowrap; transition: background 120ms, color 120ms; }
+    .seg-btn:hover { color: #12233f; }
+    .seg-on { background: #ffffff; color: #12233f; box-shadow: 0 1px 2px rgba(13, 36, 68, 0.10); }
+
+    /* ── árbol ────────────────────────────────────────────── */
+    .tree { flex-grow: 1; overflow: auto; padding: 6px 10px 10px; }
+    .empty { padding: 28px 10px; text-align: center; font-size: 13px; color: #8a94ad; }
+
+    .row { display: flex; align-items: center; gap: 8px; border-radius: 6px; padding-right: 6px; }
+    .row:hover { background: #f7f8fc; }
+    .row-prov { padding-left: 4px; }
+    .row-cant { padding-left: 4px; }
+    .row-dist { padding-left: 6px; }
+    .kids { margin-left: 16px; padding-left: 10px; border-left: 1px solid #e9edf6; }
+
+    .chev { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: #8a94ad; border-radius: 4px; flex-shrink: 0; transition: transform 160ms ease; }
+    .chev:hover { color: #12233f; background: #e9edf6; }
+    .chev-spacer { width: 18px; flex-shrink: 0; }
+
+    .cbx {
+      display: flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; box-sizing: border-box; flex-shrink: 0;
+      border: 1px solid #e3e8f2; border-radius: 4px; background: #ffffff; color: #ffffff;
+      transition: background 120ms, border-color 120ms;
+    }
+    .cbx:hover { border-color: #8a94ad; }
+
+    .label { flex-grow: 1; display: flex; align-items: baseline; gap: 6px; min-width: 0; text-align: left; }
+    .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nm-prov { font-weight: 600; }
+    .nm-cant { font-weight: 500; }
+    .meta { font-size: 11px; color: #8a94ad; white-space: nowrap; }
+    .meta-otra { font-size: 11px; color: #4a5368; background: #f1f4fb; border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+
+    /* ── el marcador ──────────────────────────────────────── */
+    .mk-col { display: flex; align-items: center; justify-content: flex-end; width: 156px; flex-shrink: 0; }
+    .mk {
+      display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 6px;
+      border: 1px solid transparent; border-radius: 999px;
+      font-size: 11.5px; font-weight: 500; white-space: nowrap;
+      transition: background 120ms, border-color 120ms, color 120ms, opacity 120ms;
+    }
+    .mk svg { flex-shrink: 0; }
+    /* apagado: sólo la silueta, y el texto aparece al pasar por encima */
+    .mk-off { color: #8a94ad; opacity: 0.55; }
+    .row:hover .mk-off, .mk-off:focus-visible { opacity: 1; background: #f1f4fb; }
+    .mk-off .mk-txt { max-width: 0; overflow: hidden; opacity: 0; transition: max-width 160ms ease, opacity 120ms; }
+    .row:hover .mk-off .mk-txt, .mk-off:focus-visible .mk-txt { max-width: 90px; opacity: 1; }
+    /* sin decidir: se anuncia solo, porque pide una decisión */
+    .mk-null { opacity: 1; border-style: dashed; border-color: #dde1ee; color: #4a5368; background: #ffffff; }
+    .mk-null .mk-txt { font-style: italic; }
+    /* grupo: contador de especiales, marca/desmarca en cascada */
+    .mk-count { background: #ffffff; }
+
+    /* ── pie ──────────────────────────────────────────────── */
+    .foot { border-top: 1px solid #e3e8f2; background: #f7f8fc; padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .foot-line { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+    .foot-ttl { font-size: 12.5px; font-weight: 600; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 6px 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 500; }
+    .chip-x { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 999px; opacity: 0.6; }
+    .chip-x:hover { opacity: 1; background: rgba(13, 36, 68, 0.10); }
+
+    .aviso { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px; background: #ffffff; border: 1px dashed #dde1ee; }
+    .aviso-txt { font-size: 12px; line-height: 1.45; color: #4a5368; }
+    .aviso-btn { font-size: 12px; font-weight: 500; color: #1d5fd4; white-space: nowrap; }
+    .aviso-btn:hover { color: #0b3880; text-decoration: underline; }
+
+    .nota { margin: 0; font-size: 11.5px; line-height: 1.5; color: #8a94ad; display: flex; align-items: flex-start; gap: 7px; }
+    .nota strong { color: #4a5368; font-weight: 500; }
+  </style>
+</helmet>
+
+<div class="panel" style="min-height: 100%; box-sizing: border-box;">
+
+  <div class="head">
+    <div class="head-top">
+      <div>
+        <h2 class="h2">Distritos de la zona</h2>
+        <p class="sub">
+          Marcá qué distritos pertenecen a <strong>GAM Sur</strong> y cuáles se cobran
+          como zona especial.
+        </p>
+      </div>
+      <div class="counts">
+        <span class="pill pill-neutral">{{ resumen.enZona }} en la zona</span>
+        <span class="pill" style="background: {{ tono.soft }}; color: {{ tono.strong }};">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+          {{ resumen.especiales }} especiales
+        </span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input class="inp" type="search" placeholder="Buscar provincia, cantón o distrito…" value="{{ query }}" onChange="{{ onQuery }}" aria-label="Buscar en el catálogo geográfico">
+      </div>
+      <div class="seg" role="group" aria-label="Filtrar el árbol">
+        <sc-for list="{{ filtros }}" as="f" hint-placeholder-count="4">
+          <button type="button" class="{{ f.cls }}" onClick="{{ f.pick }}">{{ f.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div class="tree">
+    <sc-if value="{{ vacio }}" hint-placeholder-val="{{ false }}">
+      <p class="empty">Ningún distrito coincide con lo buscado.</p>
+    </sc-if>
+
+    <sc-for list="{{ tree }}" as="p" hint-placeholder-count="3">
+      <div>
+        <div class="row row-prov" style="height: {{ alto.prov }};">
+          <button type="button" class="chev" style="transform: {{ p.chevRot }};" onClick="{{ p.toggleOpen }}" aria-label="Desplegar {{ p.nombre }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button type="button" class="cbx" style="background: {{ p.cbxBg }}; border-color: {{ p.cbxBorder }};" onClick="{{ p.toggleSel }}" aria-label="Seleccionar todos los distritos de {{ p.nombre }}">
+            <sc-if value="{{ p.cbxCheck }}" hint-placeholder-val="{{ true }}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4.5 4.5L19 7"/></svg>
+            </sc-if>
+            <sc-if value="{{ p.cbxDash }}" hint-placeholder-val="{{ false }}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+            </sc-if>
+          </button>
+          <button type="button" class="label" onClick="{{ p.toggleOpen }}">
+            <span class="nm nm-prov">{{ p.nombre }}</span>
+            <span class="meta">{{ p.conteo }}</span>
+          </button>
+          <div class="mk-col">
+            <button type="button" class="mk mk-count" style="{{ p.mkStyle }}" onClick="{{ p.toggleEsp }}" aria-label="{{ p.mkAria }}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="{{ p.starFill }}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+              <span class="mk-txt">{{ p.mkTexto }}</span>
+            </button>
+          </div>
+        </div>
+
+        <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
+          <div class="kids">
+            <sc-for list="{{ p.cantones }}" as="c" hint-placeholder-count="2">
+              <div>
+                <div class="row row-cant" style="height: {{ alto.cant }};">
+                  <button type="button" class="chev" style="transform: {{ c.chevRot }};" onClick="{{ c.toggleOpen }}" aria-label="Desplegar {{ c.nombre }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                  </button>
+                  <button type="button" class="cbx" style="background: {{ c.cbxBg }}; border-color: {{ c.cbxBorder }};" onClick="{{ c.toggleSel }}" aria-label="Seleccionar todos los distritos de {{ c.nombre }}">
+                    <sc-if value="{{ c.cbxCheck }}" hint-placeholder-val="{{ true }}">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4.5 4.5L19 7"/></svg>
+                    </sc-if>
+                    <sc-if value="{{ c.cbxDash }}" hint-placeholder-val="{{ false }}">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>
+                    </sc-if>
+                  </button>
+                  <button type="button" class="label" onClick="{{ c.toggleOpen }}">
+                    <span class="nm nm-cant">{{ c.nombre }}</span>
+                    <span class="meta">{{ c.conteo }}</span>
+                  </button>
+                  <div class="mk-col">
+                    <button type="button" class="mk mk-count" style="{{ c.mkStyle }}" onClick="{{ c.toggleEsp }}" aria-label="{{ c.mkAria }}">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="{{ c.starFill }}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+                      <span class="mk-txt">{{ c.mkTexto }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <sc-if value="{{ c.open }}" hint-placeholder-val="{{ true }}">
+                  <div class="kids">
+                    <sc-for list="{{ c.distritos }}" as="d" hint-placeholder-count="3">
+                      <div class="row row-dist" style="height: {{ alto.dist }};">
+                        <span class="chev-spacer"></span>
+                        <button type="button" class="cbx" style="background: {{ d.cbxBg }}; border-color: {{ d.cbxBorder }};" onClick="{{ d.toggleSel }}" aria-label="Incluir el distrito {{ d.nombre }} en la zona">
+                          <sc-if value="{{ d.cbxCheck }}" hint-placeholder-val="{{ true }}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4.5 4.5L19 7"/></svg>
+                          </sc-if>
+                        </button>
+                        <button type="button" class="label" onClick="{{ d.toggleSel }}">
+                          <span class="nm">{{ d.nombre }}</span>
+                          <sc-if value="{{ d.enOtraZona }}" hint-placeholder-val="{{ false }}">
+                            <span class="meta-otra">también en {{ d.zonaNombre }}</span>
+                          </sc-if>
+                        </button>
+                        <div class="mk-col">
+                          <button type="button" class="{{ d.mkClase }}" style="{{ d.mkStyle }}" onClick="{{ d.toggleEsp }}" aria-pressed="{{ d.especial }}" aria-label="{{ d.mkAria }}">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="{{ d.starFill }}" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+                            <span class="mk-txt">{{ d.mkTexto }}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="foot">
+    <div class="foot-line">
+      <span class="foot-ttl" style="color: {{ tono.strong }};">Zona especial ({{ resumen.especiales }})</span>
+      <div class="chips">
+        <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="3">
+          <span class="chip" style="background: {{ tono.soft }}; color: {{ tono.strong }};">
+            {{ ch.nombre }}
+            <button type="button" class="chip-x" onClick="{{ ch.quitar }}" aria-label="Quitar la marca de {{ ch.nombre }}">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg>
+            </button>
+          </span>
+        </sc-for>
+        <sc-if value="{{ sinEspeciales }}" hint-placeholder-val="{{ false }}">
+          <span class="meta" style="line-height: 24px;">Ningún distrito marcado todavía.</span>
+        </sc-if>
+      </div>
+    </div>
+
+    <sc-if value="{{ hayPendientes }}" hint-placeholder-val="{{ true }}">
+      <div class="aviso">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a94ad" stroke-width="2" stroke-linecap="round" style="margin-top: 1px; flex-shrink: 0;" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <span class="aviso-txt">
+          <strong style="font-weight: 500; color: #12233f;">{{ pendientes.n }} distritos sin decidir.</strong>
+          Vienen de antes de que existiera la marca: nadie dijo todavía si son especiales o no.
+        </span>
+        <button type="button" class="aviso-btn" onClick="{{ resolverPendientes }}">Marcarlos como no especiales</button>
+      </div>
+    </sc-if>
+
+    <p class="nota">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="margin-top: 1px; flex-shrink: 0;" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.6"/></svg>
+      <span><strong>La marca es del distrito, no de esta zona.</strong> Si el distrito también pertenece a otra zona, ahí también contará como especial.</span>
+    </p>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"tono":{"editor":"enum","options":["ambar","azul"],"default":"ambar","section":"Marcador"},"densidad":{"editor":"enum","options":["compacta","comoda"],"default":"compacta","section":"Marcador"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      query: "",
+      filtro: "todos",
+      // distritos que pertenecen a la zona que se está editando
+      sel: ["d-esc-01", "d-esc-02", "d-esc-03", "d-pz-01", "d-pz-04"],
+      // marca `distrito.zona_especial` = true
+      esp: ["d-osa-02", "d-gol-02", "d-tal-04"],
+      // `zona_especial IS NULL`: nadie lo decidió todavía
+      nulos: ["d-tal-03", "d-tal-02", "d-osa-03"],
+      cerrados: [],
+    };
+  }
+
+  datos() {
+    return [
+      { id: "p-sj", nombre: "San José", cantones: [
+        { id: "c-esc", nombre: "Escazú", distritos: [
+          { id: "d-esc-01", nombre: "Escazú", zona: null },
+          { id: "d-esc-02", nombre: "San Antonio", zona: null },
+          { id: "d-esc-03", nombre: "San Rafael", zona: null },
+        ]},
+        { id: "c-pz", nombre: "Pérez Zeledón", distritos: [
+          { id: "d-pz-01", nombre: "San Isidro de El General", zona: null },
+          { id: "d-pz-02", nombre: "Cajón", zona: "Brunca" },
+          { id: "d-pz-03", nombre: "Barú", zona: "Brunca" },
+          { id: "d-pz-04", nombre: "Río Nuevo", zona: null },
+        ]},
+      ]},
+      { id: "p-pu", nombre: "Puntarenas", cantones: [
+        { id: "c-gol", nombre: "Golfito", distritos: [
+          { id: "d-gol-01", nombre: "Golfito", zona: null },
+          { id: "d-gol-02", nombre: "Puerto Jiménez", zona: null },
+          { id: "d-gol-03", nombre: "Guaycará", zona: null },
+        ]},
+        { id: "c-osa", nombre: "Osa", distritos: [
+          { id: "d-osa-01", nombre: "Ciudad Cortés", zona: null },
+          { id: "d-osa-02", nombre: "Sierpe", zona: null },
+          { id: "d-osa-03", nombre: "Bahía Ballena", zona: null },
+        ]},
+      ]},
+      { id: "p-li", nombre: "Limón", cantones: [
+        { id: "c-tal", nombre: "Talamanca", distritos: [
+          { id: "d-tal-01", nombre: "Bratsi", zona: null },
+          { id: "d-tal-02", nombre: "Cahuita", zona: "Caribe Sur" },
+          { id: "d-tal-03", nombre: "Sixaola", zona: null },
+          { id: "d-tal-04", nombre: "Telire", zona: "Caribe Sur" },
+        ]},
+      ]},
+    ];
+  }
+
+  paleta() {
+    if ((this.props.tono ?? "ambar") === "azul") {
+      return { soft: "#eff6ff", strong: "#1d4ed8", base: "#1a56db", borde: "#bfd4ff" };
+    }
+    return { soft: "#fef3c7", strong: "#92400e", base: "#f59e0b", borde: "#f3d999" };
+  }
+
+  norm(s) {
+    return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  }
+
+  toggleEn(clave, ids) {
+    const actual = this.state[clave];
+    const todos = ids.every((id) => actual.indexOf(id) !== -1);
+    let next = actual.slice();
+    if (todos) {
+      next = next.filter((id) => ids.indexOf(id) === -1);
+    } else {
+      ids.forEach((id) => { if (next.indexOf(id) === -1) next.push(id); });
+    }
+    const parche = {};
+    parche[clave] = next;
+    // decidir la marca saca al distrito de "sin decidir"
+    if (clave === "esp") {
+      parche.nulos = this.state.nulos.filter((id) => ids.indexOf(id) === -1);
+    }
+    this.setState(parche);
+  }
+
+  renderVals() {
+    const tono = this.paleta();
+    const densidad = this.props.densidad ?? "compacta";
+    const alto = densidad === "comoda"
+      ? { prov: "38px", cant: "36px", dist: "34px" }
+      : { prov: "32px", cant: "30px", dist: "29px" };
+
+    const q = this.norm(this.state.query.trim());
+    const filtro = this.state.filtro;
+    const sel = this.state.sel;
+    const esp = this.state.esp;
+    const nulos = this.state.nulos;
+    const cerrados = this.state.cerrados;
+
+    const cbxDe = (estado) => {
+      if (estado === "todo") return { cbxBg: "#f26419", cbxBorder: "#f26419", cbxCheck: true, cbxDash: false };
+      if (estado === "parte") return { cbxBg: "#f26419", cbxBorder: "#f26419", cbxCheck: false, cbxDash: true };
+      return { cbxBg: "#ffffff", cbxBorder: "#e3e8f2", cbxCheck: false, cbxDash: false };
+    };
+
+    const marcaGrupo = (nombre, ids) => {
+      const n = ids.filter((id) => esp.indexOf(id) !== -1).length;
+      const todos = n > 0 && n === ids.length;
+      if (n === 0) {
+        return {
+          mkStyle: "color: #8a94ad; opacity: 0.5; border-color: transparent;",
+          starFill: "none",
+          mkTexto: "",
+          mkAria: "Marcar los " + ids.length + " distritos de " + nombre + " como zona especial",
+        };
+      }
+      return {
+        mkStyle: "color: " + tono.strong + "; background: " + tono.soft + "; border-color: " + tono.borde + ";",
+        starFill: todos ? "currentColor" : "none",
+        mkTexto: n + (todos ? " especiales" : " de " + ids.length),
+        mkAria: (todos ? "Quitar la marca de especial a " : "Marcar como especial todos los distritos de ") + nombre,
+      };
+    };
+
+    const tree = [];
+    let visibles = 0;
+    const chips = [];
+
+    this.datos().forEach((p) => {
+      const pIds = [];
+      const cantones = [];
+      p.cantones.forEach((c) => {
+        const cIds = c.distritos.map((d) => d.id);
+        cIds.forEach((id) => pIds.push(id));
+
+        const distritos = [];
+        c.distritos.forEach((d) => {
+          const enZona = sel.indexOf(d.id) !== -1;
+          const especial = esp.indexOf(d.id) !== -1;
+          const sinDecidir = nulos.indexOf(d.id) !== -1;
+
+          if (especial) chips.push({ id: d.id, nombre: d.nombre, quitar: () => this.toggleEn("esp", [d.id]) });
+
+          const coincide = q === "" || this.norm(d.nombre).indexOf(q) !== -1
+            || this.norm(c.nombre).indexOf(q) !== -1 || this.norm(p.nombre).indexOf(q) !== -1;
+          let pasaFiltro = true;
+          if (filtro === "zona") pasaFiltro = enZona;
+          if (filtro === "especial") pasaFiltro = especial;
+          if (filtro === "pendiente") pasaFiltro = sinDecidir;
+          if (!coincide || !pasaFiltro) return;
+
+          let mkClase = "mk mk-off";
+          let mkStyle = "";
+          let mkTexto = "marcar especial";
+          let starFill = "none";
+          let mkAria = "Marcar " + d.nombre + " como zona especial";
+          if (especial) {
+            mkClase = "mk";
+            mkStyle = "color: " + tono.strong + "; background: " + tono.soft + "; border-color: " + tono.borde + ";";
+            mkTexto = "zona especial";
+            starFill = "currentColor";
+            mkAria = "Quitar la marca de zona especial a " + d.nombre;
+          } else if (sinDecidir) {
+            mkClase = "mk mk-null";
+            mkTexto = "sin decidir";
+          }
+
+          distritos.push({
+            id: d.id,
+            nombre: d.nombre,
+            zonaNombre: d.zona ?? "",
+            enOtraZona: d.zona !== null,
+            especial: especial,
+            mkClase: mkClase,
+            mkStyle: mkStyle,
+            mkTexto: mkTexto,
+            starFill: starFill,
+            mkAria: mkAria,
+            toggleSel: () => this.toggleEn("sel", [d.id]),
+            toggleEsp: () => this.toggleEn("esp", [d.id]),
+            ...cbxDe(enZona ? "todo" : "vacio"),
+          });
+          visibles++;
+        });
+
+        if (distritos.length === 0) return;
+        const nSel = cIds.filter((id) => sel.indexOf(id) !== -1).length;
+        const estado = nSel === 0 ? "vacio" : (nSel === cIds.length ? "todo" : "parte");
+        cantones.push({
+          id: c.id,
+          nombre: c.nombre,
+          conteo: cIds.length + (cIds.length === 1 ? " distrito" : " distritos"),
+          open: cerrados.indexOf(c.id) === -1,
+          chevRot: cerrados.indexOf(c.id) === -1 ? "rotate(90deg)" : "none",
+          distritos: distritos,
+          toggleOpen: () => this.toggleEn("cerrados", [c.id]),
+          toggleSel: () => this.toggleEn("sel", cIds),
+          toggleEsp: () => this.toggleEn("esp", cIds),
+          ...cbxDe(estado),
+          ...marcaGrupo(c.nombre, cIds),
+        });
+      });
+
+      if (cantones.length === 0) return;
+      const nSelP = pIds.filter((id) => sel.indexOf(id) !== -1).length;
+      const estadoP = nSelP === 0 ? "vacio" : (nSelP === pIds.length ? "todo" : "parte");
+      tree.push({
+        id: p.id,
+        nombre: p.nombre,
+        conteo: cantones.length + (cantones.length === 1 ? " cantón" : " cantones"),
+        open: cerrados.indexOf(p.id) === -1,
+        chevRot: cerrados.indexOf(p.id) === -1 ? "rotate(90deg)" : "none",
+        cantones: cantones,
+        toggleOpen: () => this.toggleEn("cerrados", [p.id]),
+        toggleSel: () => this.toggleEn("sel", pIds),
+        toggleEsp: () => this.toggleEn("esp", pIds),
+        ...cbxDe(estadoP),
+        ...marcaGrupo(p.nombre, pIds),
+      });
+    });
+
+    const filtros = [
+      { k: "todos", label: "Todos" },
+      { k: "zona", label: "En la zona" },
+      { k: "especial", label: "Especiales" },
+      { k: "pendiente", label: "Sin decidir" },
+    ].map((f) => ({
+      label: f.label,
+      cls: filtro === f.k ? "seg-btn seg-on" : "seg-btn",
+      pick: () => this.setState({ filtro: f.k }),
+    }));
+
+    return {
+      tono: tono,
+      alto: alto,
+      tree: tree,
+      filtros: filtros,
+      query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      vacio: visibles === 0,
+      chips: chips,
+      sinEspeciales: chips.length === 0,
+      hayPendientes: nulos.length > 0,
+      pendientes: { n: nulos.length },
+      resolverPendientes: () => this.setState({ nulos: [] }),
+      resumen: { enZona: sel.length, especiales: esp.length },
+    };
+  }
+}
+</script>
+</body>
+</html>

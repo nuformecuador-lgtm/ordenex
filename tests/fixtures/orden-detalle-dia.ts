@@ -54,6 +54,7 @@ export function tarifaConCentinela(): TarifaDTO {
     zonaId: null,
     isDefault: true,
     tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
     valorFlete: CENTINELAS.tarifa,
     valorFleteDevuelto: CENTINELAS.tarifa,
     valorFleteGam: CENTINELAS.tarifa,

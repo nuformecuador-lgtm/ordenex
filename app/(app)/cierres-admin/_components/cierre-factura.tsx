@@ -49,6 +49,7 @@ import {
   DesgloseIngresoOrdenex,
   desgloseAriaLabel,
   renderPagoMensajero,
+  renderFleteOrigen,
   RECHAZO_SLA_BADGE_LABEL,
   RECHAZO_SLA_BADGE_NOTA,
   RECHAZO_MANUAL_BADGE_LABEL,
@@ -72,6 +73,23 @@ import {
 } from "./cierre-detalle-shared";
 // Feature 213 (T6/T7): el desglose de pago se formatea en UN solo sitio (R25).
 import { desglosePantalla } from "./desglose-pago";
+import type { OrigenFlete } from "@/lib/utils/ingreso-ordenex";
+
+/**
+ * Pega la marca del origen a un importe de flete. Sin marca (`"normal"`, el caso de casi
+ * todas las filas) devuelve el texto tal cual, para que la fila quede EXACTAMENTE como hoy.
+ */
+function conMarcaDeOrigen(texto: string, origen: OrigenFlete): ReactNode {
+  const marca = renderFleteOrigen(origen);
+  return marca === null ? (
+    texto
+  ) : (
+    <span className="inline-flex items-center gap-1.5">
+      {texto}
+      {marca}
+    </span>
+  );
+}
 
 // Vista TIPO FACTURA de un cierre (exploración de UX, feature 38/40). Es una lectura
 // alternativa de los MISMOS datos que ya pintan las tablas: el resumen de la cola /
@@ -1339,9 +1357,17 @@ function FilaGestion({
               }
             />
             <DatoFila label={FILA_TIENDA_LABEL} value={g.tiendaNombre} />
+            {/* El monto + la marca de su origen: la factura es donde más se audita el flete,
+                y un importe que salió del pacto especial no se puede reconciliar contra la
+                tabla de precios normal sin saberlo. `DatoFila` ya acepta un nodo (lo usa el
+                badge "Sin tarifa" del pago), así que no hace falta ninguna fila nueva. */}
             <DatoFila
               label={FLETE_CON_IVA_LABEL}
-              value={ing?.fleteConIva ? money(ing.fleteConIva) : null}
+              value={
+                ing?.fleteConIva
+                  ? conMarcaDeOrigen(money(ing.fleteConIva), ing.fleteOrigen)
+                  : null
+              }
             />
             <DatoFila
               label={COMISION_CON_IVA_LABEL}
@@ -1351,7 +1377,10 @@ function FilaGestion({
               label={FLETE_DEV_CON_IVA_LABEL}
               value={
                 ing?.fleteDevolucionConIva
-                  ? money(ing.fleteDevolucionConIva)
+                  ? conMarcaDeOrigen(
+                      money(ing.fleteDevolucionConIva),
+                      ing.fleteDevolucionOrigen,
+                    )
                   : null
               }
             />

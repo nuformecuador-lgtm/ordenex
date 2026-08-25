@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ordenesConfig } from "@/lib/config/ordenes";
 import type { ListarCompletoResult } from "@/lib/types/descarga-listado";
 import type { ListarPaginadoResult } from "@/lib/types/listado-paginado";
-import type { TarifaDTO } from "@/lib/types/tarifa";
+import type { TarifaDTO, OrigenFlete } from "@/lib/types/tarifa";
 
 // Campos ordenables permitidos (lista blanca, evita inyeccion de columnas; R31).
 export const SORT_FIELDS = ["created_at", "num_guia", "num_remision"] as const;
@@ -319,6 +319,17 @@ export type OrdenListItemDTO = OrdenDTO & {
    */
   fleteConIva?: string;
   comisionConIva?: string;
+  /**
+   * De donde salio el flete de `fleteConIva` (2026-08-25, tarifa especial por distrito).
+   *
+   * Existe para hacer VISIBLE el caso `especial_sin_pacto`: el distrito esta marcado como
+   * zona especial pero la tarifa que le toca no tiene monto pactado, asi que se cobro la
+   * tarifa normal. El importe es identico al de una orden corriente, de modo que sin este
+   * campo no habria forma de distinguir "cobra la normal porque le toca" de "cobra la normal
+   * porque falta configurar el pacto". Opcional por el mismo patron aditivo que sus vecinos;
+   * el repositorio SIEMPRE lo envia.
+   */
+  fleteOrigen?: OrigenFlete;
   // Fecha (`YYYY-MM-DD`) para la que quedo reprogramada la orden: el dia en que el
   // cron de liberacion (feature 46) la desbloquea. Sale de la gestion VIGENTE
   // (`gestion_orden.fecha_reprogramacion` de la mas reciente no anulada), no de la

@@ -60,6 +60,9 @@ const TARIFA_STUB: TarifaVigenteResuelta = {
   comisionCod: "5.00",
   ivaFlete: "12.00",
   ivaComisionCod: "12.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 const tarifaRepoStub: ITarifaVigenteRepository = {

@@ -1,8 +1,8 @@
 import { AppPage } from "@/components/shared/AppPage";
-import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 import { PostulacionesPendientesPanel } from "./PostulacionesPendientesPanel";
 import { PostulacionRecursoPanel } from "./PostulacionRecursoPanel";
+import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
 
 /**
  * Dashboard del admin maestro (feature 23, R5). Server Component al estilo de
@@ -10,6 +10,9 @@ import { PostulacionRecursoPanel } from "./PostulacionRecursoPanel";
  * funcionales. No obtiene datos sensibles por props; los paneles cliente consumen
  * las Server Actions (que autorizan por rol en el backend).
  *
+ * NADA de entregas vive aqui. La barra de filtros se fue a la pagina de analitica (pedido
+ * humano del 2026-08-17) y el encabezado «Entregas» que quedaba encima del panel —un
+ * contenedor sin cuerpo, solo titulo— se retiro por pedido humano del 2026-08-20.
  * Aqui NO hay nada de entregas, y es a proposito: la BARRA DE FILTROS de entregas se movio
  * a la pagina de analitica por pedido humano del 2026-08-17, que es su sitio. Fuera del
  * shell, este dashboard no pinta mas que los dos paneles de postulaciones.
@@ -30,6 +33,7 @@ export function AdminMaestroDashboard() {
       title="Panel maestro"
       description="Postulaciones pendientes: mensajeros, y vehículos o bodegas ofrecidos desde la web"
     >
+      <PostulacionesPendientesPanel />
       <ContenedorSeccion titulo="Postulaciones de mensajeros">
         <PostulacionesPendientesPanel />
       </ContenedorSeccion>

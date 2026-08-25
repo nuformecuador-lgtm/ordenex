@@ -84,6 +84,7 @@ export class TarifaService implements ITarifaService {
       ivaFlete: input.ivaFlete,
       ivaComisionCod: input.ivaComisionCod,
       tarifaEspecial: input.tarifaEspecial ?? null, // opcional: ausente = sin pacto especial
+      tarifaEspecialDevuelta: input.tarifaEspecialDevuelta ?? null, // idem, para la devolucion
       zonaId: input.zonaId ?? null, // opcional: ausente = no acotada a una zona
       isDefault: input.isDefault ?? false, // marcarla por defecto es explicito
     });
@@ -195,6 +196,9 @@ export class TarifaService implements ITarifaService {
     if (input.ivaComisionCod !== undefined) data.ivaComisionCod = input.ivaComisionCod;
     // `null` viaja tal cual (limpia el pacto especial); solo `undefined` se ignora.
     if (input.tarifaEspecial !== undefined) data.tarifaEspecial = input.tarifaEspecial;
+    if (input.tarifaEspecialDevuelta !== undefined) {
+      data.tarifaEspecialDevuelta = input.tarifaEspecialDevuelta;
+    }
     // `null` viaja tal cual (desacota de la zona); solo `undefined` se ignora.
     if (input.zonaId !== undefined) data.zonaId = input.zonaId;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;

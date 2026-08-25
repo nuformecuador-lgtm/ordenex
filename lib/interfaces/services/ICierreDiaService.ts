@@ -5,6 +5,7 @@ import type { CausaIncidente } from "@/lib/types/causa-incidente";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import type { ListarPaginadoServiceResult } from "@/lib/types/listado-paginado";
 import type { ListarCompletoServiceResult } from "@/lib/types/descarga-listado";
+import type { OrigenFlete } from "@/lib/types/tarifa";
 
 // Feature 37 — contrato del servicio del "Cierre del dia" del mensajero. Logica de
 // negocio pura (sin HTTP ni Prisma); el borde (Server Action) la traduce a
@@ -137,6 +138,11 @@ export interface TarifaSnapshotDTO {
   // columna: no hay valor correcto que inventar hacia atras, y un "0.00" diria "no se cobro",
   // que es otra cosa. NO participa del `total` del ingreso: no es un concepto de la formula.
   fulfillment: string | null;
+  // El pacto especial congelado (2026-08-25). `null` = esta tarifa no pactaba nada para ese
+  // concepto, y por eso el flete salio de la columna normal. Estas DOS si participan del
+  // `total`: cuando el distrito es especial, son el flete.
+  tarifaEspecial: string | null;
+  tarifaEspecialDevuelta: string | null;
 }
 
 /**
@@ -155,6 +161,14 @@ export interface IngresoOrdenexDTO {
   montoCobrar: string | null; // COD a recaudar, congelado (distinto de montoRecibido)
   cobraComision: boolean;
   esCentral: boolean; // zona GAM: elige la COLUMNA de tarifa, no la formula (R21)
+  // El distrito era especial AL SOLICITAR (congelado). Con `true`, el flete pudo salir del
+  // pacto en vez de la columna normal; los dos `*Origen` de abajo dicen si efectivamente salio.
+  esZonaEspecial: boolean;
+  // De donde salio cada flete. Es lo que hace VISIBLE el hueco de configuracion: un
+  // `especial_sin_pacto` cobra lo mismo que una orden normal, y sin esto no habria forma de
+  // distinguir "se cobro la tarifa normal porque toca" de "se cobro porque faltaba el pacto".
+  fleteOrigen: OrigenFlete;
+  fleteDevolucionOrigen: OrigenFlete;
   flete: string | null;
   ivaFlete: string | null;
   fleteDevolucion: string | null;

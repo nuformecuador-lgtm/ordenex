@@ -516,6 +516,7 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
           ivaFlete: 13,
           ivaComisionCod: 13,
           tarifaEspecial: null,
+          tarifaEspecialDevuelta: null,
           zonaId: null,
           isDefault: false,
           createdAt: new Date("2026-01-01T00:00:00Z"),
