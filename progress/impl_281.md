@@ -129,6 +129,19 @@ esta ficha es limpio.
 Se borró el montaje **de arriba**, no el titulado (design §5.B): el titulado es el que
 lleva el rótulo que R13 exige conservar y por el que los tests existentes lo localizan.
 
+### La trampa que el propio docblock estuvo a punto de dejar puesta
+
+La primera versión del párrafo nuevo mencionaba el panel **escrito como etiqueta JSX**.
+Efecto medido sobre el archivo **ya arreglado**: `grep -c "<PostulacionesPendientesPanel />"`
+devolvía **2** —un montaje real y una mención en prosa—, que es exactamente el número con
+el que esta ficha diagnosticó el defecto. Cualquiera que reverificase con el método de la
+ficha habría concluido que la regresión seguía viva.
+
+Corregido: en la prosa el componente se nombra **sin** la forma de etiqueta, y el propio
+docblock dice por qué. `grep -c` sobre el archivo arreglado → **1**. Es un detalle
+minúsculo y es justo la familia de esta ficha: un texto que hace que la comprobación diga
+otra cosa de la que pasa.
+
 ---
 
 ## 4. La prueba que cuenta (T7-T10), y por qué cuenta de verdad

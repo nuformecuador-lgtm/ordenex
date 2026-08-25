@@ -24,13 +24,17 @@ import { ContenedorSeccion } from "@/components/shared/ContenedorSeccion";
  *
  * ⚠️ Feature 281 — LA COMPOSICION ES EXACTAMENTE ESTA Y NO ADMITE UN PANEL SUELTO: dos bloques,
  * cada uno DENTRO de su `ContenedorSeccion` con titulo, y NINGUN panel fuera de seccion. Un
- * `<PostulacionesPendientesPanel />` suelto —sin contenedor, encima de los dos bloques— vivio aqui
- * hasta el 2026-08-25 y pintaba una TERCERA tarjeta de «No hay postulaciones pendientes», la de
- * arriba, sin titulo; con datos duplicaba la lista entera y dejaba dos regiones accesibles con el
- * mismo nombre. No entro escribiendolo: lo dejo una RESOLUCION DE MERGE que deshizo el arreglo del
- * dia anterior, y por eso el defecto tiene test propio que cuenta montajes por region
- * (`tests/components/AdminMaestroDashboard.test.tsx`) y no solo tarjetas de vacio. Si vuelves a ver
- * dos apariciones del mismo panel en este JSX, es la regresion, no una decision.
+ * montaje suelto de PostulacionesPendientesPanel —sin contenedor, encima de los dos bloques—
+ * vivio aqui hasta el 2026-08-25 y pintaba una TERCERA tarjeta de «No hay postulaciones
+ * pendientes», la de arriba, sin titulo; con datos duplicaba la lista entera y dejaba dos regiones
+ * accesibles con el mismo nombre. No entro escribiendolo: lo dejo una RESOLUCION DE MERGE que
+ * deshizo el arreglo del dia anterior, y por eso el defecto tiene test propio que cuenta montajes
+ * por region (`tests/components/AdminMaestroDashboard.test.tsx`) y no solo tarjetas de vacio. Si
+ * vuelves a ver dos montajes del mismo panel en este JSX, es la regresion, no una decision.
+ *
+ * El nombre del componente se escribe aqui SIN la forma de etiqueta JSX a proposito: contar los
+ * montajes con un grep de la etiqueta es como se diagnostico este defecto, y una mencion en prosa
+ * escrita como etiqueta habria devuelto DOS sobre el archivo ya arreglado.
  *
  * ⚠️ R36 — LA DESCRIPCION DE LA PAGINA SE CORRIGIO EN LA MISMA TANDA. Decia "Postulaciones de
  * mensajeros pendientes", que describia la pantalla ENTERA; con dos paneles esa frase pasaba a
