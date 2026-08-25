@@ -19,7 +19,7 @@
 Precedente explícito: la 279 escribió *«no se heredó el número: se volvió a medir»*. Aquí igual,
 y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
-- [ ] **T0.1 — Re-censar el daño con el quitador ACTUAL.**
+- [x] **T0.1 — Re-censar el daño con el quitador ACTUAL.**
   Script de un solo uso que pasa cada `.ts`/`.tsx` por el `quitarComentarios` del repo,
   excluyendo `node_modules`, `.next`, `.claude`, `dist`, `coverage` y `.design-work`, y cuenta
   las **líneas con código real** que desaparecen.
@@ -32,14 +32,14 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   censo no reproduce esos dos pares, el censo está mal, no el árbol.)*
   → **R17**
 
-- [ ] **T0.2 [P] — Línea base de rendimiento.**
+- [x] **T0.2 [P] — Línea base de rendimiento.**
   Tres corridas limpias de `pnpm run test:guardias` y una de `pnpm run typecheck`, sin nada más
   ejecutándose. Se anota la mediana, no la media.
   **Hecho cuando:** las tres cifras y su mediana están en `progress/impl_283.md`, con máquina y
   hora. **No se cita el ~8 s de `docs/verification.md`**: es de 2026-08-03.
   → **R25**
 
-- [ ] **T0.3 [P] — Censar las hermanas y confirmar (o corregir) la tabla de `design.md` §6.**
+- [x] **T0.3 [P] — Censar las hermanas y confirmar (o corregir) la tabla de `design.md` §6.**
   Números a confirmar: `.sql` totales (**307**), `.sql` con `/*` dentro de un `--` (**8**),
   `.sql` con un `*/` posterior que haga casar el regex (**0**), `.sql` con `--` dentro de un
   literal (**0**), `.css` reales fuera de `node_modules`/`.claude` (**1**), `//` en
@@ -49,7 +49,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   CSS fuera cuelga de que sean ceros.
   → **R23, R24**
 
-- [ ] **T0.4 [P] — Censar la prosa que quedará falsa.**
+- [x] **T0.4 [P] — Censar la prosa que quedará falsa.**
   Buscar en `tests/` las frases que afirman la limitación como vigente. Conjunto conocido de
   partida: `sin-comentarios.ts` (docstring de cabecera, ~líneas 30-36), `sin-comentarios.ts`
   (docstring de `quitarComentariosCss`, la cita «un `//` que abre una cadena si se lo lleva»),
@@ -66,7 +66,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: T0.1.*
 
-- [ ] **T1.1 — Escribir el bloque «283 — el defecto» en `quitador-comentarios.guardia.test.ts`.**
+- [x] **T1.1 — Escribir el bloque «283 — el defecto» en `quitador-comentarios.guardia.test.ts`.**
   Un `describe` nuevo con `quitadorViejo` inlineado (el patrón que el archivo ya usa en sus
   líneas 277-289) y **un `it` por caso, cada uno en las dos caras**:
   1. `/*` dentro de un `//` → el viejo pierde el código de abajo, el nuevo lo conserva.
@@ -84,14 +84,14 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: T1.1. Secuencial dentro de la tanda: son ediciones del mismo archivo.*
 
-- [ ] **T2.1 — Sustituir el cuerpo de `quitarComentarios` por el escáner de un recorrido.**
+- [x] **T2.1 — Sustituir el cuerpo de `quitarComentarios` por el escáner de un recorrido.**
   Estados y reglas en `design.md` §3. `espacioConSaltos` **se conserva tal cual**. Resultado por
   segmentos + `join("")`. Firma y exports intactos.
   **Hecho cuando:** T1.1 en verde; `pnpm run typecheck` en **0 errores**; los 33 casos que ya
   existían en `quitador-comentarios.guardia.test.ts` siguen verdes sin editarlos.
   → **R1, R2, R3, R5, R6, R7, R8, R9, R10**
 
-- [ ] **T2.2 — La regla de la comilla sin pareja.**
+- [x] **T2.2 — La regla de la comilla sin pareja.**
   Comilla simple/doble sin pareja no escapada **antes del fin de su línea** → no abre cadena.
   Backtick sin pareja en el resto del archivo → ídem.
   **Hecho cuando:** hay un caso con `<p>Don't panic</p>` seguido de `const vivo = 1;` y otro con
@@ -99,13 +99,13 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   la regla (se comprueba en T6.1(b)).
   → **R13**
 
-- [ ] **T2.3 — Escapes, plantillas multilínea y `${}` anidado.**
+- [x] **T2.3 — Escapes, plantillas multilínea y `${}` anidado.**
   Pila de profundidad, no bandera.
   **Hecho cuando:** hay caso para `'\''`, para una plantilla de 3 líneas con un `//` dentro, y
   para `` `a${b ? `x` : `y`}c` `` (la de fuera no se cierra en la de dentro).
   → **R11, R12**
 
-- [ ] **T2.4 — Re-fijar el número de líneas contra el escáner.**
+- [x] **T2.4 — Re-fijar el número de líneas contra el escáner.**
   Los dos casos de «conserva el NUMERO DE LINEAS» que ya existen (líneas 129-150) **no se
   editan**: se comprueba que siguen verdes. Se añade uno con un bloque multilínea **abierto
   dentro de una cadena**, que con el quitador viejo desalineaba el archivo entero.
@@ -113,7 +113,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   afirmado sobre un fuente real del árbol.
   → **R4, R22**
 
-- [ ] **T2.5 — Reescribir el docstring del módulo.**
+- [x] **T2.5 — Reescribir el docstring del módulo.**
   El bloque «Que NO es» deja de afirmar que un `//` dentro de un literal se lleva la línea, y
   pasa a describir el escáner: qué contextos entiende, la regla de la comilla sin pareja y **qué
   sigue sin hacer** (expresiones regulares) con el motivo. La tabla de las cuatro semánticas de
@@ -122,7 +122,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   «`codigoSinComentarios` … devuelve el codigo del archivo, ya despiojado» sigue verde.
   → **R20**
 
-- [ ] **T2.6 — Afirmar la limitación que queda.**
+- [x] **T2.6 — Afirmar la limitación que queda.**
   Un `it` con el formato de las limitaciones de la 209/223: una regex con `/*` sin escapar abre
   comentario, y se dice por qué no se cierra (haría falta un parser) y cómo se sabría si
   empezara a doler (el censo de T3.2).
@@ -135,7 +135,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: T2. T3.1 primero; T3.2, T3.3 y T3.4 en paralelo entre sí.*
 
-- [ ] **T3.1 — Reescribir el cable trampa (línea 292).**
+- [x] **T3.1 — Reescribir el cable trampa (línea 292).**
   Contenido exacto en `design.md` §5. **No se borra**: se invierte, en su sitio y en su
   `describe`, y su comentario cierra la frase que la 209 dejó abierta, diciendo ficha y fecha, y
   **que no se cerró como la 209 preveía** (el parche a `[^:]` no habría tocado el daño grande).
@@ -143,7 +143,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   comentario de verdad al final de esa línea sí desaparece. Y muere en T6.1(a).
   → **R19**
 
-- [ ] **T3.2 — El censo diferencial de monotonía.**
+- [x] **T3.2 — El censo diferencial de monotonía.**
   Recorrer los `.ts`/`.tsx` con las exclusiones de R15 y producir, por archivo, líneas
   recuperadas y **líneas perdidas** por el barrido nuevo respecto del viejo.
   **Hecho cuando:** la columna «perdidas» es **0 en todos los archivos**, y el total de
@@ -152,7 +152,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   T2.6 dejando de ser teórica, y hay que decir cuál con el archivo delante.
   → **R15, R17**
 
-- [ ] **T3.3 [P] — Cable trampa de SQL.**
+- [x] **T3.3 [P] — Cable trampa de SQL.**
   Caso en `quitador-comentarios.guardia.test.ts` que recorre `db/migrations/**/*.sql` y falla
   **nombrando el archivo** si alguno cumple la precondición del daño: un `/*` dentro de un `--`
   o de un literal **con** un `*/` posterior, o un `--` dentro de un literal de cadena. El mensaje
@@ -163,7 +163,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   tocado: `git status db/` vacío.
   → **R23**
 
-- [ ] **T3.4 [P] — Cable trampa de CSS y deuda declarada.**
+- [x] **T3.4 [P] — Cable trampa de CSS y deuda declarada.**
   (a) Caso que falla si `app/globals.css` estrena un `/*` dentro de una cadena.
   (b) Caso **sintético** que afirma que `quitarComentariosCss` sigue sin proteger cadenas —para
   que esa deuda no se vuelva invisible ahora que `quitarComentarios` deja de compartirla—.
@@ -182,18 +182,18 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: T0.4 y T2. `[P]` entre sí.*
 
-- [ ] **T4.1 [P] — Actualizar el docstring de `quitarComentariosCss`.**
+- [x] **T4.1 [P] — Actualizar el docstring de `quitarComentariosCss`.**
   Deja de citar la limitación de la 209 como vigente; dice que se cerró en la 283 y que **esta
   función no la comparte** (sigue sin proteger cadenas, a propósito, §6.3).
   **Hecho cuando:** ninguna afirmación falsa; ninguna aserción tocada.
   → **R21**
 
-- [ ] **T4.2 [P] — Actualizar la cabecera del `describe` de la 223** (líneas ~177-194) por lo
+- [x] **T4.2 [P] — Actualizar la cabecera del `describe` de la 223** (líneas ~177-194) por lo
   mismo: la frase «Es la misma familia que la 209 dejó fijada arriba» ya no describe el estado.
   **Hecho cuando:** ídem.
   → **R21**
 
-- [ ] **T4.3 [P] — *(condicionada a la autorización de P4)*
+- [x] **T4.3 [P] — *(condicionada a la autorización de P4)*
   `cotizacion-orden-service.test.ts:914-916`.**
   El paréntesis explica un rodeo que ya no hace falta: desde la 283, `FUENTE_SERVICE` **sí**
   incluye el bloque de imports. Se reescribe **solo la prosa**.
@@ -208,13 +208,13 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: T2, T3. No en paralelo con nada: la medida necesita la máquina quieta.*
 
-- [ ] **T5.1 — Re-medir `test:guardias`.**
+- [x] **T5.1 — Re-medir `test:guardias`.**
   Tres corridas, mediana, mismo método y máquina que T0.2.
   **Hecho cuando:** en `progress/impl_283.md` está la tabla antes/después con las seis corridas
   y las dos medianas, y el veredicto contra el umbral de R26 (+15 % o +3 s).
   → **R25**
 
-- [ ] **T5.2 — *(condicionada: solo si T5.1 supera el umbral)* Mitigar y volver a medir.**
+- [x] **T5.2 — *(condicionada: solo si T5.1 supera el umbral)* Mitigar y volver a medir.**
   En el orden de `design.md` §7: (1) memo por ruta en `codigoSinComentarios`, (2) atajo para
   fuentes sin comentarios ni comillas, (3) saltos por bloque.
   **Hecho cuando:** la nueva mediana está bajo umbral **y** T2.4 (número de líneas) y T3.2
@@ -227,7 +227,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
 
 *Depende de: todo lo anterior. **T6.1 y T6.2 estrictamente secuenciales.***
 
-- [ ] **T6.1 — Las tres mutaciones.**
+- [x] **T6.1 — Las tres mutaciones.**
   | # | mutación | rojo esperado |
   | --- | --- | --- |
   | (a) | Volver `quitarComentarios` a las dos pasadas de `replace` | los 3 casos de T1.1 + el cable trampa de T3.1 + el censo de T3.2 |
@@ -238,7 +238,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   el gate mientras haya una mutación viva.**
   → **R18**
 
-- [ ] **T6.2 — Gate COMPLETO.**
+- [x] **T6.2 — Gate COMPLETO.**
   `./init.sh` (no `--rapido`), con `INIT_EXIT=$?` escrito **dentro** del log, no inferido de la
   consola. El log **no se canaliza por `tail`**: se escribe entero y se lee después.
   **Hecho cuando:** `INIT_EXIT=0`, o `INIT_EXIT != 0` **exclusivamente** por el rojo ajeno de
@@ -247,7 +247,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   reporta.
   → **R28, R29**
 
-- [ ] **T6.3 — Alcance verificado por diff.**
+- [x] **T6.3 — Alcance verificado por diff.**
   **Hecho cuando:** `git diff --name-only origin/dev` devuelve **exactamente** los tres archivos
   esperados (`tests/fixtures/sin-comentarios.ts`,
   `tests/unit/guards/quitador-comentarios.guardia.test.ts`, y —si P4— el de cotización) más los
@@ -255,7 +255,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   `init.sh` o cualquier otra guardia. `tests/unit/auth/menu-visibility.test.ts` **sin tocar**.
   → **R27**
 
-- [ ] **T6.4 — Mapa de trazabilidad y cierre.**
+- [x] **T6.4 — Mapa de trazabilidad y cierre.**
   **Hecho cuando:** `progress/impl_283.md` contiene la tabla `R<n> → test` completa (abajo), sin
   ningún hueco, y el informe **está commiteado** (se ha perdido tres veces en un día por no
   hacerlo).
@@ -318,3 +318,43 @@ T0.4 [P] ───────────────────────�
    está reproduciendo el defecto y hay que rehacerlo antes de arreglar nada.
 3. **T3.2**, si algún archivo pierde líneas con el barrido nuevo.
 4. **T6.2**, si el gate da un rojo distinto del de `obtenerTarifa`.
+
+---
+
+## Marcado de las casillas — 2026-08-25
+
+Las 24 se marcan **sobre evidencia ejecutada y arbitrada**, no a ojo.
+
+- **El gate**, corrido por el implementer **tres veces** y por el reviewer **una** con
+  `pnpm run db:generate` delante: `INIT_EXIT=1` con **1 fallo de 18.985**, y ese fallo es el
+  **ajeno** (`obtenerTarifa`, ficha 275 de otra sesión). **Delta 0** contra un baseline medido en el
+  árbol prístino, no supuesto.
+- **La trazabilidad R1–R29** la verificó el reviewer abriendo cada test citado.
+- **El censo fue arbitrado**: el reviewer lo sacó de un árbol prístino con `git archive` y confirmó
+  **64 archivos / 1.387 líneas** — los números del implementer, **no los del leader**. Ver abajo.
+- **La prueba de que el arreglo sirve** se reprodujo restaurando el quitador viejo **por hash de
+  blob**: `3 failed | 33 passed`. Era imprescindible, porque **la suite ya estaba verde con el
+  defecto dentro**.
+- **Los cables trampa de `Sql` y `Css` se comprobaron rojos** mutando un `.sql` y `globals.css`. Un
+  cable trampa verde no prueba que sepa cantar.
+- **La negativa del gate rápido se midió de punta a punta** con el `init.sh` real: niega este
+  archivo, deja pasar otros, y con el `init.sh` anterior **no negaba**.
+- **Rendimiento**: mediana **−11,1 %**, y el reviewer juzgó justa la comparación porque los 15 casos
+  extra **solo sesgan en contra** del cambio.
+
+### Lo que esta ficha corrigió de sí misma, y conviene que no se pierda
+
+**Los números que trajo el leader eran falsos.** Decía 149 archivos / 1.958 líneas y 4.599
+recuperadas; lo real es **64 / 1.387** y **1.788 recuperadas en 126**. La causa está **medida**: al
+script del leader le faltaba la regla de la comilla sin pareja, y reponer ese defecto hace saltar el
+censo a **5.190/202** — el orden exacto de su cifra. Las **anclas** sí eran correctas.
+
+Y el **bloqueante 1** fue un test que no discriminaba: su entrada tenía **seis** comillas invertidas
+—número par—, así que emparejarlas mal consumía el mismo tramo que emparejarlas bien y la salida
+era idéntica **byte a byte**. La lección quedó escrita en el propio `it`: **la entrada tiene que
+estar elegida para que el mecanismo cambie el resultado, no para que se parezca al mecanismo.**
+
+**Auditado después por mutación**: de los 15 casos, **ninguno queda sin al menos una mutación que lo
+mate**. Con dos matices declarados sin que nadie los pidiera: R22 es tautológico hoy y solo
+discrimina una divergencia futura, y R14 **no discrimina ningún mecanismo vivo ni debe** — es una
+limitación afirmada, y su trabajo es ponerse roja el día que alguien la cierre.
