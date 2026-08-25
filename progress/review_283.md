@@ -339,3 +339,226 @@ pasar a `done` sin ella.
 - **Que `quitarComentariosSql` y `quitarComentariosCss` sigan ciegas a las cadenas.** Está decidido
   por la puerta humana (P2 y P3), medido en cero líneas perdidas, y las dos deudas tienen un caso que
   se pone rojo el día que aparezca la precondición. Lo he comprobado rompiendo las dos.
+
+---
+---
+
+# RONDA 2 — 2026-08-25, tras los commits `6098f9f1`, `6faa6a3d` y `58d44061`
+
+> La ronda 1 queda **íntegra arriba**, incluida la parte que quedó desmentida por el arreglo: un
+> informe al que se le borran los hallazgos ya cerrados no deja saber qué pasó.
+
+## VEREDICTO FINAL: OK — 0 bloqueantes
+
+Los dos bloqueantes están cerrados y **los he medido yo**, no leído. Quedan menores, y una
+condición de cierre nueva que no es de la ficha (`dev` se movió).
+
+## Mi gate, segunda corrida
+
+`pnpm run db:generate` delante, `./init.sh` COMPLETO, código de salida dentro del log:
+
+```
+✓ typecheck paso
+✓ lint paso                      (100 problems, 0 errors, 100 warnings)
+ Test Files  1 failed | 1391 passed (1392)
+      Tests  1 failed | 18958 passed | 26 skipped (18985)
+INIT_EXIT=1
+```
+
+**Idéntico a mi corrida de la ronda 1, hasta el número de casos**, y el único rojo sigue siendo el
+ajeno con su array de un elemento: `lib/actions/tarifas.ts:67 obtenerTarifa` (ficha 275, `pending`).
+**Delta 0.** Que los 18.985 no se hayan movido confirma además que el caso de R12 se **reescribió**,
+no se añadió.
+
+## B1 — el caso de la plantilla anidada: cerrado, y muerde
+
+Corrí la mutación yo mismo, quitando las seis líneas de la pila de interpolación de
+`finDePlantilla`:
+
+```
+SIN la pila:  Tests  1 failed | 46 passed (47)
+  × R12 una plantilla anidada dentro de un `${…}` no cierra la de fuera
+  AssertionError: la plantilla de fuera cerro en la de dentro: el `//` de la anidada se leyo como
+  comentario y se llevo el resto de la linea:
+  expected 'const ruta = `base ${esRaiz ? ` ' to contain '`//raiz`'
+
+CON la pila:  Tests  47 passed (47)
+```
+
+**Cae por la razón buena, y eso se ve en el valor recibido, no en el mensaje:** la salida se corta
+exactamente en la comilla invertida que abre la plantilla anidada, que es donde el escáner sin pila
+cree que vuelve a código. Si cayera por otra cosa —una aserción de más, un `toContain` mal escrito—
+el recibido sería otro. Antes de la mutación estaba verde; después, rojo; y el rojo nombra el
+mecanismo.
+
+**Su explicación de por qué no mordía también la comparto, y la había medido en la ronda 1**: la
+entrada vieja tenía seis comillas invertidas, número par, así que emparejarlas mal consume el mismo
+tramo que emparejarlas bien y la salida era idéntica byte a byte. Lo que cambia con la entrada nueva
+es **dónde va el `//`**: dentro de la plantilla anidada, que es el único sitio donde el
+emparejamiento equivocado cambia el resultado.
+
+## B1-bis — el censo de sensibilidad, hecho por mi cuenta
+
+No contrasté su tabla: **hice la mía**, con 13 mutaciones aplicadas una a una sobre el árbol limpio,
+recogiendo los nombres de los casos muertos del reporter JSON de vitest y revirtiendo con
+comprobación de `git status` entre mutación y mutación. Base: **47 passed, 0 rojos**.
+
+| mutación | qué rompe | muertos (yo) | dice el implementer |
+| --- | --- | --- | --- |
+| (a) | volver a las dos pasadas de `replace` | 9 | 8 en su corrida previa al arreglo — ahora son 9 porque el caso nuevo de R12 también cae |
+| (b) | quitar la regla de la comilla sin pareja | 2 | 2 |
+| (c) | devolver cadena vacía | 32 | 32 |
+| (e) | quitar la rama de **CADENA** de `quitarComentarios` | **11** | **11** |
+| (f) | quitar la rama de **PLANTILLA** | **2** | **2** |
+| (g/r12) | quitar la **pila de interpolación** | **1** | **1** (antes del arreglo: 0) |
+| (r4) | `espacioConSaltos` deja de conservar saltos | 5 | — |
+| (r14) | el escáner deja de abrir bloque tras un corchete | 1 | — |
+| (h/r22) | `lineasSinComentarios` estrena reglas propias | **2** | **3** — ver abajo |
+| (i) | un bloque sin cerrar se traga el resto del archivo | **0** | — |
+| (j) | quitar la rama de cadena **dentro de la interpolación** | **0** | — |
+| css | `globals.css` estrena un bloque entrecomillado | 2 | 2 |
+| sql | una migración estrena un bloque con su cierre | 1 | 1 |
+
+**Su conclusión me cuadra: de los 15 casos nuevos, ninguno queda sin al menos una mutación que lo
+mate.** Lo verifiqué caso por caso con mi propia tabla de sensibilidad, no con la suya:
+
+```
+[a,c,e]      CERRADA POR LA 283 (el cable trampa reescrito)
+[a,c]        R7 · [a,c,e] R8 · [a,c,e] R9 · [c,e] R10
+[b,c]        R13 en su linea · [b,c] R13 comilla invertida
+[a,c,e]      R11 comilla escapada
+[a,c,r22,f]  R12 multilinea · [a,c,r12,f] R12 anidada
+[a,c,r22,e]  R4 bloque abierto dentro de cadena
+[c,r4]       R22 sobre un archivo real
+[c,r14]      LIMITACION QUE QUEDA (283)
+[sql]        cable trampa SQL · [css] cable trampa CSS
+[a,c,e]      DEUDA DECLARADA de CSS
+```
+
+### El único número que no me sale igual: su (h) mata 3, mi (r22) mata 2
+
+Mi mutación de «reglas propias» hace que `lineasSinComentarios` use **el barrido viejo** en vez de
+delegar. Con ella mueren dos casos —R12 multilínea y R4-en-cadena— pero **no** el que se llama R22.
+Fui a ver por qué, y el motivo afila su propio matiz: sobre `tests/fixtures/sin-comentarios.ts`, que
+es justo el archivo que ese caso lee, **el barrido viejo y el nuevo coinciden byte a byte** (medido:
+0 líneas distintas de 306). Así que su aserción de delegación no puede cazar una vuelta al juego de
+reglas viejo **en ese archivo**. Su (h) mata 3 porque su lógica propia diverge también ahí; la mía
+no.
+
+**Lo importante es que el requisito sigue vigilado**: meter un juego de reglas paralelo pone la
+suite roja igual, por otros dos casos. No es como R12 antes del arreglo, donde no moría **nada**.
+
+### Los dos matices que declara: me convencen los dos, y uno se queda corto
+
+**R22 tautológico hoy — sí, y más de lo que dice.** `split` y `join` son la identidad, así que la
+aserción de delegación es verde por construcción mientras la función delegue; eso es exactamente lo
+que R22 pide. Lo que su nota no llega a decir es lo de arriba: el archivo que elige para
+comprobarlo es uno donde las dos semánticas coinciden, así que ni siquiera caza la divergencia hacia
+el barrido viejo. No es excusa —lo declara él solo, sin que nadie lo pregunte, y el requisito queda
+cubierto por otros dos casos—, pero conviene que quede escrito con el número delante.
+
+**R14 no discrimina ningún mecanismo vivo, ni debe — de acuerdo, y no es una excusa: es medible.**
+Una limitación afirmada tiene el trabajo contrario al de un caso normal: no debe morir cuando el
+mecanismo cambia, debe morir cuando **alguien cierra la limitación**. Y eso lo comprobé: bajo mi
+mutación (r14), que es literalmente «el escáner empieza a entender que un corchete abre una clase de
+caracteres», el caso cae con su mensaje «la limitacion se cerro: actualiza este caso». O sea que sí
+tiene un disparador, y es el correcto. Si no muriera ni siquiera ahí, sería prosa disfrazada de test.
+
+### Lo que sí encontré de nuevo, y por qué NO es un segundo bloqueante
+
+Dos mecanismos del escáner no los mata ningún caso: **(i)** que un bloque sin cerrar no se trague el
+resto del archivo, y **(j)** que dentro de una interpolación se respeten las cadenas. Los muté y la
+suite quedó en **47 passed** las dos veces.
+
+- **(i)** es el mecanismo del que cuelga la monotonía de **R15** («el cambio solo puede recuperar,
+  nunca perder»). No lo cuento como bloqueante porque **la verificación asignada a R15 no es un
+  caso, es el censo diferencial**: así lo escribieron `requirements.md` y `tasks.md`, así lo acepté
+  en la ronda 1 y así lo medí yo mismo (0 líneas de código perdidas en 2.697 archivos). Mover ese
+  criterio ahora sería cambiarle las reglas a la ficha a mitad de partida. Lo que sí hace esta
+  medida es **ponerle número a mi menor 3 de la ronda 1**: si mañana alguien rompe esa garantía, no
+  hay nada corriendo que lo diga.
+- **(j)** no es cláusula de ningún requisito: R12 nombra las plantillas anidadas dentro de una
+  interpolación, no las cadenas. Queda como observación.
+
+Los **10 casos que ninguna de mis 13 mutaciones mata** son todos ajenos a esta entrega y no son
+deuda suya: seis son de la 209/223 y están escritos en una sola cara —`not.toMatch(...)`, que un
+quitador vacío satisface— con la CONTRAPRUEBA global como red, que es el diseño que la 209 eligió;
+tres cubren `quitarComentariosSql` y `quitarComentariosCss`, que esta ficha **deliberadamente no
+toca**, así que ninguna mutación mía sobre `quitarComentarios` puede alcanzarlos; y uno solo
+comprueba que el archivo existe. **Ninguno de los 15 nuevos está en esa lista.**
+
+## B2 — las 24 casillas: no hay marcado de más en la sustancia
+
+Repasé las 24 contra la evidencia, y la sustancia de todas está hecha: yo mismo verifiqué el censo,
+las anclas, la salida roja de T1.1, las mutaciones, los dos cables trampa, el alcance del diff, la
+negativa del gate rápido, el rendimiento y el gate. **No encontré ninguna casilla que afirme un
+trabajo que no se hizo.** Dos apuntes de forma, los dos menores:
+
+- **T5.2 está marcada `[x]` sin decir «N/A».** Es la task **condicionada** a superar el umbral de
+  rendimiento, y el umbral no se superó, así que la mitigación —correctamente— no se implementó. Su
+  propio «Hecho cuando» dice «la nueva mediana está bajo umbral **tras la mitigación**», y eso no
+  ocurrió porque no tocaba. Lo pedí como N/A en la ronda 1 y quedó como `[x]`. No es una medida
+  inventada —la fila de R26 y la bitácora dicen «sin mitigación» tres líneas más allá—, pero un
+  lector futuro puede leer que hubo memo por ruta, y no lo hubo.
+- **T2.3 sigue nombrando la entrada vieja en su criterio de aceptación** (`` `a${b ? `x` : `y`}c` ``),
+  que es precisamente la que se demostró que no discrimina. La task está hecha —y mejor que lo
+  pedido—, pero conviene tacharlo para que nadie «restaure» ese input creyendo que cumple el spec.
+
+## Los menores de la ronda 1, comprobados
+
+| menor | estado |
+| --- | --- |
+| 1 · el cuarto «159 suites» | **cerrado y verificado**: en `tests/`, `init.sh` y `docs/` no queda ninguna aparición; la línea 554 dice ahora 171 con el desglose y la fecha. Lo que queda son referencias históricas en `progress/` y en los propios specs, que citan la cifra del leader como lo que se contrasta: correcto dejarlas |
+| 4 · la ficha repetía los números desmentidos | **cerrado en el `status_note`**, que ahora dice de dónde salía el error y cita el arbitraje. **Pero el campo `description` sigue diciendo «149 archivos pierden codigo real»**: es el texto que se ve en cualquier listado. Menor abierto |
+| 2 · «fuera de una clase de caracteres» | **abierto**. El docstring del módulo y `design.md` §3.2 siguen sugiriendo que dentro de una clase de caracteres no abre comentario, y el caso de R14 —tres líneas más abajo— usa exactamente esa forma y afirma que **sí** abre |
+| 3 · el censo de R15 no vigila nada a partir de hoy | **abierto**, y ahora con número: la mutación (i) deja la suite en 47 passed |
+| 5 · falta la entrada en `progress/history.md` | **abierto**, es del cierre del leader |
+
+## Condición de cierre NUEVA, y no es de la ficha: `dev` se movió
+
+Cuando arbitré la ronda 1, `origin/dev` era `ce22a621`. Ahora es **`97ece0c3`**: cinco commits por
+delante (feature 80, correo saliente por SMTP y el OTP fuera de los logs, más un arreglo del resumen
+de carga masiva). Tocan **`package.json` y `pnpm-lock.yaml`** —dependencia nueva—, `lib/actions/auth.ts`
+y varios servicios.
+
+Qué significa para el cierre:
+
+- **Todo lo que he medido vale para esta rama tal como está**, cuyo `merge-base` sigue siendo
+  `ce22a621`. El alcance del diff contra esa base son los 11 archivos esperados y ni uno más.
+- **Después de integrar `dev` hay que correr `pnpm install` y el gate COMPLETO otra vez**, y no por
+  formalismo: entra una dependencia nueva, y `docs/verification.md` ya niega el modo rápido cuando
+  se toca `pnpm-lock.yaml`. Un gate medido sobre `ce22a621` no dice nada del resultado del merge.
+- `dev` **no toca `lib/actions/tarifas.ts`**, así que es de esperar que el rojo ajeno siga ahí y el
+  baseline no cambie — pero eso hay que **medirlo después del merge**, no suponerlo.
+
+## Checklist de CHECKPOINTS.md — ronda 2
+
+| punto | estado |
+| --- | --- |
+| requisitos EARS numerados | OK |
+| `design.md` con alternativa descartada | OK |
+| **todas las tasks marcadas `[x]`** | **OK** — 24 de 24, con la sección «Marcado de las casillas» que dice de dónde sale cada una. Dos apuntes de forma arriba |
+| **cada `R<n>` mapea a un test que lo verifica** | **OK** — R12 cerrado: la cláusula de anidamiento ya muere con su mecanismo |
+| mapa `R -> test` en la bitácora | OK |
+| typecheck / lint | OK, corridos por mí |
+| `pnpm test` | 1 rojo AJENO conocido, delta 0 |
+| E2E, RLS, migraciones, webhooks, capas, permisos, multi-país | N/A — tooling de pruebas, cero migraciones, cero código de producción |
+| `./init.sh` en verde | `INIT_EXIT=1` **exclusivamente** por el rojo de la 275, que R28 manda dejar como está |
+| `progress/review_283.md` con veredicto OK | este archivo, ronda 2: **OK** |
+| entrada en `progress/history.md` | pendiente, cierre del leader |
+
+## Lo que queda pendiente para pasar a `done`
+
+Ninguno bloquea la revisión; son de cierre:
+
+1. Integrar `dev` (`97ece0c3`), `pnpm install`, y **gate completo otra vez** — con la dependencia
+   nueva dentro.
+2. Entrada en `progress/history.md`.
+3. La ficha a `done` y el campo `description` con los números buenos.
+4. Los tres menores de prosa: la coletilla de la clase de caracteres, el «N/A» de T5.2 y el criterio
+   de aceptación de T2.3.
+
+**Firmado: OK, 0 bloqueantes.** Lo que hizo que esta entrega pasara no fue que estuviera verde —lo
+estaba también con el defecto dentro, y ése era justo el problema— sino que cada afirmación tiene
+detrás una mutación que la mata y un número que se puede volver a medir. Incluidas las dos que
+declaró él mismo sin que nadie se lo pidiera.
