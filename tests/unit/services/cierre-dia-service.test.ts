@@ -204,11 +204,14 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     await service.listarCierreDia(MENSAJERO);
     expect(repo.findGestionesPendientes).toHaveBeenCalledWith("m1");
     // Feature 235 (T4.1, R23): la lista gana `ayuda_tienda` POR SU NOMBRE.
-    expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith("m1", [
-      "por_recoger",
-      "en_reparto",
-      "ayuda_tienda",
-    ]);
+    // Feature 246: y un TERCER argumento, el dia CR con el que se descarta lo reservado para
+    // despues. `expect.any(Date)` basta aqui —este test es sobre el ACOTAMIENTO POR ACTOR—; que el
+    // dia sea el correcto lo afirma el bloque «Feature 246» de mas abajo, con el reloj inyectado.
+    expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith(
+      "m1",
+      ["por_recoger", "en_reparto", "ayuda_tienda"],
+      expect.any(Date),
+    );
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
   });
 });
@@ -2458,5 +2461,72 @@ describe("276/R17 — la ventana de deshacer no cambia con la liberacion diferid
 
     expect(r.status).toBe("conflict");
     expect(enBodega.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 — EL DIA DE REPARTO EN EL GATE DEL CIERRE
+//
+// La 246 acordo que una orden reservada para un dia que aun no ha llegado esta «en la mano del
+// mensajero» y no la toca el corte nocturno. Ese acuerdo se aplico en DOS de los tres sitios que
+// deciden sobre esas ordenes (la seleccion del corte y el barrido de `crearCierre`) y NO en el
+// tercero: el gate que habilita «Solicitar cierre». Consecuencia medida en produccion el
+// 2026-08-25 — un mensajero que habia gestionado todo su dia no podia cerrarlo porque bodega ya le
+// habia asignado el trabajo de mañana, y el motivo que leia («gestionalas antes de cerrar») le
+// pedia algo IMPOSIBLE: no se puede gestionar una entrega de mañana.
+//
+// Estos casos afirman las dos mitades del arreglo. La primera —el ancla— es HOY y no `diaCerrado`:
+// el corte cierra la jornada ANTERIOR, el mensajero la EN CURSO, y copiar el ancla del corte sin
+// mirar habria descartado tambien las ordenes de hoy, que si son deuda suya.
+// =================================================================================================
+describe("246 · el gate del cierre no cuenta lo reservado para despues", () => {
+  // 20:00 CR del 25 = 02:00 UTC del 26. Se elige a proposito una hora en la que UTC ya paso de dia:
+  // con `new Date().toISOString().slice(0,10)` o con `inicioDelDiaCREnUtc` el ancla saldria del 26 y
+  // las ordenes de MAÑANA (26) empezarian a contar como deuda de HOY. Es el off-by-one de la 166.
+  const NOCHE_DEL_25_CR = new Date("2026-08-26T02:00:00.000Z");
+  const DIA_CR_ESPERADO = new Date("2026-08-25T00:00:00.000Z");
+
+  it("R11: `listarCierreDia` ancla el conteo en el dia CR de `now`, no en el dia UTC", async () => {
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO, NOCHE_DEL_25_CR);
+
+    const hoyCR = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][2] as Date;
+    expect(hoyCR).toEqual(DIA_CR_ESPERADO);
+  });
+
+  it("R11: `solicitarCierre` usa EL MISMO ancla que la lectura", async () => {
+    // La asimetria es el fallo que este caso existe para cazar: con anclas distintas el boton se
+    // habilita (lectura permisiva) y el submit lo rechaza acto seguido (escritura estricta), o al
+    // reves. Las dos llamadas se comparan entre si, no contra una constante.
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO, NOCHE_DEL_25_CR);
+    await service.solicitarCierre(MENSAJERO, NOCHE_DEL_25_CR);
+
+    const llamadas = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock.calls;
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[1][2]).toEqual(llamadas[0][2]);
+  });
+
+  it("el reloj es un PARAMETRO con default: sin `now` explicito sigue funcionando", async () => {
+    // Doctrina de la 246 (`dia-reparto.ts`): el reloj se inyecta en los tests y jamas se lee dentro
+    // del calculo. El default existe para los llamadores de produccion (la Server Action), que no
+    // tienen ningun dia que inyectar.
+    const { service, repo } = newService();
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    const hoyCR = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][2] as Date;
+    expect(hoyCR).toBeInstanceOf(Date);
+    // Medianoche exacta: si alguien sustituyera `startOfDayCR` por `now` a secas, el `lte` del
+    // repo dejaria fuera las ordenes de hoy creadas mas tarde en el dia.
+    expect(hoyCR.getUTCHours()).toBe(0);
+    expect(hoyCR.getUTCMinutes()).toBe(0);
+    expect(hoyCR.getUTCSeconds()).toBe(0);
+    expect(hoyCR.getUTCMilliseconds()).toBe(0);
   });
 });

@@ -255,7 +255,10 @@ export class CierreDiaService implements ICierreDiaService {
     return this.tarifaZonaRepo.resolvePagoTarifa(zonaId, vehiculoId); // R1/R2/R3
   }
 
-  async listarCierreDia(actor: Actor): Promise<ListarCierreDiaServiceResult> {
+  async listarCierreDia(
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<ListarCierreDiaServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1/R2
 
     // R2/R3/R10/R18: SOLO lectura (R17). Filtrado por el actor en el repo. Feature 39:
@@ -263,7 +266,15 @@ export class CierreDiaService implements ICierreDiaService {
     // el pago EN VIVO (R10/R11), en paralelo con el resto de lecturas.
     const [gestiones, pendientes, cierresPasados, tarifa] = await Promise.all([
       this.repo.findGestionesPendientes(actor.usuarioId),
-      this.repo.contarOrdenesPendientesGestion(actor.usuarioId, ESTADOS_PENDIENTES),
+      // Feature 246: el conteo excluye lo reservado para DESPUES de hoy (ver el repo). El dia se
+      // resuelve AQUI, desde el `now` inyectable, y baja como parametro: ningun repositorio lee el
+      // reloj para decidir un dia de reparto. La LECTURA y la ESCRITURA (`solicitarCierre`) tienen
+      // que usar el MISMO ancla, o el boton se habilita y el submit lo rechaza.
+      this.repo.contarOrdenesPendientesGestion(
+        actor.usuarioId,
+        ESTADOS_PENDIENTES,
+        startOfDayCR(now),
+      ),
       this.repo.findCierresByMensajero(actor.usuarioId),
       this.resolveTarifaMensajero(actor.usuarioId),
     ]);
@@ -495,7 +506,10 @@ export class CierreDiaService implements ICierreDiaService {
     return { status: "ok", items: conjunto, total: conjunto.length };
   }
 
-  async solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult> {
+  async solicitarCierre(
+    actor: Actor,
+    now: Date = new Date(),
+  ): Promise<SolicitarCierreServiceResult> {
     if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R1
 
     // ─── FEATURE 271 (§4) — CUATRO RAMAS, Y EL ORDEN IMPORTA ────────────────────────────────────
@@ -534,10 +548,13 @@ export class CierreDiaService implements ICierreDiaService {
     }
 
     // R11: flujo de creación de la 37 SIN CAMBIOS (precondiciones + snapshot).
-    // R10: precondicion — sin ordenes pendientes de gestion.
+    // R10: precondicion — sin ordenes pendientes de gestion. Feature 246: «pendiente» excluye lo
+    // reservado para DESPUES de hoy, con EL MISMO ancla que la lectura de `listarCierreDia` (si
+    // divergieran, el boton se habilitaria y esta precondicion lo rechazaria acto seguido).
     const pendientes = await this.repo.contarOrdenesPendientesGestion(
       actor.usuarioId,
       ESTADOS_PENDIENTES,
+      startOfDayCR(now),
     );
     if (pendientes > 0) return { status: "conflict", motivo: MSG_PENDIENTES };
 

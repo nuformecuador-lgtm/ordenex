@@ -437,14 +437,38 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     return rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id)));
   }
 
-  /** R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes. */
-  async contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number> {
+  /**
+   * R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes.
+   *
+   * FEATURE 246 (TERCERA COPIA DEL PREDICADO GEMELO) — LA SELECCION ES POR ESTATUS **Y DIA**.
+   * Una orden reservada para un dia que AUN NO HA LLEGADO no es deuda de la jornada en curso: esta
+   * en la mano del mensajero, y el corte nocturno ya acordo no tocarla (el `OR` identico de
+   * `CorteDiarioRepository.findMensajerosConActividadSinCierre` y el de `crearCierre`, mas abajo en
+   * este mismo archivo). Hasta que este predicado llego aqui la 246 estaba a DOS TERCIOS: el corte
+   * respetaba la reserva y el gate de la pantalla la contaba como pendiente, asi que a un mensajero
+   * con trabajo asignado para mañana se le deshabilitaba «Solicitar cierre» del dia que SI habia
+   * terminado — sin motivo que el pudiera resolver, porque gestionar algo de mañana no se puede.
+   *
+   * `NULL` BLOQUEA, igual que en las otras dos copias (R19/R20): significa «no reservada», no
+   * «reservada para nunca». Se pregunta «¿esta reservada para DESPUES de `hoyCR`?», no «¿es de hoy?».
+   *
+   * `hoyCR` LLEGA YA CALCULADO desde el servicio, con su `now` inyectable — este repositorio no lee
+   * el reloj para decidir un dia de reparto (ver el bloque del principio del archivo). OJO al ancla,
+   * que es lo unico que NO se comparte con las otras dos copias: aqui es HOY (`startOfDayCR(now)`)
+   * y alli es `diaCerrado`, porque el corte cierra la jornada ANTERIOR y el mensajero la EN CURSO.
+   */
+  async contarOrdenesPendientesGestion(
+    mensajeroId: string,
+    estados: string[],
+    hoyCR: Date,
+  ): Promise<number> {
     if (estados.length === 0) return 0;
     return this.prisma.orden.count({
       where: {
         mensajeroAsignadoId: mensajeroId,
         deletedAt: null,
         estatus: { value: { in: estados } },
+        OR: [{ fechaReparto: null }, { fechaReparto: { lte: hoyCR } }],
       },
     });
   }
