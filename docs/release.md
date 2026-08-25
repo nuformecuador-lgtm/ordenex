@@ -174,3 +174,39 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       llamada al proveedor no se puede distinguir «no se llamó» de «no había credencial»—. Preview
       **sí** tiene la credencial (comprobado el 2026-08-23); lo que hace falta es un despliegue y una
       cuenta que exista en **su** base, que es distinta de la de producción desde julio.
+
+---
+
+## Release NO abierta — 2026-08-24
+
+`dev` = **`7c211f2f`**, gate COMPLETO en verde (`INIT_EXIT=0`, 1375 archivos / 18.707 tests).
+`prod` sigue en **`37b5944b`**. Se recorrió el §1 de esta lista y **se paró en el cuarto punto**,
+que es justo el que existe para esto: *repasar las fichas `in_progress` que entran*.
+
+**Qué lo paró:** `dev` lleva, además de la 276 y la 277, el cambio de tarifas de otra sesión, y
+dentro va **`20260825120000_drop_tarifa_status`** — un **`DROP COLUMN` sobre una tabla de dinero**,
+irreversible. Su mitad frontend (**ficha 275**) sigue `pending`.
+
+**Lo que se comprobó antes de decidir**, para que no haya que repetirlo:
+
+- La revisión de esa ficha **existe y aprobó**: «APROBADO CON RESERVAS», **0 bloqueantes de
+  código**, 40/40 requisitos. Sus dos bloqueantes eran de bookkeeping.
+- **No queda código vivo usando `tarifas.status`**: los únicos aciertos del grep son comentarios que
+  explican su retirada.
+- El gate está verde sobre ese mismo árbol, con los tests de componentes dentro.
+
+**Decisión del humano:** esperar a que la otra sesión cierre su 275 —o confirme que su parte puede
+salir— en vez de arrastrar un borrado irreversible ajeno en una release que no es suya. Separar no
+era opción: `dev` es un solo árbol y aislar lo de esta sesión exigiría cherry-picks.
+
+### Cuando se abra, esto ya está medido — pero CADUCA
+
+Las dos condiciones de despliegue de la 276 se ejecutaron el 2026-08-24:
+
+- **R37 limpia**: única orden en el umbral, la guía `28098171`, en `devuelta`; **cero** fuera. La
+  condición de parada de Q6 no se cumple.
+- **T6 congela CERO órdenes el primer día** (medido por primera vez): 2 `reprogramada` vivas,
+  0 liberables hoy, las dos con su cierre ya aprobado.
+
+⚠️ **Son fotos. Se re-miden el día que se abra la release**, no se citan éstas. Cualquier cierre que
+la bodega apruebe entre medias puede crear una orden en el umbral que R18 dejaría inasignable.
