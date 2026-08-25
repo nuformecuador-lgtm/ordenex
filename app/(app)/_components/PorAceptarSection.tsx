@@ -15,10 +15,10 @@ import {
 //
 // QUIÉN LA USA, medido en el árbol el 2026-08-24 (ficha 278, R4): **un solo consumidor
 // real**, el portal del `adminSatelite` («Por recibir»), más su propio test. La cabecera
-// que había aquí decía otra cosa —que se «extrajo de Por recoger del mensajero» y que era
-// «compartida (mensajero / adminSatelite)»— y eso ya no describía el árbol: el mensajero
-// dejó de montarla. Se corrige porque una documentación que nombra consumidores que no
-// existen invita a «no tocar por si acaso» exactamente lo que sí se puede tocar.
+// que había aquí decía otra cosa: que el mensajero la compartía. Eso dejó de ser verdad
+// hace tiempo —el mensajero ya no la monta— y se corrige, porque una documentación que
+// nombra consumidores inexistentes invita a «no tocar por si acaso» justo lo que sí se
+// puede tocar. Si mañana vuelve a compartirse, se dice aquí y con fecha.
 //
 // QUÉ NO OFRECE, y por qué está escrito en negativo:
 // - **Ninguna acción en lote.** El «aceptar todas» se retiró el 2026-08-19 (pedido humano):

@@ -303,3 +303,331 @@ cayeron por ese corte (`RecepcionSateliteModule.test.tsx` y
 `SateliteSeleccionOtrasPaginas.test.tsx`) se adaptaron **en la dirección que `tasks.md` T4.1
 y T4.3 mandan**, no con un parche provisional, para que la mitad de frontend los continúe en
 vez de deshacerlos.
+
+---
+
+# Feature 278 — Mitad de FRONTEND (2026-08-24)
+
+> Continúa la bitácora de arriba, que cubría la tanda 3B (retirada del lote, servidor).
+> **Esta entrega cubre todo lo demás**: T0.1, tanda 1, tanda 2, tanda 3 (T3.1–T3.5), tanda 4
+> (T4.1, T4.2, T4.3b, T4.4, T4.5), tanda 5 (T5.1 y las mutaciones a/b/d/e/f de T5.2) y tanda
+> 6 entera. Las mutaciones (c) y (g) ya estaban medidas arriba, como **D** y **A**.
+
+## 11. T0.1 / T1.0 — el agujero del quitador, MEDIDO antes y después
+
+El spec afirmaba que la línea 228 era la única del archivo con un `/*` dentro de un `//`, y
+que el bloque falso se tragaba de la 228 a la ~378. **No se heredó el número: se volvió a
+medir**, con un script de un solo uso que pasa `lib/auth/menu-visibility.ts` por el
+`quitarComentarios` del repo (el script se borró; su salida es lo que sigue).
+
+| | ANTES (T0.1) | DESPUÉS del arreglo (T1.0) | Con los subítems ya puestos (T1.1) |
+| --- | --- | --- | --- |
+| (a) líneas no vacías que sobreviven | **76** (de 400 no vacías / 411 totales) | **156** (de 410 / 421) | **160** (de 432 / 443) |
+| (b) contiene `label: "Incidentes"` | `false` | **`true`** | `true` |
+| (c) contiene `"/recepcion-satelite"` | `false` | **`true`** | `true` |
+| (c2) contiene las dos subrutas nuevas | `false` | `false` (aún no existían) | **`true`** |
+| (d) aperturas de bloque dentro de un `//` | **1** → línea `228: // \`/mis-asignaciones/*\` (resuelven el rol server-side).` | **NINGUNA** | NINGUNA |
+
+**El tamaño del agujero, medido y no razonado:** el bloque falso abría en la **228** y sólo
+cerraba en el **378** (el `*/` del JSDoc de `puedeVer`, localizado con `awk`): **151 líneas**
+invisibles para cualquier guardia que escanee este fuente. Ahí dentro viven «Entregas»,
+«Recolección», el ítem del `adminSatelite`, «Novedades», «Ranking», «Wallet»,
+«Configuración», los dos cierres e «Incidentes».
+
+> ⚠️ **La ficha decía «79 líneas»** (dos veces, en `status_note`). Es **falso**: son **151**
+> de fuente, y **80 líneas no vacías** de diferencia en el texto barrido (76 → 156). El dato
+> se corrigió en la ficha.
+
+Las dos comprobaciones que `tasks.md` T0.1 marcaba como puerta —«si (b) o (c) salen `true`,
+el agujero no está donde se cree, se para y se re-decide §16»— salieron **las dos `false`**,
+o sea el §16 aplicaba tal cual y no hubo que re-decidir nada.
+
+**El arreglo (T1.0)** es el del diseño: la ruta con comodín pasa a nombrar
+`` `/mis-asignaciones/reparto` `` y `` `/mis-asignaciones/recoger` ``. Más preciso que el
+patrón y sin forma de reabrir el agujero. **`tests/fixtures/sin-comentarios.ts` no se tocó**
+(R47): `git diff` de ese archivo, vacío.
+
+**Y queda afirmado para siempre** (T1.6, R45/R46), en `tests/unit/auth/menu-visibility.test.ts`:
+un caso que comprueba que ninguna línea abre un bloque dentro de un comentario de línea, y
+otro que comprueba que el texto barrido conserva `label: "Incidentes"` y las dos subrutas.
+El segundo lleva anclaje de anti-vacuidad (`export const SIDEBAR_ITEMS` presente y >100
+líneas no vacías): si el quitador se comiera el archivo entero, se pone rojo en vez de
+aprobar el vacío. La mutación **(f)** demuestra que muerde.
+
+## 12. T1.0b · P1 FIRMADA — qué destapó abrir el agujero
+
+**NINGUNA violación.** Corridas **inmediatamente después del arreglo del comentario y antes
+de añadir los subítems**, para que cualquier rojo fuera atribuible sólo al comentario:
+
+```
+pnpm run test:guardias   (vitest run guard)
+Test Files  141 passed (141)
+Tests       2096 passed (2096)
+GUARDIAS_EXIT=0
+```
+
+Repetido tras añadir los `children`: idéntico, 141/2096 en verde.
+
+Así que **la obligación de P1 no llegó a activarse**: no hay ninguna violación previa que
+nombrar, ni ninguna con tamaño que declarar, ni nada que tocara **roles o visibilidad del
+menú** (el caso en el que la regla firmada manda parar y avisar antes de arreglar).
+
+Comprobación complementaria, por si el patrón `guard` dejaba fuera algún escáner de fuentes:
+de los 8 archivos de `tests/` que nombran `menu-visibility`, **el único que lee el fuente**
+es `tests/unit/guards/roles-analitica-acceso-vs-dominio.test.ts`, que es una guardia y entró
+en esa corrida. El resto lo importan como valor. La corrida COMPLETA del gate (§17) es la
+que cierra el hueco de un censo que recorra `lib/**` sin nombrar el archivo.
+
+## 13. Tanda 1 — el menú, y los tres tests que se pusieron rojos a propósito
+
+`lib/auth/menu-visibility.ts`: el ítem del satélite gana `children` con «Por recibir»
+primero y «En bodega» después. Etiqueta del padre («Órdenes») y `href` del padre intactos —
+patrón literal de «Entregas»—, y el comentario nuevo explica por qué se parte y por qué el
+`href` se conserva, **sin escribir ninguna ruta con comodín** (R33).
+
+Los tres que el diseño §5 anunciaba rojos lo estuvieron, y **se actualizaron a mano**:
+
+| Test | Qué decía | Qué dice |
+| --- | --- | --- |
+| `tests/unit/auth/destino-post-login.test.ts` | `adminSatelite` → `/recepcion-satelite` | → `/recepcion-satelite/por-recibir`, **más** `not.toBe("/recepcion-satelite")`. La cabecera del archivo sigue prohibiendo derivar el esperado de `primerDestino`, y la nota del caso dice de dónde viene el cambio |
+| `tests/unit/auth/menu-visibility.test.ts` | «el adminSatelite aterriza en su portal» + el caso R54 de la 192 | los dos con el literal nuevo. El R54 conserva su sentido: lo que afirma es que «Monitoreo» no mueve el aterrizaje de nadie |
+| `tests/components/AppLayout.test.tsx` | buscaba un **enlace** `href="/recepcion-satelite"` | busca el **disparador** «Órdenes», lo abre y afirma los dos subenlaces. **Conserva las dos mitades negativas**: no ve `/ordenes` y no ve «Configuración». Añade que el `href` del padre ya NO aparece como enlace |
+
+Y dos casos nuevos: `Sidebar.test.tsx` (T1.5a) afirma que con `/recepcion-satelite/en-bodega`
+activo ese subítem queda `aria-current="page"`, su padre `aria-expanded="true"` y el hermano
+**no** marcado (el activo es por igualdad exacta, no por prefijo — los dos empiezan igual);
+y el comentario de `linkPorHref` (T1.5b) deja de decir que hay dos ítems «Órdenes» que son
+enlace: sólo queda uno.
+
+## 14. Tandas 2 y 3 — las rutas y los módulos
+
+```
+app/(app)/recepcion-satelite/
+  page.tsx                        ← AHORA: redirect a /por-recibir. Sin gate propio y sin
+                                    resolver la sesión (se afirma que no llama a NINGUNA
+                                    de las seis lecturas ni al resolvedor de actor)
+  por-recibir/page.tsx            ← NUEVO. UNA sola lectura: listarRecepcionSatelite
+  en-bodega/page.tsx              ← el Server Component de hoy, movido con `git mv`
+  _components/
+    PorRecibirModule.tsx          ← NUEVO
+    AvisoSinZonaSatelite.tsx      ← NUEVO (el texto en UN sitio, R25)
+    RecepcionSateliteModule.tsx   ← conserva nombre y ruta (design D4); pierde el bloque
+    SateliteOrderCard.tsx         ← pierde la prop `acciones`
+app/(app)/_components/
+    PorAceptarSection.tsx         ← pierde las piezas del botón; cabecera reescrita
+```
+
+Lo que se retiró, y lo que **no** se puso en su lugar:
+
+- **`porRecibir` sale de `RecepcionSateliteModule` sin sustituto.** Con el escáner
+  incondicional, «En bodega» no necesita ni un booleano sobre la lista (R18/R42). El
+  typecheck lo denunció en los 8 montajes + la página, uno a uno.
+- **`mostrarAcciones`, `onAceptarUna`, `textoBotonUna` y el `CardAction` + `<Button>`** salen
+  de `PorAceptarSection`; con el último `<Button>` fuera, el import de `Button` también.
+- **`acciones` sale de `SateliteOrderCard`** con su contenedor y su JSDoc. Comprobado antes
+  de borrar: **ningún consumidor la pasaba**.
+- **La condición del escáner pasa de `!sinZona && porRecibir.length > 0` a `!sinZona`**, en
+  las dos pantallas.
+- **`estadoLegible` se muda** de `RecepcionSateliteModule` a `PorRecibirModule`: su único
+  consumidor era la tarjeta.
+- **`releerBodega` conserva `router.refresh()` + `mutate()`** en «En bodega» (R22), y «Por
+  recibir» usa `router.refresh()` a secas (R21) porque ahí no hay SWR.
+
+El separador del listado dejaba de tener sentido atado a `mostrarPorRecibir`; pasa a
+depender de si el escáner está montado (`sinZona`), que es lo único que ahora puede haber
+encima.
+
+## 15. Tanda 4 — el mapa de reexpresiones, sin un caso perdido
+
+**Regla aplicada en todas** (R29): cada ausencia con una afirmación POSITIVA **en el mismo
+caso**. Un `queryBy` que no encuentra nada pasa igual de verde si el render se rompió entero.
+
+### `tests/components/RecepcionSateliteModule.test.tsx` — la pantalla «En bodega»
+
+| Caso | Destino |
+| --- | --- |
+| `"R6/R8: muestra DOS secciones separadas 'Por recibir' y 'Recibidas'"` | **Reexpresado** → `"R18: 'En bodega' monta SU listado y NO la región 'Por recibir'"`. Positivo: la región del listado con su fila |
+| `"Feature 278 (R1): 'Por recibir' lista las órdenes SIN ningún botón"` | **Reexpresado y ampliado de ámbito** → `"R1/R34: ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'"`: la ausencia se afirma en TODA la pantalla. Positivo: el listado con su fila **y** el acceso al escáner |
+| `"R5: si sinZona, muestra aviso accionable y NO ofrece el escáner"` | **Reexpresado** → `"R25/R27: sin zona muestra el aviso y NO ofrece el escáner, pero el listado sigue"`. El texto se afirma contra `AVISO_SIN_ZONA_SATELITE`, el literal exportado, no contra una copia a mano |
+| `"con zona y órdenes por recibir, ofrece cámara y número tecleado"` | **Reexpresado** → `"R42: con zona ofrece cámara y número de guía tecleado"`, y el montaje ya **no** pasa ninguna lista: la demostración es el propio andamiaje |
+| `"sin órdenes por recibir no se muestra la tarjeta de recepción ni la sección"` (T4.1d) | **AFIRMABA LO CONTRARIO de R42.** Reexpresado → `"R42/R43: el escáner NO depende de la lista de por-recibir — se ofrece con la bodega vacía"`, con la decisión firmada escrita dentro del caso |
+| `"R7 (33, no regresión): 'Por recibir' NO ofrece seleccionar ni asignar"` | **Reexpresado** → `"R7/R18: la selección y 'Asignar' viven SOLO en el listado"`. Positivo: el listado SÍ tiene checkboxes |
+| `"Feature 63: 'Por recibir' muestra el banner con el contador"` | **MUDADO** a `PorRecibirModule.test.tsx` → `"R2: el banner cuenta las órdenes por recibir"` |
+| `"Feature 278 (R1/R34): ninguna de las dos vías sobrevive"` | **Partido**: la mitad de «En bodega» se queda (arriba); la de las tarjetas va a `PorRecibirModule.test.tsx` → `"R1/R2: … SIN ningún botón"` |
+| `"Feature 63 + pedido humano: sin zona no se ofrece nada de recepción"` | **MUDADO** → `"R26/R43: sin zona sólo el aviso"`. Su mitad de esta pantalla es OTRA regla (R27) y la afirma el caso `R25/R27` |
+| `"R18/R25: 'Por recibir' (cards) muestra el dato etiquetado"` y `"R19: … con 0 intentos"` | **MUDADOS** a `PorRecibirModule.test.tsx` con el mismo nombre. La columna «Intentos» del LISTADO se queda aquí, en sus tres casos |
+| **NUEVO (T4.1b, R22)** | `"R22: recibir por guía mete la orden en el listado sin recargar la página"`. Afirma **las dos cosas**: que la lectura paginada se repitió (`mutate()` no es un no-op) **y** que la fila aparece. Sólo lo segundo dejaría pasar un `mutate()` que devolviera lo mismo; sólo lo primero, una revalidación que no llega a pintarse |
+
+El andamiaje `renderModule` deja de pasar `porRecibir` y el tipo `GruposBodega` deja de
+declararlo (T4.1e).
+
+### `tests/components/PorAceptarSection.test.tsx` (T4.2)
+
+Tres casos con el botón por sujeto —`"'aceptar' por-orden invoca onAceptarUna"`,
+`"NO ofrece acción en lote"` y `"con mostrarAcciones=false lista sin botones"`— **se funden
+en dos**: uno con la tarjeta POR DEFECTO y otro con `renderItem`, porque el consumidor real
+usa el segundo camino y una ausencia afirmada sólo por el primero no vigila la pantalla que
+existe. Positivos: título, banner, cada orden y el número de `listitem`. Lo que muere con el
+código es el cableado botón→id: **no hay acción equivalente** que reponer, y el camino vivo
+(el QR) ya lo afirma `EscanerRecepcion.test.tsx`, sin editar.
+
+### T4.3b — los seis montajes restantes (más el séptimo, que la 3B ya había tocado)
+
+`SatelitePaginacion`, `SateliteDescarga`, `ManifiestoFlujos`, `CambiarDiaRepartoListados`,
+`RecepcionSateliteIncidente`, `deshacer-asignacion.ui` y `SateliteSeleccionOtrasPaginas`:
+fuera la prop `porRecibir`. Dos necesitaron algo más que quitar una línea:
+
+- **`deshacer-asignacion.ui.test.tsx`** tenía el caso `"R36: la sección 'Por recibir' NO
+  ofrece deshacer"`, que inyectaba una orden `en_ruta_bodega_satelite` sólo para eso.
+  **Reexpresado** a `"R36/R18: «En bodega» no monta la región 'Por recibir'"`, con positivo
+  (el listado con su fila) y afirmando además que la orden inyectada ya no aparece.
+- **`SateliteSeleccionOtrasPaginas.test.tsx`** tenía la constante `POR_RECIBIR`, viva sólo
+  para dar un botón que releyera. Se retira: su sustituto (el QR, que la 3B ya cableó) no
+  necesita ninguna orden montada porque el escáner está siempre.
+
+### `tests/components/RecepcionSatelitePage.test.tsx` (T4.4) — de una ruta a tres
+
+Tres bloques: el redirect, «Por recibir» y «En bodega». **Ningún caso de acceso por rol se
+perdió**: los cuatro de la pantalla única se ejecutan ahora **contra las dos páginas** (ocho
+casos), con la misma tabla de roles. Añadidos:
+
+- R13: el redirect **no resuelve la sesión y no llama a ninguna de las seis lecturas** — se
+  afirma mock a mock, no de pasada.
+- R14: el destino del redirect **coincide con `primerDestino`** del `adminSatelite`. El
+  esperado del aterrizaje va literal (no se deriva del redirect) y luego se comparan.
+- R16: «Por recibir» hace **exactamente una** lectura; las otras cinco, ninguna.
+- R44: cada pantalla muestra SU descripción y **ninguna dice «Mis asignaciones»**.
+
+### `tests/components/PorRecibirModule.test.tsx` (T4.5) — nuevo, 10 casos
+
+Además de los heredados: `"R5: la tarjeta no monta pie de acciones"` (afirma que hay
+**exactamente un** control y es el del detalle), `"R28/R42: con zona y la lista VACÍA se dice
+el vacío Y el escáner sigue ofreciéndose"` —el caso que el humano firmó—, `"R21: tras recibir
+por guía se relee del servidor"` (positivo: la acción se invocó **con la guía tecleada**, no
+es un no-op) y `"R16/R24: no monta listado, filtros, paginación, acciones de lote ni los
+avisos de bodega"`, con nueve ausencias sostenidas por un positivo: las dos tarjetas.
+
+## 16. Tanda 5 — la guardia nueva y las cinco mutaciones
+
+**T5.1 — `tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts`** (44 casos).
+Ámbito: los cuatro archivos de pantalla **más** los dos de servidor de los que se retiró el
+lote. Prohibidos en código ejecutable (leído con `quitarComentarios`, para juzgar lo que se
+ejecuta y no la explicación de por qué ya no está): `recibirLote`, `recibirLoteSchema`,
+`onAceptarUna`, `textoBotonUna`, `mostrarAcciones`, `aceptarRecepcion`. Más:
+
+- la **otra vía** de reintroducción: que ninguno de los dos módulos de la sección importe
+  `Button` ni monte un `<Button>` — que es exactamente como el botón estaba duplicado antes;
+- **R4** sobre el texto CRUDO (lo que R4 corrige es la documentación), con su propio anclaje;
+- **R33**: ninguna línea que nombre una subruta del satélite abre un bloque de comentario;
+- **anti-vacuidad en tres capas (R31)**: los seis archivos existen; el texto **ya barrido**
+  de cada uno conserva su anclaje positivo (`EscanerRecepcion`, `SateliteOrdenesListado`,
+  `RecepcionDetalle`, `PorAceptarSection`, y en los dos de servidor el camino del QR —
+  `recibirPorQr` y `recibirSchema`—, así que la misma pasada que comprueba que el lote no
+  está demuestra que el QR sigue); y un caso que aplica los seis prohibidos a una **cadena de
+  control** con el botón dentro y exige que los detecte **todos**.
+
+**El sidebar queda FUERA de ese censo de fuente, con el motivo escrito** (R32) y apuntando a
+la medida de T0.1. Sus dos casos se juzgan sobre el **valor importado `SIDEBAR_ITEMS`**, con
+anti-vacuidad (`SIDEBAR_ITEMS.length > 5`, para que una lista recortada no apruebe el
+vacío), y uno de ellos hace algo que un censo de texto no puede: comprobar que las dos
+subrutas del menú **corresponden a `page.tsx` que existen** en el árbol.
+
+### T5.2 — cinco mutaciones, una a una, todas revertidas
+
+| # | Mutación | Resultado |
+| --- | --- | --- |
+| **(a)** | Devolver un `<Button>Aceptar</Button>` dentro del `renderItem` de cada tarjeta | 🔴 **ROJO**, `3 failed \| 51 passed`. Muertes: T4.5 `"R1/R2 … SIN ningún botón"` y `"R5: no monta pie de acciones"`, **y** T5.1 `"ninguno de los dos módulos importa Button"` |
+| **(b)** | Devolver `onAceptarUna` + `textoBotonUna` (y el botón) a `PorAceptarSection` | 🔴 **ROJO**, `3 failed \| 47 passed`. Muertes: T5.1 (los dos prohibidos, uno por caso) y T4.2 `"no pinta NINGÚN botón con la tarjeta por defecto"` |
+| **(d)** | Quitar los `children` del ítem del menú | 🔴 **ROJO**, `13 failed \| 130 passed` en **6 archivos**: `destino-post-login`, `menu-visibility` (R8, R9, R10, R12, R46, aterrizaje y R54), `AppLayout`, `Sidebar`, la guardia nueva y `RecepcionSatelitePage` (R14) |
+| **(e)** | Condicionar el escáner a que la lista no esté vacía (en las DOS pantallas) | 🔴 **ROJO**, `3 failed \| 45 passed`: T4.5 `"R28/R42 … lista VACÍA"` y `"R42: con zona ofrece cámara…"`, y T4.1(d) `"R42/R43: el escáner NO depende de la lista"` |
+| **(f)** | Volver a escribir el comodín en el comentario del menú | 🔴 **ROJO**, `2 failed \| 89 passed`: T1.6 entero — `"R45: ninguna línea abre un bloque…"` **y** `"R46: el fuente barrido conserva el ÚLTIMO ítem y las dos subrutas"` |
+
+Las mutaciones **(c)** —quitar el `mutate()` de `releerBodega`— y **(g)** —romper la guarda
+de zona ajena de `recibir()`— están medidas arriba, en §6, como **D** y **A**.
+
+Un detalle de (f) que conviene no leer al revés: la que la mató fue **T1.6**, no el caso R33
+de la guardia nueva. Es correcto — R33 vigila las líneas que nombran **subrutas del
+satélite**, y el comodín reintroducido es de `/mis-asignaciones`. Las dos reglas cubren
+tramos distintos a propósito.
+
+`git diff` tras revertir las cinco: sin rastro en `lib/auth/menu-visibility.ts`,
+`PorRecibirModule.tsx`, `RecepcionSateliteModule.tsx` ni `PorAceptarSection.tsx`.
+
+## 17. Tanda 6 — arrastres y gate
+
+**T6.1 — e2e.** Cuatro `goto` reapuntados: `e2e/recepcion-satelite.spec.ts` →
+`/recepcion-satelite/por-recibir`; `e2e/asignacion-satelite.spec.ts` y las **dos** de
+`e2e/reglas-bloqueos-cierre.spec.ts` → `/recepcion-satelite/en-bodega`. **NO se afirma que
+estos specs pasen**: siguen sin ejecutarse en este repo (lo dice su propia cabecera), así que
+esto es una corrección de ruta por lectura, y así queda escrito en cada uno.
+
+**T6.2 — `docs/release.md`.** «Corregir el día desde `/recepcion-satelite`» pasa a
+`/recepcion-satelite/en-bodega`, que es donde vive esa acción.
+
+**T6.4 — gate COMPLETO**, no el rápido: el diff de la rama toca `lib/types/`. Antes se corrió
+`pnpm run db:generate`, porque el cliente de Prisma se comparte entre ramas en esta máquina y
+uno rancio pone rojo el gate con errores de archivos que la rama no tocó. El `INIT_EXIT=$?`
+se escribió DENTRO del log y el log **no** se canalizó por `tail`.
+
+Log: `progress/gate_278_frontend.log`.
+
+```
+GATE_PLACEHOLDER
+```
+
+## 18. Trazabilidad de esta entrega — R1…R33 y R42…R47
+
+| R | Dónde queda afirmado |
+| --- | --- |
+| R1 | `PorRecibirModule.test.tsx` «R1/R2 … SIN ningún botón» + guardia T5.1 · mutación **(a)** |
+| R2 | `PorRecibirModule.test.tsx` «R1/R2» (remisión, estado legible, detalle desplegable) y «R2: el banner cuenta» |
+| R3 | `PorAceptarSection.test.tsx` (los dos caminos: tarjeta por defecto y `renderItem`) + typecheck · mutación **(b)** |
+| R4 | guardia T5.1, caso sobre el texto crudo de `PorAceptarSection.tsx` |
+| R5 | `PorRecibirModule.test.tsx` «R5: no monta pie de acciones» + typecheck (la prop no existe) |
+| R6 | `EscanerRecepcion.test.tsx` (sin editar) + `PorRecibirModule.test.tsx` «R6: cámara y número tecleado» |
+| R7 | `git status db/` vacío; en `lib/` sólo lo de §3 (esta mitad no tocó servidor salvo `lib/auth/menu-visibility.ts`) |
+| R8 | `menu-visibility.test.ts` «R8: … declara Por recibir (primero) y En bodega», sobre `SIDEBAR_ITEMS` |
+| R9 | `AppLayout.test.tsx` (disparador + dos subenlaces) + `menu-visibility.test.ts` «R9: el href del padre…» |
+| R10 | `menu-visibility.test.ts` «R10: … sólo los alcanza el adminSatelite», con positivo antes de las cinco ausencias |
+| R11 | `Sidebar.test.tsx` «con la ruta de un subítem del satélite activo…» |
+| R12 | `destino-post-login.test.ts` (literal a mano) + `menu-visibility.test.ts` «R12» y el R54 de la 192 |
+| R13 | `RecepcionSatelitePage.test.tsx` bloque 1, los dos casos |
+| R14 | `RecepcionSatelitePage.test.tsx` «R14: el destino del redirect coincide con el aterrizaje» |
+| R15 | `RecepcionSatelitePage.test.tsx` bloque 2 + `PorRecibirModule.test.tsx` |
+| R16 | `RecepcionSatelitePage.test.tsx` «R16: … sólo hace UNA lectura» + `PorRecibirModule.test.tsx` «R16/R24» |
+| R17 | `RecepcionSatelitePage.test.tsx` bloque 3 + los casos vigentes del listado en `RecepcionSateliteModule.test.tsx` |
+| R18 | `RecepcionSateliteModule.test.tsx` «R18: … NO la región 'Por recibir'» + typecheck (la prop no existe y nada la sustituye) |
+| R19 | `RecepcionSatelitePage.test.tsx`, bloques 2 y 3, tres casos cada uno |
+| R20 | `RecepcionSatelitePage.test.tsx`, H1 «Por recibir» / «En bodega» |
+| R21 | `PorRecibirModule.test.tsx` «R21: tras recibir por guía se relee del servidor» |
+| R22 | `RecepcionSateliteModule.test.tsx` «R22: … sin recargar la página» · mutación **(c)** = **D** de §6 |
+| R23 | casos vigentes de `RecepcionSateliteModule.test.tsx` + `SateliteSeleccionOtrasPaginas.test.tsx` |
+| R24 | `RecepcionSateliteModule.test.tsx` (bloqueo, cierres, liberadas) + `PorRecibirModule.test.tsx` «R16/R24» |
+| R25 | las DOS pantallas contra `AVISO_SIN_ZONA_SATELITE`, el literal exportado |
+| R26 | `PorRecibirModule.test.tsx` «R26/R43: sin zona sólo el aviso» |
+| R27 | `RecepcionSateliteModule.test.tsx` «R25/R27: … pero el listado sigue» |
+| R28 | `PorRecibirModule.test.tsx` «R28/R42: … lista VACÍA» · mutación **(e)** |
+| R29 | los tres archivos reexpresados (§15), cada ausencia con su positivo · mutaciones **(a)** y **(b)** |
+| R30 | `satelite-sin-boton-aceptar.guardia.test.ts` (36 casos de prohibidos + la vía del `<Button>` propio) |
+| R31 | esa guardia: existencia, anclaje en el texto barrido y la cadena de control que dispara |
+| R32 | `menu-visibility.test.ts` sobre `SIDEBAR_ITEMS` + el bloque final de la guardia, que declara el sidebar fuera del censo de fuente y dice por qué |
+| R33 | la guardia, caso «ninguna línea que nombre una subruta del satélite abre un bloque» |
+| R42 | `PorRecibirModule.test.tsx` «R28/R42» + `RecepcionSateliteModule.test.tsx` «R42/R43» · mutación **(e)** |
+| R43 | `PorRecibirModule.test.tsx` «R26/R43» + `RecepcionSateliteModule.test.tsx` «R25/R27» |
+| R44 | `RecepcionSatelitePage.test.tsx`, bloques 2 y 3: cada descripción propia y ninguna dice «Mis asignaciones» |
+| R45 | `menu-visibility.test.ts` «R45: ninguna línea abre un bloque…» · mutación **(f)** |
+| R46 | `menu-visibility.test.ts` «R46: … el ÚLTIMO ítem y las dos subrutas» + los dos juegos de números de §11 |
+| R47 | `git diff tests/fixtures/sin-comentarios.ts`, vacío |
+
+## 19. Lo que un revisor debe mirar con lupa
+
+1. **La medida de §11 es reproducible pero el script se borró** (T0.1 lo exige). Lo que
+   queda vivo es la PERTENENCIA, no el número: T1.6 afirma que el último ítem y las dos
+   subrutas se ven, y eso no caduca cuando el archivo crezca.
+2. **El caso R22 mide dos cosas y hacen falta las dos.** Ver §15; si alguien recorta una,
+   el `mutate()` puede volverse un no-op sin que nada se ponga rojo.
+3. **Los e2e no se ejecutan.** Las cuatro rutas se corrigieron por lectura y así está dicho.
+4. **`RecepcionSateliteModule.tsx` no se renombró** aunque ahora sea el módulo de «En
+   bodega»: el motivo (cuatro registros por ruta + la guardia de contadores de cabecera)
+   está escrito en su cabecera.
+5. **La ficha decía «79 líneas» y son 151.** Corregido en `feature_list.json`.

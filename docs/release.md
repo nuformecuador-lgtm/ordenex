@@ -130,7 +130,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 
 Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí existe:
 
-- [ ] **Corregir el día desde `/recepcion-satelite`** con cuenta `adminSatelite`. En local no hay
+- [ ] **Corregir el día desde `/recepcion-satelite/en-bodega`** con cuenta `adminSatelite`. En local no hay
       ninguna orden de su zona en un estado que esa pantalla ofrezca, y **no hay camino por la UI**:
       el botón exige `por_recoger`, que exige asignar, que exige coordenadas — y sólo 4 órdenes de
       ~70 las tenían.

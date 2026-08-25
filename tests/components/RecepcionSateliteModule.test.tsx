@@ -409,11 +409,14 @@ describe("RecepcionSateliteModule", () => {
     renderModule({ recibidas: [yaEnBodega] });
     const listado = () => screen.getByRole("region", { name: LISTADO });
 
-    // Estado de partida: la fila vieja está y la nueva NO. Sin esto, el `getAllByText` de
+    // Estado de partida: la fila vieja está y la nueva NO. Sin esto, el aserto de más
     // abajo podría estar encontrando algo que ya estaba.
-    await waitFor(() =>
-      expect(within(listado()).getAllByText(/REM-B1/).length).toBeGreaterThan(0),
-    );
+    //
+    // La espera se ancla al CONTENIDO y no a un conteo, a propósito: mientras el listado
+    // carga, la tabla tiene su cabecera y su fila `role="status"`, así que un
+    // `.length > 0` se cumple a media carga y no distingue la pantalla asentada de la que
+    // todavía está pintando el esqueleto (lo vigila `ancla-de-carga.guardia.test.ts`).
+    await waitFor(() => expect(listado()).toHaveTextContent("REM-B1"));
     expect(within(listado()).queryByText(/REM-NUEVA/)).toBeNull();
 
     // A partir de aquí el servidor ya devuelve la orden recibida.
@@ -441,10 +444,9 @@ describe("RecepcionSateliteModule", () => {
     await waitFor(() =>
       expect(paginadoBodegaMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
     );
-    // (2) y la fila nueva se pintó, sin recargar la página.
-    await waitFor(() =>
-      expect(within(listado()).getAllByText(/REM-NUEVA/).length).toBeGreaterThan(0),
-    );
+    // (2) y la fila nueva se pintó, sin recargar la página. Otra vez por contenido: es lo
+    // que distingue «la relectura llegó y se pintó» de «la tabla tiene N elementos».
+    await waitFor(() => expect(listado()).toHaveTextContent("REM-NUEVA"));
     // (3) el Server Component también se vuelve a resolver (bloqueo, liberadas, total).
     expect(refreshMock).toHaveBeenCalled();
   });
