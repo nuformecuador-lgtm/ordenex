@@ -489,17 +489,31 @@ describe("283 — cadenas, plantillas y la comilla sin pareja", () => {
   });
 
   it("R12 una plantilla anidada dentro de un `${…}` no cierra la de fuera", () => {
-    // Con una bandera booleana en vez de una pila, la plantilla de fuera cerraria en la primera
-    // comilla invertida de dentro y a partir de ahi el escaner leeria codigo donde hay texto —y
-    // texto donde hay codigo—.
-    const fuente = "const s = `a${b ? `x` : `y`}c`; // con parseFloat(\nconst vivo = 1;";
+    // ESTE CASO ESTUVO ESCRITO MAL Y NO MORDIA. La entrada original era
+    // `const s = \`a${b ? \`x\` : \`y\`}c\`; // con parseFloat(`, y con ella la pila de
+    // interpolacion DA IGUAL: hay un numero par de comillas invertidas, asi que emparejarlas
+    // (1,2)(3,4)(5,6) —lo que hace el escaner sin pila— consume exactamente el mismo tramo que
+    // emparejar (1,6) con las demas dentro. Como el contenido de las plantillas se emite tal
+    // cual en los dos casos, la salida era identica byte a byte y el caso pasaba con el
+    // mecanismo y sin el. Lo cazo el reviewer de la 283 quitando la pila: 47 passed (47).
+    //
+    // La entrada de abajo SI discrimina, y la diferencia es donde se pone el `//`: DENTRO de la
+    // plantilla anidada. Sin pila, la de fuera cierra en la comilla invertida de antes de
+    // `//raiz`, el escaner cree que vuelve a codigo justo ahi, lee ese `//` como comentario y se
+    // come el resto de la linea —`const vivo = 1;` incluido—. Con pila, todo el tramo es texto.
+    const fuente = "const ruta = `base ${esRaiz ? `//raiz` : `/x`} fin`; const vivo = 1;";
     const limpio = quitarComentarios(fuente);
 
-    expect(limpio, "el comentario de despues de la plantilla no se quito").not.toMatch(
-      /parseFloat/,
-    );
-    expect(limpio).toContain("`a${b ? `x` : `y`}c`");
+    expect(
+      limpio,
+      "la plantilla de fuera cerro en la de dentro: el `//` de la anidada se leyo como " +
+        "comentario y se llevo el resto de la linea",
+    ).toContain("`//raiz`");
     expect(limpio).toMatch(/const vivo = 1;/);
+    expect(limpio).toContain("`base ${esRaiz ? `//raiz` : `/x`} fin`");
+    // La otra cara, para que el caso no pase por haber dejado de quitar nada: un comentario de
+    // verdad DESPUES de la plantilla si desaparece.
+    expect(quitarComentarios(fuente + " // con parseFloat(")).not.toMatch(/parseFloat/);
   });
 
   it("R4 un bloque abierto DENTRO DE UNA CADENA ya no desalinea el archivo entero", () => {
@@ -537,7 +551,8 @@ describe("283 — cadenas, plantillas y la comilla sin pareja", () => {
     // Escrito con el mismo formato con el que la 209 y la 223 dejaron las suyas, y describiendo
     // el comportamiento REAL, no el deseado. Distinguir un literal de expresion regular de una
     // division exige el token anterior, o sea un parser de TypeScript: este modulo esta en el
-    // camino caliente de 159 suites y un parse por archivo no se paga.
+    // camino caliente de 171 suites -134 importadores directos mas los transitivos, medido el
+    // 2026-08-25- y un parse por archivo no se paga.
     //
     // Como se sabria si dejara de ser teorico: el censo diferencial de la 283 recorre los 2.697
     // `.ts`/`.tsx` del arbol y exige CERO lineas perdidas frente al barrido viejo. El dia que una

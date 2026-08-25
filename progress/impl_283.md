@@ -436,3 +436,142 @@ diga otra cosa.
 4. **La limitación de las expresiones regulares sigue viva** y está escrita como caso de prueba,
    con el comportamiento real —no el deseado— y con el instrumento que la detectaría si dejara de
    ser teórica (el censo diferencial, hoy en 0).
+
+---
+
+## Addendum (revisión RECHAZADA, bloqueante 1) — el caso de R12 no discriminaba
+
+**El reviewer tenía razón y lo reproduje antes de tocar nada.** Quitando la pila de interpolación
+de `finDePlantilla` —las seis líneas del `if (c === "$" && fuente[i + 1] === "{")`— la suite salía
+`47 passed (47)`. Un caso que pasa con el mecanismo y sin él no verifica el mecanismo.
+
+### Por qué no mordía, con la traza delante
+
+La entrada era `const s = \`a${b ? \`x\` : \`y\`}c\`; // con parseFloat(`. Tiene **seis** comillas
+invertidas, un número **par**, así que emparejarlas mal —(1,2)(3,4)(5,6), que es lo que hace el
+escáner sin pila— consume **exactamente el mismo tramo** que emparejarlas bien —(1,6) con las
+demás dentro—. Y como el contenido de una plantilla se emite tal cual en los dos casos, la salida
+era idéntica **byte a byte**:
+
+```
+entrada: "const s = `a${b ? `x` : `y`}c`; // con parseFloat(\nconst vivo = 1;"
+con pila: "const s = `a${b ? `x` : `y`}c`;  \nconst vivo = 1;"
+sin pila: "const s = `a${b ? `x` : `y`}c`;  \nconst vivo = 1;"
+```
+
+El defecto **sí es detectable**; lo que fallaba era la entrada. La diferencia está en **dónde se
+pone el `//`**: dentro de la plantilla anidada. Sin pila, la de fuera cierra en la comilla
+invertida de antes de `//raiz`, el escáner cree que vuelve a código justo ahí y lee ese `//` como
+comentario:
+
+```
+entrada: "const ruta = `base ${esRaiz ? `//raiz` : `/x`} fin`; const vivo = 1;"
+con pila: "const ruta = `base ${esRaiz ? `//raiz` : `/x`} fin`; const vivo = 1;"
+sin pila: "const ruta = `base ${esRaiz ? ` "
+```
+
+### Las dos salidas de la re-medición
+
+**(1) CON la pila** — pasa:
+
+```
+ Test Files  1 passed (1)
+      Tests  47 passed (47)
+```
+
+**(2) SIN la pila** (mismas seis líneas borradas) — cae, y cae **nombrando el mecanismo**:
+
+```
+     × R12 una plantilla anidada dentro de un `${…}` no cierra la de fuera 5ms
+      Tests  1 failed | 46 passed (47)
+
+AssertionError: la plantilla de fuera cerro en la de dentro: el `//` de la anidada se leyo como
+comentario y se llevo el resto de la linea: expected 'const ruta = `base ${esRaiz ? ` ' to contain '`//raiz`'
+```
+
+---
+
+## ¿Hay MÁS casos con el mismo vicio? — auditado por mutación, no por opinión
+
+No se contestó de memoria: se mutó **cada mecanismo por separado** y se miró qué caso muere.
+Mutaciones nuevas (además de las (a)(b)(c)(d) que ya estaban):
+
+| # | mutación | casos muertos |
+| --- | --- | --- |
+| (e) | quitar la rama de **CADENA** (`'` / `"`) de `quitarComentarios` | **11**, entre ellos R8, R9, R10, R11, R4-en-cadena, el cable trampa y 4 casos de URL de la 209 |
+| (f) | quitar la rama de **PLANTILLA** (`` ` ``) | **2**: R12 multilínea y R12 anidada |
+| (g) | quitar la **pila de interpolación** (la del reviewer) | **1**: R12 anidada — antes del arreglo eran **0** |
+| (h) | que `lineasSinComentarios` **deje de delegar** y estrene lógica propia | **3**: R12 multilínea, R4-en-cadena y **R22** |
+
+Con eso, los **15 casos nuevos** quedan así:
+
+| caso | muere en |
+| --- | --- |
+| R7 `/*` dentro de un `//` | (a) |
+| R8 `/*` dentro de una cadena | (a), (e) |
+| R9 `//` dentro de una cadena | (a), (e) |
+| R10 no-regresión de URL | (e) |
+| R13 comilla sin pareja en su línea | (b) |
+| R13 comilla invertida sin pareja | (b) |
+| R11 comilla escapada | (a), (e) |
+| R12 plantilla multilínea | (a), (f), (h) |
+| **R12 plantilla anidada** | **(f), (g)** — antes: ninguna |
+| R4 bloque abierto dentro de cadena | (a), (e), (h) |
+| R22 recuento de líneas / delegación | **(h)** |
+| R14 limitación que queda (regex) | — ver abajo |
+| Cable trampa SQL | (d) |
+| Cable trampa CSS | (d) |
+| Deuda declarada de CSS | (a), (e) |
+| (+ el cable trampa R19 reescrito) | (a), (e) |
+
+### Lo que declaro por mi cuenta, sin que nadie lo pregunte
+
+**1. `R22` era el segundo sospechoso, y resultó tener dientes — pero por media razón.** Su
+segunda aserción, `lineasSinComentarios(f).join("\n") === quitarComentarios(f)`, es
+**tautológica hoy**: `split("\n").join("\n")` es la identidad, así que es verde **por
+construcción** mientras la función delegue. Eso es exactamente lo que R22 pide («NO DEBE tener un
+juego de reglas paralelo»), y la mutación (h) lo confirma: en cuanto la función estrena lógica
+propia, el caso cae. O sea: no discrimina ningún mecanismo **vivo**, discrimina una **divergencia
+futura**. Queda dicho para que nadie lo lea como más de lo que es.
+
+**2. `R14` no discrimina ningún mecanismo, y no debe.** Es una *limitación afirmada*, con el
+formato que la 209 y la 223 usaron para las suyas y que R14 pide literalmente: su trabajo es
+ponerse rojo el día que alguien **cierre** la limitación de las expresiones regulares, no
+verificar código de hoy. No muere en (a)…(h) y es correcto que no muera. Si mañana se implementa
+reconocimiento de regex, cae con el mensaje «la limitacion se cerro: actualiza este caso».
+
+**3. Ningún otro caso de los 15 queda sin al menos una mutación que lo mate.** Antes de este
+addendum había **uno** (el de R12 anidada) y lo encontró el reviewer, no yo. La lección que me
+llevo escrita: cuando un caso afirma un mecanismo, la entrada tiene que estar **elegida para que
+el mecanismo cambie el resultado**, no para que se parezca al mecanismo. Aquí la trampa era la
+paridad de las comillas invertidas — el ejemplo «de libro» de plantilla anidada es justo el que no
+distingue nada.
+
+---
+
+## El cuarto «159 suites»
+
+Estaba en `tests/unit/guards/quitador-comentarios.guardia.test.ts:554`, dentro del caso de R14.
+Corregido a **171 suites (134 importadores directos más los transitivos, medido el 2026-08-25)**,
+igual que los otros tres. Comprobado que en `tests/`, `init.sh` y `docs/` **no queda ninguno**; los
+que siguen apareciendo viven en `progress/*.md` —esta bitácora, que habla del número heredado a
+propósito, y los informes de revisión de otras sesiones, que no son míos—.
+
+---
+
+## Gate del addendum
+
+Tercera corrida completa, con `pnpm run db:generate` delante y `INIT_EXIT=$?` escrito **dentro**
+del log, sin `tail`. 16:36:50 → 16:48:22 (**11 min 32 s**).
+
+```
+✓ typecheck paso
+✓ lint paso
+ Test Files  1 failed | 1391 passed (1392)
+      Tests  1 failed | 18958 passed | 26 skipped (18985)
+INIT_EXIT=1
+```
+
+**Idéntico a las dos corridas anteriores, hasta el número de casos.** El único rojo sigue siendo
+el ajeno: `superficie-de-uso.guardia.test.ts` → `lib/actions/tarifas.ts:67 obtenerTarifa`, ficha
+275 `pending`, sin tocar, sin anotar y sin eximir. **Delta contra el baseline: 0.**
