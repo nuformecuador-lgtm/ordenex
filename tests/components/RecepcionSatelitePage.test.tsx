@@ -26,7 +26,7 @@ import { PAGE_SIZE_SATELITE } from "@/tests/fixtures/satelite-bodega";
 // listado, la lib de cámara y next/navigation (notFound y redirect lanzan; useRouter lo
 // consume el módulo cliente).
 //
-// FEATURE 278 (T4.4, 2026-08-24) — este archivo pasa a cubrir TRES rutas, en tres bloques:
+// FEATURE 279 (T4.4, 2026-08-24) — este archivo pasa a cubrir TRES rutas, en tres bloques:
 //   (1) `/recepcion-satelite`               → redirige, sin renderizar ni consultar nada;
 //   (2) `/recepcion-satelite/por-recibir`   → escáner + tarjetas;
 //   (3) `/recepcion-satelite/en-bodega`     → el listado y los avisos de bodega.

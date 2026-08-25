@@ -1,6 +1,6 @@
-// Feature 278 (T3.3, R25) — el aviso de «no tienes zona asignada», en UN solo sitio.
+// Feature 279 (T3.3, R25) — el aviso de «no tienes zona asignada», en UN solo sitio.
 //
-// Por qué existe este archivo: la ficha 278 parte el portal del `adminSatelite` en dos
+// Por qué existe este archivo: la ficha 279 parte el portal del `adminSatelite` en dos
 // pantallas («Por recibir» y «En bodega») y R25 exige que las dos muestren EXACTAMENTE el
 // mismo aviso. Dos copias del literal en dos módulos es la receta conocida de dos textos
 // gemelos que divergen: el día que alguien corrija la redacción en una pantalla, la otra

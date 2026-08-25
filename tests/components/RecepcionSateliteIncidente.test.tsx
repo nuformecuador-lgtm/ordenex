@@ -114,7 +114,7 @@ function makeOrden(
  * lee— y este andamiaje los concatena en el orden del flujo, igual que hacía el módulo, para
  * armar la página, el catálogo y el doble de la Server Action.
  */
-// Feature 278 (T4.3b): `porRecibir` SALE de estos grupos. La pantalla que monta este
+// Feature 279 (T4.3b): `porRecibir` SALE de estos grupos. La pantalla que monta este
 // archivo es «En bodega», y desde la partición del portal ya no lista —ni recibe— las
 // órdenes en camino: eso es de `/recepcion-satelite/por-recibir`.
 type GruposBodega = Partial<

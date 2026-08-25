@@ -13,7 +13,7 @@ import {
 // órdenes. Componente de presentación PURO: no conoce Server Actions ni estado de
 // negocio, y todos sus textos entran por props (i18n-ready).
 //
-// QUIÉN LA USA, medido en el árbol el 2026-08-24 (ficha 278, R4): **un solo consumidor
+// QUIÉN LA USA, medido en el árbol el 2026-08-24 (ficha 279, R4): **un solo consumidor
 // real**, el portal del `adminSatelite` («Por recibir»), más su propio test. La cabecera
 // que había aquí decía otra cosa: que el mensajero la compartía. Eso dejó de ser verdad
 // hace tiempo —el mensajero ya no la monta— y se corrige, porque una documentación que
@@ -23,7 +23,7 @@ import {
 // QUÉ NO OFRECE, y por qué está escrito en negativo:
 // - **Ninguna acción en lote.** El «aceptar todas» se retiró el 2026-08-19 (pedido humano):
 //   aceptar de golpe todo lo que hay en pantalla se firma sin mirar.
-// - **Ninguna acción por-orden.** El botón «Aceptar» se retiró en la ficha 278 (R1/R3): la
+// - **Ninguna acción por-orden.** El botón «Aceptar» se retiró en la ficha 279 (R1/R3): la
 //   recepción del satélite es SOLO por QR, con el escáner. Con él se fueron las props
 //   `onAceptarUna`, `textoBotonUna` y `mostrarAcciones` —esta última existía únicamente
 //   para ocultar ese botón— y el `CardAction` + `<Button>` de la tarjeta por defecto.

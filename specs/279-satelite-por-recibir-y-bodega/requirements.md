@@ -1,4 +1,4 @@
-# Feature 278 — El portal del `adminSatelite` se parte en «Por recibir» y «En bodega», y la recepción queda solo por QR
+# Feature 279 — El portal del `adminSatelite` se parte en «Por recibir» y «En bodega», y la recepción queda solo por QR
 
 > Requisitos en notación EARS. Numerados `R1`…`R47`. Sin detalles de implementación:
 > el CÓMO vive en `design.md` y el desglose en `tasks.md`.
@@ -274,7 +274,7 @@ hallazgo? La tarea que lo mide (T-Q4.3) se detiene y pregunta si esto ocurre.
 dejan de estar ocultas para **todas** las guardias que escanean fuentes. Si alguna se pone roja, es
 una violación que llevaba ahí escondida — no un daño de esta ficha.
 
-**Decisión del humano: se arregla DENTRO de la 278.** Lo que salga rojo se cierra en esta misma
+**Decisión del humano: se arregla DENTRO de la 279.** Lo que salga rojo se cierra en esta misma
 ficha y sale todo junto.
 
 **Lo que eso obliga, y no es opcional:** cada violación destapada se escribe en la bitácora **con su

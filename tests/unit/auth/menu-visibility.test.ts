@@ -269,7 +269,7 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
     expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
   });
 
-  // Feature 278 (R12/R14, 2026-08-24): el portal del satélite pasó a tener subítems, así
+  // Feature 279 (R12/R14, 2026-08-24): el portal del satélite pasó a tener subítems, así
   // que el aterrizaje deja de ser `/recepcion-satelite` (que ahora sólo redirige) y pasa a
   // ser el primer subítem. Cambio DELIBERADO y firmado: este caso se puso rojo con el
   // `children` nuevo y se actualizó a mano, no se relajó.
@@ -635,7 +635,7 @@ describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
     expect(destinoDe("admin")).toBe("/dashboard");
     expect(destinoDe("adminTienda")).toBe("/ordenes");
     // Los dos que esta feature podría haber roto sin que nada se pusiera rojo:
-    // Feature 278 (R12): el valor del `adminSatelite` cambió a mano el 2026-08-24 al partir
+    // Feature 279 (R12): el valor del `adminSatelite` cambió a mano el 2026-08-24 al partir
     // su portal en dos subítems. Lo que este caso sigue afirmando es lo de siempre —que el
     // ítem "Monitoreo" no mueve el aterrizaje de nadie—; el destino nuevo es el primer
     // subítem, escrito aquí LITERAL y no derivado de `primerDestino`.
@@ -666,7 +666,7 @@ describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
 });
 
 // ---------------------------------------------------------------------------------------
-// Feature 278 — el portal del `adminSatelite` se parte en dos subítems.
+// Feature 279 — el portal del `adminSatelite` se parte en dos subítems.
 //
 // TODO lo de este bloque se juzga sobre el VALOR importado `SIDEBAR_ITEMS` (R32), nunca
 // sobre el texto del archivo que lo declara. No es una preferencia de estilo: hasta el
@@ -676,7 +676,7 @@ describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
 // está cerrado (ver el describe de legibilidad, más abajo), y aun así el menú se sigue
 // juzgando por valor: eso es defensa en profundidad, no permiso para volver al texto.
 // ---------------------------------------------------------------------------------------
-describe("Feature 278 — subítems del portal del adminSatelite (sobre SIDEBAR_ITEMS)", () => {
+describe("Feature 279 — subítems del portal del adminSatelite (sobre SIDEBAR_ITEMS)", () => {
   const portalSatelite = (): MenuItem => {
     const it = SIDEBAR_ITEMS.find((i) => i.href === "/recepcion-satelite");
     if (!it) throw new Error("sin ítem /recepcion-satelite");
@@ -733,13 +733,13 @@ describe("Feature 278 — subítems del portal del adminSatelite (sobre SIDEBAR_
   it("R12: el aterrizaje post-login del adminSatelite es el PRIMER subítem, «Por recibir»", () => {
     const destino = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")));
     expect(destino).toBe("/recepcion-satelite/por-recibir");
-    // Y no la ruta del padre, que desde la 278 sólo redirige:
+    // Y no la ruta del padre, que desde la 279 sólo redirige:
     expect(destino).not.toBe("/recepcion-satelite");
   });
 });
 
 // ---------------------------------------------------------------------------------------
-// Feature 278 (R45/R46, T1.6) — el fuente del menú sigue siendo LEGIBLE para las guardias.
+// Feature 279 (R45/R46, T1.6) — el fuente del menú sigue siendo LEGIBLE para las guardias.
 //
 // Hasta el 2026-08-24 la línea 228 escribía una ruta con comodín dentro de un comentario
 // de línea. Esa barra-asterisco ABRE un bloque de comentario, y `quitarComentarios` —el
@@ -752,7 +752,7 @@ describe("Feature 278 — subítems del portal del adminSatelite (sobre SIDEBAR_
 // cada ítem nuevo— sino la PERTENENCIA: el último ítem de la lista y las dos subrutas del
 // satélite tienen que verse en el texto barrido.
 // ---------------------------------------------------------------------------------------
-describe("Feature 278 — el fuente del menú es legible para las guardias que lo escanean", () => {
+describe("Feature 279 — el fuente del menú es legible para las guardias que lo escanean", () => {
   const RUTA_MENU = "lib/auth/menu-visibility.ts";
   const fuenteCrudo = readFileSync(path.join(process.cwd(), RUTA_MENU), "utf8");
 

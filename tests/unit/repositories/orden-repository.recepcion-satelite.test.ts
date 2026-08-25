@@ -209,11 +209,11 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
   });
 });
 
-// --- Feature 278 (T3B.6, R40): aqui vivian `buildPrismaRaw` y
+// --- Feature 279 (T3B.6, R40): aqui vivian `buildPrismaRaw` y
 // `describe("OrdenRepository.recibirLoteEnSatelite (feature 63)")` ---
 //
 // El metodo de escritura EN LOTE se retiro del repositorio y de `IOrdenRepository`. Destino de
-// sus CUATRO casos (detalle en `progress/impl_278.md`): los cuatro MUEREN con el codigo, porque
+// sus CUATRO casos (detalle en `progress/impl_279.md`): los cuatro MUEREN con el codigo, porque
 // afirmaban un SQL que ya no existe (`UPDATE ... RETURNING "id"` guardado por origen+zona) y una
 // cota de lista vacia que ya no tiene lista. Lo que sostiene el QR es su HERMANO singular,
 // `recibirEnSatelite`, cuyo `describe` de ARRIBA queda intacto y conserva los tres casos que

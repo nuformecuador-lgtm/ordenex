@@ -1,6 +1,6 @@
-# Feature 278 — Bitácora de implementación
+# Feature 279 — Bitácora de implementación
 
-> Rama `feature/278-satelite-por-recibir-y-bodega`.
+> Rama `feature/279-satelite-por-recibir-y-bodega`.
 > **Esta entrega cubre SOLO la mitad de servidor: la retirada de la recepción EN LOTE
 > (R34–R41, tanda 3B).** Las pantallas, el módulo, el sidebar, las guardias nuevas y el
 > comentario del menú son de la mitad de frontend y **siguen pendientes** (§8).
@@ -162,8 +162,8 @@ fichas 90, 140 y 149: son fotos históricas. `git status` lo confirma.
 
 | Caso retirado / reexpresado | Destino |
 | --- | --- |
-| `"Feature 63: la sección 'Por recibir' expone 'Aceptar' por-orden (sin lote) y NO asignar/gestionar"` | **Reexpresado, no borrado**: afirmaba lo CONTRARIO de R1 y cambia de sentido con la decisión firmada. Pasa a `"Feature 278 (R1): 'Por recibir' lista las órdenes SIN ningún botón de acción"`, con control POSITIVO en el mismo caso (las dos remisiones visibles) para que un render roto no lo deje verde (R29) |
-| `"Pedido humano 2026-08-19: NO hay 'Aceptar todas' ni forma de recibir varias de golpe"` | **Reexpresado** a `"Feature 278 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive"`: la de lote (retirada el 2026-08-19) y la por-orden (esta ficha), con el mismo control positivo |
+| `"Feature 63: la sección 'Por recibir' expone 'Aceptar' por-orden (sin lote) y NO asignar/gestionar"` | **Reexpresado, no borrado**: afirmaba lo CONTRARIO de R1 y cambia de sentido con la decisión firmada. Pasa a `"Feature 279 (R1): 'Por recibir' lista las órdenes SIN ningún botón de acción"`, con control POSITIVO en el mismo caso (las dos remisiones visibles) para que un render roto no lo deje verde (R29) |
+| `"Pedido humano 2026-08-19: NO hay 'Aceptar todas' ni forma de recibir varias de golpe"` | **Reexpresado** a `"Feature 279 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive"`: la de lote (retirada el 2026-08-19) y la por-orden (esta ficha), con el mismo control positivo |
 | `"Feature 63: 'Aceptar' de una fila envía solo ese ordenId"` | **Muere con el código.** Era la única prueba del cableado botón → `recibirLote`, y ese cableado ya no existe. No se repone con un equivalente porque **no hay acción equivalente**: la recepción pasa por el escáner, y ese camino ya lo afirma `tests/components/EscanerRecepcion.test.tsx`, que esta entrega no toca. Queda un comentario en el sitio exacto donde vivía |
 
 ### `tests/components/paginacion/SateliteSeleccionOtrasPaginas.test.tsx` — 0 casos retirados
@@ -235,7 +235,7 @@ UI del escáner en `tests/components/EscanerRecepcion.test.tsx`, sin editar.
 `./init.sh` **completo** (el rápido se habría negado: el diff toca `lib/types/`). El código
 de salida se escribió DENTRO del log, y el log **no** se canalizó por `tail`.
 
-Log: `progress/gate_278_backend.log`.
+Log: `progress/gate_279_backend.log`.
 
 ```
 == Arnes SDD :: init (modo: completo) ==
@@ -306,7 +306,7 @@ vez de deshacerlos.
 
 ---
 
-# Feature 278 — Mitad de FRONTEND (2026-08-24)
+# Feature 279 — Mitad de FRONTEND (2026-08-24)
 
 > Continúa la bitácora de arriba, que cubría la tanda 3B (retirada del lote, servidor).
 > **Esta entrega cubre todo lo demás**: T0.1, tanda 1, tanda 2, tanda 3 (T3.1–T3.5), tanda 4
@@ -447,13 +447,13 @@ caso**. Un `queryBy` que no encuentra nada pasa igual de verde si el render se r
 | Caso | Destino |
 | --- | --- |
 | `"R6/R8: muestra DOS secciones separadas 'Por recibir' y 'Recibidas'"` | **Reexpresado** → `"R18: 'En bodega' monta SU listado y NO la región 'Por recibir'"`. Positivo: la región del listado con su fila |
-| `"Feature 278 (R1): 'Por recibir' lista las órdenes SIN ningún botón"` | **Reexpresado y ampliado de ámbito** → `"R1/R34: ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'"`: la ausencia se afirma en TODA la pantalla. Positivo: el listado con su fila **y** el acceso al escáner |
+| `"Feature 279 (R1): 'Por recibir' lista las órdenes SIN ningún botón"` | **Reexpresado y ampliado de ámbito** → `"R1/R34: ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'"`: la ausencia se afirma en TODA la pantalla. Positivo: el listado con su fila **y** el acceso al escáner |
 | `"R5: si sinZona, muestra aviso accionable y NO ofrece el escáner"` | **Reexpresado** → `"R25/R27: sin zona muestra el aviso y NO ofrece el escáner, pero el listado sigue"`. El texto se afirma contra `AVISO_SIN_ZONA_SATELITE`, el literal exportado, no contra una copia a mano |
 | `"con zona y órdenes por recibir, ofrece cámara y número tecleado"` | **Reexpresado** → `"R42: con zona ofrece cámara y número de guía tecleado"`, y el montaje ya **no** pasa ninguna lista: la demostración es el propio andamiaje |
 | `"sin órdenes por recibir no se muestra la tarjeta de recepción ni la sección"` (T4.1d) | **AFIRMABA LO CONTRARIO de R42.** Reexpresado → `"R42/R43: el escáner NO depende de la lista de por-recibir — se ofrece con la bodega vacía"`, con la decisión firmada escrita dentro del caso |
 | `"R7 (33, no regresión): 'Por recibir' NO ofrece seleccionar ni asignar"` | **Reexpresado** → `"R7/R18: la selección y 'Asignar' viven SOLO en el listado"`. Positivo: el listado SÍ tiene checkboxes |
 | `"Feature 63: 'Por recibir' muestra el banner con el contador"` | **MUDADO** a `PorRecibirModule.test.tsx` → `"R2: el banner cuenta las órdenes por recibir"` |
-| `"Feature 278 (R1/R34): ninguna de las dos vías sobrevive"` | **Partido**: la mitad de «En bodega» se queda (arriba); la de las tarjetas va a `PorRecibirModule.test.tsx` → `"R1/R2: … SIN ningún botón"` |
+| `"Feature 279 (R1/R34): ninguna de las dos vías sobrevive"` | **Partido**: la mitad de «En bodega» se queda (arriba); la de las tarjetas va a `PorRecibirModule.test.tsx` → `"R1/R2: … SIN ningún botón"` |
 | `"Feature 63 + pedido humano: sin zona no se ofrece nada de recepción"` | **MUDADO** → `"R26/R43: sin zona sólo el aviso"`. Su mitad de esta pantalla es OTRA regla (R27) y la afirma el caso `R25/R27` |
 | `"R18/R25: 'Por recibir' (cards) muestra el dato etiquetado"` y `"R19: … con 0 intentos"` | **MUDADOS** a `PorRecibirModule.test.tsx` con el mismo nombre. La columna «Intentos» del LISTADO se queda aquí, en sus tres casos |
 | **NUEVO (T4.1b, R22)** | `"R22: recibir por guía mete la orden en el listado sin recargar la página"`. Afirma **las dos cosas**: que la lectura paginada se repitió (`mutate()` no es un no-op) **y** que la fila aparece. Sólo lo segundo dejaría pasar un `mutate()` que devolviera lo mismo; sólo lo primero, una revalidación que no llega a pintarse |
@@ -569,7 +569,7 @@ esto es una corrección de ruta por lectura, y así queda escrito en cada uno.
 uno rancio pone rojo el gate con errores de archivos que la rama no tocó. El `INIT_EXIT=$?`
 se escribió DENTRO del log y el log **no** se canalizó por `tail`.
 
-Log: `progress/gate_278_frontend.log`.
+Log: `progress/gate_279_frontend.log`.
 
 ```
 == Arnes SDD :: init (modo: completo) ==

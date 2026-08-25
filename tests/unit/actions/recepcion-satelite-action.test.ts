@@ -149,10 +149,10 @@ describe("recibirPorQr — validacion de borde (R16) y delegacion (R10)", () => 
   });
 });
 
-// --- Feature 278 (T3B.6, R40): aqui vivia `describe("recibirLote — borde y delegacion")` ---
+// --- Feature 279 (T3B.6, R40): aqui vivia `describe("recibirLote — borde y delegacion")` ---
 //
 // El borde de la recepcion EN LOTE se retiro con su Server Action. Destino de sus CINCO casos
-// (detalle en `progress/impl_278.md`): `unauthenticated` antes del service, la delegacion con el
+// (detalle en `progress/impl_279.md`): `unauthenticated` antes del service, la delegacion con el
 // actor y el paso limpio de los resultados de dominio siguen afirmados ARRIBA sobre
 // `recibirPorQr` — el MISMO cuerpo de action, el mismo `withErrorHandler`, el mismo orden
 // borde-antes-que-service—; las dos cotas del array (`ordenIds` vacio y un id vacio) MUEREN con

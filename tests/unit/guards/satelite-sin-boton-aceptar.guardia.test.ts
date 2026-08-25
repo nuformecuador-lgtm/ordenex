@@ -4,12 +4,12 @@ import path from "path";
 import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 
-// Feature 278 (T5.1, R30/R31/R32/R33/R34/R35) — GUARD de NO-REINTRODUCCION del botón de
+// Feature 279 (T5.1, R30/R31/R32/R33/R34/R35) — GUARD de NO-REINTRODUCCION del botón de
 // recepción del `adminSatelite`. Molde: `tests/unit/guards/entregas-sin-recoleccion.test.ts`.
 //
 // QUÉ VIGILA, Y POR QUÉ HACE FALTA UN GUARD
 // -----------------------------------------
-// La 278 retiró la recepción que NO era por QR, entera y en las dos direcciones: en la
+// La 279 retiró la recepción que NO era por QR, entera y en las dos direcciones: en la
 // pantalla se fue el botón «Aceptar» (por-orden y de lote) y en el servidor se fue la
 // cadena que lo sostenía —la Server Action `recibirLote`, su esquema `recibirLoteSchema`,
 // el método del servicio y el del repositorio—. Lo que queda es UN camino: el escáner.
@@ -24,7 +24,7 @@ import { SIDEBAR_ITEMS } from "@/lib/auth/menu-visibility";
 // archivo fue el peor caso conocido del agujero del quitador de comentarios del repo: una
 // ruta con comodín dentro de un comentario de línea abría un bloque que sólo se cerraba
 // 151 líneas más abajo, y todo ese tramo —incluido el ítem del satélite— desaparecía del
-// texto que lee cualquier guardia. La 278 cerró el agujero y lo dejó medido (T0.1/T1.0: 76
+// texto que lee cualquier guardia. La 279 cerró el agujero y lo dejó medido (T0.1/T1.0: 76
 // líneas no vacías visibles antes, 156 después), pero eso es defensa en profundidad, no un
 // permiso para volver a juzgar el menú leyendo texto. Los subítems se afirman sobre el
 // VALOR importado `SIDEBAR_ITEMS`, aquí abajo y en `tests/unit/auth/menu-visibility.test.ts`.
@@ -97,7 +97,7 @@ function codigo(rel: string): string {
   return quitarComentarios(leer(rel));
 }
 
-describe("Feature 278 — la recepción del satélite es SOLO por QR (R30)", () => {
+describe("Feature 279 — la recepción del satélite es SOLO por QR (R30)", () => {
   for (const rel of ARCHIVOS) {
     for (const prohibido of PROHIBIDOS) {
       it(`${rel} no menciona \`${prohibido}\` en código ejecutable`, () => {
@@ -197,7 +197,7 @@ describe("Feature 278 — la recepción del satélite es SOLO por QR (R30)", () 
 // archivo que el censo de texto justamente para que quede escrito, al lado, por qué el
 // menú NO entra en ese censo.
 // ---------------------------------------------------------------------------------
-describe("Feature 278 — el menú del satélite se juzga sobre SIDEBAR_ITEMS (R32)", () => {
+describe("Feature 279 — el menú del satélite se juzga sobre SIDEBAR_ITEMS (R32)", () => {
   it("el ítem del portal declara sus dos subítems, leídos del valor importado", () => {
     const item = SIDEBAR_ITEMS.find((i) => i.href === "/recepcion-satelite");
     expect(item, "sin ítem /recepcion-satelite en SIDEBAR_ITEMS").toBeDefined();

@@ -11,13 +11,13 @@ import {
 // render de detalle opcional. Componente puro; se afirma la composición sin Server Actions
 // ni router.
 //
-// QUÉ SE RETIRÓ DE ESTE ARCHIVO Y POR QUÉ (ficha 278, T4.2, R3/R29 — 2026-08-24)
+// QUÉ SE RETIRÓ DE ESTE ARCHIVO Y POR QUÉ (ficha 279, T4.2, R3/R29 — 2026-08-24)
 // -----------------------------------------------------------------------------
 // La sección tenía DOS vías de acción y las dos están muertas:
 //
 // - la acción EN LOTE («aceptar todas») se retiró el 2026-08-19 por pedido humano —aceptar
 //   de golpe todo lo que hay en pantalla se firma sin mirar—;
-// - la acción POR-ORDEN (el botón «Aceptar») la retira la ficha 278: la recepción del
+// - la acción POR-ORDEN (el botón «Aceptar») la retira la ficha 279: la recepción del
 //   satélite pasa a ser SOLO por QR. Con ella se fueron del contrato `onAceptarUna`,
 //   `textoBotonUna` y `mostrarAcciones`, esta última una prop cuya única función era
 //   ocultar ese mismo botón.

@@ -61,7 +61,7 @@ function renderSidebar(items?: readonly MenuItem[]) {
  * real nunca coexisten —`itemsVisibles` filtra por rol y ningún rol ve los dos—, así
  * que aquí se desambigua por destino en vez de por nombre.
  *
- * Feature 278 (T1.5b, 2026-08-24): de esos dos ítems ya sólo UNO es enlace. El del
+ * Feature 279 (T1.5b, 2026-08-24): de esos dos ítems ya sólo UNO es enlace. El del
  * adminSatelite ganó subítems ("Por recibir" / "En bodega") y el Sidebar lo renderiza
  * como DISPARADOR de desplegable, igual que "Entregas", "Configuración" y "Ranking";
  * su `href` identifica al ítem pero no llega al DOM como `<a>`. O sea: buscar
@@ -188,7 +188,7 @@ describe("Sidebar", () => {
     expect(rankingDia).not.toHaveAttribute("data-active");
   });
 
-  // Feature 278 (T1.5a, R11): el portal del `adminSatelite` pasó a tener dos subítems.
+  // Feature 279 (T1.5a, R11): el portal del `adminSatelite` pasó a tener dos subítems.
   // Es el MISMO molde que Tarifas y que Histórico, y se escribe aparte porque el ítem
   // padre de este caso comparte etiqueta ("Órdenes") con un ítem que SÍ es enlace: si el
   // desplegable se rompiera y volviera a renderizarse como `<a>`, ninguno de los casos de
@@ -213,7 +213,7 @@ describe("Sidebar", () => {
     expect(porRecibir).not.toHaveAttribute("aria-current");
     expect(porRecibir).not.toHaveAttribute("data-active");
 
-    // Y la ruta VIEJA del portal no aparece como enlace en ningún sitio: desde la 278
+    // Y la ruta VIEJA del portal no aparece como enlace en ningún sitio: desde la 279
     // sólo redirige, y el padre con `children` no navega.
     expect(
       screen

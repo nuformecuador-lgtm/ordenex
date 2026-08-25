@@ -104,7 +104,7 @@ describe("Layout de la zona autenticada app/(app)/layout.tsx", () => {
       screen.queryByRole("button", { name: /configuración/i }),
     ).toBeNull();
 
-    // Feature 278 (R9), 2026-08-24: el portal del `adminSatelite` DEJÓ de ser un enlace.
+    // Feature 279 (R9), 2026-08-24: el portal del `adminSatelite` DEJÓ de ser un enlace.
     // Al ganar dos subítems, el Sidebar lo renderiza como disparador de desplegable —el
     // mismo patrón que "Entregas" del mensajero—, así que este caso pasa de buscar un
     // `link` con `href="/recepcion-satelite"` a buscar el `button` y sus dos subenlaces.

@@ -452,11 +452,11 @@ describe("recibir (R11-R18)", () => {
   });
 });
 
-// --- Feature 278 (T3B.6, R40): aqui vivia `describe("recibirLote (feature 63)")` ---
+// --- Feature 279 (T3B.6, R40): aqui vivia `describe("recibirLote (feature 63)")` ---
 //
 // La recepcion EN LOTE se retiro entera (Server Action -> service -> repositorio). Sus OCHO
 // casos no desaparecieron en silencio; su destino, uno a uno, esta escrito en
-// `progress/impl_278.md`. En resumen: rol, zona, catalogo incompleto, escritura guardada e
+// `progress/impl_279.md`. En resumen: rol, zona, catalogo incompleto, escritura guardada e
 // idempotencia siguen afirmados por el `describe("recibir")` de ARRIBA —la misma guarda, el
 // mismo servicio, el camino que sostiene el QR—; y el dedupe de ids y el conteo de recibidas
 // MUEREN con el codigo, porque ya no hay lista de ids que deduplicar ni lote que contar.

@@ -59,7 +59,7 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
     expect(destinoDe("adminTienda")).toBe("/ordenes");
   });
 
-  // 2026-08-24 · ficha 278 (R12/R14): este literal SE CAMBIÓ A MANO. El portal del
+  // 2026-08-24 · ficha 279 (R12/R14): este literal SE CAMBIÓ A MANO. El portal del
   // `adminSatelite` se partió en dos subítems («Por recibir» y «En bodega»), y como el
   // padre con `children` no navega, `primerDestino` pasa a devolver el href del PRIMER
   // subítem. El caso se puso rojo con el valor viejo — que es para lo que este archivo

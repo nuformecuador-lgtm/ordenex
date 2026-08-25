@@ -112,10 +112,10 @@ function filaSinCobertura(): Record<string, string> {
  * NO es decoracion: sin el, este censo es MUDO. El doble de repositorio es un `Proxy` que acepta
  * cualquier nombre de propiedad, asi que un metodo que ya no existe en `IOrdenRepository` seguiria
  * pasando en verde para siempre — el propio archivo lo decia («pasaria igual si el metodo no
- * existiera») y era literalmente cierto: al retirar `recibirLoteEnSatelite` en la feature 278, el
+ * existiera») y era literalmente cierto: al retirar `recibirLoteEnSatelite` en la feature 279, el
  * typecheck no dijo ni una palabra de esta lista.
  *
- * Feature 278 (T3B.5, R39/R41): `as const satisfies readonly (keyof IOrdenRepository)[]` convierte
+ * Feature 279 (T3B.5, R39/R41): `as const satisfies readonly (keyof IOrdenRepository)[]` convierte
  * ese fallo mudo en error de compilacion. Nombrar aqui un metodo inexistente ya NO compila.
  */
 const METODOS_ESCRITURA = [

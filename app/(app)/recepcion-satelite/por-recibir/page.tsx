@@ -7,7 +7,7 @@ import { listarRecepcionSatelite } from "@/lib/actions/recepcion-satelite";
 import { PorRecibirModule } from "../_components/PorRecibirModule";
 
 /**
- * Feature 278 (T2.2) — pantalla **«Por recibir»** del portal del `adminSatelite`.
+ * Feature 279 (T2.2) — pantalla **«Por recibir»** del portal del `adminSatelite`.
  *
  * Es la puerta de entrada del rol: aquí aterriza el post-login (`primerDestino` devuelve
  * el href del primer subítem, R12) y aquí redirige la ruta vieja `/recepcion-satelite`

@@ -112,7 +112,7 @@ test.describe.serial("Reglas y bloqueos de cierre — camino crítico del vencid
     page,
   }) => {
     await login(page, ADMIN_SATELITE_EMAIL, ADMIN_SATELITE_PASSWORD);
-    // Feature 278 (T6.1, 2026-08-24): el portal del `adminSatelite` se partió en dos
+    // Feature 279 (T6.1, 2026-08-24): el portal del `adminSatelite` se partió en dos
     // rutas y `/recepcion-satelite` sólo redirige. Se apunta a la pantalla que este
     // caso describe. **No se afirma que este spec pase**: los e2e de este repo siguen
     // sin ejecutarse (ver la cabecera del archivo), así que esto es una corrección de
@@ -203,7 +203,7 @@ test.describe.serial("Reglas y bloqueos de cierre — camino crítico del vencid
     // The satellite is unblocked: no warehouse-blocked notice, and selecting a
     // received order enables "Asignar" again (R15/R22).
     await login(page, ADMIN_SATELITE_EMAIL, ADMIN_SATELITE_PASSWORD);
-    // Feature 278 (T6.1, 2026-08-24): el portal del `adminSatelite` se partió en dos
+    // Feature 279 (T6.1, 2026-08-24): el portal del `adminSatelite` se partió en dos
     // rutas y `/recepcion-satelite` sólo redirige. Se apunta a la pantalla que este
     // caso describe. **No se afirma que este spec pase**: los e2e de este repo siguen
     // sin ejecutarse (ver la cabecera del archivo), así que esto es una corrección de

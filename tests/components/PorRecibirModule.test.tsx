@@ -8,7 +8,7 @@ import { AVISO_SIN_ZONA_SATELITE } from "@/app/(app)/recepcion-satelite/_compone
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
-// Feature 278 (T4.5) — pantalla «Por recibir» del portal del `adminSatelite`.
+// Feature 279 (T4.5) — pantalla «Por recibir» del portal del `adminSatelite`.
 //
 // Es la mitad de arriba de lo que hasta el 2026-08-24 era una sola pantalla, y este
 // archivo hereda los casos cuyo SUJETO eran las tarjetas por recibir, que vivían en

@@ -16,11 +16,11 @@ import { fechaCalendarioCR, mananaCalendarioCR } from "@/lib/utils/fecha-cr";
 import { RecepcionSateliteModule } from "../_components/RecepcionSateliteModule";
 
 /**
- * Feature 33 (T11, R3/R4) · Feature 278 (T2.1) — pantalla **«En bodega»** del portal del
+ * Feature 33 (T11, R3/R4) · Feature 279 (T2.1) — pantalla **«En bodega»** del portal del
  * `adminSatelite`.
  *
  * Es el Server Component que hasta el 2026-08-24 servía la pantalla ÚNICA
- * `/recepcion-satelite`; con la partición de la ficha 278 se muda aquí tal cual, con sus
+ * `/recepcion-satelite`; con la partición de la ficha 279 se muda aquí tal cual, con sus
  * seis lecturas y sus degradaciones suaves intactas. Lo que cambia es sólo la envoltura:
  * el `title` pasa a «En bodega», la descripción describe SU contenido, y **deja de bajar
  * `porRecibir`** — el bloque que lo consumía se fue a `/recepcion-satelite/por-recibir`
@@ -131,7 +131,7 @@ export default async function RecepcionSateliteEnBodegaPage() {
         // `enTransitoACentral`, `devueltas`) que `listarRecepcionSatelite` sigue trayendo.
         // Esos arrays ya no cruzan al cliente: quedan aquí, en el servidor.
         //
-        // Feature 278 (T2.1, R18): `porRecibir` TAMPOCO cruza ya. Esta pantalla no lista
+        // Feature 279 (T2.1, R18): `porRecibir` TAMPOCO cruza ya. Esta pantalla no lista
         // las órdenes en camino ni necesita ningún dato sobre ellas; `listarRecepcionSatelite`
         // se sigue llamando porque es de donde salen `zonaNombre` y `sinZona`.
         ordenesBodega={ordenesBodega}

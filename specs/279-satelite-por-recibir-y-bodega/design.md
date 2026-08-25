@@ -1,4 +1,4 @@
-# Feature 278 — Diseño técnico
+# Feature 279 — Diseño técnico
 
 > Cubre `requirements.md` R1–R47. **`fullstack`** desde el 2026-08-24: la mitad de servidor
 > es una **retirada** (el camino de recepción en lote, §15). **Sin migraciones, sin tablas

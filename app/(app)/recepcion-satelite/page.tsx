@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 /**
- * Feature 278 (T2.3, R13/R14, decisión del humano del 2026-08-24): el portal del
+ * Feature 279 (T2.3, R13/R14, decisión del humano del 2026-08-24): el portal del
  * `adminSatelite` se partió en dos pantallas hermanas —`/recepcion-satelite/por-recibir` y
  * `/recepcion-satelite/en-bodega`— con un subítem de menú cada una. Esta ruta deja de
  * renderizar nada y se convierte en un REDIRECT a «Por recibir».

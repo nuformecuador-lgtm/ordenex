@@ -1,14 +1,14 @@
-# Revisión — Feature 278 · el portal del `adminSatelite` se parte en «Por recibir» y «En bodega»
+# Revisión — Feature 279 · el portal del `adminSatelite` se parte en «Por recibir» y «En bodega»
 
 > ⚠️ **ESTE ARCHIVO TIENE DOS RONDAS.** Lo que sigue —§1 a §9— es la **ronda 1**, que terminó en
 > **RECHAZADO** con 3 bloqueantes, y se conserva íntegra a propósito: es la evidencia de qué se
 > midió y por qué. **El veredicto que manda es el de la ronda 2, en §10–§12** (final del archivo).
 
-> Rama `feature/278-satelite-por-recibir-y-bodega`, HEAD `c9281ef5`, 6 commits sobre `dev`
+> Rama `feature/279-satelite-por-recibir-y-bodega`, HEAD `c9281ef5`, 6 commits sobre `dev`
 > (`6c00ba9e`, base común verificada). Revisión del 2026-08-24.
 > **Veredicto: RECHAZADO — 3 bloqueantes.**
 >
-> Nada de lo que sigue se hereda de `progress/impl_278.md`: cada número de este informe se
+> Nada de lo que sigue se hereda de `progress/impl_279.md`: cada número de este informe se
 > volvió a medir. Donde la bitácora y la medida coinciden, se dice; donde no, también.
 
 ---
@@ -16,13 +16,13 @@
 ## 1. Checklist de `CHECKPOINTS.md`
 
 ### Especificación
-- [x] `specs/278-satelite-por-recibir-y-bodega/requirements.md` con 47 requisitos EARS `R1`…`R47`, incluida la sección «P1 — FIRMADA».
+- [x] `specs/279-satelite-por-recibir-y-bodega/requirements.md` con 47 requisitos EARS `R1`…`R47`, incluida la sección «P1 — FIRMADA».
 - [x] `design.md` con alternativas descartadas y su porqué (borrar la ruta, redirigir a «En bodega», renombrar el módulo, conservar `mostrarAcciones`, dejar las claves inertes).
 - [ ] **`tasks.md` con todas las tasks marcadas `[x]` → NO. 0 de 38.** Ver BLOQUEANTE 1.
 
 ### Trazabilidad
 - [x] Cada `R<n>` mapea a al menos un test concreto (revisados los 47 abriendo el test, no la tabla).
-- [x] `progress/impl_278.md` contiene el mapa `R<n> → test` (§8 para R34–R41, §18 para R1–R33 y R42–R47).
+- [x] `progress/impl_279.md` contiene el mapa `R<n> → test` (§8 para R34–R41, §18 para R1–R33 y R42–R47).
 - [ ] **Un test nombrado no verifica lo que dice verificar: el de R22.** Ver BLOQUEANTE 2.
 
 ### Calidad de código
@@ -61,7 +61,7 @@
 
 ### Verificación final
 - [x] `./init.sh` completo en verde (§2).
-- [x] `progress/review_278.md` existe (este archivo).
+- [x] `progress/review_279.md` existe (este archivo).
 - [ ] Entrada en `progress/history.md`: **no la hay**. Por convención de este repo se escribe al
       CERRAR la ficha, después de la revisión, así que no es deuda del implementer — queda como
       pendiente de cierre.
@@ -221,8 +221,8 @@ positivos. `RecepcionSateliteModule` reexpresa 10, cada uno con su positivo.
 ### BLOQUEANTE 1 — `tasks.md` no tiene ni una tarea marcada
 
 ```
-grep -c "^- \[x\]" specs/278-satelite-por-recibir-y-bodega/tasks.md  ->  0
-grep -c "^- \[ \]" specs/278-satelite-por-recibir-y-bodega/tasks.md  ->  38
+grep -c "^- \[x\]" specs/279-satelite-por-recibir-y-bodega/tasks.md  ->  0
+grep -c "^- \[ \]" specs/279-satelite-por-recibir-y-bodega/tasks.md  ->  38
 ```
 
 `CHECKPOINTS.md` lo pide literalmente: «Existe `specs/<feature>/tasks.md` y **todas** las tasks estan
@@ -312,11 +312,11 @@ escrito como medición previa, cuando **Q2 firmada decidió lo contrario** y est
 entera hasta el repositorio. Es el patrón que ya costó un commit dedicado en la 271 (`8b8f1356`, «la
 ficha seguia afirmando la imposibilidad, y **la usaba de argumento**»).
 
-Y T6.3 pide un `status_note` de **3–6 líneas**: el de la 278 tiene **4286 caracteres** y repite buena
-parte de lo que ya vive en `progress/impl_278.md`, que es justo lo que esa tarea prohíbe.
+Y T6.3 pide un `status_note` de **3–6 líneas**: el de la 279 tiene **4286 caracteres** y repite buena
+parte de lo que ya vive en `progress/impl_279.md`, que es justo lo que esa tarea prohíbe.
 
 **Qué falta:** borrar —no tapar— las dos menciones a «79 lineas» y el bullet «(c) … SE QUEDA», y
-dejar el `status_note` en 3–6 líneas técnicas apuntando a `progress/impl_278.md`.
+dejar el `status_note` en 3–6 líneas técnicas apuntando a `progress/impl_279.md`.
 
 ---
 
@@ -458,7 +458,7 @@ Y la bitácora se corrige a sí misma: §17 lleva ahora un aviso de que su remed
 
 ```
 grep -o "esconde 79 lineas" feature_list.json | wc -l   ->   0     (eran 2)
-status_note de la 278: 1052 caracteres                          (eran 4286)
+status_note de la 279: 1052 caracteres                          (eran 4286)
 ```
 
 «recibirLote SE QUEDA» desaparecido. **Fact-checked frase por frase** contra mis propias medidas:
@@ -507,7 +507,7 @@ esta entrega**». Hice mi propio barrido, sin heredar el suyo y **sin acotarlo**
 **todo** `tests/` que busca la forma exacta —una foto `const X = <mock>.mock.calls.length` y, más
 abajo, una aserción de **crecimiento** contra esa misma variable—. Salen **cinco**:
 
-| Sitio | ¿lo toca la 278? | ¿productor de fondo? | Estado |
+| Sitio | ¿lo toca la 279? | ¿productor de fondo? | Estado |
 | --- | --- | --- | --- |
 | `tests/components/RecepcionSateliteModule.test.tsx` 473 → 497 | **sí** | SWR | **era el defecto; arreglado y remedido** |
 | `tests/unit/components/deshacer-asignacion.ui.test.tsx` 494 → 502 | **sí** | SWR | **sano — medido, ver abajo** |
@@ -517,7 +517,7 @@ abajo, una aserción de **crecimiento** contra esa misma variable—. Salen **ci
 
 **Dentro del alcance que declara, el «exactamente dos» es correcto y lo confirmo por mi cuenta.**
 Ninguno de los otros tres lo toca esta rama (`git log 6c00ba9e..HEAD --` sobre cada uno: vacío), así
-que no son deuda de la 278 ni bloquean nada aquí.
+que no son deuda de la 279 ni bloquean nada aquí.
 
 **Pero existen, y tienen los dos ingredientes** —la foto contra la que se mide el delta y un SWR
 detrás que puede moverla sola—. No digo que estén rotos: digo que **nadie los ha medido**, que es
@@ -552,7 +552,7 @@ recibir por guía se relee del servidor». Muerde.
 - **m3 · dos aserciones algo menos específicas**, ambas con su destino escrito bajo R40. Sin cambios.
 - **m4 · el texto del aviso no lo fija nadie**, por diseño de R25 (fuente única). Sin cambios.
 - **m5 · `progress/history.md` sin entrada.** Pendiente del cierre, posterior a esta revisión.
-- **m6 · NUEVO: tres sitios ajenos con la misma forma que B2** (§12). Fuera del alcance de la 278.
+- **m6 · NUEVO: tres sitios ajenos con la misma forma que B2** (§12). Fuera del alcance de la 279.
   **Recomendado abrir ficha**, no arreglarlos aquí: son de otras features y meterlos en ésta es
   exactamente lo que P1 obligaba a contar por separado.
 

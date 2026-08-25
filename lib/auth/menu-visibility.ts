@@ -228,7 +228,7 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // `/mis-asignaciones/reparto` y `/mis-asignaciones/recoger` (resuelven el rol
     // server-side).
     //
-    // Feature 278 (R45/R46): aquí las dos rutas se escribían con un comodín. La barra y el
+    // Feature 279 (R45/R46): aquí las dos rutas se escribían con un comodín. La barra y el
     // asterisco de ese comodín ABREN un bloque de comentario, y el quitador del repo
     // (`tests/fixtures/sin-comentarios.ts`) lo cerraba en el siguiente cierre de bloque del
     // archivo —el JSDoc de `puedeVer`—, así que 151 líneas (228→378) desaparecían del texto
@@ -277,7 +277,7 @@ export const SIDEBAR_ITEMS: readonly MenuItem[] = [
     // de su zona. Exclusivo de `adminSatelite`; la defensa real es el `notFound` de
     // cada página del portal (resuelven el rol server-side).
     //
-    // Feature 278 (R8/R9, decisión del humano del 2026-08-24): el portal se PARTE en dos
+    // Feature 279 (R8/R9, decisión del humano del 2026-08-24): el portal se PARTE en dos
     // pantallas hermanas, exactamente como la 61 partió "Entregas" del mensajero, porque
     // son dos trabajos distintos del mismo turno: RECIBIR lo que llega (escáner + tarjetas
     // en camino) y GESTIONAR lo que ya está en bodega (listado, filtros, asignación, envío

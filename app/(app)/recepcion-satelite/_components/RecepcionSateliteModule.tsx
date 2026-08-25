@@ -50,7 +50,7 @@ import {
 // sensibles por props, sin resolver permisos en el cliente) y el nombre de la zona /
 // `sinZona`. Tras cada acción exitosa se relee el estado del servidor.
 //
-// Feature 278 (T3.1, 2026-08-24): este módulo es la pantalla **«En bodega»**. Perdió el
+// Feature 279 (T3.1, 2026-08-24): este módulo es la pantalla **«En bodega»**. Perdió el
 // bloque «Por recibir» entero —escáner + tarjetas—, que se mudó a `PorRecibirModule`, y
 // con él la prop `porRecibir`, **sin sustituto**: con el escáner incondicional (R42) esta
 // pantalla ya no necesita saber cuántas órdenes hay en camino, ni siquiera un booleano.
@@ -185,7 +185,7 @@ export interface RecepcionSateliteModuleProps {
 /** Feature 246: «no bajaron fechas de la página». Constante de módulo, no un literal por render. */
 const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
 
-// Feature 278 (T3.1): `estadoLegible` vivía aquí y su único consumidor era la tarjeta del
+// Feature 279 (T3.1): `estadoLegible` vivía aquí y su único consumidor era la tarjeta del
 // bloque «Por recibir». Se muda con él a `PorRecibirModule`. Este módulo no lo necesita:
 // las filas del listado componen su estado en `SateliteOrdenesListado`.
 
@@ -450,7 +450,7 @@ export function RecepcionSateliteModule({
           Las acciones pasan a ser de LOTE sobre la selección, habilitadas según el estado
           común de lo seleccionado (ver `SateliteOrdenesListado`). */}
       {/* El separador sólo tiene sentido si ARRIBA hay algo de lo que separarse. Desde la
-          278 eso es el escáner y nada más: sin zona no se monta y el listado es lo primero
+          279 eso es el escáner y nada más: sin zona no se monta y el listado es lo primero
           de la pantalla. */}
       <section
         className={`flex flex-col gap-3${sinZona ? "" : " border-t pt-6"}`}

@@ -195,7 +195,7 @@ function renderModulosSatelite(asignadas: RecepcionSateliteDTO[]) {
   // y sin esto el dato del anterior ganaría sobre el `fallbackData` del siguiente (T I.2).
   return renderConSwr(
     <RecepcionSateliteModule
-      // Feature 278 (T4.3b): el modulo dejo de recibir `porRecibir`, y con el se fue la
+      // Feature 279 (T4.3b): el modulo dejo de recibir `porRecibir`, y con el se fue la
       // orden `SAT-RUTA` que este andamiaje inyectaba para el caso R36. Ver ese caso.
       ordenesBodega={paginaBodega(asignadas)}
       catalogoFiltros={catalogoSatelite(asignadas)}
@@ -355,7 +355,7 @@ describe("R35/R36 — módulo de la bodega satélite", () => {
     expect(within(seccion).getByRole("button", { name: ACCION })).toBeEnabled();
   });
 
-  // Feature 278 (T4.3b/R18), 2026-08-24 — REEXPRESADO, no borrado. Este caso montaba una
+  // Feature 279 (T4.3b/R18), 2026-08-24 — REEXPRESADO, no borrado. Este caso montaba una
   // orden `en_ruta_bodega_satelite` en la sección «Por recibir» de la pantalla única y
   // comprobaba que ahí no se ofrecía «Deshacer asignación». Con el portal partido en dos,
   // esa sección YA NO EXISTE en «En bodega»: la afirmación se refuerza —no hay región de

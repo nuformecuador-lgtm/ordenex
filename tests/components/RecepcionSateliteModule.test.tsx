@@ -19,7 +19,7 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
 //
-// FEATURE 278 (T4.1, 2026-08-24) — ESTE ARCHIVO JUZGA «EN BODEGA», NO EL PORTAL ENTERO.
+// FEATURE 279 (T4.1, 2026-08-24) — ESTE ARCHIVO JUZGA «EN BODEGA», NO EL PORTAL ENTERO.
 // El portal del `adminSatelite` se partió en dos pantallas. Este módulo se quedó con el
 // listado de la bodega y PERDIÓ el bloque «Por recibir» (escáner + tarjetas), que vive
 // ahora en `PorRecibirModule`. Lo que eso mueve, caso por caso:
@@ -35,7 +35,7 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 // - El escáner SIGUE aquí y ya no depende de ninguna lista (R42): la condición es tener
 //   zona, y nada más. El caso que afirmaba lo contrario cambia de sentido, con la decisión
 //   firmada escrita dentro.
-// Feature 278 (T3B.1, R34): `recibirLote` YA NO SE DOBLA porque ya no existe. La recepción
+// Feature 279 (T3B.1, R34): `recibirLote` YA NO SE DOBLA porque ya no existe. La recepción
 // en lote se retiro entera —Server Action, schema, servicio y repositorio— y con ella el
 // boton "Aceptar" por-orden, su unico consumidor. Recibir es SOLO por QR (`recibirPorQr`).
 // Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
@@ -44,7 +44,7 @@ import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionS
 const { paginadoBodegaMock, recibirPorQrMock } = vi.hoisted(() => ({
   paginadoBodegaMock: vi.fn(),
   /**
-   * Feature 278 (T4.1b, R22): la ÚNICA vía de recepción que queda. El caso de R22 la
+   * Feature 279 (T4.1b, R22): la ÚNICA vía de recepción que queda. El caso de R22 la
    * dobla a `ok` para comprobar que recibir por guía desde «En bodega» mete la orden en
    * este listado sin recargar la página.
    */
@@ -244,7 +244,7 @@ afterEach(() => {
 const LISTADO = "Órdenes de la bodega";
 
 describe("RecepcionSateliteModule", () => {
-  // Feature 278 (T4.1a, R16/R18) — REEXPRESADO. Este caso afirmaba que la pantalla montaba
+  // Feature 279 (T4.1a, R16/R18) — REEXPRESADO. Este caso afirmaba que la pantalla montaba
   // LAS DOS regiones. Con el portal partido, «En bodega» monta UNA: la suya. La región
   // «Por recibir» ya no existe aquí y su contenido se afirma en `PorRecibirModule.test.tsx`.
   it("R18: 'En bodega' monta SU listado y NO la región 'Por recibir'", () => {
@@ -268,12 +268,12 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.queryByRole("heading", { name: "Por recibir" })).toBeNull();
   });
 
-  // Feature 278 (T3B.1/T4.1a, R1/R34) — este caso afirmaba lo CONTRARIO: que cada tarjeta
+  // Feature 279 (T3B.1/T4.1a, R1/R34) — este caso afirmaba lo CONTRARIO: que cada tarjeta
   // de «Por recibir» traía su botón "Aceptar" por-orden. Cambió de sentido con la decisión
   // firmada (recibir es SOLO por QR), y ahora además cambia de ámbito: la sección se mudó,
   // así que lo que aquí se afirma es que el botón no está EN NINGUNA PARTE de esta
   // pantalla — ni de lote, ni por-orden, ni reintroducido por otra vía.
-  it("Feature 278 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'", () => {
+  it("Feature 279 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive en 'En bodega'", () => {
     renderModule({
       recibidas: [
         makeOrden({
@@ -334,7 +334,7 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getAllByText(/Beto Ruiz/).length).toBeGreaterThan(0);
   });
 
-  // Feature 278 (T4.1c, R25/R27) — sin zona, en ESTA pantalla, el listado SIGUE (a
+  // Feature 279 (T4.1c, R25/R27) — sin zona, en ESTA pantalla, el listado SIGUE (a
   // diferencia de «Por recibir», donde no queda más que el aviso). El texto del aviso se
   // afirma contra el literal que exporta `AvisoSinZonaSatelite`, no contra una copia a
   // mano: si el aviso cambia de redacción, este caso sigue midiendo la pantalla y no su
@@ -373,7 +373,7 @@ describe("RecepcionSateliteModule", () => {
   // humana: la cámara es la ÚNICA entrada de recepción por escaneo.
   // Pedido humano (rama ux): la recepción se opera igual que la recogida del mensajero
   // (cámara O número tecleado, misma tarjeta).
-  // Feature 278 (R42): «y sólo se ofrece si hay algo por recibir» DEJA DE SER CIERTO —y el
+  // Feature 279 (R42): «y sólo se ofrece si hay algo por recibir» DEJA DE SER CIERTO —y el
   // montaje lo demuestra: esta pantalla ya no recibe ninguna lista de órdenes por recibir
   // y el escáner se ofrece igual.
   it("R42: con zona ofrece cámara y número de guía tecleado", async () => {
@@ -392,7 +392,7 @@ describe("RecepcionSateliteModule", () => {
     expect(within(region).getByRole("textbox")).toBeInTheDocument();
   });
 
-  // Feature 278 (T4.1d, R42/R43) — ESTE CASO AFIRMABA LO CONTRARIO, y cambia de sentido
+  // Feature 279 (T4.1d, R42/R43) — ESTE CASO AFIRMABA LO CONTRARIO, y cambia de sentido
   // con la decisión firmada del 2026-08-24. Decía que sin órdenes por recibir NO se
   // mostraba la tarjeta de recepción: exactamente el fallo que la feature 167 ya había
   // documentado con la recolección del mensajero — la herramienta se escondía justo cuando
@@ -410,7 +410,7 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
   });
 
-  // Feature 278 (T4.1b, R22) — LA RELECTURA QUE SE PIERDE EN SILENCIO SI ALGUIEN LA
+  // Feature 279 (T4.1b, R22) — LA RELECTURA QUE SE PIERDE EN SILENCIO SI ALGUIEN LA
   // "SIMPLIFICA". El escáner sigue montado en «En bodega» (decisión firmada), y una
   // recepción por QR mete una fila NUEVA en ESTE listado. Sus filas las tiene SWR, así que
   // `router.refresh()` NO basta: sin `mutate()` la orden recién recibida no aparecería
@@ -699,7 +699,7 @@ describe("RecepcionSateliteModule", () => {
     expect(within(dialog).getAllByText(/REM-B1/).length).toBeGreaterThan(0);
   });
 
-  // Feature 278 (T4.1a, R16/R18) — REEXPRESADO. Afirmaba que la sección «Por recibir» no
+  // Feature 279 (T4.1a, R16/R18) — REEXPRESADO. Afirmaba que la sección «Por recibir» no
   // ofrecía seleccionar ni asignar. Con la partición, esa sección no está en esta
   // pantalla: la afirmación se refuerza —no hay región donde ofrecerlo— y su heredera, que
   // las tarjetas no traen NINGÚN control, vive en `PorRecibirModule.test.tsx`.
@@ -1073,7 +1073,7 @@ describe("RecepcionSateliteModule", () => {
     ).toBeNull();
   });
 
-  // ---------- Feature 278: dónde fue a parar lo que juzgaba las tarjetas por recibir ------
+  // ---------- Feature 279: dónde fue a parar lo que juzgaba las tarjetas por recibir ------
   //
   // Aquí vivían tres casos con SUJETO en la sección «Por recibir». Los tres se MUDAN a
   // `tests/components/PorRecibirModule.test.tsx`, que es donde vive ahora ese sujeto, y
@@ -1081,7 +1081,7 @@ describe("RecepcionSateliteModule", () => {
   //
   // - `"Feature 63: 'Por recibir' muestra el banner con el contador de nuevas por recibir"`
   //   → `"R2: el banner cuenta las órdenes por recibir"`.
-  // - `"Feature 278 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive"` →
+  // - `"Feature 279 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive"` →
   //   se afirma en las DOS pantallas: aquí arriba (ausencia en «En bodega») y allí como
   //   `"R1: las tarjetas no ofrecen NINGÚN botón"`.
   // - `"Feature 63 + pedido humano: sin zona no se ofrece nada de recepción"` →
@@ -1232,7 +1232,7 @@ describe("RecepcionSateliteModule — intentos de entrega (feature 160)", () => 
     expect(celdaIntentos(tabla, "REM-T0", true)).toHaveTextContent(/^0$/);
   });
 
-  // Feature 278 (T4.1): los dos casos de intentos sobre las CARDS de «Por recibir» —el
+  // Feature 279 (T4.1): los dos casos de intentos sobre las CARDS de «Por recibir» —el
   // etiquetado como un campo más y el `0` que se muestra igual— se MUDAN a
   // `tests/components/PorRecibirModule.test.tsx` («R18/R25» y «R19»), porque esas cards ya
   // no las monta esta pantalla. La columna «Intentos» del LISTADO, que sí es de aquí,

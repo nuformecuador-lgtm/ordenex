@@ -51,7 +51,7 @@ const { paginadoMock, vigenciaMock, recibirPorQrMock } = vi.hoisted(() => ({
   /**
    * Una acción CUALQUIERA de la pantalla que relee del servidor, para disparar la poda.
    *
-   * Feature 278 (T4.3, diseño §11): era el botón "Aceptar" de «Por recibir», que cableaba
+   * Feature 279 (T4.3, diseño §11): era el botón "Aceptar" de «Por recibir», que cableaba
    * `recibirLote`. Esa Server Action se retiró entera (recibir es SOLO por QR), así que el
    * disparador pasa a ser la recepción por guía del escáner, que cumple las mismas TRES
    * condiciones: relee del servidor, no toca la selección y no toca filtros ni página.
@@ -144,7 +144,7 @@ const CONJUNTO: RecepcionSateliteDTO[] = Array.from({ length: TOTAL }, (_, k) =>
   orden(k + 1),
 );
 
-// Feature 278 (T4.3b): aquí vivía `POR_RECIBIR`, una orden `en_ruta_bodega_satelite` que
+// Feature 279 (T4.3b): aquí vivía `POR_RECIBIR`, una orden `en_ruta_bodega_satelite` que
 // este archivo inyectaba SÓLO para tener un botón que releyera del servidor. Ese botón
 // murió con `recibirLote` y su sustituto es la recepción por QR, que no necesita ninguna
 // orden montada: el escáner está siempre (R42). La prop `porRecibir` tampoco existe ya en
@@ -301,7 +301,7 @@ async function irAPagina(
  * señal POSITIVA de que la lectura llegó (esperar a que «algo desaparezca» se cumple también
  * antes de que la acción empiece).
  *
- * Feature 278 (T4.3, diseño §11): antes era el botón "Aceptar" de «Por recibir». Murió con
+ * Feature 279 (T4.3, diseño §11): antes era el botón "Aceptar" de «Por recibir». Murió con
  * `recibirLote`; el sustituto es la ÚNICA vía de recepción que queda, y es coherente con lo
  * que la ficha establece. El camino usado es el MANUAL (número de guía tecleado), que no
  * necesita cámara: el de la cámara vive en `EscanerRecepcion.test.tsx`.

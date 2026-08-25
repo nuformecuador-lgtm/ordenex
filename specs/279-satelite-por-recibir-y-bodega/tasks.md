@@ -1,4 +1,4 @@
-# Feature 278 — Desglose de tareas
+# Feature 279 — Desglose de tareas
 
 > Cada tarea es pequeña, verificable y trae su criterio de **hecho**. `[P]` = puede ir en
 > paralelo con las de su misma tanda. Al final, la tabla de trazabilidad `R<n>` → test.
@@ -16,7 +16,7 @@
   `lib/auth/menu-visibility.ts`, pasado por `quitarComentarios`:
   (a) líneas no vacías que sobreviven; (b) si el texto barrido contiene `label: "Incidentes"`;
   (c) si contiene `"/recepcion-satelite"`; (d) la línea exacta que abre el bloque.
-  **Hecho:** los cuatro valores en `progress/impl_278.md`, y el script borrado. Esperado:
+  **Hecho:** los cuatro valores en `progress/impl_279.md`, y el script borrado. Esperado:
   (b) y (c) `false`, (d) = la línea del comodín. **Si (b) o (c) salieran `true`, el agujero
   no está donde se cree**: se para y se re-decide §16 en vez de aplicarla a ciegas.
   *(Una imposibilidad razonada no es una imposibilidad medida.)*
@@ -60,7 +60,7 @@
 - [x] **T1.3 — `tests/unit/auth/destino-post-login.test.ts`: literal a mano.**
   Cambiar `"/recepcion-satelite"` por la ruta del primer subítem, **a mano**, respetando la
   prohibición escrita en la cabecera del archivo de derivarlo de `primerDestino`. Anotar en
-  el propio caso la fecha y la decisión (ficha 278).
+  el propio caso la fecha y la decisión (ficha 279).
   **Hecho:** el caso verde y la cabecera del archivo sigue diciendo por qué el valor va a
   mano. Depende de: T1.1.
 
@@ -215,7 +215,7 @@
   **ANTES de borrar cada caso**, anotar en la bitácora su destino: repuesto por qué caso
   vivo, o muerto con el código y por qué. La tabla de §15.3 es el punto de partida, pero se
   verifica caso por caso contra el archivo, no se copia.
-  **Hecho:** la tabla «caso retirado → destino» completa en `progress/impl_278.md`, sin
+  **Hecho:** la tabla «caso retirado → destino» completa en `progress/impl_279.md`, sin
   ninguna fila vacía, y los tres archivos verdes con lo que queda. Depende de: T3B.3.
 
 - [x] **T3B.7 — El QR sigue vivo, y se demuestra (R38).**
@@ -255,7 +255,7 @@
   `con mostrarAcciones=false lista sin botones` se funden en: «la sección no pinta NINGÚN
   botón, ni en la tarjeta por defecto ni con `renderItem`, y sí pinta el título, el banner
   del contador y cada orden» (control positivo).
-  **Hecho:** el archivo verde y su cabecera explica qué se retiró y por qué (ficha 278).
+  **Hecho:** el archivo verde y su cabecera explica qué se retiró y por qué (ficha 279).
   Depende de: T3.4.
 
 - [x] **T4.3 — `tests/components/paginacion/SateliteSeleccionOtrasPaginas.test.tsx`.**
@@ -322,7 +322,7 @@
   → T3B.7: si NO se pone rojo, la retirada del lote se quedó sin red y hay que reponerla
   antes de seguir.
   **Hecho:** las siete mutaciones revertidas y la tabla «mutación → test que la mató» en
-  `progress/impl_278.md`. Si alguna sobrevive, el test correspondiente no vale y se
+  `progress/impl_279.md`. Si alguna sobrevive, el test correspondiente no vale y se
   reescribe. Depende de: tandas 3B, 4 y 5.1.
 
 ---
@@ -342,7 +342,7 @@
   **Hecho:** la ruta del documento existe en el árbol.
 
 - [x] **T6.3 — Bitácora y ficha.**
-  `progress/impl_278.md` con: medición de T0.1, mapa de reexpresiones de la tanda 4, tabla
+  `progress/impl_279.md` con: medición de T0.1, mapa de reexpresiones de la tanda 4, tabla
   de mutaciones de T5.2 y las preguntas abiertas que el humano haya cerrado.
   `feature_list.json`: `status_note` de 3–6 líneas y `spec_path`.
   **Hecho:** la ficha no repite lo que ya está en `progress/`.
@@ -399,7 +399,7 @@
 | R37 | el repositorio sin el método ni su contrato | `tests/unit/repositories/orden-repository.recepcion-satelite.test.ts` (el `describe` del lote ya no existe; el del singular sí) + typecheck |
 | R38 | **el QR sigue vivo, con sus siete guardas** | `recepcion-satelite-service.test.ts` `describe("recibir")`, `recepcion-satelite-action.test.ts` casos de `recibirPorQr`, `orden-repository.recepcion-satelite.test.ts` `describe("recibirEnSatelite")` y `tests/components/EscanerRecepcion.test.tsx` — los cuatro **sin editar**; T3B.7 los enumera y T5.2(g) demuestra que muerden |
 | R39 | ningún censo nombra el lote | `tests/integration/cotizacion-api-key.test.ts` (lista + `satisfies`) y `tests/unit/domain/order-status-transiciones.guardia.test.ts` (nombre del caso desde `inventario-transiciones-140.ts`) |
-| R40 | cada caso retirado con su destino escrito | T3B.6: tabla «caso → destino» en `progress/impl_278.md`, revisada por el reviewer; sin fila vacía |
+| R40 | cada caso retirado con su destino escrito | T3B.6: tabla «caso → destino» en `progress/impl_279.md`, revisada por el reviewer; sin fila vacía |
 | R41 | el censo atado al contrato | `tests/integration/cotizacion-api-key.test.ts` con `as const satisfies readonly (keyof IOrdenRepository)[]` — verificado en T3B.5 metiendo un nombre falso y comprobando que NO compila |
 | R42 | escáner siempre, con zona | `PorRecibirModule.test.tsx` «con zona y lista vacía el escáner sigue» + `RecepcionSateliteModule.test.tsx` «el escáner no depende de la lista» + T5.2(e) |
 | R43 | la condición es la zona, no el recuento | `PorRecibirModule.test.tsx` «sin zona no hay escáner» + `RecepcionSateliteModule.test.tsx` «sin zona no hay escáner (y el listado sí)» |
@@ -422,7 +422,7 @@ De dónde sale:
 
 - **El gate COMPLETO**, `./init.sh` con `INIT_EXIT=0` — **1377 archivos / 18.754 tests** — corrido
   por el implementer y **re-corrido por el reviewer** con el número idéntico.
-- **La revisión** (`progress/review_278.md`) verificó la trazabilidad **R1–R47** abriendo cada test
+- **La revisión** (`progress/review_279.md`) verificó la trazabilidad **R1–R47** abriendo cada test
   citado, y reinyectó cinco mutaciones que muerden donde la tabla dice.
 - **T0.1/T1.0**: la medida del agujero está reproducida por tres partes con SHAs explícitos —
   **76 → 160** líneas visibles, tramo falso de **151** (228→378), confirmado con `awk`.

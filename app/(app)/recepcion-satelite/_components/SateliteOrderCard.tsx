@@ -41,7 +41,7 @@ export interface SateliteOrderCardProps {
   estadoLegible: string;
 }
 
-// Feature 278 (T3.5, R5): la card TENÍA una prop `acciones?: ReactNode` documentada como
+// Feature 279 (T3.5, R5): la card TENÍA una prop `acciones?: ReactNode` documentada como
 // «Acción propia del grupo ("Aceptar", "Recuperar"…)» que pintaba un pie al final. Se
 // retira con su contenedor: comprobado en el árbol antes de borrar, **ningún consumidor la
 // pasaba**. Su único usuario había sido el botón «Aceptar» que esta ficha quita, y dejarla

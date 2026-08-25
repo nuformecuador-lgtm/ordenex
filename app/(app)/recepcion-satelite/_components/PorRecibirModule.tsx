@@ -10,7 +10,7 @@ import { AvisoSinZonaSatelite } from "./AvisoSinZonaSatelite";
 import { EscanerRecepcion } from "./EscanerRecepcion";
 import { SateliteOrderCard } from "./SateliteOrderCard";
 
-// Feature 278 (T3.2) — pantalla «Por recibir» del portal del `adminSatelite`.
+// Feature 279 (T3.2) — pantalla «Por recibir» del portal del `adminSatelite`.
 //
 // Es la mitad de arriba de lo que hasta el 2026-08-24 era una sola pantalla: el escáner y
 // las órdenes en camino a la bodega satélite (`en_ruta_bodega_satelite`). La otra mitad

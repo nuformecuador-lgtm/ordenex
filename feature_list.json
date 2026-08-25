@@ -3389,15 +3389,15 @@
       "spec_path": "specs/277-por-recoger-tabs"
     },
     {
-      "id": 278,
+      "id": 279,
       "title": "el portal del adminSatelite se parte en «Por recibir» y «En bodega», y la recepcion queda solo por QR",
       "description": "Las cards de «Por recibir» pierden el boton «Aceptar» -recibir solo por QR-, se retira la accion recibirLote que se queda sin llamador, y el apartado se parte en dos subitems de acordeon con escaner en ambos.",
       "zone": "fullstack",
       "status": "in_progress",
       "sdd": true,
       "complexity": "media",
-      "status_note": "COMPLETA Y APROBADA el 2026-08-24, revision en dos rondas, 0 bloqueantes finales. Gate COMPLETO INIT_EXIT=0, 1377 archivos / 18.754 tests, re-corrido por el reviewer con numero identico. || IMPLEMENTADA (servidor + pantalla) el 2026-08-24, gate COMPLETO INIT_EXIT=0, 1377 archivos / 18.754 tests. Revision RECHAZADA en ronda 1 con 3 bloqueantes; detalle en progress/review_278.md y progress/impl_278.md. || EL AGUJERO DEL QUITADOR, MEDIDO Y CERRADO: la linea 228 de lib/auth/menu-visibility.ts abria bloque con un comodin de ruta dentro de un comentario de linea y cerraba en la 378 -151 lineas invisibles para CUALQUIER guardia que lea ese fuente-. Medido con el propio quitador: 76 lineas visibles antes, 160 ahora. Ninguna violacion destapada: 141 archivos / 2.096 casos verdes corridos ANTES de añadir los subitems, para que un rojo fuera atribuible solo al arreglo. || recibirLote SE RETIRO ENTERA, de la Server Action al repositorio, con sus 20 casos de test retirados y sus 20 destinos escritos. El QR no comparte camino y sigue intacto (repo.recibirEnSatelite, singular). || DECISIONES DEL HUMANO: escaner siempre visible, H1 «Por recibir» / «En bodega», el comentario se arregla aqui, y lo que destape se arregla aqui pero SE CUENTA.",
-      "spec_path": "specs/278-satelite-por-recibir-y-bodega"
+      "status_note": "RENUMERADA DE 278 A 279 el 2026-08-25: otra sesion tomo el id 278 para «plantilla de carga masiva v3» -renumerada a su vez desde 276- y su ficha YA ESTA MERGEADA en dev (PR #487). dev manda, es la tercera colision de esta tanda. Renumerado acotado a los 55 archivos que esta rama toca: los PR #278 viejos de history.md y feature_list.json NO se tocan. || COMPLETA Y APROBADA el 2026-08-24, revision en dos rondas, 0 bloqueantes finales. Gate COMPLETO INIT_EXIT=0, 1377 archivos / 18.754 tests, re-corrido por el reviewer con numero identico. || IMPLEMENTADA (servidor + pantalla) el 2026-08-24, gate COMPLETO INIT_EXIT=0, 1377 archivos / 18.754 tests. Revision RECHAZADA en ronda 1 con 3 bloqueantes; detalle en progress/review_278.md y progress/impl_278.md. || EL AGUJERO DEL QUITADOR, MEDIDO Y CERRADO: la linea 228 de lib/auth/menu-visibility.ts abria bloque con un comodin de ruta dentro de un comentario de linea y cerraba en la 378 -151 lineas invisibles para CUALQUIER guardia que lea ese fuente-. Medido con el propio quitador: 76 lineas visibles antes, 160 ahora. Ninguna violacion destapada: 141 archivos / 2.096 casos verdes corridos ANTES de añadir los subitems, para que un rojo fuera atribuible solo al arreglo. || recibirLote SE RETIRO ENTERA, de la Server Action al repositorio, con sus 20 casos de test retirados y sus 20 destinos escritos. El QR no comparte camino y sigue intacto (repo.recibirEnSatelite, singular). || DECISIONES DEL HUMANO: escaner siempre visible, H1 «Por recibir» / «En bodega», el comentario se arregla aqui, y lo que destape se arregla aqui pero SE CUENTA.",
+      "spec_path": "specs/279-satelite-por-recibir-y-bodega"
     }
   ]
 }

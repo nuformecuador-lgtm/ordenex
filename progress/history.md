@@ -4280,7 +4280,7 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
 
 ---
 
-## 2026-08-24 — 278 · el portal del adminSatélite se parte en dos, y la recepción queda solo por QR
+## 2026-08-24 — 279 · el portal del adminSatélite se parte en dos, y la recepción queda solo por QR
 
 - Pedido del humano: **el botón «Aceptar» de las cards de «Por recibir» desaparece** —recibir solo
   por QR— y el apartado **se parte en dos subítems de acordeón** («Órdenes › Por recibir / En
