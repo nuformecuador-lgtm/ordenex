@@ -236,68 +236,29 @@ R:\job\singularis\projects\ordenex\tests\unit\utils\capturar-ubicacion.test.ts
 
  RUN  v4.1.10 R:/job/singularis/projects/ordenex
 
-(node:12564) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:7924) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:33020) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:30908) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:14140) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:32452) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:19044) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:20892) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:8368) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:4660) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
- ❯ tests/guards/tarifa-status-retirado.guard.test.ts (8 tests | 1 failed) 40489ms
-     × ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePorTienda` 29502ms
-(node:2792) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:19544) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:13528) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(node:17928) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
- ❯ tests/unit/guards/ancla-de-carga.guardia.test.ts (7 tests | 1 failed) 23ms
-     × ninguna espera se ancla SOLO a un conteo de elementos del DOM 12ms
 
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1377 passed (1377)
+      Tests  18754 passed | 26 skipped (18780)
+   Start at  22:11:10
+   Duration  378.11s (transform 41.28s, setup 96.79s, import 923.13s, tests 820.11s, environment 633.69s)
 
- FAIL  tests/guards/tarifa-status-retirado.guard.test.ts > 274/T3.4 diente (b) — el nombre viejo del resolver no vuelve (R17) > ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePorTienda`
-Error: Test timed out in 20000ms.
-If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
- ❯ tests/guards/tarifa-status-retirado.guard.test.ts:182:3
-    180|
-    181| describe("274/T3.4 diente (b) — el nombre viejo del resolver no vuelve…
-    182|   it("ningun archivo de lib/, app/ ni tests/ menciona `TarifaVigentePo…
-       |   ^
-    183|     const infractores = censar(RAICES_NOMBRE_VIEJO, RE_NOMBRE_VIEJO).m…
-    184|       (h) => `${h.archivo}:${h.linea} -> ${h.contenido}`,
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
-
- FAIL  tests/unit/guards/ancla-de-carga.guardia.test.ts > un ancla que el estado transitorio tambien cumple no es un ancla > ninguna espera se ancla SOLO a un conteo de elementos del DOM
-AssertionError: esperan un NUMERO de elementos sin decir cuales: durante la carga la tabla tambien tiene header + la fila `role="status"`, asi que el conteo se cumple a media carga. Anade en el MISMO waitFor una asercion de contenido o la ausencia de `role="status"`: expected [ …(2) ] to deeply equal []
-
-- Expected
-+ Received
-
-- []
-+ [
-+   "tests/components/RecepcionSateliteModule.test.tsx:414 — () => expect(within(listado()).getAllByText(/REM-B1/).length).toBeGreaterThan(0),",
-+   "tests/components/RecepcionSateliteModule.test.tsx:445 — () => expect(within(listado()).getAllByText(/REM-NUEVA/).length).toBeGreaterThan(0),",
-+ ]
-
- ❯ tests/unit/guards/ancla-de-carga.guardia.test.ts:227:7
-    225|         "tiene header + la fila `role=\"status\"`, asi que el conteo s…
-    226|         "Anade en el MISMO waitFor una asercion de contenido o la ause…
-    227|     ).toEqual([]);
-       |       ^
-    228|   });
-    229| });
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
-
-
- Test Files  2 failed | 1375 passed (1377)
-      Tests  2 failed | 18752 passed | 26 skipped (18780)
-   Start at  21:52:24
-   Duration  411.21s (transform 57.12s, setup 99.92s, import 1020.71s, tests 911.21s, environment 705.39s)
-
- ELIFECYCLE  Test failed. See above for more details.
-[0;31m✗ 'pnpm run test' fallo[0m
-INIT_EXIT=1
+[0;32m✓ test paso[0m
+[1;33m! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at[0m
+[0;32m✓ .env presente[0m
+[0;32m== init OK ==[0m
+Siguiente: abre AGENTS.md y sigue el flujo desde ahi.
+INIT_EXIT=0

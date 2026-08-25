@@ -572,8 +572,62 @@ se escribió DENTRO del log y el log **no** se canalizó por `tail`.
 Log: `progress/gate_278_frontend.log`.
 
 ```
-GATE_PLACEHOLDER
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=4)
+✓ specs presentes para features sdd en vuelo
+✓ typecheck paso
+✓ lint paso            (0 errors, 101 warnings — las MISMAS 101 preexistentes que midio
+                        la mitad de servidor; ninguna en los archivos de esta entrega)
+✓ test paso
+  Test Files  1377 passed (1377)
+  Tests       18754 passed | 26 skipped (18780)
+  Duration    378.11s
+! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado
+                            20260814140000_ruta_parada_tramo
+                            20260814160000_ruta_tramo_vivo_at
+✓ .env presente
+== init OK ==
+INIT_EXIT=0
 ```
+
+El aviso de `down.sql` es **preexistente y ajeno** (familia `ruta_*`); esta entrega no
+añade ninguna migración: `git status db/` vacío y el diff de la mitad de frontend no toca
+`db/`, `lib/services/`, `lib/repositories/`, `lib/actions/` ni `lib/interfaces/`.
+
+### Las DOS corridas rojas de antes, y por qué no lo eran
+
+Se dice porque un gate que sale verde a la tercera merece que se cuente qué pasó en las dos
+primeras. **Ninguna de las tres fallas era de esta rama, y las tres se reprodujeron en
+verde al correrlas aisladas.**
+
+| Corrida | Qué salió rojo | Qué era |
+| --- | --- | --- |
+| 1ª | `tests/guards/tarifa-status-retirado.guard.test.ts` → `Test timed out in 20000ms` (tardó 29,5 s) | **Timeout bajo carga.** Aislado: **1,10 s, 8/8 en verde**. Es un censo que recorre `lib/`, `app/` y `tests/`; con 1.377 archivos en paralelo no le llega el turno |
+| 1ª | `tests/unit/guards/ancla-de-carga.guardia.test.ts` | **UN DEFECTO REAL, Y ERA MÍO** — ver abajo. Arreglado |
+| 2ª | `tests/integration/repositories/financiera-cubo-temporal.integration.test.ts` → «la ventana de 2019 ya tenía movimientos de caja: el fixture no es aislado» | **Base local compartida.** Otro test escribió `MovimientoCaja` en esa ventana mientras éste comprobaba que estaba vacía. Aislado: **1,02 s, 7/7 en verde**. Esta entrega no toca ni una línea de dinero, de repositorio ni de base |
+
+### El defecto real que encontró el gate, y que no lo encontró la tanda 5
+
+`ancla-de-carga.guardia.test.ts` denunció **las dos esperas del caso R22 nuevo** (T4.1b):
+
+```
+tests/components/RecepcionSateliteModule.test.tsx:414 — expect(within(listado()).getAllByText(/REM-B1/).length).toBeGreaterThan(0)
+tests/components/RecepcionSateliteModule.test.tsx:445 — expect(within(listado()).getAllByText(/REM-NUEVA/).length).toBeGreaterThan(0)
+```
+
+Y tenía razón: **un `.length > 0` no distingue la pantalla asentada de la que todavía está
+pintando el esqueleto**, porque durante la carga la tabla ya tiene su cabecera y su fila
+`role="status"`. Las dos se reescribieron ancladas al CONTENIDO
+(`expect(listado()).toHaveTextContent("REM-NUEVA")`), y **se volvió a medir que el caso
+sigue mordiendo**: con el `mutate()` fuera de `releerBodega` —la mutación (c)— el caso R22
+se pone rojo, `1 failed | 37 passed`. Sin esa segunda medida, el arreglo del ancla podría
+haber sido un arreglo que además apagó el test.
+
+Es, además, el argumento de por qué el gate completo va entero y no por partes: **este
+defecto no lo veía ninguna de las cinco mutaciones de T5.2**, porque no era un fallo de la
+pantalla sino de cómo la estaba mirando el test.
 
 ## 18. Trazabilidad de esta entrega — R1…R33 y R42…R47
 
@@ -631,3 +685,6 @@ GATE_PLACEHOLDER
    bodega»: el motivo (cuatro registros por ruta + la guardia de contadores de cabecera)
    está escrito en su cabecera.
 5. **La ficha decía «79 líneas» y son 151.** Corregido en `feature_list.json`.
+6. **El gate salió verde a la tercera** y las dos rojas están contadas en §17: un timeout
+   bajo carga, una base local compartida y **un defecto real que era mío** (el ancla del
+   caso R22), arreglado y vuelto a medir con la mutación (c).
