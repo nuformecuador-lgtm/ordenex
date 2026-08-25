@@ -9,6 +9,7 @@ import { resumenCargaMasiva } from "@/lib/actions/carga-masiva-resumen";
 import { formatMonto } from "@/lib/config/moneda";
 import type { ResumenCargaOrdenDTO } from "@/lib/types/carga-masiva-resumen";
 
+import { EstatusBadge } from "./EstatusBadge";
 import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 
 export interface OrdenesCargaResumenProps {
@@ -90,7 +91,18 @@ export function OrdenesCargaResumen({ numRemisiones }: OrdenesCargaResumenProps)
     {
       id: "estatus",
       value: "Estatus",
-      render: (row) => row.estatusValue ?? "",
+      // Era el ÚNICO punto del flujo de carga masiva que pintaba el value crudo de
+      // la DB (`en_preparacion`, `por_recolectar_en_tienda`): el mismo chip del
+      // listado deja la traducción y los colores en una sola fuente (`EstatusBadge`).
+      // Sin `estatusValue` el chip saldría vacío, así que la ausencia cae al mismo
+      // guion que ya usan la dirección y el monto de esta misma tabla (`-`, no el
+      // `—` de `estatusLabel`: manda la tabla en la que vive la celda).
+      render: (row) =>
+        row.estatusValue ? (
+          <EstatusBadge value={row.estatusValue} zonaNombre={row.zonaNombre} />
+        ) : (
+          "-"
+        ),
     },
     {
       id: "montoCobrar",
