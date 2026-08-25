@@ -382,7 +382,6 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
     });
     render(
       <RecepcionSateliteModule
-        porRecibir={[]}
         ordenesBodega={paginaBodega(porDevolver)}
         catalogoFiltros={catalogoSatelite(porDevolver)}
         zonaNombre="Limón"

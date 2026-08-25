@@ -321,7 +321,6 @@ function montar() {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={[]}
         ordenesBodega={paginaBodega(CONJUNTO.slice(0, PAGE_SIZE), { total: TOTAL })}
         // R46: el catálogo se deriva del CONJUNTO, como hace la acción de T K.2. Que sea
         // distinto de lo que trae la página es justo lo que hace medible el requisito.

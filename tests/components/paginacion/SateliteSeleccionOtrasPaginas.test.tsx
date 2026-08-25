@@ -144,13 +144,11 @@ const CONJUNTO: RecepcionSateliteDTO[] = Array.from({ length: TOTAL }, (_, k) =>
   orden(k + 1),
 );
 
-/** Una orden de «Por recibir»: no entra al listado, sólo da un botón que relee del servidor. */
-const POR_RECIBIR: RecepcionSateliteDTO = {
-  ...orden(9),
-  id: "o-9",
-  numRemision: "REM-09",
-  estatusValue: "en_ruta_bodega_satelite",
-};
+// Feature 278 (T4.3b): aquí vivía `POR_RECIBIR`, una orden `en_ruta_bodega_satelite` que
+// este archivo inyectaba SÓLO para tener un botón que releyera del servidor. Ese botón
+// murió con `recibirLote` y su sustituto es la recepción por QR, que no necesita ninguna
+// orden montada: el escáner está siempre (R42). La prop `porRecibir` tampoco existe ya en
+// este módulo, que es la pantalla «En bodega».
 
 // --- Andamiaje -----------------------------------------------------------
 
@@ -216,7 +214,6 @@ function montar() {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={[POR_RECIBIR]}
         ordenesBodega={paginaBodega(CONJUNTO.slice(0, PAGE_SIZE), {
           total: TOTAL,
           pageSize: PAGE_SIZE,

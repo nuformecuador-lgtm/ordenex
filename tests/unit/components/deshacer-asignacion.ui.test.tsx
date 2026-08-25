@@ -195,13 +195,8 @@ function renderModulosSatelite(asignadas: RecepcionSateliteDTO[]) {
   // y sin esto el dato del anterior ganaría sobre el `fallbackData` del siguiente (T I.2).
   return renderConSwr(
     <RecepcionSateliteModule
-      porRecibir={[
-        makeOrdenSatelite({
-          id: "b1",
-          numRemision: "SAT-RUTA",
-          estatusValue: "en_ruta_bodega_satelite",
-        }),
-      ]}
+      // Feature 278 (T4.3b): el modulo dejo de recibir `porRecibir`, y con el se fue la
+      // orden `SAT-RUTA` que este andamiaje inyectaba para el caso R36. Ver ese caso.
       ordenesBodega={paginaBodega(asignadas)}
       catalogoFiltros={catalogoSatelite(asignadas)}
       zonaNombre="Limón"
@@ -360,13 +355,25 @@ describe("R35/R36 — módulo de la bodega satélite", () => {
     expect(within(seccion).getByRole("button", { name: ACCION })).toBeEnabled();
   });
 
-  it("R36: la sección 'Por recibir' (en_ruta_bodega_satelite) NO ofrece deshacer", () => {
+  // Feature 278 (T4.3b/R18), 2026-08-24 — REEXPRESADO, no borrado. Este caso montaba una
+  // orden `en_ruta_bodega_satelite` en la sección «Por recibir» de la pantalla única y
+  // comprobaba que ahí no se ofrecía «Deshacer asignación». Con el portal partido en dos,
+  // esa sección YA NO EXISTE en «En bodega»: la afirmación se refuerza —no hay región de
+  // la que ofrecer nada— y su otra mitad (las órdenes en camino no traen acciones) vive
+  // ahora en `tests/components/PorRecibirModule.test.tsx`.
+  //
+  // Va con CONTROL POSITIVO en el mismo caso: si el módulo entero dejara de renderizar,
+  // la ausencia de abajo pasaría igual de verde.
+  it("R36/R18: «En bodega» no monta la región 'Por recibir', así que ahí no puede ofrecerse deshacer", () => {
     renderModulosSatelite([makeOrdenSatelite({ id: "s1" })]);
 
-    const porRecibir = screen.getByRole("region", { name: "Por recibir" });
-    expect(within(porRecibir).queryByRole("button", { name: ACCION })).toBeNull();
-    // La orden del caso (b) está listada, pero solo con la acción de recepción.
-    expect(within(porRecibir).getAllByText(/SAT-RUTA/).length).toBeGreaterThan(0);
+    // Positivo: el render ocurrió y el listado de la bodega está con su fila.
+    const seccion = screen.getByRole("region", { name: LISTADO_BODEGA });
+    expect(within(seccion).getByText("SAT-s1")).toBeInTheDocument();
+
+    // Ausencia: ni la región ni la orden en ruta que este archivo inyectaba.
+    expect(screen.queryByRole("region", { name: "Por recibir" })).toBeNull();
+    expect(screen.queryByText(/SAT-RUTA/)).toBeNull();
   });
 
   it("R38: tras el éxito se relee el estado del servidor (router.refresh)", async () => {

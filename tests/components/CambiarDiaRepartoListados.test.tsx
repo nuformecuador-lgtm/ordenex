@@ -191,7 +191,6 @@ function renderSatelite(asignadas: RecepcionSateliteDTO[]) {
   });
   return renderConSwr(
     <RecepcionSateliteModule
-      porRecibir={[]}
       ordenesBodega={paginaBodega(asignadas)}
       catalogoFiltros={catalogoSatelite(asignadas)}
       zonaNombre="Limón"

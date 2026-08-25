@@ -199,7 +199,6 @@ function renderModulo(ordenes: RecepcionSateliteDTO[] = ORDENES) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={[]}
         ordenesBodega={paginaBodega(ordenes)}
         catalogoFiltros={catalogoSatelite(ordenes)}
         zonaNombre={ZONA_ACTOR}
