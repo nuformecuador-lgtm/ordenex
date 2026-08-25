@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
 import type { RolValue } from "@prisma/client";
+import { quitarComentarios } from "../../fixtures/sin-comentarios";
 import {
   puedeVer,
   itemsVisibles,
@@ -266,8 +269,12 @@ describe("primerDestino (aterrizaje de /dashboard)", () => {
     expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
   });
 
-  it("el adminSatelite aterriza en su portal de órdenes", () => {
-    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
+  // Feature 278 (R12/R14, 2026-08-24): el portal del satélite pasó a tener subítems, así
+  // que el aterrizaje deja de ser `/recepcion-satelite` (que ahora sólo redirige) y pasa a
+  // ser el primer subítem. Cambio DELIBERADO y firmado: este caso se puso rojo con el
+  // `children` nuevo y se actualizó a mano, no se relajó.
+  it("el adminSatelite aterriza en el primer SUBÍTEM de su portal (el padre no navega)", () => {
+    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite/por-recibir");
   });
 
   it("maestro y admin conservan su Inicio (/dashboard), así que no hay redirección circular", () => {
@@ -628,7 +635,11 @@ describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
     expect(destinoDe("admin")).toBe("/dashboard");
     expect(destinoDe("adminTienda")).toBe("/ordenes");
     // Los dos que esta feature podría haber roto sin que nada se pusiera rojo:
-    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
+    // Feature 278 (R12): el valor del `adminSatelite` cambió a mano el 2026-08-24 al partir
+    // su portal en dos subítems. Lo que este caso sigue afirmando es lo de siempre —que el
+    // ítem "Monitoreo" no mueve el aterrizaje de nadie—; el destino nuevo es el primer
+    // subítem, escrito aquí LITERAL y no derivado de `primerDestino`.
+    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite/por-recibir");
     expect(destinoDe("mensajero")).toBe("/mis-asignaciones/reparto");
   });
 
@@ -651,5 +662,129 @@ describe("Feature 192 — ítem de sidebar de Monitoreo", () => {
       const sinItem = primerDestino(itemsVisibles(sinMonitoreo, actor(rol)));
       expect(conItem).toBe(sinItem);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 278 — el portal del `adminSatelite` se parte en dos subítems.
+//
+// TODO lo de este bloque se juzga sobre el VALOR importado `SIDEBAR_ITEMS` (R32), nunca
+// sobre el texto del archivo que lo declara. No es una preferencia de estilo: hasta el
+// 2026-08-24 este fuente tenía un comodín de ruta dentro de un comentario de línea que
+// abría un bloque, y el quitador del repo se tragaba 151 líneas —entre ellas ESTE ítem—.
+// Una guardia que hubiera leído el fuente habría aprobado el vacío en verde. El agujero
+// está cerrado (ver el describe de legibilidad, más abajo), y aun así el menú se sigue
+// juzgando por valor: eso es defensa en profundidad, no permiso para volver al texto.
+// ---------------------------------------------------------------------------------------
+describe("Feature 278 — subítems del portal del adminSatelite (sobre SIDEBAR_ITEMS)", () => {
+  const portalSatelite = (): MenuItem => {
+    const it = SIDEBAR_ITEMS.find((i) => i.href === "/recepcion-satelite");
+    if (!it) throw new Error("sin ítem /recepcion-satelite");
+    return it;
+  };
+
+  it("R8: el ítem conserva la etiqueta «Órdenes» y declara Por recibir (primero) y En bodega", () => {
+    const item = portalSatelite();
+    // Anti-vacuidad: el ítem que se está juzgando es el del satélite y no otro.
+    expect(item.label).toBe("Órdenes");
+    expect(item.roles).toEqual(["adminSatelite"]);
+
+    expect(item.children).toBeDefined();
+    expect(item.children?.map((c) => c.label)).toEqual(["Por recibir", "En bodega"]);
+    expect(item.children?.map((c) => c.href)).toEqual([
+      "/recepcion-satelite/por-recibir",
+      "/recepcion-satelite/en-bodega",
+    ]);
+  });
+
+  it("R9: el href del padre se conserva (identifica al ítem) y NO coincide con ningún subítem", () => {
+    const item = portalSatelite();
+    expect(item.href).toBe("/recepcion-satelite");
+    expect(item.children?.map((c) => c.href)).not.toContain("/recepcion-satelite");
+  });
+
+  it("R10: los dos subítems sólo los alcanza el adminSatelite; ningún otro rol ni un actor sin sesión", () => {
+    const subrutas = [
+      "/recepcion-satelite/por-recibir",
+      "/recepcion-satelite/en-bodega",
+    ];
+    const subrutasVisibles = (rol: RolValue | null): string[] =>
+      itemsVisibles(SIDEBAR_ITEMS, rol === null ? null : actor(rol))
+        .flatMap((i) => i.children ?? [])
+        .map((c) => c.href)
+        .filter((h) => subrutas.includes(h));
+
+    // Positivo primero: si el filtro estuviera roto y devolviera siempre vacío, este
+    // aserto lo denuncia en vez de dejar pasar las cinco ausencias de abajo.
+    expect(subrutasVisibles("adminSatelite")).toEqual(subrutas);
+
+    for (const rol of [
+      "maestro",
+      "admin",
+      "adminTienda",
+      "mensajero",
+      "apiKey",
+    ] as RolValue[]) {
+      expect(subrutasVisibles(rol)).toEqual([]);
+    }
+    expect(subrutasVisibles(null)).toEqual([]);
+  });
+
+  it("R12: el aterrizaje post-login del adminSatelite es el PRIMER subítem, «Por recibir»", () => {
+    const destino = primerDestino(itemsVisibles(SIDEBAR_ITEMS, actor("adminSatelite")));
+    expect(destino).toBe("/recepcion-satelite/por-recibir");
+    // Y no la ruta del padre, que desde la 278 sólo redirige:
+    expect(destino).not.toBe("/recepcion-satelite");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Feature 278 (R45/R46, T1.6) — el fuente del menú sigue siendo LEGIBLE para las guardias.
+//
+// Hasta el 2026-08-24 la línea 228 escribía una ruta con comodín dentro de un comentario
+// de línea. Esa barra-asterisco ABRE un bloque de comentario, y `quitarComentarios` —el
+// quitador único del repo— lo cerraba en el siguiente cierre de bloque del archivo (el
+// JSDoc de `puedeVer`, línea 378): 151 líneas desaparecían del texto que lee CUALQUIER
+// guardia que escanee este fuente. Medido con el propio quitador: 76 líneas no vacías
+// sobrevivían antes del arreglo, 156 después.
+//
+// Este describe es el que impide que vuelva a pasar. No mide el número —que cambia con
+// cada ítem nuevo— sino la PERTENENCIA: el último ítem de la lista y las dos subrutas del
+// satélite tienen que verse en el texto barrido.
+// ---------------------------------------------------------------------------------------
+describe("Feature 278 — el fuente del menú es legible para las guardias que lo escanean", () => {
+  const RUTA_MENU = "lib/auth/menu-visibility.ts";
+  const fuenteCrudo = readFileSync(path.join(process.cwd(), RUTA_MENU), "utf8");
+
+  it("R45: ninguna línea abre un bloque de comentario dentro de un comentario de línea", () => {
+    // Anti-vacuidad (R31): el texto que se está leyendo es el del menú de verdad.
+    expect(fuenteCrudo).toContain("SIDEBAR_ITEMS");
+    expect(fuenteCrudo.split("\n").length).toBeGreaterThan(300);
+
+    const infractoras = fuenteCrudo
+      .split("\n")
+      .map((linea, i) => ({ n: i + 1, linea }))
+      .filter(({ linea }) => {
+        const posLinea = linea.indexOf("//");
+        const posBloque = linea.indexOf("/" + "*");
+        return posLinea !== -1 && posBloque !== -1 && posBloque > posLinea;
+      })
+      .map(({ n, linea }) => `${n}: ${linea.trim()}`);
+
+    expect(infractoras).toEqual([]);
+  });
+
+  it("R46: el fuente pasado por el quitador conserva el ÚLTIMO ítem y las dos subrutas del satélite", () => {
+    const barrido = quitarComentarios(fuenteCrudo);
+
+    // Anti-vacuidad (R31): el quitador devolvió código, no un archivo vaciado. Si el
+    // agujero volviera, estos tres anclajes desaparecen y el caso se pone rojo — que es
+    // exactamente lo que la mutación (f) de T5.2 comprueba.
+    expect(barrido).toContain("export const SIDEBAR_ITEMS");
+    expect(barrido.split("\n").filter((l) => l.trim() !== "").length).toBeGreaterThan(100);
+
+    expect(barrido).toContain('label: "Incidentes"');
+    expect(barrido).toContain('"/recepcion-satelite/por-recibir"');
+    expect(barrido).toContain('"/recepcion-satelite/en-bodega"');
   });
 });

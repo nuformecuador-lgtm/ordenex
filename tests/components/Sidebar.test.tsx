@@ -56,10 +56,18 @@ function renderSidebar(items?: readonly MenuItem[]) {
 
 /**
  * Enlace del sidebar por `href`. Estos tests renderizan SIDEBAR_ITEMS COMPLETO (sin
- * filtrar por rol) y hay DOS items con el label "Órdenes": el de maestro/admin/
+ * filtrar por rol) y hay DOS ítems con el label "Órdenes": el de maestro/admin/
  * adminTienda (`/ordenes`) y el del adminSatelite (`/recepcion-satelite`). En la app
  * real nunca coexisten —`itemsVisibles` filtra por rol y ningún rol ve los dos—, así
  * que aquí se desambigua por destino en vez de por nombre.
+ *
+ * Feature 278 (T1.5b, 2026-08-24): de esos dos ítems ya sólo UNO es enlace. El del
+ * adminSatelite ganó subítems ("Por recibir" / "En bodega") y el Sidebar lo renderiza
+ * como DISPARADOR de desplegable, igual que "Entregas", "Configuración" y "Ranking";
+ * su `href` identifica al ítem pero no llega al DOM como `<a>`. O sea: buscar
+ * `/recepcion-satelite` con este helper lanza, y debe lanzar. La ambigüedad de nombre
+ * sigue existiendo —los dos disparan por `/órdenes/i` en `getByRole("button")`— así que
+ * el helper se conserva tal cual para el ítem que SÍ es enlace.
  */
 function linkPorHref(href: string): HTMLElement {
   const link = screen
@@ -178,6 +186,40 @@ describe("Sidebar", () => {
     const rankingDia = screen.getByRole("link", { name: "Ranking del día" });
     expect(rankingDia).not.toHaveAttribute("aria-current");
     expect(rankingDia).not.toHaveAttribute("data-active");
+  });
+
+  // Feature 278 (T1.5a, R11): el portal del `adminSatelite` pasó a tener dos subítems.
+  // Es el MISMO molde que Tarifas y que Histórico, y se escribe aparte porque el ítem
+  // padre de este caso comparte etiqueta ("Órdenes") con un ítem que SÍ es enlace: si el
+  // desplegable se rompiera y volviera a renderizarse como `<a>`, ninguno de los casos de
+  // arriba se enteraría.
+  it("con la ruta de un subítem del satélite activo, ese subítem queda aria-current y su padre desplegado (R11)", () => {
+    currentPathname = "/recepcion-satelite/en-bodega";
+    renderSidebar();
+
+    // El padre es un DISPARADOR (no un enlace) y está abierto porque un hijo está activo.
+    const portal = screen.getByRole("button", { name: /órdenes/i });
+    expect(portal).toHaveAttribute("aria-expanded", "true");
+
+    const enBodega = screen.getByRole("link", { name: "En bodega" });
+    expect(enBodega).toHaveAttribute("href", "/recepcion-satelite/en-bodega");
+    expect(enBodega).toHaveAttribute("aria-current", "page");
+    expect(enBodega).toHaveAttribute("data-active");
+
+    // El hermano está montado y NO marcado: el activo se decide por igualdad exacta de
+    // ruta, no por prefijo (los dos empiezan por `/recepcion-satelite`).
+    const porRecibir = screen.getByRole("link", { name: "Por recibir" });
+    expect(porRecibir).toHaveAttribute("href", "/recepcion-satelite/por-recibir");
+    expect(porRecibir).not.toHaveAttribute("aria-current");
+    expect(porRecibir).not.toHaveAttribute("data-active");
+
+    // Y la ruta VIEJA del portal no aparece como enlace en ningún sitio: desde la 278
+    // sólo redirige, y el padre con `children` no navega.
+    expect(
+      screen
+        .getAllByRole("link")
+        .map((l) => l.getAttribute("href")),
+    ).not.toContain("/recepcion-satelite");
   });
 
   it("marca item simple activo por ruta (R4, R5)", () => {

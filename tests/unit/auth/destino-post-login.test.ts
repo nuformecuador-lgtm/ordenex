@@ -59,8 +59,16 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
     expect(destinoDe("adminTienda")).toBe("/ordenes");
   });
 
-  it("adminSatelite aterriza en /recepcion-satelite (NO en /analitica)", () => {
-    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite");
+  // 2026-08-24 · ficha 278 (R12/R14): este literal SE CAMBIÓ A MANO. El portal del
+  // `adminSatelite` se partió en dos subítems («Por recibir» y «En bodega»), y como el
+  // padre con `children` no navega, `primerDestino` pasa a devolver el href del PRIMER
+  // subítem. El caso se puso rojo con el valor viejo — que es para lo que este archivo
+  // existe — y la decisión firmada es que el aterrizaje sea «Por recibir»: la misma
+  // pantalla a la que redirige la ruta vieja `/recepcion-satelite`, para que el rol tenga
+  // UNA sola puerta de entrada. Sigue PROHIBIDO derivar este esperado de `primerDestino`.
+  it("adminSatelite aterriza en /recepcion-satelite/por-recibir (NO en /analitica, y NO en la ruta vieja que sólo redirige)", () => {
+    expect(destinoDe("adminSatelite")).toBe("/recepcion-satelite/por-recibir");
+    expect(destinoDe("adminSatelite")).not.toBe("/recepcion-satelite");
   });
 
   // 2026-08-12: el mensajero ya no ve "Analítica", así que su destino lo protege ahora el
@@ -99,7 +107,7 @@ describe("R5 — destino post-login por rol (valores escritos a mano, NO derivad
   // Feature 192 (R54): "Monitoreo" es el SEGUNDO ítem que se excluye, por la misma razón y
   // con la misma marca. Va en posición 3 de `SIDEBAR_ITEMS` y es visible para
   // `adminSatelite`, que no ve "Inicio" ni "Órdenes": sin la marca, ese rol habría pasado a
-  // aterrizar en `/monitoreo` en vez de en `/recepcion-satelite`, exactamente el incidente
+  // aterrizar en `/monitoreo` en vez de en su portal, exactamente el incidente
   // que la 133 cerró con "Analítica". La lista se sigue comparando por IGUALDAD: un ítem
   // que gane la marca sin decidirlo a mano pone este caso rojo.
   it("los ítems 'Analítica' y 'Monitoreo' declaran destinoInicial: false y son los ÚNICOS que se excluyen hoy", () => {
