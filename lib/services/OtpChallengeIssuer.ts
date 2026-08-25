@@ -26,7 +26,8 @@ export interface EmitirOtpResult {
 
 /**
  * Genera y envia el OTP del paso de verificacion RBA (R17-R20). El codigo en
- * claro solo viaja por email; en DB unicamente se persiste `codeHash`.
+ * claro solo viaja por email; en DB unicamente se persiste `codeHash`, y nunca
+ * se escribe en un log (feature 80).
  */
 export class OtpChallengeIssuer {
   constructor(
@@ -36,7 +37,6 @@ export class OtpChallengeIssuer {
 
   async emitir(params: EmitirOtpParams): Promise<EmitirOtpResult> {
     const code = generarCodigoOtp();
-    console.log("Codigo OTP generado:", code);
     const codeHash = await bcrypt.hash(code, OTP_SALT_ROUNDS);
     const expiresAt = new Date(Date.now() + authConfig.OTP_TTL_MINUTES * 60_000);
 
