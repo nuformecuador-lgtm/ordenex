@@ -405,8 +405,12 @@ export interface ICierreDiaService {
    * agrupadas por resultado, con totales por metodo de pago, el gate de "Solicitar
    * cierre" y el historico de cierres. Solo lectura (R17). Rol != mensajero ->
    * forbidden.
+   *
+   * Feature 246: `now` es un PARAMETRO con default (el reloj se inyecta en los tests y jamas se lee
+   * dentro del calculo). De el sale el dia CR con el que el gate decide que orden asignada cuenta
+   * como pendiente y cual esta reservada para despues.
    */
-  listarCierreDia(actor: Actor): Promise<ListarCierreDiaServiceResult>;
+  listarCierreDia(actor: Actor, now?: Date): Promise<ListarCierreDiaServiceResult>;
   /**
    * Detalle de UN cierre PASADO del propio mensajero (solo lectura). El scope por
    * `mensajero_id` vive en el WHERE del repo: un cierre ajeno o inexistente ->
@@ -446,7 +450,7 @@ export interface ICierreDiaService {
    * gestiones pendientes del mensajero, con destino derivado por zona (R15) y
    * totales snapshot (R14). Todo-o-nada (R13).
    */
-  solicitarCierre(actor: Actor): Promise<SolicitarCierreServiceResult>;
+  solicitarCierre(actor: Actor, now?: Date): Promise<SolicitarCierreServiceResult>;
   /**
    * Feature 67/R1-R6/R8/R9/R18/R19 — DESHACE una gestion: la ANULA con rastro (no la borra,
    * decision 2 del humano) y devuelve su orden a `en_reparto` con su mensajero, de forma
