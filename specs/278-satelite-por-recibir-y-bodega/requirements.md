@@ -1,10 +1,16 @@
 # Feature 278 — El portal del `adminSatelite` se parte en «Por recibir» y «En bodega», y la recepción queda solo por QR
 
-> Requisitos en notación EARS. Numerados `R1`…`R33`. Sin detalles de implementación:
+> Requisitos en notación EARS. Numerados `R1`…`R47`. Sin detalles de implementación:
 > el CÓMO vive en `design.md` y el desglose en `tasks.md`.
 >
-> Alcance: **solo frontend**. Ninguna Server Action, servicio, repositorio, esquema ni
-> migración cambia (R7). Si algo de esto resultara necesario, se para y se pregunta.
+> **Alcance: `fullstack`** (ampliado el 2026-08-24 al cerrarse las cuatro preguntas). La
+> parte de servidor es una **retirada**: el camino de recepción EN LOTE desaparece entero,
+> de la Server Action al repositorio (R34–R41). Nada más del servidor se toca, y en
+> particular **el camino por QR no se toca** (R38). Si algo obligara a tocarlo, se para y se
+> pregunta.
+>
+> Los requisitos `R34`–`R47` entraron con las cuatro decisiones firmadas; `R7`, `R18` y
+> `R28` se reescribieron por lo mismo y llevan la marca correspondiente.
 
 ## Glosario mínimo
 
@@ -42,9 +48,10 @@ guía, el sistema DEBE recibir la orden y notificar el resultado exactamente com
 mismo mensaje por cada resultado posible, incluida la confirmación persistente de la última
 guía recibida—.
 
-**R7 (Ubicuo).** El sistema DEBE conservar sin modificar las Server Actions, servicios,
-repositorios, esquemas de validación y modelo de datos de la recepción satélite. Esta
-feature no cambia ningún contrato de servidor.
+**R7 (Ubicuo).** *(Reescrito el 2026-08-24 por la decisión Q2.)* Salvo la retirada del
+camino en lote que exigen R34–R41, el sistema DEBE conservar sin modificar las Server
+Actions, servicios, repositorios, esquemas de validación y modelo de datos de la recepción
+satélite. **Ninguna migración, ninguna tabla y ninguna política RLS cambian.**
 
 ---
 
@@ -88,8 +95,10 @@ barra de filtros, ni su control de paginación, ni sus acciones de lote, ni sus 
 el listado único de la bodega con su barra de filtros, su paginación, sus acciones de lote
 y sus modales, tal como funcionan hoy.
 
-**R18 (Ubicuo).** La pantalla «En bodega» NO DEBE listar las órdenes por recibir ni
-transportarlas al navegador: le basta con saber si hay alguna.
+**R18 (Ubicuo).** *(Reescrito el 2026-08-24 por la decisión Q1.)* La pantalla «En bodega»
+NO DEBE listar las órdenes por recibir ni transportarlas al navegador, **ni necesitar
+ningún dato sobre ellas**: con el escáner siempre presente (R42), su cantidad deja de
+decidir nada en esta pantalla.
 
 **R19 (Condicional).** SI el actor no tiene rol `adminSatelite` —o no hay sesión—, ENTONCES
 cada una de las dos pantallas DEBE responder «no encontrado» sin consultar datos.
@@ -128,12 +137,10 @@ recibir» NO DEBE ofrecer el escáner ni listar ninguna tarjeta: solo el aviso d
 **R27 (De estado).** MIENTRAS el `adminSatelite` no tenga zona asignada, la pantalla «En
 bodega» DEBE seguir mostrando su listado y NO DEBE ofrecer el escáner.
 
-**R28 (De estado).** MIENTRAS no haya ninguna orden por recibir, ninguna de las dos
-pantallas DEBE ofrecer el escáner, y «Por recibir» DEBE decir que no hay órdenes por
-recibir.
-*(Conserva la regla vigente. Ver **Q1** en Preguntas abiertas: si el humano prefiere el
-escáner siempre visible, este requisito cambia y R15 pasa a no depender de que haya
-órdenes.)*
+**R28 (De estado).** *(Reescrito el 2026-08-24 por la decisión Q1: era lo contrario.)*
+MIENTRAS no haya ninguna orden por recibir, «Por recibir» DEBE decir que no hay órdenes por
+recibir **y DEBE seguir ofreciendo el escáner**. Una lista vacía no deja al `adminSatelite`
+sin forma de recibir el paquete que tiene en la mano.
 
 ---
 
@@ -163,43 +170,98 @@ cerrar (por ejemplo, escribir una ruta con comodín `/*` dentro de un comentario
 
 ---
 
+## Bloque F — La recepción EN LOTE se retira entera (decisión Q2, 2026-08-24)
+
+> Contexto medido: el QR **no comparte camino** con el lote. El escáner va por
+> `RecepcionSateliteService.recibir()` → `repo.recibirEnSatelite(...)` (singular); el botón
+> iba por `recibirLote()` → `repo.recibirLoteEnSatelite(...)` (lote). Son métodos distintos
+> del repositorio y el del lote tiene **un solo llamador**. Verificado en el árbol el
+> 2026-08-24; el detalle, con líneas, en `design.md` §15.
+
+**R34 (Ubicuo).** El sistema NO DEBE exponer ninguna Server Action de recepción en lote en
+la bodega satélite.
+
+**R35 (Ubicuo).** El sistema NO DEBE conservar el esquema de validación de ese borde ni los
+tipos de entrada y de resultado que solo existían para él.
+
+**R36 (Ubicuo).** El servicio de recepción satélite NO DEBE exponer el método de recepción
+en lote, ni su entrada ni su resultado de dominio en el contrato de su interfaz.
+
+**R37 (Ubicuo).** El repositorio de órdenes NO DEBE exponer el método de escritura en lote
+de la recepción satélite, ni su declaración en el contrato de la interfaz.
+
+**R38 (Ubicuo).** La recepción por QR DEBE seguir funcionando de extremo a extremo —borde,
+servicio y método singular del repositorio— con TODAS sus guardas intactas: rol, zona
+propia, zona ajena, estado de origen inválido, orden inexistente o borrada, idempotencia de
+la ya recibida y resolución de carrera.
+
+**R39 (Ubicuo).** Ningún censo, doble, inventario ni lista de métodos del repositorio DEBE
+seguir nombrando el camino en lote retirado.
+
+**R40 (Condicional).** SI se retira una capa que estaba cubierta por tests, ENTONCES lo que
+esos tests afirmaban DEBE quedar resuelto de una de estas dos formas, caso por caso y por
+escrito: (a) sigue afirmado por otra pieza viva, y se dice cuál; o (b) muere con el código,
+y se dice explícitamente que muere y por qué eso es correcto. **No vale borrar un caso sin
+nombrar su destino.**
+
+**R41 (Ubicuo).** El censo escrito a mano de los métodos de escritura del repositorio DEBE
+estar atado al contrato en tiempo de compilación, de modo que nombrar un método inexistente
+NO compile.
+
+---
+
+## Bloque G — El escáner siempre disponible (decisión Q1, 2026-08-24)
+
+**R42 (De estado).** MIENTRAS el `adminSatelite` tenga zona asignada, AMBAS pantallas DEBEN
+ofrecer el escáner, haya o no órdenes por recibir listadas.
+
+**R43 (Ubicuo).** La disponibilidad del escáner NO DEBE depender de cuántas órdenes
+devolvió la última lectura del servidor. La única condición es tener zona (R26, R27): sin
+zona el servidor rechazaría la recepción, así que ofrecer el escáner solo produciría un
+error; con zona, la lista puede estar vacía justo porque la orden que el actor tiene en la
+mano todavía no se registró.
+
+---
+
+## Bloque H — Títulos, descripciones y el comentario del menú (decisiones Q3 y Q4)
+
+**R44 (Ubicuo).** Cada pantalla DEBE llevar una descripción propia que describa SU
+contenido. Ninguna de las dos DEBE heredar la descripción de la pantalla única —que solo
+habla de recepción por QR— ni el título «Mis asignaciones», que era el nombre del portal
+del MENSAJERO viviendo en la pantalla del satélite.
+
+**R45 (Ubicuo).** El archivo que declara el menú NO DEBE contener ningún comentario de
+línea que abra un bloque de comentario sin cerrar.
+
+**R46 (Ubicuo).** Tras ese arreglo, una guardia que lea ese archivo con el quitador de
+comentarios del repo DEBE ver la declaración completa de los ítems del menú, incluidos los
+subítems del `adminSatelite` y el último ítem de la lista. La mejora DEBE quedar **medida**
+—cuántas líneas veía antes y cuántas después—, no afirmada.
+
+**R47 (Ubicuo).** El quitador de comentarios del repo NO DEBE modificarse en esta feature:
+lo que se arregla es el comentario que abre el agujero, no la herramienta que se lo traga.
+
+---
+
+## Preguntas cerradas por el humano (2026-08-24)
+
+- **Q1 → el escáner es SIEMPRE visible** con zona asignada, también con la lista vacía. Es
+  el fallo que la feature 167 ya documentó: el apartado se ocultaba justo cuando iban a
+  buscarlo. ⇒ R28 reescrito, R42, R43; `R18` deja de necesitar el dato.
+- **Q2 → el lote SE RETIRA**, con su cadena hasta el repositorio; la ficha pasa a
+  `fullstack`. ⇒ R7 reescrito, R34–R41.
+- **Q3 → los H1 son «Por recibir» y «En bodega»**, iguales a sus subítems; «Mis
+  asignaciones» desaparece. Las descripciones se proponen y justifican en `design.md` §3.
+  ⇒ R20 (ya existía) y R44.
+- **Q4 → el comentario del menú SE ARREGLA aquí**, sin tocar el quitador. ⇒ R45–R47.
+
 ## Preguntas abiertas
 
-**Q1 — ¿El escáner debe estar siempre, o solo cuando hay algo por recibir?**
-Hoy el escáner solo se monta si el actor tiene zona **y** hay al menos una orden por
-recibir; R28 conserva esa regla, porque la ficha manda arreglar lo evidenciado y no
-rediseñar. Pero el motivo escrito de esa regla («no hay guía que resolver, así que solo
-estorbarían») se decidió cuando el botón era el camino principal, y ahora el QR es el
-único. Consecuencias medidas leyendo el código, que el humano debería sopesar:
-1. La lista de órdenes por recibir la resuelve el servidor al cargar la página. Si el
-   camión llega después, el escáner no está y hay que recargar.
-2. Al recibir la ÚLTIMA orden pendiente, el bloque entero se desmonta con el modal del
-   escáner abierto (esto ya pasa hoy, en la pantalla única: no es una regresión nueva).
-Si la respuesta es «siempre que tenga zona», R28 se reescribe, R15 deja de depender de que
-haya órdenes y desaparece el dato «hay algo por recibir» que «En bodega» necesita (R18).
+**P1 — ¿Qué se hace si al arreglar el comentario alguna guardia se pone roja?**
+Hoy ese `/*` esconde el tramo que va desde el ítem «Entregas» hasta el final de la lista de
+ítems. Al cerrarlo, **todas** las guardias que escanean fuentes pasan a ver ese tramo por
+primera vez. Si alguna se pone roja, no es un daño de esta feature: es una violación que
+llevaba oculta ahí. **Se pide la regla por adelantado**: ¿se arregla dentro de esta ficha
+(y se dice en la bitácora), o se revierte solo esa línea y se abre ficha aparte con el
+hallazgo? La tarea que lo mide (T-Q4.3) se detiene y pregunta si esto ocurre.
 
-**Q2 — `recibirLote` se queda sin ningún consumidor en la interfaz. ¿Se retira?**
-La ficha afirma que ese camino de servidor «lo usa el escáner». **Medido el 2026-08-24, no
-es así**: el escáner llama a `recibirPorQr`
-(`app/(app)/recepcion-satelite/_components/EscanerRecepcion.tsx:105` y `:138`) y
-`recibirLote` solo se invoca desde el botón que esta feature borra
-(`app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx:301`). La decisión
-de la ficha —no tocarlo— **se mantiene igual**, pero por otro motivo: retirarlo es backend
-(acción, servicio, repositorio, esquema y sus suites), y esta feature es solo frontend. Si
-el humano quiere retirarlo, es otra ficha.
-
-**Q3 — Textos de la descripción de cada pantalla.**
-Los títulos están decididos (R20: «Por recibir» y «En bodega»). Las descripciones que
-acompañan al título en cada pantalla las propone `design.md` §3; se piden confirmadas o
-corregidas antes de implementar. El título actual de la pantalla única —«Mis
-asignaciones»— desaparece: ninguna de las dos pantallas lo hereda.
-
-**Q4 — El agujero del quitador de comentarios en el archivo del menú.**
-El archivo que declara el menú contiene, dentro de un comentario de línea del ítem
-«Entregas», una ruta con comodín que abre un bloque de comentario que nadie cierra hasta
-mucho más abajo. Cualquier guardia que lea ese archivo por ahí queda ciega justo sobre el
-tramo donde viven los subítems nuevos. Esta feature lo esquiva (R32: se juzga el valor en
-tiempo de ejecución) y no lo arregla, porque arreglarlo es otra ficha. **Se pregunta solo
-esto**: ¿se autoriza reescribir ESE comentario concreto (una ruta con comodín pasa a
-escribirse sin él) como parte de esta feature, o se deja intacto para no pisar la ficha que
-lo tenga asignado?

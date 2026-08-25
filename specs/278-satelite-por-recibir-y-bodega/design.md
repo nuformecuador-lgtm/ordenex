@@ -1,8 +1,13 @@
 # Feature 278 — Diseño técnico
 
-> Cubre `requirements.md` R1–R33. **Solo frontend.** Sin migraciones, sin tablas, sin RLS,
-> sin endpoints nuevos, sin cambios de contrato: la sección §9 explica por qué y qué se
-> comprobó para afirmarlo.
+> Cubre `requirements.md` R1–R47. **`fullstack`** desde el 2026-08-24: la mitad de servidor
+> es una **retirada** (el camino de recepción en lote, §15). **Sin migraciones, sin tablas
+> nuevas, sin cambios de RLS y sin endpoints nuevos**: lo que se toca del servidor son una
+> Server Action, un esquema zod, un método de servicio, un método de repositorio y sus dos
+> entradas de interfaz — todo en la dirección de borrar.
+>
+> Secciones §1–§14 son el diseño original; §15–§17 entraron con las cuatro decisiones
+> firmadas y **mandan sobre lo que las contradiga**.
 
 ## 1. Qué hay hoy (medido el 2026-08-24, leyendo el árbol)
 
@@ -65,13 +70,26 @@ página (R19).
 | --- | --- | --- |
 | Ruta | `/recepcion-satelite/por-recibir` | `/recepcion-satelite/en-bodega` |
 | Título (`AppPage`) | «Por recibir» | «En bodega» |
-| Descripción propuesta (Q3) | «Órdenes en camino a tu bodega satélite; se reciben escaneando el QR» | «Órdenes que ya están en tu bodega satélite» |
+| Descripción (Q3, firmada) | «Órdenes en camino a tu bodega satélite. Se reciben escaneando el QR.» | «Órdenes que ya están en tu bodega satélite: asignar a un mensajero, enviar a central o recuperar.» |
 | Módulo cliente | `PorRecibirModule` | `RecepcionSateliteModule` |
 | Acciones de servidor que lee la página | `listarRecepcionSatelite` | `listarRecepcionSatelite`, `listarMensajerosSatelite`, `estadoBloqueoBodegaSatelite`, `listarLiberadasHoy`, `listarOrdenesBodegaPaginado`, `obtenerCatalogoFiltrosOrdenes` |
 
 Ninguna de esas llamadas es nueva: son exactamente las que hoy hace la página única. «Por
 recibir» se queda con **una sola** de ellas, que es además la que ya le da `zonaNombre` y
 `sinZona`.
+
+**Por qué esas dos descripciones (R44).** La de hoy —«Recepción de órdenes de tu bodega
+satélite por escaneo de QR»— describe solo la mitad de arriba: puesta en «En bodega» sería
+falsa (ahí no se recibe: se asigna, se devuelve y se recupera). Se parten en dos, cada una
+diciendo qué hay en SU pantalla y qué se puede hacer con ello:
+- «Por recibir» conserva la instrucción del QR, y ahora carga con más peso: desaparecido el
+  botón, la descripción es el único sitio de la pantalla que dice **cómo** se recibe.
+- «En bodega» enumera las tres acciones de lote reales del listado, para que el título
+  —dos palabras— no sea lo único que oriente. No se nombran los cinco estados: eso lo dice
+  el filtro de estado de la propia barra.
+Ninguna de las dos hereda «Mis asignaciones»: era el nombre del portal del **mensajero**
+viviendo en la pantalla del satélite, y con dos pantallas propias ya no tiene dónde
+agarrarse.
 
 ## 4. Decisión D1 — `/recepcion-satelite` no muere: redirige a «Por recibir»
 
@@ -142,7 +160,7 @@ Es la parte donde esta ficha se puede romper en silencio. Dato por dato:
 | Dato / comportamiento | Hoy | Después | Por qué |
 | --- | --- | --- | --- |
 | `porRecibir` (array de DTO) | prop del módulo único | prop de `PorRecibirModule` | es su contenido |
-| «hay algo por recibir» | se deriva de `porRecibir.length` | `hayPorRecibir: boolean` a `RecepcionSateliteModule` | «En bodega» lo necesita para el escáner (R28) y NO debe recibir las filas (R18) |
+| «hay algo por recibir» | decide si se monta el escáner y la sección | **deja de existir como dato** | Q1: el escáner ya no depende de la lista (R42/R43). `RecepcionSateliteModule` pierde `porRecibir` y **no gana nada a cambio**: R18 se cumple sin transportar ni un booleano |
 | `zonaNombre` | una prop | prop de las DOS | «Por recibir» compone el estado legible de la tarjeta; el listado lo usa igual |
 | `sinZona` | una prop | prop de las DOS | R25/R26/R27 |
 | aviso de zona ausente | literal dentro del módulo | `AvisoSinZonaSatelite`, montado por los dos | R25 exige el MISMO texto; dos copias del literal es la receta conocida de dos listas gemelas que divergen |
@@ -164,6 +182,18 @@ la página».
   escáner ya no es de esta pantalla», la orden recién recibida no aparece hasta recargar, y
   nada se pone rojo salvo el test que R22 obliga a escribir.
 - Las demás acciones del listado (§R23) siguen usando el mismo `releerBodega` intacto.
+
+**La condición del escáner, después de Q1** (R42/R43). Hoy es
+`!sinZona && porRecibir.length > 0`; pasa a ser **`!sinZona`**, en las dos pantallas. La
+mitad que se cae es la del recuento; la que se queda —la zona— no es simetría: es que el
+servidor responde `sin_zona` a ese actor, así que un escáner ahí solo sabría producir un
+error. La lista vacía es otra cosa: el servidor **aceptaría** ese escaneo, y esconder el
+escáner justo entonces es dejar sin herramienta a quien tiene el paquete en la mano (es el
+fallo que la 167 documentó con la recolección del mensajero).
+
+*Efecto colateral que desaparece con esto*: hoy, al recibir la ÚLTIMA orden pendiente, el
+bloque entero se desmontaba con el modal del escáner abierto. Con el escáner incondicional
+ya no puede pasar, en ninguna de las dos pantallas.
 
 **Caso `sinZona`, pantalla por pantalla** (R25–R27), conservando exactamente lo que hoy
 hace la pantalla única:
@@ -216,17 +246,19 @@ bloque JSX de «Por recibir» entero.
 la puerta de reentrada del botón y una mentira en el contrato; el repo ya paga caro las
 props que no hacen lo que dicen. Si mañana hace falta una acción, se decide entonces.
 
-## 9. Decisión D6 — el servidor no se toca (R7), y una corrección de hecho
+## 9. Decisión D6 — del servidor solo se retira el lote (R7)
 
-`recibirPorQr`, `recibirLote`, `RecepcionSateliteService`, `OrdenRepository` y los esquemas
-zod quedan **idénticos**. Lo que cambia es solo qué monta el cliente.
+> **Superada por §15** en su parte de decisión: Q2 se firmó a favor de retirar la cadena
+> del lote. Lo que sigue vigente de esta sección es el límite: **todo lo demás del servidor
+> queda idéntico**, y en particular `recibirPorQr` → `RecepcionSateliteService.recibir()` →
+> `repo.recibirEnSatelite(...)`, con sus guardas y su historial, no se toca ni una línea
+> (R38).
 
-Corrección medida, para que no quede escrita al revés: la ficha dice que `recibirLote` «lo
-usa el escáner». No es así — el escáner llama a `recibirPorQr`
-(`EscanerRecepcion.tsx:105` y `:138`), y `recibirLote` solo lo invocaba el botón que
-desaparece (`RecepcionSateliteModule.tsx:301`). **La decisión no cambia** (no se toca), pero
-el motivo correcto es otro: retirarlo sería backend, y esta ficha no lo es. Queda como Q2 en
-`requirements.md`.
+Corrección de un hecho de la ficha, que conviene no propagar al revés: la ficha decía que
+`recibirLote` «lo usa el escáner». **No es así.** El escáner llama a `recibirPorQr`
+(`EscanerRecepcion.tsx:105` y `:138`) y `recibirLote` solo lo invocaba el botón que
+desaparece (`RecepcionSateliteModule.tsx:301`). Esa corrección es justamente lo que hizo
+posible firmar Q2 sin riesgo: **el QR no comparte camino con el lote** (§15).
 
 ## 10. Decisión D7 — la guardia de no-reintroducción, y cómo se prueba que ve algo
 
@@ -237,10 +269,14 @@ que además incluye el caso «el guard mira archivos que EXISTEN».
 Guardia nueva `tests/unit/guards/satelite-sin-boton-aceptar.guardia.test.ts`:
 
 - **Ámbito**: `PorRecibirModule.tsx`, `RecepcionSateliteModule.tsx`,
-  `PorAceptarSection.tsx`, `SateliteOrderCard.tsx`.
+  `PorAceptarSection.tsx`, `SateliteOrderCard.tsx` y —desde Q2— los dos archivos de
+  servidor de los que se retiró el lote: `lib/actions/recepcion-satelite.ts` y
+  `lib/types/recepcion-satelite.ts`.
 - **Prohibido en código ejecutable** (leído con `quitarComentarios`, para juzgar lo que se
-  ejecuta y no la explicación de por qué ya no está): `recibirLote`, `onAceptarUna`,
-  `textoBotonUna`, `mostrarAcciones`, `aceptarRecepcion`.
+  ejecuta y no la explicación de por qué ya no está): `recibirLote`, `recibirLoteSchema`,
+  `onAceptarUna`, `textoBotonUna`, `mostrarAcciones`, `aceptarRecepcion`.
+  En los dos de servidor el anclaje positivo es `recibirPorQr`: la misma pasada que
+  comprueba que el lote no está demuestra que el QR sigue.
 - **Anti-vacuidad (R31)**, tres capas, porque una guardia que lee mal pasa igual de verde:
   1. los cuatro archivos EXISTEN;
   2. el texto **ya sin comentarios** de cada uno contiene un anclaje POSITIVO conocido
@@ -267,8 +303,9 @@ Ese archivo usa hoy el botón «Aceptar» como «una acción CUALQUIERA de la pa
 del servidor» sin tocar selección, página ni filtros (`releerListado`, líneas 294–304). Al
 morir el botón hay que sustituir el disparador, no el caso.
 
-Sustituto elegido: **la recepción por QR**, montada en «En bodega» con `hayPorRecibir` en
-`true` y `recibirPorQr` doblado a `{ status: "ok" }`. Cumple las tres condiciones (relee,
+Sustituto elegido: **la recepción por QR**, montada en «En bodega» —donde el escáner está
+siempre (R42), así que el montaje no necesita preparar nada— con `recibirPorQr` doblado a
+`{ status: "ok" }`. Cumple las tres condiciones (relee,
 no toca la selección, no toca filtros ni página), y además es coherente con lo que la
 feature establece: recibir es solo por QR. Se conserva intacto el anclaje POSITIVO del
 helper (`waitFor` sobre las remisiones visibles tras la relectura), que es lo que impide
@@ -288,13 +325,14 @@ interface PorRecibirModuleProps {
   sinZona: boolean;
 }
 
-// RecepcionSateliteModule: mismas props de hoy, con UN cambio
+// RecepcionSateliteModule: mismas props de hoy, MENOS una
 - porRecibir: RecepcionSateliteDTO[];
-+ hayPorRecibir: boolean;   // R18: solo si hay, nunca las filas
+// (no la sustituye nada: con el escáner incondicional, «En bodega» no necesita
+//  saber cuántas hay — R18/R42)
 ```
 
-Salidas: ninguna acción nueva, ningún tipo de dominio nuevo, ningún cambio en
-`lib/types/` ni en `lib/interfaces/`.
+Salidas: ninguna acción nueva, ningún tipo de dominio nuevo. En `lib/types/` y
+`lib/interfaces/` **solo se borra** (§15); no se añade nada.
 
 ## 13. Riesgos y vecindad
 
@@ -309,3 +347,154 @@ Salidas: ninguna acción nueva, ningún tipo de dominio nuevo, ningún cambio en
    se dice así en la bitácora: no se afirma que pasen.
 4. **`AppPage title`**: el H1 «Mis asignaciones» del satélite desaparece. Solo lo afirma
    `tests/components/RecepcionSatelitePage.test.tsx:118`, que esta ficha reescribe.
+5. **Guardias que ven por primera vez** (§16): al cerrar el comentario del menú, unas 150
+   líneas dejan de estar ocultas para todo guardia que escanee fuentes. Si alguna se pone
+   roja, es un hallazgo previo, no un daño de esta ficha. Protocolo en `requirements.md`
+   → **P1**.
+
+---
+
+## 15. Decisión D9 — la retirada de la recepción EN LOTE (Q2, `fullstack`)
+
+### 15.1 Por qué se puede retirar sin rozar el QR
+
+Los dos caminos se separan **en el servicio** y no vuelven a tocarse:
+
+```
+recibirPorQr(numGuia)  → Service.recibir()      → repo.recibirEnSatelite(...)        ← SE QUEDA
+recibirLote(ordenIds)  → Service.recibirLote()  → repo.recibirLoteEnSatelite(...)    ← SE VA
+```
+
+Verificado en el árbol el 2026-08-24: `recibirEnSatelite` se invoca en
+`RecepcionSateliteService.ts:392` (dentro de `recibir`) y `recibirLoteEnSatelite` **solo**
+en `RecepcionSateliteService.ts:436` (dentro de `recibirLote`). No hay ningún otro llamador
+de este último en `lib/`, `app/` ni `scripts/`. Son dos métodos distintos, con dos SQL
+distintos (uno `updateMany` guardado por orden, otro `UPDATE … RETURNING` en lote): borrar
+el segundo no puede alterar el primero.
+
+### 15.2 Qué se borra, archivo por archivo (producción)
+
+| Archivo | Qué se va |
+| --- | --- |
+| `app/(app)/recepcion-satelite/_components/RecepcionSateliteModule.tsx` | `aceptarRecepcion` y el import de `recibirLote` (ya en §8) |
+| `app/(app)/_components/PorAceptarSection.tsx` | la mención a `recibirLote` del comentario de cabecera (§8) |
+| `lib/actions/recepcion-satelite.ts` | la Server Action `recibirLote` + sus dos imports (`recibirLoteSchema`, `type RecibirLoteResult`) |
+| `lib/types/recepcion-satelite.ts` | `recibirLoteSchema`, `RecibirLoteActionInput` y `RecibirLoteResult` |
+| `lib/interfaces/services/IRecepcionSateliteService.ts` | `RecibirLoteInput`, `RecibirLoteServiceResult` y el método `recibirLote` del contrato |
+| `lib/services/RecepcionSateliteService.ts` | el método `recibirLote`, el helper `distinct()` (su único llamador era éste, comprobado), la clave `"recibirLoteEnSatelite"` del `Pick` de dependencias y los dos imports de tipo |
+| `lib/repositories/OrdenRepository.ts` | el método `recibirLoteEnSatelite` con su JSDoc |
+| `lib/interfaces/repositories/IOrdenRepository.ts` | la declaración de `recibirLoteEnSatelite` con su JSDoc |
+| `lib/types/orden-guia.ts` | solo la MENCIÓN a `recibirLoteSchema` en un comentario que enumera esquemas hermanos |
+
+**Qué NO se toca del servidor:** `recibirPorQr`, `Service.recibir()`,
+`repo.recibirEnSatelite`, `findByNumGuiaForTransicion`, `findEstatusIdByValue`,
+`appendCambioEstado`, el catálogo de estados, el historial y las constantes
+`ORIGEN_RECEPCION` / `ESTADO_RECIBIDA` (las sigue usando `recibir`).
+
+### 15.3 Los 18 archivos de test: qué se va y qué se queda
+
+**Los 18 se tocan** —ninguno se queda como está— pero por tres motivos distintos, y
+**ninguno se borra entero**. Lo que se borra son los bloques cuyo SUJETO es el lote.
+
+**(A) Muere el sujeto — 3 archivos.** Aquí es donde aplica R40: cada caso, o se repone, o se
+declara muerto por escrito.
+
+| Archivo | Qué se retira | Destino de lo que afirmaba |
+| --- | --- | --- |
+| `tests/unit/services/recepcion-satelite-service.test.ts` | `describe("recibirLote (feature 63)")` (≈457–510), la clave del `Pick` (l. 33) y el doble (l. 80) | **Muere con el código.** Sus seis afirmaciones (rol ≠ adminSatelite, sin zona, lote vacío, dedupe de ids, alcance por zona/estado, conteo) tienen equivalente vivo en el `describe("recibir")` del MISMO archivo para rol, zona y estado; el dedupe y el conteo mueren porque ya no hay lote que deduplicar. Se dice así, en la bitácora |
+| `tests/unit/actions/recepcion-satelite-action.test.ts` | los casos del borde de `recibirLote` (zod, `unauthenticated`, paso al service) | **Muere con el código.** El mismo trío está afirmado sobre `recibirPorQr` en el mismo archivo; se comprueba caso por caso ANTES de borrar, y se anota la correspondencia |
+| `tests/unit/repositories/orden-repository.recepcion-satelite.test.ts` | `describe("OrdenRepository.recibirLoteEnSatelite (feature 63)")` (226+) | **Muere con el código.** Su hermano `recibirEnSatelite` conserva sus casos y es el que sostiene el QR: el `WHERE` que importa sigue probado donde vive |
+
+**(B) Dobles tipados contra la interfaz — 5 archivos, cambio mecánico.** El typecheck los
+denuncia solo (`Partial<IOrdenRepository>` → propiedad de más; `Pick<…, "recibirLoteEnSatelite">`
+→ clave inexistente): `bulk-orden-service.test.ts:94`,
+`bulk-orden-service.carga-api.test.ts:194`, `orden-service.test.ts:122`,
+`rol-admin-satelite-authz.test.ts:134`, `recepcion-satelite-asignadas.test.ts:30,62`.
+
+**(C) Censos escritos a mano — 2 archivos, verdes pero falsos si no se tocan.**
+- `tests/integration/cotizacion-api-key.test.ts:128`: la lista `METODOS_ESCRITURA` alimenta
+  un **Proxy** que acepta cualquier nombre, así que un método inexistente NO pone nada rojo
+  — el propio archivo lo dice: «pasaría igual si el método no existiera». Se retira el
+  nombre **y** se le ata el tipo: `as const satisfies readonly (keyof IOrdenRepository)[]`,
+  que convierte el fallo mudo en error de compilación (R41).
+- `tests/fixtures/inventario-transiciones-140.ts:81`: el `callSite` de la transición
+  `en_ruta_bodega_satelite → en_bodega_satelite` pasa a nombrar solo
+  `RecepcionSateliteService.recibir`. La transición **sigue existiendo**, así que la fila se
+  queda; lo que se corrige es el nombre del sitio que la ejecuta (ese texto es el nombre del
+  caso en `order-status-transiciones.guardia.test.ts`).
+
+**(D) Montajes del módulo — 8 archivos, rojos por la prop, no por el lote.**
+`RecepcionSateliteModule.test.tsx`, `SateliteSeleccionOtrasPaginas.test.tsx:206`,
+`SatelitePaginacion.test.tsx:325`, `SateliteDescarga.test.tsx:191,203`,
+`RecepcionSateliteIncidente.test.tsx:155`, `ManifiestoFlujos.test.tsx:386`,
+`CambiarDiaRepartoListados.test.tsx:195`, `deshacer-asignacion.ui.test.tsx:199`. Se les
+quita `porRecibir` y, **ya que se abren**, la clave inerte `recibirLote: vi.fn()` de sus
+`vi.mock`.
+
+**(E) NO se tocan:** `progress/impl_lote_vacio_schemas.md`, `progress/impl_63-*.md` y los
+`design.md` de las fichas 90, 140 y 149. Son fotos históricas: reescribirlas falsearía el
+registro, igual que un `down.sql` ya aplicado.
+
+**Alternativa descartada — dejar las claves inertes de (D) y el censo de (C) como están.**
+Compila y pasa. Pero (C) deja dos censos afirmando cosas de un método que no existe —el modo
+de fallo favorito de este repo— y (D) deja ocho referencias a una acción borrada que el
+siguiente que lea el archivo creerá viva. Como los ocho archivos hay que abrirlos igual por
+la prop, el ahorro de no tocarlos era cero.
+
+---
+
+## 16. Decisión D10 — el comentario del menú se arregla aquí (Q4), y se MIDE
+
+**El defecto.** `lib/auth/menu-visibility.ts:228` dice, dentro de un comentario de línea:
+
+> `` … `/mis-asignaciones/*` (resuelven el rol server-side). ``
+
+El quitador del repo (`tests/fixtures/sin-comentarios.ts`) hace **primero** la pasada de
+bloques `/\*[\s\S]*?\*\//g` sobre el texto crudo. Ese `/*` abre un bloque que solo se cierra
+en el siguiente `*/` del archivo —el JSDoc de `puedeVer`—, así que el tramo **228 → ~378**
+desaparece del texto que cualquier guardia lee. Ahí dentro viven «Entregas» y sus hijos,
+«Recolección», **el ítem del satélite** (y por tanto los subítems que añade esta ficha),
+«Novedades», «Ranking», «Wallet», «Configuración», los dos cierres e «Incidentes».
+
+**Comprobado el 2026-08-24:** es la **única** línea del archivo con un `/*` dentro de un
+comentario de línea (las otras diez apariciones de `/*` son aperturas legítimas de JSDoc).
+Cerrar ésta devuelve el archivo entero a las guardias.
+
+**El arreglo.** La ruta con comodín pasa a nombrar las dos rutas reales —
+`` `/mis-asignaciones/reparto` y `/mis-asignaciones/recoger` `` — en vez de un patrón. No es
+un parche: es más preciso que el comodín y no puede reabrir el agujero. **No se toca
+`quitarComentarios`** (R47): el agujero de la herramienta es otra ficha.
+
+**Cómo se comprueba que funcionó, midiendo antes y después** (R46). Dos números y una
+pertenencia, tomados con el mismo script en los dos estados del archivo:
+1. líneas no vacías que sobreviven a `quitarComentarios`;
+2. si el texto barrido contiene `label: "Incidentes"` (el ÚLTIMO ítem de la lista: si está,
+   el tramo entero se ve);
+3. si contiene las dos subrutas nuevas del satélite.
+
+Esperado: (2) y (3) pasan de `false` a `true`, y (1) sube. Los tres quedan escritos en la
+bitácora con su valor real. Lo que se afirma para siempre es (2)+(3), como caso permanente
+en `tests/unit/auth/menu-visibility.test.ts` («el fuente del menú sigue siendo legible para
+las guardias»): si mañana alguien vuelve a escribir un comodín en un comentario, ese caso se
+pone rojo en vez de dejar ciegas a las demás.
+
+**Lo que NO cambia con esto:** la comprobación de los subítems sigue haciéndose sobre el
+**valor** `SIDEBAR_ITEMS` (R32). Que el fuente vuelva a ser legible es defensa en
+profundidad, no un permiso para volver a juzgar el menú leyendo texto.
+
+---
+
+## 17. Orden de ejecución y gate
+
+La retirada del lote **no compila a medias**: entre borrar la acción y borrar el método del
+repositorio hay estados intermedios rojos. Se hace en UNA tanda, en este orden —consumidor
+primero, contrato después—, y se comitea junta:
+
+```
+componente → acción → schema/tipos → servicio → interfaz de servicio
+           → repositorio → interfaz de repositorio → censos y dobles
+```
+
+**El gate rápido va a negarse** o, si no se niega, no basta: el diff toca `lib/types/`, que
+es uno de los cimientos que mandan al completo. Esta ficha corre **`./init.sh` completo**
+antes de dar nada por hecho, y el `INIT_EXIT=$?` se escribe DENTRO del log.
