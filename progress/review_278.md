@@ -1,5 +1,9 @@
 # Revisión — Feature 278 · el portal del `adminSatelite` se parte en «Por recibir» y «En bodega»
 
+> ⚠️ **ESTE ARCHIVO TIENE DOS RONDAS.** Lo que sigue —§1 a §9— es la **ronda 1**, que terminó en
+> **RECHAZADO** con 3 bloqueantes, y se conserva íntegra a propósito: es la evidencia de qué se
+> midió y por qué. **El veredicto que manda es el de la ronda 2, en §10–§12** (final del archivo).
+
 > Rama `feature/278-satelite-por-recibir-y-bodega`, HEAD `c9281ef5`, 6 commits sobre `dev`
 > (`6c00ba9e`, base común verificada). Revisión del 2026-08-24.
 > **Veredicto: RECHAZADO — 3 bloqueantes.**
@@ -377,3 +381,202 @@ cuya remedición no reproduce (B2), y la ficha que sigue afirmando lo que la bit
 
 B1 y B3 son de minutos. **B2 es el que importa**: hay que arreglar la línea de partida del caso y
 volver a medir la mutación **con el archivo completo**, no con `-t`.
+
+---
+---
+
+# RONDA 2 — 2026-08-24, sobre `3fd7555b`
+
+> Los tres bloqueantes se dan por cerrados en tres commits (`ca7e8327` B3, `09d9c292` B2,
+> `3fd7555b` B1). **No se dan por buenos: se vuelven a medir.** Nada de esta sección se hereda
+> de la bitácora ni del mensaje del coordinador.
+
+## 10. Lo que corrí en esta ronda
+
+`pnpm run db:generate` primero, y después:
+
+| Qué | Resultado |
+| --- | --- |
+| `./init.sh` completo **sobre el árbol limpio** | `Test Files 1377 passed (1377)` · `Tests 18754 passed \| 26 skipped (18780)` · 379,04 s · **`INIT_EXIT=0`** |
+| `pnpm test` completo **sin el `mutate()`** | `Test Files 2 failed \| 1375 passed (1377)` · `Tests 4 failed \| 18750 passed \| 26 skipped` · **`TEST_EXIT=1`** |
+| Sonda en `deshacer-asignacion.ui.test.tsx:494`, **en la suite entera** | **PASA** |
+| Mutación (f): el comodín vuelve al comentario del menú | 🔴 `2 failed \| 45 passed` |
+| Mutación de R21: fuera el `router.refresh()` de `PorRecibirModule` | 🔴 `1 failed \| 9 passed (10)` |
+| Censo propio de «delta contra foto» sobre **todo** `tests/` | 5 sitios; 2 en esta entrega |
+
+El gate limpio da **el mismo número que en la ronda 1** (1377 / 18.754), que es lo que cabía
+esperar: B2 no añadió ni quitó casos, reescribió uno. `git diff` vacío al terminar todo.
+
+---
+
+## 11. Los tres bloqueantes, remedidos
+
+### B2 — CERRADO. La mutación cae en la suite completa, y cae por la razón buena
+
+Quité `await mutate()` de `releerBodega` y corrí **`pnpm test` entero**, no `-t`:
+
+```
+Test Files  2 failed | 1375 passed (1377)
+Tests       4 failed | 18750 passed | 26 skipped (18780)
+TEST_EXIT=1
+```
+
+Los cuatro fallos, uno a uno:
+
+```
+FAIL tests/components/RecepcionSateliteModule.test.tsx > R22: recibir por guía mete la orden…
+     AssertionError: expected 1 to be greater than 1
+FAIL tests/components/paginacion/SateliteSeleccionOtrasPaginas.test.tsx > … (R18/R25)
+FAIL tests/components/paginacion/SateliteSeleccionOtrasPaginas.test.tsx > … (R25)
+FAIL tests/components/paginacion/SateliteSeleccionOtrasPaginas.test.tsx > … (R22 de la 184)
+```
+
+**Cae por la razón que dice, no por casualidad.** El mensaje es `expected 1 to be greater than
+1`: es la mitad (1) del caso —la lectura nueva— fallando **con el punto de partida ya asentado en
+1**. En la ronda 1 ese mismo par de números era `0 → 1` y por eso pasaba. La diferencia entre las
+dos rondas está exactamente donde el arreglo dice que está.
+
+**El arreglo es el correcto, y lo comprobé leyéndolo.** No es esperar más: el servidor responde
+primero una fila sentinela (`REM-MONTAJE`) que **no viene en el `fallbackData`** —el `fallbackData`
+son las `recibidas`, y la sentinela no está ahí—, así que verla pintada demuestra en el DOM que la
+revalidación de montaje ya aterrizó. Sólo entonces cambia la respuesta. Tres cosas más que sí
+importan:
+
+- **La propiedad doble se conserva y se refuerza**: (1) hubo lectura nueva tras el punto de partida
+  y (2) lo que trajo se pintó — ahora con las dos direcciones, **entra `REM-NUEVA` y sale
+  `REM-MONTAJE`**. Recortar cualquiera de las dos devuelve el `mutate()` a ser un no-op.
+- **Mi hallazgo quedó clavado como aserción**: `expect(lecturasAntes).toBeGreaterThan(0)`. Si mañana
+  la foto vuelve a tomarse antes de tiempo, el caso se pone rojo **por eso**, con ese mensaje.
+- **El fix no toca producción.** `git show --numstat 09d9c292` → el test, la bitácora y el log del
+  gate. Ni una línea de `app/` ni de `lib/`. Que es lo que tenía que ser: el `mutate()` de
+  producción siempre estuvo bien; lo que no medía era el test.
+
+Y la bitácora se corrige a sí misma: §17 lleva ahora un aviso de que su remedición era la foto de
+`-t` y **no reproducía**, apuntando a §20. Eso también cuenta.
+
+### B3 — CERRADO. Ninguna afirmación falsa queda dentro
+
+```
+grep -o "esconde 79 lineas" feature_list.json | wc -l   ->   0     (eran 2)
+status_note de la 278: 1052 caracteres                          (eran 4286)
+```
+
+«recibirLote SE QUEDA» desaparecido. **Fact-checked frase por frase** contra mis propias medidas:
+
+| Lo que afirma la nota nueva | Mi medida |
+| --- | --- |
+| gate completo `INIT_EXIT=0`, 1377 archivos / 18.754 tests | ✅ idéntico, dos veces |
+| línea 228 abre bloque y cierra en la 378 → 151 líneas invisibles | ✅ confirmado con `awk` |
+| «76 líneas visibles antes, **160** ahora» | ✅ — y **el número correcto**: la nota vieja decía 156, que era el intermedio |
+| 141 archivos / 2.096 casos de guardias verdes antes de los subítems | ✅ cuadra con 142 / 2.140 de HEAD menos la guardia nueva (1 / 44) |
+| `recibirLote` retirada entera, 20 casos con 20 destinos, QR intacto | ✅ verificado en la ronda 1 |
+
+No encontré ninguna afirmación falsa. Y de paso cierra la mitad del menor **m2**: la ficha ya dice
+160.
+
+### B1 — CERRADO. 38 de 38, y no se marcó de más
+
+```
+grep -c "^- \[x\]"  ->  38        grep -c "^- \[ \]"  ->  0
+```
+
+Lo primero que miré es lo que de verdad podía salir mal: **que el commit hubiera bajado el listón
+de alguna tarea para poder marcarla**. `git show --numstat 3fd7555b` toca **sólo `tasks.md`**, y su
+diff son las 38 casillas volteadas **más** la sección «Marcado de las casillas»: **ni un criterio de
+«Hecho» reescrito**. Después verifiqué a mano una muestra de los que se pueden falsificar barato:
+
+| Tarea | Su criterio de «Hecho» | Medido |
+| --- | --- | --- |
+| T1.6 | «(b) FALLA si se revierte T1.0 — si no falla, el caso no vale» | Reinyecté el comodín: 🔴 `2 failed \| 45 passed` (R45 **y** R46) |
+| T3.3 | «un solo sitio en el árbol contiene ese texto» | El literal exacto aparece **1 vez**, en `AvisoSinZonaSatelite.tsx`; los otros cinco parecidos son textos distintos |
+| T3B.4 | «el comentario no nombra ningún esquema inexistente» | `grep -c recibirLoteSchema lib/types/orden-guia.ts` → **0** |
+| T3B.5 | «el `callSite` pasa a nombrar sólo `RecepcionSateliteService.recibir`» | ✅ literal en `inventario-transiciones-140.ts:81` |
+| T6.2 | «la ruta del documento existe en el árbol» | `docs/release.md:133` apunta a `/recepcion-satelite/en-bodega`, y esa `page.tsx` existe |
+| T3.5 | «ningún consumidor la pasaba» | Ya probado en la ronda 1: pasar `acciones=` no renderiza nada porque la prop no existe |
+
+Y lo que más me importaba de esta casilla: **los e2e quedan declarados como NO ejecutados y
+explícitamente fuera de la cobertura**, en vez de colarse como trabajo hecho. Está escrito en la
+sección nueva y en los tres archivos.
+
+---
+
+## 12. El censo de «delta contra foto»: dos dentro, tres fuera
+
+El implementer declara **dos** sitios y acota el alcance por escrito: «**censados los archivos de
+esta entrega**». Hice mi propio barrido, sin heredar el suyo y **sin acotarlo**: un script sobre
+**todo** `tests/` que busca la forma exacta —una foto `const X = <mock>.mock.calls.length` y, más
+abajo, una aserción de **crecimiento** contra esa misma variable—. Salen **cinco**:
+
+| Sitio | ¿lo toca la 278? | ¿productor de fondo? | Estado |
+| --- | --- | --- | --- |
+| `tests/components/RecepcionSateliteModule.test.tsx` 473 → 497 | **sí** | SWR | **era el defecto; arreglado y remedido** |
+| `tests/unit/components/deshacer-asignacion.ui.test.tsx` 494 → 502 | **sí** | SWR | **sano — medido, ver abajo** |
+| `tests/components/ActualizarAnalitica.test.tsx` 148 → 163 | no | usa SWR | ajeno, **no censado por él** |
+| `tests/components/NotificationsBell.test.tsx` 293 → 298 | no | usa SWR | ajeno, **no censado por él** |
+| `tests/components/TableroOperativo.test.tsx` 620 → 627 | no | usa SWR | ajeno, **no censado por él** |
+
+**Dentro del alcance que declara, el «exactamente dos» es correcto y lo confirmo por mi cuenta.**
+Ninguno de los otros tres lo toca esta rama (`git log 6c00ba9e..HEAD --` sobre cada uno: vacío), así
+que no son deuda de la 278 ni bloquean nada aquí.
+
+**Pero existen, y tienen los dos ingredientes** —la foto contra la que se mide el delta y un SWR
+detrás que puede moverla sola—. No digo que estén rotos: digo que **nadie los ha medido**, que es
+justo lo que hizo falta para destapar el de R22, y que la forma es idéntica. **Recomiendo ficha
+aparte** para pasarles la misma sonda; es barato y el precedente ya está escrito. La otra forma
+frecuente en el árbol —foto y luego `toBe(foto)`, «no volvió a leer»— **no** tiene este problema: un
+productor de fondo la pone en rojo, no en verde falso.
+
+**La sonda del que sí es suyo, verificada por mí y no leída.** Inyecté
+`expect(llamadasPrevias, 'SONDA REVIEWER').toBeGreaterThan(0)` en el caso R38 de
+`deshacer-asignacion.ui.test.tsx` y lo corrí **en la suite entera** (en la misma pasada que la
+mutación, y sin riesgo de contaminación: ese caso monta `OrdenesListado`, no
+`RecepcionSateliteModule`). **No aparece entre los cuatro fallos: pasa.** Su baseline sí está
+asentado, porque se toma tras tres interacciones `await`. Sano, y correctamente dejado sin tocar
+por ser ajeno.
+
+**Y el hermano directo, R21, también medido**: quitando el `router.refresh()` del `onRecibida` de
+`PorRecibirModule`, `PorRecibirModule.test.tsx` sale `1 failed | 9 passed (10)`, en «R21: tras
+recibir por guía se relee del servidor». Muerde.
+
+---
+
+## 13. Hallazgos que quedan (ninguno bloqueante)
+
+- **m1 · R31 al pie de la letra.** Sin cambios respecto a la ronda 1: los 36 `not.toContain` de la
+  guardia llevan su anti-vacuidad en casos aparte y no dentro. La protección real se sostiene y el
+  diseño lo hace así a propósito. Se mantiene como anotación.
+- **m2 · el «156», ya sólo en los comentarios.** La ficha se corrigió a **160** (B3), pero el 156
+  sigue escrito en tres comentarios de código: `lib/auth/menu-visibility.ts`, la cabecera de
+  `satelite-sin-boton-aceptar.guardia.test.ts` y la de `menu-visibility.test.ts`. No es falso —es el
+  valor del arreglo aislado— pero quien mida hoy obtiene 160. Una cláusula lo cierra.
+- **m3 · dos aserciones algo menos específicas**, ambas con su destino escrito bajo R40. Sin cambios.
+- **m4 · el texto del aviso no lo fija nadie**, por diseño de R25 (fuente única). Sin cambios.
+- **m5 · `progress/history.md` sin entrada.** Pendiente del cierre, posterior a esta revisión.
+- **m6 · NUEVO: tres sitios ajenos con la misma forma que B2** (§12). Fuera del alcance de la 278.
+  **Recomendado abrir ficha**, no arreglarlos aquí: son de otras features y meterlos en ésta es
+  exactamente lo que P1 obligaba a contar por separado.
+
+---
+
+## 14. Cómo cierra cada bloqueante de la ronda 1
+
+| # | Ronda 1 | Ronda 2 | Cómo lo comprobé |
+| --- | --- | --- | --- |
+| **B1** | `tasks.md` 0 de 38 | **CERRADO** | 38/38, `git show --numstat` prueba que sólo se voltearon casillas; muestreo de 6 criterios de «Hecho», uno de ellos remedido con la mutación (f) |
+| **B2** | el caso de R22 verde con el `mutate()` fuera | **CERRADO** | `pnpm test` **entero** sin `mutate()`: `4 failed`, `TEST_EXIT=1`, y el fallo de R22 es `expected 1 to be greater than 1` — la mitad correcta, con el baseline ya asentado |
+| **B3** | la ficha afirmaba lo que la bitácora daba por corregido | **CERRADO** | `grep` a 0; nota de 4286 → 1052 caracteres; cada frase contrastada contra mis medidas |
+
+---
+
+## VEREDICTO FINAL (ronda 2): **OK**
+
+**0 bloqueantes.** Los tres de la ronda 1 están cerrados y **remedidos por mí**, no aceptados: el
+gate completo me da `INIT_EXIT=0` con 1377 archivos / 18.754 tests, y la mutación que la ronda 1
+destapó **cae en la suite entera** con el mensaje que le corresponde.
+
+Lo que hace que esto sea un OK y no un «ya está verde»: **B2 se cerró midiendo, y el arreglo dejó el
+propio fallo convertido en aserción**. Un caso que estuvo verde sin cubrir nada ahora se pone rojo si
+vuelve a estarlo, y por el motivo exacto. El resto son cinco menores anotados, uno de ellos —los tres
+sitios ajenos con la misma forma— **con recomendación de ficha propia**.
+
+Queda pendiente de cierre, y no es deuda del implementer: la entrada en `progress/history.md`.
