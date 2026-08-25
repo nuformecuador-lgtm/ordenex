@@ -48,7 +48,6 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
 const { paginadoBodegaMock } = vi.hoisted(() => ({ paginadoBodegaMock: vi.fn() }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   listarOrdenesBodegaPaginado: (...args: unknown[]) => paginadoBodegaMock(...args),
@@ -383,7 +382,6 @@ describe("Feature 148 — enganche del manifiesto en los 5 flujos", () => {
     });
     render(
       <RecepcionSateliteModule
-        porRecibir={[]}
         ordenesBodega={paginaBodega(porDevolver)}
         catalogoFiltros={catalogoSatelite(porDevolver)}
         zonaNombre="Limón"

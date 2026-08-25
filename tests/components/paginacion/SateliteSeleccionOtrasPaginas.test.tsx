@@ -44,17 +44,23 @@ import { catalogoSatelite, paginaBodega } from "@/tests/fixtures/satelite-bodega
 
 // --- Dobles ---------------------------------------------------------------
 
-const { paginadoMock, vigenciaMock, recibirLoteMock } = vi.hoisted(() => ({
+const { paginadoMock, vigenciaMock, recibirPorQrMock } = vi.hoisted(() => ({
   paginadoMock: vi.fn(),
   /** T A.5: la comprobación con la que la pantalla poda la selección. */
   vigenciaMock: vi.fn(),
-  /** Una acción CUALQUIERA de la pantalla que relee del servidor, para disparar la poda. */
-  recibirLoteMock: vi.fn(),
+  /**
+   * Una acción CUALQUIERA de la pantalla que relee del servidor, para disparar la poda.
+   *
+   * Feature 279 (T4.3, diseño §11): era el botón "Aceptar" de «Por recibir», que cableaba
+   * `recibirLote`. Esa Server Action se retiró entera (recibir es SOLO por QR), así que el
+   * disparador pasa a ser la recepción por guía del escáner, que cumple las mismas TRES
+   * condiciones: relee del servidor, no toca la selección y no toca filtros ni página.
+   */
+  recibirPorQrMock: vi.fn(),
 }));
 
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
-  recibirPorQr: vi.fn(),
-  recibirLote: (...a: unknown[]) => recibirLoteMock(...a),
+  recibirPorQr: (...a: unknown[]) => recibirPorQrMock(...a),
   asignarDesdeSatelite: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),
@@ -99,8 +105,11 @@ const PAGE_SIZE = 3;
 
 const LISTADO = "Órdenes de la bodega";
 const PAGINACION = "Paginación de las órdenes de la bodega";
-/** La sección de arriba: su botón es la acción que relee el listado sin tocar la selección. */
-const ACEPTAR = "Aceptar";
+/** El escáner de la pantalla: recibir por guía relee el listado sin tocar la selección. */
+const ABRIR_ESCANER = "Recibir paquete";
+const RECIBIR = "Recibir";
+/** Una guía cualquiera: lo que importa es que la recepción entre y dispare la relectura. */
+const GUIA_TECLEADA = "1001";
 
 function etiqueta(i: number): string {
   return `REM-${String(i).padStart(2, "0")}`;
@@ -135,13 +144,11 @@ const CONJUNTO: RecepcionSateliteDTO[] = Array.from({ length: TOTAL }, (_, k) =>
   orden(k + 1),
 );
 
-/** Una orden de «Por recibir»: no entra al listado, sólo da un botón que relee del servidor. */
-const POR_RECIBIR: RecepcionSateliteDTO = {
-  ...orden(9),
-  id: "o-9",
-  numRemision: "REM-09",
-  estatusValue: "en_ruta_bodega_satelite",
-};
+// Feature 279 (T4.3b): aquí vivía `POR_RECIBIR`, una orden `en_ruta_bodega_satelite` que
+// este archivo inyectaba SÓLO para tener un botón que releyera del servidor. Ese botón
+// murió con `recibirLote` y su sustituto es la recepción por QR, que no necesita ninguna
+// orden montada: el escáner está siempre (R42). La prop `porRecibir` tampoco existe ya en
+// este módulo, que es la pantalla «En bodega».
 
 // --- Andamiaje -----------------------------------------------------------
 
@@ -199,11 +206,14 @@ function montar() {
   vivas = [...CONJUNTO];
   servirPaginas();
   servirVigencia();
-  recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 1 });
+  recibirPorQrMock.mockResolvedValue({
+    status: "ok",
+    ordenId: "o-1",
+    estado: "en_bodega_satelite",
+  });
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={[POR_RECIBIR]}
         ordenesBodega={paginaBodega(CONJUNTO.slice(0, PAGE_SIZE), {
           total: TOTAL,
           pageSize: PAGE_SIZE,
@@ -285,21 +295,30 @@ async function irAPagina(
 }
 
 /**
- * Dispara una RELECTURA del listado sin tocar la selección, la página ni los filtros: acepta
- * la orden de «Por recibir», que es una acción de otra sección de la pantalla y termina —como
- * todas— releyendo del servidor. Se ancla a que la tabla enseñe las filas nuevas, que es la
+ * Dispara una RELECTURA del listado sin tocar la selección, la página ni los filtros: recibe
+ * una orden por QR desde el escáner de la pantalla, que termina —como todas las acciones de
+ * aquí— releyendo del servidor. Se ancla a que la tabla enseñe las filas nuevas, que es la
  * señal POSITIVA de que la lectura llegó (esperar a que «algo desaparezca» se cumple también
  * antes de que la acción empiece).
+ *
+ * Feature 279 (T4.3, diseño §11): antes era el botón "Aceptar" de «Por recibir». Murió con
+ * `recibirLote`; el sustituto es la ÚNICA vía de recepción que queda, y es coherente con lo
+ * que la ficha establece. El camino usado es el MANUAL (número de guía tecleado), que no
+ * necesita cámara: el de la cámara vive en `EscanerRecepcion.test.tsx`.
  */
 async function releerListado(
   user: ReturnType<typeof userEvent.setup>,
   visiblesTrasLaRelectura: string[],
 ) {
-  await user.click(
-    within(screen.getByRole("region", { name: "Por recibir" })).getByRole("button", {
-      name: ACEPTAR,
-    }),
-  );
+  await user.click(screen.getByRole("button", { name: ABRIR_ESCANER }));
+  const modal = await screen.findByRole("dialog");
+  await user.type(within(modal).getByRole("textbox"), GUIA_TECLEADA);
+  await user.click(within(modal).getByRole("button", { name: RECIBIR }));
+  await waitFor(() => expect(recibirPorQrMock).toHaveBeenCalled());
+  // El escáner vive en un modal, y mientras está abierto el resto de la página queda
+  // `aria-hidden`: sin cerrarlo, la tabla que este archivo juzga no existe para las queries.
+  await user.click(within(modal).getByRole("button", { name: /Cerrar/ }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   await waitFor(() => expect(remisionesVisibles()).toEqual(visiblesTrasLaRelectura));
 }
 

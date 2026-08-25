@@ -79,7 +79,6 @@ const { paginadoMock, completoMock, compuestoMock } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
-  recibirLote: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
   listarRecepcionSatelite: (...a: unknown[]) => compuestoMock(...a),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),
@@ -200,7 +199,6 @@ function renderModulo(ordenes: RecepcionSateliteDTO[] = ORDENES) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={[]}
         ordenesBodega={paginaBodega(ordenes)}
         catalogoFiltros={catalogoSatelite(ordenes)}
         zonaNombre={ZONA_ACTOR}

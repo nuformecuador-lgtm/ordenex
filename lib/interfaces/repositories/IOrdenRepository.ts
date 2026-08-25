@@ -1412,26 +1412,6 @@ export interface IOrdenRepository {
     historial: HistorialContexto,
   ): Promise<boolean>;
 
-  /**
-   * Feature 63 — recepcion EN LOTE en la bodega satelite (paridad con el "Recoger
-   * todas" del mensajero). Transiciona un lote de ordenes a `en_bodega_satelite`
-   * con escritura GUARDADA por estado de ORIGEN + zona (patron `asignarSateliteLote`):
-   * UPDATE raw con `WHERE id IN (ordenIds) AND estatus_id = origenEstatusId AND
-   * zona_id = zonaId AND deleted_at IS NULL RETURNING "id"` dentro de un
-   * `$transaction`, + append de historial (origenTipo `recepcion_satelite`) de EXACTAMENTE
-   * las filas retornadas, en la MISMA tx. Concurrencia-segura e idempotente: una orden
-   * de otra zona, en otro estado, borrada o re-ejecutada NO aparece en el RETURNING
-   * (no se toca, no deja rastro). NO toca `mensajeroAsignadoId` ni `numGuia`. Devuelve
-   * el numero de filas efectivamente recibidas.
-   */
-  recibirLoteEnSatelite(
-    ordenIds: string[],
-    zonaId: string,
-    origenEstatusId: string,
-    destinoEstatusId: string,
-    historial: HistorialContexto,
-  ): Promise<number>;
-
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**

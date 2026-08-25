@@ -23,14 +23,6 @@ export const recibirSchema = z.object({
 });
 export type RecibirActionInput = z.infer<typeof recibirSchema>;
 
-// Feature 63 — borde de la recepcion EN LOTE ("Aceptar/Recibir todas"): lista NO vacia
-// de ids de orden (mismo formato que `recibir`, texto no vacio). Un input invalido ->
-// ZodError -> validation_error ANTES del service, sin tocar datos.
-export const recibirLoteSchema = z.object({
-  ordenIds: z.array(z.string().trim().min(1)).min(1),
-});
-export type RecibirLoteActionInput = z.infer<typeof recibirLoteSchema>;
-
 /**
  * Feature 170 — FASE 2 (T K.1, R40/R44/R45) — borde del listado «Órdenes de la bodega»
  * paginado: `page`/`pageSize` (de `paginaInputSchema`, con el tamaño del dominio) mas los
@@ -213,16 +205,6 @@ export type RecibirResult =
   | { status: "validation_error"; fieldErrors: Record<string, string[]> }
   | { status: "conflict" }
   | { status: "unauthenticated" }; // R16 / R3 (borde)
-
-// Feature 63 — resultado expuesto por `recibirLote` (agrega `unauthenticated` del
-// borde; el resto son resultados de dominio del service). Espejo de
-// `RecibirLoteServiceResult`.
-export type RecibirLoteResult =
-  | { status: "ok"; recibidas: number }
-  | { status: "forbidden" }
-  | { status: "sin_zona" }
-  | { status: "validation_error"; fieldErrors: Record<string, string[]> }
-  | { status: "unauthenticated" };
 
 // --- Feature 34: asignacion satelite a mensajeros de la zona ---
 
