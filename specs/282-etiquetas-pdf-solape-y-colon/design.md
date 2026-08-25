@@ -263,7 +263,14 @@ el test no vale.
 |---|---|---|---|
 | Artefacto que ships (`etiquetas-fuente.ts`, base64) | **80 KB** (81 920 chars) | ≤ 45 KB | guardia ejecutable sobre `base64.length` |
 | Chunk diferido en el navegador | ≈ el anterior | — | tamaño del `.js` en `.next/static/chunks` que contiene el base64 |
-| **First Load JS de `/ordenes`** | **+0 KB** | +0 KB | salida de `next build` antes/después |
+| **First Load JS de `/ordenes`** | **+0 KB** ⚠️ | +0 KB | salida de `next build` antes/después |
+
+> ⚠️ **Corregido el 2026-08-25 (Q10).** Esta fila se escribió cuando la fuente
+> sólo se cargaba al **generar el PDF**. Con la paridad de la vista previa, el
+> momento de carga se adelanta a **abrir el modal**. El `+0 KB` de carga inicial
+> **sigue en pie, pero ahora con una condición explícita** que hay que verificar,
+> no desear: ver **§19.2**. La cifra de bytes no cambia (§19.1: un solo
+> artefacto, no dos).
 | `/FontFile2` dentro de cada PDF | **12 KB** | ≤ 6 KB | longitud del stream, afirmada en test (R15) |
 | Peso del PDF de 1 etiqueta | +12 KB máx. | — | `doc.output("arraybuffer").byteLength` |
 
@@ -603,3 +610,137 @@ El gate sigue siendo `./init.sh --rapido`: el diff no toca migraciones,
 de dinero. Sí toca `lib/pdf/` y `app/api/…` sólo de rebote (nada de las rutas
 cambia), así que conviene correr además los tests de integración de la carga por
 API antes del PR.
+
+---
+
+# Cierre del 2026-08-25 — Q7 a Q10
+
+## 17. El corpus deja de ser una suposición: está medido
+
+Medida en solo-lectura contra producción, **todas las órdenes vivas**, sobre los
+campos que la etiqueta imprime (destinatario, dirección, producto, teléfono,
+remisión, nombres de usuario): **75 caracteres distintos**, **6 fuera de ASCII**
+(`á é í ñ ó ú`) y **cero fuera de Latin-1**.
+
+Qué cambia con eso:
+
+| Antes (estimado) | Ahora (medido) |
+|---|---|
+| «¿el corpus de formas basta?» (Q7) | el corpus de `design.md` §13 **añade** los seis caracteres reales y R34 exige que se impriman |
+| «¿y si el subconjunto no cabe?» (Q6/Q8) | cp1252 cubre el 100 % de lo medido **con mucho margen**: el peso deja de ser un riesgo, pero **se sigue midiendo** (R14) porque el número hay que saberlo |
+
+**Y esto caduca.** Es la foto de un día. Un `ü`, una `Á`, un guion largo o unas
+comillas tipográficas que entren mañana por la carga masiva **no están en la
+medida**, aunque sigan dentro de cp1252; y nada garantiza que no aparezca un
+carácter fuera de cp1252. Por eso la medida justifica **el tamaño** del
+subconjunto y **no sustituye** a R28: el fallo visible en tiempo de ejecución es
+lo que convierte esta foto en algo seguro. La medida y su fecha quedan escritas
+en `requirements.md` para que dentro de seis meses nadie la lea como una ley.
+
+## 18. Coste aceptado con firma (Q9)
+
+**Se embebe cp1252 completo**, contra la opción del subconjunto mínimo, para que
+ningún nombre ni dirección futura pueda quedarse fuera. Con ello se **acepta**,
+firmado, el crecimiento en Storage de los PDF individuales:
+
+| Modo | Antes | Después |
+|---|---|---|
+| Consolidado, 300 etiquetas | ~1 MB | ~1 MB (+1 %) |
+| **Individual, 300 PDF** | **~1 MB** | **~4 MB** (×3-4) |
+
+No es una advertencia ni un riesgo pendiente: es un coste decidido. Se registra
+en `progress/impl_282.md` con la cifra real medida (T22) para que se pueda
+seguir en el tiempo, no para volver a discutirlo.
+
+## 19. Paridad tipográfica en la vista previa (Q10)
+
+Firmado: el importe de la vista previa (`EtiquetaGuia.tsx`) se pinta con la misma
+fuente que el PDF. Eso **invalida** la redacción vieja de R13 y la fila del
+presupuesto del §5.1, corregidas ambas con fecha.
+
+### 19.1 Mecanismo: un artefacto, dos consumidores
+
+El navegador registra la fuente **desde los mismos bytes** que jsPDF, con la API
+`FontFace`:
+
+```
+cargarFuenteEtiqueta()            // import() dinámico del artefacto (ya previsto)
+  → base64 → ArrayBuffer
+  → new FontFace(fuente.nombre, buffer)   → document.fonts.add(...)   // pantalla
+  → doc.addFileToVFS / doc.addFont(...)                               // PDF
+```
+
+`asegurarFuenteEnPantalla(fuente)` es **idempotente** (si la familia ya está
+registrada, no repite) y vive en
+`app/(app)/ordenes/_components/etiquetas-fuente-carga.ts`, junto al `import()`.
+La vista previa aplica esa familia **sólo al valor del monto**, que es
+exactamente donde el PDF la usa (§3.2): la paridad es entre lo que se compara,
+no un cambio de tipografía de toda la pantalla.
+
+Por qué `FontFace` y no una `@font-face` de CSS con un `.woff2` en `public/`:
+sería **una segunda copia** del archivo (otro formato, otro peso, otra
+actualización que olvidar) y la paridad pasaría a depender de que las dos copias
+sigan siendo la misma fuente. Con `FontFace` la paridad es **por construcción**:
+mismos bytes, misma familia. R31 exige justamente eso.
+
+### 19.2 Presupuesto revisado, con su condición
+
+| Concepto | Antes de Q10 | Después de Q10 |
+|---|---|---|
+| Bytes del artefacto en el navegador | ~47-60 KB (base64) | **los mismos**: un artefacto, no dos |
+| **First Load JS de `/ordenes`** | +0 KB | **+0 KB, con condición** (abajo) |
+| Momento de la descarga | al pulsar «Descargar etiquetas» | **al abrir el modal** «Imprimir etiquetas» |
+| Peticiones de red por sesión | 1 (si descarga) | 1 (si abre el modal), cacheada |
+
+**La condición del `+0 KB`**, que hay que verificar y no dar por hecha:
+
+1. el artefacto se referencia **sólo** dentro del `import()` del cargador —lo
+   vigila la guardia de T5—;
+2. la vista previa **no** se renderiza en la carga inicial de `/ordenes`: el
+   modal se monta bajo demanda. Si algún día el listado renderizara la vista
+   previa de entrada, el `+0 KB` dejaría de ser cierto **y la guardia no lo
+   vería**: por eso T30 vuelve a medir el `next build` después de la paridad, y
+   la cifra se anota otra vez.
+
+Lo que sí cambia para el usuario: el chunk se pide antes (al abrir el modal). El
+importe se pinta con la tipografía del sistema hasta que la fuente llega, y
+entonces se repinta. Es el comportamiento normal de una fuente web; no se
+bloquea la vista previa esperándola (R33).
+
+### 19.3 Cómo se comprueba la paridad (R32)
+
+No se afirma: se comprueba, en tres piezas que ya no dependen de que alguien mire
+la pantalla.
+
+1. **Mismo origen.** Un test afirma que la vista previa y el generador de PDF
+   obtienen la fuente del **mismo módulo** (mismo `nombre` y mismo `base64`): si
+   alguien añadiera una segunda copia, sale rojo.
+2. **Aplicada donde toca.** En jsdom, el importe de `EtiquetaGuia.tsx` tiene como
+   **primera** familia de su `font-family` la registrada desde el artefacto, y
+   `document.fonts` contiene una `FontFace` con ese nombre creada desde esos
+   bytes (se espía `document.fonts.add`, porque jsdom no rasteriza).
+3. **La misma familia en el PDF.** El nombre de familia registrado en pantalla es
+   idéntico al `/BaseFont` con el que el PDF dibuja el monto — que ya se extrae
+   para R8. Es decir: **el mismo identificador comprobado en los dos lados**, no
+   dos aserciones independientes que podrían derivar.
+
+Lo que estas tres piezas **no** prueban es que los píxeles coincidan (jsdom no
+pinta, y Q4 cerró que no se añade rasterizador). Esa parte la cubre la
+comprobación a ojo de T15, ahora ampliada: abrir el modal y el PDF y comparar el
+importe.
+
+## 20. Q8, cerrado por la medida
+
+El riesgo que Q8 planteaba —que el subconjunto necesario no cupiera en el
+presupuesto— desaparece con la medida del §17: cp1252 cubre lo que se imprime hoy
+con margen, y ése era el tamaño que ya se había presupuestado. Se mantiene
+intacta la obligación de **medir** (`f` por documento en el servidor, §11.3, y el
+`next build` en el navegador, §5.2): el riesgo se cierra con un número, no con un
+argumento.
+
+## 21. Estado del diseño
+
+**Sin decisiones abiertas.** Q1-Q10 cerradas y firmadas. Lo que queda son cifras
+por medir durante la implementación (peso del artefacto, First Load JS, `f` por
+documento, tamaño del PDF individual), todas con su tarea, su tope y su criterio
+de qué hacer si aprietan.

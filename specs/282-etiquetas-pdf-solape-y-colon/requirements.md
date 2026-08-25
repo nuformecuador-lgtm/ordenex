@@ -56,6 +56,29 @@ Se usa como fixture en los tests. De la evidencia constan: número de guía
 tienda y el número de remisión **no constan** (PII / recortados): el fixture los
 rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**.
 
+## El alfabeto real, medido en producción el 2026-08-25
+
+Medido en solo-lectura sobre **todas las órdenes vivas**, en los campos que la
+etiqueta imprime (destinatario, dirección, producto, teléfono, remisión y nombres
+de usuario):
+
+| Medida | Valor |
+|---|---|
+| Caracteres distintos | **75** |
+| Fuera de ASCII | **6**, y son exactamente `á é í ñ ó ú` |
+| Fuera de Latin-1 | **0** |
+
+Consecuencia: cp1252 cubre hoy el 100 % de lo que se imprime, con muchísimo
+margen, y el peso del subconjunto deja de ser un riesgo.
+
+> ⚠️ **Esto es la foto de hoy, y caduca.** Un destinatario futuro con `ü`, `Á`,
+> un guion largo o unas comillas tipográficas **no está en esta medida**, aunque
+> siga dentro de cp1252; y un carácter fuera de cp1252 tampoco puede descartarse
+> para siempre. Por eso **R28 no se relaja**: fallar de forma visible cuando el
+> carácter no está en el subconjunto es exactamente lo que convierte esta foto en
+> algo seguro. La medida justifica el **tamaño** del subconjunto, no sustituye a
+> la comprobación en tiempo de ejecución.
+
 ---
 
 ## Requisitos
@@ -122,9 +145,13 @@ rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**
 
 ### C. El coste, con número y con tope
 
-- **R13** — El sistema NO DEBE incluir los bytes de la fuente en la carga inicial
-  de la pantalla de órdenes: DONDE el usuario abra la pantalla y no genere el
-  PDF, el navegador NO DEBE descargar esos bytes.
+- **R13** *(REVISADO el 2026-08-25 al cerrarse Q10; sustituye a la redacción
+  anterior, que decía «si no genera el PDF» y que la paridad deja falsa)* — El
+  sistema NO DEBE incluir los bytes de la fuente en la carga inicial de la
+  pantalla de órdenes: DONDE el usuario abra la pantalla y **no abra el modal de
+  etiquetas**, el navegador NO DEBE descargar esos bytes. CUANDO se abra el
+  modal, el sistema DEBE descargarlos **una sola vez** y reutilizar el mismo
+  artefacto para la vista previa y para el PDF, sin una segunda copia.
 
 - **R14** *(REVISADO el 2026-08-25 al cerrarse Q6: manda la cobertura, el peso se
   reporta)* — El artefacto de fuente DEBE declarar en el repositorio su peso
@@ -226,6 +253,29 @@ rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**
   licencia del archivo elegido DEBE quedar citada por su nombre en el
   repositorio.
 
+### H. Paridad con la vista previa (Q10)
+
+- **R31** — CUANDO se muestre la vista previa de etiquetas, el valor de «Monto a
+  cobrar» DEBE pintarse con la **misma fuente** con la que el PDF lo dibuja, y
+  esa fuente DEBE proceder del **mismo artefacto** (los mismos bytes): NO DEBE
+  existir una segunda copia del archivo para la pantalla.
+
+- **R32** — La paridad de R31 DEBE **comprobarse**, no afirmarse: la verificación
+  DEBE demostrar que la familia tipográfica aplicada al importe en pantalla es la
+  registrada desde el artefacto, y que es la misma familia con la que el PDF
+  dibuja ese campo.
+
+- **R33** — SI la fuente no llega a cargarse en el navegador, ENTONCES la vista
+  previa DEBE seguir mostrándose (con la tipografía del sistema) y la descarga
+  DEBE seguir fallando de forma visible según R16; NUNCA DEBE descargarse un PDF
+  con el importe sin símbolo por el hecho de que la vista previa sí se pintara.
+
+### I. El corpus real (Q7)
+
+- **R34** — El corpus de referencia de R26 DEBE incluir los caracteres no ASCII
+  **realmente medidos en producción** el 2026-08-25 —`á é í ñ ó ú`— y la
+  verificación DEBE fallar si alguno de ellos no se imprime en la etiqueta.
+
 ---
 
 ## Preguntas cerradas (2026-08-25)
@@ -238,38 +288,17 @@ rellena con valores cualesquiera y **ningún requisito afirma nada sobre ellos**
 | Q4 | **Sin dependencia nueva**: la comprobación de contorno no vacío basta. |
 | Q5 | Símbolo no cubierto = **fallo visible**, no nota al pie. R28-R29. |
 | Q6 | Si no cabe en 80 KB, **manda la cobertura** y se reporta el número. R14 revisado. |
+| Q7 | **Medido contra producción** (no estimado): 75 caracteres distintos, 6 no ASCII (`á é í ñ ó ú`), 0 fuera de Latin-1. R34, y la caducidad escrita arriba. |
+| Q8 | **Resuelto por la medida**: el subconjunto cp1252 no aprieta el presupuesto. Se mantiene la obligación de medir el artefacto y registrar la cifra (R14/T14). |
+| Q9 | **cp1252 completo**, contra el subconjunto mínimo, **aceptando** el crecimiento en Storage de los PDF individuales (~1 MB → ~4 MB por lote). Coste aceptado con firma, no advertencia. |
+| Q10 | **Se quiere paridad**: la vista previa usa la misma fuente. R31-R33, y R13 corregido con fecha. |
 
 ## Preguntas abiertas
 
-- **Q7 — El corpus de casos reales de R26.** Tengo **una** etiqueta real (la de
-  la evidencia). El corpus que propongo lo completo con **formas**, no con datos
-  reales: dirección de una, dos y tres líneas, ubicación con los cuatro niveles,
-  destinatario y producto largos. Para que R26 se ponga rojo ante un caso real
-  de verdad haría falta un export de N etiquetas de producción (sin PII o
-  anonimizado). **¿Se puede sacar ese export, o el corpus de formas es
-  suficiente?** No lo relleno con datos inventados haciéndolos pasar por reales.
+**Ninguna.** Las diez preguntas que abrió este spec (Q1-Q10) están cerradas y
+firmadas el 2026-08-25; sus decisiones viven en la tabla de arriba y en los
+requisitos que generaron. El spec queda listo para la puerta de aprobación.
 
-- **Q8 — Si el coste de la fuente por PDF no cabe en el peor caso del servidor.**
-  Medido en el repo: el render cuesta ~18 ms por etiqueta y el tope duro es 1000
-  PDFs en modo individual, con `maxDuration = 60`. Dejando 40 % del presupuesto
-  para la inserción del lote, la fuente sólo puede costar **≤ 102 ms por PDF con
-  el tope por defecto (300)** y **≤ 18 ms con el techo duro (1000)**
-  (`design.md` §11.3). Ese coste se paga **por documento** porque jsPDF
-  descodifica y parsea el TTF en cada `addFont`
-  (`jspdf.node.js:26783-26797`). SI la medición se pasa de ahí, ¿qué prefieres:
-  estrechar el subconjunto (debilita R11), bajar el techo duro por variable de
-  entorno, o excluir el modo individual del arreglo?
-
-- **Q9 — El PDF individual engorda.** Cada documento embebe su propio
-  `/FontFile2`, así que un PDF de **una** etiqueta pasa de ~3,3 KB (cifra medida
-  en la feature 136) a del orden de 8-15 KB: **×3-4**. En modo individual con el
-  tope por defecto son ~300 PDFs por carga, es decir del orden de **1 MB → 4 MB**
-  en el bucket privado por lote. Es coste de almacenamiento, no de tiempo.
-  **¿Se acepta?**
-
-- **Q10 — La vista previa del modal no cambia.** `EtiquetaGuia.tsx` es DOM/HTML y
-  pinta el `₡` con la fuente del sistema, así que no sufre el defecto y queda
-  fuera. Consecuencia: el importe de la vista previa y el del PDF se verán con
-  tipografías ligeramente distintas. **¿Se acepta, o se quiere paridad
-  tipográfica?** (Paridad implicaría cargar la fuente también en la vista previa,
-  es decir el coste de bundle que R13 evita.)
+Lo único que sigue siendo **cifra por medir** —no decisión pendiente— es el peso
+real del artefacto y el «First Load JS» antes/después (R14, tareas T14 y T30):
+hay que saber el número, y ya está firmado qué manda si aprieta (la cobertura).

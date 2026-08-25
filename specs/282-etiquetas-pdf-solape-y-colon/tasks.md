@@ -194,10 +194,10 @@ real en `progress/impl_282.md`:
 - `./init.sh --rapido` en verde (con `INIT_EXIT=$?` escrito **dentro** del log:
   aquí un `echo` ya ha tapado un rojo).
 - `progress/impl_282.md` con el mapa R → test completo y las cifras de T14.
-- **Hecho cuando:** gate verde, los **30** requisitos mapeados a un test que
+- **Hecho cuando:** gate verde, los **34** requisitos mapeados a un test que
   existe y pasa, y ningún test previo relajado.
-- Depende de: T4, T5, T7, T10, T11, T12, T13, T14, T15 **y todo el bloque de la
-  ampliación (T17-T25)**. Correr además los tests de integración de la carga por
+- Depende de: T4, T5, T7, T10, T11, T12, T13, T15 **y todo lo posterior
+  (T17-T29)**. La medición válida del navegador es la de **T29**, no la de T14. Correr además los tests de integración de la carga por
   API (`tests/integration/carga-api-etiquetas.test.ts`), que el grafo de imports
   sí selecciona ahora que el generador del servidor cambia.
 
@@ -395,3 +395,87 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 | R30 | la fuente elegida contiene U+20A1, verificado antes | T1 | `tests/unit/pdf/etiquetas-fuente.test.ts` (puerta) |
 
 Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
+
+---
+
+# Cierre del 2026-08-25 — Q7 a Q10
+
+## Correcciones a las tareas ya escritas
+
+| Tarea | Corrección |
+|---|---|
+| **T15** | Se amplía: además del PDF, abrir **la vista previa del modal** y comparar el importe a ojo. Es la única comprobación de que los píxeles coinciden (Q4 cerró que no se añade rasterizador). |
+| **T23** | El corpus ya no es «una etiqueta real + formas»: incorpora el **alfabeto medido en producción** el 2026-08-25 (T26). |
+| **T5** | La guardia sigue vigilando que el artefacto sólo se referencie por `import()` dinámico — con la paridad eso **no cambia**, lo que cambia es *cuándo* se dispara ese `import()` (al abrir el modal, no al descargar). |
+| **T14** | Su medición queda **superada** por T29: hay que volver a medir después de la paridad, no antes. La cifra válida es la de T29. |
+
+## Bloque H — Corpus real y paridad
+
+### [ ] T26 [P] — El alfabeto real, dentro del corpus
+- `tests/fixtures/etiquetas-282.ts`: añadir un caso que contenga los **seis**
+  caracteres no ASCII medidos en producción (`á é í ñ ó ú`) repartidos por
+  destinatario, dirección y producto, con la fecha de la medida en el comentario.
+- Test en los **dos** generadores: esos seis caracteres aparecen impresos en la
+  etiqueta (decodificados desde el PDF, no desde el DTO) (**R34**).
+- **Hecho cuando:** pasa, y quitar un carácter del subconjunto lo pone rojo.
+- Depende de: T23.
+
+### [ ] T27 — Paridad: la misma fuente en la vista previa
+- `app/(app)/ordenes/_components/etiquetas-fuente-carga.ts`:
+  `asegurarFuenteEnPantalla(fuente)` idempotente — base64 → `ArrayBuffer` →
+  `new FontFace(nombre, buffer)` → `document.fonts.add`.
+- `EtiquetasGuiaModal.tsx`: dispara la carga **al abrir el modal** (una vez, sin
+  bloquear el render).
+- `EtiquetaGuia.tsx`: el **valor del monto** usa esa familia con la del sistema
+  como respaldo. Nada más de la vista previa cambia.
+- **Hecho cuando:** compila; si la fuente no llega, la vista previa se pinta
+  igual con la tipografía del sistema y la descarga sigue fallando visible
+  (**R33**); no existe ningún `.woff2` ni segunda copia del archivo (**R31**).
+- Depende de: T3, T8.
+
+### [ ] T28 — La paridad, comprobada (no afirmada)
+- `tests/components/EtiquetaGuiaPreview.test.tsx` (NUEVO o extendido): el importe
+  tiene como **primera** familia la del artefacto, y `document.fonts.add` recibió
+  una `FontFace` con ese nombre creada desde **esos** bytes (espía: jsdom no
+  rasteriza).
+- Test de origen único: vista previa y generador de PDF leen el **mismo** módulo
+  (mismo `nombre`, mismo `base64`).
+- Test cruzado: el nombre de familia registrado en pantalla es **idéntico** al
+  `/BaseFont` con el que el PDF dibuja el monto (se reutiliza la extracción de
+  R8) (**R32**).
+- **Hecho cuando:** pasan y la mutación M10 los pone en rojo.
+- Depende de: T27.
+
+### [ ] T29 — Volver a presupuestar el navegador **después** de la paridad
+- Repetir la medición de T14 con la paridad ya puesta:
+  `pnpm exec prisma generate` → `pnpm exec next build`; anotar «Size» y «First
+  Load JS» de `/ordenes` antes/después, y el peso del chunk.
+- Verificar **la condición** del `+0 KB` (`design.md` §19.2): el artefacto no
+  entra en el bundle inicial y la vista previa no se renderiza en la carga de la
+  pantalla; el chunk se pide **al abrir el modal**.
+- **Hecho cuando:** las cifras están en `progress/impl_282.md` marcadas como
+  «post-paridad» y el First Load JS de `/ordenes` **no ha crecido** (**R13**
+  revisado, **R14**). Si creciera, se para: significa que el artefacto entró al
+  bundle inicial.
+- Depende de: T27.
+
+## Mutaciones añadidas
+
+| # | Mutación | Debe ponerse ROJO |
+|---|---|---|
+| M10 | quitar la familia del artefacto del importe en la vista previa | T28 (R32) |
+| M11 | registrar en pantalla una familia con **otro** nombre que el del PDF | T28 (test cruzado) |
+
+## Trazabilidad — filas del cierre
+
+| R | Qué fija | Tarea | Test |
+|---|---|---|---|
+| R13 *(rev.)* | nada de fuente en la carga inicial; se carga al abrir el modal, una sola vez | T27, T29 | `tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts` + medición de T29 |
+| R31 | misma fuente y mismo artefacto en pantalla y PDF | T27 | `tests/components/EtiquetaGuiaPreview.test.tsx` |
+| R32 | la paridad se comprueba, no se afirma | T28 | `tests/components/EtiquetaGuiaPreview.test.tsx` (test cruzado con el `/BaseFont`) |
+| R33 | sin fuente: vista previa sí, descarga falla visible | T27 | `tests/components/EtiquetasGuiaModal.test.tsx` |
+| R34 | los seis caracteres reales se imprimen | T26 | `tests/unit/components/etiquetas-pdf.test.ts` + `tests/unit/pdf/etiquetas-pdf-lote.test.ts` |
+
+**Total: 34 requisitos, todos mapeados a un test concreto. Sin preguntas
+abiertas.** T16 (gate y bitácora) pasa a depender también de T26-T29, y su
+criterio de «hecho» cuenta **34**, no 30.
