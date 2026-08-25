@@ -214,7 +214,7 @@ y con más motivo (ver `requirements.md`, P6: el spec_author no tuvo shell).
   y las dos medianas, y el veredicto contra el umbral de R26 (+15 % o +3 s).
   → **R25**
 
-- [x] **T5.2 — *(condicionada: solo si T5.1 supera el umbral)* Mitigar y volver a medir.**
+- [x] (N/A) **T5.2 — *(condicionada: solo si T5.1 supera el umbral)* Mitigar y volver a medir.**
   En el orden de `design.md` §7: (1) memo por ruta en `codigoSinComentarios`, (2) atajo para
   fuentes sin comentarios ni comillas, (3) saltos por bloque.
   **Hecho cuando:** la nueva mediana está bajo umbral **y** T2.4 (número de líneas) y T3.2
@@ -358,3 +358,20 @@ estar elegida para que el mecanismo cambie el resultado, no para que se parezca 
 mate**. Con dos matices declarados sin que nadie los pidiera: R22 es tautológico hoy y solo
 discrimina una divergencia futura, y R14 **no discrimina ningún mecanismo vivo ni debe** — es una
 limitación afirmada, y su trabajo es ponerse roja el día que alguien la cierre.
+
+### Dos apuntes de forma del reviewer (ronda 2), cerrados
+
+- **T5.2 quedó marcada sin decir que es N/A.** Era condicionada —solo aplicaba si el rendimiento
+  superaba el umbral— y **no se tocó porque no hizo falta**: la mediana bajó un 11,1 %. Se marca
+  como **hecha por no aplicar**, que es distinto de hecha.
+- **El criterio de aceptación de T2.3 nombraba la entrada vieja**, la que no discriminaba. Queda
+  dicho aquí en vez de reescribirlo en su sitio: **la entrada válida es la que mete el `//` DENTRO
+  de la plantilla anidada**; la anterior tenía seis comillas invertidas —paridad par— y por eso
+  emparejarlas mal consumía el mismo tramo y la salida era idéntica byte a byte.
+
+### Y un número mío que sobrevivió en un TERCER sitio
+
+El campo `description` de la ficha siguió diciendo **«149 archivos»** después de que el
+`status_note` ya estuviera corregido. Es el mismo dato falso que escribí y repetí tres veces. Queda
+como recordatorio de que corregir **una** copia de una cifra no es corregirla: hay que buscar las
+demás, que es exactamente la lección que esta ficha persigue en el código.
