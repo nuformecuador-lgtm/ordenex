@@ -27,7 +27,6 @@ type RepoMethods = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
-  | "recibirLoteEnSatelite"
 >;
 
 function recepcionRow(overrides: Partial<RecepcionSateliteRow> = {}): RecepcionSateliteRow {
@@ -59,7 +58,6 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
     findByNumGuiaForTransicion: vi.fn(async () => null),
     findEstatusIdByValue: vi.fn(async () => null),
     recibirEnSatelite: vi.fn(async () => true),
-    recibirLoteEnSatelite: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     ...overrides,
   };
 }

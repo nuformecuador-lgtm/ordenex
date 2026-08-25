@@ -4277,3 +4277,63 @@ por él— y **renumerar el id 248**, que sigue usado dos veces.
   vacío**, y tras el cambio muere cuando se rompe la distinción de vacíos.
 - **Reserva menor aceptada:** el test de R15 sobrevive a la mutación `!== true` por simetría del
   fixture (1-1), aunque sí muere ante el defecto que R15 prohíbe. Mejora anotada (fixture 2+1).
+
+---
+
+## 2026-08-24 — 279 · el portal del adminSatélite se parte en dos, y la recepción queda solo por QR
+
+- Pedido del humano: **el botón «Aceptar» de las cards de «Por recibir» desaparece** —recibir solo
+  por QR— y el apartado **se parte en dos subítems de acordeón** («Órdenes › Por recibir / En
+  bodega»), cada uno con su escáner. Requisitos R1–R47, reviewer **OK en la ronda 2, 0 bloqueantes**.
+  Gate completo `INIT_EXIT=0`, 1377 archivos / 18.754 tests. **No desplegada.**
+- **Una sola ficha y no dos** porque las dos mitades tocaban los mismos archivos, y el arnés prohíbe
+  dos fichas en vuelo con conflicto de archivos.
+- **El botón estaba DUPLICADO en el mismo render** —una vez como prop de la sección y otra dentro del
+  `renderItem`—, así que quitar uno dejaba el otro vivo. Se vio midiendo, no leyendo.
+- **`recibirLote` se retiró entera**, de la Server Action al repositorio: al quitar el botón se
+  quedaba **sin ningún llamador**. Decisión del humano, y convirtió la ficha de `frontend` a
+  `fullstack`. Antes de borrar se comprobó que **el QR no comparte camino** (`recibirEnSatelite`
+  singular vs `recibirLoteEnSatelite` lote): si lo hubieran compartido, la ficha habría roto justo
+  lo que venía a dejar como única vía.
+- **20 casos de test retirados, 20 destinos escritos.** Ninguno desapareció en silencio.
+- **Un censo que no censaba**: `cotizacion-api-key.test.ts` usaba un `Proxy` que acepta cualquier
+  nombre de método, así que el nombre ya muerto **atravesó un typecheck completo sin una queja**.
+  Atado con un `satisfies`, reintroducirlo ahora no compila.
+
+### El agujero de las guardias, medido y cerrado
+
+Un comodín de ruta escrito dentro de un comentario de línea (`lib/auth/menu-visibility.ts:228`)
+**abría bloque** para el quitador del repo y cerraba 150 líneas más abajo. Resultado: **151 líneas
+invisibles para cualquier guardia que lea ese fuente** — Entregas, Recolección, el portal del
+satélite, Novedades, Ranking, Wallet, Configuración, los dos cierres e Incidentes.
+
+**Medido con el propio quitador, y por tres partes con SHAs explícitos: 76 → 160 líneas visibles.**
+El primer número que circuló, «79», **era falso**: lo escribió el leader heredándolo de un informe y
+repitiéndolo sin medir. **Ninguna violación se destapó**: 141 archivos / 2.096 casos de guardias en
+verde corridos **antes** de añadir los subítems, para que cualquier rojo fuera atribuible solo al
+arreglo. El quitador **no se tocó**: arreglarlo es otra ficha.
+
+### El hallazgo del reviewer, que es la lección de la ficha
+
+**Un test verde que no cubría nada.** El caso de R22 leía un contador para afirmar «la lectura se
+repitió», y ese `+1` **no lo producía el `mutate()` que el requisito protege**: lo producía la
+revalidación de montaje de SWR. En la suite completa esa revalidación ya había ocurrido, así que
+**el caso pasaba igual con el código borrado** — verde 38/38 en tres corridas de tres. Solo caía
+aislado con `-t`.
+
+Y de ahí sale la regla que esta ficha deja escrita: **«pasa aislado» y «pasa en la suite» no son la
+misma medida**, y la que vale para un gate es la de la suite. La primera remedición del implementer
+era la foto de `-t` y no reproducía.
+
+**El arreglo no fue esperar más**, que es el parche que lo habría tapado: el servidor responde
+primero una **fila sentinela ausente del `fallbackData`**, así que verla en el DOM prueba que la
+revalidación aterrizó. El punto de partida deja de ser un supuesto. Re-medido en corrida completa:
+sin `mutate()`, la suite pasa de **18.754 verdes a 4 fallos**.
+
+### Lo que queda vivo, y no es de esta ficha
+
+El reviewer barrió **todo** `tests/` buscando esa misma forma —foto de un contador + aserción de
+crecimiento contra ella— y encontró **cinco** sitios, no dos. Dos son de esta entrega y están
+resueltos o medidos como sanos. **Los otros tres son ajenos y siguen vivos**:
+`ActualizarAnalitica.test.tsx`, `NotificationsBell.test.tsx` y `TableroOperativo.test.tsx`, los tres
+con SWR, o sea con los dos ingredientes. No se tocan aquí; merecen ficha propia.

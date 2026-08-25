@@ -108,8 +108,15 @@ function filaSinCobertura(): Record<string, string> {
  * guias (`generarGuiaLote`, R44) y el rastro por orden (`transicionarAyuda`,
  * `incrementarIntentoContacto`, R45).
  *
- * La lista esta escrita a mano y con los nombres REALES de la interfaz: un doble que devolviera
- * espias "de lo que sea" y afirmara "ninguno se llamo" pasaria igual si el metodo no existiera.
+ * La lista esta escrita a mano y con los nombres REALES de la interfaz. El `satisfies` de abajo
+ * NO es decoracion: sin el, este censo es MUDO. El doble de repositorio es un `Proxy` que acepta
+ * cualquier nombre de propiedad, asi que un metodo que ya no existe en `IOrdenRepository` seguiria
+ * pasando en verde para siempre — el propio archivo lo decia («pasaria igual si el metodo no
+ * existiera») y era literalmente cierto: al retirar `recibirLoteEnSatelite` en la feature 279, el
+ * typecheck no dijo ni una palabra de esta lista.
+ *
+ * Feature 279 (T3B.5, R39/R41): `as const satisfies readonly (keyof IOrdenRepository)[]` convierte
+ * ese fallo mudo en error de compilacion. Nombrar aqui un metodo inexistente ya NO compila.
  */
 const METODOS_ESCRITURA = [
   "createManyOrdenes",
@@ -125,7 +132,6 @@ const METODOS_ESCRITURA = [
   "recibirEnSatelite",
   "recibirEnOrigen",
   "recibirEnBodegaCentral",
-  "recibirLoteEnSatelite",
   "asignarSateliteLote",
   "deshacerAsignacionLote",
   "transicionarAyuda",
@@ -134,7 +140,7 @@ const METODOS_ESCRITURA = [
   "setOrdenesDownloadUrl",
   "setOrdenDownloadStoragePath",
   "setCargaDownloadStoragePath",
-] as const;
+] as const satisfies readonly (keyof IOrdenRepository)[];
 
 /** Las TRES lecturas geograficas, y NADA MAS, es lo unico que puede tocar una cotizacion. */
 const LECTURAS_PERMITIDAS = [

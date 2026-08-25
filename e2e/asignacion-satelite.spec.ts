@@ -61,7 +61,12 @@ async function loginAdminSatelite(page: Page) {
 test.describe("Asignación satélite — asignar mensajero de la zona", () => {
   test.beforeEach(async ({ page }) => {
     await loginAdminSatelite(page);
-    await page.goto("/recepcion-satelite");
+    // Feature 279 (T6.1, 2026-08-24): el portal del `adminSatelite` se partió en dos
+    // rutas y `/recepcion-satelite` sólo redirige. Se apunta a la pantalla que este
+    // caso describe. **No se afirma que este spec pase**: los e2e de este repo siguen
+    // sin ejecutarse (ver la cabecera del archivo), así que esto es una corrección de
+    // ruta por lectura, no una verificación.
+    await page.goto("/recepcion-satelite/en-bodega");
   });
 
   test("seleccionar orden recibida → Asignar mensajero → por_recoger", async ({

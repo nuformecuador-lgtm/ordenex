@@ -4,12 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 
-import { Button } from "@/components/ui/button";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
 import { BodegaLiberadasHoy } from "@/components/private/BodegaLiberadasHoy";
-import { PorAceptarSection } from "@/app/(app)/_components/PorAceptarSection";
 import { useToast } from "@/hooks/useToast";
 import { recepcionSateliteConfig } from "@/lib/config/recepcion-satelite";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
@@ -22,15 +20,13 @@ import {
   listarIdsVigentesBodega,
   listarOrdenesBodegaCompleto,
   listarOrdenesBodegaPaginado,
-  recibirLote,
 } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
 import { envioDevolucionCentralErrorMessage } from "@/app/(app)/ordenes/_components/envio-devolucion-central-error-messages";
 import { recuperarBodegaErrorMessage } from "@/app/(app)/ordenes/_components/recuperar-bodega-error-messages";
+import { AvisoSinZonaSatelite } from "./AvisoSinZonaSatelite";
 import { EscanerRecepcion } from "./EscanerRecepcion";
-import { SateliteOrderCard } from "./SateliteOrderCard";
 import { SateliteOrdenesListado } from "./SateliteOrdenesListado";
 import { AsignarSateliteModal } from "./AsignarSateliteModal";
 import { DeshacerAsignacionSateliteModal } from "./DeshacerAsignacionSateliteModal";
@@ -53,6 +49,25 @@ import {
 // Component padre lo que la pantalla necesita ya acotado a la zona del actor (datos
 // sensibles por props, sin resolver permisos en el cliente) y el nombre de la zona /
 // `sinZona`. Tras cada acción exitosa se relee el estado del servidor.
+//
+// Feature 279 (T3.1, 2026-08-24): este módulo es la pantalla **«En bodega»**. Perdió el
+// bloque «Por recibir» entero —escáner + tarjetas—, que se mudó a `PorRecibirModule`, y
+// con él la prop `porRecibir`, **sin sustituto**: con el escáner incondicional (R42) esta
+// pantalla ya no necesita saber cuántas órdenes hay en camino, ni siquiera un booleano.
+//
+// El archivo NO se renombra a `BodegaModule.tsx` aunque el nombre nuevo describa mejor lo
+// que hace: cuatro registros del repo lo referencian POR RUTA o por sus exports —la
+// guardia del adaptador de descarga, la de paginación transversal, la de contadores de
+// cabecera y el fixture `satelite-bodega.ts`, que importa de aquí `OrdenesBodegaPagina`—
+// y seis suites lo montan. Renombrarlo costaba cuatro registros y seis suites para cero
+// cambio de comportamiento, y dejaba a la guardia de contadores vigilando un archivo
+// inexistente.
+//
+// EL ESCÁNER SIGUE MONTADO AQUÍ, y es una decisión firmada, no un resto: recibir por QR
+// mete una fila NUEVA en este listado. Por eso su `onRecibida` conserva el `releerBodega`
+// completo (`router.refresh()` **+** `mutate()`) y no el `refresh()` a secas que sí basta
+// en «Por recibir». Simplificarlo dejaría la orden recién recibida fuera del listado hasta
+// recargar la página (R22).
 //
 // Feature 170 — FASE 2 (T K.3, R40-R43/R52): el listado «Órdenes de la bodega» deja de
 // recibir el conjunto entero por props y pasa a pintar UNA PÁGINA que resuelve el servidor
@@ -98,8 +113,6 @@ async function leerPagina(
 }
 
 export interface RecepcionSateliteModuleProps {
-  /** Órdenes en `en_ruta_bodega_satelite` de la zona del adminSatelite. */
-  porRecibir: RecepcionSateliteDTO[];
   /**
    * Feature 170 — FASE 2 (T K.3, R40/R41): PÁGINA 1 del listado «Órdenes de la bodega»
    * —los cinco estados que el adminSatelite gestiona— resuelta server-side y SIN filtros,
@@ -172,18 +185,11 @@ export interface RecepcionSateliteModuleProps {
 /** Feature 246: «no bajaron fechas de la página». Constante de módulo, no un literal por render. */
 const SIN_FECHAS_DIA_REPARTO: FechasDiaReparto = { hoy: "", manana: "" };
 
-/**
- * Estado legible "en bodega satélite de <zona>" (R9): deriva del `estatusValue`
- * (etiqueta de `estatusLabel`) y del nombre de zona de la orden.
- */
-function estadoLegible(orden: RecepcionSateliteDTO, zonaNombre: string | null): string {
-  const base = estatusLabel(orden.estatusValue);
-  const zona = orden.zonaNombre || zonaNombre;
-  return zona ? `${base} de ${zona}` : base;
-}
+// Feature 279 (T3.1): `estadoLegible` vivía aquí y su único consumidor era la tarjeta del
+// bloque «Por recibir». Se muda con él a `PorRecibirModule`. Este módulo no lo necesita:
+// las filas del listado componen su estado en `SateliteOrdenesListado`.
 
 export function RecepcionSateliteModule({
-  porRecibir,
   ordenesBodega,
   catalogoFiltros,
   zonaNombre,
@@ -220,10 +226,6 @@ export function RecepcionSateliteModule({
   // vive solo aquí (el service es por-orden, §9.1), así que se conserva para poder
   // ofrecer su manifiesto después del refresco. Vacío = sin descarga que ofrecer (R17).
   const [ultimoEnvioACentral, setUltimoEnvioACentral] = useState<string[]>([]);
-
-  // Pedido humano: "Por recibir" (tarjeta de recepción + lista) solo se pinta si hay algo
-  // que recibir y el actor tiene zona; el separador del listado depende de lo mismo.
-  const mostrarPorRecibir = !sinZona && porRecibir.length > 0;
 
   // ---------- Feature 170 — FASE 2 (T K.3): la capa de datos del listado ----------
   // Los tres filtros VIGENTES (los emite la barra del listado), la página pedida y su
@@ -291,24 +293,6 @@ export function RecepcionSateliteModule({
   async function releerBodega() {
     router.refresh();
     await mutate();
-  }
-
-  // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
-  // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
-  // releé el estado del servidor (patrón feature 33) y da feedback por toast.
-  async function aceptarRecepcion(ordenIds: string[]) {
-    if (ordenIds.length === 0) return;
-    const result = await recibirLote({ ordenIds });
-    if (result.status === "ok") {
-      toast.success(`${result.recibidas} orden(es) recibida(s).`);
-      await releerBodega();
-      return;
-    }
-    toast.error(
-      result.status === "sin_zona"
-        ? "No tienes una zona asignada para recibir órdenes."
-        : "No se pudieron recibir las órdenes.",
-    );
   }
 
   /** Abre el modal de asignación con lo seleccionado en el listado. */
@@ -439,62 +423,25 @@ export function RecepcionSateliteModule({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* R5: aviso accionable si el adminSatelite no tiene zona asignada. */}
-      {sinZona ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
-          No tienes una zona asignada. Pide a un administrador que te asigne una
-          zona para poder recibir órdenes.
-        </p>
-      ) : null}
+      {/* R25: aviso accionable si el adminSatelite no tiene zona asignada. El texto vive
+          en UN solo sitio (`AvisoSinZonaSatelite`) porque las DOS pantallas del portal
+          tienen que decir exactamente lo mismo. */}
+      {sinZona ? <AvisoSinZonaSatelite /> : null}
 
-      {/* ---------- Sección: Por recibir (en_ruta_bodega_satelite) ---------- */}
-      {/* Pedido humano: sin NADA por recibir, ni la tarjeta de recepción ni la lista se
-          muestran — no hay guía que resolver, así que solo estorbarían. Con zona sin
-          asignar (R5) tampoco: el aviso de arriba explica el porqué. */}
-      {mostrarPorRecibir ? (
-        <>
-          {/* Recepción por guía: MISMA tarjeta que la recogida del mensajero
-              (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado. */}
-          <EscanerRecepcion onRecibida={() => void releerBodega()} />
-          {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
-              banner con contador de nuevas + "Aceptar" por-orden (recibirLote con uno).
-              Sin zona no se muestran los botones (solo se listan).
-              Pedido humano del 2026-08-19: ya NO hay "Aceptar todas" — la recepción es
-              orden por orden o por guía con el escáner. */}
-          <PorAceptarSection
-            titulo="Por recibir"
-            nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
-            ordenes={porRecibir}
-            onAceptarUna={(id) => void aceptarRecepcion([id])}
-            textoBotonUna="Aceptar"
-            vacio="No hay órdenes por recibir."
-            mostrarAcciones={!sinZona}
-            listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            // Rediseño ux: la card completa la pinta el módulo (`renderItem`), con el
-            // MISMO lenguaje visual que las del mensajero. "Aceptar" va al pie de cada
-            // card; sin zona asignada (R5) se listan sin acción.
-            renderItem={(orden) => (
-              <SateliteOrderCard
-                orden={orden}
-                estadoLegible={estadoLegible(orden, zonaNombre)}
-                acciones={
-                  sinZona ? null : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void aceptarRecepcion([orden.id])}
-                    >
-                      Aceptar
-                    </Button>
-                  )
-                }
-              />
-            )}
-          />
-        </>
+      {/* Recepción por guía: MISMA tarjeta que la recogida del mensajero
+          (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado.
+
+          R42/R43 — la condición es `!sinZona` y NADA MÁS. Antes también miraba si había
+          órdenes por recibir, y eso escondía el escáner justo cuando el actor tenía el
+          paquete en la mano y la orden aún no figuraba en la última lectura. La zona sí
+          se conserva: sin ella el servidor responde `sin_zona` y el escáner sólo sabría
+          producir un error. R27: en ESTA pantalla, sin zona, el listado sigue.
+
+          R22 — `releerBodega` completo (`router.refresh()` + `mutate()`), no un
+          `refresh()` a secas: la orden recién recibida entra en ESTE listado, y sus filas
+          las tiene SWR. */}
+      {!sinZona ? (
+        <EscanerRecepcion onRecibida={() => void releerBodega()} />
       ) : null}
 
       {/* ---------- Listado único de la bodega (pedido humano) ---------- */}
@@ -502,10 +449,11 @@ export function RecepcionSateliteModule({
           central / Devueltas) se funden en UN listado con la barra de filtros del admin.
           Las acciones pasan a ser de LOTE sobre la selección, habilitadas según el estado
           común de lo seleccionado (ver `SateliteOrdenesListado`). */}
-      {/* El separador solo tiene sentido si ARRIBA hay algo de lo que separarse: sin
-          sección "Por recibir" el listado es lo primero de la pantalla. */}
+      {/* El separador sólo tiene sentido si ARRIBA hay algo de lo que separarse. Desde la
+          279 eso es el escáner y nada más: sin zona no se monta y el listado es lo primero
+          de la pantalla. */}
       <section
-        className={`flex flex-col gap-3${mostrarPorRecibir ? " border-t pt-6" : ""}`}
+        className={`flex flex-col gap-3${sinZona ? "" : " border-t pt-6"}`}
       >
         {/* Feature 41 (R22): aviso de bodega BLOQUEADA con causa diferenciada (bloqueo
             duro: todos los mensajeros con cierre O CierreBodega pendiente). */}

@@ -5,7 +5,6 @@ import {
   listarOrdenesBodegaCompleto,
   listarIdsVigentesBodega,
   recibirPorQr,
-  recibirLote,
 } from "@/lib/actions/recepcion-satelite";
 import type { IRecepcionSateliteService } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
@@ -31,7 +30,6 @@ function buildService(overrides: Partial<IRecepcionSateliteService> = {}): IRece
       ordenId: "o1",
       estado: "en_bodega_satelite" as const,
     })),
-    recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 0 })),
     // Feature 170 (T K.1): la pagina del listado de la bodega. Este archivo no la ejercita
     // (vive en el test de servicio); se declara porque la interfaz la exige.
     listarOrdenesBodegaPaginado: vi.fn(async () => ({
@@ -151,47 +149,15 @@ describe("recibirPorQr — validacion de borde (R16) y delegacion (R10)", () => 
   });
 });
 
-// --- recibirLote: borde (unauthenticated + zod) + delegacion (feature 63) ---
-
-describe("recibirLote — borde y delegacion (feature 63)", () => {
-  it("sin actor -> unauthenticated, sin tocar el service", async () => {
-    const service = buildService();
-    const r = await recibirLote({ ordenIds: ["o1"] }, { service, getActor: noActor });
-    expect(r.status).toBe("unauthenticated");
-    expect(service.recibirLote).not.toHaveBeenCalled();
-  });
-
-  it("lote vacio (min 1) -> validation_error, sin tocar el service", async () => {
-    const service = buildService();
-    const r = await recibirLote({ ordenIds: [] }, { service, getActor: actorAdmin });
-    expect(r.status).toBe("validation_error");
-    expect(service.recibirLote).not.toHaveBeenCalled();
-  });
-
-  it("id vacio en el lote -> validation_error, sin tocar el service", async () => {
-    const service = buildService();
-    const r = await recibirLote({ ordenIds: ["o1", ""] }, { service, getActor: actorAdmin });
-    expect(r.status).toBe("validation_error");
-    expect(service.recibirLote).not.toHaveBeenCalled();
-  });
-
-  it("lote valido delega en el service con ordenIds y actor", async () => {
-    const service = buildService({
-      recibirLote: vi.fn(async () => ({ status: "ok" as const, recibidas: 2 })),
-    });
-    const r = await recibirLote({ ordenIds: ["o1", "o2"] }, { service, getActor: actorAdmin });
-    expect(r).toEqual({ status: "ok", recibidas: 2 });
-    expect(service.recibirLote).toHaveBeenCalledWith({ ordenIds: ["o1", "o2"] }, ADMIN);
-  });
-
-  it("resultados de dominio del service pasan tal cual (forbidden / sin_zona)", async () => {
-    for (const dominio of ["forbidden", "sin_zona"] as const) {
-      const service = buildService({ recibirLote: vi.fn(async () => ({ status: dominio })) });
-      const r = await recibirLote({ ordenIds: ["o1"] }, { service, getActor: actorAdmin });
-      expect(r.status).toBe(dominio);
-    }
-  });
-});
+// --- Feature 279 (T3B.6, R40): aqui vivia `describe("recibirLote — borde y delegacion")` ---
+//
+// El borde de la recepcion EN LOTE se retiro con su Server Action. Destino de sus CINCO casos
+// (detalle en `progress/impl_279.md`): `unauthenticated` antes del service, la delegacion con el
+// actor y el paso limpio de los resultados de dominio siguen afirmados ARRIBA sobre
+// `recibirPorQr` — el MISMO cuerpo de action, el mismo `withErrorHandler`, el mismo orden
+// borde-antes-que-service—; las dos cotas del array (`ordenIds` vacio y un id vacio) MUEREN con
+// `recibirLoteSchema`, porque el borde del QR no recibe una lista sino UN `numGuia`, y sus
+// propias cotas (entero positivo, forma invalida, uuid de etiqueta vieja) ya estan cubiertas.
 
 // --- listarOrdenesBodegaPaginado: la lista blanca del borde (feature 170, T K.1/R44) ---
 
