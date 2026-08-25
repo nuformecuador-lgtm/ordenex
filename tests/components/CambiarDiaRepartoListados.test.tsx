@@ -75,7 +75,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...args: unknown[]) => paginadoBodegaMock(...args),
   listarOrdenesBodegaCompleto: vi.fn(async () => ({ status: "ok", items: [], total: 0 })),
   listarIdsVigentesBodega: vi.fn(async () => ({ status: "ok", ids: [] })),

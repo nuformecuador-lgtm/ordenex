@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 
-import { Button } from "@/components/ui/button";
 import { DescargarManifiestoButton } from "@/components/shared/DescargarManifiestoButton";
 import { Pagination } from "@/components/shared/Pagination";
 import { filasDesdeResultado } from "@/components/shared/descarga-resultado";
@@ -22,7 +21,6 @@ import {
   listarIdsVigentesBodega,
   listarOrdenesBodegaCompleto,
   listarOrdenesBodegaPaginado,
-  recibirLote,
 } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 
@@ -293,24 +291,6 @@ export function RecepcionSateliteModule({
     await mutate();
   }
 
-  // Feature 63: recepción EN LOTE ("Aceptar todas" / "Aceptar" por-orden), análoga
-  // al "Recoger" del mensajero. Cablea la Server Action `recibirLote`; tras éxito
-  // releé el estado del servidor (patrón feature 33) y da feedback por toast.
-  async function aceptarRecepcion(ordenIds: string[]) {
-    if (ordenIds.length === 0) return;
-    const result = await recibirLote({ ordenIds });
-    if (result.status === "ok") {
-      toast.success(`${result.recibidas} orden(es) recibida(s).`);
-      await releerBodega();
-      return;
-    }
-    toast.error(
-      result.status === "sin_zona"
-        ? "No tienes una zona asignada para recibir órdenes."
-        : "No se pudieron recibir las órdenes.",
-    );
-  }
-
   /** Abre el modal de asignación con lo seleccionado en el listado. */
   function abrirAsignacion(ordenes: RecepcionSateliteDTO[]) {
     if (ordenes.length === 0) return;
@@ -460,37 +440,24 @@ export function RecepcionSateliteModule({
               (`EscanerGuiaCard`), con los dos caminos — cámara y número tecleado. */}
           <EscanerRecepcion onRecibida={() => void releerBodega()} />
           {/* Feature 63: REUTILIZA la sección compartida "por aceptar" del mensajero:
-              banner con contador de nuevas + "Aceptar" por-orden (recibirLote con uno).
-              Sin zona no se muestran los botones (solo se listan).
-              Pedido humano del 2026-08-19: ya NO hay "Aceptar todas" — la recepción es
-              orden por orden o por guía con el escáner. */}
+              banner con contador de nuevas + la lista de órdenes.
+              Feature 278 (T3B.1, R1/R34): la sección ya NO ofrece ninguna acción de
+              recepción. El botón "Aceptar" por-orden cableaba `recibirLote`, la única
+              consumidora de la Server Action en lote que esta ficha retira entera: recibir
+              pasa a ser SOLO por QR (el escáner de arriba). */}
           <PorAceptarSection
             titulo="Por recibir"
             nuevasLabel={(n) => `${n} Órdenes nuevas por recibir`}
             ordenes={porRecibir}
-            onAceptarUna={(id) => void aceptarRecepcion([id])}
-            textoBotonUna="Aceptar"
             vacio="No hay órdenes por recibir."
             mostrarAcciones={!sinZona}
             listClassName="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
             // Rediseño ux: la card completa la pinta el módulo (`renderItem`), con el
-            // MISMO lenguaje visual que las del mensajero. "Aceptar" va al pie de cada
-            // card; sin zona asignada (R5) se listan sin acción.
+            // MISMO lenguaje visual que las del mensajero. Sin pie de acciones (R1/R5).
             renderItem={(orden) => (
               <SateliteOrderCard
                 orden={orden}
                 estadoLegible={estadoLegible(orden, zonaNombre)}
-                acciones={
-                  sinZona ? null : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void aceptarRecepcion([orden.id])}
-                    >
-                      Aceptar
-                    </Button>
-                  )
-                }
               />
             )}
           />

@@ -15,8 +15,6 @@ import type {
   ListarOrdenesBodegaPaginadoServiceResult,
   ListarRecepcionSateliteServiceResult,
   RecepcionSateliteDTO,
-  RecibirLoteInput,
-  RecibirLoteServiceResult,
   RecibirServiceResult,
 } from "@/lib/interfaces/services/IRecepcionSateliteService";
 import { descargaConfig } from "@/lib/config/descarga";
@@ -77,13 +75,7 @@ type RecepcionSateliteRepo = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
-  | "recibirLoteEnSatelite"
 >;
-
-// Feature 63: dedupe de ids del lote antes de la escritura (patron `recogerAsignaciones`).
-function distinct(values: string[]): string[] {
-  return [...new Set(values)];
-}
 
 /**
  * Logica de negocio de la bodega satelite (feature 33). Resuelve el alcance por
@@ -404,44 +396,6 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     return { status: "conflict" };
   }
 
-  async recibirLote(
-    input: RecibirLoteInput,
-    actor: Actor,
-  ): Promise<RecibirLoteServiceResult> {
-    if (actor.rol !== ROL_AUTORIZADO) return { status: "forbidden" }; // R17 (paridad)
-
-    const zonaId = await this.repo.findUsuarioZonaId(actor.usuarioId); // R4
-    if (zonaId === null) return { status: "sin_zona" }; // R5
-
-    const ordenIds = distinct(input.ordenIds);
-    if (ordenIds.length === 0) return { status: "ok", recibidas: 0 };
-
-    // Origen (en_ruta_bodega_satelite) y destino (en_bodega_satelite) pre-resueltos:
-    // el origen es necesario para la guarda del UPDATE en lote y para el historial.
-    const [origenId, destinoId] = await Promise.all([
-      this.repo.findEstatusIdByValue(ORIGEN_RECEPCION),
-      this.repo.findEstatusIdByValue(ESTADO_RECIBIDA),
-    ]);
-    if (origenId === null || destinoId === null) {
-      return {
-        status: "validation_error",
-        fieldErrors: { estatus: ["catalogo de estados incompleto (seed pendiente)"] },
-      };
-    }
-
-    // Alcance por ZONA + estado de origen impuesto server-side en el WHERE guardado:
-    // las ordenes ajenas a la zona o fuera de en_ruta_bodega_satelite se OMITEN (no
-    // cuentan). Idempotente: re-ejecutar no vuelve a transicionar (ya no estan en el
-    // origen). Atomico + append de historial en la MISMA tx (choke point feature 49).
-    const recibidas = await this.repo.recibirLoteEnSatelite(
-      ordenIds,
-      zonaId,
-      origenId,
-      destinoId,
-      { actorUsuarioId: actor.usuarioId, origenTipo: "recepcion_satelite" },
-    );
-    return { status: "ok", recibidas };
-  }
 }
 
 function toDTO(row: RecepcionSateliteRow): RecepcionSateliteDTO {

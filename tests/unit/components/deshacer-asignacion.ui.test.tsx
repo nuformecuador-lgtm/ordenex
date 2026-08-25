@@ -87,7 +87,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...args: unknown[]) => paginadoBodegaMock(...args),
   // Feature 184 — Tanda A (T A.4/T A.5): el modulo importa las DOS acciones nuevas —el
   // conjunto de la descarga y la vigencia con la que poda la seleccion—, asi que el doble

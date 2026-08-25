@@ -30,7 +30,6 @@ type RepoMethods = Pick<
   | "findByNumGuiaForTransicion"
   | "findEstatusIdByValue"
   | "recibirEnSatelite"
-  | "recibirLoteEnSatelite"
 >;
 
 function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransicionRow {
@@ -77,7 +76,6 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
     findByNumGuiaForTransicion: vi.fn(async () => transicionRow()),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
     recibirEnSatelite: vi.fn(async () => true),
-    recibirLoteEnSatelite: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     ...overrides,
   };
 }
@@ -454,76 +452,14 @@ describe("recibir (R11-R18)", () => {
   });
 });
 
-// --- Feature 63: recibirLote (paridad con "Recoger todas" del mensajero) ---
-
-describe("recibirLote (feature 63)", () => {
-  it("autz: rol != adminSatelite -> forbidden, sin tocar datos", async () => {
-    const repo = fakeRepo();
-    for (const otro of [MAESTRO, MENSAJERO]) {
-      const r = await newService(repo).recibirLote({ ordenIds: ["o1"] }, otro);
-      expect(r.status).toBe("forbidden");
-    }
-    expect(repo.findUsuarioZonaId).not.toHaveBeenCalled();
-    expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
-  });
-
-  it("adminSatelite sin zona -> sin_zona, sin efectos", async () => {
-    const repo = fakeRepo({ findUsuarioZonaId: vi.fn(async () => null) });
-    const r = await newService(repo).recibirLote({ ordenIds: ["o1", "o2"] }, ADMIN);
-    expect(r.status).toBe("sin_zona");
-    expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
-  });
-
-  it("lote vacio -> ok con 0 recibidas, sin escribir", async () => {
-    const repo = fakeRepo();
-    const r = await newService(repo).recibirLote({ ordenIds: [] }, ADMIN);
-    expect(r).toEqual({ status: "ok", recibidas: 0 });
-    expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
-  });
-
-  it("catalogo incompleto (origen/destino sin seed) -> validation_error, sin escribir", async () => {
-    const repo = fakeRepo({ findEstatusIdByValue: vi.fn(async () => null) });
-    const r = await newService(repo).recibirLote({ ordenIds: ["o1"] }, ADMIN);
-    expect(r.status).toBe("validation_error");
-    expect(repo.recibirLoteEnSatelite).not.toHaveBeenCalled();
-  });
-
-  it("transiciona el lote de SU zona en_reparto -> en_bodega_satelite (escritura guardada por origen+zona+historial)", async () => {
-    const repo = fakeRepo();
-    const r = await newService(repo).recibirLote({ ordenIds: ["a", "b", "c"] }, ADMIN);
-    expect(r).toEqual({ status: "ok", recibidas: 3 });
-    // Alcance por zona + estado de ORIGEN + contexto de historial (actor = adminSatelite).
-    expect(repo.recibirLoteEnSatelite).toHaveBeenCalledWith(
-      ["a", "b", "c"],
-      ZONA,
-      "os-ruta-satelite", // origen: en_ruta_bodega_satelite
-      "os-recibida", // destino: en_bodega_satelite
-      { actorUsuarioId: "as1", origenTipo: "recepcion_satelite" },
-    );
-  });
-
-  it("dedupe: ids repetidos se colapsan antes de la escritura", async () => {
-    const repo = fakeRepo();
-    await newService(repo).recibirLote({ ordenIds: ["a", "a", "b"] }, ADMIN);
-    expect(repo.recibirLoteEnSatelite).toHaveBeenCalledWith(
-      ["a", "b"],
-      ZONA,
-      "os-ruta-satelite",
-      "os-recibida",
-      { actorUsuarioId: "as1", origenTipo: "recepcion_satelite" },
-    );
-  });
-
-  it("alcance por zona/estado server-side: el conteo refleja SOLO lo transicionado (ajenas omitidas)", async () => {
-    // La guarda del repo omite las de otra zona / fuera del origen: de 3 pedidas, solo 1 recibida.
-    const repo = fakeRepo({ recibirLoteEnSatelite: vi.fn(async () => 1) });
-    const r = await newService(repo).recibirLote({ ordenIds: ["a", "b", "c"] }, ADMIN);
-    expect(r).toEqual({ status: "ok", recibidas: 1 });
-  });
-
-  it("idempotencia: re-ejecutar cuando ya no hay nada en el origen -> ok con 0 recibidas", async () => {
-    const repo = fakeRepo({ recibirLoteEnSatelite: vi.fn(async () => 0) });
-    const r = await newService(repo).recibirLote({ ordenIds: ["a", "b"] }, ADMIN);
-    expect(r).toEqual({ status: "ok", recibidas: 0 });
-  });
-});
+// --- Feature 278 (T3B.6, R40): aqui vivia `describe("recibirLote (feature 63)")` ---
+//
+// La recepcion EN LOTE se retiro entera (Server Action -> service -> repositorio). Sus OCHO
+// casos no desaparecieron en silencio; su destino, uno a uno, esta escrito en
+// `progress/impl_278.md`. En resumen: rol, zona, catalogo incompleto, escritura guardada e
+// idempotencia siguen afirmados por el `describe("recibir")` de ARRIBA —la misma guarda, el
+// mismo servicio, el camino que sostiene el QR—; y el dedupe de ids y el conteo de recibidas
+// MUEREN con el codigo, porque ya no hay lista de ids que deduplicar ni lote que contar.
+//
+// El `Pick` de dependencias de este archivo (arriba) ya no declara `recibirLoteEnSatelite`:
+// esa ausencia la vigila el typecheck, no un comentario (R36).

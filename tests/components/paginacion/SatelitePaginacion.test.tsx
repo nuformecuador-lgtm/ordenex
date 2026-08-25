@@ -74,7 +74,6 @@ const { paginadoMock, completoMock, vigenciaMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
-  recibirLote: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoMock(...a),

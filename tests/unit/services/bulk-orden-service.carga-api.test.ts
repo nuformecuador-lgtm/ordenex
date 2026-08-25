@@ -191,7 +191,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // feature 157: regla de dedicacion (reparto y recoleccion no se mezclan)
     findMensajerosConOrdenesEn: vi.fn().mockResolvedValue(new Set()),
     recolectarEnTienda: vi.fn().mockResolvedValue(false),
-    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     // Feature 271: el contador N/V y el detalle del bloqueo son parte del puerto.

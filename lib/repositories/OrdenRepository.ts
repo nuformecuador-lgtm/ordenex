@@ -2935,48 +2935,6 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  /**
-   * Feature 63 — recepcion EN LOTE en la bodega satelite (paridad con `recogerLote`
-   * del mensajero). UPDATE raw guardado por estado de ORIGEN + zona + no borrada, con
-   * `RETURNING "id"` DENTRO de un `$transaction`, y con los ids retornados (EXACTAMENTE
-   * las ordenes que ganaron la guarda) hace el append del historial en la MISMA tx. Una
-   * orden de otra zona, en otro estado o re-ejecutada no aparece en el RETURNING -> no se
-   * toca ni deja rastro (idempotente y concurrencia-segura, patron `asignarSateliteLote`).
-   * NO toca `mensajero_asignado_id` ni `num_guia`. `updated_at` se fija a mano (el raw no
-   * dispara el @updatedAt de Prisma). Devuelve el count de filas recibidas.
-   */
-  async recibirLoteEnSatelite(
-    ordenIds: string[],
-    zonaId: string,
-    origenEstatusId: string,
-    destinoEstatusId: string,
-    historial: HistorialContexto,
-  ): Promise<number> {
-    if (ordenIds.length === 0) return 0;
-    return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: string }[]>`
-        UPDATE "orden"
-        SET "estatus_id" = ${destinoEstatusId},
-            "updated_at" = NOW()
-        WHERE "id" IN (${Prisma.join(ordenIds)})
-          AND "zona_id" = ${zonaId}
-          AND "estatus_id" = ${origenEstatusId}
-          AND "deleted_at" IS NULL
-        RETURNING "id"`;
-      await appendCambioEstado(
-        tx,
-        rows.map((r) => ({
-          ordenId: r.id,
-          estatusOrigenId: origenEstatusId, // la guarda garantiza este origen (en_ruta_bodega_satelite)
-          estatusDestinoId: destinoEstatusId, // en_bodega_satelite
-          actorUsuarioId: historial.actorUsuarioId, // el adminSatelite que recibe
-          origenTipo: historial.origenTipo, // recepcion_satelite
-        })),
-      );
-      return rows.length;
-    });
-  }
-
   // --- Feature 34: asignacion satelite a mensajeros de la zona (R7/R14) ---
 
   /**

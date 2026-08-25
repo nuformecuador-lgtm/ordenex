@@ -209,111 +209,14 @@ describe("OrdenRepository.recibirEnSatelite (R11/R18 · feature 49/#6)", () => {
   });
 });
 
-// Feature 63 — recepcion EN LOTE (paridad con `recogerLote` del mensajero). Es un UPDATE
-// raw guardado por estado de origen + zona + no borrada, con `RETURNING "id"` DENTRO de un
-// `$transaction`, + append del historial de EXACTAMENTE los ids retornados en la MISMA tx.
-function buildPrismaRaw() {
-  const tx = {
-    $queryRaw: vi.fn().mockResolvedValue([]),
-    ordenHistorialEstado: { createMany: vi.fn() },
-  };
-  const prisma = {
-    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(tx)),
-  };
-  return { prisma, tx };
-}
-
-describe("OrdenRepository.recibirLoteEnSatelite (feature 63)", () => {
-  it("UPDATE raw guardado por origen+zona+no borrada con RETURNING; count = filas recibidas", async () => {
-    const { prisma, tx } = buildPrismaRaw();
-    // La DB solo recibe las que siguen en el origen de la zona: 2 de 3.
-    tx.$queryRaw.mockResolvedValue([{ id: "o1" }, { id: "o2" }]);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const count = await repo.recibirLoteEnSatelite(
-      ["o1", "o2", "o3"],
-      "z-limon",
-      idEstado("en_ruta_bodega_satelite"), // origen: en_ruta_bodega_satelite
-      idEstado("en_bodega_satelite"), // destino: en_bodega_satelite
-      HIST_RECEPCION,
-    );
-
-    expect(count).toBe(2);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    // Feature 99: el choke point (appendCambioEstado) ahora emite, tras el append, una sonda
-    // de elegibilidad de webhook EN LA MISMA tx (transactional-outbox). El UPDATE de dominio
-    // sigue siendo la PRIMERA consulta ($queryRaw call[0], inspeccionada abajo); la 2.a es la
-    // sonda de suscripciones (no-op sin owners suscritos).
-    expect(tx.$queryRaw.mock.calls.length).toBeGreaterThanOrEqual(1);
-    const call = tx.$queryRaw.mock.calls[0] as unknown[];
-    const strings = (call[0] as string[]).join(" ");
-    const values = call.slice(1);
-    // Alcance por zona + estado de ORIGEN en el WHERE + destino en el SET.
-    expect(values).toContain("z-limon");
-    expect(values).toContain(idEstado("en_ruta_bodega_satelite"));
-    expect(values).toContain(idEstado("en_bodega_satelite"));
-    // NO toca mensajero ni num_guia (paridad R11 de la recepcion 1-a-1).
-    expect(strings).not.toMatch(/num_guia/);
-    expect(strings).not.toMatch(/mensajero/);
-    // RETURNING "id" para atar el historial a las filas realmente transicionadas.
-    expect(strings).toMatch(/RETURNING "id"/);
-  });
-
-  it("preserva el append de historial (recepcion_satelite) SOLO de los ids retornados (trazabilidad 49)", async () => {
-    const { prisma, tx } = buildPrismaRaw();
-    // De 2 pedidas, una perdio la guarda (zona/estado) -> solo o1 en el RETURNING.
-    tx.$queryRaw.mockResolvedValue([{ id: "o1" }]);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const count = await repo.recibirLoteEnSatelite(
-      ["o1", "o2"],
-      "z-limon",
-      idEstado("en_ruta_bodega_satelite"),
-      idEstado("en_bodega_satelite"),
-      HIST_RECEPCION,
-    );
-
-    expect(count).toBe(1);
-    expect(tx.ordenHistorialEstado.createMany).toHaveBeenCalledTimes(1);
-    const arg = tx.ordenHistorialEstado.createMany.mock.calls[0][0];
-    expect(arg.data).toEqual([
-      {
-        ordenId: "o1",
-        estatusOrigenId: idEstado("en_ruta_bodega_satelite"),
-        estatusDestinoId: idEstado("en_bodega_satelite"),
-        actorUsuarioId: "adminsat-1",
-        origenTipo: "recepcion_satelite",
-        motivo: null,
-        gestionOrdenId: null,
-      },
-    ]);
-  });
-
-  it("idempotencia: 0 filas cuando ninguna sigue en el origen; no deja rastro", async () => {
-    const { prisma, tx } = buildPrismaRaw();
-    tx.$queryRaw.mockResolvedValue([]);
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    const count = await repo.recibirLoteEnSatelite(
-      ["o1"],
-      "z-limon",
-      idEstado("en_ruta_bodega_satelite"),
-      idEstado("en_bodega_satelite"),
-      HIST_RECEPCION,
-    );
-
-    expect(count).toBe(0);
-    expect(tx.ordenHistorialEstado.createMany).not.toHaveBeenCalled();
-  });
-
-  it("devuelve 0 sin abrir transaccion cuando ordenIds esta vacio", async () => {
-    const { prisma, tx } = buildPrismaRaw();
-    const repo = new OrdenRepository(prisma as unknown as PrismaClient);
-
-    expect(
-      await repo.recibirLoteEnSatelite([], "z-limon", idEstado("en_ruta_bodega_satelite"), idEstado("en_bodega_satelite"), HIST_RECEPCION),
-    ).toBe(0);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(tx.$queryRaw).not.toHaveBeenCalled();
-  });
-});
+// --- Feature 278 (T3B.6, R40): aqui vivian `buildPrismaRaw` y
+// `describe("OrdenRepository.recibirLoteEnSatelite (feature 63)")` ---
+//
+// El metodo de escritura EN LOTE se retiro del repositorio y de `IOrdenRepository`. Destino de
+// sus CUATRO casos (detalle en `progress/impl_278.md`): los cuatro MUEREN con el codigo, porque
+// afirmaban un SQL que ya no existe (`UPDATE ... RETURNING "id"` guardado por origen+zona) y una
+// cota de lista vacia que ya no tiene lista. Lo que sostiene el QR es su HERMANO singular,
+// `recibirEnSatelite`, cuyo `describe` de ARRIBA queda intacto y conserva los tres casos que
+// importan: el `where` completo (id + zona + deletedAt + estado de origen), el append de UN
+// historial con el origen pre-leido, y el `false` sin rastro cuando la carrera se pierde.
+// Probar el WHERE donde vive: esa es la razon por la que ese bloque no se toca (R38).

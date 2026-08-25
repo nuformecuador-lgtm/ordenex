@@ -91,7 +91,6 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // feature 157: regla de dedicacion (reparto y recoleccion no se mezclan)
     findMensajerosConOrdenesEn: vi.fn().mockResolvedValue(new Set()),
     recolectarEnTienda: vi.fn().mockResolvedValue(false),
-    recibirLoteEnSatelite: vi.fn().mockResolvedValue(0),
     asignarSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 87: lista de novedades, no ejercitada aqui pero exigida por IOrdenRepository.
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.

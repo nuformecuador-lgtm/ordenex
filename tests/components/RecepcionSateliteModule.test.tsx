@@ -12,15 +12,14 @@ import {
 } from "@/tests/fixtures/satelite-bodega";
 import { ORDER_STATUS_LABELS } from "@/app/(app)/ordenes/_components/EstatusBadge";
 import { enviarACentral } from "@/lib/actions/envio-devolucion-central";
-import { recibirLote } from "@/lib/actions/recepcion-satelite";
 import { recuperarABodega } from "@/lib/actions/resolver-novedad";
 import type { RecepcionSateliteDTO } from "@/lib/interfaces/services/IRecepcionSateliteService";
 
 // Feature 33 (T12) — módulo de la bodega satélite. Se mockean la Server Action de
 // recepción, el toast, el router (refresh) y la lib de cámara (sin hardware en CI).
-// Feature 63: se mockea también `recibirLote` (la recepción "Aceptar" por-orden, que
-// viaja por el mismo camino en lote con UN id) que consume la sección compartida
-// "Por recibir". Pedido humano del 2026-08-19: ya no hay "Aceptar todas".
+// Feature 278 (T3B.1, R34): `recibirLote` YA NO SE DOBLA porque ya no existe. La recepción
+// en lote se retiro entera —Server Action, schema, servicio y repositorio— y con ella el
+// boton "Aceptar" por-orden, su unico consumidor. Recibir es SOLO por QR (`recibirPorQr`).
 // Feature 170 — FASE 2 (T K.3): el listado de la bodega pide su página al servidor. El doble
 // devuelve las órdenes que el caso monta, sin recortar: aquí no se pagina nada (eso lo mide
 // `tests/components/paginacion/SatelitePaginacion.test.tsx`).
@@ -29,7 +28,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
   // Feature 184 — Tanda A (T A.4/T A.5): el modulo importa las DOS acciones nuevas —el
   // conjunto de la descarga y la vigencia con la que poda la seleccion—, asi que el doble
@@ -38,8 +36,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   listarOrdenesBodegaCompleto: vi.fn(async () => ({ status: "ok", items: [], total: 0 })),
   listarIdsVigentesBodega: vi.fn(async () => ({ status: "ok", ids: [] })),
 }));
-
-const recibirLoteMock = vi.mocked(recibirLote);
 
 // Feature 139 (T3.3): la sección "Por devolver" envía POR LOTE a la bodega central vía
 // esta Server Action; se mockea para verificar la invocación por selección.
@@ -214,7 +210,12 @@ describe("RecepcionSateliteModule", () => {
     expect(screen.getByRole("region", { name: LISTADO })).toBeInTheDocument();
   });
 
-  it("Feature 63: la sección 'Por recibir' expone 'Aceptar' por-orden (sin lote) y NO asignar/gestionar", () => {
+  // Feature 278 (T3B.1, R1/R34): este caso afirmaba lo CONTRARIO —que cada tarjeta traia su
+  // boton "Aceptar" por-orden—. Cambia de sentido con la decision firmada (recibir es solo por
+  // QR) y se reexpresa en vez de borrarse, para que la AUSENCIA quede afirmada donde estaba la
+  // presencia. Cada ausencia va con un positivo al lado (R29): si el render se rompiera entero,
+  // los `queryBy` seguirian devolviendo null y el caso pasaria igual de verde.
+  it("Feature 278 (R1): 'Por recibir' lista las órdenes SIN ningún botón de acción", () => {
     renderModule({
       porRecibir: [
         makeOrden({ id: "r1", numRemision: "REM-R1" }),
@@ -223,12 +224,11 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recibir" });
-    // Pedido humano del 2026-08-19: NO hay acción en lote…
+    // POSITIVO: el render de la seccion ocurrio de verdad y las dos órdenes están.
+    expect(within(region).getAllByText(/REM-R1|REM-R2/).length).toBeGreaterThanOrEqual(2);
+    // AUSENCIA: ni accion en lote, ni accion por-orden, ni ningun otro boton "Aceptar".
     expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
-    // …sólo una acción por-orden por cada tarjeta.
-    expect(
-      within(region).getAllByRole("button", { name: "Aceptar" }),
-    ).toHaveLength(2);
+    expect(within(region).queryByRole("button", { name: /aceptar|recibir/i })).toBeNull();
     // Sigue SIN exponer asignar/gestionar en esta sección.
     expect(
       within(region).queryByRole("button", { name: /asignar|gestionar/i }),
@@ -905,7 +905,7 @@ describe("RecepcionSateliteModule", () => {
     ).toBeInTheDocument();
   });
 
-  it("Pedido humano 2026-08-19: NO hay 'Aceptar todas' ni forma de recibir varias de golpe", () => {
+  it("Feature 278 (R1/R34): ninguna de las dos vías de recepción del botón sobrevive", () => {
     renderModule({
       porRecibir: [
         makeOrden({ id: "r1", numRemision: "REM-R1" }),
@@ -914,28 +914,19 @@ describe("RecepcionSateliteModule", () => {
     });
 
     const region = screen.getByRole("region", { name: "Por recibir" });
+    // POSITIVO: las dos tarjetas se pintaron; lo que falta abajo falta de verdad.
+    expect(within(region).getAllByText(/REM-R1|REM-R2/).length).toBeGreaterThanOrEqual(2);
+    // Ni la de lote ("Aceptar todas", retirada el 2026-08-19) ni la por-orden (esta ficha).
     expect(within(region).queryByRole("button", { name: /todas/i })).toBeNull();
-    // Aceptar sigue existiendo, pero SOLO dentro de cada tarjeta: una por orden.
-    expect(within(region).getAllByRole("button", { name: "Aceptar" })).toHaveLength(2);
+    expect(within(region).queryAllByRole("button", { name: "Aceptar" })).toHaveLength(0);
   });
 
-  it("Feature 63: 'Aceptar' de una fila envía solo ese ordenId", async () => {
-    const user = userEvent.setup();
-    recibirLoteMock.mockResolvedValue({ status: "ok", recibidas: 1 });
-    renderModule({
-      porRecibir: [
-        makeOrden({ id: "r1", numRemision: "REM-R1" }),
-        makeOrden({ id: "r2", numRemision: "REM-R2" }),
-      ],
-    });
-
-    const region = screen.getByRole("region", { name: "Por recibir" });
-    await user.click(within(region).getAllByRole("button", { name: "Aceptar" })[1]);
-
-    await vi.waitFor(() =>
-      expect(recibirLoteMock).toHaveBeenCalledWith({ ordenIds: ["r2"] }),
-    );
-  });
+  // Feature 278 (T3B.6, R40) — aqui vivia `"Feature 63: 'Aceptar' de una fila envia solo ese
+  // ordenId"`. MUERE CON EL CODIGO: era la unica prueba del cableado boton -> `recibirLote`, y
+  // ese cableado ya no existe (la Server Action se retiro entera). No se repone con un
+  // equivalente porque no hay accion equivalente: la recepcion pasa por el escaner, y ESE
+  // camino ya esta afirmado en `tests/components/EscanerRecepcion.test.tsx`, que esta ficha no
+  // toca. Su destino, por escrito, en `progress/impl_278.md`.
 
   it("Feature 63 + pedido humano: sin zona no se ofrece nada de recepción", () => {
     renderModule({
