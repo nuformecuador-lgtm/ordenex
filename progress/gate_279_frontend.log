@@ -1,0 +1,264 @@
+== Arnes SDD :: init (modo: completo) ==
+[0;32m✓ node v24.13.0[0m
+[0;32m✓ dependencias presentes[0m
+[0;32m✓ regla max-2-por-zona respetada (in_progress=4)[0m
+[0;32m✓ specs presentes para features sdd en vuelo[0m
+-> pnpm run typecheck
+
+> ordenex@0.1.0 typecheck R:\job\singularis\projects\ordenex
+> tsc --noEmit
+
+[0;32m✓ typecheck paso[0m
+-> pnpm run lint
+
+> ordenex@0.1.0 lint R:\job\singularis\projects\ordenex
+> eslint
+
+
+R:\job\singularis\projects\ordenex\app\(app)\_components\Sidebar.tsx
+  288:9  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+R:\job\singularis\projects\ordenex\app\(app)\analitica\_components\AnaliticaShell.tsx
+   2:10  warning  'ChartColumn' is defined but never used  @typescript-eslint/no-unused-vars
+   5:10  warning  'EmptyState' is defined but never used   @typescript-eslint/no-unused-vars
+  61:3   warning  'filtros' is defined but never used      @typescript-eslint/no-unused-vars
+  62:3   warning  'operativo' is defined but never used    @typescript-eslint/no-unused-vars
+  63:3   warning  'financiero' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\cierres-admin\_components\CierresAdminModule.tsx
+  70:10  warning  'money' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\configuracion\tarifas\_components\CobroVehiculoTarifas.tsx
+  159:6  warning  React Hook useEffect has a missing dependency: 'onChange'. Either include it or remove the dependency array. If 'onChange' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+R:\job\singularis\projects\ordenex\app\(app)\configuracion\tarifas\_components\TiendasModule.tsx
+  67:5  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\GestionarOrdenPanel.tsx
+  56:10  warning  'EnviarPlantillaWhatsappButton' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\mis-asignaciones\_components\UbicacionMapaInner.tsx
+  31:7  warning  'CENTRO_FALLBACK' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\novedades\_components\novedad-a-orden-card.ts
+  99:44  warning  '_causa' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\app\(app)\recoleccion\_components\RecoleccionModule.tsx
+  3:23  warning  'useMemo' is defined but never used          @typescript-eslint/no-unused-vars
+  7:10  warning  'ContactoButtons' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\cache\cache-nula.ts
+  25:19  warning  '_origen' is defined but never used  @typescript-eslint/no-unused-vars
+  25:48  warning  '_tags' is defined but never used    @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\lib\repositories\ZonaRepository.ts
+  4:10  warning  'normalizeName' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\RepartoModule.test.tsx
+  154:10  warning  'ordenCardsEnReparto' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\WebhookAccionCell.test.tsx
+  7:3  warning  'within' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\components\descarga\DescargarGestionesDialog.test.tsx
+  110:23  warning  '_recorte' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\integration\repositories\deshacer-asignacion.historial.test.ts
+  40:35  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\deshacer-asignacion.action.test.ts
+   17:33  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+   17:66  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+  122:35  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+  122:68  warning  '_actor' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\actions\rastreo-publico-action.test.ts
+  27:34  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  27:52  warning  '_factor' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\_fake-prisma-dinero.ts
+  525:33  warning  '_id' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\alcance-bordes.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\cache-invalidacion-backfill.test.ts
+  64:37  warning  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\ciclo-vida.test.ts
+  298:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-cargadas-action.test.ts
+  23:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-devoluciones.test.ts
+  320:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-entregas-action.test.ts
+  16:45  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-hoy-gestion-action.test.ts
+  21:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\conteo-por-status-servicio.test.ts
+  157:45  warning  '_c' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\analytics\operativa-sumabilidad.guardia.test.ts
+  2:10  warning  'quitarComentarios' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\auth\google-adc-token.test.ts
+  25:38  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\analytics-topes.test.ts
+  25:7  warning  'serie' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\components\filtros-acotados-por-rol.test.ts
+   5:3   warning  'CLAVE_ESTADO' is defined but never used              @typescript-eslint/no-unused-vars
+   6:3   warning  'ESTADOS_SATELITE' is defined but never used          @typescript-eslint/no-unused-vars
+   7:3   warning  'construirFiltrosSatelite' is defined but never used  @typescript-eslint/no-unused-vars
+   8:3   warning  'seleccionAFiltroSatelite' is defined but never used  @typescript-eslint/no-unused-vars
+  11:10  warning  'ESTADOS_BODEGA_SATELITE' is defined but never used   @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\guards\quitador-comentarios.guardia.test.ts
+  123:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+  238:20  warning  '_fuente' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\api-key-repository.test.ts
+  158:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-admin-gestiones-where.test.ts
+  44:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  45:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-bodega-gestiones-where.test.ts
+  31:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  32:49  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cierres-filtros-where.test.ts
+  41:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  42:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\colas-paginadas-where.test.ts
+  44:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  45:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\cuentas-por-pagar-paginado-where.test.ts
+  42:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\desglose-mensajero-cierre-derivado.test.ts
+  53:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\historicos-paginados-where.test.ts
+  42:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  43:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\orden-repository.listado-filtros-257.test.ts
+  36:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  37:25  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\ranking-snapshot-repository.test.ts
+   52:37  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   59:28  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   62:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+   68:32  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+  224:54  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\satelite-paginado-where.test.ts
+  60:33  warning  '_args' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\repositories\tarifa-repository.test.ts
+  273:23  warning  '_omitida' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\_dobles-analitica-financiera.ts
+  201:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  201:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+  249:12  warning  '_consulta' is defined but never used  @typescript-eslint/no-unused-vars
+  249:42  warning  '_cubos' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\api-pdf-etiqueta-service.test.ts
+  73:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+  73:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+  76:14  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+  76:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+  78:47  warning  '_ordenId' is defined but never used   @typescript-eslint/no-unused-vars
+  78:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+  80:14  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+  80:32  warning  '_ownerId' is defined but never used   @typescript-eslint/no-unused-vars
+  82:47  warning  '_cargaId' is defined but never used   @typescript-eslint/no-unused-vars
+  82:65  warning  '_path' is defined but never used      @typescript-eslint/no-unused-vars
+  91:45  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  91:66  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+  95:37  warning  '_ordenIds' is defined but never used  @typescript-eslint/no-unused-vars
+  95:58  warning  '_actor' is defined but never used     @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\cierre-dia-pasados-paginado.test.ts
+  72:24  warning  '_mensajeroId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\corte-diario-seleccion.test.ts
+  118:36  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\deshacer-asignacion-service.test.ts
+  76:7   warning  '_origenes' is defined but never used   @typescript-eslint/no-unused-vars
+  77:7   warning  '_historial' is defined but never used  @typescript-eslint/no-unused-vars
+  78:7   warning  '_zonaId' is defined but never used     @typescript-eslint/no-unused-vars
+  91:12  warning  '_items' is defined but never used      @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\habilitar-novedad-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rastreo-publico-service.test.ts
+  42:38  warning  '_numGuia' is defined but never used  @typescript-eslint/no-unused-vars
+  43:43  warning  '_ordenId' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\rescate-ayuda-service.test.ts
+  64:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\solicitud-ayuda-service.test.ts
+  70:37  warning  '_input' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\services\tope-intentos-dto-derivado.test.ts
+  1:36  warning  'afterEach' is defined but never used  @typescript-eslint/no-unused-vars
+
+R:\job\singularis\projects\ordenex\tests\unit\utils\capturar-ubicacion.test.ts
+  37:9  warning  '_err' is defined but never used       @typescript-eslint/no-unused-vars
+  38:9  warning  '_opciones' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 101 problems (0 errors, 101 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+[0;32m✓ lint paso[0m
+-> pnpm run test
+
+> ordenex@0.1.0 test R:\job\singularis\projects\ordenex
+> vitest run
+
+
+ RUN  v4.1.10 R:/job/singularis/projects/ordenex
+
+(node:30888) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:14580) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:6020) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:17760) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:30012) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:12108) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:16560) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ Test Files  1377 passed (1377)
+      Tests  18754 passed | 26 skipped (18780)
+   Start at  23:12:49
+   Duration  384.22s (transform 43.86s, setup 98.21s, import 959.99s, tests 839.78s, environment 627.59s)
+
+[0;32m✓ test paso[0m
+[1;33m! migraciones sin down.sql: 20260814120000_ruta_optimizada_trazado 20260814140000_ruta_parada_tramo 20260814160000_ruta_tramo_vivo_at[0m
+[0;32m✓ .env presente[0m
+[0;32m== init OK ==[0m
+Siguiente: abre AGENTS.md y sigue el flujo desde ahi.
+INIT_EXIT=0

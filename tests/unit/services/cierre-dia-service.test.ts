@@ -204,11 +204,14 @@ describe("listarCierreDia — autorizacion y alcance (R1/R2)", () => {
     await service.listarCierreDia(MENSAJERO);
     expect(repo.findGestionesPendientes).toHaveBeenCalledWith("m1");
     // Feature 235 (T4.1, R23): la lista gana `ayuda_tienda` POR SU NOMBRE.
-    expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith("m1", [
-      "por_recoger",
-      "en_reparto",
-      "ayuda_tienda",
-    ]);
+    // Feature 246: y un TERCER argumento, el dia CR con el que se descarta lo reservado para
+    // despues. `expect.any(Date)` basta aqui —este test es sobre el ACOTAMIENTO POR ACTOR—; que el
+    // dia sea el correcto lo afirma el bloque «Feature 246» de mas abajo, con el reloj inyectado.
+    expect(repo.contarOrdenesPendientesGestion).toHaveBeenCalledWith(
+      "m1",
+      ["por_recoger", "en_reparto", "ayuda_tienda"],
+      expect.any(Date),
+    );
     expect(repo.findCierresByMensajero).toHaveBeenCalledWith("m1");
   });
 });
@@ -2366,5 +2369,164 @@ describe("264/B9 — verCierrePasado emite `ordenesSinGestion` y `sinGestionRegi
     // Contrapunto: la lista SI llego (si no, las dos igualdades de arriba serian triviales).
     expect(conLista.ordenesSinGestion).toHaveLength(3);
     expect(sinLista.ordenesSinGestion).toHaveLength(0);
+  });
+});
+
+// ============================================================================================
+// FEATURE 276 (T14, R17) — EL DESHACER SIGUE VIVO SOBRE UNA `reprogramada`.
+//
+// No hay codigo que escribir para esto, y por eso hay que escribir la PRUEBA DE QUE SIGUE SIENDO
+// CIERTO. La ficha 276 difiere la LIBERACION de una orden `reprogramada` (el cron ya no la manda a
+// bodega hasta que su cierre se apruebe), asi que la orden pasa MAS TIEMPO en `reprogramada` — y la
+// pregunta obvia es si el mensajero conserva su ventana de deshacer durante esa espera.
+//
+// La respuesta es que si, y la razon es estructural: la ventana depende de `gestion.cierre_id`, NO
+// del estado de la orden. Mientras la gestion no entre en un cierre, se deshace; en cuanto entra,
+// no — igual que antes de esta ficha. Lo que la 276 alarga es justamente el tramo en que
+// `cierre_id` sigue nulo.
+//
+// ⚠️ Y AQUI ESTA LA REGRESION QUE ESTA FICHA EVITO NO TENIENDO: si se hubiera elegido la opcion A
+// del design (§2.2, un pre-estado `reprogramacion_por_confirmar`), `ESTADOS_ESPERADOS.reprogramada`
+// habria dejado de casar y el mensajero habria perdido el deshacer EN SILENCIO. Le paso a la 239
+// con `devuelta` (ver su T1.5 y el comentario de `ESTADOS_ESPERADOS`). El caso 3 de abajo es el
+// centinela de esa decision.
+// ============================================================================================
+
+describe("276/R17 — la ventana de deshacer no cambia con la liberacion diferida", () => {
+  it("1. `reprogramada` con `cierre_id NULL` sobre una orden en `reprogramada` -> SE DESHACE", async () => {
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: null, // la gestion del dia, aun sin cierre: la ventana esta viva
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r).toEqual({ status: "ok", ordenId: "o1" });
+    // Y la orden vuelve a `en_reparto`, que es el destino unico del deshacer.
+    expect(repo.anularGestionYDevolverAGestion).toHaveBeenCalledTimes(1);
+    const arg = (repo.anularGestionYDevolverAGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as { estatusEnRepartoId: string };
+    expect(arg.estatusEnRepartoId).toBe("s-reparto");
+  });
+
+  it("2. la MISMA gestion con `cierre_id` poblado -> conflict, como siempre", async () => {
+    // El contrapunto que hace que el caso 1 signifique algo: lo unico que cambia entre los dos es
+    // `cierre_id`. Si el deshacer dependiera del ESTADO en vez del cierre, los dos darian igual.
+    const repo = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: "c1",
+          orden: { deletedAt: null, estatusId: "s-reprogramada", estatusValue: "reprogramada" },
+        }),
+      ),
+    });
+    const { service } = newService({ repo });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    if (r.status !== "conflict") throw new Error("esperaba conflict");
+    expect(r.motivo).toMatch(/cierre/i);
+    expect(repo.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+
+  it("3. la entrada `reprogramada` de la tabla de estados esperados NO cambio", async () => {
+    // Se comprueba por CONDUCTA, no leyendo la constante: la orden en `reprogramada` pasa la
+    // guarda (caso 1) y una orden que se movio a bodega NO la pasa. Si alguien anadiera un
+    // pre-estado a esa entrada —o la sustituyera— este par dejaria de discriminar.
+    const enBodega = fakeRepo({
+      findGestionParaDeshacer: vi.fn(async () =>
+        gestionDeshacer({
+          resultado: "reprogramada",
+          cierreId: null,
+          // La orden ya se libero a bodega: el deshacer NO puede arrancarla de ahi.
+          orden: {
+            deletedAt: null,
+            estatusId: "s-en-bodega",
+            estatusValue: "en_bodega_central",
+          },
+        }),
+      ),
+    });
+    const { service } = newService({ repo: enBodega });
+
+    const r = await service.deshacerGestion("g1", MENSAJERO);
+
+    expect(r.status).toBe("conflict");
+    expect(enBodega.anularGestionYDevolverAGestion).not.toHaveBeenCalled();
+  });
+});
+
+// =================================================================================================
+// FEATURE 246 — EL DIA DE REPARTO EN EL GATE DEL CIERRE
+//
+// La 246 acordo que una orden reservada para un dia que aun no ha llegado esta «en la mano del
+// mensajero» y no la toca el corte nocturno. Ese acuerdo se aplico en DOS de los tres sitios que
+// deciden sobre esas ordenes (la seleccion del corte y el barrido de `crearCierre`) y NO en el
+// tercero: el gate que habilita «Solicitar cierre». Consecuencia medida en produccion el
+// 2026-08-25 — un mensajero que habia gestionado todo su dia no podia cerrarlo porque bodega ya le
+// habia asignado el trabajo de mañana, y el motivo que leia («gestionalas antes de cerrar») le
+// pedia algo IMPOSIBLE: no se puede gestionar una entrega de mañana.
+//
+// Estos casos afirman las dos mitades del arreglo. La primera —el ancla— es HOY y no `diaCerrado`:
+// el corte cierra la jornada ANTERIOR, el mensajero la EN CURSO, y copiar el ancla del corte sin
+// mirar habria descartado tambien las ordenes de hoy, que si son deuda suya.
+// =================================================================================================
+describe("246 · el gate del cierre no cuenta lo reservado para despues", () => {
+  // 20:00 CR del 25 = 02:00 UTC del 26. Se elige a proposito una hora en la que UTC ya paso de dia:
+  // con `new Date().toISOString().slice(0,10)` o con `inicioDelDiaCREnUtc` el ancla saldria del 26 y
+  // las ordenes de MAÑANA (26) empezarian a contar como deuda de HOY. Es el off-by-one de la 166.
+  const NOCHE_DEL_25_CR = new Date("2026-08-26T02:00:00.000Z");
+  const DIA_CR_ESPERADO = new Date("2026-08-25T00:00:00.000Z");
+
+  it("R11: `listarCierreDia` ancla el conteo en el dia CR de `now`, no en el dia UTC", async () => {
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO, NOCHE_DEL_25_CR);
+
+    const hoyCR = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][2] as Date;
+    expect(hoyCR).toEqual(DIA_CR_ESPERADO);
+  });
+
+  it("R11: `solicitarCierre` usa EL MISMO ancla que la lectura", async () => {
+    // La asimetria es el fallo que este caso existe para cazar: con anclas distintas el boton se
+    // habilita (lectura permisiva) y el submit lo rechaza acto seguido (escritura estricta), o al
+    // reves. Las dos llamadas se comparan entre si, no contra una constante.
+    const { service, repo } = newService();
+
+    await service.listarCierreDia(MENSAJERO, NOCHE_DEL_25_CR);
+    await service.solicitarCierre(MENSAJERO, NOCHE_DEL_25_CR);
+
+    const llamadas = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock.calls;
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[1][2]).toEqual(llamadas[0][2]);
+  });
+
+  it("el reloj es un PARAMETRO con default: sin `now` explicito sigue funcionando", async () => {
+    // Doctrina de la 246 (`dia-reparto.ts`): el reloj se inyecta en los tests y jamas se lee dentro
+    // del calculo. El default existe para los llamadores de produccion (la Server Action), que no
+    // tienen ningun dia que inyectar.
+    const { service, repo } = newService();
+
+    const r = await service.listarCierreDia(MENSAJERO);
+
+    expect(r.status).toBe("ok");
+    const hoyCR = (repo.contarOrdenesPendientesGestion as ReturnType<typeof vi.fn>).mock
+      .calls[0][2] as Date;
+    expect(hoyCR).toBeInstanceOf(Date);
+    // Medianoche exacta: si alguien sustituyera `startOfDayCR` por `now` a secas, el `lte` del
+    // repo dejaria fuera las ordenes de hoy creadas mas tarde en el dia.
+    expect(hoyCR.getUTCHours()).toBe(0);
+    expect(hoyCR.getUTCMinutes()).toBe(0);
+    expect(hoyCR.getUTCSeconds()).toBe(0);
+    expect(hoyCR.getUTCMilliseconds()).toBe(0);
   });
 });

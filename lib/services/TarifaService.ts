@@ -37,8 +37,30 @@ export class TarifaService implements ITarifaService {
     },
   };
 
+  // 274/R14-R15: una tarifa sin tienda Y sin zona seria la fila global
+  // `(NULL, NULL)`, que la cascada de resolucion NO considera como nivel (R2):
+  // se cobraria a nadie y solo ocuparia el unico `(zona_id, tienda_id)`.
+  //
+  // Por que esta guarda vive AQUI y no en zod (design 274 §3.3): en `crear` se
+  // podria validar en el schema, pero en `actualizar` el par que queda depende de
+  // la FILA EXISTENTE —`{ zonaId: null }` sobre una tarifa que ya no tenia tienda
+  // es invalido; sobre una que si la tiene, es valido— y zod no lee la base. Poner
+  // media regla en el schema y media aqui daria dos mensajes distintos para el
+  // mismo hecho, asi que la regla entera esta en el service.
+  private readonly TARIFA_SIN_ALCANCE = {
+    status: "validation_error" as const,
+    fieldErrors: {
+      tiendaId: ["una tarifa debe acotarse por tienda, por zona o por ambas"],
+      zonaId: ["una tarifa debe acotarse por tienda, por zona o por ambas"],
+    },
+  };
+
   async crear(input: CrearTarifaInput, actor: Actor): Promise<CrearTarifaServiceResult> {
     if (!WRITE_ROLES.has(actor.rol)) return { status: "forbidden" }; // R11/R12/R13
+
+    // 274/R14: sin tienda y sin zona no hay a quien cobrarle. Se rechaza ANTES de
+    // cualquier lectura: no se gasta un viaje a la base en algo ya invalido.
+    if (input.tiendaId == null && input.zonaId == null) return this.TARIFA_SIN_ALCANCE;
 
     // Solo se comprueba si viene: `tiendaId` es opcional (null = no acotada a
     // ninguna tienda). Una tarifa sin tienda no tiene duenno cuyo rol validar.
@@ -62,6 +84,7 @@ export class TarifaService implements ITarifaService {
       ivaFlete: input.ivaFlete,
       ivaComisionCod: input.ivaComisionCod,
       tarifaEspecial: input.tarifaEspecial ?? null, // opcional: ausente = sin pacto especial
+      tarifaEspecialDevuelta: input.tarifaEspecialDevuelta ?? null, // idem, para la devolucion
       zonaId: input.zonaId ?? null, // opcional: ausente = no acotada a una zona
       isDefault: input.isDefault ?? false, // marcarla por defecto es explicito
     });
@@ -104,12 +127,27 @@ export class TarifaService implements ITarifaService {
     const existente = await this.repo.findById(id);
     if (!existente) return { status: "not_found" }; // R21
 
-    // Si se reasigna el duenno o se reactiva la tarifa, el duenno efectivo DEBE
-    // seguir teniendo un rol tarifable (no se reactiva la tarifa de una cuenta
-    // degradada, ni la de una API key que perdio su rol).
+    // 274/R15: el par EFECTIVO es el que queda tras aplicar los campos provistos
+    // sobre la fila existente. `undefined` = "no viaja, se conserva lo de la fila";
+    // `null` = "desacotar", que es un valor con significado. Si el par efectivo
+    // queda `(null, null)`, la tarifa dejaria de aplicar a nadie: se rechaza y NO
+    // se actualiza nada. Caso tipico: `{ zonaId: null }` sobre una tarifa que ya no
+    // tenia tienda.
+    // 274/R16: acotar UNA sola dimension sigue siendo valido (tienda sin zona, o
+    // zona sin tienda), asi que la guarda exige que ambas queden nulas.
+    const tiendaEfectivaPar = input.tiendaId !== undefined ? input.tiendaId : existente.tiendaId;
+    const zonaEfectivaPar = input.zonaId !== undefined ? input.zonaId : existente.zonaId;
+    if (tiendaEfectivaPar == null && zonaEfectivaPar == null) return this.TARIFA_SIN_ALCANCE;
+
+    // Si se reasigna el duenno, el duenno efectivo DEBE seguir teniendo un rol
+    // tarifable (no se le pasa la tarifa a una cuenta degradada, ni a una API key
+    // que perdio su rol).
     // `tiendaEfectiva` puede quedar en null (la tarifa deja de estar acotada, o ya
     // no lo estaba): ahi no hay rol que exigir y la comprobacion no aplica.
-    if (input.tiendaId !== undefined || input.status === "activo") {
+    // 274/R11: esta rama tambien se disparaba con `input.status === "activo"`
+    // (revalidar al REACTIVAR una tarifa). `status` ya no existe como campo, asi
+    // que ese segundo motivo desaparece; el primero se conserva intacto.
+    if (input.tiendaId !== undefined) {
       const tiendaEfectiva = input.tiendaId ?? existente.tiendaId;
       if (tiendaEfectiva != null && !(await this.repo.esTiendaAsignable(tiendaEfectiva))) {
         return this.TIENDA_NO_TARIFABLE;
@@ -146,7 +184,6 @@ export class TarifaService implements ITarifaService {
   private buildUpdateData(input: ActualizarTarifaInput): UpdateTarifaData {
     const data: UpdateTarifaData = {};
     if (input.tiendaId !== undefined) data.tiendaId = input.tiendaId;
-    if (input.status !== undefined) data.status = input.status;
     if (input.valorFlete !== undefined) data.valorFlete = input.valorFlete;
     if (input.valorFleteDevuelto !== undefined) data.valorFleteDevuelto = input.valorFleteDevuelto;
     if (input.valorFleteGam !== undefined) data.valorFleteGam = input.valorFleteGam;
@@ -159,6 +196,9 @@ export class TarifaService implements ITarifaService {
     if (input.ivaComisionCod !== undefined) data.ivaComisionCod = input.ivaComisionCod;
     // `null` viaja tal cual (limpia el pacto especial); solo `undefined` se ignora.
     if (input.tarifaEspecial !== undefined) data.tarifaEspecial = input.tarifaEspecial;
+    if (input.tarifaEspecialDevuelta !== undefined) {
+      data.tarifaEspecialDevuelta = input.tarifaEspecialDevuelta;
+    }
     // `null` viaja tal cual (desacota de la zona); solo `undefined` se ignora.
     if (input.zonaId !== undefined) data.zonaId = input.zonaId;
     if (input.isDefault !== undefined) data.isDefault = input.isDefault;

@@ -1,5 +1,7 @@
+import { MSG_CARGA_SIN_TARIFA, MSG_FILA_SIN_TARIFA } from "@/lib/services/mensajes-tarifa";
 import { EVENTOS_PUBLICOS } from "@/lib/types/webhook-eventos";
 import { METRICAS_API_KEY, METRICAS_TODAS } from "@/lib/analytics/publicacion-api-key";
+import { TOPE_FILAS_HABILITAR } from "@/lib/config/habilitacion-api";
 
 // Feature 106 — Fuente de verdad del contrato OpenAPI 3.1 del canal integrador por API key.
 // Este objeto es lo que sirve `GET /api/docs/openapi` (como JSON) y lo que renderiza Swagger UI
@@ -102,10 +104,39 @@ export const openApiSpec = {
         summary: "Carga de órdenes",
         operationId: "cargarOrdenes",
         description: [
-          "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
+          "Crea una o más órdenes en firme. Una orden nueva arranca en estado",
           "`por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,",
-          "por cada orden creada, su `costoEnvio` (flete + IVA de la tarifa vigente de la tienda;",
-          "`\"0.00\"` si la tienda no tiene tarifa vigente).",
+          "por cada orden creada, su `costoEnvio`: flete + IVA de la tarifa vigente que resuelve",
+          "el par (tienda, zona del distrito de esa orden), más el fulfillment si lo hay.",
+          "",
+          "**FULFILLMENT (2026-08).** Si tu tarifa tiene un monto de fulfillment (el servicio de",
+          "bodega: tus paquetes ya están con nosotros), tus órdenes cambian en DOS cosas y las",
+          "dos son visibles en la respuesta:",
+          "",
+          "1. **Nacen en `en_preparacion` y SIN `num_guia`** (`numGuia: null`, nunca un número",
+          "   fabricado). No esperan a que un mensajero pase por tu tienda, porque el paquete ya",
+          "   está en la bodega; la guía se emite después, cuando la orden se prepara. Ese lote",
+          "   tampoco emite `manifiesto`: no hay entrega de bultos que firmar.",
+          "2. **`costoEnvio` incluye el monto de fulfillment**, y el campo `fulfillment` de cada",
+          "   orden dice cuánto de ese total es el servicio de bodega. Sin fulfillment ese campo",
+          "   vale cero y `costoEnvio` es exactamente lo que era antes.",
+          "",
+          "El monto se resuelve por orden, con la tarifa de SU par (tienda, zona), así que un",
+          "lote puede traer órdenes de las dos clases; cada fila dice en qué estado nació.",
+          "",
+          "**CAMBIO INCOMPATIBLE (2026-08): una fila sin tarifa ya no crea orden.** La tarifa se",
+          "resuelve ANTES de persistir. Una fila cuyo par (tienda, zona) no resuelve ninguna",
+          "tarifa vigente vuelve como `resultado: \"error\"` con la clave `tarifa` en `errores`",
+          `(\`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\`), NO se crea y NO trae ningún`,
+          "`costoEnvio`. Las demás filas del mismo lote se crean con normalidad.",
+          "",
+          "**Si NINGUNA de las filas que llegan a la resolución de tarifa la resuelve, la",
+          "respuesta es 409** y no se persiste nada: ni órdenes, ni la fila de `carga`, ni la",
+          "notificación de carga terminada. Atención a la distinción, porque es la que evita un",
+          "diagnóstico falso: si NINGUNA fila llega siquiera a la resolución de tarifa (todas",
+          "fallan antes por validación, duplicidad o cobertura geográfica), la respuesta sigue",
+          "siendo `200` con esas filas en su error de siempre, NO `409`: la tarifa no es el",
+          "motivo del fallo.",
           "",
           "**CAMBIO INCOMPATIBLE (2026-07): el estado inicial cambió.** Antes las órdenes nacían",
           "en `en_ruta_bodega_central`, que afirmaba que el paquete ya viajaba hacia la bodega",
@@ -119,7 +150,10 @@ export const openApiSpec = {
           "aparece en el enum `estado` y no puede llegar en ninguna respuesta.",
           "",
           "Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya",
-          "existente) o `error` (validación/geografía). Una respuesta 200 puede contener filas con",
+          "existente **en tu cuenta**: la unicidad de `num_remision` es por tienda, así que otro",
+          "integrador puede usar el mismo número sin afectarte) o `error` (validación, geografía",
+          "o falta de tarifa). Una respuesta 200",
+          "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
         ].join("\n"),
         requestBody: {
@@ -191,6 +225,31 @@ export const openApiSpec = {
                           numGuia: 100234,
                           estado: "por_recolectar_en_tienda",
                           costoEnvio: "3.39",
+                          fulfillment: "0.00",
+                        },
+                      ],
+                    },
+                  },
+                  filaSinTarifa: {
+                    summary: "Una creada y una degradada por falta de tarifa",
+                    value: {
+                      cargaId: "9c2b7f10-5d3a-4e21-9a4b-77c8e0f1a2b3",
+                      total: 2,
+                      creadas: 1,
+                      duplicadas: 0,
+                      conError: 1,
+                      filas: [
+                        { fila: 1, numRemision: "REM-0001", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 100234 },
+                        { fila: 2, numRemision: "REM-0002", resultado: "error", errores: { tarifa: [MSG_FILA_SIN_TARIFA] } },
+                      ],
+                      ordenes: [
+                        {
+                          id: "6f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+                          numRemision: "REM-0001",
+                          numGuia: 100234,
+                          estado: "por_recolectar_en_tienda",
+                          costoEnvio: "3.39",
+                          fulfillment: "0.00",
                         },
                       ],
                     },
@@ -201,6 +260,24 @@ export const openApiSpec = {
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
+          // Feature 274 (R29/R31) — el 409 NUEVO de la carga. No es `$ref: Conflict` a secas
+          // porque el ejemplo publicado tiene que ser LA CONSTANTE que el service emite: dos
+          // cadenas (una aqui y otra en `lib/services/mensajes-tarifa.ts`) divergen a la primera
+          // errata, y R38 pide exactamente lo contrario.
+          "409": {
+            description:
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se creó ninguna orden ni fila de carga.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                example: {
+                  status: "error",
+                  code: "CONFLICT",
+                  message: MSG_CARGA_SIN_TARIFA,
+                },
+              },
+            },
+          },
           "422": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -497,9 +574,9 @@ export const openApiSpec = {
         operationId: "generarPdfOrden",
         description: [
           "Devuelve una URL firmada de corta duración con el PDF de la etiqueta de la orden.",
-          "La primera llamada construye el PDF y lo almacena (`generado: true`); las siguientes",
-          "reutilizan el mismo documento y solo lo vuelven a firmar (`generado: false`), por lo",
-          "que la `url` cambia en cada llamada aunque el PDF sea el mismo.",
+          "La primera llamada construye el PDF y lo almacena; las siguientes reutilizan el mismo",
+          "documento y solo lo vuelven a firmar. La respuesta es idéntica en ambos casos, y la",
+          "`url` cambia en cada llamada aunque el PDF sea el mismo.",
           "",
           "Solo responde a `POST`. Una orden sin guía imprimible devuelve 409.",
         ].join("\n"),
@@ -515,15 +592,13 @@ export const openApiSpec = {
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: true,
                     },
                   },
                   reuso: {
-                    summary: "Llamada posterior: solo se vuelve a firmar",
+                    summary: "Llamada posterior: solo se vuelve a firmar (misma forma)",
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: false,
                     },
                   },
                 },
@@ -556,7 +631,7 @@ export const openApiSpec = {
         description: [
           "Misma forma de respuesta que el PDF por orden, sobre el consolidado de todas las",
           "etiquetas imprimibles del lote (solo órdenes propias y vivas). La primera llamada lo",
-          "construye (`generado: true`); las siguientes solo vuelven a firmar (`generado: false`).",
+          "construye; las siguientes solo vuelven a firmar, con la misma forma de respuesta.",
           "",
           "Solo responde a `POST`. Un lote inexistente o de otro dueño devuelve el mismo 404; un",
           "lote sin etiquetas imprimibles, o que excede el tope de etiquetas por PDF, devuelve 409.",
@@ -573,7 +648,6 @@ export const openApiSpec = {
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: true,
                     },
                   },
                 },
@@ -628,18 +702,32 @@ export const openApiSpec = {
           "depende de la zona de CADA fila, así que el bloque suma únicamente las filas con",
           "resultado `cotizada` y por eso declara sus dos contadores propios, `filasSumadas` y",
           "`filasExcluidas`, cuya suma es igual a `total`. Un total que callara las filas que dejó",
-          "fuera se leería como «esto cuesta el lote» cuando no lo es. El bloque se emite SIEMPRE:",
+          "fuera se leería como «esto cuesta el lote» cuando no lo es. Una fila queda excluida por",
+          "DOS motivos distintos, no uno: porque su geografía no tiene cobertura (o no valida), o",
+          "porque el par (tienda, zona de esa fila) no resuelve tarifa vigente. Quien sume",
+          "`totales` sin mirar `filasExcluidas` obtiene un número que NO es el precio del lote.",
+          "El bloque se emite SIEMPRE:",
           "si ninguna fila resulta cotizable, llega con todos sus importes en cero,",
           "`filasSumadas: 0` y `filasExcluidas` igual a `total`.",
           "",
           "Éxito parcial: una fila sin cobertura (o que no valida) se marca `resultado: \"error\"`",
           "con sus mensajes por campo y NO trae `costos`; las demás se cotizan igual y la respuesta",
           "sigue siendo 200. No existe el resultado `duplicada`: sin persistencia no significa nada.",
+          "Una fila cuyo par (tienda, zona) no resuelve tarifa vigente se degrada por ESE MISMO",
+          `camino: \`resultado: "error"\` con \`{ "tarifa": ["${MSG_FILA_SIN_TARIFA}"] }\` y sin`,
+          "bloque `costos` —nunca un importe en cero—.",
           "",
-          "Si la tienda dueña de la key no tiene una tarifa vigente, la respuesta es **409** y no se",
-          "cotiza ninguna fila. Es la asimetría deliberada con `/carga`, que sí tolera la falta de",
-          "tarifa con `costoEnvio: \"0.00\"`: en una cotización, un cero sería una mentira sobre",
-          "dinero servida como precio.",
+          "El **409** existe sólo para el caso extremo: cuando NINGUNA de las filas que llegan a la",
+          "resolución de tarifa la resuelve. Entonces no se cotiza ni una fila y la respuesta no",
+          "trae ningún importe. Ya NO significa «la tienda no tiene tarifa vigente»: una fila suelta",
+          "sin tarifa vuelve en `error` dentro de un `200`. Y si ninguna fila llega siquiera a",
+          "resolver tarifa (todas sin cobertura o sin validar), la respuesta es `200` con `totales`",
+          "en cero, NO `409`.",
+          "",
+          "**`/carga` aplica hoy EXACTAMENTE el mismo criterio de lote.** La asimetría que este",
+          "contrato declaraba —la carga toleraba la falta de tarifa creando la orden con un costo",
+          "de envío en cero— dejó de existir: allí una fila sin tarifa tampoco se crea, y un lote",
+          "en el que ninguna resuelve también responde 409.",
         ].join("\n"),
         requestBody: {
           required: true,
@@ -694,12 +782,14 @@ export const openApiSpec = {
                           iva: "₡325,00",
                           comision: "₡906,50",
                           ivaComision: "₡117,85",
+                          fulfillment: "₡0,00",
                           total: "₡22.050,65",
                         },
                         devuelto: {
                           flete: "₡1.396,46",
                           iva: "₡181,54",
                           comision: "₡0,00",
+                          fulfillment: "₡0,00",
                           total: "-₡1.578,00",
                         },
                       },
@@ -714,12 +804,14 @@ export const openApiSpec = {
                               iva: "₡325,00",
                               comision: "₡906,50",
                               ivaComision: "₡117,85",
+                              fulfillment: "₡0,00",
                               total: "₡22.050,65",
                             },
                             devuelto: {
                               flete: "₡1.396,46",
                               iva: "₡181,54",
                               comision: "₡0,00",
+                              fulfillment: "₡0,00",
                               total: "-₡1.578,00",
                             },
                           },
@@ -741,7 +833,7 @@ export const openApiSpec = {
           "403": { $ref: "#/components/responses/Forbidden" },
           "409": {
             description:
-              "La tienda dueña de la key no tiene una tarifa vigente: no se cotiza ninguna fila.",
+              "Ninguna de las filas que llegaron a la resolución de tarifa la resolvió: no se cotiza ninguna fila.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/Error" },
@@ -884,6 +976,113 @@ export const openApiSpec = {
                             { fecha: "2026-08-19", valor: 0.93 },
                             { fecha: "2026-08-20", valor: null },
                           ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "422": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
+    // Feature 266 (T7.1, R28) — HABILITACION POR LOTE de pedidos con novedad. El NOVENO endpoint
+    // del canal. La `description` dice las tres cosas que el integrador NO puede adivinar leyendo
+    // el schema: que solo dos estados son habilitables, que una `devuelta` nunca cambia de estado
+    // y que el lote tiene tope de 100 filas.
+    "/api/ordenes/api-key/habilitar": {
+      post: {
+        tags: ["Órdenes"],
+        summary: "Habilitar pedidos con novedad (lote)",
+        operationId: "habilitarOrdenes",
+        description: [
+          "Habilita, en lote, pedidos que quedaron con una novedad: por cada fila se registra la",
+          "habilitación con su nota y, cuando corresponde, la orden vuelve a `en_reparto`.",
+          "",
+          "**Solo DOS estados son habilitables: `ayuda_tienda` y `devuelta`.** Ningún otro lo es.",
+          "En particular `reprogramada` **NO** es habilitable por este endpoint y devuelve",
+          "`estado_no_habilitable`, igual que `rechazada`, `incidente` y `sin_gestionar`.",
+          "",
+          "**Una orden `devuelta` NUNCA cambia de estado**: siempre responde",
+          "`habilitada_sin_cambio_de_estado`. No es una degradación ni un fallo — su paquete ya",
+          "volvió a la bodega, así que no hay nadie en la calle a quien devolvérselo. De los dos",
+          "estados habilitables, **solo `ayuda_tienda` (y solo si conserva mensajero asignado)**",
+          "puede producir `habilitada` con estado `en_reparto`.",
+          "",
+          `**El lote acepta entre 1 y ${TOPE_FILAS_HABILITAR} filas.** Un lote vacío, sin la clave`,
+          "`ordenes`, con un cuerpo que no es JSON o con más filas que el tope responde **422** y",
+          "no procesa ninguna fila: es el único 4xx que tira el lote entero, junto con 401 y 403.",
+          "",
+          "**Éxito parcial:** una fila mal formada, duplicada dentro del mismo lote, inexistente o",
+          "en un estado no habilitable se marca `resultado: \"error\"` con su `error.codigo`, y las",
+          "demás se procesan igual. La respuesta sigue siendo **200 aunque TODAS las filas fallen**.",
+          "`resultados` conserva el orden y la cantidad de las filas enviadas: podés casar por",
+          "índice.",
+          "",
+          "**Repetir la llamada:** habilitar dos veces la misma orden devuelve `estado_no_habilitable`",
+          "en la segunda llamada —ya está en `en_reparto`, que no es habilitable— y no escribe nada.",
+          "No se devuelve un acuse `habilitada` falso.",
+        ].join("\n"),
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/HabilitacionRequest" },
+              examples: {
+                dosFilas: {
+                  summary: "Dos filas: una en ayuda con mensajero y una devuelta",
+                  value: {
+                    ordenes: [
+                      { num_guia: 100234, nota: "el cliente pidió reintento mañana" },
+                      { num_guia: 100235, nota: "dirección corregida por el call center" },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Lote procesado (puede incluir filas con error).",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HabilitacionResponse" },
+                examples: {
+                  resumen: {
+                    summary: "Una habilitada, una sin cambio de estado y una con error",
+                    value: {
+                      resumen: {
+                        total: 3,
+                        habilitadas: 1,
+                        habilitadasSinCambioDeEstado: 1,
+                        conError: 1,
+                      },
+                      resultados: [
+                        {
+                          numGuia: 100234,
+                          resultado: "habilitada",
+                          estado: "en_reparto",
+                          error: null,
+                        },
+                        {
+                          numGuia: 100235,
+                          resultado: "habilitada_sin_cambio_de_estado",
+                          estado: "devuelta",
+                          error: null,
+                        },
+                        {
+                          numGuia: 999999,
+                          resultado: "error",
+                          estado: null,
+                          error: {
+                            codigo: "no_encontrada",
+                            mensaje: "no existe una orden viva con esa guia",
+                          },
                         },
                       ],
                     },
@@ -1316,7 +1515,8 @@ export const openApiSpec = {
           numGuia: { type: "integer", description: "Número de guía asignado (solo en `creada`)." },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso la orden no se creó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1324,16 +1524,25 @@ export const openApiSpec = {
       CargaOrden: {
         type: "object",
         description: "Una orden efectivamente creada (bloque plano listo para consumir).",
-        required: ["id", "numRemision", "numGuia", "estado", "costoEnvio"],
+        required: ["id", "numRemision", "numGuia", "estado", "costoEnvio", "fulfillment"],
         properties: {
           id: { type: "string", format: "uuid", description: "Id interno de la orden creada." },
           numRemision: { type: "string" },
-          numGuia: { type: "integer" },
+          numGuia: {
+            type: ["integer", "null"],
+            description:
+              "Número de guía asignado en el acto. Es `null` —y solo entonces— cuando la orden nació en `en_preparacion` por fulfillment: la guía se emite más tarde y nunca se fabrica un número.",
+          },
           estado: { type: "string", enum: ORDER_STATUS_ENUM },
           costoEnvio: {
             type: "string",
             description:
-              "Costo del envío (flete + IVA), string escala 2. \"0.00\" si la tienda no tiene tarifa vigente. Distinto de `monto_cobrar`/COD.",
+              "Costo total del envío (flete + IVA de la tarifa vigente del par (tienda, zona), MÁS el fulfillment si lo hay), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD.",
+          },
+          fulfillment: {
+            type: "string",
+            description:
+              "Cuánto de `costoEnvio` es el servicio de bodega, string escala 2. `\"0.00\"` si tu tarifa no tiene fulfillment — y entonces `costoEnvio` es solo flete + IVA. Nunca `null`.",
           },
         },
       },
@@ -1371,17 +1580,12 @@ export const openApiSpec = {
         type: "object",
         description:
           "URL firmada de corta duración con el PDF de etiqueta (de una orden o de un lote). La URL se firma en cada llamada: nunca es una URL persistida.",
-        required: ["url", "expiraEnSegundos", "generado"],
+        required: ["url", "expiraEnSegundos"],
         properties: {
           url: { type: "string", format: "uri", description: "URL firmada del PDF." },
           expiraEnSegundos: {
             type: "integer",
             description: "TTL de la URL firmada en segundos (300 por defecto).",
-          },
-          generado: {
-            type: "boolean",
-            description:
-              "`true` si el PDF se construyó en esta llamada; `false` si se reutilizó el ya almacenado y solo se volvió a firmar.",
           },
         },
       },
@@ -1454,27 +1658,37 @@ export const openApiSpec = {
       CotizacionEscenarioEntregado: {
         type: "object",
         description:
-          "Costo si la orden se ENTREGA: cinco conceptos. `total` es lo que RECIBE la tienda = monto a cobrar − (flete + iva + comision + ivaComision), y es negativo si no hay COD que cubra lo facturado.",
-        required: ["flete", "iva", "comision", "ivaComision", "total"],
+          "Costo si la orden se ENTREGA: seis conceptos. `total` es lo que RECIBE la tienda = monto a cobrar − (flete + iva + comision + ivaComision + fulfillment), y es negativo si no hay COD que cubra lo facturado.",
+        required: ["flete", "iva", "comision", "ivaComision", "fulfillment", "total"],
         properties: {
           flete: { type: "string", description: "Flete de la zona del distrito, formateado." },
           iva: { type: "string", description: "IVA del flete, formateado." },
           comision: { type: "string", description: "Comisión COD, formateada." },
           ivaComision: { type: "string", description: "IVA de la comisión, formateado." },
+          fulfillment: {
+            type: "string",
+            description:
+              "Monto fijo del servicio de bodega por orden, formateado. Cero si tu tarifa no tiene fulfillment; nunca ausente.",
+          },
           total: { type: "string", description: "Lo que recibe la tienda, formateado." },
         },
       },
       CotizacionEscenarioDevuelto: {
         type: "object",
         description:
-          "Costo si la orden se DEVUELVE: cuatro conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `total` es la DEUDA de la tienda = −(flete + iva), y por eso es negativo.",
-        required: ["flete", "iva", "comision", "total"],
+          "Costo si la orden se DEVUELVE: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo.",
+        required: ["flete", "iva", "comision", "fulfillment", "total"],
         properties: {
           flete: { type: "string", description: "Flete de devolución, formateado." },
           iva: { type: "string", description: "IVA del flete de devolución, formateado." },
           comision: {
             type: "string",
             description: "Siempre cero formateado: una devolución no cobra comisión COD.",
+          },
+          fulfillment: {
+            type: "string",
+            description:
+              "El MISMO monto que en el escenario entregado: preparar y despachar el paquete ya costó, lo reciba el destinatario o no. Cero si tu tarifa no tiene fulfillment.",
           },
           total: { type: "string", description: "Deuda de la tienda, formateada (negativa)." },
         },
@@ -1503,7 +1717,8 @@ export const openApiSpec = {
           costos: { $ref: "#/components/schemas/CotizacionCostos" },
           errores: {
             type: "object",
-            description: "Errores por campo (solo en `error`).",
+            description:
+              "Errores por campo (solo en `error`). Las claves suelen ser columnas de la fila, pero no siempre: la clave `tarifa` señala que el par (tienda, zona) de esa fila no resuelve tarifa vigente y por eso no se cotizó.",
             additionalProperties: { type: "array", items: { type: "string" } },
           },
         },
@@ -1596,6 +1811,104 @@ export const openApiSpec = {
                   description: "`null` significa «no se sabe» (por ejemplo, denominador cero). NUNCA se sustituye por 0. Un día con `valor: null` SÍ está en `data`: está cerrado, pero su resultado es indefinido.",
                 },
               },
+            },
+          },
+        },
+      },
+      // Feature 266 (T7.1) — cuerpo y respuesta de la habilitacion por lote.
+      HabilitacionRequest: {
+        type: "object",
+        required: ["ordenes"],
+        properties: {
+          ordenes: {
+            type: "array",
+            minItems: 1,
+            maxItems: TOPE_FILAS_HABILITAR,
+            description: `Entre 1 y ${TOPE_FILAS_HABILITAR} filas. Fuera de ese rango: 422 y ninguna fila procesada.`,
+            items: { $ref: "#/components/schemas/HabilitacionRow" },
+          },
+        },
+      },
+      HabilitacionRow: {
+        type: "object",
+        description:
+          "Una fila del lote. Si `num_guia` o `nota` no cumplen, la fila responde `error`/`fila_invalida` y el resto del lote se procesa igual: NO es un 422 del lote.",
+        required: ["num_guia", "nota"],
+        properties: {
+          num_guia: {
+            type: "integer",
+            minimum: 1,
+            description: "Número de guía de una orden propia. No se acepta como texto.",
+          },
+          nota: {
+            type: "string",
+            minLength: 1,
+            maxLength: 200,
+            description:
+              "Motivo de la habilitación, OBLIGATORIO. Se recorta y se guarda en la bitácora de la orden; no viaja en el historial de estados.",
+          },
+        },
+      },
+      HabilitacionResponse: {
+        type: "object",
+        required: ["resumen", "resultados"],
+        properties: {
+          resumen: { $ref: "#/components/schemas/HabilitacionResumen" },
+          resultados: {
+            type: "array",
+            description:
+              "MISMO orden y MISMA cantidad que las filas enviadas: se puede casar por índice.",
+            items: { $ref: "#/components/schemas/HabilitacionRowResult" },
+          },
+        },
+      },
+      HabilitacionResumen: {
+        type: "object",
+        description: "`total` = `habilitadas` + `habilitadasSinCambioDeEstado` + `conError`.",
+        required: ["total", "habilitadas", "habilitadasSinCambioDeEstado", "conError"],
+        properties: {
+          total: { type: "integer", description: "Filas recibidas." },
+          habilitadas: { type: "integer", description: "Volvieron a `en_reparto`." },
+          habilitadasSinCambioDeEstado: {
+            type: "integer",
+            description: "Se registró la habilitación y el estado NO cambió.",
+          },
+          conError: { type: "integer" },
+        },
+      },
+      HabilitacionRowResult: {
+        type: "object",
+        required: ["numGuia", "resultado", "estado", "error"],
+        properties: {
+          numGuia: {
+            description: "La guía tal como se envió (si la fila era inválida, puede no ser entero).",
+          },
+          resultado: {
+            type: "string",
+            enum: ["habilitada", "habilitada_sin_cambio_de_estado", "error"],
+            description:
+              "`habilitada`: la orden volvió a `en_reparto`. `habilitada_sin_cambio_de_estado`: se registró y el estado NO cambió (SIEMPRE el caso de una `devuelta`). `error`: la fila no se procesó.",
+          },
+          estado: {
+            type: ["string", "null"],
+            description: "Estado en el que la orden quedó; `null` cuando la fila falló.",
+          },
+          error: {
+            type: ["object", "null"],
+            required: ["codigo", "mensaje"],
+            properties: {
+              codigo: {
+                type: "string",
+                enum: [
+                  "fila_invalida",
+                  "duplicada_en_lote",
+                  "no_encontrada",
+                  "estado_no_habilitable",
+                ],
+                description:
+                  "`fila_invalida`: `num_guia`/`nota` no cumplen. `duplicada_en_lote`: la guía ya apareció antes en el mismo lote. `no_encontrada`: no hay orden viva con esa guía para esta key (no distingue «no existe» de «es de otro dueño»). `estado_no_habilitable`: el estado actual no es `ayuda_tienda` ni `devuelta` —incluye `reprogramada` y la segunda habilitación de una orden ya en `en_reparto`—.",
+              },
+              mensaje: { type: "string" },
             },
           },
         },

@@ -350,6 +350,19 @@ export const TRANSICIONES = {
   sin_gestionar: [
     { to: "en_bodega_central", via: "liberacion_sin_gestionar", rol: "admin (aprobar cierre)" }, // #17
     { to: "en_bodega_satelite", via: "liberacion_sin_gestionar", rol: "admin (aprobar cierre)" }, // #18
+    // FEATURE 276 (T3/T9, R21/R22) — #68. LA NO GESTION EN EL TOPE NO VUELVE A BODEGA: se TERMINA.
+    //
+    // Su PRODUCTOR es el mismo bloque de la aprobacion del cierre que produce las dos de arriba
+    // (`CierresAdminRepository.resolverCierre`, rama `liberacionSinGestionar`), y llega EN ESTE
+    // MISMO COMMIT: una arista sin productor es el error de la 154 que costo el tren 154+155+156,
+    // y un productor sin arista hace que el choke point (140) rechace la escritura y REVIERTA LA
+    // APROBACION ENTERA del cierre.
+    //
+    // POR QUE NO REUSA `liberacion_sin_gestionar`, que seria lo barato: ese nombre dice
+    // «liberacion» y esta es precisamente la orden que NO se libera. Las dos poblaciones saldrian
+    // indistinguibles justo en la fila que es su unica evidencia — y esta cobra dinero
+    // (`cobroRechazado`, 56). El argumento completo vive en `lib/types/orden-historial.ts`.
+    { to: "rechazada", via: "rechazo_tope_intentos", rol: "admin (aprobar cierre)" }, // #68 (276)
   ],
 
   // --- Flujo de devolucion (137 + 139) -------------------------------------------------

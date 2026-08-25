@@ -130,7 +130,7 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 
 Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí existe:
 
-- [ ] **Corregir el día desde `/recepcion-satelite`** con cuenta `adminSatelite`. En local no hay
+- [ ] **Corregir el día desde `/recepcion-satelite/en-bodega`** con cuenta `adminSatelite`. En local no hay
       ninguna orden de su zona en un estado que esa pantalla ofrezca, y **no hay camino por la UI**:
       el botón exige `por_recoger`, que exige asignar, que exige coordenadas — y sólo 4 órdenes de
       ~70 las tenían.
@@ -164,7 +164,130 @@ Lo que `F6` **no pudo cubrir en local por falta de datos**, y en producción sí
       inesperada» **posteriores al despliegue**. Antes había **6**, todos del 2026-08-22. Es la
       única comprobación de que el arreglo funcionó **donde ocurrió el incidente**: ninguna de las
       17.000 pruebas verdes la sustituye.
+      ⚠️ **Re-medido el 2026-08-24 y SIGUE SIN PODER CERRARSE, ahora con el motivo dicho:** no hay
+      **ningún** job `optimizacion_ruta` —de ningún estado— posterior al **2026-08-22 16:56 CR**, o
+      sea **ninguno después del despliegue**. El último `failed` es del **2026-08-21 23:43 CR**.
+      «Cero `failed`» vuelve a ser un cero que no significa nada, exactamente como el de `C7` antes
+      de comprobar que el cron sí había corrido. Hace falta **una optimización real** después del
+      despliegue para que este cero valga.
 - [ ] **`F6` en preview** (265 y 262): la mitad que en local **no tiene poder de resolución** —sin
       llamada al proveedor no se puede distinguir «no se llamó» de «no había credencial»—. Preview
       **sí** tiene la credencial (comprobado el 2026-08-23); lo que hace falta es un despliegue y una
       cuenta que exista en **su** base, que es distinta de la de producción desde julio.
+
+---
+
+## Release NO abierta — 2026-08-24
+
+`dev` = **`7c211f2f`**, gate COMPLETO en verde (`INIT_EXIT=0`, 1375 archivos / 18.707 tests).
+`prod` sigue en **`37b5944b`**. Se recorrió el §1 de esta lista y **se paró en el cuarto punto**,
+que es justo el que existe para esto: *repasar las fichas `in_progress` que entran*.
+
+**Qué lo paró:** `dev` lleva, además de la 276 y la 277, el cambio de tarifas de otra sesión, y
+dentro va **`20260825120000_drop_tarifa_status`** — un **`DROP COLUMN` sobre una tabla de dinero**,
+irreversible. Su mitad frontend (**ficha 275**) sigue `pending`.
+
+**Lo que se comprobó antes de decidir**, para que no haya que repetirlo:
+
+- La revisión de esa ficha **existe y aprobó**: «APROBADO CON RESERVAS», **0 bloqueantes de
+  código**, 40/40 requisitos. Sus dos bloqueantes eran de bookkeeping.
+- **No queda código vivo usando `tarifas.status`**: los únicos aciertos del grep son comentarios que
+  explican su retirada.
+- El gate está verde sobre ese mismo árbol, con los tests de componentes dentro.
+
+**Decisión del humano:** esperar a que la otra sesión cierre su 275 —o confirme que su parte puede
+salir— en vez de arrastrar un borrado irreversible ajeno en una release que no es suya. Separar no
+era opción: `dev` es un solo árbol y aislar lo de esta sesión exigiría cherry-picks.
+
+### Cuando se abra, esto ya está medido — pero CADUCA
+
+Las dos condiciones de despliegue de la 276 se ejecutaron el 2026-08-24:
+
+- **R37 limpia**: única orden en el umbral, la guía `28098171`, en `devuelta`; **cero** fuera. La
+  condición de parada de Q6 no se cumple.
+- **T6 congela CERO órdenes el primer día** (medido por primera vez): 2 `reprogramada` vivas,
+  0 liberables hoy, las dos con su cierre ya aprobado.
+
+⚠️ **Son fotos. Se re-miden el día que se abra la release**, no se citan éstas. Cualquier cierre que
+la bodega apruebe entre medias puede crear una orden en el umbral que R18 dejaría inasignable.
+
+---
+
+## Release del 2026-08-25 — la 276, la 277, la 279 y la cascada de tarifas
+
+**`prod` = `e4ff7182`** · PR #492 · `dev` = `258b6468`, y **`dev` es ancestro de `prod`** (comprobado:
+todo el trabajo llegó, no solo el PR en verde).
+
+### §1 recorrido, con su evidencia
+
+- **Gate COMPLETO sobre el SHA exacto que se despliega**: `./init.sh` → `INIT_EXIT=0`,
+  **1386 archivos / 18.868 tests**, con `INIT_EXIT` escrito dentro del log.
+- **`dev` no se movió** entre el gate y la release: `258b6468` antes y después. Se re-comprobó **tres
+  veces** durante la tanda, y en dos de ellas **sí se había movido** — de ahí la tercera colisión de
+  ids del día.
+- **Re-medido lo que caduca**, que es lo que este archivo existe para no olvidar:
+  - **R37 de la 276**, re-ejecutada **hoy** y no citada de ayer: la única orden viva con
+    `intentos >= 3` es la guía `28098171`, en `devuelta`, y **cero** fuera de ese estado. La
+    condición de parada de Q6 no se cumple.
+  - **T6 congela 0 órdenes el primer día**: 2 `reprogramada` vivas, 0 liberables hoy, las dos con su
+    cierre ya aprobado.
+- **Fichas `in_progress` que entran, leídas enteras** (ver el riesgo declarado abajo).
+- **Variables de entorno**: no aplica — ninguna de las fichas de esta tanda añade ni cambia
+  configuración de entorno.
+
+### Lo irreversible, medido ANTES de salir
+
+`20260825120000_drop_tarifa_status` **borra `tarifas.status`** y su tipo `estado_tarifa`. Un
+`DROP COLUMN` no se deshace, así que se midió qué se pierde: **`tarifas` tiene 2 filas y las dos son
+`activo`**. **Ni una `inactivo`**, así que la pérdida real de información es **cero**. Entran ocho
+migraciones en total; ninguna de las de esta sesión mueve filas.
+
+### ⚠️ Riesgo declarado y aceptado por el humano
+
+La ficha **278 (plantilla de carga masiva v3)**, de otra sesión, entró en esta release **sin informe
+de revisión ni bitácora en el repo** —no existe `progress/review_278.md` ni ningún archivo suyo— y
+con estado `in_progress`. Su código ya estaba mergeado en `dev` cuando se abrió la release.
+
+También entró la **274 (cascada de tarifas)**, que **sí** tiene revisión: «APROBADO CON RESERVAS»,
+0 hallazgos bloqueantes de código, 40/40 requisitos. Su mitad frontend, la **275**, sigue `pending`.
+
+El humano decidió el alcance dos veces con estos datos delante. Se deja escrito **aquí** y en el
+cuerpo del PR para que sea un riesgo registrado y no uno recordado.
+
+### ✅ La 271, cerrada por fin — verificado en producción anoche
+
+El corte de las **00:01:21 CR del 25** creó el cierre `5efa70b9` (`vencido`, 1 gestión + 2 órdenes
+barridas) y **emitió los avisos**: `notificacion` pasa de **0 a 4** filas `cierre_dia_vencido` —
+cero en toda la historia de la tabla hasta anoche.
+
+Y el aviso **nombra el día trabajado**: «Tu cierre **del 24 de agosto** venció sin enviarse a
+aprobación…». No el 25 de su nacimiento. Ese off-by-one era media ficha 271, y aquí queda medido en
+producción, no razonado. Los otros tres avisos van a bodega (maestro, admin, adminSatélite) **sin
+datos de nadie**.
+
+### §3 recorrido tras desplegar — todo verificado
+
+- **Despliegue `READY`** (`dpl_3Gfyukq…`), alias `ordenex.vercel.app` apuntando y `aliasError: null`.
+  No basta con que el PR esté mergeado, y por eso se espera.
+- **Cero errores de runtime** en la ventana que cubre el despliegue.
+- **Las ocho migraciones aplicaron, y se comprobó contra la base qué hicieron:**
+  - `rechazo_tope_intentos` **existe** en `orden_historial_origen_tipo`.
+  - `tarifas.status` **ya no existe**, y su tipo `estado_tarifa` **tampoco**.
+  - **`tarifas` conserva sus 2 filas**: el `DROP COLUMN` no se llevó ninguna.
+  - **0 órdenes tocadas** por el despliegue, de **163** vivas. Ninguna migración de esta tanda
+    escribió una fila que no le tocaba.
+
+### Pendiente para la PRÓXIMA release — lo que sólo se puede ver en producción
+
+- [ ] **Las dos pantallas nuevas del adminSatélite** (279). Sus e2e están **`NOT EXECUTED`**: las
+      rutas se corrigieron **por lectura**. Falta entrar como `adminSatelite` y comprobar, con el
+      número delante: que el menú «Órdenes» abre como acordeón con **«Por recibir»** y
+      **«En bodega»**; que **`/recepcion-satelite` redirige** a «Por recibir» y no da 404; que el
+      **escáner está montado en las dos**, incluida «Por recibir» **con la lista vacía**; y que
+      **ninguna card ofrece «Aceptar»**.
+- [ ] **El tope de intentos, visto por el mensajero** (276). Cuando una orden llegue a 2 intentos,
+      comprobar que su panel ofrece **sólo** «Entregada», «Rechazada» e «Incidente» — y que
+      «Reportar incidente» **sigue estando**, que fue decisión firmada.
+- [ ] **La primera orden que alcance el umbral**: comprobar que queda `rechazada` y que emite su
+      `cobroRechazado`. Esta release **acelera dinero** —hasta ahora el sistema erraba a propósito
+      hacia no cobrar— y ese primer cobro es el que hay que mirar con lupa.

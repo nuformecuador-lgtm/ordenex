@@ -1,6 +1,22 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
-import { crearTarifaSchema, actualizarTarifaSchema, listarTarifasSchema } from "@/lib/types/tarifa";
+import {
+  crearTarifaSchema,
+  actualizarTarifaSchema,
+  listarTarifasSchema,
+  type TarifaDTO,
+} from "@/lib/types/tarifa";
 import { tarifasConfig } from "@/lib/config/tarifas";
+
+// Quita comentarios de linea y de bloque. Sin esto, un assert de "esta cadena ya no
+// aparece en el fuente" se pondria rojo por el propio comentario que EXPLICA la
+// retirada -y, peor, se podria satisfacer reescribiendo un comentario-. Al mirar
+// solo codigo, el assert cae del lado de las declaraciones reales.
+function fuenteSinComentarios(rutaRelativa: string): string {
+  const texto = readFileSync(resolve(process.cwd(), rutaRelativa), "utf8");
+  return texto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
 
 function baseCrear() {
   return {
@@ -109,7 +125,7 @@ describe("crearTarifaSchema — validacion de creacion (R2/R3/R5/R14/R15)", () =
   it("rechaza campos desconocidos (strict)", () => {
     const r = crearTarifaSchema.safeParse({ ...baseCrear(), extra: "x" });
     expect(r.success).toBe(false);
-    // `status` no se acepta en creacion: nace `activo` por default de DB.
+    // 274/R11: `status` tampoco se acepta en creacion; la columna ya no existe.
     expect(crearTarifaSchema.safeParse({ ...baseCrear(), status: "inactivo" }).success).toBe(false);
   });
 });
@@ -129,16 +145,22 @@ describe("actualizarTarifaSchema — todos opcionales, strict (R20/R23)", () => 
     if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("tiendaId");
   });
 
-  it("acepta status activo|inactivo y rechaza cualquier otro valor (R20/R23)", () => {
-    expect(actualizarTarifaSchema.safeParse({ status: "activo" }).success).toBe(true);
-    expect(actualizarTarifaSchema.safeParse({ status: "inactivo" }).success).toBe(true);
-
-    const r = actualizarTarifaSchema.safeParse({ status: "borrado" });
+  // ⚠️ CAMBIO DE DECISION (feature 274, `20260825120000_drop_tarifa_status`): este
+  // test afirmaba lo CONTRARIO —que `{ status: "activo" }` era un update valido—.
+  // Se invierte a proposito, no se borra: la columna `tarifas.status` y el tipo
+  // `estado_tarifa` dejaron de existir, y con ellos la idea de tarifa "inactiva".
+  // No hizo falta escribir ninguna validacion nueva para rechazarlo: el schema es
+  // `.strict()`, asi que `status` cae como campo desconocido.
+  it("274/R11: rechaza `status` (columna retirada) por strict, sea cual sea su valor", () => {
+    for (const valor of ["activo", "inactivo", "borrado", "", null]) {
+      const r = actualizarTarifaSchema.safeParse({ status: valor });
+      expect(r.success).toBe(false);
+    }
+    // El error es de campo DESCONOCIDO (strict), no de enum invalido: es lo que
+    // demuestra que la validacion no se reescribio a mano.
+    const r = actualizarTarifaSchema.safeParse({ status: "activo" });
     expect(r.success).toBe(false);
-    if (!r.success) expect(r.error.flatten().fieldErrors).toHaveProperty("status");
-
-    expect(actualizarTarifaSchema.safeParse({ status: "" }).success).toBe(false);
-    expect(actualizarTarifaSchema.safeParse({ status: null }).success).toBe(false);
+    if (!r.success) expect(r.error.issues[0].code).toBe("unrecognized_keys");
   });
 
   it("rechaza monto negativo (R20/R23)", () => {
@@ -165,6 +187,32 @@ describe("actualizarTarifaSchema — todos opcionales, strict (R20/R23)", () => 
     expect(actualizarTarifaSchema.safeParse({ zonaId: "zona-1" }).success).toBe(true);
     expect(actualizarTarifaSchema.safeParse({ zonaId: null }).success).toBe(true);
     expect(actualizarTarifaSchema.safeParse({ isDefault: true }).success).toBe(true);
+  });
+});
+
+describe("274/R12 — `TarifaDTO` no expone `status`", () => {
+  // Segunda mitad de R12: no basta con que el DTO que devuelve `crear` no traiga la
+  // clave en tiempo de ejecucion; el TIPO tampoco debe declararla, o alguien la
+  // volveria a rellenar creyendo que el contrato la pide.
+  it("el bloque `interface TarifaDTO` no declara la propiedad `status`", () => {
+    const fuente = fuenteSinComentarios("lib/types/tarifa.ts");
+    const bloque = /export interface TarifaDTO \{([\s\S]*?)\n\}/.exec(fuente);
+    expect(bloque).not.toBeNull();
+    const cuerpo = bloque![1];
+    // el bloque se leyo de verdad (guardia contra un regex que casa con vacio)
+    expect(cuerpo).toMatch(/\btiendaId\b/);
+    expect(cuerpo).not.toMatch(/\bstatus\b/);
+  });
+
+  it("un TarifaDTO literal con `status` no compila y el tipo no tiene esa clave", () => {
+    // `keyof TarifaDTO` no incluye "status": si alguien la reintroduce, este
+    // `satisfies` deja de compilar y el typecheck lo caza.
+    const claves = ["id", "tiendaId", "zonaId"] as const;
+    type ClaveDTO = keyof TarifaDTO;
+    claves satisfies readonly ClaveDTO[];
+    // @ts-expect-error 274/R12: "status" ya no es una clave de TarifaDTO.
+    const noEsClave: ClaveDTO = "status";
+    expect(noEsClave).toBe("status"); // el valor existe; lo que no existe es el tipo
   });
 });
 

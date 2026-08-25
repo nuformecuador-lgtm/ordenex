@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierresAdminService } from "@/lib/services/CierresAdminService";
+import { reintentosConfig } from "@/lib/config/reintentos";
 import { CierresAdminRepository } from "@/lib/repositories/CierresAdminRepository";
 import { WalletMovimientoRepository } from "@/lib/repositories/WalletMovimientoRepository";
 import { WalletFeedService } from "@/lib/services/WalletFeedService";
@@ -8,7 +9,7 @@ import { WalletTiendaMovimientoRepository } from "@/lib/repositories/WalletTiend
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { PagoMensajeroMovimientoRepository } from "@/lib/repositories/PagoMensajeroMovimientoRepository";
 import { WalletMensajeroFeedService } from "@/lib/services/WalletMensajeroFeedService";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { IngresoOrdenexDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type {
   Alcance,
@@ -142,6 +143,9 @@ const ESTATUS_IDS: Record<string, string | null> = {
   // el catalogo no los tiene, la aprobacion NO ocurre (R9, fallo cerrado).
   devolucion_por_confirmar: "s-devolucion-por-confirmar",
   devuelta: "s-devuelta",
+  // FEATURE 276 (T9, R21): el DESTINO del rechazo por agotamiento de intentos. Entra en la MISMA
+  // condicion que los tres de la 109, asi que sin el la config de liberacion no se cablea.
+  rechazada: "s-rechazada",
 };
 
 function newService(
@@ -356,6 +360,9 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
       montoCobrar: null,
       cobraComision: false,
       esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
       flete: null,
       ivaFlete: null,
       fleteDevolucion: null,
@@ -773,6 +780,10 @@ describe("Feature 109 · aprobarCierre — config de liberación de `sin_gestion
       enBodegaEstatusId: "s-en-bodega",
       enBodegaSateliteEstatusId: "s-en-bodega-sat",
       centralZonaId: "z-central",
+      // FEATURE 276 (T9, R7/R21): la config gana el destino del rechazo por tope y el UMBRAL,
+      // resuelto AQUI, en el servicio. El repositorio no lee configuracion.
+      rechazadaEstatusId: "s-rechazada",
+      umbralIntentos: reintentosConfig.MIN_INTENTOS_ENTREGA,
     });
     expect(ordenRepo.findEstatusIdByValue).toHaveBeenCalledWith("sin_gestionar");
   });
@@ -933,6 +944,9 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     comisionCod: "5.00",
     ivaFlete: "13.00",
     ivaComisionCod: "13.00",
+    // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+    tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
   };
 
   // Prisma doble: cierreDia.updateMany/count/findUnique + gestionOrden.findMany + createMany de
@@ -1410,6 +1424,9 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
               montoCobrar: "50000.00",
               cobraComision: true,
               esCentral: true,
+              esZonaEspecial: false,
+              fleteOrigen: "normal",
+              fleteDevolucionOrigen: "normal",
               flete: null,
               ivaFlete: null,
               fleteDevolucion: null,

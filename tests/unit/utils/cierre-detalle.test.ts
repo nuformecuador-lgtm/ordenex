@@ -41,9 +41,14 @@ describe("tarifaDe (R11)", () => {
       comisionCod: "3.00",
       ivaFlete: "13.00",
       ivaComisionCod: "13.00",
+      // Los dos pactos por distrito especial: esta fila no pacta nada, y `null` (no "0.00")
+      // es la unica forma de decirlo sin inventar un cobro de cero.
+      tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
     });
-    // Escala 2 en TODOS, sea cual sea la escala con que Postgres devuelva el Decimal.
-    const valores = Object.values(t ?? {});
+    // Escala 2 en TODOS los MONTOS, sea cual sea la escala con que Postgres devuelva el
+    // Decimal. Los dos pactos se excluyen del barrido porque su `null` es un valor legitimo.
+    const valores = Object.values(t ?? {}).filter((v) => v !== null);
     expect(valores).toHaveLength(7);
     for (const v of valores) {
       expect(typeof v).toBe("string");
@@ -52,7 +57,7 @@ describe("tarifaDe (R11)", () => {
   });
 
   it("R11: mismo formato que el resolver vivo para el MISMO valor (no divergen)", () => {
-    // El resolver (`TarifaVigentePorTiendaRepository`) emite `toFixed(2)`. Si el snapshot
+    // El resolver (`TarifaVigenteRepository`) emite `toFixed(2)`. Si el snapshot
     // emitiera otro texto para el mismo Decimal, un cierre backfilleado y uno nuevo
     // liquidarian "igual" pero con entradas distintas al ojo: eso es lo que se prohibe.
     const valor = new Prisma.Decimal("1000.00");

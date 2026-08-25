@@ -16,13 +16,13 @@ type TarifaPrismaClient = Pick<PrismaClient, "tarifa" | "usuario" | "zona">;
 type TarifaRow = Tarifa;
 
 // Serializa la fila de Prisma a TarifaDTO: las 8 columnas Decimal -> number
-// (R27), incluye tiendaId + status. Ya no hay `deletedAt` que ocultar: la tabla
-// borra en fisico (ver la migracion tarifa_zona_is_default).
+// (R27), incluye tiendaId. Ya no hay `deletedAt` que ocultar: la tabla borra en
+// fisico (ver la migracion tarifa_zona_is_default), ni `status` que proyectar
+// (274/R12: la columna se fue con `20260825120000_drop_tarifa_status`).
 function toDTO(row: TarifaRow): TarifaDTO {
   return {
     id: row.id,
     tiendaId: row.tiendaId ?? null,
-    status: row.status,
     valorFlete: row.valorFlete.toNumber(),
     valorFleteDevuelto: row.valorFleteDevuelto.toNumber(),
     valorFleteGam: row.valorFleteGam.toNumber(),
@@ -34,6 +34,8 @@ function toDTO(row: TarifaRow): TarifaDTO {
     // Opcional: se conserva la ausencia como `null`, no se degrada a 0 (0 seria
     // un cobro especial de cero colones, que no es lo mismo que no tener pacto).
     tarifaEspecial: row.tarifaEspecial == null ? null : row.tarifaEspecial.toNumber(),
+    tarifaEspecialDevuelta:
+      row.tarifaEspecialDevuelta == null ? null : row.tarifaEspecialDevuelta.toNumber(),
     zonaId: row.zonaId ?? null,
     isDefault: row.isDefault,
     createdAt: row.createdAt,
@@ -79,6 +81,10 @@ export class TarifaRepository implements ITarifaRepository {
         ivaComisionCod: new Prisma.Decimal(data.ivaComisionCod),
         tarifaEspecial:
           data.tarifaEspecial == null ? null : new Prisma.Decimal(data.tarifaEspecial),
+        tarifaEspecialDevuelta:
+          data.tarifaEspecialDevuelta == null
+            ? null
+            : new Prisma.Decimal(data.tarifaEspecialDevuelta),
         zonaId: data.zonaId ?? null,
         // Sin `?? false` explicito quedaria en manos del default de la columna;
         // se escribe para que el valor persistido no dependa de dos sitios.
@@ -167,18 +173,16 @@ export class TarifaRepository implements ITarifaRepository {
     return row !== null;
   }
 
-  async inactivarPorTienda(tiendaId: string): Promise<number> {
-    const result = await this.prisma.tarifa.updateMany({
-      where: { tiendaId, status: "activo" },
-      data: { status: "inactivo" },
-    });
-    return result.count;
-  }
+  // 274/R13: aqui vivia `inactivarPorTienda(tiendaId)` (updateMany a
+  // `status: "inactivo"`). Se fue con la columna `tarifas.status`.
+  // HUECO ACEPTADO Y DECLARADO (design 274 §2.2, decision del humano 2026-08-24):
+  // el caso «la tienda deja de ser adminTienda» queda SIN cobertura —como ya
+  // estaba de hecho, porque ningun llamador invocaba este metodo— y NO se abre
+  // ficha. No lo reintroduzcas sin decidir antes cual es el sustituto real.
 
   private toUpdateData(data: UpdateTarifaData): Prisma.TarifaUncheckedUpdateManyInput {
     const out: Prisma.TarifaUncheckedUpdateManyInput = {};
     if (data.tiendaId !== undefined) out.tiendaId = data.tiendaId;
-    if (data.status !== undefined) out.status = data.status;
     if (data.valorFlete !== undefined) out.valorFlete = new Prisma.Decimal(data.valorFlete);
     if (data.valorFleteDevuelto !== undefined) {
       out.valorFleteDevuelto = new Prisma.Decimal(data.valorFleteDevuelto);
@@ -200,6 +204,12 @@ export class TarifaRepository implements ITarifaRepository {
     if (data.tarifaEspecial !== undefined) {
       out.tarifaEspecial =
         data.tarifaEspecial === null ? null : new Prisma.Decimal(data.tarifaEspecial);
+    }
+    if (data.tarifaEspecialDevuelta !== undefined) {
+      out.tarifaEspecialDevuelta =
+        data.tarifaEspecialDevuelta === null
+          ? null
+          : new Prisma.Decimal(data.tarifaEspecialDevuelta);
     }
     // `null` tiene significado (desacotar de la zona); solo se omite `undefined`.
     if (data.zonaId !== undefined) out.zonaId = data.zonaId;

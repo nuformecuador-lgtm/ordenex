@@ -16,8 +16,8 @@ import { diaRepartoSchema } from "@/lib/types/dia-reparto";
 // cruzaba el borde y el service lo resolvia como `{ status: "ok", resultados: [] }`, asi que
 // la UI cantaba un exito ("Mensajero asignado a 0 orden(es)") por una accion que no hizo
 // nada. Se cierra en la raiz —el schema—, no en cada modal. Es la misma cota que ya tenian
-// el resto de acciones de lote del repo (`recogerSchema`, `recibirLoteSchema`,
-// `etiquetaGuiaSchema`, `asignarRecoleccionSchema`...), y se declara igual que ellas: SIN
+// el resto de acciones de lote del repo (`recogerSchema`, `etiquetaGuiaSchema`,
+// `asignarRecoleccionSchema`...), y se declara igual que ellas: SIN
 // mensaje propio, porque la UI traduce `validation_error` a un literal fijo
 // (`guiaDecisionErrorMessage`) y el texto de zod no llega nunca al usuario.
 export const generarGuiaSchema = z.object({

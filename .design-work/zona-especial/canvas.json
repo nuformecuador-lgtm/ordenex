@@ -1,0 +1,32 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 980, "h": 1080, "title": "Selector de distritos — con marcador de zona especial" },
+    { "file": "Estados.dc.html", "x": 1100, "y": 0, "w": 660, "h": 1080, "title": "Anatomía y estados del marcador" },
+    { "file": "Confirmacion.dc.html", "x": 0, "y": 1240, "w": 640, "h": 560, "title": "Confirmación de alcance global" },
+    { "file": "ModoMarcado.dc.html", "x": 760, "y": 1240, "w": 1000, "h": 620, "title": "Opción B — modo marcar especiales" }
+  ],
+  "annotations": [
+    {
+      "id": "nota-deliverable",
+      "x": 0,
+      "y": -150,
+      "w": 420,
+      "text": "Propuesta principal — clickeable.\nProbá: marcar un distrito, marcar un cantón entero, filtrar por «Sin decidir», quitar una marca desde los chips del pie."
+    },
+    {
+      "id": "nota-dato",
+      "x": 1100,
+      "y": -150,
+      "w": 420,
+      "text": "La columna distrito.zona_especial YA existe (migración 20260824180000): booleana, nullable, default false. El diseño respeta sus tres lecturas — true / false / NULL sin decidir."
+    },
+    {
+      "id": "nota-alterna",
+      "x": 760,
+      "y": 1130,
+      "w": 420,
+      "text": "Dirección alternativa, para comparar. No es la propuesta: está al lado con su a-favor y su en-contra."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

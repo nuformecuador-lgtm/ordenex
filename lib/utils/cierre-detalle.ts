@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 69 (design §4.1/§4.2) — lectura COMPARTIDA del snapshot `cierre_detail` por los dos
@@ -24,6 +24,9 @@ export const DETALLE_SELECT = {
   montoCobrar: true,
   cobraComision: true,
   esCentral: true,
+  // La marca del DISTRITO congelada (2026-08-25): es lo que decide si el flete sale del pacto
+  // especial o de la columna normal. Va junto a `esCentral` porque cumple el mismo papel.
+  esZonaEspecial: true,
   tiendaId: true,
   tarifaId: true,
   tarifaValorFlete: true,
@@ -33,12 +36,14 @@ export const DETALLE_SELECT = {
   tarifaComisionCod: true,
   tarifaIvaFlete: true,
   tarifaIvaComisionCod: true,
+  tarifaEspecial: true,
+  tarifaEspecialDevuelta: true,
 } as const;
 
 export type CierreDetalleRow = Prisma.CierreDetailGetPayload<{ select: typeof DETALLE_SELECT }>;
 
 /**
- * Las 8 columnas de tarifa congelada, y nada mas: es todo lo que `tarifaDe` necesita. Al
+ * Las columnas de tarifa congelada, y nada mas: es todo lo que `tarifaDe` necesita. Al
  * pedir este subconjunto (y no la fila entera) la reconstruccion sirve tambien al detalle
  * del admin, que proyecta otras columnas de `cierre_detail` pero la MISMA tarifa.
  */
@@ -52,6 +57,8 @@ export type TarifaCongeladaRow = Pick<
   | "tarifaComisionCod"
   | "tarifaIvaFlete"
   | "tarifaIvaComisionCod"
+  | "tarifaEspecial"
+  | "tarifaEspecialDevuelta"
 >;
 
 /**
@@ -89,7 +96,7 @@ export function tarifaDe(d: TarifaCongeladaRow): TarifaVigente | null {
   // presente el resto no puede ser null. El `"0.00"` de `dec2` no es una politica: es el
   // estrechamiento del tipo (Decimal | null) sin introducir un fallback silencioso.
   // `toFixed(2)`, no `toString()`: R11 pide escala 2 FIJA al cruzar la frontera y el resolver
-  // de al lado (`TarifaVigentePorTiendaRepository`) ya la emite asi. Con `toString()` un
+  // de al lado (`TarifaVigenteRepository`) ya la emite asi. Con `toString()` un
   // Decimal("1000.00") salia "1000": mismo valor, distinto texto que el resolver para la misma
   // tarifa. No movia dinero (`derivarIngresoOrden` re-envuelve en Prisma.Decimal), pero dos
   // procedencias del MISMO dato con formato distinto es exactamente lo que esta feature existe
@@ -103,6 +110,16 @@ export function tarifaDe(d: TarifaCongeladaRow): TarifaVigente | null {
     comisionCod: dec2(d.tarifaComisionCod),
     ivaFlete: dec2(d.tarifaIvaFlete),
     ivaComisionCod: dec2(d.tarifaIvaComisionCod),
+    // EXCEPCION al "todas o ninguna" de arriba, y por eso NO pasan por `dec2`: estas dos son
+    // nullables EN ORIGEN (`tarifas.tarifa_especial[_devuelta]`), asi que su `null` no es el
+    // gap de la tarifa ausente sino el dato real "no se pacto nada". Mapearlas a "0.00" seria
+    // inventar un pacto de cero colones y cobrarlo.
+    // `== null` y no `=== null`: una fila que no proyecte la columna llega como `undefined`,
+    // y eso significa lo mismo que `null` —no hay pacto—; ninguno de los dos puede reventar
+    // en un camino de dinero.
+    tarifaEspecial: d.tarifaEspecial == null ? null : d.tarifaEspecial.toFixed(2),
+    tarifaEspecialDevuelta:
+      d.tarifaEspecialDevuelta == null ? null : d.tarifaEspecialDevuelta.toFixed(2),
   };
 }
 

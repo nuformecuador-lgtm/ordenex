@@ -151,6 +151,7 @@ model Usuario {
   ordenNotasEscritas                  OrdenNota[]               @relation("OrdenNotaAutor") // feature 227: notas del hilo que ESTE usuario publico; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
   postulacionesRecursoAtendidas       PostulacionRecurso[]      @relation("PostulacionRecursoAtendidaPor") // feature 253: postulaciones de vehiculo/bodega que ESTE admin marco atendidas; la FK es RESTRICT (quien atendio es evidencia)
   diaRepartoCambiosRealizados         OrdenDiaRepartoCambio[]   @relation("OrdenDiaRepartoCambioActor") // feature 262/R20: correcciones del dia de reparto que ESTE usuario hizo; la FK es RESTRICT (quien corrigio es evidencia y no se pierde al dar de baja al usuario)
+  habilitacionesApiPedidas            OrdenHabilitacionApi[]    @relation("OrdenHabilitacionApiActor") // feature 266/R21: habilitaciones que ESTE usuario dedicado de API key pidio por el canal integrador; la FK es RESTRICT (la autoria es evidencia y no se pierde al dar de baja al usuario)
 
   @@index([tipoIdentificacionId])
   @@index([rolId])
@@ -161,7 +162,7 @@ model Usuario {
 }
 
 // Feature 107: estado de una plantilla de mensaje. Enum Postgres nativo (patron
-// EstadoTarifa/RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
+// RolValue). Cuatro valores EXACTOS (R23). `pending` (estado inicial,
 // Decision humana 1) y `refused` quedan RESERVADOS en el enum aunque este alcance NO
 // los transiciona desde el front; el front SOLO emite el destino `inactivo` (R24/R25).
 enum PlantillaEstado {
@@ -493,7 +494,7 @@ model ZonaDistrito {
 model Orden {
   id                     String    @id @default(uuid())
   numGuia                Int?      @unique @map("num_guia") // feature 17/R1: nullable, sin default; asignado en "Generar guia" via nextval(orden_num_guia_seq)
-  numRemision            String    @unique @map("num_remision") // R9/R14: lo provee el usuario
+  numRemision            String    @map("num_remision") // R9/R14: lo provee el usuario. SIN @unique global: la unicidad es POR TIENDA, ver @@unique([tiendaId, numRemision]) abajo
   estatusId              String    @map("estatus_id") // R10: FK not null
   destinatario           String
   telefonoDest           String    @map("telefono_dest")
@@ -581,19 +582,37 @@ model Orden {
   carga             Carga?      @relation("OrdenCarga", fields: [cargaId], references: [id], onDelete: Restrict) // feature 141/R4: un lote con ordenes no se puede borrar
 
   gestiones             GestionOrden[] // feature 36: gestiones registradas sobre esta orden
-  mensajerosGestionando Usuario[]              @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
+  mensajerosGestionando Usuario[]               @relation("UsuarioOrdenEnGestion") // feature 36: lado inverso del puntero de bloqueo 1-a-1
   historialEstados      OrdenHistorialEstado[] // feature 49: linea de tiempo append-only de transiciones (R1/R5)
   cierreDetalles        CierreDetail[] // feature 69/R1: snapshots congelados de esta orden (uno por cierre en que aparecio)
   cierresSinGestion     CierreSinGestion[] // feature 264/R1: cierres en cuyo corte esta orden fue barrida a `sin_gestionar`
   rutaParadas           RutaOptimizadaParada[] // feature 92/R26: posicion de esta orden en la ruta optimizada de su mensajero
-  mensajeroMetas        OrdenMensajeroMeta[]   @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
+  mensajeroMetas        OrdenMensajeroMeta[]    @relation("OrdenMensajeroMetaOrden") // feature 115: marcas privadas por mensajero sobre esta orden
   chatConversaciones    ChatConversacion[] // feature 120/R13: hilos de chat colgados de esta orden
   incidentesAdmin       OrdenIncidente[] // feature 158/R38: incidentes reportados por un ADMIN sobre esta orden (a lo sumo UNO vivo, indice parcial R47)
   // NO se llama `notas`: ese nombre ya lo ocupa la nota de la TIENDA (`orden.notas`, R14a),
   // que esta feature NO toca (R25). Son dos cosas distintas y el nombre lo dice.
-  notasHilo             OrdenNota[]            @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
+  notasHilo             OrdenNota[]             @relation("OrdenNotaOrden") // feature 227/R30: hilo de notas tienda<->mensajero de esta orden; la FK es CASCADE (borrar la orden se lleva su hilo)
   diaRepartoCambios     OrdenDiaRepartoCambio[] @relation("OrdenDiaRepartoCambioOrden") // feature 262/R20-R23: rastro append-only de las correcciones del dia de reparto de esta orden
+  habilitacionesApi     OrdenHabilitacionApi[]  @relation("OrdenHabilitacionApiOrden") // feature 266/R23-R24: bitacora append-only de las habilitaciones pedidas por el canal por API key sobre esta orden; la FK es CASCADE (borrar la orden se lleva su bitacora)
 
+  // UNICIDAD DE `num_remision`: POR TIENDA, NO GLOBAL (migracion 20260825160000).
+  //
+  // Hasta hoy `num_remision` era `@unique` GLOBAL. Ese numero NO lo genera Ordenex: lo trae la
+  // tienda desde su propio sistema (R9/R14), y dos tiendas distintas no se coordinan entre si
+  // para numerar sus remisiones. Con el UNIQUE global, la PRIMERA tienda que cargaba "1001" le
+  // quemaba ese numero a TODAS las demas: la segunda veia su fila clasificada como `duplicada`
+  // por un dato que ni siquiera es suyo, y ademas podia INFERIR que alguien mas ya lo uso (fuga
+  // entre inquilinos). La identidad real de una remision es el par (tienda, numero).
+  //
+  // `tiendaId` va PRIMERO a proposito: el btree resultante sirve como prefijo a todo lo que ya
+  // filtra por tienda, y `@@index([tiendaId])` se mantiene solo porque otras rutas lo usan sin
+  // remision (el planner puede servirlas con este, pero no se retira en la misma migracion que
+  // cambia la constraint: un cambio a la vez).
+  //
+  // NO incluye `deletedAt`: igual que antes, una orden borrada logicamente sigue reservando su
+  // numero dentro de su tienda. Ese comportamiento NO cambia con esta migracion.
+  @@unique([tiendaId, numRemision], map: "orden_tienda_id_num_remision_key")
   @@index([tiendaId])
   @@index([estatusId])
   @@index([createdAt])
@@ -723,6 +742,38 @@ model OrdenNota {
   @@index([ordenId, createdAt]) // R3/R28: hilo ordenado en UNA sola consulta (forma del indice de ChatMensaje)
   @@index([autorId]) // segunda FK indexada (patron orden_mensajero_meta)
   @@map("orden_nota")
+}
+
+// Feature 266 (T1.2, design §2.2): BITACORA de las habilitaciones pedidas por el canal por API
+// key, comun a las DOS ramas del endpoint (R23). Fila APPEND-ONLY (R24): SIN updatedAt ni
+// deletedAt, y sin ningun metodo de actualizacion o borrado en su repositorio — una segunda
+// habilitacion de la misma orden con otra nota es un HECHO NUEVO, no una correccion. Mismo
+// criterio que OrdenHistorialEstado.
+//
+// ⚠️ NACE SIN LECTOR y se ACEPTA (D4, firmada 2026-08-23): es auditoria, ninguna superficie la
+// consulta, y exponerla es ficha aparte. Declarado en voz alta por el precedente de la 270.
+//
+// RLS habilitada sin policies (solo service role), patron OrdenNota/OrdenHistorialEstado/
+// GestionOrden: la unica puerta —la orden tiene que ser del owner de la key— vive en el service.
+model OrdenHabilitacionApi {
+  id               String   @id @default(uuid())
+  ordenId          String   @map("orden_id")
+  /// El usuario dedicado de la API key (`actor.usuarioId`), que es TAMBIEN el `tiendaId` de sus ordenes (R3).
+  actorUsuarioId   String   @map("actor_usuario_id")
+  /// Obligatoria: recorte y tope de 200 caracteres en el borde (R7), el mismo de `OrdenNota.cuerpo`.
+  nota             String
+  /// ESCRITO y no derivado del par de estados: `true` = rama A (volvio a `en_reparto`), `false` = rama B (solo log).
+  cambioDeEstado   Boolean  @map("cambio_de_estado")
+  /// SNAPSHOT del `order_status.value` en el que la orden quedo. TEXT y no FK: si un value se renombra, la bitacora debe seguir diciendo lo que dijo.
+  estadoResultante String   @map("estado_resultante")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  orden Orden   @relation("OrdenHabilitacionApiOrden", fields: [ordenId], references: [id], onDelete: Cascade)
+  actor Usuario @relation("OrdenHabilitacionApiActor", fields: [actorUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([ordenId, createdAt]) // todas las habilitaciones de una orden, ordenadas, en UNA consulta
+  @@index([actorUsuarioId]) // segunda FK indexada (patron orden_nota)
+  @@map("orden_habilitacion_api")
 }
 
 // Feature 36 (R5, decision F1.4-c): metodo de pago del recaudo al cliente en una
@@ -1146,36 +1197,47 @@ model CierreBodega {
 }
 
 // Tarifa: tarifas de flete/comision, tabla multi-fila con `nombre` para
-// distinguirlas (feature 18, D1). zona_id NOT NULL: cada tarifa pertenece a una
-// zona (feature 24). Se agrego via la migracion de rename cuando la tabla estaba
-// vacia. Borrado logico via deleted_at.
+// distinguirlas (feature 18, D1). Cada fila se acota por el par (tienda, zona) y
+// las DOS dimensiones son opcionales (feature 273); ver el @@unique de mas abajo.
+// Borrado FISICO: `deleted_at` la retiro la migracion tarifa_zona_is_default.
+// Sin columna de estado: la migracion drop_tarifa_status (feature 274) solto
+// `status` y su enum al cerrar la deuda (g) de la feature 69, porque nunca entro
+// en el WHERE del camino de liquidacion y la cascada (tienda, zona) la sustituye.
+// Una tarifa que no debe aplicarse se BORRA; no hay fila presente-pero-ignorada.
 model Tarifa {
-  id                    String       @id @default(uuid())
-  valorFlete            Decimal      @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
-  valorFleteDevuelto    Decimal      @map("valor_flete_devuelto") @db.Decimal(12, 2) // R2 (monto)
-  valorFleteGam         Decimal      @map("valor_flete_gam") @db.Decimal(12, 2) // R2/R4 (GAM -> gam)
-  valorFleteDevueltoGam Decimal      @map("valor_flete_devuelto_gam") @db.Decimal(12, 2) // R2/R4
-  fulfillment           Decimal      @db.Decimal(12, 2) // R2/D3 (monto)
-  comisionCod           Decimal      @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
-  ivaFlete              Decimal      @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
-  ivaComisionCod        Decimal      @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  id                     String   @id @default(uuid())
+  valorFlete             Decimal  @map("valor_flete") @db.Decimal(12, 2) // R2 (monto)
+  valorFleteDevuelto     Decimal  @map("valor_flete_devuelto") @db.Decimal(12, 2) // R2 (monto)
+  valorFleteGam          Decimal  @map("valor_flete_gam") @db.Decimal(12, 2) // R2/R4 (GAM -> gam)
+  valorFleteDevueltoGam  Decimal  @map("valor_flete_devuelto_gam") @db.Decimal(12, 2) // R2/R4
+  fulfillment            Decimal  @db.Decimal(12, 2) // R2/D3 (monto)
+  comisionCod            Decimal  @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
+  ivaFlete               Decimal  @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
+  ivaComisionCod         Decimal  @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   // Cobro pactado aparte, fuera de la tabla de precios normal. NULLABLE a proposito:
   // NULL = "sin tarifa especial pactada" (que NO es lo mismo que 0, un cobro especial
   // de cero). Unica columna opcional de la tabla; ver la migracion tarifa_especial.
-  tarifaEspecial        Decimal?     @map("tarifa_especial") @db.Decimal(12, 2)
+  tarifaEspecial         Decimal? @map("tarifa_especial") @db.Decimal(12, 2)
+  // Hermana de la anterior para la DEVOLUCION (migracion tarifa_especial_zona_especial).
+  // Independiente de ella: se puede pactar el flete de entrega y dejar la devolucion en la
+  // tarifa normal, y al reves. NULL = sin pacto para la devolucion (que NO es 0).
+  tarifaEspecialDevuelta Decimal? @map("tarifa_especial_devuelta") @db.Decimal(12, 2)
   // OPCIONAL: NULL = tarifa NO acotada a una tienda (aplica a cualquiera). Cuando
   // trae valor es FK -> usuario (la cuenta duena; el service exige un rol tarifable:
   // adminTienda o apiKey).
-  tiendaId              String?      @map("tienda_id")
-  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera). La
-  // tarifa sigue siendo por-TIENDA; esto solo permite acotarla ademas por zona.
-  zonaId                String?      @map("zona_id")
+  tiendaId               String?  @map("tienda_id")
+  // OPCIONAL: NULL = tarifa NO acotada a una zona (aplica a la tienda entera).
+  // Desde la feature 274 la resolucion es una CASCADA sobre el par (tienda, zona):
+  // 1) tienda+zona, 2) tienda con zona NULL, 3) zona con tienda NULL. La tienda ya
+  // no es la unica dimension: una fila con `tienda_id` NULL y `zona_id` con valor
+  // cobra a cualquier tienda de esa zona. El par (NULL, NULL) NO es un cuarto
+  // nivel y el service lo rechaza al crear/actualizar.
+  zonaId                 String?  @map("zona_id")
   // Tarifa a la que se cae cuando ninguna acotada por zona aplica. Nace en false:
   // marcarla es un acto explicito. Las filas historicas se backfillearon a true.
-  isDefault             Boolean      @default(false) @map("is_default")
-  status                EstadoTarifa @default(activo) // activo/inactivo; pasa a inactivo si la tienda deja de ser adminTienda
-  createdAt             DateTime     @default(now()) @map("created_at")
-  updatedAt             DateTime     @updatedAt @map("updated_at")
+  isDefault              Boolean  @default(false) @map("is_default")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id])
   zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id])
@@ -1195,13 +1257,6 @@ model Tarifa {
   @@index([tiendaId])
   @@index([zonaId])
   @@map("tarifas")
-}
-
-enum EstadoTarifa {
-  activo
-  inactivo
-
-  @@map("estado_tarifa")
 }
 
 // TarifaZonaMensajero: tarifa de comision por zona pagada al mensajero
@@ -1691,6 +1746,8 @@ enum OrdenHistorialOrigenTipo {
   rescate_ayuda_tienda // feature 235 (P2): LA VUELTA — ayuda_tienda -> en_reparto, por el punto UNICO de rescate (mensajero «Recuperar» o tienda «Habilitar»). NO es visita real. Es la familia por la que la politica de webhooks NO emite (P4)
   gestion_tienda_ayuda // feature 237 (R5): EL DESENLACE — ayuda_tienda -> reprogramada | rechazada, registrado por el adminTienda dueño. Enlaza gestion. SI es visita real (R6): cuenta UN intento, al reves que las dos de la 235
   rechazo_tienda // feature 240 (D8/R6): EL RECHAZO MANUAL — devuelta -> rechazada, decidido por el adminTienda dueño. Enlaza gestion sintetica. NO es visita real (R19): la orden ya tiene contada su `devuelta`, como `reprogramacion_tienda`
+  habilitacion_api // feature 266 (D5/R16): LA HABILITACION POR API KEY — ayuda_tienda -> en_reparto, pedida por el integrador en lote. Familia propia y NO `rescate_ayuda_tienda` (design §7, A3): `actor_usuario_id` no distingue las vias, porque el usuario dedicado de la key ES la tienda. NO es visita real (R26): nadie fue a ninguna puerta. No enlaza gestion. NO exceptuada de webhook (R27): la rama A emite `en_reparto`
+  rechazo_tope_intentos // feature 276 (R22, Q5): EL TOPE DE INTENTOS — al APROBAR el cierre, sin_gestionar -> rechazada sobre una orden que ya agoto sus intentos (actor admin). Enlaza gestion sintetica. NO es visita real: contarla subiria su propio contador y cobraria de mas
 
   @@map("orden_historial_origen_tipo")
 }
@@ -1768,11 +1825,15 @@ model CierreDetail {
   ordenId  String @map("orden_id")
 
   // --- money-critical (R6): las entradas de la formula de derivacion ---
-  montoCobrar   Decimal? @map("monto_cobrar") @db.Decimal(12, 2) // `orden.monto_cobrar` (ya nullable en origen)
-  cobraComision Boolean  @map("cobra_comision") // `orden.cobra_comision`
-  zonaId        String   @map("zona_id") // `orden.zona_id`
-  tiendaId      String   @map("tienda_id") // `orden.tienda_id`: a quien se acredita (43), CONGELADO
-  esCentral     Boolean  @map("es_central") // `zona.es_central` EN ESE INSTANTE (elige columna GAM, R21)
+  montoCobrar    Decimal? @map("monto_cobrar") @db.Decimal(12, 2) // `orden.monto_cobrar` (ya nullable en origen)
+  cobraComision  Boolean  @map("cobra_comision") // `orden.cobra_comision`
+  zonaId         String   @map("zona_id") // `orden.zona_id`
+  tiendaId       String   @map("tienda_id") // `orden.tienda_id`: a quien se acredita (43), CONGELADO
+  esCentral      Boolean  @map("es_central") // `zona.es_central` EN ESE INSTANTE (elige columna GAM, R21)
+  // `distrito.zona_especial IS TRUE` EN ESE INSTANTE: es lo que decide si el flete sale del
+  // pacto especial o de la columna normal. NOT NULL a proposito (a diferencia del origen, que
+  // es tri-valuado): al congelar, "¿se cobro como especial?" ya no admite "nadie lo decidio".
+  esZonaEspecial Boolean  @default(false) @map("es_zona_especial")
 
   // --- tarifa congelada (R8): todas o ninguna. NULL = la tienda no tenia tarifa vigente al
   // solicitar (gap R9, decision (c)): conceptos 0.00, NO bloquea el cierre. `tarifa_id` deja
@@ -1790,6 +1851,10 @@ model CierreDetail {
   // con el mismo valor que tenia al solicitar. Es NULL en las filas anteriores a esta columna
   // (no hay backfill posible: la tarifa de entonces pudo cambiar), y eso se ve como celda vacia.
   tarifaFulfillment           Decimal? @map("tarifa_fulfillment") @db.Decimal(12, 2) // monto
+  // Las DOS entradas nuevas de la formula (migracion tarifa_especial_zona_especial): el pacto
+  // especial de entrega y el de devolucion, congelados como sus siete hermanas de arriba.
+  tarifaEspecial              Decimal? @map("tarifa_especial") @db.Decimal(12, 2) // monto
+  tarifaEspecialDevuelta      Decimal? @map("tarifa_especial_devuelta") @db.Decimal(12, 2) // monto
 
   // --- descriptivos (R7): lo que el admin ve del cierre (38), congelado ---
   numGuia         Int?    @map("num_guia") // SIN @unique: es copia, no identidad

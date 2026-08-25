@@ -41,7 +41,6 @@ vi.mock("@/lib/actions/recepcion-satelite", () => ({
   recibirPorQr: vi.fn(),
   listarRecepcionSatelite: vi.fn(),
   asignarDesdeSatelite: vi.fn(),
-  recibirLote: vi.fn(),
   listarOrdenesBodegaPaginado: (...a: unknown[]) => paginadoBodegaMock(...a),
   // Feature 184 — Tanda A (T A.4/T A.5): el modulo importa las DOS acciones nuevas —el
   // conjunto de la descarga y la vigencia con la que poda la seleccion—, asi que el doble
@@ -115,9 +114,11 @@ function makeOrden(
  * lee— y este andamiaje los concatena en el orden del flujo, igual que hacía el módulo, para
  * armar la página, el catálogo y el doble de la Server Action.
  */
+// Feature 279 (T4.3b): `porRecibir` SALE de estos grupos. La pantalla que monta este
+// archivo es «En bodega», y desde la partición del portal ya no lista —ni recibe— las
+// órdenes en camino: eso es de `/recepcion-satelite/por-recibir`.
 type GruposBodega = Partial<
   Record<
-    | "porRecibir"
     | "recibidas"
     | "asignadas"
     | "porDevolver"
@@ -128,7 +129,7 @@ type GruposBodega = Partial<
 >;
 type PropsModulo = Omit<
   Partial<Parameters<typeof RecepcionSateliteModule>[0]>,
-  "porRecibir" | "ordenesBodega" | "catalogoFiltros"
+  "ordenesBodega" | "catalogoFiltros"
 >;
 
 function renderModule(props?: GruposBodega & PropsModulo) {
@@ -152,7 +153,6 @@ function renderModule(props?: GruposBodega & PropsModulo) {
   render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <RecepcionSateliteModule
-        porRecibir={props?.porRecibir ?? []}
         ordenesBodega={paginaBodega(conjunto)}
         catalogoFiltros={catalogoSatelite(conjunto)}
         zonaNombre={props?.zonaNombre ?? ZONA}

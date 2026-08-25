@@ -244,8 +244,9 @@ describe("feature 177 T22 — /generate no altera ninguna columna ajena a la ref
     const res = await service.porOrden(ACTOR, ORDEN_ID);
 
     // R38: la fila heredada se trata como "sin PDF" -> genera (no devuelve la URL vieja).
+    // Que HAYA generado se afirma abajo con la escritura observada; la respuesta ya no lo
+    // cuenta (el testigo `generado` se retiro del contrato el 2026-08-25).
     expect(res.status).toBe("ok");
-    expect(res).toMatchObject({ generado: true });
     if (res.status === "ok") expect(res.url).not.toBe(URL_HEREDADA_ORDEN);
 
     // R26: una sola escritura contra el modelo `orden`, y es un `update` de UNA columna.
@@ -308,7 +309,6 @@ describe("feature 177 T22 — /generate no altera ninguna columna ajena a la ref
     const res = await service.porCarga(ACTOR, CARGA_ID);
 
     expect(res.status).toBe("ok");
-    expect(res).toMatchObject({ generado: true });
     if (res.status === "ok") expect(res.url).not.toBe(URL_HEREDADA_CARGA);
 
     const escrituras = escriturasDe("carga");
@@ -340,8 +340,9 @@ describe("feature 177 T22 — /generate no altera ninguna columna ajena a la ref
     const porOrden = await service.porOrden(ACTOR, ORDEN_ID);
     const porCarga = await service.porCarga(ACTOR, CARGA_ID);
 
-    expect(porOrden).toMatchObject({ status: "ok", generado: false });
-    expect(porCarga).toMatchObject({ status: "ok", generado: false });
+    // El reuso ya NO se lee de la respuesta: se demuestra con que no hubo NINGUNA escritura.
+    expect(porOrden).toMatchObject({ status: "ok" });
+    expect(porCarga).toMatchObject({ status: "ok" });
 
     expect(escriturasDe("orden")).toEqual([]);
     expect(escriturasDe("carga")).toEqual([]);

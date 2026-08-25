@@ -3,7 +3,7 @@
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import { OrdenRepository } from "@/lib/repositories/OrdenRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { TarifaZonaMensajeroRepository } from "@/lib/repositories/TarifaZonaMensajeroRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { CierreDiaService } from "@/lib/services/CierreDiaService";
@@ -47,8 +47,9 @@ function buildService(): ICierreDiaService {
   const prisma = getPrismaClient();
   return new CierreDiaService(
     // Feature 69/T10: el repo del cierre congela `cierre_detail` en la tx de `crearCierre`
-    // (R3/R8) y para eso necesita el resolver de la tarifa vigente por tienda.
-    new CierreDiaRepository(prisma, new TarifaVigentePorTiendaRepository(prisma)),
+    // (R3/R8) y para eso necesita el resolver de la tarifa vigente. Feature 274: ese resolver
+    // resuelve por el PAR (tienda, zona) con la cascada de R1, ya no por tienda sola.
+    new CierreDiaRepository(prisma, new TarifaVigenteRepository(prisma)),
     new ZonaRepository(prisma),
     new OrdenRepository(prisma),
     // Las evidencias son las de gestion_orden (feature 36): mismo bucket privado.

@@ -7,7 +7,7 @@
 // generar, reutilizar ni firmar un PDF.
 //
 // El contrato de la respuesta 200 es IDENTICO al del endpoint por orden (R28):
-// `{ url, expiraEnSegundos, generado }`. La URL se firma en ESTA llamada (R22/R23).
+// `{ url, expiraEnSegundos }`. La URL se firma en ESTA llamada (R22/R23).
 //
 // Errores (R42): shape uniforme del manejador global con codigos EXISTENTES.
 //   401 UNAUTHORIZED     — sin Bearer / esquema distinto / token vacio / key desconocida
@@ -103,7 +103,6 @@ export async function handleCargaGenerateApi(
         return {
           url: salida.url,
           expiraEnSegundos: salida.expiraEnSegundos,
-          generado: salida.generado,
         };
       case "not_found":
         throw new NotFoundError(); // R29: ajena e inexistente son indistinguibles

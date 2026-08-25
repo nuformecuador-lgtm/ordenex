@@ -9,7 +9,7 @@ import {
   agregarIngresosPorConcepto,
   type OrdenIngresoInput,
 } from "@/lib/utils/ingreso-ordenex";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 
 /**
  * Feature 42 (design §2.2) — construye los movimientos de INGRESO de un cierre aprobado.
@@ -53,6 +53,8 @@ export class WalletFeedService implements IWalletFeedService {
         input: {
           resultado: g.resultado,
           esCentral: d.esCentral, // el flag de la zona AL SOLICITAR (elige la columna GAM, R21)
+          // La marca del DISTRITO AL SOLICITAR: elige el pacto especial si la tarifa lo trae.
+          esZonaEspecial: d.esZonaEspecial,
           // Money-safe: Decimal -> STRING escala 2, nunca number (R11).
           montoCobrar: d.montoCobrar === null ? null : d.montoCobrar.toFixed(2),
           cobraComision: d.cobraComision,

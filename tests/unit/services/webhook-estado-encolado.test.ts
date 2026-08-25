@@ -207,9 +207,9 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
   });
 
   it("MISMA orden, MISMO estado destino, OTRA familia: `liberacion_reprogramada` SI encola", async () => {
-    // El control que impide que la excepcion se implemente por estado. Es literalmente el mismo
-    // `enqueue`, el mismo `tx` y el mismo `s-en-reparto` del caso de arriba: lo unico que cambia es
-    // la familia.
+    // El control que impide que una exencion futura se implemente por estado. Es literalmente el
+    // mismo `enqueue`, el mismo `tx` y el mismo `s-en-reparto` del caso de arriba: lo unico que
+    // cambia es la familia.
     const { repo, enqueue } = buildRepo();
     const tx = buildTx(new Set(["o1"]));
     await emitirWebhooksEstado(
@@ -230,13 +230,14 @@ describe("268 — el ciclo de AYUDA emite en sus DOS mitades, y los reingresos l
   // en el emisor (R14) o por estado destino.
   it("268/R9/R12: en un LOTE mixto no cae NINGUNA — ya no hay familia exceptuada", async () => {
     const { repo, enqueue } = buildRepo();
-    const tx = buildTx(new Set(["o1", "o2", "o3"]));
+    const tx = buildTx(new Set(["o1", "o2", "o3", "o4"]));
     await emitirWebhooksEstado(
       tx,
       [
         entrada("o1", "s-en-reparto", "rescate_ayuda_tienda"), // antes exceptuada (235/P4)
         entrada("o2", "s-en-reparto", "recoleccion"), // la entrada NORMAL a reparto
         entrada("o3", "s-entregada", "gestion"), // otro estado publico
+        entrada("o4", "s-fulfillment", "gestion"), // estado interno: sigue sin emitir
       ],
       repo,
       () => new Date("2026-08-22T10:00:00.000Z"),

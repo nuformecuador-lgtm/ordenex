@@ -507,7 +507,6 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
         tarifa: {
           id: "tar-1",
           tiendaId: "t1",
-          status: "activo",
           valorFlete: 3000,
           valorFleteDevuelto: 1500,
           valorFleteGam: 2000,
@@ -517,6 +516,7 @@ describe("ordenesColumns — feature 204 (el dinero derivado llega hecho del ser
           ivaFlete: 13,
           ivaComisionCod: 13,
           tarifaEspecial: null,
+          tarifaEspecialDevuelta: null,
           zonaId: null,
           isDefault: false,
           createdAt: new Date("2026-01-01T00:00:00Z"),

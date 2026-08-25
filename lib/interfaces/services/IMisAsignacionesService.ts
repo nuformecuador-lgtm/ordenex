@@ -69,6 +69,23 @@ export interface MiAsignacionDTO {
    */
   intentosEntrega?: number;
   /**
+   * FEATURE 276 (T11, R8/R10) — `true` si a esta orden le queda EL ULTIMO intento: la gestion que
+   * se registre ahora es la que alcanza el umbral (o ya lo paso).
+   *
+   * ⚠️ ES UNA DECISION YA TOMADA EN EL SERVIDOR, y ese es el requisito (R10): el UMBRAL NO CRUZA
+   * AL CLIENTE. Lo calcula `MisAsignacionesService.listarMisAsignaciones` con
+   * `alcanzaElTope(intentosEntrega, reintentosConfig.MIN_INTENTOS_ENTREGA)`. La pantalla no compara
+   * numeros: lee este booleano y filtra los desenlaces con `permitidoEnElTope` — el MISMO modulo
+   * puro que usa la guarda del servidor, para que no puedan divergir.
+   *
+   * Y NO SUSTITUYE A LA GUARDA (R11): si llegara una peticion con un resultado prohibido,
+   * `gestionar` la rechaza igual. Este campo es cortesia de la interfaz, no seguridad.
+   *
+   * Opcional (`?`) por el mismo patron aditivo que `intentosEntrega?`: no rompe los fixtures que
+   * construyen `MiAsignacionDTO` sin el; el servicio SIEMPRE lo envia.
+   */
+  enElTope?: boolean;
+  /**
    * Feature 157 (R15): telefono de la TIENDA dueña de la orden, para que el mensajero pueda
    * llamarla o escribirle antes de ir a recolectar. Distinto de `telefonoDest` (el del
    * destinatario final). El modelo no tiene direccion de la tienda, asi que el contacto es lo

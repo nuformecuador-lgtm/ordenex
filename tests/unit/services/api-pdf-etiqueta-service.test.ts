@@ -146,7 +146,6 @@ describe("ApiPdfEtiquetaService.porOrden", () => {
       status: "ok",
       url: `https://signed.test/${PATH_PERSISTIDO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: false,
     });
     expect(lotePdf.generarYAlmacenarPorOrden).toHaveBeenCalledTimes(0);
     expect(lotePdf.generarYAlmacenar).toHaveBeenCalledTimes(0);
@@ -172,7 +171,6 @@ describe("ApiPdfEtiquetaService.porOrden", () => {
       status: "ok",
       url: `https://signed.test/${PATH_GENERADO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: true,
     });
   });
 
@@ -243,7 +241,6 @@ describe("ApiPdfEtiquetaService.porOrden", () => {
       status: "ok",
       url: `https://signed.test/${PATH_GENERADO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: true,
     });
     expect(lotePdf.generarYAlmacenarPorOrden).toHaveBeenCalledTimes(1);
     expect(repo.setOrdenDownloadStoragePath).toHaveBeenCalledWith(ORDEN_ID, PATH_GENERADO);
@@ -272,7 +269,6 @@ describe("ApiPdfEtiquetaService.porCarga", () => {
       status: "ok",
       url: `https://signed.test/${PATH_PERSISTIDO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: false,
     });
     expect(lotePdf.generarYAlmacenar).toHaveBeenCalledTimes(0);
     expect(lotePdf.generarYAlmacenarPorOrden).toHaveBeenCalledTimes(0);
@@ -298,7 +294,6 @@ describe("ApiPdfEtiquetaService.porCarga", () => {
       status: "ok",
       url: `https://signed.test/${PATH_GENERADO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: true,
     });
   });
 
@@ -369,7 +364,6 @@ describe("ApiPdfEtiquetaService.porCarga", () => {
       status: "ok",
       url: `https://signed.test/${PATH_GENERADO}#${TTL}`,
       expiraEnSegundos: TTL,
-      generado: true,
     });
     expect(lotePdf.generarYAlmacenar).toHaveBeenCalledTimes(1);
   });

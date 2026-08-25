@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ChevronDown, MapPin, Package } from "lucide-react";
 
 import {
@@ -39,14 +39,18 @@ export interface SateliteOrderCardProps {
   orden: RecepcionSateliteDTO;
   /** Estado legible de la orden ("en bodega satélite de <zona>", …), R9. */
   estadoLegible: string;
-  /** Acción propia del grupo ("Aceptar", "Recuperar"…). Va al pie de la card. */
-  acciones?: ReactNode;
 }
+
+// Feature 279 (T3.5, R5): la card TENÍA una prop `acciones?: ReactNode` documentada como
+// «Acción propia del grupo ("Aceptar", "Recuperar"…)» que pintaba un pie al final. Se
+// retira con su contenedor: comprobado en el árbol antes de borrar, **ningún consumidor la
+// pasaba**. Su único usuario había sido el botón «Aceptar» que esta ficha quita, y dejarla
+// viva no era neutral: un hueco de acción que nadie rellena, documentado con el nombre del
+// botón retirado, señala exactamente dónde volver a meterlo.
 
 export function SateliteOrderCard({
   orden,
   estadoLegible,
-  acciones,
 }: Readonly<SateliteOrderCardProps>) {
   // Estado del desplegable del detalle: UI efímera, de un solo consumidor.
   const [detalleAbierto, setDetalleAbierto] = useState(false);
@@ -126,7 +130,6 @@ export function SateliteOrderCard({
         </CollapsibleContent>
       </Collapsible>
 
-      {acciones ? <div className="flex justify-end">{acciones}</div> : null}
     </article>
   );
 }

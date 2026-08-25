@@ -4,8 +4,8 @@
 // POR QUE existe: `ApiPdfEtiquetaService` decide "el PDF existe" SOLO por
 // `download_storage_path` y, si viene con valor, RE-FIRMA sin comprobar que el objeto siga en el
 // bucket (`lib/services/ApiPdfEtiquetaService.ts:50-51,90`). Si la purga limpiase unicamente
-// `download_url`, el integrador recibiria `200 { generado: false, url }` con una URL firmada de un
-// objeto YA BORRADO — un 404 al descargar. R16 lo prohibe.
+// `download_url`, el integrador recibiria un `200 { url }` re-firmado sobre un objeto YA BORRADO
+// — un 404 al descargar. R16 lo prohibe.
 //
 // CLAVE DE DISEÑO: el eslabon entre las dos features es el **estado de datos compartido**, no una
 // expectativa hardcodeada. Un unico `EstadoDatos` (arrays `cargas` / `ordenes`) esta detras a la
@@ -426,7 +426,7 @@ function montar() {
 // ---------------------------------------------------------------------------
 
 describe("Feature 178 x 177 — /generate ANTES de la purga (R16, control discriminante)", () => {
-  it("R16 T24: antes de la purga /generate de carga y de orden devuelven 200 con generado:false y NO invocan al generador", async () => {
+  it("R16 T24: antes de la purga /generate de carga y de orden devuelven 200 reusando la referencia viva y NO invocan al generador", async () => {
     const { generador, generateCarga, generateOrden } = montar();
 
     const resCarga = await generateCarga();
@@ -438,9 +438,9 @@ describe("Feature 178 x 177 — /generate ANTES de la purga (R16, control discri
     const jsonCarga = await resCarga.json();
     const jsonOrden = await resOrden.json();
 
-    // Reuso puro: solo se re-firma la referencia viva.
-    expect(jsonCarga.generado).toBe(false);
-    expect(jsonOrden.generado).toBe(false);
+    // Reuso puro: solo se re-firma la referencia viva. Se comprueba por la RUTA firmada y por
+    // el generador sin invocar, no por un testigo en el cuerpo: `generado` se retiro del
+    // contrato el 2026-08-25 y la respuesta ya no distingue reuso de construccion.
     expect(rutaFirmada(jsonCarga.url)).toBe(PATH_CARGA_ORIGINAL);
     expect(rutaFirmada(jsonOrden.url)).toBe(PATH_ORDEN_ORIGINAL);
 
@@ -456,7 +456,7 @@ describe("Feature 178 x 177 — /generate ANTES de la purga (R16, control discri
 // ---------------------------------------------------------------------------
 
 describe("Feature 178 x 177 — /generate DESPUES de la purga (R16)", () => {
-  it("R16 T23: tras purgar la carga, /generate de carga y de orden devuelven 200 con generado:true, invocan al generador y firman un objeto subido en esa misma llamada", async () => {
+  it("R16 T23: tras purgar la carga, /generate de carga y de orden devuelven 200, invocan al generador y firman un objeto subido en esa misma llamada", async () => {
     const { estado, objetos, purga, generador, generateCarga, generateOrden } = montar();
 
     // Rutas originales capturadas ANTES de purgar, leidas del propio estado (no hardcodeadas).
@@ -480,9 +480,8 @@ describe("Feature 178 x 177 — /generate DESPUES de la purga (R16)", () => {
     const jsonCarga = await resCarga.json();
     const jsonOrden = await resOrden.json();
 
-    // 1. Regeneracion, no re-firma de la referencia purgada.
-    expect(jsonCarga.generado).toBe(true);
-    expect(jsonOrden.generado).toBe(true);
+    // 1. Regeneracion, no re-firma de la referencia purgada: se afirma con la invocacion del
+    //    generador y con la ruta nueva (abajo), no con un testigo en el cuerpo de la respuesta.
 
     // 2. Se invoco al generador de PDF en ambos caminos.
     expect(generador.service.generarYAlmacenar).toHaveBeenCalledTimes(1);

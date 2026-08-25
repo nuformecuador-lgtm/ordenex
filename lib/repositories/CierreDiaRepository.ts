@@ -9,11 +9,15 @@ import type {
   ICierreDiaRepository,
 } from "@/lib/interfaces/repositories/ICierreDiaRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigenteResuelta,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type { CierrePasadoDTO } from "@/lib/interfaces/services/ICierreDiaService";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
+// Feature 274 (design §4.2, R21/R22): la clave del Map del resolver batch la define el modulo
+// puro de la cascada, no este repositorio. Indexar aqui con una clave propia seria la segunda
+// declaracion de la regla que R21 existe para impedir.
+import { clavePar } from "@/lib/utils/cascada-tarifa";
 import { appendCambioEstado } from "@/lib/repositories/registrar-cambio-estado";
 import { ORIGENES_GESTION_DE_LA_TIENDA } from "@/lib/utils/gestion-de-la-tienda-flag";
 // Feature 264 (B9): la MISMA proyeccion y el MISMO orden que usa el detalle del admin.
@@ -123,7 +127,10 @@ const SNAPSHOT_SELECT = {
       tienda: { select: { nombre: true } },
       provincia: { select: { nombre: true } },
       canton: { select: { nombre: true } },
-      distrito: { select: { nombre: true } },
+      // `zonaEspecial` (R6, 2026-08-25) viaja junto al nombre: es una entrada de la formula
+      // desde que el pacto por distrito especial cobra. La columna de origen es NULLABLE
+      // (`null` = nadie lo decidio); se normaliza a dos valores AL CONGELAR, abajo.
+      distrito: { select: { nombre: true, zonaEspecial: true } },
     },
   },
 } as const;
@@ -146,6 +153,8 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
       tarifaFulfillment: null,
+      tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
     };
   }
   return {
@@ -158,6 +167,12 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
     tarifaIvaFlete: new Prisma.Decimal(t.ivaFlete),
     tarifaIvaComisionCod: new Prisma.Decimal(t.ivaComisionCod),
     tarifaFulfillment: new Prisma.Decimal(t.fulfillment),
+    // NULLABLES tambien con tarifa presente, a diferencia de sus hermanas: `null` aqui no es
+    // "no habia tarifa", es "esta tarifa no pacto nada especial". Congelarlo como 0 cobraria
+    // un pacto de cero colones que nadie acordo.
+    tarifaEspecial: t.tarifaEspecial == null ? null : new Prisma.Decimal(t.tarifaEspecial),
+    tarifaEspecialDevuelta:
+      t.tarifaEspecialDevuelta == null ? null : new Prisma.Decimal(t.tarifaEspecialDevuelta),
   };
 }
 
@@ -360,7 +375,11 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     // tx para congelar la tarifa (R8). Es el UNICO consumidor del resolver tras la 69: los
     // feeds de wallet dejan de depender de el (leen el snapshot), y ese es justo el cambio
     // que mata el vector "cambio la tarifa entre solicitar y aprobar" (R18).
-    private readonly tarifaRepo: ITarifaVigentePorTiendaRepository,
+    //
+    // Feature 274: el resolver ya NO resuelve "por tienda" sino por el PAR (tienda, zona) con
+    // la cascada de R1. Este repositorio no lo sabe: pide `resolveTarifas(pares, tx)` y la
+    // regla vive entera en `lib/utils/cascada-tarifa.ts` (R8/R21).
+    private readonly tarifaRepo: ITarifaVigenteRepository,
   ) {}
 
   /**
@@ -418,14 +437,38 @@ export class CierreDiaRepository implements ICierreDiaRepository {
     return rows.map((r) => toPendienteRow(r, deLaTienda.has(r.id)));
   }
 
-  /** R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes. */
-  async contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number> {
+  /**
+   * R10: ordenes asignadas al mensajero (no borradas) en los estados pendientes.
+   *
+   * FEATURE 246 (TERCERA COPIA DEL PREDICADO GEMELO) — LA SELECCION ES POR ESTATUS **Y DIA**.
+   * Una orden reservada para un dia que AUN NO HA LLEGADO no es deuda de la jornada en curso: esta
+   * en la mano del mensajero, y el corte nocturno ya acordo no tocarla (el `OR` identico de
+   * `CorteDiarioRepository.findMensajerosConActividadSinCierre` y el de `crearCierre`, mas abajo en
+   * este mismo archivo). Hasta que este predicado llego aqui la 246 estaba a DOS TERCIOS: el corte
+   * respetaba la reserva y el gate de la pantalla la contaba como pendiente, asi que a un mensajero
+   * con trabajo asignado para mañana se le deshabilitaba «Solicitar cierre» del dia que SI habia
+   * terminado — sin motivo que el pudiera resolver, porque gestionar algo de mañana no se puede.
+   *
+   * `NULL` BLOQUEA, igual que en las otras dos copias (R19/R20): significa «no reservada», no
+   * «reservada para nunca». Se pregunta «¿esta reservada para DESPUES de `hoyCR`?», no «¿es de hoy?».
+   *
+   * `hoyCR` LLEGA YA CALCULADO desde el servicio, con su `now` inyectable — este repositorio no lee
+   * el reloj para decidir un dia de reparto (ver el bloque del principio del archivo). OJO al ancla,
+   * que es lo unico que NO se comparte con las otras dos copias: aqui es HOY (`startOfDayCR(now)`)
+   * y alli es `diaCerrado`, porque el corte cierra la jornada ANTERIOR y el mensajero la EN CURSO.
+   */
+  async contarOrdenesPendientesGestion(
+    mensajeroId: string,
+    estados: string[],
+    hoyCR: Date,
+  ): Promise<number> {
     if (estados.length === 0) return 0;
     return this.prisma.orden.count({
       where: {
         mensajeroAsignadoId: mensajeroId,
         deletedAt: null,
         estatus: { value: { in: estados } },
+        OR: [{ fechaReparto: null }, { fechaReparto: { lte: hoyCR } }],
       },
     });
   }
@@ -776,13 +819,19 @@ export class CierreDiaRepository implements ICierreDiaRepository {
         const filas = [...porOrden.values()];
 
         if (filas.length > 0) {
-          // R8: la tarifa vigente de cada tienda distinta, EN LA MISMA tx y en UNA query
-          // (sin N+1). `null` para una tienda sin tarifa = gap R9: las 9 columnas quedan
-          // NULL y el cierre se crea igual (decision (c): el gap NO bloquea).
-          const tarifas = await this.tarifaRepo.resolveTarifasPorTiendas(
-            tx,
-            filas.map((f) => f.orden.tiendaId),
-          );
+          // Feature 69/R8 + feature 274/R22 — la tarifa vigente de cada PAR (tienda, zona)
+          // distinto, EN LA MISMA tx y en UNA query (sin N+1, R7). Hasta la 273 esto se
+          // resolvia por TIENDA sola (`resolveTarifasPorTiendas`), asi que dos ordenes de la
+          // misma tienda en zonas distintas congelaban la MISMA fila; desde la 274 la fila la
+          // elige la cascada sobre el par (design §4.2), la misma que usa el listado (R21).
+          // `null` para un par sin tarifa = gap R9/R23: las 9 columnas quedan NULL y el cierre
+          // se crea igual (decision (c) + R39: el gap NO bloquea, y el 409 de las APIs por key
+          // NO llega hasta aqui).
+          const pares = filas.map((f) => ({
+            tiendaId: f.orden.tiendaId,
+            zonaId: f.orden.zonaId,
+          }));
+          const tarifas = await this.tarifaRepo.resolveTarifas(pares, tx);
           await tx.cierreDetail.createMany({
             data: filas.map((f) => ({
               cierreId: cierre.id,
@@ -794,7 +843,15 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               zonaId: f.orden.zonaId,
               tiendaId: f.orden.tiendaId,
               esCentral: f.orden.zona.esCentral,
-              ...tarifaColumnas(tarifas.get(f.orden.tiendaId) ?? null),
+              // `=== true` y no `!!`: la columna es tri-valuada y `null` ("nadie lo decidio")
+              // NO es especial. Una orden sin distrito (el unico FK nullable de `orden`)
+              // congela `false`: sin distrito no hay marca que aplicar.
+              esZonaEspecial: f.orden.distrito?.zonaEspecial === true,
+              ...tarifaColumnas(
+                tarifas.get(
+                  clavePar({ tiendaId: f.orden.tiendaId, zonaId: f.orden.zonaId }),
+                ) ?? null,
+              ),
               // descriptivos (R7).
               numGuia: f.orden.numGuia,
               numRemision: f.orden.numRemision,

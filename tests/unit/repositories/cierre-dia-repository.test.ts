@@ -2,15 +2,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { CierreDiaRepository } from "@/lib/repositories/CierreDiaRepository";
 import type {
-  ITarifaVigentePorTiendaRepository,
+  ITarifaVigenteRepository,
   TarifaVigenteResuelta,
-} from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+} from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { idEstado, sembrarCatalogoEstados } from "@/tests/fixtures/catalogo-estados";
+import { clavePar, elegirPorCascada, type ParTarifa } from "@/lib/utils/cascada-tarifa";
 
 // Feature 37 — tests unit del repositorio del cierre (mockea Prisma, sin DB real,
 // patron orden-repository.asignacion.test.ts). Cubre R3 (solo cierre_id IS NULL),
 // R10 (conteo de pendientes), R12 (existe solicitado) y R13/R14 (crear + vincular +
 // snapshot). Money-safe: Decimal se serializa a STRING toFixed(2).
+
+// Feature 246 — el dia CR con el que se ancla el conteo de pendientes. Es un valor FIJO, no
+// `startOfDayCR(new Date())`: el repositorio no lo calcula (lo recibe), asi que el test tampoco
+// tiene por que depender del reloj de la maquina para comprobar que lo usa tal cual.
+const HOY_CR = new Date("2026-08-25T00:00:00.000Z");
 
 function detalleRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -82,19 +88,25 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
 }
 
 // Feature 69/T10 (design §3.1) — doble del resolver de tarifa que `crearCierre` recibe por
-// constructor. Por defecto resuelve `null` para toda tienda (gap R9): los casos que no
+// constructor. Por defecto no hay NINGUNA fila de tarifa (gap R9/R23): los casos que no
 // afirman nada del snapshot no necesitan configurarlo.
-function buildTarifaRepo(
-  tarifas: Record<string, TarifaVigenteResuelta | null> = {},
-): ITarifaVigentePorTiendaRepository {
+//
+// Feature 274 (T5.3): el doble ya no es un diccionario por TIENDA. Recibe FILAS de `tarifas`
+// —con sus dos dimensiones nullables— y elige con `elegirPorCascada`, la MISMA funcion pura que
+// usa el repositorio real. Se hace asi a proposito: un doble que devolviera lo que se le pide
+// por tienda no podria distinguir "el cierre pasa la zona" de "el cierre no la pasa", que es
+// justo la regresion que R22 fija. Con este doble, un `crearCierre` que olvidara la zona
+// resolveria nivel 2 y el test de R22 se pondria rojo.
+type FilaTarifaDoble = TarifaVigenteResuelta & { tiendaId: string | null; zonaId: string | null };
+
+function buildTarifaRepo(filas: readonly FilaTarifaDoble[] = []): ITarifaVigenteRepository {
   return {
-    resolveTarifaPorTienda: vi.fn(async (tiendaId: string) => tarifas[tiendaId] ?? null),
-    resolveTarifasPorTiendas: vi.fn(async (_tx: unknown, tiendaIds: string[]) => {
-      const out = new Map<string, TarifaVigenteResuelta | null>();
-      for (const id of tiendaIds) out.set(id, tarifas[id] ?? null);
-      return out;
+    resolveTarifa: vi.fn(async (tiendaId: string, zonaId: string | null) => {
+      const par = { tiendaId, zonaId };
+      return elegirPorCascada(filas, [par]).get(clavePar(par)) ?? null;
     }),
-  } as unknown as ITarifaVigentePorTiendaRepository;
+    resolveTarifas: vi.fn(async (pares: readonly ParTarifa[]) => elegirPorCascada(filas, pares)),
+  } as unknown as ITarifaVigenteRepository;
 }
 
 /**
@@ -325,7 +337,11 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     prisma.orden.count.mockResolvedValue(2);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const n = await repo.contarOrdenesPendientesGestion("m1", ["por_recoger", "en_reparto"]);
+    const n = await repo.contarOrdenesPendientesGestion(
+      "m1",
+      ["por_recoger", "en_reparto"],
+      HOY_CR,
+    );
 
     expect(n).toBe(2);
     const arg = prisma.orden.count.mock.calls[0][0];
@@ -340,10 +356,28 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     const prisma = buildPrisma();
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const n = await repo.contarOrdenesPendientesGestion("m1", []);
+    const n = await repo.contarOrdenesPendientesGestion("m1", [], HOY_CR);
 
     expect(n).toBe(0);
     expect(prisma.orden.count).not.toHaveBeenCalled();
+  });
+
+  // FEATURE 246 — EL PREDICADO DE DIA, que es la razon por la que esta firma lleva `hoyCR`.
+  //
+  // No se afirma «el `where` contiene un OR» sino LAS DOS RAMAS Y SU OPERADOR, porque el fallo que
+  // este test existe para cazar no es que el OR desaparezca: es que alguien lo cambie a `lt`
+  // (dejando fuera lo de HOY, que si es deuda) o le quite la rama `null` (dejando de contar las
+  // ordenes sin reservar, que tambien lo son). Los tres `where` gemelos —este, el de
+  // `CorteDiarioRepository` y el de `crearCierre`— tienen que decir esto MISMO.
+  it("excluye lo reservado para DESPUES de hoy y conserva lo de hoy y lo no reservado", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.contarOrdenesPendientesGestion("m1", ["en_reparto"], HOY_CR);
+
+    const arg = prisma.orden.count.mock.calls[0][0];
+    expect(arg.where.OR).toEqual([{ fechaReparto: null }, { fechaReparto: { lte: HOY_CR } }]);
   });
 });
 
@@ -1512,6 +1546,30 @@ const TARIFA_T1: TarifaVigenteResuelta = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
+};
+
+// Feature 274 — las filas de `tarifas` con las que se alimenta el doble del resolver.
+// `FILA_T1_Z1` es la de NIVEL 1 del par (t1, z1); `FILA_T1_SIN_ZONA` es la de NIVEL 2 de la
+// misma tienda, con OTRO `tarifaId` y otro flete, para poder distinguirlas en el snapshot.
+const FILA_T1_Z1: FilaTarifaDoble = { ...TARIFA_T1, tiendaId: "t1", zonaId: "z1" };
+const FILA_T1_SIN_ZONA: FilaTarifaDoble = {
+  ...TARIFA_T1,
+  tarifaId: "ta-nivel2",
+  valorFlete: "9999.00",
+  tiendaId: "t1",
+  zonaId: null,
+};
+// Nivel 1 de OTRA zona de la MISMA tienda: es lo que hace que "por tienda" y "por par" den
+// resultados distintos (R25 en la carga; aqui, R22 en el cierre).
+const FILA_T1_Z2: FilaTarifaDoble = {
+  ...TARIFA_T1,
+  tarifaId: "ta-z2",
+  valorFlete: "2000.00",
+  tiendaId: "t1",
+  zonaId: "z2",
 };
 
 // Gestion vinculada, tal como la lee `SNAPSHOT_SELECT` DENTRO de la tx.
@@ -1572,7 +1630,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     const id = await repo.crearCierre(INPUT_CIERRE);
@@ -1594,7 +1652,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1617,7 +1675,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     // NO se traga como el sentinela de 0-gestiones: un fallo real del snapshot debe
@@ -1635,7 +1693,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1651,7 +1709,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1676,7 +1734,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1704,7 +1762,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1719,17 +1777,17 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const tarifaRepo = buildTarifaRepo([FILA_T1_Z1]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
 
     await repo.crearCierre(INPUT_CIERRE);
 
     // El resolver se invoca con el cliente de la TX (no con `prisma`): si se resolviera
-    // fuera, la tarifa congelada podria no ser la que la tx vio.
-    const [txArg, tiendaIds] = (tarifaRepo.resolveTarifasPorTiendas as ReturnType<typeof vi.fn>)
-      .mock.calls[0];
+    // fuera, la tarifa congelada podria no ser la que la tx vio. Feature 274: `tx` va SEGUNDO
+    // y lo primero son los PARES (tienda, zona), no una lista de tiendas.
+    const [pares, txArg] = (tarifaRepo.resolveTarifas as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(txArg).toBe(tx);
-    expect(tiendaIds).toEqual(["t1"]);
+    expect(pares).toEqual([{ tiendaId: "t1", zonaId: "z1" }]);
 
     const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
       .data;
@@ -1750,22 +1808,24 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     }
   });
 
-  it("R9: tienda SIN tarifa => fila con las 8 columnas NULL y el cierre se crea igual", async () => {
+  it("R9/R23: par SIN tarifa => las 9 columnas NULL y el cierre se crea igual", async () => {
     const tx = buildSnapshotTx([snapshotRow()]);
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    // Sin tarifa para `t1`: el resolver devuelve null (gap de datos).
+    // Ninguna fila de `tarifas`: la cascada no resuelve nada para (t1, z1) (gap de datos).
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
     const id = await repo.crearCierre(INPUT_CIERRE);
 
-    // Decision (c): el gap NO bloquea. El cierre lo solicita el MENSAJERO; la tarifa es
-    // configuracion de la TIENDA: bloquear le impediria cerrar su dia por un dato que no
-    // controla (y tumbaria el corte diario masivo de la 41).
+    // Decision (c) + feature 274/R23/R39: el gap NO bloquea, y el `409` de las dos APIs por
+    // key NO llega hasta aqui. El cierre lo solicita el MENSAJERO; la tarifa es configuracion
+    // de la TIENDA: bloquear le impediria cerrar su dia por un dato que no controla (y
+    // tumbaria el corte diario masivo de la 41).
     expect(id).toBe("c1");
     const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
       .data;
+    // Las NUEVE, todas o ninguna (`tarifaFulfillment` incluido).
     expect(data[0]).toMatchObject({
       tarifaId: null,
       tarifaValorFlete: null,
@@ -1775,7 +1835,132 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
       tarifaComisionCod: null,
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
+      tarifaFulfillment: null,
     });
+  });
+
+  // ==========================================================================
+  // Feature 274 (R21-R24) — la fila congelada la elige la CASCADA sobre el par (tienda, zona).
+  // ==========================================================================
+
+  it("R22: congela la fila de NIVEL 1 (tienda+zona) aunque exista una de nivel 2 mas reciente", async () => {
+    // Estado de `tarifas`: la de nivel 2 (tienda sola) se creo DESPUES que la de nivel 1. La
+    // cascada es por especificidad, no por fecha (R3/R5): gana `ta1`, la del par exacto.
+    // Antes de la 274 el cierre resolvia por TIENDA y habria congelado `ta-nivel2`.
+    const tx = buildSnapshotTx([snapshotRow()]); // orden en (t1, z1)
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_SIN_ZONA, FILA_T1_Z1]), // la de nivel 2, primero y "mas nueva"
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].tarifaId).toBe("ta1");
+    expect((data[0].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+  });
+
+  it("R22: dos ordenes de la MISMA tienda en zonas distintas congelan tarifas DISTINTAS", async () => {
+    // La regresion en una sola linea: resolver por tienda daba la misma fila a las dos.
+    const tx = buildSnapshotTx([
+      snapshotRow({ ordenId: "o1" }), // (t1, z1)
+      snapshotRow({ ordenId: "o2", orden: { zonaId: "z2" } }), // (t1, z2)
+    ]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1, FILA_T1_Z2]),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data.map((d) => d.tarifaId)).toEqual(["ta1", "ta-z2"]);
+    expect((data[0].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("1000.00");
+    expect((data[1].tarifaValorFlete as Prisma.Decimal).toFixed(2)).toBe("2000.00");
+  });
+
+  it("R23: una orden sin tarifa NO impide que las demas congelen la suya ni bloquea el cierre", async () => {
+    const tx = buildSnapshotTx([
+      snapshotRow({ ordenId: "o1" }), // (t1, z1) -> resuelve
+      snapshotRow({ ordenId: "o2", orden: { tiendaId: "t9", zonaId: "z9" } }), // sin fila
+    ]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1]),
+    );
+
+    expect(await repo.crearCierre(INPUT_CIERRE)).toBe("c1");
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(data[0].tarifaId).toBe("ta1");
+    expect(data[1].tarifaId).toBeNull();
+    expect(data[1].tarifaFulfillment).toBeNull();
+  });
+
+  it("R24: el shape del snapshot no cambia — la lista EXACTA de columnas escritas", async () => {
+    // Lista congelada tal cual la escribia `dev` antes de la 274 (feature 69 + el
+    // `tarifaFulfillment` de 2026-08-19). La 274 cambia QUE FILA se elige, no QUE se escribe:
+    // si alguien anadiera o quitara una columna aqui, la aritmetica de `ingreso-ordenex.ts` y
+    // los feeds de wallet que leen el snapshot dejarian de cuadrar en silencio.
+    const COLUMNAS_DEV = [
+      "cierreId",
+      "ordenId",
+      "montoCobrar",
+      "cobraComision",
+      "zonaId",
+      "tiendaId",
+      "esCentral",
+      // 2026-08-25: la marca del distrito y los dos pactos entran en la formula, asi que
+      // entran en el snapshot. Un cierre viejo re-derivado con la tarifa de HOY es el
+      // descuadre invisible que este congelado existe para impedir.
+      "esZonaEspecial",
+      "tarifaId",
+      "tarifaValorFlete",
+      "tarifaValorFleteGam",
+      "tarifaValorFleteDevuelto",
+      "tarifaValorFleteDevueltoGam",
+      "tarifaComisionCod",
+      "tarifaIvaFlete",
+      "tarifaIvaComisionCod",
+      "tarifaFulfillment",
+      "tarifaEspecial",
+      "tarifaEspecialDevuelta",
+      "numGuia",
+      "numRemision",
+      "destinatario",
+      "direccion",
+      "producto",
+      "tiendaNombre",
+      "zonaNombre",
+      "provinciaNombre",
+      "cantonNombre",
+      "distritoNombre",
+    ];
+    const tx = buildSnapshotTx([snapshotRow()]);
+    const prisma = buildPrisma({
+      $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    });
+    const repo = new CierreDiaRepository(
+      prisma as unknown as PrismaClient,
+      buildTarifaRepo([FILA_T1_Z1]),
+    );
+
+    await repo.crearCierre(INPUT_CIERRE);
+
+    const data = ((tx.cierreDetail.createMany as ReturnType<typeof vi.fn>).mock.calls[0][0] as unknown as { data: Record<string, unknown>[] })
+      .data;
+    expect(Object.keys(data[0]).sort()).toEqual([...COLUMNAS_DEV].sort());
   });
 
   it("R2 (EL GRANO): 2 gestiones vigentes de la MISMA orden => UNA sola fila", async () => {
@@ -1788,7 +1973,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1806,7 +1991,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1824,7 +2009,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre(INPUT_CIERRE);
@@ -1834,23 +2019,35 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     expect(data[0].montoCobrar).toBeNull();
   });
 
-  it("una tienda con varias ordenes se resuelve UNA vez (sin N+1)", async () => {
+  // Feature 274/R7: el mismo invariante, pero contando PARES en vez de tiendas. NO se relaja:
+  // N ordenes de M pares distintos siguen costando UNA sola consulta de tarifas, y la consulta
+  // real de `tarifa.findMany` corre DENTRO de la tx (el doble cuenta la llamada al resolver;
+  // la equivalencia resolver->una `findMany` la fija el test del propio resolver, T3).
+  it("R7: N ordenes de M pares distintos => UNA sola llamada al resolver batch (sin N+1)", async () => {
     const tx = buildSnapshotTx([
-      snapshotRow({ ordenId: "o1" }),
-      snapshotRow({ ordenId: "o2" }),
-      snapshotRow({ ordenId: "o3", orden: { tiendaId: "t2" } }),
+      snapshotRow({ ordenId: "o1" }), // (t1, z1)
+      snapshotRow({ ordenId: "o2" }), // (t1, z1) repetido
+      snapshotRow({ ordenId: "o3", orden: { zonaId: "z2" } }), // (t1, z2)
+      snapshotRow({ ordenId: "o4", orden: { tiendaId: "t2" } }), // (t2, z1)
     ]);
     const prisma = buildPrisma({
       $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
     });
-    const tarifaRepo = buildTarifaRepo({ t1: TARIFA_T1 });
+    const tarifaRepo = buildTarifaRepo([FILA_T1_Z1, FILA_T1_Z2]);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, tarifaRepo);
 
     await repo.crearCierre(INPUT_CIERRE);
 
-    // UNA sola llamada batch para todas las tiendas del cierre.
-    expect(tarifaRepo.resolveTarifasPorTiendas).toHaveBeenCalledTimes(1);
-    expect(tarifaRepo.resolveTarifaPorTienda).not.toHaveBeenCalled();
+    // UNA sola llamada batch para TODOS los pares del cierre (4 ordenes, 3 pares distintos).
+    expect(tarifaRepo.resolveTarifas).toHaveBeenCalledTimes(1);
+    expect(tarifaRepo.resolveTarifa).not.toHaveBeenCalled();
+    const [pares] = (tarifaRepo.resolveTarifas as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(pares).toEqual([
+      { tiendaId: "t1", zonaId: "z1" },
+      { tiendaId: "t1", zonaId: "z1" },
+      { tiendaId: "t1", zonaId: "z2" },
+      { tiendaId: "t2", zonaId: "z1" },
+    ]);
   });
 
   it("R9/C1: si no se vincula ninguna gestion (rollback) el snapshot NO se toca", async () => {
@@ -1865,7 +2062,7 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     expect(await repo.crearCierre(INPUT_CIERRE)).toBeNull();
@@ -1939,7 +2136,7 @@ describe("Feature 158/R16 — crearCierre vincula tambien las gestiones `inciden
     });
     const repo = new CierreDiaRepository(
       prisma as unknown as PrismaClient,
-      buildTarifaRepo({ t1: TARIFA_T1 }),
+      buildTarifaRepo([FILA_T1_Z1]),
     );
 
     await repo.crearCierre({

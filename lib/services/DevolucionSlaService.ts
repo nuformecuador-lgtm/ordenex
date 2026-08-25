@@ -30,7 +30,16 @@ const VENTANA_WRONG_MS = 5 * DIA_MS;
 // Metodos de repo/servicio consumidos (Pick para dobles de test sin DB/red).
 type ZonaRepo = Pick<IZonaRepository, "findCentralZonaId">;
 type OrdenRepo = Pick<IOrdenRepository, "findEstatusIdByValue">;
-type HistorialSvc = Pick<IOrdenHistorialService, "contarIntentos">;
+/**
+ * FEATURE 276 (T10, R30) — el `Pick` pasa de `contarIntentos` a `contarIntentosEnLote`, y es un
+ * cambio de FORMA con dos motivos, no una optimizacion suelta:
+ *
+ *  (a) la rama `wrong_*` ahora TAMBIEN necesita el numero (R28). Si cada rama contara por su
+ *      cuenta habria DOS formas de obtener el mismo dato en el mismo servicio — la clase exacta de
+ *      divergencia que 215/R4 («una sola definicion de intento») existe para impedir;
+ *  (b) de paso desaparece el N+1: una consulta por corrida en vez de una por orden.
+ */
+type HistorialSvc = Pick<IOrdenHistorialService, "contarIntentosEnLote">;
 
 // Log de aviso inyectable: por defecto console.warn. NUNCA registra PII/secretos (R11): solo
 // conteos agregados.
@@ -87,6 +96,19 @@ export class DevolucionSlaService implements IDevolucionSlaService {
 
     const candidatas = await this.repo.findDevueltasSla();
 
+    // FEATURE 276 (T10, R28/R30) — UN SOLO CONTEO POR CORRIDA, para LAS DOS RAMAS.
+    //
+    // Las dos leen de este mismo `Map`, asi que por construccion no pueden discrepar sobre cuantos
+    // intentos tiene una orden. Con `ids` vacio el servicio no emite ni una consulta (el propio
+    // `contarIntentosEnLote` corta).
+    //
+    // CARRERA CONOCIDA Y ACEPTADA (design §9.2): entre este conteo y la escritura, una aprobacion
+    // de cierre concurrente puede subir un contador. Direccion del error: la orden NO escala, o
+    // sea NO COBRA. Es la direccion segura y queda declarada.
+    const intentosPorOrden = await this.historial.contarIntentosEnLote(
+      candidatas.map((c) => c.ordenId),
+    );
+
     let evaluadas = 0;
     let liberadas = 0;
     let escaladas = 0;
@@ -105,8 +127,35 @@ export class DevolucionSlaService implements IDevolucionSlaService {
           omitidas += 1;
           continue;
         }
+        const intentos = intentosPorOrden.get(orden.ordenId) ?? 0; // R30: del Map, no de una consulta
+
+        // 💰 FEATURE 276 (T10, R28) — LA RAMA `wrong_*` DEJA DE ESPERAR CUANDO YA NO HAY INTENTOS.
+        //
+        // MIENTRAS una orden repose en `devuelta` con causa `wrong_number`/`wrong_address` y sus
+        // intentos vigentes alcancen el umbral, escala en la PRIMERA corrida posterior a su
+        // anclaje, sin esperar sus cinco dias.
+        //
+        // POR QUE ESTO NO CAMBIA *QUE* PASA, SOLO *CUANDO* —y es lo que lo hace aceptable—: esa
+        // rama YA escalaba a `rechazada` de forma INCONDICIONAL al vencer la ventana. Consultar el
+        // contador no puede producir un desenlace distinto del que la orden iba a tener: adelanta
+        // hasta 5 dias el MISMO desenlace.
+        //
+        // POR QUE ESOS 5 DIAS DEJAN DE PODER PRODUCIR ALGO UTIL: su funcion era darle a la tienda
+        // tiempo de corregir la direccion y reprogramar. Pero con el tope puesto, una orden en el
+        // umbral que se reprograme acaba en bodega y R18 le niega la asignacion —y desde la Q2 la
+        // reprogramacion ni siquiera se acepta—. Son 5 dias de mercaderia parada a cambio de una
+        // salida que el propio tope acaba de cerrar. Medido: la guia `28098171` llevaba 89,1 h de
+        // 120 esperando un desenlace ya decidido.
+        //
+        // ⚠️ ES LA PRIMERA VEZ QUE ESTE SISTEMA *ADELANTA* UN COBRO. Lo que lo hace aceptable es
+        // que el cobro es el mismo y era seguro; lo que lo hace peligroso es que depende del
+        // contador. Por eso R33 congela el criterio de conteo en esta ficha.
+        const esWrong = orden.causa !== "not_found";
+        const escalaPorTope = esWrong && intentos >= umbral;
+
         // R14/R13/R17 (ventana viva): aun no vence -> la orden reposa en `devuelta`, no se actua.
-        if (!venceVentana(orden.causa, orden.ancladaAt, now)) {
+        // R29: por DEBAJO del umbral la ventana de cinco dias se aplica exactamente como hoy.
+        if (!escalaPorTope && !venceVentana(orden.causa, orden.ancladaAt, now)) {
           evaluadas += 1;
           continue;
         }
@@ -138,7 +187,6 @@ export class DevolucionSlaService implements IDevolucionSlaService {
           // —no se ve, no corre reloj, no se cobra— y esa poblacion es CONTABLE, que antes no lo
           // era. El dano pasa de dinero mal cobrado a mercaderia parada. La alerta operativa que
           // vigila esa poblacion (M3 del §7bis de la 215) sigue siendo ficha aparte.
-          const intentos = await this.historial.contarIntentos(orden.ordenId); // R15
           if (intentos >= umbral) {
             // R16: alcanzo el umbral -> escala a `rechazada`.
             const ok = await this.escalar(orden, estatusDevueltaId, estatusRechazadaId);

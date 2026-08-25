@@ -70,6 +70,8 @@ export interface ResolvedGeo {
   // Feature 98/R2: flag de la zona resuelta del distrito, para elegir la columna del flete al
   // tarifar la carga por API. La via sesion lo ignora (R9).
   esCentral: boolean;
+  // Marca `zona_especial` del distrito resuelto: elige el pacto especial al tarifar (2026-08-25).
+  esZonaEspecial: boolean;
 }
 
 export type GeoResult =
@@ -158,14 +160,15 @@ export function resolveGeo(
       cantonId: canton.id,
       distritoId: distrito.id,
       esCentral: distrito.esCentral, // feature 98/R2: flag de la zona del distrito.
+      esZonaEspecial: distrito.esZonaEspecial, // marca del distrito, no de su zona.
     },
   };
 }
 
 // Feature 142 (design.md §4) — extractor de geografia INYECTADO POR VIA.
 //
-// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v2 con la
-// columna unica `direccion_destinatario`) y `cargarViaApi` (via API key, feature
+// `resolveFila` lo comparten `cargarMasiva` (via sesion, plantilla v3 con
+// `provincia` + `canton_distrito`, feature 276) y `cargarViaApi` (via API key, feature
 // 88: contrato PUBLICO con `provincia`/`canton`/`distrito`/`direccion` como campos
 // separados). Cada via aporta su propio extractor; `resolveGeo` sigue recibiendo
 // los mismos 3 nombres y no cambia (R33-R38).

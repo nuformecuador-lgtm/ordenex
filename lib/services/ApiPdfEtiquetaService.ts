@@ -48,7 +48,7 @@ export class ApiPdfEtiquetaService implements IApiPdfEtiquetaService {
     //    valor implica a la vez "es propia y viva" y "el PDF existe" (R37): se re-firma y
     //    se sale sin construir, sin subir y sin reescribir la referencia (R21).
     const pathPersistido = await this.repo.findDownloadStoragePathByOrdenForOwner(ordenId, ownerId);
-    if (pathPersistido !== null) return this.firmar(pathPersistido, false);
+    if (pathPersistido !== null) return this.firmar(pathPersistido);
 
     // 2. `null` es ambiguo por contrato del repo: puede ser "propia sin PDF" o
     //    "ajena/borrada/inexistente". Se desambigua con otra lectura owner-forzada ANTES de
@@ -75,7 +75,7 @@ export class ApiPdfEtiquetaService implements IApiPdfEtiquetaService {
     // 4. Persistir DESPUES del upload y SOLO la ruta devuelta por el generador (R20/R26/R36):
     //    si el UPDATE falla queda un objeto huerfano, nunca una referencia rota (design §6).
     await this.repo.setOrdenDownloadStoragePath(ordenId, generado.path);
-    return this.firmar(generado.path, true);
+    return this.firmar(generado.path);
   }
 
   async porCarga(actor: Actor, cargaId: string): Promise<PdfEtiquetaResult> {
@@ -87,7 +87,7 @@ export class ApiPdfEtiquetaService implements IApiPdfEtiquetaService {
     if (!carga) return { status: "not_found" };
 
     // 2. Reuso del consolidado (R31): solo re-firma.
-    if (carga.downloadStoragePath !== null) return this.firmar(carga.downloadStoragePath, false);
+    if (carga.downloadStoragePath !== null) return this.firmar(carga.downloadStoragePath);
 
     // 3. Lote sin ordenes propias vivas: no hay nada imprimible (R33) y no hace falta
     //    preguntarselo al generador.
@@ -104,15 +104,19 @@ export class ApiPdfEtiquetaService implements IApiPdfEtiquetaService {
     if (!resultado) return { status: "sin_etiqueta" }; // R33: ninguna orden con etiqueta
 
     await this.repo.setCargaDownloadStoragePath(cargaId, resultado.path); // R30/R35
-    return this.firmar(resultado.path, true);
+    return this.firmar(resultado.path);
   }
 
   /**
    * R22/R23/R24: la URL SIEMPRE se emite en esta llamada a partir de la RUTA del objeto,
    * nunca se lee de la persistencia, y caduca a los `ttlSeg` segundos.
+   *
+   * Ya no recibe el testigo `generado`: el contrato dejo de exponerlo (2026-08-25). Las dos
+   * ramas —reuso y construccion— convergen en la MISMA salida, que es justo lo que el campo
+   * hacia visible y ya no hace falta distinguir desde fuera.
    */
-  private async firmar(path: string, generado: boolean): Promise<PdfEtiquetaResult> {
+  private async firmar(path: string): Promise<PdfEtiquetaResult> {
     const url = await this.signedUrls.createSignedUrl(path, this.ttlSeg);
-    return { status: "ok", url, expiraEnSegundos: this.ttlSeg, generado };
+    return { status: "ok", url, expiraEnSegundos: this.ttlSeg };
   }
 }

@@ -284,9 +284,19 @@ export interface ICierreDiaRepository {
   findGestionesPendientes(mensajeroId: string): Promise<CierreGestionPendienteRow[]>;
   /**
    * R10: cuenta las ordenes asignadas al mensajero (no borradas) cuyo estado esta
-   * en `estados` (por_recoger/en_reparto = pendientes de gestion).
+   * en `estados` (por_recoger/en_reparto/ayuda_tienda = pendientes de gestion) **y** que no esten
+   * reservadas para un dia POSTERIOR a `hoyCR` (feature 246: el predicado gemelo del corte).
+   *
+   * `hoyCR` es la medianoche UTC de la fecha CALENDARIO de CR del dia en curso (`startOfDayCR`),
+   * resuelta por el SERVICIO desde su `now` inyectable. Es un parametro REQUERIDO a proposito: con
+   * un default, una llamada nueva que lo olvidara volveria al conteo sin dia y el gate contaria de
+   * mas otra vez, en silencio.
    */
-  contarOrdenesPendientesGestion(mensajeroId: string, estados: string[]): Promise<number>;
+  contarOrdenesPendientesGestion(
+    mensajeroId: string,
+    estados: string[],
+    hoyCR: Date,
+  ): Promise<number>;
   /**
    * Feature 146 (R24) -> FEATURE 271 (R56) — datos MINIMOS de UN cierre CONCRETO: su id (entidad de
    * origen de la notificacion), la zona DESTINO (alcance del `adminSatelite`) y el nombre del

@@ -34,7 +34,9 @@ const filas: FilaParseada[] = [
     row: {
       destinatario: "Ana Solís",
       telefono: "8888",
-      direccion_destinatario: "Costa Rica / Cartago / Cartago (Occidental) / Frente gasolinera JSM, 200m sur",
+      provincia: "Cartago",
+      canton_distrito: "Cartago (Occidental)",
+      direccion: "Frente gasolinera JSM, 200m sur",
       monto_cobrar: "25.90",
       producto: "Camiseta talla M",
       num_remision: "REM-0007",
@@ -47,7 +49,9 @@ const filas: FilaParseada[] = [
     row: {
       destinatario: "Beto Mora",
       telefono: "87654321",
-      direccion_destinatario: "Costa Rica / San José / San José (Carmen) / 100m sur del parque",
+      provincia: "San José",
+      canton_distrito: "San José (Carmen)",
+      direccion: "100m sur del parque",
       monto_cobrar: "abc",
       producto: "Pantalón",
       num_remision: "REM-0012",
@@ -202,8 +206,8 @@ describe("Carga masiva — round-trip del export de filas con error", () => {
     expect(resultado.success).toBe(true);
   });
 
-  it("R18: la plantilla vacía sigue teniendo 8 columnas y NINGUNA motivo_error", () => {
-    expect(ORDENES_BULK_FIELDS.map((f) => f.key)).toHaveLength(8);
+  it("R18/R32: la plantilla vacía sigue teniendo 10 columnas y NINGUNA motivo_error", () => {
+    expect(ORDENES_BULK_FIELDS.map((f) => f.key)).toHaveLength(10);
     expect(ORDENES_BULK_FIELDS.some((f) => f.key === COLUMNA_MOTIVO_ERROR)).toBe(false);
   });
 });

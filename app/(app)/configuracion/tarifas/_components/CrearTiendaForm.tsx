@@ -21,6 +21,7 @@ import {
   type TarifaFieldErrors,
   type TarifaValores,
 } from "./TarifaCampos";
+import { useDestinoAnimado } from "./useDestinoAnimado";
 
 // Los campos numéricos viven en `TarifaCampos` porque los comparten DOS
 // formularios: este y la sección "Tarifas de zona" de `CrearZonaForm`. Son el
@@ -118,13 +119,41 @@ export function CrearTiendaForm({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [guardando, setGuardando] = useState(false);
 
+  // Rotulo del destino junto al titulo: dice contra QUE fila escribe "Guardar".
+  // El panel derecho ya marca la activa, pero el foco esta en el formulario y la
+  // marca queda fuera del campo de vision; sin el rotulo, dos zonas con los
+  // mismos numeros se ven identicas. La animacion (sale a la derecha, entra por
+  // la izquierda) es lo que delata que el cambio ocurrio.
+  const destinoPedido =
+    destino.kind === "default"
+      ? "Por defecto"
+      : `Zona ${zonas.find((z) => z.id === destino.id)?.nombre ?? "sin nombre"}`;
+  const { etiqueta: etiquetaDestino, clase: claseDestino } =
+    useDestinoAnimado(destinoPedido);
+
+  // Al CREAR, el select sólo ofrece a quien todavía no tiene ninguna tarifa. Quien ya
+  // tiene una está en el listado y se toca desde ahí: elegirlo aquí no crearía nada
+  // nuevo —el par (tienda, "Por defecto") ya está ocupado y el único lo rechaza con un
+  // `conflict`—, o peor, invitaría a reescribir a ciegas una tarifa que existe con el
+  // formulario en blanco. La cuenta se hace sobre `tiendaId`, no sobre la tarifa por
+  // defecto: una tienda que sólo tenga tarifas de zona TAMBIÉN sale ya en el listado, y
+  // su fila "Por defecto" se añade desde el panel derecho al editarla.
+  //
+  // En EDICIÓN se ofrecen todos: el select está deshabilitado pero tiene que poder
+  // MOSTRAR al dueño actual, y filtrarlo lo dejaría en blanco justo en la tienda que se
+  // está editando.
+  const conTarifa = new Set(
+    tarifas.map((t) => t.tiendaId).filter((id): id is string => id != null),
+  );
+  const disponible = (u: UsuarioPorRolDTO) => esEditar || !conTarifa.has(u.id);
+
   const opciones: SelectOption[] = [
-    ...adminTiendas.map((u) => ({
+    ...adminTiendas.filter(disponible).map((u) => ({
       value: u.id,
       label: u.nombre,
       group: GRUPO_TARIFABLE.adminTienda,
     })),
-    ...apiKeys.map((u) => ({
+    ...apiKeys.filter(disponible).map((u) => ({
       value: u.id,
       label: u.nombre,
       group: GRUPO_TARIFABLE.apiKey,
@@ -241,9 +270,21 @@ export function CrearTiendaForm({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
       <div className="flex flex-col gap-6 rounded-md border border-border p-4 lg:col-span-9">
-        <h3 className="text-sm font-semibold">
-          {esEditar ? "Editar tienda" : "Nueva tienda"}
-        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">
+            {esEditar ? "Editar tienda" : "Nueva tienda"}
+          </h3>
+          {/* `aria-live` en el contenedor, que es el que NO cambia: si estuviera
+              en la etiqueta animada, cada cambio montaria un live region nuevo y
+              el lector de pantalla podria no anunciarlo. */}
+          <span aria-live="polite">
+            <span
+              className={`inline-block rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground ${claseDestino}`}
+            >
+              {etiquetaDestino}
+            </span>
+          </span>
+        </div>
 
         <FormField
           id="tienda-admin"
@@ -252,7 +293,9 @@ export function CrearTiendaForm({
           hint={
             esEditar
               ? "No se puede cambiar en edición: para otra tienda, abre su tarifa desde el listado."
-              : undefined
+              : opciones.length === 0
+                ? "Todas las tiendas y API keys ya tienen tarifa. Para cambiar una, edítala desde el listado."
+                : "Sólo aparecen las que aún no tienen tarifa."
           }
         >
           {({
@@ -263,7 +306,11 @@ export function CrearTiendaForm({
               value={tiendaId}
               onValueChange={seleccionarTienda}
               options={opciones}
-              placeholder="Selecciona un administrador de tienda o una API key"
+              placeholder={
+                !esEditar && opciones.length === 0
+                  ? "No queda ninguna sin tarifa"
+                  : "Selecciona un administrador de tienda o una API key"
+              }
               // En EDICIÓN el dueño no se toca: la fila que se abrió es la de
               // esa tienda, y cambiar el select aquí no movería la tarifa de
               // dueño —crearía o pisaría la de OTRA tienda sin decirlo—. Para

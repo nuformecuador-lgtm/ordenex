@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { WalletTiendaFeedService } from "@/lib/services/WalletTiendaFeedService";
 import { CierreDetalleFaltanteError } from "@/lib/utils/cierre-detalle";
 import type { WalletTiendaFeedTxClient } from "@/lib/interfaces/services/IWalletTiendaFeedService";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import { agregarIngresosPorConcepto, type OrdenIngresoInput } from "@/lib/utils/ingreso-ordenex";
 
 // Feature 43/T9 — tests unit del WalletTiendaFeedService (CORAZON). Cubre R8/R9/R10/R11/R14/
@@ -24,6 +24,9 @@ const TARIFA: TarifaVigente = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 // La misma tarifa, tal como queda CONGELADA en la fila del snapshot.

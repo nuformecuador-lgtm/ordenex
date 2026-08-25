@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
 import type { GestionResultado } from "@prisma/client";
-import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigentePorTiendaRepository";
+import type { TarifaVigente } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type {
   IngresoOrdenexDTO,
   TotalesIngresoOrdenex,
 } from "@/lib/interfaces/services/ICierreDiaService";
 import type { WalletIngresoConcepto } from "@/lib/types/wallet";
+import type { OrigenFlete } from "@/lib/types/tarifa";
 
 /**
  * Feature 42 (design §4, R8/R9/R26) — derivacion del INGRESO de Ordenex por gestion.
@@ -21,12 +22,31 @@ import type { WalletIngresoConcepto } from "@/lib/types/wallet";
  *   valorFleteDevuelto) + su IVA (mismo % ivaFlete). SIN comision COD (no hubo recaudo).
  * - `reprogramada` (u otro en transito) -> no aporta a ningun concepto.
  * - `tarifa === null` (tienda sin tarifa vigente) -> todos los conceptos 0.00, sin lanzar (R9).
+ *
+ * TARIFA ESPECIAL POR DISTRITO (2026-08-25). La feature 274 declaro en su R40 que
+ * `tarifas.tarifa_especial` y `distrito.zona_especial` existian y NO cobraban, y dejo un test
+ * guardian para que nadie las conectara de pasada: conectarlas cambia lo que se factura y era
+ * una decision de producto. Esa decision ya se tomo, y esta es su implementacion. Ahora el
+ * distrito de la orden aporta `esZonaEspecial` y elige el ORIGEN del flete:
+ *
+ *   esZonaEspecial && tarifa.tarifaEspecial !== null          -> flete = tarifaEspecial
+ *   esZonaEspecial && tarifa.tarifaEspecial === null          -> flete NORMAL, origen marcado
+ *   !esZonaEspecial                                           -> flete NORMAL
+ *
+ * y lo mismo, por separado, para la devolucion con `tarifaEspecialDevuelta`. Lo especial es el
+ * FLETE: el IVA se aplica igual (`ivaFlete`) sobre el monto pactado, y la comision COD y su IVA
+ * no cambian.
  */
 
 // Datos de la orden/gestion necesarios para derivar el ingreso (sin acoplar a Prisma models).
 export interface OrdenIngresoInput {
   resultado: GestionResultado;
   esCentral: boolean;
+  // `distrito.zona_especial IS TRUE` del distrito de la orden. DOS valores, no tres: la
+  // columna de origen es nullable (`null` = nadie lo decidio) y esa duda se resuelve ANTES de
+  // llegar aca, en el borde que lee la fila. Una orden sin distrito (el unico FK nullable de
+  // `orden`) entra como `false`: sin distrito no hay marca que aplicar.
+  esZonaEspecial: boolean;
   montoCobrar: string | null; // COD a recaudar; null -> 0 (money-safe)
   cobraComision: boolean;
 }
@@ -52,6 +72,55 @@ function aplicarPorcentaje(base: Prisma.Decimal, porcentaje: Prisma.Decimal): Pr
 }
 
 /**
+ * `OrigenFlete` es informacion de AUDITORIA, no un monto: se re-exporta desde `lib/types/tarifa`
+ * (que no importa Prisma) y vive fuera de `IngresoOrdenDerivado` a proposito, porque los
+ * llamadores de esa interfaz recorren sus valores como Decimales (`Object.values(derivado)`)
+ * para sumarlos.
+ */
+export type { OrigenFlete } from "@/lib/types/tarifa";
+
+/** Los dos fletes de una orden con su origen. Salida de `resolverFlete`. */
+export interface FleteResuelto {
+  flete: Prisma.Decimal; // entrega
+  origen: OrigenFlete;
+  fleteDevuelto: Prisma.Decimal; // devolucion
+  origenDevuelto: OrigenFlete;
+}
+
+/**
+ * UNICO lugar donde se decide QUE MONTO es el flete de una orden. Existe separado de
+ * `derivarIngresoOrden` para que la eleccion se pueda leer (y mostrar) sin recalcular dinero:
+ * el listado necesita el `origen` para senalar el hueco de configuracion, y no puede
+ * deducirlo de un importe.
+ *
+ * El monto pactado IGNORA `esCentral` a proposito: `tarifa_especial` es UN precio acordado
+ * para ese distrito, no una tabla con variante GAM. `esCentral` solo sigue eligiendo columna
+ * en el camino normal —que es tambien el fallback de `especial_sin_pacto`—.
+ *
+ * Entrega y devolucion se resuelven POR SEPARADO: se puede pactar una y dejar la otra en la
+ * tarifa normal, porque las dos columnas del pacto son independientes.
+ */
+export function resolverFlete(
+  tarifa: TarifaVigente,
+  input: { esCentral: boolean; esZonaEspecial: boolean },
+): FleteResuelto {
+  const elegir = (normal: string, pactado: string | null): [Prisma.Decimal, OrigenFlete] => {
+    if (!input.esZonaEspecial) return [new Prisma.Decimal(normal), "normal"];
+    if (pactado === null) return [new Prisma.Decimal(normal), "especial_sin_pacto"];
+    return [new Prisma.Decimal(pactado), "especial"];
+  };
+  const [flete, origen] = elegir(
+    input.esCentral ? tarifa.valorFleteGam : tarifa.valorFlete,
+    tarifa.tarifaEspecial,
+  );
+  const [fleteDevuelto, origenDevuelto] = elegir(
+    input.esCentral ? tarifa.valorFleteDevueltoGam : tarifa.valorFleteDevuelto,
+    tarifa.tarifaEspecialDevuelta,
+  );
+  return { flete, origen, fleteDevuelto, origenDevuelto };
+}
+
+/**
  * Deriva los conceptos de ingreso de UNA gestion segun su `resultado` y la tarifa vigente
  * de la tienda de la orden. `tarifa === null` -> objeto vacio (todos 0.00 en el agregado, R9).
  */
@@ -64,7 +133,7 @@ export function derivarIngresoOrden(
   const ivaFletePct = new Prisma.Decimal(tarifa.ivaFlete);
 
   if (input.resultado === "entregada") {
-    const flete = new Prisma.Decimal(input.esCentral ? tarifa.valorFleteGam : tarifa.valorFlete);
+    const { flete } = resolverFlete(tarifa, input);
     const ivaFlete = aplicarPorcentaje(flete, ivaFletePct);
     const out: IngresoOrdenDerivado = {
       ingreso_flete: round2(flete),
@@ -84,9 +153,7 @@ export function derivarIngresoOrden(
   }
 
   if (input.resultado === "devuelta" || input.resultado === "rechazada") {
-    const fleteDev = new Prisma.Decimal(
-      input.esCentral ? tarifa.valorFleteDevueltoGam : tarifa.valorFleteDevuelto,
-    );
+    const fleteDev = resolverFlete(tarifa, input).fleteDevuelto;
     return {
       ingreso_flete_devolucion: round2(fleteDev),
       ingreso_iva_flete_devolucion: aplicarPorcentaje(fleteDev, ivaFletePct),
@@ -102,18 +169,22 @@ export function derivarIngresoOrden(
  * creada por la via API: FLETE + IVA del flete. Funcion PURA money-safe: toda la aritmetica
  * con `Prisma.Decimal`, salida STRING escala 2 (`ROUND_HALF_UP`), nunca number/parseFloat.
  *
- * Reutiliza EXACTAMENTE la seleccion de columna de `derivarIngresoOrden` (esCentral ->
- * variante GAM: `valorFleteGam`; si no `valorFlete`) y el mismo `aplicarPorcentaje(flete,
- * ivaFlete)` para el IVA del flete, para que "cuanto paga la tienda por una orden" se lea
- * IGUAL en el cierre (feature 42/69) y en la API. Si un dia divergieran, la misma plata se
- * leeria distinta.
+ * Reutiliza EXACTAMENTE la seleccion de monto de `derivarIngresoOrden` —la misma
+ * `resolverFlete`: pacto especial del distrito si lo hay, si no la columna GAM/estandar segun
+ * `esCentral`— y el mismo `aplicarPorcentaje(flete, ivaFlete)` para el IVA, para que "cuanto
+ * paga la tienda por una orden" se lea IGUAL en el cierre (feature 42/69) y en la API. Si un
+ * dia divergieran, la misma plata se leeria distinta.
  *
  * `tarifa === null` (tienda sin tarifa vigente) -> "0.00" (gap D1/R8): la orden se crea igual,
  * nunca `null`, nunca `error` por ausencia de tarifa.
  */
-export function costoEnvioDeTarifa(tarifa: TarifaVigente | null, esCentral: boolean): string {
+export function costoEnvioDeTarifa(
+  tarifa: TarifaVigente | null,
+  esCentral: boolean,
+  esZonaEspecial: boolean,
+): string {
   if (tarifa === null) return "0.00"; // R8/D1: gap seguro, no bloquea la carga.
-  const flete = new Prisma.Decimal(esCentral ? tarifa.valorFleteGam : tarifa.valorFlete);
+  const { flete } = resolverFlete(tarifa, { esCentral, esZonaEspecial });
   const ivaFlete = aplicarPorcentaje(flete, new Prisma.Decimal(tarifa.ivaFlete));
   return round2(flete.plus(ivaFlete)).toFixed(2); // D2: flete + IVA del flete.
 }
@@ -145,13 +216,18 @@ export function costoEnvioDeTarifa(tarifa: TarifaVigente | null, esCentral: bool
  * tarifa vigente es cero, no "desconocido" (R9), que es lo que la columna ya mostraba.
  */
 export interface CostosListadoOrden {
-  fleteConIva: string; // flete (GAM o estandar segun zona) + su IVA; "0.00" sin tarifa
+  fleteConIva: string; // flete (pacto especial, o GAM/estandar segun zona) + su IVA; "0.00" sin tarifa
   comisionConIva: string; // comision COD + su IVA; "0.00" sin tarifa o si no cobra comision
+  // De donde salio ese flete. El listado lo usa para SENALAR `especial_sin_pacto`: mismo
+  // importe que una orden normal, pero por un hueco de configuracion, no por decision. Sin
+  // tarifa vigente es `normal`: no hay pacto que faltar cuando no hay tarifa ninguna.
+  fleteOrigen: OrigenFlete;
 }
 
 /** Datos de la ORDEN que entran en las dos cifras (la tarifa va aparte). */
 export interface CostosListadoOrdenInput {
   esCentral: boolean; // zona de la orden: elige la COLUMNA de flete (GAM vs estandar)
+  esZonaEspecial: boolean; // distrito de la orden: elige el pacto especial si existe
   montoCobrar: string | null; // COD a recaudar; null -> 0 (money-safe)
   cobraComision: boolean;
 }
@@ -168,6 +244,7 @@ export function costosListadoOrden(
   return {
     fleteConIva: conIva(derivado.ingreso_flete, derivado.ingreso_iva_flete),
     comisionConIva: conIva(derivado.ingreso_comision_cod, derivado.ingreso_iva_comision_cod),
+    fleteOrigen: tarifa === null ? "normal" : resolverFlete(tarifa, orden).origen,
   };
 }
 
@@ -305,4 +382,67 @@ export function agregarIngresosPorConcepto(
     if (total.gt(0)) out.push({ categoria: c, monto: total.toFixed(2) });
   }
   return out;
+}
+
+/**
+ * FULFILLMENT (2026-08-25) — el monto FIJO que la tienda paga por orden cuando el paquete
+ * sale de NUESTRA bodega, y el predicado que dice si esa tienda hace fulfillment.
+ *
+ * POR QUE VIVE AQUI Y NO DENTRO DE `derivarIngresoOrden`. La columna `tarifas.fulfillment`
+ * lleva desde el 2026-08-19 deliberadamente FUERA de la formula de liquidacion: se congela en
+ * `cierre_detail.tarifa_fulfillment` para poder MOSTRARLA, pero no entra en las wallets ni en
+ * el cierre. Esa frontera NO se mueve. Lo que estas dos funciones habilitan es otra cosa: el
+ * canal por API key —cotizacion y carga— que le dice al integrador cuanto le va a costar el
+ * envio ANTES de que exista una gestion. Si un dia el fulfillment tiene que liquidarse, la
+ * decision se toma en `derivarIngresoOrden` y con su propia migracion de `cierre_detail`; no
+ * se cuela por aqui.
+ *
+ * EL PREDICADO ES EL MONTO. "Esta tienda hace fulfillment" se responde con
+ * `fulfillment > 0` de la tarifa que resuelve para el par (tienda, zona), y no con el flag
+ * `Usuario.fulfillment`: ese flag solo puede quedar en `true` para el rol `adminTienda`
+ * (`UsuarioService.resolverFulfillment`) y el dueño de una API key es un usuario de rol
+ * `apiKey`, asi que por esa via la respuesta seria SIEMPRE `false`. La contrapartida hay que
+ * decirla: poner el monto en `0.00` no es solo dejar de cobrar el servicio, es tambien mover
+ * donde NACEN las ordenes de esa tienda (`BulkOrdenService.cargarViaApi`).
+ */
+export interface TarifaConFulfillment {
+  fulfillment: string; // MONTO -> STRING 2 dec
+}
+
+/** El monto de fulfillment de la tarifa; CERO si no hay tarifa (mismo gap seguro que R9). */
+export function montoFulfillmentDeTarifa(tarifa: TarifaConFulfillment | null): Prisma.Decimal {
+  return tarifa === null ? new Prisma.Decimal(0) : new Prisma.Decimal(tarifa.fulfillment);
+}
+
+/** `true` = la tienda de esta tarifa hace fulfillment (su monto es mayor que cero). */
+export function tieneFulfillment(tarifa: TarifaConFulfillment | null): boolean {
+  return montoFulfillmentDeTarifa(tarifa).gt(0);
+}
+
+/**
+ * Lo que la tienda paga por UNA orden creada por la via API, DESGLOSADO.
+ *
+ * `costoEnvio` conserva su nombre y su lugar en el contrato, pero desde hoy es la SUMA de los
+ * dos conceptos —flete + IVA del flete, y el fulfillment cuando lo hay—, no solo el primero.
+ * Por eso el desglose viaja al lado: un total que crece sin decir de que esta hecho es
+ * exactamente lo que obliga al integrador a adivinar.
+ *
+ * Sin fulfillment el desglose vale `"0.00"` y `costoEnvio` da EXACTAMENTE lo que daba antes.
+ */
+export interface DesgloseCargaApi {
+  costoEnvio: string; // flete + IVA del flete + fulfillment
+  fulfillment: string; // el sumando de arriba, aparte; "0.00" si la tienda no hace fulfillment
+}
+
+export function desgloseCargaApi(
+  tarifa: (TarifaVigente & TarifaConFulfillment) | null,
+  esCentral: boolean,
+  esZonaEspecial: boolean,
+): DesgloseCargaApi {
+  const envio = new Prisma.Decimal(costoEnvioDeTarifa(tarifa, esCentral, esZonaEspecial));
+  const fulfillment = montoFulfillmentDeTarifa(tarifa);
+  return {
+    costoEnvio: round2(envio.plus(fulfillment)).toFixed(2),
+    fulfillment: round2(fulfillment).toFixed(2),
+  };
 }

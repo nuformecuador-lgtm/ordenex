@@ -55,7 +55,7 @@ import { OrdenHistorialRepository } from "@/lib/repositories/OrdenHistorialRepos
 import { OrdenDiaRepartoCambioRepository } from "@/lib/repositories/OrdenDiaRepartoCambioRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { ApiKeyRepository } from "@/lib/repositories/ApiKeyRepository";
-import { TarifaVigentePorTiendaRepository } from "@/lib/repositories/TarifaVigentePorTiendaRepository";
+import { TarifaVigenteRepository } from "@/lib/repositories/TarifaVigenteRepository";
 import { SupabaseFileStorage } from "@/lib/storage/SupabaseFileStorage";
 import { SupabaseSignedUrlProvider } from "@/lib/storage/SupabaseSignedUrlProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
@@ -152,7 +152,7 @@ function buildBulkService(): IBulkOrdenService {
   // `cargarViaApi` devuelva el `costoEnvio` (flete + IVA) por orden creada.
   return new BulkOrdenService(
     new OrdenRepository(prisma),
-    new TarifaVigentePorTiendaRepository(prisma),
+    new TarifaVigenteRepository(prisma),
     // Feature 146/R22: COMPOSITION ROOT del aviso "carga masiva terminada". Esta via SI tiene
     // fin de lote real (una peticion = un lote), asi que es la unica que lo cablea server-side.
     notificarCargaMasivaTerminadaReal,
@@ -336,15 +336,19 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
     // altera el estado, la guía o el historial de ninguna orden (R25). No se emite cuando el
     // lote nació por la rama (a) —no hubo movimiento físico— ni cuando no se creó nada (R26).
     //
-    // La selección va por `ordenIds`: este canal SÍ tiene los ids en la mano (el bloque
-    // `ordenes` del summary), y es la selección más precisa. El service acota por sí mismo lo
-    // que una API key puede ver (`esVisiblePara`: solo su propia tienda).
+    // La selección va por `ordenIds`: este canal SÍ tiene los ids en la mano, y es la
+    // selección más precisa. El service acota por sí mismo lo que una API key puede ver
+    // (`esVisiblePara`: solo su propia tienda).
+    //
+    // FULFILLMENT (2026-08-25): los ids ya no son «todas las creadas» sino los que el service
+    // seleccionó (`manifiestoOrdenIds`). En un lote mixto las órdenes que nacieron en nuestra
+    // bodega no documentan ningún movimiento físico y quedan fuera del papel que se firma.
     let manifiesto: ManifiestoBloque = null;
-    if (cargaResult.destino.emiteManifiesto && summary.ordenes.length > 0) {
+    if (cargaResult.manifiestoOrdenIds.length > 0) {
       try {
         const manifiestoSvc = deps.manifiestoService ?? buildManifiestoService();
         const out = await manifiestoSvc.armar(
-          { flujo: "recoleccion_tienda", ordenIds: summary.ordenes.map((o) => o.id) },
+          { flujo: "recoleccion_tienda", ordenIds: cargaResult.manifiestoOrdenIds },
           auth.actor,
         );
         // `forbidden` es un resultado de dominio, no una excepción: se degrada a `{ error }`
@@ -358,7 +362,7 @@ export async function handleCargaApi(req: Request, deps: CargaApiDeps = {}): Pro
         // consulta del manifiesto toca datos de la orden y podrían acabar en los logs.
         console.error("manifiesto-lote: fallo best-effort en carga por API", {
           error: describirErrorSeguro(err),
-          ordenes: summary.ordenes.length,
+          ordenes: cargaResult.manifiestoOrdenIds.length,
         });
         manifiesto = { error: MSG_MANIFIESTO_FALLO };
       }
