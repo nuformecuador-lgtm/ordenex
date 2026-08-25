@@ -7,7 +7,9 @@ import type {
 import { clavePar, elegirPorCascada, whereCascada } from "@/lib/utils/cascada-tarifa";
 import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
 
-// Proyeccion unica de los 7 campos de la formula (la misma en el singular y en el batch).
+// Proyeccion unica de los campos de la formula (la misma en el singular y en el batch). Las
+// dos `tarifaEspecial*` entraron el 2026-08-25, cuando el pacto por distrito especial paso a
+// COBRAR: son entradas de `resolverFlete`, no adorno de pantalla.
 const TARIFA_SELECT = {
   valorFlete: true,
   valorFleteGam: true,
@@ -16,7 +18,12 @@ const TARIFA_SELECT = {
   comisionCod: true,
   ivaFlete: true,
   ivaComisionCod: true,
+  tarifaEspecial: true,
+  tarifaEspecialDevuelta: true,
 } as const;
+
+// Decimal NULLABLE: `null` = sin pacto, que NO es 0.00 (ver la migracion tarifa_especial).
+type DecimalNullable = { toFixed(n: number): string } | null;
 
 interface TarifaDecimales {
   valorFlete: { toFixed(n: number): string };
@@ -26,6 +33,8 @@ interface TarifaDecimales {
   comisionCod: { toFixed(n: number): string };
   ivaFlete: { toFixed(n: number): string };
   ivaComisionCod: { toFixed(n: number): string };
+  tarifaEspecial: DecimalNullable;
+  tarifaEspecialDevuelta: DecimalNullable;
 }
 
 // Fila tal como sale del `select` de abajo: los 7 decimales + lo que la regla y el snapshot
@@ -47,6 +56,11 @@ function toTarifaVigente(t: TarifaDecimales): TarifaVigente {
     comisionCod: t.comisionCod.toFixed(2),
     ivaFlete: t.ivaFlete.toFixed(2),
     ivaComisionCod: t.ivaComisionCod.toFixed(2),
+    // `== null` y no `?.`: sin pacto es `null`, y `null` hace caer el flete a la columna
+    // normal. Un `0` seria un pacto de cero colones, que es otro dato.
+    tarifaEspecial: t.tarifaEspecial == null ? null : t.tarifaEspecial.toFixed(2),
+    tarifaEspecialDevuelta:
+      t.tarifaEspecialDevuelta == null ? null : t.tarifaEspecialDevuelta.toFixed(2),
   };
 }
 
@@ -62,6 +76,8 @@ function soloFormula(r: TarifaVigenteResuelta): TarifaVigente {
     comisionCod: r.comisionCod,
     ivaFlete: r.ivaFlete,
     ivaComisionCod: r.ivaComisionCod,
+    tarifaEspecial: r.tarifaEspecial,
+    tarifaEspecialDevuelta: r.tarifaEspecialDevuelta,
   };
 }
 

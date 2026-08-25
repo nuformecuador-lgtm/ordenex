@@ -16,6 +16,8 @@ export interface CreateTarifaData {
   ivaComisionCod: number;
   /** Cobro pactado aparte; opcional. `null`/ausente = sin tarifa especial. */
   tarifaEspecial?: number | null;
+  /** El mismo pacto, para la DEVOLUCION. Independiente del anterior. */
+  tarifaEspecialDevuelta?: number | null;
   /** Zona a la que se acota la tarifa; `null`/ausente = no acotada. */
   zonaId?: string | null;
   /** Marca la tarifa por defecto de la tienda; ausente = false. */
@@ -34,6 +36,7 @@ export interface UpdateTarifaData {
   ivaFlete?: number;
   ivaComisionCod?: number;
   tarifaEspecial?: number | null; // `null` limpia la tarifa especial pactada
+  tarifaEspecialDevuelta?: number | null; // `null` limpia el pacto de la devolucion
   zonaId?: string | null; // `null` desacota la tarifa (vuelve a aplicar a toda la tienda)
   isDefault?: boolean;
 }

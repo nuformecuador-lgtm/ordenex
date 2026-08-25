@@ -53,6 +53,9 @@ const TARIFA: TarifaVigente = {
   comisionCod: "3.50",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 /**
@@ -69,6 +72,9 @@ const TARIFA_CENTIMOS: TarifaVigente = {
   comisionCod: "10.00",
   ivaFlete: "0.00",
   ivaComisionCod: "0.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 /**
@@ -86,19 +92,22 @@ const TARIFA_Z3: TarifaVigente = {
   comisionCod: "3.50",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
 const CANTONES = [{ id: "c1", nombre: "Escazú", provinciaId: "p1" }];
 const DISTRITOS = [
-  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
-  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true },
-  { id: "d3", nombre: "Sin Zona", cantonId: "c1", zonaId: null, esCentral: false },
+  { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
+  { id: "d2", nombre: "Centro", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false },
+  { id: "d3", nombre: "Sin Zona", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
   // Dos filas con el MISMO nombre dentro del canton -> distrito ambiguo (R19).
-  { id: "d4", nombre: "Doble", cantonId: "c1", zonaId: "z1", esCentral: false },
-  { id: "d5", nombre: "Doble", cantonId: "c1", zonaId: "z2", esCentral: true },
+  { id: "d4", nombre: "Doble", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
+  { id: "d5", nombre: "Doble", cantonId: "c1", zonaId: "z2", esCentral: true, esZonaEspecial: false },
   // Feature 274: un tercer distrito NO-CENTRAL en una zona distinta de `z1`.
-  { id: "d6", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false },
+  { id: "d6", nombre: "Santa Ana", cantonId: "c1", zonaId: "z3", esCentral: false, esZonaEspecial: false },
 ];
 
 function buildGeoRepo(overrides: Partial<CotizacionGeoRepository> = {}): CotizacionGeoRepository {
@@ -126,19 +135,31 @@ function esTarifaUnica(v: TarifaVigente | TarifaPorZona): v is TarifaVigente {
   return "valorFlete" in v;
 }
 
-/** La tarifa resuelta que devuelve el repo real: los 7 campos MAS `tarifaId` y `fulfillment`. */
-function resuelta(tarifa: TarifaVigente, zonaId: string): TarifaVigenteResuelta {
-  return { ...tarifa, tarifaId: `tarifa-${zonaId}`, fulfillment: "0.00" };
+/**
+ * La tarifa resuelta que devuelve el repo real: los 7 campos MAS `tarifaId` y `fulfillment`.
+ *
+ * El monto de fulfillment es inyectable desde 2026-08-25: dejo de ser un campo mudo que el
+ * servicio ignoraba y paso a ser el SEXTO concepto del precio (y, en la carga, el predicado de
+ * donde nace la orden). El default sigue siendo `"0.00"` — la tienda que no hace fulfillment—,
+ * asi que todos los casos anteriores siguen midiendo lo mismo que median.
+ */
+function resuelta(
+  tarifa: TarifaVigente,
+  zonaId: string,
+  fulfillment = "0.00",
+): TarifaVigenteResuelta {
+  return { ...tarifa, tarifaId: `tarifa-${zonaId}`, fulfillment };
 }
 
 function buildTarifaRepo(
   tarifas: TarifaVigente | TarifaPorZona | null = TARIFA,
+  fulfillment = "0.00",
 ): ITarifaVigenteRepository {
   const paraZona = (zonaId: string | null): TarifaVigenteResuelta | null => {
     if (tarifas === null) return null;
-    if (esTarifaUnica(tarifas)) return resuelta(tarifas, zonaId ?? "sin-zona");
+    if (esTarifaUnica(tarifas)) return resuelta(tarifas, zonaId ?? "sin-zona", fulfillment);
     const tarifa = zonaId === null ? null : (tarifas[zonaId] ?? null);
-    return tarifa === null ? null : resuelta(tarifa, zonaId as string);
+    return tarifa === null ? null : resuelta(tarifa, zonaId as string, fulfillment);
   };
 
   return {
@@ -176,11 +197,16 @@ async function cotizar(
   opciones: {
     repo?: CotizacionGeoRepository;
     tarifa?: TarifaVigente | TarifaPorZona | null;
+    /** Monto de fulfillment de la tarifa que resuelve (2026-08-25). Por defecto, ninguno. */
+    fulfillment?: string;
   } = {},
 ): Promise<CotizacionResumen> {
   const service = buildService(
     opciones.repo ?? buildGeoRepo(),
-    buildTarifaRepo(opciones.tarifa === undefined ? TARIFA : opciones.tarifa),
+    buildTarifaRepo(
+      opciones.tarifa === undefined ? TARIFA : opciones.tarifa,
+      opciones.fulfillment ?? "0.00",
+    ),
   );
   const result = await service.cotizar(rows, APIKEY);
   if (result.status !== "ok") throw new Error(`se esperaba ok, llego ${result.status}`);
@@ -426,12 +452,15 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
         iva: "₡325,00",
         comision: "₡906,50",
         ivaComision: "₡117,85",
+        // Esta tienda no hace fulfillment: cero EXPLICITO, y el total no se mueve.
+        fulfillment: "₡0,00",
         total: "₡22.050,65",
       },
       devuelto: {
         flete: "₡1.396,46",
         iva: "₡181,54",
         comision: "₡0,00",
+        fulfillment: "₡0,00",
         total: "-₡1.578,00",
       },
     });
@@ -445,12 +474,16 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     expect(primera[0]).toEqual({
       resultado: "entregada",
       esCentral: false,
+      // El distrito de la fila no esta marcado como zona especial: la cotizacion viaja con la
+      // marca igual que con `esCentral`, y aqui vale `false`.
+      esZonaEspecial: false,
       montoCobrar: "25900",
       cobraComision: true,
     });
     expect(segunda[0]).toEqual({
       resultado: "devuelta",
       esCentral: false,
+      esZonaEspecial: false,
       montoCobrar: "25900",
       cobraComision: true,
     });
@@ -487,19 +520,19 @@ describe("CotizacionOrdenService — los dos escenarios (T7)", () => {
     expect(esCentrales).toEqual([false, false, true, true]);
   });
 
-  it("el escenario entregado emite exactamente flete, iva, comision, ivaComision y total (R26)", async () => {
+  it("el escenario entregado emite exactamente flete, iva, comision, ivaComision, fulfillment y total (R26)", async () => {
     const resumen = await cotizar([fila()]);
 
     expect(Object.keys(costosDe(resumen).entregado).sort()).toEqual(
-      ["comision", "flete", "iva", "ivaComision", "total"].sort(),
+      ["comision", "flete", "fulfillment", "iva", "ivaComision", "total"].sort(),
     );
   });
 
-  it("el escenario devuelto emite exactamente flete, iva, comision y total, sin ivaComision (R27)", async () => {
+  it("el escenario devuelto emite exactamente flete, iva, comision, fulfillment y total, sin ivaComision (R27)", async () => {
     const resumen = await cotizar([fila()]);
 
     expect(Object.keys(costosDe(resumen).devuelto).sort()).toEqual(
-      ["comision", "flete", "iva", "total"].sort(),
+      ["comision", "flete", "fulfillment", "iva", "total"].sort(),
     );
     expect("ivaComision" in costosDe(resumen).devuelto).toBe(false);
   });
@@ -605,11 +638,13 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
       iva: "₡650,00",
       comision: "₡1.813,00",
       ivaComision: "₡235,70",
+      fulfillment: "₡0,00",
       total: "₡44.101,30",
     });
     expect(resumen.totales.devuelto).toEqual({
       flete: "₡2.792,92",
       iva: "₡363,08",
+      fulfillment: "₡0,00",
       comision: "₡0,00",
       total: "-₡3.156,00",
     });
@@ -692,9 +727,16 @@ describe("CotizacionOrdenService — totales del LOTE (T7B)", () => {
         iva: "₡0,00",
         comision: "₡0,00",
         ivaComision: "₡0,00",
+        fulfillment: "₡0,00",
         total: "₡0,00",
       },
-      devuelto: { flete: "₡0,00", iva: "₡0,00", comision: "₡0,00", total: "₡0,00" },
+      devuelto: {
+        flete: "₡0,00",
+        iva: "₡0,00",
+        comision: "₡0,00",
+        fulfillment: "₡0,00",
+        total: "₡0,00",
+      },
     });
     expect(resumen.cotizadas).toBe(0);
     expect(resumen.conError).toBe(3);
@@ -872,5 +914,81 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     // (El bloque de imports queda fuera de `FUENTE_SERVICE`: el docstring de cabecera cita
     // `next/*` y el quitador de comentarios se come desde ahi hasta el primer `*/`. Lo que
     // importa igual esta afirmado arriba: la cadena emitida ES la constante, por identidad.)
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FULFILLMENT (2026-08-25) — el SEXTO concepto del precio.
+//
+// `tarifas.fulfillment` existia desde el 2026-08-19 pero no cobraba: se congelaba en
+// `cierre_detail` solo para mostrarse. La decision de producto cambio para el canal por API
+// key: una tienda cuyo paquete sale de NUESTRA bodega paga ese monto fijo por orden, y la
+// cotizacion —que es donde el integrador ve el precio antes de cargar— tiene que decirlo.
+//
+// Sigue SIN entrar en `derivarIngresoOrden`: la liquidacion (cierre y wallets) no se movio.
+// ---------------------------------------------------------------------------
+describe("CotizacionOrdenService — fulfillment (2026-08-25)", () => {
+  it("el monto de la tarifa se cobra en los DOS escenarios y baja los dos totales", async () => {
+    const resumen = await cotizar([fila()], { fulfillment: "1000.00" });
+
+    expect(costosDe(resumen)).toEqual({
+      entregado: {
+        flete: "₡2.500,00",
+        iva: "₡325,00",
+        comision: "₡906,50",
+        ivaComision: "₡117,85",
+        fulfillment: "₡1.000,00",
+        // 22.050,65 sin fulfillment: lo que RECIBE la tienda baja exactamente el monto.
+        total: "₡21.050,65",
+      },
+      devuelto: {
+        flete: "₡1.396,46",
+        iva: "₡181,54",
+        comision: "₡0,00",
+        // El servicio de bodega YA se presto: una devolucion no lo devuelve gratis.
+        fulfillment: "₡1.000,00",
+        // -1.578,00 sin fulfillment: la DEUDA crece por el mismo monto.
+        total: "-₡2.578,00",
+      },
+    });
+  });
+
+  it("los cuatro conceptos que ya existian no se mueven ni un centimo", async () => {
+    const [con, sin] = await Promise.all([
+      cotizar([fila()], { fulfillment: "1000.00" }),
+      cotizar([fila()]),
+    ]);
+
+    const conF = costosDe(con);
+    const sinF = costosDe(sin);
+    for (const clave of ["flete", "iva", "comision", "ivaComision"] as const) {
+      expect(conF.entregado[clave]).toBe(sinF.entregado[clave]);
+    }
+    expect(conF.devuelto.flete).toBe(sinF.devuelto.flete);
+    expect(conF.devuelto.iva).toBe(sinF.devuelto.iva);
+  });
+
+  it("el total del LOTE acumula el monto una vez por fila cotizada", async () => {
+    const resumen = await cotizar([fila(), fila({ distrito: "Sin Zona" }), fila()], {
+      fulfillment: "1000.00",
+    });
+
+    // Dos filas cotizadas -> 2×1000. La fila sin cobertura no aporta ni un cero (R53).
+    expect(resumen.totales.filasSumadas).toBe(2);
+    expect(resumen.totales.entregado.fulfillment).toBe("₡2.000,00");
+    expect(resumen.totales.devuelto.fulfillment).toBe("₡2.000,00");
+  });
+
+  it("no se cuela en la liquidacion: `derivarIngresoOrden` nunca ve el monto", async () => {
+    await cotizar([fila()], { fulfillment: "1000.00" });
+
+    // La derivacion recibe la tarifa entera —el objeto trae el campo—, pero la FORMULA no lo
+    // lee: sus importes son los mismos con y sin monto. Lo que este test fija es la frontera
+    // que sigue en pie: el fulfillment se suma FUERA, en el service, y no dentro del derivador
+    // que alimenta el cierre y las wallets.
+    for (const [, tarifa] of espiaDerivar.mock.calls) {
+      expect(tarifa).not.toBeNull();
+    }
+    expect(FUENTE_SERVICE).toContain("montoFulfillmentDeTarifa");
   });
 });

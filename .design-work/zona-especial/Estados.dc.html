@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fc; color: #12233f; font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1d5fd4; } a:hover { color: #0b3880; }
+    .wrap { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+    .ttl { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .lead { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: #4a5368; }
+    .card { background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; overflow: hidden; }
+    .card-h { padding: 12px 16px; border-bottom: 1px solid #e3e8f2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #8a94ad; }
+    .fila { display: flex; align-items: flex-start; gap: 14px; padding: 13px 16px; border-bottom: 1px solid #eef1f8; }
+    .fila:last-child { border-bottom: 0; }
+    .muestra { width: 132px; flex-shrink: 0; display: flex; justify-content: flex-start; padding-top: 1px; }
+    .txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .txt b { font-size: 12.5px; font-weight: 600; }
+    .txt span { font-size: 11.5px; line-height: 1.5; color: #4a5368; }
+    .txt code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; background: #f1f4fb; border-radius: 4px; padding: 1px 5px; color: #1f3a63; }
+    .mk { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px 0 6px; border: 1px solid transparent; border-radius: 999px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+    .anatomia { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+    .medida { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: #4a5368; }
+    .medida b { font-weight: 500; color: #12233f; min-width: 128px; }
+    .regla { display: flex; gap: 9px; align-items: flex-start; font-size: 11.5px; line-height: 1.55; color: #4a5368; }
+    .num { flex-shrink: 0; width: 17px; height: 17px; border-radius: 999px; background: #0d2444; color: #ffffff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+    .reglas { display: flex; flex-direction: column; gap: 9px; padding: 16px; }
+  </style>
+</helmet>
+
+<div class="wrap">
+  <div>
+    <h1 class="ttl">El marcador, estado por estado</h1>
+    <p class="lead">
+      Un solo control por fila de distrito, a la derecha del nombre. La casilla de la izquierda
+      sigue significando “pertenece a la zona”; el marcador es un eje aparte.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-h">Estados</div>
+
+    <div class="fila">
+      <div class="muestra">
+        <span class="mk" style="color: #8a94ad; opacity: 0.55;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+        </span>
+      </div>
+      <div class="txt">
+        <b>No especial · reposo</b>
+        <span>Silueta al 55 % y sin texto: 200 filas con etiqueta serían ruido. <code>zona_especial = false</code></span>
+      </div>
+    </div>
+
+    <div class="fila">
+      <div class="muestra">
+        <span class="mk" style="color: #8a94ad; background: #f1f4fb;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+          marcar especial
+        </span>
+      </div>
+      <div class="txt">
+        <b>No especial · hover o foco</b>
+        <span>La etiqueta se despliega y dice qué va a pasar al hacer clic. Igual con teclado: el foco la abre.</span>
+      </div>
+    </div>
+
+    <div class="fila">
+      <div class="muestra">
+        <span class="mk" style="color: #92400e; background: #fef3c7; border-color: #f3d999;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+          zona especial
+        </span>
+      </div>
+      <div class="txt">
+        <b>Especial</b>
+        <span>Estrella sólida y par <code>warning-soft</code> / <code>warning-strong</code> (6.37:1). Siempre visible, no depende del hover. <code>zona_especial = true</code></span>
+      </div>
+    </div>
+
+    <div class="fila">
+      <div class="muestra">
+        <span class="mk" style="color: #4a5368; background: #ffffff; border-color: #dde1ee; border-style: dashed;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+          <i style="font-style: italic;">sin decidir</i>
+        </span>
+      </div>
+      <div class="txt">
+        <b>Sin decidir</b>
+        <span>Borde punteado, siempre visible: pide una decisión. Existe porque la columna es nullable y <code>NULL</code> no es lo mismo que “se decidió que no”. Un clic lo resuelve a especial; el aviso del pie los pasa todos a “no especial”.</span>
+      </div>
+    </div>
+
+    <div class="fila">
+      <div class="muestra">
+        <span class="mk" style="color: #92400e; background: #fef3c7; border-color: #f3d999;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M11.5 2.3a.53.53 0 0 1 .95 0l2.31 4.68c.15.3.44.51.78.56l5.17.75a.53.53 0 0 1 .29.91l-3.73 3.63c-.25.24-.36.58-.3.92l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a1.06 1.06 0 0 0-.99 0L6.4 21.01a.53.53 0 0 1-.77-.56l.88-5.14a1.06 1.06 0 0 0-.3-.92L2.47 10.76a.53.53 0 0 1 .29-.91l5.17-.75c.34-.05.63-.26.78-.56z"/></svg>
+          2 de 4
+        </span>
+      </div>
+      <div class="txt">
+        <b>Grupo parcial (provincia o cantón)</b>
+        <span>Estrella hueca + cuántos de cuántos. Un clic marca los que faltan; con todos marcados dice “4 especiales” y el clic los limpia. Misma cascada que ya tiene la casilla.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">Medidas</div>
+    <div class="anatomia">
+      <div class="medida"><b>Alto del control</b> 22 px, el mismo que un <code>Badge</code> del repo</div>
+      <div class="medida"><b>Área de clic</b> 22 × ancho de la columna (156 px) — la fila entera nunca marca especial</div>
+      <div class="medida"><b>Radio</b> 999 px (<code>rounded-4xl</code>, como Badge)</div>
+      <div class="medida"><b>Tipografía</b> 11.5 px / 500, Poppins</div>
+      <div class="medida"><b>Icono</b> estrella lucide 13 px, trazo 1.7</div>
+      <div class="medida"><b>Columna</b> 156 px fija a la derecha: los marcadores forman una vertical legible</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">Por qué así</div>
+    <div class="reglas">
+      <div class="regla"><span class="num">1</span><span><b>Dos ejes, dos controles.</b> Casilla = pertenece a la zona. Marcador = se cobra distinto. Son independientes: se puede marcar un distrito que todavía no está en la zona.</span></div>
+      <div class="regla"><span class="num">2</span><span><b>No es un tercer estado de la casilla.</b> Una casilla de tres valores (fuera / dentro / dentro-y-especial) haría imposible marcar un distrito de otra zona y rompería la cascada que ya existe.</span></div>
+      <div class="regla"><span class="num">3</span><span><b>Ámbar, no naranja.</b> El naranja <code>#f26419</code> ya es “seleccionado” en la casilla de al lado. El par <code>warning</code> es el token del repo para “atención / excepción”, y es lo que esta marca significa.</span></div>
+      <div class="regla"><span class="num">4</span><span><b>El alcance se dice, no se supone.</b> La marca vive en <code>distrito</code>, así que vale en todas las zonas. Se avisa en el pie y se confirma cuando el distrito pertenece a otra zona.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

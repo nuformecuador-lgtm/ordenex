@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Star } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,11 +37,18 @@ interface SeleccionData {
 export function GeografiaSelector({
   provincias,
   onSelectedChange,
+  onEspecialesChange,
   initialSelected,
 }: Readonly<{
   provincias: ProvinciaArbolDTO[];
   /** Reporta al padre los distritos (hojas) seleccionados en cada cambio. */
   onSelectedChange?: (distritoIds: string[]) => void;
+  /**
+   * Reporta al padre los distritos marcados como zona especial. Va aparte de
+   * `onSelectedChange` a propósito: la marca es del DISTRITO y es independiente
+   * de que el distrito pertenezca o no a la zona que se está editando.
+   */
+  onEspecialesChange?: (distritoIds: string[]) => void;
   /** Distritos pre-seleccionados (edición de zona). Se lee al montar. */
   initialSelected?: string[];
 }>) {
@@ -50,6 +58,16 @@ export function GeografiaSelector({
   const [selDist, setSelDist] = useState<Set<string>>(
     () => new Set(initialSelected ?? []),
   );
+  // Distritos marcados como zona especial. Se siembra del árbol (el servidor ya
+  // normalizó `zona_especial IS TRUE`) y NO se re-siembra: mientras el formulario
+  // esté abierto manda lo que el usuario tocó, hasta que Guardar lo persista.
+  const [especiales, setEspeciales] = useState<Set<string>>(() => {
+    const ids = new Set<string>();
+    for (const p of provincias)
+      for (const c of p.cantones)
+        for (const d of c.distritos) if (d.zonaEspecial) ids.add(d.id);
+    return ids;
+  });
 
   // Mapas id -> distritos hoja de cada grupo (sobre el arbol COMPLETO, no el
   // filtrado, para que la cascada abarque también lo oculto por la búsqueda).
@@ -101,6 +119,24 @@ export function GeografiaSelector({
 
   function toggleDistrito(id: string) {
     setMany([id], !selDist.has(id));
+  }
+
+  /** Cuántos de esos distritos están marcados como zona especial. */
+  function especialesEn(distritos: { id: string }[]): number {
+    let n = 0;
+    for (const d of distritos) if (especiales.has(d.id)) n++;
+    return n;
+  }
+
+  // Marca/desmarca la zona especial de un distrito. Independiente del checkbox:
+  // se puede marcar un distrito como especial sin meterlo en esta zona.
+  function toggleEspecial(id: string) {
+    setEspeciales((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   // Arbol filtrado por texto (una rama sobrevive si provincia, algun canton o
@@ -164,6 +200,14 @@ export function GeografiaSelector({
     // onSelectedChange se toma fresco en cada corrida; dep solo en selDist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selDist]);
+
+  // Reporta la marca de especial al formulario contenedor (que calcula el delta
+  // contra el árbol al guardar).
+  useEffect(() => {
+    onEspecialesChange?.([...especiales]);
+    // onEspecialesChange se toma fresco en cada corrida; dep solo en especiales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [especiales]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -229,32 +273,67 @@ export function GeografiaSelector({
                             <ChevronRight className="size-4 shrink-0 transition-transform duration-200 group-data-[open]/cant:rotate-90" />
                             <span>{c.nombre}</span>
                             <span className="text-xs text-muted-foreground">
-                              ({c.distritos.length} distrito{c.distritos.length === 1 ? "" : "s"})
+                              ({c.distritos.length} distrito{c.distritos.length === 1 ? "" : "s"}
+                              {/* El conteo de especiales sólo aparece si hay alguno:
+                                  un "Zonas especiales: 0" colgado de cada cantón sería
+                                  ruido en un árbol de cientos de filas. */}
+                              {especialesEn(c.distritos) > 0
+                                ? `, Zonas especiales: ${especialesEn(c.distritos)}`
+                                : ""}
+                              )
                             </span>
                           </CollapsibleTrigger>
                         </div>
 
                         <CollapsibleContent className="ml-5 border-l border-border pl-2">
-                          {c.distritos.map((d) => (
-                            <label
-                              key={d.id}
-                              className={cn(
-                                "flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent",
-                              )}
-                            >
-                              <Checkbox
-                                checked={selDist.has(d.id)}
-                                onCheckedChange={() => toggleDistrito(d.id)}
-                                aria-label={`Seleccionar distrito ${d.nombre}`}
-                              />
-                              <span>{d.nombre}</span>
-                              {d.zonaNombre ? (
-                                <span className="text-xs text-muted-foreground">
-                                  (zona: {d.zonaNombre})
-                                </span>
-                              ) : null}
-                            </label>
-                          ))}
+                          {c.distritos.map((d) => {
+                            const esEspecial = especiales.has(d.id);
+                            return (
+                              <div
+                                key={d.id}
+                                className={cn(
+                                  "flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-accent",
+                                )}
+                              >
+                                {/* El label envuelve SOLO el checkbox y el nombre:
+                                    el botón de especial es una acción distinta y
+                                    dentro del label cada click también marcaría
+                                    el distrito para la zona. */}
+                                <label className="flex flex-1 cursor-pointer items-center gap-2">
+                                  <Checkbox
+                                    checked={selDist.has(d.id)}
+                                    onCheckedChange={() => toggleDistrito(d.id)}
+                                    aria-label={`Seleccionar distrito ${d.nombre}`}
+                                  />
+                                  <span>{d.nombre}</span>
+                                  {d.zonaNombre ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      (zona: {d.zonaNombre})
+                                    </span>
+                                  ) : null}
+                                </label>
+
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant={esEspecial ? "default" : "outline"}
+                                  aria-pressed={esEspecial}
+                                  aria-label={
+                                    esEspecial
+                                      ? `Quitar la marca de zona especial a ${d.nombre}`
+                                      : `Marcar ${d.nombre} como zona especial`
+                                  }
+                                  onClick={() => toggleEspecial(d.id)}
+                                >
+                                  <Star
+                                    aria-hidden="true"
+                                    className={cn(esEspecial && "fill-current")}
+                                  />
+                                  Especial
+                                </Button>
+                              </div>
+                            );
+                          })}
                         </CollapsibleContent>
                       </Collapsible>
                     );

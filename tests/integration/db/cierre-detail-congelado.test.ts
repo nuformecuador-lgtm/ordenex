@@ -562,6 +562,10 @@ describe("Feature 274/R23/R39 — sin tarifa el cierre se crea igual, con las 9 
       "tarifaIvaFlete",
       "tarifaIvaComisionCod",
       "tarifaFulfillment",
+      // Los dos pactos entran en el mismo "todas o ninguna": sin tarifa vigente no hay pacto
+      // que congelar, y NULL aqui no se puede confundir con "se pacto cero".
+      "tarifaEspecial",
+      "tarifaEspecialDevuelta",
     ]) {
       expect(fila[col]).toBeNull();
     }
@@ -569,7 +573,7 @@ describe("Feature 274/R23/R39 — sin tarifa el cierre se crea igual, con las 9 
 });
 
 describe("Feature 274/R24 — el shape del snapshot no cambia", () => {
-  it("la fila persistida trae las MISMAS columnas que en dev (26, `tarifa_id` y `fulfillment` incluidos)", async () => {
+  it("la fila persistida trae las MISMAS columnas que en dev (29, `tarifa_id` y `fulfillment` incluidos)", async () => {
     const db = makeDb();
     await solicitar(db);
 
@@ -583,6 +587,10 @@ describe("Feature 274/R24 — el shape del snapshot no cambia", () => {
       "zonaId",
       "tiendaId",
       "esCentral",
+      // 2026-08-25 (tarifa especial por distrito): la marca del distrito y los dos pactos son
+      // entradas de la formula, y todo lo que entra en la formula se congela aqui. Sin esto,
+      // un cierre viejo se re-derivaria con la tarifa y la marca de HOY.
+      "esZonaEspecial",
       "tarifaId",
       "tarifaValorFlete",
       "tarifaValorFleteGam",
@@ -592,6 +600,8 @@ describe("Feature 274/R24 — el shape del snapshot no cambia", () => {
       "tarifaIvaFlete",
       "tarifaIvaComisionCod",
       "tarifaFulfillment",
+      "tarifaEspecial",
+      "tarifaEspecialDevuelta",
       "numGuia",
       "numRemision",
       "destinatario",

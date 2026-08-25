@@ -129,6 +129,10 @@ describe("TarifaVigenteRepository.resolveTarifas — la query (R7)", () => {
       tiendaId: true,
       zonaId: true,
       fulfillment: true,
+      // 2026-08-25: los dos pactos son entradas de la formula (el flete de un distrito
+      // marcado como zona especial sale de ellos), asi que el resolver del DINERO los pide.
+      tarifaEspecial: true,
+      tarifaEspecialDevuelta: true,
       valorFlete: true,
       valorFleteGam: true,
       valorFleteDevuelto: true,
@@ -322,6 +326,9 @@ describe("TarifaVigenteRepository.resolveTarifas — el Map (R7) y la proyeccion
       comisionCod: "5.00",
       ivaFlete: "13.00",
       ivaComisionCod: "13.00",
+      // La fila de prueba no pacta nada: `null`, que NO es "0.00".
+      tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
     });
   });
 });
@@ -346,6 +353,8 @@ describe("TarifaVigenteRepository.resolveTarifa (singular)", () => {
       comisionCod: "5.00",
       ivaFlete: "13.00",
       ivaComisionCod: "13.00",
+      tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
     });
   });
 

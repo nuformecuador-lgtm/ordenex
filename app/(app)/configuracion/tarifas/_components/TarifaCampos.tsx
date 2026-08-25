@@ -7,7 +7,7 @@ import { FormField } from "@/components/shared/FormField";
  * Campos numéricos que pueblan la tabla `tarifas`, OMITIENDO `nombre`, `zona_id`
  * y `tienda_id` (el acotado lo decide quien usa el formulario, no los campos).
  * `monto` valida >= 0; `porcentaje` valida 0..100. Obligatorios salvo los
- * marcados `opcional` (hoy solo la tarifa especial, la única columna nullable de
+ * marcados `opcional` (hoy las dos tarifas especiales, las únicas columnas nullable de
  * la tabla: vacío = sin pacto especial, que no es lo mismo que 0).
  *
  * Vive aparte porque los usan DOS formularios: el de tarifa por tienda
@@ -29,6 +29,12 @@ export const TARIFA_CAMPOS = [
     tipo: "monto",
     opcional: true,
   },
+  {
+    key: "tarifaEspecialDevuelta",
+    label: "Tarifa especial devuelta",
+    tipo: "monto",
+    opcional: true,
+  },
 ] as const;
 
 export type TarifaCampoKey = (typeof TARIFA_CAMPOS)[number]["key"];
@@ -46,7 +52,7 @@ export const tarifaValoresVacios = (): TarifaValores =>
 
 /**
  * Deriva los valores del formulario (strings) desde una fila ya guardada de
- * `tarifas`. Un `null` —hoy sólo `tarifaEspecial`— se convierte en cadena
+ * `tarifas`. Un `null` —hoy sólo las dos `tarifaEspecial*`— se convierte en cadena
  * vacía, que es como el formulario representa "sin pacto especial": el ida y
  * vuelta con `validarTarifaCampos` lo devuelve a `null`, no a 0.
  */

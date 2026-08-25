@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #f7f8fc; color: #12233f; font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1d5fd4; } a:hover { color: #0b3880; }
+    .wrap { padding: 20px; display: flex; flex-direction: column; gap: 12px; height: 100%; box-sizing: border-box; }
+    .cab { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .ttl { margin: 0; font-size: 14px; font-weight: 600; }
+    .lead { margin: 4px 0 0; font-size: 12px; color: #4a5368; max-width: 60ch; line-height: 1.45; }
+    .seg { display: flex; gap: 2px; padding: 2px; background: #eef1f8; border-radius: 8px; flex-shrink: 0; }
+    .seg-btn { height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #4a5368; border: 0; background: none; cursor: pointer; font-family: inherit; }
+    .seg-on { background: #ffffff; color: #12233f; box-shadow: 0 1px 2px rgba(13, 36, 68, 0.1); }
+
+    .tabla { background: #ffffff; border: 1px solid #e3e8f2; border-radius: 10px; overflow: hidden; flex-grow: 1; }
+    .th { display: grid; grid-template-columns: minmax(0, 1fr) 110px 140px; gap: 12px; padding: 9px 16px; background: #f7f8fc; border-bottom: 1px solid #e3e8f2; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #8a94ad; }
+    .th span:nth-child(2), .th span:nth-child(3) { text-align: center; }
+    .tr { display: grid; grid-template-columns: minmax(0, 1fr) 110px 140px; gap: 12px; align-items: center; padding: 0 16px; height: 34px; border-bottom: 1px solid #f2f5fb; font-size: 13px; }
+    .tr:last-child { border-bottom: 0; }
+    .tr-grupo { background: #f7f8fc; font-weight: 600; font-size: 12px; color: #1f3a63; }
+    .celda-c { display: flex; justify-content: center; }
+    .nombre { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .nombre .sangria { width: 14px; flex-shrink: 0; }
+    .otra { font-size: 11px; color: #4a5368; background: #f1f4fb; border-radius: 999px; padding: 1px 7px; }
+    .box { width: 16px; height: 16px; box-sizing: border-box; border: 1px solid #e3e8f2; border-radius: 4px; background: #ffffff; display: flex; align-items: center; justify-content: center; color: #ffffff; }
+    .box-on { background: #f26419; border-color: #f26419; }
+    .box-esp { background: #f59e0b; border-color: #f59e0b; }
+    .box-null { border-style: dashed; border-color: #cfd6e6; }
+
+    .barra { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #0d2444; color: #ffffff; }
+    .barra b { font-size: 12.5px; font-weight: 500; }
+    .barra .sep { flex-grow: 1; }
+    .barra button { height: 28px; padding: 0 11px; border-radius: 7px; font-size: 12px; font-weight: 500; border: 0; cursor: pointer; font-family: inherit; }
+    .b-amb { background: #f59e0b; color: #3d1f00; }
+    .b-ghost { background: rgba(255, 255, 255, 0.12); color: #ffffff; }
+
+    .tradeoff { display: flex; gap: 16px; }
+    .to { flex-grow: 1; flex-basis: 0; font-size: 11.5px; line-height: 1.5; color: #4a5368; background: #ffffff; border: 1px solid #e3e8f2; border-radius: 8px; padding: 10px 12px; }
+    .to b { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 3px; }
+    .to-si b { color: #047857; }
+    .to-no b { color: #b91c1c; }
+  </style>
+</helmet>
+
+<div class="wrap">
+  <div class="cab">
+    <div>
+      <h2 class="ttl">Opción B — modo “marcar especiales”</h2>
+      <p class="lead">
+        El mismo árbol cambia de modo: deja de componer la zona y pasa a una tabla de dos columnas
+        pensada para marcar en tanda.
+      </p>
+    </div>
+    <div class="seg">
+      <button type="button" class="seg-btn">Componer zona</button>
+      <button type="button" class="seg-btn seg-on">Marcar especiales</button>
+    </div>
+  </div>
+
+  <div class="tabla">
+    <div class="th"><span>Distrito</span><span>En la zona</span><span>Zona especial</span></div>
+
+    <div class="tr tr-grupo"><span class="nombre">Puntarenas · Golfito</span><span class="celda-c"></span><span class="celda-c" style="font-size: 11px; font-weight: 500; color: #92400e;">1 de 3</span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Golfito</span><span class="celda-c"><span class="box box-on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></span></span><span class="celda-c"><span class="box"></span></span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Puerto Jiménez</span><span class="celda-c"><span class="box box-on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></span></span><span class="celda-c"><span class="box box-esp"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></span></span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Guaycará</span><span class="celda-c"><span class="box"></span></span><span class="celda-c"><span class="box"></span></span></div>
+
+    <div class="tr tr-grupo"><span class="nombre">Limón · Talamanca</span><span class="celda-c"></span><span class="celda-c" style="font-size: 11px; font-weight: 500; color: #8a94ad;">2 sin decidir</span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Bratsi</span><span class="celda-c"><span class="box box-on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></span></span><span class="celda-c"><span class="box"></span></span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Cahuita <span class="otra">también en Caribe Sur</span></span><span class="celda-c"><span class="box"></span></span><span class="celda-c"><span class="box box-null"></span></span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Sixaola</span><span class="celda-c"><span class="box"></span></span><span class="celda-c"><span class="box box-null"></span></span></div>
+    <div class="tr"><span class="nombre"><span class="sangria"></span>Telire <span class="otra">también en Caribe Sur</span></span><span class="celda-c"><span class="box"></span></span><span class="celda-c"><span class="box box-esp"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4.5 4.5L19 7"/></svg></span></span></div>
+  </div>
+
+  <div class="barra">
+    <b>3 distritos seleccionados</b>
+    <span class="sep"></span>
+    <button type="button" class="b-ghost">Quitar marca</button>
+    <button type="button" class="b-amb">Marcar como zona especial</button>
+  </div>
+
+  <div class="tradeoff">
+    <div class="to to-si"><b>A favor</b>Dos columnas explícitas y encabezadas: nadie duda de qué hace cada casilla. Marcar veinte distritos de una tanda es una selección y un botón.</div>
+    <div class="to to-no"><b>En contra</b>Es un modo aparte: hay que salir de componer la zona para marcar, y volver. La marca deja de leerse de un vistazo mientras se arma la zona, que es cuando surge la duda.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -67,7 +67,7 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
     ]);
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const map = await repo.findExistingRemisiones(["REM-1", "REM-2", "REM-3"]);
+    const map = await repo.findExistingRemisiones(["REM-1", "REM-2", "REM-3"], "tienda-1");
 
     expect(map.get("REM-1")).toBe("en_bodega_central");
     expect(map.get("REM-2")).toBe("entregada");
@@ -76,6 +76,9 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
     const arg = prisma.orden.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({
       numRemision: { in: ["REM-1", "REM-2", "REM-3"] },
+      // `num_remision` es unico POR TIENDA (migracion 20260825160000): sin este scope, una
+      // orden homonima de OTRA tienda se reportaria como duplicada.
+      tiendaId: "tienda-1",
       deletedAt: null,
     });
   });
@@ -84,7 +87,7 @@ describe("OrdenRepository.findExistingRemisiones (R25)", () => {
     const prisma = buildPrisma();
     const repo = new OrdenRepository(prisma as unknown as PrismaClient);
 
-    const map = await repo.findExistingRemisiones([]);
+    const map = await repo.findExistingRemisiones([], "tienda-1");
 
     expect(map.size).toBe(0);
     expect(prisma.orden.findMany).not.toHaveBeenCalled();
@@ -131,7 +134,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: "z1", esCentral: false, esZonaEspecial: false },
     ]);
     const arg = prisma.distrito.findMany.mock.calls[0][0];
     expect(arg.where).toMatchObject({ cantonId: { in: ["c1"] } });
@@ -154,7 +157,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
     // Feature 98/R2: sin zona -> esCentral false (no se tarifa: la fila falla arriba por zonaId null).
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
     ]);
   });
 
@@ -177,7 +180,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
 
     // Ambiguo: ni "z1" (la primera) ni "z2". Null y esCentral false; la fila falla arriba.
     expect(rows).toEqual([
-      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false },
+      { id: "d1", nombre: "San Rafael", cantonId: "c1", zonaId: null, esCentral: false, esZonaEspecial: false },
     ]);
   });
 
@@ -192,7 +195,7 @@ describe("OrdenRepository — resolucion geografica batch (R19)", () => {
     const rows = await repo.findDistritosByCantonIds(["c1"]);
 
     expect(rows).toEqual([
-      { id: "d1", nombre: "Centro", cantonId: "c1", zonaId: "z1", esCentral: true },
+      { id: "d1", nombre: "Centro", cantonId: "c1", zonaId: "z1", esCentral: true, esZonaEspecial: false },
     ]);
   });
 });

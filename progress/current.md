@@ -102,6 +102,27 @@ Gate **completo** tras el merge: typecheck limpio, lint 0 errores, **1375 archiv
 
 ---
 
+## 🔀 Merges de `dev` en `ux` — 2026-08-24
+
+**Segundo merge (este).** `dev` traía las fichas **276** (tope de intentos, PR #490), **277**
+(«Por recoger» en pestañas, PR #489) y **278** (plantilla de carga masiva v3, PR #487), más el
+bloque de tarifas. Solo hubo **dos conflictos, los dos de bookkeeping** — `feature_list.json` y este
+archivo—: ni una línea de código, doc o test chocó.
+
+**Renumeración: 276 → 279.** La ficha «la coleccion de Postman no guarda numGuia» (alta local en
+`ux`) ocupaba el id **276**, que `dev` ya había dado al tope de intentos. **`dev` manda** (precedente
+218): la local pasa a **279** conservando el slug, y las tres de `dev` se quedan como están. Es su
+segunda renumeración: había nacido como **258**.
+
+**Primer merge.** `dev` traía las features **256, 257 y 268** ya cerradas, implementadas por una
+sesión paralela mientras `ux` tenía su propio trabajo a medias sobre los mismos archivos. En los
+conflictos de código, doc y test **mandó `dev`**: su versión es un superconjunto (la 268 mete
+`ayuda_tienda` **e** `incidente` en `EVENTOS_PUBLICOS`, donde `ux` solo metía `ayuda_tienda`; la 257
+trae los parámetros `desde`/`hasta`/`num_guia`/`num_remision` del OpenAPI, que en `ux` estaban
+documentados en prosa pero sin declarar).
+
+---
+
 ## 💰 Tarifas ligadas a la zona (273 · 274 · 275) — 2026-08-24
 
 Pedido del humano: «ahora se cobra por **zona y tienda** en lugar de por tienda, con prioridad

@@ -38,9 +38,21 @@ import type { ParTarifa } from "@/lib/utils/cascada-tarifa";
 export type TarifaTxClient = Pick<PrismaClient, "tarifa">;
 
 // Tarifa vigente resuelta para un par (tienda, zona). MONTOS: valorFlete[Gam],
-// valorFleteDevuelto[Gam]. PORCENTAJES (0..100): comisionCod, ivaFlete, ivaComisionCod.
-// Los 7 campos NO cambian respecto de la 42/69: la aritmetica de `ingreso-ordenex.ts` no se
-// toca en la 274 (R24). Lo que cambio es QUE FILA se elige, no que se lee de ella.
+// valorFleteDevuelto[Gam], tarifaEspecial[Devuelta]. PORCENTAJES (0..100): comisionCod,
+// ivaFlete, ivaComisionCod. La 274 no toco esta forma (R24): cambio QUE FILA se elige.
+//
+// TARIFA ESPECIAL (2026-08-25) — POR QUE ESTE TIPO GANO DOS CAMPOS, y por que el comentario
+// que lo prohibia ya no aplica. Hasta hoy este contrato decia que `tarifa_especial` NO podia
+// entrar aqui, porque meterla la pondria al alcance de `derivarIngresoOrden`, "y esa funcion
+// decide dinero que se liquida". Ese era justamente el punto: la columna no debia cobrar. La
+// decision de producto cambio —un distrito marcado `zona_especial` cobra el monto pactado— y
+// entonces el pacto TIENE que llegar a la formula. Lo que sigue valiendo del criterio viejo es
+// lo demas: `isDefault`, `createdAt`/`updatedAt` y los montos como `number` siguen FUERA, y el
+// listado sigue teniendo su propio tipo para MOSTRAR la tarifa.
+//
+// Las dos columnas nuevas son `string | null` y ese `null` es informacion, no un 0: significa
+// "no hay pacto para este concepto" y hace caer el flete a la columna normal. Ver
+// `resolverFlete` en `lib/utils/ingreso-ordenex.ts`, que es donde se decide.
 export interface TarifaVigente {
   valorFlete: string; // MONTO -> STRING 2 dec
   valorFleteGam: string; // MONTO (variante central/GAM)
@@ -49,6 +61,8 @@ export interface TarifaVigente {
   comisionCod: string; // PORCENTAJE 0..100
   ivaFlete: string; // PORCENTAJE 0..100
   ivaComisionCod: string; // PORCENTAJE 0..100
+  tarifaEspecial: string | null; // MONTO pactado para el distrito especial; null = sin pacto
+  tarifaEspecialDevuelta: string | null; // MONTO pactado de DEVOLUCION; null = sin pacto
 }
 
 // Feature 69 (design §2.1) — la tarifa resuelta MAS su `id`, para que `cierre_detail` congele
@@ -59,7 +73,9 @@ export interface TarifaVigenteResuelta extends TarifaVigente {
   // Monto FIJO de fulfillment (2026-08-19). Viaja por el MISMO camino que `tarifaId` y por el
   // mismo motivo: `cierre_detail` lo congela para mostrarlo, pero NO es una entrada de la
   // formula, asi que NO entra en `TarifaVigente`. Meterlo alli lo pondria al alcance de
-  // `derivarIngresoOrden`, y esa funcion decide dinero que se liquida.
+  // `derivarIngresoOrden`, y esa funcion decide dinero que se liquida. (Las dos columnas de
+  // tarifa especial SI son entradas de la formula desde 2026-08-25, y por eso ellas si viven
+  // en `TarifaVigente`.)
   fulfillment: string; // MONTO -> STRING 2 dec
 }
 

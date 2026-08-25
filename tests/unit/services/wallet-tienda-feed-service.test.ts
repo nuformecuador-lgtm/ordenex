@@ -24,6 +24,9 @@ const TARIFA: TarifaVigente = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 // La misma tarifa, tal como queda CONGELADA en la fila del snapshot.

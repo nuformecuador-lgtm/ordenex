@@ -10,7 +10,6 @@ import type {
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
 import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
-import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
 
 const KEY_ACTOR: Actor = { usuarioId: "key-user-1", rol: "apiKey" };
 const SECRETO = "ordx_secretovivo1234567890";
@@ -23,7 +22,7 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
     conError: 0,
     filas: [{ fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 }],
     ordenes: [
-      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
     ],
     cargaId: "22222222-2222-4222-8222-222222222222", // feature 141/R39
     ...overrides,
@@ -41,7 +40,7 @@ function fakeService(overrides: Partial<IBulkOrdenService> = {}): IBulkOrdenServ
       .mockResolvedValue({
         status: "ok",
         summary: okSummary(),
-        destino: resolverDestinoCreacion(false),
+        manifiestoOrdenIds: ["ord-1"],
       } satisfies CargaViaApiResult),
     ...overrides,
   };
@@ -187,7 +186,7 @@ describe("carga API: happy path (R10)", () => {
         .mockResolvedValue({
           status: "ok",
           summary,
-          destino: resolverDestinoCreacion(false),
+          manifiestoOrdenIds: ["ord-1"],
         } satisfies CargaViaApiResult),
     });
     const res = await handleCargaApi(
@@ -259,7 +258,7 @@ describe("carga API: cargaId y nombre del lote (feature 141)", () => {
       cargarViaApi: vi.fn().mockResolvedValue({
         status: "ok",
         summary: okSummary({ creadas: 0, duplicadas: 1, ordenes: [], cargaId: null }),
-        destino: resolverDestinoCreacion(false), // feature 155/R24
+        manifiestoOrdenIds: ["ord-1"], // feature 155/R24
       } satisfies CargaViaApiResult),
     });
     const descarga = fakeDescarga();
@@ -400,15 +399,15 @@ describe("carga API: contrato de la respuesta por modo (R47/R48/R53/R54)", () =>
     const summary = okSummary({
       creadas: 2,
       ordenes: [
-        { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
-        { id: "ord-2", numRemision: "REM-2", numGuia: 1043, estado: "en_ruta_bodega_central", costoEnvio: "3.92" },
+        { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "en_ruta_bodega_central", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-2", numRemision: "REM-2", numGuia: 1043, estado: "en_ruta_bodega_central", costoEnvio: "3.92", fulfillment: "0.00" },
       ],
     });
     const service = fakeService({
       cargarViaApi: vi.fn().mockResolvedValue({
         status: "ok",
         summary,
-        destino: resolverDestinoCreacion(false), // feature 155/R24
+        manifiestoOrdenIds: ["ord-1"], // feature 155/R24
       } satisfies CargaViaApiResult),
     });
     const descarga = fakeDescarga({
@@ -518,7 +517,9 @@ describe("carga API: manifiesto del lote (155/R24/R25/R26)", () => {
       cargarViaApi: vi.fn().mockResolvedValue({
         status: "ok",
         summary: okSummary(),
-        destino: resolverDestinoCreacion(true),
+        // FULFILLMENT (2026-08-25): la rama (a) no selecciona ninguna orden para el
+        // manifiesto — antes se decia con `destino.emiteManifiesto: false`.
+        manifiestoOrdenIds: [],
       } satisfies CargaViaApiResult),
     });
     const res = await handleCargaApi(
@@ -537,7 +538,7 @@ describe("carga API: manifiesto del lote (155/R24/R25/R26)", () => {
       cargarViaApi: vi.fn().mockResolvedValue({
         status: "ok",
         summary: okSummary({ total: 1, creadas: 0, conError: 1, filas: [], ordenes: [] }),
-        destino: resolverDestinoCreacion(false),
+        manifiestoOrdenIds: [],
       } satisfies CargaViaApiResult),
     });
     const res = await handleCargaApi(

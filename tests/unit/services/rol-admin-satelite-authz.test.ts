@@ -185,6 +185,7 @@ function tarifaDto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     ivaFlete: 15,
     ivaComisionCod: 15,
     tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
     zonaId: null,
     isDefault: false,
     createdAt: new Date("2026-01-01"),

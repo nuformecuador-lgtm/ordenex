@@ -28,6 +28,8 @@ const TARIFA_TIENDA = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 describe("R17 — el pago al MENSAJERO no cobra por un incidente", () => {
@@ -60,6 +62,7 @@ describe("R17 — el ingreso de ORDENEX no factura nada por un incidente", () =>
       {
         resultado: "incidente",
         esCentral: true,
+        esZonaEspecial: false,
         montoCobrar: "50000.00", // COD alto: si la comision se calculara, se veria
         cobraComision: true,
       },
@@ -77,7 +80,7 @@ describe("R17 — el ingreso de ORDENEX no factura nada por un incidente", () =>
 
   it("control de discriminacion: con la MISMA tarifa y orden, `entregada` SI factura", () => {
     const derivado = derivarIngresoOrden(
-      { resultado: "entregada", esCentral: true, montoCobrar: "50000.00", cobraComision: true },
+      { resultado: "entregada", esCentral: true, esZonaEspecial: false, montoCobrar: "50000.00", cobraComision: true },
       TARIFA_TIENDA,
     );
     expect(Object.keys(derivado).length).toBeGreaterThan(0);
@@ -86,7 +89,7 @@ describe("R17 — el ingreso de ORDENEX no factura nada por un incidente", () =>
   it("tampoco factura la variante NO central ni con `cobraComision: false`", () => {
     expect(
       derivarIngresoOrden(
-        { resultado: "incidente", esCentral: false, montoCobrar: null, cobraComision: false },
+        { resultado: "incidente", esCentral: false, esZonaEspecial: false, montoCobrar: null, cobraComision: false },
         TARIFA_TIENDA,
       ),
     ).toEqual({});

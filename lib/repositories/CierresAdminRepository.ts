@@ -47,7 +47,7 @@ import { RESULTADOS_QUE_VUELVEN } from "@/lib/types/gestion-retorno";
 const ROL_ADMIN_SATELITE = "adminSatelite";
 const ROL_MENSAJERO = "mensajero";
 import { CierreDetalleFaltanteError, tarifaDe } from "@/lib/utils/cierre-detalle";
-import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
+import { derivarIngresoOrden, resolverFlete } from "@/lib/utils/ingreso-ordenex";
 import { esRechazoSla, ORIGEN_TIPO_RECHAZO_SLA } from "@/lib/utils/rechazo-sla-flag";
 import type { OrdenHistorialOrigenTipo } from "@/lib/types/orden-historial";
 import {
@@ -166,6 +166,7 @@ export const DETALLE_ADMIN_SELECT = {
   montoCobrar: true,
   cobraComision: true,
   esCentral: true,
+  esZonaEspecial: true, // 2026-08-25: entrada de la formula, congelada como `esCentral`
   tarifaId: true,
   tarifaValorFlete: true,
   tarifaValorFleteGam: true,
@@ -175,6 +176,8 @@ export const DETALLE_ADMIN_SELECT = {
   tarifaComisionCod: true,
   tarifaIvaFlete: true,
   tarifaIvaComisionCod: true,
+  tarifaEspecial: true,
+  tarifaEspecialDevuelta: true,
 } as const;
 
 // Feature 69/T18 — lo que aporta la GESTION (que NO se congela: es suyo, no de la orden).
@@ -265,6 +268,10 @@ function toTarifaSnapshot(d: DetalleAdminRow): TarifaSnapshotDTO | null {
     // Se lee de la COLUMNA, no de `tarifaDe`: esa reconstruye la `TarifaVigente` que consume la
     // formula, y el fulfillment no es una entrada de la formula.
     fulfillment: d.tarifaFulfillment === null ? null : d.tarifaFulfillment.toFixed(2),
+    // Estas dos SI salen de `tarifaDe`: a diferencia del fulfillment, son entradas de la
+    // formula, y el `null` que ya traen significa "sin pacto" (no "sin tarifa").
+    tarifaEspecial: t.tarifaEspecial ?? null,
+    tarifaEspecialDevuelta: t.tarifaEspecialDevuelta ?? null,
   };
 }
 
@@ -288,11 +295,19 @@ function toIngresoOrdenex(
     {
       resultado: g.resultado,
       esCentral: d.esCentral,
+      esZonaEspecial: d.esZonaEspecial,
       montoCobrar,
       cobraComision: d.cobraComision,
     },
     tarifa,
   );
+  // Los dos origenes salen del MISMO `resolverFlete` que acaba de decidir los montos, no de
+  // una segunda lectura de las columnas: si divergieran, la pantalla explicaria un importe
+  // que no es el que se derivo. Sin tarifa congelada (gap R9) no hubo eleccion que hacer.
+  const origen =
+    tarifa === null
+      ? null
+      : resolverFlete(tarifa, { esCentral: d.esCentral, esZonaEspecial: d.esZonaEspecial });
   let total = new Prisma.Decimal(0);
   for (const monto of Object.values(derivado)) {
     if (monto !== undefined) total = total.plus(monto);
@@ -312,6 +327,9 @@ function toIngresoOrdenex(
     montoCobrar,
     cobraComision: d.cobraComision,
     esCentral: d.esCentral,
+    esZonaEspecial: d.esZonaEspecial,
+    fleteOrigen: origen?.origen ?? "normal",
+    fleteDevolucionOrigen: origen?.origenDevuelto ?? "normal",
     flete: opt(derivado.ingreso_flete),
     ivaFlete: opt(derivado.ingreso_iva_flete),
     fleteDevolucion: opt(derivado.ingreso_flete_devolucion),

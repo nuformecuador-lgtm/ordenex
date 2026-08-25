@@ -40,6 +40,9 @@ const TARIFA_Z1: TarifaVigenteResuelta = {
   comisionCod: "5.00",
   ivaFlete: "12.00",
   ivaComisionCod: "12.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 /** Doble del resolver de la cascada: mapa `zonaId -> tarifa`; lo que no este, no resuelve (R2). */
@@ -187,7 +190,13 @@ describe("carga por API key: lote MIXTO -> 200 con la fila sin tarifa en error (
     // R31: solo se emite el importe de la orden realmente creada; ningun "0.00".
     expect(body.ordenes).toHaveLength(1);
     expect(body.ordenes[0]).toMatchObject({ numRemision: "REM-OK", costoEnvio: "3.92" });
-    expect(JSON.stringify(body.ordenes)).not.toContain("0.00");
+    // El barrido conserva su intencion —ningun precio fabricado por falta de tarifa— pero
+    // EXCLUYE el desglose `fulfillment` (2026-08-25): ahi el cero afirma que esta tienda no
+    // hace fulfillment, que es lo contrario de un dato que falta.
+    const sinDesglose = (body.ordenes as Array<Record<string, unknown>>).map((o) =>
+      Object.fromEntries(Object.entries(o).filter(([clave]) => clave !== "fulfillment")),
+    );
+    expect(JSON.stringify(sinDesglose)).not.toContain("0.00");
   });
 });
 

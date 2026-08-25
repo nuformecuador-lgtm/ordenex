@@ -30,6 +30,9 @@ const TARIFA_ORDENEX: TarifaVigente = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 // Fila de gestion como la lee `findGestionesPendientes` (cierre_id null -> entra al proximo cierre).
@@ -92,13 +95,13 @@ describe("Feature 100 [💰] T5.3 — la gestion sintetica `reprogramada` aporta
   it("ingreso de Ordenex (feed de wallet 42/69): reprogramada NO aporta a ningun concepto -> 0 movimientos", () => {
     // derivarIngresoOrden devuelve {} para reprogramada (u otro en transito): ningun concepto.
     const derivado = derivarIngresoOrden(
-      { resultado: "reprogramada", esCentral: false, montoCobrar: "10000.00", cobraComision: true },
+      { resultado: "reprogramada", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true },
       TARIFA_ORDENEX,
     );
     expect(derivado).toEqual({});
     // Y el agregado que emite los movimientos de wallet OMITE los conceptos 0.00 (R10): 0 movimientos.
     const movimientos = agregarIngresosPorConcepto([
-      { input: { resultado: "reprogramada", esCentral: false, montoCobrar: "10000.00", cobraComision: true }, tarifa: TARIFA_ORDENEX },
+      { input: { resultado: "reprogramada", esCentral: false, esZonaEspecial: false, montoCobrar: "10000.00", cobraComision: true }, tarifa: TARIFA_ORDENEX },
     ]);
     expect(movimientos).toEqual([]);
   });
@@ -160,6 +163,7 @@ describe("Feature 100 [💰] T5.3 — cerrar un dia CON la reprogramada da los M
       input: {
         resultado: g.resultado,
         esCentral: false,
+        esZonaEspecial: false,
         montoCobrar: "10000.00",
         cobraComision: true,
       },
