@@ -1167,3 +1167,58 @@ body:has(> .dark) {
     animation: none;
   }
 }
+
+/*
+ * Etiqueta del destino de la tarifa en el formulario de tienda ("Por defecto" /
+ * "Zona X", junto al título). Dos tramos ENCADENADOS, como el cambio de vista de
+ * las cards: primero la etiqueta vieja se va HACIA LA DERECHA desvaneciéndose
+ * (`salida`) y, sólo cuando termina, la nueva entra DESDE LA IZQUIERDA
+ * (`entrada`). El encadenado lo lleva `useDestinoAnimado`, que sostiene la
+ * etiqueta vieja durante el primer tramo; aquí viven sólo las animaciones.
+ *
+ * Las duraciones se publican como variables para que el hook use EXACTAMENTE las
+ * mismas y ninguna de las dos partes se desincronice de la otra al retocarlas.
+ */
+:root {
+  --destino-etiqueta-salida-ms: 150ms;
+  --destino-etiqueta-entrada-ms: 200ms;
+}
+
+@keyframes destino-etiqueta-salida {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+
+@keyframes destino-etiqueta-entrada {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.destino-etiqueta-saliendo {
+  animation: destino-etiqueta-salida var(--destino-etiqueta-salida-ms) ease-in both;
+}
+
+.destino-etiqueta-entrando {
+  animation: destino-etiqueta-entrada var(--destino-etiqueta-entrada-ms) ease-out both;
+}
+
+/* Quien pidió menos movimiento ve la etiqueta cambiar de golpe. El hook detecta lo
+   mismo y salta los dos tramos, así que el cambio es instantáneo. */
+@media (prefers-reduced-motion: reduce) {
+  .destino-etiqueta-saliendo,
+  .destino-etiqueta-entrando {
+    animation: none;
+  }
+}
