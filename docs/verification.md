@@ -38,6 +38,7 @@ todavía no**— y **falla** si toca alguna de estas:
 | --- | --- |
 | `db/migrations/**` · `db/schema.prisma` | **una migración no la importa nadie**: ningún test sale seleccionado por tocarla |
 | **`init.sh`** | tocar el gate cambia **la medida** con la que se mide todo lo demás; un fallo aquí no se ve como un rojo, se ve como **un verde que no significa nada** |
+| **`tests/fixtures/sin-comentarios.ts`** | el mismo argumento que `init.sh`, un piso más abajo: es el quitador de comentarios con el que **159 suites** leen el árbol. Ninguna ejecuta lo que vigila, todas lo **escanean** — y a través de este archivo. Si mide de menos, las guardias afirman sobre un texto al que le falta código y **salen verdes**. Pasó: **1.387 líneas invisibles en 64 archivos** (medido el 2026-08-25, feature 283) |
 | `lib/types/**` | un catálogo o un enum **lo importa medio repo**; "los relacionados" son casi todos, y decidirlo a ojo es peor que correrlos |
 | `package.json` · `pnpm-lock.yaml` · `tsconfig.json` · `middleware.ts` · `next.config.ts` · `vitest.config.ts` · `prisma.config.ts` · `eslint.config.mjs` · `.env.example` | cambian **cómo** se construye y se ejecuta todo; el grafo de imports no modela eso |
 | nombres de dinero en `lib/`, `app/`, `components/` (`cierre`, `tarifa`, `pago`, `wallet`, `liquidacion`, `ingreso`, `egreso`, `caja`, `comision`, `flete`, `moneda`, `cobro`, `factura`, `premio`) | el precio de equivocarse **no es un test rojo, es dinero mal cobrado** |
