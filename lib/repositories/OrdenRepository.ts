@@ -86,6 +86,7 @@ import { startOfDayCR } from "@/lib/utils/fecha-cr";
 import type { PaginaRepositorio, RangoPagina } from "@/lib/utils/rango-pagina";
 import type { OrdenAsignabilidadRow } from "@/lib/interfaces/services/IAsignabilidadCoordenadasService";
 import type {
+  OrdenParaHabilitacionApi,
   ParadaRutaRow,
   TransicionAyudaInput,
 } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -3697,6 +3698,41 @@ export class OrdenRepository implements IOrdenRepository {
       }
       return result.count > 0;
     });
+  }
+
+  /**
+   * Feature 266 (T3.1, design §4.2, R3/R4) — LECTURA de la orden `numGuia` del OWNER para el
+   * service de habilitacion por API key. No escribe nada.
+   *
+   * Las TRES claves del `where` van juntas y en el MISMO statement (patron `cancelarViaApi`):
+   * `numGuia` identifica, `tiendaId` es la frontera multi-tenant y `deletedAt: null` excluye las
+   * borradas. Forzar el owner aqui —y no en un `if` posterior— es lo que hace que no exista una
+   * ventana entre leer y comprobar. Un `null` no distingue «no existe» de «es de otra tienda»: el
+   * borde responde `no_encontrada` en los dos casos (R4).
+   *
+   * `select` acotado a los TRES campos del discriminador (R12): nada de montos, nada de fila
+   * entera, y tampoco `estatusId` —el service resuelve el catalogo por value (R19), asi que aqui
+   * seria un dato que nadie lee—. El `estatus.value` se resuelve por JOIN en la misma consulta y
+   * se aplana al salir.
+   */
+  async findParaHabilitacionApi(
+    numGuia: number,
+    ownerId: string,
+  ): Promise<OrdenParaHabilitacionApi | null> {
+    const orden = await this.prisma.orden.findFirst({
+      where: { numGuia, tiendaId: ownerId, deletedAt: null },
+      select: {
+        id: true,
+        mensajeroAsignadoId: true,
+        estatus: { select: { value: true } },
+      },
+    });
+    if (!orden) return null;
+    return {
+      id: orden.id,
+      estatusValue: orden.estatus.value,
+      mensajeroAsignadoId: orden.mensajeroAsignadoId,
+    };
   }
 
   /**

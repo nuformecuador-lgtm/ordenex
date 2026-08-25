@@ -208,6 +208,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Solicitud de ayuda (2026-08-18): exigidos por la interfaz, no ejercitados aqui.
     // Feature 235: los tres metodos de la bandera colapsaron en UN punto de escritura.
     transicionarAyuda: vi.fn(async (): Promise<boolean> => true),
+    findParaHabilitacionApi: vi.fn(async () => null), // feature 266/T3.1: lectura scoped por owner del canal por API key
     incrementarIntentoContacto: vi.fn(async (): Promise<number> => 0),
     // Feature 236: los dos metodos del listado pasan a llevar el GRUPO en la firma.
     countNovedadesByTienda: vi.fn(async (): Promise<number> => 0),

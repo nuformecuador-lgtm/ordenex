@@ -327,7 +327,32 @@ const PUNTOS_DE_ESCRITURA = [
     simbolo: "rechazarDesdeDevuelta",
     origenTipo: "rechazo_tienda",
   },
-  // FEATURE 276 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
+  // #33: feature 266 (2026-08-23) — LA HABILITACION POR API KEY. `ayuda_tienda -> en_reparto`,
+  // pedida por el INTEGRADOR en un lote del canal por API key. TERCER punto del mismo simbolo
+  // (`OrdenRepository.transicionarAyuda`, el PUNTO UNICO de escritura de esa arista que 235/R8
+  // exige, junto a #29 y #30) y eso es correcto: el mapa es de FAMILIAS, no de simbolos, y ya hay
+  // precedente (#20/#22 y #24/#25/#26). El endpoint NO abre un segundo `updateMany` sobre
+  // `orden.estatus_id`: el `Pick` del constructor de `ApiHabilitacionService` lo hace
+  // estructuralmente imposible.
+  //
+  // FAMILIA PROPIA Y NO REUSO DE `rescate_ayuda_tienda` (design §7, A3) — era la opcion barata,
+  // porque la arista es LA MISMA y ya existe una familia para ella. Se descarto porque borraria la
+  // unica distincion entre «el mensajero pulso Recuperar / la tienda pulso Habilitar» y «el
+  // integrador habilito por API», y `actor_usuario_id` NO la recupera: el usuario dedicado de la
+  // key ES la tienda (`tienda_id = ownerId`), el MISMO sujeto que el `adminTienda` del boton.
+  // Precedente literal: `rechazo_tienda` (#32) nacio como familia propia frente a
+  // `escalado_devuelta_sla` por este mismo argumento.
+  //
+  // 💰 NO enlaza gestion (su fila nace con `gestion_orden_id` nulo) y NO es VISITA REAL (266/R26):
+  // habilitar no es un intento de entrega —nadie fue a ninguna puerta—, asi que no sube el conteo,
+  // no adelanta el escalado del cron SLA (99) y no cobra el rechazo (56) antes de tiempo.
+  {
+    n: 33,
+    repo: "OrdenRepository",
+    simbolo: "transicionarAyuda",
+    origenTipo: "habilitacion_api",
+  },
+  // #34: FEATURE 276 (T9, R21/R22, 2026-08-24) — EL RECHAZO POR AGOTAMIENTO DE INTENTOS.
   //
   // `sin_gestionar -> rechazada`, al APROBAR el cierre, sobre una orden que el corte de la noche
   // barrio y que ya alcanzo el umbral. Absorbe la ficha 218.
@@ -337,7 +362,7 @@ const PUNTOS_DE_ESCRITURA = [
   // que permite despues distinguir «volvio a bodega» de «se termino y se cobro» sobre una fila de
   // historial que es su unica evidencia.
   {
-    n: 33,
+    n: 34,
     repo: "CierresAdminRepository",
     simbolo: "resolverCierre",
     origenTipo: "rechazo_tope_intentos",
@@ -418,16 +443,16 @@ const NO_ESCRIBEN_ESTADO = [
 ] as const;
 
 describe("Feature 49 · T5.2 cobertura del choke point (R6)", () => {
-  it("son EXACTAMENTE 31 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
+  it("son EXACTAMENTE 33 puntos de escritura de estado (conjunto cerrado, design §2)", () => {
     // 30 - 1: el #2 se retiro el 2026-08-07. Feature 235 (2026-08-19): +2 (#29/#30, las dos
     // familias del viaje de la ayuda, con UN solo simbolo — el punto unico que R8 exige).
-    expect(PUNTOS_DE_ESCRITURA).toHaveLength(32); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-24 (276): +#33
+    expect(PUNTOS_DE_ESCRITURA).toHaveLength(33); // 2026-08-20 (237): +#31 · 2026-08-20 (240): +#32 · 2026-08-23 (266): +#33 · 2026-08-24 (276): +#34
     // Numeracion CRECIENTE y sin duplicados, con los numeros JUBILADOS declarados uno a uno.
     // No se exige contigüidad a proposito: `n` identifica el punto, no su posicion (ver la
     // cabecera del mapa). Un hueco no declarado aqui SI rompe.
     expect(PUNTOS_DE_ESCRITURA.map((p) => p.n)).toEqual([
       1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-      26, 27, 28, 29, 30, 31, 32, 33,
+      26, 27, 28, 29, 30, 31, 32, 33, 34,
     ]);
   });
 
