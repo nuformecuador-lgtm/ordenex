@@ -620,14 +620,19 @@ tests/components/RecepcionSateliteModule.test.tsx:445 — expect(within(listado(
 Y tenía razón: **un `.length > 0` no distingue la pantalla asentada de la que todavía está
 pintando el esqueleto**, porque durante la carga la tabla ya tiene su cabecera y su fila
 `role="status"`. Las dos se reescribieron ancladas al CONTENIDO
-(`expect(listado()).toHaveTextContent("REM-NUEVA")`), y **se volvió a medir que el caso
-sigue mordiendo**: con el `mutate()` fuera de `releerBodega` —la mutación (c)— el caso R22
-se pone rojo, `1 failed | 37 passed`. Sin esa segunda medida, el arreglo del ancla podría
-haber sido un arreglo que además apagó el test.
+(`expect(listado()).toHaveTextContent("REM-NUEVA")`).
+
+> ⚠️ **ESTA REMEDICIÓN ESTABA MAL, y la corrige §20.** Aquí se escribió que con el `mutate()`
+> fuera el caso se ponía rojo `1 failed | 37 passed`. **Ese número es la foto de `-t`, no la
+> del gate**: la remedición se hizo corriendo el archivo aislado, y así escrita **no
+> reproduce**. En corrida completa el archivo se quedaba **verde 38/38**. Lo destapó la
+> revisión, es el bloqueante **B2**, y está medido de nuevo —esta vez con la suite entera—
+> en **§20**.
 
 Es, además, el argumento de por qué el gate completo va entero y no por partes: **este
 defecto no lo veía ninguna de las cinco mutaciones de T5.2**, porque no era un fallo de la
-pantalla sino de cómo la estaba mirando el test.
+pantalla sino de cómo la estaba mirando el test. Lo que §20 añade es el segundo filo del
+mismo cuchillo: tampoco lo veía **remedir en aislado**.
 
 ## 18. Trazabilidad de esta entrega — R1…R33 y R42…R47
 
@@ -686,5 +691,121 @@ pantalla sino de cómo la estaba mirando el test.
    está escrito en su cabecera.
 5. **La ficha decía «79 líneas» y son 151.** Corregido en `feature_list.json`.
 6. **El gate salió verde a la tercera** y las dos rojas están contadas en §17: un timeout
-   bajo carga, una base local compartida y **un defecto real que era mío** (el ancla del
-   caso R22), arreglado y vuelto a medir con la mutación (c).
+   bajo carga, una base local compartida y un defecto de ancla que era mío.
+7. **§20 corrige a §17**: la remedición del caso de R22 que dejé escrita ahí era la foto de
+   `-t` y no reproducía en la suite. Es el bloqueante **B2**, y la medida buena —los dos
+   números en corrida completa, con y sin `mutate()`— está en §20.
+
+---
+
+## 20. B2 — el caso de R22 no mordía en el gate, sólo aislado (2026-08-24)
+
+**Bloqueante de la revisión, y era real.** El reviewer quitó el `mutate()` de `releerBodega`
+y `tests/components/RecepcionSateliteModule.test.tsx` se quedó **verde 38/38, en 3 corridas
+de 3**. Sólo caía ejecutado aislado con `-t`. La remedición que yo había escrito en §17
+—«1 failed | 37 passed»— era la foto de `-t` y **no reproducía en la suite**.
+
+### La causa, medida por el reviewer y confirmada aquí
+
+`lecturasAntes` valía **0 en la corrida completa** y **1 en la aislada**. Es decir: cuando el
+caso fotografiaba el contador, **la revalidación que SWR dispara al montar todavía no había
+aterrizado**. De ahí salían las dos mitades falsas:
+
+- el «+1» que el caso leía como «la relectura ocurrió» lo producía **el montaje**, no el
+  `mutate()`;
+- y la fila nueva la traía **esa misma lectura de montaje**, porque para cuando llegó, la
+  respuesta del servidor ya se había cambiado.
+
+Las dos afirmaciones pasaban por la razón equivocada. Lo que las dejaba pasar no era la
+falta de una tercera aserción: era que **el punto de partida no estaba probado**.
+
+Y no era una regresión suelta: la misma mutación **sí** ponía rojo
+`SateliteSeleccionOtrasPaginas` (3 de 9). Lo que fallaba es que el test que la tabla de
+trazabilidad nombra **para R22** no verificaba su mitad.
+
+### El arreglo: un punto de partida PROBADO, no una espera más larga
+
+El servidor responde primero una fila **sentinela** (`REM-MONTAJE`) que **no viene en el
+`fallbackData`** que baja la página. Verla en la tabla demuestra —en el DOM, no en un
+contador— que la revalidación de montaje ya aterrizó. **Sólo entonces** se cambia lo que el
+servidor responde. A partir de ahí, cualquier lectura posterior sólo puede venir del
+`mutate()`.
+
+Para poder cambiar la respuesta ENTRE las dos lecturas hizo falta una escotilla en
+`renderModule`: con `mockResolvedValue` el valor queda congelado antes del `render` y se lo
+lleva el montaje, así que el caso de R22 —y sólo él— instala una `mockImplementation`. Los
+otros 37 casos del archivo siguen igual.
+
+**La propiedad doble se conserva**, que es lo que impide que recortar una mitad devuelva el
+`mutate()` a ser un no-op:
+
+1. hubo una lectura **nueva** después del punto de partida probado, y
+2. lo que trajo **se pintó**: entra `REM-NUEVA` **y sale** `REM-MONTAJE`.
+
+Más una tercera aserción que ahora está etiquetada como lo que es: `refreshMock` es
+**compañía, no discriminante** — `router.refresh()` se sigue llamando sin `mutate()`.
+
+Y el baseline dejó de suponerse: `expect(lecturasAntes).toBeGreaterThan(0)` deja **el propio
+defecto de B2 clavado como aserción**. Si mañana la foto vuelve a tomarse antes de tiempo,
+el caso se pone rojo por eso y no por otra cosa.
+
+### La remedición, ESTA VEZ EN CORRIDA COMPLETA (`pnpm test`, no `-t`)
+
+| | Suite entera CON `mutate()` | Suite entera SIN `mutate()` |
+| --- | --- | --- |
+| **Total** | `Test Files 1377 passed (1377)` · `Tests 18754 passed \| 26 skipped` · `TEST_EXIT=0` | `Test Files 2 failed \| 1375 passed (1377)` · `Tests 4 failed \| 18750 passed \| 26 skipped` · `TEST_EXIT=1` |
+| **`RecepcionSateliteModule.test.tsx`** | **38 passed** | **38 tests \| 1 failed** ← el caso de R22 |
+| **`SateliteSeleccionOtrasPaginas.test.tsx`** | 9 passed | 9 tests \| 3 failed |
+
+El fallo del caso de R22, literal: `AssertionError: expected 1 to be greater than 1`. Es la
+mitad (1): el punto de partida quedó asentado en **1** —ya no en 0— y el contador **no se
+movió**, porque sin `mutate()` no hay segunda lectura. Antes del arreglo, ese mismo número
+era `0 → 1` y pasaba.
+
+### Punto 4 del encargo — ¿hay más casos con el mismo vicio?
+
+El vicio necesita **dos** ingredientes: un **delta contra una foto** y un **productor de
+fondo** que mueva el contador solo. Censados los archivos de esta entrega, sólo hay **dos**
+sitios con esa forma, y **los dos se midieron en corrida completa** en vez de razonarse:
+
+| Sitio | Forma | Medida en la suite entera | Veredicto |
+| --- | --- | --- | --- |
+| `RecepcionSateliteModule.test.tsx` — caso de R22 | delta + SWR | era el defecto | **Arreglado**, arriba |
+| `deshacer-asignacion.ui.test.tsx:494` — `"R38 — revalida el listado…"` | delta + SWR | sonda `expect(llamadasPrevias).toBeGreaterThan(0)` inyectada y corrida en la suite entera: **PASA** | **Sano.** Su foto se toma tras varias interacciones `await`, así que la revalidación de montaje ya aterrizó. No es mío (feature 149/184) y no se toca |
+
+El resto de mis aserciones sobre dobles **no son deltas**, así que el vicio no les aplica:
+`RecepcionSatelitePage.test.tsx` juzga Server Components (sin SWR) con `toHaveBeenCalled` /
+`not.toHaveBeenCalled` absolutos, y `PorRecibirModule.test.tsx` monta un módulo **sin SWR**.
+
+Aun así, el de `PorRecibirModule` es el hermano directo del que falló, así que **se midió en
+vez de argumentarse**: quitando el `router.refresh()` de su `onRecibida` y corriendo **la
+suite entera**, `PorRecibirModule.test.tsx` sale `10 tests | 1 failed` en
+`"R21: tras recibir por guía se relee del servidor"`. Muerde donde tiene que morder.
+
+Las tres mutaciones/sondas de esta tanda quedaron **revertidas**: `git diff` de `app/` y de
+`tests/unit/components/` vacío antes de commitear.
+
+### La lección, que es la del bloqueante y no la del test
+
+**«Pasa aislado» y «pasa en la suite» no son la misma medida**, y para una remedición la que
+vale es la de la suite. Aislado, cada archivo arranca con sus temporizadores y su caché
+limpios y las cosas ocurren en el orden que uno espera; dentro de 1.377 archivos en
+paralelo, no. Una mutación remedida con `-t` puede estar midiendo un mundo que el gate no
+tiene — y eso fue exactamente lo que dejó pasar B2.
+
+### Gate tras cerrar B2
+
+`./init.sh` **completo** de nuevo sobre el árbol con el caso ya arreglado (precedido de
+`pnpm run db:generate`; `INIT_EXIT=$?` dentro del log, sin `tail`). Verde **a la primera**:
+
+```
+✓ typecheck   ✓ lint (0 errors, 101 warnings preexistentes)   ✓ test
+Test Files  1377 passed (1377)
+Tests       18754 passed | 26 skipped (18780)
+Duration    384.22s
+== init OK ==
+INIT_EXIT=0
+```
+
+El conteo total **no cambia** respecto al gate de §17 —18.754— porque B2 no añadió ni quitó
+casos: reescribió uno para que midiera lo que decía medir.

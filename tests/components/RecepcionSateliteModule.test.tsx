@@ -152,7 +152,21 @@ type PropsModulo = Omit<
   "ordenesBodega" | "catalogoFiltros"
 >;
 
-function renderModule(props?: GruposBodega & PropsModulo) {
+/**
+ * Escotilla del caso de R22 (T4.1b) — qué responde el SERVIDOR en CADA lectura paginada,
+ * resuelto EN EL MOMENTO de la llamada y no congelado antes del `render`.
+ *
+ * Existe por un defecto medido: con `mockResolvedValue` el valor de retorno queda fijado
+ * ANTES de montar, y la revalidación que SWR dispara al montar se lo lleva. Un caso que
+ * quiera distinguir «la lectura del montaje» de «la que provocó `mutate()`» necesita poder
+ * cambiar la respuesta ENTRE las dos, y para eso hace falta una implementación, no un valor.
+ * Los otros casos del archivo no lo necesitan y siguen con `mockResolvedValue`.
+ */
+interface ServidorPaginado {
+  servidor?: () => RecepcionSateliteDTO[];
+}
+
+function renderModule(props?: GruposBodega & PropsModulo & ServidorPaginado) {
   const conjunto = [
     ...(props?.recibidas ?? []),
     ...(props?.asignadas ?? []),
@@ -160,13 +174,27 @@ function renderModule(props?: GruposBodega & PropsModulo) {
     ...(props?.enTransitoACentral ?? []),
     ...(props?.devueltas ?? []),
   ];
-  paginadoBodegaMock.mockResolvedValue({
-    status: "ok",
-    items: conjunto,
-    page: 1,
-    pageSize: PAGE_SIZE_SATELITE,
-    total: conjunto.length,
-  });
+  const servidor = props?.servidor;
+  if (servidor) {
+    paginadoBodegaMock.mockImplementation(async () => {
+      const items = servidor();
+      return {
+        status: "ok",
+        items,
+        page: 1,
+        pageSize: PAGE_SIZE_SATELITE,
+        total: items.length,
+      };
+    });
+  } else {
+    paginadoBodegaMock.mockResolvedValue({
+      status: "ok",
+      items: conjunto,
+      page: 1,
+      pageSize: PAGE_SIZE_SATELITE,
+      total: conjunto.length,
+    });
+  }
   // Caché de SWR NUEVA por montaje: la clave de la página 1 es la misma en todos los casos
   // del archivo, así que sin esto el dato del caso anterior ganaría sobre el `fallbackData`
   // del siguiente y la tabla pintaría las órdenes de otro test (medido en T I.2).
@@ -386,16 +414,41 @@ describe("RecepcionSateliteModule", () => {
   // "SIMPLIFICA". El escáner sigue montado en «En bodega» (decisión firmada), y una
   // recepción por QR mete una fila NUEVA en ESTE listado. Sus filas las tiene SWR, así que
   // `router.refresh()` NO basta: sin `mutate()` la orden recién recibida no aparecería
-  // hasta recargar la página, y ningún otro caso del repo se pondría rojo.
+  // hasta recargar la página.
   //
-  // Por eso se afirman las DOS cosas: que la lectura paginada se REPITIÓ y que la fila
-  // aparece. Sólo lo segundo dejaría pasar un `mutate()` que devolviera lo mismo; sólo lo
-  // primero, una revalidación que no llega a pintarse.
+  // ⚠️ POR QUÉ ESTE CASO ESTÁ ESCRITO ASÍ, Y NO DE LA FORMA OBVIA (2026-08-24, review
+  // RECHAZADA). La primera versión hacía lo evidente: fotografiar el contador de lecturas,
+  // cambiar lo que responde el servidor, escanear y comprobar que el contador había subido.
+  // **Pasaba en verde con el `mutate()` borrado**, 38/38 en tres corridas de tres, y sólo
+  // caía al ejecutarla aislada con `-t`. La causa, medida: SWR dispara UNA revalidación
+  // PROPIA al montar, y en la corrida completa esa revalidación todavía no había aterrizado
+  // cuando se tomaba la foto — el contador valía 0 en la suite y 1 aislado—. O sea que:
+  //   · el «+1» que el caso leía como «la relectura ocurrió» lo producía el MONTAJE, y
+  //   · la fila nueva la traía esa MISMA lectura de montaje, porque la respuesta del
+  //     servidor ya se había cambiado antes de que llegara.
+  // Las dos mitades pasaban por la razón equivocada.
+  //
+  // La corrección no es esperar más, es tener un PUNTO DE PARTIDA PROBADO: el servidor
+  // responde primero una fila SENTINELA que NO viene en el `fallbackData` de la página, así
+  // que verla en la tabla demuestra —en el DOM, no en un contador— que la revalidación de
+  // montaje ya aterrizó. Sólo entonces se cambia la respuesta. A partir de ahí, cualquier
+  // lectura posterior sólo puede venir del `mutate()`.
+  //
+  // Se siguen afirmando las DOS cosas, que es lo que hace que recortar una devuelva el
+  // `mutate()` a ser un no-op silencioso: que hubo una lectura NUEVA después del punto de
+  // partida, y que lo que trajo SE PINTÓ (entra la recibida y SALE la sentinela).
   it("R22: recibir por guía mete la orden en el listado sin recargar la página", async () => {
     const user = userEvent.setup();
     const yaEnBodega = makeOrden({
       id: "b1",
       numRemision: "REM-B1",
+      estatusValue: "en_bodega_satelite",
+    });
+    // La sentinela: sólo puede llegar a la tabla por una lectura al servidor, porque el
+    // `fallbackData` que baja la página son las `recibidas` y no la incluye.
+    const marcaDeMontaje = makeOrden({
+      id: "b0",
+      numRemision: "REM-MONTAJE",
       estatusValue: "en_bodega_satelite",
     });
     const recienRecibida = makeOrden({
@@ -404,30 +457,28 @@ describe("RecepcionSateliteModule", () => {
       numGuia: 1001,
       estatusValue: "en_bodega_satelite",
     });
+    let filasDelServidor = [yaEnBodega, marcaDeMontaje];
     recibirPorQrMock.mockResolvedValue({ status: "ok", ordenId: "b2" });
 
-    renderModule({ recibidas: [yaEnBodega] });
+    renderModule({ recibidas: [yaEnBodega], servidor: () => filasDelServidor });
     const listado = () => screen.getByRole("region", { name: LISTADO });
 
-    // Estado de partida: la fila vieja está y la nueva NO. Sin esto, el aserto de más
-    // abajo podría estar encontrando algo que ya estaba.
-    //
-    // La espera se ancla al CONTENIDO y no a un conteo, a propósito: mientras el listado
-    // carga, la tabla tiene su cabecera y su fila `role="status"`, así que un
-    // `.length > 0` se cumple a media carga y no distingue la pantalla asentada de la que
-    // todavía está pintando el esqueleto (lo vigila `ancla-de-carga.guardia.test.ts`).
-    await waitFor(() => expect(listado()).toHaveTextContent("REM-B1"));
+    // PUNTO DE PARTIDA PROBADO: la revalidación de montaje aterrizó Y se pintó. Anclado al
+    // CONTENIDO y no a un conteo: durante la carga la tabla ya tiene cabecera y su fila
+    // `role="status"`, así que un `.length > 0` se cumple a media carga
+    // (`ancla-de-carga.guardia.test.ts`).
+    await waitFor(() => expect(listado()).toHaveTextContent("REM-MONTAJE"));
     expect(within(listado()).queryByText(/REM-NUEVA/)).toBeNull();
 
-    // A partir de aquí el servidor ya devuelve la orden recibida.
-    paginadoBodegaMock.mockResolvedValue({
-      status: "ok",
-      items: [yaEnBodega, recienRecibida],
-      page: 1,
-      pageSize: PAGE_SIZE_SATELITE,
-      total: 2,
-    });
     const lecturasAntes = paginadoBodegaMock.mock.calls.length;
+    // Y el punto de partida se AFIRMA, no se supone. Un `0` aquí significaría que la foto
+    // se está tomando otra vez antes de que SWR lea, que es exactamente el defecto que
+    // dejó este caso verde con el `mutate()` fuera.
+    expect(lecturasAntes).toBeGreaterThan(0);
+
+    // A partir de aquí el servidor responde OTRA cosa: la sentinela se va y entra la
+    // orden recién recibida. Nada de esto llega solo a la pantalla.
+    filasDelServidor = [yaEnBodega, recienRecibida];
 
     // El camino MANUAL (número tecleado), que no necesita cámara.
     await user.click(screen.getByRole("button", { name: "Recibir paquete" }));
@@ -440,14 +491,18 @@ describe("RecepcionSateliteModule", () => {
     await user.click(within(modal).getByRole("button", { name: /Cerrar/ }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    // (1) la lectura paginada SE REPITIÓ: `mutate()` no es un no-op.
+    // (1) hubo una lectura NUEVA después del punto de partida probado: `mutate()` no es
+    // un no-op. Ya no puede ser la del montaje — esa está contada en `lecturasAntes`.
     await waitFor(() =>
       expect(paginadoBodegaMock.mock.calls.length).toBeGreaterThan(lecturasAntes),
     );
-    // (2) y la fila nueva se pintó, sin recargar la página. Otra vez por contenido: es lo
-    // que distingue «la relectura llegó y se pintó» de «la tabla tiene N elementos».
+    // (2) y lo que esa lectura trajo SE PINTÓ, sin recargar la página: entra la recibida
+    // y sale la sentinela. Las dos mitades, porque la tabla podría repintar la respuesta
+    // vieja y el conteo de arriba no se enteraría.
     await waitFor(() => expect(listado()).toHaveTextContent("REM-NUEVA"));
+    expect(listado()).not.toHaveTextContent("REM-MONTAJE");
     // (3) el Server Component también se vuelve a resolver (bloqueo, liberadas, total).
+    // Compañía, no discriminante: `router.refresh()` sigue llamándose sin `mutate()`.
     expect(refreshMock).toHaveBeenCalled();
   });
 
