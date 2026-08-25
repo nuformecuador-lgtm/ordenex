@@ -2,7 +2,7 @@
 
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import type { OrdenExistente } from "@/app/(app)/ordenes/_components/carga-masiva-clasificacion";
-import { estatusLabel } from "@/app/(app)/ordenes/_components/estatus-label";
+import { EstatusBadge } from "@/app/(app)/ordenes/_components/EstatusBadge";
 
 export interface OrdenesExistentesTablaProps {
   /** Órdenes ya existentes (filas `duplicada` del `BulkSummary`), R4/R5. */
@@ -11,7 +11,7 @@ export interface OrdenesExistentesTablaProps {
 
 /**
  * Feature 29 — Sección de SOLO LECTURA de órdenes ya existentes (R4, R5, R6).
- * Muestra `numRemision` + estado como etiqueta legible (R17). Sin `Select`, sin
+ * Muestra `numRemision` + estado como el chip del listado (R17). Sin `Select`, sin
  * botones ni acción de recarga: las existentes no se re-insertan (R6).
  */
 export function OrdenesExistentesTabla({ existentes }: OrdenesExistentesTablaProps) {
@@ -25,7 +25,12 @@ export function OrdenesExistentesTabla({ existentes }: OrdenesExistentesTablaPro
     {
       id: "estatus",
       value: "Estado actual",
-      render: (row) => estatusLabel(row.estatus),
+      // La etiqueta ya era legible (R17), pero en texto plano: el chip del listado
+      // añade el color semántico sin cambiar el texto. `estatus` es nullable, y el
+      // guion del caso vacío se conserva (lo daba `estatusLabel`, ahora explícito).
+      // Sin `zonaNombre`: `OrdenExistente` no lo trae, así que `en_ruta_bodega_satelite`
+      // cae a su etiqueta genérica en vez de nombrar la bodega.
+      render: (row) => (row.estatus ? <EstatusBadge value={row.estatus} /> : "—"),
     },
   ];
 
