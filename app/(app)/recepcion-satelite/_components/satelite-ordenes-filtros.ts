@@ -97,6 +97,14 @@ export function etiquetaEstado(value: string): string {
  *   - **Reasignables**: es un filtro de despacho de la bodega CENTRAL (allí sin mensajero),
  *     un estado que este listado no contiene.
  *
+ * Lo que SE QUEDA, y no es obvio: el filtro por **Mensajero** (pedido humano 2026-08-25). El
+ * adminSatelite reparte por mensajeros y quiere la misma pregunta que el maestro; las opciones
+ * salen de su catálogo, que para este rol trae SOLO los mensajeros de su zona, y el listado
+ * sigue acotado por la zona del actor, así que el control no puede ampliar nada. El encadenado
+ * a `zona_id` queda inerte aquí —ese control no se declara— y el motor de dependencias trata
+ * un padre no declarado como «sin acotar», que es justo lo que corresponde: su catálogo YA
+ * viene recortado a la zona.
+ *
  * Lo que SE AÑADE: el filtro de ESTADO con los cinco estados de esta pantalla, delante del
  * resto — la misma posición que ocupa en `/ordenes`.
  *
@@ -140,6 +148,8 @@ export function construirFiltrosSatelite(
  */
 export interface FiltroBodegaSatelite {
   estados?: EstadoBodegaSatelite[];
+  /** Mensajeros asignados elegidos: la MISMA clave que el `filter` de `/ordenes`. */
+  mensajero_id?: string[];
   /** Geografía por ID, tiempo y término: las MISMAS claves que el `filter` de `/ordenes`. */
   provincia_id?: string[];
   canton_id?: string[];

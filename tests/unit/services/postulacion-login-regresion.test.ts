@@ -39,6 +39,7 @@ describe("R23: login de cuenta pendiente", () => {
       findByEmail: vi.fn(),
       create: vi.fn(),
       listMensajeros: vi.fn().mockResolvedValue([]),
+      listMensajerosParaFiltro: vi.fn().mockResolvedValue([]),
       listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
       listCuentasTienda: vi.fn().mockResolvedValue([]), // exigido por IUserRepository (feature 144); no ejercitado aqui
       updatePasswordHash: vi.fn(),

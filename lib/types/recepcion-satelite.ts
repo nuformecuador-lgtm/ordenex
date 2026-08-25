@@ -52,8 +52,14 @@ export type RecibirActionInput = z.infer<typeof recibirSchema>;
  *
  * `zona_id` y `tienda_id` NO se toman: la zona sale del actor —declararla como filtro seria
  * ofrecer el alcance como entrada— y el adminSatelite no ve el directorio de cuentas tienda.
+ *
+ * Pedido humano (2026-08-25): `mensajero_id` SI se toma. El adminSatelite reparte por
+ * mensajeros y necesita el mismo filtro que el maestro; su catalogo le entrega SOLO los de su
+ * zona, y el acotamiento por zona del listado (que no es un parametro publico: sale del actor)
+ * hace que pedir uno de otra zona devuelva cero filas en vez de ampliar nada.
  */
 const FILTROS_COMPARTIDOS = ordenFilterBase.pick({
+  mensajero_id: true,
   provincia_id: true,
   canton_id: true,
   distrito_id: true,

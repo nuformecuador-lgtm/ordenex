@@ -7,6 +7,9 @@ import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 
 const ZONAS = [{ id: "z1", nombre: "GAM" }];
 const TIENDAS = [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }];
+const MENSAJEROS = [{ id: "m1", nombre: "Ana Mora", zonaId: "z1" }];
+/** Los mensajeros de UNA zona: otro conjunto, no un subconjunto del de arriba. */
+const MENSAJEROS_ZONA = [{ id: "m9", nombre: "Beto Ruiz", zonaId: "z-satelite" }];
 const PROVINCIAS = [{ id: "p1", nombre: "San Jose" }];
 const CANTONES = [{ id: "c1", nombre: "Central", padreId: "p1" }];
 const DISTRITOS = [{ id: "d1", nombre: "Carmen", padreId: "c1" }];
@@ -34,7 +37,15 @@ function buildService(demoras: Partial<Record<string, number>> = {}) {
     });
   }
   const zonaRepo = { listLite: lectura("zonas", ZONAS) };
-  const userRepo = { listCuentasTienda: lectura("tiendas", TIENDAS) };
+  const userRepo = {
+    listCuentasTienda: lectura("tiendas", TIENDAS),
+    // El doble devuelve un conjunto DISTINTO segun se pida acotado o no, para que el test
+    // pueda distinguir "acotado a la zona" de "todos" sin mirar el argumento a mano.
+    listMensajerosParaFiltro: vi.fn(async (zonaId?: string) => {
+      orden.push("mensajeros");
+      return zonaId === undefined ? MENSAJEROS : MENSAJEROS_ZONA;
+    }),
+  };
   const geoRepo = {
     listProvinciasLite: lectura("provincias", PROVINCIAS),
     listCantonesLite: lectura("cantones", CANTONES),
@@ -57,6 +68,7 @@ describe("autorizacion (R52/R53)", () => {
     expect(r).toEqual({ status: "unauthenticated" });
     expect(zonaRepo.listLite).not.toHaveBeenCalled();
     expect(userRepo.listCuentasTienda).not.toHaveBeenCalled();
+    expect(userRepo.listMensajerosParaFiltro).not.toHaveBeenCalled();
     expect(geoRepo.listProvinciasLite).not.toHaveBeenCalled();
     expect(geoRepo.listCantonesLite).not.toHaveBeenCalled();
     expect(geoRepo.listDistritosLite).not.toHaveBeenCalled();
@@ -89,6 +101,10 @@ describe("acotamiento por rol del propio catalogo", () => {
     // No es que el control no se declare (eso lo hace la barra): es que el dato no viaja.
     expect(r.catalogo.tiendas).toEqual([]);
     expect(userRepo.listCuentasTienda).not.toHaveBeenCalled();
+    // El directorio de MENSAJEROS cae con el mismo criterio: es personal interno, no un
+    // dato que se le entregue a la cuenta tienda.
+    expect(r.catalogo.mensajeros).toEqual([]);
+    expect(userRepo.listMensajerosParaFiltro).not.toHaveBeenCalled();
     // Lo demas lo sigue recibiendo entero: su alcance es su tienda, no una zona.
     expect(r.catalogo.zonas).toEqual(ZONAS);
     expect(r.catalogo.cantones).toEqual(CANTONES);
@@ -99,10 +115,17 @@ describe("acotamiento por rol del propio catalogo", () => {
     const r = await service.obtenerCatalogo(actor("adminSatelite", "z-satelite"));
     expect(r).toEqual({
       status: "ok",
-      catalogo: { zonas: [], tiendas: [], ...GEO_ZONA },
+      catalogo: {
+        zonas: [],
+        tiendas: [],
+        mensajeros: MENSAJEROS_ZONA,
+        ...GEO_ZONA,
+      },
     });
     // La zona sale del actor, y el catalogo del pais no se lee siquiera.
     expect(geoRepo.listGeografiaLitePorZona).toHaveBeenCalledWith("z-satelite");
+    // Los mensajeros van acotados a ESA zona, no a todos.
+    expect(userRepo.listMensajerosParaFiltro).toHaveBeenCalledWith("z-satelite");
     expect(geoRepo.listProvinciasLite).not.toHaveBeenCalled();
     expect(geoRepo.listCantonesLite).not.toHaveBeenCalled();
     expect(geoRepo.listDistritosLite).not.toHaveBeenCalled();
@@ -115,30 +138,45 @@ describe("acotamiento por rol del propio catalogo", () => {
     const r = await service.obtenerCatalogo(actor("adminSatelite", null));
     expect(r).toEqual({
       status: "ok",
-      catalogo: { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
+      catalogo: {
+        zonas: [],
+        tiendas: [],
+        mensajeros: [],
+        provincias: [],
+        cantones: [],
+        distritos: [],
+      },
     });
     expect(geoRepo.listGeografiaLitePorZona).not.toHaveBeenCalled();
   });
 });
 
 describe("resolucion del catalogo (R47/R48)", () => {
-  it("R47: las CINCO lecturas se disparan EN PARALELO (todas invocadas antes de resolver la primera)", async () => {
+  it("R47: las lecturas se disparan EN PARALELO (todas invocadas antes de resolver la primera)", async () => {
     // La primera lectura resuelve tras 5 ticks; si el service fuese secuencial, las
-    // cuatro restantes no estarian invocadas todavia al terminar ese microtask.
+    // restantes no estarian invocadas todavia al terminar ese microtask.
     const { service, orden, zonaRepo, userRepo, geoRepo } = buildService({ zonas: 5 });
     const promesa = service.obtenerCatalogo(actor("admin"));
-    // Un solo tick: suficiente para que `Promise.all` haya invocado las cinco.
+    // Un solo tick: suficiente para que `Promise.all` las haya invocado todas.
     await Promise.resolve();
-    expect(orden).toEqual(["zonas", "tiendas", "provincias", "cantones", "distritos"]);
+    expect(orden).toEqual([
+      "zonas",
+      "tiendas",
+      "mensajeros",
+      "provincias",
+      "cantones",
+      "distritos",
+    ]);
     expect(zonaRepo.listLite).toHaveBeenCalledTimes(1);
     expect(userRepo.listCuentasTienda).toHaveBeenCalledTimes(1);
+    expect(userRepo.listMensajerosParaFiltro).toHaveBeenCalledTimes(1);
     expect(geoRepo.listProvinciasLite).toHaveBeenCalledTimes(1);
     expect(geoRepo.listCantonesLite).toHaveBeenCalledTimes(1);
     expect(geoRepo.listDistritosLite).toHaveBeenCalledTimes(1);
     await promesa;
   });
 
-  it("R47/R48: entrega las cinco colecciones en una sola respuesta", async () => {
+  it("R47/R48: entrega todas las colecciones en una sola respuesta", async () => {
     const { service } = buildService();
     const r = await service.obtenerCatalogo(actor("maestro"));
     expect(r).toEqual({
@@ -146,6 +184,7 @@ describe("resolucion del catalogo (R47/R48)", () => {
       catalogo: {
         zonas: ZONAS,
         tiendas: TIENDAS,
+        mensajeros: MENSAJEROS,
         provincias: PROVINCIAS,
         cantones: CANTONES,
         distritos: DISTRITOS,
@@ -174,6 +213,15 @@ describe("resolucion del catalogo (R47/R48)", () => {
       "id",
       "nombre",
     ]);
+  });
+
+  it("maestro/admin reciben TODOS los mensajeros, sin acotar por zona", async () => {
+    const { service, userRepo } = buildService();
+    const r = await service.obtenerCatalogo(actor("maestro"));
+    if (r.status !== "ok") throw new Error("esperaba ok");
+    expect(r.catalogo.mensajeros).toEqual(MENSAJEROS);
+    // Sin argumento = sin acotamiento: es lo que distingue "todos" de "los de su zona".
+    expect(userRepo.listMensajerosParaFiltro).toHaveBeenCalledWith();
   });
 
   it("R64: si una lectura falla, el service PROPAGA el error (la page decide el fallback)", async () => {

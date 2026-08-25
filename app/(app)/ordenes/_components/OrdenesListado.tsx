@@ -188,6 +188,7 @@ export function OrdenesListado({
   catalogoFiltros = null,
   incluirFiltroTienda = true,
   incluirFiltroReasignables = true,
+  incluirFiltroMensajero = true,
   permitirDescarga = true,
   puedeReportarIncidente = false,
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
@@ -237,6 +238,12 @@ export function OrdenesListado({
    * (`maestro`/`admin`). `adminTienda` lo recibe en `false`.
    */
   incluirFiltroReasignables?: boolean;
+  /**
+   * Declara el filtro por MENSAJERO asignado, encadenado a la zona (elegida una zona, sólo
+   * ofrece a sus mensajeros). Es de despacho: lo reciben `maestro`/`admin`; `adminTienda` lo
+   * recibe en `false` —no se le entrega el directorio de mensajeros—.
+   */
+  incluirFiltroMensajero?: boolean;
   /**
    * Feature 151 (R33): ofrece la descarga del dataset COMPLETO acotado a los filtros
    * vigentes de la barra. Por defecto `true`: ésta ES la superficie del listado de
@@ -626,6 +633,7 @@ export function OrdenesListado({
       {
         incluirTienda: incluirFiltroTienda,
         incluirReasignables: incluirFiltroReasignables,
+        incluirMensajero: incluirFiltroMensajero,
       },
     );
     // El BUSCADOR ya no es un control más del panel: lo posee `BuscadorFiltros`, que
@@ -652,7 +660,13 @@ export function OrdenesListado({
         catalogoFiltros === null ? { ...f, disabled: true } : f,
       ),
     ];
-  }, [catalogoFiltros, incluirFiltroTienda, incluirFiltroReasignables, opciones]);
+  }, [
+    catalogoFiltros,
+    incluirFiltroTienda,
+    incluirFiltroReasignables,
+    incluirFiltroMensajero,
+    opciones,
+  ]);
 
   /** Lo que ofrece el selector: cada filtro declarado, por su clave y su etiqueta. */
   const filtrosOfrecidos = useMemo(

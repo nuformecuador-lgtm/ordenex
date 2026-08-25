@@ -54,6 +54,7 @@ const resolveActorMock = vi.mocked(resolveActorFromSession);
 const catalogoMock = vi.mocked(obtenerCatalogoFiltrosOrdenes);
 
 const CATALOGO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda Uno", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San José" }],

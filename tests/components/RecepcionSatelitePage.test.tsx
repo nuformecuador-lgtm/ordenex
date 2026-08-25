@@ -123,7 +123,7 @@ beforeEach(() => {
   catalogoMock.mockResolvedValue({
     status: "ok",
     // Lo que este rol recibe: geografía de SU zona, ni zonas ni cuentas tienda.
-    catalogo: { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
+    catalogo: { zonas: [], tiendas: [], mensajeros: [], provincias: [], cantones: [], distritos: [] },
   });
 });
 

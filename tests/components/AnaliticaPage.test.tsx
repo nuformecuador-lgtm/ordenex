@@ -1075,6 +1075,7 @@ describe.skip("Feature 133 (T6.5, R23) — para un alcance acotado no aparece na
     catalogoOrdenesMock.mockResolvedValue({
       status: "ok",
       catalogo: {
+        mensajeros: [],
         zonas: [ZONA_AJENA],
         tiendas: [TIENDA_AJENA],
         provincias: [],

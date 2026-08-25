@@ -16,6 +16,13 @@ const CATALOGO: CatalogoFiltrosOrdenesDTO = {
     { id: "z1", nombre: "GAM" },
     { id: "z2", nombre: "Satelite Norte" },
   ],
+  mensajeros: [
+    { id: "m1", nombre: "Ana Mora", zonaId: "z1" },
+    { id: "m2", nombre: "Beto Ruiz", zonaId: "z2" },
+    // Mensajero SIN zona: existe (la columna es nullable) y no se cuela como opcion
+    // huerfana en el encadenado.
+    { id: "m3", nombre: "Caro Sin Zona", zonaId: null },
+  ],
   tiendas: [
     { id: "t1", nombre: "Tienda Activa", esApiKey: false, activa: true },
     { id: "t2", nombre: "Tienda Cerrada", esApiKey: false, activa: false },
@@ -58,6 +65,7 @@ describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
     expect(claves(true)).toEqual([
       "q",
       "zona_id",
+      "mensajero_id",
       "tienda_id",
       "provincia_id",
       "canton_id",
@@ -71,6 +79,7 @@ describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
     expect(claves(false)).toEqual([
       "q",
       "zona_id",
+      "mensajero_id",
       "provincia_id",
       "canton_id",
       "distrito_id",
@@ -88,9 +97,10 @@ describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
     expect(claves(true).filter((k) => k.startsWith("created"))).toEqual(["created"]);
   });
 
-  it("R55: los cinco filtros de catalogo son de seleccion multiple", () => {
+  it("R55: los filtros de catalogo son de seleccion multiple", () => {
     for (const clave of [
       "zona_id",
+      "mensajero_id",
       "tienda_id",
       "provincia_id",
       "canton_id",
@@ -107,6 +117,7 @@ describe("construirFiltrosOrdenes — filtros declarados (R55)", () => {
     expect(porClave("canton_id").label).toBe("Cantón");
     expect(porClave("distrito_id").label).toBe("Distrito");
     expect(porClave("created").label).toBe("Fecha de creación");
+    expect(porClave("mensajero_id").label).toBe("Mensajero");
   });
 
   it("las opciones de catalogo emiten el ID y muestran el NOMBRE, en el orden recibido", () => {
@@ -121,6 +132,19 @@ describe("construirFiltrosOrdenes — cadena geografica declarada (R56)", () => 
   it("R56: canton depende de provincia y distrito depende de canton", () => {
     expect(porClave("canton_id").dependsOn).toBe("provincia_id");
     expect(porClave("distrito_id").dependsOn).toBe("canton_id");
+  });
+
+  it("el filtro de MENSAJERO depende de la ZONA, como el canton de la provincia", () => {
+    expect(porClave("mensajero_id").dependsOn).toBe("zona_id");
+  });
+
+  it("cada mensajero lleva su zona como `parentValue`; el que no tiene zona va sin padre", () => {
+    expect(porClave("mensajero_id").options).toEqual([
+      { value: "m1", label: "Ana Mora", parentValue: "z1" },
+      { value: "m2", label: "Beto Ruiz", parentValue: "z2" },
+      // `undefined`, no `null`: el motor de dependencias solo entiende "sin padre".
+      { value: "m3", label: "Caro Sin Zona", parentValue: undefined },
+    ]);
   });
 
   it("R56: zona, tienda y provincia NO dependen de nadie", () => {
@@ -179,10 +203,17 @@ describe("construirFiltrosOrdenes — cuentas tienda (R51)", () => {
 describe("construirFiltrosOrdenes — catalogo vacio (R64)", () => {
   it("con catalogo vacio sigue declarando TODOS los filtros, sin opciones", () => {
     const defs = construirFiltrosOrdenes(
-      { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
+      {
+        zonas: [],
+        tiendas: [],
+        mensajeros: [],
+        provincias: [],
+        cantones: [],
+        distritos: [],
+      },
       { incluirTienda: true },
     );
-    expect(defs).toHaveLength(8);
+    expect(defs).toHaveLength(9);
     for (const def of defs.filter((d) => d.kind === "multi")) {
       expect(def.options).toEqual([]);
     }
@@ -209,6 +240,7 @@ describe("construirFiltrosOrdenes — filtro REASIGNABLES", () => {
     expect(claves).toEqual([
       "q",
       "zona_id",
+      "mensajero_id",
       "provincia_id",
       "canton_id",
       "distrito_id",
@@ -224,3 +256,28 @@ describe("construirFiltrosOrdenes — filtro REASIGNABLES", () => {
   });
 });
 
+describe("construirFiltrosOrdenes — filtro por MENSAJERO", () => {
+  it("cae SOLO esa clave cuando el rol no lo recibe (`incluirMensajero: false`)", () => {
+    const claves = construirFiltrosOrdenes(CATALOGO, {
+      incluirTienda: true,
+      incluirMensajero: false,
+    }).map((f) => f.key);
+    expect(claves).not.toContain("mensajero_id");
+    expect(claves).toEqual([
+      "q",
+      "zona_id",
+      "tienda_id",
+      "provincia_id",
+      "canton_id",
+      "distrito_id",
+      "created",
+      "reasignables",
+    ]);
+  });
+
+  it("la opcion emite el ID y muestra el NOMBRE (nunca datos del mensajero)", () => {
+    for (const opcion of porClave("mensajero_id").options ?? []) {
+      expect(Object.keys(opcion).sort()).toEqual(["label", "parentValue", "value"]);
+    }
+  });
+});

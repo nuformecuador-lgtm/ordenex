@@ -49,6 +49,7 @@ function buildRepo(overrides: Partial<IUserRepository> = {}): IUserRepository {
     create: vi.fn().mockResolvedValue(usuario()),
     updatePasswordHash: vi.fn(),
     listMensajeros: vi.fn(),
+    listMensajerosParaFiltro: vi.fn(),
     listByRol: vi.fn().mockResolvedValue([]), // exigido por IUserRepository; no ejercitado aqui
     listCuentasTienda: vi.fn().mockResolvedValue([]), // exigido por IUserRepository (feature 144); no ejercitado aqui
     list: vi.fn().mockResolvedValue({ items: [], total: 0 }),

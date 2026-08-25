@@ -466,29 +466,6 @@ export function SateliteOrdenesListado({
     <section aria-label={TITULO_BODEGA} className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">{TITULO_BODEGA}</h2>
 
-      {/* Pedido humano (2026-08-19): la MISMA barra de `/ordenes` — buscador permanente,
-          selector de filtros y "Limpiar todo" al final de la fila. */}
-      <BuscadorFiltros
-        label="Buscar"
-        placeholder={PLACEHOLDER_BUSQUEDA}
-        minChars={BUSQUEDA_MIN_CHARS}
-        onChange={cambiarTermino}
-        filtros={filtrosOfrecidos}
-        activos={filtrosActivos}
-        onActivosChange={setFiltrosActivos}
-        onLimpiarTodo={limpiarFiltros}
-        hayFiltrosAplicados={filtrosActivos.length > 0 || hayFiltros}
-      >
-        {filtrosMontados.length > 0 ? (
-          <FilterComponent
-            key={resetFiltros}
-            filters={filtrosMontados}
-            onChange={cambiarFiltros}
-            debounceMs={0}
-          />
-        ) : null}
-      </BuscadorFiltros>
-
       {/* Barra de acciones de lote: aparece con la selección y ofrece SOLO la transición
           válida para el estado común de lo seleccionado. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -603,6 +580,34 @@ export function SateliteOrdenesListado({
         data={filas}
         rowKey="id"
         ariaLabel={TITULO_BODEGA}
+        // Pedido humano (2026-08-25): la barra va DENTRO de la tabla, en la misma línea que el
+        // control de descarga — exactamente como en `/ordenes`. Antes colgaba encima de la
+        // sección, así que las dos superficies que comparten los MISMOS controles los
+        // presentaban en dos sitios distintos. La tabla no mira lo que le pasan (`filtros` es un
+        // `ReactNode` opaco): solo lo coloca.
+        filtros={
+          <BuscadorFiltros
+            label="Buscar"
+            placeholder={PLACEHOLDER_BUSQUEDA}
+            minChars={BUSQUEDA_MIN_CHARS}
+            onChange={cambiarTermino}
+            filtros={filtrosOfrecidos}
+            activos={filtrosActivos}
+            onActivosChange={setFiltrosActivos}
+            // "Limpiar todo" lo pone la barra al final de la fila, igual que en `/ordenes`.
+            onLimpiarTodo={limpiarFiltros}
+            hayFiltrosAplicados={filtrosActivos.length > 0 || hayFiltros}
+          >
+            {filtrosMontados.length > 0 ? (
+              <FilterComponent
+                key={resetFiltros}
+                filters={filtrosMontados}
+                onChange={cambiarFiltros}
+                debounceMs={0}
+              />
+            ) : null}
+          </BuscadorFiltros>
+        }
         // R52: el control descarga el CONJUNTO con los filtros vigentes; el callback lo baja
         // el módulo. Las columnas del archivo las declara esta tabla (T A.2).
         descarga={{

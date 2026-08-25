@@ -27,6 +27,7 @@ import { coincideSeccion, useFiltroSecciones } from "./filtro-secciones";
 const CATALOGO_VACIO: CatalogoFiltrosOrdenesDTO = {
   zonas: [],
   tiendas: [],
+  mensajeros: [],
   provincias: [],
   cantones: [],
   distritos: [],
