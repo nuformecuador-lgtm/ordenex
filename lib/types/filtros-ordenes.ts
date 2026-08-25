@@ -48,10 +48,28 @@ export interface GeografiaFiltrosDTO {
   distritos: OpcionConPadre[];
 }
 
-/** Las cinco colecciones del catalogo, cada una en orden determinista (`nombre asc`, R49). */
+/**
+ * Mensajero ofrecido por el filtro de MENSAJERO ASIGNADO (pedido humano 2026-08-25).
+ *
+ * Lleva su `zonaId` porque el control se encadena a la ZONA igual que el canton se encadena
+ * a la provincia (`dependsOn`): elegida una zona, el desplegable solo ofrece a los mensajeros
+ * de esa zona. Es NULLABLE en la tabla (`usuario.zona_id`, feature 24/R6) y por eso lo es
+ * aqui: un mensajero sin zona asignada existe, y el cliente decide que hacer con el.
+ *
+ * Se incluyen los mensajeros INACTIVOS a proposito, por la MISMA razon que las cuentas tienda
+ * inactivas: siguen siendo el mensajero asignado de ordenes historicas, y excluirlos haria
+ * imposible filtrar esas ordenes por quien las llevo.
+ */
+export interface MensajeroFiltroDTO extends OpcionCatalogo {
+  zonaId: string | null;
+}
+
+/** Las colecciones del catalogo, cada una en orden determinista (`nombre asc`, R49). */
 export interface CatalogoFiltrosOrdenesDTO {
   zonas: OpcionCatalogo[];
   tiendas: CuentaTiendaDTO[];
+  /** Mensajeros ofrecidos por el filtro de mensajero asignado; vacio si el rol no lo recibe. */
+  mensajeros: MensajeroFiltroDTO[];
   provincias: OpcionCatalogo[];
   /** `padreId` = provinciaId. */
   cantones: OpcionConPadre[];

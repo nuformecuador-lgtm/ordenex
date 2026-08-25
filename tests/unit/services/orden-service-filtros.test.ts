@@ -261,3 +261,37 @@ describe("filtro REASIGNABLES (interruptor)", () => {
   });
 });
 
+describe("filtro por MENSAJERO (pedido humano 2026-08-25)", () => {
+  it("traduce `mensajero_id` a la columna del mensajero ASIGNADO, como lista", async () => {
+    const where = await whereDe({ mensajero_id: ["m1", "m2"] });
+    expect(where).toEqual({ mensajeroAsignadoId: ["m1", "m2"] });
+    // La clave publica jamas viaja como nombre de columna.
+    expect(Object.keys(where)).toEqual(["mensajeroAsignadoId"]);
+  });
+
+  it("combina en AND con el resto de filtros, sin anular a ninguno", async () => {
+    const where = await whereDe({
+      mensajero_id: ["m1"],
+      zona_id: ["z1"],
+      status_id: ["os-a"],
+    });
+    expect(where).toEqual({
+      estatusId: ["os-a"],
+      zonaId: ["z1"],
+      mensajeroAsignadoId: ["m1"],
+    });
+  });
+
+  it("R36/R37: el rol MENSAJERO sigue acotado a SUS asignadas aunque pida otras", async () => {
+    // El acotamiento por rol se escribe AL FINAL: su id escalar PISA la lista del filtro,
+    // asi que un mensajero no puede usar este filtro para ver las de un companero.
+    const where = await whereDe({ mensajero_id: ["otro-mensajero"] }, MENSAJERO);
+    expect(where.mensajeroAsignadoId).toBe("msg1");
+  });
+
+  it("R36: el adminTienda que lo pida sigue viendo SOLO sus ordenes", async () => {
+    const where = await whereDe({ mensajero_id: ["m1"] }, TIENDA);
+    expect(where.tiendaId).toBe("store1");
+    expect(where.mensajeroAsignadoId).toEqual(["m1"]);
+  });
+});

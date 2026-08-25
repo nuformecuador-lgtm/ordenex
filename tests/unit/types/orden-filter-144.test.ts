@@ -15,11 +15,12 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // el `where`: si el schema lanza, no hay consulta.
 
 describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
-  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables` + `q`)", () => {
+  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables`, `q` y `mensajero_id`)", () => {
     // Este caso es un CENSO: enumera la whitelist entera para que ampliarla sea una
     // decision explicita y no un descuido. La feature 169 la amplio en UNA clave (`q`, el
-    // termino de busqueda, su R1/R19) y por eso se actualiza aqui; el resto del archivo
-    // —incluido "una clave desconocida sigue fallando"— no cambia.
+    // termino de busqueda, su R1/R19) y por eso se actualiza aqui; el pedido humano del
+    // 2026-08-25 la amplia en OTRA, `mensajero_id` (filtro por mensajero asignado). El
+    // resto del archivo —incluido "una clave desconocida sigue fallando"— no cambia.
     expect([...ORDEN_FILTER_FIELDS]).toEqual([
       "status_id",
       "zona_id",
@@ -27,6 +28,7 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
       "provincia_id",
       "canton_id",
       "distrito_id",
+      "mensajero_id",
       "created_preset",
       "created_desde",
       "created_hasta",
@@ -48,10 +50,11 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
     ).toThrow();
   });
 
-  it("R30: acepta las cinco claves de catalogo y las tres temporales", () => {
+  it("R30: acepta las claves de catalogo y las tres temporales", () => {
     const parsed = listarOrdenesSchema.parse({
       filter: {
         zona_id: ["z1"],
+        mensajero_id: ["m1", "m2"],
         tienda_id: ["t1", "t2"],
         provincia_id: ["p1"],
         canton_id: ["c1"],
@@ -62,6 +65,7 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
     });
     expect(parsed.filter).toEqual({
       zona_id: ["z1"],
+      mensajero_id: ["m1", "m2"],
       tienda_id: ["t1", "t2"],
       provincia_id: ["p1"],
       canton_id: ["c1"],
@@ -72,8 +76,12 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
   });
 
   it("R31: una clave fuera de la whitelist sigue produciendo ZodError (no llega a Prisma)", () => {
-    expect(() => ordenFilterSchema.parse({ mensajero_id: ["m1"] })).toThrow(z.ZodError);
-    // Ni el nombre INTERNO de una columna real que ahora si se filtra.
+    expect(() => ordenFilterSchema.parse({ ruta_id: ["r1"] })).toThrow(z.ZodError);
+    // Ni el nombre INTERNO de una columna real que ahora si se filtra. `mensajero_id` dejo
+    // de servir de ejemplo el 2026-08-25 (entro en la whitelist); su nombre interno, no.
+    expect(() => ordenFilterSchema.parse({ mensajeroAsignadoId: ["m1"] })).toThrow(
+      z.ZodError,
+    );
     expect(() => ordenFilterSchema.parse({ zonaId: ["z1"] })).toThrow(z.ZodError);
     expect(() => ordenFilterSchema.parse({ createdAt: "2026-07-01" })).toThrow(z.ZodError);
   });
@@ -215,5 +223,18 @@ describe("sin regresion del contrato previo (R45)", () => {
     expect(
       ordenFilterSchema.parse({ status_id: ["os-a"], zona_id: ["z1"], created_preset: "7d" }),
     ).toEqual({ status_id: ["os-a"], zona_id: ["z1"], created_preset: "7d" });
+  });
+});
+
+describe("filtro por MENSAJERO (pedido humano 2026-08-25)", () => {
+  it("es una LISTA NO VACIA de ids, como el resto de los filtros de catalogo (R32)", () => {
+    expect(ordenFilterSchema.parse({ mensajero_id: ["m1"] })).toEqual({
+      mensajero_id: ["m1"],
+    });
+    // Una lista vacia significaria "ningun mensajero" y degradaria a "sin filtro": falla cerrado.
+    expect(() => ordenFilterSchema.parse({ mensajero_id: [] })).toThrow(z.ZodError);
+    // Tampoco el escalar: esa concesion es exclusiva de `status_id` (retrocompatibilidad).
+    expect(() => ordenFilterSchema.parse({ mensajero_id: "m1" })).toThrow(z.ZodError);
+    expect(() => ordenFilterSchema.parse({ mensajero_id: [""] })).toThrow(z.ZodError);
   });
 });

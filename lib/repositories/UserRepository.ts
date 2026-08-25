@@ -16,7 +16,7 @@ import {
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
 import type { MensajeroDTO } from "@/lib/types/mensajero";
-import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
+import type { CuentaTiendaDTO, MensajeroFiltroDTO } from "@/lib/types/filtros-ordenes";
 
 type UserPrismaClient = Pick<PrismaClient, "usuario" | "tipoIdentificacion" | "rol">;
 
@@ -151,6 +151,23 @@ export class UserRepository implements IUserRepository {
       zonaId: row.zonaId,
       zonaNombre: row.zona?.nombre ?? null,
     }));
+  }
+
+  /**
+   * Pedido humano (2026-08-25): mensajeros del FILTRO de `/ordenes` — TODOS (tambien los
+   * inactivos, que siguen siendo el asignado de ordenes historicas), con su zona y sin PII.
+   * `zonaId` acota la lista a esa zona; sin el, devuelve el pais entero.
+   */
+  async listMensajerosParaFiltro(zonaId?: string): Promise<MensajeroFiltroDTO[]> {
+    const rows = await this.prisma.usuario.findMany({
+      where: {
+        rol: { value: "mensajero" },
+        ...(zonaId !== undefined ? { zonaId } : {}),
+      },
+      select: { id: true, nombre: true, zonaId: true },
+      orderBy: { nombre: "asc" }, // R49: orden determinista
+    });
+    return rows.map((r) => ({ id: r.id, nombre: r.nombre, zonaId: r.zonaId }));
   }
 
   /** Feature 25/R13/R14/R15: listado paginado con `rolValue`, sin hash. */

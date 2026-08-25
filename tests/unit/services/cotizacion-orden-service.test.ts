@@ -911,9 +911,12 @@ describe("CotizacionOrdenService — tarifa por zona (feature 274, R32-R38)", ()
     // carga y la cotizacion emitan la MISMA).
     expect(FUENTE_SERVICE).not.toContain(MSG_FILA_SIN_TARIFA);
     expect(FUENTE_SERVICE).toContain("MSG_FILA_SIN_TARIFA");
-    // (El bloque de imports queda fuera de `FUENTE_SERVICE`: el docstring de cabecera cita
-    // `next/*` y el quitador de comentarios se come desde ahi hasta el primer `*/`. Lo que
-    // importa igual esta afirmado arriba: la cadena emitida ES la constante, por identidad.)
+    // (Aqui decia que el bloque de imports quedaba FUERA de `FUENTE_SERVICE` porque el docstring
+    // de cabecera cita `next/*` y el quitador se comia desde ahi hasta el primer `*/`. Era cierto
+    // y era el defecto que la ficha 283 cerro el 2026-08-25: el quitador ya no abre bloque con un
+    // `/*` que vive dentro de un comentario o de una cadena, asi que `FUENTE_SERVICE` SI incluye
+    // los imports y el rodeo que esta nota explicaba ya no hace falta. La asercion no cambia: lo
+    // que importa sigue estando afirmado arriba, la cadena emitida ES la constante, por identidad.)
   });
 });
 

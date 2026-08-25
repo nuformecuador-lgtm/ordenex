@@ -118,6 +118,7 @@ export class RecepcionSateliteService implements IRecepcionSateliteService {
     return {
       zonaId,
       estatusValues: estadosDelListado(input.estados), // la lista blanca de los cinco (R44)
+      ...(input.mensajero_id ? { mensajeroIds: input.mensajero_id } : {}),
       ...(input.provincia_id ? { provinciaIds: input.provincia_id } : {}),
       ...(input.canton_id ? { cantonIds: input.canton_id } : {}),
       ...(input.distrito_id ? { distritoIds: input.distrito_id } : {}),

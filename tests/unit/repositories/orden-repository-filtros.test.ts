@@ -221,3 +221,26 @@ describe("filtro REASIGNABLES -> predicado compuesto", () => {
   });
 });
 
+describe("mensajero asignado: escalar vs lista (pedido humano 2026-08-25)", () => {
+  it("una LISTA de mensajeros se traduce a `IN (...)`, como el resto de catalogos", async () => {
+    const { findMany, count } = await whereDe({ mensajeroAsignadoId: ["m1", "m2"] });
+    expect(findMany.mensajeroAsignadoId).toEqual({ in: ["m1", "m2"] });
+    // El conteo usa EXACTAMENTE el mismo where: la paginacion no puede mentir.
+    expect(count).toEqual(findMany);
+  });
+
+  it("un ESCALAR sigue siendo igualdad (acotamiento por rol del mensajero, sin regresion)", async () => {
+    const { findMany } = await whereDe({ mensajeroAsignadoId: "m1" });
+    expect(findMany.mensajeroAsignadoId).toBe("m1");
+  });
+
+  it("`reasignables` sigue exigiendo SIN mensajero aunque llegue la lista del filtro", async () => {
+    // `reasignables` se escribe despues y fija `null`: "esperan mensajero" y "las de estos
+    // mensajeros" son incompatibles a proposito, y gana el predicado de despacho.
+    const { findMany } = await whereDe({
+      mensajeroAsignadoId: ["m1"],
+      reasignables: true,
+    });
+    expect(findMany.mensajeroAsignadoId).toBeNull();
+  });
+});

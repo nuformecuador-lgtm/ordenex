@@ -38,6 +38,7 @@ vi.mock("@/lib/actions/ordenes-guia", () => ({
 }));
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "Central" }],
   tiendas: [],
   provincias: [{ id: "p1", nombre: "San José" }],

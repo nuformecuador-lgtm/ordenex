@@ -163,6 +163,18 @@ describe("RecepcionSateliteService.listarOrdenesBodegaCompleto (feature 184, T A
     expect(ids(r.items)).toEqual(["a-06", "a-11"]);
   });
 
+  it("el filtro por MENSAJERO viaja al repositorio (pedido humano 2026-08-25)", async () => {
+    const { repo, filtros } = repoSateliteEnMemoria();
+    const r = await servicio(repo).listarOrdenesBodegaCompleto(
+      { mensajero_id: ["m1", "m2"] },
+      SAT_A,
+    );
+    if (r.status !== "ok") throw new Error("no ok");
+    expect(filtros[0]!.filtro.mensajeroIds).toEqual(["m1", "m2"]);
+    // Y el alcance sigue saliendo del ACTOR: el filtro acota dentro de su zona, no la cambia.
+    expect(filtros[0]!.filtro.zonaId).toBe("z-a");
+  });
+
   it("la lista blanca de estados sigue siendo la de la página: un estado ajeno no amplía nada", async () => {
     const svc = servicio(repoSateliteEnMemoria().repo);
 

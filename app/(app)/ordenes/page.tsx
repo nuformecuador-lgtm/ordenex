@@ -78,8 +78,8 @@ export default async function OrdenesPage() {
   // `/recepcion-satelite`. Hoy, en la práctica, sólo maestro/admin tienen desde dónde reportar.
   const puedeReportarIncidente = rol ? esAccesoTotal(rol) : false;
 
-  // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda y
-  // geografía) se resuelve AQUÍ, en el servidor, tras las guardias de rol; sus cinco
+  // Feature 144/TB2.5 (R47, R64): el catálogo de los filtros (zonas, cuentas tienda,
+  // mensajeros y geografía) se resuelve AQUÍ, en el servidor, tras las guardias de rol; sus
   // lecturas corren en paralelo dentro del service y el resultado baja por props, de
   // modo que los filtros están operativos en el primer paint, sin una petición
   // posterior ni una consulta por cada selección del usuario.
@@ -94,6 +94,11 @@ export default async function OrdenesPage() {
   // mensajero): solo le sirve a quien reasigna mensajeros. `adminTienda` no opera esa
   // transición, así que el interruptor no se le declara.
   const incluirFiltroReasignables = rol !== RolValue.adminTienda;
+  // Pedido humano (2026-08-25): filtro por MENSAJERO asignado, encadenado a la zona. Se le
+  // declara a quien despacha (maestro/admin) y NO al `adminTienda`, por la misma razón que el
+  // de tienda: el directorio de mensajeros es del personal interno y su catálogo tampoco se lo
+  // entrega, así que el control se le montaría vacío.
+  const incluirFiltroMensajero = rol !== RolValue.adminTienda;
 
   // Feature 246 (T4.2, R5/R29): las etiquetas del selector de día se resuelven AQUÍ, en el
   // servidor, con el día de Costa Rica. No bajan como `Date` ni como instante: bajan como las dos
@@ -123,6 +128,7 @@ export default async function OrdenesPage() {
           catalogoFiltros={catalogoFiltros}
           incluirFiltroTienda={incluirFiltroTienda}
           incluirFiltroReasignables={incluirFiltroReasignables}
+          incluirFiltroMensajero={incluirFiltroMensajero}
           puedeReportarIncidente={puedeReportarIncidente}
           fechasDiaReparto={fechasDiaReparto}
         />
