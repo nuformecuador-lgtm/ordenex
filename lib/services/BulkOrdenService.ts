@@ -45,7 +45,7 @@ import {
   type GeoInputExtractor,
   type GeoResult,
 } from "@/lib/services/geo-resolucion";
-import { parseDireccionDestinatario } from "@/lib/utils/direccion-destinatario";
+import { parseCantonDistrito } from "@/lib/utils/canton-distrito";
 import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 
 // FEATURE 155/R19/R22: la constante `ESTATUS_INICIAL_API` (= `en_ruta_bodega_central`) se
@@ -54,14 +54,32 @@ import { costoEnvioDeTarifa } from "@/lib/utils/ingreso-ordenex";
 // hubiera recolectado. Las tres vias comparten ahora el mismo punto de decision
 // (`resolverDestinoCreacion`), aplicado sobre el dueño de la orden.
 
-// R29: via sesion. La terna sale de parsear `direccion_destinatario`; cualquier
-// fallo de formato es un fieldError bajo esa misma clave (fila a error, R30).
-function geoInputDesdeDireccionUnificada(raw: RawRow): GeoInput {
-  const parsed = parseDireccionDestinatario(raw.direccion_destinatario ?? "");
-  if (!parsed.ok) {
-    return { ok: false, fieldErrors: { direccion_destinatario: [parsed.mensaje] } };
+// Feature 276/R22-R26: via sesion, plantilla v3. La provincia llega en su propia
+// columna y el par canton/distrito sale de parsear `canton_distrito`; cada fallo es
+// un fieldError bajo LA CLAVE DE SU COLUMNA, para que el usuario sepa que celda
+// corregir (fila a error, sin llegar a resolveGeo).
+//
+// NO se unifica con `geoInputDesdeColumnasSeparadas` pese a lo parecidos que quedaron
+// (la unica diferencia es `canton_distrito` partido vs `canton`/`distrito` sueltos):
+// aquel es el contrato PUBLICO de la feature 88 y fundirlos volveria a dar un solo
+// dueño a dos contratos que ya divergieron una vez —la 142 los separo por eso mismo—
+// y que pueden volver a divergir. Son dos vias, dos extractores.
+function geoInputDesdeCantonDistrito(raw: RawRow): GeoInput {
+  const provincia = (raw.provincia ?? "").trim();
+  if (provincia === "") {
+    return { ok: false, fieldErrors: { provincia: ["provincia es obligatoria"] } };
   }
-  return { ok: true, ...parsed.partes };
+  const parsed = parseCantonDistrito(raw.canton_distrito ?? "");
+  if (!parsed.ok) {
+    return { ok: false, fieldErrors: { canton_distrito: [parsed.mensaje] } };
+  }
+  return {
+    ok: true,
+    provincia,
+    canton: parsed.partes.canton,
+    distrito: parsed.partes.distrito,
+    direccion: (raw.direccion ?? "").trim(),
+  };
 }
 
 interface PreloadedContext {
@@ -135,9 +153,10 @@ export class BulkOrdenService implements IBulkOrdenService {
 
     rows.forEach((raw, idx) => {
       const fila = idx + 1;
-      // Feature 142: la via sesion deriva la geografia de `direccion_destinatario`
-      // (plantilla v2, corte duro D1: no hay camino desde las columnas viejas).
-      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeDireccionUnificada);
+      // Feature 276: la via sesion deriva la geografia de `provincia` +
+      // `canton_distrito` (plantilla v3, corte duro: no hay camino desde la columna
+      // unica de la v2 ni desde las columnas de la v1).
+      const result = this.resolveFila(raw, ctx, seen, geoInputDesdeCantonDistrito);
       if (result.status === "error") {
         filas.push({ fila, numRemision: result.numRemision, resultado: "error", errores: result.errores });
         return;
@@ -491,8 +510,8 @@ export class BulkOrdenService implements IBulkOrdenService {
     }
     const data = parsed.data;
 
-    // Feature 142/R29: si el extractor de la via falla (p. ej. formato invalido de
-    // `direccion_destinatario`), la fila va a error con SU clave, sin llegar a
+    // Feature 142/R29 (276/R26): si el extractor de la via falla (p. ej. formato
+    // invalido de `canton_distrito`), la fila va a error con SU clave, sin llegar a
     // resolveGeo. Si tiene exito, resolveGeo recibe exactamente los mismos 3
     // nombres de siempre (R33-R36, mensajes intactos).
     const geoInput = geoInputOf(raw);

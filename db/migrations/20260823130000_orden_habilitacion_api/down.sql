@@ -1,0 +1,16 @@
+-- DOWN (feature 266) — revierte EXACTAMENTE migration.sql. `DROP TABLE` arrastra la PK
+-- (`orden_habilitacion_api_pkey`), los dos indices
+-- (`orden_habilitacion_api_orden_id_created_at_idx`,
+-- `orden_habilitacion_api_actor_usuario_id_idx`), las dos FK (a `orden` y a `usuario`) y la RLS.
+-- Mismo texto y mismo razonamiento que el `down.sql` de `orden_nota`.
+--
+-- No lleva DROP TYPE: esta migracion NO crea ningun tipo. El valor de enum `habilitacion_api` lo
+-- anade la migracion ANTERIOR (`20260823120000_orden_historial_origen_habilitacion_api`) y se
+-- retira con SU propio down, que ademas aborta ruidosamente si quedan filas usandolo (R30).
+--
+-- DESTRUCTIVO Y ACEPTADO: se lleva la bitacora de auditoria entera. Es lo correcto para un
+-- rollback de esta migracion —la tabla nace con ella y no habia dato previo que preservar— pero
+-- hay que decirlo: las notas de las habilitaciones de la rama B NO viven en ningun otro sitio (D6:
+-- la nota no se copia al `motivo` del historial). Lo que SI sobrevive es la fila de historial de
+-- la rama A, que sigue probando quien y cuando.
+DROP TABLE IF EXISTS "orden_habilitacion_api";

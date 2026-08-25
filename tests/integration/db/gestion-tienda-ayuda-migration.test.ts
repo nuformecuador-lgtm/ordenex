@@ -144,9 +144,10 @@ describe("Feature 237 · el DOWN deja la base legible por el codigo anterior (R4
     // `down.sql` —seria una foto historica— sino nombrar el valor nuevo aqui». Eso es exactamente
     // lo que se hace: `rechazo_tienda` (240) entra en la lista de POSTERIORES y el `down.sql` de
     // la 237 no se toca ni una linea.
-    // feature 240 (2026-08-20) y feature 276 (2026-08-24). Este `down.sql` NO se toca en
-    // ninguna de las dos: lo que crece es el conjunto que se descuenta del SEED vigente.
-    const POSTERIORES = ["rechazo_tienda", "rechazo_tope_intentos"];
+    // ⏳ 2026-08-23 (feature 266) y 2026-08-24 (feature 276) — segunda y tercera vez que pasa
+    // lo mismo, y se resuelve igual: los valores nuevos entran en POSTERIORES y el `down.sql`
+    // de la 237 sigue sin tocarse. Lo que crece es el conjunto que se descuenta del SEED vigente.
+    const POSTERIORES = ["rechazo_tienda", "habilitacion_api", "rechazo_tope_intentos"]; // 240 (2026-08-20) · 266 (2026-08-23) · 276 (2026-08-24)
     expect(new Set(valores)).toEqual(
       new Set(
         (ORDEN_HISTORIAL_ORIGEN_TIPO_SEED as readonly string[]).filter(

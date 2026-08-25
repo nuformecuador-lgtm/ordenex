@@ -44,8 +44,17 @@
 -- corrido. Es el comportamiento esperado de una cadena de rollbacks: cada down devuelve la base al
 -- estado de SU momento. Quinta ficha seguida que pasa por aqui sin retocar una foto historica.
 --
--- La lista de abajo es el enum ANTES de esta migracion: los 31 valores vigentes (los 30 previos a
--- la 240 mas `rechazo_tienda`), sin `rechazo_tope_intentos`.
+-- ⏳ 2026-08-24 — CORREGIDO AL MERGEAR LA 266. Esta lista se escribio cuando esta migracion era la
+-- ULTIMA del enum, y por eso tenia 31 valores. La feature 266
+-- (`20260823120000_orden_historial_origen_habilitacion_api`) lleva un timestamp ANTERIOR, asi que
+-- `prisma migrate deploy` la aplica PRIMERO: en el momento en que corre ESTA migracion el enum ya
+-- tiene 32 valores, `habilitacion_api` incluido. NO es una foto historica que se deba respetar
+-- —seria la foto de un instante que no existe—, sino la lista del estado real previo a este up.
+-- Dejarla en 31 haria que este down BORRARA `habilitacion_api` del tipo, un valor que este up
+-- nunca anadio.
+--
+-- La lista de abajo es el enum ANTES de esta migracion: los 32 valores vigentes (los 30 previos a
+-- la 240, mas `rechazo_tienda` y mas `habilitacion_api`), sin `rechazo_tope_intentos`.
 ALTER TYPE "orden_historial_origen_tipo" RENAME TO "orden_historial_origen_tipo_old";
 CREATE TYPE "orden_historial_origen_tipo" AS ENUM (
   'carga_masiva',
@@ -78,7 +87,8 @@ CREATE TYPE "orden_historial_origen_tipo" AS ENUM (
   'solicitud_ayuda_tienda',
   'rescate_ayuda_tienda',
   'gestion_tienda_ayuda',
-  'rechazo_tienda'
+  'rechazo_tienda',
+  'habilitacion_api'
 );
 ALTER TABLE "orden_historial_estado"
   ALTER COLUMN "origen_tipo" TYPE "orden_historial_origen_tipo"

@@ -100,7 +100,7 @@ describe("276/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () 
     expect(sentenciasDe(up)).toHaveLength(1);
   });
 
-  it("R36 — el DOWN RECREA el tipo con los 31 valores previos, SIN el nuevo", () => {
+  it("R36 — el DOWN RECREA el tipo con los 32 valores previos, SIN el nuevo", () => {
     // La forma se copio del down del PROPIO enum en la 239 y la 237 (las dos RECREAN con la lista,
     // no eliminan), que es lo que la task exige mirar antes de escribir este fichero.
     expect(enumDown).toMatch(
@@ -111,7 +111,13 @@ describe("276/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () 
     );
     expect(match).not.toBeNull();
     const valores = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    expect(valores).toHaveLength(31);
+    // ⏳ 2026-08-24 (merge de la 266): 31 -> 32. La 266 lleva timestamp ANTERIOR (0823) a esta
+    // (0824), asi que se aplica PRIMERO y `habilitacion_api` YA esta en el enum cuando corre este
+    // up. Aqui NO valia la salida habitual de «anadir el valor nuevo a POSTERIORES»: eso sirve
+    // para migraciones que van DESPUES: esta va antes, y dejar su down en 31 lo haria borrar un
+    // valor que su up jamas anadio. Por eso se corrige el `down.sql`, y esta es la asercion que
+    // lo obliga.
+    expect(valores).toHaveLength(32);
     expect(valores).not.toContain(FAMILIA);
     // La lista del down es EXACTAMENTE el SEED de hoy menos el valor que esta migracion anade. Si
     // manana llega una familia nueva, este `down.sql` NO se toca (es una foto historica): lo que se
@@ -174,6 +180,9 @@ describe("276/T2 · enum — la forma de `rechazo_tope_intentos` (R22/R36)", () 
       ["_orden_historial_origen_ayuda_tienda", 27],
       ["_orden_historial_origen_gestion_tienda_ayuda", 29],
       ["_orden_historial_origen_rechazo_tienda", 30],
+      // ⏳ 2026-08-24 (merge de la 266): la 0823 tambien es ANTERIOR a esta y por tanto entra en el
+      // censo. Su down recrea con los 31 valores previos a `habilitacion_api`, y sigue intacto.
+      ["_orden_historial_origen_habilitacion_api", 31],
     ];
     for (const [sufijo, cuantos] of huellas) {
       const down = fs.readFileSync(path.join(migrationDirFor(sufijo), "down.sql"), "utf8");
@@ -368,12 +377,14 @@ describeSiHayBase("276/T2 · el DDL corre de verdad (Postgres real)", () => {
     expect(new Set(enumDePublic)).toEqual(new Set(ORDEN_HISTORIAL_ORIGEN_TIPO_SEED));
   });
 
-  it("el UP anade el valor: 31 labels antes, 32 despues, y el nuevo es el ultimo", () => {
-    expect(medicion.antesDelUp).toHaveLength(31);
+  it("el UP anade el valor: 32 labels antes, 33 despues, y el nuevo es el ultimo", () => {
+    // ⏳ 2026-08-24 (merge de la 266): 31 -> 32 antes y 32 -> 33 despues. La 266 (0823) se aplica
+    // ANTES que esta (0824), asi que su valor ya esta en el enum cuando corre este up.
+    expect(medicion.antesDelUp).toHaveLength(32);
     expect(medicion.antesDelUp).not.toContain(FAMILIA);
-    expect(medicion.despuesDelUp).toHaveLength(32);
+    expect(medicion.despuesDelUp).toHaveLength(33);
     expect(medicion.despuesDelUp).toContain(FAMILIA);
-    expect(medicion.despuesDelUp[31]).toBe(FAMILIA);
+    expect(medicion.despuesDelUp[32]).toBe(FAMILIA); // ultimo de 33 (indice 32 tras el merge de la 266)
   });
 
   it("R36 — el DOWN EJECUTA y deja el enum EXACTAMENTE como estaba antes del UP", () => {

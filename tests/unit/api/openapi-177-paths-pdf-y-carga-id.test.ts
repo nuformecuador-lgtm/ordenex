@@ -89,7 +89,17 @@ const PATH_COTIZACION = "/api/ordenes/api-key/cotizacion";
 // Un endpoint que sirve cifras y no está en el contrato publicado es una cifra sin contrato.
 const PATH_ANALITICA = "/api/ordenes/api-key/analitica";
 
-/** Los 9 endpoints que el canal por API key publica tras la 177, la 255 y la 267. */
+// ALTA de la feature 266 (R28) — el DECIMO endpoint del canal, y el alta se hace con la misma
+// regla que la de la 255 y la 267: la lista estaba firmada en NUEVE, publicar la habilitación la
+// puso ROJA, y sube a DIEZ A PROPÓSITO en el MISMO commit que publica el endpoint. Qué se añadió
+// y por qué: `POST /api/ordenes/api-key/habilitar` habilita en lote pedidos con novedad —el
+// integrador manda `{ num_guia, nota }` y recibe, fila por fila, si la orden volvió a
+// `en_reparto` o si solo quedó registrada la habilitación—. Es un borde de ESCRITURA del mismo
+// canal, con la misma key, así que un integrador que no lo encuentre en el contrato publicado no
+// puede usarlo.
+const PATH_HABILITAR = "/api/ordenes/api-key/habilitar";
+
+/** Los 10 endpoints que el canal por API key publica tras la 177, la 255, la 267 y la 266. */
 const PATHS_ESPERADOS = [
   "/api/ordenes/api-key/carga",
   "/api/ordenes/api-key",
@@ -100,13 +110,14 @@ const PATHS_ESPERADOS = [
   PATH_PDF_CARGA,
   PATH_COTIZACION,
   PATH_ANALITICA,
+  PATH_HABILITAR,
 ];
 
-describe("177/R41 + 255/R47 + 267/R39 — el OpenAPI publica los nueve endpoints del canal por API key", () => {
+describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez endpoints del canal", () => {
   const clavesTs = Object.keys(openApiSpec.paths);
 
-  it("el objeto TS declara exactamente nueve paths, uno por endpoint, y ninguno más", () => {
-    expect(clavesTs).toHaveLength(9);
+  it("el objeto TS declara exactamente diez paths, uno por endpoint, y ninguno más", () => {
+    expect(clavesTs).toHaveLength(10);
     expect(clavesTs).toEqual(PATHS_ESPERADOS);
   });
 
@@ -116,7 +127,7 @@ describe("177/R41 + 255/R47 + 267/R39 — el OpenAPI publica los nueve endpoints
     expect(clavesTs).toContain(PATH_PDF_CARGA);
   });
 
-  it("el .yaml publicado declara los mismos nueve paths, en el mismo orden", () => {
+  it("el .yaml publicado declara los mismos diez paths, en el mismo orden", () => {
     expect(pathsDelYaml()).toEqual(PATHS_ESPERADOS);
   });
 
@@ -396,12 +407,10 @@ function parametroDeAnalitica(nombre: string): ParametroOpenApi {
   return p;
 }
 
-describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto TS y en el .yaml", () => {
-  it("los dos artefactos declaran nueve paths, el mismo noveno y en la misma posición", () => {
+describe("267/R39 — la analítica es el NOVENO endpoint del canal, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran el mismo noveno path, en la misma posición", () => {
     const clavesTs = Object.keys(openApiSpec.paths);
     const clavesYaml = pathsDelYaml();
-    expect(clavesTs).toHaveLength(9);
-    expect(clavesYaml).toHaveLength(9);
     expect(clavesTs[8]).toBe(PATH_ANALITICA);
     expect(clavesYaml[8]).toBe(PATH_ANALITICA);
     expect(clavesYaml).toEqual(clavesTs);
@@ -560,5 +569,32 @@ describe("267/R39 — el canal por API key publica NUEVE endpoints, en el objeto
     expect(bloque.some((l) => l.includes('$ref: "#/components/schemas/AnaliticaSerie"'))).toBe(
       true,
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Feature 266 (R28) — la habilitación por lote, publicada. El canal pasa de NUEVE a DIEZ
+// endpoints, y la afirmación se hace sobre los DOS artefactos: el objeto TS y el `.yaml`, en el
+// mismo orden y en la misma posición. Mismo criterio que la 255 y la 267: un endpoint de
+// ESCRITURA que existe y no está publicado es un contrato que solo conoce quien leyó el código.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("266/R28 — el canal por API key publica DIEZ endpoints, en el objeto TS y en el .yaml", () => {
+  it("los dos artefactos declaran diez paths, el mismo décimo y en la misma posición", () => {
+    const clavesTs = Object.keys(openApiSpec.paths);
+    const clavesYaml = pathsDelYaml();
+    expect(clavesTs).toHaveLength(10);
+    expect(clavesYaml).toHaveLength(10);
+    expect(clavesTs[9]).toBe(PATH_HABILITAR);
+    expect(clavesYaml[9]).toBe(PATH_HABILITAR);
+    // Espejo exacto: el .yaml es un archivo de texto y nada más lo mantiene sincronizado.
+    expect(clavesYaml).toEqual(clavesTs);
+  });
+
+  it("el décimo endpoint es POST y devuelve HabilitacionResponse", () => {
+    const operacion = openApiSpec.paths[PATH_HABILITAR];
+    expect(Object.keys(operacion)).toEqual(["post"]);
+    expect(operacion.post.responses["200"].content["application/json"].schema).toEqual({
+      $ref: "#/components/schemas/HabilitacionResponse",
+    });
   });
 });

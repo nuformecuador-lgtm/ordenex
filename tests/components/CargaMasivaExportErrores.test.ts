@@ -63,12 +63,12 @@ describe("motivoErrorDeFila", () => {
   it("R6/R8: varios campos se separan con '; ' y el prefijo aparece UNA sola vez", () => {
     const texto = motivoErrorDeFila(
       error(12, "REM-12", {
-        direccion_destinatario: ["distrito no encontrado"],
+        canton_distrito: ["distrito no encontrado"],
         monto_cobrar: ["debe ser numérico y no negativo"],
       }),
     );
     expect(texto).toBe(
-      "Fila 12 — direccion_destinatario: distrito no encontrado; monto_cobrar: debe ser numérico y no negativo",
+      "Fila 12 — canton_distrito: distrito no encontrado; monto_cobrar: debe ser numérico y no negativo",
     );
     expect(texto.match(/Fila 12/g)).toHaveLength(1);
     expect(texto.match(/Fila /g)).toHaveLength(1);
@@ -102,7 +102,9 @@ describe("construirFilasErrorExport", () => {
     fila(1, {
       destinatario: "Ana",
       telefono: "8888",
-      direccion_destinatario: "CR / SJ / SJ (Carmen) / 100m sur",
+      provincia: "San José",
+      canton_distrito: "San José (Carmen)",
+      direccion: "100m sur",
       monto_cobrar: "abc",
       producto: "Camisa",
       num_remision: "REM-1",
@@ -150,7 +152,7 @@ describe("construirFilasErrorExport", () => {
     expect(salida).toHaveLength(1);
     expect(salida[0]?.num_remision).toBe("REM-HUERFANA");
     expect(salida[0]?.destinatario).toBe("");
-    expect(salida[0]?.direccion_destinatario).toBe("");
+    expect(salida[0]?.canton_distrito).toBe("");
   });
 
   it("R5: línea sin correspondencia → fila degradada y el resto se sigue generando", () => {
