@@ -265,3 +265,21 @@ llevaba oculta ahí. **Se pide la regla por adelantado**: ¿se arregla dentro de
 (y se dice en la bitácora), o se revierte solo esa línea y se abre ficha aparte con el
 hallazgo? La tarea que lo mide (T-Q4.3) se detiene y pregunta si esto ocurre.
 
+
+---
+
+## P1 — FIRMADA el 2026-08-24
+
+**Pregunta:** al cerrar el comentario de la línea 228 de `lib/auth/menu-visibility.ts`, ~150 líneas
+dejan de estar ocultas para **todas** las guardias que escanean fuentes. Si alguna se pone roja, es
+una violación que llevaba ahí escondida — no un daño de esta ficha.
+
+**Decisión del humano: se arregla DENTRO de la 278.** Lo que salga rojo se cierra en esta misma
+ficha y sale todo junto.
+
+**Lo que eso obliga, y no es opcional:** cada violación destapada se escribe en la bitácora **con su
+nombre, su regla y su tamaño**, y se dice **desde cuándo estaba escondida** si se puede averiguar.
+Un hallazgo ajeno resuelto dentro de una ficha de pantalla es exactamente lo que se pierde de vista
+después; que salga junto no puede significar que salga sin contar. Si lo que aparece toca **roles o
+visibilidad del menú**, se para igualmente y se avisa antes de arreglarlo: eso ya no es deuda de
+formato.
