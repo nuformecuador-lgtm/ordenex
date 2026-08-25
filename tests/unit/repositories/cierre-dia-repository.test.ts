@@ -1519,6 +1519,9 @@ const TARIFA_T1: TarifaVigenteResuelta = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 // Feature 274 — las filas de `tarifas` con las que se alimenta el doble del resolver.
@@ -1891,6 +1894,10 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
       "zonaId",
       "tiendaId",
       "esCentral",
+      // 2026-08-25: la marca del distrito y los dos pactos entran en la formula, asi que
+      // entran en el snapshot. Un cierre viejo re-derivado con la tarifa de HOY es el
+      // descuadre invisible que este congelado existe para impedir.
+      "esZonaEspecial",
       "tarifaId",
       "tarifaValorFlete",
       "tarifaValorFleteGam",
@@ -1900,6 +1907,8 @@ describe("Feature 69 — crearCierre puebla cierre_detail (R3-R9/R11)", () => {
       "tarifaIvaFlete",
       "tarifaIvaComisionCod",
       "tarifaFulfillment",
+      "tarifaEspecial",
+      "tarifaEspecialDevuelta",
       "numGuia",
       "numRemision",
       "destinatario",

@@ -24,6 +24,7 @@ function dto(overrides: Partial<TarifaDTO> = {}): TarifaDTO {
     ivaFlete: 15,
     ivaComisionCod: 15,
     tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
     zonaId: null,
     isDefault: false,
     createdAt: new Date("2026-01-01"),
@@ -77,6 +78,7 @@ describe("crear — matriz de autorizacion (R9-R13/R16)", () => {
     expect(repo.create).toHaveBeenCalledWith({
       ...crearInput(),
       tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
       zonaId: null,
       isDefault: false,
     });

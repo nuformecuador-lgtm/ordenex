@@ -360,6 +360,9 @@ describe("CierresAdminService.verCierreDetalle — ingreso y ganancia", () => {
       montoCobrar: null,
       cobraComision: false,
       esCentral: false,
+      esZonaEspecial: false,
+      fleteOrigen: "normal",
+      fleteDevolucionOrigen: "normal",
       flete: null,
       ivaFlete: null,
       fleteDevolucion: null,
@@ -941,6 +944,9 @@ describe("CierresAdminService.aprobarCierre — alimenta el ledger por tienda (f
     comisionCod: "5.00",
     ivaFlete: "13.00",
     ivaComisionCod: "13.00",
+    // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+    tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
   };
 
   // Prisma doble: cierreDia.updateMany/count/findUnique + gestionOrden.findMany + createMany de
@@ -1418,6 +1424,9 @@ describe("Feature 158 · verCierreDetalle — el incidente es un grupo PROPIO (R
               montoCobrar: "50000.00",
               cobraComision: true,
               esCentral: true,
+              esZonaEspecial: false,
+              fleteOrigen: "normal",
+              fleteDevolucionOrigen: "normal",
               flete: null,
               ivaFlete: null,
               fleteDevolucion: null,

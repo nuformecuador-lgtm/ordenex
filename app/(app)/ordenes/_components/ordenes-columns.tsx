@@ -161,10 +161,30 @@ export const ordenesColumns: Column<OrdenListItemDTO>[] = [
   {
     id: "flete",
     value: "Flete + IVA",
-    // STRING ya derivado por el servidor (flete GAM o estándar según la zona + su IVA).
-    // Sin tarifa activa el servidor manda "0.00", y un DTO viejo sin el campo cae al ₡0,00
-    // de PriceLabel: la misma degradación segura de siempre (R9).
-    render: (row) => <PriceLabel value={row.fleteConIva} />,
+    // STRING ya derivado por el servidor (monto pactado del distrito especial, o flete GAM /
+    // estándar según la zona, + su IVA). Sin tarifa activa el servidor manda "0.00", y un DTO
+    // viejo sin el campo cae al ₡0,00 de PriceLabel: la misma degradación segura de siempre (R9).
+    //
+    // El marcador de al lado NO es decorativo. `especial_sin_pacto` significa que el distrito
+    // está marcado como zona especial pero la tarifa que le toca no tiene monto pactado, así
+    // que se cobró la tarifa NORMAL: el importe es idéntico al de una orden corriente y sin
+    // esta marca el hueco de configuración sería invisible justo en la pantalla donde alguien
+    // podría notarlo. `especial` (se cobró el pacto) no se señala: ahí el sistema hizo lo
+    // que se le pidió.
+    render: (row) => (
+      <span className="inline-flex items-center gap-1.5">
+        <PriceLabel value={row.fleteConIva} />
+        {row.fleteOrigen === "especial_sin_pacto" ? (
+          <span
+            className="text-amber-600 dark:text-amber-500"
+            title="Distrito marcado como zona especial, pero la tarifa no tiene tarifa especial pactada: se cobró la tarifa normal."
+            aria-label="Zona especial sin tarifa especial pactada"
+          >
+            ⚠
+          </span>
+        ) : null}
+      </span>
+    ),
   },
   {
     id: "fulfillment",

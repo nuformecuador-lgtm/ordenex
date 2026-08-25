@@ -503,6 +503,11 @@ export interface DistritoRow {
   // columna del flete (`valorFleteGam` si central) al tarifar la carga por API SIN N+1. `false`
   // cuando el distrito no resuelve UNA zona (0 o >1 zonas -> `zonaId` null -> no se tarifa).
   esCentral: boolean;
+  // Marca `zona_especial` del DISTRITO (2026-08-25). Viaja junto a `esCentral` y por el mismo
+  // motivo: las dos deciden QUE MONTO es el flete al tarifar la carga y la cotizacion, sin
+  // N+1. Ya normalizada a dos valores (`zona_especial IS TRUE`); la columna de origen es
+  // nullable y `null` NO es especial.
+  esZonaEspecial: boolean;
 }
 
 // Feature 32 — fila proyectada para armar la etiqueta de guia (R1). Trae los
@@ -957,10 +962,13 @@ export interface IOrdenRepository {
   // --- Feature 15: carga masiva (metodos batch, R19/R21/R22/R25/R27) ---
 
   /**
-   * R25: remisiones ya existentes (orden no borrada) de entre las provistas.
+   * R25: remisiones ya existentes (orden no borrada) DE ESA TIENDA de entre las provistas.
    * Mapa num_remision -> estatus.value de la orden existente.
+   *
+   * `tiendaId` es obligatorio: `num_remision` es unico POR TIENDA, no global (migracion
+   * 20260825160000). Sin scope, una orden de otra tienda produciria un falso `duplicada`.
    */
-  findExistingRemisiones(nums: string[]): Promise<Map<string, string>>;
+  findExistingRemisiones(nums: string[], tiendaId: string): Promise<Map<string, string>>;
   /**
    * R19/R21: TODAS las provincias (catálogo pequeño). El match por nombre lo hace el
    * service normalizando ambos lados (`normalizeName`: minúsculas + sin acentos), por

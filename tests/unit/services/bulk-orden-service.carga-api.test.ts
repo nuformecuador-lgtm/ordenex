@@ -36,6 +36,9 @@ const TARIFA: TarifaVigenteResuelta = {
   comisionCod: "5.00",
   ivaFlete: "12.00", // 12%
   ivaComisionCod: "12.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 // Feature 274/R25 — tarifa DISTINTA para la zona `z2`: es lo que permite comprobar que dos
@@ -47,6 +50,13 @@ const TARIFA_Z2: TarifaVigenteResuelta = {
   valorFlete: "10.00", // -> costoEnvio no-central = 10.00 + 12% = "11.20"
   valorFleteGam: "20.00",
 };
+
+/**
+ * FULFILLMENT (2026-08-25) — la MISMA tarifa de z1 pero con monto de fulfillment. Es el unico
+ * dato que cambia donde nace la orden por esta via: `fulfillment > 0` -> la tienda hace
+ * fulfillment -> `en_preparacion` sin guia. El monto (2.00) tambien se suma a `costoEnvio`.
+ */
+const TARIFA_FULFILLMENT: TarifaVigenteResuelta = { ...TARIFA, fulfillment: "2.00" };
 
 /**
  * Fake del resolver de la CASCADA (R1-R7). Se le da un mapa `zonaId -> tarifa`; todo par cuya
@@ -287,36 +297,42 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
   });
 
   // Feature 155/R19/R20/R22 — el caso de la 88 no se borra: se INVIERTE. Donde decia "estado
-  // inicial FIJO, no consulta fulfillment" ahora dice "estado resuelto por el flag del dueño".
-  it("155/R19/R20: consulta el flag del dueño de la key y nace en por_recolectar_en_tienda", async () => {
+  // inicial FIJO" ahora dice "estado resuelto por la bifurcacion de creacion".
+  it("155/R20: sin fulfillment en la tarifa, nace en por_recolectar_en_tienda con guia", async () => {
     const repo = buildRepo();
     const r = await buildService(repo).cargarViaApi([row()], APIKEY);
 
-    // R19: el predicado se evalua sobre el DUEÑO de la key, una sola vez.
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1);
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("key-user-1");
     // R20/R22: nace en el estado de la rama (b), NUNCA en el viejo estado fijo.
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
     expect(repo.findEstatusIdByValue).not.toHaveBeenCalledWith("en_ruta_bodega_central");
     if (r.status === "ok") {
       expect(r.summary.filas[0].estatus).toBe("por_recolectar_en_tienda");
       expect(r.summary.filas[0].numGuia).toBe(1000); // R20: guia asignada, reportada
-      expect(r.destino).toEqual({
-        estatus: "por_recolectar_en_tienda",
-        conGuia: true,
-        emiteManifiesto: true,
-      });
+      // R24: la rama (b) SI emite manifiesto, y la orden creada esta en su seleccion.
+      expect(r.manifiestoOrdenIds).toEqual(["ord-REM-1"]);
     }
     expect(conGuiaArg(repo)[0].estatusId).toBe("os-erbp");
   });
 
-  // R21 — RAMA DEFENSIVA, hoy inalcanzable (decision del gate del 2026-07-29, pregunta 3): el
-  // switch de fulfillment solo se acepta para `adminTienda` y el dueño de una key es de rol
-  // `apiKey`. Se prueba igual: el dia que un integrador con bodega propia pueda marcarse, la
-  // respuesta NO debe fabricar un numero de guia.
-  it("155/R21: dueño con fulfillment=true -> en_preparacion y numGuia null, sin fabricar numero", async () => {
-    const repo = buildRepo({ findUsuarioFulfillment: vi.fn().mockResolvedValue(true) });
-    const r = await buildService(repo).cargarViaApi([row({ num_remision: "REM-1" })], APIKEY);
+  // FULFILLMENT (2026-08-25) — EL PREDICADO DE ESTA VIA ES LA TARIFA, NO EL FLAG DEL USUARIO.
+  // `Usuario.fulfillment` solo puede quedar en `true` para `adminTienda` y el dueño de una key
+  // es de rol `apiKey`: preguntarselo devolvia siempre `false`, que es lo que mantenia la rama
+  // (a) inalcanzable desde la 155. Ya no se le pregunta.
+  it("no consulta el flag `fulfillment` del usuario: por esta via el predicado es la tarifa", async () => {
+    const repo = buildRepo();
+    await buildService(repo).cargarViaApi(
+      [row({ num_remision: "A" }), row({ num_remision: "B" }), row({ num_remision: "C" })],
+      APIKEY,
+    );
+    expect(repo.findUsuarioFulfillment).not.toHaveBeenCalled();
+  });
+
+  it("tarifa con fulfillment > 0 -> en_preparacion y numGuia null, sin fabricar numero", async () => {
+    const repo = buildRepo();
+    const r = await buildService(repo, buildTarifaRepo(TARIFA_FULFILLMENT)).cargarViaApi(
+      [row({ num_remision: "REM-1" })],
+      APIKEY,
+    );
 
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("en_preparacion");
     if (r.status === "ok") {
@@ -327,9 +343,12 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
         numGuia: null,
         estado: "en_preparacion",
       });
-      // El resto del bloque de respuesta se conserva (R23).
-      expect(r.summary.ordenes[0].costoEnvio).toBe("3.92");
-      expect(r.destino.emiteManifiesto).toBe(false); // R26: la rama (a) no emite manifiesto
+      // El monto de bodega se SUMA al costo del envio (3.50 + 12% = 3.92, + 2.00) y viaja
+      // desglosado al lado, para que ese total no haya que adivinarlo.
+      expect(r.summary.ordenes[0].costoEnvio).toBe("5.92");
+      expect(r.summary.ordenes[0].fulfillment).toBe("2.00");
+      // R26: la rama (a) no emite manifiesto — no hubo movimiento fisico que documentar.
+      expect(r.manifiestoOrdenIds).toEqual([]);
     }
     // Se persiste por la MISMA ruta, con la numeracion desactivada: nadie consume la secuencia.
     // Feature 141: `opciones` es el 5.o argumento — el 4.o es el contexto del LOTE.
@@ -337,13 +356,11 @@ describe("cargarViaApi — dueño y estado inicial (R8, D4)", () => {
     expect(opciones).toEqual({ conGuia: false });
   });
 
-  it("155/R4: resuelve el flag UNA sola vez por lote, no una vez por fila", async () => {
-    const repo = buildRepo();
-    await buildService(repo).cargarViaApi(
-      [row({ num_remision: "A" }), row({ num_remision: "B" }), row({ num_remision: "C" })],
-      APIKEY,
-    );
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledTimes(1);
+  it("sin fulfillment el desglose es un cero explicito y `costoEnvio` no se mueve", async () => {
+    const r = await buildService(buildRepo()).cargarViaApi([row()], APIKEY);
+    if (r.status !== "ok") return;
+    expect(r.summary.ordenes[0].costoEnvio).toBe("3.92"); // lo mismo que antes de la fecha
+    expect(r.summary.ordenes[0].fulfillment).toBe("0.00");
   });
 });
 
@@ -361,11 +378,12 @@ describe("cargarViaApi — resultado con num_guia (R10)", () => {
       // Filas creadas extendidas con numGuia.
       expect(r.summary.filas[0]).toMatchObject({ resultado: "creada", numGuia: 1000, estatus: "por_recolectar_en_tienda" });
       expect(r.summary.filas[1]).toMatchObject({ resultado: "creada", numGuia: 1001 });
-      // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEnvio (feature 98/R5) por
-      // creada. No-central con TARIFA por defecto -> 3.50 + 12% = "3.92".
+      // Bloque plano `ordenes` (R10): id + numGuia + estado + costoEnvio (feature 98/R5) +
+      // fulfillment (2026-08-25) por creada. No-central con TARIFA por defecto -> 3.50 + 12%
+      // = "3.92", y sin monto de bodega el desglose es el cero explicito.
       expect(r.summary.ordenes).toEqual([
-        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
-        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
+        { id: "ord-REM-1", numRemision: "REM-1", numGuia: 1000, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
+        { id: "ord-REM-2", numRemision: "REM-2", numGuia: 1001, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
       ]);
     }
   });
@@ -571,20 +589,22 @@ describe("cargarViaApi — no-regresión del contrato 88 (feature 98/R10)", () =
       [row({ num_remision: "REM-1" })],
       APIKEY,
     );
-    // Feature 155: estado inicial RESUELTO por el flag (asercion invertida respecto de la 88)
-    // y num_guia inmediato (via createManyOrdenesConGuia). El resto del contrato, intacto.
+    // Feature 155: estado inicial RESUELTO por la bifurcacion (asercion invertida respecto de
+    // la 88) y num_guia inmediato (via createManyOrdenesConGuia). El resto, intacto.
     expect(repo.findEstatusIdByValue).toHaveBeenCalledWith("por_recolectar_en_tienda");
-    expect(repo.findUsuarioFulfillment).toHaveBeenCalledWith("key-user-1");
     expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
     if (r.status === "ok") {
-      // El bloque `ordenes` es EXACTAMENTE el de la 88 (id/numRemision/numGuia/estado) + costoEnvio,
-      // sin campos de mas: costoEnvio es la unica extension observable (R10).
+      // El bloque `ordenes` es EXACTAMENTE el de la 88 (id/numRemision/numGuia/estado) mas las
+      // DOS extensiones declaradas y ninguna otra: `costoEnvio` (feature 98/R10) y su desglose
+      // `fulfillment` (2026-08-25). La igualdad ESTRICTA es lo que hace de guardian: un campo
+      // que se cuele en la respuesta publica del canal integrador rompe aqui.
       expect(r.summary.ordenes[0]).toEqual({
         id: "ord-REM-1",
         numRemision: "REM-1",
         numGuia: 1000,
         estado: "por_recolectar_en_tienda",
         costoEnvio: "3.92",
+        fulfillment: "0.00",
       });
     }
   });
@@ -775,6 +795,71 @@ describe("cargarViaApi — cascada por par (tienda, zona) (274/R25/R26)", () => 
   });
 });
 
+// FULFILLMENT (2026-08-25) — la bifurcacion es POR ORDEN, y esto es lo que lo obliga: la
+// tarifa se resuelve por par (tienda, zona) desde la 274, asi que dos filas del mismo lote
+// pueden caer en zonas con distinto monto de fulfillment. Decidir por lote dejaria una orden a
+// la que se le COBRA fulfillment naciendo a la espera de que alguien la recoja en la tienda.
+describe("cargarViaApi — lote MIXTO por fulfillment (una zona con monto, otra sin)", () => {
+  const mixtoFulfillment = () => ({
+    repo: buildRepo(DOS_ZONAS),
+    tarifaRepo: buildTarifaRepoPorZona({ z1: TARIFA, z2: { ...TARIFA_Z2, fulfillment: "2.00" } }),
+  });
+
+  it("cada orden nace donde dice SU tarifa, y solo la de la tienda va al manifiesto", async () => {
+    const { repo, tarifaRepo } = mixtoFulfillment();
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-Z1"), filaZ2("REM-Z2")],
+      APIKEY,
+    );
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    const porRemision = new Map(r.summary.ordenes.map((o) => [o.numRemision, o]));
+    expect(porRemision.get("REM-Z1")).toMatchObject({
+      estado: "por_recolectar_en_tienda",
+      numGuia: 1000,
+      fulfillment: "0.00",
+    });
+    expect(porRemision.get("REM-Z2")).toMatchObject({
+      estado: "en_preparacion",
+      numGuia: null,
+      // 10.00 + 12% = 11.20, mas el monto de bodega.
+      costoEnvio: "13.20",
+      fulfillment: "2.00",
+    });
+    // Solo la que espera EN LA TIENDA documenta un movimiento fisico.
+    expect(r.manifiestoOrdenIds).toEqual(["ord-REM-Z1"]);
+  });
+
+  it("dos llamadas de persistencia (una por rama) pero UN solo lote: el cargaId se reutiliza", async () => {
+    const { repo, tarifaRepo } = mixtoFulfillment();
+    const r = await buildService(repo, tarifaRepo).cargarViaApi(
+      [filaZ1("REM-Z1"), filaZ2("REM-Z2")],
+      APIKEY,
+    );
+
+    const llamadas = (repo.createManyOrdenesConGuia as ReturnType<typeof vi.fn>).mock.calls;
+    expect(llamadas).toHaveLength(2);
+    // Primero la rama (b) —numera en el acto—, luego la (a) —no numera nada—.
+    expect(llamadas[0][4]).toEqual({ conGuia: true });
+    expect(llamadas[1][4]).toEqual({ conGuia: false });
+    // Feature 141/R30: UNA fila de `carga` por peticion. El segundo grupo recibe el id que
+    // resolvio el primero, en vez de abrir un lote nuevo.
+    expect(llamadas[0][3]).toMatchObject({ cargaId: null, totalFiles: 2 });
+    expect(llamadas[1][3]).toMatchObject({ cargaId: "carga-api-1", totalFiles: 2 });
+    if (r.status === "ok") expect(r.summary.cargaId).toBe("carga-api-1");
+  });
+
+  it("un lote homogeneo sigue haciendo UNA sola llamada de persistencia", async () => {
+    const repo = buildRepo(DOS_ZONAS);
+    await buildService(repo, buildTarifaRepoPorZona({ z1: TARIFA, z2: TARIFA_Z2 })).cargarViaApi(
+      [filaZ1("REM-1"), filaZ2("REM-2")],
+      APIKEY,
+    );
+    expect(repo.createManyOrdenesConGuia).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R31/R38)", () => {
   // z1 tiene tarifa, z2 NO: es el unico caso en el que el hueco de tarifa es un error de fila
   // y no un 409 de lote (design §3.6).
@@ -827,7 +912,15 @@ describe("cargarViaApi — lote MIXTO: unas resuelven y otras no (274/R27/R28/R3
 
     if (r.status !== "ok") return;
     expect(r.summary.ordenes.map((o) => o.costoEnvio)).not.toContain("0.00");
-    expect(JSON.stringify(r.summary)).not.toContain("0.00");
+    // El barrido sobre el JSON entero se conserva, pero EXCLUYENDO el desglose de fulfillment
+    // (2026-08-25): ahi el "0.00" no es un precio fabricado por falta de tarifa —lo que R31
+    // persigue— sino la afirmacion de que esta tienda no hace fulfillment. Los dos ceros se
+    // parecen y significan cosas opuestas, asi que el guardian tiene que distinguirlos en vez
+    // de dejar de mirar.
+    const sinDesglose = r.summary.ordenes.map((o) =>
+      Object.fromEntries(Object.entries(o).filter(([clave]) => clave !== "fulfillment")),
+    );
+    expect(JSON.stringify({ ...r.summary, ordenes: sinDesglose })).not.toContain("0.00");
   });
 
   it("summary: `total` = filas recibidas y creadas + duplicadas + conError = total (la degradada no se cuenta dos veces)", async () => {

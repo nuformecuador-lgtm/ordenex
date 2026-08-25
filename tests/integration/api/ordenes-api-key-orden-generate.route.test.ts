@@ -1,8 +1,9 @@
 // Feature 177 — T14: tests de INTEGRACION del handler
 // `POST /api/ordenes/api-key/orden/{id}/generate`. Sin DB y sin Storage: se inyectan por `deps`
 // el autenticador, el service de resolucion (REAL, sobre un repo fake) y el service de PDF
-// (REAL, sobre repo/generador/firmador fakes), de modo que el reuso (`generado: false`) y la
-// precedencia de R14 se comprueban extremo a extremo y no contra un doble complaciente.
+// (REAL, sobre repo/generador/firmador fakes), de modo que el reuso (una segunda llamada que NO
+// vuelve a construir) y la precedencia de R14 se comprueban extremo a extremo y no contra un
+// doble complaciente.
 import { describe, it, expect, vi } from "vitest";
 import * as generateRoute from "@/app/api/ordenes/api-key/orden/[id]/generate/route";
 import { handleGenerarPdfOrdenApi } from "@/app/api/ordenes/api-key/orden/[id]/generate/route";
@@ -139,18 +140,23 @@ function req(bearer?: string, esquema = "Bearer"): Request {
 }
 
 describe("POST /api/ordenes/api-key/orden/{id}/generate — PDF (R20/R21/R22/R27)", () => {
-  it("R20/R21/R22/R27: 200 generado:true la primera vez y generado:false la segunda, con URL distinta", async () => {
+  it("R20/R21/R22/R27: dos llamadas dan la MISMA forma y URLs distintas, construyendo una sola vez", async () => {
     const e = escenario({});
     const primera = await handleGenerarPdfOrdenApi(req(SECRETO), "100234", e.deps);
     expect(primera.status).toBe(200);
     const j1 = await primera.json();
-    expect(j1).toMatchObject({ generado: true, expiraEnSegundos: TTL });
+    // Desde el 2026-08-25 la respuesta ya no lleva el testigo `generado`: las dos llamadas son
+    // indistinguibles por su cuerpo. Que la segunda REUSO se afirma abajo, donde de verdad se
+    // puede ver: un unico objeto subido y una sola invocacion del generador.
+    expect(j1).toMatchObject({ expiraEnSegundos: TTL });
+    expect(Object.keys(j1).sort()).toEqual(["expiraEnSegundos", "url"]);
     expect(typeof j1.url).toBe("string");
 
     const segunda = await handleGenerarPdfOrdenApi(req(SECRETO), "100234", e.deps);
     expect(segunda.status).toBe(200);
     const j2 = await segunda.json();
-    expect(j2).toMatchObject({ generado: false, expiraEnSegundos: TTL });
+    expect(j2).toMatchObject({ expiraEnSegundos: TTL });
+    expect(Object.keys(j2).sort()).toEqual(["expiraEnSegundos", "url"]);
     // R22/R23: la URL se re-firma en ESTA llamada, no se devuelve la anterior.
     expect(j2.url).not.toBe(j1.url);
     // R27: un unico objeto en Storage tras dos llamadas.

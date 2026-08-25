@@ -1007,6 +1007,7 @@ describe("OrdenRepository.list — tarifa por cascada (R18/R19/R20)", () => {
       "ivaComisionCod",
       "ivaFlete",
       "tarifaEspecial",
+      "tarifaEspecialDevuelta",
       "tiendaId",
       "updatedAt",
       "valorFlete",

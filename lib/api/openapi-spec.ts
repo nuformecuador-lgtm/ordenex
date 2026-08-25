@@ -104,10 +104,25 @@ export const openApiSpec = {
         summary: "Carga de órdenes",
         operationId: "cargarOrdenes",
         description: [
-          "Crea una o más órdenes en firme. Cada orden nueva arranca en estado",
+          "Crea una o más órdenes en firme. Una orden nueva arranca en estado",
           "`por_recolectar_en_tienda` y recibe un `num_guia` en el acto. La respuesta incluye,",
           "por cada orden creada, su `costoEnvio`: flete + IVA de la tarifa vigente que resuelve",
-          "el par (tienda, zona del distrito de esa orden).",
+          "el par (tienda, zona del distrito de esa orden), más el fulfillment si lo hay.",
+          "",
+          "**FULFILLMENT (2026-08).** Si tu tarifa tiene un monto de fulfillment (el servicio de",
+          "bodega: tus paquetes ya están con nosotros), tus órdenes cambian en DOS cosas y las",
+          "dos son visibles en la respuesta:",
+          "",
+          "1. **Nacen en `en_preparacion` y SIN `num_guia`** (`numGuia: null`, nunca un número",
+          "   fabricado). No esperan a que un mensajero pase por tu tienda, porque el paquete ya",
+          "   está en la bodega; la guía se emite después, cuando la orden se prepara. Ese lote",
+          "   tampoco emite `manifiesto`: no hay entrega de bultos que firmar.",
+          "2. **`costoEnvio` incluye el monto de fulfillment**, y el campo `fulfillment` de cada",
+          "   orden dice cuánto de ese total es el servicio de bodega. Sin fulfillment ese campo",
+          "   vale cero y `costoEnvio` es exactamente lo que era antes.",
+          "",
+          "El monto se resuelve por orden, con la tarifa de SU par (tienda, zona), así que un",
+          "lote puede traer órdenes de las dos clases; cada fila dice en qué estado nació.",
           "",
           "**CAMBIO INCOMPATIBLE (2026-08): una fila sin tarifa ya no crea orden.** La tarifa se",
           "resuelve ANTES de persistir. Una fila cuyo par (tienda, zona) no resuelve ninguna",
@@ -135,7 +150,9 @@ export const openApiSpec = {
           "aparece en el enum `estado` y no puede llegar en ninguna respuesta.",
           "",
           "Éxito parcial: las filas se clasifican en `creada`, `duplicada` (num_remision ya",
-          "existente) o `error` (validación, geografía o falta de tarifa). Una respuesta 200",
+          "existente **en tu cuenta**: la unicidad de `num_remision` es por tienda, así que otro",
+          "integrador puede usar el mismo número sin afectarte) o `error` (validación, geografía",
+          "o falta de tarifa). Una respuesta 200",
           "puede contener filas con",
           `error. El lote acepta entre 1 y ${MAX_CARGA_ROWS} filas.`,
         ].join("\n"),
@@ -208,6 +225,7 @@ export const openApiSpec = {
                           numGuia: 100234,
                           estado: "por_recolectar_en_tienda",
                           costoEnvio: "3.39",
+                          fulfillment: "0.00",
                         },
                       ],
                     },
@@ -231,6 +249,7 @@ export const openApiSpec = {
                           numGuia: 100234,
                           estado: "por_recolectar_en_tienda",
                           costoEnvio: "3.39",
+                          fulfillment: "0.00",
                         },
                       ],
                     },
@@ -555,9 +574,9 @@ export const openApiSpec = {
         operationId: "generarPdfOrden",
         description: [
           "Devuelve una URL firmada de corta duración con el PDF de la etiqueta de la orden.",
-          "La primera llamada construye el PDF y lo almacena (`generado: true`); las siguientes",
-          "reutilizan el mismo documento y solo lo vuelven a firmar (`generado: false`), por lo",
-          "que la `url` cambia en cada llamada aunque el PDF sea el mismo.",
+          "La primera llamada construye el PDF y lo almacena; las siguientes reutilizan el mismo",
+          "documento y solo lo vuelven a firmar. La respuesta es idéntica en ambos casos, y la",
+          "`url` cambia en cada llamada aunque el PDF sea el mismo.",
           "",
           "Solo responde a `POST`. Una orden sin guía imprimible devuelve 409.",
         ].join("\n"),
@@ -573,15 +592,13 @@ export const openApiSpec = {
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: true,
                     },
                   },
                   reuso: {
-                    summary: "Llamada posterior: solo se vuelve a firmar",
+                    summary: "Llamada posterior: solo se vuelve a firmar (misma forma)",
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: false,
                     },
                   },
                 },
@@ -614,7 +631,7 @@ export const openApiSpec = {
         description: [
           "Misma forma de respuesta que el PDF por orden, sobre el consolidado de todas las",
           "etiquetas imprimibles del lote (solo órdenes propias y vivas). La primera llamada lo",
-          "construye (`generado: true`); las siguientes solo vuelven a firmar (`generado: false`).",
+          "construye; las siguientes solo vuelven a firmar, con la misma forma de respuesta.",
           "",
           "Solo responde a `POST`. Un lote inexistente o de otro dueño devuelve el mismo 404; un",
           "lote sin etiquetas imprimibles, o que excede el tope de etiquetas por PDF, devuelve 409.",
@@ -631,7 +648,6 @@ export const openApiSpec = {
                     value: {
                       url: "https://<proyecto>.supabase.co/storage/v1/object/sign/etiquetas/...",
                       expiraEnSegundos: 300,
-                      generado: true,
                     },
                   },
                 },
@@ -766,12 +782,14 @@ export const openApiSpec = {
                           iva: "₡325,00",
                           comision: "₡906,50",
                           ivaComision: "₡117,85",
+                          fulfillment: "₡0,00",
                           total: "₡22.050,65",
                         },
                         devuelto: {
                           flete: "₡1.396,46",
                           iva: "₡181,54",
                           comision: "₡0,00",
+                          fulfillment: "₡0,00",
                           total: "-₡1.578,00",
                         },
                       },
@@ -786,12 +804,14 @@ export const openApiSpec = {
                               iva: "₡325,00",
                               comision: "₡906,50",
                               ivaComision: "₡117,85",
+                              fulfillment: "₡0,00",
                               total: "₡22.050,65",
                             },
                             devuelto: {
                               flete: "₡1.396,46",
                               iva: "₡181,54",
                               comision: "₡0,00",
+                              fulfillment: "₡0,00",
                               total: "-₡1.578,00",
                             },
                           },
@@ -1504,16 +1524,25 @@ export const openApiSpec = {
       CargaOrden: {
         type: "object",
         description: "Una orden efectivamente creada (bloque plano listo para consumir).",
-        required: ["id", "numRemision", "numGuia", "estado", "costoEnvio"],
+        required: ["id", "numRemision", "numGuia", "estado", "costoEnvio", "fulfillment"],
         properties: {
           id: { type: "string", format: "uuid", description: "Id interno de la orden creada." },
           numRemision: { type: "string" },
-          numGuia: { type: "integer" },
+          numGuia: {
+            type: ["integer", "null"],
+            description:
+              "Número de guía asignado en el acto. Es `null` —y solo entonces— cuando la orden nació en `en_preparacion` por fulfillment: la guía se emite más tarde y nunca se fabrica un número.",
+          },
           estado: { type: "string", enum: ORDER_STATUS_ENUM },
           costoEnvio: {
             type: "string",
             description:
-              "Costo del envío (flete + IVA de la tarifa vigente del par (tienda, zona)), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD.",
+              "Costo total del envío (flete + IVA de la tarifa vigente del par (tienda, zona), MÁS el fulfillment si lo hay), string escala 2. Toda orden creada lo trae con un importe real: una fila sin tarifa no llega a crearse. Distinto de `monto_cobrar`/COD.",
+          },
+          fulfillment: {
+            type: "string",
+            description:
+              "Cuánto de `costoEnvio` es el servicio de bodega, string escala 2. `\"0.00\"` si tu tarifa no tiene fulfillment — y entonces `costoEnvio` es solo flete + IVA. Nunca `null`.",
           },
         },
       },
@@ -1551,17 +1580,12 @@ export const openApiSpec = {
         type: "object",
         description:
           "URL firmada de corta duración con el PDF de etiqueta (de una orden o de un lote). La URL se firma en cada llamada: nunca es una URL persistida.",
-        required: ["url", "expiraEnSegundos", "generado"],
+        required: ["url", "expiraEnSegundos"],
         properties: {
           url: { type: "string", format: "uri", description: "URL firmada del PDF." },
           expiraEnSegundos: {
             type: "integer",
             description: "TTL de la URL firmada en segundos (300 por defecto).",
-          },
-          generado: {
-            type: "boolean",
-            description:
-              "`true` si el PDF se construyó en esta llamada; `false` si se reutilizó el ya almacenado y solo se volvió a firmar.",
           },
         },
       },
@@ -1634,27 +1658,37 @@ export const openApiSpec = {
       CotizacionEscenarioEntregado: {
         type: "object",
         description:
-          "Costo si la orden se ENTREGA: cinco conceptos. `total` es lo que RECIBE la tienda = monto a cobrar − (flete + iva + comision + ivaComision), y es negativo si no hay COD que cubra lo facturado.",
-        required: ["flete", "iva", "comision", "ivaComision", "total"],
+          "Costo si la orden se ENTREGA: seis conceptos. `total` es lo que RECIBE la tienda = monto a cobrar − (flete + iva + comision + ivaComision + fulfillment), y es negativo si no hay COD que cubra lo facturado.",
+        required: ["flete", "iva", "comision", "ivaComision", "fulfillment", "total"],
         properties: {
           flete: { type: "string", description: "Flete de la zona del distrito, formateado." },
           iva: { type: "string", description: "IVA del flete, formateado." },
           comision: { type: "string", description: "Comisión COD, formateada." },
           ivaComision: { type: "string", description: "IVA de la comisión, formateado." },
+          fulfillment: {
+            type: "string",
+            description:
+              "Monto fijo del servicio de bodega por orden, formateado. Cero si tu tarifa no tiene fulfillment; nunca ausente.",
+          },
           total: { type: "string", description: "Lo que recibe la tienda, formateado." },
         },
       },
       CotizacionEscenarioDevuelto: {
         type: "object",
         description:
-          "Costo si la orden se DEVUELVE: cuatro conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `total` es la DEUDA de la tienda = −(flete + iva), y por eso es negativo.",
-        required: ["flete", "iva", "comision", "total"],
+          "Costo si la orden se DEVUELVE: cinco conceptos, SIN `ivaComision` (no hay comisión que gravar). `comision` es un cero EXPLÍCITO — la afirmación de que una devolución no cobra comisión COD, no un dato ausente. `fulfillment` en cambio SÍ se cobra: el servicio de bodega ya se prestó. `total` es la DEUDA de la tienda = −(flete + iva + fulfillment), y por eso es negativo.",
+        required: ["flete", "iva", "comision", "fulfillment", "total"],
         properties: {
           flete: { type: "string", description: "Flete de devolución, formateado." },
           iva: { type: "string", description: "IVA del flete de devolución, formateado." },
           comision: {
             type: "string",
             description: "Siempre cero formateado: una devolución no cobra comisión COD.",
+          },
+          fulfillment: {
+            type: "string",
+            description:
+              "El MISMO monto que en el escenario entregado: preparar y despachar el paquete ya costó, lo reciba el destinatario o no. Cero si tu tarifa no tiene fulfillment.",
           },
           total: { type: "string", description: "Deuda de la tienda, formateada (negativa)." },
         },

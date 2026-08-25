@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #ffffff; color: #12233f; font-family: Poppins, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1d5fd4; } a:hover { color: #0b3880; }
+    .escena { position: relative; height: 100%; overflow: hidden; }
+    .fondo { padding: 18px 20px; filter: blur(1.2px); opacity: 0.85; }
+    .frow { display: flex; align-items: center; gap: 8px; height: 30px; font-size: 13px; color: #4a5368; }
+    .fcbx { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #e3e8f2; background: #ffffff; box-sizing: border-box; }
+    .fcbx-on { background: #f26419; border-color: #f26419; }
+    .velo { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); }
+    .modal {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: calc(100% - 48px); max-width: 452px; box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 16px;
+      background: #f7f8fc; border: 1px solid #e3e8f2; border-radius: 10px; padding: 24px;
+      box-shadow: 0 10px 30px rgba(11, 37, 69, 0.28);
+    }
+    .m-ttl { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+    .m-desc { margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: #4a5368; }
+    .lista { display: flex; flex-direction: column; gap: 8px; background: #ffffff; border: 1px solid #e3e8f2; border-radius: 8px; padding: 12px 14px; }
+    .item { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+    .item svg { flex-shrink: 0; color: #8a94ad; }
+    .item b { font-weight: 500; }
+    .item i { font-style: normal; margin-left: auto; font-size: 11.5px; color: #8a94ad; }
+    .apunte { font-size: 12px; line-height: 1.5; color: #4a5368; display: flex; gap: 8px; align-items: flex-start; }
+    .apunte svg { flex-shrink: 0; margin-top: 1px; color: #92400e; }
+    .pie { display: flex; align-items: center; gap: 8px; }
+    .no-preg { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #4a5368; margin-right: auto; cursor: pointer; }
+    .no-preg .box { width: 15px; height: 15px; border: 1px solid #e3e8f2; border-radius: 4px; background: #ffffff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid transparent; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+    .btn-outline { border-color: #e3e8f2; background: #ffffff; color: #12233f; }
+    .btn-outline:hover { background: #f1f4fb; }
+    .btn-primary { background: #f26419; color: #ffffff; }
+    .btn-primary:hover { background: #d4530d; }
+  </style>
+</helmet>
+
+<div class="escena">
+  <div class="fondo">
+    <div class="frow"><span class="fcbx fcbx-on"></span> Bratsi</div>
+    <div class="frow"><span class="fcbx"></span> Cahuita</div>
+    <div class="frow"><span class="fcbx fcbx-on"></span> Sixaola</div>
+    <div class="frow"><span class="fcbx"></span> Telire</div>
+    <div class="frow"><span class="fcbx"></span> Puerto Viejo</div>
+  </div>
+  <div class="velo"></div>
+
+  <div class="modal">
+    <div>
+      <h2 class="m-ttl">Telire también está en otra zona</h2>
+      <p class="m-desc">
+        La marca de zona especial es del distrito, no de la zona que estás editando.
+        Al marcarlo, se cobra como especial en todas partes:
+      </p>
+    </div>
+
+    <div class="lista">
+      <div class="item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        <b>GAM Sur</b> <i>zona que estás editando</i>
+      </div>
+      <div class="item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        <b>Caribe Sur</b> <i>7 distritos</i>
+      </div>
+    </div>
+
+    <div class="apunte">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 17.5A1.9 1.9 0 0 0 4 20.4h16a1.9 1.9 0 0 0 1.6-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg>
+      <span>No cambia ninguna tarifa por sí solo: marca el distrito para que las tarifas de zona especial apliquen a partir del próximo pedido.</span>
+    </div>
+
+    <div class="pie">
+      <label class="no-preg"><span class="box"></span> No volver a preguntar</label>
+      <button type="button" class="btn btn-outline">Cancelar</button>
+      <button type="button" class="btn btn-primary">Marcar como especial</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

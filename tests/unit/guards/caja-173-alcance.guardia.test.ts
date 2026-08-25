@@ -413,7 +413,7 @@ const INSUMOS_DE_FORMULA = [
   "totalEfectivo",
 ];
 
-/** Tarifa de prueba con los SIETE campos distintos entre si: ningun par puede confundirse. */
+/** Tarifa de prueba con los campos distintos entre si: ningun par puede confundirse. */
 const TARIFA = {
   valorFlete: "2500.00",
   valorFleteGam: "2000.00",
@@ -422,6 +422,10 @@ const TARIFA = {
   comisionCod: "5.00",
   ivaFlete: "13.00",
   ivaComisionCod: "10.00",
+  // Sin pacto por distrito especial: esta guardia mide que la 173 no toque las formulas
+  // NORMALES, y el pacto tiene su propio archivo.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se alteran", () => {
@@ -435,7 +439,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
   it("MEDIDO: flete, IVA del flete, comision COD e IVA de la comision, importe a importe", () => {
     // Entregada, zona CENTRAL, 20 000 de contra-entrega, con comision.
     const r = derivarIngresoOrden(
-      { resultado: "entregada", esCentral: true, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "entregada", esCentral: true, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 
@@ -451,7 +455,7 @@ describe("R68 — las formulas de flete, comision, IVA y pago al mensajero no se
 
   it("MEDIDO: el flete de DEVOLUCION y su IVA, y que una devolucion NO cobra comision", () => {
     const r = derivarIngresoOrden(
-      { resultado: "devuelta", esCentral: false, montoCobrar: "20000.00", cobraComision: true },
+      { resultado: "devuelta", esCentral: false, esZonaEspecial: false, montoCobrar: "20000.00", cobraComision: true },
       TARIFA,
     );
 

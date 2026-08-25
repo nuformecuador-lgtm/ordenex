@@ -1,0 +1,43 @@
+-- `num_remision` DEJA DE SER UNICO GLOBAL Y PASA A SER UNICO POR TIENDA.
+--
+-- POR QUE. `num_remision` no lo genera Ordenex: lo trae la tienda desde su propio sistema
+-- (R9/R14 de la feature 15) y viaja tal cual en la carga masiva y en la carga por API key. Dos
+-- tiendas distintas no se coordinan entre si para numerar sus remisiones, asi que "1001" es un
+-- numero que muchas van a usar. Con el UNIQUE GLOBAL que creo `20260709130100_ordenes`, la
+-- PRIMERA tienda que cargaba "1001" le quemaba ese numero a TODAS las demas: la fila de la
+-- segunda se clasificaba como `duplicada` (R25) contra un dato que no es suyo y que no puede
+-- ver, y de rebote le confirmaba que ALGUIEN MAS ya lo habia usado — una fuga entre inquilinos,
+-- pequena pero real, en un sistema donde las tiendas son terceros.
+--
+-- La identidad de una remision es el PAR (tienda, numero). Esto lo escribe en la base.
+--
+-- SIN RIESGO DE DATO PREEXISTENTE, y conviene decir por que no hace falta comprobarlo: la
+-- constraint nueva es ESTRICTAMENTE MAS DEBIL que la que sustituye. Si `num_remision` era unico
+-- en toda la tabla, entonces `(tienda_id, num_remision)` lo es trivialmente. Ninguna fila puede
+-- violar el indice nuevo, asi que no hay backfill, ni deduplicacion, ni un `SELECT` de
+-- verificacion que pudiera fallar a mitad del despliegue.
+--
+-- ORDEN DE LAS COLUMNAS: `tienda_id` PRIMERO. Un btree compuesto sirve tambien a las consultas
+-- que solo filtran por su prefijo, y practicamente todo lo que toca `orden` filtra por tienda
+-- (scope del adminTienda, scope del owner de una API key, resumen del lote, manifiesto). Al
+-- reves —`(num_remision, tienda_id)`— el indice solo serviria a las busquedas que ya traen el
+-- numero de remision, que son las menos.
+--
+-- `orden_tienda_id_idx` NO SE RETIRA aqui aunque este indice lo cubra como prefijo. Es un
+-- cambio distinto, con su propio riesgo (planes que dejan de existir de golpe), y esta
+-- migracion ya cambia una constraint de identidad. Un cambio a la vez.
+--
+-- LO QUE NO CAMBIA, dicho explicitamente para que nadie lo lea de mas:
+--   * `deleted_at` NO entra en el indice. Una orden borrada logicamente sigue reservando su
+--     numero DENTRO de su tienda, igual que antes. Si algun dia se quiere permitir reutilizar
+--     el numero de una orden borrada, eso es un UNIQUE parcial y es otra decision.
+--   * `num_guia` sigue siendo UNIQUE GLOBAL (`orden_num_guia_key`). Ese numero SI lo genera
+--     Ordenex (`siguiente_num_guia()`), es el que se imprime en la etiqueta y lo leen la bodega
+--     y el mensajero sin saber de que tienda viene: tiene que ser unico en todo el sistema.
+
+-- Se crea el indice nuevo ANTES de soltar el viejo: entre las dos sentencias la tabla nunca
+-- queda sin proteccion sobre `num_remision`. Ambas en la misma transaccion de Prisma (por eso
+-- no se usa CONCURRENTLY, que no puede correr dentro de una transaccion).
+CREATE UNIQUE INDEX "orden_tienda_id_num_remision_key" ON "orden"("tienda_id", "num_remision");
+
+DROP INDEX "orden_num_remision_key";

@@ -9,7 +9,6 @@ import type {
   CargaViaApiSummary,
   IBulkOrdenService,
 } from "@/lib/interfaces/services/IBulkOrdenService";
-import { resolverDestinoCreacion } from "@/lib/services/destino-creacion";
 import type { IEtiquetasDescargaService } from "@/lib/interfaces/services/IEtiquetasDescargaService";
 import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
@@ -37,7 +36,7 @@ function okSummary(overrides: Partial<CargaViaApiSummary> = {}): CargaViaApiSumm
       { fila: 1, numRemision: "REM-1", resultado: "creada", estatus: "por_recolectar_en_tienda", numGuia: 1042 },
     ],
     ordenes: [
-      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92" },
+      { id: "ord-1", numRemision: "REM-1", numGuia: 1042, estado: "por_recolectar_en_tienda", costoEnvio: "3.92", fulfillment: "0.00" },
     ],
     cargaId: "33333333-3333-4333-8333-333333333333", // feature 141/R39
     ...overrides,
@@ -53,7 +52,7 @@ function fakeBulk(summary: CargaViaApiSummary): IBulkOrdenService {
       .mockResolvedValue({
         status: "ok",
         summary,
-        destino: resolverDestinoCreacion(false),
+        manifiestoOrdenIds: ["ord-1"],
       } satisfies CargaViaApiResult),
   };
 }
@@ -110,6 +109,7 @@ function summaryDeLoteGrande(n: number): CargaViaApiSummary {
     numGuia: 1000 + i,
     estado: "en_ruta_bodega_central",
     costoEnvio: "3.92",
+    fulfillment: "0.00",
   }));
   const filas: CargaViaApiRow[] = ordenes.map((o, i) => ({
     fila: i + 1,

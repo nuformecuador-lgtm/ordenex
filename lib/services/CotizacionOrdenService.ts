@@ -17,7 +17,7 @@ import type {
 } from "@/lib/interfaces/repositories/IOrdenRepository";
 import type {
   ITarifaVigenteRepository,
-  TarifaVigente,
+  TarifaVigenteResuelta,
 } from "@/lib/interfaces/repositories/ITarifaVigenteRepository";
 import type {
   CotizacionGeoRepository,
@@ -41,7 +41,7 @@ import {
   type CostosEntregado,
   type FilaCotizacionResultado,
 } from "@/lib/types/cotizacion";
-import { derivarIngresoOrden } from "@/lib/utils/ingreso-ordenex";
+import { derivarIngresoOrden, montoFulfillmentDeTarifa } from "@/lib/utils/ingreso-ordenex";
 import { formatMontoCotizacion } from "@/lib/utils/monto-cotizacion";
 
 /**
@@ -61,6 +61,15 @@ const COBRA_COMISION = true;
  * el MISMO metodo batch que el cierre de dia, `resolveTarifas`, y por la misma cascada.
  */
 type CotizacionTarifaRepository = Pick<ITarifaVigenteRepository, "resolveTarifas">;
+
+/**
+ * FULFILLMENT (2026-08-25) — la cotizacion resuelve por el batch, y el batch devuelve
+ * `TarifaVigenteResuelta`, que ademas de los campos de la formula trae el monto FIJO de
+ * fulfillment. Ese monto NO entra en `derivarIngresoOrden` (sigue fuera de la liquidacion,
+ * ver `lib/utils/ingreso-ordenex.ts`): se suma APARTE, como sexto concepto del precio que se
+ * publica, y es tambien el predicado de "esta tienda hace fulfillment".
+ */
+type TarifaCotizada = TarifaVigenteResuelta;
 
 /**
  * Feature 274 (design §4.4) — el resultado de la PRIMERA pasada sobre una fila. La cotizacion
@@ -108,20 +117,22 @@ interface IndicesGeograficos {
   distritoIndex: Map<string, DistritoRow[]>;
 }
 
-/** Los cinco conceptos del escenario ENTREGADO, todavia como decimales exactos (R55). */
+/** Los seis conceptos del escenario ENTREGADO, todavia como decimales exactos (R55). */
 interface MontosEntregado {
   flete: Prisma.Decimal;
   iva: Prisma.Decimal;
   comision: Prisma.Decimal;
   ivaComision: Prisma.Decimal;
+  fulfillment: Prisma.Decimal;
   total: Prisma.Decimal;
 }
 
-/** Los cuatro conceptos del escenario DEVUELTO (sin `ivaComision`, R27). */
+/** Los cinco conceptos del escenario DEVUELTO (sin `ivaComision`, R27). */
 interface MontosDevuelto {
   flete: Prisma.Decimal;
   iva: Prisma.Decimal;
   comision: Prisma.Decimal;
+  fulfillment: Prisma.Decimal;
   total: Prisma.Decimal;
 }
 
@@ -130,11 +141,18 @@ function cero(): Prisma.Decimal {
 }
 
 function acumuladorEntregado(): MontosEntregado {
-  return { flete: cero(), iva: cero(), comision: cero(), ivaComision: cero(), total: cero() };
+  return {
+    flete: cero(),
+    iva: cero(),
+    comision: cero(),
+    ivaComision: cero(),
+    fulfillment: cero(),
+    total: cero(),
+  };
 }
 
 function acumuladorDevuelto(): MontosDevuelto {
-  return { flete: cero(), iva: cero(), comision: cero(), total: cero() };
+  return { flete: cero(), iva: cero(), comision: cero(), fulfillment: cero(), total: cero() };
 }
 
 function formatearEntregado(montos: MontosEntregado): CostosEntregado {
@@ -143,6 +161,9 @@ function formatearEntregado(montos: MontosEntregado): CostosEntregado {
     iva: formatMontoCotizacion(montos.iva),
     comision: formatMontoCotizacion(montos.comision),
     ivaComision: formatMontoCotizacion(montos.ivaComision),
+    // El monto fijo de bodega. Cero explicito cuando la tienda no hace fulfillment: el
+    // integrador lee un cero, no un campo que a veces esta y a veces no.
+    fulfillment: formatMontoCotizacion(montos.fulfillment),
     total: formatMontoCotizacion(montos.total),
   };
 }
@@ -154,6 +175,8 @@ function formatearDevuelto(montos: MontosDevuelto): CostosDevuelto {
     // R28: el cero EXPLICITO. Una devolucion no cobra comision COD porque no hubo recaudo;
     // el campo AFIRMA ese cero y nunca falta ni vale `null`.
     comision: formatMontoCotizacion(montos.comision),
+    // El fulfillment SI se cobra en la devolucion: el servicio de bodega ya se presto.
+    fulfillment: formatMontoCotizacion(montos.fulfillment),
     total: formatMontoCotizacion(montos.total),
   };
 }
@@ -194,9 +217,9 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
     const pares = paresDistintos(tiendaId, pendientes);
     const tarifas =
       pares.length === 0
-        ? new Map<string, TarifaVigente | null>()
+        ? new Map<string, TarifaCotizada | null>()
         : await this.tarifaRepo.resolveTarifas(pares);
-    const tarifaDe = (geo: ResolvedGeo): TarifaVigente | null =>
+    const tarifaDe = (geo: ResolvedGeo): TarifaCotizada | null =>
       tarifas.get(clavePar({ tiendaId, zonaId: geo.zonaId })) ?? null;
 
     // R35 (design §3.6): el `409` sobrevive SOLO cuando alguna fila llego a resolver y NINGUNA
@@ -241,9 +264,11 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
         continue;
       }
 
-      // R25: la columna de flete la elige el `esCentral` de la zona DEL DISTRITO DE ESTA FILA.
+      // R25: la columna de flete la elige el `esCentral` de la zona DEL DISTRITO DE ESTA FILA
+      // —y desde 2026-08-25, si ese distrito esta marcado como zona especial, manda el monto
+      // pactado de la tarifa por encima de la columna—.
       const montos = calcularEscenarios(
-        preparada.geo.esCentral,
+        { esCentral: preparada.geo.esCentral, esZonaEspecial: preparada.geo.esZonaEspecial },
         preparada.montoCobrar,
         tarifa,
       );
@@ -370,11 +395,11 @@ export class CotizacionOrdenService implements ICotizacionOrdenService {
  * funcion (R34). El cero mudo sigue sin poder emitirse (R15).
  */
 function calcularEscenarios(
-  esCentral: boolean,
+  geo: { esCentral: boolean; esZonaEspecial: boolean },
   montoCobrar: string | null,
-  tarifa: TarifaVigente,
+  tarifa: TarifaCotizada,
 ): { entregado: MontosEntregado; devuelto: MontosDevuelto } {
-  const input = { esCentral, montoCobrar, cobraComision: COBRA_COMISION };
+  const input = { ...geo, montoCobrar, cobraComision: COBRA_COMISION };
 
   const entregada = derivarIngresoOrden({ ...input, resultado: "entregada" }, tarifa);
   const devuelta = derivarIngresoOrden({ ...input, resultado: "devuelta" }, tarifa);
@@ -387,19 +412,26 @@ function calcularEscenarios(
   const fleteDevolucion = devuelta.ingreso_flete_devolucion ?? cero();
   const ivaDevolucion = devuelta.ingreso_iva_flete_devolucion ?? cero();
 
+  // FULFILLMENT (2026-08-25): NO sale de `derivarIngresoOrden` —sigue fuera de la formula de
+  // liquidacion— sino de la tarifa directamente, y entra igual en los DOS escenarios. Cero si
+  // la tienda no hace fulfillment, que es el mismo total que se publicaba antes de hoy.
+  const fulfillment = montoFulfillmentDeTarifa(tarifa);
+
   return {
     entregado: {
       flete,
       iva,
       comision,
       ivaComision,
-      // R30/D1: lo que RECIBE la tienda = monto a cobrar menos los cuatro conceptos
+      fulfillment,
+      // R30/D1: lo que RECIBE la tienda = monto a cobrar menos los CINCO conceptos
       // facturados. R32: sin monto a cobrar la base es cero y el total sale NEGATIVO.
       total: new Prisma.Decimal(montoCobrar ?? 0)
         .minus(flete)
         .minus(iva)
         .minus(comision)
-        .minus(ivaComision),
+        .minus(ivaComision)
+        .minus(fulfillment),
     },
     devuelto: {
       flete: fleteDevolucion,
@@ -407,8 +439,10 @@ function calcularEscenarios(
       // R28: el cero de la comision se AFIRMA aqui. `derivarIngresoOrden` no emite comision
       // para una devolucion (no hubo recaudo), y esa ausencia se publica como cero explicito.
       comision: devuelta.ingreso_comision_cod ?? cero(),
-      // R31/D1: la DEUDA de la tienda = el negativo de (flete + IVA) de la devolucion.
-      total: fleteDevolucion.plus(ivaDevolucion).negated(),
+      fulfillment,
+      // R31/D1: la DEUDA de la tienda = el negativo de (flete + IVA + fulfillment) de la
+      // devolucion. El fulfillment suma a la deuda porque el servicio ya se presto.
+      total: fleteDevolucion.plus(ivaDevolucion).plus(fulfillment).negated(),
     },
   };
 }
@@ -418,6 +452,7 @@ function sumarEntregado(acc: MontosEntregado, fila: MontosEntregado): void {
   acc.iva = acc.iva.plus(fila.iva);
   acc.comision = acc.comision.plus(fila.comision);
   acc.ivaComision = acc.ivaComision.plus(fila.ivaComision);
+  acc.fulfillment = acc.fulfillment.plus(fila.fulfillment);
   acc.total = acc.total.plus(fila.total);
 }
 
@@ -425,5 +460,6 @@ function sumarDevuelto(acc: MontosDevuelto, fila: MontosDevuelto): void {
   acc.flete = acc.flete.plus(fila.flete);
   acc.iva = acc.iva.plus(fila.iva);
   acc.comision = acc.comision.plus(fila.comision);
+  acc.fulfillment = acc.fulfillment.plus(fila.fulfillment);
   acc.total = acc.total.plus(fila.total);
 }

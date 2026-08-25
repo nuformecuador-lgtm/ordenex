@@ -127,7 +127,10 @@ const SNAPSHOT_SELECT = {
       tienda: { select: { nombre: true } },
       provincia: { select: { nombre: true } },
       canton: { select: { nombre: true } },
-      distrito: { select: { nombre: true } },
+      // `zonaEspecial` (R6, 2026-08-25) viaja junto al nombre: es una entrada de la formula
+      // desde que el pacto por distrito especial cobra. La columna de origen es NULLABLE
+      // (`null` = nadie lo decidio); se normaliza a dos valores AL CONGELAR, abajo.
+      distrito: { select: { nombre: true, zonaEspecial: true } },
     },
   },
 } as const;
@@ -150,6 +153,8 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
       tarifaIvaFlete: null,
       tarifaIvaComisionCod: null,
       tarifaFulfillment: null,
+      tarifaEspecial: null,
+      tarifaEspecialDevuelta: null,
     };
   }
   return {
@@ -162,6 +167,12 @@ function tarifaColumnas(t: TarifaVigenteResuelta | null) {
     tarifaIvaFlete: new Prisma.Decimal(t.ivaFlete),
     tarifaIvaComisionCod: new Prisma.Decimal(t.ivaComisionCod),
     tarifaFulfillment: new Prisma.Decimal(t.fulfillment),
+    // NULLABLES tambien con tarifa presente, a diferencia de sus hermanas: `null` aqui no es
+    // "no habia tarifa", es "esta tarifa no pacto nada especial". Congelarlo como 0 cobraria
+    // un pacto de cero colones que nadie acordo.
+    tarifaEspecial: t.tarifaEspecial == null ? null : new Prisma.Decimal(t.tarifaEspecial),
+    tarifaEspecialDevuelta:
+      t.tarifaEspecialDevuelta == null ? null : new Prisma.Decimal(t.tarifaEspecialDevuelta),
   };
 }
 
@@ -808,6 +819,10 @@ export class CierreDiaRepository implements ICierreDiaRepository {
               zonaId: f.orden.zonaId,
               tiendaId: f.orden.tiendaId,
               esCentral: f.orden.zona.esCentral,
+              // `=== true` y no `!!`: la columna es tri-valuada y `null` ("nadie lo decidio")
+              // NO es especial. Una orden sin distrito (el unico FK nullable de `orden`)
+              // congela `false`: sin distrito no hay marca que aplicar.
+              esZonaEspecial: f.orden.distrito?.zonaEspecial === true,
               ...tarifaColumnas(
                 tarifas.get(
                   clavePar({ tiendaId: f.orden.tiendaId, zonaId: f.orden.zonaId }),

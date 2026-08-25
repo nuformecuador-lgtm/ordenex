@@ -102,7 +102,6 @@ export async function handleGenerarPdfOrdenApi(
         return {
           url: salida.url,
           expiraEnSegundos: salida.expiraEnSegundos,
-          generado: salida.generado,
         };
       case "not_found":
         throw new NotFoundError(); // carrera: borrada entre la resolucion y la generacion

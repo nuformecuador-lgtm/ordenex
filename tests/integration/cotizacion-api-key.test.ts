@@ -54,6 +54,9 @@ const TARIFA: TarifaVigente = {
   comisionCod: "3.50",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 const PROVINCIAS = [{ id: "p1", nombre: "San José" }];
@@ -71,6 +74,9 @@ const TARIFA_Z3: TarifaVigente = {
   comisionCod: "3.50",
   ivaFlete: "13.00",
   ivaComisionCod: "13.00",
+  // Sin pacto especial por distrito: estos casos cubren la tarifa NORMAL.
+  tarifaEspecial: null,
+  tarifaEspecialDevuelta: null,
 };
 
 const DISTRITOS = [
@@ -627,13 +633,14 @@ describe("cotizacion por API key — respuesta 200 (R21/R34/R46/R51/R56)", () =>
         devuelto: Record<string, string>;
       };
     };
-    // R52: el bloque de lote espeja la forma de una fila — cinco conceptos entregados, cuatro
-    // devueltos (una suma de devoluciones tampoco lleva IVA de comision).
+    // R52: el bloque de lote espeja la forma de una fila — seis conceptos entregados, cinco
+    // devueltos (una suma de devoluciones tampoco lleva IVA de comision). `fulfillment` entro
+    // en los dos el 2026-08-25.
     expect(Object.keys(body.totales.entregado).sort()).toEqual(
-      ["comision", "flete", "iva", "ivaComision", "total"].sort(),
+      ["comision", "flete", "fulfillment", "iva", "ivaComision", "total"].sort(),
     );
     expect(Object.keys(body.totales.devuelto).sort()).toEqual(
-      ["comision", "flete", "iva", "total"].sort(),
+      ["comision", "flete", "fulfillment", "iva", "total"].sort(),
     );
     // R54: los dos contadores propios del bloque, y su suma es el total recibido.
     expect(body.totales.filasSumadas).toBe(1);

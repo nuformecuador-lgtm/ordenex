@@ -34,6 +34,8 @@ function toDTO(row: TarifaRow): TarifaDTO {
     // Opcional: se conserva la ausencia como `null`, no se degrada a 0 (0 seria
     // un cobro especial de cero colones, que no es lo mismo que no tener pacto).
     tarifaEspecial: row.tarifaEspecial == null ? null : row.tarifaEspecial.toNumber(),
+    tarifaEspecialDevuelta:
+      row.tarifaEspecialDevuelta == null ? null : row.tarifaEspecialDevuelta.toNumber(),
     zonaId: row.zonaId ?? null,
     isDefault: row.isDefault,
     createdAt: row.createdAt,
@@ -79,6 +81,10 @@ export class TarifaRepository implements ITarifaRepository {
         ivaComisionCod: new Prisma.Decimal(data.ivaComisionCod),
         tarifaEspecial:
           data.tarifaEspecial == null ? null : new Prisma.Decimal(data.tarifaEspecial),
+        tarifaEspecialDevuelta:
+          data.tarifaEspecialDevuelta == null
+            ? null
+            : new Prisma.Decimal(data.tarifaEspecialDevuelta),
         zonaId: data.zonaId ?? null,
         // Sin `?? false` explicito quedaria en manos del default de la columna;
         // se escribe para que el valor persistido no dependa de dos sitios.
@@ -198,6 +204,12 @@ export class TarifaRepository implements ITarifaRepository {
     if (data.tarifaEspecial !== undefined) {
       out.tarifaEspecial =
         data.tarifaEspecial === null ? null : new Prisma.Decimal(data.tarifaEspecial);
+    }
+    if (data.tarifaEspecialDevuelta !== undefined) {
+      out.tarifaEspecialDevuelta =
+        data.tarifaEspecialDevuelta === null
+          ? null
+          : new Prisma.Decimal(data.tarifaEspecialDevuelta);
     }
     // `null` tiene significado (desacotar de la zona); solo se omite `undefined`.
     if (data.zonaId !== undefined) out.zonaId = data.zonaId;

@@ -52,6 +52,7 @@ function tarifa(overrides: Partial<TarifaDTO> & { id: string }): TarifaDTO {
     ivaFlete: 1,
     ivaComisionCod: 1,
     tarifaEspecial: null,
+    tarifaEspecialDevuelta: null,
     zonaId: null,
     isDefault: true,
     createdAt: new Date("2026-08-24T00:00:00Z"),
@@ -128,6 +129,7 @@ describe("CrearTiendaForm — a quién ofrece el select", () => {
           ivaFlete: "1",
           ivaComisionCod: "1",
           tarifaEspecial: "",
+          tarifaEspecialDevuelta: "",
         },
       },
     });

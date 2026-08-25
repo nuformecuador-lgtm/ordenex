@@ -1,7 +1,6 @@
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { RawRow } from "@/lib/parsers/spreadsheet";
 import type { BulkSummary, RowResult } from "@/lib/types/carga-masiva";
-import type { DestinoCreacion } from "@/lib/services/destino-creacion";
 
 // R11: resultado discriminado. La autorizacion NO lanza; el borde (Route
 // Handler) traduce "forbidden" a un AppErrorShape (feature 10).
@@ -33,6 +32,14 @@ export interface CargaViaApiOrden {
   // gap de tarifa (tienda sin tarifa vigente) se representa con "0.00" (D1). Distinto de
   // `monto_cobrar`/COD (que viaja en el input y no se toca).
   costoEnvio: string;
+  // FULFILLMENT (2026-08-25): el monto FIJO de bodega por orden, DESGLOSADO. `costoEnvio` pasa
+  // a ser la SUMA (flete + IVA del flete + fulfillment) y este campo dice cuanto de ese total
+  // es el servicio de bodega. "0.00" cuando la tienda no hace fulfillment — que es tambien el
+  // caso en que `costoEnvio` vale exactamente lo que valia antes de esta fecha.
+  //
+  // Nunca `null`: mismo criterio que su hermano de arriba, el gap de tarifa se representa con
+  // cero y no con ausencia.
+  fulfillment: string;
 }
 
 export interface CargaViaApiSummary {
@@ -52,12 +59,18 @@ export interface CargaViaApiSummary {
 // Feature 88 — resultado discriminado de la carga por API (espejo de `BulkOrdenResult`):
 // la autorizacion (rol `apiKey`) NO lanza; el borde traduce `forbidden` a 403.
 //
-// Feature 155/R24: `destino` es la bifurcacion resuelta para ESTE lote. Va en el resultado del
-// SERVICE y NO en el `summary` (que es literalmente el cuerpo JSON de la respuesta publica):
-// el borde lo necesita para decidir si emite manifiesto, y esa es una decision interna. Lo que
-// el integrador ve es el bloque `manifiesto`, cuando lo hay.
+// Feature 155/R24 + FULFILLMENT (2026-08-25): `manifiestoOrdenIds` son las ordenes de ESTE
+// lote que van al manifiesto — las de la rama (b), las que esperan en la tienda—. Sustituye al
+// `destino: DestinoCreacion` que viajaba aqui: desde que la bifurcacion se decide POR ORDEN (su
+// tarifa dice si esa tienda hace fulfillment) un lote puede ser mixto, y entonces "este lote
+// emite manifiesto" ya no es una pregunta con respuesta.
+//
+// Va en el resultado del SERVICE y NO en el `summary` (que es literalmente el cuerpo JSON de la
+// respuesta publica): el borde lo necesita para pedir el manifiesto, y esa es una decision
+// interna. Lo que el integrador ve es el bloque `manifiesto`, cuando lo hay. Lista VACIA = este
+// lote no emite manifiesto (ninguna orden creada, o todas nacidas en bodega).
 export type CargaViaApiResult =
-  | { status: "ok"; summary: CargaViaApiSummary; destino: DestinoCreacion }
+  | { status: "ok"; summary: CargaViaApiSummary; manifiestoOrdenIds: string[] }
   | { status: "forbidden" };
 
 export interface IBulkOrdenService {
@@ -96,11 +109,13 @@ export interface IBulkOrdenService {
    * autorizacion (devuelve `forbidden`). Devuelve el summary extendido con `numGuia` por
    * creada + el bloque plano `ordenes` (R10). No hay `dryRun`: el integrador carga en firme.
    *
-   * Feature 155/R19/R20/R22: el estado inicial DEJA de ser fijo. Se resuelve con el MISMO
-   * punto de decision que la via sesion (`resolverDestinoCreacion`) sobre el flag
-   * `fulfillment` del dueño de la key. En la practica ese dueño tiene rol `apiKey` y el flag
-   * solo se acepta para `adminTienda`, asi que el caso vivo es siempre la rama (b):
-   * `por_recolectar_en_tienda` con `num_guia` en el acto.
+   * Feature 155/R19/R20/R22 + FULFILLMENT (2026-08-25): el estado inicial DEJA de ser fijo, y
+   * desde hoy se decide POR ORDEN. Se sigue resolviendo con el MISMO punto de decision que la
+   * via sesion (`resolverDestinoCreacion`), pero el predicado de ESTA via no es el flag
+   * `Usuario.fulfillment` —que para un usuario de rol `apiKey` vale siempre `false`, y por eso
+   * la rama (a) llevaba desde la 155 declarada como inalcanzable— sino el MONTO de fulfillment
+   * de la tarifa que le resuelve a cada orden: `> 0` -> `en_preparacion` SIN guia; si no, la
+   * rama (b) de siempre, `por_recolectar_en_tienda` con `num_guia` en el acto.
    *
    * Feature 141 (R20/R21/R30-R33): `options.name` es el nombre OPCIONAL del lote; el id del
    * lote lo genera SIEMPRE el servidor (una peticion = un lote). Puede lanzar

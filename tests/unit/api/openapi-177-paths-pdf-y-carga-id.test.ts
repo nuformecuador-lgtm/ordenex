@@ -149,13 +149,15 @@ describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez 
     }
   });
 
-  it("el schema PdfGenerateResponse publica url, expiraEnSegundos y generado como requeridos", () => {
+  // `generado` se RETIRO del contrato el 2026-08-25. La asercion es de igualdad exacta
+  // (`toEqual`, no `toContain`) a proposito: asi el dia que alguien lo reintroduzca "porque es
+  // aditivo" el test se pone rojo, en vez de dejar volver un campo que ya se decidio no publicar.
+  it("el schema PdfGenerateResponse publica SOLO url y expiraEnSegundos como requeridos", () => {
     const schema = openApiSpec.components.schemas.PdfGenerateResponse;
-    expect(Object.keys(schema.properties)).toEqual(["url", "expiraEnSegundos", "generado"]);
-    expect([...schema.required]).toEqual(["url", "expiraEnSegundos", "generado"]);
+    expect(Object.keys(schema.properties)).toEqual(["url", "expiraEnSegundos"]);
+    expect([...schema.required]).toEqual(["url", "expiraEnSegundos"]);
     expect(schema.properties.url.type).toBe("string");
     expect(schema.properties.expiraEnSegundos.type).toBe("integer");
-    expect(schema.properties.generado.type).toBe("boolean");
   });
 
   it("el .yaml declara PdfGenerateResponse con las mismas propiedades requeridas", () => {
@@ -163,11 +165,11 @@ describe("177/R41 + 255/R47 + 267/R39 + 266/R28 — el OpenAPI publica los diez 
     const requeridas = subBloque(bloque, "required", 6)
       .filter((l) => /^\s*-\s+/.test(l))
       .map((l) => l.replace(/^\s*-\s+/, "").trim());
-    expect(requeridas).toEqual(["url", "expiraEnSegundos", "generado"]);
+    expect(requeridas).toEqual(["url", "expiraEnSegundos"]);
     const propiedades = subBloque(bloque, "properties", 6)
       .filter((l) => indent(l) === 8)
       .map((l) => l.trim().replace(/:$/, ""));
-    expect(propiedades).toEqual(["url", "expiraEnSegundos", "generado"]);
+    expect(propiedades).toEqual(["url", "expiraEnSegundos"]);
   });
 
   it("los tres endpoints nuevos reutilizan las responses de error existentes por $ref", () => {
@@ -330,17 +332,21 @@ describe("255/R21 — CotizacionRow no declara `required`: una fila incompleta n
 
   it("los schemas de RESPUESTA conservan su `required`: ahí sí es una promesa cumplida", () => {
     const schemas = openApiSpec.components.schemas;
+    // `fulfillment` (2026-08-25) es el sexto concepto del entregado y el quinto del devuelto:
+    // se cobra tambien cuando el paquete vuelve, porque el servicio de bodega ya se presto.
     expect([...schemas.CotizacionEscenarioEntregado.required]).toEqual([
       "flete",
       "iva",
       "comision",
       "ivaComision",
+      "fulfillment",
       "total",
     ]);
     expect([...schemas.CotizacionEscenarioDevuelto.required]).toEqual([
       "flete",
       "iva",
       "comision",
+      "fulfillment",
       "total",
     ]);
     expect([...schemas.CotizacionCostos.required]).toEqual(["entregado", "devuelto"]);
