@@ -135,6 +135,23 @@ decisión de dejar SQL y CSS fuera se sostiene y no se reabre nada.**
 
 ---
 
+### El «159 suites» del enunciado también se re-midió
+
+Es el número con el que la puerta humana justificó P5, y yo lo había repetido tal cual en tres
+sitios (el docstring del módulo, el comentario de `init.sh` y la fila de `docs/verification.md`) —
+que es exactamente el pecado que esta ficha existe para no cometer. Medido el 2026-08-25:
+
+- **134** archivos importan `tests/fixtures/sin-comentarios.ts` **directamente**; **128** de ellos
+  son archivos de test.
+- Contando las transitivas —`money-safe.ts`, `deteccion-maqueta.ts`, `css-reglas.ts`,
+  `contraste.ts`, `etiquetas-datatable.ts`, `aserciones-de-orden.ts`, `montajes-componente.ts` y
+  `_arbol-de-la-feature.ts`— el cierre son **180 archivos**, de los que **171 son suites**.
+
+El 159 firmado cae entre las dos cifras. Los tres sitios pasan a decir **171**, con el desglose y
+la fecha, para que el siguiente que lo lea sepa qué se contó.
+
+---
+
 ## T0.4 — La prosa que quedaba falsa (lista CERRADA)
 
 | ruta:línea (numeración previa al cambio) | qué afirmaba | estado |
@@ -279,6 +296,11 @@ posterior`. Revertido y comprobado: `git status` vacío, `db/` y `app/` intactos
 
 `./init.sh` (no `--rapido`), con el código de salida escrito **dentro** del log
 (`INIT_EXIT=$?`), sin canalizarlo por `tail`. Duración: 15:20:29 → 15:29:56 (**9 min 27 s**).
+
+Se corrió **dos veces**: la segunda (15:36:27 → 15:46:05, **9 min 38 s**) después de corregir el
+«159 suites» en los tres sitios, porque eso tocaba otra vez `tests/fixtures/sin-comentarios.ts` y
+un gate que no incluye el último commit no vale para cerrar. **Resultado idéntico las dos veces**,
+hasta el número de casos.
 
 ```
 ✓ typecheck paso

@@ -45,7 +45,11 @@ import path from "node:path";
  *
  * **No reconoce literales de expresion regular.** Distinguir `/…/` de una division exige el
  * token anterior, o sea un parser de TypeScript, y este modulo esta en el camino caliente de
- * 159 suites. Consecuencia conocida: una regex que contenga `/*` o `//` **sin escapar y fuera de
+ * **171 suites** —134 archivos lo importan directamente, 128 de ellos de test, y el resto llega
+ * por `money-safe.ts`, `deteccion-maqueta.ts`, `css-reglas.ts`, `contraste.ts`,
+ * `etiquetas-datatable.ts`, `aserciones-de-orden.ts`, `montajes-componente.ts` y
+ * `_arbol-de-la-feature.ts`— (medido el 2026-08-25). Consecuencia conocida: una regex que
+ * contenga `/*` o `//` **sin escapar y fuera de
  * una clase de caracteres** abre comentario. En la practica esos caracteres se escriben
  * escapados (`/\/\//`, `/\/\*\/`), y el censo diferencial de la 283 lo midio: **cero** lineas
  * perdidas en los 2.697 `.ts`/`.tsx` del arbol. Queda afirmado por un caso de prueba en

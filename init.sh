@@ -145,7 +145,10 @@ run_if() {
 # y un fallo aqui no se ve como un test rojo, se ve como un verde que no significa nada.
 #
 # `tests/fixtures/sin-comentarios.ts` entra por ESE MISMO argumento (feature 283, 2026-08-25). Es
-# el quitador de comentarios con el que **159 suites** leen el arbol: ninguna de ellas ejecuta el
+# el quitador de comentarios con el que **171 suites** leen el arbol -134 archivos lo importan
+# directamente, 128 de ellos de test, y el resto llega por money-safe, deteccion-maqueta,
+# css-reglas, contraste, etiquetas-datatable, aserciones-de-orden, montajes-componente y
+# _arbol-de-la-feature; re-medido el 2026-08-25-: ninguna de ellas ejecuta el
 # codigo que vigila, todas lo ESCANEAN, y todas lo escanean a traves de este archivo. Si el
 # quitador mide de menos, las guardias afirman sobre un texto al que le falta codigo y **no se
 # ponen rojas: se ponen verdes**. Es literalmente lo que paso -1.387 lineas de codigo invisibles en
