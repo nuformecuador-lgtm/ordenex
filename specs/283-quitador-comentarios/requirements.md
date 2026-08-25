@@ -261,3 +261,35 @@ volvió a medir»). ¿De acuerdo, o prefieres que se den por buenos?
 abrir un bloque dentro de un `//` **en ese archivo concreto**; era la mitigación puntual del
 mecanismo que esta ficha cierra. Mi propuesta es **no tocarla** (R27): sigue siendo una regla de
 legibilidad válida y su mutación (f) sigue matándola. ¿Se queda?
+
+---
+
+## PUERTA HUMANA PASADA — 2026-08-25
+
+Las siete preguntas abiertas quedan cerradas. **No se re-abren.**
+
+### Firmadas por el humano
+
+- **P5 · El quitador SE AÑADE a la lista que niega `./init.sh --rapido`.** Cualquier cambio futuro a
+  `tests/fixtures/sin-comentarios.ts` obliga a la corrida completa. Lo justifica el número: **159
+  suites leen por ahí**, así que tocarlo mal deja ciegas a las guardias **sin que nada se ponga
+  rojo** — que es exactamente lo que pasó y por lo que esta ficha existe.
+- **P1 · Umbral DURO de rendimiento: `+15 %` o `+3 s` sobre la mediana bloquea.** Si el quitador
+  nuevo supera eso, la ficha no cierra hasta optimizarlo. Se miden **tres corridas antes y tres
+  después**, mediana contra mediana, y el número se escribe.
+
+### Decididas por el leader
+
+- **P6 · Se RE-MIDE todo, no se hereda ningún número mío.** Hoy mismo heredé un «79 líneas» de un
+  informe ajeno y lo repetí sin comprobarlo: era falso, el tramo real eran 151. No se le pide a
+  nadie la confianza que uno no dio.
+- **P4 · SÍ se corrige la prosa obsoleta** de `cotizacion-orden-service.test.ts:914-916`, diciendo
+  **qué afirmaba y por qué era falsa**. Es prosa sobre el mismísimo defecto que esta ficha arregla:
+  dejarla sería cerrar el mecanismo y conservar la mentira que lo describía.
+- **P2 y P3 · `quitarComentariosCss` y `quitarComentariosSql` quedan FUERA**, como propone el
+  diseño, porque las dos miden **cero líneas perdidas hoy** (1 `.css` real; 8 `.sql` con `/*` dentro
+  de un `--` pero **ninguno** con un `*/` posterior). **Con su cable trampa cada una**: un test que
+  falla el día que aparezca la precondición. Acotar no es abandonar, y la diferencia entre las dos
+  cosas es precisamente ese test.
+- **P7 · R45/R46 de la 279 no se tocan.** Aquella ficha cerró el caso concreto del menú; ésta cierra
+  el mecanismo. Son cosas distintas y sus requisitos conviven.
