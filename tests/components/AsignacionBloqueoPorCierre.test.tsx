@@ -270,6 +270,7 @@ describe("271/T9.4 · el modal de RECOLECCIÓN en tienda (R31/R32)", () => {
  */
 describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
   const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+    mensajeros: [],
     zonas: [],
     tiendas: [],
     provincias: [],

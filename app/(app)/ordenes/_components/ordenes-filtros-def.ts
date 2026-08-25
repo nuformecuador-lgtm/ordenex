@@ -51,6 +51,13 @@ export const CLAVE_ESTADO = "status_id";
 export const CLAVE_REASIGNABLES = "reasignables";
 
 /**
+ * Clave del filtro por MENSAJERO ASIGNADO. Es la misma que espera el `filter` de
+ * `listarOrdenes`, asi que `seleccionAFilter` la deja pasar tal cual (identidad, como el
+ * resto de claves de catalogo).
+ */
+export const CLAVE_MENSAJERO = "mensajero_id";
+
+/**
  * Feature 169 — clave del BUSCADOR de texto libre. Es la misma que espera el `filter`
  * de `listarOrdenes`, pero NO viaja como lista: `seleccionAFilter` la traduce a un
  * escalar (es un termino, no un conjunto de ids).
@@ -66,7 +73,7 @@ export const CLAVE_BUSQUEDA = "q";
 export const PLACEHOLDER_BUSQUEDA = "Guía, remisión, teléfono, destinatario o producto";
 
 /**
- * Declara los OCHO filtros de la barra de ordenes sobre el contrato del bloque A.
+ * Declara los NUEVE filtros de la barra de ordenes sobre el contrato del bloque A.
  * Caen claves segun el rol: sin tienda si el rol esta acotado a la suya (R62) y sin
  * REASIGNABLES si el rol no reasigna mensajeros (`adminTienda`).
  *
@@ -86,6 +93,12 @@ export function construirFiltrosOrdenes(
     incluirTienda: boolean;
     incluirReasignables?: boolean;
     incluirZona?: boolean;
+    /**
+     * Declara el filtro por MENSAJERO asignado. Cae en el rol acotado a su propia tienda
+     * por la MISMA razon que el de tienda: el directorio de mensajeros es del personal
+     * interno y el catalogo tampoco se lo entrega, asi que el control se quedaria vacio.
+     */
+    incluirMensajero?: boolean;
     ahora?: Date;
   },
 ): FilterDef[] {
@@ -123,6 +136,37 @@ export function construirFiltrosOrdenes(
         ]
       : [];
 
+  // Pedido humano (2026-08-25): el filtro por MENSAJERO ASIGNADO, encadenado a la ZONA
+  // (`dependsOn`), exactamente igual que el canton lo esta a la provincia. Elegida una zona,
+  // el desplegable solo ofrece a los mensajeros de esa zona; sin zona elegida —o con el
+  // control de zona no declarado, que es el caso del rol acotado a UNA zona— los ofrece
+  // todos, que es lo que el motor de dependencias hace con un padre sin seleccion o no
+  // declarado (R24/R27). No hace falta ninguna regla propia aqui.
+  //
+  // ⚠️ Un mensajero SIN zona asignada (`zona_id` es nullable) no tiene `parentValue`, y el
+  // motor no ofrece esas opciones mientras el padre este declarado: no es un olvido, es la
+  // consecuencia de encadenar. Si algun dia hay mensajeros sin zona con ordenes asignadas,
+  // lo que hay que arreglar es el dato (darles zona), no el encadenado.
+  const mensajero: FilterDef[] =
+    opts.incluirMensajero ?? true
+      ? [
+          {
+            key: CLAVE_MENSAJERO,
+            label: "Mensajero",
+            kind: "multi",
+            dependsOn: "zona_id",
+            searchPlaceholder: "Buscar mensajero…",
+            options: cat.mensajeros.map((m) => ({
+              value: m.id,
+              label: m.nombre,
+              // `undefined`, no `null`: el contrato del motor es "sin padre = sin
+              // asociacion", y `null` no es ese contrato.
+              parentValue: m.zonaId ?? undefined,
+            })),
+          },
+        ]
+      : [];
+
   const zona: FilterDef[] =
     opts.incluirZona ?? true
       ? [
@@ -148,6 +192,7 @@ export function construirFiltrosOrdenes(
       placeholder: PLACEHOLDER_BUSQUEDA,
     },
     ...zona,
+    ...mensajero,
     ...tienda,
     {
       key: "provincia_id",
@@ -201,6 +246,7 @@ export function construirFiltrosOrdenes(
 export const CATALOGO_FILTROS_VACIO: CatalogoFiltrosOrdenesDTO = {
   zonas: [],
   tiendas: [],
+  mensajeros: [],
   provincias: [],
   cantones: [],
   distritos: [],

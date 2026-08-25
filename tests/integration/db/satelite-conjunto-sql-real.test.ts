@@ -78,6 +78,9 @@ describeSiHayBase("SQL real de la bodega satélite (feature 184, T A.1/T A.2)", 
           zonaId: ZONA_INEXISTENTE,
           estatusValues: [...ESTADOS_BODEGA_SATELITE],
           provinciaIds: ["p-sj"],
+          // Pedido humano (2026-08-25): con la columna REAL. Un nombre mal escrito aqui no lo
+          // ve ningun doble; revienta en la primera consulta de la bodega.
+          mensajeroIds: ["m-inexistente"],
           creadaDesde: new Date("2026-08-01T06:00:00.000Z"),
           creadaHasta: new Date("2026-08-11T06:00:00.000Z"),
           busqueda: "8888-0000",

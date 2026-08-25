@@ -1,7 +1,7 @@
 import type { EstadoUsuario, RolValue } from "@prisma/client";
 import type { MensajeroDTO } from "@/lib/types/mensajero";
 import type { UsuarioPorRolDTO } from "@/lib/types/usuario-por-rol";
-import type { CuentaTiendaDTO } from "@/lib/types/filtros-ordenes";
+import type { CuentaTiendaDTO, MensajeroFiltroDTO } from "@/lib/types/filtros-ordenes";
 
 /** Usuario sin datos sensibles: nunca incluye el hash de la contrasena (R7). */
 export interface UsuarioPublico {
@@ -137,6 +137,19 @@ export interface IUserRepository {
    * proyectados a `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.
    */
   listMensajeros(): Promise<MensajeroDTO[]>;
+  /**
+   * Pedido humano (2026-08-25): los mensajeros del FILTRO de `/ordenes`, proyectados a
+   * `{ id, nombre, zonaId }` (nunca PII) y ordenados por `nombre` (orden determinista, R49).
+   *
+   * Dos diferencias deliberadas con `listMensajeros`, y las dos vienen de que esto es un
+   * catalogo de FILTRO y no un selector de asignacion:
+   *   - NO filtra por `estado`: un mensajero desactivado sigue siendo el asignado de ordenes
+   *     historicas, y ocultarlo haria imposible filtrarlas por el (mismo criterio que las
+   *     cuentas tienda inactivas);
+   *   - acepta `zonaId` para ACOTAR la lista a una zona, que es lo que necesita el rol que
+   *     solo opera la suya. Sin argumento, devuelve todos.
+   */
+  listMensajerosParaFiltro(zonaId?: string): Promise<MensajeroFiltroDTO[]>;
   /**
    * Estrategia generica: usuarios `activo` del rol pasado, proyectados a
    * `{ id, nombre }` (nunca PII/hash), ordenados por `nombre`.

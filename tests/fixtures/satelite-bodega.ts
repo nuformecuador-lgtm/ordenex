@@ -50,6 +50,7 @@ export function catalogoSatelite(
   return {
     // El adminSatelite no recibe ni zonas ni cuentas tienda: su barra no declara esos
     // controles, y el servicio tampoco le entrega el dato.
+    mensajeros: [],
     zonas: [],
     tiendas: [],
     provincias: unicos(

@@ -904,6 +904,15 @@ function condicionesSatelite(filtro: RecepcionSateliteFiltro): Prisma.Sql[] {
   if (provinciaIds.length > 0) {
     condiciones.push(Prisma.sql`o."provincia_id" IN (${Prisma.join(provinciaIds)})`);
   }
+  // Pedido humano (2026-08-25) — mensajero ASIGNADO, por ID y en el mismo AND. La columna es
+  // NULLABLE: una orden todavia sin mensajero queda fuera bajo este filtro, que es lo que pide
+  // quien lo usa («las de Ana»), y el mismo trato que ya recibe el distrito.
+  const mensajeroIds = [...(filtro.mensajeroIds ?? [])];
+  if (mensajeroIds.length > 0) {
+    condiciones.push(
+      Prisma.sql`o."mensajero_asignado_id" IN (${Prisma.join(mensajeroIds)})`,
+    );
+  }
   const cantonIds = [...(filtro.cantonIds ?? [])];
   if (cantonIds.length > 0) {
     condiciones.push(Prisma.sql`o."canton_id" IN (${Prisma.join(cantonIds)})`);
@@ -1134,11 +1143,11 @@ export class OrdenRepository implements IOrdenRepository {
       // `true`: retrocompatibilidad de la feature 63 — una lista vacia de estados
       // equivalia a "sin filtro". Los filtros de la 144 NO heredan esa concesion.
       ...criterioColumna("estatusId", params.where.estatusId, true),
-      // Acotamiento por dueño para el rol mensajero: solo sus asignadas (evita fuga
-      // del listado completo en /ordenes). El service lo setea; aqui se traduce al WHERE.
-      ...(params.where.mensajeroAsignadoId
-        ? { mensajeroAsignadoId: params.where.mensajeroAsignadoId }
-        : {}),
+      // Un id -> igualdad (acotamiento por dueño para el rol mensajero: solo sus
+      // asignadas, evita la fuga del listado completo en /ordenes); una lista -> `IN (...)`
+      // (filtro por mensajero de la barra). El service decide cual escribe; aqui solo se
+      // traduce, con el MISMO helper que el resto de columnas.
+      ...criterioColumna("mensajeroAsignadoId", params.where.mensajeroAsignadoId),
       // Feature 144 (R33/R34/R35): filtros de catalogo de la orden. Mismo patron:
       // lista -> `IN (...)` (OR interno), escalar -> igualdad, ausente -> sin clave.
       // Claves hermanas del mismo objeto = AND entre filtros distintos.

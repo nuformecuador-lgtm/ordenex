@@ -20,6 +20,9 @@ describe("seleccionAFilter — filtros de catalogo (R58)", () => {
   it("R58: las claves de catalogo se traducen por IDENTIDAD, con sus listas de ids", () => {
     const filter = seleccionAFilter({
       zona_id: ["z1", "z2"],
+      // `mensajero_id` entro el 2026-08-25 y no necesito ninguna regla propia: la clave
+      // publica se eligio IGUAL a la del borde, asi que aqui tambien es la identidad.
+      mensajero_id: ["m1"],
       tienda_id: ["t1"],
       provincia_id: ["p1"],
       canton_id: ["c1"],
@@ -27,6 +30,7 @@ describe("seleccionAFilter — filtros de catalogo (R58)", () => {
     });
     expect(filter).toEqual({
       zona_id: ["z1", "z2"],
+      mensajero_id: ["m1"],
       tienda_id: ["t1"],
       provincia_id: ["p1"],
       canton_id: ["c1"],

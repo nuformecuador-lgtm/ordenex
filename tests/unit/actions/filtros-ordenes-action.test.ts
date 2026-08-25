@@ -9,6 +9,7 @@ import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 // `/ordenes`. Resuelve el actor server-side y delega en el service; no decide nada mas.
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San Jose" }],

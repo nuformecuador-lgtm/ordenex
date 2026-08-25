@@ -87,7 +87,10 @@ export interface ListOrdenesWhere {
   // `estatusId` admite un id (filtro por un estado) o una lista de ids (filtro
   // multi-estado del listado de `/ordenes`), que el repositorio traduce a `IN (...)`.
   estatusId?: string | string[];
-  mensajeroAsignadoId?: string;
+  // Escalar = acotamiento por rol (el mensajero solo ve las suyas); lista = filtro por
+  // mensajero de la barra. Igual que `tiendaId`: el escalar lo escribe el service AL FINAL
+  // y por tanto PISA cualquier lista que el filtro hubiera puesto (R36).
+  mensajeroAsignadoId?: string | string[];
   // Feature 144: filtros de catalogo de la orden (columnas propias, sin JOIN).
   zonaId?: string | string[];
   provinciaId?: string | string[];
@@ -626,6 +629,12 @@ export interface RecepcionSateliteFiltro {
    */
   provinciaIds?: readonly string[];
   cantonIds?: readonly string[];
+  /**
+   * Pedido humano (2026-08-25) — mensajeros ASIGNADOS elegidos; vacio/ausente = todos. Va en
+   * el mismo AND que la geografia. Una orden SIN mensajero queda fuera bajo este filtro
+   * (`mensajero_asignado_id` es NULLABLE y `NULL IN (...)` no es cierto), igual que el distrito.
+   */
+  mensajeroIds?: readonly string[];
   /**
    * Distritos elegidos; vacio/ausente = todos. Con distritos elegidos, una orden SIN distrito
    * queda fuera (`distrito_id` es NULLABLE y `NULL IN (...)` no es cierto) — el mismo trato

@@ -13,6 +13,7 @@ import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 // ordenes y su traduccion al `filter` de `listarOrdenes`.
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda Uno", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San José" }],
@@ -73,7 +74,7 @@ describe("construirFiltrosOrdenes — el buscador va PRIMERO (R32)", () => {
 
   it("R32: se declara aunque el catalogo geografico venga vacio (no sale de el)", () => {
     const sinCatalogo = construirFiltrosOrdenes(
-      { zonas: [], tiendas: [], provincias: [], cantones: [], distritos: [] },
+      { zonas: [], tiendas: [], mensajeros: [], provincias: [], cantones: [], distritos: [] },
       { incluirTienda: true },
     );
     expect(sinCatalogo[0]?.key).toBe(CLAVE_BUSQUEDA);

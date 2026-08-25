@@ -259,6 +259,7 @@ beforeEach(() => {
   catalogo.mockResolvedValue({
     status: "ok",
     catalogo: {
+      mensajeros: [],
       zonas: [{ id: ZONA, nombre: "Zona Central" }],
       tiendas: [{ id: TIENDA, nombre: "Tienda Uno", esApiKey: false, activa: true }],
       provincias: [],

@@ -52,6 +52,12 @@ const FILTER_TO_COLUMN = {
   provincia_id: "provinciaId",
   canton_id: "cantonId",
   distrito_id: "distritoId",
+  // Pedido humano (2026-08-25): el filtro por MENSAJERO asignado. La clave publica es
+  // `mensajero_id`; la columna real (`mensajeroAsignadoId`) sigue siendo un nombre que
+  // solo vive en este mapa. Se escribe con el resto de filtros —ANTES del acotamiento
+  // por rol— para que el mensajero que alcance este listado siga viendo solo las suyas:
+  // su `mensajeroAsignadoId` escalar PISA la lista que hubiera puesto el filtro (R36).
+  mensajero_id: "mensajeroAsignadoId",
 } as const;
 
 /**
@@ -182,6 +188,9 @@ export class OrdenService implements IOrdenService {
     }
     if (input.filter?.distrito_id !== undefined) {
       where[FILTER_TO_COLUMN.distrito_id] = input.filter.distrito_id;
+    }
+    if (input.filter?.mensajero_id !== undefined) {
+      where[FILTER_TO_COLUMN.mensajero_id] = input.filter.mensajero_id;
     }
     // Feature 144/R41/R42/R43: los bordes temporales se calculan AQUI (server-side),
     // no llegan del cliente.

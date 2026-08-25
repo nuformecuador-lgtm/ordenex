@@ -136,6 +136,12 @@ export interface ListarOrdenesBodegaCompletoInput {
    * Geografia por ID (antes eran nombres): las opciones salen de la geografia de la ZONA del
    * actor. Lista ausente o vacia = todas; las tres se cruzan en AND.
    */
+  /**
+   * Pedido humano (2026-08-25) — mensajeros ASIGNADOS elegidos; ausente = todos. Las opciones
+   * salen del catalogo del rol, que para el adminSatelite son los mensajeros de SU zona. No
+   * amplia nada: el acotamiento por zona del listado se impone igual.
+   */
+  mensajero_id?: string[];
   provincia_id?: string[];
   canton_id?: string[];
   /** Con distritos elegidos, una orden SIN distrito queda fuera del conjunto. */

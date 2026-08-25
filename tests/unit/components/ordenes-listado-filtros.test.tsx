@@ -40,6 +40,7 @@ const CATALOGO_ESTADOS = [
 ];
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [
     { id: "z1", nombre: "GAM" },
     { id: "z2", nombre: "Satélite Norte" },
@@ -191,11 +192,11 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("OrdenesListado — barra de filtros (R55, R63)", () => {
-  it("R55: monta los SEIS filtros sobre el componente genérico", async () => {
+  it("R55: monta TODOS los filtros sobre el componente genérico", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
 
-    const MULTI = ["Zona", "Tienda", "Provincia", "Cantón", "Distrito"];
+    const MULTI = ["Zona", "Mensajero", "Tienda", "Provincia", "Cantón", "Distrito"];
     // Los filtros se siguen DECLARANDO todos; lo que cambió es que hoy se piden en el
     // selector en vez de nacer montados. Se afirma la lista EXACTA y en su orden: así
     // el caso sigue delatando tanto un filtro que desaparezca como uno que se cuele.

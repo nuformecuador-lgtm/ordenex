@@ -3,7 +3,11 @@ import type { IUserRepository } from "@/lib/interfaces/repositories/IUserReposit
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IFiltrosOrdenesService } from "@/lib/interfaces/services/IFiltrosOrdenesService";
-import type { ObtenerCatalogoFiltrosOrdenesResult } from "@/lib/types/filtros-ordenes";
+import type {
+  GeografiaFiltrosDTO,
+  MensajeroFiltroDTO,
+  ObtenerCatalogoFiltrosOrdenesResult,
+} from "@/lib/types/filtros-ordenes";
 
 /**
  * Feature 144/B2 (design §3.3/§3.4) — catalogo precargado de los filtros de `/ordenes`.
@@ -13,7 +17,7 @@ import type { ObtenerCatalogoFiltrosOrdenesResult } from "@/lib/types/filtros-or
  * test no tiene que implementar treinta metodos ajenos.
  */
 type ZonaRepo = Pick<IZonaRepository, "listLite">;
-type UserRepo = Pick<IUserRepository, "listCuentasTienda">;
+type UserRepo = Pick<IUserRepository, "listCuentasTienda" | "listMensajerosParaFiltro">;
 type GeoRepo = Pick<
   IGeoRepository,
   | "listProvinciasLite"
@@ -72,11 +76,19 @@ export class FiltrosOrdenesService implements IFiltrosOrdenesService {
     // dos cosas distintas, y esta es la segunda.
     const conTiendas = actor.rol !== ROL_ACOTADO_A_SU_TIENDA;
 
-    // R47: las lecturas en PARALELO. Secuenciarlas sumaria cinco latencias al TTFB de
+    // Pedido humano (2026-08-25): el directorio de MENSAJEROS es del personal interno, no de
+    // las cuentas tienda. Cae por el MISMO motivo que la lista de tiendas y en la misma
+    // condicion: `adminTienda` filtra dentro de lo suyo, y quien reparte sus ordenes no es
+    // una lista que se le entregue. `maestro`/`admin` los reciben TODOS (el rol acotado a
+    // una zona no llega aqui: se resuelve arriba, en `catalogoDeZona`).
+    const conMensajeros = conTiendas;
+
+    // R47: las lecturas en PARALELO. Secuenciarlas sumaria seis latencias al TTFB de
     // `/ordenes` sin ganar nada: son independientes entre si.
-    const [zonas, tiendas, provincias, cantones, distritos] = await Promise.all([
+    const [zonas, tiendas, mensajeros, provincias, cantones, distritos] = await Promise.all([
       this.zonaRepo.listLite(),
       conTiendas ? this.userRepo.listCuentasTienda() : Promise.resolve([]),
+      conMensajeros ? this.userRepo.listMensajerosParaFiltro() : Promise.resolve([]),
       this.geoRepo.listProvinciasLite(),
       this.geoRepo.listCantonesLite(),
       this.geoRepo.listDistritosLite(),
@@ -84,7 +96,7 @@ export class FiltrosOrdenesService implements IFiltrosOrdenesService {
 
     return {
       status: "ok",
-      catalogo: { zonas, tiendas, provincias, cantones, distritos },
+      catalogo: { zonas, tiendas, mensajeros, provincias, cantones, distritos },
     };
   }
 
@@ -101,11 +113,26 @@ export class FiltrosOrdenesService implements IFiltrosOrdenesService {
     actor: Actor,
   ): Promise<ObtenerCatalogoFiltrosOrdenesResult> {
     const zonaId = actor.zonaId ?? null;
-    const geografia =
+    // Los mensajeros van ACOTADOS a la misma zona que la geografia, y por el mismo motivo:
+    // este rol opera UNA zona, asi que ofrecerle mensajeros de otra seria ofrecerle un filtro
+    // que no puede devolver ni una fila. Sin zona asignada no hay alcance sobre nada y la
+    // lista va vacia, igual que la geografia.
+    const [geografia, mensajeros] = await Promise.all([
       zonaId === null
-        ? { provincias: [], cantones: [], distritos: [] }
-        : await this.geoRepo.listGeografiaLitePorZona(zonaId);
+        ? Promise.resolve<GeografiaFiltrosDTO>({
+            provincias: [],
+            cantones: [],
+            distritos: [],
+          })
+        : this.geoRepo.listGeografiaLitePorZona(zonaId),
+      zonaId === null
+        ? Promise.resolve<MensajeroFiltroDTO[]>([])
+        : this.userRepo.listMensajerosParaFiltro(zonaId),
+    ]);
 
-    return { status: "ok", catalogo: { zonas: [], tiendas: [], ...geografia } };
+    return {
+      status: "ok",
+      catalogo: { zonas: [], tiendas: [], mensajeros, ...geografia },
+    };
   }
 }
