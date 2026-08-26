@@ -25,6 +25,38 @@ Notación EARS. Convenciones de vocabulario:
 
 ---
 
+## ⚠️ CORRECCIÓN del 2026-08-25 — tres decisiones del humano cambiaron requisitos ya escritos
+
+Este documento se aprobó **antes** de que el humano firmara **D1/D2/D3**, y tres de sus
+requisitos afirmaban lo contrario de lo que hoy hace el código. Se corrigen **aquí y en el
+propio requisito**, diciendo qué afirmaban y por qué cambió; no se reescriben en silencio.
+
+| # | Lo que decía este spec | Lo que manda desde el 2026-08-25 | Por qué |
+| --- | --- | --- | --- |
+| **R3** | «un SW recién instalado NO DEBE tomar el control ni activarse» **mientras haya un cliente controlado** | el SW nuevo **espera por defecto**, y **sí** toma el control cuando **el usuario lo pide** con el botón del aviso (mensaje `ordenex:relevo-ahora`) | **D1**: el humano eligió avisar con un botón en vez de esperar callado. Sin esa puerta, la versión nueva no llegaría hasta que se cerrara la app entera |
+| **R5** | «El SW NO DEBE navegar, recargar ni reemplazar la página de ningún cliente **en ninguna circunstancia**» | **el SW sigue sin navegar ni recargar a nadie** —eso no cambió—, pero **la página se recarga a sí misma** tras `controllerchange` **si, y sólo si, fue ESA pestaña la que pidió el relevo** | **D1**. El matiz importa: la prohibición era del SW y sigue en pie (`client.navigate` sólo existe en la rama de `localhost`); lo que se añadió es una recarga **de la página, pedida por el usuario** |
+| **R7** | «CUANDO el SW se active, DEBE borrar toda caché … que no esté en la lista de vigentes» | la purga **está condicionada**: sólo corre si no queda viva ninguna ventana de la build anterior, y se **reintenta** cuando esa ventana desaparece | consecuencia directa de **D1**: con relevo a petición, `activate` puede correr con una página vieja delante, y barrer su caché entonces sería romperla. El relevo y la purga son la misma decisión |
+| **R15** | «sus **dos** iconos …, con los valores que ya tiene» | **cuatro** iconos: 192 y 512 con `purpose: "any"`, y 192 y 512 con `purpose: "maskable"` | **D3** (decisión del humano sobre el icono): hacen falta **dos variantes del mismo vector**. El `purpose: "any maskable"` de un solo archivo era imposible de cumplir: el que se ve bien suelto da **doble redondeo** dentro de la máscara del lanzador |
+| **Fuera de alcance** → «avisar al usuario de que hay versión nueva … ficha aparte» | **ENTRA**: es D1 | | |
+| **Fuera de alcance** → «`scripts/generate-pwa-icons.mjs` … No se arregla aquí (Q6)» | **ENTRA y queda arreglado**: apuntaba a `public/next.svg`, que no existe. Ahora lee los dos vectores de marca y emite los cinco PNG | **Q6 resuelta**, no aplazada | |
+
+**Y un requisito que este spec no tenía y resultó ser el más importante de la ficha (B2 de la
+revisión, 2026-08-25):**
+
+- **R25 · `/manifest.json`, `/sw.js` y `/offline.html` DEBEN servirse sin sesión.** Medido contra
+  **producción real** (`ordenex.vercel.app`): los tres respondían **307 a `/login`** porque el
+  `matcher` del middleware sólo excluía **extensiones de imagen**. El navegador pide el
+  manifiesto **sin credenciales**, recibía el redirect, y por eso **la PWA nunca se ha podido
+  instalar** y el service worker **nunca llegó a descargarse**. Los iconos sí pasaban (200), lo
+  que hacía el defecto aún más difícil de ver. Es un defecto **vivo y anterior a esta ficha**, y
+  sin él todo lo demás de la 284 era decoración.
+- **R26 · El `<link rel="manifest">` NO DEBE declarar `crossorigin="use-credentials"`** mientras
+  el manifiesto sea un archivo estático igual para todos. Sólo haría falta si el manifiesto
+  pasara a depender de la sesión (el caso hipotético A11 del `design.md` §5), y entonces traería
+  su propio problema: el navegador **congela** el manifiesto al instalar.
+
+---
+
 ## Lo medido antes de escribir, y una corrección a la ficha
 
 Los cuatro defectos se confirmaron abriendo los archivos. Tres se confirman tal
@@ -74,13 +106,17 @@ es no perderlos.
 
 ## B · El relevo del service worker
 
-- **R3** MIENTRAS el SW en curso controle al menos un cliente, un SW recién
-  instalado NO DEBE tomar el control ni activarse.
+- **R3** ⚠️ **CORREGIDO 2026-08-25 (D1)** — decía: «MIENTRAS el SW en curso controle al
+  menos un cliente, un SW recién instalado NO DEBE tomar el control ni activarse». **Hoy dice:**
+  un SW recién instalado NO DEBE tomar el control **por su cuenta**; DEBE quedarse en `waiting`
+  hasta que **el usuario lo pida** con el botón del aviso, o hasta que no quede ningún cliente.
 - **R4** CUANDO el SW nuevo termine de instalarse y siga habiendo clientes
   controlados, el SW nuevo DEBE quedar en espera **sin borrar ninguna caché** y sin
   alterar ninguna respuesta que reciba la página viva.
-- **R5** El SW NO DEBE navegar, recargar ni reemplazar la página de ningún cliente
-  en producción, en ninguna circunstancia.
+- **R5** ⚠️ **MATIZADO 2026-08-25 (D1)** — el SW NO DEBE navegar, recargar ni reemplazar la
+  página de ningún cliente en producción, en ninguna circunstancia; **esto no cambió y sigue
+  vigilado**. Lo que se añadió NO es del SW: es **la página**, que se recarga a sí misma tras
+  `controllerchange` **si, y sólo si, fue esa pestaña la que pidió el relevo**.
 - **R6** DONDE el `hostname` sea `localhost` o `127.0.0.1`, el SW DEBE conservar
   intacto su comportamiento actual de autodestrucción —limpiar cachés,
   desregistrarse y renavegar los clientes—, y R3, R4 y R5 NO le aplican. Esa rama
@@ -88,8 +124,11 @@ es no perderlos.
 
 ## C · La política de purga de caché
 
-- **R7** CUANDO el SW se active, DEBE borrar toda caché de su origen cuyo nombre no
-  esté en la lista de cachés vigentes que el propio SW declara.
+- **R7** ⚠️ **CORREGIDO 2026-08-25 (D1)** — decía: «CUANDO el SW se active, DEBE borrar toda
+  caché … que no esté en la lista de vigentes». **Hoy dice:** CUANDO el SW se active DEBE borrar
+  esas cachés **siempre que no quede viva ninguna ventana de la build anterior**; MIENTRAS quede
+  alguna, NO DEBE borrar nada y DEBE **reintentar** la purga cuando esa ventana desaparezca.
+  Barrer bajo una página viva es romperla, y con el relevo a petición eso ya puede pasar.
 - **R8** Los nombres de las cachés de producción DEBEN cambiar en este despliegue,
   de modo que R7 recoja **una vez** todo lo acumulado por el SW anterior en
   `next-static-v1` y `pages-cache-v1`.
@@ -113,8 +152,11 @@ es no perderlos.
   `start_url`—, de modo que la identidad de la app ya instalada no cambie.
 - **R15** El manifiesto DEBE seguir declarando `name`, `short_name`, `description`,
   `start_url`, `scope`, `display`, `orientation`, `theme_color`,
-  `background_color`, `categories`, sus dos iconos y sus tres capturas, con los
-  valores que ya tiene.
+  `background_color`, `categories`, sus **cuatro** iconos y sus tres capturas.
+  ⚠️ **CORREGIDO 2026-08-25 (D3)**: decía «sus **dos** iconos … con los valores que ya tiene».
+  Hoy son **dos variantes del mismo vector** —192 y 512 con `purpose: "any"`, 192 y 512 con
+  `purpose: "maskable"`— porque un solo archivo con `"any maskable"` no puede cumplir las dos
+  cosas: da doble redondeo dentro de la máscara del lanzador.
 - **R16** El manifiesto NO DEBE declarar ningún atajo cuyo destino sea inalcanzable
   para algún rol con menú. MIENTRAS no exista una ruta que resuelva el destino por
   rol, el manifiesto NO DEBE declarar `shortcuts`.

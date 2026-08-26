@@ -7,6 +7,7 @@ import {
   MENSAJE_PAGINA_LISTA,
   MENSAJE_RELEVO_AHORA,
 } from "@/lib/pwa/actualizacion";
+import { suscribirTrabajo } from "@/lib/pwa/trabajo-en-curso";
 
 /**
  * Feature 284 — "hay una version nueva": detectarla, y NO recargar por su cuenta.
@@ -168,10 +169,16 @@ export function useActualizacionPwa(
 
   useEffect(() => {
     if (!hayVersionNueva) return;
-    const id = window.setInterval(() => {
-      setTrabajoEnCurso(hayTrabajoEnCurso(document));
-    }, intervaloMs);
-    return () => window.clearInterval(id);
+    const revisar = () => setTrabajoEnCurso(hayTrabajoEnCurso(document));
+    // El sondeo cubre lo que no avisa (un dialogo que se abre, un campo que se escribe); la
+    // suscripcion cubre lo que SI avisa y hace que el aviso se retire EN EL ACTO cuando una
+    // pantalla declara trabajo, en vez de hasta tres segundos despues.
+    const id = window.setInterval(revisar, intervaloMs);
+    const desuscribir = suscribirTrabajo(revisar);
+    return () => {
+      window.clearInterval(id);
+      desuscribir();
+    };
   }, [hayVersionNueva, intervaloMs]);
 
   const actualizar = useCallback(() => {

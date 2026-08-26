@@ -127,6 +127,22 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > decisión del humano (2026-08-25) se hacen **en producción justo después de desplegar**.
 > Cada fila se responde con **un número o un nombre**, nunca con «se ve bien».
 
+- [ ] **M8 · LOS TRES ARCHIVOS DE LA PWA, CONTRA EL DESPLIEGUE DE VERDAD.** Es **lo primero** que
+      hay que mirar tras desplegar: hasta esta release respondían **307 a `/login`** y por eso la
+      PWA **nunca se ha podido instalar**. Se comprueba **sin cookies**:
+
+      ```
+      curl -sI https://<dominio>/manifest.json | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/sw.js         | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/offline.html  | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/ordenes       | head -1     # se espera: 307 (sigue protegido)
+      ```
+
+      Si alguno vuelve **307**, el arreglo del `matcher` no llegó y **el resto de la 284 no sirve
+      de nada**: nada de lo que hace la PWA llega al dispositivo. Y con los tres en 200, en un
+      teléfono: que el navegador **ofrezca instalar** (Chrome → menú → «Instalar aplicación»), que
+      es la comprobación que ningún `curl` puede hacer.
+
 - [ ] **M1 · El relevo espera.** Con la app abierta, desplegar y recargar: en DevTools →
       Application → Service Workers debe aparecer uno **`waiting`** y el que dice **`activated`**
       debe seguir siendo el anterior. **Se anota qué versión está en cada estado.**
