@@ -13,6 +13,11 @@ import { clavePar, elegirPorCascada, type ParTarifa } from "@/lib/utils/cascada-
 // R10 (conteo de pendientes), R12 (existe solicitado) y R13/R14 (crear + vincular +
 // snapshot). Money-safe: Decimal se serializa a STRING toFixed(2).
 
+// Feature 246 — el dia CR con el que se ancla el conteo de pendientes. Es un valor FIJO, no
+// `startOfDayCR(new Date())`: el repositorio no lo calcula (lo recibe), asi que el test tampoco
+// tiene por que depender del reloj de la maquina para comprobar que lo usa tal cual.
+const HOY_CR = new Date("2026-08-25T00:00:00.000Z");
+
 function detalleRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
@@ -332,7 +337,11 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     prisma.orden.count.mockResolvedValue(2);
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const n = await repo.contarOrdenesPendientesGestion("m1", ["por_recoger", "en_reparto"]);
+    const n = await repo.contarOrdenesPendientesGestion(
+      "m1",
+      ["por_recoger", "en_reparto"],
+      HOY_CR,
+    );
 
     expect(n).toBe(2);
     const arg = prisma.orden.count.mock.calls[0][0];
@@ -347,10 +356,28 @@ describe("CierreDiaRepository.contarOrdenesPendientesGestion (R10)", () => {
     const prisma = buildPrisma();
     const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
 
-    const n = await repo.contarOrdenesPendientesGestion("m1", []);
+    const n = await repo.contarOrdenesPendientesGestion("m1", [], HOY_CR);
 
     expect(n).toBe(0);
     expect(prisma.orden.count).not.toHaveBeenCalled();
+  });
+
+  // FEATURE 246 — EL PREDICADO DE DIA, que es la razon por la que esta firma lleva `hoyCR`.
+  //
+  // No se afirma «el `where` contiene un OR» sino LAS DOS RAMAS Y SU OPERADOR, porque el fallo que
+  // este test existe para cazar no es que el OR desaparezca: es que alguien lo cambie a `lt`
+  // (dejando fuera lo de HOY, que si es deuda) o le quite la rama `null` (dejando de contar las
+  // ordenes sin reservar, que tambien lo son). Los tres `where` gemelos —este, el de
+  // `CorteDiarioRepository` y el de `crearCierre`— tienen que decir esto MISMO.
+  it("excluye lo reservado para DESPUES de hoy y conserva lo de hoy y lo no reservado", async () => {
+    const prisma = buildPrisma();
+    prisma.orden.count.mockResolvedValue(0);
+    const repo = new CierreDiaRepository(prisma as unknown as PrismaClient, buildTarifaRepo());
+
+    await repo.contarOrdenesPendientesGestion("m1", ["en_reparto"], HOY_CR);
+
+    const arg = prisma.orden.count.mock.calls[0][0];
+    expect(arg.where.OR).toEqual([{ fechaReparto: null }, { fechaReparto: { lte: HOY_CR } }]);
   });
 });
 

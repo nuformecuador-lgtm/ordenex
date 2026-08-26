@@ -157,6 +157,45 @@ describe("OrdenesCargaResumen — DataTable del resumen (R12, R22)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// El estatus se lee igual que en el listado de órdenes
+// ---------------------------------------------------------------------------
+describe("OrdenesCargaResumen — el estatus usa el chip del listado", () => {
+  it("traduce el value de la DB en vez de pintarlo crudo", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001", "REM-0002"]} />);
+    await screen.findByText("REM-0001");
+
+    // La confirmación de un lote de cientos de filas mostraba `en_preparacion`.
+    expect(screen.getAllByText("En preparación")).toHaveLength(2);
+    expect(screen.queryByText("en_preparacion")).not.toBeInTheDocument();
+  });
+
+  it("es el mismo chip de /ordenes, con su color, no texto suelto", async () => {
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+    const [chip] = screen.getAllByText("En preparación");
+
+    // `en_preparacion` -> variante `secondary` de la primitiva `Badge`. Se afirma la
+    // clase de la variante, no un hex: si alguien reimplementa la celda con un `<span>`
+    // suelto o con otro color, esto cae.
+    expect(chip.className).toMatch(/\bbg-secondary\b/);
+  });
+
+  it("una orden sin estatus no pinta un chip vacío", async () => {
+    resumenCargaMasivaMock.mockResolvedValue({
+      status: "ok",
+      ordenes: [{ ...ORDENES[0], estatusValue: undefined }],
+    });
+
+    render(<OrdenesCargaResumen numRemisiones={["REM-0001"]} />);
+    await screen.findByText("REM-0001");
+
+    // Mismo marcador de dato ausente que la dirección y el monto de esta tabla.
+    expect(screen.queryByText("En preparación")).not.toBeInTheDocument();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Feature 230 / R13 — la celda del monto pasa por el formateador compartido
 // ---------------------------------------------------------------------------
 describe("OrdenesCargaResumen — el monto lo formatea el módulo de moneda (230/R13)", () => {

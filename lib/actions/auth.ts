@@ -14,7 +14,7 @@ import { TrustedDeviceRepository } from "@/lib/repositories/TrustedDeviceReposit
 import { EmailOtpChallengeRepository } from "@/lib/repositories/EmailOtpChallengeRepository";
 import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { RiskEngine } from "@/lib/services/RiskEngine";
-import { StubEmailProvider } from "@/lib/services/EmailProvider";
+import { crearEmailProvider } from "@/lib/services/EmailProvider";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { SESSION_COOKIE_NAME } from "@/lib/constants/auth";
 
@@ -31,7 +31,7 @@ function buildAuthService(): IAuthService {
   const otpRepo = new EmailOtpChallengeRepository(prisma);
   const sessionRepo = new SessionRepository(prisma);
   const riskEngine = new RiskEngine(loginAttemptRepo, trustedDeviceRepo);
-  const emailProvider = new StubEmailProvider();
+  const emailProvider = crearEmailProvider();
   return new AuthService(
     userRepo,
     loginAttemptRepo,

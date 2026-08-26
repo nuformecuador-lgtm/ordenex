@@ -143,7 +143,19 @@ run_if() {
 # a resolver.
 # `init.sh` se vigila A SI MISMO: tocar el gate cambia LA MEDIDA con la que se mide todo lo demas,
 # y un fallo aqui no se ve como un test rojo, se ve como un verde que no significa nada.
-RUTAS_SENSIBLES='^db/migrations/|^db/schema\.prisma$|^lib/types/|^init\.sh$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
+#
+# `tests/fixtures/sin-comentarios.ts` entra por ESE MISMO argumento (feature 283, 2026-08-25). Es
+# el quitador de comentarios con el que **171 suites** leen el arbol -134 archivos lo importan
+# directamente, 128 de ellos de test, y el resto llega por money-safe, deteccion-maqueta,
+# css-reglas, contraste, etiquetas-datatable, aserciones-de-orden, montajes-componente y
+# _arbol-de-la-feature; re-medido el 2026-08-25-: ninguna de ellas ejecuta el
+# codigo que vigila, todas lo ESCANEAN, y todas lo escanean a traves de este archivo. Si el
+# quitador mide de menos, las guardias afirman sobre un texto al que le falta codigo y **no se
+# ponen rojas: se ponen verdes**. Es literalmente lo que paso -1.387 lineas de codigo invisibles en
+# 64 archivos, medidas el 2026-08-25- y lo que la 283 vino a cerrar. El grafo de imports tampoco
+# ayuda aqui: `vitest --changed` SI seleccionaria las suites que lo importan, pero el radio real
+# del cambio no es «quien lo importa» sino «quien mide con el», que es todo el arbol.
+RUTAS_SENSIBLES='^db/migrations/|^db/schema\.prisma$|^lib/types/|^init\.sh$|^tests/fixtures/sin-comentarios\.ts$|^(package\.json|pnpm-lock\.yaml|tsconfig\.json|middleware\.ts|next\.config\.ts|vitest\.config\.ts|prisma\.config\.ts|eslint\.config\.mjs|\.env\.example)$'
 NOMBRES_DE_DINERO='^(lib|app|components)/.*(cierre|tarifa|pago|wallet|liquidacion|ingreso|egreso|caja|comision|flete|moneda|cobro|factura|premio)'
 
 exigir_completo_si_toca_lo_sensible() {
