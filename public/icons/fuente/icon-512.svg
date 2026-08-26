@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- App icon PWA (rebrand B) — monograma "ex". Navy Bergen, maskable. -->
-  <rect width="512" height="512" rx="108" fill="#0d2444"/>
-  <text x="256" y="264" text-anchor="middle" dominant-baseline="central"
-        font-family="Poppins, 'Segoe UI', Arial, sans-serif" font-weight="700"
-        font-size="296" letter-spacing="-8">
-    <tspan fill="#ffffff">e</tspan><tspan fill="#f26419">x</tspan>
-  </text>
-</svg>

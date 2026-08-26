@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { Sidebar } from "./_components/Sidebar";
 import { ToastProvider } from "@/providers/ToastProvider";
+import { AvisoVersionNueva } from "@/components/shared/AvisoVersionNueva";
 import { TemaProvider } from "@/providers/TemaProvider";
 import { COOKIE_TEMA, normalizarTema } from "@/lib/tema/tema";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
@@ -65,6 +66,12 @@ export default async function AppLayout({
             {children}
           </SidebarInset>
         </SidebarProvider>
+        {/* Feature 284 — aviso de version nueva del service worker. Va en el portal y no en el
+            layout raiz: aqui viven las sesiones de trabajo (y la PWA instalada), y el layout
+            raiz cubre ademas la landing publica, que hoy es estatica y no necesita este JS.
+            El componente decide solo cuando pintarse; mientras el usuario tenga algo a medias
+            no aparece. */}
+        <AvisoVersionNueva />
       </ToastProvider>
     </TemaProvider>
   );

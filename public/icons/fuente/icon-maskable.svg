@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Feature 284 — icono de la PWA, monograma "ex" (navy Bergen + naranja).
+       Variante `maskable`: A SANGRE (rx=0, la mascara del lanzador recorta ella) y el monograma RECENTRADO.
+       EL TEXTO ESTA CONVERTIDO A TRAZADOS a proposito: el vector anterior pedia
+       "font-family: Poppins" y la app carga Poppins con "next/font/google", o sea EN EL
+       NAVEGADOR. Al rasterizar en una maquina sin Poppins instalada el monograma salia en
+       la tipografia de respaldo -el archivo compila, el PNG se genera y la letra no es la
+       de la marca-. Estos trazados son los glifos "e" y "x" de Poppins Bold (700). -->
+  <rect width="512" height="512" rx="0" fill="#0d2444"/>
+  <path fill="#ffffff" d="M251.77 267.21L145.97 267.21Q147.07 281.42 155.13 288.94Q163.19 296.46 174.95 296.46Q192.45 296.46 199.28 281.70L249.03 281.70Q245.21 296.73 235.23 308.76Q225.25 320.79 210.21 327.62Q195.18 334.46 176.59 334.46Q154.17 334.46 136.68 324.89Q119.18 315.32 109.34 297.55Q99.50 279.78 99.50 256.00Q99.50 232.22 109.20 214.45Q118.91 196.68 136.40 187.11Q153.90 177.54 176.59 177.54Q198.73 177.54 215.96 186.84Q233.18 196.13 242.88 213.35Q252.59 230.58 252.59 253.54Q252.59 260.10 251.77 267.21ZM204.75 241.24Q204.75 229.21 196.55 222.10Q188.34 214.99 176.04 214.99Q164.29 214.99 156.22 221.83Q148.16 228.66 146.25 241.24L204.75 241.24Z"/>
+  <path fill="#f26419" d="M360.01 332.27L330.76 289.90L306.16 332.27L255.59 332.27L305.89 254.36L254.22 179.73L306.71 179.73L335.96 221.83L360.56 179.73L411.13 179.73L360.01 256.55L412.50 332.27L360.01 332.27Z"/>
+</svg>
