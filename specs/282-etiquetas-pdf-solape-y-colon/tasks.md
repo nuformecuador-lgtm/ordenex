@@ -13,7 +13,7 @@
 
 ## Bloque A — La fuente: medirla antes de creérsela
 
-### [ ] T1 — Elegir la fuente y MEDIR que sirve
+### [x] T1 — Elegir la fuente y MEDIR que sirve
 - Descargar el TTF candidato (`design.md` §3.1: Liberation Sans Regular, OFL 1.1;
   alternativas DejaVu Sans / Noto Sans).
 - Comprobar con el lector de T2 —no a ojo, no por reputación— que trae **U+20A1
@@ -23,7 +23,7 @@
   cobertura. Si la candidata falla, queda escrito **por qué** y cuál se eligió.
 - Depende de: T2.
 
-### [ ] T2 [P] — Lector mínimo de TTF para tests, con autocomprobación
+### [x] T2 [P] — Lector mínimo de TTF para tests, con autocomprobación
 - Archivo: `tests/unit/pdf/ttf-lector.ts` (NUEVO, helper, sin dependencias nuevas).
 - API: `tablas(buf)`, `glifoDe(buf, codePoint)` (cmap 4 y 12), `contorno(buf, gid)`
   → longitud de `glyf` vía `loca` + `head.indexToLocFormat`.
@@ -33,7 +33,7 @@
 - **Hecho cuando:** los tres controles pasan sobre la fuente elegida. Un lector
   sin control negativo no se acepta: sería un verde que no mide nada.
 
-### [ ] T3 — Subconjunto y artefacto que ships
+### [x] T3 — Subconjunto y artefacto que ships
 - Generar el subconjunto (cp1252 imprimible ∪ `monedaConfig.simbolo`) con la
   herramienta que haya disponible; **anotar el comando exacto**.
 - Commitear: `assets/fuentes/<fuente>-etiqueta-subset.ttf`,
@@ -45,7 +45,7 @@
   base64 decodifica **byte a byte** al `.ttf` commiteado (SHA-256 afirmado en T4).
 - Depende de: T1.
 
-### [ ] T4 — Tests del artefacto de fuente
+### [x] T4 — Tests del artefacto de fuente
 - Archivo: `tests/unit/components/etiquetas-fuente.test.ts` (NUEVO, Node).
 - Cubre: cobertura de **todo** cp1252 imprimible con contorno no vacío
   **más** `monedaConfig.simbolo` leído de la configuración (no escrito a mano,
@@ -55,7 +55,7 @@
 - **Hecho cuando:** pasa y cubre **R11** y **R17**.
 - Depende de: T2, T3.
 
-### [ ] T5 — Guardia de peso y de carga diferida
+### [x] T5 — Guardia de peso y de carga diferida
 - Archivo: `tests/unit/guards/etiqueta-fuente-diferida.guardia.test.ts` (NUEVO).
 - Afirma: (a) `base64.length ≤ 81920`; (b) el módulo `etiquetas-fuente` **sólo**
   aparece dentro de un `import(` dinámico en `etiquetas-fuente-carga.ts`, y en
@@ -66,7 +66,7 @@
 
 ## Bloque B — El solape (independiente del bloque A)
 
-### [ ] T6 [P] — Derivar la línea base de los campos
+### [x] T6 [P] — Derivar la línea base de los campos
 - Archivo: `app/(app)/ordenes/_components/etiquetas-layout.ts` (MODIFICADO):
   `PT_A_MM`, `MAQUETA_BASE.guiaY = margin + 10` y `camposYInicio()` =
   `guiaY + fontGuia * PT_A_MM` (`design.md` §2.1).
@@ -76,7 +76,7 @@
 - **Hecho cuando:** compila; no queda ningún `18` ni ningún `margin + 10` literal
   en el camino; con `100x100` el resto del dibujo es idéntico al actual.
 
-### [ ] T7 — Tests del solape
+### [x] T7 — Tests del solape
 - Archivo: `tests/unit/components/etiquetas-layout.test.ts` (EXTENDIDO):
   `camposYInicio()` = 23,7611 con el cuerpo actual; **si se dobla el cuerpo de la
   guía, la primera fila baja exactamente 7,76 mm más** (derivación, no número
@@ -97,7 +97,7 @@
 
 ## Bloque C — El colón en el PDF (depende de A y B)
 
-### [ ] T8 — Cargador diferido e inyección
+### [x] T8 — Cargador diferido e inyección
 - Archivos NUEVOS: `app/(app)/ordenes/_components/etiquetas-fuente-carga.ts`
   (`cargarFuenteEtiqueta()` con el único `import()` dinámico y el error envuelto
   con contexto).
@@ -111,7 +111,7 @@
   ejecutan con esa fuente activa.
 - Depende de: T3, T6.
 
-### [ ] T9 — Borde de error en el modal (R16)
+### [x] T9 — Borde de error en el modal (R16)
 - Archivo: `app/(app)/ordenes/_components/EtiquetasGuiaModal.tsx` (MODIFICADO):
   `handleDescargar` async, `try/catch` (nada de `catch` vacío), mensaje
   «No se pudo preparar la tipografía de la etiqueta. Inténtalo de nuevo.» y
@@ -119,7 +119,7 @@
 - **Hecho cuando:** compila y el modal sigue respetando el caso «sin imprimibles».
 - Depende de: T8.
 
-### [ ] T10 — Tests del glifo EN el PDF (el requisito caro)
+### [x] T10 — Tests del glifo EN el PDF (el requisito caro)
 - Archivo: `tests/unit/components/etiquetas-pdf.test.ts` (EXTENDIDO), jsPDF real:
   1. el recurso de fuente activo en la fila del monto es `/Subtype /Type0` con
      `/Encoding /Identity-H` y tiene `/FontFile2` (**R8**);
@@ -136,7 +136,7 @@
   la aserción ASCII del monto de `etiquetas-pdf.test.ts:301-326`.
 - Depende de: T2, T8.
 
-### [ ] T11 — Tests del borde de error y de la descarga
+### [x] T11 — Tests del borde de error y de la descarga
 - Archivos: `tests/components/EtiquetasGuiaModal.test.tsx` (EXTENDIDO): con la
   carga de fuente fallando, aparece el mensaje y **no** se llama a la descarga
   (**R16**); `tests/unit/components/etiquetas-pdf-descarga.test.ts` (EXTENDIDO):
@@ -145,7 +145,7 @@
 - **Hecho cuando:** pasan sin relajar ninguna aserción previa.
 - Depende de: T9.
 
-### [ ] T12 [P] — No-regresión del generador del lote (D3 / R18)
+### [x] T12 [P] — No-regresión del generador del lote (D3 / R18)
 - Archivo: `tests/unit/pdf/etiquetas-pdf-lote.smoke.test.ts` (EXTENDIDO): sigue
   en 100 × 100, conserva su firma de un solo parámetro y su fuente **no** nombra
   el artefacto de la 282.
@@ -154,7 +154,7 @@
 
 ## Bloque D — Demostrar que no miente
 
-### [ ] T13 — Mutaciones obligatorias (matar los tests)
+### [x] T13 — Mutaciones obligatorias (matar los tests)
 Aplicar una a una, correr los tests indicados, **revertir**, y pegar la salida
 real en `progress/impl_282.md`:
 
@@ -171,7 +171,7 @@ real en `progress/impl_282.md`:
   demuestra**. Un informe de mutaciones sin salida de tests no cuenta.
 - Depende de: T4, T7, T10.
 
-### [ ] T14 — Medir el coste de verdad
+### [x] T14 — Medir el coste de verdad
 - `pnpm exec prisma generate` → `pnpm exec next build` (no `pnpm run build`).
 - Anotar: «Size» y «First Load JS» de `/ordenes` **antes y después**, tamaño en
   disco y gzip del chunk que contiene el base64, `base64.length`, bytes del
@@ -183,14 +183,14 @@ real en `progress/impl_282.md`:
   (Q6): no se baja el tope por decreto.
 - Depende de: T3, T8.
 
-### [ ] T15 — Verlo con los ojos, una vez
+### [x] T15 — Verlo con los ojos, una vez
 - Generar el PDF del caso de referencia en las cuatro hojas, abrirlo y confirmar:
   el número de guía no toca «DESTINATARIO» y el importe se lee `₡18.000`.
 - **Hecho cuando:** hay captura o confirmación en `progress/impl_282.md`. Es la
   única comprobación de **tinta** (ver Q4); no sustituye a T10, lo acompaña.
 - Depende de: T8, T6.
 
-### [ ] T16 — Gate y bitácora
+### [x] T16 — Gate y bitácora
 - `./init.sh --rapido` en verde (con `INIT_EXIT=$?` escrito **dentro** del log:
   aquí un `echo` ya ha tapado un rojo).
 - `progress/impl_282.md` con el mapa R → test completo y las cifras de T14.
@@ -252,7 +252,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 
 ## Bloque E — Maqueta compartida (va PRIMERO: es dependencia de todo)
 
-### [ ] T17 — Una sola fuente de verdad para la geometría
+### [x] T17 — Una sola fuente de verdad para la geometría
 - NUEVO `lib/pdf/etiquetas-maqueta.ts`: `LIENZO_BASE_MM`, `MAQUETA_BASE` (con
   `guiaY`), `PT_A_MM`, `camposYInicio()`, `GAP_TEXTO_CODIGOS`,
   `GAP_ROTULO_VALOR`, `qrTopBase()`.
@@ -270,7 +270,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
   fixture da **exactamente los mismos `Td`** que antes de esta tarea (aún sin el
   cambio de R19: aquí sólo se muda, no se arregla).
 
-### [ ] T18 — El dibujo del texto, una sola vez
+### [x] T18 — El dibujo del texto, una sola vez
 - NUEVO `lib/pdf/etiquetas-dibujo.ts`: cabecera (GUÍA / REMISIÓN),
   `drawCampos` (con `CampoEtiqueta.fuente`, §3.2) y `geografiaLegible`; recibe
   el `doc`, el `layout`, el DTO, la fuente embebida y **los data URL ya
@@ -281,7 +281,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
   las suites de cliente y de lote siguen verdes.
 - Depende de: T17.
 
-### [ ] T19 — Anti-divergencia, asertada
+### [x] T19 — Anti-divergencia, asertada
 - NUEVO `tests/unit/pdf/etiquetas-dos-generadores.test.ts`: para el mismo DTO y
   la hoja `100x100`, extrae `x y Td` + texto de los **dos** PDF y exige que
   coincidan (**R22**).
@@ -294,7 +294,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 
 ## Bloque F — El servidor (backend, antes que el cliente)
 
-### [ ] T20 — Fuente embebida en el generador del lote
+### [x] T20 — Fuente embebida en el generador del lote
 - `lib/pdf/etiquetas-pdf-lote.ts`: **import estático** de
   `lib/pdf/etiquetas-fuente.ts` (nada de `fs`: `next.config.ts` no declara
   `outputFileTracingIncludes` y el fallo sólo se vería en producción),
@@ -304,7 +304,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
   cambia (**R18**) y no aparece ningún `readFileSync` (**R23**).
 - Depende de: T3, T17, T18.
 
-### [ ] T21 — Tests del PDF del servidor
+### [x] T21 — Tests del PDF del servidor
 - `tests/unit/pdf/etiquetas-pdf-lote.test.ts` (EXTENDIDO), inflando los streams
   (ese builder usa `compress: true`): separación de líneas base ≥ 1 em del
   cuerpo de la guía (**R19**); y los tres eslabones del §4 sobre **su** PDF —
@@ -315,7 +315,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 - **Hecho cuando:** pasan y las mutaciones M1-M4 también los ponen rojos a ellos.
 - Depende de: T2, T20.
 
-### [ ] T22 — Medir el coste por documento en la ruta del servidor
+### [x] T22 — Medir el coste por documento en la ruta del servidor
 - Medir `f` = coste de `addFont` (descodificar + parsear el TTF) **por
   documento**, y comprobar la desigualdad de `design.md` §11.3 en los dos modos:
   consolidado (1 documento) e **individual** (N documentos, el peor caso).
@@ -328,7 +328,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 
 ## Bloque G — Cupo y cobertura
 
-### [ ] T23 [P] — Corpus de casos y cupo que no se recorta en silencio
+### [x] T23 [P] — Corpus de casos y cupo que no se recorta en silencio
 - NUEVO `tests/fixtures/etiquetas-282.ts` con el corpus de `design.md` §13,
   marcando cuál es **real** (la evidencia) y cuáles son **formas**.
 - Test en los **dos** generadores: ningún caso del corpus sale con marca de
@@ -338,7 +338,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
 - **Hecho cuando:** pasan, y añadir a mano un caso que no quepa los pone rojos.
 - Depende de: T17.
 
-### [ ] T24 — Cobertura declarada y fallo visible
+### [x] T24 — Cobertura declarada y fallo visible
 - `scripts/fuente-etiqueta-a-base64.ts` emite también `COBERTURA`, **derivada
   del archivo** (nunca a mano).
 - `lib/pdf/etiquetas-fuente-registro.ts`: `cubreTexto(fuente, texto)`; los dos
@@ -357,7 +357,7 @@ Los 18 requisitos están mapeados; ninguno queda sin test.
   forma visible.
 - Depende de: T3, T20.
 
-### [ ] T25 — El peso, declarado y reportado (R14 revisado)
+### [x] T25 — El peso, declarado y reportado (R14 revisado)
 - `lib/pdf/etiquetas-fuente.ts` exporta `PESO_DECLARADO_BYTES`; la guardia de T5
   compara el peso **real** con el declarado y falla si difieren, con un mensaje
   que diga los dos números.
@@ -411,7 +411,7 @@ Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
 
 ## Bloque H — Corpus real y paridad
 
-### [ ] T26 [P] — El alfabeto real, dentro del corpus
+### [x] T26 [P] — El alfabeto real, dentro del corpus
 - `tests/fixtures/etiquetas-282.ts`: añadir un caso que contenga los **seis**
   caracteres no ASCII medidos en producción (`á é í ñ ó ú`) repartidos por
   destinatario, dirección y producto, con la fecha de la medida en el comentario.
@@ -420,7 +420,7 @@ Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
 - **Hecho cuando:** pasa, y quitar un carácter del subconjunto lo pone rojo.
 - Depende de: T23.
 
-### [ ] T27 — Paridad: la misma fuente en la vista previa
+### [x] T27 — Paridad: la misma fuente en la vista previa
 - `app/(app)/ordenes/_components/etiquetas-fuente-carga.ts`:
   `asegurarFuenteEnPantalla(fuente)` idempotente — base64 → `ArrayBuffer` →
   `new FontFace(nombre, buffer)` → `document.fonts.add`.
@@ -433,7 +433,7 @@ Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
   (**R33**); no existe ningún `.woff2` ni segunda copia del archivo (**R31**).
 - Depende de: T3, T8.
 
-### [ ] T28 — La paridad, comprobada (no afirmada)
+### [x] T28 — La paridad, comprobada (no afirmada)
 - `tests/components/EtiquetaGuiaPreview.test.tsx` (NUEVO o extendido): el importe
   tiene como **primera** familia la del artefacto, y `document.fonts.add` recibió
   una `FontFace` con ese nombre creada desde **esos** bytes (espía: jsdom no
@@ -446,7 +446,7 @@ Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
 - **Hecho cuando:** pasan y la mutación M10 los pone en rojo.
 - Depende de: T27.
 
-### [ ] T29 — Volver a presupuestar el navegador **después** de la paridad
+### [x] T29 — Volver a presupuestar el navegador **después** de la paridad
 - Repetir la medición de T14 con la paridad ya puesta:
   `pnpm exec prisma generate` → `pnpm exec next build`; anotar «Size» y «First
   Load JS» de `/ordenes` antes/después, y el peso del chunk.
@@ -479,3 +479,36 @@ Con estas filas, los **30** requisitos quedan mapeados a un test concreto.
 **Total: 34 requisitos, todos mapeados a un test concreto. Sin preguntas
 abiertas.** T16 (gate y bitácora) pasa a depender también de T26-T29, y su
 criterio de «hecho» cuenta **34**, no 30.
+
+---
+
+## Marcado de las casillas — 2026-08-25
+
+Las 29 se marcan **sobre la verificación del reviewer**, que midió por su cuenta en vez de leer.
+
+- **Gate**: `./init.sh` completo, `INIT_EXIT=1` con **1 fallo de 19.118** — el **ajeno** de la ficha 275.
+  **Delta 0**, y probado: el commit que lo introdujo (`b7bd887a`) es **ancestro del merge-base**, y el
+  diff de la rama no toca `tarifas.ts` ni esa guardia.
+- **La verificación del glifo muerde.** El reviewer **vació el contorno de U+20A1 dentro del `.ttf`
+  sin tocar el `cmap`** —mismos bytes, mismos 219 code points— y salieron **4 rojos**, mientras que
+  **R8 y R9 se quedaron verdes**: ese es exactamente el escenario del papel en blanco, y prueba que
+  **el tercer eslabón es el que aporta**. Sin él, un glifo vacío pasaba.
+- **`tieneTinta()`, añadida fuera del spec, está cubierta**: degradada a `contorno > 0`, R11 se pone
+  rojo. Y por igualdad exacta de los vacíos, no por un `contains`.
+- **El solape**: devolver `camposYInicio()` a 18 da **10 rojos** en las cuatro hojas y en el
+  servidor. **Desviar un solo generador** rompe el test de paridad en sus cuatro casos.
+- **M10 y M11 rojas**, con M10 afilada: el importe conserva familia de respaldo, así que un test de
+  «lleva alguna familia» habría sobrevivido.
+- **El cupo, medido**: una dirección de 3 líneas entra con holgura (9 de 10), una de 4 entra justa,
+  y **a partir de 5 la etiqueta corta con «…»**.
+
+### Lo que NO cuenta como hecho, y queda dicho
+
+- **`next build` ya no imprime «Size» ni «First Load JS»** (Next 16.2.10 + Turbopack): la
+  instrucción del spec caducó por una actualización de herramienta. La cifra se derivó de los
+  manifiestos y **el reviewer la aceptó como proxy razonable, con reserva escrita**. Lo que sí queda
+  verificado es lo que R13 exige: el chunk del artefacto **no está** en el manifiesto inicial.
+- **La promesa de `+0 KB` se rompió** y está declarada: el real es **+2,0 KB crudos**, que son código
+  nuevo y no bytes de fuente.
+- **T15 se hizo a ojo en Chrome real** y declara lo que no cubre: el QR y el código de barras salen
+  como PNG de relleno en los PDF de test, y la vista previa se montó sin Tailwind.
