@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/useToast";
+import { useDeclararTrabajo } from "@/hooks/useDeclararTrabajo";
 import { gestionar } from "@/lib/actions/mis-asignaciones";
 import { solicitarAyudaOrden } from "@/lib/actions/orden-ayuda";
 import {
@@ -424,6 +425,34 @@ export function GestionarOrdenPanel({
   // el mensajero volvería a pulsarlo, disparando dos gestiones de la misma orden.
   const [ubicando, setUbicando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+
+  // Feature 284 (B1 de la revisión, 2026-08-25) — MIENTRAS HAYA GESTIÓN A MEDIAS, EL AVISO DE
+  // "hay una versión nueva" NO SE PINTA. Una recarga aquí se lleva el desglose del recaudo y las
+  // fotos ya elegidas, y el aviso es un botón `fixed` que caía justo encima de "Guardar gestión".
+  //
+  // Esta pantalla lo DECLARA en vez de dejar que se adivine desde el DOM, porque desde fuera NO
+  // SE VE: el campo del monto es un input CONTROLADO y React 19 mantiene su `defaultValue`
+  // sincronizado con `value` (medido), y las fotos no viven en ningún input —`handleEvidenciaChange`
+  // limpia `input.value` a propósito para poder volver a elegir la misma—.
+  //
+  // Basta con haber entrado a los desenlaces: desde ahí el mensajero está capturando —el monto
+  // arranca YA PUESTO con lo que hay que cobrar (`lineasIniciales`)— y cualquier recarga es
+  // destructiva. La clave lleva el id de la orden porque puede haber más de un panel montado.
+  useDeclararTrabajo(
+    `gestion:${orden.id}`,
+    // Los tres pasos son "detalle" -> "resultados" (los botones de desenlace) -> "formulario"
+    // (la captura: monto, motivo, fotos). Cuenta como trabajo desde que se sale del detalle:
+    // en "resultados" el mensajero YA decidio gestionar. Escribir aqui `=== "resultados"` fue
+    // un error de verdad, y lo cazó el caso REAL de la guardia: al pulsar "Entregar" el paso
+    // pasa a "formulario" y la declaracion se habria retirado justo al empezar a capturar.
+    paso !== "detalle" ||
+      comprimiendo ||
+      enviando ||
+      ubicando ||
+      cancelando ||
+      evidencias.length > 0 ||
+      motivo.trim() !== "",
+  );
 
   // Feature 119 (R14/R16): agrega las fotos SELECCIONADAS a la lista. Cada foto se comprime
   // en el cliente antes de guardarla (una foto de celular sin comprimir revienta el limite de

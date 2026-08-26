@@ -11,11 +11,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const saveMock = vi.fn<(nombre: string) => void>();
 const addPageMock = vi.fn();
+const addFileToVFSMock = vi.fn<(archivo: string, base64: string) => void>();
+const addFontMock = vi.fn<(archivo: string, nombre: string, estilo: string) => void>();
 
 class JsPDFDoble {
   constructor(public opciones: unknown) {}
   save = (nombre: string) => saveMock(nombre);
   addPage = (formato: unknown) => addPageMock(formato);
+  // Feature 282: el generador registra la fuente embebida una vez por documento.
+  // El doble solo ANOTA la llamada; NO finge el subsetting, que se prueba con
+  // jspdf de verdad en `etiquetas-pdf.test.ts` (ahi es donde se afirma que el
+  // glifo del simbolo acaba con contorno en el /FontFile2).
+  addFileToVFS = (archivo: string, base64: string) => addFileToVFSMock(archivo, base64);
+  addFont = (archivo: string, nombre: string, estilo: string) =>
+    addFontMock(archivo, nombre, estilo);
   setFont = () => undefined;
   setFontSize = () => undefined;
   text = () => undefined;
@@ -35,8 +44,18 @@ vi.mock("jspdf", () => ({
   },
 }));
 vi.mock("jsbarcode", () => ({ default: () => undefined }));
+// El cargador diferido se dobla para poder forzar su fallo (R16) sin tocar el
+// `import()` real; por defecto entrega el artefacto de verdad.
+vi.mock("@/app/(app)/ordenes/_components/etiquetas-fuente-carga", async () => {
+  const real = await vi.importActual<
+    typeof import("@/app/(app)/ordenes/_components/etiquetas-fuente-carga")
+  >("@/app/(app)/ordenes/_components/etiquetas-fuente-carga");
+  return { ...real, cargarFuenteEtiqueta: vi.fn(real.cargarFuenteEtiqueta) };
+});
 
 import { descargarEtiquetasPdf } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
+import { cargarFuenteEtiqueta } from "@/app/(app)/ordenes/_components/etiquetas-fuente-carga";
+import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
 import { HOJAS_ETIQUETA, getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
@@ -60,35 +79,39 @@ function etiqueta(ordenId = "ord-1"): EtiquetaGuiaDTO {
   };
 }
 
+const cargarFuenteEtiquetaMock = vi.mocked(cargarFuenteEtiqueta);
+
 beforeEach(() => {
   saveMock.mockClear();
   addPageMock.mockClear();
+  addFileToVFSMock.mockClear();
+  addFontMock.mockClear();
   vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
     "data:image/png;base64,AAAA",
   );
 });
 
 describe("descargarEtiquetasPdf (R19)", () => {
-  it("guarda con el nombre que incluye el identificador del tamaño elegido", () => {
+  it("guarda con el nombre que incluye el identificador del tamaño elegido", async () => {
     for (const hoja of HOJAS_ETIQUETA) {
       saveMock.mockClear();
-      descargarEtiquetasPdf([etiqueta()], new Map(), hoja);
+      await descargarEtiquetasPdf([etiqueta()], new Map(), hoja);
       expect(saveMock).toHaveBeenCalledTimes(1);
       expect(saveMock).toHaveBeenCalledWith(`etiquetas-guia-${hoja.id}.pdf`);
     }
   });
 
-  it("dos descargas con tamaños distintos NO producen el mismo nombre", () => {
-    descargarEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("a4"));
-    descargarEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("carta"));
+  it("dos descargas con tamaños distintos NO producen el mismo nombre", async () => {
+    await descargarEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("a4"));
+    await descargarEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("carta"));
     const nombres = saveMock.mock.calls.map((c) => c[0]);
     expect(nombres).toEqual(["etiquetas-guia-a4.pdf", "etiquetas-guia-carta.pdf"]);
     expect(new Set(nombres).size).toBe(2);
   });
 
-  it("R12: añade una pagina por etiqueta adicional, con el formato de la hoja", () => {
+  it("R12: añade una pagina por etiqueta adicional, con el formato de la hoja", async () => {
     const hoja = getHojaEtiqueta("a4");
-    descargarEtiquetasPdf(
+    await descargarEtiquetasPdf(
       [etiqueta("a"), etiqueta("b"), etiqueta("c")],
       new Map(),
       hoja,
@@ -97,5 +120,66 @@ describe("descargarEtiquetasPdf (R19)", () => {
     for (const call of addPageMock.mock.calls) {
       expect(call[0]).toEqual([hoja.anchoMm, hoja.altoMm]);
     }
+  });
+});
+
+describe("descargarEtiquetasPdf — la fuente embebida (feature 282)", () => {
+  it("registra la fuente UNA vez por documento, con el artefacto que ships", async () => {
+    await descargarEtiquetasPdf(
+      [etiqueta("a"), etiqueta("b"), etiqueta("c")],
+      new Map(),
+      getHojaEtiqueta("100x100"),
+    );
+    // Una sola vez para las tres etiquetas: `addFont` descodifica y parsea el
+    // TTF entero, y ese coste se paga por PDF, no por pagina.
+    expect(addFileToVFSMock).toHaveBeenCalledTimes(1);
+    expect(addFontMock).toHaveBeenCalledTimes(1);
+    expect(addFileToVFSMock).toHaveBeenCalledWith(
+      fuenteEtiqueta.archivoVfs,
+      fuenteEtiqueta.base64,
+    );
+    expect(addFontMock).toHaveBeenCalledWith(
+      fuenteEtiqueta.archivoVfs,
+      fuenteEtiqueta.nombre,
+      fuenteEtiqueta.estilo,
+    );
+    // R15: NUNCA con "WinAnsiEncoding". Esa rama de jsPDF embebe la fuente
+    // COMPLETA (`metadata.rawData`) en vez de un subconjunto.
+    for (const llamada of addFontMock.mock.calls) {
+      expect(llamada).not.toContain("WinAnsiEncoding");
+    }
+  });
+
+  it("R16: si la fuente no carga, NO se descarga nada y el error sube con contexto", async () => {
+    const fallo = new Error("chunk perdido");
+    cargarFuenteEtiquetaMock.mockRejectedValueOnce(fallo);
+    await expect(
+      descargarEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("100x100")),
+    ).rejects.toBe(fallo);
+    // Lo que NO puede pasar: un PDF descargado con el importe sin simbolo.
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("R28 — simbolo no cubierto: en el navegador tampoco se descarga nada", () => {
+  it("el generador LANZA y `save` no llega a llamarse", async () => {
+    // Se fuerza el simbolo a uno fuera del subconjunto (U+20B9). El modulo de
+    // moneda lee el entorno al importarse, asi que hay que reimportar la cadena
+    // entera; por eso el `resetModules`.
+    vi.resetModules();
+    process.env.MONEDA_SIMBOLO = "₹";
+    try {
+      const { descargarEtiquetasPdf: descargar } = await import(
+        "@/app/(app)/ordenes/_components/etiquetas-pdf"
+      );
+      await expect(
+        descargar([etiqueta()], new Map(), getHojaEtiqueta("100x100")),
+      ).rejects.toThrow(/U\+20B9[\s\S]*Monto a cobrar/);
+    } finally {
+      delete process.env.MONEDA_SIMBOLO;
+      vi.resetModules();
+    }
+    // Lo que NO puede pasar: un PDF descargado con el importe sin simbolo.
+    expect(saveMock).not.toHaveBeenCalled();
   });
 });

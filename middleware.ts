@@ -95,7 +95,20 @@ export const config = {
   // sepa la URL —el middleware nunca fue su control de acceso— y la exclusion se
   // acota a extensiones de imagen, asi que el resto de `public/` (los `.xlsx` de
   // geografia, por ejemplo) sigue pasando por el guard exactamente igual que antes.
+  //
+  // FEATURE 284 — LOS TRES ARCHIVOS DE LA PWA SALEN DEL GUARD, y no es cosmetica: MEDIDO CONTRA
+  // PRODUCCION el 2026-08-25, `/manifest.json`, `/sw.js` y `/offline.html` respondian **307 a
+  // /login**. El navegador pide el manifiesto SIN CREDENCIALES, recibia el redirect, y por eso
+  // **la PWA nunca se ha podido instalar**; el service worker tampoco se descargaba, asi que ni
+  // la cache ni la pantalla offline llegaban nunca al dispositivo. Los iconos si pasaban (200)
+  // porque la exclusion de arriba es solo de EXTENSIONES DE IMAGEN.
+  //
+  // No afloja nada, por el mismo argumento que ya valia para las fotos de la landing: son tres
+  // archivos ESTATICOS de `public/` sin un dato de nadie dentro -el manifiesto describe la app,
+  // el SW es codigo publico y `offline.html` es una pagina de cortesia-, y `public/` nunca
+  // estuvo detras de este guard como control de acceso. Van nombrados UNO A UNO y no por
+  // extension: excluir `.json`, `.js` o `.html` a secas si aflojaria de verdad.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|jpg|jpeg|png|gif|webp|avif|ico)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|offline\\.html|.*\\.(?:svg|jpg|jpeg|png|gif|webp|avif|ico)).*)",
   ],
 };
