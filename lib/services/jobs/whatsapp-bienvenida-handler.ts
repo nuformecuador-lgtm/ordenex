@@ -61,7 +61,7 @@ export function buildWhatsappBienvenidaDeps(): WhatsappBienvenidaDeps {
       conversacionRepo: new ChatConversacionRepository(prisma),
       mensajeRepo: new ChatMensajeRepository(prisma),
       client: new WhatsappCloudClient({ config, logger: consoleLogger }),
-      // ⚠️ ESTA LINEA ES LA QUE HACE CORRECTO EL `MAX_INTENTOS_BIENVENIDA = 1`, y por eso NO se
+      // ⚠️ ESTA LINEA ES LA QUE SEPARA LOS FALLOS DE META DE LOS DE ESTE JOB, y por eso NO se
       // copia `buildWhatsappChatEnvioService`, que la omite a proposito (alli seria recursivo:
       // es el service DEL job de reintento).
       //
@@ -69,7 +69,8 @@ export function buildWhatsappBienvenidaDeps(): WhatsappBienvenidaDeps {
       // (`ChatWhatsappService.ts:357`). Sin esta dep, un `transitorio` de Meta persistiria el
       // saliente `queued` y NO LO REINTENTARIA NADIE NUNCA: se quedaria `queued` para siempre
       // mientras el job diria `done`. Con ella, los fallos de Meta los absorbe
-      // `whatsapp_chat_envio` con sus 5 intentos, y este job puede permitirse uno solo.
+      // `whatsapp_chat_envio` con sus 5 intentos, y los intentos de ESTE job quedan libres para
+      // lo unico que le toca: los tropiezos previos a Meta (ver `MAX_INTENTOS_BIENVENIDA`).
       encolarReintento: crearEncolarReintentoChatEnvio(new JobRepository(prisma)),
       logger: consoleLogger,
     }),
@@ -87,9 +88,10 @@ export function buildWhatsappBienvenidaDeps(): WhatsappBienvenidaDeps {
  * QUE LANZA Y QUE NO, que es toda la politica de rastro de esta feature:
  *
  * - LANZA en las condiciones de CONFIGURACION —bienvenida desmarcada entre medias, plantilla no
- *   aprobada por Meta, orden reasignada, destinatario sin telefono—. Con `maxIntentos: 1` eso
- *   deja UNA fila `jobs` en `failed` con el motivo concreto en `last_error`, consultable en el
- *   minuto siguiente a la recogida.
+ *   aprobada por Meta, orden reasignada, destinatario sin telefono— y tambien en los tropiezos
+ *   transitorios previos a Meta. `JobQueueService` no distingue unos de otros: reintenta hasta
+ *   `MAX_INTENTOS_BIENVENIDA` (3) con backoff y, agotados, deja la fila `jobs` en `failed` con el
+ *   motivo concreto en `last_error`. Por eso cada guarda de abajo dice QUE hay que arreglar.
  * - NO LANZA por el desenlace de Meta. `enviarPlantilla` DEVUELVE el resultado en vez de lanzar,
  *   y los dos desenlaces malos ya dejaron mejor rastro del que dejaria un job muerto: un
  *   `permanente` deja el saliente `failed` con el error de Meta VISIBLE EN EL HILO DEL CHAT, y un

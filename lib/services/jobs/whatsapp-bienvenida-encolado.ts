@@ -20,26 +20,33 @@ import type { CambioEstadoEntrada } from "@/lib/interfaces/repositories/IOrdenHi
 import type { OrderStatusValue } from "@/lib/types/order-status";
 
 /**
- * UN SOLO INTENTO, y no es una omision.
+ * TRES INTENTOS, y el numero esta elegido, no heredado del default (que son 5).
  *
- * Los fallos de Meta NO llegan hasta aqui: `ChatWhatsappService.enviarPlantilla` ya se ocupa de
+ * Los fallos de META no se cuentan aqui: `ChatWhatsappService.enviarPlantilla` ya se ocupa de
  * ellos por su cuenta —un `transitorio` persiste el saliente `queued` y encola su propio
- * `whatsapp_chat_envio` con 5 reintentos; un `permanente` persiste el saliente `failed` con el
- * error de Meta, visible EN EL HILO DEL CHAT—, y el handler resuelve sin lanzar en los dos casos.
+ * `whatsapp_chat_envio` con sus 5 reintentos; un `permanente` persiste el saliente `failed` con
+ * el error de Meta, visible EN EL HILO DEL CHAT—, y el handler resuelve sin lanzar en los dos
+ * casos. Este job nunca muere por culpa de Meta.
  *
- * Lo unico que mata a este job son condiciones de CONFIGURACION: la plantilla marcada no esta
- * aprobada por Meta, la orden ya no es del mensajero que la recogio, falta un env de WhatsApp.
- * Ninguna de esas se arregla sola, asi que reintentarlas cinco veces son quince minutos de
- * fallos garantizados que solo retrasan el diagnostico. Con un intento, el motivo esta en
- * `jobs.last_error` en el minuto siguiente a la recogida.
+ * Lo que SI lo mata son dos clases de fallo muy distintas, y tres intentos es el punto donde las
+ * dos quedan bien servidas:
  *
- * LO QUE SE PIERDE, DECLARADO: un tropiezo de infraestructura ANTES de llegar a Meta (un hipo de
- * la base, un env a medio desplegar) mata la bienvenida sin segunda oportunidad. Queda el rastro,
- * pero no se reintenta. `JobQueueService` no distingue error reintentable de determinista, y la
- * decision de rastro obliga a LANZAR en el determinista; con esa restriccion no se pueden tener
- * las dos cosas. Subir esta constante es una linea si algun dia pesa mas el otro lado.
+ * - TRANSITORIO DE INFRAESTRUCTURA, antes de llegar a Meta: un hipo de la base, un env a medio
+ *   desplegar. Se arregla solo, y con el backoff de `JobQueueService`
+ *   (`min(1h, 60s * 2^(intentos-1))`) los reintentos caen al minuto y a los dos minutos. Con un
+ *   solo intento se habria perdido la bienvenida de esas ordenes para siempre.
+ * - CONFIGURACION: la plantilla marcada no esta aprobada por Meta, la orden ya no es del
+ *   mensajero que la recogio. No se arregla sola. Aqui los reintentos no sirven de nada, y por
+ *   eso NO se usan los 5 del default: agotar tres tarda ~3 minutos en vez de ~15, y el motivo
+ *   esta en `jobs.last_error` mucho antes.
+ *
+ * Es un compromiso explicito: se aceptan ~3 minutos de reintentos inutiles en el caso de
+ * configuracion a cambio de no perder la bienvenida en el caso transitorio. `JobQueueService` no
+ * distingue un error reintentable de uno determinista, asi que no se pueden tener las dos cosas
+ * a la vez; si algun dia hace falta, el arreglo correcto es dar a `JobHandler` una forma de decir
+ * "no reintentes", no mover este numero.
  */
-export const MAX_INTENTOS_BIENVENIDA = 1;
+export const MAX_INTENTOS_BIENVENIDA = 3;
 
 /** Prefijo del `dedupe_key` (patron `DEDUPE_PREFIX` de webhook-estado/geocodificacion). */
 export const DEDUPE_PREFIX = "whatsapp_bienvenida";
