@@ -19,7 +19,7 @@ justo al desplegar.
 
 ## T0 · Medir el estado real antes de tocar una línea
 
-- [ ] **T0.1** Sobre el despliegue **vigente** (Q3), DevTools → Application →
+- [ ] (NO EJECUTADA, ver abajo) **T0.1** Sobre el despliegue **vigente** (Q3), DevTools → Application →
       Service Workers y Cache Storage. Anotar: ¿el SW está `activated`?, nombres de
       caché, **número de entradas de cada una**, y qué hay guardado bajo la clave `/`.
       **Hecho:** los cinco datos escritos en `progress/impl_284-pwa-correcta.md` con
@@ -29,7 +29,7 @@ justo al desplegar.
       habría SW, ni caché, ni defecto 2 — y la conclusión sería otra. En este repo ya
       pasó que un invariante razonado leyendo el código lo desmintió la primera medida.
       → responde **Q8**.
-- [ ] **T0.2** `[P]` Contar los `/_next/static/` **distintos** de un recorrido
+- [ ] (NO EJECUTADA, ver abajo) **T0.2** `[P]` Contar los `/_next/static/` **distintos** de un recorrido
       completo del mensajero (DevTools → Network, filtro `_next/static`).
       **Hecho:** el número escrito. Si no se puede medir hoy, escribir
       «**sin calibrar**» y usar 200. → alimenta **T2.4** y responde **Q5**.
@@ -41,7 +41,7 @@ justo al desplegar.
 > Todo esto vive en la **rama de producción** de `public/sw.js`. La rama de
 > `localhost` (el kill-switch de desarrollo) **no se toca**: R6.
 
-- [ ] **T1** `[P]` Escribir la guardia `tests/unit/guards/pwa-relevo-y-purga.guardia.test.ts`
+- [x] **T1** `[P]` Escribir la guardia `tests/unit/guards/pwa-relevo-y-purga.guardia.test.ts`
       con el arnés del `design.md` §6.1: `new Function` con `self`, `caches`, `fetch`,
       `URL` y `Response` como parámetros; `CacheStorage` falso en memoria que conserve
       el **orden de inserción**; eventos con `waitUntil`/`respondWith` **esperados**,
@@ -52,7 +52,7 @@ justo al desplegar.
       muda. Precedente obligatorio: en este repo una guardia salió verde con su
       detector roto porque no encontraba **nada**.
       **Depende de:** nada. Puede escribirse antes que T2.
-- [ ] **T2** Modificar la rama de producción de `public/sw.js`. Sub-tasks en orden:
+- [x] **T2** Modificar la rama de producción de `public/sw.js`. Sub-tasks en orden:
   - [ ] **T2.1** Quitar `self.skipWaiting()` de `install`. Conservar el precaché tal
         cual (R12: `/` y `/offline.html`, ni una URL más).
         **Hecho:** el caso «`install` no pide el relevo» de T1 pasa, y pasa el de
@@ -79,7 +79,7 @@ justo al desplegar.
         **Hecho:** el caso de R5 pasa, y el de R6 sigue verde: en `localhost` el SW
         **sigue** limpiando, desregistrándose y renavegando.
       **Depende de:** T0.2 sólo para T2.5. El resto es independiente.
-- [ ] **T3** Comprobar que el diff **no** niega el gate rápido: ninguna ruta tocada
+- [x] **T3** Comprobar que el diff **no** niega el gate rápido: ninguna ruta tocada
       casa `RUTAS_SENSIBLES` ni `NOMBRES_DE_DINERO` (`init.sh:158-159`).
       **Hecho:** `./init.sh --rapido` arranca sin el `fail` de cimientos. (Si lo
       negara, es un dato nuevo y va a la bitácora, no se rodea.)
@@ -88,7 +88,7 @@ justo al desplegar.
 
 ## P1 · El idioma
 
-- [ ] **T4** `[P]` `app/layout.tsx`: `lang="en"` → `lang="es"`. Y guardia
+- [x] **T4** `[P]` `app/layout.tsx`: `lang="en"` → `lang="es"`. Y guardia
       `tests/unit/guards/html-lang.guardia.test.ts` que recorra el árbol de producción
       buscando **todo** documento HTML completo —`app/**`, `public/**.html`— y exija
       `lang="es"` en cada uno.
@@ -101,10 +101,10 @@ justo al desplegar.
 
 ## P2 · Manifiesto, iOS e icono
 
-- [ ] **T5** `[P]` `public/manifest.json`: añadir `"id": "/"` y **nada más**.
+- [x] **T5** `[P]` `public/manifest.json`: añadir `"id": "/"` y **nada más**.
       **Hecho:** el manifiesto sigue siendo JSON válido y `tests/unit/pwa/manifest.test.ts`
       —que **no se toca**— sigue verde. (R14, R15)
-- [ ] **T6** `[P]` Guardia `tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts`:
+- [x] **T6** `[P]` Guardia `tests/unit/guards/pwa-manifiesto-atajos.guardia.test.ts`:
       - `id === "/"` **exactamente** (con el motivo escrito en el archivo: cualquier
         otro valor cambia la identidad de la app ya instalada);
       - las diez claves de R15 siguen presentes con su valor;
@@ -118,7 +118,7 @@ justo al desplegar.
       **Hecho:** los cuatro casos pasan y el de anti-vacuidad falla al invertirlo.
       (R16, R17, R20)
       **Depende de:** T5.
-- [ ] **T7** `[P]` El icono de 180 y las metas:
+- [x] **T7** `[P]` El icono de 180 y las metas:
   - [ ] **T7.1** Generar `public/icons/icon-180.png` reescalando
         `public/icons/icon-512.png` con `sharp`. El script de un solo uso se escribe
         **en un archivo** (no `node -e`: en este repo lo inline pierde una capa de
@@ -138,7 +138,7 @@ justo al desplegar.
 
 ## Verificación
 
-- [ ] **T8** `./init.sh --rapido` en verde, con `INIT_EXIT` escrito **dentro** del log:
+- [x] **T8** `./init.sh --rapido` en verde, con `INIT_EXIT` escrito **dentro** del log:
       `{ ./init.sh --rapido; echo "INIT_EXIT=$?"; } > gate.log 2>&1`.
       **Hecho:** `INIT_EXIT=0` leído dentro del archivo. Leer el código de salida del
       comando que lo envuelve **no vale**: un `echo` posterior lo tapa y un gate rojo
@@ -146,7 +146,7 @@ justo al desplegar.
       **Depende de:** T2, T4, T5, T6, T7.
       ⚠️ Antes de la **release** el gate completo (`./init.sh` a secas) es
       **obligatorio**, sin excepción, y sobre el SHA que se despliega.
-- [ ] **T9** **Matar las mutaciones.** Aplicar una a una, correr **sólo** la guardia
+- [x] **T9** **Matar las mutaciones.** Aplicar una a una, correr **sólo** la guardia
       afectada, anotar rojo/verde, revertir. Y **un caso de control**: un cambio
       inocuo (reordenar un comentario) que debe salir **verde**.
 
@@ -166,7 +166,7 @@ justo al desplegar.
       «9/9 supervivientes» **dos veces sin haber ejecutado un solo test**: si no hay
       salida pegada, esta task no está hecha.
       **Depende de:** T8.
-- [ ] **T10** **Las comprobaciones manuales M0–M5** del `design.md` §6.3, sobre un
+- [x] **T10** **Las comprobaciones manuales M0–M5** del `design.md` §6.3, sobre un
       despliegue **HTTPS que no sea `localhost`** (Q3).
       **Hecho:** las seis filas respondidas con **un número o un nombre** —nunca «se ve
       bien»— en la bitácora. En particular: **M1** dice qué SW está `waiting` y cuál
@@ -177,7 +177,7 @@ justo al desplegar.
       `localhost`/`127.0.0.1` sin mirar `NODE_ENV` (`public/sw.js:7-9`), así que
       `pnpm build && pnpm start` **tampoco** sirve. Está medido y escrito en
       `progress/current.md:4755-4759`.
-- [ ] **T11** **La medición de Lighthouse (M6)**, con el procedimiento del
+- [x] **T11** **La medición de Lighthouse (M6)**, con el procedimiento del
       `design.md` §7: Chrome de escritorio, incógnito, sesión de **mensajero**,
       dispositivo **Mobile**.
       **Hecho:** en la bitácora quedan escritos **URL, fecha, versión de Chrome,
@@ -188,7 +188,7 @@ justo al desplegar.
       **Si el número no llega al umbral, la ficha no está hecha**: se escribe el número
       que salió y qué auditoría lo baja. (R21, R22)
       **Depende de:** el despliegue.
-- [ ] **T12** Bitácora y cierre:
+- [x] **T12** Bitácora y cierre:
   - [ ] **T12.1** `progress/impl_284-pwa-correcta.md` con el mapa **R → test** de abajo,
         la salida del gate, la de las mutaciones y las mediciones de T0, T10 y T11.
   - [ ] **T12.2** Añadir a `docs/release.md` → «Pendiente para la PRÓXIMA release» lo
@@ -262,3 +262,42 @@ abiertas de `requirements.md`. Las que bloquean de verdad son:
 - **Q5** (el tope: medido hoy o «sin calibrar») → decide T2.5.
 - **Q1** (dar de alta la 284 en `feature_list.json`) → sin eso `./init.sh` falla en
   cuanto la ficha pase a `in_progress`.
+
+---
+
+## Marcado de las casillas — 2026-08-25
+
+Marcadas **sobre lo medido**, y con dos que **NO se marcan** porque no se ejecutaron.
+
+### Lo que sostiene el marcado
+
+- **Gate**: `./init.sh` completo, `INIT_EXIT=1` con **1 fallo de 19.207** — el **ajeno** de la ficha
+  275. **Delta 0**, y aquí ese cero **no es trámite**: esta ficha toca `middleware.ts`, que **es
+  entrada** del grafo de alcanzabilidad de esa misma guardia. Si el cambio hubiera dejado una Server
+  Action sin superficie, habría **dos** items.
+- **19 mutaciones muertas**, 2 controles verdes.
+- **B2 medido sobre build de producción**, no sobre el dev server, y **en las dos versiones del
+  árbol**: antes reproduce el `307 → /login` de producción; después, `200 OK` en manifiesto, service
+  worker y página offline, con `/ordenes` **todavía protegido**.
+- **B1 probado con el panel de gestión real montado**, tecleando el recaudo. Ese caso **cazó un
+  error del propio implementer** en el mismo commit: la declaración de trabajo se retiraba justo al
+  empezar a capturar.
+
+### Las dos que NO se marcan, y por qué
+
+**T0.1 y T0.2 no se ejecutaron.** Pedían tomar la línea base del service worker **sobre el
+despliegue vigente** — cuántas cachés y cuántos `/_next/static/` distintos hay hoy en un dispositivo
+real. No se hicieron, y eso deja **sin confirmar la premisa de la ficha**: que hay cachés creciendo
+en los teléfonos.
+
+Y ahora sabemos que esa premisa era **probablemente falsa**: si `/sw.js` respondía `307 → /login`,
+**el service worker nunca llegó a instalarse en ningún dispositivo**, así que no había nada
+creciendo. El defecto de la purga era real como código, pero **su daño era cero**, porque el
+mecanismo entero estaba inalcanzable.
+
+Se dejan sin marcar a propósito. Marcarlas sería decir que se midió algo que no se midió.
+
+### Lo que queda para producción
+
+`docs/release.md` lleva **M1–M8**, con **M8 primera**: los cuatro `curl` sobre el despliegue real,
+porque lo medido aquí es el build local y **no prueba el borde de Vercel**.
