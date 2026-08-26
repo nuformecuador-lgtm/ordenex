@@ -2204,6 +2204,16 @@ export class OrdenRepository implements IOrdenRepository {
     return new Set(rows.map((r) => r.id));
   }
 
+  /** Feature 21: de `ids`, los que tienen `vehiculo_id` no nulo. */
+  async findMensajeroIdsConVehiculo(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, vehiculoId: { not: null } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
   /**
    * R15/R16 + feature 63/R5: catalogo completo `order_status` (id, value), solo
    * lectura. `orderBy: { value: "asc" }` garantiza un orden determinista y estable

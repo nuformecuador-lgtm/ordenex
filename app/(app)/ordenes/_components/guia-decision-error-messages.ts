@@ -4,6 +4,7 @@
 // `app/(app)/_components/decision-error-messages.ts` (feature 23).
 
 import { geocodificacionMotivoMessage } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+import { mensajeroSinVehiculoMessage } from "@/app/(app)/_components/mensajero-sin-vehiculo-message";
 
 type GuiaErrorStatus =
   | "unauthenticated"
@@ -113,8 +114,11 @@ function mensajePorMotivo(error: unknown): string | null {
   );
 }
 
+
 /** Mensaje de usuario para el error lanzado por `Modal.onConfirm`; fallback genérico defensivo. */
 export function guiaDecisionErrorMessage(error: unknown): string {
+  const sinVehiculo = mensajeroSinVehiculoMessage(error);
+  if (sinVehiculo !== null) return sinVehiculo;
   const porMotivo = mensajePorMotivo(error);
   if (porMotivo !== null) return porMotivo;
   // Feature 93 (R9): el mapeo de los `motivo` del gate de coordenadas (feature 92) vive en UN

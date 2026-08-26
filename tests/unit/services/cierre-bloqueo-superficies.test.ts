@@ -298,6 +298,7 @@ describe("271 · familia B — RECIBIR TRABAJO NUEVO (las TRES escrituras)", () 
     return Object.assign(Object.create(repoConCierres(cierres)) as IOrdenRepository, {
       findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID[v] ?? null),
       findMensajeroIdsValidos: vi.fn(async (ids: string[]) => new Set(ids)),
+      findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
       findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       findParaAsignabilidad: vi.fn(async (ids: string[]) =>

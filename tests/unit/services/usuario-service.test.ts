@@ -164,7 +164,14 @@ describe("actualizar (R16/R17/R18/R19)", () => {
     const data = (repo.update as ReturnType<typeof vi.fn>).mock.calls[0][1];
     // feature 27: al cambiar el rol se recalcula la invariante (rol-2 no es
     // adminTienda en el catalogo por defecto -> fulfillment false, R4a).
-    expect(data).toEqual({ nombre: "Nuevo", rolId: "rol-2", fulfillment: false });
+    // feature 21: el cambio de rol tambien recalcula el vehiculo (rol-2 no es
+    // mensajero -> null, aunque no se haya enviado).
+    expect(data).toEqual({
+      nombre: "Nuevo",
+      rolId: "rol-2",
+      fulfillment: false,
+      vehiculoId: null,
+    });
   });
 
   it("actualizar de usuario inexistente -> not_found (R17)", async () => {
@@ -221,10 +228,16 @@ describe("fulfillment — invariante por rol (feature 27/R4/R4a/R8/R9/R12)", () 
 
   it("crear rol != adminTienda ignora fulfillment=true recibido -> false (R4/R4a)", async () => {
     withRoles();
-    // mensajero requiere zona (feature 24/R27): se pasa una para aislar la
-    // aserción al invariante de fulfillment.
+    // mensajero requiere zona (feature 24/R27) y vehiculo (feature 21): se pasan
+    // ambos para aislar la aserción al invariante de fulfillment.
     await service.crear(
-      { ...crearManual, rolId: "rol-msg", fulfillment: true, zonaId: "z1" },
+      {
+        ...crearManual,
+        rolId: "rol-msg",
+        fulfillment: true,
+        zonaId: "z1",
+        vehiculoId: "v1",
+      },
       MAESTRO,
     );
     expect(createArg().fulfillment).toBe(false);
@@ -243,7 +256,12 @@ describe("fulfillment — invariante por rol (feature 27/R4/R4a/R8/R9/R12)", () 
     withRoles({
       findById: vi.fn().mockResolvedValue(usuario({ rolId: "rol-tienda", fulfillment: true })),
     });
-    await service.actualizar("usr-1", { rolId: "rol-msg" }, MAESTRO);
+    // feature 21: pasar a `mensajero` exige vehiculo, igual que zona.
+    await service.actualizar(
+      "usr-1",
+      { rolId: "rol-msg", vehiculoId: "v1" },
+      MAESTRO,
+    );
     expect(updateArg()).toMatchObject({ rolId: "rol-msg", fulfillment: false });
   });
 

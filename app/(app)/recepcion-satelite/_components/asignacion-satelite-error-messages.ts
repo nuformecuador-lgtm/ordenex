@@ -6,6 +6,7 @@
 // (porMensajeros / porCierreBodega) reutilizando `bodegaBloqueadaMensaje`.
 
 import { geocodificacionMotivoMessage } from "@/app/(app)/_components/geocodificacion-motivo-messages";
+import { mensajeroSinVehiculoMessage } from "@/app/(app)/_components/mensajero-sin-vehiculo-message";
 
 import {
   bodegaBloqueadaMensaje,
@@ -104,6 +105,9 @@ export function asignacionSateliteErrorMessage(error: unknown): string {
   if (isBodegaBloqueada(error)) {
     return bodegaBloqueadaMensaje(error.causa);
   }
+  // Feature 21: el mensajero elegido no tiene vehiculo — mismo texto que la bodega central.
+  const sinVehiculo = mensajeroSinVehiculoMessage(error);
+  if (sinVehiculo !== null) return sinVehiculo;
   // Feature 93 (R9): mismo mapeo compartido que `guiaDecisionErrorMessage`, para
   // que `AsignarSateliteModal` no quede con el mensaje genérico de `conflict`.
   const porGeocodificacion = geocodificacionMotivoMessage(error);

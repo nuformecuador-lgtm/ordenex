@@ -23,6 +23,7 @@ import {
   listarTiposIdentificacion,
 } from "@/lib/actions/usuarios";
 import { listarZonas } from "@/lib/actions/zonas";
+import { listarVehiculos } from "@/lib/actions/vehiculos";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
 
 /**
@@ -63,6 +64,9 @@ interface FormState {
   // Feature 24/R27: zona del usuario. "" = sin zona (permitido para
   // mensajero/adminSatelite; el maestro puede asignarla luego).
   zonaId: string;
+  // Feature 21: vehiculo asociado. "" = sin vehiculo (permitido: el mensajero puede
+  // no tener uno asignado todavia).
+  vehiculoId: string;
 }
 
 function initialState(usuario?: UsuarioPublico | null): FormState {
@@ -76,6 +80,7 @@ function initialState(usuario?: UsuarioPublico | null): FormState {
     password: "",
     fulfillment: usuario?.fulfillment ?? false,
     zonaId: usuario?.zonaId ?? "",
+    vehiculoId: usuario?.vehiculoId ?? "",
   };
 }
 
@@ -147,6 +152,20 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
       [zonas],
     );
 
+    // Feature 21: catalogo de vehiculos para el select (solo aplica a `mensajero`).
+    // Es un catalogo corto y administrable desde Configuracion > Vehiculos.
+    const { data: vehiculos } = useSWR("usuarios:vehiculos", async () => {
+      const res = await listarVehiculos();
+      return res.status === "ok" ? res.items : [];
+    });
+
+    // `value` = id del vehiculo (lo que espera el backend en `vehiculoId`);
+    // `label` = nombre del tipo (p. ej. "moto").
+    const vehiculoOptions: SelectOption[] = useMemo(
+      () => (vehiculos ?? []).map((v) => ({ value: v.id, label: v.name })),
+      [vehiculos],
+    );
+
     const isEditar = mode === "editar";
 
     // El switch de fulfillment aplica solo al rol `adminTienda` (R5/R6, decisión P3).
@@ -158,6 +177,10 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
     // resto de roles el service la fuerza a null. Mismo patrón que `esAdminTienda`.
     const rolValue = (roles ?? []).find((r) => r.id === form.rolId)?.value;
     const esRolConZona = rolValue === "mensajero" || rolValue === "adminSatelite";
+
+    // Feature 21: el vehiculo solo aplica a `mensajero` (es quien conduce), y para el
+    // es OBLIGATORIO. Para el resto de roles el service lo fuerza a null.
+    const esRolConVehiculo = rolValue === "mensajero";
 
     // Cuenta de integración: su rol no se toca desde aquí. Cambiarlo por accidente la
     // convertiría en un usuario humano y dejaría su API key colgando de un rol que el
@@ -182,6 +205,20 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         };
       }
 
+      // Feature 21: el vehiculo es OBLIGATORIO para `mensajero` (mismo motivo que la
+      // zona: sin el no se le puede asignar una orden). El service lo revalida.
+      if (esRolConVehiculo && !form.vehiculoId) {
+        return {
+          input: null,
+          result: {
+            status: "validation_error",
+            fieldErrors: {
+              vehiculoId: ["El vehiculo es obligatorio para el rol mensajero"],
+            },
+          },
+        };
+      }
+
       if (isEditar) {
         const parsed = actualizarUsuarioSchema.safeParse({
           nombre: form.nombre,
@@ -195,6 +232,9 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
           // libera la zona; no enviarla la deja intacta. Se omite para el resto
           // de roles (el service la fuerza a null igualmente).
           ...(esRolConZona ? { zonaId: form.zonaId || null } : {}),
+          // Feature 21: vehiculo solo para mensajero. "" -> null lo desasocia; se
+          // omite para el resto de roles (el service lo fuerza a null igualmente).
+          ...(esRolConVehiculo ? { vehiculoId: form.vehiculoId || null } : {}),
         });
         if (!parsed.success) {
           const fieldErrors = parsed.error.flatten().fieldErrors as FieldErrors;
@@ -215,6 +255,9 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
         // Feature 24/R27: zona solo para mensajero/adminSatelite. "" -> null
         // (permitido; el maestro puede asignarla luego). Se omite para el resto.
         ...(esRolConZona ? { zonaId: form.zonaId || null } : {}),
+        // Feature 21: vehiculo solo para mensajero. "" -> null (no es obligatorio;
+        // puede asignarse despues). Se omite para el resto de roles.
+        ...(esRolConVehiculo ? { vehiculoId: form.vehiculoId || null } : {}),
       };
       const candidate =
         passwordMode === "manual"
@@ -405,6 +448,31 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
                 options={zonaOptions}
                 placeholder="Selecciona una zona"
                 onValueChange={(v) => setField("zonaId", v)}
+                aria-invalid={ariaInvalid}
+                aria-describedby={ariaDescribedBy}
+              />
+            )}
+          </FormField>
+        ) : null}
+
+        {/* Feature 21: el vehiculo solo se muestra (y se envia) para `mensajero`,
+            y es OBLIGATORIO para ese rol. */}
+        {esRolConVehiculo ? (
+          <FormField
+            id="vehiculoId"
+            label="Vehiculo (obligatorio)"
+            error={errors.vehiculoId}
+          >
+            {({
+              "aria-invalid": ariaInvalid,
+              "aria-describedby": ariaDescribedBy,
+            }) => (
+              <Select
+                aria-label="Vehiculo"
+                value={form.vehiculoId}
+                options={vehiculoOptions}
+                placeholder="Selecciona un vehiculo"
+                onValueChange={(v) => setField("vehiculoId", v)}
                 aria-invalid={ariaInvalid}
                 aria-describedby={ariaDescribedBy}
               />

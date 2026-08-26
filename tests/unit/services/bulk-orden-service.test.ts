@@ -63,6 +63,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     generarGuiaLote: vi.fn().mockResolvedValue([]),
     asignarBodegaLote: vi.fn().mockResolvedValue(0),
     findMensajerosByZona: vi.fn().mockResolvedValue([]),
+    findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     // Feature 32: etiqueta de guia, exigida por la interfaz IOrdenRepository.
