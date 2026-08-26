@@ -224,6 +224,9 @@ nuevos.
 | R24 | los cuatro archivos viven en `tests/unit/guards/`; `pnpm run test:guardias` (`vitest run guard`) los selecciona **siempre**, sin registrarlos en ninguna lista |
 | D1 | `pwa-aviso-sin-recarga` › G1 · G2 · el banner se pinta con nombre accesible y un botón · **el aviso está montado en el portal** |
 | D3 | `pwa-relevo-y-purga` › con la bandera en true desaloja al SW anterior · con la bandera en false no · `pwa-aviso-sin-recarga` › el camino de rescate (3 casos) |
+| R25 | `pwa-servida-sin-sesion.guardia.test.ts` › los tres archivos no pasan por el guard · ANTI-VACUIDAD: el resto de la app sigue detrás · la exclusión va por nombre y no por extensión — **más** la medida `curl -I` sobre un build de producción (§12) y **M8** en `docs/release.md` |
+| R26 | `pwa-servida-sin-sesion.guardia.test.ts` › el `<link rel="manifest">` no declara crossorigin |
+| B1 | `pwa-aviso-sin-recarga` › un input CONTROLADO con texto tecleado cuenta como trabajo · el caso REAL del panel de gestión (3 casos) · G3: el banner va arriba, se puede quitar y no promete |
 
 **Requisitos sin test automático: R21, R22, R23** — los tres son medidas en un navegador contra un
 despliegue HTTPS. Se declaran así a propósito y no se finge cobertura.
@@ -447,3 +450,317 @@ recoja al darla de alta:
   lanzamiento.
 - **`Sidebar.tsx` usa `/icons/icon-192.png`** como logotipo: al regenerarlo, el logotipo del
   sidebar también pasa a la tipografía de marca. Es coherencia, no un efecto colateral no querido.
+
+---
+
+# SEGUNDA RONDA — los tres bloqueantes de la revisión (2026-08-25)
+
+La revisión salió **RECHAZADA con 4 bloqueantes**. B4 (las casillas del `tasks.md`) lo cierra el
+leader. Aquí van B1, B2 y B3, y **uno de ellos cambia el sentido de la ficha entera**.
+
+---
+
+## 12 · B2 — la PWA no se podía instalar, y nunca se ha podido
+
+### Lo que estaba pasando
+
+Medido por el revisor **contra producción real** (`ordenex.vercel.app`), sin cookies:
+
+```
+/manifest.json       307 -> /login?redirect=%2Fmanifest.json
+/sw.js               307 -> /login?redirect=%2Fsw.js
+/offline.html        307 -> /login?redirect=%2Foffline.html
+/icons/icon-512.png  200
+```
+
+El `matcher` del middleware sólo excluía **extensiones de imagen**. El navegador pide el
+manifiesto **sin credenciales**: recibía el redirect y **jamás ofrecía instalar**. El service
+worker tampoco se descargaba, así que **nada de lo que hace esta ficha llegaba al dispositivo**:
+ni caché, ni relevo, ni pantalla offline, ni aviso de versión nueva.
+
+**No lo introdujo esta ficha: es un defecto vivo desde la 64.** Y era un fallo mudo de manual —la
+app se ve perfecta, los iconos cargan, y lo único que ocurre es que el botón de instalar no
+aparece nunca—. Sin esto, todo lo demás de la 284 era decoración.
+
+### El arreglo
+
+Los tres archivos salen del `matcher`, **nombrados uno a uno**. Excluir `.json`, `.js` o `.html`
+por extensión sí habría aflojado de verdad: dejaría fuera del guard cualquier ruta futura con esa
+terminación. Son tres estáticos de `public/` sin un dato de nadie dentro, y `public/` nunca estuvo
+detrás de este guard como control de acceso — el mismo argumento con el que la 86 ya había sacado
+las fotos de la landing.
+
+### La medida, antes y después, sobre un BUILD DE PRODUCCIÓN
+
+No sobre el dev server: `pnpm exec next build` + `pnpm exec next start -p 3210`, que es el mismo
+artefacto compilado que corre en Vercel. Se midieron las **dos** versiones del árbol, compilando
+cada una:
+
+**ANTES** (árbol en `HEAD`, sin el arreglo) — reproduce exactamente lo que el revisor vio en
+producción:
+
+```
+/manifest.json           307 http://localhost:3210/login?redirect=%2Fmanifest.json
+/sw.js                   307 http://localhost:3210/login?redirect=%2Fsw.js
+/offline.html            307 http://localhost:3210/login?redirect=%2Foffline.html
+/icons/icon-512.png      200
+```
+
+**DESPUÉS** (con el arreglo):
+
+```
+$ curl -sI http://localhost:3210/manifest.json | head -1
+HTTP/1.1 200 OK
+$ curl -sI http://localhost:3210/sw.js | head -1
+HTTP/1.1 200 OK
+$ curl -sI http://localhost:3210/offline.html | head -1
+HTTP/1.1 200 OK
+
+/manifest.json           200
+/sw.js                   200
+/offline.html            200
+/icons/icon-512.png      200
+/ordenes                 307 http://localhost:3210/login?redirect=%2Fordenes
+```
+
+La última línea es la mitad que importa tanto como las otras tres: **el resto de la app sigue
+detrás del login**.
+
+**Lo que esta medida NO prueba, dicho:** que Vercel se comporte igual. Es el mismo `next build` y
+el mismo `middleware` compilado, pero el borde de Vercel es otra capa y yo no puedo desplegar.
+Por eso queda **M8** en `docs/release.md`, con los cuatro `curl` y su número esperado, como lo
+**primero** que se comprueba tras desplegar.
+
+### `crossorigin="use-credentials"`: NO, y con la medida delante
+
+El `design.md` §5/A11 conocía el asunto y lo aplicó a un caso **hipotético** (un manifiesto
+dinámico por rol) sin medirlo sobre el manifiesto real. Medido ahora: el manifiesto responde
+**200 sin ninguna cookie** y su contenido es un archivo **estático e igual para todos**, así que
+pedirlo con credenciales **no cambiaría ni una respuesta**. Y traería el problema de A11: un
+manifiesto que dependa de la sesión el navegador lo **congela al instalar**, y el rol de un
+usuario cambia después. Queda escrito como **R26** en el spec y **vigilado** por la guardia.
+
+### Cómo queda vigilado
+
+`tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts` (11 casos). Extrae el `matcher` del
+fuente, lo convierte en `RegExp` y afirma: los tres archivos **fuera** del guard; `/ordenes`,
+`/dashboard`, `/cierre-dia`, `/mis-asignaciones/reparto`, `/configuracion`, `/api/ordenes` y
+`/wallet` **dentro** (anti-vacuidad: sin esto, «no pasa por el guard» estaría verde con un
+matcher que no protege nada); la exclusión **por nombre y no por extensión**
+(`/reportes/export.json` sigue protegido); y el `<link rel="manifest">` **sin** `crossorigin`.
+
+Vive en `guards/` porque lo que decide esto es **un literal de configuración que nadie importa**:
+ningún grafo de imports selecciona un test cuando alguien edita `config.matcher`.
+
+---
+
+## 13 · B1 — la heurística no veía el trabajo del mensajero
+
+### Lo que yo afirmé y era falso
+
+Escribí que la heurística «se equivoca siempre hacia el mismo lado: ante la duda, el aviso
+espera». **No en esta app.** Medido por el revisor con sondas RTL sobre React 19.2.4:
+
+| caso | `value` | `defaultValue` | `hayTrabajoEnCurso` |
+| --- | --- | --- | --- |
+| input **controlado**, tecleado `45000` | `"45000"` | `"45000"` | **`false`** |
+| textarea controlada | igual | igual | **`false`** |
+| input **no** controlado | `"45000"` | `""` | `true` |
+
+React 19 mantiene `defaultValue` sincronizado con `value` en los controlados, y **esta app no usa
+otra cosa**: el campo del recaudo es `<Input value={linea.monto} onChange={…}>`
+(`components/shared/DesglosePagoField.tsx`). La señal de la foto también estaba muerta:
+`handleEvidenciaChange` hace `input.value = ""` justo tras elegir, a propósito. Y el panel se
+pinta **inline**, no en diálogo.
+
+**Y mi guardia estaba verde porque su caso G2 asignaba `.value` a un input suelto** — justo el
+único caso que la heurística sí detectaba. Un test que se probaba a sí mismo. Lo apunto tal cual
+porque es el modo de fallo que este repo lleva todo el día encontrando: **no falla, aparenta**.
+
+El daño real: panel de gestión con dinero tecleado y fotos elegidas → el aviso se pintaba, caía
+sobre «Guardar gestión» (`fixed bottom-0`, `pointer-events-auto`) y un toque **se llevaba el
+desglose y las evidencias**. Mientras el banner prometía *«Tu trabajo en pantalla no se pierde»*.
+
+### El arreglo, de raíz: el estado que se pierde vive en React, no en el DOM
+
+**Capa 1 — registro explícito** (`lib/pwa/trabajo-en-curso.ts` + `hooks/useDeclararTrabajo.ts`).
+La superficie que tiene datos sin guardar **lo declara**; el aviso sólo pregunta. Es un `Set`
+fuera de React a propósito: `useActualizacionPwa` necesita la respuesta **en el instante del
+clic**, y el aviso vive en el layout del portal mientras las superficies que declaran están en
+cualquier rama del árbol (un contexto obligaría a envolver la app entera). Se retira solo al
+desmontar. El hook `useActualizacionPwa` **se suscribe**, así que el aviso se retira **en el
+acto** cuando alguien empieza algo, no hasta tres segundos después.
+
+El panel de gestión lo declara desde que **sale del detalle** —o sea, desde que el mensajero
+decidió gestionar—, y también si hay fotos elegidas, motivo escrito, o algo comprimiéndose,
+enviándose, ubicándose o cancelándose.
+
+**Capa 2 — el barrido del DOM, arreglado.** Ya no compara con `defaultValue`: mira si el campo
+**tiene contenido**, que es lo único afirmable de un input controlado desde fuera. Con eso, el
+texto tecleado en **cualquier** formulario de la app cuenta, no sólo en lo declarado. Los campos
+de **búsqueda** quedan fuera a propósito (filtrar un listado no es trabajo que se pierda, y son
+los que más a menudo tienen contenido en reposo: dejarlos dentro haría que el aviso no apareciera
+**jamás** en los listados).
+
+**El precio, dicho:** un formulario **precargado** se lee como trabajo en curso aunque el usuario
+no haya tocado nada. Es el lado correcto del error: el aviso espera.
+
+### Y el aviso, como objeto físico
+
+1. **Va arriba.** `fixed bottom-0` ponía «Actualizar ahora» justo encima de «Guardar gestión»: el
+   pulgar apunta a guardar y toca actualizar. En esta app las acciones viven abajo.
+2. **Se puede quitar** («Ahora no»).
+3. **El texto ya no promete.** Decía *«Tu trabajo en pantalla no se pierde»* y era falso. Ahora
+   dice lo único que es seguro: *«Actualizar recarga la pantalla. Hazlo cuando hayas terminado lo
+   que tengas a medias.»* Prometer menos y cumplir.
+
+### Probado sobre el caso REAL, y encontró un error mío
+
+La guardia monta **el `GestionarOrdenPanel` de verdad** (con la misma tramoya de mocks que
+`GestionarOrdenPanelPagos.test.tsx`), abre la rama de entrega, teclea el recaudo y afirma tres
+cosas:
+
+- `monto.defaultValue === monto.value` — **la prueba de que la heurística vieja no habría visto
+  nada**, sobre el componente real y no sobre un input de laboratorio;
+- `hayTrabajoEnCurso(document) === true` y `trabajoDeclarado() === ["gestion:g1"]`;
+- **el aviso NO se pinta** mientras «Guardar gestión» está en pantalla.
+
+**Y el caso real cazó un error mío en el mismo commit**: escribí la condición como
+`paso === "resultados"`, y al pulsar «Entregar» el paso pasa a `"formulario"` — la declaración se
+habría retirado **justo al empezar a capturar**, que es el peor momento posible. Con un input de
+laboratorio eso no se ve. Va como mutación **17** para que no vuelva.
+
+### Lo que sigue SIN cubrir, dicho antes de que alguien lo suponga
+
+El registro cubre **lo que se declara**: hoy, el panel de gestión del mensajero. Una pantalla
+nueva con datos sin guardar **no se protege sola** — tiene que llamar a `useDeclararTrabajo`. La
+capa 2 la cubre **si** su estado se refleja en un `input`/`textarea`, que es lo normal, pero no si
+vive sólo en React (como las fotos). Por eso el banner ya no promete.
+
+---
+
+## 14 · B3 — el spec decía lo contrario de lo que hace el código
+
+`specs/284-pwa-correcta/requirements.md` corregido **con marca de fecha**, diciendo qué afirmaba
+cada requisito y por qué cambió — no reescrito en silencio:
+
+- un bloque **⚠️ CORRECCIÓN del 2026-08-25** con la tabla de las cinco divergencias (R3, R5, R7,
+  R15 y los dos «fuera de alcance» que dejaron de estarlo);
+- y la marca **en el propio requisito**, para que nadie lea R3/R5/R7/R15 sueltos y se lleve lo
+  contrario;
+- más **R25** (los tres archivos se sirven sin sesión) y **R26** (nada de
+  `crossorigin="use-credentials"` mientras el manifiesto sea estático), que este spec no tenía.
+
+---
+
+## 15 · Mutaciones de la segunda ronda: 6 de 6 muertas, control verde
+
+```
+== 14 devolver el matcher a solo-imagenes (el defecto de B2)
+   tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  4 failed | 7 passed (11)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+   × /manifest.json no pasa por el guard de sesión 8ms
+   × /sw.js no pasa por el guard de sesión 1ms
+   × /offline.html no pasa por el guard de sesión 0ms
+   × la exclusión va por NOMBRE y no por extensión 2ms
+== 15 volver a comparar value con defaultValue (el defecto de B1)
+   tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  1 failed | 21 passed (22)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+   × un input CONTROLADO con texto tecleado cuenta como trabajo 38ms
+== 16 que el panel de gestion deje de declarar su trabajo
+   tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  3 failed | 19 passed (22)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+   × con la rama de entrega abierta y el monto tecleado, hay trabajo en curso 230ms
+   × y con eso, el aviso de version nueva NO se pinta sobre el panel 171ms
+   × al desmontar el panel, la declaracion se retira sola 84ms
+== 17 el paso equivocado: solo `resultados` (el error real que el caso destapo)
+   tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  2 failed | 20 passed (22)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+   × con la rama de entrega abierta y el monto tecleado, hay trabajo en curso 206ms
+   × al desmontar el panel, la declaracion se retira sola 86ms
+== 18 el banner vuelve abajo, encima de Guardar gestion
+   tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  1 failed | 21 passed (22)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+   × G3: el banner va ARRIBA y se puede quitar, y su texto no promete nada 15ms
+== 19 el banner vuelve a prometer lo que no puede cumplir
+   tests/unit/guards/pwa-aviso-sin-recarga.guardia.test.ts -> MUERTA (roja)
+   Test Files  1 failed (1)
+   Tests  1 failed | 21 passed (22)
+   ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+   × G3: el banner va ARRIBA y se puede quitar, y su texto no promete nada 20ms
+== control  reordenar un comentario del middleware
+   tests/unit/guards/pwa-servida-sin-sesion.guardia.test.ts -> SUPERVIVIENTE (verde)
+   Test Files  1 passed (1)
+   Tests  11 passed (11)
+
+RESULTADO: 6 de 6 mutaciones muertas.
+CONTROL (cambio inocuo): SUPERVIVIENTE (verde) -- tiene que ser SUPERVIVIENTE (verde).
+```
+
+**Total de la ficha: 19 mutaciones muertas y 2 controles verdes.**
+
+### Un incidente del propio arnés, que hay que escribir
+
+La primera pasada de esta tanda **destruyó trabajo sin commitear**. El arnés revierte cada
+mutación con `git checkout -- <archivo>`, y tres de los archivos mutados
+(`middleware.ts`, `lib/pwa/actualizacion.ts`, `GestionarOrdenPanel.tsx`) **todavía no estaban
+commiteados**: el `checkout` no revirtió la mutación, revirtió **mi arreglo entero** a la versión
+de `HEAD`. Se recuperó de una copia y reescribiendo, y se volvió a medir **después de commitear**
+—que es como se corrió la primera tanda y por eso allí no pasó—.
+
+**La regla, para que no vuelva:** un arnés de mutaciones que revierte con `git` exige que el
+árbol esté **commiteado antes de empezar**. Si no, no es un arnés: es un `git checkout` con pasos
+extra. Se detectó porque la mutación siguiente cantó `MUTACION VACIA: no se encontro el texto` —o
+sea que la autocomprobación del arnés hizo su trabajo—.
+
+---
+
+## 16 · Gate de la segunda ronda
+
+`pnpm run db:generate` corrido antes. Gate **completo**, con el código de salida **dentro** del
+log y sin `tail` en medio:
+
+```
+{ ./init.sh; echo "INIT_EXIT=$?"; } > gate2.log 2>&1
+```
+
+```
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=6)
+✓ specs presentes para features sdd en vuelo
+✓ typecheck paso
+✓ lint paso
+     × ninguna Server Action de `lib/actions/**` es inalcanzable sin su anotación `@sin-superficie` 8ms
+ FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts > R-A — toda Server Action tiene superficie, o dice por escrito por qué no > ninguna Server Action de `lib/actions/**` es inalcanzable sin su anotación `@sin-superficie`
+ Test Files  1 failed | 1406 passed (1407)
+      Tests  1 failed | 19181 passed | 26 skipped (19208)
+✗ 'pnpm run test' fallo
+INIT_EXIT=1
+```
+
+**Veredicto: `INIT_EXIT=1` por el MISMO rojo ajeno de siempre. Delta 0.**
+
+- El rojo es `superficie-de-uso.guardia.test.ts` › *ninguna Server Action de `lib/actions/**` es
+  inalcanzable…*, con un único item: **`lib/actions/tarifas.ts:67 obtenerTarifa`** — ficha
+  **275**, ajena a esta.
+- El delta se midió en la primera ronda **en un worktree limpio en `4dc572e3`** (mismo fallo,
+  mismo item) y se vuelve a confirmar por comparación directa: **1 rojo antes, 1 rojo después, el
+  mismo nombre**. Esta ronda toca `middleware.ts`, que es entrada del grafo de alcanzabilidad de
+  esa guardia, así que la comparación no era un trámite: si mi cambio hubiera dejado alguna
+  Server Action sin superficie, ahí habría **dos** items y no uno.
+- El resto: `typecheck paso`, `lint paso` (0 errores; los warnings son preexistentes, ninguno en
+  archivos de esta ficha), **1406 de 1407 archivos de test en verde** y **19.181 tests pasando**
+  — 15 más que en la primera ronda, que son los casos nuevos de B1 y B2.
+- Las **cinco** guardias de la ficha suman **71 casos**, todas verdes dentro de esa corrida.
