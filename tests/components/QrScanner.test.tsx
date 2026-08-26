@@ -4,17 +4,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { QrScanner } from "@/components/shared/QrScanner";
+import { calcularLadoMarco, QrScanner } from "@/components/shared/QrScanner";
 
 // Sin hardware/media en CI: se mockea la lib de cámara. El doble captura el
 // callback de decodificación que `start` recibe, para poder simular un escaneo.
-const { errorMock, startMock, stopMock, clearMock, decodeCallback } = vi.hoisted(
+const {
+  errorMock,
+  startMock,
+  stopMock,
+  clearMock,
+  decodeCallback,
+  configEscaneo,
+} = vi.hoisted(
   () => ({
     errorMock: vi.fn(),
     startMock: vi.fn(),
     stopMock: vi.fn(),
     clearMock: vi.fn(),
     decodeCallback: { current: null as ((texto: string) => void) | null },
+    configEscaneo: {
+      current: null as null | {
+        fps: number;
+        qrbox: (ancho: number, alto: number) => {
+          width: number;
+          height: number;
+        };
+      },
+    },
   }),
 );
 
@@ -47,12 +63,14 @@ async function decodificar(texto: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   decodeCallback.current = null;
+  configEscaneo.current = null;
   startMock.mockImplementation(
     async (
       _config: unknown,
-      _opciones: unknown,
+      opciones: typeof configEscaneo.current,
       onDecode: (texto: string) => void,
     ) => {
+      configEscaneo.current = opciones;
       decodeCallback.current = onDecode;
     },
   );
@@ -192,6 +210,39 @@ describe("QrScanner", () => {
 
     expect(startMock).toHaveBeenCalledTimes(1);
     expect(stopMock).not.toHaveBeenCalled();
+  });
+
+  // Regresión (iOS no leía nunca): el recuadro que se pinta y la región que
+  // html5-qrcode recorta del frame tienen que ser el MISMO cuadrado. Con un
+  // `qrbox` fijo de 250 sobre un visor vertical —el stream de un móvil— el
+  // usuario apuntaba al centro de lo que veía y la lib decodificaba otra zona.
+  it("enmarca exactamente el cuadrado que la lib decodifica", async () => {
+    const user = userEvent.setup();
+    render(<QrScanner onDecoded={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Escanear con cámara" }));
+    await vi.waitFor(() => expect(configEscaneo.current).not.toBeNull());
+
+    // Visor vertical, como el que devuelve la cámara trasera de un iPhone. La
+    // lib lo llama al medir el visor; el componente publica el lado desde ahí.
+    let medida = { width: 0, height: 0 };
+    await act(async () => {
+      medida = configEscaneo.current!.qrbox(360, 640);
+    });
+    const { width, height } = medida;
+    expect(width).toBe(height);
+    expect(width).toBeLessThanOrEqual(360);
+
+    const marco = await screen.findByTestId("qr-marco");
+    expect(marco.style.width).toBe(`${width}px`);
+    expect(marco.style.height).toBe(`${height}px`);
+  });
+
+  it("el recuadro se mide sobre el lado corto del visor, en horizontal y en vertical", () => {
+    expect(calcularLadoMarco(360, 640)).toBe(calcularLadoMarco(640, 360));
+    expect(calcularLadoMarco(360, 640)).toBeLessThanOrEqual(360);
+    // Un visor diminuto no puede devolver un lado que html5-qrcode rechace.
+    expect(calcularLadoMarco(40, 30)).toBeGreaterThanOrEqual(50);
   });
 
   it("al cerrar la cámara detiene y limpia el scanner (sin fuga)", async () => {
