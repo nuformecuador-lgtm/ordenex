@@ -3470,13 +3470,13 @@
     },
     {
       "id": 285,
-      "title": "el listado de usuarios dice de que zona es cada uno, y se puede filtrar por rol y buscar por nombre o correo",
-      "description": "El listado de usuarios no muestra la zona ni acepta busqueda ni filtro: solo pagina y ordena.",
+      "title": "el listado de usuarios se puede filtrar por rol y buscar por nombre o correo",
+      "description": "El listado de usuarios no acepta busqueda ni filtro por rol: solo pagina y ordena.",
       "zone": "fullstack",
       "status": "pending",
       "sdd": true,
       "complexity": "media",
-      "status_note": "DADA DE ALTA el 2026-08-26 a pedido del humano. MEDIDO ANTES DE ESCRIBIRLA: `UsuarioListItem` (IUserRepository.ts:75) proyecta id/nombre/email/rolValue/estado/createdAt y NO trae zona, pese a que `Usuario.zonaId` existe (schema.prisma:98, nullable: solo mensajero y adminSatelite la llevan). Y `listarUsuariosSchema` (types/usuario.ts:95) acepta SOLO page/pageSize/sortBy/sortDir: no hay parametro de busqueda ni de filtro. O sea que los tres puntos son backend + frontend, no pantalla. || REUSO, PEDIDO EXPLICITO DEL HUMANO: `BuscadorFiltros` y `FilterComponent` ya son genericos y lo especifico de ordenes vive aparte en `ordenes-filtros-def.ts` como funcion pura catalogo->declaraciones. Se calca `usuarios-filtros-def.ts`; NO se toca el de ordenes. || DECIDIDO: filtro de rol MULTI-SELECCION (como el de estado en ordenes); usuario sin zona se pinta con guion, no vacio. || RIPPLE: la columna nueva toca tambien la descarga (`usuarios-descarga-columnas.ts`), que tiene guardia propia de la feature 170. Entra en esta ficha. || AL IMPLEMENTAR: el WHERE nuevo se prueba DONDE VIVE (test de integracion), no con dobles — un test de servicio con mocks no ve el SQL y pasa en verde con el WHERE mutado."
+      "status_note": "DADA DE ALTA el 2026-08-26 a pedido del humano. ALCANCE RECORTADO POR EL HUMANO el mismo dia: la columna de zona SE RETIRA («ya no necesito la columna nueva para ver de que zona es cada persona»). Queda solo el filtro por rol y el buscador. Con la columna se va tambien su unico efecto colateral: la descarga de usuarios y la guardia de columnas de la feature 170 ya NO se tocan. || MEDIDO ANTES DE ESCRIBIRLA: `listarUsuariosSchema` (types/usuario.ts:95) acepta SOLO page/pageSize/sortBy/sortDir — no hay parametro de busqueda ni de filtro. O sea que esto es backend + frontend, no pantalla. || REUSO, PEDIDO EXPLICITO DEL HUMANO: `BuscadorFiltros` y `FilterComponent` ya son genericos y lo especifico de ordenes vive aparte en `ordenes-filtros-def.ts` como funcion pura catalogo->declaraciones. Se calca `usuarios-filtros-def.ts`; NO se toca el de ordenes. || DECIDIDO: filtro de rol MULTI-SELECCION, como el de estado en ordenes. || AL IMPLEMENTAR: el WHERE nuevo se prueba DONDE VIVE (test de integracion), no con dobles — un test de servicio con mocks no ve el SQL y pasa en verde con el WHERE mutado."
     },
     {
       "id": 286,
