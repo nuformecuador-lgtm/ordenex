@@ -7,6 +7,66 @@
 > por feature, y la narrativa de decisiones dentro de cada entrada de `feature_list.json`.
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
+## 🔴 HOY — 2026-08-26. **EMPIEZA A LEER POR AQUÍ** (lo de abajo es historia)
+
+### 1. Producción entra SIN segundo factor, a propósito y de forma reversible
+
+Gmail dejó de aceptar la credencial SMTP (`535-5.7.8 BadCredentials`, `AUTH PLAIN`) sobre las
+**16:04 UTC**. El OTP de riesgo alto se manda por correo, así que **quien no tuviera dispositivo
+confiado no podía entrar**. Decisión del humano: desconectar el OTP ya.
+
+**Hecho:** `AUTH_RISK_THRESHOLD = 999` en **Production** (antes no existía la variable; corría con
+el default 50). La puntuación máxima posible es 110 → `isHigh` no puede ser cierto → nunca se llega
+a la línea del correo. **Verificado con dato**, no razonado: `login_attempt` del 2026-08-26 21:56:32
+tiene `risk_score = 110` **con `exitoso = true`**, combinación imposible hasta hoy.
+
+- **Lo que se acepta:** la contraseña es el único factor. El bloqueo por fuerza bruta SIGUE (5
+  contraseñas mal en 15 min).
+- **Efecto lateral útil:** mientras esté a 999, cada ingreso marca dispositivo e IP como conocidos,
+  así que al restaurar el 50 esa gente ya no disparará OTP.
+- **PENDIENTE REAL:** la credencial SMTP. Hay que regenerar la contraseña de aplicación de Google
+  (cambiar la contraseña de la cuenta las revoca todas) y **volver a poner el umbral en 50**.
+
+### 2. Hotfix listo y SIN desplegar: `hotfix/desafio-otp-no-bloquea-cuenta` (`4f095e25`)
+
+Emitir un desafío OTP se registraba como `exitoso: false` y el contador lo tomaba por **fallo de
+credencial**. Doble daño medido en producción: sumaba 40 puntos al intento siguiente (dejando al
+usuario clavado en la vía del OTP, donde reintentar aprieta) y empujaba al bloqueo duro. Un usuario
+real llegó a **`fallos_recientes:4`** sin escribir mal la contraseña ni una vez.
+
+Arreglo: solo cuentan las filas con motivo `password_incorrecta`; las demás son neutras. **34 tests
+verdes y verificado por mutación** (borrando el guard, el test nuevo pasa de 2 a 6). Sale de
+`origin/prod`, **sin PR ni gate todavía**. Importa cuando se reactive el OTP.
+
+### 3. Módulo de usuarios: 3 fichas registradas, specs en marcha
+
+| ficha | zona | qué | estado |
+| --- | --- | --- | --- |
+| **285** | fullstack | filtro por rol + buscador por nombre/correo | spec en curso |
+| **286** | frontend | el ojito en los 6 inputs de contraseña | spec en curso |
+| **287** | fullstack | el maestro RESTABLECE la contraseña (nunca la fija) | spec en curso |
+
+- La **columna de zona se retiró** por decisión del humano; con ella se fue el efecto colateral
+  sobre la descarga y su guardia.
+- La **287 revierte la Decision 5** de la feature 25 (`NUNCA passwordHash`) **a sabiendas**. El
+  alcance acotado —restablecer, no fijar— preserva el motivo original.
+- **Orden obligado:** 285 y 286 en paralelo (no comparten un archivo); la **287 va DESPUÉS** de la
+  285: chocan en `lib/actions/usuarios.ts`, `UsuariosModule.tsx` y `UsuarioService.ts`.
+
+### 4. Deuda abierta que NO es de nadie de esta sesión
+
+- **223 de 379 distritos cobrarían ₡0,00 de flete.** Medido ejecutando `resolverFlete` con las 10
+  filas reales de `tarifas`. Causa: `esCentral` es un flag único (solo la zona «GAM» lo tiene), así
+  que para las otras nueve `valor_flete_gam` es una columna que nadie lee — y es la que está
+  rellena. Es dato mal metido, inducido por un formulario que ofrece 4 montos cuando solo 2 aplican.
+  **Sin ficha todavía**; falta que el humano dé los precios de devolución de 4 zonas y los dos de
+  «GAM San José Abajo».
+- **`ZonaRepository.hardDelete` no limpia `tarifas`** (FK RESTRICT llegada el 2026-08-25): 10 zonas
+  imposibles de borrar. Lo está resolviendo **otra sesión**; hay una rama local abandonada a
+  propósito (`hotfix/zona-borrado-bloqueado-por-tarifa`). **No tocar.**
+- El rojo ajeno de `obtenerTarifa` (ficha **275**, otra sesión, `pending`) sigue tumbando el gate.
+
+---
 
 ## 🟢 EN `dev`, SIN RELEASE — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
 
