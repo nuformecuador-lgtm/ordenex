@@ -957,8 +957,23 @@ export interface IOrdenRepository {
     data: UpdateOrdenData,
     historial: HistorialContexto,
   ): Promise<OrdenDTO | null>;
-  // BORRADO 2026-08-07 (tanda 2): `softDelete` (unico writer de `deleted_at`) y
-  // `existsEstatus`. El predicado `deleted_at IS NULL` sigue vivo en TODAS las lecturas.
+  // BORRADO 2026-08-07 (tanda 2): `existsEstatus`. Para comprobar que un estatus existe, lo
+  // vivo es `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
+  //
+  // `softDelete` tambien se retiro ese dia ("ninguna pantalla ofrece borrar una orden") y
+  // VUELVE con la feature «eliminar orden» (2026-08-26), ahora POR LOTE y con superficie:
+  // vuelve a ser el UNICO writer de `deleted_at` en `orden`. El predicado `deleted_at IS NULL`
+  // nunca se fue: sigue vivo y aplicandose en TODAS las lecturas.
+  /**
+   * Borrado LOGICO por lote: fija `deleted_at = now()` en las ordenes de `ids` que aun NO
+   * estuvieran borradas. El `where` incluye `deletedAt: null` (patron de `OrdenGeocodeRepository`
+   * y del resto de escrituras guardadas del repo), de modo que es IDEMPOTENTE y seguro ante
+   * carreras: dos borrados simultaneos no reescriben el instante del primero.
+   *
+   * Devuelve CUANTAS filas cambio, que no tiene por que ser `ids.length` si otra sesion se
+   * adelanto. `ids` vacio -> `0` SIN consultar.
+   */
+  softDelete(ids: readonly string[]): Promise<number>;
   findEstatusIdByValue(value: string): Promise<string | null>;
   /**
    * Feature 27/R15/R16/R17: lee `usuario.fulfillment` de la tienda que realiza la

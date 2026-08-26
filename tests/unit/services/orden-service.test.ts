@@ -53,6 +53,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
     findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn().mockResolvedValue(dto()),
+    // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
+    // invoca; el doble existe para satisfacer el contrato completo del repo.
+    softDelete: vi.fn().mockResolvedValue(0),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD

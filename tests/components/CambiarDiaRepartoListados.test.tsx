@@ -288,25 +288,28 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
     expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
-  it("una orden `entregada` no gana casilla: no participa de ninguna acción por lote", async () => {
-    // Acompañada de una `por_recoger` a propósito: la columna de casillas sólo se monta si
-    // ALGUNA fila de la página tiene acción por lote. Sin la acompañante, la ausencia de abajo
-    // sería la de la columna entera y este caso pasaría en verde sin comprobar nada.
+  it("una orden `entregada` no gana la corrección del día, aunque hoy sí gane casilla", async () => {
+    // ACTUALIZADO por la feature «eliminar orden» (2026-08-26): hasta entonces esta fila NO
+    // tenía casilla —ningún estado sin acción por lote la tenía—, y eso era lo que este caso
+    // comprobaba. Hoy "Eliminar" se ofrece en CUALQUIER estado, así que la casilla existe; lo
+    // que sigue siendo cierto, y es lo que esta ficha protege, es que marcarla NO ofrece
+    // corregir el día: añadir `en_reparto` y `ayuda_tienda` a las acciones por lote NO abrió la
+    // puerta a los demás estados.
+    const user = userEvent.setup();
     renderOrdenes([
       makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregada" }),
       makeOrden({ id: "o5b" }),
     ]);
 
+    await seleccionarFila(user, "REM-o5");
+
+    // La barra EXISTE —"Eliminar" siempre está—, y aun así la corrección del día no. La pareja
+    // presencia/ausencia es lo que impide que esto pase en verde por no haberse renderizado
+    // nada.
     expect(
-      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-o5b" }),
+      await screen.findByRole("button", { name: "Eliminar" }),
     ).toBeInTheDocument();
-    // La fila existe —está listada— pero su celda de selección queda vacía: añadir
-    // `en_reparto` y `ayuda_tienda` a las acciones por lote NO abre la puerta a los demás
-    // estados.
-    expect(screen.getByText("REM-o5")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("checkbox", { name: "Seleccionar orden REM-o5" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
   it("con estados MEZCLADOS la acción sólo alcanza a las que la admiten, y lo DICE en el botón", async () => {

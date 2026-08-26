@@ -125,7 +125,13 @@ describe("OrdenesListado — flujo de devolución de rechazadas (R9/R15)", () =>
     ).toBeNull();
   });
 
-  it("R9: una orden 'rechazada' NO ofrece salida manual (sin checkbox ni acción por lote)", async () => {
+  it("R9: una orden 'rechazada' NO ofrece salida manual", async () => {
+    // ACTUALIZADO por la feature «eliminar orden» (2026-08-26): este caso comprobaba que la
+    // fila no tenía NI checkbox. "Eliminar" se ofrece hoy en cualquier estado, así que la
+    // casilla existe; lo que R9 protege —que `rechazada` no tenga salida MANUAL hacia la
+    // tienda, porque su única salida es la aprobación del cierre— sigue intacto y es lo que
+    // se asserta marcando la fila y mirando la barra.
+    const user = userEvent.setup();
     renderListado(
       [{ id: "id-rech", value: "rechazada" }],
       [makeOrden("REM-RECH", "rechazada")],
@@ -134,9 +140,14 @@ describe("OrdenesListado — flujo de devolución de rechazadas (R9/R15)", () =>
     // La orden se lista…
     const tabla = await screen.findByRole("table");
     expect(within(tabla).getByText("REM-RECH")).toBeInTheDocument();
-    // …pero SIN checkbox de selección (su estado no tiene acción por lote).
-    expect(within(tabla).queryByRole("checkbox")).toBeNull();
-    // Ni el botón de devolución/envío manual.
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: "Seleccionar orden REM-RECH" }),
+    );
+
+    // …y con la fila marcada la barra EXISTE (presencia/ausencia: sin esto el caso pasaría en
+    // verde por no haberse renderizado nada), pero SIN salida manual hacia la tienda.
+    expect(await screen.findByRole("button", { name: "Eliminar" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /devolver a la tienda|enviar a la tienda/i }),
     ).toBeNull();

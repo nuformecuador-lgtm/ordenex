@@ -1396,12 +1396,28 @@ export class OrdenRepository implements IOrdenRepository {
     });
   }
 
-  // BORRADO 2026-08-07 (tanda 2): aqui vivian `softDelete` (el borrado logico de UNA orden,
-  // de `OrdenService.borrar`) y `existsEstatus` (la guarda de catalogo de
-  // `OrdenService.actualizar`). Ninguna pantalla ofrece borrar una orden. OJO: el
-  // `deleted_at IS NULL` sigue vivo y aplicandose en TODAS las lecturas; lo que se va es el
-  // unico WRITER que lo fijaba. Para comprobar que un estatus existe, lo vivo es
+  // BORRADO 2026-08-07 (tanda 2): aqui vivia tambien `existsEstatus` (la guarda de catalogo de
+  // `OrdenService.actualizar`). Para comprobar que un estatus existe, lo vivo es
   // `findEstatusIdByValue`, que es lo que usan los servicios de dominio.
+
+  /**
+   * Feature «eliminar orden» (2026-08-26) — UNICO writer de `deleted_at` en `orden`. Reemplaza
+   * al `softDelete` de una sola orden que se retiro el 2026-08-07 por quedarse sin pantalla; el
+   * `deleted_at IS NULL` de TODAS las lecturas nunca dejo de aplicarse, asi que fijar la columna
+   * basta para que la orden desaparezca de los listados sin tocar ninguna de ellas.
+   *
+   * `updateMany` con `deletedAt: null` en el `where` (no `update` por id): un lote en una sola
+   * sentencia, idempotente y a prueba de carreras —la orden que otra sesion ya borro no entra en
+   * el conteo y su instante original se conserva—.
+   */
+  async softDelete(ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const { count } = await this.prisma.orden.updateMany({
+      where: { id: { in: [...ids] }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    return count;
+  }
 
   async findEstatusIdByValue(value: string): Promise<string | null> {
     const found = await this.prisma.orderStatus.findUnique({ where: { value } });

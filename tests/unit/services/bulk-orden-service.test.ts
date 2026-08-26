@@ -30,6 +30,9 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature 260 (B3): hidratacion por lote de ids. No la ejercita este servicio.
     findListItemsByIds: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
+    // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
+    // invoca; el doble existe para satisfacer el contrato completo del repo.
+    softDelete: vi.fn().mockResolvedValue(0),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-preparacion"),
     // Feature 27: por defecto la tienda NO tiene fulfillment -> en_preparacion (R17/R22).
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),

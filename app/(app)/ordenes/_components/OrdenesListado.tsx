@@ -9,7 +9,6 @@ import {
   type FilterSelection,
 } from "@/components/shared/FilterComponent";
 import { BuscadorFiltros } from "@/components/shared/BuscadorFiltros";
-import { BLOQUEO_SIN_AVISO } from "@/components/shared/CeldaSeleccion";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 import type { OrderStatusLiteRow } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -38,6 +37,7 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
+import { EliminarOrdenModal } from "./EliminarOrdenModal";
 import {
   CAMBIAR_DIA_ACCION,
   CambiarDiaRepartoModal,
@@ -63,6 +63,7 @@ type ModalAbierto =
   | "recuperar-bodega"
   | "deshacer-asignacion"
   | "cambiar-dia-reparto" // feature 262
+  | "eliminar" // feature «eliminar orden»
   | null;
 
 async function mensajerosFetcher() {
@@ -141,15 +142,10 @@ const MOTIVO_DEVUELTA_NO_CENTRAL =
 // el resto de vistas (otros estados, listado sin filtro) no resalta por prioridad (R10).
 const ESTADO_EN_BODEGA = "en_bodega_central";
 
-// Motivo del bloqueo del checkbox en órdenes cuyo estado no tiene ninguna acción por
-// lote (p. ej. `rechazada`, `entregada`): con una sola tabla para todos los estados,
-// marcarlas no llevaría a ninguna acción, así que se bloquean y se explica por qué.
-/**
- * Estado sin acciones por lote: la fila se bloquea pero SIN aviso visible (pedido humano
- * 2026-08-19). El «!» se reservaba para explicar un impedimento; aquí no hay impedimento
- * que explicar, solo un estado que no participa, y repetirlo en media tabla era ruido.
- */
-const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
+// RETIRADO por la feature «eliminar orden» (2026-08-26): aquí vivía `MOTIVO_SIN_ACCIONES`, el
+// bloqueo (sin aviso visible) del checkbox en órdenes cuyo estado no ofrecía ninguna acción por
+// lote —`rechazada`, `entregada`, ...—. Deja de existir esa población: "Eliminar" se ofrece en
+// CUALQUIER estado, así que ya no hay fila que lleve a una barra vacía.
 
 /** Etiqueta legible del estado; cae al `value` crudo si no hay label conocido. */
 function labelDe(value: string): string {
@@ -364,6 +360,15 @@ export function OrdenesListado({
     setModalAbierto("cambiar-dia-reparto");
   }
 
+  // Feature «eliminar orden»: retirar del sistema un registro creado por error. NO se filtra
+  // el snapshot por estado ni por zona —a diferencia de `abrirRecuperar` / `abrirRutearSatelite`,
+  // cuyas acciones sí tienen un estado de origen—: una orden se elimina esté donde esté. El
+  // servidor revalida el ROL (maestro/admin), que es la única guardia real.
+  function abrirEliminar(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("eliminar");
+  }
+
   // Señal de "desmarca todo" para la tabla: la selección vive en `OrdenesModule`, pero
   // quien sabe que una acción por lote se llevó a cabo es esta superficie. Se incrementa
   // junto con la revalidación —el mismo momento— y la tabla limpia sus casillas.
@@ -441,6 +446,22 @@ export function OrdenesListado({
     label: CAMBIAR_DIA_ACCION,
     variant: "outline",
     onRun: abrirCambiarDia,
+  };
+
+  /**
+   * Feature «eliminar orden» — la ÚNICA acción por lote que no cuelga de `accionesDe`, y no es
+   * un descuido: no tiene estado de origen. Una orden creada por error puede estar en cualquier
+   * punto del flujo, así que condicionarla al estado dejaría fuera justo los casos que motivan
+   * la ficha. Se añade en `accionesPara`, sobre la selección ENTERA.
+   *
+   * Secundaria (`variant: "outline"`) a propósito: nunca debe ser el botón que se pulsa por
+   * inercia. La confirmación destructiva vive en el modal.
+   */
+  const accionEliminar: AccionLote = {
+    key: "eliminar",
+    label: "Eliminar",
+    variant: "outline",
+    onRun: abrirEliminar,
   };
 
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
@@ -711,27 +732,31 @@ export function OrdenesListado({
   }
 
   /**
-   * ¿Se monta la columna de checkbox? Solo si alguna orden de la página está en un
-   * estado con acción por lote. Filtrado a estados de solo lectura (p. ej. `rechazada`)
-   * la tabla queda limpia, sin una columna de casillas inertes.
+   * ¿Se monta la columna de checkbox? Con acciones por lote, siempre que la página traiga
+   * filas. Hasta la feature «eliminar orden» se exigía además que alguna estuviera en un
+   * estado con acción por lote, para no montar una columna de casillas inertes; hoy no hay
+   * estado inerte —"Eliminar" aplica a todos— y esa condición sólo escondía la columna.
    */
   function haySeleccionables(items: OrdenListItemDTO[]): boolean {
-    return items.some((row) => accionesDe(row.estatusValue).length > 0);
+    // Feature «eliminar orden»: basta con que HAYA filas. Antes se exigía que alguna estuviera
+    // en un estado con acción por lote; con "Eliminar" disponible en cualquier estado, esa
+    // condición es siempre cierta y exigirla sólo escondía la columna en las páginas donde el
+    // borrado es justamente lo único que se puede hacer (`entregada`, `rechazada`).
+    return items.length > 0;
   }
 
   /**
    * Bloqueo del checkbox POR FILA (reglas que conviven, ahora derivadas del estado de
    * la ORDEN y no de una tab activa):
-   * - estado sin acciones por lote: no hay a dónde llevar la selección (la columna
-   *   existe porque otras filas de la página sí la tienen).
    * - `devuelta`: solo las de la bodega central (las satélite las recupera el adminSatelite).
+   * Feature «eliminar orden» (2026-08-26): SE RETIRÓ la regla "estado sin acciones por lote".
+   * Ver la lápida de `MOTIVO_SIN_ACCIONES` arriba.
    * Pedido humano 2026-08-18: SE RETIRÓ la tercera regla, que bloqueaba los estados de
    * asignación cuando la ZONA de la orden tenía ≥1 mensajero con cierre abierto. El servidor
    * ya no rechaza esa asignación, así que el checkbox tampoco la impide.
    */
   function bloqueoSeleccion(row: OrdenListItemDTO): string | null {
     const value = row.estatusValue;
-    if (accionesDe(value).length === 0) return MOTIVO_SIN_ACCIONES;
     if (value === ESTADO_DEVUELTA) {
       return row.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
     }
@@ -768,7 +793,7 @@ export function OrdenesListado({
       }
     }
 
-    return [...porKey.values()].map(({ accion, ordenes }) => {
+    const porEstado = [...porKey.values()].map(({ accion, ordenes }) => {
       const parcial = ordenes.length < seleccionadas.length;
       return {
         ...accion,
@@ -778,6 +803,11 @@ export function OrdenesListado({
         onRun: () => accion.onRun(ordenes),
       };
     });
+
+    // "Eliminar" va SIEMPRE la ÚLTIMA y SIN conteo: aplica a la selección entera, así que no
+    // hay subconjunto que aclarar. Al final de la barra por la misma razón por la que es
+    // secundaria: es la acción que no se debe pulsar por inercia.
+    return [...porEstado, accionEliminar];
   }
 
   // La carga masiva y los escáneres viven a nivel del contenedor (no dependen del
@@ -974,6 +1004,15 @@ export function OrdenesListado({
             open={modalAbierto === "cambiar-dia-reparto"}
             ordenes={ordenesSeleccionadas}
             fechasDiaReparto={fechasDiaReparto}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Feature «eliminar orden»: éxito ⇒ `handleSuccess` cierra y revalida las tablas, de
+              modo que las órdenes eliminadas desaparecen del listado (todas las lecturas
+              filtran `deleted_at IS NULL`). */}
+          <EliminarOrdenModal
+            open={modalAbierto === "eliminar"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
