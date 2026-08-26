@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { inflateSync } from "node:zlib";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import QRCode from "qrcode";
 import bwipjs from "bwip-js/node";
 
 import { buildEtiquetasLotePdf } from "@/lib/pdf/etiquetas-pdf-lote";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
+
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 // Feature 136 — SMOKE de R7: "el sistema DEBE generar el PDF server-side (en el
 // runtime Node del endpoint), sin depender del navegador ni del DOM del cliente".
@@ -119,11 +119,20 @@ describe("buildEtiquetasLotePdf — smoke server-side sin mocks (R7)", () => {
     expect(bytes.byteLength).toBeGreaterThan(3000);
   });
 
-  // Feature 150 (T3, R21) — BLINDAJE de la decision D3: el tamaño de hoja
-  // seleccionable es SOLO del generador de cliente. Este bloque existe para que
-  // un refactor bienintencionado que "unifique" los dos generadores rompa aqui
-  // antes de cambiar el PDF consolidado que reciben los integradores por API
-  // (feature 88/136), que sigue siendo 100 x 100 mm fijo.
+  // Feature 150 (T3, R21) - BLINDAJE de la decision D3: el tamaño de hoja
+  // seleccionable es SOLO del generador de cliente. El PDF consolidado que
+  // reciben los integradores por API (features 88/136) sigue siendo 100 x 100 mm
+  // fijo y sin parametro de tamaño.
+  //
+  // Feature 282 (T12) - REVISADO: este archivo YA NO afirma "no se ha tocado".
+  // El generador del servidor SI cambia en la 282 (comparte maqueta y embebe la
+  // fuente), asi que lo que se conserva se afirma por lo que ES, no por la
+  // ausencia de un import: firma publica de un solo parametro, pagina cuadrada
+  // de 100 mm en TODAS las paginas, y el catalogo de tamaños fuera. La
+  // asercion vieja `not.toContain("etiquetas-layout")` se retira porque el
+  // modulo compartido vive precisamente ahi; lo que aquella protegia -que nadie
+  // le meta un tamaño de hoja- lo siguen protegiendo las tres de abajo, y ahora
+  // ademas la guardia `etiquetas-maqueta-unica.guardia.test.ts`.
   it("R21: el generador server-side sigue en 100 x 100 mm y sin parametro de tamaño", async () => {
     const bytes = await buildEtiquetasLotePdf([etiqueta(2001), etiqueta(2002)]);
     const pdf = Buffer.from(bytes).toString("latin1");
@@ -139,14 +148,27 @@ describe("buildEtiquetasLotePdf — smoke server-side sin mocks (R7)", () => {
     // un `hoja`, `length` pasaria a 2 y este test caeria.
     expect(buildEtiquetasLotePdf).toHaveLength(1);
 
-    // Y no importa el catalogo de tamaños de la feature 150: ese modulo es del
-    // generador de cliente.
-    const fuente = readFileSync(
-      path.join(__dirname, "..", "..", "..", "lib", "pdf", "etiquetas-pdf-lote.ts"),
-      "utf8",
-    );
+    // Y el catalogo de tamaños de la feature 150 sigue siendo del cliente: el
+    // servidor usa el LIENZO BASE, no una hoja elegible.
+    const fuente = codigoSinComentarios("lib/pdf/etiquetas-pdf-lote.ts");
     expect(fuente).not.toContain("etiquetas-hoja");
-    expect(fuente).not.toContain("etiquetas-layout");
+    expect(fuente).not.toContain("HOJAS_ETIQUETA");
+    expect(fuente).toContain("crearLayoutBase()");
+    expect(fuente).not.toMatch(/crearLayout\(/);
+  });
+
+  // Feature 282 (T12, R18) - lo que la ficha SI cambia en esta salida, afirmado
+  // aqui con las libs reales: la fuente embebida viaja dentro del PDF que
+  // reciben los integradores.
+  it("R18/R20: el PDF consolidado embebe la fuente y sigue pesando lo razonable", async () => {
+    const bytes = await buildEtiquetasLotePdf([etiqueta(3001)]);
+    const pdf = Buffer.from(bytes).toString("latin1");
+    expect(pdf).toContain("/Subtype /Type0");
+    expect(pdf).toContain("/Identity-H");
+    expect(pdf).toContain("/FontFile2");
+    // Una etiqueta con QR + barcode reales + la fuente embebida: del orden de
+    // pocas decenas de KB, no de cientos.
+    expect(bytes.byteLength).toBeLessThan(80 * 1024);
   });
 
   it("no toca el DOM: no hay document ni window en el entorno del builder (R7)", async () => {

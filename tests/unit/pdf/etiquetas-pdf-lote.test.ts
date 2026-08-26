@@ -31,7 +31,25 @@ vi.mock("bwip-js/node", () => ({
 import { buildEtiquetasLotePdf } from "@/lib/pdf/etiquetas-pdf-lote";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import { formatMonto } from "@/lib/config/moneda";
+import { MARCA_CORTE } from "@/lib/pdf/etiquetas-ajuste";
+import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
+import { camposYInicio, MAQUETA_BASE } from "@/lib/pdf/etiquetas-maqueta";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
+
+import {
+  CASO_ALFABETO_REAL,
+  CASO_EVIDENCIA,
+  CORPUS_282,
+  NO_ASCII_MEDIDOS,
+} from "../../fixtures/etiquetas-282";
+import {
+  cidsDe,
+  fuentesDePagina,
+  textoLegible,
+  textosDePagina,
+} from "./pdf-inspector";
+import { contorno, tieneTinta } from "./ttf-lector";
+import { codigoSinComentarios } from "../../fixtures/sin-comentarios";
 
 function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
   const numGuia = overrides.numGuia ?? 1042;
@@ -88,19 +106,6 @@ function textoDelPdf(bytes: Uint8Array): string {
     }
   }
   return out;
-}
-
-/**
- * ¿Aparece `valor` como texto dibujado en el PDF? jsPDF escribe los literales en
- * WinAnsi (ASCII tal cual), PERO si la cadena trae algun caracter fuera de ese
- * juego —el simbolo de moneda, p. ej.— codifica TODO ese texto en UTF-16BE, y
- * entonces cada caracter va precedido de un byte 0x00. Se acepta cualquiera de
- * las dos formas para no atar el test a la moneda configurada.
- */
-function incluyeTexto(pdf: string, valor: string): boolean {
-  if (pdf.includes(valor)) return true;
-  const utf16be = [...valor].map((c) => `\u0000${c}`).join("");
-  return pdf.includes(utf16be);
 }
 
 beforeEach(() => {
@@ -246,14 +251,181 @@ describe("buildEtiquetasLotePdf (R1-R7)", () => {
     expect(s).toContain("ProvinciaTest");
     expect(s).toContain("CantonTest");
     expect(s).toContain("DistritoTest");
-    // Monto a cobrar: formateado con la moneda configurada (p. ej. "₡1 234,50").
-    // Se afirma el tramo ASCII visible mas largo del importe ("234,50"), valido
-    // para cualquier locale/moneda configurada, sin hardcodear el simbolo.
-    const tramosAscii = formatMonto(1234.5)
-      .split(/[^\x21-\x7E]+/)
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length);
-    expect(tramosAscii[0].length).toBeGreaterThan(1);
-    expect(incluyeTexto(s, tramosAscii[0])).toBe(true);
+    // Monto a cobrar: la cadena COMPLETA que produce el formateador, simbolo
+    // incluido, decodificada por el mapa a Unicode que declara el propio
+    // documento. Feature 282: la asercion vieja miraba el tramo ASCII mas largo
+    // ("234,50") porque el simbolo NO se podia afirmar -- precisamente porque
+    // no se imprimia. Ahora si se imprime, y se afirma entero.
+    expect(textosDecodificados(bytes)).toContain(formatMonto(1234.5));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 282 (T21) — El MISMO defecto vivia aqui, y aqui se mide igual: sobre
+// los bytes del PDF que produce ESTE generador, no sobre los del navegador.
+// ---------------------------------------------------------------------------
+
+const PT_A_MM_282 = 25.4 / 72;
+
+/** Todas las cadenas dibujadas, decodificadas por el `/ToUnicode` del documento. */
+function textosDecodificados(bytes: Uint8Array, indice = 0): string[] {
+  const fuentes = fuentesDePagina(bytes, indice);
+  return textosDePagina(bytes, indice).map((t) =>
+    textoLegible(t, fuentes.get(t.fuenteRes)),
+  );
+}
+
+describe("R19 — el servidor tampoco pisa la primera fila", () => {
+  it("la separacion entre lineas base es >= 1 em del cuerpo del numero de guia", async () => {
+    const bytes = await buildEtiquetasLotePdf([CASO_EVIDENCIA.dto]);
+    const fuentes = fuentesDePagina(bytes);
+    const textos = textosDePagina(bytes).map((t) => ({
+      t,
+      texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+    }));
+
+    const guia = textos.find((x) => x.texto === String(CASO_EVIDENCIA.dto.numGuia));
+    const destinatario = textos.find((x) => x.texto === "DESTINATARIO");
+    expect(guia).toBeDefined();
+    expect(destinatario).toBeDefined();
+
+    // La pagina es cuadrada de 100 mm; la `y` del PDF crece hacia arriba.
+    const yGuia = 100 - guia!.t.y * PT_A_MM_282;
+    const yFila = 100 - destinatario!.t.y * PT_A_MM_282;
+    const separacion = yFila - yGuia;
+    expect(
+      separacion,
+      `${separacion.toFixed(3)} mm entre lineas base para un cuerpo de ${MAQUETA_BASE.fontGuia} pt`,
+    ).toBeGreaterThanOrEqual(MAQUETA_BASE.fontGuia * PT_A_MM_282 - 1e-6);
+    // Y el cuerpo de la guia sigue siendo el de siempre (R27).
+    expect(guia!.t.tamano).toBeCloseTo(MAQUETA_BASE.fontGuia, 6);
+    // La primera fila arranca donde dice la maqueta compartida, no en un 18.
+    expect(yFila).toBeCloseTo(camposYInicio(), 3);
+  });
+});
+
+describe("R20 — el simbolo, impreso tambien en el PDF del servidor", () => {
+  /** El caso de la evidencia: montoCobrar = 18000 => "₡18.000". */
+  const dto = CASO_EVIDENCIA.dto;
+
+  function conPaginas(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      ...dto,
+      ordenId: `ord-${i}`,
+      numGuia: dto.numGuia + i,
+      barcodeValue: String(dto.numGuia + i),
+    }));
+  }
+
+  it("eslabon 1 — el recurso de fuente del monto es /Type0 con /Identity-H y /FontFile2", async () => {
+    const bytes = await buildEtiquetasLotePdf([dto]);
+    const fuentes = fuentesDePagina(bytes);
+    const monto = textosDePagina(bytes).find(
+      (t) => textoLegible(t, fuentes.get(t.fuenteRes)) === formatMonto(18000),
+    );
+    expect(monto, "no se encontro la fila del monto").toBeDefined();
+    const recurso = fuentes.get(monto!.fuenteRes)!;
+    expect(recurso.subtype).toBe("Type0");
+    expect(recurso.encoding).toBe("Identity-H");
+    expect(recurso.baseFont).toBe(fuenteEtiqueta.nombre);
+    expect(recurso.fontFile2).toBeTruthy();
+  });
+
+  it("eslabon 2 — decodificado por el /ToUnicode DEL PROPIO PDF da «₡18.000»", async () => {
+    const bytes = await buildEtiquetasLotePdf([dto]);
+    const fuentes = fuentesDePagina(bytes);
+    const monto = textosDePagina(bytes).find((t) => {
+      const recurso = fuentes.get(t.fuenteRes);
+      return recurso?.subtype === "Type0" && textoLegible(t, recurso).includes("18.000");
+    })!;
+    expect(monto.hex).toBe(true);
+    const recurso = fuentes.get(monto.fuenteRes)!;
+    expect(textoLegible(monto, recurso)).toBe(formatMonto(18000));
+    expect(textoLegible(monto, recurso)).toBe("₡18.000");
+    expect([...recurso.toUnicode!.values()]).toContain("₡");
+  });
+
+  it("eslabon 3 — el CID del simbolo tiene contorno NO VACIO en su /FontFile2", async () => {
+    const bytes = await buildEtiquetasLotePdf([dto]);
+    const fuentes = fuentesDePagina(bytes);
+    const monto = textosDePagina(bytes).find(
+      (t) => textoLegible(t, fuentes.get(t.fuenteRes)) === formatMonto(18000),
+    )!;
+    const recurso = fuentes.get(monto.fuenteRes)!;
+    expect(recurso.cidToGidMap).toBe("Identity");
+    const cids = cidsDe(monto);
+    const posicion = [...textoLegible(monto, recurso)].indexOf("₡");
+    expect(posicion).toBeGreaterThanOrEqual(0);
+    const programa = recurso.fontFile2!;
+    expect(
+      contorno(programa, cids[posicion]),
+      "el glifo del simbolo esta VACIO: imprimiria papel en blanco",
+    ).toBeGreaterThan(0);
+    expect(tieneTinta(programa, cids[posicion])).toBe(true);
+  });
+
+  it("R15 — el /FontFile2 no pasa de 12 KB y no crece con las paginas", async () => {
+    const medir = async (n: number): Promise<number> => {
+      const bytes = await buildEtiquetasLotePdf(conPaginas(n));
+      const embebida = [...fuentesDePagina(bytes).values()].find((f) => f.fontFile2);
+      expect(embebida).toBeDefined();
+      return embebida!.fontFile2!.byteLength;
+    };
+    const conUna = await medir(1);
+    const conDiez = await medir(10);
+    expect(conUna, `el /FontFile2 mide ${conUna} B`).toBeLessThanOrEqual(12 * 1024);
+    expect(conDiez).toBe(conUna);
+  });
+
+  it("R23 — la fuente NO se lee del sistema de archivos en tiempo de ejecucion", () => {
+    // SIN comentarios: la cabecera del modulo explica por que aqui no hay
+    // `readFileSync`, y un barrido sobre el texto crudo denunciaria la
+    // explicacion en vez del codigo.
+    const codigo = codigoSinComentarios("lib/pdf/etiquetas-pdf-lote.ts");
+    expect(codigo).not.toMatch(/readFileSync|readFile\(|node:fs/);
+    // Y si que la importa de forma ESTATICA (nada de `import()` diferido, que en
+    // el servidor no ahorra bundle y añade un modo de fallo).
+    expect(codigo).toMatch(/^import .*from "\.\/etiquetas-fuente";$/m);
+  });
+});
+
+describe("R26/R34 — el corpus tampoco se recorta en el servidor", () => {
+  it("ningun caso del corpus sale con marca de recorte", async () => {
+    for (const caso of CORPUS_282) {
+      const bytes = await buildEtiquetasLotePdf([caso.dto]);
+      const recortados = textosDecodificados(bytes).filter((t) =>
+        t.includes(MARCA_CORTE),
+      );
+      expect(
+        recortados,
+        `caso «${caso.id}»: se recorto ${JSON.stringify(recortados)}`,
+      ).toEqual([]);
+    }
+  });
+
+  it("los seis no-ASCII medidos en produccion salen impresos", async () => {
+    const bytes = await buildEtiquetasLotePdf([CASO_ALFABETO_REAL.dto]);
+    const texto = textosDecodificados(bytes).join("");
+    for (const caracter of NO_ASCII_MEDIDOS) {
+      expect(texto, `falta «${caracter}» en la etiqueta impresa`).toContain(caracter);
+    }
+  });
+});
+
+describe("R28 — un caracter fuera del subconjunto falla de forma VISIBLE", () => {
+  it("no produce un PDF con el importe mutilado: lanza con el code point en el mensaje", async () => {
+    // Se fuerza el simbolo a uno que el subconjunto cp1252 no cubre (la rupia
+    // india, U+20B9). El sistema NO debe imprimir la etiqueta sin el.
+    vi.resetModules();
+    process.env.MONEDA_SIMBOLO = "₹";
+    try {
+      const { buildEtiquetasLotePdf: build } = await import("@/lib/pdf/etiquetas-pdf-lote");
+      await expect(build([CASO_EVIDENCIA.dto])).rejects.toThrow(
+        /U\+20B9[\s\S]*Monto a cobrar/,
+      );
+    } finally {
+      delete process.env.MONEDA_SIMBOLO;
+      vi.resetModules();
+    }
   });
 });

@@ -4,7 +4,7 @@ import {
   crearLayout,
   LIENZO_BASE_MM,
   MAQUETA_BASE,
-} from "@/app/(app)/ordenes/_components/etiquetas-layout";
+} from "@/lib/pdf/etiquetas-layout";
 import { HOJAS_ETIQUETA, getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
 
 // Feature 150 (T5) — Aritmetica del escalado, en Node y sin DOM. Cubre R14-R17.
