@@ -377,19 +377,80 @@ describe("LoginForm — accesibilidad (R19-R23)", () => {
     await waitFor(() => expect(mockedLogin).toHaveBeenCalledTimes(1));
   });
 
-  it("R23: el orden de tabulacion es email -> password -> submit", async () => {
+  // AMPLIADO por la feature 286 (R11), no relajado: el ojito de la contraseña es un
+  // control alcanzable con teclado, así que ocupa un sitio en el recorrido —justo detrás
+  // de su propio campo—. Las tres paradas que este caso afirmaba desde la feature 86
+  // siguen aquí, en el mismo orden y con la misma aserción; lo que hay es una parada MÁS
+  // en medio. La alternativa era ponerle `tabIndex={-1}` al botón para conservar el
+  // recorrido intacto, y está descartada por escrito: dejaría el control fuera del
+  // teclado, que es lo contrario de lo que se pidió y lo que WCAG 2.1.1 prohíbe.
+  it("R23 (+286 R11): el orden de tabulacion es email -> password -> ojito -> submit", async () => {
     const user = userEvent.setup();
     render(<LoginForm redirectParam={null} />);
 
     const email = screen.getByLabelText("Correo electrónico");
     const password = screen.getByLabelText("Contraseña");
+    const ojito = screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." });
     const submit = screen.getByRole("button", { name: "Iniciar sesión" });
 
     expect(email).toHaveFocus();
     await user.tab();
     expect(password).toHaveFocus();
     await user.tab();
+    expect(ojito).toHaveFocus();
+    await user.tab();
     expect(submit).toHaveFocus();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// Feature 286 — el ojito, integrado en el formulario de verdad
+// ───────────────────────────────────────────────────────────────────────────────────────
+
+describe("LoginForm — el ojito de la contraseña (286: R1, R6, R7, R10, R13, R15.1)", () => {
+  it("R1/R6/R7: el campo de contraseña tiene ojito y alterna su `type` en los dos sentidos", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm redirectParam={null} />);
+
+    const password = screen.getByLabelText("Contraseña");
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+    expect(password).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: visible. Ocultar." }));
+    expect(password).toHaveAttribute("type", "password");
+  });
+
+  it("R10: pulsar el ojito NO envia el formulario ni pierde lo tecleado", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm redirectParam={null} />);
+
+    await user.type(screen.getByLabelText("Correo electrónico"), "ana@example.com");
+    await user.type(screen.getByLabelText("Contraseña"), "clave123");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+
+    // Ni la Server Action, ni la validacion de cliente: pulsar el ojito no es enviar.
+    expect(mockedLogin).not.toHaveBeenCalled();
+    expect(screen.queryByText("La contraseña es requerida")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Contraseña")).toHaveValue("clave123");
+    expect(screen.getByLabelText("Contraseña")).toHaveAttribute("type", "text");
+  });
+
+  it("R15.1: el ojito no estrena ningun `role=\"status\"` ni `role=\"alert\"` en la pantalla", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm redirectParam={null} />);
+
+    expect(screen.queryAllByRole("status")).toHaveLength(0);
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+
+    // Si la region viva llevara `role="alert"`, el `findByRole("alert")` EN SINGULAR de la
+    // suite de errores de mas abajo se volveria ambiguo y se caeria por otra razon.
+    expect(screen.queryAllByRole("status")).toHaveLength(0);
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
   });
 });
 

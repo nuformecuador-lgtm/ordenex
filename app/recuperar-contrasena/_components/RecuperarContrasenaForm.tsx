@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FormField } from "@/components/shared/FormField";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 
 // Fases del flujo (R16/R17): email -> code -> password -> done.
 type Phase = "email" | "code" | "password" | "done";
@@ -346,10 +347,10 @@ export function RecuperarContrasenaForm() {
           error={passwordFieldErrors.password}
         >
           {(control) => (
-            <Input
+            <PasswordInput
               {...control}
               ref={passwordRef}
-              type="password"
+              etiqueta="Nueva contraseña"
               placeholder="Tu nueva contraseña"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -363,8 +364,8 @@ export function RecuperarContrasenaForm() {
           label="Confirmar contraseña"
           error={passwordFieldErrors.confirmPassword}
         >
-          <Input
-            type="password"
+          <PasswordInput
+            etiqueta="Confirmar contraseña"
             placeholder="Repite la contraseña"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
