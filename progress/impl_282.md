@@ -564,3 +564,312 @@ PDF individual) cumplen su tope con holgura; nueve mutaciones salen rojas con su
 salida pegada; y el gate deja **delta 0** contra el unico rojo ajeno. Falta la
 UI del navegador (R31-R33 y la medida del First Load JS), que es de `frontend_dev`
 por diseno de la ficha.
+
+---
+
+# Segunda tanda — FRONTEND (la pantalla)
+
+> Misma rama `feature/282-etiquetas-pdf-solape-y-colon`. Cubre lo que el § 7
+> dejaba escrito: T9, T11, T27, T28, T29 y T15. Con esto los **34** requisitos
+> tienen test.
+
+## 12. Archivos
+
+### Creados
+
+| Archivo | Qué es |
+|---|---|
+| `tests/components/EtiquetaGuiaPreview.test.tsx` | T28. La paridad comprobada: mismo artefacto, `FontFace` desde esos bytes, idempotencia, familia aplicada al importe y **el cruce con el `/BaseFont` del PDF**. |
+
+### Modificados
+
+| Archivo | Cambio |
+|---|---|
+| `app/(app)/ordenes/_components/etiquetas-fuente-carga.ts` | Gana `asegurarFuenteEnPantalla` y `RESPALDO_FAMILIA_MONTO`. Sigue siendo el **único** sitio de `app/` que nombra el artefacto (la guardia de R13 no se toca). |
+| `app/(app)/ordenes/_components/EtiquetaGuia.tsx` | Prop `familiaMonto` y `data-testid="etiqueta-monto"`. El valor del monto se pinta con esa familia; nada más de la vista previa cambia. |
+| `app/(app)/ordenes/_components/EtiquetasGuiaModal.tsx` | `handleDescargar` **async con `try/catch`**; estado `errorDescarga` propio; carga de la fuente **al abrir**; `familiaMonto` bajando a la vista previa. |
+| `tests/components/EtiquetasGuiaModal.test.tsx` | T11. Dobles que devuelven **promesa**, y siete casos nuevos (R13, R16, R28, R31, R33), cada ausencia con su control positivo al lado. |
+
+## 13. T9 (R16) — el fallo dejaba de ser mudo
+
+Lo que estaba mal no era que faltara un mensaje: era que **no había forma de que
+lo hubiera**. `handleDescargar` llamaba a `descargarEtiquetasPdf` **sin `await`**,
+así que la promesa rechazada se perdía; el modal seguía su camino, llamaba a
+`onSuccess` y el usuario veía exactamente lo mismo que en un éxito, sin PDF. Los
+dos modos de fallo que el backend ya propagaba (fuente que no carga, R16; carácter
+fuera del subconjunto, R28) llegaban hasta ahí y **morían en silencio**.
+
+Ahora: `async` + `try/catch`, `ERROR_FUENTE_ETIQUETA` en un `Alert` con
+`role="alert"`, **ninguna** descarga y **`onSuccess` no se llama** —porque no hubo
+éxito—.
+
+Tres decisiones de la UI, con su motivo:
+
+1. **El aviso va en un estado propio (`errorDescarga`), no en `estado.fase`.**
+   Si reutilizara el estado de error de la carga, la vista previa desaparecería y
+   con ella el botón. El mensaje dice «Inténtalo de nuevo»: el botón **tiene** que
+   seguir ahí. Hay test de que sigue.
+2. **Un solo mensaje para los dos modos de fallo.** El de cobertura (R28) llega
+   con su texto técnico y el code point; eso le sirve a quien depura, no al
+   operador de bodega que está intentando imprimir. R28 exige que falle de forma
+   **visible** y sin PDF, no un texto concreto. Queda anotado por si algún día se
+   quiere un canal de diagnóstico aparte.
+3. **El aviso no sobrevive a reabrir el modal.** Test propio.
+
+## 14. T27 (R31/R33) — la paridad, por construcción
+
+`asegurarFuenteEnPantalla(fuente)`: `base64` → `Uint8Array` → `new FontFace(...)`
+→ `await cara.load()` → `document.fonts.add(...)`, y devuelve `cara.family`.
+
+Cuatro detalles que no son de estilo:
+
+- **Se devuelve `cara.family`, no `fuente.nombre`.** Quien pinta el importe usa el
+  identificador **realmente registrado**. Si fueran dos caminos distintos, uno
+  podría derivar del otro sin que nadie lo viera — y es justo lo que M11 hace.
+- **Se carga antes de añadir.** Si los bytes no sirven, no queda registrada una
+  familia que luego no pintaría nada.
+- **Idempotente sin estado de módulo**: pregunta a `document.fonts`, que es el
+  registro de verdad. Una caché propia mentiría si alguien retirase la familia, y
+  además sobreviviría entre tests dando verdes por inercia.
+- **La familia baja por prop a `EtiquetaGuia`**, que **no** importa el artefacto.
+  Así este componente no puede arrastrar los 22 KB al bundle inicial ni por
+  descuido, y la guardia de R13 sigue viendo un solo sitio que lo nombra.
+
+R33: si la fuente no llega, el `.catch` del efecto **no avisa de nada** y la vista
+previa se pinta con la del sistema. Quien avisa —y no descarga— es la descarga.
+
+## 15. Mutaciones (T13, M10 y M11) — las dos rojas
+
+Arnés en el scratchpad (un solo uso, no commiteado). **Se autocomprueba**: aborta
+si el árbol no está limpio antes de mutar, si `git diff` sale vacío, si vitest no
+llega a **contar** tests, o si el árbol no vuelve a su sitio al revertir. La
+primera formulación de M10 **abortó por sí sola** («la mutacion no cambio nada»):
+el patrón no casaba. Eso es exactamente para lo que está el arnés.
+
+### M10 — se quita la familia del artefacto del importe → **ROJO**
+
+Versión **afilada**: el importe **conserva** un `font-family` (el de respaldo), así
+que un test que sólo comprobara «lleva alguna familia» sobreviviría. Lo que
+desaparece es lo que R32 exige: la familia del artefacto.
+
+```
+app/(app)/ordenes/_components/EtiquetaGuia.tsx | 2 +-
+  × la primera familia del importe es la que devolvio el registro
+  × solo el importe cambia de tipografia: los demas valores no la llevan
+  × R31: la familia registrada acaba aplicada al importe de la vista previa
+Test Files  2 failed (2)
+Tests  3 failed | 24 passed (27)
+VITEST_EXIT=1
+(arbol revertido y limpio)
+```
+
+### M11 — se registra en pantalla una familia con OTRO nombre que el del PDF → **ROJO**
+
+```
+app/(app)/ordenes/_components/etiquetas-fuente-carga.ts | 2 +-
+  × la `FontFace` se construye con los MISMOS bytes que se embeben en el PDF
+  × es idempotente: abrir el modal dos veces no registra la familia dos veces
+  × R33 — sin la API de fuentes no registra nada y NO lanza: la vista previa sigue viva
+  × el nombre registrado en `document.fonts` y el `/BaseFont` del importe coinciden
+Test Files  1 failed | 1 passed (2)
+Tests  4 failed | 23 passed (27)
+VITEST_EXIT=1
+(arbol revertido y limpio)
+```
+
+El cuarto es **el** test de R32: el que compara el nombre que llegó a
+`document.fonts.add` con el `/BaseFont` extraído de los bytes del PDF que produce
+el generador de verdad. Sin él, las dos mitades podrían «funcionar» por separado y
+no ser la misma fuente.
+
+## 16. T29 (R13/R14) — el coste del navegador, medido después de la paridad
+
+### 16.1 Un hallazgo que cambia cómo se mide
+
+**`next build` ya no imprime «Size» ni «First Load JS».** Este repo está en
+**Next 16.2.10 con Turbopack** y su tabla de rutas sale sólo con `Revalidate` y
+`Expire`. La cifra que `tasks.md` pedía copiar de ahí **no existe**. Se saca de los
+manifiestos del propio build, que es de donde salía esa tabla:
+
+- chunks de la página = unión de los `chunks` de los módulos de cliente **no
+  async** de `__RSC_MANIFEST["/(app)/ordenes/page"]`;
+- compartidos = `rootMainFiles` + `polyfillFiles` del `build-manifest.json` de la
+  ruta;
+- **First Load JS** = la unión de los dos, sumando los bytes reales en disco.
+
+### 16.2 Las cifras (tres builds, todos `BUILD_EXIT=0`)
+
+| Punto | Size (crudo) | Size (gzip) | **First Load JS** (crudo) | **First Load JS** (gzip) |
+|---|---|---|---|---|
+| **Antes de la 282** (`9e82aee1`, merge-base) | 1 570 495 B | 469 966 B | **2 140 580 B** | **643 213 B** |
+| Tras el backend (`f1d1173b`) | 1 571 716 B | 470 419 B | 2 141 801 B | 643 666 B |
+| **Después de la paridad** (`e84602b5`) | 1 572 573 B | 470 707 B | **2 142 658 B** | **643 954 B** |
+
+| Delta | Crudo | Gzip |
+|---|---|---|
+| backend (maqueta + cargador + `async`) | +1 221 B | +453 B |
+| **paridad** (`FontFace`, prop, alerta) | **+857 B** | **+288 B** |
+| **total de la ficha 282** | **+2 078 B (+2,0 KB, +0,10 %)** | **+741 B (+0,72 KB, +0,12 %)** |
+
+### 16.3 El chunk diferido, que es lo que R13 protege
+
+```
+static/chunks/33g7btaxb8tu0.js   crudo 23 164 B (22,6 KB)   gzip 14 150 B (13,8 KB)
+   -> FUERA de la carga inicial, antes y después de la paridad
+   -> mismo nombre de archivo y mismo tamaño en los dos builds
+```
+
+El artefacto aparece en **un** chunk del build y ese chunk **no** está en el
+conjunto inicial de `/ordenes`. Es la condición del §19.2 del diseño, verificada
+sobre los bytes del build y no por argumento.
+
+### 16.4 La promesa de «+0 KB», dicha con su número
+
+**El diseño prometía `+0 KB` de First Load JS y el número real es `+2,0 KB`
+crudos (`+0,72 KB` gzip) contra el estado anterior a la ficha.** No se deja pasar:
+
+- Lo que **sí** se cumple, y es lo que R13 exige, es que **los 22,6 KB del
+  artefacto no entran en la carga inicial**: se piden al abrir el modal.
+- Los ~2 KB son el código nuevo —el cargador, `asegurarFuenteEnPantalla`, la
+  `FontFace`, la prop y la alerta de error—, no los bytes de la fuente. Un
+  `+0 KB` literal sólo sería posible sin escribir código, y la paridad de Q10 es
+  código.
+- Es **+0,10 %** de la carga inicial de una pantalla que ya pesa 2,04 MB crudos.
+  No es «apreciable» en ningún sentido operativo, pero **es la cifra**, y la
+  ficha ya tenía una promesa rota por no medir.
+
+## 17. T15 — visto con los ojos
+
+**Los cuatro PDF.** Generados con el generador **de cliente real**
+(`buildEtiquetasPdf` + el artefacto commiteado) para el caso de la evidencia
+(guía `19887906`, dirección de dos líneas, `18000`, `GAM / San José / Mora /
+Colón`), uno por hoja del catálogo, y abiertos en **Google Chrome** (visor
+PDFium; el Chromium que empaqueta Playwright no trae visor de PDF).
+
+Lo que se miró, hoja por hoja:
+
+| Hoja | Guía vs. `DESTINATARIO` | Importe | Resto |
+|---|---|---|---|
+| **100 × 100 mm** | `19887906` a 22 pt arriba y `DESTINATARIO` claramente por debajo, con banda blanca entre las dos: **no se tocan** | `₡18.000` legible | dirección en 2 líneas, sin `...` |
+| **4 × 6 in** | igual, con la separación escalada | `₡18.000` | los siete campos, en su orden |
+| **A4** | la más grande y la más clara: hueco evidente entre la guía y la primera fila | `₡18.000`, el colón con sus **dos trazos** sobre la C | `SAN JOSÉ`, `DIRECCIÓN`, `UBICACIÓN`, `pequeño`, `Colón`: los acentos y la `ñ`, impresos |
+| **Carta** | igual | `₡18.000` | igual |
+
+**La vista previa.** Se montó el componente **real** `EtiquetaGuia` en **Chrome**
+(bundle de `esbuild` sobre el propio archivo del repo), con el
+`asegurarFuenteEnPantalla` **real**. La página devolvió:
+
+```
+familia registrada: LiberationSansEtiqueta
+importe en pantalla: ₡18.000
+font-family aplicada: LiberationSansEtiqueta, ui-sans-serif, system-ui, sans-serif
+```
+
+Y comparados a 5× de aumento, **el `₡18.000` de la pantalla y el del PDF son los
+mismos glifos**: el mismo colón de doble trazo, el mismo `1`, el mismo `8`, el
+mismo punto de millar. Se puso al lado la misma cadena con la tipografía del
+sistema como control: se distingue.
+
+**Lo que esta comprobación NO cubre, dicho para que nadie lo dé por visto:**
+
+- El **QR y el código de barras de los PDF** salen como el PNG 1 × 1 de relleno,
+  porque jsdom no tiene canvas 2D y el raster se estuba. Su geometría la cubren
+  R5/R27 con tests; su contenido, la feature 32. En la vista previa, en cambio,
+  el QR y el código de barras se pintaron **de verdad** (corrió en un navegador).
+- La vista previa se montó **sin Tailwind** (no hay hoja de estilos en esa
+  página), así que su maquetación no es la del modal. Lo que se comparó es el
+  **importe**, que es lo que la paridad afirma y lo único que cambia de
+  tipografía.
+
+## 18. Gate
+
+`pnpm run db:generate` corrido antes. `./init.sh` **completo**, con `INIT_EXIT=$?`
+escrito **dentro** del log y sin `tail`.
+
+```
+$ pnpm run db:generate            # cliente Prisma al dia antes del gate
+$ ./init.sh                       # COMPLETO, con INIT_EXIT dentro del log
+== Arnes SDD :: init (modo: completo) ==
+✓ node v24.13.0
+✓ dependencias presentes
+✓ regla max-2-por-zona respetada (in_progress=5)
+✓ specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+> tsc --noEmit
+✓ typecheck paso
+-> pnpm run lint
+> eslint
+✖ 100 problems (0 errors, 100 warnings)
+✓ lint paso
+-> pnpm run test
+> vitest run
+
+ ❯ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests | 1 failed) 62ms
+
+ FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts
+ AssertionError: ... expected [ Array(1) ] to deeply equal []
+ - []
+ + [
+ +   "lib/actions/tarifas.ts:67 obtenerTarifa",
+ + ]
+
+ Test Files  1 failed | 1401 passed (1402)
+      Tests  1 failed | 19092 passed | 26 skipped (19119)
+   Duration  393.56s
+
+✗ 'pnpm run test' fallo
+INIT_EXIT=1
+```
+
+**typecheck: 0 errores. lint: 0 errores** (100 warnings, los mismos 100 de la
+tanda anterior: ninguno nuevo y ninguno mío). **Tests: 19.092 pasan, 1 falla, 26
+skipped, en 1.402 archivos.**
+
+Contra el gate del backend (§ 10): **+1 archivo** de test (el nuevo
+`EtiquetaGuiaPreview.test.tsx`) y **+15 tests** (8 suyos + 7 nuevos en
+`EtiquetasGuiaModal.test.tsx`). 19.077 → 19.092.
+
+### El rojo ajeno, otra vez medido
+
+Es **el mismo y único** rojo: `superficie-de-uso.guardia.test.ts` →
+`lib/actions/tarifas.ts:67 obtenerTarifa`, misma línea (`:687`) y mismo mensaje.
+Ficha **275**, de otra sesión. Comprobado en esta tanda con
+`git diff --name-only 9e82aee1..HEAD`: **mi diff no toca** ni `lib/actions/tarifas.ts`
+ni esa guardia (la orden devuelve vacío para los dos). No se anota, no se
+silencia y no se toca.
+
+**Delta contra ese baseline: 0.** Ni un rojo mío en 1.402 archivos.
+
+## 19. Mapa R → test: las tres filas que faltaban
+
+| R | Test |
+|---|---|
+| **R31** | `tests/components/EtiquetaGuiaPreview.test.tsx` «`cargarFuenteEtiqueta` devuelve el objeto del modulo compartido, no una copia» + «la `FontFace` se construye con los MISMOS bytes que se embeben en el PDF» + «es idempotente…» |
+| **R32** | `EtiquetaGuiaPreview.test.tsx` «la primera familia del importe es la que devolvio el registro», «solo el importe cambia de tipografia…» y **«el nombre registrado en `document.fonts` y el `/BaseFont` del importe coinciden»** (el cruce) |
+| **R33** | `EtiquetaGuiaPreview.test.tsx` «R33 — sin la API de fuentes no registra nada y NO lanza» y «R33 — sin familia el importe se pinta igual» + `EtiquetasGuiaModal.test.tsx` «R33: si la fuente no llega, la vista previa se pinta igual y no avisa de nada» |
+| R13 *(cifra)* | § 16 de esta bitácora, además de la guardia que ya existía |
+| R14 *(cifra)* | § 16.3 (peso del chunk diferido) y § 16.2 (First Load JS antes/después) |
+| R16 *(mensaje)* | `EtiquetasGuiaModal.test.tsx` «R16: si la descarga falla, sale el mensaje…» + su control positivo + «el aviso… no sobrevive a reabrir el modal» |
+| R28 *(canal navegador, en el modal)* | `EtiquetasGuiaModal.test.tsx` «R28: un caracter fuera del subconjunto tampoco se descarga en silencio» |
+
+**Los 34 requisitos tienen ya un test que existe y pasa.**
+
+## 20. Veredicto de la tanda de frontend
+
+El fallo mudo de la descarga está cerrado —se espera la promesa, el mensaje sale
+a la cara, no se descarga nada y no se da por bueno—; la paridad tipográfica es
+**por construcción** (un artefacto, los mismos bytes, el identificador que viaja
+es el realmente registrado) y está **comprobada con el cruce contra el
+`/BaseFont` del PDF**, no afirmada; M10 y M11 salen rojas con su salida pegada;
+el importe se ha visto con los ojos en las cuatro hojas y en la vista previa, y
+son los mismos glifos; el coste del navegador está medido por una vía que sí
+existe en Next 16, con la promesa de «+0 KB» corregida a **+2,0 KB crudos** y con
+los **22,6 KB del artefacto fuera de la carga inicial**, que es lo que R13 pide;
+y el gate deja **delta 0** contra el único rojo ajeno.
+
+Queda **una deuda declarada, no un riesgo oculto**: el error de cobertura (R28)
+llega al usuario con el mensaje genérico y su texto técnico —el code point que
+falta— no se muestra ni se registra en ningún sitio. Sólo puede ocurrir si alguien
+configura `MONEDA_SIMBOLO` fuera del subconjunto embebido, y cuando ocurra la
+etiqueta **no** se imprimirá rota; pero quien lo diagnostique tendrá que llegar al
+código. Si algún día se quiere un canal de diagnóstico, es aquí.
