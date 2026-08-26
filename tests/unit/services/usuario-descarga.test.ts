@@ -41,6 +41,7 @@ function usuario(over: Partial<UsuarioListItem> & { id: string }): UsuarioListIt
     email: `${over.id}@example.com`,
     rolValue: "mensajero",
     estado: "activo",
+    zonaNombre: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   };

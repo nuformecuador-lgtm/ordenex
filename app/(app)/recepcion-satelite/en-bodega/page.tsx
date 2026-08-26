@@ -55,6 +55,10 @@ export default async function RecepcionSateliteEnBodegaPage() {
   // acción degradada la lista ya viene vacía y no hay a quién marcar.
   const mensajerosBloqueadosIds =
     mensajerosResult.status === "ok" ? (mensajerosResult.bloqueadosIds ?? []) : [];
+  // Pedido humano (2026-08-26): y los que la asignación va a rechazar por su ESTADO de usuario
+  // (`inactivo`/`bloqueado`). Misma lectura, mismo trato: no se re-deriva ni se recorta aquí.
+  const mensajerosNoAsignablesIds =
+    mensajerosResult.status === "ok" ? (mensajerosResult.noAsignablesIds ?? []) : [];
 
   // Feature 41 (R22): flag DERIVADO server-side del bloqueo de la bodega satélite
   // (regla estricta R17). Si la acción degrada (forbidden/unauthenticated), se pasa
@@ -140,6 +144,7 @@ export default async function RecepcionSateliteEnBodegaPage() {
         sinZona={result.sinZona}
         mensajeros={mensajeros}
         mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+        mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
         bloqueoBodega={bloqueoBodega}
         liberadasHoy={liberadasHoy}
         fechasDiaReparto={fechasDiaReparto}

@@ -56,6 +56,7 @@ function fakeRepo(over: Record<string, unknown> = {}): IOrdenRepository {
       ordenRow({ id: "o3" }),
     ]),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
     findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),

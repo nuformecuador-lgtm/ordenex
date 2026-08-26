@@ -40,6 +40,8 @@ import type {
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  // Pedido humano 2026-08-26: el mensajero dado de baja no recibe trabajo.
+  MSG_MENSAJERO_NO_ASIGNABLE,
   // Feature 21: el mensajero destino necesita un vehiculo asociado para recibir trabajo.
   MSG_MENSAJERO_SIN_VEHICULO,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
@@ -327,6 +329,18 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       };
     }
 
+    // --- Pedido humano (2026-08-26): el mensajero destino DEBE estar en un estado que admita
+    // trabajo. Un `inactivo` seguia pasando por aqui: `findMensajeroIdsValidosByZona` mira rol y
+    // zona, y el estado no es ninguna de las dos cosas. Motivo propio, misma forma que la guarda
+    // del vehiculo de arriba: existe y es de la zona, pero esta dado de baja.
+    const noAsignables = await this.repo.findMensajerosNoAsignablesPorEstado([input.mensajeroId]);
+    if (noAsignables.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
+      };
+    }
+
     // --- Validacion por orden (R27): origen en_bodega_central + zona GAM (R12) ---
     const ordenes = await this.repo.findByIdsForTransicion(ordenIds);
     const ordenMap = new Map(ordenes.map((o) => [o.id, o]));
@@ -543,6 +557,19 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       return {
         status: "validation_error",
         fieldErrors: { mensajeroId: ["mensajeroId no valido"] },
+      };
+    }
+
+    // --- 4b. Pedido humano (2026-08-26): ni recolectar. La recoleccion no filtra por zona (ver
+    // la cabecera), asi que el estado es AQUI la unica guarda que separa a un mensajero de baja
+    // del trabajo; misma regla y mismo texto que las otras dos escrituras.
+    const noAsignablesRecoleccion = await this.repo.findMensajerosNoAsignablesPorEstado([
+      input.mensajeroId,
+    ]);
+    if (noAsignablesRecoleccion.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
       };
     }
 

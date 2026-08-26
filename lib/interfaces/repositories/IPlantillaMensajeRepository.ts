@@ -55,6 +55,27 @@ export interface PlantillaListItem {
  * presentacion no puede afectar al texto ni al orden de parametros que viaja a Meta
  * (design.md §4.6). Si alguien lo anade aqui, el motivo tiene que ser otro requisito.
  */
+/**
+ * La plantilla MARCADA como mensaje de bienvenida, tal como la lee el encolado del envio
+ * automatico al recoger. A DIFERENCIA de `PlantillaEnviable`, describe la fila TAL CUAL esta,
+ * sin exigir que sea enviable: por eso `estado` viaja y `templateId` es nullable.
+ *
+ * ESO NO ES UN DESCUIDO, ES LA DECISION. Hay dos situaciones que parecen la misma y no lo son:
+ * «nadie marco una bienvenida» (el negocio no la configuro: silencio, no se encola nada) y «hay
+ * una marcada que NO se puede enviar» (Meta no la aprobo, o se borro: eso es un fallo de
+ * configuracion que tiene que dejar rastro). Si este lector filtrara por `estado`/`templateId`
+ * las dos devolverian `null` y el segundo caso seria INVISIBLE — que es justo el modo de fallo
+ * que esta feature existe para evitar, porque el boton de la UI ya le prometio al maestro que el
+ * envio es automatico.
+ */
+export interface PlantillaBienvenida {
+  id: string;
+  nombre: string;
+  /** `null` = la plantilla nunca se propago a Meta; no se puede enviar como template. */
+  templateId: string | null;
+  estado: PlantillaEstado;
+}
+
 export interface PlantillaEnviable {
   id: string;
   nombre: string;
@@ -193,6 +214,16 @@ export interface IPlantillaMensajeRepository {
   listarEnviables(): Promise<PlantillaEnviable[]>;
   /** Una plantilla enviable por id (vigente, `activo`, con templateId); `null` si no aplica. */
   findEnviableById(id: string): Promise<PlantillaEnviable | null>;
+
+  /**
+   * La plantilla marcada como mensaje de bienvenida, ENVIABLE O NO. `null` = ninguna vigente
+   * la tiene marcada.
+   *
+   * Filtra `welcomeMessage: true` + vigente, y NADA MAS (ver `PlantillaBienvenida`). El
+   * `UNIQUE` parcial `plantilla_mensaje_welcome_message_key` garantiza que como mucho hay una,
+   * asi que la lectura es determinista sin desempate.
+   */
+  findWelcomeMessage(): Promise<PlantillaBienvenida | null>;
   /** Flujo wa.me: plantillas vigentes NO desactivadas, con cuerpo, para renderizar en cliente. */
   listarUsablesParaTexto(): Promise<PlantillaTextoEnviable[]>;
 }

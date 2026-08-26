@@ -102,6 +102,7 @@ function buildOrdenRepoParaMensajeros(): Pick<
   | "findUsuarioZonaId"
   | "findMensajerosByZona"
   | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado no recibe trabajo
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -124,6 +125,7 @@ export interface ListarMensajerosSateliteDeps {
     | "findUsuarioZonaId"
     | "findMensajerosByZona"
     | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado no recibe trabajo
   >;
   getActor?: () => Promise<Actor | null>;
 }
@@ -299,8 +301,19 @@ export async function listarMensajerosSatelite(
     if (zonaId === null) return { status: "ok" as const, mensajeros: [] }; // R6
     const mensajeros = await repo.findMensajerosByZona(zonaId); // R5
     // R32: el MISMO predicado que aplica el servidor al escribir. No se re-deriva aqui.
-    const bloqueados = await repo.findMensajerosBloqueadosPorCierres(mensajeros.map((m) => m.id));
-    return { status: "ok" as const, mensajeros, bloqueadosIds: [...bloqueados] };
+    const ids = mensajeros.map((m) => m.id);
+    // R32 + pedido humano 2026-08-26: los MISMOS predicados que aplica el servidor al escribir.
+    // Ninguno se re-deriva aqui.
+    const [bloqueados, noAsignables] = await Promise.all([
+      repo.findMensajerosBloqueadosPorCierres(ids),
+      repo.findMensajerosNoAsignablesPorEstado(ids),
+    ]);
+    return {
+      status: "ok" as const,
+      mensajeros,
+      bloqueadosIds: [...bloqueados],
+      noAsignablesIds: [...noAsignables],
+    };
   });
   // Este borde no tiene zod: el unico AppErrorShape posible es UNAUTHORIZED.
   return isAppErrorShape(r) ? { status: "unauthenticated" as const } : r;

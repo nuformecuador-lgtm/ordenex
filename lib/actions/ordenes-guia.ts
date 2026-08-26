@@ -55,6 +55,7 @@ function buildOrdenRepo(): Pick<
   | "findMensajerosByZona"
   | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
   | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado no recibe trabajo
 > {
   return new OrdenRepository(getPrismaClient());
 }
@@ -74,6 +75,7 @@ export interface ListarMensajerosDeps {
     | "findMensajerosByZona"
     | "findMensajerosConOrdenesEn" // feature 157: regla de dedicación
     | "findMensajerosBloqueadosPorCierres" // feature 271/R32: los que el servidor va a rechazar
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado no recibe trabajo
   >;
   zonaRepo?: Pick<IZonaRepository, "findCentralZonaId">;
   getActor?: () => Promise<Actor | null>;
@@ -218,10 +220,13 @@ export async function listarMensajerosParaAsignacion(
     // mensajero al que el servidor va a rechazar — que es el «rechazo al confirmar» que este
     // marcador existe para evitar. `ayuda_tienda` entra en las dos: el paquete sigue con él (R1).
     // La guardia `carga-del-mensajero.guardia.test.ts` cruza las dos y falla si divergen.
-    const [conReparto, conRecoleccion, bloqueados] = await Promise.all([
+    const [conReparto, conRecoleccion, bloqueados, noAsignables] = await Promise.all([
       repo.findMensajerosConOrdenesEn(ids, ["por_recoger", "en_reparto", "ayuda_tienda"]),
       repo.findMensajerosConOrdenesEn(ids, ["por_recolectar_en_tienda"]),
       repo.findMensajerosBloqueadosPorCierres(ids), // feature 271/R32
+      // Pedido humano 2026-08-26: los dados de baja. MISMO predicado que las tres escrituras
+      // rechazan (`findMensajerosNoAsignablesPorEstado`), sin re-derivarlo aqui.
+      repo.findMensajerosNoAsignablesPorEstado(ids),
     ]);
     return {
       status: "ok" as const,
@@ -229,6 +234,7 @@ export async function listarMensajerosParaAsignacion(
       conRepartoIds: [...conReparto],
       conRecoleccionIds: [...conRecoleccion],
       bloqueadosIds: [...bloqueados],
+      noAsignablesIds: [...noAsignables],
     };
   });
   // Este borde solo puede lanzar UnauthenticatedError (no hay zod aqui): el

@@ -48,6 +48,7 @@ function buildRepo(overrides: Partial<IPlantillaMensajeRepository> = {}): IPlant
     crearDesdeMeta: vi.fn().mockResolvedValue(true),
     listarEnviables: vi.fn().mockResolvedValue([]),
     findEnviableById: vi.fn().mockResolvedValue(null),
+    findWelcomeMessage: vi.fn().mockResolvedValue(null),
     listarUsablesParaTexto: vi.fn().mockResolvedValue([]),
     ...overrides,
   };

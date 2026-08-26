@@ -150,6 +150,21 @@ export type ListarMensajerosParaAsignacionResult =
        */
       bloqueadosIds?: string[];
       /**
+       * Pedido humano (2026-08-26) — ids de mensajeros que NO pueden recibir trabajo por su
+       * ESTADO de usuario (`inactivo` / `bloqueado`). El servidor los rechaza en las tres
+       * escrituras, asi que el selector los deshabilita con su motivo en vez de dejar elegir y
+       * toparse con un rechazo al confirmar (la leccion del incidente del 18/08).
+       *
+       * Viaja APARTE de `bloqueadosIds` porque el MOTIVO es otro y se arregla en otra pantalla:
+       * uno se resuelve cerrando cierres, este reactivando al usuario en Configuracion.
+       *
+       * ⚠️ EL **FILTRO** DEL LISTADO (`FiltrosEntregas.tsx`) TAMPOCO DEBE LEERLO: un mensajero
+       * dado de baja sigue siendo el asignado de ordenes historicas que alguien busca.
+       *
+       * Opcional (aditivo); la accion lo emite SIEMPRE.
+       */
+      noAsignablesIds?: string[];
+      /**
        * Feature 157 (regla de dedicación): ids con órdenes de REPARTO pendientes. No
        * pueden recibir una recolección en tienda —ese viaje se hace sin carga—, así que
        * el selector de ESE modal los deshabilita. Opcional (aditivo).

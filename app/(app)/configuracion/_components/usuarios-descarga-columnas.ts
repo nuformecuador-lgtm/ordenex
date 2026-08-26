@@ -20,7 +20,7 @@
 import type { DescargaColumna, DescargaFila } from "@/lib/types/descarga";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
-import { ESTADO_LABELS } from "./usuario-estado-label";
+import { ESTADO_LABELS, SIN_ZONA } from "./usuario-estado-label";
 
 /**
  * Columnas emitidas por la descarga del listado de usuarios, en su orden. Son exactamente
@@ -32,6 +32,9 @@ export const COLUMNAS_DESCARGA_USUARIOS: DescargaColumna[] = [
   { clave: "email", encabezado: "Email" },
   { clave: "rol", encabezado: "Rol" },
   { clave: "estado", encabezado: "Estado" },
+  // 2026-08-26: entra con la columna de la tabla. R24 manda que el archivo enseñe lo que la
+  // pantalla enseña, así que se añade en el MISMO cambio, no en uno posterior.
+  { clave: "zona", encabezado: "Zona" },
 ];
 
 /**
@@ -49,5 +52,8 @@ export function filaDescargaUsuario(usuario: UsuarioListItemDTO): DescargaFila {
     email: usuario.email,
     rol: ROL_LABELS[usuario.rolValue] ?? usuario.rolValue,
     estado: ESTADO_LABELS[usuario.estado] ?? usuario.estado,
+    // El MISMO guion que pinta la tabla, no una celda vacía: en una hoja de cálculo el vacío se
+    // lee como dato perdido, y «sin zona» es el estado normal de casi todos los usuarios.
+    zona: usuario.zonaNombre ?? SIN_ZONA,
   };
 }

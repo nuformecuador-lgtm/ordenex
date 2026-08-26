@@ -18,6 +18,7 @@ const ROW: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "mensajero",
   estado: "activo",
+  zonaNombre: "GAM",
   createdAt: new Date("2026-01-01T00:00:00Z"),
 };
 
@@ -37,7 +38,7 @@ describe("usuarios-columns — define columnas del listado (R14/R26)", () => {
     const { columns } = build();
     const ids = columns.map((c) => c.id);
 
-    expect(ids).toEqual(["nombre", "email", "rol", "estado", "acciones"]);
+    expect(ids).toEqual(["nombre", "email", "rol", "estado", "zona", "acciones"]);
     // Ninguna columna referencia el hash u otros campos sensibles (R14/R24).
     expect(ids).not.toContain("passwordHash");
     const serialized = JSON.stringify(columns.map((c) => c.id));
@@ -54,6 +55,20 @@ describe("usuarios-columns — define columnas del listado (R14/R26)", () => {
     expect(screen.getByText("Activo")).toBeInTheDocument();
     // El DTO de fila no incluye el hash: no aparece en el DOM.
     expect(screen.queryByText(/passwordHash/i)).not.toBeInTheDocument();
+  });
+
+  // Pedido humano (2026-08-26): la zona en el listado. El guion NO es cosmetico: la mayoria de
+  // los usuarios no tiene zona (solo `mensajero` y `adminSatelite` la conservan), y una celda
+  // vacia se leeria como «este dato no se cargo».
+  it("2026-08-26: pinta el nombre de la zona, y «-» cuando el usuario no tiene", () => {
+    const { columns } = build();
+    const sinZona: UsuarioListItemDTO = { ...ROW, id: "u2", nombre: "Beto Solís", zonaNombre: null };
+    render(
+      <DataTable columns={columns} data={[ROW, sinZona]} rowKey="id" ariaLabel="Usuarios" />,
+    );
+
+    expect(within(screen.getByRole("row", { name: /Ana Pérez/ })).getByText("GAM")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /Beto Solís/ })).getByText("-")).toBeInTheDocument();
   });
 
   it("la acción de estado muestra Inactivar para un usuario activo y dispara el callback (R20)", async () => {

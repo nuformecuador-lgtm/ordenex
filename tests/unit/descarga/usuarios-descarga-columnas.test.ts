@@ -4,6 +4,7 @@ import {
   filaDescargaUsuario,
 } from "@/app/(app)/configuracion/_components/usuarios-descarga-columnas";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
+import { SIN_ZONA } from "@/app/(app)/configuracion/_components/usuario-estado-label";
 
 // Feature 170 / T B.3 (R5/R6/R7/R8/R23/R24) — columnas de export del listado de usuarios.
 
@@ -13,6 +14,7 @@ const USUARIO: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "adminTienda",
   estado: "inactivo",
+  zonaNombre: "GAM",
   createdAt: new Date("2026-03-15T18:30:00.000Z"),
 };
 
@@ -23,12 +25,14 @@ describe("columnas de descarga de usuarios", () => {
       "email",
       "rol",
       "estado",
+      "zona",
     ]);
     expect(COLUMNAS_DESCARGA_USUARIOS.map((c) => c.encabezado)).toEqual([
       "Nombre",
       "Email",
       "Rol",
       "Estado",
+      "Zona",
     ]);
   });
 
@@ -46,6 +50,14 @@ describe("columnas de descarga de usuarios", () => {
     // Y NO el valor del enum, que es lo que se leería si alguien "simplificara" el módulo.
     expect(fila.rol).not.toBe("adminTienda");
     expect(fila.estado).not.toBe("inactivo");
+  });
+
+  // Pedido humano (2026-08-26): la zona entra en el archivo A LA VEZ que en la tabla (R24: el
+  // export enseña lo que la pantalla enseña) y con el MISMO guion, no con una celda vacía: en una
+  // hoja de cálculo el vacío se lee como dato perdido, y «sin zona» es lo normal.
+  it("2026-08-26: emite la zona, y el mismo «-» que la tabla cuando no hay", () => {
+    expect(filaDescargaUsuario(USUARIO).zona).toBe("GAM");
+    expect(filaDescargaUsuario({ ...USUARIO, zonaNombre: null }).zona).toBe(SIN_ZONA);
   });
 
   it("no expone identificadores internos (R23)", () => {

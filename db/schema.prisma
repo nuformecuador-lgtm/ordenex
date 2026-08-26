@@ -2057,6 +2057,7 @@ enum JobTipo {
   whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
   analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
   analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
+  whatsapp_bienvenida // mensaje de bienvenida: envia la plantilla marcada al recoger el paquete (por_recoger -> en_reparto, familia `recoleccion`); PUNTUAL, encolado por el choke point de estado, payload { ordenId, mensajeroId, ocurridoAt }
 
   @@map("job_tipo")
 }

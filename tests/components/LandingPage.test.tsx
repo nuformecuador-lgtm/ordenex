@@ -3,14 +3,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 
-// La landing es un Server Component sin datos: se importa y renderiza directo
-// (no hay fetch ni async). Se importa vía `await import("@/app/page")` para no
-// arrastrar el módulo a otros tests del mismo archivo.
+// La landing es un Server Component sin datos: no consulta nada, y lo único que espera es su
+// propio `searchParams` (el `?guia=` que precarga el rastreo), así que se invoca con `await` y
+// sin query. Se importa vía `await import("@/app/page")` para no arrastrar el módulo a otros
+// tests del mismo archivo.
 describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
   it("R2: la barra superior tiene el logo, las anclas de sección y el enlace «Ingresar» → /login", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    render(LandingPage());
+    render(await LandingPage({}));
 
     // El logo (wordmark) aparece (barra + pie). El texto va partido en dos
     // spans ("Orden" + "ex" en naranja de marca), así que se matchea el span
@@ -34,7 +36,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R2b: «Trabajá con nosotros» de la nav baja a la sección de esta página, no a /postulacion", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     // Esa sección ofrece tres vías: vehículo y bodega abren un modal aquí mismo
     // y solo «Quiero postularme» va a /postulacion. Enlazar la ruta desde la nav
@@ -56,7 +58,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R2c: los enlaces de sección de la nav van en el mismo orden en que la página compone las secciones", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     const nav = container.querySelector("nav")!;
     const anclasNav = [...nav.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].map(
@@ -78,7 +80,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R3: existen las secciones del home y el hero trae titular y cifras", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     for (const id of ["servicios", "como-funciona", "politicas"]) {
       expect(container.querySelector(`#${id}`)).not.toBeNull();
@@ -95,7 +97,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R4: reutiliza la paleta de marca (navy/brand) sin hex sueltos de color", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     expect(container.querySelector(".bg-navy-deep")).not.toBeNull();
     expect(container.querySelector(".bg-brand")).not.toBeNull();
@@ -112,7 +114,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R5: los destinos que la app no sirve se pintan como texto, no como enlaces muertos", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     expect(container.querySelectorAll('a[href="#"]')).toHaveLength(0);
     expect(container.querySelectorAll("a:not([href])")).toHaveLength(0);
@@ -120,7 +122,7 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
 
   it("R5b: las anclas internas son <a> nativo y globals.css declara el scroll suave bajo prefers-reduced-motion", async () => {
     const { default: LandingPage } = await import("@/app/page");
-    const { container } = render(LandingPage());
+    const { container } = render(await LandingPage({}));
 
     // El router de Next fuerza `scroll-behavior: auto` mientras navega, así que
     // un <Link> a un ancla anularía el desplazamiento suave. Basta comprobar que
@@ -136,5 +138,48 @@ describe("app/page.tsx — landing pública (feature 86, R2–R5b)", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
     expect(css).toMatch(/prefers-reduced-motion:\s*no-preference/);
     expect(css).toMatch(/scroll-behavior:\s*smooth/);
+  });
+});
+
+// El CABLEADO del `?guia=` en la landing: página → nav. Se inspecciona el árbol que devuelve el
+// Server Component en vez de renderizarlo, y no es por comodidad: la página monta sus cifras en
+// componentes asíncronos que en jsdom no resuelven, así que el diálogo —que base-ui portalea en
+// un efecto— no llega a montarse nunca y el DOM no podría decir nada de esto.
+//
+// Las otras dos mitades sí se miden donde se ven: la NORMALIZACIÓN del parámetro en
+// `tests/unit/guia-en-url.test.ts`, y el diálogo abierto con la guía puesta en
+// `tests/components/RastreoDialog.test.tsx`.
+describe("app/page.tsx — `/?guia=4321` llega hasta la nav", () => {
+  /** La `guiaInicial` con la que la página monta su nav. */
+  async function guiaDeLaNav(
+    searchParams?: Promise<Record<string, string | string[] | undefined>>,
+  ): Promise<string | null | undefined> {
+    const { default: LandingPage } = await import("@/app/page");
+    const { LandingNav } = await import("@/app/_landing/LandingNav");
+    const arbol = await LandingPage(searchParams === undefined ? {} : { searchParams });
+
+    const hijos = Children.toArray(
+      (arbol as ReactElement<{ children?: ReactNode }>).props.children,
+    );
+    const nav = hijos.find(
+      (hijo): hijo is ReactElement<{ guiaInicial?: string | null }> =>
+        isValidElement(hijo) && hijo.type === LandingNav,
+    );
+    expect(nav, "la landing ya no monta `LandingNav` como hijo directo").toBeDefined();
+    return nav!.props.guiaInicial;
+  }
+
+  it("una guía válida llega a la nav tal cual", async () => {
+    expect(await guiaDeLaNav(Promise.resolve({ guia: "4321" }))).toBe("4321");
+  });
+
+  it("lo que no es una guía llega como `null`: la landing se pinta igual y no abre nada", async () => {
+    expect(await guiaDeLaNav(Promise.resolve({ guia: "no-es-una-guia" }))).toBeNull();
+    expect(await guiaDeLaNav(Promise.resolve({ guia: ["1", "2"] }))).toBeNull();
+  });
+
+  it("sin query —el caso normal— la nav recibe `null`", async () => {
+    expect(await guiaDeLaNav(Promise.resolve({}))).toBeNull();
+    expect(await guiaDeLaNav()).toBeNull();
   });
 });

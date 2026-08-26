@@ -111,6 +111,7 @@ type MensajerosRepo = Pick<
   | "findUsuarioZonaId"
   | "findMensajerosByZona"
   | "findMensajerosBloqueadosPorCierres" // feature 271/R32
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado
 >;
 
 function buildRepo(overrides: Partial<MensajerosRepo> = {}): MensajerosRepo {
@@ -119,6 +120,8 @@ function buildRepo(overrides: Partial<MensajerosRepo> = {}): MensajerosRepo {
     findMensajerosByZona: vi.fn(async () => [{ id: MENSAJERO, nombre: "Ana" }]),
     // Feature 271 (R32): el selector marca a los que el servidor va a rechazar al asignar.
     findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
+    // 2026-08-26: y a los que no pueden recibir trabajo por su estado de usuario.
+    findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
     ...overrides,
   };
 }
@@ -145,6 +148,7 @@ describe("listarMensajerosSatelite — scoped a la zona del actor (R2/R5/R6)", (
       status: "ok",
       mensajeros: [{ id: MENSAJERO, nombre: "Ana" }],
       bloqueadosIds: [], // feature 271/R32
+      noAsignablesIds: [], // 2026-08-26: los dados de baja, por su propio motivo
     });
     // R2: la zona se resuelve server-side por el usuarioId del actor.
     expect(ordenRepo.findUsuarioZonaId).toHaveBeenCalledWith("as1");

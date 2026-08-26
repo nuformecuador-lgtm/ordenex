@@ -33,6 +33,7 @@ import {
 } from "@/lib/services/jobs/webhook-estado-handler";
 import { crearWhatsappTemplateSyncHandler } from "@/lib/services/jobs/whatsapp-template-sync-handler";
 import { crearWhatsappChatEnvioHandler } from "@/lib/services/jobs/whatsapp-chat-envio-handler";
+import { crearWhatsappBienvenidaHandler } from "@/lib/services/jobs/whatsapp-bienvenida-handler";
 import {
   buildAnaliticaRollupService,
   crearAnaliticaRollupDiarioHandler,
@@ -90,6 +91,13 @@ export function buildHandlers(now: () => Date): Map<JobTipo, JobHandler> {
   // `buildRecurrencias()`. Las deps (config de WhatsApp) se cargan perezosamente en el
   // handler: un env ausente falla ESTE job (recuperable), no el drenado de los demas tipos.
   handlers.set("whatsapp_chat_envio", crearWhatsappChatEnvioHandler());
+  // MENSAJE DE BIENVENIDA: envia al cliente la plantilla marcada cuando su paquete es recogido.
+  // Encolado por EVENTO (la transicion `recoleccion -> en_reparto`, desde el choke point de
+  // estado), no por reloj -> fuera de `buildRecurrencias()`: re-agendarlo mandaria una
+  // bienvenida por minuto al mismo cliente. Como sus hermanos de WhatsApp, las deps se cargan
+  // perezosamente en el handler: un env ausente falla ESTE job (con su motivo en `last_error`),
+  // no el drenado de los demas tipos.
+  handlers.set("whatsapp_bienvenida", crearWhatsappBienvenidaHandler());
   // Feature 124 (D4->C1, R36): agrega en el rollup diario la fecha CR que acaba de cerrar.
   // A DIFERENCIA de geocodificacion / optimizacion / webhook / whatsapp, este tipo SI se
   // registra en `buildRecurrencias()`: no lo dispara ningun evento del dominio —nadie "crea"

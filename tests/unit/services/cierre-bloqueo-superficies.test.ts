@@ -104,6 +104,10 @@ function repoConCierres(cierres: readonly CierreEstado[]): IOrdenRepository {
       ),
     },
     gestionOrden: { findMany: vi.fn(async () => []) },
+    // 2026-08-26: las tres escrituras preguntan tambien por el ESTADO del usuario. Aqui NADIE
+    // esta de baja: este archivo mide la regla de CIERRES, y un doble que bloqueara por estado
+    // haria pasar sus casos por el motivo equivocado.
+    usuario: { findMany: vi.fn(async () => []) },
   };
   return new OrdenRepository(prisma as unknown as PrismaClient);
 }

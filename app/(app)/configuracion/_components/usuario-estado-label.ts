@@ -13,6 +13,17 @@ import type { EstadoUsuario } from "@prisma/client";
  * Que el archivo y la descarga lean de AQUÍ es también lo que hace cierto R8: la etiqueta
  * del `xlsx` no puede divergir de la que ve el usuario en pantalla, porque es la misma.
  */
+/**
+ * Pedido humano (2026-08-26): lo que se pinta cuando el usuario NO tiene zona. Vive AQUÍ y no en
+ * `usuarios-columns.tsx` por la misma razón que `ESTADO_LABELS`: lo comparte el módulo de export,
+ * que tiene que ser PURO, y `usuarios-columns.tsx` importa React.
+ *
+ * Es un guion y no una celda vacía a propósito: la mayoría de los usuarios no tiene zona (sólo
+ * `mensajero` y `adminSatelite` la conservan, feature 24/R27), así que el vacío se leería como
+ * «este dato no se cargó» tanto en pantalla como en la hoja de cálculo.
+ */
+export const SIN_ZONA = "-";
+
 export const ESTADO_LABELS: Record<EstadoUsuario, string> = {
   pendiente: "Pendiente",
   activo: "Activo",

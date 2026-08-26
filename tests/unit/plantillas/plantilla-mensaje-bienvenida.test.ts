@@ -216,3 +216,60 @@ describe("repositorio.marcarWelcomeMessage", () => {
     expect(prisma.plantillaMensaje.findFirst).not.toHaveBeenCalled();
   });
 });
+// EL LECTOR DE LA MARCA. `findWelcomeMessage` es lo que consulta el encolado del envio
+// automatico, y su filtro CORTO es la decision de diseno, no un descuido: ver
+// `PlantillaBienvenida`.
+describe("PlantillaMensajeRepository.findWelcomeMessage", () => {
+  interface ArgFindFirst {
+    where: Record<string, unknown>;
+  }
+
+  function prismaLector(fila: unknown) {
+    return {
+      plantillaMensaje: { findFirst: vi.fn(async (arg: ArgFindFirst) => (arg ? fila : fila)) },
+      $transaction: vi.fn(),
+    };
+  }
+
+  function construir(prisma: unknown) {
+    return new PlantillaMensajeRepository(
+      prisma as ConstructorParameters<typeof PlantillaMensajeRepository>[0],
+    );
+  }
+
+  it("filtra por la marca y por vigente, y por NADA MAS", async () => {
+    // Este es el test que protege la politica de rastro. Si alguien anade aqui
+    // `estado: "activo"` o `NOT: { templateId: null }` —copiando `findEnviableById`, que es la
+    // tentacion— una plantilla marcada pero no aprobada por Meta devolveria `null`, el encolado
+    // la leeria como "no hay bienvenida configurada" y NO ENCOLARIA NADA. El fallo de
+    // configuracion se volveria invisible, que es justo lo que esta feature existe para evitar:
+    // el boton de la UI ya le prometio al maestro que el envio es automatico.
+    const prisma = prismaLector(null);
+    await construir(prisma).findWelcomeMessage();
+
+    expect(prisma.plantillaMensaje.findFirst.mock.calls[0][0].where).toEqual({
+      deletedAt: null,
+      welcomeMessage: true,
+    });
+  });
+
+  it("devuelve la marcada AUNQUE no sea enviable, con su estado y su templateId", async () => {
+    const prisma = prismaLector({
+      id: "pl-1",
+      nombre: "Bienvenida",
+      templateId: null,
+      estado: "pending",
+    });
+
+    expect(await construir(prisma).findWelcomeMessage()).toEqual({
+      id: "pl-1",
+      nombre: "Bienvenida",
+      templateId: null, // el handler lo cita como motivo: "no propagada a Meta"
+      estado: "pending", // idem: "esta en estado pending, no activo"
+    });
+  });
+
+  it("null cuando nadie la marco (silencio: el negocio no la configuro)", async () => {
+    expect(await construir(prismaLector(null)).findWelcomeMessage()).toBeNull();
+  });
+});

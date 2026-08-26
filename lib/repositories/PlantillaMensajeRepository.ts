@@ -7,6 +7,7 @@ import {
   type IPlantillaMensajeRepository,
   type ListPlantillasParams,
   type ListPlantillasResult,
+  type PlantillaBienvenida,
   type PlantillaEnviable,
   type PlantillaListItem,
   type PlantillaPublica,
@@ -308,6 +309,19 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
       select: { id: true, nombre: true, cuerpo: true, variables: true },
       orderBy: { nombre: "asc" },
     });
+  }
+
+  async findWelcomeMessage(): Promise<PlantillaBienvenida | null> {
+    // SOLO `welcomeMessage` + vigente. Sin filtro de `estado` ni de `templateId`: quien llama
+    // necesita DISTINGUIR «no hay bienvenida configurada» de «la hay pero no se puede enviar»,
+    // y con un filtro estricto las dos serian `null`. El detalle esta en `PlantillaBienvenida`.
+    const r = await this.prisma.plantillaMensaje.findFirst({
+      where: { ...VIGENTE, welcomeMessage: true },
+      select: { id: true, nombre: true, templateId: true, estado: true },
+    });
+    return r === null
+      ? null
+      : { id: r.id, nombre: r.nombre, templateId: r.templateId, estado: r.estado };
   }
 
   async findEnviableById(id: string): Promise<PlantillaEnviable | null> {

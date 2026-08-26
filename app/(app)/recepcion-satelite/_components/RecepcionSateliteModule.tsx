@@ -150,6 +150,11 @@ export interface RecepcionSateliteModuleProps {
    */
   mensajerosBloqueadosIds?: string[];
   /**
+   * Pedido humano (2026-08-26): ids que la asignación rechaza por el ESTADO del usuario
+   * (`inactivo`/`bloqueado`). Este módulo sólo la transporta al modal, igual que la anterior.
+   */
+  mensajerosNoAsignablesIds?: string[];
+  /**
    * Feature 41 (R22) + ajuste admin_satelite: bloqueo DERIVADO server-side de la bodega
    * satélite. Si `bloqueada` (todos los mensajeros con cierre O CierreBodega pendiente),
    * se muestra el aviso de bloqueo y se deshabilita "Asignar". Si NO está bloqueada pero
@@ -196,6 +201,7 @@ export function RecepcionSateliteModule({
   sinZona,
   mensajeros,
   mensajerosBloqueadosIds = [],
+  mensajerosNoAsignablesIds = [],
   bloqueoBodega,
   liberadasHoy = [],
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
@@ -584,6 +590,7 @@ export function RecepcionSateliteModule({
         ordenes={ordenesAAsignar}
         mensajeros={mensajeros}
         mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+        mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
         // Feature 246 (T4.3, R29): resueltas por la página, en el servidor. Este módulo sólo
         // las transporta.
         fechasDiaReparto={fechasDiaReparto}

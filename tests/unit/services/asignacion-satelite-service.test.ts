@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { MSG_MENSAJERO_SIN_VEHICULO } from "@/lib/services/mensajes-bloqueo";
+import {
+  MSG_MENSAJERO_NO_ASIGNABLE,
+  MSG_MENSAJERO_SIN_VEHICULO,
+} from "@/lib/services/mensajes-bloqueo";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
@@ -37,6 +40,7 @@ type RepoMethods = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
   | "findMensajeroIdsConVehiculo"
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado no recibe trabajo
   | "findMensajeroIdsValidosByZona"
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
@@ -71,6 +75,8 @@ function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   return {
     findUsuarioZonaId: vi.fn(async () => ZONA),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    // Por defecto NADIE esta dado de baja; el test de la regla overridea este doble.
+    findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
     findMensajeroIdsValidosByZona: vi.fn(async () => new Set([MENSAJERO])),
     findByIdsForTransicion: vi.fn(async () => [transicionRow()]),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
@@ -152,6 +158,25 @@ describe("AsignacionSateliteService.asignar", () => {
       fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
     });
     expect(repo.findMensajeroIdsConVehiculo).toHaveBeenCalledWith([MENSAJERO]);
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  // Pedido humano (2026-08-26): «si esta inactivo/bloqueado no se le puede asignar paquetes».
+  // El mensajero existe, es de la zona y tiene vehiculo: lo unico que falla es su ESTADO, y por eso
+  // el motivo es PROPIO (no "mensajero_invalido"), como el del vehiculo de arriba.
+  it("2026-08-26: mensajero inactivo/bloqueado -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo({
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set([MENSAJERO])),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
+    });
+    expect(repo.findMensajerosNoAsignablesPorEstado).toHaveBeenCalledWith([MENSAJERO]);
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
 
