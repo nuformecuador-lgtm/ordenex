@@ -9,6 +9,7 @@ import type {
   UpsertHiloInput,
 } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
+import { sqlNormalizarTelefonoCr } from "@/lib/utils/telefono-cr-sql";
 
 // Cliente Prisma minimo consumido: la tabla del hilo, la de orden (resolucion D4) y el
 // escape hatch de SQL crudo (`$queryRaw`) para normalizar el telefono en el matcheo.
@@ -59,20 +60,32 @@ export class ChatConversacionRepository implements IChatConversacionRepository {
     // R25/D4: orden viva, asignada (mensajero not null), del numero, la MAS RECIENTE por
     // `asignado_at`. Empate/NULL de asignado_at -> desempata por created_at desc.
     //
-    // El match del telefono se hace NORMALIZADO en ambos lados: el entrante (a solo digitos)
-    // contra `regexp_replace(telefono_dest, '[^0-9]', '', 'g')`. Asi `+573…` entrante casa con
-    // una orden guardada como `573…` (o al reves), evitando el bug de hilos duplicados. Prisma
-    // no puede normalizar la columna en el WHERE, por eso va raw (parametrizado, sin inyeccion).
+    // El match del telefono se hace NORMALIZADO EN AMBOS LADOS, y "normalizado" significa
+    // exactamente lo que hace `normalizarTelefonoCR`, no un simple quitar-separadores:
+    //
+    //   BUG QUE ARREGLA ESTO. Antes el lado de la COLUMNA solo aplicaba
+    //   `regexp_replace(telefono_dest, '[^0-9]', '', 'g')` mientras el entrante venia ya
+    //   prefijado con `506` por `normalizarTelefonoWa`. Una orden de Costa Rica guardada en
+    //   formato LOCAL (`8888-7777`, que es como las carga el negocio) daba `88887777` contra un
+    //   entrante `50688887777`: NUNCA casaban. El webhook contaba el evento como `sinResolver`,
+    //   respondia 200 y el mensaje se perdia sin dejar rastro (Meta no reintenta un 200). El
+    //   caso no-CR no lo delataba porque esos numeros ya se guardan con su indicativo.
+    //
+    // La expresion de la columna vive en `sqlNormalizarTelefonoCr` (una sola copia, vigilada
+    // contra la funcion de TypeScript por `chat-entrante-telefono-cr.test.ts`). Prisma no puede
+    // normalizar una columna en el WHERE, por eso va raw; el numero viaja como PARAMETRO y el
+    // unico texto interpolado es un identificador literal de este archivo (sin inyeccion).
     const normalizado = normalizarTelefonoWa(telefonoE164);
     if (normalizado === "") return null;
 
+    const telefonoNormalizado = Prisma.raw(sqlNormalizarTelefonoCr("o.telefono_dest"));
     const rows = await this.prisma.$queryRaw<OrdenResolucionRaw[]>(Prisma.sql`
-      SELECT id, mensajero_asignado_id, telefono_dest
-      FROM orden
-      WHERE deleted_at IS NULL
-        AND mensajero_asignado_id IS NOT NULL
-        AND regexp_replace(telefono_dest, '[^0-9]', '', 'g') = ${normalizado}
-      ORDER BY asignado_at DESC NULLS LAST, created_at DESC
+      SELECT o.id, o.mensajero_asignado_id, o.telefono_dest
+      FROM orden o
+      WHERE o.deleted_at IS NULL
+        AND o.mensajero_asignado_id IS NOT NULL
+        AND ${telefonoNormalizado} = ${normalizado}
+      ORDER BY o.asignado_at DESC NULLS LAST, o.created_at DESC
       LIMIT 1
     `);
 
