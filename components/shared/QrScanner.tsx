@@ -9,6 +9,21 @@ import { useToast } from "@/hooks/useToast";
 const MENSAJE_ERROR_CAMARA_DEFAULT =
   "No se pudo acceder a la cámara. Debes habilitar los permisos de cámara en la configuración del navegador para usar esta función.";
 
+/** Mínimo que html5-qrcode acepta para `qrbox`; por debajo lanza. */
+const LADO_MARCO_MINIMO = 50;
+/** Porción del lado corto del visor que ocupa el recuadro de escaneo. */
+const PROPORCION_MARCO = 0.7;
+
+/**
+ * Lado del recuadro de escaneo para un visor de `ancho`×`alto`. Cuadrado y
+ * medido sobre el lado CORTO: así cabe entero tanto en un visor vertical (el
+ * stream de un móvil) como en uno horizontal (una webcam).
+ */
+export function calcularLadoMarco(ancho: number, alto: number): number {
+  const lado = Math.floor(Math.min(ancho, alto) * PROPORCION_MARCO);
+  return Math.max(LADO_MARCO_MINIMO, lado);
+}
+
 export interface QrScannerProps {
   /** Se invoca con el texto decodificado, tras cerrar la cámara. */
   onDecoded: (texto: string) => void;
@@ -35,6 +50,10 @@ export function QrScanner({
   // lib): sin esto el usuario mira un rectangulo negro sin saber si algo pasa. Se
   // enciende en el propio clic (no en un efecto) y se apaga cuando la camara arranca.
   const [iniciando, setIniciando] = useState(false);
+  // Lado en px del recuadro que html5-qrcode recorta del frame. Lo publica la
+  // propia lib al medir el visor (ver `calcularLadoMarco`) y lo pintamos con ese
+  // mismo tamaño: el marco que ve el usuario ES la zona que se decodifica.
+  const [ladoMarco, setLadoMarco] = useState<number | null>(null);
 
   const regionId = useId().replace(/:/g, "_") + "-camara";
 
@@ -74,7 +93,18 @@ export function QrScanner({
         instancia = scanner as unknown as typeof instancia;
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
+          {
+            fps: 10,
+            // Función, no un 250 fijo: la lib nos pasa el tamaño REAL del visor
+            // (que depende del stream de la cámara) y así el recuadro siempre cabe
+            // y siempre es proporcional. De paso nos deja publicar su lado para
+            // pintar el marco encima, en el mismo sitio.
+            qrbox: (anchoVisor: number, altoVisor: number) => {
+              const lado = calcularLadoMarco(anchoVisor, altoVisor);
+              if (!cancelado) setLadoMarco(lado);
+              return { width: lado, height: lado };
+            },
+          },
           (decodedText: string) => {
             if (entregado || cancelado) return;
             entregado = true;
@@ -122,6 +152,9 @@ export function QrScanner({
         aria-pressed={camaraAbierta}
         disabled={disabled}
         onClick={() => {
+          // El lado del recuadro depende del visor de ESTA apertura (la cámara
+          // puede volver con otro tamaño); se olvida el de la anterior.
+          setLadoMarco(null);
           setIniciando(true);
           setCamaraAbierta(true);
         }}
@@ -144,14 +177,21 @@ export function QrScanner({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-black">
-      <div className="relative aspect-[4/3] w-full">
-        {/* html5-qrcode inyecta SU <video> dentro de esta region; los selectores de
-            hijo lo hacen llenar el marco en vez de quedar centrado a su tamaño. */}
+      {/* El visor toma la ALTURA del <video>, no una relación de aspecto fija.
+          html5-qrcode recorta un cuadrado centrado en el video completo, así que
+          recortar el video con una caja 4:3 (+`object-cover`) dejaba ese cuadrado
+          fuera de lo que el usuario ve: en iOS, cuyo stream llega vertical, el
+          usuario apuntaba al centro de la caja y la lib decodificaba muy por
+          debajo — nunca leía. La caja y el video ahora son el mismo rectángulo. */}
+      <div className="relative flex min-h-60 w-full items-center justify-center">
+        {/* html5-qrcode inyecta SU <video> dentro de esta region. `!w-full` gana al
+            ancho en px que la lib fija inline (se queda viejo al rotar); la altura
+            sigue siendo automática para no deformar ni recortar el frame. */}
         <div
           id={regionId}
           role="region"
           aria-label="Visor de cámara QR"
-          className="size-full [&_canvas]:hidden [&_video]:size-full [&_video]:object-cover"
+          className="w-full [&_canvas]:hidden [&_video]:!w-full [&_video]:h-auto"
         />
 
         {iniciando ? (
@@ -166,7 +206,16 @@ export function QrScanner({
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             {/* Recuadro de enfoque: la mascara oscura de alrededor la pinta la sombra
                 gigante del propio recuadro, asi no hacen falta cuatro divs de borde. */}
-            <div className="relative aspect-square w-[62%] rounded-lg">
+            <div
+              data-testid="qr-marco"
+              // Mismo lado que `qrbox`: lo que se enmarca es lo que se decodifica.
+              style={
+                ladoMarco === null
+                  ? undefined
+                  : { width: ladoMarco, height: ladoMarco }
+              }
+              className="relative aspect-square w-[62%] rounded-lg"
+            >
               <div className="absolute inset-0 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
               <span className="absolute -top-0.5 -left-0.5 size-7 rounded-tl-lg border-t-4 border-l-4 border-primary" />
               <span className="absolute -top-0.5 -right-0.5 size-7 rounded-tr-lg border-t-4 border-r-4 border-primary" />
