@@ -25,6 +25,7 @@ import type {
   ListarUsuariosInput,
 } from "@/lib/types/usuario";
 import type { IZonaRepository } from "@/lib/interfaces/repositories/IZonaRepository";
+import type { IVehiculoRepository } from "@/lib/interfaces/repositories/IVehiculoRepository";
 import { descargaConfig } from "@/lib/config/descarga";
 import { hashPassword } from "@/lib/utils/password";
 import { generateStrongPassword } from "@/lib/utils/password-generator";
@@ -36,6 +37,19 @@ const ALLOWED_ROLES = new Set<string>(["maestro"]);
 // Feature 24/R27: roles que pueden (y DEBEN) llevar una zona asignada. Para el
 // resto el `zonaId` se fuerza a null (misma politica que el `fulfillment` de adminTienda).
 const ZONA_ROLES = new Set<string>(["mensajero", "adminSatelite"]);
+
+// Feature 21: roles que pueden llevar un vehiculo asociado. Solo `mensajero`: es el
+// unico que conduce. Para el resto el `vehiculoId` se fuerza a null, igual que la zona.
+// El vehiculo es OBLIGATORIO para el rol (pedido humano 2026-08-26): un mensajero sin
+// vehiculo no puede recibir ordenes, asi que no se le deja nacer ni quedarse sin uno.
+const VEHICULO_ROLES = new Set<string>(["mensajero"]);
+
+// Mensaje de error de vehiculo segun el motivo (obligatorio para el rol vs inexistente).
+function vehiculoErrorMessage(reason: "required" | "not_found"): string {
+  return reason === "required"
+    ? "El vehiculo es obligatorio para el rol mensajero"
+    : "El vehiculo indicado no existe";
+}
 
 // Mensaje de error de zona segun el motivo (obligatoria para el rol vs inexistente).
 function zonaErrorMessage(reason: "required" | "not_found"): string {
@@ -50,6 +64,9 @@ export class UsuarioService implements IUsuarioService {
   constructor(
     private readonly repo: IUserRepository,
     private readonly zonaRepo?: IZonaRepository,
+    // Feature 21: repo del catalogo de vehiculos para validar `usuario.vehiculo_id`.
+    // Opcional por el mismo motivo que `zonaRepo`: los tests que no lo ejercitan lo omiten.
+    private readonly vehiculoRepo?: IVehiculoRepository,
   ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
@@ -71,6 +88,16 @@ export class UsuarioService implements IUsuarioService {
       return { status: "validation_error", fieldErrors: { zonaId: [zonaErrorMessage(zona.reason)] } };
     }
 
+    // Feature 21: resuelve el vehiculo segun el rol (solo mensajero) y valida su
+    // existencia en el catalogo.
+    const vehiculo = await this.resolverVehiculo(input.rolId, input.vehiculoId);
+    if (!vehiculo.ok) {
+      return {
+        status: "validation_error",
+        fieldErrors: { vehiculoId: [vehiculoErrorMessage(vehiculo.reason)] },
+      };
+    }
+
     try {
       const usuario = await this.repo.create({
         nombre: input.nombre,
@@ -83,6 +110,7 @@ export class UsuarioService implements IUsuarioService {
         estado: "activo", // R8: nace activo (a diferencia de la postulacion publica)
         fulfillment, // R8/R9: valor efectivo ya restringido por rol
         zonaId: zona.zonaId, // R27: null salvo mensajero/adminSatelite
+        vehiculoId: vehiculo.vehiculoId, // feature 21: null salvo mensajero
       });
       // R33: contrasena en claro UNA vez solo en modo autogenerado; R35: nunca en manual.
       return generated
@@ -179,6 +207,22 @@ export class UsuarioService implements IUsuarioService {
         return { status: "validation_error", fieldErrors: { zonaId: [zonaErrorMessage(zona.reason)] } };
       }
       data.zonaId = zona.zonaId;
+    }
+
+    // Feature 21: el vehiculo se recalcula si se envia O si cambia el rol (un rol
+    // distinto de `mensajero` no puede conservarlo). Si no se envia ninguno de los
+    // dos, no se toca.
+    if (input.vehiculoId !== undefined || input.rolId !== undefined) {
+      const rolIdResultante = input.rolId ?? actual.rolId;
+      const deseado = input.vehiculoId !== undefined ? input.vehiculoId : actual.vehiculoId;
+      const vehiculo = await this.resolverVehiculo(rolIdResultante, deseado);
+      if (!vehiculo.ok) {
+        return {
+          status: "validation_error",
+          fieldErrors: { vehiculoId: [vehiculoErrorMessage(vehiculo.reason)] },
+        };
+      }
+      data.vehiculoId = vehiculo.vehiculoId;
     }
 
     try {
@@ -298,5 +342,33 @@ export class UsuarioService implements IUsuarioService {
       if (!zona) return { ok: false, reason: "not_found" };
     }
     return { ok: true, zonaId: deseado };
+  }
+
+  // Feature 21: resuelve el `vehiculoId` efectivo. Solo `mensajero` lo conserva; para
+  // cualquier otro rol se fuerza null (ignora el valor recibido, misma politica que la
+  // zona). Para `mensajero` es OBLIGATORIO, por el mismo motivo que la zona: la
+  // asignacion exige un mensajero con vehiculo, asi que dejarlo vacio crea un usuario
+  // que no puede trabajar. Cuando se provee, se valida contra el catalogo.
+  private async resolverVehiculo(
+    rolId: string,
+    deseado: string | null | undefined,
+  ): Promise<
+    | { ok: true; vehiculoId: string | null }
+    | { ok: false; reason: "required" | "not_found" }
+  > {
+    const roles = await this.repo.listRoles();
+    const rolValue = roles.find((r) => r.id === rolId)?.value;
+    const esRolConVehiculo = rolValue !== undefined && VEHICULO_ROLES.has(rolValue);
+
+    if (!esRolConVehiculo) return { ok: true, vehiculoId: null };
+    if (deseado === undefined || deseado === null) {
+      return { ok: false, reason: "required" };
+    }
+
+    if (this.vehiculoRepo) {
+      const vehiculo = await this.vehiculoRepo.findById(deseado);
+      if (!vehiculo) return { ok: false, reason: "not_found" };
+    }
+    return { ok: true, vehiculoId: deseado };
   }
 }

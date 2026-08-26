@@ -79,7 +79,7 @@ export class TarifaService implements ITarifaService {
       valorFleteDevuelto: input.valorFleteDevuelto,
       valorFleteGam: input.valorFleteGam,
       valorFleteDevueltoGam: input.valorFleteDevueltoGam,
-      fulfillment: input.fulfillment,
+      fulfillment: input.fulfillment ?? null, // opcional: ausente = sin fulfillment (igual que 0)
       comisionCod: input.comisionCod,
       ivaFlete: input.ivaFlete,
       ivaComisionCod: input.ivaComisionCod,

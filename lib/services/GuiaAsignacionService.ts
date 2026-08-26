@@ -40,6 +40,8 @@ import type {
 } from "@/lib/interfaces/services/IGuiaAsignacionService";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  // Feature 21: el mensajero destino necesita un vehiculo asociado para recibir trabajo.
+  MSG_MENSAJERO_SIN_VEHICULO,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
   // FEATURE 276 (T7, R20): el motivo del tope, en su punto UNICO y compartido con el satelite.
   MSG_TOPE_INTENTOS_ASIGNACION,
@@ -311,6 +313,17 @@ export class GuiaAsignacionService implements IGuiaAsignacionService {
       return {
         status: "validation_error",
         fieldErrors: { mensajeroId: ["mensajeroId no valido"] },
+      };
+    }
+
+    // --- Feature 21: el mensajero destino DEBE tener un vehiculo asociado ---
+    // Motivo propio (no "mensajeroId no valido"): el mensajero existe y es de la zona;
+    // lo que falta es su vehiculo, y eso se arregla en otra pantalla.
+    const conVehiculo = await this.repo.findMensajeroIdsConVehiculo([input.mensajeroId]);
+    if (!conVehiculo.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
       };
     }
 

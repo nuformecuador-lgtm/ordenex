@@ -4,6 +4,20 @@
 // `detalle` de `conflict` de los servicios de asignacion (maestro y adminSatelite) para
 // que el rechazo sea accionable y testeable (defensa en profundidad: `reprogramada` ya
 // no es un origen valido de asignacion, este guardia lo hace explicito).
+/**
+ * Feature 21 (pedido humano 2026-08-26) — motivo TIPADO y COMPARTIDO del rechazo cuando el
+ * mensajero destino NO tiene un vehiculo asociado. Lo emiten las DOS escrituras de
+ * `mensajero_asignado_id` (`GuiaAsignacionService.asignarDesdeBodega` y
+ * `AsignacionSateliteService.asignar`) con el MISMO texto, porque son la misma regla: quien
+ * reparte necesita con que hacerlo. El alta/edicion del usuario ya lo exige, pero eso solo
+ * cubre a los mensajeros creados DESPUES del cambio: los de antes pueden estar sin vehiculo,
+ * y es aqui donde se les para.
+ *
+ * Dice QUE pasa y QUE hacer, sin PII: quien asigna no es quien edita el usuario.
+ */
+export const MSG_MENSAJERO_SIN_VEHICULO =
+  "el mensajero no tiene un vehiculo asociado: asignaselo en Configuracion > Usuarios";
+
 export const MSG_ORDEN_REPROGRAMADA_BLOQUEADA =
   "orden reprogramada: bloqueada hasta la fecha de reprogramacion";
 

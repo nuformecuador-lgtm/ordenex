@@ -7,6 +7,8 @@ import type {
 } from "@/lib/interfaces/services/IAsignacionSateliteService";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  // Feature 21: mismo simbolo que emite la bodega central (misma regla, un solo texto).
+  MSG_MENSAJERO_SIN_VEHICULO,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
   // FEATURE 276 (T8, R20): EL MISMO SIMBOLO que emite la bodega central. No un literal gemelo:
   // `asignacion-satelite-tope-intentos.test.ts` compara los dos contra esta constante.
@@ -43,6 +45,7 @@ type AsignacionSateliteRepo = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
   | "findMensajeroIdsValidosByZona"
+  | "findMensajeroIdsConVehiculo" // feature 21: sin vehiculo no se recibe trabajo
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
@@ -126,6 +129,16 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       return {
         status: "validation_error",
         fieldErrors: { mensajeroId: ["mensajero_invalido"] },
+      };
+    }
+
+    // 3a. Feature 21: el mensajero destino DEBE tener un vehiculo asociado. Motivo propio,
+    // el MISMO texto que emite la asignacion desde bodega central: es la misma regla.
+    const conVehiculo = await this.repo.findMensajeroIdsConVehiculo([input.mensajeroId]);
+    if (!conVehiculo.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
       };
     }
 

@@ -33,6 +33,12 @@ vi.mock("@/lib/actions/zonas", () => ({
   listarZonas: (...args: unknown[]) => listarZonasMock(...args),
 }));
 
+// Feature 21: el select de vehículo lee la acción `listarVehiculos` (módulo aparte).
+const listarVehiculosMock = vi.fn();
+vi.mock("@/lib/actions/vehiculos", () => ({
+  listarVehiculos: (...args: unknown[]) => listarVehiculosMock(...args),
+}));
+
 import {
   UsuarioForm,
   type UsuarioFormHandle,
@@ -54,6 +60,12 @@ const ROLES = [
 const ZONAS = [
   { id: "z1", nombre: "Central" },
   { id: "z2", nombre: "Norte" },
+] as const;
+
+// Feature 21: item de `listarVehiculos` (VehiculoDTO); el form lee id + name.
+const VEHICULOS = [
+  { id: "v1", name: "moto" },
+  { id: "v2", name: "carro" },
 ] as const;
 
 const USUARIO: UsuarioPublico = {
@@ -90,6 +102,7 @@ beforeEach(() => {
     pageSize: 100,
     total: ZONAS.length,
   });
+  listarVehiculosMock.mockResolvedValue({ status: "ok", items: [...VEHICULOS] });
 });
 
 afterEach(() => {
@@ -140,6 +153,12 @@ describe("UsuarioForm — selects (R29)", () => {
     await user.click(screen.getByRole("combobox", { name: "Zona" }));
     await user.click(
       within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
+    );
+
+    // Feature 21: el mensajero tambien requiere vehiculo.
+    await user.click(screen.getByRole("combobox", { name: "Vehiculo" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "moto" }),
     );
 
     // Tipo de documento desde la acción listarTiposIdentificacion.
@@ -212,6 +231,12 @@ describe("UsuarioForm — modo de contraseña (R36)", () => {
     await user.click(screen.getByRole("combobox", { name: "Zona" }));
     await user.click(
       within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
+    );
+
+    // Feature 21: el mensajero tambien requiere vehiculo.
+    await user.click(screen.getByRole("combobox", { name: "Vehiculo" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "moto" }),
     );
 
     let result: unknown;
@@ -342,6 +367,12 @@ describe("UsuarioForm — fulfillment (feature 27)", () => {
     await user.click(screen.getByRole("combobox", { name: "Zona" }));
     await user.click(
       within(await screen.findByRole("listbox")).getByRole("option", { name: "Central" }),
+    );
+
+    // Feature 21: el mensajero tambien requiere vehiculo.
+    await user.click(screen.getByRole("combobox", { name: "Vehiculo" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", { name: "moto" }),
     );
 
     await act(async () => {
@@ -501,6 +532,14 @@ describe("UsuarioForm — zona (feature 24/R27)", () => {
       }),
     );
 
+    // Feature 21: el mensajero tambien requiere vehiculo.
+    await user.click(screen.getByRole("combobox", { name: "Vehiculo" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "moto",
+      }),
+    );
+
     await act(async () => {
       await ref.current!.submit();
     });
@@ -561,6 +600,201 @@ describe("UsuarioForm — zona (feature 24/R27)", () => {
     // El trigger muestra el nombre de la zona cuyo id coincide con usuario.zonaId.
     const zonaTrigger = await screen.findByRole("combobox", { name: "Zona" });
     await waitFor(() => expect(zonaTrigger).toHaveTextContent("Norte"));
+  }, 15000);
+});
+
+
+// Feature 21: el select "Vehiculo" aparece solo para `mensajero` —es quien conduce—
+// y es OBLIGATORIO para ese rol: sin vehiculo no se le puede asignar una orden, asi
+// que el formulario no deja crearlo ni dejarlo sin uno.
+const USUARIO_VEHICULO: UsuarioPublico = {
+  ...USUARIO,
+  rolId: "rol-mensajero",
+  zonaId: "z2",
+  vehiculoId: "v2",
+};
+
+describe("UsuarioForm — vehiculo (feature 21)", () => {
+  it("muestra el select Vehiculo solo para mensajero", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    // Sin rol seleccionado no está presente.
+    expect(
+      screen.queryByRole("combobox", { name: "Vehiculo" }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => expect(listarRolesMock).toHaveBeenCalled());
+
+    // mensajero: aparece.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Vehiculo" }),
+    ).toBeInTheDocument();
+
+    // adminSatelite lleva zona pero NO vehículo: el campo desaparece.
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "adminSatelite",
+      }),
+    );
+    expect(screen.getByRole("combobox", { name: "Zona" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Vehiculo" }),
+    ).not.toBeInTheDocument();
+  }, 20000);
+
+  it("envía vehiculoId con el id elegido al crear un mensajero", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Mensajero");
+    await user.type(screen.getByLabelText("Email"), "mensajero@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Norte",
+      }),
+    );
+
+    // Elige un vehículo del catálogo (carro -> v2).
+    await user.click(screen.getByRole("combobox", { name: "Vehiculo" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "carro",
+      }),
+    );
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    expect(crearUsuarioMock).toHaveBeenCalledTimes(1);
+    const enviado = crearUsuarioMock.mock.calls[0][0] as {
+      vehiculoId?: string | null;
+    };
+    expect(enviado.vehiculoId).toBe("v2");
+  }, 20000);
+
+  it("bloquea el submit si el mensajero no tiene vehiculo (obligatorio)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Sin Vehiculo");
+    await user.type(screen.getByLabelText("Email"), "sinveh@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "mensajero",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Zona" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "Norte",
+      }),
+    );
+
+    let resultado;
+    await act(async () => {
+      resultado = await ref.current!.submit();
+    });
+
+    // No se llama al backend: el error se resuelve en cliente y se pinta.
+    expect(crearUsuarioMock).not.toHaveBeenCalled();
+    expect(resultado).toMatchObject({ status: "validation_error" });
+    expect(
+      await screen.findByText("El vehiculo es obligatorio para el rol mensajero"),
+    ).toBeInTheDocument();
+  }, 20000);
+
+  it("no incluye vehiculoId cuando el rol no lo lleva (maestro)", async () => {
+    const user = userEvent.setup();
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    crearUsuarioMock.mockResolvedValue({ status: "ok", usuario: { ...USUARIO } });
+
+    const ref = createRef<UsuarioFormHandle>();
+    renderIsolated(<UsuarioForm ref={ref} mode="crear" />);
+
+    await user.type(screen.getByLabelText("Nombre"), "Nuevo Maestro");
+    await user.type(screen.getByLabelText("Email"), "maestro@example.com");
+    await user.type(screen.getByLabelText("Teléfono"), "0988888888");
+    await user.type(screen.getByLabelText("Número de documento"), "1712345678");
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$xy");
+
+    await user.click(screen.getByRole("combobox", { name: "Tipo de documento" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "cedula",
+      }),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Rol" }));
+    await user.click(
+      within(await screen.findByRole("listbox")).getByRole("option", {
+        name: "maestro",
+      }),
+    );
+
+    await act(async () => {
+      await ref.current!.submit();
+    });
+
+    const enviado = crearUsuarioMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(enviado).not.toHaveProperty("vehiculoId");
+  }, 20000);
+
+  it("prefilla el select de vehiculo con usuario.vehiculoId al editar", async () => {
+    listarRolesMock.mockResolvedValue({ status: "ok", roles: [...ROLES_ZONA] });
+    renderIsolated(<UsuarioForm mode="editar" usuario={USUARIO_VEHICULO} />);
+
+    const trigger = await screen.findByRole("combobox", { name: "Vehiculo" });
+    await waitFor(() => expect(trigger).toHaveTextContent("carro"));
   }, 15000);
 });
 

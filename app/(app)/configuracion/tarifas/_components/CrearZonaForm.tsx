@@ -29,6 +29,7 @@ import {
   type CobroVehiculoValue,
 } from "./CobroVehiculoTarifas";
 import {
+  TARIFA_CAMPOS_ZONA,
   TarifaCamposGrid,
   hayAlgunValor,
   tarifaValoresVacios,
@@ -161,11 +162,11 @@ export function CrearZonaForm({
   function validarTarifa():
     | { ok: true; numericos: Record<string, number | null> | null }
     | { ok: false } {
-    if (!hayAlgunValor(tarifaValores)) {
+    if (!hayAlgunValor(tarifaValores, TARIFA_CAMPOS_ZONA)) {
       setTarifaErrors({});
       return { ok: true, numericos: null };
     }
-    const campos = validarTarifaCampos(tarifaValores);
+    const campos = validarTarifaCampos(tarifaValores, TARIFA_CAMPOS_ZONA);
     if (!campos.ok) {
       setTarifaErrors(campos.errors);
       return { ok: false };
@@ -363,8 +364,12 @@ export function CrearZonaForm({
             </p>
           </div>
 
+          {/* Sin `fulfillment` (2026-08-26): el servicio de bodega es un acuerdo con una
+              TIENDA, no una propiedad de la zona. El campo omitido viaja como `null` y la
+              columna lo admite desde `tarifa_fulfillment_opcional`. */}
           <TarifaCamposGrid
             idPrefix="zona-tarifa"
+            campos={TARIFA_CAMPOS_ZONA}
             valores={tarifaValores}
             errors={tarifaErrors}
             onChange={setCampoTarifa}

@@ -39,6 +39,26 @@ export const TARIFA_CAMPOS = [
 
 export type TarifaCampoKey = (typeof TARIFA_CAMPOS)[number]["key"];
 
+type TarifaCampo = (typeof TARIFA_CAMPOS)[number];
+
+/**
+ * Los campos que ve el formulario de ZONA: todos MENOS `fulfillment` (2026-08-26). Una tarifa
+ * de zona dice lo que cuesta REPARTIR ahi, no si una tienda concreta guarda su producto en
+ * nuestra bodega; pedir ese monto aquí era pedir un dato que quien edita la zona no tiene.
+ * La columna es nullable (migración `tarifa_fulfillment_opcional`) justo para que la fila
+ * pueda guardarse sin él: el formulario manda `fulfillment: null`, que aguas abajo significa
+ * exactamente lo mismo que 0 —esta tarifa no lleva fulfillment—.
+ */
+export const TARIFA_CAMPOS_ZONA: readonly TarifaCampo[] = TARIFA_CAMPOS.filter(
+  (c) => c.key !== "fulfillment",
+);
+
+/** Claves que NO están en `campos`, para mandarlas explícitamente como `null`. */
+function clavesOmitidas(campos: readonly TarifaCampo[]): TarifaCampoKey[] {
+  const presentes = new Set<TarifaCampoKey>(campos.map((c) => c.key));
+  return TARIFA_CAMPOS.filter((c) => !presentes.has(c.key)).map((c) => c.key);
+}
+
 /** Valores del formulario como strings (lo que teclea el usuario). */
 export type TarifaValores = Record<TarifaCampoKey, string>;
 
@@ -67,9 +87,16 @@ export function tarifaValoresDesde(
   return valores;
 }
 
-/** true si el usuario escribió ALGO en la sección (aunque sea un solo campo). */
-export function hayAlgunValor(valores: TarifaValores): boolean {
-  return TARIFA_CAMPOS.some((c) => valores[c.key].trim() !== "");
+/**
+ * true si el usuario escribió ALGO en la sección (aunque sea un solo campo). `campos` acota
+ * la pregunta a los VISIBLES: un valor heredado en un campo que este formulario no muestra no
+ * puede contar como "el usuario escribió algo", porque no pudo escribirlo.
+ */
+export function hayAlgunValor(
+  valores: TarifaValores,
+  campos: readonly TarifaCampo[] = TARIFA_CAMPOS,
+): boolean {
+  return campos.some((c) => valores[c.key].trim() !== "");
 }
 
 /**
@@ -79,13 +106,20 @@ export function hayAlgunValor(valores: TarifaValores): boolean {
  */
 export function validarTarifaCampos(
   valores: TarifaValores,
+  campos: readonly TarifaCampo[] = TARIFA_CAMPOS,
 ):
   | { ok: true; numericos: Record<string, number | null> }
   | { ok: false; errors: TarifaFieldErrors } {
   const errors: TarifaFieldErrors = {};
   const numericos: Record<string, number | null> = {};
 
-  for (const campo of TARIFA_CAMPOS) {
+  // Un campo que este formulario NO muestra viaja como `null` EXPLÍCITO, no ausente: si se
+  // omitiera, actualizar dejaría vivo un valor que la pantalla ya no enseña —lo que se ve
+  // dejaría de ser lo que se cobra—. Sólo es omitible una columna nullable en la base; hoy
+  // la única así fuera de las tarifas especiales es `fulfillment`.
+  for (const key of clavesOmitidas(campos)) numericos[key] = null;
+
+  for (const campo of campos) {
     const raw = valores[campo.key].trim();
     if (raw === "") {
       // Un opcional vacío no es un error: viaja como `null` para que el backend
@@ -126,15 +160,18 @@ export function TarifaCamposGrid({
   valores,
   errors,
   onChange,
+  campos = TARIFA_CAMPOS,
 }: {
   idPrefix: string;
   valores: TarifaValores;
   errors: TarifaFieldErrors;
   onChange: (key: TarifaCampoKey, value: string) => void;
+  /** Campos a mostrar; por defecto todos. El formulario de zona pasa `TARIFA_CAMPOS_ZONA`. */
+  campos?: readonly TarifaCampo[];
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {TARIFA_CAMPOS.map((campo) => (
+      {campos.map((campo) => (
         <FormField
           key={campo.key}
           id={`${idPrefix}-${campo.key}`}

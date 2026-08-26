@@ -216,7 +216,10 @@ export class ZonaRepository implements IZonaRepository {
         return "ok" as const;
       });
     } catch (e) {
-      // FK RESTRICT desde provincia/orden/tarifas -> la zona esta en uso.
+      // FK RESTRICT desde orden (y desde cierre_detail.tarifa_id, que bloquea la cascada
+      // de `tarifas` cuando alguna ya se liquido) -> la zona esta en uso.
+      // `tarifas` ya NO llega hasta aqui por si sola: su FK es CASCADE desde la migracion
+      // 20260826160000_tarifa_fk_cascade.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
         return "referenced";
       }

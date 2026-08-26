@@ -10,7 +10,8 @@ export interface CreateTarifaData {
   valorFleteDevuelto: number;
   valorFleteGam: number;
   valorFleteDevueltoGam: number;
-  fulfillment: number;
+  /** Monto de bodega; opcional. `null`/ausente = sin fulfillment, lo mismo que 0. */
+  fulfillment?: number | null;
   comisionCod: number;
   ivaFlete: number;
   ivaComisionCod: number;
@@ -31,7 +32,7 @@ export interface UpdateTarifaData {
   valorFleteDevuelto?: number;
   valorFleteGam?: number;
   valorFleteDevueltoGam?: number;
-  fulfillment?: number;
+  fulfillment?: number | null; // `null` deja la tarifa sin fulfillment (equivalente a 0)
   comisionCod?: number;
   ivaFlete?: number;
   ivaComisionCod?: number;

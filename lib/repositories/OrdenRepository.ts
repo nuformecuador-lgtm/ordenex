@@ -570,7 +570,9 @@ function toTarifaDTO(t: TarifaListRow): TarifaDTO {
     valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
     valorFleteGam: t.valorFleteGam.toNumber(),
     valorFleteDevueltoGam: t.valorFleteDevueltoGam.toNumber(),
-    fulfillment: t.fulfillment.toNumber(),
+    // Nullable: NULL se normaliza a 0 (para esta columna "sin monto" y "cero" dicen lo mismo;
+    // patron TarifaRepository). No confundir con `tarifaEspecial`, que si conserva el `null`.
+    fulfillment: t.fulfillment == null ? 0 : t.fulfillment.toNumber(),
     comisionCod: t.comisionCod.toNumber(),
     ivaFlete: t.ivaFlete.toNumber(),
     ivaComisionCod: t.ivaComisionCod.toNumber(),
@@ -2197,6 +2199,16 @@ export class OrdenRepository implements IOrdenRepository {
     if (ids.length === 0) return new Set();
     const rows = await this.prisma.usuario.findMany({
       where: { id: { in: ids }, rol: { value: "mensajero" }, zonaId },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /** Feature 21: de `ids`, los que tienen `vehiculo_id` no nulo. */
+  async findMensajeroIdsConVehiculo(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, vehiculoId: { not: null } },
       select: { id: true },
     });
     return new Set(rows.map((r) => r.id));

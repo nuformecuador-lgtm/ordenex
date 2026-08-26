@@ -18,6 +18,9 @@ export interface UsuarioPublico {
   fulfillment: boolean;
   // Feature 24/R27: zona asignada (solo mensajero/adminSatelite; null en el resto).
   zonaId?: string | null;
+  // Feature 21: vehiculo asociado (solo mensajero; null en el resto). Se expone en
+  // la forma publica para el prefill del formulario.
+  vehiculoId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +106,8 @@ export interface UpdateUsuarioData {
   fulfillment?: boolean;
   // Feature 24/R27: zona (valor efectivo ya resuelto por el service).
   zonaId?: string | null;
+  // Feature 21: vehiculo (valor efectivo ya resuelto por el service).
+  vehiculoId?: string | null;
 }
 
 // Feature 25/R29: catalogo de tipos de identificacion para poblar el select.
