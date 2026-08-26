@@ -3467,6 +3467,36 @@
       "complexity": "media",
       "status_note": "DONE Y DESPLEGADA el 2026-08-26 (prod 115fbbaf). M8 VERIFICADA CONTRA PRODUCCION: manifest.json, sw.js y offline.html en 200; /ordenes sigue en 307. LA PWA SE PUEDE INSTALAR POR PRIMERA VEZ. Cero errores de runtime, lang=es servido, y el rescate viaja inline en el HTML. || IMPLEMENTADA el 2026-08-25. || EL HALLAZGO: el icono que la app SERVIA no estaba en la tipografia de marca. Medido rasterizando el vector y comparando con el PNG vigente: coincidia con Segoe UI al 0,282% (Arial 9,31%, Poppins-por-nombre-sin-instalar 8,58%). La trampa de rasterizar con la fuente del sistema YA HABIA MORDIDO hace meses y nadie lo noto. Ahora el monograma va en TRAZADOS, con la caja de tinta cayendo donde la del vigente -asi que la diferencia restante es de LETRA, no de escala-. Y el script generador ABORTA si un vector vuelve a traer texto sin convertir. || DECISIONES DEL HUMANO, tres CONTRA la recomendacion del spec: aviso de version nueva con boton (no solo esperar), atajos solo a rutas visibles para todos -MEDIDO: la interseccion es VACIA, maestro 16 / admin 11 / satelite 6 / mensajero 6 / tienda 3, asi que son cero atajos con guardia que vigila la regla-, y verificar en PRODUCCION tras desplegar. || POR ESA TERCERA se añadio un CAMINO DE RESCATE que el spec no pedia: un SW roto persiste en el dispositivo y no se arregla desplegando otra vez, porque el navegador busca la version nueva a traves del mecanismo roto. Dos mitades, una INLINE en el head para sobrevivir con los chunks rotos. || NO MEDIDO Y DICHO: no hay linea base del SW en produccion, asi que «hay caches creciendo en los telefonos» sigue sin confirmar; y el tope de purga va declarado SIN CALIBRAR. Siete comprobaciones sobre HTTPS real en docs/release.md.",
       "spec_path": "specs/284-pwa-correcta"
+    },
+    {
+      "id": 285,
+      "title": "el listado de usuarios dice de que zona es cada uno, y se puede filtrar por rol y buscar por nombre o correo",
+      "description": "El listado de usuarios no muestra la zona ni acepta busqueda ni filtro: solo pagina y ordena.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "status_note": "DADA DE ALTA el 2026-08-26 a pedido del humano. MEDIDO ANTES DE ESCRIBIRLA: `UsuarioListItem` (IUserRepository.ts:75) proyecta id/nombre/email/rolValue/estado/createdAt y NO trae zona, pese a que `Usuario.zonaId` existe (schema.prisma:98, nullable: solo mensajero y adminSatelite la llevan). Y `listarUsuariosSchema` (types/usuario.ts:95) acepta SOLO page/pageSize/sortBy/sortDir: no hay parametro de busqueda ni de filtro. O sea que los tres puntos son backend + frontend, no pantalla. || REUSO, PEDIDO EXPLICITO DEL HUMANO: `BuscadorFiltros` y `FilterComponent` ya son genericos y lo especifico de ordenes vive aparte en `ordenes-filtros-def.ts` como funcion pura catalogo->declaraciones. Se calca `usuarios-filtros-def.ts`; NO se toca el de ordenes. || DECIDIDO: filtro de rol MULTI-SELECCION (como el de estado en ordenes); usuario sin zona se pinta con guion, no vacio. || RIPPLE: la columna nueva toca tambien la descarga (`usuarios-descarga-columnas.ts`), que tiene guardia propia de la feature 170. Entra en esta ficha. || AL IMPLEMENTAR: el WHERE nuevo se prueba DONDE VIVE (test de integracion), no con dobles — un test de servicio con mocks no ve el SQL y pasa en verde con el WHERE mutado."
+    },
+    {
+      "id": 286,
+      "title": "todos los inputs de contrasena llevan el ojito para ver lo escrito",
+      "description": "Los 6 campos de contrasena de la app son type=password sin forma de revelar lo tecleado.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "baja",
+      "status_note": "DADA DE ALTA el 2026-08-26 a pedido del humano. CENSO MEDIDO, 6 inputs en 4 archivos: UsuarioForm.tsx:511 (alta, modo manual), LoginForm.tsx:254, PostulacionForm.tsx:500 y :514, RecuperarContrasenaForm.tsx:352 y :367. || FORMA: UN componente compartido que encapsule el toggle, y sustituir los 6. No seis toggles copiados: el criterio de esta casa es que la maqueta viva en un solo sitio. || SIN CONFLICTO con la 285 (no comparten un solo archivo) ni con la 287 (que no lleva campo de contrasena). Las tres son independientes en disco. || AL ESPECIFICAR: decidir el estado inicial (oculto), que el boton sea alcanzable por teclado y que anuncie su estado a un lector de pantalla — es un control, no un adorno."
+    },
+    {
+      "id": 287,
+      "title": "el maestro restablece la contrasena de un usuario",
+      "description": "Un usuario que pierde su contrasena no tiene como recuperar el acceso: el maestro no puede tocarla.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "status_note": "DADA DE ALTA el 2026-08-26 a pedido del humano. ⚠️ REVIERTE UNA DECISION ESCRITA, A SABIENDAS: IUserRepository.ts:98 declara «solo los campos editables por el maestro. NUNCA email, cedula ni passwordHash (Decision 5)», de la feature 25. El humano lo pidio con el dato delante y ACOTO el alcance en el mismo mensaje. || ALCANCE FIRMADO: RESTABLECER, NO EDITAR. El maestro dispara una contrasena generada que se muestra UNA sola vez; NO puede escribir una contrasena elegida por el. Asi el maestro nunca fija una credencial que conozca de antemano, que es lo que Decision 5 protegia. No hay campo de contrasena en esta ficha. || LA FONTANERIA YA EXISTE: `updatePasswordHash` (IUserRepository.ts:139, feature 20), el alta ya genera y muestra una vez (`generatedPassword`, UsuarioService.ts:117) y el modulo entero ya es solo-maestro (`ALLOWED_ROLES = [\"maestro\"]`, UsuarioService.ts:35). No hace falta autorizacion nueva. || NO ENTRA (dicho por el humano): obligar a cambiarla en el siguiente ingreso, ni avisar al usuario de que se la cambiaron. || DEPENDE de la 285: chocan en lib/actions/usuarios.ts, UsuariosModule.tsx y UsuarioService.ts. Va DESPUES, no en paralelo."
     }
   ]
 }
