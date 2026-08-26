@@ -31,6 +31,7 @@ const PUBLIC_SELECT = {
   rolId: true,
   fulfillment: true, // feature 27/R14: expuesto en la forma publica (nunca el hash)
   zonaId: true, // feature 24/R27: zona asignada (mensajero/adminSatelite)
+  vehiculoId: true, // feature 21: vehiculo asociado (mensajero)
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -263,6 +264,7 @@ export class UserRepository implements IUserRepository {
     }
     if (data.fulfillment !== undefined) out.fulfillment = data.fulfillment; // feature 27/R12
     if (data.zonaId !== undefined) out.zonaId = data.zonaId; // feature 24/R27
+    if (data.vehiculoId !== undefined) out.vehiculoId = data.vehiculoId; // feature 21
     return out;
   }
 }

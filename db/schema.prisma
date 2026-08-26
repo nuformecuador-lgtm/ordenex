@@ -170,6 +170,13 @@ enum PlantillaEstado {
   inactivo
   pending
   refused
+  // 2026-08-26 — GUARDADO SIN APROBACION: la plantilla existe aqui pero NUNCA se envio a Meta.
+  // Es el estado con el que nacen todas desde hoy (`crear` ya no propaga; propagar es un acto
+  // explicito del maestro, "Enviar para aprobacion"). NO es lo mismo que `pending`: aquel
+  // significa "Meta la esta revisando", que es un hecho comprobable contra Meta; este significa
+  // "aqui no ha salido de casa". Fundirlos dejaba sin respuesta la pregunta que decide si una
+  // plantilla se puede llegar a usar. Ver `20260826120000_plantilla_estado_saved_not_aprobation`.
+  saved_not_aprobation
 
   @@map("plantilla_estado")
 }
@@ -186,6 +193,15 @@ model PlantillaMensaje {
   // columna `text[] NOT NULL DEFAULT '{}'` como REQUISITO escrito (R12/R15/R27: "nunca null").
   // Sin declararlo aqui, todo `migrate dev` proponia `DROP DEFAULT` y habria roto ese requisito.
   variables      String[]        @default([]) // R15: claves detectadas en el cuerpo (text[]), sin duplicados, sincronizadas con `cuerpo`
+  /// Snapshot `clave -> nombre legible` tomado del catalogo (`CAMPOS_PLANTILLA`) en el
+  /// ultimo guardado. Es PRESENTACION: ningun camino de envio lo lee. `{}` = fila anterior
+  /// a la feature 282 (se deriva del catalogo al pintar, R21), NUNCA null.
+  variablesNombres Json          @default("{}") @map("variables_nombres")
+  // El DEFAULT sigue siendo `pending` y NO se mueve a `saved_not_aprobation`: Postgres prohibe
+  // USAR un valor de enum en la misma transaccion en que se anade, asi que el `SET DEFAULT`
+  // habria abortado la migracion. Quien fija el estado inicial es el service (que es donde
+  // vive la politica) pasandolo explicito en el `create`; el default de columna no lo decide
+  // nadie hoy porque ninguna escritura lo omite.
   estado         PlantillaEstado @default(pending) // R12 (Decision humana 1)
   // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
   // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
@@ -1210,7 +1226,14 @@ model Tarifa {
   valorFleteDevuelto     Decimal  @map("valor_flete_devuelto") @db.Decimal(12, 2) // R2 (monto)
   valorFleteGam          Decimal  @map("valor_flete_gam") @db.Decimal(12, 2) // R2/R4 (GAM -> gam)
   valorFleteDevueltoGam  Decimal  @map("valor_flete_devuelto_gam") @db.Decimal(12, 2) // R2/R4
-  fulfillment            Decimal  @db.Decimal(12, 2) // R2/D3 (monto)
+  // OPCIONAL desde `20260826180000_tarifa_fulfillment_opcional`: el formulario de ZONA ya no
+  // pide este campo (una tarifa de zona no describe el servicio de bodega de una tienda), asi
+  // que la fila puede nacer sin monto. NULL y 0 significan LO MISMO aguas abajo -"esta tarifa
+  // no lleva fulfillment"-, y por eso los lectores normalizan NULL a 0 en la frontera
+  // (`TarifaRepository.toDTO`, `TarifaVigenteRepository`, `OrdenRepository.toTarifaDTO`) en vez
+  // de propagar la ausencia: a diferencia de `tarifaEspecial`, aqui "sin pacto" y "cero" no son
+  // dos hechos distintos. El predicado sigue siendo el monto (`tieneFulfillment`, > 0).
+  fulfillment            Decimal? @db.Decimal(12, 2) // R2/D3 (monto); NULL = sin fulfillment
   comisionCod            Decimal  @map("comision_cod") @db.Decimal(5, 2) // R3/D3 (porcentaje 0..100)
   ivaFlete               Decimal  @map("iva_flete") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
   ivaComisionCod         Decimal  @map("iva_comision_cod") @db.Decimal(5, 2) // R3/D2 (porcentaje 0..100)
@@ -1239,8 +1262,14 @@ model Tarifa {
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @updatedAt @map("updated_at")
 
-  tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id])
-  zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id])
+  // ON DELETE CASCADE en las DOS FKs (migracion tarifa_fk_cascade): borrar la tienda o la
+  // zona borra sus tarifas. Antes eran RESTRICT y una zona con tarifas era INBORRABLE; la
+  // tarifa no es un dato con vida propia -describe el precio de ese par-, asi que sobrevivir
+  // a su tienda/zona la dejaria colgando de una FK muerta. La traza historica NO se pierde:
+  // `cierre_detail.tarifa_id` sigue siendo RESTRICT a proposito, de modo que una tarifa YA
+  // LIQUIDADA bloquea la cascada entera y el borrado falla en vez de borrar la auditoria.
+  tienda         Usuario?       @relation("TarifaTienda", fields: [tiendaId], references: [id], onDelete: Cascade)
+  zona           Zona?          @relation("TarifaZona", fields: [zonaId], references: [id], onDelete: Cascade)
   cierreDetalles CierreDetail[] // feature 69/R8: cierres que liquidaron contra ESTA fila de tarifa (hace auditable la deuda (g))
 
   // Una sola tarifa por par (zona, tienda), con las dos dimensiones opcionales. El indice

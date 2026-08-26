@@ -51,7 +51,11 @@ export const crearTarifaSchema = z
     valorFleteDevuelto: montoSchema,
     valorFleteGam: montoSchema,
     valorFleteDevueltoGam: montoSchema,
-    fulfillment: montoSchema, // D3: monto
+    // OPCIONAL (migracion `tarifa_fulfillment_opcional`): ausente/`null` = esta tarifa no
+    // lleva fulfillment, LO MISMO que 0. No es el caso de `tarifaEspecial` (ver abajo): alli
+    // el `null` es un hecho distinto del cero, aqui no. El formulario de ZONA no manda el
+    // campo con valor nunca: lo manda `null`.
+    fulfillment: montoSchema.nullable().optional(), // D3: monto; null = sin fulfillment
     comisionCod: porcentajeSchema, // D3: porcentaje 0..100
     ivaFlete: porcentajeSchema, // D2: porcentaje 0..100
     ivaComisionCod: porcentajeSchema, // D2: porcentaje 0..100
@@ -109,6 +113,10 @@ export interface TarifaDTO {
   valorFleteDevuelto: number;
   valorFleteGam: number;
   valorFleteDevueltoGam: number;
+  // La columna es nullable en la base, pero el DTO NO propaga la ausencia: el repositorio
+  // normaliza NULL a 0 porque para esta columna "sin monto" y "cero" son el mismo hecho
+  // (ver `db/schema.prisma`). Quien lee un 0 aqui sabe lo unico que hay que saber: esta
+  // tarifa no lleva fulfillment.
   fulfillment: number;
   comisionCod: number;
   ivaFlete: number;

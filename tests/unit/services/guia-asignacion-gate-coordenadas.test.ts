@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { MSG_MENSAJERO_SIN_VEHICULO } from "@/lib/services/mensajes-bloqueo";
 import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import type { IOrdenRepository } from "@/lib/interfaces/repositories/IOrdenRepository";
@@ -52,6 +53,7 @@ function fakeRepo(over: Record<string, unknown> = {}): IOrdenRepository {
   return {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS[v] ?? null),
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
+    findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
     // Feature 157 (regla de dedicacion): nadie ocupado, para no interferir con el gate.
@@ -157,6 +159,24 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
       ...over,
     });
   }
+
+  // Feature 21 (pedido humano 2026-08-26): el mensajero es de la zona GAM y esta libre,
+  // pero no tiene vehiculo asociado. Se para AQUI y con motivo propio: el mismo texto que
+  // emite la asignacion desde bodega satelite, porque es la misma regla.
+  it("feature 21: mensajero sin vehiculo asociado -> validation_error, sin persistir", async () => {
+    const repo = repoBodega({
+      findMensajeroIdsConVehiculo: vi.fn(async () => new Set<string>()),
+    });
+    const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote());
+
+    const r = await service.asignarDesdeBodega({ ordenIds: ["o1", "o2"], mensajeroId: "m1" }, MAESTRO);
+
+    expect(r).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
+    });
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
 
   it.each(NO_ASIGNABLES)("motivo %s -> conflict SIN persistir", async (estado) => {
     const repo = repoBodega();

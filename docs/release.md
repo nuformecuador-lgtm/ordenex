@@ -344,3 +344,56 @@ datos de nadie**.
 - [ ] **La primera orden que alcance el umbral**: comprobar que queda `rechazada` y que emite su
       `cobroRechazado`. Esta release **acelera dinero** —hasta ahora el sistema erraba a propósito
       hacia no cobrar— y ese primer cobro es el que hay que mirar con lupa.
+
+---
+
+## Release del 2026-08-26 — las etiquetas legibles y la PWA que por fin se instala
+
+**`prod` = `115fbbaf`**, READY, **cero errores de runtime**, **sin migraciones**. Salen la **282** y la
+**284**; la 281 y la 283 ya habían salido.
+
+### ✅ M8, la comprobación que lo decidía todo — verificada CONTRA PRODUCCIÓN
+
+| ruta | antes | ahora |
+| --- | --- | --- |
+| `/manifest.json` | **307 → /login** | **200** |
+| `/sw.js` | **307 → /login** | **200** |
+| `/offline.html` | **307 → /login** | **200** |
+| `/icons/icon-512.png` | 200 | 200 |
+| `/ordenes` | 307 | **307** (sigue protegido) |
+
+**La PWA de Ordenex se puede instalar por primera vez.** El manifiesto llevaba **meses** detrás del
+login: el navegador lo pide **sin credenciales**, recibía el redirect y **nunca llegaba a ofrecer la
+instalación**. Todo lo construido encima —el botón, las capturas, los iconos— estaba bien hecho y era
+**inalcanzable**.
+
+Verificado además sobre lo que sirve producción: el manifiesto trae `id`, **cuatro variantes de
+icono** (`any` + `maskable`) y sus 3 capturas; el HTML declara **`lang="es"`**; y **el camino de
+rescate viaja inline** en el documento.
+
+### Cómo esto se descubrió, y qué lo tapaba
+
+La ficha original de la PWA **aprobó su requisito de Lighthouse con un razonamiento** —«los elementos
+necesarios están presentes, lo que asegura el puntaje»— **en vez de correrlo**. Correr Lighthouse una
+vez, o un `curl -I` de un minuto, lo habría gritado. **Una medida no se sustituye por un argumento**,
+y ésta es la factura.
+
+### ⚠️ Lo que queda vivo para vigilar
+
+- **`?rescate=sw`** — la salida de emergencia. Si un service worker deja la app inservible,
+  `https://ordenex.vercel.app/?rescate=sw` limpia el origen **sin que nadie borre datos a mano**.
+  Viaja inline en el HTML, así que funciona aunque los chunks estén rotos. **Ejercerla una vez en un
+  teléfono real (M7)** ahora que apenas hay base instalada.
+- **Puede haber service workers VIEJOS ahí fuera.** El script del SW se pedía con credenciales
+  `same-origin`, así que **para un usuario con sesión sí se instalaba** — y son los del
+  `skipWaiting()` que cachean sin mirar el estado. **M0/T0.1 sigue sin ejecutar** y es ahora o nunca.
+- **M1–M5** después, contando con que puede haber cachés `v1` que purgar.
+- **`TOPE_ESTATICOS = 200` sin calibrar**: aceptable, el peor caso es una descarga extra.
+- **El rojo ajeno** (`obtenerTarifa`, ficha 275) sigue vivo: `docs/release.md` exige gate verde y
+  **esta release se saltó esa regla a sabiendas**, por decisión del humano con el dato delante.
+
+### De las etiquetas, para bodega
+
+Una dirección de **3 líneas entra con holgura, 4 entra justa, y a partir de 5 corta con «…»**. Y si
+la red falla, **ya no se descarga nada** y sale un mensaje — antes salía la etiqueta con el importe
+roto.

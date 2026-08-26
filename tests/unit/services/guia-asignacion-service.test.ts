@@ -97,6 +97,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     asignarBodegaLote: vi.fn(async (ordenIds: string[]) => ordenIds.length),
     // Feature 30: por defecto todos los mensajeros pasados son GAM validos.
     findMensajerosByZona: vi.fn(async () => []),
+    findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajeroIdsValidosByZona: vi.fn(
       async (ids: string[]): Promise<Set<string>> => new Set(ids),
     ),
@@ -604,6 +605,7 @@ describe("GuiaAsignacionService — el mensajero BLOQUEADO no recibe reparto (fe
   it("asignarDesdeBodega hacia un mensajero BLOQUEADO -> conflict, y NINGUNA orden cambia", async () => {
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
+      findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
@@ -625,6 +627,7 @@ describe("GuiaAsignacionService — el mensajero BLOQUEADO no recibe reparto (fe
     // El contraste obligatorio. Sin el, «conflict» podria venir de cualquier otra guarda del metodo.
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
+      findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     });

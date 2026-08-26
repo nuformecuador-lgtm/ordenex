@@ -31,6 +31,7 @@ function ordenRow(over: Record<string, unknown> = {}) {
 function fakeRepo(over: Record<string, unknown> = {}) {
   return {
     findUsuarioZonaId: vi.fn(async () => ZONA),
+    findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
     findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1" }), ordenRow({ id: "o2" })]),
     findEstatusIdByValue: vi.fn(async (v: string) =>

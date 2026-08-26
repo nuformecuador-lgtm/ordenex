@@ -30,6 +30,10 @@ const baseCrearFields = {
   // Feature 24/R27/R28: zona del usuario. Solo mensajero/adminSatelite la
   // conservan; el service valida existencia y aplica la invariante por rol.
   zonaId: z.string().min(1).nullable().optional(),
+  // Vehiculo asociado. Solo `mensajero` lo conserva (el service lo fuerza a null
+  // para el resto de roles) y es OPCIONAL: `usuario.vehiculo_id` es nullable en la
+  // base y un mensajero puede darse de alta antes de que se le asigne uno.
+  vehiculoId: z.string().min(1).nullable().optional(),
 };
 
 // R5/R6/R30/R31/R32: creacion con el bloque de contrasena como union
@@ -69,6 +73,9 @@ export const actualizarUsuarioSchema = z
     // Feature 24/R27/R28: zona editable (null la libera). El service valida
     // existencia y aplica la invariante por rol (solo mensajero/adminSatelite).
     zonaId: z.string().min(1).nullable(),
+    // Vehiculo editable (null lo desasocia). El service valida existencia y aplica
+    // la invariante por rol (solo `mensajero`).
+    vehiculoId: z.string().min(1).nullable(),
   })
   .partial()
   .strict();

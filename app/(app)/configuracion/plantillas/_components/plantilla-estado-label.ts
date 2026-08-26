@@ -15,4 +15,5 @@ export const ESTADO_PLANTILLA_LABEL: Record<PlantillaEstado, string> = {
   inactivo: "Inactivo",
   pending: "Pendiente",
   refused: "Rechazado",
+  saved_not_aprobation: "Guardado sin aprobación",
 };

@@ -102,7 +102,12 @@ beforeEach(() => {
 describe("crear — zona por rol (R27/R28)", () => {
   it("mensajero con zonaId existente lo persiste (R27)", async () => {
     const svc = new UsuarioService(repo, buildZonaRepo(true));
-    const r = await svc.crear({ ...baseCrear, rolId: "rol-msg", zonaId: "z1" }, MAESTRO);
+    // feature 21: el mensajero tambien exige vehiculo; se pasa para aislar la
+    // aserción a la zona (sin `vehiculoRepo` inyectado no se valida su existencia).
+    const r = await svc.crear(
+      { ...baseCrear, rolId: "rol-msg", zonaId: "z1", vehiculoId: "v1" },
+      MAESTRO,
+    );
     expect(r.status).toBe("ok");
     expect((repo.create as ReturnType<typeof vi.fn>).mock.calls[0][0].zonaId).toBe("z1");
   });

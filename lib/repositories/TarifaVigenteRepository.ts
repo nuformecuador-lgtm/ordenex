@@ -43,7 +43,8 @@ interface TarifaFila extends TarifaDecimales {
   id: string;
   tiendaId: string | null;
   zonaId: string | null;
-  fulfillment: { toFixed(n: number): string };
+  // Nullable desde `tarifa_fulfillment_opcional`: NULL = esta tarifa no lleva fulfillment.
+  fulfillment: { toFixed(n: number): string } | null;
 }
 
 // Money-safe: Decimal -> STRING escala 2 fija (nunca number/parseFloat).
@@ -87,7 +88,10 @@ function toTarifaVigenteResuelta(f: TarifaFila): TarifaVigenteResuelta {
     // `fulfillment` viaja SOLO por el camino del snapshot (2026-08-19): `cierre_detail` lo
     // congela para mostrarlo, pero no es una entrada de la formula y por eso no esta en
     // `TARIFA_SELECT` ni en `toTarifaVigente`.
-    fulfillment: f.fulfillment.toFixed(2),
+    // NULL se normaliza a "0.00" AQUI, en la frontera: aguas abajo (`tieneFulfillment`, el
+    // desglose de la API, el snapshot de `cierre_detail`) el predicado es el MONTO, y "sin
+    // monto" y "cero" son el mismo hecho para esta columna. Nadie mas ve el `null`.
+    fulfillment: f.fulfillment == null ? "0.00" : f.fulfillment.toFixed(2),
     ...toTarifaVigente(f),
   };
 }

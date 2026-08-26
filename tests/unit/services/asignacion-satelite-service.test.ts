@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { MSG_MENSAJERO_SIN_VEHICULO } from "@/lib/services/mensajes-bloqueo";
 import { AsignacionSateliteService } from "@/lib/services/AsignacionSateliteService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import { MSG_ORDEN_REPROGRAMADA_BLOQUEADA } from "@/lib/services/mensajes-bloqueo";
@@ -35,6 +36,7 @@ const ESTATUS_ID_BY_VALUE: Record<string, string> = {
 type RepoMethods = Pick<
   IOrdenRepository,
   | "findUsuarioZonaId"
+  | "findMensajeroIdsConVehiculo"
   | "findMensajeroIdsValidosByZona"
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
@@ -68,6 +70,7 @@ function transicionRow(overrides: Partial<OrdenTransicionRow> = {}): OrdenTransi
 function fakeRepo(overrides: Partial<RepoMethods> = {}): RepoMethods {
   return {
     findUsuarioZonaId: vi.fn(async () => ZONA),
+    findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajeroIdsValidosByZona: vi.fn(async () => new Set([MENSAJERO])),
     findByIdsForTransicion: vi.fn(async () => [transicionRow()]),
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS_ID_BY_VALUE[v] ?? null),
@@ -130,6 +133,25 @@ describe("AsignacionSateliteService.asignar", () => {
       ADMIN,
     );
     expect(res).toEqual({ status: "sin_zona" });
+    expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
+  });
+
+  // Feature 21 (pedido humano 2026-08-26): el mensajero existe y es de la zona, pero no
+  // tiene vehiculo asociado. Motivo PROPIO —no "mensajero_invalido"— porque lo que hay que
+  // arreglar esta en otra pantalla (Configuracion > Usuarios), no en esta lista.
+  it("feature 21: mensajero sin vehiculo asociado -> validation_error, sin escribir", async () => {
+    const repo = fakeRepo({
+      findMensajeroIdsConVehiculo: vi.fn(async () => new Set<string>()),
+    });
+    const res = await newService(repo).asignar(
+      { ordenIds: ["o1"], mensajeroId: MENSAJERO },
+      ADMIN,
+    );
+    expect(res).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
+    });
+    expect(repo.findMensajeroIdsConVehiculo).toHaveBeenCalledWith([MENSAJERO]);
     expect(repo.asignarSateliteLote).not.toHaveBeenCalled();
   });
 

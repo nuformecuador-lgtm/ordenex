@@ -1124,6 +1124,14 @@ export interface IOrdenRepository {
    */
   findMensajeroIdsValidosByZona(ids: string[], zonaId: string): Promise<Set<string>>;
   /**
+   * Feature 21 (pedido humano 2026-08-26): subconjunto de `ids` que SI tiene un vehiculo
+   * asociado (`usuario.vehiculo_id NOT NULL`). Se consulta APARTE de
+   * `findMensajeroIdsValidosByZona` a proposito: colar el `NOT NULL` en aquella query
+   * convertiria «sin vehiculo» en «mensajero no valido», que es un motivo distinto y
+   * manda a quien asigna a buscar el problema donde no esta.
+   */
+  findMensajeroIdsConVehiculo(ids: string[]): Promise<Set<string>>;
+  /**
    * R15/R16: catalogo completo `order_status` (id, value) de solo lectura, para
    * que la UI resuelva `value` -> `estatusId` y siga filtrando `listarOrdenes`
    * por `estatusId` (contrato feature 6/7 intacto).
