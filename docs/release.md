@@ -119,6 +119,59 @@ umbral `RUTA_ORIGEN_MAX_KM = 200` continúa **declarado sin calibrar**.
 > vacía al ejecutarla. Si esta sección tiene entradas, **la release no está terminada** aunque el
 > despliegue esté verde.
 
+### De la 284 — la PWA: el relevo, la purga y el manifiesto
+
+> **Un service worker NO se puede medir en local**: el de producción se autodestruye en
+> `localhost`/`127.0.0.1` sin mirar `NODE_ENV` (`public/sw.js:7-9`), así que `pnpm build && pnpm
+> start` **tampoco** sirve. Estas seis comprobaciones sólo existen sobre HTTPS real, y por
+> decisión del humano (2026-08-25) se hacen **en producción justo después de desplegar**.
+> Cada fila se responde con **un número o un nombre**, nunca con «se ve bien».
+
+- [ ] **M8 · LOS TRES ARCHIVOS DE LA PWA, CONTRA EL DESPLIEGUE DE VERDAD.** Es **lo primero** que
+      hay que mirar tras desplegar: hasta esta release respondían **307 a `/login`** y por eso la
+      PWA **nunca se ha podido instalar**. Se comprueba **sin cookies**:
+
+      ```
+      curl -sI https://<dominio>/manifest.json | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/sw.js         | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/offline.html  | head -1     # se espera: HTTP/2 200
+      curl -sI https://<dominio>/ordenes       | head -1     # se espera: 307 (sigue protegido)
+      ```
+
+      Si alguno vuelve **307**, el arreglo del `matcher` no llegó y **el resto de la 284 no sirve
+      de nada**: nada de lo que hace la PWA llega al dispositivo. Y con los tres en 200, en un
+      teléfono: que el navegador **ofrezca instalar** (Chrome → menú → «Instalar aplicación»), que
+      es la comprobación que ningún `curl` puede hacer.
+
+- [ ] **M1 · El relevo espera.** Con la app abierta, desplegar y recargar: en DevTools →
+      Application → Service Workers debe aparecer uno **`waiting`** y el que dice **`activated`**
+      debe seguir siendo el anterior. **Se anota qué versión está en cada estado.**
+- [ ] **M2 · La página viva no se rompe.** Sin cerrar la app, navegar por tres pantallas:
+      **cero** errores de carga de chunk en Console, y `next-static-v1` **sigue existiendo** (nadie
+      la borró bajo la página viva). **Se anota el número de errores y el nombre de las cachés.**
+- [ ] **M3 · El aviso, y que no recargue solo.** Debe aparecer el aviso «Hay una versión nueva»
+      **sólo cuando no hay nada a medias** (probarlo con un formulario empezado: no debe salir).
+      Al pulsar **Actualizar ahora**, la pestaña recarga; **una segunda pestaña abierta NO debe
+      recargarse sola**. Tras la recarga, en Cache Storage quedan **sólo** `next-static-v2` y
+      `pages-cache-v2`: las `v1` **desaparecieron**.
+- [ ] **M4 · El tope.** Navegar hasta superar el tope y mirar Cache Storage: el número de entradas
+      de `next-static-v2` **no pasa de 200**. Y con el número real a la vista, **re-medir
+      `TOPE_ESTATICOS`**, que hoy está **declarado SIN CALIBRAR** (producción se vació el
+      2026-08-25 y no se pudo contar el recorrido del mensajero).
+- [ ] **M5 · Instalabilidad.** Application → Manifest: **0 errores**; `id` presente; la app **no**
+      aparece duplicada en el lanzador de un teléfono que ya la tuviera instalada. Y en un iPhone,
+      que el icono de la pantalla de inicio **no** tenga doble redondeo.
+- [ ] **M6 · Lighthouse.** Chrome de escritorio, incógnito, sesión de **mensajero**, dispositivo
+      **Mobile**. Se exige `html-has-lang` y `html-lang-valid` en **PASS** y **Accesibilidad ≥ 90**.
+      Se anotan **URL, fecha, versión de Chrome y de Lighthouse** y el número de cada categoría. Si
+      no llega al umbral, **la ficha no está hecha**: se escribe el número y qué auditoría lo baja.
+- [ ] **M7 · El camino de rescate, probado UNA vez en un teléfono de verdad.** Abrir
+      `https://<dominio>/?rescate=sw`: la app debe volver a cargar y, en DevTools → Application,
+      **no debe quedar ningún service worker registrado ni ninguna caché**. Es la salida que
+      convierte «un SW roto es irrecuperable sin borrar los datos del sitio» en «se abre una URL».
+      **Probarlo cuando no hace falta es la única forma de saber que funciona el día que haga
+      falta**; si falla, hay que arreglarlo antes de que exista una base instalada.
+
 ### De la 264 — el detalle del cierre
 
 - [ ] **Ver la sección «Órdenes sin gestionar» en pantalla.** Cierre terminado en **`8F88DCD5`**:
