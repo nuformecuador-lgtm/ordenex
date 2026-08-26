@@ -410,3 +410,317 @@ condicionada con lectura cruzada de cachés, el `response.ok` obligatorio en los
 camino de rescate en sus dos mitades, la regla de los cero atajos con su anti-vacuidad y el arreglo
 del icono con un generador que ya no puede volver a mentir. Eso son 17 mutaciones muertas y una
 medición que desmintió meses de un icono equivocado.
+
+---
+---
+
+# RONDA 2 — re-revisión tras los arreglos (2026-08-26)
+
+> La ronda 1 queda **íntegra arriba**, con su veredicto RECHAZADO. Esto es lo que cambió y lo
+> que medí yo. SHA re-revisado **`02385e4a`** · merge-base con `origin/dev` sigue en
+> **`2b6443f8`** (la rama no ha derivado).
+
+**VEREDICTO FINAL: OK — aprobado con reservas.** Los cuatro bloqueantes están cerrados y
+verificados por mí ejecutando, no leyendo. Quedan cinco `menor`, ninguno bloquea el despliegue, y
+**una corrección de fondo a una conclusión escrita en el spec** que sí cambia lo que hay que
+esperar esta noche (§R2.6).
+
+---
+
+## R2.1 · Mi gate, con el código de salida DENTRO del log
+
+`pnpm run db:generate` antes. Gate **completo**:
+
+    { ./init.sh; echo "INIT_EXIT=$?"; } > gate-284-r2.log 2>&1
+
+    ✓ typecheck paso
+    ✓ lint paso
+     FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts
+       + [ "lib/actions/tarifas.ts:67 obtenerTarifa" ]
+     Test Files  1 failed | 1406 passed (1407)
+          Tests  1 failed | 19181 passed | 26 skipped (19208)
+       Duration  383.91s
+    INIT_EXIT=1
+
+**Delta 0, y aquí no es trámite.** Esta ronda toca `middleware.ts`, que **es una raíz** del grafo
+de alcanzabilidad de esa misma guardia: si el cambio del `matcher` hubiera dejado huérfana alguna
+Server Action, la lista habría crecido. Volví a sacar la rama de en medio
+(`git checkout --detach origin/dev`, `2b6443f8`) y corrí la guardia allí:
+
+     Test Files  1 failed (1)
+          Tests  1 failed | 17 passed (18)
+       + [ "lib/actions/tarifas.ts:67 obtenerTarifa" ]
+
+**No sólo el número: el CONJUNTO es idéntico** —`{obtenerTarifa}` antes y después—, que es la
+comprobación que de verdad importa cuando lo que cambia es una raíz del grafo. Es la ficha **275**
+y no se toca.
+
+---
+
+## R2.2 · B2 CERRADO — el manifiesto sale 200 y no abre ningún agujero. Medido sobre build de producción.
+
+No me fié del dev server ni de la bitácora: compilé (`pnpm exec next build`, `BUILD_EXIT=0`) y
+serví el artefacto real (`pnpm exec next start -p 3998`). **Sin ninguna cookie:**
+
+    /manifest.json                   200      Content-Type: application/json; charset=UTF-8
+    /sw.js                           200      Content-Type: application/javascript; charset=UTF-8
+    /offline.html                    200
+    /icons/icon-512.png              200
+    /ordenes                         307  ->  /login?redirect=%2Fordenes
+    /dashboard                       307  ->  /login?redirect=%2Fdashboard
+    /cierre-dia                      307  ->  /login?redirect=%2Fcierre-dia
+    /mis-asignaciones/reparto        307  ->  /login?redirect=%2Fmis-asignaciones%2Freparto
+    /wallet                          307  ->  /login?redirect=%2Fwallet
+    /api/ordenes                     307  ->  /login?redirect=%2Fapi%2Fordenes
+    /configuracion                   307  ->  /login?redirect=%2Fconfiguracion
+    /reportes/export.json            307  ->  /login?redirect=%2Freportes%2Fexport.json   <-- EL CASO
+    /algo/sw.js                      307  ->  /login?redirect=%2Falgo%2Fsw.js
+
+Y el cuerpo es el bueno: el manifiesto empieza en `{ "id": "/", "name": "Ordenex", …` y el SW en
+`// Feature 64 (PWA) — service worker. Feature 284: …`. No es una página de login disfrazada.
+
+**El caso que el coordinador señaló —`/reportes/export.json`— sigue protegido.** Es el sitio
+donde un arreglo apresurado abre el agujero, y no está abierto: la exclusión va por **nombre
+anclado al primer segmento**, no por extensión.
+
+**Sondas extra que hice yo, buscando el agujero:**
+
+    /Manifest.json        307   (el matcher distingue mayúsculas: no se cuela por el nombre)
+    /manifest.json/       308   (normalización de barra final)
+    /sw.js.map            404   /offline.html.bak   404   /manifest.json.backup   404
+    /api/docs/openapi     200   (público por diseño desde la 106, no lo toca esta ficha)
+    /paquete/ABC123       307   /login  200   /postulacion  200   (sin cambios)
+
+Los tres `404` son rutas que la exclusión sí deja pasar por prefijo pero donde **no hay recurso
+que servir**: no filtran nada.
+
+**Y la comparación determinista de los dos `matcher`, evaluados como los compila Next:**
+
+    VIEJO: /((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|jpg|…)).*)
+    NUEVO: /((?!_next/static|_next/image|favicon.ico|manifest\.json|sw\.js|offline\.html|.*\.(?:svg|jpg|…)).*)
+
+    ruta                      ANTES pasa-guard  DESPUES pasa-guard
+    /manifest.json            true              false   <-- CAMBIA
+    /sw.js                    true              false   <-- CAMBIA
+    /offline.html             true              false   <-- CAMBIA
+    /icons/icon-512.png       false             false
+    /ordenes                  true              true
+    /dashboard                true              true
+    /cierre-dia               true              true
+    /wallet                   true              true
+    /api/ordenes              true              true
+    /reportes/export.json     true              true
+    /algo/sw.js               true              true
+    /configuracion            true              true
+
+**Exactamente tres rutas cambian de lado y ninguna más.** El «antes» además reproduce el `307`
+que yo medí en la ronda 1 contra el dev server.
+
+### El `crossorigin`: el razonamiento se sostiene
+
+Decidir **no** añadir `crossorigin="use-credentials"` es correcto, y por un motivo más fuerte que
+el que dice la ficha. `use-credentials` sólo sirve para que el manifiesto llegue **cuando está
+detrás de la sesión**; usarlo aquí habría sido **tapar el defecto en vez de arreglarlo**: el
+manifiesto habría llegado al usuario con sesión y **seguiría fallando para el visitante anónimo**,
+que es quien ve la landing y a quien el navegador debe ofrecerle instalar. Con el `matcher`
+arreglado el manifiesto responde 200 sin cookies —lo acabo de medir— y es un estático idéntico
+para todos, así que pedirlo con credenciales no cambiaría ni una respuesta. La invariante buena
+—«el manifiesto tiene que ser alcanzable **sin** credenciales»— es la que quedó vigilada.
+
+---
+
+## R2.3 · B1 CERRADO — el caso real pasa, y lo verifiqué mutándolo
+
+La corrección tiene dos capas y **la que manda es la primera**:
+
+1. **Registro explícito** (`lib/pwa/trabajo-en-curso.ts` + `useDeclararTrabajo`): la superficie
+   declara que tiene trabajo sin guardar. Es la respuesta correcta a lo que medí: **el estado que
+   se pierde vive en React y desde el DOM no se ve.**
+2. **Barrido del DOM arreglado**: mira si el campo **tiene contenido** (`campo.value !== ""`) en
+   vez de compararlo con `defaultValue`. Los buscadores (`type="search"`, `role="searchbox"`)
+   quedan fuera, con su motivo escrito.
+
+**El caso real está y es real.** `pwa-aviso-sin-recarga.guardia.test.ts` **monta el
+`GestionarOrdenPanel` de verdad**, pulsa «Entregar», teclea el recaudo en el input real, y afirma
+tres cosas: que `monto.defaultValue === monto.value` —o sea, deja **clavada mi medición** como
+sonda permanente—, que `hayTrabajoEnCurso(document)` es `true`, y que `trabajoDeclarado()` es
+`["gestion:g1"]`. Un segundo caso monta el panel **y el aviso a la vez** y exige que
+«Actualizar ahora» **no exista** mientras «Guardar gestión» sí. Un tercero comprueba que al
+desmontar el panel la declaración se retira sola.
+
+**Lo verifiqué matándolo.** Mis mutaciones sobre el código de la ronda 2:
+
+    MUERTA   B1a la declaracion del panel queda inerte
+    MUERTA   B1b el bug que el implementer cazo: paso === "resultados"
+    MUERTA   B1c hayTrabajoEnCurso ignora el registro
+    MUERTA   B1d el barrido VUELVE AL DEFECTO (value vs defaultValue)   <-- la regresión clave
+    MUERTA   G3a el banner vuelve abajo
+    MUERTA   G3b el banner vuelve a prometer lo que no cumple
+    MUERTA   G3c "Ahora no" deja de quitar el aviso
+    MUERTA   G1  recargar aunque el relevo lo pidiera otra pestaña
+    MUERTA   B2a el matcher vuelve a tragarse el manifiesto
+    MUERTA   B2b el matcher afloja POR EXTENSION (.json fuera del guard)
+    MUERTA   R3  reponer skipWaiting en install          (regresión ronda 1)
+    MUERTA   R11 cachear el estatico aunque no sea ok    (regresión ronda 1)
+    MUERTA   RESCATE-INLINE inerte                       (regresión ronda 1)
+    MUERTA   R16 atajo a /ordenes                        (regresión ronda 1)
+    SUPERVIVIENTE  B1e el barrido ignora las fotos ya elegidas          <-- menor 3
+    SUPERVIVIENTE  HOOK sin suscripcion al registro (solo sondeo)       <-- no es defecto
+    SUPERVIVIENTE  B2c el link del manifiesto pide credenciales         <-- menor 4
+    SUPERVIVIENTE  CONTROL-1 comentario reordenado en sw.js             <-- debe sobrevivir
+    SUPERVIVIENTE  CONTROL-2 comentario reordenado en middleware.ts     <-- debe sobrevivir
+    arbol limpio al terminar: true
+
+**14 de 17 muertas, con los 2 controles verdes.** `B1d` es la que importa: si alguien vuelve a
+escribir `value !== defaultValue`, la guardia se pone roja con el caso del panel real. Y `B1b`
+confirma que el caso real **caza de verdad** el error que el propio implementer declaró haber
+cometido en ese commit.
+
+De los tres supervivientes, **uno no es defecto**: quitar la suscripción al registro deja el
+sondeo cada 3 s, que es una diferencia de latencia y no de seguridad. Los otros dos van abajo
+como `menor`.
+
+---
+
+## R2.4 · ¿Queda alguna superficie con trabajo sin declarar? Sí, una, y es menor
+
+Busqué el patrón exacto que hace invisible el trabajo: estado en React que **no deja rastro en el
+DOM**. El marcador fiable es `input.value = ""` justo después de elegir un archivo. Hay cuatro
+sitios en todo el árbol:
+
+| sitio | ¿cubierto? |
+| --- | --- |
+| `GestionarOrdenPanel.tsx:467` (panel del mensajero) | **sí**, lo declara |
+| `GestionarDesdeAyudaModal.tsx:225` | **sí**, vive dentro de `Modal` → Base UI `Dialog.Popup` → `role="dialog"` |
+| `ReportarIncidenteModal.tsx:137` | **sí**, mismo `Modal` |
+| `BulkUpload.tsx:228` (carga masiva de órdenes, `OrdenesCargaUpload`) | **NO** |
+
+**La que queda: la carga masiva de órdenes.** `BulkUpload` limpia el input y guarda el archivo y
+el progreso (`status`, `progreso: {hechas,total}`) en React, y **no está dentro de un diálogo**.
+Un administrador con una importación de miles de filas a medio subir puede ver el aviso y pulsar
+«Actualizar ahora». La cobertura parcial que sí tiene: el botón de envío usa `Button loading`, que
+pone `aria-busy` (`components/ui/button.tsx:109`), y `OrdenesCargaPreview` pone `aria-busy` al
+generar errores — así que **parte** de la ventana está protegida. Lo que no está protegido es el
+hueco entre elegir el archivo y arrancar.
+
+Por qué lo dejo en `menor` y no bloquea: no se pierde nada tecleado (el archivo sigue en el disco
+y se vuelve a elegir), no es el mensajero ni es dinero, exige que coincidan «hay versión nueva» +
+«el admin pulsa actualizar a media importación», y ahora existe «Ahora no». **Un
+`useDeclararTrabajo("carga-masiva", …)` en `OrdenesCargaUpload` lo cierra en tres líneas.**
+
+El resto del árbol lo cubre el barrido por contenido: cualquier formulario con un campo escrito,
+una casilla marcada, un diálogo abierto, una mutación en vuelo o la cámara del escáner.
+
+---
+
+## R2.5 · Los `menor` de la ronda 2
+
+### menor 1 · `tasks.md`: quedan **12** casillas sin marcar que SÍ están hechas
+Sin marcar hay **14**: las dos correctas (**T0.1** y **T0.2**, con «(NO EJECUTADA…)» escrito al
+lado, que es exactamente lo que había que hacer) y **doce que sí se hicieron**: T2.1–T2.6, T7.1,
+T7.2 y T12.1–T12.4. Las verifiqué una a una en la ronda 1. Se marcaron los epígrafes y no los
+sub-items. **No bloquea el despliegue** —el expediente real está en `impl_284.md` y es completo—,
+pero deja el `tasks.md` diciendo que doce cosas no se hicieron.
+
+### menor 2 · **R25 y R26 no están en el mapa de trazabilidad de `tasks.md`**
+La tabla `R → test` de `tasks.md` termina en R24. Los dos requisitos **nuevos y más
+importantes** de la ficha sólo aparecen en `progress/impl_284.md` §5, donde sí están bien
+mapeados a `pwa-servida-sin-sesion.guardia.test.ts`. Tienen test; falta la fila.
+
+### menor 3 · La rama del archivo del barrido se quedó sin caso
+Desactivar `if ((campo.files?.length ?? 0) > 0) return true;` **no pone roja ninguna guardia**: el
+caso «una foto ya elegida y aún sin subir cuenta» de la ronda 1 desapareció en la reescritura. El
+comportamiento del panel sigue cubierto por la declaración, así que no hay daño; pero es una rama
+sin prueba dentro de la función que decide si se recarga o no.
+
+### menor 4 · La guardia del `crossorigin` no ve la ortografía real
+`expect(enlace).not.toContain("crossorigin")` es **sensible a mayúsculas**, y en JSX se escribe
+`crossOrigin` (es lo que exigen los tipos de React). Lo comprobé: añadir
+`crossOrigin="use-credentials"` al `<link>` deja la guardia **verde**. El caso que existe para
+impedir es justo el que no puede ver.
+
+### menor 5 · El precio del barrido por contenido: en pantallas precargadas el aviso no sale nunca
+`hayCampoConContenido` devuelve `true` con **cualquier** campo no vacío que no sea un buscador. En
+un formulario **precargado** —configuración, edición— eso es siempre, así que ahí el aviso no
+aparecerá jamás. Es el lado correcto hacia el que equivocarse, y está escrito en el código; pero
+sumado al precio de D1 (quien no pulsa, no actualiza) y al nuevo «Ahora no», un usuario puede
+quedarse en una versión vieja bastante más tiempo del que nadie espera. Conviene tenerlo escrito
+antes de que alguien lo descubra depurando.
+
+---
+
+## R2.6 · La conclusión que NO me cuadra: «el service worker nunca llegó a instalarse»
+
+`requirements.md` (R25), `middleware.ts` y `impl_284.md` afirman ahora que, por el 307, «el
+service worker **tampoco se descargaba**» y «**nada** de lo que hace esta ficha llegaba al
+dispositivo». **La medida no sostiene esa conclusión, y creo que es falsa.**
+
+La medición —la mía y la suya— se hizo con `curl` **sin cookies**. Eso es exactamente cómo pide el
+navegador **el manifiesto**, y por eso la conclusión sobre el manifiesto es sólida: se descarga
+con *credentials mode* `omit` salvo que el `<link>` diga `use-credentials`, así que recibía el
+307 **siempre**, y **la PWA nunca se ha podido instalar**. Eso queda en pie y es el hallazgo
+grande de esta ficha.
+
+**Pero el service worker no se pide igual.** El fetch del script de un service worker se hace con
+*credentials mode* **`same-origin`**: el navegador **sí manda la cookie de sesión**. Y el registro
+(`app/layout.tsx`) corre en el `load` de **cualquier** página, incluida la primera después de
+iniciar sesión. Para un mensajero con sesión, `/sw.js` respondía **200** y el SW **se instalaba**.
+Su `install` precachea `/` y `/offline.html`, que con cookie también daban 200.
+
+Es decir, lo que había ahí fuera es asimétrico y hay que decirlo con precisión:
+
+| | manifiesto | service worker |
+| --- | --- | --- |
+| cómo lo pide el navegador | **sin** credenciales | **con** credenciales (same-origin) |
+| qué recibía | 307 → login | 200, para quien tenía sesión |
+| consecuencia | **nunca instalable** | **instalado y activo en la pestaña del navegador** |
+
+**Por qué importa esta noche, y no es una discusión de matices:**
+
+1. Si el SW viejo está activo, **`next-static-v1` existe** en esos dispositivos, y el barrido
+   único de R8 tiene trabajo de verdad: **M3 no es vacuo**. Si se despliega creyendo que no hay
+   nada que purgar, nadie mirará si las `v1` desaparecieron.
+2. El SW viejo es el que llama a `skipWaiting()` + `clients.claim()` **y cachea sin mirar el
+   estado**. O sea que el defecto que esta ficha arregla **estaba vivo**, y el despliegue de esta
+   noche es justo el disparador que el `design.md` describía. Durante la ventana del despliegue
+   manda todavía el SW **viejo**: si un chunk vuelve 404 en ese hueco, lo guarda en `v1`, y el SW
+   nuevo lo puede seguir sirviendo porque `caches.match` mira **todas** las cachés hasta que la
+   purga corra. **Esa es la razón operativa por la que el `?rescate=sw` tiene que estar a mano
+   esta noche**, no la semana que viene.
+3. La única medida que zanja esto es **T0.1 / M0** —DevTools → Application → Service Workers sobre
+   el despliegue vigente, ANTES de desplegar— y sigue **sin ejecutar**. Con la app aún sin
+   desplegar, es literalmente ahora o nunca: después ya no se puede saber qué había.
+
+En este repo ya hay una lección con nombre para esto: una imposibilidad razonada no es una
+medida. La conclusión «no había cachés creciendo» es **más fuerte que su evidencia** y está
+escrita en el spec como si fuera un hecho medido. **Pedir:** rebajarla a lo que la medida sí
+sostiene («la PWA nunca fue instalable; si el SW llegó o no al dispositivo depende de la sesión y
+**no se midió**»), y **hacer M0 antes del despliegue** si alguien puede abrir DevTools.
+
+---
+
+## R2.7 · Veredicto final de la ronda 2
+
+**OK — aprobado con reservas. Es desplegable esta noche.**
+
+Los cuatro bloqueantes están cerrados y los verifiqué ejecutando:
+
+| | estado | cómo lo comprobé |
+| --- | --- | --- |
+| **B1** heurística ciega | **CERRADO** | el panel real montado, con el recaudo tecleado, y 4 mutaciones que lo matan (incluida la que reintroduce el defecto exacto) |
+| **B2** manifiesto en 307 | **CERRADO** | build de producción real: 200 en los tres, 307 en todo lo demás, `/reportes/export.json` incluido |
+| **B3** spec desalineado | **CERRADO** | R3, R5, R7 y R15 corregidos en su sitio con fecha, y R25/R26 nuevos |
+| **B4** casillas sin marcar | **CERRADO en lo esencial** | T0.1/T0.2 quedan sin marcar **y dicen por qué**; faltan 12 sub-items (menor 1) |
+
+**Condiciones para el despliegue de esta noche, en este orden:**
+
+1. **M8 primero**, en cuanto termine el despliegue y **antes de tocar nada más**: los cuatro
+   `curl -sI` de `docs/release.md`. Si alguno de los tres devuelve 307, la PWA sigue sin existir
+   y el resto de la ficha es decoración.
+2. **`?rescate=sw` a mano**, en un papel, con el dominio escrito. Es la salida si un service
+   worker deja la app inservible, y esta noche es cuando más probable es (§R2.6, punto 2).
+3. **M0 antes de desplegar** si alguien puede abrir DevTools sobre el despliegue vigente. Es la
+   última oportunidad de saber qué había.
+4. **M1–M5 después**, con la expectativa correcta: **puede** haber `next-static-v1` que purgar.
+
+Y a la vuelta, sin prisa: los cinco `menor` de §R2.5 y la superficie de §R2.4.
