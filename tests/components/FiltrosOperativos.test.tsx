@@ -107,6 +107,7 @@ beforeEach(() => {
   catalogo.mockResolvedValue({
     status: "ok",
     catalogo: {
+      mensajeros: [],
       zonas: [
         { id: "z1", nombre: "Zona Central" },
         { id: "z2", nombre: "Zona Norte" },

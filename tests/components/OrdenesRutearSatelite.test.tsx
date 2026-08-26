@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/ordenes-guia";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
+import type { CatalogoFiltrosOrdenesDTO } from "@/lib/types/filtros-ordenes";
 
 /**
  * Hotfix 2026-08-05 — "Rutear a bodega satélite" desapareció de producción.
@@ -63,13 +64,18 @@ vi.mock("@/lib/auth/resolve-actor", () => ({
 vi.mock("@/lib/actions/filtros-ordenes", () => ({
   obtenerCatalogoFiltrosOrdenes: vi.fn(async () => ({
     status: "ok" as const,
+    // `satisfies` y no una anotacion suelta: este objeto viaja por un `vi.mock`, que no
+    // tipa su valor de retorno, asi que hasta hoy podia quedarse ATRAS del DTO sin que el
+    // typecheck dijera nada — y quedarse atras aqui rompe la pagina entera en tiempo de
+    // ejecucion, no el filtro que falta. Paso el 2026-08-25 al entrar `mensajeros`.
     catalogo: {
       zonas: [],
       tiendas: [],
+      mensajeros: [],
       provincias: [],
       cantones: [],
       distritos: [],
-    },
+    } satisfies CatalogoFiltrosOrdenesDTO,
   })),
 }));
 

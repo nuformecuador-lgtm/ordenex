@@ -37,6 +37,7 @@ const CATALOGO_ESTADOS = [
 ];
 
 const CATALOGO: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda Uno", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San José" }],
@@ -96,6 +97,7 @@ function buscador(): HTMLElement {
 const FILTROS_OFRECIDOS = [
   "Estado",
   "Zona",
+  "Mensajero",
   "Tienda",
   "Provincia",
   "Cantón",
@@ -165,7 +167,7 @@ describe("OrdenesListado — el buscador es el PRIMER control (R32)", () => {
   // buscador: es el UNICO control permanente de la barra. Nace solo —ninguno de los
   // ocho, el de estado incluido, compite con el de entrada—, los ocho se siguen
   // ofreciendo, y pedir uno lo suma a la barra sin desplazar ni sustituir al campo.
-  it("R32: es el UNICO control permanente; los ocho restantes se piden, el de estado incluido", async () => {
+  it("R32: es el UNICO control permanente; los demas se piden, el de estado incluido", async () => {
     const user = userEvent.setup();
     renderListado(<OrdenesListado catalogoFiltros={CATALOGO} />);
     await screen.findByRole("searchbox", { name: "Buscar" });
@@ -180,7 +182,7 @@ describe("OrdenesListado — el buscador es el PRIMER control (R32)", () => {
     expect(screen.queryByRole("group", { name: "Fecha de creación" })).toBeNull();
     expect(screen.queryByRole("checkbox", { name: "Reasignables" })).toBeNull();
 
-    // ...y ninguno se perdio por el camino: los ocho se OFRECEN, en su orden.
+    // ...y ninguno se perdio por el camino: todos se OFRECEN, en su orden.
     await user.click(screen.getByRole("button", { name: /^Filtros/ }));
     const selector = await screen.findByRole("listbox", { name: "Filtros" });
     expect(

@@ -73,6 +73,7 @@ export const ORDEN_FILTER_FIELDS = [
   "provincia_id",
   "canton_id",
   "distrito_id",
+  "mensajero_id",
   "created_preset",
   "created_desde",
   "created_hasta",
@@ -138,6 +139,11 @@ export const ordenFilterBase = z
     provincia_id: idList.optional(),
     canton_id: idList.optional(),
     distrito_id: idList.optional(),
+    // Pedido humano (2026-08-25): filtro por MENSAJERO ASIGNADO. Misma forma que el resto
+    // de catalogos (lista NO vacia de ids -> `IN (...)`), y por eso hereda R32 y R35 sin
+    // ninguna regla propia. La clave publica es `mensajero_id`; la columna
+    // (`mensajero_asignado_id`) solo la conoce el mapa del service.
+    mensajero_id: idList.optional(),
     // Feature 144/R38/R39: tiempo. Atajo (escalar de dominio cerrado) O rango.
     created_preset: z.enum(CREATED_PRESETS).optional(),
     created_desde: fechaCalendario.optional(),

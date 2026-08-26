@@ -71,6 +71,7 @@ const CATALOGO_ESTADOS = [
 ];
 
 const CATALOGO_FILTROS: CatalogoFiltrosOrdenesDTO = {
+  mensajeros: [],
   zonas: [{ id: "z1", nombre: "GAM" }],
   tiendas: [{ id: "t1", nombre: "Tienda Uno", esApiKey: false, activa: true }],
   provincias: [{ id: "p1", nombre: "San José" }],
