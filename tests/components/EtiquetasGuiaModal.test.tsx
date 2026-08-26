@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { EtiquetasGuiaModal } from "@/app/(app)/ordenes/_components/EtiquetasGuiaModal";
 import { generarEtiquetas } from "@/lib/actions/etiquetas-guia";
 import { descargarEtiquetasPdf } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
+import {
+  asegurarFuenteEnPantalla,
+  cargarFuenteEtiqueta,
+  ERROR_FUENTE_ETIQUETA,
+} from "@/app/(app)/ordenes/_components/etiquetas-fuente-carga";
 import { getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+import { formatMonto } from "@/lib/config/moneda";
+import type { FuenteEmbebida } from "@/lib/pdf/etiquetas-fuente-registro";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 import type { OrdenListItemDTO } from "@/lib/types/orden";
 
@@ -21,6 +28,22 @@ vi.mock("@/app/(app)/ordenes/_components/etiquetas-pdf", () => ({
   descargarEtiquetasPdf: vi.fn(),
 }));
 
+// Feature 282 (T11) — El borde de la fuente se dobla, pero SIN borrar el resto
+// del modulo: `ERROR_FUENTE_ETIQUETA` y `RESPALDO_FAMILIA_MONTO` se usan de
+// verdad (el mensaje que se afirma abajo es EL de produccion, no una copia
+// escrita aqui que podria divergir de el sin que nadie lo viera).
+vi.mock("@/app/(app)/ordenes/_components/etiquetas-fuente-carga", async (real) => {
+  const modulo =
+    await real<
+      typeof import("@/app/(app)/ordenes/_components/etiquetas-fuente-carga")
+    >();
+  return {
+    ...modulo,
+    cargarFuenteEtiqueta: vi.fn(),
+    asegurarFuenteEnPantalla: vi.fn(),
+  };
+});
+
 // Stubs de QR/barcode: evitan canvas real y el warning de ref (forwardRef).
 vi.mock("qrcode.react", () => ({
   QRCodeCanvas: () => <canvas data-testid="qr-stub" />,
@@ -33,6 +56,23 @@ vi.mock("react-barcode", () => ({
 
 const generarEtiquetasMock = vi.mocked(generarEtiquetas);
 const descargarEtiquetasPdfMock = vi.mocked(descargarEtiquetasPdf);
+const cargarFuenteEtiquetaMock = vi.mocked(cargarFuenteEtiqueta);
+const asegurarFuenteEnPantallaMock = vi.mocked(asegurarFuenteEnPantalla);
+
+/**
+ * Doble del artefacto de fuente. Deliberadamente NO es el real: aqui se prueba
+ * el CABLEADO del modal —que pide la fuente al abrir, que aplica la familia que
+ * le devuelven y que no descarga si algo falla—, no el contenido del subconjunto,
+ * que se verifica sobre los bytes en `EtiquetaGuiaPreview.test.tsx` y en los
+ * tests del PDF.
+ */
+const FUENTE_DOBLE: FuenteEmbebida = {
+  nombre: "FuenteDeEtiquetaDePrueba",
+  archivoVfs: "prueba.ttf",
+  estilo: "normal",
+  base64: "AAEAAA==",
+  cobertura: [[0x0020, 0x007e]],
+};
 
 function makeOrden(id: string): OrdenListItemDTO {
   return {
@@ -99,6 +139,12 @@ async function elegirTamano(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Feature 282: los dobles devuelven PROMESA, como el codigo real. Con un
+  // `undefined` pelado el `await` del modal seguiria «funcionando» y ningun test
+  // veria la diferencia entre esperar y no esperar.
+  descargarEtiquetasPdfMock.mockResolvedValue(undefined);
+  cargarFuenteEtiquetaMock.mockResolvedValue(FUENTE_DOBLE);
+  asegurarFuenteEnPantallaMock.mockImplementation(async (f) => f.nombre);
 });
 
 afterEach(() => {
@@ -371,5 +417,198 @@ describe("EtiquetasGuiaModal — R30: la etiqueta NO muestra los intentos", () =
 
     expect(screen.queryByText(/Intentos/)).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Intentos" })).toBeNull();
+  });
+});
+
+// Feature 282 (T9/T11) — LA FUENTE DE LA ETIQUETA EN EL MODAL.
+//
+// Dos cosas que antes de esta ficha no existian y que ningun otro test cubre:
+//
+//  · **R16/R28 — el fallo dejaba de ser mudo.** `handleDescargar` llamaba a
+//    `descargarEtiquetasPdf` SIN `await`. La promesa rechazada se perdia: el
+//    modal se comportaba como si todo hubiera ido bien y no se descargaba nada.
+//    Un test que solo mirase «se llamo al helper» seguiria verde con ese bug.
+//  · **R13/R31/R33 — la fuente se pide al ABRIR**, para que la vista previa
+//    pueda pintar el importe con la misma tipografia que el papel; y si no
+//    llega, la vista previa sigue viva pero la descarga falla a la cara.
+describe("EtiquetasGuiaModal — la fuente de la etiqueta (feature 282)", () => {
+  function conUnaEtiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}) {
+    const etiquetas = [
+      makeEtiqueta({ ordenId: "o1", numGuia: 11, ...overrides }),
+    ];
+    generarEtiquetasMock.mockResolvedValue({
+      status: "ok",
+      etiquetas,
+      omitidas: [],
+    });
+    return etiquetas;
+  }
+
+  /** Primera familia declarada en un `font-family`, sin comillas ni espacios. */
+  function primeraFamilia(el: HTMLElement): string {
+    return (el.style.fontFamily.split(",")[0] ?? "").replace(/["']/g, "").trim();
+  }
+
+  it("R13: AL ABRIR pide la fuente una sola vez y la registra en el navegador", async () => {
+    conUnaEtiqueta();
+    renderModal([makeOrden("o1")]);
+    await screen.findAllByTestId("etiqueta-guia");
+
+    await waitFor(() =>
+      expect(asegurarFuenteEnPantallaMock).toHaveBeenCalledTimes(1),
+    );
+    expect(cargarFuenteEtiquetaMock).toHaveBeenCalledTimes(1);
+    expect(asegurarFuenteEnPantallaMock).toHaveBeenCalledWith(FUENTE_DOBLE);
+    // Se pide al ABRIR, no al pulsar: el boton no se ha tocado todavia.
+    expect(descargarEtiquetasPdfMock).not.toHaveBeenCalled();
+  });
+
+  it("R31: la familia registrada acaba aplicada al importe de la vista previa", async () => {
+    conUnaEtiqueta({ montoCobrar: 18000 });
+    renderModal([makeOrden("o1")]);
+    const monto = await screen.findByTestId("etiqueta-monto");
+
+    await waitFor(() =>
+      expect(primeraFamilia(monto)).toBe(FUENTE_DOBLE.nombre),
+    );
+    // Control positivo: la familia va sobre el importe de verdad, no sobre un
+    // elemento vacio que casualmente lleve el estilo.
+    expect(monto).toHaveTextContent(formatMonto(18000));
+  });
+
+  it("R33: si la fuente no llega, la vista previa se pinta igual y no avisa de nada", async () => {
+    cargarFuenteEtiquetaMock.mockRejectedValue(new Error(ERROR_FUENTE_ETIQUETA));
+    conUnaEtiqueta({ montoCobrar: 18000 });
+    renderModal([makeOrden("o1")]);
+
+    const monto = await screen.findByTestId("etiqueta-monto");
+    await waitFor(() => expect(cargarFuenteEtiquetaMock).toHaveBeenCalled());
+
+    expect(monto.style.fontFamily).toBe("");
+    // Control positivo de esa ausencia: el importe SI se pinto, con su simbolo.
+    expect(monto).toHaveTextContent(formatMonto(18000));
+    expect(monto.textContent).toContain("₡");
+    // Abrir no es descargar: aqui todavia no se avisa de nada. El control
+    // positivo de esta segunda ausencia es el test de R16 de abajo, donde ese
+    // mismo texto SI aparece.
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    ).toBeInTheDocument();
+  });
+
+  it("R16: si la descarga falla, sale el mensaje, no se da por buena y el boton sigue ahi", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    conUnaEtiqueta();
+    descargarEtiquetasPdfMock.mockRejectedValue(new Error(ERROR_FUENTE_ETIQUETA));
+
+    render(
+      <EtiquetasGuiaModal
+        open
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    // Antes de pulsar no hay mensaje: lo que se afirma despues es un CAMBIO.
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    );
+
+    const aviso = await screen.findByText(ERROR_FUENTE_ETIQUETA);
+    expect(aviso.closest('[role="alert"]'), "el aviso tiene que anunciarse").not.toBeNull();
+    // No hubo exito, asi que no se llama a `onSuccess`: es la diferencia entre
+    // esperar la promesa y no esperarla.
+    expect(onSuccess).not.toHaveBeenCalled();
+    // El mensaje dice «Inténtalo de nuevo»: el boton y la vista previa siguen.
+    expect(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("etiqueta-guia")).toHaveLength(1);
+  });
+
+  it("R16 (control positivo): con la descarga OK no hay mensaje y SI se llama a onSuccess", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    conUnaEtiqueta();
+
+    render(
+      <EtiquetasGuiaModal
+        open
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    );
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
+  });
+
+  it("R28: un caracter fuera del subconjunto tampoco se descarga en silencio", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    conUnaEtiqueta();
+    // El generador lanza con SU mensaje tecnico (code point incluido). El modal
+    // muestra el suyo, que es el que un operador de bodega puede leer: lo que
+    // R28 exige es que falle de forma VISIBLE y que no salga ningun PDF.
+    descargarEtiquetasPdfMock.mockRejectedValue(
+      new Error(
+        "El caracter «₿» (U+20BF) del campo «Monto a cobrar» no esta en el subconjunto embebido de la fuente",
+      ),
+    );
+
+    render(
+      <EtiquetasGuiaModal
+        open
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+      />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    );
+
+    expect(await screen.findByText(ERROR_FUENTE_ETIQUETA)).toBeInTheDocument();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("R16: el aviso de una descarga fallida no sobrevive a reabrir el modal", async () => {
+    const user = userEvent.setup();
+    conUnaEtiqueta();
+    descargarEtiquetasPdfMock.mockRejectedValue(new Error(ERROR_FUENTE_ETIQUETA));
+
+    const { rerender } = render(
+      <EtiquetasGuiaModal open ordenes={[makeOrden("o1")]} onOpenChange={vi.fn()} />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+    await user.click(
+      screen.getByRole("button", { name: "Descargar etiquetas" }),
+    );
+    expect(await screen.findByText(ERROR_FUENTE_ETIQUETA)).toBeInTheDocument();
+
+    rerender(
+      <EtiquetasGuiaModal
+        open={false}
+        ordenes={[makeOrden("o1")]}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    rerender(
+      <EtiquetasGuiaModal open ordenes={[makeOrden("o1")]} onOpenChange={vi.fn()} />,
+    );
+    await screen.findAllByTestId("etiqueta-guia");
+
+    expect(screen.queryByText(ERROR_FUENTE_ETIQUETA)).toBeNull();
   });
 });

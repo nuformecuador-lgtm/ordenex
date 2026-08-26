@@ -28,10 +28,31 @@ import {
   crearLayout,
   LIENZO_BASE_MM,
   MAQUETA_BASE,
-} from "@/app/(app)/ordenes/_components/etiquetas-layout";
-import { HOJAS_ETIQUETA, getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+} from "@/lib/pdf/etiquetas-layout";
+import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
+import {
+  HOJAS_ETIQUETA,
+  getHojaEtiqueta,
+  type HojaEtiqueta,
+} from "@/lib/config/etiquetas-hoja";
 import { formatMonto } from "@/lib/config/moneda";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
+
+import { MARCA_CORTE } from "@/lib/pdf/etiquetas-ajuste";
+
+import {
+  CASO_ALFABETO_REAL,
+  CASO_EVIDENCIA,
+  CORPUS_282,
+  NO_ASCII_MEDIDOS,
+} from "../../fixtures/etiquetas-282";
+import {
+  cidsDe,
+  fuentesDePagina,
+  textoLegible,
+  textosDePagina,
+} from "../pdf/pdf-inspector";
+import { contorno, tieneTinta } from "../pdf/ttf-lector";
 
 const MM_A_PT = 72 / 25.4;
 
@@ -55,6 +76,20 @@ function etiqueta(overrides: Partial<EtiquetaGuiaDTO> = {}): EtiquetaGuiaDTO {
     barcodeValue: String(numGuia),
     ...overrides,
   };
+}
+
+/**
+ * Atajo de los tests: `buildEtiquetasPdf` exige la fuente embebida como cuarto
+ * parametro (feature 282) y aqui siempre es la REAL, la misma que ships. Nada de
+ * dobles: el requisito caro de esta ficha es que el glifo salga de verdad en el
+ * papel, y un doble de fuente no demuestra nada sobre eso.
+ */
+function construir(
+  etiquetas: EtiquetaGuiaDTO[],
+  qrCanvases: Map<string, HTMLCanvasElement>,
+  hoja: HojaEtiqueta,
+) {
+  return buildEtiquetasPdf(etiquetas, qrCanvases, hoja, fuenteEtiqueta);
 }
 
 function bytesDe(doc: ReturnType<typeof buildEtiquetasPdf>): Buffer {
@@ -96,12 +131,24 @@ function textoDelPdf(buf: Buffer): string {
   return out;
 }
 
-/** jsPDF escribe en WinAnsi salvo que haya caracteres fuera del juego: UTF-16BE. */
-function incluyeTexto(pdf: string, valor: string): boolean {
-  if (pdf.includes(valor)) return true;
-  const NUL = String.fromCharCode(0);
-  const utf16be = [...valor].map((c) => NUL + c).join("");
-  return pdf.includes(utf16be);
+/**
+ * Todas las cadenas dibujadas en la pagina, DECODIFICADAS por el camino que
+ * seguiria un lector de PDF: las de la fuente embebida, con el `/ToUnicode` que
+ * el propio documento declara.
+ *
+ * Feature 282 - sustituye (endureciendola) a la vieja `incluyeTexto`, que
+ * buscaba el tramo ASCII del importe entre los bytes del archivo. Aquella
+ * asercion dejaba de encontrarlo en cuanto el monto pasa a Identity-H (el texto
+ * viaja en hexadecimal) y, sobre todo, NUNCA vio el simbolo de moneda: era el
+ * agujero por el que este bug llego hasta el usuario. Esta afirma la cadena
+ * entera, simbolo incluido.
+ */
+function textosDecodificados(bytes: Buffer, indice = 0): string[] {
+  const u8 = new Uint8Array(bytes);
+  const fuentes = fuentesDePagina(u8, indice);
+  return textosDePagina(u8, indice).map((t) =>
+    textoLegible(t, fuentes.get(t.fuenteRes)),
+  );
 }
 
 /**
@@ -125,7 +172,7 @@ beforeEach(() => {
 describe("buildEtiquetasPdf — tamaño de pagina (R13)", () => {
   it("declara TODAS las paginas con el tamaño exacto del catalogo, en puntos", () => {
     for (const hoja of HOJAS_ETIQUETA) {
-      const doc = buildEtiquetasPdf(
+      const doc = construir(
         [etiqueta({ ordenId: "a", numGuia: 1 }), etiqueta({ ordenId: "b", numGuia: 2 })],
         new Map(),
         hoja,
@@ -140,14 +187,14 @@ describe("buildEtiquetasPdf — tamaño de pagina (R13)", () => {
   });
 
   it("carta sale en 612 x 792 pt clavados (215.9 x 279.4 mm, no el redondeo)", () => {
-    const doc = buildEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("carta"));
+    const doc = construir([etiqueta()], new Map(), getHojaEtiqueta("carta"));
     const [[ancho, alto]] = mediaBoxes(bytesDe(doc).toString("latin1"));
     expect(ancho).toBeCloseTo(612, 1);
     expect(alto).toBeCloseTo(792, 1);
   });
 
   it("el default 100x100 sigue siendo la pagina cuadrada de 283.46 pt (sin regresion)", () => {
-    const doc = buildEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("100x100"));
+    const doc = construir([etiqueta()], new Map(), getHojaEtiqueta("100x100"));
     expect(bytesDe(doc).toString("latin1")).toMatch(
       /\/MediaBox\s*\[0 0 283\.\d+ 283\.\d+\]/,
     );
@@ -161,7 +208,7 @@ describe("buildEtiquetasPdf — una etiqueta por pagina (R12)", () => {
         const etiquetas = Array.from({ length: n }, (_, i) =>
           etiqueta({ ordenId: `o${i}`, numGuia: 1000 + i }),
         );
-        const doc = buildEtiquetasPdf(etiquetas, new Map(), hoja);
+        const doc = construir(etiquetas, new Map(), hoja);
         expect(contarPaginas(bytesDe(doc).toString("latin1"))).toBe(n);
       }
     }
@@ -171,7 +218,7 @@ describe("buildEtiquetasPdf — una etiqueta por pagina (R12)", () => {
     const etiquetas = Array.from({ length: 4 }, (_, i) =>
       etiqueta({ ordenId: `o${i}`, numGuia: 2000 + i }),
     );
-    const doc = buildEtiquetasPdf(etiquetas, new Map(), getHojaEtiqueta("a4"));
+    const doc = construir(etiquetas, new Map(), getHojaEtiqueta("a4"));
     expect(contarPaginas(bytesDe(doc).toString("latin1"))).toBe(4);
     expect(jsBarcodeMock).toHaveBeenCalledTimes(4);
     expect(jsBarcodeMock.mock.calls.map((c) => c[1])).toEqual([
@@ -187,7 +234,7 @@ describe("buildEtiquetasPdf — densidad del raster del barcode (R18)", () => {
   it("las opciones de jsbarcode escalan con el factor y nunca pierden densidad", () => {
     for (const hoja of HOJAS_ETIQUETA) {
       jsBarcodeMock.mockClear();
-      buildEtiquetasPdf([etiqueta()], new Map(), hoja);
+      construir([etiqueta()], new Map(), hoja);
       const { s } = crearLayout(hoja);
       const opts = jsBarcodeMock.mock.calls[0][2];
       expect(opts.width).toBeGreaterThanOrEqual(2 * s);
@@ -197,7 +244,7 @@ describe("buildEtiquetasPdf — densidad del raster del barcode (R18)", () => {
   });
 
   it("con 100x100 conserva las opciones historicas (2 / 60 / 18)", () => {
-    buildEtiquetasPdf([etiqueta()], new Map(), getHojaEtiqueta("100x100"));
+    construir([etiqueta()], new Map(), getHojaEtiqueta("100x100"));
     expect(jsBarcodeMock.mock.calls[0][2]).toMatchObject({
       width: 2,
       height: 60,
@@ -269,7 +316,7 @@ describe("buildEtiquetasPdf — el texto no invade la banda del QR", () => {
     });
     for (const hoja of HOJAS_ETIQUETA) {
       const layout = crearLayout(hoja);
-      const doc = buildEtiquetasPdf([larga], new Map(), hoja);
+      const doc = construir([larga], new Map(), hoja);
       const ys = textosConY(bytesDe(doc), hoja.altoMm);
       expect(ys.length).toBeGreaterThanOrEqual(16); // sanidad del parseo
       // El limite en mm de PAGINA: el borde superior del QR ya escalado y
@@ -279,7 +326,7 @@ describe("buildEtiquetasPdf — el texto no invade la banda del QR", () => {
   });
 
   it("los siete rotulos siguen dibujados: se recorta la cola, no el campo", () => {
-    const doc = buildEtiquetasPdf(
+    const doc = construir(
       [etiqueta({ producto: "P".repeat(400), direccion: "D".repeat(400) })],
       new Map(),
       getHojaEtiqueta("100x100"),
@@ -300,14 +347,8 @@ describe("buildEtiquetasPdf — el texto no invade la banda del QR", () => {
 
 describe("buildEtiquetasPdf — contenido de la etiqueta (R20)", () => {
   it("los nueve datos quedan escritos en cualquier tamaño del catalogo", () => {
-    const tramosAscii = formatMonto(1234.5)
-      .split(/[^\x21-\x7E]+/)
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length);
-    expect(tramosAscii[0].length).toBeGreaterThan(1);
-
     for (const hoja of HOJAS_ETIQUETA) {
-      const doc = buildEtiquetasPdf([etiqueta({ numGuia: 1042 })], new Map(), hoja);
+      const doc = construir([etiqueta({ numGuia: 1042 })], new Map(), hoja);
       const s = textoDelPdf(bytesDe(doc));
       expect(s).toContain("1042"); // numero de guia
       expect(s).toContain("REM-1"); // numero de remision
@@ -321,7 +362,10 @@ describe("buildEtiquetasPdf — contenido de la etiqueta (R20)", () => {
       expect(s).toContain("DistritoTest");
       expect(s).toContain("ProductoTest");
       expect(s).toContain("TiendaTest");
-      expect(incluyeTexto(s, tramosAscii[0])).toBe(true); // monto a cobrar
+      // Monto a cobrar: la cadena COMPLETA que produce el formateador,
+      // simbolo incluido, decodificada por el mapa a Unicode que declara el
+      // propio documento (R9). La asercion vieja miraba solo el tramo ASCII.
+      expect(textosDecodificados(bytesDe(doc))).toContain(formatMonto(1234.5));
     }
   });
 
@@ -335,10 +379,237 @@ describe("buildEtiquetasPdf — contenido de la etiqueta (R20)", () => {
     });
     const direccion = larga.direccion as string;
     const lineasPorHoja = HOJAS_ETIQUETA.map((hoja) => {
-      const doc = buildEtiquetasPdf([larga], new Map(), hoja);
+      const doc = construir([larga], new Map(), hoja);
       return lineasDe(textoDelPdf(bytesDe(doc)), direccion);
     });
     expect(lineasPorHoja[0]).toBeGreaterThan(1);
     expect(new Set(lineasPorHoja).size).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 282 — El defecto evidenciado, medido SOBRE EL PDF.
+// ---------------------------------------------------------------------------
+
+const PT_A_MM = 25.4 / 72;
+
+/** Linea base de un texto en mm desde el borde SUPERIOR de la pagina. */
+function yEnMm(yPt: number, altoMm: number): number {
+  return altoMm - yPt * PT_A_MM;
+}
+
+describe("R1/R3 — el numero de guia deja de pisar la primera fila (medido en el PDF)", () => {
+  it("en las CUATRO hojas, la separacion entre lineas base es >= 1 em del cuerpo de la guia", () => {
+    for (const hoja of HOJAS_ETIQUETA) {
+      const layout = crearLayout(hoja);
+      const doc = construir([etiqueta({ numGuia: 19887906 })], new Map(), hoja);
+      const u8 = new Uint8Array(bytesDe(doc));
+      const fuentes = fuentesDePagina(u8);
+      const textos = textosDePagina(u8).map((t) => ({
+        t,
+        texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+      }));
+
+      const guia = textos.find((x) => x.texto === "19887906");
+      const destinatario = textos.find((x) => x.texto === "DESTINATARIO");
+      expect(guia, `no se encontro el numero de guia en ${hoja.id}`).toBeDefined();
+      expect(destinatario, `no se encontro el rotulo DESTINATARIO en ${hoja.id}`).toBeDefined();
+
+      const yGuia = yEnMm(guia!.t.y, hoja.altoMm);
+      const yPrimeraFila = yEnMm(destinatario!.t.y, hoja.altoMm);
+      const separacion = yPrimeraFila - yGuia;
+
+      // R1: al menos el cuerpo del numero de guia expresado en mm, ESCALADO por
+      // el factor de esa hoja (R3). Antes eran 2 mm para un cuerpo de 7,76.
+      expect(
+        separacion,
+        `${hoja.id}: ${separacion.toFixed(3)} mm entre lineas base para un cuerpo de ${layout.fontGuia} pt`,
+      ).toBeGreaterThanOrEqual(layout.fontGuia * PT_A_MM - 1e-6);
+      // Y el cuerpo de la guia no se ha encogido para lograrlo (R27).
+      expect(guia!.t.tamano).toBeCloseTo(layout.fontGuia, 6);
+    }
+  });
+});
+
+describe("R4 — los siete campos, sus rotulos y su orden, intactos", () => {
+  it("aparecen los siete y en el mismo orden de arriba abajo", () => {
+    const hoja = getHojaEtiqueta("100x100");
+    const doc = construir([etiqueta()], new Map(), hoja);
+    const u8 = new Uint8Array(bytesDe(doc));
+    const fuentes = fuentesDePagina(u8);
+    const esperados = [
+      "DESTINATARIO",
+      "TELÉFONO",
+      "DIRECCIÓN",
+      "UBICACIÓN",
+      "PRODUCTO",
+      "MONTO A COBRAR",
+      "TIENDA",
+    ];
+    const rotulos = textosDePagina(u8)
+      .map((t) => ({ y: t.y, texto: textoLegible(t, fuentes.get(t.fuenteRes)) }))
+      .filter((x) => esperados.includes(x.texto))
+      // La `y` del PDF crece hacia ARRIBA: de mayor a menor es de arriba abajo.
+      .sort((a, b) => b.y - a.y)
+      .map((x) => x.texto);
+    expect(rotulos).toEqual(esperados);
+  });
+});
+
+describe("R6/R7/R26/R34 — el corpus de referencia se imprime COMPLETO, sin recorte", () => {
+  it("ningun caso del corpus sale con marca de recorte, en las cuatro hojas", () => {
+    for (const caso of CORPUS_282) {
+      for (const hoja of HOJAS_ETIQUETA) {
+        const doc = construir([caso.dto], new Map(), hoja);
+        const textos = textosDecodificados(bytesDe(doc));
+        const recortados = textos.filter((t) => t.includes(MARCA_CORTE));
+        expect(
+          recortados,
+          `caso «${caso.id}» en ${hoja.id}: se recorto ${JSON.stringify(recortados)}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it("R7 — el caso de la evidencia imprime sus nueve datos enteros", () => {
+    const dto = CASO_EVIDENCIA.dto;
+    const doc = construir([dto], new Map(), getHojaEtiqueta("100x100"));
+    const textos = textosDecodificados(bytesDe(doc));
+    const texto = textos.join("");
+    expect(texto).toContain(String(dto.numGuia));
+    expect(texto).toContain(dto.numRemision);
+    expect(texto).toContain(dto.destinatario);
+    expect(texto).toContain(dto.telefonoDest);
+    expect(texto).toContain(dto.producto);
+    expect(texto).toContain(dto.tiendaNombre);
+    for (const nivel of ["GAM", "San José", "Mora", "Colón"]) {
+      expect(texto).toContain(nivel);
+    }
+    // El importe entero, simbolo incluido: es EL dato de la evidencia.
+    expect(textos).toContain("₡18.000");
+  });
+
+  it("R34 — los seis no-ASCII medidos en produccion salen impresos (leidos del PDF)", () => {
+    const doc = construir(
+      [CASO_ALFABETO_REAL.dto],
+      new Map(),
+      getHojaEtiqueta("100x100"),
+    );
+    const texto = textosDecodificados(bytesDe(doc)).join("");
+    for (const caracter of NO_ASCII_MEDIDOS) {
+      expect(texto, `falta «${caracter}» en la etiqueta impresa`).toContain(caracter);
+    }
+  });
+});
+
+describe("R8/R9/R10/R15 — el simbolo sale de verdad en el papel", () => {
+  const hoja = getHojaEtiqueta("100x100");
+  const dto = CASO_EVIDENCIA.dto; // montoCobrar = 18000 => "₡18.000"
+
+  function pdfDeLaEvidencia(paginas = 1): Uint8Array {
+    const etiquetas = Array.from({ length: paginas }, (_, i) => ({
+      ...dto,
+      ordenId: `ord-${i}`,
+      numGuia: dto.numGuia + i,
+      barcodeValue: String(dto.numGuia + i),
+    }));
+    return new Uint8Array(bytesDe(construir(etiquetas, new Map(), hoja)));
+  }
+
+  it("R8 — el recurso de fuente del monto es /Type0 con /Identity-H y trae /FontFile2", () => {
+    const u8 = pdfDeLaEvidencia();
+    const fuentes = fuentesDePagina(u8);
+    const monto = textosDePagina(u8).find(
+      (t) => textoLegible(t, fuentes.get(t.fuenteRes)) === formatMonto(18000),
+    );
+    expect(monto, "no se encontro la fila del monto en el content stream").toBeDefined();
+
+    const recurso = fuentes.get(monto!.fuenteRes);
+    expect(recurso).toBeDefined();
+    expect(recurso!.subtype).toBe("Type0");
+    expect(recurso!.encoding).toBe("Identity-H");
+    expect(recurso!.baseFont).toBe(fuenteEtiqueta.nombre);
+    expect(recurso!.fontFile2, "la fuente no viaja embebida en el documento").toBeTruthy();
+    // Y no es una de las 14 estandar: aquellas son Type1 con WinAnsiEncoding.
+    expect(recurso!.subtype).not.toBe("Type1");
+  });
+
+  it("R9 — el hex del monto, decodificado por el /ToUnicode DEL PROPIO PDF, es «₡18.000»", () => {
+    const u8 = pdfDeLaEvidencia();
+    const fuentes = fuentesDePagina(u8);
+    const monto = textosDePagina(u8).find((t) => {
+      const recurso = fuentes.get(t.fuenteRes);
+      return recurso?.subtype === "Type0" && textoLegible(t, recurso).includes("18.000");
+    });
+    expect(monto).toBeDefined();
+    expect(monto!.hex, "con Identity-H el texto va en hexadecimal").toBe(true);
+
+    const recurso = fuentes.get(monto!.fuenteRes)!;
+    expect(textoLegible(monto!, recurso)).toBe(formatMonto(18000));
+    expect(textoLegible(monto!, recurso)).toBe("₡18.000");
+    // El mapa del documento declara el code point del colon, no otra cosa.
+    expect([...recurso.toUnicode!.values()]).toContain("₡");
+  });
+
+  it("R10 — el CID del simbolo tiene CONTORNO NO VACIO dentro del /FontFile2 embebido", () => {
+    const u8 = pdfDeLaEvidencia();
+    const fuentes = fuentesDePagina(u8);
+    const monto = textosDePagina(u8).find(
+      (t) => textoLegible(t, fuentes.get(t.fuenteRes)) === formatMonto(18000),
+    )!;
+    const recurso = fuentes.get(monto.fuenteRes)!;
+
+    // /CIDToGIDMap /Identity => el CID ES el indice de glifo del subconjunto.
+    expect(recurso.cidToGidMap).toBe("Identity");
+    const cids = cidsDe(monto);
+    const texto = textoLegible(monto, recurso);
+    const posicion = [...texto].indexOf("₡");
+    expect(posicion).toBeGreaterThanOrEqual(0);
+    const cidSimbolo = cids[posicion];
+
+    const programa = recurso.fontFile2!;
+    expect(
+      contorno(programa, cidSimbolo),
+      "el glifo del simbolo esta VACIO en el programa embebido: imprimiria papel en blanco",
+    ).toBeGreaterThan(0);
+    expect(tieneTinta(programa, cidSimbolo)).toBe(true);
+    // Y todos los glifos del importe dejan tinta: este importe no lleva espacios.
+    for (const cid of cids) {
+      expect(tieneTinta(programa, cid), `el CID ${cid} del importe no deja tinta`).toBe(true);
+    }
+  });
+
+  it("R15 — el /FontFile2 no pasa de 12 KB y es CONSTANTE al crecer las paginas", () => {
+    const bytesDeLaFuente = (u8: Uint8Array): number => {
+      const embebida = [...fuentesDePagina(u8).values()].find((f) => f.fontFile2);
+      expect(embebida, "el documento no embebe ningun programa de fuente").toBeDefined();
+      return embebida!.fontFile2!.byteLength;
+    };
+    const conUna = bytesDeLaFuente(pdfDeLaEvidencia(1));
+    const conVeinte = bytesDeLaFuente(pdfDeLaEvidencia(20));
+    expect(conUna, `el /FontFile2 mide ${conUna} B`).toBeLessThanOrEqual(12 * 1024);
+    // El subconjunto es por DOCUMENTO, no por pagina: 20 etiquetas no lo mueven.
+    expect(conVeinte).toBe(conUna);
+  });
+});
+
+describe("R12 — el resto del texto sigue con la MISMA fuente que antes", () => {
+  it("solo el valor del monto usa la fuente embebida; todo lo demas es Type1 estandar", () => {
+    const doc = construir([CASO_EVIDENCIA.dto], new Map(), getHojaEtiqueta("100x100"));
+    const u8 = new Uint8Array(bytesDe(doc));
+    const fuentes = fuentesDePagina(u8);
+    const conType0 = textosDePagina(u8)
+      .filter((t) => fuentes.get(t.fuenteRes)?.subtype === "Type0")
+      .map((t) => textoLegible(t, fuentes.get(t.fuenteRes)));
+    expect(conType0).toEqual([formatMonto(18000)]);
+
+    const conType1 = textosDePagina(u8).filter(
+      (t) => fuentes.get(t.fuenteRes)?.subtype === "Type1",
+    );
+    // 4 textos de cabecera + 7 rotulos + las lineas de los otros seis valores.
+    expect(conType1.length).toBeGreaterThanOrEqual(15);
+    for (const t of conType1) {
+      expect(fuentes.get(t.fuenteRes)!.baseFont).toMatch(/^Helvetica/);
+    }
   });
 });

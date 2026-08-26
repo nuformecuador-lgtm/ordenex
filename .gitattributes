@@ -22,3 +22,7 @@
 *.xlsx binary
 *.png  binary
 *.ico  binary
+# Feature 282: el subconjunto de fuente que se embebe en el PDF de etiquetas.
+# Sin esto depende de la autodeteccion por bytes NUL, y un solo byte convertido
+# deja el TTF ilegible para jsPDF (y el sha256 del artefacto en rojo).
+*.ttf  binary

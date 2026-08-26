@@ -8,6 +8,8 @@ import { formatMonto } from "@/lib/config/moneda";
 import { buildPaqueteUrl } from "@/lib/utils/paquete-url";
 import type { EtiquetaGuiaDTO } from "@/lib/types/etiqueta-guia";
 
+import { RESPALDO_FAMILIA_MONTO } from "./etiquetas-fuente-carga";
+
 export interface EtiquetaGuiaProps {
   /** Payload resuelto por el backend (feature 32/R1). */
   etiqueta: EtiquetaGuiaDTO;
@@ -17,6 +19,22 @@ export interface EtiquetaGuiaProps {
    * `canvas.toDataURL`); en la vista previa no es necesario.
    */
   qrCanvasRef?: Ref<HTMLCanvasElement>;
+  /**
+   * Feature 282 (T27, R31/R32) — Familia con la que quedo registrada en el
+   * navegador la fuente EMBEBIDA EN EL PDF, tal como la devuelve
+   * `asegurarFuenteEnPantalla`. Se aplica SOLO al valor del monto, que es
+   * exactamente donde el PDF la usa: la paridad es entre lo que se compara.
+   *
+   * Llega por prop y no se importa aqui a proposito. El artefacto son ~22 KB de
+   * base64 tras un `import()` diferido (R13) y este componente no debe poder
+   * arrastrarlo al bundle inicial ni por descuido; ademas, asi el identificador
+   * que se pinta es el REALMENTE registrado, no una segunda declaracion del
+   * nombre que podria derivar del artefacto sin que nadie lo notara.
+   *
+   * `null`/ausente = la fuente no llego: el importe se pinta con la del sistema
+   * y la vista previa no se bloquea por ello (R33).
+   */
+  familiaMonto?: string | null;
 }
 
 /** Marcador cuando la geografia no tiene distrito (R4: `distritoNombre` null). */
@@ -45,8 +63,18 @@ function geografiaLegible(etiqueta: EtiquetaGuiaDTO): string {
  * la config de moneda (R5, sin hardcodear moneda); null -> "-". El contenedor se
  * marca a 100x100 mm para la vista previa, pero el PDF (jspdf) es la fuente de
  * verdad del tamano exacto (decision F1.4 (c)).
+ *
+ * Feature 282 (T27, R31) — El valor del monto se pinta con `familiaMonto`, la
+ * familia registrada desde los MISMOS bytes que jsPDF embebe en el PDF. Es el
+ * unico campo que cambia de tipografia, porque es el unico que el PDF dibuja con
+ * la fuente embebida: la paridad se afirma justo donde se compara. Sin esa
+ * familia, el importe cae a la del sistema y la etiqueta se sigue viendo (R33).
  */
-export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
+export function EtiquetaGuia({
+  etiqueta,
+  qrCanvasRef,
+  familiaMonto,
+}: EtiquetaGuiaProps) {
   const {
     numGuia,
     numRemision,
@@ -105,7 +133,16 @@ export function EtiquetaGuia({ etiqueta, qrCanvasRef }: EtiquetaGuiaProps) {
         <dd>{producto}</dd>
 
         <dt className="font-semibold">Monto a cobrar</dt>
-        <dd>{formatMonto(montoCobrar)}</dd>
+        <dd
+          data-testid="etiqueta-monto"
+          style={
+            familiaMonto
+              ? { fontFamily: `"${familiaMonto}", ${RESPALDO_FAMILIA_MONTO}` }
+              : undefined
+          }
+        >
+          {formatMonto(montoCobrar)}
+        </dd>
 
         <dt className="font-semibold">Tienda</dt>
         <dd>{tiendaNombre}</dd>
