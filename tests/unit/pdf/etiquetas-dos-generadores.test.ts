@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Feature 282 (T19, R22) — ANTI-DIVERGENCIA, ASERTADA.
+//
+// Esta es la primera de las tres capas que impiden que los dos generadores
+// vuelvan a separarse, y la mas fuerte: para el MISMO DTO y la hoja de
+// 100 x 100 mm se extraen los `x y Td` y el texto de los DOS documentos y se
+// exige que coincidan. Si alguien mueve una linea base en un generador y no en
+// el otro, esto sale rojo aunque los tests propios de cada uno sigan verdes.
+//
+// El hecho que lo motiva esta medido, no supuesto: la cabecera del generador del
+// servidor declaraba ser «espejo EXACTO» del de cliente y ya no lo era —la
+// feature 150 escalo el de cliente y el otro conservo `8`, `22` y `10` escritos
+// a mano—. Un espejo mantenido a mano diverge; este test no.
+
+const PNG_1X1_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAklEQVR4AewaftIAAAFbSURBVMXBUYrbQBQAwW4x979yJwP7QAivIzsfqhKImyo2lYp3VO44eNjiR8U7KqNCZatQ2SrOKt5ROXjY4kLlrOIulYorlbOKsfiCSsWmMio+dfCwxZdURsWmUvGJxUXFp1S2ilcqfnPwsMUPlU9UbCoVm0rFUPmXVfENla1C5arijoOHLZWt4kqlYlM5q7iqUHmnYqgIxC8q7lAZFUNlq1DZKlTGwcME4q+Kd1ReqVDZKobKbyqGQFxUvKKyVahsFWcqo2JTqdhUKsbBwwTipEJlVGwqZxVXKmcVVyqjYlVcVVxVDJX/UTEOHrZU7qq4q+KVCpWtYvGj4h2VUaGyVaiMiqGyVahsFWcHD1tcqJxVXKlUbCqjYqgMlaEyVA6+UDEqhsqoGBWj4uzgYYsvqWwVo2KoDJWhUjEWFxWfUKkYKqNiU6nYVM4OHrb4oXKXSsWmMlReqXhF5Q9xIO89ads5LwAAAABJRU5ErkJggg==";
+const PNG_1X1_DATA_URL = `data:image/png;base64,${PNG_1X1_BASE64}`;
+
+vi.mock("jsbarcode", () => ({ default: () => undefined }));
+vi.mock("qrcode", () => ({
+  default: { toDataURL: async () => PNG_1X1_DATA_URL },
+}));
+vi.mock("bwip-js/node", () => ({
+  default: { toBuffer: async () => Buffer.from(PNG_1X1_BASE64, "base64") },
+}));
+
+import { buildEtiquetasPdf } from "@/app/(app)/ordenes/_components/etiquetas-pdf";
+import { buildEtiquetasLotePdf } from "@/lib/pdf/etiquetas-pdf-lote";
+import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
+import { getHojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+
+import { CORPUS_282 } from "../../fixtures/etiquetas-282";
+import { fuentesDePagina, textoLegible, textosDePagina } from "./pdf-inspector";
+
+interface Linea {
+  x: string;
+  y: string;
+  tamano: number;
+  texto: string;
+}
+
+/**
+ * Las lineas dibujadas de una pagina: posicion, cuerpo y TEXTO LEGIBLE.
+ *
+ * El texto se decodifica en vez de compararse en crudo a proposito: los dos
+ * documentos codifican distinto (el del servidor va con `compress: true` y el
+ * monto viaja en hexadecimal Identity-H en los dos), y lo que R22 exige es que
+ * el LECTOR vea lo mismo, no que los bytes sean iguales.
+ *
+ * Las coordenadas se comparan como cadena redondeada a 4 decimales: mas
+ * precision seria comparar ruido de coma flotante, y menos dejaria pasar un
+ * desplazamiento visible.
+ */
+function lineasDe(bytes: Uint8Array, indice = 0): Linea[] {
+  const fuentes = fuentesDePagina(bytes, indice);
+  return textosDePagina(bytes, indice).map((t) => ({
+    x: t.x.toFixed(4),
+    y: t.y.toFixed(4),
+    tamano: t.tamano,
+    texto: textoLegible(t, fuentes.get(t.fuenteRes)),
+  }));
+}
+
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+    PNG_1X1_DATA_URL,
+  );
+});
+
+describe("R22 — los dos generadores producen la MISMA etiqueta en 100 x 100", () => {
+  for (const caso of CORPUS_282) {
+    it(`caso «${caso.id}»: mismas lineas base y mismo texto`, async () => {
+      const cliente = new Uint8Array(
+        buildEtiquetasPdf(
+          [caso.dto],
+          new Map(),
+          getHojaEtiqueta("100x100"),
+          fuenteEtiqueta,
+        ).output("arraybuffer"),
+      );
+      const servidor = await buildEtiquetasLotePdf([caso.dto]);
+
+      const delCliente = lineasDe(cliente);
+      const delServidor = lineasDe(servidor);
+
+      // Sanidad: si el parseo devolviese poco, la igualdad seria trivial.
+      expect(delCliente.length).toBeGreaterThanOrEqual(16);
+      expect(delServidor).toEqual(delCliente);
+    });
+  }
+
+  it("y la fuente embebida es LA MISMA en los dos (mismo /BaseFont)", async () => {
+    const dto = CORPUS_282[0].dto;
+    const cliente = new Uint8Array(
+      buildEtiquetasPdf(
+        [dto],
+        new Map(),
+        getHojaEtiqueta("100x100"),
+        fuenteEtiqueta,
+      ).output("arraybuffer"),
+    );
+    const servidor = await buildEtiquetasLotePdf([dto]);
+
+    const embebida = (bytes: Uint8Array) =>
+      [...fuentesDePagina(bytes).values()].find((f) => f.subtype === "Type0");
+
+    const a = embebida(cliente);
+    const b = embebida(servidor);
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    expect(a!.baseFont).toBe(b!.baseFont);
+    expect(a!.baseFont).toBe(fuenteEtiqueta.nombre);
+    expect(a!.encoding).toBe(b!.encoding);
+    // Un solo artefacto, no dos: el programa embebido pesa lo mismo.
+    expect(a!.fontFile2!.byteLength).toBe(b!.fontFile2!.byteLength);
+  });
+});

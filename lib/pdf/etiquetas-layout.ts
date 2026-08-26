@@ -1,43 +1,22 @@
-import type { HojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+import { getHojaEtiqueta, type HojaEtiqueta } from "@/lib/config/etiquetas-hoja";
+
+import { LIENZO_BASE_MM, MAQUETA_BASE } from "./etiquetas-maqueta";
 
 // Feature 150 (T4) — Aritmetica del escalado de la etiqueta de guia.
 //
-// La maqueta de `etiquetas-pdf.ts` (feature 32) esta expresada en mm sobre un
-// LIENZO CUADRADO de 100 x 100 con margen 6. Este modulo traduce ese lienzo a
-// cualquier hoja del catalogo con un UNICO factor de escala (R14) y centrado en
-// ambos ejes (R15).
+// La maqueta (feature 32) esta expresada en mm sobre un LIENZO CUADRADO de
+// 100 x 100 con margen 6, y vive en `etiquetas-maqueta.ts`. Este modulo la
+// traduce a cualquier hoja del catalogo con un UNICO factor de escala (R14) y
+// centrado en ambos ejes (R15).
 //
-// Vive aqui (junto a su unico consumidor) y no en `lib/`, pero se separa de
-// `etiquetas-pdf.ts` por una razon concreta: aquel modulo toca
-// `document`/`canvas` y no es testeable en Node, mientras que toda esta
-// aritmetica si lo es. Sin la separacion, R14-R17 no tendrian test barato y
-// determinista.
+// Feature 282 (T17) — MUDADO desde `app/(app)/ordenes/_components/` a `lib/pdf/`
+// sin archivo-puente. Motivo: el generador server-side del lote pasa a usar el
+// MISMO `crearLayout` (con `s = 1` y offsets 0, o sea el mismo resultado
+// numerico que sus literales de antes) y no puede importar de `app/`. Un puente
+// re-exportador seria otro sitio donde volver a divergir, que es justo lo que
+// esta ficha viene a cerrar.
 
-/** Lado del lienzo base de la maqueta en mm (feature 32, decision F1.4 (c)). */
-export const LIENZO_BASE_MM = 100;
-
-/**
- * Constantes de la maqueta base, en mm salvo las tipograficas (pt). Se exportan
- * porque el generador dibuja en coordenadas del lienzo base y las mapea con
- * `layout.x()/y()`: asi la maqueta de la feature 32 se lee igual que antes.
- */
-export const MAQUETA_BASE = {
-  margin: 6,
-  fontRotulo: 8,
-  fontValor: 9,
-  fontRemision: 10,
-  fontGuia: 22,
-  lineHeight: 4,
-  // Separacion ENTRE campos. Bajo de 1.5 a 1.0 al pasar la maqueta a rotulo y
-  // valor en la misma linea (ver `drawCampos` en etiquetas-pdf.ts): con 1.5 el
-  // cupo vertical se quedaba en 9 lineas para 7 campos y una direccion real de
-  // tres lineas ya obligaba a recortar. Con 1.0 el cupo es 10 y el caso normal
-  // entra completo.
-  fieldGap: 1.0,
-  qrSize: 26,
-  barcodeHeight: 16,
-  gapQrBarcode: 4,
-} as const;
+export { LIENZO_BASE_MM, MAQUETA_BASE };
 
 export interface EtiquetaLayout {
   /** Hoja del catalogo para la que se calculo el layout. */
@@ -126,4 +105,19 @@ export function crearLayout(hoja: HojaEtiqueta): EtiquetaLayout {
       fontSize: Math.round(18 * s),
     },
   };
+}
+
+/**
+ * Layout del LIENZO BASE: 100 x 100 mm, `s = 1`, offsets 0.
+ *
+ * Existe para que el generador server-side del lote (feature 136) use la misma
+ * maqueta compartida SIN importar el catalogo de tamaños de la feature 150. Esa
+ * separacion no es cosmetica: el PDF consolidado que reciben los integradores
+ * por API es 100 x 100 fijo y no tiene —ni debe ganar— un parametro de tamaño
+ * (D3 de la 150, blindada en `etiquetas-pdf-lote.smoke.test.ts`). Con `s = 1` el
+ * resultado numerico es identico al de los literales que aquel generador tenia
+ * escritos a mano.
+ */
+export function crearLayoutBase(): EtiquetaLayout {
+  return crearLayout(getHojaEtiqueta("100x100"));
 }

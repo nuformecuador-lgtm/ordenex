@@ -12,6 +12,8 @@ import type {
 import type { IEtiquetasDescargaService } from "@/lib/interfaces/services/IEtiquetasDescargaService";
 import type { IManifiestoService } from "@/lib/interfaces/services/IManifiestoService";
 import { etiquetasConfig } from "@/lib/config/etiquetas";
+import { fuenteEtiqueta } from "@/lib/pdf/etiquetas-fuente";
+import { exigirCobertura } from "@/lib/pdf/etiquetas-fuente-registro";
 
 // Feature 136 (T3.1) — cableado del PDF de etiquetas en el endpoint de carga por
 // API. Se inyectan fakes de `autenticar`, `bulkService`, `descargaService` y
@@ -339,5 +341,53 @@ describe("tope de etiquetas en modo individual (feature 141/R52)", () => {
     expect(json.ordenes.every((o: { downloadUrl: string | null }) => o.downloadUrl === null)).toBe(
       true,
     );
+  });
+});
+
+/**
+ * Feature 282 (T24, R28) — El fallo por COBERTURA usa el canal que ya existe.
+ *
+ * El generador lanza si el texto del monto trae un caracter que el subconjunto
+ * embebido no cubre, en vez de imprimir la etiqueta con el simbolo perdido. Lo
+ * que aqui se comprueba es que ese error viaja por el camino best-effort que la
+ * feature 136 ya tenia —HTTP 200, `etiquetasPdf: { error }`, carga NO revertida
+ * y `num_guia` intactos— y no por uno nuevo.
+ *
+ * El error NO se inventa: se produce llamando a la funcion real de cobertura con
+ * un simbolo fuera del subconjunto. Un `new Error("lo que sea")` probaria el
+ * canal pero no que este fallo entre por el.
+ */
+describe("R28 — un caracter no cubierto falla VISIBLE por el canal best-effort", () => {
+  function errorDeCobertura(): Error {
+    try {
+      // U+20B9 (rupia india) no esta en el subconjunto cp1252 + colon.
+      exigirCobertura(fuenteEtiqueta, "₹18.000", "Monto a cobrar");
+    } catch (e) {
+      return e as Error;
+    }
+    throw new Error("la comprobacion de cobertura no lanzo: R28 estaria muerto");
+  }
+
+  it("HTTP 200, etiquetasPdf { error } y la carga NO revertida", async () => {
+    const fallo = errorDeCobertura();
+    expect(fallo.message).toContain("U+20B9");
+
+    const etiquetas = fakeEtiquetas({
+      generarYPersistir: vi.fn().mockRejectedValue(fallo),
+    });
+    const res = await handleCargaApi(
+      reqConBearer(BODY, SECRETO),
+      depsOk(fakeBulk(okSummary()), etiquetas),
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.etiquetasPdf).toHaveProperty("error");
+    expect(typeof json.etiquetasPdf.error).toBe("string");
+    // La carga sigue commiteada y los num_guia intactos: el PDF es best-effort.
+    expect(json.creadas).toBe(1);
+    expect(json.ordenes[0].numGuia).toBe(1042);
+    // Y lo que NO puede pasar: entregar una URL de etiqueta con el importe roto.
+    expect(json.etiquetasPdf).not.toHaveProperty("url");
   });
 });

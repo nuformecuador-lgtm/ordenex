@@ -20,6 +20,11 @@ import type {
 } from "@/lib/types/etiqueta-guia";
 
 import { EtiquetaGuia } from "./EtiquetaGuia";
+import {
+  asegurarFuenteEnPantalla,
+  cargarFuenteEtiqueta,
+  ERROR_FUENTE_ETIQUETA,
+} from "./etiquetas-fuente-carga";
 import { descargarEtiquetasPdf } from "./etiquetas-pdf";
 
 export interface EtiquetasGuiaModalProps {
@@ -92,6 +97,12 @@ function resumenOmitidas(omitidas: EtiquetaOmitidaDTO[]): string {
  * Feature 150 — El tamaño de hoja se elige en CADA descarga con un selector que
  * solo aparece si hay etiquetas imprimibles (R6/R11); arranca en el default del
  * catalogo en cada apertura (R7) y no se persiste de ninguna forma (R10).
+ *
+ * Feature 282 — Al ABRIR se pide la fuente embebida del PDF y se registra en el
+ * navegador, para que el importe de la vista previa se pinte con la misma
+ * tipografia con la que va a imprimirse (R13/R31). Si no llega, la vista previa
+ * sigue funcionando con la del sistema (R33) pero la DESCARGA falla de forma
+ * visible: mensaje y ningun PDF (R16/R28).
  */
 export function EtiquetasGuiaModal({
   open,
@@ -104,6 +115,14 @@ export function EtiquetasGuiaModal({
   // persiste en ningún sitio (ni `localStorage`, ni cookie, ni servidor): cada
   // apertura vuelve al default del catálogo (R7).
   const [hojaId, setHojaId] = useState<HojaEtiquetaId>(HOJA_ETIQUETA_DEFAULT_ID);
+  // Feature 282 (T27, R31): familia con la que la fuente del PDF quedo
+  // registrada en el navegador. `null` mientras no llega — o si no llega nunca,
+  // que es el caso de R33: la vista previa se pinta igual.
+  const [familiaMonto, setFamiliaMonto] = useState<string | null>(null);
+  // Feature 282 (T9, R16/R28): lo que salio mal AL DESCARGAR. Va aparte de
+  // `estado` para no tirar la vista previa: el mensaje dice «Inténtalo de
+  // nuevo», asi que el boton de descarga tiene que seguir ahi.
+  const [errorDescarga, setErrorDescarga] = useState<string | null>(null);
   // Canvas del QR por `ordenId`, recolectados de la vista previa para rasterizar
   // al PDF (qrcode.react reenvia la ref al canvas nativo).
   const qrCanvases = useRef<Map<string, HTMLCanvasElement>>(new Map());
@@ -118,8 +137,36 @@ export function EtiquetasGuiaModal({
       setEstado({ fase: "cargando" });
       // R7: reabrir siempre parte del default, sin importar la elección anterior.
       setHojaId(HOJA_ETIQUETA_DEFAULT_ID);
+      // 282/R16: el error de la descarga anterior no sobrevive a una reapertura.
+      setErrorDescarga(null);
     }
   }
+
+  // Feature 282 (T27, R13/R31) — La fuente embebida se pide AL ABRIR el modal,
+  // no al pulsar «Descargar»: la vista previa tiene que poder pintar el importe
+  // con la misma tipografia con la que va a salir impreso. Es una sola peticion
+  // por sesion: `import()` de un modulo ya evaluado no vuelve a la red, y
+  // `asegurarFuenteEnPantalla` no vuelve a registrar una familia que ya esta.
+  useEffect(() => {
+    if (!open) return;
+    let cancelado = false;
+
+    cargarFuenteEtiqueta()
+      .then(asegurarFuenteEnPantalla)
+      .then((familia) => {
+        if (!cancelado) setFamiliaMonto(familia);
+      })
+      .catch(() => {
+        // R33: que la fuente no llegue NO puede tumbar la vista previa. El
+        // importe se pinta con la del sistema y aqui no se avisa de nada; quien
+        // avisa —y no descarga— es `handleDescargar`, porque el PDF sin esta
+        // fuente si imprimiria el simbolo roto (R16).
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,12 +204,32 @@ export function EtiquetasGuiaModal({
   const hayImprimibles = etiquetas.length > 0;
   const hoja = getHojaEtiqueta(hojaId);
 
-  function handleDescargar() {
+  /**
+   * Feature 282 (T9, R16/R28) — `await` de verdad, y el fallo a la cara.
+   *
+   * Antes esta funcion llamaba a `descargarEtiquetasPdf` SIN `await`: la
+   * promesa rechazada se perdia y el usuario veia el modal comportarse como si
+   * todo hubiera ido bien mientras no se descargaba nada. Es el fallo mudo que
+   * R16 prohibe. Ahora: se espera, se muestra el mensaje, no se descarga nada y
+   * `onSuccess` NO se llama —porque no hubo exito.
+   */
+  async function handleDescargar() {
     // R12: sin imprimibles no se genera/descarga PDF (defensa; el botón no se
     // ofrece en ese caso).
     if (etiquetas.length === 0) return;
-    // R9: el PDF sale con el tamaño que esté seleccionado en este momento.
-    descargarEtiquetasPdf(etiquetas, qrCanvases.current, hoja);
+    setErrorDescarga(null);
+    try {
+      // R9: el PDF sale con el tamaño que esté seleccionado en este momento.
+      await descargarEtiquetasPdf(etiquetas, qrCanvases.current, hoja);
+    } catch {
+      // Un solo mensaje para los dos modos de fallo del generador —la fuente no
+      // carga (R16) y el simbolo no esta en el subconjunto (R28)— porque los dos
+      // significan lo mismo para quien esta delante: la etiqueta NO se descarga
+      // en vez de salir con el importe roto. El detalle tecnico del segundo no le
+      // sirve a un operador de bodega.
+      setErrorDescarga(ERROR_FUENTE_ETIQUETA);
+      return;
+    }
     onSuccess?.();
   }
 
@@ -193,6 +260,12 @@ export function EtiquetasGuiaModal({
         {estado.fase === "error" ? (
           <Alert variant="destructive">
             <AlertDescription>{estado.mensaje}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {errorDescarga !== null ? (
+          <Alert variant="destructive">
+            <AlertDescription>{errorDescarga}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -237,6 +310,7 @@ export function EtiquetasGuiaModal({
               <EtiquetaGuia
                 key={etiqueta.ordenId}
                 etiqueta={etiqueta}
+                familiaMonto={familiaMonto}
                 qrCanvasRef={(el) => {
                   if (el) qrCanvases.current.set(etiqueta.ordenId, el);
                   else qrCanvases.current.delete(etiqueta.ordenId);
