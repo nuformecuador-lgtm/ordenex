@@ -27,6 +27,9 @@ const ESTADO_VARIANT: Record<
   inactivo: "secondary",
   pending: "warning",
   refused: "danger",
+  // Neutra a proposito: un borrador no es un problema (no es `danger`) ni una espera
+  // (no es `warning`, que aqui significa "Meta la esta mirando"). Es una plantilla a medias.
+  saved_not_aprobation: "secondary",
 };
 
 function truncar(texto: string): string {
