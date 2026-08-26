@@ -19,7 +19,7 @@ import { consoleLogger } from "@/lib/services/whatsapp/chat-logger";
 import { loadWhatsappConfig } from "@/lib/config/whatsapp";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
-import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
+import { resolverValoresPlantilla } from "@/lib/types/plantilla-datos";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
@@ -30,6 +30,8 @@ import type {
   EnviarMensajeChatResult,
   EnviarPlantillaChatResult,
   ListarHiloChatResult,
+  MarcarChatLeidoResult,
+  ResumenNoLeidosChatResult,
 } from "@/lib/types/chat-whatsapp";
 
 const idSchema = z.string().min(1);
@@ -86,8 +88,8 @@ export async function enviarMensajeChat(
   if (!oId.success || !txt.success) return { status: "forbidden" };
 
   const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(getPrismaClient());
-  const orden = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
-  if (orden === null) return { status: "forbidden" }; // R17: inexistente o de otro mensajero
+  const datos = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  if (datos === null) return { status: "forbidden" }; // R17: inexistente o de otro mensajero
 
   const service = deps.service !== undefined ? deps.service : buildEnvioService();
   if (service === null) return { status: "no_configurado" };
@@ -95,7 +97,7 @@ export async function enviarMensajeChat(
   const outcome = await service.enviarTexto({
     ordenId: oId.data,
     mensajeroId: actor.usuarioId,
-    telefonoE164: orden.telefonoDest,
+    telefonoE164: datos.orden.telefonoDest,
     texto: txt.data,
   });
 
@@ -142,8 +144,8 @@ export async function enviarPlantillaChat(
 
   const prisma = getPrismaClient();
   const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(prisma);
-  const orden = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
-  if (orden === null) return { status: "forbidden" }; // R17: inexistente o de otro mensajero
+  const datos = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  if (datos === null) return { status: "forbidden" }; // R17: inexistente o de otro mensajero
 
   const plantillaRepo = deps.plantillaRepo ?? new PlantillaMensajeRepository(prisma);
   const plantilla = await plantillaRepo.findEnviableById(pId.data);
@@ -154,7 +156,7 @@ export async function enviarPlantillaChat(
 
   // Mapeo variables->orden y construccion de componentes: MISMA logica que el envio server-side
   // de la feature 107 (no se reinventa). El cuerpo renderizado se persiste para el historial.
-  const valores = resolverValoresOrden(plantilla.variables, orden);
+  const valores = resolverValoresPlantilla(plantilla.variables, datos);
   const componentes = construirComponentsEnvio(plantilla.variables, valores);
   const cuerpoRenderizado = renderPlantilla(plantilla.cuerpo, valores);
   const idioma =
@@ -163,7 +165,7 @@ export async function enviarPlantillaChat(
   const outcome = await service.enviarPlantilla({
     ordenId: oId.data,
     mensajeroId: actor.usuarioId,
-    telefonoE164: orden.telefonoDest,
+    telefonoE164: datos.orden.telefonoDest,
     plantillaId: plantilla.id,
     nombre: plantilla.nombre,
     idioma,
@@ -197,8 +199,8 @@ export async function listarHiloChat(
   const prisma = getPrismaClient();
   const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(prisma);
   // R16: la propiedad de la orden es la puerta; sin ella no se lee ningun hilo.
-  const orden = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
-  if (orden === null) return { status: "forbidden" };
+  const datos = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  if (datos === null) return { status: "forbidden" };
 
   const conversacionRepo = deps.conversacionRepo ?? new ChatConversacionRepository(prisma);
   const hilo = await conversacionRepo.findByOrdenParaMensajero(oId.data, actor.usuarioId);
@@ -230,4 +232,55 @@ export async function listarHiloChat(
       ocurridoAt: m.ocurridoAt.toISOString(),
     })),
   };
+}
+
+/**
+ * Entrantes SIN LEER por orden para el mensajero de la sesion. Es la fuente del distintivo
+ * numerico del chat: el numero de cada conversacion y, sumado, el del boton flotante.
+ *
+ * El scope es la sesion, no un parametro: la accion no recibe `mensajeroId` para que nadie
+ * pueda pedir el resumen de otro. Devuelve SOLO las ordenes con pendientes; la UI trata la
+ * ausencia como cero.
+ */
+export async function resumenNoLeidosChat(
+  deps: ChatWhatsappDeps = {},
+): Promise<ResumenNoLeidosChatResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const conversacionRepo =
+    deps.conversacionRepo ?? new ChatConversacionRepository(getPrismaClient());
+  const filas = await conversacionRepo.contarNoLeidosPorMensajero(actor.usuarioId);
+  return {
+    status: "ok",
+    conversaciones: filas.map((f) => ({ ordenId: f.ordenId, noLeidos: f.noLeidos })),
+  };
+}
+
+/**
+ * Sella el hilo de `ordenId` como leido hasta su ultimo entrante. La UI la llama cuando la
+ * conversacion esta ABIERTA delante del mensajero (y de nuevo cuando llega un entrante con
+ * ella abierta): ver el mensaje ES leerlo.
+ *
+ * La propiedad de la orden es la puerta, igual que en `listarHiloChat` (R16): una orden de
+ * otro mensajero responde `forbidden` sin escribir. Es idempotente.
+ */
+export async function marcarChatLeido(
+  ordenId: unknown,
+  deps: ChatWhatsappDeps = {},
+): Promise<MarcarChatLeidoResult> {
+  const actor = await (deps.getActor ?? resolveActorFromSession)();
+  if (!actor) return { status: "unauthenticated" };
+
+  const oId = idSchema.safeParse(ordenId);
+  if (!oId.success) return { status: "forbidden" };
+
+  const prisma = getPrismaClient();
+  const ordenReader = deps.ordenReader ?? new OrdenEnvioReader(prisma);
+  const datos = await ordenReader.findParaEnvio(oId.data, actor.usuarioId);
+  if (datos === null) return { status: "forbidden" };
+
+  const conversacionRepo = deps.conversacionRepo ?? new ChatConversacionRepository(prisma);
+  await conversacionRepo.marcarLeidoHastaUltimoEntrante(oId.data, actor.usuarioId);
+  return { status: "ok" };
 }

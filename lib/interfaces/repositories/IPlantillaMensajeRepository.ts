@@ -9,7 +9,19 @@ export interface PlantillaPublica {
   nombre: string;
   cuerpo: string;
   variables: string[];
+  /**
+   * Feature 282 — snapshot `clave -> nombre legible` del catalogo en el ultimo guardado.
+   * REQUERIDO y nunca null: la columna es `NOT NULL DEFAULT '{}'` y `{}` significa "fila
+   * anterior a la feature 282", que la UI resuelve derivando el nombre del catalogo (R21).
+   */
+  variablesNombres: Record<string, string>;
   estado: PlantillaEstado;
+  /**
+   * `true` en la plantilla marcada como MENSAJE DE BIENVENIDA (el que sale solo cuando el
+   * paquete es recogido). Como mucho una vigente lo tiene; lo garantiza un UNIQUE parcial en
+   * la base, no este tipo (ver `marcarWelcomeMessage`).
+   */
+  welcomeMessage: boolean;
   templateId: string | null; // enlace a Meta; NULL = no propagada / no sincronizada
   templateIdioma: string | null; // idioma del template en Meta (necesario para enviar)
   createdBy: string | null;
@@ -24,6 +36,10 @@ export interface PlantillaListItem {
   cuerpo: string;
   estado: PlantillaEstado;
   variables: string[];
+  /** Feature 282 — snapshot `clave -> nombre` (R21: `{}` = derivar del catalogo al pintar). */
+  variablesNombres: Record<string, string>;
+  /** `true` si es la plantilla de bienvenida; el listado la RESALTA (como mucho una fila). */
+  welcomeMessage: boolean;
   templateId: string | null; // el admin ve si la plantilla ya esta enlazada con Meta
   createdAt: Date;
 }
@@ -32,6 +48,12 @@ export interface PlantillaListItem {
  * Plantilla ENVIABLE por el mensajero: vigente, `activo` y ENLAZADA con Meta (templateId no
  * nulo). Lleva lo justo para construir el envio (nombre + idioma del template + variables) y
  * el `cuerpo` local para RENDERIZAR el texto que se persiste en el historial del chat.
+ *
+ * Feature 282: NO lleva `variablesNombres` — ni esta ni `PlantillaTextoEnviable`. El envio
+ * resuelve POR CLAVE y no tiene nada que hacer con las etiquetas legibles. Mantener el
+ * snapshot fuera de las formas enviables es la garantia ESTRUCTURAL de que esa columna de
+ * presentacion no puede afectar al texto ni al orden de parametros que viaja a Meta
+ * (design.md §4.6). Si alguien lo anade aqui, el motivo tiene que ser otro requisito.
  */
 export interface PlantillaEnviable {
   id: string;
@@ -90,6 +112,19 @@ export interface CreatePlantillaData {
   cuerpo: string;
   variables: string[]; // R15: derivadas por el service
   createdBy: string | null;
+  /**
+   * Estado inicial. EXPLICITO desde 2026-08-26 y no heredado del default de la columna: el
+   * default sigue siendo `pending` porque Postgres no dejaba moverlo en la misma migracion que
+   * anadio `saved_not_aprobation`, asi que si el service no lo dijera, una plantilla recien
+   * creada se anunciaria como "Meta la esta revisando" sin haberla enviado a nadie.
+   */
+  estado: PlantillaEstado;
+  /**
+   * Feature 282 (R17) — snapshot `clave -> nombre` que sella el SERVICE con el catalogo
+   * vigente. Opcional: si no llega, la columna se queda en su default `{}`. Ningun cliente lo
+   * manda (no hay entrada zod nueva); lo calcula el servidor (design.md §4.5).
+   */
+  variablesNombres?: Record<string, string>;
 }
 
 /** R20/R22: solo nombre y/o cuerpo; `variables` recalculadas por el service si cambia el cuerpo. */
@@ -97,6 +132,8 @@ export interface UpdatePlantillaData {
   nombre?: string;
   cuerpo?: string;
   variables?: string[];
+  /** Feature 282 (R17): se reescribe junto con `variables` cuando cambia el cuerpo. */
+  variablesNombres?: Record<string, string>;
 }
 
 export interface ListPlantillasParams {
@@ -110,7 +147,7 @@ export interface ListPlantillasResult {
 }
 
 export interface IPlantillaMensajeRepository {
-  /** R8/R12/R15: persiste nombre, cuerpo, variables; nace `pending`. */
+  /** R8/R12/R15: persiste nombre, cuerpo, variables y el estado inicial que decide el service. */
   create(data: CreatePlantillaData): Promise<PlantillaPublica>;
   /** R6/R7/R28: listado paginado de vigentes (deletedAt IS NULL), orden createdAt desc. */
   list(params: ListPlantillasParams): Promise<ListPlantillasResult>;
@@ -126,6 +163,15 @@ export interface IPlantillaMensajeRepository {
   updateEstado(id: string, estado: PlantillaEstado): Promise<PlantillaPublica | null>;
   /** R27: soft delete (fija deletedAt); `false` si no existe o ya estaba borrada. */
   softDelete(id: string): Promise<boolean>;
+  /**
+   * Marca ESTA plantilla como el mensaje de bienvenida y desmarca cualquier otra, en UNA sola
+   * transaccion. Es un `set`, no un `toggle`: pasar dos veces la misma id deja el mismo
+   * estado. `null` si no existe o esta soft-deleted.
+   *
+   * El desmarcado va PRIMERO y no es cosmetica: el UNIQUE parcial de la base solo admite una
+   * fila vigente en `true`, asi que marcar antes de limpiar abortaria la transaccion entera.
+   */
+  marcarWelcomeMessage(id: string): Promise<PlantillaPublica | null>;
 
   // --- Integracion WhatsApp ---
 

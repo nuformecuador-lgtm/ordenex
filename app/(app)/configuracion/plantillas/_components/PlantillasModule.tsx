@@ -14,8 +14,10 @@ import { plantillasConfig } from "@/lib/config/plantillas";
 import {
   cambiarEstadoPlantilla,
   eliminarPlantilla,
+  enviarPlantillaAprobacion,
   listarPlantillas,
   listarPlantillasCompleto,
+  marcarPlantillaBienvenida,
 } from "@/lib/actions/plantillas";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
 
@@ -76,6 +78,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
 
   const [crearOpen, setCrearOpen] = useState(false);
   const [editar, setEditar] = useState<PlantillaListItemDTO | null>(null);
+  // Aviso PREVIO a editar una plantilla que Meta ya tiene: editarla la devuelve a revisión y
+  // la deja sin usar mientras tanto. Se pregunta ANTES de abrir el formulario, no después de
+  // escribir: descubrir la consecuencia con el texto ya cambiado es descubrirla tarde.
+  const [avisoEditar, setAvisoEditar] = useState<PlantillaListItemDTO | null>(null);
+  const [enviarAprobacion, setEnviarAprobacion] = useState<PlantillaListItemDTO | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const [desactivar, setDesactivar] = useState<PlantillaListItemDTO | null>(
     null,
   );
@@ -122,6 +130,62 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     }
   }
 
+  /**
+   * Abre la edición. Un BORRADOR (guardado sin aprobación y nunca enlazado con Meta) entra
+   * directo: editarlo no tiene consecuencia, sigue siendo un borrador. Cualquier otra pasa
+   * primero por el aviso, porque guardar la manda a revisión.
+   */
+  function onEditarClick(row: PlantillaListItemDTO) {
+    const esBorrador = row.estado === "saved_not_aprobation" && row.templateId === null;
+    if (esBorrador) setEditar(row);
+    else setAvisoEditar(row);
+  }
+
+  async function onConfirmEnviarAprobacion() {
+    if (!enviarAprobacion) return;
+    // El botón queda deshabilitado mientras dura la llamada: el envío NO se puede cancelar,
+    // así que lo último que debe permitir esta pantalla es dispararlo dos veces.
+    setEnviando(true);
+    try {
+      const res = await enviarPlantillaAprobacion(enviarAprobacion.id);
+      if (res.status === "ok") {
+        toast.success("Plantilla enviada para aprobación.");
+      } else if (res.status === "ya_enviada") {
+        toast.info("Esa plantilla ya estaba en revisión.");
+      } else if (res.status === "no_configurado") {
+        toast.error("WhatsApp no está configurado: no hay a dónde enviarla.");
+        return;
+      } else if (res.status === "not_found") {
+        toast.error("La plantilla ya no existe.");
+      } else {
+        toast.error(mensajeError(res.status));
+        return;
+      }
+      await mutate();
+      setEnviarAprobacion(null);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  /**
+   * Marca la fila como MENSAJE DE BIENVENIDA. SIN modal de confirmación, a diferencia del
+   * envío a aprobación: esto no sale de casa y se deshace marcando otra. Lo único irreversible
+   * de la pantalla es lo que llega a Meta.
+   */
+  async function onMarcarBienvenida(row: PlantillaListItemDTO) {
+    const res = await marcarPlantillaBienvenida(row.id);
+    if (res.status === "ok") {
+      toast.success(`"${row.nombre}" es ahora el mensaje de bienvenida.`);
+      await mutate();
+    } else if (res.status === "not_found") {
+      toast.error("La plantilla ya no existe.");
+      await mutate();
+    } else {
+      toast.error(mensajeError(res.status));
+    }
+  }
+
   async function onConfirmDesactivar() {
     if (!desactivar) return;
     // R24/R25: el front SOLO emite el destino `inactivo`.
@@ -160,9 +224,11 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
   }
 
   const columns = buildPlantillasColumns({
-    onEditar: (row) => setEditar(row),
+    onEditar: onEditarClick,
+    onEnviarAprobacion: (row) => setEnviarAprobacion(row),
     onDesactivar: (row) => setDesactivar(row),
     onEliminar: (row) => setEliminar(row),
+    onMarcarBienvenida: (row) => void onMarcarBienvenida(row),
   });
 
   return (
@@ -253,6 +319,44 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
           <EditarPlantillaForm ref={editarRef} plantilla={editar} />
         ) : null}
       </Modal>
+
+      <Modal
+        open={enviarAprobacion !== null}
+        onOpenChange={(open) => {
+          if (!open && !enviando) setEnviarAprobacion(null);
+        }}
+        title="Enviar para aprobación"
+        description={
+          enviarAprobacion
+            ? `La plantilla "${enviarAprobacion.nombre}" se enviará a WhatsApp para su aprobación. Este proceso NO se puede cancelar: una vez enviada, no se puede retirar de revisión ni volver atrás. La plantilla quedará en revisión y no podrá usarse hasta que WhatsApp la apruebe.`
+            : undefined
+        }
+        confirmLabel={enviando ? "Enviando…" : "Continuar"}
+        cancelLabel="Cancelar"
+        closeOnConfirm={false}
+        confirmDisabled={enviando}
+        onConfirm={onConfirmEnviarAprobacion}
+      />
+
+      <Modal
+        open={avisoEditar !== null}
+        onOpenChange={(open) => {
+          if (!open) setAvisoEditar(null);
+        }}
+        title="Editar envía la plantilla para aprobación"
+        description={
+          avisoEditar
+            ? `Al actualizar "${avisoEditar.nombre}" se enviará de nuevo a WhatsApp para su aprobación y quedará deshabilitada para su uso hasta que sea aprobada. Se aconseja crear una plantilla nueva y eliminar la anterior cuando la nueva esté aprobada, para no quedarte sin ninguna disponible mientras tanto.`
+            : undefined
+        }
+        confirmLabel="Continuar"
+        cancelLabel="Cancelar"
+        closeOnConfirm={false}
+        onConfirm={() => {
+          setEditar(avisoEditar);
+          setAvisoEditar(null);
+        }}
+      />
 
       <Modal
         open={desactivar !== null}

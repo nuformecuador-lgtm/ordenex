@@ -1,0 +1,12 @@
+-- DOWN: retira el snapshot de nombres de variables de la feature 282.
+-- La UP fue ADITIVA (una sola columna con default), asi que el rollback es un DROP simple:
+-- ninguna fila preexistente dependia de ella y ningun otro objeto la referencia (no hay
+-- indices, FKs ni constraints sobre esta columna).
+--
+-- Solo esa columna y nada mas: la tabla `plantilla_mensaje` y el enum `plantilla_estado` los
+-- creo `*_plantilla_mensaje` y los revierte SU down.sql; tocarlos aqui destruiria lo que esta
+-- migracion no creo.
+--
+-- Perdida de datos ACEPTADA: se pierden las etiquetas legibles persistidas. Es presentacion
+-- derivable del catalogo (R21) y no afecta a `cuerpo`, `variables` ni a nada que viaje a Meta.
+ALTER TABLE "plantilla_mensaje" DROP COLUMN "variables_nombres";

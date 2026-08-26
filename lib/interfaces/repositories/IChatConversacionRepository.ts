@@ -13,6 +13,13 @@ export interface ChatConversacionDTO {
   ultimoEntranteAt: Date | null;
 }
 
+/** Entrantes sin leer de UN hilo, keyeados por la orden (que es lo que la UI lista). */
+export interface NoLeidosPorOrden {
+  ordenId: string;
+  /** Entrantes con `ocurrido_at` posterior a `mensajero_leido_at` (todos si es NULL). */
+  noLeidos: number;
+}
+
 /** Resolucion de la orden destino de un entrante (D4/R25). */
 export interface ResolucionOrdenEntrante {
   ordenId: string;
@@ -55,4 +62,21 @@ export interface IChatConversacionRepository {
 
   /** Busca un hilo por id (reconciliacion del job de reintento). */
   findById(id: string): Promise<ChatConversacionDTO | null>;
+
+  /**
+   * Entrantes SIN LEER de cada hilo del mensajero, agrupados por orden. Solo devuelve las
+   * ordenes con al menos uno: las que no aparecen tienen cero (asi la respuesta no crece con
+   * el historial del mensajero). Es la fuente del distintivo numerico del chat.
+   */
+  contarNoLeidosPorMensajero(mensajeroId: string): Promise<NoLeidosPorOrden[]>;
+
+  /**
+   * Sella el hilo de `ordenId` como leido hasta su ULTIMO entrante. Idempotente y sin
+   * condicion de carrera: no escribe `now()` sino la marca del entrante mas reciente, asi que
+   * un mensaje que entre entre la lectura y esta escritura sigue contando como no leido.
+   *
+   * El scope por `mensajeroId` va en el WHERE: nadie sella el hilo de otro. Si la orden no es
+   * suya, o el hilo no existe, o no hay entrantes, no escribe nada.
+   */
+  marcarLeidoHastaUltimoEntrante(ordenId: string, mensajeroId: string): Promise<void>;
 }

@@ -22,6 +22,7 @@ const cambiarEstadoPlantillaMock = vi.fn();
 const crearPlantillaMock = vi.fn();
 const actualizarPlantillaMock = vi.fn();
 const previewPlantillaMock = vi.fn();
+const marcarPlantillaBienvenidaMock = vi.fn();
 vi.mock("@/lib/actions/plantillas", () => ({
   listarPlantillas: (...a: unknown[]) => listarPlantillasMock(...a),
   eliminarPlantilla: (...a: unknown[]) => eliminarPlantillaMock(...a),
@@ -29,6 +30,7 @@ vi.mock("@/lib/actions/plantillas", () => ({
   crearPlantilla: (...a: unknown[]) => crearPlantillaMock(...a),
   actualizarPlantilla: (...a: unknown[]) => actualizarPlantillaMock(...a),
   previewPlantilla: (...a: unknown[]) => previewPlantillaMock(...a),
+  marcarPlantillaBienvenida: (...a: unknown[]) => marcarPlantillaBienvenidaMock(...a),
 }));
 
 import { PlantillasModule } from "@/app/(app)/configuracion/plantillas/_components/PlantillasModule";
@@ -39,6 +41,8 @@ const ITEM: PlantillaListItemDTO = {
   cuerpo: "Hola {{usuario}}, tu orden {{cod}}",
   estado: "pending",
   variables: ["usuario", "cod"],
+  variablesNombres: {},
+  welcomeMessage: false,
   templateId: null,
   createdAt: new Date("2026-01-01T12:00:00Z"),
 };
@@ -139,5 +143,77 @@ describe("PlantillasModule — eliminar (R27/R28)", () => {
     expect(
       (await screen.findAllByText("La plantilla ya no existe.")).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+// --- MENSAJE DE BIENVENIDA ---
+//
+// La accion NO tiene modal de confirmacion (no sale hacia Meta y se deshace marcando otra),
+// asi que lo que hay que probar es que un solo click la dispara con el id correcto y que la
+// fila marcada se distingue de las demas SIN pulsar nada.
+describe("PlantillasModule - mensaje de bienvenida", () => {
+  const OTRA: PlantillaListItemDTO = {
+    ...ITEM,
+    id: "p2",
+    nombre: "recogida",
+    welcomeMessage: true,
+  };
+
+  it("un click en 'Mensaje de bienvenida' marca la fila por id, sin confirmacion", async () => {
+    marcarPlantillaBienvenidaMock.mockImplementation(async () => {
+      items = [{ ...ITEM, welcomeMessage: true }];
+      return { status: "ok", plantilla: { id: "p1" } };
+    });
+    const user = userEvent.setup();
+    renderModule(<PlantillasModule initialData={{ items: [ITEM], total: 1, pageSize: 25 }} />);
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+
+    await user.click(within(table).getByRole("button", { name: /mensaje de bienvenida/i }));
+
+    // Sin dialogo de por medio: la llamada sale del propio click.
+    await waitFor(() => expect(marcarPlantillaBienvenidaMock).toHaveBeenCalledWith("p1"));
+    expect(
+      await screen.findByText('"bienvenida" es ahora el mensaje de bienvenida.'),
+    ).toBeInTheDocument();
+  });
+
+  it("resalta la fila marcada: insignia propia y su boton deshabilitado", async () => {
+    items = [ITEM, OTRA];
+    renderModule(
+      <PlantillasModule initialData={{ items: [ITEM, OTRA], total: 2, pageSize: 25 }} />,
+    );
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("recogida");
+
+    // La insignia aparece UNA sola vez: es la marca de la unica fila con `welcomeMessage`.
+    const insignias = within(table).getAllByText("Bienvenida");
+    expect(insignias).toHaveLength(1);
+
+    const filas = within(table).getAllByRole("row").slice(1); // sin la cabecera
+    const marcada = filas.find((f) => within(f).queryByText("recogida") !== null)!;
+    const sinMarcar = filas.find((f) => within(f).queryByText("bienvenida") !== null)!;
+
+    // La marcada no ofrece volver a marcarse; la otra si.
+    expect(within(marcada).getByRole("button", { name: /mensaje de bienvenida/i })).toBeDisabled();
+    expect(
+      within(sinMarcar).getByRole("button", { name: /mensaje de bienvenida/i }),
+    ).toBeEnabled();
+  });
+
+  it("not_found: avisa y revalida en vez de dejar la fila marcada en pantalla", async () => {
+    marcarPlantillaBienvenidaMock.mockResolvedValue({ status: "not_found" });
+    const user = userEvent.setup();
+    renderModule(<PlantillasModule initialData={{ items: [ITEM], total: 1, pageSize: 25 }} />);
+
+    const table = screen.getByRole("table", { name: "Plantillas de mensaje" });
+    await within(table).findByText("bienvenida");
+    await user.click(within(table).getByRole("button", { name: /mensaje de bienvenida/i }));
+
+    // `findAllByText`: el toast pinta el mensaje en su titulo y en su cuerpo.
+    expect((await screen.findAllByText("La plantilla ya no existe.")).length).toBeGreaterThan(0);
+    expect(within(table).queryByText("Bienvenida")).toBeNull();
   });
 });

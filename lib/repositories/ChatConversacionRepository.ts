@@ -5,6 +5,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type {
   ChatConversacionDTO,
   IChatConversacionRepository,
+  NoLeidosPorOrden,
   ResolucionOrdenEntrante,
   UpsertHiloInput,
 } from "@/lib/interfaces/repositories/IChatConversacionRepository";
@@ -14,7 +15,7 @@ import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 // escape hatch de SQL crudo (`$queryRaw`) para normalizar el telefono en el matcheo.
 type ChatConversacionPrismaClient = Pick<
   PrismaClient,
-  "chatConversacion" | "orden" | "$queryRaw"
+  "chatConversacion" | "orden" | "$queryRaw" | "$executeRaw"
 >;
 
 // Fila cruda del matcheo por telefono normalizado (columnas snake_case de la tabla `orden`).
@@ -22,6 +23,13 @@ type OrdenResolucionRaw = {
   id: string;
   mensajero_asignado_id: string | null;
   telefono_dest: string;
+};
+
+// Fila cruda del conteo de no leidos. `COUNT(*)` es `bigint` en Postgres y Prisma lo mapea a
+// `BigInt` en JS, que NO es serializable a la UI: por eso el SQL lo castea a `int`.
+type NoLeidosRaw = {
+  orden_id: string;
+  no_leidos: number;
 };
 
 const SELECT = {
@@ -132,6 +140,49 @@ export class ChatConversacionRepository implements IChatConversacionRepository {
       select: SELECT,
     });
     return row === null ? null : toDTO(row);
+  }
+
+  async contarNoLeidosPorMensajero(mensajeroId: string): Promise<NoLeidosPorOrden[]> {
+    // Va RAW porque la condicion de "no leido" compara dos tablas (`chat_mensaje.ocurrido_at`
+    // contra `chat_conversacion.mensajero_leido_at`) dentro del propio JOIN, y el `groupBy` de
+    // Prisma no expresa una correlacion asi sin traerse los mensajes a memoria.
+    //
+    // `mensajero_leido_at IS NULL` = nunca abierto -> cuentan TODOS los entrantes.
+    // Se agrupa por `orden_id` (no por hilo): si por datos legados hubiera mas de un hilo para
+    // la misma orden, la UI —que lista ordenes— ve un solo numero, la suma.
+    const rows = await this.prisma.$queryRaw<NoLeidosRaw[]>(Prisma.sql`
+      SELECT c.orden_id AS orden_id, COUNT(m.id)::int AS no_leidos
+      FROM chat_conversacion c
+      JOIN chat_mensaje m ON m.conversacion_id = c.id
+      WHERE c.mensajero_id = ${mensajeroId}
+        AND m.direccion = 'entrante'::"chat_mensaje_direccion"
+        AND (c.mensajero_leido_at IS NULL OR m.ocurrido_at > c.mensajero_leido_at)
+      GROUP BY c.orden_id
+    `);
+    return rows.map((r) => ({ ordenId: r.orden_id, noLeidos: Number(r.no_leidos) }));
+  }
+
+  async marcarLeidoHastaUltimoEntrante(
+    ordenId: string,
+    mensajeroId: string,
+  ): Promise<void> {
+    // La marca sale del propio hilo (subconsulta), NO de `now()`: sellar con la hora del
+    // servidor daria por leido un entrante llegado un instante antes de este UPDATE y que el
+    // mensajero no ha visto. `GREATEST` impide RETROCEDER la marca si el sellado llega
+    // desordenado (dos pestanas, un reintento tardio).
+    await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE chat_conversacion c
+      SET mensajero_leido_at = GREATEST(
+        c.mensajero_leido_at,
+        (SELECT MAX(m.ocurrido_at)
+           FROM chat_mensaje m
+          WHERE m.conversacion_id = c.id
+            AND m.direccion = 'entrante'::"chat_mensaje_direccion")
+      ),
+      updated_at = NOW()
+      WHERE c.orden_id = ${ordenId}
+        AND c.mensajero_id = ${mensajeroId}
+    `);
   }
 
   async findById(id: string): Promise<ChatConversacionDTO | null> {

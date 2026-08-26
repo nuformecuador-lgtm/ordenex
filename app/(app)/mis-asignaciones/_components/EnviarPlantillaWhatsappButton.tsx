@@ -15,9 +15,10 @@ import {
 import { useToast } from "@/hooks/useToast";
 import { listarPlantillasParaEnvio } from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
-import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
+import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
+import { resolverValoresPlantilla, type DatosPlantilla } from "@/lib/types/plantilla-datos";
 import { normalizarTelefonoCR } from "@/lib/utils/telefono-cr";
-import type { PlantillaTextoDTO, OrdenEnvioData } from "@/lib/types/whatsapp-envio";
+import type { PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 // Integracion WhatsApp — boton "burbuja" junto a los botones de contacto del panel del
@@ -69,26 +70,15 @@ export function EnviarPlantillaWhatsappButton({
     ? `Usar plantilla en el chat con ${orden.destinatario}`
     : `Enviar plantilla por WhatsApp a ${orden.destinatario}`;
 
-  // Datos de la orden usados para resolver las variables de cada plantilla.
-  const ordenEnvio = useMemo<OrdenEnvioData>(
-    () => ({
-      destinatario: orden.destinatario,
-      telefonoDest: orden.telefonoDest,
-      numGuia: orden.numGuia,
-      numRemision: orden.numRemision,
-      producto: orden.producto,
-      direccion: orden.direccion,
-      montoCobrar: orden.montoCobrar,
-      // Flujo wa.me del cliente: el DTO de la asignacion no trae el nombre del mensajero.
-      // La variable `mensajero` queda vacia aqui; el camino real es el envio server-side del chat.
-      mensajeroNombre: "",
-    }),
-    [orden],
-  );
+  // Datos de la orden usados para resolver las variables de cada plantilla. El adaptador
+  // declara que campos NO puede aportar esta superficie (el DTO de la asignacion no trae ni
+  // fechas ni nada del mensajero): quedan vacios aqui y el envio real los resuelve en el
+  // servidor. Ver `datosPlantillaDesdeAsignacion`.
+  const datos = useMemo<DatosPlantilla>(() => datosPlantillaDesdeAsignacion(orden), [orden]);
 
   /** Renderiza el cuerpo de una plantilla con los valores de la orden. */
   function renderizar(plantilla: PlantillaTextoDTO): string {
-    return renderPlantilla(plantilla.cuerpo, resolverValoresOrden(plantilla.variables, ordenEnvio));
+    return renderPlantilla(plantilla.cuerpo, resolverValoresPlantilla(plantilla.variables, datos));
   }
 
   // Carga perezosa al abrir (se cachea en memoria): no se pide el catalogo hasta que hace falta.

@@ -17,6 +17,8 @@ const ITEM: PlantillaListItemDTO = {
   cuerpo: "Hola {{destinatario}}",
   estado: "activo",
   variables: ["destinatario"],
+  variablesNombres: {},
+  welcomeMessage: false,
   templateId: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
 };

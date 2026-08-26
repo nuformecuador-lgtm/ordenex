@@ -89,4 +89,21 @@ export type CambiarEstadoPlantillaResult =
   | { status: "ok"; plantilla: PlantillaPublica }
   | ActionError;
 export type EliminarPlantillaResult = { status: "ok" } | ActionError;
+/**
+ * Envio a aprobacion (2026-08-26). `ya_enviada` y `no_configurado` NO son `ActionError`: son
+ * desenlaces normales que la UI cuenta con sus propias palabras (uno es "no hacia falta", el
+ * otro es "falta configurar WhatsApp"), no fallos que haya que reintentar.
+ */
+export type EnviarAprobacionPlantillaResult =
+  | { status: "ok"; plantilla: PlantillaPublica }
+  | { status: "ya_enviada"; plantilla: PlantillaPublica }
+  | { status: "no_configurado" }
+  | ActionError;
+/**
+ * Marcar el MENSAJE DE BIENVENIDA. Sin rama `conflict`: la accion desmarca a la anterior, asi
+ * que la existencia de otra bienvenida no es un error que el maestro deba resolver.
+ */
+export type MarcarBienvenidaPlantillaResult =
+  | { status: "ok"; plantilla: PlantillaPublica }
+  | ActionError;
 export type PreviewPlantillaResult = { status: "ok"; texto: string } | ActionError;

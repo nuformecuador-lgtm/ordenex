@@ -31,6 +31,8 @@ function fakeConversacionRepo(
     marcarUltimoEntrante: vi.fn(async () => {}),
     findByOrdenParaMensajero: vi.fn(async () => null),
     findById: vi.fn(async () => null),
+    contarNoLeidosPorMensajero: vi.fn(async () => []),
+    marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
     ...over,
   };
 }
