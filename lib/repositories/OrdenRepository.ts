@@ -570,7 +570,9 @@ function toTarifaDTO(t: TarifaListRow): TarifaDTO {
     valorFleteDevuelto: t.valorFleteDevuelto.toNumber(),
     valorFleteGam: t.valorFleteGam.toNumber(),
     valorFleteDevueltoGam: t.valorFleteDevueltoGam.toNumber(),
-    fulfillment: t.fulfillment.toNumber(),
+    // Nullable: NULL se normaliza a 0 (para esta columna "sin monto" y "cero" dicen lo mismo;
+    // patron TarifaRepository). No confundir con `tarifaEspecial`, que si conserva el `null`.
+    fulfillment: t.fulfillment == null ? 0 : t.fulfillment.toNumber(),
     comisionCod: t.comisionCod.toNumber(),
     ivaFlete: t.ivaFlete.toNumber(),
     ivaComisionCod: t.ivaComisionCod.toNumber(),

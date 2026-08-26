@@ -27,7 +27,10 @@ function toDTO(row: TarifaRow): TarifaDTO {
     valorFleteDevuelto: row.valorFleteDevuelto.toNumber(),
     valorFleteGam: row.valorFleteGam.toNumber(),
     valorFleteDevueltoGam: row.valorFleteDevueltoGam.toNumber(),
-    fulfillment: row.fulfillment.toNumber(),
+    // Nullable en la base, pero NO se propaga la ausencia: NULL se normaliza a 0 porque para
+    // esta columna "sin monto" y "cero" son el mismo hecho (no hay fulfillment). Justo lo
+    // contrario que `tarifaEspecial`, tres lineas mas abajo.
+    fulfillment: row.fulfillment == null ? 0 : row.fulfillment.toNumber(),
     comisionCod: row.comisionCod.toNumber(),
     ivaFlete: row.ivaFlete.toNumber(),
     ivaComisionCod: row.ivaComisionCod.toNumber(),
@@ -75,7 +78,9 @@ export class TarifaRepository implements ITarifaRepository {
         valorFleteDevuelto: new Prisma.Decimal(data.valorFleteDevuelto),
         valorFleteGam: new Prisma.Decimal(data.valorFleteGam),
         valorFleteDevueltoGam: new Prisma.Decimal(data.valorFleteDevueltoGam),
-        fulfillment: new Prisma.Decimal(data.fulfillment),
+        // Ausente = NULL explicito (sin fulfillment). No se degrada a 0 al ESCRIBIR: el cero
+        // que se guarda es el que alguien tecleo, y el NULL dice que nadie lo hizo.
+        fulfillment: data.fulfillment == null ? null : new Prisma.Decimal(data.fulfillment),
         comisionCod: new Prisma.Decimal(data.comisionCod),
         ivaFlete: new Prisma.Decimal(data.ivaFlete),
         ivaComisionCod: new Prisma.Decimal(data.ivaComisionCod),
@@ -193,7 +198,10 @@ export class TarifaRepository implements ITarifaRepository {
     if (data.valorFleteDevueltoGam !== undefined) {
       out.valorFleteDevueltoGam = new Prisma.Decimal(data.valorFleteDevueltoGam);
     }
-    if (data.fulfillment !== undefined) out.fulfillment = new Prisma.Decimal(data.fulfillment);
+    // `null` viaja tal cual (deja la tarifa sin fulfillment); solo `undefined` se ignora.
+    if (data.fulfillment !== undefined) {
+      out.fulfillment = data.fulfillment === null ? null : new Prisma.Decimal(data.fulfillment);
+    }
     if (data.comisionCod !== undefined) out.comisionCod = new Prisma.Decimal(data.comisionCod);
     if (data.ivaFlete !== undefined) out.ivaFlete = new Prisma.Decimal(data.ivaFlete);
     if (data.ivaComisionCod !== undefined) {
