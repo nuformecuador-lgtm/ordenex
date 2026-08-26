@@ -33,10 +33,10 @@ export function resolverValoresOrden(
     // `total` = valor a cobrar (alias de montoCobrar); es lo que pide la plantilla del negocio.
     total: montoCobrar,
     // SINPE del negocio (numero y titular al que el cliente transfiere): datos de config, NO de
-    // la orden. Vienen de env (`SINPE_NUMERO`/`SINPE_NOMBRE`) — sin `NEXT_PUBLIC_`: son
-    // variables de SERVIDOR y no se inyectan en el bundle del navegador. Ausentes -> "".
-    sinpe: process.env.SINPE_NUMERO ?? "",
-    sinpe_nombre: process.env.SINPE_NOMBRE ?? "",
+    // la orden. Vienen de env (`NEXT_PUBLIC_SINPE_NUMERO`/`NEXT_PUBLIC_SINPE_NOMBRE`) para que
+    // funcionen server-side (envio real) y client-side (flujo wa.me). Ausentes -> "".
+    sinpe: process.env.NEXT_PUBLIC_SINPE_NUMERO ?? "",
+    sinpe_nombre: process.env.NEXT_PUBLIC_SINPE_NOMBRE ?? "",
   };
   const valores: Record<string, string> = {};
   for (const clave of variables) {
