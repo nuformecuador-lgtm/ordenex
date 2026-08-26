@@ -429,3 +429,22 @@ describe("R28 — un caracter fuera del subconjunto falla de forma VISIBLE", () 
     }
   });
 });
+
+describe("R24 — el coste de la fuente es por DOCUMENTO, cero por pagina adicional", () => {
+  it("un lote de 20 paginas declara UN solo recurso Type0 y UN solo /FontFile2", async () => {
+    const etiquetas = Array.from({ length: 20 }, (_, i) => ({
+      ...CASO_EVIDENCIA.dto,
+      ordenId: `o${i}`,
+      numGuia: CASO_EVIDENCIA.dto.numGuia + i,
+      barcodeValue: String(CASO_EVIDENCIA.dto.numGuia + i),
+    }));
+    const bytes = await buildEtiquetasLotePdf(etiquetas);
+    const pdf = Buffer.from(bytes).toString("latin1");
+    // Es la forma ESTRUCTURAL de la medida de tiempo (f = 0,79 ms por documento,
+    // medido en `progress/impl_282.md`): si el registro se colara dentro del
+    // bucle de paginas, aqui habria 20 de cada uno y el coste seria f x N.
+    expect((pdf.match(/\/Subtype \/Type0/g) ?? []).length).toBe(1);
+    expect((pdf.match(/\/FontFile2/g) ?? []).length).toBe(1);
+    expect((pdf.match(/\/Type \/Page(?![s])/g) ?? []).length).toBe(20);
+  });
+});

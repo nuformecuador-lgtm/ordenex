@@ -160,3 +160,26 @@ describe("descargarEtiquetasPdf — la fuente embebida (feature 282)", () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 });
+
+describe("R28 — simbolo no cubierto: en el navegador tampoco se descarga nada", () => {
+  it("el generador LANZA y `save` no llega a llamarse", async () => {
+    // Se fuerza el simbolo a uno fuera del subconjunto (U+20B9). El modulo de
+    // moneda lee el entorno al importarse, asi que hay que reimportar la cadena
+    // entera; por eso el `resetModules`.
+    vi.resetModules();
+    process.env.MONEDA_SIMBOLO = "₹";
+    try {
+      const { descargarEtiquetasPdf: descargar } = await import(
+        "@/app/(app)/ordenes/_components/etiquetas-pdf"
+      );
+      await expect(
+        descargar([etiqueta()], new Map(), getHojaEtiqueta("100x100")),
+      ).rejects.toThrow(/U\+20B9[\s\S]*Monto a cobrar/);
+    } finally {
+      delete process.env.MONEDA_SIMBOLO;
+      vi.resetModules();
+    }
+    // Lo que NO puede pasar: un PDF descargado con el importe sin simbolo.
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+});
