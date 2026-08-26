@@ -496,8 +496,44 @@ diseño: la ficha se secuencia backend → frontend.
 en este repo).
 
 ```
-GATE_PENDIENTE
+$ pnpm run db:generate            # cliente Prisma al dia antes del gate
+$ ./init.sh                       # COMPLETO, con INIT_EXIT dentro del log
+2026-08-25T20:19:15-05:00
+[OK] node v24.13.0
+[OK] dependencias presentes
+[OK] regla max-2-por-zona respetada (in_progress=5)
+[OK] specs presentes para features sdd en vuelo
+-> pnpm run typecheck
+> tsc --noEmit
+[OK] typecheck paso
+-> pnpm run lint
+> eslint
+X 100 problems (0 errors, 100 warnings)
+[OK] lint paso
+-> pnpm run test
+> vitest run
+
+ tests/unit/guards/superficie-de-uso.guardia.test.ts (18 tests | 1 failed) 94ms
+     x ninguna Server Action de `lib/actions/**` es inalcanzable sin su anotacion `@sin-superficie` 23ms
+
+ FAIL  tests/unit/guards/superficie-de-uso.guardia.test.ts
+ AssertionError: ... expected [ Array(1) ] to deeply equal []
+ - []
+ + [
+ +   "lib/actions/tarifas.ts:67 obtenerTarifa",
+ + ]
+
+ Test Files  1 failed | 1400 passed (1401)
+      Tests  1 failed | 19077 passed | 26 skipped (19104)
+   Duration  387.83s
+
+X 'pnpm run test' fallo
+INIT_EXIT=1
+2026-08-25T20:25:50-05:00
 ```
+
+**typecheck: 0 errores. lint: 0 errores** (100 warnings, todos preexistentes y
+ajenos). **Tests: 19.077 pasan, 1 falla, 26 skipped, en 1.401 archivos.**
 
 ### El rojo ajeno, medido
 
@@ -515,8 +551,16 @@ el `merge-base` con `origin/dev` (`9e82aee1`) y **mi diff no toca** ni
 `lib/actions/tarifas.ts` ni esa guardia (comprobado con
 `git diff --name-only 9e82aee1..HEAD`). No se anota, no se silencia y no se toca.
 
-**Delta contra ese baseline: DELTA_PENDIENTE.**
+**Delta contra ese baseline: 0.** El unico rojo de los 1.401 archivos es ese, y
+es el mismo test y la misma linea que ya fallaba. No hay ni un rojo mio.
 
 ## 11. Veredicto
 
-VEREDICTO_PENDIENTE
+El solape y el simbolo estan arreglados **en los dos generadores a la vez** y
+verificados sobre los bytes del PDF, no sobre las llamadas; la maqueta es una
+sola y tiene tres capas que impiden que vuelva a partirse; los tres numeros que
+habia que medir (22.592 chars de base64, f = 0,79 ms por documento, +2.807 B por
+PDF individual) cumplen su tope con holgura; nueve mutaciones salen rojas con su
+salida pegada; y el gate deja **delta 0** contra el unico rojo ajeno. Falta la
+UI del navegador (R31-R33 y la medida del First Load JS), que es de `frontend_dev`
+por diseno de la ficha.
