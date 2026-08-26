@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { FormField } from "@/components/shared/FormField";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 
 // Feature 21 — formulario de postulacion de mensajero (T9: R2, R3, R10, R11, R26).
 // Cliente. Valida con el MISMO schema zod del backend (postulacionSchema) para no
@@ -496,8 +497,8 @@ export function PostulacionForm({
           label={TEXTO_LABELS.password}
           error={fieldErrors.password}
         >
-          <Input
-            type="password"
+          <PasswordInput
+            etiqueta={TEXTO_LABELS.password}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isPending}
@@ -510,8 +511,8 @@ export function PostulacionForm({
           label={TEXTO_LABELS.confirmacion_password}
           error={fieldErrors.confirmacion_password}
         >
-          <Input
-            type="password"
+          <PasswordInput
+            etiqueta={TEXTO_LABELS.confirmacion_password}
             value={confirmacionPassword}
             onChange={(e) => setConfirmacionPassword(e.target.value)}
             disabled={isPending}

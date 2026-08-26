@@ -455,3 +455,58 @@ describe("PostulacionForm — el fallo del envio nunca sale mudo (capa 3)", () =
     expect(reintentar).toBeEnabled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Feature 286 — dos campos de contraseña en la misma pantalla, dos ojitos independientes
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+describe("PostulacionForm — el ojito de cada contraseña (286: R1, R9, R14)", () => {
+  it("R1/R14: los DOS campos tienen su ojito, y cada nombre accesible dice de cual es", () => {
+    renderForm();
+
+    // Que los nombres sean distintos no es cosmetico: hay dos ojitos en la misma
+    // pantalla, y con el mismo nombre habria que adivinar cual es cual.
+    expect(
+      screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirmar contraseña: oculta. Mostrar." }),
+    ).toBeInTheDocument();
+  });
+
+  it("R9: revelar «Contraseña» NO revela «Confirmar contraseña», ni al reves", async () => {
+    const user = setupUser();
+    renderForm();
+
+    const password = screen.getByLabelText("Contraseña");
+    const confirmacion = screen.getByLabelText("Confirmar contraseña");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(confirmacion).toHaveAttribute("type", "password");
+
+    await user.click(
+      screen.getByRole("button", { name: "Confirmar contraseña: oculta. Mostrar." }),
+    );
+    expect(password).toHaveAttribute("type", "text");
+    expect(confirmacion).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: visible. Ocultar." }));
+    expect(password).toHaveAttribute("type", "password");
+    expect(confirmacion).toHaveAttribute("type", "text");
+  });
+
+  it("R9: el valor de cada campo sobrevive a revelar el otro, y el ojito no envia", async () => {
+    const user = setupUser();
+    renderForm();
+
+    await user.type(screen.getByLabelText("Contraseña"), "Clave-Larga-1");
+    await user.type(screen.getByLabelText("Confirmar contraseña"), "Clave-Larga-1");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+
+    expect(screen.getByLabelText("Contraseña")).toHaveValue("Clave-Larga-1");
+    expect(screen.getByLabelText("Confirmar contraseña")).toHaveValue("Clave-Larga-1");
+    expect(mockedPostular).not.toHaveBeenCalled();
+  });
+});

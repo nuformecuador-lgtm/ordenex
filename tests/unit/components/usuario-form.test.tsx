@@ -833,3 +833,61 @@ describe("UsuarioForm — el rol apiKey no se asigna a mano", () => {
     expect(rolTrigger).toBeDisabled();
   }, 15000);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Feature 286 — el ojito del alta manual de contraseña
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+describe("UsuarioForm — el ojito de la contraseña (286: R1, R4, R14)", () => {
+  it("R1: en modo «Escribir» hay ojito y alterna el `type` del campo", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    const password = screen.getByLabelText("Contraseña");
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+    expect(screen.getByLabelText("Contraseña")).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Contraseña: visible. Ocultar." }));
+    expect(screen.getByLabelText("Contraseña")).toHaveAttribute("type", "password");
+  });
+
+  it("R1: al pasar a «Generar automáticamente» el ojito se va CON su campo", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    expect(
+      screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Generar/ }));
+
+    expect(screen.queryByLabelText("Contraseña")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Contraseña: oculta. Mostrar." }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("R4: el nombre accesible del ojito no se cuela como «Contraseña» y rompe las busquedas de al lado", () => {
+    // `queryByLabelText("Contraseña")` en modo generar tiene que seguir dando null, y en
+    // modo manual tiene que seguir dando EL INPUT y no el boton. Es lo que afirman dos
+    // casos vivos de esta misma suite desde la feature 24.
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    const encontrado = screen.getByLabelText("Contraseña");
+    expect(encontrado.tagName).toBe("INPUT");
+    expect(encontrado).toHaveAttribute("id", "password");
+  });
+
+  it("R10: pulsar el ojito no envia el alta", async () => {
+    const user = userEvent.setup();
+    renderIsolated(<UsuarioForm mode="crear" />);
+
+    await user.type(screen.getByLabelText("Contraseña"), "Abcd1234$");
+    await user.click(screen.getByRole("button", { name: "Contraseña: oculta. Mostrar." }));
+
+    expect(crearUsuarioMock).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Contraseña")).toHaveValue("Abcd1234$");
+  });
+});

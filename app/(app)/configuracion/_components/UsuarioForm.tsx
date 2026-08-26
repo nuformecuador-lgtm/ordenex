@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { FormField } from "@/components/shared/FormField";
+import { PasswordInput } from "@/components/shared/PasswordInput";
 import {
   actualizarUsuarioSchema,
   crearUsuarioSchema,
@@ -507,8 +508,8 @@ export const UsuarioForm = forwardRef<UsuarioFormHandle, UsuarioFormProps>(
             </div>
             {passwordMode === "manual" ? (
               <FormField id="password" label="Contraseña" error={errors.password}>
-                <Input
-                  type="password"
+                <PasswordInput
+                  etiqueta="Contraseña"
                   value={form.password}
                   onChange={(e) => setField("password", e.target.value)}
                 />
