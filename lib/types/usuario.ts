@@ -152,3 +152,20 @@ export type ListarTiposIdentificacionResult =
   | { status: "ok"; tipos: { id: string; value: string }[] }
   | ActionError;
 export type ListarRolesResult = { status: "ok"; roles: RolItem[] } | ActionError;
+
+/**
+ * Feature 287/R15/R21 — resultado del restablecimiento de contrasena EN EL BORDE.
+ *
+ * ⚠️ NO se anade ningun schema zod aqui, y es deliberado: la accion solo recibe el `id` del
+ * usuario objetivo (validado con el mismo `idSchema` que las demas), asi que **no hay entrada
+ * donde meter una contrasena** (R6/R10). La ausencia del parametro es la garantia; un schema con
+ * `.strict()` seria una defensa mas debil, porque alguien puede relajarlo.
+ *
+ * `generatedPassword` es obligatorio en `ok` y no existe en ninguna otra rama: es el TIPO el que
+ * impide que un error viaje con la contrasena (R15). `self_reset_forbidden` va aparte de
+ * `ActionError` porque es una negativa con motivo propio (R5), distinguible de `forbidden`.
+ */
+export type RestablecerContrasenaResult =
+  | { status: "ok"; usuarioId: string; generatedPassword: string; sesionesRevocadas: number }
+  | { status: "self_reset_forbidden" } // R5
+  | ActionError; // unauthenticated (R1) | forbidden (R2) | not_found (R4) | validation_error (R6)

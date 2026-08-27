@@ -191,3 +191,20 @@ global (`lib/errors`, `toActionError`), DataTable/Pagination/Modal (`components/
   Descartada: mezcla la baja/alta lógica (acción con semántica propia y auditable) con
   la edición de datos. Se separa en `cambiarEstadoUsuario` para claridad y para acotar
   qué toca cada operación (R16 vs R20/R21).
+
+## APÉNDICE — 2026-08-26: el «reset futuro» de A6 ya existe (la **Decisión 5**, acotada)
+
+> Se **añade**; el texto de arriba **no se toca** (ver el apéndice gemelo en
+> `requirements.md`).
+
+A6 descartaba guardar la contraseña autogenerada y decía que, si se pierde, «el flujo correcto
+es un **reset futuro** (fuera de alcance, Decisión 5)». Ese reset **ya existe** desde el
+2026-08-26: la feature 287 (`specs/287-maestro-restablece-contrasena`) **acota** la Decisión 5
+revirtiendo únicamente su cláusula de alcance, y el maestro puede restablecer la contraseña de
+un usuario desde el listado.
+
+Lo que A6 protegía sigue en pie y por eso la reversión es parcial: la contraseña **no se
+guarda** en ningún sitio, se sigue mostrando **una sola vez** y solo se persiste el hash. La
+diferencia con lo que la Decisión 5 impedía es que el maestro **restablece** (el sistema genera
+la contraseña) en vez de **fijar** (escribir una que él elija), así que sigue sin poder dejar
+puesta una credencial que conozca de antemano.
