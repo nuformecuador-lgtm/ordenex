@@ -303,6 +303,10 @@ describe("271/R33 · el filtro de mensajero del listado NO lo aplica", () => {
       .join("\n");
 
     expect(codigo).not.toMatch(/bloqueadosIds/);
+    // 2026-08-26: la MISMA acción trae ahora `noAsignablesIds` y aquí tampoco se lee, por la MISMA
+    // razón: un mensajero dado de baja sigue siendo el asignado de órdenes históricas que alguien
+    // necesita buscar. Esconderlo del filtro las volvería inalcanzables.
+    expect(codigo).not.toMatch(/noAsignablesIds/);
     // Anti-vacuidad: si el archivo se renombrara o se vaciara, esto lo delata.
     expect(codigo).toMatch(/listarMensajerosParaAsignacion/);
   });

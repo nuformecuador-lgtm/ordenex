@@ -203,6 +203,15 @@ model PlantillaMensaje {
   // vive la politica) pasandolo explicito en el `create`; el default de columna no lo decide
   // nadie hoy porque ninguna escritura lo omite.
   estado         PlantillaEstado @default(pending) // R12 (Decision humana 1)
+  /// Marca la plantilla que se envia automaticamente al cliente cuando el paquete es recogido.
+  /// Como mucho UNA vigente puede tenerlo en `true`, y quien lo garantiza es la BASE con un
+  /// UNIQUE PARCIAL —`plantilla_mensaje_welcome_message_key`, `WHERE welcome_message = true AND
+  /// deleted_at IS NULL`— que Prisma no sabe expresar y por eso va a mano en
+  /// `20260826200000_plantilla_welcome_message` (mismo caso que `jobs.dedupeKey`). NO lleva
+  /// `@unique` aqui: eso pediria un indice TOTAL y solo dejaria una fila en `false` en toda la
+  /// tabla. Toda lectura de la bienvenida filtra `deletedAt IS NULL`: una borrada conserva su
+  /// `true` historico pero queda fuera del indice y del negocio.
+  welcomeMessage Boolean         @default(false) @map("welcome_message")
   // Integracion WhatsApp: enlace al Message Template de Meta. NULL = todavia no propagada a
   // Meta (o Meta no la ha devuelto en la sincronizacion). El envio usa `nombre` + `templateIdioma`
   // (Meta manda por name+language, no por id); `templateId` es la referencia/traza a Meta y el
@@ -269,6 +278,10 @@ model ChatConversacion {
   ordenId          String    @map("orden_id") // FK -> orden; ON DELETE RESTRICT (no huerfanos)
   mensajeroId      String    @map("mensajero_id") // FK -> usuario (mensajero asignado del hilo); ON DELETE RESTRICT
   ultimoEntranteAt DateTime? @map("ultimo_entrante_at") // marca del ultimo mensaje ENTRANTE; NULL = sin entrantes (fuera de ventana)
+  // Hasta donde LEYO el mensajero este hilo. NULL = nunca lo abrio -> todo entrante cuenta como
+  // no leido. El contador del chat es `entrantes con ocurrido_at > mensajero_leido_at`, asi que
+  // guardar la MARCA (no un contador) hace la lectura idempotente y sin condiciones de carrera.
+  mensajeroLeidoAt DateTime? @map("mensajero_leido_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -2044,6 +2057,7 @@ enum JobTipo {
   whatsapp_chat_envio // feature 109/D1: reintenta el envio saliente de un mensaje de chat que devolvio `transitorio` (payload { mensajeChatId })
   analitica_rollup_diario // feature 124/D4: agrega el rollup diario de la fecha CR que acaba de cerrar (D-1); RECURRENTE a las 00:30 CR, payload vacio {}
   analitica_invalidacion_cache // feature 128/D3: invalida por tag la cache de la analitica operativa tras un recomputo del backfill (125); PUNTUAL, encolado por el script, payload { desde, hasta }
+  whatsapp_bienvenida // mensaje de bienvenida: envia la plantilla marcada al recoger el paquete (por_recoger -> en_reparto, familia `recoleccion`); PUNTUAL, encolado por el choke point de estado, payload { ordenId, mensajeroId, ocurridoAt }
 
   @@map("job_tipo")
 }

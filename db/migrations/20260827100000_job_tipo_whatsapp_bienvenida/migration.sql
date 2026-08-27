@@ -1,0 +1,18 @@
+-- MENSAJE DE BIENVENIDA: anade el 9.º valor al enum `job_tipo` — `whatsapp_bienvenida`, el job
+-- PUNTUAL que envia al cliente la plantilla marcada como bienvenida cuando el mensajero recoge
+-- su paquete (`por_recoger` -> `en_reparto`, familia `recoleccion`).
+--
+-- POR QUE UN JOB Y NO UN ENVIO EN LINEA: la recogida se confirma con el paquete en la mano. Si
+-- la transicion esperase a la Graph API de Meta, un timeout ajeno dejaria al mensajero mirando
+-- una rueda, y un fallo de Meta ensuciaria una recogida que YA ocurrio. Encolando, la
+-- transicion se confirma al instante y el cron `app/api/cron/procesar-jobs` —que corre cada
+-- minuto— entrega con reintentos, backoff y dead-letter gratis. Es el mismo criterio que ya
+-- siguen el webhook a integradores y el reintento del chat en esta MISMA transicion.
+--
+-- POR QUE ESTA MIGRACION VA SOLA: Postgres NO permite USAR un valor de enum en la misma
+-- transaccion que lo anadio (error 55P04). Prisma Migrate corre cada migration.sql en una
+-- transaccion. Mismo criterio que 20260803140000_job_tipo_analitica_invalidacion_cache (feature
+-- 128), 20260801100000_job_tipo_analitica_rollup_diario (feature 124) y las cinco hermanas.
+--
+-- Aditiva: no altera ninguna tabla existente.
+ALTER TYPE "job_tipo" ADD VALUE IF NOT EXISTS 'whatsapp_bienvenida';

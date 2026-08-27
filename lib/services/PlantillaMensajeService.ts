@@ -9,8 +9,10 @@ import type {
   CambiarEstadoPlantillaServiceResult,
   CrearPlantillaServiceResult,
   EliminarPlantillaServiceResult,
+  EnviarAprobacionPlantillaServiceResult,
   IPlantillaMensajeService,
   ListarPlantillasCompletoServiceResult,
+  MarcarBienvenidaPlantillaServiceResult,
   ListarPlantillasServiceResult,
   PreviewPlantillaServiceResult,
 } from "@/lib/interfaces/services/IPlantillaMensajeService";
@@ -56,10 +58,15 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
         cuerpo: input.cuerpo,
         variables: validado.variables, // R15
         createdBy: actor.usuarioId, // FK -> usuario creador (R8)
+        // 2026-08-26: GUARDAR YA NO ES ENVIAR. Nace `saved_not_aprobation` y aqui NO se llama
+        // a `trasCrear`: la propagacion a Meta pasa a ser un acto explicito y confirmado del
+        // maestro (`enviarAprobacion`). El motivo es que enviar a Meta NO SE PUEDE DESHACER
+        // —una vez en revision, ni se cancela ni se retira— y el alta era la unica mutacion
+        // del modulo que disparaba un efecto irreversible sin preguntar. Guardar un borrador
+        // pasa a costar cero.
+        estado: "saved_not_aprobation",
       });
-      // Propaga a Meta (sincrono; encola reintento si falla). No bloquea el resultado local.
-      await this.whatsapp?.trasCrear(plantilla);
-      return { status: "ok", plantilla }; // nace `pending` (R12, default del schema)
+      return { status: "ok", plantilla };
     } catch (error) {
       if (error instanceof PlantillaDuplicadaError) {
         return { status: "conflict", campo: error.campo }; // R10
@@ -146,10 +153,30 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
     }
 
     try {
-      const plantilla = await this.repo.update(id, data);
-      if (!plantilla) return { status: "not_found" }; // R21
-      // Propaga el cambio a Meta (crea el template si aun no estaba enlazado, o lo actualiza).
-      await this.whatsapp?.trasActualizar(plantilla);
+      const actualizada = await this.repo.update(id, data);
+      if (!actualizada) return { status: "not_found" }; // R21
+
+      // EDITAR UN BORRADOR NO LO ENVIA. Una plantilla que nunca salio de casa
+      // (`saved_not_aprobation` y sin `templateId`) se sigue guardando y sigue siendo un
+      // borrador: si el primer `Guardar` de una edicion la mandara a Meta, el estado nuevo
+      // duraria exactamente una edicion y "guardar sin aprobacion" no significaria nada.
+      // El aviso de la UI —"actualizar la envia para aprobacion"— habla de las OTRAS: las que
+      // Meta ya tiene, que es donde editar si tiene consecuencia.
+      const esBorradorNuncaEnviado =
+        actual.estado === "saved_not_aprobation" && actual.templateId === null;
+      if (esBorradorNuncaEnviado) return { status: "ok", plantilla: actualizada };
+
+      // Propaga el cambio a Meta (crea el template si aun no estaba enlazado, o lo actualiza)
+      // y la deja EN REVISION. Meta no aprueba una edicion en caliente: el template vuelve a
+      // la cola de revision, asi que dejarla `activo` aqui la anunciaria como enviable
+      // mientras Meta todavia la mira. `pending` la saca de `listarEnviables` hasta que el
+      // cron de 24 h traiga el veredicto. Es la razon de que la UI avise ANTES de editar.
+      //
+      // Sin WhatsApp configurado no se toca el estado: no hubo envio, y marcarla `pending`
+      // seria decir que Meta la esta revisando cuando no ha recibido nada.
+      await this.whatsapp?.trasActualizar(actualizada);
+      if (this.whatsapp === undefined) return { status: "ok", plantilla: actualizada };
+      const plantilla = (await this.repo.updateEstado(id, "pending")) ?? actualizada;
       return { status: "ok", plantilla };
     } catch (error) {
       if (error instanceof PlantillaDuplicadaError) {
@@ -187,6 +214,61 @@ export class PlantillaMensajeService implements IPlantillaMensajeService {
       await this.whatsapp?.trasEliminar(id, actual.nombre);
     }
     return { status: "ok" };
+  }
+
+  /**
+   * Manda la plantilla a revision de Meta y la deja `pending`.
+   *
+   * NO ES REVERSIBLE y por eso es un metodo aparte con su confirmacion en la UI: una vez que
+   * el template entra en revision no hay forma de cancelarlo desde aqui ni desde Meta.
+   *
+   * El propagador NUNCA lanza: si Meta esta caida encola un job de reintento. Por eso el exito
+   * local significa "queda enviada o en cola de envio", que es exactamente lo que `pending`
+   * describe; un fallo de red no puede dejar la fila diciendo que sigue guardada sin enviar
+   * cuando el reintento la va a mandar en cuanto corra el cron.
+   */
+  async enviarAprobacion(
+    id: string,
+    actor: Actor,
+  ): Promise<EnviarAprobacionPlantillaServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
+
+    const actual = await this.repo.findById(id);
+    if (!actual) return { status: "not_found" };
+
+    // Sin credenciales de WhatsApp el CRUD local funciona igual, pero no hay a quien enviar:
+    // se dice, en vez de fingir un envio y dejar la fila mintiendo en `pending`.
+    if (this.whatsapp === undefined) return { status: "no_configurado" };
+
+    // Ya en revision: no se reenvia (seria una segunda peticion a Meta por el mismo cuerpo) y
+    // tampoco es un error que el maestro tenga que resolver.
+    if (actual.estado === "pending") return { status: "ya_enviada", plantilla: actual };
+
+    await this.whatsapp.trasActualizar(actual); // crea el template si no estaba enlazado
+    const plantilla = (await this.repo.updateEstado(id, "pending")) ?? actual;
+    return { status: "ok", plantilla };
+  }
+
+  /**
+   * Marca la plantilla como MENSAJE DE BIENVENIDA (el envio automatico al recoger el paquete).
+   *
+   * NO toca Meta ni el estado de revision: elegir cual es la de bienvenida es una decision
+   * local sobre plantillas que ya existen, no un cambio del texto que Meta aprobo. Por eso
+   * tampoco hay confirmacion en la UI: es reversible marcando otra.
+   *
+   * Se permite desde CUALQUIER estado a proposito. Acotarlo a `activo` obligaria al maestro a
+   * esperar la aprobacion de Meta para poder siquiera declarar su intencion, y el momento del
+   * envio —que es quien tiene que exigir una plantilla enviable— no es este.
+   */
+  async marcarMensajeBienvenida(
+    id: string,
+    actor: Actor,
+  ): Promise<MarcarBienvenidaPlantillaServiceResult> {
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R5
+
+    const plantilla = await this.repo.marcarWelcomeMessage(id);
+    if (!plantilla) return { status: "not_found" }; // no existe o esta borrada
+    return { status: "ok", plantilla };
   }
 
   async preview(cuerpo: string, actor: Actor): Promise<PreviewPlantillaServiceResult> {

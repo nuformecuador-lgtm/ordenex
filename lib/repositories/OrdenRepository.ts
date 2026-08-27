@@ -17,6 +17,7 @@ import {
 // Feature 271 (R57-R61) — el UNICO derivador de la jornada de un cierre, y la conversion a fecha
 // de Costa Rica que necesita. `created_at` de un `vencido` va UN DIA por delante de la jornada.
 import { derivarJornada } from "@/lib/utils/jornada-cierre";
+import { ESTADOS_USUARIO_NO_ASIGNABLES } from "@/lib/constants/estado-usuario-asignable";
 import { fechaCalendarioCR } from "@/lib/utils/fecha-cr";
 // Feature 274 — LA REGLA de resolucion de tarifa vive en un modulo PURO, compartido con el
 // resolver del cierre de dia: el listado no puede tener una regla propia (R18/R21).
@@ -2209,6 +2210,22 @@ export class OrdenRepository implements IOrdenRepository {
     if (ids.length === 0) return new Set();
     const rows = await this.prisma.usuario.findMany({
       where: { id: { in: ids }, vehiculoId: { not: null } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
+   * Pedido humano (2026-08-26): de `ids`, los que NO pueden recibir trabajo por su ESTADO de
+   * usuario (`ESTADOS_USUARIO_NO_ASIGNABLES` = `inactivo` / `bloqueado`).
+   *
+   * Devuelve los BLOQUEADOS, no los elegibles: se compone en el mismo mapa `noElegibles` del
+   * selector que `findMensajerosBloqueadosPorCierres`.
+   */
+  async findMensajerosNoAsignablesPorEstado(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.usuario.findMany({
+      where: { id: { in: ids }, estado: { in: [...ESTADOS_USUARIO_NO_ASIGNABLES] } },
       select: { id: true },
     });
     return new Set(rows.map((r) => r.id));

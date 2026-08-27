@@ -20,6 +20,7 @@ import {
   MOTIVO_BLOQUEADO_POR_CIERRE,
   toMensajeroOptions,
 } from "@/app/(app)/ordenes/_components/mensajero-options";
+import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { asignacionSateliteErrorMessage } from "./asignacion-satelite-error-messages";
 
 export interface AsignarSateliteModalProps {
@@ -39,6 +40,12 @@ export interface AsignarSateliteModalProps {
    * uno más, ni uno menos.
    */
   mensajerosBloqueadosIds?: string[];
+  /**
+   * Pedido humano (2026-08-26): ids de mensajeros que NO pueden recibir trabajo por su ESTADO de
+   * usuario (`inactivo` / `bloqueado`). Llega de la MISMA acción que la lista, resuelto con el
+   * MISMO predicado que aplica la escritura: aquí no se re-deriva nada.
+   */
+  mensajerosNoAsignablesIds?: string[];
   /**
    * Feature 246 (T4.3, R29): las MISMAS fechas y el MISMO contrato que la bodega central. La
    * simetría no es estética: D4 se firmó para que la elección del día signifique exactamente lo
@@ -62,6 +69,7 @@ export function AsignarSateliteModal({
   ordenes,
   mensajeros,
   mensajerosBloqueadosIds = [],
+  mensajerosNoAsignablesIds = [],
   fechasDiaReparto,
   onOpenChange,
   onSuccess,
@@ -98,9 +106,15 @@ export function AsignarSateliteModal({
   // rechaza otra vez, así que no marcarlos devuelve la pantalla al estado exacto del incidente:
   // el adminSatelite elige a alguien y el lote entero se cae sin efectos. Sigue sin haber ninguna
   // otra regla de elegibilidad aquí (la dedicación reparto/recolección es de la central).
+  //
+  // 2026-08-26: y el segundo motivo, el ESTADO del usuario. Va DESPUÉS en el mapa, así que gana si
+  // concurren: un mensajero dado de baja no se desbloquea cerrando cierres.
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
-    new Map(mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE])),
+    new Map([
+      ...mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE] as const),
+      ...mensajerosNoAsignablesIds.map((id) => [id, MOTIVO_USUARIO_NO_ASIGNABLE] as const),
+    ]),
   );
 
   async function handleConfirm() {

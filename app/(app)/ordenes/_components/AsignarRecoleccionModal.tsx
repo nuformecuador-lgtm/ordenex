@@ -11,6 +11,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
 import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
+import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarRecoleccionModalProps {
@@ -35,6 +36,12 @@ export interface AsignarRecoleccionModalProps {
    * tienda es cobrar, y el dinero que cobre no tendría cierre al que ir.
    */
   mensajerosBloqueadosIds?: string[];
+  /**
+   * Pedido humano (2026-08-26): ids de mensajeros que NO pueden recibir trabajo por su ESTADO de
+   * usuario (`inactivo` / `bloqueado`). Llega de la MISMA acción que la lista, resuelto con el
+   * MISMO predicado que aplica la escritura: aquí no se re-deriva nada.
+   */
+  mensajerosNoAsignablesIds?: string[];
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
@@ -59,6 +66,7 @@ export function AsignarRecoleccionModal({
   mensajeros,
   mensajerosConRepartoIds = [],
   mensajerosBloqueadosIds = [],
+  mensajerosNoAsignablesIds = [],
   onOpenChange,
   onSuccess,
 }: AsignarRecoleccionModalProps) {
@@ -72,13 +80,15 @@ export function AsignarRecoleccionModal({
     if (open) setMensajeroId("");
   }
 
-  // Los dos motivos, en un solo mapa. El del CIERRE va DESPUÉS: si concurren, gana el que el
-  // mensajero puede resolver por su cuenta.
+  // Los tres motivos, en un solo mapa. El del CIERRE va DESPUÉS del reparto: si concurren, gana el
+  // que el mensajero puede resolver por su cuenta. El del ESTADO (2026-08-26) va el último y gana a
+  // los dos: estar dado de baja no se arregla trabajando ni cerrando.
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
     new Map([
       ...mensajerosConRepartoIds.map((id) => [id, "tiene reparto pendiente"] as const),
       ...mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE] as const),
+      ...mensajerosNoAsignablesIds.map((id) => [id, MOTIVO_USUARIO_NO_ASIGNABLE] as const),
     ]),
   );
 

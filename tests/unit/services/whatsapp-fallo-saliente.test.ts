@@ -6,6 +6,7 @@
 //   3. el reintento se encola SOLO para codigos transitorios (lista blanca conservadora).
 import { describe, expect, it, vi } from "vitest";
 
+import { datosPlantillaFixture } from "@/tests/fixtures/plantilla-datos";
 import { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
 import type { ChatLogger } from "@/lib/services/ChatWhatsappService";
 import { CODIGOS_TRANSITORIOS, esErrorTransitorio } from "@/lib/services/whatsapp/errores-meta";
@@ -230,16 +231,7 @@ describe("reintentarEnvio: un saliente de plantilla se reenvia COMO plantilla", 
     templateId: "tpl-meta-1",
     templateIdioma: "es_MX",
   };
-  const orden = {
-    destinatario: "Juan Perez",
-    telefonoDest: "573112195060",
-    numGuia: 25381189,
-    numRemision: "REM-0002",
-    producto: "Camiseta talla M",
-    direccion: null,
-    montoCobrar: 25.9,
-    mensajeroNombre: "Jose Castillo",
-  };
+  const orden = datosPlantillaFixture({ orden: { direccion: null, montoCobrar: 25.9 } });
 
   function servicioConPlantilla(tipo: "plantilla" | "texto") {
     const enviarPlantilla = vi.fn(async () => ({ status: "ok" as const, mensajeId: "wamid.NEW" }));

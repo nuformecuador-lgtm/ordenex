@@ -7,7 +7,7 @@
 // de parametro en Meta. `variables[0]` -> `{{1}}`, `variables[1]` -> `{{2}}`, etc. Ese mismo
 // orden se respeta al ENVIAR, asi que crear/editar y enviar hablan del mismo mapeo.
 
-import { PLANTILLA_VARIABLE_EJEMPLOS } from "@/lib/types/plantilla-variables";
+import { EJEMPLOS_POR_CLAVE } from "@/lib/types/plantilla-datos";
 
 // Mismo placeholder que `lib/utils/plantilla-mensaje.ts` (R14): `{{` + clave [a-z0-9_]+ + `}}`.
 const PLACEHOLDER_RE = /\{\{\s*([a-z0-9_]+)\s*\}\}/gi;
@@ -27,11 +27,17 @@ export function cuerpoANumerado(cuerpo: string, variables: string[]): string {
 
 /**
  * Valor de ejemplo que Meta EXIGE por cada parametro del body al crear/editar un template.
- * Sale del catalogo de la feature 107 si la clave esta declarada; si no, un marcador no
- * vacio derivado de la clave (Meta rechaza ejemplos vacios).
+ * Sale del catalogo de campos (`lib/types/plantilla-datos.ts`) si la clave esta declarada; si
+ * no, un marcador no vacio derivado de la clave, porque Meta rechaza ejemplos vacios.
+ *
+ * Feature 282: antes se leia el catalogo VACIO de `plantilla-variables.ts`, asi que TODA clave
+ * caia al marcador y a Meta viajaba `MONTO` como ejemplo del monto. Ahora viaja `₡12.500`, el
+ * mismo valor que el maestro ve en la vista previa (R12). El alcance del cambio es acotado:
+ * solo el `example.body_text` de los create/update FUTUROS. Ni el `text` aprobado, ni el orden
+ * de los parametros, ni ninguna plantilla ya aprobada se reenvia por esto (design §4.4).
  */
 function ejemploDe(clave: string): string {
-  const ej = PLANTILLA_VARIABLE_EJEMPLOS[clave];
+  const ej = EJEMPLOS_POR_CLAVE[clave];
   return ej !== undefined && ej !== "" ? ej : clave.toUpperCase();
 }
 

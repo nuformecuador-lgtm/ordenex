@@ -52,6 +52,7 @@ describe("R14: sin sesion valida -> unauthenticated antes de tocar el service", 
       findMensajerosByZona: vi.fn(),
       findMensajerosConOrdenesEn: vi.fn(),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32 // feature 157
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
 
     };
     const zonaRepo = { findCentralZonaId: vi.fn() };
@@ -242,6 +243,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -270,6 +272,9 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
       conRecoleccionIds: [],
       // Feature 271/R32: el doble no bloquea a nadie, asi que la lista viaja vacia — pero VIAJA.
       bloqueadosIds: [],
+      // 2026-08-26: idem para los dados de baja (`inactivo`/`bloqueado`). Lista APARTE porque el
+      // motivo es otro y se arregla en otra pantalla.
+      noAsignablesIds: [],
     });
     expect(findMensajerosByZona).toHaveBeenCalledWith("z-gam"); // R5: filtrado por zona GAM
   });
@@ -291,6 +296,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosByZona,
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
         findMensajerosBloqueadosPorCierres,
+        findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -328,6 +334,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosConOrdenesEn,
         // Feature 271/R32: el selector marca a los que el servidor va a rechazar.
         findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
+        findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -358,6 +365,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         findMensajerosConOrdenesEn,
         // Feature 271/R32: el selector marca a los que el servidor va a rechazar.
         findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
+        findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -375,6 +383,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(MAESTRO),
@@ -393,6 +402,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor(ADMIN),
@@ -410,6 +420,7 @@ describe("Feature 30/R5: listarMensajerosParaAsignacion devuelve SOLO mensajeros
         // feature 157: sin carga por defecto; los casos de la regla lo overridean.
         findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()), // feature 271/R32
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       },
       zonaRepo: { findCentralZonaId },
       getActor: getActor({ usuarioId: "u-msg", rol: "mensajero" }),

@@ -20,8 +20,20 @@ function buildPrisma(overrides: Record<string, unknown> = {}) {
     // R25/D4: la resolucion del entrante matchea el telefono NORMALIZADO en ambos lados via SQL
     // crudo (`regexp_replace`), porque Prisma no puede normalizar la columna en el WHERE.
     $queryRaw: vi.fn(),
+    // El conteo de no leidos y el sellado de lectura tambien van raw: correlacionan
+    // `chat_mensaje.ocurrido_at` con `chat_conversacion.mensajero_leido_at`.
+    $executeRaw: vi.fn(),
     ...overrides,
   };
+}
+
+/**
+ * Texto del SQL de una plantilla `Prisma.sql`, con los parametros sustituidos por `?`. Los
+ * valores viajan aparte (`.values`), que es justo lo que hace falta comprobar: el scope no
+ * esta interpolado en el texto.
+ */
+function sqlTexto(arg: { strings: readonly string[] }): string {
+  return arg.strings.join("?");
 }
 
 const HILO = {
@@ -113,5 +125,86 @@ describe("ChatConversacionRepository", () => {
     const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
 
     expect(await repo.resolverOrdenActivaPorNumero("573999")).toBeNull();
+  });
+});
+
+// Indicador de mensajes sin leer: el conteo se DERIVA de `mensajero_leido_at`, no de un
+// contador guardado. Estos tests fijan las tres decisiones que hacen que el numero sea
+// correcto: solo entrantes, `NULL` = nunca leido (cuentan todos) y el scope por mensajero
+// como PARAMETRO (nunca interpolado en el texto del SQL).
+describe("ChatConversacionRepository · no leidos del chat", () => {
+  it("cuenta SOLO entrantes posteriores a la marca de lectura, scopeado por mensajero", async () => {
+    const prisma = buildPrisma();
+    prisma.$queryRaw.mockResolvedValue([
+      { orden_id: "orden-1", no_leidos: 3 },
+      { orden_id: "orden-2", no_leidos: 1 },
+    ]);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.contarNoLeidosPorMensajero("men-1");
+
+    const arg = prisma.$queryRaw.mock.calls[0][0];
+    const texto = sqlTexto(arg);
+    expect(texto).toMatch(/m\.direccion = 'entrante'/);
+    expect(texto).toMatch(/m\.ocurrido_at > c\.mensajero_leido_at/);
+    // NULL = nunca abrio el hilo -> cuentan todos los entrantes.
+    expect(texto).toMatch(/c\.mensajero_leido_at IS NULL/);
+    expect(texto).toMatch(/GROUP BY c\.orden_id/);
+    // El scope viaja como parametro, no concatenado (sin esto seria inyectable).
+    expect(texto).toContain("c.mensajero_id = ?");
+    expect(arg.values).toEqual(["men-1"]);
+
+    expect(res).toEqual([
+      { ordenId: "orden-1", noLeidos: 3 },
+      { ordenId: "orden-2", noLeidos: 1 },
+    ]);
+  });
+
+  it("castea el COUNT a int: el BigInt de Postgres no cruza a la UI", async () => {
+    const prisma = buildPrisma();
+    prisma.$queryRaw.mockResolvedValue([{ orden_id: "orden-1", no_leidos: 2 }]);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    const res = await repo.contarNoLeidosPorMensajero("men-1");
+
+    expect(sqlTexto(prisma.$queryRaw.mock.calls[0][0])).toMatch(/COUNT\(m\.id\)::int/);
+    expect(typeof res[0].noLeidos).toBe("number");
+    expect(JSON.stringify(res)).toContain('"noLeidos":2'); // serializable, no BigInt
+  });
+
+  it("sin pendientes -> lista vacia (la ausencia es el cero)", async () => {
+    const prisma = buildPrisma();
+    prisma.$queryRaw.mockResolvedValue([]);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    expect(await repo.contarNoLeidosPorMensajero("men-1")).toEqual([]);
+  });
+
+  it("sella la lectura con el ULTIMO entrante del hilo, no con la hora del servidor", async () => {
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(1);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    await repo.marcarLeidoHastaUltimoEntrante("orden-1", "men-1");
+
+    const texto = sqlTexto(prisma.$executeRaw.mock.calls[0][0]);
+    // La marca sale del hilo: `now()` daria por leido un entrante que el mensajero no vio.
+    expect(texto).toMatch(/mensajero_leido_at = GREATEST/);
+    expect(texto).toMatch(/SELECT MAX\(m\.ocurrido_at\)/);
+    expect(texto).toMatch(/m\.direccion = 'entrante'/);
+    expect(texto).not.toMatch(/mensajero_leido_at = NOW\(\)/);
+  });
+
+  it("el sellado va scopeado por (orden, mensajero): nadie marca el hilo de otro", async () => {
+    const prisma = buildPrisma();
+    prisma.$executeRaw.mockResolvedValue(0);
+    const repo = new ChatConversacionRepository(prisma as unknown as PrismaClient);
+
+    await repo.marcarLeidoHastaUltimoEntrante("orden-1", "men-1");
+
+    const arg = prisma.$executeRaw.mock.calls[0][0];
+    expect(sqlTexto(arg)).toContain("c.orden_id = ?");
+    expect(sqlTexto(arg)).toContain("c.mensajero_id = ?");
+    expect(arg.values).toEqual(["orden-1", "men-1"]);
   });
 });

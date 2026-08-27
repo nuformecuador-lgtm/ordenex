@@ -12,7 +12,7 @@ import type { WebhookEventos, WebhookStatus } from "@/lib/types/whatsapp-webhook
 import { normalizarTelefonoWa } from "@/lib/utils/whatsapp-telefono";
 import { esErrorTransitorio } from "@/lib/services/whatsapp/errores-meta";
 import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
-import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
+import { resolverValoresPlantilla } from "@/lib/types/plantilla-datos";
 
 /**
  * Cliente minimo consumido: el envio de texto libre (saliente del chat) y el envio de una
@@ -425,12 +425,12 @@ export class ChatWhatsappService {
     if (plantilla === null) {
       throw new Error("reintento de plantilla: la plantilla ya no es enviable");
     }
-    const orden = await ordenReader.findParaEnvio(hilo.ordenId, hilo.mensajeroId);
-    if (orden === null) {
+    const datos = await ordenReader.findParaEnvio(hilo.ordenId, hilo.mensajeroId);
+    if (datos === null) {
       throw new Error("reintento de plantilla: la orden ya no esta asignada a ese mensajero");
     }
 
-    const valores = resolverValoresOrden(plantilla.variables, orden);
+    const valores = resolverValoresPlantilla(plantilla.variables, datos);
     const componentes = construirComponentsEnvio(plantilla.variables, valores);
     return client.enviarPlantilla(
       hilo.telefonoE164,

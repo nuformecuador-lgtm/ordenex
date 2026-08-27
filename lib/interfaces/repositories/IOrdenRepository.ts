@@ -1132,6 +1132,21 @@ export interface IOrdenRepository {
    */
   findMensajeroIdsConVehiculo(ids: string[]): Promise<Set<string>>;
   /**
+   * Pedido humano (2026-08-26): subconjunto de `ids` cuyo `estado` de usuario NO admite
+   * recibir trabajo — hoy `inactivo` y `bloqueado` (`ESTADOS_USUARIO_NO_ASIGNABLES`).
+   *
+   * Se consulta APARTE de `findMensajeroIdsValidosByZona` por el mismo motivo que
+   * `findMensajeroIdsConVehiculo`: colar el estado en aquella query convertiria «esta dado de
+   * baja» en «mensajero no valido», que manda a quien asigna a buscar el problema en la zona o
+   * en el rol, donde no esta. Aqui el motivo es propio y se arregla en otra pantalla
+   * (Configuracion > Usuarios).
+   *
+   * Devuelve LOS BLOQUEADOS (no los elegibles), igual que
+   * `findMensajerosBloqueadosPorCierres`: los dos conjuntos se componen en el mismo mapa
+   * `noElegibles` del selector.
+   */
+  findMensajerosNoAsignablesPorEstado(ids: string[]): Promise<Set<string>>;
+  /**
    * R15/R16: catalogo completo `order_status` (id, value) de solo lectura, para
    * que la UI resuelva `value` -> `estatusId` y siga filtrando `listarOrdenes`
    * por `estatusId` (contrato feature 6/7 intacto).

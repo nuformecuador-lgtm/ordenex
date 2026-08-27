@@ -34,7 +34,16 @@ const CLASE_ENLACE =
  * El seguimiento del DESTINATARIO vive en ese diálogo, no en `/paquete/[numGuia]`:
  * esa ruta es privada (pinta la etiqueta, exige sesión) y sigue siéndolo.
  */
-export function LandingNav() {
+export interface LandingNavProps {
+  /**
+   * La guía que traía la URL (`/?guia=4321`), ya normalizada en `guia-en-url.ts`. La nav no la
+   * interpreta: solo la pasa al diálogo, que es quien decide nacer abierto. Sin ella —el caso
+   * normal— la nav se comporta exactamente igual que antes.
+   */
+  guiaInicial?: string | null;
+}
+
+export function LandingNav({ guiaInicial = null }: LandingNavProps = {}) {
   return (
     <nav className="sticky top-0 z-50 flex items-center justify-between gap-2.5 border-b border-white/10 bg-navy-deep/95 px-4 py-3 backdrop-blur-[10px] md:gap-4 md:px-6 md:py-3.5">
       <Link href="/" aria-label="Ordenex — inicio">
@@ -57,7 +66,7 @@ export function LandingNav() {
       </div>
 
       <div className="flex items-center gap-2">
-        <RastreoDialog className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white bg-white px-3 text-[13px] font-semibold text-asfalto-9 transition hover:bg-kraft-inset">
+        <RastreoDialog guiaInicial={guiaInicial} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white bg-white px-3 text-[13px] font-semibold text-asfalto-9 transition hover:bg-kraft-inset">
           <Search className="size-4" aria-hidden="true" />
           <span className="hidden min-[380px]:inline">Rastrear envío</span>
         </RastreoDialog>

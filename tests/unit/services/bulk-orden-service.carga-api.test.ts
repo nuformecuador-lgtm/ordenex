@@ -177,6 +177,7 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     asignarBodegaLote: vi.fn().mockResolvedValue(0),
     findMensajerosByZona: vi.fn().mockResolvedValue([]),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
     findMensajeroIdsValidosByZona: vi.fn().mockResolvedValue(new Set()),
     rutearBodegaSateliteLote: vi.fn().mockResolvedValue(0),
     findEtiquetasByIds: vi.fn().mockResolvedValue([]),

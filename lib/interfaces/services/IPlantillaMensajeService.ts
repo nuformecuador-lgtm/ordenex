@@ -53,6 +53,31 @@ export type EliminarPlantillaServiceResult =
   | { status: "forbidden" }
   | { status: "not_found" }; // R29
 
+/**
+ * ENVIO A APROBACION (2026-08-26). Propaga la plantilla a Meta y la deja `pending`.
+ *
+ * `no_configurado` es un estado propio y no un error generico: si faltan las credenciales de
+ * WhatsApp el CRUD local sigue vivo (asi nacio el modulo) pero NO hay nada que aprobar, y
+ * decirle al maestro "listo, enviada" cuando no salio nada seria mentirle. `ya_enviada` = la
+ * plantilla ya estaba en revision; no se reenvia ni se cuenta como error.
+ */
+export type EnviarAprobacionPlantillaServiceResult =
+  | { status: "ok"; plantilla: PlantillaPublica }
+  | { status: "ya_enviada"; plantilla: PlantillaPublica }
+  | { status: "no_configurado" }
+  | { status: "forbidden" }
+  | { status: "not_found" };
+
+/**
+ * MARCAR MENSAJE DE BIENVENIDA. No tiene rama de conflicto: marcar una plantilla DESMARCA la
+ * anterior en la misma transaccion, asi que "ya hay otra" no es un problema que el maestro
+ * tenga que resolver antes, es justo lo que la accion significa.
+ */
+export type MarcarBienvenidaPlantillaServiceResult =
+  | { status: "ok"; plantilla: PlantillaPublica }
+  | { status: "forbidden" }
+  | { status: "not_found" };
+
 export type PreviewPlantillaServiceResult =
   | { status: "ok"; texto: string }
   | { status: "validation_error"; fieldErrors: Record<string, string[]> } // R16
@@ -81,5 +106,19 @@ export interface IPlantillaMensajeService {
     actor: Actor,
   ): Promise<CambiarEstadoPlantillaServiceResult>;
   eliminar(id: string, actor: Actor): Promise<EliminarPlantillaServiceResult>;
+  /**
+   * Manda la plantilla a revision de Meta y la deja `pending`. Es la UNICA via por la que una
+   * plantilla sale hacia Meta desde el alta: `crear` ya no propaga (2026-08-26).
+   */
+  enviarAprobacion(id: string, actor: Actor): Promise<EnviarAprobacionPlantillaServiceResult>;
+  /**
+   * Deja ESTA plantilla como el mensaje de bienvenida (el que sale solo cuando el paquete es
+   * recogido) y quita la marca de la que la tuviera. Es un `set`, no un `toggle`: desde la UI
+   * no se desmarca sin elegir otra, porque "sin bienvenida" no es un estado que se pida.
+   */
+  marcarMensajeBienvenida(
+    id: string,
+    actor: Actor,
+  ): Promise<MarcarBienvenidaPlantillaServiceResult>;
   preview(cuerpo: string, actor: Actor): Promise<PreviewPlantillaServiceResult>;
 }

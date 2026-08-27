@@ -1,0 +1,15 @@
+-- AlterEnum: QUINTO valor de `plantilla_estado` (feature 107, ampliada 2026-08-26).
+--
+-- `saved_not_aprobation` = "guardado sin aprobacion": la plantilla existe en NUESTRA base pero
+-- NUNCA se envio a Meta. Es el estado con el que nacen todas las plantillas desde hoy, y por
+-- eso hacia falta un valor propio: `pending` ya significa otra cosa distinta y comprobable
+-- ("Meta la tiene y la esta revisando"), y fundir los dos dejaba sin respuesta la unica
+-- pregunta que el maestro necesita hacerse antes de usar una plantilla: si el silencio de Meta
+-- es porque esta revisando o porque nadie se la ha mandado.
+--
+-- Postgres 15+ (Supabase) permite ADD VALUE dentro de la transaccion de Prisma Migrate siempre
+-- que el nuevo valor NO SE USE en la misma transaccion. Por eso aqui solo se anade: el DEFAULT
+-- de la columna se queda en `pending` (usarlo en un `SET DEFAULT` aqui abortaria la migracion
+-- con "unsafe use of new value") y quien fija el estado inicial es el service, que es donde
+-- vive esa politica. Precedente exacto: `20260710130000_rol_admin_satelite`.
+ALTER TYPE "plantilla_estado" ADD VALUE IF NOT EXISTS 'saved_not_aprobation';

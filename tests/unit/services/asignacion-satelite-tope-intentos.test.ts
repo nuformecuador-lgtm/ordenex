@@ -42,6 +42,7 @@ function fakeRepo(over: Record<string, unknown> = {}) {
   return {
     findUsuarioZonaId: vi.fn(async () => ZONA),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
     findByIdsForTransicion: vi.fn(async () => [
       ordenRow({ id: "o1" }),
@@ -164,6 +165,7 @@ describe("276/T8 · R20 — un solo motivo, un solo punto", () => {
         { ...ordenRow({ id: "o1" }), estatusValue: "en_bodega_central", zonaId: "z-gam", zonaEsGam: true },
       ]),
       findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
       findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
       findMensajerosConOrdenesEn: vi.fn(async () => new Set<string>()),
