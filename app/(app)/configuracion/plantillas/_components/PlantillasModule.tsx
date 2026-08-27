@@ -182,6 +182,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
     } else if (res.status === "not_found") {
       toast.error("La plantilla ya no existe.");
       await mutate();
+    } else if (res.status === "estado_invalido") {
+      // El boton ya viene deshabilitado para este caso: llegar aqui significa que la fila
+      // cambio de estado desde la ultima carga. Por eso se REFRESCA ademas de avisar, o el
+      // maestro seguiria viendo un boton habilitado que no funciona.
+      toast.error("Solo una plantilla activa puede ser el mensaje de bienvenida.");
+      await mutate();
     } else {
       toast.error(mensajeError(res.status));
     }
@@ -361,9 +367,15 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
           if (!open) setDesactivar(null);
         }}
         title="Desactivar plantilla"
+        // Si la que se desactiva ES la bienvenida, el aviso lo dice ANTES de confirmar: la
+        // marca se pierde sola (la desactivacion la retira) y nadie designa una sustituta.
+        // Sin esta frase, el negocio se queda sin mensaje de bienvenida en silencio, y el
+        // sitio donde se nota es el cliente que no recibe nada al recoger su paquete.
         description={
           desactivar
-            ? `La plantilla "${desactivar.nombre}" pasará a estado inactivo.`
+            ? desactivar.welcomeMessage
+              ? `La plantilla "${desactivar.nombre}" pasará a estado inactivo y DEJARÁ DE SER el mensaje de bienvenida. Ninguna otra queda marcada: hasta que elijas una plantilla activa, no se enviará nada al recoger el paquete.`
+              : `La plantilla "${desactivar.nombre}" pasará a estado inactivo.`
             : undefined
         }
         confirmLabel="Desactivar"
