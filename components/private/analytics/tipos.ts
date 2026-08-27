@@ -173,9 +173,12 @@ export interface AnilloProps {
    * Acompana a la cifra, no la sustituye: «50 %» a solas no dice de cuantas ordenes se habla,
    * y en un anillo de operacion la cantidad es tan dato como la proporcion.
    *
-   * Los porcentajes se calculan con `porcentajesDeReparto`, que reparte por RESTO MAYOR para
-   * que la columna sume exactamente 100 %. Redondear cada porcion por su cuenta daria 99 o
-   * 101, y unos porcentajes que no suman contradicen el propio dibujo.
+   * Los porcentajes se calculan con `pesosDeReparto`, que reparte por RESTO MAYOR para que la
+   * columna sume exactamente 100 %. Redondear cada porcion por su cuenta daria 99 o 101, y unos
+   * porcentajes que no suman contradicen el propio dibujo.
+   *
+   * Los ESCRIBE `textoDePeso`: una porcion que existe pero cuyo peso exacto no llega a un punto
+   * dice «<1 %» y no «0 %», que junto a su propia cifra negaba el dato (feature 291).
    */
   readonly mostrarPorcentaje?: boolean;
 }
