@@ -3536,10 +3536,10 @@
       "title": "el donut y el ranking tambien rotulan 0% junto a un dato real",
       "description": "Las etiquetas de GraficaDonut y GraficaRanking salen del mismo reparto por resto mayor que la 290, asi que una categoria con valor puede leerse como 0%.",
       "zone": "frontend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
+      "branch": "fix/291-donut-ranking-menor-uno-porciento",
       "status_note": "SALE DE LA 290, medida al validar donde mas aplicaba el arreglo (2026-08-27). Es SOLO la mitad de etiqueta: en las dos graficas el dibujo no depende del porcentaje redondeado -- el donut lo pinta recharts con el valor crudo y la barra del ranking usa valor/mayor --, asi que no desaparece nada; lo que puede mentir es el texto. El arreglo ya existe y esta en produccion: usar textoDePeso/pesosDeReparto en vez de formatear la fraccion. NO aplica a la barra de la wallet (su porcentaje viene del servidor con 2 decimales y su regla money-safe prohibe convertirlo en el navegador) ni a los KPI de tasa (razon cruda con 1 decimal: un 0,4% se lee). PENDING a proposito: el arnes admite 2 in_progress por zona y frontend ya tiene la 289 y la 292."
     },
     {
@@ -3547,11 +3547,22 @@
       "title": "las tarjetas de contador del monitoreo no llevan el color de su segmento en la barra",
       "description": "En el tablero de monitoreo, cuatro de los ocho contadores se pintan de un color en la barra apilada y de otro distinto en su tarjeta, asi que no se puede leer una desde la otra.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "media",
       "branch": "feature/292-color-cards-monitoreo",
-      "status_note": "MEDIDO el 2026-08-27 sobre contadores.ts: COLOR_SEGMENTO (la barra) y VARIANTE_CONTADOR (las tarjetas) son DOS tablas y discrepan en 4 de 8 -- devueltas (chart-6 vs warning), incidentes (chart-11 vs danger), sinRecoger (chart-12 vs secondary) y enReparto (chart-13 vs info). DECISION HUMANA: opcion B, el fondo de la tarjeta toma el color de su segmento; se descarto el punto de color (opcion A) y se descarto invertirlo -- que la barra use las variantes semanticas juntaria devueltas con reprogramadas e incidentes con rechazadas y la barra dejaria de distinguir ocho categorias. COSTE ACEPTADO A SABIENDAS: chart-6/11/12/13 son colores PLANOS sin par -soft/-strong, asi que hay que crear los cuatro pares y RE-MEDIR contraste AA en los dos temas; el repo ya lleva cuatro fichas peleandose con eso (210, 216, 222, 226)."
+      "status_note": "MEDIDO el 2026-08-27 sobre contadores.ts: COLOR_SEGMENTO (la barra) y VARIANTE_CONTADOR (las tarjetas) son DOS tablas y discrepan en 4 de 8 -- devueltas (chart-6 vs warning), incidentes (chart-11 vs danger), sinRecoger (chart-12 vs secondary) y enReparto (chart-13 vs info). DECISION HUMANA: opcion B, el fondo de la tarjeta toma el color de su segmento; se descarto el punto de color (opcion A) y se descarto invertirlo -- que la barra use las variantes semanticas juntaria devueltas con reprogramadas e incidentes con rechazadas y la barra dejaria de distinguir ocho categorias. COSTE ACEPTADO A SABIENDAS: chart-6/11/12/13 son colores PLANOS sin par -soft/-strong, asi que hay que crear los cuatro pares y RE-MEDIR contraste AA en los dos temas; el repo ya lleva cuatro fichas peleandose con eso (210, 216, 222, 226). || CERRADA 2026-08-27: PR #527 -> dev, release #528 -> prod, deployment READY (27e256ae) y CERO errores de runtime. Gate COMPLETO sobre el arbol: 19.788 verdes y 6 rojos, los SEIS ajenos con delta 0 medido sobre dev limpio. Contraste re-medido por el leader con aritmetica propia: coincide al decimal con el del implementador."
+    },
+    {
+      "id": 293,
+      "title": "el maestro registra el premio del ranking en la cuenta por pagar del mensajero",
+      "description": "El premio del podio se muestra en el ranking pero nadie lo paga: no existe categoria en el libro del mensajero ni forma de registrarlo, asi que hoy se paga fuera del sistema.",
+      "zone": "fullstack",
+      "status": "pending",
+      "sdd": true,
+      "complexity": "media",
+      "branch": "feature/293-premio-ranking-cuenta-por-pagar",
+      "status_note": "MEDIDO el 2026-08-27 antes de escribir la ficha: premio_ranking solo la leen lib/actions/ranking.ts y ranking-historico.ts; el ledger NO tiene categoria de premio y ni CierreDiaService ni la caja ni la liquidacion tocan esa tabla. En produccion: posicion 1 = 5000.00 'Bono por buen rendimiento', 2 y 3 sin premio. El snapshot diario YA congela premio_monto y premio_descripcion por posicion (2 dias guardados). DECISIONES CERRADAS POR EL HUMANO, no reabrir en el spec: (a) el pago NO es automatico -- ni cron ni aprobacion del cierre emiten nada, siempre hay acto humano; (b) UNA sola puerta, Wallet > Mensajeros; se descarto hacerlo tambien desde el cierre porque dos caminos que escriben el mismo asiento de dinero es como se paga dos veces; (c) el premio SUMA a la cuenta por pagar, no es un pago suelto; (d) en el detalle debe verse QUE PARTE de la cuenta es premio, y eso es lo que obliga a una categoria propia en vez de reusar ajuste_devengo; (e) el monto sale del podio CONGELADO, no del premio vigente. GUARDA NO NEGOCIABLE: un premio por (mensajero, dia), impuesto por indice unico en la base y no solo en codigo. RIESGO DECLARADO: con todos a 0% el podio lo decide el orden alfabetico -- el 26/08 el primer puesto fue 0 de 21 entregadas. Como el pago es manual no cuesta dinero, pero la pantalla debe mostrar entregadas/asignadas del dia junto al premio para decidir con el dato delante. ESTADO: `pending` mientras el spec_author escribe los tres archivos; pasa a `spec_ready` cuando existan y a `in_progress` al arrancar la implementacion. El arnes exige spec presente para toda ficha sdd en vuelo, asi que marcarla in_progress antes pondria el gate rojo. PUERTA DE APROBACION DEL SPEC LEVANTADA por el humano el 2026-08-27 ('dale con todo sin depender de mi, hasta que salga a produccion'): el ciclo sigue completo -- requirements, design, tasks, implementacion, revision y gate COMPLETO por ser dinero -- pero sin parada."
     }
   ]
 }
