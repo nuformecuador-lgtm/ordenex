@@ -59,6 +59,24 @@ export type ListarRolesServiceResult =
   | { status: "ok"; roles: RolItem[] }
   | { status: "forbidden" };
 
+/**
+ * Feature 287 — resultado del RESTABLECIMIENTO de la contrasena de un usuario por el maestro.
+ *
+ * ⚠️ `generatedPassword` es OBLIGATORIO en la rama `ok` y **no existe** en ninguna otra rama del
+ * union. Eso no es estilo: es lo que hace R15 imposible de incumplir por descuido. Con un campo
+ * opcional al nivel del union, devolver la contrasena junto a un `forbidden` compilaria. Asi no.
+ *
+ * `self_reset_forbidden` es una rama PROPIA y no un `forbidden` (R5): el maestro no se restablece
+ * a si mismo —revocarle las sesiones a mitad del flujo puede tumbarle la sesion antes de que copie
+ * la contrasena que solo se ve una vez—, y la UI necesita poder decirle por que, no un «no puedes»
+ * indistinguible del de un rol sin permiso.
+ */
+export type RestablecerContrasenaServiceResult =
+  | { status: "ok"; usuarioId: string; generatedPassword: string; sesionesRevocadas: number } // R19/R21
+  | { status: "forbidden" } // R2/R3
+  | { status: "not_found" } // R4
+  | { status: "self_reset_forbidden" }; // R5
+
 export interface IUsuarioService {
   crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult>;
   listar(input: ListarUsuariosInput, actor: Actor): Promise<ListarUsuariosServiceResult>;
@@ -84,4 +102,14 @@ export interface IUsuarioService {
   ): Promise<CambiarEstadoUsuarioServiceResult>;
   listarTiposIdentificacion(actor: Actor): Promise<ListarTiposIdentificacionServiceResult>;
   listarRoles(actor: Actor): Promise<ListarRolesServiceResult>;
+  /**
+   * Feature 287 — el maestro RESTABLECE la contrasena del usuario `id`: el sistema la GENERA
+   * (con el mismo generador del alta), revoca TODAS las sesiones del objetivo y despues persiste
+   * el hash. Devuelve la contrasena en claro UNA sola vez, en este mismo resultado (R21).
+   *
+   * ⚠️ LA FIRMA NO ADMITE NINGUN VALOR DE CONTRASENA, y esa ausencia ES la garantia de R10 —no
+   * una validacion que alguien pueda relajar manana—. El maestro RESTABLECE; no FIJA. Ver la
+   * reversion acotada de la Decision 5 de la feature 25 en `IUserRepository.ts`.
+   */
+  restablecerContrasena(id: string, actor: Actor): Promise<RestablecerContrasenaServiceResult>;
 }

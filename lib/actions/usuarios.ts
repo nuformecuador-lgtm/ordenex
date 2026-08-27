@@ -16,12 +16,14 @@ import {
   type ListarUsuariosCompletoResult,
   type ListarUsuariosResult,
   type ObtenerUsuarioResult,
+  type RestablecerContrasenaResult,
 } from "@/lib/types/usuario";
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import { UsuarioService } from "@/lib/services/UsuarioService";
 import { UserRepository } from "@/lib/repositories/UserRepository";
 import { ZonaRepository } from "@/lib/repositories/ZonaRepository";
 import { VehiculoRepository } from "@/lib/repositories/VehiculoRepository";
+import { SessionRepository } from "@/lib/repositories/SessionRepository";
 import { getPrismaClient } from "@/lib/db/prisma-client";
 import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import {
@@ -51,10 +53,15 @@ function buildUsuarioService(): IUsuarioService {
   const prisma = getPrismaClient();
   // Feature 24/R28: se inyecta el repo de zonas para validar `usuario.zona_id`.
   // Feature 21: idem el de vehiculos para validar `usuario.vehiculo_id`.
+  // Feature 287/R20: el revocador de sesiones del restablecimiento. NO basta con importarlo:
+  // el cuarto parametro es opcional (tiene que serlo), asi que olvidarlo NO rompe el typecheck
+  // y el servicio saldria a produccion lanzando en cuanto alguien pulsara el boton. Que este
+  // argumento se PASA de verdad lo prueba `tests/unit/actions/usuarios-composition.test.ts`.
   return new UsuarioService(
     new UserRepository(prisma),
     new ZonaRepository(prisma),
     new VehiculoRepository(prisma),
+    new SessionRepository(prisma),
   );
 }
 
@@ -180,6 +187,42 @@ export async function listarTiposIdentificacion(
     if (!actor) throw new UnauthenticatedError(); // R2
     const service = deps.usuarioService ?? buildUsuarioService();
     return service.listarTiposIdentificacion(actor);
+  });
+  return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
+}
+
+/**
+ * FEATURE 287 — el maestro RESTABLECE la contrasena de un usuario.
+ *
+ * ⚠️ LA FIRMA SOLO RECIBE EL `id`, y eso es el requisito R6/R10, no una omision: si no hay objeto
+ * de entrada, no hay donde meter una contrasena. La ausencia del parametro ES la garantia de que
+ * el maestro no puede FIJAR una credencial que conozca de antemano; una validacion equivalente
+ * («rechaza el campo `password`») seria mas debil, porque alguien puede relajarla sin que nada se
+ * ponga rojo. El maestro RESTABLECE: el sistema genera la contrasena y se la ensena una vez.
+ *
+ * El resto es el patron identico a las otras siete acciones del archivo: `withErrorHandler` +
+ * `resolveActorFromSession` + `idSchema` + `toUsuarioActionError`.
+ *
+ * @sin-superficie TRANSITORIA — el backend de la 287 (T1-T8, T11-T13) aterriza en este PR y su
+ * pantalla es la tanda siguiente de la MISMA ficha (T9/T10: el panel de «una sola vez» y la
+ * accion por fila de `UsuariosModule`). Se retira al cablearla; si esta anotacion sobrevive al
+ * merge de T10, la guardia de superficie se pone roja por caducada y lo dice. Ver
+ * `specs/287-maestro-restablece-contrasena/tasks.md`.
+ */
+export async function restablecerContrasenaUsuario(
+  id: unknown,
+  deps: UsuarioActionDeps = {},
+): Promise<RestablecerContrasenaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R1: antes de instanciar el service
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      // R6: cualquier entrada que no sea un identificador valido es `validation_error` sin efectos.
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const service = deps.usuarioService ?? buildUsuarioService();
+    return service.restablecerContrasena(parsedId.data, actor);
   });
   return isAppErrorShape(r) ? toUsuarioActionError(r) : r;
 }

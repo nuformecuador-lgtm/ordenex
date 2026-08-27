@@ -16,7 +16,9 @@ import type {
   ListarUsuariosCompletoServiceResult,
   ListarUsuariosServiceResult,
   ObtenerUsuarioServiceResult,
+  RestablecerContrasenaServiceResult,
 } from "@/lib/interfaces/services/IUsuarioService";
+import type { ISessionRepository } from "@/lib/interfaces/repositories/ISessionRepository";
 import type {
   ActualizarUsuarioInput,
   CambiarEstadoUsuarioInput,
@@ -67,6 +69,15 @@ export class UsuarioService implements IUsuarioService {
     // Feature 21: repo del catalogo de vehiculos para validar `usuario.vehiculo_id`.
     // Opcional por el mismo motivo que `zonaRepo`: los tests que no lo ejercitan lo omiten.
     private readonly vehiculoRepo?: IVehiculoRepository,
+    // Feature 287/R16/R20: el revocador de sesiones del restablecimiento.
+    //
+    // ⚠️ OPCIONAL EN EL CONSTRUCTOR, OBLIGATORIO EN EL USO. Opcional porque hay decenas de
+    // `new UsuarioService(repo)` en los tests existentes y romperlos todos no compra nada. Pero
+    // `restablecerContrasena` LANZA si no esta (R20) en vez de seguir adelante: un colaborador
+    // opcional que se ignora en silencio es exactamente el modo de fallo que en este repo dejo
+    // dos notificadores muertos con la suite entera en verde. Quien lo pasa de verdad esta
+    // probado en `tests/unit/actions/usuarios-composition.test.ts`.
+    private readonly sessionRepo?: Pick<ISessionRepository, "deleteAllByUserId">,
   ) {}
 
   async crear(input: CrearUsuarioInput, actor: Actor): Promise<CrearUsuarioServiceResult> {
@@ -263,6 +274,73 @@ export class UsuarioService implements IUsuarioService {
 
     const roles = await this.repo.listRoles();
     return { status: "ok", roles };
+  }
+
+  /**
+   * Feature 287 — EL MAESTRO RESTABLECE LA CONTRASENA DE UN USUARIO.
+   *
+   * El sistema GENERA la contrasena (R8), revoca TODAS las sesiones del objetivo (R16) y SOLO
+   * DESPUES persiste el hash (R11/R12). La contrasena en claro se devuelve UNA vez, aqui (R21).
+   *
+   * ⚠️ EL ORDEN DE LOS DOS ESCRITOS NO ES ARBITRARIO (R11). No son atomicos —dos tablas, dos
+   * llamadas— y el orden decide que queda si el proceso muere en medio:
+   *
+   *   hash → revocar : contrasena rotada Y SESIONES VIVAS. Quien tuviera una sesion sigue
+   *                    dentro, y el legitimo ya no puede entrar. Estado MAS PERMISIVO.
+   *   revocar → hash : sesiones cerradas y contrasena sin rotar. Nadie gana acceso; el maestro
+   *                    reintenta. Estado MAS RESTRICTIVO — es el elegido.
+   *
+   * ⚠️ NO SE TOCAN LOS DISPOSITIVOS DE CONFIANZA (R18), y la respuesta intuitiva («si revocas,
+   * revoca todo») es la equivocada: quien perdio su contrasena llega con +40 de fallos recientes
+   * en el `RiskEngine`; con su dispositivo intacto suma 40 < 50 y entra, pero borrandolo suma 80,
+   * se dispara el OTP por correo y el correo esta caido. Borrarlo dejaria fuera justo a quien esta
+   * feature existe para dejar entrar. Se revoca lo que PORTA acceso, no lo que solo puntua riesgo.
+   *
+   * ⚠️ NO ENVIA NADA (R37/R38): ni correo al usuario ni ninguna otra notificacion. No es un olvido
+   * —es decision firmada del humano el 2026-08-26— y ademas el camino no toca el proveedor de
+   * correo ni para fallar, que es la condicion operativa que hace esta ficha necesaria (el SMTP
+   * de produccion rechaza la credencial con 535). El riesgo aceptado esta escrito como RS1 en
+   * `specs/287-maestro-restablece-contrasena/design.md` §12.
+   */
+  async restablecerContrasena(
+    id: string,
+    actor: Actor,
+  ): Promise<RestablecerContrasenaServiceResult> {
+    // R2/R3: el MISMO `ALLOWED_ROLES` del resto del modulo, no una copia. Dos listas de permisos
+    // para el mismo modulo divergen en cuanto alguien toque una.
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" };
+
+    const usuario = await this.repo.findById(id);
+    if (!usuario) return { status: "not_found" }; // R4
+
+    // R5: el maestro no se restablece a si mismo. Revocarle las sesiones a mitad del flujo puede
+    // tumbarle la sesion antes de que copie la contrasena que solo se ve una vez, y si es el
+    // unico maestro se queda fuera con el correo caido.
+    if (usuario.id === actor.usuarioId) return { status: "self_reset_forbidden" };
+
+    // R20: sin revocador NO se completa un restablecimiento. Falla visible, antes de generar
+    // nada: un restablecimiento que no revoca no restablece, solo lo aparenta.
+    const sessionRepo = this.sessionRepo;
+    if (!sessionRepo) {
+      throw new Error(
+        "UsuarioService.restablecerContrasena requiere el repositorio de sesiones: sin el no se " +
+          "pueden revocar las sesiones del usuario y el restablecimiento seria una mentira (287/R20)",
+      );
+    }
+
+    // R8/R9/R10: la genera el sistema con el MISMO generador del alta, que valida su propia
+    // salida contra `strongPasswordSchema`. Del actor no entra ningun valor: no hay parametro.
+    const plain = generateStrongPassword();
+    const passwordHash = await hashPassword(plain); // R12: solo se persiste el hash
+
+    // R11/R16: PRIMERO revocar TODAS las sesiones del objetivo...
+    const sesionesRevocadas = await sessionRepo.deleteAllByUserId(usuario.id);
+    // ...y solo DESPUES el hash (R12). Ver el porque del orden en la cabecera.
+    await this.repo.updatePasswordHash(usuario.id, passwordHash);
+
+    // R21: la contrasena en claro viaja EXACTAMENTE una vez, aqui. No se guarda en ningun sitio,
+    // no se loguea (R23/R24) y no hay forma de volver a pedirla.
+    return { status: "ok", usuarioId: usuario.id, generatedPassword: plain, sesionesRevocadas };
   }
 
   // R9/R10/R11: traduce los errores de dominio del repositorio a resultados
