@@ -200,10 +200,14 @@ describe("R18: preview resuelve las variables con los ejemplos del catalogo", ()
     if (r.status === "ok") expect(r.texto).toBe("Hola , orden ");
   });
 
+  // Exacto contra el `ejemplo` que el catalogo declara para `cliente`, como su hermano de
+  // arriba. Un `not.toContain("{{")` se satisfacia tambien con la cadena vacia —justo el
+  // desenlace que el test de al lado documenta para una clave AUSENTE—, asi que no
+  // distinguia «resuelto» de «no resuelto».
   it("una clave DEL catalogo se ve con su valor de ejemplo formateado", async () => {
     const r = await service.preview("Hola {{cliente}}", MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.texto).not.toContain("{{");
+    if (r.status === "ok") expect(r.texto).toBe("Hola María Rodríguez");
   });
 
   it("cuerpo malformado -> validation_error", async () => {

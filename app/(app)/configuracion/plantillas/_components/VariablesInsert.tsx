@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 import { previewPlantilla } from "@/lib/actions/plantillas";
 import {
@@ -80,10 +80,6 @@ export function VariablesInsert({
 }: VariablesInsertProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  // Cuerpo de la última petición LANZADA: si la respuesta llega y el cuerpo actual ya
-  // cambió, se descarta (§5.2, respuestas fuera de orden).
-  const cuerpoSolicitadoRef = useRef<string | null>(null);
-
   function insertarClave(key: string) {
     const el = textareaRef.current;
     const start = el?.selectionStart ?? value.length;
@@ -100,12 +96,19 @@ export function VariablesInsert({
   }
 
   useEffect(() => {
-    const cuerpoAlProgramar = value;
+    // Bandera POR EFECTO, invalidada por el propio cleanup. React corre el cleanup antes
+    // de re-lanzar el efecto, asi que en cuanto `value` cambia esta pasada queda muerta y
+    // su respuesta se descarta, este ya en vuelo o aun por salir (§5.2).
+    //
+    // POR QUE NO un ref con el cuerpo de la ultima peticion LANZADA (como estaba): eso
+    // responde a «¿es esta la ultima que salio?», y la pregunta correcta es «¿sigue este
+    // cuerpo en el textarea?». Con A en vuelo y B todavia dentro de su ventana de debounce
+    // nadie habia lanzado B aun, asi que A se daba por vigente y pintaba durante hasta
+    // 300 ms un cuerpo que el maestro ya habia cambiado.
+    let vigente = true;
     const timer = setTimeout(() => {
-      cuerpoSolicitadoRef.current = cuerpoAlProgramar;
-      void previewAction(cuerpoAlProgramar).then((res) => {
-        // Respuesta fuera de orden: ya se pidió (o se está por pedir) otro cuerpo.
-        if (cuerpoSolicitadoRef.current !== cuerpoAlProgramar) return;
+      void previewAction(value).then((res) => {
+        if (!vigente) return;
         if (res.status === "ok") {
           setPreview(res.texto);
           setPreviewError(null);
@@ -119,7 +122,10 @@ export function VariablesInsert({
         }
       });
     }, PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      vigente = false;
+      clearTimeout(timer);
+    };
   }, [value, previewAction]);
 
   const camposUsados = extraerVariables(value).map((clave) => ({

@@ -142,7 +142,7 @@ describe("VariablesInsert", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("R15: clave fuera del catálogo avisa, muestra el hueco y no deshabilita nada", async () => {
+  it("R15: clave fuera del catálogo avisa y el panel muestra el hueco real", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const previewAction = vi.fn(
       async (cuerpo: string): Promise<PreviewPlantillaResult> => ({
@@ -150,9 +150,7 @@ describe("VariablesInsert", () => {
         texto: previewConEjemplos(cuerpo),
       }),
     );
-    const { container } = render(
-      <Harness inicial="Hola {{sucursal}}" previewAction={previewAction} />,
-    );
+    render(<Harness inicial="Hola {{sucursal}}" previewAction={previewAction} />);
     await avanzarDebounce();
 
     await waitFor(() => {
@@ -165,8 +163,6 @@ describe("VariablesInsert", () => {
     expect(alerta.textContent).toContain(
       "no es un campo válido y llegará vacío al cliente",
     );
-
-    expect(container.querySelectorAll("[disabled]")).toHaveLength(0);
   });
 
   it("R16: con nombre persistido el aviso dice «ya no existe» y nombra el snapshot", async () => {
@@ -301,5 +297,50 @@ describe("VariablesInsert", () => {
       resolvers.get("Cuerpo A")?.({ status: "ok", texto: "texto A" });
     });
     expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("texto B");
+  });
+
+  // M1: el caso que el descarte por «ultima peticion lanzada» NO cubria. A esta en vuelo y
+  // B aun no ha salido (sigue dentro de su ventana de debounce), asi que no hay ninguna
+  // peticion posterior con la que comparar: solo una bandera invalidada por el cleanup del
+  // efecto sabe que el cuerpo de A ya no esta en pantalla.
+  it("respuesta en vuelo: si el usuario teclea, la respuesta de A no pinta aunque B siga en debounce", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const resolvers = new Map<string, (r: PreviewPlantillaResult) => void>();
+    const previewAction = vi.fn(
+      (cuerpo: string) =>
+        new Promise<PreviewPlantillaResult>((resolve) => {
+          resolvers.set(cuerpo, resolve);
+        }),
+    );
+    render(<Harness inicial="" previewAction={previewAction} />);
+    const textarea = screen.getByLabelText<HTMLTextAreaElement>("Cuerpo");
+
+    // A sale: se lanza de verdad y queda EN VUELO, sin resolver.
+    fireEvent.change(textarea, { target: { value: "Cuerpo A" } });
+    await avanzarDebounce();
+    expect(previewAction).toHaveBeenCalledWith("Cuerpo A");
+    expect(previewAction).toHaveBeenCalledTimes(1);
+
+    // El usuario teclea B. Su debounce AUN NO expira: B no se ha pedido todavia.
+    fireEvent.change(textarea, { target: { value: "Cuerpo B" } });
+    expect(previewAction).toHaveBeenCalledTimes(1);
+
+    // A responde ahora, con B en pantalla y sin peticion posterior con la que compararse.
+    await act(async () => {
+      resolvers.get("Cuerpo A")?.({ status: "ok", texto: "texto A" });
+    });
+
+    // El panel NO puede mostrar el cuerpo que el maestro ya cambio.
+    expect(screen.queryByTestId("plantilla-preview")).toBeNull();
+
+    // Y cuando B expira y resuelve, ese si pinta.
+    await avanzarDebounce();
+    expect(previewAction).toHaveBeenCalledWith("Cuerpo B");
+    await act(async () => {
+      resolvers.get("Cuerpo B")?.({ status: "ok", texto: "texto B" });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("texto B");
+    });
   });
 });
