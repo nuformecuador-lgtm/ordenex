@@ -11,6 +11,10 @@ import {
 } from "@/lib/actions/usuarios";
 import type { Actor, IUsuarioService } from "@/lib/interfaces/services/IUsuarioService";
 import type { UsuarioPublico } from "@/lib/interfaces/repositories/IUserRepository";
+import {
+  USUARIO_BUSQUEDA_MAX_CHARS,
+  USUARIO_BUSQUEDA_MIN_CHARS,
+} from "@/lib/types/usuario";
 
 const MAESTRO: Actor = { usuarioId: "m1", rol: "maestro" };
 
@@ -298,5 +302,59 @@ describe("287/R15: ninguna rama de error viaja con contrasena", () => {
         getActor: getActor(MAESTRO),
       }),
     ).rejects.toThrow();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// FEATURE 285 — el BORDE del filtro: fuera de contrato, `validation_error` SIN CONSULTAR.
+//
+// R8 y R15 no dicen solo «responde validation_error»: dicen «sin ejecutar ninguna consulta».
+// Esa mitad NO la puede afirmar un test de schema —zod no sabe si alguien consulto despues—,
+// asi que se afirma aqui, que es donde se ve que el servicio no recibe la llamada.
+// ───────────────────────────────────────────────────────────────────────────────────────────
+describe("285/R8/R15 — filtro fuera de contrato: validation_error sin llamar al service", () => {
+  const casos: { que: string; input: Record<string, unknown>; campo: string }[] = [
+    {
+      que: "termino por DEBAJO del minimo",
+      input: { q: "a".repeat(USUARIO_BUSQUEDA_MIN_CHARS - 1) },
+      campo: "q",
+    },
+    {
+      que: "termino por ENCIMA del maximo",
+      input: { q: "b".repeat(USUARIO_BUSQUEDA_MAX_CHARS + 1) },
+      campo: "q",
+    },
+    { que: "termino de solo espacios (1 caracter al recortar)", input: { q: "  a  " }, campo: "q" },
+    { que: "lista de roles VACIA", input: { rol: [] }, campo: "rol" },
+    { que: "rol que no existe", input: { rol: ["superadmin"] }, campo: "rol" },
+  ];
+
+  it.each(casos)("$que -> validation_error y el service NO se llama", async ({ input, campo }) => {
+    const service = fakeService();
+    const r = await listarUsuarios(input, {
+      usuarioService: service,
+      getActor: getActor(MAESTRO),
+    });
+
+    expect(r.status).toBe("validation_error");
+    if (r.status === "validation_error") expect(Object.keys(r.fieldErrors)).toContain(campo);
+    // La mitad que el schema no puede afirmar: no se ejecuto ninguna consulta.
+    expect(service.listar).not.toHaveBeenCalled();
+  });
+
+  it("CONTRAPRUEBA: un filtro VALIDO si llega al service, ya recortado (R6)", async () => {
+    // Sin este lado, los casos de arriba pasarian con una accion que no llamara NUNCA al
+    // servicio: la ausencia de llamada dejaria de significar «rechazado» para significar «roto».
+    const service = fakeService();
+    const r = await listarUsuarios(
+      { q: "  ro  ", rol: ["mensajero", "admin"] },
+      { usuarioService: service, getActor: getActor(MAESTRO) },
+    );
+
+    expect(r.status).toBe("ok");
+    expect(service.listar).toHaveBeenCalledTimes(1);
+    const [entrada] = (service.listar as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(entrada.q).toBe("ro"); // R6: el borde recorta antes de dejarlo pasar
+    expect(entrada.rol).toEqual(["mensajero", "admin"]);
   });
 });
