@@ -3,7 +3,6 @@ import { textoConstraintP2002 } from "@/lib/repositories/_shared/prisma-unique";
 import {
   PlantillaDuplicadaError,
   type CreatePlantillaData,
-  type CrearDesdeMetaData,
   type IPlantillaMensajeRepository,
   type ListPlantillasParams,
   type ListPlantillasResult,
@@ -14,6 +13,7 @@ import {
   type PlantillaTextoEnviable,
   type SetTemplateData,
   type SincronizarTemplateData,
+  type SincronizarTemplateOutcome,
   type UpdatePlantillaData,
 } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 
@@ -173,7 +173,11 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
   async updateEstado(id: string, estado: PlantillaEstado): Promise<PlantillaPublica | null> {
     const result = await this.prisma.plantillaMensaje.updateMany({
       where: { id, ...VIGENTE }, // R26/R28
-      data: { estado },
+      // Salir de `activo` DESMARCA la bienvenida (2026-08-27, pedido humano). Va aqui y no en
+      // el service porque por este mismo metodo pasan los TRES caminos que mueven el estado
+      // —desactivar, enviar a aprobacion y el reintento de propagacion— y la regla no puede
+      // depender de que cada uno se acuerde. `activo` no se toca: reactivar no re-marca nada.
+      data: estado === "activo" ? { estado } : { estado, welcomeMessage: false },
     });
     if (result.count === 0) return null; // R26
     const row = await this.prisma.plantillaMensaje.findFirst({
@@ -233,21 +237,53 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
   async sincronizarTemplatePorNombre(
     nombre: string,
     data: SincronizarTemplateData,
-  ): Promise<boolean> {
-    // El id/idioma del template SIEMPRE se refresca desde Meta.
-    const result = await this.prisma.plantillaMensaje.updateMany({
+  ): Promise<SincronizarTemplateOutcome> {
+    const actual = await this.prisma.plantillaMensaje.findFirst({
       where: { nombre, ...VIGENTE },
-      data: { templateId: data.templateId, templateIdioma: data.idioma },
+      select: {
+        id: true,
+        templateId: true,
+        templateIdioma: true,
+        estado: true,
+        welcomeMessage: true,
+      },
     });
-    if (result.count === 0) return false; // no habia plantilla local con ese nombre
+    // El sync ya NO importa lo que solo vive en Meta (2026-08-27): sin fila local, nada que hacer.
+    if (actual === null) return "inexistente";
 
     // El estado de Meta manda SALVO un `inactivo` puesto por el usuario: la desactivacion
-    // local (controla si el mensajero puede enviarla) no se revierte desde Meta.
-    await this.prisma.plantillaMensaje.updateMany({
-      where: { nombre, ...VIGENTE, NOT: { estado: "inactivo" } },
-      data: { estado: data.estado },
+    // local (controla si el mensajero puede enviarla) no se revierte desde Meta. Se resuelve
+    // ANTES de comparar, o una `inactivo` contaria como «cambiada» en cada corrida.
+    const estadoDestino = actual.estado === "inactivo" ? actual.estado : data.estado;
+
+    // Salir de `activo` desmarca la bienvenida, tambien cuando quien lo mueve es META y no un
+    // humano: si un template aprobado pasa a `REJECTED`, la bienvenida deja de ser enviable
+    // exactamente igual que si alguien la hubiera desactivado a mano. Entra en la COMPARACION
+    // (no solo en el `data`) porque si no, una fila cuyo unico desajuste fuera la marca se
+    // contaria como `sin_cambios` y la marca sobreviviria a su plantilla.
+    const bienvenidaDestino = estadoDestino === "activo" ? actual.welcomeMessage : false;
+
+    if (
+      actual.templateId === data.templateId &&
+      actual.templateIdioma === data.idioma &&
+      actual.estado === estadoDestino &&
+      actual.welcomeMessage === bienvenidaDestino
+    ) {
+      return "sin_cambios"; // ni un UPDATE: `updatedAt` se queda donde estaba
+    }
+
+    // Una sola escritura por id (no dos `updateMany` por nombre): el `updatedAt` se mueve
+    // UNA vez y por un cambio real.
+    await this.prisma.plantillaMensaje.update({
+      where: { id: actual.id },
+      data: {
+        templateId: data.templateId,
+        templateIdioma: data.idioma,
+        estado: estadoDestino,
+        welcomeMessage: bienvenidaDestino,
+      },
     });
-    return true;
+    return "actualizada";
   }
 
   async listarEnviables(): Promise<PlantillaEnviable[]> {
@@ -275,29 +311,14 @@ export class PlantillaMensajeRepository implements IPlantillaMensajeRepository {
     }));
   }
 
-  async crearDesdeMeta(data: CrearDesdeMetaData): Promise<boolean> {
-    try {
-      await this.prisma.plantillaMensaje.create({
-        data: {
-          nombre: data.nombre,
-          cuerpo: data.cuerpo,
-          variables: data.variables,
-          estado: data.estado, // importada: refleja el status de Meta (mapeado)
-          templateId: data.templateId,
-          templateIdioma: data.idioma,
-          // createdBy queda null: la origino la sincronizacion, no un usuario.
-          // `variablesNombres` queda en su default `{}` A PROPOSITO (feature 282): una
-          // plantilla IMPORTADA desde Meta nunca paso por el catalogo, asi que no hay snapshot
-          // que sellar. La UI derivara los nombres del catalogo al pintarla (R21).
-        },
-      });
-      return true;
-    } catch (error) {
-      // Nombre ya en uso (incluye borradas: el indice unico las cuenta). No se resucita.
-      if (mapDuplicadoError(error) instanceof PlantillaDuplicadaError) return false;
-      throw error;
-    }
-  }
+  /**
+   * BORRADO 2026-08-27 (pedido humano): `crearDesdeMeta`, que IMPORTABA como plantilla local
+   * cualquier template que apareciera en la WABA de Meta. Asi entraron filas que nadie
+   * diseno aqui —`hello_world`, y una con las variables `1`,`2`,`3` numeradas de Meta, que
+   * NO estan en el catalogo y por tanto resuelven a cadena vacia al enviar—. El sync es
+   * ahora un espejo de solo lectura sobre lo que ya existe; dar de alta una plantilla es un
+   * acto del maestro, con su cuerpo y sus variables del catalogo.
+   */
 
   async listarUsablesParaTexto(): Promise<PlantillaTextoEnviable[]> {
     return this.prisma.plantillaMensaje.findMany({
