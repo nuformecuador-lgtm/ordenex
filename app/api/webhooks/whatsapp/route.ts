@@ -103,8 +103,22 @@ export async function handlePost(req: Request, deps: WebhookDeps = {}): Promise<
   let eventos;
   try {
     eventos = parseWebhookEventos(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    // Depuracion de tipos no soportados: el cuerpo no parsea, asi que se vuelca el error
+    // COMPLETO junto con el crudo tal como llego. Excepcion consciente a R11.
+    console.log("WP - type other", { error, raw });
     return NextResponse.json({ ok: true }, { status: 200 });
+  }
+
+  // Depuracion: cuando el lote trae al menos un entrante que NO mapea a un tipo conocido
+  // (`otro`: image, audio, sticker, interactive, ...), se imprime la data entrante ENTERA
+  // para poder ver que manda Meta —el borde tipado hace zod strip y la descarta—.
+  if (eventos.mensajes.some((m) => m.tipo === "otro")) {
+    try {
+      console.log("WP - type other", JSON.parse(raw));
+    } catch (error) {
+      console.log("WP - type other", { error, raw });
+    }
   }
 
   // Volcado de diagnostico ANTES de ingerir: si la ingesta fallara, el motivo del `failed`
