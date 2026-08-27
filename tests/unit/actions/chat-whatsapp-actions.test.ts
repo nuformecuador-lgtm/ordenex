@@ -303,7 +303,14 @@ describe("listarHiloChat (R16/R22)", () => {
       ordenReader: ordenReader(ORDEN_DATA),
       conversacionRepo: conv(null),
     });
-    expect(res).toEqual({ status: "ok", ventanaAbierta: false, ultimoEntranteAt: null, mensajes: [] });
+    expect(res).toEqual({
+      status: "ok",
+      ventanaAbierta: false,
+      ultimoEntranteAt: null,
+      plantillaBloqueada: false,
+      textoLibreHabilitado: false,
+      mensajes: [],
+    });
   });
 
   it("R22: devuelve el hilo con ventana abierta cuando el ultimo entrante es reciente", async () => {
@@ -344,6 +351,108 @@ describe("listarHiloChat (R16/R22)", () => {
       now: () => ahora,
     });
     expect(res).toMatchObject({ status: "ok", ventanaAbierta: false });
+  });
+
+  // ---------------------------------------------------------------------------------------
+  // EL CHAT SE DESBLOQUEA CADA DIA. Antes estas dos banderas se derivaban en el componente
+  // sobre el hilo ENTERO y sin noción de fecha, así que un saliente de ayer —una plantilla,
+  // o la bienvenida automática— dejaba el chat mudo PARA SIEMPRE: al mensajero que recibía
+  // el paquete reasignado al día siguiente no le dejaba ni mandar plantilla ni escribir.
+  //
+  // El día es el CALENDARIO DE COSTA RICA, que empieza a las 06:00Z (UTC-6 fijo).
+  // ---------------------------------------------------------------------------------------
+
+  /** 12:00 CR del 23 de julio. El día CR arrancó a las 06:00Z de ese mismo 23. */
+  const MEDIODIA_CR = new Date("2026-07-23T18:00:00.000Z");
+
+  function hilo(
+    lista: { direccion: "entrante" | "saliente"; ocurridoAt: Date }[],
+    ultimoEntranteAt: Date | null,
+    ahora: Date,
+  ) {
+    return listarHiloChat("orden-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      conversacionRepo: conv({ id: "hilo-1", ultimoEntranteAt }),
+      mensajeRepo: mensajes(
+        lista.map((m, i) => ({
+          id: `m${i}`,
+          direccion: m.direccion,
+          tipo: m.direccion === "saliente" ? "plantilla" : "texto",
+          cuerpo: "x",
+          estado: m.direccion === "saliente" ? "sent" : null,
+          ocurridoAt: m.ocurridoAt,
+        })),
+      ),
+      now: () => ahora,
+    });
+  }
+
+  it("EL BUG: una plantilla enviada AYER no bloquea el chat de hoy", async () => {
+    const res = await hilo(
+      [{ direccion: "saliente", ocurridoAt: new Date("2026-07-22T20:00:00.000Z") }],
+      null,
+      MEDIODIA_CR,
+    );
+    // El paquete se reasigna al día siguiente: el mensajero puede volver a abrir la
+    // conversación con una plantilla, como si fuera una gestión nueva.
+    expect(res).toMatchObject({ plantillaBloqueada: false, textoLibreHabilitado: false });
+  });
+
+  it("un saliente de HOY sin respuesta sí bloquea la plantilla", async () => {
+    const res = await hilo(
+      [{ direccion: "saliente", ocurridoAt: new Date("2026-07-23T14:00:00.000Z") }],
+      null,
+      MEDIODIA_CR,
+    );
+    expect(res).toMatchObject({ plantillaBloqueada: true, textoLibreHabilitado: false });
+  });
+
+  it("si el cliente responde HOY se desbloquea y se habilita el texto libre", async () => {
+    const entranteHoy = new Date("2026-07-23T15:00:00.000Z");
+    const res = await hilo(
+      [
+        { direccion: "saliente", ocurridoAt: new Date("2026-07-23T14:00:00.000Z") },
+        { direccion: "entrante", ocurridoAt: entranteHoy },
+      ],
+      entranteHoy,
+      MEDIODIA_CR,
+    );
+    expect(res).toMatchObject({ plantillaBloqueada: false, textoLibreHabilitado: true });
+  });
+
+  it("un entrante de AYER deja la ventana de Meta abierta pero NO el texto libre", async () => {
+    // 17:00 CR de ayer: 19 h antes de `now`, así que la ventana de 24 h sigue abierta. Aun
+    // así el día empieza por una plantilla; el texto libre se gana con la respuesta de HOY.
+    const entranteAyer = new Date("2026-07-22T23:00:00.000Z");
+    const res = await hilo(
+      [{ direccion: "entrante", ocurridoAt: entranteAyer }],
+      entranteAyer,
+      MEDIODIA_CR,
+    );
+    expect(res).toMatchObject({
+      ventanaAbierta: true,
+      plantillaBloqueada: false,
+      textoLibreHabilitado: false,
+    });
+  });
+
+  // La frontera del día, con el MISMO saliente y dos relojes separados por un segundo. Fija
+  // que la cota es `inicioDelDiaCREnUtc` (06:00Z) y no la medianoche UTC de `startOfDayCR`:
+  // con esta última, el caso de las 23:59 CR se leería como "ayer" y el chat se desbloquearía
+  // seis horas antes de tiempo.
+  const SALIENTE_22 = [
+    { direccion: "saliente" as const, ocurridoAt: new Date("2026-07-22T20:00:00.000Z") },
+  ];
+
+  it("frontera: a las 23:59 CR del 22 el saliente sigue siendo de HOY", async () => {
+    const res = await hilo(SALIENTE_22, null, new Date("2026-07-23T05:59:59.999Z"));
+    expect(res).toMatchObject({ plantillaBloqueada: true });
+  });
+
+  it("frontera: a las 00:00 CR del 23 ese mismo saliente ya es de AYER", async () => {
+    const res = await hilo(SALIENTE_22, null, new Date("2026-07-23T06:00:00.000Z"));
+    expect(res).toMatchObject({ plantillaBloqueada: false });
   });
 });
 

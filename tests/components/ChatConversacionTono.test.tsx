@@ -120,6 +120,11 @@ function okHilo(
     status: "ok",
     ventanaAbierta,
     ultimoEntranteAt: mensajes.length > 0 ? ENTRANTE.ocurridoAt : null,
+    // Estas dos las decide el servidor por DIA (ver `ChatConversacionPlantillaDiaria`); aqui
+    // se fijan al escenario "conversacion viva de hoy", que es el que ejercita el tono.
+    plantillaBloqueada: false,
+    textoLibreHabilitado:
+      ventanaAbierta && mensajes.some((m) => m.direccion === "entrante"),
     mensajes,
   };
 }

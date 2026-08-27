@@ -21,6 +21,7 @@ import { resolveActorFromSession } from "@/lib/auth/resolve-actor";
 import { construirComponentsEnvio } from "@/lib/utils/whatsapp-template";
 import { resolverValoresPlantilla } from "@/lib/types/plantilla-datos";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
+import { fechaCalendarioCR, inicioDelDiaCREnUtc } from "@/lib/utils/fecha-cr";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
@@ -205,21 +206,51 @@ export async function listarHiloChat(
   const conversacionRepo = deps.conversacionRepo ?? new ChatConversacionRepository(prisma);
   const hilo = await conversacionRepo.findByOrdenParaMensajero(oId.data, actor.usuarioId);
   if (hilo === null) {
-    // Orden del mensajero pero aun sin hilo: hilo vacio, ventana cerrada (sin entrantes).
-    return { status: "ok", ventanaAbierta: false, ultimoEntranteAt: null, mensajes: [] };
+    // Orden del mensajero pero aun sin hilo: hilo vacio, ventana cerrada (sin entrantes) y
+    // nada bloqueado — es justo el estado en que se puede abrir la conversacion con una
+    // plantilla, que es la unica via valida con la ventana cerrada.
+    return {
+      status: "ok",
+      ventanaAbierta: false,
+      ultimoEntranteAt: null,
+      plantillaBloqueada: false,
+      textoLibreHabilitado: false,
+      mensajes: [],
+    };
   }
 
   const mensajeRepo = deps.mensajeRepo ?? new ChatMensajeRepository(prisma);
   const mensajes = await mensajeRepo.listarHilo(hilo.id);
-  const ahora = (deps.now ?? (() => new Date()))().getTime();
+  const ahoraDate = (deps.now ?? (() => new Date()))();
+  const ahora = ahoraDate.getTime();
   const ventanaAbierta =
     hilo.ultimoEntranteAt !== null &&
     ahora - hilo.ultimoEntranteAt.getTime() < VENTANA_MS;
+
+  // QUE SE PUEDE ENVIAR se juzga SOLO con los mensajes de HOY, no con el hilo entero. El hilo
+  // es por `(orden_id, telefono_e164)` y sobrevive a las reasignaciones, asi que sin este
+  // corte un saliente de ayer dejaba el chat mudo para siempre (ver `ListarHiloChatResult`).
+  // El HISTORIAL que se devuelve no se toca: se sigue viendo completo.
+  //
+  // La cota es `inicioDelDiaCREnUtc` (06:00Z del dia CR), NO `startOfDayCR`: aqui se compara
+  // contra `ocurrido_at`, que es un `timestamp`, y confundirlas es el off-by-one de seis horas
+  // que documenta `lib/utils/fecha-cr.ts:27-29`.
+  const inicioDelDia = inicioDelDiaCREnUtc(fechaCalendarioCR(ahoraDate)).getTime();
+  const deHoy = mensajes.filter((m) => m.ocurridoAt.getTime() >= inicioDelDia);
+  const hayEntranteHoy = deHoy.some((m) => m.direccion === "entrante");
+  const haySalienteHoy = deHoy.some((m) => m.direccion === "saliente");
 
   return {
     status: "ok",
     ventanaAbierta,
     ultimoEntranteAt: hilo.ultimoEntranteAt?.toISOString() ?? null,
+    // Cualquier saliente de hoy cuenta, no solo una plantilla: un texto libre —o la
+    // bienvenida automatica— tambien deja la conversacion esperando respuesta del cliente.
+    plantillaBloqueada: haySalienteHoy && !hayEntranteHoy,
+    // `&& ventanaAbierta` es un cinturon, no un caso real: el inicio del dia CR esta como
+    // mucho a 24 h de `now`, asi que un entrante de hoy implica ventana abierta. Se deja
+    // explicito para que la UI no prometa nunca un envio que `enviarMensajeChat` rechazaria.
+    textoLibreHabilitado: hayEntranteHoy && ventanaAbierta,
     mensajes: mensajes.map((m) => ({
       id: m.id,
       direccion: m.direccion,
