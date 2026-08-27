@@ -37,6 +37,18 @@ export interface UsuariosColumnsActions {
   onCambiarEstado: (usuario: UsuarioListItemDTO) => void;
   /** Id de la fila cuya acción de estado está en curso (deshabilita el botón). */
   estadoPendienteId?: string | null;
+  /**
+   * Feature 287/R25/R26/R27 — PIDE la confirmación del restablecimiento; NO restablece.
+   * El botón de la fila no dispara nada irreversible: el anfitrión abre el modal que
+   * nombra al usuario y advierte del cierre de sesiones, y solo el confirmar ejecuta.
+   *
+   * Es OBLIGATORIA a propósito: una prop opcional dejaría montar el listado sin cablearla
+   * y el botón existiría sin hacer nada, que es justo el modo de fallo que la guardia de
+   * superficie (R-C, «el cable suelto») vino a cerrar en este repo.
+   */
+  onRestablecerContrasena: (usuario: UsuarioListItemDTO) => void;
+  /** Id de la fila cuyo restablecimiento está en curso (deshabilita el botón). */
+  restablecerPendienteId?: string | null;
 }
 
 /**
@@ -48,6 +60,8 @@ export function buildUsuariosColumns({
   onEditar,
   onCambiarEstado,
   estadoPendienteId = null,
+  onRestablecerContrasena,
+  restablecerPendienteId = null,
 }: UsuariosColumnsActions): Column<UsuarioListItemDTO>[] {
   return [
     { id: "nombre", value: "Nombre" },
@@ -85,6 +99,17 @@ export function buildUsuariosColumns({
               onClick={() => onCambiarEstado(row)}
             >
               {esActivo ? "Inactivar" : "Activar"}
+            </Button>
+            {/* Feature 287/R25 — la acción del maestro. Aquí NO hay, ni puede haber, un campo
+                para escribir una contraseña: el sistema la genera y se muestra una vez. */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={restablecerPendienteId === row.id}
+              onClick={() => onRestablecerContrasena(row)}
+            >
+              Restablecer contraseña
             </Button>
           </div>
         );

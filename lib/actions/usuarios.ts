@@ -203,11 +203,10 @@ export async function listarTiposIdentificacion(
  * El resto es el patron identico a las otras siete acciones del archivo: `withErrorHandler` +
  * `resolveActorFromSession` + `idSchema` + `toUsuarioActionError`.
  *
- * @sin-superficie TRANSITORIA — el backend de la 287 (T1-T8, T11-T13) aterriza en este PR y su
- * pantalla es la tanda siguiente de la MISMA ficha (T9/T10: el panel de «una sola vez» y la
- * accion por fila de `UsuariosModule`). Se retira al cablearla; si esta anotacion sobrevive al
- * merge de T10, la guardia de superficie se pone roja por caducada y lo dice. Ver
- * `specs/287-maestro-restablece-contrasena/tasks.md`.
+ * Su superficie es la accion «Restablecer contrasena» por fila de `UsuariosModule` (T10), con
+ * su confirmacion (R26) y el panel de «una sola vez» (R28). La anotacion `@sin-superficie`
+ * TRANSITORIA que llevaba mientras esa pantalla no existia se retiro al cablearla: era la
+ * propia guardia la que exigia quitarla en cuanto la accion volviera a ser alcanzable.
  */
 export async function restablecerContrasenaUsuario(
   id: unknown,

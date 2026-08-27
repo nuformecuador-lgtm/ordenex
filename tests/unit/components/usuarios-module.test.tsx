@@ -22,6 +22,9 @@ const crearUsuarioMock = vi.fn();
 const actualizarUsuarioMock = vi.fn();
 const listarTiposIdentificacionMock = vi.fn();
 const listarRolesMock = vi.fn();
+// Feature 287 (T10): el modulo cablea la accion del restablecimiento. El doble va aqui para
+// que el modulo pueda importarla; su comportamiento se prueba en `usuarios-restablecer.test.tsx`.
+const restablecerContrasenaUsuarioMock = vi.fn();
 vi.mock("@/lib/actions/usuarios", () => ({
   listarUsuarios: (...a: unknown[]) => listarUsuariosMock(...a),
   cambiarEstadoUsuario: (...a: unknown[]) => cambiarEstadoUsuarioMock(...a),
@@ -31,6 +34,8 @@ vi.mock("@/lib/actions/usuarios", () => ({
   listarTiposIdentificacion: (...a: unknown[]) =>
     listarTiposIdentificacionMock(...a),
   listarRoles: (...a: unknown[]) => listarRolesMock(...a),
+  restablecerContrasenaUsuario: (...a: unknown[]) =>
+    restablecerContrasenaUsuarioMock(...a),
 }));
 
 import { UsuariosModule } from "@/app/(app)/configuracion/_components/UsuariosModule";
