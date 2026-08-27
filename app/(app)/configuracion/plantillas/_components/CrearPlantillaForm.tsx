@@ -14,6 +14,9 @@ import { VariablesInsert } from "./VariablesInsert";
 
 type FieldErrors = Record<string, string[]>;
 
+/** Referencia estable: una plantilla nueva no tiene snapshot persistido (feature 282). */
+const SIN_VARIABLES_NOMBRES: Record<string, string> = {};
+
 /** Clases del textarea del cuerpo, alineadas al `Input` del sistema de diseño. */
 const TEXTAREA_CLASS =
   "w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 placeholder:text-muted-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:bg-input/30";
@@ -80,6 +83,7 @@ export const CrearPlantillaForm = forwardRef<CrearPlantillaFormHandle>(
           textareaRef={textareaRef}
           value={cuerpo}
           onInsert={(next) => setCuerpo(next)}
+          variablesNombres={SIN_VARIABLES_NOMBRES}
         />
       </div>
     );
