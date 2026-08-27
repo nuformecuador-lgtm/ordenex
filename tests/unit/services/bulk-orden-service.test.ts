@@ -48,13 +48,13 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     findDistritosByCantonIds: vi.fn().mockResolvedValue([
       { id: "d1", nombre: "La Mariscal", cantonId: "c1", zonaId: "z1" },
     ]),
-    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null }), // feature 141
+    createManyOrdenes: vi.fn().mockResolvedValue({ inserted: 0, cargaId: null, omitidas: [] }), // feature 141/294
     // Feature 88: persistencia con guia inmediata (carga por API). Por defecto vacio;
     // los tests de cargarViaApi lo sobreescriben para devolver las guias asignadas.
     // Feature 141 (R47/R48): persistencia de las URLs de descarga de etiquetas.
     setCargaDownloadUrl: vi.fn(async () => {}),
     setOrdenesDownloadUrl: vi.fn(async () => {}),
-    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null }), // feature 88/141
+    createManyOrdenesConGuia: vi.fn().mockResolvedValue({ creadas: [], cargaId: null, omitidas: [] }), // feature 88/141/294
     // Feature 16: resumen del lote (solo lectura), no ejercitado por la carga
     // masiva (feature 15) pero exigido por la interfaz IOrdenRepository.
     findResumenByNumRemisiones: vi.fn().mockResolvedValue([]),

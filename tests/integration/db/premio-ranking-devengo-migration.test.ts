@@ -37,13 +37,18 @@ import {
 const MIGRATIONS_DIR = path.join(__dirname, "..", "..", "..", "db", "migrations");
 
 function migrationDirFor(suffix: string): string {
-  const dir = fs
+  const dirs = fs
     .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
-    .find((name) => name.endsWith(suffix));
-  if (!dir) throw new Error(`No se encontro la carpeta de migracion ${suffix}`);
-  return path.join(MIGRATIONS_DIR, dir);
+    .filter((name) => name.endsWith(suffix));
+  if (dirs.length === 0) throw new Error(`No se encontro la carpeta de migracion ${suffix}`);
+  // Se exige UNA sola: con dos, un `.find()` devolveria la mas ANTIGUA en silencio y las anclas
+  // de orden de mas abajo pasarian a medir una migracion que no es la que dicen medir.
+  if (dirs.length > 1) {
+    throw new Error(`El sufijo ${suffix} resuelve a ${dirs.length} carpetas: ${dirs.join(", ")}`);
+  }
+  return path.join(MIGRATIONS_DIR, dirs[0]);
 }
 
 const migrationDir = migrationDirFor("_premio_ranking_devengo");
@@ -343,17 +348,61 @@ describe("estructura de la carpeta de migracion", () => {
     expect(fs.existsSync(path.join(migrationDir, "down.sql"))).toBe(true);
   });
 
-  it("su timestamp es estrictamente MAYOR que el de todas las demas carpetas", () => {
-    const nombres = fs
-      .readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-    const mio = path.basename(migrationDir);
-    const otras = nombres.filter((n) => n !== mio);
-    expect(otras.length).toBeGreaterThan(100); // control de no-vacuidad
-    for (const otra of otras) {
-      expect(otra.slice(0, 14) <= mio.slice(0, 14)).toBe(true);
+  // Aqui vivia «su timestamp es estrictamente MAYOR que el de TODAS las demas carpetas», es
+  // decir «soy la ultima». Retirado el 2026-08-27: era una afirmacion con fecha de caducidad —
+  // cierta solo hasta la siguiente migracion del repo, y la 294
+  // (`20260827160000_orden_num_remision_unico_parcial`) la caduco a los dias, poniendo el gate
+  // completo en rojo sin que nada de la 293 estuviera mal. Ser la ultima NO es una propiedad de
+  // esta migracion: es una propiedad del arbol, y no es asunto suyo. Lo que SI es asunto suyo
+  // —y es lo unico que su SQL necesita para no abortar— es ir DESPUES de las migraciones que
+  // dejan puesto lo que ella usa o modifica. Eso es lo que se ancla debajo, por NOMBRE, para
+  // que ninguna migracion futura tenga que acordarse de venir a tocar este archivo.
+  const DEPENDENCIAS: Array<{ sufijo: string; crea: RegExp[]; que: string }> = [
+    {
+      sufijo: "_wallet_movimiento",
+      crea: [/CREATE TYPE "wallet_origen_tipo" AS ENUM/],
+      que: "el enum `wallet_origen_tipo` al que el paso 2 le anade 'ranking_snapshot_fila'",
+    },
+    {
+      sufijo: "_pago_mensajero_movimiento",
+      crea: [
+        /CREATE TYPE "pago_mensajero_movimiento_categoria" AS ENUM/,
+        /CREATE TABLE "pago_mensajero_movimiento"/,
+        new RegExp(`CREATE UNIQUE INDEX "${UQ_ORIGEN}"`),
+      ],
+      que: "el enum de categorias (paso 1), la tabla que recibe `premio_dia` (paso 3) y el `origen_uq` que el paso 6 DROPEA por nombre",
+    },
+    {
+      sufijo: "_liquidacion_pago",
+      crea: [new RegExp(`ADD CONSTRAINT "${NOMBRE_CHECK_TIPO}"`)],
+      que: "el CHECK tipo<->categoria que el paso 4 DROPEA por nombre para recrearlo",
+    },
+  ];
+
+  it("va DESPUES de cada migracion de la que depende, ancladas POR NOMBRE", () => {
+    const mio = path.basename(migrationDir).slice(0, 14);
+    for (const dep of DEPENDENCIAS) {
+      const carpeta = path.basename(migrationDirFor(dep.sufijo));
+      // Control de NO-VACUIDAD, y es la mitad del valor de este test: el ancla solo significa
+      // algo mientras esa carpeta SIGA creando lo que aqui se afirma que crea. Si alguien se
+      // llevara ese CREATE a otra migracion, comparar timestamps contra esta seguiria en verde
+      // midiendo nada. Asi el test lo dice.
+      const sqlDep = fs.readFileSync(path.join(MIGRATIONS_DIR, carpeta, "migration.sql"), "utf8");
+      for (const patron of dep.crea) {
+        expect(sqlDep, `${carpeta} ya no crea ${dep.que}`).toMatch(patron);
+      }
+      expect(
+        carpeta.slice(0, 14) < mio,
+        `la 293 (${mio}) tiene que ir DESPUES de ${carpeta}, que crea ${dep.que}`,
+      ).toBe(true);
     }
+  });
+
+  it("la carpeta ya aplicada conserva su nombre exacto (renumerarla seria drift)", () => {
+    // Este literal NO caduca: es el nombre de ESTA migracion, que quedo fijo al aplicarse.
+    // Renombrarla o renumerarla deja su fila en `_prisma_migrations` apuntando a una carpeta que
+    // ya no existe, y lo anadido despues no llega nunca a esa base.
+    expect(path.basename(migrationDir)).toBe("20260827120000_premio_ranking_devengo");
   });
 });
 

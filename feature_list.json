@@ -3536,11 +3536,11 @@
       "title": "el donut y el ranking tambien rotulan 0% junto a un dato real",
       "description": "Las etiquetas de GraficaDonut y GraficaRanking salen del mismo reparto por resto mayor que la 290, asi que una categoria con valor puede leerse como 0%.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/291-donut-ranking-menor-uno-porciento",
-      "status_note": "SALE DE LA 290, medida al validar donde mas aplicaba el arreglo (2026-08-27). Es SOLO la mitad de etiqueta: en las dos graficas el dibujo no depende del porcentaje redondeado -- el donut lo pinta recharts con el valor crudo y la barra del ranking usa valor/mayor --, asi que no desaparece nada; lo que puede mentir es el texto. El arreglo ya existe y esta en produccion: usar textoDePeso/pesosDeReparto en vez de formatear la fraccion. NO aplica a la barra de la wallet (su porcentaje viene del servidor con 2 decimales y su regla money-safe prohibe convertirlo en el navegador) ni a los KPI de tasa (razon cruda con 1 decimal: un 0,4% se lee). PENDING a proposito: el arnes admite 2 in_progress por zona y frontend ya tiene la 289 y la 292."
+      "status_note": "SALE DE LA 290, medida al validar donde mas aplicaba el arreglo (2026-08-27). Es SOLO la mitad de etiqueta: en las dos graficas el dibujo no depende del porcentaje redondeado -- el donut lo pinta recharts con el valor crudo y la barra del ranking usa valor/mayor --, asi que no desaparece nada; lo que puede mentir es el texto. El arreglo ya existe y esta en produccion: usar textoDePeso/pesosDeReparto en vez de formatear la fraccion. NO aplica a la barra de la wallet (su porcentaje viene del servidor con 2 decimales y su regla money-safe prohibe convertirlo en el navegador) ni a los KPI de tasa (razon cruda con 1 decimal: un 0,4% se lee). PENDING a proposito: el arnes admite 2 in_progress por zona y frontend ya tiene la 289 y la 292. || CERRADA 2026-08-27: PR #529 -> dev, release #530 -> prod, desplegada y verificada por gate completo (19.796 verdes, 6 rojos ajenos con delta 0)."
     },
     {
       "id": 292,
@@ -3569,11 +3569,11 @@
       "title": "una orden borrada bloquea para siempre su numero de remision, y la carga lo calla",
       "description": "La tienda confirma una carga y las filas no aparecen nunca, sin ningun error: el numero de remision de una orden borrada sigue ocupado y la insercion descarta la fila en silencio.",
       "zone": "backend",
-      "status": "pending",
+      "status": "in_progress",
       "sdd": false,
       "complexity": "baja",
-      "branch": null,
-      "status_note": "MEDIDO EN PRODUCCION el 2026-08-27, con una tienda real bloqueada: Nuform confirmaba la carga de 3 ordenes y no aparecia ninguna. CAUSA, con las tres piezas verificadas: (1) OrdenRepository.findExistingRemisiones valida duplicados con `deletedAt: null`, asi que una remision borrada NO cuenta como duplicada y la fila pasa la validacion; (2) el indice de la base `orden_tienda_id_num_remision_key` es UNIQUE (tienda_id, num_remision) y NO es parcial: la borrada SIGUE ocupando el numero; (3) createManyOrdenes inserta con `skipDuplicates: true`, asi que la fila se descarta SIN ERROR. Sintoma exacto: no se crea ni la fila de `carga` -- medido, cero cargas despues de las 20:00 -- y el usuario ve un exito que no ocurrio. DESBLOQUEO MANUAL ya aplicado en produccion: a las 3 borradas (73042, 73071, 73113) se les renombro la remision con sufijo -BORRADA-20260827 para liberar el numero. Es un parche, no el arreglo. ARREGLO: el indice unico pasa a PARCIAL (WHERE deleted_at IS NULL), que es lo que la validacion ya asume; y una fila que no entra deja de ser invisible -- el resumen de la carga debe contarla, que para eso ya existe el resultado `duplicada`. URGENCIA CRUZADA: el PR #509 (eliminar orden desde el listado del maestro, otra sesion) MULTIPLICA este defecto -- cada orden que el maestro borre dejara su remision inutilizable y la siguiente carga fallara muda. Conviene avisar a esa sesion ANTES de que se mergee."
+      "branch": "fix/294-remision-borrada-bloquea-carga",
+      "status_note": "MEDIDO EN PRODUCCION el 2026-08-27, con una tienda real bloqueada: Nuform confirmaba la carga de 3 ordenes y no aparecia ninguna. CAUSA, con las tres piezas verificadas: (1) OrdenRepository.findExistingRemisiones valida duplicados con `deletedAt: null`, asi que una remision borrada NO cuenta como duplicada y la fila pasa la validacion; (2) el indice de la base `orden_tienda_id_num_remision_key` es UNIQUE (tienda_id, num_remision) y NO es parcial: la borrada SIGUE ocupando el numero; (3) createManyOrdenes inserta con `skipDuplicates: true`, asi que la fila se descarta SIN ERROR. Sintoma exacto: no se crea ni la fila de `carga` -- medido, cero cargas despues de las 20:00 -- y el usuario ve un exito que no ocurrio. DESBLOQUEO MANUAL ya aplicado en produccion: a las 3 borradas (73042, 73071, 73113) se les renombro la remision con sufijo -BORRADA-20260827 para liberar el numero. Es un parche, no el arreglo. ARREGLO: el indice unico pasa a PARCIAL (WHERE deleted_at IS NULL), que es lo que la validacion ya asume; y una fila que no entra deja de ser invisible -- el resumen de la carga debe contarla, que para eso ya existe el resultado `duplicada`. URGENCIA CRUZADA: el PR #509 (eliminar orden desde el listado del maestro, otra sesion) MULTIPLICA este defecto -- cada orden que el maestro borre dejara su remision inutilizable y la siguiente carga fallara muda. Conviene avisar a esa sesion ANTES de que se mergee. || SUBE A URGENTE el 2026-08-27 22:30: el PR #509 (eliminar orden desde el listado del maestro) YA ESTA EN PRODUCCION -- llego con el PR #532 de otra sesion. El defecto deja de ser latente: desde ahora, cada orden que el maestro elimine quema su numero de remision y la siguiente carga de esa remision fallara MUDA. TRAMPA CONOCIDA para quien lo implemente: el indice de hoy lo genera Prisma desde el @@unique del esquema, y Prisma NO expresa indices parciales; hacerlo parcial exige sacar la restriccion del esquema y crear el indice a mano en la migracion, como acaba de hacer la 293 con origen_uq. A medias, el siguiente migrate diff recrearia el indice viejo."
     },
     {
       "id": 295,
@@ -3596,6 +3596,28 @@
       "complexity": "baja",
       "branch": null,
       "status_note": "PEDIDA POR EL HUMANO el 2026-08-27. CAUSA MEDIDA: `NovedadDTO` extiende `MiAsignacionDTO`, que es el contrato del PORTAL DEL MENSAJERO -- ahi el mensajero es obvio porque es quien mira, asi que el DTO no tiene NINGUN campo de mensajero. Al reusarlo en /novedades, que la ve la TIENDA, el dato no existe en el camino: hay que anadirlo al DTO y a la proyeccion, no solo pintarlo. DECISION QUE EL IMPLEMENTADOR NO DEBE TOMAR SOLO: 'quien solicito la ayuda' y 'quien la lleva ahora' pueden ser personas distintas si la orden se reasigno despues. El actor de la transicion `solicitud_ayuda_tienda` esta en `orden_historial_estado` (verificado: hoy dice 'Mensajero para pruebas' en las dos ordenes vivas), y el asignado actual esta en `orden.mensajero_asignado_id`. Lo pedido literalmente es QUIEN SOLICITO; lo util para la tienda es A QUIEN LLAMAR. Si difieren hay que mostrar los dos o elegir con el humano. OJO: `MiAsignacionDTO` lo consumen tambien las dos listas del portal del mensajero; anadir el campo alli obligaria a emitirlo donde nadie lo lee. El precedente esta escrito en el propio codigo (`causa` e `intentosContacto` son campos PROPIOS de NovedadDTO por ese mismo motivo): el campo nuevo va en NovedadDTO, no en el contrato compartido."
+    },
+    {
+      "id": 297,
+      "title": "quien no entrego nada ese dia no ocupa podio ni puede cobrar premio",
+      "description": "El podio puede quedar encabezado por alguien con cero entregas -- lo decide el orden alfabetico cuando todos empatan a 0% -- y ese puesto lleva premio en dinero.",
+      "zone": "backend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "media",
+      "branch": null,
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, con el caso delante: el podio del 26/08 quedo Andres 1o (0 de 21), Carlos 2o (0 de 25) y Johel 3o (0 de 37) -- NADIE entrego nada, todos empataron a 0% y el orden lo decidio el NOMBRE ALFABETICO (lib/ranking/orden-ranking.ts, criterio 4). El primer puesto llevaba 5.000.00 de premio. ALCANCE ELEGIDO POR EL HUMANO entre tres: la regla llega TAMBIEN AL PODIO, no solo al pago. Se descarto 'solo bloquear el pago' porque dejaria la contradiccion en pantalla -- un ganador con premio que el sistema se niega a pagar -- y se descarto exigir un minimo mayor (3 o 5) por ahora. DOS PIEZAS, y las dos hacen falta: (1) `asignarPodio` exige entregadas >= 1 para ser elegible, lo que cambia el ranking EN VIVO y los snapshots FUTUROS; (2) el registro del premio rechaza una fila de podio con entregadas = 0, que es lo unico que cubre los dias YA CONGELADOS -- el 26/08 sigue teniendo a Andres 1o con su premio, y sin esta guarda seguiria siendo pagable. NO SE REESCRIBEN los snapshots ya congelados: son historia. OJO: `orden-ranking.ts` lo comparten el ranking vivo y el snapshot A PROPOSITO ('reusar el criterio era el encargo, no reimplementarlo'), asi que el cambio va ahi y en ningun otro sitio."
+    },
+    {
+      "id": 298,
+      "title": "el panel de premios amontona la pantalla de cuentas por pagar",
+      "description": "El apartado de premios se apila encima de la tabla de cuentas por pagar, en la misma seccion, y la pantalla quedo desordenada.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "fix/298-tabs-wallet-mensajeros",
+      "status_note": "PEDIDA POR EL HUMANO el 2026-08-27, el mismo dia que se desplego la 293: 'al meter ese nuevo apartado en mensajeros creo desorden, separalo por tabs por lo menos'. VERIFICADO en app/(app)/wallet/mensajeros/page.tsx: `PremiosRankingPanel` y `CuentasPorPagarTable` cuelgan de la MISMA seccion, uno encima del otro. ALCANCE: separarlos en pestanas reusando el patron de tabs que el repo ya tiene (la 277 lo hizo en 'Por recoger' y el modulo de novedades tiene NovedadesTabs). NO se cambia ninguna regla de negocio ni el registro del premio: es disposicion."
     }
   ]
 }

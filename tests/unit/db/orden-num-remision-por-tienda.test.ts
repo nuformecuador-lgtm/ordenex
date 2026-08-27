@@ -66,11 +66,16 @@ describe("schema.prisma — el modelo declara lo que la migracion creo", () => {
     expect(modeloOrden()).toMatch(/^\s*numRemision\s+String\s+@map\("num_remision"\)/m);
   });
 
-  it("declara @@unique([tiendaId, numRemision]) con el nombre exacto del indice", () => {
-    expect(modeloOrden()).toContain(
-      '@@unique([tiendaId, numRemision], map: "orden_tienda_id_num_remision_key")',
-    );
-  });
+  // FEATURE 294 (2026-08-27) — AQUI VIVIA «declara @@unique([tiendaId, numRemision]) con el
+  // nombre exacto del indice». Ya no puede vivir: la ficha 294 convirtio ese indice en PARCIAL
+  // (`WHERE deleted_at IS NULL`) y Prisma no expresa predicados, asi que la restriccion SALIO
+  // del modelo y se declara a mano en
+  // `db/migrations/20260827160000_orden_num_remision_unico_parcial`. Lo que aquel caso protegia
+  // —que nadie devuelva la unicidad a GLOBAL— lo sigue protegiendo el caso de arriba (sin
+  // `@unique` de columna) y, sobre el indice real, `tests/unit/db/orden-num-remision-parcial.test.ts`
+  // mas su contraparte contra Postgres. NO se restaura el `@@unique`: hacerlo haria que
+  // `prisma db push` escribiera otra vez el indice SIN predicado y que el cliente generado
+  // ofreciera `findUnique` por un par que la base ya no garantiza unico (medido en la 294).
 
   it("num_guia conserva su @unique global", () => {
     expect(modeloOrden()).toMatch(/numGuia\s+Int\?\s+@unique\s+@map\("num_guia"\)/);
