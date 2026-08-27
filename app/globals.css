@@ -188,6 +188,25 @@
   --color-warning-strong: var(--warning-strong);
   --color-danger-strong: var(--danger-strong);
   --color-info-strong: var(--info-strong);
+  /* Feature 292 — LOS CUATRO PARES DE LOS `--chart-*` QUE PINTAN LA BARRA DEL MONITOREO.
+     Cuatro de los ocho contadores del tablero del día se pintan en la barra apilada con un
+     `--chart-*` (`app/(app)/monitoreo/_components/contadores.ts`) y su tarjeta llevaba una
+     variante semántica de otro color: la barra no se podía leer desde las tarjetas. Para que
+     la tarjeta tome el color de SU segmento hace falta lo que un color plano no da: el PAR
+     (`-soft` de fondo + `-strong` de texto) que el `Badge` usa.
+     Mismos tres roles que los semánticos (DESIGN.md): `-soft` fondo claro, `--chart-N` acento
+     —el que ya pinta el segmento, sin tocar—, `-strong` texto. En oscuro no hay `-soft`: el
+     `Badge` compone `--chart-N/15`, y por eso el acento GIRA con el tema y el `-soft` no.
+     Los ocho números medidos están junto a cada `-strong`, y los ata
+     `tests/unit/guards/contraste-tokens.guardia.test.ts`. */
+  --color-chart-6-soft: #ede9fe;
+  --color-chart-11-soft: #ffedd5;
+  --color-chart-12-soft: #f1f5f9;
+  --color-chart-13-soft: #dbeafe;
+  --color-chart-6-strong: var(--chart-6-strong);
+  --color-chart-11-strong: var(--chart-11-strong);
+  --color-chart-12-strong: var(--chart-12-strong);
+  --color-chart-13-strong: var(--chart-13-strong);
   --color-hivis: #f4c500;
   --color-kraft-canvas: #f7f8fc;
   --color-kraft-card: #ffffff;
@@ -286,6 +305,15 @@
   --warning-strong: #92400e; /* vs card 7.09 · vs bg 6.68 · vs warning-soft 6.37 · vs warning/15 6.31 */
   --danger-strong: #b91c1c; /* vs card 6.47 · vs bg 6.10 · vs danger-soft 5.30 */
   --info-strong: #1d4ed8; /* vs card 6.70 · vs bg 6.31 · vs info-soft 6.16 */
+  /* Feature 292 — la tinta de los cuatro pares de `--chart-*` (modo claro). Es el PROPIO color
+     del segmento donde ya cumple AA sobre su `-soft` —`chart-11` (6.38) y `chart-13` (8.49)—
+     y el tono más oscuro de la MISMA rampa donde el segmento no llegaba: `chart-6` daba 3.57 y
+     `chart-12` 4.34. Ni un tono nuevo: los dos movidos son el mismo violeta y la misma pizarra,
+     dos escalones más abajo. */
+  --chart-6-strong: #6d28d9; /* vs card 7.10 · vs bg 6.69 · vs chart-6-soft 5.98 */
+  --chart-11-strong: #9a3412; /* vs card 7.31 · vs bg 6.89 · vs chart-11-soft 6.38 */
+  --chart-12-strong: #334155; /* vs card 10.35 · vs bg 9.76 · vs chart-12-soft 9.45 */
+  --chart-13-strong: #1e3a8a; /* vs card 10.36 · vs bg 9.76 · vs chart-13-soft 8.49 */
 }
 
 /*
@@ -417,6 +445,10 @@
     --warning-strong: #92400e;
     --danger-strong: #b91c1c;
     --info-strong: #1d4ed8;
+    --chart-6-strong: #6d28d9;
+    --chart-11-strong: #9a3412;
+    --chart-12-strong: #334155;
+    --chart-13-strong: #1e3a8a;
   }
 }
 
@@ -793,6 +825,10 @@
     --warning-strong: #92400e;
     --danger-strong: #b91c1c;
     --info-strong: #1d4ed8;
+    --chart-6-strong: #6d28d9;
+    --chart-11-strong: #9a3412;
+    --chart-12-strong: #334155;
+    --chart-13-strong: #1e3a8a;
   }
 }
 
@@ -866,6 +902,15 @@ body:has(> .dark) {
   --warning-strong: #fbbf24; /* vs bg 10.98 · vs card 9.75 · vs warning/15 7.59 */
   --danger-strong: #f87171; /* vs bg 6.63 · vs card 5.89 · vs danger/15 5.20 */
   --info-strong: #93b4f7; /* vs bg 8.83 · vs card 7.84 · vs info/15 6.97 */
+  /* Feature 292 — la otra mitad de los cuatro pares de `--chart-*`. Mismo criterio que en claro:
+     el propio color del segmento donde cumple con margen —`chart-11` (7.02) y `chart-13` (6.48)
+     sobre su fondo compuesto— y un escalón más claro de la misma rampa donde el segmento se
+     quedaba en el filo: `chart-6` daba 4.69 y `chart-12` 4.89, que es AA por tres décimas y este
+     repo ya aprendió que aprobar por una centésima no es aprobar (feature 210). */
+  --chart-6-strong: #c4b5fd; /* vs bg 9.93 · vs card 8.82 · vs chart-6/15 6.91 */
+  --chart-11-strong: #fdba74; /* vs bg 10.87 · vs card 9.65 · vs chart-11/15 7.02 */
+  --chart-12-strong: #cbd5e1; /* vs bg 12.35 · vs card 10.97 · vs chart-12/15 8.45 */
+  --chart-13-strong: #93c5fd; /* vs bg 10.16 · vs card 9.03 · vs chart-13/15 6.48 */
 }
 
 /*
@@ -940,6 +985,10 @@ body:has(> .dark) {
     --warning-strong: #fbbf24;
     --danger-strong: #f87171;
     --info-strong: #93b4f7;
+    --chart-6-strong: #c4b5fd;
+    --chart-11-strong: #fdba74;
+    --chart-12-strong: #cbd5e1;
+    --chart-13-strong: #93c5fd;
   }
 }
 
