@@ -448,6 +448,16 @@ No basta con decir que se quitó, así que se midió en las dos direcciones:
   por el otro extremo — «ninguna anotación `@sin-superficie` de acción sobrevive a su motivo».
   Es decir: la excepción ya no se puede quedar ahí por olvido, y está demostrado, no supuesto.
 
+### Y un segundo agujero, encontrado al revisar el blob ya commiteado
+
+Al retirarla dejé escrito **el nombre de la anotación** en el mismo comentario, para explicar que
+se había quitado. La guardia la busca **por texto en el comentario pegado al export**: ese párrafo
+la habría **reactivado**. No lo hizo por un detalle demasiado fino para confiar en él —el nombre
+iba entre comillas invertidas y el patrón exige un espacio detrás—, así que un cambio del patrón,
+o quitar esas comillas al reformatear, la habría vuelto a encender. Reescrito sin nombrarla, y con
+el porqué escrito ahí mismo. La lección se generaliza: **contar en prosa que se retiró una marca
+que se detecta por texto, dentro del alcance donde se detecta, es volver a ponerla.**
+
 ---
 
 ## §F4 — Mapa `R<n> → test` de esta parte
