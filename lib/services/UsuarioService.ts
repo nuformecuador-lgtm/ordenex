@@ -2,6 +2,7 @@ import {
   CatalogoInvalidoError,
   UsuarioDuplicadoError,
   type IUserRepository,
+  type ListUsuariosParams,
   type UpdateUsuarioData,
   type UsuarioPublico,
 } from "@/lib/interfaces/repositories/IUserRepository";
@@ -132,8 +133,30 @@ export class UsuarioService implements IUsuarioService {
     }
   }
 
+  /**
+   * Feature 285 (design §3.2) — traduce las claves PUBLICAS del borde (`q`, `rol`) a los
+   * nombres de dominio que entiende el repositorio (`busqueda`, `roles`).
+   *
+   * ES UNO SOLO Y LO LLAMAN LOS DOS CAMINOS (`listar` y `listarCompleto`), por la misma razon
+   * por la que `OrdenService.construirWhere` es compartido: si cada uno armara el suyo, la
+   * pantalla y la descarga podrian discrepar sin que nada lo delatara — y lo que se descubriria
+   * no es un test rojo, sino un archivo que no es lo que la tabla muestra (R22).
+   *
+   * Las claves ausentes se OMITEN (no viajan como `undefined` explicito) para que el
+   * repositorio distinga "sin filtro" de "filtro vacio". `rol` nunca llega como `[]`: el borde
+   * lo rechaza con `.nonempty()`.
+   */
+  private construirFiltro(
+    input: Pick<ListarUsuariosInput, "q" | "rol">,
+  ): Pick<ListUsuariosParams, "busqueda" | "roles"> {
+    return {
+      ...(input.q !== undefined ? { busqueda: input.q } : {}), // R2/R6
+      ...(input.rol !== undefined ? { roles: input.rol } : {}), // R13/R14
+    };
+  }
+
   async listar(input: ListarUsuariosInput, actor: Actor): Promise<ListarUsuariosServiceResult> {
-    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R3/R4 (285/R26)
 
     const skip = (input.page - 1) * input.pageSize;
     const { items, total } = await this.repo.list({
@@ -141,6 +164,7 @@ export class UsuarioService implements IUsuarioService {
       take: input.pageSize, // ya acotado a MAX_PAGE_SIZE por el schema (R13)
       sortBy: input.sortBy,
       sortDir: input.sortDir,
+      ...this.construirFiltro(input), // feature 285/R2/R13/R16
     });
 
     return { status: "ok", items, page: input.page, pageSize: input.pageSize, total };
@@ -150,23 +174,32 @@ export class UsuarioService implements IUsuarioService {
    * Feature 170 (T B.1, design §2.1) — el MISMO listado sin recorte por pagina, para la
    * descarga del dataset completo.
    *
-   * NO hay `construirWhere` que extraer aqui, y eso es un HALLAZGO, no un olvido:
-   * `listar` no construye ningun `where` (el repositorio lista TODOS los usuarios; el
-   * modulo entero es exclusivo de `maestro`, que no esta acotado a un subconjunto). El
-   * alcance por rol de este listado ES el guard `ALLOWED_ROLES`, y por eso este metodo
-   * usa literalmente el mismo, escrito ANTES de tocar la base (R17): un rol no autorizado
-   * recibe `forbidden` sin que se ejecute una sola consulta.
+   * ⚠️ AQUI DECIA, HASTA LA FEATURE 285, que «NO hay `construirWhere` que extraer aqui, y eso es
+   * un HALLAZGO»: era cierto mientras el listado no tenia filtro alguno. La 285 lo DESMIENTE, y
+   * por eso el parrafo se reescribe en vez de dejarse: un comentario que afirma algo falso con
+   * aire de hallazgo verificado es peor que ninguno — la proxima sesion lo usaria de argumento.
    *
-   * La paridad con el listado (R9/R11/R19) se sostiene sobre llamar al MISMO
-   * `repo.list` con los MISMOS `sortBy`/`sortDir`: cualquier criterio que el repositorio
-   * aplique —hoy y manana— lo aplica identico en los dos caminos, porque es el mismo
-   * metodo. Solo cambian `skip` (0) y `take` (tope + 1).
+   * LO QUE HAY AHORA. El listado si construye filtro (`q` -> `busqueda`, `rol` -> `roles`), y
+   * este metodo llama al MISMO `construirFiltro` que `listar`, no a una copia. Eso es lo que
+   * hace que la descarga entregue EXACTAMENTE las filas que la pantalla muestra (R22): no es una
+   * coincidencia que haya que mantener, es el mismo codigo.
+   *
+   * LO QUE NO CAMBIA, y sigue siendo verdad: el alcance POR ACTOR de este listado ES el guard
+   * `ALLOWED_ROLES` —el modulo entero es exclusivo de `maestro`, que no esta acotado a un
+   * subconjunto de filas—, y por eso este metodo usa literalmente el mismo guard, escrito ANTES
+   * de tocar la base (R17 de la 170 / R26 de la 285): un rol no autorizado recibe `forbidden`
+   * sin que se ejecute una sola consulta, tambien cuando manda filtros.
+   *
+   * La paridad con el listado (R9/R11/R19) se sostiene sobre llamar al MISMO `repo.list` con los
+   * MISMOS `sortBy`/`sortDir` y el MISMO filtro: cualquier criterio que el repositorio aplique
+   * —hoy y manana— lo aplica identico en los dos caminos, porque es el mismo metodo. Solo
+   * cambian `skip` (0) y `take` (tope + 1).
    */
   async listarCompleto(
     input: ListarUsuariosCompletoInput,
     actor: Actor,
   ): Promise<ListarUsuariosCompletoServiceResult> {
-    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17
+    if (!ALLOWED_ROLES.has(actor.rol)) return { status: "forbidden" }; // R17 (285/R26)
 
     const limite = descargaConfig.MAX_FILAS;
 
@@ -178,10 +211,18 @@ export class UsuarioService implements IUsuarioService {
       take: limite + 1,
       sortBy: input.sortBy, // R11: mismos defaults del schema (createdAt/desc)
       sortDir: input.sortDir,
+      ...this.construirFiltro(input), // feature 285/R22: el MISMO filtro que la pantalla
     });
 
     // R27/R28: por encima del tope no se entrega NADA. Nunca un dataset truncado en
     // silencio: o van todas las filas, o va el error accionable con los conteos.
+    //
+    // Feature 285/R25: `total` es ahora el total FILTRADO (el repositorio cuenta con el mismo
+    // `where` con el que pagina), asi que el tope se mide sobre lo que de verdad se va a
+    // descargar. Es la consecuencia directa —y deseada— de que el `count` lleve el `where`: sin
+    // eso, un `limite_excedido` calculado sobre el conjunto SIN filtrar rechazaria la descarga de
+    // 8 mensajeros porque la tabla entera es grande. La direccion del cambio solo puede ser a
+    // mejor: filtrar nunca sube el total.
     if (total > limite) return { status: "limite_excedido", total, limite };
 
     return { status: "ok", items, total };

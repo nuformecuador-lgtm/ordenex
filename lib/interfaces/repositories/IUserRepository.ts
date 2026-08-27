@@ -83,11 +83,27 @@ export interface UsuarioListItem {
 
 // Feature 25/R13/R15: parametros del listado paginado. `sortBy` llega como
 // string desde el borde y el repositorio lo valida contra su lista blanca (R15).
+//
+// Feature 285: gana el filtro del listado. Los nombres son DE DOMINIO, no de transporte
+// (`busqueda`/`roles`, no `q`/`rol`): la traduccion clave-publica -> concepto interno la hace
+// el servicio, que es donde se hace en el resto del repo.
 export interface ListUsuariosParams {
   skip: number;
   take: number;
   sortBy?: string;
   sortDir?: "asc" | "desc";
+  /**
+   * Feature 285/R2/R4/R5/R6: fragmento a buscar en NOMBRE o CORREO. Llega YA RECORTADO por el
+   * borde (el schema aplica `.trim()` antes del minimo). El repositorio es quien escapa sus
+   * comodines: aqui viaja el texto tal cual lo tecleo la persona.
+   */
+  busqueda?: string;
+  /**
+   * Feature 285/R13/R14: roles admitidos, por VALOR del enum. **NUNCA una lista vacia**:
+   * ausente = sin filtro. El borde la rechaza con `.nonempty()` para que `[]` no pueda
+   * degradar a "todos" y devolver de mas.
+   */
+  roles?: RolValue[];
 }
 
 export interface ListUsuariosResult {
