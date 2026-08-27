@@ -307,3 +307,61 @@
 - **Hecho:** `./init.sh` en verde, con delta de rojos respecto al baseline de la rama base
   igual a **0** (medir el baseline **antes**, no citarlo de memoria).
 - **Depende de:** T25.
+
+---
+
+## Fase 7 — Pedido humano 2026-08-27 (posterior al cierre)
+
+Dos encargos que llegaron con el PR ya abierto y que **derogan comportamiento aprobado**. El
+detalle —qué se deroga, por qué, y qué NO cambia aunque lo parezca— vive en
+`progress/pedido_288_bienvenida_y_sync.md`, junto con la tabla de trazabilidad y los puntos
+abiertos. Aquí solo el qué y el dónde.
+
+### T27. El mensaje de bienvenida solo se marca desde `activo`
+- **Toca:** `lib/services/PlantillaMensajeService.ts`,
+  `lib/interfaces/services/IPlantillaMensajeService.ts`, `lib/types/plantilla-mensaje.ts`,
+  `app/(app)/configuracion/plantillas/_components/plantillas-columns.tsx`,
+  `app/(app)/configuracion/plantillas/_components/PlantillasModule.tsx`,
+  `tests/unit/plantillas/plantilla-mensaje-bienvenida.test.ts`,
+  `tests/components/PlantillasModule.test.tsx`.
+- **Deroga:** el criterio «se permite desde CUALQUIER estado» del service y su `it` homónimo.
+  El envío de bienvenida sale solo, sin nadie que lo revise: marcar una plantilla no enviable
+  no declaraba una intención, configuraba un silencio.
+- **Hecho (asserts):** los cuatro estados no-`activo` devuelven `estado_invalido` **sin** que
+  el repositorio se toque; `activo` sí marca; `not_found` lo decide el `findById` previo; la
+  carrera perdida sigue siendo `not_found`; el botón está deshabilitado en los cuatro estados
+  y el desenlace `estado_invalido` avisa y revalida.
+
+### T28. Sincronizar con WhatsApp: solo estados, y solo lo que cambió
+- **Toca:** `lib/services/SincronizarPlantillasWhatsappService.ts`,
+  `lib/repositories/PlantillaMensajeRepository.ts`,
+  `lib/interfaces/repositories/IPlantillaMensajeRepository.ts`,
+  `app/(app)/configuracion/plantillas/_components/SincronizarPlantillasButton.tsx`,
+  `tests/unit/plantillas/plantilla-sync-solo-estados.test.ts` (nuevo).
+- **Deroga:** la importación de templates que solo viven en Meta (`crearDesdeMeta`, borrado
+  con su tipo y con `extraerCuerpoDeComponents`). Por esa vía entraron dos plantillas cuyas
+  variables no están en el catálogo y resolverían a vacío.
+- **Hecho (asserts):** un template sin plantilla local se cuenta como `ignoradas` y no se
+  crea; cuando todo coincide no se emite **ni un** `update`; un `templateId`/idioma/estado
+  distinto produce **un** `update` por id; un `inactivo` local ni se reactiva ni cuenta como
+  cambio, pero sí actualiza el enlace conservando el `inactivo`.
+
+### T29. Salir de `activo` desmarca la bienvenida sola
+- **Toca:** `lib/repositories/PlantillaMensajeRepository.ts` (`updateEstado` y
+  `sincronizarTemplatePorNombre`), `lib/interfaces/repositories/IPlantillaMensajeRepository.ts`,
+  `app/(app)/configuracion/plantillas/_components/PlantillasModule.tsx` (aviso en el modal),
+  `tests/unit/plantillas/plantilla-mensaje-bienvenida.test.ts`,
+  `tests/unit/plantillas/plantilla-sync-solo-estados.test.ts`,
+  `tests/components/PlantillasModule.test.tsx`.
+- **Decisión humana 2026-08-27:** se desmarca sola. La regla va en el REPOSITORIO, en las dos
+  escrituras que mueven el estado: por `updateEstado` pasan los tres caminos de la app, y por
+  `sincronizarTemplatePorNombre` el que no pasa por ningún service (Meta rechaza el template).
+- **Hecho (asserts):** los cuatro estados no-`activo` limpian la marca en la MISMA escritura
+  que cambia el estado; reactivar no toca la marca; Meta rechazando la bienvenida la desmarca;
+  la marca colgada se limpia aunque nada más difiera (entra en la comparación del sync); la
+  bienvenida vigente y activa no se desmarca ni se reescribe; el modal de desactivar avisa de
+  la pérdida solo cuando la fila es la bienvenida.
+
+### T30. Gate
+- **Hacer:** `./init.sh --rapido` **se niega** (el diff toca `lib/types/`). Correr
+  `./init.sh` completo.

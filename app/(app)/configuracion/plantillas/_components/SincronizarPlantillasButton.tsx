@@ -8,8 +8,9 @@ import { useToast } from "@/hooks/useToast";
 import { sincronizarPlantillasWhatsapp } from "@/lib/actions/plantillas-sync";
 
 // Integracion WhatsApp — boton para que el maestro dispare la sincronizacion de plantillas
-// (Meta -> local) sin esperar al cron de 24 h. Trae los templates de Meta y actualiza/importa
-// las plantillas locales por nombre. Al terminar, refresca el listado (onSincronizado).
+// (Meta -> local) sin esperar al cron de 24 h. REFRESCA el estado de revision de las
+// plantillas locales que ya existen, casadas por nombre; no importa ni borra ninguna (ver
+// `SincronizarPlantillasWhatsappService`). Al terminar, refresca el listado (onSincronizado).
 
 export interface SincronizarPlantillasButtonProps {
   /** Se invoca tras una sincronizacion `ok` para refrescar el listado. */
@@ -28,9 +29,13 @@ export function SincronizarPlantillasButton({
     try {
       const r = await sincronizarPlantillasWhatsapp();
       if (r.status === "ok") {
+        // Se nombra lo que CAMBIO primero, y lo que no cambio despues: tras la primera
+        // corrida del dia lo normal es `0 actualizadas`, y sin el «N sin cambios» al lado eso
+        // se lee como «no funciono». Las ignoradas solo aparecen si las hay: son templates que
+        // viven en Meta y no aqui, y el sync ya no los importa.
         toast.success(
-          `Sincronización lista: ${r.actualizadas} actualizadas, ${r.creadas} creadas` +
-            (r.omitidas > 0 ? `, ${r.omitidas} omitidas` : "") +
+          `Sincronización lista: ${r.actualizadas} actualizadas, ${r.sinCambios} sin cambios` +
+            (r.ignoradas > 0 ? `, ${r.ignoradas} solo en Meta (no se importan)` : "") +
             ` (de ${r.leidas} en Meta).`,
         );
         onSincronizado?.();
