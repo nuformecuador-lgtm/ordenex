@@ -131,7 +131,10 @@ export function FormSheet({
           width: `max(${anchoPorcentaje}vw, ${anchoMinimoPx}px)`,
           maxWidth: "none",
         }}
-        className="w-full sm:max-w-none"
+        // NO se pasa `className` con utilidades de ancho: `w-full`/`sm:max-w-none` PIERDEN
+        // por especificidad contra las variantes `data-[side=right]:` de la clase base, asi
+        // que serian decorativas y harian creer que el ancho depende de ellas. Todo el ancho
+        // lo sostiene el `style` de arriba, que es el unico que gana.
       >
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>

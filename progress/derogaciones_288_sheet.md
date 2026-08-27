@@ -58,9 +58,17 @@ Las tres exigencias se siguen cumpliendo, y enteras:
 - opcion activa indicada: `aria-activedescendant` + `aria-selected`.
 
 Lo unico que cambia es el rol del input: de `role="combobox"` a textbox normal. **Eso lo pedia
-`design.md` 5.1, no R30.** Mantener `role="combobox"` + `aria-expanded` sobre una lista que no
-se colapsa jamas seria ARIA que **miente sobre la conducta**: anunciaria al lector de pantalla
-un estado expandido/colapsado que no existe. Se retira por eso, no por comodidad.
+`design.md` 5.1, no R30.**
+
+CORRECCION (revision 2, menor m1): la primera version de esta seccion justificaba el cambio
+diciendo que mantener `aria-expanded` seria «ARIA que miente». **No es exacto, y conviene no
+dejarlo escrito asi.** Un combobox permanentemente desplegado declara `aria-expanded="true"`
+de forma perfectamente VERAZ; el patron existe y es legitimo. La eleccion real era entre dos
+opciones validas —listbox filtrable persistente contra combobox siempre expandido— y se
+tomo la primera por ser la mas simple de las dos para una lista que nunca se colapsa.
+
+La derogacion se sostiene igual, pero por la OTRA razon, que es la solida: `role="combobox"`
+lo prescribia `design.md` 5.1, que es diseno, no un requisito. R30 nunca lo pidio.
 
 El test pasa de `getByRole("combobox", { name: /campo/i })` a
 `getByRole("textbox", { name: /campo/i })`.

@@ -723,7 +723,7 @@ export const CLAVES_OCULTAS_EN_SELECTOR: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * El catalogo COMPLETO. Sigue teniendo las 44 entradas: ocultar del selector no saca a nadie
+ * El catalogo COMPLETO: 42 entradas. Ocultar del selector no saca a nadie
  * de aqui, porque de aqui es de donde se resuelve `{{clave}}` al enviar (feature 288).
  */
 export const CAMPOS_PLANTILLA: CampoPlantilla[] = CATALOGO_DECLARADO.map((campo) =>
