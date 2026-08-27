@@ -204,9 +204,14 @@ export async function listarTiposIdentificacion(
  * `resolveActorFromSession` + `idSchema` + `toUsuarioActionError`.
  *
  * Su superficie es la accion «Restablecer contrasena» por fila de `UsuariosModule` (T10), con
- * su confirmacion (R26) y el panel de «una sola vez» (R28). La anotacion `@sin-superficie`
- * TRANSITORIA que llevaba mientras esa pantalla no existia se retiro al cablearla: era la
+ * su confirmacion (R26) y el panel de «una sola vez» (R28). La marca transitoria de excepcion
+ * de superficie que llevaba mientras esa pantalla no existia se RETIRO al cablearla: era la
  * propia guardia la que exigia quitarla en cuanto la accion volviera a ser alcanzable.
+ *
+ * Y el nombre de esa marca no se escribe aqui a proposito, ni siquiera para contarlo: la
+ * guardia la busca por texto en el comentario pegado al export, asi que mencionarla en prosa
+ * la reactivaria. Hoy no lo hace solo porque va entre comillas invertidas, que es una red
+ * demasiado fina para dejarla puesta.
  */
 export async function restablecerContrasenaUsuario(
   id: unknown,
