@@ -128,15 +128,36 @@ type VarianteContador = NonNullable<ComponentProps<typeof Badge>["variant"]>;
  * `ORDER_STATUS_SEED`, asi que el par `entregada: "success"` seria un segundo mapa de color
  * de estatus y el guardia se pondria rojo — con razon.
  *
- * ── EL COLOR CODIFICA GRAVEDAD, NO IDENTIDAD (design.md §4)
- * El par semantico del sistema de diseño tiene CUATRO colores y aqui hay OCHO contadores.
- * En vez de inventar dos semanticos nuevos (que obligaria a definir sus tres roles con sus
- * contrastes medidos en los dos temas: eso es una ficha de sistema de diseño, no de una
- * pantalla), el color dice **cuan bien o mal termino**, y la identidad la llevan siempre la
- * etiqueta y la cifra que van DENTRO del mismo `Badge`. Por eso hay colisiones a proposito
- * (`reprogramadas`/`devueltas`, `rechazadas`/`incidentes`), `sinRecoger` va en `secondary`
- * —lo que todavia no arranco no lleva acento— y `otros` va sin color, para que se note que
- * es el cajon de sastre y no una categoria mas.
+ * ── FEATURE 292: LA TARJETA LLEVA EL COLOR DE **SU** SEGMENTO
+ * Esta tabla y `COLOR_SEGMENTO` son dos declaraciones del MISMO vocabulario visual, y hasta
+ * la 292 discrepaban en cuatro de los ocho: `devueltas` era violeta en la barra y ambar en la
+ * tarjeta, `incidentes` teja y rojo, `sinRecoger` pizarra y gris, `enReparto` azul marino y
+ * azul claro. Quien miraba la barra no podia leerla desde las tarjetas, que es lo unico que
+ * lleva la cifra: el color dejaba de ser un puente entre las dos y pasaba a ser ruido.
+ *
+ * Lo que cambia es la MITAD que discrepaba. Los cuatro que ya concordaban de familia se
+ * quedan exactamente como estaban (`entregadas`, `reprogramadas`, `rechazadas`, y `otros` sin
+ * acento por ser el cajon de sastre). Y la barra NO se toca: sus ocho colores son los que
+ * distinguen ocho categorias, y hacerla semantica juntaria `devueltas` con `reprogramadas` e
+ * `incidentes` con `rechazadas` — dos pares indistinguibles justo en la pieza cuyo trabajo es
+ * distinguirlos (decision humana del 2026-08-27, se descarto tambien el punto de color).
+ *
+ * ── LO QUE ESTO REEMPLAZA, dicho y no escondido
+ * La 258 escribio aqui que «el color codifica GRAVEDAD, no identidad», y por eso `devueltas`
+ * compartia ambar con `reprogramadas` e `incidentes` rojo con `rechazadas`. Ese criterio
+ * queda RETIRADO para los cuatro que la barra pinta con `--chart-*`: en esta pantalla el color
+ * codifica **la misma categoria que la barra**, y la gravedad la sigue diciendo el grupo
+ * («Resultados del dia» / «Sin resultado todavia») ademas de la etiqueta y la cifra, que van
+ * DENTRO del mismo `Badge` y son las que portan el dato (R68).
+ *
+ * El coste que ese criterio evitaba era real y esta pagado: los `--chart-*` eran colores
+ * PLANOS y una variante de `Badge` necesita un PAR (`-soft` de fondo + `-strong` de texto). La
+ * 292 los crea en `app/globals.css` con sus ocho contrastes medidos en los dos temas.
+ *
+ * ⚠️ EL NOMBRE DE LA VARIANTE ES EL DEL TOKEN DE SU SEGMENTO (`bg-chart-6` -> `chart6`). No es
+ * cosmetica: es lo que deja comprobar la concordancia sin una tercera tabla que se desincronice
+ * como se desincronizaron estas dos. Lo ata `tests/unit/tablero-dia/color-contador.guardia.test.ts`,
+ * que compara los colores REALES que salen de las dos tablas, contador a contador.
  *
  * `satisfies Record<...>` EXHAUSTIVO: un sexto resultado o un cuarto cubo NO COMPILA sin
  * variante asignada (R16).
@@ -144,11 +165,11 @@ type VarianteContador = NonNullable<ComponentProps<typeof Badge>["variant"]>;
 export const VARIANTE_CONTADOR = {
   entregadas: "success",
   reprogramadas: "warning",
-  devueltas: "warning",
+  devueltas: "chart6",
   rechazadas: "danger",
-  incidentes: "danger",
-  sinRecoger: "secondary",
-  enReparto: "info",
+  incidentes: "chart11",
+  sinRecoger: "chart12",
+  enReparto: "chart13",
   otros: "outline",
 } as const satisfies Record<ClaveContador, VarianteContador>;
 
@@ -176,6 +197,12 @@ export const VARIANTE_CONTADOR = {
  * en los DOS temas». **Nunca un hex nuevo.**
  *
  * ⛔ Ni un hex, ni una utilidad de paleta cruda de Tailwind (R46).
+ *
+ * ── FEATURE 292 — ESTA TABLA MANDA, Y LA DE ARRIBA LA SIGUE
+ * Los ocho colores de aqui NO cambian: son los que distinguen ocho categorias. Lo que cambio
+ * es `VARIANTE_CONTADOR`, que ahora toma de cada contador el color de SU segmento. Si mueves
+ * un token de esta tabla, el `Badge` de esa tarjeta se queda con el color viejo y la barra
+ * vuelve a ser ilegible desde las tarjetas: el par se mueve entero o no se mueve.
  */
 export const COLOR_SEGMENTO = {
   entregadas: "bg-success",

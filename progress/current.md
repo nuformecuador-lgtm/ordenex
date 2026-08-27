@@ -8,6 +8,54 @@
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
 
+
+## 🎨 2026-08-27 — ficha 292: las tarjetas del monitoreo toman el color de su segmento
+
+`feature/292-color-cards-monitoreo`. **Sin SDD** por decisión humana. Reportado desde la pantalla y
+**medido antes de tocar nada**: `contadores.ts` tenía DOS tablas de color —`COLOR_SEGMENTO` (la
+barra) y `VARIANTE_CONTADOR` (las tarjetas)— y discrepaban en **4 de 8**.
+
+**Decisión humana: opción B** (el fondo de la tarjeta toma el color del segmento). Se le ofreció
+también el punto de color —más barato y sin tocar contraste— y eligió B a sabiendas del coste.
+**Se descartó invertirlo**: que la barra usara las variantes semánticas juntaría `devueltas` con
+`reprogramadas` e `incidentes` con `rechazadas`, y la barra existe para distinguir las ocho.
+
+**El coste real:** los `--chart-*` son colores PLANOS y el `Badge` necesita un PAR (`-soft` fondo +
+`-strong` texto). Cuatro pares nuevos, replicados en los cinco bloques de tokens.
+
+**Contraste AA medido sobre los hex** —nunca en el navegador— y **re-medido por el leader con
+aritmética propia**, con el control WCAG `#767676`/`#ffffff` = 4,54:
+
+| par | claro | oscuro |
+| --- | --- | --- |
+| chart-6 | **5,98** | 6,91 |
+| chart-11 | **6,38** | 7,02 |
+| chart-12 | **9,45** | 8,45 |
+| chart-13 | **8,49** | 6,48 |
+
+Dos tintas se movieron porque el color del segmento NO llegaba: **chart-6 daba 3,57** y
+**chart-12, 4,34**. Ninguna sale de la rampa de su propio color.
+
+- **Guardia nueva:** renderiza el tablero y compara las clases del DOM de cada tarjeta con las de su
+  segmento. **No** deriva las dos tablas de una tercera, que sería una tautología. Incluye que la
+  barra siga distinguiendo OCHO categorías, porque la otra forma de aprobar la concordancia es
+  pintarlo todo igual.
+- **Mutación:** devolver `devueltas` a `warning` → 2 rojos; bajar `--chart-6-strong` al color plano →
+  la guardia de contraste cae con 3,57 < 4,5.
+- **Gate rápido:** typecheck ✅, lint ✅, **2.328 verdes / 2 rojos**, los dos AJENOS y preexistentes
+  (`VariablesInsert`, el contrato viejo de plantillas que otra sesión derogó a propósito).
+- ⚠️ **Deuda dicha:** el criterio de la 258 «el color codifica gravedad, no identidad» queda
+  **retirado** para esos cuatro contadores.
+
+### Lo que sigue vivo, y es la ficha 291
+
+`GraficaDonut` y `GraficaRanking` rotulan con el mismo reparto por resto mayor que la 290, así que
+pueden escribir «0 %» junto a un dato real. Ahí el dibujo **no** depende del redondeo, así que es
+defecto de etiqueta, no de desaparición. Queda `pending` **a propósito**: el arnés admite dos fichas
+en vuelo por zona y `frontend` ya tiene la 289 (ajena) y esta 292.
+
+---
+
 ## 🩹 2026-08-27 — ficha 290: la barra de analítica escondía toda categoría bajo el 1 %
 
 `fix/290-barra-reparto-menor-uno-porciento`. **Sin SDD** por decisión humana («es algo tan pequeño,
