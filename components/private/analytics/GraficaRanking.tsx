@@ -33,7 +33,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import { formatearValor } from "./formato";
 import { GraficaMarco } from "./GraficaMarco";
-import { cifraConPeso, porcentajesDeReparto } from "./porcentajes";
+import { cifraConPeso, pesosDeReparto, textoDePeso } from "./porcentajes";
 import { SerieTextual } from "./SerieTextual";
 import type { GraficaProps } from "./tipos";
 
@@ -64,8 +64,18 @@ export function GraficaRanking({
   // El mayor manda la escala del ancho. El `|| 1` cubre el caso de que todo valga cero: las
   // barras miden 0 y las cifras siguen diciendo la verdad, en vez de dividir entre cero.
   const mayor = puntos.reduce((max, punto) => Math.max(max, punto.valor ?? 0), 0) || 1;
-  const pesos = porcentajesDeReparto(puntos.map((punto) => punto.valor)).map((fraccion) =>
-    formatearValor(fraccion, "porcentaje"),
+  // El peso escrito sale de `pesosDeReparto` + `textoDePeso`: reparto por RESTO MAYOR —la
+  // columna suma exactamente 100 %— y «<1 %» en la categoria que EXISTE pero cuyo peso exacto no
+  // llega a un punto. Con la fraccion redondeada a secas esa fila decia «0 %» al lado de su
+  // propia cifra (feature 291); el cero de verdad sigue diciendo «0 %», que es otro hecho.
+  //
+  // El `ancho` del reparto no se usa: la barra mide `valor / mayor` (ver «dos escalas», arriba),
+  // asi que ninguna fila desaparece por el redondeo. Aqui la 291 es solo la etiqueta.
+  //
+  // Se calcula UNA vez y se pasa tal cual a la leyenda y a `SerieTextual`: con dos cuentas, el
+  // lector de pantalla podria oir otro porcentaje que el que esta escrito en la fila.
+  const pesos = pesosDeReparto(puntos.map((punto) => punto.valor)).map((peso) =>
+    textoDePeso(peso, (fraccion) => formatearValor(fraccion, "porcentaje")),
   );
 
   return (
