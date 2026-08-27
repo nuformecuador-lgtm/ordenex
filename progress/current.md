@@ -7,6 +7,84 @@
 > por feature, y la narrativa de decisiones dentro de cada entrada de `feature_list.json`.
 > La bitácora extensa que vivía en este archivo se puede recuperar con
 > `git show <rev>:progress/current.md`.
+## 🚀 RELEASE DESPLEGADA — 2026-08-26 noche. **EMPIEZA A LEER POR AQUÍ**
+
+**PR #516**, `dev` → `prod`. Tres fichas del módulo de usuarios: **285** (buscador + filtro por rol),
+**286** (el ojito en los 6 campos de contraseña), **287** (el maestro restablece la contraseña).
+**Sin migraciones y sin archivos de dinero.** Gate completo sobre el SHA exacto (`80a2e347`):
+**1 fallo | 19.456 en verde**, y el fallo es el ajeno `obtenerTarifa` (ficha 275, otra sesión) con
+**un solo elemento** en la lista del guard → delta 0. Tercera release que se salta la regla del gate
+en verde, a sabiendas y registrada.
+
+### Lo que hay que hacer EN PRODUCCIÓN, y nadie ha hecho
+
+- [ ] **Restablecer una contraseña de prueba** desde Configuración → Usuarios. Es la función nueva
+      más importante: con el SMTP caído, **es la única forma de devolverle el acceso a alguien**.
+- [ ] **Que un teléfono ofrezca instalar la PWA** (Chrome → menú → «Instalar aplicación»). Los tres
+      archivos ya dan 200 —M8 cerrado hoy—, pero que el navegador la OFREZCA no lo ve ningún `curl`.
+- [ ] **M1–M7 de la 284** siguen pendientes y piden un teléfono real. La más importante es **M7**:
+      probar `?rescate=sw` **cuando no hace falta** es la única forma de saber que funciona el día
+      que haga falta.
+
+### ✅ M8 CERRADO HOY — la PWA ya es instalable
+
+Medido contra `https://ordenex.co` **sin cookies**: `manifest.json`, `sw.js` y `offline.html`
+devuelven **200**, y `/ordenes` sigue en **307**. Hasta hoy los tres daban 307 y por eso **la PWA
+nunca se pudo instalar desde que existe**. Era la premisa de la que colgaba toda la 284 y llevaba
+sin comprobar desde el 25. La receta quedó escrita en `docs/release.md`.
+
+---
+
+## ⚠️ LO QUE SIGUE ABIERTO Y NO ES DE NINGUNA FICHA
+
+### 1. No hay segundo factor, y es permanente
+
+`AUTH_RISK_THRESHOLD = 999` en Production. **Gmail bloqueó la cuenta**, así que la contraseña de
+aplicación no se puede regenerar y **el OTP por correo no volverá**. La contraseña es el único
+factor; el bloqueo por fuerza bruta (5 fallos en 15 min) SÍ sigue.
+
+**La vía de vuelta es WhatsApp**, no Gmail: la Cloud API ya está integrada y mandando mensajes, y
+`lib/clients/whatsapp-cloud.ts` ya declara la categoría **`AUTHENTICATION`**, que es la de Meta para
+códigos de un solo uso. **Pero antes hay que arreglar 7 teléfonos**, medido el 2026-08-26 sobre los
+19 usuarios activos:
+
+| teléfono | qué pasa |
+| --- | --- |
+| `0999999999` (**maestro**) y `00000000000` (mensajero) | **relleno**: un OTP no llegaría nunca, y sin error visible |
+| `+573043738012`, `3183723487` (Colombia) · `+584246327156` (Venezuela) | **fuera de Costa Rica**: ¿personas reales o datos de prueba? |
+| `8312-2625` | sólo el guion |
+| `50688688495` | ya correcto |
+
+Normalizar el formato arregla **dos**. Los otros cinco necesitan que alguien mire quién es esa
+persona. **Hacerlo ANTES de montar el OTP por WhatsApp**, o el canal nuevo nace dejando gente fuera.
+
+### 2. Hay un hotfix de auth listo y SIN desplegar
+
+Rama `hotfix/desafio-otp-no-bloquea-cuenta` (`4f095e25`), 34 tests verdes y verificado por mutación.
+Emitir un desafío OTP contaba como **fallo de credencial**: sumaba 40 puntos de riesgo al intento
+siguiente y empujaba al bloqueo duro. Un usuario real llegó a `fallos_recientes:4` sin escribir mal
+la contraseña ni una vez. **Con el OTP apagado el defecto no puede dispararse**, así que no corre
+prisa — pero vuelve el día que se reactive el segundo factor.
+
+### 3. `Session` no se purga nunca al expirar
+
+Sólo se borra en logout explícito. En una base local había **194 sesiones de un solo usuario, 0
+vivas**. En producción sólo crece, y es la tabla que la 287 recorre al revocar.
+
+### 4. Nueve tests escriben en `usuario` sin tomar el bloqueo obligatorio
+
+`tests/integration/tablero-dia-aislamiento.test.ts` y los 8 que usan `_semilla-tablero-dia.ts`
+escriben en `public."usuario"` **sin `serializarEscriturasReales`**, que el propio arnés documenta
+como obligatorio. Es la causa de los **deadlocks intermitentes** que aparecieron hoy en dos gates
+distintos. **No se tocó**: son tests de otras features y el sembrador es compartido.
+
+### 5. El rojo ajeno de siempre
+
+`lib/actions/tarifas.ts:67 obtenerTarifa` es inalcanzable porque la **275** (su pantalla) sigue
+`pending`. Es inerte —nadie puede ejecutarla— pero tumba el gate de **todo el mundo**.
+
+---
+
 ## 🔴 HOY — 2026-08-26. **EMPIEZA A LEER POR AQUÍ** (lo de abajo es historia)
 
 ### 1. Producción entra SIN segundo factor, a propósito y de forma reversible
@@ -67,6 +145,67 @@ verdes y verificado por mutación** (borrando el guard, el test nuevo pasa de 2 
 - El rojo ajeno de `obtenerTarifa` (ficha **275**, otra sesión, `pending`) sigue tumbando el gate.
 
 ---
+
+## 🟠 SESIÓN 2026-08-26 — plantillas de WhatsApp. **LEE ESTO PRIMERO**
+
+Rama de trabajo: `feature/80-notificaciones-email-otp` (no se creó rama nueva: el árbol ya venía
+con trabajo sin commitear de otra sesión —`app/_landing/*`, `app/page.tsx`, `guia-en-url.ts`— y
+un `checkout` se lo habría llevado por delante).
+
+### Hecho y verde, SIN COMMITEAR
+
+1. **Catálogo de campos de plantilla** — `lib/types/plantilla-datos.ts` (nuevo). 44 claves con
+   `clave`/`campo`/`nombre`/`descripcion`/`ejemplo`/`sensible?`/`leer`/`transform`. Sustituye al
+   objeto literal de 15 entradas que vivía dentro de `lib/utils/whatsapp-envio-valores.ts`.
+   El `OrdenEnvioReader` pasó de 7 columnas a la orden entera + el mensajero (sin `passwordHash`).
+   - ⚠️ **Cambio de salida:** `{{monto}}`/`{{total}}` ahora emiten `₡25.900`, no `25000`. El crudo
+     queda en `{{monto_crudo}}`. Afecta a plantillas YA APROBADAS por Meta.
+   - `{{url_guia}}` arma `https://…/?guia=NNNN` importando `PARAM_GUIA` de
+     `app/_landing/guia-en-url.ts`, que **es un archivo sin commitear de otra sesión**. Si esa
+     rama se descarta, este import se queda huérfano.
+2. **Guardar deja de ser enviar** — estado nuevo `saved_not_aprobation` (migración
+   `20260826120000_plantilla_estado_saved_not_aprobation`), `crear` ya NO propaga a Meta,
+   `enviarAprobacion` es la única salida hacia Meta, y `actualizar` devuelve a `pending` salvo que
+   la plantilla sea un borrador que nunca salió de casa. UI: botón «Enviar para aprobación» con
+   confirmación irreversible y aviso previo al editar.
+
+**Gate:** `tsc --noEmit` limpio. `vitest --changed origin/dev` = **4983 pasan, 2 timeouts**
+(`DetalleMensajeroPanel`, `TableroOperativo`) que **pasan en aislado** → flakes por saturación.
+Aparte, sigue el rojo AJENO conocido de `superficie-de-uso.guardia` con
+`lib/actions/tarifas.ts:67 obtenerTarifa` (es de la ficha 275, `pending`).
+
+### Feature 288 (era «282», luego «285») — `spec_ready`, esperando la puerta humana
+
+`las variables de una plantilla se eligen de un catálogo, no se escriben a mano`. Zone
+`fullstack`, complexity media. Spec **completo y revisado por el humano** el 2026-08-26 en
+`specs/288-variables-plantilla-desde-catalogo/` (requirements 24 R + design + 22 tasks).
+
+- **Renumerada 282 → 285 → 288**: el spec nació numerado 282 **sin ficha**, y ese id ya era de las
+  etiquetas PDF (`done`), y al mergear `dev` el 285 quedó tomado por el buscador de usuarios
+  (285/286/287 ya cerradas). El slug se conservó en cada renumeración; la ficha vive en
+  `feature_list.json` con `id: 288` y `status: spec_ready`.
+- **La decisión abierta quedó cerrada** en el design (§2, confirmada por el humano): el mapa
+  `clave -> nombre` **se persiste** en `plantilla_mensaje.variables_nombres JSONB NOT NULL
+  DEFAULT '{}'`, snapshot tomado del catálogo al guardar. Derivar del catálogo al pintar quedó
+  como **fallback** para las filas anteriores a la feature (R21). El cuerpo sigue guardando
+  `{{clave}}` —es lo único que Meta tiene aprobado— y `variables` sigue derivado del cuerpo,
+  porque su posición **es** el número de parámetro de Meta.
+- **Rama de trabajo: `feature/285-variables-plantilla-catalogo`**, worktree `C:/w285` (nombres
+  anteriores a la renumeración a 288; NO se renombran), nacida de
+  `origin/dev` (`3102542b`). `dev` ya absorbió `bugFix` en el **PR #504**, así que el campo
+  `variablesNombres` del `schema.prisma` y el fix de `saved_not_aprobation` (`7ad8dede`) YA
+  están en la base; no hubo que cherry-pickear nada.
+- **Lo que se dejó fuera a propósito**: los archivos de la sesión ajena de landing
+  (`app/_landing/LandingNav.tsx`, `RastreoDialog.tsx`, `app/page.tsx` y sus tests). Sí viajó
+  `app/_landing/guia-en-url.ts` con su test, porque `{{url_guia}}` importa `PARAM_GUIA` de ahí
+  y el módulo es puro. ⚠️ Ese archivo va a chocar cuando aterrice la rama de landing: mismo
+  path, y hay que resolverlo conservando una sola copia.
+- Paralelismo OK: la zona `fullstack` no tiene otra `in_progress` viva — la 278 (carga masiva
+  v3) ya está mergeada en `dev` (PR #487), su rama es ancestro de `dev`.
+- ⛔ **T0 es un prerrequisito bloqueante**: exige que `lib/types/plantilla-datos.ts` y su test
+  estén **commiteados**. Hoy la base entera (catálogo, `saved_not_aprobation`, sus dos
+  migraciones) vive **solo en el árbol sucio de `bugFix`** y no existe en ninguna rama
+  (`git log --all` sobre esos archivos: vacío). Sin ese commit, la feature no arranca.
 
 ## 🟢 EN `dev`, SIN RELEASE — 2026-08-24. **EMPIEZA A LEER POR AQUÍ**
 

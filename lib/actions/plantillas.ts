@@ -13,8 +13,10 @@ import {
   type CambiarEstadoPlantillaResult,
   type CrearPlantillaResult,
   type EliminarPlantillaResult,
+  type EnviarAprobacionPlantillaResult,
   type ListarPlantillasCompletoResult,
   type ListarPlantillasResult,
+  type MarcarBienvenidaPlantillaResult,
   type PreviewPlantillaResult,
 } from "@/lib/types/plantilla-mensaje";
 import type {
@@ -198,6 +200,54 @@ export async function eliminarPlantilla(
     }
     const service = deps.plantillaService ?? buildPlantillaService();
     return service.eliminar(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Manda la plantilla a revision de Meta (2026-08-26). ES IRREVERSIBLE: la UI confirma antes.
+ *
+ * No tiene schema propio porque no lleva payload: solo el id. El estado resultante (`pending`)
+ * lo decide el service, no el llamador — el front no puede pedir "dejala en X".
+ */
+export async function enviarPlantillaAprobacion(
+  id: unknown,
+  deps: PlantillaActionDeps = {},
+): Promise<EnviarAprobacionPlantillaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R4
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const service = deps.plantillaService ?? buildPlantillaService();
+    return service.enviarAprobacion(parsedId.data, actor);
+  });
+  return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
+}
+
+/**
+ * Deja la plantilla como MENSAJE DE BIENVENIDA (el que se envia automaticamente cuando el
+ * paquete es recogido) y desmarca la anterior.
+ *
+ * Sin schema propio, como `enviarPlantillaAprobacion`: no lleva payload, solo el id. El valor
+ * que se escribe (`true`) NO lo propone el cliente — si viajara en el body, el front podria
+ * pedir "dejalo en false" y dejar al negocio sin bienvenida por una via que nadie diseno.
+ */
+export async function marcarPlantillaBienvenida(
+  id: unknown,
+  deps: PlantillaActionDeps = {},
+): Promise<MarcarBienvenidaPlantillaResult> {
+  const r = await withErrorHandler(async () => {
+    const actor = await (deps.getActor ?? resolveActorFromSession)();
+    if (!actor) throw new UnauthenticatedError(); // R4
+    const parsedId = idSchema.safeParse(id);
+    if (!parsedId.success) {
+      throw new ValidationError(MSG.VALIDATION_ERROR, { fieldErrors: { id: ["id invalido"] } });
+    }
+    const service = deps.plantillaService ?? buildPlantillaService();
+    return service.marcarMensajeBienvenida(parsedId.data, actor);
   });
   return isAppErrorShape(r) ? toPlantillaActionError(r) : r;
 }

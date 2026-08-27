@@ -88,6 +88,10 @@ async function mensajerosFetcher() {
   return {
     mensajeros: res.mensajeros,
     bloqueadosIds: res.bloqueadosIds ?? [],
+    // Pedido humano 2026-08-26: los dados de baja (`inactivo`/`bloqueado`). Mismo trato que
+    // `bloqueadosIds` —el conjunto que el servidor rechaza, sin recortar aquí— y por el mismo
+    // motivo: el selector tiene que deshabilitar exactamente a quien la escritura va a negar.
+    noAsignablesIds: res.noAsignablesIds ?? [],
     // Feature 157 (regla de dedicación): las dos caras de "repartir y recolectar no se
     // mezclan".
     conRepartoIds: res.conRepartoIds ?? [],
@@ -292,6 +296,10 @@ export function OrdenesListado({
   // campo no se llama `bloqueadosParaRepartoIds` por eso—: desde el 2026-08-23 no hay asimetría
   // entre reparto y recolección, y el servidor aplica el mismo predicado en las dos escrituras.
   const mensajerosBloqueadosIds = mensajerosData?.bloqueadosIds ?? [];
+  // 2026-08-26: los que no pueden recibir trabajo por su estado de usuario. Lista APARTE de la
+  // anterior porque el motivo y la pantalla donde se arregla son otros, y los DOS modales la
+  // reciben igual.
+  const mensajerosNoAsignablesIds = mensajerosData?.noAsignablesIds ?? [];
 
   const [modalAbierto, setModalAbierto] = useState<ModalAbierto>(null);
   const [ordenesSeleccionadas, setOrdenesSeleccionadas] = useState<
@@ -907,6 +915,7 @@ export function OrdenesListado({
             mensajeros={mensajeros ?? []}
             mensajerosConRepartoIds={mensajerosConRepartoIds}
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
@@ -924,6 +933,7 @@ export function OrdenesListado({
             // FEATURE 271 (T9.4, R28/R32): los bloqueados por cierres, la MISMA lista que el
             // modal de recolección.
             mensajerosBloqueadosIds={mensajerosBloqueadosIds}
+            mensajerosNoAsignablesIds={mensajerosNoAsignablesIds}
             // Feature 246 (T4.2, R29): las fechas bajan de la página, que las resolvió en el
             // servidor. Este componente sólo las transporta: no las calcula ni las corrige.
             fechasDiaReparto={fechasDiaReparto}

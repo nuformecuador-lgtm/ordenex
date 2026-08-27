@@ -1,3 +1,4 @@
+import { numGuiaDeQuery, PARAM_GUIA } from "./_landing/guia-en-url";
 import { LandingBanda } from "./_landing/LandingBanda";
 import { LandingComoFunciona } from "./_landing/LandingComoFunciona";
 import { LandingFooter } from "./_landing/LandingFooter";
@@ -45,10 +46,21 @@ import { LandingServicios } from "./_landing/LandingServicios";
  * si algún día vuelven a desaparecer todas a la vez, ese es el primer sitio donde
  * mirar, y no las rutas de `public/`.
  */
-export default function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // `/?guia=4321` abre el rastreo con la guía ya puesta. Leer `searchParams` vuelve la página
+  // dinámica —deja de prerenderizarse—, y es el precio conocido de admitir el enlace; NO añade
+  // espera: no se consulta nada, solo se normaliza una cadena. Las cifras siguen resolviéndose
+  // dentro de sus propios `<Suspense>`, así que esto no retrasa el hero.
+  const query = (await searchParams) ?? {};
+  const guiaInicial = numGuiaDeQuery(query[PARAM_GUIA]);
+
   return (
     <div className="tema-claro min-h-dvh overflow-x-clip bg-kraft-canvas font-sans text-asfalto-9">
-      <LandingNav />
+      <LandingNav guiaInicial={guiaInicial} />
       <main>
         <LandingHero />
         <LandingServicios />

@@ -54,6 +54,7 @@ function fakeRepo(over: Record<string, unknown> = {}): IOrdenRepository {
     findEstatusIdByValue: vi.fn(async (v: string) => ESTATUS[v] ?? null),
     findByIdsForTransicion: vi.fn(async () => [ordenRow()]),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
     findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]) => new Set(ids)),
     findMensajerosBloqueadosPorCierres: vi.fn(async () => new Set<string>()),
     // Feature 157 (regla de dedicacion): nadie ocupado, para no interferir con el gate.
@@ -166,6 +167,7 @@ describe("R8 — asignarDesdeBodega (todo el lote recibe mensajero)", () => {
   it("feature 21: mensajero sin vehiculo asociado -> validation_error, sin persistir", async () => {
     const repo = repoBodega({
       findMensajeroIdsConVehiculo: vi.fn(async () => new Set<string>()),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
     const service = new GuiaAsignacionService(repo, fakeZonaRepo(), gate(), fakeIntentosEnLote());
 

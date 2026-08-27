@@ -12,6 +12,10 @@ import {
   type NotificacionEmisor,
   type NotificacionEmisorTx,
 } from "@/lib/notificaciones/emitir";
+import {
+  emisorBienvenidaReal,
+  type BienvenidaEmisor,
+} from "@/lib/services/jobs/whatsapp-bienvenida-encolado";
 import type { OrderStatusValue } from "@/lib/types/order-status";
 import {
   assertTransicionValida,
@@ -176,6 +180,7 @@ export async function appendCambioEstado(
   emitir: WebhookEmisor = emisorWebhookEstadoReal,
   catalogo: CatalogoEstadosResolver = resolverCatalogoEstadosReal,
   emitirNotificaciones: NotificacionEmisor = emisorNotificacionReal,
+  emitirBienvenida: BienvenidaEmisor = emisorBienvenidaReal,
 ): Promise<void> {
   if (entradas.length === 0) return; // no-op: nada que registrar
   // Feature 140 (R6/R7): guardia ANTES del append; si lanza, no hay historial ni webhook.
@@ -204,4 +209,15 @@ export async function appendCambioEstado(
   // ACEPTADAS y cerradas en F1.4-3: si la tx revierte no queda notificacion (R20) y si la
   // emision falla no se persiste el cambio de estado (R21).
   await emitirNotificaciones(tx, entradas, valuePorEstatusId);
+  // MENSAJE DE BIENVENIDA: encola el envio al cliente cuando el mensajero RECOGE su paquete
+  // (`recoleccion` -> `en_reparto`). Aqui —y no en `MisAsignacionesService`— porque este es el
+  // unico punto que ve las ordenes que transicionaron DE VERDAD: el service devuelve los ids
+  // PEDIDOS (`MisAsignacionesService.ts:483`) y `recogerLote` tira los del `RETURNING` al
+  // devolver solo un conteo, asi que colgarlo alli mandaria un WhatsApp al cliente de una orden
+  // que no salio a reparto. Un mensaje al cliente final no se deshace.
+  //
+  // TRANSACCIONAL, como sus dos hermanos de arriba: el `enqueue` va con este `tx`, asi que si la
+  // recogida revierte el job se va con ella. Lo que corre en linea es un SELECT y un INSERT
+  // locales; a Meta NO se llama aqui, por eso la recogida nunca espera a un servicio ajeno.
+  await emitirBienvenida(tx, entradas, valuePorEstatusId);
 }

@@ -18,6 +18,23 @@
 export const MSG_MENSAJERO_SIN_VEHICULO =
   "el mensajero no tiene un vehiculo asociado: asignaselo en Configuracion > Usuarios";
 
+/**
+ * Pedido humano (2026-08-26) — motivo TIPADO y COMPARTIDO del rechazo cuando el mensajero destino
+ * NO puede recibir trabajo por su ESTADO de usuario (`inactivo` / `bloqueado`, ver
+ * `lib/constants/estado-usuario-asignable.ts`). Palabras del humano: «si esta inactivo/bloqueado
+ * no se le puede asignar paquetes».
+ *
+ * Lo emiten las TRES escrituras de `mensajero_asignado_id` —`asignarDesdeBodega`,
+ * `asignarRecoleccion` y `AsignacionSateliteService.asignar`— con el MISMO texto, por el mismo
+ * motivo que `MSG_MENSAJERO_SIN_VEHICULO`: es una sola regla.
+ *
+ * MOTIVO PROPIO, no «mensajeroId no valido»: el mensajero existe y es de la zona; lo que pasa es
+ * que esta dado de baja. Un «no valido» a secas manda a quien asigna a revisar la zona o el rol,
+ * donde no esta el problema.
+ */
+export const MSG_MENSAJERO_NO_ASIGNABLE =
+  "el mensajero no esta activo: reactivalo en Configuracion > Usuarios";
+
 export const MSG_ORDEN_REPROGRAMADA_BLOQUEADA =
   "orden reprogramada: bloqueada hasta la fecha de reprogramacion";
 

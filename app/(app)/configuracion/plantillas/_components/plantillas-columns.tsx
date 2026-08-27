@@ -1,8 +1,10 @@
 import type { PlantillaEstado } from "@prisma/client";
+import { MessageSquareHeart } from "lucide-react";
 
 import type { Column } from "@/components/shared/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PlantillaListItemDTO } from "@/lib/types/plantilla-mensaje";
 
 import { ESTADO_PLANTILLA_LABEL } from "./plantilla-estado-label";
@@ -32,14 +34,45 @@ const ESTADO_VARIANT: Record<
   saved_not_aprobation: "secondary",
 };
 
+/**
+ * Estados desde los que TIENE SENTIDO mandar a revision: la que nunca salio de casa y la que
+ * Meta rechazo (se corrige y se reenvia). Desde `pending` no, porque ya esta en revision;
+ * desde `activo` tampoco, porque ya paso.
+ */
+const ENVIABLE_A_APROBACION: ReadonlySet<PlantillaEstado> = new Set([
+  "saved_not_aprobation",
+  "refused",
+]);
+
+/** `true` si la fila puede mandarse a aprobacion. Exportado: el modulo decide el mismo criterio. */
+export function puedeEnviarseAAprobacion(estado: PlantillaEstado): boolean {
+  return ENVIABLE_A_APROBACION.has(estado);
+}
+
 function truncar(texto: string): string {
   if (texto.length <= CUERPO_MAX) return texto;
   return `${texto.slice(0, CUERPO_MAX)}…`;
 }
 
+/**
+ * Lo que el boton de bienvenida explica. Es el UNICO sitio donde se dice que el envio es
+ * AUTOMATICO y CUANDO ocurre: sin esa frase, "mensaje de bienvenida" no dice si lo manda
+ * alguien a mano ni en que momento del recorrido sale.
+ */
+export const TOOLTIP_BIENVENIDA =
+  "Este mensaje se enviará automáticamente cuando el paquete sea recogido.";
+
+/** Lo que explica el boton cuando la fila YA es la bienvenida: por que no hay nada que pulsar. */
+export const TOOLTIP_BIENVENIDA_ACTUAL = `Esta es la plantilla de bienvenida. ${TOOLTIP_BIENVENIDA}`;
+
 export interface PlantillasColumnsActions {
   /** Abre el formulario de edición de la fila (R20). */
   onEditar: (row: PlantillaListItemDTO) => void;
+  /**
+   * Manda la fila a revisión de Meta. Solo se muestra desde los estados en que sirve de algo
+   * (ver `ENVIABLE_A_APROBACION`); el módulo confirma antes porque NO se puede deshacer.
+   */
+  onEnviarAprobacion: (row: PlantillaListItemDTO) => void;
   /**
    * Desactiva la fila: ÚNICA transición de estado del front (R24), envía destino
    * `inactivo`. Solo se muestra cuando el estado no es ya `inactivo`.
@@ -47,6 +80,11 @@ export interface PlantillasColumnsActions {
   onDesactivar: (row: PlantillaListItemDTO) => void;
   /** Elimina la fila (SOFT DELETE, R27): la retira del listado tras confirmar. */
   onEliminar: (row: PlantillaListItemDTO) => void;
+  /**
+   * Deja la fila como MENSAJE DE BIENVENIDA. Es un `set`: la anterior se desmarca sola en el
+   * backend, asi que desde aqui no hay forma de quedarse sin ninguna.
+   */
+  onMarcarBienvenida: (row: PlantillaListItemDTO) => void;
 }
 
 /**
@@ -59,7 +97,23 @@ export function buildPlantillasColumns(
   actions: PlantillasColumnsActions,
 ): Column<PlantillaListItemDTO>[] {
   return [
-    { id: "nombre", value: "Nombre" },
+    {
+      id: "nombre",
+      value: "Nombre",
+      // La bienvenida se RESALTA en la primera columna y no solo en el boton de accion: quien
+      // recorre el listado busca "cual es" leyendo nombres, no inspeccionando botones.
+      render: (row) => (
+        <span className="flex items-center gap-2">
+          <span className={row.welcomeMessage ? "font-medium" : undefined}>{row.nombre}</span>
+          {row.welcomeMessage ? (
+            <Badge variant="success">
+              <MessageSquareHeart className="size-3" aria-hidden="true" />
+              Bienvenida
+            </Badge>
+          ) : null}
+        </span>
+      ),
+    },
     {
       id: "estado",
       value: "Estado",
@@ -91,6 +145,40 @@ export function buildPlantillasColumns(
           >
             Editar
           </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  // La marcada va SOLIDA (`default`) y el resto en `outline`: la diferencia se
+                  // ve de un vistazo sin leer nada.
+                  variant={row.welcomeMessage ? "default" : "outline"}
+                  size="sm"
+                  // Ya marcada = nada que hacer. Se deja VISIBLE y deshabilitada en vez de
+                  // ocultarla: escondida, la fila resaltada perderia justo el control que
+                  // explica por que esta resaltada.
+                  disabled={row.welcomeMessage}
+                  aria-pressed={row.welcomeMessage}
+                  onClick={() => actions.onMarcarBienvenida(row)}
+                >
+                  <MessageSquareHeart className="size-4" aria-hidden="true" />
+                  Mensaje de bienvenida
+                </Button>
+              }
+            />
+            <TooltipContent>
+              {row.welcomeMessage ? TOOLTIP_BIENVENIDA_ACTUAL : TOOLTIP_BIENVENIDA}
+            </TooltipContent>
+          </Tooltip>
+          {puedeEnviarseAAprobacion(row.estado) ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => actions.onEnviarAprobacion(row)}
+            >
+              Enviar para aprobación
+            </Button>
+          ) : null}
           {row.estado !== "inactivo" ? (
             <Button
               type="button"

@@ -3,6 +3,7 @@ import { GuiaAsignacionService } from "@/lib/services/GuiaAsignacionService";
 import { fakeIntentosEnLote } from "@/tests/fixtures/intentos-entrega";
 import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
+  MSG_MENSAJERO_NO_ASIGNABLE,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
 } from "@/lib/services/mensajes-bloqueo";
 import type {
@@ -98,6 +99,7 @@ function fakeRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository {
     // Feature 30: por defecto todos los mensajeros pasados son GAM validos.
     findMensajerosByZona: vi.fn(async () => []),
     findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+    findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
     findMensajeroIdsValidosByZona: vi.fn(
       async (ids: string[]): Promise<Set<string>> => new Set(ids),
     ),
@@ -606,6 +608,7 @@ describe("GuiaAsignacionService — el mensajero BLOQUEADO no recibe reparto (fe
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
       findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set(["m-bloq"])),
     });
@@ -628,6 +631,7 @@ describe("GuiaAsignacionService — el mensajero BLOQUEADO no recibe reparto (fe
     const repo = fakeRepo({
       findByIdsForTransicion: vi.fn(async () => [ordenRow({ id: "o1", estatusValue: "en_bodega_central" })]),
       findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set<string>()),
       findMensajeroIdsValidosByZona: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajerosBloqueadosPorCierres: vi.fn(async (): Promise<Set<string>> => new Set()),
     });
@@ -1019,6 +1023,78 @@ describe("Feature 241 — rutear a bodega satelite YA NO mira los cierres de sus
     const r = await service.rutearABodegaSatelite({ ordenIds: ["o1"] }, MAESTRO);
 
     expect(r.status).toBe("ok");
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Pedido humano (2026-08-26): «un usuario con estado inactivo se le puede asignar ordenes, si
+// esta inactivo/bloqueado no se le puede asignar paquetes». Lo primero era el BUG —el estado del
+// usuario no se miraba en ninguna de las tres escrituras— y lo segundo la regla que se firma.
+//
+// El caso se monta con TODO lo demas en verde (existe, es de la zona GAM, tiene vehiculo, sin
+// cierres pendientes): lo unico que falla es el estado, para que el rechazo no pueda venir de otra
+// guarda. Y el motivo es PROPIO —no «mensajeroId no valido»—: quien asigna tiene que saber que el
+// arreglo esta en Configuracion > Usuarios y no en la zona ni en el rol.
+// ---------------------------------------------------------------------------------------
+describe("GuiaAsignacionService — el mensajero INACTIVO/BLOQUEADO no recibe trabajo (2026-08-26)", () => {
+  it("asignarDesdeBodega hacia un mensajero de baja -> validation_error, y NINGUNA orden cambia", async () => {
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+      ]),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set(["m-baja"])),
+    });
+
+    const r = await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m-baja" },
+      MAESTRO,
+    );
+
+    expect(r).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
+    });
+    expect(repo.findMensajerosNoAsignablesPorEstado).toHaveBeenCalledWith(["m-baja"]);
+    expect(repo.asignarBodegaLote).not.toHaveBeenCalled();
+  });
+
+  it("asignarRecoleccion hacia un mensajero de baja -> validation_error, y NINGUNA orden cambia", async () => {
+    // La recoleccion NO filtra por zona (decision del humano 2026-07-30), asi que aqui el estado
+    // es la unica guarda que separa a un mensajero dado de baja del trabajo.
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "por_recolectar_en_tienda" }),
+      ]),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async () => new Set(["m-baja"])),
+    });
+
+    const r = await newService(repo).asignarRecoleccion(
+      { ordenIds: ["o1"], mensajeroId: "m-baja" },
+      MAESTRO,
+    );
+
+    expect(r).toEqual({
+      status: "validation_error",
+      fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
+    });
+    expect(repo.asignarRecoleccionLote).not.toHaveBeenCalled();
+  });
+
+  it("mensajero ACTIVO: la guarda no estorba (se asigna igual)", async () => {
+    // El otro lado de la regla, y el que evita que un `new Set(ids)` mal puesto prohiba a todos.
+    const repo = fakeRepo({
+      findByIdsForTransicion: vi.fn(async () => [
+        ordenRow({ id: "o1", estatusValue: "en_bodega_central" }),
+      ]),
+    });
+
+    const r = await newService(repo).asignarDesdeBodega(
+      { ordenIds: ["o1"], mensajeroId: "m-activo" },
+      MAESTRO,
+    );
+
+    expect(r.status).toBe("ok");
+    expect(repo.asignarBodegaLote).toHaveBeenCalledTimes(1);
   });
 });
 

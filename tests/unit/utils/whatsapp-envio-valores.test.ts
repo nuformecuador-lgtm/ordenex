@@ -28,14 +28,21 @@ describe("resolverValoresOrden", () => {
       mensajero: "Carlos Ruiz",
       guia: "1234",
       producto: "Caja de zapatos",
-      total: "25000",
+      total: "₡25.000",
     });
   });
 
-  it("`total` es alias de montoCobrar y `monto` se conserva", () => {
+  it("`total` es alias de montoCobrar y `monto` se conserva, ya formateados", () => {
     const v = resolverValoresOrden(["total", "monto"], ORDEN);
-    expect(v.total).toBe("25000");
-    expect(v.monto).toBe("25000");
+    expect(v.total).toBe("₡25.000");
+    expect(v.monto).toBe("₡25.000");
+  });
+
+  // 2026-08-26: el importe pasa por el `transform` del catalogo, que es el formateador UNICO
+  // del repo (`lib/config/moneda.ts`). Quien necesite el numero pelado tiene `monto_crudo`.
+  it("`monto_crudo` conserva el numero sin simbolo ni separadores", () => {
+    const v = resolverValoresOrden(["monto_crudo"], ORDEN);
+    expect(v.monto_crudo).toBe("25000");
   });
 
   it("`total`/`monto` -> vacio si la orden no tiene monto a cobrar", () => {

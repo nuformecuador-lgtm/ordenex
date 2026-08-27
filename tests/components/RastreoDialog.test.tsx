@@ -70,6 +70,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.documentElement.className = "";
+  // La URL es estado GLOBAL de jsdom: sin esto, un caso que la ensucia se lo pasa al siguiente
+  // y el que comprueba que nada sobrevive en la URL (R30) pasaria o fallaria por contagio.
+  window.history.replaceState(null, "", "/");
 });
 
 // ---------------------------------------------------------------------------
@@ -289,5 +292,131 @@ describe("R31 — el diálogo es accesible y operable con teclado", () => {
 
     await waitFor(() => expect(consultarMock).toHaveBeenCalledTimes(1));
     expect(consultarMock).toHaveBeenCalledWith({ numGuia: "4321", factor: "8899" });
+  });
+});
+
+describe("apertura por URL — `/?guia=4321` abre el rastreo con la guía puesta", () => {
+  it("con guía en la URL la nav nace con el diálogo ABIERTO y el campo relleno", async () => {
+    render(<LandingNav guiaInicial="4321" />);
+
+    const abierto = await screen.findByRole("dialog", { name: "Rastrear envío" });
+    expect((campoGuia() as HTMLInputElement).value).toBe("4321");
+    // Solo se precarga el FORMULARIO: no se consulta nada por el hecho de traer la guía, así
+    // que un enlace no dice si esa guía existe.
+    expect(consultarMock).not.toHaveBeenCalled();
+    expect(within(abierto).queryByRole("alert")).not.toBeInTheDocument();
+    expect((campoFactor() as HTMLInputElement).value).toBe("");
+  });
+
+  it("el foco entra en el segundo factor, que es lo único que falta por teclear", async () => {
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+
+    await waitFor(() => expect(document.activeElement).toBe(campoFactor()));
+  });
+
+  it("desde ahí se consulta tecleando SOLO el segundo factor", async () => {
+    const user = userEvent.setup();
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+
+    await user.type(campoFactor(), "8899");
+    await user.click(enviar());
+
+    await waitFor(() => expect(consultarMock).toHaveBeenCalledTimes(1));
+    expect(consultarMock).toHaveBeenCalledWith({ numGuia: "4321", factor: "8899" });
+    expect(await within(dialogo()).findByText(/Guía 4321/)).toBeInTheDocument();
+  });
+
+  it("CONTRAPRUEBA: sin guía en la URL la nav se comporta igual que antes (cerrado y vacío)", async () => {
+    render(<LandingNav />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.setup().click(disparador());
+    await screen.findByRole("dialog");
+    expect((campoGuia() as HTMLInputElement).value).toBe("");
+  });
+
+  it("R30 SIGUE EN PIE: al cerrar y reabrir vuelve vacío, aunque el `?guia=` siga en la URL", async () => {
+    // Lo que la URL precarga es el arranque, no un estado pegajoso: nada reabre el diálogo ni
+    // repone la guía. Si esto se rompiera, el resultado de una consulta sobreviviría al cierre.
+    const user = userEvent.setup();
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+
+    await user.type(campoFactor(), "8899");
+    await user.click(enviar());
+    await within(dialogo()).findByText(/Guía 4321/);
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(disparador());
+    const reabierto = await screen.findByRole("dialog");
+    expect((campoGuia() as HTMLInputElement).value).toBe("");
+    expect((campoFactor() as HTMLInputElement).value).toBe("");
+    expect(within(reabierto).queryByText(/Guía/)).not.toBeInTheDocument();
+  });
+});
+
+describe("el `?guia=` se RETIRA de la URL al cerrar", () => {
+  /** Coloca la landing en `/?...` antes de montarla, como haría el navegador. */
+  function conUrl(query: string) {
+    window.history.replaceState(null, "", `/${query}`);
+  }
+
+  it("al cerrar, el parámetro desaparece de la barra de direcciones", async () => {
+    conUrl("?guia=4321");
+    const user = userEvent.setup();
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+    expect(window.location.search).toBe("?guia=4321");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(window.location.search).toBe("");
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("se retira SOLO ese parámetro: los demás no son nuestros y se conservan", async () => {
+    conUrl("?utm_source=whatsapp&guia=4321&utm_campaign=agosto#politicas");
+    const user = userEvent.setup();
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(window.location.search).toBe("?utm_source=whatsapp&utm_campaign=agosto");
+    expect(window.location.hash).toBe("#politicas");
+  });
+
+  it("y como el parámetro ya no está, reabrir el diálogo NO repone la guía", async () => {
+    conUrl("?guia=4321");
+    const user = userEvent.setup();
+    render(<LandingNav guiaInicial="4321" />);
+    await screen.findByRole("dialog");
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(disparador());
+    await screen.findByRole("dialog");
+
+    expect((campoGuia() as HTMLInputElement).value).toBe("");
+    expect(window.location.search).toBe("");
+  });
+
+  it("sin `?guia=` en la URL, cerrar el diálogo no toca la barra de direcciones", async () => {
+    conUrl("?utm_source=whatsapp");
+    const user = userEvent.setup();
+    render(<LandingNav />);
+    await user.click(disparador());
+    await screen.findByRole("dialog");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(window.location.search).toBe("?utm_source=whatsapp");
   });
 });

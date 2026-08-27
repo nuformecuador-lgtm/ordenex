@@ -15,6 +15,7 @@ const ITEM: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "mensajero",
   estado: "activo",
+  zonaNombre: "GAM",
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 

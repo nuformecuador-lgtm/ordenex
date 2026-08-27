@@ -15,6 +15,8 @@ const PLANTILLA: PlantillaListItemDTO = {
   cuerpo: CUERPO_LARGO,
   estado: "refused",
   variables: ["destinatario"],
+  variablesNombres: {},
+  welcomeMessage: false,
   templateId: "meta-tpl-99887766",
   createdAt: new Date("2026-03-15T18:30:00.000Z"),
 };

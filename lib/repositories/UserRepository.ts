@@ -45,6 +45,9 @@ const LIST_SELECT = {
   estado: true,
   createdAt: true,
   rol: { select: { value: true } },
+  // Pedido humano (2026-08-26): la zona en el listado. Se pide el NOMBRE por la relacion, no el
+  // `zonaId`: es lo que la tabla pinta, y resolverlo aqui evita una segunda lectura en la UI.
+  zona: { select: { nombre: true } },
 } as const;
 
 // R15: columna de negocio -> columna Prisma (lista blanca). Default `createdAt`.
@@ -230,6 +233,7 @@ export class UserRepository implements IUserRepository {
       email: row.email,
       rolValue: row.rol.value,
       estado: row.estado,
+      zonaNombre: row.zona?.nombre ?? null, // sin zona -> null (la tabla pinta «-»)
       createdAt: row.createdAt,
     }));
     return { items, total };

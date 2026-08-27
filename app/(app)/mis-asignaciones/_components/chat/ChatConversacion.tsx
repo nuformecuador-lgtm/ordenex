@@ -21,12 +21,13 @@ import {
 } from "@/lib/actions/chat-whatsapp";
 import { listarPlantillasActivasParaEnvio } from "@/lib/actions/whatsapp-envio";
 import { renderPlantilla } from "@/lib/utils/plantilla-mensaje";
-import { resolverValoresOrden } from "@/lib/utils/whatsapp-envio-valores";
+import { datosPlantillaDesdeAsignacion } from "@/lib/utils/whatsapp-envio-valores";
+import { resolverValoresPlantilla, type DatosPlantilla } from "@/lib/types/plantilla-datos";
 import type {
   ChatMensajeVista,
   ListarHiloChatResult,
 } from "@/lib/types/chat-whatsapp";
-import type { OrdenEnvioData, PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
+import type { PlantillaTextoDTO } from "@/lib/types/whatsapp-envio";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
 
 import { UbicacionModal } from "../UbicacionModal";
@@ -204,39 +205,27 @@ export function ChatConversacion({
   // salto de cero a N y sonaría al abrir un hilo con entrantes previos (R23). Sin orden
   // seleccionada la clave de SWR es `null`, no hay `data` y el contador también es `null`.
   //
-  // LÍMITE declarado (design §4, heredado del panel): solo suena con el chat ABIERTO, que es
-  // cuando este componente está montado y hay polling. El aviso con el chat cerrado exigiría
-  // un contador real de no leídos, que hoy no existe.
+  // Este contador cubre SOLO el hilo abierto, que es cuando este componente está montado.
+  // El aviso con el chat cerrado —o con otra conversación delante— lo da `ChatFlotante` desde
+  // el resumen de no leídos del servidor, y por eso descuenta de su total la conversación
+  // abierta: si no, un entrante de este hilo sonaría dos veces.
   useTonoAlIncrementar(
     hiloOk ? mensajes.filter((m) => m.direccion === "entrante").length : null,
   );
 
-  // Datos de la orden para resolver las variables de cada plantilla.
-  const ordenEnvio = useMemo<OrdenEnvioData | null>(
-    () =>
-      orden === null
-        ? null
-        : {
-            destinatario: orden.destinatario,
-            telefonoDest: orden.telefonoDest,
-            numGuia: orden.numGuia,
-            numRemision: orden.numRemision,
-            producto: orden.producto,
-            direccion: orden.direccion,
-            montoCobrar: orden.montoCobrar,
-            // El envío real lo hace el backend, que resuelve el nombre del mensajero.
-            mensajeroNombre: "",
-          },
+  // Datos de la orden para resolver las variables de cada plantilla. Es una APROXIMACIÓN
+  // declarada: el DTO de la asignación no trae fechas, banderas internas ni nada del
+  // mensajero, así que esas claves se ven vacías en el composer y llegan rellenas en el
+  // mensaje real (el envío lo hace el backend, que las lee de la base).
+  const datos = useMemo<DatosPlantilla | null>(
+    () => (orden === null ? null : datosPlantillaDesdeAsignacion(orden)),
     [orden],
   );
 
   /** Cuerpo de una plantilla ya renderizado con los datos de esta orden. */
   function renderizar(plantilla: PlantillaTextoDTO): string {
-    if (ordenEnvio === null) return plantilla.cuerpo;
-    return renderPlantilla(
-      plantilla.cuerpo,
-      resolverValoresOrden(plantilla.variables, ordenEnvio),
-    );
+    if (datos === null) return plantilla.cuerpo;
+    return renderPlantilla(plantilla.cuerpo, resolverValoresPlantilla(plantilla.variables, datos));
   }
 
   // Ancla el hilo abajo al cambiar de orden o al llegar/enviar un mensaje.

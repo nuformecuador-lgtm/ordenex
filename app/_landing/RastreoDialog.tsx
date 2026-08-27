@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
 
 import {
   Dialog,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { consultarRastreoPublico } from "@/lib/actions/rastreo-publico";
+import { PARAM_GUIA } from "./guia-en-url";
 import {
   ETIQUETA_POR_HITO,
   type ResultadoRastreoPublico,
@@ -75,6 +76,30 @@ function fechaLegible(fecha: string): string {
   return `${fecha.slice(0, corte)} · ${fecha.slice(corte + 1, corte + 6)}`;
 }
 
+/**
+ * Al cerrar, el `?guia=` desaparece de la barra de direcciones: el enlace sirve para ENTRAR una
+ * vez, no para dejar la landing marcada. Sin él, recargar ya no vuelve a abrir el diálogo y
+ * copiar la URL de una landing cerrada no comparte la guía que alguien consultó ahí.
+ *
+ * `history.replaceState` y NO el router: sustituye la entrada actual —no añade una atrás, así
+ * que «volver» sigue saliendo de la landing— y no dispara navegación ni vuelve a pedir la
+ * página. Es la misma línea que R30 sostiene: aquí la URL solo PIERDE datos, nunca gana.
+ *
+ * Se retira EXCLUSIVAMENTE este parámetro: cualquier otro (campañas, `utm_*`, un ancla) se
+ * conserva tal cual, porque no es nuestro.
+ */
+function retirarGuiaDeLaUrl(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(PARAM_GUIA)) return;
+  url.searchParams.delete(PARAM_GUIA);
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 /** El texto de rechazo que corresponde a un resultado que no es `ok`. */
 function textoDeRechazo(resultado: ResultadoRastreoPublico): string | null {
   if (resultado.estado === "no_encontrado") return MENSAJE_NO_ENCONTRADO;
@@ -93,6 +118,12 @@ export interface RastreoDialogProps {
   className?: string;
   /** Contenido del disparador (icono + texto), tal como lo declara la nav. */
   children: ReactNode;
+  /**
+   * La guía que venía en la URL (`/?guia=4321`), ya normalizada por `numGuiaDeQuery`, o `null`.
+   * Con ella el diálogo NACE ABIERTO y con el primer campo puesto; sin ella no cambia nada.
+   * Precarga el formulario, no el resultado: el segundo factor se sigue tecleando.
+   */
+  guiaInicial?: string | null;
 }
 
 /**
@@ -101,12 +132,16 @@ export interface RastreoDialogProps {
  * La nav sigue siendo Server Component: solo monta esto y le pasa el aspecto y el texto del
  * botón, que es el patrón que la landing ya usa para sus islas (`cifras-publicas.tsx`).
  */
-export function RastreoDialog({ className, children }: RastreoDialogProps) {
+export function RastreoDialog({ className, children, guiaInicial = null }: RastreoDialogProps) {
   const idGuia = useId();
   const idFactor = useId();
+  const refFactor = useRef<HTMLInputElement>(null);
 
-  const [abierto, setAbierto] = useState(false);
-  const [numGuia, setNumGuia] = useState("");
+  // Los inicializadores corren SOLO en el primer montaje, y de eso depende que la apertura por
+  // URL no pelee con R30: al cerrar se limpia todo, y al reabrir el diálogo vuelve vacío aunque
+  // el `?guia=` siga en la barra de direcciones. No hay efecto que lo reabra.
+  const [abierto, setAbierto] = useState(() => guiaInicial !== null);
+  const [numGuia, setNumGuia] = useState(() => guiaInicial ?? "");
   const [factor, setFactor] = useState("");
   const [resultado, setResultado] = useState<ResultadoRastreoPublico | null>(null);
   const [errorRed, setErrorRed] = useState(false);
@@ -120,6 +155,7 @@ export function RastreoDialog({ className, children }: RastreoDialogProps) {
       setFactor("");
       setResultado(null);
       setErrorRed(false);
+      retirarGuiaDeLaUrl();
     }
   }
 
@@ -155,7 +191,13 @@ export function RastreoDialog({ className, children }: RastreoDialogProps) {
 
       {/* `tema-claro` EXPLÍCITO: el popup se portalea fuera del subárbol claro de la landing
           y sin esto el `.dark` del envoltorio del portal lo alcanzaría (R29). */}
-      <DialogContent className="tema-claro border-asfalto-2 bg-kraft-card text-asfalto-9">
+      {/* Con guía en la URL el foco entra en el SEGUNDO campo: el primero ya viene puesto y
+          empezar en él obligaría a tabular para escribir lo único que falta. Sin guía, el
+          diálogo conserva su foco inicial por defecto. */}
+      <DialogContent
+        initialFocus={guiaInicial !== null ? refFactor : undefined}
+        className="tema-claro border-asfalto-2 bg-kraft-card text-asfalto-9"
+      >
         <DialogHeader>
           <DialogTitle className="text-navy-deep">Rastrear envío</DialogTitle>
           <DialogDescription className="text-asfalto-5">
@@ -184,6 +226,7 @@ export function RastreoDialog({ className, children }: RastreoDialogProps) {
               Últimos 4 dígitos del teléfono
             </Label>
             <input
+              ref={refFactor}
               id={idFactor}
               name="factor"
               inputMode="numeric"

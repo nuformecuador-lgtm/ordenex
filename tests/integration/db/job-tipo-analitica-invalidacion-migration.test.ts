@@ -106,14 +106,20 @@ describe("R24 · el datamodel declara el valor", () => {
     expect(bloque![0]).toMatch(new RegExp(`^\\s*${VALOR}\\s*//`, "m"));
   });
 
-  it("el datamodel y el `down.sql` no divergen: los ocho valores, ni uno mas", () => {
+  it("el datamodel y el `down.sql` no divergen: los ocho valores, en orden, y luego este", () => {
     const bloque = /enum JobTipo \{([\s\S]*?)\n\}/.exec(schemaPrisma)![1];
     const valores = bloque
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("@@"))
       .map((l) => l.split(/\s|\/\//)[0]);
-    expect(valores).toEqual([...VALORES_PREVIOS, VALOR]);
+    // PREFIJO, no igualdad. Aqui vivia `toEqual([...VALORES_PREVIOS, VALOR])`, que en realidad
+    // afirmaba «y este es el ULTIMO valor del enum». Era cierto al escribirla y caduca sola con
+    // el siguiente tipo de job que entre (entro `whatsapp_bienvenida`). Lo que esta migracion
+    // tiene que garantizar —y eso no caduca— es que su `down.sql` deja EXACTAMENTE el enum que
+    // habia antes de ella: sus ocho valores, en su orden, seguidos del suyo. Lo que venga
+    // despues no es asunto de esta migracion.
+    expect(valores.slice(0, VALORES_PREVIOS.length + 1)).toEqual([...VALORES_PREVIOS, VALOR]);
   });
 });
 

@@ -112,6 +112,7 @@ describe("T4.9(b) — ASIGNAR a ese MISMO mensajero SI se bloquea (feature 271, 
       ]),
       findMensajeroIdsValidos: vi.fn(async (ids: string[]): Promise<Set<string>> => new Set(ids)),
       findMensajeroIdsConVehiculo: vi.fn(async (ids: string[]) => new Set(ids)),
+      findMensajerosNoAsignablesPorEstado: vi.fn(async (): Promise<Set<string>> => new Set()),
       findMensajeroIdsValidosByZona: vi.fn(
         async (ids: string[]): Promise<Set<string>> => new Set(ids),
       ),

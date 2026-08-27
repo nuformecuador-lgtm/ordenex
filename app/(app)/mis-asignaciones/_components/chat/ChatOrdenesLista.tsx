@@ -16,14 +16,24 @@ import { ESTADO_CHIP, estadoDe, iniciales, zonaCorta } from "./chat-format";
 // igual que buscar allá. Nada de datos inventados: cada fila muestra solo lo que trae el
 // DTO de la asignación — remisión (identificador que el mensajero canta por radio), guía
 // cuando existe, estado y zona.
+//
+// SIN LEER: cada fila puede llevar un distintivo con los entrantes que el cliente mandó y el
+// mensajero todavía no ha visto. El conteo llega ya resuelto desde `ChatFlotante` (servidor,
+// `resumenNoLeidosChat`); aquí solo se pinta. Una fila sin entrada en el mapa es cero.
+
+/** Tope del distintivo: por encima se pinta `+9` (el ancho de la burbuja es fijo). */
+const BADGE_MAX = 9;
 
 function OrdenFila({
   orden,
   seleccionada,
+  noLeidos,
   onSeleccionar,
 }: {
   orden: MiAsignacionDTO;
   seleccionada: boolean;
+  /** Entrantes sin leer de esta conversación; 0 = sin distintivo. */
+  noLeidos: number;
   onSeleccionar: (id: string) => void;
 }) {
   const chip = ESTADO_CHIP[estadoDe(orden.estatusValue)];
@@ -38,11 +48,24 @@ function OrdenFila({
         seleccionada && "bg-accent",
       )}
     >
-      <div
-        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
-        aria-hidden="true"
-      >
-        {iniciales(orden.destinatario)}
+      <div className="relative shrink-0">
+        <div
+          className="flex size-11 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
+          aria-hidden="true"
+        >
+          {iniciales(orden.destinatario)}
+        </div>
+        {noLeidos > 0 ? (
+          // Mismos tokens que el distintivo del botón flotante y que la campana: `-strong` es
+          // la variante contrast-safe (AA) del semántico, con `text-background` acompañando su
+          // giro entre temas. Va sobre el avatar, que es el ancla visual de la fila.
+          <span
+            data-testid={`chat-no-leidos-${orden.id}`}
+            className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-card bg-danger-strong px-1 text-[11px] font-semibold leading-none text-background"
+          >
+            {noLeidos > BADGE_MAX ? `+${BADGE_MAX}` : noLeidos}
+          </span>
+        ) : null}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -74,6 +97,14 @@ function OrdenFila({
         <p className="mt-1 truncate text-xs text-muted-foreground">
           {zonaCorta(orden)}
         </p>
+
+        {/* El distintivo de arriba es una cifra suelta sobre el avatar: fuera de contexto no
+            dice de qué es. El nombre accesible del botón lo dice con palabras. */}
+        {noLeidos > 0 ? (
+          <span className="sr-only">
+            {noLeidos === 1 ? "1 mensaje sin leer" : `${noLeidos} mensajes sin leer`}
+          </span>
+        ) : null}
       </div>
     </button>
   );
@@ -82,6 +113,11 @@ function OrdenFila({
 export interface ChatOrdenesListaProps {
   /** Órdenes en reparto: una fila por orden (su destinatario es el interlocutor). */
   ordenes: MiAsignacionDTO[];
+  /**
+   * Entrantes sin leer por `ordenId`. Ausencia = cero. Lo resuelve `ChatFlotante` contra el
+   * servidor; la lista no consulta nada por su cuenta.
+   */
+  noLeidos: ReadonlyMap<string, number>;
   /** Conversación abierta ahora mismo. */
   seleccionadaId: string | null;
   /** Orden en gestión (la del detalle): se ancla arriba, separada del resto. */
@@ -92,6 +128,7 @@ export interface ChatOrdenesListaProps {
 
 export function ChatOrdenesLista({
   ordenes,
+  noLeidos,
   seleccionadaId,
   ordenEnDetalleId,
   onSeleccionar,
@@ -151,6 +188,7 @@ export function ChatOrdenesLista({
               <OrdenFila
                 orden={enGestion}
                 seleccionada={seleccionadaId === enGestion.id}
+                noLeidos={noLeidos.get(enGestion.id) ?? 0}
                 onSeleccionar={onSeleccionar}
               />
             </div>
@@ -169,6 +207,7 @@ export function ChatOrdenesLista({
                 key={orden.id}
                 orden={orden}
                 seleccionada={seleccionadaId === orden.id}
+                noLeidos={noLeidos.get(orden.id) ?? 0}
                 onSeleccionar={onSeleccionar}
               />
             ))}

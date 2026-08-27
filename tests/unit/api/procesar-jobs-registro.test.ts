@@ -46,9 +46,17 @@ describe("R21 — registro en el drenador", () => {
       "liberar_reprogramadas",
       "optimizacion_ruta",
       "webhook_estado", // feature 99
+      "whatsapp_bienvenida", // mensaje de bienvenida al recoger: PUNTUAL, no va en buildRecurrencias
       "whatsapp_chat_envio", // feature 109
       "whatsapp_template_sync", // integracion WhatsApp
     ]);
+  });
+
+  // Re-agendar la bienvenida seria mandarle un WhatsApp por minuto al mismo cliente: la dispara
+  // la RECOGIDA de un paquete, un evento del dominio, no el reloj.
+  it("buildRecurrencias NO registra `whatsapp_bienvenida` (la dispara la recogida, no el reloj)", () => {
+    expect(buildRecurrencias().has("whatsapp_bienvenida")).toBe(false);
+    expect(buildHandlers(() => AHORA).has("whatsapp_bienvenida")).toBe(true);
   });
 
   it("buildRecurrencias NO registra `optimizacion_ruta` (no es recurrente)", () => {

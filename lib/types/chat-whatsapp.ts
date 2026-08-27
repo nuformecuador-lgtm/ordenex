@@ -63,3 +63,24 @@ export type ListarHiloChatResult =
     }
   | { status: "unauthenticated" }
   | { status: "forbidden" }; // la orden no esta asignada a este mensajero (R16)
+
+/** Entrantes sin leer de UNA conversacion, tal como los consume el chat del mensajero. */
+export interface ChatNoLeidosVista {
+  ordenId: string;
+  noLeidos: number;
+}
+
+/**
+ * Resultado del resumen de no leidos del mensajero: una entrada por orden CON entrantes
+ * pendientes (las que no aparecen tienen cero). Alimenta el distintivo numerico del boton
+ * flotante del chat y el de cada fila de la lista de conversaciones.
+ */
+export type ResumenNoLeidosChatResult =
+  | { status: "ok"; conversaciones: ChatNoLeidosVista[] }
+  | { status: "unauthenticated" };
+
+/** Resultado de sellar un hilo como leido. `forbidden` = la orden no es de este mensajero. */
+export type MarcarChatLeidoResult =
+  | { status: "ok" }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" };

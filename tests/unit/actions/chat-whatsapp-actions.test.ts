@@ -1,12 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
-import { enviarMensajeChat, enviarPlantillaChat, listarHiloChat } from "@/lib/actions/chat-whatsapp";
+import {
+  enviarMensajeChat,
+  enviarPlantillaChat,
+  listarHiloChat,
+  marcarChatLeido,
+  resumenNoLeidosChat,
+} from "@/lib/actions/chat-whatsapp";
 import type { PlantillaEnviable } from "@/lib/interfaces/repositories/IPlantillaMensajeRepository";
 import type { Actor } from "@/lib/interfaces/services/IOrdenService";
 import type { IOrdenEnvioReader } from "@/lib/repositories/OrdenEnvioReader";
 import type { IChatConversacionRepository } from "@/lib/interfaces/repositories/IChatConversacionRepository";
 import type { IChatMensajeRepository } from "@/lib/interfaces/repositories/IChatMensajeRepository";
 import type { ChatWhatsappService } from "@/lib/services/ChatWhatsappService";
-import type { OrdenEnvioData } from "@/lib/types/whatsapp-envio";
+import type { DatosPlantilla } from "@/lib/types/plantilla-datos";
+import { datosPlantillaFixture } from "@/tests/fixtures/plantilla-datos";
 
 // Feature 109 — F1.T/F2.T (R16/R17/R20/R21). Server Actions del chat: scope por
 // OrdenEnvioReader (R17/R16), persistencia del saliente (R20) y manejo de transitorio (R21).
@@ -14,18 +21,20 @@ import type { OrdenEnvioData } from "@/lib/types/whatsapp-envio";
 const MENSAJERO: Actor = { usuarioId: "men-1", rol: "mensajero" };
 const getActor = (a: Actor | null) => async () => a;
 
-const ORDEN_DATA: OrdenEnvioData = {
-  destinatario: "Ana",
-  telefonoDest: "573001112233",
-  numGuia: 10,
-  numRemision: "R-1",
-  producto: "caja",
-  direccion: "calle 1",
-  montoCobrar: 100,
-  mensajeroNombre: "Carlos",
-};
+const ORDEN_DATA: DatosPlantilla = datosPlantillaFixture({
+  orden: {
+    numGuia: 10,
+    numRemision: "R-1",
+    destinatario: "Ana",
+    telefonoDest: "573001112233",
+    producto: "caja",
+    direccion: "calle 1",
+    montoCobrar: 100,
+  },
+  mensajero: { nombre: "Carlos", primerApellido: null },
+});
 
-function ordenReader(data: OrdenEnvioData | null): IOrdenEnvioReader {
+function ordenReader(data: DatosPlantilla | null): IOrdenEnvioReader {
   return { findParaEnvio: vi.fn(async () => data) };
 }
 
@@ -260,6 +269,8 @@ describe("listarHiloChat (R16/R22)", () => {
             },
       ),
       findById: vi.fn(),
+      contarNoLeidosPorMensajero: vi.fn(async () => []),
+      marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
     };
   }
 
@@ -333,5 +344,128 @@ describe("listarHiloChat (R16/R22)", () => {
       now: () => ahora,
     });
     expect(res).toMatchObject({ status: "ok", ventanaAbierta: false });
+  });
+});
+
+// Indicador de mensajes sin leer del chat del mensajero. El scope es la SESION en las dos
+// acciones: el resumen no recibe `mensajeroId` (nadie pide el de otro) y el sellado pasa por
+// el `OrdenEnvioReader`, igual que `listarHiloChat` (R16).
+
+/** Repo del hilo con solo lo que estas dos acciones usan; el resto explota si se toca. */
+function convNoLeidos(
+  over: Partial<IChatConversacionRepository> = {},
+): IChatConversacionRepository {
+  return {
+    resolverOrdenActivaPorNumero: vi.fn(),
+    upsertParaOrden: vi.fn(),
+    marcarUltimoEntrante: vi.fn(),
+    findByOrdenParaMensajero: vi.fn(),
+    findById: vi.fn(),
+    contarNoLeidosPorMensajero: vi.fn(async () => []),
+    marcarLeidoHastaUltimoEntrante: vi.fn(async () => {}),
+    ...over,
+  };
+}
+
+describe("resumenNoLeidosChat", () => {
+  it("sin sesion -> unauthenticated (no consulta nada)", async () => {
+    const repo = convNoLeidos();
+    const res = await resumenNoLeidosChat({
+      getActor: getActor(null),
+      conversacionRepo: repo,
+    });
+    expect(res).toEqual({ status: "unauthenticated" });
+    expect(repo.contarNoLeidosPorMensajero).not.toHaveBeenCalled();
+  });
+
+  it("consulta SOLO por el mensajero de la sesion", async () => {
+    const repo = convNoLeidos({
+      contarNoLeidosPorMensajero: vi.fn(async () => [
+        { ordenId: "orden-1", noLeidos: 2 },
+        { ordenId: "orden-2", noLeidos: 1 },
+      ]),
+    });
+
+    const res = await resumenNoLeidosChat({
+      getActor: getActor(MENSAJERO),
+      conversacionRepo: repo,
+    });
+
+    expect(repo.contarNoLeidosPorMensajero).toHaveBeenCalledWith(MENSAJERO.usuarioId);
+    expect(res).toEqual({
+      status: "ok",
+      conversaciones: [
+        { ordenId: "orden-1", noLeidos: 2 },
+        { ordenId: "orden-2", noLeidos: 1 },
+      ],
+    });
+  });
+
+  it("sin pendientes -> ok con lista vacia (la UI lo lee como cero)", async () => {
+    const res = await resumenNoLeidosChat({
+      getActor: getActor(MENSAJERO),
+      conversacionRepo: convNoLeidos(),
+    });
+    expect(res).toEqual({ status: "ok", conversaciones: [] });
+  });
+});
+
+describe("marcarChatLeido", () => {
+  it("sin sesion -> unauthenticated", async () => {
+    const repo = convNoLeidos();
+    const res = await marcarChatLeido("orden-1", {
+      getActor: getActor(null),
+      conversacionRepo: repo,
+    });
+    expect(res).toEqual({ status: "unauthenticated" });
+    expect(repo.marcarLeidoHastaUltimoEntrante).not.toHaveBeenCalled();
+  });
+
+  it("orden de otro mensajero -> forbidden y NO sella nada", async () => {
+    const repo = convNoLeidos();
+    const res = await marcarChatLeido("orden-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(null), // no asignada a este mensajero
+      conversacionRepo: repo,
+    });
+    expect(res).toEqual({ status: "forbidden" });
+    expect(repo.marcarLeidoHastaUltimoEntrante).not.toHaveBeenCalled();
+  });
+
+  it("ordenId no valido -> forbidden sin llegar al repo", async () => {
+    const repo = convNoLeidos();
+    const res = await marcarChatLeido("", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      conversacionRepo: repo,
+    });
+    expect(res).toEqual({ status: "forbidden" });
+    expect(repo.marcarLeidoHastaUltimoEntrante).not.toHaveBeenCalled();
+  });
+
+  it("orden del mensajero -> sella el hilo con el scope del actor", async () => {
+    const repo = convNoLeidos();
+    const res = await marcarChatLeido("orden-1", {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      conversacionRepo: repo,
+    });
+    expect(res).toEqual({ status: "ok" });
+    expect(repo.marcarLeidoHastaUltimoEntrante).toHaveBeenCalledWith(
+      "orden-1",
+      MENSAJERO.usuarioId,
+    );
+  });
+
+  it("es idempotente: sellar dos veces no cambia el desenlace", async () => {
+    const repo = convNoLeidos();
+    const deps = {
+      getActor: getActor(MENSAJERO),
+      ordenReader: ordenReader(ORDEN_DATA),
+      conversacionRepo: repo,
+    };
+    expect(await marcarChatLeido("orden-1", deps)).toEqual({ status: "ok" });
+    expect(await marcarChatLeido("orden-1", deps)).toEqual({ status: "ok" });
+    expect(repo.marcarLeidoHastaUltimoEntrante).toHaveBeenCalledTimes(2);
   });
 });

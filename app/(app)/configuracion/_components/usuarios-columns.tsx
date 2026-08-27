@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ROL_LABELS } from "@/lib/auth/rol-label";
 import type { UsuarioListItemDTO } from "@/lib/types/usuario";
 
-import { ESTADO_LABELS } from "./usuario-estado-label";
+import { ESTADO_LABELS, SIN_ZONA } from "./usuario-estado-label";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -15,7 +15,7 @@ type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 // las de estado en `./usuario-estado-label` (módulo PURO, para que las columnas de export
 // puedan leerlas sin arrastrar React). Ambas se reexportan aquí para no romper a los
 // consumidores existentes de este módulo.
-export { ROL_LABELS, ESTADO_LABELS };
+export { ROL_LABELS, ESTADO_LABELS, SIN_ZONA };
 
 /** Estado del usuario -> variante semántica de la primitiva `Badge` (sin hex). */
 const ESTADO_VARIANT: Record<EstadoUsuario, BadgeVariant> = {
@@ -75,6 +75,14 @@ export function buildUsuariosColumns({
       id: "estado",
       value: "Estado",
       render: (row) => <EstadoUsuarioBadge value={row.estado} />,
+    },
+    {
+      // Pedido humano (2026-08-26): la zona del usuario. La MAYORÍA de las filas no tiene —sólo
+      // `mensajero` y `adminSatelite` conservan zona (feature 24/R27)—, así que el guion es el
+      // caso NORMAL, no un fallo de datos: una celda vacía se leería como «no se cargó».
+      id: "zona",
+      value: "Zona",
+      render: (row) => row.zonaNombre ?? SIN_ZONA,
     },
     {
       id: "acciones",

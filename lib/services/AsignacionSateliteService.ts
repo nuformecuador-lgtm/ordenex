@@ -9,6 +9,8 @@ import {
   MSG_MENSAJERO_BLOQUEADO_POR_CIERRES,
   // Feature 21: mismo simbolo que emite la bodega central (misma regla, un solo texto).
   MSG_MENSAJERO_SIN_VEHICULO,
+  // Pedido humano 2026-08-26: el mensajero dado de baja no recibe trabajo.
+  MSG_MENSAJERO_NO_ASIGNABLE,
   MSG_ORDEN_REPROGRAMADA_BLOQUEADA,
   // FEATURE 276 (T8, R20): EL MISMO SIMBOLO que emite la bodega central. No un literal gemelo:
   // `asignacion-satelite-tope-intentos.test.ts` compara los dos contra esta constante.
@@ -46,6 +48,7 @@ type AsignacionSateliteRepo = Pick<
   | "findUsuarioZonaId"
   | "findMensajeroIdsValidosByZona"
   | "findMensajeroIdsConVehiculo" // feature 21: sin vehiculo no se recibe trabajo
+  | "findMensajerosNoAsignablesPorEstado" // 2026-08-26: inactivo/bloqueado tampoco
   | "findByIdsForTransicion"
   | "findEstatusIdByValue"
   | "asignarSateliteLote"
@@ -139,6 +142,17 @@ export class AsignacionSateliteService implements IAsignacionSateliteService {
       return {
         status: "validation_error",
         fieldErrors: { mensajeroId: [MSG_MENSAJERO_SIN_VEHICULO] },
+      };
+    }
+
+    // 3a-bis. Pedido humano (2026-08-26): el mensajero destino DEBE estar en un estado que admita
+    // trabajo (`inactivo`/`bloqueado` no). Misma regla, mismo texto y mismo lugar que en la
+    // asignacion desde bodega central: un solo predicado, todas las superficies.
+    const noAsignables = await this.repo.findMensajerosNoAsignablesPorEstado([input.mensajeroId]);
+    if (noAsignables.has(input.mensajeroId)) {
+      return {
+        status: "validation_error",
+        fieldErrors: { mensajeroId: [MSG_MENSAJERO_NO_ASIGNABLE] },
       };
     }
 

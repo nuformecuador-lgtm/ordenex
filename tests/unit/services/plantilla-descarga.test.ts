@@ -43,6 +43,8 @@ function plantilla(over: Partial<FilaFake> & { id: string }): FilaFake {
     cuerpo: "Hola {{destinatario}}",
     estado: "activo",
     variables: ["destinatario"],
+    variablesNombres: {},
+    welcomeMessage: false,
     templateId: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     deletedAt: null,

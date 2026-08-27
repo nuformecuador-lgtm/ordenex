@@ -19,6 +19,7 @@ import type { OrdenListItemDTO } from "@/lib/types/orden";
 import type { MensajeroLiteDTO } from "@/lib/types/orden-guia";
 
 import { MOTIVO_BLOQUEADO_POR_CIERRE, toMensajeroOptions } from "./mensajero-options";
+import { MOTIVO_USUARIO_NO_ASIGNABLE } from "@/lib/constants/estado-usuario-asignable";
 import { guiaDecisionErrorMessage } from "./guia-decision-error-messages";
 
 export interface AsignarBodegaModalProps {
@@ -49,6 +50,12 @@ export interface AsignarBodegaModalProps {
    */
   mensajerosBloqueadosIds?: string[];
   /**
+   * Pedido humano (2026-08-26): ids de mensajeros que NO pueden recibir trabajo por su ESTADO de
+   * usuario (`inactivo` / `bloqueado`). Llega de la MISMA acción que la lista, resuelto con el
+   * MISMO predicado que aplica la escritura: aquí no se re-deriva nada.
+   */
+  mensajerosNoAsignablesIds?: string[];
+  /**
    * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» resueltas EN EL SERVIDOR y
    * bajadas por props desde la página. Obligatorias: montar el modal sin decidir de dónde salen
    * las etiquetas del día tiene que ser imposible, porque la alternativa fácil —calcularlas con
@@ -71,6 +78,7 @@ export function AsignarBodegaModal({
   mensajeros,
   mensajerosConRecoleccionIds = [],
   mensajerosBloqueadosIds = [],
+  mensajerosNoAsignablesIds = [],
   fechasDiaReparto,
   onOpenChange,
   onSuccess,
@@ -105,9 +113,12 @@ export function AsignarBodegaModal({
     }
   }
 
-  // Los dos motivos por los que hoy NO se puede elegir a un mensajero, en un solo mapa. El del
-  // CIERRE va DESPUÉS a propósito: si concurren, gana el que el mensajero tiene que resolver él
-  // (mandarlo a cerrar es accionable; decirle que espere a que termine su recolección, no).
+  // Los TRES motivos por los que hoy NO se puede elegir a un mensajero, en un solo mapa. El del
+  // CIERRE va DESPUÉS del de recolección a propósito: si concurren, gana el que el mensajero tiene
+  // que resolver él (mandarlo a cerrar es accionable; decirle que espere a que termine su
+  // recolección, no). El del ESTADO va EL ÚLTIMO y gana a los dos (2026-08-26): un mensajero dado
+  // de baja no se desbloquea cerrando nada ni esperando, y quien asigna necesita saber que el
+  // arreglo está en otra pantalla.
   const mensajeroOptions = toMensajeroOptions(
     mensajeros,
     new Map([
@@ -115,6 +126,7 @@ export function AsignarBodegaModal({
         (id) => [id, "tiene recolección pendiente"] as const,
       ),
       ...mensajerosBloqueadosIds.map((id) => [id, MOTIVO_BLOQUEADO_POR_CIERRE] as const),
+      ...mensajerosNoAsignablesIds.map((id) => [id, MOTIVO_USUARIO_NO_ASIGNABLE] as const),
     ]),
   );
 

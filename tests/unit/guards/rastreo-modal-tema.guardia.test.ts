@@ -18,12 +18,25 @@ import { codigoSinComentarios, quitarComentarios } from "../../fixtures/sin-come
 //       · que estos archivos no introduzcan color propio (hex, `rgb(`) ni variantes `dark:`,
 //         que es lo que `tema-claro` NO apaga: fija los TOKENS, no el variant, que se define
 //         contra el ancestro (`@custom-variant dark (&:is(.dark *))`, `app/globals.css`).
-//  2. **R30 — el resultado muere al cerrar.** Consecuencia F2/F3 del gate, aceptada y
-//     declarada: no hay URL enlazable del seguimiento. Un `router.push`, un `searchParams` o
-//     un `localStorage` metidos «para que no se pierda» convertirían el estado de un envío en
-//     algo que sobrevive a la recarga y se comparte por WhatsApp — exactamente lo que la
-//     decisión humana descartó. Se vigila estáticamente porque un test de comportamiento solo
-//     ve lo que el caso concreto ejercita.
+//  2. **R30 — el RESULTADO muere al cerrar.** Un `router.push` o un `localStorage` metidos
+//     «para que no se pierda» convertirían el estado de un envío en algo que sobrevive a la
+//     recarga y se comparte por WhatsApp. Se vigila estáticamente porque un test de
+//     comportamiento solo ve lo que el caso concreto ejercita.
+//
+//     ⚠ REVISADO EL 2026-08-26, y por eso este punto ya no dice lo que decía. El 2026-08-15 se
+//     descartó la URL enlazable y esta guardia prohibía `searchParams` A SECAS. Hoy la landing
+//     SÍ acepta `/?guia=<n>`: el enlace abre el modal con la guía puesta. Es una decisión
+//     humana POSTERIOR, no el descuido que la guardia venía a atrapar. Lo que NO cambió —y es
+//     lo que se sigue sosteniendo aquí— es el límite:
+//       · la guía se PRECARGA, no se consulta: el segundo factor se sigue tecleando, así que
+//         un enlace no revela si esa guía existe y el barrido de `num_guia` sigue cerrado;
+//       · el RESULTADO no va a la URL, ni al storage, ni a otra pantalla;
+//       · desde el modal la URL solo PIERDE datos: al cerrar se retira el `?guia=` con
+//         `history.replaceState`, y no hay ninguna escritura que la haga crecer.
+//     De ahí la forma nueva de la prohibición: `useSearchParams` —el modal no lee la URL, la
+//     guía le baja como prop desde el servidor— y toda ESCRITURA (`searchParams.set/append`,
+//     `history.pushState`) siguen prohibidos. `has`/`delete` con `replaceState`, que es como se
+//     retira el parámetro, es lo único que se admite, y tiene su propio caso más abajo.
 //
 // La lectura es ESTÁTICA y sobre el CÓDIGO, no sobre la prosa: los comentarios de estos
 // archivos NOMBRAN a propósito lo que está prohibido (este mismo comentario lo hace), así que
@@ -74,11 +87,13 @@ const PROHIBIDO: { patron: RegExp; nombre: string; porque: string }[] = [
     porque: "R30: ídem.",
   },
   {
-    patron: /\buseSearchParams\b|\bsearchParams\b/,
-    nombre: "`searchParams`",
+    patron: /\buseSearchParams\b|\bsearchParams\.(?:set|append)\b|\bhistory\.pushState\b/,
+    nombre: "lectura de la URL o ESCRITURA en ella",
     porque:
-      "R30/F2: no hay URL enlazable ni compartible del seguimiento. Meter la guía en la URL " +
-      "es justo la opción que el humano descartó el 2026-08-15 al elegir modal.",
+      "R30 (revisado el 2026-08-26): la guía entra por la URL como PROP desde el servidor, no " +
+      "leyéndola aquí, y desde el modal la URL solo pierde datos. Un `searchParams.set`, un " +
+      "`history.pushState` o un `useSearchParams` devolverían el estado del envío a la barra " +
+      "de direcciones, que es lo que R30 cierra.",
   },
   {
     patron: /\brouter\.push\b|\buseRouter\b/,
@@ -124,6 +139,8 @@ describe("rastreo público — la guardia de tema mira algo", () => {
       "localStorage.setItem('guia', numGuia);",
       "sessionStorage.setItem('guia', numGuia);",
       "const params = useSearchParams();",
+      "url.searchParams.set('guia', numGuia);",
+      "window.history.pushState(null, '', `/?guia=${numGuia}`);",
       "router.push(`/rastreo/${numGuia}`);",
     ].join("\n");
     for (const { patron, nombre } of PROHIBIDO) {
@@ -151,6 +168,30 @@ describe("R29/R30 — los archivos de UI no usan hex, rgb, variantes dark, stora
     for (const { patron, nombre, porque } of PROHIBIDO) {
       const encontrado = codigo.match(new RegExp(patron.source, "g")) ?? [];
       expect(encontrado, `${relativa} usa ${nombre}. ${porque}`).toEqual([]);
+    }
+  });
+
+  it("desde el modal la URL solo PIERDE datos: `has`/`delete` y `replaceState`, nada más", () => {
+    // El límite que sustituye a la prohibición de 2026-08-15 (ver cabecera). No se mide que el
+    // parámetro se retire —eso lo ejercita `tests/components/RastreoDialog.test.tsx`, cerrando
+    // el diálogo de verdad—, sino que NO EXISTA otra forma de tocar la URL: aquí se ve el
+    // archivo entero, incluidas las ramas que ningún caso llegue a recorrer.
+    const codigo = CODIGO.get("app/_landing/RastreoDialog.tsx") as string;
+
+    const usosDeQuery = codigo.match(/\bsearchParams\.\w+/g) ?? [];
+    expect(usosDeQuery.length, "el modal ya no toca la URL: revisa si este caso sigue vivo")
+      .toBeGreaterThan(0);
+    for (const uso of usosDeQuery) {
+      expect(["searchParams.has", "searchParams.delete"], `${uso} escribe en la URL`).toContain(
+        uso,
+      );
+    }
+
+    const usosDeHistorial = codigo.match(/\bhistory\.\w+/g) ?? [];
+    for (const uso of usosDeHistorial) {
+      // `replaceState` sustituye la entrada actual; `pushState` añadiría una, y entonces
+      // «volver» devolvería la landing CON la guía otra vez en la barra.
+      expect(["history.replaceState", "history.state"], `${uso} no es un retiro`).toContain(uso);
     }
   });
 

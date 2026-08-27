@@ -25,7 +25,9 @@ function plantilla(overrides: Partial<PlantillaPublica> = {}): PlantillaPublica 
     nombre: "Bienvenida",
     cuerpo: "Hola {{usuario}}",
     variables: ["usuario"],
+    variablesNombres: {},
     estado: "pending",
+    welcomeMessage: false,
     templateId: null,
     templateIdioma: null,
     createdBy: "m1",
@@ -50,6 +52,12 @@ function fakeService(overrides: Partial<IPlantillaMensajeService> = {}): IPlanti
       .fn()
       .mockResolvedValue({ status: "ok", plantilla: plantilla({ estado: "inactivo" }) }),
     eliminar: vi.fn().mockResolvedValue({ status: "ok" }),
+    enviarAprobacion: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", plantilla: plantilla({ estado: "pending" }) }),
+    marcarMensajeBienvenida: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", plantilla: plantilla({ welcomeMessage: true }) }),
     preview: vi.fn().mockResolvedValue({ status: "ok", texto: "Hola Juan" }),
     ...overrides,
   };

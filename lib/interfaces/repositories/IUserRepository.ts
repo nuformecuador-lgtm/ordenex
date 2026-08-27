@@ -78,6 +78,15 @@ export interface UsuarioListItem {
   email: string;
   rolValue: RolValue;
   estado: EstadoUsuario;
+  /**
+   * Pedido humano (2026-08-26): NOMBRE de la zona asignada, o `null` si no tiene. Viaja el
+   * nombre y no el `zonaId` porque el listado lo PINTA: mandar el uuid obligaria a la tabla a
+   * resolverlo por su cuenta, con una segunda lectura que nadie mas necesita.
+   *
+   * `null` es la mayoria de las filas y no es un error: solo `mensajero` y `adminSatelite`
+   * conservan zona (feature 24/R27). La tabla lo pinta como «-».
+   */
+  zonaNombre: string | null;
   createdAt: Date;
 }
 
