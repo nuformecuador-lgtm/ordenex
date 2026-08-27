@@ -188,11 +188,26 @@ describe("R27/R29: eliminar marca deletedAt (soft) y no borra; inexistente -> no
   });
 });
 
-describe("R18: preview sustituye las variables por su marcador", () => {
-  it("con catalogo vacio toda clave bien formada cae al marcador en MAYUSCULAS", async () => {
+describe("R18: preview resuelve las variables con los ejemplos del catalogo", () => {
+  // El marcador en MAYUSCULAS que esta prueba exigia quedo DEROGADO por la feature 288/T5
+  // (design.md 4.3, «Contradiccion resuelta»): `preview` pasa por `previewConEjemplos`, que
+  // resuelve TODA clave extraida, y una clave fuera del catalogo cae a cadena vacia. La
+  // preview ensena asi EL HUECO REAL que le llegaria al cliente en vez de un `USUARIO` que
+  // el cliente nunca veria. Quien avisa de esa clave es `clavesSinCampo`, no el marcador.
+  it("una clave fuera del catalogo se ve como el hueco vacio que recibiria el cliente", async () => {
     const r = await service.preview("Hola {{usuario}}, orden {{cod}}", MAESTRO);
     expect(r.status).toBe("ok");
-    if (r.status === "ok") expect(r.texto).toBe("Hola USUARIO, orden COD");
+    if (r.status === "ok") expect(r.texto).toBe("Hola , orden ");
+  });
+
+  // Exacto contra el `ejemplo` que el catalogo declara para `cliente`, como su hermano de
+  // arriba. Un `not.toContain("{{")` se satisfacia tambien con la cadena vacia —justo el
+  // desenlace que el test de al lado documenta para una clave AUSENTE—, asi que no
+  // distinguia «resuelto» de «no resuelto».
+  it("una clave DEL catalogo se ve con su valor de ejemplo formateado", async () => {
+    const r = await service.preview("Hola {{cliente}}", MAESTRO);
+    expect(r.status).toBe("ok");
+    if (r.status === "ok") expect(r.texto).toBe("Hola María Rodríguez");
   });
 
   it("cuerpo malformado -> validation_error", async () => {
