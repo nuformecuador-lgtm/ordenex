@@ -172,6 +172,29 @@ Cada `R<n>` se mapea a un test concreto en `tasks.md`.
 6. **Baja lógica:** `inactivo` para baja/activación manual del maestro; `bloqueado`
    reservado a seguridad, no lo usa este módulo. (R20, R21)
 
+## APÉNDICE — 2026-08-26: la **Decisión 5** queda **acotada** (feature 287)
+
+> Este apéndice se **añade**; el texto de arriba **no se toca**. Un spec es la foto de su
+> momento, y reescribir la Decisión 5 «para que quede coherente» borraría la prueba de que
+> aquella decisión se tomó a conciencia y con sus razones.
+
+De la Decisión 5 se revierte **una sola cláusula**, la de alcance: «Reset de contraseña desde
+edición: FUERA de alcance». Desde el 2026-08-26 el maestro **sí puede restablecer** la
+contraseña de un usuario. Ficha: `specs/287-maestro-restablece-contrasena`.
+
+**Lo que NO se revierte, y por qué el motivo original sigue protegido.** La Decisión 5
+protegía que el maestro no pudiera **fijar** una credencial de otra persona —una que él
+conociera de antemano y pudiera reusar en silencio—. Eso sigue intacto: el maestro **no
+escribe** ninguna contraseña. El sistema la **genera**, se muestra **una sola vez** y solo se
+persiste su hash. Y `email`, `cedula` y el hash **siguen fuera** de la vía de edición: el
+restablecimiento es una operación propia que usa `updatePasswordHash`, no `update`.
+
+**Por qué ahora.** La vía de recuperación de la feature 20 depende del correo, y el correo
+está caído en producción (Gmail rechaza la credencial SMTP con 535). El propio diseño de esta
+ficha ya apuntaba aquí: A6 en `design.md` decía que si la contraseña generada se pierde «el
+flujo correcto es un **reset futuro** (fuera de alcance, Decisión 5)». Lo que cambió el
+2026-08-26 es la palabra «futuro».
+
 ## Preguntas abiertas
 
 Ninguna pendiente.

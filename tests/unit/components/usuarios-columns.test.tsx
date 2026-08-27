@@ -24,12 +24,14 @@ const ROW: UsuarioListItemDTO = {
 function build(overrides: Partial<Parameters<typeof buildUsuariosColumns>[0]> = {}) {
   const onEditar = vi.fn();
   const onCambiarEstado = vi.fn();
+  const onRestablecerContrasena = vi.fn();
   const columns = buildUsuariosColumns({
     onEditar,
     onCambiarEstado,
+    onRestablecerContrasena,
     ...overrides,
   });
-  return { columns, onEditar, onCambiarEstado };
+  return { columns, onEditar, onCambiarEstado, onRestablecerContrasena };
 }
 
 describe("usuarios-columns — define columnas del listado (R14/R26)", () => {
@@ -82,6 +84,40 @@ describe("usuarios-columns — define columnas del listado (R14/R26)", () => {
     expect(screen.getByRole("button", { name: "Activar" })).toBeInTheDocument();
   });
 
+  // Feature 287/R25 — la accion del maestro vive en la fila, y PIDE, no ejecuta.
+  it("la fila ofrece «Restablecer contraseña» y avisa al anfitrión con la fila (287/R25)", async () => {
+    const user = userEvent.setup();
+    const { columns, onRestablecerContrasena } = build();
+    render(
+      <DataTable columns={columns} data={[ROW]} rowKey="id" ariaLabel="Usuarios" />,
+    );
+
+    const fila = screen.getByRole("row", { name: /Ana Pérez/ });
+    await user.click(
+      within(fila).getByRole("button", { name: "Restablecer contraseña" }),
+    );
+    expect(onRestablecerContrasena).toHaveBeenCalledTimes(1);
+    expect(onRestablecerContrasena).toHaveBeenCalledWith(ROW);
+  });
+
+  it("no hay ningún campo donde escribir una contraseña en la fila (287/R25)", () => {
+    const { columns } = build();
+    const { container } = render(
+      <DataTable columns={columns} data={[ROW]} rowKey="id" ariaLabel="Usuarios" />,
+    );
+    expect(container.querySelectorAll("input")).toHaveLength(0);
+  });
+
+  it("deshabilita el botón de restablecer de la fila en curso (287)", () => {
+    const { columns } = build({ restablecerPendienteId: "u1" });
+    render(
+      <DataTable columns={columns} data={[ROW]} rowKey="id" ariaLabel="Usuarios" />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Restablecer contraseña" }),
+    ).toBeDisabled();
+  });
+
   it("deshabilita el botón de estado de la fila en curso", () => {
     const { columns } = build({ estadoPendienteId: "u1" });
     render(
@@ -95,5 +131,6 @@ describe("usuarios-columns — define columnas del listado (R14/R26)", () => {
 const _typed: Column<UsuarioListItemDTO>[] = buildUsuariosColumns({
   onEditar: () => {},
   onCambiarEstado: () => {},
+  onRestablecerContrasena: () => {},
 });
 void _typed;

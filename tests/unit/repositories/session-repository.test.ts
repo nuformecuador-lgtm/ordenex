@@ -68,6 +68,33 @@ describe("SessionRepository", () => {
     expect(del).toHaveBeenCalledWith({ where: { id: "sess-1" } });
   });
 
+  // Feature 287 (T2, R16/R19).
+  //
+  // ⚠️ ESTE CASO **NO** PRUEBA EL `WHERE`. Comprueba que el repositorio EMITE el objeto que
+  // decimos, que es otra cosa distinta de que ese `where` seleccione las filas correctas: con un
+  // doble, `where: {}` responde exactamente igual. Lo que sostiene R16/R17 de verdad es
+  // `tests/integration/db/restablecer-contrasena-sql-real.test.ts`, contra Postgres.
+  it("deleteAllByUserId borra por userId y devuelve el count (287/R16/R19)", async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 3 });
+    const prisma = { session: { deleteMany } } as unknown as MockedPrisma;
+    const repo = new SessionRepository(prisma);
+
+    await expect(repo.deleteAllByUserId("usr-1")).resolves.toBe(3);
+
+    // El `where` es el userId Y NADA MAS: no filtra por `expiresAt`, porque R16 exige borrar
+    // tambien las sesiones que aun no han expirado (son justo las peligrosas).
+    expect(deleteMany).toHaveBeenCalledWith({ where: { userId: "usr-1" } });
+    expect(Object.keys(deleteMany.mock.calls[0][0].where)).toEqual(["userId"]);
+  });
+
+  it("deleteAllByUserId es idempotente: cero sesiones devuelve 0, no lanza (287/R16)", async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const prisma = { session: { deleteMany } } as unknown as MockedPrisma;
+    const repo = new SessionRepository(prisma);
+
+    await expect(repo.deleteAllByUserId("sin-sesiones")).resolves.toBe(0);
+  });
+
   it("deleteById es idempotente si la sesion ya no existe", async () => {
     const del = vi.fn().mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("Record not found", {
