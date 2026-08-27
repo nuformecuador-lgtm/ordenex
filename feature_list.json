@@ -3525,11 +3525,33 @@
       "title": "la barra de reparto de analitica esconde toda categoria que no llegue al 1%",
       "description": "En 'Detalle gestion' una categoria con dato real desaparece de la barra y su leyenda dice 0%, porque el ancho de cada franja se calcula con el porcentaje ya redondeado a enteros.",
       "zone": "frontend",
-      "status": "in_progress",
+      "status": "done",
       "sdd": false,
       "complexity": "baja",
       "branch": "fix/290-barra-reparto-menor-uno-porciento",
-      "status_note": "REPRODUCIDO el 2026-08-27 ejecutando el modulo real de produccion con los numeros de la pantalla (1, 0, 0, 1, 0, 231 sobre 233): 'Reprogramadas 1' sale como 0% y con ancho 0%, y 'Entregadas 1' -- el MISMO valor -- sale como 1%. Causa doble: el reparto por resto mayor de porcentajes.ts da los puntos sobrantes por orden de indice al empatar el resto, y GraficaReparto.tsx:93 usa ESE entero como ancho de la franja. ALCANCE (arreglo minimo, sin rediseno): (a) etiqueta '<1 %' cuando el valor es >0 pero redondea a 0; (b) ancho minimo visible para toda franja con valor >0, descontado del segmento mayor para que el reparto siga sumando 100%. NO se toca el metodo del resto mayor: la suma exacta a 100 es su razon de ser. SIN SDD por decision humana (2026-08-27, 'es algo tan pequeno, hazlo sin preguntar'): dos archivos y un modulo puro que ya tiene tests."
+      "status_note": "REPRODUCIDO el 2026-08-27 ejecutando el modulo real de produccion con los numeros de la pantalla (1, 0, 0, 1, 0, 231 sobre 233): 'Reprogramadas 1' sale como 0% y con ancho 0%, y 'Entregadas 1' -- el MISMO valor -- sale como 1%. Causa doble: el reparto por resto mayor de porcentajes.ts da los puntos sobrantes por orden de indice al empatar el resto, y GraficaReparto.tsx:93 usa ESE entero como ancho de la franja. ALCANCE (arreglo minimo, sin rediseno): (a) etiqueta '<1 %' cuando el valor es >0 pero redondea a 0; (b) ancho minimo visible para toda franja con valor >0, descontado del segmento mayor para que el reparto siga sumando 100%. NO se toca el metodo del resto mayor: la suma exacta a 100 es su razon de ser. SIN SDD por decision humana (2026-08-27, 'es algo tan pequeno, hazlo sin preguntar'): dos archivos y un modulo puro que ya tiene tests. || CERRADA 2026-08-27: PR #524 -> dev, release PR #525 -> prod, deployment READY (6ea2d6c0) y CERO errores de runtime medidos en la ventana del despliegue. Gate COMPLETO sobre el arbol exacto: 19.760 verdes y 6 rojos, los SEIS ajenos y con delta 0 comprobado sobre dev limpio. SIGUE VIVO, y es la 291: GraficaDonut y GraficaRanking rotulan sus pesos con el mismo porcentajesDeReparto y pueden escribir '0 %' junto a un dato real; ahi el dibujo NO depende del redondeo (el donut lo pinta recharts con el valor crudo y el ranking usa valor/mayor), asi que es defecto de ETIQUETA y no de desaparicion."
+    },
+    {
+      "id": 291,
+      "title": "el donut y el ranking tambien rotulan 0% junto a un dato real",
+      "description": "Las etiquetas de GraficaDonut y GraficaRanking salen del mismo reparto por resto mayor que la 290, asi que una categoria con valor puede leerse como 0%.",
+      "zone": "frontend",
+      "status": "pending",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": null,
+      "status_note": "SALE DE LA 290, medida al validar donde mas aplicaba el arreglo (2026-08-27). Es SOLO la mitad de etiqueta: en las dos graficas el dibujo no depende del porcentaje redondeado -- el donut lo pinta recharts con el valor crudo y la barra del ranking usa valor/mayor --, asi que no desaparece nada; lo que puede mentir es el texto. El arreglo ya existe y esta en produccion: usar textoDePeso/pesosDeReparto en vez de formatear la fraccion. NO aplica a la barra de la wallet (su porcentaje viene del servidor con 2 decimales y su regla money-safe prohibe convertirlo en el navegador) ni a los KPI de tasa (razon cruda con 1 decimal: un 0,4% se lee). PENDING a proposito: el arnes admite 2 in_progress por zona y frontend ya tiene la 289 y la 292."
+    },
+    {
+      "id": 292,
+      "title": "las tarjetas de contador del monitoreo no llevan el color de su segmento en la barra",
+      "description": "En el tablero de monitoreo, cuatro de los ocho contadores se pintan de un color en la barra apilada y de otro distinto en su tarjeta, asi que no se puede leer una desde la otra.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "media",
+      "branch": "feature/292-color-cards-monitoreo",
+      "status_note": "MEDIDO el 2026-08-27 sobre contadores.ts: COLOR_SEGMENTO (la barra) y VARIANTE_CONTADOR (las tarjetas) son DOS tablas y discrepan en 4 de 8 -- devueltas (chart-6 vs warning), incidentes (chart-11 vs danger), sinRecoger (chart-12 vs secondary) y enReparto (chart-13 vs info). DECISION HUMANA: opcion B, el fondo de la tarjeta toma el color de su segmento; se descarto el punto de color (opcion A) y se descarto invertirlo -- que la barra use las variantes semanticas juntaria devueltas con reprogramadas e incidentes con rechazadas y la barra dejaria de distinguir ocho categorias. COSTE ACEPTADO A SABIENDAS: chart-6/11/12/13 son colores PLANOS sin par -soft/-strong, asi que hay que crear los cuatro pares y RE-MEDIR contraste AA en los dos temas; el repo ya lleva cuatro fichas peleandose con eso (210, 216, 222, 226)."
     }
   ]
 }
