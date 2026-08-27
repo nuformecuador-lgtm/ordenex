@@ -50,6 +50,9 @@ const ITEM: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "mensajero",
   estado: "activo",
+  // Campo añadido al DTO por el merge de la feature de WhatsApp (PR #512) sin actualizar este
+  // fixture, que quedó rojo en `dev`. Se completa aquí para desbloquear el typecheck.
+  zonaNombre: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
 };
 

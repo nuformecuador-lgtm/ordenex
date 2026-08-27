@@ -3508,6 +3508,17 @@
       "complexity": "media",
       "status_note": "SPEC ESCRITO Y REVISADO POR EL HUMANO el 2026-08-26 (tres decisiones incorporadas: la lectura legible es VISTA PREVIA con valores de ejemplo -R10-R12-, aviso de claves que no se reemplazan -R15-R16-, alias ocultos del selector -R4-R5-). || FICHA CREADA TARDE: el spec se escribio antes de existir esta entrada y nacio numerado 282, id que ya estaba ocupado por las etiquetas PDF; se renumero a 285 y luego a 288 -al mergear dev, 285/286/287 ya estaban tomadas por features cerradas-, conservando siempre el slug. || ⚠️ PRERREQUISITO BLOQUEANTE (T0 del tasks.md): la base sobre la que se apoya -el catalogo CAMPOS_PLANTILLA en lib/types/plantilla-datos.ts, el estado saved_not_aprobation y sus dos migraciones- estaba SIN COMMITEAR en el arbol de bugFix y no existia en ninguna rama. Si no esta commiteada, la feature se bloquea: no se recrea el catalogo ni se copia del arbol sucio. || ⚠️ CAMBIO DE SALIDA YA INTRODUCIDO POR ESA BASE: {{monto}}/{{total}} pasan a emitir ₡25.900 en vez de 25000 -el crudo queda en {{monto_crudo}}-, lo que afecta a plantillas YA APROBADAS por Meta. || ⚠️ {{url_guia}} importa PARAM_GUIA de app/_landing/guia-en-url.ts, archivo que venia sin commitear de otra sesion: si esa rama se descarta, el import queda huerfano.",
       "spec_path": "specs/288-variables-plantilla-desde-catalogo"
+    },
+    {
+      "id": 289,
+      "title": "al navegar hacia una orden se puede abrir la app de mapas propia (waze, google maps, apple maps)",
+      "description": "El boton Navegar del detalle de la orden solo abre el minimapa interno de la app; el mensajero no tiene forma de arrancar la navegacion guiada en la app que usa. Dentro de ese mismo modal se anade una fila \"Abrir en:\" con Waze, Google Maps, Apple Maps y -en Android- el selector nativo del sistema via geo:. La app elegida se recuerda en el dispositivo y se ofrece primera.",
+      "zone": "frontend",
+      "status": "in_progress",
+      "sdd": false,
+      "complexity": "baja",
+      "branch": "feature/289-abrir-navegacion-en-app-externa",
+      "status_note": "SIN SDD por decision humana el 2026-08-27: el cambio es un modulo puro de URLs + un componente de 3 enlaces, no justifica los tres archivos de spec. Se verifica con tests unitarios y de componente."
     }
   ]
 }
