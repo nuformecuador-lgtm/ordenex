@@ -34,6 +34,7 @@ import {
   EditarPlantillaForm,
   type EditarPlantillaFormHandle,
 } from "./EditarPlantillaForm";
+import { FormSheet } from "./FormSheet";
 import { SincronizarPlantillasButton } from "./SincronizarPlantillasButton";
 
 // Opciones acotadas por MAX_PAGE_SIZE del backend (nunca una consulta sin límite).
@@ -290,20 +291,18 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         pageSizeOptions={PAGE_SIZE_OPTIONS}
       />
 
-      <Modal
+      <FormSheet
         open={crearOpen}
         onOpenChange={setCrearOpen}
         title="Nueva plantilla"
         confirmLabel="Crear"
         cancelLabel="Cancelar"
-        closeOnConfirm={false}
         onConfirm={onConfirmCrear}
-        size="lg"
       >
         <CrearPlantillaForm ref={crearRef} />
-      </Modal>
+      </FormSheet>
 
-      <Modal
+      <FormSheet
         open={editar !== null}
         onOpenChange={(open) => {
           if (!open) setEditar(null);
@@ -311,14 +310,12 @@ export function PlantillasModule({ initialData }: PlantillasModuleProps) {
         title="Editar plantilla"
         confirmLabel="Guardar"
         cancelLabel="Cancelar"
-        closeOnConfirm={false}
         onConfirm={onConfirmEditar}
-        size="lg"
       >
         {editar ? (
           <EditarPlantillaForm ref={editarRef} plantilla={editar} />
         ) : null}
-      </Modal>
+      </FormSheet>
 
       <Modal
         open={enviarAprobacion !== null}

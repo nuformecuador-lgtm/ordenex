@@ -90,7 +90,7 @@ describe("VariablesInsert", () => {
     await avanzarDebounce();
 
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent(
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue(
         "Hola María Rodríguez, total ₡12.500",
       );
     });
@@ -127,7 +127,7 @@ describe("VariablesInsert", () => {
     render(<Harness inicial="Total {{monto}}" previewAction={previewAction} />);
     await avanzarDebounce();
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("Total ₡12.500");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("Total ₡12.500");
     });
 
     const textarea = screen.getByLabelText<HTMLTextAreaElement>("Cuerpo");
@@ -135,7 +135,7 @@ describe("VariablesInsert", () => {
     await avanzarDebounce();
 
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("Total");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("Total ");
     });
     expect(
       screen.queryByRole("button", { name: "Monto a cobrar" }),
@@ -154,9 +154,11 @@ describe("VariablesInsert", () => {
     await avanzarDebounce();
 
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("Hola");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("Hola ");
     });
-    expect(screen.getByTestId("plantilla-preview").textContent).toBe("Hola ");
+    expect(
+      screen.getByTestId<HTMLTextAreaElement>("plantilla-preview").value,
+    ).toBe("Hola ");
 
     const alerta = screen.getByRole("alert");
     expect(alerta.textContent).toContain("{{sucursal}}");
@@ -215,7 +217,7 @@ describe("VariablesInsert", () => {
     await avanzarDebounce();
 
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("10432");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("10432");
     });
     expect(
       screen.getByRole("button", { name: "Número de guía" }),
@@ -235,12 +237,59 @@ describe("VariablesInsert", () => {
     const textarea = screen.getByLabelText<HTMLTextAreaElement>("Cuerpo");
     textarea.setSelectionRange(5, 5); // "Hola |, gracias"
 
-    const combobox = screen.getByRole("combobox", { name: /campo/i });
-    fireEvent.focus(combobox);
-    fireEvent.change(combobox, { target: { value: "monto" } });
+    const filtro = screen.getByRole("textbox", { name: /campo/i });
+    fireEvent.change(filtro, { target: { value: "monto" } });
     fireEvent.click(screen.getByRole("option", { name: /Monto a cobrar/ }));
 
     expect(textarea.value).toBe("Hola {{monto}}, gracias");
+  });
+
+  it("Nuevo — orden en el DOM: la vista previa aparece antes del selector de campos", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const previewAction = vi.fn(
+      async (cuerpo: string): Promise<PreviewPlantillaResult> => ({
+        status: "ok",
+        texto: previewConEjemplos(cuerpo),
+      }),
+    );
+    render(<Harness inicial="Total {{monto}}" previewAction={previewAction} />);
+    await avanzarDebounce();
+    await waitFor(() => {
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("Total ₡12.500");
+    });
+
+    const preview = screen.getByTestId("plantilla-preview");
+    const filtro = screen.getByRole("textbox", { name: /campo/i });
+
+    expect(
+      preview.compareDocumentPosition(filtro) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("Nuevo — solo lectura: el panel de vista previa tiene readOnly y escribir en él no cambia el cuerpo", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const previewAction = vi.fn(
+      async (cuerpo: string): Promise<PreviewPlantillaResult> => ({
+        status: "ok",
+        texto: previewConEjemplos(cuerpo),
+      }),
+    );
+    render(<Harness inicial="Total {{monto}}" previewAction={previewAction} />);
+    await avanzarDebounce();
+    await waitFor(() => {
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("Total ₡12.500");
+    });
+
+    const preview = screen.getByTestId<HTMLTextAreaElement>("plantilla-preview");
+    expect(preview).toHaveAttribute("readonly");
+    expect(preview).toHaveAttribute("aria-readonly", "true");
+
+    fireEvent.change(preview, { target: { value: "algo distinto" } });
+
+    expect(screen.getByTestId("plantilla-preview")).toHaveValue("Total ₡12.500");
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Cuerpo").value).toBe(
+      "Total {{monto}}",
+    );
   });
 
   it("debounce: varias pulsaciones dentro de la ventana solo disparan una llamada", async () => {
@@ -290,13 +339,13 @@ describe("VariablesInsert", () => {
       resolvers.get("Cuerpo B")?.({ status: "ok", texto: "texto B" });
     });
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("texto B");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("texto B");
     });
 
     await act(async () => {
       resolvers.get("Cuerpo A")?.({ status: "ok", texto: "texto A" });
     });
-    expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("texto B");
+    expect(screen.getByTestId("plantilla-preview")).toHaveValue("texto B");
   });
 
   // M1: el caso que el descarte por «ultima peticion lanzada» NO cubria. A esta en vuelo y
@@ -330,8 +379,10 @@ describe("VariablesInsert", () => {
       resolvers.get("Cuerpo A")?.({ status: "ok", texto: "texto A" });
     });
 
-    // El panel NO puede mostrar el cuerpo que el maestro ya cambio.
-    expect(screen.queryByTestId("plantilla-preview")).toBeNull();
+    // El panel NO puede mostrar el cuerpo que el maestro ya cambio. Existe siempre (con su
+    // placeholder), asi que lo que se afirma es que sigue VACIO, no que desaparezca.
+    expect(screen.getByTestId("plantilla-preview")).toHaveValue("");
+    expect(screen.getByTestId("plantilla-preview")).not.toHaveValue("texto A");
 
     // Y cuando B expira y resuelve, ese si pinta.
     await avanzarDebounce();
@@ -340,7 +391,46 @@ describe("VariablesInsert", () => {
       resolvers.get("Cuerpo B")?.({ status: "ok", texto: "texto B" });
     });
     await waitFor(() => {
-      expect(screen.getByTestId("plantilla-preview")).toHaveTextContent("texto B");
+      expect(screen.getByTestId("plantilla-preview")).toHaveValue("texto B");
     });
+  });
+
+  // Pedido humano 2026-08-27: un cuerpo a medio escribir NO es un error que regañar. La
+  // rama `validation_error` deja de pintar un alert y el panel se queda vacio con su
+  // placeholder; el fallo REAL de la accion si sigue avisando.
+  it("cuerpo a medias: sin alert, el panel queda vacio con su placeholder", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const previewAction = vi.fn(
+      async (): Promise<PreviewPlantillaResult> => ({
+        status: "validation_error",
+        fieldErrors: { cuerpo: ["llave malformada"] },
+      }),
+    );
+    render(<Harness inicial="Hola {{" previewAction={previewAction} />);
+
+    await avanzarDebounce();
+
+    const panel = screen.getByTestId("plantilla-preview");
+    expect(panel).toHaveValue("");
+    expect(panel).toHaveAttribute("placeholder", "Hola...");
+    // Ni rastro del viejo «Corrige el cuerpo antes de ver la vista previa.»
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("un fallo real de la accion SI avisa, y ese alert se conserva", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const previewAction = vi.fn(
+      async (): Promise<PreviewPlantillaResult> => ({ status: "forbidden" }),
+    );
+    render(<Harness inicial="Hola" previewAction={previewAction} />);
+
+    await avanzarDebounce();
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "No se pudo generar la vista previa.",
+      );
+    });
+    expect(screen.getByTestId("plantilla-preview")).toHaveValue("");
   });
 });

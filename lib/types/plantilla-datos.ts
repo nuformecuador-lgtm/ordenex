@@ -198,6 +198,18 @@ export interface CampoPlantilla {
   sensible?: boolean;
   /** Clave del campo BASE si esta entrada es un alias del mismo dato. `undefined` = campo propio. */
   aliasDe?: string;
+  /**
+   * `true` = el campo NO se ofrece en el selector al armar una plantilla. DESCRIBE, NO DECIDE:
+   * la entrada sigue en el catalogo y en `CAMPOS_PLANTILLA_POR_CLAVE`, sigue resolviendo con su
+   * `leer`/`transform`, sigue saliendo en la vista previa y `clavesSinCampo` sigue SIN marcarla
+   * como invalida. Lo unico que cambia es que deja de proponerse para plantillas NUEVAS.
+   *
+   * Por que ocultar en vez de borrar del catalogo (pedido humano 2026-08-27): hay plantillas ya
+   * aprobadas por Meta que usan estas claves. Sacarlas del catalogo las dejaria sin resolver
+   * —llegarian VACIAS al cliente— y ademas `clavesSinCampo` empezaria a acusarlas de «retiradas
+   * del catalogo». Ocultar es reversible y no toca ningun envio vivo.
+   */
+  ocultoEnSelector?: boolean;
   /** El valor CRUDO, tal como viene en `DatosPlantilla`. */
   leer(datos: DatosPlantilla): unknown;
   /** Convierte ese crudo en el texto que se envia. Puro: mismo valor -> mismo texto. */
@@ -312,7 +324,7 @@ const MENSAJERO = definir({
  * y el armado de la vista previa (cliente). Si te saltas el segundo, la clave sale rellena en
  * el mensaje real y VACIA en el composer, que es exactamente lo que le pasaba a `{{mensajero}}`.
  */
-export const CAMPOS_PLANTILLA: CampoPlantilla[] = [
+const CATALOGO_DECLARADO: CampoPlantilla[] = [
   /* --- Identificacion del envio ------------------------------------------- */
   GUIA,
   alias(GUIA, "num_guia", "Número de guía"),
@@ -341,36 +353,6 @@ export const CAMPOS_PLANTILLA: CampoPlantilla[] = [
   CLIENTE,
   alias(CLIENTE, "nombre", "Cliente"),
   alias(CLIENTE, "destinatario", "Cliente"),
-  definir({
-    clave: "telefono",
-    campo: "orden.telefonoDest",
-    nombre: "Teléfono del cliente",
-    descripcion: "Teléfono al que se entrega el envío (el mismo al que llega este mensaje).",
-    ejemplo: "88887777",
-    leer: (d) => d.orden.telefonoDest,
-    transform: texto,
-  }),
-  definir({
-    clave: "direccion",
-    campo: "orden.direccion",
-    nombre: "Dirección",
-    descripcion: "Dirección de entrega tal como la escribió la tienda, sin la geografía.",
-    ejemplo: "200 m norte de la iglesia, casa verde",
-    leer: (d) => d.orden.direccion,
-    transform: texto,
-  }),
-  definir({
-    clave: "direccion_completa",
-    campo: "orden.direccion + distritoNombre + cantonNombre + provinciaNombre",
-    nombre: "Dirección completa",
-    descripcion: "La dirección con distrito, cantón y provincia, separados por comas.",
-    ejemplo: "200 m norte de la iglesia, casa verde, Carmen, San José, San José",
-    leer: (d) => d.orden,
-    transform: (o) =>
-      [o.direccion, o.distritoNombre, o.cantonNombre, o.provinciaNombre]
-        .filter((parte): parte is string => Boolean(parte && parte.trim()))
-        .join(", "),
-  }),
   definir({
     clave: "provincia",
     campo: "orden.provinciaNombre",
@@ -687,6 +669,75 @@ export const CAMPOS_PLANTILLA: CampoPlantilla[] = [
     transform: texto,
   }),
 ];
+
+/**
+ * BORRADOS del catalogo el 2026-08-27 (pedido humano): `telefono`, `direccion` y
+ * `direccion_completa`. No estan ocultos: no existen.
+ *
+ * Por que estos SI se pudieron borrar y los 25 de abajo NO: se comprobo contra la base que
+ * ninguna de las 7 plantillas vivas los usaba (las claves en uso son `cliente`, `guia`,
+ * `mensajero`, `producto`, `sinpe`, `sinpe_nombre` y `total`), asi que la tijera no deja
+ * ninguna plantilla aprobada por Meta sin resolver. Los otros 25 no tenian esa garantia, y por
+ * eso llevan `ocultoEnSelector` en vez de desaparecer.
+ *
+ * Consecuencia asumida y bajo test: un cuerpo con `{{telefono}}` pasa a resolver VACIO y
+ * `clavesSinCampo` lo denuncia como clave invalida. Es lo correcto: ya no es un campo.
+ */
+
+/**
+ * Las claves que el selector NO ofrece. UN SOLO SITIO a proposito: repartir el dato por las 25
+ * entradas invita a que la proxima edicion deje la lista a medias.
+ *
+ * NO son claves invalidas ni retiradas: siguen en `CAMPOS_PLANTILLA`, siguen en
+ * `CAMPOS_PLANTILLA_POR_CLAVE` y siguen resolviendo. Ver el TSDoc de `ocultoEnSelector`.
+ */
+export const CLAVES_OCULTAS_EN_SELECTOR: ReadonlySet<string> = new Set([
+  // Geografia y ubicacion
+  "provincia",
+  "canton",
+  "distrito",
+  "zona",
+  "mapa",
+  // Operativa interna del envio
+  "notas",
+  "etiqueta_pdf",
+  "monto_crudo",
+  "cobra_comision",
+  "estatus",
+  "fecha_reparto",
+  "fecha_asignacion",
+  "fecha_creacion",
+  "intentos_contacto",
+  "prioridad",
+  "orden_id",
+  // Datos del mensajero
+  "mensajero_apellidos",
+  "mensajero_telefono",
+  "mensajero_placa",
+  "mensajero_vehiculo",
+  "mensajero_zona",
+  "mensajero_email",
+  "mensajero_cedula",
+  "mensajero_estado",
+  "mensajero_id",
+]);
+
+/**
+ * El catalogo COMPLETO. Sigue teniendo las 44 entradas: ocultar del selector no saca a nadie
+ * de aqui, porque de aqui es de donde se resuelve `{{clave}}` al enviar (feature 288).
+ */
+export const CAMPOS_PLANTILLA: CampoPlantilla[] = CATALOGO_DECLARADO.map((campo) =>
+  CLAVES_OCULTAS_EN_SELECTOR.has(campo.clave) ? { ...campo, ocultoEnSelector: true } : campo,
+);
+
+/**
+ * Lo que el selector ofrece de verdad: ni alias (feature 282, R4) ni ocultos (feature 288).
+ * Vive aqui y no en el componente para que el predicado sea uno solo y los tests puedan
+ * afirmar sobre EL MISMO que usa la UI.
+ */
+export const CAMPOS_PLANTILLA_OFRECIDOS: CampoPlantilla[] = CAMPOS_PLANTILLA.filter(
+  (campo) => campo.aliasDe === undefined && campo.ocultoEnSelector !== true,
+);
 
 /** Indice `clave -> campo`, para resolver en O(1) y para que la UI busque por clave. */
 export const CAMPOS_PLANTILLA_POR_CLAVE: ReadonlyMap<string, CampoPlantilla> = new Map(
