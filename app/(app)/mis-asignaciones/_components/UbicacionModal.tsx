@@ -10,7 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useUbicacionActual, type Coords } from "@/hooks/useUbicacionActual";
+import type { DestinoNavegacion } from "@/lib/utils/navegacion-externa";
 
+import { AbrirEnAppNavegacion } from "./AbrirEnAppNavegacion";
 import { UbicacionMapa } from "./UbicacionMapa";
 import type { UbicacionPunto } from "./ubicacion-mapa-tipos";
 
@@ -27,6 +29,17 @@ export interface UbicacionModalProps {
   onOpenChange: (abierto: boolean) => void;
   titulo?: string;
   descripcion?: string;
+  /**
+   * Feature 289 — destino para la fila "Abrir en:" (Waze / Maps / selector del sistema).
+   * OPT-IN: sin esta prop el modal se comporta exactamente como antes, que es lo que quiere
+   * el chat (feature 121), donde el punto es de un cliente y no un destino de reparto.
+   */
+  destino?: DestinoNavegacion;
+  /**
+   * Feature 289 — apertura explícita, para poder abrir el modal SIN punto que pintar (orden
+   * aún no geocodificada). Sin ella manda `punto !== null`, el contrato original.
+   */
+  abierto?: boolean;
 }
 
 export function UbicacionModal({
@@ -34,6 +47,8 @@ export function UbicacionModal({
   onOpenChange,
   titulo = "Ubicación compartida",
   descripcion = "El punto compartido por el cliente y tu ubicación actual.",
+  destino,
+  abierto,
 }: Readonly<UbicacionModalProps>) {
   // El GPS del repartidor se pide LAZY al abrir (P3), nunca al montar. La captura se
   // guarda JUNTO a las coordenadas que la originaron: así el resultado de una apertura
@@ -68,7 +83,7 @@ export function UbicacionModal({
   const gpsRepartidor = gpsPedido ? captura.coords : null;
 
   return (
-    <Dialog open={punto !== null} onOpenChange={onOpenChange}>
+    <Dialog open={abierto ?? punto !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
@@ -76,6 +91,15 @@ export function UbicacionModal({
         </DialogHeader>
         {punto ? (
           <UbicacionMapa cliente={punto} repartidor={gpsRepartidor} />
+        ) : null}
+        {/* Feature 289: una orden sin geocodificar no tiene punto que pintar, pero SÍ tiene
+            dirección escrita, que es con lo que Waze o Maps la van a resolver. Se avisa en vez
+            de dejar el modal vacío. */}
+        {punto === null && destino ? (
+          <p className="text-sm text-muted-foreground">
+            Esta orden todavía no tiene ubicación exacta en el mapa. Se navegará
+            por la dirección: {destino.texto || "sin dirección registrada"}.
+          </p>
         ) : null}
         {/* R12: sin GPS del repartidor (denegado/timeout) el mapa pinta solo el punto
             del cliente y se avisa, sin bloquear apertura ni cierre. */}
@@ -86,6 +110,7 @@ export function UbicacionModal({
               : "No se pudo obtener tu ubicación actual."}
           </p>
         ) : null}
+        {destino ? <AbrirEnAppNavegacion destino={destino} /> : null}
       </DialogContent>
     </Dialog>
   );

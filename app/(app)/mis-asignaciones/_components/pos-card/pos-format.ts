@@ -1,5 +1,9 @@
 import { formatMonto as formatMontoConfigurado, SIN_MONTO_RAYA } from "@/lib/config/moneda";
 import type { MiAsignacionDTO } from "@/lib/interfaces/services/IMisAsignacionesService";
+import {
+  urlNavegacion,
+  type DestinoNavegacion,
+} from "@/lib/utils/navegacion-externa";
 
 // Rediseño "POS card" (rama ux): helpers de PRESENTACIÓN puros para la card del
 // mensajero estilo terminal (navegación primero, targets grandes, alto contraste).
@@ -37,19 +41,33 @@ export function formatPeso(peso: number | null): string {
  * Prefiere las coordenadas geocodificadas (feature 91) y cae a una búsqueda por
  * texto (dirección + distrito/cantón/provincia) cuando aún no hay coords. No
  * fuerza permisos ni GPS: Maps resuelve el origen del propio usuario.
+ *
+ * Feature 289: el formato ya no se escribe aquí. Con Waze, Apple Maps y el selector de
+ * Android en juego, todas las plantillas de URL de mapas viven en un único módulo puro.
  */
 export function mapsNavUrl(orden: MiAsignacionDTO): string {
-  const base = "https://www.google.com/maps/dir/?api=1&destination=";
-  if (orden.latitud !== null && orden.longitud !== null) {
-    return `${base}${orden.latitud},${orden.longitud}`;
-  }
-  const partes = [
-    orden.direccion,
-    orden.distritoNombre,
-    orden.cantonNombre,
-    orden.provinciaNombre,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  return `${base}${encodeURIComponent(partes)}`;
+  return urlNavegacion("google", destinoDeOrden(orden));
+}
+
+/**
+ * Destino de la orden listo para construir CUALQUIER URL de navegación: las coordenadas
+ * geocodificadas si las hay, y siempre el texto de la dirección con su distrito/cantón/
+ * provincia como respaldo.
+ *
+ * Feature 289. Vive aquí y no en `lib/utils/navegacion-externa.ts` a propósito: así aquel
+ * módulo no conoce el DTO del mensajero y se puede testear con objetos literales.
+ */
+export function destinoDeOrden(orden: MiAsignacionDTO): DestinoNavegacion {
+  return {
+    lat: orden.latitud,
+    lng: orden.longitud,
+    texto: [
+      orden.direccion,
+      orden.distritoNombre,
+      orden.cantonNombre,
+      orden.provinciaNombre,
+    ]
+      .filter(Boolean)
+      .join(", "),
+  };
 }
