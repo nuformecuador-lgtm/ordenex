@@ -349,3 +349,215 @@ sobrevivio y obligo a endurecer un detector—, 0 fallos nuevos en el gate compl
 rojo ajeno de la 275), y tres cosas SIN cerrar que hay que mirar antes de mergear: T0 (la 285 no
 esta en `dev`), el spec 287 sin commitear, y T14 (la medicion de `Session` en produccion) que
 este agente no pudo hacer.**
+
+---
+---
+
+# Feature 287 — bitácora de implementación (FRONTEND)
+
+> **Alcance de esta parte:** **T9 y T10**. Cubre **R25–R31**, la **mitad de cliente de R24** y
+> lleva **R19** hasta la pantalla. Es exactamente lo que la sección 4 de la bitácora del backend
+> declaró **NO cubierto a propósito**; no se dio por bueno nada de aquella lista sin test propio.
+>
+> - **Rama:** `feature/287-restablecer-contrasena` (worktree aislado, parte de `3e0718cd`, que es
+>   el merge del backend de esta misma ficha).
+> - **Fecha:** 2026-08-26.
+> - **No se tocó nada del backend.** Lo único que se modificó fuera de la capa de presentación es
+>   la retirada de la anotación `@sin-superficie` (ver §F3), que el propio backend dejó pedida.
+
+---
+
+## §F1 — Archivos
+
+### Creados
+
+| Archivo | Qué es |
+| --- | --- |
+| `app/(app)/configuracion/_components/ContrasenaGeneradaPanel.tsx` | El panel de «una sola vez» (T9) |
+| `tests/unit/components/contrasena-generada-panel.test.tsx` | Sus tests (T9) |
+| `tests/unit/components/usuarios-restablecer.test.tsx` | El flujo completo de pantalla (T10) |
+
+### Modificados
+
+| Archivo | Qué cambió |
+| --- | --- |
+| `app/(app)/configuracion/_components/usuarios-columns.tsx` | Acción «Restablecer contraseña» por fila (T10/R25) |
+| `app/(app)/configuracion/_components/UsuariosModule.tsx` | Confirmación (R26/R27), cableado de la acción, panel (R28/R29) y toast (R19/R30) |
+| `lib/actions/usuarios.ts` | **Retirada** de la anotación `@sin-superficie` transitoria (§F3) |
+| `tests/unit/components/usuarios-columns.test.tsx` | La prop nueva es obligatoria + 3 casos |
+| `tests/unit/components/usuarios-module.test.tsx` | Doble de la acción nueva en el `vi.mock` |
+
+**Lo que NO se tocó, y estaba prohibido tocar:** `UsuarioForm.tsx` (es de la ficha 286, PR #513
+sin mergear), `lib/actions/tarifas.ts`, la guardia `superficie-de-uso` y el módulo de órdenes.
+El diseño no llevó a ninguno de ellos: `design.md` §11 ya marcaba `UsuarioForm.tsx` con un **NO**
+y por eso T9 crea archivo propio.
+
+---
+
+## §F2 — Cómo quedó la pantalla
+
+```
+fila del listado  ──[Restablecer contraseña]──▶  Modal de confirmación (R26)
+                        (solo abre; no ejecuta)   │ nombra a la persona
+                                                  │ «La actual dejará de servir»
+                                                  │ «se cerrarán sus sesiones abiertas»
+                                                  │ «La verás una sola vez»
+                                     Cancelar/Esc ─┴─ Restablecer
+                                          (R27)          │
+                                       nada pasa         ▼
+                                                restablecerContrasenaUsuario(id)
+                                                    │              │
+                                                   ok            error
+                                                    │              │
+                                    ContrasenaGeneradaPanel     toast, y el panel
+                                    + toast con el nº de        NO se abre (R30)
+                                    sesiones cerradas (R19)
+```
+
+Tres decisiones que conviene tener escritas:
+
+1. **La llamada es `restablecerContrasenaUsuario(objetivo.id)` y nada más.** Hay un test que
+   afirma la **forma** de la llamada (`mock.calls[0]` es `["u1"]`, un solo argumento). Esa es la
+   mitad de cliente de R6/R10: si alguien le añade un objeto de entrada —por donde entraría una
+   contraseña elegida por el maestro— el test se pone rojo. La mutación **F10** lo comprueba.
+2. **La advertencia va en `description` del `Modal`, no en el cuerpo.** Así el `Modal` la cuelga
+   de `aria-describedby` y la oye quien usa lector de pantalla, no solo quien la ve. Hay un test
+   que sigue el `aria-describedby` hasta el nodo y comprueba que ahí dentro está el nombre.
+3. **`self_reset_forbidden` tiene mensaje propio**, distinto de `forbidden`. Son dos negativas
+   distintas (R5 / R2) y colapsarlas se detecta (mutación **F12**).
+
+**Texto de la confirmación (pregunta abierta 5 de `requirements.md`):** se usó *literalmente* el
+propuesto en el spec. Esa pregunta sigue **formalmente abierta**: nadie la aprobó por escrito; se
+implementó la propuesta del spec porque era la única redacción disponible y cumple las piezas de
+R26. Si el humano prefiere otra, es un cambio de una línea (y dos aserciones de test).
+
+---
+
+## §F3 — La anotación `@sin-superficie`: **retirada**, y comprobado que su ausencia importa
+
+El backend dejó sobre `restablecerContrasenaUsuario` una anotación `@sin-superficie TRANSITORIA`
+porque su pantalla —esta— aún no existía. **Se retiró al cablear T10**, sustituida por la
+descripción de cuál es ahora su superficie.
+
+No basta con decir que se quitó, así que se midió en las dos direcciones:
+
+- **Ahora:** la guardia `superficie-de-uso` **no la lista** como huérfana (la acción es alcanzable
+  desde `UsuariosModule` → `configuracion/page.tsx`) y **tampoco** se queja de anotación caducada.
+  El único elemento de esa lista sigue siendo el rojo ajeno de la 275.
+- **Mutación F9:** volver a poner la anotación con la pantalla ya cableada pone **roja** la guardia
+  por el otro extremo — «ninguna anotación `@sin-superficie` de acción sobrevive a su motivo».
+  Es decir: la excepción ya no se puede quedar ahí por olvido, y está demostrado, no supuesto.
+
+---
+
+## §F4 — Mapa `R<n> → test` de esta parte
+
+| R | Test |
+| --- | --- |
+| **R19** (en pantalla) | `usuarios-restablecer` › «muestra el claro en el panel y dice cuantas sesiones cerro (R19/R28)» + «el numero se dice tal cual llega, tambien en 1 y en 0 (R19)» |
+| **R24** (mitad de cliente) | `contrasena-generada-panel` › «tras pintar y copiar, `localStorage`, `sessionStorage` y la cookie siguen vacios» + «el CODIGO del componente no nombra ningun almacen persistente» · `usuarios-restablecer` › «no guarda el claro en ningun almacen del navegador» |
+| **R25** | `usuarios-columns` › «la fila ofrece «Restablecer contraseña»…» + «no hay ningún campo donde escribir una contraseña en la fila» · `usuarios-restablecer` › «cada fila del listado ofrece la accion del maestro» + «la confirmacion no tiene ningun campo» + «el panel del resultado tiene UN campo y es de solo lectura» · `contrasena-generada-panel` › «escribir en el campo no cambia su valor» |
+| **R26** | `usuarios-restablecer` › «el boton de la fila NO ejecuta…» + «la confirmacion NOMBRA al usuario y advierte de las DOS consecuencias» + «la advertencia esta ASOCIADA al dialogo» + «al confirmar llama a la accion UNA sola vez y SOLO con el id de la fila» |
+| **R27** | `usuarios-restablecer` › «Cancelar cierra sin ejecutar nada» + «Escape tambien cancela sin ejecutar nada» |
+| **R28** | `contrasena-generada-panel` › «pinta el valor, el encabezado y el aviso…» + «copia al portapapeles el valor EXACTO y lo confirma en pantalla» · `usuarios-restablecer` › «muestra el claro en el panel…» |
+| **R29** | `usuarios-restablecer` › «en NINGUN momento del flujo existe un control de «volver a mostrarla»» + «cerrar con Escape tambien descarta el claro» + «al cerrar desaparece del DOM y NO queda ningun control nuevo que la reponga» · `contrasena-generada-panel` › «el unico control del panel es copiar» + «el componente no conoce al usuario ni importa ninguna Server Action» |
+| **R30** | `usuarios-restablecer` › «`%s` -> toast con su mensaje y sin panel» (5 ramas de error) + «`self_reset_forbidden` NO se confunde con `forbidden`» |
+| **R31** | `usuarios-restablecer` › «el modal de Crear usuario no ofrece la accion» + «el modal de Editar usuario tampoco» + «el CODIGO del formulario no conoce la accion» |
+
+Con esto, la tabla «**NO cubiertos**» de la §4 de la bitácora del backend queda **cerrada entera**.
+
+---
+
+## §F5 — Mutaciones: **14/14 muertas**, y una que sobrevivió primero
+
+Arnés en `scratchpad/f287_front_mutar.mjs`. **Con autocomprobación**, por el motivo que esta misma
+ficha ya documentó: la primera corrida del backend usaba `--reporter=basic` —que no existe en
+vitest 4— y sus 22 mutaciones habrían salido «supervivientes» sin ejecutar un test. Aquí, por cada
+mutación: (1) el ancla debe aparecer **exactamente una vez** o es `ERROR`, no «superviviente»;
+(2) el archivo debe **cambiar en disco**; (3) vitest debe reportar su línea `Tests …` o es `ERROR`;
+(4) al restaurar, el archivo vuelve **byte a byte** al original o el arnés **aborta**.
+
+Y el veredicto **no** es «hubo un rojo», sino «**hubo más rojos que en la línea base**»: la base ya
+trae el rojo ajeno de la 275, y comparar contra cero habría dado por muerta cualquier cosa.
+Línea base medida por el propio arnés: `1 failed | 77 passed (78)`.
+
+| # | Mutación | Qué la mató |
+| --- | --- | --- |
+| F1 | el botón de la fila EJECUTA sin confirmar | «el boton de la fila NO ejecuta…» (R26/R27) y 20 más |
+| F2 | Cancelar ejecuta igualmente | «Cancelar cierra sin ejecutar nada» (R27) |
+| F3 | el panel se abre TAMBIÉN cuando la acción falla | las 5 ramas de «toast … y sin panel» (R30) |
+| F4 | el nº de sesiones se inventa (`0` fijo) | los dos casos de R19 |
+| F5 | salir por Escape/overlay deja de descartar el claro | «cerrar con Escape tambien descarta el claro» (R29) |
+| F5b | aparece un control de «Ver contraseña de nuevo» | «en NINGUN momento del flujo existe un control de «volver a mostrarla»» (R29) |
+| F6 | el panel guarda el claro en `localStorage` | los 3 detectores de R24 (dos en ejecución, uno estático) |
+| F7 | el campo deja de ser de solo lectura | los dos de R25 |
+| F8 | la confirmación deja de NOMBRAR al usuario | «…NOMBRA al usuario…» + «…ASOCIADA al dialogo» (R26) |
+| F9 | la anotación `@sin-superficie` sobrevive al cableado | `superficie-de-uso` › «ninguna anotación … sobrevive a su motivo» |
+| F10 | la llamada crece un objeto de entrada | «…UNA sola vez y SOLO con el id de la fila» (R6/R10 en cliente) |
+| F11 | el panel deja de avisar de que no se volverá a mostrar | los dos de R28 |
+| F12 | `self_reset_forbidden` colapsa en el mensaje genérico | los dos de R5 |
+| F13 | la fila deja de ofrecer la acción | 24 tests: la superficie entera |
+
+### El agujero real que encontró F5
+
+**F5 sobrevivió en la primera corrida.** Anular el `onOpenChange` del panel no rompía nada, porque
+el estado también se limpiaba desde `onConfirm`: el botón «Cerrar» tapaba el agujero. La
+consecuencia práctica era concreta y no teórica: **nada afirmaba que salir por Escape o por el
+overlay descartara el claro**, que son dos puertas de salida tan reales como el botón.
+
+Arreglado con dos tests nuevos, no con uno: «cerrar con Escape tambien descarta el claro» (que es
+la puerta que faltaba) y «en NINGUN momento del flujo existe un control de «volver a mostrarla»»
+(que vigila la otra forma de infringir R29: no que el claro sobreviva, sino que alguien ponga un
+control para reponerlo). Se añadió además la mutación **F5b** para probar que el segundo test
+también mata, con su detector autocomprobado contra nombres que sí infringen y uno que no.
+
+---
+
+## §F6 — Gate
+
+`./init.sh` **completo** (no `--rapido`: la ficha toca `lib/types/usuario.ts` y el modo rápido se
+niega). `INIT_EXIT` capturado **dentro** del log, no por un `echo` posterior.
+
+| | Antes (`3e0718cd`, sin tocar nada) | Después | Delta |
+| --- | --- | --- | --- |
+| Test files fallando | 2 | 2 | **0** |
+| Tests fallando | 4 | 4 | **0** |
+| Tests pasando | 18 776 | 18 812 | **+36** |
+| Test files totales | 1 416 | 1 418 | +2 |
+| `INIT_EXIT` | 1 | 1 | = |
+
+**Fallos nuevos introducidos por este trabajo: 0.** `typecheck` y `lint` en verde en las dos
+corridas. Los 4 rojos son **los mismos cuatro**, y ninguno es de esta tanda:
+
+1. **`superficie-de-uso.guardia.test.ts`** → `[ "lib/actions/tarifas.ts:67 obtenerTarifa" ]`. Es el
+   rojo ajeno de la ficha 275. **Un solo elemento antes y un solo elemento después**, y ése importa:
+   si retirar la anotación hubiera dejado la acción sin superficie, `restablecerContrasenaUsuario`
+   habría entrado en esa misma lista. No entró.
+2. **`analytics-daily-migration.test.ts`** (3 tests) → `PrismaConfigEnvError: Cannot resolve
+   environment variable: DATABASE_URL`. Es **del entorno, no del código**: este worktree no tiene
+   `.env` y ese guardia deriva DDL con `prisma migrate diff`. Aparece **idéntico en las dos
+   corridas**, antes y después de tocar nada. Por la misma razón, esta corrida tiene **545 tests
+   saltados** (los de `tests/integration/db/**`) frente a los 26 de la corrida del backend, que sí
+   tenía base: **el T11 del backend no se re-verificó aquí**, ya estaba verde en su tanda.
+
+---
+
+## §F7 — Lo que queda abierto de esta parte
+
+1. **Maqueta duplicada (RS5 / pregunta abierta 4).** `ContrasenaGeneradaPanel.tsx` calca el panel
+   que vive dentro de `UsuarioForm.tsx`. Es deuda **consciente**: `UsuarioForm.tsx` es de la ficha
+   286 y no se podía tocar. Cuando la 286 aterrice, unificar los dos es una ficha de seguimiento.
+   El motivo y el puntero están escritos en la cabecera del archivo nuevo, no solo aquí.
+2. **Pregunta abierta 5 (texto de la confirmación) sigue sin aprobación explícita**; se implementó
+   la redacción propuesta por el spec (§F2).
+3. **`AGENTS.md`/CHECKPOINTS: no hay E2E.** Todo lo de arriba es jsdom. Que el modal se vea bien en
+   un navegador de verdad no lo prueba ningún test de este repo; si se quiere, es «ver la app».
+4. **Lo que la bitácora del backend dejó abierto sigue abierto** y no lo cierra esta parte: T0 (la
+   285 no está en `dev`), T14 (medir `Session` en producción) y las preguntas 1–3.
+
+## Veredicto (frontend)
+
+**T9 y T10 implementadas y verificadas: R25–R31 + la mitad de cliente de R24 + R19 en pantalla,
+14/14 mutaciones muertas —una sobrevivió y destapó que nada afirmaba el cierre por Escape—,
+`@sin-superficie` retirada y demostrado que su vuelta pone roja la guardia, y 0 fallos nuevos en
+el gate completo (4 → 4: 1 ajeno de la 275 y 3 de entorno por falta de `.env`).**
