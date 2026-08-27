@@ -15,12 +15,15 @@ import { ordenesConfig } from "@/lib/config/ordenes";
 // el `where`: si el schema lanza, no hay consulta.
 
 describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
-  it("R30: la whitelist son exactamente estas claves (9 de la 144 + `reasignables`, `q` y `mensajero_id`)", () => {
+  it("R30: la whitelist son exactamente estas claves (9 de la 144 + 4 ampliaciones)", () => {
     // Este caso es un CENSO: enumera la whitelist entera para que ampliarla sea una
     // decision explicita y no un descuido. La feature 169 la amplio en UNA clave (`q`, el
     // termino de busqueda, su R1/R19) y por eso se actualiza aqui; el pedido humano del
     // 2026-08-25 la amplia en OTRA, `mensajero_id` (filtro por mensajero asignado). El
-    // resto del archivo —incluido "una clave desconocida sigue fallando"— no cambia.
+    // resto del archivo —incluido "una clave desconocida sigue fallando"— no cambia. El pedido
+    // humano del 2026-08-27 la amplia en la CUARTA y ultima hasta hoy, `eliminados`, que es la
+    // unica del conjunto que no acota el listado sino que le SUSTITUYE el universo (las borradas
+    // en vez de las vivas) y la unica que ademas se autoriza por rol en el servicio.
     expect([...ORDEN_FILTER_FIELDS]).toEqual([
       "status_id",
       "zona_id",
@@ -34,7 +37,16 @@ describe("ordenFilterSchema — whitelist ampliada (R30/R31)", () => {
       "created_hasta",
       "reasignables",
       "q",
+      "eliminados",
     ]);
+  });
+
+  it("`eliminados` solo admite `true`, igual que `reasignables`", () => {
+    expect(
+      listarOrdenesSchema.parse({ filter: { eliminados: true } }).filter,
+    ).toEqual({ eliminados: true });
+    // `false` seria una tercera forma de decir "sin filtro" y se rechaza (falla cerrado).
+    expect(() => listarOrdenesSchema.parse({ filter: { eliminados: false } })).toThrow();
   });
 
   it("`reasignables` solo admite `true`: 'sin filtro' se expresa OMITIENDO la clave", () => {

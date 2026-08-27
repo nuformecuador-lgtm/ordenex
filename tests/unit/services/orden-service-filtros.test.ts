@@ -295,3 +295,46 @@ describe("filtro por MENSAJERO (pedido humano 2026-08-25)", () => {
     expect(where.mensajeroAsignadoId).toEqual(["m1"]);
   });
 });
+
+// ---------------------------------------------------------------------------------------
+// Pedido humano (2026-08-27) — el interruptor ELIMINADAS: la unica clave del `filter` que no
+// ACOTA el listado sino que le SUSTITUYE el universo, y la unica que ademas se AUTORIZA por rol.
+// ---------------------------------------------------------------------------------------
+describe("filtro ELIMINADAS", () => {
+  const ADMIN: Actor = { usuarioId: "a1", rol: "admin" };
+
+  it("el maestro lo pide y viaja al repo como `soloEliminados`", async () => {
+    const where = await whereDe({ eliminados: true });
+    expect(where.soloEliminados).toBe(true);
+  });
+
+  it("ausente, la clave NO se escribe (el listado es el de siempre)", async () => {
+    const where = await whereDe({ zona_id: ["z1"] });
+    expect(where.soloEliminados).toBeUndefined();
+  });
+
+  it("convive con el resto de filtros como clave hermana (AND), sin pisarlos", async () => {
+    const where = await whereDe({ eliminados: true, zona_id: ["z1"] });
+    expect(where).toEqual({ soloEliminados: true, zonaId: ["z1"] });
+  });
+
+  it.each([
+    ["admin", ADMIN],
+    ["adminTienda", TIENDA],
+    ["mensajero", MENSAJERO],
+  ])("%s -> forbidden, y NI SIQUIERA se consulta", async (_n, actor) => {
+    // Se RECHAZA, no se ignora: devolver el listado de las vivas con el interruptor puesto
+    // haria concluir a quien lo pidiera que no hay ninguna orden eliminada.
+    const { repo, list } = buildRepo();
+    const service = new OrdenService(repo, fakeIntentosEnLote(), () => AHORA);
+
+    const r = await service.listar(input({ eliminados: true }), actor);
+
+    expect(r).toEqual({ status: "forbidden" });
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("el borde RECHAZA `eliminados: false` (no filtrar se expresa OMITIENDO la clave)", () => {
+    expect(() => input({ eliminados: false })).toThrow();
+  });
+});

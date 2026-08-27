@@ -292,6 +292,11 @@ describe("R13 — `/ordenes` ofrece la corrección en los tres estados del día 
     // Acompañada de una `por_recoger` a propósito: la columna de casillas sólo se monta si
     // ALGUNA fila de la página tiene acción por lote. Sin la acompañante, la ausencia de abajo
     // sería la de la columna entera y este caso pasaría en verde sin comprobar nada.
+    //
+    // IDA Y VUELTA (léase entera): la feature «eliminar orden» (2026-08-26) reexpresó este caso
+    // porque entonces "Eliminar" se ofrecía en CUALQUIER estado y la fila sí ganaba casilla. El
+    // pedido humano del 2026-08-27 acotó el borrado a las órdenes SIN GESTIÓN —una `entregada`
+    // no lo está—, así que la fila vuelve a no llevar a ningún botón y vuelve a bloquearse.
     renderOrdenes([
       makeOrden({ id: "o5", estatusId: "est-entregada", estatusValue: "entregada" }),
       makeOrden({ id: "o5b" }),

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 
 import {
+  BOOLEAN_MARCADO,
   FilterComponent,
   type FilterDef,
   type FilterSelection,
@@ -38,6 +39,8 @@ import { EtiquetasGuiaModal } from "./EtiquetasGuiaModal";
 import { DevolverATiendaModal } from "./DevolverATiendaModal";
 import { RecuperarABodegaModal } from "./RecuperarABodegaModal";
 import { DeshacerAsignacionModal } from "./DeshacerAsignacionModal";
+import { EliminarOrdenModal } from "./EliminarOrdenModal";
+import { RecuperarOrdenModal } from "./RecuperarOrdenModal";
 import {
   CAMBIAR_DIA_ACCION,
   CambiarDiaRepartoModal,
@@ -46,6 +49,7 @@ import {
   construirFiltrosOrdenes,
   CATALOGO_FILTROS_VACIO,
   CLAVE_BUSQUEDA,
+  CLAVE_ELIMINADOS,
   CLAVE_ESTADO,
   PLACEHOLDER_BUSQUEDA,
 } from "./ordenes-filtros-def";
@@ -63,6 +67,8 @@ type ModalAbierto =
   | "recuperar-bodega"
   | "deshacer-asignacion"
   | "cambiar-dia-reparto" // feature 262
+  | "eliminar" // feature «eliminar orden»
+  | "recuperar-eliminada" // pedido humano 2026-08-27: la reversión del borrado
   | null;
 
 async function mensajerosFetcher() {
@@ -145,13 +151,16 @@ const MOTIVO_DEVUELTA_NO_CENTRAL =
 // el resto de vistas (otros estados, listado sin filtro) no resalta por prioridad (R10).
 const ESTADO_EN_BODEGA = "en_bodega_central";
 
-// Motivo del bloqueo del checkbox en órdenes cuyo estado no tiene ninguna acción por
-// lote (p. ej. `rechazada`, `entregada`): con una sola tabla para todos los estados,
-// marcarlas no llevaría a ninguna acción, así que se bloquean y se explica por qué.
 /**
  * Estado sin acciones por lote: la fila se bloquea pero SIN aviso visible (pedido humano
- * 2026-08-19). El «!» se reservaba para explicar un impedimento; aquí no hay impedimento
- * que explicar, solo un estado que no participa, y repetirlo en media tabla era ruido.
+ * 2026-08-19). El «!» se reservaba para explicar un impedimento; aquí no hay impedimento que
+ * explicar, solo un estado que no participa, y repetirlo en media tabla era ruido.
+ *
+ * IDA Y VUELTA, y conviene que se lea entera: la feature «eliminar orden» (2026-08-26) RETIRÓ
+ * esta regla, porque entonces "Eliminar" se ofrecía en cualquier estado y ninguna fila llevaba a
+ * una barra vacía. El pedido humano del 2026-08-27 acotó el borrado a las órdenes SIN GESTIÓN, y
+ * con eso la población de filas inertes volvió a existir —una `entregada` no se elimina— así que
+ * la regla vuelve, ahora derivada de las DOS condiciones (ver `bloqueoSeleccion`).
  */
 const MOTIVO_SIN_ACCIONES = BLOQUEO_SIN_AVISO;
 
@@ -195,6 +204,7 @@ export function OrdenesListado({
   incluirFiltroMensajero = true,
   permitirDescarga = true,
   puedeReportarIncidente = false,
+  puedeEliminar = false,
   fechasDiaReparto = SIN_FECHAS_DIA_REPARTO,
 }: Readonly<{
   exclude?: string[];
@@ -262,6 +272,17 @@ export function OrdenesListado({
    * reporte. Es una acción por ORDEN, no por lote: no entra en `accionesDe`.
    */
   puedeReportarIncidente?: boolean;
+  /**
+   * Pedido humano (2026-08-27): ofrece ELIMINAR órdenes y RECUPERAR las eliminadas, más el
+   * interruptor «Eliminadas» de la barra que es la única forma de listarlas.
+   *
+   * SOLO el `maestro`, y por eso es una prop propia y no `accionesLote` (que es maestro Y
+   * admin): borrar retira la orden de los listados de la tienda dueña y del mensajero asignado,
+   * y recuperarla solo se puede desde esta misma pantalla. El servidor revalida el rol en las
+   * dos acciones Y en el listado —pedir «Eliminadas» sin ser maestro es `forbidden`, no una
+   * lista vacía—, así que esta prop decide qué se OFRECE, nunca qué se permite.
+   */
+  puedeEliminar?: boolean;
   /**
    * Feature 246 (T4.2, R29): fechas calendario de «hoy» y «mañana» que la PÁGINA resolvió en el
    * servidor con el día de Costa Rica. Sólo se transportan: hasta `AsignarBodegaModal` (elegir
@@ -372,6 +393,24 @@ export function OrdenesListado({
     setModalAbierto("cambiar-dia-reparto");
   }
 
+  // Feature «eliminar orden»: retirar del sistema un registro creado por error. NO se filtra
+  // el snapshot por estado ni por zona —a diferencia de `abrirRecuperar` / `abrirRutearSatelite`,
+  // cuyas acciones sí tienen un estado de origen—: una orden se elimina esté donde esté. El
+  // servidor revalida el ROL (maestro/admin), que es la única guardia real.
+  function abrirEliminar(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("eliminar");
+  }
+
+  // Pedido humano (2026-08-27): devolver al sistema una orden borrada. Solo se ofrece con el
+  // interruptor «Eliminadas» puesto, y entonces TODAS las filas de la tabla están borradas: no
+  // hay snapshot que filtrar. El servidor revalida el rol y que cada orden esté efectivamente
+  // borrada (defensa en profundidad).
+  function abrirRecuperarEliminada(seleccionadas: OrdenListItemDTO[]) {
+    setOrdenesSeleccionadas(seleccionadas);
+    setModalAbierto("recuperar-eliminada");
+  }
+
   // Señal de "desmarca todo" para la tabla: la selección vive en `OrdenesModule`, pero
   // quien sabe que una acción por lote se llevó a cabo es esta superficie. Se incrementa
   // junto con la revalidación —el mismo momento— y la tabla limpia sus casillas.
@@ -449,6 +488,34 @@ export function OrdenesListado({
     label: CAMBIAR_DIA_ACCION,
     variant: "outline",
     onRun: abrirCambiarDia,
+  };
+
+  /**
+   * Feature «eliminar orden» — la ÚNICA acción por lote que no cuelga de `accionesDe`, y no es
+   * un descuido: no tiene estado de origen. Una orden creada por error puede estar en cualquier
+   * punto del flujo, así que condicionarla al estado dejaría fuera justo los casos que motivan
+   * la ficha. Se añade en `accionesPara`, sobre la selección ENTERA.
+   *
+   * Secundaria (`variant: "outline"`) a propósito: nunca debe ser el botón que se pulsa por
+   * inercia. La confirmación destructiva vive en el modal.
+   */
+  const accionEliminar: AccionLote = {
+    key: "eliminar",
+    label: "Eliminar",
+    variant: "outline",
+    onRun: abrirEliminar,
+  };
+
+  /**
+   * Pedido humano (2026-08-27) — "Recuperar", la ÚNICA acción del listado de eliminadas. No
+   * cuelga de `accionesDe` por la misma razón que su gemela: no tiene estado de origen, y sobre
+   * una orden borrada NINGUNA de las acciones del flujo tiene sentido (la orden no está en los
+   * listados de nadie). Con el interruptor puesto, ésta es la barra entera.
+   */
+  const accionRecuperar: AccionLote = {
+    key: "recuperar-eliminada",
+    label: "Recuperar",
+    onRun: abrirRecuperarEliminada,
   };
 
   function accionesDe(estatusValue: string | undefined): AccionLote[] {
@@ -626,6 +693,16 @@ export function OrdenesListado({
   // `filter` del backend), así que sale de la selección agregada.
   const estadosMarcados = seleccionFiltros[CLAVE_ESTADO] ?? [];
 
+  /**
+   * Pedido humano (2026-08-27) — ¿está puesto el interruptor «Eliminadas»? Se lee de la MISMA
+   * selección que se traduce al `filter`, no de un estado paralelo: así la barra de acciones y
+   * lo que la tabla está pidiendo al servidor no pueden desincronizarse ni por un render.
+   *
+   * Es lo que decide qué ofrece la barra (recuperar, y nada más) y que ninguna fila se bloquee.
+   */
+  const verEliminadas =
+    (seleccionFiltros[CLAVE_ELIMINADOS] ?? [])[0] === BOOLEAN_MARCADO;
+
   const opciones = useMemo(
     () =>
       estadosDisponibles.map((s) => ({ value: s.id, label: labelDe(s.value) })),
@@ -642,6 +719,10 @@ export function OrdenesListado({
         incluirTienda: incluirFiltroTienda,
         incluirReasignables: incluirFiltroReasignables,
         incluirMensajero: incluirFiltroMensajero,
+        // Pedido humano (2026-08-27): el interruptor de las eliminadas se declara al MISMO rol
+        // que puede eliminarlas y recuperarlas. A los demás ni se les ofrece —y si lo pidieran a
+        // mano, el servidor responde `forbidden`.
+        incluirEliminados: puedeEliminar,
       },
     );
     // El BUSCADOR ya no es un control más del panel: lo posee `BuscadorFiltros`, que
@@ -673,6 +754,7 @@ export function OrdenesListado({
     incluirFiltroTienda,
     incluirFiltroReasignables,
     incluirFiltroMensajero,
+    puedeEliminar,
     opciones,
   ]);
 
@@ -719,27 +801,50 @@ export function OrdenesListado({
   }
 
   /**
-   * ¿Se monta la columna de checkbox? Solo si alguna orden de la página está en un
-   * estado con acción por lote. Filtrado a estados de solo lectura (p. ej. `rechazada`)
-   * la tabla queda limpia, sin una columna de casillas inertes.
+   * ¿Se monta la columna de checkbox? Solo si alguna orden de la página lleva a algún botón.
+   * Filtrado a estados de solo lectura y ya gestionados (p. ej. `rechazada`) la tabla queda
+   * limpia, sin una columna de casillas inertes.
    */
   function haySeleccionables(items: OrdenListItemDTO[]): boolean {
-    return items.some((row) => accionesDe(row.estatusValue).length > 0);
+    // Pedido humano (2026-08-27): vuelve a haber estados inertes, así que vuelve la pregunta —
+    // pero ahora con tres respuestas posibles, no una.
+    //   - listado de ELIMINADAS: siempre, la única acción de esa vista es recuperar;
+    //   - alguna fila con acción por su estado: como siempre;
+    //   - alguna fila todavía sin gestionar y el rol que puede borrar: "Eliminar" las alcanza.
+    // Si no se cumple ninguna, la columna no se monta: casillas que no llevan a ningún botón.
+    if (verEliminadas) return items.length > 0;
+    if (items.some((row) => accionesDe(row.estatusValue).length > 0)) return true;
+    return puedeEliminar && items.some((row) => row.sinGestion === true);
   }
 
   /**
    * Bloqueo del checkbox POR FILA (reglas que conviven, ahora derivadas del estado de
    * la ORDEN y no de una tab activa):
-   * - estado sin acciones por lote: no hay a dónde llevar la selección (la columna
-   *   existe porque otras filas de la página sí la tienen).
+   * - estado sin acciones por lote Y no eliminable: no hay a dónde llevar la selección (la
+   *   columna existe porque otras filas de la página sí la tienen).
    * - `devuelta`: solo las de la bodega central (las satélite las recupera el adminSatelite).
+   * La primera regla se retiró el 2026-08-26 y volvió el 2026-08-27, ahora con las DOS
+   * condiciones; la historia completa está en `MOTIVO_SIN_ACCIONES`, arriba.
    * Pedido humano 2026-08-18: SE RETIRÓ la tercera regla, que bloqueaba los estados de
    * asignación cuando la ZONA de la orden tenía ≥1 mensajero con cierre abierto. El servidor
    * ya no rechaza esa asignación, así que el checkbox tampoco la impide.
    */
   function bloqueoSeleccion(row: OrdenListItemDTO): string | null {
+    // Pedido humano (2026-08-27): en el listado de ELIMINADAS no se bloquea ninguna fila. Las
+    // reglas de abajo hablan de quién ejecuta una transición del flujo; recuperar no lo es, y el
+    // bloqueo de `devuelta` no-central dejaría irrecuperables justo esas órdenes.
+    if (verEliminadas) return null;
     const value = row.estatusValue;
-    if (accionesDe(value).length === 0) return MOTIVO_SIN_ACCIONES;
+    // Fila que no lleva a NINGÚN botón: ni su estado ofrece acción por lote, ni se puede
+    // eliminar. Marcarla dejaría la barra vacía. Las dos condiciones se preguntan juntas
+    // —y no solo la primera, como antes del 2026-08-26— porque hoy "Eliminar" es una acción
+    // más que puede ser la única de la fila.
+    if (
+      accionesDe(value).length === 0 &&
+      !(puedeEliminar && row.sinGestion === true)
+    ) {
+      return MOTIVO_SIN_ACCIONES;
+    }
     if (value === ESTADO_DEVUELTA) {
       return row.zonaEsGam === true ? null : MOTIVO_DEVUELTA_NO_CENTRAL;
     }
@@ -764,6 +869,13 @@ export function OrdenesListado({
   function accionesPara(seleccionadas: OrdenListItemDTO[]): AccionLote[] {
     if (seleccionadas.length === 0) return [];
 
+    // Pedido humano (2026-08-27): con «Eliminadas» puesto, la tabla trae EXCLUSIVAMENTE órdenes
+    // borradas y la barra ofrece UNA sola cosa. Se sale antes de recorrer `accionesDe` a
+    // propósito: una orden borrada no está en el listado de nadie, así que ofrecer sobre ella
+    // "generar guía" o "asignar mensajero" sería ofrecer transiciones que el servidor rechaza —y
+    // que, de aceptarlas, moverían una orden que oficialmente no existe.
+    if (verEliminadas) return [accionRecuperar];
+
     const porKey = new Map<
       string,
       { accion: AccionLote; ordenes: OrdenListItemDTO[] }
@@ -776,7 +888,7 @@ export function OrdenesListado({
       }
     }
 
-    return [...porKey.values()].map(({ accion, ordenes }) => {
+    const porEstado = [...porKey.values()].map(({ accion, ordenes }) => {
       const parcial = ordenes.length < seleccionadas.length;
       return {
         ...accion,
@@ -786,6 +898,32 @@ export function OrdenesListado({
         onRun: () => accion.onRun(ordenes),
       };
     });
+
+    // "Eliminar" va SIEMPRE la ÚLTIMA, y al final de la barra por la misma razón por la que es
+    // secundaria: es la acción que no se debe pulsar por inercia.
+    //
+    // Pedido humano (2026-08-27): SOLO sobre las órdenes que nadie ha gestionado desde que se
+    // crearon (`sinGestion`, que resuelve el servidor con el MISMO predicado que autoriza el
+    // borrado). Si ninguna de las marcadas lo está, el botón NO APARECE — que es literalmente lo
+    // pedido, "solo visible si no se ha realizado ninguna gestión". Se exige `=== true`: un DTO
+    // sin el campo (rol que no lo recibe, fixture antiguo) no habilita nada.
+    const elegiblesEliminar = puedeEliminar
+      ? seleccionadas.filter((o) => o.sinGestion === true)
+      : [];
+    if (elegiblesEliminar.length === 0) return porEstado;
+    // Con conteo cuando no alcanza a toda la selección, igual que las acciones por estado: sin
+    // él, marcar 10 y pulsar "Eliminar" borraría 3 sin decir cuáles.
+    const parcial = elegiblesEliminar.length < seleccionadas.length;
+    return [
+      ...porEstado,
+      {
+        ...accionEliminar,
+        label: parcial
+          ? `${accionEliminar.label} (${elegiblesEliminar.length})`
+          : accionEliminar.label,
+        onRun: () => accionEliminar.onRun(elegiblesEliminar),
+      },
+    ];
   }
 
   // La carga masiva y los escáneres viven a nivel del contenedor (no dependen del
@@ -984,6 +1122,24 @@ export function OrdenesListado({
             open={modalAbierto === "cambiar-dia-reparto"}
             ordenes={ordenesSeleccionadas}
             fechasDiaReparto={fechasDiaReparto}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Feature «eliminar orden»: éxito ⇒ `handleSuccess` cierra y revalida las tablas, de
+              modo que las órdenes eliminadas desaparecen del listado (todas las lecturas
+              filtran `deleted_at IS NULL`). */}
+          <EliminarOrdenModal
+            open={modalAbierto === "eliminar"}
+            ordenes={ordenesSeleccionadas}
+            onOpenChange={cerrarModal}
+            onSuccess={handleSuccess}
+          />
+          {/* Pedido humano (2026-08-27): la reversión. Éxito ⇒ `handleSuccess` revalida, y la
+              orden recuperada desaparece de ESTE listado (que solo muestra borradas) y reaparece
+              en el normal, con el estado y el historial que tenía. */}
+          <RecuperarOrdenModal
+            open={modalAbierto === "recuperar-eliminada"}
+            ordenes={ordenesSeleccionadas}
             onOpenChange={cerrarModal}
             onSuccess={handleSuccess}
           />
