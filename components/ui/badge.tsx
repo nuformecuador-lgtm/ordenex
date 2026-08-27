@@ -43,6 +43,25 @@ const badgeVariants = cva(
         warning: "bg-warning-soft text-warning-strong dark:bg-warning/15",
         info: "bg-info-soft text-info-strong dark:bg-info/15",
         danger: "bg-danger-soft text-danger-strong dark:bg-danger/15",
+        // Feature 292 — los cuatro pares de `--chart-*`, con la MISMA forma que los semánticos
+        // de arriba: `-soft` de fondo en claro, `-strong` de texto, y en oscuro el fondo se
+        // compone del acento al 15 % porque ahí no hay `-soft`.
+        //
+        // POR QUÉ EXISTEN, y por qué se llaman así. Hay pantallas que ya pintan una serie de
+        // categorías con `--chart-N` —un segmento de barra, un punto de leyenda— y necesitan un
+        // chip DEL MISMO COLOR al lado. Sin par no se puede: un `--chart-N` es un color plano y
+        // usarlo como texto sobre sí mismo al 10 % es exactamente el 3.29:1 que la 210 arregló.
+        // El nombre es el del token para que el chip y su serie se lean como lo mismo; nombrarlas
+        // por su significado («devueltas», «en reparto») metería el dominio de una pantalla dentro
+        // de una primitiva, que es justo lo que no puede pasar aquí.
+        //
+        // Los cuatro pares cumplen AA para texto normal en los DOS temas (5.98 / 6.38 / 9.45 /
+        // 8.49 en claro; 6.91 / 7.02 / 8.45 / 6.48 en oscuro) y los ata, token a token,
+        // `tests/unit/guards/contraste-tokens.guardia.test.ts`.
+        chart6: "bg-chart-6-soft text-chart-6-strong dark:bg-chart-6/15",
+        chart11: "bg-chart-11-soft text-chart-11-strong dark:bg-chart-11/15",
+        chart12: "bg-chart-12-soft text-chart-12-strong dark:bg-chart-12/15",
+        chart13: "bg-chart-13-soft text-chart-13-strong dark:bg-chart-13/15",
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:

@@ -65,6 +65,15 @@ const SUELO: Record<string, number> = {
   "oscuro:warning": 7.59,
   "oscuro:danger": 5.2,
   "oscuro:info": 6.97,
+  // Feature 292 — los cuatro pares de `--chart-*`, medidos al crearlos.
+  "claro:chart-6": 5.98,
+  "claro:chart-11": 6.38,
+  "claro:chart-12": 9.45,
+  "claro:chart-13": 8.49,
+  "oscuro:chart-6": 6.91,
+  "oscuro:chart-11": 7.02,
+  "oscuro:chart-12": 8.45,
+  "oscuro:chart-13": 6.48,
 };
 
 /** Tolerancia del suelo: absorbe el redondeo a dos decimales, nada más. */
@@ -159,6 +168,91 @@ describe("Feature 210 — contraste de los tokens semánticos (guardia)", () => 
     );
     expect(claro).toBeGreaterThanOrEqual(AA_TEXTO);
     expect(oscuro).toBeGreaterThanOrEqual(AA_TEXTO);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// Feature 292 — los cuatro pares de `--chart-*`
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Feature 292 — LOS PARES QUE NACEN DE UN COLOR PLANO.
+ *
+ * Cuatro contadores del tablero del día se pintan en la barra apilada con un `--chart-*`, y su
+ * tarjeta iba de otro color: la barra no se podía leer desde las tarjetas. Para que la tarjeta
+ * tome el color de SU segmento, esos cuatro `--chart-*` —que eran colores PLANOS— estrenan el par
+ * `-soft`/`-strong` que una variante de `Badge` necesita.
+ *
+ * ── POR QUÉ NO ENTRAN EN EL `it.each` DE ARRIBA, aunque midan lo mismo
+ * En tema oscuro, el fondo del `Badge` es `<base>/15` compuesto sobre la tarjeta, y ahí está la
+ * diferencia: la base de los semánticos (`--color-success`) es un hex FIJO —vive en `@theme
+ * inline` y no gira—, mientras que un `--chart-N` SÍ gira con el tema (`#8b5cf6` claro,
+ * `#a78bfa` oscuro). Medir estos cuatro con `paleta()` sería medir el violeta claro sobre el
+ * fondo oscuro: números plausibles del par equivocado. Se leen con `token(tema, …)`, que es lo
+ * que respeta esa vuelta.
+ *
+ * El par es AA por decisión, no por suerte: donde el propio color del segmento no llegaba sobre
+ * su `-soft` —`chart-6` daba 3.57 y `chart-12` 4.34— la tinta baja dos escalones de LA MISMA
+ * rampa en vez de estrenar un tono nuevo.
+ */
+describe("Feature 292 — contraste de los cuatro pares de `--chart-*` (guardia)", () => {
+  const PARES_CHART = ["chart-6", "chart-11", "chart-12", "chart-13"] as const;
+  const ALPHA_SOFT_BADGE_OSCURO = 0.15;
+
+  it.each(PARES_CHART)(
+    "tema claro: --%s-strong sobre --color-%s-soft cumple AA para texto",
+    (familia) => {
+      const medido = contraste(token("claro", `${familia}-strong`), paleta(`${familia}-soft`));
+      expect(medido).toBeGreaterThanOrEqual(AA_TEXTO);
+      expect(medido).toBeGreaterThanOrEqual(SUELO[`claro:${familia}`] - EPSILON);
+    },
+  );
+
+  it.each(PARES_CHART)(
+    "tema oscuro: --%s-strong sobre %s/15 compuesto en la tarjeta cumple AA para texto",
+    (familia) => {
+      // La base GIRA con el tema: se lee con `token`, no con `paleta` (ver la cabecera).
+      const base = token("oscuro", familia);
+      const medido = contraste(
+        token("oscuro", `${familia}-strong`),
+        componer(base, token("oscuro", "card"), ALPHA_SOFT_BADGE_OSCURO),
+      );
+      expect(medido).toBeGreaterThanOrEqual(AA_TEXTO);
+      expect(medido).toBeGreaterThanOrEqual(SUELO[`oscuro:${familia}`] - EPSILON);
+    },
+  );
+
+  /**
+   * La mitad que hace que lo de arriba signifique algo: que sea el `Badge` quien use ESE par.
+   * Cuatro tokens con un contraste impecable que nadie monta no arreglan ninguna pantalla, y un
+   * `dark:` que se quedara fuera es el bug de tema oscuro más repetido del repo.
+   */
+  it.each(PARES_CHART)("la variante `%s` del Badge monta el par completo, con su `dark:`", (familia) => {
+    const badge = quitarComentarios(
+      readFileSync(path.join(RAIZ, "components", "ui", "badge.tsx"), "utf8"),
+    );
+    const variante = familia.replace("-", ""); // `chart-6` -> `chart6`
+    const linea = badge.match(new RegExp(`\\b${variante}:\\s*"([^"]*)"`));
+    expect(linea, `la variante \`${variante}\` no existe en el Badge`).not.toBeNull();
+
+    const clases = linea?.[1] ?? "";
+    expect(clases).toContain(`bg-${familia}-soft`);
+    expect(clases).toContain(`text-${familia}-strong`);
+    expect(
+      clases,
+      "sin `dark:bg-<base>/15` la tarjeta se queda con el `-soft` CLARO en tema oscuro: tinta " +
+        "clara sobre fondo clarísimo",
+    ).toContain(`dark:bg-${familia}/15`);
+  });
+
+  it("los cuatro `-soft` existen como token propio y NO son el color plano de su serie", () => {
+    for (const familia of PARES_CHART) {
+      const soft = paleta(`${familia}-soft`);
+      expect(soft).toMatch(/^#[0-9a-f]{6}$/i);
+      // Si el `-soft` fuera el mismo hex que el acento, el par sería el color sobre sí mismo:
+      // exactamente el 3.29:1 de la 210.
+      expect(soft).not.toBe(token("claro", familia));
+    }
   });
 });
 
