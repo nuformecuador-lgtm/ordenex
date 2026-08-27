@@ -3518,7 +3518,7 @@
       "sdd": false,
       "complexity": "baja",
       "branch": "feature/289-abrir-navegacion-en-app-externa",
-      "status_note": "SIN SDD por decision humana el 2026-08-27: el cambio es un modulo puro de URLs + un componente de 3 enlaces, no justifica los tres archivos de spec. Se verifica con tests unitarios y de componente."
+      "status_note": "PR #519 abierto contra dev el 2026-08-27. SIN SDD por decision humana: el cambio es un modulo puro de URLs + un componente de 3 enlaces, no justifica los tres archivos de spec. Se verifica con tests unitarios y de componente."
     }
   ]
 }
