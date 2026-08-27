@@ -2221,6 +2221,12 @@ export class OrdenRepository implements IOrdenRepository {
    *
    * Devuelve los BLOQUEADOS, no los elegibles: se compone en el mismo mapa `noElegibles` del
    * selector que `findMensajerosBloqueadosPorCierres`.
+   *
+   * La firma es `(ids: string[])` porque sirve a DOS usos con el MISMO predicado: los selectores
+   * le pasan la lista entera de la zona, y las escrituras (`GuiaAsignacionService.asignarDesdeBodega`
+   * / `asignarRecoleccion`, `AsignacionSateliteService.asignar`) le pasan UN id para validar. Esa
+   * es la garantia de que la pantalla no ofrezca a quien el servidor va a rechazar. Nunca lee la
+   * tabla entera: siempre acota por `id IN (ids)`.
    */
   async findMensajerosNoAsignablesPorEstado(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();

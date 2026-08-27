@@ -304,6 +304,11 @@ export async function listarMensajerosSatelite(
     const ids = mensajeros.map((m) => m.id);
     // R32 + pedido humano 2026-08-26: los MISMOS predicados que aplica el servidor al escribir.
     // Ninguno se re-deriva aqui.
+    //
+    // NOTA (2026-08-27): `ids` NO es «todos los mensajeros»; es el conjunto que acaba de devolver
+    // `findMensajerosByZona` para la zona del actor, y el repo filtra `id IN (ids) AND estado IN
+    // (...)`. La ida extra a `usuario` para leer `estado` es deliberada y esta explicada en el
+    // gemelo `listarMensajerosParaAsignacion` (`lib/actions/ordenes-guia.ts`).
     const [bloqueados, noAsignables] = await Promise.all([
       repo.findMensajerosBloqueadosPorCierres(ids),
       repo.findMensajerosNoAsignablesPorEstado(ids),

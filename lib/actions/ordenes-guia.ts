@@ -226,6 +226,18 @@ export async function listarMensajerosParaAsignacion(
       repo.findMensajerosBloqueadosPorCierres(ids), // feature 271/R32
       // Pedido humano 2026-08-26: los dados de baja. MISMO predicado que las tres escrituras
       // rechazan (`findMensajerosNoAsignablesPorEstado`), sin re-derivarlo aqui.
+      //
+      // NOTA (2026-08-27, pregunta humana «¿esto consulta todos los mensajeros?»): NO. `ids` ya
+      // esta acotado a los mensajeros de la zona GAM que devolvio `findMensajerosByZona`, y el
+      // repo hace `WHERE id IN (ids) AND estado IN (...)`: viaja solo el subconjunto inasignable.
+      // Lo que SI es redundante es la ida en si: es una SEGUNDA lectura de `usuario` para una
+      // columna (`estado`) que la primera pudo traer —`findMensajerosByZona` selecciona solo
+      // `id, nombre`—. Corre en el `Promise.all`, asi que no suma latencia serial. Se deja asi a
+      // proposito: el metodo del repo lo comparten las escrituras (`GuiaAsignacionService`,
+      // `AsignacionSateliteService`) pasando UN id, y esa es la garantia de que selector y
+      // escritura no discrepen. Optimizarlo = anadir `estado` al select de `findMensajerosByZona`
+      // y derivar el Set en memoria contra `ESTADOS_USUARIO_NO_ASIGNABLES`; cambia la forma de
+      // `MensajeroLiteRow`/`MensajeroLiteDTO`, asi que es una feature con spec, no un retoque.
       repo.findMensajerosNoAsignablesPorEstado(ids),
     ]);
     return {
