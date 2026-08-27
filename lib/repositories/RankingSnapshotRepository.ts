@@ -4,6 +4,8 @@ import type {
   CrearSnapshotInput,
   CrearSnapshotResult,
   IRankingSnapshotRepository,
+  PodioFilaConFecha,
+  PodioFilaRow,
   SnapshotDiaRow,
 } from "@/lib/interfaces/repositories/IRankingSnapshotRepository";
 
@@ -116,6 +118,98 @@ export class RankingSnapshotRepository implements IRankingSnapshotRepository {
         premioMonto: fila.premioMonto === null ? null : fila.premioMonto.toFixed(2),
         premioDescripcion: fila.premioDescripcion,
       })),
+    };
+  }
+
+  /**
+   * Feature 293 (T3.1, R4/R6) — el PODIO congelado de una fecha: las filas con `posicion` no
+   * nula, `ORDER BY posicion ASC`.
+   *
+   * Dos consultas y no una con `include`, a proposito: hace falta distinguir «esa fecha no esta
+   * congelada» (`null`, R6) de «esta congelada y nadie ocupo podio» (`[]`), y un `findMany` sobre
+   * las filas no puede decir la diferencia — las dos darian cero filas y la pantalla mostraria el
+   * texto equivocado.
+   *
+   * `posicion IS NOT NULL` va en el WHERE, no en un `filter` en memoria: el podio es 1-3 filas de
+   * un snapshot que puede tener decenas.
+   *
+   * Money-safe (R35): el `Decimal` del premio sale como STRING de escala 2 EN EL REPO, igual que
+   * en `obtenerPorFecha`. Ningun `Prisma.Decimal` cruza esta capa.
+   */
+  async listarPodioDeFecha(fecha: Date): Promise<PodioFilaRow[] | null> {
+    const cabecera = await this.prisma.rankingSnapshotDia.findUnique({
+      where: { fecha },
+      select: { id: true },
+    });
+    if (cabecera === null) return null; // R6: esa fecha no tiene ranking congelado
+
+    const filas = await this.prisma.rankingSnapshotFila.findMany({
+      where: { snapshotId: cabecera.id, posicion: { not: null } },
+      orderBy: { posicion: "asc" },
+      select: {
+        id: true,
+        posicion: true,
+        mensajeroId: true,
+        mensajeroNombre: true,
+        entregadas: true,
+        asignadas: true,
+        premioMonto: true,
+        premioDescripcion: true,
+      },
+    });
+    return filas.flatMap((f) =>
+      // `posicion` es nullable en el esquema y el `not: null` de arriba ya la excluye; el guardia
+      // esta para que un cambio de filtro no invente una posicion en vez de fallar.
+      f.posicion === null
+        ? []
+        : [
+            {
+              filaId: f.id,
+              posicion: f.posicion,
+              mensajeroId: f.mensajeroId,
+              mensajeroNombre: f.mensajeroNombre,
+              entregadas: f.entregadas,
+              asignadas: f.asignadas,
+              premioMonto: f.premioMonto === null ? null : f.premioMonto.toFixed(2),
+              premioDescripcion: f.premioDescripcion,
+            },
+          ],
+    );
+  }
+
+  /**
+   * Feature 293 (T3.1, R16) — UNA fila del podio por su id, con la fecha de su snapshot.
+   *
+   * `posicion: { not: null }` va en el WHERE y no en un `if` posterior: una fila fuera del podio
+   * no tiene premio que registrar, y que la base no la devuelva es una barrera mas barata y mas
+   * dificil de saltarse que una comprobacion en memoria.
+   */
+  async obtenerFilaDelPodio(filaId: string): Promise<PodioFilaConFecha | null> {
+    const f = await this.prisma.rankingSnapshotFila.findFirst({
+      where: { id: filaId, posicion: { not: null } },
+      select: {
+        id: true,
+        posicion: true,
+        mensajeroId: true,
+        mensajeroNombre: true,
+        entregadas: true,
+        asignadas: true,
+        premioMonto: true,
+        premioDescripcion: true,
+        snapshot: { select: { fecha: true } },
+      },
+    });
+    if (f === null || f.posicion === null) return null;
+    return {
+      filaId: f.id,
+      posicion: f.posicion,
+      mensajeroId: f.mensajeroId,
+      mensajeroNombre: f.mensajeroNombre,
+      entregadas: f.entregadas,
+      asignadas: f.asignadas,
+      premioMonto: f.premioMonto === null ? null : f.premioMonto.toFixed(2),
+      premioDescripcion: f.premioDescripcion,
+      fecha: f.snapshot.fecha,
     };
   }
 }

@@ -41,6 +41,11 @@ export const PAGO_MENSAJERO_MOVIMIENTO_CATEGORIA_SEED = [
   // ajustes manuales (inmutables, correccion compensatoria R3)
   "ajuste_devengo",
   "ajuste_pago",
+  // Feature 293 (T1.5, design §3.1, R14): el PREMIO DEL PODIO del ranking, imputado al cierre
+  // del dia del podio. Categoria PROPIA —no `ajuste_devengo`— porque el humano pidio ver QUE
+  // PARTE de la cuenta por pagar es premio (decision (d)), y eso no se responde mezclandolo con
+  // los contraasientos de la anulacion de liquidaciones.
+  "premio_ranking",
 ] as const satisfies readonly PrismaPagoMensajeroMovimientoCategoria[];
 
 export type PagoMensajeroMovimientoCategoria =

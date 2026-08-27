@@ -564,9 +564,23 @@ describe("R32/R35/R63 — el saldo de la tienda y el pendiente del mensajero no 
     });
     // El pendiente de un cierre: `min(P,E)` menos lo ya entregado por liquidacion (172).
     // P=15 000, E=9 000 -> el cierre genero 6 000; con 2 500 ya pagados quedan 3 500.
-    expect(derivarPendienteCierre("15000.00", "9000.00", "2500.00")).toBe("3500.00");
+    expect(
+      derivarPendienteCierre({
+        pagoDebido: "15000.00",
+        efectivo: "9000.00",
+        premiosVivos: "0.00", // 293/T2.3 — sin premio, la cifra de la 173 no se mueve
+        pagadoVigente: "2500.00",
+      }),
+    ).toBe("3500.00");
     // Anular ese pago (pagadoVigente vuelve a 0) devuelve el pendiente entero.
-    expect(derivarPendienteCierre("15000.00", "9000.00", "0.00")).toBe("6000.00");
+    expect(
+      derivarPendienteCierre({
+        pagoDebido: "15000.00",
+        efectivo: "9000.00",
+        premiosVivos: "0.00",
+        pagadoVigente: "0.00",
+      }),
+    ).toBe("6000.00");
   });
 
   it("R35: el saldo de la tienda se deriva del ledger por tienda y de ninguna otra fuente", () => {

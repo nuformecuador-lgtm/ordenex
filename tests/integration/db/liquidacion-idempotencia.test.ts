@@ -70,6 +70,9 @@ type FilaMovimientoMensajero = {
   descripcion: string | null;
   registradoPor: string | null;
   fechaMovimiento?: Date;
+  /** Feature 293: la fecha del PODIO. Ausente en todo lo que no es premio (que es todo lo de
+   *  este archivo: aqui no se registra ninguno). */
+  premioDia?: Date;
 };
 
 /**
@@ -237,6 +240,60 @@ function makeStore(saldoInicial: string, cierresIniciales: FilaCierre[] = [cierr
           { tipo: "debito" as const, _sum: { monto: suma("debito") } },
         ];
         await tic(); // la respuesta llega despues: es lo que da hueco al entrelazado
+        return resultado;
+      },
+    },
+    /**
+     * Feature 293 (T2.3, §6/4) — la Σ de PREMIOS VIVOS que `pendienteDelCierre` lee. Se modela de
+     * verdad sobre `movimientosMensajero` (no se devuelve `{}` a secas): el premio SUMA y su
+     * compensacion RESTA, y las tres piezas del WHERE se COMPRUEBAN — un `where` que perdiera
+     * `origenTipo` o las categorias revienta el store en vez de colarse en verde.
+     *
+     * Como en el resto de este archivo, la INSTANTANEA se toma al empezar la sentencia y el
+     * `tic` va despues: es lo que da hueco al entrelazado de las dos transacciones.
+     */
+    pagoMensajeroMovimiento: {
+      groupBy: async ({
+        by,
+        where,
+      }: {
+        by: string[];
+        where: {
+          origenTipo?: string;
+          origenId?: { in: string[] };
+          OR?: Array<{ categoria: string; premioDia?: unknown }>;
+        };
+      }) => {
+        if (
+          by.join() !== "origenId,categoria" ||
+          where.origenTipo !== "cierre_dia" ||
+          where.origenId === undefined ||
+          where.OR === undefined
+        ) {
+          throw new Error(`el store no soporta este groupBy: ${JSON.stringify({ by, where })}`);
+        }
+        const categorias = new Set(where.OR.map((o) => o.categoria));
+        const ids = new Set(where.origenId.in);
+        const seleccionadas = movimientosMensajero.filter(
+          (m) =>
+            m.origenTipo === "cierre_dia" &&
+            m.origenId !== null &&
+            ids.has(m.origenId) &&
+            categorias.has(m.categoria) &&
+            // La compensacion del premio se distingue por `premio_dia`, no por la categoria.
+            (m.categoria === "premio_ranking" || m.premioDia !== undefined),
+        );
+        log.push("leer-premios-vivos");
+        const grupos = new Map<string, Prisma.Decimal>();
+        for (const m of seleccionadas) {
+          const clave = `${m.origenId}|${m.categoria}`;
+          grupos.set(clave, (grupos.get(clave) ?? new Prisma.Decimal(0)).add(m.monto));
+        }
+        const resultado = [...grupos.entries()].map(([clave, monto]) => {
+          const [origenId, categoria] = clave.split("|");
+          return { origenId, categoria, _sum: { monto } };
+        });
+        await tic();
         return resultado;
       },
     },
@@ -1001,7 +1058,13 @@ describe("el documento y el libro NO divergen (design §5)", () => {
     // …y el pendiente derivado del cierre coincide con lo que devolvio el servicio.
     const cierre = store.cierres[0];
     expect(
-      derivarPendienteCierre(cierre.totalPagoMensajero, cierre.totalEfectivo, sumaDocumentos),
+      derivarPendienteCierre({
+        pagoDebido: cierre.totalPagoMensajero,
+        efectivo: cierre.totalEfectivo,
+        // 293/T2.3 — NO-REGRESION: sin premios, esta cifra es EXACTAMENTE la de antes.
+        premiosVivos: "0.00",
+        pagadoVigente: sumaDocumentos,
+      }),
     ).toBe("14999.50");
     expect(ultima).toMatchObject({ status: "ok", restante: "14999.50" });
 
@@ -1121,6 +1184,9 @@ describe("R46/R83/R85 [P1] — el candado del CIERRE serializa igual que el de l
       "candado-tomado:cierre_dia:c1",
       "leer-cierre:c1",
       "leer-pagado-vigente",
+      // Feature 293 (T2.3, §6/4): lo pagable del cierre pasa a incluir sus premios vivos, asi
+      // que el tope de [P1] se lee con DOS agregaciones. Va DENTRO del candado, como la de arriba.
+      "leer-premios-vivos",
       "crear-documento:pago-1",
       "crear-movimiento-mensajero:1",
       "commit",
@@ -1256,7 +1322,12 @@ describe("T F.3/R79/R80 — MENSAJERO: pagar, anular y volver a pagar lo mismo",
     expect(await repo.sumarVigentesPorCierre(["c1"])).toEqual({ c1: "0.00" });
     const cierre = store.cierres[0];
     expect(
-      derivarPendienteCierre(cierre.totalPagoMensajero, cierre.totalEfectivo, "0.00"),
+      derivarPendienteCierre({
+        pagoDebido: cierre.totalPagoMensajero,
+        efectivo: cierre.totalEfectivo,
+        premiosVivos: "0.00", // 293/T2.3 — no-regresion
+        pagadoVigente: "0.00",
+      }),
     ).toBe("50000.00");
 
     // 4) REGISTRAR DE NUEVO con CLAVE NUEVA y la MISMA referencia y fecha real (R78).
@@ -1421,6 +1492,7 @@ describe("T F.3/R79/R80 — MENSAJERO: pagar, anular y volver a pagar lo mismo",
       "candado-tomado:cierre_dia:c1",
       "leer-cierre:c1",
       "leer-pagado-vigente", // R83: el disponible, BAJO el candado
+      "leer-premios-vivos", // 293/T2.3: y sus premios vivos, con la MISMA formula
       "crear-anulacion:pago-1",
       "crear-movimiento-mensajero:1",
       "commit",

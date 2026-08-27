@@ -164,6 +164,9 @@ export const CATEGORIA_PAGO_LABEL: Record<PagoMensajeroMovimientoCategoria, stri
   liquidacion: "Liquidación",
   ajuste_devengo: "Ajuste (devengo)",
   ajuste_pago: "Ajuste (pago)",
+  // Feature 293 (T1.6, R34, Q4 cerrada por el leader): rotulo PROPIO y distinguible del de los
+  // ajustes. Sin esta linea el `Record` deja de compilar: el compilador es la guardia.
+  premio_ranking: "Premio del ranking",
 };
 
 /** Etiqueta legible del origen de un movimiento (WalletOrigenTipo, subconjunto de la 44). */
@@ -171,6 +174,10 @@ export const ORIGEN_PAGO_LABEL: Record<string, string> = {
   cierre_dia: "Cierre del día",
   pago_mensajero: "Liquidación",
   manual: "Manual",
+  // Feature 293 (T1.6): origen de las filas de CAJA del premio. No aparece en este libro
+  // —aqui el premio va con `cierre_dia`—, pero el mapa es de `WalletOrigenTipo` y dejarlo fuera
+  // haria que un dia se pintara el valor crudo.
+  ranking_snapshot_fila: "Premio del ranking",
 };
 
 /** Origen legible con fallback al valor crudo si no hay etiqueta conocida. */
@@ -357,3 +364,123 @@ export const ESTADO_CIERRE_PLURAL: Record<CierreEstado, string> = {
   rechazado: "rechazados",
   vencido: "vencidos",
 };
+
+/**
+ * Feature 293 (T5.1) — rótulo EN MINÚSCULA de cada estado de cierre, para meterlo dentro de
+ * una frase: «El cierre de ese día está rechazado» (R12).
+ *
+ * No se reusa `ESTADO_LABEL` de `cierres-admin`: aquél está capitalizado porque encabeza una
+ * celda, y «El cierre de ese día está Rechazado» no es español. Y no se deriva con
+ * `toLowerCase()` del otro mapa: eso ataría el texto de esta frase al de una columna ajena y
+ * un rótulo compuesto («Aprobado con reparos») saldría partido.
+ *
+ * `Record` EXHAUSTIVO por el mismo motivo que su hermano de arriba: el día que el catálogo
+ * gane un estado, esto rompe el build y alguien escribe su palabra.
+ */
+export const ESTADO_CIERRE_EN_FRASE: Record<CierreEstado, string> = {
+  solicitado: "solicitado",
+  aprobado: "aprobado",
+  rechazado: "rechazado",
+  vencido: "vencido",
+};
+
+/**
+ * Feature 293 (T5.1, design §9) — textos del panel de PREMIOS DEL RANKING, la única puerta
+ * desde la que se registra el premio del podio de un día (R1).
+ *
+ * Los seis estados de R9 se dicen SIEMPRE con texto, nunca con la ausencia del control: un
+ * botón que no está no explica por qué no está, y aquí las tres razones para que no esté
+ * —sin premio, sin cierre, cierre no aprobado— son cosas distintas que el maestro tiene que
+ * poder distinguir sin abrir otra pantalla (R11/R12/R32).
+ *
+ * Money-safe (R35): los importes llegan como STRING del servidor y solo pasan por `money`.
+ */
+export const PREMIOS_RANKING = {
+  /** Nombre accesible de la sección entera y su encabezado visible. */
+  seccion: "Premios del ranking",
+  descripcion:
+    "El premio del podio de un día se registra como devengo del mensajero y se cobra con el " +
+    "cierre de ese día.",
+  /** Rótulo del selector de día. Habla del DÍA DEL PODIO, no del día de hoy. */
+  selectorFecha: "Día del podio",
+  selectorAyuda:
+    "Por defecto, el último día que el ranking congeló. No se pueden elegir días futuros.",
+  cargando: "Cargando el podio de ese día…",
+  error: "No se pudo cargar el podio de ese día. Volvé a intentarlo.",
+  /** R6 — la fecha no tiene snapshot: se dice, y no se ofrece ninguna acción. */
+  sinPodio: "Ese día no tiene ranking congelado: no hay ningún premio que registrar.",
+  /** Nombre accesible de la lista del podio. */
+  listaAria: "Podio del día",
+  /** «1.º», «2.º», «3.º» — la posición congelada de la fila. */
+  posicion: (posicion: number) => `${posicion}.º`,
+  /**
+   * R5 — el dato que va PEGADO al premio y que nunca se oculta, ni cuando es cero.
+   *
+   * Es el aviso del 26/08: con todos los mensajeros al 0 % el podio lo decidió el orden
+   * alfabético y el primer puesto fue 0 de 21. Quien pulsa «Registrar» tiene que ver eso
+   * antes de pulsar, así que el par se pinta igual que cualquier otro y sin sustituirlo por
+   * una raya.
+   */
+  entregadasAsignadas: (entregadas: number, asignadas: number) =>
+    `${entregadas} / ${asignadas} entregadas`,
+  entregadasAyuda:
+    "Entregadas de asignadas ese día. Con todos en cero, el podio lo decide el orden alfabético.",
+  /** R7/R9 — la fila no tenía premio congelado ese día. */
+  sinPremio: "Sin premio asignado ese día.",
+  /** R11 — la causa EXACTA, no un error genérico. Esta feature no crea cierres. */
+  sinCierre: "Ese día no tiene cierre: el premio no se puede imputar todavía.",
+  /** R12 — la causa exacta, nombrando el estado en que está ese cierre. */
+  cierreNoAprobado: (estado: string) =>
+    `El cierre de ese día está ${estado}: el premio no se puede imputar todavía.`,
+  /** R9 — ya registrado: se cobra con el flujo de pago por cierre que ya existía. */
+  registrado: "Registrado: se cobra con el cierre de ese día.",
+  /** R32 — anular consume el cupo para siempre, y se dice con TEXTO. */
+  anuladoEstado: "Anulado — no se puede volver a registrar.",
+  /** Nombres accesibles ÚNICOS por fila: el podio tiene hasta tres botones iguales. */
+  registrar: (mensajero: string) => `Registrar el premio de ${mensajero}`,
+  anular: (mensajero: string) => `Anular el premio de ${mensajero}`,
+  /** Confirmación del registro, con el importe que devolvió el SERVIDOR. */
+  registradoOk: (monto: string) =>
+    `Premio de ${money(monto)} registrado: se cobra con el cierre de ese día.`,
+  /** R18 — el reintento idempotente. No es un error. */
+  yaRegistrado: "Ese premio ya estaba registrado: no se escribió una segunda vez.",
+  /** R32 — se pidió registrar uno anulado. */
+  yaAnulado: "Ese premio está anulado: no se puede volver a registrar.",
+  /** R29/R33 — la anulación quedó escrita. */
+  anuladoOk: "Premio anulado: se escribió la compensación y lo pagable de ese cierre bajó.",
+  /** R31 — la segunda anulación. Tampoco es un error. */
+  anuladoRepetido: "Ese premio ya estaba anulado: no se escribió una segunda compensación.",
+  /** Se pidió anular algo que no está registrado. */
+  noRegistrado: "Ese premio no está registrado: no hay nada que anular.",
+  /** La fila del podio ya no está donde estaba (otra pestaña, otro día cargado). */
+  noEncontrado: "Esa fila del podio ya no existe. Volvé a cargar el día.",
+  forbidden: "No tenés permiso para registrar ni anular premios del ranking.",
+  unauthenticated: "Tu sesión terminó. Volvé a entrar para registrar el premio.",
+  validacion: "El día elegido no es válido: revisá la fecha.",
+  /** Fallo de red o del servidor: reintentar es seguro (la base solo deja escribir una vez). */
+  fallo: "No se pudo completar la operación. Volvé a intentarlo.",
+} as const;
+
+/**
+ * Feature 293 (T5.2, R30) — textos del diálogo que pide el MOTIVO antes de anular.
+ *
+ * Molde: `AnularPagoDialog` (172/T F.5), que es el otro sitio del repo donde una decisión
+ * irreversible exige un motivo escrito. Aquí es todavía más irreversible: por la guarda de
+ * R17 el cupo de ese (mensajero, día) queda consumido y el premio no se puede volver a
+ * registrar (Q2, cerrada), así que el diálogo lo dice antes de confirmar.
+ */
+export const ANULAR_PREMIO_TEXTO = {
+  titulo: (mensajero: string) => `Anular el premio de ${mensajero}`,
+  descripcion:
+    "Se escribe un movimiento compensatorio por el mismo importe y su reverso en la caja. " +
+    "Las filas originales no se tocan y el premio NO se podrá volver a registrar.",
+  /** Qué se anula exactamente: el importe congelado y el día del podio. */
+  resumen: (monto: string | null, fecha: string) =>
+    `Premio de ${money(monto)} del podio del ${fecha}.`,
+  motivo: "Motivo de la anulación",
+  motivoAyuda: "Queda registrado en el movimiento compensatorio.",
+  /** R30 — sin motivo no se llama a la action. El servidor lo revalida igualmente. */
+  motivoRequerido: "Escribí el motivo de la anulación.",
+  confirmar: "Anular el premio",
+  cancelar: "Cancelar",
+} as const;

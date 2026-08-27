@@ -27,6 +27,11 @@ function fakeRepo(overrides: Partial<IPagoMensajeroMovimientoRepository> = {}): 
     listarCuentasPorPagarPaginado: vi.fn(async () => ({ items: [], total: 0 })),
     listarCuentasPorPagarCompleto: vi.fn(async () => []),
     obtenerNombreMensajero: vi.fn(async () => "Ana Mensajera"),
+    // Feature 293 (T2.2/T3.3): el doble declara la interfaz COMPLETA. Este servicio no los
+    // llama —la cuenta por pagar se agrega por `tipo` y el premio entra solo, como un devengo
+    // mas (design §6/20)—, y que sigan sin llamarse es parte de lo que este archivo afirma.
+    sumarPremiosVivosPorCierre: vi.fn(async () => ({})),
+    listarPremiosPorDias: vi.fn(async () => []),
     ...overrides,
   };
 }

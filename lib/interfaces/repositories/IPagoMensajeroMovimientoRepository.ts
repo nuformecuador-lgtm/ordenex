@@ -42,6 +42,20 @@ export interface CrearPagoMensajeroInput {
    * no 06:00Z, para que el pago entre por los dos bordes del filtro por rango del desglose.
    */
   fechaMovimiento?: Date;
+  /**
+   * Feature 293 (design §3.3, R17) — FECHA CALENDARIO CR DEL PODIO del que nace el premio,
+   * MEDIANOCHE UTC (convencion `@db.Date` del repo, `fechaComoDate`).
+   *
+   * Es la mitad de la guarda no negociable: el unico parcial
+   * `(mensajero_id, premio_dia) WHERE categoria = 'premio_ranking'` la impone en la BASE, no
+   * en un `if` del servicio. Sin ella el premio no se puede escribir —el CHECK
+   * `pago_mensajero_movimiento_premio_dia_check` lo rechaza con 23514— y con ella en una
+   * categoria que no sea `premio_ranking` o `ajuste_pago`, tambien.
+   *
+   * OPCIONAL, como `fechaMovimiento`: los escritores previos (feed del cierre, liquidacion) no
+   * la mandan y su comportamiento no cambia ni un byte.
+   */
+  premioDia?: Date;
 }
 
 /**
@@ -148,4 +162,62 @@ export interface IPagoMensajeroMovimientoRepository {
   ): Promise<CuentaPorPagarAgregadoRow[]>;
   /** R18: nombre de UN mensajero (vista del maestro: desglose por cierre de un mensajero arbitrario). null si no existe. */
   obtenerNombreMensajero(mensajeroId: string): Promise<string | null>;
+  /**
+   * Feature 293 (T2.2, design §5, R24) — Σ de los PREMIOS VIVOS imputados a cada cierre pedido,
+   * en UNA consulta para toda la pagina de cierres. Es el termino nuevo de
+   * `derivarPendienteCierre`.
+   *
+   * «Vivo» = registrado y no anulado, y aqui eso es una RESTA, no un filtro: la anulacion no
+   * borra ni edita la fila del premio (R21), escribe su compensacion. Por eso
+   *
+   *     premiosVivos(cierre) = Σ `premio_ranking` − Σ (`ajuste_pago` con `premio_dia` NOT NULL)
+   *
+   * y por eso el WHERE lleva las dos categorias a la vez. El `premio_dia IS NOT NULL` de la
+   * segunda rama es lo que separa la compensacion de un premio de un `ajuste_pago` cualquiera:
+   * son la misma categoria y solo la columna los distingue.
+   *
+   * `origen_tipo = 'cierre_dia'` va SIEMPRE en el WHERE, y no es adorno: sin el, un
+   * `origen_id` que casualmente coincidiera con un cierre —el id de un PAGO, por ejemplo—
+   * sumaria dinero a un cierre al que no pertenece.
+   *
+   * Devuelve una entrada por CADA id pedido (`"0.00"` los que no tienen premio), igual que
+   * `sumarVigentesPorCierre`, para que el caller no tenga que distinguir «no hay» de «no lo
+   * pedi». Con la lista vacia no consulta.
+   */
+  sumarPremiosVivosPorCierre(cierreIds: string[]): Promise<Record<string, string>>;
+  /**
+   * Feature 293 (T3.3, R9/R18/R31/R32) — el ESTADO del premio de un mensajero en unos dias
+   * concretos: las filas `premio_ranking` y las de su compensacion (`ajuste_pago` con
+   * `premio_dia`) de ESE mensajero para ESOS dias.
+   *
+   * Es lo que deja al servicio responder «no registrado / registrado / anulado» (R9) sin
+   * ningun estado almacenado aparte, y lo que distingue `ya_registrado` de `anulado` en el
+   * segundo intento de registro (R32): las dos respuestas nacen de que el unico parcial
+   * rechazo la fila, y solo estas filas dicen cual de las dos es.
+   *
+   * `tx` es OPCIONAL y existe por un motivo concreto (revision de la 293, m4): esa segunda
+   * lectura ocurre DENTRO de la transaccion del registro, y una lectura por el cliente propio
+   * del repositorio es OTRA conexion — no ve lo que la transaccion en curso lleva escrito.
+   * Quien lea dentro de una transaccion debe pasar su `tx`; quien lea fuera (el listado del
+   * podio) lo omite y sigue usando el cliente del repositorio, como hasta hoy.
+   */
+  listarPremiosPorDias(
+    mensajeroId: string,
+    dias: Date[],
+    tx?: PagoMensajeroTxClient,
+  ): Promise<PremioRegistradoRow[]>;
+}
+
+/**
+ * Feature 293 (T3.3) — una fila del libro que pertenece al mundo del premio, con lo justo para
+ * decidir su estado. `monto` STRING (money-safe) y `premioDia` tal cual sale de la columna
+ * `@db.Date` (medianoche UTC de la fecha calendario CR).
+ */
+export interface PremioRegistradoRow {
+  categoria: Extract<PagoMensajeroMovimientoCategoria, "premio_ranking" | "ajuste_pago">;
+  premioDia: Date;
+  monto: string;
+  /** El cierre al que se imputo (`origen_tipo = cierre_dia` -> el `origen_id` ES el cierre). */
+  cierreId: string | null;
+  fechaMovimiento: Date;
 }

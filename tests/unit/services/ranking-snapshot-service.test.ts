@@ -81,7 +81,17 @@ function buildService(datos: Datos, opts: SnapshotRepoOpts = {}) {
     };
   });
   const obtenerPorFecha = vi.fn(async () => opts.lectura ?? null);
-  const snapshotRepo = { crearSnapshot, obtenerPorFecha } as IRankingSnapshotRepository;
+  // Feature 293 (T3.1): el contrato gana DOS lecturas del podio. Este servicio —el del cron y
+  // el del historico— no las llama, y que sigan sin llamarse es parte de lo que este archivo
+  // afirma: el premio NUNCA nace del congelado diario (R3).
+  const listarPodioDeFecha = vi.fn(async () => null);
+  const obtenerFilaDelPodio = vi.fn(async () => null);
+  const snapshotRepo = {
+    crearSnapshot,
+    obtenerPorFecha,
+    listarPodioDeFecha,
+    obtenerFilaDelPodio,
+  } as IRankingSnapshotRepository;
   const repos = reposDelRanking(datos);
   const config = { MIN_ASIGNADAS_PODIO: datos.minPodio ?? 1 };
   const service = new RankingSnapshotService(

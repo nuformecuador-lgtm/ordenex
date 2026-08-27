@@ -137,6 +137,10 @@ function repoEnMemoria(filas: readonly CuentaPorPagarAgregadoRow[] = CONJUNTO) {
     listarPorMensajero: vi.fn(),
     agregarCuentaPorPagar: vi.fn(),
     obtenerNombreMensajero: vi.fn(),
+    // 293/T2.2-T3.3: los dos metodos NUEVOS del contrato (lectura). No-op aqui: este
+    // doble no ejercita el premio.
+    sumarPremiosVivosPorCierre: vi.fn(async () => ({})),
+    listarPremiosPorDias: vi.fn(async () => []),
     listarCuentasPorPagarTodos,
     listarCuentasPorPagarPaginado,
     listarCuentasPorPagarCompleto,

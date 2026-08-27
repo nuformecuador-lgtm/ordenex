@@ -60,7 +60,13 @@ const INDICES_CON_ORIGEN_TIPO = [
 
 describe("R37 — el SEED tipado incluye el origen nuevo", () => {
   it("WALLET_ORIGEN_TIPO_SEED contiene orden_incidente y conserva los 6 previos, en orden", () => {
-    expect([...WALLET_ORIGEN_TIPO_SEED]).toEqual([
+    // Los SIETE primeros valores del seed, EN ORDEN: es lo que esta migracion dejo. Se compara
+    // el PREFIJO y no el seed entero porque las features posteriores APENDAN los suyos —la 293
+    // anadio `ranking_snapshot_fila`— y exigir longitud exacta convertiria este caso en un
+    // recordatorio de editar un test ajeno cada vez que el enum crece. Lo que R37 protege es que
+    // ninguno de los seis previos se retire, se renombre o se reordene, y eso es EXACTAMENTE lo
+    // que mide el prefijo.
+    expect([...WALLET_ORIGEN_TIPO_SEED].slice(0, 7)).toEqual([
       "cierre_dia",
       "gestion_orden",
       "manual",
@@ -69,8 +75,7 @@ describe("R37 — el SEED tipado incluye el origen nuevo", () => {
       "gasto",
       "orden_incidente",
     ]);
-    // R37: ninguno de los 6 previos se retiro, se renombro ni se reordeno.
-    expect(WALLET_ORIGEN_TIPO_SEED).toHaveLength(7);
+    expect(WALLET_ORIGEN_TIPO_SEED.length).toBeGreaterThanOrEqual(7);
   });
 
   it("§9.12: el origen del incidente es un valor PROPIO, no el reservado `gestion_orden`", () => {
@@ -203,8 +208,16 @@ describe("DOWN — deja la base como estaba (R40)", () => {
     const valores = valoresDelEnum(downSql, "wallet_origen_tipo");
     expect(valores).not.toContain("orden_incidente");
     expect(valores).toHaveLength(6);
-    // Cuadra EXACTAMENTE con el SEED vigente menos el valor que esta migracion anade.
-    expect(valores).toEqual(WALLET_ORIGEN_TIPO_SEED.filter((v) => v !== "orden_incidente"));
+    // Cuadra EXACTAMENTE con el SEED vigente menos el valor que esta migracion anade Y menos los
+    // que anadieron las features POSTERIORES: este `down.sql` es una FOTO punto-en-el-tiempo y no
+    // se reescribe (en un rollback los downs corren del mas nuevo al mas viejo, asi que cuando
+    // este se ejecute los valores de despues ya se habran retirado).
+    const AGREGADOS_DESPUES = ["ranking_snapshot_fila"]; // 293
+    expect(valores).toEqual(
+      WALLET_ORIGEN_TIPO_SEED.filter(
+        (v) => v !== "orden_incidente" && !AGREGADOS_DESPUES.includes(v),
+      ),
+    );
     expect(downSql).toMatch(/ALTER TYPE "wallet_origen_tipo" RENAME TO "wallet_origen_tipo_old";/);
     expect(downSql).toMatch(/DROP TYPE "wallet_origen_tipo_old";/);
   });
