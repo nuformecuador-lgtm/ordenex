@@ -1237,9 +1237,9 @@ describe("NovedadesModule — las filas son las cards POS, conmutables (2026-08-
       expect(filaCobro).toHaveTextContent("—");
       expect(within(card).queryByText(/₡/)).toBeNull();
       expect(within(card).queryByText("0 kg")).toBeNull();
-      // Sin coordenadas `UbicacionTrigger` cae al ENLACE a Maps por texto (`mapsNavUrl`), que
-      // sigue teniendo con qué resolver: dirección vacía, pero cantón y provincia no. El
-      // acceso al mapa no se queda muerto.
+      // Sin coordenadas no hay minimapa que pintar, pero `UbicacionTrigger` abre igualmente su
+      // modal (feature 289) para ofrecer las apps de navegación, que resuelven por texto:
+      // dirección vacía, pero cantón y provincia no. El acceso al mapa no se queda muerto.
       expect(within(card).getByLabelText(/Ver en el mapa/)).toBeInTheDocument();
       // Sin dirección y sin distrito la línea/bloque de ubicación se queda con el cantón, que
       // es NOT NULL: por eso "Sin dirección" (fallback de la card de fila) no se alcanza ni

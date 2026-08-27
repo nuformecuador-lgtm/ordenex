@@ -50,9 +50,8 @@ const ITEM: UsuarioListItemDTO = {
   email: "ana@example.com",
   rolValue: "mensajero",
   estado: "activo",
-  // Feature 285: `zonaNombre` es obligatorio en `UsuarioListItem`. `null` es el caso mayoritario
-  // (solo `mensajero` y `adminSatelite` conservan zona) y es justo lo que esta prueba necesita:
-  // no mira la columna de zona, solo el restablecimiento de contrasena.
+  // Campo añadido al DTO por el merge de la feature de WhatsApp (PR #512) sin actualizar este
+  // fixture, que quedó rojo en `dev`. Se completa aquí para desbloquear el typecheck.
   zonaNombre: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
 };
