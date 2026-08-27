@@ -20,13 +20,13 @@
 //
 // Lo que SÍ se reusa del paquete: `GraficaMarco` (título y los cuatro estados: cargando,
 // error, vacío, con datos), `SerieTextual` (la lista para lectores de pantalla),
-// `porcentajesDeReparto` (el reparto por resto mayor) y `paleta` (el color por posición).
+// `pesosDeReparto` (el reparto por resto mayor, con su ancho) y `paleta` (el color por posición).
 // Escribir aquí otro juego de estados los separaría del resto de gráficas a la primera.
 
 import { formatearValor } from "./formato";
 import { GraficaMarco } from "./GraficaMarco";
 import { varDeSerie } from "./paleta";
-import { cifraConPeso, porcentajesDeReparto } from "./porcentajes";
+import { cifraConPeso, pesosDeReparto, textoDePeso } from "./porcentajes";
 import { SerieTextual } from "./SerieTextual";
 import type { GraficaProps } from "./tipos";
 
@@ -49,11 +49,22 @@ export function GraficaReparto({
   // leen como una operación medida, y lo que pasa es que no hubo nada. Cae al estado vacío.
   const hayDatos = puntos.some((punto) => (punto.valor ?? 0) > 0);
 
-  // El ancho de cada franja y el porcentaje que se escribe salen del MISMO número, repartido
+  // El ancho de cada franja y el porcentaje que se escribe salen de la MISMA cuenta, repartida
   // por RESTO MAYOR: la barra suma exactamente 100 % —ni se queda corta ni desborda— y lo que
   // se ve no puede discrepar de lo que se lee.
-  const pesos = porcentajesDeReparto(puntos.map((punto) => punto.valor));
-  const pesosFormateados = pesos.map((fraccion) => formatearValor(fraccion, "porcentaje"));
+  //
+  // ⚠ ANCHO Y PORCENTAJE YA NO SON EL MISMO NÚMERO (feature 290). Con 1, 0, 0, 1, 0 y 231 sobre
+  // 233 las dos categorías de valor 1 pesan 0,429 %, pero solo sobra UN punto que repartir: una
+  // se quedaba en 0 y usar ESE cero como anchura borraba de la barra una categoría que sí
+  // ocurrió — «1 (0 %)» en la leyenda junto a una franja inexistente, y su gemela con «1 (1 %)»
+  // y franja. Ahora `pesosDeReparto` devuelve las dos cosas: `ancho` le da su astilla
+  // a toda parte con valor, descontada del segmento mayor para que la suma siga siendo 100 %, y
+  // `textoDePeso` escribe «<1 %» donde antes salía un «0 %» que era mentira. Un cero de verdad
+  // sigue diciendo «0 %» y sigue sin ocupar nada: son dos hechos distintos.
+  const pesos = pesosDeReparto(puntos.map((punto) => punto.valor));
+  const pesosFormateados = pesos.map((peso) =>
+    textoDePeso(peso, (fraccion) => formatearValor(fraccion, "porcentaje")),
+  );
 
   // ⚠ LA FIRMA ES LO QUE HACE QUE LA ANIMACIÓN VUELVA A CORRER. Una animación CSS se dispara al
   // MONTAR el elemento; si solo cambian los anchos, React reusa el mismo nodo y las franjas
@@ -90,7 +101,7 @@ export function GraficaReparto({
               <div
                 key={punto.categoria}
                 style={{
-                  width: `${(pesos[indice] ?? 0) * 100}%`,
+                  width: `${(pesos[indice]?.ancho ?? 0) * 100}%`,
                   backgroundColor: varDeSerie(indice),
                 }}
               />
