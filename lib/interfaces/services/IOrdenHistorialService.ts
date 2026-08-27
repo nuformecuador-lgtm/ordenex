@@ -42,4 +42,16 @@ export interface IOrdenHistorialService {
    * valor conocido, no un dato ausente). `ordenIds` vacio -> Map vacio sin consultar (R7).
    */
   contarIntentosEnLote(ordenIds: string[]): Promise<Map<string, number>>;
+  /**
+   * Pedido humano (2026-08-27) — de un LOTE de ordenes, cuales YA fueron gestionadas despues de
+   * nacer (al menos una transicion con origen). Es el insumo del predicado de «eliminar orden»,
+   * y por eso vive AQUI y no en el service del borrado: el historial es el dueño de "que le ha
+   * pasado a esta orden", y tanto el listado (para ofrecer el boton) como el service del
+   * borrado (para autorizarlo) tienen que leer LA MISMA respuesta. Dos derivaciones del mismo
+   * hecho es exactamente como la pantalla acaba ofreciendo lo que el servidor rechaza.
+   *
+   * Los ids sin movimiento NO estan en el Set (misma convencion que `contarIntentosEnLote` con
+   * su Map); `ordenIds` vacio -> Set vacio sin consultar.
+   */
+  idsConGestionPosteriorEnLote(ordenIds: string[]): Promise<Set<string>>;
 }

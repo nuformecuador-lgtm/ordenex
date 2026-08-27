@@ -96,6 +96,10 @@ function makeOrden(
     producto: "Producto",
     peso: 1,
     notas: null,
+    // Pedido humano (2026-08-27): por defecto la orden NO ha sido gestionada, que es el caso
+    // ELIMINABLE. El servidor resuelve este campo con el mismo predicado que autoriza el
+    // borrado; aqui se fija por fila para poder medir las dos ramas.
+    sinGestion: true,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...over,
@@ -146,7 +150,7 @@ afterEach(() => {
   cleanup();
 });
 
-describe("la acción se ofrece en CUALQUIER estado", () => {
+describe("la acción se ofrece en CUALQUIER estado, si la orden no se ha gestionado", () => {
   it.each([
     ["en_bodega_central", "est-en_bodega_central"],
     // `entregada` NO tenía ninguna acción por lote: su checkbox estaba bloqueado. Ahora se
@@ -158,11 +162,59 @@ describe("la acción se ofrece en CUALQUIER estado", () => {
       pagina([makeOrden({ id: "o1", estatusValue, estatusId })]),
     );
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
 
     await seleccionarFila(user, "REM-o1");
 
     expect(await screen.findByRole("button", { name: ACCION })).toBeInTheDocument();
+  });
+
+  // Pedido humano (2026-08-27): EL requisito nuevo. El estado da igual —`en_bodega_central`
+  // tiene otras acciones por lote y la fila se puede marcar—; lo que decide es `sinGestion`.
+  it("NO se ofrece sobre una orden que YA fue gestionada", async () => {
+    listarOrdenesMock.mockResolvedValue(
+      pagina([makeOrden({ id: "o1", sinGestion: false })]),
+    );
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
+
+    await seleccionarFila(user, "REM-o1");
+
+    // La barra existe (el estado tiene otras acciones), pero "Eliminar" no está en ella.
+    expect(await screen.findByRole("button", { name: "Asignar mensajero" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
+  });
+
+  it("selección mixta: el botón lleva el conteo y solo borra las no gestionadas", async () => {
+    listarOrdenesMock.mockResolvedValue(
+      pagina([
+        makeOrden({ id: "o1", sinGestion: true }),
+        makeOrden({ id: "o2", sinGestion: false }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
+
+    await seleccionarFila(user, "REM-o1");
+    await seleccionarFila(user, "REM-o2");
+    await user.click(await screen.findByRole("button", { name: `${ACCION} (1)` }));
+    const dialogo = await screen.findByRole("dialog");
+    await user.click(within(dialogo).getByRole("button", { name: ACCION }));
+
+    await waitFor(() => expect(eliminarOrdenesMock).toHaveBeenCalledTimes(1));
+    expect(eliminarOrdenesMock).toHaveBeenCalledWith({ ordenIds: ["o1"] });
+  });
+
+  // El rol que NO puede eliminar (admin) sí tiene el resto de acciones por lote: la prop es
+  // propia y no se deriva de `accionesLote`.
+  it("NO se ofrece a quien no puede eliminar, aunque tenga acciones por lote", async () => {
+    const user = userEvent.setup();
+    renderConSwr(<OrdenesListado accionesLote />);
+
+    await seleccionarFila(user, "REM-o1");
+
+    expect(await screen.findByRole("button", { name: "Asignar mensajero" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ACCION })).toBeNull();
   });
 
   it("NO se ofrece sin acciones por lote (rol sin permiso: no hay ni checkbox)", async () => {
@@ -182,7 +234,7 @@ describe("confirmación y llamada al borde", () => {
     );
     eliminarOrdenesMock.mockResolvedValue({ status: "ok", eliminadas: 2 });
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
 
     await seleccionarFila(user, "REM-o1");
     await seleccionarFila(user, "REM-o2");
@@ -199,7 +251,7 @@ describe("confirmación y llamada al borde", () => {
 
   it("NO llama al borde hasta que se confirma (abrir el modal no borra)", async () => {
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
 
     await seleccionarFila(user, "REM-o1");
     await user.click(await screen.findByRole("button", { name: ACCION }));
@@ -215,7 +267,7 @@ describe("confirmación y llamada al borde", () => {
     };
     eliminarOrdenesMock.mockResolvedValue(fallo);
     const user = userEvent.setup();
-    renderConSwr(<OrdenesListado accionesLote />);
+    renderConSwr(<OrdenesListado accionesLote puedeEliminar />);
 
     await eliminarDesdeListado(user, "REM-o1");
 

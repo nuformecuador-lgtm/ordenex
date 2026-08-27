@@ -1139,7 +1139,10 @@ export class OrdenRepository implements IOrdenRepository {
   async list(params: ListOrdenesParams): Promise<ListOrdenesResult> {
     const criterioColumna = OrdenRepository.criterio;
     const where: Prisma.OrdenWhereInput = {
-      deletedAt: null, // R34
+      // Pedido humano (2026-08-27): ESTE es el unico `deleted_at` del repo que se puede
+      // invertir, y solo desde el interruptor «Eliminadas» del listado (que el service reserva
+      // al `maestro`). Sin la clave, el predicado es el de siempre — R34, palabra por palabra.
+      deletedAt: params.where.soloEliminados ? { not: null } : null, // R34
       ...criterioColumna("tiendaId", params.where.tiendaId),
       // Un id -> igualdad; una lista de ids -> `IN (...)` (filtro multi-estado).
       // `true`: retrocompatibilidad de la feature 63 — una lista vacia de estados
@@ -1415,6 +1418,22 @@ export class OrdenRepository implements IOrdenRepository {
     const { count } = await this.prisma.orden.updateMany({
       where: { id: { in: [...ids] }, deletedAt: null },
       data: { deletedAt: new Date() },
+    });
+    return count;
+  }
+
+  /**
+   * Pedido humano (2026-08-27) — LA REVERSION de `softDelete`, y el segundo (y ultimo) writer
+   * de `deleted_at`. Simetrico hasta en el `where`: alli `deletedAt: null`, aqui
+   * `deletedAt: { not: null }`, y por el mismo motivo — idempotencia y carreras. Una orden
+   * viva no entra en el conteo, asi que este metodo no puede "recuperar" nada que no estuviera
+   * borrado, ni pisar el instante de un borrado ajeno.
+   */
+  async restore(ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const { count } = await this.prisma.orden.updateMany({
+      where: { id: { in: [...ids] }, deletedAt: { not: null } },
+      data: { deletedAt: null },
     });
     return count;
   }

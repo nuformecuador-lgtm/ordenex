@@ -163,6 +163,16 @@ export class OrdenHistorialService implements IOrdenHistorialService {
     return this.historialRepo.contarIntentosVigentesEnLote(ordenIds);
   }
 
+  /**
+   * Pedido humano (2026-08-27) — PUNTO UNICO de «esta orden ya fue gestionada». Delega directo
+   * en el repositorio, igual que `contarIntentosEnLote`, y corta el lote vacio aqui para que el
+   * contrato del servicio no dependa de la implementacion del repo.
+   */
+  async idsConGestionPosteriorEnLote(ordenIds: string[]): Promise<Set<string>> {
+    if (ordenIds.length === 0) return new Set();
+    return this.historialRepo.findIdsConTransicionPosteriorACreacion(ordenIds);
+  }
+
   // R27: decide la visibilidad de la orden para el actor. `orden` ya viene NO borrada.
   // adminTienda ajena -> not_found (no filtrar); mensajero/adminSatelite sin visibilidad ->
   // forbidden.

@@ -56,6 +56,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
+    // Pedido humano 2026-08-27: el gemelo, `restore`. Mismo motivo que su vecino.
+    restore: vi.fn().mockResolvedValue(0),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-bodega"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false), // feature 27
     // Feature 15: metodos batch de carga masiva, no ejercitados por el CRUD
@@ -509,3 +511,77 @@ describe("listar — visibilidad de la tienda de origen (feature 48, R12/R14)", 
 // servicios de dominio —guia, asignacion, recepcion, devoluciones, incidencias—, cada uno con
 // su propia suite y su propia matriz de autorizacion. R21 (adminTienda solo las suyas) y R24
 // conservan testigo en el bloque de `listar`.
+
+// ---------------------------------------------------------------------------------------
+// Pedido humano (2026-08-27) — `sinGestion`: ¿se puede ofrecer «Eliminar» sobre esta fila? Lo
+// resuelve el SERVIDOR con el mismo predicado que autoriza el borrado, para que la pantalla no
+// pueda ofrecer lo que el servidor va a rechazar.
+// ---------------------------------------------------------------------------------------
+describe("listar / sinGestion (eliminar orden)", () => {
+  const PAGINA = { page: 1, pageSize: 20, sortBy: "created_at", sortDir: "desc" } as const;
+
+  function conPagina(items: OrdenListItemDTO[], conGestion: string[] = []) {
+    const r = buildRepo({ list: vi.fn().mockResolvedValue({ items, total: items.length }) });
+    const h = fakeIntentosEnLote({}, conGestion);
+    return { service: new OrdenService(r, h), historial: h };
+  }
+
+  it("orden en estado de NACIMIENTO y sin movimiento -> sinGestion true", async () => {
+    const { service } = conPagina([listItem({ id: "o1", estatusValue: "en_preparacion" })]);
+
+    const r = await service.listar(PAGINA, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].sinGestion).toBe(true);
+  });
+
+  it("orden CON movimiento en el historial -> sinGestion false", async () => {
+    const { service } = conPagina(
+      [listItem({ id: "o1", estatusValue: "en_preparacion" })],
+      ["o1"],
+    );
+
+    const r = await service.listar(PAGINA, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].sinGestion).toBe(false);
+  });
+
+  it("orden fuera de un estado de nacimiento -> sinGestion false aunque el historial calle", async () => {
+    // La direccion SEGURA del error: sin rastro de movimiento, el estado manda.
+    const { service } = conPagina([listItem({ id: "o1", estatusValue: "entregada" })]);
+
+    const r = await service.listar(PAGINA, MAESTRO);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].sinGestion).toBe(false);
+  });
+
+  it("un rol que NO puede eliminar no recibe el campo, y no se consulta el historial", async () => {
+    const { service, historial } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_preparacion", tiendaId: "store1" }),
+    ]);
+
+    const r = await service.listar(PAGINA, TIENDA);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.items[0].sinGestion).toBeUndefined();
+    expect(historial.idsConGestionPosteriorEnLote).not.toHaveBeenCalled();
+  });
+
+  it("UNA sola llamada por listado, con TODOS los ids de la pagina", async () => {
+    const { service, historial } = conPagina([
+      listItem({ id: "o1", estatusValue: "en_preparacion" }),
+      listItem({ id: "o2", estatusValue: "en_preparacion" }),
+    ]);
+
+    await service.listar(PAGINA, MAESTRO);
+
+    expect(historial.idsConGestionPosteriorEnLote).toHaveBeenCalledTimes(1);
+    expect(historial.idsConGestionPosteriorEnLote).toHaveBeenCalledWith(["o1", "o2"]);
+  });
+});

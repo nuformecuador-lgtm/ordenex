@@ -140,6 +140,8 @@ function buildRepo(overrides: Partial<IOrdenRepository> = {}): IOrdenRepository 
     // Feature «eliminar orden»: writer de `deleted_at`. Ningun servicio de este archivo lo
     // invoca; el doble existe para satisfacer el contrato completo del repo.
     softDelete: vi.fn().mockResolvedValue(0),
+    // Pedido humano 2026-08-27: el gemelo, `restore`. Mismo motivo que su vecino.
+    restore: vi.fn().mockResolvedValue(0),
     findEstatusIdByValue: vi.fn().mockResolvedValue("os-erbp"),
     findUsuarioFulfillment: vi.fn().mockResolvedValue(false),
     findExistingRemisiones: vi.fn().mockResolvedValue(new Map()),
